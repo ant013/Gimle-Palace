@@ -2078,22 +2078,206 @@ python3 -c "import json,sys,os;p=os.path.expanduser('~/.claude/mcp.json');d=json
 echo "Done. Run 'claude mcp list' to verify."
 ```
 
-### 12.2 Typical user session
+### 12.2 Project context detection
 
-1. User открывает Claude Code в каком-то клиентском проекте.
-2. User пишет: "Напиши экран с отображением EVM адреса токена".
-3. Claude Code видит доступные MCP tools (подключённые при install).
-4. Claude call'ит composite `find_context_for_task("display EVM token address", project="unstoppable-android")` (§5.6).
-5. palace-mcp запускает 5-stage faceted pipeline (Intent → Vector → Multi-axial intersection → Graph expansion → Grouped render).
-6. Возвращается grouped JSON: `ui_building_blocks`, `utilities.hex_conversion`, `utilities.address_formatting`, `api_endpoints_returning_address`, `constants`, `decisions_applicable` (типа "всегда checksum формат"), `similar_code_patterns`.
-7. Claude за **один MCP call** получает ≈3-5K tokens vs 100-200K grep-исследования — и строит решение с учётом существующих helpers, паттернов и декларированных правил.
-8. По ходу работы — автоматические `record_decision(...)`/`record_finding(...)` через client palace-skill (§13.4), когда Claude принимает неочевидное решение или замечает паттерн.
+Пользователь работает между несколькими проектами (Medic сегодня, Unstoppable завтра) на одной машине. Claude Code должен знать **какой project** сейчас активен без ручного указания в каждом сообщении.
 
-### 12.3 Paperclip UI как дополнительный контрольный слой
+#### 12.2.1 Hybrid auto-detect + persistent override
 
-- http://server:3100 — пользователь видит команду, approvals, budgets, traces всех agents runs.
-- Может вручную поставить задачу: "security review PR #1234" → назначает security-reviewer агенту.
-- Может посмотреть историю вызовов palace (которые также отражены в telemetry).
+**Priority order** (palace-mcp resolves project context per tool call):
+
+```
+1. Explicit project argument в tool call            (highest priority)
+       ↓ если отсутствует
+2. Persistent session context (.claude/palace-session.json)
+       ↓ если отсутствует или expired
+3. Auto-detect through git remote
+       ↓ если ambiguous/none
+4. Prompt user once: "Which project? [list registered]"
+```
+
+**(1) Explicit:** Claude может всегда указать `project="medic-kmp"` в любом tool call. Переопределяет всё.
+
+**(2) Persistent session** via client palace-skill:
+- Client skill tracks "current project" в `.claude/palace-session.json`:
+  ```json
+  { "active_project": "medic-kmp", "set_at": "2026-04-15T10:00:00Z", "ttl_hours": 24 }
+  ```
+- User может явно: *"Работаю над Medic сегодня"* → skill записывает active_project + 24h TTL
+- `just palace-session --set medic-kmp` — CLI alternative
+
+**(3) Auto-detect:**
+- palace-mcp читает cwd клиентской Claude Code session (через special tool `_detect_context` которую Claude вызывает в начале)
+- Извлекает `git remote -v`
+- Матчит URL/path с `repo:` полем registered projects из `/api/projects` endpoint
+- Если 1 match → использует. Если 0 → fallback to (4). Если >1 (monorepo situation) → prompt
+
+**(4) Prompt:** palace-mcp возвращает `{ok: false, error: "AMBIGUOUS_PROJECT_CONTEXT", available_projects: [...], hint: "Specify project= or set session via palace-skill"}`. Claude спрашивает user выбрать.
+
+#### 12.2.2 Cross-project queries
+
+По умолчанию все queries scope'ятся на current project. Для cross-project поиска:
+```python
+palace-mcp.find_similar_component(
+    description="checksum address rendering",
+    scope="all-projects"   # or: ["medic-kmp", "unstoppable-android"]
+)
+```
+Claude использует `scope="all-projects"` когда user явно спрашивает *"а есть ли такое в других наших проектах?"*.
+
+### 12.3 Typical user session (multi-project aware)
+
+**Scenario A — single-project focused:**
+
+1. User запускает Claude Code в `/Users/ant013/Android/medic/`.
+2. Первый tool call → palace-mcp auto-detects via `git remote` → `project=medic-kmp` set для сессии.
+3. User: *"Добавь экран со списком аптечек"*.
+4. Claude → `find_context_for_task("add screen with kit list", project="medic-kmp")` (auto-injected).
+5. Palace возвращает: existing KitCard, KitRepository, Screen patterns, applicable decisions (e.g. "кнопки — только из ui/compose/components/*").
+6. Claude генерит код используя existing primitives.
+7. По ходу — `record_decision` / `record_finding` automatically via client palace-skill (§13.4) когда Claude замечает паттерн.
+
+**Scenario B — cross-project exploration:**
+
+1. User в новом проекте, пишет *"Найди все проекты команды, где мы уже делали EIP-55 checksum рендеринг"*.
+2. Claude → `find_utility(domain_concept="HandlesAddress", capability="Formats", scope="all-projects")`.
+3. Возвращается список с namespace: `{unstoppable-android: [...], medic-kmp: [...] (если зарегистрирован)}`.
+4. User читает, копирует паттерн.
+
+**Scenario C — new-onboarding:**
+
+1. Новый разработчик в команде, ещё не понимает что у команды есть.
+2. Запускает `just palace-tour` — получает список registered projects + их `get_project_overview` summaries.
+3. Выбирает проект, `just export --summary medic-kmp` — 1-2 страницы briefing.
+4. Дальше обычный flow.
+
+### 12.4 Notifications & team awareness
+
+Три механизма одновременно — пользователь выбирает какие включить.
+
+#### 12.4.1 Paperclip UI (profile `full` only)
+
+http://server:3100 — user видит команду, approvals, budgets, traces всех agents runs. Real-time. Nothing to configure — встроено в Paperclip.
+
+#### 12.4.2 Webhook notifications (любой profile)
+
+Optional `NOTIFY_WEBHOOK_URL` в `.env`. Если задан — gimle-scheduler / lite-orchestrator постит JSON на события:
+
+| Event | Payload |
+|---|---|
+| `ingest.started` | `{project, iteration_kind, expected_cost_usd}` |
+| `ingest.completed` | `{project, iteration_number, actual_cost_usd, changed_nodes, report_url}` |
+| `ingest.failed` | `{project, error, checkpoint_token, recovery_cmd}` |
+| `finding.critical` | `{project, severity, text, file, line}` (только severity=critical) |
+| `budget.exceeded` | `{project, budget_cap, actual_cost}` |
+| `calibration.stale` | `{project, last_calibration, days_since}` |
+
+Конфигурация — просто URL. Slack/Discord/Telegram/custom — все принимают webhook. Формат retry: 3 попытки с exponential backoff, при permanent fail → пишется в telemetry и отображается в `just status`.
+
+Envelope пример (JSON):
+```json
+{
+  "event": "ingest.failed",
+  "timestamp": "2026-04-15T14:22:00Z",
+  "project": "medic-kmp",
+  "payload": {
+    "error": "OpenAI rate limit (429)",
+    "checkpoint_token": "chkpt-abc123",
+    "recovery_cmd": "just recover medic-kmp"
+  },
+  "server": "palace.team.io"
+}
+```
+
+#### 12.4.3 Weekly team digest
+
+Каждую пятницу в 17:00 (configurable `DIGEST_CRON="0 17 * * 5"`) scheduler генерирует **team digest** для shared-server setup:
+
+```markdown
+# Gimlé Palace — Weekly digest (week 16, 2026-04-13 to 2026-04-17)
+
+## What your team recorded this week
+
+### Decisions (3)
+- [medic-kmp] 2026-04-15 — Dose taps are optimistic; repository writes happen
+  in background. Agent: Anton.
+- [unstoppable-android] 2026-04-14 — EIP-55 checksum required before display.
+  Agent: Anton.
+- [medic-kmp] 2026-04-13 — Kit icons migration to KitIconState. Agent: Anton.
+
+### Critical findings (1)
+- [medic-kmp] high — Private key written to UserDefaults without encryption
+  (WalletManager.swift:42). Status: open.
+
+### Iterations completed (4)
+- medic-kmp: iterations 23, 24 (2 scheduled updates + 1 manual)
+- unstoppable-android: iteration 88 (scheduled)
+
+### Taxonomy changes
+- Added concepts (pending review): :HandlesSessionCookie, :HandlesOcrInput
+- Merged by review: :HandlesHexadecimal → :HandlesHex (alias)
+
+Run `just review-taxonomy` to approve/reject pending concepts.
+```
+
+Digest отправляется:
+- На `NOTIFY_WEBHOOK_URL` если задан (one POST с полным markdown content)
+- В файл `reports/digests/week-<N>-<year>.md` (always)
+- Optional: `DIGEST_EMAIL_TO` SMTP (out-of-MVP)
+
+### 12.5 Failure recovery for ingest
+
+Ingest может упасть на середине (LLM rate limit, OOM, network flap, Paperclip упал, etc.). Стратегия: **auto-retry → checkpoint → explicit recovery**.
+
+#### 12.5.1 Уровень 1 — Auto-retry
+
+Per-task level (внутри single extractor/reviewer run): scheduler / lite-orchestrator делает 3 retry с exponential backoff (5s, 30s, 3min). При permanent fail — task помечается failed в `orchestrator_tasks` (или Paperclip heartbeat_runs.status=failed), НЕ блокирует остальные tasks.
+
+#### 12.5.2 Уровень 2 — Checkpoint-based idempotency
+
+Каждый extractor пишет processed files в `:Iteration.processed_files` attr после каждого успешного file. При рестарте (`just ingest` повторно) — extractor читает processed_files, пропускает уже обработанные, идёт с следующего.
+
+Это означает — **повторный `just ingest <project>` is always safe**: если предыдущий fail'ился частично — продолжит с места остановки; если всё прошло — no-op.
+
+#### 12.5.3 Уровень 3 — Explicit recovery
+
+`just recover <project>` — форсирует resume с последнего checkpoint даже если scheduler уже пометил iteration как "failed". Полезно когда:
+- Iteration была marked failed автоматически, но суть проблемы (rate limit, сеть) прошла и user хочет возобновить без ожидания следующего scheduled run
+- Нужно указать `--skip-tasks <name1,name2>` чтобы проскочить конкретные tasks которые упорно fail'ятся (напр. blockchain-reviewer упал из-за отсутствия Slither → skip на эту итерацию)
+
+```bash
+just recover medic-kmp                        # возобновить latest failed/partial iteration
+just recover medic-kmp --skip-tasks deadcode  # пропустить конкретные
+just recover medic-kmp --from-scratch         # **перезапустить** iteration с нуля
+                                              # (новая iteration с тем же number, старая помечается abandoned)
+```
+
+#### 12.5.4 Уровень 4 — Nuclear option
+
+Если palace corrupted (inconsistent graph state) — `just palace-reset <project>`:
+1. Создаёт full backup (палата + exports + reports)
+2. Удаляет все `:Iteration` и прикреплённые facts для project
+3. Запускает `just ingest <project> --full` с нуля
+
+Это теряет все `record_decision`/`record_iteration_note` которые user писал вручную — предлагается **export'нуть** перед reset: `just export <project> --full --format=zip`, restore manually через `record_*` API.
+
+### 12.6 Playbook scenarios — TODO after MVP implementation
+
+**Status:** ⏳ placeholder — fill in after Phases 1-4 complete, when real flows battle-tested.
+
+Планируемые разделы:
+
+- **Onboarding:** новый developer в команде за 15 минут — checklist из команд
+- **Pre-release audit:** подготовка к deploy с palace export для changelog + security sign-off
+- **Debugging stale knowledge:** симптом "palace даёт устаревшие данные" → диагностика staleness, force re-ingest, verification
+- **Major refactor workflow:** как maintain'ить palace consistency при refactor'е 30%+ symbols (использование `just ingest --full`, taxonomy update, iteration labels)
+- **Multi-repo team setup:** как team из 5 человек с 10 репо эффективно делит один palace сервер (budget allocation, access control, notification routing)
+- **Cost investigation:** "почему последний update стоил $5?" — reading telemetry + heartbeat_runs logs + identifying runaway agent
+- **Compliance export:** для compliance/audit request'а — как сгенерировать полный snapshot проекта + history
+
+Подразумевается что каждый scenario — 1/2 - 1 страница с конкретными commands, example outputs, gotchas. Итого ~7-10 страниц playbook, живут в §12.6 после реализации.
+
+**Rationale для отложить:** реальные workflows откроются только когда stack battle-tested на живых проектах. Писать наперёд — превратится в фантазию. Когда user (Anton) отработает Medic + Unstoppable через палату месяц-два — scenarios напишутся из реальных ситуаций, а не спекулятивно.
 
 ---
 
