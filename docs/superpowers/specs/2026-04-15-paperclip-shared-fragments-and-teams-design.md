@@ -735,23 +735,29 @@ Submodule можно удалить: `git rm paperclips/fragments/shared && mv p
 
 ## 11. Acceptance criteria
 
-Spec считается выполненным когда:
+Разделено на **приёмку spec'а** (документ) и **DoD проекта** (реализация). Это разные вехи.
+
+### 11.1 Spec review acceptance
+
+Spec готов к переходу в imлементацию когда:
+
+1. Документ написан, committed, обсуждён с Board (Anton)
+2. Reality-check пройден: все пути, размеры, plugin-имена соответствуют серверной реальности (см. §12)
+3. Нет placeholder'ов (TBD / TODO / `{{...}}`) в content-секциях
+4. Validation strategy зафиксирована (§13) — как не выкатывать всю архитектуру без доказательства работоспособности базы
+
+### 11.2 Project Definition of Done
+
+Имплементация считается завершённой когда:
 
 1. **`paperclip-shared-fragments` репо** на GitHub содержит:
-   - 15 fragments (5 A + 10 B)
-   - ≥6 templates (как минимум CEO, CTO, один engineer, CodeReviewer, QA, один support); target — все 21 но это Phase 2 work, не MVP-gate
-   - build.sh (hardened: `set -euo pipefail`, file-exists check, optional 2-level nested include, size-breach exit)
-   - bootstrap-new-project.sh (idempotent: refuses if `paperclips/` exists без `--force`)
-   - deploy.sh (atomic .tmp + rename для live AGENTS.md) + drift-check.sh
-   - measure.sh (tokeniser wrapper над Anthropic `count_tokens` API)
-   - README.md + CONVENTIONS.md (token policy, include rules, measure script, versioning policy)
-   - CHANGELOG.md + первый git tag `v0.1.0`
-   - GitHub branch protection для `main` + CODEOWNERS = `* @ant013`
-2. **Research нотсы** для 10 приоритетных ролей в `shared/research/role-patterns/` (+ plugin-mining report)
-3. **Medic успешно мигрирован** на submodule, chain работает без downtime (smoke test: Board comment → wake → run → handoff → done)
-4. **Gimle company** имеет 6+ нанятых агентов, первая issue выполнена end-to-end
-5. **Token-budget compliance:** `measure.sh ~/.paperclip/.../AGENTS.md` показывает ни один > 8000 tokens для всех 20+ agent'ов (9 Medic + 11 Gimle). Текущая baseline — CTO 3085 tok (§12).
-6. **Documentation** обновлена: `docs/paperclip-operations.md` в Medic и Gimle-Palace дополнены секцией про submodule workflow + deploy.sh usage + drift-check запуск
+   - Минимум: 5 fragments (категория A), 1 сборочный build.sh, 1 tag `v0.1.0`, README.md
+   - Полный scope (после успешного слайса): 15 fragments (5 A + 10 B), ≥6 templates (минимум CEO, CTO, один engineer, CodeReviewer, QA, один support), hardened tooling (build.sh + bootstrap-new-project.sh + deploy.sh + drift-check.sh + measure.sh), CHANGELOG.md, CONVENTIONS.md, branch protection + CODEOWNERS
+2. **Medic успешно мигрирован** на submodule, chain работает без downtime — smoke test: Board comment на любую открытую issue → wake fired → agent run succeeded → handoff chain не порван
+3. **Gimle company** имеет 6+ нанятых агентов, первая реальная issue выполнена end-to-end (от Board → CEO → CTO → engineer → review → done)
+4. **Token-budget compliance:** `measure.sh` показывает все AGENTS.md ≤ 8000 tokens (baseline CTO Medic = 3085 tok)
+5. **Research нотсы** для 10 приоритетных ролей (§5.1) в `shared/research/role-patterns/` — но **только если спек расширился до полного scope**. Slice-only DoD их не требует.
+6. **Documentation** обновлена: `docs/paperclip-operations.md` в Medic и Gimle-Palace дополнены секцией про submodule workflow + deploy/drift workflow
 
 ---
 
@@ -774,7 +780,7 @@ Spec считается выполненным когда:
 | `roles/ios-engineer.md` | 39 | 2069 | **605** |
 | `roles/backend-engineer.md` | 46 | 2270 | **665** |
 | `roles/code-reviewer.md` | 101 | 5522 | **1485** |
-| `roles/qa-engineer.md` | 62 | 3467 | ~900 (оценка — API count ERR'нул на файле, перезамерить через `count_tokens` отдельно) |
+| `roles/qa-engineer.md` | 62 | 3467 | **1011** |
 | `roles/research-agent.md` | 71 | 3523 | **923** |
 | `roles/ux-designer.md` | 53 | 2967 | **842** |
 
@@ -800,4 +806,87 @@ Spec считается выполненным когда:
 
 ---
 
-_Документ составлен на основе сессии brainstorming 2026-04-15. По мере bootstrap'а репо — обновлять, добавлять findings из research._
+## 13. Validation strategy: narrow slice first
+
+Спек описывает ~60 артефактов (15 fragments + 21 template + 10 research notes + tooling) как prerequisite продакшена. Но **ни один базовый assumption не валидирован**:
+
+- Submodule workflow реально работает с build.sh?
+- Extraction fragment → @include эквивалентна inline-контенту по поведению агента?
+- Paperclip корректно подхватывает новые AGENTS.md после deploy.sh?
+
+**Правило:** не расширяем scope до тех пор, пока самый узкий слайс не доказан.
+
+### 13.1 Slice #1 — submodule viability (первый слайс)
+
+**Гипотеза:** «submodule с существующими 5 Medic fragments, без extraction и новых templates, сохраняет работу существующей Medic-команды».
+
+**Scope (1 день):**
+
+1. В `paperclip-shared-fragments` репо положить **только 5 существующих Medic fragments (категория A)**: `heartbeat-discipline.md`, `git-workflow.md`, `worktree-discipline.md`, `pre-work-discovery.md`, `language.md`. Без правок содержимого.
+2. Скопировать текущий Medic `build.sh` as-is + README-stub. Tag `v0.0.1`.
+3. В Medic (на сервере, `/Users/Shared/Ios/Medic/`):
+   - `git submodule add git@github.com:ant013/paperclip-shared-fragments.git paperclips/fragments/shared`
+   - `git rm -r paperclips/fragments/*.md` (удаляем локальные копии)
+   - `sed -i 's|@include fragments/|@include fragments/shared/|g' paperclips/roles/*.md` (обновляем @include пути)
+   - `./paperclips/build.sh` → rebuild dist
+   - Commit + push на develop
+4. На сервере — atomic deploy: `cp` всех 9 dist/*.md в live AGENTS.md через `.tmp + mv` (draft deploy.sh сценарий)
+5. **Smoke test:** Board пишет коммент `@CTO проверь текущее состояние projeкта` на любую открытую issue Medic. Ждём wake → run → response.
+
+**Проверяется (ожидаемо все ✅):**
+- Submodule workflow технически работает
+- `build.sh` с путём `fragments/shared/` резолвит корректно
+- Deploy всех 9 файлов не ломает консистентность
+- Paperclip подхватывает новые AGENTS.md без перезапуска (мы это уже наблюдали когда делали rename fix, но здесь явная верификация)
+- Chain `Board → CTO → handoff` работает так же как до миграции
+
+**Критерии отказа:**
+- Submodule не клонируется при deploy / клонирование требует creds которые агенты не имеют
+- `build.sh` ищет старый путь `fragments/` вместо `fragments/shared/` и ломает сборку
+- Agent reads AGENTS.md и видит broken @include markers (сырой текст)
+- Chain molча обрывается после миграции
+
+### 13.2 Slice #2 — один extraction (после успеха #1)
+
+**Гипотеза:** «извлечение одного куска role'и в новый fragment + @include обратно даёт идентичное поведение агента».
+
+**Scope (1-2 часа):**
+- Извлечь `cto-no-code-ban` блок из `cto.md` (самый короткий и чёткий — L10-25)
+- Положить в `shared/fragments/cto-no-code-ban.md`, `v0.0.2` tag
+- В Medic: заменить inline L10-25 в cto.md на `<!-- @include fragments/shared/cto-no-code-ban.md -->`, rebuild, redeploy
+- Smoke test: измерить diff размеров AGENTS.md (должен быть нейтральным), назначить CTO issue которая обычно триггерит no-code-ban поведение, наблюдать что CTO остаётся дисциплинированным (не пишет код)
+
+### 13.3 Slice #3 — один template + один hire (после успеха #2)
+
+**Гипотеза:** «template → role → hired agent → assigned issue → executed» работает end-to-end для новой компании.
+
+**Scope (4-8 часов):**
+- Написать ОДИН template (`templates/engineers/python-engineer.md`) на основе research mining'а НЕСКОЛЬКИХ релевантных plugins (не 10 параллельных deep-research, а минимально обоснованная версия)
+- В Gimle-Palace: скопировать → заполнить Gimle-specific → build.sh → deploy
+- CEO Gimle нанимает PythonEngineer через `paperclip-create-agent` skill
+- Board назначает PythonEngineer'у простую issue («create empty `services/palace-mcp/` directory structure with Dockerfile stub»)
+- Observe: issue выполняется, commit появляется, handoff назад к CEO работает
+
+### 13.4 Только после трёх успешных слайсов — расширение scope
+
+Когда #1+#2+#3 зелёные — **тогда** запускаем:
+- Полный extraction категории B (9 оставшихся fragments)
+- Остальные templates (по мере того как нанимается новая роль)
+- Research mining (когда реально нужен — например, security-auditor template требует OWASP-knowledge)
+- Gimle team complete hiring
+
+### 13.5 Что это НЕ значит
+
+Это не «спек неверен» — большинство его решений остаются. Это — **порядок реализации**. Спек описывает **целевое состояние**. Slice-first описывает **путь туда**: сначала минимальный risk, потом инкремент.
+
+Если слайс #1 провалится — значит submodule подход ошибочен, и мы переписываем §2 (архитектуру) до того как написали 20 templates. Это дешёвый провал.
+
+Если слайс #1 зелёный — мы **знаем** что фундамент стоит, и можем строить на нём без страха.
+
+### 13.6 Что с gimle-palace-design spec'ом
+
+`2026-04-15-gimle-palace-design.md` (2873 строки, продуктовый дизайн самого palace) **не проходил** reality-check в этой сессии. Он описывает what-to-build, не how-to-deliver, поэтому прямого пересечения с team spec'ом нет. Но там тоже могут быть выдуманные facts про серверную инфраструктуру. **Отдельная задача для отдельной сессии** — не блокер для team-slice.
+
+---
+
+_Документ составлен на основе сессии brainstorming 2026-04-15. Reality-check пройден. По мере bootstrap'а репо — обновлять, добавлять findings из research._
