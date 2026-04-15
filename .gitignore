@@ -1,0 +1,42 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+.env.sops.yaml.decrypted
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+
+# Node
+node_modules/
+dist/
+*.log
+
+# Docker / data volumes (when we get them)
+data/
+volumes/
+
+# Backups
+*.backup
+.palace-backup/
+
+# Justfile local overrides
+Justfile.local
