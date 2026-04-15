@@ -1062,7 +1062,48 @@ POST /tasks
 | `:Finding` | severity, category, text, file, line, reviewer | Result of reviewer runs |
 | `:Decision` | text, scope, tags[], author, decided_at | Architectural decision record |
 | `:IterationNote` | iteration, text, tags[], created_at | Free-form notes |
-| `:Iteration` | number, started_at, ended_at, commit_sha | Marker итераций |
+| `:Iteration` | number, kind, from_commit_sha, to_commit_sha, commit_count, started_at, ended_at, label? | Marker ingest runs (не 1-commit-per-iteration, §5.2.1) |
+
+### 5.2.1 Iteration lifecycle — "ingest = iteration"
+
+Одна **Iteration** — это **одно ingest run**, не один commit. Диапазон коммитов захватывается через `from_commit_sha` / `to_commit_sha` / `commit_count`.
+
+**Временная модель:**
+
+```
+Time →
+
+ commits:    c1──c2──c3──c4──c5──c6──c7──c8──c9──c10
+                  │                     │              │
+                  ▼                     ▼              ▼
+ ingests:    Iteration 1          Iteration 2     Iteration 3
+             kind="full"          kind="incremental"  kind="incremental"
+             from_commit=null     from_commit=c3   from_commit=c6
+             to_commit=c3         to_commit=c6     to_commit=c10
+             commit_count=3       commit_count=3   commit_count=4
+             label="initial"      label="swap-v2"  label=null
+             (полный review)      (user markred)   (scheduled nightly)
+```
+
+**Правила:**
+
+- **Iteration 1 = `kind="full"`** — всегда. Ingest всего репо, `from_commit_sha=null`, `to_commit_sha=<HEAD at ingest start>`, `commit_count=<total commits in history>`. Точка отсчёта.
+
+- **Iteration N (N > 1) = `kind="incremental"`** — всегда delta. `from_commit_sha = previous iteration's to_commit_sha`. Обрабатывает только файлы затронутые диапазоном коммитов.
+
+- **Триггеры новой iteration:**
+  - `just ingest <project>` руками — если iteration 1 не было, делает full; если была — делает incremental от последней до текущего HEAD
+  - Scheduled cron (§11) — incremental от последней до HEAD, если новые коммиты появились (иначе no-op)
+  - GitHub webhook on push — incremental
+  - `just re-ingest <project> --full` — принудительно новая full iteration (например, после радикального refactor)
+
+- **Idempotency:** если HEAD == previous `to_commit_sha` — incremental ingest no-op, iteration не создаётся.
+
+- **Label** — optional, user-provided через `just ingest <project> --label "swap-v2 release"` или через `just mark-iteration <project> <iteration-number> "<label>"` post-hoc. Семантические milestones поверх техниче granularity.
+
+- **Graph node updates:** узлы создаются/обновляются с attr `introduced_at_iteration` (для создания) и `last_seen_at_iteration` (для каждого incremental confirmation). Узлы НЕ в scope incremental iteration не трогаются. Это позволяет queries типа "что было актуально на iteration 5?" через фильтр `last_seen_at_iteration >= 5`.
+
+- **Temporal invalidation:** если incremental iteration detect'ит что факт изменился (переименован, удалён, семантика поменялась) — предыдущий узел получает `valid_to = iteration.started_at`, создаётся новый с `valid_from = iteration.started_at`. Native Graphiti bi-temporal.
 
 ### 5.3 Edge types
 
@@ -1088,8 +1129,8 @@ POST /tasks
 |---|---|
 | **Structural** (где в коде) | `:Module`, `:File`, `:Class`, `:Method`, `:Property`, `:Extension` |
 | **Semantic kind** (чем является) | `:UIComponent`, `:APIEndpoint`, `:Utility`, `:Helper`, `:Validator`, `:Converter`, `:Constant`, `:TypeAlias`, `:Repository`, `:Model` |
-| **Domain concept** (о чём) | `:HandlesHex`, `:HandlesData`, `:HandlesAddress`, `:HandlesCrypto`, `:HandlesChain`, `:HandlesToken`, `:HandlesAmount`, `:HandlesUnit`, `:HandlesTime`, `:HandlesCurrency` |
-| **Capability** (что умеет) | `:Encodes`, `:Decodes`, `:Validates`, `:Formats`, `:Signs`, `:Hashes`, `:Parses`, `:Fetches`, `:Caches`, `:Transforms`, `:Renders` |
+| **Domain concept** (о чём) | **Hybrid taxonomy** (§5.4.1): base + dynamic. Базовые: `:HandlesHex`, `:HandlesData`, `:HandlesAddress`, `:HandlesCrypto`, `:HandlesChain`, `:HandlesToken`, `:HandlesAmount`, `:HandlesUnit`, `:HandlesTime`, `:HandlesCurrency`. LLM может добавлять новые при ingest → попадают в `dynamic_taxonomy.yaml`. |
+| **Capability** (что умеет) | Расширяемый vocabulary. Базовые: `:Encodes`, `:Decodes`, `:Validates`, `:Formats`, `:Signs`, `:Hashes`, `:Parses`, `:Fetches`, `:Caches`, `:Transforms`, `:Renders`, `:Authenticates`, `:Authorizes`, `:Observes`, `:Subscribes`, `:Navigates`, `:Persists`, `:Synchronizes`. Расширяется по мере необходимости через `config/facet-taxonomy.yaml`. |
 
 Пример узла метода `ByteArray.toHexString()`:
 ```
@@ -1098,6 +1139,45 @@ properties: {name, signature, path, line, usage_count, last_used_iteration}
 ```
 
 **Composite indexes** по парам (label, property) — O(log n) query по пересечениям осей.
+
+### 5.4.1 Hybrid taxonomy для axis 3 (Domain concept)
+
+Domain concepts не должны быть ни жёстко предопределены (негибко для новых проектов), ни полностью LLM-свободно generated (deteriorates consistency — один и тот же концепт получит 5 разных имён). Решение — **hybrid** с human-in-the-loop review loop.
+
+**Три уровня:**
+
+1. **Base taxonomy** (`config/facet-taxonomy.yaml`, коммитится в git):
+   ```yaml
+   domain_concepts:
+     HandlesHex:
+       description: "Operations on hexadecimal string representations"
+       aliases: ["hex", "hex string", "hexadecimal"]
+     HandlesAddress:
+       description: "Blockchain address (EVM, Bitcoin, Ton, etc.) formatting/validation"
+       aliases: ["address", "wallet address", "account address"]
+     # ... 10-15 base concepts для mobile wallet stack
+   capabilities:
+     Encodes:
+       description: "Converts from one representation to another (one-way semantic)"
+     # ... 15-18 base capabilities
+   ```
+
+2. **Dynamic taxonomy** (`data/dynamic_taxonomy.yaml`, в persistent volume):
+   - LLM extractor во время ingest'а, если встречает концепт которого нет в base **и** который встречается 3+ раз в коде — добавляет в dynamic_taxonomy
+   - Каждая новая запись: `name`, `introduced_at_iteration`, `first_seen_file`, `example_usages`, `needs_review: true`
+   - Default prefix: `:Handles*` для domain, `:*s` (Verbs) для capability
+   - Similarity check при добавлении: если embedding нового концепта слишком близок существующему (cos-sim > 0.92) — НЕ создаётся новый, используется существующий + добавляется alias
+
+3. **Review loop (weekly scheduled task)** `just review-taxonomy`:
+   - Показывает user'у все dynamic concepts с `needs_review: true`
+   - User может: **(a)** promote в base taxonomy, **(b)** merge с существующим базовым (как alias), **(c)** reject (удалить concept, re-tag узлы как `:Misc`), **(d)** rename
+   - После review — `needs_review: false`, или concept исчезает
+   - Alias-learning: если user merge'ит `HandlesHexadecimal → HandlesHex` — это записывается в `:ALIAS_OF` edge + `aliases:` list в base taxonomy
+
+**Consistency guarantees:**
+- При каждом ingest: первый шаг — прочитать `facet-taxonomy.yaml` + `dynamic_taxonomy.yaml`, дать extractor'у как known vocabulary.
+- Extractor prompt: *"Используй только эти existing concepts. Если встречаешь что-то что ни один из них не описывает и встречается часто (≥3 раз в текущем batch'е) — добавь новый с префиксом `:Handles*`, иначе маппи в ближайший существующий."*
+- Similarity check препятствует созданию `:HandlesHex` и `:HandlesHexadecimal` как разных концептов.
 
 ### 5.5 Capability edges для обратного индекса
 
@@ -1415,7 +1495,30 @@ AVOIDED_TOKENS_FORMULA = {
 
 Коэффициенты tunable через `config/telemetry.yaml` без релиза.
 
-`just stats --explain` выводит эту формулу + per-tool вклад в общий saved tokens — полная прозрачность.
+`just stats --explain` выводит эту формулу + per-tool вклад в общий saved tokens — **полная прозрачность**, явно помечает **"rough estimate based on file-size heuristics — actual savings may vary ±30%"**.
+
+**Пользователь должен понимать** что avoided_tokens_est — оценка, не измерение. Абсолютные цифры приближённые; **trend reliable** (day-over-day сравнения работают, 30% bias одинаковый в обе стороны).
+
+### 8.2.1 Калибровочный режим (opt-in)
+
+Для users, кому нужны точные savings — `just calibrate` запускает controlled A/B:
+
+```bash
+just calibrate --project unstoppable-android --iterations 10
+```
+
+Workflow:
+1. Выбираются 10 типовых задач из последних 100 палата-запросов (stratified по tool types).
+2. Для каждой — **two runs** Claude с одним и тем же промптом:
+   - Run A: **без palace-mcp** (MCP отключён). Claude делает grep/read файлов.
+   - Run B: **с palace-mcp**. Claude use faceted tools.
+3. Измеряется: total input + output tokens обоих runs. Разница (A − B) = **real avoided tokens** для этой задачи.
+4. Новые коэффициенты для `AVOIDED_TOKENS_FORMULA` вычисляются через linear regression: `avoided_real = f(response_bytes, tool_type)`. Записываются в `data/calibration.yaml` с timestamp + sample size.
+5. Дальше `just stats` использует **calibrated** коэффициенты вместо default heuristics. В `--explain` показывает *"calibrated on 2026-04-20, sample N=10, R²=0.73"*.
+
+**Cost калибровки:** ~$20-30 на ran (каждая задача ×2 runs через Sonnet). Не делается автоматически — только по user command.
+
+**Recalibration frequency:** рекомендуемая — раз в 3-6 месяцев или после значительных изменений в codebase/taxonomy. Автоматический prompt в `just stats`: *"Calibration is 4 months old — consider running `just calibrate`"*.
 
 ### 8.3 Dashboard поверх (optional)
 
@@ -1537,32 +1640,70 @@ exports/<project>/<timestamp>/
 
 ---
 
-## 10. Ingest Pipeline (first-time)
+## 10. Ingest Pipeline
 
-Команда: `just ingest <project-slug>`.
+Команда: `just ingest <project-slug>` (full или incremental — autodetected по наличию previous `:Iteration`).
+
+### 10.1 First-time (full) ingest — `:Iteration` kind=full
+
+Триггерится когда для проекта нет предыдущих `:Iteration` узлов (первый запуск). **Полный deep ingest всех файлов**, без tiered shortcuts — точка отсчёта должна быть полноценной, от неё потом delta-обновления.
 
 Workflow:
 
 1. Validate `projects/<slug>.yaml`.
-2. Clone/sync repo into server volume `repos/<slug>`.
-3. **Serena warm-up:** startup Serena с указанным репо, первичная индексация LSP (~20-120 сек в зависимости от размера).
-4. **Paperclip task creation:** создаёт tasks для каждого extractor из team-template. Tasks runs в параллель с budget limits.
-5. Extractors пишут в palace через palace-mcp `record_*` tools. Graphiti constructs KG.
-6. **Reviewers pass** (опционально, если включены в `reviewers:`). Пишут `:Finding` узлы.
-7. **Report generation:** последний Paperclip task — `report-writer` агент читает palace + findings + generates **markdown-отчёт 10-20 страниц** в `reports/<slug>/<iteration>.md`. Содержимое:
-   - Architecture overview (с diagram в mermaid)
-   - UI components catalogue
-   - API surface
-   - Dependencies
-   - Critical findings (severity=high)
-   - Non-critical findings
-   - Dead code hotspots
-   - Duplication hotspots
-   - Recommendations
-8. `:Iteration` node создаётся/обновляется с commit_sha + ended_at.
-9. Telemetry записывает `ingest_completed` event.
+2. Clone/sync repo into server volume `repos/<slug>`. Запомнить `HEAD_SHA`.
+3. Create `:Iteration` node: `{number: 1, kind: "full", from_commit_sha: null, to_commit_sha: <pending>, started_at: now(), label: <from flag or null>}`.
+4. **Serena warm-up:** startup Serena с указанным репо, первичная индексация LSP (~20-120 сек в зависимости от размера).
+5. **Load taxonomy:** читаем `config/facet-taxonomy.yaml` + `data/dynamic_taxonomy.yaml` — подаём extractor'у как known vocabulary.
+6. **Paperclip task creation** (или lite-orchestrator в profile `analyze`): создаёт tasks для каждого extractor из team-template. Tasks runs параллельно с budget limits.
+7. **Extractors** пишут в palace через palace-mcp `record_*` tools. Graphiti constructs KG. Каждый факт помечается `introduced_at_iteration: 1`, `last_seen_at_iteration: 1`.
+8. **Reviewers pass** (если включены в `reviewers:` в project.yaml). Пишут `:Finding` узлы. Hybrid flow (§4.5.4): static tools first → LLM reasoning second.
+9. **Taxonomy delta persist:** если LLM-extractor'ы создали новые domain concepts — append в `data/dynamic_taxonomy.yaml` с `needs_review: true`.
+10. **Report generation:** `report-writer` агент читает palace + findings + generates **markdown-отчёт 10-20 страниц** в `reports/<slug>/iteration-01.md`. Содержимое (см. §8.4 для детальной структуры):
+    - Architecture overview (с diagram в mermaid)
+    - UI components catalogue
+    - API surface
+    - Dependencies + CVE findings
+    - Critical findings (severity=high) — static + llm + hybrid
+    - Non-critical findings
+    - Dead code hotspots
+    - Duplication hotspots
+    - Recommendations
+11. **Finalize Iteration:** update `:Iteration{1}` с `to_commit_sha: HEAD_SHA`, `commit_count: <total-in-history>`, `ended_at: now()`.
+12. Telemetry записывает `ingest_completed` event с `kind="full"`, `iteration_number=1`, cost stats, latency.
 
-Idempotency: повторный `just ingest` на том же commit SHA → no-op (детектируется через `:Iteration.commit_sha`).
+Cost для типичного репо 30-300K LOC на cloud mode: **$5-50** (Sonnet). На Opus для критичных ролей: ×6-10.
+
+### 10.2 Subsequent (incremental) ingest — `:Iteration` kind=incremental
+
+Триггерится либо manually (`just ingest <project>`) либо scheduler (§11). Детектирует previous `:Iteration`, делает delta от её `to_commit_sha` до current HEAD.
+
+Workflow:
+
+1. Load last `:Iteration` (highest `number`).
+2. `git fetch && HEAD_SHA = git rev-parse HEAD`.
+3. Если `HEAD_SHA == last.to_commit_sha` → **no-op** (нет новых commits), exit. Iteration не создаётся.
+4. Create `:Iteration{number: last.number + 1, kind: "incremental", from_commit_sha: last.to_commit_sha, to_commit_sha: <pending>, started_at: now()}`.
+5. `changed_files = git diff --name-only last.to_commit_sha..HEAD`.
+6. **Scope extractors только на changed_files** — не re-ingest всего репо. Serena refresh relevant LSP indexes.
+7. Extractors пишут через palace-mcp `record_*`:
+   - Новые факты: создаются узлы с `introduced_at_iteration: N`, `last_seen_at_iteration: N`.
+   - Изменённые: старый узел получает `valid_to = iteration.started_at`, новый создаётся.
+   - Удалённые (файл исчез): старый узел получает `valid_to = iteration.started_at` без нового.
+   - Неизменённые факты из нетронутых файлов: просто update `last_seen_at_iteration: N` чтобы показать "всё ещё актуально".
+8. Reviewers pass — только на changed_files + связанных через `:DEPENDS_ON` (blast radius ≤ 2 hops).
+9. `report-writer` делает **delta report** — что изменилось в этой итерации (это `just export --since=<prev-iter-date>` эквивалент, автоматически).
+10. Finalize Iteration: `to_commit_sha`, `commit_count`, `ended_at`.
+11. Telemetry event `kind="incremental"`.
+
+Cost: **$0.05-$0.50 per incremental update** — 10-100× дешевле full ingest.
+
+### 10.3 Когда нужен force-full
+
+`just ingest <project> --full` принудительно создаёт новую full iteration даже если есть предыдущие. Используй когда:
+- Радикальный refactor (переименование 30%+ symbols, структурные изменения)
+- Изменение `config/facet-taxonomy.yaml` (новые concepts, которые требуют re-classification)
+- Подозрение на corruption incrementals (расхождение palace ↔ реальный код)
 
 ---
 
