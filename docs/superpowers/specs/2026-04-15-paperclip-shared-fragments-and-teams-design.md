@@ -846,6 +846,40 @@ Spec готов к переходу в imлементацию когда:
 - Agent reads AGENTS.md и видит broken @include markers (сырой текст)
 - Chain molча обрывается после миграции
 
+### 13.1.1 Slice #1 outcome — EXECUTED 2026-04-15 ✅
+
+| Metric | Result |
+|---|---|
+| **Executed by** | Claude Opus 4.6 (subagent-driven) + Anton Stavnichiy (manual board comment) |
+| **Wall-clock time** | ~1.5 hours (from Task 0 to Task 9 commit) |
+| **Tasks completed** | 10/10 (Tasks 0–9 done, Task 10 = this update) |
+| **dist/*.md byte-identical pre/post** | 9/9 OK (Task 5 Step 6) |
+| **Live AGENTS.md token Δ vs baseline** | 9/9 Δ=0 bytes AND Δ=0 tokens (Task 7) |
+| **Smoke test** | PASS — @CTO comment on STA-27 → wake source=`issue_comment_mentioned` → run `1a9af85d` succeeded in 47s → CTO posted coherent response confirming submodule-migration transparent |
+| **Total baseline tokens (9 agents)** | 24990 (unchanged post-migration) |
+| **Medic commit** | `9c03641e refactor(paperclips): migrate fragments to paperclip-shared-fragments submodule` on branch `refactor/paperclips-shared-fragments` (pushed to origin) |
+| **Shared repo** | `github.com/ant013/paperclip-shared-fragments` v0.0.1 (commit `b78f2f7`) |
+
+**Findings / surprises:**
+
+1. **@include path required extra `fragments/` segment.** Initial sed set paths to `fragments/shared/X.md`, but submodule's own internal layout puts fragments at `fragments/shared/fragments/X.md` (because shared repo has `fragments/` subdir). Hardened build.sh caught this instantly via `ERROR: cannot read` + exit 2 — doing exactly what hardening was for. Fixed by second sed run. **Action for spec §8.1 migration doc:** correct @include path substitution to account for the inner `fragments/`.
+
+2. **CTO token baseline divergence vs §12 pre-measurement.** §12 says CTO = 3085 tok, actual measurement at Task 2 baseline = 3168 tok (+83, +2.7%). Not a blocker for Δ=0 validation (baseline matches itself). Likely due to slight heartbeat-discipline edits between §12 measurement and Task 2 measurement. No action needed.
+
+3. **Code review findings on new build.sh** — 2 Important followups identified, deferred to future work:
+   - Empty-fragment false positive (0-byte file indistinguishable from missing)
+   - Partial dist output remains if awk fails mid-stream (no cleanup on error)
+   
+   Tracked as §10.2 items.
+
+4. **Medic repo dist/*.md showed no git status change** despite `build.sh` rebuild. Reason: rebuilt output byte-identical → git sees no change. Expected, not a problem.
+
+5. **Execution model pragmatic adaptation.** Task 8 (smoke test with manual Board comment) bypassed subagent dispatch — too much human-in-loop orchestration for a subagent. Ran directly. All other tasks went through implementer + spec review (+ code quality review where applicable).
+
+**Decision: proceed to slice #2** (per §13.2) — submodule approach is validated, can start extracting category B fragments. First target: `cto-no-code-ban` extraction.
+
+**Open PR to merge:** `https://github.com/ant013/Medic/pull/new/refactor/paperclips-shared-fragments` — awaits Board review + CI green.
+
 ### 13.2 Slice #2 — один extraction (после успеха #1)
 
 **Гипотеза:** «извлечение одного куска role'и в новый fragment + @include обратно даёт идентичное поведение агента».
