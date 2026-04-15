@@ -405,6 +405,14 @@ just setup --yes                # profile=full, paperclip=embedded, sensible def
     hashed — hash arg values in logs (privacy-preserving)
     off — no telemetry
 
+? Use local Ollama for embeddings / extraction? [auto-detect: Docker has 16 GB RAM available]
+    cloud   — OpenAI embeddings + Claude extraction (recommended, best quality)  [default]
+    hybrid  — local Ollama for embeddings, Claude for extraction (save $ on embeddings, 2 GB RAM)
+    local   — everything via local Ollama (zero $, privacy++, quality⭐⭐⭐, needs 8+ GB RAM)
+    external-ollama — I already have Ollama running somewhere (enter URL)
+
+↳ cloud
+
 ? Ready to install:
      profile: full
      paperclip: embedded
@@ -470,7 +478,7 @@ Connected to Gimlé server at https://palace.team.io
 
 Пользователь может пропустить компоненты если не хочет. Например отказаться от `subagents` но взять `mcp` + `skills`.
 
-### 4.1 Neo4j Community 5.x
+### 4.1 Neo4j Community 5.x + backup sidecar
 
 - Docker image: `neo4j:5-community`
 - Persistent volume: `neo4j-data`
@@ -478,14 +486,96 @@ Connected to Gimlé server at https://palace.team.io
 - Лицензия: GPL v3 — **приемлемо** т.к. мы не distribut'им стек как продукт, это self-host tooling
 - Plan B: FalkorDB (SSPL, Redis-based) — drop-in замена для тех, кому GPL неприемлема; переключается через env-флаг `GRAPH_BACKEND=neo4j|falkordb`
 
+**Backup sidecar `neo4j-backup`:**
+
+```yaml
+# docker-compose.yml snippet
+neo4j-backup:
+  profiles: [analyze, full]
+  image: neo4j:5-community
+  depends_on: { neo4j: { condition: service_healthy } }
+  volumes:
+    - neo4j-data:/data:ro
+    - backup-volume:/backups
+  environment:
+    - BACKUP_HOURLY_RETENTION=24    # keep last 24 hourly
+    - BACKUP_DAILY_RETENTION=30     # keep last 30 daily
+    - BACKUP_WEEKLY_RETENTION=12    # keep last 12 weekly
+  entrypoint: /scripts/backup-runner.sh
+```
+
+Содержит crond + `neo4j-admin database dump palace --to-path=...` для hourly snapshots, автоматическая rotation по retention policy. Даёт паритет с Paperclip's built-in pg_dump hourly + 30-day retention.
+
+**CLI commands:**
+- `just backup-now` — manual snapshot сейчас (в папку `manual/` с timestamp)
+- `just backups-list` — показывает все snapshots с размерами
+- `just restore --timestamp <ts>` — восстановление из конкретного snapshot (останавливает Neo4j, заменяет volume, стартует)
+- `just backup-config` — показывает текущую retention config
+
+Retention настройка в `.env` — `BACKUP_HOURLY_RETENTION`, `BACKUP_DAILY_RETENTION`, `BACKUP_WEEKLY_RETENTION`.
+
 ### 4.2 Graphiti service
 
 - Python 3.11 FastAPI wrapper над `graphiti-core` library (getzep/graphiti)
 - Выставляет:
   - Internal gRPC/HTTP для palace-mcp
   - Official Graphiti MCP server v1.0 на отдельном порту (для Paperclip-агентов которым удобнее прямой MCP)
-- Embedding model: configurable — `text-embedding-3-large` по умолчанию, переопределяется ENV
-- Entity extraction LLM: configurable — Claude Sonnet по умолчанию (cost/quality оптимум)
+- **Embedding provider:** configurable через `.env`. Default cloud (OpenAI `text-embedding-3-large`). Alternative: local Ollama (§4.2.1 — opt-in checkbox в installer).
+- **Entity extraction LLM:** configurable через `.env`. Default cloud (Claude Sonnet — cost/quality оптимум). Alternative: local Ollama (качество хуже, privacy+cost выигрыш).
+- **Provider abstraction:** через LiteLLM router — любой OpenAI-compatible endpoint подключается без кода (Claude, Anthropic, OpenAI, Gemini, Ollama, Voyage AI, Together, Groq и т.д.).
+
+#### 4.2.1 Ollama как opt-in local LLM runner
+
+При `just setup` пользователь получает prompt (§3.6): *"Use local Ollama for embeddings/extraction? (recommended only if server has 8+ GB free RAM)"*. По умолчанию — **cloud**.
+
+**Three режима** (env `LLM_MODE`):
+
+| Mode | Embedding | Extraction | Cost | Quality | Min RAM extra |
+|---|---|---|---|---|---|
+| `cloud` (default) | OpenAI API | Claude API | $ per call | ⭐⭐⭐⭐⭐ | 0 |
+| `hybrid` | Local Ollama (`nomic-embed-text`) | Claude API | $ only for extraction | ⭐⭐⭐⭐ | ~2 GB |
+| `local` | Local Ollama (`nomic-embed-text`) | Local Ollama (`llama3.1:8b` или `qwen2.5-coder:7b`) | $0 | ⭐⭐⭐ | ~8 GB |
+
+**Где и как поднимается Ollama:**
+
+- `just setup` с Ollama-галочкой → `docker compose --profile with-ollama up`
+- Compose service `ollama` (official `ollama/ollama` image), expose `:11434` на internal network
+- Auto-pull моделей при первом запуске: `nomic-embed-text` (274 MB), `llama3.1:8b` (4.7 GB) — только если выбран соответствующий mode
+- Если у пользователя **уже есть** native Ollama на хост-машине — можно указать `OLLAMA_URL=http://host.docker.internal:11434` в `.env`, profile `with-ollama` не включается, compose-сервис не поднимается.
+
+**Installer RAM check:** при выборе `local`/`hybrid` mode installer запускает `docker info --format '{{.MemTotal}}'` и warn'ит если доступно < 8 GB: *"Your server has 6 GB RAM; Ollama may struggle with llama3.1:8b. Consider `hybrid` mode or stay with `cloud`."* Не блокирует — только warn.
+
+**Соответствующие `.env` переменные (§4.2.2):**
+
+```bash
+# Default — cloud
+LLM_MODE=cloud
+EMBEDDING_PROVIDER=openai
+EMBEDDING_MODEL=text-embedding-3-large
+EXTRACTION_PROVIDER=anthropic
+EXTRACTION_MODEL=claude-sonnet-4-6
+
+# Hybrid
+LLM_MODE=hybrid
+EMBEDDING_PROVIDER=ollama
+EMBEDDING_MODEL=nomic-embed-text
+EXTRACTION_PROVIDER=anthropic
+EXTRACTION_MODEL=claude-sonnet-4-6
+
+# Fully local
+LLM_MODE=local
+EMBEDDING_PROVIDER=ollama
+EMBEDDING_MODEL=nomic-embed-text
+EXTRACTION_PROVIDER=ollama
+EXTRACTION_MODEL=llama3.1:8b
+
+# Ollama endpoint (always required if EMBEDDING_PROVIDER=ollama or EXTRACTION_PROVIDER=ollama)
+OLLAMA_URL=http://ollama:11434                   # compose-internal (default with --profile with-ollama)
+# OLLAMA_URL=http://host.docker.internal:11434   # native Ollama on host machine
+# OLLAMA_URL=http://192.168.1.50:11434           # dedicated Ollama server
+```
+
+Режим можно поменять после install через `just reconfigure` — установщик проходит заново только релевантные вопросы.
 
 ### 4.3 palace-mcp
 
@@ -507,6 +597,9 @@ Exposed tools (read):
 | `get_dependency_usage(library_name, project?)` | где используется 3rd-party lib |
 | `get_iteration_notes(project?, since_iteration?)` | заметки предыдущих итераций |
 | `get_iteration_diff(project, from, to)` | что изменилось между итерациями |
+| `get_recent_iterations(project?, limit=5)` | последние N итераций + summary что изменилось |
+| `find_decision_by_topic(topic, project?)` | быстрый поиск архитектурных правил по теме |
+| `get_architecture_summary(project, depth="medium")` | one-shot overview: modules/layers/key-decisions (depth ∈ high/medium/detailed) |
 | `list_projects()` | каталог проектов |
 | `get_project_overview(project)` | high-level summary |
 
@@ -515,33 +608,175 @@ Exposed tools (write):
 | Tool | Назначение |
 |---|---|
 | `record_decision(project, scope, text, tags?)` | архитектурное решение |
-| `record_finding(project, scope, severity, text, tags?)` | баг/уязвимость/anti-pattern |
+| `record_finding(project, scope, severity, text, tags?, source?)` | баг/уязвимость/anti-pattern. `source ∈ {"static","llm","hybrid"}` — см. §4.5 hybrid reviewer design |
 | `record_iteration_note(project, text, tags?)` | свободная заметка из текущей работы |
+| `link_items(from_id, to_id, relation)` | явно связать два узла графа (напр. `:Finding → :Decision :INVALIDATED_BY`) |
 | `create_paperclip_issue(project, title, description, role_hint?)` | ставит задачу сотруднику Paperclip |
 
-Все tools возвращают `{ok: bool, data?: T, error?: string, meta: {latency_ms, tokens_est, avoided_tokens_est, event_id}}`.
+Все tools возвращают `{ok: bool, data?: T, error?: string, meta: {latency_ms, tokens_est, avoided_tokens_est, event_id, last_ingest_at?, staleness_warning?}}`. Поля `last_ingest_at` и `staleness_warning` добавляются когда response основан на snapshot старше `STALENESS_WARN_HOURS` (default 12h) — см. §4.4.
 
-### 4.4 Serena MCP
+### 4.3.1 Branch-aware ingest
 
-Standalone контейнер поверх official image. Конфигурируется через volume mount путей анализируемых репозиториев. Запускается в режиме `--transport streamable-http` на порту в `paperclip-agent-net`.
+В дополнение к `just ingest <project>` (main branch) — поддержка feature branches:
 
-Serena покрывает **"живую" code navigation** — то что должно быть точным в моменте, через LSP: find-references, go-to-definition, call hierarchies. В отличие от palace который содержит **синтезированные** знания, Serena даёт структурную истину текущего кода.
+```bash
+just re-ingest <project> --branch feature/swap-v2
+# → создаёт namespace project/<slug>#branch/<branch-name> в Graphiti
+# → все queries с filter {branch: "feature/swap-v2"} возвращают knowledge
+#   текущей ветки, fallback на main для отсутствующих фактов
+# → при merge PR: `just merge-branch <project> feature/swap-v2` —
+#   либо применяет branch knowledge в main namespace, либо отбрасывает
+#   (выбор при merge)
+```
 
-### 4.5 Code-analyzer MCP family
+Используется когда работаешь над фичей больше суток и хочется чтобы palace понимал твою ветку, не дожидаясь scheduled update. Не связано со scheduled updates — это on-demand.
 
-Модульно: по одному MCP-серверу на домен. Это **специализированные reviewers**, которые запускаются Paperclip-агентами при ingest и при scheduled updates; результаты их работы пишутся в palace через `record_*`.
+### 4.4 Serena MCP — local vs server coexistence
 
-Roster v1:
+**Две разные instance Serena** могут жить параллельно — у пользователя на машине и у нас в контейнере. Они работают в **разных filesystem namespace'ах** и служат **разным целям**.
 
-| MCP | Что делает | Базовые инструменты |
+#### 4.4.1 Две instance, разный scope
+
+| | Local Serena (у пользователя) | Server Serena (наш контейнер, alias `palace-serena`) |
 |---|---|---|
-| `security-reviewer-mcp` | OWASP/CWE checks, secret scanning, injection surfaces | semgrep, trufflehog, ручные checklist-promts |
-| `blockchain-reviewer-mcp` | crypto-specific invariants (reentrancy, signature verification, nonce handling, key storage) | ручные checklist + slither-like rules адаптированные под mobile Kotlin/Swift |
-| `deadcode-hunter-mcp` | unused symbols, unreachable code | через Serena `find_references` — если 0 references → flag |
-| `duplication-detector-mcp` | copy-paste, near-duplicates | jscpd / simian через tool-wrapping + semantic dedup через embeddings |
-| `dependency-analyzer-mcp` | 3rd-party libs + usage map | парсинг build файлов + cross-ref через Serena |
+| **Видит** | твой личный checkout + uncommitted changes | server-side mirror репо (mount в `/repos/`) |
+| **Обновление** | мгновенно при редактировании | при `just ingest` / scheduled update |
+| **Запускается** | `~/.local/share/uv/tools/serena-agent/bin/serena` | Docker container |
+| **Alias в `~/.claude/mcp.json`** | `serena` | `palace-serena` |
+| **Primary для кейсов** | работа в текущем live коде, find_references по только что отредактированному | обзор snapshot-knowledge по проектам которые не cloneнуты у тебя локально |
 
-Каждый — отдельный контейнер с единым interface: `analyze_file(path) → findings[]`.
+В profile `client` — user не имеет локального checkout'а обязательно, но обычно имеет. Оба MCP остаются доступны — Claude routing (§4.4.3) решает что когда.
+
+#### 4.4.2 Docker setup для server Serena
+
+Standalone контейнер поверх official image. Конфигурируется через volume mount путей анализируемых репозиториев в `/repos/<project-slug>`. Запускается в режиме `--transport streamable-http` на порту в `paperclip-agent-net`. Регистрируется в client MCP config **под alias `palace-serena`** (не `serena` — чтобы не конфликтовать с локальной).
+
+#### 4.4.3 Routing: какой Serena использовать для какой задачи
+
+Tool descriptions в `palace-serena` явно говорят: *"This Serena instance works on the server-side snapshot of team-registered projects. For navigation in your current local checkout, use the local `serena` tool instead."*
+
+Claude routing auto-таблица:
+
+| User ask | Tool |
+|---|---|
+| "где используется метод `signTransaction` в моём коде?" | local `serena.find_references` |
+| "сколько раз `ButtonPrimary` используется в проекте?" | `palace-mcp.find_component_usage` (synthesized count) |
+| "покажи call graph для `WalletViewModel`" (в моём локальном checkout) | local `serena.call_hierarchies` |
+| "есть ли в другом репо команды (`ethereum-kit`) что-то похожее на это?" | `palace-serena` + `palace-mcp` |
+| "какие decisions приняты про swap?" | `palace-mcp.find_decision_by_topic` |
+
+#### 4.4.4 Staleness semantics — palace не видит uncommitted
+
+**Правило:** palace = shared team knowledge, live local workdir = личное in-progress. Uncommitted changes **не попадают** в palace пока не push'ены + re-ingest отработал.
+
+Это **фича**, не баг: экспериментальный scratch не засоряет shared knowledge. Но требует user-awareness:
+
+- `palace-mcp` в каждом ответе прокидывает `meta.last_ingest_at` + `meta.last_ingest_commit_sha`.
+- Если разница между `last_ingest_commit_sha` и `git HEAD` в локальном checkout > threshold — `meta.staleness_warning: "Palace is behind by 18 commits; your local changes not reflected"`.
+- Claude инструктирован (через client skill `palace-awareness`) сообщать user'у: *"По данным палаты (snapshot 18 коммитов назад)... в твоих локальных изменениях возможно уже другое."*
+
+#### 4.4.5 Когда твоя ветка отличается сильно
+
+Для большой долгоживущей feature branch — используй `just re-ingest <project> --branch <name>` (§4.3.1). Тогда palace знает и main, и ветку отдельно, и на запросы с `branch=feature-x` отдаёт branch-aware ответ. Без этого — default main snapshot + staleness warning.
+
+### 4.5 Code-analyzer — hybrid architecture (2 deterministic MCPs + 5 roles)
+
+**Ключевая идея:** разные типы багов требуют разных инструментов. Formal patterns (reentrancy, known CVE, hardcoded secrets в git history) — детерминированные tools объективно быстрее, дешевле и надёжнее. Business-logic bugs (wrong approve amount, reversed condition, architecture misuse) — LLM объективно эффективнее. Ни одно из двух не заменяет другое.
+
+Поэтому — **hybrid**:
+
+#### 4.5.1 Два deterministic MCP-сервера (формальный слой)
+
+**`security-tools-mcp`** (1 контейнер с необходимыми CLI tools установленными):
+
+| Tool | Wraps | Назначение |
+|---|---|---|
+| `run_semgrep(path, ruleset)` | semgrep CLI | OWASP, CWE, custom wallet-security rulesets |
+| `scan_secrets_in_history(repo_path)` | trufflehog | Поиск hardcoded keys/tokens во всей git-истории |
+| `check_cve_in_dependencies(path)` | osv-scanner, trivy | Known CVE в direct + transitive deps |
+| `check_tls_config(path)` | custom scanner | cleartext traffic, missing certificate pinning, weak TLS |
+| `verify_keystore_usage(path, lang)` | ast-based | Kotlin EncryptedSharedPreferences vs SharedPreferences, Swift Keychain vs UserDefaults для sensitive data |
+| `run_slither(path)` | slither CLI, conditional | Solidity static analysis (активируется только если Solidity файлы detected) |
+
+**`code-analysis-mcp`** (1 контейнер):
+
+| Tool | Wraps | Назначение |
+|---|---|---|
+| `detect_duplicates(path, threshold)` | jscpd + semantic embedding dedup | copy-paste detection + semantic near-duplicates |
+| `find_unreferenced_symbols(path)` | через palace-serena `find_references` | dead code (0 references → flag) |
+| `extract_public_surface(path, lang)` | ast-based | entry points + exported APIs — "вот что внешний user может вызвать" |
+| `compute_complexity(file)` | McCabe, Halstead | cyclomatic complexity, halstead effort — hotspots для refactor |
+| `parse_build_deps(path)` | gradle/swift-pm/cargo/package.json parsers | 3rd-party libs + versions |
+
+Оба сервиса — stateless, `POST /tool/{name}` с JSON body, отдают JSON findings. Включаются в profiles `review`/`analyze`/`full`.
+
+#### 4.5.2 Пять reviewer ролей (LLM-слой, используют MCPs выше)
+
+Каждая роль — запись в `team-template.yaml`, spawn'ится через Paperclip / lite-orchestrator. **Не имеет собственного docker-сервиса.** Использует:
+- `palace-mcp` для записи findings
+- `palace-serena` для code navigation
+- `security-tools-mcp` / `code-analysis-mcp` для formal checks
+- Plugin'ы и subagents из существующего inventory (§13.3)
+
+| Role | Plugins / subagents из inventory | Что добавлено нашим fragment'ом |
+|---|---|---|
+| `security-reviewer` | `voltagent-qa-sec` (`security-auditor`, `penetration-tester`), `code-review`, `pr-review-toolkit` | OWASP-focused prompt + workflow "сначала run_semgrep → record static findings → дальше LLM reasoning по business logic" |
+| `blockchain-reviewer` | `voltagent-qa-sec` (`security-auditor`) | `fragments/blockchain-invariants.md` — checklist из 25+ пунктов (reentrancy, signature verification, nonce handling, key storage, front-running, integer overflow, access control). Вызывает `run_slither` если Solidity, `verify_keystore_usage` для Kotlin/Swift. |
+| `deadcode-hunter` | `pr-review-toolkit:code-simplifier` | Вызывает `find_unreferenced_symbols`, добавляет reasoning "может это используется через reflection?" |
+| `duplication-detector` | `pr-review-toolkit:code-simplifier` | Вызывает `detect_duplicates`, потом LLM группирует похожие дубликаты по семантике |
+| `dependency-analyzer` | (generic) | Вызывает `parse_build_deps` + `check_cve_in_dependencies`, reasoning "какие deps реально используются vs dead dependencies" |
+
+#### 4.5.3 Дуальная confidence в `:Finding`
+
+`record_finding` принимает параметр `source ∈ {"static","llm","hybrid"}`. Для каждой finding в палате:
+
+```json
+{
+  "severity": "high",
+  "category": "key-storage",
+  "text": "Private key stored in UserDefaults without encryption",
+  "file": "WalletManager.swift", "line": 42,
+  "source": "hybrid",
+  "static_confidence": 0.95,    // verify_keystore_usage вернул match
+  "llm_confidence": 0.85,        // reviewer подтвердил + написал reasoning
+  "evidence": {
+    "static_rule": "verify_keystore_usage:userdefaults-for-sensitive",
+    "llm_reasoning": "В WalletManager.swift:42 `UserDefaults.set(privateKey, forKey:)` —
+                      UserDefaults не encrypted by default, не имеет hw-backing. В то же
+                      время в проекте используется Keychain для других sensitive values
+                      (AuthManager.swift:18). Inconsistent usage — явная ошибка."
+  }
+}
+```
+
+Это даёт audit trail: security-ревьюер команды или auditor видит **какой tool нашёл что** + **какое reasoning LLM добавил**. Для compliance-отчётов — бесценно.
+
+#### 4.5.4 Порядок работы внутри role (каноничный pattern)
+
+Из `fragments/hybrid-review-workflow.md` (автоматически инжектится во все reviewer-роли):
+
+```markdown
+### Hybrid review workflow (ОБЯЗАТЕЛЬНО в этом порядке)
+
+1. **First pass — static tools:** вызови все применимые deterministic tools из
+   security-tools-mcp / code-analysis-mcp. Записать каждую finding через
+   `palace-mcp.record_finding(source="static", static_confidence=1.0)`.
+
+2. **Second pass — LLM reasoning поверх того что static tools не нашли:**
+   прочитай ключевые entry-points (public methods on user-controlled inputs),
+   architecture (через palace-mcp.get_architecture_summary), cross-file flows
+   (через palace-serena). Ищи business-logic bugs, misuse patterns, выставление
+   правил без проверки. Каждую LLM-finding записать с `source="llm",
+   llm_confidence=<0.0..1.0>`.
+
+3. **Merge pass:** если static нашёл что-то и LLM также подтвердил —
+   `link_items` свяжи две findings, обновите одну до `source="hybrid"`.
+
+4. **Never rely только на static.** Static — это baseline coverage, не exhaustive.
+   Никогда не пропускай second pass "потому что static уже покрыл всё".
+```
+
+Это hard rule во всех reviewer-ролях — гарантия что hybrid action'ится, а не роль ограничивается только "что tool сказал".
 
 ### 4.6 Specialized extractors (ingest-time only)
 
@@ -1185,6 +1420,83 @@ AVOIDED_TOKENS_FORMULA = {
 ### 8.3 Dashboard поверх (optional)
 
 Через compose profile `with-dashboard` добавляется **Metabase** pointed на SQLite. Out-of-scope для MVP.
+
+### 8.4 Export — human-facing knowledge dump
+
+`just export` — генерирует dump знаний палаты для человеческого чтения, передачи коллеге, архива. Отличается от backup (§4.1) тем, что backup — машинный snapshot для restore, export — читаемый артефакт.
+
+**Параметры CLI:**
+
+```bash
+just export <project>                          # полный snapshot, markdown, все разделы
+just export <project> --since=2026-04-01       # только delta с даты
+just export <project> --since-iteration=5      # с конкретной итерации
+just export <project> --format=markdown        # default
+just export <project> --format=json            # machine-readable
+just export <project> --format=zip             # markdown + json + attachments
+just export <project> --summary                # краткая 1-2 стр. сводка вместо полного дампа
+just export <project> --sections=ui,decisions  # только указанные разделы
+just export --all                              # все registered projects разом
+```
+
+**Структура полного markdown export:**
+
+```
+exports/<project>/<timestamp>/
+├── README.md               # metadata: iteration#, last_ingest_commit_sha, coverage %
+├── architecture.md         # §modules + layers + mermaid dep-diagram
+├── ui-catalogue.md         # все :UIComponent grouped by kind + usage counts
+├── api-surface.md          # все :APIEndpoint с schemas
+├── data-layer.md           # :Model, :Repository, :DBTable inventory
+├── decisions.md            # все :Decision с timestamps — Linear-style feed
+├── findings.md             # все :Finding grouped by severity + static/llm/hybrid source
+├── dead-code.md            # hotspots из deadcode-hunter
+├── duplication.md          # hotspots из duplication-detector
+├── dependencies.md         # :ExternalLib + usage map + CVE findings
+├── iterations-history.md   # timeline: когда какая итерация + что изменилось
+└── diff-since-<date>.md    # если --since указан (delta-only view)
+```
+
+**Режимы:**
+
+| Режим | Объём | Когда использовать |
+|---|---|---|
+| **Полный** (без флагов) | 20-50 стр. markdown для среднего репо | Монументальный audit, onboarding нового senior'а, архив итерации |
+| **`--summary`** | 1-2 стр. (overview + top-10 decisions + top findings by severity) | Weekly digest команде, quick briefing для заинтересованного стейкхолдера |
+| **`--since=<date>`** | Только изменения с даты | Monthly report "что сделали", delta audit перед релизом |
+| **`--sections=...`** | Только указанные разделы | Focused export для конкретной задачи (напр. "покажи только UI inventory для дизайнера") |
+
+**Что `--summary` выдаёт (компактный формат):**
+
+```markdown
+# Gimlé Palace Summary — unstoppable-wallet-android (iteration 14)
+
+## Architecture at a glance
+- 47 modules, 8 logical layers (ui / data / domain / ...)
+- Deepest dep chain: 6 hops
+- Top-3 most-depended-on modules: core-utils (23 depend), wallet-manager (18), network-kit (14)
+
+## Key decisions (most recent 10)
+- [2026-04-14] EVM addresses MUST be rendered in EIP-55 checksum format before display
+- [2026-04-11] Biometric auth required for any private-key access path
+- ... (дальше 8)
+
+## Critical findings (severity=high, active)
+- 2 open (SecurityReviewer 2026-04-13, BlockchainReviewer 2026-04-09)
+  - HexEncoder uses platform-default charset → unicode edge case
+  - Nonce in approve-tx handled in VM, should be in UseCase
+
+## Stats
+- UI components: 87 (32 screens, 24 buttons, 18 cards, 13 other)
+- API endpoints: 42
+- External libs: 23
+- Dead code hotspots: 6
+- Duplicates: 3 clusters
+```
+
+Генератор exports — отдельная role `report-writer` (§4.6), вызываемая через `just export` (напрямую из lite-orchestrator / Paperclip task). Использует `palace-mcp.get_architecture_summary`, `get_iteration_notes`, `find_decision_by_topic` и прочее — не пишет SQL/Cypher сам.
+
+**Delta export** (`--since=<date>`) — incremental режим: report-writer получает `get_iteration_diff(from, to)`, только изменённые факты становятся контентом. 10-20× меньше чем full.
 
 ---
 
