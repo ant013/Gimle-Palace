@@ -565,18 +565,132 @@ Roster v1:
 1. Статическая раздача `/client/skills.tar.gz` и `/client/subagents.tar.gz` из volume `client-inventory`.
 2. Команда `just install-skills` внутри сервера (для scenario A): копирует те же tarball'ы в локальный `~/.claude/` на хост-машине через volume mount.
 
-**paperclip-provisioner** — one-shot Python job, стартует после всего остального. Логика:
-1. Читает все `projects/*.yaml` + `teams/*.yaml`.
-2. Для каждого проекта резолвит какие role нужны (из project.yaml `reviewers:` list).
-3. Идемпотентно создаёт в Paperclip через REST API: Company per project, Agents per role, linked к MCP endpoints из нашего сервера.
-4. Stable IDs — hash от `<project>:<role>` — чтобы re-run не создавал дубликатов (PUT семантика).
-5. **Пишет `~/.paperclip/instances/default/workspaces/<workspace-id>/.claude/settings.json`** с plugin matrix из `team-template.yaml` (§13.6, §13.7). Merges with user-managed keys non-destructively; backup предыдущего в `~/.claude/.palace-backup/`.
-6. **Пишет `~/.paperclip/instances/default/workspaces/<workspace-id>/.claude/mcp.json`** — merged MCP list: global user MCPs (§13.1) + наш palace-mcp + role-specific MCPs из `team-template.roles[].mcp_endpoints`.
+**paperclip-provisioner** — one-shot Python job, **reconciler-style** (не upsert — у Paperclip нет идемпотентного PUT для agents).
 
-**scheduler** — APScheduler внутри контейнера. Для каждого проекта из `projects/*.yaml`:
-- Если `trigger: cron` → запускает по cron spec.
-- Если `trigger: webhook` → слушает `POST /webhook/<project>/push` (GitHub/GitLab webhook).
-- На срабатывании: `git fetch && git diff --name-only HEAD@{1} HEAD` → запускает incremental re-ingest только по затронутым файлам (Paperclip task).
+Pre-reqs: `PAPERCLIP_URL`, `PAPERCLIP_API_KEY` (или JWT) в `.env`. Company уже существует — либо передаётся `PAPERCLIP_COMPANY_ID`, либо provisioner создаёт новую через `POST /api/companies`. Один gimle-instance → одна Paperclip company (все проекты в ней).
+
+**Reconciliation loop:**
+
+```python
+for project in projects/*.yaml:
+    desired_roles = resolve_roles(project, team_template)
+    existing_agents = GET /api/companies/{cid}/agents
+                      # filtered by name prefix "gimle:<project-slug>:" + role
+    diff = compute_diff(desired_roles, existing_agents)
+
+    for role in diff.to_create:
+        # 1. Submit hire request (requires approval by default)
+        hire = POST /api/companies/{cid}/agent-hires { ... see below ... }
+        # → { agent: {id, status:"pending_approval"}, approval:{id, status:"pending"} | null }
+
+        if hire.approval:
+            if GIMLE_AUTO_APPROVE_HIRES=true:
+                POST /api/approvals/{approvalId}/approve
+                # (requires user api-key with board scope, опциональный)
+            else:
+                log("⏳ Agent {name} waiting for board approval: /approvals/{id}")
+                continue  # пропускаем дальше, бэкгрaундом опрашиваем status
+
+        # 2. Upload AGENTS.md bundle (managed mode)
+        PUT /api/agents/{id}/instructions-bundle/file
+          body: { path: "AGENTS.md",
+                  content: render_role_prompt(role, project)}
+
+        # 3. Skills sync through API (primary path)
+        POST /api/agents/{id}/skills/sync
+          body: { skills: role.plugins }
+
+        # 4. Fallback: direct file write for plugin matrix that's not expressible via API
+        #    (backup first to ~/.claude/.palace-backup/<ts>/)
+        atomic_write(workspace_settings_path(agent.workspace_id),
+                     merge_user_managed(existing, generated))
+
+    for role in diff.to_update:
+        PATCH /api/agents/{id} { title, role, icon, capabilities, adapterConfig, runtimeConfig }
+        PUT /api/agents/{id}/instructions-bundle/file { ... }  # rewrite AGENTS.md
+
+    for role in diff.to_delete:
+        POST /api/agents/{id}/terminate
+        # НЕ удаляем heartbeat_runs / comments / issues — audit trail
+```
+
+**Pending-approval background worker.** Если `GIMLE_AUTO_APPROVE_HIRES=false` (default) — provisioner пишет "awaiting approval" в лог и **не блокирует stack startup**. Отдельный background worker (в scheduler контейнере) поллит `GET /api/approvals?status=pending` каждые 60s; когда approval переходит в `approved` → запускается step 2+ для этого agent'а.
+
+**Agent name convention (критичный hard rule — §Paperclip-operations Bug #1+#2):**
+- Format: `<PascalCase role name>` без пробелов (`SecurityReviewer`, `UiComponentExtractor`, `ArchitectureExtractor`)
+- Prefix не нужен — company isolation достаточна. Но при multi-project: `<project-slug>:<Role>` где `:` часть internal ID, в `name` field — только `Role` для корректного @-mention resolution
+- Validation на загрузке `team-template.yaml` — regex `^[A-Z][a-zA-Z0-9]*$`, fail-fast если нарушено
+
+**AGENTS.md template** рендерится из `roles/<role>.md` + `fragments/*.md` с автоматически inject'имым fragment'ом `@-mention-safety.md` (§7 team-template). Этот fragment содержит три правила handoff из §Paperclip-operations 3.4.
+
+**AGENT_ROLE mapping.** Paperclip enum: `ceo, cto, cmo, cfo, engineer, designer, pm, qa, devops, researcher, general`. Наши extractors/reviewers мапятся так:
+
+| Наш role | Paperclip agent_role |
+|---|---|
+| architecture-extractor, api-extractor, data-layer-extractor, ui-component-extractor, dependency-analyzer | `engineer` |
+| security-reviewer, blockchain-reviewer, deadcode-hunter, duplication-detector | `qa` |
+| report-writer | `researcher` |
+| orchestrator (если делаем meta-coordinator) | `general` |
+
+**adapterType mapping.** Наш `cli:` field → Paperclip `adapterType`:
+`claude-code → claude_local`, `codex → codex_local`, `gemini → gemini_local`, `opencode → opencode_local`, `cursor → cursor`.
+
+**Hire request body template:**
+```json
+{
+  "name": "<PascalCaseRoleName>",
+  "role": "engineer|qa|researcher|general",
+  "title": "<role.display_name>",
+  "icon": "<from /llms/agent-icons.txt>",
+  "reportsTo": "<ceo-or-cto-agent-id — опционально>",
+  "capabilities": "<from role.capabilities in team-template>",
+  "adapterType": "claude_local",
+  "adapterConfig": {
+    "cwd": "<repo_path from project.yaml>",
+    "model": "<role.model>",
+    "instructionsFilePath": "AGENTS.md",
+    "instructionsBundleMode": "managed"
+  },
+  "runtimeConfig": {
+    "heartbeat": {"enabled": false, "wakeOnDemand": true, "maxConcurrentRuns": 1, "cooldownSec": 10}
+  },
+  "budgetMonthlyCents": "<role.budget_usd_per_month * 100>"
+}
+```
+
+Примечание: `heartbeat.enabled=false` — мы не хотим, чтобы ingest-агенты просыпались по таймеру без задачи. Трigger — только по ручному wake из provisioner'а или scheduler'а.
+
+---
+
+**scheduler** — поведение зависит от `PAPERCLIP_MODE`:
+
+**Case A — `PAPERCLIP_MODE=embedded` или `external` (profile `full`):**
+Используем **Paperclip Routines API** — не пишем своего scheduler'а.
+
+```python
+for project in projects/*.yaml:
+    routine = PUT /api/companies/{cid}/routines  # reconciled
+      body: { name: "gimle:{project}:incremental-update",
+              description: ...,
+              task_template: "Run incremental ingest for project={project} based on
+                              git HEAD since last run. Use tools: palace-mcp.record_*,
+                              Serena. Assignee: ArchitectureExtractor."
+            }
+    PUT /api/routines/{id}/triggers
+      body: { type: project.trigger.kind,  # cron | webhook | api
+              schedule: project.trigger.schedule,
+              secret: ... }
+```
+
+Paperclip routines сами триггерят issue creation + assign + wake-up. Наш scheduler sidecars только syncs routines declarations из `projects/*.yaml` → Paperclip.
+
+**Case B — `PAPERCLIP_MODE=none` (profile `analyze`):**
+Embedded scheduler в lite-orchestrator контейнере через APScheduler. Для каждого проекта:
+- `trigger.kind: cron` → запускает по cron spec, POST /tasks в lite-orchestrator
+- `trigger.kind: webhook` → FastAPI listens `POST /webhook/<project>/push`
+- На срабатывании: `git fetch && git diff HEAD@{1} HEAD` → POST /tasks в lite-orchestrator с ролью `incremental-updater`
+
+Обе ветки пишут результат в palace через те же `record_*` tools — data path идентичен, отличается только compute path.
 
 ### 4.8 Telemetry service
 
@@ -873,51 +987,170 @@ budget:
 
 ## 7. `team-template.yaml` schema
 
-Шаблон команды в Paperclip для данного **класса** проектов (т.е. один template может использоваться для нескольких project.yaml).
+Шаблон команды для данного **класса** проектов (один template может использоваться для нескольких `project.yaml`). Структура одинаковая для Paperclip-based (`full`) и lite-orchestrator (`analyze`) путей — разница только в том, кто запускает агентов.
+
+### 7.1 Role schema (полная)
 
 ```yaml
 # teams/mobile-blockchain-default.yaml
 name: Mobile Blockchain Default Team
 applies_to_tags: [mobile, blockchain]
 
-roles:
-  - id: architect
-    display_name: Architecture Extractor
-    prompt_template: |
-      You are an architecture extractor. Using Serena MCP for navigation and palace-mcp
-      for recording, map modules, layers, and dependencies in {project.name}. Record
-      as :Module and :DEPENDS_ON. Use tags: [{project.tags}].
-    cli: claude-code          # claude-code | codex | gemini | opencode
-    model: claude-opus-4-6
-    mcp_endpoints: [palace, serena]
-    budget_usd_per_run: 5
+# Fragment'ы автоматически инжектятся во все generated AGENTS.md
+auto_fragments:
+  - "@-mention-safety"       # см. §7.3, критично для Paperclip handoff
+  - "palace-record-discipline" # как и когда писать в palace через record_*
 
-  - id: ui-extractor
-    display_name: UI Component Extractor
+roles:
+  - id: architecture-extractor
+    # Paperclip-specific (только для paperclip-provisioner):
+    paperclip_name: ArchitectureExtractor      # MUST match ^[A-Z][a-zA-Z0-9]*$ (§Paperclip-ops Bug #1)
+    paperclip_role: engineer                   # enum: ceo|cto|cmo|cfo|engineer|designer|pm|qa|devops|researcher|general
+    paperclip_icon: cpu                        # из /llms/agent-icons.txt
+    paperclip_reports_to: CTO                  # optional agent name в той же company
+
+    display_name: Architecture Extractor
+    capabilities: |
+      Maps modules, layers, and inter-module dependencies.
+      Records :Module and :DEPENDS_ON edges in palace.
+
+    # CLI / adapter selection
+    cli: claude-code                           # claude-code | codex | gemini | opencode | cursor
+    adapter_type: claude_local                 # auto-derived from cli; overridable
+    model: claude-opus-4-6
+
+    # MCP endpoints that agent has access to (reference §13.1 inventory + our palace)
+    mcp_endpoints: [palace, serena, github, sequential-thinking]
+
+    # Plugins enabled in ~/.paperclip/.../workspaces/<id>/.claude/settings.json
+    plugins: [superpowers, voltagent-meta]     # per §13.5 matrix
+
+    # Preferred subagents (when Claude Code is the CLI)
+    subagent_preferences:
+      - voltagent-qa-sec:architect-reviewer
+
+    # Prompt template — rendered with {project.*} variables + auto_fragments injected
     prompt_template: |
-      Extract UI components (buttons, screens, cards) from {project.name}. Classify by
-      `kind`. Count usages via Serena `find_references`. Record as :UIComponent with
-      :USED_BY edges.
+      You are the Architecture Extractor for {project.name} ({project.slug}).
+      Use Serena MCP for navigation and palace-mcp.record_* to persist findings.
+      Map modules, layers, dependencies. Record as :Module and :DEPENDS_ON edges.
+      Tags: {project.tags}.
+
+    # Budget and runtime
+    budget_usd_per_run: 5
+    budget_monthly_usd: 100
+    runtime:
+      heartbeat_enabled: false                 # только on_demand wake от scheduler/provisioner
+      wake_on_demand: true
+      max_concurrent_runs: 1
+      cooldown_sec: 10
+
+  - id: ui-component-extractor
+    paperclip_name: UiComponentExtractor
+    paperclip_role: engineer
+    paperclip_icon: palette
+    display_name: UI Component Extractor
+    capabilities: "Classifies UI components (buttons/screens/cards); counts usages; records :UIComponent + :USED_BY."
     cli: claude-code
     model: claude-sonnet-4-6
     mcp_endpoints: [palace, serena]
+    plugins: [superpowers]
+    prompt_template: |
+      Extract UI components from {project.name}. For each @Composable (Kotlin) / View (Swift) /
+      component (React/Vue/etc): classify kind={button|screen|card|input|layout|modal|other},
+      framework={{project.framework}}, count usages via Serena `find_references`.
+      Record as :UIComponent with :USED_BY edges.
     budget_usd_per_run: 3
+    runtime: { heartbeat_enabled: false, wake_on_demand: true, max_concurrent_runs: 1 }
 
   - id: security-reviewer
+    paperclip_name: SecurityReviewer
+    paperclip_role: qa
+    paperclip_icon: shield-check
     display_name: Security Reviewer
-    prompt_template: |
-      Run security-reviewer-mcp against {project.name}. Focus on: key storage,
-      crypto usage, network requests, WebView configurations, deep link handling.
-      Record findings as :Finding with severity.
+    capabilities: "Reviews code for OWASP/CWE vulnerabilities and security anti-patterns."
     cli: claude-code
-    model: claude-opus-4-6    # Opus for security
-    mcp_endpoints: [palace, serena, security-reviewer]
+    model: claude-opus-4-6            # Opus для security-critical
+    mcp_endpoints: [palace, serena, security-reviewer-mcp, github]
+    plugins: [superpowers, pr-review-toolkit, code-review, voltagent-qa-sec]
+    subagent_preferences:
+      - voltagent-qa-sec:security-auditor
+      - voltagent-qa-sec:penetration-tester
+    prompt_template: |
+      Run security-reviewer-mcp against {project.name}. Focus: key storage, crypto usage,
+      network requests, WebView configurations, deep link handling, input validation.
+      Record findings as :Finding with severity ∈ {low, medium, high, critical}.
     budget_usd_per_run: 10
 
-  # ... etc для blockchain-reviewer, deadcode-hunter, etc.
+  # ... etc для blockchain-reviewer, deadcode-hunter, duplication-detector, etc.
 ```
 
-Paperclip-provisioner при запуске резолвит `project.yaml.reviewers` + `project.yaml.extractors` через template matching и создаёт соответствующие Agents в Paperclip.
+### 7.2 Validation (на load)
+
+`paperclip-provisioner` и `lite-orchestrator` валидируют `team-template.yaml` при старте через JSON Schema:
+- `paperclip_name` — regex `^[A-Z][a-zA-Z0-9]*$` (hard fail — это корень Bug #1)
+- `paperclip_role` — только enum values
+- `cli` → `adapter_type` таблица маппинга должна совпадать
+- `mcp_endpoints` — все endpoint names из списка должны быть зарегистрированы в compose
+- `plugins` — все plugin names должны быть из `~/.claude/plugins/cache/` (detected at startup)
+- `model` — валидный Claude/OpenAI/Gemini model ID
+
+Fail-fast — если schema broken, стек не поднимается.
+
+### 7.3 Auto-fragment `@-mention-safety.md`
+
+Автоматически инжектится во все AGENTS.md (через `auto_fragments: ["@-mention-safety"]`). Его содержимое (на основе §Paperclip-operations 3.4):
+
+```markdown
+### @-упоминания: CamelCase без пробелов и всегда пробел после имени
+
+Paperclip parser ломается на пробелах внутри имени агента и на любой пунктуации
+сразу после `@Name`. Цепочка handoff молча останавливается — в логе никаких ошибок.
+
+- Правильно:   `@CodeReviewer фикс готов`, `@iOSEngineer проверь билд`
+- Неправильно: `@Code Reviewer ...`, `@CTO: нужен фикс`, `(@CodeReviewer)`
+
+### Handoff: всегда @-упомяни следующего агента
+
+Когда заканчиваешь фазу — обязательно `@NextAgent` в комментарии, **даже** если он
+уже assignee. Разница endpoint'ов Paperclip:
+
+- `POST /api/issues/{id}/comments` — будит assignee + всех @-упомянутых
+- `PATCH /api/issues/{id}` с `comment` — будит ТОЛЬКО на assignee-change / status-from-backlog / @-mentions
+
+Handoff-комментарий ВСЕГДА включает `@NextAgent` (CamelCase + пробел после).
+Страхует оба пути, чтобы цепочка не остановилась молча.
+
+### Ссылка на агента через markdown-link (опционально для 100% надёжности)
+
+[Code Reviewer](agent://<agent-uuid>) — обрабатывается через `extractAgentMentionIds`,
+пробелы и пунктуация в лейбле не ломают парсинг. Используй если имя сложное или ты не
+уверен в токене.
+```
+
+Этот fragment **НЕ редактируется** пользователем в `fragments/` — он генерируется нашим builder'ом из данных `~/.paperclip/instances/default/companies/<cid>/agents` (список agent names живой). Регенерация при `just rebuild-prompts` или при каждом ingest.
+
+### 7.4 Resolve flow (template → Paperclip agent)
+
+```
+team-template.yaml (roles)  +  project.yaml (reviewers, extractors list)
+           │
+           ▼
+resolve_roles(project, template) → list[ResolvedRole]
+  - filter: только те role.id, которые в project.reviewers + project.extractors
+  - render prompt_template с project vars
+  - inject auto_fragments
+  - validate schema
+           │
+           ▼
+paperclip-provisioner → Paperclip API (see §4.7 reconciliation loop)
+   │     │
+   │     └── создаёт/обновляет/удаляет Paperclip agents
+   │
+   └── lite-orchestrator (если PAPERCLIP_MODE=none) →
+       регистрирует role в своём SQLite таске `orchestrator_roles`
+       для последующих POST /tasks
+```
 
 ---
 
@@ -963,10 +1196,14 @@ AVOIDED_TOKENS_FORMULA = {
 |---|---|
 | `ANTHROPIC_API_KEY` | `.env` (gitignored) или sops-encrypted `.env.sops.yaml` |
 | `OPENAI_API_KEY` | same |
-| `PAPERCLIP_API_KEY` | same |
-| `GITHUB_TOKEN` (доступ к private репо) | same |
+| `PAPERCLIP_API_KEY` | same (получается через `POST /api/agents/{id}/keys` — raw key возвращается **один раз**, сохранить в `.env` сразу; после потери — создать новый и ротировать) |
+| `PAPERCLIP_AGENT_JWT_SECRET` | живёт в `~/.paperclip/instances/default/.env` на той же машине; наш stack читает через volume mount если нужен (для crafting JWT при manual wake-up через `curl`) — но штатно мы используем API keys, не JWT |
+| `PAPERCLIP_LLM_APIKEY` | читается из `~/.paperclip/instances/default/config.json` → `llm.apiKey` (это **Paperclip-owned** секрет, мы его не трогаем, только читаем для sanity check что Paperclip может отдать LLM calls) |
+| `GITHUB_TOKEN` (доступ к private репо) | `.env` |
 | `NEO4J_PASSWORD` | `.env`, rotated через `just rotate-neo4j` |
 | `TELEMETRY_HASH_SALT` | `.env` (для обезличивания args в логах) |
+
+**Paperclip secrets не попадают в gimle's `.env`** — остаются под Paperclip'ом. Gimle держит только **ссылки на них** через path mount'ы и API keys.
 
 ### 9.2 Auth между client ↔ server
 
@@ -1019,18 +1256,27 @@ Idempotency: повторный `just ingest` на том же commit SHA → no
 
 ## 11. Scheduled Update Flow
 
-Команда `scheduler` внутри контейнера. Два источника триггеров:
+Логика триггеров теперь разделена между Paperclip routines (`full` profile) и собственным scheduler'ом (`analyze`). Реализация и routing описаны в §4.7 (scheduler subsection). Здесь — только **pipeline logic**, одинаковая для обеих веток.
 
-### 11.1 Cron-режим
+### 11.1 Incremental update pipeline (одинаково для обеих веток)
 
-Для каждого `projects/*.yaml` с `trigger.kind: cron` — APScheduler job.
-
-Logic per job:
+Logic per trigger fire:
 ```
 fetch_latest(repo)
 if head_sha == last_ingested_sha: return  # ничего нового
 changed_files = git diff --name-only last_ingested_sha..HEAD
 new_iteration = current + 1
+
+# Ветка A (PAPERCLIP_MODE=embedded|external, profile=full):
+#   scheduler синхронизировал Paperclip Routine; routine fires → issue created →
+#   assigned to ArchitectureExtractor/... → agent wakes → читает issue →
+#   использует palace-mcp.record_* tools
+
+# Ветка B (PAPERCLIP_MODE=none, profile=analyze):
+#   scheduler's APScheduler job → POST /tasks в lite-orchestrator с role=incremental-updater
+#   → lite-orchestrator спавнит claude code -p "..." с нужным контекстом
+
+# Далее — одинаковое:
 run_incremental_extractors(changed_files, iteration=new_iteration)
 run_incremental_reviewers(changed_files)
 update_or_invalidate_graph_nodes(changed_files, iteration=new_iteration)
@@ -1040,9 +1286,21 @@ update project.yaml with new iteration number (commit to git)
 
 Incremental ingest в 10-100× дешевле полного (по количеству touched files).
 
-### 11.2 Webhook-режим
+### 11.2 Triggers — spec (одинаково для обеих веток)
 
-`POST /webhook/<project>/push` принимает GitHub/GitLab payload, verifies secret, enqueues same incremental pipeline.
+В `project.yaml`:
+```yaml
+trigger:
+  kind: cron      # cron | webhook | manual | api
+  schedule: "0 3 * * *"
+  # или:
+  webhook:
+    provider: github           # github | gitlab | gitea | generic
+    secret_env: GITHUB_WEBHOOK_SECRET
+```
+
+`full` профиль: scheduler transformation `project.trigger` → Paperclip `POST /api/routines/:id/triggers` body.
+`analyze` профиль: scheduler sets up APScheduler job или FastAPI `POST /webhook/:project/push` endpoint.
 
 ### 11.3 Invalidation vs update
 
@@ -1220,23 +1478,40 @@ roles:
     # ...
 ```
 
-### 13.7 Automatic settings.json installation
+### 13.7 Automatic settings.json installation — API-primary + file fallback
 
-**paperclip-provisioner** (§4.7) расширяется: после создания Agent'а в Paperclip он также пишет `~/.paperclip/instances/default/workspaces/<workspace-id>/.claude/settings.json` с plugin matrix из `team-template.yaml`.
+Паперклип выставляет API для **part** нашей работы (plugins/skills sync через endpoint'ы). Но **некоторые аспекты** конфигурации Claude Code workspace'ов живут только в файле `settings.json` и нет эквивалентного API. Поэтому paperclip-provisioner использует **двухуровневый подход**:
 
-Алгоритм:
-```
-for project in projects/*.yaml:
-  company = paperclip.put_company(project.slug)
-  for role in resolve_roles(project, team_template):
-    agent = paperclip.put_agent(company, role)
-    workspace_id = agent.workspace_id
-    path = ~/.paperclip/instances/default/workspaces/{workspace_id}/.claude/settings.json
-    settings = build_settings_json(role)   # plugins enabled, mcp_endpoints, subagent prefs
-    atomic_write(path, settings)            # write via temp + rename for idempotency
+**Primary path (API):** после создания agent'а в Paperclip (§4.7 reconciler) —
+```python
+POST /api/agents/{id}/skills/sync
+  body: { skills: role.plugins_as_skill_refs }
+
+PATCH /api/agents/{id}/configuration
+  body: { mcp_endpoints: [...], adapterConfig.model, budgetMonthlyCents, ... }
 ```
 
-Чтобы команды разных агентов не конфликтовали — каждый settings.json генерируется свежим, но **мы сохраняем user overrides** через механизм: перед перезаписью читаем существующий файл, merge'им наши managed keys с user-managed keys (user-managed область помечена комментарием `# managed by user, do not touch`).
+Это official путь. Не требует filesystem access к `~/.paperclip/`, работает даже когда наш контейнер не mount'ит `~/.paperclip/` как volume (remote-Paperclip сценарий).
+
+**Fallback path (direct file write):** для того, что нельзя выразить через API:
+```python
+workspace_id = GET /api/agents/{id}/configuration -> .adapterConfig.workspaceId
+path = ~/.paperclip/instances/default/workspaces/{workspace_id}/.claude/settings.json
+existing = json.load(path) if path.exists() else {}
+backup = ~/.claude/.palace-backup/<ts>/settings-{workspace_id}.json
+atomic_copy(path, backup)                # safety net
+merged = merge_user_managed(existing, build_settings_json(role))
+atomic_write(path, merged)               # temp + rename
+```
+
+File write требует volume mount `~/.paperclip/` в наш контейнер (делается только в scenario A/B — full self-host). В remote-connect (`external` Paperclip где мы только API-клиент) — **fallback невозможен**, мы ограничиваемся тем что API позволяет.
+
+**Merge strategy.** При merge:
+- Наши managed keys имеют префикс `palace_*` (для opaque values) и annotation `"# managed-by-gimle-palace": true` в root-level comments (если формат поддерживает).
+- User-managed keys (без префикса, без annotation) — **никогда** не трогаются.
+- При конфликте (user вручную редактировал наш `palace_*` key) — пропускаем с warning'ом, не перезаписываем. Пользователь должен либо откатить своё изменение, либо удалить managed key полностью (и regenerate через `just re-provision`).
+
+**Rollback.** При любых проблемах — `just palace-restore --timestamp <ts>` восстанавливает из `~/.claude/.palace-backup/`.
 
 ### 13.8 File structure добавления к пользовательскому setup
 
@@ -1322,7 +1597,19 @@ for project in projects/*.yaml:
 - **Cost caps realtime:** сейчас budget declared в `project.yaml`, но enforcement — на Paperclip. Может потребоваться middleware в palace-mcp для hard-cutoff по telemetry.
 - **RAG-mode:** сейчас palace — structured KG. Может имеет смысл иметь ещё один MCP tool `rag_search(query, project)` который возвращает raw code chunks с embeddings (не graph). Будущая итерация.
 - **Diff-aware context window для Claude:** вместо `get_iteration_diff` сделать tool который возвращает semantically relevant diff (только relevant к текущему query).
-- **Paperclip REST API: idempotent PUT семантика.** Наш provisioner предполагает что Paperclip поддерживает upsert по stable IDs. Если в реальности только POST/create — нужен reconciler cycle (list → diff → create/update/delete) вместо голого PUT. Проверить при первой интеграции.
+- ~~**Paperclip REST API: idempotent PUT семантика.**~~ **CLOSED (2026-04-15):** подтверждено через operational dossier (§Paperclip-operations): PUT-upsert-нет, agents создаются через `POST /api/companies/:id/agent-hires` с approval flow. Provisioner реализован как **reconciler** (§4.7). Удаление — `POST /api/agents/:id/terminate` (soft), не `DELETE`.
+
+- **Approval flow автоматизация.** Новые agents hire'ятся в `status: pending_approval` до board approval. Если `GIMLE_AUTO_APPROVE_HIRES=false` (default — безопаснее), `just setup --yes` ≠ полностью автоматический setup: на этапе creation'а agent'ов нужен manual approve через Paperclip UI. Варианты: (a) документировать как limitation, (b) предоставить auto-approve режим через user-level API key с board scope, (c) реализовать polling/wait pattern в installer с heartbeat'ом "⏳ waiting for approvals". Default: (a) + опциональный (b) через `--auto-approve` флаг installer'а.
+
+- **Agent API key одноразовая выдача.** `POST /api/agents/:id/keys` возвращает raw key **один раз**. При потере — новый ключ + revoke старого. Влияние: provisioner'у нужно безопасно сохранить raw key в `.env` в момент creation. Если `.env` потерян / удалён — регенерация через `just rotate-keys`.
+
+- **Migration path `analyze` → `full`.** Если user стартанул в `analyze` и потом хочет включить Paperclip — что делать с already-created lite-orchestrator tasks? Сейчас: reconciler не мигрирует, lite-orchestrator продолжает работать для исторических задач, новые идут в Paperclip. Возможно нужно явное `just migrate-to-paperclip` действие.
+
+- **Paperclip heartbeat disabled vs enabled.** Мы hire'им agents с `heartbeat.enabled=false` (только on-demand wake). Плюс — agents не кушают budget в простое. Минус — если agent должен делать что-то периодически (например QAEngineer мониторить PR'ы) — heartbeat нужен. Пока пользователь не попросит recurring background behavior — остаёмся на on-demand.
+
+- **Paperclip embedded Postgres vs наш Neo4j coexistence.** Embedded Paperclip слушает `54329` на localhost, наш Neo4j `7687` на docker network. Port-конфликтов нет. Но embedded Paperclip'а creds hardcoded (`paperclip/paperclip`). Если наш stack и Paperclip делят machine — docker network isolation достаточна.
+
+- **На macOS: LaunchAgent для Paperclip не всегда зарегистрирован.** На `imac-ssh.ant013.work` launchd plist лежит но `launchctl print` возвращает "not found". При перезагрузке Paperclip сам не поднимется. Это user-side issue, но в `just doctor` можем детектить и warnить. В embedded-mode нашего compose — не проблема, docker сам управляет lifecycle.
 - **Alias learning для domain concepts (§5.4 axis 3).** "hex" / "hex string" / "hexadecimal" — должно маппиться в один концепт. Runtime — детектится через embedding similarity; offline — через LLM pass на начальном ingest. Механизм тюнинга коэффициентов — open.
 - **Facet taxonomy версионирование.** Domain concepts / capabilities (axes 3 и 4) — это evolving vocabulary. При расширении taxonomy старые `:Iteration` facts могут оказаться под-классифицированы. Нужен реиндексатор в scheduler: при изменении `facet-taxonomy.yaml` — triggers selective re-classification.
 - **Cross-project decisions propagation:** если `:Decision` в репо A применим к репо B (напр. общий паттерн безопасности) — сейчас manual копирование. Хотелось бы автодетект через domain concepts overlap.
@@ -1337,8 +1624,18 @@ for project in projects/*.yaml:
 - **Reviewer** — ongoing analyzer MCP, пишет `:Finding` узлы.
 - **Iteration** — snapshot знаний палаты на конкретный commit.
 - **Paperclip** — control plane (external product), оркеструет команду.
+- **lite-orchestrator** — наш thin orchestrator на Python/asyncio, замена Paperclip в профилях `review`/`analyze`.
 - **Subagent** — Claude Code feature: specialized helper, запускается как delegated task.
 - **Skill** — Claude Code feature: reusable prompt playbook, автоматически активируется триггерами.
+- **Fragment** — reusable Markdown-блок в `paperclips/fragments/*.md`, инжектится через `<!-- @include -->` маркеры в role prompts.
+- **Auto-fragment** — наш концепт: fragment который **автоматически** добавляется во все generated AGENTS.md (напр. `@-mention-safety`).
+- **Paperclip heartbeat** — периодический wake агента по timer'у (interval в seconds). Не путать с health-check docker-сервисов.
+- **Wake-up** (Paperclip) — событие, приводящее к запуску heartbeat_run для агента. 4 source'а: `timer`, `assignment`, `automation` (включая `@-mentions`), `on_demand`.
+- **heartbeat_run** (Paperclip) — одна итерация работы агента: 1 запуск Claude/Codex/Gemini CLI с контекстом issue + bundle.
+- **Managed bundle** (Paperclip) — режим AGENTS.md когда Paperclip владеет файлом (запись через `PUT /api/agents/:id/instructions-bundle/file`). Альтернатива — `external` (Paperclip только читает).
+- **Execution lock** (Paperclip) — атомарный захват issue одним агентом. Пока один активно работает, wake'ы для других идут в `status=skipped reason=issue_execution_locked` (кроме `issue_comment_mentioned` — тот bypass'ит).
+- **Approval flow** (Paperclip) — board approval required для hire нового агента, смены config'а, и пр. Gate'ится в `approvals` таблице; gimle-installer документирует ограничение для fully-automated setup.
+- **Reconciler** (наш) — provisioner-паттерн: list existing → compute diff vs desired → create/update/terminate. Заменяет "upsert" когда нет PUT-семантики.
 
 ---
 
