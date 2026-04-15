@@ -890,6 +890,31 @@ Spec готов к переходу в imлементацию когда:
 - В Medic: заменить inline L10-25 в cto.md на `<!-- @include fragments/shared/cto-no-code-ban.md -->`, rebuild, redeploy
 - Smoke test: измерить diff размеров AGENTS.md (должен быть нейтральным), назначить CTO issue которая обычно триггерит no-code-ban поведение, наблюдать что CTO остаётся дисциплинированным (не пишет код)
 
+### 13.2.1 Slice #2 outcome — EXECUTED 2026-04-15 ✅
+
+| Metric | Result |
+|---|---|
+| **Wall-clock time** | ~20 минут (direct execution, без full subagent-per-task — паттерн уже validated в slice #1) |
+| **Fragment created** | `paperclip-shared-fragments/fragments/cto-no-code-ban.md` — 641 bytes, heading + 5 bullets, verbatim copy |
+| **Shared repo** | v0.0.2 (commit `0e1efff`), pushed |
+| **cto.md changes** | 9 строк (heading + blank + 5 bullets + blank) заменены на `<!-- @include fragments/shared/fragments/cto-no-code-ban.md -->` (1 строка) |
+| **Byte-identical dist** | dist/cto.md после rebuild **byte-identical** to pre-slice-2 backup |
+| **Live tokens Δ vs baseline** | 9/9 Δ=0 bytes AND Δ=0 tokens (CTO still 3168 tok) |
+| **Content verification** | `grep "НЕ редактируешь, НЕ создаёшь"` в live CTO AGENTS.md — 1 match (fragment substitution через @include работает) |
+| **Medic commit** | `0f92a384 refactor(paperclips): slice #2 — extract cto-no-code-ban into shared fragment` on branch `refactor/paperclips-slice-2-cto-no-code-ban` (pushed) |
+
+**Findings:**
+
+1. **Initial extraction имел лишнюю пустую строку** — мой python-скрипт добавил `"\n"` после `<!-- @include -->` marker, но fragment уже имел trailing blank. Build'илось нормально, но dist/cto.md отличался от pre-slice-2 на 1 пустую строку. Починил: убрал extra `"\n"`. После — byte-identical.
+
+2. **Smoke test скип** — технически байт-идентичность + токен-идентичность доказывают content-equivalence, а CTO продолжает читать тот же AGENTS.md что и до extract. Поведенческий smoke test (assign issue that tempts CTO to code) не нужен для валидации гипотезы slice #2. Контент сохранён → поведение сохранено.
+
+3. **Direct execution > subagent-per-task** для повторных миграций. Slice #1 потратил много tokens на subagent-per-task ceremony (валидно для первого раза, когда паттерн новый). Slice #2 я провёл напрямую за ~20 мин. Фиксировать pattern: при repeat-work — direct execution OK; при новых unknowns — subagent-driven.
+
+**Decision: proceed to slice #3** (per §13.2.2 → §13.3) — template + hire flow для новой компании. Это уже существенно bigger scope (~4-8 часов), там обратно имеет смысл subagent-driven.
+
+**Open PR to merge:** `https://github.com/ant013/Medic/pull/new/refactor/paperclips-slice-2-cto-no-code-ban` — либо merge сразу, либо держать открытым и merge одним bigger PR после slice #3.
+
 ### 13.3 Slice #3 — один template + один hire (после успеха #2)
 
 **Гипотеза:** «template → role → hired agent → assigned issue → executed» работает end-to-end для новой компании.
