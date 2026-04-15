@@ -2671,29 +2671,45 @@ Taxonomy drift score:        0.23 / 1.00  (healthy, <0.4 OK)
 
 ## 16. Open Questions / Future Work
 
-- **Multi-tenant на уровне данных:** сейчас namespace'ы по проекту, но auth per-user не привязан к данным (`palace_events.user` логируется, но все users видят все projects). Если понадобится — добавить `:Project` → `:Team` edge и filtering в palace-mcp.
+Разбито на 5 категорий для ясности.
 
-- **Per-project ACL / token scoping (Q7.3 future):** MVP допускает что все holders валидного API key видят все projects. Для команды Аня→medic, Бен→unstoppable на одном сервере нужно: (a) scoped tokens `POST /api/tokens?projects=medic-kmp,other` → token валиден только для указанных, (b) check в каждом palace-mcp tool что token scope покрывает requested project. Дизайн: token payload содержит `project_scopes: [...]` array + `allow_write: true/false`. RBAC с users/roles/admin UI — вне scope (overkill для self-host).
-- **Non-Claude CLIs:** skills/subagents concept специфичен Claude Code. Для Codex/Gemini/Cursor — только MCP endpoints + documentation how to add them. Hardcode-free; но auto-install не делаем.
-- **Cost caps realtime:** сейчас budget declared в `project.yaml`, но enforcement — на Paperclip. Может потребоваться middleware в palace-mcp для hard-cutoff по telemetry.
-- **RAG-mode:** сейчас palace — structured KG. Может имеет смысл иметь ещё один MCP tool `rag_search(query, project)` который возвращает raw code chunks с embeddings (не graph). Будущая итерация.
-- **Diff-aware context window для Claude:** вместо `get_iteration_diff` сделать tool который возвращает semantically relevant diff (только relevant к текущему query).
+### 16.1 Resolved (archive)
+
 - ~~**Paperclip REST API: idempotent PUT семантика.**~~ **CLOSED (2026-04-15):** подтверждено через operational dossier (§Paperclip-operations): PUT-upsert-нет, agents создаются через `POST /api/companies/:id/agent-hires` с approval flow. Provisioner реализован как **reconciler** (§4.7). Удаление — `POST /api/agents/:id/terminate` (soft), не `DELETE`.
 
-- **Approval flow автоматизация.** Новые agents hire'ятся в `status: pending_approval` до board approval. Если `GIMLE_AUTO_APPROVE_HIRES=false` (default — безопаснее), `just setup --yes` ≠ полностью автоматический setup: на этапе creation'а agent'ов нужен manual approve через Paperclip UI. Варианты: (a) документировать как limitation, (b) предоставить auto-approve режим через user-level API key с board scope, (c) реализовать polling/wait pattern в installer с heartbeat'ом "⏳ waiting for approvals". Default: (a) + опциональный (b) через `--auto-approve` флаг installer'а.
+### 16.2 Deferred to post-MVP
 
-- **Agent API key одноразовая выдача.** `POST /api/agents/:id/keys` возвращает raw key **один раз**. При потере — новый ключ + revoke старого. Влияние: provisioner'у нужно безопасно сохранить raw key в `.env` в момент creation. Если `.env` потерян / удалён — регенерация через `just rotate-keys`.
+Документировано как future work, не блокирует MVP.
 
+- **Multi-tenant на уровне данных:** сейчас namespace'ы по проекту, но auth per-user не привязан к данным (`palace_events.user` логируется, но все users видят все projects). Если понадобится — добавить `:Project` → `:Team` edge и filtering в palace-mcp.
+- **Per-project ACL / token scoping (Q7.3):** MVP допускает что все holders валидного API key видят все projects. Для команды Аня→medic, Бен→unstoppable на одном сервере нужно: (a) scoped tokens `POST /api/tokens?projects=medic-kmp,other` → token валиден только для указанных, (b) check в каждом palace-mcp tool что token scope покрывает requested project. Дизайн: token payload содержит `project_scopes: [...]` array + `allow_write: true/false`. RBAC с users/roles/admin UI — вне scope (overkill для self-host).
+- **RAG-mode:** сейчас palace — structured KG. Может имеет смысл иметь ещё один MCP tool `rag_search(query, project)` который возвращает raw code chunks с embeddings (не graph). Дополнение для случаев когда нужна не структура, а "покажи мне строки похожие по смыслу".
+- **Diff-aware context window для Claude:** вместо `get_iteration_diff` сделать tool который возвращает semantically relevant diff (только relevant к текущему query).
+- **Cross-project decisions propagation:** если `:Decision` в репо A применим к репо B (общий паттерн безопасности) — сейчас manual копирование. Автодетект через domain concepts overlap + semantic similarity.
+- **Cost caps realtime enforcement:** сейчас budget declared в `project.yaml`, enforcement — на Paperclip. Может потребоваться middleware в palace-mcp для hard-cutoff по telemetry (запрос блокируется если проект уже превысил `monthly_cap_usd`).
+- **Non-Claude CLI client skills install:** skills/subagents concept специфичен Claude Code. Для Codex/Gemini/Cursor — только MCP endpoints + documentation. Auto-install в их config не делаем. Будущая итерация — adapter'ы для каждого CLI.
+- **Playbook scenarios (§12.6):** 7 practical playbooks fill'нутся после реального использования стека на Medic + unstoppable-wallet-ios 1-2 месяца.
+
+### 16.3 Current workarounds / known limitations
+
+Сознательно оставлены на MVP с документацией.
+
+- **Approval flow автоматизация.** Новые agents hire'ятся в `status: pending_approval` до board approval. Если `GIMLE_AUTO_APPROVE_HIRES=false` (default — безопаснее), `just setup --yes` ≠ полностью автоматический setup: нужен manual approve через Paperclip UI. Варианты mitigation: (a) документировать как limitation (принято для MVP), (b) auto-approve через user-level API key с board scope (`--auto-approve` флаг в installer'е), (c) polling/wait pattern с heartbeat'ом "⏳ waiting for approvals".
+- **Agent API key одноразовая выдача.** `POST /api/agents/:id/keys` возвращает raw key **один раз**. При потере — новый ключ + revoke старого. Влияние: provisioner'у нужно безопасно сохранить raw key в `.env` в момент creation. Если `.env` потерян / удалён — `just rotate-keys`.
 - **Migration path `analyze` → `full`.** Если user стартанул в `analyze` и потом хочет включить Paperclip — что делать с already-created lite-orchestrator tasks? Сейчас: reconciler не мигрирует, lite-orchestrator продолжает работать для исторических задач, новые идут в Paperclip. Возможно нужно явное `just migrate-to-paperclip` действие.
+- **Paperclip heartbeat disabled vs enabled trade-off.** Мы hire'им agents с `heartbeat.enabled=false` (только on-demand wake). Плюс — agents не кушают budget в простое. Минус — если agent должен делать что-то периодически (QAEngineer мониторить PR'ы) — heartbeat нужен. Пока пользователь не попросит recurring background behavior — остаёмся на on-demand.
 
-- **Paperclip heartbeat disabled vs enabled.** Мы hire'им agents с `heartbeat.enabled=false` (только on-demand wake). Плюс — agents не кушают budget в простое. Минус — если agent должен делать что-то периодически (например QAEngineer мониторить PR'ы) — heartbeat нужен. Пока пользователь не попросит recurring background behavior — остаёмся на on-demand.
+### 16.4 Paperclip-specific edge cases
 
 - **Paperclip embedded Postgres vs наш Neo4j coexistence.** Embedded Paperclip слушает `54329` на localhost, наш Neo4j `7687` на docker network. Port-конфликтов нет. Но embedded Paperclip'а creds hardcoded (`paperclip/paperclip`). Если наш stack и Paperclip делят machine — docker network isolation достаточна.
+- **На macOS: LaunchAgent для Paperclip не всегда зарегистрирован.** На некоторых user-machines launchd plist лежит но `launchctl print` возвращает "not found" (пример `imac-ssh.ant013.work`). При перезагрузке Paperclip сам не поднимется. В `just doctor` детектим и warn'им. В embedded-mode нашего compose — не проблема (docker сам управляет lifecycle).
+- **Paperclip @-mention parser quirks** — CamelCase names без пробелов, обязательный space после `@Name` перед пунктуацией, explicit `@NextAgent` в handoff комментариях. Документировано как auto-fragment `@-mention-safety` (§7.3) — применяется ко всем generated AGENTS.md. Long-term: upstream PR в Paperclip для liberal regex.
 
-- **На macOS: LaunchAgent для Paperclip не всегда зарегистрирован.** На `imac-ssh.ant013.work` launchd plist лежит но `launchctl print` возвращает "not found". При перезагрузке Paperclip сам не поднимется. Это user-side issue, но в `just doctor` можем детектить и warnить. В embedded-mode нашего compose — не проблема, docker сам управляет lifecycle.
-- **Alias learning для domain concepts (§5.4 axis 3).** "hex" / "hex string" / "hexadecimal" — должно маппиться в один концепт. Runtime — детектится через embedding similarity; offline — через LLM pass на начальном ingest. Механизм тюнинга коэффициентов — open.
-- **Facet taxonomy версионирование.** Domain concepts / capabilities (axes 3 и 4) — это evolving vocabulary. При расширении taxonomy старые `:Iteration` facts могут оказаться под-классифицированы. Нужен реиндексатор в scheduler: при изменении `facet-taxonomy.yaml` — triggers selective re-classification.
-- **Cross-project decisions propagation:** если `:Decision` в репо A применим к репо B (напр. общий паттерн безопасности) — сейчас manual копирование. Хотелось бы автодетект через domain concepts overlap.
+### 16.5 Taxonomy evolution
+
+- **Alias learning для domain concepts (§5.4 axis 3).** "hex" / "hex string" / "hexadecimal" — должно маппиться в один концепт. Runtime: детектится через embedding similarity при ingest, `just review-taxonomy` подтверждает merges. Механизм тюнинга similarity threshold (0.92 default) — open для пересмотра по мере накопления дата.
+- **Facet taxonomy версионирование.** Domain concepts / capabilities — evolving vocabulary. При расширении taxonomy старые `:Iteration` facts могут оказаться под-классифицированы. Нужен реиндексатор в scheduler: при изменении `facet-taxonomy.yaml` — triggers selective re-classification затронутых узлов. Добавлено в Phase 8 scope.
+- **Drift control** (§14.7). `drift_score > 0.6` в `just taxonomy-health` — сигнал что вокабуляр разрастается бесконтрольно. Нет auto-action'а — только warning'а. Возможно MVP+1: auto-merge концептов с cos-sim > 0.95.
 
 ---
 
@@ -2717,41 +2733,141 @@ Taxonomy drift score:        0.23 / 1.00  (healthy, <0.4 OK)
 - **Execution lock** (Paperclip) — атомарный захват issue одним агентом. Пока один активно работает, wake'ы для других идут в `status=skipped reason=issue_execution_locked` (кроме `issue_comment_mentioned` — тот bypass'ит).
 - **Approval flow** (Paperclip) — board approval required для hire нового агента, смены config'а, и пр. Gate'ится в `approvals` таблице; gimle-installer документирует ограничение для fully-automated setup.
 - **Reconciler** (наш) — provisioner-паттерн: list existing → compute diff vs desired → create/update/terminate. Заменяет "upsert" когда нет PUT-семантики.
+- **Hybrid review** (§4.5) — reviewer-паттерн: сначала deterministic static tools (semgrep/trufflehog/slither) → потом LLM reasoning поверх → merge findings с dual confidence scoring.
+- **Static confidence / LLM confidence** — two separate scores на одной `:Finding` (§4.5.3): `static_confidence` от deterministic tool (0.95 если regex/AST match точный), `llm_confidence` от reviewer'а (0.7 если LLM согласился при проверке). `source ∈ {"static","llm","hybrid"}` показывает происхождение.
+- **Core taxonomy** (§5.4.1) — `config/taxonomies/_core.yaml`, всегда загружается — универсальные domain concepts (HandlesData/Text/Time/Amount/Hex/File/Network/Error/Credentials). Domain-agnostic.
+- **Domain taxonomy** — opt-in YAML (wallet, healthcare, ecommerce, saas, fintech, social, iot, gaming, education) подключается через `taxonomies:` в project.yaml. Добавляет domain-specific concepts поверх core.
+- **Dynamic taxonomy** — `data/dynamic_taxonomy.yaml`, LLM-generated runtime. Новые concepts попадают с `needs_review: true`, человек review'ит через `just review-taxonomy`.
+- **Staleness warning** (§4.4.4) — meta-поле в palace-mcp response: `last_ingest_at`, `last_ingest_commit_sha`, `staleness_warning` — сообщает если palace отстаёт от текущего git HEAD. Client palace-skill показывает warning user'у.
+- **Preset pack** (§3.5.5) — shortcut для custom install profile: `review-only`, `ui-only`, `security-audit`, `api-contract`, `docs-onboarding`, `dead-code-hunt`, `full-analysis`, `review-and-analyze`. Domain-agnostic — domain специфика через team-template.
+- **ZDR** (Zero Data Retention, §9.5) — договорённость с LLM providers (Anthropic Enterprise, OpenAI по request) что user prompts не retained beyond request processing и не используются для training. Рекомендуется для `cloud`/`hybrid` modes в sensitive проектах.
+- **Golden fixture** (§14.6) — mini-repo в `tests/fixtures/golden/` с expected outputs (architecture.json / ui-components.json / findings.json / retrievals.json) — baseline для regression tests против LLM/prompt changes.
+- **Drift score** (§14.7) — 0.0-1.0 метрика в `just taxonomy-health`: сколько dynamic concepts near-duplicate (high drift → нужен review). `> 0.6` = warning.
 
 ---
 
-## 18. Implementation Phases (preview — detailed plan будет в writing-plans skill)
+## 18. Implementation Phases (preview — detailed plan для каждой через writing-plans skill)
 
-**Phase 0 — Schema & scaffolding**
-- Finalize JSON schemas for `project.yaml`, `team-template.yaml`, agent-role manifests, `installer/profiles/*.yaml`.
-- `docker-compose.yml` скелет с compose-profiles matrix (§3.5).
-- `installer/setup.sh` с gum/whiptail/bash-fallback chain (§3.6).
-- `Justfile` shell (`setup`, `ingest`, `update`, `status`, `stats`, `down`, `uninstall`).
-- Neo4j + Graphiti up, smoke test на `profile=review` (минимальная конфигурация).
+~12-14 weeks MVP. Каждая phase — отдельный writing-plans invocation с granular task breakdown, tests, exit criteria. Phase numbering 0-8 (не сдвигаем после переработки).
 
-**Phase 1 — Core MCPs**
-- palace-mcp с read tools (search, find_*).
-- palace-mcp write tools (record_*, create_paperclip_issue).
-- Serena MCP wired in.
-- Telemetry service.
+### Phase 0 — Scaffolding & schemas (week 1)
 
-**Phase 2 — Extractors + Reviewers**
-- architecture-extractor + ui-component-extractor (highest-value).
-- security-reviewer + deadcode-hunter.
-- Report-writer role.
+- Finalize JSON Schema для: `project.yaml` (§6), `team-template.yaml` (§7), `installer/profiles/*.yaml` (§3.5), role manifests, facet-taxonomy.
+- `docker-compose.yml` skeleton с compose-profiles matrix (`review`/`analyze`/`full`/`client`/`custom`).
+- `installer/setup.sh` с gum → whiptail → bash fallback chain (§3.6).
+- `Justfile` initial set: `setup`, `status`, `down`, `uninstall`, `doctor`, `validate`.
+- `.env.example` с всеми секретами и optional vars.
+- `.gitignore` (уже есть).
+- 4 shipped `teams/*.yaml` (minimal / library-default / backend-default / mobile-default) — stubs.
+- 3 shipped `config/taxonomies/*.yaml` (_core / wallet / healthcare) — stubs.
+- CI скелет (GitHub Actions workflow): lint, JSON schema validation, spec markdown linting.
 
-**Phase 3 — Provisioners**
-- paperclip-provisioner with idempotent Company/Agent creation.
-- skills-distributor + client install.sh.
-- scheduler (cron + webhook).
+**Exit criteria:** `just setup --profile minimal --yes` на чистом сервере → поднимается docker skeleton (без realного Neo4j ещё) → `just doctor` выдаёт green.
 
-**Phase 4 — First real ingest**
-- `just ingest unstoppable-android` на реальном репо.
-- End-to-end валидация + отчёт.
+### Phase 1 — Storage layer (week 2)
 
-**Phase 5 — Expand**
-- Остальные Unstoppable репо (14 kit-библиотек).
-- blockchain-reviewer, duplication-detector, dependency-analyzer.
-- Dashboard (Metabase profile).
+- Neo4j Community 5.x container + persistent volume + vector index plugin configured.
+- **neo4j-backup sidecar** (§4.1) с cron + retention policy (hourly/daily/weekly).
+- Graphiti Python service + FastAPI wrapper, LiteLLM router для configurable embedding/extraction providers (§4.2).
+- Ollama compose profile `with-ollama` (opt-in, §4.2.1) + auto-pull моделей.
+- Telemetry SQLite service + /stats FastAPI endpoint (§4.8, §8.2).
+- Basic healthchecks для всех services в compose.
 
-Каждая phase — отдельный implementation plan через writing-plans skill.
+**Exit criteria:** `just setup --profile analyze --ollama-mode=cloud` → Neo4j healthy, Graphiti принимает test entity, `just backup-now` создаёт dump. Switch to `--llm-mode=hybrid` → Ollama поднимается, embeddings идут через neo4j.
+
+### Phase 2 — Core MCPs (weeks 3-4)
+
+- **palace-mcp** Python FastMCP с read tools (§4.3): `find_context_for_task`, `search_memory`, `find_ui_components`, `find_*`, `get_architecture_summary`, `get_recent_iterations`, `list_projects`.
+- palace-mcp write tools: `record_decision`, `record_finding` (с `source` field), `record_iteration_note`, `link_items`, `create_paperclip_issue`.
+- Faceted retrieval 5-stage pipeline (§5.6): intent → vector → multi-axial intersection → graph expand → grouped render.
+- **Serena MCP** wired в как server-side container (§4.4) под alias `palace-serena`.
+- **security-tools-mcp** (§4.5.1) — wraps semgrep, trufflehog, osv-scanner, custom keystore-check, slither (conditional).
+- **code-analysis-mcp** (§4.5.1) — wraps jscpd, unreferenced-symbols, McCabe complexity, build-deps-parser.
+- Staleness meta injection (§4.4.4) в все palace-mcp responses.
+- Unit tests per tool + mock Graphiti client (pytest).
+
+**Exit criteria:** `curl palace-mcp` → корректный JSON на тест запрос. Manual `record_decision` → Graphiti sees node. Все 5 MCP-сервисов здоровы в compose.
+
+### Phase 3 — Orchestration (weeks 5-6)
+
+- **lite-orchestrator** (§4.10) — Python/asyncio FastAPI с REST + CLI (`just task-run/spawn/status/cancel`).
+- Task lifecycle: spawn CLI subprocess (`claude code -p "..."`), stream logs, budget enforcement with SIGTERM overshoot.
+- **paperclip-provisioner** (§4.7) — reconciler с approval flow, pending-approval background worker.
+- Agent settings.json generator (§13.7) — API-primary + file fallback + user-managed keys preservation.
+- Agent name validation (`^[A-Z][a-zA-Z0-9]*$`) на load team-template.
+- Hire body template + real endpoint calls (`POST /api/companies/:id/agent-hires` + `PUT instructions-bundle/file`).
+- `@-mention-safety` + `prompt-injection-hardening` + `hybrid-review-workflow` auto-fragments в prompt builder.
+
+**Exit criteria:** `just setup --profile full` → Paperclip embedded → provisioner создаёт `TestAgent` → Paperclip UI показывает agent в `idle` (или `pending_approval`). `just task-run SecurityReviewer medic-kmp --input="stub"` через lite-orchestrator → subprocess запускается, budget enforced.
+
+### Phase 4 — Extractors + report-writer (weeks 7-8)
+
+- 5 extractor role prompts: `architecture-extractor`, `ui-component-extractor`, `api-extractor`, `data-layer-extractor`, `dependency-analyzer`.
+- `auto_fragments` mechanism — build.sh awk preprocessor для fragments/ → dist/ (параллельно с Paperclip's paperclips/).
+- Faceted classification extractor — записывает `:Symbol` / `:Method` с multi-label (Structural+Semantic+Domain+Capability).
+- **report-writer** role с Jinja2 templates в `reports/templates/<section>.md.j2`.
+- `just export` CLI (§8.4) — full / delta / summary modes.
+- Scheduled update pipeline: cron/webhook trigger → incremental ingest (§10.2) — `analyze` profile через lite-orchestrator, `full` profile через Paperclip Routines API.
+- Notifications webhook (`NOTIFY_WEBHOOK_URL`) + weekly digest (§12.4).
+
+**Exit criteria:** `just ingest mini-repo-kotlin` (test fixture) → iteration 1 создана, палата наполнена (>100 узлов), architecture.md экспорт valid.
+
+### Phase 5 — Reviewers + regression tests (week 9)
+
+- 5 reviewer role prompts: `security-reviewer`, `blockchain-reviewer`, `deadcode-hunter`, `duplication-detector`, `dependency-analyzer` (используют security-tools-mcp + code-analysis-mcp через hybrid workflow).
+- Dual confidence scoring в `record_finding` (§4.5.3) — static vs llm vs hybrid.
+- **Golden fixture regression tests** (§14.6) — 4 mini-repo fixtures (Kotlin, Swift, backend, healthcare-KMP) + expected outputs + `make test-golden` CI integration.
+- **Taxonomy health check** (§14.7) — `just taxonomy-health <project>` + `just review-taxonomy` interactive TUI.
+- Failure recovery: `just recover <project>`, checkpoint-based idempotency (§12.5).
+
+**Exit criteria:** `make test-golden` passes for all 4 fixtures. `just review-taxonomy` shows pending concepts with similarity warnings. Kill test: SIGTERM mid-ingest, `just recover` возобновляет с checkpoint.
+
+### Phase 6 — Client distribution + remote-connect (week 10)
+
+- **skills-distributor** HTTP endpoints: `/install`, `/client/skills.tar.gz`, `/client/subagents.tar.gz`, `/client/mcp-config.json`, `/server-profile`.
+- `client/install.sh.tmpl` rendering — server URL autoinjected, token handling.
+- Profile-aware client installer (§3.7) — detects server profile, user can opt-out components.
+- Palace client-skill для Claude Code (`.claude/skills/palace-*/`) — auto-detect project context (§12.2), staleness warnings propagation.
+- `just palace-session --set <project>` CLI.
+- remote-connect flow end-to-end: scenario C без docker на client-machine.
+
+**Exit criteria:** На второй machine: `curl http://server/install | sh --server http://server` → `~/.claude/` получает skills + mcp config → `claude mcp list` показывает palace + palace-serena endpoints. Test query работает.
+
+### Phase 7 — First live ingest: unstoppable-wallet-ios (week 11)
+
+- Написать `projects/unstoppable-wallet-ios.yaml` (Swift primary, `wallet` taxonomy, `mobile-blockchain` template).
+- Swift-specific tuning: Serena LSP + Swift support check, SwiftUI recognition в ui-component-extractor, Swift package-manager parser в dependency-analyzer.
+- `just ingest unstoppable-wallet-ios` (full, ~1-4 hours, budget $40-80).
+- End-to-end валидация: report-writer выдаёт читаемый 10-20-page отчёт + findings + UI catalogue.
+- Manual spot-check топ findings — правильно ли извлекаются `:UIComponent`, `:APIEndpoint`, `:Decision`.
+- Telemetry проверка: что cost actually попало в estimated budget, avoided_tokens_est выглядит разумно.
+- First incremental update (через несколько дней, на новых коммитах) — verify delta pipeline works.
+- **Calibration run** (§8.2.1): `just calibrate` на 10 задачах — установить baseline coefficients.
+
+**Exit criteria:** Реальный `reports/unstoppable-wallet-ios/iteration-01.md` + user может через Claude Code делать `find_ui_components`, получать полезные ответы. Telemetry показывает positive savings trend.
+
+### Phase 8 — Second project + cross-project + hardening (weeks 12-14)
+
+- **Medic-kmp ingest** (KMP project — Kotlin + Swift) — full ingest, healthcare taxonomy, `mobile-healthcare` template с HIPAA fragments. Test multi-project workflows.
+- **Unstoppable-wallet-android + kit-libs** — expand to 10-15 дополнительных репо. Cross-project queries validation: `scope="all-projects"` поиск работает между iOS/Android/kit'ами.
+- **Upgrade compatibility tests** (§14.8) — `make test-upgrade` матрица между v1.0 → v1.1 фейковых миграций.
+- Dashboard profile `with-dashboard` — Metabase поверх telemetry SQLite.
+- Facet taxonomy re-classifier (§16.5) — когда `config/taxonomies/*.yaml` меняется, scheduler triggers selective re-classification.
+- Performance tuning: если latency > P95 target → optimize composite indexes в Neo4j, batch MCP calls.
+- Documentation pass: README + docs/zdr-setup.md + docs/security/* + troubleshooting.md.
+
+**Exit criteria:** 2+ projects в palace, cross-project queries работают, weekly digest generates полноценный output, `just upgrade` v1.0→v1.1 не ломает existing palate. **Готовность к "dogfooding"** — Anton реально использует palace ежедневно при работе над Medic / Unstoppable.
+
+---
+
+### Post-MVP (Phase 9+, из §16.2)
+
+- Per-project ACL / scoped tokens
+- RAG-mode tool
+- Diff-aware context window
+- Cross-project decision propagation (auto)
+- Real-time cost cap enforcement
+- Non-Claude CLI auto-install adapters
+- Playbook scenarios в §12.6 (fill'нутся из реального use)
+
+Каждая phase завершается `/write-plan` для следующей + review checkpoint с пользователем.
