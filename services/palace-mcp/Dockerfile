@@ -9,9 +9,12 @@ WORKDIR /app
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-COPY pyproject.toml .
-RUN uv sync --no-dev
+# Install dependencies first (cached layer) without installing the project itself
+COPY pyproject.toml uv.lock .
+RUN uv sync --no-dev --no-install-project
 
+# Now copy source and install the project package
 COPY src/ src/
+RUN uv sync --no-dev
 
 CMD ["uv", "run", "uvicorn", "palace_mcp.main:app", "--host", "0.0.0.0", "--port", "8000"]
