@@ -1109,7 +1109,79 @@ All five slices green. Further scope expansion через tight iteration:
 
 ---
 
-### 13.4 Только после трёх (теперь пяти) успешных слайсов — расширение scope
+### 13.3.4 Slice #6 — CodeReviewer (generalist Red Team) — EXECUTED 2026-04-15 ✅
+
+**Hypothesis:** «CodeReviewer как independent Red Team находит что CTO пропустил — validation value of multi-agent review».
+
+**Scope executed (~1h, parallel research + adaptation):**
+- Research (background subagent): 16 agent prompts + 6 web refs → `code-reviewer.md` (174 lines). **Key decision: generalist > 6-personality fan-out** (pr-review-toolkit specialists invoked on-demand as subagents, not as parallel top-level agents — rationale in research note).
+- Written `templates/quality/code-reviewer.md` in shared v0.0.6 (1253 tokens body — самый компактный на данный момент). Medic Red Team pattern + 7 adversarial principles (added silent-failure zero tolerance explicit per Muraya 2025 + board escalation rule).
+- Customized для Gimle (Python/FastAPI + Docker/Compose + MCP protocol + Gimle-specific compliance checklist ~30 items).
+- Hired Gimle CodeReviewer (`bd2d7e20-7ed8-474c-91fc-353d610f4c52`, opus-4-6, **reports_to CEO not CTO** — independence per Red Team pattern).
+- Board создал GIM-6 "Code review: feature/GIM-5-docker-compose", назначил CodeReviewer.
+
+### 13.3.4.1 Review findings — CodeReviewer нашёл 4 CRITICAL которые CTO пропустил
+
+Review run `5eb66b44`: 2m 40s. Verdict **REQUEST CHANGES**.
+
+**CRITICAL (CTO missed all 4):**
+1. `services/palace-mcp/Dockerfile:1` — base image `python:3.12-slim` без `@sha256:` digest
+2. `services/palace-mcp/Dockerfile:10` — `ghcr.io/astral-sh/uv:latest` tag violation
+3. Container runs as root — нет `USER` directive
+4. Не multi-stage build — build tools (uv, pip cache) в финальном image
+
+**6 WARNING:**
+- `cpus:` limits отсутствуют
+- Нет `profiles:` на сервисах
+- `NEO4J_AUTH` + `NEO4J_PASSWORD` дублируют пароль
+- `app = FastAPI()` module-level — для DI рефактор нужен
+- Тесты отсутствуют (`tests/`, pytest, pytest-asyncio)
+- `dev-dependencies = []` — нет ruff/mypy/pytest
+
+**3 NOTE:** healthcheck fragile Python urllib, os.environ.get vs BaseSettings, `NEO4J_PASSWORD=changeme` слабый default.
+
+### 13.3.4.2 Validation criteria — все met
+
+- ✅ **Independent review caught real misses.** CTO в slice #5 approved тот же Dockerfile. CodeReviewer mechanical checklist каждый пункт compliance — нашёл 4 bypassed rules. Это validation **value of separation of concerns** — CTO фокусируется на bug-class logic (уловил `uv sync` order bug), Red Team mechanical compliance (уловил digest pinning).
+- ✅ **Generalist pattern работает** — не понадобилось 6 параллельных агентов. Single CodeReviewer прошёл по checklist, использовал subagent (pr-review-toolkit если нужен был) on-demand.
+- ✅ **Format strictly followed** — CRITICAL/WARNING/NOTE с `file:line` + правилом + REQUEST CHANGES verdict. Никакого «looks good».
+- ✅ **Russian output** (Medic convention preserved).
+- ✅ **Tokens discipline** — dist 3820 / budget 8000.
+
+### 13.3.4.3 Findings / surprises
+
+1. **Independent review critical value proven.** Не rubber-stamping, не дубль CTO. Разная perspective → разные находки. 4 реальных CRITICAL bug'а **улетели бы в prod** если бы не CodeReviewer. Если бы команда имела только CTO review, образ с uv:latest + root user пошёл бы в docker hub.
+
+2. **Generalist + on-demand subagents лучше 6-personality** per research. Spec §6 предлагал 6 reviewer'ов (CodeReviewer + BugHunter + SecurityAuditor + PrivacyAuditor + PerformanceEngineer + ArchitectureReviewer). Research + практика slice #6 подтверждает: overkill для Gimle scale. **Спек §6 надо скорректировать** в future edit — снизить до 1 CodeReviewer + on-demand specialists через subagents.
+
+3. **opus-4-6 для CodeReviewer дал density findings** за 2m 40s. Разумный tradeoff цена/качество для review role — критические bugs не пропускать.
+
+4. **Merge pattern (research + Medic adaptation)** работает отлично. Medic's 100 lines Red Team → shared template 83 lines (компактнее через fragments) → Gimle 112 lines (добавили stack-specific compliance checklist). Research informed principles ordering + silent-failure explicit + escalation rule.
+
+### 13.3.4.4 Спек §6 требует ревизии (future micro-slice)
+
+Оригинальный §6 (проект спека) предлагал 6 reviewer-личностей. **По результату slice #6:**
+- Оставить **1 CodeReviewer** как generalist Red Team
+- Specialists (SecurityAuditor/PerformanceEngineer/etc.) — invocable through pr-review-toolkit skills + voltagent-qa-sec subagents on-demand
+- Удалить templates/quality/{bug-hunter,privacy-auditor,performance-engineer,architecture-reviewer}.md — НЕ нужны как standalone роли
+- Оставить templates/quality/{code-reviewer, security-auditor}.md — SecurityAuditor может иметь смысл как отдельный для проектов с serious compliance (Medic health data, Gimle — возможно в future)
+
+Spec edit: отдельная микро-задача, низкий приоритет.
+
+### 13.3.4.5 Gimle team after slice #6 (6 agents)
+
+- CEO (10a4968e)
+- CTO (7fb0fdbb) — canAssignTasks + canCreateAgents
+- **CodeReviewer (bd2d7e20)** — reports CEO (independent Red Team)
+- PythonEngineer (127068ee)
+- InfraEngineer (89f8f76b)
+- (Reserved: MCPEngineer, QAEngineer, TechnicalWriter, ResearchAgent — templates ready as needed)
+
+Closed issues GIM-1 ... GIM-6. 3 engineering artifacts на feature branch (palace-mcp skeleton + /version + docker-compose), 1 CodeReviewer critical review блокирующий merge до фикса.
+
+---
+
+### 13.4 Только после трёх (теперь шести) успешных слайсов — расширение scope
 
 Когда #1+#2+#3 зелёные — **тогда** запускаем:
 - Полный extraction категории B (9 оставшихся fragments)
