@@ -25,7 +25,17 @@
 - Не переписываем Paperclip AI — когда он доступен, он **control plane** (оркестрация команды, budgets, approvals). Мы data plane + specialized tools.
 - Не пишем полноценный agent framework уровня Paperclip/Letta/AutoGen (с GUI, governance UI, cross-agent messaging). **Но** — минимальный self-contained `lite-orchestrator` (§4.10) включён в стек для профилей `review` и `analyze`, где Paperclip выключен. Lite-orchestrator только спавнит задачи/агентов и логирует — без визуалки и сложной coordination.
 
-**Portability requirement.** Стек должен быть полностью переносимым: склонировать репозиторий → задать `.env` + `projects/<name>.yaml` → `just setup` → работает на любом проекте любой платформы. **Zero Unstoppable-specific code в ядре.** Unstoppable Wallet — первый реальный подопытный, не предмет оптимизации.
+**Portability requirement — КРИТИЧНО.** Стек должен быть полностью **domain-agnostic** и переносимым на любой проект любого домена:
+
+- **Unstoppable Wallet** (mobile + blockchain + crypto) — первый реальный подопытный
+- **Medic** (mobile + healthcare + KMP) — ещё один активный проект автора, другой домен целиком
+- **Любой backend / web / library / SaaS** — работает
+
+Конкретные следствия:
+- **Zero blockchain/wallet/mobile-specific code в ядре.** Всё domain-specific вынесено в opt-in taxonomies (§5.4.1), team-templates (§7.2), и reviewer prompt-fragments.
+- **Domain taxonomies** подключаются явно в `project.yaml` — Medic не загружает `wallet.yaml` taxonomy, Unstoppable не загружает `healthcare.yaml`.
+- **Team-templates** — pre-defined для типовых доменов (`mobile-default`, `mobile-blockchain`, `mobile-healthcare`, `backend-default`, `library-default`, `minimal`) — project.yaml ссылается на один из них или custom.
+- **Опциональность** — пользователь может поставить стек вообще без knowledge о blockchain, если все его проекты — healthcare / backend / commerce. По default активны только universal components.
 
 ---
 
@@ -283,13 +293,21 @@ gimle-palace/
 
 Пользователь проходит через wizard (§3.6) и либо выбирает один из **preset packs**, либо собирает custom по галочкам. Preset packs — это "полу-готовые" комбинации для частых сценариев:
 
-| Preset | Что даёт |
-|---|---|
-| `ui-only` | palace + Serena + ui-component-extractor + find_ui_components. Без security/blockchain. Для чистого frontend-work. |
-| `security-audit` | palace + Serena + security-reviewer + blockchain-reviewer + penetration-tester subagent. Без extractors — только обзор существующего кода. |
-| `docs-onboarding` | palace + Serena + architecture-extractor + report-writer. Делает только architecture report, не пишет Findings. Для новичков в команде. |
-| `dead-code-hunt` | palace + deadcode-hunter + duplication-detector + report-writer. Generates cleanup backlog. |
-| `blockchain-deep` | palace + blockchain-reviewer + security-reviewer + api-extractor (с crypto-focus). Для аудита web3/wallet codebases. |
+| Preset | Что даёт | Для каких проектов |
+|---|---|---|
+| `review-only` | palace (read) + Serena + code-analyzers. Reviewer MCPs on-demand. | Универсальный boost для любого проекта без heavy setup |
+| `ui-only` | palace + Serena + ui-component-extractor + find_ui_components. Без security. | Frontend-focused / design-system projects (web/mobile) |
+| `security-audit` | palace + Serena + security-reviewer + penetration-tester + code-review plugin | Periodic security audit любого проекта — не привязан к домену |
+| `api-contract` | palace + api-extractor + api-contract-stability-reviewer | Libraries/SDKs где breaking changes критичны |
+| `docs-onboarding` | palace + architecture-extractor + report-writer → только architecture report | Для нового teammate — быстро показать что за проект |
+| `dead-code-hunt` | palace + deadcode-hunter + duplication-detector + report-writer | Legacy refactor / cleanup sprints, любой домен |
+| `full-analysis` | Всё: extractors + reviewers + report-writer. Длительный и дорогой первый ingest. | Полный аудит проекта |
+| `review-and-analyze` | Middle: extractors + ingest pipeline без reviewers. Делает knowledge palace без Findings. | Хочется palace, но security ещё не приоритет |
+
+**Domain-specific preset'ы** — не в core (чтобы не захламлять инсталлер). Получаются через выбор `full-analysis` + нужный team-template в project.yaml:
+- Healthcare: `full-analysis` + `mobile-healthcare` template
+- Blockchain: `full-analysis` + `mobile-blockchain` template
+- E-commerce: `full-analysis` + `mobile-ecommerce` template
 
 После выбора preset — пользователь может дальше кастомизировать (добавить/убрать компонент). Результат сохраняется в `installer/profiles/custom-<timestamp>.yaml` для reproducibility и shareability (коллега может взять тот же yaml и получить идентичный setup).
 
@@ -1140,27 +1158,74 @@ properties: {name, signature, path, line, usage_count, last_used_iteration}
 
 **Composite indexes** по парам (label, property) — O(log n) query по пересечениям осей.
 
-### 5.4.1 Hybrid taxonomy для axis 3 (Domain concept)
+### 5.4.1 Hybrid taxonomy для axis 3 (Domain concept) — **domain-agnostic**
 
-Domain concepts не должны быть ни жёстко предопределены (негибко для новых проектов), ни полностью LLM-свободно generated (deteriorates consistency — один и тот же концепт получит 5 разных имён). Решение — **hybrid** с human-in-the-loop review loop.
+Domain concepts не должны быть ни жёстко предопределены (негибко для новых проектов), ни полностью LLM-свободно generated (deteriorates consistency). Решение — **hybrid** из трёх слоёв + human-in-the-loop review loop.
+
+**Критично:** universal slice (общий для всех проектов) + домен-specific overlays (подключаются opt-in). Пользователь с Medic НЕ загружает wallet concepts, и наоборот.
 
 **Три уровня:**
 
-1. **Base taxonomy** (`config/facet-taxonomy.yaml`, коммитится в git):
+1. **Core taxonomy** (`config/taxonomies/_core.yaml`, всегда загружается):
    ```yaml
+   # Универсальные концепты — нужны в любом проекте
    domain_concepts:
-     HandlesHex:
-       description: "Operations on hexadecimal string representations"
-       aliases: ["hex", "hex string", "hexadecimal"]
-     HandlesAddress:
-       description: "Blockchain address (EVM, Bitcoin, Ton, etc.) formatting/validation"
-       aliases: ["address", "wallet address", "account address"]
-     # ... 10-15 base concepts для mobile wallet stack
+     HandlesData:
+       description: "Generic data/bytes operations (not domain-specific)"
+       aliases: ["data", "bytes", "buffer"]
+     HandlesText:
+       aliases: ["string", "text", "utf8"]
+     HandlesTime:
+       aliases: ["timestamp", "date", "instant", "duration"]
+     HandlesAmount:
+       aliases: ["amount", "quantity", "count"]
+     HandlesUnit:
+       aliases: ["measurement", "unit", "dimension"]
+     HandlesHex:                      # ← universal (bytes → hex is common)
+       aliases: ["hex", "hexadecimal"]
+     HandlesFile:
+       aliases: ["file", "path", "filesystem"]
+     HandlesNetwork:
+       aliases: ["request", "response", "http", "api-call"]
+     HandlesError:
+       aliases: ["error", "exception", "failure", "result"]
+     HandlesCredentials:
+       aliases: ["auth", "credential", "token", "session"]
    capabilities:
-     Encodes:
-       description: "Converts from one representation to another (one-way semantic)"
-     # ... 15-18 base capabilities
+     Encodes, Decodes, Validates, Formats, Parses, Fetches, Caches,
+     Transforms, Renders, Authenticates, Authorizes, Observes, Subscribes,
+     Navigates, Persists, Synchronizes
    ```
+
+2. **Domain-specific taxonomies** (`config/taxonomies/<domain>.yaml`, **opt-in** через `project.yaml`):
+   ```yaml
+   # config/taxonomies/wallet.yaml — for blockchain wallets
+   domain_concepts:
+     HandlesAddress: { aliases: ["address", "wallet-address", "evm-address", "btc-address"] }
+     HandlesCrypto:  { aliases: ["signing", "encryption", "hashing"] }
+     HandlesChain:   { aliases: ["blockchain", "network", "chain-id"] }
+     HandlesToken:   { aliases: ["token", "coin", "asset", "erc20", "nft"] }
+     HandlesMnemonic: { aliases: ["seed", "mnemonic", "bip39"] }
+     HandlesNonce:   { aliases: ["nonce", "sequence"] }
+     HandlesGas:     { aliases: ["fee", "gas-price", "priority-fee"] }
+   capabilities:
+     Signs, Hashes                    # добавляются к core
+   ```
+
+   ```yaml
+   # config/taxonomies/healthcare.yaml — for medical/patient apps (Medic и подобные)
+   domain_concepts:
+     HandlesPatient:      { aliases: ["patient", "person", "user-profile"] }
+     HandlesPrescription: { aliases: ["prescription", "rx", "script"] }
+     HandlesMedicalCard:  { aliases: ["medical-card", "health-record", "ehr"] }
+     HandlesMedication:   { aliases: ["medication", "drug", "medicine", "med"] }
+     HandlesDose:         { aliases: ["dose", "dosage", "administration"] }
+     HandlesKit:          { aliases: ["kit", "first-aid", "medicine-kit"] }
+     HandlesAllergy:      { aliases: ["allergy", "allergen", "reaction"] }
+     HandlesProcedure:    { aliases: ["procedure", "treatment", "intervention"] }
+   ```
+
+   Дополнительные предустановленные taxonomies (shipped): `ecommerce.yaml`, `saas.yaml`, `fintech.yaml`, `social.yaml`, `iot.yaml`, `gaming.yaml`, `education.yaml`. Каждый — 8-15 domain concepts. Пользователь выбирает какие **загружать в каком проекте** через `taxonomies:` field в `project.yaml` (§6).
 
 2. **Dynamic taxonomy** (`data/dynamic_taxonomy.yaml`, в persistent volume):
    - LLM extractor во время ingest'а, если встречает концепт которого нет в base **и** который встречается 3+ раз в коде — добавляет в dynamic_taxonomy
@@ -1230,73 +1295,254 @@ Stage 5: Group & render
 
 ---
 
-## 6. `project.yaml` schema
+## 6. `project.yaml` schema — domain-agnostic
 
-Декларативное описание таргет-репозитория. Валидируется через JSON Schema; загружается paperclip-provisioner + scheduler.
+Декларативное описание таргет-репозитория. **Generic-first** — никаких предположений о домене; всё domain-specific через явный opt-in. Валидируется JSON Schema.
+
+### 6.1 Полная schema (с описаниями)
+
+```yaml
+# projects/<slug>.yaml
+
+# ── Identity ────────────────────────────────────────────
+slug: my-app              # string, [a-z0-9-]+, unique per installation
+name: My App              # human-readable
+
+# ── Repo ────────────────────────────────────────────────
+repo:
+  kind: local             # local | git
+  path: /repos/my-app             # if local
+  # url: https://github.com/...   # if git
+  # token_env: GITHUB_TOKEN       # if private git
+  default_branch: main            # которую branch ingest'им по default
+
+# ── Code characterization ───────────────────────────────
+language: kotlin          # primary — used for Serena LSP config
+framework: android-compose  # string — hint for UI extractor (compose / swiftui / react / vue / flutter / django / rails / ...)
+secondary_languages: [java]  # optional
+
+tags:                     # free-form, used for team-template matching если не указан explicit
+  - mobile
+  - healthcare           # или blockchain / backend / web / ...
+
+# ── Team template binding ───────────────────────────────
+team_template: mobile-healthcare  # explicit (recommended) — ссылка на teams/*.yaml
+# ЛИБО tags-based (fallback): team-template с overlapping applies_to_tags выбирается автоматически
+# При нескольких matches — первый по алфавиту + warning
+
+# ── Preset (optional shortcut) ──────────────────────────
+preset: review-and-analyze  # optional preset pack (см. §3.5.5), overridable полями ниже
+# Resolve: preset определяет baseline extractors/reviewers. Ниже поля override.
+
+# ── Paths filter (default blacklist + project-specific) ─
+paths:
+  exclude:                # Default: node_modules, .git, build, dist, vendor, .next, __pycache__, target, .gradle. Ниже — дополнения.
+    - tests/              # не ingest'им тесты
+    - generated/          # generated code
+    - features/experimental/  # временные branches фич
+  # include: [...]        # optional whitelist — если указан, остальное игнорируется
+
+# ── Domain taxonomies (opt-in) ──────────────────────────
+taxonomies:
+  - _core                 # всегда загружается (не обязательно указывать, default)
+  - healthcare           # opt-in: patient/prescription/medication concepts
+  # - wallet             # would load blockchain/crypto concepts
+  # - ecommerce, saas, fintech, ...
+
+# ── Extractors (active set for this project) ────────────
+# Если указан preset — это override. Иначе resolve из team-template.
+extractors:
+  - architecture-extractor
+  - ui-component-extractor
+  - api-extractor
+  - data-layer-extractor
+  # - dependency-analyzer   # пропускаем на этом проекте
+
+# ── Reviewers ────────────────────────────────────────────
+reviewers:
+  - security-reviewer         # универсальный
+  - deadcode-hunter
+  - duplication-detector
+  # - blockchain-reviewer     # НЕ нужен на healthcare проекте — просто не указываем
+  # Custom reviewers из team-template ниже role_overrides могут включать.
+
+# ── Scheduled updates ───────────────────────────────────
+trigger:
+  enabled: true
+  kind: cron                  # cron | webhook | manual
+  schedule: "0 3 * * *"       # nightly at 03:00 UTC
+  # OR webhook:
+  #   provider: github        # github | gitlab | gitea | generic
+  #   secret_env: GITHUB_WEBHOOK_SECRET
+  # OR manual:  # только через just ingest
+
+# ── Cost caps ──────────────────────────────────────────
+budget:
+  initial_ingest_usd: 50      # hard cap на full ingest
+  per_update_usd: 2           # hard cap на один incremental
+  monthly_cap_usd: 100        # hard cap на весь проект за месяц
+
+# ── Role-level overrides (optional, rare) ────────────────
+# Переопределяет team-template settings только для этого проекта.
+role_overrides:
+  security-reviewer:
+    model: claude-opus-4-6    # защита чувствительна — Opus вместо template Sonnet
+    budget_usd_per_run: 15    # увеличенный лимит
+  ui-component-extractor:
+    plugins:                  # add to what's в team-template
+      - magic                 # 21st-dev/magic MCP для UI help (из §13.1 inventory)
+
+# ── LLM mode override (optional, for sensitive projects) ─
+llm_mode_override: cloud      # cloud | hybrid | local
+# Если указан, перекрывает глобальный LLM_MODE для этого проекта.
+# Healthcare example: может хотеть full local Ollama из-за HIPAA sensitivity.
+
+# ── Reporting ─────────────────────────────────────────
+reporting:
+  ingest_report: full         # full | summary | off — report-writer on first ingest
+  update_report: summary      # full | summary | off — on each incremental
+  sections:                   # override team-template.report_sections
+    - architecture
+    - api-surface
+    - findings
+    # - ui-catalogue — не нужен на этом проекте
+```
+
+### 6.2 Пример A: Medic (mobile healthcare, KMP, NO blockchain)
+
+```yaml
+# projects/medic-kmp.yaml
+slug: medic-kmp
+name: Medic (KMP + Android + iOS)
+repo:
+  kind: local
+  path: /repos/medic
+  default_branch: main
+
+language: kotlin
+framework: kotlin-multiplatform     # KMP специфично
+secondary_languages: [swift]
+
+tags: [mobile, healthcare, kmp, multiplatform]
+
+team_template: mobile-healthcare    # pre-defined template
+
+paths:
+  exclude:
+    - shared/build/
+    - app-android/build/
+    - app-ios/build/
+    - server/supabase/functions/deno.lock
+
+taxonomies:
+  - _core
+  - healthcare                       # patient/prescription/medication/dose/kit concepts
+
+extractors:
+  - architecture-extractor
+  - ui-component-extractor
+  - api-extractor
+  - data-layer-extractor
+
+reviewers:
+  - security-reviewer                # HIPAA-focused via fragment
+  - deadcode-hunter
+  - duplication-detector
+  # НЕТ blockchain-reviewer — не нужен для healthcare
+
+trigger:
+  enabled: true
+  kind: cron
+  schedule: "0 4 * * *"
+
+budget:
+  initial_ingest_usd: 40             # поменьше — проект поскромнее
+  per_update_usd: 1.5
+  monthly_cap_usd: 60
+
+role_overrides:
+  security-reviewer:
+    fragments_extra:
+      - hipaa-compliance              # custom fragment по HIPAA
+      - pii-data-flows                # patient privacy
+
+llm_mode_override: hybrid             # embeddings locally (medical data privacy),
+                                      # но extraction в cloud (quality trade-off)
+
+reporting:
+  ingest_report: full
+  update_report: summary
+```
+
+### 6.3 Пример B: Unstoppable Wallet (mobile blockchain wallet)
 
 ```yaml
 # projects/unstoppable-android.yaml
 slug: unstoppable-android
 name: Unstoppable Wallet (Android)
 repo:
-  kind: local                # local | git
+  kind: local
   path: /repos/unstoppable-wallet-android
-  # OR:
-  # url: https://github.com/horizontalsystems/unstoppable-wallet-android
-  # token_env: GITHUB_TOKEN
   default_branch: master
 
 language: kotlin
 framework: android-compose
 secondary_languages: [java]
 
-tags:
-  - mobile
-  - blockchain
-  - wallet
+tags: [mobile, blockchain, wallet, crypto]
 
-# Какие extractors активны на этом проекте
+team_template: mobile-blockchain     # другой pre-defined template
+
+paths:
+  exclude:
+    - app/build/
+
+taxonomies:
+  - _core
+  - wallet                           # crypto/address/chain/token/nonce/gas concepts
+
 extractors:
   - architecture-extractor
   - ui-component-extractor
   - api-extractor
   - data-layer-extractor
-  - dependency-analyzer
+  - dependency-analyzer              # wallet heavily uses external libs (bitcoin-kit, web3j)
 
-# Какие reviewers активны (code-analyzer MCPs)
 reviewers:
   - security-reviewer
-  - blockchain-reviewer
+  - blockchain-reviewer              # crypto invariants + slither/semgrep wallet rules
   - deadcode-hunter
   - duplication-detector
 
-# Depth tuning (cost knob)
-depth:
-  structural: full            # full | shallow — карта символов
-  review: hot-paths           # full | hot-paths | off — где гонять reviewers
-  embeddings: yes             # да/нет — строить vector index
-
-# Planned iterations marker
-iteration:
-  current: 1
-  label: "initial"
-
-# Scheduled updates
 trigger:
-  kind: cron                  # cron | webhook | manual
-  schedule: "0 3 * * *"       # nightly at 03:00 UTC
-  # OR: webhook: {provider: github, secret_env: GITHUB_WEBHOOK_SECRET}
+  enabled: true
+  kind: cron
+  schedule: "0 3 * * *"
 
-# Budget caps (optional — forwarded to Paperclip team template)
 budget:
-  initial_ingest_usd: 50
+  initial_ingest_usd: 60              # больше — проект крупнее, больше libs
   per_update_usd: 2
-  model_policy:
-    architecture: opus
-    bulk_review: sonnet
-    extractors: sonnet
-    minor_passes: haiku
+  monthly_cap_usd: 120
+
+role_overrides:
+  security-reviewer:
+    model: claude-opus-4-6            # private-key paths — Opus критичен
+    budget_usd_per_run: 15
+  blockchain-reviewer:
+    model: claude-opus-4-6            # invariants complexity — Opus
 ```
+
+### 6.4 Resolution order (что выигрывает при конфликтах)
+
+При load `project.yaml`:
+
+1. `preset:` — если указан, задаёт baseline extractors/reviewers/taxonomies
+2. `team_template:` — explicit или tags-matched — добавляет/overriденит plugins, subagent_preferences, models
+3. `extractors: / reviewers: / taxonomies:` в project.yaml — **полностью override** baseline (это не merge, это replace)
+4. `role_overrides:` — **merge** на уровне roles (fragment/model/budget override без реплейсмента всей роли)
+5. `llm_mode_override:` → перекрывает global `.env` LLM_MODE для этого проекта
+
+Разрешение конфликтов explicit логированием: `just validate <project>` покажет полный resolved config + source каждого поля.
 
 ---
 
@@ -1466,6 +1712,48 @@ paperclip-provisioner → Paperclip API (see §4.7 reconciliation loop)
        регистрирует role в своём SQLite таске `orchestrator_roles`
        для последующих POST /tasks
 ```
+
+### 7.5 Pre-defined team-templates (shipped с stack'ом)
+
+Папка `teams/` содержит набор стандартных templates для типовых доменов. Пользователь может использовать один из них **без modifications** или скопировать как starting point для custom.
+
+| Template | `applies_to_tags` | Active roles | Use case |
+|---|---|---|---|
+| `minimal.yaml` | `[minimal, quick]` | architecture-extractor, deadcode-hunter | Quick start, small project / library |
+| `library-default.yaml` | `[library, sdk]` | architecture-extractor, api-extractor, dependency-analyzer, deadcode-hunter + **api-contract-stability-reviewer** | SDK / open-source library — упор на API surface и backward-compat |
+| `backend-default.yaml` | `[backend, server, api]` | architecture-extractor, api-extractor, data-layer-extractor, security-reviewer, dependency-analyzer, deadcode-hunter | Backend service, REST/GraphQL API |
+| `web-default.yaml` | `[web, frontend, spa]` | architecture-extractor, ui-component-extractor, api-extractor, deadcode-hunter, duplication-detector, accessibility-reviewer | Web app (React/Vue/Angular/Svelte) |
+| `mobile-default.yaml` | `[mobile]` | architecture-extractor, ui-component-extractor, api-extractor, data-layer-extractor, deadcode-hunter | Generic mobile app — no domain specialization |
+| `mobile-healthcare.yaml` | `[mobile, healthcare, medical]` | `mobile-default` roster + fragments `hipaa-compliance`, `pii-data-flows` on security-reviewer | Medic + подобные проекты |
+| `mobile-blockchain.yaml` | `[mobile, blockchain, wallet, crypto]` | `mobile-default` roster + blockchain-reviewer, security-reviewer(Opus), dependency-analyzer | Unstoppable + подобные проекты |
+| `mobile-ecommerce.yaml` | `[mobile, ecommerce, shopping]` | `mobile-default` roster + fragments `payment-flows`, `pci-dss-compliance` on security-reviewer | Shop-style mobile apps |
+| `full-stack.yaml` | `[fullstack]` | Everything combined, budget caps значимо выше | Monorepo проект backend + mobile + web |
+
+Пользователь может:
+- **Использовать as-is** — project.yaml `team_template: mobile-healthcare` → готовый setup.
+- **Скопировать и модифицировать** — `cp teams/mobile-healthcare.yaml teams/medic-custom.yaml`, edit.
+- **Цепочкой inherit'ить** — новая фича: template может иметь `extends: mobile-default` + добавить свои role_overrides / auto_fragments.
+
+### 7.6 Report sections (новое поле в team-template)
+
+Каждый template декларирует **какие разделы report-writer генерирует**:
+
+```yaml
+# teams/mobile-healthcare.yaml snippet
+report_sections:
+  - architecture
+  - ui-catalogue
+  - api-surface
+  - data-layer
+  - findings                  # всегда есть если hay reviewers
+  - dependencies
+  - hipaa-compliance-notes    # custom для healthcare
+  # Опущены: ui-accessibility (redundant в mobile-healthcare), dead-code (opt-in per-project)
+```
+
+Project.yaml может **override** через `reporting.sections: [...]` (§6.1). Example: на Medic включили только `architecture + findings + api-surface`, остальное пропускается для сжатия отчёта.
+
+Каждая `report_sections` entry — это **Jinja2 template** в `reports/templates/<section>.md.j2`. Новые разделы добавляются копированием шаблона + добавлением имени в список. `report-writer` role resolve'ит все указанные sections, рендерит parallel и конкатенирует.
 
 ---
 
