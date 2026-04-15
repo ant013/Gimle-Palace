@@ -84,15 +84,27 @@
 └───────────────────────┘                       └─────────────────────────────┘
 ```
 
-### 2.2 Три deployment scenarios
+### 2.2 Deployment scenarios — матрица (profile × topology)
 
-| # | Scenario | Server-side шаги | Client-side шаги |
-|---|---|---|---|
-| **A** | Full self-host (one developer, один сервер) | `git clone` + `just setup` + `just ingest <project>` | `curl <localhost>/install \| sh` |
-| **B** | Full self-host + existing external Paperclip | `just setup` + `PAPERCLIP_URL=https://...` в `.env` | то же что A |
-| **C** | Remote-connect (один сервер, команда разработчиков) | **Ничего** — сервер уже развёрнут командой | `curl <team-server>/install \| sh --server <url>` |
+**Axis 1 — topology** (где живёт сервер):
 
-Scenario A+B — полный контроль и автономность; C — нулевой ops для рядового разработчика, единая общая память команды.
+| # | Topology |
+|---|---|
+| **A** | Full self-host (один developer, свой сервер или laptop) |
+| **B** | Full self-host + existing external Paperclip (подключаемся к его REST API) |
+| **C** | Remote-connect (общий team-сервер уже развёрнут — клиент ставится за 1 команду) |
+| **D** | Client-only (вообще без сервера у себя — только MCP-клиент к чужому инстансу) |
+
+**Axis 2 — profile** (какие компоненты активны — см. §3.5):
+
+| Profile | Что включает |
+|---|---|
+| `review` | palace (read-only MCPs) + Serena + code-analyzer MCPs. **Без Paperclip**, без extractors, без scheduler. Lightweight для соло-разработчика. |
+| `analyze` | `review` + extractors + ingest pipeline + scheduler. **Без Paperclip** — ручные триггеры через `just`. |
+| `full` | `analyze` + Paperclip (embedded) + paperclip-provisioner + team-templates. **Default — всё включено**. |
+| `custom` | Интерактивный выбор каждого компонента отдельно (§3.6). |
+
+Комбинация topology × profile даёт 16 вариантов; реально используются ~5-6. Установка — всегда через **interactive installer** (§3.6), результат сохраняется в `.env` как `GIMLE_PROFILE=<name>` + `COMPOSE_PROFILES=<docker-compose-profiles>` чтобы повторный `just setup` был non-interactive.
 
 ### 2.3 Логические слои сервера
 
@@ -138,14 +150,13 @@ Neo4j  ──►  Graphiti  ──►  palace-mcp  ──►  skills-distributor
 
 Критично: **skills-distributor запускается до paperclip-provisioner**, чтобы когда provisioner создаёт "сотрудников" в Paperclip, MCP endpoints и skills-manifests уже были зарегистрированы и доступны.
 
-### 3.3 Paperclip co-existence
+### 3.3 Paperclip co-existence — три режима
 
-- **Scenario A (external Paperclip):** наш compose подключается к external docker network `paperclip-agent-net`, которую Paperclip уже создал. `PAPERCLIP_URL` указывает на его hostname в этой сети.
-- **Scenario B (embedded Paperclip):** `docker compose --profile with-paperclip up` поднимает Paperclip как service внутри нашего stack (для новых серверов где ещё ничего нет).
+- **External:** Paperclip уже стоит у пользователя. `PAPERCLIP_MODE=external` + `PAPERCLIP_URL=http://paperclip.existing.host:3100` в `.env`. Наш compose подключается к external docker network.
+- **Embedded:** `docker compose --profile with-paperclip up` поднимает Paperclip внутри нашего stack (для чистых серверов). `PAPERCLIP_MODE=embedded`, `PAPERCLIP_URL=http://paperclip:3100`.
+- **None:** Paperclip не нужен — работаем только как "lightweight memory palace + MCP tools для локального Claude/Codex". `PAPERCLIP_MODE=none`. Профили `review` и `analyze` идут в этом режиме по умолчанию.
 
-Выбор делается через compose profile (`--profile with-paperclip`) и соответствующее значение `PAPERCLIP_URL` в `.env`:
-- external: `PAPERCLIP_URL=http://paperclip.existing.host:3100`
-- embedded: `PAPERCLIP_URL=http://paperclip:3100` (internal hostname в compose)
+Выбирается интерактивно (§3.6) либо через флаг `just setup --paperclip external|embedded|none`.
 
 ### 3.4 Infrastructure-as-code
 
@@ -180,13 +191,241 @@ gimle-palace/
 │   ├── install.sh.tmpl                # template для client installer
 │   ├── skills/                        # skills inventory для ~/.claude/
 │   └── subagents/                     # subagents inventory
+├── installer/
+│   ├── setup.sh                       # интерактивный installer (§3.6)
+│   ├── profiles/                      # декларативные profile definitions
+│   │   ├── review.yaml
+│   │   ├── analyze.yaml
+│   │   ├── full.yaml
+│   │   └── client.yaml
+│   └── questions.yaml                 # custom-профиль — schema вопросов
 └── docs/
     └── superpowers/specs/             # design docs (этот файл)
 ```
 
----
+### 3.5 Installation profiles (detailed)
 
-## 4. Core Components (detailed)
+Каждый profile — декларативный yaml в `installer/profiles/<name>.yaml`, описывающий какие compose-services, которые reviewer/extractor роли, какие client-артефакты включены. Installer парсит это и генерирует `.env` + `COMPOSE_PROFILES`.
+
+#### 3.5.1 Profile `review` — lightweight reviewer boost
+
+**Для кого:** соло developer, хочет получить мгновенное улучшение качества code review своими coding CLIs, без тяжёлой инфры. Без Paperclip.
+
+**Что включено (server side):**
+- Neo4j + Graphiti (baseline store)
+- palace-mcp (read tools только — write tools disabled через env-флаг)
+- Serena MCP
+- code-analyzer MCPs (security, deadcode, duplication) — вызываются из локального Claude/Codex on-demand
+- Telemetry (SQLite + `/stats`)
+- ❌ extractors, ❌ scheduler, ❌ paperclip-provisioner, ❌ skills-distributor HTTP endpoint (доступен только локально)
+
+**Что включено (client side):**
+- MCP config → palace + code-analyzers
+- Palace skill для Claude Code (чтобы вызывать reviewers одной командой)
+- ❌ team-workspace setup, ❌ plugin matrix
+
+**Ingest:** не поддерживается в этом профиле — палата наполняется **только** через записи из read-write `/record_*` tools когда явно вызваны из Claude. Либо upgrade → `analyze`.
+
+**Docker compose footprint:** ~400 MB RAM, 4 контейнера.
+
+#### 3.5.2 Profile `analyze` — palace + pipelines, без Paperclip
+
+**Для кого:** developer/small team, хочет полный palace (с extractors, scheduled updates), но управляет командой агентов **не через Paperclip GUI**, а через CLI (`just ingest`, `just update`, `just report`). Ingest-агенты спавнятся как `claude code -p "..."` sub-processes из scheduler'а.
+
+**Что включено (server side):**
+- Всё из `review`
+- palace-mcp read+write
+- Extractors (architecture, ui-component, api, data-layer, dependency)
+- Ingest pipeline (Justfile targets)
+- Scheduler (cron + webhook endpoint)
+- Reports generator → `reports/<project>/<iteration>.md`
+- ❌ paperclip-provisioner, ❌ Paperclip container
+
+**Client side:**
+- Всё из `review`
+- `/palace-ingest`, `/palace-update`, `/palace-report` slash-commands
+
+**Trade-off:** нет Paperclip GUI — no governance/budgets/approvals UI. Зато нулевые шансы что Paperclip mismatch сломает workflow. Отличный вариант для "quick value" без команды.
+
+**Docker compose footprint:** ~900 MB RAM, 8-10 контейнеров.
+
+#### 3.5.3 Profile `full` — всё включено (default)
+
+**Для кого:** team/organization, хочет полный governance через Paperclip UI, budgets, approvals, multi-agent coordination.
+
+**Что включено:** всё из `analyze` + Paperclip (embedded или external по выбору) + paperclip-provisioner + skills-distributor HTTP + workspace settings.json auto-install.
+
+**Docker compose footprint:** ~1.5 GB RAM (Neo4j 600MB + Paperclip 500MB + прочее 400MB), 12-14 контейнеров.
+
+#### 3.5.4 Profile `client` — только клиентская часть
+
+**Для кого:** рядовой developer в команде, где team-сервер уже развёрнут (scenario C из §2.2).
+
+**Что ставится:**
+- Только `~/.claude/mcp.json` (merged non-destructively)
+- Только `~/.claude/skills/palace-*` и `~/.claude/agents/palace-*`
+- **Никакого Docker, никакого Neo4j.**
+
+**Команда:** `curl <team-server>/install | sh --server <url>`. Сервер выдаёт готовый client-tarball и config с правильным endpoint'ом.
+
+#### 3.5.5 Profile `custom` — интерактивный выбор
+
+Пользователь проходит через wizard (§3.6) и сам отмечает галочками каждый компонент. Результат сохраняется в `installer/profiles/custom-<timestamp>.yaml` для reproducibility.
+
+#### 3.5.6 Summary matrix
+
+| Feature | `review` | `analyze` | `full` | `client` | `custom` |
+|---|---|---|---|---|---|
+| Neo4j + Graphiti | ✅ | ✅ | ✅ | ❌ | ? |
+| palace-mcp (read) | ✅ | ✅ | ✅ | n/a | ? |
+| palace-mcp (write / `record_*`) | ❌ | ✅ | ✅ | n/a | ? |
+| Serena MCP | ✅ | ✅ | ✅ | ❌ | ? |
+| code-analyzer MCPs | ✅ | ✅ | ✅ | ❌ | ? |
+| Extractors + ingest pipeline | ❌ | ✅ | ✅ | ❌ | ? |
+| Scheduler (cron/webhook) | ❌ | ✅ | ✅ | ❌ | ? |
+| Reports generator | ❌ | ✅ | ✅ | ❌ | ? |
+| Paperclip (embedded) | ❌ | ❌ | ✅/(ext) | ❌ | ? |
+| Workspace settings.json auto-install | ❌ | ❌ | ✅ | ❌ | ? |
+| Client MCP install | ✅ | ✅ | ✅ | ✅ | ? |
+| Client skills install | ✅ | ✅ | ✅ | ✅ | ? |
+| Telemetry | ✅ | ✅ | ✅ | n/a | ? |
+| **Min RAM** | 400 MB | 900 MB | 1.5 GB | 0 | varies |
+| **First-time setup** | ~2 min | ~3 min | ~5 min | ~30 sec | varies |
+
+### 3.6 Interactive installer
+
+**Entry point:** `just setup` → `installer/setup.sh`.
+
+**Non-interactive modes (для CI, scripted deploys):**
+```bash
+just setup --profile review                    # minimal
+just setup --profile analyze                   # palace + pipelines
+just setup --profile full --paperclip embedded # всё в одной коробке
+just setup --profile client --server https://palace.team.io
+just setup --profile custom --answers answers.yaml  # pre-filled answers
+```
+
+**Interactive flow** (запуск `just setup` без флагов):
+
+```
+╔══════════════════════════════════════════════════════════════════╗
+║  Gimlé Palace — installer                                        ║
+╚══════════════════════════════════════════════════════════════════╝
+
+? What do you want to install?  [use ↑↓, space to select, enter to confirm]
+
+  ❯ full      — all-in-one: memory palace + team of agents + Paperclip GUI
+    analyze   — memory palace + ingest pipeline + scheduler  (no Paperclip)
+    review    — lightweight reviewer boost for local Claude Code  (minimal)
+    client    — I already have a Gimlé server, just hook up my laptop
+    custom    — let me pick every component myself
+
+↳ Selected: full
+
+? Paperclip deployment?
+  ❯ embedded — bundle Paperclip inside our docker-compose (default for full)
+    external — I already run Paperclip on this or another host
+    skip     — no Paperclip, use CLI-only orchestration
+
+↳ embedded
+
+? Which projects do you want to register now?
+  (can be added later via `just add-project <path>`)
+  ❯ detect — scan current directory for git repos
+    manual — paste paths comma-separated
+    later  — skip for now
+
+↳ detect
+[scanning... found 4 git repos]
+  ☑ /Users/anton/Android/unstoppable-wallet-android
+  ☑ /Users/anton/Android/bitcoin-kit-android
+  ☐ /Users/anton/Android/ethereum-kit-android
+  ☐ /Users/anton/Android/market-kit-android
+[space to toggle, enter to confirm]
+
+? Team template for detected projects?
+  ❯ mobile-blockchain-default — architect + UI + API + security + blockchain + deadcode
+    mobile-default            — architect + UI + API + deadcode
+    backend-default           — architect + API + data + security + deadcode
+    minimal                   — architect + deadcode only
+    custom                    — edit yaml after install
+
+? API keys — paste now or add later to .env?
+  ❯ paste now  (secure input, not echoed)
+    add later
+
+   ANTHROPIC_API_KEY: ****** ✓
+   OPENAI_API_KEY:    (empty, skipped — will be added later)
+
+? Telemetry & privacy?
+  ❯ full — log args for debugging (local SQLite only, not sent anywhere)
+    hashed — hash arg values in logs (privacy-preserving)
+    off — no telemetry
+
+? Ready to install:
+     profile: full
+     paperclip: embedded
+     projects: 2
+     team-template: mobile-blockchain-default
+     secrets: 1 of 2 provided
+     telemetry: full
+  ❯ Install  (ctrl+c to cancel, e to edit)
+
+▶ Generating .env ...                             ✓
+▶ Generating docker-compose.override.yml ...      ✓
+▶ docker compose pull ...                         ✓ (3 minutes)
+▶ docker compose up -d ...                        ✓
+▶ Waiting for healthchecks ...                    ✓ (45s)
+▶ Running paperclip-provisioner ...               ✓ (2 companies created)
+▶ Writing ~/.paperclip workspaces settings.json ... ✓ (9 agents configured)
+▶ Generating client install URL ...               ✓
+
+╔══════════════════════════════════════════════════════════════════╗
+║  ✓ Installation complete!                                        ║
+╠══════════════════════════════════════════════════════════════════╣
+║                                                                  ║
+║  Paperclip UI:       http://localhost:3100                       ║
+║  Palace stats:       http://localhost:8080/stats                 ║
+║  Client install:     curl http://localhost:8080/install | sh     ║
+║                                                                  ║
+║  First ingest:       just ingest unstoppable-wallet-android      ║
+║  Status:             just status                                 ║
+║                                                                  ║
+╚══════════════════════════════════════════════════════════════════╝
+```
+
+**Technical stack для installer:**
+- **`gum`** (charmbracelet) как primary prompt library — beautiful TTY, single Go binary, `brew install gum` или `apt install gum`. Работает через `gum choose`, `gum input`, `gum confirm`.
+- **Fallback на `whiptail`** — встроен в большинство Linux distros (ncurses-based) если gum недоступен.
+- **Last resort: plain bash `read`** — ASCII UI, работает всегда.
+
+Installer автодетект'ит доступные tools в таком порядке и использует первый найденный. `setup.sh --plain-ui` форсит bash-fallback для тестов/CI.
+
+**Idempotency.** Повторный `just setup` детектит существующий `.env` + `COMPOSE_PROFILES` → предлагает:
+```
+Detected existing install: profile=full, paperclip=embedded.
+  ❯ Keep current config and restart services
+    Reconfigure (walk through installer again)
+    Upgrade in-place (pull latest images, re-migrate schemas)
+    Uninstall (docker compose down -v, remove ~/.claude entries)
+```
+
+### 3.7 Profile-aware client installer
+
+Client-side `install.sh` получает от сервера метаданные о активном профиле (`GET /server-profile`). Скрипт показывает user'у:
+
+```
+Connected to Gimlé server at https://palace.team.io
+  profile:        full
+  version:        1.0.3
+  available MCP:  palace, serena, security-reviewer, blockchain-reviewer
+  skills:         5 (palace-*)
+  subagents:      2 (palace-*)
+
+? Install all available components? [Y/n]
+```
+
+Пользователь может пропустить компоненты если не хочет. Например отказаться от `subagents` но взять `mcp` + `skills`.
 
 ### 4.1 Neo4j Community 5.x
 
@@ -971,6 +1210,10 @@ for project in projects/*.yaml:
 
 **Rejected:** K8s (overkill single-server), Ansible (нужен только для OS-level provisioning, которого нет), Nix (входной барьер), curl-to-sh installer (хрупкий, плохо обновляется).
 
+**Profiles via Docker Compose `profiles:` keyword** — each service declares list of profiles оно принадлежит (`profiles: [review, analyze, full]`). Compose'у пробрасывается `COMPOSE_PROFILES=<active-profile>` из `.env`. Это нативный mechanism, не требующий override файлов (кроме override когда пользователь идёт по custom-пути).
+
+**Interactive installer: gum → whiptail → bash fallback chain.** Хорошо деградирует: на голом сервере без tooling всё равно работает через `read`. На dev-машине с `brew install gum` — красивый UI. Installer не требует Python/Node — single shell script, максимальная portability.
+
 ---
 
 ## 16. Open Questions / Future Work
@@ -1003,9 +1246,11 @@ for project in projects/*.yaml:
 ## 18. Implementation Phases (preview — detailed plan будет в writing-plans skill)
 
 **Phase 0 — Schema & scaffolding**
-- Finalize JSON schemas for `project.yaml`, `team-template.yaml`, agent-role manifests.
-- `docker-compose.yml` скелет + `Justfile` shell.
-- Neo4j + Graphiti up, smoke test.
+- Finalize JSON schemas for `project.yaml`, `team-template.yaml`, agent-role manifests, `installer/profiles/*.yaml`.
+- `docker-compose.yml` скелет с compose-profiles matrix (§3.5).
+- `installer/setup.sh` с gum/whiptail/bash-fallback chain (§3.6).
+- `Justfile` shell (`setup`, `ingest`, `update`, `status`, `stats`, `down`, `uninstall`).
+- Neo4j + Graphiti up, smoke test на `profile=review` (минимальная конфигурация).
 
 **Phase 1 — Core MCPs**
 - palace-mcp с read tools (search, find_*).
