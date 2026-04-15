@@ -1,0 +1,4 @@
+[submodule "paperclips/fragments/shared"]
+	path = paperclips/fragments/shared
+	url = git@github.com:ant013/paperclip-shared-fragments.git
+	branch = main
