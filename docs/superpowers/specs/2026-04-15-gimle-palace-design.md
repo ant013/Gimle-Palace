@@ -22,8 +22,8 @@
 
 **Non-goals.**
 - Не являемся замена IDE-расширений (Continue.dev, Cursor) — мы слой ПОД ними.
-- Не переписываем Paperclip AI — он **control plane** (оркестрация команды, budgets, approvals). Мы data plane + specialized tools.
-- Не пишем свой agent framework / LLM router — используем Paperclip + существующие coding CLIs.
+- Не переписываем Paperclip AI — когда он доступен, он **control plane** (оркестрация команды, budgets, approvals). Мы data plane + specialized tools.
+- Не пишем полноценный agent framework уровня Paperclip/Letta/AutoGen (с GUI, governance UI, cross-agent messaging). **Но** — минимальный self-contained `lite-orchestrator` (§4.10) включён в стек для профилей `review` и `analyze`, где Paperclip выключен. Lite-orchestrator только спавнит задачи/агентов и логирует — без визуалки и сложной coordination.
 
 **Portability requirement.** Стек должен быть полностью переносимым: склонировать репозиторий → задать `.env` + `projects/<name>.yaml` → `just setup` → работает на любом проекте любой платформы. **Zero Unstoppable-specific code в ядре.** Unstoppable Wallet — первый реальный подопытный, не предмет оптимизации.
 
@@ -113,7 +113,8 @@
 | **Storage** | Neo4j Community 5.x | Persistent граф |
 | **Memory engine** | Graphiti (Python service) | Bi-temporal KG, hybrid retrieval, embedding pipeline |
 | **Core MCPs** | palace-mcp, Serena MCP, code-analyzer family | Agent-facing tools |
-| **Provisioners** | skills-distributor, paperclip-provisioner, scheduler | One-shot bootstrap + cron |
+| **Orchestration** | lite-orchestrator (always-on) + paperclip-provisioner (profile `full` only) | Спавн задач/агентов в профилях без Paperclip; bootstrap команды в Paperclip когда он есть |
+| **Provisioners** | skills-distributor, scheduler | One-shot bootstrap + cron |
 | **Telemetry** | SQLite + FastAPI `/stats` | Observability, ROI measurement |
 | **Client distribution** | HTTP endpoint `/install` + `/client/*` | Раздача client artifacts |
 
@@ -150,13 +151,22 @@ Neo4j  ──►  Graphiti  ──►  palace-mcp  ──►  skills-distributor
 
 Критично: **skills-distributor запускается до paperclip-provisioner**, чтобы когда provisioner создаёт "сотрудников" в Paperclip, MCP endpoints и skills-manifests уже были зарегистрированы и доступны.
 
-### 3.3 Paperclip co-existence — три режима
+### 3.3 Paperclip co-existence — три режима (явный выбор, без автодетекта)
 
-- **External:** Paperclip уже стоит у пользователя. `PAPERCLIP_MODE=external` + `PAPERCLIP_URL=http://paperclip.existing.host:3100` в `.env`. Наш compose подключается к external docker network.
-- **Embedded:** `docker compose --profile with-paperclip up` поднимает Paperclip внутри нашего stack (для чистых серверов). `PAPERCLIP_MODE=embedded`, `PAPERCLIP_URL=http://paperclip:3100`.
-- **None:** Paperclip не нужен — работаем только как "lightweight memory palace + MCP tools для локального Claude/Codex". `PAPERCLIP_MODE=none`. Профили `review` и `analyze` идут в этом режиме по умолчанию.
+Режим Paperclip пользователь выбирает **руками** (через installer §3.6 либо флаг `--paperclip`). Мы **не** делаем автодетект запущенного Paperclip на машине — пользователь может дать ссылку на удалённый инстанс в другой сети с отдельными credentials, что автодетектом не нашли бы.
 
-Выбирается интерактивно (§3.6) либо через флаг `just setup --paperclip external|embedded|none`.
+- **External:** Paperclip уже стоит (на этой машине, на сервере команды, где угодно доступно по URL). Вводится URL + optional login/password. `PAPERCLIP_MODE=external` + `PAPERCLIP_URL=https://paperclip.team.io` + `PAPERCLIP_USER=...` / `PAPERCLIP_PASSWORD=...` (или `PAPERCLIP_API_KEY=...`) в `.env`.
+- **Embedded (default):** `docker compose --profile with-paperclip up` поднимает Paperclip внутри нашего stack (новый инстанс рядом с остальным набором). `PAPERCLIP_MODE=embedded`, `PAPERCLIP_URL=http://paperclip:3100`. Это defаulт для профиля `full` когда пользователь не указал иначе.
+- **None:** Paperclip выключен. Активируется `lite-orchestrator` (§4.10) как замена — без UI, но достаточная для спавна задач. `PAPERCLIP_MODE=none`. Профили `review` и `analyze` идут в этом режиме.
+
+Выбор через installer prompt (§3.6) или non-interactive флаги:
+```bash
+just setup --paperclip embedded                     # default for full
+just setup --paperclip external \
+  --paperclip-url https://paperclip.team.io \
+  --paperclip-api-key-env PAPERCLIP_API_KEY        # creds через env var
+just setup --paperclip none                         # review/analyze
+```
 
 ### 3.4 Infrastructure-as-code
 
@@ -216,6 +226,7 @@ gimle-palace/
 - palace-mcp (read tools только — write tools disabled через env-флаг)
 - Serena MCP
 - code-analyzer MCPs (security, deadcode, duplication) — вызываются из локального Claude/Codex on-demand
+- **lite-orchestrator (§4.10)** — для on-demand запуска reviewer'ов через `just review <file>` / `/palace-review` slash-command
 - Telemetry (SQLite + `/stats`)
 - ❌ extractors, ❌ scheduler, ❌ paperclip-provisioner, ❌ skills-distributor HTTP endpoint (доступен только локально)
 
@@ -230,7 +241,7 @@ gimle-palace/
 
 #### 3.5.2 Profile `analyze` — palace + pipelines, без Paperclip
 
-**Для кого:** developer/small team, хочет полный palace (с extractors, scheduled updates), но управляет командой агентов **не через Paperclip GUI**, а через CLI (`just ingest`, `just update`, `just report`). Ingest-агенты спавнятся как `claude code -p "..."` sub-processes из scheduler'а.
+**Для кого:** developer/small team, хочет полный palace (с extractors, scheduled updates), но управляет командой агентов **не через Paperclip GUI**, а через CLI (`just ingest`, `just update`, `just report`). Ingest-агенты спавнятся через **lite-orchestrator (§4.10)** — который знает про team-template.yaml, бюджет, role manifests и умеет вызывать `claude code -p "..."` (или Codex/Gemini CLI) в параллель. Без UI и approval-gates, но с telemetry и budget enforcement.
 
 **Что включено (server side):**
 - Всё из `review`
@@ -268,9 +279,19 @@ gimle-palace/
 
 **Команда:** `curl <team-server>/install | sh --server <url>`. Сервер выдаёт готовый client-tarball и config с правильным endpoint'ом.
 
-#### 3.5.5 Profile `custom` — интерактивный выбор
+#### 3.5.5 Profile `custom` — интерактивный выбор с preset packs
 
-Пользователь проходит через wizard (§3.6) и сам отмечает галочками каждый компонент. Результат сохраняется в `installer/profiles/custom-<timestamp>.yaml` для reproducibility.
+Пользователь проходит через wizard (§3.6) и либо выбирает один из **preset packs**, либо собирает custom по галочкам. Preset packs — это "полу-готовые" комбинации для частых сценариев:
+
+| Preset | Что даёт |
+|---|---|
+| `ui-only` | palace + Serena + ui-component-extractor + find_ui_components. Без security/blockchain. Для чистого frontend-work. |
+| `security-audit` | palace + Serena + security-reviewer + blockchain-reviewer + penetration-tester subagent. Без extractors — только обзор существующего кода. |
+| `docs-onboarding` | palace + Serena + architecture-extractor + report-writer. Делает только architecture report, не пишет Findings. Для новичков в команде. |
+| `dead-code-hunt` | palace + deadcode-hunter + duplication-detector + report-writer. Generates cleanup backlog. |
+| `blockchain-deep` | palace + blockchain-reviewer + security-reviewer + api-extractor (с crypto-focus). Для аудита web3/wallet codebases. |
+
+После выбора preset — пользователь может дальше кастомизировать (добавить/убрать компонент). Результат сохраняется в `installer/profiles/custom-<timestamp>.yaml` для reproducibility и shareability (коллега может взять тот же yaml и получить идентичный setup).
 
 #### 3.5.6 Summary matrix
 
@@ -289,8 +310,18 @@ gimle-palace/
 | Client MCP install | ✅ | ✅ | ✅ | ✅ | ? |
 | Client skills install | ✅ | ✅ | ✅ | ✅ | ? |
 | Telemetry | ✅ | ✅ | ✅ | n/a | ? |
-| **Min RAM** | 400 MB | 900 MB | 1.5 GB | 0 | varies |
+| lite-orchestrator | ✅ | ✅ | ✅ (fallback when Paperclip down) | ❌ | ? |
+| **Min RAM** | 500 MB | 1.0 GB | 1.6 GB | 0 | varies |
 | **First-time setup** | ~2 min | ~3 min | ~5 min | ~30 sec | varies |
+
+#### 3.5.7 Optional / post-MVP profiles
+
+Не входят в первый релиз, но предусмотрены архитектурно:
+
+- **`enterprise`** — `full` + TLS/reverse-proxy (Caddy или Traefik), OIDC/LDAP auth на Paperclip + palace-mcp, audit логи в append-only store, backup на S3/MinIO. Нужен когда палате ходит команда 10+ человек со сложной авторизацией.
+- **`ci-only`** — headless режим для CI/CD. Нет client-distribution endpoint, нет interactive installer, нет Paperclip UI. Только `just ingest` и `just report` — для автоматических прогонов на каждом релизном бранче с артефактом (markdown-отчёт) в CI-output.
+
+Эти профили добавляются через отдельный yaml-файл в `installer/profiles/` без изменений в core. Pre-requisite: базовые профили (`review/analyze/full/client/custom`) стабилизированы в MVP.
 
 ### 3.6 Interactive installer
 
@@ -303,9 +334,15 @@ just setup --profile analyze                   # palace + pipelines
 just setup --profile full --paperclip embedded # всё в одной коробке
 just setup --profile client --server https://palace.team.io
 just setup --profile custom --answers answers.yaml  # pre-filled answers
+
+# Для максимально-быстрого старта:
+just setup --yes                # profile=full, paperclip=embedded, sensible defaults,
+                                # projects detected from cwd, team-template=default
+                                # secrets — если есть env vars $ANTHROPIC_API_KEY etc. берёт
+                                # их, иначе просит один раз в конце
 ```
 
-**Interactive flow** (запуск `just setup` без флагов):
+**Interactive flow** (запуск `just setup` без флагов). Все 6 промптов имеют **sensible defaults**, можно быстро пройти Enter'ом через все:
 
 ```
 ╔══════════════════════════════════════════════════════════════════╗
@@ -324,10 +361,16 @@ just setup --profile custom --answers answers.yaml  # pre-filled answers
 
 ? Paperclip deployment?
   ❯ embedded — bundle Paperclip inside our docker-compose (default for full)
-    external — I already run Paperclip on this or another host
-    skip     — no Paperclip, use CLI-only orchestration
+    external — I already run Paperclip somewhere (this/another host)
+    skip     — no Paperclip, use lite-orchestrator instead
 
 ↳ embedded
+  (if "external" selected, следующие 3 промпта:)
+
+   ? Paperclip URL?            https://paperclip.team.io
+   ? Auth type?                  ❯ api-key   basic (login/password)   none
+   ? API key env variable name?  PAPERCLIP_API_KEY
+   (if basic: login/password prompt, secrets masked, stored в .env)
 
 ? Which projects do you want to register now?
   (can be added later via `just add-project <path>`)
@@ -585,6 +628,62 @@ Client `install.sh`:
 4. Prints подтверждение + `claude mcp list` hint.
 
 Идемпотентен — повторный запуск обновляет до последней версии.
+
+### 4.10 lite-orchestrator
+
+**Роль:** минимальный, но самодостаточный orchestrator для спавна задач/агентов когда Paperclip отсутствует (`PAPERCLIP_MODE=none`) или недоступен (`external` потеряло связность). Заменяет Paperclip **только** в части "кто какую задачу запустил, с каким бюджетом, какой result'ом" — без UI, без approval-gates, без cross-agent messaging.
+
+**Tech stack:**
+- Python 3.11 + FastAPI + asyncio + Pydantic
+- SQLite таблица `orchestrator_tasks` (рядом с telemetry, тот же volume)
+- Ничего другого (никакого Redis/Celery/RabbitMQ — overkill для single-host)
+
+**API surface:**
+
+REST:
+- `POST /tasks` — enqueue task: `{role, project, input, budget_usd?, timeout_s?}` → возвращает `task_id`
+- `GET /tasks/{id}` — статус (pending|running|done|failed|cancelled) + outputs + cost
+- `GET /tasks?project=X&role=Y&status=running` — фильтрация
+- `DELETE /tasks/{id}` — cancel running task (SIGTERM на sub-process)
+- `GET /tasks/{id}/stream` — SSE stream logs/outputs в реальном времени
+
+CLI (через Justfile):
+- `just task-run <role> <project> [--input=...]` — синхронный запуск, выводит результат
+- `just task-spawn <role> <project>` — async, возвращает task_id
+- `just task-status <id>` / `just task-cancel <id>`
+- `just task-list [--active]`
+
+**Task lifecycle:**
+
+```
+POST /tasks
+  ├─ resolve role из team-template.yaml → {cli, model, prompt_template, mcp_endpoints, budget}
+  ├─ render prompt с переменными проекта
+  ├─ spawn sub-process: `<cli> -p "<rendered_prompt>"` 
+  │    (claude code / codex / gemini / opencode — определяется team-template)
+  ├─ устанавливает env vars: ANTHROPIC_API_KEY, PALACE_MCP_URL и т.д.
+  ├─ stream stdout+stderr в SQLite blob + SSE clients
+  ├─ при exit: подсчёт tokens (parse from stdout или API call к provider), update cost
+  ├─ enforce budget: если `spent >= budget_usd` — SIGTERM sub-process
+  └─ финальный status → running → done|failed → event в telemetry
+```
+
+**Team-template совместимость.** Lite-orchestrator читает **тот же** `team-template.yaml` (§7) что и paperclip-provisioner. Одни и те же role manifests работают в обеих орбитах. При миграции с `analyze` → `full` (добавлении Paperclip) — provisioner просто переносит роли в Paperclip, lite-orchestrator автоматически становится fallback'ом.
+
+**Budget enforcement — real.** В отличие от "декларативного" бюджета в Paperclip (где пользователь доверяет, что агент сам остановится) — lite-orchestrator считает токены по факту (subprocess stdout parse / API latency × model rate) и жёстко kill'ит при overshoot. Результат записывается с `killed_by_budget=true`, пишется warning в report.
+
+**Parallelism.** Configurable через `LITE_ORCHESTRATOR_MAX_PARALLEL_TASKS` (default 3). Задачи сверх лимита — в очередь FIFO.
+
+**Scheduler integration.** Scheduler (§4.7) при cron/webhook trigger не сам спавнит агентов — он **POST'ит в lite-orchestrator** (если `PAPERCLIP_MODE=none`) или в Paperclip REST (если `embedded/external`). Это унифицирует data flow: кто бы ни дирижировал, `:Finding`/`:Decision`/прочие записываются одинаково.
+
+**Ограничения (явно):**
+- Нет UI — только REST и CLI
+- Нет approval-gates — запускает сразу
+- Нет cross-agent messaging (если агент A хочет что-то передать B — через palace `record_*` tools)
+- Нет long-running conversations — каждый task stateless, single-shot
+- Нет mTLS между worker'ами — внутри docker network, auth через bearer token
+
+Если пользователю нужна governance — ставит профиль `full` с Paperclip. Lite-orchestrator не пытается быть Paperclip'ом.
 
 ---
 
