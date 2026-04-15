@@ -962,7 +962,70 @@ Spec готов к переходу в imлементацию когда:
 - Medic live AGENTS.md file verification skipped in slice #2 (we relied on grep + token-parity). Could add automated diff check.
 - Research notes `python-engineer.md` can inform template for `mcp-engineer.md`, `infra-engineer.md` — pattern reusable.
 
-### 13.4 Только после трёх успешных слайсов — расширение scope
+### 13.3.2 Slice #4 — CTO hire + delegation chain (executed 2026-04-15 ✅)
+
+**Hypothesis:** «CTO template transfers cleanly across projects (Medic → Gimle) + multi-agent delegation chain works end-to-end».
+
+**Scope (executed ~1h):**
+- Extracted Medic's cto.md body to `templates/management/cto.md` in shared v0.0.4 — 4 placeholders (`{{PROJECT}}`, `{{DELEGATION_MAP}}`, `{{VERIFICATION_GATES}}`, `{{MCP_SUBAGENTS_SKILLS}}`)
+- Customized for Gimle: Python/MCP/Infra delegation map, pytest/mypy/docker verification gates, Gimle-specific MCPs
+- Hired Gimle CTO via DB (agent `7fb0fdbb-e17f-4487-a4da-16993a907bec`, model=opus-4-6, reports_to=CEO)
+- Board created GIM-3 `Add /version endpoint to palace-mcp`, assigned CTO
+- Observed chain end-to-end
+
+**Parallel:** InfraEngineer research (11 community sources + 8 web refs) → `research/role-patterns/infra-engineer.md` (221 lines, ~5k tokens)
+
+### 13.3.2.1 Chain observations
+
+| Timestamp | Agent | Action |
+|---|---|---|
+| 15:21:16 | CTO | Woke via `assignment` on GIM-3. Triage started. |
+| 15:23:32 | CTO | Posted architectural plan (GIM-3 plan doc): `importlib.metadata` для version + `PALACE_GIT_SHA` env var через Dockerfile ARG. **Hit blocker: нет `tasks:assign` permission.** Эскалировал @CEO. |
+| 15:23:32 | CEO | Woken by @-mention. |
+| 15:23:32 | PythonEngineer | Woken by @-mention. |
+| 15:25:19 | CEO | Created GIM-4 subtask, assigned to PythonEngineer with spec from plan. |
+| 15:25:12 | PythonEngineer | Woken by assignment on GIM-4. |
+| 15:25:39 | PythonEngineer | Committed `3acc375 feat(palace-mcp): add GET /version endpoint` (+15 lines: main.py endpoint + Dockerfile ARG/ENV). Posted handback comment on GIM-3 with @CTO mention. |
+| 15:27:26 | CTO | Woken by @-mention in handback. Reviewed commit 3acc375. Approved: *"Код соответствует плану... Нет лишних зависимостей, нет хардкода. Закрываю задачу."* |
+| 15:27:43 | — | GIM-3 + GIM-4 both → done |
+
+**Total chain time:** 6 min 27 sec. All runs `status=succeeded`, no error_code.
+
+### 13.3.2.2 Validation criteria — all met
+
+- ✅ **CTO не пишет код** — posted design decisions + review only. `cto-no-code-ban` fragment держится.
+- ✅ **@-mentions all correctly parsed** — no regression от trех багов которые чинили в начале сессии. `@PythonEngineer`, `@CTO`, `@CEO` — все без punctuation immediately after, все резолвились в wake-ups.
+- ✅ **Real multi-agent handoff** — CTO → PE → CTO → closed. Не один агент делает всё.
+- ✅ **PE produced real code** — commit 3acc375, proper co-author, conventional commit, 15 lines exactly what was needed (no over-engineering).
+- ✅ **Template customization работает** — shared template → sed placeholders → Gimle-specific role. Assembled tokens 3473, под 8000.
+
+### 13.3.2.3 Findings / surprises
+
+1. **CTO missing `tasks:assign` permission by default.** When CTO tried to create GIM-4 as subtask, got blocked, had to escalate CEO. Fixed during session: granted `canAssignTasks=true` + `canCreateAgents=true` to Gimle CTO via `UPDATE agents SET permissions = ...`. **Recommendation for template/bootstrap:** при hiring CTO автоматически ставить эти permissions по умолчанию (через `paperclip-create-agent` skill's `permissions` field). Добавить в `templates/management/cto.md` секцию "Required permissions on hire".
+
+2. **Multiple wake paths fire per comment.** When Anton created GIM-3 with description mentioning @CEO and @PythonEngineer (implicit in description?), both woke in parallel с CTO. Это overkill для этой задачи, но показывает что mention-wake работает повсюду.
+
+3. **`issue_execution_promoted` wake reason** — новый для меня. Вероятно срабатывает когда PE начинает executing issue с parent linkage, CTO-owner parent получает notification. Интересный implicit sync paperclip'а который мы не использовали сознательно.
+
+4. **Research in parallel to execution работает.** InfraEngineer research subagent (30 min) + CTO slice (~1h) параллельно — ноль конфликтов, два deliverable. Pattern для будущего: длинные research задачи → background subagent, foreground — execution.
+
+5. **paperclip project workspace isolation как в slice #3.** Commit 3acc375 живёт в project workspace `~/.paperclip/.../projects/.../_default/`, НЕ в `/Users/Shared/Ios/Gimle-Palace` working tree. Agent runs в своём checkout'е. Будущий workflow: когда CEO принимает решение "release", делать `git push` из project workspace → origin/main, или создать PR.
+
+### 13.3.2.4 Artifacts (end of slice #4)
+
+**Gimle agents:** CEO (10a4968e) + PythonEngineer (127068ee) + **CTO (7fb0fdbb)** с permissions granted
+**Gimle issues closed:** GIM-3 + GIM-4 (version endpoint in palace-mcp)
+**Shared repo:** v0.0.4 — templates/management/cto.md added
+**Research notes:** python-engineer.md (slice #3) + infra-engineer.md (parallel slice #4)
+**Gimle-Palace commits pushed:** 4 новых (cto role, research, outcome, slice-4 spec)
+
+### 13.3.2.5 Decision
+
+Full delegation chain proven. Pattern validated. Для дальнейшего расширения — InfraEngineer template (research готов), MCPEngineer template (когда реально понадобится), Quality team (CodeReviewer minimum) — все будут следовать той же шаблонной структуре.
+
+---
+
+### 13.4 Только после трёх (теперь четырёх) успешных слайсов — расширение scope
 
 Когда #1+#2+#3 зелёные — **тогда** запускаем:
 - Полный extraction категории B (9 оставшихся fragments)
