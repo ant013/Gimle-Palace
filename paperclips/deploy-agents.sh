@@ -21,19 +21,21 @@ PAPERCLIP_DATA="${PAPERCLIP_DATA_DIR:-$HOME/.paperclip/instances/default}"
 AGENTS_BASE="$PAPERCLIP_DATA/companies/$COMPANY_ID/agents"
 
 # Gimle agents (CEO excluded — no role file; if added, map here)
-AGENT_NAMES="code-reviewer cto infra-engineer python-engineer qa-engineer technical-writer mcp-engineer research-agent"
+AGENT_NAMES="code-reviewer cto infra-engineer python-engineer qa-engineer technical-writer mcp-engineer research-agent blockchain-engineer security-auditor"
 
 agent_id() {
   case "$1" in
-    code-reviewer)    echo "bd2d7e20-7ed8-474c-91fc-353d610f4c52" ;;
-    cto)              echo "7fb0fdbb-e17f-4487-a4da-16993a907bec" ;;
-    infra-engineer)   echo "89f8f76b-844b-4d1f-b614-edbe72a91d4b" ;;
-    python-engineer)  echo "127068ee-b564-4b37-9370-616c81c63f35" ;;
-    qa-engineer)      echo "58b68640-1e83-4d5d-978b-51a5ca9080e0" ;;
-    technical-writer) echo "0e8222fd-88b9-4593-98f6-847a448b0aab" ;;
-    mcp-engineer)     echo "274a0b0c-ebe8-4613-ad0e-3e745c817a97" ;;
-    research-agent)   echo "bbcef02c-b755-4624-bba6-84f01e5d49c8" ;;
-    *)                echo "" ;;
+    code-reviewer)       echo "bd2d7e20-7ed8-474c-91fc-353d610f4c52" ;;
+    cto)                 echo "7fb0fdbb-e17f-4487-a4da-16993a907bec" ;;
+    infra-engineer)      echo "89f8f76b-844b-4d1f-b614-edbe72a91d4b" ;;
+    python-engineer)     echo "127068ee-b564-4b37-9370-616c81c63f35" ;;
+    qa-engineer)         echo "58b68640-1e83-4d5d-978b-51a5ca9080e0" ;;
+    technical-writer)    echo "0e8222fd-88b9-4593-98f6-847a448b0aab" ;;
+    mcp-engineer)        echo "274a0b0c-ebe8-4613-ad0e-3e745c817a97" ;;
+    research-agent)      echo "bbcef02c-b755-4624-bba6-84f01e5d49c8" ;;
+    blockchain-engineer) echo "9874ad7a-dfbc-49b0-b3ed-d0efda6453bb" ;;
+    security-auditor)    echo "a56f9e4a-ef9c-46d4-a736-1db5e19bbde4" ;;
+    *)                   echo "" ;;
   esac
 }
 
