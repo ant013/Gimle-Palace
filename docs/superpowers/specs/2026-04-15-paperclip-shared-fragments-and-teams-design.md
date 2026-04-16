@@ -1273,6 +1273,39 @@ Research: 9 sources reviewed, 4 directly applicable, **wshobson + garrytan не 
 
 **Decision:** Gimle team after slice #9 = 8 agents operational (CEO + CTO + CodeReviewer + Python + Infra + QA + TechnicalWriter + **MCPEngineer**). Templates reserved: ResearchAgent, BlockchainEngineer (optional), SecurityAuditor (per-project).
 
+### 13.3.8 Slice #10 — ResearchAgent (synthesis layer, on-demand only) — EXECUTED 2026-04-16 ✅ — FINAL CORE TEAM
+
+Research: 8 sources reviewed, 3 directly applicable (rohitg00 research-analyst 12k⭐, Imbad0202 academic-research-skills 2.9k⭐, VoltAgent research-analyst 17.4k⭐). Insight: tech research отличается от academic — academic source pyramid не применим, нужен GitHub releases > maintainer blog > community blog hierarchy.
+
+**Composite design:**
+1. **Base — rohitg00 research-analyst** (72 lines compact, decision-context driven, per-finding confidence H/M/L/SPECULATIVE, follow-ups ranked by decision impact — exact match для Gimle "research X before deciding Y")
+2. **Anti-leakage — Imbad0202 [MATERIAL GAP] pattern** → adapted as 3-flag taxonomy ([VERSION GAP] / [MATERIAL GAP] / [CONTRADICTION])
+3. **Search-specialist as sub-tool** — ResearchAgent оркестрирует voltagent search-specialist для retrieval
+
+**4 Gimle-specific blocks (не покрыто community):**
+- Tech-source tier (Official docs / GitHub releases > library source > maintainer blog > community blog > HN/Reddit) — vs academic pyramid в community
+- Version-pinned claims (every library claim with explicit version — claim expires at version drift)
+- Consumer-aware output routing (CTO architectural / MCPEngineer protocol / PythonEngineer library / InfraEngineer deployment — different report shapes)
+- Trigger discipline (no self-init — only CTO/engineer request or periodic spec evolution)
+
+**Heartbeat optimization:** `enabled=false` + `wakeOnDemand=true`. ResearchAgent чисто on-demand (как Medic после оптимизации) — не тратит quota на idle timer wakes.
+
+**Artifacts:**
+- Template: `paperclips/roles/research-agent.md` (95 строк role + 176 fragments = 271 lines dist)
+- Research: `docs/superpowers/research/role-patterns/research-agent.md`
+- Agent: ResearchAgent `bbcef02c-b755-4624-bba6-84f01e5d49c8`, role=researcher, reports to CTO, on-demand only
+
+**Validation criteria (met):**
+- [x] Composite design — rohitg00 base + Imbad0202 anti-leakage + 4 Gimle-specific
+- [x] Trigger discipline (no self-init) — отличает от другого community паттерна
+- [x] Consumer-aware output (4 audiences) — уникальный Gimle паттерн
+- [x] Heartbeat=false для idle quota efficiency
+- [x] Hire submitted (pending_approval)
+
+**Decision: Gimle CORE TEAM COMPLETE — 9 agents operational** (CEO + CTO + CodeReviewer + Python + Infra + QA + TechnicalWriter + MCPEngineer + **ResearchAgent**). Reserved templates: BlockchainEngineer (optional, для Unstoppable wallet integration), SecurityAuditor (per-project, для serious compliance audits).
+
+Slice-based bootstrap (10 slices, v0.0.1 → v0.0.10) завершён.
+
 ---
 
 ### 13.4 Только после трёх (теперь шести) успешных слайсов — расширение scope
