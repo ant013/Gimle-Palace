@@ -1181,6 +1181,33 @@ Spec edit: отдельная микро-задача, низкий приори
 
 Closed issues GIM-1 ... GIM-6. 3 engineering artifacts на feature branch (palace-mcp skeleton + /version + docker-compose), 1 CodeReviewer critical review блокирующий merge до фикса.
 
+### 13.3.5 Slice #7 — QAEngineer (testing + smoke gate) — EXECUTED 2026-04-16 ✅
+
+Research-informed adaptation Medic QAEngineer baseline + 9 community prompts (`wshobson/agents` 33k⭐, `addyosmani/agent-skills` 16k⭐ TDD patterns, `VoltAgent/awesome-claude-code-subagents` 17k⭐ qa-expert + test-automator, `rohitg00/awesome-claude-code-toolkit` qa-automation compose-CI patterns, `fugazi/test-automation-skills-agents` flaky-hunter, `garrytan/gstack` 72k⭐ browser-loop). Full gap analysis: `docs/superpowers/research/role-patterns/qa-engineer.md`.
+
+**3 Gimle-specific additions vs Medic baseline:**
+1. **Docker Compose smoke gate** — закрывает GIM-10 gap (CodeReviewer approve'ил без live smoke, InfraEngineer merged, Board delivered bonus smoke). Теперь smoke обязателен в compliance checklist перед APPROVE.
+2. **Testcontainers lifecycle** для Neo4j — session-scope container + autouse DETACH DELETE fixture (Neo4j не поддерживает TRUNCATE/rollback как Postgres).
+3. **"Real > Fakes > Stubs > Mocks" hierarchy** — Python `unittest.mock.patch` делает over-mocking trivial; explicit правило заставляет использовать testcontainers где возможна real dependency.
+
+**Retained from Medic:** adversarial skeptic принцип, regression-first, compliance checklist mechanical, silent-failure zero-tolerance, MCP/subagents/skills wiring.
+
+**Dropped from Medic:** cross-platform parity (Android+iOS), SQLDelight/Turbine/pgTAP, offline mode, Kit/PillBox parity — не применимы к single-deploy server stack.
+
+**Artifacts:**
+- Template: `paperclips/roles/qa-engineer.md` (85 строк role-specific + ~100 shared fragments = 279 lines dist)
+- Research: `docs/superpowers/research/role-patterns/qa-engineer.md` (9 sources table + 3-gap analysis)
+- Agent: QAEngineer `58b68640-1e83-4d5d-978b-51a5ca9080e0`, role=qa, reports to CTO, heartbeat 4h
+
+**Validation criteria (met):**
+- [x] Template адаптирован research-based, не blind copy from Medic
+- [x] 3 concrete gaps из GIM-9/GIM-10 инцидентов закрыты
+- [x] Fragment includes (karpathy + escalation + heartbeat + git + worktree + language + pre-work-discovery)
+- [x] Role file в репо + research note
+- [x] Hire submitted (pending_approval до Board approve)
+
+**Decision:** Gimle team after slice #7 = 6 agents operational (CEO + CTO + CodeReviewer + Python + Infra + **QA**). Templates reserved: MCPEngineer, TechnicalWriter, ResearchAgent, BlockchainEngineer (optional), SecurityAuditor (per-project).
+
 ---
 
 ### 13.4 Только после трёх (теперь шести) успешных слайсов — расширение scope
