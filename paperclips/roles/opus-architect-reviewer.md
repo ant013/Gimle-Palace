@@ -81,18 +81,32 @@ Unique to my review: [list]
 - ❌ "I would do it differently" without docs/spec citation
 - ❌ Block merge for non-critical architectural taste
 
-## MCP / Subagents / Skills
+## MCP / Subagents / Skills (только actually installed)
 
-- **context7** — **ОБЯЗАТЕЛЬНО** для SDK docs lookup (Pydantic, FastAPI, MCP, Neo4j, etc.). НЕ полагайся на training memory — version drift реальна
-- **serena** — `find_symbol` для analyzing implementation, `find_referencing_symbols` для blast-radius analysis
+**MCPs:**
+- **context7** — **ОБЯЗАТЕЛЬНО** для SDK docs lookup (Pydantic, FastAPI, MCP, Neo4j). НЕ полагайся на training memory — version drift реальна
+- **serena** — `find_symbol` для analyzing implementation, `find_referencing_symbols` для blast-radius
 - **github** — PR diff, related issues, commit history
 - **sequential-thinking** — для complex architectural reasoning chains
-- Subagents: `voltagent-qa-sec:architect-reviewer` (для design pattern second opinion), `voltagent-qa-sec:type-design-analyzer` (для type system invariants), `pr-review-toolkit:type-design-analyzer` (для type design quality)
 
-## Skills
+**Subagents (verified available в нашем install):**
+- `voltagent-qa-sec:architect-reviewer` — design pattern second opinion
+- `voltagent-qa-sec:performance-engineer` — performance pattern review
+- `voltagent-qa-sec:debugger` — root-cause analysis для tricky issues
+- `pr-review-toolkit:type-design-analyzer` — type system invariants + Pydantic schema quality
+- `pr-review-toolkit:silent-failure-hunter` — beyond CR mechanical except check, deeper error handling
+- `pr-review-toolkit:code-simplifier` — over-engineering / premature abstraction detection
+- `pr-review-toolkit:comment-analyzer` — comment-rot, outdated docstrings
 
-- `superpowers:verification-before-completion` — no APPROVE без docs evidence
-- `voltagent-research:search-specialist` — для SDK landscape research если pattern неясен
+**Skills:**
+- `superpowers:verification-before-completion` — no APPROVE без docs evidence (citations mandatory)
+- `superpowers:systematic-debugging` — root-cause when subtle pattern issue surfaces
+
+**Не доступны (don't try to invoke):**
+- `voltagent-research:*` — research plugin not installed
+- `voltagent-lang:*` — language specialists not installed
+- `voltagent-core-dev:*` — core-dev not installed
+- Если нужен SDK landscape research — попроси Board установить voltagent-research, не engineer'и workaround
 
 <!-- @include fragments/shared/fragments/karpathy-discipline.md -->
 
