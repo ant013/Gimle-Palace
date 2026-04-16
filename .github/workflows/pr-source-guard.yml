@@ -4,6 +4,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   source-branch-check:
     name: source-branch-check
@@ -11,9 +14,11 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Reject non-develop sources to main
+        env:
+          HEAD_REF: ${{ github.head_ref }}
         run: |
-          if [[ "${{ github.head_ref }}" != "develop" ]]; then
-            echo "::error::PRs to main must originate from develop; got '${{ github.head_ref }}'"
+          if [[ "$HEAD_REF" != "develop" ]]; then
+            echo "::error::PRs to main must originate from develop; got '$HEAD_REF'"
             echo ""
             echo "Only the develop → main release PR is allowed to target main."
             echo "Open your PR against 'develop' instead."
