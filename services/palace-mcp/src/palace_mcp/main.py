@@ -1,15 +1,16 @@
 import logging
 import os
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from importlib.metadata import version
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import Depends, FastAPI, Request, Response
 from neo4j import AsyncDriver, AsyncGraphDatabase
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     uri = os.environ.get("NEO4J_URI", "bolt://neo4j:7687")
     password = os.environ.get("NEO4J_PASSWORD", "")
     driver = AsyncGraphDatabase.driver(uri, auth=("neo4j", password))
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 async def get_neo4j(request: Request) -> AsyncDriver:
-    return request.app.state.neo4j
+    return cast(AsyncDriver, request.app.state.neo4j)
 
 
 def create_app() -> FastAPI:
