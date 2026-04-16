@@ -1304,7 +1304,69 @@ Research: 8 sources reviewed, 3 directly applicable (rohitg00 research-analyst 1
 
 **Decision: Gimle CORE TEAM COMPLETE — 9 agents operational** (CEO + CTO + CodeReviewer + Python + Infra + QA + TechnicalWriter + MCPEngineer + **ResearchAgent**). Reserved templates: BlockchainEngineer (optional, для Unstoppable wallet integration), SecurityAuditor (per-project, для serious compliance audits).
 
-Slice-based bootstrap (10 slices, v0.0.1 → v0.0.10) завершён.
+### 13.3.9 Slice #11 — BlockchainEngineer (advisor + orchestrator) — EXECUTED 2026-04-16 ✅
+
+Research: 5 directly applicable sources (VoltAgent blockchain-developer 17k⭐ as base, wshobson blockchain-web3 plugin inventory 33k⭐, VoltAgent Binance Skills Hub for production crypto skills, Anthropic red-team $4.6M exploit study for static-first methodology, Etherscan MCP for on-chain context). Common gap in community: covers EVM/Solidity but NOT wallet-client architecture (BIP32/39/44, multi-chain abstraction, key storage).
+
+**Role: expert advisor (NOT implementer).** Consultant для MCPEngineer (palace-mcp tool catalogue для crypto codebases) + PythonEngineer. Главный value — orchestrates существующий stack:
+
+| Trigger | Subagent |
+|---|---|
+| Kotlin wallet kits | `voltagent-lang:kotlin-specialist` |
+| Swift wallet code | `voltagent-lang:swift-expert` |
+| Smart contract security | `voltagent-qa-sec:security-auditor` (Slither/Mythril wrapper) |
+| Mobile attack surface | `voltagent-qa-sec:penetration-tester` (OWASP Mobile Top-10) |
+| DeFi/Swap interfaces | `voltagent-core-dev:api-designer` |
+| On-chain context | Etherscan MCP server |
+| CVE lookup | `voltagent-research:search-specialist` |
+
+**3 Gimle-specific blocks:**
+1. Wallet taxonomy + BIP44 coin_type annotations для palace-mcp graph
+2. Kit-abstraction graph (Unstoppable 15+ kits → chain-agnostic interfaces as `:Interface` nodes)
+3. Key-storage check #1 priority (Keychain/AndroidKeyStore — anti-pattern UserDefaults plaintext) — confirmed by Anthropic red-team study
+
+**Heartbeat=false** — pure on-demand only when crypto/wallet question arises.
+
+**Artifacts:**
+- Template: `paperclips/roles/blockchain-engineer.md` (95 строк role + 181 fragments = 276 dist)
+- Research: `docs/superpowers/research/role-patterns/blockchain-engineer.md`
+- Agent: BlockchainEngineer `9874ad7a-dfbc-49b0-b3ed-d0efda6453bb`, role=engineer
+
+### 13.3.10 Slice #12 — SecurityAuditor (orchestrator) — EXECUTED 2026-04-16 ✅
+
+Research: 5 production sources + 1 academic (wshobson 33.7k⭐, VoltAgent security-auditor 7.8k⭐, mrwadams stride-gpt, stfbk PILLAR LINDDUN, Semgrep+GitGuardian+Snyk MCPs, ASTRIDE arxiv:2512.04785).
+
+**Role: smart orchestrator, NEVER executor.** Никогда не читает код сам — делегирует специализированным subagents, агрегирует findings с CVSS + business context. 4-phase workflow:
+
+```
+Phase 1 PARALLEL: architect-reviewer + security-engineer (infra) + Semgrep MCP
+Phase 2 SEQUENTIAL: threat-modeling + penetration-tester (Critical/High exploit proof)
+Phase 3 COMPLIANCE (parallel Phase 2 if needed): compliance-auditor (GDPR/SOC2/PCI/ISO)
+Phase 4 SYNTHESIS (own): prioritize + risk-score + remediation plan + delegate fixes
+```
+
+**Subagent invocation matrix:**
+- `voltagent-qa-sec:security-auditor` — process orchestration
+- `voltagent-qa-sec:penetration-tester` — Critical/High exploitation proof only
+- `voltagent-qa-sec:compliance-auditor` — regulatory framework mapping
+- `voltagent-qa-sec:architect-reviewer` — security design review
+- `pr-review-toolkit:silent-failure-hunter` — error handling audit
+- `voltagent-infra:security-engineer` — remediation automation
+- MCPs: Semgrep / GitGuardian / Snyk / Trivy
+
+**3 Gimle-specific authored gaps (нет в community):**
+1. MCP threat model для palace-mcp (tool poisoning, SSE injection CVE-2025-56406, Neo4j prompt injection, no-auth MCP default) — ASTRIDE как академический base
+2. sops + Docker Compose CIS Benchmark v1.6 audit
+3. Cloudflared tunnel scope audit (Access policies, service tokens, JWT audience binding)
+
+**Heartbeat=false** — invoke only when serious security work needed.
+
+**Artifacts:**
+- Template: `paperclips/roles/security-auditor.md` (105 строк role + 197 fragments = 302 dist)
+- Research: `docs/superpowers/research/role-patterns/security-auditor.md`
+- Agent: SecurityAuditor `a56f9e4a-ef9c-46d4-a736-1db5e19bbde4`, role=qa
+
+**Decision: Gimle EXTENDED TEAM COMPLETE — 11 agents available** (9 core + BlockchainEngineer + SecurityAuditor). Все non-CEO/CTO агенты на heartbeat=false (on-demand only). Org chart bootstrap полностью завершён. Дальше — product validation slices, не hiring.
 
 ---
 
