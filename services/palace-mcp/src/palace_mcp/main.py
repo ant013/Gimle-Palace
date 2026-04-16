@@ -8,6 +8,8 @@ from typing import Annotated, cast
 from fastapi import Depends, FastAPI, Request, Response
 from neo4j import AsyncDriver, AsyncGraphDatabase
 
+from palace_mcp.mcp_server import build_mcp_asgi_app, set_driver
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -15,6 +17,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     password = os.environ.get("NEO4J_PASSWORD", "")
     driver = AsyncGraphDatabase.driver(uri, auth=("neo4j", password))
     app.state.neo4j = driver
+    set_driver(driver)
     yield
     await driver.close()
 
@@ -28,6 +31,7 @@ async def get_neo4j(request: Request) -> AsyncDriver:
 
 def create_app() -> FastAPI:
     app = FastAPI(lifespan=lifespan)
+    app.mount("/mcp", build_mcp_asgi_app())
 
     @app.get("/health")
     async def health() -> dict[str, str]:
