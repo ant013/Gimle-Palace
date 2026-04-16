@@ -14,7 +14,7 @@ from neo4j import AsyncDriver
 from pydantic import BaseModel
 from starlette.applications import Starlette
 
-_mcp = FastMCP("palace")
+_mcp = FastMCP("palace", streamable_http_path="/")
 
 # Module-level driver reference — set by FastAPI lifespan before any request.
 _driver: AsyncDriver | None = None
