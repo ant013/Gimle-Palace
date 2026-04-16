@@ -1241,6 +1241,38 @@ Research-informed adaptation 12 community prompts (`VoltAgent documentation-engi
 
 **Decision:** Gimle team after slice #8 = 7 agents operational (CEO + CTO + CodeReviewer + Python + Infra + QA + **TechnicalWriter**). Templates reserved: MCPEngineer, ResearchAgent, BlockchainEngineer (optional), SecurityAuditor (per-project).
 
+### 13.3.7 Slice #9 — MCPEngineer (palace-mcp protocol owner) — EXECUTED 2026-04-16 ✅
+
+Research: 9 sources reviewed, 4 directly applicable, **wshobson + garrytan не покрывают MCP вообще** (niche). Главные источники:
+
+1. **anthropics/claude-plugins-official `mcp-server-dev`** (17.1k⭐) — Anthropic-authored, spec-current (2025-11-25), references/ folder с tool-design + auth + elicitation
+2. **VoltAgent codex `mcp-developer.toml`** (4k⭐) — engineering conservatism: smallest safe change, compatibility-first, no protocol-breaking без migration
+3. **VoltAgent `mcp-developer.md`** (~17k⭐, 275 lines) — full-lifecycle scaffold (взяты только sections, не full prompt)
+4. **rohitg00 `mcp-developer.md`** — transport/Inspector testing (низкая ценность, transport уже locked)
+
+**4 Gimle-specific блока (не покрыто community):**
+- Pydantic v2 boundary validation policy (FastAPI + MCP = двойная validation layer)
+- Serena tool catalogue rules (semantic code analysis specifics)
+- Internal auth threat model (paperclip-agent-net + cloudflared exposable)
+- Tool naming convention `palace.<domain>.<verb>`
+
+**Transport locked:** streamable-HTTP. palace-mcp на FastAPI 8080:8000, stdio не применим, SSE deprecated, MCPB defer until external client demand.
+
+**Engineering conservatism principles (5):** smallest safe change / no protocol-breaking без migration / contract-safe error envelopes / read-tool idempotency / Pydantic v2 boundary.
+
+**Artifacts:**
+- Template: `paperclips/roles/mcp-engineer.md` (95 строк role + ~169 fragments = 270 lines dist)
+- Research: `docs/superpowers/research/role-patterns/mcp-engineer.md`
+- Agent: MCPEngineer `274a0b0c-ebe8-4613-ad0e-3e745c817a97`, role=engineer, reports to CTO
+
+**Validation criteria (met):**
+- [x] Template composite — Anthropic spec base + codex behavioral conservatism + Gimle-specific
+- [x] 4 Gimle-specific блока (Pydantic boundary, Serena, threat model, naming)
+- [x] Transport decision локked с явным reasoning
+- [x] Hire submitted (pending_approval)
+
+**Decision:** Gimle team after slice #9 = 8 agents operational (CEO + CTO + CodeReviewer + Python + Infra + QA + TechnicalWriter + **MCPEngineer**). Templates reserved: ResearchAgent, BlockchainEngineer (optional), SecurityAuditor (per-project).
+
 ---
 
 ### 13.4 Только после трёх (теперь шести) успешных слайсов — расширение scope
