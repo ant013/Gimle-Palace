@@ -1208,6 +1208,39 @@ Research-informed adaptation Medic QAEngineer baseline + 9 community prompts (`w
 
 **Decision:** Gimle team after slice #7 = 6 agents operational (CEO + CTO + CodeReviewer + Python + Infra + **QA**). Templates reserved: MCPEngineer, TechnicalWriter, ResearchAgent, BlockchainEngineer (optional), SecurityAuditor (per-project).
 
+### 13.3.6 Slice #8 — TechnicalWriter (operational docs) — EXECUTED 2026-04-16 ✅
+
+Research-informed adaptation 12 community prompts (`VoltAgent documentation-engineer/technical-writer/readme-generator` 17k⭐, `wshobson tutorial-engineer/docs-architect/reference-builder` 33k⭐, `garrytan /document-release` 73k⭐, `addyosmani documentation-and-adrs` 16k⭐, `rohitg00 /onboard`, `alirezarezvani /runbook-generator`, `SkeltonThatcher run-book-template`, `dandye/ai-runbooks`). Full gap analysis: `docs/superpowers/research/role-patterns/technical-writer.md`.
+
+**Community gap (no existing prompt fits Gimle):** все community prompts делятся на web/API docs camp (плохо для runbooks) и tutorial/onboarding camp (без verification loop). Operational docs для Docker Compose stack с verify-loop "install → curl /health" — пробел.
+
+**3 принципа из community → composite:**
+1. **Zero-hallucination** (readme-generator + /onboard) — команды извлекаются из реальных compose/.env/Justfile, не выдумываются
+2. **Time-to-first-success ≤10min metric + verification checkpoints** (tutorial-engineer + /runbook-generator) — каждый step имеет expected output
+3. **Profile/topology matrix** (documentation-engineer + SkeltonThatcher) — docs как rows×cols (doc-type × profile), не один guide для всех
+
+**4 Gimle-specific scope items (нет в community):**
+- Profile-aware install guides (review/analyze/full/with-paperclip/client)
+- MCP protocol docs для palace-mcp
+- Neo4j backup/restore runbook
+- First-run demo script (install → populate → MCP query → verify)
+
+**Verification protocol:** fresh-checkout test обязателен — `rm -rf /tmp/gimle-test && git clone && следуй guide дословно`. Failure на любом шаге = bug в docs, не в setup.
+
+**Artifacts:**
+- Template: `paperclips/roles/technical-writer.md` (90 строк role-specific + ~169 fragments = 259 lines dist)
+- Research: `docs/superpowers/research/role-patterns/technical-writer.md` (12 sources table + community gap analysis)
+- Agent: TechnicalWriter `0e8222fd-88b9-4593-98f6-847a448b0aab`, role=general, reports to CTO, heartbeat 4h
+
+**Validation criteria (met):**
+- [x] Template адаптирован composite из 12 community prompts (нет blind copy — community gap doc)
+- [x] 4 Gimle-specific output types определены (profile install, runbooks, MCP docs, demo)
+- [x] Fragment includes (karpathy + escalation + heartbeat + git + worktree + language + pre-work)
+- [x] Role file + research note + spec outcome
+- [x] Hire submitted (pending_approval)
+
+**Decision:** Gimle team after slice #8 = 7 agents operational (CEO + CTO + CodeReviewer + Python + Infra + QA + **TechnicalWriter**). Templates reserved: MCPEngineer, ResearchAgent, BlockchainEngineer (optional), SecurityAuditor (per-project).
+
 ---
 
 ### 13.4 Только после трёх (теперь шести) успешных слайсов — расширение scope
