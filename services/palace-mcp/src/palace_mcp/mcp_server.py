@@ -5,6 +5,7 @@ The FastAPI app mounts this at ``/mcp`` and shares the Neo4j driver
 through :func:`set_driver`.
 """
 
+import logging
 import os
 import time
 from typing import Literal
@@ -13,6 +14,8 @@ from mcp.server.fastmcp import FastMCP
 from neo4j import AsyncDriver
 from pydantic import BaseModel
 from starlette.applications import Starlette
+
+logger = logging.getLogger(__name__)
 
 _mcp = FastMCP("palace", streamable_http_path="/")
 
@@ -40,15 +43,19 @@ def build_mcp_asgi_app() -> Starlette:
     return _mcp.streamable_http_app()
 
 
-@_mcp.tool(name="palace.health.status", description="Return Neo4j reachability, git SHA, and server uptime.")
-async def palace_health_status(verbose: bool = False) -> HealthStatusResponse:  # noqa: ARG001
+@_mcp.tool(
+    name="palace.health.status",
+    description="Return Neo4j reachability, git SHA, and server uptime.",
+)
+async def palace_health_status() -> HealthStatusResponse:
     """Check Palace service health: Neo4j connectivity, git revision, uptime."""
     neo4j_status: Literal["reachable", "unreachable"] = "unreachable"
     if _driver is not None:
         try:
             await _driver.verify_connectivity()
             neo4j_status = "reachable"
-        except Exception:
+        except Exception as exc:
+            logger.warning("MCP palace.health.status neo4j check failed: %s", exc)
             neo4j_status = "unreachable"
 
     return HealthStatusResponse(

@@ -63,18 +63,6 @@ async def test_health_status_no_driver(monkeypatch):
     assert structured["neo4j"] == "unreachable"
 
 
-async def test_health_status_verbose_flag(monkeypatch):
-    """verbose=True is accepted without error (reserved for future use)."""
-    mcp_module._driver = _make_driver(reachable=True)
-    monkeypatch.setenv("PALACE_GIT_SHA", "abc123")
-
-    (content, structured) = await _mcp.call_tool(
-        "palace.health.status", {"verbose": True}
-    )
-
-    assert structured["neo4j"] == "reachable"
-
-
 async def test_health_status_git_sha_default(monkeypatch):
     """PALACE_GIT_SHA defaults to 'unknown' when not set."""
     mcp_module._driver = _make_driver(reachable=True)
@@ -93,7 +81,7 @@ def test_health_status_response_schema():
     assert r.uptime_seconds == 42
 
 
-def test_tool_registered_in_mcp():
+async def test_tool_registered_in_mcp():
     """palace.health.status must appear in the tool list."""
-    tools = [t.name for t in _mcp._tool_manager.list_tools()]
+    tools = [t.name for t in await _mcp.list_tools()]
     assert "palace.health.status" in tools
