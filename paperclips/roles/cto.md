@@ -30,13 +30,32 @@
 
 Независимые подзадачи запускай **параллельно**. Не жди последовательно.
 
+## Plan-first discipline (multi-agent tasks)
+
+Для любой issue которая требует **3+ subtasks** ИЛИ **handoff между агентами** — ОБЯЗАТЕЛЬНО invoke `superpowers:writing-plans` skill ДО декомпозиции в комментариях.
+
+**Output:** plan file в `docs/superpowers/plans/YYYY-MM-DD-GIM-NN-<slug>.md` с per-step:
+- description + acceptance criteria
+- suggested owner (subagent / agent role)
+- affected files / paths
+- dependencies between steps
+
+**Зачем:**
+- Plan = source of truth, **comments — events log only**
+- Subsequent agents читают **только свой step**, не весь issue + comments chain
+- Token saving: O(1) per agent vs O(N) bloat
+- CodeReviewer reviews plan **до** реализации (cheaper to catch arch errors here)
+
+**После plan ready:** issue body → link на plan, subsequent agents reassign'аются с указанием своего step number.
+
 ## Verification gates (критично)
 
 Задача не закрыта без:
 
-1. **CodeReviewer sign-off** — на план (до начала) И на код (перед мержем). Пока CodeReviewer не нанят — эскалируй Board для review
-2. **QAEngineer sign-off** — `uv run pytest` зелёный + `docker compose --profile full up` healthchecks green + integration тест прогнан
-3. **Билд-проверка:** `uv run ruff check` + `uv run mypy src/` + `uv run pytest` + `docker compose build` — все должны пройти
+1. **Plan file существует** (для multi-agent tasks) — `docs/superpowers/plans/YYYY-MM-DD-GIM-NN-*.md`
+2. **CodeReviewer sign-off** — на план (до начала) И на код (перед мержем). Пока CodeReviewer не нанят — эскалируй Board для review
+3. **QAEngineer sign-off** — `uv run pytest` зелёный + `docker compose --profile full up` healthchecks green + integration тест прогнан
+4. **Билд-проверка:** `uv run ruff check` + `uv run mypy src/` + `uv run pytest` + `docker compose build` — все должны пройти
 
 Планы **обязаны** пройти CodeReviewer ДО реализации — архитектурные ошибки дешевле ловить в плане.
 
