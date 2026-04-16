@@ -1181,6 +1181,131 @@ Spec edit: отдельная микро-задача, низкий приори
 
 Closed issues GIM-1 ... GIM-6. 3 engineering artifacts на feature branch (palace-mcp skeleton + /version + docker-compose), 1 CodeReviewer critical review блокирующий merge до фикса.
 
+### 13.3.5 Slice #7 — QAEngineer (testing + smoke gate) — EXECUTED 2026-04-16 ✅
+
+Research-informed adaptation Medic QAEngineer baseline + 9 community prompts (`wshobson/agents` 33k⭐, `addyosmani/agent-skills` 16k⭐ TDD patterns, `VoltAgent/awesome-claude-code-subagents` 17k⭐ qa-expert + test-automator, `rohitg00/awesome-claude-code-toolkit` qa-automation compose-CI patterns, `fugazi/test-automation-skills-agents` flaky-hunter, `garrytan/gstack` 72k⭐ browser-loop). Full gap analysis: `docs/superpowers/research/role-patterns/qa-engineer.md`.
+
+**3 Gimle-specific additions vs Medic baseline:**
+1. **Docker Compose smoke gate** — закрывает GIM-10 gap (CodeReviewer approve'ил без live smoke, InfraEngineer merged, Board delivered bonus smoke). Теперь smoke обязателен в compliance checklist перед APPROVE.
+2. **Testcontainers lifecycle** для Neo4j — session-scope container + autouse DETACH DELETE fixture (Neo4j не поддерживает TRUNCATE/rollback как Postgres).
+3. **"Real > Fakes > Stubs > Mocks" hierarchy** — Python `unittest.mock.patch` делает over-mocking trivial; explicit правило заставляет использовать testcontainers где возможна real dependency.
+
+**Retained from Medic:** adversarial skeptic принцип, regression-first, compliance checklist mechanical, silent-failure zero-tolerance, MCP/subagents/skills wiring.
+
+**Dropped from Medic:** cross-platform parity (Android+iOS), SQLDelight/Turbine/pgTAP, offline mode, Kit/PillBox parity — не применимы к single-deploy server stack.
+
+**Artifacts:**
+- Template: `paperclips/roles/qa-engineer.md` (85 строк role-specific + ~100 shared fragments = 279 lines dist)
+- Research: `docs/superpowers/research/role-patterns/qa-engineer.md` (9 sources table + 3-gap analysis)
+- Agent: QAEngineer `58b68640-1e83-4d5d-978b-51a5ca9080e0`, role=qa, reports to CTO, heartbeat 4h
+
+**Validation criteria (met):**
+- [x] Template адаптирован research-based, не blind copy from Medic
+- [x] 3 concrete gaps из GIM-9/GIM-10 инцидентов закрыты
+- [x] Fragment includes (karpathy + escalation + heartbeat + git + worktree + language + pre-work-discovery)
+- [x] Role file в репо + research note
+- [x] Hire submitted (pending_approval до Board approve)
+
+**Decision:** Gimle team after slice #7 = 6 agents operational (CEO + CTO + CodeReviewer + Python + Infra + **QA**). Templates reserved: MCPEngineer, TechnicalWriter, ResearchAgent, BlockchainEngineer (optional), SecurityAuditor (per-project).
+
+### 13.3.6 Slice #8 — TechnicalWriter (operational docs) — EXECUTED 2026-04-16 ✅
+
+Research-informed adaptation 12 community prompts (`VoltAgent documentation-engineer/technical-writer/readme-generator` 17k⭐, `wshobson tutorial-engineer/docs-architect/reference-builder` 33k⭐, `garrytan /document-release` 73k⭐, `addyosmani documentation-and-adrs` 16k⭐, `rohitg00 /onboard`, `alirezarezvani /runbook-generator`, `SkeltonThatcher run-book-template`, `dandye/ai-runbooks`). Full gap analysis: `docs/superpowers/research/role-patterns/technical-writer.md`.
+
+**Community gap (no existing prompt fits Gimle):** все community prompts делятся на web/API docs camp (плохо для runbooks) и tutorial/onboarding camp (без verification loop). Operational docs для Docker Compose stack с verify-loop "install → curl /health" — пробел.
+
+**3 принципа из community → composite:**
+1. **Zero-hallucination** (readme-generator + /onboard) — команды извлекаются из реальных compose/.env/Justfile, не выдумываются
+2. **Time-to-first-success ≤10min metric + verification checkpoints** (tutorial-engineer + /runbook-generator) — каждый step имеет expected output
+3. **Profile/topology matrix** (documentation-engineer + SkeltonThatcher) — docs как rows×cols (doc-type × profile), не один guide для всех
+
+**4 Gimle-specific scope items (нет в community):**
+- Profile-aware install guides (review/analyze/full/with-paperclip/client)
+- MCP protocol docs для palace-mcp
+- Neo4j backup/restore runbook
+- First-run demo script (install → populate → MCP query → verify)
+
+**Verification protocol:** fresh-checkout test обязателен — `rm -rf /tmp/gimle-test && git clone && следуй guide дословно`. Failure на любом шаге = bug в docs, не в setup.
+
+**Artifacts:**
+- Template: `paperclips/roles/technical-writer.md` (90 строк role-specific + ~169 fragments = 259 lines dist)
+- Research: `docs/superpowers/research/role-patterns/technical-writer.md` (12 sources table + community gap analysis)
+- Agent: TechnicalWriter `0e8222fd-88b9-4593-98f6-847a448b0aab`, role=general, reports to CTO, heartbeat 4h
+
+**Validation criteria (met):**
+- [x] Template адаптирован composite из 12 community prompts (нет blind copy — community gap doc)
+- [x] 4 Gimle-specific output types определены (profile install, runbooks, MCP docs, demo)
+- [x] Fragment includes (karpathy + escalation + heartbeat + git + worktree + language + pre-work)
+- [x] Role file + research note + spec outcome
+- [x] Hire submitted (pending_approval)
+
+**Decision:** Gimle team after slice #8 = 7 agents operational (CEO + CTO + CodeReviewer + Python + Infra + QA + **TechnicalWriter**). Templates reserved: MCPEngineer, ResearchAgent, BlockchainEngineer (optional), SecurityAuditor (per-project).
+
+### 13.3.7 Slice #9 — MCPEngineer (palace-mcp protocol owner) — EXECUTED 2026-04-16 ✅
+
+Research: 9 sources reviewed, 4 directly applicable, **wshobson + garrytan не покрывают MCP вообще** (niche). Главные источники:
+
+1. **anthropics/claude-plugins-official `mcp-server-dev`** (17.1k⭐) — Anthropic-authored, spec-current (2025-11-25), references/ folder с tool-design + auth + elicitation
+2. **VoltAgent codex `mcp-developer.toml`** (4k⭐) — engineering conservatism: smallest safe change, compatibility-first, no protocol-breaking без migration
+3. **VoltAgent `mcp-developer.md`** (~17k⭐, 275 lines) — full-lifecycle scaffold (взяты только sections, не full prompt)
+4. **rohitg00 `mcp-developer.md`** — transport/Inspector testing (низкая ценность, transport уже locked)
+
+**4 Gimle-specific блока (не покрыто community):**
+- Pydantic v2 boundary validation policy (FastAPI + MCP = двойная validation layer)
+- Serena tool catalogue rules (semantic code analysis specifics)
+- Internal auth threat model (paperclip-agent-net + cloudflared exposable)
+- Tool naming convention `palace.<domain>.<verb>`
+
+**Transport locked:** streamable-HTTP. palace-mcp на FastAPI 8080:8000, stdio не применим, SSE deprecated, MCPB defer until external client demand.
+
+**Engineering conservatism principles (5):** smallest safe change / no protocol-breaking без migration / contract-safe error envelopes / read-tool idempotency / Pydantic v2 boundary.
+
+**Artifacts:**
+- Template: `paperclips/roles/mcp-engineer.md` (95 строк role + ~169 fragments = 270 lines dist)
+- Research: `docs/superpowers/research/role-patterns/mcp-engineer.md`
+- Agent: MCPEngineer `274a0b0c-ebe8-4613-ad0e-3e745c817a97`, role=engineer, reports to CTO
+
+**Validation criteria (met):**
+- [x] Template composite — Anthropic spec base + codex behavioral conservatism + Gimle-specific
+- [x] 4 Gimle-specific блока (Pydantic boundary, Serena, threat model, naming)
+- [x] Transport decision локked с явным reasoning
+- [x] Hire submitted (pending_approval)
+
+**Decision:** Gimle team after slice #9 = 8 agents operational (CEO + CTO + CodeReviewer + Python + Infra + QA + TechnicalWriter + **MCPEngineer**). Templates reserved: ResearchAgent, BlockchainEngineer (optional), SecurityAuditor (per-project).
+
+### 13.3.8 Slice #10 — ResearchAgent (synthesis layer, on-demand only) — EXECUTED 2026-04-16 ✅ — FINAL CORE TEAM
+
+Research: 8 sources reviewed, 3 directly applicable (rohitg00 research-analyst 12k⭐, Imbad0202 academic-research-skills 2.9k⭐, VoltAgent research-analyst 17.4k⭐). Insight: tech research отличается от academic — academic source pyramid не применим, нужен GitHub releases > maintainer blog > community blog hierarchy.
+
+**Composite design:**
+1. **Base — rohitg00 research-analyst** (72 lines compact, decision-context driven, per-finding confidence H/M/L/SPECULATIVE, follow-ups ranked by decision impact — exact match для Gimle "research X before deciding Y")
+2. **Anti-leakage — Imbad0202 [MATERIAL GAP] pattern** → adapted as 3-flag taxonomy ([VERSION GAP] / [MATERIAL GAP] / [CONTRADICTION])
+3. **Search-specialist as sub-tool** — ResearchAgent оркестрирует voltagent search-specialist для retrieval
+
+**4 Gimle-specific blocks (не покрыто community):**
+- Tech-source tier (Official docs / GitHub releases > library source > maintainer blog > community blog > HN/Reddit) — vs academic pyramid в community
+- Version-pinned claims (every library claim with explicit version — claim expires at version drift)
+- Consumer-aware output routing (CTO architectural / MCPEngineer protocol / PythonEngineer library / InfraEngineer deployment — different report shapes)
+- Trigger discipline (no self-init — only CTO/engineer request or periodic spec evolution)
+
+**Heartbeat optimization:** `enabled=false` + `wakeOnDemand=true`. ResearchAgent чисто on-demand (как Medic после оптимизации) — не тратит quota на idle timer wakes.
+
+**Artifacts:**
+- Template: `paperclips/roles/research-agent.md` (95 строк role + 176 fragments = 271 lines dist)
+- Research: `docs/superpowers/research/role-patterns/research-agent.md`
+- Agent: ResearchAgent `bbcef02c-b755-4624-bba6-84f01e5d49c8`, role=researcher, reports to CTO, on-demand only
+
+**Validation criteria (met):**
+- [x] Composite design — rohitg00 base + Imbad0202 anti-leakage + 4 Gimle-specific
+- [x] Trigger discipline (no self-init) — отличает от другого community паттерна
+- [x] Consumer-aware output (4 audiences) — уникальный Gimle паттерн
+- [x] Heartbeat=false для idle quota efficiency
+- [x] Hire submitted (pending_approval)
+
+**Decision: Gimle CORE TEAM COMPLETE — 9 agents operational** (CEO + CTO + CodeReviewer + Python + Infra + QA + TechnicalWriter + MCPEngineer + **ResearchAgent**). Reserved templates: BlockchainEngineer (optional, для Unstoppable wallet integration), SecurityAuditor (per-project, для serious compliance audits).
+
+Slice-based bootstrap (10 slices, v0.0.1 → v0.0.10) завершён.
+
 ---
 
 ### 13.4 Только после трёх (теперь шести) успешных слайсов — расширение scope
