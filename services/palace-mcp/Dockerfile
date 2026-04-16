@@ -1,20 +1,34 @@
-FROM python:3.12-slim
+# --- builder stage -------------------------------------------------------
+FROM python:3.12-slim@sha256:804ddf3251a60bbf9c92e73b7566c40428d54d0e79d3428194edf40da6521286 AS builder
 
-ARG GIT_SHA=unknown
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PALACE_GIT_SHA=$GIT_SHA
+COPY --from=ghcr.io/astral-sh/uv:0.11.7@sha256:240fb85ab0f263ef12f492d8476aa3a2e4e1e333f7d67fbdd923d00a506a516a /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
-
 # Install dependencies first (cached layer) without installing the project itself
-COPY pyproject.toml uv.lock .
+COPY pyproject.toml uv.lock ./
 RUN uv sync --no-dev --no-install-project
 
 # Now copy source and install the project package
 COPY src/ src/
 RUN uv sync --no-dev
 
-CMD ["uv", "run", "uvicorn", "palace_mcp.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# --- runtime stage -------------------------------------------------------
+FROM python:3.12-slim@sha256:804ddf3251a60bbf9c92e73b7566c40428d54d0e79d3428194edf40da6521286 AS runtime
+
+ARG GIT_SHA=unknown
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PALACE_GIT_SHA=$GIT_SHA \
+    PATH="/app/.venv/bin:$PATH"
+
+WORKDIR /app
+
+RUN adduser --disabled-password --gecos "" appuser
+
+COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /app/src /app/src
+
+USER appuser
+
+CMD ["uvicorn", "palace_mcp.main:app", "--host", "0.0.0.0", "--port", "8000"]
