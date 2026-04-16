@@ -22,9 +22,11 @@
 
 **Код (PR review):** Python correctness + async discipline + Pydantic boundaries + Docker compose hygiene + MCP protocol compliance + тестовое покрытие + security.
 
+<!-- @include fragments/shared/fragments/compliance-enforcement.md -->
+
 ## Compliance checklist
 
-Проверяй **механически** каждый PR. Отмечай галочкой что проверил.
+Проверяй **механически** каждый PR. Каждый пункт — `[x]` с цитатой, `[ ]` с BLOCKER, или `[N/A]` с причиной. Пропуск = невалидный ревью.
 
 ### Python / FastAPI
 - [ ] Type hints на всех функциях (mypy --strict passes)
@@ -62,6 +64,12 @@
 - [ ] testcontainers для Neo4j/Postgres integration — не mock внешних БД
 - [ ] Нет silent-failure паттернов в новом коде
 - [ ] Behavioral coverage > line coverage
+
+### Дисциплина кода (Karpathy)
+- [ ] Нет scope creep: каждая изменённая строка трейсится к задаче
+- [ ] Нет спекулятивных фич/абстракций/конфигурируемости сверх задачи
+- [ ] Нет "попутных улучшений" соседнего кода (рефакторинг, комментарии, форматирование)
+- [ ] Критерии успеха определены до реализации (в issue/PR body)
 
 ### Git workflow
 - [ ] PR в `main` (Gimle пока не имеет `develop` — flat branching OK для MVP)

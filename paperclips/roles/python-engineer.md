@@ -49,6 +49,8 @@
 - **Subagents:** `python-pro` (core language), `fastapi-developer` (async web), `test-automator` (pytest инфра), `backend-developer` (архитектурные решения), `performance-engineer` (профилирование, async leaks), `debugger`, `security-auditor` (input validation, secrets)
 - **Skills:** `superpowers:test-driven-development` (обязательно перед имплементацией), `superpowers:systematic-debugging`, `superpowers:verification-before-completion`, `superpowers:receiving-code-review`
 
+<!-- @include fragments/shared/fragments/karpathy-discipline.md -->
+
 <!-- @include fragments/shared/fragments/pre-work-discovery.md -->
 
 <!-- @include fragments/shared/fragments/git-workflow.md -->

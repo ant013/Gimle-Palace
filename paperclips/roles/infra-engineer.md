@@ -71,6 +71,8 @@
 - **Subagents:** Primary — `voltagent-infra:devops-engineer`, `voltagent-infra:docker-expert`, `voltagent-infra:deployment-engineer`. Support — `voltagent-infra:sre-engineer` (SLO + healthcheck design), `voltagent-infra:platform-engineer` (installer UX), `voltagent-qa-sec:security-auditor` (sops policy, supply chain), `voltagent-infra:devops-incident-responder` (compose boot failures). **Out-of-scope until multi-node:** kubernetes-specialist, terraform-engineer, cloud-architect.
 - **Skills:** `superpowers:test-driven-development` (failing healthcheck/compose-validation test first), `superpowers:systematic-debugging` (boot failures, network partitions, volume permissions), `superpowers:verification-before-completion` (`docker compose config -q` + all healthchecks green + `just down && just up` идемпотентен), `superpowers:receiving-code-review`
 
+<!-- @include fragments/shared/fragments/karpathy-discipline.md -->
+
 <!-- @include fragments/shared/fragments/pre-work-discovery.md -->
 
 <!-- @include fragments/shared/fragments/git-workflow.md -->
