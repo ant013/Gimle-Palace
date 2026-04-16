@@ -6,8 +6,9 @@ on:
 
 jobs:
   source-branch-check:
-    name: Enforce develop → main only
+    name: source-branch-check
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Reject non-develop sources to main
         run: |
