@@ -73,8 +73,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
       - run: |
-          docker build services/palace-mcp \
+          docker buildx build services/palace-mcp \
             --cache-from type=local,src=/tmp/.buildx-cache \
             --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=max \
-            -t palace-mcp:ci
+            -t palace-mcp:ci \
+            --load
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
