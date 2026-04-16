@@ -4,7 +4,7 @@ services:
     restart: unless-stopped
     mem_limit: 1g
     cpus: "1.0"
-    profiles: [core]
+    profiles: [review, analyze, full]
     environment:
       NEO4J_AUTH: "neo4j/${NEO4J_PASSWORD}"
       NEO4J_server_memory_heap_initial__size: "512M"
@@ -28,7 +28,7 @@ services:
     restart: unless-stopped
     mem_limit: 512m
     cpus: "0.5"
-    profiles: [core]
+    profiles: [review, analyze, full]
     depends_on:
       neo4j:
         condition: service_healthy
