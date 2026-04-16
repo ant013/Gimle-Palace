@@ -1,3 +1,4 @@
+import logging
 import os
 from contextlib import asynccontextmanager
 from importlib.metadata import version
@@ -15,6 +16,9 @@ async def lifespan(app: FastAPI):
     app.state.neo4j = driver
     yield
     await driver.close()
+
+
+logger = logging.getLogger(__name__)
 
 
 async def get_neo4j(request: Request) -> AsyncDriver:
@@ -36,7 +40,8 @@ def create_app() -> FastAPI:
                 content='{"status":"ok","neo4j":"reachable"}',
                 media_type="application/json",
             )
-        except Exception:
+        except Exception as exc:
+            logger.warning("neo4j verify_connectivity failed: %s", exc)
             return Response(
                 content='{"status":"degraded","neo4j":"unreachable"}',
                 status_code=503,
