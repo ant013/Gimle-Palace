@@ -1,0 +1,52 @@
+services:
+  neo4j:
+    image: neo4j:5.26.0@sha256:5a015e53de1895e7eee1574ae0325cf8c4b89587222778108c594bdd45a474b5
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: "1.0"
+    profiles: [core]
+    environment:
+      NEO4J_AUTH: "neo4j/${NEO4J_PASSWORD}"
+      NEO4J_server_memory_heap_initial__size: "512M"
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    networks:
+      - paperclip-agent-net
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p $${NEO4J_AUTH#*/} 'RETURN 1'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  palace-mcp:
+    build:
+      context: services/palace-mcp
+      args:
+        GIT_SHA: "${PALACE_GIT_SHA:-unknown}"
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: "0.5"
+    profiles: [core]
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    ports:
+      - "8080:8000"
+    networks:
+      - paperclip-agent-net
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\" 2>/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+networks:
+  paperclip-agent-net:
+    driver: bridge
+
+volumes:
+  neo4j_data:
+  neo4j_logs:

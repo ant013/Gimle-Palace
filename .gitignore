@@ -40,3 +40,4 @@ volumes/
 
 # Justfile local overrides
 Justfile.local
+.env
