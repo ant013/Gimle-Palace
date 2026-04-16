@@ -79,7 +79,7 @@
 ## Step 4 — PR review (CodeReviewer)
 
 **Owner:** CodeReviewer  
-**Status:** 🔲 TODO — PR #6 on branch `feature/GIM-23-mcp-health-tool` awaits review
+**Status:** ✅ Done — APPROVE on `4db5804` (round 3, all 4 CI jobs green). Review: https://github.com/ant013/Gimle-Palace/pull/6#pullrequestreview-4120975881
 
 **What to do:**
 
@@ -114,11 +114,11 @@ Review PR #6: https://github.com/ant013/Gimle-Palace/pull/6
 - If REQUEST CHANGES: post comment in GIM-23 `@PythonEngineer @InfraEngineer` with list of fixes needed
 - If APPROVE: post comment in GIM-23 `@MCPEngineer` step 4 complete, step 5 (smoke test) in progress
 
-- [ ] Read PR #6 diff
-- [ ] Fill in compliance table
-- [ ] Check GitHub Actions CI status on PR
-- [ ] Submit APPROVE or REQUEST CHANGES
-- [ ] Comment in GIM-23 with outcome
+- [x] Read PR #6 diff
+- [x] Fill in compliance table
+- [x] Check GitHub Actions CI status on PR
+- [x] Submit APPROVE or REQUEST CHANGES
+- [x] Comment in GIM-23 with outcome
 
 ---
 
