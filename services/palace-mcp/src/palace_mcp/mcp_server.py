@@ -1,41 +1,53 @@
 """MCP server layer for palace-mcp.
 
 Exposes the ``palace.health.status`` tool via streamable-HTTP transport.
-The FastAPI app mounts this at ``/mcp`` and shares the Neo4j driver
-through :func:`set_driver`.
+The FastAPI app mounts this at ``/mcp``; Neo4j connectivity is owned by
+:func:`palace_lifespan` and injected into each tool call via :class:`Context`.
 """
 
 import logging
 import os
 import time
-from typing import Literal
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
+from typing import Any, Literal
 
-from mcp.server.fastmcp import FastMCP
-from neo4j import AsyncDriver
+from mcp.server.fastmcp import Context, FastMCP
+from neo4j import AsyncDriver, AsyncGraphDatabase
 from pydantic import BaseModel
 from starlette.applications import Starlette
 
 logger = logging.getLogger(__name__)
 
-_mcp = FastMCP("palace", streamable_http_path="/")
-
-# Module-level driver reference — set by FastAPI lifespan before any request.
-_driver: AsyncDriver | None = None
-
 # Server start time for uptime_seconds calculation.
 _start_time: float = time.monotonic()
+
+
+@dataclass
+class PalaceContext:
+    driver: AsyncDriver
+
+
+@asynccontextmanager
+async def palace_lifespan(server: FastMCP) -> AsyncIterator[PalaceContext]:
+    """FastMCP lifespan: open and close the Neo4j driver for MCP tool requests."""
+    uri = os.environ.get("NEO4J_URI", "bolt://neo4j:7687")
+    password = os.environ.get("NEO4J_PASSWORD", "")
+    driver = AsyncGraphDatabase.driver(uri, auth=("neo4j", password))
+    try:
+        yield PalaceContext(driver=driver)
+    finally:
+        await driver.close()
+
+
+_mcp = FastMCP("palace", streamable_http_path="/", lifespan=palace_lifespan)
 
 
 class HealthStatusResponse(BaseModel):
     neo4j: Literal["reachable", "unreachable"]
     git_sha: str
     uptime_seconds: int
-
-
-def set_driver(driver: AsyncDriver) -> None:
-    """Called from FastAPI lifespan to share the Neo4j driver with MCP tools."""
-    global _driver  # noqa: PLW0603
-    _driver = driver
 
 
 def build_mcp_asgi_app() -> Starlette:
@@ -47,16 +59,15 @@ def build_mcp_asgi_app() -> Starlette:
     name="palace.health.status",
     description="Return Neo4j reachability, git SHA, and server uptime.",
 )
-async def palace_health_status() -> HealthStatusResponse:
+async def palace_health_status(ctx: Context[Any, PalaceContext, Any]) -> HealthStatusResponse:
     """Check Palace service health: Neo4j connectivity, git revision, uptime."""
+    driver: AsyncDriver = ctx.request_context.lifespan_context.driver
     neo4j_status: Literal["reachable", "unreachable"] = "unreachable"
-    if _driver is not None:
-        try:
-            await _driver.verify_connectivity()
-            neo4j_status = "reachable"
-        except Exception as exc:
-            logger.warning("MCP palace.health.status neo4j check failed: %s", exc)
-            neo4j_status = "unreachable"
+    try:
+        await driver.verify_connectivity()
+        neo4j_status = "reachable"
+    except Exception as exc:
+        logger.warning("MCP palace.health.status neo4j check failed: %s", exc)
 
     return HealthStatusResponse(
         neo4j=neo4j_status,

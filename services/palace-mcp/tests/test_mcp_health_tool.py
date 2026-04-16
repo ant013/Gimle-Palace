@@ -1,23 +1,12 @@
 """Unit tests for the palace.health.status MCP tool.
 
-Tests run against the tool function directly (no HTTP transport needed)
-to stay fast and portable.
+Tests call the tool function directly with a mock Context so they stay
+fast, portable, and free of any ASGI/lifespan machinery.
 """
 
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
-
-import palace_mcp.mcp_server as mcp_module
-from palace_mcp.mcp_server import HealthStatusResponse, _mcp
-
-
-@pytest.fixture(autouse=True)
-def reset_driver():
-    """Restore module-level driver to None after each test."""
-    original = mcp_module._driver
-    yield
-    mcp_module._driver = original
+from palace_mcp.mcp_server import HealthStatusResponse, PalaceContext, _mcp, palace_health_status
 
 
 def _make_driver(*, reachable: bool):
@@ -29,48 +18,52 @@ def _make_driver(*, reachable: bool):
     return driver
 
 
+def _make_ctx(driver):
+    """Return a mock Context whose lifespan_context holds the given driver."""
+    ctx = MagicMock()
+    ctx.request_context.lifespan_context = PalaceContext(driver=driver)
+    return ctx
+
+
 async def test_health_status_neo4j_reachable(monkeypatch):
-    mcp_module._driver = _make_driver(reachable=True)
+    ctx = _make_ctx(_make_driver(reachable=True))
     monkeypatch.setenv("PALACE_GIT_SHA", "abc123")
 
-    (content, structured) = await _mcp.call_tool("palace.health.status", {})
+    result = await palace_health_status(ctx)
 
-    assert structured["neo4j"] == "reachable"
-    assert structured["git_sha"] == "abc123"
-    assert isinstance(structured["uptime_seconds"], int)
-    assert len(content) == 1
-    assert "reachable" in content[0].text
+    assert result.neo4j == "reachable"
+    assert result.git_sha == "abc123"
+    assert isinstance(result.uptime_seconds, int)
 
 
 async def test_health_status_neo4j_unreachable(monkeypatch):
-    mcp_module._driver = _make_driver(reachable=False)
+    ctx = _make_ctx(_make_driver(reachable=False))
     monkeypatch.setenv("PALACE_GIT_SHA", "def456")
 
-    (content, structured) = await _mcp.call_tool("palace.health.status", {})
+    result = await palace_health_status(ctx)
 
-    assert structured["neo4j"] == "unreachable"
-    assert structured["git_sha"] == "def456"
-    assert "unreachable" in content[0].text
-
-
-async def test_health_status_no_driver(monkeypatch):
-    """When driver is not set (None), neo4j should be 'unreachable'."""
-    mcp_module._driver = None
-    monkeypatch.setenv("PALACE_GIT_SHA", "ghi789")
-
-    (content, structured) = await _mcp.call_tool("palace.health.status", {})
-
-    assert structured["neo4j"] == "unreachable"
+    assert result.neo4j == "unreachable"
+    assert result.git_sha == "def456"
 
 
 async def test_health_status_git_sha_default(monkeypatch):
     """PALACE_GIT_SHA defaults to 'unknown' when not set."""
-    mcp_module._driver = _make_driver(reachable=True)
+    ctx = _make_ctx(_make_driver(reachable=True))
     monkeypatch.delenv("PALACE_GIT_SHA", raising=False)
 
-    (_content, structured) = await _mcp.call_tool("palace.health.status", {})
+    result = await palace_health_status(ctx)
 
-    assert structured["git_sha"] == "unknown"
+    assert result.git_sha == "unknown"
+
+
+async def test_health_status_uptime_non_negative():
+    """uptime_seconds is a non-negative integer."""
+    ctx = _make_ctx(_make_driver(reachable=True))
+
+    result = await palace_health_status(ctx)
+
+    assert isinstance(result.uptime_seconds, int)
+    assert result.uptime_seconds >= 0
 
 
 def test_health_status_response_schema():
