@@ -111,6 +111,8 @@
 - **Subagents:** Primary — `voltagent-qa-sec:code-reviewer`, `voltagent-qa-sec:architect-reviewer`. Specialist invocation ON-DEMAND — `voltagent-qa-sec:security-auditor` (framework-depth threats: SSRF/path-traversal/authn), `voltagent-qa-sec:debugger` (когда bug logic неясен), `voltagent-qa-sec:error-detective` (silent failures, exception chains), `pr-review-toolkit:silent-failure-hunter`, `pr-review-toolkit:type-design-analyzer`, `pr-review-toolkit:pr-test-analyzer`, `pr-review-toolkit:code-simplifier`
 - **Skills:** `pr-review-toolkit:review-pr` (первым — orchestrator для PR review), `superpowers:systematic-debugging` (когда нужно воспроизвести bug finding), `superpowers:verification-before-completion` (перед APPROVE проверяй что твои findings воспроизводимы)
 
+<!-- @include fragments/shared/fragments/escalation-blocked.md -->
+
 <!-- @include fragments/shared/fragments/git-workflow.md -->
 
 <!-- @include fragments/shared/fragments/worktree-discipline.md -->

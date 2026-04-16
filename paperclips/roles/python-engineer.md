@@ -51,6 +51,8 @@
 
 <!-- @include fragments/shared/fragments/karpathy-discipline.md -->
 
+<!-- @include fragments/shared/fragments/escalation-blocked.md -->
+
 <!-- @include fragments/shared/fragments/pre-work-discovery.md -->
 
 <!-- @include fragments/shared/fragments/git-workflow.md -->

@@ -415,14 +415,16 @@ Read shared/research/role-patterns/security-auditor.md
 | 4 | PythonEngineer | `engineers/python-engineer.md` | Graphiti service, extractors, telemetry, lite-orchestrator, scheduler |
 | 5 | MCPEngineer | `engineers/mcp-engineer.md` | palace-mcp, code-analyzer MCPs, Serena integration, client distribution |
 | 6 | InfraEngineer | `engineers/infra-engineer.md` | Docker Compose, Justfile, install scripts, networking, secrets, healthchecks |
-| 7 | CodeReviewer | `quality/code-reviewer.md` | Coordinator generalist — synthesizes review from other specialists |
-| 8 | **SecurityAuditor** (enhanced) | `quality/security-auditor.md` + `blockchain-web3` + `frontend-mobile-security` plugins | Wallet attack surface + MCP exposure surface + secrets/supply chain |
+| 7 | CodeReviewer | `quality/code-reviewer.md` | Generalist Red Team — механический compliance чеклист; специализированные аспекты (bug-hunting, performance, type design) invocable via `pr-review-toolkit` skills + `voltagent-qa-sec` subagents on-demand |
+| 8 | **SecurityAuditor** (optional, per project) | `quality/security-auditor.md` + `blockchain-web3` + `frontend-mobile-security` plugins | Нанимается отдельно для проектов с serious compliance (Medic health data, Unstoppable wallet crypto) — wallet attack surface + MCP exposure + secrets/supply chain |
 | 9 | QAEngineer | `quality/qa-engineer.md` | Integration tests across docker profiles (review/analyze/full), pytest+testcontainers, Unstoppable real-repo test |
 | 10 | TechnicalWriter | `support/technical-writer.md` | README, install guides (per profile × topology), operational runbooks, demo scripts |
 | 11 | ResearchAgent | `support/research-agent.md` | Graphiti/mem0/Letta landscape evolution, MCP spec updates, blockchain-client patterns research |
 
-**Опциональное расширение** (добавить если один CodeReviewer не справляется):
-- BugHunter, PerformanceEngineer, ArchitectureReviewer, PrivacyAuditor — от review team full
+**Не нанимаем отдельных reviewer-личностей** (пересмотрено 2026-04-15 по результату slice #6, см. §13.3.4.4):
+- BugHunter, PerformanceEngineer, ArchitectureReviewer, PrivacyAuditor — НЕ standalone роли. Вызываются CodeReviewer'ом через subagents (`voltagent-qa-sec:*`) и skills (`pr-review-toolkit:silent-failure-hunter`, `pr-review-toolkit:type-design-analyzer`, `pr-review-toolkit:pr-test-analyzer`) on-demand
+- Причина: overkill для Gimle scale. 6-personality подход дороже (6 × heartbeat tokens), медленнее (6 × context load), и сложнее координировать. Один CodeReviewer + on-demand specialists покрывает 95% случаев
+- Templates `quality/{bug-hunter,privacy-auditor,performance-engineer,architecture-reviewer}.md` — не создавать в shared fragments
 
 ### 6.3 Gimle — что НЕ берём (vs Medic)
 
