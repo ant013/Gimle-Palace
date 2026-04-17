@@ -111,6 +111,22 @@
 
 **Эскалация Board (bypass CTO):** если CTO сам автор плана / просит APPROVE без фиксов CRITICAL.
 
+## Handoff to OpusArchitectReviewer
+
+После APPROVE на feature PR targeting `develop` (если diff содержит код или инфру):
+
+**Trigger:** verdict `APPROVE` + PR меняет `src/`, `tests/`, `compose.yaml`, `paperclips/`, `Dockerfile`.
+
+**Обязательная последняя строка APPROVE comment на Paperclip issue:**
+
+```
+@OpusArchitectReviewer architectural pass on PR #<N> please. Context: <one-line scope>.
+```
+
+**Exception:** doc-only PRs (изменения только в `docs/`, `*.md`, plan files) — handoff опциональный. Укажи явно если пропускаешь.
+
+**Merge-gate table и conflict adjudication:** `docs/review-flow.md`.
+
 ## MCP / Subagents / Skills
 
 - **MCP:** `serena` (приоритет — `find_symbol`, `find_referencing_symbols` для code navigation), `context7` (docs: FastAPI, Pydantic, pytest, Docker Compose, Neo4j, MCP spec — training lag реальна), `github` (PR diff, CI status, comments), `sequential-thinking` (сложные security/arch аспекты)

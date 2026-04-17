@@ -12,6 +12,7 @@ develop → main (release PR, CTO approval required)
 - PRs open against `develop`, never `main`
 - `main` is updated only via develop→main release PRs
 - Force-push to `main`/`develop` is forbidden
+- Review pipeline — see `docs/review-flow.md` (Sonnet mechanical pass → Opus architectural pass on feature→develop PRs)
 
 ## Docker Compose Profiles
 
