@@ -6,10 +6,10 @@ Release PRs (`develop → main`) follow the existing CTO-approval rule in `CLAUD
 ## Scope
 
 This flow applies to **feature PRs targeting `develop`** that contain code or infra changes
-(`src/`, `tests/`, `compose.yaml`, `paperclips/`, `Dockerfile`).
+(`src/`, `tests/`, `compose.yaml`, `paperclips/`, `Dockerfile`, `CLAUDE.md`, `.github/`).
 
-**Opt-out:** doc-only PRs (no changes outside `docs/`, `*.md`, `*.yaml` plans) may merge with
-Sonnet-only review. Opus invocation is optional for doc-only PRs.
+**Opt-out:** PRs that ONLY change files under `docs/` (excluding `CLAUDE.md`) may merge with
+Sonnet-only review. Opus invocation is optional for those doc-only PRs.
 
 ## Lifecycle
 

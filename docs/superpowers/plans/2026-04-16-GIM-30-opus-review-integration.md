@@ -46,9 +46,9 @@
 **Deps:** Step 1.2 committed and pushed.  
 **Files:** N/A (review only).
 
-- [ ] Read `docs/superpowers/plans/2026-04-16-GIM-30-opus-review-integration.md` on branch `feature/GIM-30-opus-review-integration`.
-- [ ] Check plan-first compliance items from CodeReviewer's own checklist (`paperclips/roles/code-reviewer.md` → Plan-first discipline).
-- [ ] Post verdict `APPROVE` or `REQUEST CHANGES` on [GIM-30](/GIM/issues/GIM-30).
+- [x] Read `docs/superpowers/plans/2026-04-16-GIM-30-opus-review-integration.md` on branch `feature/GIM-30-opus-review-integration`.
+- [x] Check plan-first compliance items from CodeReviewer's own checklist (`paperclips/roles/code-reviewer.md` → Plan-first discipline).
+- [x] Post verdict `APPROVE` on [GIM-30](/GIM/issues/GIM-30). (APPROVE — rev 2, after fixing CRITICAL #1 branch scope + WARNING #1/#2)
 
 **Acceptance:** Explicit APPROVE comment from CodeReviewer on GIM-30 before Phase 2 starts. If REQUEST CHANGES — CTO revises plan, loops back to 1.3.
 
@@ -117,31 +117,31 @@ Sections:
 - **Release flow pointer:** `develop → main` release PR still follows existing CTO-approval rule (link to CLAUDE.md branch-flow section).
 - **Retroactive reviews:** CTO may `@OpusArchitectReviewer` on any merged PR's Paperclip issue to get a post-hoc architectural review; findings feed backlog issues.
 
-**Acceptance:** File exists, merge-gate table rendered, all sections present, linked from `paperclips/roles/opus-architect-reviewer.md` and CLAUDE.md Branch Flow section (or at minimum — from a new pointer line in CLAUDE.md).
+**Acceptance:** File exists, merge-gate table rendered, all sections present, linked from `paperclips/roles/opus-architect-reviewer.md` and CLAUDE.md Branch Flow section (or at minimum — from a new pointer line in CLAUDE.md). ✅ Done (commit `266b2a6`).
 
 ### Step 2.3: Update `paperclips/roles/code-reviewer.md` with handoff step
 **Owner:** TechnicalWriter.  
 **Deps:** Step 1.3 APPROVE.  
 **Files:** `paperclips/roles/code-reviewer.md` (modify).
 
-- [ ] Add new subsection under existing `## Формат ревью` (or as a new top-level `## Handoff to OpusArchitectReviewer`) with:
+- [x] Add new subsection under existing `## Формат ревью` (or as a new top-level `## Handoff to OpusArchitectReviewer`) with:
   - Trigger condition: verdict `APPROVE` on feature PR targeting `develop` and diff contains code / infra (not doc-only).
   - Required last line of APPROVE comment on Paperclip issue: `@OpusArchitectReviewer architectural pass on PR #<N> please. Context: <scope>.`
   - Explicit exception: doc-only PRs skip the handoff.
   - Pointer to `docs/review-flow.md` merge-gate table.
-- [ ] Do NOT change existing compliance checklist entries — only add the new handoff section.
+- [x] Do NOT change existing compliance checklist entries — only add the new handoff section.
 
-**Acceptance:** New handoff section present, trigger / format / exception spelled out, no regressions to existing checklist.
+**Acceptance:** New handoff section present, trigger / format / exception spelled out, no regressions to existing checklist. ✅ Done (commit `266b2a6`).
 
 ### Step 2.4: Add pointer in CLAUDE.md
 **Owner:** TechnicalWriter.  
 **Deps:** Step 2.2.  
 **Files:** `CLAUDE.md` (modify).
 
-- [ ] Under existing `## Branch Flow` section, append a short bullet: `Review pipeline — see docs/review-flow.md (Sonnet mechanical pass → Opus architectural pass on feature→develop PRs).`
-- [ ] No other CLAUDE.md changes.
+- [x] Under existing `## Branch Flow` section, append a short bullet: `Review pipeline — see docs/review-flow.md (Sonnet mechanical pass → Opus architectural pass on feature→develop PRs).`
+- [x] No other CLAUDE.md changes.
 
-**Acceptance:** Pointer bullet present, one line only, no other churn.
+**Acceptance:** Pointer bullet present, one line only, no other churn. ✅ Done (commit `266b2a6`).
 
 ---
 

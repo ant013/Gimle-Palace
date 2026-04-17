@@ -115,7 +115,7 @@
 
 После APPROVE на feature PR targeting `develop` (если diff содержит код или инфру):
 
-**Trigger:** verdict `APPROVE` + PR меняет `src/`, `tests/`, `compose.yaml`, `paperclips/`, `Dockerfile`.
+**Trigger:** verdict `APPROVE` + PR меняет хотя бы один файл из: `src/`, `tests/`, `compose.yaml`, `paperclips/`, `Dockerfile`, `CLAUDE.md`, `.github/`.
 
 **Обязательная последняя строка APPROVE comment на Paperclip issue:**
 
@@ -123,7 +123,7 @@
 @OpusArchitectReviewer architectural pass on PR #<N> please. Context: <one-line scope>.
 ```
 
-**Exception:** doc-only PRs (изменения только в `docs/`, `*.md`, plan files) — handoff опциональный. Укажи явно если пропускаешь.
+**Exception:** PRs, в которых изменения ТОЛЬКО в `docs/` (и не затрагивают `CLAUDE.md`) — handoff опциональный. Укажи явно если пропускаешь.
 
 **Merge-gate table и conflict adjudication:** `docs/review-flow.md`.
 

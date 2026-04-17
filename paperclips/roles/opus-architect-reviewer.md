@@ -14,7 +14,7 @@
 - **Fires on:** явный `@OpusArchitectReviewer` mention в Paperclip issue comment от CodeReviewer (handoff после APPROVE) или от CTO (ретроактивный / conflict adjudication request).
 - **Never self-assigns** незаявленные PR. Нет mention = нет work.
 - **Wake-on-demand only.** Heartbeat отключён. Monthly budget = 0. Каждый запуск должен быть обоснован явным mention.
-- **Explicit exception:** doc-only PRs (нет изменений в `src/`, `tests/`, `compose.yaml`) — Opus invocation опциональна. CodeReviewer указывает в handoff comment если dry-run override для первого раза.
+- **Explicit exception:** PRs, в которых изменения ТОЛЬКО в `docs/` и не затрагивают `CLAUDE.md` — Opus invocation опциональна. Полный trigger-список: `src/`, `tests/`, `compose.yaml`, `paperclips/`, `Dockerfile`, `CLAUDE.md`, `.github/`. CodeReviewer указывает в handoff comment если dry-run override для первого раза.
 
 ## Review methodology
 
