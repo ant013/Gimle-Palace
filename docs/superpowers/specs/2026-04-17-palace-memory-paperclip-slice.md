@@ -49,7 +49,12 @@ Zero new compose services. Uses the existing `palace-mcp` (FastAPI + FastMCP) an
 └─────────────────────┘
 ```
 
-**Source of truth:** paperclip HTTPS API (via existing `PAPERCLIP_API_KEY` board token). Not a direct postgres connection — the API path keeps us decoupled from embedded-postgres internals and reuses established auth.
+**Source of truth:** paperclip HTTPS API (via a board-level static token — env var `PAPERCLIP_INGEST_API_KEY`, **not** the run-scoped JWT the agents receive). Not a direct postgres connection — the API path keeps us decoupled from embedded-postgres internals and reuses established auth.
+
+**Runtime dependencies** (to add to `services/palace-mcp/pyproject.toml` `[project].dependencies` if not already present):
+- `httpx` — async HTTP client for paperclip API
+- `python-json-logger` — structured JSON stdout formatter
+- Production `mcp` extras: use `"mcp>=1.6"` (core) in `[project].dependencies`; move `mcp[cli]` (CLI tooling: click/rich/typer) to `[tool.uv].dev-dependencies` only — not needed at runtime in the container.
 
 **Data flow — ingest:**
 1. Operator runs CLI (`python -m palace_mcp.ingest.paperclip`).
@@ -154,8 +159,10 @@ class LookupRequest(BaseModel):
 class LookupResponseItem(BaseModel):
     id: str
     type: Literal["Issue", "Comment", "Agent"]
-    properties: dict[str, Any]                       # all node properties
-    related: dict[str, dict | list[dict] | None] = {}  # one-hop related — see §5.1 table below
+    properties: dict[str, Any]                                                   # all node properties
+    related: dict[str, dict[str, Any] | list[dict[str, Any]] | None] = {}        # one-hop related — see §5.1 table below
+    # Note: `related["author"]["name"]` may be None (when comment author is a human user, not an agent).
+    # Comment.author_name typed `str | None` in resolver output.
 
 class LookupResponse(BaseModel):
     items: list[LookupResponseItem]
@@ -172,6 +179,10 @@ class LookupResponse(BaseModel):
 | `Agent`   | `name`, `url_key` |
 
 Unknown filter keys emit a `query.lookup.unknown_filter` warning in logs and are silently ignored. This gives forward-compat with future filter expansions without 500-ing on clients.
+
+**Cypher parameterization mandate (required for all tool queries):** All filter values pass into Cypher as **named parameters** (`$param` syntax), never via string interpolation. Filter whitelisting validates the **keys**; parameterization protects the **values**. No raw user input reaches Cypher as literal syntax.
+
+**Query transaction discipline:** Lookup queries execute via `session.execute_read()` (Neo4j async-driver managed read transaction) — not `session.run()` (auto-commit) and not `execute_write()`. Managed reads enable read-replica routing in cluster deployments, provide automatic retry on transient errors, and declare intent explicitly. Ingest writes use `session.execute_write()` (already covered in §6.2).
 
 **Related (one-hop expansion)** is inlined per entity type:
 - `Issue` → `comments: [{id, body, source_created_at, author_name}]` (up to 50 comments), `assignee: {id, name, url_key}` (nullable).
@@ -205,6 +216,9 @@ python -m palace_mcp.ingest.paperclip \
 Env defaults: `PAPERCLIP_API_URL`, `PAPERCLIP_COMPANY_ID`, `PAPERCLIP_API_KEY`.
 
 ### 6.2 Phases (logically atomic — not a single transaction)
+
+**Idempotency requirement (Neo4j async driver contract):** All transaction functions passed to `session.execute_write()` must be idempotent — the driver may invoke the function more than once on transient failures. The MERGE-based upserts in §6.3 are naturally idempotent (re-applying SET with the same values is a no-op). The implementer MUST NOT add side-effects inside the transaction function — no counters, no external event emission, no HTTP calls. Side-effects belong outside the transaction (before/after the `execute_write` call).
+
 
 ```python
 async def run_ingest():
@@ -328,6 +342,7 @@ Expected plan-file at `docs/superpowers/plans/2026-04-17-GIM-NN-palace-memory-pa
 - [ ] Three timestamps (`source_created_at`, `source_updated_at`, `palace_last_seen_at`) present on every node and returned in `lookup` responses.
 - [ ] `docker compose logs palace-mcp` produces JSON events matching `ingest.*` and `query.*` patterns.
 - [ ] Filter whitelist enforced: unknown filter keys produce a `query.lookup.unknown_filter` warning and do not leak into the Cypher query.
+- [ ] `uv run mypy --strict` green — no new `Any`-valued return types, no bare container types (`dict`, `list`) without parameters.
 - [ ] CI green on all four jobs (lint, typecheck, test, docker-build).
 - [ ] CodeReviewer posts APPROVE with the full compliance table (anti-rubber-stamp discipline).
 - [ ] QAEngineer attaches smoke evidence (screenshot or curl-equivalent) in the PR thread (GIM-23 / GIM-27 pattern).
@@ -345,6 +360,8 @@ Expected plan-file at `docs/superpowers/plans/2026-04-17-GIM-NN-palace-memory-pa
 - Pagination > 100 / cursor-based pagination — MVP limit 100.
 - Edges with properties (history of assignments, edit logs) — temporal model belongs to slice N+2+.
 - Authentication on palace-mcp tools — stays internal-only behind the docker network for this slice.
+- **FastMCP `Context` parameter migration** (inherited tech debt from GIM-23). Current tools read `_driver` from module-level global set by `set_driver()` in lifespan. FastMCP idiom: tools accept `ctx: Context` and read `ctx.lifespan_context["driver"]`. Migration reduces defensive null-checks, unlocks MCP-framework structured logging per tool invocation. Defer to a dedicated slice when tool catalogue grows past ~5 tools, since refactor is cross-cutting.
+- **Client-visible unknown-filter feedback** (non-blocking UX improvement). Currently unknown filter keys are logged as warning + silently ignored. A `warnings: list[str]` field on `LookupResponse` could surface them to the client. Implementation-time decision; not gating.
 
 ## 11. Estimated size
 
