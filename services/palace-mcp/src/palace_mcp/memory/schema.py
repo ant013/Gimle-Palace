@@ -37,6 +37,7 @@ class LookupResponse(BaseModel):
     items: list[LookupResponseItem]
     total_matched: int
     query_ms: int
+    warnings: list[str] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):

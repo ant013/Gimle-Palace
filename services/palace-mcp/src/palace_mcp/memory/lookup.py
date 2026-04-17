@@ -145,4 +145,10 @@ async def perform_lookup(driver: AsyncDriver, req: LookupRequest) -> LookupRespo
             "duration_ms": query_ms,
         },
     )
-    return LookupResponse(items=items, total_matched=total, query_ms=query_ms)
+    warnings = [
+        f"unknown filter '{k}' for entity_type '{req.entity_type}' \u2014 ignored"
+        for k in unknown
+    ]
+    return LookupResponse(
+        items=items, total_matched=total, query_ms=query_ms, warnings=warnings
+    )
