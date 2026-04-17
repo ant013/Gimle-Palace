@@ -818,30 +818,44 @@ async def ensure_constraints(driver: AsyncDriver) -> None:
             await session.run(stmt)  # type: ignore[func-returns-value]
 ```
 
-- [ ] Tests for `cypher.py` — parameterization audit (no `{` or `%s` in query body except whitelisted GC label substitution):
+- [ ] Tests for `cypher.py` — parameterization audit using AST introspection (detects f-string constants and `.format()` calls on query constants; does NOT check for raw `{` which is valid Cypher syntax for property maps; `GC_BY_LABEL` is excluded — its `.format(label=...)` uses a closed tuple `("Issue", "Comment", "Agent")`, not user input):
 
 ```python
 # tests/memory/test_cypher_parameterization.py
-import re
+import ast
+import inspect
 
 from palace_mcp.memory import cypher
 
-QUERIES = [
-    cypher.UPSERT_AGENTS,
-    cypher.UPSERT_ISSUES,
-    cypher.UPSERT_COMMENTS,
-    cypher.CREATE_INGEST_RUN,
-    cypher.FINALIZE_INGEST_RUN,
-    cypher.LATEST_INGEST_RUN,
-    cypher.ENTITY_COUNTS,
+_QUERY_CONSTANTS = [
+    name for name, val in vars(cypher).items()
+    if isinstance(val, str) and name.isupper() and "MATCH" in val
 ]
 
 
-def test_queries_use_named_parameters_only() -> None:
-    """All user-value slots must be $name parameters, never f-strings or %-format."""
-    for q in QUERIES:
-        assert "%" not in q or "%s" not in q, f"percent-format in: {q[:100]}"
-        assert "{" not in q, f"brace-format in: {q[:100]}"
+def test_no_python_format_interpolation() -> None:
+    """Query constants must not use .format() or f-string interpolation."""
+    src = inspect.getsource(cypher)
+    for name in _QUERY_CONSTANTS:
+        assert f"{name}.format" not in src, f"{name} uses .format()"
+    tree = ast.parse(src)
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Assign)
+            and any(isinstance(t, ast.Name) and t.id.isupper() for t in node.targets)
+            and isinstance(node.value, ast.JoinedStr)
+        ):
+            names = [t.id for t in node.targets if isinstance(t, ast.Name)]
+            raise AssertionError(f"Query constant(s) {names} use f-string")
+
+
+def test_queries_use_dollar_params() -> None:
+    """All user-value slots in query constants must use $name parameters."""
+    for name in _QUERY_CONSTANTS:
+        q = getattr(cypher, name)
+        # Static queries with no params (e.g. ENTITY_COUNTS) are OK
+        if "$" not in q and "%" in q:
+            raise AssertionError(f"{name} uses %-format instead of $param")
 ```
 
 Run → PASS (assuming queries are clean — this is a regression guard).
@@ -854,7 +868,7 @@ git add services/palace-mcp/src/palace_mcp/memory/cypher.py services/palace-mcp/
 git commit -m "feat(palace-mcp): Cypher queries + constraint assertion (GIM-34)"
 ```
 
-**Acceptance:** cypher module exports all 7 Cypher constants; constraint function idempotent; parameterization guard test green.
+**Acceptance:** cypher module exports all 7 Cypher constants; constraint function idempotent; parameterization guard verifies no Python interpolation on Cypher constants.
 
 ### Step 2.8: Ingest orchestrator + CLI
 
@@ -1231,19 +1245,32 @@ from palace_mcp.memory.schema import (
 logger = logging.getLogger(__name__)
 
 # One-hop related-entity fragments per entity type, returned in `related`.
+# Issue fragment uses a CALL subquery to traverse AUTHORED_BY per comment
+# so that author_name (nullable — human users are not Agent nodes) is included
+# per spec §5.1.
 _RELATED_FRAGMENTS: dict[EntityType, str] = {
     "Issue": """
         OPTIONAL MATCH (n)-[:ASSIGNED_TO]->(assignee:Agent)
+        CALL (n) {
+            OPTIONAL MATCH (c:Comment)-[:ON]->(n)
+            OPTIONAL MATCH (c)-[:AUTHORED_BY]->(author:Agent)
+            RETURN c, author
+            ORDER BY c.source_created_at DESC
+            LIMIT 50
+        }
         WITH n, assignee,
-             [(c:Comment)-[:ON]->(n) | {
-                 id: c.id, body: c.body, source_created_at: c.source_created_at
-             }] AS comments
-        RETURN
-            n AS node,
+             collect(CASE WHEN c IS NULL THEN null ELSE {
+                 id: c.id, body: c.body,
+                 source_created_at: c.source_created_at,
+                 author_name: author.name
+             } END) AS comments_raw
+        WITH n, assignee,
+             [x IN comments_raw WHERE x IS NOT NULL] AS comments
+        RETURN n AS node,
             CASE WHEN assignee IS NULL THEN null
                  ELSE {id: assignee.id, name: assignee.name, url_key: assignee.url_key}
             END AS assignee,
-            comments[..50] AS comments
+            comments
     """,
     "Comment": """
         OPTIONAL MATCH (n)-[:ON]->(issue:Issue)
