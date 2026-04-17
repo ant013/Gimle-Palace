@@ -10,6 +10,8 @@ from neo4j import AsyncDriver, AsyncGraphDatabase
 from starlette.applications import Starlette
 
 from palace_mcp.mcp_server import build_mcp_asgi_app, set_driver
+from palace_mcp.memory.constraints import ensure_constraints
+from palace_mcp.memory.logging_setup import configure_json_logging
 
 # Build once at module level so lifespan can be wired in below.
 _mcp_asgi_app: Starlette = build_mcp_asgi_app()
@@ -17,11 +19,13 @@ _mcp_asgi_app: Starlette = build_mcp_asgi_app()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    configure_json_logging()
     uri = os.environ.get("NEO4J_URI", "bolt://neo4j:7687")
     password = os.environ.get("NEO4J_PASSWORD", "")
     driver = AsyncGraphDatabase.driver(uri, auth=("neo4j", password))
     app.state.neo4j = driver
     set_driver(driver)
+    await ensure_constraints(driver)
     # Run the MCP sub-app lifespan so StreamableHTTPSessionManager task group is initialized.
     async with _mcp_asgi_app.router.lifespan_context(_mcp_asgi_app):
         yield
