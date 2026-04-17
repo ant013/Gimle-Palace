@@ -1,19 +1,26 @@
 """MCP server layer for palace-mcp.
 
-Exposes the ``palace.health.status`` tool via streamable-HTTP transport.
+Exposes MCP tools via streamable-HTTP transport.
 The FastAPI app mounts this at ``/mcp`` and shares the Neo4j driver
 through :func:`set_driver`.
+
+Tools registered:
+- palace.health.status
+- palace.memory.lookup
 """
 
 import logging
 import os
 import time
-from typing import Literal
+from typing import Any, Literal
 
 from mcp.server.fastmcp import FastMCP
 from neo4j import AsyncDriver
 from pydantic import BaseModel
 from starlette.applications import Starlette
+
+from palace_mcp.memory.lookup import perform_lookup
+from palace_mcp.memory.schema import LookupRequest, LookupResponse
 
 logger = logging.getLogger(__name__)
 
@@ -63,3 +70,30 @@ async def palace_health_status() -> HealthStatusResponse:
         git_sha=os.environ.get("PALACE_GIT_SHA", "unknown"),
         uptime_seconds=int(time.monotonic() - _start_time),
     )
+
+
+@_mcp.tool(
+    name="palace.memory.lookup",
+    description=(
+        "Query Paperclip entities (Issue, Comment, Agent) from the Palace knowledge graph. "
+        "Returns matching nodes with one-hop related data (assignee + comments for Issues, "
+        "issue + author for Comments). Use palace.health.status to check reachability first."
+    ),
+)
+async def palace_memory_lookup(
+    entity_type: str,
+    filters: dict[str, Any] | None = None,
+    limit: int = 20,
+    order_by: str = "source_updated_at",
+) -> dict[str, Any]:
+    """Look up Paperclip entities from the Neo4j knowledge graph."""
+    if _driver is None:
+        return {"error": {"code": "driver_unavailable", "message": "Neo4j driver not initialised"}}
+    req = LookupRequest(
+        entity_type=entity_type,
+        filters=filters or {},
+        limit=limit,
+        order_by=order_by,
+    )
+    resp: LookupResponse = await perform_lookup(_driver, req)
+    return resp.model_dump()

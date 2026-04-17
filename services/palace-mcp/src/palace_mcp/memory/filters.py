@@ -5,7 +5,7 @@ named Cypher parameters. Unknown keys are collected separately so the
 caller can log a `query.lookup.unknown_filter` warning.
 """
 
-from typing import Literal
+from typing import Any, Literal
 
 EntityType = Literal["Issue", "Comment", "Agent"]
 
@@ -33,8 +33,8 @@ _WHITELIST: dict[EntityType, dict[str, str]] = {
 
 
 def resolve_filters(
-    entity_type: EntityType, filters: dict[str, object]
-) -> tuple[list[str], dict[str, object], list[str]]:
+    entity_type: EntityType, filters: dict[str, Any]
+) -> tuple[list[str], dict[str, Any], list[str]]:
     """Return (where_clauses, cypher_params, unknown_keys).
 
     Only keys in the whitelist produce clauses/params. Unknown keys are
@@ -42,7 +42,7 @@ def resolve_filters(
     """
     allowed = _WHITELIST[entity_type]
     where_clauses: list[str] = []
-    params: dict[str, object] = {}
+    params: dict[str, Any] = {}
     unknown: list[str] = []
 
     for k, v in filters.items():
