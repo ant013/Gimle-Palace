@@ -7,20 +7,25 @@ through :func:`set_driver`.
 Tools registered:
 - palace.health.status
 - palace.memory.lookup
+- palace.memory.health
 """
 
 import logging
 import os
 import time
-from typing import Any, Literal
+from collections.abc import Callable
+from typing import Any, Literal, TypeVar
 
 from mcp.server.fastmcp import FastMCP
 from neo4j import AsyncDriver
-from neo4j.exceptions import ServiceUnavailable
 from pydantic import BaseModel
 from starlette.applications import Starlette
 
-from palace_mcp.errors import DriverUnavailableError, UnknownEntityTypeError, handle_tool_error
+from palace_mcp.errors import (
+    DriverUnavailableError,
+    UnknownEntityTypeError,
+    handle_tool_error,
+)
 from palace_mcp.memory.health import get_health
 from palace_mcp.memory.lookup import perform_lookup
 from palace_mcp.memory.schema import HealthResponse as MemoryHealthResponse
@@ -38,6 +43,25 @@ _start_time: float = time.monotonic()
 
 _VALID_ENTITY_TYPES: tuple[str, ...] = ("Issue", "Comment", "Agent")
 
+# Pattern #21: track registered tool names for startup uniqueness assertion.
+_registered_tool_names: list[str] = []
+
+
+def assert_unique_tool_names(names: list[str]) -> None:
+    """Pattern #21: crash immediately on duplicate tool name.
+
+    Call at boot (inside build_mcp_asgi_app) so silent shadowing is
+    impossible. A duplicate is a programmer error — fail loud and early.
+    """
+    seen: set[str] = set()
+    for name in names:
+        if name in seen:
+            raise RuntimeError(
+                f"Duplicate MCP tool name detected at startup: {name!r}. "
+                "Each tool must have a unique name. Crash is intentional."
+            )
+        seen.add(name)
+
 
 class HealthStatusResponse(BaseModel):
     neo4j: Literal["reachable", "unreachable"]
@@ -52,11 +76,25 @@ def set_driver(driver: AsyncDriver) -> None:
 
 
 def build_mcp_asgi_app() -> Starlette:
-    """Return the MCP streamable-HTTP ASGI app for mounting."""
+    """Return the MCP streamable-HTTP ASGI app for mounting.
+
+    Pattern #21: asserts all registered tool names are unique before
+    returning the app. Crashes immediately on duplicate.
+    """
+    assert_unique_tool_names(_registered_tool_names)
     return _mcp.streamable_http_app()
 
 
-@_mcp.tool(
+_F = TypeVar("_F", bound=Callable[..., Any])
+
+
+def _tool(name: str, description: str) -> Callable[[_F], _F]:
+    """Wrapper around @_mcp.tool that tracks names for Pattern #21 dedup check."""
+    _registered_tool_names.append(name)
+    return _mcp.tool(name=name, description=description)  # type: ignore[return-value]
+
+
+@_tool(
     name="palace.health.status",
     description="Return Neo4j reachability, git SHA, and server uptime.",
 )
@@ -78,7 +116,7 @@ async def palace_health_status() -> HealthStatusResponse:
     )
 
 
-@_mcp.tool(
+@_tool(
     name="palace.memory.lookup",
     description=(
         "Query Paperclip entities (Issue, Comment, Agent) from the Palace knowledge graph. "
@@ -111,7 +149,7 @@ async def palace_memory_lookup(
         handle_tool_error(exc)
 
 
-@_mcp.tool(
+@_tool(
     name="palace.memory.health",
     description=(
         "Return Neo4j entity counts (Issue/Comment/Agent) and the latest ingest run metadata. "

@@ -67,13 +67,14 @@ def _recovery_hint(exc: Exception) -> str:
     if isinstance(exc, asyncio.TimeoutError):
         return "Query timed out. Try a narrower filter or smaller time range."
     neo4j_msg = str(exc).lower()
-    if isinstance(exc, Neo4jError) and ("timeout" in neo4j_msg or "timed out" in neo4j_msg):
+    if isinstance(exc, Neo4jError) and (
+        "timeout" in neo4j_msg or "timed out" in neo4j_msg
+    ):
         return "Query timed out. Try a narrower filter or smaller time range."
     if isinstance(exc, UnknownEntityTypeError):
         available = ", ".join(_ENTITY_TYPES)
         return (
-            f"Unknown entity type: {exc.entity_type!r}. "
-            f"Available types: {available}."
+            f"Unknown entity type: {exc.entity_type!r}. Available types: {available}."
         )
     if isinstance(exc, InvalidFilterError):
         valid = ", ".join(exc.valid_keys)

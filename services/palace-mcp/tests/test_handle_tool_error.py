@@ -31,23 +31,33 @@ from palace_mcp.mcp_server import _mcp
 
 def test_recovery_hint_service_unavailable() -> None:
     exc = ServiceUnavailable("connection refused")
-    assert _recovery_hint(exc) == "Neo4j is temporarily unavailable. Wait 30s and retry."
+    assert (
+        _recovery_hint(exc) == "Neo4j is temporarily unavailable. Wait 30s and retry."
+    )
 
 
 def test_recovery_hint_driver_unavailable() -> None:
     exc = DriverUnavailableError("Neo4j driver not initialised")
-    assert _recovery_hint(exc) == "Neo4j is temporarily unavailable. Wait 30s and retry."
+    assert (
+        _recovery_hint(exc) == "Neo4j is temporarily unavailable. Wait 30s and retry."
+    )
 
 
 def test_recovery_hint_asyncio_timeout() -> None:
     exc = asyncio.TimeoutError()
-    assert _recovery_hint(exc) == "Query timed out. Try a narrower filter or smaller time range."
+    assert (
+        _recovery_hint(exc)
+        == "Query timed out. Try a narrower filter or smaller time range."
+    )
 
 
 def test_recovery_hint_neo4j_timeout_in_message() -> None:
     # Neo4jError with "timeout" anywhere in str(exc) — covers TransactionTimedOut.
     exc = Neo4jError("Transaction timed out: TransactionTimedOut")
-    assert _recovery_hint(exc) == "Query timed out. Try a narrower filter or smaller time range."
+    assert (
+        _recovery_hint(exc)
+        == "Query timed out. Try a narrower filter or smaller time range."
+    )
 
 
 def test_recovery_hint_neo4j_error_no_timeout() -> None:

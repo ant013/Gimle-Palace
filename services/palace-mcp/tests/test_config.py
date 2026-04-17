@@ -1,0 +1,75 @@
+"""Tests for Pattern #6: Config merge with defaults.
+
+All config reads use BaseSettings with explicit default values.
+No KeyError if optional env vars are absent.
+"""
+
+import os
+from unittest.mock import patch
+
+from pydantic import SecretStr
+
+
+class TestSettings:
+    def test_neo4j_uri_default(self) -> None:
+        """NEO4J_URI absent → bolt://neo4j:7687 default, no KeyError."""
+        env = {"NEO4J_PASSWORD": "test-pw"}
+        with patch.dict(os.environ, env, clear=True):
+            from palace_mcp.config import Settings
+
+            s = Settings()
+        assert s.neo4j_uri == "bolt://neo4j:7687"
+
+    def test_neo4j_uri_from_env(self) -> None:
+        """NEO4J_URI present → picked up from env."""
+        env = {"NEO4J_URI": "bolt://myhost:7688", "NEO4J_PASSWORD": "pw"}
+        with patch.dict(os.environ, env, clear=True):
+            from palace_mcp.config import Settings
+
+            s = Settings()
+        assert s.neo4j_uri == "bolt://myhost:7688"
+
+    def test_password_is_secret_str(self) -> None:
+        """neo4j_password is SecretStr — repr masks the value."""
+        env = {"NEO4J_PASSWORD": "hunter2"}
+        with patch.dict(os.environ, env, clear=True):
+            from palace_mcp.config import Settings
+
+            s = Settings()
+        assert isinstance(s.neo4j_password, SecretStr)
+        assert "hunter2" not in repr(s)
+        assert s.neo4j_password.get_secret_value() == "hunter2"
+
+
+class TestIngestSettings:
+    def test_all_required_fields_read(self) -> None:
+        """IngestSettings reads all required fields from env."""
+        env = {
+            "NEO4J_PASSWORD": "pw",
+            "PAPERCLIP_API_URL": "http://localhost:3000",
+            "PAPERCLIP_INGEST_API_KEY": "key123",
+            "PAPERCLIP_COMPANY_ID": "comp-1",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            from palace_mcp.config import IngestSettings
+
+            s = IngestSettings()
+        assert s.neo4j_uri == "bolt://neo4j:7687"  # default
+        assert s.paperclip_api_url == "http://localhost:3000"
+        assert s.paperclip_ingest_api_key.get_secret_value() == "key123"
+        assert s.paperclip_company_id == "comp-1"
+
+    def test_ingest_api_key_is_secret_str(self) -> None:
+        """PAPERCLIP_INGEST_API_KEY is SecretStr — masked in repr."""
+        env = {
+            "NEO4J_PASSWORD": "pw",
+            "PAPERCLIP_API_URL": "http://localhost:3000",
+            "PAPERCLIP_INGEST_API_KEY": "supersecret",
+            "PAPERCLIP_COMPANY_ID": "comp-1",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            from palace_mcp.config import IngestSettings
+
+            s = IngestSettings()
+        assert isinstance(s.paperclip_ingest_api_key, SecretStr)
+        assert "supersecret" not in repr(s)
