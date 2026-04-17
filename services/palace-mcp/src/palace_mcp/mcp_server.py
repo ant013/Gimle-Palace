@@ -16,9 +16,11 @@ from typing import Any, Literal
 
 from mcp.server.fastmcp import FastMCP
 from neo4j import AsyncDriver
+from neo4j.exceptions import ServiceUnavailable
 from pydantic import BaseModel
 from starlette.applications import Starlette
 
+from palace_mcp.errors import DriverUnavailableError, UnknownEntityTypeError, handle_tool_error
 from palace_mcp.memory.health import get_health
 from palace_mcp.memory.lookup import perform_lookup
 from palace_mcp.memory.schema import HealthResponse as MemoryHealthResponse
@@ -33,6 +35,8 @@ _driver: AsyncDriver | None = None
 
 # Server start time for uptime_seconds calculation.
 _start_time: float = time.monotonic()
+
+_VALID_ENTITY_TYPES: tuple[str, ...] = ("Issue", "Comment", "Agent")
 
 
 class HealthStatusResponse(BaseModel):
@@ -89,21 +93,22 @@ async def palace_memory_lookup(
     order_by: str = "source_updated_at",
 ) -> dict[str, Any]:
     """Look up Paperclip entities from the Neo4j knowledge graph."""
-    if _driver is None:
-        return {
-            "error": {
-                "code": "driver_unavailable",
-                "message": "Neo4j driver not initialised",
-            }
-        }
-    req = LookupRequest(
-        entity_type=entity_type,
-        filters=filters or {},
-        limit=limit,
-        order_by=order_by,
-    )
-    resp: LookupResponse = await perform_lookup(_driver, req)
-    return resp.model_dump()
+    driver = _driver
+    if driver is None:
+        handle_tool_error(DriverUnavailableError("Neo4j driver not initialised"))
+    if entity_type not in _VALID_ENTITY_TYPES:
+        handle_tool_error(UnknownEntityTypeError(entity_type))
+    try:
+        req = LookupRequest(
+            entity_type=entity_type,
+            filters=filters or {},
+            limit=limit,
+            order_by=order_by,
+        )
+        resp: LookupResponse = await perform_lookup(driver, req)
+        return resp.model_dump()
+    except Exception as exc:
+        handle_tool_error(exc)
 
 
 @_mcp.tool(
@@ -115,12 +120,11 @@ async def palace_memory_lookup(
 )
 async def palace_memory_health() -> dict[str, Any]:
     """Return knowledge-graph health: entity counts and last ingest run."""
-    if _driver is None:
-        return {
-            "error": {
-                "code": "driver_unavailable",
-                "message": "Neo4j driver not initialised",
-            }
-        }
-    resp: MemoryHealthResponse = await get_health(_driver)
-    return resp.model_dump()
+    driver = _driver
+    if driver is None:
+        handle_tool_error(DriverUnavailableError("Neo4j driver not initialised"))
+    try:
+        resp: MemoryHealthResponse = await get_health(driver)
+        return resp.model_dump()
+    except Exception as exc:
+        handle_tool_error(exc)
