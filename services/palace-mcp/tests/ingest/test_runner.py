@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
@@ -29,11 +29,48 @@ def _make_session() -> MagicMock:
 def _paperclip_handler(request: httpx.Request) -> httpx.Response:
     path = request.url.path
     if "/agents" in path:
-        return httpx.Response(200, json=[{"id": "a1", "name": "A", "urlKey": "a", "role": "", "createdAt": "2026-01-01T00:00:00Z", "updatedAt": "2026-01-01T00:00:00Z"}])
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "id": "a1",
+                    "name": "A",
+                    "urlKey": "a",
+                    "role": "",
+                    "createdAt": "2026-01-01T00:00:00Z",
+                    "updatedAt": "2026-01-01T00:00:00Z",
+                }
+            ],
+        )
     if "/comments" in path:
-        return httpx.Response(200, json=[{"id": "c1", "body": "hi", "issueId": "i1", "authorAgentId": None, "createdAt": "2026-01-01T00:00:00Z"}])
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "id": "c1",
+                    "body": "hi",
+                    "issueId": "i1",
+                    "authorAgentId": None,
+                    "createdAt": "2026-01-01T00:00:00Z",
+                }
+            ],
+        )
     if "/issues" in path:
-        return httpx.Response(200, json={"issues": [{"id": "i1", "identifier": "GIM-1", "title": "T", "status": "done", "createdAt": "2026-01-01T00:00:00Z", "updatedAt": "2026-01-01T00:00:00Z"}]})
+        return httpx.Response(
+            200,
+            json={
+                "issues": [
+                    {
+                        "id": "i1",
+                        "identifier": "GIM-1",
+                        "title": "T",
+                        "status": "done",
+                        "createdAt": "2026-01-01T00:00:00Z",
+                        "updatedAt": "2026-01-01T00:00:00Z",
+                    }
+                ]
+            },
+        )
     return httpx.Response(404)
 
 

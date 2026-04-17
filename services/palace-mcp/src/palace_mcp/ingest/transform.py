@@ -13,7 +13,9 @@ SOURCE = "paperclip"
 def _ts(record: dict[str, Any], key: str, fallback_key: str = "createdAt") -> str:
     val = record.get(key) or record.get(fallback_key)
     if not isinstance(val, str):
-        raise ValueError(f"paperclip record missing {key}/{fallback_key}: {record.get('id')}")
+        raise ValueError(
+            f"paperclip record missing {key}/{fallback_key}: {record.get('id')}"
+        )
     return val
 
 

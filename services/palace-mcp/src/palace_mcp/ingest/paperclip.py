@@ -27,7 +27,9 @@ async def _amain(args: argparse.Namespace) -> int:
     driver = AsyncGraphDatabase.driver(neo4j_uri, auth=("neo4j", neo4j_password))
     try:
         await ensure_constraints(driver)
-        async with PaperclipClient(base_url=base_url, token=token, company_id=company_id) as client:
+        async with PaperclipClient(
+            base_url=base_url, token=token, company_id=company_id
+        ) as client:
             result = await run_ingest(client=client, driver=driver)
         return 0 if not result["errors"] else 1
     finally:
@@ -36,8 +38,12 @@ async def _amain(args: argparse.Namespace) -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="palace-mcp-ingest-paperclip")
-    parser.add_argument("--paperclip-url", default=None, help="Default: $PAPERCLIP_API_URL")
-    parser.add_argument("--company-id", default=None, help="Default: $PAPERCLIP_COMPANY_ID")
+    parser.add_argument(
+        "--paperclip-url", default=None, help="Default: $PAPERCLIP_API_URL"
+    )
+    parser.add_argument(
+        "--company-id", default=None, help="Default: $PAPERCLIP_COMPANY_ID"
+    )
     args = parser.parse_args()
     sys.exit(asyncio.run(_amain(args)))
 

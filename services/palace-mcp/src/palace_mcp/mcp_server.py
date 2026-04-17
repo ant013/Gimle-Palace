@@ -90,7 +90,12 @@ async def palace_memory_lookup(
 ) -> dict[str, Any]:
     """Look up Paperclip entities from the Neo4j knowledge graph."""
     if _driver is None:
-        return {"error": {"code": "driver_unavailable", "message": "Neo4j driver not initialised"}}
+        return {
+            "error": {
+                "code": "driver_unavailable",
+                "message": "Neo4j driver not initialised",
+            }
+        }
     req = LookupRequest(
         entity_type=entity_type,
         filters=filters or {},
@@ -111,6 +116,11 @@ async def palace_memory_lookup(
 async def palace_memory_health() -> dict[str, Any]:
     """Return knowledge-graph health: entity counts and last ingest run."""
     if _driver is None:
-        return {"error": {"code": "driver_unavailable", "message": "Neo4j driver not initialised"}}
+        return {
+            "error": {
+                "code": "driver_unavailable",
+                "message": "Neo4j driver not initialised",
+            }
+        }
     resp: MemoryHealthResponse = await get_health(_driver)
     return resp.model_dump()

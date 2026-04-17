@@ -26,7 +26,9 @@ async def get_health(driver: AsyncDriver) -> HealthResponse:
         logger.warning("palace.memory.health neo4j unreachable: %s", exc)
         return HealthResponse(neo4j_reachable=False, entity_counts={})
 
-    async def _read(tx: AsyncManagedTransaction) -> tuple[dict[str, int], dict[str, Any] | None]:
+    async def _read(
+        tx: AsyncManagedTransaction,
+    ) -> tuple[dict[str, int], dict[str, Any] | None]:
         counts_result = await tx.run(ENTITY_COUNTS)
         counts: dict[str, int] = {}
         async for row in counts_result:
@@ -34,7 +36,9 @@ async def get_health(driver: AsyncDriver) -> HealthResponse:
 
         ingest_result = await tx.run(LATEST_INGEST_RUN, source="paperclip")
         ingest_row = await ingest_result.single()
-        ingest_data: dict[str, Any] | None = dict(ingest_row["r"]) if ingest_row else None
+        ingest_data: dict[str, Any] | None = (
+            dict(ingest_row["r"]) if ingest_row else None
+        )
         return counts, ingest_data
 
     async with driver.session() as session:

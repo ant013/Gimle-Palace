@@ -26,7 +26,9 @@ class LookupResponseItem(BaseModel):
     id: str
     type: EntityType
     properties: dict[str, Any]
-    related: dict[str, dict[str, Any] | list[dict[str, Any]] | None] = Field(default_factory=dict)
+    related: dict[str, dict[str, Any] | list[dict[str, Any]] | None] = Field(
+        default_factory=dict
+    )
 
 
 class LookupResponse(BaseModel):

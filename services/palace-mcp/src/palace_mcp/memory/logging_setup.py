@@ -19,7 +19,12 @@ def configure_json_logging(level: int = logging.INFO) -> None:
     handler = logging.StreamHandler(stream=sys.stdout)
     formatter = JsonFormatter(
         "%(asctime)s %(levelname)s %(name)s %(message)s",
-        rename_fields={"asctime": "ts", "levelname": "level", "name": "logger", "message": "event"},
+        rename_fields={
+            "asctime": "ts",
+            "levelname": "level",
+            "name": "logger",
+            "message": "event",
+        },
         datefmt="%Y-%m-%dT%H:%M:%S%z",
     )
     handler.setFormatter(formatter)
@@ -29,8 +34,12 @@ def configure_json_logging(level: int = logging.INFO) -> None:
     # but preserve other handlers (e.g. pytest's LogCaptureHandler which
     # streams to its own in-memory buffer, not sys.stdout).
     root.handlers = [
-        h for h in root.handlers
-        if not (isinstance(h, logging.StreamHandler) and getattr(h, "stream", None) is sys.stdout)
+        h
+        for h in root.handlers
+        if not (
+            isinstance(h, logging.StreamHandler)
+            and getattr(h, "stream", None) is sys.stdout
+        )
     ]
     root.addHandler(handler)
     root.setLevel(level)

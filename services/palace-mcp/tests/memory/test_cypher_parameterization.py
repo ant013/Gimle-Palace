@@ -4,7 +4,8 @@ import inspect
 from palace_mcp.memory import cypher
 
 _QUERY_CONSTANTS = [
-    name for name, val in vars(cypher).items()
+    name
+    for name, val in vars(cypher).items()
     if isinstance(val, str) and name.isupper() and "MATCH" in val
 ]
 

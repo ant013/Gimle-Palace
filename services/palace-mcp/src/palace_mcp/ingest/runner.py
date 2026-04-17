@@ -16,7 +16,11 @@ from typing import Any
 from neo4j import AsyncDriver, AsyncManagedTransaction
 
 from palace_mcp.ingest.paperclip_client import PaperclipClient
-from palace_mcp.ingest.transform import transform_agent, transform_comment, transform_issue
+from palace_mcp.ingest.transform import (
+    transform_agent,
+    transform_comment,
+    transform_issue,
+)
 from palace_mcp.memory import cypher
 
 logger = logging.getLogger(__name__)
@@ -26,15 +30,21 @@ def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-async def _write_upsert_agents(tx: AsyncManagedTransaction, batch: list[dict[str, Any]]) -> None:
+async def _write_upsert_agents(
+    tx: AsyncManagedTransaction, batch: list[dict[str, Any]]
+) -> None:
     await tx.run(cypher.UPSERT_AGENTS, batch=batch)
 
 
-async def _write_upsert_issues(tx: AsyncManagedTransaction, batch: list[dict[str, Any]]) -> None:
+async def _write_upsert_issues(
+    tx: AsyncManagedTransaction, batch: list[dict[str, Any]]
+) -> None:
     await tx.run(cypher.UPSERT_ISSUES, batch=batch)
 
 
-async def _write_upsert_comments(tx: AsyncManagedTransaction, batch: list[dict[str, Any]]) -> None:
+async def _write_upsert_comments(
+    tx: AsyncManagedTransaction, batch: list[dict[str, Any]]
+) -> None:
     await tx.run(cypher.UPSERT_COMMENTS, batch=batch)
 
 
@@ -47,7 +57,9 @@ async def _write_gc(tx: AsyncManagedTransaction, *, label: str, cutoff: str) -> 
 async def _write_create_ingest_run(
     tx: AsyncManagedTransaction, *, run_id: str, started_at: str, source: str
 ) -> None:
-    await tx.run(cypher.CREATE_INGEST_RUN, id=run_id, started_at=started_at, source=source)
+    await tx.run(
+        cypher.CREATE_INGEST_RUN, id=run_id, started_at=started_at, source=source
+    )
 
 
 async def _write_finalize_ingest_run(
@@ -80,24 +92,36 @@ async def run_ingest(
 
     async with driver.session() as session:
         await session.execute_write(
-            _write_create_ingest_run, run_id=run_id, started_at=started_at, source=source
+            _write_create_ingest_run,
+            run_id=run_id,
+            started_at=started_at,
+            source=source,
         )
 
     try:
         issues_raw = await client.list_issues()
         agents_raw = await client.list_agents()
-        logger.info("ingest.fetch.issues", extra={"count": len(issues_raw), "source": source})
-        logger.info("ingest.fetch.agents", extra={"count": len(agents_raw), "source": source})
+        logger.info(
+            "ingest.fetch.issues", extra={"count": len(issues_raw), "source": source}
+        )
+        logger.info(
+            "ingest.fetch.agents", extra={"count": len(agents_raw), "source": source}
+        )
 
         comments_raw: list[dict[str, Any]] = []
         for issue in issues_raw:
             ic = await client.list_comments_for_issue(issue["id"])
             comments_raw.extend(ic)
-        logger.info("ingest.fetch.comments", extra={"count": len(comments_raw), "source": source})
+        logger.info(
+            "ingest.fetch.comments",
+            extra={"count": len(comments_raw), "source": source},
+        )
 
         issues_batch = [transform_issue(x, run_started=started_at) for x in issues_raw]
         agents_batch = [transform_agent(x, run_started=started_at) for x in agents_raw]
-        comments_batch = [transform_comment(x, run_started=started_at) for x in comments_raw]
+        comments_batch = [
+            transform_comment(x, run_started=started_at) for x in comments_raw
+        ]
 
         async with driver.session() as session:
             t0 = time.monotonic()

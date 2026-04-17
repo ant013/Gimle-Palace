@@ -49,7 +49,9 @@ def _make_mock_driver(
                 if ingest_row is not None:
                     single_val = MagicMock()
                     # single_val["r"] must be dict-like
-                    single_val.__getitem__ = lambda _self, key: ingest_row if key == "r" else None
+                    single_val.__getitem__ = lambda _self, key: (
+                        ingest_row if key == "r" else None
+                    )
                     result.single = AsyncMock(return_value=single_val)
                 else:
                     result.single = AsyncMock(return_value=None)
