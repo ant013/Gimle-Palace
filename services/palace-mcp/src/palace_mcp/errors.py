@@ -16,7 +16,7 @@ from neo4j.exceptions import Neo4jError, ServiceUnavailable
 
 logger = logging.getLogger(__name__)
 
-_ENTITY_TYPES: tuple[str, ...] = ("Issue", "Comment", "Agent")
+VALID_ENTITY_TYPES: tuple[str, ...] = ("Issue", "Comment", "Agent")
 
 
 class DriverUnavailableError(Exception):
@@ -72,7 +72,7 @@ def _recovery_hint(exc: Exception) -> str:
     ):
         return "Query timed out. Try a narrower filter or smaller time range."
     if isinstance(exc, UnknownEntityTypeError):
-        available = ", ".join(_ENTITY_TYPES)
+        available = ", ".join(VALID_ENTITY_TYPES)
         return (
             f"Unknown entity type: {exc.entity_type!r}. Available types: {available}."
         )

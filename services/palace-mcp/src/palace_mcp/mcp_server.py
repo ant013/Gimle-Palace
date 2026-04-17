@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from starlette.applications import Starlette
 
 from palace_mcp.errors import (
+    VALID_ENTITY_TYPES,
     DriverUnavailableError,
     UnknownEntityTypeError,
     handle_tool_error,
@@ -40,8 +41,6 @@ _driver: AsyncDriver | None = None
 
 # Server start time for uptime_seconds calculation.
 _start_time: float = time.monotonic()
-
-_VALID_ENTITY_TYPES: tuple[str, ...] = ("Issue", "Comment", "Agent")
 
 # Pattern #21: track registered tool names for startup uniqueness assertion.
 _registered_tool_names: list[str] = []
@@ -134,7 +133,7 @@ async def palace_memory_lookup(
     driver = _driver
     if driver is None:
         handle_tool_error(DriverUnavailableError("Neo4j driver not initialised"))
-    if entity_type not in _VALID_ENTITY_TYPES:
+    if entity_type not in VALID_ENTITY_TYPES:
         handle_tool_error(UnknownEntityTypeError(entity_type))
     try:
         req = LookupRequest(

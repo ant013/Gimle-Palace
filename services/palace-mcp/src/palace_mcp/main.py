@@ -20,7 +20,7 @@ _mcp_asgi_app: Starlette = build_mcp_asgi_app()
 
 logger = logging.getLogger(__name__)
 
-# Pattern #21: keep a reference so GC doesn't cancel mid-run.
+# Pattern #11: keep a reference so GC doesn't cancel mid-run.
 _background_tasks: set[asyncio.Task[None]] = set()
 
 
