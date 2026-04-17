@@ -1,0 +1,172 @@
+topic: "Paperclip plugin ecosystem — Telegram integration options for Gimle-Palace"
+generated_at: "2026-04-17"
+time_range: "Last 6 months (since 2025-10-17)"
+goal: >
+  Decide: install `paperclip-plugin-telegram`, build our own via @paperclipai/plugin-sdk,
+  or bridge via n8n / native routine webhooks. Output is a comparison matrix + a
+  recommendation for Gimle-Palace (company 9d8f432c-..., self-hosted at paperclip.ant013.work).
+
+context:
+  paperclip_version_in_use: "paperclipai 2026.403.0 (npm latest is 2026.416.0)"
+  paperclip_github_stars: 55061
+  paperclip_last_push: "2026-04-17"
+  plugin_system_shipped: "2026-03-14 (approx 5 weeks old at research date)"
+
+items:
+  - id: tg-plugin
+    name: paperclip-plugin-telegram
+    kind: community_plugin
+    primary_candidate: true
+    repo: https://github.com/mvanhorn/paperclip-plugin-telegram
+    author: mvanhorn
+    stars: 33
+    last_push: "2026-04-13"
+    claim: "Bidirectional — outbound notifications (issue lifecycle, agent error, approval) + inbound (bot commands, inline approve/reject, reply routing, media)"
+    why_matters: "Direct hit on the ask. Listed in awesome-paperclip."
+
+  - id: discord-plugin
+    name: paperclip-plugin-discord
+    kind: community_plugin_comparator
+    repo: https://github.com/mvanhorn/paperclip-plugin-discord
+    author: mvanhorn
+    claim: "Same author/architecture as TG plugin — battle-tested equivalent, useful to cross-check quality signals."
+    why_matters: "If Discord version is solid, raises confidence in TG version."
+
+  - id: plugin-sdk
+    name: "@paperclipai/plugin-sdk"
+    kind: official_sdk
+    npm: https://www.npmjs.com/package/@paperclipai/plugin-sdk
+    dependents: "26+"
+    claim: "Exposes events.subscribe(eventName, filter?) with { companyId, projectId, agentId } filter — relevant for Gimle-Palace per-company isolation."
+    why_matters: "Build-our-own path. Also: understand what TG plugin imports."
+
+  - id: create-plugin
+    name: "@paperclipai/create-paperclip-plugin"
+    kind: official_scaffold
+    npm: https://www.npmjs.com/package/@paperclipai/create-paperclip-plugin
+    claim: "Scaffold a new plugin with the `paperclip-create-plugin` skill."
+    why_matters: "Time-to-MVP if we roll our own."
+
+  - id: routine-webhooks
+    name: "Built-in routine triggers (webhook/schedule/api)"
+    kind: native_capability
+    endpoint: "POST /api/routines, POST /api/routine-triggers, POST /api/routine-triggers/public/:publicId/fire"
+    claim: "Native inbound HTTP → wake agents. Does NOT handle outbound events — that still needs plugin or polling."
+    why_matters: "Zero-plugin TG→agent path (TG bot webhook → /api/routine-triggers/public/:id/fire)."
+
+  - id: integrations-hub
+    name: "Integrations Hub (Teams) — paperclipai/paperclip#3328"
+    kind: upstream_roadmap
+    issue: https://github.com/paperclipai/paperclip/issues/3328
+    opened: "2026-04-10"
+    claim: "In-progress native webhook/integrations service. Teams-specific today; may generalize."
+    why_matters: "If shipping soon, could obsolete community plugins. Check status."
+
+  - id: n8n-claw
+    name: "n8n-claw"
+    kind: external_bridge
+    repo: https://github.com/freddy-schuetz/n8n-claw
+    request_issue: https://github.com/paperclipai/paperclip/issues/1324
+    claim: "No-code bridge via n8n — TG → n8n webhook → Paperclip REST API."
+    why_matters: "Fallback if plugin install fails or we want GUI flow builder."
+
+  - id: awesome-index
+    name: "awesome-paperclip"
+    kind: meta_index
+    repo: https://github.com/gsxdsm/awesome-paperclip
+    claim: "Curated plugin list — source for any plugins not found above."
+    why_matters: "Sanity check that we're not missing a better TG option."
+
+  - id: plugin-spec
+    name: "PLUGIN_SPEC.md + paperclip-create-plugin skill"
+    kind: upstream_docs
+    repo: https://github.com/paperclipai/paperclip/blob/master/doc/plugins/PLUGIN_SPEC.md
+    skill: https://github.com/paperclipai/paperclip/blob/master/skills/paperclip-create-plugin/SKILL.md
+    claim: "Spec for plugin contract: events, handlers, secrets (UUID refs), install path."
+    why_matters: "Authoritative — validates/refutes claims made by community plugins."
+
+execution:
+  batch_size: 3
+  items_per_agent: 3
+  output_dir: ./docs/research/paperclip-plugins/results
+  agent_split:
+    - agent_1: [tg-plugin, discord-plugin, plugin-sdk]
+    - agent_2: [routine-webhooks, integrations-hub, n8n-claw]
+    - agent_3: [create-plugin, awesome-index, plugin-spec]
+
+caveats:
+  - "Some URLs produced by web-search-agent were not independently re-verified (only tg-plugin, paperclipai/paperclip, awesome-paperclip were confirmed via gh CLI). Deep-phase agents should verify each URL they cite."
+  - "Plugin system is ~5 weeks old — community plugins target an API still in flux."
+  - "Webhook signature mismatch (issue #1892) may affect inbound TG routing — verify during deep phase."
+  - "awesome-paperclip categorizes paperclip-plugin-telegram as 'Notification' (not 'Bidirectional' as research-agent claimed). Verify bi-directional claim against the plugin's own README during deep phase or live install."
+
+# Full awesome-paperclip catalog as of 2026-04-17 (source: https://github.com/gsxdsm/awesome-paperclip).
+# Not all items are targets for /research-deep — only those referenced in items[] above.
+# Listed here for completeness and so future sessions can see the landscape without re-fetching.
+full_catalog:
+  notification:
+    - name: paperclip-plugin-telegram
+      author: mvanhorn
+      url: https://github.com/mvanhorn/paperclip-plugin-telegram
+      note: "Primary TG candidate. Awesome-paperclip calls it Notification; plugin README claims bidirectional."
+    - name: paperclip-plugin-slack
+      author: mvanhorn
+      url: https://github.com/mvanhorn/paperclip-plugin-slack
+    - name: paperclip-plugin-discord
+      author: mvanhorn
+      url: https://github.com/mvanhorn/paperclip-plugin-discord
+    - name: paperclip-discord-bot
+      author: rekon307
+      url: https://github.com/rekon307/paperclip-discord-bot
+      note: "Alternative Discord bot with OAuth roles + AI summaries."
+
+  bridges:
+    - name: paperclip-plugin-github-issues
+      author: mvanhorn
+      url: https://github.com/mvanhorn/paperclip-plugin-github-issues
+      note: "Bidirectional GitHub Issues sync. Relevant since Gimle-Palace lives on GitHub."
+    - name: paperclip-plugin-writbase
+      author: Writbase
+      url: https://github.com/Writbase/paperclip-plugin-writbase
+    - name: obsidian-paperclip
+      author: istib
+      url: https://github.com/istib/obsidian-paperclip
+      note: "Browse/comment/assign issues from Obsidian."
+    - name: paperclip-plugin-chat
+      author: webprismdevin
+      url: https://github.com/webprismdevin/paperclip-plugin-chat
+
+  memory:
+    - name: paperclip-plugin-hindsight
+      author: vectorize-io
+      url: https://github.com/vectorize-io/hindsight/tree/main/hindsight-integrations/paperclip-plugin
+      note: "Long-term memory — adjacent to our palace-memory slice. Worth studying their persistence model."
+
+  dev_tools:
+    - name: paperclip-plugin-acp
+      author: mvanhorn
+      url: https://github.com/mvanhorn/paperclip-plugin-acp
+      note: "Run Claude Code / Codex / Gemini CLI from chat platforms."
+    - name: paperclip-mcp
+      author: wizarck
+      url: https://github.com/wizarck/paperclip-mcp
+      note: "MCP server exposing Paperclip REST API as Claude tools. Complement/alternative to our palace-memory MCP."
+    - name: paperclip-aperture
+      author: tomismeta
+      url: https://github.com/tomismeta/paperclip-aperture
+    - name: paperclip-live-analytics-plugin
+      author: Agent-Analytics
+      url: https://github.com/Agent-Analytics/paperclip-live-analytics-plugin
+
+  utilities:
+    - name: paperclip-plugin-company-wizard
+      author: yesterday-ai
+      url: https://github.com/yesterday-ai/paperclip-plugin-company-wizard
+    - name: paperclip-plugin-avp
+      author: creatorrmode-lead
+      url: https://github.com/creatorrmode-lead/paperclip-plugin-avp
+      note: "Trust layer with DID identity + EigenTrust reputation. Adjacent to BlockchainEngineer role."
+    - name: oh-my-paperclip
+      author: gsxdsm
+      url: https://github.com/gsxdsm/oh-my-paperclip
+      note: "Bundle of plugins — worth inspecting the manifest before picking individually."

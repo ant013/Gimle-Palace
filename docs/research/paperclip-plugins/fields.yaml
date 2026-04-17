@@ -1,0 +1,96 @@
+categories:
+  basic_info:
+    - name: name
+      description: "Package / repo name"
+      detail_level: brief
+    - name: author
+      description: "Maintainer GitHub handle or org"
+      detail_level: brief
+    - name: repo_url
+      description: "Canonical repo URL — MUST be verified in deep phase"
+      detail_level: brief
+    - name: npm_url
+      description: "npm package URL if published"
+      detail_level: brief
+    - name: latest_version
+      description: "Latest published version"
+      detail_level: brief
+    - name: license
+      description: "SPDX license id"
+      detail_level: brief
+
+  technical:
+    - name: plugin_type
+      description: "notifier | bridge | bidirectional | sdk | meta"
+      detail_level: brief
+    - name: paperclip_sdk_version_pin
+      description: "Which @paperclipai/plugin-sdk semver — stale pin risk for date-versioned SDK"
+      detail_level: moderate
+    - name: install_command_verified
+      description: "Exact install command tested against a running paperclipai instance"
+      detail_level: moderate
+    - name: event_filter_support
+      description: "Does events.subscribe accept { companyId } filter — critical for multi-tenant isolation"
+      detail_level: moderate
+    - name: inbound_transport
+      description: "How external → paperclip routes: plugin-registered route vs separate public URL vs routine webhook"
+      detail_level: moderate
+    - name: secret_storage_model
+      description: "Paperclip Secrets UUIDs (telegramBotTokenRef) vs raw env vars vs config file"
+      detail_level: moderate
+
+  quality:
+    - name: github_stars
+      description: "Raw star count — weak signal but useful floor"
+      detail_level: brief
+    - name: npm_weekly_downloads
+      description: "npm weekly downloads if published"
+      detail_level: brief
+    - name: last_commit_date
+      description: "Most recent commit / push — activity signal"
+      detail_level: brief
+    - name: open_issues_count
+      description: "Open issues — scan for breakage reports"
+      detail_level: brief
+    - name: test_coverage_type
+      description: "unit | integration | e2e — unit stubs vs live Bot API calls affects trust"
+      detail_level: moderate
+    - name: ci_publish_model
+      description: "OIDC trusted publishing | manual | none"
+      detail_level: brief
+
+  telegram_specific:
+    - name: supports_inbound
+      description: "TG msg → paperclip issue/comment"
+      detail_level: brief
+    - name: supports_outbound
+      description: "Wake / mention / lifecycle event → TG message"
+      detail_level: brief
+    - name: supports_threading
+      description: "1 issue = 1 TG thread, or flat chat"
+      detail_level: moderate
+    - name: inline_actions
+      description: "Approve/reject buttons, reassign, close — which actions bubble back"
+      detail_level: moderate
+    - name: media_pipeline
+      description: "Images/files in TG → paperclip attachments"
+      detail_level: detailed
+
+  fit_for_gimle_palace:
+    - name: self_hosted_compatible
+      description: "Works with 127.0.0.1:3100 behind Cloudflare tunnel at paperclip.ant013.work"
+      detail_level: moderate
+    - name: company_isolation
+      description: "Respects companyId 9d8f432c-... — no cross-company event leakage"
+      detail_level: moderate
+    - name: agent_routing_model
+      description: "How TG chat → specific agent (CTO, MCPEngineer, ...) — direct id, @mention, slash command?"
+      detail_level: detailed
+    - name: time_to_first_message
+      description: "Estimated setup time from zero to first TG→agent round-trip"
+      detail_level: moderate
+
+uncertain:
+  - tg_plugin_production_readiness: "Claimed 3/5 by web-search-agent — deep phase should verify test quality + fetch actual issue tracker"
+  - integrations_hub_eta: "Opened 2026-04-10; no merge date known"
+  - webhook_signature_workaround: "Issue #1892 — does TG plugin handle this, or does it bypass the global signature check?"
