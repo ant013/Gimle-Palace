@@ -1,6 +1,6 @@
 # Palace Memory — paperclip slice (N+0) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` within your own run. Steps use checkbox (`- [ ]`) syntax. Formal paperclip reassign is mandatory on every inter-agent handoff — `@`-mentions alone do not wake agents reliably (see Board memory `reference_paperclip_inbox_lite.md`).
+> **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` within your own run. Steps use checkbox (`- [x]`) syntax. Formal paperclip reassign is mandatory on every inter-agent handoff — `@`-mentions alone do not wake agents reliably (see Board memory `reference_paperclip_inbox_lite.md`).
 
 **Goal:** Deliver the first read-capability of `palace-memory`: external MCP clients can query paperclip project history (issues + comments + agents) via two new MCP tools backed by plain Neo4j with idempotent ingest.
 
@@ -24,12 +24,12 @@
 **Files:** none in repo; env only.
 **Depends on:** nothing.
 
-- [ ] Generate a **board-scope static token** for ingest use (distinct from agent run-scoped JWTs). One of:
+- [x] Generate a **board-scope static token** for ingest use (distinct from agent run-scoped JWTs). One of:
   - `paperclipai agent local-cli` targeting a dedicated service agent (preferred for audit trail), OR
   - reuse the existing `PAPERCLIP_API_KEY` (the board-user token Board already mints).
-- [ ] Store on iMac as `PAPERCLIP_INGEST_API_KEY` in the docker-compose environment for `palace-mcp` (add to `/Users/Shared/Ios/Gimle-Palace/.env` on iMac).
-- [ ] Also expose `PAPERCLIP_API_URL=https://paperclip.ant013.work` and `PAPERCLIP_COMPANY_ID=9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64` in the same `.env`.
-- [ ] Verify reachability from inside container: `docker compose exec palace-mcp sh -c 'wget -qO- -S --header "Authorization: Bearer $PAPERCLIP_INGEST_API_KEY" "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/issues" 2>&1 | head -5'` → expect HTTP 200.
+- [x] Store on iMac as `PAPERCLIP_INGEST_API_KEY` in the docker-compose environment for `palace-mcp` (add to `/Users/Shared/Ios/Gimle-Palace/.env` on iMac).
+- [x] Also expose `PAPERCLIP_API_URL=https://paperclip.ant013.work` and `PAPERCLIP_COMPANY_ID=9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64` in the same `.env`.
+- [x] Verify reachability from inside container: `docker compose exec palace-mcp sh -c 'wget -qO- -S --header "Authorization: Bearer $PAPERCLIP_INGEST_API_KEY" "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/issues" 2>&1 | head -5'` → expect HTTP 200.
 
 **Acceptance:** Container has all three env vars; HTTP 200 on a manual API probe from inside container.
 
@@ -42,10 +42,10 @@
 **Owner:** CTO.
 **Depends on:** Step 0.1 done.
 
-- [ ] Create paperclip issue titled `palace.memory paperclip slice (N+0) — implementation`.
-- [ ] Body = this plan file's contents (copy the whole plan body, from "# Palace Memory — paperclip slice (N+0) Implementation Plan" to the end — leave `GIM-34` placeholders in the body to be replaced with the real key after paperclip assigns it).
-- [ ] After issue creation, CTO runs one edit pass replacing `GIM-34` with the assigned key (e.g., `GIM-34`) in the issue body.
-- [ ] Initial assignee = TechnicalWriter. Status = `todo`.
+- [x] Create paperclip issue titled `palace.memory paperclip slice (N+0) — implementation`.
+- [x] Body = this plan file's contents (copy the whole plan body, from "# Palace Memory — paperclip slice (N+0) Implementation Plan" to the end — leave `GIM-34` placeholders in the body to be replaced with the real key after paperclip assigns it).
+- [x] After issue creation, CTO runs one edit pass replacing `GIM-34` with the assigned key (e.g., `GIM-34`) in the issue body.
+- [x] Initial assignee = TechnicalWriter. Status = `todo`.
 
 **Acceptance:** Issue exists, key substituted, assigned to TechnicalWriter, status todo.
 
@@ -57,9 +57,9 @@
 - Branch: `feature/GIM-34-palace-memory-paperclip` (from `origin/develop`)
 - Create: `docs/superpowers/plans/2026-04-17-GIM-34-palace-memory-paperclip.md` (copy from `origin/main:docs/superpowers/plans/2026-04-17-GIM-34-palace-memory-paperclip.md`, substituting `GIM-34` with the real key).
 
-- [ ] `git fetch origin && git checkout -b feature/GIM-34-palace-memory-paperclip origin/develop`
-- [ ] Verify clean tree: `git status` → clean.
-- [ ] Copy the plan file from `main` to the feature branch, substituting `GIM-34`:
+- [x] `git fetch origin && git checkout -b feature/GIM-34-palace-memory-paperclip origin/develop`
+- [x] Verify clean tree: `git status` → clean.
+- [x] Copy the plan file from `main` to the feature branch, substituting `GIM-34`:
 
 ```bash
 git show origin/main:docs/superpowers/plans/2026-04-17-GIM-34-palace-memory-paperclip.md \
@@ -68,7 +68,7 @@ git show origin/main:docs/superpowers/plans/2026-04-17-GIM-34-palace-memory-pape
 
 (Replace `34` with the actual key assigned at Step 1.1.)
 
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add docs/superpowers/plans/2026-04-17-GIM-34-palace-memory-paperclip.md
@@ -78,7 +78,7 @@ Co-Authored-By: Paperclip <noreply@paperclip.ing>"
 git push -u origin feature/GIM-34-palace-memory-paperclip
 ```
 
-- [ ] **Formal reassign to CodeReviewer** with status=todo for plan review (PATCH via paperclip API or UI — @-mention alone does not wake CR reliably; see `reference_paperclip_inbox_lite.md`).
+- [x] **Formal reassign to CodeReviewer** with status=todo for plan review (PATCH via paperclip API or UI — @-mention alone does not wake CR reliably; see `reference_paperclip_inbox_lite.md`).
 
 **Acceptance:** Branch pushed, plan file on branch, CR assigned, status todo.
 
@@ -90,17 +90,17 @@ git push -u origin feature/GIM-34-palace-memory-paperclip
 
 Verify the 4 plan-first compliance items (from `paperclips/fragments/shared/fragments/plan-first-review.md`):
 
-- [ ] Plan file exists at `docs/superpowers/plans/2026-04-17-GIM-34-palace-memory-paperclip.md` on branch `feature/GIM-34-palace-memory-paperclip` — cite exact commit SHA.
-- [ ] PR description will reference this plan file — note as requirement for Phase 3 (PR not yet opened).
-- [ ] All `- [ ]` checkboxes are actionable and present — scan for `TODO` / `TBD` / placeholder text.
-- [ ] Plan not diverging from scope in spec — cross-check Phase 2 against spec §5/§6/§7/§9 sections.
+- [x] Plan file exists at `docs/superpowers/plans/2026-04-17-GIM-34-palace-memory-paperclip.md` on branch `feature/GIM-34-palace-memory-paperclip` — cite exact commit SHA.
+- [x] PR description will reference this plan file — note as requirement for Phase 3 (PR not yet opened).
+- [x] All `- [x]` checkboxes are actionable and present — scan for `TODO` / `TBD` / placeholder text.
+- [x] Plan not diverging from scope in spec — cross-check Phase 2 against spec §5/§6/§7/§9 sections.
 
 Then verify plan completeness:
 
-- [ ] Every file to be created/modified appears in exactly one step.
-- [ ] Each implementation step has acceptance criteria.
-- [ ] Out-of-scope items from spec §10 do not appear in plan (no Graphiti, no NL query, no GitHub extractor, etc.).
-- [ ] All 9 MUST-FIX from GIM-33 review appear as explicit acceptance items (verify each: Cypher parameterization, `related` typing, `execute_read`, httpx + python-json-logger deps, `PAPERCLIP_INGEST_API_KEY`, idempotency note, mcp/mcp[cli] split, `mypy --strict` in acceptance, `author_name: str | None`).
+- [x] Every file to be created/modified appears in exactly one step.
+- [x] Each implementation step has acceptance criteria.
+- [x] Out-of-scope items from spec §10 do not appear in plan (no Graphiti, no NL query, no GitHub extractor, etc.).
+- [x] All 9 MUST-FIX from GIM-33 review appear as explicit acceptance items (verify each: Cypher parameterization, `related` typing, `execute_read`, httpx + python-json-logger deps, `PAPERCLIP_INGEST_API_KEY`, idempotency note, mcp/mcp[cli] split, `mypy --strict` in acceptance, `author_name: str | None`).
 
 Post verdict comment per spec §9 format:
 
@@ -122,8 +122,8 @@ Post verdict comment per spec §9 format:
 ### Verdict: APPROVE | REQUEST CHANGES
 ```
 
-- [ ] On APPROVE, formal reassign back to MCPEngineer with status=todo for Phase 2.
-- [ ] On REQUEST CHANGES, formal reassign to CTO with status=todo; CTO revises plan, loops to Step 1.3.
+- [x] On APPROVE, formal reassign back to MCPEngineer with status=todo for Phase 2.
+- [x] On REQUEST CHANGES, formal reassign to CTO with status=todo; CTO revises plan, loops to Step 1.3.
 
 **Acceptance:** CR verdict posted, assignee + status correctly set for next phase.
 
@@ -139,8 +139,8 @@ All Phase 2 steps happen on branch `feature/GIM-34-palace-memory-paperclip`. MCP
 **Files:**
 - Modify: `services/palace-mcp/pyproject.toml`
 
-- [ ] Read current `pyproject.toml` on branch (has `mcp[cli]>=1.6` in `[project].dependencies`, `httpx>=0.28.0` in dev).
-- [ ] Change `[project].dependencies`:
+- [x] Read current `pyproject.toml` on branch (has `mcp[cli]>=1.6` in `[project].dependencies`, `httpx>=0.28.0` in dev).
+- [x] Change `[project].dependencies`:
 
 ```toml
 [project]
@@ -159,7 +159,7 @@ dependencies = [
 ]
 ```
 
-- [ ] Move `mcp[cli]` to `[tool.uv].dev-dependencies`:
+- [x] Move `mcp[cli]` to `[tool.uv].dev-dependencies`:
 
 ```toml
 [tool.uv]
@@ -174,9 +174,9 @@ dev-dependencies = [
 
 (Removed `httpx>=0.28.0` from dev — it's runtime now.)
 
-- [ ] Regenerate lockfile: `cd services/palace-mcp && uv sync`.
-- [ ] Verify: `uv run python -c "import httpx, pythonjsonlogger, mcp; print('OK')"` → prints OK.
-- [ ] Commit:
+- [x] Regenerate lockfile: `cd services/palace-mcp && uv sync`.
+- [x] Verify: `uv run python -c "import httpx, pythonjsonlogger, mcp; print('OK')"` → prints OK.
+- [x] Commit:
 
 ```bash
 git add services/palace-mcp/pyproject.toml services/palace-mcp/uv.lock
@@ -196,9 +196,9 @@ Co-Authored-By: Paperclip <noreply@paperclip.ing>"
 - Create: `services/palace-mcp/tests/memory/__init__.py` (empty)
 - Create: `services/palace-mcp/tests/ingest/__init__.py` (empty)
 
-- [ ] Create empty `__init__.py` in each new dir (package markers).
-- [ ] `uv run ruff check` + `uv run mypy --strict` — clean.
-- [ ] Commit:
+- [x] Create empty `__init__.py` in each new dir (package markers).
+- [x] `uv run ruff check` + `uv run mypy --strict` — clean.
+- [x] Commit:
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/memory services/palace-mcp/src/palace_mcp/ingest services/palace-mcp/tests/memory services/palace-mcp/tests/ingest
@@ -214,7 +214,7 @@ git commit -m "chore(palace-mcp): scaffold memory/ and ingest/ subpackages (GIM-
 - Create: `services/palace-mcp/src/palace_mcp/memory/logging_setup.py`
 - Create: `services/palace-mcp/tests/memory/test_logging_setup.py`
 
-- [ ] TDD — write failing test first at `tests/memory/test_logging_setup.py`:
+- [x] TDD — write failing test first at `tests/memory/test_logging_setup.py`:
 
 ```python
 import json
@@ -236,7 +236,7 @@ def test_json_logger_emits_structured_record(caplog: pytest.LogCaptureFixture) -
 
 Add `import pytest` at top. Run: `cd services/palace-mcp && uv run pytest tests/memory/test_logging_setup.py -v` → expected FAIL (`configure_json_logging` missing).
 
-- [ ] Implement `logging_setup.py`:
+- [x] Implement `logging_setup.py`:
 
 ```python
 """JSON structured logging configuration.
@@ -271,9 +271,9 @@ def configure_json_logging(level: int = logging.INFO) -> None:
     root.setLevel(level)
 ```
 
-- [ ] Run test → PASS.
-- [ ] `uv run ruff check` + `uv run mypy --strict` clean.
-- [ ] Commit:
+- [x] Run test → PASS.
+- [x] `uv run ruff check` + `uv run mypy --strict` clean.
+- [x] Commit:
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/memory/logging_setup.py services/palace-mcp/tests/memory/test_logging_setup.py
@@ -289,7 +289,7 @@ git commit -m "feat(palace-mcp): JSON structured logging helper (GIM-34)"
 - Create: `services/palace-mcp/src/palace_mcp/memory/schema.py`
 - Create: `services/palace-mcp/tests/memory/test_schema.py`
 
-- [ ] TDD — write failing test `tests/memory/test_schema.py`:
+- [x] TDD — write failing test `tests/memory/test_schema.py`:
 
 ```python
 import pytest
@@ -343,7 +343,7 @@ def test_health_response_shape() -> None:
 
 Run: `uv run pytest tests/memory/test_schema.py -v` → FAIL (imports missing).
 
-- [ ] Implement `schema.py`:
+- [x] Implement `schema.py`:
 
 ```python
 """Pydantic v2 schemas for palace-memory MCP tools.
@@ -396,9 +396,9 @@ class HealthResponse(BaseModel):
     last_ingest_errors: list[str] = Field(default_factory=list)
 ```
 
-- [ ] Run test → PASS.
-- [ ] `ruff + mypy --strict` clean.
-- [ ] Commit:
+- [x] Run test → PASS.
+- [x] `ruff + mypy --strict` clean.
+- [x] Commit:
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/memory/schema.py services/palace-mcp/tests/memory/test_schema.py
@@ -414,7 +414,7 @@ git commit -m "feat(palace-mcp): memory tool schemas (GIM-34)"
 - Create: `services/palace-mcp/src/palace_mcp/ingest/paperclip_client.py`
 - Create: `services/palace-mcp/tests/ingest/test_paperclip_client.py`
 
-- [ ] TDD — test with `httpx.MockTransport`:
+- [x] TDD — test with `httpx.MockTransport`:
 
 ```python
 import httpx
@@ -450,7 +450,7 @@ async def test_list_comments_for_issue(monkeypatch: pytest.MonkeyPatch) -> None:
 
 Run: `uv run pytest tests/ingest/test_paperclip_client.py -v` → FAIL.
 
-- [ ] Implement `paperclip_client.py`:
+- [x] Implement `paperclip_client.py`:
 
 ```python
 """Async HTTP client for paperclip's public API.
@@ -524,9 +524,9 @@ class PaperclipClient:
         return []
 ```
 
-- [ ] Run tests → PASS.
-- [ ] `ruff + mypy --strict` clean.
-- [ ] Commit:
+- [x] Run tests → PASS.
+- [x] `ruff + mypy --strict` clean.
+- [x] Commit:
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/ingest/paperclip_client.py services/palace-mcp/tests/ingest/test_paperclip_client.py
@@ -542,7 +542,7 @@ git commit -m "feat(palace-mcp): paperclip async HTTP client (GIM-34)"
 - Create: `services/palace-mcp/src/palace_mcp/ingest/transform.py`
 - Create: `services/palace-mcp/tests/ingest/test_transform.py`
 
-- [ ] TDD — test first:
+- [x] TDD — test first:
 
 ```python
 from palace_mcp.ingest.transform import (
@@ -603,7 +603,7 @@ def test_transform_agent_basic() -> None:
 
 Run → FAIL.
 
-- [ ] Implement `transform.py`:
+- [x] Implement `transform.py`:
 
 ```python
 """Map paperclip API DTOs to Neo4j node property dicts.
@@ -666,8 +666,8 @@ def transform_agent(agent: dict[str, Any], *, run_started: str) -> dict[str, Any
     }
 ```
 
-- [ ] Tests green. `ruff + mypy --strict` clean.
-- [ ] Commit:
+- [x] Tests green. `ruff + mypy --strict` clean.
+- [x] Commit:
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/ingest/transform.py services/palace-mcp/tests/ingest/test_transform.py
@@ -684,7 +684,7 @@ git commit -m "feat(palace-mcp): paperclip DTO → Neo4j props transform (GIM-34
 - Create: `services/palace-mcp/src/palace_mcp/memory/constraints.py`
 - Create: `services/palace-mcp/tests/memory/test_constraints.py` (if testcontainers not available, mark as integration-skipped by default)
 
-- [ ] Create `cypher.py` as a module of string constants — all Cypher queries live here in one place for audit:
+- [x] Create `cypher.py` as a module of string constants — all Cypher queries live here in one place for audit:
 
 ```python
 """Cypher query strings. Parameters use $name syntax — never string
@@ -800,7 +800,7 @@ RETURN type, count
 """
 ```
 
-- [ ] Create `constraints.py`:
+- [x] Create `constraints.py`:
 
 ```python
 """Idempotent constraint assertion. Called from FastAPI lifespan or
@@ -818,7 +818,7 @@ async def ensure_constraints(driver: AsyncDriver) -> None:
             await session.run(stmt)  # type: ignore[func-returns-value]
 ```
 
-- [ ] Tests for `cypher.py` — parameterization audit using AST introspection (detects f-string constants and `.format()` calls on query constants; does NOT check for raw `{` which is valid Cypher syntax for property maps; `GC_BY_LABEL` is excluded — its `.format(label=...)` uses a closed tuple `("Issue", "Comment", "Agent")`, not user input):
+- [x] Tests for `cypher.py` — parameterization audit using AST introspection (detects f-string constants and `.format()` calls on query constants; does NOT check for raw `{` which is valid Cypher syntax for property maps; `GC_BY_LABEL` is excluded — its `.format(label=...)` uses a closed tuple `("Issue", "Comment", "Agent")`, not user input):
 
 ```python
 # tests/memory/test_cypher_parameterization.py
@@ -860,8 +860,8 @@ def test_queries_use_dollar_params() -> None:
 
 Run → PASS (assuming queries are clean — this is a regression guard).
 
-- [ ] `ruff + mypy --strict` clean.
-- [ ] Commit:
+- [x] `ruff + mypy --strict` clean.
+- [x] Commit:
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/memory/cypher.py services/palace-mcp/src/palace_mcp/memory/constraints.py services/palace-mcp/tests/memory/test_cypher_parameterization.py
@@ -878,7 +878,7 @@ git commit -m "feat(palace-mcp): Cypher queries + constraint assertion (GIM-34)"
 - Create: `services/palace-mcp/src/palace_mcp/ingest/runner.py` (orchestration logic — pure function, testable)
 - Create: `services/palace-mcp/tests/ingest/test_runner.py`
 
-- [ ] Implement `runner.py` (extracted from CLI to keep I/O and orchestration separable):
+- [x] Implement `runner.py` (extracted from CLI to keep I/O and orchestration separable):
 
 ```python
 """Ingest orchestrator. Fetches from paperclip, transforms, upserts via
@@ -1021,7 +1021,7 @@ async def run_ingest(*, client: PaperclipClient, driver: AsyncDriver, source: st
     }
 ```
 
-- [ ] Implement `paperclip.py` CLI:
+- [x] Implement `paperclip.py` CLI:
 
 ```python
 """CLI entrypoint: python -m palace_mcp.ingest.paperclip"""
@@ -1072,7 +1072,7 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] Tests for runner in `test_runner.py` — use `httpx.MockTransport` for client + a fake Neo4j driver (pytest-asyncio + Neo4j testcontainer if available; otherwise mock):
+- [x] Tests for runner in `test_runner.py` — use `httpx.MockTransport` for client + a fake Neo4j driver (pytest-asyncio + Neo4j testcontainer if available; otherwise mock):
 
 ```python
 # test_runner.py — integration-style; use testcontainers if available.
@@ -1083,8 +1083,8 @@ if __name__ == "__main__":
 
 (If testcontainers-neo4j is not in dev-deps, mock the driver surface: `AsyncDriver.session()`, `session.execute_write(fn, *args, **kw)`. Verify call order via `unittest.mock.AsyncMock`.)
 
-- [ ] `ruff + mypy --strict` clean.
-- [ ] Commit:
+- [x] `ruff + mypy --strict` clean.
+- [x] Commit:
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/ingest/paperclip.py services/palace-mcp/src/palace_mcp/ingest/runner.py services/palace-mcp/tests/ingest/test_runner.py
@@ -1100,7 +1100,7 @@ git commit -m "feat(palace-mcp): ingest orchestrator + CLI (GIM-34)"
 - Create: `services/palace-mcp/src/palace_mcp/memory/filters.py`
 - Create: `services/palace-mcp/tests/memory/test_filters.py`
 
-- [ ] TDD — test first:
+- [x] TDD — test first:
 
 ```python
 from palace_mcp.memory.filters import resolve_filters
@@ -1137,7 +1137,7 @@ def test_agent_whitelist_enforced() -> None:
     assert unknown == ["foo"]
 ```
 
-- [ ] Implement `filters.py`:
+- [x] Implement `filters.py`:
 
 ```python
 """Filter whitelist + Cypher WHERE-clause synthesis.
@@ -1198,8 +1198,8 @@ def resolve_filters(
     return where_clauses, params, unknown
 ```
 
-- [ ] Tests green. `ruff + mypy --strict` clean.
-- [ ] Commit:
+- [x] Tests green. `ruff + mypy --strict` clean.
+- [x] Commit:
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/memory/filters.py services/palace-mcp/tests/memory/test_filters.py
@@ -1216,7 +1216,7 @@ git commit -m "feat(palace-mcp): filter whitelist resolver (GIM-34)"
 - Modify: `services/palace-mcp/src/palace_mcp/mcp_server.py` (register tool)
 - Create: `services/palace-mcp/tests/memory/test_lookup.py`
 
-- [ ] Implement `lookup.py`:
+- [x] Implement `lookup.py`:
 
 ```python
 """palace.memory.lookup implementation.
@@ -1367,7 +1367,7 @@ async def perform_lookup(driver: AsyncDriver, req: LookupRequest) -> LookupRespo
     return LookupResponse(items=items, total_matched=total, query_ms=query_ms)
 ```
 
-- [ ] Register tool in `mcp_server.py`. Add at the bottom of the file:
+- [x] Register tool in `mcp_server.py`. Add at the bottom of the file:
 
 ```python
 # --- memory tools (GIM-34) ---
@@ -1393,7 +1393,7 @@ async def palace_memory_lookup(request: LookupRequest) -> LookupResponse:
 
 (Note: imports placed at bottom to match the pattern of adding tools without reorganizing existing imports; the `# noqa: E402` lines silence lint for deliberate late-import. MCPEngineer may choose to hoist to top — minor style choice.)
 
-- [ ] Write lookup test `test_lookup.py` — minimal unit test for `_build_query` (query-shape snapshot) and a mocked-driver integration:
+- [x] Write lookup test `test_lookup.py` — minimal unit test for `_build_query` (query-shape snapshot) and a mocked-driver integration:
 
 ```python
 from palace_mcp.memory.lookup import _build_query
@@ -1407,8 +1407,8 @@ def test_build_query_contains_entity_label_and_limit() -> None:
     assert "$status" in q
 ```
 
-- [ ] `ruff + mypy --strict` clean.
-- [ ] Commit:
+- [x] `ruff + mypy --strict` clean.
+- [x] Commit:
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/memory/lookup.py services/palace-mcp/src/palace_mcp/mcp_server.py services/palace-mcp/tests/memory/test_lookup.py
@@ -1425,7 +1425,7 @@ git commit -m "feat(palace-mcp): palace.memory.lookup tool (GIM-34)"
 - Modify: `services/palace-mcp/src/palace_mcp/mcp_server.py` (already imported at Step 2.10 — just ensure registration follows)
 - Create: `services/palace-mcp/tests/memory/test_health.py`
 
-- [ ] Implement `health.py`:
+- [x] Implement `health.py`:
 
 ```python
 """palace.memory.health implementation — counts + last IngestRun."""
@@ -1475,7 +1475,7 @@ async def perform_health(driver: AsyncDriver) -> HealthResponse:
     )
 ```
 
-- [ ] Register tool in `mcp_server.py` (append after the lookup registration):
+- [x] Register tool in `mcp_server.py` (append after the lookup registration):
 
 ```python
 @_mcp.tool(
@@ -1488,9 +1488,9 @@ async def palace_memory_health() -> HealthResponse:
     return await perform_health(_driver)
 ```
 
-- [ ] Write `test_health.py` — minimum: mock driver returning no ingest run, verify response shape.
-- [ ] `ruff + mypy --strict` clean.
-- [ ] Commit:
+- [x] Write `test_health.py` — minimum: mock driver returning no ingest run, verify response shape.
+- [x] `ruff + mypy --strict` clean.
+- [x] Commit:
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/memory/health.py services/palace-mcp/src/palace_mcp/mcp_server.py services/palace-mcp/tests/memory/test_health.py
@@ -1505,7 +1505,7 @@ git commit -m "feat(palace-mcp): palace.memory.health tool (GIM-34)"
 **Files:**
 - Modify: `services/palace-mcp/src/palace_mcp/main.py`
 
-- [ ] In `main.py`, add constraint assertion + JSON logging setup to `lifespan`:
+- [x] In `main.py`, add constraint assertion + JSON logging setup to `lifespan`:
 
 ```python
 # At top:
@@ -1517,10 +1517,10 @@ from palace_mcp.memory.logging_setup import configure_json_logging
     await ensure_constraints(driver)
 ```
 
-- [ ] `uv run pytest` → all tests green.
-- [ ] `uv run ruff check` + `uv run mypy --strict` → clean.
-- [ ] Verify Docker build: `docker compose build palace-mcp` (run locally or on iMac).
-- [ ] Commit:
+- [x] `uv run pytest` → all tests green.
+- [x] `uv run ruff check` + `uv run mypy --strict` → clean.
+- [x] Verify Docker build: `docker compose build palace-mcp` (run locally or on iMac).
+- [x] Commit:
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/main.py
@@ -1534,12 +1534,12 @@ git commit -m "feat(palace-mcp): wire constraints + json logging in lifespan (GI
 **Owner:** MCPEngineer.
 **Depends on:** all Step 2.x committed + pushed.
 
-- [ ] `git push origin feature/GIM-34-palace-memory-paperclip`
-- [ ] Open PR against `develop`:
+- [x] `git push origin feature/GIM-34-palace-memory-paperclip`
+- [x] Open PR against `develop`:
   - Title: `feat(palace-mcp): palace.memory tools + paperclip ingest (GIM-34)`
   - Body: link to plan file + spec file, short summary of changes per Step, acceptance checklist (copy from Phase 4 below to be filled by QA).
-- [ ] Post comment in paperclip issue linking to PR URL.
-- [ ] Formal reassign to CodeReviewer with status=todo.
+- [x] Post comment in paperclip issue linking to PR URL.
+- [x] Formal reassign to CodeReviewer with status=todo.
 
 **Acceptance:** PR open; CI running; CR notified via formal reassign.
 
@@ -1554,24 +1554,24 @@ git commit -m "feat(palace-mcp): wire constraints + json logging in lifespan (GI
 
 Run CR's full compliance table including all 9 MUST-FIX checkpoints from GIM-33. Cite exact file:line for each finding. Required table items:
 
-- [ ] **Spec §3** — `PAPERCLIP_INGEST_API_KEY` used in `ingest/paperclip.py`, not run-scoped JWT.
-- [ ] **Spec §3** — `pyproject.toml` has `mcp>=1.6` (not `mcp[cli]`) in `[project].dependencies`; `mcp[cli]` only in dev.
-- [ ] **Spec §3** — `httpx` and `python-json-logger` in `[project].dependencies`.
-- [ ] **Spec §5.1** — `LookupResponseItem.related` typed `dict[str, dict[str, Any] | list[dict[str, Any]] | None]`, not bare `dict`.
-- [ ] **Spec §5.1** — `author_name: str | None` surfaces nullability in Comment `related`.
-- [ ] **Spec §5.1** — Cypher queries contain zero string interpolation for user values (`%` and `{...}`-format absent from parameter positions; label substitution only for whitelisted `Issue|Comment|Agent`).
-- [ ] **Spec §5.1** — Lookup uses `session.execute_read()`, not `session.run()` or `execute_write()`.
-- [ ] **Spec §6.2** — Transaction functions passed to `execute_write` are idempotent (MERGE-only, no side effects outside the transaction function body).
-- [ ] **Spec §9** — `uv run mypy --strict` green in CI.
+- [x] **Spec §3** — `PAPERCLIP_INGEST_API_KEY` used in `ingest/paperclip.py`, not run-scoped JWT.
+- [x] **Spec §3** — `pyproject.toml` has `mcp>=1.6` (not `mcp[cli]`) in `[project].dependencies`; `mcp[cli]` only in dev.
+- [x] **Spec §3** — `httpx` and `python-json-logger` in `[project].dependencies`.
+- [x] **Spec §5.1** — `LookupResponseItem.related` typed `dict[str, dict[str, Any] | list[dict[str, Any]] | None]`, not bare `dict`.
+- [x] **Spec §5.1** — `author_name: str | None` surfaces nullability in Comment `related`.
+- [x] **Spec §5.1** — Cypher queries contain zero string interpolation for user values (`%` and `{...}`-format absent from parameter positions; label substitution only for whitelisted `Issue|Comment|Agent`).
+- [x] **Spec §5.1** — Lookup uses `session.execute_read()`, not `session.run()` or `execute_write()`.
+- [x] **Spec §6.2** — Transaction functions passed to `execute_write` are idempotent (MERGE-only, no side effects outside the transaction function body).
+- [x] **Spec §9** — `uv run mypy --strict` green in CI.
 
 Plus plan-first compliance (`plan-first-review.md`):
-- [ ] Plan file exists + PR description links to it.
-- [ ] Plan steps reflect actual PR (any deviations must be committed as plan-diff before PR merges).
-- [ ] Unknown filter key handling: warning logged + value ignored, no Cypher path.
+- [x] Plan file exists + PR description links to it.
+- [x] Plan steps reflect actual PR (any deviations must be committed as plan-diff before PR merges).
+- [x] Unknown filter key handling: warning logged + value ignored, no Cypher path.
 
 Plus anti-rubber-stamp (`compliance-enforcement.md`):
-- [ ] Every acceptance criterion in §9 of the spec has a corresponding test or explicit verification in the PR.
-- [ ] CI green on all four jobs (lint, typecheck, test, docker-build) — cite SHAs.
+- [x] Every acceptance criterion in §9 of the spec has a corresponding test or explicit verification in the PR.
+- [x] CI green on all four jobs (lint, typecheck, test, docker-build) — cite SHAs.
 
 Verdict: `APPROVE | REQUEST CHANGES`. On APPROVE → formal reassign to OpusArchitectReviewer (if GIM-30 wiring done) or skip to QAEngineer (Step 4.1). On REQUEST CHANGES → formal reassign to MCPEngineer with specific file:line feedback.
 
@@ -1582,11 +1582,11 @@ Verdict: `APPROVE | REQUEST CHANGES`. On APPROVE → formal reassign to OpusArch
 
 Docs-first pass via `context7` — fetch current docs for every non-trivial SDK use and cite URL per finding:
 
-- [ ] Neo4j async driver session/transaction discipline (`execute_read` vs `execute_write` vs `run`).
-- [ ] FastMCP tool registration + `Context` parameter use (note inherited tech debt from GIM-23 if absent — not a blocker per spec §10).
-- [ ] Pydantic v2 `model_validate` vs raw dict construction.
-- [ ] `httpx.AsyncClient` lifecycle (context-manager, transport override for tests).
-- [ ] MCP Python SDK tool schema generation from Pydantic models.
+- [x] Neo4j async driver session/transaction discipline (`execute_read` vs `execute_write` vs `run`).
+- [x] FastMCP tool registration + `Context` parameter use (note inherited tech debt from GIM-23 if absent — not a blocker per spec §10).
+- [x] Pydantic v2 `model_validate` vs raw dict construction.
+- [x] `httpx.AsyncClient` lifecycle (context-manager, transport override for tests).
+- [x] MCP Python SDK tool schema generation from Pydantic models.
 
 Verdict: `APPROVE | NUDGE | REQUEST REDESIGN`. NUDGE findings are advisory; REQUEST REDESIGN blocks merge.
 
@@ -1594,9 +1594,9 @@ Verdict: `APPROVE | NUDGE | REQUEST REDESIGN`. NUDGE findings are advisory; REQU
 
 **Owner:** MCPEngineer (with CR re-review each round).
 
-- [ ] Fix each CRITICAL finding in its own commit with a message citing the finding reference (e.g., `fix(palace-mcp): cypher parameterization in cypher.py:42 (CR CRITICAL #1)`).
-- [ ] Push + request CR re-review via formal reassign.
-- [ ] Repeat until CR posts APPROVE without CRITICAL.
+- [x] Fix each CRITICAL finding in its own commit with a message citing the finding reference (e.g., `fix(palace-mcp): cypher parameterization in cypher.py:42 (CR CRITICAL #1)`).
+- [x] Push + request CR re-review via formal reassign.
+- [x] Repeat until CR posts APPROVE without CRITICAL.
 
 ---
 
@@ -1607,53 +1607,53 @@ Verdict: `APPROVE | NUDGE | REQUEST REDESIGN`. NUDGE findings are advisory; REQU
 **Owner:** QAEngineer.
 **Depends on:** Step 3.1 APPROVE (+ Step 3.2 if invoked).
 
-- [ ] Ensure on iMac: `cd /Users/Shared/Ios/Gimle-Palace && git fetch origin && git checkout feature/GIM-34-palace-memory-paperclip`
-- [ ] Stop existing compose stack: `docker compose --profile full down`
-- [ ] Rebuild: `docker compose --profile full build palace-mcp`
-- [ ] Start: `docker compose --profile full up -d`
-- [ ] Wait for `/healthz` green: `curl -fsS http://localhost:8080/healthz` returns `{"status":"ok","neo4j":"reachable"}`.
-- [ ] Verify JSON logging: `docker compose logs palace-mcp | jq 'select(.event != null) | .event' | head` — expect `ingest.*`/`query.*` events absent until first ingest/query, but logs parseable as JSON.
+- [x] Ensure on iMac: `cd /Users/Shared/Ios/Gimle-Palace && git fetch origin && git checkout feature/GIM-34-palace-memory-paperclip`
+- [x] Stop existing compose stack: `docker compose --profile full down`
+- [x] Rebuild: `docker compose --profile full build palace-mcp`
+- [x] Start: `docker compose --profile full up -d`
+- [x] Wait for `/healthz` green: `curl -fsS http://localhost:8080/healthz` returns `{"status":"ok","neo4j":"reachable"}`.
+- [x] Verify JSON logging: `docker compose logs palace-mcp | jq 'select(.event != null) | .event' | head` — expect `ingest.*`/`query.*` events absent until first ingest/query, but logs parseable as JSON.
 
 **Acceptance:** compose up green, health endpoint green, logs are JSON.
 
 ### Step 4.2: Ingest + health smoke
 
-- [ ] Run ingest: `docker compose exec palace-mcp python -m palace_mcp.ingest.paperclip`
-- [ ] Verify exit code 0 and log events: `ingest.start → ingest.fetch.* → ingest.upsert → ingest.gc → ingest.finish`.
-- [ ] Connect a real MCP client (Claude Desktop, Cursor, or mcp Python SDK) to `palace-mcp` `/mcp` using the existing GIM-23 config.
-- [ ] Call `palace.memory.health`. Expect:
+- [x] Run ingest: `docker compose exec palace-mcp python -m palace_mcp.ingest.paperclip`
+- [x] Verify exit code 0 and log events: `ingest.start → ingest.fetch.* → ingest.upsert → ingest.gc → ingest.finish`.
+- [x] Connect a real MCP client (Claude Desktop, Cursor, or mcp Python SDK) to `palace-mcp` `/mcp` using the existing GIM-23 config.
+- [x] Call `palace.memory.health`. Expect:
   - `neo4j_reachable: true`
   - `entity_counts.Issue ≥ 1`, `Comment ≥ 1`, `Agent ≥ 1`
   - `last_ingest_started_at`, `last_ingest_finished_at`, `last_ingest_duration_ms` populated
   - `last_ingest_errors: []`
 
-- [ ] Attach screenshot or curl-equivalent to the PR as comment.
+- [x] Attach screenshot or curl-equivalent to the PR as comment.
 
 ### Step 4.3: Lookup smoke + timestamp check
 
-- [ ] Call `palace.memory.lookup(entity_type="Issue", filters={"status":"done"}, limit=5)`.
-- [ ] Verify response:
+- [x] Call `palace.memory.lookup(entity_type="Issue", filters={"status":"done"}, limit=5)`.
+- [x] Verify response:
   - `items` non-empty.
   - Each item has `properties.source_created_at`, `properties.source_updated_at`, `properties.palace_last_seen_at` — all non-null ISO-8601 strings.
   - `related.assignee` either `null` or `{id, name, url_key}` shape.
   - `related.comments` a list (possibly empty).
   - `total_matched` ≥ `len(items)`.
   - `query_ms` reasonable.
-- [ ] Call with unknown filter: `filters={"bogus":"x"}`. Expect `items` filtered by remaining keys (or all if no other keys), and JSON log line `{"event":"query.lookup.unknown_filter","filter_key":"bogus"}` visible in `docker compose logs`.
-- [ ] Attach call + response samples + log snippet to PR.
+- [x] Call with unknown filter: `filters={"bogus":"x"}`. Expect `items` filtered by remaining keys (or all if no other keys), and JSON log line `{"event":"query.lookup.unknown_filter","filter_key":"bogus"}` visible in `docker compose logs`.
+- [x] Attach call + response samples + log snippet to PR.
 
 ### Step 4.4: Idempotency + deletion propagation
 
-- [ ] Re-run ingest: `docker compose exec palace-mcp python -m palace_mcp.ingest.paperclip` (no paperclip changes between runs).
-- [ ] Call `palace.memory.health` — `entity_counts` identical to Step 4.2 run.
-- [ ] Query one specific issue's `palace_last_seen_at` — verify it advanced to the new run's start time.
-- [ ] Hide or delete a test issue in paperclip (prefer hide — reversible). Re-run ingest. Verify the issue is absent from `palace.memory.lookup` results.
-- [ ] Un-hide the issue in paperclip. Re-run ingest. Verify issue returns.
-- [ ] Attach evidence to PR.
+- [x] Re-run ingest: `docker compose exec palace-mcp python -m palace_mcp.ingest.paperclip` (no paperclip changes between runs).
+- [x] Call `palace.memory.health` — `entity_counts` identical to Step 4.2 run.
+- [x] Query one specific issue's `palace_last_seen_at` — verify it advanced to the new run's start time.
+- [x] Hide or delete a test issue in paperclip (prefer hide — reversible). Re-run ingest. Verify the issue is absent from `palace.memory.lookup` results.
+- [x] Un-hide the issue in paperclip. Re-run ingest. Verify issue returns.
+- [x] Attach evidence to PR.
 
 ### Step 4.5: Post smoke evidence + verdict
 
-- [ ] Compile PR comment with:
+- [x] Compile PR comment with:
   - Compose build + up outcome.
   - Ingest run log excerpt.
   - Health tool response.
@@ -1662,8 +1662,8 @@ Verdict: `APPROVE | NUDGE | REQUEST REDESIGN`. NUDGE findings are advisory; REQU
   - Deletion propagation proof.
   - Verdict: `QA PASS` or `QA BLOCKER: ...`.
 
-- [ ] On QA PASS → formal reassign to MCPEngineer with status=todo for merge.
-- [ ] On QA BLOCKER → formal reassign to MCPEngineer with status=todo; findings comment with exact reproduction.
+- [x] On QA PASS → formal reassign to MCPEngineer with status=todo for merge.
+- [x] On QA BLOCKER → formal reassign to MCPEngineer with status=todo; findings comment with exact reproduction.
 
 ---
 
@@ -1673,8 +1673,8 @@ Verdict: `APPROVE | NUDGE | REQUEST REDESIGN`. NUDGE findings are advisory; REQU
 
 **Owner:** MCPEngineer.
 
-- [ ] On feature branch, edit the plan file in `docs/superpowers/plans/`:
-  - All phase/step `- [ ]` → `- [x]`.
+- [x] On feature branch, edit the plan file in `docs/superpowers/plans/`:
+  - All phase/step `- [x]` → `- [x]`.
   - Any deviations in scope: commit a plan-diff commit before merge so CR can verify no silent scope creep.
 
 ```bash
@@ -1685,9 +1685,9 @@ git push origin feature/GIM-34-palace-memory-paperclip
 
 ### Step 5.2: Squash-merge to develop
 
-- [ ] On GitHub PR: **Squash merge** (single commit lands on `develop`).
-- [ ] Delete the feature branch after merge.
-- [ ] Verify: `git log origin/develop --oneline -1` shows the squash commit.
+- [x] On GitHub PR: **Squash merge** (single commit lands on `develop`).
+- [x] Delete the feature branch after merge.
+- [x] Verify: `git log origin/develop --oneline -1` shows the squash commit.
 
 ### Step 5.3: Close issue with acceptance evidence
 
@@ -1731,8 +1731,8 @@ Post a final comment on the paperclip issue:
 - N+1: Graphiti service (brainstorm already in progress on main — spec TBD)
 ```
 
-- [ ] PATCH status=done on the paperclip issue.
-- [ ] Release assignee (optional).
+- [x] PATCH status=done on the paperclip issue.
+- [x] Release assignee (optional).
 
 **Acceptance:** issue closed, evidence table posted, followups filed as separate issues where needed.
 
@@ -1740,12 +1740,12 @@ Post a final comment on the paperclip issue:
 
 ## Cross-cutting acceptance (this whole plan closes when)
 
-- [ ] Phase 0: `PAPERCLIP_INGEST_API_KEY` provisioned.
-- [ ] Phase 1: Issue + branch + plan committed; CR plan-first APPROVE.
-- [ ] Phase 2: All 13 implementation steps committed; CI green on the feature branch head.
-- [ ] Phase 3: CR mechanical APPROVE; Opus NUDGE (or skipped); any CRITICAL iterated to resolution.
-- [ ] Phase 4: QA smoke PASS with evidence attached to PR.
-- [ ] Phase 5: Squash-merged to `develop`; issue closed with acceptance table.
+- [x] Phase 0: `PAPERCLIP_INGEST_API_KEY` provisioned.
+- [x] Phase 1: Issue + branch + plan committed; CR plan-first APPROVE.
+- [x] Phase 2: All 13 implementation steps committed; CI green on the feature branch head.
+- [x] Phase 3: CR mechanical APPROVE; Opus NUDGE (or skipped); any CRITICAL iterated to resolution.
+- [x] Phase 4: QA smoke PASS with evidence attached to PR.
+- [x] Phase 5: Squash-merged to `develop`; issue closed with acceptance table.
 
 ## Estimated size
 
