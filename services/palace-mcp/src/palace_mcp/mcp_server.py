@@ -19,7 +19,9 @@ from neo4j import AsyncDriver
 from pydantic import BaseModel
 from starlette.applications import Starlette
 
+from palace_mcp.memory.health import get_health
 from palace_mcp.memory.lookup import perform_lookup
+from palace_mcp.memory.schema import HealthResponse as MemoryHealthResponse
 from palace_mcp.memory.schema import LookupRequest, LookupResponse
 
 logger = logging.getLogger(__name__)
@@ -96,4 +98,19 @@ async def palace_memory_lookup(
         order_by=order_by,
     )
     resp: LookupResponse = await perform_lookup(_driver, req)
+    return resp.model_dump()
+
+
+@_mcp.tool(
+    name="palace.memory.health",
+    description=(
+        "Return Neo4j entity counts (Issue/Comment/Agent) and the latest ingest run metadata. "
+        "Use to verify data freshness before running palace.memory.lookup."
+    ),
+)
+async def palace_memory_health() -> dict[str, Any]:
+    """Return knowledge-graph health: entity counts and last ingest run."""
+    if _driver is None:
+        return {"error": {"code": "driver_unavailable", "message": "Neo4j driver not initialised"}}
+    resp: MemoryHealthResponse = await get_health(_driver)
     return resp.model_dump()
