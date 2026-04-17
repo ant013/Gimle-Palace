@@ -25,8 +25,8 @@
 **Deps:** none.  
 **Files:** branch only.
 
-- [ ] `git fetch origin && git checkout -b feature/GIM-30-opus-review-integration origin/develop`
-- [ ] Confirm branch has no uncommitted state: `git status` → clean tree.
+- [x] `git fetch origin && git checkout -b feature/GIM-30-opus-review-integration origin/develop`
+- [x] Confirm branch has no uncommitted state: `git status` → clean tree.
 
 **Acceptance:** Branch `feature/GIM-30-opus-review-integration` exists locally, tracks `origin/develop`, working tree clean.
 
@@ -35,9 +35,9 @@
 **Deps:** Step 1.1.  
 **Files:** `docs/superpowers/plans/2026-04-16-GIM-30-opus-review-integration.md` (create).
 
-- [ ] Copy this plan body verbatim (from issue document) to the repo file.
-- [ ] Keep internal Paperclip links (`/GIM/...`) as-is for now — they resolve inside Paperclip UI.
-- [ ] Commit: `docs(plans): add GIM-30 Opus review integration implementation plan` + `Co-Authored-By: Paperclip <noreply@paperclip.ing>`.
+- [x] Copy this plan body verbatim (from issue document) to the repo file.
+- [x] Keep internal Paperclip links (`/GIM/...`) as-is for now — they resolve inside Paperclip UI.
+- [x] Commit: `docs(plans): add GIM-30 Opus review integration implementation plan` + `Co-Authored-By: Paperclip <noreply@paperclip.ing>`.
 
 **Acceptance:** File exists on branch, contents match issue `plan` document, commit present.
 
@@ -84,7 +84,7 @@ File MUST contain these sections (style must match existing `code-reviewer.md` f
   - Subagents: `voltagent-qa-sec:architect-reviewer`, `voltagent-qa-sec:code-reviewer` (for checks Sonnet tier skipped), `pr-review-toolkit:type-design-analyzer`, `pr-review-toolkit:silent-failure-hunter`.
   - Skills: `pr-review-toolkit:review-pr`, `superpowers:verification-before-completion`.
 - **Escalation:** If CTO authored the plan Opus is reviewing → escalate disagreement directly to Board (bypass CTO). Never suppress CRITICAL finding under deadline pressure.
-- **Included fragments (required):** `escalation-blocked.md`, `git-workflow.md`, `worktree-discipline.md`, `heartbeat-discipline.md`, `language.md` — match CodeReviewer layout.
+- **Included fragments (convention, not GIM-30 scope):** Use `<!-- @include fragments/shared/fragments/*.md -->` comments for `escalation-blocked.md`, `git-workflow.md`, `worktree-discipline.md`, `heartbeat-discipline.md`, `language.md` — matching CodeReviewer layout. **Note:** These are currently comment placeholders (same as in `code-reviewer.md`); the actual fragment files under `paperclips/fragments/shared/` do not exist as separate files — the content is inlined. Creating the fragment directory/files is pre-existing debt, not in-scope for GIM-30.
 
 **Acceptance:** File exists, lints clean against project markdown style, all required sections present, fragments included.
 
