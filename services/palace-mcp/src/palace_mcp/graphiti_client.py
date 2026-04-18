@@ -1,7 +1,7 @@
 """Graphiti instance factory.
 
 Constructs a graphiti-core Graphiti client from IngestSettings using
-OpenAIGenericClient + OpenAIEmbedder against an OpenAI-compat endpoint
+OpenAIClient + OpenAIEmbedder against an OpenAI-compat endpoint
 (works for external Ollama, Alibaba DashScope, OpenAI, Voyage, Cohere).
 
 LLM client is required by Graphiti() constructor but never invoked in N+1a
@@ -13,7 +13,7 @@ from __future__ import annotations
 from graphiti_core import Graphiti
 from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
 from graphiti_core.llm_client.config import LLMConfig
-from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
+from graphiti_core.llm_client.openai_client import OpenAIClient
 
 from palace_mcp.config import IngestSettings, Settings
 
@@ -23,7 +23,7 @@ def build_graphiti(settings: IngestSettings | Settings) -> Graphiti:
 
     Caller is responsible for ``await graphiti.close()`` when done.
     """
-    llm_client = OpenAIGenericClient(
+    llm_client = OpenAIClient(
         config=LLMConfig(
             api_key=settings.effective_llm_api_key.get_secret_value(),
             model=settings.llm_model,
