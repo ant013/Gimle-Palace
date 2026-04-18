@@ -38,7 +38,8 @@ CALL () {
 UPSERT_AGENTS = """
 UNWIND $batch AS row
 MERGE (a:Agent {id: row.id})
-SET a.name                 = row.name,
+SET a.group_id             = $group_id,
+    a.name                 = row.name,
     a.url_key              = row.url_key,
     a.role                 = row.role,
     a.source               = 'paperclip',
@@ -50,7 +51,8 @@ SET a.name                 = row.name,
 UPSERT_ISSUES = """
 UNWIND $batch AS row
 MERGE (i:Issue {id: row.id})
-SET i.key                  = row.key,
+SET i.group_id             = $group_id,
+    i.key                  = row.key,
     i.title                = row.title,
     i.description          = row.description,
     i.status               = row.status,
@@ -70,7 +72,8 @@ MERGE (i)-[:ASSIGNED_TO]->(a)
 UPSERT_COMMENTS = """
 UNWIND $batch AS row
 MERGE (c:Comment {id: row.id})
-SET c.body                 = row.body,
+SET c.group_id             = $group_id,
+    c.body                 = row.body,
     c.source               = 'paperclip',
     c.source_created_at    = row.source_created_at,
     c.source_updated_at    = row.source_updated_at,
