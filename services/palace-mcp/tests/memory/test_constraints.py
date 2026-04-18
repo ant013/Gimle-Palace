@@ -103,3 +103,29 @@ async def test_ensure_schema_bootstrap_idempotent(live_driver: Any) -> None:
             )
         ).single()
     assert row1["t"] == row2["t"], "source_created_at must be preserved"
+
+
+# ---------------------------------------------------------------------------
+# Task 4 integration tests — integrity invariant
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_ensure_schema_fails_on_unregistered_group_id(live_driver: Any) -> None:
+    """If any Issue/Comment/Agent/IngestRun has a group_id with no :Project,
+    ensure_schema raises a clear error."""
+    from palace_mcp.memory.constraints import SchemaIntegrityError
+
+    async with live_driver.session() as s:
+        await s.run(
+            "CREATE (:Issue {id: 'stray-t4', group_id: 'project/unregistered-t4', "
+            "source: 'paperclip', palace_last_seen_at: '1970'})"
+        )
+
+    try:
+        with pytest.raises(SchemaIntegrityError, match="unregistered"):
+            await ensure_schema(live_driver, default_group_id="project/test-bootstrap")
+    finally:
+        async with live_driver.session() as s:
+            await s.run("MATCH (n {id: 'stray-t4'}) DETACH DELETE n")

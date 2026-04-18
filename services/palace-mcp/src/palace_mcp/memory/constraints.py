@@ -13,6 +13,7 @@ from palace_mcp.memory.cypher import (
     BACKFILL_GROUP_ID,
     CREATE_CONSTRAINTS,
     CREATE_INDEXES,
+    UNREGISTERED_GROUP_IDS,
     UPSERT_PROJECT,
 )
 
@@ -44,4 +45,15 @@ async def ensure_schema(driver: AsyncDriver, *, default_group_id: str) -> None:
             framework=None,
             repo_url=None,
             now=now,
+        )
+
+    async with driver.session() as session:
+        result = await session.run(UNREGISTERED_GROUP_IDS)
+        row = await result.single()
+        unregistered = row["unregistered"] if row else []
+
+    if unregistered:
+        raise SchemaIntegrityError(
+            f"group_ids present on entities but no matching :Project: "
+            f"{sorted(unregistered)}. Register via palace.memory.register_project."
         )

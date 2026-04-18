@@ -170,6 +170,16 @@ WHERE (n:Issue OR n:Comment OR n:Agent OR n:IngestRun)
 RETURN labels(n) AS labels, count(n) AS c
 """
 
+UNREGISTERED_GROUP_IDS = """
+MATCH (n)
+WHERE (n:Issue OR n:Comment OR n:Agent OR n:IngestRun)
+WITH DISTINCT n.group_id AS g
+WHERE g IS NOT NULL AND NOT EXISTS {
+    MATCH (p:Project) WHERE p.group_id = g
+}
+RETURN collect(g) AS unregistered
+"""
+
 PROJECT_LAST_INGEST = """
 MATCH (r:IngestRun {source: $source})
 WHERE r.group_id = $group_id
