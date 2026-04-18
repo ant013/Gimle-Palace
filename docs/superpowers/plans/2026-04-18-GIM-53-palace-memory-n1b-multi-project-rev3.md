@@ -28,7 +28,7 @@ FastMCP, pytest.
 git fetch origin
 git checkout develop
 git pull --ff-only
-git checkout -b feature/GIM-NN-palace-memory-n1b-multi-project
+git checkout -b feature/GIM-53-palace-memory-n1b-multi-project
 ```
 
 Replace `NN` with the issue number CTO assigns in Phase 1.1.
@@ -90,7 +90,7 @@ And append to `CREATE_INDEXES`:
 ```bash
 git add services/palace-mcp/src/palace_mcp/memory/cypher.py \
         services/palace-mcp/tests/memory/test_schema_ddl.py
-git commit -m "feat(schema): :Project slug constraint + group_id index (GIM-NN)"
+git commit -m "feat(schema): :Project slug constraint + group_id index (GIM-53)"
 ```
 
 ---
@@ -201,7 +201,7 @@ class ProjectInfo(BaseModel):
 git add services/palace-mcp/src/palace_mcp/memory/cypher.py \
         services/palace-mcp/src/palace_mcp/memory/schema.py \
         services/palace-mcp/tests/memory/test_project_cypher.py
-git commit -m "feat(schema): UPSERT_PROJECT cypher + ProjectInfo model (GIM-NN)"
+git commit -m "feat(schema): UPSERT_PROJECT cypher + ProjectInfo model (GIM-53)"
 ```
 
 ---
@@ -295,7 +295,7 @@ async def ensure_schema(driver: AsyncDriver, *, default_group_id: str) -> None:
 - [ ] **Step 5: Commit**
 
 ```bash
-git commit -am "feat(schema): ensure_schema bootstraps default :Project idempotently (GIM-NN)"
+git commit -am "feat(schema): ensure_schema bootstraps default :Project idempotently (GIM-53)"
 ```
 
 ---
@@ -369,7 +369,7 @@ fresh install with GIM-52-stamped data (only `project/gimle`) self-heals.
 - [ ] **Step 5: Commit**
 
 ```bash
-git commit -am "feat(schema): integrity check — every entity group_id has :Project (GIM-NN)"
+git commit -am "feat(schema): integrity check — every entity group_id has :Project (GIM-53)"
 ```
 
 ---
@@ -507,7 +507,7 @@ async def resolve_group_ids(
 ```bash
 git add services/palace-mcp/src/palace_mcp/memory/projects.py \
         services/palace-mcp/tests/memory/test_projects.py
-git commit -m "feat(projects): resolve_group_ids + UnknownProjectError (GIM-NN)"
+git commit -m "feat(projects): resolve_group_ids + UnknownProjectError (GIM-53)"
 ```
 
 ---
@@ -555,7 +555,7 @@ response — see existing warning-response pattern (GIM-37).
 - [ ] **Step 5: Commit**
 
 ```bash
-git commit -am "feat(lookup): project param with IN \$group_ids WHERE (GIM-NN)"
+git commit -am "feat(lookup): project param with IN \$group_ids WHERE (GIM-53)"
 ```
 
 ---
@@ -613,7 +613,7 @@ In `get_health`: after existing count query, query
 - [ ] **Step 5: Commit**
 
 ```bash
-git commit -am "feat(health): projects + per-project counts, total preserved (GIM-NN)"
+git commit -am "feat(health): projects + per-project counts, total preserved (GIM-53)"
 ```
 
 ---
@@ -712,7 +712,7 @@ Wire into `mcp_server.py` as tool `palace.memory.register_project`.
 - [ ] **Step 5: Commit**
 
 ```bash
-git commit -am "feat(mcp): register_project tool, idempotent upsert (GIM-NN)"
+git commit -am "feat(mcp): register_project tool, idempotent upsert (GIM-53)"
 ```
 
 ---
@@ -806,7 +806,7 @@ Wire both into `mcp_server.py`.
 - [ ] **Step 5: Commit**
 
 ```bash
-git commit -am "feat(mcp): list_projects + get_project_overview with counts (GIM-NN)"
+git commit -am "feat(mcp): list_projects + get_project_overview with counts (GIM-53)"
 ```
 
 ---
@@ -854,7 +854,7 @@ to the slug of `settings.palace_default_group_id`.
 - [ ] **Step 5: Commit**
 
 ```bash
-git commit -am "feat(ingest): --project-slug flag with :Project validation (GIM-NN)"
+git commit -am "feat(ingest): --project-slug flag with :Project validation (GIM-53)"
 ```
 
 ---
@@ -888,7 +888,7 @@ async def test_lookup_default_project_byte_stable(live_driver):
 - [ ] **Step 4: Commit**
 
 ```bash
-git commit -am "test: byte-stable lookup response with project=None (GIM-NN)"
+git commit -am "test: byte-stable lookup response with project=None (GIM-53)"
 ```
 
 ---
@@ -938,7 +938,7 @@ async def test_medic_registration_and_isolation(live_driver):
 - [ ] **Step 3: Commit**
 
 ```bash
-git commit -am "test(integration): multi-project scoping + isolation (GIM-NN)"
+git commit -am "test(integration): multi-project scoping + isolation (GIM-53)"
 ```
 
 ---
