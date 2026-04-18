@@ -105,6 +105,7 @@ DETACH DELETE n
 CREATE_INGEST_RUN = """
 CREATE (r:IngestRun {
     id: $id,
+    group_id: $group_id,
     source: $source,
     started_at: $started_at,
     finished_at: null,
@@ -122,6 +123,14 @@ SET r.finished_at = $finished_at,
 
 LATEST_INGEST_RUN = """
 MATCH (r:IngestRun {source: $source})
+RETURN r
+ORDER BY r.started_at DESC
+LIMIT 1
+"""
+
+LATEST_INGEST_RUN_FOR_GROUP = """
+MATCH (r:IngestRun {source: $source})
+WHERE r.group_id = $group_id
 RETURN r
 ORDER BY r.started_at DESC
 LIMIT 1
