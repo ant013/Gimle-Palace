@@ -11,7 +11,7 @@ from neo4j import AsyncDriver, AsyncGraphDatabase
 from starlette.applications import Starlette
 
 from palace_mcp.config import Settings
-from palace_mcp.mcp_server import build_mcp_asgi_app, set_driver
+from palace_mcp.mcp_server import build_mcp_asgi_app, set_default_group_id, set_driver
 from palace_mcp.memory.constraints import ensure_schema
 from palace_mcp.memory.logging_setup import configure_json_logging
 
@@ -55,6 +55,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
     app.state.neo4j = driver
     set_driver(driver)
+    set_default_group_id(settings.palace_default_group_id)
     # Patterns #5 + #11: schema migration is fire-and-forget.
     # Race window: backfill runs in <1s for ~213 nodes; palace-mcp starts
     # behind compose healthcheck so MCP clients only connect after healthy.
