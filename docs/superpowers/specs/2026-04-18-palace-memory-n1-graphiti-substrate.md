@@ -1,5 +1,21 @@
 # Palace Memory — N+1 Graphiti substrate + multi-project scoping
 
+> **⚠️ STATUS: REJECTED (2026-04-18) — DO NOT IMPLEMENT**
+>
+> Board adversarial review identified 5 hallucinated graphiti-core API claims (methods that don't exist or have different names), 4 logical inconsistencies (double-indexing, bi-temporal theatre, 22-stub YAGNI violation, non-atomic slice), and 6 operational/security issues (no agent auth, no embed change-detection, multi-MCP write-boundary leak).
+>
+> This document is preserved as historical artifact. Replaced by three atomic sub-slices:
+> - `TBD — N+1a Graphiti substrate swap`
+> - `TBD — N+1b Multi-project + :Project entity`
+> - `TBD — N+1c Agent MCP + record_note + provider choice`
+>
+> Prerequisite for rewrite: hands-on graphiti-core API verification spike (see `docs/research/graphiti-core-verification.md`).
+>
+> Rewrite blocked until GIM-30 (OpusArchitectReviewer wiring) operational — docs-first adversarial pass via context7 would have caught the 5 API-hallucination failures pre-review.
+>
+> ---
+
+
 **Date:** 2026-04-18
 **Slice:** N+1 in the palace.memory.* product roadmap
 **Author:** Board (via brainstorming session with Claude Opus 4.7, extended with extractor-library research detour)
