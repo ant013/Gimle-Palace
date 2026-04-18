@@ -308,7 +308,152 @@ These need a 30-min local poke before N+1c implementation:
 
 These are implementation-time concerns, not spec blockers. MCPEngineer validates during 2.1 of plan-file.
 
-## 5. Conclusion
+## 5. Extended verification (2026-04-18, second adversarial review)
+
+After the first round of rewrites produced three atomic N+1 specs (a/b/c), a second adversarial review flagged 9 additional API assumptions. All verified below via context7; **several collapse the architecture further**.
+
+### A. `services/graphiti/` as separate compose service — NOT JUSTIFIED
+
+`graphiti-core` is a pure Python library (`from graphiti_core import Graphiti`). There is no runtime daemon requirement. The REJECTED spec's separate service was scaffold, not necessity.
+
+**Decision:** collapse. Import `graphiti-core` directly into `palace-mcp`. Saves ~100 LOC + compose service + healthcheck + depends_on chain. All "internal RPC" endpoints in N+1a §6.1 become method calls in Python.
+
+### B. `graphiti_core.mcp_server` — SEPARATE SUBPROJECT, not importable module
+
+From `mcp_server/README.md`:
+```json
+{
+  "transport": "stdio",
+  "command": "/Users/<user>/.local/bin/uv",
+  "args": ["run", "--directory", ".../graphiti/mcp_server", "main.py"]
+}
+```
+And Docker image `zepai/graphiti` (FastAPI REST server, a separate subproject in `server/`). The MCP server is yet another subproject. Neither is importable from `graphiti_core`.
+
+**Decision:** do NOT use official mcp_server. Build our own thin MCP wrapper inside `palace-mcp` using FastMCP, exposing tools that call `graphiti.nodes.entity.save`, `graphiti.edges.entity.save`, `graphiti.search_`, etc. FastAPI middleware for auth works natively. Single process hosts both external-client API (:8080 palace-mcp curated tools) and agent API (:8002 graphiti-style raw tools). No reverse-proxy, no second container.
+
+### C. `group_id` storage in Neo4j — inconclusive, mitigation available
+
+graphiti-core ships `delete_by_group_id`, `get_by_group_ids`, `save(node)` with `group_id` attribute. These APIs work. Direct Cypher `MATCH (n) WHERE n.group_id = $x` likely works too (most pragmatic Neo4j storage) but not explicitly confirmed.
+
+**Decision:** use graphiti-core API exclusively for group_id operations in N+1b. Project enumeration (`palace.memory.list_projects`) queries only known `:Project` nodes — which ARE first-class entities we always create via ingest. `project="*"` resolves to: fetch all `:Project` nodes via `graphiti.nodes.entity.get_by_group_ids(ALL_GROUP_IDS)` where `ALL_GROUP_IDS` is maintained as a registry file `projects/_registry.yaml` (list of project slugs) updated on `register_project` and ingest. No raw Cypher for enumeration.
+
+### D. Edge update (invalidate existing edge) — NATIVE API EXISTS
+
+From driver-operations-redesign.md spec:
+```python
+graphiti.edges.entity.save(edge)              # update existing edge by uuid
+graphiti.edges.entity.get_by_uuid("abc-123")
+graphiti.edges.entity.get_between_nodes(src_uuid, target_uuid)  # find existing edges
+```
+
+Pattern for N+1a `invalidate_stale_assignments`:
+```python
+existing = await graphiti.edges.entity.get_between_nodes(issue.uuid, old_agent.uuid)
+for edge in existing:
+    if edge.name == "ASSIGNED_TO" and edge.invalid_at is None:
+        edge.invalid_at = run_started
+        await graphiti.edges.entity.save(edge)
+# then add new triplet for new assignment
+```
+
+**Decision:** bi-temporal demo in N+1a is NATIVE, no raw Cypher. Unblocks the claim that "ASSIGNED_TO invalidation is exercised."
+
+### E. `SearchFilters` — typed object, not kwargs
+
+```python
+from graphiti_core.search.search_filters import SearchFilters, DateFilter, ComparisonOperator
+
+SearchFilters(
+    node_labels=["Person", "Organization"],
+    edge_types=["WORKS_FOR"],
+    valid_at=[[DateFilter(date=..., comparison_operator=ComparisonOperator.greater_than_equal)]]
+)
+
+results = await graphiti.search_(query="...", config=NODE_HYBRID_SEARCH_RRF, search_filter=filter)
+```
+
+**Decision:** all spec code using `labels=["Issue"]` kwarg rewritten to `SearchFilters(node_labels=["Issue"])`.
+
+### F. Auto-prepend `:Entity` — CONFIRMED
+
+Runtime log from examples:
+```
+Extracted new nodes: [{'name': 'AI Assistant', 'labels': ['Entity', 'Speaker'], ...}]
+```
+User-provided `labels=["Speaker"]` became stored `labels=["Entity", "Speaker"]`. graphiti-core auto-prepends.
+
+**Decision:** remove `"Entity"` from all manual `labels=[...]` lists in specs. Write `labels=["Issue"]`, not `labels=["Issue", "Entity"]`.
+
+### G. Filter pushdown path for `palace.memory.lookup`
+
+For structured lookup (`entity_type="Issue"`, `filters={"status":"done"}`):
+- **Label filter pushdown:** use `SearchFilters(node_labels=["Issue"])` + `graphiti.search_(query=None, config=NODE_HYBRID_SEARCH_RRF, search_filter=filter, ...)` — OR use `get_by_group_ids` and filter labels in Python (labels are on every returned node).
+- **Attribute filter (status=done):** no native graphiti API; filter in Python over the result set. Acceptable at current scale (31 issues); O(n) documented.
+
+**Decision:** use `get_by_group_ids(group_ids=[f"project/{slug}"])` + Python-level filter by labels AND attribute values for `palace.memory.lookup`. Document O(n) constraint. When extractor data scales, migrate to `search_` with `SearchFilters` (label-pushdown) + Python attribute filter, or consider custom Cypher helper as documented exception.
+
+### H. Namespace API path
+
+```python
+graphiti = Graphiti(uri, user, password, llm_client=..., embedder=...)
+
+await graphiti.nodes.entity.save(node)                        # upsert EntityNode (triggers embed)
+await graphiti.nodes.entity.get_by_uuid("abc-123")
+await graphiti.nodes.entity.get_by_group_ids(["project/gimle"])
+await graphiti.nodes.entity.delete_by_group_id("project/gimle")
+
+await graphiti.edges.entity.save(edge)
+await graphiti.edges.entity.get_between_nodes(src_uuid, target_uuid)
+await graphiti.edges.entity.get_by_node_uuid(node_uuid)       # all edges touching this node
+
+await graphiti.nodes.episode.retrieve_episodes(reference_time, last_n=5)
+
+async with graphiti.driver.transaction() as tx:
+    await graphiti.nodes.entity.save(node1, tx=tx)
+    await graphiti.nodes.entity.save(node2, tx=tx)
+```
+
+**Decision:** all spec code uses namespace paths (`graphiti.nodes.entity.*`, `graphiti.edges.entity.*`).
+
+### I. Search recipes
+
+```python
+from graphiti_core.search.search_config_recipes import (
+    NODE_HYBRID_SEARCH_RRF,
+    EDGE_HYBRID_SEARCH_CROSS_ENCODER,
+    COMBINED_HYBRID_SEARCH_CROSS_ENCODER,
+)
+
+results = await graphiti.search_(query="...", config=NODE_HYBRID_SEARCH_RRF.model_copy(deep=True))
+# .nodes, .edges, .communities
+```
+
+For `palace.memory.search(query, project)`: use `NODE_HYBRID_SEARCH_RRF` (RRF reranking combines vector + fulltext) with `SearchFilters(node_labels=["Issue", "Comment", "Note"])` and `group_ids=resolved_project_slugs`.
+
+**Decision:** adopt high-level `graphiti.search_()` API with recipes. Avoid hand-rolling `node_similarity_search` at the low level — recipes give RRF hybrid out-of-box.
+
+### J. Embedding dim mismatch — API-confirmed need for safety
+
+No native detection. Must add ourselves:
+- `embedding_dim` stored in `:Project` node attributes as `embedding_provider_config_hash`.
+- Health tool compares current provider config hash vs per-project stored hash; mismatch → `embedding_dim_mismatch_count` > 0 + warning.
+- `just reset-embeddings` CLI: iterates project nodes, calls `graphiti.nodes.entity.delete_by_group_id(...)` + re-runs ingest with new provider.
+
+## 6. Final design collapse (summary for N+1a/b/c rewrite)
+
+1. **No `services/graphiti/` service.** graphiti-core imported into palace-mcp directly.
+2. **No `zepai/graphiti` MCP server container.** palace-mcp hosts both external API (:8080) and agent API (:8002) — both FastMCP apps in the same process, different middleware stacks (external: no auth; agent: X-Agent-Token + allowed_group_ids).
+3. **No raw Cypher in ingest.** Edge update via `graphiti.edges.entity.save()`, GC via `graphiti.nodes.entity.delete_by_uuids` (after enumerating orphans via `get_by_group_ids` + Python-level `palace_last_seen_at < cutoff` filter).
+4. **Project enumeration via registry + graphiti API.** `projects/_registry.yaml` lists all known slugs; `list_projects` iterates and calls `graphiti.nodes.entity.get_by_group_ids([f"project/{slug}"])` filtering for `:Project` label. No raw Cypher.
+5. **Search via high-level `graphiti.search_()` + `NODE_HYBRID_SEARCH_RRF` recipe.** Native RRF reranking; `SearchFilters(node_labels=[...])` for label pushdown.
+6. **Labels minus :Entity.** All `labels=[...]` lists drop the explicit `"Entity"` (auto-prepended).
+7. **Bi-temporal demo in N+1a is genuine.** Native `edges.entity.save(edge)` with updated `invalid_at`, not raw Cypher, not theatre.
+8. **Per-agent token → allowed_group_ids map in middleware.** `.palace/agent-token-map.yaml`: `{"<token>": {"agent_id": "...", "allowed_group_ids": ["project/gimle"]}}`. 5 LOC middleware check.
+9. **Embedding dim mismatch detection** via provider config hash on `:Project` attributes + health check.
+10. **Deploy listener:** HMAC-SHA256 signature (secret = GitHub App private key, not plain shared secret) + healthcheck-based auto-rollback (if health fails after up, revert to prev SHA + alert).
+
+## 7. Conclusion
 
 All 5 critical claims from the REJECTED spec are confirmed wrong. graphiti-core's actual API is **simpler and more elegant** than what the REJECTED spec assumed:
 
