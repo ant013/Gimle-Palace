@@ -7,11 +7,12 @@ from importlib.metadata import version
 from typing import Annotated, cast
 
 from fastapi import Depends, FastAPI, Request, Response
+from neo4j import AsyncDriver, AsyncGraphDatabase
 from starlette.applications import Starlette
 
 from palace_mcp.config import Settings
-from palace_mcp.graphiti_client import build_graphiti
-from palace_mcp.mcp_server import build_mcp_asgi_app, set_graphiti
+from palace_mcp.mcp_server import build_mcp_asgi_app, set_driver
+from palace_mcp.memory.constraints import ensure_constraints
 from palace_mcp.memory.logging_setup import configure_json_logging
 
 # Build once at module level so lifespan can be wired in below.
@@ -36,7 +37,7 @@ def _fire_and_forget(coro: Coroutine[None, None, None]) -> None:
         _background_tasks.discard(t)
         if not t.cancelled() and t.exception() is not None:
             logger.error(
-                "background task failed: %s",
+                "ensure_constraints background task failed: %s",
                 t.exception(),
                 exc_info=t.exception(),
             )
@@ -47,18 +48,24 @@ def _fire_and_forget(coro: Coroutine[None, None, None]) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     configure_json_logging()
+    # Pattern #6: read config via Settings (defaults present — no KeyError).
     settings = Settings()
-    graphiti = build_graphiti(settings)
-    app.state.graphiti = graphiti
-    set_graphiti(graphiti, embedder_base_url=settings.embedding_base_url)
+    driver = AsyncGraphDatabase.driver(
+        settings.neo4j_uri, auth=("neo4j", settings.neo4j_password.get_secret_value())
+    )
+    app.state.neo4j = driver
+    set_driver(driver)
+    # Patterns #5 + #11: schema migration check is fire-and-forget.
+    # A slow/unavailable Neo4j must not block startup or cause SIGKILL.
+    _fire_and_forget(ensure_constraints(driver))
     # Run the MCP sub-app lifespan so StreamableHTTPSessionManager task group is initialized.
     async with _mcp_asgi_app.router.lifespan_context(_mcp_asgi_app):
         yield
-    await graphiti.close()
+    await driver.close()
 
 
-async def get_graphiti(request: Request):  # type: ignore[no-untyped-def]
-    return cast("object", request.app.state.graphiti)
+async def get_neo4j(request: Request) -> AsyncDriver:
+    return cast(AsyncDriver, request.app.state.neo4j)
 
 
 def create_app() -> FastAPI:
@@ -70,14 +77,9 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     @app.get("/healthz")
-    async def healthz(
-        graphiti: Annotated[object, Depends(get_graphiti)],
-    ) -> Response:
-        from graphiti_core import Graphiti  # local to avoid circular at module level
-
+    async def healthz(driver: Annotated[AsyncDriver, Depends(get_neo4j)]) -> Response:
         try:
-            if isinstance(graphiti, Graphiti):
-                await graphiti.driver.verify_connectivity()
+            await driver.verify_connectivity()
             return Response(
                 content='{"status":"ok","neo4j":"reachable"}',
                 media_type="application/json",

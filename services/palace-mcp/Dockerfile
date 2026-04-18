@@ -31,11 +31,6 @@ RUN adduser --disabled-password --gecos "" appuser
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/src /app/src
 
-# graphiti-core LLMClient.__init__ unconditionally creates Cache("./llm_cache")
-# via diskcache, even when cache=False. WORKDIR /app is root-owned, so appuser
-# needs a writable subdir. Pre-create it with the right ownership.
-RUN mkdir -p /app/llm_cache && chown -R appuser:appuser /app/llm_cache
-
 USER appuser
 
 CMD ["uvicorn", "palace_mcp.main:app", "--host", "0.0.0.0", "--port", "8000"]
