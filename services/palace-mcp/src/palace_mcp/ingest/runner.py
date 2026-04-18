@@ -22,6 +22,7 @@ from palace_mcp.ingest.transform import (
     transform_issue,
 )
 from palace_mcp.memory import cypher
+from palace_mcp.memory.projects import UnknownProjectError
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +103,14 @@ async def run_ingest(
     started_monotonic = time.monotonic()
     errors: list[str] = []
     finished_at = started_at
+
+    # Validate :Project exists before writing anything.
+    slug = group_id.removeprefix("project/")
+    async with driver.session() as session:
+        result = await session.run(cypher.GET_PROJECT, slug=slug)
+        row = await result.single()
+    if row is None:
+        raise UnknownProjectError(slug)
 
     logger.info("ingest.start", extra={"source": source, "run_id": run_id})
 

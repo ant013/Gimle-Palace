@@ -26,6 +26,10 @@ async def _amain(args: argparse.Namespace) -> int:
     neo4j_uri = settings.neo4j_uri
     neo4j_password = settings.neo4j_password.get_secret_value()
 
+    default_slug = settings.palace_default_group_id.removeprefix("project/")
+    project_slug = args.project_slug or default_slug
+    group_id = f"project/{project_slug}"
+
     driver = AsyncGraphDatabase.driver(neo4j_uri, auth=("neo4j", neo4j_password))
     try:
         await ensure_schema(driver, default_group_id=settings.palace_default_group_id)
@@ -35,7 +39,7 @@ async def _amain(args: argparse.Namespace) -> int:
             result = await run_ingest(
                 client=client,
                 driver=driver,
-                group_id=settings.palace_default_group_id,
+                group_id=group_id,
             )
         return 0 if not result["errors"] else 1
     finally:
@@ -49,6 +53,10 @@ def main() -> None:
     )
     parser.add_argument(
         "--company-id", default=None, help="Default: $PAPERCLIP_COMPANY_ID"
+    )
+    parser.add_argument(
+        "--project-slug", default=None,
+        help="Project slug to ingest into. Default: slug of $PALACE_DEFAULT_GROUP_ID",
     )
     args = parser.parse_args()
     sys.exit(asyncio.run(_amain(args)))
