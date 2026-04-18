@@ -30,3 +30,11 @@ def test_latest_ingest_run_accepts_optional_group_filter() -> None:
     from palace_mcp.memory.cypher import LATEST_INGEST_RUN_FOR_GROUP
 
     assert "r.group_id = $group_id" in LATEST_INGEST_RUN_FOR_GROUP
+
+
+def test_gc_by_label_filters_by_group_id() -> None:
+    from palace_mcp.memory.cypher import GC_BY_LABEL
+
+    assert "n.group_id = $group_id" in GC_BY_LABEL
+    assert "n.source = 'paperclip'" in GC_BY_LABEL
+    assert "n.palace_last_seen_at < $cutoff" in GC_BY_LABEL

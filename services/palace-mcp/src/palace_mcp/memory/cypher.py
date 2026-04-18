@@ -97,7 +97,10 @@ MERGE (c)-[:AUTHORED_BY]->(a)
 # {label} is substituted by a closed tuple ("Issue", "Comment", "Agent") in runner.py,
 # NOT user input. Labels are hardcoded; this is intentional.
 GC_BY_LABEL = """
-MATCH (n:{label}) WHERE n.source = 'paperclip' AND n.palace_last_seen_at < $cutoff
+MATCH (n:{label})
+WHERE n.source = 'paperclip'
+  AND n.group_id = $group_id
+  AND n.palace_last_seen_at < $cutoff
 DETACH DELETE n
 """
 
