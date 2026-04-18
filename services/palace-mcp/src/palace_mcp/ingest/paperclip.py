@@ -11,7 +11,7 @@ from neo4j import AsyncGraphDatabase
 from palace_mcp.config import IngestSettings
 from palace_mcp.ingest.paperclip_client import PaperclipClient
 from palace_mcp.ingest.runner import run_ingest
-from palace_mcp.memory.constraints import ensure_constraints
+from palace_mcp.memory.constraints import ensure_schema
 from palace_mcp.memory.logging_setup import configure_json_logging
 
 
@@ -28,11 +28,15 @@ async def _amain(args: argparse.Namespace) -> int:
 
     driver = AsyncGraphDatabase.driver(neo4j_uri, auth=("neo4j", neo4j_password))
     try:
-        await ensure_constraints(driver)
+        await ensure_schema(driver, default_group_id=settings.palace_default_group_id)
         async with PaperclipClient(
             base_url=base_url, token=token, company_id=company_id
         ) as client:
-            result = await run_ingest(client=client, driver=driver)
+            result = await run_ingest(
+                client=client,
+                driver=driver,
+                group_id=settings.palace_default_group_id,
+            )
         return 0 if not result["errors"] else 1
     finally:
         await driver.close()

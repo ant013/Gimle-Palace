@@ -31,34 +31,45 @@ def _utcnow_iso() -> str:
 
 
 async def _write_upsert_agents(
-    tx: AsyncManagedTransaction, batch: list[dict[str, Any]]
+    tx: AsyncManagedTransaction, batch: list[dict[str, Any]], *, group_id: str
 ) -> None:
-    await tx.run(cypher.UPSERT_AGENTS, batch=batch)
+    await tx.run(cypher.UPSERT_AGENTS, batch=batch, group_id=group_id)
 
 
 async def _write_upsert_issues(
-    tx: AsyncManagedTransaction, batch: list[dict[str, Any]]
+    tx: AsyncManagedTransaction, batch: list[dict[str, Any]], *, group_id: str
 ) -> None:
-    await tx.run(cypher.UPSERT_ISSUES, batch=batch)
+    await tx.run(cypher.UPSERT_ISSUES, batch=batch, group_id=group_id)
 
 
 async def _write_upsert_comments(
-    tx: AsyncManagedTransaction, batch: list[dict[str, Any]]
+    tx: AsyncManagedTransaction, batch: list[dict[str, Any]], *, group_id: str
 ) -> None:
-    await tx.run(cypher.UPSERT_COMMENTS, batch=batch)
+    await tx.run(cypher.UPSERT_COMMENTS, batch=batch, group_id=group_id)
 
 
-async def _write_gc(tx: AsyncManagedTransaction, *, label: str, cutoff: str) -> None:
+async def _write_gc(
+    tx: AsyncManagedTransaction, *, label: str, cutoff: str, group_id: str
+) -> None:
     # Label is whitelisted (Issue|Comment|Agent) — not user input.
     query = cypher.GC_BY_LABEL.format(label=label)
-    await tx.run(query, cutoff=cutoff)
+    await tx.run(query, cutoff=cutoff, group_id=group_id)
 
 
 async def _write_create_ingest_run(
-    tx: AsyncManagedTransaction, *, run_id: str, started_at: str, source: str
+    tx: AsyncManagedTransaction,
+    *,
+    run_id: str,
+    started_at: str,
+    source: str,
+    group_id: str,
 ) -> None:
     await tx.run(
-        cypher.CREATE_INGEST_RUN, id=run_id, started_at=started_at, source=source
+        cypher.CREATE_INGEST_RUN,
+        id=run_id,
+        started_at=started_at,
+        source=source,
+        group_id=group_id,
     )
 
 
@@ -80,7 +91,11 @@ async def _write_finalize_ingest_run(
 
 
 async def run_ingest(
-    *, client: PaperclipClient, driver: AsyncDriver, source: str = "paperclip"
+    *,
+    client: PaperclipClient,
+    driver: AsyncDriver,
+    source: str = "paperclip",
+    group_id: str,
 ) -> dict[str, Any]:
     run_id = str(uuid.uuid4())
     started_at = _utcnow_iso()
@@ -96,6 +111,7 @@ async def run_ingest(
             run_id=run_id,
             started_at=started_at,
             source=source,
+            group_id=group_id,
         )
 
     try:
@@ -125,7 +141,9 @@ async def run_ingest(
 
         async with driver.session() as session:
             t0 = time.monotonic()
-            await session.execute_write(_write_upsert_agents, agents_batch)
+            await session.execute_write(
+                _write_upsert_agents, agents_batch, group_id=group_id
+            )
             logger.info(
                 "ingest.upsert",
                 extra={
@@ -136,7 +154,9 @@ async def run_ingest(
             )
 
             t0 = time.monotonic()
-            await session.execute_write(_write_upsert_issues, issues_batch)
+            await session.execute_write(
+                _write_upsert_issues, issues_batch, group_id=group_id
+            )
             logger.info(
                 "ingest.upsert",
                 extra={
@@ -147,7 +167,9 @@ async def run_ingest(
             )
 
             t0 = time.monotonic()
-            await session.execute_write(_write_upsert_comments, comments_batch)
+            await session.execute_write(
+                _write_upsert_comments, comments_batch, group_id=group_id
+            )
             logger.info(
                 "ingest.upsert",
                 extra={
@@ -159,7 +181,9 @@ async def run_ingest(
 
             # GC only on clean success — partial failure leaves stale data.
             for label in ("Issue", "Comment", "Agent"):
-                await session.execute_write(_write_gc, label=label, cutoff=started_at)
+                await session.execute_write(
+                    _write_gc, label=label, cutoff=started_at, group_id=group_id
+                )
                 logger.info("ingest.gc", extra={"type": label})
     except Exception as e:  # noqa: BLE001 — re-raised after logging
         errors.append(f"{type(e).__name__}: {e}")
