@@ -1,0 +1,4 @@
+{
+  "_placeholder": true,
+  "_instructions": "Run: NEO4J_PASSWORD=... uv run python -c \"import asyncio, json; from palace_mcp.memory.lookup import perform_lookup; from palace_mcp.memory.schema import LookupRequest; from neo4j import AsyncGraphDatabase; async def main(): d=AsyncGraphDatabase.driver('bolt://localhost:7687', auth=('neo4j', 'PASSWORD')); r=await perform_lookup(d, LookupRequest(entity_type='Issue', limit=20), 'project/gimle'); print(json.dumps(r.model_dump(), indent=2)); await d.close(); asyncio.run(main())\" > tests/fixtures/lookup_issue_snapshot_n1b_compat.json"
+}
