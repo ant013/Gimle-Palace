@@ -10,6 +10,14 @@ CREATE_CONSTRAINTS = [
     "CREATE CONSTRAINT agent_id IF NOT EXISTS FOR (a:Agent) REQUIRE a.id IS UNIQUE",
 ]
 
+# --- Indexes (non-unique; speeds up group_id filter + GC cutoff) ---
+CREATE_INDEXES = [
+    "CREATE INDEX issue_group_id IF NOT EXISTS FOR (n:Issue) ON (n.group_id)",
+    "CREATE INDEX comment_group_id IF NOT EXISTS FOR (n:Comment) ON (n.group_id)",
+    "CREATE INDEX agent_group_id IF NOT EXISTS FOR (n:Agent) ON (n.group_id)",
+    "CREATE INDEX ingest_run_group_id IF NOT EXISTS FOR (n:IngestRun) ON (n.group_id)",
+]
+
 # --- Upserts (idempotent — safe to re-run on transient failure retry) ---
 UPSERT_AGENTS = """
 UNWIND $batch AS row
