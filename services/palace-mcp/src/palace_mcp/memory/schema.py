@@ -44,6 +44,7 @@ class HealthResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     neo4j_reachable: bool
+    embedder_reachable: bool = False
     entity_counts: dict[str, int]
     last_ingest_started_at: str | None = None
     last_ingest_finished_at: str | None = None

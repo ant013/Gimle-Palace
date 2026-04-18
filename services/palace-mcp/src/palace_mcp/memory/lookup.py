@@ -1,8 +1,10 @@
-"""palace.memory.lookup implementation.
+"""palace.memory.lookup — graphiti-core substrate (N+1a).
 
-- Filters resolved to parameterized Cypher WHERE clauses (filters.py).
-- Read queries via session.execute_read (managed read transaction).
-- Related-entity expansion one hop per entity type.
+Replaces Cypher queries with graphiti namespace API calls.
+Filter evaluation moved to Python layer; related-entity expansion
+via get_by_node_uuid edge traversal.
+
+Zero raw Cypher — spec §9 acceptance.
 """
 
 from __future__ import annotations
@@ -11,9 +13,10 @@ import logging
 import time
 from typing import Any
 
-from neo4j import AsyncDriver, AsyncManagedTransaction
+from graphiti_core import Graphiti
+from graphiti_core.nodes import EntityNode
 
-from palace_mcp.memory.filters import resolve_filters
+from palace_mcp.ingest.builders import GROUP_ID
 from palace_mcp.memory.schema import (
     EntityType,
     LookupRequest,
@@ -23,123 +26,234 @@ from palace_mcp.memory.schema import (
 
 logger = logging.getLogger(__name__)
 
-# One-hop related-entity fragments per entity type, returned in `related`.
-# Issue fragment uses a CALL subquery to traverse AUTHORED_BY per comment
-# so that author_name (nullable — human users are not Agent nodes) is included
-# per spec §5.1.
-_RELATED_FRAGMENTS: dict[EntityType, str] = {
-    "Issue": """
-        OPTIONAL MATCH (n)-[:ASSIGNED_TO]->(assignee:Agent)
-        CALL (n) {
-            OPTIONAL MATCH (c:Comment)-[:ON]->(n)
-            OPTIONAL MATCH (c)-[:AUTHORED_BY]->(author:Agent)
-            RETURN c, author
-            ORDER BY c.source_created_at DESC
-            LIMIT 50
-        }
-        WITH n, assignee,
-             collect(CASE WHEN c IS NULL THEN null ELSE {
-                 id: c.id, body: c.body,
-                 source_created_at: c.source_created_at,
-                 author_name: author.name
-             } END) AS comments_raw
-        WITH n, assignee,
-             [x IN comments_raw WHERE x IS NOT NULL] AS comments
-        RETURN n AS node,
-            CASE WHEN assignee IS NULL THEN null
-                 ELSE {id: assignee.id, name: assignee.name, url_key: assignee.url_key}
-            END AS assignee,
-            comments
-    """,
-    "Comment": """
-        OPTIONAL MATCH (n)-[:ON]->(issue:Issue)
-        OPTIONAL MATCH (n)-[:AUTHORED_BY]->(author:Agent)
-        RETURN
-            n AS node,
-            CASE WHEN issue IS NULL THEN null
-                 ELSE {id: issue.id, key: issue.key, title: issue.title, status: issue.status}
-            END AS issue,
-            CASE WHEN author IS NULL THEN null
-                 ELSE {id: author.id, name: author.name}
-            END AS author
-    """,
-    "Agent": "RETURN n AS node",
+# Keys that require edge-traversal for filtering (cannot be resolved from
+# node attributes alone). These produce a warning and are handled after
+# related-entity expansion.
+_EDGE_FILTER_KEYS: dict[EntityType, set[str]] = {
+    "Issue": {"assignee_name"},
+    "Comment": {"issue_key", "author_name"},
+    "Agent": set(),
+}
+
+# Direct attribute filter keys per entity type (Python attribute comparison).
+_DIRECT_FILTER_KEYS: dict[EntityType, set[str]] = {
+    "Issue": {"key", "status", "source_updated_at_gte", "source_updated_at_lte"},
+    "Comment": {"source_created_at_gte"},
+    "Agent": {"name", "url_key"},
 }
 
 
-def _build_query(
-    entity_type: EntityType, where_clauses: list[str], order_by: str, limit: int
-) -> str:
-    where = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
-    related = _RELATED_FRAGMENTS[entity_type]
-    # NOTE: order_by and limit are restricted to safe values by LookupRequest schema.
-    # order_by is a Literal union of known column names; limit is int 1-100.
-    return f"""
-        MATCH (n:{entity_type})
-        {where}
-        ORDER BY n.{order_by} DESC
-        LIMIT {limit}
-        CALL (n) {{
-            {related}
-        }}
-        RETURN *
-    """
+async def _get_node_safe(graphiti: Graphiti, uuid: str) -> EntityNode | None:
+    try:
+        return await graphiti.nodes.entity.get_by_uuid(uuid)
+    except (LookupError, ValueError, RuntimeError, KeyError):
+        return None
+    except Exception:  # noqa: BLE001 — graphiti may raise arbitrary types
+        return None
 
 
-def _count_query(entity_type: EntityType, where_clauses: list[str]) -> str:
-    where = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
-    return f"MATCH (n:{entity_type}) {where} RETURN count(n) AS c"
+def _node_properties(node: EntityNode) -> dict[str, Any]:
+    """Return a flat properties dict from node attributes (mirrors N+0 Cypher row)."""
+    props = dict(node.attributes)
+    # Ensure id is always present from uuid if not in attributes
+    props.setdefault("id", node.uuid)
+    return props
 
 
-async def perform_lookup(driver: AsyncDriver, req: LookupRequest) -> LookupResponse:
-    where_clauses, params, unknown = resolve_filters(req.entity_type, dict(req.filters))
-    for k in unknown:
-        logger.warning(
-            "query.lookup.unknown_filter",
-            extra={"entity_type": req.entity_type, "filter_key": k},
-        )
+async def _fetch_related_issue(
+    graphiti: Graphiti, node: EntityNode
+) -> dict[str, Any]:
+    edges = await graphiti.edges.entity.get_by_node_uuid(node.uuid)
+    assignee: dict[str, Any] | None = None
+    comments: list[dict[str, Any]] = []
 
-    query = _build_query(req.entity_type, where_clauses, req.order_by, req.limit)
-    count_query = _count_query(req.entity_type, where_clauses)
+    for edge in edges:
+        if edge.invalid_at is not None:
+            continue
 
+        if edge.name == "ASSIGNED_TO" and edge.source_node_uuid == node.uuid:
+            if assignee is None:  # first valid ASSIGNED_TO wins
+                agent_node = await _get_node_safe(graphiti, edge.target_node_uuid)
+                if agent_node:
+                    assignee = {
+                        "id": agent_node.attributes.get("id", agent_node.uuid),
+                        "name": agent_node.name,
+                        "url_key": agent_node.attributes.get("url_key", ""),
+                    }
+
+        elif edge.name == "ON" and edge.target_node_uuid == node.uuid:
+            comment_node = await _get_node_safe(graphiti, edge.source_node_uuid)
+            if comment_node is None:
+                continue
+            # Get author for this comment
+            c_edges = await graphiti.edges.entity.get_by_node_uuid(comment_node.uuid)
+            author_name: str | None = None
+            for ce in c_edges:
+                if (
+                    ce.name == "AUTHORED_BY"
+                    and ce.source_node_uuid == comment_node.uuid
+                    and ce.invalid_at is None
+                ):
+                    author_node = await _get_node_safe(graphiti, ce.target_node_uuid)
+                    if author_node:
+                        author_name = author_node.name
+                    break
+            comments.append(
+                {
+                    "id": comment_node.attributes.get("id", comment_node.uuid),
+                    "body": comment_node.attributes.get("body", ""),
+                    "source_created_at": comment_node.attributes.get(
+                        "source_created_at", ""
+                    ),
+                    "author_name": author_name,
+                }
+            )
+
+    comments.sort(key=lambda c: c.get("source_created_at", ""), reverse=True)
+    return {"assignee": assignee, "comments": comments[:50]}
+
+
+async def _fetch_related_comment(
+    graphiti: Graphiti, node: EntityNode
+) -> dict[str, Any]:
+    edges = await graphiti.edges.entity.get_by_node_uuid(node.uuid)
+    issue: dict[str, Any] | None = None
+    author: dict[str, Any] | None = None
+
+    for edge in edges:
+        if edge.invalid_at is not None:
+            continue
+        if edge.name == "ON" and edge.source_node_uuid == node.uuid:
+            if issue is None:
+                issue_node = await _get_node_safe(graphiti, edge.target_node_uuid)
+                if issue_node:
+                    issue = {
+                        "id": issue_node.attributes.get("id", issue_node.uuid),
+                        "key": issue_node.attributes.get("key", ""),
+                        "title": issue_node.attributes.get("title", ""),
+                        "status": issue_node.attributes.get("status", ""),
+                    }
+        elif edge.name == "AUTHORED_BY" and edge.source_node_uuid == node.uuid:
+            if author is None:
+                author_node = await _get_node_safe(graphiti, edge.target_node_uuid)
+                if author_node:
+                    author = {
+                        "id": author_node.attributes.get("id", author_node.uuid),
+                        "name": author_node.name,
+                    }
+
+    return {"issue": issue, "author": author}
+
+
+def _apply_direct_filter(
+    nodes: list[EntityNode], key: str, val: Any
+) -> list[EntityNode]:
+    """Filter nodes by attribute with gte/lte suffix support."""
+    if key.endswith("_gte"):
+        attr = key[: -len("_gte")]
+        return [n for n in nodes if (n.attributes.get(attr) or "") >= val]
+    if key.endswith("_lte"):
+        attr = key[: -len("_lte")]
+        return [n for n in nodes if (n.attributes.get(attr) or "") <= val]
+    return [n for n in nodes if n.attributes.get(key) == val]
+
+
+def _edge_filter_matches(
+    related: dict[str, Any], entity_type: EntityType, edge_filters: dict[str, Any]
+) -> bool:
+    """Return True if related data satisfies all edge-traversal filters."""
+    for key, val in edge_filters.items():
+        if entity_type == "Issue" and key == "assignee_name":
+            assignee = related.get("assignee")
+            if not assignee or assignee.get("name") != val:
+                return False
+        elif entity_type == "Comment" and key == "issue_key":
+            issue = related.get("issue")
+            if not issue or issue.get("key") != val:
+                return False
+        elif entity_type == "Comment" and key == "author_name":
+            author = related.get("author")
+            if not author or author.get("name") != val:
+                return False
+    return True
+
+
+async def perform_lookup(graphiti: Graphiti, req: LookupRequest) -> LookupResponse:
     t0 = time.monotonic()
 
-    async def _read(tx: AsyncManagedTransaction) -> tuple[list[dict[str, Any]], int]:
-        result = await tx.run(query, **params)
-        rows: list[dict[str, Any]] = [r.data() async for r in result]
-        count_result = await tx.run(count_query, **params)
-        count_row = await count_result.single()
-        count_val = int(count_row["c"]) if count_row else 0
-        return rows, count_val
+    direct_allowed = _DIRECT_FILTER_KEYS[req.entity_type]
+    edge_allowed = _EDGE_FILTER_KEYS[req.entity_type]
+    direct_filters: dict[str, Any] = {}
+    edge_filters: dict[str, Any] = {}
+    unknown: list[str] = []
 
-    async with driver.session() as session:
-        rows, total = await session.execute_read(_read)
+    for k, v in req.filters.items():
+        if k in direct_allowed:
+            direct_filters[k] = v
+        elif k in edge_allowed:
+            edge_filters[k] = v
+        else:
+            unknown.append(k)
+            logger.warning(
+                "query.lookup.unknown_filter",
+                extra={"entity_type": req.entity_type, "filter_key": k},
+            )
 
+    # ── Fetch all nodes in group, filter by entity type label ─────────────────
+    all_nodes = await graphiti.nodes.entity.get_by_group_ids([GROUP_ID])
+    nodes = [n for n in all_nodes if req.entity_type in n.labels]
+
+    # ── Apply direct attribute filters ─────────────────────────────────────────
+    for key, val in direct_filters.items():
+        nodes = _apply_direct_filter(nodes, key, val)
+
+    # ── Sort ───────────────────────────────────────────────────────────────────
+    nodes.sort(
+        key=lambda n: n.attributes.get(req.order_by, "") or "",
+        reverse=True,
+    )
+
+    # If no edge filters, we can count before expansion and apply limit early
+    if not edge_filters:
+        total = len(nodes)
+        page_nodes = nodes[: req.limit]
+    else:
+        # Edge filters require related-data expansion before we can count/limit
+        page_nodes = nodes
+        total = 0  # computed below after filtering
+
+    # ── Fetch related entities + apply edge filters ───────────────────────────
     items: list[LookupResponseItem] = []
-    for row in rows:
-        node = row["node"]
-        related: dict[str, dict[str, Any] | list[dict[str, Any]] | None] = {}
+    for node in page_nodes:
         if req.entity_type == "Issue":
-            related["assignee"] = row.get("assignee")
-            related["comments"] = row.get("comments") or []
+            related = await _fetch_related_issue(graphiti, node)
         elif req.entity_type == "Comment":
-            related["issue"] = row.get("issue")
-            related["author"] = row.get("author")
+            related = await _fetch_related_comment(graphiti, node)
+        else:
+            related = {}
+
+        if edge_filters and not _edge_filter_matches(related, req.entity_type, edge_filters):
+            continue
+
         items.append(
             LookupResponseItem(
-                id=node["id"],
+                id=node.attributes.get("id", node.uuid),
                 type=req.entity_type,
-                properties=dict(node),
+                properties=_node_properties(node),
                 related=related,
             )
         )
+
+    if edge_filters:
+        total = len(items)
+        items = items[: req.limit]
 
     query_ms = int((time.monotonic() - t0) * 1000)
     logger.info(
         "query.lookup",
         extra={
             "entity_type": req.entity_type,
-            "filters": list(params.keys()),
+            "filters": list(req.filters.keys()),
             "matched": len(items),
             "total_matched": total,
             "duration_ms": query_ms,
