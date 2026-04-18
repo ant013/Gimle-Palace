@@ -188,6 +188,18 @@ ORDER BY r.started_at DESC
 LIMIT 1
 """
 
+ENTITY_COUNTS_BY_PROJECT = """
+MATCH (p:Project)
+CALL (p) {
+    MATCH (n:Issue) WHERE n.group_id = p.group_id RETURN 'Issue' AS type, count(n) AS cnt
+    UNION ALL
+    MATCH (n:Comment) WHERE n.group_id = p.group_id RETURN 'Comment' AS type, count(n) AS cnt
+    UNION ALL
+    MATCH (n:Agent) WHERE n.group_id = p.group_id RETURN 'Agent' AS type, count(n) AS cnt
+}
+RETURN p.slug AS slug, type, cnt
+"""
+
 # --- Entity counts (health) ---
 ENTITY_COUNTS = """
 CALL () {

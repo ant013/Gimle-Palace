@@ -178,7 +178,7 @@ async def palace_memory_health() -> dict[str, Any]:
     if driver is None:
         handle_tool_error(DriverUnavailableError("Neo4j driver not initialised"))
     try:
-        resp: MemoryHealthResponse = await get_health(driver)
+        resp: MemoryHealthResponse = await get_health(driver, default_group_id=_default_group_id)
         return resp.model_dump()
     except Exception as exc:
         handle_tool_error(exc)

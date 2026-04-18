@@ -66,3 +66,6 @@ class HealthResponse(BaseModel):
     last_ingest_finished_at: str | None = None
     last_ingest_duration_ms: int | None = None
     last_ingest_errors: list[str] = Field(default_factory=list)
+    projects: list[str] = Field(default_factory=list)
+    default_project: str | None = None
+    entity_counts_per_project: dict[str, dict[str, int]] = Field(default_factory=dict)
