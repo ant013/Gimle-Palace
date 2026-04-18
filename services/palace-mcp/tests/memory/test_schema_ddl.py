@@ -11,6 +11,4 @@ def test_group_id_index_for_each_label() -> None:
 
 def test_create_indexes_are_idempotent() -> None:
     for stmt in CREATE_INDEXES:
-        assert "IF NOT EXISTS" in stmt, (
-            "all index statements must be idempotent"
-        )
+        assert "IF NOT EXISTS" in stmt, "all index statements must be idempotent"

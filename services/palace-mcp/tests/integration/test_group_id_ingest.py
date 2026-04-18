@@ -178,7 +178,9 @@ async def test_gc_does_not_cross_project_boundary(live_driver: Any) -> None:
             "MATCH (a:Agent {id: 'gc-test-agent-B'}) RETURN a.group_id AS gid"
         )
         row = await record.single()
-    assert row is not None, "GC deleted a node from a different project (cross-project leak)"
+    assert row is not None, (
+        "GC deleted a node from a different project (cross-project leak)"
+    )
     assert row["gid"] == group_b
 
     # Cleanup.

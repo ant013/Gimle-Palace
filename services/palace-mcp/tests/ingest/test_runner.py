@@ -83,9 +83,7 @@ async def test_run_ingest_happy_path_calls_all_write_paths() -> None:
     async with PaperclipClient(
         base_url="https://pc", token="t", company_id="co-1", transport=transport
     ) as client:
-        result = await run_ingest(
-            client=client, driver=driver, group_id="project/test"
-        )
+        result = await run_ingest(client=client, driver=driver, group_id="project/test")
 
     assert result["errors"] == []
     # execute_write is called: create_ingest_run, agents, issues, comments, gc*3, finalize
