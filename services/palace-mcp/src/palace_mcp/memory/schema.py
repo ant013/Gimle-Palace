@@ -15,7 +15,7 @@ class LookupRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     entity_type: EntityType
-    group_id: str
+    project: str | list[str] | None = None
     filters: dict[str, Any] = Field(default_factory=dict)
     limit: int = Field(default=20, ge=1, le=100)
     order_by: Literal["source_updated_at", "source_created_at"] = "source_updated_at"
@@ -41,6 +41,22 @@ class LookupResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class ProjectInfo(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    slug: str
+    name: str
+    tags: list[str]
+    language: str | None = None
+    framework: str | None = None
+    repo_url: str | None = None
+    source_created_at: str
+    source_updated_at: str
+    entity_counts: dict[str, int] = Field(default_factory=dict)
+    last_ingest_started_at: str | None = None
+    last_ingest_finished_at: str | None = None
+
+
 class HealthResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -50,3 +66,6 @@ class HealthResponse(BaseModel):
     last_ingest_finished_at: str | None = None
     last_ingest_duration_ms: int | None = None
     last_ingest_errors: list[str] = Field(default_factory=list)
+    projects: list[str] = Field(default_factory=list)
+    default_project: str | None = None
+    entity_counts_per_project: dict[str, dict[str, int]] = Field(default_factory=dict)

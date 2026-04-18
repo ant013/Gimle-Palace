@@ -20,9 +20,14 @@ def _make_mock_driver(session_mock: MagicMock) -> MagicMock:
     return driver
 
 
-def _make_session() -> MagicMock:
+def _make_session(project_found: bool = True) -> MagicMock:
     session = MagicMock()
     session.execute_write = AsyncMock(return_value=None)
+    # Mock session.run for project validation query
+    row = MagicMock() if project_found else None
+    run_result = MagicMock()
+    run_result.single = AsyncMock(return_value=row)
+    session.run = AsyncMock(return_value=run_result)
     return session
 
 
@@ -138,6 +143,37 @@ class TestRunIngestGroupId:
         ]
         assert len(gc_kwargs) == 3, f"Expected 3 GC calls, got {len(gc_kwargs)}"
         assert all(kw.get("group_id") == "project/scoped" for kw in gc_kwargs)
+
+
+class TestRunIngestProjectValidation:
+    """Task 10: run_ingest validates :Project exists before writing."""
+
+    @pytest.mark.asyncio
+    async def test_rejects_unregistered_project(self) -> None:
+        from palace_mcp.memory.projects import UnknownProjectError
+
+        session = _make_session(project_found=False)
+        driver = _make_mock_driver(session)
+        transport = httpx.MockTransport(_paperclip_handler)
+        async with PaperclipClient(
+            base_url="https://pc", token="t", company_id="co-1", transport=transport
+        ) as client:
+            with pytest.raises(UnknownProjectError, match="ghost"):
+                await run_ingest(client=client, driver=driver, group_id="project/ghost")
+
+    @pytest.mark.asyncio
+    async def test_accepts_registered_project(self) -> None:
+        session = _make_session(project_found=True)
+
+        driver = _make_mock_driver(session)
+        transport = httpx.MockTransport(_paperclip_handler)
+        async with PaperclipClient(
+            base_url="https://pc", token="t", company_id="co-1", transport=transport
+        ) as client:
+            result = await run_ingest(
+                client=client, driver=driver, group_id="project/gimle"
+            )
+        assert result["errors"] == []
 
 
 @pytest.mark.asyncio

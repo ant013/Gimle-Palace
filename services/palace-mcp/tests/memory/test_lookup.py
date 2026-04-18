@@ -60,3 +60,16 @@ def test_lookup_response_warnings_single_item_with_data() -> None:
     assert len(resp.items) == 1
     assert len(resp.warnings) == 1
     assert "foo" in resp.warnings[0]
+
+
+# --- Task 6: project param + IN $group_ids WHERE ---
+
+
+def test_build_query_uses_group_ids_in_clause() -> None:
+    q = _build_query(
+        "Issue",
+        ["n.group_id IN $group_ids"],
+        "source_updated_at",
+        20,
+    )
+    assert "n.group_id IN $group_ids" in q

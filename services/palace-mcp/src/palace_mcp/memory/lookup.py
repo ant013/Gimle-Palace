@@ -1,6 +1,7 @@
 """palace.memory.lookup implementation.
 
 - Filters resolved to parameterized Cypher WHERE clauses (filters.py).
+- Project resolved to group_ids list via resolve_group_ids (projects.py).
 - Read queries via session.execute_read (managed read transaction).
 - Related-entity expansion one hop per entity type.
 """
@@ -14,6 +15,7 @@ from typing import Any
 from neo4j import AsyncDriver, AsyncManagedTransaction
 
 from palace_mcp.memory.filters import resolve_filters
+from palace_mcp.memory.projects import resolve_group_ids
 from palace_mcp.memory.schema import (
     EntityType,
     LookupRequest,
@@ -91,26 +93,33 @@ def _count_query(entity_type: EntityType, where_clauses: list[str]) -> str:
     return f"MATCH (n:{entity_type}) {where} RETURN count(n) AS c"
 
 
-async def perform_lookup(driver: AsyncDriver, req: LookupRequest) -> LookupResponse:
+async def perform_lookup(
+    driver: AsyncDriver,
+    req: LookupRequest,
+    default_group_id: str,
+) -> LookupResponse:
     where_clauses, params, unknown = resolve_filters(req.entity_type, dict(req.filters))
-    # group_id always scopes the query — prepend so it's the first WHERE predicate.
-    where_clauses.insert(0, "n.group_id = $group_id")
-    params["group_id"] = req.group_id
     for k in unknown:
         logger.warning(
             "query.lookup.unknown_filter",
             extra={"entity_type": req.entity_type, "filter_key": k},
         )
 
-    query = _build_query(req.entity_type, where_clauses, req.order_by, req.limit)
-    count_query = _count_query(req.entity_type, where_clauses)
-
     t0 = time.monotonic()
 
     async def _read(tx: AsyncManagedTransaction) -> tuple[list[dict[str, Any]], int]:
-        result = await tx.run(query, **params)
+        group_ids = await resolve_group_ids(
+            tx, req.project, default_group_id=default_group_id
+        )
+        all_clauses = ["n.group_id IN $group_ids"] + where_clauses
+        all_params = {**params, "group_ids": group_ids}
+
+        query = _build_query(req.entity_type, all_clauses, req.order_by, req.limit)
+        count_q = _count_query(req.entity_type, all_clauses)
+
+        result = await tx.run(query, **all_params)
         rows: list[dict[str, Any]] = [r.data() async for r in result]
-        count_result = await tx.run(count_query, **params)
+        count_result = await tx.run(count_q, **all_params)
         count_row = await count_result.single()
         count_val = int(count_row["c"]) if count_row else 0
         return rows, count_val

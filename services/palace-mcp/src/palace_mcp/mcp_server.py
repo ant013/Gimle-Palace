@@ -29,8 +29,14 @@ from palace_mcp.errors import (
 )
 from palace_mcp.memory.health import get_health
 from palace_mcp.memory.lookup import perform_lookup
+from palace_mcp.memory.project_tools import (
+    get_project_overview,
+    list_projects,
+    register_project,
+)
+from palace_mcp.memory.projects import UnknownProjectError
 from palace_mcp.memory.schema import HealthResponse as MemoryHealthResponse
-from palace_mcp.memory.schema import LookupRequest, LookupResponse
+from palace_mcp.memory.schema import LookupRequest, LookupResponse, ProjectInfo
 
 logger = logging.getLogger(__name__)
 
@@ -149,16 +155,17 @@ async def palace_memory_lookup(
     if entity_type not in VALID_ENTITY_TYPES:
         handle_tool_error(UnknownEntityTypeError(entity_type))
     try:
-        group_id = project if project is not None else _default_group_id
         req = LookupRequest(
             entity_type=entity_type,
-            group_id=group_id,
+            project=project,
             filters=filters or {},
             limit=limit,
             order_by=order_by,
         )
-        resp: LookupResponse = await perform_lookup(driver, req)
+        resp: LookupResponse = await perform_lookup(driver, req, _default_group_id)
         return resp.model_dump()
+    except UnknownProjectError as exc:
+        return {"ok": False, "error": "unknown_project", "message": str(exc)}
     except Exception as exc:
         handle_tool_error(exc)
 
@@ -176,7 +183,84 @@ async def palace_memory_health() -> dict[str, Any]:
     if driver is None:
         handle_tool_error(DriverUnavailableError("Neo4j driver not initialised"))
     try:
-        resp: MemoryHealthResponse = await get_health(driver)
+        resp: MemoryHealthResponse = await get_health(
+            driver, default_group_id=_default_group_id
+        )
         return resp.model_dump()
+    except Exception as exc:
+        handle_tool_error(exc)
+
+
+@_tool(
+    name="palace.memory.register_project",
+    description=(
+        "Register a new project namespace in the Palace knowledge graph. "
+        "Creates or updates a :Project node with the given slug, name, and tags. "
+        "Idempotent — safe to call multiple times; source_created_at is preserved."
+    ),
+)
+async def palace_memory_register_project(
+    slug: str,
+    name: str,
+    tags: list[str] | None = None,
+    language: str | None = None,
+    framework: str | None = None,
+    repo_url: str | None = None,
+) -> dict[str, Any]:
+    """Register or update a project in the knowledge graph."""
+    driver = _driver
+    if driver is None:
+        handle_tool_error(DriverUnavailableError("Neo4j driver not initialised"))
+    try:
+        info: ProjectInfo = await register_project(
+            driver,
+            slug=slug,
+            name=name,
+            tags=list(tags or []),
+            language=language,
+            framework=framework,
+            repo_url=repo_url,
+        )
+        return info.model_dump()
+    except Exception as exc:
+        handle_tool_error(exc)
+
+
+@_tool(
+    name="palace.memory.list_projects",
+    description=(
+        "List all registered projects in the Palace knowledge graph. "
+        "Returns project slugs, names, and tags ordered alphabetically."
+    ),
+)
+async def palace_memory_list_projects() -> list[dict[str, Any]]:
+    """Return all registered :Project nodes."""
+    driver = _driver
+    if driver is None:
+        handle_tool_error(DriverUnavailableError("Neo4j driver not initialised"))
+    try:
+        infos: list[ProjectInfo] = await list_projects(driver)
+        return [i.model_dump() for i in infos]
+    except Exception as exc:
+        handle_tool_error(exc)
+
+
+@_tool(
+    name="palace.memory.get_project_overview",
+    description=(
+        "Return detailed overview of a single project including entity counts and last ingest metadata. "
+        "Use palace.memory.list_projects to discover available project slugs."
+    ),
+)
+async def palace_memory_get_project_overview(slug: str) -> dict[str, Any]:
+    """Return a project overview with entity counts and ingest metadata."""
+    driver = _driver
+    if driver is None:
+        handle_tool_error(DriverUnavailableError("Neo4j driver not initialised"))
+    try:
+        info: ProjectInfo = await get_project_overview(driver, slug=slug)
+        return info.model_dump()
+    except UnknownProjectError as exc:
+        return {"ok": False, "error": "unknown_project", "message": str(exc)}
     except Exception as exc:
         handle_tool_error(exc)

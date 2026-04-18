@@ -8,6 +8,7 @@ CREATE_CONSTRAINTS = [
     "CREATE CONSTRAINT issue_id IF NOT EXISTS FOR (i:Issue) REQUIRE i.id IS UNIQUE",
     "CREATE CONSTRAINT comment_id IF NOT EXISTS FOR (c:Comment) REQUIRE c.id IS UNIQUE",
     "CREATE CONSTRAINT agent_id IF NOT EXISTS FOR (a:Agent) REQUIRE a.id IS UNIQUE",
+    "CREATE CONSTRAINT project_slug IF NOT EXISTS FOR (p:Project) REQUIRE p.slug IS UNIQUE",
 ]
 
 # --- Indexes (non-unique; speeds up group_id filter + GC cutoff) ---
@@ -16,6 +17,7 @@ CREATE_INDEXES = [
     "CREATE INDEX comment_group_id IF NOT EXISTS FOR (n:Comment) ON (n.group_id)",
     "CREATE INDEX agent_group_id IF NOT EXISTS FOR (n:Agent) ON (n.group_id)",
     "CREATE INDEX ingest_run_group_id IF NOT EXISTS FOR (n:IngestRun) ON (n.group_id)",
+    "CREATE INDEX project_group_id IF NOT EXISTS FOR (p:Project) ON (p.group_id)",
 ]
 
 # --- Backfill: WHERE IS NULL guard makes this a no-op after first run ---
@@ -137,6 +139,67 @@ WHERE r.group_id = $group_id
 RETURN r
 ORDER BY r.started_at DESC
 LIMIT 1
+"""
+
+# --- Project DDL (read/write) ---
+UPSERT_PROJECT = """
+MERGE (p:Project {slug: $slug})
+SET p.group_id            = 'project/' + $slug,
+    p.name                = $name,
+    p.tags                = $tags,
+    p.language            = $language,
+    p.framework           = $framework,
+    p.repo_url            = $repo_url,
+    p.source              = 'paperclip',
+    p.source_created_at   = coalesce(p.source_created_at, $now),
+    p.source_updated_at   = $now
+RETURN p
+"""
+
+LIST_PROJECT_SLUGS = "MATCH (p:Project) RETURN p.slug AS slug ORDER BY slug"
+
+LIST_PROJECTS = "MATCH (p:Project) RETURN p ORDER BY p.slug"
+
+GET_PROJECT = """
+MATCH (p:Project {slug: $slug})
+RETURN p
+"""
+
+PROJECT_ENTITY_COUNTS = """
+MATCH (n)
+WHERE (n:Issue OR n:Comment OR n:Agent OR n:IngestRun)
+  AND n.group_id = $group_id
+RETURN labels(n) AS labels, count(n) AS c
+"""
+
+UNREGISTERED_GROUP_IDS = """
+MATCH (n)
+WHERE (n:Issue OR n:Comment OR n:Agent OR n:IngestRun)
+WITH DISTINCT n.group_id AS g
+WHERE g IS NOT NULL AND NOT EXISTS {
+    MATCH (p:Project) WHERE p.group_id = g
+}
+RETURN collect(g) AS unregistered
+"""
+
+PROJECT_LAST_INGEST = """
+MATCH (r:IngestRun {source: $source})
+WHERE r.group_id = $group_id
+RETURN r
+ORDER BY r.started_at DESC
+LIMIT 1
+"""
+
+ENTITY_COUNTS_BY_PROJECT = """
+MATCH (p:Project)
+CALL (p) {
+    MATCH (n:Issue) WHERE n.group_id = p.group_id RETURN 'Issue' AS type, count(n) AS cnt
+    UNION ALL
+    MATCH (n:Comment) WHERE n.group_id = p.group_id RETURN 'Comment' AS type, count(n) AS cnt
+    UNION ALL
+    MATCH (n:Agent) WHERE n.group_id = p.group_id RETURN 'Agent' AS type, count(n) AS cnt
+}
+RETURN p.slug AS slug, type, cnt
 """
 
 # --- Entity counts (health) ---
