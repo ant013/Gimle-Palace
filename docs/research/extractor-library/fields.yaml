@@ -1,0 +1,185 @@
+topic: Design space for maximally comprehensive extractor library for Gimle-Palace
+description: |
+  Per-extractor research fields. Each field has a detail_level indicating
+  depth expectation during /research-deep fill-in.
+
+  detail_level hierarchy: brief -> moderate -> detailed
+  uncertain: list of fields where the deep-research agent should flag
+  low-confidence values rather than confabulate.
+
+categories:
+  - name: identity
+    fields:
+      - name: name
+        description: Canonical name of the extractor
+        detail_level: brief
+      - name: meta_category
+        description: One of — structural / conventional / historical / semantic / contextual / support
+        detail_level: brief
+      - name: target_problems
+        description: List of problems from 1..20 this extractor addresses (multi-valued)
+        detail_level: brief
+      - name: short_description
+        description: 1–2 sentence summary of purpose
+        detail_level: brief
+
+  - name: implementation
+    fields:
+      - name: tech_stack
+        description: |
+          Primary tooling — list combinations of: LSP (SourceKit-LSP, kotlin-lsp, etc.),
+          AST tool (tree-sitter, ast-grep, semgrep, swift-syntax, ktlint/detekt),
+          git (libgit2, pygit2, shell), test-runtime (xctest, JUnit, coverage tools),
+          custom parser, LLM (only when deterministic not viable)
+        detail_level: moderate
+      - name: language_support
+        description: |
+          Languages this extractor supports. Values: kotlin, swift, typescript,
+          python, java, go, rust, language-agnostic, other (specify).
+          Important for Unstoppable Wallet (Kotlin + Swift multi-lang repo).
+        detail_level: brief
+      - name: confidence_tier
+        description: |
+          deterministic (AST/symbol-based, 100% precision), heuristic (pattern
+          matching with false positives), LLM-required (semantic reasoning only
+          reliable with LLM). Important for source="static"/"llm"/"hybrid"
+          classification in :Finding nodes.
+        detail_level: brief
+      - name: ingest_trigger
+        description: |
+          When this extractor runs — full (complete re-scan), incremental
+          (diff-based since last iteration), on-demand (user invokes explicitly).
+          Affects scheduler design and ingest-time cost.
+        detail_level: brief
+
+  - name: data_model
+    fields:
+      - name: entity_model
+        description: |
+          Graph entities produced (node types) + edge types. Align with
+          Graphiti schema §5.2/5.3 from gimle-palace-design. Include faceted
+          classification axes from §5.4 (structural/semantic-kind/domain-concept/capability).
+          Example: "Produces :UIComponent (name, kind, framework, path, variants),
+          :USED_BY edge to :File with count property, applies :Renders capability."
+        detail_level: detailed
+      - name: storage_format
+        description: |
+          graph-node (default — writes to Graphiti), markdown (writes to
+          .knowledge/*.md for stability over ingests), annotation (writes
+          alongside code as DocC/KDoc), hybrid (graph + markdown).
+          Rationale for format choice.
+        detail_level: moderate
+
+  - name: prior_art
+    fields:
+      - name: prior_art
+        description: |
+          Existing OSS tools, research papers, blog posts describing similar
+          extractors. Include repo URLs, paper arXiv IDs, release versions.
+          Focus on 2024-2026 work (MCP era, graphiti-core release, SWE-Bench
+          derivatives, Glean OSS, Aider repo-map, Cursor indexer).
+          Note maintenance health, license, last-release date.
+        detail_level: detailed
+
+  - name: queries_and_integration
+    fields:
+      - name: consumer_query_patterns
+        description: |
+          Concrete example Cypher or structured queries that a downstream
+          agent (palace-mcp tool, paperclip-agent) would issue against this
+          extractor's graph output. Bridges entity_model (abstract) → actual
+          palace.memory.lookup / palace.memory.search calls. Include 2-4
+          representative queries per extractor.
+        detail_level: detailed
+      - name: cross_extractor_feeds
+        description: |
+          Structured list — {consumes: [item-ids], produces_for: [item-ids]}.
+          Replaces prose cross-references. Enables automated ingest-order
+          scheduling and prevents circular ingest dependencies. Aligns with
+          RepoGraph/RANGER emphasis on explicit inter-extractor edges.
+        detail_level: moderate
+      - name: scip_lsif_alignment
+        description: |
+          Whether this extractor's symbol references can correlate with SCIP
+          stable symbol IDs for cross-tool de-duplication. Values:
+          scip-native (produces SCIP directly), scip-correlated (can map),
+          scip-independent (no symbol-level alignment needed).
+        detail_level: brief
+      - name: change_granularity
+        description: |
+          Smallest delta unit that triggers meaningful re-extraction:
+          file / function / symbol / commit / PR. Distinct from ingest_trigger
+          (which is scheduling) — this is the delta unit the extractor emits.
+          Drives partial-reingest optimization for 20-Kit scale.
+        detail_level: brief
+      - name: graphiti_episode_type
+        description: |
+          Pre-declare Graphiti node type: EntityNode / EpisodicNode /
+          CommunityNode. Include temporal-validity semantics — whether edges
+          carry end_time (e.g., @deprecated edges) or are permanent (e.g.,
+          architectural layer boundaries). Avoids retroactive schema
+          migration once plain Neo4j is replaced by Graphiti in N+1.
+        detail_level: moderate
+      - name: snapshot_vs_streaming
+        description: |
+          Whether the extractor produces point-in-time snapshots or can emit
+          incremental streaming updates (LSP-style textDocument/didChange).
+          Affects scheduler choice (batch-nightly vs on-commit-push).
+          Values: snapshot-only / streaming-capable / hybrid.
+        detail_level: brief
+
+  - name: operational
+    fields:
+      - name: ingest_perf_est
+        description: |
+          Order-of-magnitude estimated ingest time on a 20-library repo
+          (Unstoppable Wallet scale: ~200K LOC Kotlin, ~150K LOC Swift).
+          Full-ingest and incremental-ingest separately when they differ.
+          Mark uncertain if based on analogy to another tool rather than actual measurement.
+        detail_level: moderate
+      - name: maintenance_burden
+        description: |
+          How much per-project configuration is needed to onboard a new
+          repo. One of: zero-config (works out of box), low (1-3 YAML entries),
+          medium (per-module annotations required), high (significant manual
+          classification).
+        detail_level: brief
+      - name: failure_modes
+        description: |
+          Known pitfalls: false-positive patterns, false-negative patterns,
+          hardware/RAM requirements, noise from generated code, language-version
+          sensitivity (e.g., Swift 6 actor isolation changes).
+        detail_level: moderate
+      - name: open_questions
+        description: |
+          Unresolved design decisions that block slice-level implementation.
+          Surface adversarial-review questions — things an OpusArchitectReviewer
+          would flag during spec review. Mark explicitly in the deep-research
+          report so the downstream spec-writer attends to them.
+        detail_level: detailed
+      - name: adversarial_resistance
+        description: |
+          Robustness to deliberate code obfuscation, minification, or
+          heavy macro expansion. Relevant for crypto domain (partially
+          generated code, Kotlin macros, Swift macros). Values:
+          high / medium / low + brief explanation. Enables ingest pipeline
+          to attach lower confidence weights in macro-heavy modules.
+        detail_level: brief
+      - name: human_validation_cost
+        description: |
+          Order-of-magnitude human-hours per quarter needed to spot-check
+          extractor output on a new project. Highly variable for
+          confidence_tier=LLM-required extractors. Values: negligible /
+          low (< 2h) / medium (2-8h) / high (> 8h).
+        detail_level: brief
+      - name: regulatory_sensitivity
+        description: |
+          Whether extractor processes or produces data subject to
+          data-residency / GDPR / CCPA / financial-security compliance.
+          PII taint (#35), logging (#20), crash-signal outputs may contain
+          actual key material or user-identifying patterns if not sanitized.
+          Values: none / low / high + brief note on what triggers the
+          classification.
+        detail_level: brief
+
+uncertain: []   # populated during /research-deep when agents flag low-confidence values

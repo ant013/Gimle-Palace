@@ -2,6 +2,12 @@
 
 Quick find during GIM-39 gap closure. Not a full research issue — just enough to trigger decision.
 
+## Decision (2026-04-17) — REJECTED
+
+Board decided NOT to adopt Hindsight, neither Frame 1 (run-both) nor Frame 2 (replace). **Reason:** Hindsight invokes LLM per-recall and per-indexing through a vendored API key (the plugin README uses `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` — pay-per-token path). Our Paperclip agents run on Claude Code **OAuth** (Max subscription, flat-rate) — adopting Hindsight would route agent recall costs onto the pay-per-token API, reintroducing burn that the OAuth model was chosen to eliminate.
+
+Sections below preserved for historical context. N+1 Graphiti migration is **unblocked**: the "do not sink time" caveat in §My-recommendation no longer applies.
+
 ## Hindsight
 
 - **Repo:** `vectorize-io/hindsight`, MIT, by Vectorize.io (vector DB company).

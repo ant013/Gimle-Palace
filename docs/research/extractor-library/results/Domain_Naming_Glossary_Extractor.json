@@ -1,0 +1,62 @@
+{
+  "name": "Domain Naming & Glossary Extractor",
+  "meta_category": "conventional",
+  "target_problems": [18],
+  "short_description": "Infers a project-specific crypto domain glossary by extracting identifier names, class/enum hierarchies, and documentation comments across all modules, detecting semantic inconsistencies such as Token vs Coin disambiguation and surfacing term-to-code mappings for agent reasoning.",
+  "tech_stack": [
+    "SwiftSyntax — extracts enum case names, class/struct/protocol names, KDoc/DocC comment text, property names within domain model types",
+    "tree-sitter (Swift + Kotlin grammars) — fast token-level identifier extraction for cross-module name frequency analysis",
+    "ast-grep — structural patterns for class hierarchies (class Coin : Asset, sealed class Token : BlockchainAsset)",
+    "semgrep — inconsistent naming patterns: files using 'Coin' in one module vs 'Token' in another; cross-module name collision",
+    "LLM (GPT-4o / Claude-3.5) — required for: semantic disambiguation (auth token vs blockchain token), glossary description generation, cluster labeling",
+    "sentence-transformers / text-embedding-3-small — embed identifier names + surrounding code context for semantic clustering",
+    "KDoc / DocC parser — extracts prose descriptions from /// and /** */ comments",
+    "Graphiti entity extraction pipeline — custom entity_types schema defining CryptoDomainTerm as EntityNode type"
+  ],
+  "language_support": ["swift", "kotlin"],
+  "confidence_tier": "LLM-required",
+  "ingest_trigger": "on-demand",
+  "entity_model": "Produces :DomainTerm nodes (term, canonical_form, category∈{asset-type|transaction-concept|network-concept|ui-label|protocol-concept|technical-identifier}, definition_source∈{code-comment|inferred|external-glossary}, confidence_pct, first_seen_file). :SYNONYM_OF edge between :DomainTerm nodes (weight=semantic_similarity_score). :USED_AS edge from :DomainTerm to :Symbol. :INCONSISTENCY nodes (term_a, term_b, module_a, module_b, inconsistency_kind). :GlossaryCluster nodes group related domain terms via CommunityNode. Faceted axes: semantic-kind=DomainKnowledge, domain-concept=CryptoGlossary, capability=:Explains.",
+  "storage_format": "hybrid — :DomainTerm nodes in graph; additionally .knowledge/domain-glossary.md markdown snapshot for human review and LLM context injection. Markdown versioned in git alongside code.",
+  "prior_art": [
+    {"name": "Global Crypto Classification Standard (21Shares, Sep 2024)", "url": "https://cdn.21shares.com/uploads/current-documents/reports/21Shares_R_TheGlobalCryptoClassificationStandard_September2024.pdf", "description": "Industry standard; Token = asset on existing chain, Coin = native asset of own chain."},
+    {"name": "Knowledge Graph Based Repository-Level Code Generation (arXiv 2505.14394)", "url": "https://arxiv.org/html/2505.14394v1", "description": "Uses domain-concept nodes extracted from code to guide LLM code generation."},
+    {"name": "Graphiti temporal entity extraction", "url": "https://github.com/getzep/graphiti", "description": "Graphiti's LLM-based entity extraction pipeline with Pydantic model-defined entity types. entity_types parameter accepts custom schemas."},
+    {"name": "SemanticForge (arXiv 2511.07584)", "url": "https://arxiv.org/html/2511.07584v1", "description": "Repository-level code generation through semantic knowledge graphs; explicitly constructs domain-term subgraph."},
+    {"name": "Unstoppable Wallet iOS", "url": "https://github.com/horizontalsystems/unstoppable-wallet-ios", "description": "Target codebase reference: uses Coin, Token, TransactionRecord, BlockchainType as domain identifiers."},
+    {"name": "ENRE", "url": "https://github.com/xjtu-enre/ENRE-ts", "description": "ENtity Relationship Extractor; incremental update support (Nov 2024)."}
+  ],
+  "consumer_query_patterns": [
+    {"label": "What does 'Token' mean vs 'Coin'?", "cypher": "MATCH (t1:DomainTerm {term:'Token'}), (t2:DomainTerm {term:'Coin'}) OPTIONAL MATCH (t1)-[r:SYNONYM_OF]-(t2) RETURN t1.definition_source, t1.category, t2.definition_source, t2.category, r.weight"},
+    {"label": "Find all naming inconsistencies between modules", "cypher": "MATCH (inc:Inconsistency)-[:AFFECTS]->(m1:Module), (inc)-[:AFFECTS]->(m2:Module) WHERE m1 <> m2 RETURN inc.term_a, inc.term_b, m1.name, m2.name, inc.inconsistency_kind"},
+    {"label": "Which symbols use the term 'address' and in what contexts?", "cypher": "MATCH (dt:DomainTerm {term:'address'})-[:USED_AS]->(s:Symbol) RETURN s.name, s.kind, s.file, dt.category LIMIT 30"},
+    {"label": "Full glossary cluster for blockchain asset types", "cypher": "MATCH (gc:GlossaryCluster {semantic_theme:'blockchain-asset'})<-[:MEMBER_OF]-(dt:DomainTerm) RETURN dt.term, dt.canonical_form, dt.category"}
+  ],
+  "cross_extractor_feeds": {"consumes": [21, 24], "produces_for": [15, 40, 43]},
+  "scip_lsif_alignment": "scip-correlated",
+  "change_granularity": "symbol",
+  "graphiti_episode_type": "EntityNode — :DomainTerm nodes are long-lived entities with stable canonical_form IDs. :SYNONYM_OF edges carry confidence_pct. :INCONSISTENCY nodes are EpisodicNode. CommunityNode clusters related domain terms.",
+  "snapshot_vs_streaming": "snapshot-only",
+  "ingest_perf_est": "[uncertain] Full ingest: 20–45 min on 350K LOC due to LLM calls. Incremental: ~5–15 min. Highly uncertain — LLM latency dominates.",
+  "maintenance_burden": "medium",
+  "failure_modes": [
+    "LLM hallucination: definition generation for ambiguous terms may produce plausible but incorrect definitions",
+    "Homonym confusion: 'token' has three distinct meanings (blockchain asset, auth, NLP)",
+    "Embedding clustering instability across model versions",
+    "Sparse comments: low KDoc/DocC coverage drops confidence_pct",
+    "Cross-language term drift: Swift CoinRecord vs Kotlin CoinEntity — requires multilingual embedding model",
+    "Dynamic identifiers invisible to static AST extraction",
+    "External glossary divergence from project-specific usage"
+  ],
+  "open_questions": [
+    "Share :DomainTerm with extractor #40 (Crypto Domain Model) or keep separate subgraph?",
+    "Authority when graph and markdown diverge after human edit — editable or read-only?",
+    "How to prevent Graphiti entity deduplication merging :DomainTerm with unrelated entities sharing same term string?",
+    "Incremental updates: full cluster re-evaluation cost for high-centrality terms may approach full-ingest cost",
+    "Should :INCONSISTENCY trigger automated PR comments or stay read-only?"
+  ],
+  "adversarial_resistance": "low — identifier names are primary signal; renaming to consistent (even wrong) terms eliminates inconsistency nodes while hiding semantic ambiguity.",
+  "human_validation_cost": "high",
+  "regulatory_sensitivity": "none",
+  "uncertain": ["ingest_perf_est", "confidence_tier", "human_validation_cost", "maintenance_burden"]
+}

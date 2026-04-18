@@ -1,0 +1,62 @@
+{
+  "name": "Testability/DI Pattern Extractor",
+  "meta_category": "conventional",
+  "target_problems": [11],
+  "short_description": "Identifies the dependency injection container strategy, mocking framework choice, and protocol-based vs library-based testability approach per module, enabling agents to understand how to write new tests and where seams exist for mocking in a multi-library crypto codebase.",
+  "tech_stack": [
+    "SwiftSyntax — detects: protocol declarations used as injectable abstractions, @Environment / @EnvironmentObject injection sites, Swinject Container.register / resolve call sites, Factory Container.register patterns, Needle Component subclass declarations",
+    "Harmonize (perrystreetsoftware/Harmonize, MIT, 2024) — Swift architectural rule: every ViewModel initializer must accept protocol parameters (not concrete types)",
+    "Konsist (LemonAppDev/konsist, Apache-2.0, 2024-2025) — Kotlin: every ViewModel constructor must accept interfaces or abstract types; Hilt @HiltViewModel + @Inject constructor presence check",
+    "detekt (custom RuleSet) — Kotlin: Hilt @Module + @Provides/@Binds detection, Koin module { factory/single } block scanning, manual constructor injection shape analysis",
+    "semgrep — cross-language: MockK (io.mockk) import detection in test files, Mockito usage, Swift MockingKit / Cuckoo framework detection via import statements, XCTest expectation-based mock detection",
+    "ast-grep — structural: Kotlin interface mock subclass pattern, Swift protocol-conforming struct/class used only in test targets",
+    "tree-sitter (Kotlin + Swift grammars) — low-level token scanning for DI container call patterns when AST visitors insufficient"
+  ],
+  "language_support": ["swift", "kotlin"],
+  "confidence_tier": "heuristic",
+  "ingest_trigger": "incremental",
+  "entity_model": "Produces :DIStrategy nodes (container_kind∈{Hilt|Koin|Manual|Swinject|Factory|Needle|EnvironmentObject|None}, language, scope∈{module|project}, test_seam_quality∈{high|medium|low|unknown}) with :GOVERNS edge to :Module. :MockingApproach nodes (framework∈{MockK|Mockito|protocol-manual|Cuckoo|MockingKit|XCTest-manual|None}, language, test_target) with :USED_IN edge to :Module. :InjectableAbstraction nodes (symbol_id, kind∈{protocol|interface|abstract-class}, impl_count, mock_count). :IMPLEMENTS edge from :File to :InjectableAbstraction, :MOCKS edge from test :File to :InjectableAbstraction. :TESTABILITY_SCORE property on :Module. Faceted axes: structural/semantic-kind=Convention, domain-concept=Testability, capability=:Audits.",
+  "storage_format": "graph-node",
+  "prior_art": [
+    {"name": "Konsist", "url": "https://github.com/LemonAppDev/konsist", "description": "Konsist can enforce that every ViewModel class has exactly one constructor whose parameters are interfaces or abstract types. Active 2024-2025, Apache-2.0."},
+    {"name": "Harmonize", "url": "https://github.com/perrystreetsoftware/Harmonize", "description": "Swift architectural linter using SwiftSyntax; can enforce that every ViewModel initializer parameter is a protocol type. MIT, Summer 2024."},
+    {"name": "Swinject", "url": "https://github.com/Swinject/Swinject", "description": "Runtime DI framework for Swift/iOS. Container.register/resolve call pattern is reliably detectable via AST. MIT, active."},
+    {"name": "Factory (hmlongco/Factory)", "url": "https://github.com/hmlongco/Factory", "description": "Compile-time safe Swift DI framework. Uses Swift property wrappers, detectable via @Injected/@LazyInjected patterns."},
+    {"name": "Needle (uber/needle)", "url": "https://github.com/uber/needle", "description": "Uber's compile-time safe Swift DI via code generation. Component subclass declarations are reliably detectable. MIT."},
+    {"name": "MockK", "url": "https://github.com/mockk/mockk", "description": "Kotlin mocking library with mockk() and every/verify DSL. Import detection in test source sets is deterministic. Apache-2.0."},
+    {"name": "Google Hilt / Dagger", "url": "https://dagger.dev/hilt/", "description": "Hilt annotations (@HiltViewModel, @Inject, @Module, @Provides) are unique tokens detectable via tree-sitter/semgrep with 100% precision."}
+  ],
+  "consumer_query_patterns": [
+    {"label": "What DI strategy does each iOS module use?", "cypher": "MATCH (d:DIStrategy {language:'swift'})-[:GOVERNS]->(m:Module) RETURN m.name, d.container_kind, d.test_seam_quality ORDER BY m.name"},
+    {"label": "Find all protocol seams that have no mock implementation", "cypher": "MATCH (ia:InjectableAbstraction {mock_count: 0}) RETURN ia.symbol_id, ia.impl_count ORDER BY ia.impl_count DESC LIMIT 20"},
+    {"label": "Which modules have low testability scores?", "cypher": "MATCH (m:Module) WHERE m.testability_score < 40 RETURN m.name, m.testability_score, m.platform ORDER BY m.testability_score ASC"},
+    {"label": "Which mocking framework is used across all test targets?", "cypher": "MATCH (ma:MockingApproach)-[:USED_IN]->(m:Module) RETURN ma.framework, ma.language, count(m) AS module_count ORDER BY module_count DESC"}
+  ],
+  "cross_extractor_feeds": {"consumes": [6, 21, 24], "produces_for": [28, 38]},
+  "scip_lsif_alignment": "scip-correlated",
+  "change_granularity": "symbol",
+  "graphiti_episode_type": "EntityNode — :DIStrategy and :MockingApproach are persistent per-module facts with valid_from. :InjectableAbstraction nodes are EntityNodes tracking impl_count and mock_count as evolving properties. CommunityNode clusters modules sharing identical DI strategies.",
+  "snapshot_vs_streaming": "snapshot-only",
+  "ingest_perf_est": "[uncertain] Full ingest: ~12–18 min on 350K LOC. Incremental: ~45–90 s. Hilt annotation detection is near-instant (tree-sitter token scan).",
+  "maintenance_burden": "low",
+  "failure_modes": [
+    "Manual DI without any framework produces ~75% precision via protocol parameter shape heuristic",
+    "SwiftUI @EnvironmentObject may be used for non-DI purposes (theme objects) — inflates DI score",
+    "Hilt kapt/KSP code generation: generated Dagger components are not in source tree",
+    "Mixed DI strategies: per-context disambiguation needed",
+    "Protocol-vs-class detection: protocols sometimes used as namespaces",
+    "Kotlin Koin vs manual: Koin DSL looks similar to manual Map-based DI",
+    "Swift @Observable macro (Swift 5.9+): changes EnvironmentObject detection accuracy"
+  ],
+  "open_questions": [
+    "Should :InjectableAbstraction nodes link to :Symbol nodes via a :CORRESPONDS_TO edge, or are they the same node type?",
+    "test_seam_quality scoring formula: derived from mock_count/impl_count, coverage data, or multi-factor?",
+    "Needle Component hierarchy is rich graph — extract subgraph or just strategy classification?",
+    "For KMP shared modules, classify as 'kotlin' platform or separate 'kmp-shared'?",
+    "Testability score: 0-100 cardinality or categorical enum to avoid false precision?"
+  ],
+  "adversarial_resistance": "medium — framework import detection is deterministic. Protocol-shape heuristics bypassable via 'Protocol' suffix on concrete type without actual protocol.",
+  "human_validation_cost": "low",
+  "regulatory_sensitivity": "none",
+  "uncertain": ["ingest_perf_est", "confidence_tier"]
+}

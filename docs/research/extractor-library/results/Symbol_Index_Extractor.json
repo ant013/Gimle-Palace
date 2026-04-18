@@ -1,0 +1,61 @@
+{
+  "name": "Symbol Index Extractor",
+  "meta_category": "support",
+  "target_problems": [1, 2, 4, 16, 17, 18],
+  "short_description": "Palace-Serena-backed, LSP-driven symbol graph that serves as the backbone queried by every other extractor. Uses SourceKit-LSP + indexstore-db for Swift and the official JetBrains Kotlin LSP (kotlin-lsp) for Kotlin, producing a unified :Symbol node set with resolved type information, module membership, and cross-module reference edges.",
+  "tech_stack": [
+    "SourceKit-LSP (swiftlang/sourcekit-lsp) — semantic indexing via indexstore-db; workspace/symbol, textDocument/definition, textDocument/references, callHierarchy",
+    "indexstore-db (swiftlang/indexstore-db) — composable query API; UncheckedIndex/CheckedIndex; libIndexStore backend",
+    "Kotlin LSP (Kotlin/kotlin-lsp, JetBrains, KotlinConf 2025) — IntelliJ/Fleet engine exposed as LSP; JVM-only Gradle in current scope",
+    "fwcd/kotlin-language-server (community fallback) — MIT, active 2025; uses kotlin-compiler directly; less accurate but more portable",
+    "palace-serena MCP server — wraps SourceKit-LSP and kotlin-lsp behind unified symbol query interface",
+    "scip-java (sourcegraph/scip-java) — secondary path for Kotlin: compiles with SemanticDB plugin then runs scip-java index-semanticdb",
+    "tree-sitter — fallback for files not covered by LSP"
+  ],
+  "language_support": ["swift", "kotlin", "java"],
+  "confidence_tier": "deterministic",
+  "ingest_trigger": "incremental",
+  "entity_model": "Node types: :Symbol (fqn, name, kind=[class|struct|enum|protocol|func|var|typealias|associatedtype|actor|extension], module, path, line, col, visibility, language, is_generated). :Module (name, language, path, type=[SwiftPM|Gradle|KMP-shared|KMP-ios|KMP-android]). :SymbolOccurrence (symbol_fqn, file_path, line, col, role=[definition|reference|call|override|conformance]). :TypeRelation. Edge types: :DEFINED_IN. :REFERENCED_IN (count=int). :TYPE_INHERITS. :TYPE_CONFORMS. :OVERRIDES. :IMPORTS. Faceted axes: structural=module-membership, semantic-kind=[declaration|reference|conformance], domain-concept=[type-hierarchy|import-graph], capability=[Resolves|Indexes|CrossModule].",
+  "storage_format": "graph-node",
+  "prior_art": [
+    {"name": "SourceKit-LSP + indexstore-db (swiftlang)", "url": "https://github.com/swiftlang/sourcekit-lsp", "notes": "Apple's official LSP. Apache-2.0. Tied to Swift 6.1 toolchain (2025)."},
+    {"name": "indexstore-db (swiftlang)", "url": "https://github.com/swiftlang/indexstore-db", "notes": "Composable query library over .indexstore. Apache-2.0. Active."},
+    {"name": "Kotlin LSP (JetBrains official)", "url": "https://github.com/Kotlin/kotlin-lsp", "notes": "Previewed KotlinConf 2025. IntelliJ/Fleet engine. Alpha roadmap later 2025. JVM-only Gradle currently. Partially closed-source."},
+    {"name": "kotlin-language-server (fwcd, community)", "url": "https://github.com/fwcd/kotlin-language-server", "notes": "MIT. Active 2025. Uses kotlin-compiler directly. Portable but less accurate."},
+    {"name": "scip-java (sourcegraph) — Kotlin path", "url": "https://github.com/sourcegraph/scip-java", "notes": "Supports Kotlin via SemanticDB. Apache-2.0."},
+    {"name": "Glean (Meta OSS, Dec 2024)", "url": "https://engineering.fb.com/2024/12/19/developer-tools/glean-open-source-code-indexing/", "notes": "Design reference for cross-language unified symbol graph at scale."},
+    {"name": "palace-serena MCP server", "url": "internal", "notes": "Gimle-Palace's serena integration. Already in production."}
+  ],
+  "consumer_query_patterns": [
+    {"label": "Resolve all public symbols in a module", "cypher": "MATCH (s:Symbol {module: $module_name, visibility: 'public'})-[:DEFINED_IN]->(m:Module) RETURN s.fqn, s.kind, s.path, s.line ORDER BY s.kind, s.name"},
+    {"label": "Find all callers of a specific function across modules", "cypher": "MATCH (occ:SymbolOccurrence {symbol_fqn: $fqn, role: 'call'})<-[:REFERENCED_IN]-(f:Symbol) RETURN f.fqn, f.module, f.path ORDER BY f.module"},
+    {"label": "Module import dependency graph (two hops)", "cypher": "MATCH (m:Module {name: $module_name})-[:IMPORTS*1..2]->(dep:Module) RETURN dep.name, dep.type ORDER BY dep.name"},
+    {"label": "All types that conform to a given protocol/interface", "cypher": "MATCH (s:Symbol)-[:TYPE_CONFORMS]->(proto:Symbol {name: $protocol_name}) RETURN s.fqn, s.kind, s.module ORDER BY s.module"}
+  ],
+  "cross_extractor_feeds": {"consumes": [], "produces_for": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 27, 33, 34, 35, 37, 39, 40, 41, 43, 44, 45]},
+  "scip_lsif_alignment": "scip-correlated",
+  "change_granularity": "symbol",
+  "graphiti_episode_type": "EntityNode for :Symbol and :Module. EpisodicNode for :SymbolOccurrence. :TYPE_CONFORMS and :TYPE_INHERITS edges permanent while conformance declaration exists.",
+  "snapshot_vs_streaming": "hybrid",
+  "ingest_perf_est": "[uncertain] Full ingest on 20-Kit repo: Swift indexing ~5-15 min clean build; Kotlin LSP ~10-25 min. Total ~20-40 min. Incremental: sub-second for SourceKit-LSP; ~10-60 seconds per changed file.",
+  "maintenance_burden": "low",
+  "failure_modes": [
+    "SourceKit-LSP stale index if build system not invoked after changes",
+    "Kotlin LSP (JetBrains) partially closed-source and JVM-only in 2025 GA; KMP shared modules may fall back to community server or scip-java",
+    "Generated code noise: protobuf, SwiftGen outputs inflate symbol count; is_generated flag via path heuristic",
+    "Swift 6 actor isolation — SourceKit-LSP support incomplete as of Swift 6.0",
+    "Cross-module type resolution requires dependent module indexed first",
+    "RAM: Kotlin LSP daemon 4-8 GB; SourceKit-LSP 2-4 GB; parallel 12+ GB"
+  ],
+  "open_questions": [
+    "Merge vs separate with Item 41 (SCIP/LSIF): Item 21 live LSP vs Item 41 batch SCIP. Keep separate with join-by-display_name+module, merge, or deprecate LSP for Kotlin?",
+    "Should :SymbolOccurrence nodes be stored in Graphiti? 20-Kit repo may generate 5-10M occurrences. Sidecar index (Tantivy/Lucene) alternative.",
+    "Kotlin LSP JetBrains vs community (fwcd): accuracy vs openness tradeoff",
+    "How to unify FQN format between Swift and Kotlin for cross-language dedup?",
+    "KMP expect/actual: does Item 21 or Item 4 own :EXPECT_ACTUAL edge?"
+  ],
+  "adversarial_resistance": "high — LSP-based indexing is deterministic, compiler-driven. Macro expansion handled pre-indexing. Generated code flagged.",
+  "human_validation_cost": "low",
+  "regulatory_sensitivity": "none",
+  "uncertain": ["ingest_perf_est"]
+}

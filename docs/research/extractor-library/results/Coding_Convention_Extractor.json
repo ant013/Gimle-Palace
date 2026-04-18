@@ -1,0 +1,66 @@
+{
+  "name": "Coding Convention Extractor",
+  "meta_category": "conventional",
+  "target_problems": [3],
+  "short_description": "Detects undocumented coding conventions — Coordinator pattern presence, MVVM variant classification, Rx-to-Combine migration direction, and style rules — by statically analysing class/protocol naming, inheritance hierarchies, and import graphs across Kotlin and Swift modules.",
+
+  "tech_stack": [
+    "SwiftSyntax (swift-syntax) — AST visitor for protocol conformance, class suffix matching, import enumeration",
+    "Harmonize (perrystreetsoftware/Harmonize, MIT, Summer 2024) — Swift architectural lint-as-unit-test, inspects class structure without regex",
+    "Konsist (LemonAppDev/konsist, Apache-2.0, active 2024-2025) — Kotlin architectural unit-test linter; ViewModel suffix rules, package-layer assertions",
+    "detekt (custom RuleSet) — Kotlin AST visitor for naming rules, ViewModel constructor shape, Coordinator suffix detection",
+    "semgrep (multi-language patterns) — cross-language import pattern matching (import RxSwift vs import Combine) and annotation scanning",
+    "ast-grep — structural pattern matching for Coordinator/ViewModel protocol conformance in both Swift and Kotlin",
+    "LLM (GPT-4o / Claude-3.5) — only for ambiguous MVVM variant disambiguation (MVVM-C vs MVVM-R) when naming heuristics yield <70% confidence"
+  ],
+  "language_support": ["swift", "kotlin"],
+  "confidence_tier": "heuristic",
+  "ingest_trigger": "incremental",
+
+  "entity_model": "Produces :Convention nodes (name, kind∈{ArchitecturalPattern|StyleRule|MigrationDirection}, scope∈{module|project}, confidence_pct, evidence_files[]), :GOVERNS edge from :Convention to :Module (with rule_text property). Faceted axes: structural/semantic-kind=Convention, domain-concept=Architecture, capability=:Lints. Subtypes: :ArchitecturalConvention (pattern_name∈{Coordinator|MVVM|MVI|Clean|VIPER}, platform∈{iOS|Android|shared}), :MigrationConvention (from_framework, to_framework, direction∈{in-progress|complete|mixed}, pct_migrated), :StyleConvention (rule_type∈{naming|access-control|file-structure}). :CONTRADICTS edge between two :Convention nodes when mixed patterns detected in same module (e.g., both RxSwift and Combine imported). :APPLIED_IN edge from :Convention to :File with match_count property.",
+  "storage_format": "graph-node — conventions are project-level persistent facts; hybrid is considered but pure graph-node preferred because conventions have stable identity across ingests and change only on refactor commits",
+
+  "prior_art": [
+    {"name": "Konsist", "url": "https://github.com/LemonAppDev/konsist", "description": "Kotlin architectural unit-test linter inspired by ArchUnit. Verifies ViewModel suffix, package-layer rules, DI constructor shape. Active 2024-2025, Mercedes-Benz.io adoption article Oct 2024. Apache-2.0. Last release: 0.15.x (2024).", "relevance": "Direct prior art for Kotlin convention detection; query API maps well to :Convention entity extraction"},
+    {"name": "Harmonize", "url": "https://github.com/perrystreetsoftware/Harmonize", "description": "Swift architectural linter writing rules as XCTest/Swift Testing unit tests using SwiftSyntax. Introduced Summer 2024 (Perry Street Software). MIT. Addresses exact gap that SwiftLint regex rules cannot fill for MVVM-C pattern enforcement.", "relevance": "Closest Swift prior art; SwiftSyntax-backed visitor approach is the recommended foundation for Coding Convention Extractor on iOS side"},
+    {"name": "detekt naming ruleset + custom RuleSet API", "url": "https://detekt.dev/docs/rules/naming/", "description": "detekt ships ViewModel naming rules; custom RuleSets allow AST visitor rules for Coordinator suffix, Presenter/ViewModel constructor shape. Maintained 2024-2025.", "relevance": "Supplementary Kotlin tooling; allowedStateHolderNames config already supports ViewModel classification"},
+    {"name": "SwiftLint custom_rules + SwiftSyntax rules", "url": "https://github.com/realm/SwiftLint", "description": "Regex-based custom rules cover naming; SwiftSyntax-backed rules cover AST-level patterns. Blog post 'Advanced architectural rules in SwiftLint — just kidding' (ITNEXT) shows limitations beyond trivial patterns.", "relevance": "Baseline Swift tooling; not sufficient alone for MVVM-C detection, must be augmented with Harmonize or SwiftSyntax visitors"},
+    {"name": "RepoGraph (arXiv 2410.14684)", "url": "https://arxiv.org/abs/2410.14684", "description": "Repository-level code graph for AI software engineering; demonstrates pattern nodes with cross-file edges. 2024.", "relevance": "Schema inspiration for :Convention node with :GOVERNS and :APPLIED_IN edges"},
+    {"name": "RxSwift-to-Combine cheatsheet (CombineCommunity)", "url": "https://github.com/CombineCommunity/rxswift-to-combine-cheatsheet", "description": "Operator mapping reference; import-level migration signal detection (import RxSwift vs import Combine) is directly usable as a semgrep pattern.", "relevance": "Migration direction detection ground truth"}
+  ],
+
+  "consumer_query_patterns": [
+    {"label": "Active architectural patterns in a module", "cypher": "MATCH (c:Convention {kind:'ArchitecturalPattern'})-[:APPLIED_IN]->(f:File)-[:BELONGS_TO]->(m:Module {name:$module_name}) RETURN c.pattern_name, count(f) AS file_count, c.confidence_pct ORDER BY file_count DESC"},
+    {"label": "Rx-to-Combine migration state project-wide", "cypher": "MATCH (c:MigrationConvention {from_framework:'RxSwift', to_framework:'Combine'}) RETURN c.direction, c.pct_migrated, c.evidence_files LIMIT 1"},
+    {"label": "Find modules with contradictory conventions (mixed patterns)", "cypher": "MATCH (c1:Convention)-[:CONTRADICTS]->(c2:Convention), (c1)-[:GOVERNS]->(m:Module) RETURN m.name, c1.pattern_name AS pattern_a, c2.pattern_name AS pattern_b"},
+    {"label": "Which files violate the project-wide naming style rule?", "cypher": "MATCH (sr:StyleConvention {rule_type:'naming'})-[:GOVERNS]->(m:Module)<-[:BELONGS_TO]-(f:File) WHERE NOT (sr)-[:APPLIED_IN]->(f) RETURN f.path, m.name"}
+  ],
+  "cross_extractor_feeds": {"consumes": [5, 24], "produces_for": [7, 8, 12]},
+  "scip_lsif_alignment": "scip-correlated",
+  "change_granularity": "file",
+  "graphiti_episode_type": "EntityNode — :Convention nodes are persistent facts with valid_from (commit SHA when pattern first detected) and invalid_from (commit SHA when last file using pattern is removed or pattern replaced). :MigrationConvention edges carry end_time when migration reaches 100%. Communities cluster conventions by platform (iOS/Android) and architectural layer.",
+  "snapshot_vs_streaming": "snapshot-only",
+
+  "ingest_perf_est": "[uncertain] Full ingest on 200K Kotlin + 150K Swift LOC: estimated 8–15 min (Konsist test suite ~5 min on medium Kotlin monorepo, SwiftSyntax traversal ~3–8 min for Swift). Incremental (changed files only): ~30–90 s. Estimates based on analogous Konsist and SwiftLint benchmarks, not direct measurement.",
+  "maintenance_burden": "low",
+  "failure_modes": [
+    "False negatives: Coordinator pattern implemented without 'Coordinator' suffix (e.g., named 'Router', 'FlowController')",
+    "False positives: Test doubles or example code matching ViewModel suffix but not production architecture",
+    "MVVM variant disambiguation (MVVM-C vs MVVM-R vs MVVM-S) requires LLM for files that use both ViewModel and Coordinator but in non-standard ways",
+    "Rx→Combine state: modules using both frameworks during migration will trigger :CONTRADICTS — correct but noisy if migration is intentionally in-flight",
+    "KMP shared modules: Swift conventions not applicable; risk of misclassifying shared Kotlin code as Android-MVVM when it is platform-agnostic",
+    "Generated code (proto-generated ViewModels, Kotlin Poet outputs) may match naming patterns falsely; generated file exclusion list required"
+  ],
+  "open_questions": [
+    "Should MVVM variant classification be a single :Convention node property or a separate subtype hierarchy?",
+    "How to handle the 'Router' vs 'Coordinator' naming divergence common in iOS codebases — single pattern_name enum or aliasing?",
+    "Rx→Combine migration pct_migrated: calculate by file count, by LoC, or by import-site count?",
+    "Harmonize runs as XCTest — it requires a build target. Does Gimle-Palace's ingest pipeline run in a build environment?",
+    "For KMP projects: should shared-module conventions be classified under 'kotlin' platform or a separate 'kmp-shared' platform?"
+  ],
+  "adversarial_resistance": "medium — suffix-based naming heuristics are trivially defeated by non-standard naming. SwiftSyntax and Konsist protocol-conformance checks are harder to evade but still fail on heavily macro-generated code (e.g., @Observable macro generating ViewModel protocol conformances at compile time, invisible to source-level AST).",
+  "human_validation_cost": "low",
+  "regulatory_sensitivity": "none",
+
+  "uncertain": ["ingest_perf_est", "confidence_tier"]
+}

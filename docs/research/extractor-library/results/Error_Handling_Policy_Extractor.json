@@ -1,0 +1,60 @@
+{
+  "name": "Error Handling Policy Extractor",
+  "meta_category": "conventional",
+  "target_problems": [10],
+  "short_description": "Infers per-layer and per-module error-handling policies by classifying usage of throws, Result<T,E>, Publisher.failure, Optional, and silent-log patterns across Swift and Kotlin codebases, producing a policy graph that distinguishes propagation style by architectural layer.",
+  "tech_stack": [
+    "SwiftSyntax (swift-syntax) — AST visitor detects: try/throw/catch sites, Result<_, Error> return types, AnyPublisher<_, Error> signatures, optional-return-on-failure patterns",
+    "semgrep — multi-language pattern rules for: silent-log patterns, error swallowing, Kotlin runCatching + fold/getOrNull vs getOrThrow usage",
+    "ast-grep — structural matching for Kotlin sealed class Error hierarchies, Swift enum conforming to Error, and Swift typed throws (Swift 6 feature) signatures",
+    "detekt (custom RuleSet) — Kotlin-side: catches EmptyCatchBlock, detects Result<T,E>.getOrNull() used where propagation expected, flags runCatching chains",
+    "SourceKit-LSP — type resolution to determine actual Error type propagated (typed vs untyped)",
+    "LLM (optional, heuristic upgrade) — only when determining intent: distinguishes intentional boundary error-swallowing from accidental swallowing"
+  ],
+  "language_support": ["swift", "kotlin"],
+  "confidence_tier": "heuristic",
+  "ingest_trigger": "incremental",
+  "entity_model": "Produces :ErrorPolicy nodes (layer∈{domain|data|presentation|network|ui}, platform∈{iOS|Android|shared}, style∈{throws|Result|PublisherFailure|Optional|SilentLog|Mixed}, typed_errors:bool, confidence_pct) with :GOVERNS edge to :Module. :ErrorBoundary nodes (location:file+line, boundary_kind∈{catch-all|Result-to-throws-conversion|Publisher-catch}, upstream_style, downstream_style) representing style transitions. :VIOLATES edge from :File to :ErrorPolicy when a file uses a style inconsistent with its module's declared policy. Faceted axes: semantic-kind=Policy, domain-concept=ErrorHandling, capability=:Audits.",
+  "storage_format": "graph-node — policy nodes are persistent per-module facts stable across ingests; :ErrorBoundary nodes carry valid_from/valid_to for tracking when boundary was introduced or removed",
+  "prior_art": [
+    {"name": "Interleaving static analysis and LLM prompting for error specification inference (Springer STTT 2025)", "url": "https://link.springer.com/article/10.1007/s10009-025-00780-7", "description": "Hybrid approach: static analyzer generates candidate error specs, LLM refines them."},
+    {"name": "semgrep taint-mode and error-swallowing rules", "url": "https://semgrep.dev/", "description": "Semgrep supports structural pattern matching for empty catch blocks, ignored Result values, and silent-log patterns."},
+    {"name": "detekt EmptyCatchBlock and similar rules", "url": "https://detekt.dev/docs/rules/exceptions/", "description": "detekt ships SwallowedException, TooGenericExceptionCaught, EmptyCatchBlock, and PrintStackTrace rules covering Kotlin error-handling anti-patterns."},
+    {"name": "Swift typed throws (SE-0413, Swift 6)", "url": "https://docs.swift.org/swift-book/documentation/the-swift-programming-language/errorhandling/", "description": "Swift 6 typed throws changes error propagation semantics."},
+    {"name": "CodeQL 2.25.0 Swift 6.2.4 support", "url": "https://github.blog/changelog/2026-03-31-codeql-2-25-0-adds-swift-6-2-4-support/", "description": "CodeQL's Swift data-flow engine understands throws/Result propagation at the type level."},
+    {"name": "Combine error handling patterns (Kodeco, avanderlee.com)", "url": "https://www.avanderlee.com/swift/combine-error-handling/", "description": "Documents Publisher.failure, mapError, catch, replaceError patterns."}
+  ],
+  "consumer_query_patterns": [
+    {"label": "What error style does each module use by layer?", "cypher": "MATCH (ep:ErrorPolicy)-[:GOVERNS]->(m:Module) RETURN m.name, ep.layer, ep.style, ep.confidence_pct ORDER BY m.name, ep.layer"},
+    {"label": "Find all error-swallowing violations in the domain layer", "cypher": "MATCH (f:File)-[:VIOLATES]->(ep:ErrorPolicy {layer:'domain', style:'SilentLog'}) RETURN f.path, ep.module ORDER BY f.path"},
+    {"label": "Where do error-handling style transitions (boundaries) occur?", "cypher": "MATCH (eb:ErrorBoundary) RETURN eb.location, eb.upstream_style, eb.downstream_style, eb.boundary_kind"},
+    {"label": "Which modules mix throws and Result in the same layer (Mixed style)?", "cypher": "MATCH (ep:ErrorPolicy {style:'Mixed'})-[:GOVERNS]->(m:Module) RETURN m.name, ep.layer, ep.confidence_pct"}
+  ],
+  "cross_extractor_feeds": {"consumes": [6, 24], "produces_for": [7, 35, 43]},
+  "scip_lsif_alignment": "scip-correlated",
+  "change_granularity": "function",
+  "graphiti_episode_type": "EntityNode — :ErrorPolicy nodes carry valid_from and valid_to (when pattern changes). :ErrorBoundary nodes are EpisodicNode when representing a single conversion event at a specific commit.",
+  "snapshot_vs_streaming": "snapshot-only",
+  "ingest_perf_est": "[uncertain] Full ingest estimated 10–20 min on 350K LOC combined. Incremental on changed files: ~60–120 s.",
+  "maintenance_burden": "low",
+  "failure_modes": [
+    "Silent logging via custom Logger wrapper not matching known log-call patterns",
+    "Legitimate catch-all UI boundary handlers classified as violations",
+    "Swift typed throws: pre-Swift-6 heuristics misclassify typed throws as untyped",
+    "Kotlin runCatching getOrNull() intent disambiguation",
+    "Combine vs async/await migration: Mixed style may be correct in-progress",
+    "Generated stub code using throws everywhere",
+    "KMP shared code error style may legitimately differ"
+  ],
+  "open_questions": [
+    "Model Result→throws conversion as boundary node or edge property?",
+    "Swift 6 typed throws: how to treat 'throws Never'?",
+    "Silent-log detection requires per-project logger-library config",
+    "Does schema need :ErrorType node separate from :ErrorPolicy?",
+    "Hard dependency on extractor #6 (Coding Convention) for layer assignment"
+  ],
+  "adversarial_resistance": "medium — basic empty-catch and silent-log patterns are reliably detected. Adversarial code hiding error swallowing inside abstraction layers will evade AST detection.",
+  "human_validation_cost": "medium (2-8h)",
+  "regulatory_sensitivity": "low — error messages occasionally contain user-identifying data. Silent-log classification may surface log calls containing sensitive crypto material; output nodes should not store log message content.",
+  "uncertain": ["ingest_perf_est", "confidence_tier"]
+}

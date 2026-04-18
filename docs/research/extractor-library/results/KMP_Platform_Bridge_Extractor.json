@@ -1,0 +1,65 @@
+{
+  "name": "KMP Platform-Bridge Extractor",
+  "meta_category": "structural",
+  "target_problems": [16],
+  "short_description": "Extracts the full Kotlin Multiplatform platform-bridging surface: expect/actual declaration pairs, @ObjCName annotations, SKIE-enhanced Swift API shapes, ObjC header exports, and Swift Export (experimental, Kotlin 2.2.x). Produces a bridge-surface graph enabling impact analysis when shared API changes.",
+
+  "tech_stack": [
+    "tree-sitter-kotlin — AST extraction of expect/actual keywords, @ObjCName/@ObjCProtocolName annotations, @HiddenFromObjC",
+    "Kotlin compiler plugin (compiler-embeddable) or kotlin-analysis-api — programmatic access to resolved expect/actual linkage, platform target metadata; more accurate than tree-sitter for multi-round type inference",
+    "SKIE Gradle plugin (Touchlab, v0.x) — generates Swift overlay declarations; SKIE API report JSON can be parsed post-build",
+    "swift-syntax (SwiftPM) or SourceKit-LSP — parse generated .swiftinterface files to extract Swift-visible API surface",
+    "objc-header-parser (custom, or libclang) — parse generated ObjC umbrella header (.h) to extract @interface/@protocol declarations",
+    "custom Python/Kotlin driver — orchestrates extraction, aligns expect<->actual pairs, emits bridge surface to Graphiti"
+  ],
+  "language_support": ["kotlin", "swift"],
+  "confidence_tier": "deterministic",
+  "ingest_trigger": "incremental",
+
+  "entity_model": "Produces :ExpectDeclaration nodes (fqn, file_path, kind=[class|function|object|property], target_platforms=[android|ios|jvm|js]) and :ActualDeclaration nodes (fqn, file_path, platform, implementation_notes). Edge :IMPLEMENTS links ActualDeclaration → ExpectDeclaration. Produces :ObjCExport nodes (kotlin_fqn, objc_name, swift_name, export_kind=[class|protocol|function|property], is_skie_enhanced=bool, has_objc_name_annotation=bool). :EXPOSES edge links :ObjCExport → :ExpectDeclaration or :ActualDeclaration. For Swift Export path (Kotlin 2.2.x experimental): :SwiftExportSymbol nodes with swift_module, swift_name. All bridge entities apply structural facet structural=platform-bridge, capability=KMPBridge. :BridgeSurfaceSnapshot node (timestamp, kotlin_version, skie_version) acts as snapshot root for temporal queries.",
+  "storage_format": "graph-node — primary storage in Graphiti for Cypher traversal. Supplementary .knowledge/kmp-bridge-surface.md snapshot (human-readable table of expect/actual pairs + ObjC export names) written per ingest cycle. Rationale: bridge surface is critical for iOS engineer orientation; markdown provides stable non-graph access.",
+
+  "prior_art": [
+    {"name": "SKIE — Swift Kotlin Interface Enhancer", "url": "https://skie.touchlab.co/", "description": "Gradle plugin by Touchlab that enhances ObjC-generated Swift API (sealed class → Swift enum, suspend → async/throws, Flow → AsyncSequence). Produces structured API change reports. Does not yet support Swift Export path. Actively maintained 2024–2025.", "maintenance": "active, Touchlab commercial backing"},
+    {"name": "Kotlin Swift Export (JetBrains roadmap)", "url": "https://blog.jetbrains.com/kotlin/2025/08/kmp-roadmap-aug-2025/", "description": "JetBrains Aug 2025 roadmap: Swift Export experimental in Kotlin 2.2.x, target stable 2026. Generates pure Swift without ObjC layer. SKIE does not support this path yet. Breaking change from ObjC-export paradigm.", "maintenance": "experimental/roadmap"},
+    {"name": "Kotlin ObjC Interop documentation", "url": "https://kotlinlang.org/docs/native-objc-interop.html", "description": "Canonical reference for @ObjCName, @ObjCProtocolName, @HiddenFromObjC annotations and name mangling rules.", "maintenance": "official docs, continuously updated"},
+    {"name": "KMMBridge (Touchlab)", "url": "https://github.com/touchlab/KMMBridge", "description": "Framework for publishing KMP XCFrameworks to SPM/CocoaPods. Integrates SKIE. Used with PowerSync example. Provides build pipeline reference for bridge surface publication.", "maintenance": "active 2024–2025"},
+    {"name": "swift-api-digester / diagnose-api-breaking-changes", "url": "https://forums.swift.org/t/swift-package-diagnose-api-breaking-changes/54308", "description": "Built into Swift toolchain. Detects breaking changes in .swiftinterface files between versions. Relevant for tracking KMP bridge surface breakage from Kotlin side changes. Known issues with ObjC dependencies (Issue #75847).", "maintenance": "maintained as part of Swift toolchain"},
+    {"name": "scip-kotlin (Sourcegraph)", "url": "https://github.com/sourcegraph/scip-kotlin", "description": "SCIP indexer for Kotlin via SemanticDB compiler plugin. Could provide stable SCIP symbol IDs for expect/actual fqns. Less mature than scip-java Java support.", "maintenance": "moderate"},
+    {"name": "Kotlin binary-compatibility-validator", "url": "https://github.com/Kotlin/binary-compatibility-validator", "description": "JetBrains tool generating .api dump files per module, now with experimental KLib ABI support (2024). apiCheck task detects breaking public API changes. Directly applicable to validating expect/actual contract stability.", "maintenance": "active, JetBrains maintained"}
+  ],
+
+  "consumer_query_patterns": [
+    "// All expect declarations without a corresponding iOS actual\nMATCH (e:ExpectDeclaration)\nWHERE NOT EXISTS { MATCH (a:ActualDeclaration {platform: 'ios'})-[:IMPLEMENTS]->(e) }\nRETURN e.fqn, e.file_path",
+    "// ObjC export names that differ from Kotlin FQN (renamed via @ObjCName)\nMATCH (o:ObjCExport {has_objc_name_annotation: true})\nRETURN o.kotlin_fqn, o.objc_name, o.swift_name ORDER BY o.kotlin_fqn",
+    "// Bridge surface functions that are SKIE-enhanced (async/throws wrappers)\nMATCH (o:ObjCExport {is_skie_enhanced: true})\nRETURN o.kotlin_fqn, o.swift_name, o.export_kind",
+    "// Impact analysis: what iOS bridge symbols are affected when a shared class changes?\nMATCH (e:ExpectDeclaration {fqn: $changed_fqn})<-[:IMPLEMENTS]-(a:ActualDeclaration)<-[:EXPOSES]-(o:ObjCExport)\nRETURN o.swift_name, o.objc_name, o.export_kind"
+  ],
+  "cross_extractor_feeds": {"consumes": [1, 21, 27], "produces_for": [31, 27, 5]},
+  "scip_lsif_alignment": "scip-correlated",
+  "change_granularity": "symbol",
+  "graphiti_episode_type": "EntityNode — :ExpectDeclaration and :ActualDeclaration are permanent structural nodes until declaration is removed (carry end_time). :ObjCExport nodes carry end_time when @ObjCName annotation or SKIE configuration changes. :BridgeSurfaceSnapshot is an EpisodicNode with a point-in-time validity.",
+  "snapshot_vs_streaming": "snapshot-only",
+
+  "ingest_perf_est": "[uncertain] Tree-sitter pass for expect/actual extraction on 200K LOC Kotlin: ~1–3 minutes. Annotation extraction: fast (~30s). ObjC header parsing (libclang or custom): ~1–2 minutes for a 20-library XCFramework. SKIE API report parsing: ~10–30s (post-build artifact). Full ingest including Kotlin compiler plugin invocation: ~5–15 minutes (Kotlin compilation is the bottleneck). Incremental: ~1–3 minutes for a changed module. All estimates based on analogous KMP build times, not direct measurement.",
+  "maintenance_burden": "medium",
+  "failure_modes": [
+    "SKIE does not support Swift Export path (as of 2025) — when Kotlin migrates to Swift Export, the ObjC-header-based extraction pipeline becomes obsolete and must be rewritten for .swiftinterface parsing",
+    "Swift Export is experimental in Kotlin 2.2.x — schema designed today may need significant revision once Swift Export stabilises (target 2026)",
+    "diagnose-api-breaking-changes fails with 'redefinition of module' errors in some configurations (Swift Forums Issue #8103) — reduces reliability of ObjC-header diff pipeline",
+    "@ObjCName annotation is still marked experimental as of Kotlin 2.x — name mangling rules may change across compiler versions",
+    "Generated SKIE Swift overlay code in build/ may not be preserved between CI runs — requires build step before extraction, coupling ingest to compilation"
+  ],
+  "open_questions": [
+    "SKIE vs Swift Export migration timing: should the extractor schema model both ObjC-export and Swift-Export paths in parallel, accepting dual-path complexity, or delay implementation until Swift Export stabilises (2026)? This is a fundamental schema fork decision.",
+    "Overlap with Item 27 (Public API Surface Extractor): ObjCExport nodes overlap with exported symbol surface. Should bridge-surface nodes be merged with Item 27 output or kept separate with :EXPOSES edges? Merging simplifies the graph; separation preserves semantic clarity.",
+    "How should expect/actual pairs where the actual is platform-specific (iosMain, androidMain) be distinguished from expect/actual pairs where actual is in a common non-shared module? Relevant for Unstoppable Wallet's Kit architecture.",
+    "KMMBridge XCFramework publishing: should the extractor track which Kotlin version produced a given bridge snapshot to enable version-skew analysis across Kit libraries? Requires versioning :BridgeSurfaceSnapshot nodes.",
+    "Compiler plugin approach (kotlin-analysis-api) vs tree-sitter: the compiler plugin gives 100% accurate multi-platform resolution but requires a full Kotlin compilation pass — is this acceptable for incremental ingest latency targets?"
+  ],
+  "adversarial_resistance": "high — expect/actual keywords and @ObjCName annotations are syntactic; not obfuscatable at source level. Generated ObjC headers are compiler output and deterministic given the same source.",
+  "human_validation_cost": "low",
+  "regulatory_sensitivity": "none",
+
+  "uncertain": ["ingest_perf_est", "swift_export_schema_stability"]
+}
