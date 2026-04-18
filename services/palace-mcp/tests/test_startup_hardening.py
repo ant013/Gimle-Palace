@@ -13,6 +13,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _stub_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Settings requires NEO4J_PASSWORD with no default. Tests that
+    exercise ``lifespan`` must have it present in env so the ``Settings()``
+    construction in ``main.lifespan`` does not raise ValidationError.
+    """
+    monkeypatch.setenv("NEO4J_PASSWORD", "test-pw")
+
+
 class TestFireAndForgetConstraints:
     """Pattern #11: ensure_constraints must be fire-and-forget, not blocking."""
 
