@@ -1,0 +1,113 @@
+"""Runner unit tests using AsyncMock for Neo4j driver and httpx.MockTransport for client."""
+
+from __future__ import annotations
+
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock
+
+import httpx
+import pytest
+
+from palace_mcp.ingest.paperclip_client import PaperclipClient
+from palace_mcp.ingest.runner import run_ingest
+
+
+def _make_mock_driver(session_mock: MagicMock) -> MagicMock:
+    """Build a minimal AsyncDriver mock that yields session_mock from session()."""
+    driver = MagicMock()
+    driver.session.return_value.__aenter__ = AsyncMock(return_value=session_mock)
+    driver.session.return_value.__aexit__ = AsyncMock(return_value=None)
+    return driver
+
+
+def _make_session() -> MagicMock:
+    session = MagicMock()
+    session.execute_write = AsyncMock(return_value=None)
+    return session
+
+
+def _paperclip_handler(request: httpx.Request) -> httpx.Response:
+    path = request.url.path
+    if "/agents" in path:
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "id": "a1",
+                    "name": "A",
+                    "urlKey": "a",
+                    "role": "",
+                    "createdAt": "2026-01-01T00:00:00Z",
+                    "updatedAt": "2026-01-01T00:00:00Z",
+                }
+            ],
+        )
+    if "/comments" in path:
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "id": "c1",
+                    "body": "hi",
+                    "issueId": "i1",
+                    "authorAgentId": None,
+                    "createdAt": "2026-01-01T00:00:00Z",
+                }
+            ],
+        )
+    if "/issues" in path:
+        return httpx.Response(
+            200,
+            json={
+                "issues": [
+                    {
+                        "id": "i1",
+                        "identifier": "GIM-1",
+                        "title": "T",
+                        "status": "done",
+                        "createdAt": "2026-01-01T00:00:00Z",
+                        "updatedAt": "2026-01-01T00:00:00Z",
+                    }
+                ]
+            },
+        )
+    return httpx.Response(404)
+
+
+@pytest.mark.asyncio
+async def test_run_ingest_happy_path_calls_all_write_paths() -> None:
+    session = _make_session()
+    driver = _make_mock_driver(session)
+
+    transport = httpx.MockTransport(_paperclip_handler)
+    async with PaperclipClient(
+        base_url="https://pc", token="t", company_id="co-1", transport=transport
+    ) as client:
+        result = await run_ingest(client=client, driver=driver)
+
+    assert result["errors"] == []
+    # execute_write is called: create_ingest_run, agents, issues, comments, gc*3, finalize
+    assert session.execute_write.call_count >= 7
+
+
+@pytest.mark.asyncio
+async def test_run_ingest_records_error_on_exception() -> None:
+    session = _make_session()
+    # Make upsert raise on second call (agents OK, issues fail)
+    call_count = 0
+
+    async def side_effect(fn: Any, *args: Any, **kwargs: Any) -> None:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 2:
+            raise RuntimeError("neo4j down")
+
+    session.execute_write.side_effect = side_effect
+    driver = _make_mock_driver(session)
+
+    transport = httpx.MockTransport(_paperclip_handler)
+    async with PaperclipClient(
+        base_url="https://pc", token="t", company_id="co-1", transport=transport
+    ) as client:
+        with pytest.raises(RuntimeError):
+            await run_ingest(client=client, driver=driver)

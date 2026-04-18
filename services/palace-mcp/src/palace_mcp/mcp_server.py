@@ -1,8 +1,8 @@
 """MCP server layer for palace-mcp.
 
 Exposes MCP tools via streamable-HTTP transport.
-The FastAPI app mounts this at ``/mcp`` and shares the Graphiti instance
-through :func:`set_graphiti`.
+The FastAPI app mounts this at ``/mcp`` and shares the Neo4j driver
+through :func:`set_driver`.
 
 Tools registered:
 - palace.health.status
@@ -16,8 +16,8 @@ import time
 from collections.abc import Callable
 from typing import Any, Literal, TypeVar
 
-from graphiti_core import Graphiti
 from mcp.server.fastmcp import FastMCP
+from neo4j import AsyncDriver
 from pydantic import BaseModel
 from starlette.applications import Starlette
 
@@ -36,11 +36,8 @@ logger = logging.getLogger(__name__)
 
 _mcp = FastMCP("palace", streamable_http_path="/")
 
-# Module-level graphiti reference — set by FastAPI lifespan before any request.
-_graphiti: Graphiti | None = None
-
-# Embedder base URL for health probe — set by FastAPI lifespan.
-_embedder_base_url: str = ""
+# Module-level driver reference — set by FastAPI lifespan before any request.
+_driver: AsyncDriver | None = None
 
 # Server start time for uptime_seconds calculation.
 _start_time: float = time.monotonic()
@@ -71,11 +68,10 @@ class HealthStatusResponse(BaseModel):
     uptime_seconds: int
 
 
-def set_graphiti(graphiti: Graphiti, embedder_base_url: str = "") -> None:
-    """Called from FastAPI lifespan to share Graphiti with MCP tools."""
-    global _graphiti, _embedder_base_url  # noqa: PLW0603
-    _graphiti = graphiti
-    _embedder_base_url = embedder_base_url
+def set_driver(driver: AsyncDriver) -> None:
+    """Called from FastAPI lifespan to share the Neo4j driver with MCP tools."""
+    global _driver  # noqa: PLW0603
+    _driver = driver
 
 
 def build_mcp_asgi_app() -> Starlette:
@@ -104,9 +100,9 @@ def _tool(name: str, description: str) -> Callable[[_F], _F]:
 async def palace_health_status() -> HealthStatusResponse:
     """Check Palace service health: Neo4j connectivity, git revision, uptime."""
     neo4j_status: Literal["reachable", "unreachable"] = "unreachable"
-    if _graphiti is not None:
+    if _driver is not None:
         try:
-            await _graphiti.driver.verify_connectivity()
+            await _driver.verify_connectivity()
             neo4j_status = "reachable"
         except Exception as exc:
             logger.warning("MCP palace.health.status neo4j check failed: %s", exc)
@@ -133,10 +129,10 @@ async def palace_memory_lookup(
     limit: int = 20,
     order_by: str = "source_updated_at",
 ) -> dict[str, Any]:
-    """Look up Paperclip entities from the knowledge graph."""
-    graphiti = _graphiti
-    if graphiti is None:
-        handle_tool_error(DriverUnavailableError("Graphiti not initialised"))
+    """Look up Paperclip entities from the Neo4j knowledge graph."""
+    driver = _driver
+    if driver is None:
+        handle_tool_error(DriverUnavailableError("Neo4j driver not initialised"))
     if entity_type not in VALID_ENTITY_TYPES:
         handle_tool_error(UnknownEntityTypeError(entity_type))
     try:
@@ -146,7 +142,7 @@ async def palace_memory_lookup(
             limit=limit,
             order_by=order_by,
         )
-        resp: LookupResponse = await perform_lookup(graphiti, req)
+        resp: LookupResponse = await perform_lookup(driver, req)
         return resp.model_dump()
     except Exception as exc:
         handle_tool_error(exc)
@@ -161,11 +157,11 @@ async def palace_memory_lookup(
 )
 async def palace_memory_health() -> dict[str, Any]:
     """Return knowledge-graph health: entity counts and last ingest run."""
-    graphiti = _graphiti
-    if graphiti is None:
-        handle_tool_error(DriverUnavailableError("Graphiti not initialised"))
+    driver = _driver
+    if driver is None:
+        handle_tool_error(DriverUnavailableError("Neo4j driver not initialised"))
     try:
-        resp: MemoryHealthResponse = await get_health(graphiti, _embedder_base_url)
+        resp: MemoryHealthResponse = await get_health(driver)
         return resp.model_dump()
     except Exception as exc:
         handle_tool_error(exc)

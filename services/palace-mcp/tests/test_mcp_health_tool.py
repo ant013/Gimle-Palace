@@ -13,26 +13,24 @@ from palace_mcp.mcp_server import HealthStatusResponse, _mcp
 
 
 @pytest.fixture(autouse=True)
-def reset_graphiti():
-    """Restore module-level graphiti to None after each test."""
-    original = mcp_module._graphiti
+def reset_driver():
+    """Restore module-level driver to None after each test."""
+    original = mcp_module._driver
     yield
-    mcp_module._graphiti = original
+    mcp_module._driver = original
 
 
-def _make_graphiti(*, reachable: bool):
+def _make_driver(*, reachable: bool):
     driver = MagicMock()
     if reachable:
         driver.verify_connectivity = AsyncMock()
     else:
         driver.verify_connectivity = AsyncMock(side_effect=Exception("unreachable"))
-    graphiti = MagicMock()
-    graphiti.driver = driver
-    return graphiti
+    return driver
 
 
 async def test_health_status_neo4j_reachable(monkeypatch):
-    mcp_module._graphiti = _make_graphiti(reachable=True)
+    mcp_module._driver = _make_driver(reachable=True)
     monkeypatch.setenv("PALACE_GIT_SHA", "abc123")
 
     (content, structured) = await _mcp.call_tool("palace.health.status", {})
@@ -45,7 +43,7 @@ async def test_health_status_neo4j_reachable(monkeypatch):
 
 
 async def test_health_status_neo4j_unreachable(monkeypatch):
-    mcp_module._graphiti = _make_graphiti(reachable=False)
+    mcp_module._driver = _make_driver(reachable=False)
     monkeypatch.setenv("PALACE_GIT_SHA", "def456")
 
     (content, structured) = await _mcp.call_tool("palace.health.status", {})
@@ -55,9 +53,9 @@ async def test_health_status_neo4j_unreachable(monkeypatch):
     assert "unreachable" in content[0].text
 
 
-async def test_health_status_no_graphiti(monkeypatch):
-    """When graphiti is not set (None), neo4j should be 'unreachable'."""
-    mcp_module._graphiti = None
+async def test_health_status_no_driver(monkeypatch):
+    """When driver is not set (None), neo4j should be 'unreachable'."""
+    mcp_module._driver = None
     monkeypatch.setenv("PALACE_GIT_SHA", "ghi789")
 
     (content, structured) = await _mcp.call_tool("palace.health.status", {})
@@ -67,7 +65,7 @@ async def test_health_status_no_graphiti(monkeypatch):
 
 async def test_health_status_git_sha_default(monkeypatch):
     """PALACE_GIT_SHA defaults to 'unknown' when not set."""
-    mcp_module._graphiti = _make_graphiti(reachable=True)
+    mcp_module._driver = _make_driver(reachable=True)
     monkeypatch.delenv("PALACE_GIT_SHA", raising=False)
 
     (_content, structured) = await _mcp.call_tool("palace.health.status", {})
