@@ -1,125 +1,93 @@
 # Palace Memory — N+1a Graphiti substrate swap
 
-**Date:** 2026-04-18
+**Date:** 2026-04-18 (revision 2 — post extended verification)
 **Slice:** N+1a (first of three N+1 sub-slices)
 **Author:** Board
 **Status:** Draft — awaiting CTO formalization as GIM-NN issue
-**Related specs:** `docs/superpowers/specs/2026-04-15-gimle-palace-design.md` §4.2, §5; `docs/research/graphiti-core-verification.md`; successor slices N+1b (multi-project) + N+1c (agent-MCP + record_note)
+**Related specs:** `docs/superpowers/specs/2026-04-15-gimle-palace-design.md` §4.2, §5; `docs/research/graphiti-core-verification.md` (full API verification; revision 2 §5-6 resolves 9 additional API-gap questions from Board review #2)
 **Predecessor slice:** N+0 (GIM-34) — `docs/superpowers/specs/2026-04-17-palace-memory-paperclip-slice.md`
-**Supersedes:** `2026-04-18-palace-memory-n1-graphiti-substrate.md` (REJECTED — API hallucinations)
 
 ## 1. Context
 
-N+0 shipped paperclip ingest + `palace.memory.lookup/health` on plain Neo4j with direct Cypher `MERGE`. N+1 was originally drafted as a single combined slice (substrate + multi-project + agent-MCP) which the Board rejected for non-atomicity and API hallucinations. This slice (N+1a) ships **only the substrate swap** — N+0 user-visible behavior is 100% preserved, but writes go through `graphiti-core.add_triplet` with typed `EntityNode` + bi-temporal `EntityEdge`. Multi-project scoping (N+1b) and agent-MCP surface (N+1c) follow as independent slices.
+N+0 shipped paperclip ingest + `palace.memory.lookup/health` on plain Neo4j. This slice swaps the write+read substrate to `graphiti-core` while preserving N+0 user-visible behavior byte-for-byte. Multi-project scoping (N+1b) and agent-MCP surface (N+1c) follow as independent slices.
 
-Why this order: substrate is the highest-risk change (wrong API choice = rework of all downstream). By shipping it in isolation with N+0 acceptance preserved, risk is contained. N+1b/N+1c build on verified-working substrate.
+**Why this order:** substrate is the highest-risk change. Shipping in isolation with N+0 acceptance preserved contains risk. N+1b/c build on verified-working substrate.
+
+**Architectural collapse vs revision 1:** graphiti-core is a pure Python library imported into palace-mcp directly — no separate compose service, no "internal RPC" layer, no middleman. All graphiti operations are namespace-API method calls: `graphiti.nodes.entity.save(node)`, `graphiti.edges.entity.save(edge)`, `graphiti.edges.entity.get_between_nodes(src, target)`. Zero raw Cypher in ingest path.
 
 ## 2. Goal
 
-After this slice, `palace-mcp` uses `graphiti-core` under the hood for all writes and reads; paperclip ingest produces `:Issue`/`:Comment`/`:Agent` nodes via `add_triplet` (bypassing LLM extraction); `palace.memory.lookup` and `palace.memory.health` return identical results to N+0.
+After this slice: palace-mcp uses graphiti-core for all writes and reads; paperclip ingest produces `:Issue` / `:Comment` / `:Agent` (auto-prepended `:Entity`) nodes via `graphiti.nodes.entity.save`; `ASSIGNED_TO` edge invalidation exercises genuine bi-temporal via `graphiti.edges.entity.save(edge)` with updated `invalid_at`; `palace.memory.lookup` + `palace.memory.health` return identical results to N+0.
 
-**Success criterion:** `python -m palace_mcp.ingest.paperclip` completes against the live Gimle paperclip; `palace.memory.lookup(entity_type="Issue", filters={"status":"done"})` from Claude Code returns the same result set as N+0; Neo4j Browser shows nodes carry `labels=["Issue", "Entity"]` (graphiti-core format) instead of plain `:Issue`.
+**Success criterion:** `python -m palace_mcp.ingest.paperclip` completes against live Gimle paperclip; `palace.memory.lookup(entity_type="Issue", filters={"status":"done"})` from Claude Code returns same result set as N+0; Neo4j Browser shows nodes with `:Issue:Entity` labels; when an issue assignee changes between ingests, Cypher inspection of the corresponding `ASSIGNED_TO` edge shows `invalid_at` set to prior-run timestamp.
 
 ## 3. Architecture
 
-One new compose service (`graphiti`), one refactored service (`palace-mcp`). No Ollama compose service in this slice — embedding provider is **external URL only** (user's hosted Ollama, Alibaba DashScope, OpenAI, etc.) via env config. Local Ollama compose is deferred to N+1c `with-local-ollama` profile.
+Zero new compose services. palace-mcp gains `graphiti-core` as a Python dependency and embedder client configuration.
 
 ```
 ┌─────────────────────┐                      ┌──────────────────────────────────┐
-│ Paperclip HTTP API  │◄──── ingest ────────►│ palace-mcp (FastAPI+FastMCP)     │
-│ (iMac:3100)         │     (on-demand CLI)  │  ├── /mcp  streamable-HTTP       │
-└─────────────────────┘                      │  │   ├── palace.memory.lookup   │
-                                             │  │   ├── palace.memory.health   │
-                                             │  │   └── palace.health.status   │
-                                             │  └── ingest CLI uses             │
-                                             │      graphiti_core.add_triplet   │
-                                             └───────────────┬──────────────────┘
-                                                             │ HTTP (internal)
-                                                             ▼
-                                             ┌──────────────────────────────────┐
-                                             │ graphiti (Python 3.11 + FastAPI  │
-                                             │  + graphiti-core + uvicorn)      │
-                                             │  ├── /healthz                    │
-                                             │  ├── internal RPC for palace-mcp │
-                                             │  │   (add_triplet, search, get)  │
-                                             │  └── graphiti-core OpenAIGeneric │
-                                             │      + OpenAIEmbedder pointing   │
-                                             │      at EMBEDDING_BASE_URL       │
-                                             └──────┬──────────────────┬────────┘
-                                                    │ Bolt             │ HTTP
-                                                    ▼                  ▼
-                                        ┌──────────────────┐  ┌──────────────────┐
-                                        │  Neo4j 5.26      │  │ External         │
-                                        │  (existing)      │  │ embedding server │
-                                        └──────────────────┘  │ (user's Ollama / │
-                                                              │  Alibaba / etc.) │
-                                                              └──────────────────┘
+│ Paperclip HTTP API  │◄──── ingest ────────►│ palace-mcp (FastAPI + FastMCP)   │
+│ (iMac:3100)         │   (on-demand CLI)    │  ├── /mcp streamable-HTTP :8080  │
+│                     │                      │  │   ├── palace.memory.lookup   │
+│                     │                      │  │   ├── palace.memory.health   │
+│                     │                      │  │   └── palace.health.status   │
+│                     │                      │  └── embeds graphiti-core        │
+│                     │                      │      - Graphiti(...)             │
+│                     │                      │      - namespace API calls       │
+│                     │                      │      - OpenAIGenericClient +     │
+│                     │                      │        OpenAIEmbedder            │
+│                     │                      └──────┬────────────┬──────────────┘
+│                     │                             │ Bolt       │ HTTP
+│                     │                             ▼            ▼
+│                     │                     ┌─────────────┐  ┌────────────────┐
+│                     │                     │ Neo4j 5.26  │  │ External       │
+│                     │                     └─────────────┘  │ embedder URL   │
+│                     │                                      │ (user's Ollama │
+│                     │                                      │  or Alibaba)   │
+│                     │                                      └────────────────┘
+└─────────────────────┘
+
 ┌─────────────────────┐
-│ External MCP client │──── MCP streamable-HTTP :8080 (unchanged from N+0)
+│ External MCP client │──── :8080 (unchanged from N+0)
 └─────────────────────┘
 ```
 
-Compose additions:
+Compose delta: `palace-mcp` service gains env vars for embedder. No new services.
 
 ```yaml
-graphiti:
-  build:
-    context: services/graphiti
-  restart: unless-stopped
-  mem_limit: 1g
-  cpus: "1.0"
-  profiles: [review, analyze, full]
+palace-mcp:
+  # existing N+0 service
   environment:
+    # N+0 preserved
     NEO4J_URI: "bolt://neo4j:7687"
-    NEO4J_USER: "neo4j"
     NEO4J_PASSWORD: "${NEO4J_PASSWORD}"
+    # NEW — embedder/LLM client config for graphiti-core (single block covers
+    # external Ollama, Alibaba DashScope, OpenAI, Voyage — all OpenAI-compat)
     EMBEDDING_BASE_URL: "${EMBEDDING_BASE_URL}"
     EMBEDDING_API_KEY: "${EMBEDDING_API_KEY:-placeholder}"
     EMBEDDING_MODEL: "${EMBEDDING_MODEL:-nomic-embed-text}"
     EMBEDDING_DIM: "${EMBEDDING_DIM:-768}"
-    # LLM client required by Graphiti constructor; N+1a never calls add_episode
+    # LLM client required by Graphiti constructor; never invoked in N+1a
     LLM_BASE_URL: "${LLM_BASE_URL:-${EMBEDDING_BASE_URL}}"
     LLM_API_KEY: "${LLM_API_KEY:-${EMBEDDING_API_KEY:-placeholder}}"
     LLM_MODEL: "${LLM_MODEL:-llama3:8b}"
-  depends_on:
-    neo4j:
-      condition: service_healthy
-  networks:
-    - paperclip-agent-net
-  healthcheck:
-    test: ["CMD-SHELL", "curl -fsS http://localhost:8001/healthz || exit 1"]
-    interval: 30s
-    timeout: 5s
-    retries: 3
-    start_period: 60s
-
-palace-mcp:
-  # existing N+0 service; ONE change — new dependency
-  depends_on:
-    neo4j:
-      condition: service_healthy
-    graphiti:
-      condition: service_healthy
-  environment:
-    GRAPHITI_URL: "http://graphiti:8001"
-    # existing NEO4J_* vars kept for direct read-path fallback if needed
 ```
 
-## 4. Graphiti schema (N+0 entities rewritten)
+## 4. Graphiti schema (N+0 entities rewritten via graphiti-core)
 
-All nodes use graphiti-core `EntityNode` with custom `labels: list[str]`. Graphiti always prepends `:Entity`, so labels like `["Issue", "Entity"]` produce `:Issue:Entity` in Cypher — both are queryable.
-
-`group_id` hardcoded to `"project/gimle"` in this slice (multi-project comes in N+1b). This is a single-line change when N+1b lands.
-
-### 4.1 Nodes
+### 4.1 Nodes — custom labels, auto-prepended `:Entity`
 
 ```python
+from graphiti_core import Graphiti
+from graphiti_core.nodes import EntityNode
+
 # Issue
-EntityNode(
+issue_node = EntityNode(
     uuid=issue.id,                           # paperclip UUID as stable ID
     name=f"{issue.key}: {issue.title}",
-    labels=["Issue", "Entity"],
-    group_id="project/gimle",
+    labels=["Issue"],                        # :Entity auto-prepended by graphiti
+    group_id="project/gimle",                # hardcoded in N+1a; N+1b parameterizes
     summary=issue.description[:500],
     attributes={
         "id": issue.id, "key": issue.key, "title": issue.title,
@@ -128,21 +96,23 @@ EntityNode(
         "source_created_at": issue.createdAt,
         "source_updated_at": issue.updatedAt,
         "palace_last_seen_at": run_started,
-        "text_hash": sha256(issue.description).hexdigest(),
+        "text_hash": sha256(issue.description.encode()).hexdigest(),
     }
 )
-
-# Comment — labels=["Comment", "Entity"], attributes: id, body, source, three timestamps, text_hash
-# Agent — labels=["Agent", "Entity"], attributes: id, name, url_key, role, source, three timestamps
+# Comment — labels=["Comment"], same attrs pattern
+# Agent   — labels=["Agent"],   attrs: id, name, url_key, role, source, three timestamps
 ```
 
-Uniqueness guaranteed via `uuid` = paperclip UUID (graphiti uses `uuid` as primary identifier).
+Uniqueness: `uuid` = paperclip UUID. graphiti handles constraint enforcement.
 
-### 4.2 Edges
+### 4.2 Edges — native bi-temporal via `graphiti.edges.entity.save`
 
 ```python
-# Comment ON Issue
-EntityEdge(
+from graphiti_core.edges import EntityEdge
+from datetime import datetime, timezone
+
+# Comment ON Issue (permanent)
+on_edge = EntityEdge(
     source_node_uuid=comment.uuid,
     target_node_uuid=issue.uuid,
     name="ON",
@@ -150,40 +120,77 @@ EntityEdge(
     group_id="project/gimle",
     created_at=run_started,
     valid_at=comment.createdAt,
-    invalid_at=None,      # never invalidated for comment-on-issue
+    invalid_at=None,
 )
 
-# Comment AUTHORED_BY Agent (when authored_by_agent_id present)
-EntityEdge(source=comment, target=agent, name="AUTHORED_BY", ...)
-
-# Issue ASSIGNED_TO Agent (when assignee present; refreshed per ingest)
-EntityEdge(source=issue, target=agent, name="ASSIGNED_TO", valid_at=run_started, ...)
+# Issue ASSIGNED_TO Agent (revisited each ingest; bi-temporal)
+assign_edge = EntityEdge(
+    source_node_uuid=issue.uuid,
+    target_node_uuid=agent.uuid,
+    name="ASSIGNED_TO",
+    fact=f"Issue {issue.key} assigned to {agent.name} as of {run_started}",
+    group_id="project/gimle",
+    created_at=run_started,
+    valid_at=run_started,
+    invalid_at=None,
+)
 ```
-
-Bi-temporal discipline: `valid_at` is set to the source-system timestamp where meaningful; `invalid_at` left null for permanent relationships. When ingest detects that an assignment has changed (same issue now has a different assignee), the old edge gets `invalid_at = run_started`; new edge created with fresh `valid_at`. This is the first slice actually exercising bi-temporal semantics.
 
 ### 4.3 Idempotency + change detection
 
-On each ingest pass, per node:
+```python
+async def upsert_with_change_detection(graphiti, node):
+    try:
+        existing = await graphiti.nodes.entity.get_by_uuid(node.uuid)
+    except NotFoundError:
+        await graphiti.nodes.entity.save(node)   # new — triggers embed
+        return "inserted"
 
-1. Look up existing node by `uuid`.
-2. If missing → build full `EntityNode` → `graphiti.add_node(node)` (triggers embedding).
-3. If present and `attributes.text_hash == new_text_hash` → skip embedding, only update `palace_last_seen_at`.
-4. If present and `text_hash` differs → rebuild node → save (re-embed new text).
+    if existing.attributes.get("text_hash") == node.attributes["text_hash"]:
+        # Only refresh palace_last_seen_at — skip embed
+        existing.attributes["palace_last_seen_at"] = node.attributes["palace_last_seen_at"]
+        await graphiti.nodes.entity.save(existing)   # save without embed regeneration
+        return "skipped_unchanged"
 
-Change detection is implemented in the ingest transform module, not in graphiti-core itself. Critical for cost control on cloud-embedding providers.
+    # Text changed — full re-embed
+    await graphiti.nodes.entity.save(node)
+    return "re_embedded"
+```
+
+Per verified API: `graphiti.nodes.entity.save(node)` calls `generate_name_embedding(embedder)` internally. Skipping embed when text unchanged requires bypassing this path — acceptable strategy: set `node.name_embedding` manually from `existing.name_embedding` before `save`. Mini-gap (§10) confirms whether that's the correct idiom.
+
+### 4.4 Native bi-temporal: ASSIGNED_TO invalidation
+
+```python
+async def invalidate_stale_assignments(graphiti, issue_node, new_agent_uuid, run_started):
+    # Fetch all existing edges touching this issue
+    existing_edges = await graphiti.edges.entity.get_by_node_uuid(issue_node.uuid)
+    for edge in existing_edges:
+        if (edge.name == "ASSIGNED_TO"
+            and edge.invalid_at is None
+            and edge.target_node_uuid != new_agent_uuid):
+            # Assignment changed — invalidate old edge
+            edge.invalid_at = run_started
+            await graphiti.edges.entity.save(edge)   # native update
+```
+
+Then the new edge is created via normal `graphiti.nodes.entity.save(new_edge)` (per §4.2).
+
+**Zero raw Cypher.** Per verification §5.D, this is native graphiti-core path.
 
 ## 5. MCP tool surface — N+0 PRESERVED
 
-Three tools only. No new tools in N+1a.
+Three tools. No new tools in N+1a.
 
 | Tool | Status | Changes from N+0 |
 |---|---|---|
 | `palace.health.status` | Preserved from GIM-23 | None |
-| `palace.memory.lookup(entity_type, filters, limit, order_by)` | Preserved | Implementation switches from direct Cypher to `graphiti.get_by_group_ids(["project/gimle"])` + filter pushdown; identical response shape + `meta` envelope |
-| `palace.memory.health()` | Preserved | Extended: response includes `graphiti_reachable: bool`, `embedder_reachable: bool`, `embedding_model: str`, `embedding_provider_base_url: str (hostname only)` |
+| `palace.memory.lookup(entity_type, filters, limit, order_by)` | Preserved | Implementation: `graphiti.nodes.entity.get_by_group_ids(["project/gimle"])` → Python-level filter by `entity_type` (label) + `filters` attribute match. Response shape + `meta` envelope byte-identical to N+0. |
+| `palace.memory.health()` | Preserved + extended | New fields: `graphiti_initialized: bool`, `embedder_reachable: bool`, `embedding_model: str`, `embedding_provider_base_url: str` (hostname-only for privacy). |
 
-No `project` param in N+1a tools — that's N+1b. No `search`, `record_note`, or anything agent-MCP — that's N+1c.
+**Filter pushdown strategy:** current scale (31 issues) uses Python-level filter (O(n)). When extractor slices land (N+2+) and `n` grows to thousands, migrate `palace.memory.lookup` to `graphiti.search_(query="", config=NODE_HYBRID_SEARCH_RRF, search_filter=SearchFilters(node_labels=[entity_type]))` — label pushdown via SearchFilters is native. Attribute-level pushdown (e.g., `status=done`) remains Python-level indefinitely; acceptable.
+
+No `project` param in N+1a — that's N+1b. No `search`, no `record_note`, no agent MCP — that's N+1c.
 
 ## 6. Ingest pipeline (substrate swap)
 
@@ -195,17 +202,22 @@ python -m palace_mcp.ingest.paperclip \
     --company-id 9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64
 ```
 
-### 6.1 Phases (rewrite of N+0 §6)
+### 6.1 Phases (rewrite, uses namespace API + native bi-temporal)
 
 ```python
+from graphiti_core import Graphiti
+from graphiti_core.llm_client.config import LLMConfig
+from graphiti_core.llm_client.openai_generic_client import OpenAIGenericClient
+from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
+
 async def run_ingest():
     started_at = utcnow_iso()
     errors: list[str] = []
     run_id = str(uuid4())
+    group_id = "project/gimle"   # hardcoded in N+1a; parameterized in N+1b
 
-    # Initialize graphiti-core client (external URL from env)
     graphiti = Graphiti(
-        neo4j_uri=NEO4J_URI, neo4j_user=NEO4J_USER, neo4j_password=NEO4J_PASSWORD,
+        NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD,
         llm_client=OpenAIGenericClient(LLMConfig(
             api_key=LLM_API_KEY, model=LLM_MODEL, base_url=LLM_BASE_URL
         )),
@@ -220,129 +232,154 @@ async def run_ingest():
         agents   = await paperclip_api.list_agents(company_id=...)
         comments = await paperclip_api.list_comments(issues=[i["id"] for i in issues])
 
-        # Upsert agents first (Issues/Comments reference them via FK-like edges)
+        # 1. Upsert agents
         for agent in agents:
-            node = build_agent_node(agent, started_at)
+            node = build_agent_node(agent, started_at, group_id)
             await upsert_with_change_detection(graphiti, node)
 
-        # Upsert issues — each as a triplet (Issue, ASSIGNED_TO-or-null, Agent)
+        # 2. Upsert issues + invalidate+create ASSIGNED_TO edges per-issue
         for issue in issues:
-            issue_node = build_issue_node(issue, started_at)
+            issue_node = build_issue_node(issue, started_at, group_id)
             await upsert_with_change_detection(graphiti, issue_node)
-            if issue.get("assigneeAgentId"):
-                edge = build_assigned_to_edge(issue_node, agent_nodes[issue.assigneeAgentId], started_at)
-                await graphiti.add_triplet(issue_node, edge, agent_nodes[issue.assigneeAgentId])
 
-        # Comments — triplet (Comment, ON, Issue) + optional (Comment, AUTHORED_BY, Agent)
+            new_assignee_uuid = issue.get("assigneeAgentId")
+            await invalidate_stale_assignments(graphiti, issue_node, new_assignee_uuid, started_at)
+            if new_assignee_uuid:
+                await graphiti.edges.entity.save(
+                    build_assigned_to_edge(issue_node, agent_nodes[new_assignee_uuid], started_at)
+                )
+
+        # 3. Upsert comments + ON/AUTHORED_BY edges
         for comment in comments:
-            comment_node = build_comment_node(comment, started_at)
+            comment_node = build_comment_node(comment, started_at, group_id)
             await upsert_with_change_detection(graphiti, comment_node)
-            edge_on = build_on_edge(comment_node, issue_nodes[comment.issueId], started_at)
-            await graphiti.add_triplet(comment_node, edge_on, issue_nodes[comment.issueId])
+            await graphiti.edges.entity.save(build_on_edge(comment_node, issue_nodes[comment.issueId], started_at))
             if comment.get("authoredByAgentId"):
-                edge_auth = build_authored_by_edge(comment_node, agent_nodes[comment.authoredByAgentId], started_at)
-                await graphiti.add_triplet(comment_node, edge_auth, agent_nodes[comment.authoredByAgentId])
+                await graphiti.edges.entity.save(build_authored_by_edge(comment_node, agent_nodes[comment.authoredByAgentId], started_at))
 
-        # Invalidate stale ASSIGNED_TO edges where assignee changed
-        await invalidate_stale_assignments(graphiti, issues, started_at)
-
-        # GC — delete nodes whose palace_last_seen_at < run_started (graphiti has no native GC,
-        # drop to raw Cypher scoped to group_id for this operation)
+        # 4. GC orphans — via graphiti API, no raw Cypher
         if not errors:
-            await gc_orphans(graphiti, source="paperclip", cutoff=started_at, group_id="project/gimle")
+            await gc_orphans(graphiti, group_id=group_id, cutoff=started_at)
 
     except Exception as e:
         errors.append(f"{type(e).__name__}: {e}")
         raise
     finally:
-        await record_ingest_run(graphiti, run_id, started_at, utcnow_iso(), errors)
+        # :IngestRun as a first-class EntityNode
+        ingest_run = EntityNode(
+            uuid=run_id, name=f"ingest-{run_id[:8]}", labels=["IngestRun"],
+            group_id=group_id, summary=f"paperclip ingest {started_at}",
+            attributes={
+                "source": "paperclip", "started_at": started_at,
+                "finished_at": utcnow_iso(), "duration_ms": ...,
+                "errors": errors, "run_id": run_id,
+            }
+        )
+        await graphiti.nodes.entity.save(ingest_run)
         await graphiti.close()
+
+async def gc_orphans(graphiti, group_id, cutoff):
+    # Fetch all :Issue/:Comment/:Agent nodes in group, filter for stale, delete by uuid
+    all_nodes = await graphiti.nodes.entity.get_by_group_ids([group_id])
+    stale_uuids = [
+        n.uuid for n in all_nodes
+        if n.attributes.get("source") == "paperclip"
+        and n.attributes.get("palace_last_seen_at", "") < cutoff
+        and any(lbl in n.labels for lbl in ["Issue", "Comment", "Agent"])
+    ]
+    if stale_uuids:
+        await graphiti.nodes.entity.delete_by_uuids(stale_uuids)
 ```
 
-### 6.2 Edge cases (preserved from N+0 + new)
+### 6.2 Edge cases (preserved + new)
 
 - Human-authored comment → `AUTHORED_BY` edge not created (N+0 preserved).
-- Mid-ingest partial failure → GC skipped; errors recorded in `:IngestRun` node.
-- **NEW:** embedder reachability failure → ingest aborts with explicit error; no partial state.
-- **NEW:** text_hash mismatch → re-embed. Same hash → skip embed (cost control on cloud).
+- Partial failure → GC skipped; `:IngestRun.attributes.errors` records.
+- **NEW:** embedder reachability failure at startup → fast-fail with clear error.
+- **NEW:** text_hash match → skip embed (cost control). Text change → full re-embed.
+- **NEW:** ASSIGNED_TO invalidation: if an issue had no prior assignee, no invalidation happens; if new assignee is same as previous, no invalidation + no new edge (idempotent); if changed, old edge `invalid_at` set + new edge created.
 
 ## 7. Observability
 
-JSON log events extended from N+0:
+JSON log events:
 
 ```
 {"event":"ingest.start","source":"paperclip","run_id":"...","group_id":"project/gimle"}
-{"event":"ingest.embedder.probe","base_url":"http://ollama-host.example.com:11434/v1","model":"nomic-embed-text","reachable":true}
-{"event":"ingest.upsert","type":"Agent","count":12,"embedded":12,"skipped_unchanged":0,"duration_ms":4800}
-{"event":"ingest.upsert","type":"Issue","count":31,"embedded":5,"skipped_unchanged":26,"duration_ms":1200}
-{"event":"ingest.triplet","type":"ON","count":52,"duration_ms":300}
-{"event":"ingest.invalidate","type":"ASSIGNED_TO","count":2,"duration_ms":50}
-{"event":"ingest.gc","type":"Issue","deleted":0}
-{"event":"ingest.finish","duration_ms":6400,"errors":[],"embedded_total":17,"skipped_total":26}
+{"event":"ingest.embedder.probe","base_url_host":"ollama-host.example.com","model":"nomic-embed-text","reachable":true}
+{"event":"ingest.upsert","type":"Agent","count":12,"inserted":0,"re_embedded":0,"skipped_unchanged":12,"duration_ms":200}
+{"event":"ingest.upsert","type":"Issue","count":31,"inserted":0,"re_embedded":5,"skipped_unchanged":26,"duration_ms":1200}
+{"event":"ingest.assignment.invalidate","issue_key":"GIM-44","old_edge_uuid":"...","new_target_uuid":"...","duration_ms":50}
+{"event":"ingest.edge","type":"ON","count":52,"duration_ms":300}
+{"event":"ingest.gc","candidates":0,"deleted":0}
+{"event":"ingest.finish","duration_ms":1800,"errors":[],"run_id":"..."}
 ```
-
-Health tool extensions per §5 table.
 
 ## 8. Decomposition (plan-first ready)
 
-Expected plan-file at `docs/superpowers/plans/2026-04-18-GIM-NN-palace-memory-n1a-substrate.md`.
+Expected plan-file: `docs/superpowers/plans/2026-04-18-GIM-NN-palace-memory-n1a-substrate.md`.
 
 | Phase | Step | Owner | Description |
 |---|---|---|---|
 | 1 | 1.1 | CTO | Create GIM-NN issue + plan file. Reassign to CodeReviewer. |
-| 1 | 1.2 | CodeReviewer | Plan-first compliance + design sanity check. APPROVE → Phase 2. |
-| 2 | 2.1 | MCPEngineer | Resolve 4 mini-gaps via local poke (see `graphiti-core-verification.md` §4); commit findings as appendix. |
-| 2 | 2.2 | MCPEngineer | Add `services/graphiti/` — Python 3.11 FastAPI wrapper exposing `/healthz` + internal RPC; graphiti-core initialized with OpenAIGenericClient + OpenAIEmbedder from env. |
-| 2 | 2.3 | MCPEngineer | Rewrite `palace_mcp/ingest/*` modules to build `EntityNode` / `EntityEdge` and call `graphiti.add_triplet` / `add_node`; implement `upsert_with_change_detection` (text_hash). |
-| 2 | 2.4 | MCPEngineer | Rewrite `palace_mcp/memory/lookup.py` to read via graphiti-core (`get_by_group_ids`); preserve response envelope byte-for-byte; preserve whitelisted filter resolver. |
-| 2 | 2.5 | MCPEngineer | Extend `palace_mcp/memory/health.py` with graphiti + embedder reachability probes. |
-| 2 | 2.6 | MCPEngineer | Unit tests — ingest with mocked graphiti client, change-detection logic, stale-assignment invalidation, health extensions, lookup backward-compat (≥30 new tests). |
-| 3 | 3.1 | CodeReviewer | PR mechanical review: compliance, plan-first, no raw Cypher in ingest path, mypy --strict, no Graphiti API hallucinations (cross-check against `graphiti-core-verification.md`). |
-| 3 | 3.2 | OpusArchitectReviewer | (If GIM-30 wired) docs-first adversarial pass via context7; advisory unless CRITICAL. |
-| 4 | 4.1 | QAEngineer | Live smoke: compose up, set EMBEDDING_BASE_URL to external Ollama (or Alibaba for Intel-Mac path), run ingest CLI, verify `palace.memory.lookup(entity_type="Issue", filters={"status":"done"})` returns same ≥1 issue with three timestamps; Cypher inspection confirms `:Issue:Entity` labels. |
-| 4 | 4.2 | MCPEngineer | Squash-merge to develop. Update plan-file checkboxes. Manual iMac deploy. |
+| 1 | 1.2 | CodeReviewer | Plan-first compliance; API claims cross-checked against `graphiti-core-verification.md` §5-6. APPROVE → Phase 2. |
+| 2 | 2.1 | MCPEngineer | Close 4 mini-gaps from §10 via local poke; append findings to verification doc. |
+| 2 | 2.2 | MCPEngineer | Add `graphiti-core` dependency to `services/palace-mcp/pyproject.toml`; init `Graphiti(...)` instance per-process in palace-mcp + ingest module. |
+| 2 | 2.3 | MCPEngineer | Rewrite `palace_mcp/ingest/*` — EntityNode/EntityEdge builders, `upsert_with_change_detection`, `invalidate_stale_assignments`, `gc_orphans` (all via graphiti namespace API). |
+| 2 | 2.4 | MCPEngineer | Rewrite `palace_mcp/memory/lookup.py` — `graphiti.nodes.entity.get_by_group_ids(["project/gimle"])` + Python-level filter; preserve response envelope. |
+| 2 | 2.5 | MCPEngineer | Extend `palace_mcp/memory/health.py` with embedder probe + graphiti init check. |
+| 2 | 2.6 | MCPEngineer | `:IngestRun` writer; namespace-scoped. |
+| 2 | 2.7 | MCPEngineer | Unit tests — ingest builders, change-detection, ASSIGNED_TO invalidation (bi-temporal), GC orphan filter logic, lookup backward-compat (≥40 new tests). |
+| 3 | 3.1 | CodeReviewer | PR mechanical review: compliance, plan-first, **no raw Cypher anywhere** (including GC — spec forbids it now), mypy --strict, API cross-check against verification doc §5. |
+| 3 | 3.2 | OpusArchitectReviewer | (If wired) context7 docs-first adversarial pass. Advisory unless CRITICAL. |
+| 4 | 4.1 | QAEngineer | Live smoke: compose up with `EMBEDDING_BASE_URL` pointed at user's external Ollama; run ingest CLI; verify same N+0 behavior in `lookup`; verify `invalid_at` set on ASSIGNED_TO when assignee changed between two consecutive ingests (manual paperclip flip + re-ingest). |
+| 4 | 4.2 | MCPEngineer | Squash-merge. Update plan-file. Manual iMac deploy (automation lands in N+1c). |
 
 ## 9. Acceptance criteria
 
-- [ ] PR against develop, squash-merged on APPROVE.
+- [ ] PR against develop; squash-merged on APPROVE.
 - [ ] Plan file at `docs/superpowers/plans/2026-04-18-GIM-NN-palace-memory-n1a-substrate.md`.
-- [ ] 4 mini-gap verification appendix committed (Graphiti(llm_client=None) behavior, EntityNode.attributes round-trip, similarity score return, Neo4j 5.26 compatibility).
-- [ ] `services/graphiti/` importable; `/healthz` returns 200 within start_period.
-- [ ] Compose stack brings up 3 services (neo4j, palace-mcp, graphiti) in profile `full` without ollama compose service.
-- [ ] `EMBEDDING_BASE_URL` env drives embedder; documented paths for external Ollama, Alibaba DashScope, OpenAI direct.
-- [ ] Ingest CLI runs to completion against live paperclip; produces ≥31 `:Issue:Entity` nodes, ≥52 `:Comment:Entity`, ≥12 `:Agent:Entity` in group_id `project/gimle`.
-- [ ] Nodes carry `text_hash` attribute; re-running ingest without paperclip changes reports `embedded: 0, skipped_unchanged: N` in logs.
-- [ ] Stale `ASSIGNED_TO` edge gets `invalid_at` set when assignee changes between ingests (unit test + smoke scenario).
-- [ ] `palace.memory.lookup(entity_type="Issue", filters={"status":"done"})` returns identical result set to N+0 (same issue IDs, same three timestamp fields).
-- [ ] `palace.memory.health()` returns `graphiti_reachable: true` + `embedder_reachable: true` + `embedding_model: nomic-embed-text` (or configured).
-- [ ] `uv run mypy --strict` green across palace-mcp and services/graphiti.
-- [ ] CI green (lint, typecheck, test, docker-build).
-- [ ] Post-merge: manual iMac deploy; external Claude Code verifies `palace.memory.lookup` works end-to-end.
+- [ ] 4 mini-gap verification appendix committed to `graphiti-core-verification.md`.
+- [ ] **Zero raw Cypher** in `services/palace-mcp/src/palace_mcp/ingest/**` and `services/palace-mcp/src/palace_mcp/memory/lookup.py` (grep-verifiable).
+- [ ] graphiti-core Python dependency added; palace-mcp compose service brings up with `EMBEDDING_BASE_URL` env; embedder probe passes at startup.
+- [ ] Ingest CLI runs against live paperclip; produces `:Issue:Entity`, `:Comment:Entity`, `:Agent:Entity`, `:IngestRun:Entity` nodes in group_id `project/gimle`.
+- [ ] `text_hash` attribute present on Issue/Comment; re-running ingest reports `skipped_unchanged: N` in logs when text didn't change.
+- [ ] **Bi-temporal smoke:** manually reassign one issue in paperclip, re-run ingest, verify via `palace.memory.lookup` (or direct Cypher read-only inspection) that the prior `ASSIGNED_TO` edge has non-null `invalid_at` matching prior run's `started_at`.
+- [ ] `palace.memory.lookup(entity_type="Issue", filters={"status":"done"})` returns same issue set as N+0 — byte-for-byte response comparison via captured fixture.
+- [ ] `palace.memory.health()` response includes `graphiti_initialized`, `embedder_reachable`, `embedding_model`.
+- [ ] `uv run mypy --strict` green.
+- [ ] CI green on all four jobs.
+- [ ] Post-merge: manual iMac deploy; external Claude Code verifies lookup/health unchanged.
 
-## 10. Out of scope (explicit)
+## 10. Mini-gaps to resolve in step 2.1
 
-- **Multi-project.** `group_id` hardcoded `project/gimle`; `:Project` entity, project param on tools, multi-project query — all N+1b.
-- **Agent-facing MCP.** graphiti-mcp exposure on :8002, per-agent auth — all N+1c.
-- **record_note / search / any new tool.** N+0 surface preserved only.
-- **Ollama compose service.** External URL only in N+1a. Local compose service (profile `with-local-ollama`) lands in N+1c.
-- **LLM extraction.** `add_episode` never called; `add_triplet` path exclusively. LLM extraction lands in N+5+ per research roadmap.
-- **Bi-temporal demo beyond ASSIGNED_TO invalidation.** Schema supports `valid_at`/`invalid_at`/`expired_at` on all edges; only ASSIGNED_TO invalidation is exercised in N+1a.
-- **Faceted classification axes.** Only `labels: ["Issue", "Entity"]` / `["Comment", "Entity"]` / `["Agent", "Entity"]` in N+1a; capability axis + domain-concept labels from spec §5.4 land with first extractor in N+2.
-- **SCIP-alignment field on `:Symbol`.** No `:Symbol` nodes in N+1a; reserved for palace-serena slice.
-- **`:Iteration` node type.** Reserved for code-ingest slices.
-- **Installer prompt for embedding provider choice.** Env-only in N+1a; interactive installer UI lands in N+1c.
-- **OpusArchitectReviewer enablement.** Advisory only; GIM-30 still unwired unless separately landed.
-- **Post-merge deploy automation.** Still manual in N+1a; automation lands in N+1c (same slice as installer UX).
+1. **Skip-embed-on-unchanged idiom.** `graphiti.nodes.entity.save(node)` always embeds. Confirm whether setting `node.name_embedding` manually from `existing.name_embedding` before save bypasses re-embed, OR whether `save_without_embedding` helper exists, OR custom path needed.
+2. **`EntityNode.attributes` round-trip.** Verify arbitrary dict keys (text_hash, status, etc.) persist via `save` and return intact via `get_by_uuid`.
+3. **`Graphiti(llm_client=OpenAIGenericClient(...))` with LLM never invoked** — confirm no side effects on init or embed-only operation.
+4. **graphiti-core ↔ Neo4j 5.26 compatibility.** Currently using 5.26 in N+0 compose; confirm graphiti-core supports.
 
-## 11. Estimated size
+Resolutions appended to `graphiti-core-verification.md` as §8 (new section).
 
-- Code: ~400 LOC (graphiti service wrapper ~100, ingest rewrite ~150, lookup/health updates ~80, tests ~70).
+## 11. Out of scope
+
+- Multi-project scoping (N+1b).
+- Agent-facing MCP surface on :8002 + record_note + search (N+1c).
+- Ollama compose service — external URL only in N+1a; local compose (profile `with-local-ollama`) lands in N+1c.
+- LLM extraction via `add_episode` — bypassed; lands in N+5+ per research roadmap.
+- Bi-temporal exercise beyond ASSIGNED_TO — substrate supports all edges; only ASSIGNED_TO triggered in N+1a data flow.
+- SCIP-alignment on `:Symbol` — no `:Symbol` nodes exist in N+1a.
+- Installer prompt — env-only in N+1a.
+- Post-merge deploy automation (N+1c).
+- OpusArchitectReviewer wiring (GIM-30).
+
+## 12. Estimated size
+
+- Code: ~350 LOC (ingest rewrite ~150, lookup rewrite ~60, health ext ~30, IngestRun writer ~20, tests ~90).
 - Plan + docs: ~60 LOC.
 - 1 PR, 4-5 handoffs.
-- Expected duration: 3 days agent-time.
+- Duration: 3 days agent-time.
 
-## 12. Followups
+## 13. Followups
 
-- N+1b multi-project slice starts immediately after merge.
-- Document 4 mini-gap resolutions in `graphiti-core-verification.md` appendix.
-- If `Graphiti(llm_client=None)` proves unsupported, note the workaround (reuse embedder client, never call add_episode) in slice architecture comments for future reference.
+- N+1b starts immediately after merge.
+- Mini-gap resolutions become verification-doc §8.
+- If skip-embed-on-unchanged requires custom graphiti-core patch → upstream PR or local monkey-patch (document choice in mini-gap resolution).
