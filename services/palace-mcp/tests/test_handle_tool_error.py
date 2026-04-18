@@ -130,40 +130,37 @@ def test_handle_tool_error_unknown_entity_type() -> None:
 
 
 # ---------------------------------------------------------------------------
-# MCP tool integration — driver-unavailable and unknown entity_type
+# MCP tool integration — graphiti-unavailable and unknown entity_type
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture(autouse=True)
-def reset_driver() -> object:
-    original = mcp_module._driver
+def reset_graphiti() -> object:
+    original = mcp_module._graphiti
     yield
-    mcp_module._driver = original
+    mcp_module._graphiti = original
 
 
-async def test_lookup_tool_driver_none_raises_with_hint() -> None:
-    """palace.memory.lookup with no driver raises ToolError wrapping recovery hint.
-
-    FastMCP wraps tool RuntimeErrors in ToolError before propagating; the MCP
-    transport layer converts them to CallToolResult with isError=True.
-    """
-    mcp_module._driver = None
+async def test_lookup_tool_graphiti_none_raises_with_hint() -> None:
+    """palace.memory.lookup with no graphiti raises ToolError wrapping recovery hint."""
+    mcp_module._graphiti = None
     with pytest.raises(ToolError, match="Neo4j is temporarily unavailable"):
         await _mcp.call_tool("palace.memory.lookup", {"entity_type": "Issue"})
 
 
 async def test_lookup_tool_unknown_entity_type_raises_with_hint() -> None:
     """palace.memory.lookup with unknown entity_type raises ToolError with hint."""
-    driver = MagicMock()
-    driver.verify_connectivity = AsyncMock()
-    mcp_module._driver = driver
+    graphiti = MagicMock()
+    graphiti.driver = MagicMock()
+    graphiti.driver.verify_connectivity = AsyncMock()
+    mcp_module._graphiti = graphiti
 
     with pytest.raises(ToolError, match="Unknown entity type"):
         await _mcp.call_tool("palace.memory.lookup", {"entity_type": "Bogus"})
 
 
-async def test_memory_health_tool_driver_none_raises_with_hint() -> None:
-    """palace.memory.health with no driver raises ToolError wrapping recovery hint."""
-    mcp_module._driver = None
+async def test_memory_health_tool_graphiti_none_raises_with_hint() -> None:
+    """palace.memory.health with no graphiti raises ToolError wrapping recovery hint."""
+    mcp_module._graphiti = None
     with pytest.raises(ToolError, match="Neo4j is temporarily unavailable"):
         await _mcp.call_tool("palace.memory.health", {})

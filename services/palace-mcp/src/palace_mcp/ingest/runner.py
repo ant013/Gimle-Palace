@@ -1,8 +1,10 @@
-"""Ingest orchestrator. Fetches from paperclip, transforms, upserts via
-managed write transactions (idempotent), GC on clean success.
+"""Ingest orchestrator — graphiti-core substrate (N+1a).
 
-`run_ingest` is the single entry point. Accepts a configured
-PaperclipClient and an AsyncDriver — construction happens in the CLI.
+Replaces AsyncDriver/Cypher with graphiti.nodes/edges namespace API.
+`run_ingest` is the single entry point; accepts PaperclipClient +
+Graphiti instance (construction lives in the CLI / FastAPI lifespan).
+
+Zero raw Cypher — spec §9 acceptance.
 """
 
 from __future__ import annotations
@@ -13,15 +15,25 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from neo4j import AsyncDriver, AsyncManagedTransaction
+from graphiti_core import Graphiti
 
-from palace_mcp.ingest.paperclip_client import PaperclipClient
-from palace_mcp.ingest.transform import (
-    transform_agent,
-    transform_comment,
-    transform_issue,
+from palace_mcp.ingest.builders import (
+    GROUP_ID,
+    build_agent_node,
+    build_assigned_to_edge,
+    build_authored_by_edge,
+    build_comment_node,
+    build_issue_node,
+    build_on_edge,
 )
-from palace_mcp.memory import cypher
+from palace_mcp.ingest.paperclip_client import PaperclipClient
+from palace_mcp.ingest.upsert import (
+    UpsertResult,
+    gc_orphans,
+    invalidate_stale_assignments,
+    upsert_with_change_detection,
+)
+from palace_mcp.memory.ingest_run import write_ingest_run
 
 logger = logging.getLogger(__name__)
 
@@ -30,58 +42,18 @@ def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-async def _write_upsert_agents(
-    tx: AsyncManagedTransaction, batch: list[dict[str, Any]]
-) -> None:
-    await tx.run(cypher.UPSERT_AGENTS, batch=batch)
-
-
-async def _write_upsert_issues(
-    tx: AsyncManagedTransaction, batch: list[dict[str, Any]]
-) -> None:
-    await tx.run(cypher.UPSERT_ISSUES, batch=batch)
-
-
-async def _write_upsert_comments(
-    tx: AsyncManagedTransaction, batch: list[dict[str, Any]]
-) -> None:
-    await tx.run(cypher.UPSERT_COMMENTS, batch=batch)
-
-
-async def _write_gc(tx: AsyncManagedTransaction, *, label: str, cutoff: str) -> None:
-    # Label is whitelisted (Issue|Comment|Agent) — not user input.
-    query = cypher.GC_BY_LABEL.format(label=label)
-    await tx.run(query, cutoff=cutoff)
-
-
-async def _write_create_ingest_run(
-    tx: AsyncManagedTransaction, *, run_id: str, started_at: str, source: str
-) -> None:
-    await tx.run(
-        cypher.CREATE_INGEST_RUN, id=run_id, started_at=started_at, source=source
-    )
-
-
-async def _write_finalize_ingest_run(
-    tx: AsyncManagedTransaction,
-    *,
-    run_id: str,
-    finished_at: str,
-    duration_ms: int,
-    errors: list[str],
-) -> None:
-    await tx.run(
-        cypher.FINALIZE_INGEST_RUN,
-        id=run_id,
-        finished_at=finished_at,
-        duration_ms=duration_ms,
-        errors=errors,
-    )
-
-
 async def run_ingest(
-    *, client: PaperclipClient, driver: AsyncDriver, source: str = "paperclip"
+    *,
+    client: PaperclipClient,
+    graphiti: Graphiti,
+    source: str = "paperclip",
+    group_id: str = GROUP_ID,
 ) -> dict[str, Any]:
+    """Run a full ingest pass against the paperclip API.
+
+    Returns a summary dict compatible with the N+0 contract so that
+    callers (CLI, palace.memory.health) need no changes.
+    """
     run_id = str(uuid.uuid4())
     started_at = _utcnow_iso()
     started_monotonic = time.monotonic()
@@ -90,91 +62,153 @@ async def run_ingest(
 
     logger.info("ingest.start", extra={"source": source, "run_id": run_id})
 
-    async with driver.session() as session:
-        await session.execute_write(
-            _write_create_ingest_run,
-            run_id=run_id,
-            started_at=started_at,
-            source=source,
-        )
-
     try:
+        # ── Fetch ─────────────────────────────────────────────────────────────
         issues_raw = await client.list_issues()
         agents_raw = await client.list_agents()
-        logger.info(
-            "ingest.fetch.issues", extra={"count": len(issues_raw), "source": source}
-        )
-        logger.info(
-            "ingest.fetch.agents", extra={"count": len(agents_raw), "source": source}
-        )
+        logger.info("ingest.fetch.issues", extra={"count": len(issues_raw)})
+        logger.info("ingest.fetch.agents", extra={"count": len(agents_raw)})
 
         comments_raw: list[dict[str, Any]] = []
         for issue in issues_raw:
             ic = await client.list_comments_for_issue(issue["id"])
             comments_raw.extend(ic)
+        logger.info("ingest.fetch.comments", extra={"count": len(comments_raw)})
+
+        # ── Upsert agents ─────────────────────────────────────────────────────
+        agent_counters: dict[str, int] = {r.value: 0 for r in UpsertResult}
+        t0 = time.monotonic()
+        for agent_raw in agents_raw:
+            node = build_agent_node(agent_raw, run_started=started_at, group_id=group_id)
+            result = await upsert_with_change_detection(graphiti, node)
+            agent_counters[result.value] += 1
         logger.info(
-            "ingest.fetch.comments",
-            extra={"count": len(comments_raw), "source": source},
+            "ingest.upsert",
+            extra={
+                "type": "Agent",
+                "count": len(agents_raw),
+                "inserted": agent_counters[UpsertResult.INSERTED.value],
+                "skipped": agent_counters[UpsertResult.SKIPPED_UNCHANGED.value],
+                "re_embedded": agent_counters[UpsertResult.RE_EMBEDDED.value],
+                "duration_ms": int((time.monotonic() - t0) * 1000),
+            },
         )
 
-        issues_batch = [transform_issue(x, run_started=started_at) for x in issues_raw]
-        agents_batch = [transform_agent(x, run_started=started_at) for x in agents_raw]
-        comments_batch = [
-            transform_comment(x, run_started=started_at) for x in comments_raw
-        ]
+        # ── Upsert issues + ASSIGNED_TO edges ─────────────────────────────────
+        issue_counters: dict[str, int] = {r.value: 0 for r in UpsertResult}
+        t0 = time.monotonic()
+        for issue_raw in issues_raw:
+            node = build_issue_node(issue_raw, run_started=started_at, group_id=group_id)
+            result = await upsert_with_change_detection(graphiti, node)
+            issue_counters[result.value] += 1
 
-        async with driver.session() as session:
-            t0 = time.monotonic()
-            await session.execute_write(_write_upsert_agents, agents_batch)
-            logger.info(
-                "ingest.upsert",
-                extra={
-                    "type": "Agent",
-                    "count": len(agents_batch),
-                    "duration_ms": int((time.monotonic() - t0) * 1000),
-                },
+            assignee_id: str | None = issue_raw.get("assigneeAgentId")
+            invalidated, has_active_assignment = await invalidate_stale_assignments(
+                graphiti,
+                issue_uuid=issue_raw["id"],
+                new_agent_uuid=assignee_id,
+                run_started=started_at,
             )
+            if invalidated:
+                logger.info(
+                    "ingest.edges.invalidated",
+                    extra={"issue_id": issue_raw["id"], "count": invalidated},
+                )
 
-            t0 = time.monotonic()
-            await session.execute_write(_write_upsert_issues, issues_batch)
-            logger.info(
-                "ingest.upsert",
-                extra={
-                    "type": "Issue",
-                    "count": len(issues_batch),
-                    "duration_ms": int((time.monotonic() - t0) * 1000),
-                },
-            )
+            # Skip edge creation when an active ASSIGNED_TO for the same agent
+            # already exists — prevents duplicate edges across ingest runs (spec §4.3).
+            if assignee_id and not has_active_assignment:
+                edge = build_assigned_to_edge(
+                    issue_uuid=issue_raw["id"],
+                    agent_uuid=assignee_id,
+                    run_started=started_at,
+                    group_id=group_id,
+                )
+                await graphiti.edges.entity.save(edge)
 
-            t0 = time.monotonic()
-            await session.execute_write(_write_upsert_comments, comments_batch)
-            logger.info(
-                "ingest.upsert",
-                extra={
-                    "type": "Comment",
-                    "count": len(comments_batch),
-                    "duration_ms": int((time.monotonic() - t0) * 1000),
-                },
-            )
+        logger.info(
+            "ingest.upsert",
+            extra={
+                "type": "Issue",
+                "count": len(issues_raw),
+                "inserted": issue_counters[UpsertResult.INSERTED.value],
+                "skipped": issue_counters[UpsertResult.SKIPPED_UNCHANGED.value],
+                "re_embedded": issue_counters[UpsertResult.RE_EMBEDDED.value],
+                "duration_ms": int((time.monotonic() - t0) * 1000),
+            },
+        )
 
-            # GC only on clean success — partial failure leaves stale data.
-            for label in ("Issue", "Comment", "Agent"):
-                await session.execute_write(_write_gc, label=label, cutoff=started_at)
-                logger.info("ingest.gc", extra={"type": label})
-    except Exception as e:  # noqa: BLE001 — re-raised after logging
+        # ── Upsert comments + ON / AUTHORED_BY edges ──────────────────────────
+        comment_counters: dict[str, int] = {r.value: 0 for r in UpsertResult}
+        t0 = time.monotonic()
+        for comment_raw in comments_raw:
+            node = build_comment_node(comment_raw, run_started=started_at, group_id=group_id)
+            result = await upsert_with_change_detection(graphiti, node)
+            comment_counters[result.value] += 1
+
+            issue_id: str = comment_raw.get("issueId") or ""
+            comment_created_at: str = comment_raw.get("createdAt") or started_at
+
+            if issue_id:
+                on_edge = build_on_edge(
+                    comment_uuid=comment_raw["id"],
+                    issue_uuid=issue_id,
+                    comment_created_at=comment_created_at,
+                    run_started=started_at,
+                    group_id=group_id,
+                )
+                await graphiti.edges.entity.save(on_edge)
+
+            author_id: str | None = comment_raw.get("authorAgentId")
+            if author_id:
+                authored_edge = build_authored_by_edge(
+                    comment_uuid=comment_raw["id"],
+                    agent_uuid=author_id,
+                    comment_created_at=comment_created_at,
+                    run_started=started_at,
+                    group_id=group_id,
+                )
+                await graphiti.edges.entity.save(authored_edge)
+
+        logger.info(
+            "ingest.upsert",
+            extra={
+                "type": "Comment",
+                "count": len(comments_raw),
+                "inserted": comment_counters[UpsertResult.INSERTED.value],
+                "skipped": comment_counters[UpsertResult.SKIPPED_UNCHANGED.value],
+                "re_embedded": comment_counters[UpsertResult.RE_EMBEDDED.value],
+                "duration_ms": int((time.monotonic() - t0) * 1000),
+            },
+        )
+
+        # ── GC — only on clean success ────────────────────────────────────────
+        gc_count = await gc_orphans(graphiti, group_id=group_id, cutoff=started_at)
+        logger.info("ingest.gc", extra={"deleted": gc_count})
+
+    except Exception as e:  # noqa: BLE001 — re-raised after audit trail
         errors.append(f"{type(e).__name__}: {e}")
         logger.exception("ingest.error", extra={"source": source, "run_id": run_id})
         raise
     finally:
         finished_at = _utcnow_iso()
         duration_ms = int((time.monotonic() - started_monotonic) * 1000)
-        async with driver.session() as session:
-            await session.execute_write(
-                _write_finalize_ingest_run,
+        try:
+            await write_ingest_run(
+                graphiti,
                 run_id=run_id,
+                started_at=started_at,
                 finished_at=finished_at,
                 duration_ms=duration_ms,
                 errors=errors,
+                group_id=group_id,
+                source=source,
+            )
+        except Exception:  # noqa: BLE001 — audit trail must not suppress original error
+            logger.warning(
+                "ingest.run_record.failed",
+                extra={"run_id": run_id},
+                exc_info=True,
             )
         logger.info(
             "ingest.finish",

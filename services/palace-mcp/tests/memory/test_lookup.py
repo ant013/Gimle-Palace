@@ -1,35 +1,20 @@
-"""Unit tests for palace_mcp.memory.lookup._build_query (query-shape snapshot)
-and LookupResponse.warnings field (GIM-37).
+"""Tests for palace_mcp.memory.lookup — graphiti-core substrate (N+1a).
+
+Tests focus on the Python-level schema contract (LookupResponse,
+LookupResponseItem, warnings field) and _edge_filter_matches logic.
+Full integration tests (perform_lookup with Graphiti mock) live in
+test_lookup_graphiti.py.
 """
 
-from palace_mcp.memory.lookup import _build_query
+from __future__ import annotations
+
+import pytest
+
+from palace_mcp.memory.lookup import _edge_filter_matches
 from palace_mcp.memory.schema import LookupResponse, LookupResponseItem
 
 
-def test_build_query_contains_entity_label_and_limit() -> None:
-    q = _build_query("Issue", ["n.status = $status"], "source_updated_at", 20)
-    assert "(n:Issue)" in q
-    assert "LIMIT 20" in q
-    assert "ORDER BY n.source_updated_at DESC" in q
-    assert "$status" in q
-
-
-def test_build_query_no_filters() -> None:
-    q = _build_query("Agent", [], "source_updated_at", 5)
-    assert "(n:Agent)" in q
-    assert "LIMIT 5" in q
-    assert "WHERE" not in q
-
-
-def test_build_query_comment_entity() -> None:
-    q = _build_query("Comment", ["n.source_created_at >= $ts"], "source_created_at", 10)
-    assert "(n:Comment)" in q
-    assert "LIMIT 10" in q
-    assert "ORDER BY n.source_created_at DESC" in q
-    assert "$ts" in q
-
-
-# --- LookupResponse.warnings tests (GIM-37) ---
+# ── LookupResponse schema ─────────────────────────────────────────────────────
 
 
 def test_lookup_response_warnings_empty_by_default() -> None:
@@ -41,8 +26,8 @@ def test_lookup_response_warnings_empty_by_default() -> None:
 def test_lookup_response_warnings_populated() -> None:
     """warnings carries unknown-filter messages when provided."""
     msgs = [
-        "unknown filter 'bogus' for entity_type 'Issue' — ignored",
-        "unknown filter 'xyz' for entity_type 'Issue' — ignored",
+        "unknown filter 'bogus' for entity_type 'Issue' \u2014 ignored",
+        "unknown filter 'xyz' for entity_type 'Issue' \u2014 ignored",
     ]
     resp = LookupResponse(items=[], total_matched=0, query_ms=1, warnings=msgs)
     assert resp.warnings == msgs
@@ -55,8 +40,56 @@ def test_lookup_response_warnings_single_item_with_data() -> None:
         items=[item],
         total_matched=1,
         query_ms=5,
-        warnings=["unknown filter 'foo' for entity_type 'Agent' — ignored"],
+        warnings=["unknown filter 'foo' for entity_type 'Agent' \u2014 ignored"],
     )
     assert len(resp.items) == 1
     assert len(resp.warnings) == 1
     assert "foo" in resp.warnings[0]
+
+
+# ── _edge_filter_matches ──────────────────────────────────────────────────────
+
+
+def test_edge_filter_matches_issue_assignee_name_match() -> None:
+    related = {"assignee": {"name": "CTO"}, "comments": []}
+    assert _edge_filter_matches(related, "Issue", {"assignee_name": "CTO"}) is True
+
+
+def test_edge_filter_matches_issue_assignee_name_no_match() -> None:
+    related = {"assignee": {"name": "MCPEngineer"}, "comments": []}
+    assert _edge_filter_matches(related, "Issue", {"assignee_name": "CTO"}) is False
+
+
+def test_edge_filter_matches_issue_no_assignee() -> None:
+    related = {"assignee": None, "comments": []}
+    assert _edge_filter_matches(related, "Issue", {"assignee_name": "CTO"}) is False
+
+
+def test_edge_filter_matches_comment_issue_key_match() -> None:
+    related = {"issue": {"key": "GIM-42"}, "author": None}
+    assert _edge_filter_matches(related, "Comment", {"issue_key": "GIM-42"}) is True
+
+
+def test_edge_filter_matches_comment_issue_key_no_match() -> None:
+    related = {"issue": {"key": "GIM-1"}, "author": None}
+    assert _edge_filter_matches(related, "Comment", {"issue_key": "GIM-42"}) is False
+
+
+def test_edge_filter_matches_comment_author_name_match() -> None:
+    related = {"issue": None, "author": {"name": "CodeReviewer"}}
+    assert _edge_filter_matches(related, "Comment", {"author_name": "CodeReviewer"}) is True
+
+
+def test_edge_filter_matches_comment_author_name_no_match() -> None:
+    related = {"issue": None, "author": None}
+    assert _edge_filter_matches(related, "Comment", {"author_name": "CodeReviewer"}) is False
+
+
+def test_edge_filter_matches_empty_filters_always_true() -> None:
+    related: dict = {}
+    assert _edge_filter_matches(related, "Issue", {}) is True
+
+
+def test_edge_filter_matches_agent_no_edge_filters() -> None:
+    """Agent type has no edge filters; empty filters always match."""
+    assert _edge_filter_matches({}, "Agent", {}) is True
