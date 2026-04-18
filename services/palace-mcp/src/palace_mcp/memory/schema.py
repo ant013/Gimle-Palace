@@ -15,7 +15,7 @@ class LookupRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     entity_type: EntityType
-    group_id: str
+    project: str | list[str] | None = None
     filters: dict[str, Any] = Field(default_factory=dict)
     limit: int = Field(default=20, ge=1, le=100)
     order_by: Literal["source_updated_at", "source_created_at"] = "source_updated_at"

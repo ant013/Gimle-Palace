@@ -1,18 +1,16 @@
 """Tasks 9, 9.5, 10: group_id scoping in lookup and MCP tool project param.
 
-Task 10 tests use set_default_group_id + palace_memory_lookup to verify that
-the MCP tool resolves project → group_id correctly.
+Updated for GIM-53: LookupRequest.group_id replaced by project param;
+perform_lookup gains default_group_id positional arg.
 """
 
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import ValidationError
-
-from unittest.mock import patch
 
 from palace_mcp.memory.lookup import _build_query, perform_lookup
 from palace_mcp.memory.schema import LookupRequest
@@ -51,7 +49,12 @@ def _make_driver(
     captured_queries: list[str] | None = None,
     captured_params: list[dict[str, Any]] | None = None,
 ) -> MagicMock:
-    """Return a mock driver whose session.execute_read calls the real _read closure."""
+    """Return a mock driver whose session.execute_read calls the real _read closure.
+
+    project=None path: tx.run called twice (main query, count query).
+    The LIST_PROJECT_SLUGS call is bypassed because project=None returns
+    [default_group_id] immediately without querying the transaction.
+    """
     extra: dict[str, Any] = {}
     if entity_type == "Issue":
         extra = {"assignee": None, "comments": []}
@@ -94,32 +97,40 @@ def _make_driver(
 
 
 # ---------------------------------------------------------------------------
-# Task 9: LookupRequest.group_id required
+# Task 9: LookupRequest.project replaces group_id
 # ---------------------------------------------------------------------------
 
 
-class TestLookupRequestGroupId:
-    def test_missing_group_id_raises(self) -> None:
+class TestLookupRequestProjectParam:
+    def test_group_id_field_removed(self) -> None:
         with pytest.raises(ValidationError):
-            LookupRequest(entity_type="Issue")
+            LookupRequest(entity_type="Issue", group_id="project/test")  # type: ignore[call-arg]
 
-    def test_group_id_accepted(self) -> None:
-        req = LookupRequest(entity_type="Issue", group_id="project/test")
-        assert req.group_id == "project/test"
+    def test_project_none_accepted(self) -> None:
+        req = LookupRequest(entity_type="Issue")
+        assert req.project is None
 
-    def test_build_query_includes_group_id_clause(self) -> None:
+    def test_project_string_accepted(self) -> None:
+        req = LookupRequest(entity_type="Issue", project="gimle")
+        assert req.project == "gimle"
+
+    def test_project_list_accepted(self) -> None:
+        req = LookupRequest(entity_type="Issue", project=["gimle", "medic"])
+        assert req.project == ["gimle", "medic"]
+
+    def test_build_query_includes_group_ids_in_clause(self) -> None:
         q = _build_query(
             "Issue",
-            ["n.group_id = $group_id", "n.status = $status"],
+            ["n.group_id IN $group_ids", "n.status = $status"],
             "source_updated_at",
             20,
         )
-        assert "n.group_id = $group_id" in q
+        assert "n.group_id IN $group_ids" in q
 
 
 class TestPerformLookupGroupIdScoping:
     @pytest.mark.asyncio
-    async def test_group_id_passed_to_cypher(self) -> None:
+    async def test_group_ids_passed_to_cypher(self) -> None:
         captured_queries: list[str] = []
         captured_params: list[dict[str, Any]] = []
         driver = _make_driver(
@@ -127,13 +138,13 @@ class TestPerformLookupGroupIdScoping:
             captured_queries=captured_queries,
             captured_params=captured_params,
         )
-        req = LookupRequest(entity_type="Issue", group_id="project/test")
-        await perform_lookup(driver, req)
+        req = LookupRequest(entity_type="Issue")  # project=None → uses default
+        await perform_lookup(driver, req, "project/test")
 
         all_params = {k: v for d in captured_params for k, v in d.items()}
-        assert "group_id" in all_params, "group_id not in Cypher params"
-        assert all_params["group_id"] == "project/test"
-        assert any("n.group_id = $group_id" in q for q in captured_queries)
+        assert "group_ids" in all_params, "group_ids not in Cypher params"
+        assert all_params["group_ids"] == ["project/test"]
+        assert any("n.group_id IN $group_ids" in q for q in captured_queries)
 
 
 # ---------------------------------------------------------------------------
@@ -148,8 +159,8 @@ class TestPerformLookupStripsGroupId:
             {"id": "a1", "group_id": "project/test", "name": "Bot"},
             entity_type="Agent",
         )
-        req = LookupRequest(entity_type="Agent", group_id="project/test")
-        resp = await perform_lookup(driver, req)
+        req = LookupRequest(entity_type="Agent")
+        resp = await perform_lookup(driver, req, "project/test")
 
         assert len(resp.items) == 1
         assert "group_id" not in resp.items[0].properties
@@ -160,8 +171,8 @@ class TestPerformLookupStripsGroupId:
             {"id": "a1", "group_id": "project/test", "name": "Bot", "role": "dev"},
             entity_type="Agent",
         )
-        req = LookupRequest(entity_type="Agent", group_id="project/test")
-        resp = await perform_lookup(driver, req)
+        req = LookupRequest(entity_type="Agent")
+        resp = await perform_lookup(driver, req, "project/test")
 
         props = resp.items[0].properties
         assert props["name"] == "Bot"
@@ -170,7 +181,7 @@ class TestPerformLookupStripsGroupId:
 
 
 # ---------------------------------------------------------------------------
-# Task 10: MCP tool resolves project → group_id, falls back to server default
+# Task 10: MCP tool resolves project → group_ids, falls back to server default
 # ---------------------------------------------------------------------------
 
 
@@ -182,16 +193,15 @@ class TestMcpToolProjectParam:
         from palace_mcp import mcp_server
 
         assert mcp_server._default_group_id == "project/custom"
-        # Reset to original
         set_default_group_id("project/gimle")
 
     @pytest.mark.asyncio
-    async def test_palace_memory_lookup_uses_project_param(self) -> None:
-        """When project is passed, it becomes the group_id for the lookup."""
-        captured_reqs: list[LookupRequest] = []
+    async def test_palace_memory_lookup_passes_project_to_req(self) -> None:
+        """project param is forwarded to LookupRequest.project."""
+        captured_reqs: list[tuple[Any, LookupRequest, str]] = []
 
-        async def fake_perform_lookup(driver: Any, req: LookupRequest) -> Any:
-            captured_reqs.append(req)
+        async def fake_perform_lookup(driver: Any, req: LookupRequest, default_group_id: str) -> Any:
+            captured_reqs.append((driver, req, default_group_id))
             from palace_mcp.memory.schema import LookupResponse
 
             return LookupResponse(items=[], total_matched=0, query_ms=1)
@@ -199,23 +209,23 @@ class TestMcpToolProjectParam:
         from palace_mcp import mcp_server
         from palace_mcp.mcp_server import palace_memory_lookup
 
-        mcp_server._driver = MagicMock()  # satisfy driver check
-        with patch(
-            "palace_mcp.mcp_server.perform_lookup", side_effect=fake_perform_lookup
-        ):
-            await palace_memory_lookup(entity_type="Issue", project="project/custom")
+        mcp_server._driver = MagicMock()
+        with patch("palace_mcp.mcp_server.perform_lookup", side_effect=fake_perform_lookup):
+            await palace_memory_lookup(entity_type="Issue", project="gimle")
 
         assert len(captured_reqs) == 1
-        assert captured_reqs[0].group_id == "project/custom"
+        _, req, default_group_id = captured_reqs[0]
+        assert req.project == "gimle"
+        assert default_group_id == mcp_server._default_group_id
         mcp_server._driver = None
 
     @pytest.mark.asyncio
     async def test_palace_memory_lookup_uses_default_when_no_project(self) -> None:
-        """When project is omitted, the server default group_id is used."""
-        captured_reqs: list[LookupRequest] = []
+        """When project is omitted, req.project is None and default_group_id is server default."""
+        captured_reqs: list[tuple[Any, LookupRequest, str]] = []
 
-        async def fake_perform_lookup(driver: Any, req: LookupRequest) -> Any:
-            captured_reqs.append(req)
+        async def fake_perform_lookup(driver: Any, req: LookupRequest, default_group_id: str) -> Any:
+            captured_reqs.append((driver, req, default_group_id))
             from palace_mcp.memory.schema import LookupResponse
 
             return LookupResponse(items=[], total_matched=0, query_ms=1)
@@ -230,5 +240,7 @@ class TestMcpToolProjectParam:
         ):
             await palace_memory_lookup(entity_type="Issue")
 
-        assert captured_reqs[0].group_id == "project/gimle"
+        _, req, default_group_id = captured_reqs[0]
+        assert req.project is None
+        assert default_group_id == "project/gimle"
         mcp_server._driver = None

@@ -11,16 +11,16 @@ from palace_mcp.memory.schema import (
 
 def test_lookup_request_rejects_unknown_entity_type() -> None:
     with pytest.raises(ValidationError):
-        LookupRequest(entity_type="Bogus", group_id="project/test")  # type: ignore[arg-type]
+        LookupRequest(entity_type="Bogus")  # type: ignore[arg-type]
 
 
 def test_lookup_request_limit_bounds() -> None:
-    LookupRequest(entity_type="Issue", group_id="project/test", limit=1)
-    LookupRequest(entity_type="Issue", group_id="project/test", limit=100)
+    LookupRequest(entity_type="Issue", limit=1)
+    LookupRequest(entity_type="Issue", limit=100)
     with pytest.raises(ValidationError):
-        LookupRequest(entity_type="Issue", group_id="project/test", limit=0)
+        LookupRequest(entity_type="Issue", limit=0)
     with pytest.raises(ValidationError):
-        LookupRequest(entity_type="Issue", group_id="project/test", limit=101)
+        LookupRequest(entity_type="Issue", limit=101)
 
 
 def test_lookup_response_item_related_accepts_none_dict_list() -> None:

@@ -29,6 +29,7 @@ from palace_mcp.errors import (
 )
 from palace_mcp.memory.health import get_health
 from palace_mcp.memory.lookup import perform_lookup
+from palace_mcp.memory.projects import UnknownProjectError
 from palace_mcp.memory.schema import HealthResponse as MemoryHealthResponse
 from palace_mcp.memory.schema import LookupRequest, LookupResponse
 
@@ -149,16 +150,17 @@ async def palace_memory_lookup(
     if entity_type not in VALID_ENTITY_TYPES:
         handle_tool_error(UnknownEntityTypeError(entity_type))
     try:
-        group_id = project if project is not None else _default_group_id
         req = LookupRequest(
             entity_type=entity_type,
-            group_id=group_id,
+            project=project,
             filters=filters or {},
             limit=limit,
             order_by=order_by,
         )
-        resp: LookupResponse = await perform_lookup(driver, req)
+        resp: LookupResponse = await perform_lookup(driver, req, _default_group_id)
         return resp.model_dump()
+    except UnknownProjectError as exc:
+        return {"ok": False, "error": "unknown_project", "message": str(exc)}
     except Exception as exc:
         handle_tool_error(exc)
 
