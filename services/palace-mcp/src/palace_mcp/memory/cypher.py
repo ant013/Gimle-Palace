@@ -18,6 +18,22 @@ CREATE_INDEXES = [
     "CREATE INDEX ingest_run_group_id IF NOT EXISTS FOR (n:IngestRun) ON (n.group_id)",
 ]
 
+# --- Backfill: WHERE IS NULL guard makes this a no-op after first run ---
+BACKFILL_GROUP_ID = """
+CALL () {
+    MATCH (n:Issue)     WHERE n.group_id IS NULL SET n.group_id = $default
+}
+CALL () {
+    MATCH (n:Comment)   WHERE n.group_id IS NULL SET n.group_id = $default
+}
+CALL () {
+    MATCH (n:Agent)     WHERE n.group_id IS NULL SET n.group_id = $default
+}
+CALL () {
+    MATCH (n:IngestRun) WHERE n.group_id IS NULL SET n.group_id = $default
+}
+"""
+
 # --- Upserts (idempotent — safe to re-run on transient failure retry) ---
 UPSERT_AGENTS = """
 UNWIND $batch AS row
