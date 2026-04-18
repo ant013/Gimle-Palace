@@ -158,6 +158,8 @@ RETURN p
 
 LIST_PROJECT_SLUGS = "MATCH (p:Project) RETURN p.slug AS slug ORDER BY slug"
 
+LIST_PROJECTS = "MATCH (p:Project) RETURN p ORDER BY p.slug"
+
 GET_PROJECT = """
 MATCH (p:Project {slug: $slug})
 RETURN p
