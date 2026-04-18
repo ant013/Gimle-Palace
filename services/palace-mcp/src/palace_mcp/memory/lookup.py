@@ -15,7 +15,7 @@ from typing import Any
 from neo4j import AsyncDriver, AsyncManagedTransaction
 
 from palace_mcp.memory.filters import resolve_filters
-from palace_mcp.memory.projects import UnknownProjectError, resolve_group_ids
+from palace_mcp.memory.projects import resolve_group_ids
 from palace_mcp.memory.schema import (
     EntityType,
     LookupRequest,
