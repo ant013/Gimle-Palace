@@ -85,5 +85,6 @@
 <!-- @include fragments/shared/fragments/worktree-discipline.md -->
 
 <!-- @include fragments/shared/fragments/heartbeat-discipline.md -->
+<!-- @include fragments/shared/fragments/phase-handoff.md -->
 
 <!-- @include fragments/shared/fragments/language.md -->

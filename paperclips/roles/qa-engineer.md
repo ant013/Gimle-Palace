@@ -88,5 +88,6 @@ Evidence в PR comment: `docker compose ps` output + curl outputs. **Static revi
 <!-- @include fragments/shared/fragments/worktree-discipline.md -->
 
 <!-- @include fragments/shared/fragments/heartbeat-discipline.md -->
+<!-- @include fragments/shared/fragments/phase-handoff.md -->
 
 <!-- @include fragments/shared/fragments/language.md -->
