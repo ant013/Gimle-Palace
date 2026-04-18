@@ -93,6 +93,9 @@ def _count_query(entity_type: EntityType, where_clauses: list[str]) -> str:
 
 async def perform_lookup(driver: AsyncDriver, req: LookupRequest) -> LookupResponse:
     where_clauses, params, unknown = resolve_filters(req.entity_type, dict(req.filters))
+    # group_id always scopes the query — prepend so it's the first WHERE predicate.
+    where_clauses.insert(0, "n.group_id = $group_id")
+    params["group_id"] = req.group_id
     for k in unknown:
         logger.warning(
             "query.lookup.unknown_filter",
@@ -125,11 +128,13 @@ async def perform_lookup(driver: AsyncDriver, req: LookupRequest) -> LookupRespo
         elif req.entity_type == "Comment":
             related["issue"] = row.get("issue")
             related["author"] = row.get("author")
+        props = dict(node)
+        props.pop("group_id", None)
         items.append(
             LookupResponseItem(
                 id=node["id"],
                 type=req.entity_type,
-                properties=dict(node),
+                properties=props,
                 related=related,
             )
         )

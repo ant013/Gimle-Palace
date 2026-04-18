@@ -39,6 +39,15 @@ _mcp = FastMCP("palace", streamable_http_path="/")
 # Module-level driver reference — set by FastAPI lifespan before any request.
 _driver: AsyncDriver | None = None
 
+# Default group_id for lookup scoping — set by lifespan from Settings.
+_default_group_id: str = "project/gimle"
+
+
+def set_default_group_id(group_id: str) -> None:
+    """Called from FastAPI lifespan to share the default group_id with MCP tools."""
+    global _default_group_id  # noqa: PLW0603
+    _default_group_id = group_id
+
 # Server start time for uptime_seconds calculation.
 _start_time: float = time.monotonic()
 
@@ -120,7 +129,9 @@ async def palace_health_status() -> HealthStatusResponse:
     description=(
         "Query Paperclip entities (Issue, Comment, Agent) from the Palace knowledge graph. "
         "Returns matching nodes with one-hop related data (assignee + comments for Issues, "
-        "issue + author for Comments). Use palace.health.status to check reachability first."
+        "issue + author for Comments). Use palace.health.status to check reachability first. "
+        "Optional 'project' scopes results to a specific project group_id; "
+        "omit to use the server default (project/gimle)."
     ),
 )
 async def palace_memory_lookup(
@@ -128,6 +139,7 @@ async def palace_memory_lookup(
     filters: dict[str, Any] | None = None,
     limit: int = 20,
     order_by: str = "source_updated_at",
+    project: str | None = None,
 ) -> dict[str, Any]:
     """Look up Paperclip entities from the Neo4j knowledge graph."""
     driver = _driver
@@ -136,8 +148,10 @@ async def palace_memory_lookup(
     if entity_type not in VALID_ENTITY_TYPES:
         handle_tool_error(UnknownEntityTypeError(entity_type))
     try:
+        group_id = project if project is not None else _default_group_id
         req = LookupRequest(
             entity_type=entity_type,
+            group_id=group_id,
             filters=filters or {},
             limit=limit,
             order_by=order_by,

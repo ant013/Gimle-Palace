@@ -10,11 +10,36 @@ CREATE_CONSTRAINTS = [
     "CREATE CONSTRAINT agent_id IF NOT EXISTS FOR (a:Agent) REQUIRE a.id IS UNIQUE",
 ]
 
+# --- Indexes (non-unique; speeds up group_id filter + GC cutoff) ---
+CREATE_INDEXES = [
+    "CREATE INDEX issue_group_id IF NOT EXISTS FOR (n:Issue) ON (n.group_id)",
+    "CREATE INDEX comment_group_id IF NOT EXISTS FOR (n:Comment) ON (n.group_id)",
+    "CREATE INDEX agent_group_id IF NOT EXISTS FOR (n:Agent) ON (n.group_id)",
+    "CREATE INDEX ingest_run_group_id IF NOT EXISTS FOR (n:IngestRun) ON (n.group_id)",
+]
+
+# --- Backfill: WHERE IS NULL guard makes this a no-op after first run ---
+BACKFILL_GROUP_ID = """
+CALL () {
+    MATCH (n:Issue)     WHERE n.group_id IS NULL SET n.group_id = $default
+}
+CALL () {
+    MATCH (n:Comment)   WHERE n.group_id IS NULL SET n.group_id = $default
+}
+CALL () {
+    MATCH (n:Agent)     WHERE n.group_id IS NULL SET n.group_id = $default
+}
+CALL () {
+    MATCH (n:IngestRun) WHERE n.group_id IS NULL SET n.group_id = $default
+}
+"""
+
 # --- Upserts (idempotent — safe to re-run on transient failure retry) ---
 UPSERT_AGENTS = """
 UNWIND $batch AS row
 MERGE (a:Agent {id: row.id})
-SET a.name                 = row.name,
+SET a.group_id             = $group_id,
+    a.name                 = row.name,
     a.url_key              = row.url_key,
     a.role                 = row.role,
     a.source               = 'paperclip',
@@ -26,7 +51,8 @@ SET a.name                 = row.name,
 UPSERT_ISSUES = """
 UNWIND $batch AS row
 MERGE (i:Issue {id: row.id})
-SET i.key                  = row.key,
+SET i.group_id             = $group_id,
+    i.key                  = row.key,
     i.title                = row.title,
     i.description          = row.description,
     i.status               = row.status,
@@ -46,7 +72,8 @@ MERGE (i)-[:ASSIGNED_TO]->(a)
 UPSERT_COMMENTS = """
 UNWIND $batch AS row
 MERGE (c:Comment {id: row.id})
-SET c.body                 = row.body,
+SET c.group_id             = $group_id,
+    c.body                 = row.body,
     c.source               = 'paperclip',
     c.source_created_at    = row.source_created_at,
     c.source_updated_at    = row.source_updated_at,
@@ -70,7 +97,10 @@ MERGE (c)-[:AUTHORED_BY]->(a)
 # {label} is substituted by a closed tuple ("Issue", "Comment", "Agent") in runner.py,
 # NOT user input. Labels are hardcoded; this is intentional.
 GC_BY_LABEL = """
-MATCH (n:{label}) WHERE n.source = 'paperclip' AND n.palace_last_seen_at < $cutoff
+MATCH (n:{label})
+WHERE n.source = 'paperclip'
+  AND n.group_id = $group_id
+  AND n.palace_last_seen_at < $cutoff
 DETACH DELETE n
 """
 
@@ -78,6 +108,7 @@ DETACH DELETE n
 CREATE_INGEST_RUN = """
 CREATE (r:IngestRun {
     id: $id,
+    group_id: $group_id,
     source: $source,
     started_at: $started_at,
     finished_at: null,
@@ -95,6 +126,14 @@ SET r.finished_at = $finished_at,
 
 LATEST_INGEST_RUN = """
 MATCH (r:IngestRun {source: $source})
+RETURN r
+ORDER BY r.started_at DESC
+LIMIT 1
+"""
+
+LATEST_INGEST_RUN_FOR_GROUP = """
+MATCH (r:IngestRun {source: $source})
+WHERE r.group_id = $group_id
 RETURN r
 ORDER BY r.started_at DESC
 LIMIT 1

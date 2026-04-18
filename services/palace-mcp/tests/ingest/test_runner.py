@@ -83,11 +83,63 @@ async def test_run_ingest_happy_path_calls_all_write_paths() -> None:
     async with PaperclipClient(
         base_url="https://pc", token="t", company_id="co-1", transport=transport
     ) as client:
-        result = await run_ingest(client=client, driver=driver)
+        result = await run_ingest(
+            client=client, driver=driver, group_id="project/test"
+        )
 
     assert result["errors"] == []
     # execute_write is called: create_ingest_run, agents, issues, comments, gc*3, finalize
     assert session.execute_write.call_count >= 7
+
+
+class TestRunIngestGroupId:
+    """Task 8: group_id must be threaded through every write path."""
+
+    @pytest.mark.asyncio
+    async def test_run_ingest_accepts_group_id_kwarg(self) -> None:
+        session = _make_session()
+        driver = _make_mock_driver(session)
+        transport = httpx.MockTransport(_paperclip_handler)
+        async with PaperclipClient(
+            base_url="https://pc", token="t", company_id="co-1", transport=transport
+        ) as client:
+            result = await run_ingest(
+                client=client, driver=driver, group_id="project/test"
+            )
+        assert result["errors"] == []
+
+    @pytest.mark.asyncio
+    async def test_run_ingest_passes_group_id_to_create_ingest_run(self) -> None:
+        session = _make_session()
+        driver = _make_mock_driver(session)
+        transport = httpx.MockTransport(_paperclip_handler)
+        async with PaperclipClient(
+            base_url="https://pc", token="t", company_id="co-1", transport=transport
+        ) as client:
+            await run_ingest(client=client, driver=driver, group_id="project/test")
+
+        all_kwargs = [c.kwargs for c in session.execute_write.call_args_list]
+        group_ids = [kw["group_id"] for kw in all_kwargs if "group_id" in kw]
+        assert group_ids, "group_id not passed to any execute_write call"
+        assert all(gid == "project/test" for gid in group_ids)
+
+    @pytest.mark.asyncio
+    async def test_run_ingest_passes_group_id_to_gc(self) -> None:
+        session = _make_session()
+        driver = _make_mock_driver(session)
+        transport = httpx.MockTransport(_paperclip_handler)
+        async with PaperclipClient(
+            base_url="https://pc", token="t", company_id="co-1", transport=transport
+        ) as client:
+            await run_ingest(client=client, driver=driver, group_id="project/scoped")
+
+        gc_kwargs = [
+            c.kwargs
+            for c in session.execute_write.call_args_list
+            if "label" in c.kwargs
+        ]
+        assert len(gc_kwargs) == 3, f"Expected 3 GC calls, got {len(gc_kwargs)}"
+        assert all(kw.get("group_id") == "project/scoped" for kw in gc_kwargs)
 
 
 @pytest.mark.asyncio
@@ -110,4 +162,4 @@ async def test_run_ingest_records_error_on_exception() -> None:
         base_url="https://pc", token="t", company_id="co-1", transport=transport
     ) as client:
         with pytest.raises(RuntimeError):
-            await run_ingest(client=client, driver=driver)
+            await run_ingest(client=client, driver=driver, group_id="project/test")

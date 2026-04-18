@@ -73,3 +73,37 @@ class TestIngestSettings:
             s = IngestSettings()
         assert isinstance(s.paperclip_ingest_api_key, SecretStr)
         assert "supersecret" not in repr(s)
+
+
+class TestGroupId:
+    def test_palace_default_group_id_defaults_to_project_gimle(self) -> None:
+        env = {"NEO4J_PASSWORD": "x"}
+        with patch.dict(os.environ, env, clear=True):
+            from palace_mcp.config import Settings
+
+            s = Settings()
+        assert s.palace_default_group_id == "project/gimle"
+
+    def test_ingest_palace_default_group_id_defaults_to_project_gimle(self) -> None:
+        env = {
+            "NEO4J_PASSWORD": "x",
+            "PAPERCLIP_API_URL": "http://test",
+            "PAPERCLIP_INGEST_API_KEY": "k",
+            "PAPERCLIP_COMPANY_ID": "test-co",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            from palace_mcp.config import IngestSettings
+
+            s = IngestSettings()
+        assert s.palace_default_group_id == "project/gimle"
+
+    def test_palace_default_group_id_overridable_via_env(self, monkeypatch: object) -> None:
+        import importlib
+
+        import palace_mcp.config as cfg_mod
+
+        monkeypatch.setenv("PALACE_DEFAULT_GROUP_ID", "project/other")
+        monkeypatch.setenv("NEO4J_PASSWORD", "x")
+        importlib.reload(cfg_mod)
+        s = cfg_mod.Settings()
+        assert s.palace_default_group_id == "project/other"

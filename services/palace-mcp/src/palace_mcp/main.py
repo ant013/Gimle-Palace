@@ -11,8 +11,8 @@ from neo4j import AsyncDriver, AsyncGraphDatabase
 from starlette.applications import Starlette
 
 from palace_mcp.config import Settings
-from palace_mcp.mcp_server import build_mcp_asgi_app, set_driver
-from palace_mcp.memory.constraints import ensure_constraints
+from palace_mcp.mcp_server import build_mcp_asgi_app, set_default_group_id, set_driver
+from palace_mcp.memory.constraints import ensure_schema
 from palace_mcp.memory.logging_setup import configure_json_logging
 
 # Build once at module level so lifespan can be wired in below.
@@ -37,7 +37,7 @@ def _fire_and_forget(coro: Coroutine[None, None, None]) -> None:
         _background_tasks.discard(t)
         if not t.cancelled() and t.exception() is not None:
             logger.error(
-                "ensure_constraints background task failed: %s",
+                "ensure_schema background task failed: %s",
                 t.exception(),
                 exc_info=t.exception(),
             )
@@ -55,9 +55,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
     app.state.neo4j = driver
     set_driver(driver)
-    # Patterns #5 + #11: schema migration check is fire-and-forget.
+    set_default_group_id(settings.palace_default_group_id)
+    # Patterns #5 + #11: schema migration is fire-and-forget.
+    # Race window: backfill runs in <1s for ~213 nodes; palace-mcp starts
+    # behind compose healthcheck so MCP clients only connect after healthy.
     # A slow/unavailable Neo4j must not block startup or cause SIGKILL.
-    _fire_and_forget(ensure_constraints(driver))
+    _fire_and_forget(ensure_schema(driver, default_group_id=settings.palace_default_group_id))
     # Run the MCP sub-app lifespan so StreamableHTTPSessionManager task group is initialized.
     async with _mcp_asgi_app.router.lifespan_context(_mcp_asgi_app):
         yield
