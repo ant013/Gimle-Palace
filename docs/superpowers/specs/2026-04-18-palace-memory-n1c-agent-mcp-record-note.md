@@ -1,9 +1,18 @@
 # Palace Memory — N+1c Agent MCP + record_note + provider UX
 
+> ⚠ **SUPERSEDED 2026-04-18.** Predecessor N+1a reverted. N+1c depended
+> on graphiti-core search and record_note on EntityNode attributes;
+> both assumptions are invalid against the real library API (see
+> `reference_graphiti_core_api_truth.md`). When search becomes a
+> driving product need, re-evaluate: either spike graphiti-core again
+> against a newer version, use Neo4j vector index directly, or pick
+> another vector DB. The agent-MCP + HMAC deploy listener parts of
+> this spec stand on their own and can migrate to a rev3 unchanged.
+
 **Date:** 2026-04-18 (revision 2 — post extended verification)
-**Slice:** N+1c (third of three N+1 sub-slices)
+**Slice:** N+1c (third of three N+1 sub-slices) — **needs rev3**
 **Author:** Board
-**Status:** Draft — awaiting CTO formalization as GIM-NN issue
+**Status:** SUPERSEDED (predecessor N+1a reverted)
 **Related specs:** `docs/superpowers/specs/2026-04-15-gimle-palace-design.md` §4.2, §4.3; `docs/research/graphiti-core-verification.md` §5.B (mcp_server is separate subproject), §5.E-I (SearchFilters, search_ recipes, namespace API), §5.J (dim-mismatch detection)
 **Predecessor slices:** N+1a, N+1b
 **Closes:** N+1 palace.memory.* substrate epic

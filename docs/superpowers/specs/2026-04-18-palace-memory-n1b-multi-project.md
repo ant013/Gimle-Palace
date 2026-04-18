@@ -1,9 +1,19 @@
 # Palace Memory — N+1b Multi-project + :Project entity
 
+> ⚠ **SUPERSEDED 2026-04-18.** This spec assumed N+1a graphiti-core
+> substrate as predecessor. After N+1a revert, the predecessor becomes
+> `2026-04-18-palace-memory-group-id-migration.md` (N+0 + `group_id`
+> column) — which already delivers single-project namespacing. N+1b
+> still applies but the "Graphiti substrate" assumptions below are
+> invalid. A fresh rev is needed once the group_id migration lands;
+> the `:Project` entity node design and `project: list | "*" | None`
+> MCP surface carry over mostly as-is. Do not implement from this
+> document verbatim; use it as a starting point for the rev3 rewrite.
+
 **Date:** 2026-04-18 (revision 2 — post extended verification)
-**Slice:** N+1b (second of three N+1 sub-slices)
+**Slice:** N+1b (second of three N+1 sub-slices) — **needs rev3**
 **Author:** Board
-**Status:** Draft — awaiting CTO formalization as GIM-NN issue
+**Status:** SUPERSEDED (predecessor N+1a reverted)
 **Related specs:** `docs/superpowers/specs/2026-04-15-gimle-palace-design.md` §5.1, §6; `docs/research/graphiti-core-verification.md` §5.C, §5.E (SearchFilters)
 **Predecessor:** N+1a
 **Successor:** N+1c

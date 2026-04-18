@@ -1,5 +1,13 @@
 # N+1a Graphiti Substrate Swap — Implementation Plan
 
+> ⚠ **DEPRECATED 2026-04-18.** This plan was executed as GIM-48,
+> merged as `9d87fa0`, and reverted as `a4abd28` on the same day
+> because it targets graphiti-core APIs that do not exist in 0.4.3
+> (`Graphiti.nodes.entity.save`, `Graphiti.edges.entity.save`,
+> `node.attributes`). Replacement slice:
+> `docs/superpowers/plans/2026-04-18-GIM-NN-palace-memory-group-id-migration.md`.
+> Kept as historical record; **do not execute**.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace direct Cypher MERGE writes in palace-mcp with `graphiti-core` namespace API while preserving N+0 user-visible `palace.memory.lookup` and `palace.memory.health` behavior byte-for-byte.

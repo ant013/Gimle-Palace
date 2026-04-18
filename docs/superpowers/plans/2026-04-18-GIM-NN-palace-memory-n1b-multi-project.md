@@ -1,5 +1,14 @@
 # N+1b Multi-project + :Project entity — Implementation Plan
 
+> ⚠ **SUPERSEDED 2026-04-18.** This plan assumed N+1a Graphiti
+> substrate as predecessor. After N+1a revert the foundation is now
+> N+0 + `group_id` (see
+> `docs/superpowers/plans/2026-04-18-GIM-NN-palace-memory-group-id-migration.md`).
+> All "graphiti.nodes.entity.save" references here are invalid. Rev3
+> will rewrite with raw parameterised Cypher on top of N+0+group_id.
+> Do **not** execute this plan verbatim; use as starting-point
+> reference only.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Introduce `:Project` entity, project-registry file, and `project: str | list[str] | "*" | None` scoping on all applicable palace-mcp tools. Validate multi-project schema via registering a test Medic `:Project` node without full data ingest.

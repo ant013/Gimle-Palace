@@ -1,9 +1,19 @@
 # Palace Memory — N+1a Graphiti substrate swap
 
+> ⚠ **DEPRECATED 2026-04-18.** N+1a was implemented as GIM-48, merged as
+> `9d87fa0`, and **reverted** on the same day as `a4abd28`. The
+> implementation used graphiti-core API surfaces that do not exist
+> (`Graphiti.nodes`, `Graphiti.edges`, `EntityNode.attributes`). The
+> replacement slice is `2026-04-18-palace-memory-group-id-migration.md`
+> — a `group_id` column on N+0 that unlocks N+1b without a substrate
+> swap. See `feedback_qa_skipped_gim48.md` (auto-memory) for post-mortem
+> and `reference_graphiti_core_api_truth.md` for the real API surface.
+> This file is kept for historical context; **do not implement**.
+
 **Date:** 2026-04-18 (revision 2 — post extended verification)
-**Slice:** N+1a (first of three N+1 sub-slices)
+**Slice:** N+1a (first of three N+1 sub-slices) — **abandoned**
 **Author:** Board
-**Status:** Draft — awaiting CTO formalization as GIM-NN issue
+**Status:** DEPRECATED (implemented, reverted, superseded)
 **Related specs:** `docs/superpowers/specs/2026-04-15-gimle-palace-design.md` §4.2, §5; `docs/research/graphiti-core-verification.md` (full API verification; revision 2 §5-6 resolves 9 additional API-gap questions from Board review #2)
 **Predecessor slice:** N+0 (GIM-34) — `docs/superpowers/specs/2026-04-17-palace-memory-paperclip-slice.md`
 

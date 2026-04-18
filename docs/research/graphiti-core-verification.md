@@ -1,9 +1,21 @@
 # graphiti-core API verification spike
 
+> ⚠ **CAUTION 2026-04-18.** This document was used to author the N+1a
+> spec and plan. In practice, multiple claims here turned out to be
+> stale or wrong against the installed `graphiti-core 0.4.3`: notably
+> `Graphiti.nodes.entity.*` and `Graphiti.edges.entity.*` namespace
+> managers do **not** exist, `EntityNode` has **no** `attributes`
+> dict, and the `OpenAIGenericClient` import path was renamed to
+> `openai_client.OpenAIClient`. Consequences: N+1a was merged broken
+> and reverted the same day. **Treat this doc as a historical
+> reference only.** The source of truth for the real 0.4.3 API surface
+> is `reference_graphiti_core_api_truth.md` in auto-memory (captured
+> via `inspect` against the installed library on 2026-04-18).
+
 **Date:** 2026-04-18
 **Purpose:** Verify 8 API claims from REJECTED N+1 spec (`docs/superpowers/specs/2026-04-18-palace-memory-n1-graphiti-substrate.md`) before writing replacement atomic specs (N+1a/b/c).
 **Source:** context7 MCP server (`/getzep/graphiti`, source reputation High, benchmark 81.1, 221 code snippets) — pulled directly from getzep/graphiti repo + llms.txt.
-**Outcome:** All 5 critical hallucinations confirmed. 3 bonus findings unlock cleaner design.
+**Outcome at time of writing:** All 5 critical hallucinations confirmed. 3 bonus findings unlock cleaner design. **Updated assessment 2026-04-18 evening:** some of those findings themselves reference APIs that turned out not to exist in 0.4.3 — see caution banner above.
 
 ## 1. Claim-by-claim verification
 
