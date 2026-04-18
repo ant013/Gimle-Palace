@@ -34,7 +34,7 @@ Branch from `develop` (which currently holds post-revert N+0):
 git fetch origin
 git checkout develop
 git pull --ff-only
-git checkout -b feature/GIM-NN-palace-memory-group-id
+git checkout -b feature/GIM-52-palace-memory-group-id
 ```
 
 Replace `NN` with the issue number CTO assigns in Phase 1.1.
@@ -113,7 +113,7 @@ Expected: both tests PASS.
 git add services/palace-mcp/src/palace_mcp/config.py \
         services/palace-mcp/tests/test_config.py \
         services/palace-mcp/.env.example
-git commit -m "feat(config): add palace_default_group_id setting (GIM-NN)"
+git commit -m "feat(config): add palace_default_group_id setting (GIM-52)"
 ```
 
 ---
@@ -185,7 +185,7 @@ Expected: both tests PASS.
 ```bash
 git add services/palace-mcp/src/palace_mcp/memory/cypher.py \
         services/palace-mcp/tests/memory/test_schema_ddl.py
-git commit -m "feat(schema): add group_id indexes per label (GIM-NN)"
+git commit -m "feat(schema): add group_id indexes per label (GIM-52)"
 ```
 
 ---
@@ -295,7 +295,7 @@ Expected: all three backfill tests PASS.
 git add services/palace-mcp/src/palace_mcp/memory/cypher.py \
         services/palace-mcp/src/palace_mcp/memory/constraints.py \
         services/palace-mcp/tests/memory/test_constraints.py
-git commit -m "feat(schema): ensure_schema() with indexes + idempotent group_id backfill (GIM-NN)"
+git commit -m "feat(schema): ensure_schema() with indexes + idempotent group_id backfill (GIM-52)"
 ```
 
 ---
@@ -355,7 +355,7 @@ awaited to avoid race with first request.
 - [ ] **Step 5: Commit**
 
 ```bash
-git commit -am "feat(lifespan): call ensure_schema with default_group_id (GIM-NN)"
+git commit -am "feat(lifespan): call ensure_schema with default_group_id (GIM-52)"
 ```
 
 ---
@@ -427,7 +427,7 @@ within one group.
 ```bash
 git add services/palace-mcp/src/palace_mcp/memory/cypher.py \
         services/palace-mcp/tests/memory/test_upsert_cypher.py
-git commit -m "feat(cypher): upserts set group_id (GIM-NN)"
+git commit -m "feat(cypher): upserts set group_id (GIM-52)"
 ```
 
 ---
@@ -487,7 +487,7 @@ default-project health call path, so the wire contract of
 - [ ] **Step 5: Commit**
 
 ```bash
-git commit -am "feat(cypher): IngestRun carries group_id, add per-group lookup (GIM-NN)"
+git commit -am "feat(cypher): IngestRun carries group_id, add per-group lookup (GIM-52)"
 ```
 
 ---
@@ -527,7 +527,7 @@ DETACH DELETE n
 - [ ] **Step 5: Commit**
 
 ```bash
-git commit -am "feat(cypher): GC scoped by group_id (GIM-NN)"
+git commit -am "feat(cypher): GC scoped by group_id (GIM-52)"
 ```
 
 ---
@@ -586,7 +586,7 @@ async def _write_gc(
 - [ ] **Step 5: Commit**
 
 ```bash
-git commit -am "feat(ingest): thread group_id through runner + writes (GIM-NN)"
+git commit -am "feat(ingest): thread group_id through runner + writes (GIM-52)"
 ```
 
 ---
@@ -632,7 +632,7 @@ will override the default in Task 10.
 - [ ] **Step 5: Commit**
 
 ```bash
-git commit -am "feat(lookup): implicit group_id WHERE clause on every query (GIM-NN)"
+git commit -am "feat(lookup): implicit group_id WHERE clause on every query (GIM-52)"
 ```
 
 ---
@@ -685,7 +685,7 @@ provided, pass it through as `group_id`; otherwise pass
 - [ ] **Step 5: Commit**
 
 ```bash
-git commit -am "feat(mcp): optional project arg on palace.memory.lookup (GIM-NN)"
+git commit -am "feat(mcp): optional project arg on palace.memory.lookup (GIM-52)"
 ```
 
 ---
@@ -780,7 +780,7 @@ QA runs these on the iMac Neo4j in Phase 4.1.
 - [ ] **Step 5: Commit**
 
 ```bash
-git commit -am "test(integration): group_id namespace invariants (GIM-NN)"
+git commit -am "test(integration): group_id namespace invariants (GIM-52)"
 ```
 
 ---
@@ -825,7 +825,7 @@ legacy single-project reality, so rows + order must be identical.
 - [ ] **Step 4: Commit**
 
 ```bash
-git commit -am "test: lookup response byte-stable across group_id migration (GIM-NN)"
+git commit -am "test: lookup response byte-stable across group_id migration (GIM-52)"
 ```
 
 ---
