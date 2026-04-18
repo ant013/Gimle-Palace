@@ -17,5 +17,12 @@ def test_upsert_project_preserves_source_created_at() -> None:
 
 def test_project_info_has_required_fields() -> None:
     fields = ProjectInfo.model_fields
-    for req in ("slug", "name", "tags", "source_created_at", "source_updated_at", "entity_counts"):
+    for req in (
+        "slug",
+        "name",
+        "tags",
+        "source_created_at",
+        "source_updated_at",
+        "entity_counts",
+    ):
         assert req in fields, f"ProjectInfo missing required field: {req}"

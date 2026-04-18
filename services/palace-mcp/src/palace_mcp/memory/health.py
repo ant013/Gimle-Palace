@@ -34,7 +34,9 @@ async def get_health(driver: AsyncDriver, *, default_group_id: str) -> HealthRes
 
     async def _read(
         tx: AsyncManagedTransaction,
-    ) -> tuple[dict[str, int], dict[str, Any] | None, list[str], dict[str, dict[str, int]]]:
+    ) -> tuple[
+        dict[str, int], dict[str, Any] | None, list[str], dict[str, dict[str, int]]
+    ]:
         counts_result = await tx.run(ENTITY_COUNTS)
         counts: dict[str, int] = {}
         async for row in counts_result:

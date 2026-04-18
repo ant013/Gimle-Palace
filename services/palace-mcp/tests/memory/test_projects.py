@@ -54,13 +54,17 @@ async def test_resolve_single_validates_existence() -> None:
 async def test_resolve_list_validates_each() -> None:
     tx = _FakeTx(["gimle"])
     with pytest.raises(UnknownProjectError, match="medic, other"):
-        await resolve_group_ids(tx, ["gimle", "medic", "other"], default_group_id="project/gimle")
+        await resolve_group_ids(
+            tx, ["gimle", "medic", "other"], default_group_id="project/gimle"
+        )
 
 
 @pytest.mark.asyncio
 async def test_resolve_list_ok() -> None:
     tx = _FakeTx(["gimle", "medic"])
-    out = await resolve_group_ids(tx, ["gimle", "medic"], default_group_id="project/gimle")
+    out = await resolve_group_ids(
+        tx, ["gimle", "medic"], default_group_id="project/gimle"
+    )
     assert out == ["project/gimle", "project/medic"]
 
 

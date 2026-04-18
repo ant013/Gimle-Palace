@@ -32,7 +32,9 @@ from typing import Any
 import pytest
 import pytest_asyncio
 
-SNAPSHOT_PATH = Path(__file__).parent / "fixtures" / "lookup_issue_snapshot_n1b_compat.json"
+SNAPSHOT_PATH = (
+    Path(__file__).parent / "fixtures" / "lookup_issue_snapshot_n1b_compat.json"
+)
 
 
 def _normalize(obj: dict[str, Any]) -> dict[str, Any]:
@@ -70,7 +72,9 @@ async def test_lookup_default_project_byte_stable(live_driver: Any) -> None:  # 
     """With project=None, response must match the captured N+1b snapshot."""
     snap_raw = json.loads(SNAPSHOT_PATH.read_text())
     if snap_raw.get("_placeholder"):
-        pytest.skip("Snapshot not yet captured — run capture command in module docstring")
+        pytest.skip(
+            "Snapshot not yet captured — run capture command in module docstring"
+        )
 
     from palace_mcp.memory.lookup import perform_lookup
     from palace_mcp.memory.schema import LookupRequest

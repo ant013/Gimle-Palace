@@ -55,7 +55,8 @@ def main() -> None:
         "--company-id", default=None, help="Default: $PAPERCLIP_COMPANY_ID"
     )
     parser.add_argument(
-        "--project-slug", default=None,
+        "--project-slug",
+        default=None,
         help="Project slug to ingest into. Default: slug of $PALACE_DEFAULT_GROUP_ID",
     )
     args = parser.parse_args()

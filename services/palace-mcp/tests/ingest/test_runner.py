@@ -159,9 +159,7 @@ class TestRunIngestProjectValidation:
             base_url="https://pc", token="t", company_id="co-1", transport=transport
         ) as client:
             with pytest.raises(UnknownProjectError, match="ghost"):
-                await run_ingest(
-                    client=client, driver=driver, group_id="project/ghost"
-                )
+                await run_ingest(client=client, driver=driver, group_id="project/ghost")
 
     @pytest.mark.asyncio
     async def test_accepts_registered_project(self) -> None:

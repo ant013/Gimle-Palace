@@ -91,12 +91,22 @@ async def test_register_project_returns_project_info() -> None:
 @pytest.mark.asyncio
 async def test_register_project_optional_fields() -> None:
     row = _make_project_row(
-        "alpha", "Alpha", [], language="Kotlin", framework="KMP", repo_url="https://gh/alpha"
+        "alpha",
+        "Alpha",
+        [],
+        language="Kotlin",
+        framework="KMP",
+        repo_url="https://gh/alpha",
     )
     driver = _make_mock_driver_for_register(row)
     info = await register_project(
-        driver, slug="alpha", name="Alpha", tags=[],
-        language="Kotlin", framework="KMP", repo_url="https://gh/alpha",
+        driver,
+        slug="alpha",
+        name="Alpha",
+        tags=[],
+        language="Kotlin",
+        framework="KMP",
+        repo_url="https://gh/alpha",
     )
     assert info.language == "Kotlin"
     assert info.framework == "KMP"

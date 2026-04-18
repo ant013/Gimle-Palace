@@ -20,7 +20,9 @@ from palace_mcp.memory.schema import ProjectInfo
 logger = logging.getLogger(__name__)
 
 
-def _project_info_from_row(row: Any, *, entity_counts: dict[str, int] | None = None) -> ProjectInfo:
+def _project_info_from_row(
+    row: Any, *, entity_counts: dict[str, int] | None = None
+) -> ProjectInfo:
     p = row["p"]
     return ProjectInfo(
         slug=p["slug"],
@@ -105,8 +107,14 @@ async def get_project_overview(
         except Exception as exc:
             logger.warning("get_project_overview last_ingest query failed: %s", exc)
 
-    return base.model_copy(update={
-        "entity_counts": counts,
-        "last_ingest_started_at": last_ingest.get("started_at") if last_ingest else None,
-        "last_ingest_finished_at": last_ingest.get("finished_at") if last_ingest else None,
-    })
+    return base.model_copy(
+        update={
+            "entity_counts": counts,
+            "last_ingest_started_at": last_ingest.get("started_at")
+            if last_ingest
+            else None,
+            "last_ingest_finished_at": last_ingest.get("finished_at")
+            if last_ingest
+            else None,
+        }
+    )

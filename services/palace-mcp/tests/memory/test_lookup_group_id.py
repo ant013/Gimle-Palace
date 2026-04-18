@@ -200,7 +200,9 @@ class TestMcpToolProjectParam:
         """project param is forwarded to LookupRequest.project."""
         captured_reqs: list[tuple[Any, LookupRequest, str]] = []
 
-        async def fake_perform_lookup(driver: Any, req: LookupRequest, default_group_id: str) -> Any:
+        async def fake_perform_lookup(
+            driver: Any, req: LookupRequest, default_group_id: str
+        ) -> Any:
             captured_reqs.append((driver, req, default_group_id))
             from palace_mcp.memory.schema import LookupResponse
 
@@ -210,7 +212,9 @@ class TestMcpToolProjectParam:
         from palace_mcp.mcp_server import palace_memory_lookup
 
         mcp_server._driver = MagicMock()
-        with patch("palace_mcp.mcp_server.perform_lookup", side_effect=fake_perform_lookup):
+        with patch(
+            "palace_mcp.mcp_server.perform_lookup", side_effect=fake_perform_lookup
+        ):
             await palace_memory_lookup(entity_type="Issue", project="gimle")
 
         assert len(captured_reqs) == 1
@@ -224,7 +228,9 @@ class TestMcpToolProjectParam:
         """When project is omitted, req.project is None and default_group_id is server default."""
         captured_reqs: list[tuple[Any, LookupRequest, str]] = []
 
-        async def fake_perform_lookup(driver: Any, req: LookupRequest, default_group_id: str) -> Any:
+        async def fake_perform_lookup(
+            driver: Any, req: LookupRequest, default_group_id: str
+        ) -> Any:
             captured_reqs.append((driver, req, default_group_id))
             from palace_mcp.memory.schema import LookupResponse
 

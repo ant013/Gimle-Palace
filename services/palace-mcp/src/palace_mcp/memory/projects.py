@@ -41,6 +41,4 @@ async def resolve_group_ids(
             raise UnknownProjectError(", ".join(unknown))
         return [f"project/{s}" for s in project]
 
-    raise TypeError(
-        f"project must be str, list, or None; got {type(project).__name__}"
-    )
+    raise TypeError(f"project must be str, list, or None; got {type(project).__name__}")
