@@ -291,7 +291,7 @@ Structured log events (added/changed):
 
 ## 9. Decomposition (plan-first ready)
 
-Expected plan-file: `docs/superpowers/plans/2026-04-18-GIM-NN-palace-memory-n1b-multi-project-rev3.md`.
+Expected plan-file: `docs/superpowers/plans/2026-04-18-GIM-53-palace-memory-n1b-multi-project-rev3.md`.
 
 Workflow per `phase-handoff.md` fragment (shared-fragments `e32f6b8`).
 CI green at every phase. CR must paste `uv run ruff check && uv run
