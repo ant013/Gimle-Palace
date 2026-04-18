@@ -40,10 +40,10 @@ class TestFireAndForgetConstraints:
         mock_driver.verify_connectivity = AsyncMock(return_value=None)
         mock_driver.close = AsyncMock(return_value=None)
 
-        # ensure_constraints hangs forever — if awaited, lifespan never yields.
+        # ensure_schema hangs forever — if awaited, lifespan never yields.
         never_resolving: asyncio.Future[None] = asyncio.get_event_loop().create_future()
 
-        async def hanging_constraints(_driver: object) -> None:
+        async def hanging_constraints(_driver: object, *, default_group_id: str) -> None:
             await never_resolving
 
         mock_app = MagicMock()
@@ -61,7 +61,7 @@ class TestFireAndForgetConstraints:
                 "palace_mcp.main.AsyncGraphDatabase.driver", return_value=mock_driver
             ),
             patch(
-                "palace_mcp.main.ensure_constraints", side_effect=hanging_constraints
+                "palace_mcp.main.ensure_schema", side_effect=hanging_constraints
             ),
             patch(
                 "palace_mcp.main._mcp_asgi_app.router.lifespan_context",
@@ -83,7 +83,7 @@ class TestFireAndForgetConstraints:
         mock_driver.verify_connectivity = AsyncMock(return_value=None)
         mock_driver.close = AsyncMock(return_value=None)
 
-        async def failing_constraints(_driver: object) -> None:
+        async def failing_constraints(_driver: object, *, default_group_id: str) -> None:
             raise RuntimeError("neo4j not ready")
 
         mock_app = MagicMock()
@@ -100,7 +100,7 @@ class TestFireAndForgetConstraints:
                 "palace_mcp.main.AsyncGraphDatabase.driver", return_value=mock_driver
             ),
             patch(
-                "palace_mcp.main.ensure_constraints", side_effect=failing_constraints
+                "palace_mcp.main.ensure_schema", side_effect=failing_constraints
             ),
             patch(
                 "palace_mcp.main._mcp_asgi_app.router.lifespan_context",
@@ -117,11 +117,57 @@ class TestFireAndForgetConstraints:
         error_records = [r for r in caplog.records if r.levelno >= logging.ERROR]
         assert any(
             "neo4j not ready" in r.getMessage()
-            or "ensure_constraints" in r.getMessage()
+            or "ensure_schema" in r.getMessage()
             for r in error_records
         ), (
             f"Expected an error log about constraint failure, got: {[r.getMessage() for r in error_records]}"
         )
+
+
+class TestEnsureSchemaWiredInLifespan:
+    """Task 4 (GIM-52): lifespan calls ensure_schema with default_group_id."""
+
+    @pytest.mark.asyncio
+    async def test_lifespan_calls_ensure_schema_with_default_group_id(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """ensure_schema must be called once, fire-and-forget, with default_group_id."""
+        from collections.abc import AsyncGenerator
+        from contextlib import asynccontextmanager
+
+        from palace_mcp.main import lifespan
+
+        calls: list[tuple[object, str]] = []
+
+        async def fake_ensure_schema(driver: object, *, default_group_id: str) -> None:
+            calls.append((driver, default_group_id))
+
+        mock_driver = AsyncMock()
+        mock_driver.verify_connectivity = AsyncMock(return_value=None)
+        mock_driver.close = AsyncMock(return_value=None)
+
+        mock_app = MagicMock()
+        mock_app.state = MagicMock()
+
+        @asynccontextmanager
+        async def _noop_lifespan(app: object) -> AsyncGenerator[None, None]:
+            yield
+
+        with (
+            patch("palace_mcp.main.AsyncGraphDatabase.driver", return_value=mock_driver),
+            patch("palace_mcp.main.ensure_schema", side_effect=fake_ensure_schema),
+            patch(
+                "palace_mcp.main._mcp_asgi_app.router.lifespan_context",
+                return_value=_noop_lifespan(None),
+            ),
+        ):
+            async with asyncio.timeout(2.0):
+                async with lifespan(mock_app):
+                    # Give background task time to run.
+                    await asyncio.sleep(0.05)
+
+        assert len(calls) == 1, f"ensure_schema should be called once, got {len(calls)}"
+        assert calls[0][1] == "project/gimle"
 
 
 class TestNoBlockingExternalCallsAtStartup:
@@ -144,7 +190,7 @@ class TestNoBlockingExternalCallsAtStartup:
         mock_driver.verify_connectivity = AsyncMock(return_value=None)
         mock_driver.close = AsyncMock(return_value=None)
 
-        async def noop_constraints(_driver: object) -> None:
+        async def noop_constraints(_driver: object, *, default_group_id: str) -> None:
             pass
 
         mock_app = MagicMock()
@@ -165,7 +211,7 @@ class TestNoBlockingExternalCallsAtStartup:
             patch(
                 "palace_mcp.main.AsyncGraphDatabase.driver", return_value=mock_driver
             ) as driver_call,
-            patch("palace_mcp.main.ensure_constraints", side_effect=noop_constraints),
+            patch("palace_mcp.main.ensure_schema", side_effect=noop_constraints),
             patch(
                 "palace_mcp.main._mcp_asgi_app.router.lifespan_context",
                 return_value=_noop_lifespan(None),
