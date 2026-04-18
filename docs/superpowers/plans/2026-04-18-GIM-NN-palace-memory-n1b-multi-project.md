@@ -1512,7 +1512,107 @@ git status projects/
 # expected: clean (both _registry.yaml and gimle.yaml already committed in Task 1)
 ```
 
-### Task 12: Open PR + handoff to CodeReviewer
+### Task 12a: QAEngineer live smoke on iMac production checkout (Phase 4.1 explicit)
+
+**Owner:** QAEngineer (paperclip agent).
+**Trigger:** After CR APPROVE on PR, BEFORE squash-merge.
+
+QA runs smoke on the iMac production checkout so the same environment used for production deployment is validated. This prevents the N+1a gap where smoke ran on ephemeral compose and iMac was left stale until Board manually rebuilt.
+
+- [ ] **Step 1: SSH to iMac + check out feature branch**
+
+```bash
+ssh imac-ssh.ant013.work
+cd /Users/Shared/Ios/Gimle-Palace
+git fetch origin
+git checkout feature/GIM-NN-palace-memory-n1b-multi-project  # use actual issue number
+git log --oneline -3  # verify latest feature branch HEAD
+```
+
+- [ ] **Step 2: Rebuild compose with new code**
+
+```bash
+docker compose pull
+docker compose up -d --build
+sleep 45
+docker compose ps  # all healthy
+```
+
+- [ ] **Step 3: Smoke — multi-project scoping**
+
+```bash
+# Health should show projects=["gimle"] + default_project="gimle"
+curl -sS http://localhost:8080/mcp -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call",
+       "params":{"name":"palace.memory.health","arguments":{}}}' | jq '.result'
+
+# Lookup with project="gimle" explicit
+curl -sS http://localhost:8080/mcp ... \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call",
+       "params":{"name":"palace.memory.lookup",
+                 "arguments":{"entity_type":"Issue","project":"gimle","limit":5}}}' | jq '.result.items | length'
+
+# Register test Medic project
+curl -sS http://localhost:8080/mcp ... \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call",
+       "params":{"name":"palace.memory.register_project",
+                 "arguments":{"slug":"medic","name":"Medic Healthcare",
+                              "tags":["mobile","kmp","healthcare"]}}}'
+
+# list_projects must return both
+curl -sS http://localhost:8080/mcp ... \
+  -d '{"jsonrpc":"2.0","id":4,"method":"tools/call",
+       "params":{"name":"palace.memory.list_projects","arguments":{}}}' | jq '.result.projects[].slug'
+
+# Cross-project lookup — empty for medic (no data), Gimle issues for "*"
+curl -sS http://localhost:8080/mcp ... \
+  -d '{"jsonrpc":"2.0","id":5,"method":"tools/call",
+       "params":{"name":"palace.memory.lookup",
+                 "arguments":{"entity_type":"Issue","project":"*","limit":5}}}' | jq '.result.items | length'
+```
+
+- [ ] **Step 4: Post evidence as comment in GIM-NN issue**
+
+Attach:
+- Full output of each curl above (redact sensitive values)
+- `docker compose logs --tail 30 palace-mcp` output
+- git SHA of feature branch HEAD tested
+
+Comment format:
+```
+QA Phase 4.1 evidence (GIM-NN, iMac production checkout):
+
+Feature SHA: <sha>
+Health: projects=["gimle"], default_project="gimle", embedder_reachable=true ✅
+Lookup(project="gimle"): 31 items ✅
+register_project(medic): 200 OK, :Project node created ✅
+list_projects: [gimle, medic] ✅
+Lookup(project="*"): 31 items (Gimle issues, Medic empty) ✅
+
+PASS — ready for CR mechanical review + merge.
+```
+
+- [ ] **Step 5: LEAVE iMac on feature branch until merge, then reset**
+
+After squash-merge to develop, QA returns to iMac:
+
+```bash
+ssh imac-ssh.ant013.work
+cd /Users/Shared/Ios/Gimle-Palace
+git fetch origin
+git checkout develop
+git reset --hard origin/develop  # takes the squash-merge commit
+docker compose pull
+docker compose up -d --build
+sleep 45
+curl -sS http://localhost:8080/healthz   # must return 200 ok
+exit
+```
+
+This closes the discipline gap: QA leaves iMac on `develop` matching origin, ready for next slice. Per `feedback_imac_checkout_discipline.md`.
+
+### Task 12b: Open PR + handoff to CodeReviewer
 
 - [ ] **Step 1: Push branch**
 
