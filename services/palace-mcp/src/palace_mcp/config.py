@@ -17,6 +17,7 @@ class Settings(BaseSettings):
 
     neo4j_uri: str = "bolt://neo4j:7687"
     neo4j_password: SecretStr
+    palace_default_group_id: str = "project/gimle"
 
 
 class IngestSettings(BaseSettings):
@@ -28,3 +29,4 @@ class IngestSettings(BaseSettings):
     paperclip_api_url: str
     paperclip_ingest_api_key: SecretStr
     paperclip_company_id: str
+    palace_default_group_id: str = "project/gimle"
