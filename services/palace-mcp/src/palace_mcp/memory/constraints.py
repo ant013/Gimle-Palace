@@ -3,24 +3,45 @@ first ingest. Safe to run repeatedly: constraints + indexes are
 IF NOT EXISTS and the backfill is WHERE-IS-NULL guarded.
 """
 
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
 from neo4j import AsyncDriver
 
 from palace_mcp.memory.cypher import (
     BACKFILL_GROUP_ID,
     CREATE_CONSTRAINTS,
     CREATE_INDEXES,
+    UPSERT_PROJECT,
 )
 
 
+def _bootstrap_name_for(slug: str) -> str:
+    return slug.replace("-", " ").replace("_", " ").title() + " (bootstrap)"
+
+
+class SchemaIntegrityError(RuntimeError):
+    pass
+
+
 async def ensure_schema(driver: AsyncDriver, *, default_group_id: str) -> None:
+    default_slug = default_group_id.removeprefix("project/")
+    now = datetime.now(timezone.utc).isoformat()
+
     async with driver.session() as session:
         for stmt in CREATE_CONSTRAINTS:
             await session.run(stmt)
         for stmt in CREATE_INDEXES:
             await session.run(stmt)
         await session.run(BACKFILL_GROUP_ID, default=default_group_id)
-
-
-# Back-compat shim for any stray callers. Remove in the next slice.
-async def ensure_constraints(driver: AsyncDriver) -> None:
-    await ensure_schema(driver, default_group_id="project/gimle")
+        await session.run(
+            UPSERT_PROJECT,
+            slug=default_slug,
+            name=_bootstrap_name_for(default_slug),
+            tags=["bootstrap"],
+            language=None,
+            framework=None,
+            repo_url=None,
+            now=now,
+        )
