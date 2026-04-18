@@ -43,7 +43,9 @@ class TestFireAndForgetConstraints:
         # ensure_schema hangs forever — if awaited, lifespan never yields.
         never_resolving: asyncio.Future[None] = asyncio.get_event_loop().create_future()
 
-        async def hanging_constraints(_driver: object, *, default_group_id: str) -> None:
+        async def hanging_constraints(
+            _driver: object, *, default_group_id: str
+        ) -> None:
             await never_resolving
 
         mock_app = MagicMock()
@@ -60,9 +62,7 @@ class TestFireAndForgetConstraints:
             patch(
                 "palace_mcp.main.AsyncGraphDatabase.driver", return_value=mock_driver
             ),
-            patch(
-                "palace_mcp.main.ensure_schema", side_effect=hanging_constraints
-            ),
+            patch("palace_mcp.main.ensure_schema", side_effect=hanging_constraints),
             patch(
                 "palace_mcp.main._mcp_asgi_app.router.lifespan_context",
                 return_value=_noop_lifespan(None),
@@ -83,7 +83,9 @@ class TestFireAndForgetConstraints:
         mock_driver.verify_connectivity = AsyncMock(return_value=None)
         mock_driver.close = AsyncMock(return_value=None)
 
-        async def failing_constraints(_driver: object, *, default_group_id: str) -> None:
+        async def failing_constraints(
+            _driver: object, *, default_group_id: str
+        ) -> None:
             raise RuntimeError("neo4j not ready")
 
         mock_app = MagicMock()
@@ -99,9 +101,7 @@ class TestFireAndForgetConstraints:
             patch(
                 "palace_mcp.main.AsyncGraphDatabase.driver", return_value=mock_driver
             ),
-            patch(
-                "palace_mcp.main.ensure_schema", side_effect=failing_constraints
-            ),
+            patch("palace_mcp.main.ensure_schema", side_effect=failing_constraints),
             patch(
                 "palace_mcp.main._mcp_asgi_app.router.lifespan_context",
                 return_value=_noop_lifespan(None),
@@ -116,8 +116,7 @@ class TestFireAndForgetConstraints:
         # App stayed up (no exception propagated), error was logged.
         error_records = [r for r in caplog.records if r.levelno >= logging.ERROR]
         assert any(
-            "neo4j not ready" in r.getMessage()
-            or "ensure_schema" in r.getMessage()
+            "neo4j not ready" in r.getMessage() or "ensure_schema" in r.getMessage()
             for r in error_records
         ), (
             f"Expected an error log about constraint failure, got: {[r.getMessage() for r in error_records]}"
@@ -154,7 +153,9 @@ class TestEnsureSchemaWiredInLifespan:
             yield
 
         with (
-            patch("palace_mcp.main.AsyncGraphDatabase.driver", return_value=mock_driver),
+            patch(
+                "palace_mcp.main.AsyncGraphDatabase.driver", return_value=mock_driver
+            ),
             patch("palace_mcp.main.ensure_schema", side_effect=fake_ensure_schema),
             patch(
                 "palace_mcp.main._mcp_asgi_app.router.lifespan_context",

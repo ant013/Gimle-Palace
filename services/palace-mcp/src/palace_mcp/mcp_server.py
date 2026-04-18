@@ -48,6 +48,7 @@ def set_default_group_id(group_id: str) -> None:
     global _default_group_id  # noqa: PLW0603
     _default_group_id = group_id
 
+
 # Server start time for uptime_seconds calculation.
 _start_time: float = time.monotonic()
 

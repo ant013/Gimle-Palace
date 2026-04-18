@@ -97,7 +97,9 @@ class TestGroupId:
             s = IngestSettings()
         assert s.palace_default_group_id == "project/gimle"
 
-    def test_palace_default_group_id_overridable_via_env(self, monkeypatch: object) -> None:
+    def test_palace_default_group_id_overridable_via_env(
+        self, monkeypatch: object
+    ) -> None:
         import importlib
 
         import palace_mcp.config as cfg_mod

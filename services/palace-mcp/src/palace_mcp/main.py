@@ -60,7 +60,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Race window: backfill runs in <1s for ~213 nodes; palace-mcp starts
     # behind compose healthcheck so MCP clients only connect after healthy.
     # A slow/unavailable Neo4j must not block startup or cause SIGKILL.
-    _fire_and_forget(ensure_schema(driver, default_group_id=settings.palace_default_group_id))
+    _fire_and_forget(
+        ensure_schema(driver, default_group_id=settings.palace_default_group_id)
+    )
     # Run the MCP sub-app lifespan so StreamableHTTPSessionManager task group is initialized.
     async with _mcp_asgi_app.router.lifespan_context(_mcp_asgi_app):
         yield

@@ -200,10 +200,10 @@ class TestMcpToolProjectParam:
         from palace_mcp.mcp_server import palace_memory_lookup
 
         mcp_server._driver = MagicMock()  # satisfy driver check
-        with patch("palace_mcp.mcp_server.perform_lookup", side_effect=fake_perform_lookup):
-            await palace_memory_lookup(
-                entity_type="Issue", project="project/custom"
-            )
+        with patch(
+            "palace_mcp.mcp_server.perform_lookup", side_effect=fake_perform_lookup
+        ):
+            await palace_memory_lookup(entity_type="Issue", project="project/custom")
 
         assert len(captured_reqs) == 1
         assert captured_reqs[0].group_id == "project/custom"
@@ -225,7 +225,9 @@ class TestMcpToolProjectParam:
 
         set_default_group_id("project/gimle")
         mcp_server._driver = MagicMock()
-        with patch("palace_mcp.mcp_server.perform_lookup", side_effect=fake_perform_lookup):
+        with patch(
+            "palace_mcp.mcp_server.perform_lookup", side_effect=fake_perform_lookup
+        ):
             await palace_memory_lookup(entity_type="Issue")
 
         assert captured_reqs[0].group_id == "project/gimle"
