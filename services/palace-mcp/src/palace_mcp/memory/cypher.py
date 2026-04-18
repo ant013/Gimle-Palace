@@ -141,6 +141,43 @@ ORDER BY r.started_at DESC
 LIMIT 1
 """
 
+# --- Project DDL (read/write) ---
+UPSERT_PROJECT = """
+MERGE (p:Project {slug: $slug})
+SET p.group_id            = 'project/' + $slug,
+    p.name                = $name,
+    p.tags                = $tags,
+    p.language            = $language,
+    p.framework           = $framework,
+    p.repo_url            = $repo_url,
+    p.source              = 'paperclip',
+    p.source_created_at   = coalesce(p.source_created_at, $now),
+    p.source_updated_at   = $now
+RETURN p
+"""
+
+LIST_PROJECT_SLUGS = "MATCH (p:Project) RETURN p.slug AS slug ORDER BY slug"
+
+GET_PROJECT = """
+MATCH (p:Project {slug: $slug})
+RETURN p
+"""
+
+PROJECT_ENTITY_COUNTS = """
+MATCH (n)
+WHERE (n:Issue OR n:Comment OR n:Agent OR n:IngestRun)
+  AND n.group_id = $group_id
+RETURN labels(n) AS labels, count(n) AS c
+"""
+
+PROJECT_LAST_INGEST = """
+MATCH (r:IngestRun {source: $source})
+WHERE r.group_id = $group_id
+RETURN r
+ORDER BY r.started_at DESC
+LIMIT 1
+"""
+
 # --- Entity counts (health) ---
 ENTITY_COUNTS = """
 CALL () {

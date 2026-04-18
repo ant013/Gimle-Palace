@@ -41,6 +41,22 @@ class LookupResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class ProjectInfo(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    slug: str
+    name: str
+    tags: list[str]
+    language: str | None = None
+    framework: str | None = None
+    repo_url: str | None = None
+    source_created_at: str
+    source_updated_at: str
+    entity_counts: dict[str, int] = Field(default_factory=dict)
+    last_ingest_started_at: str | None = None
+    last_ingest_finished_at: str | None = None
+
+
 class HealthResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
