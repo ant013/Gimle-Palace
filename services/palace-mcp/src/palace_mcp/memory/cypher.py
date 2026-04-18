@@ -8,6 +8,7 @@ CREATE_CONSTRAINTS = [
     "CREATE CONSTRAINT issue_id IF NOT EXISTS FOR (i:Issue) REQUIRE i.id IS UNIQUE",
     "CREATE CONSTRAINT comment_id IF NOT EXISTS FOR (c:Comment) REQUIRE c.id IS UNIQUE",
     "CREATE CONSTRAINT agent_id IF NOT EXISTS FOR (a:Agent) REQUIRE a.id IS UNIQUE",
+    "CREATE CONSTRAINT project_slug IF NOT EXISTS FOR (p:Project) REQUIRE p.slug IS UNIQUE",
 ]
 
 # --- Indexes (non-unique; speeds up group_id filter + GC cutoff) ---
@@ -16,6 +17,7 @@ CREATE_INDEXES = [
     "CREATE INDEX comment_group_id IF NOT EXISTS FOR (n:Comment) ON (n.group_id)",
     "CREATE INDEX agent_group_id IF NOT EXISTS FOR (n:Agent) ON (n.group_id)",
     "CREATE INDEX ingest_run_group_id IF NOT EXISTS FOR (n:IngestRun) ON (n.group_id)",
+    "CREATE INDEX project_group_id IF NOT EXISTS FOR (p:Project) ON (p.group_id)",
 ]
 
 # --- Backfill: WHERE IS NULL guard makes this a no-op after first run ---
