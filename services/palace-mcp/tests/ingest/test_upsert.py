@@ -134,22 +134,25 @@ def _make_edge(
 async def test_invalidate_stale_assignments_invalidates_old_edge() -> None:
     old_edge = _make_edge("ASSIGNED_TO", source="issue-1", target="agent-old", invalid_at=None)
     graphiti = _make_graphiti(edges_list=[old_edge])
-    count = await invalidate_stale_assignments(
+    count, has_active = await invalidate_stale_assignments(
         graphiti, issue_uuid="issue-1", new_agent_uuid="agent-new", run_started=RUN_STARTED
     )
     assert count == 1
+    assert has_active is False
     graphiti.edges.entity.save.assert_called_once_with(old_edge)
     assert old_edge.invalid_at is not None
 
 
 @pytest.mark.asyncio
 async def test_invalidate_stale_assignments_skips_same_agent() -> None:
+    """Same-agent active edge: count=0, has_active=True (caller must skip new edge)."""
     same_edge = _make_edge("ASSIGNED_TO", source="issue-1", target="agent-same", invalid_at=None)
     graphiti = _make_graphiti(edges_list=[same_edge])
-    count = await invalidate_stale_assignments(
+    count, has_active = await invalidate_stale_assignments(
         graphiti, issue_uuid="issue-1", new_agent_uuid="agent-same", run_started=RUN_STARTED
     )
     assert count == 0
+    assert has_active is True  # active same-agent edge found — caller skips new edge
     graphiti.edges.entity.save.assert_not_called()
 
 
@@ -162,39 +165,43 @@ async def test_invalidate_stale_assignments_skips_already_invalid() -> None:
         invalid_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
     )
     graphiti = _make_graphiti(edges_list=[already_invalid])
-    count = await invalidate_stale_assignments(
+    count, has_active = await invalidate_stale_assignments(
         graphiti, issue_uuid="issue-1", new_agent_uuid="agent-new", run_started=RUN_STARTED
     )
     assert count == 0
+    assert has_active is False
 
 
 @pytest.mark.asyncio
 async def test_invalidate_stale_assignments_skips_non_assigned_to() -> None:
     on_edge = _make_edge("ON", source="comment-1", target="issue-1", invalid_at=None)
     graphiti = _make_graphiti(edges_list=[on_edge])
-    count = await invalidate_stale_assignments(
+    count, has_active = await invalidate_stale_assignments(
         graphiti, issue_uuid="issue-1", new_agent_uuid="agent-new", run_started=RUN_STARTED
     )
     assert count == 0
+    assert has_active is False
 
 
 @pytest.mark.asyncio
 async def test_invalidate_stale_assignments_none_new_agent_invalidates_all() -> None:
     edge = _make_edge("ASSIGNED_TO", "issue-1", "agent-old", invalid_at=None)
     graphiti = _make_graphiti(edges_list=[edge])
-    count = await invalidate_stale_assignments(
+    count, has_active = await invalidate_stale_assignments(
         graphiti, issue_uuid="issue-1", new_agent_uuid=None, run_started=RUN_STARTED
     )
     assert count == 1
+    assert has_active is False
 
 
 @pytest.mark.asyncio
 async def test_invalidate_stale_assignments_empty_edges() -> None:
     graphiti = _make_graphiti(edges_list=[])
-    count = await invalidate_stale_assignments(
+    count, has_active = await invalidate_stale_assignments(
         graphiti, issue_uuid="issue-1", new_agent_uuid="agent-1", run_started=RUN_STARTED
     )
     assert count == 0
+    assert has_active is False
 
 
 # ── gc_orphans ────────────────────────────────────────────────────────────────

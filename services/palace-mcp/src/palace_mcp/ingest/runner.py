@@ -103,7 +103,7 @@ async def run_ingest(
             issue_counters[result.value] += 1
 
             assignee_id: str | None = issue_raw.get("assigneeAgentId")
-            invalidated = await invalidate_stale_assignments(
+            invalidated, has_active_assignment = await invalidate_stale_assignments(
                 graphiti,
                 issue_uuid=issue_raw["id"],
                 new_agent_uuid=assignee_id,
@@ -115,7 +115,9 @@ async def run_ingest(
                     extra={"issue_id": issue_raw["id"], "count": invalidated},
                 )
 
-            if assignee_id:
+            # Skip edge creation when an active ASSIGNED_TO for the same agent
+            # already exists — prevents duplicate edges across ingest runs (spec §4.3).
+            if assignee_id and not has_active_assignment:
                 edge = build_assigned_to_edge(
                     issue_uuid=issue_raw["id"],
                     agent_uuid=assignee_id,

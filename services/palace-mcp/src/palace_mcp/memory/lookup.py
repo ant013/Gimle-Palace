@@ -49,6 +49,7 @@ async def _get_node_safe(graphiti: Graphiti, uuid: str) -> EntityNode | None:
     except (LookupError, ValueError, RuntimeError, KeyError):
         return None
     except Exception:  # noqa: BLE001 — graphiti may raise arbitrary types
+        logger.warning("_get_node_safe: unexpected error fetching node %s", uuid, exc_info=True)
         return None
 
 

@@ -23,11 +23,13 @@ _SRC_ROOT = Path(__file__).parent.parent / "src" / "palace_mcp"
 # We match standalone query keywords that would only appear in actual Cypher.
 _CYPHER_PATTERNS = [
     re.compile(r'\bMATCH\s*\(', re.MULTILINE),        # MATCH (n:Label)
+    re.compile(r'\bOPTIONAL MATCH\s*\(', re.MULTILINE),  # OPTIONAL MATCH (n:Label)
     re.compile(r'\bMERGE\s*\(', re.MULTILINE),        # MERGE (n:Label)
     re.compile(r'\bCREATE\s*\(', re.MULTILINE),       # CREATE (n:Label)
     re.compile(r'\bDETACH DELETE\b', re.MULTILINE),   # DETACH DELETE
     re.compile(r'\bUNWIND\s+\$', re.MULTILINE),       # UNWIND $batch
     re.compile(r'\bRETURN\s+\w', re.MULTILINE),       # RETURN n AS node
+    re.compile(r'\bSET\s+\w+\.\w+\s*=', re.MULTILINE),  # SET n.prop = $val
     re.compile(r'tx\.run\(', re.MULTILINE),           # tx.run( — managed transaction
     re.compile(r'session\.execute_(?:read|write)', re.MULTILINE),  # session.execute_*
 ]

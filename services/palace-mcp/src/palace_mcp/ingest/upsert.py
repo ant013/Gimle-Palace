@@ -43,8 +43,11 @@ async def upsert_with_change_detection(
         # Node does not exist — insert (triggers embed via save())
         pass
     except Exception:  # noqa: BLE001 — graphiti may raise arbitrary exception types
-        # Treat any other lookup failure as "not found" — safe to insert
-        pass
+        logger.warning(
+            "upsert_with_change_detection: unexpected error on get_by_uuid for %s",
+            node.uuid,
+            exc_info=True,
+        )
 
     if existing is None:
         await graphiti.nodes.entity.save(node)
@@ -66,12 +69,18 @@ async def invalidate_stale_assignments(
     issue_uuid: str,
     new_agent_uuid: str | None,
     run_started: str,
-) -> int:
+) -> tuple[int, bool]:
     """Invalidate stale ASSIGNED_TO edges via graphiti.edges.entity.save.
 
-    Returns count of edges invalidated. Native bi-temporal — zero raw Cypher.
+    Returns (count_invalidated, has_active_same_assignee).
+    has_active_same_assignee=True when a non-invalidated ASSIGNED_TO edge for
+    new_agent_uuid already exists — caller must skip creating a duplicate edge
+    to satisfy spec §4.3 idempotency.
+
+    Zero raw Cypher — spec §9 acceptance.
     """
     invalidated = 0
+    has_active_same_assignee = False
     run_started_dt = datetime.fromisoformat(run_started)
     edges = await graphiti.edges.entity.get_by_node_uuid(issue_uuid)
     for edge in edges:
@@ -80,11 +89,12 @@ async def invalidate_stale_assignments(
         if edge.invalid_at is not None:
             continue  # already invalidated
         if edge.target_node_uuid == new_agent_uuid:
-            continue  # same assignee — no change
+            has_active_same_assignee = True  # active edge for same agent — keep
+            continue
         edge.invalid_at = run_started_dt
         await graphiti.edges.entity.save(edge)
         invalidated += 1
-    return invalidated
+    return invalidated, has_active_same_assignee
 
 
 async def gc_orphans(graphiti: Graphiti, *, group_id: str, cutoff: str) -> int:
@@ -93,15 +103,32 @@ async def gc_orphans(graphiti: Graphiti, *, group_id: str, cutoff: str) -> int:
     Uses graphiti.nodes.entity.get_by_group_ids + Python filter +
     delete_by_uuids (with single-UUID loop fallback if method absent per
     WARNING from CodeReviewer). Zero raw Cypher per spec §9 acceptance.
+
+    Timestamps are compared as datetime objects (not strings) to handle
+    differing ISO 8601 suffixes (Z vs +00:00, fractional seconds).
     """
+    cutoff_dt = datetime.fromisoformat(cutoff)
     all_nodes = await graphiti.nodes.entity.get_by_group_ids([group_id])
-    stale_uuids = [
-        n.uuid
-        for n in all_nodes
-        if n.attributes.get("source") == "paperclip"
-        and (n.attributes.get("palace_last_seen_at") or "") < cutoff
-        and any(lbl in PAPERCLIP_LABELS for lbl in n.labels)
-    ]
+    stale_uuids: list[str] = []
+    for n in all_nodes:
+        if n.attributes.get("source") != "paperclip":
+            continue
+        if not any(lbl in PAPERCLIP_LABELS for lbl in n.labels):
+            continue
+        last_seen_raw: str | None = n.attributes.get("palace_last_seen_at")
+        if not last_seen_raw:
+            continue
+        try:
+            last_seen_dt = datetime.fromisoformat(last_seen_raw)
+        except ValueError:
+            logger.warning(
+                "gc_orphans: unparseable palace_last_seen_at %r on node %s — skipping",
+                last_seen_raw,
+                n.uuid,
+            )
+            continue
+        if last_seen_dt < cutoff_dt:
+            stale_uuids.append(n.uuid)
     if not stale_uuids:
         return 0
 

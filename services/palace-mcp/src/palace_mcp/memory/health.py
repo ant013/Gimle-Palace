@@ -29,7 +29,8 @@ async def _check_embedder(base_url: str) -> bool:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(url)
             return resp.is_success
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("_check_embedder: probe to %s failed: %s", url, exc)
         return False
 
 
