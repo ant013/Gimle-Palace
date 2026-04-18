@@ -45,3 +45,34 @@ def test_no_stale_graphiti_core_names_in_graphiti_client() -> None:
         "module path graphiti_core.llm_client.openai_generic_client "
         "was removed; use graphiti_core.llm_client.openai_client"
     )
+
+
+def test_build_graphiti_does_not_require_openai_api_key_env(
+    monkeypatch,
+) -> None:
+    """build_graphiti() must not fail when OPENAI_API_KEY is unset.
+
+    Graphiti() unconditionally instantiates a cross_encoder if one is not
+    provided, which calls AsyncOpenAI() and reads OPENAI_API_KEY from env.
+    We must pass our own cross_encoder backed by the same LLMConfig as
+    llm_client so startup works against external Ollama / OpenAI-compat
+    endpoints without leaking a dependency on OPENAI_API_KEY.
+
+    Regression test for GIM-48 hotfix round 2.
+    """
+    from pydantic import SecretStr
+
+    from palace_mcp.config import Settings
+    from palace_mcp.graphiti_client import build_graphiti
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    settings = Settings(
+        neo4j_uri="bolt://localhost:7687",
+        neo4j_password=SecretStr("test"),
+        embedding_base_url="http://localhost:11434/v1",
+        embedding_api_key=SecretStr("placeholder"),
+    )
+
+    graphiti = build_graphiti(settings)
+    assert graphiti is not None
