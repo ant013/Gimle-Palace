@@ -4,7 +4,7 @@
 **Slice:** Meta-workflow-migration (next after GIM-54)
 **Author:** Board (operator-driven)
 **Status:** Awaiting formalization (Phase 1.1)
-**Branch:** `feature/GIM-55-meta-workflow-migration` (this spec lives on the feature branch — first slice to follow the new flow it defines)
+**Branch:** `feature/GIM-57-meta-workflow-migration` (this spec lives on the feature branch — first slice to follow the new flow it defines)
 **Predecessors pinned:**
 - `develop@f3489b6` — reconcile merge (main → develop). main and develop pointed at same tip for the first time since bootstrap.
 - `main@f3489b6` — same.
@@ -138,7 +138,7 @@ This fragment binds **all writers** — agents, Board session, human operator. W
 ```md
 - **DO NOT run** `git checkout -- <file>` (discard WD changes), `git stash`, `git worktree add/remove`.
 - **DO NOT use** `Edit`, `Write`, `NotebookEdit` tools on files under `services/`, `tests/`, `src/`, or any path outside `docs/` and `paperclips/roles/`. Code is engineer turf.
-- **MAY run** `git commit` / `git push` / `git mv` / `Edit` / `Write` **only** when modifying files under `docs/superpowers/**` or `docs/runbooks/**` **on a feature branch** (Phase 1.1 mechanical work: plan renames, GIM-55 placeholder swaps, rev-updates to address CR findings). Never on `develop` / `main` directly.
+- **MAY run** `git commit` / `git push` / `git mv` / `Edit` / `Write` **only** when modifying files under `docs/superpowers/**` or `docs/runbooks/**` **on a feature branch** (Phase 1.1 mechanical work: plan renames, GIM-57 placeholder swaps, rev-updates to address CR findings). Never on `develop` / `main` directly.
 ```
 
 ### 3.4 `paperclips/fragments/shared/fragments/phase-handoff.md` — Phase 1.1 no longer requires sub-issue
@@ -152,7 +152,7 @@ This fragment binds **all writers** — agents, Board session, human operator. W
 **With**:
 
 ```md
-| 1.1 Formalization (CTO) | 1.2 Plan-first review | CTO does `git mv` / rename / GIM-55 swap **on the feature branch directly** (no sub-issue), pushes, then `assignee=CodeReviewer` + @CodeReviewer. Sub-issues for Phase 1.1 mechanical work are anti-pattern per narrowed `cto-no-code-ban.md`. |
+| 1.1 Formalization (CTO) | 1.2 Plan-first review | CTO does `git mv` / rename / GIM-57 swap **on the feature branch directly** (no sub-issue), pushes, then `assignee=CodeReviewer` + @CodeReviewer. Sub-issues for Phase 1.1 mechanical work are anti-pattern per narrowed `cto-no-code-ban.md`. |
 ```
 
 ### 3.5 `paperclips/roles/cto.md` — align with narrowed ban
@@ -348,11 +348,11 @@ Manual release: `gh workflow run release-cut.yml`. Label-triggered: add `release
 
 ## 7. Decomposition (plan-first ready)
 
-Expected plan file: `docs/superpowers/plans/2026-04-19-GIM-55-meta-workflow-migration.md` on this same feature branch. CTO swaps `GIM-55` during Phase 1.1.
+Expected plan file: `docs/superpowers/plans/2026-04-19-GIM-57-meta-workflow-migration.md` on this same feature branch. CTO swaps `GIM-57` during Phase 1.1.
 
 | Phase | Step | Owner | Description |
 |---|---|---|---|
-| 1.1 | 1.1.1 | CTO | Rename plan file `GIM-55` → `GIM-<issue>`. Swap placeholders. Commit + push on feature branch (first use of newly-allowed mechanical perm). |
+| 1.1 | 1.1.1 | CTO | Rename plan file `GIM-57` → `GIM-<issue>`. Swap placeholders. Commit + push on feature branch (first use of newly-allowed mechanical perm). |
 | 1.1 | 1.1.2 | CTO | Handoff to CR with PR-preview link. |
 | 1.2 | 1.2.1 | CodeReviewer | Plan-first review. Verify every §5 acceptance criterion maps to a Phase 2 task. APPROVE or findings. |
 | 2 | 2.1 | TechnicalWriter | Rewrite `CLAUDE.md` Branch Flow per §3.1 (incl. Board checkout location). |
@@ -369,7 +369,7 @@ Expected plan file: `docs/superpowers/plans/2026-04-19-GIM-55-meta-workflow-migr
 | 2 | 2.12 | InfraEngineer | Run `./paperclips/deploy-agents.sh` — push new bundles to all 11 agents. Verify 2 agents via API diff. |
 | 3.1 | 3.1 | CodeReviewer | Mechanical: markdown-lint (if exists) on changed fragments; YAML schema check on new workflows; compliance table against §5 acceptance. Post paperclip APPROVE + `gh pr review --approve`. |
 | 3.2 | 3.2 | OpusArchitectReviewer | Adversarial: what if Medic also uses the submodule? What if in-flight slice starts mid-migration? Is `RELEASE_CUT_TOKEN` scoped tightly? Are there QA-evidence regex false-positive cases? |
-| 4.1 | 4.1 | QAEngineer | Dogfood Phase 4.1 (before protection turned on): (a) cut throwaway `feature/GIM-55-smoke-dogfood`, edit any file, commit, push, open PR to develop, attempt merge without `## QA Evidence` — check fails. (b) Add QA Evidence section with SHA — check passes. (c) Verify `gh pr review --approve` is required to merge. (d) Run `gh workflow run release-cut.yml` to FF main. Close dogfood PR without merge. Attach logs/screenshots as this-slice's QA evidence. |
+| 4.1 | 4.1 | QAEngineer | Dogfood Phase 4.1 (before protection turned on): (a) cut throwaway `feature/GIM-57-smoke-dogfood`, edit any file, commit, push, open PR to develop, attempt merge without `## QA Evidence` — check fails. (b) Add QA Evidence section with SHA — check passes. (c) Verify `gh pr review --approve` is required to merge. (d) Run `gh workflow run release-cut.yml` to FF main. Close dogfood PR without merge. Attach logs/screenshots as this-slice's QA evidence. |
 | 4.2 | 4.2 | CTO | Squash-merge this feature branch to develop via PR. CI must include `qa-evidence-present` passing (evidence from 4.1 in this PR's body). |
 | **4.3** | 4.3.1 | Operator (Board, manual) | One-time FF: `git switch main && git merge --ff-only origin/develop && git push origin main`. This is the last legitimate direct human push to main, done under old-flow rules before protection tightens. |
 | **4.3** | 4.3.2 | InfraEngineer | Apply branch protection: `gh api -X PUT /repos/.../branches/develop/protection -d @.github/branch-protection/develop.json` + same for main. Admin-bypass off. Push restriction: `github-actions[bot]` only for main. |
@@ -398,7 +398,7 @@ Expected plan file: `docs/superpowers/plans/2026-04-19-GIM-55-meta-workflow-migr
 
 ## 10. Pinning — note on meta
 
-This spec lives on `feature/GIM-55-meta-workflow-migration`, NOT on `main`. This is intentional and self-referential: under the old flow this spec would have been pushed to main directly. Under the new flow (defined by this spec) it lives on a feature branch.
+This spec lives on `feature/GIM-57-meta-workflow-migration`, NOT on `main`. This is intentional and self-referential: under the old flow this spec would have been pushed to main directly. Under the new flow (defined by this spec) it lives on a feature branch.
 
 **Transition status — explicit:** This PR is reviewed under **old-flow rules**:
 - CR approves via paperclip comment only (no `gh pr review --approve` yet — that's what §3.9 introduces).
