@@ -20,7 +20,7 @@ jobs:
           fi
           if echo "$BODY" | grep -q '^## QA Evidence'; then
             echo "QA Evidence section detected."
-            SECTION=$(echo "$BODY" | awk '/^## QA Evidence/,/^## /')
+            SECTION=$(echo "$BODY" | awk '/^## QA Evidence/{found=1; next} found && /^## /{exit} found')
             if echo "$SECTION" | grep -qE '[0-9a-f]{7,40}'; then
               echo "Commit SHA reference found in QA Evidence section."
               exit 0
