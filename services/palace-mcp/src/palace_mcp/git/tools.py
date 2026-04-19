@@ -38,7 +38,7 @@ from palace_mcp.memory.projects import InvalidSlug
 logger = logging.getLogger(__name__)
 
 # Ref validation: alphanumeric start, then alphanumeric/._/@/- allowed.
-_REF_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/@\-]{0,199}$")
+_REF_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/@\-~^]{0,199}$")
 
 # Per-tool caps
 LOG_DEFAULT_N = 20
