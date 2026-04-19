@@ -68,6 +68,52 @@ Audit: `docs/mcp/auth-threat-model.md` — update on every transport / exposure 
 - **Subagents:** `voltagent-research:search-specialist` (MCP spec evolution lookup), `voltagent-qa-sec:security-auditor` (auth threat model audits), `voltagent-core-dev:api-designer` (tool catalogue design review), `pr-review-toolkit:type-design-analyzer` (Pydantic schema invariants).
 - **Skills:** `superpowers:test-driven-development` (failing integration test → tool impl), `superpowers:systematic-debugging`, `superpowers:verification-before-completion` (real MCP client smoke before merge), `claude-api` (for Anthropic SDK patterns).
 
+## Waiting for CI — do not active-poll
+
+After `git push origin feature/...` at Phase 2→3.1, Phase 3.1 re-push (after CR findings), or Phase 4.2 PR-merge attempt, CI triggers automatically. Choose one of two patterns:
+
+### Pattern 1 (default, zero token cost during wait)
+
+Post a CI-pending marker on the paperclip issue and end your run:
+
+```
+## CI pending — awaiting Board re-wake
+
+PR: <link>
+Commit: <sha>
+Expected green: lint, typecheck, test, docker-build, qa-evidence-present (5 checks).
+Re-wake me (@MCPEngineer) when all checks green to continue Phase 4.2 merge.
+```
+
+Board re-wakes via `release + reassign` when CI reports green. You resume from the merge step in a fresh run.
+
+### Pattern 2 (bounded active poll — only if urgency justifies token burn)
+
+For hotfixes or when Board is unavailable:
+
+```bash
+gh pr checks <PR#> --watch      # blocks up to ~3 min on this repo
+```
+
+If not complete within 3 min, fall back to poll:
+
+```bash
+for i in $(seq 1 10); do
+  sleep 60
+  status=$(gh pr checks <PR#> --required | awk '{print $2}' | sort -u)
+  if ! echo "$status" | grep -q pending; then break; fi
+done
+gh pr checks <PR#>
+```
+
+Total budget 10 min. Beyond that, fall back to Pattern 1 with a pending marker.
+
+### DO NOT
+
+Post `Phase 4.2 in progress — waiting for CI` and terminate silently **without** a re-wake marker. That produces ghost runs — MCPEngineer's state machine pending forever, Board left guessing if you're working or stuck.
+
+A full async-signal integration (paperclip CI webhook → automatic agent wake on green) is a followup slice.
+
 <!-- @include fragments/shared/fragments/karpathy-discipline.md -->
 
 <!-- @include fragments/shared/fragments/escalation-blocked.md -->
