@@ -26,7 +26,7 @@
 **Files:** this plan (rename only); `docs/superpowers/specs/2026-04-19-git-mcp-read-only-design.md` (pin commit ref only if stale).
 
 - [ ] **Step 1:** Mint paperclip issue titled `git-mcp read-only exposure (N+1.5 bridge)`, assign to CodeReviewer for Phase 1.2. Issue body links to spec `main@e5bf422` + this plan path.
-- [ ] **Step 2:** In this plan file, `git mv` from `2026-04-19-GIM-NN-git-mcp-read-only.md` to `2026-04-19-GIM-<N>-git-mcp-read-only.md` where `<N>` is the minted issue number. Open the file and replace every `GIM-NN` with `GIM-<N>` (ripgrep: `rg -l 'GIM-NN' docs/superpowers/plans/`).
+- [ ] **Step 2:** In this plan file, `git mv` from `2026-04-19-GIM-54-git-mcp-read-only.md` to `2026-04-19-GIM-<N>-git-mcp-read-only.md` where `<N>` is the minted issue number. Open the file and replace every `GIM-54` with `GIM-<N>` (ripgrep: `rg -l 'GIM-54' docs/superpowers/plans/`).
 - [ ] **Step 3:** Commit on main: `docs(plan): rename to GIM-<N> (paperclip issue created)` (no Co-Authored-By; this is meta work).
 - [ ] **Step 4:** Reassign paperclip issue to CodeReviewer with a comment pointing at plan file + both commit SHAs (spec + rename).
 
