@@ -1,0 +1,304 @@
+topic: Design space for maximally comprehensive extractor library for Gimle-Palace
+description: |
+  Identify the most effective extractor per each of 20 known context-problem
+  categories (grouped into 5 meta-categories: Structural / Conventional /
+  Historical / Semantic / Contextual) plus cross-cutting support extractors,
+  for multi-repo mobile codebases at the scale of Unstoppable Wallet
+  (~20 Kit-libraries in Kotlin + Swift, SwiftUI + Compose, crypto/blockchain).
+
+  Informs Graphiti schema and extractor-pipeline design for Gimle-Palace
+  slices N+2..N+5. Blocks slice N+1 spec writing.
+created: 2026-04-18
+origin: Board brainstorm during N+1 resumption (post-N+0 merge)
+
+execution:
+  batch_size: 9              # 9 parallel agents
+  items_per_agent: 5         # 5 extractors each (45 / 9)
+  output_dir: ./results
+  agent_type: voltagent-research:research-analyst
+
+items:
+  # ── Structural (5) ──
+  - id: 1
+    name: Architecture Layer Extractor
+    meta_category: structural
+    target_problems: [4]
+    summary: Module boundaries + import graph, enforces architectural layer rules (domain/data/presentation separation, KMP shared-vs-platform split).
+
+  - id: 2
+    name: Symbol Duplication Detector
+    meta_category: structural
+    target_problems: [1]
+    summary: jscpd exact-copy detection + semantic embedding dedup for near-duplicates (address formatters, amount converters, validators).
+
+  - id: 3
+    name: Reactive Dependency Tracer
+    meta_category: structural
+    target_problems: [2]
+    summary: SwiftUI @EnvironmentObject/@Published, Combine pipelines, Compose state graph — invisible-at-compile-time dependencies.
+
+  - id: 4
+    name: KMP Platform-Bridge Extractor
+    meta_category: structural
+    target_problems: [16]
+    summary: expect/actual declarations, ObjC export names, Kotlin-to-iOS bridging surface, @ObjCName annotations.
+
+  - id: 5
+    name: Dependency Surface Extractor
+    meta_category: structural
+    target_problems: [17]
+    summary: Parse Gradle/SwiftPM/package.json; map declared deps vs actual imports per module.
+
+  # ── Conventional (5) ──
+  - id: 6
+    name: Coding Convention Extractor
+    meta_category: conventional
+    target_problems: [3]
+    summary: Coordinator pattern, MVVM variants, Rx→Combine migration direction, style rules not written down anywhere.
+
+  - id: 7
+    name: Error Handling Policy Extractor
+    meta_category: conventional
+    target_problems: [10]
+    summary: throws vs Result vs Publisher.failure vs optional vs silent-log patterns — policy inference per layer/module.
+
+  - id: 8
+    name: Testability/DI Pattern Extractor
+    meta_category: conventional
+    target_problems: [11]
+    summary: DI container presence, mocking framework choice, protocol-based vs library-based approach.
+
+  - id: 9
+    name: Localization & Accessibility Extractor
+    meta_category: conventional
+    target_problems: [12]
+    summary: NSLocalizedString/strings catalog usage, design-token adoption, accessibility labels coverage.
+
+  - id: 10
+    name: Domain Naming & Glossary Extractor
+    meta_category: conventional
+    target_problems: [18]
+    summary: Token vs Coin semantic disambiguation, term consistency across modules, glossary inference.
+
+  # ── Historical (2) ──
+  - id: 11
+    name: Decision History Extractor
+    meta_category: historical
+    target_problems: [5]
+    summary: git-blame → PR → linked Decision; bug-fix commit markers; "why not X?" rationale extraction.
+
+  - id: 12
+    name: Migration Signal Extractor
+    meta_category: historical
+    target_problems: [15]
+    summary: @deprecated markers, parallel old/new patterns, migration direction inference.
+
+  # ── Semantic (4) ──
+  - id: 13
+    name: Invariant & Contract Extractor
+    meta_category: semantic
+    target_problems: [6]
+    summary: precondition/assert, tests-as-spec, implicit nullability invariants between related fields.
+
+  - id: 14
+    name: Lifecycle & State Extractor
+    meta_category: semantic
+    target_problems: [7]
+    summary: @StateObject/@EnvironmentObject semantics, .onAppear, Compose recomposition triggers.
+
+  - id: 15
+    name: Domain Edge-Case Extractor
+    meta_category: semantic
+    target_problems: [14]
+    summary: Partial chain data, decimals, overflow guards, checksummed addresses — domain invariants.
+
+  - id: 16
+    name: Read/Write Path Asymmetry Extractor
+    meta_category: semantic
+    target_problems: [19]
+    summary: cache vs source-of-truth paths, write-through patterns, cache invalidation chains.
+
+  # ── Contextual (4) ──
+  - id: 17
+    name: Hot-Path Profiler Extractor
+    meta_category: contextual
+    target_problems: [8]
+    summary: Test-runtime traces, Instruments profile ingestion, call-frequency estimation per method.
+
+  - id: 18
+    name: Concurrency Ownership Map Extractor
+    meta_category: contextual
+    target_problems: [9]
+    summary: actor/queue ownership, @MainActor decoration, Swift 6 isolation boundary mapping.
+
+  - id: 19
+    name: Feature Flag & Config Extractor
+    meta_category: contextual
+    target_problems: [13]
+    summary: RemoteConfig, build-config (testnet vs mainnet), usage-site enumeration.
+
+  - id: 20
+    name: Logging Policy Extractor
+    meta_category: contextual
+    target_problems: [20]
+    summary: Log levels per module, PII patterns, redaction rules, private-key safety.
+
+  # ── Cross-cutting support (4) ──
+  - id: 21
+    name: Symbol Index Extractor
+    meta_category: support
+    target_problems: [1, 2, 4, 16, 17, 18]
+    summary: palace-serena-backed symbol graph, backbone that every other extractor queries.
+
+  - id: 22
+    name: Git History Harvester
+    meta_category: support
+    target_problems: [5, 15]
+    summary: Commits, PRs, blame, merge-base range — feeds historical and some semantic extractors.
+
+  - id: 23
+    name: Test Harness Adapter
+    meta_category: support
+    target_problems: [6, 11, 13, 15, 17]
+    summary: Runs project tests, extracts runtime traces, coverage, timing — feeds invariant, edge-case, hot-path extractors.
+
+  - id: 24
+    name: AST Pattern Matcher
+    meta_category: support
+    target_problems: [3, 6, 7, 9, 10, 12, 20]
+    summary: semgrep + tree-sitter + ast-grep wrapper — structural patterns cross-language, feeds convention/style/concurrency extractors.
+
+  # ── Extended (8) ──
+  - id: 25
+    name: Build System Extractor
+    meta_category: structural
+    target_problems: [4, 13]
+    summary: Gradle/SwiftPM/Bazel task graph, build configurations, flavor/productFlavor matrix.
+
+  - id: 26
+    name: Bug-Archaeology Extractor
+    meta_category: historical
+    target_problems: [5]
+    summary: Past bug reports from issue tracker, regression history via PR labels + linked issues, failure-pattern extraction.
+
+  - id: 27
+    name: Public API Surface Extractor
+    meta_category: structural
+    target_problems: [4, 16, 17]
+    summary: Exported symbols per module, KMP public surface, versioned contracts, API-stability inference.
+
+  - id: 28
+    name: Coverage-Gap Extractor
+    meta_category: conventional
+    target_problems: [11]
+    summary: Test-coverage blind spots per module, integration-vs-unit ratio, untested public API entries.
+
+  - id: 29
+    name: Resource/Asset Usage Extractor
+    meta_category: conventional
+    target_problems: [12]
+    summary: Image/color/string-resource usage graph, orphan-asset detection, design-system-token adoption.
+
+  - id: 30
+    name: Performance Pattern Extractor
+    meta_category: contextual
+    target_problems: [8]
+    summary: N+1 call detection, sync-on-main-thread smells, heavy-list-rendering patterns, cold-path allocations.
+
+  - id: 31
+    name: Cross-Module Contract Extractor
+    meta_category: structural
+    target_problems: [4, 17]
+    summary: Inter-module interface surface + version sensitivity, breaking-change detection on module upgrades.
+
+  - id: 32
+    name: Code Ownership Extractor
+    meta_category: historical
+    target_problems: [5]
+    summary: File ownership inference (who touches what), bus-factor + recency per module.
+
+  # ── Web-search supplement (13 additions, 2026-04-18) ──
+  - id: 33
+    name: Dead Symbol & Binary Surface Extractor
+    meta_category: structural
+    target_problems: [1, 4]
+    summary: Reachability analysis at build+runtime (Periphery for Swift, Reaper for Android/Kotlin). Distinct from #21 (what exists) and #27 (what's exported) — maps what is never reached from the app entry.
+
+  - id: 34
+    name: Code Smell Structural Extractor
+    meta_category: semantic
+    target_problems: [6, 11]
+    summary: God Class, Long Method, Feature Envy, Data Class via AST metrics (SmellyCode++ 94-96% F1 without LLM). Complements #28 Coverage-Gap to flag untested AND structurally fragile files.
+
+  - id: 35
+    name: Taint & PII Data-Flow Extractor
+    meta_category: contextual
+    target_problems: [20]
+    summary: Private-key bytes, seed phrases, address strings — flow from source (BIP-39 mnemonic, Keychain/Keystore) to sinks (logs, network, clipboard, screenshots). iHunter binary taint + semgrep taint-mode. Critical for crypto domain.
+
+  - id: 36
+    name: Network Schema & API Contract Extractor
+    meta_category: structural
+    target_problems: [4, 17]
+    summary: protobuf/OpenAPI/GraphQL schema parsing, declared-vs-observed RPC/REST endpoint mapping. Breaking-change detection (oasdiff-style). Distinct from #27 (symbol-level export).
+
+  - id: 37
+    name: Documentation Coverage Extractor
+    meta_category: conventional
+    target_problems: [3, 18]
+    summary: KDoc/Dokka coverage for Kotlin, DocC/swift-docc coverage for Swift at public symbol level. Identifies undocumented exported API surface. Distinct from #9 (i18n/a11y) and #27 (declaration presence).
+
+  - id: 38
+    name: Test Smell & Flaky Test Extractor
+    meta_category: conventional
+    target_problems: [11]
+    summary: Assertion Roulette, Mystery Guest, Eager Test, Lazy Test via AST rules (tsDetect, VITRuM). Flaky-test ML classifier (Flakify). #23 runs tests; this analyses their quality.
+
+  - id: 39
+    name: Cross-Repo Dependency Version Skew Extractor
+    meta_category: structural
+    target_problems: [17]
+    summary: Scans all Kit manifests (Gradle BOM, SwiftPM resolved) and builds cross-repo version-matrix graph. Surfaces diamond-dependency risks, stale transitive pins. Critical for multi-Kit KMP topology.
+
+  - id: 40
+    name: Crypto Domain Model Extractor
+    meta_category: semantic
+    target_problems: [14, 18]
+    summary: Blockchain domain primitives — coin/token hierarchy, address validation patterns, transaction construction (UTXO vs account model), chain adapter registrations. Overlaps with #15 (edge cases) — overlap-scope to be resolved during deep research.
+
+  - id: 41
+    name: SCIP/LSIF Precise Symbol Resolver
+    meta_category: support
+    target_problems: [1, 2, 4, 16, 18]
+    summary: Sourcegraph SCIP (GA, 4x smaller than LSIF), scip-java + scip-typescript. Compiler-verified cross-module symbol resolution with stable string IDs. Augments #21 — overlap-scope to be resolved during deep research.
+
+  - id: 42
+    name: Build Reproducibility & Hermetic Build Extractor
+    meta_category: contextual
+    target_problems: [13]
+    summary: Reproducible-build inference (same inputs → same binary hash), timestamp-embedding detection, non-hermetic build steps. Bazel remote-cache hit rate, Gradle configuration-cache health. Overlaps with #25 — overlap-scope to be resolved during deep research.
+
+  - id: 43
+    name: PR Review Comment Knowledge Extractor
+    meta_category: historical
+    target_problems: [3, 5, 10]
+    summary: Mines inline PR comments via GitHub/GitLab API for reviewer feedback patterns — violation categories (naming, error handling, thread safety), linked commit fixes. Captures reviewer intent + engineering culture signals distinct from #11.
+
+  - id: 44
+    name: Code Complexity × Churn Hotspot Extractor
+    meta_category: historical
+    target_problems: [5, 8]
+    summary: Cyclomatic + cognitive complexity × code churn — Tornhill crime-scene model. High-complexity + high-churn = highest refactor ROI. Deterministic, prior art CodeScene + SonarQube. Distinct from #17 (runtime) and #26 (bugs).
+
+  - id: 45
+    name: Inter-Module Event Bus Extractor
+    meta_category: structural
+    target_problems: [2, 4, 9]
+    summary: NotificationCenter, Kotlin Flow collect across module boundaries, broadcast channels, custom event bus registrations — emitters + subscribers + key/type graph. Detects broken-subscription bugs, circular notification loops. Distinct from #3 (in-module @Published) and #18 (actor ownership).
+
+# Overlapping-scope items flagged for deep-research resolution:
+# - #40 Crypto Domain Model ↔ #15 Domain Edge-Case Extractor
+# - #41 SCIP Resolver ↔ #21 Symbol Index Extractor
+# - #42 Build Reproducibility ↔ #25 Build System Extractor
+# Deep-research agents will produce `open_questions` entries recommending
+# merge-vs-keep-separate based on evidence from entity_model + consumer_query_patterns.

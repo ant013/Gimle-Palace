@@ -1,0 +1,59 @@
+{
+  "name": "Localization & Accessibility Extractor",
+  "meta_category": "conventional",
+  "target_problems": [12],
+  "short_description": "Audits NSLocalizedString / .xcstrings catalog coverage and Android strings.xml completeness, detects design-token adoption vs hardcoded UI values, and measures accessibility label coverage on interactive elements across SwiftUI, UIKit, Compose, and XML layouts.",
+  "tech_stack": [
+    "SwiftSyntax — detects: NSLocalizedString(), String(localized:) (Xcode 15+), missing .accessibilityLabel() on interactive SwiftUI views, hardcoded string literals in UI-layer files",
+    "xcstrings parser (custom, JSON-based) — parses .xcstrings; computes translation state per key per locale; detects stale/new/needs-review keys",
+    "semgrep — detects hardcoded UI strings in Swift and Kotlin Compose",
+    "detekt (custom RuleSet) + Android Lint — Kotlin/Compose: missing contentDescription, hardcoded string literals, missing strings.xml entries",
+    "Google Accessibility Test Framework (ATF) — runtime accessibility checks; Compose 1.8.0+ enableAccessibilityChecks()",
+    "Android Lint (built-in) — MissingTranslation, HardcodedText, ContentDescription rules",
+    "tree-sitter — R.string.*, @StringRes, .xcstrings key references for usage graph"
+  ],
+  "language_support": ["swift", "kotlin"],
+  "confidence_tier": "heuristic",
+  "ingest_trigger": "incremental",
+  "entity_model": "Produces :LocalizationCoverage nodes (module, platform, locale, total_keys, translated_keys, stale_keys, missing_keys, coverage_pct). :HardcodedString nodes (file, line, literal_value_hash, ui_element_kind). :AccessibilityCoverage nodes (module, platform, element_kind, total_elements, labeled_elements, coverage_pct). :DesignTokenAdoption nodes (module, token_system, hardcoded_color_count, hardcoded_spacing_count, token_coverage_pct). :L10N_KEY nodes (key_id, default_locale_value_hash, locale_count, state). :REFERENCES edge from :File to :L10N_KEY. Faceted axes: semantic-kind=CoverageMetric, domain-concept=Localization+Accessibility, capability=:Audits.",
+  "storage_format": "graph-node — coverage metrics are temporal; valid_from enables trend queries across releases",
+  "prior_art": [
+    {"name": "Xcode String Catalogs (.xcstrings)", "url": "https://developer.apple.com/documentation/xcode/localizing-and-varying-text-with-a-string-catalog", "description": "Apple's official format (Xcode 15+, JSON-based). Xcode 26 adds auto-generated comments and symbol generation."},
+    {"name": "Android Lint", "url": "https://developer.android.com/guide/topics/ui/accessibility", "description": "Built-in rules: MissingTranslation, HardcodedText, ContentDescription. Deterministic, zero-config."},
+    {"name": "Google Accessibility Test Framework", "url": "https://github.com/google/Accessibility-Test-Framework-for-Android", "description": "ATF performs touch target size, color contrast, content label checks at runtime. Compose 1.8.0+ enableAccessibilityChecks()."},
+    {"name": "SimpleLocalize xcstrings guide", "url": "https://simplelocalize.io/blog/posts/xcstrings-string-catalog-guide/", "description": "Documents xcstrings JSON structure and translation states."}
+  ],
+  "consumer_query_patterns": [
+    {"label": "Localization coverage by module and locale", "cypher": "MATCH (lc:LocalizationCoverage {locale:$locale})-[:MEASURES]->(m:Module) WHERE lc.coverage_pct < 90 RETURN m.name, lc.coverage_pct, lc.missing_keys"},
+    {"label": "Hardcoded UI strings in iOS presentation layer", "cypher": "MATCH (hs:HardcodedString)-[:FOUND_IN]->(f:File)-[:BELONGS_TO]->(m:Module {platform:'iOS', layer:'presentation'}) RETURN f.path, hs.ui_element_kind, count(hs) AS count ORDER BY count DESC"},
+    {"label": "Accessibility coverage for interactive elements by platform", "cypher": "MATCH (ac:AccessibilityCoverage)-[:MEASURES]->(m:Module) WHERE ac.element_kind = 'button' RETURN m.name, m.platform, ac.coverage_pct ORDER BY ac.coverage_pct ASC"},
+    {"label": "Design token adoption vs hardcoded colors per module", "cypher": "MATCH (dt:DesignTokenAdoption)-[:MEASURES]->(m:Module) RETURN m.name, dt.token_system, dt.hardcoded_color_count, dt.token_coverage_pct ORDER BY dt.hardcoded_color_count DESC"}
+  ],
+  "cross_extractor_feeds": {"consumes": [5, 24], "produces_for": [29]},
+  "scip_lsif_alignment": "scip-independent",
+  "change_granularity": "file",
+  "graphiti_episode_type": "EntityNode — :LocalizationCoverage and :AccessibilityCoverage persistent with temporal pct tracking. :HardcodedString nodes are EpisodicNode (appear/disappear per commit). :L10N_KEY nodes are EntityNode with long-lived identity (key string as stable ID).",
+  "snapshot_vs_streaming": "snapshot-only",
+  "ingest_perf_est": "[uncertain] Full ingest: ~6–12 min on 350K LOC. Incremental: ~30–60 s on changed UI files.",
+  "maintenance_burden": "low",
+  "failure_modes": [
+    "String Catalogs auto-generated may be flagged as 'new' noisily",
+    "Non-localizable technical strings flagged as hardcoded UI unless excluded",
+    "Design token detection requires knowing project's token system",
+    "Accessibility ATF runtime checks require device/simulator — static analysis misses contrast failures",
+    "KMP Compose Multiplatform: accessibility semantics differ between iOS and Android Compose",
+    "Xcode 26 xcstrings v1.1: parser must handle v1.0 + v1.1",
+    "Dynamic strings (runtime-computed keys) fail semgrep matching"
+  ],
+  "open_questions": [
+    "Should :HardcodedString store literal or hash? Literal enables queries but may contain sensitive crypto domain text",
+    "Design token signals: standard set or per-project config?",
+    "xcstrings v1.1 (Xcode 26) format version negotiation in mixed-Xcode-version repos",
+    "ATF runtime vs static: add on-demand device trigger or stay static-only?",
+    "Stale key detection: :L10N_KEY nodes with no :REFERENCES edges — requires full-repo symbol scan"
+  ],
+  "adversarial_resistance": "medium — xcstrings parsing and Android Lint rules deterministic. Hardcoded detection bypassable by dynamic string construction.",
+  "human_validation_cost": "low",
+  "regulatory_sensitivity": "low — string literals may contain PII template strings. :HardcodedString nodes should hash literal values. Crypto wallet: seed phrase display strings must never be stored.",
+  "uncertain": ["ingest_perf_est"]
+}

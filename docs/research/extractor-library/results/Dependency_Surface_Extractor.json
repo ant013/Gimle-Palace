@@ -1,0 +1,66 @@
+{
+  "name": "Dependency Surface Extractor",
+  "meta_category": "structural",
+  "target_problems": [17],
+  "short_description": "Parses build manifests (Gradle build.gradle.kts, SwiftPM Package.swift, package.json) across all modules to extract declared dependencies, then cross-references actual import statements extracted via tree-sitter to compute the declared-vs-used gap: unused declared deps and used-but-transitive deps per module.",
+
+  "tech_stack": [
+    "dependency-analysis-gradle-plugin (autonomousapps, v2.x+, Apache 2.0) — bytecode-level declared-vs-used analysis for Kotlin/Android modules; provides projectHealth and fixDependencies tasks",
+    "gradle-dependency-analyze plugin — compile-scope declared vs used check, complementary to DAGP",
+    "tree-sitter (kotlin + swift grammars) — import statement extraction from source for cross-validation with manifest declarations",
+    "SwiftPM Package.resolved parser (custom Python) — parse JSON Package.resolved to extract pinned dependency versions and transitive closure",
+    "spmgraph (getyourguide, Nov 2025) — SPM dependency graph management, rule-based; used for cross-module SPM dependency assertions",
+    "swift-dependency-graph (Tim Searle, Dec 2025) — builds dependency graph across Xcode targets and SwiftPM packages, exports HTML/DOT",
+    "OWASP dependency-check Swift analyzer — CVE correlation on Swift packages (bonus security enrichment)"
+  ],
+  "language_support": ["kotlin", "swift"],
+  "confidence_tier": "deterministic",
+  "ingest_trigger": "incremental",
+
+  "entity_model": "Produces :Dependency nodes (group_id, artifact_id, version, ecosystem=[gradle|spm|npm], resolved_version) and :Module nodes (shared with Item 1). Edges: :DECLARES_DEP (module → dependency, config=[api|implementation|compileOnly|testImplementation|regular], is_used=bool, is_transitive_leak=bool). Also :IMPORTS_SYMBOL (module → dependency, symbol_name, import_path) for import-level cross-reference. Produces :DepFinding nodes (module, finding_type=[unused-declared|used-undeclared|wrong-config|version-mismatch], dependency, recommendation) for actionable advice. Applies structural facet structural=dependency-surface, domain-concept=dependency-hygiene. :DepHealthReport node (timestamp, total_modules, unused_count, transitive_leak_count) is an EpisodicNode summarising the state per ingest cycle.",
+  "storage_format": "graph-node — :Dependency, :Module, :DECLARES_DEP, :DepFinding written to Graphiti. .knowledge/dep-surface.md supplementary markdown listing the top-N unused and transitive-leak findings per ingest.",
+
+  "prior_art": [
+    {"name": "dependency-analysis-gradle-plugin (autonomousapps)", "url": "https://github.com/autonomousapps/dependency-analysis-gradle-plugin", "description": "Primary tool for Gradle declared-vs-used analysis. Bytecode-level analysis for JVM/Android Kotlin. Provides projectHealth task and fixDependencies auto-remediation. v3.7.0 adds Java 25 / ASM 9.9 support. Known KMP issues: Issue #1345 (doesn't recognise KMP project deps), Issue #1649 (KMP androidMain config crash). MIT license.", "maintenance": "active, frequent releases 2024–2025"},
+    {"name": "gradle-dependency-analyze", "url": "https://github.com/gradle-dependency-analyze/gradle-dependency-analyze", "description": "Gradle plugin checking compile-scope declared vs used classes. Older, complementary to DAGP. MIT license.", "maintenance": "moderate"},
+    {"name": "spmgraph (GetYourGuide)", "url": "https://github.com/getyourguide/spmgraph", "description": "SPM dependency graph management tool with rule-based assertions via SPMGraphConfig.swift. Updated Nov 2025.", "maintenance": "active"},
+    {"name": "swift-dependency-graph (Tim Searle)", "url": "https://searle.dev/2025/12/13/swift-dependency-graph.html", "description": "Builds dependency graph across Xcode targets and SwiftPM packages, exports to HTML, DOT, JSON. Published Dec 2025.", "maintenance": "new, health unknown"},
+    {"name": "OWASP dependency-check (Swift analyzer)", "url": "https://jeremylong.github.io/DependencyCheck/analyzers/swift.html", "description": "CVE-enriched dependency analysis for Swift/SPM packages. Adds security dimension to dependency surface.", "maintenance": "active (OWASP project)"},
+    {"name": "Gradle built-in dependency tasks", "url": "https://docs.gradle.org/current/userguide/viewing_debugging_dependencies.html", "description": "gradle dependencies, gradle dependencyInsight, IntelliJ IDEA dependency diagram. Baseline tooling, less structured output for programmatic ingestion.", "maintenance": "maintained by Gradle"},
+    {"name": "Kotlin binary-compatibility-validator (KLib ABI)", "url": "https://github.com/Kotlin/binary-compatibility-validator", "description": "Generates .api dump files; KLib ABI support added 2024. Useful for tracking which declared dependency versions affect the public API surface.", "maintenance": "active"}
+  ],
+
+  "consumer_query_patterns": [
+    "// All unused declared dependencies in a specific module\nMATCH (m:Module {name: $module_name})-[d:DECLARES_DEP {is_used: false}]->(dep:Dependency)\nRETURN dep.artifact_id, dep.version, d.config ORDER BY dep.artifact_id",
+    "// Transitive-leak deps (used in code but only transitively declared)\nMATCH (m:Module)-[d:DECLARES_DEP {is_transitive_leak: true}]->(dep:Dependency)\nRETURN m.name, dep.artifact_id, dep.version, d.recommendation",
+    "// All modules depending on a specific library version\nMATCH (m:Module)-[:DECLARES_DEP]->(dep:Dependency {artifact_id: 'retrofit', version: '2.9.0'})\nRETURN m.name, m.build_system",
+    "// DepFindings by type across all modules\nMATCH (f:DepFinding)\nRETURN f.finding_type, count(f) AS count, collect(f.module)[..5] AS sample_modules ORDER BY count DESC"
+  ],
+  "cross_extractor_feeds": {"consumes": [1, 21], "produces_for": [31, 39, 27, 4, 25]},
+  "scip_lsif_alignment": "scip-independent",
+  "change_granularity": "file",
+  "graphiti_episode_type": "EntityNode — :Dependency nodes are semi-permanent (carry end_time when removed from manifest); :DECLARES_DEP edges are versioned (new edge on version bump, old edge gets end_time). :DepFinding nodes are EpisodicNodes that expire when finding is resolved. :DepHealthReport is a point-in-time EpisodicNode.",
+  "snapshot_vs_streaming": "snapshot-only",
+
+  "ingest_perf_est": "[uncertain] DAGP full projectHealth run on 20-module Android KMP repo: ~3–10 minutes. SPM Package.resolved parsing: <30 seconds. Tree-sitter import extraction (Kotlin + Swift): ~2–5 minutes. Total full ingest: ~5–15 minutes. Incremental (single module change): ~1–3 minutes. KMP-specific limitations (Issue #1345, #1649) may cause partial failures. Analogical estimates.",
+  "maintenance_burden": "low",
+  "failure_modes": [
+    "DAGP does not reliably recognise KMP commonMain/androidMain/iosMain source-set dependencies (Issue #1345)",
+    "DAGP crash (Issue #1649) on androidMainImplementation config in KMP projects with AGP 9.0+",
+    "SPM Package.resolved only tracks resolved (pinned) versions, not range constraints",
+    "Tree-sitter import extraction may over-count: a Kotlin file may import a symbol from a transitive dependency without that being a 'leak' in all build-system conventions",
+    "npm/package.json analysis not applicable for Unstoppable Wallet (Kotlin+Swift only)"
+  ],
+  "open_questions": [
+    "KMP DAGP issues (#1345, #1649): implement workaround or wait for upstream fix?",
+    "Overlap with Item 39 (Cross-Repo Dependency Version Skew Extractor): Items 5 and 39 share :Dependency nodes. Co-design or reconcile via MERGE?",
+    "How should version ranges ('>= 1.2.0, < 2.0.0' in SPM) be represented — single node with range attribute, or resolved-version node linked to range-constraint node?",
+    "Should DepFindings trigger immediate notifications or be batch-reviewed?",
+    "For crypto domain: some dependencies are deliberately pinned for reproducibility — how to distinguish intentional exact pins from accidental stale pins?"
+  ],
+  "adversarial_resistance": "high — manifest files and import statements are structured text with well-defined schemas. Not subject to obfuscation.",
+  "human_validation_cost": "low",
+  "regulatory_sensitivity": "none",
+
+  "uncertain": ["ingest_perf_est", "kmp_dagp_coverage"]
+}

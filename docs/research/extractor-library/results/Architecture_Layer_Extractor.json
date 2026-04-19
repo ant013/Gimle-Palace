@@ -1,0 +1,65 @@
+{
+  "name": "Architecture Layer Extractor",
+  "meta_category": "structural",
+  "target_problems": [4],
+  "short_description": "Builds a module-boundary and import graph for a multi-module Kotlin/Swift codebase, then validates that dependencies respect declared architectural layer rules (domain → data → presentation, KMP shared vs platform-specific). Flags illegal cross-layer imports and cycles.",
+
+  "tech_stack": [
+    "tree-sitter (tree-sitter-kotlin v0.3.x, tree-sitter/tree-sitter-swift) — AST import declaration extraction",
+    "modules-graph-assert (jraska, v2.9.0, Jun 2025) — Gradle-side rule assertion, cycle detection, max-height rules",
+    "iurysza/module-graph (v1.x, Oct 2025) — Mermaid/DOT visualisation layer exported to .knowledge/ markdown",
+    "ArchUnit (TNG, v1.x) — JVM bytecode layer-rule enforcement in Kotlin modules as test suite",
+    "SPM package manifest parser (Swift) — Package.swift dependency declarations for Swift module graph",
+    "custom Python driver — orchestrates tree-sitter queries, emits JSON node/edge stream to Graphiti"
+  ],
+  "language_support": ["kotlin", "swift"],
+  "confidence_tier": "deterministic",
+  "ingest_trigger": "incremental",
+
+  "entity_model": "Produces :Module nodes (name, kind=[domain|data|presentation|shared|platform], path, build_system=[gradle|spm], target=[android|ios|common]) and :DEPENDS_ON edges (from_module, to_module, declared_config=[api|implementation|compileOnly|regular], is_illegal=bool). Produces :ImportViolation nodes (source_module, target_module, violation_rule, file_path, line) when a layer rule is breached. :Module applies structural/capability facets: structural=layer-boundary, capability=LayerEnforcement. Cycle findings produce :ArchCycle nodes referencing a list of :Module ids. KMP shared/platform split modelled as kind=shared or kind=platform with a :KMPSplit edge linking shared → platform counterparts.",
+  "storage_format": "hybrid — primary graph-node writes to Graphiti (Module, DEPENDS_ON, ImportViolation, ArchCycle), plus a snapshot module-graph.md written to .knowledge/ for human review and LLM prompt injection. Rationale: graph-node enables downstream Cypher queries; markdown enables stable snapshot sharing with non-graph agents.",
+
+  "prior_art": [
+    {"name": "modules-graph-assert", "url": "https://github.com/jraska/modules-graph-assert", "description": "Gradle plugin for asserting module graph rules (layer types, height, cycles). v2.9.0 released Jun 2025, Kotlin 2.0 support. MIT license. KMP support partial — Issue #249 open as of 2024; commonMain dependencies not recognised.", "maintenance": "active, ~monthly releases"},
+    {"name": "iurysza/module-graph", "url": "https://github.com/iurysza/module-graph", "description": "Gradle plugin generating Mermaid module dependency graph, embeds into README. Oct 2025 release. Visualisation only, no rule enforcement.", "maintenance": "active"},
+    {"name": "ArchUnit", "url": "https://github.com/TNG/ArchUnit", "description": "JVM bytecode architecture rule library. Kotlin-supported via bytecode analysis. Layer rules expressed as JUnit tests. No native Swift/KMP awareness. Apache 2.0.", "maintenance": "active, last release 2024"},
+    {"name": "tree-sitter-kotlin (fwcd)", "url": "https://github.com/fwcd/tree-sitter-kotlin", "description": "Kotlin grammar for tree-sitter, validated against JetBrains PSI parser. Used by Neovim, Helix, GitHub Linguist. Supports import declarations.", "maintenance": "active 2024–2025"},
+    {"name": "tree-sitter/tree-sitter-swift", "url": "https://github.com/tree-sitter/tree-sitter-swift", "description": "Official tree-sitter Swift grammar, maintained under tree-sitter org. Jun 2025 activity confirmed.", "maintenance": "active"},
+    {"name": "ENRE-java (incremental)", "url": "https://github.com/xjtu-enre/ENRE-java", "description": "Entity/dependency extractor for Java with incremental analysis (Nov 2024). Not Swift/Kotlin-native but architectural approach is directly applicable.", "maintenance": "moderate, 2024 updates"},
+    {"name": "RepoGraph (arXiv 2410.14684)", "url": "https://arxiv.org/abs/2410.14684", "description": "2024 paper describing repo-level code graph enhanced AI SE. Import-graph construction technique aligns with this extractor's approach.", "maintenance": "research paper"}
+  ],
+
+  "consumer_query_patterns": [
+    "// All illegal cross-layer imports in the shared KMP module\nMATCH (v:ImportViolation {source_module: 'shared'})\nRETURN v.file_path, v.violation_rule, v.target_module ORDER BY v.file_path",
+    "// Direct dependency graph of a module — one hop\nMATCH (m:Module {name: $module_name})-[:DEPENDS_ON]->(dep:Module)\nRETURN dep.name, dep.kind, dep.build_system",
+    "// Find all modules that illegally access the data layer from presentation\nMATCH (src:Module {kind: 'presentation'})-[e:DEPENDS_ON {is_illegal: true}]->(tgt:Module {kind: 'data'})\nRETURN src.name, tgt.name",
+    "// Detect any architectural cycle involving module X\nMATCH p=(m:Module {name: $module_name})-[:DEPENDS_ON*]->(m)\nRETURN [n in nodes(p) | n.name] AS cycle_path"
+  ],
+  "cross_extractor_feeds": {"consumes": [21, 5], "produces_for": [31, 27, 4, 25]},
+  "scip_lsif_alignment": "scip-correlated",
+  "change_granularity": "file",
+  "graphiti_episode_type": "EntityNode — :Module nodes are permanent structural entities; :DEPENDS_ON edges are permanent unless a module is removed (carry end_time on deletion); :ImportViolation edges carry end_time once the violation is fixed.",
+  "snapshot_vs_streaming": "snapshot-only",
+
+  "ingest_perf_est": "[uncertain] Full ingest on 20-library KMP repo (~200K LOC Kotlin + ~150K LOC Swift): estimated 3–8 minutes using tree-sitter parsing (fast) plus Gradle task execution (modules-graph-assert assertModuleGraph). Incremental: estimated 30–90 seconds per changed module (re-parse affected files + re-run assertions). Based on analogy with tree-sitter benchmark data and modules-graph-assert task overhead, not direct measurement.",
+  "maintenance_burden": "low",
+  "failure_modes": [
+    "modules-graph-assert does not recognise KMP commonMain dependencies (Issue #249, open 2024) — KMP shared modules may show false-negative missing-dependency violations",
+    "ArchUnit operates on JVM bytecode only — Swift modules require separate tree-sitter-based rule enforcement pipeline",
+    "tree-sitter-kotlin parse errors on advanced Kotlin 2.x syntax (context receivers, multi-dollar interpolation) may silently miss import nodes",
+    "Generated code (Kotlin code-gen by KSP, Swift code-gen by SKIE) imports phantom modules that pollute the layer graph with noise",
+    "Monorepo SPM packages with platform conditionals (#if canImport(UIKit)) not captured by manifest-level parsing; import graph may be under-complete for iOS-only modules"
+  ],
+  "open_questions": [
+    "How should KMP expect/actual split be represented in the layer graph — two :Module nodes (shared + platform) or one node with a platform attribute? Resolving this requires coordination with Item 4 (KMP Platform-Bridge Extractor) to avoid duplicate module nodes.",
+    "modules-graph-assert KMP issue (#249) — should Gimle-Palace implement a custom Gradle task that walks KMP source sets, or wait for upstream fix? Blocks deterministic enforcement for KMP modules.",
+    "ArchUnit requires JUnit test runner — is running architecture tests as part of the ingest pipeline acceptable, or should tree-sitter-based rule checking replace ArchUnit entirely to avoid JVM test-runner dependency?",
+    "How to handle Gradle configuration-cache compatibility for modules-graph-assert (Issue #120)? Without CC support, incremental Gradle builds are significantly slowed.",
+    "Layer rule schema: where is the authoritative source for layer definitions (YAML config, build.gradle.kts annotations, or inferred from package names)? Inferred-from-package-names approach is fragile for non-standard codebases like Unstoppable Wallet."
+  ],
+  "adversarial_resistance": "high — import declarations are syntactic and not obfuscatable at source level; generated code is a noise source but not an adversarial scenario. Kotlin macros (KSP) produce new files that are parseable by tree-sitter.",
+  "human_validation_cost": "low",
+  "regulatory_sensitivity": "none",
+
+  "uncertain": ["ingest_perf_est"]
+}
