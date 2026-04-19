@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Spec:** `docs/superpowers/specs/2026-04-19-meta-workflow-migration-design.md` on `feature/meta-workflow-migration` @ `7da9d5d` (rev2).
+**Spec:** `docs/superpowers/specs/2026-04-19-meta-workflow-migration-design.md` on `feature/GIM-55-meta-workflow-migration` @ `7da9d5d` (rev2).
 
 **Goal:** Close the 3 structural gaps exposed by GIM-54 (stale checkout, Board direct-push to main, ghost runs after async waits) by making every writer (agents + Board) use a single feature-branch flow, enforced by branch protection + GitHub Actions.
 
@@ -12,7 +12,7 @@
 
 **Predecessors pinned:**
 - `develop@f3489b6` — reconcile merge (main → develop unified).
-- `feature/meta-workflow-migration@7da9d5d` — current spec rev2 on this branch.
+- `feature/GIM-55-meta-workflow-migration@7da9d5d` — current spec rev2 on this branch.
 
 **Language rule:** code / docstrings / commit messages / YAML / JSON in English; Russian only in UI text (per `language.md` fragment).
 
@@ -22,7 +22,7 @@
 
 ## File structure
 
-### New files on this branch (feature/meta-workflow-migration)
+### New files on this branch (feature/GIM-55-meta-workflow-migration)
 
 ```
 .github/workflows/qa-evidence-check.yml         # §3.8 — required check
@@ -64,18 +64,18 @@ fragments/phase-handoff.md                      # §3.4 Phase 1.1 row
 
 ## Phase 1 — Formalization
 
-### Task 1.1: CTO formalize (rename GIM-NN to real issue number)
+### Task 1.1: CTO formalize (rename GIM-55 to real issue number)
 
 **Owner:** CTO
 
 **Files:**
-- Modify: `docs/superpowers/plans/2026-04-19-GIM-NN-meta-workflow-migration.md` (rename)
+- Modify: `docs/superpowers/plans/2026-04-19-GIM-55-meta-workflow-migration.md` (rename)
 
 - [ ] **Step 1: Fetch origin first** (compensation control from GIM-54 lesson)
 
 ```bash
 git fetch origin --prune
-git switch feature/meta-workflow-migration
+git switch feature/GIM-55-meta-workflow-migration
 git pull --ff-only
 git log --oneline -3    # expect 7da9d5d spec rev2, 794a5ae spec rev1, f3489b6 reconcile
 ```
@@ -93,7 +93,7 @@ cat > /tmp/issue-body.json <<'EOF'
   "assigneeAgentId": "7fb0fdbb-e17f-4487-a4da-16993a907bec",
   "priority": "high",
   "status": "in_progress",
-  "description": "## Summary\n\nClose 2 of 3 GIM-48 failure vectors (admin-bypass + QA-evidence-gate). Migrate to single feature-branch flow for all writers. Self-referential: this slice's PR follows old-flow rules; new-flow takes effect from next merge.\n\n## Artifacts\n\n- **Spec:** `docs/superpowers/specs/2026-04-19-meta-workflow-migration-design.md` on `feature/meta-workflow-migration@7da9d5d`\n- **Plan:** `docs/superpowers/plans/2026-04-19-GIM-NN-meta-workflow-migration.md` (this file — CTO to rename after creating this issue).\n- **Predecessor:** `develop@f3489b6` (reconcile merge unifying main + develop)\n\n## Phase 1.1 (assignee: CTO)\n\n1. Rename this plan file: `GIM-NN` → `GIM-<this issue number>`.\n2. Swap all `GIM-NN` in plan body.\n3. Commit + push on `feature/meta-workflow-migration` (first legitimate use of narrowed CTO commit permission).\n4. Reassign to CodeReviewer for Phase 1.2.\n\n## Pipeline\n\n| Phase | Owner | Scope |\n|---|---|---|\n| 1.1 | CTO | Rename plan. |\n| 1.2 | CodeReviewer | Plan-first review. |\n| 2 | TechnicalWriter | §3.1-§3.6, §3.9 doc edits. |\n| 2 | InfraEngineer | §3.7, §3.8, §3.10 workflows + branch-protection JSON. |\n| 3.1 | CodeReviewer | Mechanical review. |\n| 3.2 | OpusArchitectReviewer | Adversarial. |\n| 4.1 | QAEngineer | Dogfood: attempt PR without evidence, verify checks block. |\n| 4.2 | CTO | Squash-merge. |\n| 4.3 | Operator + InfraEng | Final FF, tighten protection, verify blocks. |\n\n## Reminders\n\n- All commits on `feature/meta-workflow-migration`, no direct push to develop/main.\n- CTO Phase 1.1 rename done WITHOUT sub-issue (per new narrowed ban).\n- Submodule `paperclips-shared-fragments` needs its own PR for fragment changes.\n- Rollback runbook `docs/runbooks/2026-04-19-meta-workflow-migration-rollback.md` is part of acceptance.\n\n## Size\n\n~300 LOC prose + ~80 LOC YAML/JSON. 2 PRs (this + shared-fragments). ~1 day agent-time."
+  "description": "## Summary\n\nClose 2 of 3 GIM-48 failure vectors (admin-bypass + QA-evidence-gate). Migrate to single feature-branch flow for all writers. Self-referential: this slice's PR follows old-flow rules; new-flow takes effect from next merge.\n\n## Artifacts\n\n- **Spec:** `docs/superpowers/specs/2026-04-19-meta-workflow-migration-design.md` on `feature/GIM-55-meta-workflow-migration@7da9d5d`\n- **Plan:** `docs/superpowers/plans/2026-04-19-GIM-55-meta-workflow-migration.md` (this file — CTO to rename after creating this issue).\n- **Predecessor:** `develop@f3489b6` (reconcile merge unifying main + develop)\n\n## Phase 1.1 (assignee: CTO)\n\n1. Rename this plan file: `GIM-55` → `GIM-<this issue number>`.\n2. Swap all `GIM-55` in plan body.\n3. Commit + push on `feature/GIM-55-meta-workflow-migration` (first legitimate use of narrowed CTO commit permission).\n4. Reassign to CodeReviewer for Phase 1.2.\n\n## Pipeline\n\n| Phase | Owner | Scope |\n|---|---|---|\n| 1.1 | CTO | Rename plan. |\n| 1.2 | CodeReviewer | Plan-first review. |\n| 2 | TechnicalWriter | §3.1-§3.6, §3.9 doc edits. |\n| 2 | InfraEngineer | §3.7, §3.8, §3.10 workflows + branch-protection JSON. |\n| 3.1 | CodeReviewer | Mechanical review. |\n| 3.2 | OpusArchitectReviewer | Adversarial. |\n| 4.1 | QAEngineer | Dogfood: attempt PR without evidence, verify checks block. |\n| 4.2 | CTO | Squash-merge. |\n| 4.3 | Operator + InfraEng | Final FF, tighten protection, verify blocks. |\n\n## Reminders\n\n- All commits on `feature/GIM-55-meta-workflow-migration`, no direct push to develop/main.\n- CTO Phase 1.1 rename done WITHOUT sub-issue (per new narrowed ban).\n- Submodule `paperclips-shared-fragments` needs its own PR for fragment changes.\n- Rollback runbook `docs/runbooks/2026-04-19-meta-workflow-migration-rollback.md` is part of acceptance.\n\n## Size\n\n~300 LOC prose + ~80 LOC YAML/JSON. 2 PRs (this + shared-fragments). ~1 day agent-time."
 }
 EOF
 RESPONSE=$(curl -sS -X POST -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
@@ -112,14 +112,14 @@ Assuming `N` = 55 (verify on paperclip UI):
 
 ```bash
 N=55
-git mv docs/superpowers/plans/2026-04-19-GIM-NN-meta-workflow-migration.md \
+git mv docs/superpowers/plans/2026-04-19-GIM-55-meta-workflow-migration.md \
        docs/superpowers/plans/2026-04-19-GIM-${N}-meta-workflow-migration.md
 ```
 
 - [ ] **Step 4: Swap placeholders in plan body**
 
 ```bash
-sed -i '' "s/GIM-NN/GIM-${N}/g" docs/superpowers/plans/2026-04-19-GIM-${N}-meta-workflow-migration.md
+sed -i '' "s/GIM-55/GIM-${N}/g" docs/superpowers/plans/2026-04-19-GIM-${N}-meta-workflow-migration.md
 ```
 
 (Linux: `sed -i "s/.../"` without the empty `''`.)
@@ -127,23 +127,23 @@ sed -i '' "s/GIM-NN/GIM-${N}/g" docs/superpowers/plans/2026-04-19-GIM-${N}-meta-
 Verify:
 
 ```bash
-grep -n 'GIM-NN' docs/superpowers/plans/2026-04-19-GIM-${N}-meta-workflow-migration.md || echo 'clean — no GIM-NN left'
+grep -n 'GIM-55' docs/superpowers/plans/2026-04-19-GIM-${N}-meta-workflow-migration.md || echo 'clean — no GIM-55 left'
 ```
 
-Expected: `clean — no GIM-NN left`.
+Expected: `clean — no GIM-55 left`.
 
 - [ ] **Step 5: Commit + push**
 
 ```bash
 git add -A
 git commit -m "docs(plan): rename to GIM-${N} (paperclip issue ${ISSUE_ID})"
-git push origin feature/meta-workflow-migration
+git push origin feature/GIM-55-meta-workflow-migration
 ```
 
 - [ ] **Step 6: Open draft PR (if not yet open)**
 
 ```bash
-gh pr create --draft --base develop --head feature/meta-workflow-migration \
+gh pr create --draft --base develop --head feature/GIM-55-meta-workflow-migration \
   --title "Meta-workflow migration (single mainline, GIM-${N})" \
   --body "$(cat <<'EOF'
 ## Summary
@@ -169,9 +169,9 @@ POST comment on paperclip issue:
 ## Phase 1.1 complete
 
 - Plan renamed: docs/superpowers/plans/2026-04-19-GIM-55-meta-workflow-migration.md
-- Commit: <sha> pushed to feature/meta-workflow-migration
+- Commit: <sha> pushed to feature/GIM-55-meta-workflow-migration
 - Draft PR: <link>
-- Zero `GIM-NN` remain in plan body.
+- Zero `GIM-55` remain in plan body.
 
 @CodeReviewer your turn — Phase 1.2 plan-first review.
 ```
@@ -193,7 +193,7 @@ curl -sS -X PATCH -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
 
 ```bash
 git fetch origin --prune
-git switch feature/meta-workflow-migration
+git switch feature/GIM-55-meta-workflow-migration
 git pull --ff-only
 ```
 
@@ -227,7 +227,7 @@ Via paperclip API, `assigneeAgentId=0e8222fd-88b9-4593-98f6-847a448b0aab`.
 
 ## Phase 2 — Implementation
 
-All Phase 2 work happens on `feature/meta-workflow-migration`. No branch switching mid-phase. Commits can be made by whichever agent is active; the branch tracks the whole slice's history before squash-merge.
+All Phase 2 work happens on `feature/GIM-55-meta-workflow-migration`. No branch switching mid-phase. Commits can be made by whichever agent is active; the branch tracks the whole slice's history before squash-merge.
 
 ### Task 2.1: CLAUDE.md Branch Flow section rewrite
 
@@ -380,7 +380,7 @@ With:
 ```markdown
 - **DO NOT run** `git checkout -- <file>` (discard working-directory changes), `git stash`, `git worktree add/remove`.
 - **DO NOT use** `Edit`, `Write`, `NotebookEdit` tools on files under `services/`, `tests/`, `src/`, or any path outside `docs/` and `paperclips/roles/`. Code is engineer turf.
-- **MAY run** `git commit` / `git push` / `git mv` / `Edit` / `Write` **only** when modifying files under `docs/superpowers/**` or `docs/runbooks/**` **on a feature branch** (Phase 1.1 mechanical work: plan renames, `GIM-NN` placeholder swaps, rev-updates addressing CR findings). Never on `develop` / `main` directly.
+- **MAY run** `git commit` / `git push` / `git mv` / `Edit` / `Write` **only** when modifying files under `docs/superpowers/**` or `docs/runbooks/**` **on a feature branch** (Phase 1.1 mechanical work: plan renames, `GIM-55` placeholder swaps, rev-updates addressing CR findings). Never on `develop` / `main` directly.
 ```
 
 - [ ] **Step 2: Verify the rest of fragment unchanged**
@@ -410,7 +410,7 @@ Open fragment, find row:
 Replace with:
 
 ```markdown
-| 1.1 Formalization (CTO) | 1.2 Plan-first review | CTO does `git mv` / rename / `GIM-NN` swap **on the feature branch directly** (no sub-issue), pushes, then `assignee=CodeReviewer` + @CodeReviewer. Sub-issues for Phase 1.1 mechanical work are anti-pattern per the narrowed `cto-no-code-ban.md` scope. |
+| 1.1 Formalization (CTO) | 1.2 Plan-first review | CTO does `git mv` / rename / `GIM-55` swap **on the feature branch directly** (no sub-issue), pushes, then `assignee=CodeReviewer` + @CodeReviewer. Sub-issues for Phase 1.1 mechanical work are anti-pattern per the narrowed `cto-no-code-ban.md` scope. |
 ```
 
 - [ ] **Step 2: No separate commit yet** — bundled in Task 2.11.
@@ -435,7 +435,7 @@ Replace with:
 ```markdown
 If you catch yourself opening `Edit` / `Write` tool on files under `services/`, `tests/`, `src/`, or outside `docs/` / `paperclips/roles/` — that's a **behavior bug**, stop immediately: *"Caught myself trying to write code outside allowed scope. Block me or give explicit permission."*
 
-`Edit` / `Write` on `docs/superpowers/**` and `docs/runbooks/**` for Phase 1.1 mechanical work **is allowed and expected** (plan renames, `GIM-NN` swaps, rev-updates to address CR findings). See `cto-no-code-ban.md` narrowed scope.
+`Edit` / `Write` on `docs/superpowers/**` and `docs/runbooks/**` for Phase 1.1 mechanical work **is allowed and expected** (plan renames, `GIM-55` swaps, rev-updates to address CR findings). See `cto-no-code-ban.md` narrowed scope.
 ```
 
 - [ ] **Step 2: Commit**
@@ -567,7 +567,7 @@ git commit -m "docs(code-reviewer role): Phase 3.1 GitHub PR review bridge"
 Before continuing to Task 2.8, confirm CR can actually `gh pr review --approve`. Run from CR's execution environment (or simulate from operator's with CR's token if convenient):
 
 ```bash
-# On a throwaway commit in a throwaway PR (can use feature/meta-workflow-migration itself):
+# On a throwaway commit in a throwaway PR (can use feature/GIM-55-meta-workflow-migration itself):
 gh pr review 25 --approve --body "Dry-run: verifying gh pr review --approve permission. Not a real APPROVE."
 ```
 
@@ -632,7 +632,7 @@ jobs:
 ```bash
 git add .github/workflows/qa-evidence-check.yml
 git commit -m "feat(ci): qa-evidence-present required check (GIM-48 vector #2)"
-git push origin feature/meta-workflow-migration
+git push origin feature/GIM-55-meta-workflow-migration
 ```
 
 - [ ] **Step 3: DRY-RUN — verify Action fires on PR**
@@ -738,7 +738,7 @@ gh secret set RELEASE_CUT_TOKEN --repo ant013/Gimle-Palace
 ```bash
 git add .github/workflows/release-cut.yml
 git commit -m "feat(ci): release-cut workflow for main FF via bot (no human direct push)"
-git push origin feature/meta-workflow-migration
+git push origin feature/GIM-55-meta-workflow-migration
 ```
 
 - [ ] **Step 4: DRY-RUN — manual dispatch WHILE branch protection still off**
@@ -831,7 +831,7 @@ Note on `main.json`:
 ```bash
 git add .github/branch-protection/develop.json .github/branch-protection/main.json
 git commit -m "feat(ci): branch-protection JSON configs (applied in Phase 4.3)"
-git push origin feature/meta-workflow-migration
+git push origin feature/GIM-55-meta-workflow-migration
 ```
 
 Not applied yet. `gh api -X PUT` call happens in Task 4.3.2.
@@ -912,7 +912,7 @@ git status
 # Expected: modified: paperclips/fragments/shared (new commits)
 git add paperclips/fragments/shared
 git commit -m "chore(submodule): bump paperclip-shared-fragments to ${FRAG_SHA} (meta-workflow-migration fragments)"
-git push origin feature/meta-workflow-migration
+git push origin feature/GIM-55-meta-workflow-migration
 ```
 
 - [ ] **Step 6: Rebuild role bundles in dist/**
@@ -923,7 +923,7 @@ git status
 # Expected: modified: paperclips/dist/**/*.md (rebuilt bundles)
 git add paperclips/dist/
 git commit -m "chore(dist): rebuild role bundles with new shared fragments"
-git push origin feature/meta-workflow-migration
+git push origin feature/GIM-55-meta-workflow-migration
 ```
 
 - [ ] **Step 7: Verify distbundle content for one agent (CTO)**
@@ -978,7 +978,7 @@ Expected: both booleans `True` for CTO; at minimum `Fresh-fetch on wake: True` f
 
 ```bash
 git fetch origin --prune
-git switch feature/meta-workflow-migration
+git switch feature/GIM-55-meta-workflow-migration
 git pull --ff-only
 ```
 
@@ -1073,7 +1073,7 @@ curl -sS -X PATCH -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
 
 ```bash
 git fetch origin --prune
-git switch feature/meta-workflow-migration
+git switch feature/GIM-55-meta-workflow-migration
 git pull --ff-only
 ```
 
@@ -1140,7 +1140,7 @@ curl -sS -X PATCH -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
 
 ```bash
 git fetch origin --prune
-git switch feature/meta-workflow-migration
+git switch feature/GIM-55-meta-workflow-migration
 git pull --ff-only
 gh pr view --json number,url,statusCheckRollup -q '{pr: .number, url: .url, checks: [.statusCheckRollup[] | {name, status: .status, conclusion: .conclusion}]}'
 ```
@@ -1197,7 +1197,7 @@ Plan: \`docs/superpowers/plans/2026-04-19-GIM-${N}-meta-workflow-migration.md\`
 
 ## QA Evidence
 
-Commit tested: \`${SHA}\` (HEAD of feature/meta-workflow-migration).
+Commit tested: \`${SHA}\` (HEAD of feature/GIM-55-meta-workflow-migration).
 
 ### Scenarios executed (Phase 4.1)
 
@@ -1240,7 +1240,7 @@ On paperclip issue:
 ```
 ## Phase 4.1 PASS
 
-**Commit tested:** <sha> (feature/meta-workflow-migration HEAD)
+**Commit tested:** <sha> (feature/GIM-55-meta-workflow-migration HEAD)
 
 ### Scenarios
 - A: No evidence section → qa-evidence-present FAIL (log attached).
@@ -1273,7 +1273,7 @@ curl -sS -X PATCH -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
 
 ```bash
 git fetch origin --prune
-git switch feature/meta-workflow-migration
+git switch feature/GIM-55-meta-workflow-migration
 git pull --ff-only
 
 # Convert draft to ready-for-review (if still draft)
@@ -1670,7 +1670,7 @@ Total: 30-45 min for a full rollback.
 ```bash
 git add docs/runbooks/2026-04-19-meta-workflow-migration-rollback.md
 git commit -m "docs(runbook): meta-workflow migration rollback procedure"
-git push origin feature/meta-workflow-migration
+git push origin feature/GIM-55-meta-workflow-migration
 ```
 
 ---
