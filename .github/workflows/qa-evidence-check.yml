@@ -1,0 +1,33 @@
+name: qa-evidence-present
+on:
+  pull_request:
+    types: [opened, synchronize, edited, labeled, unlabeled]
+    branches: [develop]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check QA Evidence section or waiver label
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+          IS_MICRO_SLICE: ${{ contains(github.event.pull_request.labels.*.name, 'micro-slice') }}
+        run: |
+          set -euo pipefail
+          if [ "$IS_MICRO_SLICE" = "true" ]; then
+            echo "Label 'micro-slice' present — QA evidence waived."
+            exit 0
+          fi
+          if echo "$BODY" | grep -q '^## QA Evidence'; then
+            echo "QA Evidence section detected."
+            SECTION=$(echo "$BODY" | awk '/^## QA Evidence/,/^## /')
+            if echo "$SECTION" | grep -qE '[0-9a-f]{7,40}'; then
+              echo "Commit SHA reference found in QA Evidence section."
+              exit 0
+            else
+              echo "::error::QA Evidence section has no commit SHA (need 7-40 hex chars)."
+              exit 1
+            fi
+          fi
+          echo "::error::PR body must contain '## QA Evidence' section with commit SHA, OR add label 'micro-slice' to waive."
+          exit 1
