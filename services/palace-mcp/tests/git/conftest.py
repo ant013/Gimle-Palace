@@ -39,3 +39,24 @@ def repos_root(tmp_path: Path, tmp_repo: Path) -> Path:
     """Simulate container's /repos/ with one project mounted."""
     # tmp_repo already lives at tmp_path / "repos" / "testproj"
     return tmp_path / "repos"
+
+
+@pytest.fixture
+def large_repo(tmp_path: Path) -> tuple[Path, Path]:
+    """Return (repo_path, repos_root) with 250 commits — used for cap tests."""
+    repos = tmp_path / "large_repos"
+    repo = repos / "bigproj"
+    repo.mkdir(parents=True)
+    _run(["git", "init", "-q", "-b", "main"], cwd=repo)
+    _run(["git", "config", "user.email", "t@t"], cwd=repo)
+    _run(["git", "config", "user.name", "T"], cwd=repo)
+    (repo / "f.py").write_text("0\n")
+    _run(["git", "add", "."], cwd=repo)
+    _run(["git", "commit", "-m", "init", "-q"], cwd=repo)
+    for i in range(1, 250):
+        (repo / "f.py").write_text(f"{i}\n")
+        subprocess.run(
+            ["git", "commit", "-am", f"c{i}", "-q"],
+            cwd=repo, check=True, capture_output=True,
+        )
+    return repo, repos
