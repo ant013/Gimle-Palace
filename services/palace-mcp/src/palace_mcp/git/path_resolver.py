@@ -28,8 +28,10 @@ class InvalidPath(ValueError):
         self.reason = reason
 
 
-def resolve_project(slug: str, *, repos_root: Path = REPOS_ROOT) -> Path:
+def resolve_project(slug: str, *, repos_root: Path | None = None) -> Path:
     """Resolve slug → absolute repo path. Requires .git/ to exist."""
+    if repos_root is None:
+        repos_root = REPOS_ROOT
     validate_slug(slug)
     candidate = (repos_root / slug).resolve()
     if not candidate.is_dir():
