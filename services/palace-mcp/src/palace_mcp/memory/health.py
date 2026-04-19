@@ -13,6 +13,7 @@ from typing import Any
 
 from neo4j import AsyncDriver, AsyncManagedTransaction
 
+from palace_mcp.git.path_resolver import REPOS_ROOT
 from palace_mcp.memory.cypher import (
     ENTITY_COUNTS,
     ENTITY_COUNTS_BY_PROJECT,
@@ -66,6 +67,14 @@ async def get_health(driver: AsyncDriver, *, default_group_id: str) -> HealthRes
     async with driver.session() as session:
         entity_counts, ingest, slugs, per_project = await session.execute_read(_read)
 
+    # Discover repos mounted under REPOS_ROOT (synchronous FS scan, fast).
+    git_available: list[str] = []
+    if REPOS_ROOT.is_dir():
+        for entry in sorted(REPOS_ROOT.iterdir()):
+            if entry.is_dir() and (entry / ".git").exists():
+                git_available.append(entry.name)
+    git_unregistered = sorted(set(git_available) - set(slugs))
+
     default_project = default_group_id.removeprefix("project/")
     return HealthResponse(
         neo4j_reachable=True,
@@ -77,4 +86,6 @@ async def get_health(driver: AsyncDriver, *, default_group_id: str) -> HealthRes
         projects=slugs,
         default_project=default_project,
         entity_counts_per_project=per_project,
+        git_repos_available=git_available,
+        git_repos_unregistered=git_unregistered,
     )
