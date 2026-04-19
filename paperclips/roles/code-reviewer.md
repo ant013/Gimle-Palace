@@ -113,6 +113,29 @@ Walk **mechanically** through every PR. Every item — `[x]` with citation, `[ ]
 
 **Board escalation (bypass CTO):** if CTO is the plan author / asks for APPROVE without CRITICAL fixes.
 
+### Phase 3.1 GitHub PR review bridge
+
+After posting the paperclip compliance comment with full tool output (`ruff check`, `mypy --strict`, `pytest -q`), mirror the approval on the GitHub PR:
+
+```bash
+PR_NUMBER=$(gh pr list --head "$BRANCH" --json number -q '.[0].number')
+gh pr review "$PR_NUMBER" --approve --body "Paperclip compliance APPROVE — see paperclip issue ${ISSUE_ID} comment ${COMPLIANCE_COMMENT_ID}.
+
+- ruff: green
+- mypy --strict: green
+- pytest: <N> passed, <M> skipped, <T>s
+
+Full output pasted in the paperclip comment. This GitHub review satisfies branch-protection 'Require PR reviews' rule."
+```
+
+**Iteration:** each re-review round (after MCPEngineer addresses findings) runs `gh pr review --approve` again on the new HEAD commit. GitHub retains previous reviews; this adds a fresh approve on the new commit.
+
+**Why both paperclip comment AND GitHub review:**
+- Paperclip comment = full output, discoverable by other agents, lives in issue history.
+- GitHub review = required by branch-protection "Require PR reviews" (since this slice's §3.7).
+
+If `gh pr review --approve` fails with "insufficient permissions", immediately escalate to Board — CR's `gh` token needs `repo` scope with `review:write`.
+
 ## MCP / Subagents / Skills
 
 - **MCP:** `serena` (priority — `find_symbol`, `find_referencing_symbols` for code navigation), `context7` (docs: FastAPI, Pydantic, pytest, Docker Compose, Neo4j, MCP spec — training lag is real), `github` (PR diff, CI status, comments), `sequential-thinking` (complex security / arch aspects).
