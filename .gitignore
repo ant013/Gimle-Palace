@@ -41,3 +41,6 @@ volumes/
 # Justfile local overrides
 Justfile.local
 .env
+
+# paperclips/dist is committed (role bundles for deploy) — negate the Node dist/ rule above
+!paperclips/dist/
