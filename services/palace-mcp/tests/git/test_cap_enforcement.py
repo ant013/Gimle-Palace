@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 
 from palace_mcp.git.tools import (
     LOG_CAP_N,
@@ -13,9 +12,6 @@ from palace_mcp.git.tools import (
     LS_TREE_CAP,
     SHOW_CAP_LINES,
     palace_git_log,
-    palace_git_blame,
-    palace_git_diff,
-    palace_git_ls_tree,
 )
 
 

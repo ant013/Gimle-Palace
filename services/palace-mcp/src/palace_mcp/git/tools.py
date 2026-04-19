@@ -14,7 +14,6 @@ from palace_mcp.git.command import (
     run_git,
 )
 from palace_mcp.git.path_resolver import (
-    REPOS_ROOT,
     InvalidPath,
     ProjectNotRegistered,
     resolve_project,
@@ -554,7 +553,7 @@ def parse_ls_tree(raw: str) -> list[TreeEntry]:
         if typ not in ("blob", "tree", "commit"):
             continue
         entries.append(
-            TreeEntry(path=path, type=typ, mode=mode, sha=sha)  # type: ignore[arg-type]
+            TreeEntry(path=path, type=typ, mode=mode, sha=sha)
         )
     return entries
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import pytest
 
+from palace_mcp.memory.project_tools import register_project
 from palace_mcp.memory.projects import InvalidSlug, validate_slug
 
 
@@ -39,11 +40,6 @@ def test_valid_slugs_accepted(slug: str) -> None:
 def test_invalid_slugs_rejected(slug: str, reason: str) -> None:
     with pytest.raises(InvalidSlug):
         validate_slug(slug)
-
-
-import pytest
-
-from palace_mcp.memory.project_tools import register_project
 
 
 @pytest.mark.asyncio

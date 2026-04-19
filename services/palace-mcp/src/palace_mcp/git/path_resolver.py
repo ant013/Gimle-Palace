@@ -7,7 +7,6 @@ can address (spec §3.6).
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from palace_mcp.memory.projects import validate_slug
