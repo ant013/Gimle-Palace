@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from datetime import datetime, timezone
@@ -138,7 +139,8 @@ async def palace_git_log(
         args.append(resolved_path)
 
     try:
-        result = run_git(
+        result = await asyncio.to_thread(
+            run_git,
             args,
             repo_path=repo_path,
             max_stdout_lines=capped_n,
@@ -226,7 +228,8 @@ async def palace_git_show(
 
         # Binary detection via `git cat-file -t <ref>:<path>`.
         spec = f"{ref}:{path}"
-        type_result = run_git(
+        type_result = await asyncio.to_thread(
+            run_git,
             ["cat-file", "-t", spec],
             repo_path=repo_path,
         )
@@ -235,25 +238,26 @@ async def palace_git_show(
         if obj_type != "blob":
             return _error("invalid_path", f"not a blob: {spec!r}", project)
 
-        # Fetch blob content; scan for NUL to detect binary.
-        show_result = run_git(
+        # Fetch blob content capped at SHOW_CAP_LINES + 1 lines;
+        # scan first chunk for NUL to detect binary.
+        show_result = await asyncio.to_thread(
+            run_git,
             ["show", spec],
             repo_path=repo_path,
-            max_stdout_lines=None,
+            max_stdout_lines=SHOW_CAP_LINES + 1,
             timeout_s=5.0,
         )
         if _scan_for_nul(show_result.stdout.encode("utf-8", errors="replace")):
-            size = _get_blob_size(repo_path, ref, path)
+            size_result = await asyncio.to_thread(_get_blob_size, repo_path, ref, path)
             return BinaryFileResponse(
-                project=project, ref=ref, path=path, size_bytes=size
+                project=project, ref=ref, path=path, size_bytes=size_result
             ).model_dump()
 
         # Text file — cap lines.
         lines = show_result.stdout.splitlines(keepends=True)
-        truncated = False
+        truncated = show_result.truncated or len(lines) > SHOW_CAP_LINES
         if len(lines) > SHOW_CAP_LINES:
             lines = lines[:SHOW_CAP_LINES]
-            truncated = True
         content = "".join(lines)
         return ShowFileResponse(
             project=project,
@@ -265,11 +269,22 @@ async def palace_git_show(
         ).model_dump()
 
     # Commit mode.
-    result = run_git(
-        ["show", ref, "--stat", "-p"],
-        repo_path=repo_path,
-        max_stdout_lines=SHOW_CAP_LINES,
-    )
+    try:
+        result = await asyncio.to_thread(
+            run_git,
+            ["show", ref, "--stat", "-p"],
+            repo_path=repo_path,
+            max_stdout_lines=SHOW_CAP_LINES,
+        )
+    except GitTimeout as exc:
+        return _error("git_timeout", str(exc), project)
+    except ForbiddenGitCommand as exc:
+        return _error("forbidden_command", str(exc), project)
+    except GitError as exc:
+        return _error("git_error", str(exc), project)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("palace.git.show unexpected error")
+        return _error("unknown", str(exc), project)
     if result.rc != 0:
         low = result.stderr.lower()
         if "unknown revision" in low or "bad object" in low:
@@ -315,7 +330,7 @@ def _parse_show_commit(raw: str) -> dict[str, Any]:
     if i < len(lines):
         subject = lines[i].strip()
         i += 1
-    while i < len(lines) and not lines[i].startswith(("diff ", "---")):
+    while i < len(lines) and not lines[i].startswith("diff --git"):
         body_lines.append(lines[i])
         i += 1
     while i < len(lines):
@@ -418,7 +433,22 @@ async def palace_git_blame(
 
     # Each output line is ~5 porcelain lines, cap accordingly.
     raw_line_cap = BLAME_CAP_LINES * 5 if (line_start is None and line_end is None) else None
-    result = run_git(args, repo_path=repo_path, max_stdout_lines=raw_line_cap)
+    try:
+        result = await asyncio.to_thread(
+            run_git,
+            args,
+            repo_path=repo_path,
+            max_stdout_lines=raw_line_cap,
+        )
+    except GitTimeout as exc:
+        return _error("git_timeout", str(exc), project)
+    except ForbiddenGitCommand as exc:
+        return _error("forbidden_command", str(exc), project)
+    except GitError as exc:
+        return _error("git_error", str(exc), project)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("palace.git.blame unexpected error")
+        return _error("unknown", str(exc), project)
     if result.rc != 0:
         low = result.stderr.lower()
         if "unknown revision" in low or "bad object" in low:
@@ -503,7 +533,22 @@ async def palace_git_diff(
         args.append(path)
 
     cap = min(max_lines, DIFF_CAP_FULL) if mode == "full" else DIFF_CAP_STAT
-    result = run_git(args, repo_path=repo_path, max_stdout_lines=cap)
+    try:
+        result = await asyncio.to_thread(
+            run_git,
+            args,
+            repo_path=repo_path,
+            max_stdout_lines=cap,
+        )
+    except GitTimeout as exc:
+        return _error("git_timeout", str(exc), project)
+    except ForbiddenGitCommand as exc:
+        return _error("forbidden_command", str(exc), project)
+    except GitError as exc:
+        return _error("git_error", str(exc), project)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("palace.git.diff unexpected error")
+        return _error("unknown", str(exc), project)
     if result.rc != 0:
         low = result.stderr.lower()
         if "unknown revision" in low or "bad object" in low:
@@ -590,7 +635,22 @@ async def palace_git_ls_tree(
     if path is not None:
         args.extend(["--", path])
 
-    result = run_git(args, repo_path=repo_path, max_stdout_lines=LS_TREE_CAP)
+    try:
+        result = await asyncio.to_thread(
+            run_git,
+            args,
+            repo_path=repo_path,
+            max_stdout_lines=LS_TREE_CAP,
+        )
+    except GitTimeout as exc:
+        return _error("git_timeout", str(exc), project)
+    except ForbiddenGitCommand as exc:
+        return _error("forbidden_command", str(exc), project)
+    except GitError as exc:
+        return _error("git_error", str(exc), project)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("palace.git.ls_tree unexpected error")
+        return _error("unknown", str(exc), project)
     if result.rc != 0:
         low = result.stderr.lower()
         if "unknown revision" in low or "not a tree" in low:

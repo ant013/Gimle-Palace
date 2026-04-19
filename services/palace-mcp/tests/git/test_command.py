@@ -151,10 +151,11 @@ def test_broken_pipe_raises_git_error(tmp_repo: Path) -> None:
 def test_missing_git_binary_raises_git_error(
     tmp_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Set PATH to a non-existent dir so git cannot be found — assert GitError.
+    """Patch SAFE_ENV PATH to a non-existent dir so git cannot be found — assert GitError.
 
     Maps to spec §7.6. Verifies error message is human-readable.
     """
-    monkeypatch.setenv("PATH", "/nonexistent")
+    import palace_mcp.git.command as cmd_mod
+    monkeypatch.setitem(cmd_mod.SAFE_ENV, "PATH", "/nonexistent")
     with pytest.raises(GitError, match=r"git"):
         run_git(["log", "--oneline", "-1"], repo_path=tmp_repo)

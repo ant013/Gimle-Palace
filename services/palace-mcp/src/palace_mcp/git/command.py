@@ -7,12 +7,14 @@ stderr drain on kill.
 
 from __future__ import annotations
 
-import os
+import logging
 import shutil
 import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 ALLOWED_VERBS: frozenset[str] = frozenset(
     {"log", "show", "blame", "diff", "ls-tree", "cat-file"}
@@ -25,7 +27,7 @@ SAFE_ENV: dict[str, str] = {
     "GIT_CONFIG_GLOBAL": "/dev/null",
     "GIT_CONFIG_SYSTEM": "/dev/null",
     "GIT_CONFIG_NOSYSTEM": "1",
-    "HOME": "/tmp",
+    "HOME": "/nonexistent",
     "LANG": "C.UTF-8",
     "GIT_TERMINAL_PROMPT": "0",
     "GIT_CONFIG_COUNT": "1",
@@ -81,9 +83,9 @@ def run_git(
     if verb not in ALLOWED_VERBS:
         raise ForbiddenGitCommand(verb)
 
-    git_bin = shutil.which("git")
+    git_bin = shutil.which("git", path=SAFE_ENV["PATH"])
     if git_bin is None:
-        raise GitError(rc=-1, stderr=f"git binary not found (PATH={os.environ.get('PATH', '')})")
+        raise GitError(rc=-1, stderr=f"git binary not found in PATH={SAFE_ENV['PATH']!r}")
     full = [git_bin, "-C", str(repo_path), *args]
 
     start = time.monotonic()
@@ -94,7 +96,7 @@ def run_git(
             stderr=subprocess.PIPE,
             env=dict(SAFE_ENV),
             cwd=str(repo_path),
-            bufsize=1,  # line-buffered
+            bufsize=0,
         )
     except (FileNotFoundError, OSError) as exc:
         raise GitError(rc=-1, stderr=f"git: {exc}") from exc
@@ -172,7 +174,7 @@ def _drain_and_kill(proc: subprocess.Popen[bytes]) -> str:
         try:
             proc.wait(timeout=2.0)
         except subprocess.TimeoutExpired:
-            pass
+            logger.warning("git pid=%d did not exit after SIGKILL", proc.pid)
         return tail.decode("utf-8", errors="replace")
     except Exception:
         return ""
