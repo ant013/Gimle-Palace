@@ -8,6 +8,11 @@ Tools registered:
 - palace.health.status
 - palace.memory.lookup
 - palace.memory.health
+- palace.git.log
+- palace.git.show
+- palace.git.blame
+- palace.git.diff
+- palace.git.ls_tree
 """
 
 import logging
@@ -26,6 +31,13 @@ from palace_mcp.errors import (
     DriverUnavailableError,
     UnknownEntityTypeError,
     handle_tool_error,
+)
+from palace_mcp.git.tools import (
+    palace_git_blame,
+    palace_git_diff,
+    palace_git_log,
+    palace_git_ls_tree,
+    palace_git_show,
 )
 from palace_mcp.memory.health import get_health
 from palace_mcp.memory.lookup import perform_lookup
@@ -270,3 +282,111 @@ async def palace_memory_get_project_overview(slug: str) -> dict[str, Any]:
         return {"ok": False, "error": "unknown_project", "message": str(exc)}
     except Exception as exc:
         handle_tool_error(exc)
+
+
+# ---------------------------------------------------------------------------
+# palace.git.* — read-only git tools
+# ---------------------------------------------------------------------------
+
+
+@_tool(
+    name="palace.git.log",
+    description=(
+        "Return commit history for a mounted project repo. "
+        "Use palace.git.show to inspect a specific commit SHA or file at a ref. "
+        "project: slug of a bind-mounted repo (e.g. 'gimle'). "
+        "ref: branch/tag/SHA (default HEAD). n: max entries (capped at 200). "
+        "path: optional file filter. since: ISO date filter. author: author filter."
+    ),
+)
+async def _palace_git_log(
+    project: str,
+    ref: str = "HEAD",
+    n: int = 20,
+    path: str | None = None,
+    since: str | None = None,
+    author: str | None = None,
+) -> dict[str, Any]:
+    return await palace_git_log(
+        project, ref=ref, n=n, path=path, since=since, author=author
+    )
+
+
+@_tool(
+    name="palace.git.show",
+    description=(
+        "Show a commit's diff+metadata (path omitted) or a file's content at a ref (path provided). "
+        "Use palace.git.log to find commit SHAs. "
+        "project: slug of a bind-mounted repo. ref: branch/tag/SHA. "
+        "path: relative file path within the repo (omit for commit mode)."
+    ),
+)
+async def _palace_git_show(
+    project: str,
+    ref: str,
+    path: str | None = None,
+) -> dict[str, Any]:
+    return await palace_git_show(project, ref=ref, path=path)
+
+
+@_tool(
+    name="palace.git.blame",
+    description=(
+        "Return per-line blame annotation for a file. "
+        "Use palace.git.show to view file content first. "
+        "project: slug of a bind-mounted repo. path: relative file path. "
+        "ref: branch/tag/SHA (default HEAD). "
+        "line_start/line_end: optional 1-based line range."
+    ),
+)
+async def _palace_git_blame(
+    project: str,
+    path: str,
+    ref: str = "HEAD",
+    line_start: int | None = None,
+    line_end: int | None = None,
+) -> dict[str, Any]:
+    return await palace_git_blame(
+        project, path=path, ref=ref, line_start=line_start, line_end=line_end
+    )
+
+
+@_tool(
+    name="palace.git.diff",
+    description=(
+        "Show diff between two refs. mode='full' returns unified diff text; "
+        "mode='stat' returns per-file added/deleted counts (faster). "
+        "Use palace.git.log to find ref SHAs. "
+        "project: slug of a bind-mounted repo. ref_a/ref_b: refs to compare. "
+        "path: optional file filter. max_lines: cap for full mode (default 500, max 2000)."
+    ),
+)
+async def _palace_git_diff(
+    project: str,
+    ref_a: str,
+    ref_b: str,
+    path: str | None = None,
+    mode: str = "full",
+    max_lines: int = 500,
+) -> dict[str, Any]:
+    return await palace_git_diff(
+        project, ref_a=ref_a, ref_b=ref_b, path=path, mode=mode, max_lines=max_lines
+    )
+
+
+@_tool(
+    name="palace.git.ls_tree",
+    description=(
+        "List files and directories in a repo at a given ref. "
+        "recursive=true traverses all subdirectories (use for full-tree discovery). "
+        "project: slug of a bind-mounted repo. ref: branch/tag/SHA (default HEAD). "
+        "path: optional subtree prefix. recursive: whether to recurse (default false)."
+    ),
+)
+async def _palace_git_ls_tree(
+    project: str,
+    ref: str = "HEAD",
+    path: str | None = None,
+    recursive: bool = False,
+) -> dict[str, Any]:
+    return await palace_git_ls_tree(project, ref=ref, path=path, recursive=recursive)
