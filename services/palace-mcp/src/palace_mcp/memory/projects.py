@@ -2,9 +2,32 @@
 
 from __future__ import annotations
 
+import re
+
 from neo4j import AsyncManagedTransaction
 
 from palace_mcp.memory.cypher import LIST_PROJECT_SLUGS
+
+
+_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{0,62}$")
+
+
+class InvalidSlug(ValueError):
+    """Raised when a project slug fails format validation.
+
+    Slug format: `[a-z0-9][a-z0-9\\-]{0,62}` (1–63 chars,
+    lowercase alphanumerics plus hyphen, no leading hyphen).
+    """
+
+    def __init__(self, slug: str) -> None:
+        super().__init__(f"invalid project slug: {slug!r}")
+        self.slug = slug
+
+
+def validate_slug(slug: str) -> None:
+    """Validate a project slug. Raise InvalidSlug if invalid."""
+    if not isinstance(slug, str) or not _SLUG_RE.match(slug):
+        raise InvalidSlug(slug)
 
 
 class UnknownProjectError(ValueError):

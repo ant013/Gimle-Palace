@@ -92,6 +92,36 @@ slice status, paperclip API tokens, known library pitfalls, incident
 lessons, and deploy notes. The repo itself assumes operator memory
 exists but does not reference any single memory file by path.
 
+## Mounting project repos for palace.git.*
+
+`palace-mcp` exposes 5 read-only git tools (`palace.git.log`, `.show`,
+`.blame`, `.diff`, `.ls_tree`). Each tool takes a `project` slug that
+must correspond to a directory bind-mounted at `/repos/<slug>` inside
+the container.
+
+**Currently mounted projects (docker-compose.yml):**
+
+| Slug    | Host path                     | Mount                    |
+|---------|-------------------------------|--------------------------|
+| `gimle` | `/Users/Shared/Ios/Gimle-Palace` | `/repos/gimle:ro`     |
+
+**To add a new project:**
+1. Add a bind-mount entry to `docker-compose.yml` under `palace-mcp.volumes`:
+   ```yaml
+   - /path/to/your/repo:/repos/your-slug:ro
+   ```
+2. Restart the `palace-mcp` container (`docker compose --profile review up -d --force-recreate palace-mcp`).
+3. Optionally register the project in Neo4j via `palace.memory.register_project` so
+   it appears in `palace.memory.health` without the `git_repos_unregistered` warning.
+
+**Security notes:**
+- All bind-mounts are read-only (`:ro`).
+- `git` commands run with a sanitized environment (`GIT_CONFIG_NOSYSTEM=1`,
+  `PATH=/usr/bin:/bin`, no `HOME` git config) — the container cannot write
+  to or exfiltrate credentials from mounted repos.
+- Only whitelisted git verbs (`log`, `show`, `blame`, `diff`, `ls-tree`,
+  `cat-file`) are executed; write verbs are blocked at the subprocess layer.
+
 ## Pinning
 
 When editing specs or plans, always reference the commit SHA or

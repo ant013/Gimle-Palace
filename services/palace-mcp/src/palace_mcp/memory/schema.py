@@ -69,3 +69,6 @@ class HealthResponse(BaseModel):
     projects: list[str] = Field(default_factory=list)
     default_project: str | None = None
     entity_counts_per_project: dict[str, dict[str, int]] = Field(default_factory=dict)
+    # git section: repos bind-mounted at /repos/<slug>
+    git_repos_available: list[str] = Field(default_factory=list)
+    git_repos_unregistered: list[str] = Field(default_factory=list)
