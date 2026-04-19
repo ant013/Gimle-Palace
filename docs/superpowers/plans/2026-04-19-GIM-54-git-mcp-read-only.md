@@ -890,12 +890,60 @@ uv run pytest tests/git/test_command.py -v
 
 Expected: all tests pass. If `test_timeout_raises_git_timeout` flakes (budget too tight), bump `timeout_s=0.0001` → `0.001`.
 
-- [ ] **Step 13: Commit**
+- [ ] **Step 13: Add `BrokenPipeError` mock test (CR Phase 1.2 finding #4)**
+
+Append to `services/palace-mcp/tests/git/test_command.py`:
+
+```python
+def test_broken_pipe_raises_git_error(tmp_repo: Path) -> None:
+    """Mock proc.stdout.readline to raise BrokenPipeError — assert GitError raised.
+
+    Maps to spec §7.6. Verifies the streaming loop handles broken pipes.
+    """
+    with patch(
+        "palace_mcp.git.command.subprocess.Popen",
+        spec=True,
+    ) as mock_popen:
+        mock_proc = mock_popen.return_value.__enter__.return_value
+        # readline raises BrokenPipeError on the first call
+        mock_proc.stdout.readline.side_effect = BrokenPipeError("pipe broken")
+        mock_proc.stderr.read.return_value = b"broken pipe"
+        mock_proc.returncode = None
+        with pytest.raises(GitError):
+            run_git(["log", "--oneline", "-5"], repo_path=tmp_repo)
+```
+
+- [ ] **Step 14: Add missing-git-binary test (CR Phase 1.2 finding #5)**
+
+Append to `services/palace-mcp/tests/git/test_command.py`:
+
+```python
+def test_missing_git_binary_raises_git_error(
+    tmp_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Set PATH to a non-existent dir so git cannot be found — assert GitError.
+
+    Maps to spec §7.6. Verifies error message is human-readable.
+    """
+    monkeypatch.setenv("PATH", "/nonexistent")
+    with pytest.raises(GitError, match=r"git"):
+        run_git(["log", "--oneline", "-1"], repo_path=tmp_repo)
+```
+
+- [ ] **Step 15: Run all command tests — expect pass**
+
+```bash
+uv run pytest tests/git/test_command.py -v
+```
+
+Expected: all tests pass (including the two new ones).
+
+- [ ] **Step 16: Commit**
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/git/command.py \
         services/palace-mcp/tests/git/test_command.py
-git commit -m "feat(git-mcp): run_git with whitelist, env, timeout, capped stream"
+git commit -m "feat(git-mcp): run_git with whitelist, env, timeout, capped stream + error-path tests"
 ```
 
 ---
@@ -1366,6 +1414,253 @@ git commit -m "feat(git-mcp): palace.git.log with NULL-delim parser"
 
 ---
 
+### Task 2.6a: `_valid_ref` security tests (CR Phase 1.2 finding #1)
+
+**Files:**
+- Modify: `services/palace-mcp/tests/git/test_tool_log.py` (append) or create `services/palace-mcp/tests/git/test_valid_ref.py`
+
+Maps to spec §5.3 / §7.6. `_valid_ref` is the only guard against injection via ref arguments.
+
+- [ ] **Step 1: Write parametrized tests for `_valid_ref`**
+
+File: `services/palace-mcp/tests/git/test_valid_ref.py`
+
+```python
+"""Security tests for tools._valid_ref. Spec §5.3, §7.6.
+
+Ensures the ref whitelist rejects injection patterns and accepts
+legitimate git refs.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from palace_mcp.git.tools import _valid_ref
+
+
+@pytest.mark.parametrize(
+    "ref",
+    [
+        "HEAD",
+        "HEAD~3",
+        "main",
+        "abc1234",
+        "v1.0.0",
+        "feature/foo",
+    ],
+)
+def test_valid_refs_accepted(ref: str) -> None:
+    assert _valid_ref(ref) is True
+
+
+@pytest.mark.parametrize(
+    "ref,reason",
+    [
+        ("--upload-pack=x", "git flag injection"),
+        ("-flag", "leading dash"),
+        ("HEAD; rm -rf /", "shell metachar semicolon"),
+        ("HEAD\ninjection", "newline injection"),
+        ("", "empty string"),
+        ("HEAD\x00null", "nul byte"),
+    ],
+)
+def test_invalid_refs_rejected(ref: str, reason: str) -> None:
+    assert _valid_ref(ref) is False, f"Expected False for {reason!r}: {ref!r}"
+```
+
+- [ ] **Step 2: Run tests — expect pass (function already exists)**
+
+```bash
+uv run pytest tests/git/test_valid_ref.py -v
+```
+
+Expected: 12 passed (6 valid + 6 invalid).
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add services/palace-mcp/tests/git/test_valid_ref.py
+git commit -m "test(git-mcp): add _valid_ref security parametrized tests (spec §5.3)"
+```
+
+---
+
+### Task 2.6b: Per-tool output-cap integration tests (CR Phase 1.2 finding #2)
+
+**Files:**
+- Create: `services/palace-mcp/tests/git/test_cap_enforcement.py`
+- Modify: `services/palace-mcp/tests/git/conftest.py` (add `large_repo` fixture)
+
+Maps to spec §7.6 Level 4. Verifies each tool's cap constant is enforced in practice.
+
+- [ ] **Step 1: Extend `conftest.py` with `large_repo` fixture**
+
+Append to `services/palace-mcp/tests/git/conftest.py`:
+
+```python
+@pytest.fixture
+def large_repo(tmp_path: Path) -> Path:
+    """Git repo exceeding all per-tool output caps.
+
+    Creates:
+    - 250 commits (LOG_CAP_N=200)
+    - a single file with 500 lines (BLAME_CAP_LINES=400, SHOW_CAP_LINES=500)
+    - 600 files staged at once (LS_TREE_CAP=500)
+    - a diff with 2500 lines changed (DIFF_CAP_FULL=2000)
+    - a diff across 600 files (DIFF_CAP_STAT=500)
+    """
+    repo = tmp_path / "repos" / "large"
+    repo.mkdir(parents=True)
+    _run(["git", "init", "-q", "-b", "main"], cwd=repo)
+    _run(["git", "config", "user.email", "t@t"], cwd=repo)
+    _run(["git", "config", "user.name", "T"], cwd=repo)
+
+    # 600 files (covers ls_tree + diff stat cap)
+    for i in range(600):
+        (repo / f"f{i:04d}.txt").write_text(f"file {i}\n" * 5)
+    _run(["git", "add", "."], cwd=repo)
+    _run(["git", "commit", "-m", "bulk-files", "-q"], cwd=repo)
+
+    # Large single file: 500 lines (covers blame + show caps)
+    (repo / "big.txt").write_text("".join(f"line {i}\n" for i in range(500)))
+    _run(["git", "add", "big.txt"], cwd=repo)
+    _run(["git", "commit", "-m", "big-file", "-q"], cwd=repo)
+
+    # 250 more commits (covers log cap)
+    for i in range(250):
+        (repo / "counter.txt").write_text(f"{i}\n")
+        _run(["git", "add", "counter.txt"], cwd=repo)
+        _run(["git", "commit", "-m", f"tick-{i}", "-q"], cwd=repo)
+
+    return repo
+
+
+@pytest.fixture
+def large_repos_root(large_repo: Path) -> Path:
+    """Simulate /repos/ containing the large project."""
+    return large_repo.parent
+```
+
+- [ ] **Step 2: Write cap enforcement tests**
+
+File: `services/palace-mcp/tests/git/test_cap_enforcement.py`
+
+```python
+"""Integration tests: each tool truncates at its cap constant. Spec §7.6 Level 4."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from palace_mcp.git.tools import (
+    LOG_CAP_N,
+    DIFF_CAP_FULL,
+    DIFF_CAP_STAT,
+    BLAME_CAP_LINES,
+    LS_TREE_CAP,
+    SHOW_CAP_LINES,
+    palace_git_log,
+    palace_git_diff,
+    palace_git_blame,
+    palace_git_ls_tree,
+    palace_git_show,
+)
+
+
+@pytest.mark.asyncio
+async def test_log_cap(
+    monkeypatch: pytest.MonkeyPatch, large_repos_root: Path
+) -> None:
+    monkeypatch.setattr("palace_mcp.git.path_resolver.REPOS_ROOT", large_repos_root)
+    res = await palace_git_log(project="large", n=LOG_CAP_N + 100)
+    assert res["ok"] is True
+    assert len(res["entries"]) == LOG_CAP_N
+    assert res["truncated"] is True
+
+
+@pytest.mark.asyncio
+async def test_diff_full_cap(
+    monkeypatch: pytest.MonkeyPatch, large_repos_root: Path
+) -> None:
+    monkeypatch.setattr("palace_mcp.git.path_resolver.REPOS_ROOT", large_repos_root)
+    # Diff between initial bulk-files commit and HEAD should exceed DIFF_CAP_FULL.
+    res = await palace_git_diff(
+        project="large", ref_a="HEAD~251", ref_b="HEAD", mode="full"
+    )
+    assert res["ok"] is True
+    assert res["truncated"] is True
+    assert res["diff"].count("\n") <= DIFF_CAP_FULL
+
+
+@pytest.mark.asyncio
+async def test_diff_stat_cap(
+    monkeypatch: pytest.MonkeyPatch, large_repos_root: Path
+) -> None:
+    monkeypatch.setattr("palace_mcp.git.path_resolver.REPOS_ROOT", large_repos_root)
+    res = await palace_git_diff(
+        project="large", ref_a="HEAD~251", ref_b="HEAD~250", mode="stat"
+    )
+    assert res["ok"] is True
+    assert res["truncated"] is True
+    assert len(res["files"]) <= DIFF_CAP_STAT
+
+
+@pytest.mark.asyncio
+async def test_blame_cap(
+    monkeypatch: pytest.MonkeyPatch, large_repos_root: Path
+) -> None:
+    monkeypatch.setattr("palace_mcp.git.path_resolver.REPOS_ROOT", large_repos_root)
+    res = await palace_git_blame(project="large", ref="HEAD", path="big.txt")
+    assert res["ok"] is True
+    assert res["truncated"] is True
+    assert len(res["lines"]) == BLAME_CAP_LINES
+
+
+@pytest.mark.asyncio
+async def test_ls_tree_cap(
+    monkeypatch: pytest.MonkeyPatch, large_repos_root: Path
+) -> None:
+    monkeypatch.setattr("palace_mcp.git.path_resolver.REPOS_ROOT", large_repos_root)
+    res = await palace_git_ls_tree(project="large", ref="HEAD")
+    assert res["ok"] is True
+    assert res["truncated"] is True
+    assert len(res["entries"]) == LS_TREE_CAP
+
+
+@pytest.mark.asyncio
+async def test_show_cap(
+    monkeypatch: pytest.MonkeyPatch, large_repos_root: Path
+) -> None:
+    monkeypatch.setattr("palace_mcp.git.path_resolver.REPOS_ROOT", large_repos_root)
+    res = await palace_git_show(project="large", ref="HEAD", path="big.txt")
+    assert res["ok"] is True
+    assert res["truncated"] is True
+    assert res["content"].count("\n") <= SHOW_CAP_LINES
+```
+
+- [ ] **Step 3: Run tests — expect pass after all tool tasks complete**
+
+Note: these tests must be run **after** Tasks 2.7-2.10 are implemented (all tool functions referenced must exist). Run as the final integration check at the end of Phase 2:
+
+```bash
+uv run pytest tests/git/test_cap_enforcement.py -v
+```
+
+Expected: 6 passed.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add services/palace-mcp/tests/git/conftest.py \
+        services/palace-mcp/tests/git/test_cap_enforcement.py
+git commit -m "test(git-mcp): per-tool cap enforcement integration tests (spec §7.6 L4)"
+```
+
+---
+
 ### Task 2.7: `palace.git.show` — commit + file modes, binary detection
 
 **Files:**
@@ -1509,27 +1804,36 @@ async def palace_git_show(
         except InvalidPath as exc:
             return _error("invalid_path", str(exc), project)
 
-        # Binary detection — fetch first 8 KiB as bytes.
+        # Binary detection via `git cat-file -t <ref>:<path>` (single
+        # subprocess). CR Phase 1.2 finding #3: eliminates _raw_bytes_show
+        # duplicate Popen; spec §3.3 mandates single-subprocess flow.
         spec = f"{ref}:{path}"
-        bin_probe = run_git(
+        type_result = run_git(
+            ["cat-file", "-t", spec],
+            repo_path=repo_path,
+        )
+        obj_type = type_result.stdout.strip() if type_result.rc == 0 else ""
+
+        if obj_type != "blob":
+            return _error("invalid_path", f"not a blob: {spec!r}", project)
+
+        # Fetch blob content once; scan decoded bytes for NUL proxy.
+        # UTF-8 decode with errors="replace" preserves \x00 as \x00 in
+        # Python, so _scan_for_nul works on the encoded representation.
+        show_result = run_git(
             ["show", spec],
             repo_path=repo_path,
             max_stdout_lines=None,
             timeout_s=5.0,
         )
-        # Re-fetch raw bytes for NUL scan: `git show <ref>:<path>` writes
-        # decoded utf-8 in our pipeline, so the NUL byte is already a
-        # replacement char. Use a dedicated raw-bytes path.
-        raw_bytes = _raw_bytes_show(repo_path, spec)
-        if _scan_for_nul(raw_bytes):
+        if _scan_for_nul(show_result.stdout.encode("utf-8", errors="replace")):
             size = _get_blob_size(repo_path, ref, path)
             return BinaryFileResponse(
                 project=project, ref=ref, path=path, size_bytes=size
             ).model_dump()
 
-        # Text file — use the already-decoded content from bin_probe,
-        # cap lines.
-        lines = bin_probe.stdout.splitlines(keepends=True)
+        # Text file — cap lines.
+        lines = show_result.stdout.splitlines(keepends=True)
         truncated = False
         if len(lines) > SHOW_CAP_LINES:
             lines = lines[:SHOW_CAP_LINES]
@@ -1568,31 +1872,6 @@ async def palace_git_show(
         diff=parsed["diff"],
         truncated=result.truncated,
     ).model_dump()
-
-
-def _raw_bytes_show(repo_path: Any, spec: str) -> bytes:
-    """Bypass UTF-8 decoding for binary detection only. Returns first
-    8 KiB raw."""
-    import shutil
-    import subprocess as sp
-
-    git_bin = shutil.which("git") or "/usr/bin/git"
-    p = sp.Popen(
-        [git_bin, "-C", str(repo_path), "show", spec],
-        stdout=sp.PIPE,
-        stderr=sp.DEVNULL,
-        env=dict(SAFE_ENV),
-    )
-    try:
-        assert p.stdout is not None
-        data = p.stdout.read(8192)
-    finally:
-        p.kill()
-        try:
-            p.wait(timeout=2.0)
-        except sp.TimeoutExpired:
-            pass
-    return data
 
 
 def _parse_show_commit(raw: str) -> dict[str, Any]:
