@@ -34,7 +34,7 @@ from palace_mcp.memory.project_tools import (
     list_projects,
     register_project,
 )
-from palace_mcp.memory.projects import UnknownProjectError
+from palace_mcp.memory.projects import InvalidSlug, UnknownProjectError
 from palace_mcp.memory.schema import HealthResponse as MemoryHealthResponse
 from palace_mcp.memory.schema import LookupRequest, LookupResponse, ProjectInfo
 
@@ -222,6 +222,12 @@ async def palace_memory_register_project(
             repo_url=repo_url,
         )
         return info.model_dump()
+    except InvalidSlug as exc:
+        return {
+            "ok": False,
+            "error_code": "invalid_slug",
+            "message": str(exc),
+        }
     except Exception as exc:
         handle_tool_error(exc)
 
