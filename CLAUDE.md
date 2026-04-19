@@ -2,22 +2,46 @@
 
 ## Branch Flow
 
+Single mainline: `develop`. Feature branches cut from develop, PR'd back.
+`main` is an optional release-stable reference.
+
 ```
-feature/* → develop (PR, CodeReviewer sign-off required)
-develop → main (release PR, CTO approval required)
+feature/GIM-N-<slug>    (all work: code, spec, plan, research, docs)
+      │
+      ▼  PR → squash-merge (CI green + CR paperclip APPROVE + CR GitHub review + QA evidence present)
+develop                   (integration tip; iMac deploys from here)
+      │
+      ▼  .github/workflows/release-cut.yml (label `release-cut` on a merged PR, or workflow_dispatch)
+main                      (stable release ref — tags live here)
 ```
 
-**Rules:**
-- All work in feature branches cut from `develop`:
-  `git checkout -b feature/GIM-N origin/develop`
-- PRs open against `develop`, never `main`.
-- `main` holds meta (specs, plans, research, postmortems); `develop`
-  holds product code + plan-files.
-- Force-push to `main`/`develop` is forbidden.
-- **No admin CI override on merge.** Branch protection requires all
-  four checks (`lint`, `typecheck`, `test`, `docker-build`) green
-  before squash-merge. Rule enforced after the GIM-48 incident — see
-  `docs/postmortems/2026-04-18-GIM-48-n1a-broken-merge.md`.
+**Iron rules:**
+- Every change — product code, spec, plan, research, postmortem, role-file, CLAUDE.md itself — goes through a feature branch + PR. Zero direct human commits to `develop` or `main`.
+- Force push forbidden on `develop` / `main`; on feature branches only `--force-with-lease` AND only when you are the sole writer of the current phase (see `git-workflow.md` fragment).
+- Branch protection on develop + main: admin-bypass disabled. All required checks must pass for PR merge. `main` accepts push only from `github-actions[bot]` via `release-cut.yml`.
+- Feature branches live in paperclip-managed worktrees; primary repo stays on `develop`.
+- **Operator/Board checkout location:** a separate clone, typically `~/<project>-board/` or `~/Android/<project>/`. Never use the production deploy checkout (`/Users/Shared/Ios/<project>/`) for spec/plan writing.
+
+**Spec + plan location:** `docs/superpowers/specs/` and `docs/superpowers/plans/` on the feature branch. After squash-merge they land on develop. Main gets them only when `release-cut.yml` Action runs.
+
+**Required status checks on develop:**
+- `lint`
+- `typecheck`
+- `test`
+- `docker-build`
+- `qa-evidence-present` (verifies PR body has `## QA Evidence` with SHA, unless `micro-slice` label)
+
+**CR approval path:** CR posts full compliance comment on paperclip issue AND `gh pr review --approve` on the GitHub PR (the GitHub review satisfies branch-protection's "Require PR reviews" rule).
+
+**Release-cut procedure:** to update `main`:
+1. Add label `release-cut` to a merged develop PR, OR
+2. Run `gh workflow run release-cut.yml`.
+
+The Action fast-forwards `main` to `origin/develop` using `RELEASE_CUT_TOKEN` (GitHub App or PAT with `contents: write`). No human pushes `main`, ever.
+
+See also:
+- `paperclips/fragments/shared/fragments/git-workflow.md` — per-agent rules.
+- `docs/runbooks/2026-04-19-meta-workflow-migration-rollback.md` — if branch protection or the new workflows cause a block and need to be reverted.
 
 ## Docker Compose Profiles
 

@@ -1,0 +1,43 @@
+name: release-cut
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Reason for release cut"
+        required: false
+        default: "manual dispatch"
+  pull_request:
+    types: [closed]
+    branches: [develop]
+
+jobs:
+  cut:
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       contains(github.event.pull_request.labels.*.name, 'release-cut'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_CUT_TOKEN }}
+      - name: Fast-forward main to develop
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin develop main
+          git checkout main
+          BEFORE=$(git rev-parse HEAD)
+          git merge --ff-only origin/develop
+          AFTER=$(git rev-parse HEAD)
+          git push origin main
+          echo "Released main: $BEFORE -> $AFTER"
+          echo "## Release cut" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- before: $BEFORE" >> "$GITHUB_STEP_SUMMARY"
+          echo "- after:  $AFTER" >> "$GITHUB_STEP_SUMMARY"
+          echo "- trigger: ${{ github.event_name }}" >> "$GITHUB_STEP_SUMMARY"
