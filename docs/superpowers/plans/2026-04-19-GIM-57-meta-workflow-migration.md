@@ -577,7 +577,7 @@ If this succeeds, CR has the scope. If it fails with "insufficient permissions",
 
 ```bash
 # Dismiss the dry-run approval
-gh pr review 25 --body "Dismissing the dry-run approval above — was a permission check only, not a real CR verdict." --request-changes
+gh pr review "$PR_NUM" --body "Dismissing the dry-run approval above — was a permission check only, not a real CR verdict." --request-changes
 ```
 
 (If `gh` doesn't support dismiss, document the dry-run commentary in the PR comment so downstream CR is not confused.)
@@ -851,7 +851,10 @@ Gimle side:
 - [ ] **Step 1: cd into submodule, create branch**
 
 ```bash
+# Ensure submodule initialized (cold-clone safety) — CR WARNING #3
+git submodule update --init paperclips/fragments/shared
 cd paperclips/fragments/shared
+git fetch origin
 git checkout -b meta-workflow-migration origin/main
 git status
 # Expected: 3 modified files (git-workflow, cto-no-code-ban, phase-handoff)
