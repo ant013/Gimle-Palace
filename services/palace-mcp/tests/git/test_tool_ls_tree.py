@@ -69,7 +69,9 @@ async def test_ls_tree_recursive(
     subprocess.run(["git", "add", "."], cwd=tmp_repo, check=True, capture_output=True)
     subprocess.run(
         ["git", "commit", "-m", "add sub", "-q"],
-        cwd=tmp_repo, check=True, capture_output=True,
+        cwd=tmp_repo,
+        check=True,
+        capture_output=True,
     )
     monkeypatch.setattr("palace_mcp.git.path_resolver.REPOS_ROOT", repos_root)
     result = await palace_git_ls_tree("testproj", recursive=True)

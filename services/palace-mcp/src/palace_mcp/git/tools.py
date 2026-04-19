@@ -171,7 +171,10 @@ async def palace_git_log(
     logger.info(
         "git.tool.call tool=palace.git.log project=%s duration_ms=%d rc=0 "
         "stdout_bytes=%d truncated=%s",
-        project, result.duration_ms, len(result.stdout), result.truncated,
+        project,
+        result.duration_ms,
+        len(result.stdout),
+        result.truncated,
     )
     return resp.model_dump()
 
@@ -374,9 +377,7 @@ def parse_blame_porcelain(raw: str) -> list[BlameLine]:
             date_iso = ""
             try:
                 ts = int(meta.get("author-time", "0"))
-                date_iso = datetime.fromtimestamp(
-                    ts, tz=timezone.utc
-                ).isoformat()
+                date_iso = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
             except ValueError:
                 date_iso = ""
             lines.append(
@@ -432,7 +433,9 @@ async def palace_git_blame(
     args.extend(["--", path])
 
     # Each output line is ~5 porcelain lines, cap accordingly.
-    raw_line_cap = BLAME_CAP_LINES * 5 if (line_start is None and line_end is None) else None
+    raw_line_cap = (
+        BLAME_CAP_LINES * 5 if (line_start is None and line_end is None) else None
+    )
     try:
         result = await asyncio.to_thread(
             run_git,
@@ -487,9 +490,7 @@ def parse_numstat(raw: str) -> list[FileStat]:
             stats.append(FileStat(path=path, added=None, deleted=None))
         else:
             try:
-                stats.append(
-                    FileStat(path=path, added=int(a), deleted=int(d))
-                )
+                stats.append(FileStat(path=path, added=int(a), deleted=int(d)))
             except ValueError:
                 continue
     return stats
@@ -597,9 +598,7 @@ def parse_ls_tree(raw: str) -> list[TreeEntry]:
         mode, typ, sha = parts
         if typ not in ("blob", "tree", "commit"):
             continue
-        entries.append(
-            TreeEntry(path=path, type=typ, mode=mode, sha=sha)
-        )
+        entries.append(TreeEntry(path=path, type=typ, mode=mode, sha=sha))
     return entries
 
 

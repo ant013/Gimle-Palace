@@ -85,7 +85,9 @@ def run_git(
 
     git_bin = shutil.which("git", path=SAFE_ENV["PATH"])
     if git_bin is None:
-        raise GitError(rc=-1, stderr=f"git binary not found in PATH={SAFE_ENV['PATH']!r}")
+        raise GitError(
+            rc=-1, stderr=f"git binary not found in PATH={SAFE_ENV['PATH']!r}"
+        )
     full = [git_bin, "-C", str(repo_path), *args]
 
     start = time.monotonic()
@@ -113,18 +115,13 @@ def run_git(
                 break
             line = line_bytes.decode("utf-8", errors="replace")
             stdout_lines.append(line)
-            if (
-                max_stdout_lines is not None
-                and len(stdout_lines) >= max_stdout_lines
-            ):
+            if max_stdout_lines is not None and len(stdout_lines) >= max_stdout_lines:
                 truncated = True
                 break
             # Timeout check.
             if time.monotonic() - start > timeout_s:
                 _drain_and_kill(proc)
-                raise GitTimeout(
-                    f"git {verb} exceeded {timeout_s}s"
-                )
+                raise GitTimeout(f"git {verb} exceeded {timeout_s}s")
     except GitTimeout:
         raise
     except Exception as exc:
@@ -140,9 +137,7 @@ def run_git(
             _, stderr_bytes = proc.communicate(
                 timeout=max(timeout_s - (time.monotonic() - start), 0.1)
             )
-            stderr_tail = stderr_bytes.decode(
-                "utf-8", errors="replace"
-            )[:4096]
+            stderr_tail = stderr_bytes.decode("utf-8", errors="replace")[:4096]
             rc = proc.returncode
         except subprocess.TimeoutExpired:
             _drain_and_kill(proc)

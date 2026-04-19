@@ -22,25 +22,25 @@ VALID_REFS = [
 ]
 
 INVALID_REFS = [
-    "",                      # empty
-    " main",                 # leading space
-    "main branch",           # space in middle
-    "--injected-flag",       # leading dash (flag injection)
-    "-n",                    # flag injection
-    "\x00hidden",            # NUL byte
-    "ref\nnewline",          # newline
-    "ref\ttab",              # tab
-    "a" * 201,               # exceeds 200 chars
-    "$(evil)",               # shell metachar
-    "`backtick`",            # backtick
-    "ref;evil",              # semicolon
-    "ref|pipe",              # pipe
-    "ref&bg",                # ampersand
-    "ref>redirect",          # redirect
-    "ref<redirect",          # redirect
-    "ref'quote",             # single quote
-    'ref"quote',             # double quote
-    "ref\\backslash",        # backslash (not in whitelist)
+    "",  # empty
+    " main",  # leading space
+    "main branch",  # space in middle
+    "--injected-flag",  # leading dash (flag injection)
+    "-n",  # flag injection
+    "\x00hidden",  # NUL byte
+    "ref\nnewline",  # newline
+    "ref\ttab",  # tab
+    "a" * 201,  # exceeds 200 chars
+    "$(evil)",  # shell metachar
+    "`backtick`",  # backtick
+    "ref;evil",  # semicolon
+    "ref|pipe",  # pipe
+    "ref&bg",  # ampersand
+    "ref>redirect",  # redirect
+    "ref<redirect",  # redirect
+    "ref'quote",  # single quote
+    'ref"quote',  # double quote
+    "ref\\backslash",  # backslash (not in whitelist)
 ]
 
 

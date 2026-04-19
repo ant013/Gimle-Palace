@@ -48,6 +48,7 @@ async def register_project(
     repo_url: str | None = None,
 ) -> ProjectInfo:
     from palace_mcp.memory.projects import validate_slug
+
     validate_slug(slug)
     now = datetime.now(timezone.utc).isoformat()
     async with driver.session() as session:

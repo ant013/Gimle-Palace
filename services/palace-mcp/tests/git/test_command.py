@@ -64,7 +64,9 @@ def test_cap_streaming_truncates_at_line_boundary(tmp_repo: Path) -> None:
         (repo / "a.py").write_text(f"change-{i}\n")
         subprocess.run(
             ["git", "commit", "-am", f"c{i}", "-q"],
-            cwd=repo, check=True, capture_output=True,
+            cwd=repo,
+            check=True,
+            capture_output=True,
         )
     res = run_git(
         ["log", "--pretty=%H", "-n", "500"],
@@ -97,19 +99,11 @@ def test_stderr_drained_on_cap_kill(tmp_repo: Path) -> None:
 def test_invalid_utf8_replaced(tmp_path: Path) -> None:
     repo = tmp_path / "enc"
     repo.mkdir()
-    subprocess.run(
-        ["git", "init", "-q", "-b", "main"], cwd=repo, check=True
-    )
-    subprocess.run(
-        ["git", "config", "user.email", "t@t"], cwd=repo, check=True
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "T"], cwd=repo, check=True
-    )
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.email", "t@t"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "T"], cwd=repo, check=True)
     (repo / "a").write_text("x")
-    subprocess.run(
-        ["git", "add", "."], cwd=repo, check=True, capture_output=True
-    )
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
     # Commit with invalid UTF-8 in subject via GIT_COMMITTER_EMAIL trick:
     # easier: use bytes via raw subprocess and I18N.COMMIT_ENCODING.
     env = os.environ.copy()
@@ -156,6 +150,7 @@ def test_missing_git_binary_raises_git_error(
     Maps to spec §7.6. Verifies error message is human-readable.
     """
     import palace_mcp.git.command as cmd_mod
+
     monkeypatch.setitem(cmd_mod.SAFE_ENV, "PATH", "/nonexistent")
     with pytest.raises(GitError, match=r"git"):
         run_git(["log", "--oneline", "-1"], repo_path=tmp_repo)

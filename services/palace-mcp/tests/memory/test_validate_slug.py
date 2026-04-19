@@ -48,8 +48,6 @@ async def test_register_project_rejects_invalid_slug() -> None:
 
     driver = AsyncMock()
     with pytest.raises(InvalidSlug):
-        await register_project(
-            driver, slug="../etc", name="hack", tags=[]
-        )
+        await register_project(driver, slug="../etc", name="hack", tags=[])
     # driver.session() must never have been called — rejection pre-Cypher.
     driver.session.assert_not_called()

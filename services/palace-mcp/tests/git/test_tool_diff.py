@@ -87,7 +87,9 @@ async def test_diff_invalid_mode_returns_error(
     tmp_repo: Path, repos_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr("palace_mcp.git.path_resolver.REPOS_ROOT", repos_root)
-    result = await palace_git_diff("testproj", ref_a="HEAD", ref_b="HEAD", mode="badmode")
+    result = await palace_git_diff(
+        "testproj", ref_a="HEAD", ref_b="HEAD", mode="badmode"
+    )
     assert result["ok"] is False
     assert result["error_code"] == "invalid_mode"
 

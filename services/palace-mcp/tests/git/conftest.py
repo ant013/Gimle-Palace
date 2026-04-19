@@ -56,6 +56,8 @@ def large_repo(tmp_path: Path) -> tuple[Path, Path]:
         (repo / "f.py").write_text(f"{i}\n")
         subprocess.run(
             ["git", "commit", "-am", f"c{i}", "-q"],
-            cwd=repo, check=True, capture_output=True,
+            cwd=repo,
+            check=True,
+            capture_output=True,
         )
     return repo, repos

@@ -25,6 +25,7 @@ async def test_log_cap_enforced(large_repo: tuple[Path, Path]) -> None:
     repo, repos = large_repo
 
     import palace_mcp.git.path_resolver as pr_mod
+
     orig = pr_mod.REPOS_ROOT
     pr_mod.REPOS_ROOT = repos
     try:
@@ -41,6 +42,7 @@ async def test_log_truncated_flag_set(large_repo: tuple[Path, Path]) -> None:
     repo, repos = large_repo
 
     import palace_mcp.git.path_resolver as pr_mod
+
     orig = pr_mod.REPOS_ROOT
     pr_mod.REPOS_ROOT = repos
     try:

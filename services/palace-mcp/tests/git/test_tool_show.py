@@ -64,10 +64,14 @@ async def test_show_binary_file_returns_binary_response(
     # Create a binary file in the repo
     binary_file = tmp_repo / "blob.bin"
     binary_file.write_bytes(b"\x00\x01\x02\x03binary")
-    subprocess.run(["git", "add", "blob.bin"], cwd=tmp_repo, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "add", "blob.bin"], cwd=tmp_repo, check=True, capture_output=True
+    )
     subprocess.run(
         ["git", "commit", "-m", "add binary", "-q"],
-        cwd=tmp_repo, check=True, capture_output=True,
+        cwd=tmp_repo,
+        check=True,
+        capture_output=True,
     )
     result = await palace_git_show("testproj", ref="HEAD", path="blob.bin")
     assert result["ok"] is False
