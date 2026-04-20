@@ -2,7 +2,15 @@
 
 **Date:** 2026-04-20
 **Author:** Board (brainstorm with operator)
-**Status:** DRAFT — pending operator review
+**Status:** REV2 — adversarial review incorporated (permissions/concurrency/debounce/security/race; LOC estimate + fixtures + validation tests).
+
+**Rev2 change log:**
+- §4.1 — removed `pr.review_comment` as separate rule (unified into `pr.review`).
+- §4.2 — added explicit `permissions:` block and `concurrency:` block.
+- §4.3 — added branch-extraction table per event type; revised LOC estimate (250–350 prod, 400–600 test); explicit 409 pre-check on active `executionRunId`.
+- §6 — added §6.1 Security model and §6.2 Active-session race row.
+- §7.1 — added webhook-fixtures convention and `test_real_config_parses` + `test_ci_workflow_name_pinned`.
+- §10 — expanded migration note for `## CI pending` deprecation; bot-PAT followup clearly labeled.
 
 **Predecessor SHAs this spec is grounded in:**
 - `develop` tip: `7bdc302` (at brainstorm start; verify before implementation)
@@ -122,10 +130,11 @@ rules:
   - trigger: ci.success
     target: issue_assignee
 
+  # Unified trigger: fires on pull_request_review.submitted AND
+  # pull_request_review_comment.created (both normalize to pr.review in parse_event).
+  # Debouncing benefit: CR-cycle with 3 inline comments + final APPROVE → 1 wake
+  # per sha, not 4. Split into distinct triggers in followup if divergent targets needed.
   - trigger: pr.review
-    target: issue_assignee
-
-  - trigger: pr.review_comment
     target: issue_assignee
 
   # Extension point — not wired to any iMac automation yet.
@@ -143,7 +152,7 @@ bot_authors:
 - `version`: integer. Dispatcher rejects unknown versions with config-error fail.
 - `company_id`: UUID string. Used in all paperclip API calls.
 - `rules`: list of `{trigger, target, note?}`.
-  - Valid `trigger` values: `ci.success`, `pr.review`, `pr.review_comment`, `qa.smoke_complete`. Unknown → config-error fail.
+  - Valid `trigger` values: `ci.success`, `pr.review`, `qa.smoke_complete`. Unknown → config-error fail. Note: `pr.review_comment` is NOT a valid config trigger — the GitHub event `pull_request_review_comment` is normalized to `pr.review` in `parse_event` (debounce).
   - Valid `target` values: `issue_assignee` (implemented), `role(<Name>)` (stub — resolver raises NotImplementedError).
 - `bot_authors`: list of strings. Checked against `github.event.sender.login` before any processing.
 
@@ -162,6 +171,22 @@ on:
     types: [created]
   repository_dispatch:
     types: [qa-smoke-complete]
+
+# Minimum scopes needed: PR comment read/write for dedup + marker posting.
+# Explicit grant required because repo "Default workflow permissions" may be
+# set to restricted (read-only), in which case POST comments silently 403.
+permissions:
+  pull-requests: write     # dedup GET + POST marker/failed/deferred comments
+  contents: read           # checkout only
+
+# Serialize runs per PR to avoid TOCTOU on dedup marker check.
+# Without this: 3 near-simultaneous pr.review_comment events → 3 parallel
+# workflow runs → all 3 see "no marker" → all 3 reassign → triple-wake.
+# `cancel-in-progress: false` because each run is short (~10-20s) and must
+# complete its marker POST; cancelling mid-flight would leave dedup state inconsistent.
+concurrency:
+  group: paperclip-signal-${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number || github.event.client_payload.pr_number || github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   signal:
@@ -193,12 +218,22 @@ jobs:
 
 ### 4.3 Python script — `.github/scripts/paperclip_signal.py`
 
-**Structure (~150 LOC, targeted < 200):**
+**Structure (~250–350 prod LOC + ~400–600 test LOC):**
+
+Revised estimate after adversarial review. Honest breakdown:
+- config parse + schema validation: ~40 LOC
+- 4 event shapes × parse_event branches: ~60 LOC
+- httpx client + retry + 409 pre-check handling: ~70 LOC
+- dedup via `gh api repos/.../issues/{n}/comments`: ~40 LOC
+- branch-regex + paperclip issue resolve: ~30 LOC
+- two bot-filter layers, error taxonomy, logging: ~40 LOC
+- `main()` control flow + exit codes: ~20 LOC
+
 
 ```
 # Module-level
 CONFIG_PATH = ".github/paperclip-signals.yml"
-TRIGGERS = {"ci.success", "pr.review", "pr.review_comment", "qa.smoke_complete"}
+TRIGGERS = {"ci.success", "pr.review", "qa.smoke_complete"}  # pr.review_comment folded → pr.review in parse_event
 BRANCH_RE = re.compile(r"^feature/GIM-(\d+)-")
 
 # Functions
@@ -248,8 +283,40 @@ return 0
 | `workflow_run` | `conclusion=success` | `ci.success` |
 | `workflow_run` | `conclusion=failure` / other | `None` (skip — red CI not in scope) |
 | `pull_request_review` | `action=submitted`, `state=approved/commented/changes_requested` | `pr.review` |
-| `pull_request_review_comment` | `action=created` | `pr.review_comment` |
+| `pull_request_review_comment` | `action=created` | `pr.review` (folded — debounce) |
 | `repository_dispatch` | `event_type=qa-smoke-complete` | `qa.smoke_complete` |
+
+**Branch extraction per event type (used by `resolve_target` for `issue_assignee`):**
+
+| Event | Branch field path |
+|---|---|
+| `workflow_run` | `event.workflow_run.head_branch` |
+| `pull_request_review` | `event.pull_request.head.ref` |
+| `pull_request_review_comment` | `event.pull_request.head.ref` |
+| `repository_dispatch` | `event.client_payload.branch` (required field; dispatcher fails with config-error if missing in payload) |
+
+**PR number extraction (used for dedup GET + marker posting):**
+
+| Event | PR number field path |
+|---|---|
+| `workflow_run` | `event.workflow_run.pull_requests[0].number` (if PR-triggered CI) |
+| `pull_request_review` | `event.pull_request.number` |
+| `pull_request_review_comment` | `event.pull_request.number` |
+| `repository_dispatch` | `event.client_payload.pr_number` (required) |
+
+**409 / active-session pre-check (addresses GIM-52/53 stale-lock race):**
+
+Before `POST /release + PATCH assigneeId`, the script fetches the target issue and inspects `executionRunId`:
+
+- If `executionRunId` is `null` → proceed normally (reassign + comment).
+- If `executionRunId` is `non-null` → agent session is actively running OR has a stale lock. We do NOT retry-spam here. Instead:
+  1. Sleep 30s, re-check `executionRunId`.
+  2. If still non-null → post `<!-- paperclip-signal-deferred: {trigger} {sha} --> Signal received while agent session active (executionRunId=<id>); deferred. Next matching event will retry.` Exit 0 (not a failure).
+  3. Operator sees the deferred comment; can intervene or simply wait for next CI rerun / review comment.
+
+This is simpler than "detect stale vs. live lock" heuristics and avoids pounding the paperclip API. Documented trade-off: an isolated CI-green signal during a long-running agent session may be silently dropped if no follow-up event fires. Acceptable because:
+- Agent sessions rarely outlast CI (push takes seconds; session exits; CI finishes minutes later).
+- The `## Waiting for signal:` marker on the agent side is the secondary observability channel — operator sees marker + no `signal:` PR comment → knows infra didn't fire, manually wakes.
 
 **Retry logic (inside `paperclip_release_and_reassign`):**
 - Attempts at `t=0`, `t=10s`, `t=30s`.
@@ -279,7 +346,7 @@ explicit wait-marker so the signal infrastructure can resume you.
 
     ## Waiting for signal: <event> on <sha>
 
-Valid events: `ci.success`, `pr.review`, `pr.review_comment`, `qa.smoke_complete`.
+Valid events: `ci.success`, `pr.review`, `qa.smoke_complete`.
 
 **On resume** (you were reassigned without new instructions):
 
@@ -360,13 +427,39 @@ No new secrets for GitHub App or webhook — we stay inside Actions permissions 
 | Situation | Detection | Response |
 |---|---|---|
 | Paperclip API 5xx | httpx exception | Retry 2x (10s, 30s). Final fail → `signal-failed` comment, Action exits 1. |
-| Paperclip 409 (execution lock stale) | HTTP status | Retry 1x within main retry loop. |
+| Paperclip 409 on release/patch | HTTP status | Retry 1x within main retry loop. If still 409 after retry, treat as active-session race (see row below). |
+| **Active agent session on target issue** | GET issue returns `executionRunId != null` | Sleep 30s, recheck. If still non-null → post `signal-deferred` comment, exit 0. Do NOT retry-spam. Next event retries. |
 | Branch name does not match `feature/GIM-N-...` | Regex miss | Log WARNING, Action exits 0. Not a failure — could be human PR. |
 | `assigneeId` null on issue | API response field | WARNING + `⚠ Issue has no assignee` PR comment, exit 0. |
 | Config parse error (bad YAML, unknown trigger, etc.) | PyYAML / validation exception | Action FAIL (exit 1). Repo-level bug, must block future PRs until fixed. |
 | `role(<Name>)` target in config | NotImplementedError from resolver | Action FAIL with clear message. Explicitly tested. |
 | Marker-comment already present for (trigger, sha) | Dedup check | Log INFO "already signaled", exit 0. |
-| Bot-sender event | `sender.type==Bot` or `sender.login in bot_authors` | Workflow `if:` skips job entirely — no API calls, no marker writes. |
+| Concurrent workflow runs for same PR | GitHub `concurrency:` group | Second run queues behind first; no parallel execution. |
+| Bot-sender event | `sender.type==Bot` or `sender.login in bot_authors` | Workflow `if:` (for platform bots) OR Python filter (for `ant013`) skips — no paperclip API calls, no marker writes. |
+
+### 6.1 Security model — PAPERCLIP_API_KEY exposure surface
+
+**Threat:** a contributor modifies `.github/workflows/paperclip-signal.yml` or `.github/scripts/paperclip_signal.py` in a PR to exfiltrate `secrets.PAPERCLIP_API_KEY`.
+
+**GitHub event semantics (verify during implementation):**
+- `workflow_run` — triggered by the `ci` workflow completing. The **workflow file that runs** is the one from the **default branch** (not the PR head). Safe against PR modifications.
+- `pull_request_review`, `pull_request_review_comment` — for **same-repo PRs** (our case: all Gimle agents commit to the same repo), the workflow file is read from the **PR head branch**. An attacker with push access could modify the Action in their PR and exfiltrate the secret on the next review comment.
+- `repository_dispatch` — triggered by API call; workflow from default branch.
+
+**Ground reality for Gimle-Palace:**
+- Private repo, 2 trusted committers (operator + agents under shared token).
+- All agents run with the operator's trust level (no isolation between agent accounts).
+- The `PAPERCLIP_API_KEY` is the same token agents already possess (identical blast radius to current state).
+
+**Mitigations in scope:**
+1. **Documented trust boundary** — this spec is the explicit record that the security model assumes trusted committer set.
+2. **Bot-filter at workflow level** — `github.event.sender.type != 'Bot'` at job `if:` prevents any Bot-authored event from triggering the Action (pre-runner).
+
+**Followup mitigations (out of scope, documented in §10):**
+- Separate `PAPERCLIP_BOT_PAT` (limited scope: only `POST /release`, `PATCH assignee` on specific agents) rather than reusing operator's full-scope token.
+- Move the script to `.github/actions/paperclip-signal/` as a composite action pinned to a SHA; consuming workflows reference `uses: ./.github/actions/paperclip-signal@{sha}` so modification requires a merged commit to default branch.
+
+**Not suitable for:** public repos, repos with untrusted contributors, repos where review events can be fired by external contributors against forks.
 
 **Observability layers (no extra infra):**
 
@@ -379,33 +472,59 @@ No new secrets for GitHub App or webhook — we stay inside Actions permissions 
 
 ### 7.1 Unit tests — `tests/github_scripts/test_paperclip_signal.py`
 
+**Fixtures convention (required by test-design-discipline):**
+
+All `parse_event` tests MUST load real GitHub webhook payloads saved to `tests/github_scripts/fixtures/`. These are captured from actual Action runs, not hand-written mental models.
+
+```
+tests/github_scripts/fixtures/
+  workflow_run_success.json      # from a real green-CI run (sanitized)
+  workflow_run_failure.json      # red-CI for negative test
+  pull_request_review_approved.json
+  pull_request_review_comment_created.json
+  repository_dispatch_qa_smoke.json
+  sender_is_bot_github_actions.json
+  sender_is_human_ant013.json
+  real_config_current.yml        # snapshot of .github/paperclip-signals.yml at time of test
+```
+
+Operator captures initial fixtures during first post-merge smoke run and commits them in a followup PR if missing. Tests written against synthetic JSON until then, flagged with `pytest.mark.fixture_pending` — these must be replaced with real captures before the slice is considered closed.
+
 | Test | Verifies |
 |---|---|
 | `test_config_parse_valid` | Valid YAML → Config object with expected rules |
 | `test_config_parse_unknown_trigger` | Unknown trigger → raises ConfigError |
 | `test_config_parse_unknown_target` | `target: foo` (not `issue_assignee` or `role(X)`) → ConfigError |
 | `test_config_parse_role_target_parses_but_not_callable` | `target: role(X)` parses ok, but resolver raises NotImplementedError |
-| `test_parse_event_ci_success` | `workflow_run` + `conclusion=success` → trigger=ci.success |
-| `test_parse_event_ci_failure_returns_none` | `workflow_run` + `conclusion=failure` → None (not in scope) |
-| `test_parse_event_pr_review_approved` | `pull_request_review` submitted approved → trigger=pr.review |
-| `test_parse_event_pr_review_comment` | `pull_request_review_comment` created → trigger=pr.review_comment |
-| `test_parse_event_repository_dispatch_qa` | dispatch `qa-smoke-complete` → trigger=qa.smoke_complete |
+| `test_config_parse_pr_review_comment_rejected` | `trigger: pr.review_comment` in config → ConfigError (only normalized-side key allowed) |
+| `test_real_config_parses` | Loads the live `.github/paperclip-signals.yml` from repo root, must parse without error. Runs on every PR; breaks if someone introduces an invalid rule. |
+| `test_parse_event_ci_success` | `workflow_run` fixture + `conclusion=success` → trigger=ci.success |
+| `test_parse_event_ci_failure_returns_none` | `workflow_run` fixture + `conclusion=failure` → None |
+| `test_parse_event_pr_review_approved` | `pull_request_review` fixture submitted approved → trigger=pr.review |
+| `test_parse_event_pr_review_comment_normalizes_to_pr_review` | `pull_request_review_comment` fixture → trigger=pr.review (folded, not separate) |
+| `test_parse_event_repository_dispatch_qa` | dispatch fixture `qa-smoke-complete` → trigger=qa.smoke_complete |
+| `test_parse_event_repository_dispatch_missing_branch` | dispatch missing `client_payload.branch` → ConfigError with clear message |
+| `test_branch_extraction_per_event_type` | Each event fixture yields correct branch via `extract_branch()` table |
 | `test_branch_regex_feature_slash` | `feature/GIM-62-async-signal` → 62 |
-| `test_branch_regex_no_match` | `fix/typo` → None |
-| `test_bot_filter_github_actions` | sender=github-actions[bot] → early exit |
-| `test_bot_filter_ant013_listed` | sender=ant013 → early exit |
-| `test_dedup_marker_present` | comments contain matching marker → returns True (skip) |
-| `test_dedup_marker_absent` | comments empty → returns False (proceed) |
+| `test_branch_regex_no_match` | `fix/typo` → None (log WARNING, no raise) |
+| `test_bot_filter_github_actions` | sender fixture=`github-actions[bot]` → early exit |
+| `test_bot_filter_ant013_listed` | sender fixture=`ant013` → early exit |
+| `test_dedup_marker_present` | mock comments contain matching marker → returns True (skip) |
+| `test_dedup_marker_absent` | mock comments empty → returns False (proceed) |
+| `test_ci_workflow_name_pinned` | Reads `.github/workflows/ci.yml` on disk, asserts top-level `name: ci`. Breaks loudly if someone renames the CI workflow. |
 
 ### 7.2 Integration tests (httpx MockTransport)
 
 | Test | Verifies |
 |---|---|
-| `test_reassign_refresh_success` | Full flow: GET issue → POST release → PATCH assignee → POST comment. All 4 HTTP calls made with correct payloads. |
-| `test_reassign_refresh_5xx_retry` | 503, 503, 200 → succeeds. Confirms 3 attempts, delays honored (use freezegun). |
-| `test_reassign_refresh_all_fail` | 503 forever → raises PaperclipError → `main()` posts signal-failed comment → exit 1. |
+| `test_reassign_refresh_success_null_execution_run` | GET issue returns `executionRunId=null` → POST release → PATCH assignee → POST signal marker comment. All 4 HTTP calls asserted with correct payloads. |
+| `test_reassign_refresh_5xx_retry` | 503, 503, 200 on release → succeeds. Confirms 3 attempts, delays 10s/30s honored (use freezegun for time). |
+| `test_reassign_refresh_all_5xx_fail` | 503 forever on release → raises PaperclipError → `main()` posts signal-failed comment → exit 1. |
 | `test_issue_not_found_404` | GET issue 404 → signal-failed comment, exit 1. |
-| `test_409_execution_lock_retry` | POST release 409 → 1 retry → success. |
+| `test_409_active_execution_run_deferred` | GET issue returns `executionRunId="run-abc"` → after 30s recheck still non-null → posts `signal-deferred` comment, exits 0. No release/patch calls made. |
+| `test_409_transient_execution_run_clears` | First GET shows `executionRunId="run-abc"`, post-sleep GET shows `null` → proceeds with normal release+patch+marker. |
+| `test_409_on_release_after_null_precheck` | GET `executionRunId=null` → POST release returns 409 → 1 retry → success. (Covers true "stale lock" case distinct from active run.) |
+| `test_concurrency_group_serializes` | Documented expectation only — concurrency is workflow-level, cannot unit-test. Live-validation plan exercises it. |
 
 **Test-design-discipline compliance (GIM-61 fragment):**
 - We use `httpx.MockTransport` (fake network, real httpx) — aligns with the rule. No whole-client `MagicMock`.
@@ -438,16 +557,25 @@ Executed by operator/Board after merge:
 
 This slice is successful when:
 - A new engineer PR that exits with `## Waiting for signal: ci.success on <sha>` is auto-woken on CI green without manual operator action.
-- CR's push-fix cycle is auto-woken via `pr.review` or `pr.review_comment`.
+- CR's push-fix cycle is auto-woken via `pr.review` (both formal review submissions and inline review comments fold into this single trigger).
 - A `signal-failed` comment appears on the PR when paperclip is unavailable, with enough info for operator to diagnose.
 - Unit + integration tests pass in CI.
 - Zero changes to `develop`/`main` branch-protection rules required (signal Action runs independently of required-checks).
 
 ## 10. Open questions / explicit trade-offs
 
-- **`## CI pending` migration**: existing open PRs (if any) using the old marker will not be auto-migrated. They'll continue to require manual wake until the branch is rebased. Acceptable — old marker isn't broken, just deprecated.
-- **Shared-token bot-filter list**: `ant013` is in `bot_authors` so that an agent's own commit/comment does not wake itself. Consequence: a human PR author (operator) who pushes as `ant013` also won't trigger a wake. Fine because operator PRs are usually not on feature branches (meta/ops work goes through separate workflow), and when they are, operator is actively monitoring.
-- **No retry on CI failure**: intentional. Red CI is a signal the engineer-in-session will act on; if they're already idle, they can refresh manually or the next push will trigger the loop again on the following green.
+- **`## CI pending` migration** — two-phase deprecation:
+  - **Phase A (this slice, GIM-62):** ship new `async-signal-wait.md` fragment + infra + remove old `## CI pending` block from MCPEngineer role. Agents invoked after `deploy-agents.sh --local` use the new marker immediately.
+  - **Phase B (first week after deploy):** any in-flight agent suspended with old `## CI pending` marker before deploy won't be auto-woken. Operator manually reassigns if they're still idle after the slice they belonged to merges. Bounded pain: at most N agents × M active slices at moment of deploy (observed max: 3 agents at any time).
+  - **Not chosen: long backwards-compatible overlap.** Keeping both markers in dist/*.md during transition confuses agents (which one do I write?) and creates silent-bug surface (Action might regex-match old format and reassign to wrong target). A clean cut is safer given small fleet.
+- **Shared-token bot-filter (`ant013` in `bot_authors`)** — operator pushing as `ant013` won't wake themselves. Acceptable because:
+  - Operator PRs (meta/infra) are generally not on `feature/GIM-N-` branches → branch regex fails first anyway.
+  - When operator does act on a GIM-N branch, they're actively monitoring.
+  - **Followup slice (GIM-6X):** provision a separate `PAPERCLIP_BOT_PAT` for the Action, remove `ant013` from `bot_authors`. Gives agent-events proper wake while keeping operator visible. Blocked on paperclip side — operator needs to generate a scoped bot token.
+- **No retry on CI failure** — intentional. Red CI is a signal the engineer-in-session will act on; if they're already idle, they can refresh manually or the next push will trigger the loop again on the following green.
+- **Deferred signals may be silently dropped** — if CI goes green while agent is actively running (executionRunId non-null), Action posts `signal-deferred` and exits. If no subsequent CI rerun or review comment happens, the signal is lost. Operator observes via `## Waiting for signal:` marker on issue + absence of `<!-- paperclip-signal: -->` PR comment. Acceptable because: (a) agent session outlasting CI is rare, (b) agent can check CI status on their own when session ends, (c) manual operator wake is always available as fallback.
+- **Webhook fixtures captured post-first-event** — unit tests flagged `@pytest.mark.fixture_pending` until first Action run produces real payloads. Followup PR replaces synthetic JSON with captured real-world payloads.
+- **No threat isolation between agents** — all agents share `ant013` token; signal Action uses the same token for paperclip calls. Same blast radius as current state. Token-per-agent is a platform-level change (paperclip + deploy scripts), out of scope.
 
 ---
 
