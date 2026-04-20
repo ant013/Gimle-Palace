@@ -29,14 +29,17 @@ def test_base_extractor_abstract_cannot_instantiate() -> None:
 
 def test_subclass_without_name_and_extract_fails() -> None:
     """Subclass missing abstract members cannot be instantiated."""
+
     class Incomplete(BaseExtractor):
         pass
+
     with pytest.raises(TypeError):
         Incomplete()  # type: ignore[abstract]
 
 
 def test_valid_subclass_instantiates() -> None:
     """Subclass with name + extract instantiates."""
+
     class MyExtractor(BaseExtractor):
         name = "my_ext"
         description = "test"

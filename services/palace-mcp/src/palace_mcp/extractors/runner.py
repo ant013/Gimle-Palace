@@ -39,6 +39,7 @@ GET_PROJECT = "MATCH (p:Project {slug: $slug}) RETURN p"
 
 # --- precheck ---
 
+
 @dataclass(frozen=True)
 class _PrecheckOk:
     extractor: BaseExtractor
@@ -96,6 +97,7 @@ async def _precheck(
 
 # --- execute ---
 
+
 @dataclass(frozen=True)
 class _ExecuteOk:
     stats: ExtractorStats
@@ -138,6 +140,7 @@ async def _execute(
 
 # --- finalize ---
 
+
 async def _finalize(
     *,
     driver: AsyncDriver,
@@ -172,6 +175,7 @@ async def _finalize(
 
 
 # --- orchestrator ---
+
 
 async def run_extractor(
     name: str,
@@ -227,9 +231,7 @@ async def run_extractor(
         logger=logger,
     )
     start_mono = time.monotonic()
-    exec_result = await _execute(
-        extractor=pre.extractor, ctx=ctx, timeout_s=timeout_s
-    )
+    exec_result = await _execute(extractor=pre.extractor, ctx=ctx, timeout_s=timeout_s)
     duration_ms = int((time.monotonic() - start_mono) * 1000)
     finished_at = datetime.now(timezone.utc).isoformat()
 

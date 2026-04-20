@@ -35,9 +35,7 @@ def neo4j_auth() -> tuple[str, str]:
 
 
 @pytest.fixture
-async def driver(
-    neo4j_uri: str, neo4j_auth: tuple[str, str]
-) -> Iterator[AsyncDriver]:
+async def driver(neo4j_uri: str, neo4j_auth: tuple[str, str]) -> Iterator[AsyncDriver]:
     drv = AsyncGraphDatabase.driver(neo4j_uri, auth=neo4j_auth)
     try:
         yield drv

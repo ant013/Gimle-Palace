@@ -98,7 +98,9 @@ async def test_invalid_slug_returns_error(mock_driver: MagicMock) -> None:
 
 @pytest.mark.asyncio
 async def test_unknown_extractor_returns_error(mock_driver: MagicMock) -> None:
-    res = await run_extractor(name="does_not_exist", project="testproj", driver=mock_driver)
+    res = await run_extractor(
+        name="does_not_exist", project="testproj", driver=mock_driver
+    )
     assert res["ok"] is False
     assert res["error_code"] == "unknown_extractor"
 
@@ -131,7 +133,9 @@ async def test_repo_not_mounted_returns_error(tmp_path: Path) -> None:
 async def test_happy_path_success(mock_driver: MagicMock, tmp_path: Path) -> None:
     registry.register(_Ok())
     with patch("palace_mcp.extractors.runner.REPOS_ROOT", tmp_path / "repos"):
-        res = await run_extractor(name="__test_ok", project="testproj", driver=mock_driver)
+        res = await run_extractor(
+            name="__test_ok", project="testproj", driver=mock_driver
+        )
 
     assert res["ok"] is True
     assert res["success"] is True
