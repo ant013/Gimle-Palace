@@ -189,6 +189,14 @@ Add section (`## Waiting for CI — do not active-poll`):
 
 ### 3.7 GitHub branch protection — tighten (timing matters)
 
+> ⚠ **SUPERSEDED 2026-04-20 (GIM-60 retrofit).** Two flaws discovered during GIM-59 merge:
+>
+> 1. `Require pull request reviews before merging` on develop is **structurally unsatisfiable** under single-token reality — every Gimle agent AND Board share the same GitHub token (`ant013`), so self-approve always returns GitHub 422. Rule removed 2026-04-20. See `feedback_single_token_review_gate.md`.
+> 2. Required context `qa-evidence-present` is the workflow name; GitHub matches by **check-run name** = job name, which is `check` in `qa-evidence-check.yml`. Required context changed to `check`.
+> 3. `Restrict who can push to matching branches` on main with `apps: ["github-actions"]` is **org-only**; GitHub 422 on personal repo. Dropped.
+>
+> Live branch-protection as of 2026-04-20 matches `.github/branch-protection/develop.json` + `main.json` in the repo (retrofit by GIM-60 from the stale config this section originally described). Read those files for ground truth, NOT the text below.
+
 On `ant013/Gimle-Palace`, update branch-protection rules for `main` and `develop`:
 
 - `Require status checks to pass before merging` — enforce for admins (`Do not allow bypassing the above settings` ← flip to on). Checks required: `lint`, `typecheck`, `test`, `docker-build`, `qa-evidence-present` (new, §3.8).
@@ -241,6 +249,10 @@ Added to `develop` required status checks in §3.7. MCPE's PR creation template 
 **Waiver**: label `micro-slice` (for trivial docs-only PRs) bypasses the QA-evidence check. Use sparingly — default is evidence required.
 
 ### 3.9 NEW — CR GitHub-review bridge
+
+> ⚠ **SUPERSEDED 2026-04-20 (GIM-60).** Bridge is structurally unsatisfiable under current setup: CR's GitHub MCP token authenticates as `ant013` — same identity that opens PRs. GitHub returns 422 "Cannot approve your own pull request" regardless of tool (gh CLI or GitHub MCP). Since §3.7 `required_pull_request_reviews` was removed on 2026-04-20, this bridge is also **no longer required** for merging.
+>
+> Compliance paperclip comment (with full tool output) remains the single CR APPROVE signal. No `gh pr review --approve` step in current flow. If separate GitHub identity (bot account / App installation) is ever provisioned for CR, this bridge becomes viable again and should be re-enabled alongside restoring `required_pull_request_reviews`. Until then, rules here describe a future state, not the active one. See `feedback_single_token_review_gate.md`.
 
 CR's Phase 3.1 role update (`paperclips/roles/code-reviewer.md` or `plan-first-review.md` fragment):
 
