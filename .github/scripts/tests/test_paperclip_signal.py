@@ -875,3 +875,35 @@ def test_main_paperclip_down_posts_failed_exits_1(
             repo="ant013/Gimle-Palace",
         )
     assert rc == 1
+
+
+# ---------------------------------------------------------------------------
+# Task 15: Invariant tests — live config + CI workflow name
+# ---------------------------------------------------------------------------
+
+import yaml as _yaml
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def test_real_config_parses():
+    """.github/paperclip-signals.yml must parse without error on every PR."""
+    config_path = REPO_ROOT / ".github" / "paperclip-signals.yml"
+    assert config_path.exists(), f"Live config missing at {config_path}"
+    config = ps.load_config(config_path)
+    assert config.version == 1
+    assert config.company_id
+    assert len(config.rules) >= 1
+
+
+def test_ci_workflow_name_pinned():
+    """The workflow file referenced by paperclip-signal must have name: CI."""
+    ci_yaml = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+    assert ci_yaml.exists(), f"Missing {ci_yaml}"
+    raw = _yaml.safe_load(ci_yaml.read_text())
+    assert raw.get("name") == "CI", (
+        f"Expected top-level `name: CI` in .github/workflows/ci.yml for "
+        f"workflow_run trigger matching; found {raw.get('name')!r}. "
+        f"Update .github/workflows/paperclip-signal.yml workflows: key "
+        f"if this name is changed intentionally."
+    )
