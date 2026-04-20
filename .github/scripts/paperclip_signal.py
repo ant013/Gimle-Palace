@@ -16,6 +16,7 @@ import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import httpx
 import yaml
@@ -120,7 +121,9 @@ def load_config(path: Path) -> Config:
         rules.append(Rule(trigger=trigger, target=target, note=note))
 
     bot_authors = raw.get("bot_authors") or []
-    if not isinstance(bot_authors, list) or not all(isinstance(x, str) for x in bot_authors):
+    if not isinstance(bot_authors, list) or not all(
+        isinstance(x, str) for x in bot_authors
+    ):
         raise ConfigError("bot_authors must be a list of strings.")
 
     return Config(
@@ -147,7 +150,7 @@ class Event:
     author: str
 
 
-def _parse_workflow_run(payload: dict) -> Event | None:
+def _parse_workflow_run(payload: dict[str, Any]) -> Event | None:
     run = payload.get("workflow_run") or {}
     conclusion = run.get("conclusion")
     if conclusion != "success":
@@ -165,29 +168,31 @@ def _parse_workflow_run(payload: dict) -> Event | None:
     )
 
 
-def _parse_pull_request_review(payload: dict) -> Event | None:
+def _parse_pull_request_review(payload: dict[str, Any]) -> Event | None:
     pr = payload.get("pull_request") or {}
     return Event(
         trigger="pr.review",
-        sha=(payload.get("review") or {}).get("commit_id") or pr.get("head", {}).get("sha", ""),
+        sha=(payload.get("review") or {}).get("commit_id")
+        or pr.get("head", {}).get("sha", ""),
         pr_number=pr.get("number") or 0,
         branch=pr.get("head", {}).get("ref") or "",
         author=(payload.get("sender") or {}).get("login") or "",
     )
 
 
-def _parse_pull_request_review_comment(payload: dict) -> Event | None:
+def _parse_pull_request_review_comment(payload: dict[str, Any]) -> Event | None:
     pr = payload.get("pull_request") or {}
     return Event(
         trigger="pr.review",
-        sha=(payload.get("comment") or {}).get("commit_id") or pr.get("head", {}).get("sha", ""),
+        sha=(payload.get("comment") or {}).get("commit_id")
+        or pr.get("head", {}).get("sha", ""),
         pr_number=pr.get("number") or 0,
         branch=pr.get("head", {}).get("ref") or "",
         author=(payload.get("sender") or {}).get("login") or "",
     )
 
 
-def _parse_repository_dispatch(payload: dict) -> Event | None:
+def _parse_repository_dispatch(payload: dict[str, Any]) -> Event | None:
     action = payload.get("action") or ""
     if action != "qa-smoke-complete":
         return None
@@ -217,7 +222,7 @@ _EVENT_PARSERS = {
 }
 
 
-def parse_event(event_name: str, payload: dict) -> Event | None:
+def parse_event(event_name: str, payload: dict[str, Any]) -> Event | None:
     """Normalize a GitHub webhook into an internal Event, or None if non-actionable."""
     parser = _EVENT_PARSERS.get(event_name)
     if parser is None:
@@ -275,7 +280,9 @@ class Issue:
 class PaperclipClient:
     """Thin httpx wrapper over paperclip REST API."""
 
-    def __init__(self, base_url: str, api_key: str, company_id: str, timeout: float = 30.0):
+    def __init__(
+        self, base_url: str, api_key: str, company_id: str, timeout: float = 30.0
+    ):
         self._client = httpx.Client(
             base_url=base_url.rstrip("/"),
             headers={
@@ -283,7 +290,9 @@ class PaperclipClient:
                 "Accept": "application/json",
                 "Content-Type": "application/json",
             },
-            timeout=httpx.Timeout(connect=10.0, read=timeout, write=timeout, pool=timeout),
+            timeout=httpx.Timeout(
+                connect=10.0, read=timeout, write=timeout, pool=timeout
+            ),
         )
         self._company_id = company_id
 
@@ -311,11 +320,15 @@ class PaperclipClient:
         """Wake an assignee via release + re-patch (GIM-52/53 proven workaround)."""
         release = self._client.post(f"/api/issues/{issue_id}/release")
         release.raise_for_status()
-        patch = self._client.patch(f"/api/issues/{issue_id}", json={"assigneeId": assignee_id})
+        patch = self._client.patch(
+            f"/api/issues/{issue_id}", json={"assigneeId": assignee_id}
+        )
         patch.raise_for_status()
 
     def post_comment(self, issue_id: str, body: str) -> None:
-        resp = self._client.post(f"/api/issues/{issue_id}/comments", json={"body": body})
+        resp = self._client.post(
+            f"/api/issues/{issue_id}/comments", json={"body": body}
+        )
         resp.raise_for_status()
 
     def close(self) -> None:
@@ -401,7 +414,9 @@ def resolve_target_issue_assignee(
 # ---------------------------------------------------------------------------
 
 
-def pr_has_signal_marker(comments: list[dict], trigger: str, sha: str) -> bool:
+def pr_has_signal_marker(
+    comments: list[dict[str, Any]], trigger: str, sha: str
+) -> bool:
     """Check if a success marker for this (trigger, sha) already exists.
 
     Only success markers count — failed and deferred markers intentionally
@@ -451,7 +466,9 @@ def build_no_assignee_comment(trigger: str, sha: str) -> str:
     )
 
 
-def github_post_pr_comment(repo: str, pr_number: int, body: str, github_token: str) -> None:
+def github_post_pr_comment(
+    repo: str, pr_number: int, body: str, github_token: str
+) -> None:
     url = f"{GITHUB_API_BASE}/repos/{repo}/issues/{pr_number}/comments"
     resp = httpx.post(
         url,
@@ -465,7 +482,9 @@ def github_post_pr_comment(repo: str, pr_number: int, body: str, github_token: s
     resp.raise_for_status()
 
 
-def github_get_pr_comments(repo: str, pr_number: int, github_token: str) -> list[dict]:
+def github_get_pr_comments(
+    repo: str, pr_number: int, github_token: str
+) -> list[dict[str, Any]]:
     url = f"{GITHUB_API_BASE}/repos/{repo}/issues/{pr_number}/comments"
     resp = httpx.get(
         url,
@@ -479,7 +498,9 @@ def github_get_pr_comments(repo: str, pr_number: int, github_token: str) -> list
     resp.raise_for_status()
     data = resp.json()
     if not isinstance(data, list):
-        raise PaperclipError(f"Unexpected GitHub API response shape: {type(data).__name__}")
+        raise PaperclipError(
+            f"Unexpected GitHub API response shape: {type(data).__name__}"
+        )
     return data
 
 
@@ -488,7 +509,9 @@ def github_get_pr_comments(repo: str, pr_number: int, github_token: str) -> list
 # ---------------------------------------------------------------------------
 
 
-def _resolve_target(rule: Rule, client: PaperclipClient, issue_number: int) -> ResolveResult:
+def _resolve_target(
+    rule: Rule, client: PaperclipClient, issue_number: int
+) -> ResolveResult:
     """Dispatch target to the correct resolver."""
     if rule.target == "issue_assignee":
         return resolve_target_issue_assignee(client, issue_number)
@@ -503,7 +526,7 @@ def _resolve_target(rule: Rule, client: PaperclipClient, issue_number: int) -> R
 def main(
     *,
     event_name: str,
-    event_payload: dict,
+    event_payload: dict[str, Any],
     config_path: Path,
     paperclip_base_url: str,
     paperclip_api_key: str,
@@ -528,7 +551,9 @@ def main(
 
     issue_number = extract_issue_number(event.branch)
     if issue_number is None:
-        log.warning("Branch %s does not match feature/GIM-N pattern; exiting 0.", event.branch)
+        log.warning(
+            "Branch %s does not match feature/GIM-N pattern; exiting 0.", event.branch
+        )
         return 0
 
     client = PaperclipClient(
@@ -543,7 +568,9 @@ def main(
             if result.status == "no_assignee":
                 body = build_no_assignee_comment(trigger=event.trigger, sha=event.sha)
                 github_post_pr_comment(repo, event.pr_number, body, github_token)
-                log.warning("Issue %s has no assignee; posted warning.", result.issue.id)
+                log.warning(
+                    "Issue %s has no assignee; posted warning.", result.issue.id
+                )
                 continue
 
             if result.status == "deferred":
@@ -563,7 +590,11 @@ def main(
             # result.status == "proceed"
             existing = github_get_pr_comments(repo, event.pr_number, github_token)
             if pr_has_signal_marker(existing, event.trigger, event.sha):
-                log.info("Signal %s at %s already posted; dedup skip.", event.trigger, event.sha)
+                log.info(
+                    "Signal %s at %s already posted; dedup skip.",
+                    event.trigger,
+                    event.sha,
+                )
                 continue
 
             try:
@@ -604,7 +635,9 @@ def _cli() -> int:
     import json as _json
     import os as _os
 
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(levelname)s %(name)s: %(message)s"
+    )
 
     event_name = _os.environ["EVENT_NAME"]
     event_payload = _json.loads(_os.environ["EVENT_JSON"])

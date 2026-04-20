@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import httpx
 import pytest
+import yaml as _yaml
 from pytest_httpx import HTTPXMock
 
 import paperclip_signal as ps
@@ -268,13 +268,15 @@ def test_paperclip_get_issue_success(httpx_mock: HTTPXMock):
     httpx_mock.add_response(
         method="GET",
         url="https://paperclip.example.com/api/issues?issueNumber=62&companyId=C1",
-        json=[{
-            "id": "issue-uuid-1",
-            "issueNumber": 62,
-            "assigneeId": "agent-uuid-1",
-            "assigneeName": "MCPEngineer",
-            "executionRunId": None,
-        }],
+        json=[
+            {
+                "id": "issue-uuid-1",
+                "issueNumber": 62,
+                "assigneeId": "agent-uuid-1",
+                "assigneeName": "MCPEngineer",
+                "executionRunId": None,
+            }
+        ],
     )
     client = ps.PaperclipClient(
         base_url="https://paperclip.example.com", api_key="k", company_id="C1"
@@ -353,7 +355,9 @@ def test_release_and_reassign_retry_5xx_then_success(httpx_mock: HTTPXMock):
     )
     client = ps.PaperclipClient("https://paperclip.example.com", "k", "C1")
     with patch.object(ps, "_sleep", lambda s: None):
-        ps.release_and_reassign_with_retry(client, issue_id="uuid", assignee_id="agent-uuid")
+        ps.release_and_reassign_with_retry(
+            client, issue_id="uuid", assignee_id="agent-uuid"
+        )
     client.close()
 
 
@@ -369,7 +373,9 @@ def test_release_and_reassign_retry_all_fail(httpx_mock: HTTPXMock):
     client = ps.PaperclipClient("https://paperclip.example.com", "k", "C1")
     with patch.object(ps, "_sleep", lambda s: None):
         with pytest.raises(ps.PaperclipError):
-            ps.release_and_reassign_with_retry(client, issue_id="uuid", assignee_id="agent-uuid")
+            ps.release_and_reassign_with_retry(
+                client, issue_id="uuid", assignee_id="agent-uuid"
+            )
     client.close()
 
 
@@ -393,7 +399,9 @@ def test_release_and_reassign_retry_409_transient_lock(httpx_mock: HTTPXMock):
     )
     client = ps.PaperclipClient("https://paperclip.example.com", "k", "C1")
     with patch.object(ps, "_sleep", lambda s: None):
-        ps.release_and_reassign_with_retry(client, issue_id="uuid", assignee_id="agent-uuid")
+        ps.release_and_reassign_with_retry(
+            client, issue_id="uuid", assignee_id="agent-uuid"
+        )
     client.close()
 
 
@@ -408,7 +416,9 @@ def test_release_and_reassign_no_retry_on_4xx_not_409(httpx_mock: HTTPXMock):
     client = ps.PaperclipClient("https://paperclip.example.com", "k", "C1")
     with patch.object(ps, "_sleep", lambda s: None):
         with pytest.raises(ps.PaperclipError):
-            ps.release_and_reassign_with_retry(client, issue_id="uuid", assignee_id="agent-uuid")
+            ps.release_and_reassign_with_retry(
+                client, issue_id="uuid", assignee_id="agent-uuid"
+            )
     assert len(httpx_mock.get_requests()) == 1
     client.close()
 
@@ -423,13 +433,15 @@ def test_resolve_target_issue_assignee_active_run_null(httpx_mock: HTTPXMock):
     httpx_mock.add_response(
         method="GET",
         url="https://paperclip.example.com/api/issues?issueNumber=62&companyId=C1",
-        json=[{
-            "id": "uuid",
-            "issueNumber": 62,
-            "assigneeId": "agent-uuid",
-            "assigneeName": "MCPEngineer",
-            "executionRunId": None,
-        }],
+        json=[
+            {
+                "id": "uuid",
+                "issueNumber": 62,
+                "assigneeId": "agent-uuid",
+                "assigneeName": "MCPEngineer",
+                "executionRunId": None,
+            }
+        ],
     )
     client = ps.PaperclipClient("https://paperclip.example.com", "k", "C1")
     result = ps.resolve_target_issue_assignee(client, issue_number=62)
@@ -439,19 +451,23 @@ def test_resolve_target_issue_assignee_active_run_null(httpx_mock: HTTPXMock):
     client.close()
 
 
-def test_resolve_target_issue_assignee_deferred_active_run_persists(httpx_mock: HTTPXMock):
+def test_resolve_target_issue_assignee_deferred_active_run_persists(
+    httpx_mock: HTTPXMock,
+):
     """executionRunId non-null on first AND recheck → status=deferred."""
     for _ in range(2):
         httpx_mock.add_response(
             method="GET",
             url="https://paperclip.example.com/api/issues?issueNumber=62&companyId=C1",
-            json=[{
-                "id": "uuid",
-                "issueNumber": 62,
-                "assigneeId": "agent-uuid",
-                "assigneeName": "MCPEngineer",
-                "executionRunId": "run-active-1",
-            }],
+            json=[
+                {
+                    "id": "uuid",
+                    "issueNumber": 62,
+                    "assigneeId": "agent-uuid",
+                    "assigneeName": "MCPEngineer",
+                    "executionRunId": "run-active-1",
+                }
+            ],
         )
     client = ps.PaperclipClient("https://paperclip.example.com", "k", "C1")
     with patch.object(ps, "_sleep", lambda s: None):
@@ -466,24 +482,28 @@ def test_resolve_target_issue_assignee_active_run_clears(httpx_mock: HTTPXMock):
     httpx_mock.add_response(
         method="GET",
         url="https://paperclip.example.com/api/issues?issueNumber=62&companyId=C1",
-        json=[{
-            "id": "uuid",
-            "issueNumber": 62,
-            "assigneeId": "agent-uuid",
-            "assigneeName": "MCPEngineer",
-            "executionRunId": "run-active-1",
-        }],
+        json=[
+            {
+                "id": "uuid",
+                "issueNumber": 62,
+                "assigneeId": "agent-uuid",
+                "assigneeName": "MCPEngineer",
+                "executionRunId": "run-active-1",
+            }
+        ],
     )
     httpx_mock.add_response(
         method="GET",
         url="https://paperclip.example.com/api/issues?issueNumber=62&companyId=C1",
-        json=[{
-            "id": "uuid",
-            "issueNumber": 62,
-            "assigneeId": "agent-uuid",
-            "assigneeName": "MCPEngineer",
-            "executionRunId": None,
-        }],
+        json=[
+            {
+                "id": "uuid",
+                "issueNumber": 62,
+                "assigneeId": "agent-uuid",
+                "assigneeName": "MCPEngineer",
+                "executionRunId": None,
+            }
+        ],
     )
     client = ps.PaperclipClient("https://paperclip.example.com", "k", "C1")
     with patch.object(ps, "_sleep", lambda s: None):
@@ -497,13 +517,15 @@ def test_resolve_target_issue_assignee_null_assignee(httpx_mock: HTTPXMock):
     httpx_mock.add_response(
         method="GET",
         url="https://paperclip.example.com/api/issues?issueNumber=62&companyId=C1",
-        json=[{
-            "id": "uuid",
-            "issueNumber": 62,
-            "assigneeId": None,
-            "assigneeName": None,
-            "executionRunId": None,
-        }],
+        json=[
+            {
+                "id": "uuid",
+                "issueNumber": 62,
+                "assigneeId": None,
+                "assigneeName": None,
+                "executionRunId": None,
+            }
+        ],
     )
     client = ps.PaperclipClient("https://paperclip.example.com", "k", "C1")
     result = ps.resolve_target_issue_assignee(client, issue_number=62)
@@ -520,7 +542,9 @@ def test_pr_has_signal_marker_present():
     """Comment body with matching marker → True."""
     comments = [
         {"body": "Some random comment"},
-        {"body": "<!-- paperclip-signal: ci.success abc123 assignee=MCPEngineer --> Woke MCPEngineer on ci.success at abc123."},
+        {
+            "body": "<!-- paperclip-signal: ci.success abc123 assignee=MCPEngineer --> Woke MCPEngineer on ci.success at abc123."
+        },
     ]
     assert ps.pr_has_signal_marker(comments, trigger="ci.success", sha="abc123") is True
 
@@ -531,13 +555,17 @@ def test_pr_has_signal_marker_absent():
         {"body": "Unrelated"},
         {"body": "<!-- paperclip-signal: ci.success DIFFERENT_SHA -->"},
     ]
-    assert ps.pr_has_signal_marker(comments, trigger="ci.success", sha="abc123") is False
+    assert (
+        ps.pr_has_signal_marker(comments, trigger="ci.success", sha="abc123") is False
+    )
 
 
 def test_pr_has_signal_marker_different_trigger():
     """Marker with same sha but different trigger → False."""
     comments = [{"body": "<!-- paperclip-signal: pr.review abc123 -->"}]
-    assert ps.pr_has_signal_marker(comments, trigger="ci.success", sha="abc123") is False
+    assert (
+        ps.pr_has_signal_marker(comments, trigger="ci.success", sha="abc123") is False
+    )
 
 
 def test_pr_has_signal_marker_empty_comments():
@@ -547,13 +575,17 @@ def test_pr_has_signal_marker_empty_comments():
 def test_pr_has_signal_marker_failed_marker_not_counted():
     """signal-failed markers do NOT deduplicate — a failed prior attempt should retry."""
     comments = [{"body": "<!-- paperclip-signal-failed: ci.success abc123 -->"}]
-    assert ps.pr_has_signal_marker(comments, trigger="ci.success", sha="abc123") is False
+    assert (
+        ps.pr_has_signal_marker(comments, trigger="ci.success", sha="abc123") is False
+    )
 
 
 def test_pr_has_signal_marker_deferred_marker_not_counted():
     """signal-deferred markers do NOT deduplicate — a deferred signal should retry next event."""
     comments = [{"body": "<!-- paperclip-signal-deferred: ci.success abc123 -->"}]
-    assert ps.pr_has_signal_marker(comments, trigger="ci.success", sha="abc123") is False
+    assert (
+        ps.pr_has_signal_marker(comments, trigger="ci.success", sha="abc123") is False
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -652,7 +684,9 @@ bot_authors:
     return cfg
 
 
-def test_main_happy_path_ci_success(httpx_mock: HTTPXMock, load_fixture, minimal_config: Path):
+def test_main_happy_path_ci_success(
+    httpx_mock: HTTPXMock, load_fixture, minimal_config: Path
+):
     """workflow_run success → GET issue → release+patch → success comment → exit 0."""
     payload = load_fixture("workflow_run_success")
     payload["sender"] = {"login": "operator", "type": "User"}
@@ -660,13 +694,15 @@ def test_main_happy_path_ci_success(httpx_mock: HTTPXMock, load_fixture, minimal
     httpx_mock.add_response(
         method="GET",
         url="https://paperclip.example.com/api/issues?issueNumber=62&companyId=C1",
-        json=[{
-            "id": "issue-uuid",
-            "issueNumber": 62,
-            "assigneeId": "agent-uuid",
-            "assigneeName": "MCPEngineer",
-            "executionRunId": None,
-        }],
+        json=[
+            {
+                "id": "issue-uuid",
+                "issueNumber": 62,
+                "assigneeId": "agent-uuid",
+                "assigneeName": "MCPEngineer",
+                "executionRunId": None,
+            }
+        ],
     )
     httpx_mock.add_response(
         method="GET",
@@ -702,7 +738,9 @@ def test_main_happy_path_ci_success(httpx_mock: HTTPXMock, load_fixture, minimal
     assert rc == 0
 
 
-def test_main_bot_sender_exits_early(httpx_mock: HTTPXMock, load_fixture, minimal_config: Path):
+def test_main_bot_sender_exits_early(
+    httpx_mock: HTTPXMock, load_fixture, minimal_config: Path
+):
     """sender=ant013 → exit 0, no API calls."""
     payload = load_fixture("workflow_run_success")  # sender=ant013 by default
     rc = ps.main(
@@ -735,25 +773,33 @@ def test_main_branch_mismatch_warn_exit_0(load_fixture, minimal_config: Path):
     assert rc == 0
 
 
-def test_main_dedup_hit_exits_0(httpx_mock: HTTPXMock, load_fixture, minimal_config: Path):
+def test_main_dedup_hit_exits_0(
+    httpx_mock: HTTPXMock, load_fixture, minimal_config: Path
+):
     """Existing success marker → skip reassign, exit 0, no paperclip release calls."""
     payload = load_fixture("workflow_run_success")
     payload["sender"] = {"login": "operator", "type": "User"}
     httpx_mock.add_response(
         method="GET",
         url="https://paperclip.example.com/api/issues?issueNumber=62&companyId=C1",
-        json=[{
-            "id": "issue-uuid",
-            "issueNumber": 62,
-            "assigneeId": "agent-uuid",
-            "assigneeName": "MCPEngineer",
-            "executionRunId": None,
-        }],
+        json=[
+            {
+                "id": "issue-uuid",
+                "issueNumber": 62,
+                "assigneeId": "agent-uuid",
+                "assigneeName": "MCPEngineer",
+                "executionRunId": None,
+            }
+        ],
     )
     httpx_mock.add_response(
         method="GET",
         url="https://api.github.com/repos/ant013/Gimle-Palace/issues/77/comments?per_page=100",
-        json=[{"body": "<!-- paperclip-signal: ci.success abc123def456 assignee=MCPEngineer --> Woke."}],
+        json=[
+            {
+                "body": "<!-- paperclip-signal: ci.success abc123def456 assignee=MCPEngineer --> Woke."
+            }
+        ],
     )
     rc = ps.main(
         event_name="workflow_run",
@@ -777,13 +823,15 @@ def test_main_deferred_posts_deferred_comment_exits_0(
         httpx_mock.add_response(
             method="GET",
             url="https://paperclip.example.com/api/issues?issueNumber=62&companyId=C1",
-            json=[{
-                "id": "issue-uuid",
-                "issueNumber": 62,
-                "assigneeId": "agent-uuid",
-                "assigneeName": "MCPEngineer",
-                "executionRunId": "run-active",
-            }],
+            json=[
+                {
+                    "id": "issue-uuid",
+                    "issueNumber": 62,
+                    "assigneeId": "agent-uuid",
+                    "assigneeName": "MCPEngineer",
+                    "executionRunId": "run-active",
+                }
+            ],
         )
     httpx_mock.add_response(
         method="POST",
@@ -839,13 +887,15 @@ def test_main_paperclip_down_posts_failed_exits_1(
     httpx_mock.add_response(
         method="GET",
         url="https://paperclip.example.com/api/issues?issueNumber=62&companyId=C1",
-        json=[{
-            "id": "issue-uuid",
-            "issueNumber": 62,
-            "assigneeId": "agent-uuid",
-            "assigneeName": "MCPEngineer",
-            "executionRunId": None,
-        }],
+        json=[
+            {
+                "id": "issue-uuid",
+                "issueNumber": 62,
+                "assigneeId": "agent-uuid",
+                "assigneeName": "MCPEngineer",
+                "executionRunId": None,
+            }
+        ],
     )
     httpx_mock.add_response(
         method="GET",
@@ -880,8 +930,6 @@ def test_main_paperclip_down_posts_failed_exits_1(
 # ---------------------------------------------------------------------------
 # Task 15: Invariant tests — live config + CI workflow name
 # ---------------------------------------------------------------------------
-
-import yaml as _yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
