@@ -128,3 +128,6 @@ A full async-signal integration (paperclip CI webhook → automatic agent wake o
 <!-- @include fragments/shared/fragments/phase-handoff.md -->
 
 <!-- @include fragments/shared/fragments/language.md -->
+
+<!-- @include fragments/shared/fragments/test-design-discipline.md -->
+<!-- @include fragments/local/test-design-gimle.md -->
