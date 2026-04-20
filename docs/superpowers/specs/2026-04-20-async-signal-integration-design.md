@@ -363,7 +363,7 @@ Signal infra cannot target you reliably, operator has no diagnostic.
 
 **Upstream PR in paperclip-shared-fragments repo**:
 - Adds `fragments/async-signal-wait.md`
-- Updates `templates/engineers/mcp-engineer.md`, `templates/engineers/python-engineer.md`, `templates/quality/code-reviewer.md` with `@include` of the new fragment
+- Updates `templates/engineers/python-engineer.md`, `templates/quality/code-reviewer.md` with `@include` of the new fragment (NOTE: no `templates/engineers/mcp-engineer.md` exists upstream — the Gimle-local `paperclips/roles/mcp-engineer.md` is handled in §4.4.2)
 - **Does NOT** update templates/qa-engineer.md — explicitly excluded (see Section 5.2).
 - **Does NOT** update templates/infra-engineer.md — no async-wait case identified.
 

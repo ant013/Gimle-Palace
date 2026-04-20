@@ -19,9 +19,10 @@
 ### Files created in `paperclip-shared-fragments` (upstream submodule)
 
 - `fragments/async-signal-wait.md` — new shared fragment (~28 lines), project-agnostic async-signal-wait discipline.
-- `templates/engineers/mcp-engineer.md` — add one `@include` line.
 - `templates/engineers/python-engineer.md` — add one `@include` line.
 - `templates/quality/code-reviewer.md` — add one `@include` line.
+
+> **NOTE:** No `templates/engineers/mcp-engineer.md` exists upstream. The Gimle-local `paperclips/roles/mcp-engineer.md` is updated in Task 18.
 
 ### Files created in Gimle-Palace
 
@@ -59,7 +60,6 @@
 
 **Files (in `paperclip-shared-fragments` clone, NOT Gimle):**
 - Create: `fragments/async-signal-wait.md`
-- Modify: `templates/engineers/mcp-engineer.md`
 - Modify: `templates/engineers/python-engineer.md`
 - Modify: `templates/quality/code-reviewer.md`
 
@@ -115,17 +115,7 @@ Valid events: `ci.success`, `pr.review`, `qa.smoke_complete`.
 Signal infra cannot target you reliably, operator has no diagnostic.
 ```
 
-- [ ] **Step 1.4: Add `@include` to `templates/engineers/mcp-engineer.md`**
-
-Find the section that lists shared fragment includes (typically right after the role header block). Add:
-
-```markdown
-<!-- @include ../../fragments/async-signal-wait.md -->
-```
-
-Place it after the existing includes (e.g., after `git-workflow.md` or `phase-handoff.md`). Exact placement: if the template already has a block of consecutive `@include` lines, append to the end of that block.
-
-- [ ] **Step 1.5: Add `@include` to `templates/engineers/python-engineer.md`**
+- [ ] **Step 1.4: Add `@include` to `templates/engineers/python-engineer.md`**
 
 Same pattern — append:
 
@@ -133,7 +123,7 @@ Same pattern — append:
 <!-- @include ../../fragments/async-signal-wait.md -->
 ```
 
-- [ ] **Step 1.6: Add `@include` to `templates/quality/code-reviewer.md`**
+- [ ] **Step 1.5: Add `@include` to `templates/quality/code-reviewer.md`**
 
 Same pattern — append:
 
@@ -141,14 +131,13 @@ Same pattern — append:
 <!-- @include ../../fragments/async-signal-wait.md -->
 ```
 
-- [ ] **Step 1.7: Commit + push**
+- [ ] **Step 1.6: Commit + push**
 
 ```bash
 git add fragments/async-signal-wait.md \
-        templates/engineers/mcp-engineer.md \
         templates/engineers/python-engineer.md \
         templates/quality/code-reviewer.md
-git commit -m "feat(fragments): async-signal-wait discipline + 3 template includes
+git commit -m "feat(fragments): async-signal-wait discipline + 2 template includes
 
 Adds the async-signal-wait fragment consumed by Gimle-Palace GIM-62 and
 future paperclip projects. Disciplines agent exit behavior when waiting
