@@ -26,6 +26,8 @@ from neo4j import AsyncDriver
 from pydantic import BaseModel
 from starlette.applications import Starlette
 
+from palace_mcp.extractors import registry as _extractor_registry
+from palace_mcp.extractors.runner import run_extractor as _run_extractor
 from palace_mcp.errors import (
     VALID_ENTITY_TYPES,
     DriverUnavailableError,
@@ -282,6 +284,42 @@ async def palace_memory_get_project_overview(slug: str) -> dict[str, Any]:
         return {"ok": False, "error": "unknown_project", "message": str(exc)}
     except Exception as exc:
         handle_tool_error(exc)
+
+
+# ---------------------------------------------------------------------------
+# palace.ingest.* — extractor pipeline tools
+# ---------------------------------------------------------------------------
+
+
+@_tool(
+    name="palace.ingest.run_extractor",
+    description=(
+        "Run a named extractor against a registered project. Writes nodes/edges "
+        "scoped by group_id. Creates :IngestRun tracking. Returns run_id + "
+        "duration_ms + nodes_written + edges_written on success, or error_code "
+        "envelope on failure. Default timeout 300s per run."
+    ),
+)
+async def _palace_ingest_run_extractor(name: str, project: str) -> dict[str, Any]:
+    driver = _driver
+    if driver is None:
+        handle_tool_error(DriverUnavailableError("Neo4j driver not initialised"))
+    return await _run_extractor(name=name, project=project, driver=driver)
+
+
+@_tool(
+    name="palace.ingest.list_extractors",
+    description=(
+        "List registered extractors with their descriptions. Discovery endpoint "
+        "so clients don't hardcode extractor names."
+    ),
+)
+async def _palace_ingest_list_extractors() -> dict[str, Any]:
+    extractors = [
+        {"name": e.name, "description": e.description}
+        for e in _extractor_registry.list_all()
+    ]
+    return {"ok": True, "extractors": extractors}
 
 
 # ---------------------------------------------------------------------------

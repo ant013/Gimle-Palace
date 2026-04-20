@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch, NonCallableMagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -14,7 +13,6 @@ from palace_mcp.extractors.base import (
     BaseExtractor,
     ExtractionContext,
     ExtractorConfigError,
-    ExtractorRuntimeError,
     ExtractorStats,
 )
 from palace_mcp.extractors.runner import run_extractor

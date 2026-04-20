@@ -11,6 +11,7 @@ from neo4j import AsyncDriver, AsyncGraphDatabase
 from starlette.applications import Starlette
 
 from palace_mcp.config import Settings
+from palace_mcp.extractors.schema import ensure_extractors_schema
 from palace_mcp.mcp_server import build_mcp_asgi_app, set_default_group_id, set_driver
 from palace_mcp.memory.constraints import ensure_schema
 from palace_mcp.memory.logging_setup import configure_json_logging
@@ -63,6 +64,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     _fire_and_forget(
         ensure_schema(driver, default_group_id=settings.palace_default_group_id)
     )
+    await ensure_extractors_schema(driver)
     # Run the MCP sub-app lifespan so StreamableHTTPSessionManager task group is initialized.
     async with _mcp_asgi_app.router.lifespan_context(_mcp_asgi_app):
         yield
