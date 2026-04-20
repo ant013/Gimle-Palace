@@ -8,8 +8,11 @@ no thread-safety needed.
 from __future__ import annotations
 
 from palace_mcp.extractors.base import BaseExtractor
+from palace_mcp.extractors.heartbeat import HeartbeatExtractor
 
-EXTRACTORS: dict[str, BaseExtractor] = {}
+EXTRACTORS: dict[str, BaseExtractor] = {
+    "heartbeat": HeartbeatExtractor(),
+}
 
 
 def register(extractor: BaseExtractor) -> None:
