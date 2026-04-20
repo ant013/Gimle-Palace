@@ -135,9 +135,41 @@ def list_all() -> list[BaseExtractor]:
 
 Adding N+2b = 1 import line + 1 dict entry. No framework change.
 
+**Thread-safety:** registration is import-time (module-level EXTRACTORS dict literal). FastMCP tools run in a single asyncio event loop — no parallel register() calls possible in production. `register()` is provided for **test-time dynamic registration only**; production code never calls it at runtime.
+
 ### 3.4 Runner lifecycle (`runner.py`)
 
+Split into 3 helper coroutines + one orchestrator. Keeps each function < 50 LOC and independently testable (per reviewer NUDGE — 7-step monolith resisted clean unit-test boundaries).
+
 ```python
+# --- helper 1 ---
+async def _precheck(
+    *, name: str, project: str, driver: AsyncDriver
+) -> PrecheckResult:
+    """Validate slug, lookup extractor, verify :Project + repo_path. Pure
+    reads; no :IngestRun written yet. Returns PrecheckResult which is either
+    PrecheckOk(extractor, repo_path, group_id) or PrecheckError(error_code, message)."""
+
+
+# --- helper 2 ---
+async def _execute(
+    *, extractor: BaseExtractor, ctx: ExtractionContext, timeout_s: float
+) -> ExecuteResult:
+    """Wrap extractor.extract() in asyncio.wait_for + Exception handling.
+    Returns ExecuteOk(stats) or ExecuteError(error_code, errors_list). Never
+    raises. Logs extractor.run.start/finish/error structured events."""
+
+
+# --- helper 3 ---
+async def _finalize(
+    *, driver: AsyncDriver, run_id: str, result: ExecuteResult,
+    started_at: str, duration_ms: int,
+) -> None:
+    """Write FINALIZE_INGEST_RUN with stats/errors/success. Idempotent if
+    called twice (MATCH + SET)."""
+
+
+# --- orchestrator ---
 async def run_extractor(
     name: str,
     project: str,
@@ -145,7 +177,7 @@ async def run_extractor(
     driver: AsyncDriver | None = None,
     timeout_s: float = EXTRACTOR_TIMEOUT_S,  # default 300
 ) -> dict[str, Any]:
-    """Full lifecycle: validate → create :IngestRun → extract → finalize."""
+    """Full lifecycle: precheck → create :IngestRun → execute → finalize."""
     driver = driver or get_global_driver()  # from palace_mcp.main
 
     # 1. Validate slug
@@ -300,7 +332,7 @@ class HeartbeatExtractor(BaseExtractor):
         return ExtractorStats(nodes_written=1, edges_written=0)
 ```
 
-`:ExtractorHeartbeat` schema: `{run_id, ts, extractor, group_id}`. MERGE by `run_id` — idempotent even if `extract()` called twice with same ctx (defensive).
+`:ExtractorHeartbeat` schema: `{run_id, ts, extractor, group_id}`. MERGE by `run_id` is **defensive good practice**, not a load-bearing idempotency guarantee — runner generates a fresh UUID per call (see §3.4 step 5), so MERGE always dedegenerates to CREATE in normal flow. Framework-level idempotency "re-running heartbeat against same project creates separate runs" is guaranteed by fresh `run_id`, not by MERGE semantics.
 
 ## 4. MCP tool surface
 
@@ -333,7 +365,7 @@ class HeartbeatExtractor(BaseExtractor):
   "run_id": "<uuid>" | null
 }
 ```
-Pydantic `ExtractorRunResponse` / `ExtractorErrorResponse` with `ConfigDict(extra="forbid")`. FastMCP auto-generates JSON Schema for MCP clients.
+Pydantic `ExtractorRunResponse` / `ExtractorErrorResponse` with `ConfigDict(extra="forbid")` are used **internally** for validation and serialization (e.g., `response.model_dump()` inside runner). The MCP tool signature itself returns `dict[str, Any]` — this matches the established palace-mcp pattern (all `palace.memory.*` / `palace.git.*` tools return `dict[str, Any]`; FastMCP derives the input schema from param type hints, the output shape is documented in the tool's `description` string rather than a JSON Schema).
 
 **Timeout:** 300s default per run. Override via module constant `EXTRACTOR_TIMEOUT_S`. Per-extractor override deferred (followup).
 
@@ -478,9 +510,19 @@ Per GIM-54 §6.1 privacy pattern:
 - Commit/file contents, Cypher parameters values, stack traces — **never** in `:IngestRun.errors` or MCP response. Stack trace → stdout only via `logger.exception`.
 - Stderr / subprocess output — truncate to 4096 bytes if logged (matches GIM-54 git-mcp practice).
 
-### 6.3 Health integration
+### 6.3 Health integration — current state + decision
 
-Zero new code in `memory/health.py`. Existing `PROJECT_LAST_INGEST` query reads latest `:IngestRun` by `source`. When `source = "extractor.heartbeat"`, health shows that run automatically. UI-friendly grouping (`extractors: {...}` dict) — followup if needed.
+**Verified against code** (`memory/health.py:46` at `origin/develop@41d23d2`):
+
+```python
+ingest_result = await tx.run(LATEST_INGEST_RUN, source="paperclip")
+```
+
+Current `palace.memory.health()` response **hardcodes `source="paperclip"`** — extractor runs do NOT appear in the `last_ingest_*` fields today. My initial "zero code changes" claim was wrong (caught by independent review).
+
+**Decision (MVP):** leave `memory/health.py` unchanged. Extractor runs are queryable via the already-existing `palace.memory.lookup(entity_type="IngestRun", ...)` tool from GIM-52/53, filtered by `source="extractor.<name>"`. The dedicated health summary for extractor runs is a followup (`extractors: {heartbeat: {...}, ...}` grouping in health response).
+
+**Phase 2 task (added to §11):** Verify via a test that `memory.health.LATEST_INGEST_RUN` query still returns accurate paperclip data after this slice ships (regression guard — new `:IngestRun.nodes_written` field is nullable, so paperclip rows should parse unchanged).
 
 ## 7. Testing
 
@@ -496,7 +538,31 @@ Target: ~30 unit tests.
 
 ### 7.2 Integration tests — real Neo4j (`tests/extractors/integration/`)
 
-Fixture `neo4j_container` from `testcontainers-neo4j` (adds optional dev dep) OR uses existing compose neo4j if `COMPOSE_NEO4J_URI` env var set (CI preference — reuse compose to save boot time).
+Fixture `neo4j_container` in `tests/extractors/integration/conftest.py`:
+
+```python
+# conftest.py (integration)
+@pytest.fixture(scope="session")
+def neo4j_uri() -> str:
+    """Prefer reuse of existing Neo4j via env var; else spin up testcontainers."""
+    if reuse := os.environ.get("COMPOSE_NEO4J_URI"):
+        # CI and dev with `docker compose --profile review up` set this:
+        # COMPOSE_NEO4J_URI=bolt://localhost:7687
+        return reuse
+    # Fallback: boot a throwaway container for this test session.
+    from testcontainers.neo4j import Neo4jContainer
+    container = Neo4jContainer("neo4j:5.26.0")
+    container.start()
+    yield container.get_connection_url()
+    container.stop()
+```
+
+**Env var contract (documented explicitly):**
+- `COMPOSE_NEO4J_URI=bolt://localhost:7687` — set by CI job when a Neo4j service container is available (saves ~30s testcontainers boot per run).
+- Absent — tests fall back to `testcontainers-neo4j` auto-boot.
+- `testcontainers-neo4j` is a **dev-only** dependency in `pyproject.toml` (`[tool.uv.dependency-groups.dev]`), not shipped to production image.
+
+Plan Task 2.10 covers this conftest + dep + CI wiring explicitly.
 
 - `test_ensure_extractors_schema.py` — on clean Neo4j, creates expected constraint + 2 indexes. Idempotent on re-run.
 - `test_heartbeat_integration.py` — full `run_extractor("heartbeat", "<test-project>")` writes `:IngestRun` + `:ExtractorHeartbeat` correctly; re-run with separate run_id produces 2 of each.
@@ -572,6 +638,8 @@ Target: ~10-15 integration tests.
 4. **testcontainers-neo4j CI latency.** Adds ~30s container boot per integration run. Mitigation: offer `COMPOSE_NEO4J_URI` env var so CI with neo4j-service skips boot.
 5. **Schema drift across extractor releases.** If N+2b Git History changes `:Commit` schema mid-version, `IF NOT EXISTS` protects constraint but not semantics. Acceptable for MVP; schema-versioning is a larger followup.
 
+6. **`ensure_extractors_schema` startup failure crashes palace-mcp.** If any `CREATE CONSTRAINT`/`CREATE INDEX` fails (insufficient Neo4j permissions, edition incompatibility, pre-existing conflicting constraint with different definition), the lifespan throws — container restarts in a crash loop. No retry / partial-success semantics in MVP. **Acceptable** because: (a) `IF NOT EXISTS` makes re-runs safe, so failure is a legitimate environment misconfiguration that needs human fix; (b) a silent-partial-schema state would be worse (extractors would write to Neo4j thinking constraints are in place). **Fail-loud > fail-silent.** Operator sees clear error in `docker logs` and can investigate (likely: Neo4j version mismatch or restart needed).
+
 ## 11. Decomposition (plan-first ready)
 
 Expected plan: `docs/superpowers/plans/2026-04-20-GIM-59-extractor-framework-substrate.md` on this same feature branch. CTO resolves GIM-59 on Phase 1.1 (or operator bootstraps if CTO ban narrowing from GIM-57 hasn't propagated yet — verify).
@@ -589,10 +657,12 @@ Expected plan: `docs/superpowers/plans/2026-04-20-GIM-59-extractor-framework-sub
 | 2 | 2.7 | PE | `schema.py` — ensure_extractors_schema aggregator. Integration test for constraint + index creation. |
 | 2 | 2.8 | PE | `heartbeat.py` — HeartbeatExtractor class + integration test (real Neo4j, verify node persisted). |
 | 2 | 2.9 | PE | Wire to `main.py` lifespan + `mcp_server.py` MCP tools. End-to-end integration test. |
-| 2 | 2.10 | PE | `testcontainers-neo4j` dev dependency in pyproject.toml + conftest.py helper for real-vs-stubbed Neo4j fixture. |
-| 2 | 2.11 | TechnicalWriter | CLAUDE.md `## Extractors` section. Rollback runbook entry. |
+| 2 | 2.10 | PE | `testcontainers-neo4j` dev dependency in `pyproject.toml` + `tests/extractors/integration/conftest.py` `neo4j_uri` fixture with `COMPOSE_NEO4J_URI` env-var fallback (see §7.2). Dry-run: fixture boots container when env-var absent; reuses compose Neo4j when set. |
+| 2 | 2.10a | PE | Verify **consumer compatibility** with new `:IngestRun` nullable fields. Explicit test: parse existing paperclip ingest rows (e.g., from gimle fixture) through the `memory/health.py` `LATEST_INGEST_RUN` path after schema extension — assert no regression when `nodes_written` / `edges_written` are NULL on paperclip rows. Confirms §6.3 decision "leave health.py unchanged" holds. |
+| 2 | 2.11 | **PE → TW handoff.** PE posts paperclip comment `## Phase 2 code complete, handoff to TW for Task 2.12 docs` + reassigns `TechnicalWriter` (`0e8222fd-88b9-4593-98f6-847a448b0aab`). |
+| 2 | 2.12 | TechnicalWriter | CLAUDE.md `## Extractors` section — framework overview, how to register new extractor, MCP tool examples. Rollback runbook entry in `docs/runbooks/` (schema-drop + `MATCH (n:ExtractorHeartbeat) DETACH DELETE n`). |
 | 3.1 | 3.1 | CodeReviewer | Mechanical: ruff + mypy + pytest output pasted; compliance checklist against §9 acceptance; `gh pr review --approve` (new CR bridge from GIM-57). |
-| 3.2 | 3.2 | OpusArchitectReviewer | Adversarial: runner lifecycle edge cases (session leak, partial finalize on panic), Neo4j property drift for `:IngestRun`, registry thread-safety under concurrent FastMCP tool calls. |
+| 3.2 | 3.2 | OpusArchitectReviewer | Adversarial: runner lifecycle edge cases (session leak, partial finalize on panic), Neo4j property drift for `:IngestRun` (new nullable fields vs existing consumers like `memory/health.py:46` hardcoded `source="paperclip"`), `ensure_extractors_schema` startup-crash semantics, extractor exception hierarchy coverage (do we miss `neo4j.exceptions.ServiceUnavailable` / `ClientError`?). Registry thread-safety explicitly **not** in scope — single event loop, import-time registration. |
 | 4.1 | 4.1 | QAEngineer | Live smoke on iMac: §2 success criteria 1-7 reproduced. Evidence comment with commit SHA + Cypher-shell outputs + response payloads. Fills `## QA Evidence` in PR body (required check). |
 | 4.2 | 4.2 | CTO | Squash-merge via `gh pr merge --squash --delete-branch`. CI green (5 checks incl. qa-evidence-present). Close GIM-59. |
 
@@ -605,7 +675,7 @@ Operator (Board) role for this slice: no Phase 4.3 ritual since this slice doesn
 - Docs: ~50 LOC (CLAUDE.md section + rollback entry).
 - mypy --strict clean; ruff clean.
 - 1 PR on feature branch `feature/GIM-59-extractor-framework-substrate`.
-- ~1 day agent-time (4 phases, smaller than GIM-57 since no CI/branch-protection work).
+- **1-1.5 days agent-time** (revised up from initial 1-day estimate per reviewer NUDGE — 450 LOC prod + 600 LOC tests at palace-mcp's quality bar likely needs 2 CR rounds, matching GIM-54 precedent). Smaller than GIM-57 (no CI/branch-protection work); larger than a pure-docs slice.
 
 ## 13. Followups
 
