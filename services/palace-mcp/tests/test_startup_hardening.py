@@ -14,6 +14,21 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
+def _mock_ensure_extractors_schema() -> None:
+    """Isolate startup-hardening tests from extractor schema bootstrap.
+
+    These tests verify ensure_schema (memory constraints) fire-and-forget
+    behavior, not extractor schema. The dedicated test_ensure_extractors_schema
+    integration suite covers that path.
+    """
+    with patch(
+        "palace_mcp.main.ensure_extractors_schema",
+        new_callable=AsyncMock,
+    ):
+        yield  # type: ignore[misc]
+
+
+@pytest.fixture(autouse=True)
 def _stub_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Settings requires NEO4J_PASSWORD with no default. Tests that
     exercise ``lifespan`` must have it present in env so the ``Settings()``
