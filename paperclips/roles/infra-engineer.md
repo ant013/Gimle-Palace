@@ -85,3 +85,6 @@ Owns Gimle-Palace infrastructure: Docker Compose stack (profiles review/analyze/
 <!-- @include fragments/shared/fragments/phase-handoff.md -->
 
 <!-- @include fragments/shared/fragments/language.md -->
+
+<!-- @include fragments/shared/fragments/test-design-discipline.md -->
+<!-- @include fragments/local/test-design-gimle.md -->
