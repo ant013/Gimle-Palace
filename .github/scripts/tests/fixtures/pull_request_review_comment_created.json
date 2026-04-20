@@ -1,0 +1,22 @@
+{
+  "action": "created",
+  "comment": {
+    "id": 999,
+    "body": "nit: rename this variable",
+    "commit_id": "abc123def456"
+  },
+  "pull_request": {
+    "number": 77,
+    "head": {
+      "ref": "feature/GIM-62-async-signal",
+      "sha": "abc123def456"
+    }
+  },
+  "sender": {
+    "login": "operator",
+    "type": "User"
+  },
+  "repository": {
+    "full_name": "ant013/Gimle-Palace"
+  }
+}
