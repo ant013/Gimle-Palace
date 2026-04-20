@@ -152,3 +152,65 @@ When editing specs or plans, always reference the commit SHA or
 branch state the artefact is grounded in — do not assume "current
 develop" still means what it meant when a future reader lands here.
 Cite a predecessor slice's merge SHA in spec headers.
+
+## Extractors
+
+Palace-mcp ships a pluggable extractor framework under
+`services/palace-mcp/src/palace_mcp/extractors/`. Each extractor writes
+domain nodes/edges to Neo4j scoped by `group_id = "project/<slug>"` and is
+invoked via MCP tool `palace.ingest.run_extractor(name, project)`.
+
+### Registered extractors
+
+- `heartbeat` — diagnostic probe. Writes one `:ExtractorHeartbeat` node per
+  run. Use to verify the pipeline is alive before running heavy extractors.
+
+### Running an extractor
+
+From Claude Code (or any MCP client connected to palace-mcp):
+
+```
+palace.ingest.list_extractors()
+palace.ingest.run_extractor(name="heartbeat", project="gimle")
+```
+
+Response shape (success):
+```json
+{"ok": true, "run_id": "<uuid>", "extractor": "heartbeat",
+ "project": "gimle", "duration_ms": 42,
+ "nodes_written": 1, "edges_written": 0, "success": true}
+```
+
+Error envelope on failure:
+```json
+{"ok": false, "error_code": "invalid_slug | unknown_extractor |
+ project_not_registered | repo_not_mounted | extractor_config_error |
+ extractor_runtime_error | unknown", "message": "<short>",
+ "extractor": "...", "project": "...", "run_id": "..."}
+```
+
+### Adding a new extractor
+
+1. Create `src/palace_mcp/extractors/<name>.py` with a class inheriting
+   `BaseExtractor`. Declare `name`, `description`, `constraints`, `indexes`
+   class attributes. Implement `async def extract(self, ctx) -> ExtractorStats`.
+2. Import and register in `registry.py`:
+   ```python
+   from palace_mcp.extractors.<name> import <ClassName>
+   EXTRACTORS["<name>"] = <ClassName>()
+   ```
+3. Unit test in `tests/extractors/unit/test_<name>.py` (mock driver).
+4. Integration test in `tests/extractors/integration/test_<name>_integration.py`
+   (real Neo4j via testcontainers or compose reuse).
+
+### Known limitations
+
+- **`palace.memory.health()` shows only paperclip ingest runs**, not
+  extractor runs (`memory/health.py:46` hardcodes `source="paperclip"`).
+  Query extractor runs via `palace.memory.lookup(entity_type="IngestRun",
+  filters={"source": "extractor.<name>"})`. UI-friendly health grouping
+  is a followup.
+- **No scheduler** — extractor runs are manual via MCP tool. Cron trigger
+  is a followup.
+- **No concurrent runs** — palace-mcp's event loop serializes MCP tool
+  calls. A heavy extractor blocks other tools during its run.
