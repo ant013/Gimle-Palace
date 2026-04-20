@@ -272,7 +272,7 @@ def test_paperclip_get_issue_success(httpx_mock: HTTPXMock):
             {
                 "id": "issue-uuid-1",
                 "issueNumber": 62,
-                "assigneeId": "agent-uuid-1",
+                "assigneeAgentId": "agent-uuid-1",
                 "assigneeName": "MCPEngineer",
                 "executionRunId": None,
             }
@@ -315,7 +315,7 @@ def test_paperclip_release_and_reassign(httpx_mock: HTTPXMock):
     httpx_mock.add_response(
         method="PATCH",
         url="https://paperclip.example.com/api/issues/issue-uuid-1",
-        match_json={"assigneeId": "agent-uuid-1"},
+        match_json={"assigneeAgentId": "agent-uuid-1"},
         json={"ok": True},
     )
     client = ps.PaperclipClient(
@@ -437,7 +437,7 @@ def test_resolve_target_issue_assignee_active_run_null(httpx_mock: HTTPXMock):
             {
                 "id": "uuid",
                 "issueNumber": 62,
-                "assigneeId": "agent-uuid",
+                "assigneeAgentId": "agent-uuid",
                 "assigneeName": "MCPEngineer",
                 "executionRunId": None,
             }
@@ -463,7 +463,7 @@ def test_resolve_target_issue_assignee_deferred_active_run_persists(
                 {
                     "id": "uuid",
                     "issueNumber": 62,
-                    "assigneeId": "agent-uuid",
+                    "assigneeAgentId": "agent-uuid",
                     "assigneeName": "MCPEngineer",
                     "executionRunId": "run-active-1",
                 }
@@ -486,7 +486,7 @@ def test_resolve_target_issue_assignee_active_run_clears(httpx_mock: HTTPXMock):
             {
                 "id": "uuid",
                 "issueNumber": 62,
-                "assigneeId": "agent-uuid",
+                "assigneeAgentId": "agent-uuid",
                 "assigneeName": "MCPEngineer",
                 "executionRunId": "run-active-1",
             }
@@ -499,7 +499,7 @@ def test_resolve_target_issue_assignee_active_run_clears(httpx_mock: HTTPXMock):
             {
                 "id": "uuid",
                 "issueNumber": 62,
-                "assigneeId": "agent-uuid",
+                "assigneeAgentId": "agent-uuid",
                 "assigneeName": "MCPEngineer",
                 "executionRunId": None,
             }
@@ -521,7 +521,7 @@ def test_resolve_target_issue_assignee_null_assignee(httpx_mock: HTTPXMock):
             {
                 "id": "uuid",
                 "issueNumber": 62,
-                "assigneeId": None,
+                "assigneeAgentId": None,
                 "assigneeName": None,
                 "executionRunId": None,
             }
@@ -698,7 +698,7 @@ def test_main_happy_path_ci_success(
             {
                 "id": "issue-uuid",
                 "issueNumber": 62,
-                "assigneeId": "agent-uuid",
+                "assigneeAgentId": "agent-uuid",
                 "assigneeName": "MCPEngineer",
                 "executionRunId": None,
             }
@@ -786,7 +786,7 @@ def test_main_dedup_hit_exits_0(
             {
                 "id": "issue-uuid",
                 "issueNumber": 62,
-                "assigneeId": "agent-uuid",
+                "assigneeAgentId": "agent-uuid",
                 "assigneeName": "MCPEngineer",
                 "executionRunId": None,
             }
@@ -827,7 +827,7 @@ def test_main_deferred_posts_deferred_comment_exits_0(
                 {
                     "id": "issue-uuid",
                     "issueNumber": 62,
-                    "assigneeId": "agent-uuid",
+                    "assigneeAgentId": "agent-uuid",
                     "assigneeName": "MCPEngineer",
                     "executionRunId": "run-active",
                 }
@@ -891,7 +891,7 @@ def test_main_paperclip_down_posts_failed_exits_1(
             {
                 "id": "issue-uuid",
                 "issueNumber": 62,
-                "assigneeId": "agent-uuid",
+                "assigneeAgentId": "agent-uuid",
                 "assigneeName": "MCPEngineer",
                 "executionRunId": None,
             }

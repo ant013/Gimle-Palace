@@ -311,7 +311,7 @@ class PaperclipClient:
         return Issue(
             id=entry["id"],
             issue_number=entry["issueNumber"],
-            assignee_id=entry.get("assigneeId"),
+            assignee_id=entry.get("assigneeAgentId"),
             assignee_name=entry.get("assigneeName"),
             execution_run_id=entry.get("executionRunId"),
         )
@@ -321,7 +321,7 @@ class PaperclipClient:
         release = self._client.post(f"/api/issues/{issue_id}/release")
         release.raise_for_status()
         patch = self._client.patch(
-            f"/api/issues/{issue_id}", json={"assigneeId": assignee_id}
+            f"/api/issues/{issue_id}", json={"assigneeAgentId": assignee_id}
         )
         patch.raise_for_status()
 
