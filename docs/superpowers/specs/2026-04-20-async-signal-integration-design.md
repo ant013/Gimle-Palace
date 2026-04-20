@@ -163,7 +163,7 @@ name: paperclip-signal
 
 on:
   workflow_run:
-    workflows: ["ci"]
+    workflows: ["CI"]                # matches .github/workflows/ci.yml top-level `name: CI`
     types: [completed]
   pull_request_review:
     types: [submitted]
@@ -511,7 +511,7 @@ Operator captures initial fixtures during first post-merge smoke run and commits
 | `test_bot_filter_ant013_listed` | sender fixture=`ant013` → early exit |
 | `test_dedup_marker_present` | mock comments contain matching marker → returns True (skip) |
 | `test_dedup_marker_absent` | mock comments empty → returns False (proceed) |
-| `test_ci_workflow_name_pinned` | Reads `.github/workflows/ci.yml` on disk, asserts top-level `name: ci`. Breaks loudly if someone renames the CI workflow. |
+| `test_ci_workflow_name_pinned` | Reads `.github/workflows/ci.yml` on disk, asserts top-level `name: CI`. Breaks loudly if someone renames the CI workflow. |
 
 ### 7.2 Integration tests (httpx MockTransport)
 
