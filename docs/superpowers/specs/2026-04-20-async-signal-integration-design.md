@@ -14,8 +14,8 @@
 
 **Predecessor SHAs this spec is grounded in:**
 - `develop` tip: `7bdc302` (at brainstorm start; verify before implementation)
-- `paperclips/fragments/shared` submodule tracked: `8bae8b7` (Gimle develop)
-- `paperclips/fragments/shared` upstream main: `b40da10` (PR #5 landed, Gimle pointer not yet bumped — expected to be absorbed into this slice's final submodule bump)
+- `paperclips/fragments/shared` submodule tracked post-bump: `63744230bf986bd87c509564b969178d0472d4d7`
+- `paperclips/fragments/shared` upstream main pre-bump: `b40da10` (PR #5 landed); post-bump: `6374423` (PR #6 async-signal-wait merged)
 
 ---
 
