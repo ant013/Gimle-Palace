@@ -66,8 +66,19 @@ Use real substrate where feasible: test containers for databases, real
 subprocess invocations for CLI tools, temp directories for filesystem,
 transport-level mocks for HTTP (not client-class mocks).
 
-**Mock is acceptable** for timeouts, specific exception types, and other
-error paths that are hard to reproduce with real substrate.
+**Error-path tests MAY continue to use mocks freely.** This rule targets
+happy-path only. Explicit examples of legitimate mock usage:
+
+- `asyncio.wait_for` raising `TimeoutError` / `asyncio.TimeoutError`.
+- Driver exceptions (`neo4j.exceptions.ServiceUnavailable`, `ClientError`,
+  connection resets).
+- `BrokenPipeError`, OS-level errors in subprocess streams.
+- HTTP 5xx responses via `httpx.MockTransport` (transport-level, not client-level).
+- Specific race conditions hard to reproduce on real substrate.
+
+The rule is: use real substrate for the **success path** of substrate-touching
+code. Error paths retain mocks — real substrate rarely reproduces them cleanly
+and doing so blows up CI runtime.
 
 ### Touching shared infrastructure → full test suite, not scoped
 
@@ -211,7 +222,15 @@ Submodule PR must merge before Gimle PR can bump pointer:
 2. **Retrospective mapping weakness.** If GIM-48 / GIM-59 patterns map weakly onto the new checklist text, the rule sounds good but doesn't actually catch bugs in practice. Mitigation: retrospective validation is part of acceptance; Board verifies mapping before merge.
 3. **`fragments/local/` first use breaks build.sh.** The resolver is universal, but untested in this subpath. Mitigation: dry-run in Phase 2 Task 2.8 before push — diff the generated `dist/code-reviewer.md` before and after, confirm both fragments appear.
 4. **Over-broad substrate definition.** Agents flag too many mocks as violations, friction rises. Mitigation: shared fragment definition is narrow — external library classes + subprocesses + FS-as-subject. Internal modules and pure funcs explicitly excluded.
-5. **Submodule bump ordering race.** If PR A in `paperclip-shared-fragments` merges, then another PR merges before Gimle bump, submodule ref drifts. Mitigation: do PR A and PR B in one session, 30-60 minutes apart.
+5. **Submodule bump ordering race.** If PR A in `paperclip-shared-fragments` merges, then another PR merges before Gimle bump, submodule ref drifts. Mitigation: do PR A and PR B in one session, 30-60 minutes apart. Single-operator reality makes this low-risk today; multi-team future needs auto-bump automation (§9 followup).
+
+6. **CI-time explosion if rule over-applied.** Real substrate for happy-path testing means `testcontainers-neo4j` boot (~30s per test session observed in GIM-59), real `git init` + commits, real subprocess forks. Naive interpretation "every new test uses real substrate" × hundreds of tests × each PR CI = CI latency 3-10× current. Mitigation:
+   - Shared fragment explicitly states error-path mocks remain OK (§3.1 revision).
+   - Prefer session-scoped testcontainers fixtures (one container per test session, not per test) — documented in `tests/extractors/integration/conftest.py` from GIM-59.
+   - `COMPOSE_NEO4J_URI` env-var override (GIM-59) lets CI reuse a long-lived compose Neo4j instead of booting per run.
+   - CR checklist calls out "real-fixture integration test exists", not "every test uses real fixture" — scoping matters.
+
+7. **CR review latency increase.** 3 new checklist items add ~15-30% review surface on typical diffs. Trade-off accepted: the items are binary (mock spec matches external class: yes/no), which reduces ambiguity on happy-path cases. Latency grows mostly on corner-cases and adversarial examples where CR must judge whether a mock is substrate-or-internal. Measure after 2-3 slices post-merge; if real, consider ruff-lint automation (§9 followup #1) to offload CR.
 
 ## 7. Decomposition (plan-first ready)
 
@@ -226,7 +245,7 @@ Expected plan: `docs/superpowers/plans/2026-04-20-GIM-61-test-design-discipline-
 | 2 | 2.3 | TechnicalWriter | Add 2 `@include` lines to each of 5 role files (code-reviewer, python-engineer, mcp-engineer, qa-engineer, infra-engineer). |
 | 2 | 2.4 | InfraEngineer | Bump submodule `paperclips/fragments/shared` to `$FRAG_SHA`. |
 | 2 | 2.5 | InfraEngineer | Run `./paperclips/build.sh`. Dry-run check: `grep 'Test-design discipline' paperclips/dist/*.md` → expect 5 files; `grep 'Gimle specifics' paperclips/dist/*.md` → same 5 files. Commit `dist/` changes. |
-| 2 | 2.6 | TechnicalWriter | Write retrospective validation: apply CR checklist to GIM-48 plan (vector #3) + GIM-59 plan (`test_startup_hardening.py`). Show which item catches each case. Paste evidence in PR body ready for Phase 4.1. |
+| 2 | 2.6 | TechnicalWriter | Write retrospective validation. For each of GIM-48 and GIM-59, produce **quantitative** mapping (not decorative hand-wave): (a) cite the specific plan-step or test file line that introduced the anti-pattern; (b) name which of the 3 CR checklist items would have fired at what phase (Phase 1.2 plan-first vs Phase 3.1 diff-scan); (c) write one sentence describing **what the plan author would have written instead** to pass the check. Output as markdown table with 4 columns (incident, plan step, checklist item, corrective wording). Paste in PR body ready for Phase 4.1. If either mapping turns out to be weak (item doesn't clearly fire on the plan text as written), this is a signal the rule is decorative, not preventative — escalate rather than fudging. |
 | 3.1 | 3.1.1 | CodeReviewer | Mechanical: markdown-lint on new fragments (if lint exists), verify `@include` syntax (lines compile through build.sh without errors), retrospective mapping makes sense. |
 | 3.2 | 3.2 | OpusArchitectReviewer | Adversarial: edge cases — over-strict rule producing rejections of legitimate tests; cross-extractor soft contracts at risk; semantic drift between shared fragment and local addendum. |
 | 4.1 | 4.1 | QAEngineer | Deploy dry-run to one agent (test bundle locally, not live deploy). Verify fragment content renders correctly. Add `micro-slice` label — qa-evidence-present waived. Compliance-comment text = retrospective validation from Task 2.6. |
@@ -246,8 +265,11 @@ Expected plan: `docs/superpowers/plans/2026-04-20-GIM-61-test-design-discipline-
 
 ## 9. Followups
 
-1. **Pre-commit / ruff custom rule** detecting `MagicMock(spec=<external>)`. Automation; MVP relies on manual CR scan.
+1. **Pre-commit / ruff custom rule** detecting `MagicMock(spec=<external>)`. Automation; MVP relies on manual CR scan. Offload CR review latency increase noted in §6.7.
 2. **OpusArchitectReviewer fragment inclusion** if Opus-missed regression shows up.
 3. **Expanded substrate taxonomy** (IPC queues, message brokers) when encountered.
 4. **Medic-side `test-design-medic.md` local addendum** when Medic team adopts.
 5. **Fragment lint CI** in `paperclip-shared-fragments` repo — markdown syntax, link-check, schema validation. Cross-cutting; not unique to this slice.
+6. **Automated submodule-bump PR.** When `paperclip-shared-fragments@main` advances, a Gimle-side automation opens a PR bumping `paperclips/fragments/shared` to the new ref + runs `build.sh` + commits dist. Addresses §6.5 manual-coordination fragility.
+7. **Fragment accumulation policy.** Shared-fragments currently has 12 files (~500 LOC total). Projected growth: another 3-5 fragments in next 6 months. At 15-20 fragments, per-agent bundle overhead becomes measurable (10-20% system prompt); risk of "lost in the middle" attention issues on long bundles. Needed: policy for when to (a) consolidate similar fragments, (b) deprecate superseded ones via banner + eventual removal, (c) set a soft budget per agent bundle (e.g., 800-1200 LOC cap). Cross-project concern; propose through `paperclip-shared-fragments` repo rather than Gimle-local.
+8. **Decision log on committing `dist/*.md`.** Current practice (inherited from GIM-48 era build.sh): committed in-repo so role bundle diffs are visible in PR reviews. Alternative: generate in CI, `.gitignore` `dist/`. Current practice wins on review ergonomics; loses on commit noise (~250 LOC re-generated on every fragment change). Document the trade-off explicitly in build.sh header comment so future reader understands the choice.
