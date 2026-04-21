@@ -2,7 +2,22 @@
 
 **Date:** 2026-04-21
 **Author:** Board (brainstorm with operator)
-**Status:** DRAFT — pending operator review
+**Status:** REV2 — adversarial review incorporated.
+
+**Rev2 change log:**
+- §1 — honest LOC estimate (1000-1200 prod + 1000-1500 test); dropped "janitor" framing
+- §4.2 — `hang_etime_min: 60` (was 30), `hang_cpu_max_s: 30` (was 60). Empirically calibrated against observed p99 of legitimate runs — see §4.2.1
+- §4.5 — **major redesign**: POST `/api/agents/{id}/wake` returns 404 (verified 2026-04-21); `wakeAgentSchema` in paperclip source is internal-only. Primary path is now `POST /release → PATCH assigneeAgentId=same`. No `/wake` primary. No fallback logic needed.
+- §4.5 kill — added PID-cmdline re-verification before `os.kill` to mitigate PID-reuse race
+- §4.3 daemon — `_tick` wrapped in `asyncio.wait_for(..., timeout=60)` with `sys.exit(1)` on hang → launchd restarts
+- §4.4 / §4.8 — `status` CLI now reports "paperclip-skills procs matched by filter today" (operator observability if command-line filter gets stale from Anthropic renames)
+- §4.4 — permanent-escalation state (3 re-escalation cycles → no-auto-unescalate; requires explicit `unescalate --permanent=false`)
+- §4.6 — state file version migration policy (unknown version → rename `.bak`, start empty, WARN)
+- §4.7 — `install --discover-companies` errors by default if companies list non-empty; requires `--force`
+- §6.1 — failure matrix: `fcntl LOCK_NB + 2 retries + fail-hard` (no infinite launchd-restart), HTTP 429 back-off
+- §7.5 — coverage exclusions declared (subprocess calls to system-ctl, other-OS branches, CLI boilerplate)
+- §8 — pre-merge check: PATCH assigneeAgentId with token returns 200 (was wake-check)
+- §10 — escalation comment template explicit (referenced from §4.3), LOC estimate honest
 
 **Predecessor SHAs this spec is grounded in:**
 - `develop` tip: `068014f` (GIM-62 async-signal dispatcher merged 2026-04-21T01:07:48Z)
@@ -19,7 +34,7 @@
 
 Close the pipeline-recovery gap discovered during GIM-62: paperclip does **not** auto-respawn agents when their Claude subprocess dies mid-work, and it does **not** auto-kill Claude subprocesses that hang after completion. Both are observed failure modes. Heartbeat is globally disabled by design (event-driven handoff); without it, stuck issues wait forever for operator intervention.
 
-Build a small host-native watchdog daemon, part of the Gimle stack's one-command install, that:
+Build a host-native watchdog daemon (~1000-1200 LOC prod + 1000-1500 LOC test, measured for honesty — this is not a small utility), part of the Gimle stack's one-command install, that:
 
 1. Polls paperclip API every 2 minutes for issues stuck in `assignee-set + no-run` state older than a threshold, and wakes the assignee via `POST /wake` (with `PATCH` fallback).
 2. Polls the iMac process table for `claude --print` subprocesses with long wall-time and negligible CPU-time, and kills them — next tick resurrects via (1).
@@ -157,15 +172,15 @@ companies:
     name: gimle
     thresholds:
       died_min: 3                    # updatedAt > N min → "stuck"
-      hang_etime_min: 30             # ps etime > N min (combined with below)
-      hang_cpu_max_s: 60             # AND ps cpu_time < N s
+      hang_etime_min: 60             # ps etime > N min (empirically calibrated, §4.2.1)
+      hang_cpu_max_s: 30             # AND ps cpu_time < N s
 
   - id: 1593f659-a6d7-4c7e-9cd7-8b87027f278e
     name: medic
     thresholds:
       died_min: 3
-      hang_etime_min: 30
-      hang_cpu_max_s: 60
+      hang_etime_min: 60
+      hang_cpu_max_s: 30
 
 daemon:
   poll_interval_seconds: 120
@@ -186,6 +201,32 @@ escalation:
   comment_marker: "<!-- watchdog-escalation -->"
 ```
 
+### 4.2.1 Threshold calibration — empirical methodology
+
+**Data** (sampled 2026-04-21 from GIM-62 issue — 19 completed runs across CTO, CR, PE, QA, Opus, CEO agents):
+
+| Stat | `duration_ms` (wall-time of completed run) |
+|---|---|
+| Min | 34,411 ms (~34s, CTO quick formalize) |
+| P50 | ~170 s |
+| P75 | ~260 s |
+| P90 | ~410 s |
+| **Max legitimate run** | **2,125,525 ms (~35.4 min, PE Phase 2 implementation)** |
+
+**Key insight:** Claude CLI runs are **API-bound** (>95% of `duration_ms` is spent in `api_duration_ms` — `cache_read_input_tokens > 1M` for CTO run observed). Legitimate long work has **low CPU** by construction — the opposite of a "busy process".
+
+**Threshold derivation:**
+
+- `hang_etime_min: 60` = 1.7× observed max legitimate run (35 min × 1.7 ≈ 60 min). Covers the long-tail PE/MCPE coding sessions with comfortable safety margin. CTO idle-hang incident was 66 min → still detected.
+- `hang_cpu_max_s: 30` = conservative. Legit API-bound runs accrue CPU on MCP tool calls / context processing. A 60-min run normally accumulates 1-5 min CPU on serena/palace MCP invocations. Truly idle-hang process: ~0-10s CPU over hours (what GIM-62 CTO showed).
+
+**Re-calibration triggered by:**
+- New false-positive kill observed in production → widen thresholds
+- Long-tail run extends beyond 35 min (e.g., heavy MCPE multi-hour coding) → widen further  
+- Anthropic releases changes Claude-CLI behavior → sample fresh data
+
+**Open calibration improvement (out-of-scope for MVP):** collect ps snapshots every 30s for first week post-deploy, compute rolling p99 (etime, cpu), auto-tune thresholds. Tracked as followup slice GIM-6X.
+
 **Schema validation** (enforced by `config.py`):
 - `version == 1` required (reject unknown versions)
 - `companies` non-empty list, each `id` is UUID
@@ -202,7 +243,17 @@ async def run(config: Config, state: State, client: PaperclipClient) -> None:
     while True:
         tick_started = datetime.utcnow()
         try:
-            await _tick(config, state, client)
+            # Self-liveness: if _tick itself hangs (httpx deadlock, zombie
+            # subprocess, PATCH stuck in paperclip), we sys.exit(1) and
+            # let launchd/systemd respawn us. Without this, a hung daemon
+            # is exactly the silent-failure it's meant to prevent.
+            await asyncio.wait_for(
+                _tick(config, state, client),
+                timeout=60,  # 2× normal tick budget — generous but bounded
+            )
+        except asyncio.TimeoutError:
+            log.error("tick_timeout_self_exit", timeout_s=60)
+            sys.exit(1)  # launchd KeepAlive restarts us after ~10s
         except Exception as e:
             log.exception("tick_failed", error=str(e))
         # Sleep until next interval, accounting for tick duration
@@ -236,9 +287,13 @@ async def _tick(config: Config, state: State, client: PaperclipClient) -> TickRe
             elif action.kind == "escalate":
                 state.record_escalation(action.issue.id, action.reason)
                 if config.escalation.post_comment_on_issue:
+                    # Template: see §6.3 for full example. Build function renders
+                    # marker + escalation context (agent name, wake count, timeline,
+                    # suggested operator actions) into a single markdown comment.
                     await client.post_issue_comment(action.issue.id,
-                                                    build_escalation_body(action))
-                log.warn("escalation", issue=action.issue.id, reason=action.reason)
+                                                    build_escalation_body(action, state))
+                log.warn("escalation", issue=action.issue.id, reason=action.reason,
+                         escalation_count=state.escalation_count(action.issue.id))
             total_actions += 1
 
     state.save()
@@ -268,6 +323,12 @@ async def scan_died_mid_work(company: CompanyConfig, client: PaperclipClient,
         if issue.updated_at > threshold:
             continue
         if state.is_escalated(issue.id):
+            # Permanent-escalation cuts off auto-unescalate after M re-escalation cycles.
+            # Scenario this prevents: broken agent → 3 wakes → escalate → operator
+            # comments "looking" → auto-unescalate → 3 wakes again → escalate → ...
+            # After 3 such full cycles, require explicit `unescalate` CLI invocation.
+            if state.is_permanently_escalated(issue.id):
+                continue
             # Auto-unescalate if operator touched issue after escalation
             if issue.updated_at > state.escalated_issues[issue.id]["escalated_at"]:
                 state.clear_escalation(issue.id)
@@ -329,51 +390,71 @@ Detection via `sys.platform` at module load; pick parser.
 
 ### 4.5 Action primitives
 
-**`wake_with_fallback`** — implements `/wake` with `PATCH` fallback (§3 C pattern from brainstorm):
+**`trigger_respawn`** — PATCH-based primary, with POST `/release` pre-step for stale-lock cases.
+
+**Endpoint verification (2026-04-21):**
+- `POST /api/agents/{id}/wake` → **HTTP 404 not found.** `wakeAgentSchema` in paperclip source (`paperclipai/dist/index.js:1527`) is an internal Zod schema for validation, NOT exposed as REST route.
+- `PATCH /api/issues/{id}` with `{assigneeAgentId: same}` → **works** (GIM-62 proven; triggers `assignment` wake event).
+- `POST /api/issues/{id}/release` → **works** (GIM-62 proven; clears assignee + potentially clears stale `executionRunId`).
+
+**Revised logic** (no `/wake`, no fallback branching):
 
 ```python
-async def wake_with_fallback(client: PaperclipClient, issue: Issue,
-                              assignee_id: str) -> WakeResult:
-    """POST /wake; if no respawn within 30s, PATCH assigneeAgentId=same."""
-    idempotency_key = f"watchdog-{issue.id}-{int(time.time() // 60)}"
-
-    # Primary: POST /wake
-    try:
-        await client.wake_agent(
-            assignee_id,
-            source="automation",
-            reason=f"watchdog-respawn issue={issue.id}",
-            idempotency_key=idempotency_key,
-        )
-    except PaperclipError as e:
-        log.warning("wake_primary_failed", agent=assignee_id, error=str(e))
-
-    # Verify: poll for new executionRunId within 30s
-    for _ in range(6):
-        await asyncio.sleep(5)
-        refreshed = await client.get_issue(issue.id)
-        if refreshed.execution_run_id is not None:
-            return WakeResult(via="wake", success=True,
-                              run_id=refreshed.execution_run_id)
-
-    # Fallback: PATCH assigneeAgentId=same-value (proven from GIM-62)
-    log.info("wake_fallback_patch", issue=issue.id)
+async def trigger_respawn(client: PaperclipClient, issue: Issue,
+                           assignee_id: str) -> RespawnResult:
+    """PATCH assigneeAgentId=same to trigger paperclip 'assignment' wake event.
+    
+    If PATCH alone doesn't trigger a new run within 30s (possible if
+    paperclip has a stale lock referring to the dead run), retry with
+    POST /release + PATCH sequence — the proven GIM-52/53 workaround.
+    """
+    # Primary: single PATCH (fast path, most cases work)
     await client.patch_issue(issue.id, {"assigneeAgentId": assignee_id})
     for _ in range(6):
         await asyncio.sleep(5)
         refreshed = await client.get_issue(issue.id)
         if refreshed.execution_run_id is not None:
-            return WakeResult(via="patch", success=True,
-                              run_id=refreshed.execution_run_id)
+            return RespawnResult(via="patch", success=True,
+                                 run_id=refreshed.execution_run_id)
 
-    return WakeResult(via="none", success=False, run_id=None)
+    # Fallback: POST /release clears stale lock, then PATCH re-triggers
+    log.info("respawn_fallback_release_patch", issue=issue.id)
+    try:
+        await client.post_release(issue.id)
+    except PaperclipError as e:
+        log.warning("release_failed", issue=issue.id, error=str(e))
+    await client.patch_issue(issue.id, {"assigneeAgentId": assignee_id})
+    for _ in range(6):
+        await asyncio.sleep(5)
+        refreshed = await client.get_issue(issue.id)
+        if refreshed.execution_run_id is not None:
+            return RespawnResult(via="release_patch", success=True,
+                                 run_id=refreshed.execution_run_id)
+
+    return RespawnResult(via="none", success=False, run_id=None)
 ```
 
-**`kill_hanged_proc`** — sync.
+**`kill_hanged_proc`** — with PID-cmdline re-verification to mitigate PID-reuse race.
 
 ```python
 def kill_hanged_proc(proc: HangedProc) -> KillResult:
-    """SIGTERM, wait 3s, SIGKILL if still alive."""
+    """SIGTERM, wait 3s, SIGKILL if still alive.
+
+    Re-verifies PID-cmdline match before sending signal. On macOS, PID max
+    is 99999 and reuse can happen on long-running systems; between the
+    scan and the kill, the original process could have exited and its PID
+    could have been reassigned to an unrelated process (or critical OS
+    service). This check catches that rare race.
+    """
+    # Re-verify: same PID, same command, etime roughly matches
+    current = _read_proc_cmdline(proc.pid)
+    if current is None:
+        return KillResult(pid=proc.pid, status="already_dead")
+    if "append-system-prompt-file" not in current or "paperclip-skills" not in current:
+        log.warning("pid_reused", pid=proc.pid, old_cmd_prefix=proc.command[:60],
+                    new_cmd_prefix=current[:60])
+        return KillResult(pid=proc.pid, status="pid_reused_skip")
+
     try:
         os.kill(proc.pid, signal.SIGTERM)
     except ProcessLookupError:
@@ -386,11 +467,22 @@ def kill_hanged_proc(proc: HangedProc) -> KillResult:
         return KillResult(pid=proc.pid, status="forced")
     except ProcessLookupError:
         return KillResult(pid=proc.pid, status="clean")
+
+
+def _read_proc_cmdline(pid: int) -> str | None:
+    """Return current process cmdline, or None if process is gone."""
+    result = subprocess.run(
+        ["ps", "-p", str(pid), "-o", "command="],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+    return result.stdout.strip()
 ```
 
 ### 4.6 State file
 
-**`~/.paperclip/watchdog-state.json`** shape (see §4 of brainstorm for full example):
+**`~/.paperclip/watchdog-state.json`** shape:
 
 ```json
 {
@@ -403,10 +495,24 @@ def kill_hanged_proc(proc: HangedProc) -> KillResult:
     "<agent-uuid>": ["2026-04-21T01:55:00Z", "..."]
   },
   "escalated_issues": {
-    "<issue-uuid>": {"escalated_at": "...", "reason": "per_agent_cap_exceeded"}
+    "<issue-uuid>": {
+      "escalated_at": "2026-04-21T01:45:00Z",
+      "reason": "per_agent_cap_exceeded",
+      "escalation_count": 1,
+      "permanent": false
+    }
   }
 }
 ```
+
+**Fields explained:**
+- `escalation_count`: incremented each time we re-escalate the same issue (including after auto-unescalate + re-trigger cycle)
+- `permanent`: set to `true` when `escalation_count >= 3`. Auto-unescalate is skipped while `permanent=true`. Only `gimle-watchdog unescalate --issue <uuid>` clears it.
+
+**Version migration policy** (for future schema changes):
+- Unknown `version` → rename current file to `watchdog-state.json.bak-<timestamp>`, start with empty state, log `WARN state_version_unknown`.
+- Missing `version` (very old corrupted file) → same recovery path.
+- This avoids blocking daemon startup on a single bad field while preserving forensic data.
 
 **Atomic writes:** write to `<path>.tmp` then `os.replace()` (POSIX-atomic).
 **Corrupt-file recovery:** read errors → log WARN + start with empty state (don't crash daemon).
@@ -454,23 +560,81 @@ def cmd_install(args):
         _append_crontab_entry(entry, marker="# gimle-watchdog")
 ```
 
-**`--discover-companies` flag:** on first install, `GET /api/companies` with token, auto-populates `companies: []` in config with all non-archived entries. User can edit yaml after.
+**`--discover-companies` flag** — overwrite semantics:
+- On first install (config missing OR `companies: []` empty): runs `GET /api/companies`, auto-populates with non-archived entries. No prompt.
+- On re-install with existing non-empty `companies:` list: **errors out** with clear message:
+  ```
+  Config at ~/.paperclip/watchdog-config.yaml already has 2 companies configured.
+  --discover-companies will OVERWRITE your edits (thresholds, names).
+  Re-run with --force to overwrite, or edit the file manually.
+  ```
+- `--force` overrides the error (operator consent-required).
+
+This prevents silent loss of operator-tuned thresholds when running install a second time.
 
 **`--dry-run`:** print would-write content without actually writing.
+
+### 4.7.1 State file locking
+
+Single-writer guarantee via `fcntl.flock(fd, LOCK_EX | LOCK_NB)` on the state file. If another daemon instance holds the lock:
+
+```python
+for attempt in range(3):
+    try:
+        fcntl.flock(state_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        break
+    except BlockingIOError:
+        log.warn("state_locked_retry", attempt=attempt)
+        time.sleep(2)
+else:
+    log.error("state_locked_fatal_another_daemon_present")
+    sys.exit(2)  # hard fail — launchd will not restart-loop because
+                 # exit code 2 can be configured as "do not restart"
+                 # (in plist ExitTimeOut + SuccessfulExit behavior)
+```
+
+`exit(2)` signals to `launchd`/`systemd` that this is a permanent setup error, not a transient fault — avoids the 10-second restart loop that `exit(1)` would trigger.
 
 ### 4.8 CLI surface
 
 ```
-gimle-watchdog install [--config PATH] [--dry-run] [--discover-companies]
-gimle-watchdog uninstall [--purge]   # --purge also deletes state + log
-gimle-watchdog run                   # long-running loop (launchd/systemd)
-gimle-watchdog tick                  # one-shot scan + exit (cron)
-gimle-watchdog status                # service state + last log lines + cooldowns
+gimle-watchdog install [--config PATH] [--dry-run] [--discover-companies] [--force]
+gimle-watchdog uninstall [--purge]                     # --purge also deletes state + log
+gimle-watchdog run                                     # long-running loop (launchd/systemd)
+gimle-watchdog tick                                    # one-shot scan + exit (cron)
+gimle-watchdog status                                  # service state + filter-match count + cooldowns
 gimle-watchdog tail [-n N] [-f] [--level L]
-gimle-watchdog unescalate --issue <uuid>   # clear manual escalation flag
+gimle-watchdog unescalate --issue <uuid>               # clear escalation (including permanent flag)
+gimle-watchdog escalate --issue <uuid> --permanent     # manually mark issue as permanently escalated
 ```
 
 All commands read `--config PATH` or default `~/.paperclip/watchdog-config.yaml`.
+
+### 4.8.1 `status` health-check — filter-drift detection
+
+The `status` CLI reports a count of `ps` processes matching our `append-system-prompt-file.*paperclip-skills` filter, **across any etime** (not just idle-hangs):
+
+```
+$ gimle-watchdog status
+Service: gimle-watchdog (launchd)           active (running) since 2026-04-21 10:00:00
+Current tick: 2026-04-21T15:14:00Z          no hangs detected
+Filter health:
+  paperclip-skills procs seen today: 47     ← if 0 for 24h+, filter may be stale
+  (This catches upstream Anthropic renaming of --append-system-prompt-file, etc.)
+Cooldowns active:                            2
+Escalations (auto):                          0
+Escalations (permanent):                     1 (use `unescalate --issue <uuid>` to clear)
+```
+
+If `procs seen today: 0` across multiple hours while paperclip agent activity is non-zero (cross-check via `GET /api/issues?status=in_progress`), the filter has probably drifted — Anthropic renamed a flag, or paperclip changed its subprocess invocation. Operator action: update filter pattern in `detection.py` and re-deploy.
+
+**Daily process-match counter persistence:** state file gets a new field:
+```json
+"daily_filter_stats": {
+  "2026-04-21": {"procs_seen": 47, "kills": 0}
+}
+```
+Older dates pruned (keep 30 days).
 
 ## 5. Scope boundaries
 
@@ -510,15 +674,19 @@ All commands read `--config PATH` or default `~/.paperclip/watchdog-config.yaml`
 | Situation | Detection | Response |
 |---|---|---|
 | Paperclip API 5xx (transient) | httpx exception | log WARN, skip this tick, retry next tick |
+| Paperclip API 429 (rate limit) | status check | exponential back-off: next tick waits 2×, 4×, 8× normal interval, max 30 min. Resets on first 2xx. |
 | Paperclip API 401/403 | status check | log ERROR, keep running (operator must fix token) |
-| `/wake` fails but `PATCH` succeeds | verify loop | log INFO `wake_via=patch`, normal path |
-| Both `/wake` and `PATCH` fail to respawn | verify loop timeout | log ERROR, count as wake attempt (towards cap), next tick retry unless cap hit |
+| PATCH primary respawn trigger fails (no new run in 30s) | verify loop | fall to release+PATCH path (§4.5). If still fails, count as wake attempt, log ERROR |
 | `ps` command fails (permissions) | subprocess error | log ERROR, skip scenario (b) for this tick, still run (a) |
 | `kill` permission denied | OSError | log ERROR, move on, next tick retries |
-| Config YAML malformed | parse error | daemon fails to start, clear error message |
+| PID reused between scan and kill | cmdline re-check (§4.5) | log WARN `pid_reused`, skip kill, next tick will re-scan |
+| `_tick` itself hangs > 60s | `asyncio.wait_for` timeout | log ERROR, `sys.exit(1)`, launchd KeepAlive restarts |
+| Config YAML malformed | parse error | daemon fails to start with `sys.exit(2)`, clear error message |
 | State file corrupted | json.JSONDecodeError | log WARN, start with empty state, continue |
-| Multiple concurrent daemons (accidental) | file lock via `fcntl` on state path | second instance exits with clear error |
+| State file unknown version | version mismatch | rename to `.bak-<ts>`, start empty, log WARN |
+| State file locked by another daemon | `fcntl.LOCK_NB` BlockingIOError | retry 2× with 2s sleep, then `sys.exit(2)` (do-not-respawn) |
 | Escalation comment post fails | paperclip API error | log ERROR, escalation still recorded in state (not retried) |
+| Daily filter-match count = 0 for 24h+ | status health-check | log WARN `filter_drift_suspected`, operator notified via `status` output |
 
 ### 6.2 Security model
 
@@ -666,7 +834,27 @@ Documented in `services/watchdog/README.md`:
 - ✅ `os.kill` tests use real signals on a real spawned `sleep 300` child process (not mocked)
 - ✅ Integration test = real FastAPI app in-process — behaves like real paperclip (incl. HTTP error shapes)
 
-Coverage goal: 85%+ documented in README. Measured via `pytest --cov=watchdog`.
+Coverage goal: **85%+ of instrumented code**, declared excludes in `.coveragerc`:
+
+```ini
+[run]
+omit =
+  # Platform-specific branches — tested on live OS only, not by opposite-OS CI
+  */service.py:detect_platform
+
+[report]
+exclude_lines =
+  # CLI entrypoint boilerplate (tested by integration, not unit)
+  if __name__ == .__main__.:
+  # Subprocess calls to system tools (launchctl/systemctl) — real execution is live-smoke
+  subprocess.run\(\[.launchctl.
+  subprocess.run\(\[.systemctl.
+  # Defensive branches for conditions that require OS support we can't fake
+  if sys.platform == .win32.:
+  pragma: no cover
+```
+
+Measured via `pytest --cov=watchdog --cov-config=.coveragerc`. CI reports `coverage xml` artifact for PR review.
 
 ## 8. Rollout order
 
@@ -674,6 +862,16 @@ Coverage goal: 85%+ documented in README. Measured via `pytest --cov=watchdog`.
 2. **Pre-merge operator tasks**:
    - Ensure `.env` has `PAPERCLIP_API_KEY` (already present from GIM-62)
    - No new secrets needed — daemon reads existing token
+   - **Token scope pre-check** — verify the existing Board-level token can perform the PATCH that drives respawn. On iMac (or any machine with `$PAPERCLIP_API_KEY`):
+     ```bash
+     curl -sS -w "HTTP %{http_code}\n" -X PATCH \
+       -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
+       -H "Content-Type: application/json" \
+       -d '{"assigneeAgentId":"<CTO-uuid>"}' \
+       "$PAPERCLIP_BASE/api/issues/<any-cto-assigned-issue>"
+     # Expected: HTTP 200 (verified in GIM-62, but re-check in case scope changed)
+     ```
+     If 403 → obtain higher-scope token before merge. (Existing `pcp_board_*` token verified 2026-04-21 to work for PATCH.)
 3. **Merge to develop** — CI green (new `watchdog-tests` CI job added, mirrors `github-scripts-tests`).
 4. **Install on iMac** — manual SSH + `cd /Users/Shared/Ios/Gimle-Palace && git pull && cd services/watchdog && uv sync && uv run python -m watchdog install --discover-companies`.
 5. **Verify** via `gimle-watchdog status` + checking iMac log file.
@@ -694,6 +892,8 @@ This slice is successful when:
 - Live smoke tests 1-3 pass on iMac post-install
 
 ## 10. Open questions / trade-offs
+
+- **Honest scope assessment**: this is the largest slice among GIM-59/61/62/63 — ~1000-1200 LOC prod + ~1000-1500 LOC test, 3 days of engineer-time, not an afternoon janitor script. The "janitor" framing in earlier drafts understated complexity; §1 now reflects reality.
 
 - **Coarse cap vs per-(agent,issue) cap**: chosen per-agent cap. Consequence: if agent X legitimately has 3 stuck issues in parallel (shouldn't happen in Gimle — each agent handles one phase at a time), all 3 escalate after 3 total wakes of agent X. Acceptable given current usage pattern. Revisit if pattern changes.
 
