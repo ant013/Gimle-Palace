@@ -36,7 +36,7 @@ Close the pipeline-recovery gap discovered during GIM-62: paperclip does **not**
 
 Build a host-native watchdog daemon (~1000-1200 LOC prod + 1000-1500 LOC test, measured for honesty — this is not a small utility), part of the Gimle stack's one-command install, that:
 
-1. Polls paperclip API every 2 minutes for issues stuck in `assignee-set + no-run` state older than a threshold, and wakes the assignee via `POST /wake` (with `PATCH` fallback).
+1. Polls paperclip API every 2 minutes for issues stuck in `assignee-set + no-run` state older than a threshold, and triggers respawn via `PATCH assigneeAgentId=same` (primary) or `POST /release + PATCH` (fallback for stale-lock cases).
 2. Polls the iMac process table for `claude --print` subprocesses with long wall-time and negligible CPU-time, and kills them — next tick resurrects via (1).
 3. Protects itself against loop-forever scenarios with per-issue cooldowns, per-agent caps, and escalation comments on paperclip issues when operator intervention is genuinely needed.
 4. Supports multi-company configs (one daemon, multiple paperclip companies — Gimle + Medic in one install).
@@ -113,8 +113,8 @@ Proves two gaps in current state:
          ┌──────────────────────────────────────────┐
          │ paperclip.ant013.work (OR localhost:3100)│
          │   GET /api/companies/{id}/issues         │
-         │   POST /api/agents/{id}/wake             │
-         │   PATCH /api/issues/{id}                 │
+         │   PATCH /api/issues/{id} (assignee=same) │
+         │   POST /api/issues/{id}/release          │
          │   POST /api/issues/{id}/comments         │
          └──────────────────────────────────────────┘
 ```
@@ -135,7 +135,7 @@ services/watchdog/
 │   ├── config.py                    # YAML parser + dataclasses + schema validation
 │   ├── paperclip.py                 # httpx.AsyncClient wrapper
 │   ├── detection.py                 # scan_died_mid_work + scan_idle_hangs + ps parsers
-│   ├── actions.py                   # wake_with_fallback + kill_hanged_proc
+│   ├── actions.py                   # trigger_respawn + kill_hanged_proc
 │   ├── state.py                     # ~/.paperclip/watchdog-state.json
 │   ├── service.py                   # render_plist / render_systemd_unit / render_cron
 │   ├── logger.py                    # JSON-lines + rotation
@@ -280,7 +280,7 @@ async def _tick(config: Config, state: State, client: PaperclipClient) -> TickRe
         died = await detection.scan_died_mid_work(company, client, state, config)
         for action in died:
             if action.kind == "wake":
-                result = await actions.wake_with_fallback(client, action.issue, action.agent_id)
+                result = await actions.trigger_respawn(client, action.issue, action.agent_id)
                 state.record_wake(action.issue.id, action.agent_id)
                 log.info("wake_result", via=result.via, success=result.success,
                          issue=action.issue.id)
@@ -643,7 +643,7 @@ Older dates pruned (keep 30 days).
 - Python package `services/watchdog/` with modules above
 - Config YAML with multi-company support
 - Detection for mid-work-died + idle-hang
-- Wake with POST /wake primary + PATCH fallback
+- Respawn trigger via PATCH assigneeAgentId=same (primary) + POST /release + PATCH (fallback for stale-lock)
 - Per-issue cooldown + per-agent cap + escalation
 - State file with atomic writes
 - Platform-native installers: macOS launchd, Linux systemd, crontab fallback
@@ -772,9 +772,9 @@ Metrics/dashboard deferred.
 
 | Test | Verifies |
 |---|---|
-| `test_wake_with_fallback_via_wake` | /wake → verify poll finds run_id → via="wake" |
-| `test_wake_with_fallback_via_patch` | /wake posts but no run → PATCH → success → via="patch" |
-| `test_wake_with_fallback_total_failure` | both fail → success=False |
+| `test_trigger_respawn_via_patch` | PATCH assigneeAgentId=same → new run appears → via="patch" |
+| `test_trigger_respawn_via_release_patch` | first PATCH yields no run → POST /release + PATCH → success → via="release_patch" |
+| `test_trigger_respawn_total_failure` | neither path yields a new run → success=False |
 | `test_kill_hanged_proc_clean_exit` | SIGTERM, process gone at check → status="clean" |
 | `test_kill_hanged_proc_forced` | SIGTERM, still alive → SIGKILL → status="forced" |
 | `test_kill_hanged_proc_already_dead` | process missing → status="already_dead" |
@@ -792,7 +792,8 @@ Metrics/dashboard deferred.
 
 **`test_integration.py`:** spins up FastAPI in-process mock exposing:
 - `GET /api/companies/{id}/issues` → returns configurable list
-- `POST /api/agents/{id}/wake` → mutates mock state (sets new `executionRunId`)
+- `PATCH /api/issues/{id}` with `assigneeAgentId` → mutates mock state (sets new `executionRunId` on "assignment" event)
+- `POST /api/issues/{id}/release` → clears `assigneeAgentId` + `executionRunId` on mock issue
 - `PATCH /api/issues/{id}` → stores change
 - `POST /api/issues/{id}/comments` → records
 
