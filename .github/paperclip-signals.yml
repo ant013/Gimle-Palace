@@ -1,0 +1,36 @@
+# Dispatcher config for paperclip-signal GitHub Action.
+# Read by .github/scripts/paperclip_signal.py on every event.
+# Schema validation in `load_config()`; unknown keys → config-error.
+
+version: 1
+
+# Paperclip company UUID. Fallback default — override via env PAPERCLIP_COMPANY_ID if needed.
+company_id: 9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64
+
+# Rules: map normalized trigger keys to wake targets.
+# Trigger normalization happens in parse_event (see paperclip_signal.py):
+#   workflow_run[success]           → ci.success
+#   pull_request_review             → pr.review
+#   pull_request_review_comment     → pr.review    (folded — debounce)
+#   repository_dispatch[qa-smoke]   → qa.smoke_complete
+rules:
+  - trigger: ci.success
+    target: issue_assignee
+
+  - trigger: pr.review
+    target: issue_assignee
+
+  # Extension point — wired to dispatcher but no iMac automation yet.
+  # Followup slice will provision the iMac post-deploy smoke script
+  # that calls `gh api repos/.../dispatches -f event_type=qa-smoke-complete`.
+  - trigger: qa.smoke_complete
+    target: issue_assignee
+    note: "Awaiting iMac post-deploy smoke automation (followup)"
+
+# Accounts whose events MUST NOT trigger wake. Prevents self-wake loops.
+# github-actions[bot] is also filtered at workflow level via if:.
+# ant013 is the shared human/agent token — filtered only at Python level
+# because sender.type=User for this account, not Bot.
+bot_authors:
+  - github-actions[bot]
+  - ant013

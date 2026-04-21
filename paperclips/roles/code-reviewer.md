@@ -155,3 +155,4 @@ If `gh pr review --approve` fails with "insufficient permissions", immediately e
 
 <!-- @include fragments/shared/fragments/test-design-discipline.md -->
 <!-- @include fragments/local/test-design-gimle.md -->
+<!-- @include fragments/shared/fragments/async-signal-wait.md -->

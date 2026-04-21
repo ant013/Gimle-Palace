@@ -1,0 +1,21 @@
+{
+  "action": "completed",
+  "workflow_run": {
+    "id": 12345679,
+    "name": "CI",
+    "head_branch": "feature/GIM-62-async-signal",
+    "head_sha": "abc123def456",
+    "conclusion": "failure",
+    "status": "completed",
+    "pull_requests": [
+      {"number": 77, "head": {"ref": "feature/GIM-62-async-signal", "sha": "abc123def456"}}
+    ]
+  },
+  "sender": {
+    "login": "ant013",
+    "type": "User"
+  },
+  "repository": {
+    "full_name": "ant013/Gimle-Palace"
+  }
+}
