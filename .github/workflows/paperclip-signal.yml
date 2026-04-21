@@ -1,0 +1,46 @@
+name: paperclip-signal
+
+on:
+  workflow_run:
+    workflows: ["CI"]                # matches .github/workflows/ci.yml top-level `name: CI`
+    types: [completed]
+  pull_request_review:
+    types: [submitted]
+  pull_request_review_comment:
+    types: [created]
+  repository_dispatch:
+    types: [qa-smoke-complete]
+
+permissions:
+  pull-requests: write     # dedup GET + POST marker/failed/deferred comments
+  contents: read           # checkout only
+
+concurrency:
+  group: paperclip-signal-${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number || github.event.client_payload.pr_number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  signal:
+    runs-on: ubuntu-latest
+    if: |
+      github.event.sender.login != 'github-actions[bot]'
+      && github.event.sender.type != 'Bot'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install deps
+        working-directory: .github/scripts
+        run: pip install -r requirements.txt
+      - name: Dispatch signal
+        working-directory: .github/scripts
+        env:
+          PAPERCLIP_API_KEY: ${{ secrets.PAPERCLIP_API_KEY }}
+          PAPERCLIP_BASE_URL: https://paperclip.ant013.work
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_JSON: ${{ toJSON(github.event) }}
+          REPO: ${{ github.repository }}
+          CONFIG_PATH: ${{ github.workspace }}/.github/paperclip-signals.yml
+        run: python paperclip_signal.py

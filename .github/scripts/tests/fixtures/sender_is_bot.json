@@ -1,0 +1,7 @@
+{
+  "action": "submitted",
+  "review": {"state": "commented", "commit_id": "abc123def456"},
+  "pull_request": {"number": 77, "head": {"ref": "feature/GIM-62-async-signal", "sha": "abc123def456"}},
+  "sender": {"login": "github-actions[bot]", "type": "Bot"},
+  "repository": {"full_name": "ant013/Gimle-Palace"}
+}

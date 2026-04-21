@@ -1,0 +1,22 @@
+{
+  "action": "submitted",
+  "review": {
+    "state": "approved",
+    "commit_id": "abc123def456",
+    "submitted_at": "2026-04-20T12:00:00Z"
+  },
+  "pull_request": {
+    "number": 77,
+    "head": {
+      "ref": "feature/GIM-62-async-signal",
+      "sha": "abc123def456"
+    }
+  },
+  "sender": {
+    "login": "operator",
+    "type": "User"
+  },
+  "repository": {
+    "full_name": "ant013/Gimle-Palace"
+  }
+}
