@@ -1,9 +1,9 @@
 ---
 slug: palace-ops-unstick-issue
 status: proposed
-branch: feature/GIM-80-palace-ops-unstick (cut from develop after umbrella lands)
-paperclip_issue: 80 (to be created)
-parent_umbrella: 78
+branch: feature/GIM-81-palace-ops-unstick (cut from develop after umbrella lands)
+paperclip_issue: 81
+parent_umbrella: 79
 predecessor: develop tip after umbrella merge
 date: 2026-04-25
 ---
@@ -135,5 +135,5 @@ Mock-based (no real SSH or live paperclip); patches `subprocess.run` for SSH/ps/
 
 - Memory `reference_paperclip_stale_execution_lock.md` (the bug, the workaround, the 2026-04-25 confirmation).
 - `mcp_server.py:120-123` (Pattern #21 `_tool()` wrapper for MCP tool registration).
-- GIM-79 (parallel slice) for `idle_cpu_ratio_max` heuristic which the permissive fallback reuses.
+- GIM-80 (parallel slice) for `idle_cpu_ratio_max` heuristic which the permissive fallback reuses.
 - 2026-04-25 incident timeline: GIM-75/76 stale-lock occurrences during overnight token-quota stalls.

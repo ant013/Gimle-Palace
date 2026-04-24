@@ -1,12 +1,12 @@
 ---
 slug: ops-quality-decomposition
 status: proposed
-branch: feature/GIM-78-ops-quality-followups
-paperclip_issue: 78 (umbrella, to be created)
+branch: feature/GIM-79-ops-quality-followups
+paperclip_issue: 79 (umbrella)
 sub_issues:
-  - GIM-79 — Watchdog idle-hang detection improvements
-  - GIM-80 — palace.ops.unstick_issue MCP tool (paperclip stale-lock workaround)
-  - GIM-81 — Shared-fragments discipline updates (operator+CR review patterns + branch hygiene + spec quality)
+  - GIM-80 — Watchdog idle-hang detection improvements
+  - GIM-81 — palace.ops.unstick_issue MCP tool (paperclip stale-lock workaround)
+  - GIM-82 — Shared-fragments discipline updates (operator+CR review patterns + branch hygiene + spec quality)
 predecessor: tip of develop after GIM-75 + GIM-76 + GIM-77 merge (TBD)
 date: 2026-04-25
 ---
@@ -29,19 +29,19 @@ Curated 2026-04-25 by operator after GIM-75/76 spec/plan/impl rounds:
 
 ## Atomic decomposition
 
-### GIM-79 — Watchdog idle-hang detection improvements
+### GIM-80 — Watchdog idle-hang detection improvements
 
 **File:** `docs/superpowers/specs/2026-04-25-watchdog-idle-hang-detection-design.md`
 
 Replace single `hang_cpu_max_s` heuristic with two-criterion detection: (1) ratio-based `cpu_time / etime < threshold` for long-running idle, (2) "time since last stream-json event" parsed from Claude subprocess stdout for token-quota stalls. Estimate ~300 LOC product + tests.
 
-### GIM-80 — `palace.ops.unstick_issue` MCP tool
+### GIM-81 — `palace.ops.unstick_issue` MCP tool
 
 **File:** `docs/superpowers/specs/2026-04-25-palace-ops-unstick-issue-design.md`
 
 New MCP tool that automates the documented workaround for paperclip stale-execution-lock bug (memory: `reference_paperclip_stale_execution_lock.md`): SSH to host, locate stuck `claude --print` subprocess by `executionRunId` proxy heuristic, kill it, wait for paperclip to detect exit, optionally retry the chain. Estimate ~250 LOC + tests.
 
-### GIM-81 — Shared-fragments discipline updates
+### GIM-82 — Shared-fragments discipline updates
 
 **File:** `docs/superpowers/specs/2026-04-25-shared-fragments-discipline-design.md`
 

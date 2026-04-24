@@ -1,9 +1,9 @@
 ---
 slug: shared-fragments-discipline
 status: proposed
-branch: feature/GIM-81-shared-fragments-discipline (cut from develop after umbrella lands)
-paperclip_issue: 81 (to be created)
-parent_umbrella: 78
+branch: feature/GIM-82-shared-fragments-discipline (cut from develop after umbrella lands)
+paperclip_issue: 82
+parent_umbrella: 79
 predecessor: develop tip after umbrella merge
 date: 2026-04-25
 ---

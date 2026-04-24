@@ -1,9 +1,9 @@
 ---
 slug: watchdog-idle-hang-detection
 status: proposed
-branch: feature/GIM-79-watchdog-idle-hang (cut from develop after GIM-78 umbrella lands)
-paperclip_issue: 79 (to be created)
-parent_umbrella: 78
+branch: feature/GIM-80-watchdog-idle-hang (cut from develop after GIM-78 umbrella lands)
+paperclip_issue: 80
+parent_umbrella: 79
 predecessor: develop tip after umbrella merge
 date: 2026-04-25
 ---
