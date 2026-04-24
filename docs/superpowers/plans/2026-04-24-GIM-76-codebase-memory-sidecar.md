@@ -4,7 +4,7 @@
 
 **Goal:** Embed codebase-memory-mcp as a docker-compose sidecar and expose 7 pass-through + 1 disabled MCP tool via `palace.code.*` in palace-mcp.
 
-**Architecture:** A new `code-graph` docker-compose profile starts the `codebase-memory-mcp` sidecar alongside palace-mcp and neo4j. Palace-mcp contains a `code_router.py` module that registers 8 MCP tools (`palace.code.*`) using the existing `_tool()` decorator from `mcp_server.py`. Seven tools forward JSON-RPC calls to the sidecar via a DI-injected `httpx.AsyncClient`; one (`manage_adr`) returns a structured error. Health status is surfaced via `palace.memory.health`.
+**Architecture:** A new `code-graph` docker-compose profile starts the `codebase-memory-mcp` sidecar alongside palace-mcp and neo4j (neo4j also gets `code-graph` in its profiles — see CR CRITICAL #3). Palace-mcp contains a `code_router.py` module that registers 8 MCP tools (`palace.code.*`) via `register_code_tools(tool_decorator)`, which receives `_tool` from `mcp_server.py` — Pattern #21 dedup-aware decorator (CR CRITICAL #1). The decorator handles `__name__` binding before decoration (CR CRITICAL #2 — no late-binding closure bug). Seven tools forward JSON-RPC calls to the sidecar via a DI-injected `httpx.AsyncClient`; one (`manage_adr`) returns a structured error. Health status is surfaced via `palace.memory.health`.
 
 **Tech Stack:** Python 3.12, FastMCP (from `mcp.server.fastmcp`), httpx, Pydantic BaseSettings, pytest, Docker Compose.
 
@@ -100,23 +100,25 @@ git commit -m "docs(research): verify CM transport and schemas for GIM-76"
 In `tests/test_config.py`, add:
 
 ```python
-def test_settings_codebase_memory_mcp_url_defaults_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+from unittest.mock import patch
+
+def test_settings_codebase_memory_mcp_url_defaults_empty() -> None:
     """codebase_memory_mcp_url defaults to empty string when env var unset."""
-    monkeypatch.setenv("NEO4J_PASSWORD", "test")
-    monkeypatch.delenv("CODEBASE_MEMORY_MCP_URL", raising=False)
-    from palace_mcp.config import Settings
-    s = Settings()
-    assert s.codebase_memory_mcp_url == ""
+    with patch.dict(os.environ, {"NEO4J_PASSWORD": "test"}, clear=True):
+        from palace_mcp.config import Settings
+        s = Settings()
+        assert s.codebase_memory_mcp_url == ""
 
 
-def test_settings_codebase_memory_mcp_url_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_settings_codebase_memory_mcp_url_from_env() -> None:
     """codebase_memory_mcp_url reads from env var."""
-    monkeypatch.setenv("NEO4J_PASSWORD", "test")
-    monkeypatch.setenv("CODEBASE_MEMORY_MCP_URL", "http://cm:8765/mcp")
-    from palace_mcp.config import Settings
-    s = Settings()
-    assert s.codebase_memory_mcp_url == "http://cm:8765/mcp"
+    with patch.dict(os.environ, {"NEO4J_PASSWORD": "test", "CODEBASE_MEMORY_MCP_URL": "http://cm:8765/mcp"}, clear=True):
+        from palace_mcp.config import Settings
+        s = Settings()
+        assert s.codebase_memory_mcp_url == "http://cm:8765/mcp"
 ```
+
+**Note:** Uses `patch.dict(os.environ, ..., clear=True)` to match existing test style in `test_config.py` (CR WARNING #2).
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -182,30 +184,70 @@ EXPECTED_ENABLED_TOOLS = [
 
 
 class TestToolRegistration:
+    """Unit tests use a stub decorator to test code_router in isolation.
+
+    Integration with mcp_server._tool (Pattern #21) is tested in
+    test_mcp_server.py::TestCodeToolRegistration.
+    """
+
+    @staticmethod
+    def _make_stub_tool() -> tuple[Callable, FastMCP, list[str]]:
+        """Create a stub _tool decorator that registers on a test FastMCP instance."""
+        mcp = FastMCP("test")
+        tracked_names: list[str] = []
+
+        def stub_tool(name: str, description: str) -> Callable:
+            tracked_names.append(name)
+            return mcp.tool(name=name, description=description)
+
+        return stub_tool, mcp, tracked_names
+
     def test_registers_seven_enabled_tools(self) -> None:
         """register_code_tools adds exactly 7 palace.code.* pass-through tools."""
-        mcp = FastMCP("test")
+        stub_tool, mcp, _ = self._make_stub_tool()
         from palace_mcp.code_router import register_code_tools
-        register_code_tools(mcp)
+        register_code_tools(stub_tool)
         tool_names = [t.name for t in mcp._tool_manager.list_tools()]
         for name in EXPECTED_ENABLED_TOOLS:
             assert name in tool_names, f"Missing tool: {name}"
 
     def test_registers_manage_adr_as_disabled(self) -> None:
         """palace.code.manage_adr is registered and returns directive error."""
-        mcp = FastMCP("test")
+        stub_tool, mcp, _ = self._make_stub_tool()
         from palace_mcp.code_router import register_code_tools
-        register_code_tools(mcp)
+        register_code_tools(stub_tool)
         tool_names = [t.name for t in mcp._tool_manager.list_tools()]
         assert "palace.code.manage_adr" in tool_names
 
     def test_total_tool_count_is_eight(self) -> None:
         """Exactly 8 palace.code.* tools registered (7 enabled + 1 disabled)."""
-        mcp = FastMCP("test")
+        stub_tool, mcp, _ = self._make_stub_tool()
         from palace_mcp.code_router import register_code_tools
-        register_code_tools(mcp)
+        register_code_tools(stub_tool)
         code_tools = [t for t in mcp._tool_manager.list_tools() if t.name.startswith("palace.code.")]
         assert len(code_tools) == 8
+
+    def test_each_tool_dispatches_to_distinct_cm_name(self) -> None:
+        """Verify each registered tool forwards to its own CM tool name (closure binding correctness).
+
+        CR CRITICAL #2: The decorator receives a factory-bound cm_tool_name,
+        ensuring no late-binding closure bug in the registration loop.
+        """
+        stub_tool, mcp, _ = self._make_stub_tool()
+        from palace_mcp.code_router import register_code_tools
+        register_code_tools(stub_tool)
+        tools = [t for t in mcp._tool_manager.list_tools()
+                 if t.name.startswith("palace.code.") and t.name != "palace.code.manage_adr"]
+        names = {t.name for t in tools}
+        assert len(names) == 7, f"Expected 7 distinct tool names, got {len(names)}: {names}"
+
+    def test_decorator_receives_all_names(self) -> None:
+        """Stub decorator tracks all 8 tool names — proves Pattern #21 integration point works."""
+        stub_tool, _, tracked = self._make_stub_tool()
+        from palace_mcp.code_router import register_code_tools
+        register_code_tools(stub_tool)
+        code_names = [n for n in tracked if n.startswith("palace.code.")]
+        assert len(code_names) == 8, f"Expected 8, got {len(code_names)}: {code_names}"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -227,10 +269,9 @@ Registers 7 enabled tools (forwarded to CM via JSON-RPC over HTTP) and
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Callable
 
 import httpx
-from mcp.server.fastmcp import FastMCP
 
 logger = logging.getLogger(__name__)
 
@@ -243,15 +284,15 @@ def set_cm_client(client: httpx.AsyncClient) -> None:
     _cm_client = client
 
 
-_ENABLED_CM_TOOLS: list[str] = [
-    "search_graph",
-    "trace_call_path",
-    "query_graph",
-    "detect_changes",
-    "get_architecture",
-    "get_code_snippet",
-    "search_code",
-]
+_ENABLED_CM_TOOLS: dict[str, str] = {
+    "search_graph": "Search code graph nodes by name pattern, label, or file pattern.",
+    "trace_call_path": "Trace function call chains (inbound/outbound/both).",
+    "query_graph": "Run a Cypher-like query against the code graph.",
+    "detect_changes": "Detect uncommitted changes mapped to symbols.",
+    "get_architecture": "Get project architecture: languages, packages, entry points, routes.",
+    "get_code_snippet": "Get source code for a qualified symbol name.",
+    "search_code": "Grep-like code search across indexed repositories.",
+}
 
 _DISABLED_CM_TOOLS: dict[str, str] = {
     "manage_adr": (
@@ -262,18 +303,27 @@ _DISABLED_CM_TOOLS: dict[str, str] = {
 }
 
 
-def register_code_tools(mcp: FastMCP) -> None:
-    """Register all palace.code.* tools on the given FastMCP instance."""
-    for tool_name in _ENABLED_CM_TOOLS:
-        _register_passthrough(mcp, tool_name)
+def register_code_tools(tool_decorator: Callable[[str, str], Callable]) -> None:
+    """Register all palace.code.* tools using the provided decorator.
+
+    Accepts `_tool` from mcp_server.py — Pattern #21 dedup-aware decorator
+    that appends each name to `_registered_tool_names` before delegating
+    to `@_mcp.tool()`.
+    """
+    for cm_name, desc in _ENABLED_CM_TOOLS.items():
+        _register_passthrough(tool_decorator, cm_name, desc)
     for disabled_name, message in _DISABLED_CM_TOOLS.items():
-        _register_disabled_tool(mcp, disabled_name, message)
+        _register_disabled_tool(tool_decorator, disabled_name, message)
 
 
-def _register_passthrough(mcp: FastMCP, cm_tool_name: str) -> None:
+def _register_passthrough(
+    tool_decorator: Callable[[str, str], Callable],
+    cm_tool_name: str,
+    description: str,
+) -> None:
     palace_name = f"palace.code.{cm_tool_name}"
 
-    @mcp.tool(name=palace_name)
+    @tool_decorator(palace_name, description)
     async def _forward(**kwargs: Any) -> dict[str, Any]:
         assert _cm_client is not None, (
             "CM client not initialized; call set_cm_client() in lifespan"
@@ -293,22 +343,20 @@ def _register_passthrough(mcp: FastMCP, cm_tool_name: str) -> None:
             return {"error": result["error"]}
         return result.get("result", result)
 
-    _forward.__name__ = f"palace_code_{cm_tool_name}"
-    _forward.__qualname__ = f"code_router.palace_code_{cm_tool_name}"
 
-
-def _register_disabled_tool(mcp: FastMCP, cm_tool_name: str, message: str) -> None:
+def _register_disabled_tool(
+    tool_decorator: Callable[[str, str], Callable],
+    cm_tool_name: str,
+    message: str,
+) -> None:
     palace_name = f"palace.code.{cm_tool_name}"
 
-    @mcp.tool(name=palace_name)
+    @tool_decorator(palace_name, f"[DISABLED] {cm_tool_name}")
     async def _blocked(**kwargs: Any) -> dict[str, Any]:
         return {
             "error": message,
             "hint": "See spec §3.2 of N+1a.2 for rationale.",
         }
-
-    _blocked.__name__ = f"palace_code_{cm_tool_name}_disabled"
-    _blocked.__qualname__ = f"code_router.palace_code_{cm_tool_name}_disabled"
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -345,7 +393,8 @@ class TestDisabledTool:
         """Calling palace.code.manage_adr returns error + hint, no forwarding."""
         from palace_mcp.code_router import register_code_tools
         mcp = FastMCP("test")
-        register_code_tools(mcp)
+        stub_tool = lambda name, desc: mcp.tool(name=name, description=desc)
+        register_code_tools(stub_tool)
 
         tool = next(t for t in mcp._tool_manager.list_tools() if t.name == "palace.code.manage_adr")
         result = await tool.run(arguments={})
@@ -384,7 +433,8 @@ class TestPassthroughSerialization:
         set_cm_client(client)
 
         mcp = FastMCP("test")
-        register_code_tools(mcp)
+        stub_tool = lambda name, desc: mcp.tool(name=name, description=desc)
+        register_code_tools(stub_tool)
         tool = next(t for t in mcp._tool_manager.list_tools() if t.name == "palace.code.search_graph")
         result = await tool.run(arguments={"name_pattern": "main"})
 
@@ -421,7 +471,8 @@ class TestPassthroughTimeout:
         set_cm_client(client)
 
         mcp = FastMCP("test")
-        register_code_tools(mcp)
+        stub_tool = lambda name, desc: mcp.tool(name=name, description=desc)
+        register_code_tools(stub_tool)
         tool = next(t for t in mcp._tool_manager.list_tools() if t.name == "palace.code.get_architecture")
 
         with pytest.raises(httpx.ReadTimeout):
@@ -462,9 +513,17 @@ Add to `tests/test_mcp_server.py`:
 ```python
 class TestCodeToolRegistration:
     def test_code_tools_registered_in_mcp(self) -> None:
-        """palace.code.* tools are registered in the MCP app."""
-        from palace_mcp.mcp_server import _registered_tool_names
-        code_tools = [n for n in _registered_tool_names if n.startswith("palace.code.")]
+        """palace.code.* tools pass Pattern #21 dedup and appear in the MCP app.
+
+        Tests through build_mcp_asgi_app() — same path as the existing
+        TestAssertUniqueToolNames test. This verifies that code tools
+        are tracked by _registered_tool_names (Pattern #21) and don't
+        collide with existing palace.memory.* / palace.git.* tools.
+        (CR WARNING #3: test public API, not internal list.)
+        """
+        from palace_mcp.mcp_server import build_mcp_asgi_app, _mcp
+        build_mcp_asgi_app()  # asserts unique names — would crash on collision
+        code_tools = [t for t in _mcp._tool_manager.list_tools() if t.name.startswith("palace.code.")]
         assert len(code_tools) == 8
 ```
 
@@ -488,8 +547,12 @@ At the bottom of the file (after the last `@_tool` block, before any trailing co
 # palace.code.* — codebase-memory pass-through tools
 # ---------------------------------------------------------------------------
 
-register_code_tools(_mcp)
+register_code_tools(_tool)
 ```
+
+**Why `_tool` not `_mcp`:** `register_code_tools` receives Pattern #21's `_tool` decorator
+directly — each `palace.code.*` name is appended to `_registered_tool_names` and checked
+by `assert_unique_tool_names()` at boot via `build_mcp_asgi_app()`. This closes CR CRITICAL #1.
 
 Update the module docstring (lines 1-16) to include the new tools:
 
@@ -604,17 +667,17 @@ Expected: PASS
 
 In `services/palace-mcp/src/palace_mcp/memory/health.py`, import and probe the CM sidecar.
 
-At the top, add:
+At the top, add (import the module, not the binding — avoids stale-reference bug per CR WARNING #1):
 
 ```python
-from palace_mcp.code_router import _cm_client
+from palace_mcp import code_router
 ```
 
 Before the `return HealthResponse(...)` block (around line 79), add:
 
 ```python
     code_graph_ok = False
-    if _cm_client is not None:
+    if code_router._cm_client is not None:
         try:
             probe = await _cm_client.post(
                 "",
@@ -650,6 +713,19 @@ git commit -m "feat(health): add code_graph_reachable to palace.memory.health (G
 
 **Files:**
 - Modify: `docker-compose.yml`
+
+- [ ] **Step 0: Add `code-graph` to neo4j profiles** (CR CRITICAL #3)
+
+In `docker-compose.yml`, update the neo4j service `profiles` line (currently `[review, analyze, full]`) to include `code-graph`:
+
+```yaml
+    profiles: [review, analyze, full, code-graph]
+```
+
+**Why:** palace-mcp's `depends_on: neo4j: condition: service_healthy` means
+`docker compose --profile code-graph up -d` must also start neo4j. Without
+`code-graph` in neo4j's profiles, compose deadlocks or silently skips the
+dependency.
 
 - [ ] **Step 1: Add the codebase-memory-mcp service**
 
@@ -830,11 +906,12 @@ import os
 import shutil
 import subprocess
 import time
+from collections.abc import AsyncGenerator, Generator
 from pathlib import Path
-from typing import Generator
 
 import httpx
 import pytest
+import pytest_asyncio
 
 SANDBOX_REPO = Path(__file__).parent.parent / "fixtures" / "sandbox-repo"
 CM_BINARY = shutil.which("codebase-memory-mcp")
@@ -898,16 +975,18 @@ def cm_port() -> Generator[int, None, None]:
     proc.wait()
 
 
-@pytest.fixture(scope="session")
-def cm_client(cm_port: int) -> Generator[httpx.AsyncClient, None, None]:
-    """Async httpx client pointed at the CM subprocess."""
-    import asyncio
+@pytest_asyncio.fixture(scope="session")
+async def cm_client(cm_port: int) -> AsyncGenerator[httpx.AsyncClient, None]:
+    """Async httpx client pointed at the CM subprocess.
+
+    Uses async fixture + yield (CR NOTE #1: avoids deprecated asyncio.get_event_loop()).
+    """
     client = httpx.AsyncClient(
         base_url=f"http://127.0.0.1:{cm_port}/mcp",
         timeout=30.0,
     )
     yield client
-    asyncio.get_event_loop().run_until_complete(client.aclose())
+    await client.aclose()
 ```
 
 - [ ] **Step 3: Write the 8 integration tests**
@@ -998,7 +1077,8 @@ class TestCodeGraphIntegration:
 
         _set(cm_client)
         mcp = FastMCP("test")
-        register_code_tools(mcp)
+        stub_tool = lambda name, desc: mcp.tool(name=name, description=desc)
+        register_code_tools(stub_tool)
         tool = next(t for t in mcp._tool_manager.list_tools() if t.name == "palace.code.manage_adr")
         result = await tool.run(arguments={"action": "list"})
         assert "error" in result
