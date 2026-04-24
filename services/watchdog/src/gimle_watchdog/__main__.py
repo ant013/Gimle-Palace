@@ -128,10 +128,14 @@ def _cmd_run(args: argparse.Namespace) -> int:  # pragma: no cover
     state_path = Path("~/.paperclip/watchdog-state.json").expanduser()
     state = State.load(state_path)
     client = PaperclipClient(base_url=cfg.paperclip.base_url, api_key=cfg.paperclip.api_key or "")
-    try:
-        asyncio.run(daemon.run(cfg, state, client))
-    finally:
-        asyncio.run(client.aclose())
+
+    async def _run() -> None:
+        try:
+            await daemon.run(cfg, state, client)
+        finally:
+            await client.aclose()
+
+    asyncio.run(_run())
     return 0
 
 
@@ -141,10 +145,14 @@ def _cmd_tick(args: argparse.Namespace) -> int:  # pragma: no cover
     state_path = Path("~/.paperclip/watchdog-state.json").expanduser()
     state = State.load(state_path)
     client = PaperclipClient(base_url=cfg.paperclip.base_url, api_key=cfg.paperclip.api_key or "")
-    try:
-        asyncio.run(daemon._tick(cfg, state, client))
-    finally:
-        asyncio.run(client.aclose())
+
+    async def _tick() -> None:
+        try:
+            await daemon._tick(cfg, state, client)
+        finally:
+            await client.aclose()
+
+    asyncio.run(_tick())
     return 0
 
 
