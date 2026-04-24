@@ -1,11 +1,22 @@
 ---
 slug: N1a-1-graphiti-foundation
-status: proposed
-branch: feature/GIM-75-graphiti-foundation (to be cut from develop once umbrella spec lands)
+status: proposed (rev2 after CR Phase 1.2 REQUEST CHANGES 2026-04-24)
+branch: feature/GIM-75-graphiti-foundation
 paperclip_issue: 75 (0855b069-3e42-4cc8-b644-6dec26660111)
 parent_umbrella: 74
-predecessor: 67d42dc (develop tip)
+predecessor: 766629d (develop tip after umbrella merge)
 date: 2026-04-24
+revisions:
+  - rev1 2026-04-24 — initial (merged as part of umbrella PR #36, `766629d`).
+  - rev2 2026-04-24 — CR Phase 1.2 REQUEST CHANGES addressed:
+      - CRITICAL-1: `openai_api_key` added to `Settings` + `.env.example`.
+      - CRITICAL-2: `palace.memory.lookup` adaptation pinned down — filters.py/schema.py EntityType literal replaced, `_RELATED_FRAGMENTS` emptied for N+1a, Cypher adapted to Graphiti labels + attributes.
+      - CRITICAL-3: `palace.memory.health` adaptation pinned down — ENTITY_COUNTS label list updated, LATEST_INGEST_RUN source filter generalized, HealthResponse keys renamed.
+      - WARNING-1: runner dual-dependency (graphiti + driver for `:IngestRun` writes) explicit.
+      - WARNING-2: `:Project` node stores slug in `name` field so `(p:Project {name: $slug})` works.
+      - WARNING-3: unbounded Episode growth explicitly documented as known limitation.
+      - WARNING-4: §6 "Tests" section renumbered consistently.
+      - WARNING-5: frontmatter predecessor updated.
 ---
 
 # N+1a.1 — Graphiti foundation (storage swap only)
@@ -29,7 +40,7 @@ After the 2026-04-18 N+1a revert, `graphiti-core` is no longer in `palace-mcp` d
 
 ## 3. Solution — one new foundation layer inside palace-mcp
 
-### 3.1 Dependency
+### 3.1 Dependency + config
 
 Add to `services/palace-mcp/pyproject.toml`:
 
@@ -41,6 +52,26 @@ dependencies = [
 ```
 
 Pin exact patch. **Do not rely on `~=0.28` or `>=0.28` — 0.28.x history shows breaking changes between minor patches.**
+
+**Add to `services/palace-mcp/src/palace_mcp/config.py` (addresses CR CRITICAL-1):**
+
+```python
+class Settings(BaseSettings):
+    # ... existing fields ...
+    openai_api_key: SecretStr    # NEW — required by graphiti-core 0.28 for
+                                 # constructor (even though add_triplet does
+                                 # not call LLM on the hot path).
+```
+
+**Add to `.env.example`:**
+
+```
+# Graphiti: used by graphiti-core 0.28 constructor (LLM/embedder stubs).
+# Writes go via add_triplet — LLM is never invoked, but constructor requires
+# a valid client, so the key must be present. Embedder (text-embedding-3-small)
+# IS invoked on EntityNode.save for name_embedding.
+OPENAI_API_KEY=sk-...
+```
 
 ### 3.2 Factory and bootstrap
 
@@ -217,7 +248,141 @@ class HeartbeatExtractor(BaseExtractor):
 
 Heartbeat remains the reference implementation for "how an extractor writes to Graphiti" and the default sanity check in `palace.memory.health`.
 
-### 3.7 N+0 paperclip extractor removal
+### 3.7 `palace.memory.lookup` / `filters.py` / `schema.py` adaptation (addresses CR CRITICAL-2)
+
+Current state (commit `766629d`):
+
+```python
+# services/palace-mcp/src/palace_mcp/memory/filters.py
+EntityType = Literal["Issue", "Comment", "Agent"]
+_WHITELIST: dict[EntityType, dict[str, str]] = { ... }   # Issue/Comment/Agent props
+
+# services/palace-mcp/src/palace_mcp/memory/lookup.py
+_RELATED_FRAGMENTS: dict[EntityType, str] = { ... }      # :ASSIGNED_TO, :ON, :AUTHORED_BY Cypher
+```
+
+**Rev2 changes — concrete replacements:**
+
+1. **`filters.py` / `schema.py` — `EntityType` literal:**
+
+   ```python
+   # Replacement after N+1a:
+   EntityType = Literal[
+       "Project",
+       "Iteration",
+       "Episode",
+       "Decision",
+       "IterationNote",
+       "Finding",
+       "Module",       # projected later by bridge (GIM-77), classes exist now
+       "File",
+       "Symbol",
+       "APIEndpoint",
+       "Model",
+       "Repository",
+       "ExternalLib",
+       "Trace",
+       # Declared but no extractor populates in N+1a: Commit, PR, Owner,
+       # Hotspot, TestCase, BuildRun, Contract, ArchitectureCommunity.
+       # Add them to the literal here when GIM-77 / N+1c land, not earlier,
+       # to keep `lookup` filter validation honest.
+   ]
+   ```
+
+2. **`filters.py` — `_WHITELIST`:** per-type filter whitelist maps to Graphiti properties. Graphiti persists `EntityNode.attributes` values as **flat Neo4j node properties** (verified in spike — see `docs/research/graphiti-core-0-28-spike/README.md` — `attributes` is spread onto the node via `SET n += $attrs` inside graphiti-core's Cypher). So filters work against top-level node props, same shape as before:
+
+   ```python
+   _WHITELIST: dict[EntityType, dict[str, str]] = {
+       "Episode": {"kind": "kind", "source": "source"},
+       "Decision": {"author": "author", "status": "status"},
+       "Symbol":   {"kind": "kind", "name": "name", "file_path": "file_path"},
+       "File":     {"path": "path", "language": "language"},
+       # ... one entry per entity in the literal, starting conservative
+       # (a handful of safe filters each) and growing per use case.
+   }
+   ```
+
+   `group_id`, `uuid`, `name` are always valid filter keys (always present) — handle at the resolver level, not in the per-type whitelist.
+
+3. **`lookup.py` — `_RELATED_FRAGMENTS`:**
+
+   ```python
+   _RELATED_FRAGMENTS: dict[EntityType, str] = {}     # EMPTY in N+1a
+   ```
+
+   The old "related-entity expansion" idiom (Issue → Comments via `:ON`, Agent → assigned issues via `:ASSIGNED_TO`) is out of scope for the foundation slice. Cross-entity traversals arrive with GIM-77 (bridge edges: `DEFINES`, `CALLS`) and N+1c (`:TOUCHES`/`:MODIFIES`). Keep the dict as-is (empty) and document it in-code.
+
+4. **`lookup.py` main Cypher:** becomes a simple label match — `MATCH (n:{entity_type}) WHERE ... RETURN n`. No related-node collection. Use the `EntityType` string to pick the label dynamically — same pattern as before, minus the related fragment injection.
+
+5. **`schema.py`:** update `EntityType` literal identically (single-source refactor: export once from `filters.py`, import in `schema.py`).
+
+6. **Tests:** `tests/memory/test_lookup.py` and `test_filters.py` — rewrite parametrized cases against the new entity literal. Old `test_lookup_issue_returns_comments` etc. delete.
+
+### 3.8 `palace.memory.health` adaptation (addresses CR CRITICAL-3)
+
+Current state at `services/palace-mcp/src/palace_mcp/memory/health.py:46`:
+
+```python
+ingest_result = await tx.run(LATEST_INGEST_RUN, source="paperclip")
+```
+
+**Rev2 changes — concrete replacements:**
+
+1. **`LATEST_INGEST_RUN`:** drop the `source` parameter. Return the latest `:IngestRun` across all sources. If the caller wants per-source filtering later, add a second tool (or a parameter) — not in N+1a scope.
+
+   ```cypher
+   MATCH (r:IngestRun)
+   RETURN r ORDER BY r.started_at DESC LIMIT 1
+   ```
+
+2. **`ENTITY_COUNTS`:** the old label list `[:Issue, :Comment, :Agent]` → the new literal from §3.7:
+
+   ```cypher
+   UNWIND $labels AS lbl
+   CALL { WITH lbl
+     CALL apoc.cypher.run('MATCH (n:' + lbl + ') RETURN count(n) AS cnt', {}) YIELD value
+     RETURN value.cnt AS cnt
+   }
+   RETURN lbl AS type, cnt AS count
+   ```
+
+   (Same pattern as current. `$labels` becomes the new EntityType set.)
+
+3. **`ENTITY_COUNTS_BY_PROJECT`:** same pattern, grouped by `group_id`.
+
+4. **`HealthResponse`** (pydantic model): expose the new entity set. Keys that previously were `{issues, comments, agents}` become `{episodes, iterations, decisions, findings, files, symbols, modules, api_endpoints, models, repositories, external_libs, traces, projects}`. Drop old keys — no shim, per GIM-74 removal policy.
+
+5. **Tests** in `tests/memory/test_health.py` — rewrite assertions against new response shape.
+
+### 3.9 Runner dual-dependency (addresses CR WARNING-1)
+
+`services/palace-mcp/src/palace_mcp/extractors/runner.py` creates `:IngestRun` + `:Extractor` nodes via direct Cypher (lines ~200). These are palace-mcp's internal ops-log, **not** Graphiti product-layer entities.
+
+**Rev2 decision:** runner keeps direct `driver` access for `:IngestRun` writes. The runner receives **both** `graphiti: Graphiti` (to pass into extractor.run) and `driver: AsyncDriver` (for its own ops log). `ExtractorRunContext` carries only `graphiti`; the driver stays in the runner's own closure.
+
+Rationale: `:IngestRun` is a Neo4j-native ops construct, not a Graphiti-native entity. Forcing it through Graphiti would bring no benefit and would couple our ops log to graphiti-core's internal schema. Reserve that refactor for a followup if `:IngestRun` ever becomes cross-project or temporal.
+
+### 3.10 `:Project` slug query (addresses CR WARNING-2)
+
+`runner.py:77` current query:
+
+```python
+GET_PROJECT = "MATCH (p:Project {slug: $slug}) RETURN p"
+```
+
+`EntityNode.name` is required and top-level in Graphiti. `attributes` values are persisted as flat Neo4j props (§3.7 point 2), so `{slug: $slug}` would technically work post-write — but relying on that is fragile. **Explicit rule:** `:Project` nodes store `slug` in `EntityNode.name`. So:
+
+```python
+GET_PROJECT = "MATCH (p:Project {name: $slug}) RETURN p"
+```
+
+The `name` field is guaranteed top-level by Graphiti schema. Update `projects.py` `register_project()` to pass `name=slug` when constructing the Project EntityNode.
+
+### 3.11 Unbounded Episode growth — known limitation (addresses CR WARNING-3)
+
+Heartbeat creates a new `:Episode` per tick. With a 2-minute tick cadence that's ~720 episodes/day/project. In N+1a we do **not** implement GC. Documented limitation; a future "palace retention" slice will add TTL/compaction. Operator may clear manually with Cypher if it ever becomes a problem.
+
+### 3.12 N+0 paperclip extractor removal
 
 Delete (paperclip team has already confirmed — 2026-04-24):
 
@@ -241,16 +406,19 @@ Handle removal of `:Issue`/`:Comment`/`:Agent` filter support: the tools stay, b
 6. Refactor `BaseExtractor` in `services/palace-mcp/src/palace_mcp/extractors/base.py`: change signature from `extract(ctx)` to `run(graphiti, ctx)`. Define `ExtractorRunContext` (group_id, duration_ms, config, ...) replacing the old `ExtractionContext(driver=...)`.
 7. **Update the extractor runner orchestrator** at `services/palace-mcp/src/palace_mcp/extractors/runner.py`:
    - Lines around 115, 121, 225 currently call `extractor.extract(ctx)` with `ExtractionContext(driver=...)` — replace with `extractor.run(graphiti=<module-level g>, ctx=ExtractorRunContext(group_id=..., ...))`.
-   - Remove the `driver` kwarg from the runner's own call-sites.
+   - **Keep `driver` in the runner's own scope** — needed for writing `:IngestRun` + `:Extractor` ops-log nodes (per §3.9). Only product-layer entities flow through Graphiti.
+   - `GET_PROJECT` query at line 77 changes from `{slug: $slug}` to `{name: $slug}` (per §3.10 — `:Project` stores slug in `name`).
    - `ExtractionContext` is deleted; `ExtractorRunContext` is the only context class.
-   - Verify all imports resolve; add/update tests in `tests/extractors/*_test.py` for runner behavior.
+   - Verify all imports resolve; update tests in `tests/extractors/*_test.py`.
 8. Refactor `HeartbeatExtractor` per §3.6 — use `save_entity_node()` helper.
-9. Remove N+0 paperclip extractor files per §3.7.
-10. Update `palace.memory.health` and `palace.memory.lookup` MCP tools to work against the new schema (no hard-coded old labels).
-11. Update `services/palace-mcp/README.md` with Graphiti-layer architecture note + pointer to `docs/research/graphiti-core-0-28-spike/README.md`.
-12. Unit tests per §7.1.
-13. Integration tests per §7.2.
-14. Live smoke per §7.3 — iMac.
+9. **Adapt `palace.memory.lookup` / `filters.py` / `schema.py`** per §3.7 — replace EntityType literal, empty `_RELATED_FRAGMENTS`, update `_WHITELIST` per-type, rewrite tests.
+10. **Adapt `palace.memory.health`** per §3.8 — drop `source` filter on LATEST_INGEST_RUN, new label list for ENTITY_COUNTS, update HealthResponse keys + tests.
+11. Remove N+0 paperclip extractor files per §3.12.
+12. **Add `openai_api_key: SecretStr`** to `services/palace-mcp/src/palace_mcp/config.py`; add env var line to `.env.example` (per §3.1).
+13. Update `services/palace-mcp/README.md` with Graphiti-layer architecture note + pointer to `docs/research/graphiti-core-0-28-spike/README.md`.
+14. Unit tests per §6.1.
+15. Integration tests per §6.2.
+16. Live smoke per §6.3 — iMac.
 
 ## 5. API shape after this slice
 
@@ -263,17 +431,24 @@ No new MCP tool is exposed beyond those already present. The surface is unchange
 
 ## 6. Tests
 
-### 7.1 Unit tests
+### 6.1 Unit tests
 
 - `test_build_graphiti_constructor` — asserts returned Graphiti has non-None `llm_client`, `embedder`, and `cross_encoder is None`.
 - `test_build_graphiti_missing_openai_key_fails_early` — when `OPENAI_API_KEY` is absent in settings, `build_graphiti()` raises a clear `ConfigurationError` at build time (not at first LLM call).
+- `test_settings_openai_api_key_required` — `Settings()` without `OPENAI_API_KEY` env var raises `pydantic.ValidationError` (per §3.1).
+- `test_entity_type_literal_contains_new_set` — `filters.EntityType.__args__` matches the §3.7 list; does NOT contain `"Issue"`, `"Comment"`, `"Agent"`.
+- `test_lookup_related_fragments_empty_in_n1a` — `lookup._RELATED_FRAGMENTS == {}` after refactor.
+- `test_health_response_has_new_keys` — `HealthResponse` fields include `episodes`, `decisions`, `symbols`, `files`, ...; do NOT include `issues`, `comments`, `agents`.
+- `test_latest_ingest_run_no_source_filter` — `LATEST_INGEST_RUN` Cypher has no `WHERE r.source = $source` clause (per §3.8).
+- `test_project_slug_query_uses_name` — `runner.GET_PROJECT` matches `(p:Project {name: $slug})`, not `{slug: $slug}` (per §3.10).
+- `test_register_project_sets_name_to_slug` — `register_project(slug="gimle")` creates an EntityNode with `name="gimle"`.
 - `test_entity_factory_metadata_envelope_required` — factory for any entity type raises `ValueError` if `confidence` or `provenance` is absent from attributes.
 - `test_entity_factory_provenance_enum` — `provenance` must be `"asserted" | "derived" | "inferred"`.
 - `test_symbol_kind_enum` — factory for Symbol validates `kind ∈ {function, method, class, interface, enum, type}`.
 - `test_edge_factory_attributes_envelope_required` — same for edges.
 - `test_paperclip_extractor_modules_removed` — `import services.palace_mcp.ingest.paperclip` raises `ModuleNotFoundError`.
 
-### 7.2 Integration tests
+### 6.2 Integration tests
 
 Fixture: `testcontainers-neo4j` + a dummy OPENAI_API_KEY. No real OpenAI call is made (writes via `add_triplet`).
 
@@ -283,7 +458,7 @@ Fixture: `testcontainers-neo4j` + a dummy OPENAI_API_KEY. No real OpenAI call is
 - `test_memory_health_counts_episodes` — after one heartbeat run, `palace.memory.health()` returns `{Episode: 1, ...}`.
 - `test_memory_lookup_unknown_entity_returns_error` — `palace.memory.lookup Issue {}` returns `{error: "unknown entity type", warnings: [...]}` (no silent fallback).
 
-### 7.3 Live smoke on iMac
+### 6.3 Live smoke on iMac
 
 1. `docker compose --profile review up -d` (existing profile, still sufficient — no code-graph needed for this slice).
 2. `palace.ingest.run_extractor heartbeat --project gimle` succeeds with `nodes_written=1`.
