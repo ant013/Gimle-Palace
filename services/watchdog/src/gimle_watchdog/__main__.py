@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 from gimle_watchdog import daemon, detection, logger, service
-from gimle_watchdog.config import Config, ConfigError, load_config
+from gimle_watchdog.config import ConfigError, load_config
 from gimle_watchdog.paperclip import PaperclipClient
 from gimle_watchdog.state import State
 

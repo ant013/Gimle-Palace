@@ -121,3 +121,23 @@ async def test_run_loop_exits_on_tick_timeout(tmp_path: Path):
             with patch("sys.exit") as mock_exit:
                 await daemon._run_one_iteration_for_test(cfg, state, client)
                 mock_exit.assert_called_with(1)
+
+
+def test_build_escalation_body_non_permanent(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    state = State.load(tmp_path / "state.json")
+    state.record_escalation("issue-5", "no_run")
+    body = daemon._build_escalation_body("issue-5", "agent-5", state, cfg.escalation.comment_marker)
+    assert "agent-5" in body
+    assert "auto-unescalate" in body
+    assert "PERMANENT" not in body
+
+
+def test_build_escalation_body_permanent(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    state = State.load(tmp_path / "state.json")
+    for _ in range(4):
+        state.record_escalation("issue-6", "no_run")
+    body = daemon._build_escalation_body("issue-6", "agent-6", state, cfg.escalation.comment_marker)
+    assert "PERMANENT" in body
+    assert "unescalate" in body

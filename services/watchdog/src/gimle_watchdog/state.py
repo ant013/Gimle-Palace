@@ -61,9 +61,9 @@ class State:
             log.warning("state_version_unknown version=%r backup=%s", ver, backup.name)
             return cls(path=path)
 
-        agent_wakes: dict[str, list[datetime]] = {}
+        agent_wakes: dict[str, list[_dt.datetime]] = {}
         for agent_id, times in (raw.get("agent_wakes") or {}).items():
-            parsed: list[datetime] = []
+            parsed: list[_dt.datetime] = []
             for t in times:
                 try:
                     parsed.append(_parse_iso(t))

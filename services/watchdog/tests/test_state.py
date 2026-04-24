@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 from freezegun import freeze_time
 
 from gimle_watchdog import state as st
