@@ -96,3 +96,23 @@ jobs:
             --load
           rm -rf /tmp/.buildx-cache
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+
+  watchdog-tests:
+    name: watchdog-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: services/watchdog/uv.lock
+          python-version: "3.12"
+      - run: uv sync --all-extras
+        working-directory: services/watchdog
+      - run: uv run ruff check src/ tests/
+        working-directory: services/watchdog
+      - run: uv run mypy --strict src/
+        working-directory: services/watchdog
+      - run: uv run pytest tests/ -v --cov=gimle_watchdog --cov-config=.coveragerc --cov-fail-under=85
+        working-directory: services/watchdog
