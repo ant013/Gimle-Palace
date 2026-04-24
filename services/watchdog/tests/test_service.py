@@ -93,3 +93,17 @@ def test_rendered_systemd_args_parse_cleanly():
             _build_parser().parse_args(args_after_module)
             return
     raise AssertionError("ExecStart line not found in systemd unit")
+
+
+def test_rendered_cron_args_parse_cleanly() -> None:
+    """Rendered cron entry args must be parseable by _build_parser."""
+    entry = service.render_cron_entry(
+        venv_python=Path("/path/to/.venv/bin/python"),
+        config_path=Path("/home/user/.paperclip/watchdog-config.yaml"),
+        poll_interval_seconds=120,
+    )
+    # Cron entry: `*/2 * * * * /path/python -m gimle_watchdog tick --config /path/cfg.yaml`
+    parts = entry.split()
+    idx = next(i for i, p in enumerate(parts) if "gimle_watchdog" in p)
+    args_after_module = parts[idx + 1 :]
+    _build_parser().parse_args(args_after_module)
