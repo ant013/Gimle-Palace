@@ -1,0 +1,191 @@
+# Field definitions for deep-research per item.
+# detail_level: brief (one-liner) | moderate (1-2 paragraphs) | detailed (multi-paragraph, quotes/code)
+# uncertain: populated automatically during deep-research when a field cannot
+# be confidently filled from sources.
+
+fields:
+  # --- Identity & activity ----------------------------------------------
+  - name: name
+    description: Official name as used by maintainer
+    detail_level: brief
+
+  - name: maintainer
+    description: Org / company / lab / research group
+    detail_level: brief
+
+  - name: year_introduced
+    description: First public release or paper publication year
+    detail_level: brief
+
+  - name: license
+    description: OSS license (MIT/Apache/BSL/…) or "closed/commercial"
+    detail_level: brief
+
+  - name: last_major_release
+    description: Version tag + date of last major release
+    detail_level: brief
+
+  - name: activity
+    description: Commits/month trend, contributor count, stars trajectory,
+                 open issues count as of 2026-04
+    detail_level: brief
+
+  # --- Architecture ------------------------------------------------------
+  - name: storage_backend
+    description: Neo4j / Postgres / Qdrant / SQLite / custom RocksDB / FS /
+                 multiple configurable
+    detail_level: brief
+
+  - name: representation_primitive
+    description: entity+edge / document-chunk / markdown-file / code-AST /
+                 memcube / episodic-note / KV-cache-block
+    detail_level: moderate
+
+  - name: api_shape
+    description: Python lib / MCP server / REST / CLI / SDK-multiple. Include
+                 whether there is a first-party MCP server.
+    detail_level: brief
+
+  - name: hosting
+    description: self-host / managed-cloud / both. Note SaaS free tier if any.
+    detail_level: brief
+
+  # --- Semantic depth & schema ------------------------------------------
+  - name: llm_dependency
+    description: When LLM is required — ingest / retrieval / both / none.
+                 Note the models typically used (default Claude? GPT? local?).
+    detail_level: moderate
+
+  - name: schema_extensibility
+    description: fixed / yaml-config / LLM-learns (open discovery) /
+                 intrinsic-relational-routing / prescribed+learned hybrid.
+    detail_level: moderate
+
+  - name: schema_richness
+    description: Core entity types count. Core edge types count. Multi-label
+                 support? Multi-graph? How close to 20+ entities / 15+ edges
+                 that Gimle §5 targets.
+    detail_level: detailed
+
+  # --- Temporal & lifecycle ---------------------------------------------
+  - name: temporal_model
+    description: snapshot / bi-temporal (valid_from/to + recorded_at) /
+                 event-log / none
+    detail_level: moderate
+
+  - name: forgetting_policy
+    description: none / LRU / LFU / semantic-dedup / bi-temporal-invalidation /
+                 OS-page-eviction / agent-driven-deletion
+    detail_level: brief
+
+  - name: ingest_latency_class
+    description: real-time-incremental (sub-second per episode) /
+                 batch-offline (minutes-hours per corpus) /
+                 lazy-on-demand (deferred until query)
+    detail_level: brief
+
+  # --- Retrieval & reasoning --------------------------------------------
+  - name: retrieval_modes
+    description: vector / BM25 / graph-traversal / hybrid / community-search /
+                 drift-search / any combination. List supported modes.
+    detail_level: moderate
+
+  - name: retrieval_agenticity
+    description: static-lookup / HyDE / Self-RAG / CRAG / CLAUSE-budget-aware /
+                 multi-hop / policy-guided
+    detail_level: moderate
+
+  - name: retrieval_budget_control
+    description: Does the system expose per-query cost/latency budgets
+                 (max tokens / hops / edges) as first-class parameters?
+                 yes / no / planned.
+    detail_level: brief
+
+  # --- Multi-tenancy & access ------------------------------------------
+  - name: multi_project_namespace
+    description: How data is partitioned: none / project-label / group_id /
+                 database-per-project. Cross-project queries supported?
+    detail_level: moderate
+
+  - name: multi_user_access
+    description: none / per-agent-namespace / RBAC / bipartite-access-graph /
+                 provenance-aware-sharing. Relevant for multi-agent teams.
+    detail_level: brief
+
+  # --- LLM/embedder plumbing -------------------------------------------
+  - name: embedder_options
+    description: Built-in adapters (OpenAI/Ollama/sentence-transformers/…).
+                 Custom embedder support? Default? Dimensions.
+    detail_level: moderate
+
+  - name: llm_client_options
+    description: Built-in LLM clients (OpenAI/Anthropic/Ollama/…). Default?
+                 Can LLM be disabled (structured-writes-only mode)?
+    detail_level: brief
+
+  - name: cost_privacy
+    description: Typical token cost per ingest/query. Privacy: does ingest
+                 data leave the host by default?
+    detail_level: moderate
+
+  # --- Code understanding (central to Gimle) ---------------------------
+  - name: code_artifact_linkage
+    description: Granularity of code linkage supported natively:
+                 none / file-path / symbol (function/class) /
+                 line-level-defs+refs / issue-PR-to-symbol-chain / AST-node.
+                 Ranked list of what the system exposes.
+    detail_level: detailed
+
+  - name: code_analysis_features
+    description: Call graph / diff-awareness / symbol index / dependency graph /
+                 import resolution / type-aware / cross-language. Which are
+                 first-party, which need plugins.
+    detail_level: moderate
+
+  # --- Memory OS layer (new axis post-MemOS) --------------------------
+  - name: memory_os_layer
+    description: Which MemOS tier does the system operate at — parametric
+                 (model-weight tuning) / activation (KV-cache reuse) /
+                 plaintext (what we usually mean by memory). Cross-type
+                 migration supported?
+    detail_level: brief
+
+  # --- Self-improvement & provenance -----------------------------------
+  - name: self_improvement_mechanism
+    description: How stored context improves from execution feedback:
+                 none / manual-curation / LLM-reflection / ACE-GRC /
+                 RL-policy / online-alias-learning
+    detail_level: moderate
+
+  - name: provenance_standard
+    description: Audit trail emitted: none / custom-log / W3C-PROV /
+                 OpenTelemetry / MCP-native-trace. Relevant for regulated
+                 and multi-agent debugging.
+    detail_level: brief
+
+  # --- Evidence & fit ---------------------------------------------------
+  - name: benchmark_results
+    description: Published results on LongMemEval / LoCoMo / SWE-bench /
+                 SWE-bench-Lite / CrossCodeEval / MultiHop / HotpotQA /
+                 vendor-internal. Prefer third-party verified.
+    detail_level: moderate
+
+  - name: strengths
+    description: 2-3 distinctive strengths relevant to Gimle's goals
+    detail_level: moderate
+
+  - name: weaknesses
+    description: 2-3 honest weaknesses or gaps relevant to Gimle's goals
+    detail_level: moderate
+
+  - name: fit_with_gimle_section_5
+    description: >
+      Verdict for Gimle-palace §5 (Project/Module/File/Symbol/UIComponent/
+      APIEndpoint/Model/Decision/Iteration + faceted 4-axis multi-label +
+      bi-temporal): adopt-whole / steal-specific-ideas (list which) /
+      incompatible (explain). Include 1-2 specific code/schema snippets
+      if they'd inform our design.
+    detail_level: detailed
+
+# Populated by deep-research phase; empty here.
+uncertain: []

@@ -1,0 +1,222 @@
+topic: >
+  Context storage for AI agents that truly understands projects — landscape
+  review (2025-10 … 2026-04) informing Gimle-palace N+1 Graphiti-based
+  schema foundation design.
+
+# 15 prioritized items; rest (~45) captured for awareness in separate
+# section below, not for deep-research.
+
+items:
+  # --- Updates to our baseline / direct alternatives on same stack ---
+  - id: graphiti-v1
+    name: Graphiti v1.0
+    hint: >
+      Major release by Zep. Added structured Entity Types. Our verified API
+      was 0.4.3 (2026-04-18, now legacy). Re-verify: class surface, EntityNode
+      with typed attributes, add_triplet signature, search API.
+    sources:
+      - https://blog.getzep.com/entity-types-structured-agent-memory/
+      - https://github.com/getzep/graphiti
+
+  - id: neo4j-labs-agent-memory
+    name: neo4j-labs/agent-memory
+    hint: >
+      Native Neo4j-team library (Apr 2026). Three-tier memory (short/long/
+      reasoning), POLE+O entity model, GLiNER+GLiREL pipeline, Wikipedia/
+      Diffbot enrichment, MCP server with 16 tools, LangChain/CrewAI/Pydantic-AI
+      integrations. Direct competitor to Graphiti on the same DB.
+    sources:
+      - https://github.com/neo4j-labs/agent-memory
+      - https://deepwiki.com/neo4j-labs/create-context-graph/6-three-memory-architecture
+
+  - id: neo4j-labs-create-context-graph
+    name: neo4j-labs/create-context-graph
+    hint: >
+      CLI scaffolder for domain-specific context-graph apps. POLE+O schema,
+      3-memory architecture. Treat as Neo4j's opinionated "agent memory"
+      pattern - steal schema design cues.
+    sources:
+      - https://github.com/neo4j-labs/create-context-graph
+
+  # --- Code-structural KG research (directly answers "understand project") ---
+  - id: repograph
+    name: RepoGraph (ICLR 2025)
+    hint: >
+      Plug-in module giving AI SWEs a repository-level navigation graph at
+      code-line level (definition-reference relationships). Boosts all
+      SWE-bench solvers. Published paper + reference impl.
+    sources:
+      - https://arxiv.org/abs/2410.14684
+
+  - id: cgm-code-graph-model
+    name: CGM - Code Graph Model (NeurIPS 2025)
+    hint: >
+      LLM with repo code graph injected via attention adapters, eliminating
+      the retrieval loop. 43% on SWE-bench Lite (first open-weight, +12pp).
+      Likely incompatible with runtime RAG but highly instructive for what
+      schema richness must capture.
+    sources:
+      - https://arxiv.org/abs/2505.16901
+
+  - id: kgcompass
+    name: KGCompass (Mar 2025)
+    hint: >
+      Repository-aware KG linking issues/PRs → files/classes/functions.
+      Multi-hop traversal locates bugs that plain LLMs miss (89.7% of
+      successful localizations had no explicit hint). 58.3% SWE-bench at
+      $0.20/repair. Concrete issue-to-symbol chain schema.
+    sources:
+      - https://arxiv.org/abs/2503.21710
+
+  - id: codexgraph
+    name: CodexGraph (NAACL 2025)
+    hint: >
+      LLM agent backed by code graph DB. Static analysis extracts MODULE,
+      CLASS, FUNCTION nodes + CONTAINS, INHERITS, USES edges; agent issues
+      graph queries instead of embedding lookups. Canonical reference for
+      graph query language over embedding retrieval.
+    sources:
+      - https://arxiv.org/abs/2408.03910
+
+  # --- State-of-the-art agent memory benchmarks / approaches ---
+  - id: licomemory
+    name: LiCoMemory (Nov 2025)
+    hint: >
+      Hierarchical graph with top-down retrieval - abstract summaries
+      hyperlink to specific dialogue chunks. 73.8% on LongMemEval, beats
+      Mem0, Zep, LoCoMo-RAG. Directly actionable layering pattern.
+    sources:
+      - https://arxiv.org/html/2511.01448v1
+
+  - id: magma
+    name: MAGMA - Multi-Graph Agentic Memory (Jan 2026)
+    hint: >
+      Separate graphs for semantic / temporal / causal / entity relations,
+      retrieval as policy-guided traversal. 40% lower latency, 95% token
+      reduction on LongMemEval. Alternative to our single-multi-label-graph
+      design.
+    sources:
+      - https://arxiv.org/abs/2601.03236
+
+  - id: memos
+    name: MemOS (MemCube, 2025-2026)
+    hint: >
+      Memory as OS resource. Three types: parametric (model weights) /
+      activation (KV cache) / plaintext. MemCube container enables tracking,
+      fusion, migration across types. v2.0 adds multi-modal + tool memory.
+      Informs our memory boundary and eviction design.
+    sources:
+      - https://arxiv.org/abs/2505.22101
+      - https://arxiv.org/abs/2507.03724
+
+  # --- Context engineering / self-improvement / budget ---
+  - id: ace-context-engineering
+    name: ACE - Agentic Context Engineering (Oct 2025)
+    hint: >
+      Generator-Reflector-Curator pipeline evolving system prompts / agent
+      memory via structured delta updates, preventing context collapse.
+      +10.6% agents, +8.6% finance without labeled supervision. Pattern for
+      schema self-improvement from execution feedback.
+    sources:
+      - https://arxiv.org/abs/2510.04618
+
+  - id: clause-neurosymbolic
+    name: CLAUSE - Neuro-Symbolic KG Reasoning (Sep 2025)
+    hint: >
+      Three-agent framework (Subgraph Architect, Path Navigator, Context
+      Curator); retrieval as sequential decision over KG under hard resource
+      budgets (tokens, steps, edges). +39.3 EM@1 over GraphRAG baseline at
+      -18.6% latency. Pattern for first-class budget-aware traversal.
+    sources:
+      - https://arxiv.org/abs/2509.21035
+
+  # --- Schema discipline ---
+  - id: ontokg
+    name: OntoKG - Intrinsic-Relational Routing (Apr 2026)
+    hint: >
+      Classifies every property as node attribute (intrinsic) or traversable
+      edge (relational), eliminating spurious edges. 34M nodes / 61M edges
+      from Wikidata, 93.3% coverage. Schema discipline pattern directly
+      relevant to our "what is an edge vs a property" decisions.
+    sources:
+      - https://arxiv.org/abs/2604.02618
+
+  # --- Current widely-used competitors (re-verify 2026 state) ---
+  - id: mem0
+    name: Mem0 (2026 state)
+    hint: >
+      Dual-memory (vector + KG) framework for agents. Re-verify current
+      schema, ingest shape, LLM dependency. Benchmark position after
+      LiCoMemory overtaking it.
+    sources:
+      - https://github.com/mem0ai/mem0
+
+  - id: cognee
+    name: Cognee (2026 state)
+    hint: >
+      KG-based memory with async ingest pipeline. Re-verify current state,
+      what their "understanding" pipeline looks like, which LLM steps are
+      baked in.
+    sources:
+      - https://github.com/topoteretes/cognee
+
+# Items captured for awareness only (no deep-research needed), flagged here
+# so future sessions know they were considered.
+awareness_only:
+  # Vector / RAG-first (out of direct scope for "understanding")
+  - LlamaIndex
+  - Ragie
+  - Pinecone Memory
+  - Cody (Sourcegraph)
+  - Sweep AI
+  - Continue.dev
+  - Basic Memory
+  - ConPort
+  # LLM-native or adjacent agent-memory frameworks
+  - Letta (ex-MemGPT)
+  - LangMem (LangChain)
+  - Zep (cloud, same authors as Graphiti)
+  - Neo4j GraphRAG
+  - AutoGen Memory / CrewAI Memory
+  - OpenAI Assistants File Search
+  - SuperMemory / Papr Memory
+  - Redis AI Memory
+  - Claude prompt caching
+  - GitHub Copilot Workspace
+  - Cline / Bolt / v0
+  - OpenDevin / SWE-agent
+  # Research / academia not in top-15
+  - GraphRAG Microsoft (DRIFT + LazyGraphRAG)
+  - RAPTOR
+  - HyDE
+  - Self-RAG / CRAG
+  - REAPER
+  - CodeGRAG variants
+  - A-MEM (Zettelkasten-style)
+  - MemoryOS (EMNLP 2025 Oral)
+  - MemArt / KVCache-Centric Memory
+  - KEEP (Microsoft, 2026)
+  - Ontology-Constrained Neural Reasoning (enterprise, 2026)
+  - Collaborative Memory (multi-user)
+  - PROV-AGENT
+  - Microsoft Fabric IQ
+  - Open Semantic Interchange (OSI) spec
+  - Memory for Autonomous LLM Agents Survey
+  - Graph-Based Agent Memory Taxonomy Survey
+  # Schema / paradigm concepts
+  - Bi-temporal modelling
+  - Episodic vs semantic memory
+  - Entity-centric vs document-centric
+  - Event-sourced knowledge
+  - Faceted multi-label (our own §5.4 approach)
+  # Code-structural tooling
+  - Serena MCP (we use)
+  - Tree-sitter indexers
+  - Aider repomap
+  - SCIP (Sourcegraph)
+  - CodeQL
+
+execution:
+  batch_size: 5             # 5 parallel research agents
+  items_per_agent: 3        # 15 items / 5 = 3 each
+  output_dir: results       # .json per item under ./results/
