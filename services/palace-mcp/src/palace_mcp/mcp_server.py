@@ -13,6 +13,14 @@ Tools registered:
 - palace.git.blame
 - palace.git.diff
 - palace.git.ls_tree
+- palace.code.search_graph
+- palace.code.trace_call_path
+- palace.code.query_graph
+- palace.code.detect_changes
+- palace.code.get_architecture
+- palace.code.get_code_snippet
+- palace.code.search_code
+- palace.code.manage_adr  [DISABLED — returns directive error]
 """
 
 import logging
@@ -27,7 +35,6 @@ from neo4j import AsyncDriver
 from pydantic import BaseModel
 from starlette.applications import Starlette
 
-from palace_mcp.code_router import register_code_tools
 from palace_mcp.extractors import registry as _extractor_registry
 from palace_mcp.extractors.runner import run_extractor as _run_extractor
 from palace_mcp.errors import (
@@ -317,7 +324,9 @@ async def _palace_ingest_run_extractor(name: str, project: str) -> dict[str, Any
     graphiti = _graphiti
     if graphiti is None:
         handle_tool_error(DriverUnavailableError("Graphiti not initialised"))
-    return await _run_extractor(name=name, project=project, driver=driver, graphiti=graphiti)
+    return await _run_extractor(
+        name=name, project=project, driver=driver, graphiti=graphiti
+    )
 
 
 @_tool(
@@ -441,10 +450,3 @@ async def _palace_git_ls_tree(
     recursive: bool = False,
 ) -> dict[str, Any]:
     return await palace_git_ls_tree(project, ref=ref, path=path, recursive=recursive)
-
-
-# ---------------------------------------------------------------------------
-# palace.code.* — codebase-memory pass-through tools
-# ---------------------------------------------------------------------------
-
-register_code_tools(_tool)

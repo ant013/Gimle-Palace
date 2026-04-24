@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -41,7 +41,7 @@ _DISABLED_CM_TOOLS: dict[str, str] = {
 }
 
 
-def register_code_tools(tool_decorator: Callable[[str, str], Callable]) -> None:
+def register_code_tools(tool_decorator: Callable[[str, str], Callable[..., Any]]) -> None:
     """Register all palace.code.* tools using the provided decorator.
 
     Accepts `_tool` from mcp_server.py — Pattern #21 dedup-aware decorator
@@ -55,7 +55,7 @@ def register_code_tools(tool_decorator: Callable[[str, str], Callable]) -> None:
 
 
 def _register_passthrough(
-    tool_decorator: Callable[[str, str], Callable],
+    tool_decorator: Callable[[str, str], Callable[..., Any]],
     cm_tool_name: str,
     description: str,
 ) -> None:
@@ -80,11 +80,11 @@ def _register_passthrough(
         result = response.json()
         if "error" in result:
             return {"error": result["error"]}
-        return result.get("result", result)
+        return cast(dict[str, Any], result.get("result", result))
 
 
 def _register_disabled_tool(
-    tool_decorator: Callable[[str, str], Callable],
+    tool_decorator: Callable[[str, str], Callable[..., Any]],
     cm_tool_name: str,
     message: str,
 ) -> None:
