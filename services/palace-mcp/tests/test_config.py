@@ -109,3 +109,25 @@ class TestGroupId:
         importlib.reload(cfg_mod)
         s = cfg_mod.Settings()
         assert s.palace_default_group_id == "project/other"
+
+
+class TestCodebaseMemoryUrl:
+    def test_codebase_memory_mcp_url_defaults_empty(self) -> None:
+        """codebase_memory_mcp_url defaults to empty string when env var unset."""
+        with patch.dict(os.environ, {"NEO4J_PASSWORD": "test"}, clear=True):
+            from palace_mcp.config import Settings
+
+            s = Settings()
+        assert s.codebase_memory_mcp_url == ""
+
+    def test_codebase_memory_mcp_url_from_env(self) -> None:
+        """codebase_memory_mcp_url reads from CODEBASE_MEMORY_MCP_URL env var."""
+        with patch.dict(
+            os.environ,
+            {"NEO4J_PASSWORD": "test", "CODEBASE_MEMORY_MCP_URL": "http://cm:8765/mcp"},
+            clear=True,
+        ):
+            from palace_mcp.config import Settings
+
+            s = Settings()
+        assert s.codebase_memory_mcp_url == "http://cm:8765/mcp"

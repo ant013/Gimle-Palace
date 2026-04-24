@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     neo4j_uri: str = "bolt://neo4j:7687"
     neo4j_password: SecretStr
     palace_default_group_id: str = "project/gimle"
+    codebase_memory_mcp_url: str = ""
 
 
 class IngestSettings(BaseSettings):
