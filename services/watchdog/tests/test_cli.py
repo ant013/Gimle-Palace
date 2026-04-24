@@ -39,7 +39,7 @@ logging: {path: /tmp/x.log, level: INFO, rotate_max_bytes: 10485760, rotate_back
 escalation: {post_comment_on_issue: true, comment_marker: "<!-- x -->"}
 """)
     monkeypatch.setattr(sys, "platform", "darwin")
-    rc = cli.main(["watchdog", "--config", str(cfg_path), "install", "--dry-run"])
+    rc = cli.main(["watchdog", "install", "--config", str(cfg_path), "--dry-run"])
     out = capsys.readouterr().out
     assert rc == 0
     assert "work.ant013.gimle-watchdog" in out
@@ -66,7 +66,7 @@ escalation: {{post_comment_on_issue: true, comment_marker: "<!-- x -->"}}
 def test_cmd_status(tmp_path: Path, capsys):
     cfg_path = _minimal_cfg(tmp_path)
     # state file doesn't exist yet — that's fine, it initialises empty
-    rc = cli.main(["watchdog", "--config", str(cfg_path), "status"])
+    rc = cli.main(["watchdog", "status", "--config", str(cfg_path)])
     out = capsys.readouterr().out
     assert rc == 0
     assert "Companies configured: 1" in out
@@ -75,7 +75,7 @@ def test_cmd_status(tmp_path: Path, capsys):
 
 def test_cmd_tail_no_log(tmp_path: Path, capsys):
     cfg_path = _minimal_cfg(tmp_path)
-    rc = cli.main(["watchdog", "--config", str(cfg_path), "tail"])
+    rc = cli.main(["watchdog", "tail", "--config", str(cfg_path)])
     assert rc == 1
     assert "does not exist" in capsys.readouterr().err
 
@@ -87,7 +87,7 @@ def test_cmd_tail_with_log(tmp_path: Path, capsys):
         {"ts": "2026-04-21T10:00:00Z", "level": "INFO", "name": "watchdog", "message": "hi"}
     )
     log_path.write_text(entry + "\n")
-    rc = cli.main(["watchdog", "--config", str(cfg_path), "tail", "-n", "5"])
+    rc = cli.main(["watchdog", "tail", "--config", str(cfg_path), "-n", "5"])
     out = capsys.readouterr().out
     assert rc == 0
     assert "hi" in out
@@ -117,3 +117,24 @@ def test_cmd_unescalate(tmp_path: Path, capsys):
     out = capsys.readouterr().out
     assert rc == 0
     assert "cleared" in out
+
+
+# GIM-69 regression: --config must be accepted after the subcommand
+
+
+def test_config_after_subcommand_run(tmp_path: Path) -> None:
+    """'run --config X' must parse without error (matches service renderer output)."""
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text("")
+    args = cli._build_parser().parse_args(["run", "--config", str(cfg)])
+    assert args.command == "run"
+    assert args.config == cfg
+
+
+def test_config_after_subcommand_tick(tmp_path: Path) -> None:
+    """'tick --config X' must parse without error (matches cron renderer output)."""
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text("")
+    args = cli._build_parser().parse_args(["tick", "--config", str(cfg)])
+    assert args.command == "tick"
+    assert args.config == cfg
