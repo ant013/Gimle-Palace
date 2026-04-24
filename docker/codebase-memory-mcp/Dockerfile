@@ -1,7 +1,7 @@
 # codebase-memory-mcp sidecar — built from official GitHub release binary.
 # Pinned to v0.6.0 with SHA-256 verification of the release tarball.
 # Update CM_VERSION + CM_SHA256_AMD64/ARM64 in lockstep when upgrading.
-FROM debian:bookworm-slim AS fetch
+FROM debian:bookworm-slim@sha256:f9c6a2fd2ddbc23e336b6257a5245e31f996953ef06cd13a59fa0a1df2d5c252 AS fetch
 
 ARG CM_VERSION=v0.6.0
 ARG TARGETARCH=amd64
@@ -26,7 +26,7 @@ RUN set -ex; \
     tar -xzf /tmp/cm.tar.gz -C /tmp; \
     chmod +x /tmp/codebase-memory-mcp
 
-FROM debian:bookworm-slim
+FROM debian:bookworm-slim@sha256:f9c6a2fd2ddbc23e336b6257a5245e31f996953ef06cd13a59fa0a1df2d5c252
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates curl && \

@@ -41,7 +41,9 @@ _DISABLED_CM_TOOLS: dict[str, str] = {
 }
 
 
-def register_code_tools(tool_decorator: Callable[[str, str], Callable[..., Any]]) -> None:
+def register_code_tools(
+    tool_decorator: Callable[[str, str], Callable[..., Any]],
+) -> None:
     """Register all palace.code.* tools using the provided decorator.
 
     Accepts `_tool` from mcp_server.py — Pattern #21 dedup-aware decorator

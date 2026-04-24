@@ -35,6 +35,7 @@ from neo4j import AsyncDriver
 from pydantic import BaseModel
 from starlette.applications import Starlette
 
+from palace_mcp.code_router import register_code_tools
 from palace_mcp.extractors import registry as _extractor_registry
 from palace_mcp.extractors.runner import run_extractor as _run_extractor
 from palace_mcp.errors import (
@@ -450,3 +451,10 @@ async def _palace_git_ls_tree(
     recursive: bool = False,
 ) -> dict[str, Any]:
     return await palace_git_ls_tree(project, ref=ref, path=path, recursive=recursive)
+
+
+# ---------------------------------------------------------------------------
+# palace.code.* — codebase-memory pass-through tools
+# ---------------------------------------------------------------------------
+
+register_code_tools(_tool)
