@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 async def get_health(driver: AsyncDriver, *, default_group_id: str) -> HealthResponse:
     """Return health data: reachability, entity counts, project list, last ingest run."""
-    code_graph_reachable = code_router._cm_client is not None
+    code_graph_reachable = code_router._cm_session is not None
 
     try:
         await driver.verify_connectivity()

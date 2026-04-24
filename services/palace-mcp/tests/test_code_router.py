@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
-import httpx
 import pytest
+from mcp import ClientSession
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
+from mcp.types import TextContent
 
 
 EXPECTED_ENABLED_TOOLS = [
@@ -127,31 +127,19 @@ class TestDisabledTool:
 
 class TestPassthroughSerialization:
     @pytest.mark.asyncio
-    async def test_jsonrpc_envelope_shape(self) -> None:
-        """Pass-through builds correct JSON-RPC envelope and unwraps result.
+    async def test_call_tool_arguments_forwarded(self) -> None:
+        """Pass-through calls cm_session.call_tool with correct name and arguments."""
+        from mcp.types import CallToolResult
 
-        FastMCP converts **kwargs to a required field so pass-through tools
-        use a single `arguments: dict | None = None` parameter. The LLM passes
-        tool args as: palace.code.search_graph(arguments={"name_pattern": "x"}).
-        """
-        from palace_mcp.code_router import register_code_tools, set_cm_client
+        from palace_mcp.code_router import _set_cm_session, register_code_tools
 
-        captured_request: dict[str, Any] = {}
-
-        async def mock_post(url: str, *, json: dict[str, Any], **kw: Any) -> MagicMock:
-            captured_request.update(json)
-            resp = MagicMock()
-            resp.raise_for_status = MagicMock()
-            resp.json.return_value = {
-                "jsonrpc": "2.0",
-                "result": {"nodes": []},
-                "id": 1,
-            }
-            return resp
-
-        client = AsyncMock(spec=httpx.AsyncClient)
-        client.post = mock_post
-        set_cm_client(client)
+        mock_result = CallToolResult(
+            content=[TextContent(type="text", text='{"nodes":[]}')],
+            isError=False,
+        )
+        mock_session = AsyncMock(spec=ClientSession)
+        mock_session.call_tool = AsyncMock(return_value=mock_result)
+        _set_cm_session(mock_session)
 
         mcp = FastMCP("test")
         stub_tool = lambda name, desc: mcp.tool(name=name, description=desc)  # noqa: E731
@@ -161,30 +149,56 @@ class TestPassthroughSerialization:
             for t in mcp._tool_manager.list_tools()
             if t.name == "palace.code.search_graph"
         )
-        # `arguments` is the single dict parameter; LLM passes CM args inside it.
         result = await tool.run(arguments={"arguments": {"name_pattern": "main"}})
 
-        assert captured_request["jsonrpc"] == "2.0"
-        assert captured_request["method"] == "tools/call"
-        assert captured_request["params"]["name"] == "search_graph"
-        assert captured_request["params"]["arguments"] == {"name_pattern": "main"}
+        mock_session.call_tool.assert_called_once_with(
+            "search_graph", arguments={"name_pattern": "main"}
+        )
         assert result == {"nodes": []}
 
-        set_cm_client(None)  # cleanup
+        _set_cm_session(None)
 
-
-class TestPassthroughTimeout:
     @pytest.mark.asyncio
-    async def test_timeout_surfaces_as_error(self) -> None:
-        """httpx timeout → httpx.ReadTimeout raised (FastMCP converts to isError)."""
-        from palace_mcp.code_router import register_code_tools, set_cm_client
+    async def test_structured_content_returned_directly(self) -> None:
+        """When structuredContent is present, it is returned as-is."""
+        from mcp.types import CallToolResult
 
-        async def mock_post_timeout(url: str, **kw: Any) -> None:
-            raise httpx.ReadTimeout("Connection timed out")
+        from palace_mcp.code_router import _set_cm_session, register_code_tools
 
-        client = AsyncMock(spec=httpx.AsyncClient)
-        client.post = mock_post_timeout
-        set_cm_client(client)
+        mock_result = CallToolResult(
+            content=[],
+            structuredContent={"languages": ["python"], "packages": []},
+            isError=False,
+        )
+        mock_session = AsyncMock(spec=ClientSession)
+        mock_session.call_tool = AsyncMock(return_value=mock_result)
+        _set_cm_session(mock_session)
+
+        mcp = FastMCP("test")
+        stub_tool = lambda name, desc: mcp.tool(name=name, description=desc)  # noqa: E731
+        register_code_tools(stub_tool)
+        tool = next(
+            t
+            for t in mcp._tool_manager.list_tools()
+            if t.name == "palace.code.get_architecture"
+        )
+        result = await tool.run(arguments={})
+        assert result == {"languages": ["python"], "packages": []}
+
+        _set_cm_session(None)
+
+
+class TestPassthroughError:
+    @pytest.mark.asyncio
+    async def test_exception_from_call_tool_surfaces_as_tool_error(self) -> None:
+        """Exception from call_tool → FastMCP converts to ToolError."""
+        from palace_mcp.code_router import _set_cm_session, register_code_tools
+
+        mock_session = AsyncMock(spec=ClientSession)
+        mock_session.call_tool = AsyncMock(
+            side_effect=RuntimeError("CM subprocess died")
+        )
+        _set_cm_session(mock_session)
 
         mcp = FastMCP("test")
         stub_tool = lambda name, desc: mcp.tool(name=name, description=desc)  # noqa: E731
@@ -195,8 +209,35 @@ class TestPassthroughTimeout:
             if t.name == "palace.code.get_architecture"
         )
 
-        # FastMCP wraps the underlying exception in ToolError.
-        with pytest.raises(ToolError, match="Connection timed out"):
+        with pytest.raises(ToolError, match="CM subprocess died"):
             await tool.run(arguments={})
 
-        set_cm_client(None)  # cleanup
+        _set_cm_session(None)
+
+    @pytest.mark.asyncio
+    async def test_is_error_result_returns_error_dict(self) -> None:
+        """isError=True result returns error dict without raising."""
+        from mcp.types import CallToolResult
+
+        from palace_mcp.code_router import _set_cm_session, register_code_tools
+
+        mock_result = CallToolResult(
+            content=[TextContent(type="text", text="not found")],
+            isError=True,
+        )
+        mock_session = AsyncMock(spec=ClientSession)
+        mock_session.call_tool = AsyncMock(return_value=mock_result)
+        _set_cm_session(mock_session)
+
+        mcp = FastMCP("test")
+        stub_tool = lambda name, desc: mcp.tool(name=name, description=desc)  # noqa: E731
+        register_code_tools(stub_tool)
+        tool = next(
+            t
+            for t in mcp._tool_manager.list_tools()
+            if t.name == "palace.code.search_code"
+        )
+        result = await tool.run(arguments={})
+        assert "error" in result
+
+        _set_cm_session(None)

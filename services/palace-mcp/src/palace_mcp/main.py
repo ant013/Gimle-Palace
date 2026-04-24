@@ -6,12 +6,11 @@ from contextlib import asynccontextmanager
 from importlib.metadata import version
 from typing import Annotated, cast
 
-import httpx
 from fastapi import Depends, FastAPI, Request, Response
 from neo4j import AsyncDriver, AsyncGraphDatabase
 from starlette.applications import Starlette
 
-from palace_mcp.code_router import set_cm_client
+from palace_mcp.code_router import start_cm_subprocess, stop_cm_subprocess
 from palace_mcp.config import Settings
 from palace_mcp.extractors.schema import ensure_extractors_schema
 from palace_mcp.graphiti_runtime import (
@@ -65,10 +64,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     set_driver(driver)
     set_graphiti(graphiti)
     set_default_group_id(settings.palace_default_group_id)
-    cm_client: httpx.AsyncClient | None = None
-    if settings.codebase_memory_mcp_url:
-        cm_client = httpx.AsyncClient(base_url=settings.codebase_memory_mcp_url)
-        set_cm_client(cm_client)
+    if settings.codebase_memory_mcp_binary:
+        await start_cm_subprocess(settings.codebase_memory_mcp_binary)
     _fire_and_forget(
         ensure_schema(driver, default_group_id=settings.palace_default_group_id)
     )
@@ -76,9 +73,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await ensure_graphiti_schema(graphiti)
     async with _mcp_asgi_app.router.lifespan_context(_mcp_asgi_app):
         yield
-    if cm_client is not None:
-        set_cm_client(None)
-        await cm_client.aclose()
+    if settings.codebase_memory_mcp_binary:
+        await stop_cm_subprocess()
     await close_graphiti(graphiti)
     await driver.close()
 

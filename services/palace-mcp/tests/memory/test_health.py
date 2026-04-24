@@ -186,34 +186,37 @@ async def test_health_unreachable_preserves_new_field_defaults() -> None:
 
 
 @pytest.mark.asyncio
-async def test_code_graph_reachable_false_when_cm_client_none() -> None:
-    """code_graph_reachable=False when CM client not configured."""
+async def test_code_graph_reachable_false_when_cm_session_none() -> None:
+    """code_graph_reachable=False when CM subprocess not started."""
     from palace_mcp import code_router
 
-    original = code_router._cm_client
-    code_router._cm_client = None
+    original = code_router._cm_session
+    code_router._cm_session = None
     try:
         driver = MagicMock()
         driver.verify_connectivity = AsyncMock(side_effect=Exception("down"))
         result = await get_health(driver, default_group_id="project/gimle")
         assert result.code_graph_reachable is False
     finally:
-        code_router._cm_client = original
+        code_router._cm_session = original
 
 
 @pytest.mark.asyncio
-async def test_code_graph_reachable_true_when_cm_client_set() -> None:
-    """code_graph_reachable=True when CM client is configured."""
-    import httpx
+async def test_code_graph_reachable_true_when_cm_session_set() -> None:
+    """code_graph_reachable=True when CM subprocess is running."""
+    from unittest.mock import MagicMock
+
+    from mcp import ClientSession
+
     from palace_mcp import code_router
 
-    original = code_router._cm_client
-    fake_client = MagicMock(spec=httpx.AsyncClient)
-    code_router._cm_client = fake_client
+    original = code_router._cm_session
+    fake_session = MagicMock(spec=ClientSession)
+    code_router._cm_session = fake_session
     try:
         driver = MagicMock()
         driver.verify_connectivity = AsyncMock(side_effect=Exception("down"))
         result = await get_health(driver, default_group_id="project/gimle")
         assert result.code_graph_reachable is True
     finally:
-        code_router._cm_client = original
+        code_router._cm_session = original
