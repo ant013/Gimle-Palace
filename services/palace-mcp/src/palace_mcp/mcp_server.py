@@ -316,7 +316,9 @@ async def _palace_ingest_run_extractor(name: str, project: str) -> dict[str, Any
     graphiti = _graphiti
     if graphiti is None:
         handle_tool_error(DriverUnavailableError("Graphiti not initialised"))
-    return await _run_extractor(name=name, project=project, driver=driver, graphiti=graphiti)
+    return await _run_extractor(
+        name=name, project=project, driver=driver, graphiti=graphiti
+    )
 
 
 @_tool(

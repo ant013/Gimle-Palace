@@ -22,7 +22,8 @@ def test_episode_unknown_key_returned_separately() -> None:
 
 def test_symbol_filter_keys() -> None:
     where_clauses, params, unknown = resolve_filters(
-        "Symbol", {"kind": "function", "name": "build_graphiti", "file_path": "src/x.py"}
+        "Symbol",
+        {"kind": "function", "name": "build_graphiti", "file_path": "src/x.py"},
     )
     assert "n.kind = $kind" in where_clauses
     assert "n.name = $name" in where_clauses

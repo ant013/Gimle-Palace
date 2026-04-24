@@ -1,11 +1,11 @@
 from palace_mcp.memory.cypher import CREATE_INDEXES
 
 
-def test_group_id_index_for_each_label() -> None:
+def test_no_old_label_indexes() -> None:
     joined = " ".join(CREATE_INDEXES)
     for label in ("Issue", "Comment", "Agent", "IngestRun"):
-        assert f"FOR (n:{label}) ON (n.group_id)" in joined, (
-            f"missing group_id index for {label}"
+        assert f"(n:{label})" not in joined, (
+            f"old label {label!r} still in CREATE_INDEXES — should have been removed in GIM-75"
         )
 
 

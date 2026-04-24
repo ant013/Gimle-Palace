@@ -49,7 +49,9 @@ def neo4j_auth() -> tuple[str, str]:
 
 
 @pytest_asyncio.fixture
-async def driver(neo4j_uri: str, neo4j_auth: tuple[str, str]) -> AsyncIterator[AsyncDriver]:
+async def driver(
+    neo4j_uri: str, neo4j_auth: tuple[str, str]
+) -> AsyncIterator[AsyncDriver]:
     drv = AsyncGraphDatabase.driver(neo4j_uri, auth=neo4j_auth)
     try:
         await drv.verify_connectivity()
@@ -88,7 +90,9 @@ def mock_graphiti(driver: AsyncDriver) -> Any:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_ensure_graphiti_schema_idempotent(clean_db: None, mock_graphiti: Any) -> None:
+async def test_ensure_graphiti_schema_idempotent(
+    clean_db: None, mock_graphiti: Any
+) -> None:
     """ensure_graphiti_schema() can be called twice without error."""
     from palace_mcp.graphiti_runtime import ensure_graphiti_schema
 
@@ -103,7 +107,9 @@ async def test_ensure_graphiti_schema_idempotent(clean_db: None, mock_graphiti: 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_heartbeat_writes_one_episode(clean_db: None, driver: AsyncDriver, mock_graphiti: Any) -> None:
+async def test_heartbeat_writes_one_episode(
+    clean_db: None, driver: AsyncDriver, mock_graphiti: Any
+) -> None:
     """HeartbeatExtractor.run() creates exactly one :Episode node in Neo4j."""
     import logging
 
@@ -141,7 +147,9 @@ async def test_heartbeat_writes_one_episode(clean_db: None, driver: AsyncDriver,
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_heartbeat_episode_has_metadata(clean_db: None, driver: AsyncDriver, mock_graphiti: Any) -> None:
+async def test_heartbeat_episode_has_metadata(
+    clean_db: None, driver: AsyncDriver, mock_graphiti: Any
+) -> None:
     """Episode node written by HeartbeatExtractor has group_id and kind attributes."""
     import logging
 
@@ -176,7 +184,9 @@ async def test_heartbeat_episode_has_metadata(clean_db: None, driver: AsyncDrive
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_memory_health_counts_episodes(clean_db: None, driver: AsyncDriver, mock_graphiti: Any) -> None:
+async def test_memory_health_counts_episodes(
+    clean_db: None, driver: AsyncDriver, mock_graphiti: Any
+) -> None:
     """get_health() returns entity_counts dict with 'Episode' key after a heartbeat run."""
     import logging
 

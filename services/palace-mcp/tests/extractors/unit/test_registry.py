@@ -17,7 +17,9 @@ class _FakeExtractor(BaseExtractor):
     name = "__test_fake"
     description = "fake for tests only"
 
-    async def run(self, *, graphiti: Graphiti, ctx: ExtractorRunContext) -> ExtractorStats:
+    async def run(
+        self, *, graphiti: Graphiti, ctx: ExtractorRunContext
+    ) -> ExtractorStats:
         return ExtractorStats()
 
 
@@ -59,14 +61,18 @@ def test_list_all_preserves_insertion_order() -> None:
         name = "__test_a"
         description = "a"
 
-        async def run(self, *, graphiti: Graphiti, ctx: ExtractorRunContext) -> ExtractorStats:
+        async def run(
+            self, *, graphiti: Graphiti, ctx: ExtractorRunContext
+        ) -> ExtractorStats:
             return ExtractorStats()
 
     class B(BaseExtractor):
         name = "__test_b"
         description = "b"
 
-        async def run(self, *, graphiti: Graphiti, ctx: ExtractorRunContext) -> ExtractorStats:
+        async def run(
+            self, *, graphiti: Graphiti, ctx: ExtractorRunContext
+        ) -> ExtractorStats:
             return ExtractorStats()
 
     registry.register(A())

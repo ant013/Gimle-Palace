@@ -31,7 +31,9 @@ def test_build_graphiti_returns_graphiti_instance() -> None:
     )
 
     with (
-        patch("palace_mcp.graphiti_runtime.Graphiti", return_value=mock_graphiti) as patched,
+        patch(
+            "palace_mcp.graphiti_runtime.Graphiti", return_value=mock_graphiti
+        ) as patched,
         patch("palace_mcp.graphiti_runtime.OpenAIClient"),
         patch("palace_mcp.graphiti_runtime.OpenAIEmbedder"),
     ):
@@ -88,7 +90,9 @@ def test_entity_type_literal_contains_new_set() -> None:
     assert actual == expected, f"EntityType mismatch: got {sorted(actual)}"
     # Old types must be gone
     for old_type in ("Issue", "Comment", "Agent"):
-        assert old_type not in actual, f"Old type '{old_type}' still present in EntityType"
+        assert old_type not in actual, (
+            f"Old type '{old_type}' still present in EntityType"
+        )
 
 
 # ---------------------------------------------------------------------------
