@@ -6,7 +6,7 @@
 
 **Architecture:** Standalone Python 3.12 package under `services/watchdog/`. Polls paperclip REST every 2 min per company. Scans host `ps` for hung Claude subprocesses. Uses `httpx` async client with retry + 429 back-off. State persisted to `~/.paperclip/watchdog-state.json` with atomic writes + `fcntl.flock` single-writer guarantee. JSON-lines logging with rotation.
 
-**Tech Stack:** Python 3.12, uv (package manager), httpx (async HTTP + MockTransport for tests), pytest + pytest-asyncio + pytest-httpx + freezegun, PyYAML, fcntl, subprocess, FastAPI (test-integration only, in-process mock paperclip).
+**Tech Stack:** Python 3.12, uv (package manager), httpx (async HTTP + MockTransport for tests), pytest + pytest-asyncio + freezegun, PyYAML, fcntl, subprocess, FastAPI (test-integration only, in-process mock paperclip).
 
 **Spec:** `docs/superpowers/specs/2026-04-21-GIM-63-agent-watchdog-design.md` (rev2b; endpoint + threshold verified empirically 2026-04-21).
 
@@ -21,16 +21,16 @@
 - `pyproject.toml` — package metadata + deps
 - `README.md` — install, troubleshoot, live smoke
 - `.coveragerc` — coverage excludes
-- `src/watchdog/__init__.py` — package marker
-- `src/watchdog/__main__.py` — CLI dispatch
-- `src/watchdog/config.py` — `Config`/`CompanyConfig`/`Thresholds`/`Cooldowns` dataclasses + `load_config` + validation
-- `src/watchdog/paperclip.py` — `PaperclipClient` async httpx wrapper
-- `src/watchdog/detection.py` — `parse_ps_output` + `scan_died_mid_work` + `scan_idle_hangs`
-- `src/watchdog/actions.py` — `trigger_respawn` + `kill_hanged_proc` + `_read_proc_cmdline`
-- `src/watchdog/state.py` — `State` dataclass + atomic write + cooldown/cap/escalation logic
-- `src/watchdog/logger.py` — JSONL + rotation setup
-- `src/watchdog/service.py` — platform installers (render_plist/systemd/cron)
-- `src/watchdog/daemon.py` — main tick loop with `asyncio.wait_for` self-liveness
+- `src/gimle_watchdog/__init__.py` — package marker
+- `src/gimle_watchdog/__main__.py` — CLI dispatch
+- `src/gimle_watchdog/config.py` — `Config`/`CompanyConfig`/`Thresholds`/`Cooldowns` dataclasses + `load_config` + validation
+- `src/gimle_watchdog/paperclip.py` — `PaperclipClient` async httpx wrapper
+- `src/gimle_watchdog/detection.py` — `parse_ps_output` + `scan_died_mid_work` + `scan_idle_hangs`
+- `src/gimle_watchdog/actions.py` — `trigger_respawn` + `kill_hanged_proc` + `_read_proc_cmdline`
+- `src/gimle_watchdog/state.py` — `State` dataclass + atomic write + cooldown/cap/escalation logic
+- `src/gimle_watchdog/logger.py` — JSONL + rotation setup
+- `src/gimle_watchdog/service.py` — platform installers (render_plist/systemd/cron)
+- `src/gimle_watchdog/daemon.py` — main tick loop with `asyncio.wait_for` self-liveness
 - `tests/conftest.py` — shared fixtures + in-process FastAPI mock paperclip
 - `tests/fixtures/ps_output_macos.txt`
 - `tests/fixtures/ps_output_linux.txt`
@@ -58,7 +58,7 @@
 **Files:**
 - Create: `services/watchdog/pyproject.toml`
 - Create: `services/watchdog/.coveragerc`
-- Create: `services/watchdog/src/watchdog/__init__.py`
+- Create: `services/watchdog/src/gimle_watchdog/__init__.py`
 - Create: `services/watchdog/tests/__init__.py`
 - Create: `services/watchdog/tests/fixtures/.gitkeep`
 
@@ -66,9 +66,9 @@
 
 ```bash
 cd /Users/ant013/Android/Gimle-Palace
-mkdir -p services/watchdog/src/watchdog
+mkdir -p services/watchdog/src/gimle_watchdog
 mkdir -p services/watchdog/tests/fixtures
-touch services/watchdog/src/watchdog/__init__.py
+touch services/watchdog/src/gimle_watchdog/__init__.py
 touch services/watchdog/tests/__init__.py
 touch services/watchdog/tests/fixtures/.gitkeep
 ```
@@ -77,7 +77,7 @@ touch services/watchdog/tests/fixtures/.gitkeep
 
 ```toml
 [project]
-name = "watchdog"
+name = "gimle-watchdog"
 version = "0.1.0"
 description = "Gimle Palace agent watchdog — respawn + idle-hang recovery daemon (GIM-63)"
 requires-python = ">=3.12"
@@ -90,7 +90,6 @@ dependencies = [
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
-    "pytest-httpx>=0.32",
     "pytest-cov>=5.0",
     "freezegun>=1.5",
     "fastapi>=0.110",
@@ -105,7 +104,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/watchdog"]
+packages = ["src/gimle_watchdog"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -125,7 +124,7 @@ strict = true
 
 ```ini
 [run]
-source = watchdog
+source = gimle_watchdog
 branch = true
 
 [report]
@@ -158,7 +157,8 @@ cd /Users/ant013/Android/Gimle-Palace
 grep -q "^services/watchdog/\.venv/$" .gitignore || echo "services/watchdog/.venv/" >> .gitignore
 git add services/watchdog/pyproject.toml \
         services/watchdog/.coveragerc \
-        services/watchdog/src/watchdog/__init__.py \
+        services/watchdog/uv.lock \
+        services/watchdog/src/gimle_watchdog/__init__.py \
         services/watchdog/tests/__init__.py \
         services/watchdog/tests/fixtures/.gitkeep \
         .gitignore
@@ -170,7 +170,7 @@ git commit -m "feat(watchdog): project scaffolding (pyproject + coveragerc + pkg
 ## Task 2: Config loader — dataclasses + YAML parser + validation
 
 **Files:**
-- Create: `services/watchdog/src/watchdog/config.py`
+- Create: `services/watchdog/src/gimle_watchdog/config.py`
 - Create: `services/watchdog/tests/test_config.py`
 
 - [ ] **Step 2.1: Write failing tests first**
@@ -186,7 +186,7 @@ from pathlib import Path
 
 import pytest
 
-from watchdog import config as cfg
+from gimle_watchdog import config as cfg
 
 
 def _write(tmp_path: Path, content: str) -> Path:
@@ -377,7 +377,7 @@ uv run pytest tests/test_config.py -v
 
 Expected: `ModuleNotFoundError: No module named 'watchdog.config'`.
 
-- [ ] **Step 2.3: Implement `services/watchdog/src/watchdog/config.py`**
+- [ ] **Step 2.3: Implement `services/watchdog/src/gimle_watchdog/config.py`**
 
 ```python
 """Config loader — YAML schema + validation + API key resolution."""
@@ -598,7 +598,7 @@ Expected: 7 passed.
 
 ```bash
 cd /Users/ant013/Android/Gimle-Palace
-git add services/watchdog/src/watchdog/config.py services/watchdog/tests/test_config.py
+git add services/watchdog/src/gimle_watchdog/config.py services/watchdog/tests/test_config.py
 git commit -m "feat(watchdog): config loader — YAML schema + validation (TDD)"
 ```
 
@@ -607,7 +607,7 @@ git commit -m "feat(watchdog): config loader — YAML schema + validation (TDD)"
 ## Task 3: State file — dataclass + atomic write + cooldown/cap
 
 **Files:**
-- Create: `services/watchdog/src/watchdog/state.py`
+- Create: `services/watchdog/src/gimle_watchdog/state.py`
 - Create: `services/watchdog/tests/test_state.py`
 
 - [ ] **Step 3.1: Write failing tests**
@@ -625,8 +625,8 @@ from pathlib import Path
 import pytest
 from freezegun import freeze_time
 
-from watchdog import state as st
-from watchdog.config import CooldownsConfig
+from gimle_watchdog import state as st
+from gimle_watchdog.config import CooldownsConfig
 
 
 COOLDOWNS = CooldownsConfig(
@@ -770,7 +770,7 @@ cd services/watchdog
 uv run pytest tests/test_state.py -v
 ```
 
-- [ ] **Step 3.3: Implement `services/watchdog/src/watchdog/state.py`**
+- [ ] **Step 3.3: Implement `services/watchdog/src/gimle_watchdog/state.py`**
 
 ```python
 """Persistent state — cooldowns, wake counts, escalation tracking."""
@@ -786,7 +786,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from watchdog.config import CooldownsConfig
+from gimle_watchdog.config import CooldownsConfig
 
 
 log = logging.getLogger("watchdog.state")
@@ -949,7 +949,7 @@ uv run pytest tests/test_state.py -v
 
 ```bash
 cd /Users/ant013/Android/Gimle-Palace
-git add services/watchdog/src/watchdog/state.py services/watchdog/tests/test_state.py
+git add services/watchdog/src/gimle_watchdog/state.py services/watchdog/tests/test_state.py
 git commit -m "feat(watchdog): state file — cooldown + cap + permanent escalation (TDD)"
 ```
 
@@ -958,7 +958,7 @@ git commit -m "feat(watchdog): state file — cooldown + cap + permanent escalat
 ## Task 4: Paperclip client — httpx wrapper
 
 **Files:**
-- Create: `services/watchdog/src/watchdog/paperclip.py`
+- Create: `services/watchdog/src/gimle_watchdog/paperclip.py`
 - Create: `services/watchdog/tests/test_paperclip.py`
 
 - [ ] **Step 4.1: Write failing tests**
@@ -975,7 +975,7 @@ from datetime import datetime, timezone
 import httpx
 import pytest
 
-from watchdog import paperclip as pc
+from gimle_watchdog import paperclip as pc
 
 
 BASE = "http://paperclip.test"
@@ -1113,7 +1113,7 @@ async def test_retry_5xx_then_succeed():
     client = await _client_with_mock(handler)
     try:
         # Patch _sleep to no-op to avoid real backoff waits
-        import watchdog.paperclip as _pc_mod
+        import gimle_watchdog.paperclip as _pc_mod
         original_sleep = _pc_mod._sleep
         _pc_mod._sleep = lambda _: None
         try:
@@ -1139,7 +1139,7 @@ async def test_429_backs_off():
 
     client = await _client_with_mock(handler)
     try:
-        import watchdog.paperclip as _pc_mod
+        import gimle_watchdog.paperclip as _pc_mod
         _pc_mod._sleep = lambda _: None
         issues = await client.list_in_progress_issues(CO_ID)
         assert issues == []
@@ -1173,7 +1173,7 @@ cd services/watchdog
 uv run pytest tests/test_paperclip.py -v
 ```
 
-- [ ] **Step 4.3: Implement `services/watchdog/src/watchdog/paperclip.py`**
+- [ ] **Step 4.3: Implement `services/watchdog/src/gimle_watchdog/paperclip.py`**
 
 ```python
 """Paperclip REST client — async httpx wrapper with retry + 429 backoff."""
@@ -1319,7 +1319,7 @@ uv run pytest tests/test_paperclip.py -v
 
 ```bash
 cd /Users/ant013/Android/Gimle-Palace
-git add services/watchdog/src/watchdog/paperclip.py services/watchdog/tests/test_paperclip.py
+git add services/watchdog/src/gimle_watchdog/paperclip.py services/watchdog/tests/test_paperclip.py
 git commit -m "feat(watchdog): PaperclipClient httpx wrapper — retry + 429 backoff (TDD)"
 ```
 
@@ -1328,7 +1328,7 @@ git commit -m "feat(watchdog): PaperclipClient httpx wrapper — retry + 429 bac
 ## Task 5: Detection — ps parsers + scan functions
 
 **Files:**
-- Create: `services/watchdog/src/watchdog/detection.py`
+- Create: `services/watchdog/src/gimle_watchdog/detection.py`
 - Create: `services/watchdog/tests/fixtures/ps_output_macos.txt`
 - Create: `services/watchdog/tests/fixtures/ps_output_linux.txt`
 - Create: `services/watchdog/tests/test_detection.py`
@@ -1339,7 +1339,7 @@ git commit -m "feat(watchdog): PaperclipClient httpx wrapper — retry + 429 bac
 
 ```
   PID     ELAPSED        TIME COMMAND
-89879    1:06:07     0:35.61 /Users/anton/.nvm/versions/node/v20.20.2/bin/claude --print - --output-format stream-json --verbose --dangerously-skip-permissions --model claude-opus-4-6 --max-turns 200 --append-system-prompt-file /var/folders/y8/dg8qs5dx7zs19xp99hwf21w00000gn/T/paperclip-skills-1OHr0Z/agent-instructions.md --add-dir /var/folders/y8/dg8qs5dx7zs19xp99hwf21w00000gn/T/paperclip-skills-1OHr0Z
+89879    1:06:07     0:05.00 /Users/anton/.nvm/versions/node/v20.20.2/bin/claude --print - --output-format stream-json --verbose --dangerously-skip-permissions --model claude-opus-4-6 --max-turns 200 --append-system-prompt-file /var/folders/y8/dg8qs5dx7zs19xp99hwf21w00000gn/T/paperclip-skills-1OHr0Z/agent-instructions.md --add-dir /var/folders/y8/dg8qs5dx7zs19xp99hwf21w00000gn/T/paperclip-skills-1OHr0Z
 91082        5:30     2:10.12 /Users/anton/.nvm/versions/node/v20.20.2/bin/claude --print - --output-format stream-json --verbose --dangerously-skip-permissions --model claude-opus-4-6 --max-turns 200 --append-system-prompt-file /var/folders/y8/dg8qs5dx7zs19xp99hwf21w00000gn/T/paperclip-skills-Q5szxs/agent-instructions.md --add-dir /var/folders/y8/dg8qs5dx7zs19xp99hwf21w00000gn/T/paperclip-skills-Q5szxs
 10669    2-03:15:42     0:08.65 /Users/anton/.nvm/versions/node/v20.20.2/bin/node /Users/anton/.paperclip/plugins/node_modules/paperclip-plugin-telegram/dist/worker.js
 ```
@@ -1348,7 +1348,7 @@ git commit -m "feat(watchdog): PaperclipClient httpx wrapper — retry + 429 bac
 
 ```
   PID     ELAPSED        TIME COMMAND
-89879   01:06:07    00:00:35 /usr/bin/claude --print - --append-system-prompt-file /tmp/paperclip-skills-abc/agent-instructions.md --add-dir /tmp/paperclip-skills-abc
+89879   01:06:07    00:00:05 /usr/bin/claude --print - --append-system-prompt-file /tmp/paperclip-skills-abc/agent-instructions.md --add-dir /tmp/paperclip-skills-abc
 91082      05:30    00:02:10 /usr/bin/claude --print - --append-system-prompt-file /tmp/paperclip-skills-def/agent-instructions.md --add-dir /tmp/paperclip-skills-def
 10669 1-02:00:00    00:00:05 /usr/bin/node /opt/paperclip/worker.js
 ```
@@ -1368,8 +1368,8 @@ from pathlib import Path
 import pytest
 from freezegun import freeze_time
 
-from watchdog import detection as det
-from watchdog.config import (
+from gimle_watchdog import detection as det
+from gimle_watchdog.config import (
     Config,
     CompanyConfig,
     CooldownsConfig,
@@ -1379,8 +1379,8 @@ from watchdog.config import (
     PaperclipConfig,
     Thresholds,
 )
-from watchdog.paperclip import Issue
-from watchdog.state import State
+from gimle_watchdog.paperclip import Issue
+from gimle_watchdog.state import State
 
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures"
@@ -1412,7 +1412,7 @@ def test_parse_etime_linux_days():
 
 
 def test_parse_time_macos_decimal():
-    assert det._parse_time("0:35.61") == 36  # rounded
+    assert det._parse_time("0:05.00") == 5
 
 
 def test_parse_time_macos_hh_mm_ss_hundredths():
@@ -1421,7 +1421,7 @@ def test_parse_time_macos_hh_mm_ss_hundredths():
 
 
 def test_parse_time_linux_hms():
-    assert det._parse_time("00:00:35") == 35
+    assert det._parse_time("00:00:05") == 5
 
 
 def test_parse_time_invalid_returns_zero():
@@ -1438,7 +1438,7 @@ def test_parse_ps_macos_finds_hangs():
     assert len(hangs) == 1
     assert hangs[0].pid == 89879
     assert hangs[0].etime_s == 3967
-    assert hangs[0].cpu_s == 36  # rounded from 35.61
+    assert hangs[0].cpu_s == 5
 
 
 def test_parse_ps_linux_finds_hangs():
@@ -1660,7 +1660,7 @@ cd services/watchdog
 uv run pytest tests/test_detection.py -v
 ```
 
-- [ ] **Step 5.4: Implement `services/watchdog/src/watchdog/detection.py`**
+- [ ] **Step 5.4: Implement `services/watchdog/src/gimle_watchdog/detection.py`**
 
 ```python
 """Detection primitives — ps parsers + scan_died_mid_work + scan_idle_hangs."""
@@ -1674,9 +1674,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Protocol
 
-from watchdog.config import CompanyConfig, Config
-from watchdog.paperclip import Issue
-from watchdog.state import State
+from gimle_watchdog.config import CompanyConfig, Config
+from gimle_watchdog.paperclip import Issue
+from gimle_watchdog.state import State
 
 
 log = logging.getLogger("watchdog.detection")
@@ -1880,7 +1880,7 @@ uv run pytest tests/test_detection.py -v
 
 ```bash
 cd /Users/ant013/Android/Gimle-Palace
-git add services/watchdog/src/watchdog/detection.py \
+git add services/watchdog/src/gimle_watchdog/detection.py \
         services/watchdog/tests/test_detection.py \
         services/watchdog/tests/fixtures/ps_output_macos.txt \
         services/watchdog/tests/fixtures/ps_output_linux.txt
@@ -1892,7 +1892,7 @@ git commit -m "feat(watchdog): detection — ps parsers + scan_died + scan_idle 
 ## Task 6: Actions — trigger_respawn + kill_hanged_proc
 
 **Files:**
-- Create: `services/watchdog/src/watchdog/actions.py`
+- Create: `services/watchdog/src/gimle_watchdog/actions.py`
 - Create: `services/watchdog/tests/test_actions.py`
 
 - [ ] **Step 6.1: Write failing tests**
@@ -1914,9 +1914,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from watchdog import actions as act
-from watchdog.detection import HangedProc
-from watchdog.paperclip import Issue, PaperclipClient
+from gimle_watchdog import actions as act
+from gimle_watchdog.detection import HangedProc
+from gimle_watchdog.paperclip import Issue, PaperclipClient
 
 
 def _issue(run_id: str | None = None) -> Issue:
@@ -2037,7 +2037,7 @@ cd services/watchdog
 uv run pytest tests/test_actions.py -v
 ```
 
-- [ ] **Step 6.3: Implement `services/watchdog/src/watchdog/actions.py`**
+- [ ] **Step 6.3: Implement `services/watchdog/src/gimle_watchdog/actions.py`**
 
 ```python
 """Actions — trigger_respawn + kill_hanged_proc."""
@@ -2052,8 +2052,8 @@ import subprocess
 import time
 from dataclasses import dataclass
 
-from watchdog.detection import HangedProc
-from watchdog.paperclip import Issue, PaperclipClient, PaperclipError
+from gimle_watchdog.detection import HangedProc
+from gimle_watchdog.paperclip import Issue, PaperclipClient, PaperclipError
 
 
 log = logging.getLogger("watchdog.actions")
@@ -2146,7 +2146,7 @@ def kill_hanged_proc(proc: HangedProc) -> KillResult:
     if current is None:
         return KillResult(pid=proc.pid, status="already_dead")
     # Compare original filter tokens against current cmdline
-    from watchdog.detection import PS_FILTER_TOKENS
+    from gimle_watchdog.detection import PS_FILTER_TOKENS
     if not all(tok in current for tok in PS_FILTER_TOKENS):
         log.warning(
             "pid_reused pid=%d old_cmd=%r new_cmd=%r",
@@ -2179,7 +2179,7 @@ uv run pytest tests/test_actions.py -v
 
 ```bash
 cd /Users/ant013/Android/Gimle-Palace
-git add services/watchdog/src/watchdog/actions.py services/watchdog/tests/test_actions.py
+git add services/watchdog/src/gimle_watchdog/actions.py services/watchdog/tests/test_actions.py
 git commit -m "feat(watchdog): actions — trigger_respawn + kill with PID-reuse mitigation (TDD)"
 ```
 
@@ -2188,7 +2188,7 @@ git commit -m "feat(watchdog): actions — trigger_respawn + kill with PID-reuse
 ## Task 7: Logger — JSONL + rotation
 
 **Files:**
-- Create: `services/watchdog/src/watchdog/logger.py`
+- Create: `services/watchdog/src/gimle_watchdog/logger.py`
 - Modify: `services/watchdog/tests/test_state.py` (no — keep separate)
 - Create tests inline in `services/watchdog/tests/test_logger.py`
 
@@ -2205,8 +2205,8 @@ import json
 import logging
 from pathlib import Path
 
-from watchdog import logger as wl
-from watchdog.config import LoggingConfig
+from gimle_watchdog import logger as wl
+from gimle_watchdog.config import LoggingConfig
 
 
 def _make_cfg(path: Path) -> LoggingConfig:
@@ -2255,7 +2255,7 @@ cd services/watchdog
 uv run pytest tests/test_logger.py -v
 ```
 
-- [ ] **Step 7.3: Implement `services/watchdog/src/watchdog/logger.py`**
+- [ ] **Step 7.3: Implement `services/watchdog/src/gimle_watchdog/logger.py`**
 
 ```python
 """JSONL log handler with rotation."""
@@ -2268,7 +2268,7 @@ from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from watchdog.config import LoggingConfig
+from gimle_watchdog.config import LoggingConfig
 
 
 class _JSONFormatter(logging.Formatter):
@@ -2329,7 +2329,7 @@ uv run pytest tests/test_logger.py -v
 
 ```bash
 cd /Users/ant013/Android/Gimle-Palace
-git add services/watchdog/src/watchdog/logger.py services/watchdog/tests/test_logger.py
+git add services/watchdog/src/gimle_watchdog/logger.py services/watchdog/tests/test_logger.py
 git commit -m "feat(watchdog): JSONL logger with rotation (TDD)"
 ```
 
@@ -2338,7 +2338,7 @@ git commit -m "feat(watchdog): JSONL logger with rotation (TDD)"
 ## Task 8: Service renderers — plist/systemd/cron
 
 **Files:**
-- Create: `services/watchdog/src/watchdog/service.py`
+- Create: `services/watchdog/src/gimle_watchdog/service.py`
 - Create: `services/watchdog/tests/test_service.py`
 - Create: `services/watchdog/tests/fixtures/plist_expected.xml`
 - Create: `services/watchdog/tests/fixtures/systemd_unit_expected.service`
@@ -2398,7 +2398,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from watchdog import service
+from gimle_watchdog import service
 
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures"
@@ -2455,7 +2455,7 @@ cd services/watchdog
 uv run pytest tests/test_service.py -v
 ```
 
-- [ ] **Step 8.5: Implement `services/watchdog/src/watchdog/service.py`**
+- [ ] **Step 8.5: Implement `services/watchdog/src/gimle_watchdog/service.py`**
 
 ```python
 """Platform-native service installer renderers (no system calls)."""
@@ -2542,7 +2542,7 @@ uv run pytest tests/test_service.py -v
 
 ```bash
 cd /Users/ant013/Android/Gimle-Palace
-git add services/watchdog/src/watchdog/service.py \
+git add services/watchdog/src/gimle_watchdog/service.py \
         services/watchdog/tests/test_service.py \
         services/watchdog/tests/fixtures/plist_expected.xml \
         services/watchdog/tests/fixtures/systemd_unit_expected.service
@@ -2554,7 +2554,7 @@ git commit -m "feat(watchdog): service renderers — plist/systemd/cron (TDD, fi
 ## Task 9: Daemon — main tick loop + self-liveness
 
 **Files:**
-- Create: `services/watchdog/src/watchdog/daemon.py`
+- Create: `services/watchdog/src/gimle_watchdog/daemon.py`
 - Create: `services/watchdog/tests/test_daemon.py`
 
 - [ ] **Step 9.1: Write failing tests**
@@ -2572,9 +2572,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from watchdog import daemon
-from watchdog.actions import RespawnResult
-from watchdog.config import (
+from gimle_watchdog import daemon
+from gimle_watchdog.actions import RespawnResult
+from gimle_watchdog.config import (
     Config,
     CompanyConfig,
     CooldownsConfig,
@@ -2584,8 +2584,8 @@ from watchdog.config import (
     PaperclipConfig,
     Thresholds,
 )
-from watchdog.paperclip import Issue
-from watchdog.state import State
+from gimle_watchdog.paperclip import Issue
+from gimle_watchdog.state import State
 
 
 def _cfg(tmp_path: Path) -> Config:
@@ -2662,7 +2662,7 @@ async def test_tick_escalates_capped_agent(tmp_path: Path):
 async def test_tick_kills_hanged_procs(tmp_path: Path):
     cfg = _cfg(tmp_path)
     state = State.load(tmp_path / "state.json")
-    from watchdog.detection import HangedProc
+    from gimle_watchdog.detection import HangedProc
     client = MagicMock()
     client.list_in_progress_issues = AsyncMock(return_value=[])
     hanged = HangedProc(pid=12345, etime_s=5000, cpu_s=10, command="paperclip-skills append-system-prompt-file")
@@ -2699,7 +2699,7 @@ cd services/watchdog
 uv run pytest tests/test_daemon.py -v
 ```
 
-- [ ] **Step 9.3: Implement `services/watchdog/src/watchdog/daemon.py`**
+- [ ] **Step 9.3: Implement `services/watchdog/src/gimle_watchdog/daemon.py`**
 
 ```python
 """Main daemon loop — orchestrates detection + actions + state per tick."""
@@ -2711,10 +2711,10 @@ import logging
 import sys
 from datetime import datetime, timedelta, timezone
 
-from watchdog import actions, detection
-from watchdog.config import Config
-from watchdog.paperclip import PaperclipClient
-from watchdog.state import State
+from gimle_watchdog import actions, detection
+from gimle_watchdog.config import Config
+from gimle_watchdog.paperclip import PaperclipClient
+from gimle_watchdog.state import State
 
 
 log = logging.getLogger("watchdog.daemon")
@@ -2850,7 +2850,7 @@ uv run pytest tests/test_daemon.py -v
 
 ```bash
 cd /Users/ant013/Android/Gimle-Palace
-git add services/watchdog/src/watchdog/daemon.py services/watchdog/tests/test_daemon.py
+git add services/watchdog/src/gimle_watchdog/daemon.py services/watchdog/tests/test_daemon.py
 git commit -m "feat(watchdog): daemon tick loop + asyncio.wait_for self-liveness (TDD)"
 ```
 
@@ -2859,7 +2859,7 @@ git commit -m "feat(watchdog): daemon tick loop + asyncio.wait_for self-liveness
 ## Task 10: CLI — `__main__.py` with install/uninstall/run/tick/status/tail/escalate
 
 **Files:**
-- Create: `services/watchdog/src/watchdog/__main__.py`
+- Create: `services/watchdog/src/gimle_watchdog/__main__.py`
 - Create: `services/watchdog/tests/test_cli.py` (light — renderer-boundary + arg-parsing only; real install tested manually per §7.3)
 
 - [ ] **Step 10.1: Write failing tests**
@@ -2874,7 +2874,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from watchdog import __main__ as cli
+from gimle_watchdog import __main__ as cli
 
 
 def test_main_no_args_prints_help(capsys):
@@ -2921,7 +2921,7 @@ cd services/watchdog
 uv run pytest tests/test_cli.py -v
 ```
 
-- [ ] **Step 10.3: Implement `services/watchdog/src/watchdog/__main__.py`**
+- [ ] **Step 10.3: Implement `services/watchdog/src/gimle_watchdog/__main__.py`**
 
 ```python
 """CLI — install/uninstall/run/tick/status/tail/escalate/unescalate."""
@@ -2939,10 +2939,10 @@ from pathlib import Path
 
 import yaml
 
-from watchdog import daemon, detection, logger, service
-from watchdog.config import Config, ConfigError, load_config
-from watchdog.paperclip import PaperclipClient
-from watchdog.state import State
+from gimle_watchdog import daemon, detection, logger, service
+from gimle_watchdog.config import Config, ConfigError, load_config
+from gimle_watchdog.paperclip import PaperclipClient
+from gimle_watchdog.state import State
 
 
 log = logging.getLogger("watchdog.cli")
@@ -3184,7 +3184,7 @@ uv run pytest tests/test_cli.py -v
 
 ```bash
 cd /Users/ant013/Android/Gimle-Palace
-git add services/watchdog/src/watchdog/__main__.py services/watchdog/tests/test_cli.py
+git add services/watchdog/src/gimle_watchdog/__main__.py services/watchdog/tests/test_cli.py
 git commit -m "feat(watchdog): CLI — install/run/tick/status/tail/escalate/unescalate (TDD)"
 ```
 
@@ -3311,8 +3311,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from watchdog import daemon
-from watchdog.config import (
+from gimle_watchdog import daemon
+from gimle_watchdog.config import (
     Config,
     CompanyConfig,
     CooldownsConfig,
@@ -3322,8 +3322,8 @@ from watchdog.config import (
     PaperclipConfig,
     Thresholds,
 )
-from watchdog.paperclip import PaperclipClient
-from watchdog.state import State
+from gimle_watchdog.paperclip import PaperclipClient
+from gimle_watchdog.state import State
 
 
 def _cfg(base_url: str, tmp_path: Path) -> Config:
@@ -3416,7 +3416,11 @@ Open `.github/workflows/ci.yml`. Add a new job at the end of `jobs:`:
           python-version: "3.12"
       - run: uv sync --all-extras
         working-directory: services/watchdog
-      - run: uv run pytest tests/ -v --cov=watchdog --cov-config=.coveragerc --cov-fail-under=85
+      - run: uv run ruff check src/ tests/
+        working-directory: services/watchdog
+      - run: uv run mypy --strict src/
+        working-directory: services/watchdog
+      - run: uv run pytest tests/ -v --cov=gimle_watchdog --cov-config=.coveragerc --cov-fail-under=85
         working-directory: services/watchdog
 ```
 
@@ -3487,7 +3491,7 @@ gimle-watchdog uninstall                  # remove service
 
 **Agent not waking.** Verify token: `curl -H "Authorization: Bearer $PAPERCLIP_API_KEY" http://localhost:3100/api/companies/<CO>/issues`.
 
-**Filter drift.** If `status` shows `procs matching filter: 0` across multiple days while agents are active, Anthropic may have renamed `--append-system-prompt-file`. Update `PS_FILTER_TOKENS` in `src/watchdog/detection.py`.
+**Filter drift.** If `status` shows `procs matching filter: 0` across multiple days while agents are active, Anthropic may have renamed `--append-system-prompt-file`. Update `PS_FILTER_TOKENS` in `src/gimle_watchdog/detection.py`.
 
 ## Live smoke tests
 
@@ -3512,7 +3516,7 @@ git commit -m "docs(watchdog): README with install + troubleshoot + live smoke"
 
 ```bash
 cd services/watchdog
-uv run pytest tests/ -v --cov=watchdog --cov-config=.coveragerc
+uv run pytest tests/ -v --cov=gimle_watchdog --cov-config=.coveragerc
 ```
 
 Expected: all tests pass, coverage ≥85%.
