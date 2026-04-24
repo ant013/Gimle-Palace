@@ -16,7 +16,22 @@ from neo4j.exceptions import Neo4jError, ServiceUnavailable
 
 logger = logging.getLogger(__name__)
 
-VALID_ENTITY_TYPES: tuple[str, ...] = ("Issue", "Comment", "Agent")
+VALID_ENTITY_TYPES: tuple[str, ...] = (
+    "Project",
+    "Iteration",
+    "Episode",
+    "Decision",
+    "IterationNote",
+    "Finding",
+    "Module",
+    "File",
+    "Symbol",
+    "APIEndpoint",
+    "Model",
+    "Repository",
+    "ExternalLib",
+    "Trace",
+)
 
 
 class DriverUnavailableError(Exception):

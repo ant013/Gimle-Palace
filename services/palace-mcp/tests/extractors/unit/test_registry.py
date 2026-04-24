@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-
 import pytest
+from graphiti_core import Graphiti
 
 from palace_mcp.extractors import registry
 from palace_mcp.extractors.base import (
     BaseExtractor,
-    ExtractionContext,
+    ExtractorRunContext,
     ExtractorStats,
 )
 
@@ -17,7 +17,7 @@ class _FakeExtractor(BaseExtractor):
     name = "__test_fake"
     description = "fake for tests only"
 
-    async def extract(self, ctx: ExtractionContext) -> ExtractorStats:
+    async def run(self, *, graphiti: Graphiti, ctx: ExtractorRunContext) -> ExtractorStats:
         return ExtractorStats()
 
 
@@ -59,14 +59,14 @@ def test_list_all_preserves_insertion_order() -> None:
         name = "__test_a"
         description = "a"
 
-        async def extract(self, ctx: ExtractionContext) -> ExtractorStats:
+        async def run(self, *, graphiti: Graphiti, ctx: ExtractorRunContext) -> ExtractorStats:
             return ExtractorStats()
 
     class B(BaseExtractor):
         name = "__test_b"
         description = "b"
 
-        async def extract(self, ctx: ExtractionContext) -> ExtractorStats:
+        async def run(self, *, graphiti: Graphiti, ctx: ExtractorRunContext) -> ExtractorStats:
             return ExtractorStats()
 
     registry.register(A())

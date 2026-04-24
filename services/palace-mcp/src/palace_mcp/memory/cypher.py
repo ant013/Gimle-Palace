@@ -127,7 +127,7 @@ SET r.finished_at = $finished_at,
 """
 
 LATEST_INGEST_RUN = """
-MATCH (r:IngestRun {source: $source})
+MATCH (r:IngestRun)
 RETURN r
 ORDER BY r.started_at DESC
 LIMIT 1
@@ -156,7 +156,7 @@ SET p.group_id            = 'project/' + $slug,
 RETURN p
 """
 
-LIST_PROJECT_SLUGS = "MATCH (p:Project) RETURN p.slug AS slug ORDER BY slug"
+LIST_PROJECT_SLUGS = "MATCH (p:Project) RETURN p.name AS slug ORDER BY slug"
 
 LIST_PROJECTS = "MATCH (p:Project) RETURN p ORDER BY p.slug"
 
@@ -193,23 +193,63 @@ LIMIT 1
 ENTITY_COUNTS_BY_PROJECT = """
 MATCH (p:Project)
 CALL (p) {
-    MATCH (n:Issue) WHERE n.group_id = p.group_id RETURN 'Issue' AS type, count(n) AS cnt
+    MATCH (n:Episode)      WHERE n.group_id = p.group_id RETURN 'Episode'      AS type, count(n) AS cnt
     UNION ALL
-    MATCH (n:Comment) WHERE n.group_id = p.group_id RETURN 'Comment' AS type, count(n) AS cnt
+    MATCH (n:Iteration)    WHERE n.group_id = p.group_id RETURN 'Iteration'    AS type, count(n) AS cnt
     UNION ALL
-    MATCH (n:Agent) WHERE n.group_id = p.group_id RETURN 'Agent' AS type, count(n) AS cnt
+    MATCH (n:Decision)     WHERE n.group_id = p.group_id RETURN 'Decision'     AS type, count(n) AS cnt
+    UNION ALL
+    MATCH (n:IterationNote) WHERE n.group_id = p.group_id RETURN 'IterationNote' AS type, count(n) AS cnt
+    UNION ALL
+    MATCH (n:Finding)      WHERE n.group_id = p.group_id RETURN 'Finding'      AS type, count(n) AS cnt
+    UNION ALL
+    MATCH (n:Module)       WHERE n.group_id = p.group_id RETURN 'Module'       AS type, count(n) AS cnt
+    UNION ALL
+    MATCH (n:File)         WHERE n.group_id = p.group_id RETURN 'File'         AS type, count(n) AS cnt
+    UNION ALL
+    MATCH (n:Symbol)       WHERE n.group_id = p.group_id RETURN 'Symbol'       AS type, count(n) AS cnt
+    UNION ALL
+    MATCH (n:APIEndpoint)  WHERE n.group_id = p.group_id RETURN 'APIEndpoint'  AS type, count(n) AS cnt
+    UNION ALL
+    MATCH (n:Model)        WHERE n.group_id = p.group_id RETURN 'Model'        AS type, count(n) AS cnt
+    UNION ALL
+    MATCH (n:Repository)   WHERE n.group_id = p.group_id RETURN 'Repository'   AS type, count(n) AS cnt
+    UNION ALL
+    MATCH (n:ExternalLib)  WHERE n.group_id = p.group_id RETURN 'ExternalLib'  AS type, count(n) AS cnt
+    UNION ALL
+    MATCH (n:Trace)        WHERE n.group_id = p.group_id RETURN 'Trace'        AS type, count(n) AS cnt
 }
-RETURN p.slug AS slug, type, cnt
+RETURN p.name AS slug, type, cnt
 """
 
 # --- Entity counts (health) ---
 ENTITY_COUNTS = """
 CALL () {
-    MATCH (n:Issue) RETURN 'Issue' AS type, count(n) AS count
+    MATCH (n:Episode)      RETURN 'Episode'      AS type, count(n) AS count
     UNION ALL
-    MATCH (n:Comment) RETURN 'Comment' AS type, count(n) AS count
+    MATCH (n:Iteration)    RETURN 'Iteration'    AS type, count(n) AS count
     UNION ALL
-    MATCH (n:Agent) RETURN 'Agent' AS type, count(n) AS count
+    MATCH (n:Decision)     RETURN 'Decision'     AS type, count(n) AS count
+    UNION ALL
+    MATCH (n:IterationNote) RETURN 'IterationNote' AS type, count(n) AS count
+    UNION ALL
+    MATCH (n:Finding)      RETURN 'Finding'      AS type, count(n) AS count
+    UNION ALL
+    MATCH (n:Module)       RETURN 'Module'       AS type, count(n) AS count
+    UNION ALL
+    MATCH (n:File)         RETURN 'File'         AS type, count(n) AS count
+    UNION ALL
+    MATCH (n:Symbol)       RETURN 'Symbol'       AS type, count(n) AS count
+    UNION ALL
+    MATCH (n:APIEndpoint)  RETURN 'APIEndpoint'  AS type, count(n) AS count
+    UNION ALL
+    MATCH (n:Model)        RETURN 'Model'        AS type, count(n) AS count
+    UNION ALL
+    MATCH (n:Repository)   RETURN 'Repository'   AS type, count(n) AS count
+    UNION ALL
+    MATCH (n:ExternalLib)  RETURN 'ExternalLib'  AS type, count(n) AS count
+    UNION ALL
+    MATCH (n:Trace)        RETURN 'Trace'        AS type, count(n) AS count
 }
 RETURN type, count
 """

@@ -21,6 +21,7 @@ import time
 from collections.abc import Callable
 from typing import Any, Literal, TypeVar
 
+from graphiti_core import Graphiti
 from mcp.server.fastmcp import FastMCP
 from neo4j import AsyncDriver
 from pydantic import BaseModel
@@ -58,6 +59,9 @@ _mcp = FastMCP("palace", streamable_http_path="/")
 
 # Module-level driver reference — set by FastAPI lifespan before any request.
 _driver: AsyncDriver | None = None
+
+# Module-level Graphiti instance — set by FastAPI lifespan before any request.
+_graphiti: Graphiti | None = None
 
 # Default group_id for lookup scoping — set by lifespan from Settings.
 _default_group_id: str = "project/gimle"
@@ -104,6 +108,12 @@ def set_driver(driver: AsyncDriver) -> None:
     _driver = driver
 
 
+def set_graphiti(graphiti: Graphiti) -> None:
+    """Called from FastAPI lifespan to share the Graphiti instance with MCP tools."""
+    global _graphiti  # noqa: PLW0603
+    _graphiti = graphiti
+
+
 def build_mcp_asgi_app() -> Starlette:
     """Return the MCP streamable-HTTP ASGI app for mounting.
 
@@ -148,9 +158,8 @@ async def palace_health_status() -> HealthStatusResponse:
 @_tool(
     name="palace.memory.lookup",
     description=(
-        "Query Paperclip entities (Issue, Comment, Agent) from the Palace knowledge graph. "
-        "Returns matching nodes with one-hop related data (assignee + comments for Issues, "
-        "issue + author for Comments). Use palace.health.status to check reachability first. "
+        "Query Graphiti entities (Episode, Symbol, File, Module, etc.) from the Palace knowledge graph. "
+        "Returns matching nodes with metadata. Use palace.memory.health to check reachability first. "
         "Optional 'project' scopes results to a specific project group_id; "
         "omit to use the server default (project/gimle)."
     ),
@@ -159,7 +168,7 @@ async def palace_memory_lookup(
     entity_type: str,
     filters: dict[str, Any] | None = None,
     limit: int = 20,
-    order_by: str = "source_updated_at",
+    order_by: str = "created_at",
     project: str | None = None,
 ) -> dict[str, Any]:
     """Look up Paperclip entities from the Neo4j knowledge graph."""
@@ -304,7 +313,10 @@ async def _palace_ingest_run_extractor(name: str, project: str) -> dict[str, Any
     driver = _driver
     if driver is None:
         handle_tool_error(DriverUnavailableError("Neo4j driver not initialised"))
-    return await _run_extractor(name=name, project=project, driver=driver)
+    graphiti = _graphiti
+    if graphiti is None:
+        handle_tool_error(DriverUnavailableError("Graphiti not initialised"))
+    return await _run_extractor(name=name, project=project, driver=driver, graphiti=graphiti)
 
 
 @_tool(

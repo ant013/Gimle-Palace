@@ -1,8 +1,8 @@
 """palace.memory.health implementation.
 
 Queries Neo4j for:
-- Entity counts (Issue / Comment / Agent) — global totals
-- Latest IngestRun metadata (started_at, finished_at, duration_ms, errors)
+- Entity counts (Graphiti entity labels from N+1a catalog)
+- Latest IngestRun metadata across all sources
 - Project list and per-project entity counts
 """
 
@@ -43,7 +43,8 @@ async def get_health(driver: AsyncDriver, *, default_group_id: str) -> HealthRes
         async for row in counts_result:
             counts[row["type"]] = int(row["count"])
 
-        ingest_result = await tx.run(LATEST_INGEST_RUN, source="paperclip")
+        # Drop source filter — return latest IngestRun across all sources.
+        ingest_result = await tx.run(LATEST_INGEST_RUN)
         ingest_row = await ingest_result.single()
         ingest_data: dict[str, Any] | None = (
             dict(ingest_row["r"]) if ingest_row else None
@@ -67,7 +68,6 @@ async def get_health(driver: AsyncDriver, *, default_group_id: str) -> HealthRes
     async with driver.session() as session:
         entity_counts, ingest, slugs, per_project = await session.execute_read(_read)
 
-    # Discover repos mounted under REPOS_ROOT (synchronous FS scan, fast).
     git_available: list[str] = []
     if REPOS_ROOT.is_dir():
         for entry in sorted(REPOS_ROOT.iterdir()):

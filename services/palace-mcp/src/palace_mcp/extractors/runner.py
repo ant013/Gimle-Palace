@@ -1,7 +1,10 @@
 """Extractor runner — lifecycle orchestration.
 
-Split into _precheck / _execute / _finalize + run_extractor orchestrator
-(spec §3.4). Each helper is independently testable.
+Split into _precheck / _execute / _finalize + run_extractor orchestrator.
+Each helper is independently testable.
+
+Runner keeps direct driver access for :IngestRun ops-log writes (per spec §3.9).
+Product-layer entities flow through Graphiti only.
 """
 
 from __future__ import annotations
@@ -15,13 +18,14 @@ from pathlib import Path
 from typing import Any, Union
 from uuid import uuid4
 
+from graphiti_core import Graphiti
 from neo4j import AsyncDriver
 
 from palace_mcp.extractors import registry
 from palace_mcp.extractors.base import (
     BaseExtractor,
-    ExtractionContext,
     ExtractorError,
+    ExtractorRunContext,
     ExtractorStats,
 )
 from palace_mcp.extractors.cypher import CREATE_INGEST_RUN, FINALIZE_INGEST_RUN
@@ -34,7 +38,8 @@ from palace_mcp.memory.projects import InvalidSlug, validate_slug
 REPOS_ROOT = Path("/repos")
 EXTRACTOR_TIMEOUT_S = 300.0
 
-GET_PROJECT = "MATCH (p:Project {slug: $slug}) RETURN p"
+# :Project node stores slug in EntityNode.name (per spec §3.10).
+GET_PROJECT = "MATCH (p:Project {name: $slug}) RETURN p"
 
 
 # --- precheck ---
@@ -79,7 +84,7 @@ async def _precheck(
     if row is None:
         return _PrecheckError(
             error_code="project_not_registered",
-            message=f"no :Project {{slug: {project!r}}}",
+            message=f"no :Project {{name: {project!r}}}",
             extractor=name,
         )
 
@@ -113,12 +118,14 @@ _ExecuteResult = Union[_ExecuteOk, _ExecuteError]
 
 
 async def _execute(
-    *, extractor: BaseExtractor, ctx: ExtractionContext, timeout_s: float
+    *, extractor: BaseExtractor, graphiti: Graphiti, ctx: ExtractorRunContext, timeout_s: float
 ) -> _ExecuteResult:
-    """Wrap extract() in timeout + Exception handling. Never raises."""
+    """Wrap run() in timeout + Exception handling. Never raises."""
     logger = ctx.logger
     try:
-        stats = await asyncio.wait_for(extractor.extract(ctx), timeout=timeout_s)
+        stats = await asyncio.wait_for(
+            extractor.run(graphiti=graphiti, ctx=ctx), timeout=timeout_s
+        )
         return _ExecuteOk(stats=stats)
     except asyncio.TimeoutError:
         msg = f"timeout after {timeout_s}s"
@@ -131,7 +138,7 @@ async def _execute(
         )
         return _ExecuteError(error_code=e.error_code, errors=[str(e)[:200]])
     except Exception as e:  # noqa: BLE001 — unexpected, structured response
-        logger.exception("extractor.execute.unhandled")  # stack → stdout only
+        logger.exception("extractor.execute.unhandled")
         return _ExecuteError(
             error_code="unknown",
             errors=[f"{type(e).__name__}: {str(e)[:200]}"],
@@ -182,10 +189,11 @@ async def run_extractor(
     project: str,
     *,
     driver: AsyncDriver,
+    graphiti: Graphiti,
     timeout_s: float = EXTRACTOR_TIMEOUT_S,
 ) -> dict[str, Any]:
     """Full lifecycle: precheck → create :IngestRun → execute → finalize."""
-    # 1. Precheck
+    # 1. Precheck (driver used for :Project lookup)
     pre = await _precheck(
         name=name, project=project, driver=driver, repos_root=REPOS_ROOT
     )
@@ -197,7 +205,7 @@ async def run_extractor(
             project=project,
         ).model_dump()
 
-    # 2. Create :IngestRun
+    # 2. Create :IngestRun (driver — ops-log, not Graphiti product layer)
     run_id = str(uuid4())
     started_at = datetime.now(timezone.utc).isoformat()
     source = f"extractor.{name}"
@@ -222,20 +230,22 @@ async def run_extractor(
             "group_id": pre.group_id,
         },
     )
-    ctx = ExtractionContext(
-        driver=driver,
+    start_mono = time.monotonic()
+    ctx = ExtractorRunContext(
         project_slug=project,
         group_id=pre.group_id,
         repo_path=pre.repo_path,
         run_id=run_id,
+        duration_ms=0,  # placeholder; extractor may use ctx.duration_ms for metadata
         logger=logger,
     )
-    start_mono = time.monotonic()
-    exec_result = await _execute(extractor=pre.extractor, ctx=ctx, timeout_s=timeout_s)
+    exec_result = await _execute(
+        extractor=pre.extractor, graphiti=graphiti, ctx=ctx, timeout_s=timeout_s
+    )
     duration_ms = int((time.monotonic() - start_mono) * 1000)
     finished_at = datetime.now(timezone.utc).isoformat()
 
-    # 4. Finalize
+    # 4. Finalize (driver — ops-log)
     nodes, edges, errors, success = await _finalize(
         driver=driver,
         run_id=run_id,

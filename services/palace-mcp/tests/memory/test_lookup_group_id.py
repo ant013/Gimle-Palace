@@ -1,7 +1,6 @@
 """Tasks 9, 9.5, 10: group_id scoping in lookup and MCP tool project param.
 
-Updated for GIM-53: LookupRequest.group_id replaced by project param;
-perform_lookup gains default_group_id positional arg.
+Updated for GIM-75: entity types are now Graphiti types (Episode, Symbol, etc.).
 """
 
 from __future__ import annotations
@@ -45,23 +44,11 @@ def _make_row(data: dict[str, Any]) -> MagicMock:
 
 def _make_driver(
     node_props: dict[str, Any],
-    entity_type: str = "Issue",
+    entity_type: str = "Episode",
     captured_queries: list[str] | None = None,
     captured_params: list[dict[str, Any]] | None = None,
 ) -> MagicMock:
-    """Return a mock driver whose session.execute_read calls the real _read closure.
-
-    project=None path: tx.run called twice (main query, count query).
-    The LIST_PROJECT_SLUGS call is bypassed because project=None returns
-    [default_group_id] immediately without querying the transaction.
-    """
-    extra: dict[str, Any] = {}
-    if entity_type == "Issue":
-        extra = {"assignee": None, "comments": []}
-    elif entity_type == "Comment":
-        extra = {"issue": None, "author": None}
-
-    row = _make_row({"node": node_props, **extra})
+    row = _make_row({"node": node_props})
 
     count_record = MagicMock()
     count_record.__getitem__ = MagicMock(side_effect=lambda k: 1)
@@ -104,25 +91,25 @@ def _make_driver(
 class TestLookupRequestProjectParam:
     def test_group_id_field_removed(self) -> None:
         with pytest.raises(ValidationError):
-            LookupRequest(entity_type="Issue", group_id="project/test")  # type: ignore[call-arg]
+            LookupRequest(entity_type="Episode", group_id="project/test")  # type: ignore[call-arg]
 
     def test_project_none_accepted(self) -> None:
-        req = LookupRequest(entity_type="Issue")
+        req = LookupRequest(entity_type="Episode")
         assert req.project is None
 
     def test_project_string_accepted(self) -> None:
-        req = LookupRequest(entity_type="Issue", project="gimle")
+        req = LookupRequest(entity_type="Episode", project="gimle")
         assert req.project == "gimle"
 
     def test_project_list_accepted(self) -> None:
-        req = LookupRequest(entity_type="Issue", project=["gimle", "medic"])
+        req = LookupRequest(entity_type="Episode", project=["gimle", "medic"])
         assert req.project == ["gimle", "medic"]
 
     def test_build_query_includes_group_ids_in_clause(self) -> None:
         q = _build_query(
-            "Issue",
-            ["n.group_id IN $group_ids", "n.status = $status"],
-            "source_updated_at",
+            "Episode",
+            ["n.group_id IN $group_ids", "n.kind = $kind"],
+            "created_at",
             20,
         )
         assert "n.group_id IN $group_ids" in q
@@ -134,11 +121,11 @@ class TestPerformLookupGroupIdScoping:
         captured_queries: list[str] = []
         captured_params: list[dict[str, Any]] = []
         driver = _make_driver(
-            {"id": "i1", "group_id": "project/test", "title": "T"},
+            {"uuid": "e1", "group_id": "project/test", "name": "heartbeat-2026"},
             captured_queries=captured_queries,
             captured_params=captured_params,
         )
-        req = LookupRequest(entity_type="Issue")  # project=None → uses default
+        req = LookupRequest(entity_type="Episode")  # project=None → uses default
         await perform_lookup(driver, req, "project/test")
 
         all_params = {k: v for d in captured_params for k, v in d.items()}
@@ -156,10 +143,9 @@ class TestPerformLookupStripsGroupId:
     @pytest.mark.asyncio
     async def test_group_id_absent_from_properties(self) -> None:
         driver = _make_driver(
-            {"id": "a1", "group_id": "project/test", "name": "Bot"},
-            entity_type="Agent",
+            {"uuid": "e1", "group_id": "project/test", "name": "heartbeat-2026"},
         )
-        req = LookupRequest(entity_type="Agent")
+        req = LookupRequest(entity_type="Episode")
         resp = await perform_lookup(driver, req, "project/test")
 
         assert len(resp.items) == 1
@@ -168,16 +154,19 @@ class TestPerformLookupStripsGroupId:
     @pytest.mark.asyncio
     async def test_other_properties_preserved(self) -> None:
         driver = _make_driver(
-            {"id": "a1", "group_id": "project/test", "name": "Bot", "role": "dev"},
-            entity_type="Agent",
+            {
+                "uuid": "e1",
+                "group_id": "project/test",
+                "name": "heartbeat-2026",
+                "kind": "heartbeat",
+            },
         )
-        req = LookupRequest(entity_type="Agent")
+        req = LookupRequest(entity_type="Episode")
         resp = await perform_lookup(driver, req, "project/test")
 
         props = resp.items[0].properties
-        assert props["name"] == "Bot"
-        assert props["role"] == "dev"
-        assert props["id"] == "a1"
+        assert props["name"] == "heartbeat-2026"
+        assert props["kind"] == "heartbeat"
 
 
 # ---------------------------------------------------------------------------
@@ -215,7 +204,7 @@ class TestMcpToolProjectParam:
         with patch(
             "palace_mcp.mcp_server.perform_lookup", side_effect=fake_perform_lookup
         ):
-            await palace_memory_lookup(entity_type="Issue", project="gimle")
+            await palace_memory_lookup(entity_type="Episode", project="gimle")
 
         assert len(captured_reqs) == 1
         _, req, default_group_id = captured_reqs[0]
@@ -244,7 +233,7 @@ class TestMcpToolProjectParam:
         with patch(
             "palace_mcp.mcp_server.perform_lookup", side_effect=fake_perform_lookup
         ):
-            await palace_memory_lookup(entity_type="Issue")
+            await palace_memory_lookup(entity_type="Episode")
 
         _, req, default_group_id = captured_reqs[0]
         assert req.project is None
