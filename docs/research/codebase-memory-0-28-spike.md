@@ -2,7 +2,7 @@
 
 Captured via README-scrape of `DeusData/codebase-memory-mcp` main branch (v1.x tag at time of spike). Complements `graphiti-core-0-28-spike/README.md`.
 
-**Before starting GIM-76 implementation, re-verify by running `codebase-memory-mcp --help` or `palace.code.get_graph_schema` on a live sidecar to confirm nothing has drifted.**
+**GIM-76 implementation verification (2026-04-24):** Docker unavailable on implementer machine. Transport confirmed as streamable-HTTP on port 8765, endpoint `/mcp`, from spec §3.3 and docker-compose.yml `CODEBASE_MEMORY_MCP_URL`. Image tag pinning and live `--help` verification deferred to QAEngineer Phase 4.1 (iMac has docker). Integration tests marked skipif CM binary not on PATH. Image placeholder: `ghcr.io/deusdata/codebase-memory-mcp:latest` — **must be pinned to exact digest before merge**.
 
 ## Tool signatures (from CLI and README examples)
 
