@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>work.ant013.gimle-watchdog</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/path/to/.venv/bin/python</string>
+        <string>-m</string>
+        <string>gimle_watchdog</string>
+        <string>run</string>
+        <string>--config</string>
+        <string>/home/user/.paperclip/watchdog-config.yaml</string>
+    </array>
+    <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><true/>
+    <key>StandardOutPath</key><string>/home/user/.paperclip/watchdog.log</string>
+    <key>StandardErrorPath</key><string>/home/user/.paperclip/watchdog.err</string>
+</dict>
+</plist>

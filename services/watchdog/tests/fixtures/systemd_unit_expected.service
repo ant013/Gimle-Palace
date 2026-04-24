@@ -1,0 +1,14 @@
+[Unit]
+Description=Gimle Palace agent watchdog (GIM-63)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/path/to/.venv/bin/python -m gimle_watchdog run --config /home/user/.paperclip/watchdog-config.yaml
+Restart=on-failure
+RestartSec=10s
+StandardOutput=append:/home/user/.paperclip/watchdog.log
+StandardError=append:/home/user/.paperclip/watchdog.err
+
+[Install]
+WantedBy=default.target

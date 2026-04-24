@@ -1,0 +1,4 @@
+  PID     ELAPSED        TIME COMMAND
+89879   01:06:07    00:00:05 /usr/bin/claude --print - --append-system-prompt-file /tmp/paperclip-skills-abc/agent-instructions.md --add-dir /tmp/paperclip-skills-abc
+91082      05:30    00:02:10 /usr/bin/claude --print - --append-system-prompt-file /tmp/paperclip-skills-def/agent-instructions.md --add-dir /tmp/paperclip-skills-def
+10669 1-02:00:00    00:00:05 /usr/bin/node /opt/paperclip/worker.js
