@@ -213,8 +213,8 @@ Product/process (from §5.3 + new):
 | `:LOCATES_IN` | `:Hotspot` → `:File` / `:Module` | 1:1 |
 | `:TRACED_AS` | `:Decision` → `:Trace` | 1:N |
 | `:HAS_STEP` | `:Trace` → `:TraceStep` | 1:N |
-| `:SIMILAR_TO` | `:Symbol` ↔ `:Symbol` | N:M (pre-computed via embedding cos-sim > 0.85) |
-| `:ALIAS_OF` | alias → `:DomainConcept` | N:1 |
+| `:SIMILAR_TO` | `:Symbol` ↔ `:Symbol` | N:M — **schema-only in N+1a**; populated by future embedding-similarity slice (pre-computed cos-sim > 0.85) |
+| `:ALIAS_OF` | alias → `:DomainConcept` | N:1 — **schema-only in N+1a**; populated by future domain-concept extractor |
 
 ### 4.3 Metadata envelope on every node and edge
 
@@ -309,7 +309,7 @@ Acceptance gates in §7.
 - Task 7 — Remove N+0 paperclip extractor (§3.6) + associated tests + MCP filter paths.
 - Task 8 — Add docker-compose profile `code-graph` with codebase-memory-mcp sidecar. Named volume `codebase-memory-cache`. Health probe on CM's MCP endpoint.
 - Task 9 — `palace.code.*` router: thin pass-through from palace-mcp → CM MCP over internal network. Schema validation at router boundary.
-- Task 10 — `codebase_memory_bridge` extractor per §3.4 projection rules. Start with `:Project/:Package/:Folder/:File/:Symbol/:APIEndpoint/:ArchitectureCommunity/:Hotspot` + corresponding edges. Incremental via CM's XXH3 hash + our own last-seen timestamp.
+- Task 10 — `codebase_memory_bridge` extractor per §3.4 projection rules. Start with `:Project/:Package/:Folder/:File/:Module/:Symbol/:APIEndpoint/:ArchitectureCommunity/:Hotspot` + corresponding edges (`:CONTAINS`, `:DEFINES`, `:CALLS`, `:IMPORTS`, `:MEMBER_OF`, `:LOCATES_IN`, `:HANDLES`). Incremental via CM's XXH3 hash + our own last-seen timestamp.
 - Task 11 — Unit tests per §7.1.
 - Task 12 — Integration tests per §7.2.
 - Task 13 — CI job `palace-mcp-graphiti-tests` wired; add to required checks on develop (same pattern as `watchdog-tests` via GIM-70).
@@ -332,7 +332,7 @@ Acceptance gates in §7.
 - MAGMA multi-graph separation into multiple Neo4j DBs.
 - Cross-encoder / reranker for search.
 - Domain-concept taxonomy population (requires concrete symbol labels; no extractor attaches them in N+1a).
-- `:UIComponent` / `:APIEndpoint` domain-level extraction (N+2+).
+- `:UIComponent` / `:APIEndpoint` **rich** domain-level extraction (OpenAPI/gRPC schema introspection, UI framework reflection, usage counts) — N+2+. Note: N+1a already projects a basic `:APIEndpoint` from CM `:Route` (method, path, handler ref); this deferred scope is the richer per-domain extraction layered on top.
 - Windows platform for codebase-memory-mcp (iMac / Linux only).
 - CM's ADR tool bidirectional sync with `:Decision`.
 
@@ -346,8 +346,9 @@ Acceptance gates in §7.
 - `test_bridge_projection_rules` — given a fixture CM SQLite with known nodes/edges, assert projection picks only §3.4-listed facts, skips the others.
 - `test_bridge_louvain_derived_confidence` — Louvain `:MEMBER_OF` edges carry `confidence` = normalized modularity score.
 - `test_paperclip_extractor_removed` — import of old paperclip modules raises `ModuleNotFoundError`.
-- `test_heartbeat_writes_episode` — one tick produces one `:Episode` node with correct metadata.
+- `test_heartbeat_writes_episode` — one tick produces one `:Episode` node with correct metadata envelope (confidence=1.0, provenance="asserted", extractor="heartbeat@...", observed_at set).
 - `test_code_router_passthrough` — each of 8 `palace.code.*` tools forwards args and returns CM response unchanged.
+- `test_followup_edge_types_declared_but_empty` — `:SIMILAR_TO`, `:ALIAS_OF`, `:COVERED_BY`, `:INCLUDES`, `:RESOLVES`, `:TRACED_AS`, `:HAS_STEP`, `:OWNS`, `:TOUCHES`, `:MODIFIES` exist as Neo4j relationship-type constraints after bootstrap but have zero instances post-N+1a bridge run (populated by later slices).
 
 ### 7.2 Integration tests
 
