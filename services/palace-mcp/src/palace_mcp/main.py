@@ -6,31 +6,36 @@ from contextlib import asynccontextmanager
 from importlib.metadata import version
 from typing import Annotated, cast
 
+import httpx
 from fastapi import Depends, FastAPI, Request, Response
 from neo4j import AsyncDriver, AsyncGraphDatabase
 from starlette.applications import Starlette
 
+from palace_mcp.code_router import set_cm_client
 from palace_mcp.config import Settings
 from palace_mcp.extractors.schema import ensure_extractors_schema
-from palace_mcp.mcp_server import build_mcp_asgi_app, set_default_group_id, set_driver
+from palace_mcp.graphiti_runtime import (
+    build_graphiti,
+    close_graphiti,
+    ensure_graphiti_schema,
+)
+from palace_mcp.mcp_server import (
+    build_mcp_asgi_app,
+    set_default_group_id,
+    set_driver,
+    set_graphiti,
+)
 from palace_mcp.memory.constraints import ensure_schema
 from palace_mcp.memory.logging_setup import configure_json_logging
 
-# Build once at module level so lifespan can be wired in below.
 _mcp_asgi_app: Starlette = build_mcp_asgi_app()
 
 logger = logging.getLogger(__name__)
 
-# Pattern #11: keep a reference so GC doesn't cancel mid-run.
 _background_tasks: set[asyncio.Task[None]] = set()
 
 
 def _fire_and_forget(coro: Coroutine[None, None, None]) -> None:
-    """Pattern #11: schedule a coroutine as a background task.
-
-    Keeps a strong reference to prevent GC cancellation and logs
-    any exception to avoid silent swallowing.
-    """
     task: asyncio.Task[None] = asyncio.create_task(coro)
     _background_tasks.add(task)
 
@@ -49,25 +54,32 @@ def _fire_and_forget(coro: Coroutine[None, None, None]) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     configure_json_logging()
-    # Pattern #6: read config via Settings (defaults present — no KeyError).
     settings = Settings()
     driver = AsyncGraphDatabase.driver(
-        settings.neo4j_uri, auth=("neo4j", settings.neo4j_password.get_secret_value())
+        settings.neo4j_uri,
+        auth=(settings.neo4j_user, settings.neo4j_password.get_secret_value()),
     )
+    graphiti = build_graphiti(settings)
     app.state.neo4j = driver
+    app.state.graphiti = graphiti
     set_driver(driver)
+    set_graphiti(graphiti)
     set_default_group_id(settings.palace_default_group_id)
-    # Patterns #5 + #11: schema migration is fire-and-forget.
-    # Race window: backfill runs in <1s for ~213 nodes; palace-mcp starts
-    # behind compose healthcheck so MCP clients only connect after healthy.
-    # A slow/unavailable Neo4j must not block startup or cause SIGKILL.
+    cm_client: httpx.AsyncClient | None = None
+    if settings.codebase_memory_mcp_url:
+        cm_client = httpx.AsyncClient(base_url=settings.codebase_memory_mcp_url)
+        set_cm_client(cm_client)
     _fire_and_forget(
         ensure_schema(driver, default_group_id=settings.palace_default_group_id)
     )
     await ensure_extractors_schema(driver)
-    # Run the MCP sub-app lifespan so StreamableHTTPSessionManager task group is initialized.
+    await ensure_graphiti_schema(graphiti)
     async with _mcp_asgi_app.router.lifespan_context(_mcp_asgi_app):
         yield
+    if cm_client is not None:
+        set_cm_client(None)
+        await cm_client.aclose()
+    await close_graphiti(graphiti)
     await driver.close()
 
 
