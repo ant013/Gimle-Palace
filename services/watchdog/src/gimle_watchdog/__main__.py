@@ -45,7 +45,9 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("status", parents=[config_parent], help="service + filter health")
     p_tail = sub.add_parser("tail", parents=[config_parent], help="tail log")
     p_tail.add_argument("-n", type=int, default=50)
-    p_esc = sub.add_parser("escalate", parents=[config_parent], help="manually mark issue permanent escalation")
+    p_esc = sub.add_parser(
+        "escalate", parents=[config_parent], help="manually mark issue permanent escalation"
+    )
     p_esc.add_argument("--issue", required=True)
     p_unesc = sub.add_parser("unescalate", parents=[config_parent], help="clear escalation")
     p_unesc.add_argument("--issue", required=True)
