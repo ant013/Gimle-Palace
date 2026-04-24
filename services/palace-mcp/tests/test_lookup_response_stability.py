@@ -8,10 +8,10 @@ from palace_mcp.memory.schema import LookupResponse, LookupResponseItem
 
 
 def _make_item(extra_props: dict | None = None) -> LookupResponseItem:
-    props: dict = {"id": "i1", "title": "T", "status": "done"}
+    props: dict = {"name": "heartbeat-2026", "kind": "heartbeat"}
     if extra_props:
         props.update(extra_props)
-    return LookupResponseItem(id="i1", type="Issue", properties=props)
+    return LookupResponseItem(id="e1", type="Episode", properties=props)
 
 
 def test_lookup_response_top_level_keys_stable() -> None:
@@ -29,13 +29,7 @@ def test_lookup_response_item_keys_stable() -> None:
 
 
 def test_group_id_absent_from_serialized_properties() -> None:
-    """Regression guard: perform_lookup strips group_id before constructing items.
-
-    This test verifies that when an item is constructed without group_id
-    (as perform_lookup does after popping it), the serialized form is clean.
-    """
-    # perform_lookup pops group_id before constructing LookupResponseItem.
-    # Simulate that by NOT including group_id in the item properties.
+    """Regression guard: perform_lookup strips group_id before constructing items."""
     item = _make_item()  # no group_id in props
     dumped = item.model_dump()
     props = dumped["properties"]
@@ -51,7 +45,7 @@ def test_lookup_response_round_trips_via_model_dump() -> None:
         items=[item],
         total_matched=1,
         query_ms=10,
-        warnings=["unknown filter 'foo' for entity_type 'Issue' — ignored"],
+        warnings=["unknown filter 'foo' for entity_type 'Episode' — ignored"],
     )
     dumped = original.model_dump()
     reconstructed = LookupResponse(**dumped)

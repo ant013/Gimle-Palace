@@ -6,9 +6,11 @@ import pytest
 from neo4j import AsyncDriver
 
 from palace_mcp.extractors import registry
+from graphiti_core import Graphiti
+
 from palace_mcp.extractors.base import (
     BaseExtractor,
-    ExtractionContext,
+    ExtractorRunContext,
     ExtractorStats,
 )
 from palace_mcp.extractors.schema import ensure_extractors_schema
@@ -26,7 +28,7 @@ class _SchemaTest(BaseExtractor):
         "FOR (n:__SchemaTestNode) ON (n.ts)",
     ]
 
-    async def extract(self, ctx: ExtractionContext) -> ExtractorStats:
+    async def run(self, *, graphiti: Graphiti, ctx: ExtractorRunContext) -> ExtractorStats:
         return ExtractorStats()
 
 
