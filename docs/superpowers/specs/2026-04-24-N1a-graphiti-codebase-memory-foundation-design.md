@@ -1,14 +1,38 @@
 ---
 slug: N1a-graphiti-codebase-memory-foundation
-status: proposed
+status: DEPRECATED 2026-04-24 — split by operator review into three atomic sub-slices
 branch: feature/GIM-74-n1a-graphiti-cm-foundation
-paperclip_issue: 74 (90c9af9e-ee37-4d98-9cb5-2041fb364b87)
-predecessor: 67d42dc (develop tip at design time — GIM-71 ruff-format merge)
-supersedes:
-  - docs/superpowers/specs/2026-04-18-palace-memory-n1-graphiti-substrate.md (deprecated rev1)
-  - verbal N+1 brainstorm state captured in memory/project_n1_brainstorm_paused.md
-  - earlier "G1+G3" sketch (swap paperclip extractor → Graphiti + semantic_search)
+paperclip_issue: 74 (now umbrella — coordination only)
 date: 2026-04-24
+---
+
+> ⚠ **DEPRECATED 2026-04-24 — same day as creation.** Operator adversarial review flagged five load-bearing problems:
+> 1. Schema vocabulary not self-consistent (`:Package`/`:Folder`/`:Class`/`:Method`/`:DomainConcept` undefined or contradictory).
+> 2. graphiti-core 0.28.2 runtime shape assumed without verification (prior N+1a revert cause).
+> 3. ADR split-brain (CM `manage_adr` stayed enabled against authoritative Graphiti `:Decision`).
+> 4. `test_followup_edge_types_declared_but_empty` not testable in Neo4j (no "declared rel type" artifact).
+> 5. Bundled too many concerns in one slice — failure coupling across two stores and two MCP surfaces.
+>
+> **Resolution:**
+> - 2026-04-24 spike against live `graphiti-core==0.28.2` in isolated venv produced `memory/reference_graphiti_core_0_28_api_truth.md` (supersedes the 0.4.3 reference). Key findings: `llm_client=None` trap (default-OpenAI spawns, needs `OPENAI_API_KEY`) — workaround is pass `OpenAIClient` stub; `EntityNode.attributes: dict` is first-class in 0.28 (not in 0.4.3) — metadata envelope fits without subclassing.
+> - Schema switched to **flat** (`:Symbol{kind=function|method|class|interface|enum|type}`; `:Class/:Method/:Package/:Folder` live only in CM; domain concepts are multi-labels, not standalone nodes).
+> - `palace.code.manage_adr` **disabled** in the router (returns directive to use `palace.memory`).
+> - Slice split into three atomic sub-slices (each independently mergeable):
+>   - **GIM-75 (N+1a.1)** — Graphiti foundation. Spec: `2026-04-24-N1a-1-graphiti-foundation-design.md`.
+>   - **GIM-76 (N+1a.2)** — Codebase-Memory sidecar + pass-through. Spec: `2026-04-24-N1a-2-codebase-memory-sidecar-design.md`.
+>   - **GIM-77 (N+1a.3)** — Bridge extractor, depends on GIM-75+76. Spec: `2026-04-24-N1a-3-bridge-extractor-design.md`.
+> - GIM-74 remains as umbrella/coordination issue; do not implement from this combined spec directly.
+>
+> Kept for historical trace of what was rejected and why. See the three sub-specs and the umbrella decomposition doc `2026-04-24-N1-decomposition-design.md`.
+
+---
+
+<!-- Original spec below retained unchanged for reference. -->
+
+---
+slug-historical: N1a-graphiti-codebase-memory-foundation
+status-historical: proposed
+date-historical: 2026-04-24
 ---
 
 # N+1a Foundation: Graphiti product-layer + Codebase-Memory code-layer
