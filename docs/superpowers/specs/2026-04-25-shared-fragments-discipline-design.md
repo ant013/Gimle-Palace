@@ -8,7 +8,7 @@ predecessor: develop tip after umbrella merge
 date: 2026-04-25
 ---
 
-# GIM-81 — Shared-fragments discipline updates (branch hygiene + evidence rigor + spec quality)
+# GIM-82 — Shared-fragments discipline updates (branch hygiene + evidence rigor + spec quality)
 
 ## 1. Context
 
@@ -22,17 +22,37 @@ These are discipline gaps, not technical bugs. Each can be plugged with a one-pa
 
 ## 2. Problem
 
-The shared-fragments repo (`ant013/paperclip-shared-fragments`, submoduled at `paperclips/fragments/shared`) has fragments for `phase-1.1-formalize.md`, `phase-3.1-implementation-evidence.md`, etc. They cover most workflows but lack:
+The shared-fragments repo (`ant013/paperclip-shared-fragments`, submoduled at `paperclips/fragments/shared`) currently has these fragments (verified 2026-04-25):
 
-- A **branch-hygiene** fragment forbidding stash/cherry-pick between parallel slice branches.
-- A rule in `phase-3.1-implementation-evidence.md` requiring **paste of exact tool output** when implementer claims "no new errors" — and requiring CR to audit `git log origin/develop..HEAD --name-only` for out-of-scope files.
-- A rule in `phase-1.1-formalize.md` requiring spec writers to (a) live-verify any external library API reference, (b) `grep` audit existing usages of any field/property whose semantics the spec changes.
+```
+async-signal-wait.md       compliance-enforcement.md   cto-no-code-ban.md
+escalation-blocked.md      git-workflow.md             heartbeat-discipline.md
+karpathy-discipline.md     language.md                 phase-handoff.md
+plan-first-producer.md     plan-first-review.md        pre-work-discovery.md
+test-design-discipline.md  worktree-discipline.md
+```
 
-## 3. Solution — three fragment changes in submodule, then submodule SHA bump
+Three concrete gaps relative to N+1 incident lessons:
+
+- **`worktree-discipline.md` is silent on cross-branch carry-over commits** — covers only worktree handling.
+- **`compliance-enforcement.md` does not require** paste of exact tool output when implementer claims "no new errors" — CR can choose to trust the claim.
+- **`pre-work-discovery.md` does not require** (a) live verification of external library API references in spec, or (b) `grep` audit of an existing field/property whose semantics the spec changes.
+
+## 3. Solution — extend three existing fragments, then submodule SHA bump
 
 All work lives in `ant013/paperclip-shared-fragments` (separate repo, submoduled). One PR there, then a submodule-bump PR in this repo. Both PRs together = this slice.
 
-### 3.1 NEW fragment: `branch-hygiene.md`
+**Mapping (verified against actual fragment list 2026-04-25 — no fabricated filenames):**
+
+| Topic | Target file | Operation |
+|---|---|---|
+| Branch hygiene (forbid carry-over) | `worktree-discipline.md` | EXTEND with new "Cross-branch carry-over forbidden" section |
+| Evidence rigor (paste tool output, scope audit) | `compliance-enforcement.md` | EXTEND with new "Phase 3.1 evidence rigor" + "Scope audit" sections |
+| Spec quality (live-verified library refs, grep audit before semantic change) | `pre-work-discovery.md` | EXTEND with new "External library reference rule" + "Existing-field semantic-change rule" sections |
+
+No new fragment files (avoids dist regeneration churn + agent bundle size growth). All three updates are pure additions — no rewriting of existing rules.
+
+### 3.1 EXTEND `worktree-discipline.md` — branch hygiene
 
 ```markdown
 # branch-hygiene
@@ -75,7 +95,7 @@ and asserts every changed file is in the slice's declared scope. Any
 file outside scope → REQUEST CHANGES citing this fragment.
 ```
 
-### 3.2 UPDATE: `phase-3.1-implementation-evidence.md`
+### 3.2 EXTEND `compliance-enforcement.md` — evidence rigor + scope audit
 
 Add a new section near the top:
 
@@ -113,7 +133,7 @@ Each file in the diff must trace to a task in the spec. Files outside
 declared scope → REQUEST CHANGES citing branch-hygiene fragment.
 ```
 
-### 3.3 UPDATE: `phase-1.1-formalize.md`
+### 3.3 EXTEND `pre-work-discovery.md` — spec quality rules
 
 Add two new sections:
 
@@ -164,9 +184,9 @@ should have been caught at Phase 1.1 with a 1-minute grep.
 ## 4. Tasks
 
 1. Open PR in `ant013/paperclip-shared-fragments`:
-   - Add new file `fragments/branch-hygiene.md`.
-   - Update `fragments/phase-3.1-implementation-evidence.md` per §3.2.
-   - Update `fragments/phase-1.1-formalize.md` per §3.3.
+   - Extend `fragments/worktree-discipline.md` with the new "Cross-branch carry-over forbidden" section (§3.1).
+   - Extend `fragments/compliance-enforcement.md` with the new "Phase 3.1 evidence rigor" + "Scope audit" sections (§3.2).
+   - Extend `fragments/pre-work-discovery.md` with the new "External library reference rule" + "Existing-field semantic-change rule" sections (§3.3).
    - Run `./build.sh` to regenerate `dist/*.md` bundles.
 2. Merge that PR; record the new submodule SHA.
 3. In this repo:

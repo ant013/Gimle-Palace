@@ -8,7 +8,7 @@ predecessor: develop tip after umbrella merge
 date: 2026-04-25
 ---
 
-# GIM-79 — Watchdog idle-hang detection improvements
+# GIM-80 — Watchdog idle-hang detection improvements
 
 ## 1. Context
 
@@ -149,12 +149,29 @@ Spawn synthetic subprocesses with controlled CPU usage via `python -c "import ti
 
 ### 6.3 Live smoke on iMac
 
-1. SSH to iMac, ensure watchdog running new version (after merge + manual install).
+The watchdog filter (`detection.py:20`) requires every candidate process command line to contain **both** substrings `paperclip-skills` and `append-system-prompt-file`. A bare `sleep` proc will never match. Smoke must produce a process whose command line carries both tokens. Two approaches:
+
+**(a) Real paperclip-spawned subprocess (preferred — exercises full path):**
+1. SSH to iMac, ensure watchdog running new version.
 2. `tail -f ~/.paperclip/watchdog.log` in one window.
-3. Trigger a fake hang: `ssh imac "sleep 3700 &"` (etime > hang_etime_min, zero CPU).
-4. Within next 1 watchdog tick (max 2 min after threshold) — log line `hang_killed pid=...`. Sleep proc exits.
-5. Trigger a fake stalled-stream: long-running script with high CPU, stop emitting stdout via `kill -STOP`. Within hang_stream_idle_max_s + 1 tick — `hang_killed`.
-6. `~/.paperclip/watchdog.err` stays empty for the duration of the smoke.
+3. From operator's MCP client: create disposable test issue assigned to TechnicalWriter (same pattern as GIM-72 smoke earlier in this session). PATCH `status=in_progress` so paperclip spawns a real `claude --print … --append-system-prompt-file …/paperclip-skills-XXXXXX/agent-instructions.md …` subprocess.
+4. Wait until subprocess CPU goes idle after Claude returns its short reply (a few seconds) but the proc is still alive (idle hang variant — the very pattern we're fixing).
+5. Within `hang_etime_min + 1 tick` — log line `hang_killed pid=...`. Subprocess exits.
+6. Cancel the test issue (`status=cancelled`).
+
+**(b) Synthetic emulator (no Anthropic call required):**
+1. SSH to iMac.
+2. `mkdir -p /tmp/paperclip-skills-fakesmoke && touch /tmp/paperclip-skills-fakesmoke/agent-instructions.md`
+3. Spawn a process that has both filter substrings in its argv:
+   ```bash
+   /usr/bin/env -i bash -c 'exec -a "fake-claude --print --append-system-prompt-file /tmp/paperclip-skills-fakesmoke/agent-instructions.md --add-dir /tmp/paperclip-skills-fakesmoke" sleep 3700' &
+   ```
+   Verify with `ps -ax -o command | grep paperclip-skills-fakesmoke` — the command line carries both tokens.
+4. To exercise **Criterion A** (idle CPU ratio): wait `hang_etime_min` minutes, the sleep accumulates ~0s CPU per minute → ratio drops well below 0.005 → killed at next tick.
+5. To exercise **Criterion B** (stream-stall): replace step 3 with a script that emits to a paperclip-style log path every 1 sec for 4 min, then stops. Observe `hang_stream_idle_max_s` exceeded → killed.
+6. `~/.paperclip/watchdog.err` stays empty for the duration.
+
+**(a)** is the canonical acceptance smoke; **(b)** is the unit/CI-runnable surrogate. Both must pass before Phase 4.2 merge.
 
 ## 7. Risks
 

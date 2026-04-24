@@ -11,7 +11,7 @@ predecessor: tip of develop after GIM-75 + GIM-76 + GIM-77 merge (TBD)
 date: 2026-04-25
 ---
 
-# GIM-78 — Ops quality + bug fixes uncovered by N+1 sessions
+# GIM-79 — Ops quality + bug fixes uncovered by N+1 sessions
 
 ## Why this document exists
 
@@ -49,13 +49,19 @@ Three new/updated paperclip-shared-fragment markdowns:
 
 1. **`branch-hygiene.md`** (NEW) — never copy/stash/cherry-pick between parallel slice branches; if Slice B depends on Slice A, wait for A to merge then rebase B onto develop.
 2. **`phase-3.1-implementation-evidence.md`** (UPDATE) — when implementer claims "no new errors", paste exact `mypy --strict` / `ruff check` / `pytest` output diff; CR Phase 3.1 must run `git log origin/develop..HEAD --name-only` and assert no out-of-scope files.
-3. **`phase-1.1-formalize.md`** (UPDATE) — any external library API reference in spec MUST cite a live-verified version (in-repo spike under `docs/research/`); for any spec change touching a property/field that already exists in code, spec writer MUST run `grep -r '<field-name>' src/` audit and list affected call-sites.
+3. **Spec quality rules** added to `pre-work-discovery.md` (the existing fragment that covers Phase 1 discovery) — any external library API reference in spec MUST cite a live-verified version (in-repo spike under `docs/research/`); for any spec change touching a property/field that already exists in code, spec writer MUST run `grep -r '<field-name>' src/` audit and list affected call-sites. The branch-hygiene addition lands in `worktree-discipline.md`; evidence-rigor in `compliance-enforcement.md`. (Sub-spec §3 has the full mapping — none of the file names are fabricated; all three target files exist in the submodule today.)
 
 Doc-only slice. ~150 LOC across 3 markdown files in `paperclip-shared-fragments` submodule + bumping the submodule SHA in this repo. Estimate 1 day end-to-end.
 
-## Order
+## Order — revised after spec self-review
 
-GIM-79 and GIM-80 are independent and can run in parallel. GIM-81 is doc-only, also independent. All three may merge in any order. None blocks N+2 product work.
+- **GIM-80 (watchdog)** — fully independent. Touches only `services/watchdog/`. Can merge in any order vs GIM-75/76/77 too — watchdog is a separate Python package.
+- **GIM-81 (palace.ops.unstick_issue)** — **depends on GIM-75** for the audit `:Episode` write (re-uses `save_entity_node` from `graphiti_runtime.py`). The kill+poll path itself is independent, but Phase 2 cannot complete without GIM-75 merged first. Wrapped in try/except so audit failure does not block the kill — but at compile/import time GIM-81 still references GIM-75 helpers, so the import has to resolve.
+- **GIM-82 (shared-fragments)** — fully independent. Doc-only changes in submodule.
+
+So merge order constraint is just: **GIM-75 before GIM-81**. GIM-80 and GIM-82 can land any time.
+
+None blocks N+2 product work; ops-quality is purely defensive.
 
 ## What this umbrella does NOT include
 

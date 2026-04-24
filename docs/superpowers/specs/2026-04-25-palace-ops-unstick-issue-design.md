@@ -4,11 +4,13 @@ status: proposed
 branch: feature/GIM-81-palace-ops-unstick (cut from develop after umbrella lands)
 paperclip_issue: 81
 parent_umbrella: 79
-predecessor: develop tip after umbrella merge
+depends_on:
+  - 75 — Graphiti foundation (audit `:Episode` write requires `save_entity_node` from `graphiti_runtime.py`). If GIM-75 hasn't merged, this slice cannot finish Phase 2.
+predecessor: develop tip after umbrella + GIM-75 merge
 date: 2026-04-25
 ---
 
-# GIM-80 — `palace.ops.unstick_issue` MCP tool
+# GIM-81 — `palace.ops.unstick_issue` MCP tool
 
 ## 1. Context
 
@@ -66,11 +68,41 @@ Two heuristics, applied in order:
 
 In either case, the response carries the full PID list + which heuristic matched, so the caller can audit.
 
-### 3.3 Host access
+### 3.3 Host access — runtime contract
 
-Tool runs inside `palace-mcp` container; SSH to host (iMac) via existing `imac-ssh.ant013.work` cloudflared tunnel + the operator's SSH key (already authorized on the host since 2026-04-24).
+Tool runs **inside `palace-mcp` container**. Current Dockerfile installs only `curl` + `git`; `docker-compose.yml` mounts no SSH material. **This slice must extend both** to enable host SSH:
 
-For non-iMac deployments the host endpoint is configured via `PALACE_OPS_HOST` env var (default: `imac-ssh.ant013.work`).
+**Dockerfile change (`services/palace-mcp/Dockerfile`):**
+
+```dockerfile
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl git \
+    openssh-client \
+    && rm -rf /var/lib/apt/lists/*
+```
+
+**docker-compose change (`docker-compose.yml` palace-mcp service):**
+
+```yaml
+palace-mcp:
+  # ... existing ...
+  volumes:
+    # ... existing ...
+    - "${HOME}/.ssh/id_ed25519:/root/.ssh/id_ed25519:ro"
+    - "${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts:ro"
+    - "${HOME}/.ssh/config:/root/.ssh/config:ro"   # only if cloudflared ProxyCommand entry needs to be visible
+  environment:
+    # ... existing ...
+    PALACE_OPS_HOST: "${PALACE_OPS_HOST:-imac-ssh.ant013.work}"
+```
+
+**Notes:**
+- Mount is **read-only** (`:ro`) — defense in depth.
+- The SSH key file path is parameterized via env var (e.g. `PALACE_OPS_SSH_KEY=/root/.ssh/id_ed25519`).
+- For deployments where the host runs **on the same machine** as palace-mcp (no SSH needed), `PALACE_OPS_HOST=local` short-circuits SSH and execs `ps` / `kill` directly. Decide between these two modes via `PALACE_OPS_HOST` value at config-load time.
+- `cloudflared access ssh` is invoked via `ProxyCommand` declared in mounted `~/.ssh/config`. Verify cloudflared binary is reachable inside container — if not, add `cloudflared` to the Dockerfile too. **Task 0 verifies which mode (cloudflared vs direct) the production iMac uses.**
+
+For non-iMac deployments — same contract, just different `PALACE_OPS_HOST`.
 
 ### 3.4 Safety guards
 
@@ -86,14 +118,16 @@ For non-iMac deployments the host endpoint is configured via `PALACE_OPS_HOST` e
 
 ## 4. Tasks
 
-0. **Spike on iMac** — SSH and inspect a live paperclip run; correlate `executionRunId` from API with `paperclip-skills-XXXXXX` temp dir suffix in `ps` output. Document the link in `docs/research/paperclip-run-id-pid-correlation.md`. If no deterministic correlation found — drop strict heuristic, document as such.
-1. Create `services/palace-mcp/src/palace_mcp/ops/unstick.py` with the algorithm.
-2. Register MCP tool `palace.ops.unstick_issue` via `_tool()` wrapper (per `mcp_server.py:120-123` Pattern #21).
-3. Audit-log episode write (re-uses Graphiti foundation from GIM-75).
-4. `PALACE_OPS_HOST` setting in `config.py` (default: `imac-ssh.ant013.work`).
-5. Unit tests per §6.1.
-6. Integration test (mocks SSH + paperclip API) per §6.2.
-7. Live smoke on iMac per §6.3.
+0. **Spike on iMac** — (a) SSH from operator laptop, inspect a live paperclip run; correlate `executionRunId` from API with `paperclip-skills-XXXXXX` temp dir suffix in `ps` output. Document the link in `docs/research/paperclip-run-id-pid-correlation.md`. If no deterministic correlation found — drop strict heuristic, document as such. (b) Verify whether the iMac SSH endpoint requires `cloudflared access ssh` ProxyCommand, or accepts direct OpenSSH. Document in same spike file. (c) Decide whether `palace-mcp` container needs `cloudflared` binary installed alongside `openssh-client` — record verdict.
+1. **Extend `services/palace-mcp/Dockerfile`** to install `openssh-client` (and `cloudflared` if Task 0(c) says so).
+2. **Extend `docker-compose.yml`** palace-mcp service: read-only mounts of `${HOME}/.ssh/id_ed25519`, `${HOME}/.ssh/known_hosts`, `${HOME}/.ssh/config`; new env vars `PALACE_OPS_HOST` and `PALACE_OPS_SSH_KEY`.
+3. **Add to `config.py`** `Settings`: `palace_ops_host: str = "imac-ssh.ant013.work"`, `palace_ops_ssh_key: str = "/root/.ssh/id_ed25519"`. Add `.env.example` lines.
+4. Create `services/palace-mcp/src/palace_mcp/ops/unstick.py` with the algorithm.
+5. Register MCP tool `palace.ops.unstick_issue` via `_tool()` wrapper (per `mcp_server.py:120-123` Pattern #21).
+6. Audit-log episode write — depends on GIM-75 helpers `save_entity_node` from `graphiti_runtime.py`. **Wrap in try/except**: if Graphiti is unreachable (Neo4j down) the kill must still proceed; log a stderr warning instead of failing the tool.
+7. Unit tests per §6.1.
+8. Integration test (mocks SSH + paperclip API) per §6.2.
+9. Live smoke on iMac per §6.3.
 
 ## 5. Tests
 
