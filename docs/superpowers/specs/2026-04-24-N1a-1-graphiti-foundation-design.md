@@ -48,6 +48,8 @@ Pin exact patch. **Do not rely on `~=0.28` or `>=0.28` — 0.28.x history shows 
 # services/palace-mcp/src/palace_mcp/graphiti_runtime.py
 
 from graphiti_core import Graphiti
+from graphiti_core.nodes import EntityNode
+from graphiti_core.edges import EntityEdge
 from graphiti_core.llm_client.openai_client import OpenAIClient
 from graphiti_core.llm_client.config import LLMConfig
 from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
@@ -79,9 +81,26 @@ def build_graphiti(settings: Settings) -> Graphiti:
 async def ensure_graphiti_schema(g: Graphiti) -> None:
     """Idempotent bootstrap. Safe to call on every startup."""
     await g.build_indices_and_constraints(delete_existing=False)
+
+# --- Public helpers — extractors MUST use these, never g._driver directly ---
+
+async def save_entity_node(g: Graphiti, node: EntityNode) -> None:
+    """Persist an EntityNode. Encapsulates driver access so extractors
+    never touch g._driver."""
+    await node.save(g._driver)  # _driver is library-internal; helper is the stable contract
+
+async def save_entity_edge(g: Graphiti, edge: EntityEdge) -> None:
+    """Persist an EntityEdge."""
+    await edge.save(g._driver)
+
+async def close_graphiti(g: Graphiti) -> None:
+    """Shutdown helper. Always await."""
+    await g.close()
 ```
 
-Wire `build_graphiti()` into the palace-mcp lifespan startup. Hold a module-level singleton (same pattern as the existing Neo4j driver). Ensure `g.close()` runs on shutdown.
+Wire `build_graphiti()` into the palace-mcp lifespan startup. Hold a module-level singleton (same pattern as the existing Neo4j driver). Ensure `close_graphiti(g)` runs on shutdown.
+
+**Public API contract (load-bearing for GIM-77):** `save_entity_node`, `save_entity_edge`, `close_graphiti`, `ensure_graphiti_schema` are the stable interface. Direct `g._driver` access is reserved for this module. Extractor code that touches `g._driver` fails review.
 
 ### 3.3 Pydantic entity catalog
 
@@ -192,7 +211,7 @@ class HeartbeatExtractor(BaseExtractor):
                 "observed_at": now.isoformat(),
             },
         )
-        await episode.save(graphiti._driver)  # or public helper
+        await save_entity_node(graphiti, episode)   # helper, never graphiti._driver
         return ExtractorStats(nodes_written=1, edges_written=0)
 ```
 
@@ -215,18 +234,23 @@ Handle removal of `:Issue`/`:Comment`/`:Agent` filter support: the tools stay, b
 ## 4. Tasks
 
 1. Add `graphiti-core==0.28.2` to `services/palace-mcp/pyproject.toml` + `uv lock`.
-2. Create `services/palace-mcp/src/palace_mcp/graphiti_runtime.py` with `build_graphiti()` + `ensure_graphiti_schema()`.
+2. Create `services/palace-mcp/src/palace_mcp/graphiti_runtime.py` with `build_graphiti()`, `ensure_graphiti_schema()`, and public helpers `save_entity_node()`, `save_entity_edge()`, `close_graphiti()`. Helpers are the stable contract — consumed by GIM-77 bridge extractor.
 3. Create `services/palace-mcp/src/palace_mcp/graphiti_schema/entities.py` with Pydantic factory functions (not subclasses — 0.28 `EntityNode.attributes` dict is enough) for each entity type in §3.3.
 4. Create `services/palace-mcp/src/palace_mcp/graphiti_schema/edges.py` similarly.
-5. Wire `build_graphiti()` into palace-mcp FastMCP lifespan startup; wire `await g.close()` on shutdown.
-6. Refactor `BaseExtractor` signature in `services/palace-mcp/src/palace_mcp/extractors/base.py`.
-7. Refactor `HeartbeatExtractor` per §3.6.
-8. Remove N+0 paperclip extractor files per §3.7.
-9. Update `palace.memory.health` and `palace.memory.lookup` MCP tools to work against the new schema (no hard-coded old labels).
-10. Update `services/palace-mcp/README.md` with Graphiti-layer architecture note + pointer to `memory/reference_graphiti_core_0_28_api_truth.md`.
-11. Unit tests per §7.1.
-12. Integration tests per §7.2.
-13. Live smoke per §7.3 — iMac.
+5. Wire `build_graphiti()` into palace-mcp FastMCP lifespan startup; wire `await close_graphiti(g)` on shutdown.
+6. Refactor `BaseExtractor` in `services/palace-mcp/src/palace_mcp/extractors/base.py`: change signature from `extract(ctx)` to `run(graphiti, ctx)`. Define `ExtractorRunContext` (group_id, duration_ms, config, ...) replacing the old `ExtractionContext(driver=...)`.
+7. **Update the extractor runner orchestrator** at `services/palace-mcp/src/palace_mcp/extractors/runner.py`:
+   - Lines around 115, 121, 225 currently call `extractor.extract(ctx)` with `ExtractionContext(driver=...)` — replace with `extractor.run(graphiti=<module-level g>, ctx=ExtractorRunContext(group_id=..., ...))`.
+   - Remove the `driver` kwarg from the runner's own call-sites.
+   - `ExtractionContext` is deleted; `ExtractorRunContext` is the only context class.
+   - Verify all imports resolve; add/update tests in `tests/extractors/*_test.py` for runner behavior.
+8. Refactor `HeartbeatExtractor` per §3.6 — use `save_entity_node()` helper.
+9. Remove N+0 paperclip extractor files per §3.7.
+10. Update `palace.memory.health` and `palace.memory.lookup` MCP tools to work against the new schema (no hard-coded old labels).
+11. Update `services/palace-mcp/README.md` with Graphiti-layer architecture note + pointer to `docs/research/graphiti-core-0-28-spike/README.md`.
+12. Unit tests per §7.1.
+13. Integration tests per §7.2.
+14. Live smoke per §7.3 — iMac.
 
 ## 5. API shape after this slice
 
@@ -281,7 +305,7 @@ All five must pass before Phase 4.2 merge. QA Phase 4.1 evidence comment referen
 
 ## 8. References
 
-- Graphiti 0.28.2 verified API: `memory/reference_graphiti_core_0_28_api_truth.md`.
+- Graphiti 0.28.2 verified API: `docs/research/graphiti-core-0-28-spike/README.md` (repo-tracked copy of memory reference).
 - Umbrella decomposition: `docs/superpowers/specs/2026-04-24-N1-decomposition-design.md`.
 - GIM-76 sidecar spec: `docs/superpowers/specs/2026-04-24-N1a-2-codebase-memory-sidecar-design.md`.
 - GIM-77 bridge spec: `docs/superpowers/specs/2026-04-24-N1a-3-bridge-extractor-design.md`.

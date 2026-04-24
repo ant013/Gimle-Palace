@@ -71,15 +71,15 @@ For each target project (identified by `ctx.project_slug`), the bridge calls `pa
 | CM source | Graphiti target | `provenance` | `confidence` | `attributes` essentials |
 |---|---|---|---|---|
 | `:Project` | `:Project` (one per slug) | `asserted` | `1.0` | `cm_id`, `slug`, `name`, `language?`, `framework?` |
-| `:File` | `:File` | `asserted` | `1.0` | `cm_id`, `path`, `hash` (XXH3 from CM), `loc` |
-| `:Module` | `:Module` | `asserted` | `1.0` | `cm_id`, `path`, `kind?` |
-| `:Function` | `:Symbol{kind: "function"}` | `asserted` | `1.0` | `cm_id`, `name`, `file_path`, `signature?` |
-| `:Method` | `:Symbol{kind: "method"}` | `asserted` | `1.0` | `cm_id`, `name`, `file_path`, `signature?`, `class_cm_id` |
-| `:Class` | `:Symbol{kind: "class"}` | `asserted` | `1.0` | `cm_id`, `name`, `file_path` |
-| `:Interface` | `:Symbol{kind: "interface"}` | `asserted` | `1.0` | same |
-| `:Enum` | `:Symbol{kind: "enum"}` | `asserted` | `1.0` | same |
-| `:Type` | `:Symbol{kind: "type"}` | `asserted` | `1.0` | same |
-| `:Route` | `:APIEndpoint` | `asserted` | `1.0` (or CM's `HANDLES.confidence` if present) | `cm_id`, `method`, `path`, `handler_cm_id?` |
+| `:File` | `:File` | `asserted` | `1.0` | `cm_id`, `qualified_name` (project-dotted-path), `path`, `xxh3` (from CM — load-bearing for GIM-77 incremental), `loc` |
+| `:Module` | `:Module` | `asserted` | `1.0` | `cm_id`, `qualified_name`, `path`, `kind?` |
+| `:Function` | `:Symbol{kind: "function"}` | `asserted` | `1.0` | `cm_id`, `qualified_name`, `name`, `file_path`, `signature?` |
+| `:Method` | `:Symbol{kind: "method"}` | `asserted` | `1.0` | `cm_id`, `qualified_name`, `name`, `file_path`, `signature?`, `class_cm_id` |
+| `:Class` | `:Symbol{kind: "class"}` | `asserted` | `1.0` | `cm_id`, `qualified_name`, `name`, `file_path` |
+| `:Interface` | `:Symbol{kind: "interface"}` | `asserted` | `1.0` | same + `qualified_name` |
+| `:Enum` | `:Symbol{kind: "enum"}` | `asserted` | `1.0` | same + `qualified_name` |
+| `:Type` | `:Symbol{kind: "type"}` | `asserted` | `1.0` | same + `qualified_name` |
+| `:Route` | `:APIEndpoint` | `asserted` | `1.0` (or CM's `HANDLES.confidence` if present) | `cm_id`, `qualified_name?`, `method`, `path`, `handler_cm_id?` |
 | CM community node (from Louvain) | `:EntityNode` with `labels=["ArchitectureCommunity"]` | `derived` | Louvain modularity score, clamped [0, 1] | `cm_id`, `name` (auto: `community-<n>`), `modularity`, `member_count` |
 | CM hotspot (derived: top-5% co-change frequency, computed by bridge) | `:EntityNode` with `labels=["Hotspot"]` | `derived` | normalized co-change rank, clamped [0, 1] | `cm_id_file`, `cochange_score`, `rank` |
 
@@ -103,21 +103,67 @@ Rationale: per-node call-tree detail and side-effect edges are high-volume, low-
 
 ### 3.4 Incremental / bi-temporal update logic
 
-- Per-run: query CM's `detect_changes` to get the set of files modified since the bridge's last recorded `observed_at`.
-- For each changed file, re-fetch CM facts for it; compute diff against what Graphiti currently has for `cm_id` matching any of the file's symbols.
-- **New facts:** `EntityNode.save(driver)` + `EntityEdge.save(driver)` with fresh `valid_at = now`, `invalid_at = None`.
-- **Removed facts** (in Graphiti but no longer in CM): set `edge.invalid_at = now`, `edge.save(driver)`. Nodes are not deleted immediately — kept with `attributes["deprecated_at"] = now` for one more run, then can be reaped by a future GC slice.
-- **Unchanged facts:** no write. The bridge's own state file (under `~/.paperclip/codebase-memory-bridge-state.json`) tracks last-seen XXH3 per file to skip files whose hash matches Graphiti's stored `attributes["hash"]`.
+**Clarification (post-spike 2026-04-24):** `palace.code.detect_changes` returns the **current uncommitted git working-tree diff** only — it takes no arguments and is not a change-feed indexed by time. It cannot answer "what changed in CM since T". See `docs/research/codebase-memory-0-28-spike.md`.
+
+**Correct primitive — per-file XXH3 hash comparison:**
+
+1. Bridge maintains a state file at `~/.paperclip/codebase-memory-bridge-state.json` (or next to palace-mcp state — to be decided in impl). Shape:
+
+   ```json
+   {
+     "project_slug": "gimle",
+     "last_run_at": "2026-04-24T12:34:56Z",
+     "file_hashes": {
+       "<cm_file_id>": "<xxh3_hash>",
+       ...
+     }
+   }
+   ```
+
+2. On each run the bridge issues:
+
+   ```cypher
+   // via palace.code.query_graph
+   MATCH (f:File)
+   WHERE f.project = $project
+   RETURN f.uuid AS cm_id, f.path AS path, f.xxh3_hash AS xxh3
+   ```
+
+3. Build a current hash map `{cm_id: xxh3}` and diff against the state file:
+
+   - **cm_id new or xxh3 changed** → re-fetch that file's symbols + edges from CM, project into Graphiti with fresh `valid_at = now`, `invalid_at = None`. Existing Graphiti edges with the same `source_cm_id/target_cm_id` pair whose fact has changed get `invalid_at = now` (via `save_entity_edge`) and a new edge supersedes them.
+   - **cm_id removed from CM** → mark all Graphiti edges touching its symbols `invalid_at = now`. Nodes carry `attributes["deprecated_at"] = now` for one more run (to give any concurrent reader a grace window), then a future GC slice reaps them.
+   - **cm_id unchanged** → no write.
+
+4. After successful run, rewrite the state file with the current hash map + new `last_run_at`.
+
+**`detect_changes` role** — NOT used for bridge sync. It stays as an on-demand `palace.code.*` query agents use to ask "what's uncommitted right now".
 
 ### 3.5 Cross-resolve contract
 
-Any Graphiti `:Symbol` written by this extractor carries `attributes["cm_id"]`. Agents hydrate full detail by:
+**Qualified_name is stored as a first-class attribute on every projected Symbol/File/Module**, read verbatim from CM's `search_graph`/`query_graph` response (CM maintains it internally; format is `<project>.<dotted_path>.<name>`). This is deterministic; no "derivation" at agent time.
 
-```
-palace.code.get_code_snippet(qualified_name=<derived from cm_id or name>)
+Projected `attributes` for every `:Symbol`:
+
+```python
+{
+  "cm_id": "...",                          # CM's internal UUID
+  "qualified_name": "gimle.palace_mcp.graphiti_runtime.build_graphiti",
+  "name": "build_graphiti",
+  "kind": "function",
+  "file_path": "services/palace-mcp/src/palace_mcp/graphiti_runtime.py",
+  "signature": "(settings: Settings) -> Graphiti",
+  # ... metadata envelope ...
+}
 ```
 
-The cross-resolve test (§6.2) asserts this path works end-to-end on a sandbox repo.
+Cross-resolve becomes a one-liner:
+
+```python
+body = await palace.code.get_code_snippet(qualified_name=symbol.attributes["qualified_name"])
+```
+
+The integration test (§6.2 `test_cross_resolve_symbol_to_cm`) asserts this exact path returns a non-empty body matching the on-disk file.
 
 ### 3.6 Health reporting
 
@@ -169,8 +215,10 @@ No new MCP tools beyond what GIM-75/76 delivered. New *behavior*:
 - `test_skipped_edges_not_projected` — for each CM edge in the skip-list (`THROWS`/`READS`/`WRITES`/...), the bridge's filter drops it; fixture CM response with one of each produces zero such edges in Graphiti.
 - `test_metadata_envelope_on_every_projection` — for every projected entity/edge, `confidence`, `provenance`, `extractor`, `extractor_version`, `evidence_ref`, `observed_at` are all populated.
 - `test_cm_id_present_on_every_projected_node` — post-run, all projected nodes carry `attributes["cm_id"]`.
-- `test_incremental_skips_unchanged_files` — fixture with two runs on identical CM state; second run writes 0 nodes / 0 edges.
-- `test_incremental_invalidates_removed_edges` — fixture with a file whose CM response drops one `CALLS` edge on the second run; the corresponding Graphiti edge has `invalid_at` set.
+- `test_qualified_name_populated_on_symbol_file_module` — every projected `:Symbol`, `:File`, `:Module` has `attributes["qualified_name"]` as a non-empty string matching pattern `<project>.<dotted_path>...<name>`.
+- `test_incremental_skips_unchanged_files` — fixture with two runs on identical CM state; second run writes 0 nodes / 0 edges. Internal assertion: state-file hash map unchanged between runs.
+- `test_incremental_invalidates_removed_edges` — fixture with a file whose CM response drops one `CALLS` edge on the second run; the corresponding Graphiti edge has `invalid_at` set (not deleted).
+- `test_incremental_uses_hash_compare_not_detect_changes` — mock `palace.code.detect_changes` to raise; bridge still syncs correctly using `query_graph` + state file. Proves we are not depending on `detect_changes` for sync.
 
 ### 6.2 Integration tests
 
@@ -182,7 +230,7 @@ Fixture: testcontainers-neo4j + `codebase-memory-mcp` subprocess + `tests/fixtur
   - `palace.memory.lookup ArchitectureCommunity {}` returns at least one.
   - `palace.memory.lookup Hotspot {}` returns at most 5% of files (in a small sandbox, likely 1).
   - Every node `attributes.provenance` ∈ `{asserted, derived}`, never `inferred`.
-- `test_cross_resolve_symbol_to_cm` — pick a `:Symbol` row at random; extract `attributes["cm_id"]`; call `palace.code.get_code_snippet(qualified_name=<derived>)` and verify returned body matches the on-disk file at `attributes["file_path"]` and line range.
+- `test_cross_resolve_symbol_to_cm` — pick a `:Symbol` row at random; extract `attributes["qualified_name"]` (stored first-class, not derived); call `palace.code.get_code_snippet(qualified_name=<that value>)` and verify the returned body matches the on-disk file at `attributes["file_path"]` and line range.
 - `test_incremental_rerun_no_op` — run bridge twice on unchanged fixture; second run's `ExtractorStats` reports `nodes_written=0`, `edges_written=0`.
 - `test_file_modification_incremental_update` — edit one file in fixture, re-run bridge. Only that file's symbols are updated; other files' `observed_at` unchanged.
 - `test_bridge_health_reporting` — after one run, `palace.memory.health()['bridge']` populated with `last_run_at`, `last_run_duration_ms`, `nodes_written_by_type`, etc.
@@ -217,6 +265,7 @@ All 9 must pass before Phase 4.2 merge.
 - GIM-75 foundation spec: `docs/superpowers/specs/2026-04-24-N1a-1-graphiti-foundation-design.md` (provides `BaseExtractor`, Graphiti entity/edge catalog).
 - GIM-76 sidecar spec: `docs/superpowers/specs/2026-04-24-N1a-2-codebase-memory-sidecar-design.md` (provides `palace.code.*`).
 - Umbrella decomposition: `docs/superpowers/specs/2026-04-24-N1-decomposition-design.md`.
-- Graphiti 0.28.2 verified API: `memory/reference_graphiti_core_0_28_api_truth.md`.
+- Graphiti 0.28.2 verified API: `docs/research/graphiti-core-0-28-spike/README.md`.
+- Codebase-Memory tool-schema spike (verified 2026-04-24): `docs/research/codebase-memory-0-28-spike.md`.
 - Codebase-Memory paper: arXiv:2603.27277.
 - Historical combined spec (deprecated): `docs/superpowers/specs/2026-04-24-N1a-graphiti-codebase-memory-foundation-design.md`.

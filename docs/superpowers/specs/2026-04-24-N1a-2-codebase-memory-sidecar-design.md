@@ -156,10 +156,11 @@ def _register_disabled_tool(mcp: FastMCP, tool_name: str, message: str) -> None:
 
 ## 4. Tasks
 
+0. **Verify CM MCP tool schemas** — before writing router code, run `codebase-memory-mcp cli get_graph_schema` and `codebase-memory-mcp --help` against the pinned image in a throwaway container. Record actual parameter names (critically `index_repository: repo_path` — **NOT** `path`). Update `docs/research/codebase-memory-0-28-spike.md` if drift from the pre-design spike is found.
 1. Decide image source — published tag or vendored tarball — in operator discussion before Phase 2.
 2. Add `codebase-memory-mcp` service to `docker-compose.yml` under `code-graph` profile.
 3. Add `CODEBASE_MEMORY_MCP_URL` env var to palace-mcp service.
-4. Create `services/palace-mcp/src/palace_mcp/code_router.py` with `register_code_tools()` + 7 pass-through + 1 disabled.
+4. Create `services/palace-mcp/src/palace_mcp/code_router.py` with `register_code_tools()` + 7 pass-through + 1 disabled. Use parameter names from Task 0.
 5. Wire `register_code_tools()` into palace-mcp's MCP registration.
 6. Add `code_graph_reachable` health probe to `palace.memory.health`.
 7. Update `services/palace-mcp/README.md` with architecture note + list of `palace.code.*` tools + note on disabled `manage_adr`.
@@ -205,7 +206,7 @@ Fixture: spawn `codebase-memory-mcp` binary as subprocess on an ephemeral port; 
 ### 6.3 Live smoke on iMac
 
 1. `docker compose --profile code-graph up -d` → `palace-mcp` + `neo4j` + `codebase-memory-mcp` all healthy (healthchecks green within 60s).
-2. Index the Gimle repo via the operator shell attached to the CM container: `codebase-memory-mcp cli index_repository '{"path": "/repos/gimle"}'` — non-zero node/edge counts.
+2. Index the Gimle repo via the operator shell attached to the CM container: `codebase-memory-mcp cli index_repository '{"repo_path": "/repos/gimle"}'` — non-zero node/edge counts. (Parameter name is `repo_path`, not `path` — verified 2026-04-24, see `docs/research/codebase-memory-0-28-spike.md`.)
 3. `palace.code.get_architecture` via an MCP client returns languages=["Python"], non-zero packages.
 4. `palace.code.trace_call_path(function_name="build_graphiti")` returns at least an empty-array result (function does not exist yet in GIM-76 alone; non-error response is the assertion).
 5. `palace.code.manage_adr(...)` returns the directive error.
@@ -229,6 +230,7 @@ All seven must pass before Phase 4.2 merge. QA Phase 4.1 evidence comment includ
 
 - Codebase-Memory paper: arXiv:2603.27277 (Vogel et al., March 2026).
 - Codebase-Memory repo: https://github.com/DeusData/codebase-memory-mcp (MIT, 1809 stars).
+- Pre-design tool-schema spike (verified 2026-04-24): `docs/research/codebase-memory-0-28-spike.md`.
 - Umbrella decomposition: `docs/superpowers/specs/2026-04-24-N1-decomposition-design.md`.
 - GIM-75 Graphiti foundation spec (independent): `docs/superpowers/specs/2026-04-24-N1a-1-graphiti-foundation-design.md`.
 - GIM-77 bridge extractor spec (depends on this + GIM-75): `docs/superpowers/specs/2026-04-24-N1a-3-bridge-extractor-design.md`.

@@ -61,11 +61,16 @@ GIM-75 and GIM-76 can proceed in parallel after GIM-74 umbrella spec merges. GIM
 
 ## Cross-cutting decisions (apply to all three sub-slices)
 
-- **`graphiti-core==0.28.2`** verified live 2026-04-24 via isolated-venv spike. See `memory/reference_graphiti_core_0_28_api_truth.md`.
+- **`graphiti-core==0.28.2`** verified live 2026-04-24 via isolated-venv spike. Repo-tracked copy: `docs/research/graphiti-core-0-28-spike/README.md`.
+- **`codebase-memory-mcp` tool schemas** verified 2026-04-24 via README scrape. Repo-tracked copy: `docs/research/codebase-memory-0-28-spike.md`. Critical: `index_repository` parameter is **`repo_path`** (not `path`); `detect_changes` takes no arguments and returns only current uncommitted git diff (**not** a change-feed for bridge sync).
 - **LLM client trap:** pass `OpenAIClient(api_key=$OPENAI_API_KEY)` to `Graphiti(...)` as a stub. Writes go through `add_triplet` — LLM call never fires. Passing `None` creates an OpenAI default client that errors on missing key at construction time.
+- **Write path contract for extractors:** `save_entity_node(g, node)`, `save_entity_edge(g, edge)`, `close_graphiti(g)` from `graphiti_runtime.py`. **No direct `g._driver` access** in extractor code. GIM-75 ships the helpers; GIM-77 consumes them.
+- **Runner refactor** at `services/palace-mcp/src/palace_mcp/extractors/runner.py` is **part of GIM-75** scope (lines 115, 121, 225 — explicit in GIM-75 Task 7). `ExtractionContext(driver=...)` deleted; `ExtractorRunContext(group_id, ...)` replaces it.
 - **Metadata envelope** — `confidence`, `provenance` (`asserted` / `derived` / `inferred`), `extractor`, `extractor_version`, `evidence_ref`, `observed_at` — stored in `EntityNode.attributes: dict` and `EntityEdge.attributes: dict`. **No Pydantic subclassing needed** in 0.28.
 - **Schema is flat:** `:Symbol{kind=function|method|class|interface|enum|type}` in Graphiti. Separate `:Class/:Method/:Package/:Folder` labels are not replicated — those live in CM SQLite. Query Graphiti by `(n:Symbol {kind: "class"})`, not by label.
 - **Domain-concept axis is multi-label, not node.** `:Symbol` carries labels like `[Symbol, HandlesHex, Encodes]`. No standalone `:DomainConcept` node. Edges that the old §5 wrote as `:APPLIES_TO -> :DomainConcept` become `:APPLIES_TO -> :Symbol` with a label filter on the target.
+- **Cross-resolve contract (GIM-77 → GIM-76):** every projected `:Symbol`/`:File`/`:Module` stores `attributes["qualified_name"]` verbatim from CM's `search_graph` response. Agents call `palace.code.get_code_snippet(qualified_name=node.attributes["qualified_name"])` — deterministic, no derivation.
+- **Incremental sync (GIM-77):** per-file XXH3 hash compare via `palace.code.query_graph "MATCH (f:File) RETURN f.uuid, f.path, f.xxh3_hash"` + local state file. **Not** `detect_changes`.
 - **CM's `manage_adr` disabled.** Graphiti `:Decision` is the single source of truth for architectural decisions. The router in GIM-76 explicitly rejects `palace.code.manage_adr` with an error directive.
 - **Embedder:** OpenAI `text-embedding-3-small` (pre-paid credit, $11.20 covers decades at projected volume).
 
