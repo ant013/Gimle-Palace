@@ -35,7 +35,9 @@ async def _call_tool(
 
 @pytest.mark.asyncio
 class TestCodeGraphIntegration:
-    async def test_end_to_end_get_architecture(self, cm_client: httpx.AsyncClient) -> None:
+    async def test_end_to_end_get_architecture(
+        self, cm_client: httpx.AsyncClient
+    ) -> None:
         result = await _call_tool(cm_client, "get_architecture")
         assert isinstance(result, dict)
         assert "languages" in result
@@ -44,7 +46,9 @@ class TestCodeGraphIntegration:
         result = await _call_tool(cm_client, "search_graph", {"name_pattern": "main"})
         assert isinstance(result, (dict, list))
 
-    async def test_end_to_end_trace_call_path(self, cm_client: httpx.AsyncClient) -> None:
+    async def test_end_to_end_trace_call_path(
+        self, cm_client: httpx.AsyncClient
+    ) -> None:
         result = await _call_tool(
             cm_client,
             "trace_call_path",
@@ -52,15 +56,23 @@ class TestCodeGraphIntegration:
         )
         assert isinstance(result, (dict, list))
 
-    async def test_end_to_end_get_code_snippet(self, cm_client: httpx.AsyncClient) -> None:
-        result = await _call_tool(cm_client, "get_code_snippet", {"qualified_name": "main"})
+    async def test_end_to_end_get_code_snippet(
+        self, cm_client: httpx.AsyncClient
+    ) -> None:
+        result = await _call_tool(
+            cm_client, "get_code_snippet", {"qualified_name": "main"}
+        )
         assert isinstance(result, (dict, str))
 
     async def test_end_to_end_query_graph(self, cm_client: httpx.AsyncClient) -> None:
-        result = await _call_tool(cm_client, "query_graph", {"query": "MATCH (n) RETURN count(n)"})
+        result = await _call_tool(
+            cm_client, "query_graph", {"query": "MATCH (n) RETURN count(n)"}
+        )
         assert result is not None
 
-    async def test_end_to_end_detect_changes(self, cm_client: httpx.AsyncClient) -> None:
+    async def test_end_to_end_detect_changes(
+        self, cm_client: httpx.AsyncClient
+    ) -> None:
         result = await _call_tool(cm_client, "detect_changes")
         assert isinstance(result, (dict, list))
 
@@ -68,7 +80,9 @@ class TestCodeGraphIntegration:
         result = await _call_tool(cm_client, "search_code", {"pattern": "def main"})
         assert isinstance(result, (dict, list))
 
-    async def test_end_to_end_manage_adr_blocked(self, cm_client: httpx.AsyncClient) -> None:
+    async def test_end_to_end_manage_adr_blocked(
+        self, cm_client: httpx.AsyncClient
+    ) -> None:
         """manage_adr goes through the router disabled path, not CM directly."""
         from mcp.server.fastmcp import FastMCP
 
@@ -80,7 +94,9 @@ class TestCodeGraphIntegration:
         stub_tool = lambda name, desc: mcp.tool(name=name, description=desc)  # noqa: E731
         register_code_tools(stub_tool)
         tool = next(
-            t for t in mcp._tool_manager.list_tools() if t.name == "palace.code.manage_adr"
+            t
+            for t in mcp._tool_manager.list_tools()
+            if t.name == "palace.code.manage_adr"
         )
         result = await tool.run(arguments={})
         assert "error" in result

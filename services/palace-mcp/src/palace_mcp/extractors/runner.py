@@ -118,7 +118,11 @@ _ExecuteResult = Union[_ExecuteOk, _ExecuteError]
 
 
 async def _execute(
-    *, extractor: BaseExtractor, graphiti: Graphiti, ctx: ExtractorRunContext, timeout_s: float
+    *,
+    extractor: BaseExtractor,
+    graphiti: Graphiti,
+    ctx: ExtractorRunContext,
+    timeout_s: float,
 ) -> _ExecuteResult:
     """Wrap run() in timeout + Exception handling. Never raises."""
     logger = ctx.logger

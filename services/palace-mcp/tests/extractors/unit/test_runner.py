@@ -23,7 +23,9 @@ class _Ok(BaseExtractor):
     name = "__test_ok"
     description = "returns stats"
 
-    async def run(self, *, graphiti: Graphiti, ctx: ExtractorRunContext) -> ExtractorStats:
+    async def run(
+        self, *, graphiti: Graphiti, ctx: ExtractorRunContext
+    ) -> ExtractorStats:
         return ExtractorStats(nodes_written=5, edges_written=2)
 
 
@@ -31,7 +33,9 @@ class _ConfigFail(BaseExtractor):
     name = "__test_config_fail"
     description = "raises ExtractorConfigError"
 
-    async def run(self, *, graphiti: Graphiti, ctx: ExtractorRunContext) -> ExtractorStats:
+    async def run(
+        self, *, graphiti: Graphiti, ctx: ExtractorRunContext
+    ) -> ExtractorStats:
         raise ExtractorConfigError("missing tool X")
 
 
@@ -39,7 +43,9 @@ class _Unhandled(BaseExtractor):
     name = "__test_unhandled"
     description = "raises generic Exception"
 
-    async def run(self, *, graphiti: Graphiti, ctx: ExtractorRunContext) -> ExtractorStats:
+    async def run(
+        self, *, graphiti: Graphiti, ctx: ExtractorRunContext
+    ) -> ExtractorStats:
         raise RuntimeError("boom")
 
 
@@ -47,7 +53,9 @@ class _Slow(BaseExtractor):
     name = "__test_slow"
     description = "takes too long"
 
-    async def run(self, *, graphiti: Graphiti, ctx: ExtractorRunContext) -> ExtractorStats:
+    async def run(
+        self, *, graphiti: Graphiti, ctx: ExtractorRunContext
+    ) -> ExtractorStats:
         await asyncio.sleep(10.0)
         return ExtractorStats()
 
@@ -110,7 +118,10 @@ async def test_unknown_extractor_returns_error(
     mock_driver: MagicMock, mock_graphiti: MagicMock
 ) -> None:
     res = await run_extractor(
-        name="does_not_exist", project="testproj", driver=mock_driver, graphiti=mock_graphiti
+        name="does_not_exist",
+        project="testproj",
+        driver=mock_driver,
+        graphiti=mock_graphiti,
     )
     assert res["ok"] is False
     assert res["error_code"] == "unknown_extractor"
@@ -155,7 +166,10 @@ async def test_happy_path_success(
     registry.register(_Ok())
     with patch("palace_mcp.extractors.runner.REPOS_ROOT", tmp_path / "repos"):
         res = await run_extractor(
-            name="__test_ok", project="testproj", driver=mock_driver, graphiti=mock_graphiti
+            name="__test_ok",
+            project="testproj",
+            driver=mock_driver,
+            graphiti=mock_graphiti,
         )
 
     assert res["ok"] is True

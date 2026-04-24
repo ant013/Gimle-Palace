@@ -28,7 +28,9 @@ class _SchemaTest(BaseExtractor):
         "FOR (n:__SchemaTestNode) ON (n.ts)",
     ]
 
-    async def run(self, *, graphiti: Graphiti, ctx: ExtractorRunContext) -> ExtractorStats:
+    async def run(
+        self, *, graphiti: Graphiti, ctx: ExtractorRunContext
+    ) -> ExtractorStats:
         return ExtractorStats()
 
 

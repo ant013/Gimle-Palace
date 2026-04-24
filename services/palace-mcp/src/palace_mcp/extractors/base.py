@@ -28,7 +28,9 @@ class BaseExtractor(ABC):
     indexes: ClassVar[list[str]] = []
 
     @abstractmethod
-    async def run(self, *, graphiti: Graphiti, ctx: ExtractorRunContext) -> ExtractorStats:
+    async def run(
+        self, *, graphiti: Graphiti, ctx: ExtractorRunContext
+    ) -> ExtractorStats:
         """Run the extractor. Write nodes/edges via graphiti_runtime helpers.
 
         Returns ExtractorStats with counts (for :IngestRun finalize).

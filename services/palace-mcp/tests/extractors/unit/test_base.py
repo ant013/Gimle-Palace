@@ -45,7 +45,9 @@ def test_valid_subclass_instantiates() -> None:
         name = "my_ext"
         description = "test"
 
-        async def run(self, *, graphiti: Graphiti, ctx: ExtractorRunContext) -> ExtractorStats:
+        async def run(
+            self, *, graphiti: Graphiti, ctx: ExtractorRunContext
+        ) -> ExtractorStats:
             return ExtractorStats()
 
     e = MyExtractor()

@@ -68,7 +68,9 @@ class TestToolRegistration:
 
         register_code_tools(stub_tool)
         code_tools = [
-            t for t in mcp._tool_manager.list_tools() if t.name.startswith("palace.code.")
+            t
+            for t in mcp._tool_manager.list_tools()
+            if t.name.startswith("palace.code.")
         ]
         assert len(code_tools) == 8
 
@@ -88,7 +90,9 @@ class TestToolRegistration:
             if t.name.startswith("palace.code.") and t.name != "palace.code.manage_adr"
         ]
         names = {t.name for t in tools}
-        assert len(names) == 7, f"Expected 7 distinct tool names, got {len(names)}: {names}"
+        assert len(names) == 7, (
+            f"Expected 7 distinct tool names, got {len(names)}: {names}"
+        )
 
     def test_decorator_receives_all_names(self) -> None:
         """Stub decorator tracks all 8 tool names — proves Pattern #21 integration point works."""
@@ -110,7 +114,11 @@ class TestDisabledTool:
         stub_tool = lambda name, desc: mcp.tool(name=name, description=desc)  # noqa: E731
         register_code_tools(stub_tool)
 
-        tool = next(t for t in mcp._tool_manager.list_tools() if t.name == "palace.code.manage_adr")
+        tool = next(
+            t
+            for t in mcp._tool_manager.list_tools()
+            if t.name == "palace.code.manage_adr"
+        )
         result = await tool.run(arguments={})
         assert "error" in result
         assert "palace.memory" in result["error"]
@@ -134,7 +142,11 @@ class TestPassthroughSerialization:
             captured_request.update(json)
             resp = MagicMock()
             resp.raise_for_status = MagicMock()
-            resp.json.return_value = {"jsonrpc": "2.0", "result": {"nodes": []}, "id": 1}
+            resp.json.return_value = {
+                "jsonrpc": "2.0",
+                "result": {"nodes": []},
+                "id": 1,
+            }
             return resp
 
         client = AsyncMock(spec=httpx.AsyncClient)
@@ -145,7 +157,9 @@ class TestPassthroughSerialization:
         stub_tool = lambda name, desc: mcp.tool(name=name, description=desc)  # noqa: E731
         register_code_tools(stub_tool)
         tool = next(
-            t for t in mcp._tool_manager.list_tools() if t.name == "palace.code.search_graph"
+            t
+            for t in mcp._tool_manager.list_tools()
+            if t.name == "palace.code.search_graph"
         )
         # `arguments` is the single dict parameter; LLM passes CM args inside it.
         result = await tool.run(arguments={"arguments": {"name_pattern": "main"}})
@@ -176,7 +190,9 @@ class TestPassthroughTimeout:
         stub_tool = lambda name, desc: mcp.tool(name=name, description=desc)  # noqa: E731
         register_code_tools(stub_tool)
         tool = next(
-            t for t in mcp._tool_manager.list_tools() if t.name == "palace.code.get_architecture"
+            t
+            for t in mcp._tool_manager.list_tools()
+            if t.name == "palace.code.get_architecture"
         )
 
         # FastMCP wraps the underlying exception in ToolError.

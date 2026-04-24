@@ -20,7 +20,9 @@ from graphiti_core.nodes import EntityNode
 # ---------------------------------------------------------------------------
 
 _VALID_PROVENANCE = frozenset({"asserted", "derived", "inferred"})
-_VALID_SYMBOL_KINDS = frozenset({"function", "method", "class", "interface", "enum", "type"})
+_VALID_SYMBOL_KINDS = frozenset(
+    {"function", "method", "class", "interface", "enum", "type"}
+)
 
 
 def _validate_envelope(attributes: dict[str, Any]) -> None:
@@ -73,7 +75,9 @@ def make_episode(
         **(extra or {}),
     }
     _validate_envelope(attrs)
-    return EntityNode(name=name, group_id=group_id, labels=["Episode"], attributes=attrs)
+    return EntityNode(
+        name=name, group_id=group_id, labels=["Episode"], attributes=attrs
+    )
 
 
 def make_project(
@@ -101,7 +105,9 @@ def make_project(
         **(extra or {}),
     }
     _validate_envelope(attrs)
-    return EntityNode(name=slug, group_id=group_id, labels=["Project"], attributes=attrs)
+    return EntityNode(
+        name=slug, group_id=group_id, labels=["Project"], attributes=attrs
+    )
 
 
 def make_iteration(
@@ -132,7 +138,9 @@ def make_iteration(
         **(extra or {}),
     }
     _validate_envelope(attrs)
-    return EntityNode(name=name, group_id=group_id, labels=["Iteration"], attributes=attrs)
+    return EntityNode(
+        name=name, group_id=group_id, labels=["Iteration"], attributes=attrs
+    )
 
 
 def make_decision(
@@ -163,7 +171,9 @@ def make_decision(
         **(extra or {}),
     }
     _validate_envelope(attrs)
-    return EntityNode(name=name, group_id=group_id, labels=["Decision"], attributes=attrs)
+    return EntityNode(
+        name=name, group_id=group_id, labels=["Decision"], attributes=attrs
+    )
 
 
 def make_iteration_note(
@@ -194,7 +204,9 @@ def make_iteration_note(
         **(extra or {}),
     }
     _validate_envelope(attrs)
-    return EntityNode(name=name, group_id=group_id, labels=["IterationNote"], attributes=attrs)
+    return EntityNode(
+        name=name, group_id=group_id, labels=["IterationNote"], attributes=attrs
+    )
 
 
 def make_finding(
@@ -229,7 +241,9 @@ def make_finding(
         **(extra or {}),
     }
     _validate_envelope(attrs)
-    return EntityNode(name=name, group_id=group_id, labels=["Finding"], attributes=attrs)
+    return EntityNode(
+        name=name, group_id=group_id, labels=["Finding"], attributes=attrs
+    )
 
 
 def make_module(
@@ -349,7 +363,9 @@ def make_api_endpoint(
         **(extra or {}),
     }
     _validate_envelope(attrs)
-    return EntityNode(name=name, group_id=group_id, labels=["APIEndpoint"], attributes=attrs)
+    return EntityNode(
+        name=name, group_id=group_id, labels=["APIEndpoint"], attributes=attrs
+    )
 
 
 def make_model(
@@ -403,7 +419,9 @@ def make_repository(
         **(extra or {}),
     }
     _validate_envelope(attrs)
-    return EntityNode(name=name, group_id=group_id, labels=["Repository"], attributes=attrs)
+    return EntityNode(
+        name=name, group_id=group_id, labels=["Repository"], attributes=attrs
+    )
 
 
 def make_external_lib(
@@ -430,7 +448,9 @@ def make_external_lib(
         **(extra or {}),
     }
     _validate_envelope(attrs)
-    return EntityNode(name=name, group_id=group_id, labels=["ExternalLib"], attributes=attrs)
+    return EntityNode(
+        name=name, group_id=group_id, labels=["ExternalLib"], attributes=attrs
+    )
 
 
 def make_trace(

@@ -54,6 +54,8 @@ class TestCodeToolRegistration:
 
         build_mcp_asgi_app()  # asserts unique names — would crash on collision
         code_tools = [
-            t for t in _mcp._tool_manager.list_tools() if t.name.startswith("palace.code.")
+            t
+            for t in _mcp._tool_manager.list_tools()
+            if t.name.startswith("palace.code.")
         ]
         assert len(code_tools) == 8

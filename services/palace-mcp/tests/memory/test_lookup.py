@@ -50,7 +50,9 @@ def test_lookup_response_warnings_populated() -> None:
 
 def test_lookup_response_warnings_single_item_with_data() -> None:
     """warnings coexists with regular response items."""
-    item = LookupResponseItem(id="abc", type="Episode", properties={"kind": "heartbeat"})
+    item = LookupResponseItem(
+        id="abc", type="Episode", properties={"kind": "heartbeat"}
+    )
     resp = LookupResponse(
         items=[item],
         total_matched=1,
