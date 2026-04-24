@@ -112,6 +112,8 @@ jobs:
         working-directory: services/watchdog
       - run: uv run ruff check src/ tests/
         working-directory: services/watchdog
+      - run: uv run ruff format --check src/ tests/
+        working-directory: services/watchdog
       - run: uv run mypy --strict src/
         working-directory: services/watchdog
       - run: uv run pytest tests/ -v --cov=gimle_watchdog --cov-config=.coveragerc --cov-fail-under=85

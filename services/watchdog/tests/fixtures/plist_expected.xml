@@ -7,7 +7,7 @@
     <array>
         <string>/path/to/.venv/bin/python</string>
         <string>-m</string>
-        <string>watchdog</string>
+        <string>gimle_watchdog</string>
         <string>run</string>
         <string>--config</string>
         <string>/home/user/.paperclip/watchdog-config.yaml</string>

@@ -159,9 +159,7 @@ async def scan_died_mid_work(
                 continue
             entry = state.escalated_issues[issue.id]
             escalated_at_str = str(entry.get("escalated_at", "1970-01-01T00:00:00Z"))
-            escalated_at = _dt.datetime.fromisoformat(
-                escalated_at_str.replace("Z", "+00:00")
-            )
+            escalated_at = _dt.datetime.fromisoformat(escalated_at_str.replace("Z", "+00:00"))
             if issue.updated_at > escalated_at:
                 state.clear_escalation(issue.id)
                 # fall through and treat as normal candidate
@@ -188,7 +186,5 @@ async def scan_died_mid_work(
                 )
             )
             continue
-        actions.append(
-            Action(kind="wake", issue=issue, agent_id=issue.assignee_agent_id)
-        )
+        actions.append(Action(kind="wake", issue=issue, agent_id=issue.assignee_agent_id))
     return actions

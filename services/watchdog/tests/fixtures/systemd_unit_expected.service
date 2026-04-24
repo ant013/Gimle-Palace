@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/path/to/.venv/bin/python -m watchdog run --config /home/user/.paperclip/watchdog-config.yaml
+ExecStart=/path/to/.venv/bin/python -m gimle_watchdog run --config /home/user/.paperclip/watchdog-config.yaml
 Restart=on-failure
 RestartSec=10s
 StandardOutput=append:/home/user/.paperclip/watchdog.log

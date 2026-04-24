@@ -109,8 +109,12 @@ def _require_positive_int(value: object, name: str) -> int:
 def _parse_thresholds(raw: dict[str, object]) -> Thresholds:
     return Thresholds(
         died_min=_require_positive_int(raw.get("died_min"), "thresholds.died_min"),
-        hang_etime_min=_require_positive_int(raw.get("hang_etime_min"), "thresholds.hang_etime_min"),
-        hang_cpu_max_s=_require_positive_int(raw.get("hang_cpu_max_s"), "thresholds.hang_cpu_max_s"),
+        hang_etime_min=_require_positive_int(
+            raw.get("hang_etime_min"), "thresholds.hang_etime_min"
+        ),
+        hang_cpu_max_s=_require_positive_int(
+            raw.get("hang_cpu_max_s"), "thresholds.hang_cpu_max_s"
+        ),
     )
 
 
@@ -161,7 +165,11 @@ def load_config(path: Path) -> Config:
 
     cooldowns_raw = raw.get("cooldowns") or {}
     per_agent_cap_val = cooldowns_raw.get("per_agent_cap")
-    if not isinstance(per_agent_cap_val, int) or isinstance(per_agent_cap_val, bool) or per_agent_cap_val < 1:
+    if (
+        not isinstance(per_agent_cap_val, int)
+        or isinstance(per_agent_cap_val, bool)
+        or per_agent_cap_val < 1
+    ):
         raise ConfigError(f"cooldowns.per_agent_cap must be >= 1, got {per_agent_cap_val!r}")
     cooldowns = CooldownsConfig(
         per_issue_seconds=_require_positive_int(

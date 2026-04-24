@@ -97,7 +97,9 @@ def _cmd_install(args: argparse.Namespace) -> int:
         SYSTEMD_UNIT_PATH.parent.mkdir(parents=True, exist_ok=True)
         SYSTEMD_UNIT_PATH.write_text(rendered)
         subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
-        subprocess.run(["systemctl", "--user", "enable", "--now", "gimle-watchdog.service"], check=True)
+        subprocess.run(
+            ["systemctl", "--user", "enable", "--now", "gimle-watchdog.service"], check=True
+        )
         print(f"installed systemd unit: {SYSTEMD_UNIT_PATH}")
     return 0
 
@@ -176,7 +178,7 @@ def _cmd_tail(args: argparse.Namespace) -> int:
     if not cfg.logging.path.exists():
         print(f"log file does not exist: {cfg.logging.path}", file=sys.stderr)
         return 1
-    lines = cfg.logging.path.read_text().splitlines()[-args.n:]
+    lines = cfg.logging.path.read_text().splitlines()[-args.n :]
     for line in lines:
         try:
             entry = json.loads(line)

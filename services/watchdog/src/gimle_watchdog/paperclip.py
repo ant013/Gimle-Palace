@@ -106,9 +106,7 @@ class PaperclipClient:
         ) from last_exc
 
     async def list_in_progress_issues(self, company_id: str) -> list[Issue]:
-        resp = await self._request(
-            "GET", f"/api/companies/{company_id}/issues?status=in_progress"
-        )
+        resp = await self._request("GET", f"/api/companies/{company_id}/issues?status=in_progress")
         data = resp.json()
         if not isinstance(data, list):
             raise PaperclipError(f"expected list, got {type(data).__name__}")
@@ -125,6 +123,4 @@ class PaperclipClient:
         await self._request("POST", f"/api/issues/{issue_id}/release")
 
     async def post_issue_comment(self, issue_id: str, body: str) -> None:
-        await self._request(
-            "POST", f"/api/issues/{issue_id}/comments", json={"body": body}
-        )
+        await self._request("POST", f"/api/issues/{issue_id}/comments", json={"body": body})

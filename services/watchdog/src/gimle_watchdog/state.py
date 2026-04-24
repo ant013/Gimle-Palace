@@ -68,7 +68,7 @@ class State:
                 try:
                     parsed.append(_parse_iso(t))
                 except Exception:
-                    pass
+                    log.warning("state_bad_timestamp agent=%s value=%r", agent_id, t)
             agent_wakes[agent_id] = parsed
 
         return cls(

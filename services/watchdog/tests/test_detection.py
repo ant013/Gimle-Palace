@@ -128,9 +128,7 @@ def _make_config(died_min: int = 3, cooldowns: CooldownsConfig | None = None) ->
             CompanyConfig(
                 id="9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64",
                 name="gimle",
-                thresholds=Thresholds(
-                    died_min=died_min, hang_etime_min=60, hang_cpu_max_s=30
-                ),
+                thresholds=Thresholds(died_min=died_min, hang_etime_min=60, hang_cpu_max_s=30),
             )
         ],
         daemon=DaemonConfig(poll_interval_seconds=120),
@@ -141,9 +139,7 @@ def _make_config(died_min: int = 3, cooldowns: CooldownsConfig | None = None) ->
             rotate_max_bytes=1048576,
             rotate_backup_count=1,
         ),
-        escalation=EscalationConfig(
-            post_comment_on_issue=False, comment_marker="<!-- x -->"
-        ),
+        escalation=EscalationConfig(post_comment_on_issue=False, comment_marker="<!-- x -->"),
     )
 
 
@@ -179,7 +175,11 @@ async def test_scan_died_skips_null_assignee(tmp_path: Path):
     cfg = _make_config()
     st = State.load(tmp_path / "s.json")
     client = _FakeClient(
-        [_issue(assignee=None, updated_at=_dt.datetime(2026, 4, 21, 10, 0, tzinfo=_dt.timezone.utc))]
+        [
+            _issue(
+                assignee=None, updated_at=_dt.datetime(2026, 4, 21, 10, 0, tzinfo=_dt.timezone.utc)
+            )
+        ]
     )
     actions = await det.scan_died_mid_work(cfg.companies[0], client, st, cfg)
     assert actions == []
@@ -191,7 +191,11 @@ async def test_scan_died_skips_active_run(tmp_path: Path):
     cfg = _make_config()
     st = State.load(tmp_path / "s.json")
     client = _FakeClient(
-        [_issue(run_id="run-1", updated_at=_dt.datetime(2026, 4, 21, 10, 0, tzinfo=_dt.timezone.utc))]
+        [
+            _issue(
+                run_id="run-1", updated_at=_dt.datetime(2026, 4, 21, 10, 0, tzinfo=_dt.timezone.utc)
+            )
+        ]
     )
     actions = await det.scan_died_mid_work(cfg.companies[0], client, st, cfg)
     assert actions == []

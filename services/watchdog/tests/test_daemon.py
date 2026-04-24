@@ -62,8 +62,10 @@ async def test_tick_wakes_stuck_issue(tmp_path: Path):
     state = State.load(tmp_path / "state.json")
     client = MagicMock()
     client.list_in_progress_issues = AsyncMock(return_value=[_stuck_issue()])
-    with patch("gimle_watchdog.daemon.actions.trigger_respawn",
-               new=AsyncMock(return_value=RespawnResult(via="patch", success=True, run_id="run-new"))):
+    with patch(
+        "gimle_watchdog.daemon.actions.trigger_respawn",
+        new=AsyncMock(return_value=RespawnResult(via="patch", success=True, run_id="run-new")),
+    ):
         with patch("gimle_watchdog.daemon.detection.scan_idle_hangs", return_value=[]):
             with patch("gimle_watchdog.daemon._sleep", new=AsyncMock()):
                 await daemon._tick(cfg, state, client)
@@ -75,6 +77,7 @@ async def test_tick_escalates_capped_agent(tmp_path: Path):
     cfg = _cfg(tmp_path)
     state = State.load(tmp_path / "state.json")
     from freezegun import freeze_time
+
     for ts in ["2026-04-21T09:55:00Z", "2026-04-21T09:57:00Z", "2026-04-21T09:58:00Z"]:
         with freeze_time(ts):
             state.record_wake(f"dummy-{ts}", "agent-1")
@@ -94,10 +97,13 @@ async def test_tick_kills_hanged_procs(tmp_path: Path):
     cfg = _cfg(tmp_path)
     state = State.load(tmp_path / "state.json")
     from gimle_watchdog.detection import HangedProc
+
     client = MagicMock()
     client.list_in_progress_issues = AsyncMock(return_value=[])
-    hanged = HangedProc(pid=12345, etime_s=5000, cpu_s=10, command="paperclip-skills append-system-prompt-file")
-    kill_mock = MagicMock(return_value=MagicMock(status="clean", pid=12345))
+    hanged = HangedProc(
+        pid=12345, etime_s=5000, cpu_s=10, command="paperclip-skills append-system-prompt-file"
+    )
+    kill_mock = AsyncMock(return_value=MagicMock(status="clean", pid=12345))
     with patch("gimle_watchdog.daemon.detection.scan_idle_hangs", return_value=[hanged]):
         with patch("gimle_watchdog.daemon.actions.kill_hanged_proc", kill_mock):
             with patch("gimle_watchdog.daemon._sleep", new=AsyncMock()):

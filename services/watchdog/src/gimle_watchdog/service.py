@@ -24,7 +24,7 @@ def render_plist(
     <array>
         <string>{venv_python}</string>
         <string>-m</string>
-        <string>watchdog</string>
+        <string>gimle_watchdog</string>
         <string>run</string>
         <string>--config</string>
         <string>{config_path}</string>
@@ -50,7 +50,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart={venv_python} -m watchdog run --config {config_path}
+ExecStart={venv_python} -m gimle_watchdog run --config {config_path}
 Restart=on-failure
 RestartSec=10s
 StandardOutput=append:{log_path}
@@ -67,4 +67,4 @@ def render_cron_entry(
     poll_interval_seconds: int,
 ) -> str:
     minutes = max(1, poll_interval_seconds // 60)
-    return f"*/{minutes} * * * * {venv_python} -m watchdog tick --config {config_path}"
+    return f"*/{minutes} * * * * {venv_python} -m gimle_watchdog tick --config {config_path}"

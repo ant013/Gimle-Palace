@@ -23,9 +23,7 @@ async def _sleep(seconds: float) -> None:
     await asyncio.sleep(seconds)
 
 
-def _build_escalation_body(
-    issue_id: str, agent_id: str, state: State, marker: str
-) -> str:
+def _build_escalation_body(issue_id: str, agent_id: str, state: State, marker: str) -> str:
     count = state.escalation_count(issue_id)
     permanent = state.is_permanently_escalated(issue_id)
     marker_with_meta = f"{marker[:-4]} issue={issue_id} agent={agent_id} count={count} -->"
@@ -55,10 +53,13 @@ async def _tick(cfg: Config, state: State, client: PaperclipClient) -> None:
     # Phase 1: kill host-level idle hangs
     hanged = detection.scan_idle_hangs(cfg)
     for proc in hanged:
-        res = actions.kill_hanged_proc(proc)
+        res = await actions.kill_hanged_proc(proc)
         log.warning(
             "hang_killed pid=%d etime_s=%d cpu_s=%d status=%s",
-            proc.pid, proc.etime_s, proc.cpu_s, res.status,
+            proc.pid,
+            proc.etime_s,
+            proc.cpu_s,
+            res.status,
         )
     if hanged:
         await _sleep(10)
@@ -73,7 +74,9 @@ async def _tick(cfg: Config, state: State, client: PaperclipClient) -> None:
                 state.record_wake(action.issue.id, action.agent_id)
                 log.info(
                     "wake_result issue=%s via=%s success=%s",
-                    action.issue.id, result.via, result.success,
+                    action.issue.id,
+                    result.via,
+                    result.success,
                 )
                 if not result.success:
                     log.error(
@@ -105,9 +108,7 @@ async def _tick(cfg: Config, state: State, client: PaperclipClient) -> None:
     log.info("tick_end actions=%d", total_actions)
 
 
-async def _run_one_iteration_for_test(
-    cfg: Config, state: State, client: PaperclipClient
-) -> None:
+async def _run_one_iteration_for_test(cfg: Config, state: State, client: PaperclipClient) -> None:
     """Single iteration used by test_run_loop_exits_on_tick_timeout."""
     try:
         await asyncio.wait_for(_tick(cfg, state, client), timeout=TICK_TIMEOUT_SECONDS)

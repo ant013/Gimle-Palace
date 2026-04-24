@@ -7,7 +7,6 @@ import logging
 import os
 import signal
 import subprocess
-import time
 from dataclasses import dataclass
 
 from gimle_watchdog.detection import HangedProc, PS_FILTER_TOKENS
@@ -47,9 +46,7 @@ async def _wait_for_respawn(client: PaperclipClient, issue_id: str) -> str | Non
     return None
 
 
-async def trigger_respawn(
-    client: PaperclipClient, issue: Issue, assignee_id: str
-) -> RespawnResult:
+async def trigger_respawn(client: PaperclipClient, issue: Issue, assignee_id: str) -> RespawnResult:
     """PATCH assigneeAgentId=same as primary; POST /release + PATCH as fallback."""
     # Primary
     await client.patch_issue(issue.id, {"assigneeAgentId": assignee_id})
@@ -85,7 +82,7 @@ def _read_proc_cmdline(pid: int) -> str | None:
     return result.stdout.strip()
 
 
-def kill_hanged_proc(proc: HangedProc) -> KillResult:
+async def kill_hanged_proc(proc: HangedProc) -> KillResult:
     """Kill a hanged claude subprocess with PID-reuse mitigation."""
     current = _read_proc_cmdline(proc.pid)
     if current is None:
@@ -93,7 +90,9 @@ def kill_hanged_proc(proc: HangedProc) -> KillResult:
     if not all(tok in current for tok in PS_FILTER_TOKENS):
         log.warning(
             "pid_reused pid=%d old_cmd=%r new_cmd=%r",
-            proc.pid, proc.command[:80], current[:80],
+            proc.pid,
+            proc.command[:80],
+            current[:80],
         )
         return KillResult(pid=proc.pid, status="pid_reused_skip")
 
@@ -102,7 +101,7 @@ def kill_hanged_proc(proc: HangedProc) -> KillResult:
     except ProcessLookupError:
         return KillResult(pid=proc.pid, status="already_dead")
 
-    time.sleep(3)
+    await asyncio.sleep(3)
     try:
         os.kill(proc.pid, 0)  # check if still alive
         os.kill(proc.pid, signal.SIGKILL)

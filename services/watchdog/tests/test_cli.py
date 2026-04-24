@@ -83,7 +83,9 @@ def test_cmd_tail_no_log(tmp_path: Path, capsys):
 def test_cmd_tail_with_log(tmp_path: Path, capsys):
     cfg_path = _minimal_cfg(tmp_path)
     log_path = tmp_path / "watchdog.log"
-    entry = json.dumps({"ts": "2026-04-21T10:00:00Z", "level": "INFO", "name": "watchdog", "message": "hi"})
+    entry = json.dumps(
+        {"ts": "2026-04-21T10:00:00Z", "level": "INFO", "name": "watchdog", "message": "hi"}
+    )
     log_path.write_text(entry + "\n")
     rc = cli.main(["watchdog", "--config", str(cfg_path), "tail", "-n", "5"])
     out = capsys.readouterr().out

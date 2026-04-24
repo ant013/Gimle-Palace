@@ -10,7 +10,7 @@ Manual:
 ```bash
 cd services/watchdog
 uv sync --all-extras
-uv run python -m watchdog install --discover-companies
+uv run python -m gimle_watchdog install --discover-companies
 ```
 
 On macOS → launchd plist at `~/Library/LaunchAgents/work.ant013.gimle-watchdog.plist`.
