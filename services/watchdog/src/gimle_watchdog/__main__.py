@@ -25,23 +25,29 @@ SYSTEMD_UNIT_PATH = Path("~/.config/systemd/user/gimle-watchdog.service").expand
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="watchdog", description="Gimle agent watchdog (GIM-63)")
-    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
+
+    # Shared --config parent so every subcommand accepts `--config` after the subcommand
+    # (e.g. `watchdog run --config X`), matching what service renderers emit.
+    # add_help=False avoids a duplicate -h flag conflict.
+    config_parent = argparse.ArgumentParser(add_help=False)
+    config_parent.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
+
     sub = parser.add_subparsers(dest="command")
 
-    p_install = sub.add_parser("install", help="install platform service")
+    p_install = sub.add_parser("install", parents=[config_parent], help="install platform service")
     p_install.add_argument("--dry-run", action="store_true")
     p_install.add_argument("--force", action="store_true")
     p_install.add_argument("--discover-companies", action="store_true")
 
-    sub.add_parser("uninstall", help="remove platform service")
-    sub.add_parser("run", help="run daemon loop (launchd/systemd)")
-    sub.add_parser("tick", help="one-shot tick (cron)")
-    sub.add_parser("status", help="service + filter health")
-    p_tail = sub.add_parser("tail", help="tail log")
+    sub.add_parser("uninstall", parents=[config_parent], help="remove platform service")
+    sub.add_parser("run", parents=[config_parent], help="run daemon loop (launchd/systemd)")
+    sub.add_parser("tick", parents=[config_parent], help="one-shot tick (cron)")
+    sub.add_parser("status", parents=[config_parent], help="service + filter health")
+    p_tail = sub.add_parser("tail", parents=[config_parent], help="tail log")
     p_tail.add_argument("-n", type=int, default=50)
-    p_esc = sub.add_parser("escalate", help="manually mark issue permanent escalation")
+    p_esc = sub.add_parser("escalate", parents=[config_parent], help="manually mark issue permanent escalation")
     p_esc.add_argument("--issue", required=True)
-    p_unesc = sub.add_parser("unescalate", help="clear escalation")
+    p_unesc = sub.add_parser("unescalate", parents=[config_parent], help="clear escalation")
     p_unesc.add_argument("--issue", required=True)
     return parser
 
