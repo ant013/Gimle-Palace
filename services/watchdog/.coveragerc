@@ -1,0 +1,13 @@
+[run]
+source = gimle_watchdog
+branch = true
+
+[report]
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
+    subprocess.run\(\[.launchctl.
+    subprocess.run\(\[.systemctl.
+    if sys.platform == .win32.:
+    raise NotImplementedError
+precision = 1

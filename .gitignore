@@ -44,3 +44,4 @@ Justfile.local
 
 # paperclips/dist is committed (role bundles for deploy) — negate the Node dist/ rule above
 !paperclips/dist/
+services/watchdog/.venv/
