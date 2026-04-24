@@ -129,17 +129,17 @@ def test_latest_ingest_run_no_source_filter() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_project_slug_query_uses_name() -> None:
-    """Runner GET_PROJECT matches on p.name (Graphiti EntityNode name field), not p.slug.
+def test_project_slug_query_uses_slug() -> None:
+    """Runner GET_PROJECT matches on p.slug (the unique merge key), not p.name.
 
-    Per spec §3.10: :Project nodes are stored as Graphiti EntityNodes where
-    EntityNode.name = slug. The runner's local GET_PROJECT must use {name: $slug}.
+    UPSERT_PROJECT uses MERGE on {slug: $slug}; p.name is a separate display
+    field. Matching on {name: $slug} would always miss — OpusArchitectReviewer
+    Finding 1 (Phase 3.2).
     """
     from palace_mcp.extractors.runner import GET_PROJECT
 
-    assert "name: $slug" in GET_PROJECT or "{name: $slug}" in GET_PROJECT, (
-        "Runner GET_PROJECT must match on {name: $slug}. "
-        "Graphiti EntityNode stores slug in EntityNode.name field. "
+    assert "slug: $slug" in GET_PROJECT or "{slug: $slug}" in GET_PROJECT, (
+        "Runner GET_PROJECT must match on {slug: $slug}. "
         f"Query: {GET_PROJECT!r}"
     )
 

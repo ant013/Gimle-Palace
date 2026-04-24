@@ -38,8 +38,7 @@ from palace_mcp.memory.projects import InvalidSlug, validate_slug
 REPOS_ROOT = Path("/repos")
 EXTRACTOR_TIMEOUT_S = 300.0
 
-# :Project node stores slug in EntityNode.name (per spec §3.10).
-GET_PROJECT = "MATCH (p:Project {name: $slug}) RETURN p"
+GET_PROJECT = "MATCH (p:Project {slug: $slug}) RETURN p"
 
 
 # --- precheck ---
