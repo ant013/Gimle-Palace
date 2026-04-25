@@ -87,7 +87,10 @@ class TestCodebaseMemoryBinary:
 
     def test_codebase_memory_mcp_binary_from_env(self) -> None:
         """codebase_memory_mcp_binary reads from CODEBASE_MEMORY_MCP_BINARY env var."""
-        env = {**_BASE_ENV, "CODEBASE_MEMORY_MCP_BINARY": "/usr/local/bin/codebase-memory-mcp"}
+        env = {
+            **_BASE_ENV,
+            "CODEBASE_MEMORY_MCP_BINARY": "/usr/local/bin/codebase-memory-mcp",
+        }
         with patch.dict(os.environ, env, clear=True):
             from palace_mcp.config import Settings
 
