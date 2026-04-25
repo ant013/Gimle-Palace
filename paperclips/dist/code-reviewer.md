@@ -98,6 +98,30 @@ When a prod bug is found and fixed:
 
 Turns "we missed it again" → "we physically can't miss it again".
 
+## MCP wire-contract test (integration test rule)
+
+Any tool registered via `@mcp.tool` / `register_X_tools` that crosses the
+MCP wire boundary (callable from external MCP clients like Claude Code)
+MUST have at least one test that:
+
+1. Spawns a test FastMCP instance bound to a localhost port (or the
+   palace-mcp container)
+2. Connects via `streamablehttp_client` / SSE / actual MCP HTTP client
+3. Calls `tools/list` — asserts the tool appears with correct `inputSchema`
+4. Calls `tools/call` with FLAT arguments (not nested
+   `{arguments: {...}}`) — asserts non-empty result on a known-good case
+5. Calls `tools/call` with WRONG argument shape — asserts proper error
+
+Mocks at the FastMCP signature-binding level (e.g. mocking `call_tool`
+directly, calling `_forward()` programmatically) DO NOT count as MCP
+integration tests. They test the implementation, not the contract.
+
+### CR enforcement (Phase 3.1)
+
+If a PR adds or modifies an `@mcp.tool` or passthrough decorator, CR MUST
+verify there is an integration test file with `streamablehttp_client` or
+equivalent real MCP HTTP client. If absent, REQUEST CHANGES.
+
 ## Compliance checklist
 
 Walk **mechanically** through every PR. Every item — `[x]` with citation, `[ ]` with BLOCKER, or `[N/A]` with reason. Skipping = invalid review.

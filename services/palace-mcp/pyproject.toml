@@ -34,6 +34,9 @@ dev-dependencies = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+markers = [
+    "integration: tests requiring external services (Neo4j, running MCP server)",
+]
 
 [tool.mypy]
 strict = true
