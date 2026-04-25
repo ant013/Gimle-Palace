@@ -21,6 +21,6 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr
     palace_default_group_id: str = "project/gimle"
     codebase_memory_mcp_binary: str = ""
-    palace_ops_host: str = "imac-ssh.ant013.work"
-    palace_ops_ssh_key: str = "/home/appuser/.ssh/id_ed25519"
+    palace_ops_host: str = "host.docker.internal"
+    palace_ops_ssh_key: str = "/home/appuser/.ssh/palace_ops_id_ed25519"
     paperclip_api_url: str = "http://host.docker.internal:3100"

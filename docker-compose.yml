@@ -36,8 +36,8 @@ services:
       NEO4J_PASSWORD: "${NEO4J_PASSWORD}"
       OPENAI_API_KEY: "${OPENAI_API_KEY}"
       CODEBASE_MEMORY_MCP_BINARY: "${CODEBASE_MEMORY_MCP_BINARY:-}"
-      PALACE_OPS_HOST: "${PALACE_OPS_HOST:-imac-ssh.ant013.work}"
-      PALACE_OPS_SSH_KEY: "${PALACE_OPS_SSH_KEY:-/home/appuser/.ssh/id_ed25519}"
+      PALACE_OPS_HOST: "${PALACE_OPS_HOST:-host.docker.internal}"
+      PALACE_OPS_SSH_KEY: "${PALACE_OPS_SSH_KEY:-/home/appuser/.ssh/palace_ops_id_ed25519}"
       PAPERCLIP_API_URL: "${PAPERCLIP_API_URL:-http://host.docker.internal:3100}"
     depends_on:
       neo4j:
@@ -48,6 +48,8 @@ services:
       - /Users/Shared/Ios/Gimle-Palace:/repos/gimle:ro
       - codebase-memory-cache:/home/appuser/.cache/codebase-memory-mcp
       - "${HOME}/.ssh/id_ed25519:/home/appuser/.ssh/id_ed25519:ro"
+      - "${HOME}/.ssh/palace_ops_id_ed25519:/home/appuser/.ssh/palace_ops_id_ed25519:ro"
+      - "${HOME}/.ssh/palace_ops_id_ed25519.pub:/home/appuser/.ssh/palace_ops_id_ed25519.pub:ro"
       - "${HOME}/.ssh/known_hosts:/home/appuser/.ssh/known_hosts:ro"
       - "${HOME}/.ssh/config:/home/appuser/.ssh/config:ro"
     networks:
