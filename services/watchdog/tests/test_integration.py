@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from gimle_watchdog import daemon
+from gimle_watchdog import daemon, detection as det
 from gimle_watchdog.config import (
     CompanyConfig,
     Config,
@@ -31,7 +31,13 @@ def _cfg(base_url: str, tmp_path: Path) -> Config:
             CompanyConfig(
                 id="9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64",
                 name="gimle",
-                thresholds=Thresholds(died_min=3, hang_etime_min=60, hang_cpu_max_s=30),
+                thresholds=Thresholds(
+                    died_min=3,
+                    hang_etime_min=60,
+                    hang_cpu_max_s=None,
+                    idle_cpu_ratio_max=0.005,
+                    hang_stream_idle_max_s=300,
+                ),
             )
         ],
         daemon=DaemonConfig(poll_interval_seconds=120),
@@ -97,3 +103,64 @@ async def test_tick_escalates_and_comments_end_to_end(mock_paperclip, tmp_path):
         await client.aclose()
     assert state.is_escalated("issue-2")
     assert any("issue-2" in iid for iid, _ in mpc_state.comments_posted)
+
+
+# --- GIM-80 idle-hang detection integration tests ----------------------------
+
+
+def test_real_idle_proc_classified_as_hang(tmp_path: Path) -> None:
+    """A process with very low CPU/etime ratio is classified as hang."""
+    import unittest.mock as _mock
+
+    # Build ps-like output for a fake idle process
+    # etime=2h, cpu=1s → ratio ≈ 0.000139 → well below 0.005 threshold
+    ps_text = (
+        "  PID     ELAPSED        TIME COMMAND\n"
+        "99991    2:00:00     0:00:01 /usr/bin/claude --append-system-prompt-file /tmp/paperclip-skills-xxx --add-dir /tmp\n"
+    )
+    with _mock.patch.object(det, "last_stream_event_age_seconds", return_value=None):
+        hangs = det.parse_ps_output(ps_text, etime_min_s=3600, idle_cpu_ratio_max=0.005, hang_stream_idle_max_s=300)
+    assert len(hangs) == 1
+    assert hangs[0].pid == 99991
+    assert hangs[0].cpu_ratio < 0.005
+
+
+def test_real_active_proc_not_classified(tmp_path: Path) -> None:
+    """A process with high CPU ratio is NOT classified as hang."""
+    import unittest.mock as _mock
+
+    # etime=2h, cpu=10min → ratio = 600/7200 ≈ 0.083 → above 0.005
+    ps_text = (
+        "  PID     ELAPSED        TIME COMMAND\n"
+        "99992    2:00:00     0:10:00 /usr/bin/claude --append-system-prompt-file /tmp/paperclip-skills-xxx --add-dir /tmp\n"
+    )
+    with _mock.patch.object(det, "last_stream_event_age_seconds", return_value=None):
+        hangs = det.parse_ps_output(ps_text, etime_min_s=3600, idle_cpu_ratio_max=0.005, hang_stream_idle_max_s=300)
+    assert hangs == []
+
+
+def test_stream_stall_detected(tmp_path: Path) -> None:
+    """last_stream_event_age_seconds returns correct age for a stale log file (via mock path)."""
+    import os
+    import time
+    import unittest.mock as _mock
+
+    log_file = tmp_path / "stream.jsonl"
+    log_file.write_text('{"event": "token"}\n')
+    past_mtime = time.time() - 400  # 400s ago
+    os.utime(log_file, (past_mtime, past_mtime))
+
+    # Patch last_stream_event_age_seconds to use our temp file via subprocess mock
+    # We directly validate the stat-based age by calling it with a controlled log path
+    with _mock.patch("subprocess.run") as mock_run:
+        # Simulate lsof returning our temp file as a .jsonl file
+        mock_run.return_value = _mock.MagicMock(
+            stdout=f"n{log_file}\n",
+            returncode=0,
+        )
+        import sys as _sys
+        if _sys.platform != "darwin":
+            pytest.skip("lsof path only tested on macOS")
+        age = det.last_stream_event_age_seconds(99999)
+    assert age is not None
+    assert 390 <= age <= 420  # ~400s old
