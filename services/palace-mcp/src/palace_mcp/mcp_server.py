@@ -457,4 +457,4 @@ async def _palace_git_ls_tree(
 # palace.code.* — codebase-memory pass-through tools
 # ---------------------------------------------------------------------------
 
-register_code_tools(_tool)
+register_code_tools(_tool, _mcp)
