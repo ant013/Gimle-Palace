@@ -65,7 +65,7 @@ SET p.group_id            = 'project/' + $slug,
 RETURN p
 """
 
-LIST_PROJECT_SLUGS = "MATCH (p:Project) RETURN p.slug AS slug ORDER BY slug"
+LIST_PROJECT_SLUGS = "MATCH (p:Project) RETURN p.name AS slug ORDER BY slug"
 
 LIST_PROJECTS = "MATCH (p:Project) RETURN p ORDER BY p.slug"
 

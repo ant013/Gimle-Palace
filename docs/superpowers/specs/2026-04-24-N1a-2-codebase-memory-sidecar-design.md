@@ -1,12 +1,22 @@
 ---
 slug: N1a-2-codebase-memory-sidecar
-status: proposed
+status: SUPERSEDED by 2026-04-25-N1a-2-codebase-memory-cm-stdio-rev2.md
 branch: feature/GIM-76-codebase-memory-sidecar (to be cut from develop once umbrella lands)
 paperclip_issue: 76 (9917ad4d-102f-4c81-afcd-22a9a6c71881)
 parent_umbrella: 74
 predecessor: 67d42dc (develop tip)
 date: 2026-04-24
 ---
+
+> **SUPERSEDED 2026-04-25.** This rev1 spec assumed `codebase-memory-mcp` v0.6.0
+> exposes an HTTP/JSON-RPC endpoint and runs as a separate compose service. Phase 4.1
+> live smoke (commit `18def9c`) revealed the binary is **stdio-only** — there is
+> no HTTP server, no listening port, immediate exit when stdin is closed. The
+> transport assumption was never verified in the rev1 spike. See
+> `2026-04-25-N1a-2-codebase-memory-cm-stdio-rev2.md` for the corrected
+> architecture (in-process subprocess via MCP SDK stdio_client). PE pre-emptively
+> shipped the rev2 architecture in commit `de3f30c` before the spec was written;
+> rev2 is the post-hoc canonicalization.
 
 # N+1a.2 — Codebase-Memory sidecar and `palace.code.*` pass-through
 
@@ -56,6 +66,8 @@ services:
     ports:
       # Only expose via internal network; DO NOT bind to host in MVP.
       # For debugging, operator can uncomment: - "127.0.0.1:8765:8765"
+    mem_limit: 2g
+    cpus: 1.5
     healthcheck:
       test: ["CMD", "codebase-memory-mcp", "--health"]
       interval: 30s
@@ -64,6 +76,8 @@ services:
       start_period: 20s
     restart: unless-stopped
 
+  # NOTE: neo4j is pulled into code-graph profile implicitly via palace-mcp's
+  # existing depends_on: neo4j. No separate profile entry needed for neo4j.
   palace-mcp:
     # ... existing config ...
     profiles: [review, analyze, full, code-graph]   # add code-graph
@@ -84,11 +98,19 @@ volumes:
 `services/palace-mcp/src/palace_mcp/code_router.py`:
 
 ```python
-from fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP
 import httpx
-from pydantic import BaseModel
+from palace_mcp.config import Settings
 
 CM_URL = settings.codebase_memory_mcp_url
+
+# Module-level long-lived httpx client, injected via set_cm_client()
+# from FastAPI lifespan (same DI pattern as set_driver() for Neo4j).
+_cm_client: httpx.AsyncClient | None = None
+
+def set_cm_client(client: httpx.AsyncClient) -> None:
+    global _cm_client
+    _cm_client = client
 
 # Tools enabled as pass-through:
 _ENABLED_CM_TOOLS = [
@@ -101,14 +123,20 @@ _ENABLED_CM_TOOLS = [
     "search_code",
 ]
 
-# Tools explicitly disabled:
+# Tools explicitly disabled (with rationale):
 _DISABLED_CM_TOOLS = {
     "manage_adr": (
-        "palace.code.manage_adr is disabled: :Decision in palace.memory is the "
+        "palace.code.manage_adr is disabled. Decision in palace.memory is the "
         "authoritative ADR store. Use palace.memory.lookup Decision {...} to read "
         "and a future palace.memory.decide(...) to write."
     ),
 }
+
+# CM tools NOT routed (with rationale for omission):
+# - index_repository, index_config, reindex_file, create_checkpoint:
+#     Indexing is operator-controlled, not agent-facing. Manual via CLI.
+# - get_graph_schema: Internal CM schema introspection, no agent use case.
+# - ingest_traces: Trace ingestion is out-of-scope for this slice.
 
 def register_code_tools(mcp: FastMCP) -> None:
     for tool_name in _ENABLED_CM_TOOLS:
@@ -120,24 +148,26 @@ def _register_passthrough(mcp: FastMCP, tool_name: str) -> None:
     """Expose `palace.code.<tool_name>` that forwards the call to CM."""
     @mcp.tool(name=f"palace.code.{tool_name}")
     async def _forward(**kwargs) -> dict:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                CM_URL,
-                json={
-                    "jsonrpc": "2.0",
-                    "method": f"tools/call",
-                    "params": {"name": tool_name, "arguments": kwargs},
-                    "id": 1,
-                },
-            )
-            response.raise_for_status()
-            return response.json()["result"]
+        assert _cm_client is not None, "CM client not initialized; call set_cm_client() in lifespan"
+        response = await _cm_client.post(
+            CM_URL,
+            json={
+                "jsonrpc": "2.0",
+                "method": "tools/call",
+                "params": {"name": tool_name, "arguments": kwargs},
+                "id": 1,
+            },
+        )
+        response.raise_for_status()
+        return response.json()["result"]
 
 def _register_disabled_tool(mcp: FastMCP, tool_name: str, message: str) -> None:
     @mcp.tool(name=f"palace.code.{tool_name}")
     async def _blocked(**kwargs) -> dict:
         return {"error": message, "hint": "See spec §3.2 of N+1a.2 for rationale."}
 ```
+
+**DI pattern:** `set_cm_client()` is called from FastAPI lifespan (same pattern as `set_driver()` for Neo4j in `mcp_server.py`). The `httpx.AsyncClient` is long-lived with `base_url` and `timeout=30.0` configured at creation. This avoids per-request client instantiation overhead.
 
 **Rationale for not `mcp.mount(other_server)`:** FastMCP supports server composition, but we want explicit per-tool allow-list (for `manage_adr` denial and future per-tool rate limiting / auditing). A router with explicit tool registration is clearer to audit.
 
@@ -156,7 +186,7 @@ def _register_disabled_tool(mcp: FastMCP, tool_name: str, message: str) -> None:
 
 ## 4. Tasks
 
-0. **Verify CM MCP tool schemas** — before writing router code, run `codebase-memory-mcp cli get_graph_schema` and `codebase-memory-mcp --help` against the pinned image in a throwaway container. Record actual parameter names (critically `index_repository: repo_path` — **NOT** `path`). Update `docs/research/codebase-memory-0-28-spike.md` if drift from the pre-design spike is found.
+0. **Verify CM MCP tool schemas and transport** — before writing router code, run `codebase-memory-mcp cli get_graph_schema` and `codebase-memory-mcp --help` against the pinned image in a throwaway container. Record actual parameter names (critically `index_repository: repo_path` — **NOT** `path`). **Explicitly verify the MCP transport type** (HTTP-SSE on port 8765, or stdio, or streamable-HTTP) and record the endpoint path in the spike doc — the router's `httpx.post()` target depends on this. Update `docs/research/codebase-memory-0-28-spike.md` if drift from the pre-design spike is found.
 1. Decide image source — published tag or vendored tarball — in operator discussion before Phase 2.
 2. Add `codebase-memory-mcp` service to `docker-compose.yml` under `code-graph` profile.
 3. Add `CODEBASE_MEMORY_MCP_URL` env var to palace-mcp service.
@@ -201,6 +231,9 @@ Fixture: spawn `codebase-memory-mcp` binary as subprocess on an ephemeral port; 
 - `test_end_to_end_search_graph` — `palace.code.search_graph(name_pattern="main")` returns at least one node.
 - `test_end_to_end_trace_call_path` — for a known Python call in the sandbox repo, `palace.code.trace_call_path` returns the expected chain.
 - `test_end_to_end_get_code_snippet` — for a known symbol, `get_code_snippet` returns source body matching the on-disk file.
+- `test_end_to_end_query_graph` — `palace.code.query_graph(cypher="MATCH (n) RETURN count(n)")` returns a non-error numeric result.
+- `test_end_to_end_detect_changes` — `palace.code.detect_changes()` returns a dict (may be empty on a freshly-indexed repo, but must not error).
+- `test_end_to_end_search_code` — `palace.code.search_code(pattern="def main")` returns at least one result matching the sandbox repo's `main` function.
 - `test_end_to_end_manage_adr_blocked` — attempting `palace.code.manage_adr` returns the directive error.
 
 ### 6.3 Live smoke on iMac
