@@ -39,7 +39,8 @@ services:
       PALACE_OPS_HOST: "${PALACE_OPS_HOST:-host.docker.internal}"
       PALACE_OPS_SSH_USER: "${PALACE_OPS_SSH_USER:-anton}"
       PALACE_OPS_SSH_KEY: "${PALACE_OPS_SSH_KEY:-/home/appuser/.ssh/palace_ops_id_ed25519}"
-      PAPERCLIP_API_URL: "${PAPERCLIP_API_URL:-http://host.docker.internal:3100}"
+      PAPERCLIP_API_URL: "${PALACE_PAPERCLIP_API_URL:-http://host.docker.internal:3100}"
+      PAPERCLIP_API_KEY: "${PAPERCLIP_API_KEY:-}"
     depends_on:
       neo4j:
         condition: service_healthy

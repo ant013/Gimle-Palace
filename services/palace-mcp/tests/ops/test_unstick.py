@@ -54,6 +54,7 @@ _LOCKED_AT_90MIN = (
 def _make_kwargs(
     *,
     api_url: str = "http://localhost:3100",
+    api_key: str = "test-api-key",
     ops_host: str = "local",
     ssh_key: str = "/home/appuser/.ssh/palace_ops_id_ed25519",
     ssh_user: str = "anton",
@@ -71,6 +72,7 @@ def _make_kwargs(
         ssh_key=ssh_key,
         ssh_user=ssh_user,
         api_url=api_url,
+        api_key=api_key,
         graphiti=graphiti,
         group_id=group_id,
     )

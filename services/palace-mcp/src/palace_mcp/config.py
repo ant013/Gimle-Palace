@@ -25,3 +25,4 @@ class Settings(BaseSettings):
     palace_ops_ssh_key: str = "/home/appuser/.ssh/palace_ops_id_ed25519"
     palace_ops_ssh_user: str = "anton"
     paperclip_api_url: str = "http://host.docker.internal:3100"
+    paperclip_api_key: str = ""

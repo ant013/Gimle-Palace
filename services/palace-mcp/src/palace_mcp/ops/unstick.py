@@ -198,11 +198,13 @@ async def _get_execution_run_id(
     return str(value) if value is not None else None
 
 
-async def _poll_until_cleared(api_url: str, issue_id: str, timeout_sec: int) -> bool:
-    loop = asyncio.get_event_loop()
-    deadline = loop.time() + timeout_sec
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        while loop.time() < deadline:
+async def _poll_until_cleared(
+    api_url: str, api_key: str, issue_id: str, timeout_sec: int
+) -> bool:
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    deadline = asyncio.get_event_loop().time() + timeout_sec
+    async with httpx.AsyncClient(timeout=10.0, headers=headers) as client:
+        while asyncio.get_event_loop().time() < deadline:
             run_id = await _get_execution_run_id(client, api_url, issue_id)
             if run_id is None:
                 return True
@@ -257,13 +259,15 @@ async def unstick_issue(
     ssh_key: str,
     ssh_user: str,
     api_url: str,
+    api_key: str = "",
     graphiti: Graphiti | None,
     group_id: str,
 ) -> dict[str, Any]:
     """Force-release a paperclip issue stuck on a stale executionRunId."""
 
     # Step 1 — read current lock state
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    auth_headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    async with httpx.AsyncClient(timeout=10.0, headers=auth_headers) as client:
         resp = await client.get(f"{api_url}/api/issues/{issue_id}")
         resp.raise_for_status()
         issue_data = resp.json()
@@ -338,7 +342,7 @@ async def unstick_issue(
         }
 
     # Step 4 — poll for lock clear
-    cleared = await _poll_until_cleared(api_url, issue_id, timeout_sec)
+    cleared = await _poll_until_cleared(api_url, api_key, issue_id, timeout_sec)
 
     # Step 5 — audit episode (best-effort; must not block kill outcome)
     outcome = "killed" if cleared else "killed_lock_not_released"
@@ -363,7 +367,7 @@ async def unstick_issue(
         }
 
     # Check for respawn (new run on same issue)
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=10.0, headers=auth_headers) as client:
         new_run_id = await _get_execution_run_id(client, api_url, issue_id)
     if new_run_id is not None and new_run_id != stale_run_id:
         return {

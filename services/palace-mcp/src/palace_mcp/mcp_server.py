@@ -504,6 +504,7 @@ async def palace_ops_unstick_issue(
         ssh_key=_settings.palace_ops_ssh_key,
         ssh_user=_settings.palace_ops_ssh_user,
         api_url=_settings.paperclip_api_url,
+        api_key=_settings.paperclip_api_key,
         graphiti=_graphiti,
         group_id=_default_group_id,
     )
