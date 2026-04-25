@@ -83,13 +83,60 @@ class TestCodeGraphIntegration:
         _set_cm_session(cm_session)
         mcp = FastMCP("test")
         stub_tool = lambda name, desc: mcp.tool(name=name, description=desc)  # noqa: E731
-        register_code_tools(stub_tool)
-        tool = next(
-            t
-            for t in mcp._tool_manager.list_tools()
-            if t.name == "palace.code.manage_adr"
+        register_code_tools(stub_tool, mcp)
+        result = await mcp.call_tool("palace.code.manage_adr", {})
+        if isinstance(result, tuple):
+            structured = result[1]
+            assert "error" in structured
+            assert "palace.memory" in structured["error"]
+        else:
+            import json as _json
+
+            parsed = _json.loads(result[0].text)
+            assert "error" in parsed
+            assert "palace.memory" in parsed["error"]
+        _set_cm_session(None)
+
+    async def test_router_flat_args_reach_cm(self, cm_session: ClientSession) -> None:
+        """palace.code.search_graph with flat args (no double-nesting) returns results.
+
+        Regression test for GIM-89: **kwargs signature must propagate flat args
+        through FastMCP binding all the way to the CM subprocess.
+        """
+        from mcp.server.fastmcp import FastMCP
+
+        from palace_mcp.code_router import _set_cm_session, register_code_tools
+
+        _set_cm_session(cm_session)
+        mcp = FastMCP("test")
+        stub_tool = lambda name, desc: mcp.tool(name=name, description=desc)  # noqa: E731
+        register_code_tools(stub_tool, mcp)
+
+        # Call through FastMCP's full pipeline with flat args (GIM-89 regression).
+        result = await mcp.call_tool(
+            "palace.code.search_graph", {"name_pattern": "main"}
         )
-        result = await tool.run(arguments={})
-        assert "error" in result
-        assert "palace.memory" in result["error"]
+        assert result is not None
+
+        _set_cm_session(None)
+
+    async def test_disabled_tool_accepts_any_args(
+        self, cm_session: ClientSession
+    ) -> None:
+        """palace.code.manage_adr returns directive regardless of args passed."""
+        from mcp.server.fastmcp import FastMCP
+
+        from palace_mcp.code_router import _set_cm_session, register_code_tools
+
+        _set_cm_session(cm_session)
+        mcp = FastMCP("test")
+        stub_tool = lambda name, desc: mcp.tool(name=name, description=desc)  # noqa: E731
+        register_code_tools(stub_tool, mcp)
+
+        # Should not raise "unexpected argument" regardless of what args are passed.
+        result = await mcp.call_tool(
+            "palace.code.manage_adr", {"some_arg": "some_value"}
+        )
+        assert result is not None
+
         _set_cm_session(None)
