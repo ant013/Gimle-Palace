@@ -31,7 +31,7 @@ def build_graphiti(settings: Settings) -> Graphiti:
     pass an explicit OpenAIClient stub; writes go through add_triplet which
     does not invoke LLM, so the stub is never called on the hot path.
 
-    Embedder IS invoked on EntityNode.save for name_embedding — real key required.
+    Embedder must be called explicitly via generate_name_embedding() before save() — real key required.
     """
     api_key = settings.openai_api_key.get_secret_value()
     llm_stub = OpenAIClient(config=LLMConfig(api_key=api_key))
@@ -58,11 +58,15 @@ async def ensure_graphiti_schema(g: Graphiti) -> None:
 
 async def save_entity_node(g: Graphiti, node: EntityNode) -> None:
     """Persist an EntityNode. Stable contract for extractors — never touch g.driver directly."""
+    if node.name_embedding is None:
+        await node.generate_name_embedding(g.embedder)
     await node.save(g.driver)
 
 
 async def save_entity_edge(g: Graphiti, edge: EntityEdge) -> None:
     """Persist an EntityEdge. Stable contract for extractors."""
+    if edge.fact_embedding is None:
+        await edge.generate_embedding(g.embedder)
     await edge.save(g.driver)
 
 
