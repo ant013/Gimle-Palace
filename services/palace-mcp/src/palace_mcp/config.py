@@ -16,17 +16,8 @@ class Settings(BaseSettings):
     """Runtime settings for the palace-mcp FastAPI service."""
 
     neo4j_uri: str = "bolt://neo4j:7687"
+    neo4j_user: str = "neo4j"
     neo4j_password: SecretStr
+    openai_api_key: SecretStr
     palace_default_group_id: str = "project/gimle"
-
-
-class IngestSettings(BaseSettings):
-    """Runtime settings for the palace-mcp ingest CLI."""
-
-    neo4j_uri: str = "bolt://neo4j:7687"
-    neo4j_password: SecretStr
-
-    paperclip_api_url: str
-    paperclip_ingest_api_key: SecretStr
-    paperclip_company_id: str
-    palace_default_group_id: str = "project/gimle"
+    codebase_memory_mcp_binary: str = ""

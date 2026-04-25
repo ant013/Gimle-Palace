@@ -14,27 +14,25 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def _mock_ensure_extractors_schema() -> None:
-    """Isolate startup-hardening tests from extractor schema bootstrap.
-
-    These tests verify ensure_schema (memory constraints) fire-and-forget
-    behavior, not extractor schema. The dedicated test_ensure_extractors_schema
-    integration suite covers that path.
-    """
-    with patch(
-        "palace_mcp.main.ensure_extractors_schema",
-        new_callable=AsyncMock,
+def _mock_graphiti_runtime() -> None:
+    """Isolate startup-hardening tests from graphiti-core and extractor schema."""
+    mock_graphiti = MagicMock()
+    with (
+        patch("palace_mcp.main.build_graphiti", return_value=mock_graphiti),
+        patch("palace_mcp.main.ensure_graphiti_schema", new_callable=AsyncMock),
+        patch("palace_mcp.main.close_graphiti", new_callable=AsyncMock),
+        patch("palace_mcp.main.ensure_extractors_schema", new_callable=AsyncMock),
     ):
         yield  # type: ignore[misc]
 
 
 @pytest.fixture(autouse=True)
 def _stub_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Settings requires NEO4J_PASSWORD with no default. Tests that
-    exercise ``lifespan`` must have it present in env so the ``Settings()``
-    construction in ``main.lifespan`` does not raise ValidationError.
+    """Settings requires NEO4J_PASSWORD + OPENAI_API_KEY. Tests that
+    exercise ``lifespan`` must have both present in env.
     """
     monkeypatch.setenv("NEO4J_PASSWORD", "test-pw")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
 
 
 class TestFireAndForgetConstraints:

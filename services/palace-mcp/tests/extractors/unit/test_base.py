@@ -1,4 +1,4 @@
-"""Unit tests for BaseExtractor ABC + ExtractionContext + ExtractorStats + errors.
+"""Unit tests for BaseExtractor ABC + ExtractorRunContext + ExtractorStats + errors.
 
 Per spec §3.2 — validates the contract independently of Neo4j.
 """
@@ -7,15 +7,16 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import MagicMock
 
 import pytest
+from graphiti_core import Graphiti
 
 from palace_mcp.extractors.base import (
     BaseExtractor,
-    ExtractionContext,
     ExtractorConfigError,
     ExtractorError,
+    ExtractorRunContext,
     ExtractorRuntimeError,
     ExtractorStats,
 )
@@ -27,7 +28,7 @@ def test_base_extractor_abstract_cannot_instantiate() -> None:
         BaseExtractor()  # type: ignore[abstract]
 
 
-def test_subclass_without_name_and_extract_fails() -> None:
+def test_subclass_without_name_and_run_fails() -> None:
     """Subclass missing abstract members cannot be instantiated."""
 
     class Incomplete(BaseExtractor):
@@ -38,13 +39,15 @@ def test_subclass_without_name_and_extract_fails() -> None:
 
 
 def test_valid_subclass_instantiates() -> None:
-    """Subclass with name + extract instantiates."""
+    """Subclass with name + run instantiates."""
 
     class MyExtractor(BaseExtractor):
         name = "my_ext"
         description = "test"
 
-        async def extract(self, ctx: ExtractionContext) -> ExtractorStats:
+        async def run(
+            self, *, graphiti: Graphiti, ctx: ExtractorRunContext
+        ) -> ExtractorStats:
             return ExtractorStats()
 
     e = MyExtractor()
@@ -54,14 +57,14 @@ def test_valid_subclass_instantiates() -> None:
     assert e.indexes == []
 
 
-def test_extraction_context_frozen() -> None:
-    """ExtractionContext is immutable (frozen dataclass)."""
-    ctx = ExtractionContext(
-        driver=AsyncMock(),
+def test_extractor_run_context_frozen() -> None:
+    """ExtractorRunContext is immutable (frozen dataclass)."""
+    ctx = ExtractorRunContext(
         project_slug="test",
         group_id="project/test",
         repo_path=Path("/repos/test"),
         run_id="abc-123",
+        duration_ms=0,
         logger=logging.getLogger("test"),
     )
     with pytest.raises(Exception):  # FrozenInstanceError
@@ -90,3 +93,7 @@ def test_extractor_error_codes() -> None:
     assert ExtractorError.error_code == "extractor_error"
     assert ExtractorConfigError.error_code == "extractor_config_error"
     assert ExtractorRuntimeError.error_code == "extractor_runtime_error"
+
+
+# Suppress unused import warning — MagicMock used in frozen test
+_ = MagicMock

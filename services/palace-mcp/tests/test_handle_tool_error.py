@@ -70,9 +70,9 @@ def test_recovery_hint_unknown_entity_type() -> None:
     exc = UnknownEntityTypeError("Ticket")
     hint = _recovery_hint(exc)
     assert "Ticket" in hint
-    assert "Issue" in hint
-    assert "Comment" in hint
-    assert "Agent" in hint
+    assert "Episode" in hint
+    assert "Symbol" in hint
+    assert "File" in hint
 
 
 def test_recovery_hint_invalid_filter() -> None:

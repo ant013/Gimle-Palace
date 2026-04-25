@@ -1,7 +1,7 @@
 """Tests for memory/constraints.py.
 
-Static (unit) tests run always. Integration tests marked @pytest.mark.integration
-require NEO4J_PASSWORD env var and a reachable Neo4j instance — skipped otherwise.
+Integration tests marked @pytest.mark.integration require NEO4J_PASSWORD env var
+and a reachable Neo4j instance — skipped otherwise.
 """
 
 from __future__ import annotations
@@ -12,20 +12,6 @@ from typing import Any
 import pytest
 
 from palace_mcp.memory.constraints import ensure_schema
-from palace_mcp.memory.cypher import BACKFILL_GROUP_ID
-
-
-def test_backfill_has_where_is_null_guard() -> None:
-    assert "WHERE n.group_id IS NULL" in BACKFILL_GROUP_ID
-
-
-def test_backfill_covers_all_four_labels() -> None:
-    for label in ("Issue", "Comment", "Agent", "IngestRun"):
-        assert f"(n:{label})" in BACKFILL_GROUP_ID
-
-
-def test_backfill_parameterises_default() -> None:
-    assert "$default" in BACKFILL_GROUP_ID
 
 
 # ---------------------------------------------------------------------------
@@ -113,14 +99,12 @@ async def test_ensure_schema_bootstrap_idempotent(live_driver: Any) -> None:
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_ensure_schema_fails_on_unregistered_group_id(live_driver: Any) -> None:
-    """If any Issue/Comment/Agent/IngestRun has a group_id with no :Project,
-    ensure_schema raises a clear error."""
+    """If any Graphiti entity has a group_id with no :Project, ensure_schema raises."""
     from palace_mcp.memory.constraints import SchemaIntegrityError
 
     async with live_driver.session() as s:
         await s.run(
-            "CREATE (:Issue {id: 'stray-t4', group_id: 'project/unregistered-t4', "
-            "source: 'paperclip', palace_last_seen_at: '1970'})"
+            "CREATE (:Episode {uuid: 'stray-t4', group_id: 'project/unregistered-t4'})"
         )
 
     try:
@@ -128,4 +112,4 @@ async def test_ensure_schema_fails_on_unregistered_group_id(live_driver: Any) ->
             await ensure_schema(live_driver, default_group_id="project/test-bootstrap")
     finally:
         async with live_driver.session() as s:
-            await s.run("MATCH (n {id: 'stray-t4'}) DETACH DELETE n")
+            await s.run("MATCH (n:Episode {uuid: 'stray-t4'}) DETACH DELETE n")

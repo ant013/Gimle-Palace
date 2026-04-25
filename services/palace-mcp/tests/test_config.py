@@ -9,12 +9,13 @@ from unittest.mock import patch
 
 from pydantic import SecretStr
 
+_BASE_ENV = {"NEO4J_PASSWORD": "test-pw", "OPENAI_API_KEY": "sk-test"}
+
 
 class TestSettings:
     def test_neo4j_uri_default(self) -> None:
         """NEO4J_URI absent → bolt://neo4j:7687 default, no KeyError."""
-        env = {"NEO4J_PASSWORD": "test-pw"}
-        with patch.dict(os.environ, env, clear=True):
+        with patch.dict(os.environ, _BASE_ENV, clear=True):
             from palace_mcp.config import Settings
 
             s = Settings()
@@ -22,7 +23,7 @@ class TestSettings:
 
     def test_neo4j_uri_from_env(self) -> None:
         """NEO4J_URI present → picked up from env."""
-        env = {"NEO4J_URI": "bolt://myhost:7688", "NEO4J_PASSWORD": "pw"}
+        env = {**_BASE_ENV, "NEO4J_URI": "bolt://myhost:7688"}
         with patch.dict(os.environ, env, clear=True):
             from palace_mcp.config import Settings
 
@@ -31,7 +32,7 @@ class TestSettings:
 
     def test_password_is_secret_str(self) -> None:
         """neo4j_password is SecretStr — repr masks the value."""
-        env = {"NEO4J_PASSWORD": "hunter2"}
+        env = {**_BASE_ENV, "NEO4J_PASSWORD": "hunter2"}
         with patch.dict(os.environ, env, clear=True):
             from palace_mcp.config import Settings
 
@@ -40,61 +41,24 @@ class TestSettings:
         assert "hunter2" not in repr(s)
         assert s.neo4j_password.get_secret_value() == "hunter2"
 
-
-class TestIngestSettings:
-    def test_all_required_fields_read(self) -> None:
-        """IngestSettings reads all required fields from env."""
-        env = {
-            "NEO4J_PASSWORD": "pw",
-            "PAPERCLIP_API_URL": "http://localhost:3000",
-            "PAPERCLIP_INGEST_API_KEY": "key123",
-            "PAPERCLIP_COMPANY_ID": "comp-1",
-        }
-        with patch.dict(os.environ, env, clear=True):
-            from palace_mcp.config import IngestSettings
-
-            s = IngestSettings()
-        assert s.neo4j_uri == "bolt://neo4j:7687"  # default
-        assert s.paperclip_api_url == "http://localhost:3000"
-        assert s.paperclip_ingest_api_key.get_secret_value() == "key123"
-        assert s.paperclip_company_id == "comp-1"
-
-    def test_ingest_api_key_is_secret_str(self) -> None:
-        """PAPERCLIP_INGEST_API_KEY is SecretStr — masked in repr."""
-        env = {
-            "NEO4J_PASSWORD": "pw",
-            "PAPERCLIP_API_URL": "http://localhost:3000",
-            "PAPERCLIP_INGEST_API_KEY": "supersecret",
-            "PAPERCLIP_COMPANY_ID": "comp-1",
-        }
-        with patch.dict(os.environ, env, clear=True):
-            from palace_mcp.config import IngestSettings
-
-            s = IngestSettings()
-        assert isinstance(s.paperclip_ingest_api_key, SecretStr)
-        assert "supersecret" not in repr(s)
-
-
-class TestGroupId:
-    def test_palace_default_group_id_defaults_to_project_gimle(self) -> None:
-        env = {"NEO4J_PASSWORD": "x"}
+    def test_openai_api_key_is_secret_str(self) -> None:
+        """openai_api_key is SecretStr — repr masks the value."""
+        env = {**_BASE_ENV, "OPENAI_API_KEY": "sk-my-secret"}
         with patch.dict(os.environ, env, clear=True):
             from palace_mcp.config import Settings
 
             s = Settings()
-        assert s.palace_default_group_id == "project/gimle"
+        assert isinstance(s.openai_api_key, SecretStr)
+        assert "sk-my-secret" not in repr(s)
+        assert s.openai_api_key.get_secret_value() == "sk-my-secret"
 
-    def test_ingest_palace_default_group_id_defaults_to_project_gimle(self) -> None:
-        env = {
-            "NEO4J_PASSWORD": "x",
-            "PAPERCLIP_API_URL": "http://test",
-            "PAPERCLIP_INGEST_API_KEY": "k",
-            "PAPERCLIP_COMPANY_ID": "test-co",
-        }
-        with patch.dict(os.environ, env, clear=True):
-            from palace_mcp.config import IngestSettings
 
-            s = IngestSettings()
+class TestGroupId:
+    def test_palace_default_group_id_defaults_to_project_gimle(self) -> None:
+        with patch.dict(os.environ, _BASE_ENV, clear=True):
+            from palace_mcp.config import Settings
+
+            s = Settings()
         assert s.palace_default_group_id == "project/gimle"
 
     def test_palace_default_group_id_overridable_via_env(
@@ -106,6 +70,29 @@ class TestGroupId:
 
         monkeypatch.setenv("PALACE_DEFAULT_GROUP_ID", "project/other")
         monkeypatch.setenv("NEO4J_PASSWORD", "x")
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-x")
         importlib.reload(cfg_mod)
         s = cfg_mod.Settings()
         assert s.palace_default_group_id == "project/other"
+
+
+class TestCodebaseMemoryBinary:
+    def test_codebase_memory_mcp_binary_defaults_empty(self) -> None:
+        """codebase_memory_mcp_binary defaults to empty string when env var unset."""
+        with patch.dict(os.environ, _BASE_ENV, clear=True):
+            from palace_mcp.config import Settings
+
+            s = Settings()
+        assert s.codebase_memory_mcp_binary == ""
+
+    def test_codebase_memory_mcp_binary_from_env(self) -> None:
+        """codebase_memory_mcp_binary reads from CODEBASE_MEMORY_MCP_BINARY env var."""
+        env = {
+            **_BASE_ENV,
+            "CODEBASE_MEMORY_MCP_BINARY": "/usr/local/bin/codebase-memory-mcp",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            from palace_mcp.config import Settings
+
+            s = Settings()
+        assert s.codebase_memory_mcp_binary == "/usr/local/bin/codebase-memory-mcp"

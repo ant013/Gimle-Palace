@@ -1,44 +1,43 @@
 from palace_mcp.memory.filters import resolve_filters
 
 
-def test_issue_known_keys_pass_through() -> None:
+def test_episode_known_keys_pass_through() -> None:
     where_clauses, params, unknown = resolve_filters(
-        "Issue",
-        {
-            "key": "GIM-23",
-            "status": "done",
-            "source_updated_at_gte": "2026-04-01T00:00:00Z",
-        },
+        "Episode",
+        {"kind": "heartbeat", "source": "extractor.heartbeat"},
     )
-    assert "n.key = $key" in where_clauses
-    assert "n.status = $status" in where_clauses
-    assert "n.source_updated_at >= $source_updated_at_gte" in where_clauses
-    assert params == {
-        "key": "GIM-23",
-        "status": "done",
-        "source_updated_at_gte": "2026-04-01T00:00:00Z",
-    }
+    assert "n.kind = $kind" in where_clauses
+    assert "n.source = $source" in where_clauses
+    assert params == {"kind": "heartbeat", "source": "extractor.heartbeat"}
     assert unknown == []
 
 
-def test_issue_unknown_key_returned_separately() -> None:
+def test_episode_unknown_key_returned_separately() -> None:
     where_clauses, params, unknown = resolve_filters(
-        "Issue", {"key": "GIM-23", "bogus": "x"}
+        "Episode", {"kind": "heartbeat", "bogus": "x"}
     )
     assert unknown == ["bogus"]
     assert "bogus" not in params
 
 
-def test_issue_assignee_name_joins_via_agent() -> None:
+def test_symbol_filter_keys() -> None:
     where_clauses, params, unknown = resolve_filters(
-        "Issue", {"assignee_name": "CodeReviewer"}
+        "Symbol",
+        {"kind": "function", "name": "build_graphiti", "file_path": "src/x.py"},
     )
-    # assignee_name uses a relationship traversal — marked as a special "join" clause.
-    assert any("ASSIGNED_TO" in c for c in where_clauses)
-    assert params["assignee_name"] == "CodeReviewer"
+    assert "n.kind = $kind" in where_clauses
+    assert "n.name = $name" in where_clauses
+    assert "n.file_path = $file_path" in where_clauses
+    assert unknown == []
 
 
-def test_agent_whitelist_enforced() -> None:
-    _, params, unknown = resolve_filters("Agent", {"name": "X", "foo": "bar"})
-    assert "name" in params
+def test_finding_severity_filter() -> None:
+    _, params, unknown = resolve_filters("Finding", {"severity": "high", "foo": "bar"})
+    assert "severity" in params
     assert unknown == ["foo"]
+
+
+def test_model_has_no_filters_all_unknown() -> None:
+    _, params, unknown = resolve_filters("Model", {"anything": "x"})
+    assert params == {}
+    assert unknown == ["anything"]
