@@ -716,60 +716,70 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
             extra: dict[str, Any] = {"cm_edge_id": f"{slug}:{edge_id}"}
 
             if rel_type.startswith("CONTAINS"):
-                pending_edges.append(make_contains(
-                    group_id=ctx.group_id,
-                    source_uuid=src_node.uuid,
-                    target_uuid=tgt_node.uuid,
-                    fact="contains",
-                    extractor=tag,
-                    extractor_version=ver,
-                    extra=extra,
-                ))
+                pending_edges.append(
+                    make_contains(
+                        group_id=ctx.group_id,
+                        source_uuid=src_node.uuid,
+                        target_uuid=tgt_node.uuid,
+                        fact="contains",
+                        extractor=tag,
+                        extractor_version=ver,
+                        extra=extra,
+                    )
+                )
                 inc_e("CONTAINS")
             elif rel_type == "DEFINES":
-                pending_edges.append(make_defines(
-                    group_id=ctx.group_id,
-                    source_uuid=src_node.uuid,
-                    target_uuid=tgt_node.uuid,
-                    fact="defines",
-                    extractor=tag,
-                    extractor_version=ver,
-                    extra=extra,
-                ))
+                pending_edges.append(
+                    make_defines(
+                        group_id=ctx.group_id,
+                        source_uuid=src_node.uuid,
+                        target_uuid=tgt_node.uuid,
+                        fact="defines",
+                        extractor=tag,
+                        extractor_version=ver,
+                        extra=extra,
+                    )
+                )
                 inc_e("DEFINES")
             elif rel_type == "CALLS":
-                pending_edges.append(make_calls(
-                    group_id=ctx.group_id,
-                    source_uuid=src_node.uuid,
-                    target_uuid=tgt_node.uuid,
-                    fact="calls",
-                    extractor=tag,
-                    extractor_version=ver,
-                    extra=extra,
-                ))
+                pending_edges.append(
+                    make_calls(
+                        group_id=ctx.group_id,
+                        source_uuid=src_node.uuid,
+                        target_uuid=tgt_node.uuid,
+                        fact="calls",
+                        extractor=tag,
+                        extractor_version=ver,
+                        extra=extra,
+                    )
+                )
                 inc_e("CALLS")
             elif rel_type == "IMPORTS":
-                pending_edges.append(make_imports(
-                    group_id=ctx.group_id,
-                    source_uuid=src_node.uuid,
-                    target_uuid=tgt_node.uuid,
-                    fact="imports",
-                    extractor=tag,
-                    extractor_version=ver,
-                    extra=extra,
-                ))
+                pending_edges.append(
+                    make_imports(
+                        group_id=ctx.group_id,
+                        source_uuid=src_node.uuid,
+                        target_uuid=tgt_node.uuid,
+                        fact="imports",
+                        extractor=tag,
+                        extractor_version=ver,
+                        extra=extra,
+                    )
+                )
                 inc_e("IMPORTS")
             elif rel_type == "HANDLES":
-                pending_edges.append(make_handles(
-                    group_id=ctx.group_id,
-                    source_uuid=src_node.uuid,
-                    target_uuid=tgt_node.uuid,
-                    fact="handles",
-                    extractor=tag,
-                    extractor_version=ver,
-                    confidence=rel_conf,
-                    extra=extra,
-                ))
+                pending_edges.append(
+                    make_handles(
+                        group_id=ctx.group_id,
+                        source_uuid=src_node.uuid,
+                        target_uuid=tgt_node.uuid,
+                        fact="handles",
+                        extractor=tag,
+                        extractor_version=ver,
+                        confidence=rel_conf,
+                        extra=extra,
+                    )
+                )
                 inc_e("HANDLES")
 
         # Batch-embed and save: one embedding API call per 512 items instead of N serial calls.
