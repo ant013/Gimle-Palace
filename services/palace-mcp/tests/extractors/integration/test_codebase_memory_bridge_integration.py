@@ -67,10 +67,18 @@ def _fake_cm(
             assert got == _EXPECTED_CM_PROJECT, (
                 f"search_graph received project={got!r}, expected {_EXPECTED_CM_PROJECT!r}"
             )
+            # Filter by the requested label so each search_graph call only returns
+            # nodes that carry that label (mirrors real CM behaviour).
+            label_filter = args.get("label")
+            filtered = (
+                [n for n in nodes if label_filter in (n.get("labels") or [])]
+                if label_filter is not None
+                else nodes
+            )
             # Actual CM shape: {"results": [{"entity": {...}}, ...], "total": N}
             return {
-                "results": [{"entity": n} for n in nodes],
-                "total": len(nodes),
+                "results": [{"entity": n} for n in filtered],
+                "total": len(filtered),
                 "has_more": False,
             }
         if tool == "query_graph":
