@@ -76,20 +76,20 @@ class TestGroupId:
         assert s.palace_default_group_id == "project/other"
 
 
-class TestCodebaseMemoryUrl:
-    def test_codebase_memory_mcp_url_defaults_empty(self) -> None:
-        """codebase_memory_mcp_url defaults to empty string when env var unset."""
+class TestCodebaseMemoryBinary:
+    def test_codebase_memory_mcp_binary_defaults_empty(self) -> None:
+        """codebase_memory_mcp_binary defaults to empty string when env var unset."""
         with patch.dict(os.environ, _BASE_ENV, clear=True):
             from palace_mcp.config import Settings
 
             s = Settings()
-        assert s.codebase_memory_mcp_url == ""
+        assert s.codebase_memory_mcp_binary == ""
 
-    def test_codebase_memory_mcp_url_from_env(self) -> None:
-        """codebase_memory_mcp_url reads from CODEBASE_MEMORY_MCP_URL env var."""
-        env = {**_BASE_ENV, "CODEBASE_MEMORY_MCP_URL": "http://cm:8765/mcp"}
+    def test_codebase_memory_mcp_binary_from_env(self) -> None:
+        """codebase_memory_mcp_binary reads from CODEBASE_MEMORY_MCP_BINARY env var."""
+        env = {**_BASE_ENV, "CODEBASE_MEMORY_MCP_BINARY": "/usr/local/bin/codebase-memory-mcp"}
         with patch.dict(os.environ, env, clear=True):
             from palace_mcp.config import Settings
 
             s = Settings()
-        assert s.codebase_memory_mcp_url == "http://cm:8765/mcp"
+        assert s.codebase_memory_mcp_binary == "/usr/local/bin/codebase-memory-mcp"
