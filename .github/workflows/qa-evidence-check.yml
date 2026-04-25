@@ -18,9 +18,13 @@ jobs:
             echo "Label 'micro-slice' present — QA evidence waived."
             exit 0
           fi
-          if echo "$BODY" | grep -q '^## QA Evidence'; then
+          # Normalize literal-\n to real newlines (paperclip CTO agent
+          # bug, GIM-86) so awk extraction works whether the body was
+          # opened correctly or with bash-escaped newlines.
+          NORMALIZED=$(printf '%s' "$BODY" | python3 -c 'import sys; print(sys.stdin.read().replace(r"\n", "\n"))')
+          if echo "$NORMALIZED" | grep -q '^## QA Evidence'; then
             echo "QA Evidence section detected."
-            SECTION=$(echo "$BODY" | awk '/^## QA Evidence/{found=1; next} found && /^## /{exit} found')
+            SECTION=$(echo "$NORMALIZED" | awk '/^## QA Evidence/{found=1; next} found && /^## /{exit} found')
             if echo "$SECTION" | grep -qE '[0-9a-f]{7,40}'; then
               echo "Commit SHA reference found in QA Evidence section."
               exit 0
