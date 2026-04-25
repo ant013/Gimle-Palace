@@ -23,6 +23,7 @@ from palace_mcp.mcp_server import (
     set_default_group_id,
     set_driver,
     set_graphiti,
+    set_settings,
 )
 from palace_mcp.memory.constraints import ensure_schema
 from palace_mcp.memory.logging_setup import configure_json_logging
@@ -63,6 +64,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.graphiti = graphiti
     set_driver(driver)
     set_graphiti(graphiti)
+    set_settings(settings)
     set_default_group_id(settings.palace_default_group_id)
     if settings.codebase_memory_mcp_binary:
         await start_cm_subprocess(settings.codebase_memory_mcp_binary)

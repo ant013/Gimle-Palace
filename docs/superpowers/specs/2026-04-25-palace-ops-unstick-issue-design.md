@@ -45,6 +45,7 @@ async def unstick_issue(
     issue_id: str,
     *,
     dry_run: bool = False,
+    force: bool = False,
     timeout_sec: int = 90,
 ) -> dict:
     """Force-release a paperclip issue stuck on a stale executionRunId.
@@ -86,23 +87,30 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ```yaml
 palace-mcp:
   # ... existing ...
+  extra_hosts:
+    - "host.docker.internal:host-gateway"   # enables container → host API access
   volumes:
     # ... existing ...
-    - "${HOME}/.ssh/id_ed25519:/root/.ssh/id_ed25519:ro"
-    - "${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts:ro"
-    - "${HOME}/.ssh/config:/root/.ssh/config:ro"   # only if cloudflared ProxyCommand entry needs to be visible
+    - "${HOME}/.ssh/id_ed25519:/home/appuser/.ssh/id_ed25519:ro"
+    - "${HOME}/.ssh/known_hosts:/home/appuser/.ssh/known_hosts:ro"
+    - "${HOME}/.ssh/config:/home/appuser/.ssh/config:ro"   # only if cloudflared ProxyCommand entry needs to be visible
   environment:
     # ... existing ...
     PALACE_OPS_HOST: "${PALACE_OPS_HOST:-imac-ssh.ant013.work}"
+    PAPERCLIP_API_URL: "${PAPERCLIP_API_URL:-http://host.docker.internal:3100}"
 ```
 
 **Notes:**
 - Mount is **read-only** (`:ro`) — defense in depth.
-- The SSH key file path is parameterized via env var (e.g. `PALACE_OPS_SSH_KEY=/root/.ssh/id_ed25519`).
+- The SSH key file path is parameterized via env var (e.g. `PALACE_OPS_SSH_KEY=/home/appuser/.ssh/id_ed25519`).
 - For deployments where the host runs **on the same machine** as palace-mcp (no SSH needed), `PALACE_OPS_HOST=local` short-circuits SSH and execs `ps` / `kill` directly. Decide between these two modes via `PALACE_OPS_HOST` value at config-load time.
 - `cloudflared access ssh` is invoked via `ProxyCommand` declared in mounted `~/.ssh/config`. Verify cloudflared binary is reachable inside container — if not, add `cloudflared` to the Dockerfile too. **Task 0 verifies which mode (cloudflared vs direct) the production iMac uses.**
 
 For non-iMac deployments — same contract, just different `PALACE_OPS_HOST`.
+
+**Paperclip API access from container:** The tool reads issue state and polls for lock clearing via the paperclip API. Since palace-mcp runs on the Docker bridge network, `127.0.0.1:3100` (host-local paperclip) is unreachable. Use `extra_hosts: ["host.docker.internal:host-gateway"]` in compose and `PAPERCLIP_API_URL=http://host.docker.internal:3100` env var. The tool must read `PAPERCLIP_API_URL` from config, not hardcode localhost.
+
+**Async subprocess discipline:** All SSH/ps/kill subprocess calls must use `asyncio.create_subprocess_exec`, not `subprocess.run` — the tool runs inside an async MCP handler and blocking the event loop would stall all concurrent MCP operations.
 
 ### 3.4 Safety guards
 
@@ -121,7 +129,7 @@ For non-iMac deployments — same contract, just different `PALACE_OPS_HOST`.
 0. **Spike on iMac** — (a) SSH from operator laptop, inspect a live paperclip run; correlate `executionRunId` from API with `paperclip-skills-XXXXXX` temp dir suffix in `ps` output. Document the link in `docs/research/paperclip-run-id-pid-correlation.md`. If no deterministic correlation found — drop strict heuristic, document as such. (b) Verify whether the iMac SSH endpoint requires `cloudflared access ssh` ProxyCommand, or accepts direct OpenSSH. Document in same spike file. (c) Decide whether `palace-mcp` container needs `cloudflared` binary installed alongside `openssh-client` — record verdict.
 1. **Extend `services/palace-mcp/Dockerfile`** to install `openssh-client` (and `cloudflared` if Task 0(c) says so).
 2. **Extend `docker-compose.yml`** palace-mcp service: read-only mounts of `${HOME}/.ssh/id_ed25519`, `${HOME}/.ssh/known_hosts`, `${HOME}/.ssh/config`; new env vars `PALACE_OPS_HOST` and `PALACE_OPS_SSH_KEY`.
-3. **Add to `config.py`** `Settings`: `palace_ops_host: str = "imac-ssh.ant013.work"`, `palace_ops_ssh_key: str = "/root/.ssh/id_ed25519"`. Add `.env.example` lines.
+3. **Add to `config.py`** `Settings`: `palace_ops_host: str = "imac-ssh.ant013.work"`, `palace_ops_ssh_key: str = "/home/appuser/.ssh/id_ed25519"`, `paperclip_api_url: str = "http://host.docker.internal:3100"`. Add `.env.example` lines.
 4. Create `services/palace-mcp/src/palace_mcp/ops/unstick.py` with the algorithm.
 5. Register MCP tool `palace.ops.unstick_issue` via `_tool()` wrapper (per `mcp_server.py:120-123` Pattern #21).
 6. Audit-log episode write — depends on GIM-75 helpers `save_entity_node` from `graphiti_runtime.py`. **Wrap in try/except**: if Graphiti is unreachable (Neo4j down) the kill must still proceed; log a stderr warning instead of failing the tool.
@@ -138,6 +146,7 @@ For non-iMac deployments — same contract, just different `PALACE_OPS_HOST`.
 - `test_unstick_strict_heuristic_matches_run_id` — fixture `ps` output containing matching paperclip-skills temp dir.
 - `test_unstick_permissive_fallback_when_strict_empty` — strict match empty → permissive returns idle candidates with `confidence: "permissive"`.
 - `test_unstick_refuses_more_than_five_candidates_without_force` — 6 candidates → returns error unless `force=True`.
+- `test_unstick_local_mode_no_ssh` — `PALACE_OPS_HOST=local` → uses direct `asyncio.create_subprocess_exec` for `ps`/`kill` without SSH wrapper.
 - `test_unstick_writes_audit_episode` — graphiti mock captures `:Episode{kind="ops.unstick_issue"}` with metadata envelope.
 - `test_unstick_returns_lock_not_released_when_timeout` — paperclip API returns same executionRunId for entire poll window → `{ok: False, error: "lock_not_released"}`.
 
