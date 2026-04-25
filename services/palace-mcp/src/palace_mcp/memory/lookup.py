@@ -30,6 +30,19 @@ logger = logging.getLogger(__name__)
 _RELATED_FRAGMENTS: dict[EntityType, str] = {}
 
 
+def _serialize_props(props: dict[str, Any]) -> dict[str, Any]:
+    """Convert neo4j temporal/spatial types to JSON-safe primitives."""
+    out: dict[str, Any] = {}
+    for k, v in props.items():
+        if hasattr(v, "iso_format"):
+            out[k] = v.iso_format()
+        elif isinstance(v, (list, tuple)):
+            out[k] = [x.iso_format() if hasattr(x, "iso_format") else x for x in v]
+        else:
+            out[k] = v
+    return out
+
+
 def _build_query(
     entity_type: EntityType, where_clauses: list[str], order_by: str, limit: int
 ) -> str:
@@ -86,7 +99,7 @@ async def perform_lookup(
     items: list[LookupResponseItem] = []
     for row in rows:
         node = row["node"]
-        props = dict(node)
+        props = _serialize_props(dict(node))
         node_id = props.get("uuid") or props.get("id", "")
         props.pop("group_id", None)
         items.append(

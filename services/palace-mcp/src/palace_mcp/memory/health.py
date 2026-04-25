@@ -21,9 +21,38 @@ from palace_mcp.memory.cypher import (
     LATEST_INGEST_RUN,
     LIST_PROJECT_SLUGS,
 )
-from palace_mcp.memory.schema import HealthResponse
+from palace_mcp.memory.schema import BridgeHealthInfo, HealthResponse
 
 logger = logging.getLogger(__name__)
+
+
+_BRIDGE_STALENESS_THRESHOLD_S: float = 600.0  # 2× 5-min MVP interval
+
+
+def _build_bridge_health(default_project: str) -> BridgeHealthInfo | None:
+    """Read bridge state file and compute health fields."""
+    from datetime import datetime, timezone
+
+    from palace_mcp.extractors.codebase_memory_bridge import _load_state
+
+    state = _load_state(default_project)
+    if not state.last_run_at:
+        return None
+    try:
+        last_run_dt = datetime.fromisoformat(state.last_run_at)
+    except ValueError:
+        return None
+    now = datetime.now(timezone.utc)
+    freshness_sec = (now - last_run_dt).total_seconds()
+    staleness = freshness_sec > _BRIDGE_STALENESS_THRESHOLD_S
+    return BridgeHealthInfo(
+        last_run_at=state.last_run_at,
+        last_run_duration_ms=state.last_run_duration_ms,
+        nodes_written_by_type=state.nodes_written_by_type,
+        edges_written_by_type=state.edges_written_by_type,
+        cm_index_freshness_sec=freshness_sec,
+        staleness_warning=staleness,
+    )
 
 
 async def get_health(driver: AsyncDriver, *, default_group_id: str) -> HealthResponse:
@@ -38,6 +67,7 @@ async def get_health(driver: AsyncDriver, *, default_group_id: str) -> HealthRes
             neo4j_reachable=False,
             entity_counts={},
             code_graph_reachable=code_graph_reachable,
+            bridge=None,
         )
 
     async def _read(
@@ -83,6 +113,7 @@ async def get_health(driver: AsyncDriver, *, default_group_id: str) -> HealthRes
     git_unregistered = sorted(set(git_available) - set(slugs))
 
     default_project = default_group_id.removeprefix("project/")
+    bridge_health = _build_bridge_health(default_project)
     return HealthResponse(
         neo4j_reachable=True,
         entity_counts=entity_counts,
@@ -96,4 +127,5 @@ async def get_health(driver: AsyncDriver, *, default_group_id: str) -> HealthRes
         git_repos_available=git_available,
         git_repos_unregistered=git_unregistered,
         code_graph_reachable=code_graph_reachable,
+        bridge=bridge_health,
     )

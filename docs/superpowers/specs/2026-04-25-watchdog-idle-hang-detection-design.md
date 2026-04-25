@@ -110,11 +110,7 @@ companies:
       hang_cpu_max_s: 30             # DEPRECATED — keep for one release with backward-compat read; warn in log
 ```
 
-Backward-compat:
-- If `idle_cpu_ratio_max` **absent** AND `hang_cpu_max_s` present: raise `ConfigError` with migration instructions. Forces operator to explicitly set the new key — no silent auto-translation.
-- If **both** `idle_cpu_ratio_max` and `hang_cpu_max_s` present: log a `DeprecationWarning` for `hang_cpu_max_s`, ignore its value, use `idle_cpu_ratio_max`.
-- If only `idle_cpu_ratio_max` present: normal path (no warning).
-- Rationale: hard-error on missing new key prevents silent behavior change and ensures operator explicitly opts in to the new ratio semantics.
+Backward-compat: if `hang_cpu_max_s` present in config, log a deprecation warning and ignore it (don't auto-translate — operator should explicitly choose ratio).
 
 ## 4. Tasks
 
