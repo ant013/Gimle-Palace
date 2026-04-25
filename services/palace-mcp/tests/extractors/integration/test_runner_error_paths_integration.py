@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
+from graphiti_core import Graphiti
 from neo4j import AsyncDriver
 
 from palace_mcp.extractors import registry
 from palace_mcp.extractors.base import (
     BaseExtractor,
-    ExtractionContext,
     ExtractorConfigError,
+    ExtractorRunContext,
     ExtractorStats,
 )
 from palace_mcp.extractors.heartbeat import HeartbeatExtractor
@@ -23,10 +24,12 @@ from palace_mcp.extractors.schema import ensure_extractors_schema
 class _FailingExtractor(BaseExtractor):
     name = "__integration_failing"
     description = "raises ExtractorConfigError"
-    constraints: list[str] = []
-    indexes: list[str] = []
+    constraints = []
+    indexes = []
 
-    async def extract(self, ctx: ExtractionContext) -> ExtractorStats:
+    async def run(
+        self, *, graphiti: Graphiti, ctx: ExtractorRunContext
+    ) -> ExtractorStats:
         raise ExtractorConfigError("test-triggered config error")
 
 
@@ -50,7 +53,10 @@ async def test_unknown_extractor_no_ingest_run_created(
         r1 = await s.run("MATCH (n:IngestRun) RETURN count(n) AS c")
         before = (await r1.single())["c"]
 
-    res = await run_extractor(name="does_not_exist", project="gimle", driver=driver)
+    graphiti = MagicMock(spec=Graphiti)
+    res = await run_extractor(
+        name="does_not_exist", project="gimle", driver=driver, graphiti=graphiti
+    )
     assert res["ok"] is False
     assert res["error_code"] == "unknown_extractor"
 
@@ -75,9 +81,13 @@ async def test_failing_extractor_finalizes_as_errored(
     repo.mkdir(parents=True)
     (repo / ".git").mkdir()
 
+    graphiti = MagicMock(spec=Graphiti)
     with patch("palace_mcp.extractors.runner.REPOS_ROOT", tmp_path / "repos"):
         res = await run_extractor(
-            name="__integration_failing", project="errtest", driver=driver
+            name="__integration_failing",
+            project="errtest",
+            driver=driver,
+            graphiti=graphiti,
         )
 
     assert res["ok"] is False

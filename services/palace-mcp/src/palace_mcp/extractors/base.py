@@ -1,9 +1,8 @@
-"""Extractor protocol — BaseExtractor ABC + ExtractionContext + errors.
+"""Extractor protocol — BaseExtractor ABC + ExtractorRunContext + errors.
 
-Contract for all palace-mcp extractors (spec §3.2). Extractors implement
-extract() and declare their Cypher constraints + indexes as class attributes.
-Framework (runner.py) handles :IngestRun lifecycle; extractor only writes
-its domain nodes/edges via ctx.driver.
+Contract for all palace-mcp extractors (spec §3.5). Extractors implement
+run(graphiti, ctx) and write domain nodes/edges via graphiti_runtime helpers.
+The runner orchestrator handles :IngestRun lifecycle via its own driver handle.
 """
 
 from __future__ import annotations
@@ -14,11 +13,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
-from neo4j import AsyncDriver
+from graphiti_core import Graphiti
 
 
 class BaseExtractor(ABC):
-    """Contract for an extractor. Subclass + implement extract()."""
+    """Contract for an extractor. Subclass + implement run()."""
 
     # Required class attributes
     name: ClassVar[str]
@@ -29,8 +28,10 @@ class BaseExtractor(ABC):
     indexes: ClassVar[list[str]] = []
 
     @abstractmethod
-    async def extract(self, ctx: ExtractionContext) -> ExtractorStats:
-        """Run the extractor. Write nodes/edges via ctx.driver.
+    async def run(
+        self, *, graphiti: Graphiti, ctx: ExtractorRunContext
+    ) -> ExtractorStats:
+        """Run the extractor. Write nodes/edges via graphiti_runtime helpers.
 
         Returns ExtractorStats with counts (for :IngestRun finalize).
         Raise ExtractorError subclass or any Exception on failure —
@@ -40,20 +41,20 @@ class BaseExtractor(ABC):
 
 
 @dataclass(frozen=True)
-class ExtractionContext:
-    """Per-run context passed by runner into extractor.extract()."""
+class ExtractorRunContext:
+    """Per-run context passed by runner into extractor.run()."""
 
-    driver: AsyncDriver
     project_slug: str
     group_id: str
     repo_path: Path
     run_id: str
+    duration_ms: int
     logger: logging.Logger
 
 
 @dataclass(frozen=True)
 class ExtractorStats:
-    """What extract() returns. Merged into :IngestRun for observability."""
+    """What run() returns. Merged into :IngestRun for observability."""
 
     nodes_written: int = 0
     edges_written: int = 0

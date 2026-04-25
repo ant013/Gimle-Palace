@@ -15,36 +15,35 @@ def test_lookup_request_rejects_unknown_entity_type() -> None:
 
 
 def test_lookup_request_limit_bounds() -> None:
-    LookupRequest(entity_type="Issue", limit=1)
-    LookupRequest(entity_type="Issue", limit=100)
+    LookupRequest(entity_type="Episode", limit=1)
+    LookupRequest(entity_type="Episode", limit=100)
     with pytest.raises(ValidationError):
-        LookupRequest(entity_type="Issue", limit=0)
+        LookupRequest(entity_type="Episode", limit=0)
     with pytest.raises(ValidationError):
-        LookupRequest(entity_type="Issue", limit=101)
+        LookupRequest(entity_type="Episode", limit=101)
 
 
 def test_lookup_response_item_related_accepts_none_dict_list() -> None:
     item = LookupResponseItem(
         id="abc",
-        type="Comment",
-        properties={"body": "..."},
-        related={"author": None, "issue": {"id": "i1"}, "comments": [{"id": "c1"}]},
+        type="Symbol",
+        properties={"name": "build_graphiti"},
+        related={"author": None, "callers": [{"id": "c1"}]},
     )
     assert item.related["author"] is None
-    assert isinstance(item.related["issue"], dict)
-    assert isinstance(item.related["comments"], list)
+    assert isinstance(item.related["callers"], list)
 
 
 def test_health_response_shape() -> None:
     h = HealthResponse(
         neo4j_reachable=True,
-        entity_counts={"Issue": 31, "Comment": 52, "Agent": 12},
+        entity_counts={"Episode": 31, "Symbol": 52, "File": 12},
         last_ingest_started_at="2026-04-17T06:00:00+00:00",
         last_ingest_finished_at="2026-04-17T06:00:02+00:00",
         last_ingest_duration_ms=2000,
         last_ingest_errors=[],
     )
-    assert h.entity_counts["Issue"] == 31
+    assert h.entity_counts["Episode"] == 31
 
 
 def test_lookup_response_shape() -> None:
