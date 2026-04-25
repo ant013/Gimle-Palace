@@ -55,10 +55,12 @@ async def _tick(cfg: Config, state: State, client: PaperclipClient) -> None:
     for proc in hanged:
         res = await actions.kill_hanged_proc(proc)
         log.warning(
-            "hang_killed pid=%d etime_s=%d cpu_s=%d status=%s",
+            "hang_killed pid=%d etime_s=%d cpu_s=%d cpu_ratio=%.4f stream_age_s=%s status=%s",
             proc.pid,
             proc.etime_s,
             proc.cpu_s,
+            proc.cpu_ratio,
+            proc.stream_event_age_s,
             res.status,
         )
     if hanged:
@@ -119,7 +121,7 @@ async def _run_one_iteration_for_test(cfg: Config, state: State, client: Papercl
         log.exception("tick_failed")
 
 
-async def run(cfg: Config, state: State, client: PaperclipClient) -> None:
+async def run(cfg: Config, state: State, client: PaperclipClient) -> None:  # pragma: no cover
     """Persistent loop — called by CLI `run` command in launchd/systemd mode."""
     while True:
         tick_started = _dt.datetime.now(_dt.timezone.utc)

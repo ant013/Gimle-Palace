@@ -19,6 +19,7 @@ from gimle_watchdog.state import State
 log = logging.getLogger("watchdog.cli")
 
 DEFAULT_CONFIG_PATH = Path("~/.paperclip/watchdog-config.yaml").expanduser()
+_DEFAULT_STATE_PATH = str(Path("~/.paperclip/watchdog-state.json").expanduser())
 PLIST_PATH = Path("~/Library/LaunchAgents/work.ant013.gimle-watchdog.plist").expanduser()
 SYSTEMD_UNIT_PATH = Path("~/.config/systemd/user/gimle-watchdog.service").expanduser()
 
@@ -40,8 +41,20 @@ def _build_parser() -> argparse.ArgumentParser:
     p_install.add_argument("--discover-companies", action="store_true")
 
     sub.add_parser("uninstall", parents=[config_parent], help="remove platform service")
-    sub.add_parser("run", parents=[config_parent], help="run daemon loop (launchd/systemd)")
-    sub.add_parser("tick", parents=[config_parent], help="one-shot tick (cron)")
+
+    p_run = sub.add_parser("run", parents=[config_parent], help="run daemon loop (launchd/systemd)")
+    p_run.add_argument(
+        "--debug-watchdog",
+        action="store_true",
+        help="scan once, print proc table, exit — no kill, no daemon loop",
+    )
+
+    p_tick = sub.add_parser("tick", parents=[config_parent], help="one-shot tick (cron)")
+    p_tick.add_argument(
+        "--debug-watchdog",
+        action="store_true",
+        help="scan once, print proc table, exit — no kill, no daemon loop",
+    )
     sub.add_parser("status", parents=[config_parent], help="service + filter health")
     p_tail = sub.add_parser("tail", parents=[config_parent], help="tail log")
     p_tail.add_argument("-n", type=int, default=50)
@@ -130,10 +143,30 @@ def _cmd_uninstall(args: argparse.Namespace) -> int:  # pragma: no cover
     return 0
 
 
+def _cmd_debug_watchdog(cfg_path: Path) -> int:
+    """Scan once, print candidate proc table, exit. No kill, no daemon loop."""
+    cfg = load_config(cfg_path)
+    procs = detection.scan_idle_hangs(cfg)
+    if not procs:
+        print("No candidate hanged procs found.")
+        return 0
+    header = f"{'PID':>8}  {'etime_s':>8}  {'cpu_s':>6}  {'cpu_ratio':>10}  {'stream_age_s':>12}  command"
+    print(header)
+    print("-" * len(header))
+    for p in procs:
+        stream_age = str(p.stream_event_age_s) if p.stream_event_age_s is not None else "n/a"
+        print(
+            f"{p.pid:>8}  {p.etime_s:>8}  {p.cpu_s:>6}  {p.cpu_ratio:>10.4f}  {stream_age:>12}  {p.command[:60]}"
+        )
+    return 0
+
+
 def _cmd_run(args: argparse.Namespace) -> int:  # pragma: no cover
+    if getattr(args, "debug_watchdog", False):
+        return _cmd_debug_watchdog(args.config)
     cfg = load_config(args.config)
     logger.setup_logging(cfg.logging)
-    state_path = Path("~/.paperclip/watchdog-state.json").expanduser()
+    state_path = Path(_DEFAULT_STATE_PATH)
     state = State.load(state_path)
     client = PaperclipClient(base_url=cfg.paperclip.base_url, api_key=cfg.paperclip.api_key or "")
 
@@ -148,9 +181,11 @@ def _cmd_run(args: argparse.Namespace) -> int:  # pragma: no cover
 
 
 def _cmd_tick(args: argparse.Namespace) -> int:  # pragma: no cover
+    if getattr(args, "debug_watchdog", False):
+        return _cmd_debug_watchdog(args.config)
     cfg = load_config(args.config)
     logger.setup_logging(cfg.logging)
-    state_path = Path("~/.paperclip/watchdog-state.json").expanduser()
+    state_path = Path(_DEFAULT_STATE_PATH)
     state = State.load(state_path)
     client = PaperclipClient(base_url=cfg.paperclip.base_url, api_key=cfg.paperclip.api_key or "")
 
@@ -166,7 +201,7 @@ def _cmd_tick(args: argparse.Namespace) -> int:  # pragma: no cover
 
 def _cmd_status(args: argparse.Namespace) -> int:
     cfg = load_config(args.config)
-    state_path = Path("~/.paperclip/watchdog-state.json").expanduser()
+    state_path = Path(_DEFAULT_STATE_PATH)
     state = State.load(state_path)
     try:
         result = subprocess.run(
@@ -205,7 +240,7 @@ def _cmd_tail(args: argparse.Namespace) -> int:
 
 
 def _cmd_escalate(args: argparse.Namespace) -> int:
-    state_path = Path("~/.paperclip/watchdog-state.json").expanduser()
+    state_path = Path(_DEFAULT_STATE_PATH)
     state = State.load(state_path)
     for _ in range(4):
         state.record_escalation(args.issue, "manual")
@@ -217,7 +252,7 @@ def _cmd_escalate(args: argparse.Namespace) -> int:
 
 
 def _cmd_unescalate(args: argparse.Namespace) -> int:
-    state_path = Path("~/.paperclip/watchdog-state.json").expanduser()
+    state_path = Path(_DEFAULT_STATE_PATH)
     state = State.load(state_path)
     state.force_unescalate(args.issue)
     state.save()

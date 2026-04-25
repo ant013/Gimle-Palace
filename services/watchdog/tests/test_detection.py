@@ -71,19 +71,30 @@ def test_parse_time_invalid_returns_zero():
 # --- parse_ps_output ------------------------------------------------------------
 
 
+def _parse_ps(
+    text: str, etime_min_s: int = 60 * 60, ratio: float = 0.005, stream_max: int = 300
+) -> list[det.HangedProc]:
+    """Helper: call parse_ps_output with last_stream_event_age_seconds mocked to None."""
+    import unittest.mock as _mock
+
+    with _mock.patch.object(det, "last_stream_event_age_seconds", return_value=None):
+        return det.parse_ps_output(text, etime_min_s, ratio, stream_max)
+
+
 def test_parse_ps_macos_finds_hangs():
     text = (FIXTURE_DIR / "ps_output_macos.txt").read_text()
-    # thresholds: etime >= 60 min, cpu <= 30 s
-    hangs = det.parse_ps_output(text, etime_min_s=60 * 60, cpu_max_s=30)
+    # pid 89879: etime=3967s, cpu=5s → ratio=5/3967≈0.00126 < 0.005 → idle
+    hangs = _parse_ps(text, etime_min_s=60 * 60, ratio=0.005)
     assert len(hangs) == 1
     assert hangs[0].pid == 89879
     assert hangs[0].etime_s == 3967
     assert hangs[0].cpu_s == 5
+    assert hangs[0].cpu_ratio == pytest.approx(5 / 3967, rel=1e-3)
 
 
 def test_parse_ps_linux_finds_hangs():
     text = (FIXTURE_DIR / "ps_output_linux.txt").read_text()
-    hangs = det.parse_ps_output(text, etime_min_s=60 * 60, cpu_max_s=30)
+    hangs = _parse_ps(text, etime_min_s=60 * 60, ratio=0.005)
     assert len(hangs) == 1
     assert hangs[0].pid == 89879
 
@@ -93,25 +104,129 @@ def test_parse_ps_skips_non_paperclip():
         "  PID     ELAPSED        TIME COMMAND\n"
         "99999    1:00:00     0:05.00 /usr/bin/some-other-process --flag\n"
     )
-    assert det.parse_ps_output(text, etime_min_s=60 * 60, cpu_max_s=30) == []
+    assert _parse_ps(text, etime_min_s=60 * 60) == []
 
 
 def test_parse_ps_skips_fresh_procs():
     text = (FIXTURE_DIR / "ps_output_macos.txt").read_text()
     # 91082 has etime 5:30 = 330s, well under 3600
-    hangs = det.parse_ps_output(text, etime_min_s=60 * 60, cpu_max_s=30)
+    hangs = _parse_ps(text, etime_min_s=60 * 60)
     pids = [h.pid for h in hangs]
     assert 91082 not in pids
 
 
 def test_parse_ps_skips_high_cpu_procs():
-    """A process with 65s CPU is not idle even if etime > threshold."""
+    """A process with high CPU ratio is not idle (ratio=65/7200≈0.009 > 0.005)."""
     text = (
         "  PID     ELAPSED        TIME COMMAND\n"
         "55555    2:00:00    00:01:05 /usr/bin/claude --append-system-prompt-file /tmp/paperclip-skills-abc --add-dir /tmp/paperclip-skills-abc\n"
     )
-    hangs = det.parse_ps_output(text, etime_min_s=60 * 60, cpu_max_s=30)
+    # cpu=65s, etime=7200s → ratio≈0.009 > 0.005 threshold
+    hangs = _parse_ps(text, etime_min_s=60 * 60, ratio=0.005)
     assert len(hangs) == 0
+
+
+# --- New GIM-80 detection tests ---------------------------------------------------
+
+
+def test_is_idle_hang_under_threshold_skips_young_proc():
+    """Proc with etime < etime_min is not classified as hang regardless of ratio."""
+    text = (
+        "  PID     ELAPSED        TIME COMMAND\n"
+        "11111      30:00     0:00.01 /usr/bin/claude --append-system-prompt-file /tmp/paperclip-skills-abc --add-dir /tmp/paperclip-skills-abc\n"
+    )
+    hangs = _parse_ps(text, etime_min_s=60 * 60, ratio=0.005)
+    assert hangs == []
+
+
+def test_is_idle_hang_high_etime_low_ratio_kills():
+    """Long-running proc with very low CPU ratio should be classified as hang."""
+    # etime=4h, cpu=2s → ratio = 2/14400 ≈ 0.000139 < 0.005
+    text = (
+        "  PID     ELAPSED        TIME COMMAND\n"
+        "22222    4:00:00     0:00:02 /usr/bin/claude --append-system-prompt-file /tmp/paperclip-skills-abc --add-dir /tmp/paperclip-skills-abc\n"
+    )
+    hangs = _parse_ps(text, etime_min_s=60 * 60, ratio=0.005)
+    assert len(hangs) == 1
+    assert hangs[0].pid == 22222
+    assert hangs[0].cpu_ratio == pytest.approx(2 / 14400, rel=1e-3)
+
+
+def test_is_idle_hang_high_etime_high_ratio_keeps():
+    """Long-running proc with high CPU ratio should NOT be classified as hang."""
+    # etime=2h, cpu=500s → ratio = 500/7200 ≈ 0.069 > 0.005
+    text = (
+        "  PID     ELAPSED        TIME COMMAND\n"
+        "33333    2:00:00     0:08:20 /usr/bin/claude --append-system-prompt-file /tmp/paperclip-skills-abc --add-dir /tmp/paperclip-skills-abc\n"
+    )
+    hangs = _parse_ps(text, etime_min_s=60 * 60, ratio=0.005)
+    assert hangs == []
+
+
+def test_is_stream_stalled_no_log_returns_false():
+    """When last_stream_event_age_seconds returns None, stream criterion is False."""
+    text = (
+        "  PID     ELAPSED        TIME COMMAND\n"
+        # high ratio so cpu criterion won't fire
+        "44444    2:00:00     0:08:20 /usr/bin/claude --append-system-prompt-file /tmp/paperclip-skills-abc --add-dir /tmp/paperclip-skills-abc\n"
+    )
+    import unittest.mock as _mock
+
+    with _mock.patch.object(det, "last_stream_event_age_seconds", return_value=None):
+        hangs = det.parse_ps_output(text, 60 * 60, 0.005, 300)
+    assert hangs == []
+
+
+def test_is_stream_stalled_recent_event_returns_false():
+    """Stream age below threshold → stream criterion is False."""
+    text = (
+        "  PID     ELAPSED        TIME COMMAND\n"
+        "55556    2:00:00     0:08:20 /usr/bin/claude --append-system-prompt-file /tmp/paperclip-skills-abc --add-dir /tmp/paperclip-skills-abc\n"
+    )
+    import unittest.mock as _mock
+
+    with _mock.patch.object(det, "last_stream_event_age_seconds", return_value=60):
+        hangs = det.parse_ps_output(text, 60 * 60, 0.005, 300)
+    assert hangs == []
+
+
+def test_is_stream_stalled_old_event_returns_true():
+    """Stream age above threshold → proc classified as hang even with high CPU ratio."""
+    text = (
+        "  PID     ELAPSED        TIME COMMAND\n"
+        # high ratio so cpu criterion alone wouldn't fire
+        "55557    2:00:00     0:08:20 /usr/bin/claude --append-system-prompt-file /tmp/paperclip-skills-abc --add-dir /tmp/paperclip-skills-abc\n"
+    )
+    import unittest.mock as _mock
+
+    with _mock.patch.object(det, "last_stream_event_age_seconds", return_value=600):
+        hangs = det.parse_ps_output(text, 60 * 60, 0.005, 300)
+    assert len(hangs) == 1
+    assert hangs[0].pid == 55557
+    assert hangs[0].stream_event_age_s == 600
+
+
+def test_is_hang_either_criterion_triggers():
+    """Either criterion alone is sufficient to classify a proc as hang."""
+    import unittest.mock as _mock
+
+    # Only stream criterion fires (high cpu ratio, stale stream)
+    text_high_cpu = (
+        "  PID     ELAPSED        TIME COMMAND\n"
+        "66666    2:00:00     0:08:20 /usr/bin/claude --append-system-prompt-file /tmp/paperclip-skills-abc --add-dir /tmp/paperclip-skills-abc\n"
+    )
+    with _mock.patch.object(det, "last_stream_event_age_seconds", return_value=600):
+        hangs = det.parse_ps_output(text_high_cpu, 60 * 60, 0.005, 300)
+    assert len(hangs) == 1
+
+    # Only cpu criterion fires (no stream log, low cpu ratio)
+    text_low_cpu = (
+        "  PID     ELAPSED        TIME COMMAND\n"
+        "77777    4:00:00     0:00:02 /usr/bin/claude --append-system-prompt-file /tmp/paperclip-skills-abc --add-dir /tmp/paperclip-skills-abc\n"
+    )
+    with _mock.patch.object(det, "last_stream_event_age_seconds", return_value=None):
+        hangs = det.parse_ps_output(text_low_cpu, 60 * 60, 0.005, 300)
+    assert len(hangs) == 1
 
 
 # --- scan_died_mid_work --------------------------------------------------------
@@ -128,7 +243,13 @@ def _make_config(died_min: int = 3, cooldowns: CooldownsConfig | None = None) ->
             CompanyConfig(
                 id="9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64",
                 name="gimle",
-                thresholds=Thresholds(died_min=died_min, hang_etime_min=60, hang_cpu_max_s=30),
+                thresholds=Thresholds(
+                    died_min=died_min,
+                    hang_etime_min=60,
+                    hang_cpu_max_s=None,
+                    idle_cpu_ratio_max=0.005,
+                    hang_stream_idle_max_s=300,
+                ),
             )
         ],
         daemon=DaemonConfig(poll_interval_seconds=120),
