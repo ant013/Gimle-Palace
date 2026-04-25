@@ -29,11 +29,16 @@ services:
     mem_limit: 512m
     cpus: "0.5"
     profiles: [review, analyze, full, code-graph]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       NEO4J_URI: "bolt://neo4j:7687"
       NEO4J_PASSWORD: "${NEO4J_PASSWORD}"
       OPENAI_API_KEY: "${OPENAI_API_KEY}"
       CODEBASE_MEMORY_MCP_BINARY: "${CODEBASE_MEMORY_MCP_BINARY:-}"
+      PALACE_OPS_HOST: "${PALACE_OPS_HOST:-imac-ssh.ant013.work}"
+      PALACE_OPS_SSH_KEY: "${PALACE_OPS_SSH_KEY:-/home/appuser/.ssh/id_ed25519}"
+      PAPERCLIP_API_URL: "${PAPERCLIP_API_URL:-http://host.docker.internal:3100}"
     depends_on:
       neo4j:
         condition: service_healthy
@@ -42,6 +47,9 @@ services:
     volumes:
       - /Users/Shared/Ios/Gimle-Palace:/repos/gimle:ro
       - codebase-memory-cache:/home/appuser/.cache/codebase-memory-mcp
+      - "${HOME}/.ssh/id_ed25519:/home/appuser/.ssh/id_ed25519:ro"
+      - "${HOME}/.ssh/known_hosts:/home/appuser/.ssh/known_hosts:ro"
+      - "${HOME}/.ssh/config:/home/appuser/.ssh/config:ro"
     networks:
       - paperclip-agent-net
     healthcheck:

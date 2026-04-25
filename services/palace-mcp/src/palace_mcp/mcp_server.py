@@ -21,6 +21,7 @@ Tools registered:
 - palace.code.get_code_snippet
 - palace.code.search_code
 - palace.code.manage_adr  [DISABLED — returns directive error]
+- palace.ops.unstick_issue
 """
 
 import logging
@@ -59,8 +60,10 @@ from palace_mcp.memory.project_tools import (
     register_project,
 )
 from palace_mcp.memory.projects import InvalidSlug, UnknownProjectError
+from palace_mcp.config import Settings
 from palace_mcp.memory.schema import HealthResponse as MemoryHealthResponse
 from palace_mcp.memory.schema import LookupRequest, LookupResponse, ProjectInfo
+from palace_mcp.ops.unstick import unstick_issue as _unstick_issue
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +74,9 @@ _driver: AsyncDriver | None = None
 
 # Module-level Graphiti instance — set by FastAPI lifespan before any request.
 _graphiti: Graphiti | None = None
+
+# Module-level Settings — set by FastAPI lifespan before any request.
+_settings: Settings | None = None
 
 # Default group_id for lookup scoping — set by lifespan from Settings.
 _default_group_id: str = "project/gimle"
@@ -121,6 +127,12 @@ def set_graphiti(graphiti: Graphiti) -> None:
     """Called from FastAPI lifespan to share the Graphiti instance with MCP tools."""
     global _graphiti  # noqa: PLW0603
     _graphiti = graphiti
+
+
+def set_settings(settings: Settings) -> None:
+    """Called from FastAPI lifespan to share Settings with MCP tools."""
+    global _settings  # noqa: PLW0603
+    _settings = settings
 
 
 def build_mcp_asgi_app() -> Starlette:
@@ -458,3 +470,39 @@ async def _palace_git_ls_tree(
 # ---------------------------------------------------------------------------
 
 register_code_tools(_tool, _mcp)
+
+
+# ---------------------------------------------------------------------------
+# palace.ops.* — operational tools
+# ---------------------------------------------------------------------------
+
+
+@_tool(
+    name="palace.ops.unstick_issue",
+    description=(
+        "Force-release a paperclip issue stuck on a stale executionRunId. "
+        "Discovers the blocking Claude subprocess on the host via SSH (or locally if "
+        "PALACE_OPS_HOST=local), sends SIGTERM, and polls for lock clearing. "
+        "Use dry_run=True first to inspect candidate PIDs before killing."
+    ),
+)
+async def palace_ops_unstick_issue(
+    issue_id: str,
+    dry_run: bool = False,
+    force: bool = False,
+    timeout_sec: int = 90,
+) -> dict[str, Any]:
+    """Release a stuck paperclip execution lock by killing the underlying subprocess."""
+    if _settings is None:
+        return {"ok": False, "error": "settings_unavailable"}
+    return await _unstick_issue(
+        issue_id,
+        dry_run=dry_run,
+        force=force,
+        timeout_sec=timeout_sec,
+        ops_host=_settings.palace_ops_host,
+        ssh_key=_settings.palace_ops_ssh_key,
+        api_url=_settings.paperclip_api_url,
+        graphiti=_graphiti,
+        group_id=_default_group_id,
+    )
