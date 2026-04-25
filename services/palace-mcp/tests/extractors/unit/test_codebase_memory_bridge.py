@@ -29,6 +29,7 @@ from palace_mcp.extractors.registry import EXTRACTORS
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _ctx(tmp_path: Path) -> ExtractorRunContext:
     return ExtractorRunContext(
         project_slug="test-proj",
@@ -61,7 +62,11 @@ def _make_cm_node(
     name: str = "foo",
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    base: dict[str, Any] = {"uuid": cm_id, "name": name, "qualified_name": f"proj.{name}"}
+    base: dict[str, Any] = {
+        "uuid": cm_id,
+        "name": name,
+        "qualified_name": f"proj.{name}",
+    }
     if extra:
         base.update(extra)
     return base
@@ -74,7 +79,9 @@ def _make_cm_node(
 
 def test_extractor_registered() -> None:
     assert "codebase_memory_bridge" in EXTRACTORS
-    assert isinstance(EXTRACTORS["codebase_memory_bridge"], CodebaseMemoryBridgeExtractor)
+    assert isinstance(
+        EXTRACTORS["codebase_memory_bridge"], CodebaseMemoryBridgeExtractor
+    )
 
 
 def test_extractor_name_and_version() -> None:
@@ -100,8 +107,12 @@ def test_projection_rules_coverage() -> None:
 
 def test_metadata_envelope_keys_defined() -> None:
     assert _METADATA_ENVELOPE_KEYS == {
-        "confidence", "provenance", "extractor", "extractor_version",
-        "evidence_ref", "observed_at",
+        "confidence",
+        "provenance",
+        "extractor",
+        "extractor_version",
+        "evidence_ref",
+        "observed_at",
     }
 
 
@@ -121,11 +132,17 @@ async def test_metadata_envelope_on_every_projection(tmp_path: Path) -> None:
     async def fake_save_edge(graphiti: Any, edge: Any) -> None:
         pass
 
-    file_node = _make_cm_node("file-1", "main.py", {"path": "main.py", "xxh3_hash": "abc"})
-    sym_node = _make_cm_node("sym-1", "foo_func", {"qualified_name": "test-proj.main.foo_func"})
+    file_node = _make_cm_node(
+        "file-1", "main.py", {"path": "main.py", "xxh3_hash": "abc"}
+    )
+    sym_node = _make_cm_node(
+        "sym-1", "foo_func", {"qualified_name": "test-proj.main.foo_func"}
+    )
 
     cm_responses: dict[tuple[str, str], dict[str, Any]] = {
-        ("search_graph", "Project"): _cm_response([_make_cm_node("proj-1", "test-proj")]),
+        ("search_graph", "Project"): _cm_response(
+            [_make_cm_node("proj-1", "test-proj")]
+        ),
         ("search_graph", "File"): _cm_response([file_node]),
         ("search_graph", "Module"): _cm_response([]),
         ("search_graph", "Function"): _cm_response([sym_node]),
@@ -135,12 +152,16 @@ async def test_metadata_envelope_on_every_projection(tmp_path: Path) -> None:
         ("search_graph", "Enum"): _cm_response([]),
         ("search_graph", "Type"): _cm_response([]),
         ("search_graph", "Route"): _cm_response([]),
-        ("query_graph", "hash"): _cm_edges_response([{"cm_id": "file-1", "xxh3": "abc"}]),
+        ("query_graph", "hash"): _cm_edges_response(
+            [{"cm_id": "file-1", "xxh3": "abc"}]
+        ),
         ("query_graph", "edges"): _cm_edges_response([]),
         ("get_architecture", ""): {"clusters": [], "hotspots": []},
     }
 
-    async def fake_call_cm(tool: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def fake_call_cm(
+        tool: str, arguments: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         args = arguments or {}
         if tool == "get_architecture":
             return cm_responses[("get_architecture", "")]
@@ -156,8 +177,14 @@ async def test_metadata_envelope_on_every_projection(tmp_path: Path) -> None:
 
     with (
         patch("palace_mcp.extractors.codebase_memory_bridge._call_cm", fake_call_cm),
-        patch("palace_mcp.extractors.codebase_memory_bridge.save_entity_node", fake_save_node),
-        patch("palace_mcp.extractors.codebase_memory_bridge.save_entity_edge", fake_save_edge),
+        patch(
+            "palace_mcp.extractors.codebase_memory_bridge.save_entity_node",
+            fake_save_node,
+        ),
+        patch(
+            "palace_mcp.extractors.codebase_memory_bridge.save_entity_edge",
+            fake_save_edge,
+        ),
     ):
         stats = await ex.run(graphiti=g, ctx=ctx)
 
@@ -179,9 +206,13 @@ async def test_cm_id_present_on_every_projected_node(tmp_path: Path) -> None:
     async def fake_save_node(graphiti: Any, node: Any) -> None:
         saved_nodes.append(node)
 
-    file_node = _make_cm_node("file-1", "main.py", {"path": "main.py", "xxh3_hash": "abc"})
+    file_node = _make_cm_node(
+        "file-1", "main.py", {"path": "main.py", "xxh3_hash": "abc"}
+    )
 
-    async def fake_call_cm(tool: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def fake_call_cm(
+        tool: str, arguments: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         args = arguments or {}
         if tool == "get_architecture":
             return {"clusters": [], "hotspots": []}
@@ -199,8 +230,13 @@ async def test_cm_id_present_on_every_projected_node(tmp_path: Path) -> None:
 
     with (
         patch("palace_mcp.extractors.codebase_memory_bridge._call_cm", fake_call_cm),
-        patch("palace_mcp.extractors.codebase_memory_bridge.save_entity_node", fake_save_node),
-        patch("palace_mcp.extractors.codebase_memory_bridge.save_entity_edge", AsyncMock()),
+        patch(
+            "palace_mcp.extractors.codebase_memory_bridge.save_entity_node",
+            fake_save_node,
+        ),
+        patch(
+            "palace_mcp.extractors.codebase_memory_bridge.save_entity_edge", AsyncMock()
+        ),
     ):
         await ex.run(graphiti=g, ctx=ctx)
 
@@ -220,21 +256,35 @@ async def test_qualified_name_populated_on_symbol_file_module(tmp_path: Path) ->
     async def fake_save_node(graphiti: Any, node: Any) -> None:
         saved_nodes.append(node)
 
-    file_node = _make_cm_node("f-1", "utils.py", {
-        "path": "utils.py",
-        "xxh3_hash": "x1",
-        "qualified_name": "test-proj.utils",
-    })
-    sym_node = _make_cm_node("s-1", "helper", {
-        "qualified_name": "test-proj.utils.helper",
-        "file_path": "utils.py",
-    })
-    mod_node = _make_cm_node("m-1", "utils", {
-        "qualified_name": "test-proj.utils",
-        "path": "utils/",
-    })
+    file_node = _make_cm_node(
+        "f-1",
+        "utils.py",
+        {
+            "path": "utils.py",
+            "xxh3_hash": "x1",
+            "qualified_name": "test-proj.utils",
+        },
+    )
+    sym_node = _make_cm_node(
+        "s-1",
+        "helper",
+        {
+            "qualified_name": "test-proj.utils.helper",
+            "file_path": "utils.py",
+        },
+    )
+    mod_node = _make_cm_node(
+        "m-1",
+        "utils",
+        {
+            "qualified_name": "test-proj.utils",
+            "path": "utils/",
+        },
+    )
 
-    async def fake_call_cm(tool: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def fake_call_cm(
+        tool: str, arguments: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         args = arguments or {}
         if tool == "get_architecture":
             return {"clusters": [], "hotspots": []}
@@ -256,13 +306,19 @@ async def test_qualified_name_populated_on_symbol_file_module(tmp_path: Path) ->
 
     with (
         patch("palace_mcp.extractors.codebase_memory_bridge._call_cm", fake_call_cm),
-        patch("palace_mcp.extractors.codebase_memory_bridge.save_entity_node", fake_save_node),
-        patch("palace_mcp.extractors.codebase_memory_bridge.save_entity_edge", AsyncMock()),
+        patch(
+            "palace_mcp.extractors.codebase_memory_bridge.save_entity_node",
+            fake_save_node,
+        ),
+        patch(
+            "palace_mcp.extractors.codebase_memory_bridge.save_entity_edge", AsyncMock()
+        ),
     ):
         await ex.run(graphiti=g, ctx=ctx)
 
     qn_nodes = [
-        n for n in saved_nodes
+        n
+        for n in saved_nodes
         if any(lbl in n.labels for lbl in ["File", "Module", "Symbol"])
     ]
     assert qn_nodes, "expected File/Module/Symbol nodes"
@@ -287,14 +343,24 @@ async def test_skipped_edges_not_projected(tmp_path: Path) -> None:
     saved_edges: list[Any] = []
 
     file_node = _make_cm_node("f-1", "a.py", {"path": "a.py", "xxh3_hash": "h1"})
-    sym_node = _make_cm_node("s-1", "foo", {"file_path": "a.py", "qualified_name": "proj.foo"})
+    sym_node = _make_cm_node(
+        "s-1", "foo", {"file_path": "a.py", "qualified_name": "proj.foo"}
+    )
 
     skipped_edge_rows = [
-        {"rel_type": skipped, "edge_id": f"e-{i}", "src_id": "f-1", "tgt_id": "s-1", "rel_confidence": 1.0}
+        {
+            "rel_type": skipped,
+            "edge_id": f"e-{i}",
+            "src_id": "f-1",
+            "tgt_id": "s-1",
+            "rel_confidence": 1.0,
+        }
         for i, skipped in enumerate(_SKIPPED_CM_EDGES)
     ]
 
-    async def fake_call_cm(tool: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def fake_call_cm(
+        tool: str, arguments: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         args = arguments or {}
         if tool == "get_architecture":
             return {"clusters": [], "hotspots": []}
@@ -314,7 +380,9 @@ async def test_skipped_edges_not_projected(tmp_path: Path) -> None:
 
     with (
         patch("palace_mcp.extractors.codebase_memory_bridge._call_cm", fake_call_cm),
-        patch("palace_mcp.extractors.codebase_memory_bridge.save_entity_node", AsyncMock()),
+        patch(
+            "palace_mcp.extractors.codebase_memory_bridge.save_entity_node", AsyncMock()
+        ),
         patch(
             "palace_mcp.extractors.codebase_memory_bridge.save_entity_edge",
             AsyncMock(side_effect=lambda g, e: saved_edges.append(e)),
@@ -322,7 +390,9 @@ async def test_skipped_edges_not_projected(tmp_path: Path) -> None:
     ):
         await ex.run(graphiti=g, ctx=ctx)
 
-    assert saved_edges == [], f"Expected zero edges, got {[e.name for e in saved_edges]}"
+    assert saved_edges == [], (
+        f"Expected zero edges, got {[e.name for e in saved_edges]}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -343,7 +413,9 @@ async def test_architecture_community_nodes_created(tmp_path: Path) -> None:
         {"id": "c1", "name": "community-1", "modularity": 0.6, "members": []},
     ]
 
-    async def fake_call_cm(tool: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def fake_call_cm(
+        tool: str, arguments: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         args = arguments or {}
         if tool == "get_architecture":
             return {"clusters": clusters, "hotspots": []}
@@ -362,7 +434,9 @@ async def test_architecture_community_nodes_created(tmp_path: Path) -> None:
             "palace_mcp.extractors.codebase_memory_bridge.save_entity_node",
             AsyncMock(side_effect=lambda g, n: saved_nodes.append(n)),
         ),
-        patch("palace_mcp.extractors.codebase_memory_bridge.save_entity_edge", AsyncMock()),
+        patch(
+            "palace_mcp.extractors.codebase_memory_bridge.save_entity_edge", AsyncMock()
+        ),
     ):
         await ex.run(graphiti=g, ctx=ctx)
 
@@ -382,10 +456,16 @@ async def test_member_of_edges_created(tmp_path: Path) -> None:
     g = _graphiti_mock()
     saved_edges: list[Any] = []
 
-    sym_node = _make_cm_node("sym-1", "foo_fn", {"qualified_name": "tp.foo_fn", "file_path": "a.py"})
-    clusters = [{"id": "c0", "name": "community-0", "modularity": 0.8, "members": ["sym-1"]}]
+    sym_node = _make_cm_node(
+        "sym-1", "foo_fn", {"qualified_name": "tp.foo_fn", "file_path": "a.py"}
+    )
+    clusters = [
+        {"id": "c0", "name": "community-0", "modularity": 0.8, "members": ["sym-1"]}
+    ]
 
-    async def fake_call_cm(tool: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def fake_call_cm(
+        tool: str, arguments: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         args = arguments or {}
         if tool == "get_architecture":
             return {"clusters": clusters, "hotspots": []}
@@ -403,7 +483,9 @@ async def test_member_of_edges_created(tmp_path: Path) -> None:
 
     with (
         patch("palace_mcp.extractors.codebase_memory_bridge._call_cm", fake_call_cm),
-        patch("palace_mcp.extractors.codebase_memory_bridge.save_entity_node", AsyncMock()),
+        patch(
+            "palace_mcp.extractors.codebase_memory_bridge.save_entity_node", AsyncMock()
+        ),
         patch(
             "palace_mcp.extractors.codebase_memory_bridge.save_entity_edge",
             AsyncMock(side_effect=lambda g, e: saved_edges.append(e)),
@@ -427,15 +509,21 @@ async def test_hotspot_top_5_percent(tmp_path: Path) -> None:
 
     # 20 files → 5% = 1 hotspot
     file_nodes_data = [
-        _make_cm_node(f"f-{i}", f"file{i}.py", {"path": f"file{i}.py", "xxh3_hash": f"h{i}"})
+        _make_cm_node(
+            f"f-{i}", f"file{i}.py", {"path": f"file{i}.py", "xxh3_hash": f"h{i}"}
+        )
         for i in range(20)
     ]
     hotspots = [
         {"path": f"file{i}.py", "score": 100 - i, "cm_id": f"f-{i}"}
-        for i in range(5)  # CM provides 5 hotspots; bridge should take only ceil(20*0.05)=1
+        for i in range(
+            5
+        )  # CM provides 5 hotspots; bridge should take only ceil(20*0.05)=1
     ]
 
-    async def fake_call_cm(tool: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def fake_call_cm(
+        tool: str, arguments: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         args = arguments or {}
         if tool == "get_architecture":
             return {"clusters": [], "hotspots": hotspots}
@@ -459,7 +547,9 @@ async def test_hotspot_top_5_percent(tmp_path: Path) -> None:
             "palace_mcp.extractors.codebase_memory_bridge.save_entity_node",
             AsyncMock(side_effect=lambda g, n: saved_nodes.append(n)),
         ),
-        patch("palace_mcp.extractors.codebase_memory_bridge.save_entity_edge", AsyncMock()),
+        patch(
+            "palace_mcp.extractors.codebase_memory_bridge.save_entity_edge", AsyncMock()
+        ),
     ):
         await ex.run(graphiti=g, ctx=ctx)
 
@@ -483,9 +573,13 @@ async def test_incremental_skips_unchanged_files(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path)
     g = _graphiti_mock()
 
-    file_node = _make_cm_node("f-1", "a.py", {"path": "a.py", "xxh3_hash": "stable-hash"})
+    file_node = _make_cm_node(
+        "f-1", "a.py", {"path": "a.py", "xxh3_hash": "stable-hash"}
+    )
 
-    async def fake_call_cm(tool: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def fake_call_cm(
+        tool: str, arguments: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         args = arguments or {}
         if tool == "get_architecture":
             return {"clusters": [], "hotspots": []}
@@ -506,8 +600,13 @@ async def test_incremental_skips_unchanged_files(tmp_path: Path) -> None:
 
     with (
         patch("palace_mcp.extractors.codebase_memory_bridge._call_cm", fake_call_cm),
-        patch("palace_mcp.extractors.codebase_memory_bridge.save_entity_node", counting_save),
-        patch("palace_mcp.extractors.codebase_memory_bridge.save_entity_edge", AsyncMock()),
+        patch(
+            "palace_mcp.extractors.codebase_memory_bridge.save_entity_node",
+            counting_save,
+        ),
+        patch(
+            "palace_mcp.extractors.codebase_memory_bridge.save_entity_edge", AsyncMock()
+        ),
     ):
         # First run — populates state
         await ex.run(graphiti=g, ctx=ctx)
@@ -540,7 +639,9 @@ async def test_incremental_invalidates_removed_edges(tmp_path: Path) -> None:
     g = _graphiti_mock()
     invalidate_calls: list[set[str]] = []
 
-    async def fake_call_cm(tool: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def fake_call_cm(
+        tool: str, arguments: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         args = arguments or {}
         if tool == "get_architecture":
             return {"clusters": [], "hotspots": []}
@@ -554,14 +655,22 @@ async def test_incremental_invalidates_removed_edges(tmp_path: Path) -> None:
             return _cm_edges_response([])
         return {}
 
-    async def fake_invalidate(self: Any, graphiti: Any, ctx: Any, removed: set[str]) -> None:
+    async def fake_invalidate(
+        self: Any, graphiti: Any, ctx: Any, removed: set[str]
+    ) -> None:
         invalidate_calls.append(set(removed))
 
     with (
         patch("palace_mcp.extractors.codebase_memory_bridge._call_cm", fake_call_cm),
-        patch("palace_mcp.extractors.codebase_memory_bridge.save_entity_node", AsyncMock()),
-        patch("palace_mcp.extractors.codebase_memory_bridge.save_entity_edge", AsyncMock()),
-        patch.object(CodebaseMemoryBridgeExtractor, "_invalidate_removed", fake_invalidate),
+        patch(
+            "palace_mcp.extractors.codebase_memory_bridge.save_entity_node", AsyncMock()
+        ),
+        patch(
+            "palace_mcp.extractors.codebase_memory_bridge.save_entity_edge", AsyncMock()
+        ),
+        patch.object(
+            CodebaseMemoryBridgeExtractor, "_invalidate_removed", fake_invalidate
+        ),
     ):
         await ex.run(graphiti=g, ctx=ctx)
 
@@ -579,7 +688,9 @@ async def test_incremental_uses_hash_compare_not_detect_changes(tmp_path: Path) 
 
     file_node = _make_cm_node("f-1", "a.py", {"path": "a.py", "xxh3_hash": "h"})
 
-    async def fake_call_cm(tool: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def fake_call_cm(
+        tool: str, arguments: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         args = arguments or {}
         if tool == "detect_changes":
             raise RuntimeError("detect_changes should NOT be called")
@@ -599,8 +710,12 @@ async def test_incremental_uses_hash_compare_not_detect_changes(tmp_path: Path) 
 
     with (
         patch("palace_mcp.extractors.codebase_memory_bridge._call_cm", fake_call_cm),
-        patch("palace_mcp.extractors.codebase_memory_bridge.save_entity_node", AsyncMock()),
-        patch("palace_mcp.extractors.codebase_memory_bridge.save_entity_edge", AsyncMock()),
+        patch(
+            "palace_mcp.extractors.codebase_memory_bridge.save_entity_node", AsyncMock()
+        ),
+        patch(
+            "palace_mcp.extractors.codebase_memory_bridge.save_entity_edge", AsyncMock()
+        ),
     ):
         # Should not raise even though detect_changes would raise
         stats = await ex.run(graphiti=g, ctx=ctx)
@@ -685,7 +800,10 @@ def test_health_bridge_section_absent_when_no_runs() -> None:
 
     empty_state = _BridgeState(project_slug="never-ran")
 
-    with patch("palace_mcp.extractors.codebase_memory_bridge._load_state", return_value=empty_state):
+    with patch(
+        "palace_mcp.extractors.codebase_memory_bridge._load_state",
+        return_value=empty_state,
+    ):
         info = _build_bridge_health("never-ran")
 
     assert info is None
@@ -693,14 +811,20 @@ def test_health_bridge_section_absent_when_no_runs() -> None:
 
 def test_health_bridge_staleness_warning() -> None:
     """staleness_warning=True when last_run_at is long ago."""
-    from palace_mcp.memory.health import _build_bridge_health, _BRIDGE_STALENESS_THRESHOLD_S
+    from palace_mcp.memory.health import (
+        _build_bridge_health,
+        _BRIDGE_STALENESS_THRESHOLD_S,
+    )
 
     stale_state = _BridgeState(
         project_slug="stale",
         last_run_at="2020-01-01T00:00:00+00:00",  # very old
     )
 
-    with patch("palace_mcp.extractors.codebase_memory_bridge._load_state", return_value=stale_state):
+    with patch(
+        "palace_mcp.extractors.codebase_memory_bridge._load_state",
+        return_value=stale_state,
+    ):
         info = _build_bridge_health("stale")
 
     assert info is not None

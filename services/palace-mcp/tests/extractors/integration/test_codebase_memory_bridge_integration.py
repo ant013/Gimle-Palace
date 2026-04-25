@@ -25,6 +25,7 @@ from palace_mcp.extractors.codebase_memory_bridge import (
 # Fixtures / helpers
 # ---------------------------------------------------------------------------
 
+
 def _ctx(tmp_path: Path) -> ExtractorRunContext:
     return ExtractorRunContext(
         project_slug="integ-proj",
@@ -41,15 +42,28 @@ def _fake_cm(
     edges: list[dict[str, Any]] | None = None,
     architecture: dict[str, Any] | None = None,
 ) -> Any:
-    """Return an async fake for _call_cm that handles tool routing."""
+    """Return an async fake for _call_cm that handles tool routing.
+
+    Routes on actual tool names used by the extractor:
+      search_graph  → node queries by label
+      query_graph   → hash fetch (returns []) or edge fetch (returns edges)
+      get_architecture → Louvain/hotspot data
+    """
     edges = edges or []
 
-    async def _call(tool: str, **kwargs: Any) -> dict[str, Any]:
-        if tool in ("palace.code.get_nodes", "palace.code.get_file_nodes"):
+    async def _call(
+        tool: str, arguments: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        args = arguments or {}
+        if tool == "search_graph":
             return {"nodes": nodes}
-        if tool == "palace.code.get_edges":
+        if tool == "query_graph":
+            # Hash-fetch query contains "xxh3_hash"; edge queries don't.
+            q = args.get("query", "")
+            if "xxh3_hash" in q:
+                return {"result": []}  # no prior hashes → first-run projects all
             return {"result": edges}
-        if tool == "palace.code.get_architecture":
+        if tool == "get_architecture":
             return architecture or {"communities": [], "hotspots": []}
         return {}
 

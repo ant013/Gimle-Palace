@@ -172,8 +172,10 @@ def _load_state(project_slug: str, state_path: Path = _STATE_PATH) -> _BridgeSta
                 edges_written_by_type=raw.get("edges_written_by_type", {}),
                 file_hashes=raw.get("file_hashes", {}),
             )
-    except (FileNotFoundError, json.JSONDecodeError, KeyError):
+    except FileNotFoundError:
         pass
+    except (json.JSONDecodeError, KeyError) as exc:
+        _LOG.debug("Bridge state file unreadable (%s); starting fresh", exc)
     return _BridgeState(project_slug=project_slug)
 
 
@@ -204,11 +206,16 @@ async def _call_cm(
     """Call a CM MCP tool directly via the shared _cm_session."""
     from mcp.types import CallToolResult, TextContent  # local import avoids circular
 
+    from palace_mcp.extractors.base import ExtractorConfigError
+
     session = code_router._cm_session
     if session is None:
-        return {}
+        raise ExtractorConfigError(
+            "CM session not available — is codebase-memory-mcp running?"
+        )
     result: CallToolResult = await session.call_tool(tool, arguments=arguments or {})
     if result.isError:
+        _LOG.warning("CM tool %r returned an error; skipping this call", tool)
         return {}
     if result.structuredContent is not None:
         return dict(result.structuredContent)
@@ -581,7 +588,11 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
                 if not isinstance(hs, dict):
                     continue
                 file_path = hs.get("path", "")
-                _sc = hs.get("score") if hs.get("score") is not None else hs.get("cochange_score")
+                _sc = (
+                    hs.get("score")
+                    if hs.get("score") is not None
+                    else hs.get("cochange_score")
+                )
                 score = float(_sc) if _sc is not None else 1.0
                 norm_rank = max(0.0, min(1.0, 1.0 - rank / max(1, cutoff)))
                 hs_cm_id = hs.get("cm_id", f"hotspot-{rank}")
