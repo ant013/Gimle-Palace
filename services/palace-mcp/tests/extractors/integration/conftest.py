@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterator
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from neo4j import AsyncGraphDatabase, AsyncDriver
+from neo4j import AsyncDriver, AsyncGraphDatabase
 
 
 @pytest.fixture(scope="session")
@@ -48,3 +49,21 @@ async def clean_db(driver: AsyncDriver) -> None:
     """Clean all nodes between tests for hermetic runs."""
     async with driver.session() as session:
         await session.run("MATCH (n) DETACH DELETE n")
+
+
+@pytest.fixture
+def graphiti_mock(neo4j_uri: str, neo4j_auth: tuple[str, str]) -> MagicMock:
+    """Mock Graphiti with a real Neo4jDriver and a dummy embedder.
+
+    Passes a Neo4jDriver backed by the test-container URI so save_entity_node
+    can write to real Neo4j without making OpenAI API calls.
+    """
+    from graphiti_core.driver.neo4j_driver import Neo4jDriver
+
+    user, password = neo4j_auth
+    g = MagicMock()
+    g.driver = Neo4jDriver(neo4j_uri, user=user, password=password)
+    g.embedder = MagicMock()
+    g.embedder.create = AsyncMock(return_value=[0.0] * 1024)
+    g.build_indices_and_constraints = AsyncMock(return_value=None)
+    return g

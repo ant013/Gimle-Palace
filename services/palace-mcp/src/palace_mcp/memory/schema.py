@@ -8,7 +8,16 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-EntityType = Literal["Issue", "Comment", "Agent"]
+from palace_mcp.memory.filters import EntityType
+
+__all__ = [
+    "EntityType",
+    "LookupRequest",
+    "LookupResponseItem",
+    "LookupResponse",
+    "ProjectInfo",
+    "HealthResponse",
+]
 
 
 class LookupRequest(BaseModel):
@@ -18,7 +27,7 @@ class LookupRequest(BaseModel):
     project: str | list[str] | None = None
     filters: dict[str, Any] = Field(default_factory=dict)
     limit: int = Field(default=20, ge=1, le=100)
-    order_by: Literal["source_updated_at", "source_created_at"] = "source_updated_at"
+    order_by: Literal["created_at", "name"] = "created_at"
 
 
 class LookupResponseItem(BaseModel):
@@ -69,6 +78,5 @@ class HealthResponse(BaseModel):
     projects: list[str] = Field(default_factory=list)
     default_project: str | None = None
     entity_counts_per_project: dict[str, dict[str, int]] = Field(default_factory=dict)
-    # git section: repos bind-mounted at /repos/<slug>
     git_repos_available: list[str] = Field(default_factory=list)
     git_repos_unregistered: list[str] = Field(default_factory=list)

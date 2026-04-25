@@ -3,31 +3,84 @@
 Keys are statically whitelisted per entity type. Values always pass as
 named Cypher parameters. Unknown keys are collected separately so the
 caller can log a `query.lookup.unknown_filter` warning.
+
+graphiti-core 0.28.2 persists EntityNode.attributes as flat Neo4j node
+properties (SET n += $attrs), so top-level filter syntax {prop: $val} works.
 """
 
 from typing import Any, Literal
 
-EntityType = Literal["Issue", "Comment", "Agent"]
+EntityType = Literal[
+    "Project",
+    "Iteration",
+    "Episode",
+    "Decision",
+    "IterationNote",
+    "Finding",
+    "Module",
+    "File",
+    "Symbol",
+    "APIEndpoint",
+    "Model",
+    "Repository",
+    "ExternalLib",
+    "Trace",
+]
 
 
 # Per-entity whitelist mapping filter-key → Cypher WHERE clause template.
-# `$param` slots in the clause match the filter-key name.
+# Conservative starting set; grows per use case. group_id / uuid / name
+# are always valid and handled at the resolver level, not here.
 _WHITELIST: dict[EntityType, dict[str, str]] = {
-    "Issue": {
-        "key": "n.key = $key",
+    "Project": {
+        "slug": "n.slug = $slug",
+    },
+    "Iteration": {
+        "kind": "n.kind = $kind",
+        "number": "n.number = $number",
+    },
+    "Episode": {
+        "kind": "n.kind = $kind",
+        "source": "n.source = $source",
+    },
+    "Decision": {
+        "author": "n.author = $author",
         "status": "n.status = $status",
-        "assignee_name": "EXISTS { MATCH (n)-[:ASSIGNED_TO]->(ag:Agent {name: $assignee_name}) }",
-        "source_updated_at_gte": "n.source_updated_at >= $source_updated_at_gte",
-        "source_updated_at_lte": "n.source_updated_at <= $source_updated_at_lte",
     },
-    "Comment": {
-        "issue_key": "EXISTS { MATCH (n)-[:ON]->(i:Issue {key: $issue_key}) }",
-        "author_name": "EXISTS { MATCH (n)-[:AUTHORED_BY]->(ag:Agent {name: $author_name}) }",
-        "source_created_at_gte": "n.source_created_at >= $source_created_at_gte",
+    "IterationNote": {
+        "iteration_ref": "n.iteration_ref = $iteration_ref",
     },
-    "Agent": {
+    "Finding": {
+        "severity": "n.severity = $severity",
+        "category": "n.category = $category",
+        "source": "n.source = $source",
+    },
+    "Module": {
+        "path": "n.path = $path",
+        "kind": "n.kind = $kind",
+    },
+    "File": {
+        "path": "n.path = $path",
+    },
+    "Symbol": {
+        "kind": "n.kind = $kind",
         "name": "n.name = $name",
-        "url_key": "n.url_key = $url_key",
+        "file_path": "n.file_path = $file_path",
+    },
+    "APIEndpoint": {
+        "method": "n.method = $method",
+        "path": "n.path = $path",
+    },
+    "Model": {},
+    "Repository": {
+        "storage_kind": "n.storage_kind = $storage_kind",
+    },
+    "ExternalLib": {
+        "version": "n.version = $version",
+        "category": "n.category = $category",
+    },
+    "Trace": {
+        "agent_id": "n.agent_id = $agent_id",
     },
 }
 
