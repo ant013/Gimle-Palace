@@ -8,10 +8,14 @@ Public API (consumed by HeartbeatExtractor, GIM-77 bridge extractor, etc.):
   ensure_graphiti_schema(g) -> None
   save_entity_node(g, node) -> None
   save_entity_edge(g, edge) -> None
+  batch_save_entity_nodes(g, nodes) -> None
+  batch_save_entity_edges(g, edges) -> None
   close_graphiti(g) -> None
 """
 
 from __future__ import annotations
+
+import asyncio
 
 from graphiti_core import Graphiti
 from graphiti_core.edges import EntityEdge
@@ -21,6 +25,10 @@ from graphiti_core.llm_client.openai_client import OpenAIClient
 from graphiti_core.nodes import EntityNode
 
 from palace_mcp.config import Settings
+
+# OpenAI embeddings API accepts up to 2048 inputs per request; use 512 to
+# stay within token-count limits on long node names.
+_EMBED_BATCH_SIZE = 512
 
 
 def build_graphiti(settings: Settings) -> Graphiti:
@@ -68,6 +76,36 @@ async def save_entity_edge(g: Graphiti, edge: EntityEdge) -> None:
     if edge.fact_embedding is None:
         await edge.generate_embedding(g.embedder)
     await edge.save(g.driver)
+
+
+async def batch_save_entity_nodes(g: Graphiti, nodes: list[EntityNode]) -> None:
+    """Embed all nodes in one batch call, then save concurrently.
+
+    Reduces N sequential OpenAI embedding API calls to ceil(N/_EMBED_BATCH_SIZE)
+    calls, then fans out Neo4j writes in parallel.
+    """
+    to_embed = [n for n in nodes if n.name_embedding is None]
+    for i in range(0, len(to_embed), _EMBED_BATCH_SIZE):
+        chunk = to_embed[i : i + _EMBED_BATCH_SIZE]
+        embeddings = await g.embedder.create_batch(
+            [n.name.replace("\n", " ") for n in chunk]
+        )
+        for node, emb in zip(chunk, embeddings, strict=True):
+            node.name_embedding = emb
+    await asyncio.gather(*(n.save(g.driver) for n in nodes))
+
+
+async def batch_save_entity_edges(g: Graphiti, edges: list[EntityEdge]) -> None:
+    """Embed all edges in one batch call, then save concurrently."""
+    to_embed = [e for e in edges if e.fact_embedding is None]
+    for i in range(0, len(to_embed), _EMBED_BATCH_SIZE):
+        chunk = to_embed[i : i + _EMBED_BATCH_SIZE]
+        embeddings = await g.embedder.create_batch(
+            [e.fact.replace("\n", " ") for e in chunk]
+        )
+        for edge, emb in zip(chunk, embeddings, strict=True):
+            edge.fact_embedding = emb
+    await asyncio.gather(*(e.save(g.driver) for e in edges))
 
 
 async def close_graphiti(g: Graphiti) -> None:

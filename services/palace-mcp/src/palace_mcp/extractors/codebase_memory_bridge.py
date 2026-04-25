@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from graphiti_core import Graphiti
+from graphiti_core.edges import EntityEdge
 from graphiti_core.nodes import EntityNode
 
 from palace_mcp import code_router
@@ -35,7 +36,10 @@ from palace_mcp.extractors.base import (
     ExtractorRunContext,
     ExtractorStats,
 )
-from palace_mcp.graphiti_runtime import save_entity_edge, save_entity_node
+from palace_mcp.graphiti_runtime import (
+    batch_save_entity_edges,
+    batch_save_entity_nodes,
+)
 from palace_mcp.graphiti_schema.edges import (
     make_calls,
     make_contains,
@@ -437,6 +441,8 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
 
         tag = self._tag()
         ver = self.version
+        pending_nodes: list[EntityNode] = []
+        pending_edges: list[EntityEdge] = []
         now = self._now()
         slug = ctx.project_slug  # Graphiti namespace (group_id prefix)
 
@@ -460,7 +466,7 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
                     "name": nd.get("name", slug),
                 },
             )
-            await save_entity_node(graphiti, node)
+            pending_nodes.append(node)
             inc_n("Project")
 
         # --- :File ---
@@ -491,7 +497,7 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
                     "loc": nd.get("loc", 0),
                 },
             )
-            await save_entity_node(graphiti, node)
+            pending_nodes.append(node)
             file_nodes[cm_id] = node
             inc_n("File")
 
@@ -518,7 +524,7 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
                     "path": nd.get("path", ""),
                 },
             )
-            await save_entity_node(graphiti, node)
+            pending_nodes.append(node)
             inc_n("Module")
 
         # --- :Symbol (Function/Method/Class/Interface/Enum/Type) ---
@@ -548,7 +554,7 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
                         "signature": nd.get("signature", ""),
                     },
                 )
-                await save_entity_node(graphiti, node)
+                pending_nodes.append(node)
                 symbol_nodes[cm_id] = node
                 inc_n("Symbol")
 
@@ -576,7 +582,7 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
                     "handler_cm_id": nd.get("handler_cm_id", ""),
                 },
             )
-            await save_entity_node(graphiti, node)
+            pending_nodes.append(node)
             inc_n("APIEndpoint")
 
         # --- Derived: ArchitectureCommunity (Louvain clusters from get_architecture) ---
@@ -608,7 +614,7 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
                     labels=["ArchitectureCommunity"],
                     attributes=attrs,
                 )
-                await save_entity_node(graphiti, community_node)
+                pending_nodes.append(community_node)
                 community_nodes[cm_id] = community_node
                 inc_n("ArchitectureCommunity")
 
@@ -626,7 +632,7 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
                         provenance="derived",
                         extra={"cm_edge_id": f"member_of:{member_cm_id}:{cm_id}"},
                     )
-                    await save_entity_edge(graphiti, edge)
+                    pending_edges.append(edge)
                     inc_e("MEMBER_OF")
 
         # --- Derived: Hotspot (top-5% co-change files from get_architecture) ---
@@ -663,7 +669,7 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
                     labels=["Hotspot"],
                     attributes=hs_attrs,
                 )
-                await save_entity_node(graphiti, hotspot_node)
+                pending_nodes.append(hotspot_node)
                 inc_n("Hotspot")
 
                 target = _find_file_by_path(file_nodes, file_path)
@@ -678,7 +684,7 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
                         confidence=norm_rank,
                         provenance="derived",
                     )
-                    await save_entity_edge(graphiti, edge)
+                    pending_edges.append(edge)
                     inc_e("LOCATES_IN")
 
         # --- Asserted edges from CM ---
@@ -710,76 +716,65 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
             extra: dict[str, Any] = {"cm_edge_id": f"{slug}:{edge_id}"}
 
             if rel_type.startswith("CONTAINS"):
-                await save_entity_edge(
-                    graphiti,
-                    make_contains(
-                        group_id=ctx.group_id,
-                        source_uuid=src_node.uuid,
-                        target_uuid=tgt_node.uuid,
-                        fact="contains",
-                        extractor=tag,
-                        extractor_version=ver,
-                        extra=extra,
-                    ),
-                )
+                pending_edges.append(make_contains(
+                    group_id=ctx.group_id,
+                    source_uuid=src_node.uuid,
+                    target_uuid=tgt_node.uuid,
+                    fact="contains",
+                    extractor=tag,
+                    extractor_version=ver,
+                    extra=extra,
+                ))
                 inc_e("CONTAINS")
             elif rel_type == "DEFINES":
-                await save_entity_edge(
-                    graphiti,
-                    make_defines(
-                        group_id=ctx.group_id,
-                        source_uuid=src_node.uuid,
-                        target_uuid=tgt_node.uuid,
-                        fact="defines",
-                        extractor=tag,
-                        extractor_version=ver,
-                        extra=extra,
-                    ),
-                )
+                pending_edges.append(make_defines(
+                    group_id=ctx.group_id,
+                    source_uuid=src_node.uuid,
+                    target_uuid=tgt_node.uuid,
+                    fact="defines",
+                    extractor=tag,
+                    extractor_version=ver,
+                    extra=extra,
+                ))
                 inc_e("DEFINES")
             elif rel_type == "CALLS":
-                await save_entity_edge(
-                    graphiti,
-                    make_calls(
-                        group_id=ctx.group_id,
-                        source_uuid=src_node.uuid,
-                        target_uuid=tgt_node.uuid,
-                        fact="calls",
-                        extractor=tag,
-                        extractor_version=ver,
-                        extra=extra,
-                    ),
-                )
+                pending_edges.append(make_calls(
+                    group_id=ctx.group_id,
+                    source_uuid=src_node.uuid,
+                    target_uuid=tgt_node.uuid,
+                    fact="calls",
+                    extractor=tag,
+                    extractor_version=ver,
+                    extra=extra,
+                ))
                 inc_e("CALLS")
             elif rel_type == "IMPORTS":
-                await save_entity_edge(
-                    graphiti,
-                    make_imports(
-                        group_id=ctx.group_id,
-                        source_uuid=src_node.uuid,
-                        target_uuid=tgt_node.uuid,
-                        fact="imports",
-                        extractor=tag,
-                        extractor_version=ver,
-                        extra=extra,
-                    ),
-                )
+                pending_edges.append(make_imports(
+                    group_id=ctx.group_id,
+                    source_uuid=src_node.uuid,
+                    target_uuid=tgt_node.uuid,
+                    fact="imports",
+                    extractor=tag,
+                    extractor_version=ver,
+                    extra=extra,
+                ))
                 inc_e("IMPORTS")
             elif rel_type == "HANDLES":
-                await save_entity_edge(
-                    graphiti,
-                    make_handles(
-                        group_id=ctx.group_id,
-                        source_uuid=src_node.uuid,
-                        target_uuid=tgt_node.uuid,
-                        fact="handles",
-                        extractor=tag,
-                        extractor_version=ver,
-                        confidence=rel_conf,
-                        extra=extra,
-                    ),
-                )
+                pending_edges.append(make_handles(
+                    group_id=ctx.group_id,
+                    source_uuid=src_node.uuid,
+                    target_uuid=tgt_node.uuid,
+                    fact="handles",
+                    extractor=tag,
+                    extractor_version=ver,
+                    confidence=rel_conf,
+                    extra=extra,
+                ))
                 inc_e("HANDLES")
+
+        # Batch-embed and save: one embedding API call per 512 items instead of N serial calls.
+        await batch_save_entity_nodes(graphiti, pending_nodes)
+        await batch_save_entity_edges(graphiti, pending_edges)
 
         return nodes, edges, nbt, ebt
 

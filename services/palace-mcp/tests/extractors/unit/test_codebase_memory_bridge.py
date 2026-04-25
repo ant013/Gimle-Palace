@@ -158,10 +158,10 @@ async def test_metadata_envelope_on_every_projection(tmp_path: Path) -> None:
 
     saved_nodes: list[Any] = []
 
-    async def fake_save_node(graphiti: Any, node: Any) -> None:
-        saved_nodes.append(node)
+    async def fake_batch_save_nodes(graphiti: Any, nodes_list: list[Any]) -> None:
+        saved_nodes.extend(nodes_list)
 
-    async def fake_save_edge(graphiti: Any, edge: Any) -> None:
+    async def fake_batch_save_edges(graphiti: Any, edges_list: list[Any]) -> None:
         pass
 
     file_node = _make_cm_node(
@@ -210,12 +210,12 @@ async def test_metadata_envelope_on_every_projection(tmp_path: Path) -> None:
     with (
         patch("palace_mcp.extractors.codebase_memory_bridge._call_cm", fake_call_cm),
         patch(
-            "palace_mcp.extractors.codebase_memory_bridge.save_entity_node",
-            fake_save_node,
+            "palace_mcp.extractors.codebase_memory_bridge.batch_save_entity_nodes",
+            fake_batch_save_nodes,
         ),
         patch(
-            "palace_mcp.extractors.codebase_memory_bridge.save_entity_edge",
-            fake_save_edge,
+            "palace_mcp.extractors.codebase_memory_bridge.batch_save_entity_edges",
+            fake_batch_save_edges,
         ),
     ):
         stats = await ex.run(graphiti=g, ctx=ctx)
@@ -235,8 +235,8 @@ async def test_cm_id_present_on_every_projected_node(tmp_path: Path) -> None:
     g = _graphiti_mock()
     saved_nodes: list[Any] = []
 
-    async def fake_save_node(graphiti: Any, node: Any) -> None:
-        saved_nodes.append(node)
+    async def fake_batch_save_nodes(graphiti: Any, nodes_list: list[Any]) -> None:
+        saved_nodes.extend(nodes_list)
 
     file_node = _make_cm_node(
         "file-1", "main.py", {"path": "main.py", "xxh3_hash": "abc"}
@@ -263,11 +263,11 @@ async def test_cm_id_present_on_every_projected_node(tmp_path: Path) -> None:
     with (
         patch("palace_mcp.extractors.codebase_memory_bridge._call_cm", fake_call_cm),
         patch(
-            "palace_mcp.extractors.codebase_memory_bridge.save_entity_node",
-            fake_save_node,
+            "palace_mcp.extractors.codebase_memory_bridge.batch_save_entity_nodes",
+            fake_batch_save_nodes,
         ),
         patch(
-            "palace_mcp.extractors.codebase_memory_bridge.save_entity_edge", AsyncMock()
+            "palace_mcp.extractors.codebase_memory_bridge.batch_save_entity_edges", AsyncMock()
         ),
     ):
         await ex.run(graphiti=g, ctx=ctx)
@@ -285,8 +285,8 @@ async def test_qualified_name_populated_on_symbol_file_module(tmp_path: Path) ->
     g = _graphiti_mock()
     saved_nodes: list[Any] = []
 
-    async def fake_save_node(graphiti: Any, node: Any) -> None:
-        saved_nodes.append(node)
+    async def fake_batch_save_nodes(graphiti: Any, nodes_list: list[Any]) -> None:
+        saved_nodes.extend(nodes_list)
 
     file_node = _make_cm_node(
         "f-1",
@@ -339,11 +339,11 @@ async def test_qualified_name_populated_on_symbol_file_module(tmp_path: Path) ->
     with (
         patch("palace_mcp.extractors.codebase_memory_bridge._call_cm", fake_call_cm),
         patch(
-            "palace_mcp.extractors.codebase_memory_bridge.save_entity_node",
-            fake_save_node,
+            "palace_mcp.extractors.codebase_memory_bridge.batch_save_entity_nodes",
+            fake_batch_save_nodes,
         ),
         patch(
-            "palace_mcp.extractors.codebase_memory_bridge.save_entity_edge", AsyncMock()
+            "palace_mcp.extractors.codebase_memory_bridge.batch_save_entity_edges", AsyncMock()
         ),
     ):
         await ex.run(graphiti=g, ctx=ctx)
@@ -413,11 +413,11 @@ async def test_skipped_edges_not_projected(tmp_path: Path) -> None:
     with (
         patch("palace_mcp.extractors.codebase_memory_bridge._call_cm", fake_call_cm),
         patch(
-            "palace_mcp.extractors.codebase_memory_bridge.save_entity_node", AsyncMock()
+            "palace_mcp.extractors.codebase_memory_bridge.batch_save_entity_nodes", AsyncMock()
         ),
         patch(
-            "palace_mcp.extractors.codebase_memory_bridge.save_entity_edge",
-            AsyncMock(side_effect=lambda g, e: saved_edges.append(e)),
+            "palace_mcp.extractors.codebase_memory_bridge.batch_save_entity_edges",
+            AsyncMock(side_effect=lambda g, es: saved_edges.extend(es)),
         ),
     ):
         await ex.run(graphiti=g, ctx=ctx)
@@ -463,11 +463,11 @@ async def test_architecture_community_nodes_created(tmp_path: Path) -> None:
     with (
         patch("palace_mcp.extractors.codebase_memory_bridge._call_cm", fake_call_cm),
         patch(
-            "palace_mcp.extractors.codebase_memory_bridge.save_entity_node",
-            AsyncMock(side_effect=lambda g, n: saved_nodes.append(n)),
+            "palace_mcp.extractors.codebase_memory_bridge.batch_save_entity_nodes",
+            AsyncMock(side_effect=lambda g, ns: saved_nodes.extend(ns)),
         ),
         patch(
-            "palace_mcp.extractors.codebase_memory_bridge.save_entity_edge", AsyncMock()
+            "palace_mcp.extractors.codebase_memory_bridge.batch_save_entity_edges", AsyncMock()
         ),
     ):
         await ex.run(graphiti=g, ctx=ctx)
@@ -516,11 +516,11 @@ async def test_member_of_edges_created(tmp_path: Path) -> None:
     with (
         patch("palace_mcp.extractors.codebase_memory_bridge._call_cm", fake_call_cm),
         patch(
-            "palace_mcp.extractors.codebase_memory_bridge.save_entity_node", AsyncMock()
+            "palace_mcp.extractors.codebase_memory_bridge.batch_save_entity_nodes", AsyncMock()
         ),
         patch(
-            "palace_mcp.extractors.codebase_memory_bridge.save_entity_edge",
-            AsyncMock(side_effect=lambda g, e: saved_edges.append(e)),
+            "palace_mcp.extractors.codebase_memory_bridge.batch_save_entity_edges",
+            AsyncMock(side_effect=lambda g, es: saved_edges.extend(es)),
         ),
     ):
         await ex.run(graphiti=g, ctx=ctx)
@@ -576,11 +576,11 @@ async def test_hotspot_top_5_percent(tmp_path: Path) -> None:
     with (
         patch("palace_mcp.extractors.codebase_memory_bridge._call_cm", fake_call_cm),
         patch(
-            "palace_mcp.extractors.codebase_memory_bridge.save_entity_node",
-            AsyncMock(side_effect=lambda g, n: saved_nodes.append(n)),
+            "palace_mcp.extractors.codebase_memory_bridge.batch_save_entity_nodes",
+            AsyncMock(side_effect=lambda g, ns: saved_nodes.extend(ns)),
         ),
         patch(
-            "palace_mcp.extractors.codebase_memory_bridge.save_entity_edge", AsyncMock()
+            "palace_mcp.extractors.codebase_memory_bridge.batch_save_entity_edges", AsyncMock()
         ),
     ):
         await ex.run(graphiti=g, ctx=ctx)
@@ -627,17 +627,17 @@ async def test_incremental_skips_unchanged_files(tmp_path: Path) -> None:
             return _cm_edges_response([])
         return {}
 
-    async def counting_save(g: Any, n: Any) -> None:
+    async def counting_save(g: Any, ns: list[Any]) -> None:
         pass
 
     with (
         patch("palace_mcp.extractors.codebase_memory_bridge._call_cm", fake_call_cm),
         patch(
-            "palace_mcp.extractors.codebase_memory_bridge.save_entity_node",
+            "palace_mcp.extractors.codebase_memory_bridge.batch_save_entity_nodes",
             counting_save,
         ),
         patch(
-            "palace_mcp.extractors.codebase_memory_bridge.save_entity_edge", AsyncMock()
+            "palace_mcp.extractors.codebase_memory_bridge.batch_save_entity_edges", AsyncMock()
         ),
     ):
         # First run — populates state
@@ -695,10 +695,10 @@ async def test_incremental_invalidates_removed_edges(tmp_path: Path) -> None:
     with (
         patch("palace_mcp.extractors.codebase_memory_bridge._call_cm", fake_call_cm),
         patch(
-            "palace_mcp.extractors.codebase_memory_bridge.save_entity_node", AsyncMock()
+            "palace_mcp.extractors.codebase_memory_bridge.batch_save_entity_nodes", AsyncMock()
         ),
         patch(
-            "palace_mcp.extractors.codebase_memory_bridge.save_entity_edge", AsyncMock()
+            "palace_mcp.extractors.codebase_memory_bridge.batch_save_entity_edges", AsyncMock()
         ),
         patch.object(
             CodebaseMemoryBridgeExtractor, "_invalidate_removed", fake_invalidate
@@ -743,10 +743,10 @@ async def test_incremental_uses_hash_compare_not_detect_changes(tmp_path: Path) 
     with (
         patch("palace_mcp.extractors.codebase_memory_bridge._call_cm", fake_call_cm),
         patch(
-            "palace_mcp.extractors.codebase_memory_bridge.save_entity_node", AsyncMock()
+            "palace_mcp.extractors.codebase_memory_bridge.batch_save_entity_nodes", AsyncMock()
         ),
         patch(
-            "palace_mcp.extractors.codebase_memory_bridge.save_entity_edge", AsyncMock()
+            "palace_mcp.extractors.codebase_memory_bridge.batch_save_entity_edges", AsyncMock()
         ),
     ):
         # Should not raise even though detect_changes would raise
