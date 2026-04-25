@@ -299,6 +299,53 @@ CR Phase 3.1 runs:
 and asserts every changed file is in the slice's declared scope. Any
 file outside scope → REQUEST CHANGES citing this fragment.
 
+## QA returns production checkout to develop after Phase 4.1
+
+### Rule
+
+After posting the Phase 4.1 evidence comment, **before terminating the
+run**, QA agent MUST restore the production checkout:
+
+```bash
+cd /Users/Shared/Ios/Gimle-Palace
+git checkout develop
+git pull --ff-only origin develop
+```
+
+Verify with `git branch --show-current` — it must output `develop`
+before the run exits.
+
+### Why
+
+`/Users/Shared/Ios/Gimle-Palace` is the production checkout that
+deployments and observability tooling read from. Leaving it on a feature
+branch breaks deployments and requires operator intervention to recover.
+
+Incident GIM-48 (2026-04-18): production checkout left on a feature
+branch caused a wasted cycle and operator-side `git reset --hard
+origin/develop` to recover. Confirmed again 2026-04-25 14:42 UTC (GIM-77
+branch left checked out after Phase 4.1).
+
+### Dirty worktree handling
+
+If the working tree is dirty after smoke testing (e.g. uncommitted
+`docker-compose` modifications):
+
+1. Commit the changes to the feature branch **first**, or
+2. `git stash` them before switching.
+
+Then `git checkout develop`. Never leave a dirty feature-branch checkout
+for the next agent.
+
+### Verification
+
+Before run exit:
+
+```bash
+git -C /Users/Shared/Ios/Gimle-Palace branch --show-current
+# expected output: develop
+```
+
 ## Heartbeat discipline
 
 On every wake (heartbeat or event) check only **three** things:
