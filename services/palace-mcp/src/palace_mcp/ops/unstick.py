@@ -3,7 +3,8 @@
 Algorithm:
   1. Read issue state from paperclip API. executionRunId=None → noop.
   2. Discover candidate Claude PIDs on the host (SSH or local).
-     a. Strict: search for executionRunId string in process command.
+     a. Strict: timing heuristic — match claude --print whose etime ≈
+        (now - executionLockedAt) within ±60s.
      b. Permissive fallback: idle claude --print (etime>30m, cpu<0.5%).
   3. dry_run=True → return candidates, no kills.
   4. Refuse if >5 candidates unless force=True.
@@ -29,6 +30,7 @@ from palace_mcp.graphiti_schema.entities import make_episode
 logger = logging.getLogger(__name__)
 
 _POLL_INTERVAL_SEC = 5
+_STRICT_ETIME_TOLERANCE_SEC = 60
 _PID_CAP = 5
 _IDLE_ETIME_MIN = 30.0
 _IDLE_CPU_MAX_PCT = 0.5  # pcpu column is percent (0..100)
@@ -82,10 +84,30 @@ def _parse_ps_output(ps_output: str) -> list[dict[str, Any]]:
 
 
 def _find_strict_candidates(
-    rows: list[dict[str, Any]], run_id: str
+    rows: list[dict[str, Any]], execution_locked_at: str
 ) -> list[dict[str, Any]]:
-    """Return processes whose command contains run_id (and 'claude')."""
-    return [r for r in rows if "claude" in r["command"] and run_id in r["command"]]
+    """Return claude --print processes whose etime matches (now - executionLockedAt) ±60s.
+
+    Task 0 spike confirmed that executionRunId is never present in process args,
+    so timing-based matching is the only practical strict heuristic.
+    """
+    try:
+        locked_dt = datetime.fromisoformat(execution_locked_at.replace("Z", "+00:00"))
+        expected_sec = (datetime.now(timezone.utc) - locked_dt).total_seconds()
+    except Exception:
+        return []
+
+    result = []
+    for r in rows:
+        if "claude" not in r["command"] or "--print" not in r["command"]:
+            continue
+        try:
+            etime_sec = _parse_etime_to_minutes(r["etime"]) * 60.0
+        except Exception:
+            continue
+        if abs(etime_sec - expected_sec) <= _STRICT_ETIME_TOLERANCE_SEC:
+            result.append(r)
+    return result
 
 
 def _find_permissive_candidates(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -122,7 +144,7 @@ async def _run_subprocess(*args: str) -> tuple[str, str, int]:
     )
 
 
-def _ssh_prefix(ops_host: str, ssh_key: str) -> list[str]:
+def _ssh_prefix(ops_host: str, ssh_key: str, ssh_user: str) -> list[str]:
     return [
         "ssh",
         "-i",
@@ -133,28 +155,30 @@ def _ssh_prefix(ops_host: str, ssh_key: str) -> list[str]:
         "BatchMode=yes",
         "-o",
         "ConnectTimeout=10",
-        ops_host,
+        f"{ssh_user}@{ops_host}",
     ]
 
 
-async def _get_ps_output(ops_host: str, ssh_key: str) -> str:
+async def _get_ps_output(ops_host: str, ssh_key: str, ssh_user: str) -> str:
     ps_cmd = ["ps", "-A", "-o", "pid,etime,pcpu,command"]
     if ops_host == "local":
         args = ps_cmd
     else:
-        args = _ssh_prefix(ops_host, ssh_key) + ps_cmd
+        args = _ssh_prefix(ops_host, ssh_key, ssh_user) + ps_cmd
     stdout, stderr, rc = await _run_subprocess(*args)
     if rc != 0:
         raise RuntimeError(f"ps failed (rc={rc}): {stderr.strip()}")
     return stdout
 
 
-async def _send_sigterm(pids: list[int], ops_host: str, ssh_key: str) -> None:
+async def _send_sigterm(
+    pids: list[int], ops_host: str, ssh_key: str, ssh_user: str
+) -> None:
     kill_args = ["kill", "-TERM"] + [str(p) for p in pids]
     if ops_host == "local":
         args = kill_args
     else:
-        args = _ssh_prefix(ops_host, ssh_key) + kill_args
+        args = _ssh_prefix(ops_host, ssh_key, ssh_user) + kill_args
     _, stderr, rc = await _run_subprocess(*args)
     if rc != 0:
         logger.warning("kill returned rc=%d: %s", rc, stderr.strip())
@@ -165,22 +189,24 @@ async def _send_sigterm(pids: list[int], ops_host: str, ssh_key: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def _get_execution_run_id(api_url: str, issue_id: str) -> str | None:
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.get(f"{api_url}/api/issues/{issue_id}")
-        resp.raise_for_status()
-        value = resp.json().get("executionRunId")
-        return str(value) if value is not None else None
+async def _get_execution_run_id(
+    client: httpx.AsyncClient, api_url: str, issue_id: str
+) -> str | None:
+    resp = await client.get(f"{api_url}/api/issues/{issue_id}")
+    resp.raise_for_status()
+    value = resp.json().get("executionRunId")
+    return str(value) if value is not None else None
 
 
 async def _poll_until_cleared(api_url: str, issue_id: str, timeout_sec: int) -> bool:
     loop = asyncio.get_event_loop()
     deadline = loop.time() + timeout_sec
-    while loop.time() < deadline:
-        run_id = await _get_execution_run_id(api_url, issue_id)
-        if run_id is None:
-            return True
-        await asyncio.sleep(_POLL_INTERVAL_SEC)
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        while loop.time() < deadline:
+            run_id = await _get_execution_run_id(client, api_url, issue_id)
+            if run_id is None:
+                return True
+            await asyncio.sleep(_POLL_INTERVAL_SEC)
     return False
 
 
@@ -229,6 +255,7 @@ async def unstick_issue(
     timeout_sec: int = 90,
     ops_host: str,
     ssh_key: str,
+    ssh_user: str,
     api_url: str,
     graphiti: Graphiti | None,
     group_id: str,
@@ -236,13 +263,20 @@ async def unstick_issue(
     """Force-release a paperclip issue stuck on a stale executionRunId."""
 
     # Step 1 — read current lock state
-    stale_run_id = await _get_execution_run_id(api_url, issue_id)
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.get(f"{api_url}/api/issues/{issue_id}")
+        resp.raise_for_status()
+        issue_data = resp.json()
+
+    stale_run_id = issue_data.get("executionRunId")
     if stale_run_id is None:
         return {"ok": True, "action": "noop", "issue_id": issue_id}
+    stale_run_id = str(stale_run_id)
+    execution_locked_at: str = issue_data.get("executionLockedAt") or ""
 
     # Step 2 — discover candidate PIDs
     try:
-        ps_output = await _get_ps_output(ops_host, ssh_key)
+        ps_output = await _get_ps_output(ops_host, ssh_key, ssh_user)
     except Exception as exc:
         return {
             "ok": False,
@@ -252,7 +286,7 @@ async def unstick_issue(
         }
 
     rows = _parse_ps_output(ps_output)
-    strict = _find_strict_candidates(rows, stale_run_id)
+    strict = _find_strict_candidates(rows, execution_locked_at)
     if strict:
         candidates = strict
         heuristic: str = "strict"
@@ -294,7 +328,7 @@ async def unstick_issue(
 
     # Step 3 — SIGTERM
     try:
-        await _send_sigterm(pids, ops_host, ssh_key)
+        await _send_sigterm(pids, ops_host, ssh_key, ssh_user)
     except Exception as exc:
         return {
             "ok": False,
@@ -329,7 +363,8 @@ async def unstick_issue(
         }
 
     # Check for respawn (new run on same issue)
-    new_run_id = await _get_execution_run_id(api_url, issue_id)
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        new_run_id = await _get_execution_run_id(client, api_url, issue_id)
     if new_run_id is not None and new_run_id != stale_run_id:
         return {
             "ok": True,

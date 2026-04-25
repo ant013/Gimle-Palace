@@ -3,7 +3,7 @@
 Tests cover all response shapes per spec §5.1:
 1. noop when no lock
 2. dry_run returns candidates without kill
-3. strict heuristic matches run_id
+3. strict heuristic matches via timing (executionLockedAt)
 4. permissive fallback when strict empty
 5. 5-PID cap without force
 6. local mode (no SSH)
@@ -13,6 +13,7 @@ Tests cover all response shapes per spec §5.1:
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -32,12 +33,7 @@ from palace_mcp.ops.unstick import (
 
 _FAKE_RUN_ID = "abc12345-dead-beef-cafe-111122223333"
 
-_PS_WITH_RUN_ID = f"""\
-PID ELAPSED %CPU COMMAND
-  42 01:30:00  0.0 claude --print --add-dir /tmp/paperclip-skills-XYZ/ --run-id {_FAKE_RUN_ID}
- 100  00:02:00  1.2 python3 server.py
-"""
-
+# ps output: PID 42 has been running ~90 minutes
 _PS_IDLE_CLAUDE = """\
 PID ELAPSED %CPU COMMAND
   42 01:30:00  0.0 claude --print --add-dir /tmp/paperclip-skills-XYZ/
@@ -49,12 +45,18 @@ PID ELAPSED %CPU COMMAND
  100  00:02:00  1.2 python3 server.py
 """
 
+# executionLockedAt ~90 minutes ago → PID 42 should match strict heuristic
+_LOCKED_AT_90MIN = (
+    datetime.now(timezone.utc) - timedelta(minutes=90)
+).isoformat()
+
 
 def _make_kwargs(
     *,
     api_url: str = "http://localhost:3100",
     ops_host: str = "local",
-    ssh_key: str = "/home/appuser/.ssh/id_ed25519",
+    ssh_key: str = "/home/appuser/.ssh/palace_ops_id_ed25519",
+    ssh_user: str = "anton",
     graphiti: Any = None,
     group_id: str = "project/test",
     dry_run: bool = False,
@@ -67,10 +69,18 @@ def _make_kwargs(
         timeout_sec=timeout_sec,
         ops_host=ops_host,
         ssh_key=ssh_key,
+        ssh_user=ssh_user,
         api_url=api_url,
         graphiti=graphiti,
         group_id=group_id,
     )
+
+
+_FAKE_ISSUE_LOCKED = {
+    "executionRunId": _FAKE_RUN_ID,
+    "executionLockedAt": _LOCKED_AT_90MIN,
+}
+_FAKE_ISSUE_CLEAR = {"executionRunId": None, "executionLockedAt": None}
 
 
 # ---------------------------------------------------------------------------
@@ -87,21 +97,30 @@ def test_parse_etime_to_minutes_days() -> None:
 
 
 def test_parse_ps_output_skips_header() -> None:
-    rows = _parse_ps_output(_PS_WITH_RUN_ID)
+    rows = _parse_ps_output(_PS_IDLE_CLAUDE)
     assert len(rows) == 2
     assert rows[0]["pid"] == 42
 
 
-def test_find_strict_candidates_matches_run_id() -> None:
-    rows = _parse_ps_output(_PS_WITH_RUN_ID)
-    result = _find_strict_candidates(rows, _FAKE_RUN_ID)
+def test_find_strict_candidates_matches_timing() -> None:
+    """PID 42 with etime=01:30:00 matches executionLockedAt ~90min ago."""
+    rows = _parse_ps_output(_PS_IDLE_CLAUDE)
+    result = _find_strict_candidates(rows, _LOCKED_AT_90MIN)
     assert len(result) == 1
     assert result[0]["pid"] == 42
 
 
-def test_find_strict_candidates_empty_when_no_match() -> None:
+def test_find_strict_candidates_empty_when_timing_mismatch() -> None:
+    """executionLockedAt very recent → etime=01:30:00 won't match."""
+    locked_at_now = datetime.now(timezone.utc).isoformat()
     rows = _parse_ps_output(_PS_IDLE_CLAUDE)
-    result = _find_strict_candidates(rows, _FAKE_RUN_ID)
+    result = _find_strict_candidates(rows, locked_at_now)
+    assert result == []
+
+
+def test_find_strict_candidates_empty_on_invalid_locked_at() -> None:
+    rows = _parse_ps_output(_PS_IDLE_CLAUDE)
+    result = _find_strict_candidates(rows, "not-a-date")
     assert result == []
 
 
@@ -113,7 +132,6 @@ def test_find_permissive_candidates_returns_idle_claude() -> None:
 
 
 def test_find_permissive_candidates_excludes_active() -> None:
-    # Active = low etime (2 min) but has claude --print
     ps_active = "PID ELAPSED %CPU COMMAND\n  42 00:02:00  0.0 claude --print foo\n"
     rows = _parse_ps_output(ps_active)
     result = _find_permissive_candidates(rows)
@@ -128,23 +146,24 @@ def test_find_permissive_candidates_excludes_active() -> None:
 @pytest.mark.asyncio
 async def test_unstick_noop_when_no_lock() -> None:
     """Issue with executionRunId=None returns noop immediately."""
-    with patch(
-        "palace_mcp.ops.unstick._get_execution_run_id", new_callable=AsyncMock
-    ) as mock_get:
-        mock_get.return_value = None
+    with patch("palace_mcp.ops.unstick.httpx.AsyncClient") as mock_cls:
+        mock_client = AsyncMock()
+        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = _FAKE_ISSUE_CLEAR
+        mock_client.get = AsyncMock(return_value=mock_resp)
+
         result = await unstick_issue("issue-1", **_make_kwargs())
 
     assert result == {"ok": True, "action": "noop", "issue_id": "issue-1"}
-    mock_get.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_unstick_dry_run_returns_candidates_no_kill() -> None:
     """dry_run=True returns candidate PIDs without invoking kill."""
     with (
-        patch(
-            "palace_mcp.ops.unstick._get_execution_run_id", new_callable=AsyncMock
-        ) as mock_get,
+        patch("palace_mcp.ops.unstick.httpx.AsyncClient") as mock_cls,
         patch(
             "palace_mcp.ops.unstick._get_ps_output", new_callable=AsyncMock
         ) as mock_ps,
@@ -152,8 +171,13 @@ async def test_unstick_dry_run_returns_candidates_no_kill() -> None:
             "palace_mcp.ops.unstick._send_sigterm", new_callable=AsyncMock
         ) as mock_kill,
     ):
-        mock_get.return_value = _FAKE_RUN_ID
-        mock_ps.return_value = _PS_WITH_RUN_ID
+        mock_client = AsyncMock()
+        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = _FAKE_ISSUE_LOCKED
+        mock_client.get = AsyncMock(return_value=mock_resp)
+        mock_ps.return_value = _PS_IDLE_CLAUDE
 
         result = await unstick_issue("issue-1", **_make_kwargs(dry_run=True))
 
@@ -164,12 +188,10 @@ async def test_unstick_dry_run_returns_candidates_no_kill() -> None:
 
 
 @pytest.mark.asyncio
-async def test_unstick_strict_heuristic_matches_run_id() -> None:
-    """Strict heuristic finds the PID containing run_id in command."""
+async def test_unstick_strict_heuristic_matches_timing() -> None:
+    """Strict heuristic finds PID whose etime matches executionLockedAt ±60s."""
     with (
-        patch(
-            "palace_mcp.ops.unstick._get_execution_run_id", new_callable=AsyncMock
-        ) as mock_get,
+        patch("palace_mcp.ops.unstick.httpx.AsyncClient") as mock_cls,
         patch(
             "palace_mcp.ops.unstick._get_ps_output", new_callable=AsyncMock
         ) as mock_ps,
@@ -178,8 +200,13 @@ async def test_unstick_strict_heuristic_matches_run_id() -> None:
             "palace_mcp.ops.unstick._poll_until_cleared", new_callable=AsyncMock
         ) as mock_poll,
     ):
-        mock_get.return_value = _FAKE_RUN_ID
-        mock_ps.return_value = _PS_WITH_RUN_ID
+        mock_client = AsyncMock()
+        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = _FAKE_ISSUE_LOCKED
+        mock_client.get = AsyncMock(return_value=mock_resp)
+        mock_ps.return_value = _PS_IDLE_CLAUDE
         mock_poll.return_value = True
 
         result = await unstick_issue("issue-1", **_make_kwargs())
@@ -191,11 +218,14 @@ async def test_unstick_strict_heuristic_matches_run_id() -> None:
 
 @pytest.mark.asyncio
 async def test_unstick_permissive_fallback_when_strict_empty() -> None:
-    """When strict yields no candidates, permissive returns idle candidates."""
+    """When strict yields no candidates (timing mismatch), permissive fallback."""
+    # executionLockedAt just now → strict won't match the 90-min etime proc
+    issue_locked_just_now = {
+        "executionRunId": _FAKE_RUN_ID,
+        "executionLockedAt": datetime.now(timezone.utc).isoformat(),
+    }
     with (
-        patch(
-            "palace_mcp.ops.unstick._get_execution_run_id", new_callable=AsyncMock
-        ) as mock_get,
+        patch("palace_mcp.ops.unstick.httpx.AsyncClient") as mock_cls,
         patch(
             "palace_mcp.ops.unstick._get_ps_output", new_callable=AsyncMock
         ) as mock_ps,
@@ -204,8 +234,12 @@ async def test_unstick_permissive_fallback_when_strict_empty() -> None:
             "palace_mcp.ops.unstick._poll_until_cleared", new_callable=AsyncMock
         ) as mock_poll,
     ):
-        mock_get.return_value = _FAKE_RUN_ID
-        # ps output has idle claude --print but no run_id match
+        mock_client = AsyncMock()
+        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = issue_locked_just_now
+        mock_client.get = AsyncMock(return_value=mock_resp)
         mock_ps.return_value = _PS_IDLE_CLAUDE
         mock_poll.return_value = True
 
@@ -219,21 +253,23 @@ async def test_unstick_permissive_fallback_when_strict_empty() -> None:
 @pytest.mark.asyncio
 async def test_unstick_refuses_more_than_five_candidates_without_force() -> None:
     """6 candidates → returns error unless force=True."""
-    # Build ps output with 6 idle claude processes
     lines = ["PID ELAPSED %CPU COMMAND"]
     for pid in range(10, 16):
         lines.append(f"  {pid} 01:30:00  0.0 claude --print --add-dir /tmp/foo/")
     ps_output = "\n".join(lines) + "\n"
 
     with (
-        patch(
-            "palace_mcp.ops.unstick._get_execution_run_id", new_callable=AsyncMock
-        ) as mock_get,
+        patch("palace_mcp.ops.unstick.httpx.AsyncClient") as mock_cls,
         patch(
             "palace_mcp.ops.unstick._get_ps_output", new_callable=AsyncMock
         ) as mock_ps,
     ):
-        mock_get.return_value = _FAKE_RUN_ID
+        mock_client = AsyncMock()
+        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = _FAKE_ISSUE_LOCKED
+        mock_client.get = AsyncMock(return_value=mock_resp)
         mock_ps.return_value = ps_output
 
         result = await unstick_issue("issue-1", **_make_kwargs(force=False))
@@ -246,9 +282,7 @@ async def test_unstick_refuses_more_than_five_candidates_without_force() -> None
 async def test_unstick_local_mode_no_ssh() -> None:
     """PALACE_OPS_HOST=local uses direct subprocess (no SSH wrapper)."""
     with (
-        patch(
-            "palace_mcp.ops.unstick._get_execution_run_id", new_callable=AsyncMock
-        ) as mock_get,
+        patch("palace_mcp.ops.unstick.httpx.AsyncClient") as mock_cls,
         patch(
             "palace_mcp.ops.unstick._run_subprocess", new_callable=AsyncMock
         ) as mock_sub,
@@ -256,8 +290,13 @@ async def test_unstick_local_mode_no_ssh() -> None:
             "palace_mcp.ops.unstick._poll_until_cleared", new_callable=AsyncMock
         ) as mock_poll,
     ):
-        mock_get.return_value = _FAKE_RUN_ID
-        mock_sub.return_value = (_PS_WITH_RUN_ID, "", 0)
+        mock_client = AsyncMock()
+        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = _FAKE_ISSUE_LOCKED
+        mock_client.get = AsyncMock(return_value=mock_resp)
+        mock_sub.return_value = (_PS_IDLE_CLAUDE, "", 0)
         mock_poll.return_value = True
 
         result = await unstick_issue(
@@ -265,7 +304,6 @@ async def test_unstick_local_mode_no_ssh() -> None:
         )
 
     assert result["ok"] is True
-    # Verify no "ssh" arg was used
     for call in mock_sub.call_args_list:
         assert call.args[0] != "ssh", "Expected no SSH call in local mode"
 
@@ -276,9 +314,7 @@ async def test_unstick_writes_audit_episode() -> None:
     mock_graphiti = MagicMock()
 
     with (
-        patch(
-            "palace_mcp.ops.unstick._get_execution_run_id", new_callable=AsyncMock
-        ) as mock_get,
+        patch("palace_mcp.ops.unstick.httpx.AsyncClient") as mock_cls,
         patch(
             "palace_mcp.ops.unstick._get_ps_output", new_callable=AsyncMock
         ) as mock_ps,
@@ -290,15 +326,19 @@ async def test_unstick_writes_audit_episode() -> None:
             "palace_mcp.ops.unstick.save_entity_node", new_callable=AsyncMock
         ) as mock_save,
     ):
-        mock_get.return_value = _FAKE_RUN_ID
-        mock_ps.return_value = _PS_WITH_RUN_ID
+        mock_client = AsyncMock()
+        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = _FAKE_ISSUE_LOCKED
+        mock_client.get = AsyncMock(return_value=mock_resp)
+        mock_ps.return_value = _PS_IDLE_CLAUDE
         mock_poll.return_value = True
 
         result = await unstick_issue("issue-1", **_make_kwargs(graphiti=mock_graphiti))
 
     assert result["ok"] is True
     mock_save.assert_awaited_once()
-    # Verify the Episode node carries the right metadata
     node = mock_save.call_args.args[1]
     assert node.attributes["kind"] == "ops.unstick_issue"
     assert node.attributes["target_issue"] == "issue-1"
@@ -309,9 +349,7 @@ async def test_unstick_writes_audit_episode() -> None:
 async def test_unstick_returns_lock_not_released_when_timeout() -> None:
     """Paperclip never clears lock → {ok: False, error: lock_not_released}."""
     with (
-        patch(
-            "palace_mcp.ops.unstick._get_execution_run_id", new_callable=AsyncMock
-        ) as mock_get,
+        patch("palace_mcp.ops.unstick.httpx.AsyncClient") as mock_cls,
         patch(
             "palace_mcp.ops.unstick._get_ps_output", new_callable=AsyncMock
         ) as mock_ps,
@@ -320,8 +358,13 @@ async def test_unstick_returns_lock_not_released_when_timeout() -> None:
             "palace_mcp.ops.unstick._poll_until_cleared", new_callable=AsyncMock
         ) as mock_poll,
     ):
-        mock_get.return_value = _FAKE_RUN_ID
-        mock_ps.return_value = _PS_WITH_RUN_ID
+        mock_client = AsyncMock()
+        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = _FAKE_ISSUE_LOCKED
+        mock_client.get = AsyncMock(return_value=mock_resp)
+        mock_ps.return_value = _PS_IDLE_CLAUDE
         mock_poll.return_value = False
 
         result = await unstick_issue("issue-1", **_make_kwargs())

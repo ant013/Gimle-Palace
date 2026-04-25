@@ -23,4 +23,5 @@ class Settings(BaseSettings):
     codebase_memory_mcp_binary: str = ""
     palace_ops_host: str = "host.docker.internal"
     palace_ops_ssh_key: str = "/home/appuser/.ssh/palace_ops_id_ed25519"
+    palace_ops_ssh_user: str = "anton"
     paperclip_api_url: str = "http://host.docker.internal:3100"
