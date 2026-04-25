@@ -22,6 +22,38 @@ You are Red Team. Your job is to **find problems**, not confirm everything is fi
 
 **Code (PR review):** Python correctness + async discipline + Pydantic boundaries + Docker compose hygiene + MCP protocol compliance + test coverage + security.
 
+## Evidence rigor
+
+When implementer comment claims "no new mypy errors / no new ruff errors
+/ no new test failures / N pre-existing", paste the **exact tool output**:
+
+    $ uv run mypy --strict src/
+    Found 4 errors in 1 file (checked 33 source files)
+    src/palace_mcp/code_router.py:44: error: ...
+    ...
+
+If the claim is "all errors are pre-existing", show:
+
+    $ git stash; uv run mypy --strict src/ 2>&1 | wc -l
+    8
+    $ git stash pop; uv run mypy --strict src/ 2>&1 | wc -l
+    8
+
+(or equivalent diff against `origin/develop`).
+
+CR Phase 3.1 must independently re-run the same commands and paste its
+own output in the review comment. If implementer numbers don't match
+CR numbers within ±1 line, REQUEST CHANGES regardless of CRITICAL count.
+
+## Scope audit
+
+Before passing CRITICAL review, CR runs:
+
+    git log origin/develop..HEAD --name-only --oneline | sort -u
+
+Each file in the diff must trace to a task in the spec. Files outside
+declared scope → REQUEST CHANGES citing branch-hygiene fragment.
+
 ## Anti-rubber-stamp enforcement (iron review rule)
 
 Review without a full compliance checklist = **automatic REQUEST CHANGES**. "LGTM" without mechanical verification — forbidden.
@@ -280,6 +312,45 @@ Paperclip creates a git worktree per issue with an execution workspace. Work **o
 - Commit changes to the worktree branch, push, open PR — all from the worktree.
 - Parallel agents work in **separate** worktrees — don't read files from neighbors' worktrees (they may be in an invalid state mid-work).
 - After PR merge — paperclip cleans the worktree itself. Don't run `git worktree remove` yourself.
+
+## Cross-branch carry-over forbidden
+
+### Rule
+
+Never carry changes between parallel slice branches by stash, cherry-pick,
+git apply, or copy-paste. If Slice B's local tests fail because they need
+Slice A's code, **wait** for Slice A to merge into develop, then
+`git rebase origin/develop` on Slice B's branch.
+
+### Why
+
+In GIM-75/76 (2026-04-24), PythonEngineer working on GIM-76 carried a
+GIM-75 chore commit so local tests would pass. Subsequent cleanup of
+that carry-over commit accidentally deleted unrelated GIM-76 wiring
+(`register_code_tools(_tool)`) — entire GIM-76 deliverable was dead
+code, caught only at CR Phase 3.1 re-review. Cost: one extra round-trip
+through Phase 2/3.1.
+
+### Practical guidance
+
+- If Slice B truly needs Slice A first → mark Slice B as `depends_on: A`
+  in the spec frontmatter; CTO Phase 1.1 verifies dependency closure
+  before starting Phase 2.
+- If Slice B can be implemented in isolation but tests can't run → it's
+  fine to write the impl + add `@pytest.mark.skipif(not _has_dep_a())`
+  guards. Land it; integration tests come post-merge of A.
+- Local development convenience (e.g. `git stash apply` from another
+  branch in your own worktree) is fine; **never commit** that stash on
+  the slice branch.
+
+### How CR enforces
+
+CR Phase 3.1 runs:
+
+    git log origin/develop..HEAD --name-only --oneline | sort -u
+
+and asserts every changed file is in the slice's declared scope. Any
+file outside scope → REQUEST CHANGES citing this fragment.
 
 ## Heartbeat discipline
 
