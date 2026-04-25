@@ -46,3 +46,87 @@ running as a separate container.
 - `index_repository`, `index_config`, `reindex_file`, `create_checkpoint` — indexing is operator-controlled, not agent-facing
 - `get_graph_schema` — internal CM introspection, no agent use case
 - `ingest_traces` — out of scope for this slice
+
+## palace.ingest — Extractor Framework
+
+Palace-mcp ships a pluggable extractor framework. Extractors read from external
+sources and write `EntityNode` / `EntityEdge` rows to Graphiti (Neo4j).
+
+### Registered extractors
+
+| Name | Description |
+|---|---|
+| `heartbeat` | Diagnostic probe. Writes one `:Episode` node per run. Use to verify the pipeline is alive. |
+| `codebase_memory_bridge` | Projects selected CM facts into Graphiti with metadata envelope (`cm_id`, `confidence`, `provenance`, `observed_at`). Supports incremental sync via per-file XXH3 hashing. |
+
+### Running an extractor
+
+```
+palace.ingest.list_extractors()
+palace.ingest.run_extractor(name="codebase_memory_bridge", project="gimle")
+```
+
+Success response:
+```json
+{
+  "ok": true,
+  "run_id": "<uuid>",
+  "extractor": "codebase_memory_bridge",
+  "project": "gimle",
+  "duration_ms": 1420,
+  "nodes_written": 34,
+  "edges_written": 12,
+  "success": true
+}
+```
+
+### codebase_memory_bridge — projection rules
+
+| CM label | Graphiti type | Confidence | Provenance |
+|---|---|---|---|
+| `Project` | `:Project` | 1.0 | asserted |
+| `File` | `:File` | 1.0 | asserted |
+| `Module` | `:Module` | 1.0 | asserted |
+| `Function` / `Method` / `Class` / … | `:Symbol{kind=...}` | 1.0 | asserted |
+| `Route` | `:APIEndpoint` | 1.0 | asserted |
+| Louvain cluster | `:ArchitectureCommunity` | modularity score | derived |
+| Top-5% co-change files | `:Hotspot` | normalized rank | derived |
+
+Skipped CM edges: `THROWS`, `READS`, `WRITES`, `HTTP_CALLS`, `ASYNC_CALLS`,
+`USES_TYPE`, `IMPLEMENTS`, `INHERITS`, `USAGE`, `TESTS`, `FILE_CHANGES_WITH`.
+
+### Cross-resolve: CM node ↔ Graphiti node
+
+Every projected node carries `cm_id = "<project_slug>:<cm_uuid>"`. To find
+the Graphiti EntityNode matching a CM symbol:
+
+```cypher
+MATCH (n {cm_id: "gimle:some-cm-uuid", group_id: "project/gimle"})
+RETURN n
+```
+
+### Incremental sync
+
+State is persisted to `~/.paperclip/codebase-memory-bridge-state.json`.
+Between runs, only files whose `xxh3` hash changed are re-projected.
+Stale edges for removed files are marked `invalid_at`.
+
+### Health
+
+`palace.memory.health()` returns a `bridge` section when the extractor has
+run at least once:
+
+```json
+{
+  "bridge": {
+    "last_run_at": "2026-04-25T10:00:00+00:00",
+    "last_run_duration_ms": 1420,
+    "nodes_written_by_type": {"File": 12, "Symbol": 22},
+    "edges_written_by_type": {"CONTAINS": 12},
+    "cm_index_freshness_sec": 42.3,
+    "staleness_warning": false
+  }
+}
+```
+
+`staleness_warning` is `true` when `cm_index_freshness_sec > 600` (2× the 5-min MVP interval).

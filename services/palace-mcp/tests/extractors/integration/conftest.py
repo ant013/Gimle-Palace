@@ -65,5 +65,8 @@ def graphiti_mock(neo4j_uri: str, neo4j_auth: tuple[str, str]) -> MagicMock:
     g.driver = Neo4jDriver(neo4j_uri, user=user, password=password)
     g.embedder = MagicMock()
     g.embedder.create = AsyncMock(return_value=[0.0] * 1024)
+    g.embedder.create_batch = AsyncMock(
+        side_effect=lambda texts: [[0.0] * 1024 for _ in texts]
+    )
     g.build_indices_and_constraints = AsyncMock(return_value=None)
     return g
