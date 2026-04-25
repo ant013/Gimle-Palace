@@ -20,3 +20,4 @@ class Settings(BaseSettings):
     neo4j_password: SecretStr
     openai_api_key: SecretStr
     palace_default_group_id: str = "project/gimle"
+    codebase_memory_mcp_binary: str = ""

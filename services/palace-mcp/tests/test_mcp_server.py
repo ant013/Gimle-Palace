@@ -40,3 +40,22 @@ class TestAssertUniqueToolNames:
 
         # Should not raise — all current tool names are unique.
         build_mcp_asgi_app()
+
+
+class TestCodeToolRegistration:
+    def test_code_tools_registered_in_mcp(self) -> None:
+        """palace.code.* tools pass Pattern #21 dedup and appear in the MCP app.
+
+        Tests through build_mcp_asgi_app() — same path as TestAssertUniqueToolNames.
+        Verifies that code tools are tracked by _registered_tool_names (Pattern #21)
+        and don't collide with existing palace.memory.* / palace.git.* tools.
+        """
+        from palace_mcp.mcp_server import build_mcp_asgi_app, _mcp
+
+        build_mcp_asgi_app()  # asserts unique names — would crash on collision
+        code_tools = [
+            t
+            for t in _mcp._tool_manager.list_tools()
+            if t.name.startswith("palace.code.")
+        ]
+        assert len(code_tools) == 8

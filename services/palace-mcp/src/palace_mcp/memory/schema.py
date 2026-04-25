@@ -80,3 +80,4 @@ class HealthResponse(BaseModel):
     entity_counts_per_project: dict[str, dict[str, int]] = Field(default_factory=dict)
     git_repos_available: list[str] = Field(default_factory=list)
     git_repos_unregistered: list[str] = Field(default_factory=list)
+    code_graph_reachable: bool = False

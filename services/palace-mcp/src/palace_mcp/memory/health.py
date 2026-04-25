@@ -13,6 +13,7 @@ from typing import Any
 
 from neo4j import AsyncDriver, AsyncManagedTransaction
 
+from palace_mcp import code_router
 from palace_mcp.git.path_resolver import REPOS_ROOT
 from palace_mcp.memory.cypher import (
     ENTITY_COUNTS,
@@ -27,11 +28,17 @@ logger = logging.getLogger(__name__)
 
 async def get_health(driver: AsyncDriver, *, default_group_id: str) -> HealthResponse:
     """Return health data: reachability, entity counts, project list, last ingest run."""
+    code_graph_reachable = code_router._cm_session is not None
+
     try:
         await driver.verify_connectivity()
     except Exception as exc:
         logger.warning("palace.memory.health neo4j unreachable: %s", exc)
-        return HealthResponse(neo4j_reachable=False, entity_counts={})
+        return HealthResponse(
+            neo4j_reachable=False,
+            entity_counts={},
+            code_graph_reachable=code_graph_reachable,
+        )
 
     async def _read(
         tx: AsyncManagedTransaction,
@@ -88,4 +95,5 @@ async def get_health(driver: AsyncDriver, *, default_group_id: str) -> HealthRes
         entity_counts_per_project=per_project,
         git_repos_available=git_available,
         git_repos_unregistered=git_unregistered,
+        code_graph_reachable=code_graph_reachable,
     )
