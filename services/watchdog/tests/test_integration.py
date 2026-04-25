@@ -119,7 +119,9 @@ def test_real_idle_proc_classified_as_hang(tmp_path: Path) -> None:
         "99991    2:00:00     0:00:01 /usr/bin/claude --append-system-prompt-file /tmp/paperclip-skills-xxx --add-dir /tmp\n"
     )
     with _mock.patch.object(det, "last_stream_event_age_seconds", return_value=None):
-        hangs = det.parse_ps_output(ps_text, etime_min_s=3600, idle_cpu_ratio_max=0.005, hang_stream_idle_max_s=300)
+        hangs = det.parse_ps_output(
+            ps_text, etime_min_s=3600, idle_cpu_ratio_max=0.005, hang_stream_idle_max_s=300
+        )
     assert len(hangs) == 1
     assert hangs[0].pid == 99991
     assert hangs[0].cpu_ratio < 0.005
@@ -135,7 +137,9 @@ def test_real_active_proc_not_classified(tmp_path: Path) -> None:
         "99992    2:00:00     0:10:00 /usr/bin/claude --append-system-prompt-file /tmp/paperclip-skills-xxx --add-dir /tmp\n"
     )
     with _mock.patch.object(det, "last_stream_event_age_seconds", return_value=None):
-        hangs = det.parse_ps_output(ps_text, etime_min_s=3600, idle_cpu_ratio_max=0.005, hang_stream_idle_max_s=300)
+        hangs = det.parse_ps_output(
+            ps_text, etime_min_s=3600, idle_cpu_ratio_max=0.005, hang_stream_idle_max_s=300
+        )
     assert hangs == []
 
 
@@ -159,6 +163,7 @@ def test_stream_stall_detected(tmp_path: Path) -> None:
             returncode=0,
         )
         import sys as _sys
+
         if _sys.platform != "darwin":
             pytest.skip("lsof path only tested on macOS")
         age = det.last_stream_event_age_seconds(99999)

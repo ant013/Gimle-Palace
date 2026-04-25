@@ -71,9 +71,12 @@ def test_parse_time_invalid_returns_zero():
 # --- parse_ps_output ------------------------------------------------------------
 
 
-def _parse_ps(text: str, etime_min_s: int = 60 * 60, ratio: float = 0.005, stream_max: int = 300) -> list[det.HangedProc]:
+def _parse_ps(
+    text: str, etime_min_s: int = 60 * 60, ratio: float = 0.005, stream_max: int = 300
+) -> list[det.HangedProc]:
     """Helper: call parse_ps_output with last_stream_event_age_seconds mocked to None."""
     import unittest.mock as _mock
+
     with _mock.patch.object(det, "last_stream_event_age_seconds", return_value=None):
         return det.parse_ps_output(text, etime_min_s, ratio, stream_max)
 
@@ -168,6 +171,7 @@ def test_is_stream_stalled_no_log_returns_false():
         "44444    2:00:00     0:08:20 /usr/bin/claude --append-system-prompt-file /tmp/paperclip-skills-abc --add-dir /tmp/paperclip-skills-abc\n"
     )
     import unittest.mock as _mock
+
     with _mock.patch.object(det, "last_stream_event_age_seconds", return_value=None):
         hangs = det.parse_ps_output(text, 60 * 60, 0.005, 300)
     assert hangs == []
@@ -180,6 +184,7 @@ def test_is_stream_stalled_recent_event_returns_false():
         "55556    2:00:00     0:08:20 /usr/bin/claude --append-system-prompt-file /tmp/paperclip-skills-abc --add-dir /tmp/paperclip-skills-abc\n"
     )
     import unittest.mock as _mock
+
     with _mock.patch.object(det, "last_stream_event_age_seconds", return_value=60):
         hangs = det.parse_ps_output(text, 60 * 60, 0.005, 300)
     assert hangs == []
@@ -193,6 +198,7 @@ def test_is_stream_stalled_old_event_returns_true():
         "55557    2:00:00     0:08:20 /usr/bin/claude --append-system-prompt-file /tmp/paperclip-skills-abc --add-dir /tmp/paperclip-skills-abc\n"
     )
     import unittest.mock as _mock
+
     with _mock.patch.object(det, "last_stream_event_age_seconds", return_value=600):
         hangs = det.parse_ps_output(text, 60 * 60, 0.005, 300)
     assert len(hangs) == 1

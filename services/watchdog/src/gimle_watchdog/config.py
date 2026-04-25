@@ -128,14 +128,10 @@ def _parse_thresholds(raw: dict[str, object]) -> Thresholds:
 
     ratio_raw = raw.get("idle_cpu_ratio_max")
     if not isinstance(ratio_raw, (int, float)) or isinstance(ratio_raw, bool):
-        raise ConfigError(
-            f"thresholds.idle_cpu_ratio_max must be a float, got {ratio_raw!r}"
-        )
+        raise ConfigError(f"thresholds.idle_cpu_ratio_max must be a float, got {ratio_raw!r}")
     ratio = float(ratio_raw)
     if not (0.0 < ratio < 1.0):
-        raise ConfigError(
-            f"thresholds.idle_cpu_ratio_max must be in (0.0, 1.0), got {ratio!r}"
-        )
+        raise ConfigError(f"thresholds.idle_cpu_ratio_max must be in (0.0, 1.0), got {ratio!r}")
 
     return Thresholds(
         died_min=_require_positive_int(raw.get("died_min"), "thresholds.died_min"),

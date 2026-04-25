@@ -107,7 +107,11 @@ async def test_tick_kills_hanged_procs(tmp_path: Path):
     client = MagicMock()
     client.list_in_progress_issues = AsyncMock(return_value=[])
     hanged = HangedProc(
-        pid=12345, etime_s=5000, cpu_s=10, cpu_ratio=0.002, command="paperclip-skills append-system-prompt-file"
+        pid=12345,
+        etime_s=5000,
+        cpu_s=10,
+        cpu_ratio=0.002,
+        command="paperclip-skills append-system-prompt-file",
     )
     kill_mock = AsyncMock(return_value=MagicMock(status="clean", pid=12345))
     with patch("gimle_watchdog.daemon.detection.scan_idle_hangs", return_value=[hanged]):
