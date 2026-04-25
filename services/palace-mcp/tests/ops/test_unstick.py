@@ -46,9 +46,7 @@ PID ELAPSED %CPU COMMAND
 """
 
 # executionLockedAt ~90 minutes ago → PID 42 should match strict heuristic
-_LOCKED_AT_90MIN = (
-    datetime.now(timezone.utc) - timedelta(minutes=90)
-).isoformat()
+_LOCKED_AT_90MIN = (datetime.now(timezone.utc) - timedelta(minutes=90)).isoformat()
 
 
 def _make_kwargs(
