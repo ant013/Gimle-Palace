@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 from neo4j import AsyncDriver
@@ -14,13 +14,9 @@ from palace_mcp.extractors.heartbeat import HeartbeatExtractor
 
 
 @pytest.mark.asyncio
-async def test_heartbeat_writes_node(driver: AsyncDriver) -> None:
-    from graphiti_core.driver.neo4j_driver import Neo4jDriver
-
-    graphiti = MagicMock()
-    graphiti.driver = Neo4jDriver(driver)
-    graphiti.build_indices_and_constraints = AsyncMock(return_value=None)
-
+async def test_heartbeat_writes_node(
+    driver: AsyncDriver, graphiti_mock: MagicMock
+) -> None:
     ctx = ExtractorRunContext(
         project_slug="gimle",
         group_id="project/gimle",
@@ -30,7 +26,7 @@ async def test_heartbeat_writes_node(driver: AsyncDriver) -> None:
         logger=logging.getLogger("test"),
     )
     extractor = HeartbeatExtractor()
-    stats = await extractor.run(graphiti=graphiti, ctx=ctx)
+    stats = await extractor.run(graphiti=graphiti_mock, ctx=ctx)
 
     assert stats.nodes_written == 1
     assert stats.edges_written == 0

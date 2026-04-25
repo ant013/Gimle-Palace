@@ -1,13 +1,13 @@
 """Integration test — end-to-end via run_extractor runner (tool handler bypass).
 
 Calls the runner directly to verify wire-up between HeartbeatExtractor,
-:IngestRun lifecycle, and :ExtractorHeartbeat persistence.
+:IngestRun lifecycle, and :Episode persistence.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from neo4j import AsyncDriver
@@ -47,12 +47,14 @@ async def _project_and_repo(driver: AsyncDriver, tmp_path: Path) -> Path:
 
 @pytest.mark.asyncio
 async def test_run_extractor_end_to_end(
-    driver: AsyncDriver, _project_and_repo: Path
+    driver: AsyncDriver, graphiti_mock: MagicMock, _project_and_repo: Path
 ) -> None:
     await ensure_extractors_schema(driver)
 
     with patch("palace_mcp.extractors.runner.REPOS_ROOT", _project_and_repo):
-        res = await run_extractor(name="heartbeat", project="testproj", driver=driver)
+        res = await run_extractor(
+            name="heartbeat", project="testproj", driver=driver, graphiti=graphiti_mock
+        )
 
     assert res["ok"] is True
     assert res["extractor"] == "heartbeat"
@@ -60,12 +62,9 @@ async def test_run_extractor_end_to_end(
     assert res["nodes_written"] == 1
 
     async with driver.session() as s:
-        result = await s.run(
-            "MATCH (h:ExtractorHeartbeat {run_id: $run_id}) RETURN h",
-            run_id=res["run_id"],
-        )
+        result = await s.run("MATCH (h:Episode) RETURN count(h) AS c")
         row = await result.single()
-    assert row is not None
+    assert row is not None and row["c"] == 1
 
     async with driver.session() as s:
         result = await s.run(
@@ -82,18 +81,22 @@ async def test_run_extractor_end_to_end(
 
 @pytest.mark.asyncio
 async def test_rerun_creates_separate_records(
-    driver: AsyncDriver, _project_and_repo: Path
+    driver: AsyncDriver, graphiti_mock: MagicMock, _project_and_repo: Path
 ) -> None:
     await ensure_extractors_schema(driver)
 
     with patch("palace_mcp.extractors.runner.REPOS_ROOT", _project_and_repo):
-        res1 = await run_extractor(name="heartbeat", project="testproj", driver=driver)
-        res2 = await run_extractor(name="heartbeat", project="testproj", driver=driver)
+        res1 = await run_extractor(
+            name="heartbeat", project="testproj", driver=driver, graphiti=graphiti_mock
+        )
+        res2 = await run_extractor(
+            name="heartbeat", project="testproj", driver=driver, graphiti=graphiti_mock
+        )
 
     assert res1["run_id"] != res2["run_id"]
 
     async with driver.session() as s:
-        result = await s.run("MATCH (h:ExtractorHeartbeat) RETURN count(h) AS c")
+        result = await s.run("MATCH (h:Episode) RETURN count(h) AS c")
         row = await result.single()
     assert row is not None
     assert row["c"] == 2

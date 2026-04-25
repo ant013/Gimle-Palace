@@ -52,10 +52,12 @@ async def test_paperclip_ingest_row_parses_with_new_nullable_fields(
     from palace_mcp.memory.cypher import LATEST_INGEST_RUN
 
     async with driver.session() as s:
-        result = await s.run(LATEST_INGEST_RUN, source="paperclip")
+        result = await s.run(LATEST_INGEST_RUN)
         row = await result.single()
     assert row is not None
     r = dict(row["r"])
-    assert r["source"] == "paperclip"
+    # LATEST_INGEST_RUN returns the most recent row by started_at;
+    # extractor row (10:00) is newer than the legacy paperclip row (09:00)
+    assert r["source"] == "extractor.heartbeat"
     assert r["success"] is True
-    assert r.get("nodes_written") is None
+    assert r["nodes_written"] == 1

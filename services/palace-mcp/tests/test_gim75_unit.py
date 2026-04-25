@@ -139,8 +139,7 @@ def test_project_slug_query_uses_slug() -> None:
     from palace_mcp.extractors.runner import GET_PROJECT
 
     assert "slug: $slug" in GET_PROJECT or "{slug: $slug}" in GET_PROJECT, (
-        "Runner GET_PROJECT must match on {slug: $slug}. "
-        f"Query: {GET_PROJECT!r}"
+        f"Runner GET_PROJECT must match on {{slug: $slug}}. Query: {GET_PROJECT!r}"
     )
 
 
