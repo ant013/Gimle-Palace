@@ -51,7 +51,9 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends curl git && rm -rf /var/lib/apt/lists/*
 
-RUN adduser --disabled-password --gecos "" appuser
+RUN adduser --disabled-password --gecos "" appuser && \
+    mkdir -p /home/appuser/.cache/codebase-memory-mcp && \
+    chown -R appuser:appuser /home/appuser/.cache
 
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/src /app/src
