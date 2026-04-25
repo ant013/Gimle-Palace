@@ -1,12 +1,22 @@
 ---
 slug: N1a-2-codebase-memory-sidecar
-status: proposed
+status: SUPERSEDED by 2026-04-25-N1a-2-codebase-memory-cm-stdio-rev2.md
 branch: feature/GIM-76-codebase-memory-sidecar (to be cut from develop once umbrella lands)
 paperclip_issue: 76 (9917ad4d-102f-4c81-afcd-22a9a6c71881)
 parent_umbrella: 74
 predecessor: 67d42dc (develop tip)
 date: 2026-04-24
 ---
+
+> **SUPERSEDED 2026-04-25.** This rev1 spec assumed `codebase-memory-mcp` v0.6.0
+> exposes an HTTP/JSON-RPC endpoint and runs as a separate compose service. Phase 4.1
+> live smoke (commit `18def9c`) revealed the binary is **stdio-only** — there is
+> no HTTP server, no listening port, immediate exit when stdin is closed. The
+> transport assumption was never verified in the rev1 spike. See
+> `2026-04-25-N1a-2-codebase-memory-cm-stdio-rev2.md` for the corrected
+> architecture (in-process subprocess via MCP SDK stdio_client). PE pre-emptively
+> shipped the rev2 architecture in commit `de3f30c` before the spec was written;
+> rev2 is the post-hoc canonicalization.
 
 # N+1a.2 — Codebase-Memory sidecar and `palace.code.*` pass-through
 
