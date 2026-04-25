@@ -106,7 +106,7 @@ MUST have at least one test that:
 
 1. Spawns a test FastMCP instance bound to a localhost port (or the
    palace-mcp container)
-2. Connects via `streamablehttp_client` / SSE / actual MCP HTTP client
+2. Connects via `streamable_http_client` / SSE / actual MCP HTTP client
 3. Calls `tools/list` — asserts the tool appears with correct `inputSchema`
 4. Calls `tools/call` with FLAT arguments (not nested
    `{arguments: {...}}`) — asserts non-empty result on a known-good case
@@ -119,7 +119,7 @@ integration tests. They test the implementation, not the contract.
 ### CR enforcement (Phase 3.1)
 
 If a PR adds or modifies an `@mcp.tool` or passthrough decorator, CR MUST
-verify there is an integration test file with `streamablehttp_client` or
+verify there is an integration test file with `streamable_http_client` or
 equivalent real MCP HTTP client. If absent, REQUEST CHANGES.
 
 ## Compliance checklist
