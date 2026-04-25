@@ -50,11 +50,21 @@ def _graphiti_mock() -> MagicMock:
 
 
 def _cm_response(nodes: list[dict[str, Any]]) -> dict[str, Any]:
-    return {"nodes": nodes}
+    # Actual CM search_graph shape: {"results": [{"entity": {...}}, ...], "total": N}
+    return {
+        "results": [{"entity": n} for n in nodes],
+        "total": len(nodes),
+        "has_more": False,
+    }
 
 
 def _cm_edges_response(edges: list[dict[str, Any]]) -> dict[str, Any]:
-    return {"result": edges}
+    # Actual CM query_graph shape: {"columns": [...], "rows": [...], "total": N}
+    if not edges:
+        return {"columns": [], "rows": [], "total": 0}
+    cols = list(edges[0].keys())
+    rows = [[e.get(c) for c in cols] for e in edges]
+    return {"columns": cols, "rows": rows, "total": len(edges)}
 
 
 def _make_cm_node(

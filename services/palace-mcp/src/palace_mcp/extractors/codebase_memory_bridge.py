@@ -256,6 +256,15 @@ async def _call_cm(
 
 def _iter_nodes(result: dict[str, Any]) -> list[dict[str, Any]]:
     """Extract list of node dicts from various CM response shapes."""
+    # CM search_graph: {"results": [{"entity": {...}, ...}, ...], "total": N}
+    if "results" in result and isinstance(result["results"], list):
+        out: list[dict[str, Any]] = []
+        for item in result["results"]:
+            if not isinstance(item, dict):
+                continue
+            out.append(item["entity"] if "entity" in item else item)
+        return out
+    # Fallback shapes
     if "nodes" in result and isinstance(result["nodes"], list):
         return [n for n in result["nodes"] if isinstance(n, dict)]
     if "result" in result and isinstance(result["result"], list):
@@ -264,7 +273,11 @@ def _iter_nodes(result: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _iter_edges(result: dict[str, Any]) -> list[dict[str, Any]]:
-    """Extract list of edge dicts from CM query_graph response."""
+    """Extract list of edge/row dicts from CM query_graph response."""
+    # CM query_graph: {"columns": ["col1", ...], "rows": [[v1, ...], ...], "total": N}
+    if "columns" in result and "rows" in result:
+        cols: list[str] = result["columns"]
+        return [dict(zip(cols, row)) for row in result["rows"] if isinstance(row, list)]
     if "result" in result and isinstance(result["result"], list):
         return [e for e in result["result"] if isinstance(e, dict)]
     if "edges" in result and isinstance(result["edges"], list):
@@ -566,7 +579,7 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
             inc_n("APIEndpoint")
 
         # --- Derived: ArchitectureCommunity (Louvain clusters from get_architecture) ---
-        arch_res = await _call_cm("get_architecture")
+        arch_res = await _call_cm("get_architecture", {"project": cm_project})
         clusters = arch_res.get("clusters", [])
         community_nodes: dict[str, EntityNode] = {}
         if isinstance(clusters, list):

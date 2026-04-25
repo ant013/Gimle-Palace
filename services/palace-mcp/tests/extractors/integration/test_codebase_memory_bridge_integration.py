@@ -67,17 +67,32 @@ def _fake_cm(
             assert got == _EXPECTED_CM_PROJECT, (
                 f"search_graph received project={got!r}, expected {_EXPECTED_CM_PROJECT!r}"
             )
-            return {"nodes": nodes}
+            # Actual CM shape: {"results": [{"entity": {...}}, ...], "total": N}
+            return {
+                "results": [{"entity": n} for n in nodes],
+                "total": len(nodes),
+                "has_more": False,
+            }
         if tool == "query_graph":
-            # Hash-fetch query contains "xxh3_hash"; edge queries don't.
+            # Hash-fetch query contains "xxh3"; edge queries don't.
             q = args.get("query", "")
-            if "xxh3_hash" in q:
+            if "xxh3" in q:
                 assert _EXPECTED_CM_PROJECT in q, (
                     f"query_graph hash query uses wrong project: {q!r}"
                 )
-                return {"result": []}  # no prior hashes → first-run projects all
-            return {"result": edges}
+                # Actual CM shape: {"columns": [...], "rows": [...], "total": N}
+                return {"columns": ["cm_id", "path", "xxh3"], "rows": [], "total": 0}
+            # Edge query — convert edge dicts to column format
+            if edges:
+                cols = list(edges[0].keys())
+                rows = [[e.get(c) for c in cols] for e in edges]
+                return {"columns": cols, "rows": rows, "total": len(edges)}
+            return {"columns": [], "rows": [], "total": 0}
         if tool == "get_architecture":
+            got_proj = args.get("project")
+            assert got_proj == _EXPECTED_CM_PROJECT, (
+                f"get_architecture received project={got_proj!r}, expected {_EXPECTED_CM_PROJECT!r}"
+            )
             return architecture or {"communities": [], "hotspots": []}
         return {}
 
