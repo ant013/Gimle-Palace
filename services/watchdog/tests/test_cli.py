@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from unittest.mock import patch
 
 from gimle_watchdog import __main__ as cli
 
@@ -32,7 +31,7 @@ paperclip: {base_url: http://x, api_key_source: "inline:k"}
 companies:
   - id: 9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64
     name: gimle
-    thresholds: {died_min: 3, hang_etime_min: 60, hang_cpu_max_s: 30}
+    thresholds: {died_min: 3, hang_etime_min: 60, idle_cpu_ratio_max: 0.005, hang_stream_idle_max_s: 300}
 daemon: {poll_interval_seconds: 120}
 cooldowns: {per_issue_seconds: 300, per_agent_cap: 3, per_agent_window_seconds: 900}
 logging: {path: /tmp/x.log, level: INFO, rotate_max_bytes: 10485760, rotate_backup_count: 5}
@@ -54,7 +53,7 @@ paperclip: {{base_url: http://x, api_key_source: "inline:k"}}
 companies:
   - id: 9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64
     name: gimle
-    thresholds: {{died_min: 3, hang_etime_min: 60, hang_cpu_max_s: 30}}
+    thresholds: {{died_min: 3, hang_etime_min: 60, idle_cpu_ratio_max: 0.005, hang_stream_idle_max_s: 300}}
 daemon: {{poll_interval_seconds: 120}}
 cooldowns: {{per_issue_seconds: 300, per_agent_cap: 3, per_agent_window_seconds: 900}}
 logging: {{path: {log_path}, level: INFO, rotate_max_bytes: 10485760, rotate_backup_count: 5}}
@@ -63,9 +62,11 @@ escalation: {{post_comment_on_issue: true, comment_marker: "<!-- x -->"}}
     return cfg_path
 
 
-def test_cmd_status(tmp_path: Path, capsys):
+def test_cmd_status(tmp_path: Path, capsys, monkeypatch):
     cfg_path = _minimal_cfg(tmp_path)
-    # state file doesn't exist yet — that's fine, it initialises empty
+    # Redirect default state path so the test is isolated from the real watchdog state file
+    state_file = tmp_path / "watchdog-state.json"
+    monkeypatch.setattr(cli, "_DEFAULT_STATE_PATH", str(state_file))
     rc = cli.main(["watchdog", "status", "--config", str(cfg_path)])
     out = capsys.readouterr().out
     assert rc == 0
@@ -93,27 +94,25 @@ def test_cmd_tail_with_log(tmp_path: Path, capsys):
     assert "hi" in out
 
 
-def test_cmd_escalate(tmp_path: Path, capsys):
+def test_cmd_escalate(tmp_path: Path, capsys, monkeypatch):
     import argparse
 
     state_path = tmp_path / "state.json"
+    monkeypatch.setattr(cli, "_DEFAULT_STATE_PATH", str(state_path))
     args = argparse.Namespace(issue="issue-x")
-    with patch("gimle_watchdog.__main__.Path") as mock_path_cls:
-        mock_path_cls.return_value.expanduser.return_value = state_path
-        rc = cli._cmd_escalate(args)
+    rc = cli._cmd_escalate(args)
     out = capsys.readouterr().out
     assert rc == 0
     assert "permanently escalated" in out
 
 
-def test_cmd_unescalate(tmp_path: Path, capsys):
+def test_cmd_unescalate(tmp_path: Path, capsys, monkeypatch):
     import argparse
 
-    args = argparse.Namespace(issue="issue-y")
     state_path = tmp_path / "state.json"
-    with patch("gimle_watchdog.__main__.Path") as mock_path_cls:
-        mock_path_cls.return_value.expanduser.return_value = state_path
-        rc = cli._cmd_unescalate(args)
+    monkeypatch.setattr(cli, "_DEFAULT_STATE_PATH", str(state_path))
+    args = argparse.Namespace(issue="issue-y")
+    rc = cli._cmd_unescalate(args)
     out = capsys.readouterr().out
     assert rc == 0
     assert "cleared" in out
@@ -138,3 +137,76 @@ def test_config_after_subcommand_tick(tmp_path: Path) -> None:
     args = cli._build_parser().parse_args(["tick", "--config", str(cfg)])
     assert args.command == "tick"
     assert args.config == cfg
+
+
+def test_detect_platform_linux(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "linux")
+    assert cli._detect_platform() == "linux"
+
+
+def test_detect_platform_unknown(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "freebsd12")
+    assert cli._detect_platform() == "unknown"
+
+
+def test_dry_run_install_linux(tmp_path, monkeypatch, capsys):
+    cfg_path = _minimal_cfg(tmp_path)
+    monkeypatch.setattr(sys, "platform", "linux")
+    rc = cli.main(["watchdog", "install", "--config", str(cfg_path), "--dry-run"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "WantedBy=default.target" in out  # systemd unit marker
+
+
+def test_install_unsupported_platform(tmp_path, monkeypatch, capsys):
+    cfg_path = _minimal_cfg(tmp_path)
+    monkeypatch.setattr(sys, "platform", "freebsd12")
+    rc = cli.main(["watchdog", "install", "--config", str(cfg_path), "--dry-run"])
+    assert rc == 1
+    assert "Unsupported" in capsys.readouterr().err
+
+
+def test_main_no_command(capsys):
+    # The no-command path (args.command is None) triggers rc=2
+    parser = cli._build_parser()
+    args = parser.parse_args([])
+    assert args.command is None
+
+
+def test_main_config_error(tmp_path, capsys):
+    bad_cfg = tmp_path / "bad.yaml"
+    bad_cfg.write_text("version: 1\n")  # missing required fields
+    rc = cli.main(["watchdog", "status", "--config", str(bad_cfg)])
+    assert rc == 2
+    assert "config error" in capsys.readouterr().err
+
+
+def test_cmd_debug_watchdog_empty(tmp_path, monkeypatch, capsys):
+    from unittest.mock import patch
+
+    cfg_path = _minimal_cfg(tmp_path)
+    with patch("gimle_watchdog.detection.scan_idle_hangs", return_value=[]):
+        rc = cli.main(["watchdog", "run", "--config", str(cfg_path), "--debug-watchdog"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "No candidate" in out
+
+
+def test_cmd_debug_watchdog_with_procs(tmp_path, monkeypatch, capsys):
+    from unittest.mock import patch
+
+    from gimle_watchdog.detection import HangedProc
+
+    cfg_path = _minimal_cfg(tmp_path)
+    proc = HangedProc(
+        pid=9999,
+        etime_s=3600,
+        cpu_s=5,
+        cpu_ratio=0.0014,
+        command="paperclip-skills test",
+    )
+    with patch("gimle_watchdog.detection.scan_idle_hangs", return_value=[proc]):
+        rc = cli.main(["watchdog", "run", "--config", str(cfg_path), "--debug-watchdog"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "9999" in out

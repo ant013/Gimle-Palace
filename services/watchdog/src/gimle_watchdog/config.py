@@ -32,7 +32,9 @@ class PaperclipConfig:
 class Thresholds:
     died_min: int
     hang_etime_min: int
-    hang_cpu_max_s: int
+    hang_cpu_max_s: int | None  # deprecated; None when new fields are used
+    idle_cpu_ratio_max: float  # CPU time / elapsed time ratio below which proc is idle
+    hang_stream_idle_max_s: int  # seconds since last stream-json event before proc is stalled
 
 
 @dataclass(frozen=True)
@@ -107,13 +109,39 @@ def _require_positive_int(value: object, name: str) -> int:
 
 
 def _parse_thresholds(raw: dict[str, object]) -> Thresholds:
+    has_new = "idle_cpu_ratio_max" in raw
+    has_old = "hang_cpu_max_s" in raw
+
+    if has_old and not has_new:
+        raise ConfigError(
+            "thresholds.hang_cpu_max_s is no longer supported. "
+            "Add 'idle_cpu_ratio_max: 0.005' and 'hang_stream_idle_max_s: 300' to migrate."
+        )
+
+    hang_cpu_max_s: int | None = None
+    if has_old and has_new:
+        log.warning(
+            "thresholds.hang_cpu_max_s is deprecated and will be ignored; "
+            "using idle_cpu_ratio_max instead"
+        )
+        hang_cpu_max_s = None
+
+    ratio_raw = raw.get("idle_cpu_ratio_max")
+    if not isinstance(ratio_raw, (int, float)) or isinstance(ratio_raw, bool):
+        raise ConfigError(f"thresholds.idle_cpu_ratio_max must be a float, got {ratio_raw!r}")
+    ratio = float(ratio_raw)
+    if not (0.0 < ratio < 1.0):
+        raise ConfigError(f"thresholds.idle_cpu_ratio_max must be in (0.0, 1.0), got {ratio!r}")
+
     return Thresholds(
         died_min=_require_positive_int(raw.get("died_min"), "thresholds.died_min"),
         hang_etime_min=_require_positive_int(
             raw.get("hang_etime_min"), "thresholds.hang_etime_min"
         ),
-        hang_cpu_max_s=_require_positive_int(
-            raw.get("hang_cpu_max_s"), "thresholds.hang_cpu_max_s"
+        hang_cpu_max_s=hang_cpu_max_s,
+        idle_cpu_ratio_max=ratio,
+        hang_stream_idle_max_s=_require_positive_int(
+            raw.get("hang_stream_idle_max_s"), "thresholds.hang_stream_idle_max_s"
         ),
     )
 

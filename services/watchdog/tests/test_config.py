@@ -30,7 +30,8 @@ companies:
     thresholds:
       died_min: 3
       hang_etime_min: 60
-      hang_cpu_max_s: 30
+      idle_cpu_ratio_max: 0.005
+      hang_stream_idle_max_s: 300
 daemon:
   poll_interval_seconds: 120
 cooldowns:
@@ -55,6 +56,9 @@ escalation:
     assert c.companies[0].id == "9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64"
     assert c.companies[0].name == "gimle"
     assert c.companies[0].thresholds.hang_etime_min == 60
+    assert c.companies[0].thresholds.idle_cpu_ratio_max == 0.005
+    assert c.companies[0].thresholds.hang_stream_idle_max_s == 300
+    assert c.companies[0].thresholds.hang_cpu_max_s is None
     assert c.cooldowns.per_agent_cap == 3
     assert c.escalation.post_comment_on_issue is True
 
@@ -92,7 +96,7 @@ paperclip: {base_url: http://x, api_key_source: "inline:k"}
 companies:
   - id: not-a-uuid
     name: bad
-    thresholds: {died_min: 3, hang_etime_min: 60, hang_cpu_max_s: 30}
+    thresholds: {died_min: 3, hang_etime_min: 60, idle_cpu_ratio_max: 0.005, hang_stream_idle_max_s: 300}
 daemon: {poll_interval_seconds: 120}
 cooldowns: {per_issue_seconds: 300, per_agent_cap: 3, per_agent_window_seconds: 900}
 logging: {path: /tmp/x.log, level: INFO, rotate_max_bytes: 1, rotate_backup_count: 1}
@@ -113,7 +117,7 @@ paperclip: {base_url: http://x, api_key_source: "env:NONEXISTENT_VAR"}
 companies:
   - id: 9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64
     name: gimle
-    thresholds: {died_min: 3, hang_etime_min: 60, hang_cpu_max_s: 30}
+    thresholds: {died_min: 3, hang_etime_min: 60, idle_cpu_ratio_max: 0.005, hang_stream_idle_max_s: 300}
 daemon: {poll_interval_seconds: 120}
 cooldowns: {per_issue_seconds: 300, per_agent_cap: 3, per_agent_window_seconds: 900}
 logging: {path: /tmp/x.log, level: INFO, rotate_max_bytes: 1, rotate_backup_count: 1}
@@ -137,7 +141,7 @@ paperclip:
 companies:
   - id: 9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64
     name: gimle
-    thresholds: {{died_min: 3, hang_etime_min: 60, hang_cpu_max_s: 30}}
+    thresholds: {{died_min: 3, hang_etime_min: 60, idle_cpu_ratio_max: 0.005, hang_stream_idle_max_s: 300}}
 daemon: {{poll_interval_seconds: 120}}
 cooldowns: {{per_issue_seconds: 300, per_agent_cap: 3, per_agent_window_seconds: 900}}
 logging: {{path: /tmp/x.log, level: INFO, rotate_max_bytes: 1, rotate_backup_count: 1}}
@@ -157,7 +161,7 @@ paperclip: {base_url: http://x, api_key_source: "inline:k"}
 companies:
   - id: 9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64
     name: gimle
-    thresholds: {died_min: -1, hang_etime_min: 60, hang_cpu_max_s: 30}
+    thresholds: {died_min: -1, hang_etime_min: 60, idle_cpu_ratio_max: 0.005, hang_stream_idle_max_s: 300}
 daemon: {poll_interval_seconds: 120}
 cooldowns: {per_issue_seconds: 300, per_agent_cap: 3, per_agent_window_seconds: 900}
 logging: {path: /tmp/x.log, level: INFO, rotate_max_bytes: 1, rotate_backup_count: 1}
@@ -177,7 +181,7 @@ paperclip: {base_url: http://x, api_key_source: "inline:k"}
 companies:
   - id: 9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64
     name: gimle
-    thresholds: {died_min: 3, hang_etime_min: 60, hang_cpu_max_s: 30}
+    thresholds: {died_min: 3, hang_etime_min: 60, idle_cpu_ratio_max: 0.005, hang_stream_idle_max_s: 300}
 daemon: {poll_interval_seconds: 120}
 cooldowns: {per_issue_seconds: 300, per_agent_cap: 0, per_agent_window_seconds: 900}
 logging: {path: /tmp/x.log, level: INFO, rotate_max_bytes: 1, rotate_backup_count: 1}
@@ -185,4 +189,74 @@ escalation: {post_comment_on_issue: false, comment_marker: "x"}
 """,
     )
     with pytest.raises(cfg.ConfigError, match="per_agent_cap"):
+        cfg.load_config(path)
+
+
+# --- New GIM-80 threshold tests -------------------------------------------------
+
+
+_BASE_YAML = """\
+version: 1
+paperclip: {{base_url: http://x, api_key_source: "inline:k"}}
+companies:
+  - id: 9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64
+    name: gimle
+    thresholds: {thresholds}
+daemon: {{poll_interval_seconds: 120}}
+cooldowns: {{per_issue_seconds: 300, per_agent_cap: 3, per_agent_window_seconds: 900}}
+logging: {{path: /tmp/x.log, level: INFO, rotate_max_bytes: 1, rotate_backup_count: 1}}
+escalation: {{post_comment_on_issue: false, comment_marker: "x"}}
+"""
+
+
+def test_config_load_raises_without_idle_cpu_ratio_max(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        _BASE_YAML.format(
+            thresholds="{died_min: 3, hang_etime_min: 60, hang_cpu_max_s: 30, hang_stream_idle_max_s: 300}"
+        ),
+    )
+    with pytest.raises(cfg.ConfigError, match="hang_cpu_max_s is no longer supported"):
+        cfg.load_config(path)
+
+
+def test_config_load_warns_on_deprecated_hang_cpu_max_s(tmp_path: Path, caplog):
+    import logging
+
+    path = _write(
+        tmp_path,
+        _BASE_YAML.format(
+            thresholds=(
+                "{died_min: 3, hang_etime_min: 60, "
+                "hang_cpu_max_s: 30, idle_cpu_ratio_max: 0.005, hang_stream_idle_max_s: 300}"
+            )
+        ),
+    )
+    with caplog.at_level(logging.WARNING, logger="watchdog.config"):
+        c = cfg.load_config(path)
+    assert c.companies[0].thresholds.hang_cpu_max_s is None
+    assert c.companies[0].thresholds.idle_cpu_ratio_max == 0.005
+    assert any("deprecated" in r.message for r in caplog.records)
+
+
+def test_config_load_validates_ratio_range(tmp_path: Path):
+    for bad_ratio in [0.0, 1.0, -0.1, 1.5]:
+        path = _write(
+            tmp_path,
+            _BASE_YAML.format(
+                thresholds=f"{{died_min: 3, hang_etime_min: 60, idle_cpu_ratio_max: {bad_ratio}, hang_stream_idle_max_s: 300}}"
+            ),
+        )
+        with pytest.raises(cfg.ConfigError, match="idle_cpu_ratio_max"):
+            cfg.load_config(path)
+
+
+def test_config_load_validates_stream_idle_positive(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        _BASE_YAML.format(
+            thresholds="{died_min: 3, hang_etime_min: 60, idle_cpu_ratio_max: 0.005, hang_stream_idle_max_s: 0}"
+        ),
+    )
+    with pytest.raises(cfg.ConfigError, match="positive"):
         cfg.load_config(path)
