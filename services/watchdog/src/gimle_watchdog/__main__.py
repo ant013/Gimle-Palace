@@ -40,8 +40,20 @@ def _build_parser() -> argparse.ArgumentParser:
     p_install.add_argument("--discover-companies", action="store_true")
 
     sub.add_parser("uninstall", parents=[config_parent], help="remove platform service")
-    sub.add_parser("run", parents=[config_parent], help="run daemon loop (launchd/systemd)")
-    sub.add_parser("tick", parents=[config_parent], help="one-shot tick (cron)")
+
+    p_run = sub.add_parser("run", parents=[config_parent], help="run daemon loop (launchd/systemd)")
+    p_run.add_argument(
+        "--debug-watchdog",
+        action="store_true",
+        help="scan once, print proc table, exit — no kill, no daemon loop",
+    )
+
+    p_tick = sub.add_parser("tick", parents=[config_parent], help="one-shot tick (cron)")
+    p_tick.add_argument(
+        "--debug-watchdog",
+        action="store_true",
+        help="scan once, print proc table, exit — no kill, no daemon loop",
+    )
     sub.add_parser("status", parents=[config_parent], help="service + filter health")
     p_tail = sub.add_parser("tail", parents=[config_parent], help="tail log")
     p_tail.add_argument("-n", type=int, default=50)
@@ -130,7 +142,27 @@ def _cmd_uninstall(args: argparse.Namespace) -> int:  # pragma: no cover
     return 0
 
 
+def _cmd_debug_watchdog(cfg_path: Path) -> int:
+    """Scan once, print candidate proc table, exit. No kill, no daemon loop."""
+    cfg = load_config(cfg_path)
+    procs = detection.scan_idle_hangs(cfg)
+    if not procs:
+        print("No candidate hanged procs found.")
+        return 0
+    header = f"{'PID':>8}  {'etime_s':>8}  {'cpu_s':>6}  {'cpu_ratio':>10}  {'stream_age_s':>12}  command"
+    print(header)
+    print("-" * len(header))
+    for p in procs:
+        stream_age = str(p.stream_event_age_s) if p.stream_event_age_s is not None else "n/a"
+        print(
+            f"{p.pid:>8}  {p.etime_s:>8}  {p.cpu_s:>6}  {p.cpu_ratio:>10.4f}  {stream_age:>12}  {p.command[:60]}"
+        )
+    return 0
+
+
 def _cmd_run(args: argparse.Namespace) -> int:  # pragma: no cover
+    if getattr(args, "debug_watchdog", False):
+        return _cmd_debug_watchdog(args.config)
     cfg = load_config(args.config)
     logger.setup_logging(cfg.logging)
     state_path = Path("~/.paperclip/watchdog-state.json").expanduser()
@@ -148,6 +180,8 @@ def _cmd_run(args: argparse.Namespace) -> int:  # pragma: no cover
 
 
 def _cmd_tick(args: argparse.Namespace) -> int:  # pragma: no cover
+    if getattr(args, "debug_watchdog", False):
+        return _cmd_debug_watchdog(args.config)
     cfg = load_config(args.config)
     logger.setup_logging(cfg.logging)
     state_path = Path("~/.paperclip/watchdog-state.json").expanduser()

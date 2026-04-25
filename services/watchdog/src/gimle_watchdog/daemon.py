@@ -55,10 +55,12 @@ async def _tick(cfg: Config, state: State, client: PaperclipClient) -> None:
     for proc in hanged:
         res = await actions.kill_hanged_proc(proc)
         log.warning(
-            "hang_killed pid=%d etime_s=%d cpu_s=%d status=%s",
+            "hang_killed pid=%d etime_s=%d cpu_s=%d cpu_ratio=%.4f stream_age_s=%s status=%s",
             proc.pid,
             proc.etime_s,
             proc.cpu_s,
+            proc.cpu_ratio,
+            proc.stream_event_age_s,
             res.status,
         )
     if hanged:
