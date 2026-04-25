@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from unittest.mock import patch
 
 from gimle_watchdog import __main__ as cli
 
@@ -63,9 +62,11 @@ escalation: {{post_comment_on_issue: true, comment_marker: "<!-- x -->"}}
     return cfg_path
 
 
-def test_cmd_status(tmp_path: Path, capsys):
+def test_cmd_status(tmp_path: Path, capsys, monkeypatch):
     cfg_path = _minimal_cfg(tmp_path)
-    # state file doesn't exist yet — that's fine, it initialises empty
+    # Redirect default state path so the test is isolated from the real watchdog state file
+    state_file = tmp_path / "watchdog-state.json"
+    monkeypatch.setattr(cli, "_DEFAULT_STATE_PATH", str(state_file))
     rc = cli.main(["watchdog", "status", "--config", str(cfg_path)])
     out = capsys.readouterr().out
     assert rc == 0
@@ -93,27 +94,25 @@ def test_cmd_tail_with_log(tmp_path: Path, capsys):
     assert "hi" in out
 
 
-def test_cmd_escalate(tmp_path: Path, capsys):
+def test_cmd_escalate(tmp_path: Path, capsys, monkeypatch):
     import argparse
 
     state_path = tmp_path / "state.json"
+    monkeypatch.setattr(cli, "_DEFAULT_STATE_PATH", str(state_path))
     args = argparse.Namespace(issue="issue-x")
-    with patch("gimle_watchdog.__main__.Path") as mock_path_cls:
-        mock_path_cls.return_value.expanduser.return_value = state_path
-        rc = cli._cmd_escalate(args)
+    rc = cli._cmd_escalate(args)
     out = capsys.readouterr().out
     assert rc == 0
     assert "permanently escalated" in out
 
 
-def test_cmd_unescalate(tmp_path: Path, capsys):
+def test_cmd_unescalate(tmp_path: Path, capsys, monkeypatch):
     import argparse
 
-    args = argparse.Namespace(issue="issue-y")
     state_path = tmp_path / "state.json"
-    with patch("gimle_watchdog.__main__.Path") as mock_path_cls:
-        mock_path_cls.return_value.expanduser.return_value = state_path
-        rc = cli._cmd_unescalate(args)
+    monkeypatch.setattr(cli, "_DEFAULT_STATE_PATH", str(state_path))
+    args = argparse.Namespace(issue="issue-y")
+    rc = cli._cmd_unescalate(args)
     out = capsys.readouterr().out
     assert rc == 0
     assert "cleared" in out
