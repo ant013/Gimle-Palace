@@ -157,3 +157,43 @@ def test_build_escalation_body_permanent(tmp_path: Path):
     body = daemon._build_escalation_body("issue-6", "agent-6", state, cfg.escalation.comment_marker)
     assert "PERMANENT" in body
     assert "unescalate" in body
+
+
+@pytest.mark.asyncio
+async def test_sleep_delegates_to_asyncio():
+    with patch("asyncio.sleep", new=AsyncMock()) as mock_sleep:
+        await daemon._sleep(1.5)
+    mock_sleep.assert_awaited_once_with(1.5)
+
+
+@pytest.mark.asyncio
+async def test_tick_logs_wake_failure(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    state = State.load(tmp_path / "state.json")
+    client = MagicMock()
+    client.list_in_progress_issues = AsyncMock(return_value=[_stuck_issue()])
+    failed = RespawnResult(via="patch", success=False, run_id=None)
+    with patch("gimle_watchdog.daemon.actions.trigger_respawn", new=AsyncMock(return_value=failed)):
+        with patch("gimle_watchdog.daemon.detection.scan_idle_hangs", return_value=[]):
+            with patch("gimle_watchdog.daemon._sleep", new=AsyncMock()):
+                await daemon._tick(cfg, state, client)
+
+
+@pytest.mark.asyncio
+async def test_tick_escalation_comment_failure_swallowed(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    state = State.load(tmp_path / "state.json")
+    from freezegun import freeze_time
+
+    for ts in ["2026-04-21T09:55:00Z", "2026-04-21T09:57:00Z", "2026-04-21T09:58:00Z"]:
+        with freeze_time(ts):
+            state.record_wake(f"dup-{ts}", "agent-1")
+    client = MagicMock()
+    client.list_in_progress_issues = AsyncMock(return_value=[_stuck_issue()])
+    client.post_issue_comment = AsyncMock(side_effect=RuntimeError("network"))
+    with patch("gimle_watchdog.daemon.detection.scan_idle_hangs", return_value=[]):
+        with patch("gimle_watchdog.daemon._sleep", new=AsyncMock()):
+            with freeze_time("2026-04-21T10:05:00Z"):
+                # Should not raise even if comment posting fails
+                await daemon._tick(cfg, state, client)
+    assert state.is_escalated("issue-1")
