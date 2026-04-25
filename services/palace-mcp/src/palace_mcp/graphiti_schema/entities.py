@@ -278,7 +278,15 @@ def make_module(
         **(extra or {}),
     }
     _validate_envelope(attrs)
-    return EntityNode(name=name, group_id=group_id, labels=["Module"], attributes=attrs)
+    stable_name = (extra or {}).get("qualified_name", name)
+    node_uuid = str(uuid5(NAMESPACE_OID, f"{group_id}:Module:{stable_name}"))
+    return EntityNode(
+        uuid=node_uuid,
+        name=name,
+        group_id=group_id,
+        labels=["Module"],
+        attributes=attrs,
+    )
 
 
 def make_file(
@@ -306,7 +314,10 @@ def make_file(
         **(extra or {}),
     }
     _validate_envelope(attrs)
-    return EntityNode(name=path, group_id=group_id, labels=["File"], attributes=attrs)
+    node_uuid = str(uuid5(NAMESPACE_OID, f"{group_id}:File:{path}"))
+    return EntityNode(
+        uuid=node_uuid, name=path, group_id=group_id, labels=["File"], attributes=attrs
+    )
 
 
 def make_symbol(
@@ -340,7 +351,15 @@ def make_symbol(
         **(extra or {}),
     }
     _validate_envelope(attrs)
-    return EntityNode(name=name, group_id=group_id, labels=["Symbol"], attributes=attrs)
+    stable_qname = (extra or {}).get("qualified_name", name)
+    node_uuid = str(uuid5(NAMESPACE_OID, f"{group_id}:Symbol:{stable_qname}:{kind}"))
+    return EntityNode(
+        uuid=node_uuid,
+        name=name,
+        group_id=group_id,
+        labels=["Symbol"],
+        attributes=attrs,
+    )
 
 
 def make_api_endpoint(
@@ -371,8 +390,13 @@ def make_api_endpoint(
         **(extra or {}),
     }
     _validate_envelope(attrs)
+    node_uuid = str(uuid5(NAMESPACE_OID, f"{group_id}:APIEndpoint:{method}:{path}"))
     return EntityNode(
-        name=name, group_id=group_id, labels=["APIEndpoint"], attributes=attrs
+        uuid=node_uuid,
+        name=name,
+        group_id=group_id,
+        labels=["APIEndpoint"],
+        attributes=attrs,
     )
 
 

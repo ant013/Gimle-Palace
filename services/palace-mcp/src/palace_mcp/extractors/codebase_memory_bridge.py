@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from uuid import NAMESPACE_OID, uuid5
 
 from graphiti_core import Graphiti
 from graphiti_core.edges import EntityEdge
@@ -609,6 +610,12 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
                     "observed_at": now,
                 }
                 community_node = EntityNode(
+                    uuid=str(
+                        uuid5(
+                            NAMESPACE_OID,
+                            f"{ctx.group_id}:ArchitectureCommunity:{slug}:{cm_id}",
+                        )
+                    ),
                     name=nm,
                     group_id=ctx.group_id,
                     labels=["ArchitectureCommunity"],
@@ -664,6 +671,11 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
                     "observed_at": now,
                 }
                 hotspot_node = EntityNode(
+                    uuid=str(
+                        uuid5(
+                            NAMESPACE_OID, f"{ctx.group_id}:Hotspot:{slug}:{hs_cm_id}"
+                        )
+                    ),
                     name=f"hotspot-{file_path or rank}",
                     group_id=ctx.group_id,
                     labels=["Hotspot"],
@@ -803,13 +815,10 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
         slug = ctx.project_slug
         for cm_id in removed_cm_ids:
             full_cm_id = f"{slug}:{cm_id}"
-            # Mark edges with this cm_id in attributes as invalid
-            async with graphiti.driver._async_driver.session() as session:  # type: ignore[attr-defined]
-                await session.run(
-                    "MATCH ()-[r]->() "
-                    "WHERE r.cm_edge_id STARTS WITH $prefix "
-                    "AND r.invalid_at IS NULL "
-                    "SET r.invalid_at = $now",
-                    prefix=f"{full_cm_id}",
-                    now=now,
-                )
+            await graphiti.driver.execute_query(
+                "MATCH ()-[r]->() "
+                "WHERE r.cm_edge_id STARTS WITH $prefix "
+                "AND r.invalid_at IS NULL "
+                "SET r.invalid_at = $now",
+                params={"prefix": full_cm_id, "now": now},
+            )
