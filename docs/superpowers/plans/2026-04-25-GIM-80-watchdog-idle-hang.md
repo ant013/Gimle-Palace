@@ -26,6 +26,11 @@ the log file path in code.
 **Note:** If operator confirms the path before this task starts, engineer
 can skip the SSH discovery and use the documented path directly.
 
+**Blocking scope:** Task 0 only blocks the production path-resolution
+logic in Task 2 (`_resolve_paperclip_subprocess_log`). Task 3 Criterion B
+tests (`test_is_stream_stalled_*`) use mocked paths and do NOT depend on
+Task 0. Implementer can proceed with Tasks 1–3 in parallel with Task 0.
+
 ## Task 1 — Config: add new thresholds, deprecate old
 
 **Owner:** PythonEngineer
@@ -38,14 +43,18 @@ can skip the SSH discovery and use the documented path directly.
    - `idle_cpu_ratio_max: float` (default `0.005`)
    - `hang_stream_idle_max_s: int` (default `300`)
 2. Keep `hang_cpu_max_s` as `int | None` (optional, default `None`).
-3. In `load_config()` / YAML parser:
+3. In `load_config()` / YAML parser — **and** in `_parse_thresholds()` (config.py:109-118):
    - If `idle_cpu_ratio_max` absent AND `hang_cpu_max_s` present: raise
-     `ConfigError` with migration instructions.
+     `ConfigError` with migration instructions (spec §3.4 aligned).
    - If both present: log `DeprecationWarning` for `hang_cpu_max_s`,
      ignore its value, use `idle_cpu_ratio_max`.
    - If only `idle_cpu_ratio_max` present: normal path.
 4. Validate `idle_cpu_ratio_max` in range `(0.0, 1.0)`.
 5. Validate `hang_stream_idle_max_s > 0`.
+
+**Note:** `_parse_thresholds()` (config.py:109-118) must be updated to
+parse the new fields; adding them to `Thresholds` dataclass alone is not
+enough — the parser constructs `Thresholds` from raw YAML dict.
 
 ### Tests (in Task 3)
 
@@ -60,7 +69,7 @@ can skip the SSH discovery and use the documented path directly.
 ## Task 2 — Detection: implement dual-criteria hang detection
 
 **Owner:** PythonEngineer
-**Files:** `services/watchdog/src/gimle_watchdog/detection.py`
+**Files:** `services/watchdog/src/gimle_watchdog/detection.py`, `services/watchdog/src/gimle_watchdog/daemon.py`
 **Depends on:** Task 1 (needs new `Thresholds` fields)
 
 ### Changes
@@ -85,6 +94,11 @@ can skip the SSH discovery and use the documented path directly.
 
 5. Add `--debug-watchdog` support (Task 5 below covers CLI; detection.py
    just needs to expose ratio data in `HangedProc` for the debug printer).
+6. Update `daemon.py:_tick()` kill-log line (currently `hang_killed pid=%d
+   etime_s=%d cpu_s=%d`) to include `cpu_ratio=%.4f` and `stream_age_s=%s`.
+   Also update `scan_idle_hangs()` call site (detection.py:120) to pass new
+   threshold fields (`idle_cpu_ratio_max`, `hang_stream_idle_max_s`) instead
+   of `hang_cpu_max_s`.
 
 ### Tests (in Task 3)
 
@@ -151,11 +165,14 @@ In `test_detection.py`:
 ### Changes
 
 1. Add `--debug-watchdog` flag to `tick` and `run` subcommands.
-2. When set: after scanning, print each candidate proc's PID, etime,
-   cpu_time, cpu_ratio, stream_event_age, and whether each criterion
-   would fire — but do NOT kill.
+2. When set: run scan synchronously (not the async daemon loop), print
+   each candidate proc's PID, etime, cpu_time, cpu_ratio,
+   stream_event_age, and whether each criterion would fire in a table
+   format — then return immediately. No kill, no Phase 2 respawn.
 3. Useful for operator to inspect ratios on live iMac before trusting
    the new thresholds.
+4. Behavior: `scan → print table → exit(0)`. Does not enter the daemon
+   tick loop. Does not modify any process state.
 
 ### Commit
 
@@ -193,6 +210,13 @@ Fix-up commit if needed: `chore(watchdog): lint/type fixes (GIM-80)`
 | 3.2 Adversarial review | OpusArchitectReviewer | Poke holes. |
 | 4.1 Live smoke | QAEngineer | Synthetic emulator (spec §6.3b) on iMac. |
 | 4.2 Merge | CTO | Squash-merge to develop after CI green. |
+
+## Pre-implementation note
+
+Working directory may contain uncommitted palace-mcp files from a prior
+branch. Implementer must `git checkout -- services/palace-mcp/` and
+`git clean -fd services/palace-mcp/` before starting to ensure a clean
+GIM-80-only diff.
 
 ## Risks
 
