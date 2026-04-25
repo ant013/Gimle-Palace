@@ -74,12 +74,13 @@ def _fake_cm(
                 "has_more": False,
             }
         if tool == "query_graph":
+            got_proj = args.get("project")
+            assert got_proj == _EXPECTED_CM_PROJECT, (
+                f"query_graph received project={got_proj!r}, expected {_EXPECTED_CM_PROJECT!r}"
+            )
             # Hash-fetch query contains "xxh3"; edge queries don't.
             q = args.get("query", "")
             if "xxh3" in q:
-                assert _EXPECTED_CM_PROJECT in q, (
-                    f"query_graph hash query uses wrong project: {q!r}"
-                )
                 # Actual CM shape: {"columns": [...], "rows": [...], "total": N}
                 return {"columns": ["cm_id", "path", "xxh3"], "rows": [], "total": 0}
             # Edge query — convert edge dicts to column format

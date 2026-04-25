@@ -356,10 +356,11 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
         hash_result = await _call_cm(
             "query_graph",
             {
+                "project": cm_project,
                 "query": (
                     f"MATCH (f:File) WHERE f.project = '{cm_project}' "
                     "RETURN f.uuid AS cm_id, f.path AS path, f.xxh3_hash AS xxh3"
-                )
+                ),
             },
         )
         current_hashes: dict[str, str] = {}
@@ -685,11 +686,12 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
         edges_res = await _call_cm(
             "query_graph",
             {
+                "project": cm_project,
                 "query": (
                     f"MATCH (a)-[r]->(b) WHERE a.project = '{cm_project}' "
                     "RETURN type(r) AS rel_type, id(r) AS edge_id, "
                     "id(a) AS src_id, id(b) AS tgt_id, r.confidence AS rel_confidence"
-                )
+                ),
             },
         )
         for ed in _iter_edges(edges_res):

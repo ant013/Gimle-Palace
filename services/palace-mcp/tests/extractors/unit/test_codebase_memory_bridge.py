@@ -9,6 +9,7 @@ import logging
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import NAMESPACE_OID, uuid5
 
 import pytest
 
@@ -113,6 +114,27 @@ def test_projection_rules_coverage() -> None:
         assert not missing, f"{cm_type!r} rule missing keys: {missing}"
         assert rule["provenance"] in {"asserted", "derived"}
         assert 0.0 <= float(rule["confidence"]) <= 1.0
+
+
+def test_make_project_deterministic_uuid() -> None:
+    """make_project must return the same UUID on repeated calls (idempotent MERGE in Neo4j)."""
+    from palace_mcp.graphiti_schema.entities import make_project
+
+    n1 = make_project(
+        group_id="project/test",
+        slug="test",
+        extractor="bridge@0.1",
+        extractor_version="0.1",
+    )
+    n2 = make_project(
+        group_id="project/test",
+        slug="test",
+        extractor="bridge@0.1",
+        extractor_version="0.1",
+    )
+    assert n1.uuid == n2.uuid
+    expected = str(uuid5(NAMESPACE_OID, "project/test:Project:test"))
+    assert n1.uuid == expected
 
 
 def test_metadata_envelope_keys_defined() -> None:

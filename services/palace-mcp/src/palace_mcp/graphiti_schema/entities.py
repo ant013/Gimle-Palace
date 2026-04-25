@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
+from uuid import NAMESPACE_OID, uuid5
 
 from graphiti_core.nodes import EntityNode
 
@@ -105,8 +106,15 @@ def make_project(
         **(extra or {}),
     }
     _validate_envelope(attrs)
+    # Deterministic UUID so MERGE finds the same node on repeated runs.
+    # Without this, each call gets a random UUID → new node → Project.slug UNIQUENESS violation.
+    node_uuid = str(uuid5(NAMESPACE_OID, f"{group_id}:Project:{slug}"))
     return EntityNode(
-        name=slug, group_id=group_id, labels=["Project"], attributes=attrs
+        uuid=node_uuid,
+        name=slug,
+        group_id=group_id,
+        labels=["Project"],
+        attributes=attrs,
     )
 
 
