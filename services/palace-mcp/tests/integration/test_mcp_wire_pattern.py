@@ -186,9 +186,7 @@ async def test_search_graph_input_schema_is_flat(mcp_url: str) -> None:
     search_tool = next(
         (t for t in result.tools if t.name == "palace.code.search_graph"), None
     )
-    assert search_tool is not None, (
-        "palace.code.search_graph missing from tools/list"
-    )
+    assert search_tool is not None, "palace.code.search_graph missing from tools/list"
 
     schema = search_tool.inputSchema
     assert schema is not None
@@ -224,9 +222,7 @@ async def test_search_graph_call_flat_args_no_type_error(mcp_url: str) -> None:
 
     assert result.content, "tools/call must return non-empty content"
     if result.isError:
-        error_text = " ".join(
-            c.text for c in result.content if hasattr(c, "text")
-        )
+        error_text = " ".join(c.text for c in result.content if hasattr(c, "text"))
         assert "TypeError" not in error_text, (
             f"Got TypeError in tool result — GIM-89 regression detected. "
             f"Error: {error_text}"
