@@ -700,99 +700,110 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
                     inc_e("LOCATES_IN")
 
         # --- Asserted edges from CM ---
+        # Primary lookup by CM uuid/id (as before); secondary by node name
+        # (CM returns a.name, not id(a), so we need a name→EntityNode index).
         all_nodes: dict[str, EntityNode] = {**file_nodes, **symbol_nodes}
-        edges_res = await _call_cm(
-            "query_graph",
-            {
-                "project": cm_project,
-                "query": (
-                    f"MATCH (a)-[r]->(b) WHERE a.project = '{cm_project}' "
-                    "RETURN type(r) AS rel_type, id(r) AS edge_id, "
-                    "id(a) AS src_id, id(b) AS tgt_id, r.confidence AS rel_confidence"
-                ),
-            },
-        )
-        for ed in _iter_edges(edges_res):
-            rel_type = str(ed.get("rel_type", ""))
-            if not rel_type or rel_type in _SKIPPED_CM_EDGES:
-                continue
-            src_id = str(ed.get("src_id", ""))
-            tgt_id = str(ed.get("tgt_id", ""))
-            edge_id = str(ed.get("edge_id", ""))
-            src_node = all_nodes.get(src_id)
-            tgt_node = all_nodes.get(tgt_id)
-            if src_node is None or tgt_node is None:
-                continue
-            _rc = ed.get("rel_confidence")
-            rel_conf = float(_rc) if _rc is not None else 1.0
-            extra: dict[str, Any] = {"cm_edge_id": f"{slug}:{edge_id}"}
+        nodes_by_name: dict[str, EntityNode] = {n.name: n for n in all_nodes.values()}
 
-            if rel_type.startswith("CONTAINS"):
-                pending_edges.append(
-                    make_contains(
-                        group_id=ctx.group_id,
-                        source_uuid=src_node.uuid,
-                        target_uuid=tgt_node.uuid,
-                        fact="contains",
-                        extractor=tag,
-                        extractor_version=ver,
-                        extra=extra,
+        # Query per edge-type using names (not internal Neo4j ids).
+        # arch_res["edge_types"] lists all relationship types present in CM graph.
+        edge_types: list[str] = [
+            et["type"] if isinstance(et, dict) else et
+            for et in arch_res.get("edge_types", [])
+            if et
+        ]
+        for edge_type in edge_types:
+            if not edge_type or edge_type in _SKIPPED_CM_EDGES:
+                continue
+            edges_res = await _call_cm(
+                "query_graph",
+                {
+                    "project": cm_project,
+                    "query": (
+                        f"MATCH (a)-[r:{edge_type}]->(b) "
+                        "RETURN a.name AS src_id, b.name AS tgt_id"
+                    ),
+                },
+            )
+            for ed in _iter_edges(edges_res):
+                rel_type = str(ed.get("rel_type", edge_type))
+                src_id = str(ed.get("src_id", ""))
+                tgt_id = str(ed.get("tgt_id", ""))
+                src_node = nodes_by_name.get(src_id) or all_nodes.get(src_id)
+                tgt_node = nodes_by_name.get(tgt_id) or all_nodes.get(tgt_id)
+                if src_node is None or tgt_node is None:
+                    continue
+                _rc = ed.get("rel_confidence")
+                rel_conf = float(_rc) if _rc is not None else 1.0
+                edge_id = str(ed.get("edge_id", f"{src_id}:{rel_type}:{tgt_id}"))
+                extra: dict[str, Any] = {"cm_edge_id": f"{slug}:{edge_id}"}
+
+                if rel_type.startswith("CONTAINS"):
+                    pending_edges.append(
+                        make_contains(
+                            group_id=ctx.group_id,
+                            source_uuid=src_node.uuid,
+                            target_uuid=tgt_node.uuid,
+                            fact="contains",
+                            extractor=tag,
+                            extractor_version=ver,
+                            extra=extra,
+                        )
                     )
-                )
-                inc_e("CONTAINS")
-            elif rel_type == "DEFINES":
-                pending_edges.append(
-                    make_defines(
-                        group_id=ctx.group_id,
-                        source_uuid=src_node.uuid,
-                        target_uuid=tgt_node.uuid,
-                        fact="defines",
-                        extractor=tag,
-                        extractor_version=ver,
-                        extra=extra,
+                    inc_e("CONTAINS")
+                elif rel_type == "DEFINES":
+                    pending_edges.append(
+                        make_defines(
+                            group_id=ctx.group_id,
+                            source_uuid=src_node.uuid,
+                            target_uuid=tgt_node.uuid,
+                            fact="defines",
+                            extractor=tag,
+                            extractor_version=ver,
+                            extra=extra,
+                        )
                     )
-                )
-                inc_e("DEFINES")
-            elif rel_type == "CALLS":
-                pending_edges.append(
-                    make_calls(
-                        group_id=ctx.group_id,
-                        source_uuid=src_node.uuid,
-                        target_uuid=tgt_node.uuid,
-                        fact="calls",
-                        extractor=tag,
-                        extractor_version=ver,
-                        extra=extra,
+                    inc_e("DEFINES")
+                elif rel_type == "CALLS":
+                    pending_edges.append(
+                        make_calls(
+                            group_id=ctx.group_id,
+                            source_uuid=src_node.uuid,
+                            target_uuid=tgt_node.uuid,
+                            fact="calls",
+                            extractor=tag,
+                            extractor_version=ver,
+                            extra=extra,
+                        )
                     )
-                )
-                inc_e("CALLS")
-            elif rel_type == "IMPORTS":
-                pending_edges.append(
-                    make_imports(
-                        group_id=ctx.group_id,
-                        source_uuid=src_node.uuid,
-                        target_uuid=tgt_node.uuid,
-                        fact="imports",
-                        extractor=tag,
-                        extractor_version=ver,
-                        extra=extra,
+                    inc_e("CALLS")
+                elif rel_type == "IMPORTS":
+                    pending_edges.append(
+                        make_imports(
+                            group_id=ctx.group_id,
+                            source_uuid=src_node.uuid,
+                            target_uuid=tgt_node.uuid,
+                            fact="imports",
+                            extractor=tag,
+                            extractor_version=ver,
+                            extra=extra,
+                        )
                     )
-                )
-                inc_e("IMPORTS")
-            elif rel_type == "HANDLES":
-                pending_edges.append(
-                    make_handles(
-                        group_id=ctx.group_id,
-                        source_uuid=src_node.uuid,
-                        target_uuid=tgt_node.uuid,
-                        fact="handles",
-                        extractor=tag,
-                        extractor_version=ver,
-                        confidence=rel_conf,
-                        extra=extra,
+                    inc_e("IMPORTS")
+                elif rel_type == "HANDLES":
+                    pending_edges.append(
+                        make_handles(
+                            group_id=ctx.group_id,
+                            source_uuid=src_node.uuid,
+                            target_uuid=tgt_node.uuid,
+                            fact="handles",
+                            extractor=tag,
+                            extractor_version=ver,
+                            confidence=rel_conf,
+                            extra=extra,
+                        )
                     )
-                )
-                inc_e("HANDLES")
+                    inc_e("HANDLES")
 
         # Batch-embed and save: one embedding API call per 512 items instead of N serial calls.
         await batch_save_entity_nodes(graphiti, pending_nodes)
