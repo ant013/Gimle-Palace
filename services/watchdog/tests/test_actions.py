@@ -81,7 +81,7 @@ async def test_trigger_respawn_total_failure():
 
 async def test_kill_hanged_proc_clean_exit():
     """Process exits within grace period after SIGTERM → 'clean'."""
-    hang = HangedProc(pid=12345, etime_s=3600, cpu_s=0, command="fake")
+    hang = HangedProc(pid=12345, etime_s=3600, cpu_s=0, cpu_ratio=0.0, command="fake")
 
     def mock_kill(pid: int, sig: int) -> None:
         if sig == 0:
@@ -99,7 +99,7 @@ async def test_kill_hanged_proc_clean_exit():
 
 async def test_kill_hanged_proc_forced():
     """Process doesn't exit within grace period → SIGKILL → 'forced'."""
-    hang = HangedProc(pid=12345, etime_s=3600, cpu_s=0, command="fake")
+    hang = HangedProc(pid=12345, etime_s=3600, cpu_s=0, cpu_ratio=0.0, command="fake")
 
     with patch.object(
         act, "_read_proc_cmdline", return_value="paperclip-skills append-system-prompt-file fake"
@@ -115,7 +115,7 @@ async def test_kill_hanged_proc_forced():
 async def test_kill_hanged_proc_already_dead():
     proc = subprocess.Popen(["true"])
     proc.wait()
-    hang = HangedProc(pid=proc.pid, etime_s=3600, cpu_s=0, command="dummy")
+    hang = HangedProc(pid=proc.pid, etime_s=3600, cpu_s=0, cpu_ratio=0.0, command="dummy")
     result = await act.kill_hanged_proc(hang)
     assert result.status == "already_dead"
 
@@ -126,6 +126,7 @@ async def test_kill_hanged_proc_pid_reused_skip():
         pid=1,
         etime_s=3600,
         cpu_s=0,
+        cpu_ratio=0.0,
         command="old cmd with paperclip-skills append-system-prompt-file",
     )
     with patch.object(act, "_read_proc_cmdline", return_value="/usr/sbin/unrelated --daemon"):

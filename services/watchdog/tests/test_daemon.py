@@ -32,7 +32,13 @@ def _cfg(tmp_path: Path) -> Config:
             CompanyConfig(
                 id="9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64",
                 name="gimle",
-                thresholds=Thresholds(died_min=3, hang_etime_min=60, hang_cpu_max_s=30),
+                thresholds=Thresholds(
+                    died_min=3,
+                    hang_etime_min=60,
+                    hang_cpu_max_s=None,
+                    idle_cpu_ratio_max=0.005,
+                    hang_stream_idle_max_s=300,
+                ),
             )
         ],
         daemon=DaemonConfig(poll_interval_seconds=120),
@@ -101,7 +107,7 @@ async def test_tick_kills_hanged_procs(tmp_path: Path):
     client = MagicMock()
     client.list_in_progress_issues = AsyncMock(return_value=[])
     hanged = HangedProc(
-        pid=12345, etime_s=5000, cpu_s=10, command="paperclip-skills append-system-prompt-file"
+        pid=12345, etime_s=5000, cpu_s=10, cpu_ratio=0.002, command="paperclip-skills append-system-prompt-file"
     )
     kill_mock = AsyncMock(return_value=MagicMock(status="clean", pid=12345))
     with patch("gimle_watchdog.daemon.detection.scan_idle_hangs", return_value=[hanged]):

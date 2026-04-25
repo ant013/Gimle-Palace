@@ -32,7 +32,7 @@ paperclip: {base_url: http://x, api_key_source: "inline:k"}
 companies:
   - id: 9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64
     name: gimle
-    thresholds: {died_min: 3, hang_etime_min: 60, hang_cpu_max_s: 30}
+    thresholds: {died_min: 3, hang_etime_min: 60, idle_cpu_ratio_max: 0.005, hang_stream_idle_max_s: 300}
 daemon: {poll_interval_seconds: 120}
 cooldowns: {per_issue_seconds: 300, per_agent_cap: 3, per_agent_window_seconds: 900}
 logging: {path: /tmp/x.log, level: INFO, rotate_max_bytes: 10485760, rotate_backup_count: 5}
@@ -54,7 +54,7 @@ paperclip: {{base_url: http://x, api_key_source: "inline:k"}}
 companies:
   - id: 9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64
     name: gimle
-    thresholds: {{died_min: 3, hang_etime_min: 60, hang_cpu_max_s: 30}}
+    thresholds: {{died_min: 3, hang_etime_min: 60, idle_cpu_ratio_max: 0.005, hang_stream_idle_max_s: 300}}
 daemon: {{poll_interval_seconds: 120}}
 cooldowns: {{per_issue_seconds: 300, per_agent_cap: 3, per_agent_window_seconds: 900}}
 logging: {{path: {log_path}, level: INFO, rotate_max_bytes: 10485760, rotate_backup_count: 5}}
