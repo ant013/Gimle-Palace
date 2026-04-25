@@ -20,6 +20,7 @@ from gimle_watchdog.config import (
     PaperclipConfig,
     Thresholds,
 )
+
 from gimle_watchdog.paperclip import Issue
 from gimle_watchdog.state import State
 
@@ -197,3 +198,60 @@ async def test_tick_escalation_comment_failure_swallowed(tmp_path: Path):
                 # Should not raise even if comment posting fails
                 await daemon._tick(cfg, state, client)
     assert state.is_escalated("issue-1")
+
+
+@pytest.mark.asyncio
+async def test_tick_skip_action_cooldown(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    state = State.load(tmp_path / "state.json")
+    state.record_wake("issue-1", "agent-1")  # put issue in cooldown
+    client = MagicMock()
+    client.list_in_progress_issues = AsyncMock(return_value=[_stuck_issue()])
+    with patch("gimle_watchdog.daemon.detection.scan_idle_hangs", return_value=[]):
+        with patch("gimle_watchdog.daemon._sleep", new=AsyncMock()):
+            await daemon._tick(cfg, state, client)
+    assert state.is_issue_in_cooldown("issue-1", cfg.cooldowns.per_issue_seconds)
+
+
+@pytest.mark.asyncio
+async def test_tick_escalation_no_comment(tmp_path: Path):
+    from freezegun import freeze_time
+
+    cfg_no_comment = _cfg(tmp_path)
+    # Rebuild config with post_comment_on_issue=False
+    cfg_no_comment = Config(
+        version=cfg_no_comment.version,
+        paperclip=cfg_no_comment.paperclip,
+        companies=cfg_no_comment.companies,
+        daemon=cfg_no_comment.daemon,
+        cooldowns=cfg_no_comment.cooldowns,
+        logging=cfg_no_comment.logging,
+        escalation=EscalationConfig(post_comment_on_issue=False, comment_marker="<!-- m -->"),
+    )
+    state = State.load(tmp_path / "state.json")
+    for ts in ["2026-04-21T09:55:00Z", "2026-04-21T09:57:00Z", "2026-04-21T09:58:00Z"]:
+        with freeze_time(ts):
+            state.record_wake(f"nocom-{ts}", "agent-1")
+    client = MagicMock()
+    client.list_in_progress_issues = AsyncMock(return_value=[_stuck_issue()])
+    client.post_issue_comment = AsyncMock()
+    with patch("gimle_watchdog.daemon.detection.scan_idle_hangs", return_value=[]):
+        with patch("gimle_watchdog.daemon._sleep", new=AsyncMock()):
+            with freeze_time("2026-04-21T10:05:00Z"):
+                await daemon._tick(cfg_no_comment, state, client)
+    assert state.is_escalated("issue-1")
+    client.post_issue_comment.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_run_one_iteration_tick_exception(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    state = State.load(tmp_path / "state.json")
+    client = MagicMock()
+
+    async def fail(*a: object, **kw: object) -> None:
+        raise RuntimeError("unexpected")
+
+    with patch("gimle_watchdog.daemon._tick", new=fail):
+        # Should not raise — exception is swallowed and logged
+        await daemon._run_one_iteration_for_test(cfg, state, client)

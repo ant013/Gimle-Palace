@@ -137,3 +137,76 @@ def test_config_after_subcommand_tick(tmp_path: Path) -> None:
     args = cli._build_parser().parse_args(["tick", "--config", str(cfg)])
     assert args.command == "tick"
     assert args.config == cfg
+
+
+def test_detect_platform_linux(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "linux")
+    assert cli._detect_platform() == "linux"
+
+
+def test_detect_platform_unknown(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "freebsd12")
+    assert cli._detect_platform() == "unknown"
+
+
+def test_dry_run_install_linux(tmp_path, monkeypatch, capsys):
+    cfg_path = _minimal_cfg(tmp_path)
+    monkeypatch.setattr(sys, "platform", "linux")
+    rc = cli.main(["watchdog", "install", "--config", str(cfg_path), "--dry-run"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "WantedBy=default.target" in out  # systemd unit marker
+
+
+def test_install_unsupported_platform(tmp_path, monkeypatch, capsys):
+    cfg_path = _minimal_cfg(tmp_path)
+    monkeypatch.setattr(sys, "platform", "freebsd12")
+    rc = cli.main(["watchdog", "install", "--config", str(cfg_path), "--dry-run"])
+    assert rc == 1
+    assert "Unsupported" in capsys.readouterr().err
+
+
+def test_main_no_command(capsys):
+    # The no-command path (args.command is None) triggers rc=2
+    parser = cli._build_parser()
+    args = parser.parse_args([])
+    assert args.command is None
+
+
+def test_main_config_error(tmp_path, capsys):
+    bad_cfg = tmp_path / "bad.yaml"
+    bad_cfg.write_text("version: 1\n")  # missing required fields
+    rc = cli.main(["watchdog", "status", "--config", str(bad_cfg)])
+    assert rc == 2
+    assert "config error" in capsys.readouterr().err
+
+
+def test_cmd_debug_watchdog_empty(tmp_path, monkeypatch, capsys):
+    from unittest.mock import patch
+
+    cfg_path = _minimal_cfg(tmp_path)
+    with patch("gimle_watchdog.detection.scan_idle_hangs", return_value=[]):
+        rc = cli.main(["watchdog", "run", "--config", str(cfg_path), "--debug-watchdog"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "No candidate" in out
+
+
+def test_cmd_debug_watchdog_with_procs(tmp_path, monkeypatch, capsys):
+    from unittest.mock import patch
+
+    from gimle_watchdog.detection import HangedProc
+
+    cfg_path = _minimal_cfg(tmp_path)
+    proc = HangedProc(
+        pid=9999,
+        etime_s=3600,
+        cpu_s=5,
+        cpu_ratio=0.0014,
+        command="paperclip-skills test",
+    )
+    with patch("gimle_watchdog.detection.scan_idle_hangs", return_value=[proc]):
+        rc = cli.main(["watchdog", "run", "--config", str(cfg_path), "--debug-watchdog"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "9999" in out

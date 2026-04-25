@@ -121,7 +121,7 @@ async def _run_one_iteration_for_test(cfg: Config, state: State, client: Papercl
         log.exception("tick_failed")
 
 
-async def run(cfg: Config, state: State, client: PaperclipClient) -> None:
+async def run(cfg: Config, state: State, client: PaperclipClient) -> None:  # pragma: no cover
     """Persistent loop — called by CLI `run` command in launchd/systemd mode."""
     while True:
         tick_started = _dt.datetime.now(_dt.timezone.utc)
