@@ -16,6 +16,7 @@ __all__ = [
     "LookupResponseItem",
     "LookupResponse",
     "ProjectInfo",
+    "BridgeHealthInfo",
     "HealthResponse",
 ]
 
@@ -66,6 +67,17 @@ class ProjectInfo(BaseModel):
     last_ingest_finished_at: str | None = None
 
 
+class BridgeHealthInfo(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    last_run_at: str | None = None
+    last_run_duration_ms: int | None = None
+    nodes_written_by_type: dict[str, int] = Field(default_factory=dict)
+    edges_written_by_type: dict[str, int] = Field(default_factory=dict)
+    cm_index_freshness_sec: float | None = None
+    staleness_warning: bool = False
+
+
 class HealthResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -81,3 +93,4 @@ class HealthResponse(BaseModel):
     git_repos_available: list[str] = Field(default_factory=list)
     git_repos_unregistered: list[str] = Field(default_factory=list)
     code_graph_reachable: bool = False
+    bridge: BridgeHealthInfo | None = None
