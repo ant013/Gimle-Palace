@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -53,6 +54,28 @@ from palace_mcp.graphiti_schema.entities import (
 )
 
 _LOG = logging.getLogger(__name__)
+
+# CM project names are derived from mount-path components joined with "-".
+# Only allow characters that are safe to embed in a Cypher string literal.
+_SAFE_SLUG_RE = re.compile(r"^[a-z0-9_\-/]+$")
+
+
+def _cm_project_name(repo_path: Path) -> str:
+    """Convert a repo mount path to the CM-internal project name.
+
+    CM names projects by joining path components with '-':
+      /repos/gimle  →  repos-gimle
+    """
+    return "-".join(str(repo_path).lstrip("/").split("/"))
+
+
+def _assert_safe_slug(slug: str) -> None:
+    """Raise ExtractorConfigError if slug contains characters unsafe for Cypher."""
+    from palace_mcp.extractors.base import ExtractorConfigError
+
+    if not _SAFE_SLUG_RE.match(slug):
+        raise ExtractorConfigError(f"Unsafe project slug for Cypher: {slug!r}")
+
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -309,6 +332,11 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
     async def run(
         self, *, graphiti: Graphiti, ctx: ExtractorRunContext
     ) -> ExtractorStats:
+        # CM names projects from mount-path components: /repos/gimle → repos-gimle.
+        # Validate before embedding in Cypher strings.
+        cm_project = _cm_project_name(ctx.repo_path)
+        _assert_safe_slug(cm_project)
+
         state = _load_state(ctx.project_slug, self._state_path)
 
         # 1. Fetch current per-file XXH3 hashes from CM (incremental key)
@@ -316,7 +344,7 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
             "query_graph",
             {
                 "query": (
-                    f"MATCH (f:File) WHERE f.project = '{ctx.project_slug}' "
+                    f"MATCH (f:File) WHERE f.project = '{cm_project}' "
                     "RETURN f.uuid AS cm_id, f.path AS path, f.xxh3_hash AS xxh3"
                 )
             },
@@ -346,7 +374,7 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
 
         # 2. Only re-project when there are changes (or first run)
         if changed_cm_ids or not state.last_run_at:
-            n, e, nbt, ebt = await self._project_all(graphiti, ctx)
+            n, e, nbt, ebt = await self._project_all(graphiti, ctx, cm_project)
             nodes_written += n
             edges_written += e
             for k, v in nbt.items():
@@ -375,7 +403,7 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
     # ---------------------------------------------------------------------------
 
     async def _project_all(
-        self, graphiti: Graphiti, ctx: ExtractorRunContext
+        self, graphiti: Graphiti, ctx: ExtractorRunContext, cm_project: str
     ) -> tuple[int, int, dict[str, int], dict[str, int]]:
         """Project all CM node/edge types into Graphiti. Returns (n, e, nbt, ebt)."""
         nodes = 0
@@ -396,10 +424,12 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
         tag = self._tag()
         ver = self.version
         now = self._now()
-        slug = ctx.project_slug
+        slug = ctx.project_slug  # Graphiti namespace (group_id prefix)
 
         # --- :Project ---
-        proj_res = await _call_cm("search_graph", {"label": "Project", "project": slug})
+        proj_res = await _call_cm(
+            "search_graph", {"label": "Project", "project": cm_project}
+        )
         for nd in _iter_nodes(proj_res):
             cm_id = _get_id(nd)
             node = make_project(
@@ -421,7 +451,9 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
 
         # --- :File ---
         file_nodes: dict[str, EntityNode] = {}
-        file_res = await _call_cm("search_graph", {"label": "File", "project": slug})
+        file_res = await _call_cm(
+            "search_graph", {"label": "File", "project": cm_project}
+        )
         for nd in _iter_nodes(file_res):
             cm_id = _get_id(nd)
             path = nd.get("path", nd.get("name", ""))
@@ -450,7 +482,9 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
             inc_n("File")
 
         # --- :Module ---
-        mod_res = await _call_cm("search_graph", {"label": "Module", "project": slug})
+        mod_res = await _call_cm(
+            "search_graph", {"label": "Module", "project": cm_project}
+        )
         for nd in _iter_nodes(mod_res):
             cm_id = _get_id(nd)
             nm = nd.get("name", cm_id)
@@ -477,7 +511,7 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
         symbol_nodes: dict[str, EntityNode] = {}
         for cm_label, sym_kind in _SYMBOL_KINDS.items():
             sym_res = await _call_cm(
-                "search_graph", {"label": cm_label, "project": slug}
+                "search_graph", {"label": cm_label, "project": cm_project}
             )
             for nd in _iter_nodes(sym_res):
                 cm_id = _get_id(nd)
@@ -505,7 +539,9 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
                 inc_n("Symbol")
 
         # --- :APIEndpoint (Route) ---
-        route_res = await _call_cm("search_graph", {"label": "Route", "project": slug})
+        route_res = await _call_cm(
+            "search_graph", {"label": "Route", "project": cm_project}
+        )
         for nd in _iter_nodes(route_res):
             cm_id = _get_id(nd)
             method = nd.get("method", "GET")
@@ -637,7 +673,7 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
             "query_graph",
             {
                 "query": (
-                    f"MATCH (a)-[r]->(b) WHERE a.project = '{slug}' "
+                    f"MATCH (a)-[r]->(b) WHERE a.project = '{cm_project}' "
                     "RETURN type(r) AS rel_type, id(r) AS edge_id, "
                     "id(a) AS src_id, id(b) AS tgt_id, r.confidence AS rel_confidence"
                 )

@@ -26,11 +26,15 @@ from palace_mcp.extractors.codebase_memory_bridge import (
 # ---------------------------------------------------------------------------
 
 
+_FAKE_REPO_PATH = Path("/repos/integ-proj")
+_EXPECTED_CM_PROJECT = "repos-integ-proj"  # _cm_project_name(_FAKE_REPO_PATH)
+
+
 def _ctx(tmp_path: Path) -> ExtractorRunContext:
     return ExtractorRunContext(
         project_slug="integ-proj",
         group_id="project/integ-proj",
-        repo_path=tmp_path,
+        repo_path=_FAKE_REPO_PATH,
         run_id="integ-run-bridge-001",
         duration_ms=0,
         logger=logging.getLogger("test"),
@@ -48,6 +52,9 @@ def _fake_cm(
       search_graph  → node queries by label
       query_graph   → hash fetch (returns []) or edge fetch (returns edges)
       get_architecture → Louvain/hotspot data
+
+    Asserts that search_graph and query_graph receive the CM-derived project name
+    (repos-integ-proj, not the Graphiti slug integ-proj) to catch slug mismatches.
     """
     edges = edges or []
 
@@ -56,11 +63,18 @@ def _fake_cm(
     ) -> dict[str, Any]:
         args = arguments or {}
         if tool == "search_graph":
+            got = args.get("project")
+            assert got == _EXPECTED_CM_PROJECT, (
+                f"search_graph received project={got!r}, expected {_EXPECTED_CM_PROJECT!r}"
+            )
             return {"nodes": nodes}
         if tool == "query_graph":
             # Hash-fetch query contains "xxh3_hash"; edge queries don't.
             q = args.get("query", "")
             if "xxh3_hash" in q:
+                assert _EXPECTED_CM_PROJECT in q, (
+                    f"query_graph hash query uses wrong project: {q!r}"
+                )
                 return {"result": []}  # no prior hashes → first-run projects all
             return {"result": edges}
         if tool == "get_architecture":

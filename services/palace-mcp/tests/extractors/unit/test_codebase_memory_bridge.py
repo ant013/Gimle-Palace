@@ -34,7 +34,7 @@ def _ctx(tmp_path: Path) -> ExtractorRunContext:
     return ExtractorRunContext(
         project_slug="test-proj",
         group_id="project/test-proj",
-        repo_path=tmp_path,
+        repo_path=Path("/repos/test-proj"),  # fixed path → cm_project=repos-test-proj
         run_id="run-001",
         duration_ms=0,
         logger=logging.getLogger("test"),
