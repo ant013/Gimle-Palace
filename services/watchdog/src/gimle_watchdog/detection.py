@@ -6,7 +6,9 @@ import datetime as _dt
 import logging
 import re
 import subprocess
+import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 
 from gimle_watchdog.config import CompanyConfig, Config
@@ -25,7 +27,9 @@ class HangedProc:
     pid: int
     etime_s: int
     cpu_s: int
+    cpu_ratio: float
     command: str
+    stream_event_age_s: int | None = None  # None means no log file found
 
 
 @dataclass(frozen=True)
@@ -86,10 +90,63 @@ def _parse_time(s: str) -> int:
     return value + (1 if rounded_up else 0)
 
 
-def parse_ps_output(ps_output: str, etime_min_s: int, cpu_max_s: int) -> list[HangedProc]:
+def last_stream_event_age_seconds(pid: int) -> int | None:
+    """Return seconds since last stream-json write for the given PID, or None if not found.
+
+    On macOS uses lsof to find the process's stdout/stderr log file.
+    Falls back to /proc/{pid}/fd/1 on Linux.
+    Returns None when no log file can be resolved.
+    """
+    log_path: Path | None = None
+
+    import sys as _sys
+
+    if _sys.platform.startswith("linux"):
+        fd1 = Path(f"/proc/{pid}/fd/1")
+        try:
+            resolved = fd1.resolve(strict=True)
+            if resolved.is_file():
+                log_path = resolved
+        except OSError:
+            pass
+    else:
+        # macOS: use lsof to find regular file FDs for the process
+        try:
+            result = subprocess.run(
+                ["lsof", "-p", str(pid), "-F", "n"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            for lsof_line in result.stdout.splitlines():
+                if lsof_line.startswith("n") and lsof_line.endswith(".jsonl"):
+                    candidate = Path(lsof_line[1:])
+                    if candidate.is_file():
+                        log_path = candidate
+                        break
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+
+    if log_path is None:
+        return None
+
+    try:
+        age = int(time.time() - log_path.stat().st_mtime)
+        return max(0, age)
+    except OSError:
+        return None
+
+
+def parse_ps_output(
+    ps_output: str,
+    etime_min_s: int,
+    idle_cpu_ratio_max: float,
+    hang_stream_idle_max_s: int,
+) -> list[HangedProc]:
     """Parse `ps -ao pid,etime,time,command` output, return hanged procs.
 
-    Hanged = command matches PS_FILTER_TOKENS AND etime >= etime_min_s AND cpu <= cpu_max_s.
+    Hanged = command matches PS_FILTER_TOKENS AND etime >= etime_min_s AND
+    (cpu_ratio < idle_cpu_ratio_max OR stream_event_age > hang_stream_idle_max_s).
     """
     hangs: list[HangedProc] = []
     lines = ps_output.splitlines()
@@ -106,8 +163,23 @@ def parse_ps_output(ps_output: str, etime_min_s: int, cpu_max_s: int) -> list[Ha
             continue
         etime_s = _parse_etime(etime_str)
         cpu_s = _parse_time(time_str)
-        if etime_s >= etime_min_s and cpu_s <= cpu_max_s:
-            hangs.append(HangedProc(pid=pid, etime_s=etime_s, cpu_s=cpu_s, command=command))
+        if etime_s < etime_min_s:
+            continue
+        cpu_ratio = cpu_s / etime_s if etime_s > 0 else 0.0
+        stream_age = last_stream_event_age_seconds(pid)
+        idle_cpu = cpu_ratio < idle_cpu_ratio_max
+        stream_stalled = stream_age is not None and stream_age > hang_stream_idle_max_s
+        if idle_cpu or stream_stalled:
+            hangs.append(
+                HangedProc(
+                    pid=pid,
+                    etime_s=etime_s,
+                    cpu_s=cpu_s,
+                    cpu_ratio=cpu_ratio,
+                    command=command,
+                    stream_event_age_s=stream_age,
+                )
+            )
     return hangs
 
 
@@ -117,7 +189,8 @@ def parse_ps_output(ps_output: str, etime_min_s: int, cpu_max_s: int) -> list[Ha
 def scan_idle_hangs(config: Config) -> list[HangedProc]:
     """Run ps on host, filter for hung paperclip claude subprocesses."""
     etime_min_s = min(c.thresholds.hang_etime_min for c in config.companies) * 60
-    cpu_max_s = max(c.thresholds.hang_cpu_max_s for c in config.companies)
+    idle_cpu_ratio_max = min(c.thresholds.idle_cpu_ratio_max for c in config.companies)
+    hang_stream_idle_max_s = min(c.thresholds.hang_stream_idle_max_s for c in config.companies)
     try:
         result = subprocess.run(
             ["ps", "-ao", "pid,etime,time,command"],
@@ -129,7 +202,7 @@ def scan_idle_hangs(config: Config) -> list[HangedProc]:
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
         log.error("ps_failed %s", e)
         return []
-    return parse_ps_output(result.stdout, etime_min_s, cpu_max_s)
+    return parse_ps_output(result.stdout, etime_min_s, idle_cpu_ratio_max, hang_stream_idle_max_s)
 
 
 # --- scan_died_mid_work --------------------------------------------------------
