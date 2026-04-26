@@ -8,6 +8,7 @@ Tools registered:
 - palace.health.status
 - palace.memory.lookup
 - palace.memory.health
+- palace.memory.decide
 - palace.git.log
 - palace.git.show
 - palace.git.blame
@@ -33,7 +34,7 @@ from typing import Any, Literal, TypeVar
 from graphiti_core import Graphiti
 from mcp.server.fastmcp import FastMCP
 from neo4j import AsyncDriver
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from starlette.applications import Starlette
 
 from palace_mcp.code_router import register_code_tools
@@ -52,6 +53,8 @@ from palace_mcp.git.tools import (
     palace_git_ls_tree,
     palace_git_show,
 )
+from palace_mcp.memory.decide import decide as _decide
+from palace_mcp.memory.decide_models import DecideRequest
 from palace_mcp.memory.health import get_health
 from palace_mcp.memory.lookup import perform_lookup
 from palace_mcp.memory.project_tools import (
@@ -231,6 +234,70 @@ async def palace_memory_health() -> dict[str, Any]:
             driver, default_group_id=_default_group_id
         )
         return resp.model_dump()
+    except Exception as exc:
+        handle_tool_error(exc)
+
+
+@_tool(
+    name="palace.memory.decide",
+    description=(
+        "Record a :Decision node in Graphiti. Use after a verdict, design call, "
+        "review APPROVE/REJECT, or any committed-to choice that future agents should see. "
+        "Required: title, body, slice_ref, decision_maker_claimed. "
+        "Optional decision_kind values (free-form, not enforced): "
+        "'design' | 'scope-change' | 'review-approve' | 'spec-revision' | "
+        "'postmortem-finding' | 'board-ratification'. "
+        "Confidence rubric: 1.0 = revert-if-wrong, 0.7 = default-unless-evidence-against, "
+        "0.4 = best-guess, <0.3 = consider IterationNote (not enforced in v1)."
+    ),
+)
+async def palace_memory_decide(
+    title: str,
+    body: str,
+    slice_ref: str,
+    decision_maker_claimed: str,
+    project: str | None = None,
+    decision_kind: str | None = None,
+    tags: list[str] | None = None,
+    evidence_ref: list[str] | None = None,
+    confidence: float = 1.0,
+) -> dict[str, Any]:
+    """Record a committed-to decision in the Palace knowledge graph."""
+    if _graphiti is None:
+        handle_tool_error(DriverUnavailableError("graphiti not initialized"))
+    try:
+        req = DecideRequest(
+            title=title,
+            body=body,
+            slice_ref=slice_ref,
+            decision_maker_claimed=decision_maker_claimed,
+            project=project,
+            decision_kind=decision_kind,
+            tags=tags,
+            evidence_ref=evidence_ref,
+            confidence=confidence,
+        )
+    except ValidationError as exc:
+        return {"ok": False, "error_code": "validation_error", "message": str(exc)}
+
+    if project is not None:
+        try:
+            from palace_mcp.memory.projects import resolve_group_ids
+
+            async with _driver.session() as session:  # type: ignore[union-attr]
+                group_ids = await session.execute_read(
+                    lambda tx: resolve_group_ids(
+                        tx, project, default_group_id=_default_group_id
+                    )
+                )
+            group_id = group_ids[0]
+        except UnknownProjectError as exc:
+            return {"ok": False, "error_code": "unknown_project", "message": str(exc)}
+    else:
+        group_id = _default_group_id
+
+    try:
+        return await _decide(req, g=_graphiti, group_id=group_id)
     except Exception as exc:
         handle_tool_error(exc)
 
