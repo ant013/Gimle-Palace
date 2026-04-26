@@ -113,7 +113,7 @@ async def test_decide_then_lookup_by_slice_ref(mcp_url: str) -> None:
     catches this.
     """
     # Use a unique slice_ref to avoid collisions with other test runs.
-    unique_ref = f"GIM-95"
+    unique_ref = "GIM-95"
     test_title = f"Round-trip test {uuid.uuid4().hex[:8]}"
 
     async with streamablehttp_client(mcp_url) as (read, write, _):
