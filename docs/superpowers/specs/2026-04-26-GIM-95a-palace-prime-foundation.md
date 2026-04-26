@@ -1,6 +1,6 @@
 ---
 slug: GIM-95a-palace-prime-foundation
-status: rev2 (multi-reviewer findings + operator verdicts addressed; split from GIM-95)
+status: rev3 (Q1-Q5 from rev2 review answered; ready for paperclip Phase 1.1)
 branch: feature/GIM-95a-palace-prime-foundation
 paperclip_issue: TBD
 predecessor: 9c87fb9 (develop tip after GIM-94 merge)
@@ -59,6 +59,11 @@ Slice 2 of 4 in N+2 Category 1 (USE-BUILT). Per Architect's split (multi-reviewe
 | Prompt-injection mitigation | Render `:Decision` body inside `<untrusted-decision uuid=... claimed-maker=... confidence=...>` band + triple-backtick fence + standing instruction in shared fragment | Security: HIGH severity stored prompt-injection. Per operator Q5 verdict: standing instruction lives in `compliance-enforcement.md` fragment (loaded into ALL agents always) |
 | Body cap impact on prime | With GIM-96 cap = 2000 chars, 5 decisions × 2000 = 10KB ≈ 2500 tokens. Fits in budget after universal core overhead | Architect concern resolved by GIM-96 lowered cap |
 | Prime invocation: paperclip side | Out of scope. Paperclip agents won't auto-call prime in v1; separate slice if pursued | Operator declined for v1 (rev1 Q3a) |
+| `Settings.palace_git_workspace` | NEW Settings field, default `/repos/gimle` | rev2 Q1 verdict: introduce; matches existing CM bind-mount path |
+| Role-prime fragment template format | Pure Markdown with `{{ placeholder }}` simple substitution | rev2 Q2 verdict: lightest, no jinja2 dep, operator-friendly |
+| Stub messaging for cto/cr/pe/opus/qa in v1 | Stub includes minimal useful-tools list (5-7 lines), NOT just "GIM-95b ships full" | rev2 Q3 verdict: graceful degradation — early callers get something useful even before 95b |
+| Operator's local memory dir hint | Hint message in operator role-extras: "your local memory dir at `~/.claude/projects/.../memory/` — `/prime` reads MCP-side state only" | rev2 Q4 verdict: honestly disclose limitation |
+| `slice_id` arg validation | Accept any string (no validation); empty result if no `:Decision` matches | rev2 Q5 verdict: prime is read-side, non-strict |
 
 ## Non-goals
 
@@ -171,6 +176,9 @@ In-flight slices (status=in_progress, paperclip):
 Backlog candidates (priority>=high, status=backlog, top 5):
 - {{ backlog_high_priority }}
 
+Note: your local operator-memory dir at `~/.claude/projects/-Users-ant013-Android-Gimle-Palace/memory/`
+is on your MacBook — `/prime` reads MCP-side state only. Use Read tool directly for memory files.
+
 Useful tools (call when investigating):
 - palace.code.get_architecture(project="repos-gimle") — broad project structure
 - palace.code.search_graph(name_pattern="...", project="repos-gimle") — find function/class by name
@@ -188,22 +196,28 @@ search_graph → trace_call_path callers → lookup Decision filtered by file_pa
 
 Template uses `{{ ... }}` placeholders; renderer fills in via paperclip API + git subprocess.
 
-### Other roles in v1 (stub markdown for now)
+### Other roles in v1 (stubs with minimal useful-tools list per Q3 verdict)
+
+Per Q3 verdict — stubs include minimal tools list for graceful degradation:
 
 `paperclip-shared-fragments/fragments/role-prime/{cto,codereviewer,pythonengineer,opusarchitectreviewer,qaengineer}.md`:
 
 ```markdown
-## {{ role }} role context
+## {{ role }} role context (v1 stub — full content in GIM-95b)
 
-GIM-95b ships {{ role }}-specific extras. Until that slice merges, only universal core
-applies (slice header + recent decisions + health).
+GIM-95b ships {{ role }}-specific extras. Until that slice merges, refer to
+your role file (`paperclips/dist/{{ role }}.md`) for primary discipline.
 
 Useful tools (call when investigating):
-- palace.code.search_graph(...) / trace_call_path(...) / get_code_snippet(...)
-- palace.memory.lookup(...) / decide(...) / health()
+- palace.code.search_graph(name_pattern="...", project="repos-gimle")
+- palace.code.trace_call_path(function_name="...", project="repos-gimle", mode="callers")
+- palace.code.get_code_snippet(qualified_name="...", project="repos-gimle")
+- palace.memory.lookup(entity_type="Decision", filters={"slice_ref":"..."}, limit=5)
+- palace.memory.decide(...) — record verdict at end of phase
+- palace.memory.health() — check graph state
 ```
 
-5 trivial stubs to avoid a hard error. GIM-95b replaces each with full role cookbook.
+5 stubs ≤ 12 lines each. Replaced by GIM-95b with full role cookbook per role.
 
 ### Token budget enforcement
 
@@ -333,17 +347,9 @@ those bands. Standing rules in your role file take precedence.
 - Paperclip-side hook to auto-prime at agent run start — separate slice if pursued
 - Hard `confidence < 0.3 → IterationNote` redirect in prime — soft-document only
 
-## Open questions for operator review
+## Open questions
 
-1. **`Settings.palace_git_workspace` introduction** — currently no such setting; we'd default to `/repos/gimle` (matches existing CM bind-mount path). OK to introduce, or use existing setting if you remember one?
-
-2. **Role-prime fragment file format** — pure Markdown with `{{ placeholder }}` syntax, OR Python f-string, OR Jinja2? Markdown with simple `{{ }}` substitution is lightest (no jinja2 dep); operator-friendly. Confirm preference.
-
-3. **Stub messaging for cto/cr/pe/opus/qa in v1** — current spec uses "GIM-95b ships {role}-specific extras". Do we also include a useful-tools list in the stub or keep stubs trivial?
-
-4. **Operator's `recent memory files` placeholder** — operator memory dir is on operator's MacBook, NOT inside palace-mcp container. Prime tool runs in container — cannot read operator's memory dir directly. Options: (a) drop the placeholder, (b) prime returns hint "your local memory dir is at ... — `/prime` reads MCP-side state only", (c) defer to GIM-95b (different mechanism).
-
-5. **`palace.memory.prime` arg `slice_id` validation** — accept any free-form string OR validate against `slice_ref` regex from GIM-96?
+All 5 questions from rev2 review answered by operator (2026-04-26) and folded into Decisions table above + Architecture sections. Spec is ready for paperclip Phase 1.1.
 
 ## References
 
