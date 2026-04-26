@@ -1,6 +1,6 @@
 ---
 slug: GIM-94-ops-quality-round-2
-status: draft (operator review pending)
+status: draft (operator review round 2)
 branch: feature/GIM-94-ops-quality-round-2
 paperclip_issue: 94
 predecessor: 6fc1d1a (develop tip after GIM-81 merge)
@@ -12,6 +12,26 @@ date: 2026-04-26
 ## Goal
 
 Fix three operational defects discovered in the 2026-04-25/26 N+1 + autonomous-chain session, while **net-reducing** the byte size of `paperclip-shared-fragments`. Today's GIM-82/90/91 added +184 lines (~5.5 KB ≈ 1500 tokens) of mostly postmortem narrative — that loads into every agent run. Compression must dominate the 3 new rules being added.
+
+## Baseline
+
+```
+paperclip-shared-fragments @ 3d63d3f  (post-GIM-91 main, 2026-04-26)
+```
+
+File sizes at that commit (authoritative — all compression targets and bytewise checks reference these):
+
+| File | Bytes at 3d63d3f |
+|---|---|
+| `fragments/worktree-discipline.md` | 3455 |
+| `fragments/compliance-enforcement.md` | 3979 |
+| `fragments/pre-work-discovery.md` | 2307 |
+
+Verify any value with:
+
+```bash
+git -C paperclip-shared-fragments show 3d63d3f:fragments/<name>.md | wc -c
+```
 
 ## Defects to fix
 
@@ -56,16 +76,18 @@ Soft cap per fragment file: **2 KB**. If exceeded, refactor or split.
 
 | # | Task | Owner | Deps |
 |---|---|---|---|
-| 1 | Compress `fragments/worktree-discipline.md` (3.5 KB → ≤ 2.0 KB) | PE | — |
-| 2 | Compress `fragments/compliance-enforcement.md` (4.0 KB → ≤ 2.0 KB) + add D1 rule + D3 rule | PE | — |
-| 3 | Compress `fragments/pre-work-discovery.md` (2.3 KB → ≤ 1.5 KB) | PE | — |
-| 4 | Add `PAPERCLIP_API_KEY` to `.env.example` + new `docs/runbooks/deploy-checklist.md` step | PE | — |
+| 1 | Compress `fragments/worktree-discipline.md` (3455 B → ≤ 2000 B) | PE | — |
+| 2 | Compress `fragments/compliance-enforcement.md` (3979 B → ≤ 2000 B) + add D1 rule + D3 rule | PE | — |
+| 3 | Compress `fragments/pre-work-discovery.md` (2307 B → ≤ 1500 B) | PE | — |
+| 4 | Add `PAPERCLIP_API_KEY` to `.env.example` + new `docs/runbooks/deploy-checklist.md` with auth-path probe | PE | — |
 | 5 | New `fragments/fragment-density.md` (≤ 25 lines) — codify compression principle | PE | — |
 | 6 | New `docs/postmortems/2026-04-26-fragment-extraction-postmortems.md` — narrative content moved here | PE | T1, T2, T3 |
-| 7 | Setup branch protection on `paperclip-shared-fragments/main` via `gh api PUT` | Operator (Board) | — |
-| 8 | Net-byte verification: fragments folder total bytes < pre-GIM-94 baseline | PE (CR verifies) | T1-T6 |
+| 7 | Setup branch protection on `paperclip-shared-fragments/main` via `gh api PUT` (blocks direct push) | Operator (Board) | — |
+| 8 | Net-byte verification: per-file and aggregate `wc -c` vs pinned baseline | PE (CR verifies) | T1-T6 |
 
 ### Task 1 — worktree-discipline.md compression
+
+**Baseline: 3455 B. Target: ≤ 2000 B.**
 
 Current additions to trim (86 lines):
 
@@ -100,6 +122,8 @@ Delete: detailed dirty-worktree handling examples, "Practical guidance" subsecti
 
 ### Task 2 — compliance-enforcement.md compression + 2 new rules
 
+**Baseline: 3979 B. Target: ≤ 2000 B.**
+
 **Compress added today** (56 lines → ≤ 20 lines):
 
 - Evidence rigor — keep the imperative + 1-line why. Drop the "Pattern" code blocks, drop "How CR enforces" subsection.
@@ -129,11 +153,13 @@ get CR APPROVE, squash-merge. Same flow as gimle-palace develop.
 
 ### Task 3 — pre-work-discovery.md compression
 
+**Baseline: 2307 B. Target: ≤ 1500 B.**
+
 Same shape as T1: keep imperative + one-line why + optional command. Drop multi-paragraph examples and "How to verify" subsections.
 
 ### Task 4 — `.env.example` + deploy runbook
 
-In `gimle-palace` (root):
+In `gimle-palace` (root), add to `.env.example`:
 
 ```
 # Paperclip API token — required by palace.ops.unstick_issue (GIM-81+)
@@ -143,10 +169,25 @@ PAPERCLIP_API_KEY=
 ```
 
 Create `docs/runbooks/deploy-checklist.md` (new file) with steps:
-1. Pull latest develop
-2. `grep -E "^(NEO4J_PASSWORD|OPENAI_API_KEY|PAPERCLIP_API_KEY)=." .env` returns 3 lines (non-empty values)
+
+1. Pull latest develop.
+2. `grep -E "^(NEO4J_PASSWORD|OPENAI_API_KEY|PAPERCLIP_API_KEY)=." .env` returns 3 lines (non-empty values).
 3. `docker compose --profile review up -d --build --wait`
-4. `curl -fsS http://localhost:8080/healthz` returns `{status:ok}`
+4. `curl -fsS http://localhost:8080/healthz` returns `{"status":"ok"}`.
+5. **Auth-path probe** — run this immediately after step 4:
+   ```bash
+   docker compose exec -T palace-mcp python3 -c '
+   import os, urllib.request, json
+   url = os.environ["PAPERCLIP_API_URL"] + "/api/health"
+   key = os.environ["PAPERCLIP_API_KEY"]
+   req = urllib.request.Request(url, headers={"Authorization": f"Bearer {key}"})
+   with urllib.request.urlopen(req, timeout=5) as r:
+       assert r.status == 200, f"paperclip auth failed: {r.status}"
+   print("OK")'
+   ```
+   Expected output: `OK`. Any non-200 or exception = deploy blocked; re-check `PAPERCLIP_API_KEY` in `.env`.
+
+   Alternative if the `/api/health` endpoint does not accept Authorization header: call `palace.ops.unstick_issue` via MCP with a known-done issue UUID and `dry_run=True`, assert response contains `"action": "noop"` (not an error or 401).
 
 ### Task 5 — `fragments/fragment-density.md` (NEW, ≤ 25 lines)
 
@@ -195,13 +236,19 @@ now reference these by date+slug.
 
 ### Task 7 — Branch protection on fragments main
 
+The protection payload must set `required_pull_request_reviews` to a non-null object so that a PR is required before any commit lands on `main`. `required_approving_review_count: 0` means the PR author does not need a separate approver — this works under single-token reality (per memory `feedback_single_token_review_gate`) while still blocking direct push entirely.
+
 ```bash
 gh api -X PUT /repos/ant013/paperclip-shared-fragments/branches/main/protection \
   --input - <<'JSON'
 {
   "required_status_checks": null,
   "enforce_admins": false,
-  "required_pull_request_reviews": null,
+  "required_pull_request_reviews": {
+    "required_approving_review_count": 0,
+    "dismiss_stale_reviews": false,
+    "require_code_owner_reviews": false
+  },
   "restrictions": null,
   "allow_force_pushes": false,
   "allow_deletions": false
@@ -209,52 +256,160 @@ gh api -X PUT /repos/ant013/paperclip-shared-fragments/branches/main/protection 
 JSON
 ```
 
-Note: `required_pull_request_reviews: null` is intentional — single-token reality (per memory) means no agent can self-approve. Direct-push block is the protection we want; the discipline rule (T2 D3) provides the PR requirement at the workflow layer.
-
-### Task 8 — Net-byte verification
+After running, verify the protection is active:
 
 ```bash
-cd paperclip-shared-fragments
-PRE_GIM_94=<HEAD before this PR's submodule pointer bump>
-git diff $PRE_GIM_94..HEAD --stat fragments/
-# total deletions > total insertions, even after 3 new rules added
+gh api /repos/ant013/paperclip-shared-fragments/branches/main/protection \
+  --jq '.required_pull_request_reviews.required_approving_review_count'
+# expected output: 0
 ```
 
-If insertions > deletions, fail Phase 3.1 review and iterate compression.
+Then confirm direct push is rejected:
+
+```bash
+# From a local clone of paperclip-shared-fragments on a non-PR branch
+echo "test" >> fragments/worktree-discipline.md
+git add -A && git commit -m "test direct push protection"
+git push origin main
+# Expected: remote: error: GH006: Protected branch update failed ...
+git reset --hard HEAD~1  # revert the test commit locally
+```
+
+### Task 8 — Net-byte verification (wc -c against pinned baseline)
+
+PE runs this after T1–T6 are complete; CR re-runs independently at Phase 3.1.
+
+**Baseline commit:** `3d63d3f` (post-GIM-91 `paperclip-shared-fragments` main — see Baseline section above).
+
+```bash
+BASELINE=3d63d3f
+FRAGS="paperclip-shared-fragments"
+
+# Per-file check for the three files this slice touches
+for FILE in fragments/worktree-discipline.md fragments/compliance-enforcement.md fragments/pre-work-discovery.md; do
+  PRE=$(git -C "$FRAGS" show "${BASELINE}:${FILE}" | wc -c)
+  NEW=$(wc -c < "${FRAGS}/${FILE}")
+  if [ "$NEW" -ge "$PRE" ]; then
+    echo "BYTE BUDGET VIOLATED: $FILE  baseline=${PRE}B  now=${NEW}B"
+    exit 1
+  else
+    echo "OK: $FILE  ${PRE}B -> ${NEW}B  (delta=$(( NEW - PRE ))B)"
+  fi
+done
+
+# Aggregate check across all fragment files
+PRE_TOTAL=$(git -C "$FRAGS" ls-tree -r "${BASELINE}" --name-only fragments/ | \
+  xargs -I{} sh -c "git -C ${FRAGS} show ${BASELINE}:{} | wc -c" | \
+  awk '{s+=$1} END {print s}')
+NEW_TOTAL=$(find "${FRAGS}/fragments" -type f | xargs wc -c | tail -1 | awk '{print $1}')
+echo "Aggregate: baseline=${PRE_TOTAL}B  now=${NEW_TOTAL}B  delta=$(( NEW_TOTAL - PRE_TOTAL ))B"
+if [ "$NEW_TOTAL" -ge "$PRE_TOTAL" ]; then
+  echo "AGGREGATE BYTE BUDGET VIOLATED"
+  exit 1
+fi
+echo "Net-byte check PASSED"
+```
+
+If any check fails, fail Phase 3.1 review and iterate compression.
 
 ## Phase sequence (standard)
 
 | Phase | Agent | Notes |
 |---|---|---|
-| 1.1 Formalize | CTO | This plan exists; CTO verifies and pushes branch |
-| 1.2 Plan-first review | CR | Review this plan for completeness, scope |
+| 1.1 Formalize | CTO | This plan exists; CTO verifies baseline SHA + pushes branch |
+| 1.2 Plan-first review | CR | Review this plan for completeness and scope |
 | 2 Implement | PE | Tasks 1–6 + 8 (T7 is operator) |
-| 3.1 Mechanical | CR | Verify fragment sizes, run net-byte check |
-| 3.2 Adversarial | Opus | Verify no semantic loss in compression |
-| 4.1 QA | QA | Spawn one fresh agent run, confirm role files load < 32 KB total |
+| 3.1 Mechanical | CR | Verify fragment sizes with `wc -c`; re-run T8 script independently |
+| 3.2 Adversarial | Opus | Verify no semantic loss in compression; check D3 fix is real |
+| 4.1 QA | QA | Full QA checklist below |
 | 4.2 Merge | **CTO ONLY** | Per the new D1 rule landing in this PR |
 
 No chain trigger to next slice — this is end of ops-quality cleanup queue.
 
+## Phase 4.1 QA acceptance (detailed)
+
+QA must verify each item and include evidence in the PR body under `## QA Evidence`.
+
+### Bundle size: per-bundle delta, not absolute
+
+Each of the 11 dist bundles in `paperclips/dist/*.md` must SHRINK in bytes vs the pre-GIM-94 baseline. Use the develop tip SHA immediately before this branch's submodule bump as `$BASELINE_GIMLE`.
+
+```bash
+BASELINE_GIMLE=$(git merge-base HEAD origin/develop)
+
+for F in paperclips/dist/*.md; do
+  PRE=$(git show "${BASELINE_GIMLE}:${F}" 2>/dev/null | wc -c)
+  CUR=$(wc -c < "$F")
+  if [ "$CUR" -gt "$PRE" ]; then
+    echo "REGRESS: $F  ${PRE}B -> ${CUR}B  (+$(( CUR - PRE ))B)"
+  else
+    echo "OK: $F  ${PRE}B -> ${CUR}B  ($(( CUR - PRE ))B)"
+  fi
+done
+```
+
+Expected: zero `REGRESS` lines. Any regression = block on QA.
+
+### Auth-path probe (must pass end-to-end)
+
+After `docker compose --profile review up -d --wait`, run the auth probe from the deploy-checklist:
+
+```bash
+docker compose exec -T palace-mcp python3 -c '
+import os, urllib.request, json
+url = os.environ["PAPERCLIP_API_URL"] + "/api/health"
+key = os.environ["PAPERCLIP_API_KEY"]
+req = urllib.request.Request(url, headers={"Authorization": f"Bearer {key}"})
+with urllib.request.urlopen(req, timeout=5) as r:
+    assert r.status == 200, f"paperclip auth failed: {r.status}"
+print("OK")'
+```
+
+Expected output: `OK`. Paste the terminal output as QA evidence. If response is non-200 or raises, QA is blocked — do not claim D2 fixed.
+
+### Branch protection verification
+
+Confirm T7 was executed and the protection is live:
+
+```bash
+gh api /repos/ant013/paperclip-shared-fragments/branches/main/protection \
+  --jq '.required_pull_request_reviews.required_approving_review_count'
+```
+
+Expected output: `0`. Paste output as QA evidence.
+
+### Fragment compression check
+
+Re-run T8 script (net-byte verification). All per-file checks and aggregate must show `OK`. Paste full output as QA evidence.
+
+### D1 rule readable in dist bundle
+
+```bash
+grep -c "Phase 4.2 squash-merge" paperclips/dist/python-engineer.md
+```
+
+Expected: `1`. Paste output.
+
 ## Acceptance summary
 
-1. ✅ All 4 defects (D1-D4) addressed with concrete, enforceable artifacts
-2. ✅ Net byte delta on `fragments/` is **negative** vs. pre-GIM-94 baseline
-3. ✅ All previously-codified rules from GIM-82/90/91 still expressible (semantic preservation)
-4. ✅ Postmortem doc exists with extracted narratives, fragments reference it by date
-5. ✅ `PAPERCLIP_API_KEY` documented in `.env.example` + verified in deploy-checklist
-6. ✅ Branch protection on fragments main blocks direct-push
-7. ✅ New `fragment-density.md` enforced by CR going forward
+1. All 4 defects (D1-D4) addressed with concrete, enforceable artifacts
+2. Net byte delta on `fragments/` is **negative** vs. `paperclip-shared-fragments@3d63d3f` baseline (verified per-file and aggregate with `wc -c`)
+3. All previously-codified rules from GIM-82/90/91 still expressible (semantic preservation verified by Opus at 3.2)
+4. Postmortem doc exists with extracted narratives; fragments reference it by date
+5. `PAPERCLIP_API_KEY` documented in `.env.example` + deploy-checklist auth-path probe passes end-to-end in QA
+6. Branch protection on fragments main has `required_pull_request_reviews.required_approving_review_count=0` (direct push blocked; verified via `gh api` + attempted push test)
+7. New `fragment-density.md` enforced by CR going forward
+8. Each of the 11 `paperclips/dist/*.md` bundles shrinks in bytes vs pre-GIM-94 baseline (zero `REGRESS` lines)
 
 ## Out of scope (defer to N+2 candidates)
 
-- Per-role fragment loading (PE.md grams only PE-relevant rules; CR.md only CR-relevant) — large architectural refactor, file as N+2
+- Per-role fragment loading (PE.md ingests only PE-relevant rules; CR.md only CR-relevant) — large architectural refactor, file as N+2
 - Automated token-budget alarm in `paperclips/build.sh` — defer until compression discipline holds over multiple slices
 - Migrating other historical narratives from fragments to memory/postmortems — this slice covers what GIM-82/90/91 added; older narratives left for a later cleanup pass
 
 ## Open questions for operator review
 
-1. **Net-byte target tightness:** "≤ pre-GIM-94 baseline" or "≤ pre-GIM-82 baseline (more aggressive)"?
+1. **Net-byte target tightness:** "≤ pre-GIM-94 baseline (`3d63d3f`)" or "≤ pre-GIM-82 baseline (more aggressive)"?
 2. **Postmortem doc structure:** one file with 4 sections (current plan) or 4 separate files?
 3. **D1 rule placement:** only in `compliance-enforcement.md`, or duplicated in `paperclips/roles/python-engineer.md` so PE sees it without cross-fragment lookup?
-4. **`required_pull_request_reviews: null` confirm:** keep null forever, or revisit when separate bot identity is provisioned (separate slice)?
+4. **`required_approving_review_count: 0` permanence:** keep at 0 until a separate bot identity is provisioned (separate slice), or revisit sooner?
