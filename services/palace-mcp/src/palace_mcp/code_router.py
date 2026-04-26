@@ -35,6 +35,37 @@ def _set_cm_session(session: ClientSession | None) -> None:
     _cm_session = session
 
 
+def get_cm_session() -> ClientSession | None:
+    """Public accessor — returns current CM session, None if not started.
+
+    Use from composite tools to read the session at invocation time
+    (avoids None-at-import-time of direct imports).
+    """
+    return _cm_session
+
+
+def parse_cm_result(result: Any) -> dict[str, Any]:
+    """Parse MCP CallToolResult → dict; replaces inline logic in _forward.
+
+    Public so composite tools (code_composite.py) can reuse the same
+    result-extraction semantics without duplicating the pattern.
+
+    Note: non-dict JSON is wrapped as {"_raw": value} (intentional rename
+    from _forward's {"result": value} — near-unreachable in practice).
+    Non-JSON text is wrapped as {"_raw": text}.
+    """
+    if result.structuredContent is not None:
+        return dict(result.structuredContent)
+    for block in result.content:
+        if isinstance(block, TextContent):
+            try:
+                parsed = json.loads(block.text)
+                return parsed if isinstance(parsed, dict) else {"_raw": parsed}
+            except json.JSONDecodeError:
+                return {"_raw": block.text}
+    return {}
+
+
 async def start_cm_subprocess(binary: str) -> None:
     """Start CM binary as stdio subprocess and initialize MCP session."""
     global _cm_session, _cm_exit_stack  # noqa: PLW0603
@@ -162,18 +193,7 @@ def _register_passthrough(
         )
         if result.isError:
             return {"error": [str(block) for block in result.content]}
-        if result.structuredContent is not None:
-            return dict(result.structuredContent)
-        for block in result.content:
-            if isinstance(block, TextContent):
-                try:
-                    parsed = json.loads(block.text)
-                    if isinstance(parsed, dict):
-                        return parsed
-                    return {"result": parsed}
-                except json.JSONDecodeError:
-                    return {"text": block.text}
-        return {}
+        return parse_cm_result(result)
 
     if mcp_instance is not None:
         _patch_tool_open_schema(
