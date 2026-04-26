@@ -37,7 +37,10 @@ main                      (stable release ref — tags live here)
 1. Add label `release-cut` to a merged develop PR, OR
 2. Run `gh workflow run release-cut.yml`.
 
-The Action fast-forwards `main` to `origin/develop` using `RELEASE_CUT_TOKEN` (GitHub App or PAT with `contents: write`). No human pushes `main`, ever.
+The Action opens a PR `develop → main`, enables auto-merge with rebase
+strategy, and (after merge) pushes an annotated tag `release-<date>-<sha>`.
+Uses only the workflow's `GITHUB_TOKEN` — no PAT or App needed. No human
+pushes `main`, ever.
 
 See also:
 - `paperclips/fragments/shared/fragments/git-workflow.md` — per-agent rules.

@@ -1,0 +1,5 @@
+# SC2296: false positive for GitHub Actions ${{ }} expressions substituted
+# before shell execution — not actual shell syntax errors.
+# SC2034: false positive when ${{ }} assignment confuses shellcheck into thinking
+# the variable is unused (variable IS used but shellcheck loses track after SC2296).
+disable=SC2296,SC2034
