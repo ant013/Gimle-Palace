@@ -182,6 +182,11 @@ Sources:
 | Named export in `src/utils.js` | `src/utils.foo` |
 | Class method | `src/utils.C.method` |
 
+Sources:
+- MDN Function.name: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Function/name (accessed 2026-04-27)
+- Node.js ESM resolution: https://nodejs.org/api/esm.html#resolution-algorithm (accessed 2026-04-27)
+- scip-typescript: https://github.com/sourcegraph/scip-typescript (accessed 2026-04-27)
+
 #### TypeScript
 
 **Native mechanism:** `typeChecker.getFullyQualifiedName(symbol)` from compiler API. [HIGH]
@@ -190,6 +195,7 @@ Sources:
 - TypeScript namespaces produce `Namespace.Type.member`
 
 Sources:
+- TypeScript Compiler API: https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API (accessed 2026-04-27)
 - scip-typescript blog: https://sourcegraph.com/blog/announcing-scip-typescript (accessed 2026-04-27)
 
 ### 1.2 Semantic Index Tool Outputs
@@ -220,12 +226,12 @@ Sources:
 | **Python** | scip-python 0.4.x | Production | `scip-python` |
 | **Kotlin** | scip-java 0.12.x | Production (covers Kotlin) | `scip-java` |
 | **Swift** | **None** | [MATERIAL GAP] | N/A |
-| **Rust** | rust-analyzer (built-in) | Production | `rust-analyzer` |
+| **Rust** | rust-analyzer v0.3.2870 (2026-04-20) | Production | `rust-analyzer` |
 | **Solidity** | **None** | [MATERIAL GAP] (enum exists: `Solidity=95`) | N/A |
 | **FunC** | **None** | [MATERIAL GAP] | N/A |
 | **Anchor/Solana** | rust-analyzer (Rust layer) | Partial | `rust-analyzer` |
-| **JavaScript** | scip-typescript | Production | `scip-typescript` |
-| **TypeScript** | scip-typescript | Production | `scip-typescript` |
+| **JavaScript** | scip-typescript 0.4.0 | Production | `scip-typescript` |
+| **TypeScript** | scip-typescript 0.4.0 | Production | `scip-typescript` |
 
 **Example SCIP symbols:**
 ```
@@ -235,7 +241,7 @@ scip-python pip mypackage 1.0 mypackage/module/MyClass#method().       -- Python
 ```
 
 Sources:
-- SCIP proto: https://github.com/sourcegraph/scip/blob/main/scip.proto (accessed 2026-04-27)
+- SCIP proto (as of Feb 2026, last indexed): https://github.com/sourcegraph/scip/blob/main/scip.proto (accessed 2026-04-27)
 - SCIP docs: https://github.com/sourcegraph/scip/blob/main/docs/scip.md (accessed 2026-04-27)
 - scip-code.org: https://scip-code.org/ (accessed 2026-04-27)
 - rust-analyzer SCIP: https://rust-lang.github.io/rust-analyzer/src/rust_analyzer/cli/scip.rs.html (accessed 2026-04-27)
@@ -246,7 +252,7 @@ Sources:
 
 **Tree-sitter tags:** Produces `(name, role, kind, location)` tuples. Does NOT produce qualified names — only simple names with roles. [HIGH]
 
-**Stack graphs (GitHub):** Extend tree-sitter for name resolution via graph structures where paths represent valid name bindings. Produce FQNs like `stove.broil` for Python. Language-agnostic but requires per-language DSL rules. Currently used for Python, TypeScript, Java, Ruby at GitHub. [HIGH]
+**Stack graphs (GitHub):** Extend tree-sitter for name resolution via graph structures where paths represent valid name bindings. Produce FQNs like `stove.broil` for Python. Language-agnostic but requires per-language DSL rules. As of the 2021 blog post, used for Python, TypeScript, Java, Ruby at GitHub. [HIGH] [VERSION GAP — 2021 coverage claim; current language support may differ]
 
 Sources:
 - Tree-sitter Code Navigation: https://tree-sitter.github.io/tree-sitter/4-code-navigation.html (accessed 2026-04-27)
@@ -462,6 +468,8 @@ For 30-70M occurrence nodes:
 - OS: 2-4 GB
 - **Total: 21-47 GB RAM recommended** [MEDIUM]
 
+**Note:** These estimates cover occurrence nodes only. Existing graph data (Symbol nodes, ExternalDependency nodes, paperclip ingest nodes, edges) will add ~10-20% overhead depending on graph size. Budget accordingly.
+
 #### Published Limits
 
 - Neo4j theoretical: up to 2^45 (~35T) node IDs [HIGH]
@@ -512,17 +520,21 @@ Uses Elasticsearch. [MATERIAL GAP] — no specific benchmarks at our scale found
 | **Schema flexibility** | Excellent (add properties freely) [HIGH] | Good (re-index for schema changes) [MEDIUM] | Good [SPECULATIVE] | Excellent (no schema) [HIGH] |
 | **Multi-tenant** | Good (group_id filtering) [HIGH] | Good (per-project indexes) [MEDIUM] | Good [SPECULATIVE] | Inherent (separate repos) [HIGH] |
 
-**Scoring (1-5):**
+**Scoring (1-5, weighted):**
 
-| Dimension | A | B | C | D |
-|---|---|---|---|---|
-| Insertion | 3 | 5 | 4 | 5 |
-| Query latency | 4 | 5 | 5 | 1 |
-| Storage | 2 | 4 | 4 | 5 |
-| Ops complexity | 5 | 3 | 2 | 4 |
-| Schema flexibility | 5 | 4 | 4 | 5 |
-| Multi-tenant | 5 | 4 | 4 | 5 |
-| **Total** | **24** | **25** | **23** | **25** |
+Ops complexity carries 2x weight for iMac single-operator deployment — adding a new system has outsized operational cost. All other dimensions weighted 1x.
+
+| Dimension | Weight | A | B | C | D |
+|---|---|---|---|---|---|
+| Insertion | 1x | 3 | 5 | 4 | 5 |
+| Query latency | 1x | 4 | 5 | 5 | 1 |
+| Storage | 1x | 2 | 4 | 4 | 5 |
+| Ops complexity | **2x** | 5 (10) | 3 (6) | 2 (4) | 4 (8) |
+| Schema flexibility | 1x | 5 | 4 | 4 | 5 |
+| Multi-tenant | 1x | 5 | 4 | 4 | 5 |
+| **Weighted Total** | | **29** | **28** | **25** | **29** |
+
+Option A and D tie at 29. D is eliminated because seconds-to-minutes query latency (score 1) is unacceptable for interactive MCP tool calls. **A wins on ops simplicity with acceptable query performance.**
 
 ### 2.4 Recommendation: All-in-Neo4j with Hybrid Escape Hatch
 
@@ -620,17 +632,17 @@ Uses Elasticsearch. [MATERIAL GAP] — no specific benchmarks at our scale found
 | **Registry** | https://soldeer.xyz/ | npm |
 | **Special** | Import remappings (`remappings.txt`) unique to Solidity |
 
-[HIGH] Sources: Soldeer USAGE.md https://github.com/mario-eth/soldeer/blob/main/USAGE.md, Hardhat 3 docs https://hardhat.org/docs/guides/writing-contracts/dependencies (accessed 2026-04-27)
+[HIGH] Sources: Soldeer 0.10.1 (2026-02-16) USAGE.md https://github.com/mario-eth/soldeer/blob/main/USAGE.md, Hardhat 3 docs https://hardhat.org/docs/guides/writing-contracts/dependencies (accessed 2026-04-27)
 
 #### FunC/TON [MATERIAL GAP]
 
 **No on-chain dependency system.** [LOW]
 
-- Build system: Blueprint SDK (`@ton/blueprint` npm package)
+- Build system: Blueprint SDK (`@ton/blueprint` 0.42.0, npm package)
 - Smart contract languages: FunC, Tolk, Tact
 - Dependencies are npm packages for tooling: `@ton/core`, `@ton/crypto`, `@tact-lang/compiler`
 - No contract-level package registry or dependency management
-- TON's 2025 roadmap mentions "shared libraries for smart contracts" as future feature — not yet available
+- TON's 2025 roadmap mentions "shared libraries for smart contracts" as future feature — not yet available [SPECULATIVE — no direct roadmap URL found; based on community discussion]
 
 [LOW] Sources: TON Blueprint https://docs.ton.org/contract-dev/blueprint/overview, Tact compilation https://docs.tact-lang.org/book/compile/ (accessed 2026-04-27)
 
@@ -856,10 +868,10 @@ Stale edges GC'd by comparing extracted edges against existing for same `(module
 
 | Integration point | Q1 (FQN) | Q2 (Occurrences) | Q3 (Dependencies) | Status |
 |---|---|---|---|---|
-| Symbol identity | `qualified_name` in SCIP format | `symbol_fqn` references same format | `:IMPORTED_FROM` edge links to dep's FQN | **Consistent** |
-| Package/version | SCIP `<manager> <package> <version>` | N/A | `:ExternalDependency {ecosystem, name}` | **Compatible** — SCIP's package maps to ExternalDependency node |
-| Ecosystem scoping | `scheme` field identifies ecosystem | `group_id` scopes to project | `ecosystem` property | **Consistent** — different fields, same intent |
-| Scale | ~500K-2M symbol nodes | 30-70M occurrence nodes | ~5K-50K dependency nodes | **No conflict** — occurrence scale drives storage decision |
+| Symbol identity | `qualified_name` in SCIP format | `symbol_fqn` references same format | `:IMPORTED_FROM` edge links to dep's FQN | **Consistent** [HIGH] |
+| Package/version | SCIP `<manager> <package> <version>` | N/A | `:ExternalDependency {ecosystem, name}` | **Compatible** [HIGH] — SCIP's package maps to ExternalDependency node |
+| Ecosystem scoping | `scheme` field identifies ecosystem | `group_id` scopes to project | `ecosystem` property | **Consistent** [HIGH] — different fields, same intent |
+| Scale | ~500K-2M symbol nodes | 30-70M occurrence nodes | ~5K-50K dependency nodes | **No conflict** [MEDIUM] — occurrence scale drives storage decision |
 
 ---
 
@@ -886,7 +898,8 @@ Stale edges GC'd by comparing extracted edges against existing for same `(module
 | Tantivy ~2x faster than Lucene | Tantivy 0.22-0.24.x | Lucene may close gap in future versions |
 | SCIP symbol format | scip.proto as of Apr 2026 | SCIP is still evolving (see open issues) |
 | rust-analyzer SCIP output | rust-analyzer nightly | Some trait impl flattening may change |
-| Soldeer in Foundry | Soldeer as of Apr 2026 | Soldeer is young, API may change |
+| Soldeer in Foundry | Soldeer 0.10.1 (Feb 2026) | Soldeer is young, API may change |
+| Stack Graphs language coverage | Blog post 2021 | Current language support may differ |
 
 ---
 
@@ -929,15 +942,15 @@ Stale edges GC'd by comparing extracted edges against existing for same `(module
 | Neo4j NODES 2019 updates | Official conf | 2019 | 2 | Q2 |
 | UNWIND benchmark (achantavy) | Engineering blog | 2020 | 2 | Q2 |
 | neo4j-admin import community | Community report | 2024 | 3 | Q2 |
-| Mix-and-batch blog | Official blog | date varies | 2 | Q2 |
-| Memgraph comparison | Vendor benchmark | date varies | 3 | Q2 |
+| Mix-and-batch blog | Official blog | 2022 | 2 | Q2 |
+| Memgraph comparison | Vendor benchmark | 2023 | 3 | Q2 |
 | Max De Marzi benchmark | Expert blog | Jan 2023 | 2 | Q2 |
-| 100M+ nodes community | Community report | date varies | 3 | Q2 |
-| Disk capacity planning (sgerogia) | Community blog | date varies | 3 | Q2 |
+| 100M+ nodes community | Community report | 2024 | 3 | Q2 |
+| Disk capacity planning (sgerogia) | Community blog | 2019 [STALE-RISK] | 3 | Q2 |
 | Neo4j Infinigraph announcement | Official blog | 2025 | 1 | Q2 |
 | ParadeDB Tantivy introduction | Official docs | Apr 2026 | 1 | Q2 |
-| Tantivy 0.22 release (Quickwit) | Maintainer blog | date varies | 2 | Q2 |
-| SeekStorm benchmark | Benchmark | date varies | 3 | Q2 |
+| Tantivy 0.22 release (Quickwit) | Maintainer blog | Sep 2024 | 2 | Q2 |
+| SeekStorm benchmark | Benchmark | 2024 | 3 | Q2 |
 | Tantivy on S3 (shayon.dev) | Engineering blog | 2025 | 3 | Q2 |
 | GitHub Blackbird blog | Official blog | 2023 | 1 | Q2 |
 | Sourcegraph Zoekt | Official product | Apr 2026 | 1 | Q2 |
