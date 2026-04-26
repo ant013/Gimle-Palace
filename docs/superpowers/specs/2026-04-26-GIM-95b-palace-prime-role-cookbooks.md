@@ -1,6 +1,6 @@
 ---
 slug: GIM-95b-palace-prime-role-cookbooks
-status: draft (operator review pending)
+status: rev2 (Q6-Q8 from review answered; ready for paperclip Phase 1.1 after GIM-95a merges)
 branch: feature/GIM-95b-palace-prime-role-cookbooks
 paperclip_issue: TBD
 predecessor: TBD (post-GIM-95a merge SHA)
@@ -25,11 +25,18 @@ Slice 3 of 4 in N+2 Category 1 (USE-BUILT). **Hard dependency on GIM-95a merge**
 
 ## Decisions recorded
 
-Per operator verdict during GIM-95 review:
-- All architectural decisions live in GIM-95a (rev2 spec). This slice inherits them.
+Per operator verdict during GIM-95 review + Q6-Q8 round:
+- All architectural decisions live in GIM-95a (rev3 spec). This slice inherits them.
 - Cookbook content respects GIM-94 fragment-density rule (imperative one-liners + minimal context).
 - Each role markdown fragment ≤ 1400 tokens (universal core takes ≤ 600 of the 2000 budget).
-- No phase auto-detection in v1 — agent reads role-extras and infers their phase from issue context.
+
+Q6-Q8 verdicts (from review of rev1):
+
+| Topic | Verdict | Rationale |
+|---|---|---|
+| Cookbook content granularity | ~15-20 lines per cookbook (current state) | Q6 verdict: sweet spot — enough phase context without bloating. Each agent gets only ONE cookbook per /prime call so individual size matters less than total budget |
+| Phase-detection in cookbooks | Explicit phase guards inline ("If at Phase 1.1, do X; if at 4.2, do Y") for multi-phase roles (CTO, CR) | Q7 verdict: compromise — more targeted than "let agent reason", less complex than per-phase cookbook files |
+| Useful-tools ordering | Phase-progression order (sequenced as agent would invoke during their phase) | Q8 verdict: workflow-aligned, helps agent execute step-by-step |
 
 ## Cookbook content per role
 
@@ -183,13 +190,9 @@ Useful tools:
 - Phase-aware sub-priming (e.g. `/prime cr 1.2` vs `/prime cr 3.1`) — separate refinement slice
 - Cookbook content tuning post-observation — separate slice after we see how agents use them
 
-## Open questions for operator review
+## Open questions
 
-1. **Cookbook content granularity** — current cookbooks have ~15-20 lines each. Is this the right depth, or should they be tighter (~10 lines, fragment-density rule pressure) or richer (~30 lines, fully phase-detailed)?
-
-2. **Phase-detection placeholder** — cookbooks above implicitly assume one phase per role (e.g., CTO at 1.1+4.2 covered in same cookbook). Should we add explicit phase guards (e.g., "If you are at Phase 1.1, use these tools; if 4.2, use those") or let agent reason?
-
-3. **`Useful tools` ordering** — currently each cookbook lists ~5-7 tools in arbitrary order. Should we rank by frequency-of-use (most-used first) or by phase-progression (sequenced as agent would invoke)?
+All 3 questions from rev1 review answered by operator (2026-04-26) and folded into Decisions table above. Cookbook content (current state) already matches Q6 verdict (~15-20 lines). Q7 (explicit phase guards for CTO+CR) and Q8 (phase-progression tool order) to be applied in Phase 2 implementation per cookbook content guidance below — PE adjusts cookbooks during Tasks 1-5 to match.
 
 ## References
 
