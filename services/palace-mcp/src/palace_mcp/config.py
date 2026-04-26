@@ -26,3 +26,4 @@ class Settings(BaseSettings):
     palace_ops_ssh_user: str = "anton"
     paperclip_api_url: str = "http://host.docker.internal:3100"
     paperclip_api_key: str = ""
+    palace_git_workspace: str = "/repos/gimle"
