@@ -76,7 +76,12 @@ async def _resolve_qn(
     )
     if raw.isError:
         cm_msg = code_router.parse_cm_result(raw).get("_raw", "")
-        return {"ok": False, "error_code": "cm_error", "requested_qualified_name": qualified_name, "message": f"CM error from search_graph: {cm_msg}"}
+        return {
+            "ok": False,
+            "error_code": "cm_error",
+            "requested_qualified_name": qualified_name,
+            "message": f"CM error from search_graph: {cm_msg}",
+        }
     data = code_router.parse_cm_result(raw)
     results = data.get("results", [])
     total = data.get("total", len(results))
@@ -137,7 +142,12 @@ async def _test_impact_tests_edge(
     )
     if raw.isError:
         cm_msg = code_router.parse_cm_result(raw).get("_raw", "")
-        return {"ok": False, "error_code": "cm_error", "requested_qualified_name": requested_qn, "message": f"CM error from query_graph: {cm_msg}"}
+        return {
+            "ok": False,
+            "error_code": "cm_error",
+            "requested_qualified_name": requested_qn,
+            "message": f"CM error from query_graph: {cm_msg}",
+        }
     data = code_router.parse_cm_result(raw)
     rows = data.get("rows", [])
     truncated = len(rows) > max_results
@@ -179,7 +189,12 @@ async def _test_impact_trace(
     )
     if raw.isError:
         cm_msg = code_router.parse_cm_result(raw).get("_raw", "")
-        return {"ok": False, "error_code": "cm_error", "requested_qualified_name": requested_qn, "message": f"CM error from trace_call_path: {cm_msg}"}
+        return {
+            "ok": False,
+            "error_code": "cm_error",
+            "requested_qualified_name": requested_qn,
+            "message": f"CM error from trace_call_path: {cm_msg}",
+        }
     data = code_router.parse_cm_result(raw)
     callers = data.get("callers", [])
     tests = [c for c in callers if c.get("is_test")]

@@ -202,7 +202,9 @@ async def test_test_impact_cm_not_started_returns_mcp_error(mcp_url: str) -> Non
 
     assert result.content, "tools/call must return non-empty content"
     error_text = " ".join(c.text for c in result.content if hasattr(c, "text"))
-    assert "TypeError" not in error_text, f"TypeError must not appear in error: {error_text}"
+    assert "TypeError" not in error_text, (
+        f"TypeError must not appear in error: {error_text}"
+    )
 
 
 # ---------------------------------------------------------------------------

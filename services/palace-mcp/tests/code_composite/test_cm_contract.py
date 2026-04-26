@@ -128,8 +128,18 @@ class TestSearchGraphContract:
         session = _session(
             {
                 "results": [
-                    {"name": "fn", "qualified_name": "a.fn", "label": "Function", "file_path": "a.py"},
-                    {"name": "fn", "qualified_name": "b.fn", "label": "Function", "file_path": "b.py"},
+                    {
+                        "name": "fn",
+                        "qualified_name": "a.fn",
+                        "label": "Function",
+                        "file_path": "a.py",
+                    },
+                    {
+                        "name": "fn",
+                        "qualified_name": "b.fn",
+                        "label": "Function",
+                        "file_path": "b.py",
+                    },
                 ],
                 "total": 2,
                 "has_more": False,
@@ -155,7 +165,10 @@ class TestQueryGraphContract:
         session = _session(
             {
                 "rows": [
-                    ["test_register_code_tools", "tests.test_code_router.test_register_code_tools"]
+                    [
+                        "test_register_code_tools",
+                        "tests.test_code_router.test_register_code_tools",
+                    ]
                 ],
                 "columns": ["name", "qualified_name"],
             }
@@ -257,8 +270,17 @@ class TestTraceCallPathContract:
     @pytest.mark.asyncio
     async def test_trace_call_path_caller_fields(self) -> None:
         """Callers have is_test, hop, name, qualified_name; non-tests omit is_test."""
-        test_caller = {"name": "test_fn", "qualified_name": "tests.test_fn", "is_test": True, "hop": 1}
-        prod_caller = {"name": "caller_fn", "qualified_name": "pkg.caller_fn", "hop": 2}  # no is_test
+        test_caller = {
+            "name": "test_fn",
+            "qualified_name": "tests.test_fn",
+            "is_test": True,
+            "hop": 1,
+        }
+        prod_caller = {
+            "name": "caller_fn",
+            "qualified_name": "pkg.caller_fn",
+            "hop": 2,
+        }  # no is_test
         session = _session({"callers": [test_caller, prod_caller]})
 
         result = await code_composite._test_impact_trace(
@@ -283,8 +305,18 @@ class TestTraceCallPathContract:
         session = _session(
             {
                 "callers": [
-                    {"name": "deep", "qualified_name": "t.deep", "is_test": True, "hop": 3},
-                    {"name": "near", "qualified_name": "t.near", "is_test": True, "hop": 1},
+                    {
+                        "name": "deep",
+                        "qualified_name": "t.deep",
+                        "is_test": True,
+                        "hop": 3,
+                    },
+                    {
+                        "name": "near",
+                        "qualified_name": "t.near",
+                        "is_test": True,
+                        "hop": 1,
+                    },
                 ]
             }
         )
