@@ -1,6 +1,6 @@
 ---
 slug: GIM-94-ops-quality-round-2
-status: draft (operator review round 2)
+status: rev3 (CR round 1 findings addressed)
 branch: feature/GIM-94-ops-quality-round-2
 paperclip_issue: 94
 predecessor: 6fc1d1a (develop tip after GIM-81 merge)
@@ -79,10 +79,10 @@ Soft cap per fragment file: **2 KB**. If exceeded, refactor or split.
 | 1 | Compress `fragments/worktree-discipline.md` (3455 B → ≤ 2000 B) | PE | — |
 | 2 | Compress `fragments/compliance-enforcement.md` (3979 B → ≤ 2000 B) + add D1 rule + D3 rule | PE | — |
 | 3 | Compress `fragments/pre-work-discovery.md` (2307 B → ≤ 1500 B) | PE | — |
-| 4 | Add `PAPERCLIP_API_KEY` to `.env.example` + new `docs/runbooks/deploy-checklist.md` with auth-path probe | PE | — |
+| 4 | Create `docs/runbooks/deploy-checklist.md` with auth-path probe (`.env.example` already has `PAPERCLIP_API_KEY` via GIM-81 merge `6fc1d1a`) | PE | — |
 | 5 | New `fragments/fragment-density.md` (≤ 25 lines) — codify compression principle | PE | — |
 | 6 | New `docs/postmortems/2026-04-26-fragment-extraction-postmortems.md` — narrative content moved here | PE | T1, T2, T3 |
-| 7 | Setup branch protection on `paperclip-shared-fragments/main` via `gh api PUT` (blocks direct push) | Operator (Board) | — |
+| 7 | Setup branch protection on `paperclip-shared-fragments/main` via `gh api PUT` (blocks direct push) | **Operator (Board)** — NOT PE, requires admin perms; run parallel to Phase 2 or between 4.1→4.2 | — |
 | 8 | Net-byte verification: per-file and aggregate `wc -c` vs pinned baseline | PE (CR verifies) | T1-T6 |
 
 ### Task 1 — worktree-discipline.md compression
@@ -157,16 +157,9 @@ get CR APPROVE, squash-merge. Same flow as gimle-palace develop.
 
 Same shape as T1: keep imperative + one-line why + optional command. Drop multi-paragraph examples and "How to verify" subsections.
 
-### Task 4 — `.env.example` + deploy runbook
+### Task 4 — deploy-checklist runbook (`.env.example` already done)
 
-In `gimle-palace` (root), add to `.env.example`:
-
-```
-# Paperclip API token — required by palace.ops.unstick_issue (GIM-81+)
-# Source: ~/.paperclip/auth.json on the deploy host
-# Format: pcp_board_<32 hex chars>
-PAPERCLIP_API_KEY=
-```
+**`.env.example` already has `PAPERCLIP_API_KEY=` on develop** (landed via GIM-81 merge `6fc1d1a`, line 37). No `.env.example` edit needed — PE skips that part.
 
 Create `docs/runbooks/deploy-checklist.md` (new file) with steps:
 
@@ -283,7 +276,7 @@ PE runs this after T1–T6 are complete; CR re-runs independently at Phase 3.1.
 
 ```bash
 BASELINE=3d63d3f
-FRAGS="paperclip-shared-fragments"
+FRAGS="paperclips/fragments/shared"
 
 # Per-file check for the three files this slice touches
 for FILE in fragments/worktree-discipline.md fragments/compliance-enforcement.md fragments/pre-work-discovery.md; do
@@ -318,7 +311,7 @@ If any check fails, fail Phase 3.1 review and iterate compression.
 |---|---|---|
 | 1.1 Formalize | CTO | This plan exists; CTO verifies baseline SHA + pushes branch |
 | 1.2 Plan-first review | CR | Review this plan for completeness and scope |
-| 2 Implement | PE | Tasks 1–6 + 8 (T7 is operator) |
+| 2 Implement | PE | Tasks 1–6 + 8 only. T7 is Board/operator — runs in parallel or between 4.1→4.2 |
 | 3.1 Mechanical | CR | Verify fragment sizes with `wc -c`; re-run T8 script independently |
 | 3.2 Adversarial | Opus | Verify no semantic loss in compression; check D3 fix is real |
 | 4.1 QA | QA | Full QA checklist below |
