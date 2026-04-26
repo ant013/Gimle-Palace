@@ -1,6 +1,6 @@
 ---
 slug: GIM-98-palace-code-test-impact
-status: draft (operator review pending)
+status: rev2 (5 open questions answered; ready for multi-reviewer adversarial round)
 branch: feature/GIM-98-palace-code-test-impact
 paperclip_issue: TBD
 predecessor: 1f7c8f2 (develop tip after GIM-97 merge)
@@ -75,6 +75,7 @@ async def palace_code_test_impact(
 3. Call `palace.code.trace_call_path(function_name=symbol_short_name, project=resolved_project, mode="callers")` internally — extract callers with their hop distance.
    - **Note:** `trace_call_path` takes a function_name (short) not qualified_name. We need to extract short name from qualified_name OR resolve qualified_name → uuid first.
    - **Strategy:** call `palace.code.search_graph(qn_pattern=qualified_name, project=project, label="Function")` first to verify symbol exists; use its `name` field for trace_call_path.
+   - **Ambiguity (Q3 verdict):** if `search_graph` returns >1 match for the qn_pattern, return `ok: false, error_code: ambiguous_qualified_name, message: "...", matches: [{qualified_name, file_path}, ...]`. Caller must refine the qualified_name. Do NOT silently take first match — leads to wrong test list returned.
 4. Filter callers by test-naming pattern (defaults below).
 5. Sort by hop distance ascending (closer = more direct test).
 6. Truncate to `max_results`.
@@ -124,6 +125,20 @@ If symbol doesn't exist:
 }
 ```
 
+If `qualified_name` is ambiguous (search_graph returns >1 match):
+```json
+{
+  "ok": false,
+  "error_code": "ambiguous_qualified_name",
+  "message": "qn_pattern '<x>' matched 3 symbols in project '<y>' — refine to uniquely identify",
+  "matches": [
+    {"qualified_name": "...", "file_path": "..."},
+    {"qualified_name": "...", "file_path": "..."},
+    {"qualified_name": "...", "file_path": "..."}
+  ]
+}
+```
+
 If no tests exercise the symbol (empty result is NOT an error):
 ```json
 {
@@ -148,8 +163,8 @@ If no tests exercise the symbol (empty result is NOT an error):
 | # | Task | Owner | Deps |
 |---|---|---|---|
 | 1 | Pydantic input model `TestImpactRequest` (qualified_name non-empty, max_hops 1..10, max_results 1..200) | PE | — |
-| 2 | Implementation in `services/palace-mcp/src/palace_mcp/code/test_impact.py` (new module) | PE | T1 |
-| 3 | MCP tool registration `palace.code.test_impact` in `code_router.py` (alongside existing palace.code.* tools, with explicit named args per GIM-89 lesson) | PE | T2 |
+| 2 | Implementation in `services/palace-mcp/src/palace_mcp/code/composite/test_impact.py` (new — Q5 verdict: separate `code/composite/` module to keep palace.code.* passthroughs vs composites distinct) | PE | T1 |
+| 3 | MCP tool registration `palace.code.test_impact` in new `services/palace-mcp/src/palace_mcp/code/composite/router.py` (Q5 verdict: composites NOT in `code_router.py`; new module called from `mcp_server.py` lifespan) | PE | T2 |
 | 4 | Unit tests — mock CM `trace_call_path` + `search_graph`; verify filter regex on diverse callers (test fn + non-test fn mix); empty result handling | PE | T2 |
 | 5 | Integration test through real MCP HTTP+SSE (per GIM-91 wire-contract rule) — call against real indexed `repos-gimle` data | PE | T3 |
 | 6 | Update `services/palace-mcp/README.md` with usage example | PE | T2 |
@@ -196,14 +211,30 @@ async def test_impact(
         "label": "Function",
     })
     sg_data = _parse_cm_result(sg)
-    if not sg_data.get("results"):
+    results = sg_data.get("results", [])
+    if not results:
         return {
             "ok": False,
             "error_code": "symbol_not_found",
             "message": f"qualified_name '{qualified_name}' not found in project '{project}'",
         }
 
-    target = sg_data["results"][0]  # closest match
+    # Q3 verdict: ambiguous match → error, don't silently take first
+    if len(results) > 1:
+        return {
+            "ok": False,
+            "error_code": "ambiguous_qualified_name",
+            "message": (
+                f"qn_pattern '{qualified_name}' matched {len(results)} symbols "
+                f"in project '{project}' — refine to uniquely identify"
+            ),
+            "matches": [
+                {"qualified_name": r.get("qualified_name", ""), "file_path": r.get("file_path", "")}
+                for r in results[:10]  # cap match list at 10 entries
+            ],
+        }
+
+    target = results[0]
     short_name = target["name"]
 
     # Step 2: trace_call_path callers
@@ -267,12 +298,47 @@ def _parse_cm_result(result) -> dict:
     return {}
 ```
 
-### Task 3 — MCP tool registration
+### Task 3 — MCP tool registration (in NEW module per Q5 verdict)
 
-In `services/palace-mcp/src/palace_mcp/code_router.py`, register `palace.code.test_impact` as a NEW (non-passthrough) tool — it composes existing palace.code.* tools internally, not a CM tool itself:
+Per Q5: composite tools live in `services/palace-mcp/src/palace_mcp/code/composite/router.py` (NEW), NOT in `code_router.py` (passthroughs only). Pattern:
 
 ```python
-# At end of register_code_tools(), after passthrough loop:
+# services/palace-mcp/src/palace_mcp/code/composite/router.py
+
+from collections.abc import Callable
+from typing import Any
+
+from palace_mcp.code.composite.test_impact import test_impact, TestImpactRequest
+
+def register_code_composite_tools(
+    tool_decorator: Callable[[str, str], Callable[..., Any]],
+) -> None:
+    """Register palace.code.* composite (non-passthrough) tools.
+
+    Composites internally call CM via _cm_session (set by code_router's
+    lifespan) but expose orchestrated logic — distinct from raw passthroughs.
+    """
+    from palace_mcp.code_router import _cm_session  # share session
+
+    @tool_decorator("palace.code.test_impact", "...")
+    async def palace_code_test_impact(
+        qualified_name: str,
+        project: str | None = None,
+        max_hops: int = 3,
+        max_results: int = 50,
+    ) -> dict[str, Any]:
+        # ... full body per implementation below
+```
+
+Then in `mcp_server.py`, alongside `register_code_tools(_tool)`:
+
+```python
+from palace_mcp.code.composite.router import register_code_composite_tools
+register_code_tools(_tool)            # existing passthroughs
+register_code_composite_tools(_tool)  # new composites
+```
+
+Body per implementation block:
 
 @_tool(
     name="palace.code.test_impact",
@@ -402,17 +468,21 @@ Operator-driven on iMac:
 - Cross-project queries — defer until federation work
 - `palace.code.semantic_search` — separate slice (Slice 5 candidate)
 
-## Open questions for operator review
+## Decisions recorded (rev2)
 
-1. **Test pattern hardcoded vs Settings** — currently hardcoded regex covers common conventions (`tests/`, `test_<name>`, `\.tests?\.`). Is this enough for v1, or should we expose `palace_test_pattern_regex` as Settings field for projects with non-standard conventions?
+5 open questions from rev1 review answered by operator (2026-04-26):
 
-2. **`max_hops` default = 3** — aggressive enough? Could capture: direct test → helper → target (3 hops). Or should default be 5 for deeper chains?
+| Q | Topic | Verdict | Rationale |
+|---|---|---|---|
+| 1 | Test pattern source | Hardcoded regex (NOT Settings field) | One Python project for now; Settings field deferred until non-Python project arrives |
+| 2 | `max_hops` default | 3 (NOT 5) | Balance between coverage + noise. Caller can override per-call |
+| 3 | Ambiguous qualified_name | Return `error_code: ambiguous_qualified_name` with `matches: [...]` | Don't silently take first match — leads to wrong test list returned. Force caller to refine |
+| 4 | `hop_distance` in output | Keep | Useful for ranking (direct vs nested test); ~10 bytes per entry is negligible |
+| 5 | Composite tool location | NEW `services/palace-mcp/src/palace_mcp/code/composite/` module | Keeps `code_router.py` as 100% passthrough (clean separation). Future composites (e.g., palace.code.semantic_search) land here too |
 
-3. **Symbol resolution strategy** — currently uses `search_graph(qn_pattern=qualified_name)` which is substring-based. If qualified_name is unique, returns 1 match; if ambiguous, takes first result. Should we error on ambiguity (multiple matches) instead?
+## Open questions
 
-4. **Result schema includes `hop_distance`** — operator-friendly, but adds bytes. Drop in v1 (always max 3 anyway), or keep for richer ranking?
-
-5. **Composite tool registration** — in `code_router.py` (alongside passthrough tools) OR in new `code_composite.py` module? `code_router.py` is currently 100% passthrough; mixing composite blurs concerns. Architectural preference?
+All 5 questions from rev1 answered. Spec ready for multi-reviewer adversarial round before paperclip Phase 1.1.
 
 ## References
 
