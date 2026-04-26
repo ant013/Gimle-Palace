@@ -40,7 +40,7 @@ Q6-Q8 verdicts (from review of rev1):
 
 ## Cookbook content per role
 
-### CTO — `paperclip-shared-fragments/fragments/role-prime/cto.md`
+### CTO — `paperclips/fragments/shared/fragments/role-prime/cto.md`
 
 CTO active in Phase 1.1 (Formalize) and Phase 4.2 (Merge). Role context:
 
@@ -66,7 +66,7 @@ Useful tools:
 - palace.memory.decide(...) — record after merge: decision_kind="board-ratification" or "spec-revision"
 ```
 
-### CodeReviewer — `paperclip-shared-fragments/fragments/role-prime/codereviewer.md`
+### CodeReviewer — `paperclips/fragments/shared/fragments/role-prime/codereviewer.md`
 
 CR active in Phase 1.2 (plan-first), 3.1 (mechanical), 3.2 (adversarial substitution). Role context:
 
@@ -90,7 +90,7 @@ Useful tools:
 - palace.memory.decide(...) — record APPROVE/REJECT: decision_kind="review-approve" or "scope-change"
 ```
 
-### PythonEngineer — `paperclip-shared-fragments/fragments/role-prime/pythonengineer.md`
+### PythonEngineer — `paperclips/fragments/shared/fragments/role-prime/pythonengineer.md`
 
 PE active in Phase 2 (Implementation). Role context:
 
@@ -112,7 +112,7 @@ Useful tools:
 - palace.memory.decide(...) — record at end of Phase 2: decision_kind="design"
 ```
 
-### OpusArchitectReviewer — `paperclip-shared-fragments/fragments/role-prime/opusarchitectreviewer.md`
+### OpusArchitectReviewer — `paperclips/fragments/shared/fragments/role-prime/opusarchitectreviewer.md`
 
 Opus active in Phase 3.2 (adversarial). Role context:
 
@@ -135,7 +135,7 @@ Useful tools:
 - palace.memory.decide(...) — record verdict: decision_kind="review-approve" with confidence rubric
 ```
 
-### QAEngineer — `paperclip-shared-fragments/fragments/role-prime/qaengineer.md`
+### QAEngineer — `paperclips/fragments/shared/fragments/role-prime/qaengineer.md`
 
 QA active in Phase 4.1 (Live smoke). Role context:
 
@@ -164,7 +164,7 @@ Useful tools:
 
 | # | Task | Owner | Deps |
 |---|---|---|---|
-| 1 | Replace `paperclip-shared-fragments/fragments/role-prime/cto.md` stub with full content above | PE | GIM-95a merged |
+| 1 | Replace `paperclips/fragments/shared/fragments/role-prime/cto.md` stub with full content above | PE | GIM-95a merged |
 | 2 | Replace `role-prime/codereviewer.md` stub | PE | GIM-95a merged |
 | 3 | Replace `role-prime/pythonengineer.md` stub | PE | GIM-95a merged |
 | 4 | Replace `role-prime/opusarchitectreviewer.md` stub | PE | GIM-95a merged |
@@ -200,5 +200,5 @@ All 3 questions from rev1 review answered by operator (2026-04-26) and folded in
 - GIM-96 — write-side `:Decision` (consumed by all 5 cookbooks via `decide(...)` recommendations)
 - GIM-94 — fragment density rule (this slice's cookbooks respect it)
 - GIM-91 — MCP wire-contract test rule (referenced in PE/Opus/QA cookbooks)
-- `paperclip-shared-fragments/fragments/compliance-enforcement.md` — discipline reminders
-- `paperclip-shared-fragments/fragments/worktree-discipline.md` — QA cleanup rule
+- `paperclips/fragments/shared/fragments/compliance-enforcement.md` — discipline reminders
+- `paperclips/fragments/shared/fragments/worktree-discipline.md` — QA cleanup rule

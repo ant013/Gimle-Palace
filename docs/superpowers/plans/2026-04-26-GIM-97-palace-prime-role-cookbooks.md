@@ -13,11 +13,11 @@ Replace stub content in each file with the full cookbook from the spec (§ Cookb
 
 | File | Role | Key content |
 |---|---|---|
-| `paperclip-shared-fragments/fragments/role-prime/cto.md` | CTO | Phase 1.1 + 4.2 guards, lookup/decide tools |
-| `paperclip-shared-fragments/fragments/role-prime/codereviewer.md` | CodeReviewer | Phase 1.2 + 3.1 guards, search_graph/decide tools |
-| `paperclip-shared-fragments/fragments/role-prime/pythonengineer.md` | PythonEngineer | Phase 2 guards, code tools, decide |
-| `paperclip-shared-fragments/fragments/role-prime/opusarchitectreviewer.md` | OpusArchitectReviewer | Phase 3.2 guards, query_graph/search_code, decide |
-| `paperclip-shared-fragments/fragments/role-prime/qaengineer.md` | QAEngineer | Phase 4.1 guards, health/lookup, decide |
+| `paperclips/fragments/shared/fragments/role-prime/cto.md` | CTO | Phase 1.1 + 4.2 guards, lookup/decide tools |
+| `paperclips/fragments/shared/fragments/role-prime/codereviewer.md` | CodeReviewer | Phase 1.2 + 3.1 guards, search_graph/decide tools |
+| `paperclips/fragments/shared/fragments/role-prime/pythonengineer.md` | PythonEngineer | Phase 2 guards, code tools, decide |
+| `paperclips/fragments/shared/fragments/role-prime/opusarchitectreviewer.md` | OpusArchitectReviewer | Phase 3.2 guards, query_graph/search_code, decide |
+| `paperclips/fragments/shared/fragments/role-prime/qaengineer.md` | QAEngineer | Phase 4.1 guards, health/lookup, decide |
 
 **Acceptance:**
 - Each file ≤ 1400 tokens (universal core takes ≤ 600 of 2000 budget)
@@ -27,17 +27,17 @@ Replace stub content in each file with the full cookbook from the spec (§ Cookb
 - Each cookbook references `palace.memory.decide` with role-appropriate `decision_kind`
 - Fragment density matches GIM-94 rule (imperative one-liners + minimal context)
 
-**Affected files:** `paperclip-shared-fragments/fragments/role-prime/{cto,codereviewer,pythonengineer,opusarchitectreviewer,qaengineer}.md`
+**Affected files:** `paperclips/fragments/shared/fragments/role-prime/{cto,codereviewer,pythonengineer,opusarchitectreviewer,qaengineer}.md`
 **Dependencies:** GIM-95a merged (provides loader/dispatcher)
 **Owner:** PythonEngineer
 
 ### Step 2 — Submodule update (PythonEngineer)
 
-Commit the 5 changed files in `paperclip-shared-fragments`, push to `paperclip-shared-fragments/main` per GIM-94 D3 rule. Then bump the submodule pointer in `gimle-palace` feature branch.
+Commit the 5 changed files in `paperclips/fragments/shared`, push to `paperclip-shared-fragments/main` per GIM-94 D3 rule. Then bump the submodule pointer in `gimle-palace` feature branch.
 
 **Acceptance:**
 - `git submodule status` shows updated SHA
-- `git diff --cached -- paperclip-shared-fragments` confirms pointer advance
+- `git diff --cached -- paperclips/fragments/shared` confirms pointer advance
 
 **Affected files:** `paperclip-shared-fragments` (submodule pointer)
 **Dependencies:** Step 1
