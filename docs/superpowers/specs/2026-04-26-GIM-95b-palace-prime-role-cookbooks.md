@@ -2,7 +2,7 @@
 slug: GIM-95b-palace-prime-role-cookbooks
 status: rev2 (Q6-Q8 from review answered; ready for paperclip Phase 1.1 after GIM-95a merges)
 branch: feature/GIM-95b-palace-prime-role-cookbooks
-paperclip_issue: TBD
+paperclip_issue: 97 (auto-assigned by paperclip; spec slug retained as GIM-95b)
 predecessor: TBD (post-GIM-95a merge SHA)
 date: 2026-04-26
 parent_initiative: N+2 Category 1 (USE-BUILT)
