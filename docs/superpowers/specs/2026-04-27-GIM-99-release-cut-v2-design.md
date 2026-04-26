@@ -2,7 +2,7 @@
 slug: GIM-99-release-cut-v2
 status: rev1 (operator-approved approach A — PR + auto-merge rebase, with tagging)
 branch: feature/GIM-99-release-cut-v2
-paperclip_issue: TBD
+paperclip_issue: GIM-99
 predecessor: f8ccb97 (develop tip after GIM-98 merge)
 date: 2026-04-27
 parent_initiative: ops-quality (release flow)
