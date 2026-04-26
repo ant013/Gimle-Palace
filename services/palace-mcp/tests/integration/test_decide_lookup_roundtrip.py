@@ -138,7 +138,9 @@ async def test_decide_then_lookup_by_slice_ref(mcp_url: str) -> None:
                 f"decide write failed: {write_result.content}"
             )
             write_payload = json.loads(write_result.content[0].text)
-            assert write_payload["ok"] is True, f"decide returned not-ok: {write_payload}"
+            assert write_payload["ok"] is True, (
+                f"decide returned not-ok: {write_payload}"
+            )
             written_uuid = write_payload["uuid"]
 
             # Read back via lookup with slice_ref filter

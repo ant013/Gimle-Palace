@@ -140,7 +140,9 @@ async def test_decide_valid_call_returns_ok(mcp_url: str) -> None:
                 },
             )
 
-    assert not result.isError, f"Expected ok result, got isError. Content: {result.content}"
+    assert not result.isError, (
+        f"Expected ok result, got isError. Content: {result.content}"
+    )
     assert result.content
     payload = json.loads(result.content[0].text)
     assert payload["ok"] is True
