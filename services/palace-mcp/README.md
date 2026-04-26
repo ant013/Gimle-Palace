@@ -20,6 +20,52 @@ running as a separate container.
 | `palace.code.get_code_snippet` | Get source code for a qualified symbol name |
 | `palace.code.search_code` | Grep-like code search |
 
+### Composite tools
+
+| Tool | Description |
+|---|---|
+| `palace.code.test_impact` | Given a Function's `qualified_name`, return all tests exercising it. Default: `:TESTS` edge (exact, hop=1, homonym-immune). Opt-in: `include_indirect=True` — multi-hop `trace_call_path` (homonym caveat). |
+
+#### `palace.code.test_impact` usage
+
+```jsonc
+// Default path — exact, homonym-immune (uses :TESTS edge)
+{
+  "qualified_name": "palace_mcp.code_router.register_code_tools",
+  "project": "repos-gimle"          // optional; default from PALACE_CM_DEFAULT_PROJECT
+}
+
+// Opt-in indirect path — multi-hop via trace_call_path (homonym risk)
+{
+  "qualified_name": "palace_mcp.code_router.register_code_tools",
+  "include_indirect": true,
+  "max_hops": 3,                    // 1-5, default 3
+  "max_results": 50                 // 1-200, default 50
+}
+```
+
+Response shape (success):
+```json
+{
+  "ok": true,
+  "requested_qualified_name": "register_code_tools",
+  "qualified_name": "palace_mcp.code_router.register_code_tools",
+  "project": "repos-gimle",
+  "method": "tests_edge",
+  "tests": [
+    {"name": "test_register_code_tools", "qualified_name": "tests.test_code_router.test_register_code_tools", "hop": 1}
+  ],
+  "total_found": 1,
+  "max_hops_used": null,
+  "truncated": false
+}
+```
+
+Error envelopes:
+- `symbol_not_found` — no Function node matches the `qualified_name` suffix
+- `ambiguous_qualified_name` — pattern matched multiple symbols; `matches` lists candidates
+- `validation_error` — invalid argument (e.g. special characters in `qualified_name`)
+
 ### Disabled tools
 
 | Tool | Reason |
