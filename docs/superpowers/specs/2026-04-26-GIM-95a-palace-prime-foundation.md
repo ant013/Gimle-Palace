@@ -2,7 +2,7 @@
 slug: GIM-95a-palace-prime-foundation
 status: rev3 (Q1-Q5 from rev2 review answered; ready for paperclip Phase 1.1)
 branch: feature/GIM-95a-palace-prime-foundation
-paperclip_issue: TBD
+paperclip_issue: 96 (auto-assigned by paperclip; spec slug retained as GIM-95a)
 predecessor: 9c87fb9 (develop tip after GIM-94 merge)
 date: 2026-04-26
 parent_initiative: N+2 Category 1 (USE-BUILT)
