@@ -38,6 +38,7 @@ from neo4j import AsyncDriver
 from pydantic import BaseModel, ValidationError
 from starlette.applications import Starlette
 
+from palace_mcp.code_composite import register_code_composite_tools
 from palace_mcp.code_router import register_code_tools
 from palace_mcp.extractors import registry as _extractor_registry
 from palace_mcp.extractors.runner import run_extractor as _run_extractor
@@ -547,6 +548,10 @@ async def _palace_git_ls_tree(
 # ---------------------------------------------------------------------------
 
 register_code_tools(_tool, _mcp)
+register_code_composite_tools(
+    _tool,
+    default_project=os.environ.get("PALACE_CM_DEFAULT_PROJECT", "repos-gimle"),
+)
 
 
 # ---------------------------------------------------------------------------
