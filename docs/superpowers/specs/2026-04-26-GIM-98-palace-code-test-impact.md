@@ -2,7 +2,7 @@
 slug: GIM-98-palace-code-test-impact
 status: rev4 (hybrid design — default Cypher TESTS edge, opt-in trace_call_path; convergent reviewer findings applied)
 branch: feature/GIM-98-palace-code-test-impact
-paperclip_issue: TBD
+paperclip_issue: 98
 predecessor: 1f7c8f2 (develop tip after GIM-97 merge)
 date: 2026-04-26
 parent_initiative: N+2 Category 1 (USE-BUILT)
