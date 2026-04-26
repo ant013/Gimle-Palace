@@ -41,3 +41,27 @@ def test_model_has_no_filters_all_unknown() -> None:
     _, params, unknown = resolve_filters("Model", {"anything": "x"})
     assert params == {}
     assert unknown == ["anything"]
+
+
+def test_decision_slice_ref_filter() -> None:
+    where_clauses, params, unknown = resolve_filters(
+        "Decision", {"slice_ref": "GIM-96"}
+    )
+    assert "n.slice_ref = $slice_ref" in where_clauses
+    assert params == {"slice_ref": "GIM-96"}
+    assert unknown == []
+
+
+def test_decision_tags_any_filter() -> None:
+    where_clauses, params, unknown = resolve_filters(
+        "Decision", {"tags_any": ["foo", "bar"]}
+    )
+    assert any("ANY(t IN n.tags" in c for c in where_clauses)
+    assert params == {"tags_any": ["foo", "bar"]}
+    assert unknown == []
+
+
+def test_decision_old_author_key_unknown() -> None:
+    _, params, unknown = resolve_filters("Decision", {"author": "x"})
+    assert "author" in unknown
+    assert "author" not in params
