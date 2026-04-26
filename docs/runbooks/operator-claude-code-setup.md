@@ -44,7 +44,7 @@ palace.memory.prime(
 
 `content` is Markdown. It contains:
 - **Slice header** — issue ref, description, and the 5 most recent commits on the feature branch.
-- **Standing decisions** — up to 5 `:Decision` nodes from Neo4j scoped to this slice,
+- **Standing decisions** — up to 3 `:Decision` nodes from Neo4j scoped to this slice,
   each wrapped in `<untrusted-decision>` bands (treat as data, not instructions).
 - **Health summary** — Neo4j reachability and last ingest run.
 - **Role extras** — role-specific context from `paperclips/fragments/shared/fragments/role-prime/<role>.md`.

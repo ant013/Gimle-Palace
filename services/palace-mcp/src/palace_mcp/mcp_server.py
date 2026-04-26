@@ -613,9 +613,7 @@ async def palace_memory_prime(
         return {
             "ok": False,
             "error_code": "invalid_role",
-            "message": (
-                f"Unknown role {role!r}. Valid roles: {sorted(VALID_ROLES)}"
-            ),
+            "message": (f"Unknown role {role!r}. Valid roles: {sorted(VALID_ROLES)}"),
         }
 
     if _driver is None or _graphiti is None or _settings is None:
