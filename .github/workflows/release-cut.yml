@@ -19,25 +19,108 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.RELEASE_CUT_TOKEN }}
-      - name: Fast-forward main to develop
+
+      - name: Compute revisions
+        id: rev
+        run: |
+          git fetch origin develop main --tags
+          DEVELOP_SHA=$(git rev-parse origin/develop)
+          MAIN_SHA=$(git rev-parse origin/main)
+          echo "develop=$DEVELOP_SHA" >> "$GITHUB_OUTPUT"
+          echo "main=$MAIN_SHA" >> "$GITHUB_OUTPUT"
+          if [[ "$DEVELOP_SHA" == "$MAIN_SHA" ]]; then
+            echo "noop=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "noop=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Exit if noop
+        if: steps.rev.outputs.noop == 'true'
+        run: |
+          MSG="main already at develop tip — nothing to cut"
+          echo "$MSG" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Open release PR and enable auto-merge
+        if: steps.rev.outputs.noop == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          DATE=$(date -u +%Y-%m-%d)
+          DEVELOP_SHA="${{ steps.rev.outputs.develop }}"
+          MAIN_SHA="${{ steps.rev.outputs.main }}"
+
+          # Write PR body to file — avoids shell injection from commit messages
+          {
+            printf "## Release cut: %s\n\n" "$DEVELOP_SHA"
+            echo "Fast-forwards main to develop tip."
+            echo ""
+            echo "### Commits"
+            git log --oneline "$MAIN_SHA..$DEVELOP_SHA"
+          } > /tmp/release-pr-body.md
+
+          TITLE="release: $DATE"
+          PR_URL=$(gh pr create \
+            --base main \
+            --head develop \
+            --title "$TITLE" \
+            --body-file /tmp/release-pr-body.md)
+          PR_NUM=$(echo "$PR_URL" | grep -oE '[0-9]+$')
+          echo "PR_URL=$PR_URL" >> "$GITHUB_ENV"
+          echo "PR_NUM=$PR_NUM" >> "$GITHUB_ENV"
+          gh pr merge --auto --rebase "$PR_NUM"
+
+      - name: Wait for merge
+        if: steps.rev.outputs.noop == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          STATE=""
+          for ((attempt=1; attempt<=30; attempt++)); do
+            STATE=$(gh pr view "$PR_NUM" --json state -q .state)
+            if [[ "$STATE" == "MERGED" ]]; then
+              echo "PR #$PR_NUM merged"
+              break
+            fi
+            if [[ "$STATE" == "CLOSED" ]]; then
+              echo "::error::PR #$PR_NUM closed without merge"
+              exit 1
+            fi
+            sleep 2
+          done
+          if [[ "$STATE" != "MERGED" ]]; then
+            echo "::error::PR #$PR_NUM not merged after 60s — auto-merge may be blocked"
+            exit 1
+          fi
+
+      - name: Tag main tip
+        if: steps.rev.outputs.noop == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git checkout main
+          git pull --ff-only origin main
+          NEW_SHA=$(git rev-parse HEAD)
+          DATE=$(date -u +%Y-%m-%d)
+          TAG="release-$DATE-${NEW_SHA:0:7}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin develop main
-          git checkout main
-          BEFORE=$(git rev-parse HEAD)
-          git merge --ff-only origin/develop
-          AFTER=$(git rev-parse HEAD)
-          git push origin main
-          echo "Released main: $BEFORE -> $AFTER"
-          echo "## Release cut" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- before: $BEFORE" >> "$GITHUB_STEP_SUMMARY"
-          echo "- after:  $AFTER" >> "$GITHUB_STEP_SUMMARY"
-          echo "- trigger: ${{ github.event_name }}" >> "$GITHUB_STEP_SUMMARY"
+          git tag -a "$TAG" -m "Auto-cut from develop@${{ steps.rev.outputs.develop }} (PR $PR_URL)"
+          git push origin "$TAG"
+          {
+            echo "## Release cut complete"
+            echo ""
+            echo "- before main: \`${{ steps.rev.outputs.main }}\`"
+            echo "- after main:  \`$NEW_SHA\`"
+            echo "- tag:        \`$TAG\`"
+            echo "- PR:         $PR_URL"
+            echo "- trigger:    \`${{ github.event_name }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
