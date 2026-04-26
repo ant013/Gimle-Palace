@@ -28,8 +28,8 @@ Spec slug is GIM-95a (split from original GIM-95 scope); paperclip issue is GIM-
 - **Globals**: `mcp_server.py` — `_driver`, `_graphiti`, `_settings`, `_default_group_id`.
 - **`palace.memory.lookup`**: read-side tool for `:Decision` and other entity types — prime calls this to fetch recent decisions for slice.
 - **`palace.memory.health`**: health summary — prime includes health output in universal core.
-- **Git subprocess pattern**: `services/palace-mcp/src/palace_mcp/git/` — `asyncio.create_subprocess_exec` with env lockdown (`GIT_CONFIG_NOSYSTEM=1`, `PATH=/usr/bin:/bin`), timeout. Reuse this pattern for branch detection.
-- **Settings**: `services/palace-mcp/src/palace_mcp/settings.py` — add `palace_git_workspace: str = "/repos/gimle"`.
+- **Git subprocess pattern**: `services/palace-mcp/src/palace_mcp/git/command.py` — `SAFE_ENV` dict at line 25 provides env lockdown (`GIT_CONFIG_NOSYSTEM=1`, `PATH=/usr/bin:/bin`). Note: `command.py` uses synchronous `subprocess.Popen`; for branch detection, import and reuse `SAFE_ENV` but use `asyncio.create_subprocess_exec` (not the sync pattern).
+- **Settings**: `services/palace-mcp/src/palace_mcp/config.py` — class `Settings(BaseSettings)`. Add `palace_git_workspace: str = "/repos/gimle"`.
 - **Fragments submodule**: `paperclips/fragments/shared` → `paperclip-shared-fragments` repo. Contains `compliance-enforcement.md`. New `role-prime/` dir needed.
 
 ## Task 1 — Module scaffold `memory/prime/`
@@ -45,7 +45,7 @@ Spec slug is GIM-95a (split from original GIM-95 scope); paperclip issue is GIM-
 **What to do**:
 
 1. Create module directory with `__init__.py` re-exporting public API.
-2. `deps.py`: `PrimingDeps` dataclass wrapping graphiti, driver, settings, default_group_id (per spec § PrimingDeps).
+2. `deps.py`: `PrimingDeps` dataclass wrapping graphiti, driver, settings, default_group_id (per spec § PrimingDeps). **No `paperclip_client` field** — paperclip API integration deferred to GIM-95b. Also add `role_prime_dir: Path` derived from `Path(settings.palace_git_workspace) / "paperclips/fragments/shared/fragments/role-prime"`.
 3. `core.py`: universal core renderer function signature (implementation in Task 3).
 4. `roles.py`: role dispatcher function signature (implementation in Task 4).
 
@@ -97,8 +97,11 @@ Spec slug is GIM-95a (split from original GIM-95 scope); paperclip issue is GIM-
 
 **What to do**:
 
-1. `async def render_role_extras(role: str, deps: PrimingDeps) -> str` — reads `role-prime/{role}.md` from fragments directory at runtime.
-2. For `role="operator"`: substitute `{{ placeholders }}` with runtime values (paperclip API URL, git workspace path, etc.).
+1. `async def render_role_extras(role: str, deps: PrimingDeps) -> str` — reads `role-prime/{role}.md` from `deps.role_prime_dir` at runtime.
+2. For `role="operator"`: substitute `{{ placeholders }}` with runtime values:
+   - `{{ recent_develop_commits }}` — fetch via `asyncio.create_subprocess_exec` running `git log --oneline -5 origin/develop` with `SAFE_ENV` from `git/command.py`, `cwd=settings.palace_git_workspace`.
+   - `{{ in_progress_slices }}` / `{{ backlog_high_priority }}` — **v1: static instructions** ("Run `palace.memory.lookup(entity_type='Issue', filters={...})` to see in-flight slices"). Paperclip API integration deferred to GIM-95b.
+   - `{{ paperclip_api_url }}`, `{{ git_workspace }}` — from `deps.settings`.
 3. For other 5 roles (cto/codereviewer/pythonengineer/opusarchitectreviewer/qaengineer): return stub content with minimal useful-tools list (5-7 lines per spec Q3 verdict).
 4. Unknown role → raise ValueError.
 5. Fragment path: `paperclips/fragments/shared/fragments/role-prime/{role}.md` (relative to repo root, via settings or env).
@@ -131,7 +134,7 @@ Spec slug is GIM-95a (split from original GIM-95 scope); paperclip issue is GIM-
 **What to do**:
 
 1. Register `palace.memory.prime` tool with Pattern #21 dedup + `assert_unique_tool_names`.
-2. Args: `role: str` (required), `slice_id: str | None` (optional, auto-detected if absent).
+2. Args: `role: str` (required), `slice_id: str | None` (optional, auto-detected if absent), `budget: int = 2000` (token cap).
 3. Validate role against allowed set: `{operator, cto, codereviewer, pythonengineer, opusarchitectreviewer, qaengineer}`.
 4. Compose: `render_universal_core() + render_role_extras()` → apply budget → return `{"content": ..., "role": ..., "slice_id": ..., "tokens_estimated": ...}`.
 5. Error envelope: `{"ok": false, "error_code": "invalid_role|...", "message": ...}`.
@@ -148,6 +151,15 @@ Spec slug is GIM-95a (split from original GIM-95 scope); paperclip issue is GIM-
 **What to do**:
 
 Append "Untrusted content policy" section (≤ 4 lines per spec). Verify post-edit file stays under GIM-94 ≤ 2 KB density cap.
+
+**Cross-repo checklist** (applies to Tasks 7 and 8 — batch into one PR):
+1. `cd paperclips/fragments/shared` (submodule root).
+2. Create branch `feature/GIM-96-role-prime` in `paperclip-shared-fragments`.
+3. Make edits (Task 7 + Task 8 files).
+4. Commit, push, open PR in `paperclip-shared-fragments` repo per GIM-94 D3 rule.
+5. After merge, return to gimle-palace repo.
+6. `git add paperclips/fragments/shared` to bump submodule pointer.
+7. Commit submodule pointer bump on `feature/GIM-95a-palace-prime-foundation`.
 
 **Acceptance**: section present; file ≤ 2 KB; submodule pointer bumped in gimle-palace.
 
@@ -182,7 +194,7 @@ Append "Untrusted content policy" section (≤ 4 lines per spec). Verify post-ed
 
 Per spec § Task 9 — template with `$ARGUMENTS` parsing: first word = role, optional second word = slice_id. Include validation against allowed roles and usage hint.
 
-**Acceptance**: file present at repo root `.claude/commands/`; content matches spec template.
+**Acceptance**: file present at repo root `.claude/commands/`; content matches spec § Task 9 template verbatim; file contains `$ARGUMENTS` parsing for role + optional slice_id.
 
 ## Task 10 — Operator runbook
 
@@ -202,9 +214,9 @@ Document: SSH tunnel setup, MCP server config for Claude Code, `/prime` usage ex
 **Owner**: PythonEngineer
 **Dependencies**: Tasks 1–5
 **Affected files**:
-- NEW: `tests/palace-mcp/unit/memory/prime/test_core.py`
-- NEW: `tests/palace-mcp/unit/memory/prime/test_roles.py`
-- NEW: `tests/palace-mcp/unit/memory/prime/test_budget.py`
+- NEW: `services/palace-mcp/tests/memory/prime/test_core.py`
+- NEW: `services/palace-mcp/tests/memory/prime/test_roles.py`
+- NEW: `services/palace-mcp/tests/memory/prime/test_budget.py`
 
 **What to do**:
 
@@ -216,14 +228,14 @@ Document: SSH tunnel setup, MCP server config for Claude Code, `/prime` usage ex
 6. Test untrusted-decision band wrapping.
 7. Test branch detection (feature branch, detached HEAD, non-standard).
 
-**Acceptance**: `uv run pytest tests/palace-mcp/unit/memory/prime/` green; coverage for all components.
+**Acceptance**: `uv run pytest services/palace-mcp/tests/memory/prime/` green; coverage for all components.
 
 ## Task 12 — Integration test (MCP wire-contract)
 
 **Owner**: PythonEngineer
 **Dependencies**: Task 6
 **Affected files**:
-- NEW: `tests/palace-mcp/integration/test_prime_wire_contract.py`
+- NEW: `services/palace-mcp/tests/integration/test_prime_wire_contract.py`
 
 **What to do**:
 
@@ -247,6 +259,16 @@ Per GIM-91 wire-contract rule: real MCP HTTP+SSE call to `palace.memory.prime(ro
 6. Direct Cypher invariant check: `MATCH (d:Decision) WHERE d.group_id = "project/gimle" RETURN count(d)` ≥ 1.
 
 **Acceptance**: per spec § Acceptance (13 criteria); evidence comment authored by QAEngineer.
+
+## Commit grouping guidance
+
+- Tasks 1–2: scaffold + branch detection (1 commit)
+- Task 3: universal core renderer (1 commit)
+- Tasks 4–5: role dispatcher + budget enforcement (1 commit)
+- Task 6: MCP tool registration (1 commit)
+- Tasks 7–8: cross-repo submodule PR (separate repo commits + submodule pointer bump)
+- Tasks 9–10: slash command + runbook (1 commit)
+- Tasks 11–12: unit + integration tests (1 commit)
 
 ## Phase sequence
 
