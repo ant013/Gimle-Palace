@@ -58,6 +58,7 @@ Primary author of all Python code: FastAPI services, async pipelines, Pydantic m
 <!-- @include fragments/shared/fragments/git-workflow.md -->
 
 <!-- @include fragments/shared/fragments/worktree-discipline.md -->
+<!-- @include fragments/shared/fragments/compliance-enforcement.md -->
 
 <!-- @include fragments/shared/fragments/heartbeat-discipline.md -->
 <!-- @include fragments/shared/fragments/phase-handoff.md -->

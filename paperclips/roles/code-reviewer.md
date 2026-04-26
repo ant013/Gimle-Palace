@@ -23,6 +23,7 @@ You are Red Team. Your job is to **find problems**, not confirm everything is fi
 **Code (PR review):** Python correctness + async discipline + Pydantic boundaries + Docker compose hygiene + MCP protocol compliance + test coverage + security.
 
 <!-- @include fragments/shared/fragments/compliance-enforcement.md -->
+<!-- @include fragments/shared/fragments/fragment-density.md -->
 
 ## Compliance checklist
 
