@@ -130,3 +130,55 @@ run at least once:
 ```
 
 `staleness_warning` is `true` when `cm_index_freshness_sec > 600` (2× the 5-min MVP interval).
+
+## palace.memory.decide — Write-side :Decision tool
+
+Records a `:Decision` node in Graphiti. Use after a verdict, design call, review APPROVE/REJECT, or any committed-to choice that future agents should see.
+
+### Example
+
+```python
+palace.memory.decide(
+  title="Adopt edge-based supersession model",
+  body="Decision nodes use (:Decision)-[:SUPERSEDES]->(:Decision) edges instead of a supersedes attribute list. Separate slice for proper edge-based supersession.",
+  slice_ref="GIM-96",
+  decision_maker_claimed="cto",
+  decision_kind="design",
+  tags=["architecture", "graphiti"],
+  confidence=0.9,
+)
+```
+
+Success response:
+```json
+{
+  "ok": true,
+  "uuid": "<uuid>",
+  "name": "Adopt edge-based supersession model",
+  "slice_ref": "GIM-96",
+  "decision_maker_claimed": "cto",
+  "decided_at": "2026-04-26T07:30:00+00:00",
+  "name_embedding_dim": 1536
+}
+```
+
+### Read back via lookup
+
+```python
+palace.memory.lookup(entity_type="Decision", filters={"slice_ref": "GIM-96"})
+```
+
+### Validation
+
+| Field | Rules |
+|---|---|
+| `title` | 1–200 chars |
+| `body` | 1–2000 chars |
+| `slice_ref` | `GIM-<n>`, `N+<n>[a-z][.<n>]`, or `operator-decision-<YYYYMMDD>` |
+| `decision_maker_claimed` | One of: `cto`, `codereviewer`, `pythonengineer`, `opusarchitectreviewer`, `qaengineer`, `operator`, `board` |
+| `confidence` | 0.0–1.0 (default 1.0) |
+| `tags` | ≤ 16 items |
+| `evidence_ref` | ≤ 32 items |
+| `decision_kind` | Optional free-form string, ≤ 80 chars |
+
+Validation errors return `{"ok": false, "error_code": "validation_error", "message": "..."}` (not FastMCP `isError`). Infrastructure errors (Neo4j/embedder down) raise via `handle_tool_error` → FastMCP `isError=true`.

@@ -44,8 +44,12 @@ _WHITELIST: dict[EntityType, dict[str, str]] = {
         "source": "n.source = $source",
     },
     "Decision": {
-        "author": "n.author = $author",
-        "status": "n.status = $status",
+        "name": "n.name = $name",
+        "name_pattern": "n.name CONTAINS $name_pattern",
+        "slice_ref": "n.slice_ref = $slice_ref",
+        "decision_maker_claimed": "n.decision_maker_claimed = $decision_maker_claimed",
+        "decision_kind": "n.decision_kind = $decision_kind",
+        "tags_any": "ANY(t IN n.tags WHERE t IN $tags_any)",
     },
     "IterationNote": {
         "iteration_ref": "n.iteration_ref = $iteration_ref",
