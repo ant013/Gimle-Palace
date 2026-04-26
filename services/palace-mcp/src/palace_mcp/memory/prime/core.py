@@ -94,7 +94,9 @@ async def render_universal_core(
     if slice_id:
         lines.append(f"You are **{role}** working on slice **{slice_id}**.")
     else:
-        lines.append(f"You are **{role}** (no slice context — detached HEAD or non-standard branch).")
+        lines.append(
+            f"You are **{role}** (no slice context — detached HEAD or non-standard branch)."
+        )
 
     lines.append("")
     lines.append(_STANDING_INSTRUCTION)
@@ -117,16 +119,18 @@ async def render_universal_core(
         )
 
     try:
-        lookup_resp = await perform_lookup(
-            deps.driver, req, deps.default_group_id
-        )
+        lookup_resp = await perform_lookup(deps.driver, req, deps.default_group_id)
         decisions = lookup_resp.items
     except Exception:
-        logger.warning("prime.render_universal_core: decision lookup failed", exc_info=True)
+        logger.warning(
+            "prime.render_universal_core: decision lookup failed", exc_info=True
+        )
         decisions = []
 
     if slice_id:
-        lines.append(f"**Recent decisions** (filtered by `slice_ref={slice_id}`, last 3, newest first):")
+        lines.append(
+            f"**Recent decisions** (filtered by `slice_ref={slice_id}`, last 3, newest first):"
+        )
     else:
         lines.append("**Recent decisions** (last 3 across all slices, newest first):")
     lines.append("")
@@ -157,7 +161,9 @@ async def render_universal_core(
             f"Health: `neo4j={neo4j_status}`  `code_graph={code_status}`{bridge_info}"
         )
     except Exception:
-        logger.warning("prime.render_universal_core: health check failed", exc_info=True)
+        logger.warning(
+            "prime.render_universal_core: health check failed", exc_info=True
+        )
         lines.append("Health: (unavailable)")
 
     return "\n".join(lines)

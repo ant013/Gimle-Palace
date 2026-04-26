@@ -72,9 +72,7 @@ def _substitute_static_placeholders(content: str, deps: PrimingDeps) -> str:
     content = content.replace(
         "{{ paperclip_api_url }}", deps.settings.paperclip_api_url
     )
-    content = content.replace(
-        "{{ git_workspace }}", deps.settings.palace_git_workspace
-    )
+    content = content.replace("{{ git_workspace }}", deps.settings.palace_git_workspace)
     return content
 
 
@@ -101,9 +99,7 @@ async def render_role_extras(role: str, deps: PrimingDeps) -> str:
     Unknown role: raises ValueError.
     """
     if role not in VALID_ROLES:
-        raise ValueError(
-            f"Unknown role {role!r}. Valid roles: {sorted(VALID_ROLES)}"
-        )
+        raise ValueError(f"Unknown role {role!r}. Valid roles: {sorted(VALID_ROLES)}")
 
     raw = _read_role_file(deps.role_prime_dir, role)
 
@@ -114,10 +110,10 @@ async def render_role_extras(role: str, deps: PrimingDeps) -> str:
             f"GIM-95b ships {role}-specific extras. Until that slice merges, refer to\n"
             f"your role file (`paperclips/dist/{role}.md`) for primary discipline.\n\n"
             "Useful tools (call when investigating):\n"
-            "- palace.code.search_graph(name_pattern=\"...\", project=\"repos-gimle\")\n"
-            "- palace.code.trace_call_path(function_name=\"...\", project=\"repos-gimle\", mode=\"callers\")\n"
-            "- palace.code.get_code_snippet(qualified_name=\"...\", project=\"repos-gimle\")\n"
-            "- palace.memory.lookup(entity_type=\"Decision\", filters={\"slice_ref\":\"...\"}, limit=5)\n"
+            '- palace.code.search_graph(name_pattern="...", project="repos-gimle")\n'
+            '- palace.code.trace_call_path(function_name="...", project="repos-gimle", mode="callers")\n'
+            '- palace.code.get_code_snippet(qualified_name="...", project="repos-gimle")\n'
+            '- palace.memory.lookup(entity_type="Decision", filters={"slice_ref":"..."}, limit=5)\n'
             "- palace.memory.decide(...) — record verdict at end of phase\n"
             "- palace.memory.health() — check graph state\n"
         )
