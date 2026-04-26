@@ -211,49 +211,23 @@ Before writing code or decomposing — verify the feature / fix doesn't already 
 4. `docs/` — spec may already be written
 5. Paperclip issues — is someone already working on it?
 
-**If it exists** — close the issue as `duplicate` with a link, or reframe it ("integrate X from feature/Y"). Don't start a new one.
+**If it exists** — close as `duplicate` with a link, or reframe ("integrate X from feature/Y").
 
 ## External library reference rule
 
-Any spec line that references an external library API (constructor,
-method, return-type) MUST be backed by a live-verified spike committed
-to the repo under `docs/research/<library-version>-spike/` or a
-`reference_<lib>_api_truth.md` memory file dated within the last 30
-days.
+Any spec line referencing an external library API MUST be backed by a live-verified spike under `docs/research/<library-version>-spike/` or a `reference_<lib>_api_truth.md` memory file dated within 30 days.
 
-Memory references are not enough by themselves — memory drifts; cite
-both the memory file AND the underlying repo spike.
+CTO Phase 1.1 greps spec for `from <lib> import` / `<lib>.<method>` and verifies a spike exists. Missing → REQUEST CHANGES.
 
-CTO Phase 1.1 runs:
-
-    grep -E 'from <lib> import|<lib>\.<method>' <spec-file> | wc -l
-
-For every match, verify a corresponding spike file exists or REQUEST
-CHANGES citing this rule.
-
-**Why:** N+1a (2026-04-18) was reverted because the spec referenced
-`graphiti-core 0.4.3` API that didn't exist in the installed version;
-N+1a.1 rev1 (2026-04-24) hardcoded `LLM: None` against the same
-unverified guess. Both could have been caught by a 30-minute spike.
+Why: N+1a reverted because spec referenced `graphiti-core 0.4.3` API that didn't exist in installed version.
 
 ## Existing-field semantic-change rule
 
-If the spec changes the semantics of a field/property/column that
-already exists in code (e.g. "`:Project` stores slug in
-`EntityNode.name`"), the spec writer MUST include in the spec:
+Spec changing semantics of an existing field MUST include: output of `grep -r '<field-name>' src/` + list of which call-sites change.
 
-1. Output of `grep -r '<field-name>' src/` showing every existing
-   call-site.
-2. An explicit list of which call-sites change and which don't.
+CTO Phase 1.1 re-runs grep against HEAD; REQUEST CHANGES if missing or stale.
 
-CTO Phase 1.1 verifies the grep output is current (re-runs against
-HEAD); REQUEST CHANGES if the spec is missing the audit or if grep
-output reveals call-sites the spec doesn't acknowledge.
-
-**Why:** N+1a.1 §3.10 changed `:Project.name` semantics without grep'ing
-`UPSERT_PROJECT` which already used `name` for a display string.
-OpusArchitectReviewer caught the latent production bug at Phase 3.2 —
-should have been caught at Phase 1.1 with a 1-minute grep.
+Why: N+1a.1 §3.10 changed `:Project.name` semantics without auditing `UPSERT_PROJECT` callers.
 
 ## Git workflow (iron rule)
 
@@ -301,89 +275,23 @@ Paperclip creates a git worktree per issue with an execution workspace. Work **o
 
 ## Cross-branch carry-over forbidden
 
-### Rule
+Never carry commits between parallel slice branches via cherry-pick or
+copy-paste. If Slice B's tests need Slice A, declare `depends_on: A`
+in spec and rebase on develop after A merges.
 
-Never carry changes between parallel slice branches by stash, cherry-pick,
-git apply, or copy-paste. If Slice B's local tests fail because they need
-Slice A's code, **wait** for Slice A to merge into develop, then
-`git rebase origin/develop` on Slice B's branch.
+Why: GIM-75/76 incident (2026-04-24) — see `docs/postmortems/2026-04-26-fragment-extraction-postmortems.md`.
 
-### Why
+CR enforcement: every changed file must be in slice's declared scope.
 
-In GIM-75/76 (2026-04-24), PythonEngineer working on GIM-76 carried a
-GIM-75 chore commit so local tests would pass. Subsequent cleanup of
-that carry-over commit accidentally deleted unrelated GIM-76 wiring
-(`register_code_tools(_tool)`) — entire GIM-76 deliverable was dead
-code, caught only at CR Phase 3.1 re-review. Cost: one extra round-trip
-through Phase 2/3.1.
+## QA returns checkout to develop after Phase 4.1
 
-### Practical guidance
+Before run exit, QA on iMac:
 
-- If Slice B truly needs Slice A first → mark Slice B as `depends_on: A`
-  in the spec frontmatter; CTO Phase 1.1 verifies dependency closure
-  before starting Phase 2.
-- If Slice B can be implemented in isolation but tests can't run → it's
-  fine to write the impl + add `@pytest.mark.skipif(not _has_dep_a())`
-  guards. Land it; integration tests come post-merge of A.
-- Local development convenience (e.g. `git stash apply` from another
-  branch in your own worktree) is fine; **never commit** that stash on
-  the slice branch.
+    cd /Users/Shared/Ios/Gimle-Palace && git checkout develop && git pull --ff-only
 
-### How CR enforces
+Verify: `git branch --show-current` outputs `develop`.
 
-CR Phase 3.1 runs:
-
-    git log origin/develop..HEAD --name-only --oneline | sort -u
-
-and asserts every changed file is in the slice's declared scope. Any
-file outside scope → REQUEST CHANGES citing this fragment.
-
-## QA returns production checkout to develop after Phase 4.1
-
-### Rule
-
-After posting the Phase 4.1 evidence comment, **before terminating the
-run**, QA agent MUST restore the production checkout:
-
-```bash
-cd /Users/Shared/Ios/Gimle-Palace
-git checkout develop
-git pull --ff-only origin develop
-```
-
-Verify with `git branch --show-current` — it must output `develop`
-before the run exits.
-
-### Why
-
-`/Users/Shared/Ios/Gimle-Palace` is the production checkout that
-deployments and observability tooling read from. Leaving it on a feature
-branch breaks deployments and requires operator intervention to recover.
-
-Incident GIM-48 (2026-04-18): production checkout left on a feature
-branch caused a wasted cycle and operator-side `git reset --hard
-origin/develop` to recover. Confirmed again 2026-04-25 14:42 UTC (GIM-77
-branch left checked out after Phase 4.1).
-
-### Dirty worktree handling
-
-If the working tree is dirty after smoke testing (e.g. uncommitted
-`docker-compose` modifications):
-
-1. Commit the changes to the feature branch **first**, or
-2. `git stash` them before switching.
-
-Then `git checkout develop`. Never leave a dirty feature-branch checkout
-for the next agent.
-
-### Verification
-
-Before run exit:
-
-```bash
-git -C /Users/Shared/Ios/Gimle-Palace branch --show-current
-# expected output: develop
-```
+Why: production checkout drives deploys/observability. Incident GIM-48 (2026-04-18).
 
 ## Heartbeat discipline
 
