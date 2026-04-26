@@ -22,9 +22,7 @@ from palace_mcp import code_router
 from palace_mcp.errors import handle_tool_error
 
 
-_QN_RE = re.compile(
-    r"^[A-Za-z_][A-Za-z0-9_-]*(\.[A-Za-z_][A-Za-z0-9_-]*)*$"
-)
+_QN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*(\.[A-Za-z_][A-Za-z0-9_-]*)*$")
 
 
 class TestImpactRequest(BaseModel):
@@ -122,9 +120,10 @@ async def _test_impact_tests_edge(
     max_results: int,
 ) -> dict[str, Any]:
     """Default path — direct Cypher over :TESTS edge."""
+    safe_qn = resolved_qn.replace("\\", "\\\\").replace("'", "\\'")
     cypher = (
         f"MATCH (test)-[:TESTS]->(target) "
-        f"WHERE target.qualified_name = '{resolved_qn}' "
+        f"WHERE target.qualified_name = '{safe_qn}' "
         f"RETURN test.name AS name, test.qualified_name AS qualified_name "
         f"ORDER BY test.qualified_name "
         f"LIMIT {max_results + 1}"
@@ -214,7 +213,9 @@ def register_code_composite_tools(
         session = code_router.get_cm_session()
         if session is None:
             handle_tool_error(
-                RuntimeError("CM subprocess not started — set CODEBASE_MEMORY_MCP_BINARY")
+                RuntimeError(
+                    "CM subprocess not started — set CODEBASE_MEMORY_MCP_BINARY"
+                )
             )
 
         try:
