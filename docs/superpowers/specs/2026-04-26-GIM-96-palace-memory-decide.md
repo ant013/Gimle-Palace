@@ -2,7 +2,7 @@
 slug: GIM-96-palace-memory-decide
 status: rev2 (multi-reviewer findings + operator verdicts addressed)
 branch: feature/GIM-96-palace-memory-decide
-paperclip_issue: TBD
+paperclip_issue: 95 (auto-assigned by paperclip; spec slug retained as GIM-96 for branch continuity)
 predecessor: 9c87fb9 (develop tip after GIM-94 merge)
 date: 2026-04-26
 parent_initiative: N+2 Category 1 (USE-BUILT) — extract value from N+1a infrastructure
