@@ -14,6 +14,7 @@ dependencies = [
     "httpx>=0.28.0",
     "python-json-logger>=2.0.7",
     "tantivy>=0.25.1",
+    "protobuf>=4.25",
 ]
 
 [build-system]
@@ -37,6 +38,8 @@ dev-dependencies = [
 asyncio_mode = "auto"
 markers = [
     "integration: tests requiring external services (Neo4j, running MCP server)",
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "wire: tests requiring full MCP server running (subset of integration)",
 ]
 
 [tool.mypy]
@@ -49,5 +52,5 @@ files = ["src"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["tantivy"]
+module = ["tantivy", "scip.*", "google.protobuf.*"]
 ignore_missing_imports = true
