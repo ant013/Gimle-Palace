@@ -149,6 +149,16 @@ def set_settings(settings: Settings) -> None:
     _settings = settings
 
 
+def get_driver() -> AsyncDriver | None:
+    """Public getter for the Neo4j driver. Returns None before set_driver() call."""
+    return _driver
+
+
+def get_settings() -> Settings | None:
+    """Public getter for Settings. Returns None before set_settings() call."""
+    return _settings
+
+
 def build_mcp_asgi_app() -> Starlette:
     """Return the MCP streamable-HTTP ASGI app for mounting.
 
