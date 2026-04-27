@@ -40,6 +40,8 @@ markers = [
     "integration: tests requiring external services (Neo4j, running MCP server)",
     "slow: tests >30s (excluded from CI; run nightly or manually on iMac)",
     "wire: MCP wire-contract tests requiring running palace-mcp transport",
+    "requires_scip_typescript: tests requiring ts-mini-project/index.scip fixture",
+    "requires_scip_python: tests requiring py-mini-project/index.scip fixture",
 ]
 
 [tool.mypy]
