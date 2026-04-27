@@ -1,0 +1,198 @@
+"""SCIP file parser + path resolver for symbol index extractors.
+
+Vendored scip_pb2 (palace_mcp.proto.scip_pb2) generated from the official
+Sourcegraph SCIP proto. protobuf>=4.25 pinned for upb backend (handles
+files >64 MiB that the pure-Python backend cannot).
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from google.protobuf.message import DecodeError
+
+from palace_mcp.extractors.foundation.errors import ExtractorErrorCode
+from palace_mcp.extractors.foundation.identifiers import symbol_id_for
+from palace_mcp.extractors.foundation.models import Language, SymbolKind, SymbolOccurrence
+from palace_mcp.proto import scip_pb2
+
+
+@dataclass
+class ScipPathRequiredError(Exception):
+    """No .scip path configured for this project."""
+
+    project: str
+    action_required: str
+    error_code: str = ExtractorErrorCode.SCIP_PATH_REQUIRED.value
+
+    def __post_init__(self) -> None:
+        super().__init__(
+            f"No .scip path for project {self.project!r}. {self.action_required}"
+        )
+
+
+@dataclass
+class ScipFileTooLargeError(Exception):
+    """SCIP file exceeds configured size cap."""
+
+    path: Path
+    size_mb: int
+    cap_mb: int
+
+    def __post_init__(self) -> None:
+        super().__init__(
+            f".scip file {self.path} is {self.size_mb} MB, exceeds cap {self.cap_mb} MB"
+        )
+
+
+@dataclass
+class ScipParseError(Exception):
+    """Protobuf decode failed on .scip file."""
+
+    path: Path
+    cause: str
+
+    def __post_init__(self) -> None:
+        super().__init__(f"Failed to parse {self.path}: {self.cause}")
+
+
+class FindScipPath:
+    """Resolve .scip file path for a project slug."""
+
+    @staticmethod
+    def resolve(
+        project: str,
+        settings: Any,
+        override: str | None = None,
+    ) -> Path:
+        """Per-call override > Settings dict. Raises ScipPathRequiredError if neither."""
+        if override is not None:
+            return Path(override)
+        path = settings.palace_scip_index_paths.get(project)
+        if path is None:
+            raise ScipPathRequiredError(
+                project=project,
+                action_required=(
+                    f"Set PALACE_SCIP_INDEX_PATHS env var to JSON dict including "
+                    f"'{project}' key, or pass scip_path argument to "
+                    f"palace.ingest.run_extractor"
+                ),
+            )
+        return Path(path)
+
+
+def parse_scip_file(
+    path: Path,
+    max_size_mb: int = 500,
+) -> Any:
+    """Parse SCIP protobuf with size guard.
+
+    Raises ScipFileTooLargeError if file exceeds max_size_mb.
+    Raises ScipParseError on protobuf decode failure.
+    Raises FileNotFoundError if path does not exist.
+    """
+    size = path.stat().st_size
+    if size > max_size_mb * 1024 * 1024:
+        raise ScipFileTooLargeError(
+            path=path,
+            size_mb=size // (1024 * 1024),
+            cap_mb=max_size_mb,
+        )
+    data = path.read_bytes()
+    index = scip_pb2.Index()  # type: ignore[attr-defined]
+    try:
+        index.ParseFromString(data)
+    except DecodeError as e:
+        raise ScipParseError(path=path, cause=str(e)) from e
+    return index
+
+
+# ---------------------------------------------------------------------------
+# SCIP role bitmask constants (from SymbolRole enum in scip.proto)
+# ---------------------------------------------------------------------------
+
+_SCIP_ROLE_DEF = 1
+_SCIP_ROLE_IMPORT = 2
+_SCIP_ROLE_WRITE_ACCESS = 4
+_SCIP_ROLE_READ_ACCESS = 8
+_SCIP_ROLE_GENERATED = 16
+_SCIP_ROLE_TEST = 32
+_SCIP_ROLE_FORWARD_DEF = 64
+
+
+def _scip_role_to_kind(symbol_roles: int) -> SymbolKind:
+    """Map SCIP symbol_roles bitmask to SymbolKind."""
+    if symbol_roles & _SCIP_ROLE_DEF:
+        return SymbolKind.DEF
+    if symbol_roles & _SCIP_ROLE_FORWARD_DEF:
+        return SymbolKind.DECL
+    if symbol_roles & _SCIP_ROLE_WRITE_ACCESS:
+        return SymbolKind.ASSIGN
+    return SymbolKind.USE
+
+
+def _extract_qualified_name(scip_symbol: str) -> str:
+    """Extract a human-readable qualified name from a SCIP symbol string.
+
+    SCIP format: 'scip-python python <package> . <module> . <name> .'
+    Strips the scheme prefix and trailing dots, joins components with '.'.
+    """
+    parts = scip_symbol.strip().split(" ")
+    name_parts = [p for p in parts[2:] if p and p != "."]
+    return ".".join(name_parts) if name_parts else scip_symbol
+
+
+def iter_scip_occurrences(
+    index: Any,  # scip_pb2.Index — no stub for generated protobuf
+    *,
+    commit_sha: str,
+    ingest_run_id: str = "",
+) -> Iterator[SymbolOccurrence]:
+    """Yield SymbolOccurrence from a parsed SCIP Index.
+
+    Each SCIP Document maps to a file; each Occurrence within it maps to
+    a SymbolOccurrence with file_path, line, col derived from the SCIP range.
+    """
+    for doc in index.documents:
+        file_path = doc.relative_path
+        for occ in doc.occurrences:
+            if not occ.symbol or occ.symbol.startswith("local "):
+                continue
+
+            kind = _scip_role_to_kind(occ.symbol_roles)
+            qname = _extract_qualified_name(occ.symbol)
+            sym_id = symbol_id_for(qname)
+
+            range_vals = list(occ.range)
+            line = range_vals[0] if len(range_vals) > 0 else 0
+            col_start = range_vals[1] if len(range_vals) > 1 else 0
+
+            if len(range_vals) == 3:
+                col_end = range_vals[2]
+            elif len(range_vals) == 4:
+                col_end = range_vals[3]
+            else:
+                col_end = col_start
+
+            if col_end < col_start:
+                col_end = col_start
+
+            doc_key = f"{sym_id}:{file_path}:{line}:{col_start}"
+
+            yield SymbolOccurrence(
+                doc_key=doc_key,
+                symbol_id=sym_id,
+                symbol_qualified_name=qname,
+                kind=kind,
+                language=Language.PYTHON,
+                file_path=file_path,
+                line=line,
+                col_start=col_start,
+                col_end=col_end,
+                importance=0.0,
+                commit_sha=commit_sha,
+                ingest_run_id=ingest_run_id,
+            )
