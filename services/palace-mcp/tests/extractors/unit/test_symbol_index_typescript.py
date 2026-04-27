@@ -78,9 +78,7 @@ class TestSymbolIndexTypeScriptMeta:
         desc = extractor.description.lower()
         assert "typescript" in desc or "ts" in desc
 
-    def test_primary_lang_is_typescript(
-        self, extractor: SymbolIndexTypeScript
-    ) -> None:
+    def test_primary_lang_is_typescript(self, extractor: SymbolIndexTypeScript) -> None:
         assert extractor.primary_lang == Language.TYPESCRIPT
 
 

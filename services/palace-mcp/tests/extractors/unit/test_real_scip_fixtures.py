@@ -60,9 +60,9 @@ class TestTsMiniProjectFixture:
         for occ in occs:
             parts = occ.symbol_qualified_name.split(" ")
             for part in parts:
-                assert not (
-                    part.count(".") >= 2 and part[0].isdigit()
-                ), f"Possible version token in qualified_name: {occ.symbol_qualified_name!r}"
+                assert not (part.count(".") >= 2 and part[0].isdigit()), (
+                    f"Possible version token in qualified_name: {occ.symbol_qualified_name!r}"
+                )
 
     def test_has_use_occurrences(self) -> None:
         index = parse_scip_file(TS_SCIP)
@@ -102,6 +102,6 @@ class TestPyMiniProjectFixture:
         for occ in occs:
             parts = occ.symbol_qualified_name.split(" ")
             for part in parts:
-                assert not (
-                    part.count(".") >= 2 and part[0].isdigit()
-                ), f"Possible version token in qualified_name: {occ.symbol_qualified_name!r}"
+                assert not (part.count(".") >= 2 and part[0].isdigit()), (
+                    f"Possible version token in qualified_name: {occ.symbol_qualified_name!r}"
+                )
