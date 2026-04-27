@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from palace_mcp.extractors.base import ExtractorRunContext, ExtractorStats
+from palace_mcp.extractors.base import ExtractorRunContext
 from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErrorCode
 from palace_mcp.extractors.symbol_index_python import SymbolIndexPython
 from tests.extractors.fixtures.scip_factory import build_minimal_scip_index, write_scip_fixture
@@ -89,8 +89,8 @@ class TestSymbolIndexPythonRun:
         graphiti = AsyncMock()
 
         with (
-            patch("palace_mcp.extractors.symbol_index_python.get_driver", return_value=driver),
-            patch("palace_mcp.extractors.symbol_index_python.get_settings", return_value=settings),
+            patch("palace_mcp.mcp_server.get_driver", return_value=driver),
+            patch("palace_mcp.mcp_server.get_settings", return_value=settings),
             patch("palace_mcp.extractors.symbol_index_python.ensure_custom_schema", AsyncMock()),
             patch("palace_mcp.extractors.symbol_index_python.create_ingest_run", AsyncMock()),
             patch("palace_mcp.extractors.symbol_index_python.finalize_ingest_run", AsyncMock()),
@@ -121,8 +121,8 @@ class TestSymbolIndexPythonRun:
         graphiti = AsyncMock()
 
         with (
-            patch("palace_mcp.extractors.symbol_index_python.get_driver", return_value=driver),
-            patch("palace_mcp.extractors.symbol_index_python.get_settings", return_value=settings),
+            patch("palace_mcp.mcp_server.get_driver", return_value=driver),
+            patch("palace_mcp.mcp_server.get_settings", return_value=settings),
             patch("palace_mcp.extractors.symbol_index_python.ensure_custom_schema", AsyncMock()),
             patch("palace_mcp.extractors.symbol_index_python.create_ingest_run", AsyncMock()),
             patch("palace_mcp.extractors.symbol_index_python.finalize_ingest_run", AsyncMock()),

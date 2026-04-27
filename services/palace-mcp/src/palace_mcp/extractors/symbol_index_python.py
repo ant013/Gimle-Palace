@@ -39,8 +39,6 @@ from palace_mcp.extractors.scip_parser import (
 )
 from neo4j import AsyncDriver
 
-from palace_mcp.mcp_server import get_driver, get_settings
-
 logger = logging.getLogger(__name__)
 
 
@@ -53,6 +51,9 @@ class SymbolIndexPython(BaseExtractor):
     )
 
     async def run(self, *, graphiti: Graphiti, ctx: ExtractorRunContext) -> ExtractorStats:
+        # Deferred import to avoid circular import (mcp_server → registry → here → mcp_server)
+        from palace_mcp.mcp_server import get_driver, get_settings
+
         driver = get_driver()
         settings = get_settings()
 
