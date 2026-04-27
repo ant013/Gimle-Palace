@@ -17,6 +17,7 @@
 
 | File | Responsibility |
 |------|---------------|
+| `services/palace-mcp/src/palace_mcp/mcp_server.py` | Add `get_driver()` + `get_settings()` getter functions (modify — CR F1) |
 | `services/palace-mcp/src/palace_mcp/extractors/scip_parser.py` | `parse_scip_file()` + `FindScipPath` resolver + SCIP iteration helpers |
 | `services/palace-mcp/src/palace_mcp/extractors/symbol_index_python.py` | `SymbolIndexPython(BaseExtractor)` — 3-phase bootstrap using 101a substrate |
 | `services/palace-mcp/src/palace_mcp/extractors/registry.py` | Add `symbol_index_python` registration (modify) |
@@ -62,6 +63,47 @@ Expected: `scip OK`
 ```bash
 git add services/palace-mcp/pyproject.toml services/palace-mcp/uv.lock
 git commit -m "feat(GIM-102): T1 — pin scip>=0.4.0 + protobuf>=4.25
+
+Co-Authored-By: Paperclip <noreply@paperclip.ing>"
+```
+
+---
+
+## Task 1b: Add `get_driver()` + `get_settings()` getters to mcp_server (CR F1 fix)
+
+**Files:**
+- Modify: `services/palace-mcp/src/palace_mcp/mcp_server.py`
+
+**Context:** `mcp_server.py` has `set_driver()` / `set_settings()` but no getter functions. Module-level `_driver` / `_settings` are private. SymbolIndexPython and find_references need public getters.
+
+- [ ] **Step 1: Add getter functions**
+
+In `services/palace-mcp/src/palace_mcp/mcp_server.py`, after `set_settings()` (around line 149), add:
+
+```python
+def get_driver() -> AsyncDriver | None:
+    """Public getter for the Neo4j driver. Returns None before set_driver() call."""
+    return _driver
+
+
+def get_settings() -> Settings | None:
+    """Public getter for Settings. Returns None before set_settings() call."""
+    return _settings
+```
+
+- [ ] **Step 2: Verify existing tests still pass**
+
+Run: `cd services/palace-mcp && uv run pytest tests/ -v -m "not slow and not integration" -x --timeout=30`
+Expected: PASS (no existing code uses these getters yet).
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add services/palace-mcp/src/palace_mcp/mcp_server.py
+git commit -m "feat(GIM-102): T1b — add get_driver/get_settings public getters
+
+CR F1 fix: SymbolIndexPython + find_references need access to module-level
+driver and settings without importing private _driver/_settings.
 
 Co-Authored-By: Paperclip <noreply@paperclip.ing>"
 ```
@@ -622,26 +664,45 @@ class TestSymbolIndexPythonRun:
     async def test_missing_scip_path_returns_error(
         self, extractor: SymbolIndexPython, run_ctx: ExtractorRunContext
     ) -> None:
+        """CR F6: must assert ExtractorError with SCIP_PATH_REQUIRED code."""
         settings = MagicMock()
         settings.palace_scip_index_paths = {}
         graphiti = AsyncMock()
         driver = AsyncMock()
+        driver.session.return_value.__aenter__ = AsyncMock(return_value=AsyncMock(
+            run=AsyncMock(return_value=AsyncMock(single=AsyncMock(return_value=None)))
+        ))
+        driver.session.return_value.__aexit__ = AsyncMock(return_value=False)
 
-        result = await extractor.run(graphiti=graphiti, ctx=run_ctx)
-        # SymbolIndexPython should handle ScipPathRequiredError
-        # and return ExtractorStats with 0 writes (or raise ExtractorError)
-        # Exact behavior depends on implementation — test will be adjusted.
+        from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErrorCode
+
+        with patch("palace_mcp.extractors.symbol_index_python.get_driver", return_value=driver), \
+             patch("palace_mcp.extractors.symbol_index_python.get_settings", return_value=settings):
+            with pytest.raises(ExtractorError) as exc_info:
+                await extractor.run(graphiti=graphiti, ctx=run_ctx)
+            assert exc_info.value.error_code == ExtractorErrorCode.SCIP_PATH_REQUIRED
 
     @pytest.mark.asyncio
     async def test_scip_file_not_found_raises(
         self, extractor: SymbolIndexPython, run_ctx: ExtractorRunContext
     ) -> None:
+        """CR F6: must assert FileNotFoundError for nonexistent .scip path."""
         settings = MagicMock()
         settings.palace_scip_index_paths = {"test-project": "/nonexistent/path.scip"}
-        # Test that run() raises or returns error envelope
+        driver = AsyncMock()
+        driver.session.return_value.__aenter__ = AsyncMock(return_value=AsyncMock(
+            run=AsyncMock(return_value=AsyncMock(single=AsyncMock(return_value=None)))
+        ))
+        driver.session.return_value.__aexit__ = AsyncMock(return_value=False)
+        graphiti = AsyncMock()
+
+        with patch("palace_mcp.extractors.symbol_index_python.get_driver", return_value=driver), \
+             patch("palace_mcp.extractors.symbol_index_python.get_settings", return_value=settings):
+            with pytest.raises(FileNotFoundError):
+                await extractor.run(graphiti=graphiti, ctx=run_ctx)
 ```
 
-Note: these tests establish the contract — the implementer will refine assertions based on the actual error-handling flow (the extractor calls `run()` which receives `graphiti` + `ctx`; the `SymbolIndexPython` must additionally receive `driver` and `settings` via a mechanism — see Step 2 for the design decision).
+Note: both error-path tests now have concrete assertions (CR F6 fix). The `get_driver`/`get_settings` are patched via `unittest.mock.patch` to inject test doubles.
 
 - [ ] **Step 1b: Run to verify failure**
 
@@ -683,10 +744,13 @@ from palace_mcp.extractors.base import (
 from palace_mcp.extractors.foundation.checkpoint import (
     create_ingest_run,
     finalize_ingest_run,
+    read_checkpoints,
+    reconcile_checkpoint,
     write_checkpoint,
 )
 from palace_mcp.extractors.foundation.circuit_breaker import (
     check_phase_budget,
+    check_resume_budget,
 )
 from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErrorCode
 from palace_mcp.extractors.foundation.identifiers import symbol_id_for
@@ -735,6 +799,10 @@ class SymbolIndexPython(BaseExtractor):
                 action="retry",
             )
 
+        # 0. Pre-flight: check if previous run hit budget (CR F3 — 101a bootstrap)
+        previous_error = await self._get_previous_error_code(driver, ctx.project_slug)
+        check_resume_budget(previous_error_code=previous_error)
+
         # 1. Idempotent schema bootstrap
         await ensure_custom_schema(driver)
 
@@ -765,8 +833,25 @@ class SymbolIndexPython(BaseExtractor):
                 ingest_run_id=ctx.run_id,
             ))
 
-            # 7. Build in-degree counter from USE occurrences
+            # 7. Build in-degree counter (CR F3 — 101a bootstrap: load from disk + hard-fail)
+            tantivy_path = Path(settings.palace_tantivy_index_path)
+            counter_path = tantivy_path / "in_degree_counter.json"
             counter = BoundedInDegreeCounter()
+            if counter_path.exists():
+                if not counter.from_disk(counter_path, expected_run_id=ctx.run_id):
+                    import os
+                    if os.environ.get("PALACE_COUNTER_RESET") != "1":
+                        raise ExtractorError(
+                            error_code=ExtractorErrorCode.COUNTER_STATE_CORRUPT,
+                            message=(
+                                f"Counter state corrupt or run_id mismatch at {counter_path}. "
+                                "Set PALACE_COUNTER_RESET=1 to reset, or rebuild."
+                            ),
+                            recoverable=False,
+                            action="manual_cleanup",
+                        )
+                    counter = BoundedInDegreeCounter()
+
             for occ in all_occs:
                 if occ.kind == SymbolKind.USE:
                     counter.increment(occ.symbol_qualified_name)
@@ -981,6 +1066,25 @@ class SymbolIndexPython(BaseExtractor):
             return ref[:40]
         except (FileNotFoundError, OSError):
             return "unknown"
+
+    @staticmethod
+    async def _get_previous_error_code(
+        driver: object, project: str
+    ) -> str | None:
+        """Read the most recent IngestRun error_code for resume-budget check (CR F3)."""
+        _QUERY = """
+        MATCH (r:IngestRun {project: $project, extractor_name: 'symbol_index_python'})
+        WHERE r.success = false
+        RETURN r.error_code AS error_code
+        ORDER BY r.started_at DESC
+        LIMIT 1
+        """
+        async with driver.session() as session:  # type: ignore[union-attr]
+            result = await session.run(_QUERY, project=project)
+            record = await result.single()
+            if record is None:
+                return None
+            return record["error_code"]
 ```
 
 - [ ] **Step 2b: Run tests**
@@ -1106,6 +1210,24 @@ class TestQueryIngestRun:
         result = await _query_ingest_run_for_project(driver, "test", "symbol_index_python")
         assert result is not None
         assert result["success"] is True
+
+
+class TestFindReferencesSymbolResolution:
+    """CR F4: find_references uses _resolve_qn before Tantivy query."""
+
+    @pytest.mark.asyncio
+    async def test_symbol_not_found_returns_error_envelope(self) -> None:
+        """When _resolve_qn returns symbol_not_found, find_references propagates it."""
+        # This verifies the integration point — _resolve_qn is tested
+        # separately in test_impact tests; here we verify find_references
+        # correctly returns the error envelope instead of querying Tantivy.
+        pass  # Exact wiring depends on how find_references calls _resolve_qn;
+              # implementer adds integration assertion using mocked CM session.
+
+    @pytest.mark.asyncio
+    async def test_ambiguous_qn_returns_error_envelope(self) -> None:
+        """When _resolve_qn returns ambiguous_qualified_name, find_references propagates it."""
+        pass  # Same as above — verify error envelope propagation.
 
 
 class TestQueryEvictionRecord:
@@ -1234,6 +1356,7 @@ Inside `register_code_composite_tools`, add the new tool (after `palace_code_tes
         from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
 
         driver = get_driver()
+        cm_session = code_router.get_cm_session()  # CR F4: need CM session for _resolve_qn
         if driver is None:
             handle_tool_error(RuntimeError("Neo4j driver not initialised"))
 
@@ -1269,34 +1392,44 @@ Inside `register_code_composite_tools`, add the new tool (after `palace_code_tes
                 ),
             }
 
-        # Search Tantivy for occurrences
+        # CR F4: Symbol resolution via graph-search before Tantivy query.
+        # Uses _resolve_qn() pattern from test_impact — suffix-match via
+        # search_graph, preserving symbol_not_found / ambiguous_qualified_name
+        # error envelopes. Falls back to raw qualified_name if CM unavailable.
+        resolved_qn = req.qualified_name
+        if cm_session is not None:
+            disambig = await _resolve_qn(
+                cm_session, req.qualified_name, resolved_project
+            )
+            if isinstance(disambig, dict):
+                return disambig  # symbol_not_found or ambiguous_qualified_name
+            _short_name, resolved_qn = disambig
+
+        # Search Tantivy for occurrences using resolved qualified_name
         from palace_mcp.mcp_server import get_settings
         settings = get_settings()
         tantivy_path = Path(settings.palace_tantivy_index_path)
-        sym_id = symbol_id_for(req.qualified_name)
+        sym_id = symbol_id_for(resolved_qn)
 
-        occurrences: list[dict[str, Any]] = []
-        try:
-            async with TantivyBridge(tantivy_path, heap_size_mb=settings.palace_tantivy_heap_mb) as bridge:
-                raw_results = await bridge.search_by_symbol_id_async(
-                    sym_id, limit=req.max_results + 1
-                )
-                truncated = len(raw_results) > req.max_results
-                raw_results = raw_results[:req.max_results]
-                occurrences = [
-                    {
-                        "file_path": r.file_path,
-                        "line": r.line,
-                        "col_start": r.col_start,
-                        "col_end": r.col_end,
-                        "kind": r.kind,
-                        "qualified_name": r.symbol_qualified_name,
-                    }
-                    for r in raw_results
-                ]
-        except Exception:
-            occurrences = []
-            truncated = False
+        # Search Tantivy — CR F2: no bare except; Tantivy errors surface as error envelope
+        async with TantivyBridge(tantivy_path, heap_size_mb=settings.palace_tantivy_heap_mb) as bridge:
+            raw_results = await bridge.search_by_symbol_id_async(
+                sym_id, limit=req.max_results + 1
+            )
+        truncated = len(raw_results) > req.max_results
+        raw_results = raw_results[:req.max_results]
+        # CR F5: raw_results is list[dict[str, Any]], use dict access not attr
+        occurrences: list[dict[str, Any]] = [
+            {
+                "file_path": r["file_path"],
+                "line": r["line"],
+                "col_start": r["col_start"],
+                "col_end": r["col_end"],
+                "kind": r["kind"],
+                "qualified_name": r["symbol_qualified_name"],
+            }
+            for r in raw_results
+        ]
 
         # State C check: evicted
         eviction_info = await _query_eviction_record(
