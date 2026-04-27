@@ -43,6 +43,29 @@ def build_minimal_scip_index(
     return index
 
 
+def build_typescript_scip_index(
+    *,
+    relative_path: str = "src/example.ts",
+    symbols: list[tuple[str, int]] | None = None,
+) -> Any:
+    """Build a minimal SCIP Index for TypeScript/JavaScript testing.
+
+    Uses 'typescript' as doc.language and scip-typescript as tool_info.name.
+    """
+    if symbols is None:
+        symbols = [
+            (
+                "scip-typescript npm example 1.0.0 src/`example.ts`/ExampleClass#.",
+                1,
+            )
+        ]
+    return build_minimal_scip_index(
+        language="typescript",
+        relative_path=relative_path,
+        symbols=symbols,
+    )
+
+
 def write_scip_fixture(index: Any, path: Path) -> Path:
     """Serialize SCIP Index to a file."""
     path.write_bytes(index.SerializeToString())
