@@ -253,3 +253,16 @@ Foundation slice scope per Option B chosen by Board:
 6. **Plus** first language extractor: Python via scip-python (dogfood test on Gimle-Palace itself)
 
 Subsequent language extractors (Slice 102+) follow the same pattern with ~2-3 day cadence per language: scip-typescript / scip-kotlin / swift-symbolkit / palace-scheme generators for Solidity, FunC, Anchor.
+
+---
+
+## Implementation slicing addendum (2026-04-27)
+
+After two adversarial review rounds (rev1 round-1 found 26 findings; rev2 round-2 found 26 more — including 6 catastrophic silent-failure modes), Board ratified split of the original monolithic implementation slice into:
+
+- **101a** (`docs/superpowers/specs/2026-04-27-101a-extractor-foundation-design.md`): Foundation substrate + synthetic 70M-occurrence stress harness validating eviction + write-path. No real extractor. Falsifiable on its own via T12.
+- **101b** (`docs/superpowers/specs/2026-04-27-101b-symbol-index-python-design.md`): scip-python integration + `SymbolIndexPython` + `palace.code.find_references` composite tool with 3-state distinction. Hard depends on 101a merged.
+
+This split realizes the second-round Architect F8 + Slicing strategic finding ("19 tasks/18 acceptance in single PR violates project's anti-rubber-stamp norms"). Subsequent language extractors (102 TS/JS, 103 Kotlin/Swift, 110+ smart contracts) follow 101b's pattern with ~2-3 day cadence each.
+
+D1-D9 decisions themselves are unchanged at architectural level; rev3a (101a) and rev1 (101b) implementation specs apply 26 round-2 findings as implementation refinements.
