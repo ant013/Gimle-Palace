@@ -8,6 +8,11 @@ from __future__ import annotations
 
 import pytest
 
+pytestmark = pytest.mark.skip(
+    reason="mcp_client/indexed_project/evicted_project conftest fixtures "
+    "not yet implemented — see GIM-91 wire-contract followup"
+)
+
 
 @pytest.mark.integration
 @pytest.mark.wire

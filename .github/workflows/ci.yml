@@ -54,7 +54,7 @@ jobs:
           python-version: "3.12"
       - run: uv sync --frozen
         working-directory: services/palace-mcp
-      - run: uv run pytest
+      - run: uv run pytest -m "not slow"
         working-directory: services/palace-mcp
 
   github-scripts-tests:

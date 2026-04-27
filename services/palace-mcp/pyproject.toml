@@ -38,8 +38,8 @@ dev-dependencies = [
 asyncio_mode = "auto"
 markers = [
     "integration: tests requiring external services (Neo4j, running MCP server)",
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "wire: tests requiring full MCP server running (subset of integration)",
+    "slow: tests >30s (excluded from CI; run nightly or manually on iMac)",
+    "wire: MCP wire-contract tests requiring running palace-mcp transport",
 ]
 
 [tool.mypy]
