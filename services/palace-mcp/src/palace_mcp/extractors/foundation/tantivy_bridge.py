@@ -14,12 +14,12 @@ from __future__ import annotations
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 # tantivy is an optional dependency during test without the real package.
 # Import is deferred to __aenter__ so that unit tests can mock it.
 try:
-    import tantivy  # type: ignore[import-untyped]
+    import tantivy
 
     _TANTIVY_AVAILABLE = True
 except ImportError:  # pragma: no cover
@@ -99,18 +99,18 @@ class TantivyBridge:
     async def search_by_symbol_id_async(
         self, symbol_id: int, limit: int = 1000
     ) -> list[dict[str, Any]]:
-        return await self._run(self._search_by_symbol_id_sync, symbol_id, limit)
+        return cast(list[dict[str, Any]], await self._run(self._search_by_symbol_id_sync, symbol_id, limit))
 
     async def delete_by_symbol_ids_async(self, symbol_ids: list[int]) -> int:
         """Delete all docs whose symbol_id matches any id in the list.
 
         Returns count of deleted docs (approximate — Tantivy merges lazily).
         """
-        return await self._run(self._delete_by_symbol_ids_sync, symbol_ids)
+        return cast(int, await self._run(self._delete_by_symbol_ids_sync, symbol_ids))
 
     async def count_docs_for_run_async(self, run_id: str, phase: str) -> int:
         """Count committed docs matching ingest_run_id and phase (for checkpoint reconciliation)."""
-        return await self._run(self._count_docs_for_run_sync, run_id, phase)
+        return cast(int, await self._run(self._count_docs_for_run_sync, run_id, phase))
 
     # ------------------------------------------------------------------
     # Synchronous internals (run on executor thread)
@@ -163,7 +163,7 @@ class TantivyBridge:
             "line": occ.line,
             "col_start": occ.col_start,
             "col_end": occ.col_end,
-            "role": list(type(occ).model_fields["kind"].annotation.__members__).index(  # type: ignore[union-attr]
+            "role": list(type(occ).model_fields["kind"].annotation.__members__).index(
                 occ.kind.value
             )
             if False
@@ -214,7 +214,7 @@ class TantivyBridge:
         # phase is encoded in doc_key prefix in real impl; here simplified.
         query = self._index.parse_query(f'ingest_run_id:"{run_id}"')
         results = searcher.search(query, limit=0)
-        return results.count
+        return cast(int, results.count)
 
     # ------------------------------------------------------------------
     # Helper

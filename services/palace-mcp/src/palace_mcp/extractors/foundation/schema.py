@@ -172,9 +172,12 @@ async def _detect_drift(session: AsyncSession) -> None:
     expected_constraint_props: dict[str, frozenset[str]] = {
         c.name: frozenset(c.properties) for c in EXPECTED_SCHEMA.constraints
     }
+    all_index_specs: list[IndexSpec | FulltextSpec] = [
+        *EXPECTED_SCHEMA.indexes,
+        *EXPECTED_SCHEMA.fulltext_indexes,
+    ]
     expected_index_props: dict[str, frozenset[str]] = {
-        i.name: frozenset(i.properties)
-        for i in (*EXPECTED_SCHEMA.indexes, *EXPECTED_SCHEMA.fulltext_indexes)
+        i.name: frozenset(i.properties) for i in all_index_specs
     }
 
     try:

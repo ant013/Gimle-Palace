@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 
-import pytest
 
 from palace_mcp.extractors.foundation.identifiers import symbol_id_for
 
