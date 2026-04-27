@@ -48,7 +48,7 @@ class SymbolKind(str, Enum):
     IMPL = "impl"
     USE = "use"
     ASSIGN = "assign"
-    EVENT = "event"        # Solidity event definition
+    EVENT = "event"  # Solidity event definition
     MODIFIER = "modifier"  # Solidity modifier definition
 
 
@@ -76,6 +76,7 @@ class SourceType(str, Enum):
 # ---------------------------------------------------------------------------
 # Core occurrence model
 # ---------------------------------------------------------------------------
+
 
 class SymbolOccurrence(BaseModel):
     """One occurrence of a symbol in source code.
@@ -162,6 +163,7 @@ class ExternalDependency(BaseModel):
 # Neo4j shadow + eviction
 # ---------------------------------------------------------------------------
 
+
 class SymbolOccurrenceShadow(BaseModel):
     """Lightweight Neo4j shadow node for eviction policy decisions.
 
@@ -199,6 +201,7 @@ class EvictionRecord(BaseModel):
 # ---------------------------------------------------------------------------
 # Checkpoint
 # ---------------------------------------------------------------------------
+
 
 class IngestCheckpoint(BaseModel):
     """Source of truth for phase completion in both stores.

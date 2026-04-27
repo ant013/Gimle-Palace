@@ -93,9 +93,13 @@ class SyntheticHarness:
         self.project = project
         self.file_count = file_count
 
-        self._symbol_names = [f"pkg.module_{i}.Class_{i}.method_{i % 100}" for i in range(symbols)]
+        self._symbol_names = [
+            f"pkg.module_{i}.Class_{i}.method_{i % 100}" for i in range(symbols)
+        ]
         self._symbol_ids = [symbol_id_for(name) for name in self._symbol_names]
-        self._file_paths = [f"/repo/src/module_{i % file_count}/file.py" for i in range(file_count)]
+        self._file_paths = [
+            f"/repo/src/module_{i % file_count}/file.py" for i in range(file_count)
+        ]
 
     def occurrences(self) -> Iterator[SymbolOccurrence]:
         """Yield SymbolOccurrence records up to self.total."""

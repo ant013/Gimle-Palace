@@ -4,7 +4,10 @@ from __future__ import annotations
 
 
 from palace_mcp.extractors.foundation.models import SymbolKind
-from palace_mcp.extractors.foundation.synthetic_harness import HarnessStats, SyntheticHarness
+from palace_mcp.extractors.foundation.synthetic_harness import (
+    HarnessStats,
+    SyntheticHarness,
+)
 
 
 class TestSyntheticHarness:

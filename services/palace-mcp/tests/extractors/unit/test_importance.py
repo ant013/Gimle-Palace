@@ -22,6 +22,7 @@ from palace_mcp.extractors.foundation.models import Language, SymbolKind
 # BoundedInDegreeCounter — T2 acceptance criteria
 # ---------------------------------------------------------------------------
 
+
 class TestBoundedInDegreeCounter:
     def test_increment_and_estimate(self) -> None:
         c = BoundedInDegreeCounter(max_entries=100)
@@ -90,7 +91,9 @@ class TestBoundedInDegreeCounter:
 
     def test_from_disk_missing_file_returns_false(self, tmp_path: Path) -> None:
         c = BoundedInDegreeCounter()
-        assert c.from_disk(tmp_path / "nonexistent.json", expected_run_id="any") is False
+        assert (
+            c.from_disk(tmp_path / "nonexistent.json", expected_run_id="any") is False
+        )
 
     def test_from_disk_wrong_version_returns_false(self, tmp_path: Path) -> None:
         path = tmp_path / "counter.json"
@@ -114,6 +117,7 @@ class TestBoundedInDegreeCounter:
 # ---------------------------------------------------------------------------
 # importance_score — T4 acceptance criteria
 # ---------------------------------------------------------------------------
+
 
 class TestTierWeight:
     def test_first_party_path(self) -> None:

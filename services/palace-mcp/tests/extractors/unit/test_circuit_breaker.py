@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from palace_mcp.extractors.foundation.circuit_breaker import check_phase_budget, check_resume_budget
+from palace_mcp.extractors.foundation.circuit_breaker import (
+    check_phase_budget,
+    check_resume_budget,
+)
 from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErrorCode
 
 

@@ -16,7 +16,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from palace_mcp.extractors.foundation.checkpoint import reconcile_checkpoint, write_checkpoint
+from palace_mcp.extractors.foundation.checkpoint import (
+    reconcile_checkpoint,
+    write_checkpoint,
+)
 from palace_mcp.extractors.foundation.circuit_breaker import check_resume_budget
 from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErrorCode
 from palace_mcp.extractors.foundation.models import IngestCheckpoint
@@ -136,4 +139,7 @@ class TestPhaseCheckpointOrdering:
         )
         with pytest.raises(ExtractorError) as exc_info:
             await reconcile_checkpoint(checkpoint=cp1, actual_doc_count=99)
-        assert exc_info.value.error_code == ExtractorErrorCode.CHECKPOINT_DOC_COUNT_MISMATCH
+        assert (
+            exc_info.value.error_code
+            == ExtractorErrorCode.CHECKPOINT_DOC_COUNT_MISMATCH
+        )

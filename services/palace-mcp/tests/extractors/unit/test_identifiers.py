@@ -7,6 +7,7 @@ import hashlib
 
 from palace_mcp.extractors.foundation.identifiers import symbol_id_for
 
+
 def _golden(qn: str) -> int:
     raw = int.from_bytes(
         hashlib.blake2b(qn.encode("utf-8"), digest_size=8).digest(),
@@ -45,8 +46,14 @@ class TestSymbolIdFor:
     def test_signed_i64_range(self) -> None:
         """All outputs must fit in signed i64 (Tantivy constraint)."""
         samples = [
-            "foo", "bar", "baz.qux", "org.apache.commons.lang3.StringUtils",
-            "x" * 1000, "", "unicode_ñame", "日本語",
+            "foo",
+            "bar",
+            "baz.qux",
+            "org.apache.commons.lang3.StringUtils",
+            "x" * 1000,
+            "",
+            "unicode_ñame",
+            "日本語",
         ]
         for qn in samples:
             sid = symbol_id_for(qn)

@@ -78,7 +78,12 @@ async def run_eviction(
     Raises ExtractorError on any round failure (ON ERROR FAIL semantics, F1).
     All three rounds skip def/decl nodes — those are never evicted.
     """
-    r1 = await _round1(driver, group_id=group_id, importance_threshold=importance_threshold, batch_size=batch_size)
+    r1 = await _round1(
+        driver,
+        group_id=group_id,
+        importance_threshold=importance_threshold,
+        batch_size=batch_size,
+    )
     r2 = await _round2(driver, group_id=group_id, per_symbol_cap=per_symbol_cap)
     r3 = await _round3(driver, group_id=group_id, global_cap=global_cap)
     return r1, r2, r3

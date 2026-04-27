@@ -19,19 +19,25 @@ def _minimal_env() -> dict[str, str]:
 
 
 class TestSettingsFoundationDefaults:
-    def test_max_occurrences_total_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_max_occurrences_total_default(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         for k, v in _minimal_env().items():
             monkeypatch.setenv(k, v)
         s = Settings()
         assert s.palace_max_occurrences_total == 50_000_000
 
-    def test_max_occurrences_per_project_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_max_occurrences_per_project_default(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         for k, v in _minimal_env().items():
             monkeypatch.setenv(k, v)
         s = Settings()
         assert s.palace_max_occurrences_per_project == 10_000_000
 
-    def test_importance_threshold_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_importance_threshold_default(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         for k, v in _minimal_env().items():
             monkeypatch.setenv(k, v)
         s = Settings()
@@ -61,7 +67,9 @@ class TestSettingsFoundationDefaults:
         s = Settings()
         assert s.palace_tantivy_heap_mb == 100
 
-    def test_scip_index_paths_default_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_scip_index_paths_default_empty(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         for k, v in _minimal_env().items():
             monkeypatch.setenv(k, v)
         s = Settings()
@@ -84,7 +92,9 @@ class TestSettingsFoundationOverrides:
         s = Settings()
         assert s.palace_tantivy_heap_mb == 256
 
-    def test_max_occurrences_total_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_max_occurrences_total_override(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         for k, v in _minimal_env().items():
             monkeypatch.setenv(k, v)
         monkeypatch.setenv("PALACE_MAX_OCCURRENCES_TOTAL", "70000000")

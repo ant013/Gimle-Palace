@@ -7,7 +7,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from palace_mcp.extractors.foundation.models import Language, SymbolKind, SymbolOccurrence
+from palace_mcp.extractors.foundation.models import (
+    Language,
+    SymbolKind,
+    SymbolOccurrence,
+)
 from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
 
 
@@ -56,8 +60,15 @@ class TestTantivyBridgeLifecycle:
     @pytest.mark.asyncio
     async def test_context_manager_opens_and_closes(self, tmp_index: Path) -> None:
         mock_tantivy = _mock_tantivy()
-        with patch("palace_mcp.extractors.foundation.tantivy_bridge.tantivy", mock_tantivy), \
-             patch("palace_mcp.extractors.foundation.tantivy_bridge._TANTIVY_AVAILABLE", True):
+        with (
+            patch(
+                "palace_mcp.extractors.foundation.tantivy_bridge.tantivy", mock_tantivy
+            ),
+            patch(
+                "palace_mcp.extractors.foundation.tantivy_bridge._TANTIVY_AVAILABLE",
+                True,
+            ),
+        ):
             async with TantivyBridge(tmp_index) as bridge:
                 assert bridge._executor is not None
             # executor shut down after exit
@@ -68,8 +79,15 @@ class TestTantivyBridgeLifecycle:
         """F-F acceptance: executor must shut down even when an exception escapes the block."""
         mock_tantivy = _mock_tantivy()
         bridge = TantivyBridge(tmp_index)
-        with patch("palace_mcp.extractors.foundation.tantivy_bridge.tantivy", mock_tantivy), \
-             patch("palace_mcp.extractors.foundation.tantivy_bridge._TANTIVY_AVAILABLE", True):
+        with (
+            patch(
+                "palace_mcp.extractors.foundation.tantivy_bridge.tantivy", mock_tantivy
+            ),
+            patch(
+                "palace_mcp.extractors.foundation.tantivy_bridge._TANTIVY_AVAILABLE",
+                True,
+            ),
+        ):
             with pytest.raises(RuntimeError, match="test_exception"):
                 async with bridge:
                     raise RuntimeError("test_exception")
@@ -79,8 +97,15 @@ class TestTantivyBridgeLifecycle:
     @pytest.mark.asyncio
     async def test_commit_called_on_clean_exit(self, tmp_index: Path) -> None:
         mock_tantivy = _mock_tantivy()
-        with patch("palace_mcp.extractors.foundation.tantivy_bridge.tantivy", mock_tantivy), \
-             patch("palace_mcp.extractors.foundation.tantivy_bridge._TANTIVY_AVAILABLE", True):
+        with (
+            patch(
+                "palace_mcp.extractors.foundation.tantivy_bridge.tantivy", mock_tantivy
+            ),
+            patch(
+                "palace_mcp.extractors.foundation.tantivy_bridge._TANTIVY_AVAILABLE",
+                True,
+            ),
+        ):
             async with TantivyBridge(tmp_index) as bridge:
                 writer = bridge._writer
         # commit called exactly once on clean exit
@@ -91,8 +116,15 @@ class TestTantivyBridgeLifecycle:
         """On exception path, commit should not be called (avoid partial writes)."""
         mock_tantivy = _mock_tantivy()
         bridge = TantivyBridge(tmp_index)
-        with patch("palace_mcp.extractors.foundation.tantivy_bridge.tantivy", mock_tantivy), \
-             patch("palace_mcp.extractors.foundation.tantivy_bridge._TANTIVY_AVAILABLE", True):
+        with (
+            patch(
+                "palace_mcp.extractors.foundation.tantivy_bridge.tantivy", mock_tantivy
+            ),
+            patch(
+                "palace_mcp.extractors.foundation.tantivy_bridge._TANTIVY_AVAILABLE",
+                True,
+            ),
+        ):
             try:
                 async with bridge:
                     writer = bridge._writer
@@ -108,8 +140,15 @@ class TestTantivyBridgeOperations:
         """F4: doc_key uniqueness — delete-by-doc_key then add."""
         mock_tantivy = _mock_tantivy()
         occ = _make_occ()
-        with patch("palace_mcp.extractors.foundation.tantivy_bridge.tantivy", mock_tantivy), \
-             patch("palace_mcp.extractors.foundation.tantivy_bridge._TANTIVY_AVAILABLE", True):
+        with (
+            patch(
+                "palace_mcp.extractors.foundation.tantivy_bridge.tantivy", mock_tantivy
+            ),
+            patch(
+                "palace_mcp.extractors.foundation.tantivy_bridge._TANTIVY_AVAILABLE",
+                True,
+            ),
+        ):
             async with TantivyBridge(tmp_index) as bridge:
                 writer = bridge._writer
                 await bridge.add_or_replace_async(occ)
@@ -120,8 +159,15 @@ class TestTantivyBridgeOperations:
     @pytest.mark.asyncio
     async def test_delete_by_symbol_ids(self, tmp_index: Path) -> None:
         mock_tantivy = _mock_tantivy()
-        with patch("palace_mcp.extractors.foundation.tantivy_bridge.tantivy", mock_tantivy), \
-             patch("palace_mcp.extractors.foundation.tantivy_bridge._TANTIVY_AVAILABLE", True):
+        with (
+            patch(
+                "palace_mcp.extractors.foundation.tantivy_bridge.tantivy", mock_tantivy
+            ),
+            patch(
+                "palace_mcp.extractors.foundation.tantivy_bridge._TANTIVY_AVAILABLE",
+                True,
+            ),
+        ):
             async with TantivyBridge(tmp_index) as bridge:
                 writer = bridge._writer
                 count = await bridge.delete_by_symbol_ids_async([1, 2, 3])

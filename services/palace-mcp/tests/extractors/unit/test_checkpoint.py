@@ -118,7 +118,10 @@ class TestReconcileCheckpoint:
         cp = _make_checkpoint(expected_doc_count=1000)
         with pytest.raises(ExtractorError) as exc_info:
             await reconcile_checkpoint(checkpoint=cp, actual_doc_count=999)
-        assert exc_info.value.error_code == ExtractorErrorCode.CHECKPOINT_DOC_COUNT_MISMATCH
+        assert (
+            exc_info.value.error_code
+            == ExtractorErrorCode.CHECKPOINT_DOC_COUNT_MISMATCH
+        )
         assert exc_info.value.recoverable is False
         assert exc_info.value.action == "rebuild_tantivy"
         assert exc_info.value.partial_writes == 999

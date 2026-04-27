@@ -91,7 +91,9 @@ class TestEnsureCustomSchema:
         if index_records is None:
             index_records = []
 
-        async def run_side_effect(query: str, *args: object, **kwargs: object) -> object:
+        async def run_side_effect(
+            query: str, *args: object, **kwargs: object
+        ) -> object:
             if "SHOW CONSTRAINTS" in query:
                 return _async_records(constraint_records)
             if "SHOW INDEXES" in query:
@@ -126,7 +128,9 @@ class TestEnsureCustomSchema:
     async def test_show_constraints_error_does_not_propagate(self) -> None:
         """If SHOW CONSTRAINTS fails (older Neo4j), drift detection is skipped gracefully."""
 
-        async def run_side_effect(query: str, *args: object, **kwargs: object) -> AsyncMock:
+        async def run_side_effect(
+            query: str, *args: object, **kwargs: object
+        ) -> AsyncMock:
             if "SHOW" in query:
                 raise Exception("SHOW not supported")
             result = AsyncMock()

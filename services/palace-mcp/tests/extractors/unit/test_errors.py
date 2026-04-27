@@ -16,7 +16,10 @@ class TestExtractorErrorCode:
 
     def test_budget_codes_present(self) -> None:
         assert ExtractorErrorCode.BUDGET_EXCEEDED == "budget_exceeded"
-        assert ExtractorErrorCode.BUDGET_EXCEEDED_RESUME_BLOCKED == "budget_exceeded_resume_blocked"
+        assert (
+            ExtractorErrorCode.BUDGET_EXCEEDED_RESUME_BLOCKED
+            == "budget_exceeded_resume_blocked"
+        )
 
     def test_eviction_codes_present(self) -> None:
         assert ExtractorErrorCode.EVICTION_ROUND_1_FAILED == "eviction_round_1_failed"
@@ -41,7 +44,10 @@ class TestExtractorErrorCode:
         assert ExtractorErrorCode.COUNTER_STATE_CORRUPT == "counter_state_corrupt"
 
     def test_checkpoint_mismatch_present(self) -> None:
-        assert ExtractorErrorCode.CHECKPOINT_DOC_COUNT_MISMATCH == "checkpoint_doc_count_mismatch"
+        assert (
+            ExtractorErrorCode.CHECKPOINT_DOC_COUNT_MISMATCH
+            == "checkpoint_doc_count_mismatch"
+        )
 
 
 class TestExtractorError:

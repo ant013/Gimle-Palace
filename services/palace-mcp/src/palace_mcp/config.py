@@ -73,6 +73,6 @@ class Settings(BaseSettings):
         default_factory=dict,
         description=(
             "JSON-encoded dict mapping project slug → .scip file path. "
-            "Example env: PALACE_SCIP_INDEX_PATHS='{\"gimle\":\"/repos/gimle/.scip/index.scip\"}'"
+            'Example env: PALACE_SCIP_INDEX_PATHS=\'{"gimle":"/repos/gimle/.scip/index.scip"}\''
         ),
     )

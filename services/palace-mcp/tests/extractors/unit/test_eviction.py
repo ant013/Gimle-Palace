@@ -7,7 +7,12 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErrorCode
-from palace_mcp.extractors.foundation.eviction import _round1, _round2, _round3, run_eviction
+from palace_mcp.extractors.foundation.eviction import (
+    _round1,
+    _round2,
+    _round3,
+    run_eviction,
+)
 
 
 def _make_summary(nodes_deleted: int = 0) -> MagicMock:
@@ -73,7 +78,10 @@ class TestRound1:
         driver = _make_driver(fail_round=1)
         with pytest.raises(ExtractorError) as exc_info:
             await _round1(
-                driver, group_id="project/test", importance_threshold=0.05, batch_size=1000
+                driver,
+                group_id="project/test",
+                importance_threshold=0.05,
+                batch_size=1000,
             )
         assert exc_info.value.error_code == ExtractorErrorCode.EVICTION_ROUND_1_FAILED
         assert exc_info.value.recoverable is False
@@ -81,7 +89,9 @@ class TestRound1:
     @pytest.mark.asyncio
     async def test_uses_importance_threshold_param(self) -> None:
         driver = _make_driver()
-        await _round1(driver, group_id="project/test", importance_threshold=0.15, batch_size=500)
+        await _round1(
+            driver, group_id="project/test", importance_threshold=0.15, batch_size=500
+        )
         call_kwargs = driver.session.return_value.run.call_args
         assert "importance_threshold" in str(call_kwargs)
 
@@ -125,7 +135,9 @@ class TestRound3:
 class TestRunEviction:
     @pytest.mark.asyncio
     async def test_returns_triple(self) -> None:
-        driver = _make_driver(r1_deleted=10, r2_deleted=5, total_count=100, r3_deleted=0)
+        driver = _make_driver(
+            r1_deleted=10, r2_deleted=5, total_count=100, r3_deleted=0
+        )
         r1, r2, r3 = await run_eviction(
             driver,
             group_id="project/test",

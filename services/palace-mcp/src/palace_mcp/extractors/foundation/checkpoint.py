@@ -161,6 +161,7 @@ async def read_checkpoints(
 # Restart reconciliation
 # ---------------------------------------------------------------------------
 
+
 async def reconcile_checkpoint(
     *,
     checkpoint: IngestCheckpoint,

@@ -122,22 +122,16 @@ _CONSTRAINT_TEMPLATES: dict[str, str] = {
     ),
 }
 
-_INDEX_TEMPLATE = (
-    "CREATE INDEX {name} IF NOT EXISTS "
-    "FOR (n:{label}) ON ({props})"
-)
+_INDEX_TEMPLATE = "CREATE INDEX {name} IF NOT EXISTS FOR (n:{label}) ON ({props})"
 
 _FULLTEXT_TEMPLATE = (
-    "CREATE FULLTEXT INDEX {name} IF NOT EXISTS "
-    "FOR (n:{label}) ON EACH [{props}]"
+    "CREATE FULLTEXT INDEX {name} IF NOT EXISTS FOR (n:{label}) ON EACH [{props}]"
 )
 
 
 def _constraint_cypher(c: ConstraintSpec) -> str:
     props = ", ".join(f"n.{p}" for p in c.properties)
-    return _CONSTRAINT_TEMPLATES[c.type].format(
-        name=c.name, label=c.label, props=props
-    )
+    return _CONSTRAINT_TEMPLATES[c.type].format(name=c.name, label=c.label, props=props)
 
 
 def _index_cypher(i: IndexSpec) -> str:
@@ -153,6 +147,7 @@ def _fulltext_cypher(f: FulltextSpec) -> str:
 # ---------------------------------------------------------------------------
 # Schema bootstrap
 # ---------------------------------------------------------------------------
+
 
 async def ensure_custom_schema(driver: AsyncDriver) -> None:
     """Idempotent schema bootstrap with drift detection (F-G + Architect F4).

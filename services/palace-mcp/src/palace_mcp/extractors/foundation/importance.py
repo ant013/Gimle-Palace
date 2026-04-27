@@ -27,7 +27,7 @@ KIND_WEIGHT: dict[SymbolKind, float] = {
     SymbolKind.DECL: 0.8,
     SymbolKind.IMPL: 0.7,
     SymbolKind.MODIFIER: 0.6,  # Solidity modifier (Architect F23)
-    SymbolKind.EVENT: 0.55,    # Solidity event (Architect F23)
+    SymbolKind.EVENT: 0.55,  # Solidity event (Architect F23)
     SymbolKind.ASSIGN: 0.5,
     SymbolKind.USE: 0.3,
 }
@@ -115,11 +115,7 @@ def importance_score(
     lang_w = language_weight(language, primary_lang)
 
     raw = (
-        0.35 * centrality
-        + 0.30 * tier
-        + 0.20 * kind_w
-        + 0.10 * recency
-        + 0.05 * lang_w
+        0.35 * centrality + 0.30 * tier + 0.20 * kind_w + 0.10 * recency + 0.05 * lang_w
     )
     return max(0.0, min(1.0, raw))
 
@@ -127,6 +123,7 @@ def importance_score(
 # ---------------------------------------------------------------------------
 # BoundedInDegreeCounter
 # ---------------------------------------------------------------------------
+
 
 class BoundedInDegreeCounter:
     """Exact in-degree counter with bounded memory and JSON persistence.

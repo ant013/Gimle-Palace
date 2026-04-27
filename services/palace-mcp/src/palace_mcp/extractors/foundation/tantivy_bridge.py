@@ -54,9 +54,7 @@ class TantivyBridge:
     # ------------------------------------------------------------------
 
     async def __aenter__(self) -> "TantivyBridge":
-        self._executor = ThreadPoolExecutor(
-            max_workers=1, thread_name_prefix="tantivy"
-        )
+        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="tantivy")
         try:
             await self._run(self._open_sync)
         except Exception:
@@ -99,7 +97,10 @@ class TantivyBridge:
     async def search_by_symbol_id_async(
         self, symbol_id: int, limit: int = 1000
     ) -> list[dict[str, Any]]:
-        return cast(list[dict[str, Any]], await self._run(self._search_by_symbol_id_sync, symbol_id, limit))
+        return cast(
+            list[dict[str, Any]],
+            await self._run(self._search_by_symbol_id_sync, symbol_id, limit),
+        )
 
     async def delete_by_symbol_ids_async(self, symbol_ids: list[int]) -> int:
         """Delete all docs whose symbol_id matches any id in the list.
@@ -118,10 +119,7 @@ class TantivyBridge:
 
     def _open_sync(self) -> None:
         if not _TANTIVY_AVAILABLE:
-            raise RuntimeError(
-                "tantivy package is not installed. "
-                "Run: uv add tantivy"
-            )
+            raise RuntimeError("tantivy package is not installed. Run: uv add tantivy")
         self.index_path.mkdir(parents=True, exist_ok=True)
         schema_builder = tantivy.SchemaBuilder()
         # Primary key for uniqueness (Silent-failure F4); use raw tokenizer
@@ -136,12 +134,20 @@ class TantivyBridge:
         )
         schema_builder.add_text_field("file_path", stored=True, index_option="basic")
         schema_builder.add_integer_field("line", fast=True, indexed=True, stored=False)
-        schema_builder.add_integer_field("col_start", fast=True, indexed=False, stored=False)
-        schema_builder.add_integer_field("col_end", fast=True, indexed=False, stored=False)
+        schema_builder.add_integer_field(
+            "col_start", fast=True, indexed=False, stored=False
+        )
+        schema_builder.add_integer_field(
+            "col_end", fast=True, indexed=False, stored=False
+        )
         schema_builder.add_integer_field("role", fast=True, indexed=True, stored=False)
-        schema_builder.add_integer_field("language", fast=True, indexed=True, stored=False)
+        schema_builder.add_integer_field(
+            "language", fast=True, indexed=True, stored=False
+        )
         schema_builder.add_text_field("commit_sha", stored=True, index_option="basic")
-        schema_builder.add_float_field("importance", fast=True, indexed=False, stored=False)
+        schema_builder.add_float_field(
+            "importance", fast=True, indexed=False, stored=False
+        )
         schema_builder.add_text_field("ingest_run_id", stored=True)
         schema = schema_builder.build()
 
