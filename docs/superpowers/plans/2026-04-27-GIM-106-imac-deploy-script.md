@@ -58,7 +58,7 @@ Write README covering:
 - Usage examples (basic deploy, pinned deploy, extractor assertion)
 - Prerequisites (Docker Desktop running, PATH locations)
 - Gotchas section (all 5, with explanation)
-- Rollback procedure (`docker tag` + restart)
+- Rollback procedure: tag saved prev-image-id as compose-generated name (`docker tag <prev-id> gimle-palace-palace-mcp:latest`) then `docker compose --profile review up -d --no-build palace-mcp` (compose uses `build:` directive — `--no-build` is essential)
 - Log file location and format
 - Exit code reference table
 
@@ -67,17 +67,17 @@ Write README covering:
 - [ ] Rollback procedure is copy-pasteable
 - [ ] Prerequisites section lists Docker Desktop + PATH requirements
 
-### T3 — `.gitignore` update
+### T3 — `.gitignore` update (OPTIONAL — already covered by `*.log` glob)
 
 **Owner:** InfraEngineer
 **Deps:** none
 **Affected files:** `.gitignore`
 
 **Description:**
-Add entry to ignore `paperclips/scripts/imac-deploy.log` (per-host runtime artifact, not version-controlled).
+`.gitignore` already has `*.log` pattern (line 31) which covers `paperclips/scripts/imac-deploy.log`. This task is optional: add an explicit comment near the `*.log` line documenting intent, or skip entirely. Implementer's judgment — verify with `git check-ignore` first.
 
 **Acceptance:**
-- [ ] `git check-ignore paperclips/scripts/imac-deploy.log` returns the path
+- [ ] `git check-ignore paperclips/scripts/imac-deploy.log` returns the path (should already pass without changes)
 
 ### T4 — `CLAUDE.md` update
 

@@ -62,7 +62,11 @@ Single idempotent bash script `paperclips/scripts/imac-deploy.sh` that:
 
 ## Rollback procedure
 
+Compose uses `build:` directive, not a named `image:` tag. Rollback must
+override the compose-generated image name and skip rebuild:
+
 ```bash
-docker tag <prev-image-sha> palace-mcp:rollback
-docker compose --profile review up -d palace-mcp
+# prev-image-id is captured in imac-deploy.log before each rebuild
+docker tag <prev-image-id> gimle-palace-palace-mcp:latest
+docker compose --profile review up -d --no-build palace-mcp
 ```
