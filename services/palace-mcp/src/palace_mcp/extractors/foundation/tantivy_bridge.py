@@ -124,23 +124,25 @@ class TantivyBridge:
             )
         self.index_path.mkdir(parents=True, exist_ok=True)
         schema_builder = tantivy.SchemaBuilder()
-        # Primary key for uniqueness (Silent-failure F4)
-        schema_builder.add_text_field("doc_key", stored=True, indexed=True)
+        # Primary key for uniqueness (Silent-failure F4); use raw tokenizer
+        # so delete_documents("doc_key", value) performs exact-term deletion.
+        # Default (whitespace) tokenizer splits on special chars, breaking dedup.
+        schema_builder.add_text_field("doc_key", stored=True, tokenizer_name="raw")
         schema_builder.add_integer_field(
             "symbol_id", fast=True, indexed=True, stored=False
         )
         schema_builder.add_integer_field(
             "repo_id", fast=True, indexed=True, stored=False
         )
-        schema_builder.add_text_field("file_path", stored=True, indexed=False)
+        schema_builder.add_text_field("file_path", stored=True, index_option="basic")
         schema_builder.add_integer_field("line", fast=True, indexed=True, stored=False)
         schema_builder.add_integer_field("col_start", fast=True, indexed=False, stored=False)
         schema_builder.add_integer_field("col_end", fast=True, indexed=False, stored=False)
         schema_builder.add_integer_field("role", fast=True, indexed=True, stored=False)
         schema_builder.add_integer_field("language", fast=True, indexed=True, stored=False)
-        schema_builder.add_text_field("commit_sha", stored=True, indexed=False)
+        schema_builder.add_text_field("commit_sha", stored=True, index_option="basic")
         schema_builder.add_float_field("importance", fast=True, indexed=False, stored=False)
-        schema_builder.add_text_field("ingest_run_id", stored=True, indexed=True)
+        schema_builder.add_text_field("ingest_run_id", stored=True)
         schema = schema_builder.build()
 
         try:
@@ -176,6 +178,9 @@ class TantivyBridge:
     def _commit_sync(self) -> None:
         assert self._writer is not None
         self._writer.commit()
+        # Reload so that subsequent searchers see the committed segments.
+        assert self._index is not None
+        self._index.reload()
 
     def _close_sync(self) -> None:
         self._writer = None
@@ -191,7 +196,7 @@ class TantivyBridge:
         out = []
         for _score, addr in results.hits:
             doc = searcher.doc(addr)
-            out.append(dict(doc))
+            out.append(doc.to_dict())
         return out
 
     def _delete_by_symbol_ids_sync(self, symbol_ids: list[int]) -> int:
