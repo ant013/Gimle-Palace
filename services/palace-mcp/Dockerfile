@@ -54,14 +54,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
-RUN adduser --disabled-password --gecos "" appuser && \
+RUN adduser --disabled-password --gecos "" --uid 1000 appuser && \
     mkdir -p /home/appuser/.cache/codebase-memory-mcp && \
-    chown -R appuser:appuser /home/appuser/.cache
+    chown -R appuser:appuser /home/appuser/.cache && \
+    mkdir -p /var/lib/palace/tantivy && \
+    chown -R appuser:appuser /var/lib/palace
 
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/src /app/src
 COPY --from=cm-fetch /tmp/codebase-memory-mcp /usr/local/bin/codebase-memory-mcp
 
+# Entrypoint checks Tantivy volume ownership before starting (GIM-101a T10 — Architect F19)
+COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
 USER appuser
 
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["uvicorn", "palace_mcp.main:app", "--host", "0.0.0.0", "--port", "8000"]

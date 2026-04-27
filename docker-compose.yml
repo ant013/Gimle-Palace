@@ -41,6 +41,8 @@ services:
       PALACE_OPS_SSH_KEY: "${PALACE_OPS_SSH_KEY:-/home/appuser/.ssh/palace_ops_id_ed25519}"
       PAPERCLIP_API_URL: "${PALACE_PAPERCLIP_API_URL:-http://host.docker.internal:3100}"
       PAPERCLIP_API_KEY: "${PAPERCLIP_API_KEY:-}"
+    # Non-root user for security hardening (GIM-101a, T10 — Architect F19)
+    user: "1000:1000"
     depends_on:
       neo4j:
         condition: service_healthy
@@ -54,6 +56,7 @@ services:
       - "${HOME}/.ssh/palace_ops_id_ed25519.pub:/home/appuser/.ssh/palace_ops_id_ed25519.pub:ro"
       - "${HOME}/.ssh/known_hosts:/home/appuser/.ssh/known_hosts:ro"
       - "${HOME}/.ssh/config:/home/appuser/.ssh/config:ro"
+      - palace-tantivy-data:/var/lib/palace/tantivy
     networks:
       - paperclip-agent-net
     healthcheck:
@@ -71,3 +74,4 @@ volumes:
   neo4j_data:
   neo4j_logs:
   codebase-memory-cache:
+  palace-tantivy-data:
