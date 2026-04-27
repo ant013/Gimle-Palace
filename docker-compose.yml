@@ -41,6 +41,7 @@ services:
       PALACE_OPS_SSH_KEY: "${PALACE_OPS_SSH_KEY:-/home/appuser/.ssh/palace_ops_id_ed25519}"
       PAPERCLIP_API_URL: "${PALACE_PAPERCLIP_API_URL:-http://host.docker.internal:3100}"
       PAPERCLIP_API_KEY: "${PAPERCLIP_API_KEY:-}"
+      PALACE_SCIP_INDEX_PATHS: "${PALACE_SCIP_INDEX_PATHS:-}"
     # Non-root user for security hardening (GIM-101a, T10 — Architect F19)
     user: "1000:1000"
     depends_on:
