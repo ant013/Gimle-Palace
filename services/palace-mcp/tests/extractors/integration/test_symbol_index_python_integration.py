@@ -15,7 +15,10 @@ import pytest
 
 from palace_mcp.extractors.base import ExtractorRunContext
 from palace_mcp.extractors.symbol_index_python import SymbolIndexPython
-from tests.extractors.fixtures.scip_factory import build_minimal_scip_index, write_scip_fixture
+from tests.extractors.fixtures.scip_factory import (
+    build_minimal_scip_index,
+    write_scip_fixture,
+)
 
 
 @pytest.mark.integration

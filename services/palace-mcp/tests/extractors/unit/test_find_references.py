@@ -51,14 +51,18 @@ class TestQueryIngestRun:
     @pytest.mark.asyncio
     async def test_no_ingest_run_returns_none(self) -> None:
         driver = _make_driver_with_result(None)
-        result = await _query_ingest_run_for_project(driver, "test", "symbol_index_python")
+        result = await _query_ingest_run_for_project(
+            driver, "test", "symbol_index_python"
+        )
         assert result is None
 
     @pytest.mark.asyncio
     async def test_successful_run_returns_dict(self) -> None:
         record = {"run_id": "r1", "success": True, "error_code": None}
         driver = _make_driver_with_result(record)
-        result = await _query_ingest_run_for_project(driver, "test", "symbol_index_python")
+        result = await _query_ingest_run_for_project(
+            driver, "test", "symbol_index_python"
+        )
         assert result is not None
         assert result["success"] is True
 

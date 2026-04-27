@@ -16,7 +16,11 @@ from google.protobuf.message import DecodeError
 
 from palace_mcp.extractors.foundation.errors import ExtractorErrorCode
 from palace_mcp.extractors.foundation.identifiers import symbol_id_for
-from palace_mcp.extractors.foundation.models import Language, SymbolKind, SymbolOccurrence
+from palace_mcp.extractors.foundation.models import (
+    Language,
+    SymbolKind,
+    SymbolOccurrence,
+)
 from palace_mcp.proto import scip_pb2
 
 

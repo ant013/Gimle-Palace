@@ -66,7 +66,5 @@ class TestFindReferencesWireContract:
     async def test_dedup_pattern_21(self, mcp_client: object) -> None:
         """palace.code.find_references appears exactly once in tools/list (Pattern #21)."""
         tools = await mcp_client.list_tools()  # type: ignore[union-attr]
-        find_refs_tools = [
-            t for t in tools if t.name == "palace.code.find_references"
-        ]
+        find_refs_tools = [t for t in tools if t.name == "palace.code.find_references"]
         assert len(find_refs_tools) == 1

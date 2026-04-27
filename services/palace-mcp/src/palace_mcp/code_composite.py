@@ -432,7 +432,9 @@ def register_code_composite_tools(
         cm_session = code_router.get_cm_session()
         if cm_session is not None:
             try:
-                disambig = await _resolve_qn(cm_session, req.qualified_name, resolved_project)
+                disambig = await _resolve_qn(
+                    cm_session, req.qualified_name, resolved_project
+                )
                 if isinstance(disambig, dict):
                     if disambig.get("error_code") == "cm_error":
                         # CM is connected but search_graph failed (project not in CM graph).
@@ -495,6 +497,8 @@ def register_code_composite_tools(
                 f"(round={eviction_info['eviction_round']}); coverage may be incomplete"
             )
             total = len(occurrences) + total_evicted
-            response["coverage_pct"] = int(100 * len(occurrences) / total) if total > 0 else 100
+            response["coverage_pct"] = (
+                int(100 * len(occurrences) / total) if total > 0 else 100
+            )
 
         return response

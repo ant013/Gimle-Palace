@@ -19,16 +19,30 @@ from typing import ClassVar
 
 from graphiti_core import Graphiti
 
-from palace_mcp.extractors.base import BaseExtractor, ExtractorRunContext, ExtractorStats
+from palace_mcp.extractors.base import (
+    BaseExtractor,
+    ExtractorRunContext,
+    ExtractorStats,
+)
 from palace_mcp.extractors.foundation.checkpoint import (
     create_ingest_run,
     finalize_ingest_run,
     write_checkpoint,
 )
-from palace_mcp.extractors.foundation.circuit_breaker import check_phase_budget, check_resume_budget
+from palace_mcp.extractors.foundation.circuit_breaker import (
+    check_phase_budget,
+    check_resume_budget,
+)
 from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErrorCode
-from palace_mcp.extractors.foundation.importance import BoundedInDegreeCounter, importance_score
-from palace_mcp.extractors.foundation.models import Language, SymbolKind, SymbolOccurrence
+from palace_mcp.extractors.foundation.importance import (
+    BoundedInDegreeCounter,
+    importance_score,
+)
+from palace_mcp.extractors.foundation.models import (
+    Language,
+    SymbolKind,
+    SymbolOccurrence,
+)
 from palace_mcp.extractors.foundation.schema import ensure_custom_schema
 from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
 from palace_mcp.extractors.scip_parser import (
@@ -50,7 +64,9 @@ class SymbolIndexPython(BaseExtractor):
         "defs/decls → user uses → vendor uses."
     )
 
-    async def run(self, *, graphiti: Graphiti, ctx: ExtractorRunContext) -> ExtractorStats:
+    async def run(
+        self, *, graphiti: Graphiti, ctx: ExtractorRunContext
+    ) -> ExtractorStats:
         # Deferred import to avoid circular import (mcp_server → registry → here → mcp_server)
         from palace_mcp.mcp_server import get_driver, get_settings
 
@@ -125,7 +141,9 @@ class SymbolIndexPython(BaseExtractor):
                     max_occurrences_total=settings.palace_max_occurrences_total,
                     phase="phase1_defs",
                 )
-                phase1 = [o for o in all_occs if o.kind in (SymbolKind.DEF, SymbolKind.DECL)]
+                phase1 = [
+                    o for o in all_occs if o.kind in (SymbolKind.DEF, SymbolKind.DECL)
+                ]
                 p1 = await _ingest_batch(bridge, phase1)
                 await bridge.commit_async()
                 await write_checkpoint(
@@ -140,7 +158,9 @@ class SymbolIndexPython(BaseExtractor):
 
                 # Phase 2: user-code uses (if budget < 50%)
                 p2 = 0
-                budget_frac = total_written / max(settings.palace_max_occurrences_per_project, 1)
+                budget_frac = total_written / max(
+                    settings.palace_max_occurrences_per_project, 1
+                )
                 if budget_frac < 0.5:
                     check_phase_budget(
                         nodes_written_so_far=total_written,
@@ -153,7 +173,8 @@ class SymbolIndexPython(BaseExtractor):
                         if o.kind == SymbolKind.USE and not _is_vendor(o.file_path)
                     ]
                     phase2 = [
-                        o for o in phase2
+                        o
+                        for o in phase2
                         if o.importance >= settings.palace_importance_threshold_use
                     ]
                     p2 = await _ingest_batch(bridge, phase2)
@@ -170,7 +191,9 @@ class SymbolIndexPython(BaseExtractor):
 
                 # Phase 3: vendor uses (if budget < 30%)
                 p3 = 0
-                budget_frac = total_written / max(settings.palace_max_occurrences_per_project, 1)
+                budget_frac = total_written / max(
+                    settings.palace_max_occurrences_per_project, 1
+                )
                 if budget_frac < 0.3:
                     check_phase_budget(
                         nodes_written_so_far=total_written,
@@ -232,7 +255,10 @@ class SymbolIndexPython(BaseExtractor):
 # Private helpers
 # ---------------------------------------------------------------------------
 
-async def _ingest_batch(bridge: TantivyBridge, occurrences: list[SymbolOccurrence]) -> int:
+
+async def _ingest_batch(
+    bridge: TantivyBridge, occurrences: list[SymbolOccurrence]
+) -> int:
     written = 0
     for occ in occurrences:
         await bridge.add_or_replace_async(occ)
@@ -292,8 +318,15 @@ def _with_importance(
 
 def _is_vendor(file_path: str) -> bool:
     _VENDOR_MARKERS = (
-        "node_modules/", "vendor/", ".venv/", "site-packages/",
-        "__pycache__/", "dist/", "build/", "target/", ".gradle/",
+        "node_modules/",
+        "vendor/",
+        ".venv/",
+        "site-packages/",
+        "__pycache__/",
+        "dist/",
+        "build/",
+        "target/",
+        ".gradle/",
     )
     return any(m in file_path for m in _VENDOR_MARKERS)
 

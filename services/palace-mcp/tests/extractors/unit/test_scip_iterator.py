@@ -7,7 +7,10 @@ from pathlib import Path
 from palace_mcp.extractors.foundation.models import SymbolKind
 from palace_mcp.extractors.scip_parser import iter_scip_occurrences, parse_scip_file
 from palace_mcp.proto import scip_pb2
-from tests.extractors.fixtures.scip_factory import build_minimal_scip_index, write_scip_fixture
+from tests.extractors.fixtures.scip_factory import (
+    build_minimal_scip_index,
+    write_scip_fixture,
+)
 
 
 class TestIterScipOccurrences:
