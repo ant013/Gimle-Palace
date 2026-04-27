@@ -8,7 +8,7 @@ so they are masked in repr() and structured log output.
 Call `.get_secret_value()` only at driver/client construction sites.
 """
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings
 
 
@@ -28,3 +28,51 @@ class Settings(BaseSettings):
     paperclip_api_key: str = ""
     palace_git_workspace: str = "/repos/gimle"
     palace_cm_default_project: str = "repos-gimle"
+
+    # -----------------------------------------------------------------------
+    # Extractor foundation — memory-bounded occurrence store (GIM-101a, T9)
+    # -----------------------------------------------------------------------
+
+    palace_max_occurrences_total: int = Field(
+        default=50_000_000,
+        description="Hard cap on total SymbolOccurrenceShadow nodes across all projects.",
+    )
+    palace_max_occurrences_per_project: int = Field(
+        default=10_000_000,
+        description="Per-project cap; circuit breaker fires above this threshold.",
+    )
+    palace_importance_threshold_use: float = Field(
+        default=0.05,
+        ge=0.0,
+        le=1.0,
+        description="Minimum importance score for 'use' occurrences to be retained.",
+    )
+    palace_max_occurrences_per_symbol: int = Field(
+        default=5_000,
+        description="Max occurrences stored per symbol_id (de-duplication cap).",
+    )
+    palace_recency_decay_days: float = Field(
+        default=30.0,
+        gt=0.0,
+        description="Half-life (days) for the recency component of importance score.",
+    )
+
+    # Tantivy
+    palace_tantivy_index_path: str = Field(
+        default="/var/lib/palace/tantivy",
+        description="Host path (or container path) for Tantivy index data.",
+    )
+    palace_tantivy_heap_mb: int = Field(
+        default=100,
+        gt=0,
+        description="Write-merge buffer size in MB (not runtime mmap budget).",
+    )
+
+    # SCIP integration (101a decides pathing; 101b does the actual parse)
+    palace_scip_index_paths: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "JSON-encoded dict mapping project slug → .scip file path. "
+            'Example env: PALACE_SCIP_INDEX_PATHS=\'{"gimle":"/repos/gimle/.scip/index.scip"}\''
+        ),
+    )

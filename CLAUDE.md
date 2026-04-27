@@ -206,6 +206,53 @@ Error envelope on failure:
 4. Integration test in `tests/extractors/integration/test_<name>_integration.py`
    (real Neo4j via testcontainers or compose reuse).
 
+### Extractor foundation substrate (GIM-101a)
+
+All production extractors build on `extractors/foundation/`:
+
+| Module | Purpose |
+|--------|---------|
+| `models.py` | Pydantic v2 schemas: `SymbolOccurrence`, `IngestCheckpoint`, `EvictionRecord`, … |
+| `errors.py` | `ExtractorErrorCode` (18 codes) + `ExtractorError(Exception)` dataclass |
+| `identifiers.py` | `symbol_id_for(qname)` — signed-i64 blake2b hash (overflow-safe) |
+| `importance.py` | `BoundedInDegreeCounter` + `importance_score()` 5-component formula |
+| `tantivy_bridge.py` | `TantivyBridge` async context manager wrapping tantivy-py |
+| `schema.py` | `ensure_custom_schema()` — idempotent Neo4j schema with drift detection |
+| `checkpoint.py` | `write_checkpoint`, `reconcile_checkpoint`, `create_ingest_run` |
+| `eviction.py` | 3-round eviction (`run_eviction`) — never deletes def/decl |
+| `circuit_breaker.py` | `check_phase_budget`, `check_resume_budget` — hard caps |
+| `synthetic_harness.py` | Deterministic 70M-occurrence stress generator |
+
+**Phase bootstrap order (per phase start):**
+1. `check_resume_budget(previous_error_code)` — block budget-exceeded restarts
+2. `ensure_custom_schema(driver)` — idempotent schema bootstrap
+3. `check_phase_budget(nodes_written_so_far, ...)` — hard cap pre-flight
+4. Process occurrences → `tantivy_bridge.add_or_replace_async()`
+5. `write_checkpoint(driver, ...)` — after Tantivy commit
+6. On restart: `reconcile_checkpoint(checkpoint, actual_doc_count)` — verify integrity
+
+**Tantivy volume** (docker-compose): named volume `palace-tantivy-data` at
+`/var/lib/palace/tantivy` inside container. Service runs as uid 1000 (non-root).
+`entrypoint.sh` checks write access and fails fast on ownership mismatch.
+
+**GDS plugin caveat**: eviction rounds 1-3 use standard Cypher (`DETACH DELETE`),
+not GDS algorithms. GDS is optional — eviction works without it.
+
+### Extractor env vars (GIM-101a)
+
+All vars in `PalaceSettings` (config.py), prefix `PALACE_`:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PALACE_MAX_OCCURRENCES_TOTAL` | 50 000 000 | Global hard cap across all projects |
+| `PALACE_MAX_OCCURRENCES_PER_PROJECT` | 10 000 000 | Per-project hard cap |
+| `PALACE_IMPORTANCE_THRESHOLD_USE` | 0.05 | Round-1 eviction floor for `use` nodes |
+| `PALACE_MAX_OCCURRENCES_PER_SYMBOL` | 5 000 | Round-2 per-symbol cap |
+| `PALACE_RECENCY_DECAY_DAYS` | 30.0 | Half-life for recency_decay() |
+| `PALACE_TANTIVY_INDEX_PATH` | (required) | Host path for Tantivy index |
+| `PALACE_TANTIVY_HEAP_MB` | 100 | Tantivy writer heap in MB |
+| `PALACE_SCIP_INDEX_PATHS` | `{}` | JSON map `{slug: path}` for SCIP extractors |
+
 ### Known limitations
 
 - **`palace.memory.health()` shows only paperclip ingest runs**, not
