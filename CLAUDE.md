@@ -172,6 +172,12 @@ invoked via MCP tool `palace.ingest.run_extractor(name, project)`.
   Writes occurrences into Tantivy (full-text) and `:IngestRun` + checkpoints
   into Neo4j. 3-phase bootstrap: defs/decls → user uses → vendor uses.
   Query via `palace.code.find_references(qualified_name, project)`.
+- `symbol_index_typescript` — TypeScript/JavaScript symbol indexer (GIM-104).
+  Reads a pre-generated `.scip` file produced by `npx @sourcegraph/scip-typescript`.
+  Handles `.ts`, `.tsx`, `.js`, `.jsx` in one pass via per-document language
+  auto-detection. Same 3-phase bootstrap as `symbol_index_python`. Uses the
+  same `PALACE_SCIP_INDEX_PATHS` env var — add the project slug with the path
+  to the TypeScript SCIP file.
 
 ### Operator workflow: Python symbol index
 
