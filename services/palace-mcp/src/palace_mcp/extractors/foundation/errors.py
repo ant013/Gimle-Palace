@@ -10,7 +10,7 @@ from typing import Literal
 class ExtractorErrorCode(str, Enum):
     """Exhaustive error code surface for all foundation extractor failures.
 
-    16 codes covering config, schema, counter, tantivy, neo4j, and budget
+    18 codes covering config, schema, counter, tantivy, neo4j, and budget
     failure modes. Using str-Enum so codes serialize naturally to JSON.
     """
 

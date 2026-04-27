@@ -73,7 +73,7 @@ class TestCheckResumeBudget:
         assert err.recoverable is False
         assert err.action == "raise_budget"
 
-    def test_resume_blocked_message_mentions_force_reingest(self) -> None:
+    def test_resume_blocked_message_mentions_budget_override(self) -> None:
         with pytest.raises(ExtractorError) as exc_info:
             check_resume_budget(previous_error_code="budget_exceeded")
-        assert "PALACE_FORCE_REINGEST" in exc_info.value.message
+        assert "PALACE_BUDGET_OVERRIDE" in exc_info.value.message

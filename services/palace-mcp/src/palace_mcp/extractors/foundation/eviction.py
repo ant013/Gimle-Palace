@@ -39,7 +39,8 @@ _EVICT_R2_CYPHER = """\
 MATCH (n:SymbolOccurrenceShadow {group_id: $group_id})
 WHERE n.kind NOT IN ['def', 'decl']
 WITH n.symbol_qualified_name AS sym,
-     collect(n) AS nodes
+     n ORDER BY n.last_seen_at ASC
+WITH sym, collect(n) AS nodes
 WHERE size(nodes) > $per_symbol_cap
 UNWIND nodes[0..size(nodes) - $per_symbol_cap] AS victim
 DETACH DELETE victim

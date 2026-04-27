@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import AsyncIterator
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -71,24 +72,31 @@ class TestCypherGeneration:
         assert "IF NOT EXISTS" in stmt
 
 
+async def _async_records(
+    records: list[dict[str, object]],
+) -> AsyncIterator[dict[str, object]]:
+    for r in records:
+        yield r
+
+
 class TestEnsureCustomSchema:
-    def _make_driver(self, constraint_names: list[str] | None = None) -> MagicMock:
+    def _make_driver(
+        self,
+        constraint_records: list[dict[str, object]] | None = None,
+        index_records: list[dict[str, object]] | None = None,
+    ) -> MagicMock:
         """Build a mocked AsyncDriver whose session runs queries cleanly."""
-        if constraint_names is None:
-            constraint_names = []
+        if constraint_records is None:
+            constraint_records = []
+        if index_records is None:
+            index_records = []
 
-        async def run_side_effect(query: str, *args: object, **kwargs: object) -> AsyncMock:
-            result = AsyncMock()
+        async def run_side_effect(query: str, *args: object, **kwargs: object) -> object:
             if "SHOW CONSTRAINTS" in query:
-                result.__aiter__ = lambda self: aiter_names(constraint_names)
-            elif "SHOW INDEXES" in query:
-                result.__aiter__ = lambda self: aiter_names([])
-            else:
-                result.__aiter__ = lambda self: aiter_names([])
-            return result
-
-        def aiter_names(names: list[str]) -> object:
-            return ({"name": n} for n in names).__aiter__()
+                return _async_records(constraint_records)
+            if "SHOW INDEXES" in query:
+                return _async_records(index_records)
+            return _async_records([])
 
         session = AsyncMock()
         session.run = AsyncMock(side_effect=run_side_effect)
@@ -122,7 +130,7 @@ class TestEnsureCustomSchema:
             if "SHOW" in query:
                 raise Exception("SHOW not supported")
             result = AsyncMock()
-            result.__aiter__ = lambda self: iter([])
+            result.__aiter__ = lambda self: iter([]).__aiter__()
             return result
 
         session = AsyncMock()
@@ -133,3 +141,58 @@ class TestEnsureCustomSchema:
         driver.session = MagicMock(return_value=session)
         # Should not raise
         await ensure_custom_schema(driver)
+
+    @pytest.mark.asyncio
+    async def test_conflicting_constraint_raises_schema_drift_error(self) -> None:
+        """Constraint with same name but different properties → SchemaDriftError."""
+        conflicting = [
+            {
+                "name": "ext_dep_purl_unique",
+                "properties": ["wrong_prop"],
+                "labelsOrTypes": ["ExternalDependency"],
+            }
+        ]
+        driver = self._make_driver(constraint_records=conflicting)
+        with pytest.raises(SchemaDriftError, match="ext_dep_purl_unique"):
+            await ensure_custom_schema(driver)
+
+    @pytest.mark.asyncio
+    async def test_conflicting_index_raises_schema_drift_error(self) -> None:
+        """Index with same name but different properties → SchemaDriftError."""
+        conflicting_indexes = [
+            {
+                "name": "shadow_evict_r1",
+                "properties": ["wrong_field"],
+                "labelsOrTypes": ["SymbolOccurrenceShadow"],
+                "type": "BTREE",
+            }
+        ]
+        driver = self._make_driver(index_records=conflicting_indexes)
+        with pytest.raises(SchemaDriftError, match="shadow_evict_r1"):
+            await ensure_custom_schema(driver)
+
+    @pytest.mark.asyncio
+    async def test_matching_constraint_no_drift(self) -> None:
+        """Existing constraint with correct properties → no error."""
+        matching = [
+            {
+                "name": "ext_dep_purl_unique",
+                "properties": ["purl"],
+                "labelsOrTypes": ["ExternalDependency"],
+            }
+        ]
+        driver = self._make_driver(constraint_records=matching)
+        await ensure_custom_schema(driver)  # must not raise
+
+    @pytest.mark.asyncio
+    async def test_unknown_constraint_name_ignored(self) -> None:
+        """Constraint not in expected schema → no drift raised (not our schema object)."""
+        unrelated = [
+            {
+                "name": "some_other_constraint",
+                "properties": ["anything"],
+                "labelsOrTypes": ["AnyLabel"],
+            }
+        ]
+        driver = self._make_driver(constraint_records=unrelated)
+        await ensure_custom_schema(driver)  # must not raise

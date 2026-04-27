@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from neo4j import AsyncDriver
+from neo4j import AsyncDriver, AsyncSession
 
 
 @dataclass(frozen=True)
@@ -159,62 +159,64 @@ async def ensure_custom_schema(driver: AsyncDriver) -> None:
 
     Raises:
         SchemaDriftError: if an existing constraint/index conflicts with
-            expected schema by name but different definition (drift).
+            expected schema by name but different properties (drift).
     """
     async with driver.session() as session:
         await _detect_drift(session)
         await _create_schema(session)
 
 
-async def _detect_drift(session: object) -> None:
-    """Pre-flight: check for conflicting constraints/indexes already present."""
-    from neo4j import AsyncSession  # local import to keep module importable without neo4j
-
-    assert isinstance(session, object)
-    s = session  # type: ignore[assignment]
-
-    # We only raise drift if a constraint/index with same name but different
-    # semantics exists. IF NOT EXISTS handles identical re-creation safely.
-    # Here we query existing names and check for unknown conflicting names.
-    existing_constraint_names: set[str] = set()
-    existing_index_names: set[str] = set()
+async def _detect_drift(session: AsyncSession) -> None:
+    """Pre-flight: raise SchemaDriftError when name matches but properties differ."""
+    # Build lookup maps: name -> frozenset of expected properties
+    expected_constraint_props: dict[str, frozenset[str]] = {
+        c.name: frozenset(c.properties) for c in EXPECTED_SCHEMA.constraints
+    }
+    expected_index_props: dict[str, frozenset[str]] = {
+        i.name: frozenset(i.properties)
+        for i in (*EXPECTED_SCHEMA.indexes, *EXPECTED_SCHEMA.fulltext_indexes)
+    }
 
     try:
-        result = await s.run("SHOW CONSTRAINTS YIELD name")  # type: ignore[union-attr]
+        result = await session.run(
+            "SHOW CONSTRAINTS YIELD name, properties, labelsOrTypes"
+        )
         async for record in result:
-            existing_constraint_names.add(record["name"])
+            name = record["name"]
+            if name not in expected_constraint_props:
+                continue
+            existing_props = frozenset(record["properties"] or [])
+            if existing_props != expected_constraint_props[name]:
+                raise SchemaDriftError(
+                    f"Constraint '{name}' exists with properties {set(existing_props)} "
+                    f"but expected {set(expected_constraint_props[name])}"
+                )
 
-        result = await s.run("SHOW INDEXES YIELD name, type")  # type: ignore[union-attr]
+        result = await session.run(
+            "SHOW INDEXES YIELD name, properties, labelsOrTypes, type"
+        )
         async for record in result:
-            existing_index_names.add(record["name"])
+            name = record["name"]
+            if name not in expected_index_props:
+                continue
+            existing_props = frozenset(record["properties"] or [])
+            if existing_props != expected_index_props[name]:
+                raise SchemaDriftError(
+                    f"Index '{name}' exists with properties {set(existing_props)} "
+                    f"but expected {set(expected_index_props[name])}"
+                )
+    except SchemaDriftError:
+        raise
     except Exception:
-        # Older Neo4j versions may not support SHOW CONSTRAINTS YIELD name
-        # Skip drift detection — CREATE ... IF NOT EXISTS is still idempotent
+        # Older Neo4j versions may not support SHOW CONSTRAINTS YIELD ...
+        # Skip drift detection — CREATE ... IF NOT EXISTS is still idempotent.
         return
 
-    expected = EXPECTED_SCHEMA.all_names()
 
-    # Check for name conflicts in constraints
-    for name in existing_constraint_names:
-        if name in expected:
-            # Same name exists — IF NOT EXISTS handles exact duplicate; skip.
-            pass
-
-    # Drift = constraints whose names are in our expected set but were
-    # created externally with incompatible semantics. Since we use IF NOT
-    # EXISTS, the only way to detect real drift is to compare property
-    # signatures. For now we trust IF NOT EXISTS handles idempotency and
-    # only raise on truly incompatible conflicts (which would surface as
-    # runtime errors from Neo4j).
-    # This implementation satisfies the acceptance test: conflicting prior
-    # schema must raise SchemaDriftError. The integration test validates it.
-
-
-async def _create_schema(session: object) -> None:
-    s = session  # type: ignore[assignment]
+async def _create_schema(session: AsyncSession) -> None:
     for c in EXPECTED_SCHEMA.constraints:
-        await s.run(_constraint_cypher(c))  # type: ignore[union-attr]
+        await session.run(_constraint_cypher(c))
     for i in EXPECTED_SCHEMA.indexes:
-        await s.run(_index_cypher(i))  # type: ignore[union-attr]
+        await session.run(_index_cypher(i))
     for f in EXPECTED_SCHEMA.fulltext_indexes:
-        await s.run(_fulltext_cypher(f))  # type: ignore[union-attr]
+        await session.run(_fulltext_cypher(f))
