@@ -10,10 +10,12 @@ from __future__ import annotations
 from palace_mcp.extractors.base import BaseExtractor
 from palace_mcp.extractors.codebase_memory_bridge import CodebaseMemoryBridgeExtractor
 from palace_mcp.extractors.heartbeat import HeartbeatExtractor
+from palace_mcp.extractors.symbol_index_python import SymbolIndexPython
 
 EXTRACTORS: dict[str, BaseExtractor] = {
     "heartbeat": HeartbeatExtractor(),
     "codebase_memory_bridge": CodebaseMemoryBridgeExtractor(),
+    "symbol_index_python": SymbolIndexPython(),
 }
 
 
