@@ -31,13 +31,14 @@ Write the main deploy script with these sections:
 4. Pre-flight checks: cwd assertion, branch=develop, tracked-tree clean (gotcha #4 — report untracked, don't abort)
 5. Git fetch + pull --ff-only (gotcha #5 — no worktree)
 6. Optional `--target` SHA assertion after pull
-7. `docker compose --profile review build palace-mcp`
-8. `docker compose --profile review up -d palace-mcp neo4j`
-9. Healthcheck polling loop (45×2s = 90s timeout)
-10. In-container extractor registry verify (gotcha #3 — one-liner python)
-11. Optional `--expect-extractor` assertion
-12. Baseline log line append to `paperclips/scripts/imac-deploy.log`
-13. `tee` all output to `/tmp/imac-deploy-<utc>.log`
+7. Capture current image ID (`docker inspect --format='{{.Image}}' <palace-mcp-container>`) into baseline log BEFORE rebuild (needed for rollback)
+8. `docker compose --profile review build palace-mcp`
+9. `docker compose --profile review up -d palace-mcp neo4j`
+10. Healthcheck polling loop — poll BOTH neo4j and palace-mcp via `docker inspect --format='{{.State.Health.Status}}'` (180×2s = 360s timeout; cold-start worst case: neo4j start_period 60s + 5×30s retries, then palace-mcp start_period 30s + 3×30s = ~330s total)
+11. In-container extractor registry verify (gotcha #3 — one-liner python)
+12. Optional `--expect-extractor` assertion
+13. Baseline log line append to `paperclips/scripts/imac-deploy.log` (includes prev-image-id from step 7 + new-image-id + source SHA + container ID)
+14. `tee` all output to `/tmp/imac-deploy-<utc>.log`
 
 **Acceptance:**
 - [ ] File exists, executable bit set (`chmod +x`)
@@ -46,6 +47,7 @@ Write the main deploy script with these sections:
 - [ ] Exit codes: 1=pre-flight, 2=docker, 3=verify, 4=arg
 - [ ] Idempotent: second run on unchanged develop succeeds (skip pull = already up-to-date, still rebuild+verify)
 - [ ] Pure bash — no python/node as script dependency (python only inside container via `docker exec`)
+- [ ] Script output tee'd to `/tmp/imac-deploy-<utc>.log` (transient per-run log)
 
 ### T2 — Create `paperclips/scripts/imac-deploy.README.md`
 
