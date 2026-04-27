@@ -42,6 +42,17 @@ def _session(*responses: dict[str, Any]) -> AsyncMock:
     return session
 
 
+def _error_session(error_text: str = "project not registered") -> AsyncMock:
+    """CM session whose search_graph returns isError=True."""
+    session = AsyncMock()
+    error_result = CallToolResult(
+        content=[TextContent(type="text", text=error_text)],
+        isError=True,
+    )
+    session.call_tool = AsyncMock(return_value=error_result)
+    return session
+
+
 # ---------------------------------------------------------------------------
 # search_graph contract
 # ---------------------------------------------------------------------------
@@ -149,6 +160,31 @@ class TestSearchGraphContract:
         assert isinstance(result, dict)
         assert result["error_code"] == "ambiguous_qualified_name"
         assert len(result["matches"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_search_graph_cm_error_returns_cm_error_envelope(self) -> None:
+        """_resolve_qn returns cm_error envelope when CM search_graph fails."""
+        session = _error_session("project not registered in CM")
+        result = await code_composite._resolve_qn(session, "fn", "proj")
+        assert isinstance(result, dict)
+        assert result["error_code"] == "cm_error"
+
+    @pytest.mark.asyncio
+    async def test_search_graph_is_error_returns_cm_error_envelope(self) -> None:
+        """_resolve_qn returns cm_error envelope when CM returns isError=True.
+
+        Regression for QA finding (GIM-102 Phase 4.1): when CM search_graph fails
+        (project not registered in CM), _resolve_qn must return a cm_error dict.
+        The CALLER (palace_code_find_references) must check error_code and fall
+        back to literal QN instead of propagating this error to the user.
+        """
+        session = _error_session("project not registered in CM graph")
+        result = await code_composite._resolve_qn(session, "my.function", "proj")
+        assert isinstance(result, dict)
+        assert result["error_code"] == "cm_error"
+        # Confirm the caller has the information needed to distinguish cm_error
+        # from user-actionable errors (symbol_not_found, ambiguous_qualified_name).
+        assert result["requested_qualified_name"] == "my.function"
 
 
 # ---------------------------------------------------------------------------

@@ -434,7 +434,12 @@ def register_code_composite_tools(
             try:
                 disambig = await _resolve_qn(cm_session, req.qualified_name, resolved_project)
                 if isinstance(disambig, dict):
-                    return disambig  # symbol_not_found or ambiguous_qualified_name
+                    if disambig.get("error_code") == "cm_error":
+                        # CM is connected but search_graph failed (project not in CM graph).
+                        # Fall back to literal QN instead of surfacing a CM infrastructure error.
+                        resolved_qn = req.qualified_name
+                    else:
+                        return disambig  # symbol_not_found or ambiguous_qualified_name
                 _short_name, resolved_qn = disambig
             except Exception:
                 logger.debug(
