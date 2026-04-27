@@ -2,8 +2,8 @@
 slug: 101b-symbol-index-python
 status: rev1 (depends on 101a foundation merge)
 branch: feature/101b-symbol-index-python (cut from develop AFTER 101a merge)
-paperclip_issue: TBD
-predecessor: <101a merge SHA on develop>
+paperclip_issue: GIM-102
+predecessor: bb0e944
 date: 2026-04-27
 parent_initiative: N+2 Extractor cycle — first real content extractor
 related: 101a (foundation, MUST be merged first), GIM-100 (D1-D9)

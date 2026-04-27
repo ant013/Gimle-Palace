@@ -167,6 +167,34 @@ invoked via MCP tool `palace.ingest.run_extractor(name, project)`.
 
 - `heartbeat` — diagnostic probe. Writes one `:ExtractorHeartbeat` node per
   run. Use to verify the pipeline is alive before running heavy extractors.
+- `symbol_index_python` — Python symbol indexer. Reads a pre-generated `.scip`
+  file (produced by `npx @sourcegraph/scip-python` outside the container).
+  Writes occurrences into Tantivy (full-text) and `:IngestRun` + checkpoints
+  into Neo4j. 3-phase bootstrap: defs/decls → user uses → vendor uses.
+  Query via `palace.code.find_references(qualified_name, project)`.
+
+### Operator workflow: Python symbol index
+
+1. Generate `.scip` file outside the container:
+   ```bash
+   cd /repos/gimle
+   npx @sourcegraph/scip-python index --output ./scip/index.scip
+   ```
+
+2. Set env var for palace-mcp container in `.env`:
+   ```
+   PALACE_SCIP_INDEX_PATHS={"gimle":"/repos/gimle/scip/index.scip"}
+   ```
+
+3. Run the extractor:
+   ```
+   palace.ingest.run_extractor(name="symbol_index_python", project="gimle")
+   ```
+
+4. Query references:
+   ```
+   palace.code.find_references(qualified_name="register_code_tools", project="gimle")
+   ```
 
 ### Running an extractor
 

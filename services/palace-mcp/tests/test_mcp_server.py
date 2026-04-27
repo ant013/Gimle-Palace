@@ -58,4 +58,4 @@ class TestCodeToolRegistration:
             for t in _mcp._tool_manager.list_tools()
             if t.name.startswith("palace.code.")
         ]
-        assert len(code_tools) == 9
+        assert len(code_tools) == 10
