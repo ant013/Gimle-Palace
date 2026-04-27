@@ -11,6 +11,7 @@ owned by us; closed schema is correct for v1.
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Callable
 from typing import Any, Protocol
@@ -21,6 +22,8 @@ from pydantic import BaseModel, Field, ValidationError, field_validator
 from palace_mcp import code_router
 from palace_mcp.errors import handle_tool_error
 
+
+logger = logging.getLogger(__name__)
 
 _QN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*(\.[A-Za-z_][A-Za-z0-9_-]*)*$")
 
@@ -434,6 +437,11 @@ def register_code_composite_tools(
                     return disambig  # symbol_not_found or ambiguous_qualified_name
                 _short_name, resolved_qn = disambig
             except Exception:
+                logger.debug(
+                    "CM symbol resolution failed for %s, using literal",
+                    req.qualified_name,
+                    exc_info=True,
+                )
                 resolved_qn = req.qualified_name  # fall back to literal
 
         # Query Tantivy for occurrences
