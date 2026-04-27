@@ -139,14 +139,21 @@ def _scip_role_to_kind(symbol_roles: int) -> SymbolKind:
 
 
 def _extract_qualified_name(scip_symbol: str) -> str:
-    """Extract a human-readable qualified name from a SCIP symbol string.
+    """Strip scheme + manager + version, keep package-name + descriptors.
 
-    SCIP format: 'scip-python python <package> . <module> . <name> .'
-    Strips the scheme prefix and trailing dots, joins components with '.'.
+    SCIP format: '<scheme> <manager> <package-name> <version> <descriptors...>'
+    Result format: '<package-name> <descriptors-joined>'
+
+    Q1 FQN decision (GIM-105, Variant B): version token excluded so the same
+    symbol from different library versions yields the same qualified_name.
+    This is the input to symbol_id_for() — a version-stripped qualified_name.
     """
     parts = scip_symbol.strip().split(" ")
-    name_parts = [p for p in parts[2:] if p and p != "."]
-    return ".".join(name_parts) if name_parts else scip_symbol
+    if len(parts) < 5:
+        return scip_symbol.strip()
+    package_name = parts[2]
+    descriptor_chain = " ".join(p for p in parts[4:] if p)
+    return f"{package_name} {descriptor_chain}"
 
 
 def iter_scip_occurrences(
