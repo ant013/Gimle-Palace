@@ -470,7 +470,7 @@ def register_code_composite_tools(
 
         # State C: evicted — attach partial_index warning
         eviction_info = await _query_eviction_record(
-            driver, req.qualified_name, resolved_project
+            driver, resolved_qn, resolved_project
         )
 
         response: dict[str, Any] = {
