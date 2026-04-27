@@ -219,6 +219,77 @@ async def _test_impact_trace(
     }
 
 
+class FindReferencesRequest(BaseModel):
+    """Input model for palace.code.find_references."""
+
+    qualified_name: str = Field(..., min_length=1, max_length=500)
+    project: str | None = None
+    max_results: int = Field(100, ge=1, le=500)
+
+
+_QUERY_INGEST_RUN = """
+MATCH (r:IngestRun {project: $project, extractor_name: $extractor_name})
+WHERE r.success = true
+RETURN r.run_id AS run_id, r.success AS success, r.error_code AS error_code
+ORDER BY r.started_at DESC
+LIMIT 1
+"""
+
+_QUERY_EVICTION_RECORD = """
+MATCH (e:EvictionRecord {symbol_qualified_name: $qn, project: $project})
+RETURN e.eviction_round AS eviction_round,
+       e.evicted_at AS evicted_at,
+       e.run_id AS run_id
+LIMIT 1
+"""
+
+_COUNT_EVICTED_FOR_SYMBOL = """
+MATCH (e:EvictionRecord {project: $project})
+WHERE e.symbol_qualified_name STARTS WITH $qn_prefix
+RETURN count(e) AS total_evicted
+"""
+
+
+async def _query_ingest_run_for_project(
+    driver: Any, project: str, extractor_name: str
+) -> dict[str, Any] | None:
+    """Check if a successful IngestRun exists for this project+extractor."""
+    async with driver.session() as session:
+        result = await session.run(
+            _QUERY_INGEST_RUN,
+            project=project,
+            extractor_name=extractor_name,
+        )
+        record = await result.single()
+        return None if record is None else dict(record)
+
+
+async def _query_eviction_record(
+    driver: Any, qualified_name: str, project: str
+) -> dict[str, Any] | None:
+    """Check if an EvictionRecord exists for this symbol."""
+    async with driver.session() as session:
+        result = await session.run(
+            _QUERY_EVICTION_RECORD,
+            qn=qualified_name,
+            project=project,
+        )
+        record = await result.single()
+        if record is None:
+            return None
+        eviction_data = dict(record)
+        count_result = await session.run(
+            _COUNT_EVICTED_FOR_SYMBOL,
+            project=project,
+            qn_prefix=qualified_name.split(".")[0],
+        )
+        count_record = await count_result.single()
+        eviction_data["total_evicted"] = (
+            count_record.get("total_evicted", 0) if count_record else 0
+        )
+        return eviction_data
+
+
 def register_code_composite_tools(
     tool_decorator: _ToolDecorator,
     default_project: str,
@@ -291,3 +362,126 @@ def register_code_composite_tools(
         except Exception as e:
             handle_tool_error(e)
             raise  # unreachable
+
+    _DESC_FIND_REFS = (
+        "Find all references (occurrences) of a symbol by qualified_name. "
+        "Returns 3-state distinction: genuinely-zero-refs (ok, no warning), "
+        "project-not-indexed (warning: project_not_indexed), or "
+        "partial-index-due-to-eviction (warning: partial_index + coverage_pct)."
+    )
+
+    @tool_decorator("palace.code.find_references", _DESC_FIND_REFS)
+    async def palace_code_find_references(
+        qualified_name: str,
+        project: str | None = None,
+        max_results: int = 100,
+    ) -> dict[str, Any]:
+        from pathlib import Path
+
+        from palace_mcp.extractors.foundation.identifiers import symbol_id_for
+        from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
+        from palace_mcp.mcp_server import get_driver, get_settings
+
+        driver = get_driver()
+        if driver is None:
+            handle_tool_error(RuntimeError("Neo4j driver not initialised"))
+            raise  # unreachable
+
+        settings = get_settings()
+        if settings is None:
+            handle_tool_error(RuntimeError("Settings not initialised"))
+            raise  # unreachable
+
+        try:
+            req = FindReferencesRequest(
+                qualified_name=qualified_name,
+                project=project,
+                max_results=max_results,
+            )
+        except ValidationError as e:
+            return {
+                "ok": False,
+                "error_code": "validation_error",
+                "requested_qualified_name": qualified_name,
+                "message": str(e),
+            }
+
+        resolved_project = req.project or default_project
+
+        # State B: never-indexed — check for a successful IngestRun
+        ingest_run = await _query_ingest_run_for_project(
+            driver, resolved_project, "symbol_index_python"
+        )
+        if ingest_run is None:
+            return {
+                "ok": True,
+                "occurrences": [],
+                "total_found": 0,
+                "warning": "project_not_indexed",
+                "action_required": (
+                    f"Run palace.ingest.run_extractor('symbol_index_python', "
+                    f"'{resolved_project}') before relying on this answer"
+                ),
+            }
+
+        # Optional: resolve via CM session for suffix-match disambiguation
+        resolved_qn = req.qualified_name
+        cm_session = code_router.get_cm_session()
+        if cm_session is not None:
+            try:
+                disambig = await _resolve_qn(cm_session, req.qualified_name, resolved_project)
+                if isinstance(disambig, dict):
+                    return disambig  # symbol_not_found or ambiguous_qualified_name
+                _short_name, resolved_qn = disambig
+            except Exception:
+                resolved_qn = req.qualified_name  # fall back to literal
+
+        # Query Tantivy for occurrences
+        sym_id = symbol_id_for(resolved_qn)
+        tantivy_path = Path(settings.palace_tantivy_index_path)
+        async with TantivyBridge(
+            tantivy_path, heap_size_mb=settings.palace_tantivy_heap_mb
+        ) as bridge:
+            raw_results = await bridge.search_by_symbol_id_async(
+                sym_id, limit=req.max_results + 1
+            )
+        truncated = len(raw_results) > req.max_results
+        raw_results = raw_results[: req.max_results]
+
+        occurrences: list[dict[str, Any]] = [
+            {
+                "file_path": r["file_path"],
+                "line": r["line"],
+                "col_start": r["col_start"],
+                "col_end": r["col_end"],
+                "kind": r["kind"],
+                "qualified_name": r.get("symbol_qualified_name", resolved_qn),
+            }
+            for r in raw_results
+        ]
+
+        # State C: evicted — attach partial_index warning
+        eviction_info = await _query_eviction_record(
+            driver, req.qualified_name, resolved_project
+        )
+
+        response: dict[str, Any] = {
+            "ok": True,
+            "requested_qualified_name": req.qualified_name,
+            "project": resolved_project,
+            "occurrences": occurrences,
+            "total_found": len(occurrences) + (1 if truncated else 0),
+            "truncated": truncated,
+        }
+
+        if eviction_info:
+            total_evicted = int(eviction_info.get("total_evicted", 0))
+            response["warning"] = "partial_index"
+            response["eviction_note"] = (
+                f"{total_evicted} occurrences evicted "
+                f"(round={eviction_info['eviction_round']}); coverage may be incomplete"
+            )
+            total = len(occurrences) + total_evicted
+            response["coverage_pct"] = int(100 * len(occurrences) / total) if total > 0 else 100
+
+        return response
