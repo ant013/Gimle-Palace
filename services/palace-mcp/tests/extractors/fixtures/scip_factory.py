@@ -1,0 +1,49 @@
+"""Factory for building synthetic SCIP Index protos for testing."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from palace_mcp.proto import scip_pb2
+
+
+def build_minimal_scip_index(
+    *,
+    language: str = "python",
+    relative_path: str = "src/example.py",
+    symbols: list[tuple[str, int]] | None = None,
+) -> Any:
+    """Build a minimal SCIP Index with one document and configurable symbols.
+
+    symbols: list of (symbol_string, scip_role_int) tuples.
+    Default: one def symbol.
+    """
+    index = scip_pb2.Index()  # type: ignore[attr-defined]
+    metadata = scip_pb2.Metadata()  # type: ignore[attr-defined]
+    metadata.version = scip_pb2.ProtocolVersion.UnspecifiedProtocolVersion  # type: ignore[attr-defined]
+    metadata.tool_info.name = "test"
+    metadata.tool_info.version = "0.0.1"
+    metadata.project_root = "file:///test"
+    index.metadata.CopyFrom(metadata)
+
+    doc = index.documents.add()
+    doc.relative_path = relative_path
+    doc.language = language
+
+    if symbols is None:
+        symbols = [("scip-python python example . example_func .", 0)]
+
+    for sym_str, role in symbols:
+        occ = doc.occurrences.add()
+        occ.range.extend([1, 0, 10])
+        occ.symbol = sym_str
+        occ.symbol_roles = role
+
+    return index
+
+
+def write_scip_fixture(index: Any, path: Path) -> Path:
+    """Serialize SCIP Index to a file."""
+    path.write_bytes(index.SerializeToString())
+    return path
