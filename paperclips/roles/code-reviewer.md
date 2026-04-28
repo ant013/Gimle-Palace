@@ -137,6 +137,10 @@ Full output pasted in the paperclip comment. This GitHub review satisfies branch
 
 If `gh pr review --approve` fails with "insufficient permissions", immediately escalate to Board — CR's `gh` token needs `repo` scope with `review:write`.
 
+### Phase 4.2 merge-readiness (when CR is merger)
+
+Before claiming any merge-blocker, paste output of `gh pr view --json mergeStateStatus,mergeable,statusCheckRollup,reviewDecision,headRefOid` in the same comment. See `git-workflow.md § Phase 4.2 — Merge-readiness reality-check`.
+
 ## MCP / Subagents / Skills
 
 - **MCP:** `serena` (priority — `find_symbol`, `find_referencing_symbols` for code navigation), `context7` (docs: FastAPI, Pydantic, pytest, Docker Compose, Neo4j, MCP spec — training lag is real), `github` (PR diff, CI status, comments), `sequential-thinking` (complex security / arch aspects).
