@@ -42,6 +42,7 @@ markers = [
     "wire: MCP wire-contract tests requiring running palace-mcp transport",
     "requires_scip_typescript: tests requiring ts-mini-project/index.scip fixture",
     "requires_scip_python: tests requiring py-mini-project/index.scip fixture",
+    "requires_scip_java: tests requiring a real scip-java-generated index.scip (not synthetic)",
 ]
 
 [tool.mypy]
