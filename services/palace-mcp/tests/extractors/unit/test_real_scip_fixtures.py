@@ -70,7 +70,6 @@ class TestTsMiniProjectFixture:
         uses = [o for o in occs if o.kind == SymbolKind.USE]
         assert len(uses) > 0, "Expected at least one USE occurrence in index.ts"
 
-
     def test_cache_generic_class_present(self) -> None:
         index = parse_scip_file(TS_SCIP)
         occs = list(iter_scip_occurrences(index, commit_sha="test"))
@@ -91,7 +90,11 @@ class TestTsMiniProjectFixture:
         button_docs = [p for p in doc_paths if "Button.tsx" in p]
         assert button_docs, f"Expected Button.tsx document, got: {doc_paths!r}"
         occs = list(iter_scip_occurrences(index, commit_sha="test"))
-        ts_occs = [o for o in occs if o.language == Language.TYPESCRIPT and "Button" in o.symbol_qualified_name]
+        ts_occs = [
+            o
+            for o in occs
+            if o.language == Language.TYPESCRIPT and "Button" in o.symbol_qualified_name
+        ]
         assert ts_occs, "Expected at least one TYPESCRIPT occurrence for Button"
 
     def test_legacy_js_javascript_language(self) -> None:
