@@ -114,6 +114,24 @@ Walk **mechanically** through every PR. Every item — `[x]` with citation, `[ ]
 
 **Board escalation (bypass CTO):** if CTO is the plan author / asks for APPROVE without CRITICAL fixes.
 
+### Phase 3.1 — Plan vs Implementation file-structure check
+
+Before mechanical APPROVE, paste output of `git diff --name-only <base>..<head>` and explicitly compare against the plan's file structure table.
+
+**Required APPROVE evidence format:**
+```
+Plan Task <N> specified <X> files; landed <X>: [list]. Match.
+```
+
+**Forbidden APPROVE patterns:**
+- APPROVE without pasted `git diff --name-only` matching plan's file count.
+- APPROVE when PE cut scope without mention in commit message, comment, or plan revision.
+- "LGTM, all tests pass" without file-structure comparison — tooling checks don't catch scope drift.
+
+**If PE reduced scope with justification:** evaluate the argument. Either APPROVE reduced scope explicitly (citing the justification) or REQUEST CHANGES for full scope. Never silently accept a reduction.
+
+See `phase-review-discipline.md` § Phase 3.1.
+
 ### Phase 3.1 GitHub PR review bridge
 
 After posting the paperclip compliance comment with full tool output (`ruff check`, `mypy --strict`, `pytest -q`), mirror the approval on the GitHub PR:

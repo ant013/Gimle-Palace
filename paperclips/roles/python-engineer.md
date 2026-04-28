@@ -27,6 +27,7 @@ Primary author of all Python code: FastAPI services, async pipelines, Pydantic m
 5. **Pydantic v2 at the boundary.** All service inputs/outputs (HTTP body, MCP tool args, DB DTO) — via `BaseModel`. `Settings` — via `BaseSettings` + env vars, no hard-coded strings.
 6. **Dependency injection.** FastAPI `Depends(...)`. Module-level singletons (`db = Database()`) — **anti-pattern**.
 7. **Never bare `except`.** Minimum `except SpecificException as e: logger.exception(...)`. Custom error hierarchy in `errors.py`.
+8. **Scope reduction transparency.** If scope reduction necessary — ALWAYS post comment with reasoning before commit. Silent reduction = REQUEST CHANGES at Phase 3.1. See `phase-review-discipline.md`.
 
 ## Tests
 
