@@ -81,6 +81,23 @@ Unique to my review: [list]
 - ❌ "I would do it differently" without docs / spec citation
 - ❌ Block merge for non-critical architectural taste
 
+## Phase 3.2 — Coverage matrix audit discipline
+
+Adversarial review must include a coverage matrix audit for PRs that add or modify test fixtures, vendored data, or synthetic factories. Not limited to architectural risks — also verify all spec'ed edge cases landed.
+
+**Required output:**
+```
+Coverage matrix audit:
+| Spec'ed case | Landed | File |
+|--------------|--------|------|
+| <case>       | ✓      | path/to/file:LINE |
+| <case>       | ✗ MISSING | (not found in fixture or test) |
+```
+
+Missing rows → **REQUEST CHANGES** (blocking finding, not NUDGE).
+
+See `phase-review-discipline.md` § Phase 3.2.
+
 ## MCP / Subagents / Skills (only actually installed)
 
 **MCPs:**
@@ -121,5 +138,6 @@ Unique to my review: [list]
 <!-- @include fragments/shared/fragments/heartbeat-discipline.md -->
 
 <!-- @include fragments/shared/fragments/phase-handoff.md -->
+<!-- @include fragments/shared/fragments/phase-review-discipline.md -->
 
 <!-- @include fragments/shared/fragments/language.md -->

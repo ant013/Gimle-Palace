@@ -64,6 +64,23 @@ The script must run **on the iMac** (SSH in first, then invoke locally).
 Prerequisites and all five deploy gotchas are documented in
 `paperclips/scripts/imac-deploy.README.md`.
 
+## AGENTS.md deploy on iMac
+
+After a release-cut merges to `main`, update live agent role files with:
+
+```bash
+bash paperclips/scripts/imac-agents-deploy.sh
+```
+
+The script must run **on the iMac** (SSH in first, then invoke locally).
+
+- Pinned deploy: `bash paperclips/scripts/imac-agents-deploy.sh --target-sha <sha>`
+- Rollback: see `paperclips/scripts/imac-agents-deploy.README.md`
+
+No Docker needed — the script copies rendered AGENTS.md files from a
+temporary `origin/main` worktree to live agent bundle directories.
+Paperclip reads AGENTS.md fresh on each agent run, so no restart is required.
+
 ## Docker Compose Profiles
 
 Services use explicit profile opt-in:
