@@ -40,6 +40,7 @@ Task isn't closed without:
 2. **CodeReviewer sign-off** — on the plan (before start) AND on the code (before merge). Until CodeReviewer is hired — escalate to Board for review.
 3. **QAEngineer sign-off** — `uv run pytest` green + `docker compose --profile full up` healthchecks green + integration test passed.
 4. **Build check:** `uv run ruff check` + `uv run mypy src/` + `uv run pytest` + `docker compose build` — all must pass.
+5. **Merge-readiness reality-check:** Before claiming any merge-blocker, paste output of `gh pr view --json mergeStateStatus,mergeable,statusCheckRollup,reviewDecision,headRefOid` in the same comment. See `git-workflow.md § Phase 4.2 — Merge-readiness reality-check`.
 
 Plans **must** pass CodeReviewer BEFORE implementation — architectural mistakes are cheaper to catch in a plan.
 
