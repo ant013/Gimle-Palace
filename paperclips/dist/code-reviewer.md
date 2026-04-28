@@ -183,6 +183,24 @@ Walk **mechanically** through every PR. Every item — `[x]` with citation, `[ ]
 
 **Board escalation (bypass CTO):** if CTO is the plan author / asks for APPROVE without CRITICAL fixes.
 
+### Phase 3.1 — Plan vs Implementation file-structure check
+
+Before mechanical APPROVE, paste output of `git diff --name-only <base>..<head>` and explicitly compare against the plan's file structure table.
+
+**Required APPROVE evidence format:**
+```
+Plan Task <N> specified <X> files; landed <X>: [list]. Match.
+```
+
+**Forbidden APPROVE patterns:**
+- APPROVE without pasted `git diff --name-only` matching plan's file count.
+- APPROVE when PE cut scope without mention in commit message, comment, or plan revision.
+- "LGTM, all tests pass" without file-structure comparison — tooling checks don't catch scope drift.
+
+**If PE reduced scope with justification:** evaluate the argument. Either APPROVE reduced scope explicitly (citing the justification) or REQUEST CHANGES for full scope. Never silently accept a reduction.
+
+See `phase-review-discipline.md` § Phase 3.1.
+
 ### Phase 3.1 GitHub PR review bridge
 
 After posting the paperclip compliance comment with full tool output (`ruff check`, `mypy --strict`, `pytest -q`), mirror the approval on the GitHub PR:
@@ -546,6 +564,36 @@ If the workaround fails twice — escalate to Board with details (issue id, run 
 - "Is current assignee the next agent or still me?" — must be next
 - "Is my push visible in `git ls-remote origin <branch>`?" — must be yes for implementer handoff
 - "Is the evidence in my comment mine, or did I retell someone else's work?" — for QA, only own evidence counts
+# Phase review discipline
+
+## Phase 3.1 — Plan vs Implementation file-structure check
+
+CR must paste `git diff --name-only <base>..<head>` and compare file count against plan's "File Structure" table before APPROVE.
+
+Why: GIM-104 — PE silently reduced 6→2 files; tooling checks don't catch scope drift.
+
+```bash
+git diff --name-only <base>..<head> | sort
+# Compare against plan's "File Structure" table. Count must match.
+```
+
+PE scope reduction without comment = REQUEST CHANGES.
+
+## Phase 3.2 — Adversarial coverage matrix audit
+
+Opus Phase 3.2 must include coverage matrix audit for fixture/vendored-data PRs.
+
+Why: GIM-104 — Opus focused on architectural risks, missed that fixture coverage was halved.
+
+Required output template:
+
+```
+| Spec'ed case | Landed | File |
+|--------------|--------|------|
+| <case>       | ✓ / ✗  | path:LINE |
+```
+
+Missing rows → REQUEST CHANGES (not NUDGE).
 
 ## Language
 
