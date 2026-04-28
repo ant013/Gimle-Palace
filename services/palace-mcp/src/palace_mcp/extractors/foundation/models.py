@@ -27,6 +27,7 @@ class Language(str, Enum):
     PYTHON = "python"
     TYPESCRIPT = "typescript"
     JAVASCRIPT = "javascript"
+    JAVA = "java"
     KOTLIN = "kotlin"
     SWIFT = "swift"
     RUST = "rust"
