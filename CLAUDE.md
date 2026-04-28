@@ -196,6 +196,32 @@ invoked via MCP tool `palace.ingest.run_extractor(name, project)`.
   auto-detection. Same 3-phase bootstrap as `symbol_index_python`. Uses the
   same `PALACE_SCIP_INDEX_PATHS` env var — add the project slug with the path
   to the TypeScript SCIP file.
+- `symbol_index_java` — Java/Kotlin symbol indexer (GIM-111).
+  Reads a pre-generated `.scip` file produced by `npx @sourcegraph/scip-java`
+  (requires Java 17+ and Gradle). Handles `.java`, `.kt`, `.kts` in one pass
+  via per-document language auto-detection. Same 3-phase bootstrap as
+  `symbol_index_python`. Uses `PALACE_SCIP_INDEX_PATHS` — set the project slug
+  to the scip-java output path. scip-java symbol scheme: `semanticdb maven
+  <package-name> <version> <descriptor>`.
+
+### Operator workflow: Java/Kotlin symbol index
+
+1. Generate `.scip` file outside the container (requires Java 17+ and Gradle):
+   ```bash
+   cd /repos/your-java-project
+   gradle wrapper && ./gradlew compileKotlin compileJava
+   npx @sourcegraph/scip-java index --output ./scip/index.scip
+   ```
+
+2. Set env var for palace-mcp container in `.env`:
+   ```
+   PALACE_SCIP_INDEX_PATHS={"your-project":"/repos/your-project/scip/index.scip"}
+   ```
+
+3. Run the extractor:
+   ```
+   palace.ingest.run_extractor(name="symbol_index_java", project="your-project")
+   ```
 
 ### Operator workflow: Python symbol index
 
