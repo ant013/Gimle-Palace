@@ -17,6 +17,11 @@ import hashlib
 def symbol_id_for(qualified_name: str) -> int:
     """Return a 64-bit deterministic signed i64 identifier for qualified_name.
 
+    Input format: version-stripped qualified_name '<package-name> <descriptor-chain>'
+    (Q1 FQN decision, GIM-105 Variant B). The version token is stripped by
+    _extract_qualified_name() before this call so symbols from different library
+    versions map to the same identifier.
+
     Byte order: big-endian (network order). Survives process restart.
 
     Cross-language invariant: Kotlin, Swift, Rust extractors (Slices 102+)
