@@ -66,6 +66,30 @@ def build_typescript_scip_index(
     )
 
 
+def build_jvm_scip_index(
+    *,
+    relative_path: str = "src/main/java/com/example/Example.java",
+    language: str = "java",
+    symbols: list[tuple[str, int]] | None = None,
+) -> Any:
+    """Build a minimal SCIP Index for Java/Kotlin testing.
+
+    Uses configurable language ('java' or 'kotlin') and scip-java scheme.
+    """
+    if symbols is None:
+        symbols = [
+            (
+                "semanticdb maven com.example 1.0.0 com/example/Example#run().",
+                1,
+            )
+        ]
+    return build_minimal_scip_index(
+        language=language,
+        relative_path=relative_path,
+        symbols=symbols,
+    )
+
+
 def write_scip_fixture(index: Any, path: Path) -> Path:
     """Serialize SCIP Index to a file."""
     path.write_bytes(index.SerializeToString())

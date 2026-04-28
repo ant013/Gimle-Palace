@@ -4,8 +4,9 @@
 PALACE_MCP_DIR := services/palace-mcp
 TS_FIXTURE_DIR := $(PALACE_MCP_DIR)/tests/extractors/fixtures/ts-mini-project
 PY_FIXTURE_DIR := $(PALACE_MCP_DIR)/tests/extractors/fixtures/py-mini-project
+JVM_FIXTURE_DIR := $(PALACE_MCP_DIR)/tests/extractors/fixtures/jvm-mini-project
 
-.PHONY: regen-ts-fixture regen-py-fixture
+.PHONY: regen-ts-fixture regen-py-fixture regen-jvm-fixture
 
 # Regenerate the committed TypeScript SCIP fixture.
 # Requires: node/npm + @sourcegraph/scip-typescript (auto-installed via npx).
@@ -22,3 +23,11 @@ regen-py-fixture:
 		--project-version 1.0.0 \
 		--output index.scip src/
 	@echo "Regenerated $(PY_FIXTURE_DIR)/index.scip"
+
+# Regenerate the committed JVM SCIP fixture.
+# Requires: Java 17+, Gradle 8+, and scip-java (npx @sourcegraph/scip-java).
+regen-jvm-fixture:
+	cd $(JVM_FIXTURE_DIR) && gradle wrapper
+	cd $(JVM_FIXTURE_DIR) && ./gradlew compileKotlin compileJava
+	cd $(JVM_FIXTURE_DIR) && npx @sourcegraph/scip-java index --output index.scip
+	@echo "Regenerated $(JVM_FIXTURE_DIR)/index.scip"
