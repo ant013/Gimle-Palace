@@ -31,14 +31,14 @@ Extend `git-workflow.md` shared fragment with Phase 4.2 reality-check section. W
 **Description:** Add section `### Phase 4.2 — Merge-readiness reality-check` to `git-workflow.md` containing:
 
 1. **Mandatory pre-escalation commands** — 3 `gh` commands agents must run and paste before claiming any merge blocker.
-2. **`mergeStateStatus` decoder table** — 6 values (CLEAN, BEHIND, DIRTY, BLOCKED, UNSTABLE, UNKNOWN) with meaning + fix action.
+2. **`mergeStateStatus` decoder table** — 8 values (CLEAN, BEHIND, DIRTY, BLOCKED, UNSTABLE, UNKNOWN, DRAFT, HAS_HOOKS) with meaning + fix action. Note: `DRAFT` is deprecated by GitHub (use `PullRequest.isDraft` instead) but `gh pr view --json mergeStateStatus` still returns it.
 3. **Forbidden response patterns** — 4 specific claim patterns that are banned without evidence output.
 4. **Self-approval clarification** — GitHub global rule vs branch-protection distinction.
 
 **Acceptance criteria:**
 - [ ] New section appended after `### What applies to Board, too` in `git-workflow.md`
 - [ ] All 4 sub-blocks present (commands, decoder table, forbidden patterns, self-approval)
-- [ ] Decoder table covers all 6 `mergeStateStatus` values
+- [ ] Decoder table covers all 8 `mergeStateStatus` values (incl. DRAFT with deprecation note, HAS_HOOKS for GHE pre-receive hooks)
 - [ ] Cross-references `feedback_single_token_review_gate` in operator memory
 
 **Commit:** `docs(GIM-108): Phase 4.2 merge-readiness reality-check in git-workflow.md`
@@ -51,11 +51,13 @@ Extend `git-workflow.md` shared fragment with Phase 4.2 reality-check section. W
 **Affected files:** `paperclips/roles/cto.md`
 **Dependencies:** Task 1 merged in shared-fragments
 
-**Description:** Add one-line reference in Phase 4.2 / verification gates section:
-> Before claiming any merge-blocker, paste output of `gh pr view --json mergeStateStatus,mergeable,statusCheckRollup,reviewDecision,headRefOid` in the same comment. See `git-workflow.md § Phase 4.2 — Merge-readiness reality-check`.
+**Description:** Add one-line reference as item 5 in `## Verification gates (critical)` section (after item 4 "Build check:", line 42 in current `cto.md`):
+> 5. **Merge-readiness reality-check:** Before claiming any merge-blocker, paste output of `gh pr view --json mergeStateStatus,mergeable,statusCheckRollup,reviewDecision,headRefOid` in the same comment. See `git-workflow.md § Phase 4.2 — Merge-readiness reality-check`.
+
+Note: `git-workflow.md` is already `@include`'d in `cto.md` (line 60) — the new fragment section will render automatically via submodule bump. This line is a cross-reference in the role-file prose, not a new `@include`.
 
 **Acceptance criteria:**
-- [ ] Line present in `cto.md` near verification gates or Phase 4.2 context
+- [ ] Line present in `cto.md` as item 5 in `## Verification gates (critical)`, after item 4 ("Build check:")
 - [ ] References the exact fragment section anchor
 
 **Commit:** `docs(GIM-108): wire Phase 4.2 reality-check ref into cto.md`
@@ -68,10 +70,18 @@ Extend `git-workflow.md` shared fragment with Phase 4.2 reality-check section. W
 **Affected files:** `paperclips/roles/code-reviewer.md`
 **Dependencies:** Task 1 merged in shared-fragments
 
-**Description:** Add same one-line reference in CR's Phase 3.1 and Phase 4.2 sections (CR is occasional Phase 4.2 actor).
+**Description:** `code-reviewer.md` has `### Phase 3.1 GitHub PR review bridge` (line 117) but no Phase 4.2 section. Add a new `### Phase 4.2 merge-readiness` subsection after the Phase 3.1 block (after line ~145, before `<!-- @include fragments/shared/fragments/escalation-blocked.md -->`):
+
+```markdown
+### Phase 4.2 merge-readiness (when CR is merger)
+
+Before claiming any merge-blocker, paste output of `gh pr view --json mergeStateStatus,mergeable,statusCheckRollup,reviewDecision,headRefOid` in the same comment. See `git-workflow.md § Phase 4.2 — Merge-readiness reality-check`.
+```
+
+Note: `git-workflow.md` is already `@include`'d in `code-reviewer.md` (line 148). The new fragment section renders automatically via submodule bump. This subsection is a cross-reference in the role-file prose, not a new `@include`.
 
 **Acceptance criteria:**
-- [ ] Line present in `code-reviewer.md` in relevant sections
+- [ ] New `### Phase 4.2 merge-readiness` subsection present in `code-reviewer.md` after the Phase 3.1 block, before the `@include escalation-blocked.md` line
 - [ ] References the exact fragment section anchor
 
 **Commit:** `docs(GIM-108): wire Phase 4.2 reality-check ref into code-reviewer.md`
@@ -106,6 +116,11 @@ Extend `git-workflow.md` shared fragment with Phase 4.2 reality-check section. W
 - [ ] `grep -c "Merge-readiness reality-check" paperclips/dist/cto.md` returns 1+
 - [ ] `grep -c "Merge-readiness reality-check" paperclips/dist/code-reviewer.md` returns 1+
 - [ ] All existing dist files still render (no regression)
+
+**Failure criteria:** If `grep` returns 0, verify in order:
+1. Submodule SHA includes Task 1 content: `cd paperclips/fragments/shared && git log --oneline -3` — must show the Task 1 commit.
+2. `@include` line resolves: `grep "git-workflow.md" paperclips/roles/cto.md` — must show `<!-- @include fragments/shared/fragments/git-workflow.md -->`.
+3. `build.sh` ran without errors: re-run `bash paperclips/build.sh 2>&1` and inspect stderr for include resolution failures.
 
 **Commit:** no commit (verification only)
 
