@@ -57,7 +57,6 @@ class TestScipJavaDrift:
         assert index is not None
 
     def test_java_and_kotlin_languages_detected(self) -> None:
-        from palace_mcp.extractors.foundation.models import Language
 
         occs = self._occs()
         langs = {o.language for o in occs}  # type: ignore[attr-defined]
