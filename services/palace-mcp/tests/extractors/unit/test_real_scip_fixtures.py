@@ -71,6 +71,39 @@ class TestTsMiniProjectFixture:
         assert len(uses) > 0, "Expected at least one USE occurrence in index.ts"
 
 
+    def test_cache_generic_class_present(self) -> None:
+        index = parse_scip_file(TS_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        names = {o.symbol_qualified_name for o in occs if o.kind == SymbolKind.DEF}
+        cache_defs = [n for n in names if "Cache" in n]
+        assert cache_defs, f"Expected Cache def in {names!r}"
+
+    def test_logger_default_export_present(self) -> None:
+        index = parse_scip_file(TS_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        names = {o.symbol_qualified_name for o in occs if o.kind == SymbolKind.DEF}
+        logger_defs = [n for n in names if "Logger" in n]
+        assert logger_defs, f"Expected Logger def in {names!r}"
+
+    def test_button_tsx_jsx_component(self) -> None:
+        index = parse_scip_file(TS_SCIP)
+        doc_paths = {doc.relative_path for doc in index.documents}
+        button_docs = [p for p in doc_paths if "Button.tsx" in p]
+        assert button_docs, f"Expected Button.tsx document, got: {doc_paths!r}"
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        ts_occs = [o for o in occs if o.language == Language.TYPESCRIPT and "Button" in o.symbol_qualified_name]
+        assert ts_occs, "Expected at least one TYPESCRIPT occurrence for Button"
+
+    def test_legacy_js_javascript_language(self) -> None:
+        index = parse_scip_file(TS_SCIP)
+        doc_paths = {doc.relative_path for doc in index.documents}
+        js_docs = [p for p in doc_paths if "legacy.js" in p]
+        assert js_docs, f"Expected legacy.js document, got: {doc_paths!r}"
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        js_occs = [o for o in occs if o.language == Language.JAVASCRIPT]
+        assert js_occs, "Expected at least one JAVASCRIPT occurrence from legacy.js"
+
+
 @requires_scip_python
 class TestPyMiniProjectFixture:
     def test_parses_without_error(self) -> None:
@@ -105,3 +138,24 @@ class TestPyMiniProjectFixture:
                 assert not (part.count(".") >= 2 and part[0].isdigit()), (
                     f"Possible version token in qualified_name: {occ.symbol_qualified_name!r}"
                 )
+
+    def test_cache_generic_class_present(self) -> None:
+        index = parse_scip_file(PY_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        names = {o.symbol_qualified_name for o in occs if o.kind == SymbolKind.DEF}
+        cache_defs = [n for n in names if "Cache" in n]
+        assert cache_defs, f"Expected Cache def in {names!r}"
+
+    def test_config_dataclass_present(self) -> None:
+        index = parse_scip_file(PY_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        names = {o.symbol_qualified_name for o in occs if o.kind == SymbolKind.DEF}
+        config_defs = [n for n in names if "Config" in n]
+        assert config_defs, f"Expected Config def in {names!r}"
+
+    def test_logger_decorated_method(self) -> None:
+        index = parse_scip_file(PY_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        names = {o.symbol_qualified_name for o in occs if o.kind == SymbolKind.DEF}
+        logger_defs = [n for n in names if "Logger" in n]
+        assert logger_defs, f"Expected Logger def in {names!r}"
