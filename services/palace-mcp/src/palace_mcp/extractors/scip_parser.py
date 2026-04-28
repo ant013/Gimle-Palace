@@ -139,14 +139,39 @@ def _scip_role_to_kind(symbol_roles: int) -> SymbolKind:
 
 
 def _extract_qualified_name(scip_symbol: str) -> str:
-    """Extract a human-readable qualified name from a SCIP symbol string.
+    """Strip scheme + manager + version, keep package-name + descriptors.
 
-    SCIP format: 'scip-python python <package> . <module> . <name> .'
-    Strips the scheme prefix and trailing dots, joins components with '.'.
+    SCIP format: '<scheme> <manager> <package-name> <version> <descriptors...>'
+    Result format: '<package-name> <descriptors-joined>'
+
+    Q1 FQN decision (GIM-105, Variant B): version token excluded so the same
+    symbol from different library versions yields the same qualified_name.
+    This is the input to symbol_id_for() — a version-stripped qualified_name.
     """
     parts = scip_symbol.strip().split(" ")
-    name_parts = [p for p in parts[2:] if p and p != "."]
-    return ".".join(name_parts) if name_parts else scip_symbol
+    if len(parts) < 5:
+        return scip_symbol.strip()
+    package_name = parts[2]
+    descriptor_chain = " ".join(p for p in parts[4:] if p)
+    return f"{package_name} {descriptor_chain}"
+
+
+_SCIP_LANGUAGE_MAP: dict[str, Language] = {
+    "python": Language.PYTHON,
+    "typescript": Language.TYPESCRIPT,
+    "javascript": Language.JAVASCRIPT,
+}
+
+
+def _language_from_path(relative_path: str) -> Language:
+    """Fallback: derive language from file extension when doc.language is empty."""
+    if relative_path.endswith((".ts", ".tsx")):
+        return Language.TYPESCRIPT
+    if relative_path.endswith((".js", ".jsx")):
+        return Language.JAVASCRIPT
+    if relative_path.endswith(".py"):
+        return Language.PYTHON
+    return Language.UNKNOWN
 
 
 def iter_scip_occurrences(
@@ -154,14 +179,25 @@ def iter_scip_occurrences(
     *,
     commit_sha: str,
     ingest_run_id: str = "",
+    language: Language | None = None,
 ) -> Iterator[SymbolOccurrence]:
     """Yield SymbolOccurrence from a parsed SCIP Index.
 
     Each SCIP Document maps to a file; each Occurrence within it maps to
     a SymbolOccurrence with file_path, line, col derived from the SCIP range.
+    language= overrides per-document detection when explicitly provided.
     """
     for doc in index.documents:
         file_path = doc.relative_path
+
+        if language is not None:
+            doc_lang = language
+        else:
+            doc_lang_str = getattr(doc, "language", "")
+            doc_lang = _SCIP_LANGUAGE_MAP.get(doc_lang_str, Language.UNKNOWN)
+            if doc_lang == Language.UNKNOWN:
+                doc_lang = _language_from_path(file_path)
+
         for occ in doc.occurrences:
             if not occ.symbol or occ.symbol.startswith("local "):
                 continue
@@ -191,7 +227,7 @@ def iter_scip_occurrences(
                 symbol_id=sym_id,
                 symbol_qualified_name=qname,
                 kind=kind,
-                language=Language.PYTHON,
+                language=doc_lang,
                 file_path=file_path,
                 line=line,
                 col_start=col_start,
