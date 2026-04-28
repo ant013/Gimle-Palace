@@ -12,6 +12,7 @@ from palace_mcp.extractors.scip_parser import (
     ScipFileTooLargeError,
     ScipParseError,
     ScipPathRequiredError,
+    _extract_qualified_name,
     parse_scip_file,
 )
 
@@ -36,6 +37,56 @@ class TestFindScipPath:
             FindScipPath.resolve("unknown_project", settings)
         assert "unknown_project" in str(exc_info.value)
         assert exc_info.value.error_code == "scip_path_required"
+
+
+@pytest.mark.parametrize(
+    "symbol, expected",
+    [
+        # Standard class in TS: scheme manager package version descriptor...
+        (
+            "scip-typescript npm ts-mini-project 1.0.0 src/`Cache.ts`/Cache#",
+            "ts-mini-project src/`Cache.ts`/Cache#",
+        ),
+        # Generic type-param descriptor — [K] bracket notation kept verbatim
+        (
+            "scip-typescript npm ts-mini-project 1.0.0 src/`Cache.ts`/Cache#[K]",
+            "ts-mini-project src/`Cache.ts`/Cache#[K]",
+        ),
+        # Default export class — same format as named, no special marker
+        (
+            "scip-typescript npm ts-mini-project 1.0.0 src/`Logger.ts`/Logger#",
+            "ts-mini-project src/`Logger.ts`/Logger#",
+        ),
+        # JSX component in .tsx — descriptor contains backtick-quoted path
+        (
+            "scip-typescript npm ts-mini-project 1.0.0 src/`Button.tsx`/Button.",
+            "ts-mini-project src/`Button.tsx`/Button.",
+        ),
+        # JS interop (legacy.js) — same extraction logic as TS
+        (
+            "scip-typescript npm ts-mini-project 1.0.0 src/`legacy.js`/helper().",
+            "ts-mini-project src/`legacy.js`/helper().",
+        ),
+        # Short symbol (< 5 parts) → passthrough unchanged
+        (
+            "local 1",
+            "local 1",
+        ),
+        # Python symbol — scip-python uses different scheme
+        (
+            "scip-python python pymini . `src.pymini.cache`/Cache#",
+            "pymini `src.pymini.cache`/Cache#",
+        ),
+    ],
+)
+class TestExtractQualifiedName:
+    def test_extract(self, symbol: str, expected: str) -> None:
+        result = _extract_qualified_name(symbol)
+        assert result == expected
+
+    def test_no_empty_result(self, symbol: str, expected: str) -> None:
+        result = _extract_qualified_name(symbol)
+        assert result, "qualified_name must not be empty"
 
 
 class TestParseScipFile:

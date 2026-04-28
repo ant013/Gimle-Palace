@@ -3,7 +3,9 @@
     "target": "ES2020",
     "module": "commonjs",
     "strict": true,
-    "outDir": "dist"
+    "outDir": "dist",
+    "jsx": "react",
+    "allowJs": true
   },
   "include": ["src/**/*"]
 }
