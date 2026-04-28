@@ -221,7 +221,7 @@
 
 | Phase | Owner | Gate |
 |-------|-------|------|
-| 1.1 Formalize | CTO | Plan file exists, GIM-NN swapped |
+| 1.1 Formalize | CTO | Plan file exists, GIM-113 swapped |
 | 1.2 Plan-first review | CodeReviewer | Every task has test+impl+commit; flag gaps |
 | 2 Implement | PythonEngineer | TDD: failing assertions → fixture files → regen .scip → green |
 | 3.1 Mechanical review | CodeReviewer | `uv run ruff check && uv run mypy src/ && uv run pytest` output + **file count verification via `ls`** (post-GIM-104 lesson) |
