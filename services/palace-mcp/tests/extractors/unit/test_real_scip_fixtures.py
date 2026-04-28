@@ -171,6 +171,44 @@ class TestJvmMiniProjectFixture:
         uses = [o for o in occs if o.kind == SymbolKind.USE]
         assert len(uses) > 0, "Expected at least one USE occurrence"
 
+    def test_cache_generic_def_present(self) -> None:
+        index = parse_scip_file(JVM_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        names = {o.symbol_qualified_name for o in occs if o.kind == SymbolKind.DEF}
+        cache_defs = [n for n in names if "Cache" in n]
+        assert cache_defs, f"Expected Cache# generic def; got defs: {names!r}"
+        assert any("Cache#put" in n for n in names), (
+            f"Expected Cache#put() def; got: {names!r}"
+        )
+
+    def test_kotlin_greet_default_present(self) -> None:
+        index = parse_scip_file(JVM_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        names = {o.symbol_qualified_name for o in occs if o.kind == SymbolKind.DEF}
+        greet_default = [n for n in names if "greet$default" in n]
+        assert greet_default, (
+            f"Expected Greeter#greet$default() def for default-param method; "
+            f"got: {names!r}"
+        )
+
+    def test_kotlin_extension_fun_present(self) -> None:
+        index = parse_scip_file(JVM_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        names = {o.symbol_qualified_name for o in occs if o.kind == SymbolKind.DEF}
+        ext_funs = [n for n in names if "toGreeting" in n]
+        assert ext_funs, (
+            f"Expected extension fun toGreeting() def; got: {names!r}"
+        )
+
+    def test_anonymous_inner_class_filtered(self) -> None:
+        index = parse_scip_file(JVM_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        local_occs = [o for o in occs if "local" in o.symbol_qualified_name.lower()]
+        assert not local_occs, (
+            f"Anonymous inner class 'local N' symbols must be filtered; "
+            f"found: {[o.symbol_qualified_name for o in local_occs]!r}"
+        )
+
     def test_qualified_names_have_no_scheme_or_manager(self) -> None:
         index = parse_scip_file(JVM_SCIP)
         occs = list(iter_scip_occurrences(index, commit_sha="test"))

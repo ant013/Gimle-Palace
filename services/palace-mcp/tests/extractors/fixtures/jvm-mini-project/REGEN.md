@@ -24,11 +24,11 @@ make regen-jvm-fixture
 
 - `src/main/java/com/example/User.java` — `User` class, `getName` / `getAge`
 - `src/main/java/com/example/Cache.java` — generic `Cache<K,V>` with `put/get/evict`
-- `src/main/java/com/example/Inner.java` — outer class with static `Builder` inner class
+- `src/main/java/com/example/Inner.java` — outer class with static `Builder` inner class + anonymous inner class (→ `local N` filtered)
 - `src/main/java/com/example/Main.java` — usage site exercising all Java public symbols
 - `src/main/kotlin/com/example/Logger.kt` — `Logger` class with `companion object`
-- `src/main/kotlin/com/example/Greeter.kt` — `Greeter` + `Greeting` interface
-- `src/main/kotlin/com/example/Sealed.kt` — `sealed class Result` with `Success/Failure/Loading`
+- `src/main/kotlin/com/example/Greeter.kt` — `Greeter` + `Greeting` interface + extension fun `String.toGreeting()` + `suspend fun fetchGreeting()` + default-param `greet(greeting: String = "Hello")` → `greet$default`
+- `src/main/kotlin/com/example/Sealed.kt` — `sealed class Result` with `Success/Failure/Loading` + extension fun `Result<T>.getOrNull()`
 
 The fixture covers:
 - Java defs (role=1) and reference uses (role=0) → 3-phase bootstrap tests
@@ -36,3 +36,7 @@ The fixture covers:
 - Generic type parameters (`Cache#`) → qualified-name normalisation
 - Sealed subclasses (`Result#Success#`, `Result#Failure#`, `Result#Loading.`)
 - Static nested classes (`Inner#Builder#`) vs inner classes
+- Anonymous inner classes (`local N` symbol) → filtered by `startswith("local ")`
+- Kotlin default-param method → `Greeter#greet$default()` symbol
+- Kotlin `suspend fun` → `Greeter#fetchGreeting()` (standard descriptor)
+- Kotlin extension function → `GreeterKt#toGreeting()` (file-facade class)

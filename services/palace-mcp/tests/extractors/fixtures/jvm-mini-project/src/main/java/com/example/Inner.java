@@ -23,4 +23,13 @@ public class Inner {
     public int getValue() {
         return value;
     }
+
+    public Runnable makeRunnable() {
+        return new Runnable() {
+            @Override
+            public void run() {
+                System.out.println(value);
+            }
+        };
+    }
 }
