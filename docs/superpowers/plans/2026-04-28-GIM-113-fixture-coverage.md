@@ -32,6 +32,26 @@
 | `services/palace-mcp/tests/extractors/fixtures/py-mini-project/index.scip` | Regenerate | `npx @sourcegraph/scip-python index --project-name pymini` |
 | `services/palace-mcp/tests/extractors/unit/test_real_scip_fixtures.py` | Modify | Add edge-case assertions per coverage matrix |
 | `services/palace-mcp/tests/extractors/unit/test_scip_parser.py` | Modify | Add unit tests for `_extract_qualified_name()` edge cases |
+| `services/palace-mcp/tests/extractors/fixtures/Makefile` | Create | `regen-ts-fixture`, `regen-py-fixture` targets for deterministic SCIP regen |
+| `services/palace-mcp/tests/extractors/fixtures/ts-mini-project/.gitignore` | Create (if missing) | Gitignore `node_modules/` |
+
+---
+
+## Execution order (TDD)
+
+Per Board spec: "TDD: write failing assertions → add fixture files → regenerate `.scip` → verify green."
+
+**Mandated execution sequence:**
+1. **Task 7** — write failing test assertions (they reference edge-case symbols that don't exist yet → RED)
+2. **Tasks 1–2** — add TS fixture source files + config updates
+3. **Task 3** — regenerate TS `index.scip` (GREEN for TS assertions)
+4. **Tasks 4–5** — add Python fixture source files + wiring
+5. **Task 6** — regenerate Python `index.scip` (GREEN for Python assertions)
+6. **Task 8** — add `_extract_qualified_name()` edge-case unit tests (depends on Tasks 3, 6 — needs actual SCIP output)
+7. **Task 10** — create Makefile regen targets
+8. **Task 9** — CI verification + file count + push
+
+Task numbers are not execution order — follow this sequence.
 
 ---
 
@@ -67,12 +87,15 @@
 
 **Steps:**
 - [ ] `tsconfig.json`: add `"jsx": "react"` and `"allowJs": true` to `compilerOptions`. Keep existing options intact.
-- [ ] `package.json`: add `"@types/react": "^18.0.0"` to `devDependencies`. Run `npm install` in the fixture directory to update `package-lock.json`.
+- [ ] `package.json`: add `"@types/react": "^18.0.0"` to `devDependencies`. Run `npm install` in the fixture directory to generate/update `package-lock.json`. **Commit `package-lock.json`** — needed for deterministic SCIP regeneration.
+- [ ] Verify `.gitignore` exists in `ts-mini-project/` with `node_modules/` entry. If missing, create it. `node_modules/` MUST NOT be committed — only needed locally for `scip-typescript` to resolve type stubs.
 - [ ] `index.ts`: add `export { Cache } from './Cache';` and `import Logger from './Logger'; export { Logger };`. For Button: `export { Button } from './Button';`. For legacy.js: `export { helper } from './legacy';` (may need `// @ts-ignore` or allowJs handles it).
 
 **Acceptance criteria:**
 - `tsc --noEmit` in `ts-mini-project/` succeeds (no compile errors).
 - `index.ts` re-exports at least Cache, Logger, Button, helper.
+- `package-lock.json` committed (deterministic regen).
+- `node_modules/` gitignored.
 
 ---
 
@@ -171,7 +194,11 @@
 - Tests use existing `requires_scip_typescript` / `requires_scip_python` markers.
 - No regression in existing tests.
 
+**Depends on:** Tasks 3, 6 (need actual SCIP output to know real symbol formats — same dependency as Task 8).
+
 **NOTE on symbol format:** The exact SCIP symbol strings for generics, default exports, JSX are tool-version-dependent. PE MUST inspect the actual regenerated `.scip` output before writing assertions. Write assertions grounded in observed output, not spec assumptions. If the observed SCIP output differs from spec expectations (e.g., no `[T]` in generic descriptors), document the delta and adjust assertions.
+
+**TDD note:** Per execution order, Task 7 is written FIRST (RED phase) with best-guess assertions. After Tasks 3/6 regenerate SCIP files, PE re-inspects actual output and adjusts assertions to match observed symbols before marking GREEN.
 
 ---
 
@@ -214,6 +241,28 @@
 - CI green.
 - File counts match.
 - PR description references GIM-113 and predecessor `54691a7`.
+
+---
+
+## Task 10: Create Makefile with regen targets
+
+**Files:**
+- Create: `services/palace-mcp/tests/extractors/fixtures/Makefile`
+
+**Steps:**
+- [ ] Create `Makefile` at `services/palace-mcp/tests/extractors/fixtures/` with targets:
+  - `regen-ts-fixture`: `cd ts-mini-project && npm install && npx @sourcegraph/scip-typescript index --output index.scip`
+  - `regen-py-fixture`: `cd py-mini-project && npx @sourcegraph/scip-python index --project-name pymini --output index.scip`
+  - `regen-all`: depends on both above.
+- [ ] Verify: `make -C services/palace-mcp/tests/extractors/fixtures/ regen-ts-fixture` produces the same `index.scip` (idempotent check: `git diff --quiet`).
+- [ ] Verify: `make -C services/palace-mcp/tests/extractors/fixtures/ regen-py-fixture` same.
+
+**Acceptance criteria:**
+- `make regen-ts-fixture` and `make regen-py-fixture` work from the fixtures directory.
+- Board spec's QA command `make regen-ts-fixture && git diff --quiet` is now executable.
+- Makefile is minimal (< 20 lines), no magic.
+
+**Why:** Board spec acceptance criterion #3 and Phase 4.1 QA plan reference `make regen-{ts,py}-fixture` — without these targets QA literally cannot execute the verification command. (CR finding WARNING #1.)
 
 ---
 
