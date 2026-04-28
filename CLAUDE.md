@@ -46,6 +46,24 @@ See also:
 - `paperclips/fragments/shared/fragments/git-workflow.md` — per-agent rules.
 - `docs/runbooks/2026-04-19-meta-workflow-migration-rollback.md` — if branch protection or the new workflows cause a block and need to be reverted.
 
+## Production deploy on iMac
+
+After a PR squash-merges to `develop`, rebuild and restart `palace-mcp` with:
+
+```bash
+bash paperclips/scripts/imac-deploy.sh
+```
+
+The script must run **on the iMac** (SSH in first, then invoke locally).
+
+- Pinned deploy: `bash paperclips/scripts/imac-deploy.sh --target <sha>`
+- Assert extractor: `bash paperclips/scripts/imac-deploy.sh --expect-extractor symbol_index_typescript`
+- Rollback: see `paperclips/scripts/imac-deploy.README.md` — tag `prev_image`
+  from `imac-deploy.log` and `docker compose up -d --no-build palace-mcp`
+
+Prerequisites and all five deploy gotchas are documented in
+`paperclips/scripts/imac-deploy.README.md`.
+
 ## Docker Compose Profiles
 
 Services use explicit profile opt-in:
