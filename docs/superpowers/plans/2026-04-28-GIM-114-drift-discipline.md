@@ -1,4 +1,6 @@
-# GIM-114 — Plan-implementation drift discipline
+# GIM-114 — Plan-implementation drift discipline (rev2)
+
+> **Supersedes:** rev1 (commit `af440a3`). Revised per CodeReviewer Phase 1.2 REQUEST CHANGES.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -10,67 +12,79 @@
 
 **Root path prefix:** `paperclips/` — fragments in submodule `paperclips/fragments/shared/`, roles in `paperclips/roles/`.
 
+### CR Phase 1.2 findings addressed (rev2)
+
+| # | Finding | Severity | Resolution |
+|---|---------|----------|------------|
+| 1 | Fragment density: `git-workflow.md` at 5 KB (2.5x cap) | CRITICAL | **New fragment** `phase-review-discipline.md` instead of extending `git-workflow.md`. Git-workflow stays git-only. |
+| 2 | Task 4: opus-architect-reviewer.md has no Phase 3.2 section | WARNING | Task 4 revised: **create** new section `## Phase 3.2 — Coverage matrix audit discipline` after `## Anti-patterns` (line ~83). |
+| 3 | Task 5: python-engineer.md has no Phase 2 section | WARNING | Task 5 revised: append to existing `## Technical conventions (hard rules)` (line 21). |
+| 4 | Task 3: anchor placement ambiguity | WARNING | Task 3 revised: new subsection `### Phase 3.1 — Plan vs Implementation file-structure check` inserted **before** `### Phase 3.1 GitHub PR review bridge` (line 117). Separate concern: discipline before bridge. |
+| 5 | Content should be fragment-grade, not role-file-grade | NOTE | Tasks 1–2: fragment = rule + mandatory command. Role files = enforcement examples + forbidden patterns. |
+
 ---
 
 ## File Structure
 
 | File | Action | Responsibility |
 |------|--------|---------------|
-| `paperclips/fragments/shared/fragments/git-workflow.md` | Modify (submodule) | Add §Phase 3.1 + §Phase 3.2 sections |
+| `paperclips/fragments/shared/fragments/phase-review-discipline.md` | **Create** (submodule) | New fragment: §Phase 3.1 + §Phase 3.2 rules |
 | `paperclips/roles/code-reviewer.md` | Modify | Wire §Phase 3.1 reference |
-| `paperclips/roles/opus-architect-reviewer.md` | Modify | Wire §Phase 3.2 reference |
+| `paperclips/roles/opus-architect-reviewer.md` | Modify | Wire §Phase 3.2 reference + new section |
 | `paperclips/roles/python-engineer.md` | Modify | Wire scope-reduction transparency rule |
 | `paperclips/fragments/shared` (submodule pointer) | Bump | After submodule PR merges |
 
 ---
 
-## Task 1: Add Phase 3.1 file-structure check to git-workflow.md (submodule)
+## Task 1: Create Phase 3.1 file-structure check in new fragment (submodule)
 
 **Files:**
-- Modify: `paperclips/fragments/shared/fragments/git-workflow.md`
+- **Create:** `paperclips/fragments/shared/fragments/phase-review-discipline.md`
 
 **Steps:**
-- [ ] Add new section `### Phase 3.1 — Plan vs Implementation file-structure check` after the existing `### Phase 4.2 — Merge-readiness reality-check` section (or before it, maintaining ascending phase order).
-- [ ] Content must include:
-  - Mandatory CR step: paste `git diff --name-only <base>..<head>` and compare against plan's file table.
-  - Forbidden APPROVE patterns:
-    - APPROVE without pasted `git diff --name-only` matching plan's file count.
-    - APPROVE when PE cut scope without mention in commit/comment/plan revision.
-    - "LGTM, all tests pass" without file-structure comparison.
-  - PE scope-reduction protocol: PE must post comment with reasoning before committing reduced scope. CR evaluates: APPROVE reduced scope OR REQUEST CHANGES for full scope. Never silent.
-- [ ] Use the same style as existing `### Phase 4.2` section (forbidden response patterns table, mandatory commands block).
+- [ ] Create new fragment file `phase-review-discipline.md` in the submodule fragments directory.
+- [ ] Add section `## Phase 3.1 — Plan vs Implementation file-structure check` with **fragment-grade** content:
+  - Imperative one-liner: CR must paste `git diff --name-only <base>..<head>` and compare count against plan's file table before APPROVE.
+  - One-line why: GIM-104 — PE silently reduced 6→2 files; tooling checks don't catch scope drift.
+  - Mandatory command block:
+    ```bash
+    git diff --name-only <base>..<head> | sort
+    # Compare against plan's "File Structure" table. Count must match.
+    ```
+  - One-liner: PE scope reduction without comment = REQUEST CHANGES.
+- [ ] Keep content under 1 KB for this section (fragment density rule).
 
 **Acceptance criteria:**
-- New section exists in git-workflow.md.
-- Contains at least: mandatory command, forbidden patterns, PE-reduction protocol.
-- Ascending phase order maintained (3.1 before 3.2 before 4.2).
+- New file `phase-review-discipline.md` exists in submodule.
+- Phase 3.1 section is fragment-grade: rule + command + one-line why.
+- File total stays under 2 KB soft cap.
 
 **NOTE:** This requires a commit in the `paperclip-shared-fragments` submodule repo (`git@github.com:ant013/paperclip-shared-fragments.git`), not in Gimle-Palace directly. Create a branch in the submodule, commit, push, PR.
 
 ---
 
-## Task 2: Add Phase 3.2 coverage matrix audit to git-workflow.md (submodule)
+## Task 2: Add Phase 3.2 coverage matrix audit to the same new fragment (submodule)
 
 **Files:**
-- Modify: `paperclips/fragments/shared/fragments/git-workflow.md` (same file as Task 1)
+- Modify: `paperclips/fragments/shared/fragments/phase-review-discipline.md` (same file as Task 1)
 
 **Steps:**
-- [ ] Add section `### Phase 3.2 — Adversarial coverage matrix audit` (after Phase 3.1 section from Task 1).
-- [ ] Content must include:
-  - Opus Phase 3.2 mandate expansion: not just architectural risks, also coverage matrix audit.
-  - For every test fixture / vendored data / synthetic factory in the PR, verify all edge cases from spec landed.
-  - Output template:
+- [ ] Add section `## Phase 3.2 — Adversarial coverage matrix audit` (after Phase 3.1 section from Task 1).
+- [ ] Fragment-grade content:
+  - Imperative one-liner: Opus Phase 3.2 must include coverage matrix audit for fixture/vendored-data PRs.
+  - One-line why: GIM-104 — Opus focused on architectural risks, missed that fixture coverage was halved.
+  - Output template (compact):
     ```
-    Coverage matrix audit:
     | Spec'ed case | Landed | File |
     |--------------|--------|------|
-    | <case 1>     | ✓      | path/to/test.py:LINE |
-    | <case 2>     | ✗ MISSING | (not found in fixture or test) |
+    | <case>       | ✓ / ✗  | path:LINE |
     ```
-  - Missing rows → blocking finding (REQUEST CHANGES, not NUDGE).
+  - One-liner: Missing rows → REQUEST CHANGES (not NUDGE).
+- [ ] Verify total file size stays under 2 KB soft cap.
 
 **Acceptance criteria:**
-- Section exists with template and enforcement rule.
+- Section exists with compact template and enforcement rule.
+- Total `phase-review-discipline.md` stays under 2 KB.
 - Clearly states missing coverage = REQUEST CHANGES.
 
 **Depends on:** Task 1 (same file, coordinate insertion order).
@@ -83,13 +97,21 @@
 - Modify: `paperclips/roles/code-reviewer.md`
 
 **Steps:**
-- [ ] Locate `### Phase 3.1 GitHub PR review bridge` section (line ~117).
-- [ ] Add a new subsection or bullet: "Before mechanical APPROVE — paste output of `git diff --name-only <base>..<head>` and explicit comparison vs plan file structure. See `git-workflow.md#phase-31-plan-vs-implementation-file-structure-check`."
+- [ ] Insert a **new subsection** `### Phase 3.1 — Plan vs Implementation file-structure check` **before** the existing `### Phase 3.1 GitHub PR review bridge` (line ~117). These are separate concerns: discipline (the check) before bridge (posting the GitHub approve).
+- [ ] Content (role-file-grade — enforcement details belong here, not in fragment):
+  - Before mechanical APPROVE, paste output of `git diff --name-only <base>..<head>` and explicit comparison vs plan file structure.
+  - Forbidden APPROVE patterns:
+    - APPROVE without pasted `git diff --name-only` matching plan's file count.
+    - APPROVE when PE cut scope without mention in commit/comment/plan revision.
+    - "LGTM, all tests pass" without file-structure comparison.
+  - If PE reduced scope with justification: evaluate argument, either APPROVE reduced scope or REQUEST CHANGES for full scope.
+  - Reference: `See phase-review-discipline.md#phase-31`.
 - [ ] Ensure the reference uses the exact section anchor from Task 1.
 
 **Acceptance criteria:**
-- code-reviewer.md references the new git-workflow.md section.
-- Reference is in the Phase 3.1 area of the role file.
+- code-reviewer.md has new subsection before the bridge section.
+- Contains forbidden patterns and enforcement procedure.
+- References new fragment.
 
 **Depends on:** Task 1 (need final section header for correct anchor).
 
@@ -101,12 +123,18 @@
 - Modify: `paperclips/roles/opus-architect-reviewer.md`
 
 **Steps:**
-- [ ] Locate the Phase 3.2 / adversarial review section.
-- [ ] Add: "Adversarial review must include coverage matrix audit for fixture/vendored-data PRs. Not limited to architectural risks. See `git-workflow.md#phase-32-adversarial-coverage-matrix-audit`."
+- [ ] **Create new section** `## Phase 3.2 — Coverage matrix audit discipline` after the `## Anti-patterns` section (line ~83, before `## MCP / Subagents / Skills`).
+- [ ] Content (role-file-grade):
+  - Adversarial review must include coverage matrix audit for fixture/vendored-data PRs.
+  - Not limited to architectural risks — also verify all spec'ed edge cases landed in test fixtures.
+  - Coverage matrix output template (from fragment).
+  - Missing rows = REQUEST CHANGES (blocking finding, not NUDGE).
+  - Reference: `See phase-review-discipline.md#phase-32`.
 
 **Acceptance criteria:**
-- opus-architect-reviewer.md references the new git-workflow.md section.
+- opus-architect-reviewer.md has new `## Phase 3.2` section in the correct location.
 - Coverage matrix audit is explicitly required, not optional.
+- References new fragment.
 
 **Depends on:** Task 2 (need final section header).
 
@@ -118,12 +146,12 @@
 - Modify: `paperclips/roles/python-engineer.md`
 
 **Steps:**
-- [ ] Locate Phase 2 / implementation section.
-- [ ] Add: "If scope reduction is necessary — ALWAYS post comment with reasoning before commit. Silent reduction = REQUEST CHANGES at Phase 3.1."
+- [ ] Append to existing `## Technical conventions (hard rules)` section (line 21) — do NOT create a new section that doesn't exist.
+- [ ] Add bullet: `- **Scope reduction transparency.** If scope reduction necessary — ALWAYS post comment with reasoning before commit. Silent reduction = REQUEST CHANGES at Phase 3.1. See `phase-review-discipline.md`.`
 
 **Acceptance criteria:**
-- python-engineer.md contains the transparency rule.
-- Rule is in the implementation phase context.
+- python-engineer.md contains the transparency rule as a bullet in `## Technical conventions (hard rules)`.
+- Rule references the new fragment.
 
 ---
 
@@ -146,7 +174,7 @@
 **Acceptance criteria:**
 - Submodule pointer updated to SHA containing Tasks 1–2 changes.
 - `bash paperclips/build.sh` succeeds.
-- `grep -l 'Phase 3.1' paperclips/dist/*.md` returns hits (new content in built output).
+- `grep -l 'phase-review-discipline' paperclips/dist/*.md` returns hits (new fragment content in built output).
 
 **Depends on:** Tasks 1–2 merged in submodule repo.
 
@@ -173,7 +201,8 @@
 |-------|-------|------|
 | 1.1 Formalize | CTO | Plan file exists, GIM-114 confirmed |
 | 1.2 Plan-first review | CodeReviewer | Every task has clear output; flag gaps |
-| 2a Fragment text | TechnicalWriter | Tasks 1–2: new sections in git-workflow.md (submodule PR) |
+| 1.2-rev2 Plan revision | CTO | Address CR findings, resubmit |
+| 2a Fragment text | TechnicalWriter | Tasks 1–2: new fragment `phase-review-discipline.md` (submodule PR) |
 | 2b Role file wiring | CTO | Tasks 3–5: role file references (after 2a lands section headers) |
 | 2c Submodule bump + build | CTO | Task 6: pointer update + build.sh green |
 | 3.1 Mechanical review | CodeReviewer | **Eat your own dog food**: apply new Phase 3.1 discipline on THIS PR |
@@ -186,10 +215,16 @@
 ### Two-repo workflow
 
 This slice spans two repos:
-1. **`paperclip-shared-fragments`** (submodule): Tasks 1–2 — new sections in git-workflow.md. Requires its own feature branch + PR.
+1. **`paperclip-shared-fragments`** (submodule): Tasks 1–2 — **new file** `phase-review-discipline.md`. Requires its own feature branch + PR.
 2. **`Gimle-Palace`** (parent): Tasks 3–6 — role files + submodule bump. Feature branch `feature/GIM-114-drift-discipline`.
 
 Tasks 1–2 must merge in the submodule BEFORE Tasks 3–6 can finalize in the parent (submodule pointer depends on merged SHA).
+
+### Fragment density compliance (CR finding #1)
+
+Original plan extended `git-workflow.md` (5 KB, 2.5x cap). Revised: create new fragment `phase-review-discipline.md`. This keeps `git-workflow.md` git-only and respects the 2 KB soft cap per fragment.
+
+Content split: fragment = imperative rules + mandatory commands (fragment-grade). Role files = enforcement details, forbidden patterns, examples (role-file-grade per CR finding #5).
 
 ### Eat-your-own-dog-food
 
