@@ -101,7 +101,9 @@ class TestScipJavaDrift:
     def test_sealed_subclasses_not_filtered(self) -> None:
         occs = self._occs()
         names = {o.symbol_qualified_name for o in occs if o.kind == SymbolKind.DEF}  # type: ignore[attr-defined]
-        sealed = [n for n in names if any(s in n for s in ("Success", "Failure", "Loading"))]
+        sealed = [
+            n for n in names if any(s in n for s in ("Success", "Failure", "Loading"))
+        ]
         assert sealed, (
             f"Expected sealed subclass defs (Success/Failure/Loading). "
             f"Got defs: {list(names)[:20]!r}"

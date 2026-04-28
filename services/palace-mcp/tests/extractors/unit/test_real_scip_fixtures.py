@@ -218,9 +218,15 @@ class TestJvmMiniProjectFixture:
         index = parse_scip_file(JVM_SCIP)
         occs = list(iter_scip_occurrences(index, commit_sha="test"))
         names = {o.symbol_qualified_name for o in occs if o.kind == SymbolKind.DEF}
-        assert any("Success" in n for n in names), f"Expected Result.Success def; {names!r}"
-        assert any("Failure" in n for n in names), f"Expected Result.Failure def; {names!r}"
-        assert any("Loading" in n for n in names), f"Expected Result.Loading def; {names!r}"
+        assert any("Success" in n for n in names), (
+            f"Expected Result.Success def; {names!r}"
+        )
+        assert any("Failure" in n for n in names), (
+            f"Expected Result.Failure def; {names!r}"
+        )
+        assert any("Loading" in n for n in names), (
+            f"Expected Result.Loading def; {names!r}"
+        )
 
     def test_has_use_occurrences(self) -> None:
         index = parse_scip_file(JVM_SCIP)
@@ -253,9 +259,7 @@ class TestJvmMiniProjectFixture:
         occs = list(iter_scip_occurrences(index, commit_sha="test"))
         names = {o.symbol_qualified_name for o in occs if o.kind == SymbolKind.DEF}
         ext_funs = [n for n in names if "toGreeting" in n]
-        assert ext_funs, (
-            f"Expected extension fun toGreeting() def; got: {names!r}"
-        )
+        assert ext_funs, f"Expected extension fun toGreeting() def; got: {names!r}"
 
     def test_anonymous_inner_class_filtered(self) -> None:
         index = parse_scip_file(JVM_SCIP)
