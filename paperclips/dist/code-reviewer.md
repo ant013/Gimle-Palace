@@ -564,6 +564,36 @@ If the workaround fails twice — escalate to Board with details (issue id, run 
 - "Is current assignee the next agent or still me?" — must be next
 - "Is my push visible in `git ls-remote origin <branch>`?" — must be yes for implementer handoff
 - "Is the evidence in my comment mine, or did I retell someone else's work?" — for QA, only own evidence counts
+# Phase review discipline
+
+## Phase 3.1 — Plan vs Implementation file-structure check
+
+CR must paste `git diff --name-only <base>..<head>` and compare file count against plan's "File Structure" table before APPROVE.
+
+Why: GIM-104 — PE silently reduced 6→2 files; tooling checks don't catch scope drift.
+
+```bash
+git diff --name-only <base>..<head> | sort
+# Compare against plan's "File Structure" table. Count must match.
+```
+
+PE scope reduction without comment = REQUEST CHANGES.
+
+## Phase 3.2 — Adversarial coverage matrix audit
+
+Opus Phase 3.2 must include coverage matrix audit for fixture/vendored-data PRs.
+
+Why: GIM-104 — Opus focused on architectural risks, missed that fixture coverage was halved.
+
+Required output template:
+
+```
+| Spec'ed case | Landed | File |
+|--------------|--------|------|
+| <case>       | ✓ / ✗  | path:LINE |
+```
+
+Missing rows → REQUEST CHANGES (not NUDGE).
 
 ## Language
 
