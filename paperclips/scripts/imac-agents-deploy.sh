@@ -210,7 +210,7 @@ if [ ! -f "$CTO_AGENTS_MD" ]; then
     die "CTO AGENTS.md not found at ${CTO_AGENTS_MD} — deploy may have failed" 4
 fi
 
-if ! grep -q "$VERIFY_MARKER" "$CTO_AGENTS_MD"; then
+if ! grep -qF "$VERIFY_MARKER" "$CTO_AGENTS_MD"; then
     die "marker '${VERIFY_MARKER}' not found in deployed CTO AGENTS.md (${CTO_AGENTS_MD})" 4
 fi
 log "Verify OK: marker '${VERIFY_MARKER}' found in CTO AGENTS.md"
