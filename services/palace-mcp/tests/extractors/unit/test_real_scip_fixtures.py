@@ -1,4 +1,6 @@
-"""Integration tests using real .scip fixture files (ts-mini-project, py-mini-project, jvm-mini-project).
+"""Integration tests using real .scip fixture files.
+
+Covers ts-mini-project, py-mini-project, jvm-mini-project, oz-v5-mini-project.
 
 These tests parse the pre-built SCIP binaries and verify actual symbol extraction
 behaviour — both language detection and qualified_name format.
@@ -7,6 +9,7 @@ Markers:
   requires_scip_typescript — skipped if ts-mini-project/index.scip is missing
   requires_scip_python     — skipped if py-mini-project/index.scip is missing
   requires_scip_java       — skipped if jvm-mini-project/index.scip is missing (synthetic always present)
+  requires_scip_solidity   — skipped if oz-v5-mini-project/index.scip is missing
 """
 
 from __future__ import annotations
@@ -22,6 +25,7 @@ FIXTURES = Path(__file__).parent.parent / "fixtures"
 TS_SCIP = FIXTURES / "ts-mini-project" / "index.scip"
 PY_SCIP = FIXTURES / "py-mini-project" / "index.scip"
 JVM_SCIP = FIXTURES / "jvm-mini-project" / "index.scip"
+SOL_SCIP = FIXTURES / "oz-v5-mini-project" / "index.scip"
 
 requires_scip_typescript = pytest.mark.skipif(
     not TS_SCIP.exists(), reason="ts-mini-project/index.scip not present"
@@ -31,6 +35,9 @@ requires_scip_python = pytest.mark.skipif(
 )
 requires_scip_java = pytest.mark.skipif(
     not JVM_SCIP.exists(), reason="jvm-mini-project/index.scip not present"
+)
+requires_scip_solidity = pytest.mark.skipif(
+    not SOL_SCIP.exists(), reason="oz-v5-mini-project/index.scip not present"
 )
 
 
@@ -280,4 +287,179 @@ class TestJvmMiniProjectFixture:
             )
             assert not qn.startswith("maven"), (
                 f"Qualified name must not start with 'maven': {qn!r}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# Oracle constants (GIM-124 Phase 1.0 — filled 2026-04-29, commit 53fc272)
+# ---------------------------------------------------------------------------
+# 6 .sol files, 8 contracts/interfaces, 76 DEF + 12 ForwardDef(DECL) = 88 total
+_SOL_N_OCCURRENCES_TOTAL = 88
+_SOL_N_DEF = 76
+_SOL_N_DECL = 12  # ForwardDef inherited-but-not-overridden functions
+
+
+@requires_scip_solidity
+class TestSolMiniProjectFixture:
+    def test_parses_without_error(self) -> None:
+        index = parse_scip_file(SOL_SCIP)
+        assert index is not None
+
+    def test_yields_solidity_occurrences(self) -> None:
+        index = parse_scip_file(SOL_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        sol_occs = [o for o in occs if o.language == Language.SOLIDITY]
+        assert len(sol_occs) >= _SOL_N_OCCURRENCES_TOTAL, (
+            f"Expected ≥{_SOL_N_OCCURRENCES_TOTAL} SOLIDITY occurrences, got {len(sol_occs)}"
+        )
+
+    def test_occurrence_total_matches_oracle(self) -> None:
+        index = parse_scip_file(SOL_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        assert len(occs) == _SOL_N_OCCURRENCES_TOTAL, (
+            f"Oracle: {_SOL_N_OCCURRENCES_TOTAL} occurrences, got {len(occs)}"
+        )
+
+    def test_six_documents(self) -> None:
+        index = parse_scip_file(SOL_SCIP)
+        assert len(index.documents) == 6
+
+    def test_def_count_matches_oracle(self) -> None:
+        index = parse_scip_file(SOL_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        defs = [o for o in occs if o.kind == SymbolKind.DEF]
+        assert len(defs) == _SOL_N_DEF, f"Oracle: {_SOL_N_DEF} DEF, got {len(defs)}"
+
+    def test_inherited_forward_def_count_matches_oracle(self) -> None:
+        index = parse_scip_file(SOL_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        decls = [o for o in occs if o.kind == SymbolKind.DECL]
+        assert len(decls) == _SOL_N_DECL, (
+            f"Oracle: {_SOL_N_DECL} DECL (ForwardDef), got {len(decls)}"
+        )
+
+    def test_erc20_contract_def_present(self) -> None:
+        index = parse_scip_file(SOL_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        names = {o.symbol_qualified_name for o in occs if o.kind == SymbolKind.DEF}
+        assert any("`ERC20`#." in n for n in names), (
+            f"Expected ERC20 contract def; got: {names!r}"
+        )
+
+    def test_ownable_contract_def_present(self) -> None:
+        index = parse_scip_file(SOL_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        names = {o.symbol_qualified_name for o in occs if o.kind == SymbolKind.DEF}
+        assert any("`Ownable`#." in n for n in names), (
+            f"Expected Ownable contract def; got: {names!r}"
+        )
+
+    def test_transfer_abi_selector_oracle(self) -> None:
+        # Oracle: transfer(address,uint256) → 0xa9059cbb
+        index = parse_scip_file(SOL_SCIP)
+        found = False
+        for doc in index.documents:
+            for si in doc.symbols:
+                if "`ERC20`#transfer(address,uint256)." in si.symbol:
+                    found = any(
+                        d == "abi_selector:0xa9059cbb" for d in si.documentation
+                    )
+                    assert found, (
+                        f"Expected abi_selector:0xa9059cbb for ERC20.transfer; "
+                        f"got: {list(si.documentation)}"
+                    )
+                    break
+        assert found, "ERC20.transfer(address,uint256) symbol not found in index"
+
+    def test_owner_abi_selector_oracle(self) -> None:
+        # Oracle: owner() → 0x8da5cb5b
+        index = parse_scip_file(SOL_SCIP)
+        found = False
+        for doc in index.documents:
+            for si in doc.symbols:
+                if "`Ownable`#owner()." in si.symbol:
+                    found = any(
+                        d == "abi_selector:0x8da5cb5b" for d in si.documentation
+                    )
+                    assert found, (
+                        f"Expected abi_selector:0x8da5cb5b for Ownable.owner; "
+                        f"got: {list(si.documentation)}"
+                    )
+                    break
+        assert found, "Ownable.owner() symbol not found in index"
+
+    def test_transfer_ownership_abi_selector_oracle(self) -> None:
+        # Oracle: transferOwnership(address) → 0xf2fde38b
+        index = parse_scip_file(SOL_SCIP)
+        found = False
+        for doc in index.documents:
+            for si in doc.symbols:
+                if "`Ownable`#transferOwnership(address)." in si.symbol:
+                    found = any(
+                        d == "abi_selector:0xf2fde38b" for d in si.documentation
+                    )
+                    assert found, (
+                        f"Expected abi_selector:0xf2fde38b for Ownable.transferOwnership; "
+                        f"got: {list(si.documentation)}"
+                    )
+                    break
+        assert found, "Ownable.transferOwnership(address) symbol not found in index"
+
+    def test_inherited_msg_sender_is_forward_def(self) -> None:
+        # Ownable._msgSender() is inherited from Context, not overridden → DECL
+        index = parse_scip_file(SOL_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        ownable_msg_sender = [
+            o for o in occs if "`Ownable`#_msgSender()." in o.symbol_qualified_name
+        ]
+        assert ownable_msg_sender, "Expected Ownable._msgSender() inherited occurrence"
+        assert all(o.kind == SymbolKind.DECL for o in ownable_msg_sender), (
+            f"Expected DECL (ForwardDef) for inherited _msgSender; "
+            f"got kinds: {[o.kind for o in ownable_msg_sender]}"
+        )
+
+    def test_erc20_custom_error_present(self) -> None:
+        index = parse_scip_file(SOL_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        names = {o.symbol_qualified_name for o in occs if o.kind == SymbolKind.DEF}
+        assert any("ERC20InsufficientBalance(" in n for n in names), (
+            f"Expected ERC20InsufficientBalance error def; got: {names!r}"
+        )
+
+    def test_ownable_custom_error_present(self) -> None:
+        index = parse_scip_file(SOL_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        names = {o.symbol_qualified_name for o in occs if o.kind == SymbolKind.DEF}
+        assert any("OwnableUnauthorizedAccount(" in n for n in names), (
+            f"Expected OwnableUnauthorizedAccount error def; got: {names!r}"
+        )
+
+    def test_erc20_approve_overloads_distinct_qualified_names(self) -> None:
+        # ERC20 has _approve(address,address,uint256) and _approve(address,address,uint256,bool)
+        # Both internal — distinct symbols, no ABI selectors
+        index = parse_scip_file(SOL_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        approve_defs = [
+            o
+            for o in occs
+            if o.kind == SymbolKind.DEF
+            and "`ERC20`#_approve(" in o.symbol_qualified_name
+        ]
+        qnames = {o.symbol_qualified_name for o in approve_defs}
+        assert len(qnames) == 2, (
+            f"Expected 2 distinct _approve overload symbols; got: {qnames!r}"
+        )
+        assert any("uint256)." in n for n in qnames), "Expected 3-arg _approve"
+        assert any("uint256,bool)." in n for n in qnames), "Expected 4-arg _approve"
+
+    def test_qualified_names_use_ethereum_path_format(self) -> None:
+        index = parse_scip_file(SOL_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        for occ in occs:
+            qn = occ.symbol_qualified_name
+            assert not qn.startswith("scip-solidity"), (
+                f"qualified_name must not include scheme: {qn!r}"
+            )
+            assert not qn.startswith("ethereum"), (
+                f"qualified_name must not include manager: {qn!r}"
             )
