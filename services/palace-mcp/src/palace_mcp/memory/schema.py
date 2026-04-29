@@ -60,8 +60,8 @@ class ProjectInfo(BaseModel):
     language: str | None = None
     framework: str | None = None
     repo_url: str | None = None
-    source_created_at: str
-    source_updated_at: str
+    source_created_at: str | None = None
+    source_updated_at: str | None = None
     entity_counts: dict[str, int] = Field(default_factory=dict)
     last_ingest_started_at: str | None = None
     last_ingest_finished_at: str | None = None

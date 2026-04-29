@@ -160,6 +160,22 @@ async def test_list_projects_returns_sorted_slugs() -> None:
     assert slugs == ["gimle", "medic"]
 
 
+@pytest.mark.asyncio
+async def test_list_projects_tolerates_null_timestamps() -> None:
+    # Regression: GIM-121. Some legacy :Project nodes have null
+    # source_created_at/source_updated_at; ProjectInfo must accept None.
+    legacy_row = _make_project_row("legacy", "Legacy Project", [])
+    legacy_row["p"]["source_created_at"] = None
+    legacy_row["p"]["source_updated_at"] = None
+    rows = [{"p": {**legacy_row["p"]}}]
+    driver = _make_mock_driver_for_list(rows)
+    infos = await list_projects(driver)
+    assert len(infos) == 1
+    assert infos[0].slug == "legacy"
+    assert infos[0].source_created_at is None
+    assert infos[0].source_updated_at is None
+
+
 def _make_mock_driver_for_overview(
     project_row: dict[str, Any],
     count_rows: list[dict[str, Any]],
