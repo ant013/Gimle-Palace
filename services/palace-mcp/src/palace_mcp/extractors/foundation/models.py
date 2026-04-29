@@ -33,6 +33,7 @@ class Language(str, Enum):
     RUST = "rust"
     SOLIDITY = "solidity"
     FUNC = "func"
+    TOLK = "tolk"
     ANCHOR = "anchor"
     UNKNOWN = "unknown"
 
