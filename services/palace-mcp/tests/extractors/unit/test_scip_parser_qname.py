@@ -54,7 +54,13 @@ class TestSplitScipTopLevel:
     def test_naive_case_matches_split(self) -> None:
         # No backticks anywhere — output identical to str.split(' ').
         sym = "scip-python python pkg 1.0 a/b"
-        assert _split_scip_top_level(sym) == ["scip-python", "python", "pkg", "1.0", "a/b"]
+        assert _split_scip_top_level(sym) == [
+            "scip-python",
+            "python",
+            "pkg",
+            "1.0",
+            "a/b",
+        ]
 
     def test_backtick_with_internal_dot_kept_whole(self) -> None:
         # Real scip-python pattern: dotted name in escape, no spaces.
