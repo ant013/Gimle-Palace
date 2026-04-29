@@ -147,8 +147,13 @@ def _extract_qualified_name(scip_symbol: str) -> str:
     Q1 FQN decision (GIM-105, Variant B): version token excluded so the same
     symbol from different library versions yields the same qualified_name.
     This is the input to symbol_id_for() — a version-stripped qualified_name.
+
+    Splitting is backtick-aware (GIM-123): SCIP grammar permits identifiers
+    with embedded spaces when wrapped in backticks (e.g. `` `operator T()` ``
+    in scip-clang for C++ operator overloads). Splitting on raw spaces would
+    fragment such identifiers and corrupt the qualified_name.
     """
-    parts = scip_symbol.strip().split(" ")
+    parts = _split_scip_top_level(scip_symbol.strip())
     if len(parts) < 5:
         return scip_symbol.strip()
     package_name = parts[2]
@@ -156,10 +161,57 @@ def _extract_qualified_name(scip_symbol: str) -> str:
     return f"{package_name} {descriptor_chain}"
 
 
+def _split_scip_top_level(symbol: str) -> list[str]:
+    """Split a SCIP symbol string on top-level spaces, respecting backtick
+    escapes per the SCIP grammar.
+
+    A backtick toggles 'escaped identifier' mode. Inside escaped mode, a
+    doubled backtick (``) represents a literal backtick within the
+    identifier — both backticks stay together and do NOT toggle the mode.
+    Spaces encountered inside escaped mode are preserved as part of the
+    current token; only top-level spaces split tokens.
+
+    Examples:
+        "scip-python python pkg 1.0 a/b"          -> 5 tokens, naive case
+        "x y `name with space` z"                 -> 4 tokens (escaped name kept whole)
+        "x `a``b` y"                              -> 3 tokens (`` is literal backtick)
+    """
+    parts: list[str] = []
+    cur: list[str] = []
+    in_escape = False
+    i = 0
+    n = len(symbol)
+    while i < n:
+        c = symbol[i]
+        if c == "`":
+            # Inside escaped mode, a doubled backtick is a literal — consume
+            # both characters as part of the current token without toggling.
+            if in_escape and i + 1 < n and symbol[i + 1] == "`":
+                cur.append("``")
+                i += 2
+                continue
+            cur.append(c)
+            in_escape = not in_escape
+            i += 1
+            continue
+        if c == " " and not in_escape:
+            parts.append("".join(cur))
+            cur = []
+            i += 1
+            continue
+        cur.append(c)
+        i += 1
+    if cur:
+        parts.append("".join(cur))
+    return parts
+
+
 _SCIP_LANGUAGE_MAP: dict[str, Language] = {
     "python": Language.PYTHON,
     "typescript": Language.TYPESCRIPT,
+    "TypeScriptReact": Language.TYPESCRIPT,
     "javascript": Language.JAVASCRIPT,
+    "JavaScriptReact": Language.JAVASCRIPT,
     "java": Language.JAVA,
     "kotlin": Language.KOTLIN,
 }
