@@ -85,6 +85,27 @@ class TestIterScipOccurrencesLanguageDetection:
         occs = list(iter_scip_occurrences(index, commit_sha="abc"))
         assert occs[0].language == Language.UNKNOWN
 
+    def test_typescriptreact_doc_language_yields_typescript(self) -> None:
+        # GIM-123: scip-typescript emits 'TypeScriptReact' for .tsx; previously
+        # missing from _SCIP_LANGUAGE_MAP and only worked via extension fallback.
+        index = _build_index_with_doc(
+            language="TypeScriptReact",
+            relative_path="src/Button.tsx",
+            sym="scip-typescript npm pkg 1.0.0 src/`Button.tsx`/Button#.",
+        )
+        occs = list(iter_scip_occurrences(index, commit_sha="abc"))
+        assert occs[0].language == Language.TYPESCRIPT
+
+    def test_javascriptreact_doc_language_yields_javascript(self) -> None:
+        # GIM-123: same gap for .jsx → 'JavaScriptReact'.
+        index = _build_index_with_doc(
+            language="JavaScriptReact",
+            relative_path="src/Button.jsx",
+            sym="scip-typescript npm pkg 1.0.0 src/`Button.jsx`/Button#.",
+        )
+        occs = list(iter_scip_occurrences(index, commit_sha="abc"))
+        assert occs[0].language == Language.JAVASCRIPT
+
     def test_empty_language_falls_back_to_path_extension(self) -> None:
         """When doc.language is empty, derive from relative_path extension."""
         index = _build_index_with_doc(
