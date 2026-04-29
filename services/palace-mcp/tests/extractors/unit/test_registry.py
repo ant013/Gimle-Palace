@@ -36,6 +36,13 @@ def test_get_unknown_returns_none() -> None:
     assert registry.get("definitely_not_registered") is None
 
 
+def test_symbol_index_solidity_registered() -> None:
+    """GIM-124: symbol_index_solidity must be present in EXTRACTORS."""
+    extractor = registry.get("symbol_index_solidity")
+    assert extractor is not None
+    assert extractor.name == "symbol_index_solidity"
+
+
 def test_register_and_get() -> None:
     e = _FakeExtractor()
     registry.register(e)
