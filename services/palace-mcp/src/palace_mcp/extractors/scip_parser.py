@@ -214,6 +214,7 @@ _SCIP_LANGUAGE_MAP: dict[str, Language] = {
     "JavaScriptReact": Language.JAVASCRIPT,
     "java": Language.JAVA,
     "kotlin": Language.KOTLIN,
+    "solidity": Language.SOLIDITY,
 }
 
 
@@ -229,6 +230,8 @@ def _language_from_path(relative_path: str) -> Language:
         return Language.JAVA
     if relative_path.endswith((".kt", ".kts")):
         return Language.KOTLIN
+    if relative_path.endswith(".sol"):
+        return Language.SOLIDITY
     return Language.UNKNOWN
 
 

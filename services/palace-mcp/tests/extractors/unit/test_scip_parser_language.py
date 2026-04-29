@@ -5,7 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 from palace_mcp.extractors.foundation.models import Language
-from palace_mcp.extractors.scip_parser import iter_scip_occurrences
+from palace_mcp.extractors.scip_parser import (
+    _SCIP_LANGUAGE_MAP,
+    _language_from_path,
+    iter_scip_occurrences,
+)
 from palace_mcp.proto import scip_pb2
 
 
@@ -141,3 +145,34 @@ class TestIterScipOccurrencesMixedLanguageDocs:
         by_path = {o.file_path: o.language for o in occs}
         assert by_path["src/a.ts"] == Language.TYPESCRIPT
         assert by_path["src/b.js"] == Language.JAVASCRIPT
+
+
+class TestSolidityLanguageDetection:
+    """GIM-124: Solidity .sol language detection via doc.language and path extension."""
+
+    def test_solidity_doc_language_yields_solidity(self) -> None:
+        index = _build_index_with_doc(
+            language="solidity",
+            relative_path="contracts/Token.sol",
+            sym="scip-solidity ethereum contracts/Token.sol . contracts/Token.sol/`Token`#.",
+        )
+        occs = list(iter_scip_occurrences(index, commit_sha="abc"))
+        assert occs[0].language == Language.SOLIDITY
+
+    def test_sol_extension_fallback_yields_solidity(self) -> None:
+        index = _build_index_with_doc(
+            language="",
+            relative_path="contracts/ERC20.sol",
+            sym="scip-solidity ethereum contracts/ERC20.sol . contracts/ERC20.sol/`ERC20`#.",
+        )
+        occs = list(iter_scip_occurrences(index, commit_sha="abc"))
+        assert occs[0].language == Language.SOLIDITY
+
+    def test_solidity_in_language_map(self) -> None:
+        assert _SCIP_LANGUAGE_MAP["solidity"] == Language.SOLIDITY
+
+    def test_sol_path_in_language_from_path(self) -> None:
+        assert _language_from_path("contracts/A.sol") == Language.SOLIDITY
+
+    def test_sol_path_nested_in_language_from_path(self) -> None:
+        assert _language_from_path("contracts/token/ERC20/ERC20.sol") == Language.SOLIDITY
