@@ -370,7 +370,7 @@ def emit_index_from_path(root_path: Path, **slither_kwargs: Any) -> Any:
     all .sol files so slither can analyse a directory in plain solc mode.
     """
     try:
-        from slither import Slither  # type: ignore[import-untyped]
+        from slither import Slither
     except ImportError as exc:
         raise ImportError(
             "slither-analyzer is not installed. "
@@ -411,7 +411,7 @@ def _main() -> None:
     args = parser.parse_args()
 
     try:
-        from slither import Slither  # type: ignore[import-untyped]
+        from slither import Slither
     except ImportError:
         print(
             "slither-analyzer is not installed. "
