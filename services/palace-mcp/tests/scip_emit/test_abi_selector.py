@@ -5,7 +5,6 @@ Oracle values verified against ERC20/Ownable standards.
 
 from __future__ import annotations
 
-import pytest
 
 from palace_mcp.scip_emit.abi_selector import compute_abi_selector
 
