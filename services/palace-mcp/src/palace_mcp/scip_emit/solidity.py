@@ -29,7 +29,7 @@ from typing import Any
 from palace_mcp.proto import scip_pb2
 from palace_mcp.scip_emit.abi_selector import compute_abi_selector
 
-_SCIP_ROLE_DEF = 1         # SymbolRole.Definition
+_SCIP_ROLE_DEF = 1  # SymbolRole.Definition
 _SCIP_ROLE_FORWARD_DEF = 64  # SymbolRole.ForwardDefinition
 
 # SymbolInformation.Kind integer values from scip.proto
@@ -47,6 +47,7 @@ _KIND_ERROR = 63
 # ---------------------------------------------------------------------------
 # Descriptor / symbol helpers
 # ---------------------------------------------------------------------------
+
 
 def _scip_escape_type(type_str: str) -> str:
     """Backtick-escape a Solidity type string if it contains SCIP-special characters.
@@ -104,10 +105,10 @@ def _parse_canonical(canonical_name: str) -> tuple[str, str]:
       "Token.fallback()"               → ("fallback", "")
     """
     dot_idx = canonical_name.index(".")
-    sig = canonical_name[dot_idx + 1:]      # "func(params)"
+    sig = canonical_name[dot_idx + 1 :]  # "func(params)"
     paren_idx = sig.index("(")
-    member_name = sig[:paren_idx]           # "func"
-    params_str = sig[paren_idx + 1 : -1]   # strip leading "(" and trailing ")"
+    member_name = sig[:paren_idx]  # "func"
+    params_str = sig[paren_idx + 1 : -1]  # strip leading "(" and trailing ")"
     return member_name, params_str
 
 
@@ -117,7 +118,9 @@ def _member_sig(canonical_name: str) -> str:
 
 
 def _symbol_str(rel_path: str, contract_name: str, descriptor: str) -> str:
-    return f"scip-solidity ethereum {rel_path} . {rel_path}/`{contract_name}`#{descriptor}"
+    return (
+        f"scip-solidity ethereum {rel_path} . {rel_path}/`{contract_name}`#{descriptor}"
+    )
 
 
 def _contract_kind(contract: Any) -> int:
@@ -132,6 +135,7 @@ def _contract_kind(contract: Any) -> int:
 # ---------------------------------------------------------------------------
 # Occurrence + SymbolInformation writers
 # ---------------------------------------------------------------------------
+
 
 def _add_def_occurrence(doc: Any, symbol: str, role: int = _SCIP_ROLE_DEF) -> None:
     occ = doc.occurrences.add()
@@ -154,15 +158,16 @@ def _add_symbol_info(
 # Per-member emitters
 # ---------------------------------------------------------------------------
 
-def _emit_function(
-    doc: Any, rel_path: str, contract_name: str, func: Any
-) -> None:
+
+def _emit_function(doc: Any, rel_path: str, contract_name: str, func: Any) -> None:
     """Emit one function symbol (handles constructor, fallback, receive)."""
     canonical = func.canonical_name
     member_name, params_str = _parse_canonical(canonical)
 
     if func.is_constructor:
-        sym = _symbol_str(rel_path, contract_name, f"{contract_name}({_format_params(params_str)}).")
+        sym = _symbol_str(
+            rel_path, contract_name, f"{contract_name}({_format_params(params_str)})."
+        )
         _add_def_occurrence(doc, sym)
         _add_symbol_info(doc, sym, _KIND_CONSTRUCTOR)
         return
@@ -192,9 +197,7 @@ def _emit_function(
     _add_symbol_info(doc, sym, _KIND_FUNCTION, si_docs or None)
 
 
-def _emit_event(
-    doc: Any, rel_path: str, contract_name: str, event: Any
-) -> None:
+def _emit_event(doc: Any, rel_path: str, contract_name: str, event: Any) -> None:
     event_name, params_str = _parse_canonical(event.canonical_name)
     descriptor = f"{event_name}({_format_params(params_str)})."
     sym = _symbol_str(rel_path, contract_name, descriptor)
@@ -202,9 +205,7 @@ def _emit_event(
     _add_symbol_info(doc, sym, _KIND_EVENT)
 
 
-def _emit_modifier(
-    doc: Any, rel_path: str, contract_name: str, mod: Any
-) -> None:
+def _emit_modifier(doc: Any, rel_path: str, contract_name: str, mod: Any) -> None:
     mod_name, params_str = _parse_canonical(mod.canonical_name)
     descriptor = f"{mod_name}({_format_params(params_str)})."
     sym = _symbol_str(rel_path, contract_name, descriptor)
@@ -212,9 +213,7 @@ def _emit_modifier(
     _add_symbol_info(doc, sym, _KIND_MODIFIER)
 
 
-def _emit_state_var(
-    doc: Any, rel_path: str, contract_name: str, var: Any
-) -> None:
+def _emit_state_var(doc: Any, rel_path: str, contract_name: str, var: Any) -> None:
     sym = _symbol_str(rel_path, contract_name, f"{var.name}.")
     _add_def_occurrence(doc, sym)
     _add_symbol_info(doc, sym, _KIND_FIELD)
@@ -227,9 +226,7 @@ def _emit_state_var(
         _add_symbol_info(doc, getter_sym, _KIND_FUNCTION, [f"abi_selector:{selector}"])
 
 
-def _emit_custom_error(
-    doc: Any, rel_path: str, contract_name: str, err: Any
-) -> None:
+def _emit_custom_error(doc: Any, rel_path: str, contract_name: str, err: Any) -> None:
     err_name, params_str = _parse_canonical(err.canonical_name)
     descriptor = f"{err_name}({_format_params(params_str)})."
     sym = _symbol_str(rel_path, contract_name, descriptor)
@@ -295,6 +292,7 @@ def _emit_contract(doc: Any, rel_path: str, contract: Any) -> None:
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def emit_index(slither_obj: Any, root_path: Path) -> Any:
     """Convert a slither object to a SCIP Index protobuf.
 
@@ -341,6 +339,7 @@ def emit_index(slither_obj: Any, root_path: Path) -> Any:
 # ---------------------------------------------------------------------------
 # Convenience wrapper (used by regen.sh and tests that have slither available)
 # ---------------------------------------------------------------------------
+
 
 def _make_aggregator(root_path: Path) -> Path:
     """Create a temporary aggregator .sol that imports every .sol in root_path.
@@ -392,6 +391,7 @@ def emit_index_from_path(root_path: Path, **slither_kwargs: Any) -> Any:
 # ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
+
 
 def _main() -> None:
     parser = argparse.ArgumentParser(

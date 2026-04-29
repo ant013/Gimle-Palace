@@ -361,7 +361,9 @@ class TestSolMiniProjectFixture:
         for doc in index.documents:
             for si in doc.symbols:
                 if "`ERC20`#transfer(address,uint256)." in si.symbol:
-                    found = any(d == "abi_selector:0xa9059cbb" for d in si.documentation)
+                    found = any(
+                        d == "abi_selector:0xa9059cbb" for d in si.documentation
+                    )
                     assert found, (
                         f"Expected abi_selector:0xa9059cbb for ERC20.transfer; "
                         f"got: {list(si.documentation)}"
@@ -376,7 +378,9 @@ class TestSolMiniProjectFixture:
         for doc in index.documents:
             for si in doc.symbols:
                 if "`Ownable`#owner()." in si.symbol:
-                    found = any(d == "abi_selector:0x8da5cb5b" for d in si.documentation)
+                    found = any(
+                        d == "abi_selector:0x8da5cb5b" for d in si.documentation
+                    )
                     assert found, (
                         f"Expected abi_selector:0x8da5cb5b for Ownable.owner; "
                         f"got: {list(si.documentation)}"
@@ -391,7 +395,9 @@ class TestSolMiniProjectFixture:
         for doc in index.documents:
             for si in doc.symbols:
                 if "`Ownable`#transferOwnership(address)." in si.symbol:
-                    found = any(d == "abi_selector:0xf2fde38b" for d in si.documentation)
+                    found = any(
+                        d == "abi_selector:0xf2fde38b" for d in si.documentation
+                    )
                     assert found, (
                         f"Expected abi_selector:0xf2fde38b for Ownable.transferOwnership; "
                         f"got: {list(si.documentation)}"
@@ -404,8 +410,7 @@ class TestSolMiniProjectFixture:
         index = parse_scip_file(SOL_SCIP)
         occs = list(iter_scip_occurrences(index, commit_sha="test"))
         ownable_msg_sender = [
-            o for o in occs
-            if "`Ownable`#_msgSender()." in o.symbol_qualified_name
+            o for o in occs if "`Ownable`#_msgSender()." in o.symbol_qualified_name
         ]
         assert ownable_msg_sender, "Expected Ownable._msgSender() inherited occurrence"
         assert all(o.kind == SymbolKind.DECL for o in ownable_msg_sender), (
@@ -435,8 +440,10 @@ class TestSolMiniProjectFixture:
         index = parse_scip_file(SOL_SCIP)
         occs = list(iter_scip_occurrences(index, commit_sha="test"))
         approve_defs = [
-            o for o in occs
-            if o.kind == SymbolKind.DEF and "`ERC20`#_approve(" in o.symbol_qualified_name
+            o
+            for o in occs
+            if o.kind == SymbolKind.DEF
+            and "`ERC20`#_approve(" in o.symbol_qualified_name
         ]
         qnames = {o.symbol_qualified_name for o in approve_defs}
         assert len(qnames) == 2, (

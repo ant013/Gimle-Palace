@@ -175,4 +175,6 @@ class TestSolidityLanguageDetection:
         assert _language_from_path("contracts/A.sol") == Language.SOLIDITY
 
     def test_sol_path_nested_in_language_from_path(self) -> None:
-        assert _language_from_path("contracts/token/ERC20/ERC20.sol") == Language.SOLIDITY
+        assert (
+            _language_from_path("contracts/token/ERC20/ERC20.sol") == Language.SOLIDITY
+        )

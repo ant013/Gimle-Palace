@@ -41,6 +41,7 @@ _KIND_ERROR = 63
 # Mock builders
 # ---------------------------------------------------------------------------
 
+
 def _filename(tmp_path: Path, rel: str) -> SimpleNamespace:
     abs_path = str(tmp_path / rel)
     return SimpleNamespace(absolute=abs_path, relative=rel, short=rel)
@@ -59,7 +60,7 @@ def _func(
     is_receive: bool = False,
 ) -> SimpleNamespace:
     dot_idx = canonical_name.index(".")
-    sig = canonical_name[dot_idx + 1:]
+    sig = canonical_name[dot_idx + 1 :]
     name = sig[: sig.index("(")]
     return SimpleNamespace(
         name=name,
@@ -73,14 +74,14 @@ def _func(
 
 def _event(canonical_name: str) -> SimpleNamespace:
     dot_idx = canonical_name.index(".")
-    sig = canonical_name[dot_idx + 1:]
+    sig = canonical_name[dot_idx + 1 :]
     name = sig[: sig.index("(")]
     return SimpleNamespace(name=name, canonical_name=canonical_name)
 
 
 def _modifier(canonical_name: str) -> SimpleNamespace:
     dot_idx = canonical_name.index(".")
-    sig = canonical_name[dot_idx + 1:]
+    sig = canonical_name[dot_idx + 1 :]
     name = sig[: sig.index("(")]
     return SimpleNamespace(name=name, canonical_name=canonical_name)
 
@@ -91,7 +92,7 @@ def _var(name: str, *, visibility: str = "internal") -> SimpleNamespace:
 
 def _error(canonical_name: str) -> SimpleNamespace:
     dot_idx = canonical_name.index(".")
-    sig = canonical_name[dot_idx + 1:]
+    sig = canonical_name[dot_idx + 1 :]
     name = sig[: sig.index("(")]
     return SimpleNamespace(name=name, canonical_name=canonical_name)
 
@@ -141,13 +142,14 @@ def _abi_selector_map(doc: object) -> dict[str, str]:
     for si in doc.symbols:
         for d in si.documentation:
             if d.startswith("abi_selector:"):
-                result[si.symbol] = d[len("abi_selector:"):]
+                result[si.symbol] = d[len("abi_selector:") :]
     return result
 
 
 # ---------------------------------------------------------------------------
 # Task 3: basic emit
 # ---------------------------------------------------------------------------
+
 
 class TestEmitIndexSingleContract:
     """1 contract with 1 function + 1 event + 1 modifier + 1 state var."""
@@ -169,7 +171,9 @@ class TestEmitIndexSingleContract:
         index = emit_index(slither_obj, tmp_path)
         assert len(index.documents) == 1
 
-    def test_document_language(self, slither_obj: SimpleNamespace, tmp_path: Path) -> None:
+    def test_document_language(
+        self, slither_obj: SimpleNamespace, tmp_path: Path
+    ) -> None:
         index = emit_index(slither_obj, tmp_path)
         assert index.documents[0].language == "solidity"
 
@@ -184,7 +188,10 @@ class TestEmitIndexSingleContract:
     ) -> None:
         index = emit_index(slither_obj, tmp_path)
         syms = _def_symbols(index.documents[0])
-        assert "scip-solidity ethereum contracts/Token.sol . contracts/Token.sol/`Token`#." in syms
+        assert (
+            "scip-solidity ethereum contracts/Token.sol . contracts/Token.sol/`Token`#."
+            in syms
+        )
 
     def test_function_def_symbol(
         self, slither_obj: SimpleNamespace, tmp_path: Path
@@ -225,10 +232,25 @@ class TestEmitIndexSingleContract:
         km = _kind_map(index.documents[0])
         rel = "contracts/Token.sol"
         assert km[f"scip-solidity ethereum {rel} . {rel}/`Token`#."] == _KIND_CONTRACT
-        assert km[f"scip-solidity ethereum {rel} . {rel}/`Token`#transfer(address,uint256)."] == _KIND_FUNCTION
-        assert km[f"scip-solidity ethereum {rel} . {rel}/`Token`#Transfer(address,address,uint256)."] == _KIND_EVENT
-        assert km[f"scip-solidity ethereum {rel} . {rel}/`Token`#onlyOwner()."] == _KIND_MODIFIER
-        assert km[f"scip-solidity ethereum {rel} . {rel}/`Token`#_owner."] == _KIND_FIELD
+        assert (
+            km[
+                f"scip-solidity ethereum {rel} . {rel}/`Token`#transfer(address,uint256)."
+            ]
+            == _KIND_FUNCTION
+        )
+        assert (
+            km[
+                f"scip-solidity ethereum {rel} . {rel}/`Token`#Transfer(address,address,uint256)."
+            ]
+            == _KIND_EVENT
+        )
+        assert (
+            km[f"scip-solidity ethereum {rel} . {rel}/`Token`#onlyOwner()."]
+            == _KIND_MODIFIER
+        )
+        assert (
+            km[f"scip-solidity ethereum {rel} . {rel}/`Token`#_owner."] == _KIND_FIELD
+        )
 
     def test_public_function_has_abi_selector(
         self, slither_obj: SimpleNamespace, tmp_path: Path
@@ -299,6 +321,7 @@ class TestCustomErrors:
 # Task 4: constructor, fallback, receive
 # ---------------------------------------------------------------------------
 
+
 class TestSpecialFunctions:
     def test_constructor_named_after_contract(self, tmp_path: Path) -> None:
         c = _contract(
@@ -330,7 +353,13 @@ class TestSpecialFunctions:
             "Token",
             tmp_path,
             "contracts/Token.sol",
-            functions=[_func("Token.constructor(address)", is_constructor=True, visibility="public")],
+            functions=[
+                _func(
+                    "Token.constructor(address)",
+                    is_constructor=True,
+                    visibility="public",
+                )
+            ],
         )
         index = emit_index(_slither(c), tmp_path)
         selectors = _abi_selector_map(index.documents[0])
@@ -366,6 +395,7 @@ class TestSpecialFunctions:
 # ---------------------------------------------------------------------------
 # Task 4: public state var auto-getter
 # ---------------------------------------------------------------------------
+
 
 class TestPublicStateVarGetter:
     def test_public_var_emits_field_and_getter(self, tmp_path: Path) -> None:
@@ -427,6 +457,7 @@ class TestPublicStateVarGetter:
 # Task 4: inheritance
 # ---------------------------------------------------------------------------
 
+
 class TestInheritance:
     def test_inherited_member_emitted_at_inheriting_contract(
         self, tmp_path: Path
@@ -447,13 +478,24 @@ class TestInheritance:
         index = emit_index(_slither(base, child), tmp_path)
 
         # Base still has its own definition
-        base_doc = next(d for d in index.documents if d.relative_path == "contracts/Base.sol")
-        assert "scip-solidity ethereum contracts/Base.sol . contracts/Base.sol/`Base`#foo()." in _def_symbols(base_doc)
+        base_doc = next(
+            d for d in index.documents if d.relative_path == "contracts/Base.sol"
+        )
+        assert (
+            "scip-solidity ethereum contracts/Base.sol . contracts/Base.sol/`Base`#foo()."
+            in _def_symbols(base_doc)
+        )
 
         # Child has a ForwardDef for foo()
-        child_doc = next(d for d in index.documents if d.relative_path == "contracts/Child.sol")
+        child_doc = next(
+            d for d in index.documents if d.relative_path == "contracts/Child.sol"
+        )
         child_foo_sym = "scip-solidity ethereum contracts/Child.sol . contracts/Child.sol/`Child`#foo()."
-        fwd_syms = {occ.symbol for occ in child_doc.occurrences if occ.symbol_roles & _ROLE_FORWARD_DEF}
+        fwd_syms = {
+            occ.symbol
+            for occ in child_doc.occurrences
+            if occ.symbol_roles & _ROLE_FORWARD_DEF
+        }
         assert child_foo_sym in fwd_syms
 
     def test_overridden_member_not_forwarded(self, tmp_path: Path) -> None:
@@ -478,13 +520,18 @@ class TestInheritance:
         assert child_foo_sym in _def_symbols(child_doc)
 
         # No ForwardDef
-        fwd_syms = {occ.symbol for occ in child_doc.occurrences if occ.symbol_roles & _ROLE_FORWARD_DEF}
+        fwd_syms = {
+            occ.symbol
+            for occ in child_doc.occurrences
+            if occ.symbol_roles & _ROLE_FORWARD_DEF
+        }
         assert child_foo_sym not in fwd_syms
 
 
 # ---------------------------------------------------------------------------
 # Task 4: overloads
 # ---------------------------------------------------------------------------
+
 
 class TestOverloads:
     def test_overloads_produce_distinct_symbols(self, tmp_path: Path) -> None:
@@ -526,6 +573,7 @@ class TestOverloads:
 # ---------------------------------------------------------------------------
 # Task 5: mapping type backtick-escape
 # ---------------------------------------------------------------------------
+
 
 class TestScipEscapeType:
     def test_plain_type_unchanged(self) -> None:

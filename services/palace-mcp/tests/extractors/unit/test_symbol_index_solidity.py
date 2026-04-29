@@ -72,7 +72,9 @@ class TestSymbolIndexSolidityMeta:
     def test_name_is_correct(self, extractor: SymbolIndexSolidity) -> None:
         assert extractor.name == "symbol_index_solidity"
 
-    def test_description_mentions_solidity(self, extractor: SymbolIndexSolidity) -> None:
+    def test_description_mentions_solidity(
+        self, extractor: SymbolIndexSolidity
+    ) -> None:
         desc = extractor.description.lower()
         assert "solidity" in desc
 
