@@ -9,6 +9,37 @@ from unittest.mock import AsyncMock
 import pytest
 from mcp.types import CallToolResult, TextContent
 
+from palace_mcp.code_composite import _slug_to_cm_project
+
+
+# ---------------------------------------------------------------------------
+# Slug ↔ CM project name translation (GIM-122)
+# ---------------------------------------------------------------------------
+
+
+class TestSlugToCmProject:
+    """Boundary translation: operator-facing slug → CM-internal project name.
+
+    palace-mcp public API uses slugs ('gimle'); codebase-memory-mcp keys
+    projects by mount-path-derived names ('/repos/gimle' → 'repos-gimle').
+    Without this translation `palace.code.test_impact project='gimle'`
+    returns cm_error because CM doesn't know 'gimle'.
+    """
+
+    def test_operator_slug_gets_repos_prefix(self) -> None:
+        assert _slug_to_cm_project("gimle") == "repos-gimle"
+
+    def test_already_cm_name_passthrough(self) -> None:
+        # Idempotent on already-translated names so the config default
+        # (palace_cm_default_project='repos-gimle') round-trips safely.
+        assert _slug_to_cm_project("repos-gimle") == "repos-gimle"
+
+    def test_non_repos_prefix_still_translates(self) -> None:
+        # Non-`repos-` slugs get the prefix even though the convention
+        # currently only has /repos/* mounts. Keep behaviour predictable
+        # rather than try to detect "looks already-mapped" heuristically.
+        assert _slug_to_cm_project("medic") == "repos-medic"
+
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -28,6 +28,23 @@ logger = logging.getLogger(__name__)
 _QN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*(\.[A-Za-z_][A-Za-z0-9_-]*)*$")
 
 
+def _slug_to_cm_project(value: str) -> str:
+    """Translate operator-facing project slug to CM-internal project name.
+
+    palace-mcp public API uses operator slugs (e.g. ``gimle``). The codebase-
+    memory-mcp sidecar derives project names from mount paths
+    (``/repos/gimle`` → ``repos-gimle``) and refuses calls keyed on the
+    operator slug. Translate at the boundary before any CM call.
+
+    Idempotent on already-translated names: ``repos-gimle`` passes through
+    unchanged. Assumes the standard ``/repos/<slug>`` mount convention from
+    docker-compose.yml.
+    """
+    if value.startswith("repos-"):
+        return value
+    return f"repos-{value}"
+
+
 class TestImpactRequest(BaseModel):
     """Input model for palace.code.test_impact."""
 
@@ -332,7 +349,7 @@ def register_code_composite_tools(
                 "message": str(e),
             }
 
-        resolved_project = req.project or default_project
+        resolved_project = _slug_to_cm_project(req.project or default_project)
 
         try:
             disambig = await _resolve_qn(session, req.qualified_name, resolved_project)
