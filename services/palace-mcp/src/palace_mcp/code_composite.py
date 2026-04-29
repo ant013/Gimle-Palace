@@ -45,6 +45,19 @@ def _slug_to_cm_project(value: str) -> str:
     return f"repos-{value}"
 
 
+def _cm_project_to_slug(value: str) -> str:
+    """Inverse of :func:`_slug_to_cm_project`. Strip the ``repos-`` prefix.
+
+    The current default ``palace_cm_default_project='repos-gimle'`` is in
+    CM-form, but Neo4j-side queries (e.g. ``IngestRun.project``) store the
+    operator slug. Apply this before any Neo4j read in code_composite so
+    explicit-slug and default-fallback paths agree.
+
+    Idempotent on plain slugs.
+    """
+    return value.removeprefix("repos-")
+
+
 class TestImpactRequest(BaseModel):
     """Input model for palace.code.test_impact."""
 
@@ -426,7 +439,10 @@ def register_code_composite_tools(
                 "message": str(e),
             }
 
-        resolved_project = req.project or default_project
+        # default_project is in CM-form ('repos-gimle'); Neo4j IngestRun.project
+        # stores the operator slug ('gimle'). Reverse-translate so the default-
+        # fallback path matches what palace.ingest.run_extractor wrote.
+        resolved_project = _cm_project_to_slug(req.project or default_project)
 
         # State B: never-indexed — check for a successful IngestRun
         ingest_run = await _query_ingest_run_for_project(

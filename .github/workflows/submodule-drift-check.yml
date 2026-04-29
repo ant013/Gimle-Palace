@@ -1,0 +1,45 @@
+name: submodule-drift-check
+# Fail the build if any git submodule is in advance ('+' prefix) or
+# uninitialised ('-' prefix) state. Preempts the GIM-119 trap where a
+# submodule commit lands inside the inner repo but the outer repo's
+# pin is never bumped, leaving production checkouts mysteriously dirty
+# after every git pull.
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+jobs:
+  submodule-drift-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Assert no submodule drift
+        run: |
+          set -eu
+          status="$(git submodule status --recursive)"
+          echo "submodule status:"
+          echo "$status"
+
+          # First-character semantics of `git submodule status`:
+          #   ' ' (space) — submodule at recorded SHA (clean)
+          #   '+'         — submodule at a different SHA than recorded (drift)
+          #   '-'         — submodule uninitialised
+          #   'U'         — submodule has merge conflicts
+          # Any prefix other than ' ' is a failure.
+
+          drift="$(echo "$status" | grep -E '^[+\-U]' || true)"
+          if [ -n "$drift" ]; then
+            echo ""
+            echo "::error::Submodule drift detected. Lines below mean a submodule is not at the SHA pinned by the parent commit. Fix locally with 'git submodule update --init --recursive'. To bump a pin intentionally: cd into the submodule, checkout the desired SHA, then 'git add <submodule-path> && git commit'."
+            echo "$drift"
+            exit 1
+          fi
+          echo "all submodules clean"
