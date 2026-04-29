@@ -1,5 +1,9 @@
 # Q1 Research: Cross-language FQN format decision
 
+> **⚠ Scope-limited revision (rev1).** This document covers Q1 for **Python + TypeScript only** (the GIM-104 context). It is preserved for historical and rationale purposes — Variant A/B/C/D analysis here is the source for the Variant B decision still in effect.
+>
+> **For the full 10-language scope** (adds Java/Kotlin, Swift, C++, Rust+Anchor, Solidity, FunC, Tolk, Move) **and the canonical 12 minimum invariants** every extractor must honor, see **[`2026-04-27-q1-fqn-cross-language-rev2.md`](./2026-04-27-q1-fqn-cross-language-rev2.md)** (GIM-105). Treat rev2 as the active contract; this rev1 file as the deeper rationale for why Variant B was chosen for Python+TS.
+
 **Consumer:** CTO (architectural decision) + MCPEngineer (extractor implementation)
 **Decision context:** GIM-104 добавляет `symbol_index_typescript` — второй extractor поверх foundation substrate. Нужно зафиксировать формат `:Symbol.qualified_name` в Neo4j до того, как два языка начнут сосуществовать в графе.
 **Recency window:** апрель 2026; SCIP spec и snapshot'ы проверены 2026-04-27.

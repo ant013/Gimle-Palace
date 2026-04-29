@@ -58,9 +58,9 @@ class TestSymbolKind:
 
 
 class TestLanguage:
-    def test_ten_languages_plus_unknown(self) -> None:
+    def test_eleven_languages_plus_unknown(self) -> None:
         non_unknown = [lang for lang in Language if lang != Language.UNKNOWN]
-        assert len(non_unknown) == 10
+        assert len(non_unknown) == 11
 
 
 class TestSymbolOccurrence:
