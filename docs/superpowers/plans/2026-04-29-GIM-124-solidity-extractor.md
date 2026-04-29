@@ -34,20 +34,35 @@ After Task 6 (fixture vendoring) commits to the feature branch, CTO checks out t
 **Task 0a deliverable:** This section becomes a filled-in oracle table:
 
 ```
-Manual oracle count for OpenZeppelin Contracts v5 subset (PE: DO NOT IMPLEMENT until table filled):
+Manual oracle count for OpenZeppelin Contracts v5.2.0 subset (6 .sol files, 8 contracts):
+Counted by CTO from source on 2026-04-29, branch c97fea3.
 
 | Metric | Value | Source |
 |---|---|---|
-| N_CONTRACTS | <TBD> | manual count |
-| N_FUNCTIONS | <TBD> | manual count |
-| N_EVENTS | <TBD> | manual count |
-| N_MODIFIERS | <TBD> | manual count |
-| N_STATEVARS | <TBD> | manual count |
-| N_OCCURRENCES_TOTAL | <TBD> | manual count |
-| ORACLE_ABI_SELECTOR | <0x...> | keccak4("<sig>") |
+| N_CONTRACTS | 8 | Context, IERC20, IERC20Metadata, Ownable, IERC20Errors, IERC721Errors, IERC1155Errors, ERC20 |
+| N_FUNCTIONS | 35 | Context:3, IERC20:6, IERC20Metadata:3, Ownable:6(incl ctor), IERC6093:0, ERC20:17(incl ctor) |
+| N_EVENTS | 3 | IERC20:Transfer+Approval, Ownable:OwnershipTransferred |
+| N_MODIFIERS | 1 | Ownable:onlyOwner |
+| N_STATEVARS | 6 | Ownable:_owner(1), ERC20:_balances+_allowances+_totalSupply+_name+_symbol(5) |
+| N_CUSTOM_ERRORS | 23 | Ownable:2, IERC20Errors:6, IERC721Errors:8, IERC1155Errors:7 |
+| N_OCCURRENCES_TOTAL | ≥76 | defs only: 8+35+3+1+6+23=76; uses TBD after Task 3 regen |
+| ORACLE_ABI_SELECTOR transfer(address,uint256) | 0xa9059cbb | keccak4, verified in Task 2 tests |
+| ORACLE_ABI_SELECTOR owner() | 0x8da5cb5b | keccak4, verified in Task 2 tests |
+| ORACLE_ABI_SELECTOR transferOwnership(address) | 0xf2fde38b | keccak4, verified in Task 2 tests |
 ```
 
-CTO authorizes Phase 2 only when table is filled.
+**Overload discovery:** Only overload pair in fixture is `ERC20._approve(address,address,uint256)` vs
+`ERC20._approve(address,address,uint256,bool)` — both `internal`, so neither has an ABI selector.
+AC#5 can assert distinct `qualified_name` but NOT distinct `abi_selector` for this pair.
+PE should adjust Task 11 accordingly (test overload qualified_name distinction; skip selector assertion
+for internal-only overloads, or add a synthetic fixture with a public overload pair).
+
+**N_OCCURRENCES_TOTAL refinement:** Lower bound 76 covers definition occurrences only.
+After Task 3 emitter produces `index.scip`, PE runs `regen.sh` which prints the actual total.
+PE MUST update this table and REGEN.md with the actual count before Task 11 tests pin it.
+CTO will verify the final count in a followup check.
+
+CTO authorizes Phase 2 (Tasks 3-5, 11-12) with these oracle values.
 
 ---
 
