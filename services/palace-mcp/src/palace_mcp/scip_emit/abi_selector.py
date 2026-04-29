@@ -7,7 +7,7 @@ Output: lowercase hex string "0x" + first 4 bytes of keccak256 digest.
 
 from __future__ import annotations
 
-from Crypto.Hash import keccak  # type: ignore[import-untyped]
+from Crypto.Hash import keccak
 
 
 def compute_abi_selector(canonical_signature: str) -> str:
