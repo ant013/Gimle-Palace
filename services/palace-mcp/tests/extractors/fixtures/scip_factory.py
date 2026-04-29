@@ -90,6 +90,29 @@ def build_jvm_scip_index(
     )
 
 
+def build_solidity_scip_index(
+    *,
+    relative_path: str = "contracts/Token.sol",
+    symbols: list[tuple[str, int]] | None = None,
+) -> Any:
+    """Build a minimal SCIP Index for Solidity testing.
+
+    Uses 'solidity' as doc.language and scip-solidity scheme.
+    """
+    if symbols is None:
+        symbols = [
+            (
+                "scip-solidity ethereum contracts/Token.sol . contracts/Token.sol/`Token`#.",
+                1,
+            )
+        ]
+    return build_minimal_scip_index(
+        language="solidity",
+        relative_path=relative_path,
+        symbols=symbols,
+    )
+
+
 def write_scip_fixture(index: Any, path: Path) -> Path:
     """Serialize SCIP Index to a file."""
     path.write_bytes(index.SerializeToString())
