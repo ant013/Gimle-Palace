@@ -339,6 +339,57 @@ def emit_index(slither_obj: Any, root_path: Path) -> Any:
 
 
 # ---------------------------------------------------------------------------
+# Convenience wrapper (used by regen.sh and tests that have slither available)
+# ---------------------------------------------------------------------------
+
+def _make_aggregator(root_path: Path) -> Path:
+    """Create a temporary aggregator .sol that imports every .sol in root_path.
+
+    Plain solc mode (foundry_ignore=True) requires a single file target.
+    Importing all .sol files in one aggregator file lets slither parse the full
+    project; Solidity's import system deduplicates files referenced multiple times.
+    The caller is responsible for deleting the returned path when done.
+    """
+    sol_files = sorted(root_path.rglob("*.sol"))
+    lines = ["// SPDX-License-Identifier: MIT", "pragma solidity ^0.8.20;"]
+    for f in sol_files:
+        rel = f.relative_to(root_path)
+        lines.append(f'import "./{rel}";')
+    agg_path = root_path / "_scip_all.sol"
+    agg_path.write_text("\n".join(lines) + "\n")
+    return agg_path
+
+
+def emit_index_from_path(root_path: Path, **slither_kwargs: Any) -> Any:
+    """Load slither from root_path and emit a SCIP Index.
+
+    Requires slither-analyzer (not a runtime dep — fixture regen only).
+    Pass foundry_ignore=True to skip Foundry detection and use plain solc.
+
+    When foundry_ignore=True, creates a temporary aggregator .sol that imports
+    all .sol files so slither can analyse a directory in plain solc mode.
+    """
+    try:
+        from slither import Slither  # type: ignore[import-untyped]
+    except ImportError as exc:
+        raise ImportError(
+            "slither-analyzer is not installed. "
+            "Install it manually: pip install slither-analyzer"
+        ) from exc
+
+    if slither_kwargs.get("foundry_ignore") and root_path.is_dir():
+        agg_path = _make_aggregator(root_path)
+        try:
+            slither_obj = Slither(str(agg_path), **slither_kwargs)
+        finally:
+            agg_path.unlink(missing_ok=True)
+    else:
+        slither_obj = Slither(str(root_path), **slither_kwargs)
+
+    return emit_index(slither_obj, root_path)
+
+
+# ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
 
@@ -350,6 +401,13 @@ def _main() -> None:
         "--project-root", required=True, help="Path to Solidity project root"
     )
     parser.add_argument("--output", required=True, help="Path to output index.scip")
+    parser.add_argument(
+        "--foundry-ignore",
+        action="store_true",
+        default=False,
+        help="Skip Foundry detection and use plain solc (needed if forge is not installed)",
+    )
+    parser.add_argument("--solc", default=None, help="Path to solc binary")
     args = parser.parse_args()
 
     try:
@@ -365,8 +423,21 @@ def _main() -> None:
     root = Path(args.project_root).resolve()
     output = Path(args.output)
 
+    kwargs: dict[str, Any] = {}
+    if args.foundry_ignore:
+        kwargs["foundry_ignore"] = True
+    if args.solc:
+        kwargs["solc"] = args.solc
+
     print(f"Running slither on {root}...", file=sys.stderr)
-    slither_obj = Slither(str(root))
+    if kwargs.get("foundry_ignore") and root.is_dir():
+        agg_path = _make_aggregator(root)
+        try:
+            slither_obj = Slither(str(agg_path), **kwargs)
+        finally:
+            agg_path.unlink(missing_ok=True)
+    else:
+        slither_obj = Slither(str(root), **kwargs)
 
     print("Emitting SCIP index...", file=sys.stderr)
     index = emit_index(slither_obj, root)

@@ -43,12 +43,12 @@ the slither output manually).
 
 | Metric | Value | Source |
 |---|---|---|
-| N_CONTRACTS | TBD | manual count |
-| N_FUNCTIONS | TBD | manual count |
-| N_EVENTS | TBD | manual count |
-| N_MODIFIERS | TBD | manual count |
-| N_STATEVARS | TBD | manual count |
-| N_OCCURRENCES_TOTAL | TBD | manual count (emit output) |
+| N_CONTRACTS | 8 | Context, IERC20, IERC20Metadata, Ownable, IERC20Errors, IERC721Errors, IERC1155Errors, ERC20 |
+| N_FUNCTIONS | 35 | declared only: Context:3, IERC20:6, IERC20Metadata:3, Ownable:6(incl ctor), ERC20:17(incl ctor) |
+| N_EVENTS | 3 | IERC20:Transfer+Approval, Ownable:OwnershipTransferred |
+| N_MODIFIERS | 1 | Ownable:onlyOwner |
+| N_STATEVARS | 6 | Ownable:_owner(1), ERC20:_balances+_allowances+_totalSupply+_name+_symbol(5) |
+| N_OCCURRENCES_TOTAL | 88 | emit output 2026-04-29: 6 docs, 88 occurrences (defs + ForwardDef inherited) |
 | ORACLE_ABI_SELECTOR transfer | 0xa9059cbb | keccak4("transfer(address,uint256)") |
 | ORACLE_ABI_SELECTOR owner | 0x8da5cb5b | keccak4("owner()") |
 | ORACLE_ABI_SELECTOR transferOwnership | 0xf2fde38b | keccak4("transferOwnership(address)") |
