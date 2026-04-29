@@ -15,6 +15,7 @@ dependencies = [
     "python-json-logger>=2.0.7",
     "tantivy>=0.25.1",
     "protobuf>=4.25",
+    "pycryptodome>=3.20",
 ]
 
 [build-system]
@@ -32,6 +33,9 @@ dev-dependencies = [
     "pytest-asyncio>=0.25.0",
     "mcp[cli]>=1.6",
     "testcontainers[neo4j]>=4.14.2",
+    # slither-analyzer is regen-only (fixture generation); install manually:
+    #   pip install slither-analyzer>=0.11.5
+    # NOT listed here — cbor2 transitive dep requires Rust, breaks CI uv sync.
 ]
 
 [tool.pytest.ini_options]
@@ -43,6 +47,8 @@ markers = [
     "requires_scip_typescript: tests requiring ts-mini-project/index.scip fixture",
     "requires_scip_python: tests requiring py-mini-project/index.scip fixture",
     "requires_scip_java: tests requiring a real scip-java-generated index.scip (not synthetic)",
+    "requires_scip_solidity: tests requiring oz-v5-mini/index.scip fixture",
+    "requires_slither: tests requiring slither-analyzer installed and functional",
 ]
 
 [tool.mypy]
@@ -55,5 +61,5 @@ files = ["src"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["tantivy", "scip.*", "google.protobuf.*"]
+module = ["tantivy", "scip.*", "google.protobuf.*", "slither.*"]
 ignore_missing_imports = true

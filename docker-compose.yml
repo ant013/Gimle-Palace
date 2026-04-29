@@ -51,6 +51,7 @@ services:
       - "8080:8000"
     volumes:
       - /Users/Shared/Ios/Gimle-Palace:/repos/gimle:ro
+      - ./services/palace-mcp/tests/extractors/fixtures/oz-v5-mini-project:/repos/oz-v5-mini:ro
       - codebase-memory-cache:/home/appuser/.cache/codebase-memory-mcp
       - "${HOME}/.ssh/id_ed25519:/home/appuser/.ssh/id_ed25519:ro"
       - "${HOME}/.ssh/palace_ops_id_ed25519:/home/appuser/.ssh/palace_ops_id_ed25519:ro"

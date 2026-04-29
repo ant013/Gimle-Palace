@@ -166,6 +166,7 @@ the container.
 | Slug    | Host path                     | Mount                    |
 |---------|-------------------------------|--------------------------|
 | `gimle` | `/Users/Shared/Ios/Gimle-Palace` | `/repos/gimle:ro`     |
+| `oz-v5-mini` | `services/palace-mcp/tests/extractors/fixtures/oz-v5-mini-project` (repo-relative) | `/repos/oz-v5-mini:ro` |
 
 **To add a new project:**
 1. Add a bind-mount entry to `docker-compose.yml` under `palace-mcp.volumes`:
@@ -220,6 +221,12 @@ invoked via MCP tool `palace.ingest.run_extractor(name, project)`.
   `symbol_index_python`. Uses `PALACE_SCIP_INDEX_PATHS` — set the project slug
   to the scip-java output path. scip-java symbol scheme: `semanticdb maven
   <package-name> <version> <descriptor>`.
+- `symbol_index_solidity` — Solidity smart-contract symbol indexer (GIM-124).
+  Reads a pre-generated `.scip` file produced by `python -m palace_mcp.scip_emit.solidity`
+  (requires `slither-analyzer>=0.11.5` installed manually — not in pyproject.toml due to
+  Rust/cbor2 transitive dep). Handles `.sol` files. Same 3-phase bootstrap as
+  `symbol_index_python`. Uses `PALACE_SCIP_INDEX_PATHS` — set the project slug to the
+  scip_emit/solidity output path. SCIP scheme: `scip-solidity ethereum <path> . <descriptor>`.
 
 ### Operator workflow: Java/Kotlin symbol index
 
