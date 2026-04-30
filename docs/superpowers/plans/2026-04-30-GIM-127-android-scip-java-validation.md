@@ -1,10 +1,14 @@
-# Slice 1 — Android scip-java AGP validation Implementation Plan (rev1)
+# Slice 1 — Android scip-java AGP validation Implementation Plan (rev2)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Revision history:**
+- rev1 (2026-04-30) — initial plan, 14 tasks
+- rev2 (2026-04-30) — Phase 1.2 CodeReviewer review (paperclip GIM-127 comment 2026-04-30T07:34Z) returned REQUEST CHANGES: CRITICAL #1 (AC#5 only 1 of 5 USE-pair tests in Task 9), WARNING #1 (Task 10 missing Tantivy doc count assertion despite description claim), WARNING #2 (Composable tests missing explicit `language == Language.KOTLIN` per AC#6). All three fixed in rev2: Task 9 expanded 13 → 17 tests, Task 10 Assert 4 added (Tantivy via `count_docs_for_run_async`), Composable tests now check Language.KOTLIN per-DEF.
+
 **Goal:** Validate that the existing `symbol_index_java` extractor (GIM-111) handles real-world Android projects (Compose + multi-module + KSP via Room) end-to-end without code changes. Ship vendored fixture from `unstoppable-wallet-android`, oracle-backed unit + integration tests, docker-compose bind-mount, and CLAUDE.md operator workflow doc.
 
-**Architecture:** Pure fixture + tests + config + docs slice. **No new extractor code.** Re-uses `symbol_index_java`, `scip_parser`, 101a foundation substrate. New deliverables: vendored multi-module fixture (`uw-android-mini-project`), 12 oracle-backed unit assertions, NEW integration-test pattern (real fixture `.scip` from disk + real Neo4j compose-reuse — distinct from existing synthetic `build_jvm_scip_index()` pattern in `test_symbol_index_java_integration.py`), 1 docker-compose bind-mount, pyproject.toml marker, CLAUDE.md updates.
+**Architecture:** Pure fixture + tests + config + docs slice. **No new extractor code.** Re-uses `symbol_index_java`, `scip_parser`, 101a foundation substrate. New deliverables: vendored multi-module fixture (`uw-android-mini-project`), **17 oracle-backed unit assertions** (rev2; was 13 — added 4 cross-module USE pairs per CR CRITICAL #1), NEW integration-test pattern (real fixture `.scip` from disk + real Neo4j compose-reuse — distinct from existing synthetic `build_jvm_scip_index()` pattern in `test_symbol_index_java_integration.py`) **with Tantivy doc count oracle assertion** (rev2; CR WARNING #1), 1 docker-compose bind-mount, pyproject.toml marker, CLAUDE.md updates.
 
 **Tech Stack:** Python 3.12, palace-mcp extractor framework (101a substrate, lang-agnostic since GIM-104), Kotlin 1.9+, AGP 8.x, Jetpack Compose, Room (KSP), system Gradle ≥8.x, scip-java upstream (Sourcegraph), pytest, testcontainers/compose-reuse Neo4j, Tantivy.
 
@@ -604,7 +608,7 @@ git commit -m "test(GIM-127): register requires_scip_uw_android pytest marker"
 
 ### Task 9: `TestUwAndroidMiniProjectFixture` — unit-level oracle assertions
 
-> **TDD:** Write all 12 assertions referencing oracle values from REGEN.md FIRST. Run — assertions checking concrete numbers will pass (index already committed); structural assertions will fail if module names mismatch — adjust as needed. Then commit.
+> **TDD:** Write all 17 assertions (rev2 — 13 + 4 cross-module USE pairs from CR CRITICAL #1 fix) referencing oracle values from REGEN.md FIRST. Run — assertions checking concrete numbers will pass (index already committed); structural assertions will fail if module names mismatch — adjust as needed. Then commit.
 
 **Files:**
 - Modify: `services/palace-mcp/tests/extractors/unit/test_real_scip_fixtures.py` (append new test class at end of file)
@@ -696,18 +700,36 @@ class TestUwAndroidMiniProjectFixture:
 
     def test_main_screen_composable_present(self) -> None:
         # @Composable MainScreen() in app-mini/MainScreen.kt
+        # AC#6: language detected KOTLIN (CR WARNING #2 fix — explicit per-DEF check)
         index = parse_scip_file(UW_ANDROID_SCIP)
         occs = list(iter_scip_occurrences(index, commit_sha="test"))
-        names = {o.symbol_qualified_name for o in occs if o.kind == SymbolKind.DEF}
-        assert any("MainScreen" in n for n in names), \
-            f"Expected MainScreen Composable DEF, sample: {sorted(names)[:5]}"
+        main_screen_defs = [
+            o for o in occs
+            if o.kind == SymbolKind.DEF and "MainScreen" in o.symbol_qualified_name
+        ]
+        assert main_screen_defs, (
+            "Expected MainScreen Composable DEF, sample DEFs: "
+            f"{sorted({o.symbol_qualified_name for o in occs if o.kind == SymbolKind.DEF})[:5]}"
+        )
+        for occ in main_screen_defs:
+            assert occ.language == Language.KOTLIN, (
+                f"AC#6: MainScreen DEF must be KOTLIN, got {occ.language}: {occ.symbol_qualified_name}"
+            )
 
     def test_chart_view_composable_present(self) -> None:
+        # @Composable ChartView() in :components:chartview-mini
+        # AC#6: language detected KOTLIN (CR WARNING #2 fix)
         index = parse_scip_file(UW_ANDROID_SCIP)
         occs = list(iter_scip_occurrences(index, commit_sha="test"))
-        names = {o.symbol_qualified_name for o in occs if o.kind == SymbolKind.DEF}
-        assert any("ChartView" in n for n in names), \
-            f"Expected ChartView Composable DEF in :components:chartview-mini"
+        chart_view_defs = [
+            o for o in occs
+            if o.kind == SymbolKind.DEF and "ChartView" in o.symbol_qualified_name
+        ]
+        assert chart_view_defs, "Expected ChartView Composable DEF in :components:chartview-mini"
+        for occ in chart_view_defs:
+            assert occ.language == Language.KOTLIN, (
+                f"AC#6: ChartView DEF must be KOTLIN, got {occ.language}: {occ.symbol_qualified_name}"
+            )
 
     def test_wallet_entity_def_present(self) -> None:
         index = parse_scip_file(UW_ANDROID_SCIP)
@@ -732,7 +754,12 @@ class TestUwAndroidMiniProjectFixture:
             f"AC#4 Branch {_UW_AC4_BRANCH}: expected KSP-generated WalletDao_Impl as DEF"
         )
 
+    # ─── AC#5 Cross-module USE pairs (5 total per spec) ─────────────────
+    # CR CRITICAL #1 fix (rev2): plan rev1 had only 1 of 5 USE-pair tests.
+    # All 5 below; dao_impl→dao conditional on AC#4 Branch A/B-1.
+
     def test_cross_module_use_repo_in_viewmodel(self) -> None:
+        # AC#5 pair 1/5: app→repo
         # MainViewModel (in :app-mini) USEs WalletRepository (in :core-mini)
         index = parse_scip_file(UW_ANDROID_SCIP)
         occs = list(iter_scip_occurrences(index, commit_sha="test"))
@@ -742,7 +769,88 @@ class TestUwAndroidMiniProjectFixture:
             and "MainViewModel" in (o.file_path or "")
             for o in occs
         )
-        assert viewmodel_uses_repo, "Expected :app-mini → :core-mini cross-module USE (MainViewModel uses WalletRepository)"
+        assert viewmodel_uses_repo, (
+            "AC#5 pair 1/5 — Expected :app-mini → :core-mini cross-module USE "
+            "(MainViewModel uses WalletRepository)"
+        )
+
+    def test_cross_module_use_icons_in_main_screen(self) -> None:
+        # AC#5 pair 2/5: app→icons
+        # MainScreen (in :app-mini) USEs WalletIcons (in :components:icons-mini)
+        index = parse_scip_file(UW_ANDROID_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        main_screen_uses_icons = any(
+            "WalletIcons" in o.symbol_qualified_name
+            and o.kind == SymbolKind.USE
+            and "MainScreen" in (o.file_path or "")
+            for o in occs
+        )
+        assert main_screen_uses_icons, (
+            "AC#5 pair 2/5 — Expected :app-mini → :components:icons-mini "
+            "cross-module USE (MainScreen uses WalletIcons)"
+        )
+
+    def test_cross_module_use_chart_in_main_screen(self) -> None:
+        # AC#5 pair 3/5: app→chart
+        # MainScreen (in :app-mini) USEs ChartView (in :components:chartview-mini)
+        index = parse_scip_file(UW_ANDROID_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        main_screen_uses_chart = any(
+            "ChartView" in o.symbol_qualified_name
+            and o.kind == SymbolKind.USE
+            and "MainScreen" in (o.file_path or "")
+            for o in occs
+        )
+        assert main_screen_uses_chart, (
+            "AC#5 pair 3/5 — Expected :app-mini → :components:chartview-mini "
+            "cross-module USE (MainScreen uses ChartView)"
+        )
+
+    def test_cross_module_use_dao_in_repository(self) -> None:
+        # AC#5 pair 4/5: repo→dao
+        # WalletRepository (in :core-mini/repository) USEs WalletDao (in :core-mini/db).
+        # Note: intra-:core-mini cross-package; spec lists it as AC#5 because Slice 1
+        # primarily proves cross-MODULE resolution but this pair anchors the
+        # KSP follow-on chain (pair 5/5 dao_impl→dao). Excludes WalletDao_Impl
+        # to avoid self-match.
+        index = parse_scip_file(UW_ANDROID_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        repo_uses_dao = any(
+            "WalletDao" in o.symbol_qualified_name
+            and "WalletDao_Impl" not in o.symbol_qualified_name
+            and o.kind == SymbolKind.USE
+            and "WalletRepository" in (o.file_path or "")
+            for o in occs
+        )
+        assert repo_uses_dao, (
+            "AC#5 pair 4/5 — Expected WalletRepository USEs WalletDao "
+            "(intra-:core-mini cross-package)"
+        )
+
+    def test_cross_module_use_dao_impl_to_dao(self) -> None:
+        # AC#5 pair 5/5: dao_impl→dao (CONDITIONAL on AC#4 Branch A/B-1)
+        # KSP-generated WalletDao_Impl extends/USEs WalletDao base interface.
+        # If Phase 1.0 locked Branch B-2, this pair is untestable — skip.
+        if _UW_AC4_BRANCH == "B-2":
+            pytest.skip(
+                "AC#4 Branch B-2 — KSP-generated source not visible to scip-java; "
+                "AC#5 pair 5/5 (dao_impl→dao) untestable until KSP support followup"
+            )
+        index = parse_scip_file(UW_ANDROID_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        impl_uses_dao = any(
+            "WalletDao" in o.symbol_qualified_name
+            and "WalletDao_Impl" not in o.symbol_qualified_name
+            and o.kind == SymbolKind.USE
+            and "WalletDao_Impl" in (o.file_path or "")
+            for o in occs
+        )
+        assert impl_uses_dao, (
+            f"AC#5 pair 5/5 — Branch {_UW_AC4_BRANCH}: expected KSP-generated "
+            "WalletDao_Impl USEs WalletDao base interface"
+        )
+
+    # ─── End AC#5 cross-module USE pairs ────────────────────────────────
 
     def test_qualified_names_have_no_scheme_prefix(self) -> None:
         index = parse_scip_file(UW_ANDROID_SCIP)
@@ -759,7 +867,10 @@ class TestUwAndroidMiniProjectFixture:
 cd services/palace-mcp && uv run pytest tests/extractors/unit/test_real_scip_fixtures.py::TestUwAndroidMiniProjectFixture -v
 ```
 
-Expected (Branch A): 13 passed (or 12 + 1 skipped for B-2).
+Expected:
+- Branch A: **17 passed** (rev2 added 4 USE-pair tests per CR CRITICAL #1 fix)
+- Branch B-1: 17 passed (KSP visible after `sourceSets` workaround)
+- Branch B-2: **15 passed, 2 skipped** (`test_wallet_dao_impl_ksp_generated` + `test_cross_module_use_dao_impl_to_dao`)
 
 - [ ] **Step 6: If failures — diagnose**
 
@@ -897,7 +1008,39 @@ class TestSymbolIndexJavaUwIntegration:
             )
             record = await result.single()
             assert record is not None, "phase1_defs checkpoint missing"
-            assert record["count"] > 0, "phase1_defs wrote zero documents"
+            phase1_count = record["count"]
+            assert phase1_count > 0, "phase1_defs wrote zero documents"
+
+        # Assert 4: Tantivy doc count matches oracle (CR WARNING #1 fix — rev2)
+        # Verified API: TantivyBridge.count_docs_for_run_async(run_id, phase)
+        # exists at tantivy_bridge.py:112; sum phase1+phase2+phase3 for total.
+        # Oracle from REGEN.md: _UW_N_OCCURRENCES_TOTAL ±2% drift tolerance.
+        from tests.extractors.unit.test_real_scip_fixtures import (
+            _UW_N_OCCURRENCES_TOTAL,
+        )
+        from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
+
+        async with TantivyBridge(
+            tantivy_dir, heap_size_mb=settings.palace_tantivy_heap_mb
+        ) as bridge:
+            phase1_docs = await bridge.count_docs_for_run_async(
+                "uw-android-integration-001", "phase1_defs"
+            )
+            phase2_docs = await bridge.count_docs_for_run_async(
+                "uw-android-integration-001", "phase2_user_uses"
+            )
+            phase3_docs = await bridge.count_docs_for_run_async(
+                "uw-android-integration-001", "phase3_vendor_uses"
+            )
+        tantivy_doc_count = phase1_docs + phase2_docs + phase3_docs
+
+        lo = int(_UW_N_OCCURRENCES_TOTAL * 0.98)
+        hi = int(_UW_N_OCCURRENCES_TOTAL * 1.02)
+        assert lo <= tantivy_doc_count <= hi, (
+            f"Tantivy doc count {tantivy_doc_count} (p1={phase1_docs}, "
+            f"p2={phase2_docs}, p3={phase3_docs}) outside oracle "
+            f"{_UW_N_OCCURRENCES_TOTAL}±2% (range [{lo}, {hi}])"
+        )
 ```
 
 - [ ] **Step 3: Run the new integration test (requires Neo4j)**
@@ -1235,9 +1378,14 @@ Before marking plan complete, verify:
 - [x] AC#2 (scip-java emits valid index) — Task 7 Step 3
 - [x] AC#3 (oracle counts match) — Task 9 (TestUwAndroidMiniProjectFixture)
 - [x] AC#4 (KSP-generated WalletDao_Impl, conditional Phase 1.0 gate) — Task 0a Step 7 + Task 9 `test_wallet_dao_impl_ksp_generated`
-- [x] AC#5 (cross-module USE) — Task 9 `test_cross_module_use_repo_in_viewmodel`
-- [x] AC#6 (@Composable qualified_names) — Task 9 `test_main_screen_composable_present` + `test_qualified_names_have_no_scheme_prefix`
-- [x] AC#7 (integration test green) — Task 10
+- [x] AC#5 (cross-module USE — **5 pairs per spec, all covered in rev2**) — Task 9:
+  - pair 1/5 app→repo: `test_cross_module_use_repo_in_viewmodel`
+  - pair 2/5 app→icons: `test_cross_module_use_icons_in_main_screen` ⚡rev2
+  - pair 3/5 app→chart: `test_cross_module_use_chart_in_main_screen` ⚡rev2
+  - pair 4/5 repo→dao: `test_cross_module_use_dao_in_repository` ⚡rev2
+  - pair 5/5 dao_impl→dao: `test_cross_module_use_dao_impl_to_dao` ⚡rev2 (conditional B-2 skip)
+- [x] AC#6 (@Composable qualified_names + KOTLIN language) — Task 9 `test_main_screen_composable_present` + `test_chart_view_composable_present` (both with explicit `language == Language.KOTLIN` per-DEF check, rev2 WARNING #2 fix) + `test_qualified_names_have_no_scheme_prefix`
+- [x] AC#7 (integration test green) — Task 10 (with rev2 Tantivy doc count Assert 4 per WARNING #1)
 - [x] AC#8 (docker-compose 1 bind-mount uw-android) — Task 11
 - [x] AC#9 (.env.example documented) — Task 12
 - [x] AC#10 (CLAUDE.md updated) — Task 13
