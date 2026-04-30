@@ -1,6 +1,9 @@
 # Slice 1 — Android scip-java AGP validation
 
-**Status:** Board draft (rev1, 2026-04-30)
+**Status:** Board draft (rev2, 2026-04-30)
+**Revision history:**
+- rev1 (2026-04-30) — initial draft from operator brainstorm Q1-Q5
+- rev2 (2026-04-30) — operator review surfaced 9 issues; fixes: paths qualified `services/palace-mcp/`-rooted, `gradle` (system) replaces `./gradlew`, AC#4 conditional on Phase 1.0 KSP-source-visibility gate, AC#7 `find_references` removed (latent bug `code_composite.py:449` hardcoded `symbol_index_python` — separate followup), `requires_scip_uw_android` marker as explicit pyproject.toml deliverable, integration test pattern flagged as NEW (real fixture vs existing synthetic), iOS `uw-ios` bind-mount/register decoupled from Slice 1 ACs (now optional ops-prep), non-iMac contributor override note added, "максимум эффективности" mandate scoped to scip-java-visible sources
 **GIM-NN:** placeholder — CTO swaps in Phase 1.1
 **Predecessor merge:** `d6e6d35` (GIM-124 Solidity extractor merged 2026-04-29)
 **Related:** GIM-104 (TS extractor), GIM-111 (Java/Kotlin extractor on JVM-mini synthetic fixture), GIM-105 rev2 (Q1 FQN cross-language decision)
@@ -21,12 +24,12 @@ Slice 1 (this) → Slice 2 (Android resources) → Slice 3 (iOS native) → Slic
    ↓
 deliverables:
    - vendored fixture compiles + scip-java emits valid index
-   - oracle-backed assertions on def/use/cross-module/KSP-generated symbols
+   - oracle-backed assertions on def/use/cross-module/KSP-generated (KSP cond on Phase 1.0)
    - real Android project (UW-android) registered + live-smoke
-   - parallel ops setup for UW-ios (mount + register, no extractor yet)
+   - UW-ios clone is OPTIONAL ops-prep, not Slice 1 deliverable
 ```
 
-**Per-slice "максимум эффективности" mandate:** each language slice ships full DEF + USE coverage from day 1. No Solidity-style v1-stub-then-followup pattern.
+**Per-slice "максимум эффективности" mandate:** each language slice ships **full Java/Kotlin source DEF+USE coverage for scip-java-visible sources** from day 1. Resource-layer coverage (XML/Manifest/R-class/ViewBinding) is deferred to Slice 2; KMP cross-target resolution is deferred to Slice 4. No Solidity-style v1-stub-then-followup pattern *within the declared scope*.
 
 ## Hard dependencies
 
@@ -49,23 +52,24 @@ deliverables:
 | `scip_parser.iter_scip_occurrences()` | Unchanged. |
 | Foundation substrate (101a: schema bootstrap, TantivyBridge, eviction, circuit breaker, checkpoints) | Unchanged. |
 | 3-phase bootstrap (defs+decls → user_uses → vendor_uses) | Unchanged. |
-| `palace.code.find_references()` MCP tool | Unchanged. |
+| `palace.code.find_references()` MCP tool | Unchanged in Slice 1. **Known broken for non-Python extractors** — see Non-goals; separate followup (proposed GIM-126). |
 | Existing tests for jvm-mini fixture | Unchanged — coexist with new uw-android-mini tests. |
 
 ### What's new
 
 | Artefact | Description |
 |---|---|
-| `tests/extractors/fixtures/uw-android-mini-project/` | Vendored multi-module Android fixture, ~28-32 files. |
-| `tests/extractors/fixtures/uw-android-mini-project/REGEN.md` | Vendor source pin (UW commit SHA captured at fixture creation, upstream branch = `master`), regen script doc, manual oracle table. |
-| `tests/extractors/fixtures/uw-android-mini-project/regen.sh` | `./gradlew compileDebugKotlin` (all 4 modules) + `npx @sourcegraph/scip-java index --output ./scip/index.scip`. |
-| `tests/extractors/fixtures/uw-android-mini-project/scip/index.scip` | Pre-generated scip-java output, committed binary (~80-200 KB). |
-| `tests/extractors/fixtures/uw-android-mini-project/LICENSE` | MIT, copy from upstream UW. |
-| `TestUwAndroidMiniProjectFixture` class in `tests/extractors/unit/test_real_scip_fixtures.py` | ~12 oracle-backed assertions (def counts, KSP-generated symbol present, cross-module USE pairs, qualified_name format). Skipped via `requires_scip_uw_android` marker if `index.scip` missing. |
-| `tests/extractors/integration/test_symbol_index_java_uw_integration.py` | Integration test running `symbol_index_java` against the new fixture; asserts IngestRun success + checkpoints in Neo4j + Tantivy doc count. |
-| `docker-compose.yml` additions | 2 bind-mounts: `/Users/Shared/Android/unstoppable-wallet-android:/repos/uw-android:ro` and `/Users/Shared/Ios/unstoppable-wallet-ios:/repos/uw-ios:ro`. |
+| `services/palace-mcp/tests/extractors/fixtures/uw-android-mini-project/` | Vendored multi-module Android fixture, ~28-32 files. |
+| `services/palace-mcp/tests/extractors/fixtures/uw-android-mini-project/REGEN.md` | Vendor source pin (UW commit SHA captured at fixture creation, upstream branch = `master`), regen script doc, manual oracle table. |
+| `services/palace-mcp/tests/extractors/fixtures/uw-android-mini-project/regen.sh` | `gradle compileDebugKotlin` (all 4 modules) + `npx @sourcegraph/scip-java index --output ./scip/index.scip`. |
+| `services/palace-mcp/tests/extractors/fixtures/uw-android-mini-project/scip/index.scip` | Pre-generated scip-java output, committed binary (~80-200 KB). |
+| `services/palace-mcp/tests/extractors/fixtures/uw-android-mini-project/LICENSE` | MIT, copy from upstream UW. |
+| `TestUwAndroidMiniProjectFixture` class in `services/palace-mcp/tests/extractors/unit/test_real_scip_fixtures.py` | ~12 oracle-backed assertions (def counts, KSP-generated symbol present, cross-module USE pairs, qualified_name format). Skipped via `requires_scip_uw_android` marker if `index.scip` missing. |
+| `services/palace-mcp/tests/extractors/integration/test_symbol_index_java_uw_integration.py` | **NEW INTEGRATION-TEST PATTERN** — distinct from existing `test_symbol_index_java_integration.py` which uses synthetic `build_jvm_scip_index()` factory + `MagicMock` settings. New test reads committed fixture `index.scip` from disk + uses real Neo4j (compose-reuse) + asserts Tantivy doc count against oracle. Sets precedent for future fixture-based integration tests. |
+| `services/palace-mcp/pyproject.toml` `[tool.pytest.ini_options].markers` | **Add `requires_scip_uw_android` marker** — explicit one-line edit, symmetric with existing `requires_scip_typescript/python/java/solidity`. |
+| `docker-compose.yml` additions | **1 bind-mount** added: `/Users/Shared/Android/unstoppable-wallet-android:/repos/uw-android:ro`. iOS mount (`uw-ios`) is **NOT** in this slice — see §"iMac ops setup" optional ops-prep. |
 | `.env.example` annotation | Document `PALACE_SCIP_INDEX_PATHS` extension for Android slug. |
-| `CLAUDE.md` updates | New "Operator workflow: Android symbol index" subsection in §Extractors; project mount table extended with `uw-android` + `uw-ios` rows. |
+| `CLAUDE.md` updates | New "Operator workflow: Android symbol index" subsection in §Extractors; project mount table extended with `uw-android` row; explicit note that real-project bind-mounts (`gimle`, `uw-android`) are operator-iMac-specific paths and non-iMac contributors should use `docker-compose.override.yml` to redirect. |
 
 ### Fixture layout
 
@@ -78,9 +82,7 @@ uw-android-mini-project/
 ├── build.gradle.kts                         # root buildscript
 ├── gradle.properties                        # android.useAndroidX=true, etc.
 ├── gradle/
-│   ├── libs.versions.toml                   # version catalog (Kotlin/AGP/Compose/Room)
-│   └── wrapper/
-│       └── gradle-wrapper.properties        # gradle distribution URL pinned
+│   └── libs.versions.toml                   # version catalog (Kotlin/AGP/Compose/Room)
 ├── scip/
 │   └── index.scip                           # committed binary
 │
@@ -146,20 +148,24 @@ uw-android-mini-project/
 | Qualified_name | `<package>:<descriptor-chain>` after Variant B strip |
 | Local symbols | Skip function-body locals; store class members globally |
 
-### Decisions resolved in rev1 of this spec
+### Decisions resolved (rev1 + rev2)
 
 | Decision | Resolution |
 |---|---|
 | Fixture source | Vendored from `unstoppable-wallet-android` (MIT, public, modern Compose+Room+multi-module). Operator's primary Android dev project (Medic) is private — cannot vendor. |
 | Vendor pin policy | Track upstream `master`. SHA captured per-regen in REGEN.md for reproducibility, no fixed tag. |
 | Module count | **4 modules** — `:app-mini`, `:core-mini`, `:components:icons-mini`, `:components:chartview-mini`. Mirrors UW topology. Single-module fixture (1) too weak for cross-module proof. |
-| KSP exercise | **Room** (`@Entity`/`@Dao`/`@Database`). Matches UW's actual KSP usage (UW does NOT use Hilt). Generates `WalletDao_Impl` whose presence is AC#4. |
+| KSP exercise | **Room** (`@Entity`/`@Dao`/`@Database`). Matches UW's actual KSP usage (UW does NOT use Hilt). |
+| KSP source visibility (rev2) | **Conditional on Phase 1.0 gate** — see AC#4. Branch A: scip-java sees KSP source by default. Branch B: workaround in `:core-mini/build.gradle.kts` OR followup-issue replaces AC#4. PE Phase 2 blocked until branch locked. |
 | Compose `@Composable` | Emitted by scip-java as standard METHOD. Specialized `SymbolKind.COMPOSABLE` is **out of scope** v1. |
-| Fixture wrapper jar | **Not committed.** Text-only fixture, operator runs system Gradle. |
+| Gradle invocation (rev2) | **System `gradle` (≥8.x)**, no wrapper jar/script in fixture. Symmetric with `jvm-mini-project` precedent. |
 | `index.scip` binary | **Committed.** Existing pattern across all 4 prior language fixtures. |
-| Test marker | `requires_scip_uw_android` — symmetric with `requires_scip_solidity`/`_python`/`_typescript`/`_java`. |
+| Test marker | `requires_scip_uw_android` — explicit one-line addition to `services/palace-mcp/pyproject.toml` `[tool.pytest.ini_options].markers` (NOT pre-existing). |
+| Integration test pattern (rev2) | **NEW pattern** — distinct from existing `test_symbol_index_java_integration.py` (which uses synthetic SCIP factory + MagicMock). New pattern: real fixture `.scip` from disk + real Neo4j (compose-reuse) + Tantivy doc count oracle. Sets precedent for future fixture-based integration tests across all languages. |
 | Live-smoke target | UW-android (public). Medic deferred — would be private-only iMac demo without public artefact. |
-| iOS pre-registration | UW-ios bind-mount + `register_project` lands in Slice 1. Extractor execution happens in Slice 3. |
+| `find_references` proof (rev2) | **Removed from AC#7** — `code_composite.py:449` has latent bug hardcoding `symbol_index_python` for IngestRun lookup (affects all 4 language extractors). **Separate followup-issue** (proposed GIM-126). Slice 1 live-smoke proves via `palace.memory.lookup` instead. |
+| iOS pre-registration (rev2) | **Decoupled from Slice 1 ACs.** UW-ios clone is OPTIONAL ops-prep with no Slice 1 deliverable; `docker-compose.yml` adds ONLY `uw-android` mount. iOS-related compose changes land in Slice 3. |
+| Non-iMac contributors (rev2) | `docker-compose.yml` real-project mounts use absolute Mac paths (operator iMac convention). Contributors on other platforms use `docker-compose.override.yml`. Documented in CLAUDE.md per AC#10. |
 
 ## Non-goals (explicitly defer)
 
@@ -170,15 +176,16 @@ uw-android-mini-project/
 - **Gradle dependency graph indexing** (modules, transitive deps, version conflicts) — out of scope, not a code-symbol concern.
 - **ProGuard/R8 rules indexing** — low value, out of scope.
 - **Hilt/Koin DI** — UW does not use either; nothing to exercise in fixture.
-- **`uw-ios` extractor execution** — pre-mounted in this slice but extractor work is Slice 3.
+- **`uw-ios` ALL** — clone+mount+register+extractor — **all** iOS-related work is Slice 3. UW-ios clone is a discretionary ops-prep convenience here, NOT a deliverable.
+- **`palace.code.find_references` lang-agnostic fix** — `code_composite.py:449` hardcodes `symbol_index_python` for IngestRun lookup, breaking `find_references` for Java/TS/Solidity ingest projects. **Tracked as separate followup** (proposed GIM-126). Affects ALL prior language extractors, not Android-specific.
 
 ## Test strategy
 
 | Test layer | File | Purpose |
 |---|---|---|
-| Unit (parser-level) | `tests/extractors/unit/test_real_scip_fixtures.py` :: `TestUwAndroidMiniProjectFixture` | Parse committed `index.scip`, assert oracle counts + named symbols + cross-module USE pairs + qualified_name format. ~12 assertions. Skipped via `requires_scip_uw_android` marker. |
-| Integration (extractor end-to-end) | `tests/extractors/integration/test_symbol_index_java_uw_integration.py` | Real Neo4j (testcontainers/compose-reuse) + Tantivy. Run `symbol_index_java` against the new fixture; assert IngestRun success, phase1+phase2 checkpoints, Tantivy doc count matches oracle. |
-| Live-smoke (Phase 4.1, QAEngineer on iMac) | Manual MCP tool calls + Cypher | After deploy: `palace.ingest.run_extractor name=symbol_index_java project=uw-android` → verify `ok:true` + `nodes_written` > 5000; `palace.code.find_references qualified_name=WalletDao project=uw-android` → returns multi-occurrence result. |
+| Unit (parser-level) | `services/palace-mcp/tests/extractors/unit/test_real_scip_fixtures.py` :: `TestUwAndroidMiniProjectFixture` | Parse committed `index.scip`, assert oracle counts + named symbols + cross-module USE pairs + qualified_name format. ~12 assertions. Skipped via `requires_scip_uw_android` marker. |
+| Integration (extractor end-to-end) | `services/palace-mcp/tests/extractors/integration/test_symbol_index_java_uw_integration.py` | Real Neo4j (testcontainers/compose-reuse) + Tantivy. Run `symbol_index_java` against the new fixture; assert IngestRun success, phase1+phase2 checkpoints, Tantivy doc count matches oracle. |
+| Live-smoke (Phase 4.1, QAEngineer on iMac) | Manual MCP tool calls + Cypher | After deploy: `palace.ingest.run_extractor name=symbol_index_java project=uw-android` → verify `ok:true` + `nodes_written` > 5000; `palace.memory.lookup entity_type=IngestRun filters={"source":"extractor.symbol_index_java"}` → confirms run record. **Note:** `palace.code.find_references` is NOT used as proof — see "Known limitations" below. |
 
 Drift-check: regen UW → `index.scip` differs → oracle counts must update. Pattern symmetric to oz-v5-mini.
 
@@ -186,16 +193,16 @@ Drift-check: regen UW → `index.scip` differs → oracle counts must update. Pa
 
 | AC# | Condition | Verification |
 |---|---|---|
-| AC#1 | Vendored fixture compiles standalone | `./gradlew :app-mini:compileDebugKotlin :core-mini:compileDebugKotlin :components:icons-mini:compileDebugKotlin :components:chartview-mini:compileDebugKotlin` exit 0 |
+| AC#1 | Vendored fixture compiles standalone | `gradle :app-mini:compileDebugKotlin :core-mini:compileDebugKotlin :components:icons-mini:compileDebugKotlin :components:chartview-mini:compileDebugKotlin` exit 0 (system Gradle ≥8.x; no wrapper jar in fixture — symmetric with `jvm-mini-project`) |
 | AC#2 | scip-java emits valid `index.scip` | `npx @sourcegraph/scip-java index` exit 0; file parses via `parse_scip_file()` without exception |
 | AC#3 | Oracle counts match (locked Phase 1.0) | All assertions in `TestUwAndroidMiniProjectFixture` pass |
-| **AC#4** | **KSP-generated `WalletDao_Impl` present as DEF** | Test: `assert any("WalletDao_Impl" in n for n in def_qnames)` — primary KSP proof |
-| AC#5 | Cross-module USE resolves | 5 USE-pair tests: app→repo, app→icons, app→chart, repo→dao, dao_impl→dao |
+| **AC#4 (CONDITIONAL — Phase 1.0 gate)** | KSP-generated `WalletDao_Impl` resolution status fixed BEFORE Phase 2 starts. **Branch A** (default expected): `regen.sh` end-to-end produces `index.scip` with `WalletDao_Impl` as DEF — AC#4 hard, test `assert any("WalletDao_Impl" in n for n in def_qnames)`. **Branch B**: Phase 1.0 confirms scip-java does NOT see KSP source — spec **enters rev2** before PE Phase 2 starts; either (B-1) workaround `sourceSets["main"].kotlin.srcDir("build/generated/ksp/.../sources/...")` in `:core-mini/build.gradle.kts` makes `WalletDao_Impl` visible, OR (B-2) AC#4 is replaced by "scip-java handles non-KSP Kotlin only" + explicit followup-issue for KSP support. PE Phase 2 does NOT start until branch is locked. |
+| AC#5 | Cross-module USE resolves | 5 USE-pair tests: app→repo, app→icons, app→chart, repo→dao, dao_impl→dao (last pair conditional on AC#4 Branch A) |
 | AC#6 | `@Composable` qualified_names well-formed | `MainScreen` + `ChartView` both Composable; qualified_name has no scheme prefix; language detected `KOTLIN` |
 | AC#7 | Integration test green | `test_symbol_index_java_uw_integration.py` passes locally + on iMac |
-| AC#8 | Docker-compose bind-mounts added | 2 entries in `docker-compose.yml` (uw-android + uw-ios) |
+| AC#8 | Docker-compose bind-mount added | **1 entry** in `docker-compose.yml` (`uw-android`) — see "Known limitations" for `uw-ios` deferral |
 | AC#9 | `PALACE_SCIP_INDEX_PATHS` documented | `.env.example` shows Android slug example |
-| AC#10 | CLAUDE.md updated | New "Operator workflow: Android symbol index" subsection + 2 new project mount rows |
+| AC#10 | CLAUDE.md updated | New "Operator workflow: Android symbol index" subsection + 1 new project mount row (`uw-android`) + non-iMac contributor override note |
 
 ### Phase 4.1 live-smoke evidence (QAEngineer)
 
@@ -203,30 +210,34 @@ Drift-check: regen UW → `index.scip` differs → oracle counts must update. Pa
 [1] palace.ingest.list_extractors → returns existing list (no new extractor expected)
 [2] palace.memory.register_project slug=uw-android → ok:true
 [3] On iMac: cd /Users/Shared/Android/unstoppable-wallet-android
-            ./gradlew compileDebugKotlin
+            gradle compileDebugKotlin
             npx @sourcegraph/scip-java index --output ./scip/index.scip
 [4] Update .env: PALACE_SCIP_INDEX_PATHS={..., "uw-android":"/repos/uw-android/scip/index.scip"}
 [5] Restart palace-mcp container
 [6] palace.ingest.run_extractor name=symbol_index_java project=uw-android
     → ok:true, nodes_written > 5000 (full UW codebase)
-[7] palace.code.find_references qualified_name=WalletDao project=uw-android
-    → returns DEFs + USEs across UW codebase
-[8] palace.memory.lookup entity_type=IngestRun filters={"source":"extractor.symbol_index_java"}
-    → confirms run record persisted
+[7] palace.memory.lookup entity_type=IngestRun filters={"source":"extractor.symbol_index_java"}
+    → confirms run record persisted with success=true + matching project
 ```
+
+### Known limitations (this slice)
+
+- **`palace.code.find_references` is NOT exercised as Slice 1 proof.** `code_composite.py:449` hard-codes the IngestRun extractor-name lookup to `symbol_index_python`, so calling `find_references` after a successful `symbol_index_java` ingest returns `project_not_indexed` even though Tantivy contains the data. **Out of scope for Slice 1; tracked as separate followup** (proposed: GIM-126 — make `_query_ingest_run_for_project` lang-agnostic OR check ANY successful IngestRun regardless of extractor). Affects all four current language extractors (TS/Python/Java/Solidity), not specific to Android — discovery surfaced during Slice 1 brainstorm 2026-04-30.
+- **`@Composable` indistinguishable from regular METHOD** in index — scip-java emits both with same SymbolKind. No Compose-specific queries possible via `palace.code.*` v1.
+- **iOS bind-mount + register (`uw-ios`)** deferred to Slice 3. See "iMac ops setup" optional ops-prep — operator MAY clone+mount in this window but it is NOT a Slice 1 deliverable nor merge gate.
 
 ## Risks
 
 | # | Risk | Mitigation |
 |---|---|---|
-| **R1** | scip-java may NOT pick up KSP-generated source (`WalletDao_Impl` in `build/generated/ksp/.../sources/`) | **Phase 1.0 prerequisite:** end-to-end `regen.sh` + `grep WalletDao_Impl scip/index.scip`. If 0 → add explicit `sourceSets["main"].kotlin.srcDir(...)` for KSP outputs in `:core-mini/build.gradle.kts`. If still 0 → escalate to spec rev2 with workaround OR scip-java patch as separate followup. |
+| **R1** | scip-java may NOT pick up KSP-generated source (`WalletDao_Impl` in `build/generated/ksp/.../sources/`) | **Encoded as AC#4 conditional Phase 1.0 gate.** Phase 1.0 = end-to-end `regen.sh` + `grep WalletDao_Impl scip/index.scip`. If 0 → Branch B-1 workaround `sourceSets["main"].kotlin.srcDir(...)` in `:core-mini/build.gradle.kts`. If still 0 → Branch B-2: AC#4 replaced + spec rev3 + followup-issue for scip-java KSP support. PE Phase 2 blocked until branch locked. |
 | R2 | scip-java may emit per-module `.scip` instead of one merged file | Phase 1.0 verify: `len(index.documents)` after parse. If per-module → adapt `regen.sh` to aggregator pattern (Solidity precedent). |
 | R3 | AGP/Kotlin/Compose Compiler version drift | `REGEN.md` pins UW SHA + scip-java version. If versions conflict, fixture pins AGP **older** than upstream UW (documented divergence). |
 | R4 | UW transitive deps pull blockchain SDKs into fixture | Vendor `:core` only as Room-related kernel; synthesize `:app-mini` rather than copying real UW `:app`. Documented in REGEN.md "Vendoring strategy" section. |
 | R5 | `@Composable` indistinguishable from regular METHOD in index | **Accept as v1 limitation.** Document in Non-goals. Followup if Compose-specific queries needed. |
 | R6 | iMac live-smoke needs operator manual ops (clone, mount, rebuild) | Documented in CLAUDE.md (existing pattern). QAEngineer Phase 4.1 owns deployment. |
 | R7 | `index.scip` binary creates noisy diffs on regen | Existing pattern across 4 fixtures. Acceptable. |
-| R8 | Effort underestimation if R1/R2/R3 surface | Plan includes Phase 1.0 prerequisite **before** PE Phase 2. Spec rev2 if early-discover blocks plan. **Buffer:** 5d PE + 2d = 7d. |
+| R8 | Effort underestimation if R1/R2/R3 surface | Plan includes Phase 1.0 prerequisite **before** PE Phase 2. Spec rev3 if early-discover blocks plan. **Buffer:** PE 4-5d + ritual + 1-2d buffer = ~7-9d wall-clock. |
 
 ## Effort estimate
 
@@ -243,20 +254,50 @@ Phase breakdown (informational):
 - Phase 4.2 CTO merge: 0.1d
 - Buffer: 1-2d for R1/R2/R3 surprises (KSP source visibility, multi-module aggregation, AGP version conflicts)
 
-## iMac ops setup (parallel to slice — not blocking PR merge)
+## iMac ops setup
+
+### Required for Slice 1 (gates AC#7-AC#10 — operator-iMac-specific paths)
 
 1. `git clone https://github.com/horizontalsystems/unstoppable-wallet-android.git /Users/Shared/Android/unstoppable-wallet-android`
-2. `git clone https://github.com/horizontalsystems/unstoppable-wallet-ios.git /Users/Shared/Ios/unstoppable-wallet-ios`
-3. Edit `docker-compose.yml` on iMac checkout: add 2 bind-mounts under `palace-mcp.volumes`.
-4. `bash paperclips/scripts/imac-deploy.sh --target <merge-sha>` — restart palace-mcp with new mounts.
-5. Via MCP: `palace.memory.register_project slug=uw-android` + `slug=uw-ios`.
-6. (For Phase 4.1 live-smoke) — `./gradlew compileDebugKotlin` + `scip-java index` on UW-android, set `PALACE_SCIP_INDEX_PATHS`, restart, run `symbol_index_java`.
+2. Edit `docker-compose.yml` (committed via this slice's PR): adds **1 bind-mount** under `palace-mcp.volumes` for `uw-android`.
+3. `bash paperclips/scripts/imac-deploy.sh --target <merge-sha>` — restart palace-mcp with the new mount.
+4. Via MCP: `palace.memory.register_project slug=uw-android`.
+5. For Phase 4.1 live-smoke: `gradle compileDebugKotlin` + `scip-java index` on UW-android, set `PALACE_SCIP_INDEX_PATHS`, restart, run `symbol_index_java`.
 
-## Operator review verification (rev1)
+### Optional ops-prep (NOT a Slice 1 gate — operator-discretion, supports future Slice 3)
+
+While you're at it on iMac, you MAY also (entirely optional, no AC depends on these):
+- `git clone https://github.com/horizontalsystems/unstoppable-wallet-ios.git /Users/Shared/Ios/unstoppable-wallet-ios` — saves time during Slice 3 setup.
+- This slice does NOT add a `uw-ios` bind-mount to `docker-compose.yml`. iOS-related compose changes land in Slice 3 alongside iOS extractor work.
+
+### Non-iMac contributors
+
+`docker-compose.yml` real-project mounts (`gimle`, `uw-android`) use absolute Mac paths (`/Users/Shared/...`) for operator-iMac convenience. Non-iMac contributors should:
+- Either create `docker-compose.override.yml` redirecting these paths to local clones
+- Or run `docker compose --profile review up` excluding the affected service and use the fixture-only path (`./services/palace-mcp/tests/extractors/fixtures/...` mounts work cross-platform)
+- This is documented in CLAUDE.md as part of AC#10.
+
+## Operator review verification
+
+### rev1 (initial brainstorm Q1-Q5)
 
 | Operator question | Resolution |
 |---|---|
 | 1. Vendor pin policy | `master` (rolling), SHA captured per-regen in REGEN.md. |
-| 2. UW-android + UW-ios placement on iMac | Both downloaded + bind-mounted in this slice. Android under `/Users/Shared/Android/`, iOS under `/Users/Shared/Ios/` (existing convention). |
+| 2. UW-android + UW-ios placement on iMac | Android under `/Users/Shared/Android/`, iOS under `/Users/Shared/Ios/` (existing convention). **rev2 update:** iOS decoupled from Slice 1 ACs. |
 | 3. Live-smoke target | UW-android (public). Medic deferred (private). |
 | 4. Other open questions (Q4-Q8 from spec §4) | All accepted with brainstorm-recommended defaults. |
+
+### rev2 (operator review of rev1 spec)
+
+| # | Operator finding | Resolution in rev2 |
+|---|---|---|
+| Critical 1 | `find_references` hardcoded to `symbol_index_python` (`code_composite.py:449`) | Operator chose option (b): remove from AC#7, open separate followup-issue (proposed GIM-126). Live-smoke uses `palace.memory.lookup` instead. |
+| Critical 2 | Path references missing `services/palace-mcp/` prefix | Fixed throughout — all paths now repo-rooted. |
+| Critical 3 | `./gradlew` vs system `gradle` conflict | Use system `gradle` (≥8.x). No wrapper in fixture. Symmetric with `jvm-mini-project`. |
+| Critical 4 | AC#4 phrased as guarantee, but R1 acknowledges KSP-source-visibility risk | AC#4 → **conditional Phase 1.0 gate**. Branch A (default), Branch B (workaround), B-2 (followup-issue). PE Phase 2 blocked until branch locked. |
+| Medium 5 | `requires_scip_uw_android` marker doesn't exist yet | Explicit deliverable in "What's new" — `pyproject.toml` edit. |
+| Medium 6 | New integration test pattern (real fixture + Neo4j) is stronger, not symmetric | Flagged as **NEW PATTERN** in "What's new" + Decisions table. Sets precedent for future fixtures. |
+| Medium 7 | "Full DEF + USE coverage from day 1" wider than declared scope | Qualified to "**scip-java-visible Kotlin/Java sources** from day 1; resource layer → Slice 2; KMP → Slice 4". |
+| Medium 8 | docker-compose.yml Mac-specific mounts may break non-iMac contributors | Existing precedent (gimle line 53), but rev2 adds explicit override note in CLAUDE.md (per AC#10). |
+| Medium 9 | iOS scope creep without immediate validation | Operator chose option (b): UW-ios is OPTIONAL ops-prep, NOT a Slice 1 deliverable nor merge gate. AC#8 reduced from "2 mounts" to "1 mount" (uw-android only). |
