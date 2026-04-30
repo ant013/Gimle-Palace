@@ -50,7 +50,11 @@ services:
     ports:
       - "8080:8000"
     volumes:
+      # NOTE: real-project bind-mounts use absolute Mac paths (operator-iMac convention).
+      # Non-iMac contributors should override these in docker-compose.override.yml.
+      # Fixture-based mounts (relative paths under ./services/...) work cross-platform.
       - /Users/Shared/Ios/Gimle-Palace:/repos/gimle:ro
+      - /Users/Shared/Android/unstoppable-wallet-android:/repos/uw-android:ro
       - ./services/palace-mcp/tests/extractors/fixtures/oz-v5-mini-project:/repos/oz-v5-mini:ro
       - codebase-memory-cache:/home/appuser/.cache/codebase-memory-mcp
       - "${HOME}/.ssh/id_ed25519:/home/appuser/.ssh/id_ed25519:ro"
