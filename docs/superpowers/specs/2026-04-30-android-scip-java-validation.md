@@ -1,9 +1,10 @@
 # Slice 1 — Android scip-java AGP validation
 
-**Status:** Board draft (rev2, 2026-04-30) — paperclip-issue [GIM-127](https://paperclip.ant013.work/issues/60cb7d81-22ec-4261-8150-14b147f7f64e) created 2026-04-30; awaits CTO Phase 1.1 formalization (verify paths, reassign to CodeReviewer for Phase 1.2 plan-first review).
+**Status:** Board draft (rev3, 2026-04-30) — paperclip-issue [GIM-127](https://paperclip.ant013.work/issues/60cb7d81-22ec-4261-8150-14b147f7f64e); rev3 surfaces UW-upstream reality discovered in Phase 1.0 trial; needs CR re-review before PE Phase 2 begins.
 **Revision history:**
 - rev1 (2026-04-30) — initial draft from operator brainstorm Q1-Q5
 - rev2 (2026-04-30) — operator review surfaced 9 issues; fixes: paths qualified `services/palace-mcp/`-rooted, `gradle` (system) replaces `./gradlew`, AC#4 conditional on Phase 1.0 KSP-source-visibility gate, AC#7 `find_references` removed (latent bug `code_composite.py:449` hardcoded `symbol_index_python` — separate followup), `requires_scip_uw_android` marker as explicit pyproject.toml deliverable, integration test pattern flagged as NEW (real fixture vs existing synthetic), iOS `uw-ios` bind-mount/register decoupled from Slice 1 ACs (now optional ops-prep), non-iMac contributor override note added, "максимум эффективности" mandate scoped to scip-java-visible sources
+- rev3 (2026-04-30) — Phase 1.0 trial on UW master `f830bb52` revealed two spec-assumption mistakes: (1) `:components:icons` upstream is **resources-only** (XML drawables, no Kotlin), not a Compose icons object — `:components:icons-mini/WalletIcons.kt` switches from "literal vendoring" to **synthesized in UW style** (~30-50 LOC); (2) Room (`@Entity`/`@Dao`/`@Database`) lives in UW `:app/src/main/java/.../core/storage/` (20+ DAOs), not `:core` — `:core-mini/db/*` switches from "literal vendor" to **synthesized mirroring UW DAO patterns**, placed in `:core-mini` to preserve multi-module proof structure. Net: 1 of 4 modules truly vendored verbatim (`:components:chartview-mini`), 3 of 4 synthesized. Slice goal unchanged; module count unchanged; ACs unchanged.
 **Predecessor merge:** `d6e6d35` (GIM-124 Solidity extractor merged 2026-04-29)
 **Related:** GIM-104 (TS extractor), GIM-111 (Java/Kotlin extractor on JVM-mini synthetic fixture), GIM-105 rev2 (Q1 FQN cross-language decision)
 **Roadmap context:** First of 4-5 slices for full operator-stack language coverage. Sequence: Slice 1 (this) → Slice 2 (Android resources) → Slice 3 (iOS Swift+C+++Obj-C, possibly split) → Slice 4 (KMP bridge).
@@ -118,20 +119,22 @@ uw-android-mini-project/
 │       └── src/main/kotlin/.../ChartView.kt + ChartData.kt
 ```
 
-### Vendoring strategy
+### Vendoring strategy (rev3 — corrected against UW reality discovered in Phase 1.0 trial 2026-04-30)
 
 | File / module | Source | Strategy |
 |---|---|---|
 | `LICENSE` | UW root | Literal copy |
-| `gradle/libs.versions.toml` | UW root | Literal, trim blockchain-SDK entries |
-| Root `settings.gradle.kts` + `build.gradle.kts` | UW root | Adapted — only 4 mini modules |
-| `:components:icons-mini/WalletIcons.kt` | UW `:components:icons` | **Literal vendoring** — primary "real-world Compose" proof |
-| `:components:chartview-mini/*.kt` | UW `:components:chartview` | Literal or pruned subset (if upstream >300 LOC) |
-| `:core-mini/db/*` | UW `:core` Room files | Literal + strip blockchain-SDK imports |
-| `:core-mini/repository/WalletRepository.kt` | UW patterns | Adapted — Room-only, no networking |
-| `:app-mini/Main*.kt` | UW patterns | **Synthesized** in UW style — UW `:app` is too dependency-heavy to vendor verbatim |
+| `gradle/libs.versions.toml` | UW root | Literal, trim blockchain-SDK entries (web3j, bitcoin/ethereum/solana/tron/ton kits, etc.) |
+| Root `settings.gradle.kts` + `build.gradle.kts` + `gradle.properties` | UW root | Adapted — only 4 mini modules |
+| **`:components:chartview-mini/*.kt`** | UW `:components:chartview` | **LITERAL VENDORING** — only true verbatim vendor in fixture; primary "real-world Compose" proof. Pick 2-4 source files (e.g., `ChartView.kt`, `ChartData.kt`) + minimum dependencies. View-binding-using files OK — proves scip-java handles non-Compose Kotlin too. |
+| `:components:icons-mini/WalletIcons.kt` | **No upstream** — UW `:components:icons` is **resources-only** (XML drawables, 0 Kotlin) | **SYNTHESIZED** in UW style — `object WalletIcons { val Send: ImageVector = ...; val Receive = ...; val Swap = ... }` (~30-50 LOC). Provides "Compose-only module without KSP/DB" multi-module proof. Could not be vendored as originally planned. |
+| `:core-mini/db/*` (Room entities, DAOs, Database) | **No upstream in `:core`** — UW Room lives in `:app/src/main/java/.../core/storage/` (20+ DAOs + AppDatabase). Strategy: **MIRROR** UW patterns (snake-case table names, suspend + Flow, `@Insert`/`@Update`/`@Delete`/`@Query` mix) but place in our `:core-mini`. | **SYNTHESIZED** following UW DAO conventions. Justification: vendoring full UW `:app` storage is infeasible (transitive deps explode); placing Room in `:core-mini` (not `:app-mini`) keeps multi-module proof structure clean. |
+| `:core-mini/repository/WalletRepository.kt` | UW DAO usage patterns | **SYNTHESIZED** — Room-only, no networking |
+| `:app-mini/Main*.kt` | UW Activity/Compose patterns | **SYNTHESIZED** in UW style — UW `:app` is too dependency-heavy to vendor verbatim |
 
-**Pin policy:** REGEN.md captures UW commit SHA at fixture creation for reproducibility. Upstream tracking branch = `master` — future regens may roll forward. Oracle counts are re-verified on every regen.
+**Net vendoring count:** 1 of 4 modules truly vendored verbatim (`:components:chartview-mini`); 3 of 4 synthesized. Original spec rev1/rev2 wording "vendored 4 modules" was over-stated — corrected here. Slice 1 still proves "scip-java handles real Android" because (a) chartview vendor IS real UW Kotlin code, (b) all dependencies pinned to UW's `libs.versions.toml` (Kotlin 2.3.10, AGP equivalent, Compose 1.10.2, Room 2.8.1, KSP 2.3.2 — modern), (c) `:app-mini` synthesis uses real UW Compose+Hilt-free patterns.
+
+**Pin policy:** REGEN.md captures UW commit SHA `f830bb528998855dcfe276c1e4ff927a1e2cd9a1` (Phase 1.0 trial 2026-04-30) for reproducibility. Upstream tracking branch = `master` — future regens may roll forward. Oracle counts are re-verified on every regen.
 
 ## Architecture decisions
 
@@ -147,7 +150,7 @@ uw-android-mini-project/
 | Qualified_name | `<package>:<descriptor-chain>` after Variant B strip |
 | Local symbols | Skip function-body locals; store class members globally |
 
-### Decisions resolved (rev1 + rev2)
+### Decisions resolved (rev1 + rev2 + rev3)
 
 | Decision | Resolution |
 |---|---|
@@ -165,6 +168,8 @@ uw-android-mini-project/
 | `find_references` proof (rev2) | **Removed from AC#7** — `code_composite.py:449` has latent bug hardcoding `symbol_index_python` for IngestRun lookup (affects all 4 language extractors). **Separate followup-issue** (proposed GIM-126). Slice 1 live-smoke proves via `palace.memory.lookup` instead. |
 | iOS pre-registration (rev2) | **Decoupled from Slice 1 ACs.** UW-ios clone is OPTIONAL ops-prep with no Slice 1 deliverable; `docker-compose.yml` adds ONLY `uw-android` mount. iOS-related compose changes land in Slice 3. |
 | Non-iMac contributors (rev2) | `docker-compose.yml` real-project mounts use absolute Mac paths (operator iMac convention). Contributors on other platforms use `docker-compose.override.yml`. Documented in CLAUDE.md per AC#10. |
+| **UW upstream reality (rev3)** | Phase 1.0 trial on UW master `f830bb52` revealed: `:components:icons` = XML resources only (no Kotlin); `:core` = generic utils (Room actually in `:app/.../storage/`). Spec rev1/rev2 wrongly assumed icons had a `WalletIcons.kt` Kotlin object and core had Room. **Resolution**: `:components:icons-mini` and `:core-mini` switch from "literal vendor" to "synthesized in UW style" — same module structure, same ACs, same KSP exercise via Room. Only `:components:chartview-mini` remains literal vendor (UW source confirmed Kotlin Compose + view-binding). |
+| **Synthesis vs vendoring trade-off (rev3)** | Spec rev1 oversold "vendored from UW" — actual ratio is 1:3 (vendored:synthesized). This DOES NOT weaken the slice because: (a) Compose vendor IS real (chartview); (b) all version pins (Kotlin 2.3.10, Compose 1.10.2, Room 2.8.1, KSP 2.3.2, AGP) come from UW's `libs.versions.toml` literal; (c) synthesized code FOLLOWS UW patterns (same Compose state-hoisting, same Room DAO conventions). Operator's "максимум эффективности" mandate satisfied — fixture exercises real-world AGP+Compose+KSP toolchain even when source is partially synthesized. |
 
 ## Non-goals (explicitly defer)
 
@@ -286,6 +291,16 @@ While you're at it on iMac, you MAY also (entirely optional, no AC depends on th
 | 2. UW-android + UW-ios placement on iMac | Android under `/Users/Shared/Android/`, iOS under `/Users/Shared/Ios/` (existing convention). **rev2 update:** iOS decoupled from Slice 1 ACs. |
 | 3. Live-smoke target | UW-android (public). Medic deferred (private). |
 | 4. Other open questions (Q4-Q8 from spec §4) | All accepted with brainstorm-recommended defaults. |
+
+### rev3 (Phase 1.0 trial on dev Mac, 2026-04-30)
+
+| # | Phase 1.0 finding | Resolution in rev3 |
+|---|---|---|
+| Reality 1 | `:components:icons` upstream — resources-only (XML drawables, 0 Kotlin) | `:components:icons-mini/WalletIcons.kt` SYNTHESIZED in UW style (`object WalletIcons { val Send/Receive/Swap: ImageVector }`). Module preserved for multi-module proof. |
+| Reality 2 | Room (`@Entity`/`@Dao`/`@Database`) lives in UW `:app/.../storage/`, not `:core` | `:core-mini/db/*` SYNTHESIZED following UW DAO patterns (snake-case tables, suspend + Flow, mixed Insert/Update/Delete/Query). Placed in `:core-mini` (not `:app-mini`) to preserve multi-module structure + Room/KSP exercise. |
+| Reality 3 | UW master pin captured | SHA `f830bb528998855dcfe276c1e4ff927a1e2cd9a1` (REGEN.md will document). |
+| Toolchain | Dev Mac has Java 21 LTS, Gradle 9.3.1, Node 23, npx 11.6 | Gradle 9 may need AGP compat workaround; surface in REGEN.md if encountered. |
+| Vendoring honesty | rev1/rev2 implied "4 modules vendored from UW" | rev3 corrects: 1 truly vendored (chartview), 3 synthesized in UW style with all version pins from UW `libs.versions.toml`. |
 
 ### rev2 (operator review of rev1 spec)
 
