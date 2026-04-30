@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
 
@@ -21,7 +22,7 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
+    kotlinOptions { jvmTarget = "17" }
 }
 
 dependencies {
@@ -37,4 +38,16 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.kotlinx.coroutines.android)
+}
+
+dependencies {
+    kotlinCompilerPluginClasspath(libs.sourcegraph.semanticdb.kotlinc)
+}
+
+val semanticdbTargetRoot = rootProject.layout.buildDirectory.dir("semanticdb-targetroot")
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask<*>>().configureEach {
+    compilerOptions.freeCompilerArgs.addAll(
+        "-P=plugin:semanticdb-kotlinc:sourceroot=${rootProject.projectDir.absolutePath}",
+        "-P=plugin:semanticdb-kotlinc:targetroot=${semanticdbTargetRoot.get().asFile.absolutePath}",
+    )
 }
