@@ -1,10 +1,9 @@
 # Slice 1 — Android scip-java AGP validation
 
-**Status:** Board draft (rev2, 2026-04-30)
+**Status:** Board draft (rev2, 2026-04-30) — paperclip-issue [GIM-127](https://paperclip.ant013.work/issues/60cb7d81-22ec-4261-8150-14b147f7f64e) created 2026-04-30; awaits CTO Phase 1.1 formalization (verify paths, reassign to CodeReviewer for Phase 1.2 plan-first review).
 **Revision history:**
 - rev1 (2026-04-30) — initial draft from operator brainstorm Q1-Q5
 - rev2 (2026-04-30) — operator review surfaced 9 issues; fixes: paths qualified `services/palace-mcp/`-rooted, `gradle` (system) replaces `./gradlew`, AC#4 conditional on Phase 1.0 KSP-source-visibility gate, AC#7 `find_references` removed (latent bug `code_composite.py:449` hardcoded `symbol_index_python` — separate followup), `requires_scip_uw_android` marker as explicit pyproject.toml deliverable, integration test pattern flagged as NEW (real fixture vs existing synthetic), iOS `uw-ios` bind-mount/register decoupled from Slice 1 ACs (now optional ops-prep), non-iMac contributor override note added, "максимум эффективности" mandate scoped to scip-java-visible sources
-**GIM-NN:** placeholder — CTO swaps in Phase 1.1
 **Predecessor merge:** `d6e6d35` (GIM-124 Solidity extractor merged 2026-04-29)
 **Related:** GIM-104 (TS extractor), GIM-111 (Java/Kotlin extractor on JVM-mini synthetic fixture), GIM-105 rev2 (Q1 FQN cross-language decision)
 **Roadmap context:** First of 4-5 slices for full operator-stack language coverage. Sequence: Slice 1 (this) → Slice 2 (Android resources) → Slice 3 (iOS Swift+C+++Obj-C, possibly split) → Slice 4 (KMP bridge).

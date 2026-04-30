@@ -58,7 +58,7 @@ Board (operator or designated agent) executes outside the feature branch (e.g., 
 | AC#4 Branch | A / B-1 / B-2 | locked outcome |
 ```
 
-10. Commit Phase 1.0 outputs to FB `feature/GIM-NN-android-scip-java-validation`:
+10. Commit Phase 1.0 outputs to FB `feature/GIM-127-android-scip-java-validation`:
     - REGEN.md with filled oracle table + AC#4 branch decision
     - All vendored files (so PE doesn't redo vendoring; Phase 2 Tasks 2-6 become "verify present" rather than "create")
     - `regen.sh`
@@ -487,7 +487,7 @@ Expected: `5`.
 
 ```bash
 git add services/palace-mcp/tests/extractors/fixtures/uw-android-mini-project/app-mini/
-git commit -m "feat(GIM-NN): synthesize :app-mini module (Activity + Compose + ViewModel + StateFlow + sealed UiState)"
+git commit -m "feat(GIM-127): synthesize :app-mini module (Activity + Compose + ViewModel + StateFlow + sealed UiState)"
 ```
 
 ---
@@ -552,7 +552,7 @@ git diff --cached --stat services/palace-mcp/tests/extractors/fixtures/uw-androi
 
 If diff non-empty:
 ```bash
-git commit -m "chore(GIM-NN): regen index.scip after :app-mini synthesis"
+git commit -m "chore(GIM-127): regen index.scip after :app-mini synthesis"
 ```
 
 If diff empty (Phase 1.0 already final): no commit, move on.
@@ -597,7 +597,7 @@ Expected: line `@pytest.mark.requires_scip_uw_android: tests requiring uw-androi
 
 ```bash
 git add services/palace-mcp/pyproject.toml
-git commit -m "test(GIM-NN): register requires_scip_uw_android pytest marker"
+git commit -m "test(GIM-127): register requires_scip_uw_android pytest marker"
 ```
 
 ---
@@ -772,7 +772,7 @@ Common failures:
 
 ```bash
 git add services/palace-mcp/tests/extractors/unit/test_real_scip_fixtures.py
-git commit -m "test(GIM-NN): TestUwAndroidMiniProjectFixture — oracle assertions for Android fixture (Compose + Room + multi-module + KSP cond on AC#4 branch)"
+git commit -m "test(GIM-127): TestUwAndroidMiniProjectFixture — oracle assertions for Android fixture (Compose + Room + multi-module + KSP cond on AC#4 branch)"
 ```
 
 ---
@@ -799,7 +799,7 @@ Note: how `driver` fixture is provided (testcontainers Neo4j or compose-reuse), 
 ```python
 """Integration test: SymbolIndexJava on real fixture .scip + real Neo4j.
 
-NEW PATTERN (GIM-NN Slice 1): unlike test_symbol_index_java_integration.py
+NEW PATTERN (GIM-127 Slice 1): unlike test_symbol_index_java_integration.py
 which uses synthetic build_jvm_scip_index() factory, this test reads the
 committed uw-android-mini-project/scip/index.scip fixture from disk and
 runs the full extractor pipeline against real Neo4j (compose-reuse).
@@ -923,7 +923,7 @@ Common failures:
 
 ```bash
 git add services/palace-mcp/tests/extractors/integration/test_symbol_index_java_uw_integration.py
-git commit -m "test(GIM-NN): NEW integration-test pattern — real fixture .scip + real Neo4j (vs existing synthetic factory)"
+git commit -m "test(GIM-127): NEW integration-test pattern — real fixture .scip + real Neo4j (vs existing synthetic factory)"
 ```
 
 ---
@@ -974,7 +974,7 @@ Expected: empty output (success). Errors → fix YAML indentation.
 
 ```bash
 git add docker-compose.yml
-git commit -m "chore(GIM-NN): add uw-android bind-mount + non-iMac contributor override note"
+git commit -m "chore(GIM-127): add uw-android bind-mount + non-iMac contributor override note"
 ```
 
 ---
@@ -1003,7 +1003,7 @@ PALACE_SCIP_INDEX_PATHS={"gimle":"/repos/gimle/scip/index.scip","oz-v5-mini":"/r
 
 ```bash
 git add .env.example
-git commit -m "docs(GIM-NN): show Android slug example in PALACE_SCIP_INDEX_PATHS"
+git commit -m "docs(GIM-127): show Android slug example in PALACE_SCIP_INDEX_PATHS"
 ```
 
 ---
@@ -1106,7 +1106,7 @@ Expected: ≥4 matches.
 
 ```bash
 git add CLAUDE.md
-git commit -m "docs(GIM-NN): CLAUDE.md — Android operator workflow + uw-android mount + non-iMac override note"
+git commit -m "docs(GIM-127): CLAUDE.md — Android operator workflow + uw-android mount + non-iMac override note"
 ```
 
 ---
@@ -1143,7 +1143,7 @@ cd services/palace-mcp && uv run mypy src/ 2>&1 | tail -5
 
 Expected: `Success: no issues found in N source files`.
 
-- [ ] **Step 4: pytest GIM-NN-scoped**
+- [ ] **Step 4: pytest GIM-127-scoped**
 
 Run:
 ```bash
@@ -1194,8 +1194,8 @@ Expected: ~10-15 commits ahead of develop, no unexpected `??` files. (Phase 1.0 
 - [ ] **Step 9: Push branch + open draft PR**
 
 ```bash
-git push -u origin feature/GIM-NN-android-scip-java-validation
-gh pr create --draft --title "feat(GIM-NN): Android scip-java AGP validation — Slice 1" --body "$(cat <<'PRBODY'
+git push -u origin feature/GIM-127-android-scip-java-validation
+gh pr create --draft --title "feat(GIM-127): Android scip-java AGP validation — Slice 1" --body "$(cat <<'PRBODY'
 ## Summary
 
 - Slice 1 of 4-5 in post-Solidity language coverage roadmap (Slice 1: this → Slice 2: Android resources → Slice 3: iOS native → Slice 4: KMP bridge)
