@@ -38,7 +38,7 @@ class TantivyBridge:
     Usage::
 
         async with TantivyBridge(Path("/var/lib/palace/tantivy"), heap_mb=100) as bridge:
-            await bridge.add_or_replace_async(occurrence)
+            await bridge.add_or_replace_async(occurrence, phase="phase1_defs")
             await bridge.commit_async()
     """
 
@@ -86,9 +86,9 @@ class TantivyBridge:
     # Public async API
     # ------------------------------------------------------------------
 
-    async def add_or_replace_async(self, occ: SymbolOccurrence) -> None:
+    async def add_or_replace_async(self, occ: SymbolOccurrence, phase: str) -> None:
         """Delete any doc with same doc_key then add new one (F4 uniqueness fix)."""
-        await self._run(self._add_or_replace_sync, occ)
+        await self._run(self._add_or_replace_sync, occ, phase)
 
     async def commit_async(self) -> None:
         """Flush writer buffer to disk."""
@@ -148,7 +148,12 @@ class TantivyBridge:
         schema_builder.add_float_field(
             "importance", fast=True, indexed=False, stored=False
         )
-        schema_builder.add_text_field("ingest_run_id", stored=True)
+        # raw tokenizer keeps UUIDs as single terms for exact-match queries.
+        schema_builder.add_text_field(
+            "ingest_run_id", stored=True, tokenizer_name="raw"
+        )
+        # phase stored as raw term so count_docs_for_run can filter per-phase.
+        schema_builder.add_text_field("phase", stored=False, tokenizer_name="raw")
         schema = schema_builder.build()
 
         try:
@@ -158,7 +163,7 @@ class TantivyBridge:
 
         self._writer = self._index.writer(heap_size=self.heap_size)
 
-    def _add_or_replace_sync(self, occ: SymbolOccurrence) -> None:
+    def _add_or_replace_sync(self, occ: SymbolOccurrence, phase: str) -> None:
         assert self._writer is not None
         # Delete any existing doc with same primary key (idempotent rerun)
         self._writer.delete_documents("doc_key", occ.doc_key)
@@ -169,15 +174,12 @@ class TantivyBridge:
             "line": occ.line,
             "col_start": occ.col_start,
             "col_end": occ.col_end,
-            "role": list(type(occ).model_fields["kind"].annotation.__members__).index(
-                occ.kind.value
-            )
-            if False
-            else 0,  # simplified; real impl maps SymbolKind → u8
-            "language": 0,  # simplified; real impl maps Language → u8
+            "role": 0,
+            "language": 0,
             "commit_sha": occ.commit_sha,
             "importance": occ.importance,
             "ingest_run_id": occ.ingest_run_id,
+            "phase": phase,
         }
         self._writer.add_document(tantivy.Document(**doc))
 
@@ -216,10 +218,9 @@ class TantivyBridge:
     def _count_docs_for_run_sync(self, run_id: str, phase: str) -> int:
         assert self._index is not None
         searcher = self._index.searcher()
-        # Count by searching for run_id in ingest_run_id field.
-        # phase is encoded in doc_key prefix in real impl; here simplified.
-        query = self._index.parse_query(f'ingest_run_id:"{run_id}"')
-        results = searcher.search(query, limit=0)
+        # Both fields use raw tokenizer → exact-term match, no UUID splitting.
+        query = self._index.parse_query(f'+ingest_run_id:"{run_id}" +phase:"{phase}"')
+        results = searcher.search(query, limit=1)
         return cast(int, results.count)
 
     # ------------------------------------------------------------------

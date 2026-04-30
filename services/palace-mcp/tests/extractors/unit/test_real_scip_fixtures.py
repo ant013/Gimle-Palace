@@ -26,6 +26,7 @@ TS_SCIP = FIXTURES / "ts-mini-project" / "index.scip"
 PY_SCIP = FIXTURES / "py-mini-project" / "index.scip"
 JVM_SCIP = FIXTURES / "jvm-mini-project" / "index.scip"
 SOL_SCIP = FIXTURES / "oz-v5-mini-project" / "index.scip"
+UW_ANDROID_SCIP = FIXTURES / "uw-android-mini-project" / "scip" / "index.scip"
 
 requires_scip_typescript = pytest.mark.skipif(
     not TS_SCIP.exists(), reason="ts-mini-project/index.scip not present"
@@ -38,6 +39,10 @@ requires_scip_java = pytest.mark.skipif(
 )
 requires_scip_solidity = pytest.mark.skipif(
     not SOL_SCIP.exists(), reason="oz-v5-mini-project/index.scip not present"
+)
+requires_scip_uw_android = pytest.mark.skipif(
+    not UW_ANDROID_SCIP.exists(),
+    reason="uw-android-mini-project/scip/index.scip not present",
 )
 
 
@@ -462,4 +467,234 @@ class TestSolMiniProjectFixture:
             )
             assert not qn.startswith("ethereum"), (
                 f"qualified_name must not include manager: {qn!r}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# Oracle constants (GIM-127 Phase 1.0 — locked 2026-04-30, commit e4e36de)
+# ---------------------------------------------------------------------------
+# UW@c0489d5a3 pin (last pre-AGP-9 commit), semanticdb-kotlinc 0.5.0
+# 4 modules: app-mini, core-mini, components/icons-mini, components/chartview-mini
+# All occurrences are KOTLIN (no Java source in fixture)
+_UW_N_OCCURRENCES_TOTAL = 1470
+_UW_N_DEFS = 269
+_UW_N_USES = 1201
+_UW_N_DOCUMENTS = 17
+_UW_AC4_BRANCH = "A"  # KSP-generated source visible without workaround
+# Tantivy deduplicates by doc_key (symbol_id:file:line:col_start). 35 positions
+# appear as both DEF (phase1) and USE (phase2/3) — the USE overwrites the DEF,
+# so Tantivy total = 1470 - 35 = 1435 unique positions after full ingest.
+_UW_N_TANTIVY_DOCS = 1435
+
+
+@requires_scip_uw_android
+class TestUwAndroidMiniProjectFixture:
+    """Oracle assertions for uw-android-mini-project fixture.
+
+    Locked Phase 1.0 oracle in
+    services/palace-mcp/tests/extractors/fixtures/uw-android-mini-project/REGEN.md.
+    AC#4 (KSP-generated WalletDao_Impl) conditional — see _UW_AC4_BRANCH.
+    """
+
+    def test_parses_without_error(self) -> None:
+        index = parse_scip_file(UW_ANDROID_SCIP)
+        assert index is not None
+
+    def test_yields_kotlin_occurrences(self) -> None:
+        index = parse_scip_file(UW_ANDROID_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        kt_occs = [o for o in occs if o.language == Language.KOTLIN]
+        assert len(kt_occs) > 0, "Expected at least one Kotlin occurrence"
+
+    def test_occurrence_total_matches_oracle(self) -> None:
+        index = parse_scip_file(UW_ANDROID_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        lo, hi = (
+            int(_UW_N_OCCURRENCES_TOTAL * 0.98),
+            int(_UW_N_OCCURRENCES_TOTAL * 1.02),
+        )
+        assert lo <= len(occs) <= hi, (
+            f"Oracle: {_UW_N_OCCURRENCES_TOTAL}±2%, got {len(occs)}"
+        )
+
+    def test_def_count_matches_oracle(self) -> None:
+        index = parse_scip_file(UW_ANDROID_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        defs = [o for o in occs if o.kind == SymbolKind.DEF]
+        lo, hi = int(_UW_N_DEFS * 0.98), int(_UW_N_DEFS * 1.02)
+        assert lo <= len(defs) <= hi, f"Oracle: {_UW_N_DEFS}±2% DEF, got {len(defs)}"
+
+    def test_documents_count_matches_oracle(self) -> None:
+        index = parse_scip_file(UW_ANDROID_SCIP)
+        assert len(index.documents) == _UW_N_DOCUMENTS, (
+            f"Oracle: {_UW_N_DOCUMENTS} docs, got {len(index.documents)}"
+        )
+
+    def test_main_activity_def_present(self) -> None:
+        index = parse_scip_file(UW_ANDROID_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        names = {o.symbol_qualified_name for o in occs if o.kind == SymbolKind.DEF}
+        assert any("MainActivity" in n for n in names), (
+            f"Expected MainActivity DEF, sample: {sorted(names)[:5]}"
+        )
+
+    def test_main_screen_composable_present(self) -> None:
+        # AC#6: language detected KOTLIN — explicit per-DEF check (CR WARNING #2 fix)
+        index = parse_scip_file(UW_ANDROID_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        main_screen_defs = [
+            o
+            for o in occs
+            if o.kind == SymbolKind.DEF and "MainScreen" in o.symbol_qualified_name
+        ]
+        assert main_screen_defs, (
+            "Expected MainScreen Composable DEF, sample DEFs: "
+            f"{sorted({o.symbol_qualified_name for o in occs if o.kind == SymbolKind.DEF})[:5]}"
+        )
+        for occ in main_screen_defs:
+            assert occ.language == Language.KOTLIN, (
+                f"AC#6: MainScreen DEF must be KOTLIN, got {occ.language}: "
+                f"{occ.symbol_qualified_name}"
+            )
+
+    def test_chart_view_composable_present(self) -> None:
+        # AC#6: language detected KOTLIN — explicit per-DEF check (CR WARNING #2 fix)
+        index = parse_scip_file(UW_ANDROID_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        chart_view_defs = [
+            o
+            for o in occs
+            if o.kind == SymbolKind.DEF and "ChartView" in o.symbol_qualified_name
+        ]
+        assert chart_view_defs, (
+            "Expected ChartView Composable DEF in :components:chartview-mini"
+        )
+        for occ in chart_view_defs:
+            assert occ.language == Language.KOTLIN, (
+                f"AC#6: ChartView DEF must be KOTLIN, got {occ.language}: "
+                f"{occ.symbol_qualified_name}"
+            )
+
+    def test_wallet_entity_def_present(self) -> None:
+        index = parse_scip_file(UW_ANDROID_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        names = {o.symbol_qualified_name for o in occs if o.kind == SymbolKind.DEF}
+        assert any("WalletEntity" in n for n in names), "Expected Room @Entity"
+
+    def test_wallet_dao_def_present(self) -> None:
+        index = parse_scip_file(UW_ANDROID_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        names = {o.symbol_qualified_name for o in occs if o.kind == SymbolKind.DEF}
+        assert any("WalletDao" in n for n in names), "Expected Room @Dao interface"
+
+    def test_wallet_dao_impl_ksp_generated(self) -> None:
+        # AC#4 conditional gate. Branch A/B-1: must pass. Branch B-2: skipped.
+        if _UW_AC4_BRANCH == "B-2":
+            pytest.skip(
+                "AC#4 Branch B-2 — KSP source not visible to scip-java; followup tracked"
+            )
+        index = parse_scip_file(UW_ANDROID_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        names = {o.symbol_qualified_name for o in occs if o.kind == SymbolKind.DEF}
+        assert any("WalletDao_Impl" in n for n in names), (
+            f"AC#4 Branch {_UW_AC4_BRANCH}: expected KSP-generated WalletDao_Impl as DEF"
+        )
+
+    # ── AC#5 Cross-module USE pairs (5 total per spec) ───────────────────────
+    # CR CRITICAL #1 fix (rev2): all 5 pairs; dao_impl→dao conditional on AC#4.
+
+    def test_cross_module_use_repo_in_viewmodel(self) -> None:
+        # AC#5 pair 1/5: app→repo
+        index = parse_scip_file(UW_ANDROID_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        viewmodel_uses_repo = any(
+            "WalletRepository" in o.symbol_qualified_name
+            and o.kind == SymbolKind.USE
+            and "MainViewModel" in (o.file_path or "")
+            for o in occs
+        )
+        assert viewmodel_uses_repo, (
+            "AC#5 pair 1/5 — Expected :app-mini → :core-mini cross-module USE "
+            "(MainViewModel uses WalletRepository)"
+        )
+
+    def test_cross_module_use_icons_in_main_screen(self) -> None:
+        # AC#5 pair 2/5: app→icons
+        index = parse_scip_file(UW_ANDROID_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        main_screen_uses_icons = any(
+            "WalletIcons" in o.symbol_qualified_name
+            and o.kind == SymbolKind.USE
+            and "MainScreen" in (o.file_path or "")
+            for o in occs
+        )
+        assert main_screen_uses_icons, (
+            "AC#5 pair 2/5 — Expected :app-mini → :components:icons-mini "
+            "cross-module USE (MainScreen uses WalletIcons)"
+        )
+
+    def test_cross_module_use_chart_in_main_screen(self) -> None:
+        # AC#5 pair 3/5: app→chart
+        index = parse_scip_file(UW_ANDROID_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        main_screen_uses_chart = any(
+            "ChartView" in o.symbol_qualified_name
+            and o.kind == SymbolKind.USE
+            and "MainScreen" in (o.file_path or "")
+            for o in occs
+        )
+        assert main_screen_uses_chart, (
+            "AC#5 pair 3/5 — Expected :app-mini → :components:chartview-mini "
+            "cross-module USE (MainScreen uses ChartView)"
+        )
+
+    def test_cross_module_use_dao_in_repository(self) -> None:
+        # AC#5 pair 4/5: repo→dao (intra-:core-mini cross-package)
+        index = parse_scip_file(UW_ANDROID_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        repo_uses_dao = any(
+            "WalletDao" in o.symbol_qualified_name
+            and "WalletDao_Impl" not in o.symbol_qualified_name
+            and o.kind == SymbolKind.USE
+            and "WalletRepository" in (o.file_path or "")
+            for o in occs
+        )
+        assert repo_uses_dao, (
+            "AC#5 pair 4/5 — Expected WalletRepository USEs WalletDao "
+            "(intra-:core-mini cross-package)"
+        )
+
+    def test_cross_module_use_dao_impl_to_dao(self) -> None:
+        # AC#5 pair 5/5: dao_impl→dao (conditional on AC#4 Branch A/B-1)
+        if _UW_AC4_BRANCH == "B-2":
+            pytest.skip(
+                "AC#4 Branch B-2 — KSP-generated source not visible to scip-java; "
+                "AC#5 pair 5/5 (dao_impl→dao) untestable until KSP support followup"
+            )
+        index = parse_scip_file(UW_ANDROID_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        impl_uses_dao = any(
+            "WalletDao" in o.symbol_qualified_name
+            and "WalletDao_Impl" not in o.symbol_qualified_name
+            and o.kind == SymbolKind.USE
+            and "WalletDao_Impl" in (o.file_path or "")
+            for o in occs
+        )
+        assert impl_uses_dao, (
+            f"AC#5 pair 5/5 — Branch {_UW_AC4_BRANCH}: expected KSP-generated "
+            "WalletDao_Impl USEs WalletDao base interface"
+        )
+
+    # ── End AC#5 ─────────────────────────────────────────────────────────────
+
+    def test_qualified_names_have_no_scheme_prefix(self) -> None:
+        index = parse_scip_file(UW_ANDROID_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        for occ in occs:
+            qn = occ.symbol_qualified_name
+            assert not qn.startswith("semanticdb"), (
+                f"qualified_name leaks scheme prefix: {qn!r}"
+            )
+            assert not qn.startswith("scip-java"), (
+                f"qualified_name leaks scheme prefix: {qn!r}"
             )

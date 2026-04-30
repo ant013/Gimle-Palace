@@ -163,10 +163,25 @@ the container.
 
 **Currently mounted projects (docker-compose.yml):**
 
-| Slug    | Host path                     | Mount                    |
-|---------|-------------------------------|--------------------------|
-| `gimle` | `/Users/Shared/Ios/Gimle-Palace` | `/repos/gimle:ro`     |
-| `oz-v5-mini` | `services/palace-mcp/tests/extractors/fixtures/oz-v5-mini-project` (repo-relative) | `/repos/oz-v5-mini:ro` |
+| Slug         | Host path                                                                           | Mount                    |
+|--------------|-------------------------------------------------------------------------------------|--------------------------|
+| `gimle`      | `/Users/Shared/Ios/Gimle-Palace`                                                    | `/repos/gimle:ro`        |
+| `oz-v5-mini` | `services/palace-mcp/tests/extractors/fixtures/oz-v5-mini-project` (repo-relative) | `/repos/oz-v5-mini:ro`   |
+| `uw-android` | `/Users/Shared/Android/unstoppable-wallet-android`                                  | `/repos/uw-android:ro`   |
+
+### Non-iMac contributors
+
+Real-project bind-mounts (`gimle`, `uw-android`) use absolute Mac paths
+(`/Users/Shared/...`) for operator-iMac convention. Non-iMac contributors
+should:
+
+- Create `docker-compose.override.yml` redirecting these paths to local clones, OR
+- Run `docker compose --profile review up` excluding affected services and use only
+  fixture-based mounts (paths under `./services/palace-mcp/tests/extractors/fixtures/`)
+  which work cross-platform.
+
+iOS-related mounts (`uw-ios`) intentionally NOT yet present — Slice 3 (iOS extractor)
+will add them. UW-ios may be cloned now as discretionary ops-prep but is not gated.
 
 **To add a new project:**
 1. Add a bind-mount entry to `docker-compose.yml` under `palace-mcp.volumes`:
@@ -245,6 +260,44 @@ invoked via MCP tool `palace.ingest.run_extractor(name, project)`.
 3. Run the extractor:
    ```
    palace.ingest.run_extractor(name="symbol_index_java", project="your-project")
+   ```
+
+### Operator workflow: Android symbol index (modern Compose + KSP + multi-module)
+
+Android projects (e.g., `unstoppable-wallet-android`) use scip-java with the real
+Android Gradle Plugin classpath. Requires semanticdb-kotlinc 0.5.0 (NOT 0.6.0 — breaks
+on Kotlin 2.1+ with `AbstractMethodError`). AGP 9+ is not yet supported by scip-java
+auto-mode; pin to AGP ≤8.13.x until upstream fixes (GIM-127; Sourcegraph issue #864).
+
+1. Clone target project on iMac:
+   ```bash
+   git clone https://github.com/horizontalsystems/unstoppable-wallet-android.git \
+     /Users/Shared/Android/unstoppable-wallet-android
+   cd /Users/Shared/Android/unstoppable-wallet-android
+   # Pin to last pre-AGP-9 commit if on master:
+   git checkout c0489d5a33f5da441f07b1f685d42b25b805ffd1
+   ```
+
+2. Generate `.scip` outside container (requires JDK 17+ + Gradle 8.x + semanticdb-kotlinc 0.5.0):
+   ```bash
+   cd /Users/Shared/Android/unstoppable-wallet-android
+   # See fixture REGEN.md for the exact regen.sh command sequence
+   bash services/palace-mcp/tests/extractors/fixtures/uw-android-mini-project/regen.sh
+   ```
+
+3. Set env var for palace-mcp container in `.env`:
+   ```
+   PALACE_SCIP_INDEX_PATHS={..., "uw-android":"/repos/uw-android/scip/index.scip"}
+   ```
+
+4. Run the extractor:
+   ```
+   palace.ingest.run_extractor(name="symbol_index_java", project="uw-android")
+   ```
+
+5. Query (after GIM-126 lands; currently use `palace.memory.lookup`):
+   ```
+   palace.code.find_references(qualified_name="WalletDao", project="uw-android")
    ```
 
 ### Operator workflow: Python symbol index
