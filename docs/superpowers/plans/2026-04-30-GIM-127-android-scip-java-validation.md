@@ -1,10 +1,11 @@
-# Slice 1 — Android scip-java AGP validation Implementation Plan (rev2)
+# Slice 1 — Android scip-java AGP validation Implementation Plan (rev3)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Revision history:**
 - rev1 (2026-04-30) — initial plan, 14 tasks
-- rev2 (2026-04-30) — Phase 1.2 CodeReviewer review (paperclip GIM-127 comment 2026-04-30T07:34Z) returned REQUEST CHANGES: CRITICAL #1 (AC#5 only 1 of 5 USE-pair tests in Task 9), WARNING #1 (Task 10 missing Tantivy doc count assertion despite description claim), WARNING #2 (Composable tests missing explicit `language == Language.KOTLIN` per AC#6). All three fixed in rev2: Task 9 expanded 13 → 17 tests, Task 10 Assert 4 added (Tantivy via `count_docs_for_run_async`), Composable tests now check Language.KOTLIN per-DEF.
+- rev2 (2026-04-30) — Phase 1.2 CodeReviewer review (paperclip GIM-127 comment 2026-04-30T07:34Z) returned REQUEST CHANGES: CRITICAL #1 (AC#5 only 1 of 5 USE-pair tests in Task 9), WARNING #1 (Task 10 missing Tantivy doc count assertion despite description claim), WARNING #2 (Composable tests missing explicit `language == Language.KOTLIN` per AC#6). All three fixed in rev2.
+- rev3 (2026-04-30) — Spec rev3 landed (commit `b0e4607`) reflecting Phase 1.0 trial finding: UW upstream `:components:icons` is XML-resources-only (no Kotlin) and Room lives in `:app/.../storage/` not `:core`. Plan adapts: Tasks 3 + 5 switch from "verify vendored" to "verify Phase 1.0 SYNTHESIZED outputs". Task 4 (`:components:chartview-mini`) stays "verify vendored verbatim" — only true vendor in fixture. Module count + ACs unchanged.
 
 **Goal:** Validate that the existing `symbol_index_java` extractor (GIM-111) handles real-world Android projects (Compose + multi-module + KSP via Room) end-to-end without code changes. Ship vendored fixture from `unstoppable-wallet-android`, oracle-backed unit + integration tests, docker-compose bind-mount, and CLAUDE.md operator workflow doc.
 
@@ -152,7 +153,9 @@ Expected: 4 `OK:` lines.
 
 ---
 
-### Task 3: Verify `:components:icons-mini` module (vendored verbatim)
+### Task 3: Verify `:components:icons-mini` module (SYNTHESIZED — rev3)
+
+> **rev3 change:** UW upstream `:components:icons` is XML-resources-only (no Kotlin source). Phase 1.0 synthesizes `WalletIcons.kt` (~30-50 LOC, `object WalletIcons { val Send/Receive/Swap/...: ImageVector }`) in UW style. Module preserved for "Compose-only without DB/KSP" multi-module proof.
 
 **Files:**
 - Verify: `services/palace-mcp/tests/extractors/fixtures/uw-android-mini-project/components/icons-mini/src/main/kotlin/.../WalletIcons.kt`
@@ -189,7 +192,9 @@ Expected: at least 2 matches. If `compose = true` missing → fixture won't comp
 
 ---
 
-### Task 4: Verify `:components:chartview-mini` module (vendored adapted)
+### Task 4: Verify `:components:chartview-mini` module (VENDORED VERBATIM from UW)
+
+> **rev3 emphasis:** This is the **only** module truly vendored from UW (`components/chartview/src/main/java/io/horizontalsystems/chartview/`). Phase 1.0 picks 2-4 source files (e.g., `ChartView.kt`, `ChartData.kt`) + minimum dependencies. UW upstream uses `viewBinding = true` + `compose.runtime` (mixed View+Compose); our vendor preserves this — proves scip-java handles non-pure-Compose Kotlin too.
 
 **Files:**
 - Verify: `services/palace-mcp/tests/extractors/fixtures/uw-android-mini-project/components/chartview-mini/src/main/kotlin/.../*.kt`
@@ -227,7 +232,9 @@ Expected: ≥1.
 
 ---
 
-### Task 5: Verify `:core-mini` module (Room + KSP exercise)
+### Task 5: Verify `:core-mini` module (SYNTHESIZED Room — rev3)
+
+> **rev3 change:** UW Room (`@Entity`/`@Dao`/`@Database`) lives in `:app/src/main/java/io/horizontalsystems/bankwallet/core/storage/` (20+ DAOs + `AppDatabase.kt`), NOT in `:core`. UW `:core` is generic utilities (Extensions, helpers). Phase 1.0 synthesizes `:core-mini/db/*` (`WalletEntity.kt`, `WalletDao.kt`, `AppDatabase.kt`) following UW patterns (snake-case tables, suspend + Flow, mixed `@Insert`/`@Update`/`@Delete`/`@Query`). Module placed in `:core-mini` (not `:app-mini`) to preserve multi-module proof + KSP-via-Room exercise.
 
 **Files:**
 - Verify: `services/palace-mcp/tests/extractors/fixtures/uw-android-mini-project/core-mini/src/main/kotlin/.../db/{WalletEntity,WalletDao,AppDatabase}.kt`
