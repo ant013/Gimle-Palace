@@ -481,6 +481,10 @@ _UW_N_DEFS = 269
 _UW_N_USES = 1201
 _UW_N_DOCUMENTS = 17
 _UW_AC4_BRANCH = "A"  # KSP-generated source visible without workaround
+# Tantivy deduplicates by doc_key (symbol_id:file:line:col_start). 35 positions
+# appear as both DEF (phase1) and USE (phase2/3) — the USE overwrites the DEF,
+# so Tantivy total = 1470 - 35 = 1435 unique positions after full ingest.
+_UW_N_TANTIVY_DOCS = 1435
 
 
 @requires_scip_uw_android

@@ -219,9 +219,7 @@ class TantivyBridge:
         assert self._index is not None
         searcher = self._index.searcher()
         # Both fields use raw tokenizer → exact-term match, no UUID splitting.
-        query = self._index.parse_query(
-            f'+ingest_run_id:"{run_id}" +phase:"{phase}"'
-        )
+        query = self._index.parse_query(f'+ingest_run_id:"{run_id}" +phase:"{phase}"')
         results = searcher.search(query, limit=1)
         return cast(int, results.count)
 

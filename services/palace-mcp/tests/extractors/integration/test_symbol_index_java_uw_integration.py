@@ -24,7 +24,7 @@ from palace_mcp.extractors.base import ExtractorRunContext
 from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
 from palace_mcp.extractors.symbol_index_java import SymbolIndexJava
 from tests.extractors.unit.test_real_scip_fixtures import (
-    _UW_N_OCCURRENCES_TOTAL,
+    _UW_N_TANTIVY_DOCS,
     requires_scip_uw_android,
 )
 
@@ -114,10 +114,10 @@ class TestSymbolIndexJavaUwIntegration:
             )
         tantivy_total = phase1_docs + phase2_docs + phase3_docs
 
-        lo = int(_UW_N_OCCURRENCES_TOTAL * 0.98)
-        hi = int(_UW_N_OCCURRENCES_TOTAL * 1.02)
+        lo = int(_UW_N_TANTIVY_DOCS * 0.98)
+        hi = int(_UW_N_TANTIVY_DOCS * 1.02)
         assert lo <= tantivy_total <= hi, (
             f"Tantivy doc count {tantivy_total} "
             f"(p1={phase1_docs}, p2={phase2_docs}, p3={phase3_docs}) "
-            f"outside oracle {_UW_N_OCCURRENCES_TOTAL}±2% (range [{lo}, {hi}])"
+            f"outside oracle {_UW_N_TANTIVY_DOCS}±2% (range [{lo}, {hi}])"
         )
