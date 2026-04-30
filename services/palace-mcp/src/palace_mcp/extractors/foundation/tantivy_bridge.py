@@ -219,7 +219,9 @@ class TantivyBridge:
         # Count by searching for run_id in ingest_run_id field.
         # phase is encoded in doc_key prefix in real impl; here simplified.
         query = self._index.parse_query(f'ingest_run_id:"{run_id}"')
-        results = searcher.search(query, limit=0)
+        # limit=1 avoids pyo3 panic ("Limit must be strictly greater than 0");
+        # results.count is the total match count regardless of limit.
+        results = searcher.search(query, limit=1)
         return cast(int, results.count)
 
     # ------------------------------------------------------------------
