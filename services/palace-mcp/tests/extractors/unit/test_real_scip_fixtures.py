@@ -505,8 +505,13 @@ class TestUwAndroidMiniProjectFixture:
     def test_occurrence_total_matches_oracle(self) -> None:
         index = parse_scip_file(UW_ANDROID_SCIP)
         occs = list(iter_scip_occurrences(index, commit_sha="test"))
-        lo, hi = int(_UW_N_OCCURRENCES_TOTAL * 0.98), int(_UW_N_OCCURRENCES_TOTAL * 1.02)
-        assert lo <= len(occs) <= hi, f"Oracle: {_UW_N_OCCURRENCES_TOTAL}±2%, got {len(occs)}"
+        lo, hi = (
+            int(_UW_N_OCCURRENCES_TOTAL * 0.98),
+            int(_UW_N_OCCURRENCES_TOTAL * 1.02),
+        )
+        assert lo <= len(occs) <= hi, (
+            f"Oracle: {_UW_N_OCCURRENCES_TOTAL}±2%, got {len(occs)}"
+        )
 
     def test_def_count_matches_oracle(self) -> None:
         index = parse_scip_file(UW_ANDROID_SCIP)
@@ -534,7 +539,8 @@ class TestUwAndroidMiniProjectFixture:
         index = parse_scip_file(UW_ANDROID_SCIP)
         occs = list(iter_scip_occurrences(index, commit_sha="test"))
         main_screen_defs = [
-            o for o in occs
+            o
+            for o in occs
             if o.kind == SymbolKind.DEF and "MainScreen" in o.symbol_qualified_name
         ]
         assert main_screen_defs, (
@@ -552,10 +558,13 @@ class TestUwAndroidMiniProjectFixture:
         index = parse_scip_file(UW_ANDROID_SCIP)
         occs = list(iter_scip_occurrences(index, commit_sha="test"))
         chart_view_defs = [
-            o for o in occs
+            o
+            for o in occs
             if o.kind == SymbolKind.DEF and "ChartView" in o.symbol_qualified_name
         ]
-        assert chart_view_defs, "Expected ChartView Composable DEF in :components:chartview-mini"
+        assert chart_view_defs, (
+            "Expected ChartView Composable DEF in :components:chartview-mini"
+        )
         for occ in chart_view_defs:
             assert occ.language == Language.KOTLIN, (
                 f"AC#6: ChartView DEF must be KOTLIN, got {occ.language}: "
@@ -577,7 +586,9 @@ class TestUwAndroidMiniProjectFixture:
     def test_wallet_dao_impl_ksp_generated(self) -> None:
         # AC#4 conditional gate. Branch A/B-1: must pass. Branch B-2: skipped.
         if _UW_AC4_BRANCH == "B-2":
-            pytest.skip("AC#4 Branch B-2 — KSP source not visible to scip-java; followup tracked")
+            pytest.skip(
+                "AC#4 Branch B-2 — KSP source not visible to scip-java; followup tracked"
+            )
         index = parse_scip_file(UW_ANDROID_SCIP)
         occs = list(iter_scip_occurrences(index, commit_sha="test"))
         names = {o.symbol_qualified_name for o in occs if o.kind == SymbolKind.DEF}
