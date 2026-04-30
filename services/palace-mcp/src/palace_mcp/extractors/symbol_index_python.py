@@ -144,7 +144,7 @@ class SymbolIndexPython(BaseExtractor):
                 phase1 = [
                     o for o in all_occs if o.kind in (SymbolKind.DEF, SymbolKind.DECL)
                 ]
-                p1 = await _ingest_batch(bridge, phase1)
+                p1 = await _ingest_batch(bridge, phase1, "phase1_defs")
                 await bridge.commit_async()
                 await write_checkpoint(
                     driver,
@@ -177,7 +177,7 @@ class SymbolIndexPython(BaseExtractor):
                         for o in phase2
                         if o.importance >= settings.palace_importance_threshold_use
                     ]
-                    p2 = await _ingest_batch(bridge, phase2)
+                    p2 = await _ingest_batch(bridge, phase2, "phase2_user_uses")
                     await bridge.commit_async()
                     await write_checkpoint(
                         driver,
@@ -205,7 +205,7 @@ class SymbolIndexPython(BaseExtractor):
                         for o in all_occs
                         if o.kind == SymbolKind.USE and _is_vendor(o.file_path)
                     ]
-                    p3 = await _ingest_batch(bridge, phase3)
+                    p3 = await _ingest_batch(bridge, phase3, "phase3_vendor_uses")
                     if p3 > 0:
                         await bridge.commit_async()
                         await write_checkpoint(
@@ -257,11 +257,11 @@ class SymbolIndexPython(BaseExtractor):
 
 
 async def _ingest_batch(
-    bridge: TantivyBridge, occurrences: list[SymbolOccurrence]
+    bridge: TantivyBridge, occurrences: list[SymbolOccurrence], phase: str
 ) -> int:
     written = 0
     for occ in occurrences:
-        await bridge.add_or_replace_async(occ)
+        await bridge.add_or_replace_async(occ, phase)
         written += 1
     return written
 

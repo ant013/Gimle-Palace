@@ -151,7 +151,7 @@ class TestTantivyBridgeOperations:
         ):
             async with TantivyBridge(tmp_index) as bridge:
                 writer = bridge._writer
-                await bridge.add_or_replace_async(occ)
+                await bridge.add_or_replace_async(occ, "phase1_defs")
         # delete_documents called with "doc_key" before add_document
         writer.delete_documents.assert_called_once_with("doc_key", occ.doc_key)
         writer.add_document.assert_called_once()
