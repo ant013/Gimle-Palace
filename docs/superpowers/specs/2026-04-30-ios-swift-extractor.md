@@ -1,7 +1,6 @@
 # Slice 3 — iOS Swift extractor (`symbol_index_swift`)
 
-**Status:** Board draft (rev1, 2026-04-30) — paperclip-issue pending; awaits CTO Phase 1.1 formalization.
-**GIM-NN:** placeholder — CTO swaps in Phase 1.1
+**Status:** Board draft (rev1, 2026-04-30) — paperclip-issue [GIM-128](https://paperclip.ant013.work/issues/2087656e-1530-4fe5-a7cd-5d9517947895) created 2026-04-30; awaits CTO Phase 1.1 formalization.
 **Predecessor merge:** `6492561` (GIM-127 Android scip-java validation merged 2026-04-30; spec rev3 pin policy and rev2 review-fix patterns inform this spec)
 **Related:** GIM-127 Slice 1 Android (sibling pattern), GIM-126 find_references lang-agnostic fix (pending merge — affects AC#7 evidence script), GIM-105 rev2 (Q1 FQN cross-language decision — Swift entry).
 **Roadmap context:** Slice 3 of 4 in operator-stack language coverage post-Solidity. Sequence: Slice 1 (Android Java/Kotlin) ✅ merged → Slice 2 (Android resources) deferred per `project_slice2_deferred_2026-04-30.md` → **Slice 3 (this — iOS Swift)** → Slice 4 (KMP bridge, after iOS).
