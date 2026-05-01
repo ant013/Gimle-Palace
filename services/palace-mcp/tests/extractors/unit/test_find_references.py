@@ -8,6 +8,7 @@ import pytest
 
 from palace_mcp.code_composite import (
     FindReferencesRequest,
+    _query_any_ingest_run_for_project,
     _query_eviction_record,
     _query_ingest_run_for_project,
 )
@@ -63,6 +64,47 @@ class TestQueryIngestRun:
         result = await _query_ingest_run_for_project(
             driver, "test", "symbol_index_python"
         )
+        assert result is not None
+        assert result["success"] is True
+
+
+class TestQueryAnyIngestRun:
+    """Tests for _query_any_ingest_run_for_project (AC#3, AC#5)."""
+
+    @pytest.mark.asyncio
+    async def test_no_ingest_run_returns_none(self) -> None:
+        driver = _make_driver_with_result(None)
+        result = await _query_any_ingest_run_for_project(driver, "test")
+        assert result is None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "extractor_name",
+        [
+            "symbol_index_python",
+            "symbol_index_typescript",
+            "symbol_index_java",
+            "symbol_index_solidity",
+        ],
+    )
+    async def test_any_extractor_returns_ingest_run(self, extractor_name: str) -> None:
+        record = {
+            "run_id": f"r-{extractor_name}",
+            "success": True,
+            "extractor_name": extractor_name,
+        }
+        driver = _make_driver_with_result(record)
+        result = await _query_any_ingest_run_for_project(driver, "test-project")
+        assert result is not None
+        assert result["success"] is True
+        assert result["extractor_name"] == extractor_name
+
+    @pytest.mark.asyncio
+    async def test_backwards_compat_missing_extractor_name_property(self) -> None:
+        # AC#5: old IngestRun records may lack extractor_name — still pass gate
+        record = {"run_id": "r-old", "success": True, "extractor_name": None}
+        driver = _make_driver_with_result(record)
+        result = await _query_any_ingest_run_for_project(driver, "legacy-project")
         assert result is not None
         assert result["success"] is True
 
