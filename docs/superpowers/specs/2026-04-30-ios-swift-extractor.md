@@ -1,6 +1,9 @@
 # Slice 3 — iOS Swift extractor (`symbol_index_swift`)
 
-**Status:** Board draft (rev1, 2026-04-30) — paperclip-issue [GIM-128](https://paperclip.ant013.work/issues/2087656e-1530-4fe5-a7cd-5d9517947895) created 2026-04-30; awaits CTO Phase 1.1 formalization.
+**Status:** Board draft (rev2, 2026-04-30) — paperclip-issue [GIM-128](https://paperclip.ant013.work/issues/2087656e-1530-4fe5-a7cd-5d9517947895); awaits CTO Phase 1.1 formalization. **Mandates dedicated Phase 1.0 spike before PE Phase 2 — see §"Phase 1.0 spike requirements".**
+**Revision history:**
+- rev1 (2026-04-30) — initial draft from operator brainstorm Q1-Q5
+- rev2 (2026-04-30) — operator review surfaced 7 issues; fixes: parser support claim corrected (parser is NOT lang-agnostic for Swift today — `_SCIP_LANGUAGE_MAP` lacks swift, `.swift` extension fallback absent); "максимум эффективности" mandate softened (Apple compile-time codegen visibility is Phase 1.0 unknown, not assumed); SwiftSCIPIndex risk re-balanced (Apple IndexStoreDB stable, but **community converter unproven** — biggest unknown); Xcode CLI-only assumption removed (full Xcode.app likely required for iOS Simulator builds — Phase 1.0 verifies); `~80 LOC copy-paste` revised to ~200-300 LOC across multiple files; AC#7 live-smoke threshold replaced from `nodes_written > 5000` to substantive criteria (named UW-ios symbols, language distribution, non-vendor DEF/USE, cross-file refs, low UNKNOWN); minor wording cleanups (removed "1:N ratio as Slice 1" leftover marketing); explicit gating: iMac toolchain setup may run parallel BUT successful real-project smoke is hard merge gate (no fabrication path).
 **Predecessor merge:** `6492561` (GIM-127 Android scip-java validation merged 2026-04-30; spec rev3 pin policy and rev2 review-fix patterns inform this spec)
 **Related:** GIM-127 Slice 1 Android (sibling pattern), GIM-126 find_references lang-agnostic fix (pending merge — affects AC#7 evidence script), GIM-105 rev2 (Q1 FQN cross-language decision — Swift entry).
 **Roadmap context:** Slice 3 of 4 in operator-stack language coverage post-Solidity. Sequence: Slice 1 (Android Java/Kotlin) ✅ merged → Slice 2 (Android resources) deferred per `project_slice2_deferred_2026-04-30.md` → **Slice 3 (this — iOS Swift)** → Slice 4 (KMP bridge, after iOS).
@@ -12,9 +15,9 @@ Add `symbol_index_swift` extractor to palace-mcp covering Swift code on iOS. Val
 Unlike Slice 1 (Android), Sourcegraph has **no first-party scip-swift indexer** (no `sourcegraph/scip-swift` repo, not on npm, not in coursier `--contrib`). The Swift indexing path uses:
 1. **Apple native IndexStoreDB** — generated automatically by `swiftc` and `clang` during `xcodebuild build` for Debug.
 2. **`SwiftSCIPIndex`** (community, `Fostonger/SwiftSCIPIndex`, MIT, last commit 2026-01-05) — converts IndexStoreDB to SCIP protobuf format.
-3. **palace-mcp's existing `scip_parser.py`** (lang-agnostic since GIM-104) — reads the SCIP, no parser changes if SwiftSCIPIndex output is spec-compliant.
+3. **palace-mcp's existing `scip_parser.py`** — supports per-document language detection (GIM-104) BUT **does not currently know Swift**: `_SCIP_LANGUAGE_MAP` (`scip_parser.py:209`) lacks `"swift"` key, and `_language_from_path` (`scip_parser.py:230`) lacks `.swift` extension fallback. **Required edits**: add `"swift": Language.SWIFT` to map + `.swift` (and possibly `.swiftinterface`) to path fallback. (`Language.SWIFT` enum value already exists at `models.py:32`.)
 
-This avoids the scip-java/AGP-9 incompatibility lock-in we hit in Slice 1, because Apple maintains IndexStoreDB centrally for SourceKit-LSP — it tracks Swift compiler updates synchronously, no third-party tooling lag.
+Apple-native IndexStoreDB tracks Swift compiler updates synchronously — that part is rock-solid. **The real unknown is `SwiftSCIPIndex` (community, 1⭐, single maintainer)** — its IndexStoreDB → SCIP mapping fidelity for modern Swift idioms (macros, property wrappers, Codable synthesis) has not been independently verified. Phase 1.0 spike validates this before PE Phase 2 starts.
 
 The slice ships a **Hybrid SPM package + 1 Xcode app target fixture** (`uw-ios-mini-project`) with ~30 files exercising Swift core + modern idioms (SwiftUI, Combine, async/await) + Apple compile-time codegen (`@Observable` macro, Codable synthesis, property wrapper `$`-projection) + UIKit interop. Live-smoke runs the extractor against real `unstoppable-wallet-ios` master on operator's iMac.
 
@@ -33,16 +36,16 @@ deliverables:
 Slice 4 (KMP bridge) — after iOS Slice 3 merges
 ```
 
-**Per-slice "максимум эффективности" mandate**: each language slice ships full Swift source DEF+USE coverage from day 1 (parallel to Slice 1's Java/Kotlin DEF+USE).
+**Per-slice "максимум эффективности" mandate (qualified for Slice 3)**: ships full Swift **source-level** DEF+USE coverage for what `xcodebuild` IndexStoreDB + SwiftSCIPIndex actually expose. Apple's compile-time codegen (Codable synthesis, `@Observable` macro internals, property wrapper `$`-projection) **may or may not** appear as source-level symbols depending on SwiftSCIPIndex's mapping fidelity — Phase 1.0 spike empirically determines this and locks AC#4 branch (A/B-1/B-2). Slice does NOT promise generated-code coverage as a feature claim — only as a Phase 1.0 verification target.
 
 ## Hard dependencies
 
 | Dependency | State |
 |---|---|
 | 101a foundation substrate (TantivyBridge, BoundedInDegreeCounter, ensure_custom_schema, …) | Stable, Slice 1 used it — REUSE |
-| `scip_parser.py` lang-agnostic parser (GIM-104) | REUSE; needs `Language.SWIFT` enum value addition in `extractors/foundation/models.py` if absent |
+| `scip_parser.py` per-document language detector (GIM-104) | **REUSE with required edits** — add `"swift": Language.SWIFT` to `_SCIP_LANGUAGE_MAP` (line 209) + `.swift` (and likely `.swiftinterface`) to `_language_from_path` (line 230). `Language.SWIFT` enum already exists at `models.py:32`. |
 | Q1 FQN cross-language Variant B (GIM-105 rev2) | Locks Swift qualified_name format (see rev2 §Per-language action map) |
-| `xcodebuild` | macOS host with Xcode CLI (no full Xcode.app required for SwiftSCIPIndex flow — test on iMac during Phase 1.0) |
+| `xcodebuild` for iOS targets | **Build host = operator's dev Mac (Apple Silicon, current macOS + Xcode)**. iMac is Intel x86_64 + macOS 13 + old Xcode (≤Swift 5.8) — **CANNOT build modern iOS Swift code** (UW master uses Swift 5.9+ with `@Observable` macros, iOS 17+ APIs). iMac upgrade infeasible (Apple dropped support for Intel-era macOS upgrades that meet current Xcode requirements). Fixture regen + real UW-ios indexing both happen on dev Mac; iMac receives pre-generated `index.scip` files for ingestion only. |
 | **`SwiftSCIPIndex`** (community) | External binary. Build from source via `git clone https://github.com/Fostonger/SwiftSCIPIndex.git && swift build -c release`. SHA pinned per-regen in REGEN.md. |
 | **XcodeGen** | `brew install xcodegen` — generates fixture's `.xcodeproj` from `project.yml` (deterministic, text-based) |
 | `unstoppable-wallet-ios` clone on iMac | Operator clone @ master; SHA captured per-regen in REGEN.md |
@@ -65,8 +68,9 @@ Slice 4 (KMP bridge) — after iOS Slice 3 merges
 
 | Artefact | Description |
 |---|---|
-| `services/palace-mcp/src/palace_mcp/extractors/symbol_index_swift.py` | NEW extractor. ~80 LOC copy-paste from `symbol_index_java.py` with literal `"java"` → `"swift"` rename + `Language.SWIFT` filter. 3-phase ingest unchanged. |
-| `services/palace-mcp/src/palace_mcp/extractors/foundation/models.py` | ADD `Language.SWIFT = "swift"` if not already present (verify Phase 1.0). |
+| `services/palace-mcp/src/palace_mcp/extractors/symbol_index_swift.py` | NEW extractor. **~150-200 LOC** — adapted from `symbol_index_java.py`, NOT pure copy-paste: rename literal `"java"` → `"swift"` in name/error-msgs/queries; replace `Language.JAVA` filter with `Language.SWIFT`; review primary-language logic for Swift-specific paths (e.g., handling `.swiftinterface` if needed); review error_code mappings; review vendor-noise filters (Swift's `.build`, `.swiftpm`, `Pods`, `Carthage`, `SourcePackages`, DerivedData paths differ from JVM `build/`). |
+| `services/palace-mcp/src/palace_mcp/extractors/scip_parser.py` | **EDIT REQUIRED** — add `"swift": Language.SWIFT` to `_SCIP_LANGUAGE_MAP` (line 209) and `.swift` (and likely `.swiftinterface`) to `_language_from_path` (line 230). |
+| `services/palace-mcp/src/palace_mcp/extractors/foundation/models.py` | NO EDIT — `Language.SWIFT = "swift"` already at line 32 (verified). |
 | `services/palace-mcp/src/palace_mcp/extractors/registry.py` | Register new extractor: `EXTRACTORS["symbol_index_swift"] = SymbolIndexSwift()`. |
 | `services/palace-mcp/tests/extractors/fixtures/uw-ios-mini-project/` | NEW vendored hybrid SPM+Xcode fixture, ~30 files. |
 | `services/palace-mcp/tests/extractors/fixtures/uw-ios-mini-project/REGEN.md` | Vendor source pin (UW-ios SHA, SwiftSCIPIndex SHA), regen script doc, manual oracle table. |
@@ -165,7 +169,7 @@ uw-ios-mini-project/
 | `UwMiniApp/Legacy/LegacyWalletViewController.swift` | UW-ios UIKit ViewController patterns | SYNTHESIZED |
 | `project.yml` (XcodeGen) | hand-written | NEW |
 
-**Vendor justification**: 3 of 30 truly vendored; 27 synthesized in UW-ios style. Same 1:N ratio as Slice 1 (UW-android: 3 chartview files vendored verbatim, 27 synthesized).
+**Vendor justification**: 3 of 30 truly vendored from real UW-ios; 27 synthesized in UW-ios idiom style. Synthesized portion gives controllable AC#4 generated-code targets (we know exactly what `@Observable` / Codable / property wrapper patterns to expect).
 
 ### Toolchain dependencies (one-time setup, like Slice 1's gradle/scip-java)
 
@@ -228,6 +232,64 @@ iMac one-time setup ~10 min. Subsequent regens are `bash regen.sh` (5-10 min dep
 
 Drift-check: regen UW-ios → `index.scip` differs → oracle counts must update. Pattern symmetric to Slice 1.
 
+## Phase 1.0 spike requirements (mandatory, BEFORE PE Phase 2)
+
+This is a **dedicated spike** — not a paper exercise. Operator (or designated agent) executes on dev Mac and posts findings before PE Phase 2 begins. Output is REGEN.md draft + AC#4 branch decision + go/no-go on the rest of the slice as currently specified.
+
+### Toolchain pinning
+
+- [ ] **Pin SwiftSCIPIndex SHA**: `cd ~/.local/opt/SwiftSCIPIndex && git rev-parse HEAD` → record in REGEN.md draft. If main branch changes during slice → re-pin or document divergence.
+- [ ] **Capture dev Mac toolchain versions**: `sw_vers -productVersion` (macOS), `xcode-select -p`, `xcodebuild -version`, `swift --version` — record all in REGEN.md.
+- [ ] **iMac Xcode/macOS confirmed too old to build UW master**: explicit baseline note in REGEN.md (rationale for Track A/B split).
+
+### Generate raw SCIP fixture
+
+- [ ] On dev Mac: build minimal 1-file Swift package or Xcode project with a Codable struct + `@Observable` class + `@State` SwiftUI view (smaller scope than full fixture; just enough for Phase 1.0 verifications).
+- [ ] Run `xcodebuild build` then `SwiftSCIPIndex --derived-data ... --output spike.scip`.
+- [ ] Verify spike.scip parses via `parse_scip_file()` (use existing `services/palace-mcp/src/palace_mcp/extractors/scip_parser.py`). Note: BEFORE adding Swift to language map, parser will return `Language.UNKNOWN` for these documents — that's expected.
+
+### Verify `document.language` actual values
+
+- [ ] Inspect `index.documents[i].language` for the spike Swift sources. Capture exact string (e.g., `"swift"`, `"Swift"`, `"swift_lang"` — SwiftSCIPIndex's specific value). Record in REGEN.md.
+- [ ] Document the exact mapping needed in `_SCIP_LANGUAGE_MAP` (line 209 of scip_parser.py).
+
+### Add Swift to scip_parser
+
+- [ ] Edit `services/palace-mcp/src/palace_mcp/extractors/scip_parser.py`:
+  - Line ~209 `_SCIP_LANGUAGE_MAP`: add `"<exact-string>": Language.SWIFT` (key = whatever SwiftSCIPIndex emits).
+  - Line ~230 `_language_from_path`: add `if relative_path.endswith((".swift", ".swiftinterface")): return Language.SWIFT`.
+- [ ] Run existing parser tests: `cd services/palace-mcp && uv run pytest tests/extractors/unit/test_scip_parser_*.py -v` — must still pass.
+- [ ] Re-parse spike.scip — confirm Swift documents now have `Language.SWIFT`.
+
+### AC#4 generated-code visibility check
+
+For each of the 3 targets, query spike.scip for expected symbols:
+
+- [ ] **Codable synthesis**: `grep init.from\\: spike.scip || python3 -c "<parser-based check>"` — observe presence/absence of `Wallet#init(from:)` and `Wallet#encode(to:)`.
+- [ ] **`@Observable` macro**: query for `_$observationRegistrar`, `withMutation(keyPath:_:)`, `access(keyPath:_:)`. Document which (if any) appear.
+- [ ] **Property wrapper $-projection**: SwiftUI `@State var foo: Int` should produce `_foo` storage and `$foo` projected — query both. Document presence.
+- [ ] **Lock AC#4 branch**: A (all visible), B-1 (visible after workaround — try `-Xfrontend -emit-symbol-graph`, alternate SwiftSCIPIndex flags), or B-2 (not visible even with workaround). Record decision + rationale in REGEN.md draft.
+
+### FQN format check (against GIM-105 rev2 expectations)
+
+- [ ] Sample 3-5 Swift symbols from spike.scip. Compare actual `qualified_name` format against GIM-105 rev2 §Per-language action map — Swift entry: `<module>:<descriptor-chain>` after Variant B strip.
+- [ ] If actual format diverges (e.g., manager token differs, or descriptors not as expected) → document in REGEN.md + propose either (a) accept actual format and update GIM-105 cross-reference, OR (b) post-process in extractor.
+
+### Path-noise enumeration
+
+Run real UW-ios `xcodebuild build` on dev Mac. Inspect the resulting DerivedData and `index.scip` for noise paths:
+
+- [ ] List all top-level path prefixes that appear in `index.scip` documents (likely: `UnstoppableWallet/...`, `~/Library/Developer/Xcode/DerivedData/.../Index.noindex/.../`, `.build/...`, `.swiftpm/...`, `Pods/...`, `Carthage/...`, `SourcePackages/...`).
+- [ ] For each prefix, classify as PROJECT (keep) or VENDOR (filter). Document in REGEN.md.
+- [ ] Lock vendor-filter rules for `symbol_index_swift` extractor config.
+
+### Effort and check-out
+
+- [ ] Spike duration: ~0.75-1.5 days (operator-time on dev Mac).
+- [ ] Output: REGEN.md draft + AC#4 branch + Swift parser-edit PR (small, separate from main slice PR — can merge first to develop) + go/no-go signal on PE Phase 2.
+- [ ] If go: PE Phase 2 starts with locked oracle table + locked AC#4 branch + parser already supports Swift.
+- [ ] If no-go (R1 surfaces fundamentally): spec rev3 with alternative path; PE Phase 2 deferred or re-scoped.
+
 ## Acceptance criteria
 
 | AC# | Condition | Verification |
@@ -235,38 +297,65 @@ Drift-check: regen UW-ios → `index.scip` differs → oracle counts must update
 | AC#1 | Vendored fixture compiles | `xcodegen generate -s project.yml -p UwMiniApp/UwMiniApp.xcodeproj && xcodebuild build -workspace UwMiniApp/UwMiniApp.xcworkspace -scheme UwMiniApp -destination "generic/platform=iOS Simulator"` exit 0 |
 | AC#2 | SwiftSCIPIndex emits valid `index.scip` | SwiftSCIPIndex run produces non-empty `index.scip`; parses via `parse_scip_file()` without exception |
 | AC#3 | Oracle counts match (Phase 1.0 locked) | All assertions in `TestUwIosMiniProjectFixture` pass |
-| **AC#4 (CONDITIONAL — Phase 1.0 gate)** | **3 of 3 generated-code targets visible** | Phase 1.0 grep'ает `index.scip` на:<br>(a) **Codable synthesis** — `Wallet#init(from:)` + `Wallet#encode(to:)` (compiler-generated)<br>(b) **`@Observable` macro** — `WalletStore#_$observationRegistrar` или `withMutation(keyPath:_:)`<br>(c) **Property wrapper `$`-projection** — `_state` storage + `$state` projected on `@State`/`@Binding`<br><br>**Branch A** (default expected): all 3 visible → AC#4 hard.<br>**Branch B-1**: workaround (e.g., `-Xfrontend -emit-symbol-graph` flag or specific IndexStoreDB include path) makes the missing target(s) visible → AC#4 hard with workaround documented in REGEN.md.<br>**Branch B-2**: any of 3 not visible after workaround attempts → spec rev2 + followup-issue. PE Phase 2 blocked until branch locked. |
+| **AC#4 (CONDITIONAL — Phase 1.0 gate, B-2 plausible)** | **Generated-code visibility branch locked before PE Phase 2** | Phase 1.0 spike checks each independently in `index.scip`:<br>(a) **Codable synthesis** — `Wallet#init(from:)` + `Wallet#encode(to:)` (compiler-emitted)<br>(b) **`@Observable` macro** — `WalletStore#_$observationRegistrar` / `withMutation(keyPath:_:)`<br>(c) **Property wrapper `$`-projection** — `_state` storage + `$state` projected on `@State`/`@Binding`<br><br>**Branch A** (best case): all 3 visible → AC#4 asserts presence of all.<br>**Branch B-1**: visible after workaround (e.g., `-Xfrontend -emit-symbol-graph`, IndexStoreDB include flag, alternate SwiftSCIPIndex SHA) → AC#4 asserts presence with workaround documented in REGEN.md.<br>**Branch B-2** (plausible): not visible even with workaround → AC#4 narrows to "Swift source-level symbols indexed correctly; generated-code visibility tracked as followup issue (proposed GIM-N+M)". Realistic outcome — Apple's IndexStoreDB exposure of compiler-internal symbols is undocumented and not part of public Swift symbol API. PE Phase 2 proceeds with B-2-narrowed scope; slice ships valid even if generated-code is invisible.<br><br>**No assumption that A or B-1 is the default.** Phase 1.0 is empirical. |
 | AC#5 | Cross-target USE resolves — **5 USE pairs** | Tests:<br>• 1/5 **app→SPM**: `WalletListView.swift` USE `WalletStore` (`UwMiniCore`)<br>• 2/5 **app→SPM**: `WalletDetailView.swift` USE `Wallet` Codable struct (`UwMiniCore`)<br>• 3/5 **app→SPM**: `ChartViewRepresentable.swift` USE `Transaction` (UIKit interop ↔ SPM types)<br>• 4/5 **intra-SPM cross-package**: `WalletRepository.swift` USE `Wallet` + `Transaction`<br>• 5/5 **macro-generated→source**: `WalletStore`'s `withMutation(...)` generated body USE `_$observationRegistrar` (conditional on AC#4 Branch A). Skipped if Branch B-2. |
 | AC#6 | All DEFs language=`SWIFT` | `WalletStore` + `Wallet` + `WalletListView` (3 representative DEFs) all have `occ.language == Language.SWIFT`. Requires `Language.SWIFT` enum value in `extractors/foundation/models.py` (verified Phase 1.0). |
-| AC#7 | Integration test green | `tests/extractors/integration/test_symbol_index_swift_uw_integration.py` passes locally + on iMac. NEW pattern — real fixture .scip + real Neo4j (Slice 1 rev2 pattern). |
+| AC#7 | Integration test green | `tests/extractors/integration/test_symbol_index_swift_uw_integration.py` passes locally + on iMac. NEW pattern — real fixture .scip + real Neo4j (Slice 1 rev2 pattern). Test uses fixture's committed `.scip`; does NOT require iOS build on iMac. |
+| **AC#7.5 (Phase 4.1 evidence — fixture-based, NOT raw threshold)** | Live-smoke demonstrates **fixture-based extractor pipeline works on iMac**; real UW-ios indexing **deferred** to operator's dev Mac as separate evidence | iMac live-smoke (gate for merge):<br>(a) `palace.ingest.run_extractor name=symbol_index_swift project=uw-ios-mini` against committed fixture `index.scip` (mounted at `/repos/uw-ios-mini`) → ok:true with real timestamps + run_id<br>(b) Tantivy doc counts per phase match fixture oracle ±2% (post-dedup constant `_UW_IOS_MINI_N_TANTIVY_DOCS` locked Phase 1.0)<br>(c) Cypher: IngestRun in Neo4j with success=true<br>(d) Language distribution: 100% SWIFT in fixture (controlled — if not, parser bug)<br><br>**Real UW-ios indexing as separate evidence** (deferred-not-blocked):<br>(e) Operator's dev Mac runs xcodebuild + SwiftSCIPIndex on real UW-ios master, generates `index.scip`, transfers to iMac mount, runs extractor with `project=uw-ios`. Evidence comment posted on slice followup-issue (proposed GIM-N+M).<br>(f) Real-source criteria (when run): ≥1000 DEFs from UW main paths (`UnstoppableWallet/UnstoppableWallet/.../`); ≥3 known named symbols (e.g., `WalletManager`, `MarketKit`); ≥10 cross-file USE refs; <5% UNKNOWN language. Excluded paths: `DerivedData/`, `.build/`, `Pods/`, `Carthage/`, `SourcePackages/`.<br><br>**Why split**: iMac (Intel + macOS 13 + old Xcode) cannot build modern Swift. Forcing real-UW-ios on iMac would require either (1) iMac upgrade (infeasible — Apple dropped Intel support), or (2) UW-ios SHA pin to pre-Swift-5.9 era (loses operator's interest in current UW master analysis). Solution: split — fixture-based merge gate + real-source as deferred operator-Mac evidence. |
 | AC#8 | `docker-compose.yml` bind-mount added | 1 entry: `/Users/Shared/Ios/unstoppable-wallet-ios:/repos/uw-ios:ro`. |
 | AC#9 | `.env.example` documented | `PALACE_SCIP_INDEX_PATHS={..., "uw-ios": "/repos/uw-ios/scip/index.scip"}` example shown. |
 | AC#10 | CLAUDE.md updated | New "Operator workflow: iOS Swift symbol index" subsection + project mount table row + non-iMac override note (continuing Slice 1 rev2 pattern). |
 
-### Phase 4.1 live-smoke evidence script (mandatory, real, with transcripts)
+### Phase 4.1 live-smoke evidence — TWO TRACKS (revised rev2)
+
+**Track A — fixture live-smoke on iMac (MERGE GATE)**
+
+This is the hard merge requirement. Demonstrates extractor pipeline works on iMac production palace-mcp.
 
 ```
 [1] palace.ingest.list_extractors → returns existing list + symbol_index_swift (NEWLY added)
-[2] palace.memory.register_project slug=uw-ios → ok:true
-[3] On iMac (real session, real timestamps):
-    cd /Users/Shared/Ios/unstoppable-wallet-ios
-    git rev-parse HEAD  # capture SHA
-    date -u +%FT%TZ     # capture timestamp BEFORE
+[2] palace.memory.register_project slug=uw-ios-mini → ok:true (fixture slug)
+[3] Bind-mount fixture into container (docker-compose.yml addition; or copy fixture path):
+    /Users/Shared/Ios/Gimle-Palace/services/palace-mcp/tests/extractors/fixtures/uw-ios-mini-project:/repos/uw-ios-mini:ro
+[4] PALACE_SCIP_INDEX_PATHS includes {"uw-ios-mini":"/repos/uw-ios-mini/scip/index.scip"}
+[5] palace.ingest.run_extractor name=symbol_index_swift project=uw-ios-mini
+    → ok:true with REAL timestamps + run_id (mandatory; no fabrication path)
+[6] Direct cypher verification (palace.memory.lookup does NOT support 'IngestRun' entity type):
+    docker exec gimle-palace-neo4j-1 cypher-shell -u neo4j -p $NEO4J_PASSWORD \
+      "MATCH (r:IngestRun {run_id:'<from-step-5>'}) RETURN r.success, r.started_at, r.finished_at"
+[7] Phase counts via TantivyBridge.count_docs_for_run_async (Slice 1 pattern):
+    expected: phase1_defs ≥ <oracle>, language_distribution = 100% SWIFT, ±2% drift
+```
+
+**Track B — real UW-ios live-smoke on operator's dev Mac (DEFERRED-NOT-BLOCKED)**
+
+iMac (Intel x86_64 + macOS 13 + old Xcode ≤Swift 5.8) cannot build modern Swift code. Operator's dev Mac (Apple Silicon + current Xcode) is the only host that can build UW-ios master.
+
+This evidence is captured as a **separate followup-issue** post-merge:
+
+```
+[1] On dev Mac:
+    git clone https://github.com/horizontalsystems/unstoppable-wallet-ios.git
+    cd unstoppable-wallet-ios
+    git rev-parse HEAD                          # capture SHA
+    date -u +%FT%TZ                             # capture timestamp BEFORE
     xcodebuild build -workspace UnstoppableWallet/UnstoppableWallet.xcworkspace \
                     -scheme UnstoppableWallet \
                     -destination "generic/platform=iOS Simulator"
     SwiftSCIPIndex --derived-data ~/Library/Developer/Xcode/DerivedData/UnstoppableWallet-* \
-                  --output ./scip/index.scip
-    date -u +%FT%TZ     # capture timestamp AFTER xcodebuild
-[4] Update .env: PALACE_SCIP_INDEX_PATHS={..., "uw-ios":"/repos/uw-ios/scip/index.scip"}
-[5] Restart palace-mcp container
-[6] palace.ingest.run_extractor name=symbol_index_swift project=uw-ios
-    → expect: ok:true, nodes_written > 5000 (UW-ios has 1704 .swift files)
-[7] palace.memory.lookup entity_type=IngestRun (NOTE: 'IngestRun' not in palace.memory entity types — use direct cypher instead)
-    OR direct cypher: MATCH (r:IngestRun {run_id: "<from-step-6>"}) RETURN r.success, r.started_at, r.finished_at
-[8] (If GIM-126 merged) palace.code.find_references qualified_name=WalletStore project=uw-ios
-    → returns DEFs + USEs across UW-ios codebase
+                  --output ./scip/uw-ios-master.scip
+    date -u +%FT%TZ                             # capture timestamp AFTER
+[2] Transfer to iMac: scp uw-ios-master.scip imac:/Users/Shared/Ios/unstoppable-wallet-ios-scip/
+[3] Update iMac .env: PALACE_SCIP_INDEX_PATHS={..., "uw-ios":"/repos/uw-ios-scip/uw-ios-master.scip"}
+[4] Add bind-mount in docker-compose.yml: /Users/Shared/Ios/unstoppable-wallet-ios-scip:/repos/uw-ios-scip:ro
+[5] Restart palace-mcp on iMac
+[6] palace.memory.register_project slug=uw-ios → ok:true
+[7] palace.ingest.run_extractor name=symbol_index_swift project=uw-ios → real result with timestamps
+[8] Substantive criteria (per AC#7.5 row "f"): ≥1000 main-source DEFs, ≥3 named UW symbols, ≥10 cross-file USE refs, <5% UNKNOWN
+[9] (Post-GIM-126) palace.code.find_references qualified_name=WalletManager project=uw-ios → ≥3 USEs across distinct files
 ```
+
+Track B is operator-Mac-bound and post-merge; this prevents iMac toolchain limitations from blocking the slice.
 
 **Process discipline (per `feedback_pe_qa_evidence_fabrication.md`)**:
 - Evidence MUST include real timestamps from `date -u` BEFORE/AFTER each major step
@@ -279,15 +368,17 @@ Drift-check: regen UW-ios → `index.scip` differs → oracle counts must update
 
 | # | Risk | Mitigation |
 |---|---|---|
-| **R1** ⚡ | **SwiftSCIPIndex output quality unknown** — community 1⭐, single maintainer, last update Jan 2026. May crash on complex Xcode workspace OR skip Swift macros (= AC#4 Branch B/C trigger) OR produce non-standard SCIP. | **Phase 1.0 prerequisite**: end-to-end run on fixture before PE Phase 2. AC#4 wide gate (3 of 3 generated targets) catches frequent failure mode. If R1 surfaces on real UW-ios — spec rev2 with workaround flags or SHA pin. |
-| R2 | IndexStoreDB path varies by Xcode/macOS version | `regen.sh` uses `~/Library/Developer/Xcode/DerivedData/<scheme>-*/Index.noindex` glob. REGEN.md instructs operator to verify path. |
-| R3 | `xcodebuild` requires macOS host with Xcode (cannot run in Docker) | Existing pattern — Slice 1 also generated `.scip` outside container. operator runs regen on iMac, palace-mcp container reads result. |
-| R4 | Swift macros require Swift ≥5.9 (Xcode ≥15) | Pinned in `project.yml` + REGEN.md. UW-ios already on Swift 5.9+ (per `.swift-version`). |
-| R5 | XcodeGen — extra dependency | Document in REGEN.md: `brew install xcodegen` one-time. Alternative (commit pre-generated `.xcodeproj`) is worse — `project.pbxproj` is unreadable mess. |
-| R6 | fixture regen slower than Slice 1 (2-5 min vs 30-60 sec for gradle) | Acceptable; CI doesn't regen (committed `.scip`). PE on regen waits. |
-| R7 | IndexStoreDB may include compiler-internal symbols (mangled names like `$s4...`) | Phase 1.0 inspect — if noisy, filter in `symbol_index_swift` extractor. |
-| **R8** | Effort underestimate if R1 surfaces — fallback to "wait for upstream" / write own | Phase 1.0 oracle gate catches ASAP. Buffer: 5-6d PE + 2-3d = ~10-12d wall-clock. |
-| R9 | Phase 4.1 evidence fabrication (Slice 1 incident) | **Hardened**: spec mandates real timestamps + transcripts + git rev-parse output; CTO Phase 4.2 must cross-check numbers vs oracle constants. Memory `feedback_pe_qa_evidence_fabrication.md` codifies the lesson. |
+| **R1** ⚡ | **SwiftSCIPIndex output quality is THE primary unknown** — community 1⭐, single maintainer (`Fostonger`), last commit 2026-01-05. Apple's IndexStoreDB itself is solid; the COMMUNITY CONVERTER is what may misbehave. May crash on complex Xcode workspaces, skip generated code, output non-standard SCIP, mishandle modern Swift idioms. | **Phase 1.0 spike** (mandatory, before PE Phase 2 starts) runs end-to-end on fixture AND real UW-ios on dev Mac, captures actual `document.language` values, generated-code visibility, FQN format. Documents result in REGEN.md + locks AC#4 branch. If SwiftSCIPIndex fundamentally fails → spec rev3 with alternative path (e.g., manual IndexStoreDB walker, or wait for upstream, or write own). |
+| **R2** ⚡ | **iMac CANNOT build modern iOS** (Intel x86_64 + macOS 13 + Xcode ≤Swift 5.8). UW master uses Swift 5.9+ macros, iOS 17+ APIs. Forcing iMac build = fail. iMac upgrade infeasible (Apple dropped Intel macOS upgrade path). | **Resolution (rev2)**: split Phase 4.1 into Track A (fixture-based on iMac, hard merge gate) + Track B (real UW-ios on operator's dev Mac, deferred-not-blocked, separate followup-issue evidence). Container ingests pre-generated `.scip` files regardless of build host — `.scip` is platform-portable. iMac role limited to palace-mcp runtime. |
+| R3 | IndexStoreDB path varies by Xcode/macOS version | `regen.sh` uses `~/Library/Developer/Xcode/DerivedData/<scheme>-*/Index.noindex` glob. REGEN.md instructs operator to verify path on dev Mac (build host). |
+| R4 | Swift compiler plugin / macro classpath skew between SwiftSCIPIndex's expected Swift version vs operator's dev Mac Xcode | Phase 1.0 captures dev Mac Xcode version + Swift version + SwiftSCIPIndex SHA. If skew → SwiftSCIPIndex rebuild from main branch OR pin to SwiftSCIPIndex SHA known-compatible with operator's Xcode. |
+| R5 | XcodeGen — extra dependency on dev Mac (one-time `brew install xcodegen`) | Document in REGEN.md. Alternative (commit pre-generated `.xcodeproj`) is worse — `project.pbxproj` is unreadable mess. |
+| R6 | fixture regen on dev Mac slower than Slice 1's gradle (~2-5 min vs 30-60s) | Acceptable; CI doesn't regen (committed `.scip`). PE waits for `regen.sh` on initial fixture build. |
+| R7 | IndexStoreDB may emit compiler-internal symbols (mangled names like `$s4...`, `_$s...`) as noise | Phase 1.0 inspect — if noisy enough to skew oracle counts or pollute UI, filter in `symbol_index_swift` (path-based for `.swiftinterface` etc., name-based for mangled). Filter list documented in REGEN.md. |
+| **R8** | Effort underestimate if R1/R2 surface significantly | Phase 1.0 spike catches ASAP. Buffer: PE 5-6d + 2-3d buffer = ~10-12d wall-clock. If Phase 1.0 reveals R1 fundamental → escalate to spec rev3 + scope reduction. |
+| **R9** | Phase 4.1 evidence fabrication (Slice 1 GIM-127 incident — PE wrote oracle constants into PR body without running) | **Hardened (rev2)**: Track A fixture-based smoke includes Tantivy+Neo4j cypher transcripts; CTO Phase 4.2 cross-checks evidence numbers vs fixture oracle constants — refuse merge if exact match (suspicious). QAEngineer (not PE) authors evidence section. Memory `feedback_pe_qa_evidence_fabrication.md` codifies. |
+| R10 | Vendor-noise paths in real UW-ios (DerivedData, .build, .swiftpm, Pods, Carthage, SourcePackages) inflate symbol count without project value | Phase 1.0 spike enumerates noise paths in real UW-ios DerivedData output; vendor-filter list locked in `symbol_index_swift` config. AC#7.5 substantive criteria explicitly count "non-vendor" symbols. |
+| R11 | `palace.code.find_references` blocked by GIM-126 (PR #70 OPEN) for cross-language fix | Track A and B Phase 4.1 evidence use Tantivy direct lookup (Slice 1 pattern) until GIM-126 merges. Spec rev3 (or follow-up issue) restores `find_references` step. |
 
 ## Effort estimate
 
@@ -304,16 +395,28 @@ Phase breakdown:
 - Phase 4.2 CTO merge: 0.1d (with mandatory evidence cross-check vs oracle per `feedback_pe_qa_evidence_fabrication.md`)
 - Buffer: 2-3d for R1/R7/R8 surprises
 
-## iMac ops setup (parallel to slice — not blocking PR merge)
+## Operator host setup (rev2: split between dev Mac and iMac)
 
-1. `git clone https://github.com/horizontalsystems/unstoppable-wallet-ios.git /Users/Shared/Ios/unstoppable-wallet-ios` (operator)
-2. Toolchain install (one-time):
-   - `brew install xcodegen` (operator)
-   - `git clone https://github.com/Fostonger/SwiftSCIPIndex.git ~/SwiftSCIPIndex && cd ~/SwiftSCIPIndex && swift build -c release` (operator)
-   - Add `~/SwiftSCIPIndex/.build/release/SwiftSCIPIndex` to PATH (or alias)
-3. Edit `docker-compose.yml` (committed via this slice's PR): adds bind-mount for `uw-ios`.
-4. `bash paperclips/scripts/imac-deploy.sh --target <merge-sha>` — restart palace-mcp.
-5. Via MCP: `palace.memory.register_project slug=uw-ios`.
+### Dev Mac (operator's primary, Apple Silicon, current Xcode) — build host
+
+For Phase 1.0 spike + fixture regen + (post-merge) real UW-ios indexing for Track B:
+
+1. `xcode-select -p` → expect `/Applications/Xcode.app/Contents/Developer` (full Xcode, not Command Line Tools)
+2. `brew install xcodegen` (one-time)
+3. `git clone https://github.com/Fostonger/SwiftSCIPIndex.git ~/.local/opt/SwiftSCIPIndex && cd ~/.local/opt/SwiftSCIPIndex && swift build -c release` (one-time, builds from source against operator's Xcode toolchain)
+4. Symlink `~/.local/opt/SwiftSCIPIndex/.build/release/SwiftSCIPIndex` into PATH
+5. (Track B) `git clone https://github.com/horizontalsystems/unstoppable-wallet-ios.git ~/iOS-projects/unstoppable-wallet-ios`
+
+### iMac (Intel x86_64, macOS 13, runtime palace-mcp host) — ingestion only
+
+Phase 4.1 Track A merge gate runs here. iMac DOES NOT build iOS code:
+
+1. Edit `docker-compose.yml` (committed via this slice's PR): adds bind-mount for `uw-ios-mini` fixture path
+2. (Optional, post-merge) Operator transfers Track B's real `.scip` from dev Mac to iMac via scp + adds `uw-ios` bind-mount
+3. `bash paperclips/scripts/imac-deploy.sh --target <merge-sha>` — restart palace-mcp
+4. Via MCP HTTP `localhost:8080/mcp/`: `palace.memory.register_project slug=uw-ios-mini` (Track A) and/or `slug=uw-ios` (Track B)
+
+**This split is the key rev2 change**: iMac never tries to build modern Swift. Build happens on dev Mac; iMac receives pre-generated `.scip` for ingestion. Container environment is host-portable for the .scip file.
 6. For Phase 4.1 live-smoke: `xcodebuild build` + SwiftSCIPIndex extraction on UW-ios, set `PALACE_SCIP_INDEX_PATHS`, restart, run `symbol_index_swift`.
 
 ### Non-iMac contributors
