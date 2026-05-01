@@ -1,4 +1,6 @@
-# Slice 3 — iOS Swift extractor (`symbol_index_swift`) Implementation Plan (rev1)
+> ⚠ **DEPRECATED 2026-05-01 — Superseded by [rev2](2026-04-30-GIM-128-ios-swift-extractor-rev2.md).** Phase 1.0 spike on dev Mac found SwiftSCIPIndex unviable on Xcode 26 (0 symbols on real DerivedData, non-canonical output format). Operator approved pivot to **custom Swift emitter** (Option C). See [Phase 1.0 spike findings](../../research/2026-05-01-swift-indexstore-spike.md) and [spec rev3](../specs/2026-04-30-ios-swift-extractor-rev3.md). This rev1 plan retained for historical context only.
+
+# Slice 3 — iOS Swift extractor (`symbol_index_swift`) Implementation Plan (rev1) — SUPERSEDED
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
