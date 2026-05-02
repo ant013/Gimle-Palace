@@ -99,6 +99,14 @@ Use this checklist mechanically. Mark every item `[x]`, `[ ]`, or `[N/A]`.
 
 Use installed Codex capabilities by task shape:
 
+- VoltAgent parity aliases:
+  - `voltagent-qa-sec:code-reviewer` -> `code-reviewer` / `reviewer`;
+  - `voltagent-qa-sec:architect-reviewer` -> `architect-reviewer`;
+  - `voltagent-qa-sec:security-auditor` -> `security-auditor`;
+  - `voltagent-qa-sec:debugger` -> `debugger`;
+  - `voltagent-qa-sec:error-detective` -> `error-detective`;
+  - `voltagent-core-dev:api-designer` -> `api-designer`;
+  - `voltagent-core-dev:mcp-developer` -> `mcp-developer`.
 - Planning: `create-plan` skill for explicit plan requests.
 - Code review: `code-reviewer`, `reviewer`, `architect-reviewer`.
 - Python/backend work: `python-pro`, `backend-developer`, `debugger`.
@@ -117,6 +125,10 @@ Use MCP context deliberately:
 
 When a named capability is missing at runtime, say so in the Paperclip comment
 and continue with the best available fallback instead of inventing a tool.
+
+MCP servers are shared runtime configuration. If they are missing in a Codex
+Paperclip run, treat that as a runtime setup issue, not as a role-specific
+instruction problem.
 
 ## Creating Paperclip agents from Codex
 
@@ -162,7 +174,11 @@ Codex hire payload shape:
     "instructionsBundleMode": "managed",
     "maxTurnsPerRun": 200,
     "timeoutSec": 0,
-    "graceSec": 15
+    "graceSec": 15,
+    "env": {
+      "CODEX_HOME": "/Users/anton/.paperclip/instances/default/companies/9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64/codex-home",
+      "PATH": "/Users/anton/.local/bin:/Users/anton/.nvm/versions/node/v20.20.2/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    }
   },
   "runtimeConfig": {
     "heartbeat": {
@@ -186,4 +202,5 @@ Procedure:
    `PUT /api/agents/:id/instructions-bundle/file`.
 4. Before upload, fetch the target agent config and require
    `adapterType: "codex_local"`.
-5. Run a narrow smoke task before assigning implementation work.
+5. Verify the company Codex home exposes common MCP, agents, and skills.
+6. Run a narrow smoke task before assigning implementation work.
