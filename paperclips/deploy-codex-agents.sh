@@ -16,11 +16,18 @@ if [ -f "$ID_FILE" ]; then
   . "$ID_FILE"
 fi
 
-CODEX_AGENT_NAMES="cx-code-reviewer"
+CODEX_AGENT_NAMES="cx-code-reviewer codex-architect-reviewer cx-python-engineer cx-infra-engineer cx-mcp-engineer cx-qa-engineer cx-research-agent cx-technical-writer"
 
 agent_id() {
   case "$1" in
     cx-code-reviewer) echo "${CX_CODE_REVIEWER_AGENT_ID:-}" ;;
+    codex-architect-reviewer) echo "${CODEX_ARCHITECT_REVIEWER_AGENT_ID:-}" ;;
+    cx-python-engineer) echo "${CX_PYTHON_ENGINEER_AGENT_ID:-}" ;;
+    cx-infra-engineer) echo "${CX_INFRA_ENGINEER_AGENT_ID:-}" ;;
+    cx-mcp-engineer) echo "${CX_MCP_ENGINEER_AGENT_ID:-}" ;;
+    cx-qa-engineer) echo "${CX_QA_ENGINEER_AGENT_ID:-}" ;;
+    cx-research-agent) echo "${CX_RESEARCH_AGENT_AGENT_ID:-}" ;;
+    cx-technical-writer) echo "${CX_TECHNICAL_WRITER_AGENT_ID:-}" ;;
     *) echo "" ;;
   esac
 }
@@ -34,7 +41,14 @@ Usage:
 Environment:
   PAPERCLIP_API_KEY              required for --api and live adapter preflight
   PAPERCLIP_CODEX_AGENT_IDS_FILE optional env file with CODEX_*_AGENT_ID values
-  CX_CODE_REVIEWER_AGENT_ID   pilot Codex agent id after hire approval
+  CX_CODE_REVIEWER_AGENT_ID         Codex code reviewer id after hire approval
+  CODEX_ARCHITECT_REVIEWER_AGENT_ID Codex architectural reviewer id
+  CX_PYTHON_ENGINEER_AGENT_ID       Codex Python engineer id
+  CX_INFRA_ENGINEER_AGENT_ID        Codex infra engineer id
+  CX_MCP_ENGINEER_AGENT_ID          Codex MCP engineer id
+  CX_QA_ENGINEER_AGENT_ID           Codex QA engineer id
+  CX_RESEARCH_AGENT_AGENT_ID        Codex research agent id
+  CX_TECHNICAL_WRITER_AGENT_ID      Codex technical writer id
 
 This script intentionally has no --local mode for the first Codex pilot slice.
 USAGE
