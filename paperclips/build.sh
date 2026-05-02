@@ -95,6 +95,8 @@ for role_file in "$ROLES_DIR"/*.md; do
       s/Claude CLI/session cache/g;
       s/OpusArchitectReviewer/CodexArchitectReviewer/g;
       s/Opus adversarial/Codex adversarial/g;
+      s/superpowers:/codex-discipline:/g;
+      s/pr-review-toolkit:/codex-review:/g;
     ' "$out_file"
   fi
 

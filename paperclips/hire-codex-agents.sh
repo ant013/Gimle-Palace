@@ -96,6 +96,16 @@ post_hire() {
 }
 
 post_hire \
+  "CXCTO" \
+  "cto" \
+  "CX Chief Technology Officer — Gimle" \
+  "crown" \
+  "$CEO_ID" \
+  "Codex duplicate of CTO. Owns technical strategy, architecture, decomposition, review gates, and delegation to the CX agent team. Does not write code." \
+  "gpt-5.5" \
+  "high"
+
+post_hire \
   "CXPythonEngineer" \
   "engineer" \
   "CX Python services engineer (FastAPI, asyncio, Neo4j, pytest)" \
