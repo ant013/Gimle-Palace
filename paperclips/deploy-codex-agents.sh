@@ -16,11 +16,12 @@ if [ -f "$ID_FILE" ]; then
   . "$ID_FILE"
 fi
 
-CODEX_AGENT_NAMES="cx-code-reviewer codex-architect-reviewer cx-python-engineer cx-infra-engineer cx-mcp-engineer cx-qa-engineer cx-research-agent cx-technical-writer"
+CODEX_AGENT_NAMES="cx-code-reviewer cx-cto codex-architect-reviewer cx-python-engineer cx-infra-engineer cx-mcp-engineer cx-qa-engineer cx-research-agent cx-technical-writer"
 
 agent_id() {
   case "$1" in
     cx-code-reviewer) echo "${CX_CODE_REVIEWER_AGENT_ID:-}" ;;
+    cx-cto) echo "${CX_CTO_AGENT_ID:-}" ;;
     codex-architect-reviewer) echo "${CODEX_ARCHITECT_REVIEWER_AGENT_ID:-}" ;;
     cx-python-engineer) echo "${CX_PYTHON_ENGINEER_AGENT_ID:-}" ;;
     cx-infra-engineer) echo "${CX_INFRA_ENGINEER_AGENT_ID:-}" ;;
@@ -42,6 +43,7 @@ Environment:
   PAPERCLIP_API_KEY              required for --api and live adapter preflight
   PAPERCLIP_CODEX_AGENT_IDS_FILE optional env file with CODEX_*_AGENT_ID values
   CX_CODE_REVIEWER_AGENT_ID         Codex code reviewer id after hire approval
+  CX_CTO_AGENT_ID                   Codex CTO id
   CODEX_ARCHITECT_REVIEWER_AGENT_ID Codex architectural reviewer id
   CX_PYTHON_ENGINEER_AGENT_ID       Codex Python engineer id
   CX_INFRA_ENGINEER_AGENT_ID        Codex infra engineer id
