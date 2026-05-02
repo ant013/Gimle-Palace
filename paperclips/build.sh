@@ -64,6 +64,9 @@ if [ ! -d "$ROLES_DIR" ]; then
 fi
 
 mkdir -p "$OUT_DIR"
+if [ "$TARGET" = "codex" ]; then
+  rm -f "$OUT_DIR"/*.md
+fi
 
 found=0
 for role_file in "$ROLES_DIR"/*.md; do
@@ -82,6 +85,19 @@ for role_file in "$ROLES_DIR"/*.md; do
     }
     { print }
   ' "$role_file" > "$out_file"
+
+  if [ "$TARGET" = "codex" ]; then
+    perl -0pi -e '
+      s/CLAUDE\.md/AGENTS.md/g;
+      s/claude CLI cache/session cache/g;
+      s/Claude CLI cache/session cache/g;
+      s/claude CLI/session cache/g;
+      s/Claude CLI/session cache/g;
+      s/OpusArchitectReviewer/CodexArchitectReviewer/g;
+      s/Opus adversarial/Codex adversarial/g;
+    ' "$out_file"
+  fi
+
   echo "built $out_file"
 done
 
