@@ -16,6 +16,34 @@ separation to deploy guardrails, then to one approved pilot Codex agent.
 - Do not direct-write Paperclip database rows for agent creation.
 - Use `POST /api/companies/:companyId/agent-hires` for new agents.
 
+## Dependencies
+
+- Codex runtime map source:
+  `/Users/ant013/Android/paperclip-shared-fragments/targets/codex/runtime-map.json`.
+- Current shared-fragments branch:
+  `feature/codex-global-spec-gate`.
+- Gimle must consume the shared-fragments runtime map either by merging/bumping
+  the shared fragments dependency or by copying a reviewed snapshot into the
+  Gimle implementation branch.
+- If the runtime map is not yet merged, Phase 3 may proceed only with an
+  explicit pinned commit hash recorded in the implementation PR.
+
+## Write Scopes
+
+| Phase | Repo | Allowed writes | Forbidden writes |
+|---|---|---|---|
+| 1 | Gimle + shared fragments | Docs/notes only | Prompt output, live bundles, API writes |
+| 2 | Gimle | `paperclips/build.sh` or new builder script, build docs | Existing live agent ids, existing deploy API behavior |
+| 3 | shared fragments first, Gimle integration second | Target-specific fragments, runtime map references | Claude-only fragment semantics |
+| 4 | Gimle | Validation scripts/docs if needed | Live Paperclip state |
+| 5 | Gimle | New Codex deploy script or target-aware deploy mode | Uploading to current Claude ids |
+| 6 | Paperclip API | `agent-hires` for one approved pilot only | Patching existing agents, direct DB writes |
+| 7 | Paperclip API | One read-only smoke issue/comment flow | Broad team rollout |
+| 8 | Gimle + Paperclip API | Additional Codex hires after pilot approval | Claude team conversion |
+ 
+The first implementation PR should keep Phase 6+ live API writes out of scope
+unless the PR explicitly requests pilot approval.
+
 ## Phase 1: Builder Discovery
 
 1. Inspect current Gimle prompt build flow:
@@ -35,6 +63,23 @@ Exit criteria:
 - Existing Claude build behavior is documented before changes.
 
 ## Phase 2: Target-Aware Build
+
+Implementation choice:
+
+- Keep the current `paperclips/build.sh` legacy behavior as the Claude default.
+- Add a small target-aware wrapper or builder rather than replacing the current
+  awk expander in-place.
+- Do not rely on broad global string replacement. Target-specific content should
+  come from explicit target fragments or explicit token values.
+- The first acceptable mechanism is:
+  - legacy command: `./paperclips/build.sh` builds Claude output exactly as
+    today;
+  - new command: `./paperclips/build.sh --target codex` or
+    `./paperclips/build-target.sh codex` writes `paperclips/dist/codex/*.md`;
+  - token values are supplied by a small target map:
+    `PROJECT_RULES_FILE`, `RUNTIME_FRAGMENT`, `CREATE_AGENT_FRAGMENT`.
+
+Steps:
 
 1. Add target parameters:
    - `target=claude|codex`
@@ -58,7 +103,7 @@ Exit criteria:
    - load context with `codebase-memory` and `serena`;
    - use installed Codex agents and skills;
    - apply Karpathy discipline.
-2. Add Codex skills/agents mapping using the existing runtime map.
+2. Add Codex skills/agents mapping using the pinned runtime map dependency.
 3. Add Codex create-agent instructions:
    - verify identity and permissions;
    - verify company and adapter docs;
@@ -102,9 +147,20 @@ Exit criteria:
 
 ## Phase 5: Deploy Guardrails
 
+Policy for the first Codex pilot:
+
+- Prefer API deploy for Codex bundles.
+- Do not allow Codex `--local` copy in the first implementation slice.
+- If local mode is later added, it must first read the target agent config and
+  prove `adapterType: "codex_local"` before copying to a managed bundle path.
+- Existing Claude local deploy may remain unchanged, but adding an adapter
+  preflight there is allowed if it does not change successful behavior.
+
+Steps:
+
 1. Add Codex deploy path:
-   - either `paperclips/deploy-codex-agents.sh`;
-   - or `paperclips/deploy-agents.sh --target codex`.
+   - preferred: `paperclips/deploy-codex-agents.sh`;
+   - acceptable alternative: `paperclips/deploy-agents.sh --target codex`.
 2. Use a separate Codex agent id map.
 3. Before upload, fetch each live agent config.
 4. Refuse upload unless live `adapterType` matches target:
@@ -122,6 +178,10 @@ Exit criteria:
 
 1. Choose first pilot role.
    Recommended first pilot: `CodexCodeReviewer`.
+   Rationale: Paperclip has no `reviewer` role enum, and the existing Medic
+   `CodeReviewer` uses `role: "engineer"`. A reviewer pilot is low-risk because
+   the first smoke task can be read-only and does not require write access to
+   production code.
 2. Submit a new hire request through Paperclip API:
 
 ```json
@@ -156,6 +216,20 @@ Exit criteria:
   "sourceIssueId": "<originating-issue-uuid>"
 }
 ```
+
+Before submitting the first hire, re-read:
+
+```bash
+curl -sS "$PAPERCLIP_API_URL/llms/agent-configuration/codex_local.txt" \
+  -H "Authorization: Bearer $PAPERCLIP_API_KEY"
+```
+
+Confirm that:
+
+- `timeoutSec` is accepted and `0` means no timeout for the current adapter
+  version, or replace it with the documented safe value.
+- `maxTurnsPerRun` is accepted by `codex_local`.
+- `modelReasoningEffort: "high"` is accepted for the selected model.
 
 3. Wait for board approval if Paperclip returns `pending_approval`.
 4. Upload only the pilot Codex bundle.
@@ -197,4 +271,3 @@ Exit criteria:
 - Codex duplicate team exists beside Claude team.
 - Claude remains operational.
 - Rollback remains pause/stop assigning/terminate Codex agents only.
-
