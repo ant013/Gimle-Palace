@@ -42,7 +42,11 @@ Codex hire payload shape:
     "instructionsBundleMode": "managed",
     "maxTurnsPerRun": 200,
     "timeoutSec": 0,
-    "graceSec": 15
+    "graceSec": 15,
+    "env": {
+      "CODEX_HOME": "/Users/anton/.paperclip/instances/default/companies/9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64/codex-home",
+      "PATH": "/Users/anton/.local/bin:/Users/anton/.nvm/versions/node/v20.20.2/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    }
   },
   "runtimeConfig": {
     "heartbeat": {
@@ -66,4 +70,5 @@ Procedure:
    `PUT /api/agents/:id/instructions-bundle/file`.
 4. Before upload, fetch the target agent config and require
    `adapterType: "codex_local"`.
-5. Run a narrow smoke task before assigning implementation work.
+5. Verify the company Codex home exposes common MCP, agents, and skills.
+6. Run a narrow smoke task before assigning implementation work.
