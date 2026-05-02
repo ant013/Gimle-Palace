@@ -16,11 +16,11 @@ if [ -f "$ID_FILE" ]; then
   . "$ID_FILE"
 fi
 
-CODEX_AGENT_NAMES="codex-code-reviewer"
+CODEX_AGENT_NAMES="cx-code-reviewer"
 
 agent_id() {
   case "$1" in
-    codex-code-reviewer) echo "${CODEX_CODE_REVIEWER_AGENT_ID:-}" ;;
+    cx-code-reviewer) echo "${CX_CODE_REVIEWER_AGENT_ID:-}" ;;
     *) echo "" ;;
   esac
 }
@@ -34,7 +34,7 @@ Usage:
 Environment:
   PAPERCLIP_API_KEY              required for --api and live adapter preflight
   PAPERCLIP_CODEX_AGENT_IDS_FILE optional env file with CODEX_*_AGENT_ID values
-  CODEX_CODE_REVIEWER_AGENT_ID   pilot Codex agent id after hire approval
+  CX_CODE_REVIEWER_AGENT_ID   pilot Codex agent id after hire approval
 
 This script intentionally has no --local mode for the first Codex pilot slice.
 USAGE
@@ -81,7 +81,7 @@ deploy_one() {
 
   if [ -z "$aid" ]; then
     echo "  PENDING: $name has no Codex agent id yet"
-    echo "           Set CODEX_CODE_REVIEWER_AGENT_ID after Paperclip hire approval."
+    echo "           Set CX_CODE_REVIEWER_AGENT_ID after Paperclip hire approval."
     [ "$MODE" = "dry-run" ] && return 0
     return 1
   fi
@@ -148,7 +148,14 @@ if [ "$TARGET" = "all" ]; then
   done
   [ "$failed" -eq 0 ] || exit 1
 else
-  if ! printf '%s\n' "$CODEX_AGENT_NAMES" | rg -qx "$TARGET"; then
+  known=0
+  for name in $CODEX_AGENT_NAMES; do
+    if [ "$name" = "$TARGET" ]; then
+      known=1
+      break
+    fi
+  done
+  if [ "$known" -ne 1 ]; then
     echo "Unknown Codex agent: $TARGET" >&2
     echo "Available: $CODEX_AGENT_NAMES" >&2
     exit 1
