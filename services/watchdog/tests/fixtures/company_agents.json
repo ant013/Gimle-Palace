@@ -1,0 +1,38 @@
+[
+  {
+    "id": "7fb0fdbb-e17f-4487-a4da-16993a907bec",
+    "companyId": "9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64",
+    "name": "CTO",
+    "role": "engineer",
+    "title": "CTO",
+    "icon": "crown",
+    "status": "idle",
+    "reportsTo": null,
+    "createdAt": "2026-04-14T00:00:00Z",
+    "updatedAt": "2026-05-03T10:00:00Z"
+  },
+  {
+    "id": "bd2d7e20-7ed8-474c-91fc-353d610f4c52",
+    "companyId": "9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64",
+    "name": "CodeReviewer",
+    "role": "engineer",
+    "title": "Code Reviewer",
+    "icon": "eye",
+    "status": "idle",
+    "reportsTo": "7fb0fdbb-e17f-4487-a4da-16993a907bec",
+    "createdAt": "2026-04-14T00:00:00Z",
+    "updatedAt": "2026-05-03T10:00:00Z"
+  },
+  {
+    "id": "127068ee-b564-4b37-9370-616c81c63f35",
+    "companyId": "9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64",
+    "name": "PythonEngineer",
+    "role": "engineer",
+    "title": "Python Engineer",
+    "icon": "code",
+    "status": "running",
+    "reportsTo": "7fb0fdbb-e17f-4487-a4da-16993a907bec",
+    "createdAt": "2026-04-15T00:00:00Z",
+    "updatedAt": "2026-05-03T14:30:36Z"
+  }
+]

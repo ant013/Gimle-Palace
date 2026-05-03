@@ -16,9 +16,15 @@ from gimle_watchdog.config import (
     CooldownsConfig,
     DaemonConfig,
     EscalationConfig,
+    HandoffConfig,
     LoggingConfig,
     PaperclipConfig,
     Thresholds,
+)
+from gimle_watchdog.models import (
+    AlertResult,
+    FindingType,
+    ReviewOwnedByImplementerFinding,
 )
 
 from gimle_watchdog.paperclip import Issue
@@ -255,3 +261,272 @@ async def test_run_one_iteration_tick_exception(tmp_path: Path):
     with patch("gimle_watchdog.daemon._tick", new=fail):
         # Should not raise — exception is swallowed and logged
         await daemon._run_one_iteration_for_test(cfg, state, client)
+
+
+# --- T7: _run_handoff_pass tests -----------------------------------------------
+
+_NOW_SERVER = datetime(2026, 5, 3, 12, 0, tzinfo=timezone.utc)
+_COMPANY_ID = "9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64"
+_PE_ID = "127068ee-b564-4b37-9370-616c81c63f35"
+_CR_ID = "bd2d7e20-7ed8-474c-91fc-353d610f4c52"
+
+
+def _handoff_cfg(tmp_path: Path, enabled: bool = True) -> Config:
+    base = _cfg(tmp_path)
+    return Config(
+        version=base.version,
+        paperclip=base.paperclip,
+        companies=base.companies,
+        daemon=base.daemon,
+        cooldowns=base.cooldowns,
+        logging=base.logging,
+        escalation=base.escalation,
+        handoff=HandoffConfig(
+            handoff_alert_enabled=enabled,
+            handoff_comment_lookback_min=5,
+            handoff_wrong_assignee_min=3,
+            handoff_review_owner_min=5,
+            handoff_comments_per_issue=5,
+            handoff_max_issues_per_tick=30,
+            handoff_alert_cooldown_min=30,
+        ),
+    )
+
+
+def _in_review_issue() -> Issue:
+    return Issue(
+        id="issue-42",
+        assignee_agent_id=_PE_ID,
+        execution_run_id=None,
+        status="in_review",
+        updated_at=datetime(2026, 5, 3, 11, 0, tzinfo=timezone.utc),
+        issue_number=42,
+    )
+
+
+def _ro_finding() -> ReviewOwnedByImplementerFinding:
+    return ReviewOwnedByImplementerFinding(
+        type=FindingType.REVIEW_OWNED_BY_IMPLEMENTER,
+        issue_id="issue-42",
+        issue_number=42,
+        implementer_assignee_id=_PE_ID,
+        implementer_role_name="PythonEngineer",
+        implementer_role_class="implementer",
+        age_seconds=3600,
+    )
+
+
+@pytest.mark.asyncio
+async def test_handoff_pass_disabled_skips(tmp_path: Path):
+    """When handoff_alert_enabled=False, scan is never called."""
+    cfg = _handoff_cfg(tmp_path, enabled=False)
+    state = State.load(tmp_path / "state.json")
+    client = MagicMock()
+    client.list_active_issues = AsyncMock(return_value=[])
+    client.list_company_agents = AsyncMock(return_value=[])
+
+    with patch(
+        "gimle_watchdog.daemon.detection_semantic.scan_handoff_inconsistencies",
+        new=AsyncMock(return_value=[]),
+    ) as mock_scan:
+        await daemon._run_handoff_pass(cfg, state, client, _NOW_SERVER)
+    mock_scan.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_handoff_pass_posts_alert_first_time(tmp_path: Path):
+    """No prior entry → post_handoff_alert is called once."""
+    cfg = _handoff_cfg(tmp_path)
+    state = State.load(tmp_path / "state.json")
+    client = MagicMock()
+    client.list_active_issues = AsyncMock(return_value=[_in_review_issue()])
+    client.list_company_agents = AsyncMock(return_value=[])
+    client.list_recent_comments = AsyncMock(return_value=[])
+
+    posted = AlertResult(
+        finding_type=FindingType.REVIEW_OWNED_BY_IMPLEMENTER,
+        issue_id="issue-42",
+        posted=True,
+        comment_id="cmt-1",
+        error=None,
+    )
+    with patch(
+        "gimle_watchdog.daemon.detection_semantic.scan_handoff_inconsistencies",
+        new=AsyncMock(return_value=[_ro_finding()]),
+    ):
+        with patch(
+            "gimle_watchdog.daemon.actions.post_handoff_alert", new=AsyncMock(return_value=posted)
+        ) as mock_post:
+            await daemon._run_handoff_pass(cfg, state, client, _NOW_SERVER)
+    mock_post.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_handoff_pass_skips_active_alert_same_snapshot(tmp_path: Path):
+    """Identical snapshot already alerted → post_handoff_alert not called again."""
+    cfg = _handoff_cfg(tmp_path)
+    state = State.load(tmp_path / "state.json")
+    # Pre-populate state with a matching alert entry
+    snapshot = {"assigneeAgentId": _PE_ID, "status": "in_review"}
+    state.record_handoff_alert(
+        "issue-42",
+        FindingType.REVIEW_OWNED_BY_IMPLEMENTER,
+        snapshot,
+        _NOW_SERVER,
+    )
+    client = MagicMock()
+    client.list_active_issues = AsyncMock(return_value=[_in_review_issue()])
+    client.list_company_agents = AsyncMock(return_value=[])
+    client.list_recent_comments = AsyncMock(return_value=[])
+
+    with patch(
+        "gimle_watchdog.daemon.detection_semantic.scan_handoff_inconsistencies",
+        new=AsyncMock(return_value=[_ro_finding()]),
+    ):
+        with patch(
+            "gimle_watchdog.daemon.actions.post_handoff_alert", new=AsyncMock()
+        ) as mock_post:
+            await daemon._run_handoff_pass(cfg, state, client, _NOW_SERVER)
+    mock_post.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_handoff_pass_respects_cooldown(tmp_path: Path):
+    """Snapshot changed but cooldown not elapsed → post not called."""
+    cfg = _handoff_cfg(tmp_path)
+    state = State.load(tmp_path / "state.json")
+    # Old snapshot (different assignee), alerted 5 min ago (cooldown=30)
+    old_snapshot = {"assigneeAgentId": "old-agent", "status": "in_review"}
+    alert_time = datetime(2026, 5, 3, 11, 55, tzinfo=timezone.utc)  # 5 min ago
+    state.record_handoff_alert(
+        "issue-42",
+        FindingType.REVIEW_OWNED_BY_IMPLEMENTER,
+        old_snapshot,
+        alert_time,
+    )
+    client = MagicMock()
+    client.list_active_issues = AsyncMock(return_value=[_in_review_issue()])
+    client.list_company_agents = AsyncMock(return_value=[])
+    client.list_recent_comments = AsyncMock(return_value=[])
+
+    with patch(
+        "gimle_watchdog.daemon.detection_semantic.scan_handoff_inconsistencies",
+        new=AsyncMock(return_value=[_ro_finding()]),
+    ):
+        with patch(
+            "gimle_watchdog.daemon.actions.post_handoff_alert", new=AsyncMock()
+        ) as mock_post:
+            await daemon._run_handoff_pass(cfg, state, client, _NOW_SERVER)
+    mock_post.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_handoff_pass_re_alerts_after_cooldown(tmp_path: Path):
+    """Snapshot changed AND cooldown elapsed → re-alerts."""
+    cfg = _handoff_cfg(tmp_path)
+    state = State.load(tmp_path / "state.json")
+    old_snapshot = {"assigneeAgentId": "old-agent", "status": "in_review"}
+    # Alerted 60 min ago (past cooldown_min=30)
+    alert_time = datetime(2026, 5, 3, 11, 0, tzinfo=timezone.utc)
+    state.record_handoff_alert(
+        "issue-42",
+        FindingType.REVIEW_OWNED_BY_IMPLEMENTER,
+        old_snapshot,
+        alert_time,
+    )
+    client = MagicMock()
+    client.list_active_issues = AsyncMock(return_value=[_in_review_issue()])
+    client.list_company_agents = AsyncMock(return_value=[])
+    client.list_recent_comments = AsyncMock(return_value=[])
+
+    posted = AlertResult(
+        finding_type=FindingType.REVIEW_OWNED_BY_IMPLEMENTER,
+        issue_id="issue-42",
+        posted=True,
+        comment_id="cmt-2",
+        error=None,
+    )
+    with patch(
+        "gimle_watchdog.daemon.detection_semantic.scan_handoff_inconsistencies",
+        new=AsyncMock(return_value=[_ro_finding()]),
+    ):
+        with patch(
+            "gimle_watchdog.daemon.actions.post_handoff_alert", new=AsyncMock(return_value=posted)
+        ) as mock_post:
+            await daemon._run_handoff_pass(cfg, state, client, _NOW_SERVER)
+    mock_post.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_handoff_pass_clears_stale_entry_when_no_finding(tmp_path: Path):
+    """Issue has no finding anymore → alert entry cleared from state."""
+    cfg = _handoff_cfg(tmp_path)
+    state = State.load(tmp_path / "state.json")
+    snapshot = {"assigneeAgentId": _PE_ID, "status": "in_review"}
+    state.record_handoff_alert(
+        "issue-42",
+        FindingType.REVIEW_OWNED_BY_IMPLEMENTER,
+        snapshot,
+        _NOW_SERVER,
+    )
+    client = MagicMock()
+    client.list_active_issues = AsyncMock(return_value=[_in_review_issue()])
+    client.list_company_agents = AsyncMock(return_value=[])
+    client.list_recent_comments = AsyncMock(return_value=[])
+
+    with patch(
+        "gimle_watchdog.daemon.detection_semantic.scan_handoff_inconsistencies",
+        new=AsyncMock(return_value=[]),  # no findings
+    ):
+        await daemon._run_handoff_pass(cfg, state, client, _NOW_SERVER)
+
+    assert not state.has_active_alert("issue-42", FindingType.REVIEW_OWNED_BY_IMPLEMENTER, snapshot)
+
+
+@pytest.mark.asyncio
+async def test_handoff_pass_isolates_per_company_errors(tmp_path: Path):
+    """Exception during agent fetch for one company doesn't raise to caller."""
+    cfg = _handoff_cfg(tmp_path)
+    state = State.load(tmp_path / "state.json")
+    client = MagicMock()
+    client.list_company_agents = AsyncMock(side_effect=RuntimeError("network"))
+
+    # Should not raise
+    await daemon._run_handoff_pass(cfg, state, client, _NOW_SERVER)
+
+
+@pytest.mark.asyncio
+async def test_tick_calls_handoff_pass_when_enabled(tmp_path: Path):
+    """_tick calls _run_handoff_pass when handoff_alert_enabled=True."""
+    cfg = _handoff_cfg(tmp_path, enabled=True)
+    state = State.load(tmp_path / "state.json")
+    client = MagicMock()
+    client.list_in_progress_issues = AsyncMock(return_value=[])
+
+    with patch("gimle_watchdog.daemon.detection.scan_idle_hangs", return_value=[]):
+        with patch("gimle_watchdog.daemon._sleep", new=AsyncMock()):
+            with patch("gimle_watchdog.daemon._run_handoff_pass", new=AsyncMock()) as mock_pass:
+                await daemon._tick(cfg, state, client)
+    mock_pass.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_handoff_pass_logs_pass_complete_event(tmp_path: Path, caplog):
+    """JSONL event 'handoff_pass_complete' is logged after the pass."""
+    import logging
+
+    cfg = _handoff_cfg(tmp_path)
+    state = State.load(tmp_path / "state.json")
+    client = MagicMock()
+    client.list_active_issues = AsyncMock(return_value=[])
+    client.list_company_agents = AsyncMock(return_value=[])
+
+    with patch(
+        "gimle_watchdog.daemon.detection_semantic.scan_handoff_inconsistencies",
+        new=AsyncMock(return_value=[]),
+    ):
+        with caplog.at_level(logging.INFO, logger="watchdog.daemon"):
+            await daemon._run_handoff_pass(cfg, state, client, _NOW_SERVER)
+
+    events = [r for r in caplog.records if getattr(r, "event", None) == "handoff_pass_complete"]
+    assert len(events) == 1

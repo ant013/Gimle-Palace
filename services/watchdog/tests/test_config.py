@@ -260,3 +260,56 @@ def test_config_load_validates_stream_idle_positive(tmp_path: Path):
     )
     with pytest.raises(cfg.ConfigError, match="positive"):
         cfg.load_config(path)
+
+
+# --- T7: HandoffConfig ---------------------------------------------------------
+
+_FULL_YAML = """\
+version: 1
+paperclip: {{base_url: http://x, api_key_source: "inline:k"}}
+companies:
+  - id: 9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64
+    name: gimle
+    thresholds: {{died_min: 3, hang_etime_min: 60, idle_cpu_ratio_max: 0.005, hang_stream_idle_max_s: 300}}
+daemon: {{poll_interval_seconds: 120}}
+cooldowns: {{per_issue_seconds: 300, per_agent_cap: 3, per_agent_window_seconds: 900}}
+logging: {{path: /tmp/x.log, level: INFO, rotate_max_bytes: 1, rotate_backup_count: 1}}
+escalation: {{post_comment_on_issue: false, comment_marker: "x"}}
+{handoff}
+"""
+
+
+def test_handoff_defaults_when_section_absent(tmp_path: Path):
+    """When handoff: section is absent, defaults are applied and alert is disabled."""
+    path = _write(tmp_path, _FULL_YAML.format(handoff=""))
+    c = cfg.load_config(path)
+    assert c.handoff.handoff_alert_enabled is False
+    assert c.handoff.handoff_comment_lookback_min == 5
+    assert c.handoff.handoff_wrong_assignee_min == 3
+    assert c.handoff.handoff_review_owner_min == 5
+    assert c.handoff.handoff_comments_per_issue == 5
+    assert c.handoff.handoff_max_issues_per_tick == 30
+    assert c.handoff.handoff_alert_cooldown_min == 30
+
+
+def test_handoff_enabled_from_yaml(tmp_path: Path):
+    """handoff_alert_enabled: true is parsed correctly and overrides are applied."""
+    path = _write(
+        tmp_path,
+        _FULL_YAML.format(
+            handoff="handoff:\n  handoff_alert_enabled: true\n  handoff_alert_cooldown_min: 60"
+        ),
+    )
+    c = cfg.load_config(path)
+    assert c.handoff.handoff_alert_enabled is True
+    assert c.handoff.handoff_alert_cooldown_min == 60
+
+
+def test_handoff_unknown_key_raises(tmp_path: Path):
+    """Unknown key in handoff: section raises ConfigError (strict validation)."""
+    path = _write(
+        tmp_path,
+        _FULL_YAML.format(handoff="handoff:\n  typo_key: 99"),
+    )
+    with pytest.raises(cfg.ConfigError, match="handoff"):
+        cfg.load_config(path)
