@@ -14,7 +14,7 @@ fi
 
 python3 "$SCRIPT_DIR/scripts/validate_instructions.py"
 
-if rg -n "superpowers:|Claude Code|Claude CLI|claude CLI|claude-api|CLAUDE\\.md|pr-review-toolkit:|OpusArchitectReviewer" "$CODEX_DIST"; then
+if rg -n "superpowers:|Claude Code|Claude CLI|claude CLI|claude-api|CLAUDE\\.md|pr-review-toolkit:|OpusArchitectReviewer|\\bOpus\\b" "$CODEX_DIST"; then
   echo "ERROR: Codex output contains forbidden runtime references" >&2
   exit 1
 fi
