@@ -135,6 +135,30 @@ def test_baseline_growth_allowlist_passes(tmp_path: Path) -> None:
     assert errors == []
 
 
+def test_global_growth_allowlist_fails(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    baseline_path = repo / "paperclips" / "bundle-size-baseline.json"
+    baseline = json.loads(baseline_path.read_text())
+    baseline["policy"]["maxGrowthPercent"] = 10
+    baseline["bundles"][0]["bytes"] = int(baseline["bundles"][0]["bytes"] * 0.80)
+    baseline_path.write_text(json.dumps(baseline, indent=2) + "\n")
+    allowlist_path = repo / "paperclips" / "bundle-size-allowlist.json"
+    allowlist = json.loads(allowlist_path.read_text())
+    allowlist["entries"].append(
+        {
+            "rule": "bundle-size-growth",
+            "reason": "malformed global exception",
+        }
+    )
+    allowlist_path.write_text(json.dumps(allowlist, indent=2) + "\n")
+
+    errors = validate_instructions.validate(repo)
+
+    assert any("allowlist entry 0 missing roleId" in error for error in errors)
+    assert any("allowlist entry 0 missing path" in error for error in errors)
+    assert any("bundle grew more than 10%" in error for error in errors)
+
+
 def test_rule_required_profile_missing_fails(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     matrix_path = repo / "paperclips" / "instruction-coverage.matrix.yaml"

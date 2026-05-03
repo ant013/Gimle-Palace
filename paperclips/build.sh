@@ -101,6 +101,13 @@ for role_file in "$ROLES_DIR"/*.md; do
       if (system("test -f " target_path) == 0) {
         path = target_path
       }
+      read_status = getline line < path
+      if (read_status < 0) {
+        print "ERROR: include fragment not readable: " path > "/dev/stderr"
+        close(path)
+        exit 2
+      }
+      if (read_status > 0) print line
       while ((getline line < path) > 0) print line
       close(path)
       next
