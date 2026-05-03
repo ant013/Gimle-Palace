@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Coroutine
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -45,8 +46,34 @@ from palace_mcp.memory.projects import InvalidSlug, validate_slug
 REPOS_ROOT = Path("/repos")
 EXTRACTOR_TIMEOUT_S = 300.0
 
+_logger = logging.getLogger(__name__)
+
 # :Project node uses {slug: $slug} as the unique merge key (OpusReviewer Phase 3.2 finding).
 GET_PROJECT = "MATCH (p:Project {slug: $slug}) RETURN p"
+
+_background_tasks: set[asyncio.Task[None]] = set()
+
+
+def _fire_and_forget(coro: Coroutine[None, None, None]) -> None:
+    """Schedule a coroutine as a background task without leaking it.
+
+    Mirrors main.py pattern: stores the task in a module-level set so the event
+    loop keeps a strong reference, then discards it on completion and logs any
+    unhandled exception.
+    """
+    task: asyncio.Task[None] = asyncio.create_task(coro)
+    _background_tasks.add(task)
+
+    def _on_done(t: asyncio.Task[None]) -> None:
+        _background_tasks.discard(t)
+        if not t.cancelled() and t.exception() is not None:
+            _logger.error(
+                "bundle ingest background task failed: %s",
+                t.exception(),
+                exc_info=t.exception(),
+            )
+
+    task.add_done_callback(_on_done)
 
 
 # --- precheck ---
@@ -402,7 +429,7 @@ async def run_extractor_bundle(
     state["_driver"] = driver
     state["_graphiti"] = graphiti
 
-    asyncio.create_task(
+    _fire_and_forget(
         _run_bundle_ingest_task(name=name, bundle=bundle, members=members, state=state)
     )
     return state
