@@ -3,27 +3,30 @@
 **Spec:** `docs/superpowers/specs/2026-05-03-paperclip-agent-instruction-efficiency.md`
 **Branch:** `feature/paperclip-agent-instruction-efficiency`
 **Base:** `origin/develop` at `65f5793`
-**Spec commit:** `a50ee54`
+**Reviewed spec baseline:** `48ca294`
+
+Implementation agents must use the branch tip, not the original `a50ee54`
+spec-only commit. If the spec or plan changes again before implementation, this
+reviewed baseline must be refreshed before Phase 1.1 approval.
 
 ## Goal
 
 Reduce generated Paperclip instruction weight for both Claude and Codex agents
 without weakening the safety rules learned from real Gimle incidents.
 
-The implementation should prefer short mandatory rules in generated bundles and
-move long background lessons to runbooks when the rule can still be executed
-without reading the full incident narrative.
+The implementation must convert "everyone gets every heavy fragment" into an
+explicit role/profile system with validator-enforced safety coverage.
 
-## Guardrails
+## Non-Negotiable Guardrails
 
-- Change Claude and Codex symmetrically.
+- Change Claude and Codex symmetrically by role group.
 - Do not modify live Paperclip agent records during this work.
-- Do not deploy regenerated bundles until reviewers approve the generated
-  output.
+- Do not deploy regenerated bundles until reviewers approve generated output.
 - Keep distilled mandatory rules inline until runtime runbook access is proven.
-- Do not remove safety behavior unless the safety coverage matrix has an
-  equivalent required rule, profile, role mapping, and validation check.
+- Do not remove safety behavior unless the matrix has an equivalent rule,
+  profile, role mapping, and validator check.
 - Keep old untracked local files out of scope.
+- Update `CLAUDE.md` if workflow, build, validator, or baseline commands change.
 
 ## Decisions
 
@@ -31,42 +34,135 @@ without reading the full incident narrative.
 |---|---|
 | Role/profile declaration | YAML front matter before first heading |
 | Generated bundle metadata | builder strips YAML front matter from `dist` |
+| Profile source of truth | `paperclips/instruction-profiles.yaml` |
 | Coverage source of truth | `paperclips/instruction-coverage.matrix.yaml` |
 | Role identity | canonical IDs: `<target>:<role-file-stem>` |
-| Initial size enforcement | baseline bytes/lines plus no-growth guard |
+| Profile fragments path | `paperclips/fragments/profiles/` |
+| Lessons/runbooks path | `paperclips/fragments/lessons/` |
 | Baseline file | `paperclips/bundle-size-baseline.json` |
 | Allowlist file | `paperclips/bundle-size-allowlist.json` |
+| Breakdown file | `paperclips/bundle-size-breakdown.json` |
+| Token metric | report tokens as efficiency metric; bytes remain deterministic gate |
+| Validator implementation | Python module plus pytest coverage; shell wrappers are allowed |
+| Unknown profile | fail |
+| Matrix references unknown role/profile | fail |
+| Profile with no fragments | fail unless `empty_allowed: true` |
 | Growth failure threshold | generated bundle grows more than 10 percent |
 | New fragment warning | above 2 KB |
 | New fragment failure | above 3 KB unless allowlisted |
 | `handoff-full` default roles | `cto`, `code-reviewer`, `architect-reviewer`, `qa` families, resolved to explicit Claude/Codex role IDs |
 | Other roles | short `handoff` profile by default |
-| Lesson text | runbook/lesson files, not repeated in every generated bundle |
+| Canary | heavy Python engineer pair, not `CXCodeReviewer` |
 
-## Task 1: Baseline Measurement And Manifest
+## Profile Contract
 
-**Owner:** CTO or implementation engineer
+Profiles are not implicit labels. A profile must resolve to an ordered fragment
+list through `paperclips/instruction-profiles.yaml`.
+
+Example shape:
+
+```yaml
+profiles:
+  core:
+    fragments:
+      - paperclips/fragments/profiles/core.md
+  handoff:
+    fragments:
+      - paperclips/fragments/profiles/handoff.md
+    runbooks:
+      - paperclips/fragments/lessons/phase-handoff.md
+  handoff-full:
+    fragments:
+      - paperclips/fragments/shared/fragments/phase-handoff.md
+```
+
+The builder flow is:
+
+1. Read role front matter.
+2. Validate `target`, canonical role ID, and requested profiles.
+3. Resolve each profile through `paperclips/instruction-profiles.yaml`.
+4. Expand the ordered fragment list.
+5. Strip source front matter from generated bundles.
+6. Emit Claude output under `paperclips/dist/*.md` and Codex output under
+   `paperclips/dist/codex/*.md`.
+
+Existing `<!-- @include ... -->` expansion can remain during migration, but the
+profile manifest becomes the source of truth for new profile-based content.
+
+## Validator Invariants
+
+- `role.front_matter.profiles` must contain every profile required by
+  `instruction-coverage.matrix.yaml` for that role ID.
+- Every profile in role front matter must exist in
+  `paperclips/instruction-profiles.yaml`.
+- Every profile referenced by the matrix must exist in
+  `paperclips/instruction-profiles.yaml`.
+- Every role ID referenced by the matrix must map to an existing role file.
+- Every resolved fragment path must exist.
+- Generated bundles must not contain YAML front matter.
+- Generated bundles must contain the validation markers required by the matrix.
+- Runbook-backed rules are valid only if the distilled mandatory rule remains
+  inline or runbook access has been verified before split.
+
+## Handoff Split
+
+The implementation must create two explicit semantics:
+
+- `handoff`: short mandatory rule in
+  `paperclips/fragments/profiles/handoff.md`.
+- `handoff-full`: full phase matrix and incident lessons, initially backed by
+  existing `paperclips/fragments/shared/fragments/phase-handoff.md`.
+
+`paperclips/fragments/lessons/phase-handoff.md` stores the long background
+lesson if narrative text is moved out of runtime bundles. The plan must measure
+the byte and token savings from roles moving from `handoff-full` to `handoff`.
+
+## Task 1: Baseline Measurement And Manifests
+
+**Owner:** implementation engineer
 **Files:**
 - `paperclips/roles/*.md`
 - `paperclips/roles-codex/*.md`
+- `paperclips/instruction-profiles.yaml`
 - `paperclips/instruction-coverage.matrix.yaml`
 - `paperclips/bundle-size-baseline.json`
 
 **Work:**
-- Record current bytes and line counts for all generated Claude and Codex
-  bundles.
-- Add profile declarations to role files without removing existing includes.
+- Record current bytes, lines, and token estimate for all generated Claude and
+  Codex bundles.
+- Add profile declarations to role files without slimming generated content.
 - Add canonical role IDs using `<target>:<role-file-stem>`.
+- Add `paperclips/instruction-profiles.yaml`.
 - Add machine-readable safety coverage matrix data.
 
 **Acceptance:**
 - Every Claude and Codex role declares `target` and `profiles`.
-- Baseline report covers `paperclips/dist/*.md` and
-  `paperclips/dist/codex/*.md`.
+- `instruction-profiles.yaml` maps every declared profile to explicit fragment
+  paths.
+- `instruction-coverage.matrix.yaml` references explicit role IDs.
 - Baseline data is committed to `paperclips/bundle-size-baseline.json`.
-- Coverage matrix is committed to `paperclips/instruction-coverage.matrix.yaml`
-  and references explicit role IDs.
 - No generated bundle content is slimmed in this task.
+
+## Task 1.5: Fragment Breakdown Audit
+
+**Owner:** implementation engineer
+**Dependencies:** Task 1
+**Files:**
+- `paperclips/bundle-size-breakdown.json`
+- validator/report module
+
+**Work:**
+- Produce expanded-fragment breakdown for heavy bundles before slimming.
+- Minimum roles: `claude:code-reviewer`, `claude:python-engineer`,
+  `claude:mcp-engineer`, `claude:cto`, `codex:cx-python-engineer`.
+- Report bytes, lines, token estimate, and source fragment path per expanded
+  fragment.
+- Identify expected savings from `handoff` vs `handoff-full`.
+
+**Acceptance:**
+- Breakdown explains which fragments dominate the 25-35 KB bundles.
+- Size target bands are reviewed against real fragment contribution data.
+- No broad slimming begins until this audit is reviewed.
 
 ## Task 2: Validators Without Slimming
 
@@ -75,53 +171,79 @@ without reading the full incident narrative.
 - `paperclips/build.sh`
 - `paperclips/validate-codex-target.sh`
 - `paperclips/bundle-size-allowlist.json`
-- new validation script if cleaner
+- validator Python module and tests
+- `CLAUDE.md` if commands/workflow change
 
 **Work:**
 - Validate YAML profile declarations.
+- Validate profile manifest, coverage matrix, baseline, and allowlist schemas.
+- Enforce validator invariants from this plan.
 - Strip YAML front matter from generated bundles.
-- Validate required profiles against the safety coverage matrix.
 - Add bundle-size reporting.
-- Fail only on new no-growth violations or malformed declarations.
+- Add token estimate reporting as warn-only efficiency metric.
+- Fail only on malformed declarations, unknown profiles, missing required
+  profiles, missing fragments, missing markers, or no-growth violations.
 
 **Acceptance:**
 - Claude build still emits `paperclips/dist/*.md`.
 - Codex build still emits `paperclips/dist/codex/*.md`.
 - Codex validation still rejects Claude-only runtime assumptions.
-- Validator reports size, profile coverage, and missing required rules.
 - Generated bundles do not contain source role YAML front matter.
 - No-growth exceptions must be listed in
   `paperclips/bundle-size-allowlist.json`.
+- Validator logic has pytest coverage for known-good and known-bad fixtures.
 
-## Task 3: Pilot Profile Split
+## Task 2.5: Runbook Access Verification
 
-**Owner:** implementation engineer
-**Files:**
-- `paperclips/roles-codex/cx-code-reviewer.md`
-- one Claude reviewer role, preferably `paperclips/roles/code-reviewer.md`
-- profile/runbook fragments under `paperclips/fragments/**`
+**Owner:** implementation engineer plus reviewer
+**Dependencies:** Task 2
 
 **Work:**
-- Split one Codex reviewer and one Claude reviewer into explicit profiles.
-- Keep mandatory rules inline.
-- Move long lesson narrative to runbook references.
-- Verify that `handoff-full`, review, QA evidence, branch safety, and stale
-  session rules remain present where required.
+- Verify whether Paperclip runtime agents can read
+  `paperclips/fragments/lessons/` during actual task execution.
+- If access is not proven, require every runbook-backed rule to keep a
+  distilled mandatory inline rule in the profile fragment.
+- Record the result in the PR description and validator config if needed.
 
 **Acceptance:**
-- Generated pilot bundles are smaller or no larger than baseline.
+- Pilot split is blocked until this result is known.
+- Dead links to lessons are not used as the only copy of a required rule.
+
+## Task 3: Heavy Pilot Profile Split
+
+**Owner:** implementation engineer
+**Dependencies:** Tasks 1, 1.5, 2, 2.5 reviewed
+**Files:**
+- `paperclips/roles/python-engineer.md`
+- `paperclips/roles-codex/cx-python-engineer.md`
+- profile/runbook fragments under `paperclips/fragments/profiles/` and
+  `paperclips/fragments/lessons/`
+
+**Work:**
+- Split the Python engineer pair first because it exercises real heavy-bundle
+  profile mechanics.
+- Keep mandatory rules inline.
+- Move long lesson narrative to `paperclips/fragments/lessons/` only when the
+  short executable rule remains in profile output.
+- Verify `implementation`, `task-start`, `handoff`, branch safety,
+  stale-session, and verification rules remain present.
+
+**Acceptance:**
+- Pilot roles are smaller or explicitly justified in the allowlist.
+- Bundle savings are shown in bytes and token estimate.
 - Safety matrix has no missing required rules for pilot roles.
-- Reviewer can identify where each required rule came from.
+- Reviewer can identify which profile/fragment supplies each required rule.
 
 ## Task 4: Symmetric Role-Group Rollout
 
 **Owner:** implementation engineer
-**Dependencies:** Tasks 1-3 reviewed
+**Dependencies:** Task 3 approved
 
 **Work:**
 - Apply profile split by role group across Claude and Codex together.
-- Preferred order: reviewers, QA, implementation engineers, research/writer,
+- Preferred order: implementation engineers, reviewers, QA, research/writer,
   then CTO/infra/architect.
+- Use the breakdown audit to choose high-impact fragments first.
 - Avoid keeping heavy fragments in roles that only need short mandatory rules.
 - Preserve Claude production-baseline behavior.
 - Preserve Codex runtime behavior.
@@ -144,6 +266,7 @@ without reading the full incident narrative.
 - Keep Codex instructions grounded in `AGENTS.md`, `codebase-memory`, `serena`,
   Codex agents, and Codex skills only where the role needs them.
 - Keep Claude-specific runtime text only where Claude roles need it.
+- Update `CLAUDE.md` if new validator/build commands become required workflow.
 
 **Acceptance:**
 - All Claude and Codex bundles build.
@@ -166,21 +289,23 @@ without reading the full incident narrative.
 - Gimle submodule bump is forward-only and reviewable.
 - Generated Gimle output remains equivalent after the upstream move.
 
-## Task 7: Canary Validation
+## Task 7: Heavy Canary Validation
 
 **Owner:** CodeReviewer, QAEngineer, CTO
 **Dependencies:** Tasks 1-6
 
 **Work:**
-- Run a read-only `CXCodeReviewer` canary review.
-- Compare before/after bundle size and instruction clarity.
+- Run a read-only canary with a role that actually changed from heavy to
+  profiled output. Default canary pair:
+  `claude:python-engineer` and `codex:cx-python-engineer`.
+- Compare before/after bundle size, token estimate, and instruction clarity.
 - Check whether the canary misses any safety rule that old bundles covered.
 
 **Acceptance:**
 - Canary output uses the right role profile.
 - Canary does not miss branch/spec, stale-session, handoff, QA evidence, or
-  review-readiness rules.
-- Results decide whether to expand the pattern to the remaining roles.
+  verification-readiness rules.
+- Results decide whether to expand the pattern to remaining heavy roles.
 
 ## Verification Commands
 
@@ -188,6 +313,7 @@ without reading the full incident narrative.
 ./paperclips/build.sh --target claude
 ./paperclips/build.sh --target codex
 ./paperclips/validate-codex-target.sh
+pytest tests -k "paperclip"
 ```
 
 Additional required checks:
@@ -197,20 +323,24 @@ find paperclips/dist -maxdepth 2 -type f -name '*.md' -print0 | xargs -0 wc -c |
 find paperclips/dist -maxdepth 2 -type f -name '*.md' -print0 | xargs -0 wc -l | sort -n
 ```
 
-Validator-specific checks:
+Validator-specific file checks:
 
 ```bash
+test -f paperclips/instruction-profiles.yaml
 test -f paperclips/instruction-coverage.matrix.yaml
 test -f paperclips/bundle-size-baseline.json
 test -f paperclips/bundle-size-allowlist.json
+test -f paperclips/bundle-size-breakdown.json
 ```
 
 ## Review Gates
 
 1. Spec and plan committed and pushed to the feature branch.
-2. Plan-first review confirms the safety coverage matrix is specific enough.
-3. Implementation begins only after approval.
-4. Pilot split is reviewed before broad Claude/Codex rollout.
+2. Plan-first review confirms profile manifest, matrix, baseline, breakdown,
+   and validator invariants are specific enough.
+3. Runbook access is verified before pilot split.
+4. Heavy pilot split is reviewed before broad rollout.
 5. Broad rollout proceeds by symmetric role groups, not all Claude before all
    Codex.
-6. Live deploy is a separate approved step after generated bundles pass review.
+6. Validator implementation includes pytest coverage.
+7. Live deploy is a separate approved step after generated bundles pass review.
