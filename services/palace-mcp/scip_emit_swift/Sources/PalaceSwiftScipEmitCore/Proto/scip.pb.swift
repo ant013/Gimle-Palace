@@ -1088,11 +1088,11 @@ public struct Scip_Index: Sendable {
 
   /// Metadata about this index.
   public var metadata: Scip_Metadata {
-    get {return _metadata ?? Scip_Metadata()}
+    get {_metadata ?? Scip_Metadata()}
     set {_metadata = newValue}
   }
   /// Returns true if `metadata` has been explicitly set.
-  public var hasMetadata: Bool {return self._metadata != nil}
+  public var hasMetadata: Bool {self._metadata != nil}
   /// Clears the value of `metadata`. Subsequent reads from it will return its default value.
   public mutating func clearMetadata() {self._metadata = nil}
 
@@ -1123,11 +1123,11 @@ public struct Scip_Metadata: Sendable {
 
   /// Information about the tool that produced this index.
   public var toolInfo: Scip_ToolInfo {
-    get {return _toolInfo ?? Scip_ToolInfo()}
+    get {_toolInfo ?? Scip_ToolInfo()}
     set {_toolInfo = newValue}
   }
   /// Returns true if `toolInfo` has been explicitly set.
-  public var hasToolInfo: Bool {return self._toolInfo != nil}
+  public var hasToolInfo: Bool {self._toolInfo != nil}
   /// Clears the value of `toolInfo`. Subsequent reads from it will return its default value.
   public mutating func clearToolInfo() {self._toolInfo = nil}
 
@@ -1276,11 +1276,11 @@ public struct Scip_Symbol: Sendable {
   public var scheme: String = String()
 
   public var package: Scip_Package {
-    get {return _package ?? Scip_Package()}
+    get {_package ?? Scip_Package()}
     set {_package = newValue}
   }
   /// Returns true if `package` has been explicitly set.
-  public var hasPackage: Bool {return self._package != nil}
+  public var hasPackage: Bool {self._package != nil}
   /// Clears the value of `package`. Subsequent reads from it will return its default value.
   public mutating func clearPackage() {self._package = nil}
 
@@ -1452,11 +1452,11 @@ public struct Scip_SymbolInformation: Sendable {
   /// while other fields such as `Documentation.occurrences` can be optionally
   /// included to support hyperlinking referenced symbols in the signature.
   public var signatureDocumentation: Scip_Document {
-    get {return _signatureDocumentation ?? Scip_Document()}
+    get {_signatureDocumentation ?? Scip_Document()}
     set {_signatureDocumentation = newValue}
   }
   /// Returns true if `signatureDocumentation` has been explicitly set.
-  public var hasSignatureDocumentation: Bool {return self._signatureDocumentation != nil}
+  public var hasSignatureDocumentation: Bool {self._signatureDocumentation != nil}
   /// Clears the value of `signatureDocumentation`. Subsequent reads from it will return its default value.
   public mutating func clearSignatureDocumentation() {self._signatureDocumentation = nil}
 

@@ -7,8 +7,9 @@ using Xcode IndexStoreDB and `palace-swift-scip-emit`.
 
 - Xcode: 26.3 (build 17C529)
 - `xcrun swift --version`: Apple Swift 6.2.4 (`swiftlang-6.2.4.1.4 clang-1700.6.4.2`), target `arm64-apple-macosx26.0`
-- `protoc --version`: `libprotoc 32.1`
-- `protoc-gen-swift --version`: `protoc-gen-swift 1.31.1`
+- `protoc --version`: `libprotoc 34.1`
+- `protoc-gen-swift --version`: `protoc-gen-swift 1.37.0`
+- `apple/swift-protobuf`: exact `1.37.0` in `services/palace-mcp/scip_emit_swift/Package.swift`
 
 ## Oracle Counts
 
@@ -38,6 +39,10 @@ using Xcode IndexStoreDB and `palace-swift-scip-emit`.
 
 ```bash
 cd services/palace-mcp/scip_emit_swift
+protoc --proto_path=Sources/PalaceSwiftScipEmitCore/Proto \
+  --swift_out=Visibility=Public:Sources/PalaceSwiftScipEmitCore/Proto \
+  Sources/PalaceSwiftScipEmitCore/Proto/scip.proto
+
 xcrun swift build -c release
 
 cd ../tests/extractors/fixtures/uw-ios-mini-project
