@@ -3,7 +3,23 @@
 GIM-160 generates `scip/index.scip` from the local Swift fixture on a dev Mac
 using Xcode IndexStoreDB and `palace-swift-scip-emit`.
 
-## Toolchain
+## Drift Status
+
+The currently committed `scip/index.scip` evidence was generated with a toolchain
+that does **not** match the locked Phase 1.1 truth in
+`docs/research/2026-05-03-gim-128-phase-1-1-pin-truth.md`:
+
+- locked truth requires `protoc 34.1` and `protoc-gen-swift 1.37.0`
+- current committed evidence below records `protoc 32.1` and
+  `protoc-gen-swift 1.31.1`
+
+Do not treat the current artifact as Phase 3.1-closing evidence until one of
+these happens:
+
+1. GIM-160 reruns the fixture generation with the locked pins and updates this file.
+2. The board explicitly approves changing the locked toolchain truth.
+
+## Current Committed Artifact Toolchain
 
 - Xcode: 26.3 (build 17C529)
 - `xcrun swift --version`: Apple Swift 6.2.4 (`swiftlang-6.2.4.1.4 clang-1700.6.4.2`), target `arm64-apple-macosx26.0`

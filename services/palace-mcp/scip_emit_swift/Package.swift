@@ -10,7 +10,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/swiftlang/indexstore-db.git", revision: "4ee7a49edc48e94361c3477623deeffb25dbed0d"),
-        .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.31.0"),
+        .package(url: "https://github.com/apple/swift-protobuf.git", exact: "1.37.0"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0"),
     ],
     targets: [
