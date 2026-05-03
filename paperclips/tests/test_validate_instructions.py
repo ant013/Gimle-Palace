@@ -233,7 +233,30 @@ def test_codex_full_handoff_requires_codex_architect_destination(tmp_path: Path)
 
     assert any(
         "rule full-phase-matrix handoff destination missing for codex:cx-code-reviewer: "
-        "codexarchitectreviewer"
+        "assignee=codexarchitectreviewer"
+        in error
+        for error in errors
+    )
+
+
+def test_codex_full_handoff_rejects_legacy_qa_destination(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    bundle_path = repo / "paperclips" / "dist" / "codex" / "codex-architect-reviewer.md"
+    bundle_path.write_text(
+        bundle_path.read_text().replace("CXQAEngineer", "QAEngineer")
+    )
+
+    errors = validate_instructions.validate(repo)
+
+    assert any(
+        "rule full-phase-matrix handoff destination missing for "
+        "codex:codex-architect-reviewer: assignee=cxqaengineer"
+        in error
+        for error in errors
+    )
+    assert any(
+        "rule full-phase-matrix forbidden handoff destination for "
+        "codex:codex-architect-reviewer: assignee=qaengineer"
         in error
         for error in errors
     )

@@ -402,25 +402,25 @@ Between plan phases (§8), always **explicit reassign** to the next-phase agent.
 
 ALWAYS hand off by PATCHing `status + assigneeAgentId + comment` in one API call, then GET-verify the assignee; @mention-only handoff is invalid.
 
-Grounded in GIM-48 (2026-04-18): CodeReviewer set `status=todo` after Phase 3.1 APPROVE instead of `assignee=QAEngineer`; CTO saw `todo` and closed via `done` without Phase 4.1 evidence; merged code crashed on iMac. QA gate was skipped **because no one transferred ownership**.
+Grounded in GIM-48 (2026-04-18): a reviewer set `status=todo` after Phase 3.1 APPROVE instead of assigning the next QA agent; the closer saw `todo` and closed via `done` without Phase 4.1 evidence; merged code crashed on iMac. QA gate was skipped **because no one transferred ownership**.
 
 ### Handoff matrix
 
 | Phase done | Next phase | Required handoff |
 |---|---|---|
-| 1.1 Formalization (CTO) | 1.2 Plan-first review | CTO does `git mv` / rename / `GIM-57` swap **on the feature branch directly** (no sub-issue), pushes, then `assignee=CodeReviewer` + @CodeReviewer. Sub-issues for Phase 1.1 mechanical work are anti-pattern per the narrowed `cto-no-code-ban.md` scope. |
-| 1.2 Plan-first (CR) | 2.x Implementation | `assignee=<implementer>` + @mention |
-| 2 Implementation | 3.1 Mechanical review | `assignee=CodeReviewer` + @mention + **git push done** |
+| 1.1 Formalization (CXCTO) | 1.2 Plan-first review | CXCTO does `git mv` / rename / `GIM-57` swap **on the feature branch directly** (no sub-issue), pushes, then `assignee=CXCodeReviewer` + @CXCodeReviewer. Sub-issues for Phase 1.1 mechanical work are anti-pattern per the narrowed `cto-no-code-ban.md` scope. |
+| 1.2 Plan-first (CXCodeReviewer) | 2.x Implementation | `assignee=<CX implementer>` + @mention |
+| 2 Implementation | 3.1 Mechanical review | `assignee=CXCodeReviewer` + @CXCodeReviewer + **git push done** |
 | 3.1 CR APPROVE | 3.2 Codex adversarial | `assignee=CodexArchitectReviewer` + @mention |
-| 3.2 Architect APPROVE | 4.1 QA live smoke | `assignee=QAEngineer` + @mention |
-| 4.1 QA PASS | 4.2 Merge | `assignee=<merger>` (usually CTO) + @mention |
+| 3.2 Architect APPROVE | 4.1 QA live smoke | `assignee=CXQAEngineer` + @CXQAEngineer |
+| 4.1 QA PASS | 4.2 Merge | `assignee=CXCTO` + @CXCTO |
 
 ### NEVER
 
 - `status=todo` between phases. `todo` = "unassigned, free to claim" — phases require **explicit assignee**.
 - `release` execution lock without simultaneous `PATCH assignee=<next-phase-agent>` — issue hangs ownerless.
 - Keeping `assignee=me, status=in_progress` after my phase ends. Reassign before writing the handoff comment.
-- `status=done` without verifying Phase 4.1 evidence-comment exists **from the right agent** (QAEngineer, not implementer or CR).
+- `status=done` without verifying Phase 4.1 evidence-comment exists **from the right Codex QA agent** (CXQAEngineer, not implementer or CR).
 
 ### Handoff comment format
 
@@ -436,7 +436,7 @@ See `heartbeat-discipline.md` §@-mentions for the parser rule. Mention wakes th
 
 ### Pre-handoff checklist (implementer → reviewer)
 
-Before writing "Phase 2 complete — @CodeReviewer":
+Before writing "Phase 2 complete — @CXCodeReviewer":
 
 - [ ] `git push origin <feature-branch>` done — commits live on origin
 - [ ] Local green: `uv run ruff check && uv run mypy src/ && uv run pytest` (or language equivalent)
@@ -446,10 +446,10 @@ Before writing "Phase 2 complete — @CodeReviewer":
 
 Skip any → CR gets "done" on code not on origin → dead end.
 
-### Pre-close checklist (CTO → status=done)
+### Pre-close checklist (CXCTO → status=done)
 
 - [ ] Phase 4.2 merge done (squash-commit on develop / main)
-- [ ] Phase 4.1 evidence-comment **exists** and authored by **QAEngineer** (verify `authorAgentId` in activity log / UI)
+- [ ] Phase 4.1 evidence-comment **exists** and authored by **CXQAEngineer** (verify `authorAgentId` in activity log / UI)
 - [ ] Evidence contains: commit SHA, runtime smoke (healthcheck / tool call), plan-specific invariant check (e.g. `MATCH ... RETURN DISTINCT n.group_id`)
 - [ ] CI green on merge commit (or admin override documented in merge message with reason)
 - [ ] Production deploy completed post-merge (merge ≠ auto-deploy on most setups — follow the project's deploy playbook)
@@ -473,7 +473,7 @@ Reference (GIM-52 Phase 4.1 PASS):
 6. Direct invariant check (plan-specific) — e.g. `MATCH (n) RETURN DISTINCT n.group_id`, expected 1 row
 7. After QA — restore the production checkout to the expected branch (follow the project's checkout-discipline rule)
 
-@<merger> Phase 4.1 green, handing to Phase 4.2 — squash-merge to develop.
+@CXCTO Phase 4.1 green, handing to Phase 4.2 — squash-merge to develop.
 ```
 
 Replacing `/healthz`-only evidence with a real tool-call is critical. `/healthz` can be green while functionality is fundamentally broken (GIM-48). Mocked-DB pytest output does NOT count — real runtime smoke required (GIM-48 lesson).
