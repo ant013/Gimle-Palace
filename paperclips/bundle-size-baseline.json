@@ -12,9 +12,9 @@
     {"roleId": "claude:opus-architect-reviewer", "target": "claude", "path": "paperclips/dist/opus-architect-reviewer.md", "bytes": 28495, "lines": 564, "tokenEstimate": 7124},
     {"roleId": "claude:python-engineer", "target": "claude", "path": "paperclips/dist/python-engineer.md", "bytes": 28367, "lines": 574, "tokenEstimate": 7092},
     {"roleId": "claude:qa-engineer", "target": "claude", "path": "paperclips/dist/qa-engineer.md", "bytes": 29811, "lines": 563, "tokenEstimate": 7453},
-    {"roleId": "claude:research-agent", "target": "claude", "path": "paperclips/dist/research-agent.md", "bytes": 26339, "lines": 477, "tokenEstimate": 6585},
+    {"roleId": "claude:research-agent", "target": "claude", "path": "paperclips/dist/research-agent.md", "bytes": 21902, "lines": 408, "tokenEstimate": 5476},
     {"roleId": "claude:security-auditor", "target": "claude", "path": "paperclips/dist/security-auditor.md", "bytes": 27701, "lines": 508, "tokenEstimate": 6926},
-    {"roleId": "claude:technical-writer", "target": "claude", "path": "paperclips/dist/technical-writer.md", "bytes": 26090, "lines": 465, "tokenEstimate": 6523},
+    {"roleId": "claude:technical-writer", "target": "claude", "path": "paperclips/dist/technical-writer.md", "bytes": 21653, "lines": 396, "tokenEstimate": 5414},
     {"roleId": "codex:codex-architect-reviewer", "target": "codex", "path": "paperclips/dist/codex/codex-architect-reviewer.md", "bytes": 28485, "lines": 564, "tokenEstimate": 7122},
     {"roleId": "codex:cx-code-reviewer", "target": "codex", "path": "paperclips/dist/codex/cx-code-reviewer.md", "bytes": 8039, "lines": 218, "tokenEstimate": 2010},
     {"roleId": "codex:cx-cto", "target": "codex", "path": "paperclips/dist/codex/cx-cto.md", "bytes": 25051, "lines": 441, "tokenEstimate": 6263},
@@ -22,7 +22,7 @@
     {"roleId": "codex:cx-mcp-engineer", "target": "codex", "path": "paperclips/dist/codex/cx-mcp-engineer.md", "bytes": 26683, "lines": 509, "tokenEstimate": 6671},
     {"roleId": "codex:cx-python-engineer", "target": "codex", "path": "paperclips/dist/codex/cx-python-engineer.md", "bytes": 28328, "lines": 574, "tokenEstimate": 7082},
     {"roleId": "codex:cx-qa-engineer", "target": "codex", "path": "paperclips/dist/codex/cx-qa-engineer.md", "bytes": 29766, "lines": 563, "tokenEstimate": 7442},
-    {"roleId": "codex:cx-research-agent", "target": "codex", "path": "paperclips/dist/codex/cx-research-agent.md", "bytes": 26336, "lines": 477, "tokenEstimate": 6584},
-    {"roleId": "codex:cx-technical-writer", "target": "codex", "path": "paperclips/dist/codex/cx-technical-writer.md", "bytes": 26055, "lines": 465, "tokenEstimate": 6514}
+    {"roleId": "codex:cx-research-agent", "target": "codex", "path": "paperclips/dist/codex/cx-research-agent.md", "bytes": 21896, "lines": 408, "tokenEstimate": 5474},
+    {"roleId": "codex:cx-technical-writer", "target": "codex", "path": "paperclips/dist/codex/cx-technical-writer.md", "bytes": 21615, "lines": 396, "tokenEstimate": 5404}
   ]
 }
