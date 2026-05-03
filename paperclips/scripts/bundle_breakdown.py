@@ -91,24 +91,6 @@ def token_estimate(byte_count: int) -> int:
     return (byte_count + 3) // 4
 
 
-def codex_transform(text: str) -> str:
-    replacements = [
-        ("CLAUDE.md", "AGENTS.md"),
-        ("claude CLI cache", "session cache"),
-        ("Claude CLI cache", "session cache"),
-        ("claude CLI", "session cache"),
-        ("Claude CLI", "session cache"),
-        ("OpusArchitectReviewer", "CodexArchitectReviewer"),
-        ("Opus adversarial", "Codex adversarial"),
-        ("superpowers:writing-plans", "create-plan"),
-        ("superpowers:", "codex-discipline:"),
-        ("pr-review-toolkit:", "codex-review:"),
-    ]
-    for source, target in replacements:
-        text = text.replace(source, target)
-    return text
-
-
 def strip_front_matter(text: str) -> str:
     lines = text.splitlines(keepends=True)
     if not lines or lines[0].strip() != "---":
@@ -151,6 +133,14 @@ def add_component(
     components[key] = Component(kind, path, byte_count, line_count, tokens)
 
 
+def resolve_fragment_path(target: str, fragment_rel: str) -> tuple[Path, str]:
+    target_fragment_path = REPO_ROOT / "paperclips" / "fragments" / "targets" / target / fragment_rel
+    if target_fragment_path.is_file():
+        return target_fragment_path, f"paperclips/fragments/targets/{target}/{fragment_rel}"
+    fragment_path = REPO_ROOT / "paperclips" / "fragments" / fragment_rel
+    return fragment_path, f"paperclips/fragments/{fragment_rel}"
+
+
 def analyze_role(role_id: str, target: str, source_path: str, dist_path: str) -> dict:
     source_abs = REPO_ROOT / source_path
     dist_abs = REPO_ROOT / dist_path
@@ -163,8 +153,6 @@ def analyze_role(role_id: str, target: str, source_path: str, dist_path: str) ->
         if not inline_buffer:
             return
         text = "".join(inline_buffer)
-        if target == "codex":
-            text = codex_transform(text)
         add_component(components, "inline-role-text", source_path, text)
         expanded_parts.append(text)
         inline_buffer.clear()
@@ -174,10 +162,8 @@ def analyze_role(role_id: str, target: str, source_path: str, dist_path: str) ->
         if stripped.startswith("<!-- @include fragments/") and stripped.endswith("-->"):
             flush_inline()
             fragment_rel = stripped.split("fragments/", 1)[1].split(".md", 1)[0] + ".md"
-            fragment_path = f"paperclips/fragments/{fragment_rel}"
-            fragment_text = (REPO_ROOT / fragment_path).read_text()
-            if target == "codex":
-                fragment_text = codex_transform(fragment_text)
+            fragment_abs, fragment_path = resolve_fragment_path(target, fragment_rel)
+            fragment_text = fragment_abs.read_text()
             add_component(components, "fragment", fragment_path, fragment_text)
             expanded_parts.append(fragment_text)
         else:

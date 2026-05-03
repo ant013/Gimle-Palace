@@ -224,7 +224,7 @@ This is a **compensation control** (agent remembers). An environment-level hook 
 
 ### What applies to Board, too
 
-This fragment binds **all writers** — agents, Board session, human operator. When Board writes a spec or plan, it goes on a feature branch. Board checkout location: a separate clone per `AGENTS.md § Branch Flow`. When Board pushes, it's to `feature/...` then PR — never `main` or `develop` directly.
+This fragment binds **all writers** — agents, Board session, human operator. When Board writes a spec or plan, it goes on a feature branch. Board checkout location: a separate clone per `AGENTS.md § New Task Branch And Spec Gate`. When Board pushes, it's to `feature/...` then PR — never `main` or `develop` directly.
 
 ### Phase 4.2 — Merge-readiness reality-check
 
@@ -393,7 +393,7 @@ Grounded in GIM-48 (2026-04-18): CodeReviewer set `status=todo` after Phase 3.1 
 | 1.2 Plan-first (CR) | 2.x Implementation | `assignee=<implementer>` + @mention |
 | 2 Implementation | 3.1 Mechanical review | `assignee=CodeReviewer` + @mention + **git push done** |
 | 3.1 CR APPROVE | 3.2 Codex adversarial | `assignee=CodexArchitectReviewer` + @mention |
-| 3.2 Opus APPROVE | 4.1 QA live smoke | `assignee=QAEngineer` + @mention |
+| 3.2 Architect APPROVE | 4.1 QA live smoke | `assignee=QAEngineer` + @mention |
 | 4.1 QA PASS | 4.2 Merge | `assignee=<merger>` (usually CTO) + @mention |
 
 ### NEVER
