@@ -37,6 +37,18 @@ ROLE_SPECS = [
         "paperclips/roles/mcp-engineer.md",
         "paperclips/dist/mcp-engineer.md",
     ),
+    (
+        "claude:research-agent",
+        "claude",
+        "paperclips/roles/research-agent.md",
+        "paperclips/dist/research-agent.md",
+    ),
+    (
+        "claude:technical-writer",
+        "claude",
+        "paperclips/roles/technical-writer.md",
+        "paperclips/dist/technical-writer.md",
+    ),
     ("claude:cto", "claude", "paperclips/roles/cto.md", "paperclips/dist/cto.md"),
     (
         "codex:cx-mcp-engineer",
@@ -49,6 +61,18 @@ ROLE_SPECS = [
         "codex",
         "paperclips/roles-codex/cx-python-engineer.md",
         "paperclips/dist/codex/cx-python-engineer.md",
+    ),
+    (
+        "codex:cx-research-agent",
+        "codex",
+        "paperclips/roles-codex/cx-research-agent.md",
+        "paperclips/dist/codex/cx-research-agent.md",
+    ),
+    (
+        "codex:cx-technical-writer",
+        "codex",
+        "paperclips/roles-codex/cx-technical-writer.md",
+        "paperclips/dist/codex/cx-technical-writer.md",
     ),
 ]
 

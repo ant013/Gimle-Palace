@@ -449,6 +449,176 @@
       ]
     },
     {
+      "roleId": "claude:research-agent",
+      "target": "claude",
+      "source": "paperclips/roles/research-agent.md",
+      "dist": "paperclips/dist/research-agent.md",
+      "total": {
+        "bytes": 21902,
+        "lines": 408,
+        "tokenEstimate": 5476
+      },
+      "components": [
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/git-workflow.md",
+          "bytes": 5040,
+          "lines": 79,
+          "tokenEstimate": 1260,
+          "includeCount": 1
+        },
+        {
+          "kind": "inline-role-text",
+          "path": "paperclips/roles/research-agent.md",
+          "bytes": 4963,
+          "lines": 77,
+          "tokenEstimate": 1241,
+          "includeCount": 7
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/heartbeat-discipline.md",
+          "bytes": 4113,
+          "lines": 77,
+          "tokenEstimate": 1029,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/escalation-blocked.md",
+          "bytes": 2142,
+          "lines": 48,
+          "tokenEstimate": 536,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/karpathy-discipline.md",
+          "bytes": 2055,
+          "lines": 43,
+          "tokenEstimate": 514,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/pre-work-discovery.md",
+          "bytes": 1375,
+          "lines": 27,
+          "tokenEstimate": 344,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
+          "bytes": 1362,
+          "lines": 29,
+          "tokenEstimate": 341,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/profiles/handoff.md",
+          "bytes": 727,
+          "lines": 25,
+          "tokenEstimate": 182,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/language.md",
+          "bytes": 125,
+          "lines": 3,
+          "tokenEstimate": 32,
+          "includeCount": 1
+        }
+      ]
+    },
+    {
+      "roleId": "claude:technical-writer",
+      "target": "claude",
+      "source": "paperclips/roles/technical-writer.md",
+      "dist": "paperclips/dist/technical-writer.md",
+      "total": {
+        "bytes": 21653,
+        "lines": 396,
+        "tokenEstimate": 5414
+      },
+      "components": [
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/git-workflow.md",
+          "bytes": 5040,
+          "lines": 79,
+          "tokenEstimate": 1260,
+          "includeCount": 1
+        },
+        {
+          "kind": "inline-role-text",
+          "path": "paperclips/roles/technical-writer.md",
+          "bytes": 4714,
+          "lines": 65,
+          "tokenEstimate": 1179,
+          "includeCount": 7
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/heartbeat-discipline.md",
+          "bytes": 4113,
+          "lines": 77,
+          "tokenEstimate": 1029,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/escalation-blocked.md",
+          "bytes": 2142,
+          "lines": 48,
+          "tokenEstimate": 536,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/karpathy-discipline.md",
+          "bytes": 2055,
+          "lines": 43,
+          "tokenEstimate": 514,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/pre-work-discovery.md",
+          "bytes": 1375,
+          "lines": 27,
+          "tokenEstimate": 344,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
+          "bytes": 1362,
+          "lines": 29,
+          "tokenEstimate": 341,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/profiles/handoff.md",
+          "bytes": 727,
+          "lines": 25,
+          "tokenEstimate": 182,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/language.md",
+          "bytes": 125,
+          "lines": 3,
+          "tokenEstimate": 32,
+          "includeCount": 1
+        }
+      ]
+    },
+    {
       "roleId": "claude:cto",
       "target": "claude",
       "source": "paperclips/roles/cto.md",
@@ -755,6 +925,176 @@
           "bytes": 908,
           "lines": 30,
           "tokenEstimate": 227,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/profiles/handoff.md",
+          "bytes": 727,
+          "lines": 25,
+          "tokenEstimate": 182,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/language.md",
+          "bytes": 125,
+          "lines": 3,
+          "tokenEstimate": 32,
+          "includeCount": 1
+        }
+      ]
+    },
+    {
+      "roleId": "codex:cx-research-agent",
+      "target": "codex",
+      "source": "paperclips/roles-codex/cx-research-agent.md",
+      "dist": "paperclips/dist/codex/cx-research-agent.md",
+      "total": {
+        "bytes": 21896,
+        "lines": 408,
+        "tokenEstimate": 5474
+      },
+      "components": [
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/git-workflow.md",
+          "bytes": 5040,
+          "lines": 79,
+          "tokenEstimate": 1260,
+          "includeCount": 1
+        },
+        {
+          "kind": "inline-role-text",
+          "path": "paperclips/roles-codex/cx-research-agent.md",
+          "bytes": 4960,
+          "lines": 77,
+          "tokenEstimate": 1240,
+          "includeCount": 7
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/heartbeat-discipline.md",
+          "bytes": 4110,
+          "lines": 77,
+          "tokenEstimate": 1028,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/escalation-blocked.md",
+          "bytes": 2142,
+          "lines": 48,
+          "tokenEstimate": 536,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/karpathy-discipline.md",
+          "bytes": 2055,
+          "lines": 43,
+          "tokenEstimate": 514,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/pre-work-discovery.md",
+          "bytes": 1375,
+          "lines": 27,
+          "tokenEstimate": 344,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
+          "bytes": 1362,
+          "lines": 29,
+          "tokenEstimate": 341,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/profiles/handoff.md",
+          "bytes": 727,
+          "lines": 25,
+          "tokenEstimate": 182,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/language.md",
+          "bytes": 125,
+          "lines": 3,
+          "tokenEstimate": 32,
+          "includeCount": 1
+        }
+      ]
+    },
+    {
+      "roleId": "codex:cx-technical-writer",
+      "target": "codex",
+      "source": "paperclips/roles-codex/cx-technical-writer.md",
+      "dist": "paperclips/dist/codex/cx-technical-writer.md",
+      "total": {
+        "bytes": 21615,
+        "lines": 396,
+        "tokenEstimate": 5404
+      },
+      "components": [
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/git-workflow.md",
+          "bytes": 5040,
+          "lines": 79,
+          "tokenEstimate": 1260,
+          "includeCount": 1
+        },
+        {
+          "kind": "inline-role-text",
+          "path": "paperclips/roles-codex/cx-technical-writer.md",
+          "bytes": 4679,
+          "lines": 65,
+          "tokenEstimate": 1170,
+          "includeCount": 7
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/heartbeat-discipline.md",
+          "bytes": 4110,
+          "lines": 77,
+          "tokenEstimate": 1028,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/escalation-blocked.md",
+          "bytes": 2142,
+          "lines": 48,
+          "tokenEstimate": 536,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/karpathy-discipline.md",
+          "bytes": 2055,
+          "lines": 43,
+          "tokenEstimate": 514,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/pre-work-discovery.md",
+          "bytes": 1375,
+          "lines": 27,
+          "tokenEstimate": 344,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
+          "bytes": 1362,
+          "lines": 29,
+          "tokenEstimate": 341,
           "includeCount": 1
         },
         {
