@@ -189,6 +189,14 @@ async def scan_handoff_inconsistencies(
             )
             if finding is not None:
                 findings.append(finding)
-        except Exception:
-            log.exception("handoff_pass_failed_for_issue issue_id=%s", issue.id)
+        except Exception as exc:
+            log.exception(
+                "handoff_pass_failed_for_issue issue_id=%s",
+                issue.id,
+                extra={
+                    "event": "handoff_pass_failed_for_issue",
+                    "issue_id": issue.id,
+                    "error": repr(exc),
+                },
+            )
     return findings

@@ -70,20 +70,26 @@ def _finding_snapshot(finding: Finding) -> dict[str, Any]:
     return {"assigneeAgentId": finding.implementer_assignee_id, "status": "in_review"}
 
 
-def _needs_alert(
+def _alert_decision(
     state: State,
     issue_id: str,
     ftype: FindingType,
     snapshot: dict[str, Any],
     now_server: datetime,
     cooldown_min: int,
-) -> bool:
+) -> str:
+    """Return one of: "alert" / "skip_already_alerted" / "skip_cooldown".
+
+    Caller emits the appropriate JSONL event per spec §4.9.
+    """
     if state.has_active_alert(issue_id, ftype, snapshot):
-        return False
+        return "skip_already_alerted"
     key = f"{issue_id}:{ftype.value}"
     if key in state.alerted_handoffs:
-        return state.cooldown_elapsed(issue_id, ftype, now_server, cooldown_min)
-    return True  # first time → always alert
+        if state.cooldown_elapsed(issue_id, ftype, now_server, cooldown_min):
+            return "alert"
+        return "skip_cooldown"
+    return "alert"  # first time → always alert
 
 
 async def _run_handoff_pass(
@@ -128,14 +134,39 @@ async def _run_handoff_pass(
                 finding = issues_with_findings.get(issue.id)
                 if finding is None:
                     for ftype in FindingType:
-                        state.clear_handoff_alert(issue.id, ftype)
+                        if state.clear_handoff_alert(issue.id, ftype):
+                            log.info(
+                                "handoff_alert_state_cleared issue=%s type=%s",
+                                issue.id,
+                                ftype.value,
+                                extra={
+                                    "event": "handoff_alert_state_cleared",
+                                    "issue_id": issue.id,
+                                    "finding_type": ftype.value,
+                                },
+                            )
                     continue
 
                 ftype = finding.type
                 snapshot = _finding_snapshot(finding)
-                if not _needs_alert(
+                decision = _alert_decision(
                     state, issue.id, ftype, snapshot, now_server, h.handoff_alert_cooldown_min
-                ):
+                )
+                if decision == "skip_already_alerted":
+                    continue
+                if decision == "skip_cooldown":
+                    log.info(
+                        "handoff_alert_skipped_cooldown issue=%s type=%s cooldown_min=%d",
+                        issue.id,
+                        ftype.value,
+                        h.handoff_alert_cooldown_min,
+                        extra={
+                            "event": "handoff_alert_skipped_cooldown",
+                            "issue_id": issue.id,
+                            "finding_type": ftype.value,
+                            "cooldown_min": h.handoff_alert_cooldown_min,
+                        },
+                    )
                     continue
 
                 assignee_id = snapshot.get("assigneeAgentId", "")
@@ -146,8 +177,16 @@ async def _run_handoff_pass(
                 if result.posted:
                     state.record_handoff_alert(issue.id, ftype, snapshot, now_server)
                     total_alerts += 1
-        except Exception:
-            log.exception("handoff_pass_company_failed company=%s", company.id)
+        except Exception as exc:
+            log.exception(
+                "handoff_pass_failed company=%s",
+                company.id,
+                extra={
+                    "event": "handoff_pass_failed",
+                    "company_id": company.id,
+                    "error": repr(exc),
+                },
+            )
 
     log.info(
         "handoff_pass_complete alerts=%d",
@@ -217,7 +256,11 @@ async def _tick(cfg: Config, state: State, client: PaperclipClient) -> None:
             total_actions += 1
 
     # Phase 3: handoff inconsistency detection (alert-only)
-    now_server = _dt.datetime.now(_dt.timezone.utc)
+    # Spec §4.2.1: anchor "now" to server clock via the most recent
+    # successful response Date header, not the local clock. Phase-2
+    # GETs above already populate it; only fall back to local clock
+    # if no successful response was made yet (cold first tick).
+    now_server = client.last_response_date or _dt.datetime.now(_dt.timezone.utc)
     await _run_handoff_pass(cfg, state, client, now_server)
 
     state.save()
