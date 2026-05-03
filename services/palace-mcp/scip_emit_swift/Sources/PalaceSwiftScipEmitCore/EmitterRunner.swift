@@ -1,7 +1,7 @@
 import Foundation
 import SwiftProtobuf
 
-public enum EmitterError: Error, CustomStringConvertible {
+public enum EmitterError: Error, CustomStringConvertible, LocalizedError {
     case derivedDataNotFound(path: String)
     case dataStoreNotFound(path: String)
     case libIndexStoreNotFound(path: String)
@@ -15,6 +15,10 @@ public enum EmitterError: Error, CustomStringConvertible {
         case .libIndexStoreNotFound(let path):
             return "libIndexStore.dylib not found: \(path)"
         }
+    }
+
+    public var errorDescription: String? {
+        description
     }
 }
 

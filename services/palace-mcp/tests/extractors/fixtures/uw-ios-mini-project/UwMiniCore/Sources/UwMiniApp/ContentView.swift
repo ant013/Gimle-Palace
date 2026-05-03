@@ -1,4 +1,5 @@
 import Foundation
+import Foo
 import UwMiniCore
 
 struct ContentView {
@@ -17,6 +18,6 @@ struct ContentView {
         guard let selectedWallet = store.selectedWallet else {
             return nil
         }
-        return store.title(for: selectedWallet)
+        return FooVendorFormatter.render(label: store.title(for: selectedWallet))
     }
 }

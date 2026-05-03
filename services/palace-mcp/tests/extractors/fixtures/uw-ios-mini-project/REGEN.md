@@ -21,22 +21,24 @@ GIM-179 reran fixture generation with the locked Phase 1.1 truth from
 
 | Metric | Value |
 |---|---:|
-| N_DOCUMENTS_TOTAL | 5 |
-| N_DEFS_TOTAL | 117 |
-| N_USES_TOTAL | 253 |
-| N_OCCURRENCES_TOTAL | 370 |
+| N_DOCUMENTS_TOTAL | 7 |
+| N_DEFS_TOTAL | 134 |
+| N_USES_TOTAL | 287 |
+| N_OCCURRENCES_TOTAL | 421 |
 
 ## Branch Notes
 
 - AC#4 Branch: B-2. IndexStoreDB exposes source-level Swift symbols and also some macro-expanded `@Observable` support symbols, but this first locked fixture does not assert full generated-code visibility for Codable synthesis or every compiler-generated member.
-- Cross-file symbol proof in the currently committed artifact: `WalletStore` is defined in `Sources/UwMiniCore/State/WalletStore.swift` and referenced from `Sources/UwMiniApp/main.swift` as `scip-swift apple UwMiniCore . s%3A10UwMiniCore11WalletStoreC`.
-- Source tree drift fixed in PR remediation: the fixture now routes the `WalletStore.select(_:)` call through `Sources/UwMiniApp/ContentView.swift` and adds a vendor stub at `Pods/Foo/Foo.swift` for Phase 3 coverage. This host cannot regenerate `scip/index.scip`; the next dev-Mac regen must refresh the committed binary to reflect those source paths.
+- Cross-file symbol proof in the currently committed artifact: `WalletStore` is defined in `Sources/UwMiniCore/State/WalletStore.swift` and referenced from `Sources/UwMiniApp/ContentView.swift` as `scip-swift apple UwMiniCore . s%3A10UwMiniCore11WalletStoreC`.
+- Source tree drift fixed in PR remediation: the committed binary now includes `Sources/UwMiniApp/ContentView.swift` for the cross-file app use path and `Pods/Foo/Foo.swift` for Phase 3 vendor coverage.
 
 ## Document Breakdown
 
 | Document | Occurrences | Symbols |
 |---|---:|---:|
-| `Sources/UwMiniApp/main.swift` | 11 | 3 |
+| `Pods/Foo/Foo.swift` | 11 | 5 |
+| `Sources/UwMiniApp/ContentView.swift` | 30 | 9 |
+| `Sources/UwMiniApp/main.swift` | 21 | 6 |
 | `Sources/UwMiniCore/Model/Transaction.swift` | 62 | 25 |
 | `Sources/UwMiniCore/Model/Wallet.swift` | 50 | 20 |
 | `Sources/UwMiniCore/Repository/WalletRepository.swift` | 54 | 16 |
@@ -54,7 +56,7 @@ xcrun swift build -c release
 
 cd ../tests/extractors/fixtures/uw-ios-mini-project
 ./regen.sh
-# documents=5 occurrences=370
+# documents=7 occurrences=421
 
 cd ../../../..
 uv run python - <<'PY'
@@ -64,7 +66,7 @@ idx = scip_pb2.Index()
 idx.ParseFromString(Path("tests/extractors/fixtures/uw-ios-mini-project/scip/index.scip").read_bytes())
 print(len(idx.documents), sum(len(d.occurrences) for d in idx.documents))
 PY
-# 5 370
+# 7 421
 ```
 
 Full Swift smoke tests pass on the MacBook with Xcode SDK/toolchain includes

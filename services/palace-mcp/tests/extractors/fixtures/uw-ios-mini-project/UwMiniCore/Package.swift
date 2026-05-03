@@ -10,6 +10,7 @@ let package = Package(
     ],
     targets: [
         .target(name: "UwMiniCore"),
-        .executableTarget(name: "UwMiniApp", dependencies: ["UwMiniCore"]),
+        .target(name: "Foo", dependencies: ["UwMiniCore"], path: "Pods/Foo"),
+        .executableTarget(name: "UwMiniApp", dependencies: ["UwMiniCore", "Foo"]),
     ]
 )

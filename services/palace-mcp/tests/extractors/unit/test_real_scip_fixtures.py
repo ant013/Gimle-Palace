@@ -492,11 +492,11 @@ _UW_AC4_BRANCH = "A"  # KSP-generated source visible without workaround
 # so Tantivy total = 1470 - 35 = 1435 unique positions after full ingest.
 _UW_N_TANTIVY_DOCS = 1435
 
-_UW_IOS_N_OCCURRENCES_TOTAL = 370
-_UW_IOS_N_DEFS = 117
-_UW_IOS_N_USES = 253
-_UW_IOS_N_ASSIGNS = 22
-_UW_IOS_N_DOCUMENTS = 5
+_UW_IOS_N_OCCURRENCES_TOTAL = 421
+_UW_IOS_N_DEFS = 134
+_UW_IOS_N_USES = 287
+_UW_IOS_N_ASSIGNS = 23
+_UW_IOS_N_DOCUMENTS = 7
 _UW_IOS_TOOL_NAME = "palace-swift-scip-emit"
 
 
@@ -752,6 +752,12 @@ class TestUwIosMiniProjectFixture:
         index = parse_scip_file(UW_IOS_SCIP)
         occs = list(iter_scip_occurrences(index, commit_sha="test"))
         assert any("WalletStoreC6select" in o.symbol_qualified_name for o in occs)
+
+    def test_content_view_and_vendor_documents_present(self) -> None:
+        index = parse_scip_file(UW_IOS_SCIP)
+        paths = {doc.relative_path for doc in index.documents}
+        assert "Sources/UwMiniApp/ContentView.swift" in paths
+        assert "Pods/Foo/Foo.swift" in paths
 
     def test_ranges_are_non_negative_and_non_empty(self) -> None:
         index = parse_scip_file(UW_IOS_SCIP)
