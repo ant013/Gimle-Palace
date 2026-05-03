@@ -53,6 +53,7 @@ explicit role/profile system with validator-enforced safety coverage.
 | `handoff-full` default roles | `cto`, `code-reviewer`, `architect-reviewer`, `qa` families, resolved to explicit Claude/Codex role IDs |
 | Other roles | short `handoff` profile by default |
 | Canary | heavy Python engineer pair, not `CXCodeReviewer` |
+| Shared repo productization | starts only after Gimle proof and heavy canary approval |
 
 ## Profile Contract
 
@@ -116,6 +117,12 @@ The implementation must create two explicit semantics:
 `paperclips/fragments/lessons/phase-handoff.md` stores the long background
 lesson if narrative text is moved out of runtime bundles. The plan must measure
 the byte and token savings from roles moving from `handoff-full` to `handoff`.
+
+## Part 1: Gimle Proof
+
+Part 1 proves the profile, validation, size, and runbook model inside
+Gimle-Palace only. `paperclip-shared-fragments` remains unchanged until Part 1
+has a reviewed heavy pilot and canary result.
 
 ## Task 1: Baseline Measurement And Manifests
 
@@ -274,25 +281,10 @@ the byte and token savings from roles moving from `handoff-full` to `handoff`.
 - Codex bundles do not contain Claude-only runtime assumptions.
 - Claude bundles do not lose required production-baseline safety behavior.
 
-## Task 6: Shared Fragments Upstream
-
-**Owner:** implementation engineer
-**Dependencies:** Tasks 1-5 proven in Gimle
-
-**Work:**
-- Port the proven profile/runbook shape to `paperclip-shared-fragments`.
-- Repair shared-fragments build/docs drift if it blocks the upstream move.
-- Bump the Gimle submodule only after the shared-fragments PR is reviewed.
-
-**Acceptance:**
-- Shared repo has the same safety semantics.
-- Gimle submodule bump is forward-only and reviewable.
-- Generated Gimle output remains equivalent after the upstream move.
-
-## Task 7: Heavy Canary Validation
+## Task 6: Heavy Canary Validation
 
 **Owner:** CodeReviewer, QAEngineer, CTO
-**Dependencies:** Tasks 1-6
+**Dependencies:** Tasks 1-5
 
 **Work:**
 - Run a read-only canary with a role that actually changed from heavy to
@@ -306,6 +298,126 @@ the byte and token savings from roles moving from `handoff-full` to `handoff`.
 - Canary does not miss branch/spec, stale-session, handoff, QA evidence, or
   verification-readiness rules.
 - Results decide whether to expand the pattern to remaining heavy roles.
+
+## Part 2: Shared Fragments Reusable Toolkit
+
+Part 2 starts only after Part 1 is reviewed. Its goal is to make
+`paperclip-shared-fragments` usable for new projects as more than a loose
+fragment library: documented install flow, starter layout, reusable validators,
+and a smoke-tested consumer fixture.
+
+## Task 7: Shared Repo Audit And README Refresh
+
+**Owner:** implementation engineer
+**Dependencies:** Part 1 approved
+**Repo:** `paperclip-shared-fragments`
+
+**Work:**
+- Audit current shared repo state and record the current baseline SHA.
+- Update README from old slice wording to current capability wording.
+- Document what is supported now: fragments, templates, `@include` builder,
+  Codex runtime map.
+- Document what remains consumer-owned: project-local roles, local fragments,
+  live Paperclip agent records, deploy scripts.
+
+**Acceptance:**
+- README no longer claims only `v0.0.1` slice status.
+- New-project usage section explains the minimum setup path.
+- Limitations are explicit so consumers do not assume full team-builder
+  automation exists before it is implemented.
+
+## Task 8: Starter Consumer Layout
+
+**Owner:** implementation engineer
+**Dependencies:** Task 7
+**Repo:** `paperclip-shared-fragments`
+
+**Work:**
+- Add or document a starter layout for a new consumer project:
+  `paperclips/roles/`, `paperclips/fragments/local/`,
+  `paperclips/fragments/shared`, `paperclips/dist/`, and validation files.
+- Provide starter role examples that use shared fragments without Gimle-specific
+  assumptions.
+- Provide a project-local override pattern for local rules.
+
+**Acceptance:**
+- A new project can copy or reference the starter layout without importing
+  Gimle-specific files.
+- Starter examples build with the shared builder or documented commands.
+
+## Task 9: Bootstrap And Install Flow
+
+**Owner:** implementation engineer
+**Dependencies:** Task 8
+**Repo:** `paperclip-shared-fragments`
+
+**Work:**
+- Document and, if small enough, add a bootstrap script for adding the shared
+  repo to a consumer project as a submodule.
+- Include commands for building generated role bundles from the starter layout.
+- Include rollback/removal instructions.
+- Avoid mutating an existing project unless the operator explicitly opts in.
+
+**Acceptance:**
+- New project setup is reproducible from README commands.
+- Bootstrap path does not require hidden Gimle files.
+- Failure modes are documented: missing git, existing `paperclips/`, missing
+  Paperclip runtime, missing Codex runtime.
+
+## Task 10: Consumer Fixture Smoke
+
+**Owner:** implementation engineer
+**Dependencies:** Task 9
+**Repo:** `paperclip-shared-fragments`
+
+**Work:**
+- Add a minimal example consumer fixture or documented smoke flow.
+- Build at least one Claude role and one Codex/CX role from the fixture.
+- Validate that shared fragments resolve and project-local fragments override
+  only intended content.
+
+**Acceptance:**
+- Smoke build is runnable in CI or with one documented command.
+- Fixture proves the shared repo works for a project that is not Gimle.
+- Fixture output does not contain Gimle-specific role names, branch names, or
+  issue IDs unless clearly marked as examples.
+
+## Task 11: Upstream Profile And Validator Model
+
+**Owner:** implementation engineer
+**Dependencies:** Part 1 approved, Tasks 7-10 complete
+**Repo:** `paperclip-shared-fragments`
+
+**Work:**
+- Port the proven Gimle profile/runbook shape to shared repo.
+- Add shared versions of:
+  `instruction-profiles.yaml`,
+  `instruction-coverage.matrix.yaml`,
+  bundle-size baseline/allowlist conventions, and validator tests.
+- Keep project-specific role IDs and thresholds overridable by consumers.
+- Repair shared-fragments build/docs drift if it blocks the upstream move.
+
+**Acceptance:**
+- Shared repo has reusable profile and validator semantics.
+- Validators remain project-neutral and do not hardcode Gimle role IDs.
+- Tests cover at least one fixture role, one unknown profile failure, and one
+  missing required profile failure.
+
+## Task 12: Gimle Submodule Bump After Shared PR
+
+**Owner:** implementation engineer
+**Dependencies:** Task 11 shared repo PR reviewed and merged
+**Repo:** Gimle-Palace
+
+**Work:**
+- Bump `paperclips/fragments/shared` to the reviewed shared repo SHA.
+- Rebuild Gimle bundles.
+- Compare generated output against the pre-upstream Gimle proof.
+
+**Acceptance:**
+- Gimle submodule bump is forward-only and reviewable.
+- Generated Gimle output remains equivalent or intentionally improved.
+- `paperclips/validate-codex-target.sh` and profile validators pass.
 
 ## Verification Commands
 
@@ -343,4 +455,7 @@ test -f paperclips/bundle-size-breakdown.json
 5. Broad rollout proceeds by symmetric role groups, not all Claude before all
    Codex.
 6. Validator implementation includes pytest coverage.
-7. Live deploy is a separate approved step after generated bundles pass review.
+7. Part 2 shared repo productization starts only after Part 1 Gimle proof and
+   heavy canary approval.
+8. Shared repo changes land in their own PR before Gimle submodule bump.
+9. Live deploy is a separate approved step after generated bundles pass review.
