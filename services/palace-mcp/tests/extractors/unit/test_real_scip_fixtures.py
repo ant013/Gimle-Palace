@@ -8,6 +8,7 @@ behaviour — both language detection and qualified_name format.
 Markers:
   requires_scip_typescript — skipped if ts-mini-project/index.scip is missing
   requires_scip_python     — skipped if py-mini-project/index.scip is missing
+  requires_scip_uw_ios     — skipped if uw-ios-mini-project/scip/index.scip is missing
   requires_scip_java       — skipped if jvm-mini-project/index.scip is missing (synthetic always present)
   requires_scip_solidity   — skipped if oz-v5-mini-project/index.scip is missing
 """
@@ -27,6 +28,7 @@ PY_SCIP = FIXTURES / "py-mini-project" / "index.scip"
 JVM_SCIP = FIXTURES / "jvm-mini-project" / "index.scip"
 SOL_SCIP = FIXTURES / "oz-v5-mini-project" / "index.scip"
 UW_ANDROID_SCIP = FIXTURES / "uw-android-mini-project" / "scip" / "index.scip"
+UW_IOS_SCIP = FIXTURES / "uw-ios-mini-project" / "scip" / "index.scip"
 
 requires_scip_typescript = pytest.mark.skipif(
     not TS_SCIP.exists(), reason="ts-mini-project/index.scip not present"
@@ -43,6 +45,10 @@ requires_scip_solidity = pytest.mark.skipif(
 requires_scip_uw_android = pytest.mark.skipif(
     not UW_ANDROID_SCIP.exists(),
     reason="uw-android-mini-project/scip/index.scip not present",
+)
+requires_scip_uw_ios = pytest.mark.skipif(
+    not UW_IOS_SCIP.exists(),
+    reason="uw-ios-mini-project/scip/index.scip not present",
 )
 
 
@@ -179,6 +185,41 @@ class TestPyMiniProjectFixture:
         names = {o.symbol_qualified_name for o in occs if o.kind == SymbolKind.DEF}
         logger_defs = [n for n in names if "Logger" in n]
         assert logger_defs, f"Expected Logger def in {names!r}"
+
+
+@requires_scip_uw_ios
+class TestUwIosMiniProjectFixture:
+    def test_parses_without_error(self) -> None:
+        index = parse_scip_file(UW_IOS_SCIP)
+        assert index is not None
+
+    def test_metadata_uses_swift_emitter_tool_name(self) -> None:
+        index = parse_scip_file(UW_IOS_SCIP)
+        assert index.metadata.tool_info.name == "palace-swift-scip-emit"
+
+    def test_yields_swift_occurrences(self) -> None:
+        index = parse_scip_file(UW_IOS_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        swift_occs = [o for o in occs if o.language == Language.SWIFT]
+        assert swift_occs, "Expected at least one Swift occurrence"
+
+    def test_has_def_and_use_occurrences(self) -> None:
+        index = parse_scip_file(UW_IOS_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        defs = [o for o in occs if o.kind == SymbolKind.DEF]
+        uses = [o for o in occs if o.kind == SymbolKind.USE]
+        assert defs, "Expected at least one DEF occurrence"
+        assert uses, "Expected at least one USE occurrence"
+
+    def test_qualified_names_have_no_version(self) -> None:
+        index = parse_scip_file(UW_IOS_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        for occ in occs:
+            parts = occ.symbol_qualified_name.split(" ")
+            for part in parts:
+                assert not (part.count(".") >= 2 and part[0].isdigit()), (
+                    f"Possible version token in qualified_name: {occ.symbol_qualified_name!r}"
+                )
 
 
 @requires_scip_java

@@ -178,3 +178,40 @@ class TestSolidityLanguageDetection:
         assert (
             _language_from_path("contracts/token/ERC20/ERC20.sol") == Language.SOLIDITY
         )
+
+
+class TestSwiftLanguageDetection:
+    """GIM-128: Swift language detection via doc.language and path extension."""
+
+    def test_swift_doc_language_yields_swift(self) -> None:
+        index = _build_index_with_doc(
+            language="swift",
+            relative_path="Sources/App/Wallet.swift",
+            sym="scip-swift apple UwMiniCore . s%3A5UwMini6WalletV",
+        )
+        occs = list(iter_scip_occurrences(index, commit_sha="abc"))
+        assert occs[0].language == Language.SWIFT
+
+    def test_swift_extension_fallback_yields_swift(self) -> None:
+        index = _build_index_with_doc(
+            language="",
+            relative_path="Sources/App/Wallet.swift",
+            sym="scip-swift apple UwMiniCore . s%3A5UwMini6WalletV",
+        )
+        occs = list(iter_scip_occurrences(index, commit_sha="abc"))
+        assert occs[0].language == Language.SWIFT
+
+    def test_swiftinterface_extension_fallback_yields_swift(self) -> None:
+        index = _build_index_with_doc(
+            language="",
+            relative_path="Modules/UwMini.swiftinterface",
+            sym="scip-swift apple UwMiniCore . s%3A5UwMini6WalletV",
+        )
+        occs = list(iter_scip_occurrences(index, commit_sha="abc"))
+        assert occs[0].language == Language.SWIFT
+
+    def test_swift_in_language_map(self) -> None:
+        assert _SCIP_LANGUAGE_MAP["swift"] == Language.SWIFT
+
+    def test_swift_path_in_language_from_path(self) -> None:
+        assert _language_from_path("Sources/App/Wallet.swift") == Language.SWIFT

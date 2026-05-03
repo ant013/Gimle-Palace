@@ -13,6 +13,7 @@ from palace_mcp.extractors.heartbeat import HeartbeatExtractor
 from palace_mcp.extractors.symbol_index_java import SymbolIndexJava
 from palace_mcp.extractors.symbol_index_python import SymbolIndexPython
 from palace_mcp.extractors.symbol_index_solidity import SymbolIndexSolidity
+from palace_mcp.extractors.symbol_index_swift import SymbolIndexSwift
 from palace_mcp.extractors.symbol_index_typescript import SymbolIndexTypeScript
 
 EXTRACTORS: dict[str, BaseExtractor] = {
@@ -21,6 +22,7 @@ EXTRACTORS: dict[str, BaseExtractor] = {
     "symbol_index_python": SymbolIndexPython(),
     "symbol_index_typescript": SymbolIndexTypeScript(),
     "symbol_index_java": SymbolIndexJava(),
+    "symbol_index_swift": SymbolIndexSwift(),
     "symbol_index_solidity": SymbolIndexSolidity(),
 }
 
