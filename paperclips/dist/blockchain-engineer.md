@@ -285,6 +285,17 @@ Paperclip creates a git worktree per issue with an execution workspace. Work **o
 - Parallel agents work in **separate** worktrees — don't read files from neighbors' worktrees (they may be in an invalid state mid-work).
 - After PR merge — paperclip cleans the worktree itself. Don't run `git worktree remove` yourself.
 
+## Shared codebase memory
+
+Worktree isolation does not mean memory isolation. Claude and CX/Codex teams share the same code knowledge:
+
+- Use `palace.code.*` / codebase-memory with project `repos-gimle` for indexed code search, architecture, snippets, and impact.
+- Use `serena` only for the current worktree (`cwd`) and current branch state.
+- Write durable findings through `palace.memory.decide(...)`; read them through `palace.memory.lookup(...)`.
+- Each written finding needs provenance: issue id, branch, commit SHA when available, source path or symbol, `canonical` or `provisional`, and verification evidence.
+- Treat `canonical` as facts grounded in `origin/develop` or merged commits. Treat `provisional` as branch-local hints that require local verification.
+- Never treat another team's uncommitted worktree files as project truth. Share cross-team facts through commits, PRs, issue comments, or `palace.memory`.
+
 ## Cross-branch carry-over forbidden
 
 Never carry commits between parallel slice branches via cherry-pick or

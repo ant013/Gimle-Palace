@@ -111,6 +111,10 @@ rules:
     required_profiles: [task-start]
     role_ids: all
     markers: ["git fetch origin --prune", "spec"]
+  shared-codebase-memory:
+    required_profiles: [task-start]
+    role_ids: all
+    markers: ["repos-gimle", "palace.memory.decide", "provisional"]
   short-handoff:
     required_profiles: [handoff]
     role_ids:
