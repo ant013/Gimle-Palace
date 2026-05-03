@@ -113,6 +113,30 @@ def build_solidity_scip_index(
     )
 
 
+def build_swift_scip_index(
+    *,
+    relative_path: str = "Sources/Example/Example.swift",
+    symbols: list[tuple[str, int]] | None = None,
+) -> Any:
+    """Build a minimal SCIP Index for Swift testing.
+
+    Uses 'swift' as doc.language and scip-swift scheme.
+    Symbol format: scip-swift <module> . <descriptor>
+    """
+    if symbols is None:
+        symbols = [
+            (
+                "scip-swift Example . `Example`/`ExampleClass`#.",
+                1,
+            )
+        ]
+    return build_minimal_scip_index(
+        language="swift",
+        relative_path=relative_path,
+        symbols=symbols,
+    )
+
+
 def write_scip_fixture(index: Any, path: Path) -> Path:
     """Serialize SCIP Index to a file."""
     path.write_bytes(index.SerializeToString())

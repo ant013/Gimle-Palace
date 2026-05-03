@@ -30,7 +30,6 @@ from palace_mcp.extractors.base import (
 )
 from palace_mcp.extractors.bundle_state import (
     finalize_state,
-    get_bundle_ingest_state,
     init_bundle_ingest_state,
     update_state,
 )
@@ -333,17 +332,20 @@ async def _run_bundle_ingest_task(
     name: str,
     bundle: str,
     members: tuple[ProjectRef, ...],
-    state: dict,
+    state: dict[str, Any],
 ) -> None:
     """Background task: iterate members, call run_extractor, update state."""
-    driver = state.get("_driver")
-    graphiti = state.get("_graphiti")
-    run_id: str = state["run_id"]
+    driver: AsyncDriver | None = state.get("_driver")
+    graphiti: Graphiti | None = state.get("_graphiti")
+    run_id: str = str(state["run_id"])
 
     for member in members:
         try:
             result_dict = await run_extractor(
-                name=name, project=member.slug, driver=driver, graphiti=graphiti
+                name=name,
+                project=member.slug,
+                driver=driver,  # type: ignore[arg-type]
+                graphiti=graphiti,  # type: ignore[arg-type]
             )
             ok: bool = bool(result_dict.get("ok", False))
             if ok:

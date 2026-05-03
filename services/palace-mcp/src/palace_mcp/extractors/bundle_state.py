@@ -11,16 +11,17 @@ import time
 import uuid
 from collections.abc import Iterable
 from datetime import datetime, timezone
+from typing import Any
 
 from palace_mcp.memory.models import IngestRunResult, ProjectRef
 
-_registry: dict[str, dict] = {}
+_registry: dict[str, dict[str, Any]] = {}
 
 
 def init_bundle_ingest_state(
     bundle: str,
     members: Iterable[ProjectRef],
-) -> dict:
+) -> dict[str, Any]:
     """Create a running state dict for a bundle ingest and register it.
 
     Returns the mutable state dict (same object stored in registry).
@@ -31,7 +32,7 @@ def init_bundle_ingest_state(
     now = datetime.now(timezone.utc)
 
     if not member_list:
-        state: dict = {
+        state: dict[str, Any] = {
             "run_id": run_id,
             "bundle": bundle,
             "state": "succeeded",
@@ -89,6 +90,6 @@ def finalize_state(run_id: str) -> None:
     state["state"] = "succeeded" if state["members_failed"] == 0 else "failed"
 
 
-def get_bundle_ingest_state(run_id: str) -> dict | None:
+def get_bundle_ingest_state(run_id: str) -> dict[str, Any] | None:
     """Return the state dict for run_id, or None if not found."""
     return _registry.get(run_id)
