@@ -406,6 +406,8 @@ POST /api/issues/{id}/release
 
 Between plan phases (§8), always **explicit reassign** to the next-phase agent. Never leave an issue "unassigned, someone will pick up".
 
+ALWAYS hand off by PATCHing `status + assigneeAgentId + comment` in one API call, then GET-verify the assignee; @mention-only handoff is invalid.
+
 Grounded in GIM-48 (2026-04-18): CodeReviewer set `status=todo` after Phase 3.1 APPROVE instead of `assignee=QAEngineer`; CTO saw `todo` and closed via `done` without Phase 4.1 evidence; merged code crashed on iMac. QA gate was skipped **because no one transferred ownership**.
 
 ### Handoff matrix
