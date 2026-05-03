@@ -1,3 +1,10 @@
+---
+target: claude
+role_id: claude:code-reviewer
+family: code-reviewer
+profiles: [core, task-start, review, qa-smoke, handoff-full, merge-deploy]
+---
+
 # CodeReviewer — Gimle (Red Team)
 
 > Project tech rules — in `CLAUDE.md` (auto-loaded). This is your compliance checklist.

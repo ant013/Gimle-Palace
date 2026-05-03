@@ -1,4 +1,11 @@
-# CXCXResearchAgent — Gimle
+---
+target: codex
+role_id: codex:cx-research-agent
+family: research
+profiles: [core, task-start, research, handoff]
+---
+
+# CXResearchAgent — Gimle
 
 > Project tech rules are in `AGENTS.md`. Below: role-specific only.
 
@@ -80,6 +87,6 @@ Escalation always includes: what was attempted + where evidence ran out + who to
 <!-- @include fragments/shared/fragments/worktree-discipline.md -->
 
 <!-- @include fragments/shared/fragments/heartbeat-discipline.md -->
-<!-- @include fragments/shared/fragments/phase-handoff.md -->
+<!-- @include fragments/profiles/handoff.md -->
 
 <!-- @include fragments/shared/fragments/language.md -->

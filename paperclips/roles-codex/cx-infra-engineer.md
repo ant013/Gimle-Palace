@@ -1,4 +1,11 @@
-# CXCXInfraEngineer — Gimle
+---
+target: codex
+role_id: codex:cx-infra-engineer
+family: infra
+profiles: [core, task-start, implementation, handoff-full, merge-deploy]
+---
+
+# CXInfraEngineer — Gimle
 
 > Project tech rules are in `AGENTS.md`. Below: role-specific only.
 
