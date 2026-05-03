@@ -344,3 +344,118 @@ async def test_list_company_agents_propagates_429():
     finally:
         _pc_mod._sleep = original_sleep
         await client.aclose()
+
+
+# ---------------------------------------------------------------------------
+# GIM-183: server-clock anchoring via Date header
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_last_response_date_none_before_any_request():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[])
+
+    client = await _client_with_mock(handler)
+    try:
+        assert client.last_response_date is None
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_last_response_date_captures_rfc2822_date():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"Date": "Sun, 03 May 2026 14:30:00 GMT"},
+            json=[],
+        )
+
+    client = await _client_with_mock(handler)
+    try:
+        await client.list_in_progress_issues(CO_ID)
+        captured = client.last_response_date
+        assert captured is not None
+        assert captured.tzinfo is not None
+        # Compare against the canonical UTC moment the header encodes.
+        expected = datetime(2026, 5, 3, 14, 30, 0, tzinfo=timezone.utc)
+        assert captured == expected
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_last_response_date_advances_across_requests():
+    responses = iter(
+        [
+            httpx.Response(200, headers={"Date": "Sun, 03 May 2026 14:30:00 GMT"}, json=[]),
+            httpx.Response(200, headers={"Date": "Sun, 03 May 2026 14:32:00 GMT"}, json=[]),
+        ]
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return next(responses)
+
+    client = await _client_with_mock(handler)
+    try:
+        await client.list_in_progress_issues(CO_ID)
+        first = client.last_response_date
+        await client.list_in_progress_issues(CO_ID)
+        second = client.last_response_date
+        assert first is not None and second is not None
+        assert second > first
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_last_response_date_unchanged_when_header_malformed():
+    responses = iter(
+        [
+            httpx.Response(200, headers={"Date": "Sun, 03 May 2026 14:30:00 GMT"}, json=[]),
+            httpx.Response(200, headers={"Date": "not-a-date"}, json=[]),
+        ]
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return next(responses)
+
+    client = await _client_with_mock(handler)
+    try:
+        await client.list_in_progress_issues(CO_ID)
+        good = client.last_response_date
+        await client.list_in_progress_issues(CO_ID)
+        # Malformed Date header must not corrupt the cached value.
+        assert client.last_response_date == good
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_last_response_date_unchanged_on_4xx():
+    """4xx terminal errors raise; the cached server-clock is not updated by the
+    failure path."""
+    responses = iter(
+        [
+            httpx.Response(200, headers={"Date": "Sun, 03 May 2026 14:30:00 GMT"}, json=[]),
+            httpx.Response(
+                404,
+                headers={"Date": "Sun, 03 May 2026 15:00:00 GMT"},
+                json={"error": "not_found"},
+            ),
+        ]
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return next(responses)
+
+    client = await _client_with_mock(handler)
+    try:
+        await client.list_in_progress_issues(CO_ID)
+        good = client.last_response_date
+        with pytest.raises(pc.PaperclipError):
+            await client.list_in_progress_issues(CO_ID)
+        assert client.last_response_date == good
+    finally:
+        await client.aclose()

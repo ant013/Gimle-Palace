@@ -234,6 +234,12 @@ class State:
             "snapshot": {k: snapshot.get(k) for k in _SNAPSHOT_KEYS[ftype]},
         }
 
-    def clear_handoff_alert(self, issue_id: str, ftype: FindingType) -> None:
+    def clear_handoff_alert(self, issue_id: str, ftype: FindingType) -> bool:
+        """Remove the alert state entry for (issue_id, ftype).
+
+        Returns True if an entry actually existed and was removed; False if
+        no entry was present (no-op). Caller uses the return value to decide
+        whether to emit the `handoff_alert_state_cleared` JSONL event.
+        """
         key = f"{issue_id}:{ftype.value}"
-        self.alerted_handoffs.pop(key, None)
+        return self.alerted_handoffs.pop(key, None) is not None

@@ -6,6 +6,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any
 
 import httpx
@@ -99,6 +100,14 @@ class PaperclipClient:
             timeout=httpx.Timeout(connect=10.0, read=timeout, write=timeout, pool=timeout),
             transport=transport,
         )
+        self._last_response_date: datetime | None = None
+
+    @property
+    def last_response_date(self) -> datetime | None:
+        """Server-clock anchor: parsed `Date` header from the most recent
+        successful HTTP response. Used by the handoff detector to avoid
+        local-clock skew per spec §4.2.1."""
+        return self._last_response_date
 
     async def aclose(self) -> None:
         await self._client.aclose()
@@ -115,6 +124,7 @@ class PaperclipClient:
                 log.warning("paperclip_request_error attempt=%d url=%s error=%s", attempt, url, e)
                 continue
             if resp.status_code < 400:
+                self._capture_response_date(resp)
                 return resp
             if resp.status_code in RETRY_STATUSES:
                 log.warning(
@@ -131,6 +141,18 @@ class PaperclipClient:
         raise PaperclipError(
             f"paperclip {method} {url} exhausted {MAX_RETRIES + 1} attempts: {last_exc}"
         ) from last_exc
+
+    def _capture_response_date(self, resp: httpx.Response) -> None:
+        date_header = resp.headers.get("Date") or resp.headers.get("date")
+        if not date_header:
+            return
+        try:
+            parsed = parsedate_to_datetime(date_header)
+        except (TypeError, ValueError):
+            return
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        self._last_response_date = parsed.astimezone(timezone.utc)
 
     async def list_in_progress_issues(self, company_id: str) -> list[Issue]:
         resp = await self._request("GET", f"/api/companies/{company_id}/issues?status=in_progress")
