@@ -21,10 +21,10 @@ class RoleMeta:
     profiles: list[str]
 
 
-def parse_inline_list(value: str) -> list[str]:
+def parse_scalar_or_inline_list(value: str) -> str | list[str]:
     value = value.strip()
     if not value.startswith("[") or not value.endswith("]"):
-        return [value] if value else []
+        return value.strip("\"'")
     inner = value[1:-1].strip()
     if not inner:
         return []
@@ -40,16 +40,34 @@ def load_role_front_matter(path: Path) -> RoleMeta:
     if not lines or lines[0] != "---":
         raise ValueError(f"{path}: missing YAML front matter")
 
-    data: dict[str, str] = {}
+    data: dict[str, str | list[str]] = {}
     end_index = None
+    current_list_key: str | None = None
     for index, line in enumerate(lines[1:], start=1):
         if line == "---":
             end_index = index
             break
+        cleaned = clean_line(line)
+        if not cleaned.strip():
+            continue
+        indent = len(cleaned) - len(cleaned.lstrip(" "))
+        text = cleaned.strip()
+        if indent == 2 and text.startswith("- ") and current_list_key:
+            existing = data.setdefault(current_list_key, [])
+            if isinstance(existing, list):
+                existing.append(text[2:].strip().strip("\"'"))
+            continue
         if ":" not in line:
             continue
-        key, value = line.split(":", 1)
-        data[key.strip()] = value.strip()
+        key, value = text.split(":", 1)
+        key = key.strip()
+        value = value.strip()
+        if value == "":
+            data[key] = []
+            current_list_key = key
+        else:
+            data[key] = parse_scalar_or_inline_list(value)
+            current_list_key = None
 
     if end_index is None:
         raise ValueError(f"{path}: unterminated YAML front matter")
@@ -60,10 +78,14 @@ def load_role_front_matter(path: Path) -> RoleMeta:
         raise ValueError(f"{path}: missing front matter keys: {', '.join(missing)}")
 
     return RoleMeta(
-        target=data["target"],
-        role_id=data["role_id"],
-        family=data["family"],
-        profiles=parse_inline_list(data["profiles"]),
+        target=str(data["target"]),
+        role_id=str(data["role_id"]),
+        family=str(data["family"]),
+        profiles=(
+            list(data["profiles"])
+            if isinstance(data["profiles"], list)
+            else [str(data["profiles"])]
+        ),
     )
 
 
@@ -137,7 +159,7 @@ def load_coverage_matrix(path: Path) -> dict[str, dict]:
                 matrix[section][current_item][key] = []
                 current_list_key = key
             elif value.startswith("["):
-                matrix[section][current_item][key] = parse_inline_list(value)
+                matrix[section][current_item][key] = parse_scalar_or_inline_list(value)
                 current_list_key = None
             else:
                 matrix[section][current_item][key] = value.strip("\"'")
@@ -151,6 +173,20 @@ def load_coverage_matrix(path: Path) -> dict[str, dict]:
 
 def token_estimate(byte_count: int) -> int:
     return (byte_count + 3) // 4
+
+
+def allowlisted(allowlist: dict, role_id: str, path: str, rule: str) -> bool:
+    for entry in allowlist.get("entries", []):
+        if entry.get("rule") != rule:
+            continue
+        if entry.get("roleId") not in {None, role_id}:
+            continue
+        if entry.get("path") not in {None, path}:
+            continue
+        if not entry.get("reason"):
+            continue
+        return True
+    return False
 
 
 def validate(repo_root: Path = REPO_ROOT) -> list[str]:
@@ -193,6 +229,7 @@ def validate(repo_root: Path = REPO_ROOT) -> list[str]:
                 errors.append(f"profile {profile_name} references missing runbook: {runbook}")
 
     role_sources_seen: set[Path] = set()
+    role_profiles_by_id: dict[str, set[str]] = {}
     for role_id, role in matrix.get("roles", {}).items():
         source = role.get("source")
         if not source:
@@ -216,6 +253,7 @@ def validate(repo_root: Path = REPO_ROOT) -> list[str]:
             errors.append(f"{source}: family mismatch with matrix")
         if metadata.profiles != role.get("profiles"):
             errors.append(f"{source}: profiles mismatch with matrix")
+        role_profiles_by_id[role_id] = set(metadata.profiles)
         expected_prefix = f"{metadata.target}:"
         if not metadata.role_id.startswith(expected_prefix):
             errors.append(f"{source}: role_id must start with {expected_prefix}")
@@ -254,6 +292,10 @@ def validate(repo_root: Path = REPO_ROOT) -> list[str]:
         allowlist = {"entries": []}
     if "entries" not in allowlist:
         errors.append("bundle-size-allowlist.json missing entries")
+    if "measurementCommit" not in baseline:
+        errors.append("bundle-size-baseline.json missing measurementCommit")
+    policy = baseline.get("policy", {})
+    max_growth_percent = int(policy.get("maxGrowthPercent", 10))
 
     bundle_paths_by_role: dict[str, Path] = {}
     for bundle in baseline.get("bundles", []):
@@ -274,21 +316,28 @@ def validate(repo_root: Path = REPO_ROOT) -> list[str]:
         if text.startswith("---\n"):
             errors.append(f"generated bundle contains front matter: {path}")
         byte_count = len(text.encode("utf-8"))
-        line_count = text.count("\n")
-        bundle_tokens = token_estimate(byte_count)
-        if bundle.get("bytes") != byte_count:
-            errors.append(f"baseline byte mismatch for {path}: {bundle.get('bytes')} != {byte_count}")
-        if bundle.get("lines") != line_count:
-            errors.append(f"baseline line mismatch for {path}: {bundle.get('lines')} != {line_count}")
-        if bundle.get("tokenEstimate") != bundle_tokens:
+        baseline_bytes = bundle.get("bytes")
+        if not isinstance(baseline_bytes, int):
+            errors.append(f"baseline byte count missing for {path}")
+            continue
+        growth_allowance = (baseline_bytes * max_growth_percent + 99) // 100
+        max_allowed_bytes = baseline_bytes + growth_allowance
+        if byte_count > max_allowed_bytes and not allowlisted(
+            allowlist, str(role_id), str(path), "bundle-size-growth"
+        ):
             errors.append(
-                f"baseline token mismatch for {path}: {bundle.get('tokenEstimate')} != {bundle_tokens}"
+                f"bundle grew more than {max_growth_percent}% for {path}: "
+                f"{byte_count} > {max_allowed_bytes}"
             )
 
     for rule_id, rule in matrix.get("rules", {}).items():
         rule_role_ids = role_ids if rule.get("role_ids") == "all" else set(rule.get("role_ids", []))
+        required_profiles = set(rule.get("required_profiles", []))
         markers = [str(marker).lower() for marker in rule.get("markers", [])]
         for role_id in rule_role_ids:
+            missing_profiles = required_profiles - role_profiles_by_id.get(role_id, set())
+            for profile in sorted(missing_profiles):
+                errors.append(f"rule {rule_id} requires profile {profile} for role {role_id}")
             bundle_path = bundle_paths_by_role.get(role_id)
             if bundle_path is None:
                 errors.append(f"rule {rule_id} cannot find generated bundle for role: {role_id}")

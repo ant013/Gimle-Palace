@@ -69,16 +69,114 @@ def test_generated_front_matter_fails(tmp_path: Path) -> None:
     assert any("generated bundle contains front matter" in error for error in errors)
 
 
-def test_baseline_size_mismatch_fails(tmp_path: Path) -> None:
+def test_baseline_allows_smaller_bundle(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     baseline_path = repo / "paperclips" / "bundle-size-baseline.json"
     baseline = json.loads(baseline_path.read_text())
-    baseline["bundles"][0]["bytes"] += 1
+    baseline["bundles"][0]["bytes"] += 1000
     baseline_path.write_text(json.dumps(baseline, indent=2) + "\n")
 
     errors = validate_instructions.validate(repo)
 
-    assert any("baseline byte mismatch" in error for error in errors)
+    assert errors == []
+
+
+def test_baseline_allows_growth_under_policy_threshold(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    baseline_path = repo / "paperclips" / "bundle-size-baseline.json"
+    baseline = json.loads(baseline_path.read_text())
+    baseline["policy"]["maxGrowthPercent"] = 10
+    baseline["bundles"][0]["bytes"] = int(baseline["bundles"][0]["bytes"] * 0.95)
+    baseline_path.write_text(json.dumps(baseline, indent=2) + "\n")
+
+    errors = validate_instructions.validate(repo)
+
+    assert errors == []
+
+
+def test_baseline_growth_over_policy_threshold_fails(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    baseline_path = repo / "paperclips" / "bundle-size-baseline.json"
+    baseline = json.loads(baseline_path.read_text())
+    baseline["policy"]["maxGrowthPercent"] = 10
+    baseline["bundles"][0]["bytes"] = int(baseline["bundles"][0]["bytes"] * 0.80)
+    baseline_path.write_text(json.dumps(baseline, indent=2) + "\n")
+
+    errors = validate_instructions.validate(repo)
+
+    assert any("bundle grew more than 10%" in error for error in errors)
+
+
+def test_baseline_growth_allowlist_passes(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    baseline_path = repo / "paperclips" / "bundle-size-baseline.json"
+    baseline = json.loads(baseline_path.read_text())
+    baseline["policy"]["maxGrowthPercent"] = 10
+    role_id = baseline["bundles"][0]["roleId"]
+    path = baseline["bundles"][0]["path"]
+    baseline["bundles"][0]["bytes"] = int(baseline["bundles"][0]["bytes"] * 0.80)
+    baseline_path.write_text(json.dumps(baseline, indent=2) + "\n")
+    allowlist_path = repo / "paperclips" / "bundle-size-allowlist.json"
+    allowlist = json.loads(allowlist_path.read_text())
+    allowlist["entries"].append(
+        {
+            "rule": "bundle-size-growth",
+            "roleId": role_id,
+            "path": path,
+            "reason": "temporary reviewed migration exception",
+            "owner": "paperclip",
+            "reviewAfter": "2026-06-01",
+        }
+    )
+    allowlist_path.write_text(json.dumps(allowlist, indent=2) + "\n")
+
+    errors = validate_instructions.validate(repo)
+
+    assert errors == []
+
+
+def test_rule_required_profile_missing_fails(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    matrix_path = repo / "paperclips" / "instruction-coverage.matrix.yaml"
+    matrix_path.write_text(
+        matrix_path.read_text().replace(
+            "profiles: [core, task-start, implementation, handoff]",
+            "profiles: [core, task-start, handoff]",
+            1,
+        )
+    )
+    role_path = repo / "paperclips" / "roles" / "blockchain-engineer.md"
+    role_path.write_text(
+        role_path.read_text().replace(
+            "profiles: [core, task-start, implementation, handoff]",
+            "profiles: [core, task-start, handoff]",
+            1,
+        )
+    )
+
+    errors = validate_instructions.validate(repo)
+
+    assert any(
+        "rule implementation-verification requires profile implementation for role claude:blockchain-engineer"
+        in error
+        for error in errors
+    )
+
+
+def test_block_list_front_matter_profiles_supported(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    role_path = repo / "paperclips" / "roles" / "python-engineer.md"
+    role_path.write_text(
+        role_path.read_text().replace(
+            "profiles: [core, task-start, implementation, handoff]",
+            "profiles:\n  - core\n  - task-start\n  - implementation\n  - handoff",
+            1,
+        )
+    )
+
+    errors = validate_instructions.validate(repo)
+
+    assert errors == []
 
 
 def test_runbook_profile_requires_inline_rule(tmp_path: Path) -> None:

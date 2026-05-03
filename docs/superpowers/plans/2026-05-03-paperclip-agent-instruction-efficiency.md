@@ -77,7 +77,7 @@ profiles:
       - paperclips/fragments/shared/fragments/phase-handoff.md
 ```
 
-The builder flow is:
+The final profile-driven builder flow is:
 
 1. Read role front matter.
 2. Validate `target`, canonical role ID, and requested profiles.
@@ -87,8 +87,11 @@ The builder flow is:
 6. Emit Claude output under `paperclips/dist/*.md` and Codex output under
    `paperclips/dist/codex/*.md`.
 
-Existing `<!-- @include ... -->` expansion can remain during migration, but the
-profile manifest becomes the source of truth for new profile-based content.
+During the Gimle proof migration, existing `<!-- @include ... -->` expansion
+remains the builder path. In this phase, the profile manifest is the validation
+source of truth: validators must ensure role metadata, matrix requirements,
+resolved fragments, generated markers, and size policy remain coherent before a
+later slice makes profile resolution drive bundle assembly directly.
 
 ## Validator Invariants
 
@@ -424,8 +427,10 @@ and a smoke-tested consumer fixture.
 ```bash
 ./paperclips/build.sh --target claude
 ./paperclips/build.sh --target codex
+python3 paperclips/scripts/validate_instructions.py
 ./paperclips/validate-codex-target.sh
-pytest tests -k "paperclip"
+services/palace-mcp/.venv/bin/pytest -q paperclips/tests/test_validate_instructions.py
+git diff --check
 ```
 
 Additional required checks:
