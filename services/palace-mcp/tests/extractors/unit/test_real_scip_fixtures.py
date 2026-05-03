@@ -1,6 +1,7 @@
 """Integration tests using real .scip fixture files.
 
-Covers ts-mini-project, py-mini-project, jvm-mini-project, oz-v5-mini-project.
+Covers ts-mini-project, py-mini-project, jvm-mini-project, oz-v5-mini-project,
+uw-android-mini-project, and uw-ios-mini-project.
 
 These tests parse the pre-built SCIP binaries and verify actual symbol extraction
 behaviour — both language detection and qualified_name format.
@@ -27,6 +28,7 @@ PY_SCIP = FIXTURES / "py-mini-project" / "index.scip"
 JVM_SCIP = FIXTURES / "jvm-mini-project" / "index.scip"
 SOL_SCIP = FIXTURES / "oz-v5-mini-project" / "index.scip"
 UW_ANDROID_SCIP = FIXTURES / "uw-android-mini-project" / "scip" / "index.scip"
+UW_IOS_SCIP = FIXTURES / "uw-ios-mini-project" / "scip" / "index.scip"
 
 requires_scip_typescript = pytest.mark.skipif(
     not TS_SCIP.exists(), reason="ts-mini-project/index.scip not present"
@@ -43,6 +45,10 @@ requires_scip_solidity = pytest.mark.skipif(
 requires_scip_uw_android = pytest.mark.skipif(
     not UW_ANDROID_SCIP.exists(),
     reason="uw-android-mini-project/scip/index.scip not present",
+)
+requires_scip_uw_ios = pytest.mark.skipif(
+    not UW_IOS_SCIP.exists(),
+    reason="uw-ios-mini-project/scip/index.scip not present",
 )
 
 
@@ -486,6 +492,13 @@ _UW_AC4_BRANCH = "A"  # KSP-generated source visible without workaround
 # so Tantivy total = 1470 - 35 = 1435 unique positions after full ingest.
 _UW_N_TANTIVY_DOCS = 1435
 
+_UW_IOS_N_OCCURRENCES_TOTAL = 370
+_UW_IOS_N_DEFS = 117
+_UW_IOS_N_USES = 253
+_UW_IOS_N_ASSIGNS = 22
+_UW_IOS_N_DOCUMENTS = 5
+_UW_IOS_TOOL_NAME = "palace-swift-scip-emit"
+
 
 @requires_scip_uw_android
 class TestUwAndroidMiniProjectFixture:
@@ -698,3 +711,51 @@ class TestUwAndroidMiniProjectFixture:
             assert not qn.startswith("scip-java"), (
                 f"qualified_name leaks scheme prefix: {qn!r}"
             )
+
+
+@requires_scip_uw_ios
+class TestUwIosMiniProjectFixture:
+    def test_parses_without_error(self) -> None:
+        index = parse_scip_file(UW_IOS_SCIP)
+        assert index is not None
+
+    def test_emitter_tool_name_matches_ac11(self) -> None:
+        index = parse_scip_file(UW_IOS_SCIP)
+        assert index.metadata.tool_info.name == _UW_IOS_TOOL_NAME
+
+    def test_documents_count_matches_oracle(self) -> None:
+        index = parse_scip_file(UW_IOS_SCIP)
+        assert len(index.documents) == _UW_IOS_N_DOCUMENTS
+
+    def test_occurrence_total_matches_oracle(self) -> None:
+        index = parse_scip_file(UW_IOS_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        assert len(occs) == _UW_IOS_N_OCCURRENCES_TOTAL
+
+    def test_def_use_and_assign_counts_match_oracle(self) -> None:
+        index = parse_scip_file(UW_IOS_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        defs = [o for o in occs if o.kind == SymbolKind.DEF]
+        uses = [o for o in occs if o.kind == SymbolKind.USE]
+        assigns = [o for o in occs if o.kind == SymbolKind.ASSIGN]
+        assert len(defs) == _UW_IOS_N_DEFS
+        assert len(uses) + len(assigns) == _UW_IOS_N_USES
+        assert len(assigns) == _UW_IOS_N_ASSIGNS
+
+    def test_all_documents_are_swift(self) -> None:
+        index = parse_scip_file(UW_IOS_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        assert occs
+        assert {o.language for o in occs} == {Language.SWIFT}
+
+    def test_wallet_store_select_symbol_present(self) -> None:
+        index = parse_scip_file(UW_IOS_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        assert any("WalletStoreC6select" in o.symbol_qualified_name for o in occs)
+
+    def test_ranges_are_non_negative_and_non_empty(self) -> None:
+        index = parse_scip_file(UW_IOS_SCIP)
+        occs = list(iter_scip_occurrences(index, commit_sha="test"))
+        assert occs
+        assert all(o.col_start >= 0 for o in occs)
+        assert all(o.col_end >= o.col_start for o in occs)

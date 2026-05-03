@@ -7,14 +7,26 @@ struct ScipEmitter {
     let projectRoot: URL
     let pathFilter: PathFilter
 
-    func emit(toolName: String = "palace-swift-scip-emit", toolVersion: String = "0.1.0") throws -> Scip_Index {
+    static func emptyIndex(
+        projectRoot: URL,
+        toolName: String = "palace-swift-scip-emit",
+        toolVersion: String = "0.1.0"
+    ) -> Scip_Index {
         var index = Scip_Index()
         index.metadata.version = .unspecifiedProtocolVersion
         index.metadata.toolInfo.name = toolName
         index.metadata.toolInfo.version = toolVersion
         index.metadata.projectRoot = "file://\(projectRoot.path)"
         index.metadata.textDocumentEncoding = .utf8
+        return index
+    }
 
+    func emit(toolName: String = "palace-swift-scip-emit", toolVersion: String = "0.1.0") throws -> Scip_Index {
+        var index = Self.emptyIndex(
+            projectRoot: projectRoot,
+            toolName: toolName,
+            toolVersion: toolVersion
+        )
         let byFile = reader.collectOccurrencesByFile(pathFilter: pathFilter)
         for (relativePath, records) in byFile.sorted(by: { $0.key < $1.key }) {
             var document = Scip_Document()

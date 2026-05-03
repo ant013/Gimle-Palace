@@ -5,10 +5,8 @@ import UwMiniCore
 struct UwMiniApp {
     static func main() async throws {
         let store = WalletStore()
-        try await store.refresh()
-        store.select(walletID: 2)
-        if let selectedWallet = store.selectedWallet {
-            print(store.title(for: selectedWallet))
-        }
+        let view = ContentView(store: store)
+        try await view.bootstrap()
+        print(view.renderedTitle ?? "No wallet selected")
     }
 }

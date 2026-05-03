@@ -38,7 +38,7 @@ struct IndexStoreReader {
         store.pollForUnitChangesAndWait()
     }
 
-    static func locateDataStore(in derivedData: URL) throws -> URL {
+    static func dataStoreIfPresent(in derivedData: URL) -> URL? {
         let noindex = derivedData.appendingPathComponent("Index.noindex/DataStore")
         if FileManager.default.fileExists(atPath: noindex.path) {
             return noindex
@@ -47,6 +47,14 @@ struct IndexStoreReader {
         let legacy = derivedData.appendingPathComponent("Index/DataStore")
         if FileManager.default.fileExists(atPath: legacy.path) {
             return legacy
+        }
+
+        return nil
+    }
+
+    static func locateDataStore(in derivedData: URL) throws -> URL {
+        if let dataStore = dataStoreIfPresent(in: derivedData) {
+            return dataStore
         }
 
         throw EmitterError.dataStoreNotFound(path: derivedData.path)

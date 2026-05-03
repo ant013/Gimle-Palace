@@ -29,7 +29,8 @@ GIM-179 reran fixture generation with the locked Phase 1.1 truth from
 ## Branch Notes
 
 - AC#4 Branch: B-2. IndexStoreDB exposes source-level Swift symbols and also some macro-expanded `@Observable` support symbols, but this first locked fixture does not assert full generated-code visibility for Codable synthesis or every compiler-generated member.
-- Cross-file symbol proof: `WalletStore` is defined in `Sources/UwMiniCore/State/WalletStore.swift` and referenced from `Sources/UwMiniApp/main.swift` as `scip-swift apple UwMiniCore . s%3A10UwMiniCore11WalletStoreC`.
+- Cross-file symbol proof in the currently committed artifact: `WalletStore` is defined in `Sources/UwMiniCore/State/WalletStore.swift` and referenced from `Sources/UwMiniApp/main.swift` as `scip-swift apple UwMiniCore . s%3A10UwMiniCore11WalletStoreC`.
+- Source tree drift fixed in PR remediation: the fixture now routes the `WalletStore.select(_:)` call through `Sources/UwMiniApp/ContentView.swift` and adds a vendor stub at `Pods/Foo/Foo.swift` for Phase 3 coverage. This host cannot regenerate `scip/index.scip`; the next dev-Mac regen must refresh the committed binary to reflect those source paths.
 
 ## Document Breakdown
 

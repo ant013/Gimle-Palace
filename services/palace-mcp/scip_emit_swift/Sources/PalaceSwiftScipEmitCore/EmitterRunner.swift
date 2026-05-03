@@ -1,4 +1,5 @@
 import Foundation
+import SwiftProtobuf
 
 public enum EmitterError: Error, CustomStringConvertible {
     case derivedDataNotFound(path: String)
@@ -32,9 +33,14 @@ public enum EmitterRunner {
         guard FileManager.default.fileExists(atPath: derivedData.path) else {
             throw EmitterError.derivedDataNotFound(path: derivedData.path)
         }
-        let reader = try IndexStoreReader(derivedDataPath: derivedData, projectRoot: projectRoot)
-        let emitter = ScipEmitter(reader: reader, projectRoot: projectRoot, pathFilter: pathFilter)
-        let index = try emitter.emit()
+        let index: Scip_Index
+        if IndexStoreReader.dataStoreIfPresent(in: derivedData) == nil {
+            index = ScipEmitter.emptyIndex(projectRoot: projectRoot)
+        } else {
+            let reader = try IndexStoreReader(derivedDataPath: derivedData, projectRoot: projectRoot)
+            let emitter = ScipEmitter(reader: reader, projectRoot: projectRoot, pathFilter: pathFilter)
+            index = try emitter.emit()
+        }
         let parent = output.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
         try index.serializedData().write(to: output)
