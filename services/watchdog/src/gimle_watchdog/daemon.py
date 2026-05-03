@@ -6,9 +6,19 @@ import asyncio
 import datetime as _dt
 import logging
 import sys
+from datetime import datetime
+from typing import Any
 
-from gimle_watchdog import actions, detection
+from gimle_watchdog import actions, detection, detection_semantic
 from gimle_watchdog.config import Config
+from gimle_watchdog.detection_semantic import HandoffDetectionConfig
+from gimle_watchdog.models import (
+    CommentOnlyHandoffFinding,
+    Finding,
+    FindingType,
+    ReviewOwnedByImplementerFinding,
+    WrongAssigneeFinding,
+)
 from gimle_watchdog.paperclip import PaperclipClient
 from gimle_watchdog.state import State
 
@@ -43,6 +53,106 @@ def _build_escalation_body(issue_id: str, agent_id: str, state: State, marker: s
         f"Agent `{agent_id}` exceeded wake cap ({count} escalation cycles).\n\n"
         f"{unescalate_note}\n\n"
         f"Diagnostic: SSH the iMac, `grep '{issue_id}' ~/.paperclip/watchdog.log` for timeline."
+    )
+
+
+def _finding_snapshot(finding: Finding) -> dict[str, Any]:
+    if isinstance(finding, CommentOnlyHandoffFinding):
+        return {
+            "assigneeAgentId": finding.current_assignee_id,
+            "status": finding.issue_status,
+            "mention_comment_id": finding.mention_comment_id,
+            "mention_target_uuid": finding.mentioned_agent_id,
+        }
+    if isinstance(finding, WrongAssigneeFinding):
+        return {"assigneeAgentId": finding.bogus_assignee_id, "status": finding.issue_status}
+    assert isinstance(finding, ReviewOwnedByImplementerFinding)
+    return {"assigneeAgentId": finding.implementer_assignee_id, "status": "in_review"}
+
+
+def _needs_alert(
+    state: State,
+    issue_id: str,
+    ftype: FindingType,
+    snapshot: dict[str, Any],
+    now_server: datetime,
+    cooldown_min: int,
+) -> bool:
+    if state.has_active_alert(issue_id, ftype, snapshot):
+        return False
+    key = f"{issue_id}:{ftype.value}"
+    if key in state.alerted_handoffs:
+        return state.cooldown_elapsed(issue_id, ftype, now_server, cooldown_min)
+    return True  # first time → always alert
+
+
+async def _run_handoff_pass(
+    cfg: Config,
+    state: State,
+    client: PaperclipClient,
+    now_server: datetime,
+) -> None:
+    h = cfg.handoff
+    if not h.handoff_alert_enabled:
+        return
+
+    det_cfg = HandoffDetectionConfig(
+        handoff_alert_enabled=h.handoff_alert_enabled,
+        handoff_comment_lookback_min=h.handoff_comment_lookback_min,
+        handoff_wrong_assignee_min=h.handoff_wrong_assignee_min,
+        handoff_review_owner_min=h.handoff_review_owner_min,
+        handoff_comments_per_issue=h.handoff_comments_per_issue,
+        handoff_max_issues_per_tick=h.handoff_max_issues_per_tick,
+        handoff_alert_cooldown_min=h.handoff_alert_cooldown_min,
+    )
+
+    total_alerts = 0
+    for company in cfg.companies:
+        try:
+            agents = await client.list_company_agents(company.id)
+            hired_ids = frozenset(a.id for a in agents)
+            name_by_id = {a.id: a.name for a in agents}
+            issues = await client.list_active_issues(company.id)
+
+            async def _fetch_comments(issue_id: str) -> list[Any]:
+                return await client.list_recent_comments(
+                    issue_id, det_cfg.handoff_comments_per_issue
+                )
+
+            findings = await detection_semantic.scan_handoff_inconsistencies(
+                issues, _fetch_comments, hired_ids, name_by_id, det_cfg, now_server
+            )
+            issues_with_findings = {f.issue_id: f for f in findings}
+
+            for issue in issues:
+                finding = issues_with_findings.get(issue.id)
+                if finding is None:
+                    for ftype in FindingType:
+                        state.clear_handoff_alert(issue.id, ftype)
+                    continue
+
+                ftype = finding.type
+                snapshot = _finding_snapshot(finding)
+                if not _needs_alert(
+                    state, issue.id, ftype, snapshot, now_server, h.handoff_alert_cooldown_min
+                ):
+                    continue
+
+                assignee_id = snapshot.get("assigneeAgentId", "")
+                assignee_name = name_by_id.get(assignee_id)
+                result = await actions.post_handoff_alert(
+                    client, finding, "watchdog", now_server, assignee_name
+                )
+                if result.posted:
+                    state.record_handoff_alert(issue.id, ftype, snapshot, now_server)
+                    total_alerts += 1
+        except Exception:
+            log.exception("handoff_pass_company_failed company=%s", company.id)
+
+    log.info(
+        "handoff_pass_complete alerts=%d",
+        total_alerts,
+        extra={"event": "handoff_pass_complete", "alerts": total_alerts},
     )
 
 
@@ -105,6 +215,10 @@ async def _tick(cfg: Config, state: State, client: PaperclipClient) -> None:
             elif action.kind == "skip":
                 log.info("skip issue=%s reason=%s", action.issue.id, action.reason)
             total_actions += 1
+
+    # Phase 3: handoff inconsistency detection (alert-only)
+    now_server = _dt.datetime.now(_dt.timezone.utc)
+    await _run_handoff_pass(cfg, state, client, now_server)
 
     state.save()
     log.info("tick_end actions=%d", total_actions)
