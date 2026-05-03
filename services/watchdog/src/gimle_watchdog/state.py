@@ -24,8 +24,10 @@ PERMANENT_ESCALATION_THRESHOLD = 3
 
 _SNAPSHOT_KEYS: dict[FindingType, tuple[str, ...]] = {
     FindingType.COMMENT_ONLY_HANDOFF: (
-        "assigneeAgentId", "status",
-        "mention_comment_id", "mention_target_uuid",
+        "assigneeAgentId",
+        "status",
+        "mention_comment_id",
+        "mention_target_uuid",
     ),
     FindingType.WRONG_ASSIGNEE: ("assigneeAgentId", "status"),
     FindingType.REVIEW_OWNED_BY_IMPLEMENTER: ("assigneeAgentId", "status"),

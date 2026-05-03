@@ -58,9 +58,9 @@ def _detect_comment_only_handoff(
         return None
 
     qualifying = [
-        c for c in comments
-        if c.author_agent_id == issue.assignee_agent_id
-        and parse_mention_targets(c.body)
+        c
+        for c in comments
+        if c.author_agent_id == issue.assignee_agent_id and parse_mention_targets(c.body)
     ]
     if not qualifying:
         return None

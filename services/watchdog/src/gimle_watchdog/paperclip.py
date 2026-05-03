@@ -139,6 +139,17 @@ class PaperclipClient:
             raise PaperclipError(f"expected list, got {type(data).__name__}")
         return [_issue_from_json(d) for d in data]
 
+    async def list_active_issues(self, company_id: str) -> list[Issue]:
+        """GET issues with status todo, in_progress, or in_review (for handoff detection)."""
+        resp = await self._request(
+            "GET",
+            f"/api/companies/{company_id}/issues?status=todo,in_progress,in_review",
+        )
+        data = resp.json()
+        if not isinstance(data, list):
+            raise PaperclipError(f"expected list, got {type(data).__name__}")
+        return [_issue_from_json(d) for d in data]
+
     async def get_issue(self, issue_id: str) -> Issue:
         resp = await self._request("GET", f"/api/issues/{issue_id}")
         return _issue_from_json(resp.json())
