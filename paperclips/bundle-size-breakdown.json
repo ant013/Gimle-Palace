@@ -135,19 +135,11 @@
       "source": "paperclips/roles/python-engineer.md",
       "dist": "paperclips/dist/python-engineer.md",
       "total": {
-        "bytes": 32804,
-        "lines": 643,
-        "tokenEstimate": 8201
+        "bytes": 28367,
+        "lines": 574,
+        "tokenEstimate": 7092
       },
       "components": [
-        {
-          "kind": "fragment",
-          "path": "paperclips/fragments/shared/fragments/phase-handoff.md",
-          "bytes": 5164,
-          "lines": 94,
-          "tokenEstimate": 1291,
-          "includeCount": 1
-        },
         {
           "kind": "fragment",
           "path": "paperclips/fragments/shared/fragments/git-workflow.md",
@@ -242,6 +234,14 @@
           "bytes": 908,
           "lines": 30,
           "tokenEstimate": 227,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/profiles/handoff.md",
+          "bytes": 727,
+          "lines": 25,
+          "tokenEstimate": 182,
           "includeCount": 1
         },
         {
@@ -462,19 +462,11 @@
       "source": "paperclips/roles-codex/cx-python-engineer.md",
       "dist": "paperclips/dist/codex/cx-python-engineer.md",
       "total": {
-        "bytes": 32768,
-        "lines": 643,
-        "tokenEstimate": 8192
+        "bytes": 28328,
+        "lines": 574,
+        "tokenEstimate": 7082
       },
       "components": [
-        {
-          "kind": "fragment",
-          "path": "paperclips/fragments/shared/fragments/phase-handoff.md",
-          "bytes": 5167,
-          "lines": 94,
-          "tokenEstimate": 1292,
-          "includeCount": 1
-        },
         {
           "kind": "fragment",
           "path": "paperclips/fragments/shared/fragments/git-workflow.md",
@@ -569,6 +561,14 @@
           "bytes": 908,
           "lines": 30,
           "tokenEstimate": 227,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/profiles/handoff.md",
+          "bytes": 727,
+          "lines": 25,
+          "tokenEstimate": 182,
           "includeCount": 1
         },
         {

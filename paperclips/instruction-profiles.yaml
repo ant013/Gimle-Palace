@@ -34,7 +34,9 @@ profiles:
       - paperclips/fragments/shared/fragments/karpathy-discipline.md
   handoff:
     fragments:
-      - paperclips/fragments/shared/fragments/phase-handoff.md
+      - paperclips/fragments/profiles/handoff.md
+    runbooks:
+      - paperclips/fragments/lessons/phase-handoff.md
     inline_rule_required: true
   handoff-full:
     fragments:
