@@ -60,6 +60,9 @@ class ProjectInfo(BaseModel):
     language: str | None = None
     framework: str | None = None
     repo_url: str | None = None
+    # GIM-182: parent mount for shared-prefix repo layouts
+    parent_mount: str | None = None
+    relative_path: str | None = None
     source_created_at: str | None = None
     source_updated_at: str | None = None
     entity_counts: dict[str, int] = Field(default_factory=dict)
