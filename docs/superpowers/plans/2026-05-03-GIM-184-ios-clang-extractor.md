@@ -69,11 +69,12 @@ This slice must cover both app-level native files (`.c`, `.cc`, `.cpp`, `.h`, `.
 - [ ] Run the first smoke on iMac: verify `xcodebuild -version`, `clang --version`, `scip-clang --version`, create tiny `.c/.cpp/.m/.h` projects, generate `compile_commands.json`, emit `index.scip`, and inspect role/language counts. Probe `.mm` only as optional interop evidence.
 - [ ] Choose and document the compilation database path: manual mini fixture compdb first, then Bear around `xcodebuild`, then deterministic xcodebuild-log extraction, then fixture-only fallback.
 - [ ] Extend `Language` and `scip_parser` for C, C++, and Obj-C with safe extension fallback for `.c`, `.cc`, `.cpp`, `.cxx`, and `.m`; keep headers UNKNOWN unless document language or TU context proves otherwise.
-- [ ] Add parser tests for scip-clang empty-manager symbols, `.` package/version placeholders, C++ backtick/operator descriptors, mixed-language documents, and ambiguous headers.
+- [ ] Add parser tests for scip-clang empty-manager symbols, `.` package/version placeholders, C++ backtick/operator descriptors, mixed-language documents, ambiguous headers, and app/vendor same-descriptor collision behavior.
 - [ ] Implement `symbol_index_clang.py` by adapting the Swift/Java extractor shape, excluding system SDK/toolchain paths before phase selection, and classifying `Pods/`, `Carthage/`, `SourcePackages/`, `third_party/`, and `Vendor/` as vendor.
+- [ ] Wire fixture `.scip` files through `palace_scip_index_paths`; do not add a runtime `scip_path` runner override in v1.
 - [ ] Add `uw-ios-clang-mini-project` fixture with app-level C/C++/Obj-C and Pods/vendor native files, plus `REGEN.md` and pre-generated `scip/index.scip`.
-- [ ] Add unit tests for extractor batching, language tagging, vendor routing, and importance filtering.
-- [ ] Add an integration test with Neo4j IngestRun checkpoints and Tantivy queries proving app/native and vendor occurrences are searchable.
+- [ ] Add unit tests for extractor batching, parser/extractor language tagging, path normalization, vendor routing, system SDK exclusion, and importance filtering.
+- [ ] Add an integration test with Neo4j IngestRun checkpoints and Tantivy `search_by_symbol_id_async(symbol_id_for(qname))` queries proving app/native and vendor occurrences are searchable.
 - [ ] Run local MacBook tests after implementation: targeted unit tests, targeted integration tests, then the palace-mcp extractor slice.
 - [ ] Post smoke and test evidence to GIM-184, then hand off via the standard Paperclip phase chain.
 

@@ -51,7 +51,7 @@ Known scip-clang constraints that shape this spec:
 - `symbol_index_clang.py` registered in the extractor registry.
 - Mixed native fixture containing app-level C/C++/Obj-C files and Pods/vendor native files.
 - Unit tests for parser, language detection, qname canonicalization, and vendor/system classification.
-- Integration tests proving IngestRun checkpoints and Tantivy search over native occurrences.
+- Integration tests proving IngestRun checkpoints and Tantivy search over native occurrences by `symbol_id`.
 - iMac smoke evidence before implementation handoff.
 
 ### Out Of Scope
@@ -103,7 +103,7 @@ Pass:
 
 - `scip-clang` emits usable Objective-C symbols and references.
 - Language is `objective-c` from document metadata or a safe `.m` extension fallback.
-- Method identity is stable enough for Tantivy `search_by_symbol`.
+- Method identity is stable enough for `symbol_id_for(symbol_qualified_name)` and Tantivy `search_by_symbol_id_async`.
 
 Fail:
 
@@ -160,6 +160,7 @@ For GIM-184 v1:
 - Package placeholder `.` is accepted as project-local package.
 - Canonical qname for project-local scip-clang symbols remains `. <descriptor-chain>` unless Phase 1.1 smoke proves a better stable package token is emitted by the installed `scip-clang`.
 - If the team changes this rule, it must update `symbol_id_for` expectations and parser tests in the same PR.
+- v1 must test for app/vendor qname collisions caused by placeholder package names. At minimum, create app and vendor symbols with the same basename/function descriptor and assert they either produce distinct qualified names or the collision is documented as a v1 limitation before implementation handoff.
 
 Required tests:
 
@@ -184,6 +185,16 @@ Language detection order:
 
 This avoids treating the same `.h` as C, C++, or Objective-C based only on extension.
 
+Expected `Language` enum values:
+
+- `Language.C = "c"`
+- `Language.CPP = "cpp"`
+- `Language.OBJECTIVE_C = "objective-c"`
+
+Do not add an Objective-C++ enum in v1. `.mm` remains `unknown` unless the optional interop probe passes and the spec is explicitly revised.
+
+Current Tantivy caveat: `TantivyBridge` has integer `role` and `language` fields, but currently writes them as `0`. GIM-184 does not require changing Tantivy schema or bridge behavior unless the implementation intentionally takes on that foundation work. Language acceptance for v1 is therefore parser/extractor-level, not Tantivy-field-level. If the implementation chooses to make native language filterable in Tantivy, add `foundation/tantivy_bridge.py` and schema migration tests to scope before coding.
+
 ## System And Vendor Policy
 
 System SDK headers must not flood `phase1_defs`.
@@ -203,8 +214,25 @@ Rules:
   - `Vendor/`
 - Vendor USE occurrences go to `phase3_vendor_uses`.
 - Vendor DEF/DECL occurrences must not enter user `phase1_defs`; either route them to a vendor-def path or exclude them from v1. The implementation must make this explicit in tests.
+- Path normalization tests are required for:
+  - absolute SDK paths,
+  - Xcode toolchain paths,
+  - repo-relative `Pods/...`,
+  - absolute in-repo `Pods/...`,
+  - DerivedData-rooted paths that point back to the project,
+  - symlinked project paths when feasible.
 
 Default v1 choice: exclude system SDK entirely; include Pods/third-party as vendor.
+
+## SCIP Path Wiring
+
+`run_extractor` does not accept a runtime `scip_path` override. Native `.scip` files must be wired through settings, using the existing `FindScipPath.resolve(project_slug, settings)` path.
+
+For GIM-184 v1:
+
+- Use `palace_scip_index_paths` keyed by project slug for fixture and smoke runs.
+- Do not add a `scip_path` parameter to `run_extractor` unless a separate spec revision expands runner scope.
+- Verification commands must document the settings/env value used to point `symbol_index_clang` at `uw-ios-clang-mini-project/scip/index.scip`.
 
 ## Affected Files
 
@@ -212,6 +240,7 @@ Default v1 choice: exclude system SDK entirely; include Pods/third-party as vend
 - `services/palace-mcp/src/palace_mcp/extractors/scip_parser.py`
 - `services/palace-mcp/src/palace_mcp/extractors/symbol_index_clang.py`
 - `services/palace-mcp/src/palace_mcp/extractors/registry.py`
+- `services/palace-mcp/src/palace_mcp/config.py` / `.env.example` only if new settings documentation is required for `palace_scip_index_paths`.
 - `services/palace-mcp/tests/extractors/unit/test_scip_parser*.py`
 - `services/palace-mcp/tests/extractors/unit/test_symbol_index_clang.py`
 - `services/palace-mcp/tests/extractors/integration/test_symbol_index_clang_integration.py`
@@ -224,11 +253,13 @@ Default v1 choice: exclude system SDK entirely; include Pods/third-party as vend
 - Final v1 language scope is explicitly set after smoke: either C/C++/Obj-C or narrowed C/C++.
 - `symbol_index_clang` is registered and runnable through the extractor runner.
 - Parser handles `scip-clang` empty-manager symbols and backtick descriptors without qname corruption.
-- Language metadata follows the detection policy above; `.h` is not blindly classified.
+- Parser/extractor language values follow the detection policy above; `.h` is not blindly classified.
 - System SDK/toolchain headers do not inflate `phase1_defs`.
+- Path normalization tests prove system SDK exclusion and in-repo Pods/vendor retention for absolute and relative paths.
+- App/vendor same-descriptor collision behavior is tested and either prevented or documented as a v1 limitation.
 - App-level native and Pods/vendor native fixture files are both represented.
 - Fixture ingest writes expected checkpoints for phases enabled by the final scope.
-- Tantivy search can find at least one native symbol definition and one reference by `symbol_qualified_name`.
+- Tantivy search can find at least one native symbol definition and one reference by `symbol_id_for(symbol_qualified_name)` using `search_by_symbol_id_async`.
 - Tests run from `services/palace-mcp` and pass for the targeted extractor slice.
 
 ## Verification Plan
@@ -252,6 +283,7 @@ Then parse role/language counts through palace-mcp:
 cd services/palace-mcp
 uv run python - <<'PY'
 from collections import Counter
+from palace_mcp.extractors.foundation.identifiers import symbol_id_for
 from palace_mcp.extractors.scip_parser import iter_scip_occurrences, parse_scip_file
 
 idx = parse_scip_file("tests/extractors/fixtures/uw-ios-clang-mini-project/scip/index.scip")
@@ -260,6 +292,8 @@ print("count", len(occs))
 print("kind", Counter(o.kind.value for o in occs))
 print("language", Counter(o.language.value for o in occs))
 print("paths", sorted({o.file_path for o in occs})[:20])
+for qname in sorted({o.symbol_qualified_name for o in occs})[:10]:
+    print(symbol_id_for(qname), qname)
 PY
 ```
 
@@ -290,6 +324,8 @@ uv run pytest tests/extractors
 - Xcode compilation database generation may be the largest unknown; manual fixture compdb is required as the first controlled step.
 - Header documents may be ambiguous; default UNKNOWN is safer than incorrect language labels.
 - SDK/system headers may produce too much data; they are excluded by default.
+- `.` package placeholders can collide across app/vendor symbols with identical descriptors; v1 must test this and either avoid it or document the limitation.
+- Tantivy does not currently store `symbol_qualified_name`, and its `role`/`language` fields are placeholders; v1 verification should not assume those fields are queryable unless foundation scope is expanded.
 - Real UW-iOS native surface may live mostly in dependencies; fixture coverage is still required even if real-source smoke is deferred.
 
 ## Open Questions
@@ -297,3 +333,4 @@ uv run pytest tests/extractors
 - Which exact `scip-clang` version/source is pinned for iMac?
 - Does the installed `scip-clang` emit useful `document.language` for `.m` files?
 - Should vendor DEF/DECL occurrences be routed to a dedicated future phase, or excluded in v1?
+- If placeholder qnames collide, should GIM-184 prefix package with project/vendor namespace or defer that to a foundation follow-up?
