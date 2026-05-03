@@ -14,6 +14,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 ROLE_SPECS = [
     (
+        "claude:blockchain-engineer",
+        "claude",
+        "paperclips/roles/blockchain-engineer.md",
+        "paperclips/dist/blockchain-engineer.md",
+    ),
+    (
         "claude:code-reviewer",
         "claude",
         "paperclips/roles/code-reviewer.md",
@@ -32,6 +38,12 @@ ROLE_SPECS = [
         "paperclips/dist/mcp-engineer.md",
     ),
     ("claude:cto", "claude", "paperclips/roles/cto.md", "paperclips/dist/cto.md"),
+    (
+        "codex:cx-mcp-engineer",
+        "codex",
+        "paperclips/roles-codex/cx-mcp-engineer.md",
+        "paperclips/dist/codex/cx-mcp-engineer.md",
+    ),
     (
         "codex:cx-python-engineer",
         "codex",
