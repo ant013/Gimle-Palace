@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from gimle_watchdog.config import CooldownsConfig
+from gimle_watchdog.models import FindingType
 
 
 log = logging.getLogger("watchdog.state")
@@ -20,6 +21,20 @@ STATE_VERSION = 1
 PRUNE_WAKE_HISTORY_SECONDS = 3600  # keep 1h of wake history per agent
 # After this many re-escalation cycles (clear+re-escalate), stop auto-clearing.
 PERMANENT_ESCALATION_THRESHOLD = 3
+
+_SNAPSHOT_KEYS: dict[FindingType, tuple[str, ...]] = {
+    FindingType.COMMENT_ONLY_HANDOFF: (
+        "assigneeAgentId", "status",
+        "mention_comment_id", "mention_target_uuid",
+    ),
+    FindingType.WRONG_ASSIGNEE: ("assigneeAgentId", "status"),
+    FindingType.REVIEW_OWNED_BY_IMPLEMENTER: ("assigneeAgentId", "status"),
+}
+
+
+def _snapshot_matches(stored: dict[str, Any], current: dict[str, Any], ftype: FindingType) -> bool:
+    keys = _SNAPSHOT_KEYS[ftype]
+    return all(stored.get(k) == current.get(k) for k in keys)
 
 
 def _now() -> _dt.datetime:
@@ -41,6 +56,7 @@ class State:
     issue_cooldowns: dict[str, dict[str, Any]] = field(default_factory=dict)
     agent_wakes: dict[str, list[_dt.datetime]] = field(default_factory=dict)
     escalated_issues: dict[str, dict[str, Any]] = field(default_factory=dict)
+    alerted_handoffs: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: Path) -> "State":
@@ -77,6 +93,7 @@ class State:
             issue_cooldowns=dict(raw.get("issue_cooldowns") or {}),
             agent_wakes=agent_wakes,
             escalated_issues=dict(raw.get("escalated_issues") or {}),
+            alerted_handoffs=dict(raw.get("alerted_handoffs") or {}),
         )
 
     def save(self) -> None:
@@ -89,6 +106,7 @@ class State:
                 aid: [_iso(t) for t in times] for aid, times in self.agent_wakes.items()
             },
             "escalated_issues": self.escalated_issues,
+            "alerted_handoffs": self.alerted_handoffs,
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp_fd, tmp_name = tempfile.mkstemp(
@@ -170,3 +188,50 @@ class State:
     def escalation_count(self, issue_id: str) -> int:
         entry = self.escalated_issues.get(issue_id) or {}
         return int(entry.get("escalation_count", 0))
+
+    # ------------------------------------------------------------------
+    # Handoff alert cooldown (GIM-181)
+    # ------------------------------------------------------------------
+
+    def has_active_alert(
+        self, issue_id: str, ftype: FindingType, current_snapshot: dict[str, Any]
+    ) -> bool:
+        """True iff entry exists AND all snapshot keys match stored values."""
+        key = f"{issue_id}:{ftype.value}"
+        entry = self.alerted_handoffs.get(key)
+        if not entry:
+            return False
+        return _snapshot_matches(entry.get("snapshot", {}), current_snapshot, ftype)
+
+    def cooldown_elapsed(
+        self,
+        issue_id: str,
+        ftype: FindingType,
+        now_server: _dt.datetime,
+        cooldown_min: int,
+    ) -> bool:
+        """True iff entry exists AND alerted_at is older than cooldown_min minutes."""
+        key = f"{issue_id}:{ftype.value}"
+        entry = self.alerted_handoffs.get(key)
+        if not entry:
+            return False
+        alerted_at = _parse_iso(entry["alerted_at"])
+        elapsed_min = (now_server - alerted_at).total_seconds() / 60
+        return elapsed_min >= cooldown_min
+
+    def record_handoff_alert(
+        self,
+        issue_id: str,
+        ftype: FindingType,
+        snapshot: dict[str, Any],
+        alerted_at: _dt.datetime,
+    ) -> None:
+        key = f"{issue_id}:{ftype.value}"
+        self.alerted_handoffs[key] = {
+            "alerted_at": _iso(alerted_at),
+            "snapshot": {k: snapshot.get(k) for k in _SNAPSHOT_KEYS[ftype]},
+        }
+
+    def clear_handoff_alert(self, issue_id: str, ftype: FindingType) -> None:
+        key = f"{issue_id}:{ftype.value}"
+        self.alerted_handoffs.pop(key, None)
