@@ -530,3 +530,307 @@ async def test_handoff_pass_logs_pass_complete_event(tmp_path: Path, caplog):
 
     events = [r for r in caplog.records if getattr(r, "event", None) == "handoff_pass_complete"]
     assert len(events) == 1
+
+
+# ---------------------------------------------------------------------------
+# GIM-183: missing JSONL events from spec §4.9 + e2e lifecycle + server-Date
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_handoff_alert_state_cleared_emits_event(tmp_path: Path, caplog):
+    """Pre-existing alert entry, finding now absent → JSONL event emitted."""
+    import logging
+
+    cfg = _handoff_cfg(tmp_path)
+    state = State.load(tmp_path / "state.json")
+    snapshot = {"assigneeAgentId": _PE_ID, "status": "in_review"}
+    state.record_handoff_alert(
+        "issue-42",
+        FindingType.REVIEW_OWNED_BY_IMPLEMENTER,
+        snapshot,
+        _NOW_SERVER,
+    )
+    client = MagicMock()
+    client.list_active_issues = AsyncMock(return_value=[_in_review_issue()])
+    client.list_company_agents = AsyncMock(return_value=[])
+    client.list_recent_comments = AsyncMock(return_value=[])
+
+    with patch(
+        "gimle_watchdog.daemon.detection_semantic.scan_handoff_inconsistencies",
+        new=AsyncMock(return_value=[]),  # no findings → trigger clear path
+    ):
+        with caplog.at_level(logging.INFO, logger="watchdog.daemon"):
+            await daemon._run_handoff_pass(cfg, state, client, _NOW_SERVER)
+
+    cleared = [
+        r for r in caplog.records if getattr(r, "event", None) == "handoff_alert_state_cleared"
+    ]
+    assert len(cleared) == 1
+    assert cleared[0].issue_id == "issue-42"
+    assert cleared[0].finding_type == FindingType.REVIEW_OWNED_BY_IMPLEMENTER.value
+
+
+@pytest.mark.asyncio
+async def test_handoff_alert_state_cleared_silent_when_nothing_to_clear(tmp_path: Path, caplog):
+    """No pre-existing alert, finding absent → no clear event (no-op)."""
+    import logging
+
+    cfg = _handoff_cfg(tmp_path)
+    state = State.load(tmp_path / "state.json")
+    client = MagicMock()
+    client.list_active_issues = AsyncMock(return_value=[_in_review_issue()])
+    client.list_company_agents = AsyncMock(return_value=[])
+    client.list_recent_comments = AsyncMock(return_value=[])
+
+    with patch(
+        "gimle_watchdog.daemon.detection_semantic.scan_handoff_inconsistencies",
+        new=AsyncMock(return_value=[]),
+    ):
+        with caplog.at_level(logging.INFO, logger="watchdog.daemon"):
+            await daemon._run_handoff_pass(cfg, state, client, _NOW_SERVER)
+
+    cleared = [
+        r for r in caplog.records if getattr(r, "event", None) == "handoff_alert_state_cleared"
+    ]
+    assert cleared == []
+
+
+@pytest.mark.asyncio
+async def test_handoff_alert_skipped_cooldown_emits_event(tmp_path: Path, caplog):
+    """Snapshot mismatch + cooldown not elapsed → JSONL event emitted."""
+    import logging
+    from datetime import timedelta
+
+    cfg = _handoff_cfg(tmp_path)
+    state = State.load(tmp_path / "state.json")
+    # Pre-existing entry with a DIFFERENT snapshot, alerted only 5 minutes ago
+    # (cooldown is 30 min in _handoff_cfg, so not elapsed).
+    old_snapshot = {"assigneeAgentId": "old-agent", "status": "in_review"}
+    state.record_handoff_alert(
+        "issue-42",
+        FindingType.REVIEW_OWNED_BY_IMPLEMENTER,
+        old_snapshot,
+        _NOW_SERVER - timedelta(minutes=5),
+    )
+    client = MagicMock()
+    client.list_active_issues = AsyncMock(return_value=[_in_review_issue()])
+    client.list_company_agents = AsyncMock(return_value=[])
+    client.list_recent_comments = AsyncMock(return_value=[])
+
+    with patch(
+        "gimle_watchdog.daemon.detection_semantic.scan_handoff_inconsistencies",
+        new=AsyncMock(return_value=[_ro_finding()]),
+    ):
+        with patch(
+            "gimle_watchdog.daemon.actions.post_handoff_alert", new=AsyncMock()
+        ) as mock_post:
+            with caplog.at_level(logging.INFO, logger="watchdog.daemon"):
+                await daemon._run_handoff_pass(cfg, state, client, _NOW_SERVER)
+
+    skipped = [
+        r for r in caplog.records if getattr(r, "event", None) == "handoff_alert_skipped_cooldown"
+    ]
+    assert len(skipped) == 1
+    assert skipped[0].issue_id == "issue-42"
+    assert skipped[0].cooldown_min == 30
+    mock_post.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_handoff_pass_failed_emits_event_on_company_error(tmp_path: Path, caplog):
+    """Per-company exception → JSONL `handoff_pass_failed` with company_id + error."""
+    import logging
+
+    cfg = _handoff_cfg(tmp_path)
+    state = State.load(tmp_path / "state.json")
+    client = MagicMock()
+    client.list_company_agents = AsyncMock(side_effect=RuntimeError("network drop"))
+
+    with caplog.at_level(logging.ERROR, logger="watchdog.daemon"):
+        await daemon._run_handoff_pass(cfg, state, client, _NOW_SERVER)
+
+    failed = [r for r in caplog.records if getattr(r, "event", None) == "handoff_pass_failed"]
+    assert len(failed) == 1
+    assert "network drop" in failed[0].error
+
+
+@pytest.mark.asyncio
+async def test_handoff_pass_failed_for_issue_emits_event(tmp_path: Path, caplog):
+    """Per-issue exception inside scan_handoff_inconsistencies → JSONL event."""
+    import logging
+
+    from gimle_watchdog import detection_semantic as ds
+
+    # Build a minimal Issue + a fetch_comments that raises for it.
+    issue = _in_review_issue()
+
+    async def boom_fetch(_: str) -> list:
+        raise RuntimeError("comment fetch failed")
+
+    det_cfg = ds.HandoffDetectionConfig(
+        handoff_alert_enabled=True,
+        handoff_comment_lookback_min=5,
+        handoff_wrong_assignee_min=3,
+        handoff_review_owner_min=5,
+        handoff_comments_per_issue=5,
+        handoff_max_issues_per_tick=30,
+        handoff_alert_cooldown_min=30,
+    )
+
+    # Hired ids include the assignee so wrong_assignee does NOT fire and
+    # fetch_comments gets called, raising and triggering the per-issue
+    # except block we want to test.
+    hired = frozenset({_PE_ID})
+
+    with caplog.at_level(logging.ERROR, logger="gimle_watchdog.detection_semantic"):
+        findings = await ds.scan_handoff_inconsistencies(
+            [issue],
+            boom_fetch,
+            hired,
+            {},
+            det_cfg,
+            _NOW_SERVER,
+        )
+
+    # Pass continues; finding list empty for the failing issue.
+    assert findings == []
+    per_issue = [
+        r for r in caplog.records if getattr(r, "event", None) == "handoff_pass_failed_for_issue"
+    ]
+    assert len(per_issue) == 1
+    assert per_issue[0].issue_id == issue.id
+
+
+@pytest.mark.asyncio
+async def test_tick_uses_client_last_response_date_not_local_clock(tmp_path: Path):
+    """_tick reads now_server from client.last_response_date when available
+    (spec §4.2.1 server-clock anchoring)."""
+    cfg = _handoff_cfg(tmp_path, enabled=True)
+    state = State.load(tmp_path / "state.json")
+    server_now = datetime(2026, 5, 3, 8, 0, tzinfo=timezone.utc)
+
+    client = MagicMock()
+    client.list_in_progress_issues = AsyncMock(return_value=[])
+    # Property-style mock for last_response_date.
+    type(client).last_response_date = server_now  # type: ignore[misc]
+
+    captured: dict[str, datetime] = {}
+
+    async def _capture(_cfg, _state, _client, now_server):
+        captured["now_server"] = now_server
+
+    with patch("gimle_watchdog.daemon.detection.scan_idle_hangs", return_value=[]):
+        with patch("gimle_watchdog.daemon._sleep", new=AsyncMock()):
+            with patch("gimle_watchdog.daemon._run_handoff_pass", new=_capture):
+                await daemon._tick(cfg, state, client)
+
+    assert captured["now_server"] == server_now
+
+
+@pytest.mark.asyncio
+async def test_tick_falls_back_to_local_clock_when_no_response_date(tmp_path: Path):
+    """When client has not yet captured a Date header (cold first tick),
+    daemon falls back to local clock — spec §4.2.1 fallback path."""
+    cfg = _handoff_cfg(tmp_path, enabled=True)
+    state = State.load(tmp_path / "state.json")
+
+    client = MagicMock()
+    client.list_in_progress_issues = AsyncMock(return_value=[])
+    type(client).last_response_date = None  # type: ignore[misc]
+
+    captured: dict[str, datetime] = {}
+
+    async def _capture(_cfg, _state, _client, now_server):
+        captured["now_server"] = now_server
+
+    with patch("gimle_watchdog.daemon.detection.scan_idle_hangs", return_value=[]):
+        with patch("gimle_watchdog.daemon._sleep", new=AsyncMock()):
+            with patch("gimle_watchdog.daemon._run_handoff_pass", new=_capture):
+                await daemon._tick(cfg, state, client)
+
+    # Fallback: any tz-aware datetime; we just assert it's not None.
+    assert captured["now_server"] is not None
+    assert captured["now_server"].tzinfo is not None
+
+
+@pytest.mark.asyncio
+async def test_tick_e2e_lifecycle(tmp_path: Path, caplog):
+    """End-to-end: alert → assignee fixed (cleared) → assignee broken again (re-alert).
+
+    Walks through a full state-machine cycle within a single test using three
+    successive `_run_handoff_pass` calls. Covers the contract that GIM-183 spec
+    §4.4 declares: edge-triggered + cooldown + state clearing.
+    """
+    import logging
+    from datetime import timedelta
+
+    cfg = _handoff_cfg(tmp_path)
+    state = State.load(tmp_path / "state.json")
+    client = MagicMock()
+    client.list_active_issues = AsyncMock(return_value=[_in_review_issue()])
+    client.list_company_agents = AsyncMock(return_value=[])
+    client.list_recent_comments = AsyncMock(return_value=[])
+
+    posted = AlertResult(
+        finding_type=FindingType.REVIEW_OWNED_BY_IMPLEMENTER,
+        issue_id="issue-42",
+        posted=True,
+        comment_id="cmt-1",
+        error=None,
+    )
+
+    # Phase 1: finding active → expect alert.
+    t1 = _NOW_SERVER
+    with patch(
+        "gimle_watchdog.daemon.detection_semantic.scan_handoff_inconsistencies",
+        new=AsyncMock(return_value=[_ro_finding()]),
+    ):
+        with patch(
+            "gimle_watchdog.daemon.actions.post_handoff_alert",
+            new=AsyncMock(return_value=posted),
+        ) as mock_post_1:
+            with caplog.at_level(logging.INFO, logger="watchdog.daemon"):
+                await daemon._run_handoff_pass(cfg, state, client, t1)
+    assert mock_post_1.await_count == 1
+    snapshot_1 = {"assigneeAgentId": _PE_ID, "status": "in_review"}
+    assert state.has_active_alert("issue-42", FindingType.REVIEW_OWNED_BY_IMPLEMENTER, snapshot_1)
+
+    # Phase 2: finding gone (operator reassigned) → expect state cleared.
+    caplog.clear()
+    t2 = t1 + timedelta(minutes=2)
+    with patch(
+        "gimle_watchdog.daemon.detection_semantic.scan_handoff_inconsistencies",
+        new=AsyncMock(return_value=[]),
+    ):
+        with patch(
+            "gimle_watchdog.daemon.actions.post_handoff_alert", new=AsyncMock()
+        ) as mock_post_2:
+            with caplog.at_level(logging.INFO, logger="watchdog.daemon"):
+                await daemon._run_handoff_pass(cfg, state, client, t2)
+    mock_post_2.assert_not_awaited()
+    cleared = [
+        r for r in caplog.records if getattr(r, "event", None) == "handoff_alert_state_cleared"
+    ]
+    assert len(cleared) == 1
+    assert not state.has_active_alert(
+        "issue-42", FindingType.REVIEW_OWNED_BY_IMPLEMENTER, snapshot_1
+    )
+
+    # Phase 3: finding reactivates (operator re-broke) → expect re-alert
+    # (no cooldown gating because state was cleared, so this is a "first time"
+    # alert from the state-machine's perspective).
+    caplog.clear()
+    t3 = t2 + timedelta(minutes=10)
+    with patch(
+        "gimle_watchdog.daemon.detection_semantic.scan_handoff_inconsistencies",
+        new=AsyncMock(return_value=[_ro_finding()]),
+    ):
+        with patch(
+            "gimle_watchdog.daemon.actions.post_handoff_alert",
+            new=AsyncMock(return_value=posted),
+        ) as mock_post_3:
+            with caplog.at_level(logging.INFO, logger="watchdog.daemon"):
+                await daemon._run_handoff_pass(cfg, state, client, t3)
+    assert mock_post_3.await_count == 1
+    assert state.has_active_alert("issue-42", FindingType.REVIEW_OWNED_BY_IMPLEMENTER, snapshot_1)
