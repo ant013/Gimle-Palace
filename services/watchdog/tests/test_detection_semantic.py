@@ -175,10 +175,18 @@ def test_comment_only_no_mentions_in_window_no_finding():
 
 def test_comment_only_multiple_comments_most_recent_wins():
     issue = _issue(updated_at=NOW)
-    old = _comment(id="old", body=f"[@CR](agent://{CR_ID}?i=eye)", author_id=PE_ID,
-                   created_at=NOW - timedelta(minutes=20))
-    recent = _comment(id="new", body=f"[@CTO](agent://{CTO_ID}?i=crown)", author_id=PE_ID,
-                      created_at=NOW - timedelta(minutes=8))
+    old = _comment(
+        id="old",
+        body=f"[@CR](agent://{CR_ID}?i=eye)",
+        author_id=PE_ID,
+        created_at=NOW - timedelta(minutes=20),
+    )
+    recent = _comment(
+        id="new",
+        body=f"[@CTO](agent://{CTO_ID}?i=crown)",
+        author_id=PE_ID,
+        created_at=NOW - timedelta(minutes=8),
+    )
     result = ds._detect_comment_only_handoff(issue, [old, recent], lookback_min=5)
     assert result is not None
     assert result.mention_comment_id == "new"
@@ -224,7 +232,9 @@ def test_wrong_assignee_status_not_eligible_no_finding():
 
 def test_review_owned_happy_path():
     issue = _issue(status="in_review", assignee_id=PE_ID, updated_at=NOW - timedelta(minutes=7))
-    result = ds._detect_review_owned_by_implementer(issue, HIRED_IDS, NAME_BY_ID, NOW, min_age_min=5)
+    result = ds._detect_review_owned_by_implementer(
+        issue, HIRED_IDS, NAME_BY_ID, NOW, min_age_min=5
+    )
     assert isinstance(result, ReviewOwnedByImplementerFinding)
     assert result.implementer_assignee_id == PE_ID
     assert result.implementer_role_class == "implementer"
@@ -232,29 +242,44 @@ def test_review_owned_happy_path():
 
 def test_review_owned_status_not_in_review_no_finding():
     issue = _issue(status="in_progress", assignee_id=PE_ID, updated_at=NOW - timedelta(minutes=7))
-    assert ds._detect_review_owned_by_implementer(issue, HIRED_IDS, NAME_BY_ID, NOW, min_age_min=5) is None
+    assert (
+        ds._detect_review_owned_by_implementer(issue, HIRED_IDS, NAME_BY_ID, NOW, min_age_min=5)
+        is None
+    )
 
 
 def test_review_owned_reviewer_assignee_no_finding():
     issue = _issue(status="in_review", assignee_id=CR_ID, updated_at=NOW - timedelta(minutes=7))
-    assert ds._detect_review_owned_by_implementer(issue, HIRED_IDS, NAME_BY_ID, NOW, min_age_min=5) is None
+    assert (
+        ds._detect_review_owned_by_implementer(issue, HIRED_IDS, NAME_BY_ID, NOW, min_age_min=5)
+        is None
+    )
 
 
 def test_review_owned_assignee_not_in_hired_no_finding():
     """wrong_assignee wins by precedence; review_owned should not double-fire."""
     issue = _issue(status="in_review", assignee_id=BOGUS_ID, updated_at=NOW - timedelta(minutes=7))
-    assert ds._detect_review_owned_by_implementer(issue, HIRED_IDS, NAME_BY_ID, NOW, min_age_min=5) is None
+    assert (
+        ds._detect_review_owned_by_implementer(issue, HIRED_IDS, NAME_BY_ID, NOW, min_age_min=5)
+        is None
+    )
 
 
 def test_review_owned_unknown_name_no_finding():
     issue = _issue(status="in_review", assignee_id=PE_ID, updated_at=NOW - timedelta(minutes=7))
     name_by_id = {}  # no mapping
-    assert ds._detect_review_owned_by_implementer(issue, HIRED_IDS, name_by_id, NOW, min_age_min=5) is None
+    assert (
+        ds._detect_review_owned_by_implementer(issue, HIRED_IDS, name_by_id, NOW, min_age_min=5)
+        is None
+    )
 
 
 def test_review_owned_issue_too_young_no_finding():
     issue = _issue(status="in_review", assignee_id=PE_ID, updated_at=NOW - timedelta(minutes=2))
-    assert ds._detect_review_owned_by_implementer(issue, HIRED_IDS, NAME_BY_ID, NOW, min_age_min=5) is None
+    assert (
+        ds._detect_review_owned_by_implementer(issue, HIRED_IDS, NAME_BY_ID, NOW, min_age_min=5)
+        is None
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -265,36 +290,44 @@ def test_review_owned_issue_too_young_no_finding():
 async def _make_fetch(comments_map: dict[str, list[Comment]]):
     async def fetch(issue_id: str) -> list[Comment]:
         return comments_map.get(issue_id, [])
+
     return fetch
 
 
 async def test_precedence_wrong_assignee_beats_comment_only():
     # Issue has wrong assignee AND has @mention comment
-    issue = _issue(id="i1", assignee_id=BOGUS_ID, status="in_progress",
-                   updated_at=NOW - timedelta(minutes=5))
+    issue = _issue(
+        id="i1", assignee_id=BOGUS_ID, status="in_progress", updated_at=NOW - timedelta(minutes=5)
+    )
     comments = [_comment(body=_CO_BODY, author_id=BOGUS_ID, created_at=NOW - timedelta(minutes=10))]
     fetch = await _make_fetch({"i1": comments})
-    findings = await ds.scan_handoff_inconsistencies([issue], fetch, HIRED_IDS, NAME_BY_ID, _cfg(), NOW)
+    findings = await ds.scan_handoff_inconsistencies(
+        [issue], fetch, HIRED_IDS, NAME_BY_ID, _cfg(), NOW
+    )
     assert len(findings) == 1
     assert findings[0].type == FindingType.WRONG_ASSIGNEE
 
 
 async def test_precedence_comment_only_beats_review_owned():
     # Issue is in_review with PE, AND PE posted @mention
-    issue = _issue(id="i1", assignee_id=PE_ID, status="in_review",
-                   updated_at=NOW)
+    issue = _issue(id="i1", assignee_id=PE_ID, status="in_review", updated_at=NOW)
     comments = [_comment(body=_CO_BODY, author_id=PE_ID, created_at=NOW - timedelta(minutes=10))]
     fetch = await _make_fetch({"i1": comments})
-    findings = await ds.scan_handoff_inconsistencies([issue], fetch, HIRED_IDS, NAME_BY_ID, _cfg(), NOW)
+    findings = await ds.scan_handoff_inconsistencies(
+        [issue], fetch, HIRED_IDS, NAME_BY_ID, _cfg(), NOW
+    )
     assert len(findings) == 1
     assert findings[0].type == FindingType.COMMENT_ONLY_HANDOFF
 
 
 async def test_precedence_only_review_owned_emits():
-    issue = _issue(id="i1", assignee_id=PE_ID, status="in_review",
-                   updated_at=NOW - timedelta(minutes=7))
+    issue = _issue(
+        id="i1", assignee_id=PE_ID, status="in_review", updated_at=NOW - timedelta(minutes=7)
+    )
     fetch = await _make_fetch({"i1": []})
-    findings = await ds.scan_handoff_inconsistencies([issue], fetch, HIRED_IDS, NAME_BY_ID, _cfg(), NOW)
+    findings = await ds.scan_handoff_inconsistencies(
+        [issue], fetch, HIRED_IDS, NAME_BY_ID, _cfg(), NOW
+    )
     assert len(findings) == 1
     assert findings[0].type == FindingType.REVIEW_OWNED_BY_IMPLEMENTER
 
@@ -333,12 +366,23 @@ def test_comment_only_age_server_derived():
 
 
 async def test_scan_continues_when_fetch_comments_raises_for_one_issue():
-    issue_err = _issue(id="issue-err", status="in_review", assignee_id=PE_ID,
-                       updated_at=NOW - timedelta(minutes=7))
-    issue_ok1 = _issue(id="issue-ok1", status="in_review", assignee_id=PE_ID,
-                       updated_at=NOW - timedelta(minutes=7), issue_number=2)
-    issue_ok2 = _issue(id="issue-ok2", status="in_review", assignee_id=PE_ID,
-                       updated_at=NOW - timedelta(minutes=7), issue_number=3)
+    issue_err = _issue(
+        id="issue-err", status="in_review", assignee_id=PE_ID, updated_at=NOW - timedelta(minutes=7)
+    )
+    issue_ok1 = _issue(
+        id="issue-ok1",
+        status="in_review",
+        assignee_id=PE_ID,
+        updated_at=NOW - timedelta(minutes=7),
+        issue_number=2,
+    )
+    issue_ok2 = _issue(
+        id="issue-ok2",
+        status="in_review",
+        assignee_id=PE_ID,
+        updated_at=NOW - timedelta(minutes=7),
+        issue_number=3,
+    )
 
     async def fetch(issue_id: str) -> list[Comment]:
         if issue_id == "issue-err":
@@ -356,8 +400,9 @@ async def test_scan_continues_when_fetch_comments_raises_for_one_issue():
 async def test_scan_continues_when_wrong_assignee_detector_raises_for_one_issue():
     real_detect = ds._detect_wrong_assignee
     issues = [
-        _issue(id=f"i{n}", assignee_id=BOGUS_ID, updated_at=NOW - timedelta(minutes=5),
-               issue_number=n)
+        _issue(
+            id=f"i{n}", assignee_id=BOGUS_ID, updated_at=NOW - timedelta(minutes=5), issue_number=n
+        )
         for n in range(4)
     ]
 
@@ -377,15 +422,15 @@ async def test_scan_continues_when_wrong_assignee_detector_raises_for_one_issue(
 
 async def test_scan_continues_when_comment_only_detector_raises_for_one_issue():
     issues = [
-        _issue(id=f"i{n}", assignee_id=PE_ID, status="in_progress",
-               updated_at=NOW, issue_number=n)
+        _issue(id=f"i{n}", assignee_id=PE_ID, status="in_progress", updated_at=NOW, issue_number=n)
         for n in range(4)
     ]
     comments_body = _CO_BODY
 
     async def fetch(issue_id: str) -> list[Comment]:
-        return [_comment(body=comments_body, author_id=PE_ID,
-                         created_at=NOW - timedelta(minutes=10))]
+        return [
+            _comment(body=comments_body, author_id=PE_ID, created_at=NOW - timedelta(minutes=10))
+        ]
 
     def raising_co(issue, comments, lookback_min):
         if issue.id == "i0":
@@ -402,8 +447,13 @@ async def test_scan_continues_when_comment_only_detector_raises_for_one_issue():
 async def test_scan_continues_when_review_owned_detector_raises_for_one_issue():
     real_ro = ds._detect_review_owned_by_implementer
     issues = [
-        _issue(id=f"i{n}", assignee_id=PE_ID, status="in_review",
-               updated_at=NOW - timedelta(minutes=7), issue_number=n)
+        _issue(
+            id=f"i{n}",
+            assignee_id=PE_ID,
+            status="in_review",
+            updated_at=NOW - timedelta(minutes=7),
+            issue_number=n,
+        )
         for n in range(4)
     ]
 
@@ -428,8 +478,9 @@ async def test_scan_continues_when_review_owned_detector_raises_for_one_issue():
 
 async def test_max_issues_cap_limits_evaluation():
     issues = [
-        _issue(id=f"i{n}", assignee_id=BOGUS_ID, updated_at=NOW - timedelta(minutes=5),
-               issue_number=n)
+        _issue(
+            id=f"i{n}", assignee_id=BOGUS_ID, updated_at=NOW - timedelta(minutes=5), issue_number=n
+        )
         for n in range(50)
     ]
     cfg = _cfg(handoff_max_issues_per_tick=30)

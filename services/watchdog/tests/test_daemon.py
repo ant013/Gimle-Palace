@@ -354,7 +354,9 @@ async def test_handoff_pass_posts_alert_first_time(tmp_path: Path):
         "gimle_watchdog.daemon.detection_semantic.scan_handoff_inconsistencies",
         new=AsyncMock(return_value=[_ro_finding()]),
     ):
-        with patch("gimle_watchdog.daemon.actions.post_handoff_alert", new=AsyncMock(return_value=posted)) as mock_post:
+        with patch(
+            "gimle_watchdog.daemon.actions.post_handoff_alert", new=AsyncMock(return_value=posted)
+        ) as mock_post:
             await daemon._run_handoff_pass(cfg, state, client, _NOW_SERVER)
     mock_post.assert_awaited_once()
 
@@ -381,7 +383,9 @@ async def test_handoff_pass_skips_active_alert_same_snapshot(tmp_path: Path):
         "gimle_watchdog.daemon.detection_semantic.scan_handoff_inconsistencies",
         new=AsyncMock(return_value=[_ro_finding()]),
     ):
-        with patch("gimle_watchdog.daemon.actions.post_handoff_alert", new=AsyncMock()) as mock_post:
+        with patch(
+            "gimle_watchdog.daemon.actions.post_handoff_alert", new=AsyncMock()
+        ) as mock_post:
             await daemon._run_handoff_pass(cfg, state, client, _NOW_SERVER)
     mock_post.assert_not_awaited()
 
@@ -409,7 +413,9 @@ async def test_handoff_pass_respects_cooldown(tmp_path: Path):
         "gimle_watchdog.daemon.detection_semantic.scan_handoff_inconsistencies",
         new=AsyncMock(return_value=[_ro_finding()]),
     ):
-        with patch("gimle_watchdog.daemon.actions.post_handoff_alert", new=AsyncMock()) as mock_post:
+        with patch(
+            "gimle_watchdog.daemon.actions.post_handoff_alert", new=AsyncMock()
+        ) as mock_post:
             await daemon._run_handoff_pass(cfg, state, client, _NOW_SERVER)
     mock_post.assert_not_awaited()
 
@@ -444,7 +450,9 @@ async def test_handoff_pass_re_alerts_after_cooldown(tmp_path: Path):
         "gimle_watchdog.daemon.detection_semantic.scan_handoff_inconsistencies",
         new=AsyncMock(return_value=[_ro_finding()]),
     ):
-        with patch("gimle_watchdog.daemon.actions.post_handoff_alert", new=AsyncMock(return_value=posted)) as mock_post:
+        with patch(
+            "gimle_watchdog.daemon.actions.post_handoff_alert", new=AsyncMock(return_value=posted)
+        ) as mock_post:
             await daemon._run_handoff_pass(cfg, state, client, _NOW_SERVER)
     mock_post.assert_awaited_once()
 

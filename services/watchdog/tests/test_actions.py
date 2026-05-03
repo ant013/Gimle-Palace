@@ -228,9 +228,7 @@ def test_render_handoff_alert_handles_unknown_assignee_name():
 async def test_post_handoff_alert_emits_jsonl_event_on_success(caplog):
     import logging
 
-    transport = httpx.MockTransport(
-        lambda req: httpx.Response(201, json={"id": "cmt-new"})
-    )
+    transport = httpx.MockTransport(lambda req: httpx.Response(201, json={"id": "cmt-new"}))
     client = PaperclipClient(base_url="http://pc.test", api_key="tok", transport=transport)
     try:
         with caplog.at_level(logging.INFO, logger="watchdog.actions"):
