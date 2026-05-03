@@ -91,6 +91,11 @@ def load_profiles_manifest(path: Path) -> dict[str, dict[str, list[str]]]:
             current_key = text[:-1]
             profiles[current_profile][current_key] = []
             continue
+        if indent == 4 and ":" in text:
+            key, value = text.split(":", 1)
+            profiles[current_profile][key.strip()] = value.strip().strip("\"'")
+            current_key = None
+            continue
         if indent == 6 and text.startswith("- ") and current_key:
             profiles[current_profile][current_key].append(text[2:].strip())
 
@@ -177,6 +182,15 @@ def validate(repo_root: Path = REPO_ROOT) -> list[str]:
             fragment_path = repo_root / fragment
             if not fragment_path.is_file():
                 errors.append(f"profile {profile_name} references missing fragment: {fragment}")
+        runbooks = profile_data.get("runbooks", [])
+        if runbooks and profile_data.get("inline_rule_required") != "true":
+            errors.append(
+                f"profile {profile_name} has runbooks but does not require inline rules"
+            )
+        for runbook in runbooks:
+            runbook_path = repo_root / runbook
+            if not runbook_path.is_file():
+                errors.append(f"profile {profile_name} references missing runbook: {runbook}")
 
     role_sources_seen: set[Path] = set()
     for role_id, role in matrix.get("roles", {}).items():

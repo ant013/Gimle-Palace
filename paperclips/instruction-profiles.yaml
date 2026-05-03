@@ -35,10 +35,12 @@ profiles:
   handoff:
     fragments:
       - paperclips/fragments/shared/fragments/phase-handoff.md
+    inline_rule_required: true
   handoff-full:
     fragments:
       - paperclips/fragments/shared/fragments/phase-handoff.md
       - paperclips/fragments/shared/fragments/phase-review-discipline.md
+    inline_rule_required: true
   merge-deploy:
     fragments:
       - paperclips/fragments/shared/fragments/git-workflow.md

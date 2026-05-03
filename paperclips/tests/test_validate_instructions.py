@@ -79,3 +79,20 @@ def test_baseline_size_mismatch_fails(tmp_path: Path) -> None:
     errors = validate_instructions.validate(repo)
 
     assert any("baseline byte mismatch" in error for error in errors)
+
+
+def test_runbook_profile_requires_inline_rule(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    profiles_path = repo / "paperclips" / "instruction-profiles.yaml"
+    profiles_path.write_text(
+        profiles_path.read_text()
+        + "\n  unsafe-runbook-only:\n"
+        + "    fragments:\n"
+        + "      - paperclips/fragments/shared/fragments/language.md\n"
+        + "    runbooks:\n"
+        + "      - paperclips/fragments/shared/fragments/phase-handoff.md\n"
+    )
+
+    errors = validate_instructions.validate(repo)
+
+    assert any("has runbooks but does not require inline rules" in error for error in errors)
