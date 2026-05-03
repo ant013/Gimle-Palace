@@ -39,7 +39,7 @@ Run independent subtasks (Python service X + Docker tweaks + Docs) **in parallel
 
 ## Plan-first discipline (multi-agent tasks)
 
-Any issue requiring **3+ subtasks** OR **handoff between agents** — REQUIRED to invoke `codex-discipline:writing-plans` skill BEFORE decomposing in comments.
+Any issue requiring **3+ subtasks** OR **handoff between agents** — REQUIRED to invoke `create-plan` skill BEFORE decomposing in comments.
 
 **Output:** plan file at `docs/superpowers/plans/YYYY-MM-DD-GIM-NN-<slug>.md` with per-step:
 - description + acceptance criteria
