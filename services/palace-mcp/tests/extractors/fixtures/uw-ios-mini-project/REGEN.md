@@ -37,10 +37,14 @@ using Xcode IndexStoreDB and `palace-swift-scip-emit`.
 ## Verification
 
 ```bash
+cd services/palace-mcp/scip_emit_swift
+xcrun swift build -c release
+
+cd ../tests/extractors/fixtures/uw-ios-mini-project
 ./regen.sh
 # documents=5 occurrences=370
 
-cd services/palace-mcp
+cd ../../../..
 uv run python - <<'PY'
 from pathlib import Path
 from palace_mcp.proto import scip_pb2
@@ -50,3 +54,26 @@ print(len(idx.documents), sum(len(d.occurrences) for d in idx.documents))
 PY
 # 5 370
 ```
+
+Full Swift smoke tests pass on the MacBook with Xcode SDK/toolchain includes
+isolated from `/usr/local/include`:
+
+```bash
+cd services/palace-mcp/scip_emit_swift
+SDK=$(xcrun --sdk macosx --show-sdk-path)
+TOOLCHAIN=/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain
+xcrun swift test \
+  -Xcc -nostdinc \
+  -Xcc -isystem -Xcc "$SDK/usr/include/c++/v1" \
+  -Xcc -isystem -Xcc "$TOOLCHAIN/usr/lib/clang/17/include" \
+  -Xcc -isystem -Xcc "$SDK/usr/include" \
+  -Xcc -isystem -Xcc "$TOOLCHAIN/usr/include" \
+  -Xcc -F -Xcc "$SDK/System/Library/Frameworks" \
+  -Xcc -F -Xcc "$SDK/System/Library/SubFrameworks"
+# Executed 5 tests, with 0 failures (0 unexpected)
+```
+
+The explicit include set is required on this host because a stale
+`/usr/local/include/IOKit` directory shadows the Xcode SDK IOKit headers when
+XCTest is imported. The smoke test itself passes once the compiler include path
+is constrained to the Xcode SDK/toolchain.
