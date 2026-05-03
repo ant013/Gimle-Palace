@@ -86,7 +86,8 @@ def test_baseline_allows_growth_under_policy_threshold(tmp_path: Path) -> None:
     baseline_path = repo / "paperclips" / "bundle-size-baseline.json"
     baseline = json.loads(baseline_path.read_text())
     baseline["policy"]["maxGrowthPercent"] = 10
-    baseline["bundles"][0]["bytes"] = int(baseline["bundles"][0]["bytes"] * 0.95)
+    actual_bytes = (repo / baseline["bundles"][0]["path"]).stat().st_size
+    baseline["bundles"][0]["bytes"] = int(actual_bytes / 1.05)
     baseline_path.write_text(json.dumps(baseline, indent=2) + "\n")
 
     errors = validate_instructions.validate(repo)
@@ -99,7 +100,8 @@ def test_baseline_growth_over_policy_threshold_fails(tmp_path: Path) -> None:
     baseline_path = repo / "paperclips" / "bundle-size-baseline.json"
     baseline = json.loads(baseline_path.read_text())
     baseline["policy"]["maxGrowthPercent"] = 10
-    baseline["bundles"][0]["bytes"] = int(baseline["bundles"][0]["bytes"] * 0.80)
+    actual_bytes = (repo / baseline["bundles"][0]["path"]).stat().st_size
+    baseline["bundles"][0]["bytes"] = int(actual_bytes / 1.20)
     baseline_path.write_text(json.dumps(baseline, indent=2) + "\n")
 
     errors = validate_instructions.validate(repo)
