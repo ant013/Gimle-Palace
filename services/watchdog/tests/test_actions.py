@@ -6,10 +6,17 @@ import subprocess
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from gimle_watchdog import actions as act
 from gimle_watchdog.detection import HangedProc
+from gimle_watchdog.models import (
+    CommentOnlyHandoffFinding,
+    FindingType,
+    ReviewOwnedByImplementerFinding,
+    WrongAssigneeFinding,
+)
 from gimle_watchdog.paperclip import Issue, PaperclipClient
 
 
@@ -137,3 +144,114 @@ async def test_kill_hanged_proc_pid_reused_skip():
 def test_read_proc_cmdline_for_nonexistent_returns_none():
     """PID 999999 is extremely unlikely to be alive."""
     assert act._read_proc_cmdline(999999) is None
+
+
+# ---------------------------------------------------------------------------
+# T6: render_handoff_alert_comment + post_handoff_alert
+# ---------------------------------------------------------------------------
+
+_PE_ID = "127068ee-b564-4b37-9370-616c81c63f35"
+_CR_ID = "bd2d7e20-7ed8-474c-91fc-353d610f4c52"
+_TS = datetime(2026, 5, 3, 12, 0, tzinfo=timezone.utc)
+_VERSION = "0.3.0"
+
+
+def _co_finding() -> CommentOnlyHandoffFinding:
+    return CommentOnlyHandoffFinding(
+        type=FindingType.COMMENT_ONLY_HANDOFF,
+        issue_id="issue-42",
+        issue_number=42,
+        current_assignee_id=_PE_ID,
+        mentioned_agent_id=_CR_ID,
+        mention_comment_id="cmt-001",
+        mention_author_agent_id=_PE_ID,
+        mention_age_seconds=600,
+        issue_status="in_progress",
+    )
+
+
+def _wa_finding() -> WrongAssigneeFinding:
+    return WrongAssigneeFinding(
+        type=FindingType.WRONG_ASSIGNEE,
+        issue_id="issue-43",
+        issue_number=43,
+        bogus_assignee_id="00000000-dead-beef-0000-000000000001",
+        issue_status="in_progress",
+        age_seconds=300,
+    )
+
+
+def _ro_finding() -> ReviewOwnedByImplementerFinding:
+    return ReviewOwnedByImplementerFinding(
+        type=FindingType.REVIEW_OWNED_BY_IMPLEMENTER,
+        issue_id="issue-44",
+        issue_number=44,
+        implementer_assignee_id=_PE_ID,
+        implementer_role_name="PythonEngineer",
+        implementer_role_class="implementer",
+        age_seconds=420,
+    )
+
+
+def test_render_handoff_alert_comment_for_comment_only():
+    body = act.render_handoff_alert_comment(_co_finding(), _VERSION, _TS, "PythonEngineer")
+    assert "comment_only_handoff" in body
+    assert "@-mention from current assignee but assigneeAgentId not updated" in body
+    assert "cmt-001" in body
+    assert _CR_ID in body
+
+
+def test_render_handoff_alert_comment_for_wrong_assignee():
+    body = act.render_handoff_alert_comment(_wa_finding(), _VERSION, _TS, None)
+    assert "wrong_assignee" in body
+    assert "assigneeAgentId is not a hired agent" in body
+    assert "valid hired agent UUID required" in body
+
+
+def test_render_handoff_alert_comment_for_review_owned():
+    body = act.render_handoff_alert_comment(_ro_finding(), _VERSION, _TS, "PythonEngineer")
+    assert "review_owned_by_implementer" in body
+    assert "in_review with implementer-class assignee" in body
+    assert "reassign to a code-reviewer-class agent" in body
+
+
+def test_render_handoff_alert_includes_grep_anchor():
+    body = act.render_handoff_alert_comment(_co_finding(), _VERSION, _TS, "PythonEngineer")
+    assert body.startswith("## Watchdog handoff alert — ")
+
+
+def test_render_handoff_alert_handles_unknown_assignee_name():
+    body = act.render_handoff_alert_comment(_wa_finding(), _VERSION, _TS, None)
+    assert "unknown" in body.lower() or "(unknown)" in body or "None" not in body
+
+
+async def test_post_handoff_alert_emits_jsonl_event_on_success(caplog):
+    import logging
+
+    transport = httpx.MockTransport(lambda req: httpx.Response(201, json={"id": "cmt-new"}))
+    client = PaperclipClient(base_url="http://pc.test", api_key="tok", transport=transport)
+    try:
+        with caplog.at_level(logging.INFO, logger="watchdog.actions"):
+            result = await act.post_handoff_alert(client, _co_finding(), _VERSION, _TS, "PE")
+        assert result.posted is True
+        assert result.comment_id == "cmt-new"
+        events = [r for r in caplog.records if getattr(r, "event", None) == "handoff_alert_posted"]
+        assert len(events) == 1
+    finally:
+        await client.aclose()
+
+
+async def test_post_handoff_alert_emits_jsonl_event_on_failure(caplog):
+    import logging
+
+    transport = httpx.MockTransport(lambda req: httpx.Response(500, json={"error": "boom"}))
+    client = PaperclipClient(base_url="http://pc.test", api_key="tok", transport=transport)
+    try:
+        with caplog.at_level(logging.WARNING, logger="watchdog.actions"):
+            result = await act.post_handoff_alert(client, _co_finding(), _VERSION, _TS, "PE")
+        assert result.posted is False
+        assert result.error is not None
+        events = [r for r in caplog.records if getattr(r, "event", None) == "handoff_alert_failed"]
+        assert len(events) == 1
+    finally:
+        await client.aclose()
