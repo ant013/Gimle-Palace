@@ -46,7 +46,9 @@ from starlette.applications import Starlette
 from palace_mcp.code_composite import register_code_composite_tools
 from palace_mcp.code_router import register_code_tools
 from palace_mcp.extractors import registry as _extractor_registry
+from palace_mcp.extractors.bundle_state import get_bundle_ingest_state
 from palace_mcp.extractors.runner import run_extractor as _run_extractor
+from palace_mcp.extractors.runner import run_extractor_bundle as _run_extractor_bundle
 from palace_mcp.errors import (
     VALID_ENTITY_TYPES,
     DriverUnavailableError,
@@ -583,22 +585,51 @@ async def palace_memory_delete_bundle(
 @_tool(
     name="palace.ingest.run_extractor",
     description=(
-        "Run a named extractor against a registered project. Writes nodes/edges "
-        "scoped by group_id. Creates :IngestRun tracking. Returns run_id + "
-        "duration_ms + nodes_written + edges_written on success, or error_code "
-        "envelope on failure. Default timeout 300s per run."
+        "Run a named extractor. Pass project= to run against a single registered project. "
+        "Pass bundle= to run asynchronously across all bundle members — returns run_id "
+        "immediately; use palace.ingest.bundle_status(run_id) to poll progress. "
+        "project= and bundle= are mutually exclusive. "
+        "On success (project mode): run_id + duration_ms + nodes_written + edges_written. "
+        "On success (bundle mode): run_id + state='running' + members_total. "
+        "On failure: error_code envelope."
     ),
 )
-async def _palace_ingest_run_extractor(name: str, project: str) -> dict[str, Any]:
+async def _palace_ingest_run_extractor(
+    name: str,
+    project: str | None = None,
+    bundle: str | None = None,
+) -> dict[str, Any]:
     driver = _driver
     if driver is None:
         handle_tool_error(DriverUnavailableError("Neo4j driver not initialised"))
     graphiti = _graphiti
     if graphiti is None:
         handle_tool_error(DriverUnavailableError("Graphiti not initialised"))
+    if bundle is not None and project is not None:
+        return {"ok": False, "error_code": "invalid_request", "message": "project and bundle are mutually exclusive"}
+    if bundle is not None:
+        state = await _run_extractor_bundle(name=name, bundle=bundle, driver=driver, graphiti=graphiti)
+        return {k: v for k, v in state.items() if not k.startswith("_")}
+    if project is None:
+        return {"ok": False, "error_code": "invalid_request", "message": "either project or bundle is required"}
     return await _run_extractor(
         name=name, project=project, driver=driver, graphiti=graphiti
     )
+
+
+@_tool(
+    name="palace.ingest.bundle_status",
+    description=(
+        "Poll the status of an async bundle ingest started by palace.ingest.run_extractor(bundle=...). "
+        "Returns state ('running'|'succeeded'|'failed'), progress counters (members_done / members_total), "
+        "per-member run results, and timing. Returns error_code='not_found' if run_id is unknown or expired."
+    ),
+)
+async def _palace_ingest_bundle_status(run_id: str) -> dict[str, Any]:
+    state = get_bundle_ingest_state(run_id)
+    if state is None:
+        return {"ok": False, "error_code": "not_found", "message": f"bundle ingest run {run_id!r} not found or expired"}
+    return {"ok": True, **{k: v for k, v in state.items() if not k.startswith("_")}}
 
 
 @_tool(
