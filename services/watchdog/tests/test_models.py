@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 import pytest
 
 from gimle_watchdog.models import (
-    Agent,
     AlertResult,
     Comment,
     CommentOnlyHandoffFinding,

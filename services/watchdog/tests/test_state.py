@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-import pytest
 from freezegun import freeze_time
 
 from gimle_watchdog import state as st

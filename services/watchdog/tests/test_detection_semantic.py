@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
-import pytest
 from freezegun import freeze_time
 
 from gimle_watchdog import detection_semantic as ds
