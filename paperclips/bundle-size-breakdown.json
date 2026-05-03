@@ -826,9 +826,9 @@
       "source": "paperclips/roles-codex/cx-python-engineer.md",
       "dist": "paperclips/dist/codex/cx-python-engineer.md",
       "total": {
-        "bytes": 28346,
+        "bytes": 28369,
         "lines": 574,
-        "tokenEstimate": 7087
+        "tokenEstimate": 7093
       },
       "components": [
         {
@@ -921,10 +921,10 @@
         },
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/shared/fragments/phase-review-discipline.md",
-          "bytes": 908,
+          "path": "paperclips/fragments/targets/codex/shared/fragments/phase-review-discipline.md",
+          "bytes": 931,
           "lines": 30,
-          "tokenEstimate": 227,
+          "tokenEstimate": 233,
           "includeCount": 1
         },
         {

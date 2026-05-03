@@ -545,9 +545,9 @@ PE scope reduction without comment = REQUEST CHANGES.
 
 ## Phase 3.2 — Adversarial coverage matrix audit
 
-Opus Phase 3.2 must include coverage matrix audit for fixture/vendored-data PRs.
+Architect Phase 3.2 must include coverage matrix audit for fixture/vendored-data PRs.
 
-Why: GIM-104 — Opus focused on architectural risks, missed that fixture coverage was halved.
+Why: GIM-104 — the architect reviewer focused on architectural risks, missed that fixture coverage was halved.
 
 Required output template:
 
