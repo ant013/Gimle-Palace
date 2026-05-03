@@ -195,6 +195,14 @@ def allowlisted(allowlist: dict, role_id: str, path: str, rule: str) -> bool:
     return False
 
 
+def required_handoff_destination(role_id: str) -> str | None:
+    if role_id.startswith("codex:"):
+        return "codexarchitectreviewer"
+    if role_id.startswith("claude:"):
+        return "opusarchitectreviewer"
+    return None
+
+
 def validate(repo_root: Path = REPO_ROOT) -> list[str]:
     errors: list[str] = []
     paperclips = repo_root / "paperclips"
@@ -359,6 +367,13 @@ def validate(repo_root: Path = REPO_ROOT) -> list[str]:
                 if marker not in bundle_text:
                     errors.append(
                         f"rule {rule_id} marker missing for {role_id}: {marker}"
+                    )
+            if rule_id == "full-phase-matrix":
+                destination = required_handoff_destination(role_id)
+                if destination and destination not in bundle_text:
+                    errors.append(
+                        f"rule {rule_id} handoff destination missing for "
+                        f"{role_id}: {destination}"
                     )
 
     return errors

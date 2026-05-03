@@ -220,3 +220,20 @@ def test_runbook_profile_requires_inline_rule(tmp_path: Path) -> None:
     errors = validate_instructions.validate(repo)
 
     assert any("has runbooks but does not require inline rules" in error for error in errors)
+
+
+def test_codex_full_handoff_requires_codex_architect_destination(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    bundle_path = repo / "paperclips" / "dist" / "codex" / "cx-code-reviewer.md"
+    bundle_path.write_text(
+        bundle_path.read_text().replace("CodexArchitectReviewer", "OpusArchitectReviewer")
+    )
+
+    errors = validate_instructions.validate(repo)
+
+    assert any(
+        "rule full-phase-matrix handoff destination missing for codex:cx-code-reviewer: "
+        "codexarchitectreviewer"
+        in error
+        for error in errors
+    )
