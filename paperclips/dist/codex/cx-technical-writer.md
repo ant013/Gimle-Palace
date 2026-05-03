@@ -389,6 +389,7 @@ When your phase is done, explicitly transfer ownership. Never leave an issue as
 
 Required handoff:
 
+- ALWAYS hand off by PATCHing `status + assigneeAgentId + comment` in one API call, then GET-verify the assignee; @mention-only handoff is invalid.
 - push the feature branch before handoff;
 - set the next-phase assignee explicitly;
 - @mention the next agent in the handoff comment;
