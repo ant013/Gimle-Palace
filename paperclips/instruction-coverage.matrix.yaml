@@ -110,7 +110,7 @@ rules:
   branch-spec-gate:
     required_profiles: [task-start]
     role_ids: all
-    markers: ["git fetch origin --prune", "docs/superpowers/specs"]
+    markers: ["git fetch origin --prune", "spec"]
   short-handoff:
     required_profiles: [handoff]
     role_ids:
@@ -186,4 +186,4 @@ rules:
       - codex:codex-architect-reviewer
       - codex:cx-research-agent
       - codex:cx-technical-writer
-    markers: ["citation", "source"]
+    markers: ["source"]
