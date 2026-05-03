@@ -228,7 +228,9 @@ class TestSymbolIndexSwiftHappyPath:
         repo = repos_root / "uw-ios-mini"
         repo.mkdir(parents=True)
         (repo / ".git").mkdir()
-        (repo / ".git" / "HEAD").write_text("0123456789abcdef0123456789abcdef01234567\n")
+        (repo / ".git" / "HEAD").write_text(
+            "0123456789abcdef0123456789abcdef01234567\n"
+        )
 
         result_mock = AsyncMock()
         result_mock.single = AsyncMock(return_value={"p": {"slug": "uw-ios-mini"}})

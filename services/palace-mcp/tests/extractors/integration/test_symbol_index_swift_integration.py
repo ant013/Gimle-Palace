@@ -13,15 +13,20 @@ from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
 from palace_mcp.extractors.runner import run_extractor
 from palace_mcp.extractors.schema import ensure_extractors_schema
 from palace_mcp.extractors.scip_parser import parse_scip_file
-from tests.extractors.fixtures.scip_factory import (
-    build_swift_scip_index,
-    write_scip_fixture,
+from tests.extractors.unit.test_real_scip_fixtures import (
+    _UW_IOS_N_DOCUMENTS,
+    _UW_IOS_TOOL_NAME,
+    requires_scip_uw_ios,
 )
 
 _RUN_ID = "swift-integration-run-001"
-_SELECT_QNAME = (
-    "UwMiniCore "
-    "s%3A10UwMiniCore11WalletStoreC6select8walletIDySi_tF"
+_SELECT_QNAME = "UwMiniCore s%3A10UwMiniCore11WalletStoreC6select8walletIDySi_tF"
+FIXTURE_SCIP = (
+    Path(__file__).parent.parent
+    / "fixtures"
+    / "uw-ios-mini-project"
+    / "scip"
+    / "index.scip"
 )
 
 
@@ -46,16 +51,21 @@ async def _project_and_repo(driver: AsyncDriver, tmp_path: Path) -> Path:
 
 
 @pytest.mark.integration
+@requires_scip_uw_ios
 class TestSymbolIndexSwiftIntegration:
     @pytest.mark.asyncio
     async def test_run_extractor_registers_and_ingests_all_three_phases(
-        self, driver: AsyncDriver, graphiti_mock: MagicMock, _project_and_repo: Path, tmp_path: Path
+        self,
+        driver: AsyncDriver,
+        graphiti_mock: MagicMock,
+        _project_and_repo: Path,
+        tmp_path: Path,
     ) -> None:
         await ensure_extractors_schema(driver)
-        scip_path = write_scip_fixture(build_swift_scip_index(), tmp_path / "swift.scip")
+        scip_path = FIXTURE_SCIP
         parsed = parse_scip_file(scip_path)
-        assert parsed.metadata.tool_info.name == "palace-swift-scip-emit"
-        assert len(parsed.documents) == 3
+        assert parsed.metadata.tool_info.name == _UW_IOS_TOOL_NAME
+        assert len(parsed.documents) == _UW_IOS_N_DOCUMENTS
 
         settings = MagicMock()
         settings.palace_scip_index_paths = {"uw-ios-mini": str(scip_path)}
