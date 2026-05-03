@@ -9,12 +9,19 @@
 2. **Python extractor** (NEW, `symbol_index_swift.py`) — structurally identical to `symbol_index_java.py`. Reads emitter output via existing `parse_scip_file`. Runs in palace-mcp container.
 3. **Fixture** (NEW, `uw-ios-mini-project/`) — hybrid SPM + Xcode app, ~30 files, regen via `palace-swift-scip-emit`. Pre-generated `.scip` committed.
 
-**Tech stack:** Python 3.12 (palace-mcp), Swift 6+ (emitter + fixture), Xcode 16+, XcodeGen, swiftlang/indexstore-db (pinned), apple/swift-protobuf, sourcegraph/scip proto, pytest, testcontainers/compose-reuse Neo4j, Tantivy.
+**Tech stack:** Python 3.12 (palace-mcp), Swift 6+ (emitter + fixture), Xcode 16+, XcodeGen, swiftlang/indexstore-db (pinned), apple/swift-protobuf, scip-code/scip proto, pytest, testcontainers/compose-reuse Neo4j, Tantivy.
 
 **Predecessor SHA:** `6492561` (GIM-127 Slice 1 Android merged 2026-04-30).
 **Spec:** `docs/superpowers/specs/2026-04-30-ios-swift-extractor-rev3.md`.
 **Phase 1.0 findings:** `docs/research/2026-05-01-swift-indexstore-spike.md`.
+**Phase 1.1 pin truth:** `docs/research/2026-05-03-gim-128-phase-1-1-pin-truth.md`.
 **Companion (NOT a blocker):** GIM-126 PR #70 (`find_references` lang-agnostic).
+
+**Phase 1.1 locked pins (2026-05-03):**
+- `indexstore-db`: `swiftlang/indexstore-db` revision `4ee7a49edc48e94361c3477623deeffb25dbed0d`. This is the current upstream `main` SHA used for API compatibility in this plan. Runtime proof that it reads Xcode 26 `Index.noindex/DataStore` records remains Task 3's hard gate; if Task 3 returns 0 USRs after diagnostics, stop and return to spec rev4.
+- `scip.proto`: `scip-code/scip` tag `v0.7.1`, sha256 `387f91bea3357a6ab72ae6214c569bf33fddcd3c726a8eacfa1435d65ac347e8`, size `32283` bytes. This matches the deployed Python proto line (`github.com/scip-code/scip/...`) in `palace_mcp.proto.scip_pb2`.
+- `swift-protobuf`: exact SPM tag `1.37.0` (`81558271e243f8f47dfe8e9fdd55f3c2b5413f68`). `protoc-gen-swift` must report `1.37.0`.
+- `protobuf`/`protoc`: Homebrew formula `protobuf` stable `34.1`; `protoc --version` must report `libprotoc 34.1`.
 
 ---
 
@@ -57,11 +64,10 @@ let package = Package(
         .executable(name: "palace-swift-scip-emit-cli", targets: ["PalaceSwiftScipEmitCLI"]),
     ],
     dependencies: [
-        // indexstore-db: pin SHA known to work on Xcode 16+ (CTO locks during Phase 1.1).
-        // SHA must successfully read Xcode 26's Index.noindex/DataStore on operator's dev Mac.
-        .package(url: "https://github.com/swiftlang/indexstore-db.git", revision: "TBD-pin-sha"),
-        // swift-protobuf: pin tag matching the protoc-gen-swift binary version available via brew.
-        .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.31.0"),
+        // indexstore-db: Phase 1.1 API-compatible pin. Task 3 proves runtime read against Xcode 26.
+        .package(url: "https://github.com/swiftlang/indexstore-db.git", revision: "4ee7a49edc48e94361c3477623deeffb25dbed0d"),
+        // swift-protobuf: exact tag matching protoc-gen-swift 1.37.0 from Homebrew swift-protobuf.
+        .package(url: "https://github.com/apple/swift-protobuf.git", exact: "1.37.0"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0"),
     ],
     targets: [
@@ -88,7 +94,7 @@ let package = Package(
 )
 ```
 
-The `revision: "TBD-pin-sha"` placeholder gets locked in Phase 1.1 by CTO. Pick a recent indexstore-db `main` SHA that the operator's Xcode 26 toolchain successfully reads. Verify by inspecting `git log` on the dependency.
+The `indexstore-db` revision is locked by CTO Phase 1.1. Task 3 is still the runtime proof: if this SHA cannot read the operator's Xcode 26 `Index.noindex/DataStore`, stop before Phase 2 and return to spec rev4 with diagnostic transcripts.
 
 - [ ] **Step 2: Write CLI main.swift skeleton (--help works)**
 
@@ -202,7 +208,7 @@ xcrun swift build -c release 2>&1 | tail -5
 
 Expected: build completes; --help prints usage including all flags.
 
-> **Note for CTO Phase 1.1:** Lock `indexstore-db` revision SHA in Package.swift before approving this task. Build will fail until SHA is real.
+> **Phase 1.1 pin:** `indexstore-db` is locked to `4ee7a49edc48e94361c3477623deeffb25dbed0d`. Build may succeed before runtime read is proven; Task 3 remains the hard stop if Xcode 26 records produce 0 USRs.
 
 - [ ] **Step 7: Commit**
 
@@ -220,14 +226,15 @@ git commit -m "chore(GIM-128): scip_emit_swift SPM scaffold — Core lib + CLI e
 - Create: `services/palace-mcp/scip_emit_swift/Sources/PalaceSwiftScipEmitCore/Proto/scip.pb.swift` (generated)
 - Create: `services/palace-mcp/scip_emit_swift/Tests/PalaceSwiftScipEmitCoreTests/ProtoSmokeTests.swift`
 
-- [ ] **Step 1: Vendor scip.proto from sourcegraph/scip**
+- [ ] **Step 1: Vendor scip.proto from scip-code/scip**
 
-Pin to a specific tag. CTO confirms exact tag during Phase 1.1 (must match `palace_mcp.proto.scip_pb2` Python proto version currently deployed). Recommendation: latest `v0.5.x` series tag.
+Pin to the exact tag confirmed during Phase 1.1: `scip-code/scip` `v0.7.1`. This matches the currently deployed Python proto line (`github.com/scip-code/scip/...` in `palace_mcp.proto.scip_pb2`).
 
 ```bash
 cd services/palace-mcp/scip_emit_swift/Sources/PalaceSwiftScipEmitCore/Proto/
-curl -sLO https://raw.githubusercontent.com/sourcegraph/scip/<PINNED_TAG>/scip.proto
-sha256sum scip.proto  # record hash for REGEN.md
+curl -fsSLo scip.proto https://raw.githubusercontent.com/scip-code/scip/v0.7.1/scip.proto
+shasum -a 256 scip.proto
+# Expected: 387f91bea3357a6ab72ae6214c569bf33fddcd3c726a8eacfa1435d65ac347e8  scip.proto
 ```
 
 - [ ] **Step 2: Generate scip.pb.swift**
@@ -236,8 +243,8 @@ Requires `protoc` + `protoc-gen-swift` plugin. Install if missing:
 
 ```bash
 brew install protobuf swift-protobuf
-protoc --version              # record version (e.g., libprotoc 25.1) — pin in REGEN.md
-protoc-gen-swift --version    # record version — must match swift-protobuf SPM dep
+protoc --version              # expected: libprotoc 34.1
+protoc-gen-swift --version    # expected: 1.37.0; must match swift-protobuf exact SPM dep
 ```
 
 Generate:
@@ -1692,7 +1699,8 @@ PROTOC_VERSION=$(protoc --version)
 PROTOC_GEN_SWIFT_VERSION=$(protoc-gen-swift --version 2>&1 | head -1)
 echo "protoc: $PROTOC_VERSION"
 echo "protoc-gen-swift: $PROTOC_GEN_SWIFT_VERSION"
-# Compare against pinned versions in REGEN.md; fail loud if mismatch.
+test "$PROTOC_VERSION" = "libprotoc 34.1"
+test "$PROTOC_GEN_SWIFT_VERSION" = "1.37.0"
 # (xcodegen + xcodebuild + xcrun swift versions also captured.)
 
 # 4. Build emitter (if not already built)
