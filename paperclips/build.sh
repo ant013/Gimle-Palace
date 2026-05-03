@@ -75,6 +75,24 @@ for role_file in "$ROLES_DIR"/*.md; do
   role_name=$(basename "$role_file")
   out_file="$OUT_DIR/$role_name"
   awk -v frag_dir="$FRAG_DIR" '
+    NR == 1 && $0 == "---" {
+      in_front_matter = 1
+      next
+    }
+    in_front_matter {
+      if ($0 == "---") {
+        in_front_matter = 0
+        skip_front_matter_gap = 1
+      }
+      next
+    }
+    skip_front_matter_gap && $0 == "" {
+      skip_front_matter_gap = 0
+      next
+    }
+    {
+      skip_front_matter_gap = 0
+    }
     /<!-- @include fragments\/.*\.md -->/ {
       match($0, /fragments\/[^ ]+\.md/)
       frag = substr($0, RSTART + 10, RLENGTH - 10)

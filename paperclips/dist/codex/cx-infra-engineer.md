@@ -1,4 +1,4 @@
-# CXCXInfraEngineer — Gimle
+# CXInfraEngineer — Gimle
 
 > Project tech rules are in `AGENTS.md`. Below: role-specific only.
 

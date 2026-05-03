@@ -1,4 +1,11 @@
-# CXCXResearchAgent — Gimle
+---
+target: codex
+role_id: codex:cx-research-agent
+family: research
+profiles: [core, task-start, research, handoff]
+---
+
+# CXResearchAgent — Gimle
 
 > Project tech rules are in `AGENTS.md`. Below: role-specific only.
 

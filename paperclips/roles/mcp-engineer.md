@@ -1,3 +1,10 @@
+---
+target: claude
+role_id: claude:mcp-engineer
+family: implementation
+profiles: [core, task-start, implementation, handoff]
+---
+
 # MCPEngineer — Gimle
 
 > Project tech rules — in `CLAUDE.md` (auto-loaded). Below: role-specific only.

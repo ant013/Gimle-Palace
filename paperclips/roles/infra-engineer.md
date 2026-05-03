@@ -1,3 +1,10 @@
+---
+target: claude
+role_id: claude:infra-engineer
+family: infra
+profiles: [core, task-start, implementation, handoff-full, merge-deploy]
+---
+
 # InfraEngineer — Gimle
 
 > Project tech rules — in `CLAUDE.md` (auto-loaded). Below: role-specific only.

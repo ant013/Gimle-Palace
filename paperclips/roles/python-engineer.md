@@ -1,3 +1,10 @@
+---
+target: claude
+role_id: claude:python-engineer
+family: implementation
+profiles: [core, task-start, implementation, handoff]
+---
+
 # PythonEngineer — Gimle
 
 > Project tech rules — in `CLAUDE.md` (auto-loaded). Below: role-specific only.

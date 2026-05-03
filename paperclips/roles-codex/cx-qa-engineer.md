@@ -1,4 +1,11 @@
-# CXCXQAEngineer — Gimle
+---
+target: codex
+role_id: codex:cx-qa-engineer
+family: qa
+profiles: [core, task-start, qa-smoke, implementation, handoff-full, merge-deploy]
+---
+
+# CXQAEngineer — Gimle
 
 > Project tech rules are in `AGENTS.md`. Below: role-specific only.
 

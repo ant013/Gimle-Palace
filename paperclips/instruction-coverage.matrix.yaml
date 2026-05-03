@@ -1,0 +1,189 @@
+# Task 1 safety matrix. Validators in later tasks should treat this file as
+# the machine-readable source of truth for required profile coverage.
+roles:
+  claude:blockchain-engineer:
+    target: claude
+    source: paperclips/roles/blockchain-engineer.md
+    family: implementation
+    profiles: [core, task-start, implementation, handoff]
+  claude:code-reviewer:
+    target: claude
+    source: paperclips/roles/code-reviewer.md
+    family: code-reviewer
+    profiles: [core, task-start, review, qa-smoke, handoff-full, merge-deploy]
+  claude:cto:
+    target: claude
+    source: paperclips/roles/cto.md
+    family: cto
+    profiles: [core, task-start, review, qa-smoke, handoff-full, merge-deploy]
+  claude:infra-engineer:
+    target: claude
+    source: paperclips/roles/infra-engineer.md
+    family: infra
+    profiles: [core, task-start, implementation, handoff-full, merge-deploy]
+  claude:mcp-engineer:
+    target: claude
+    source: paperclips/roles/mcp-engineer.md
+    family: implementation
+    profiles: [core, task-start, implementation, handoff]
+  claude:opus-architect-reviewer:
+    target: claude
+    source: paperclips/roles/opus-architect-reviewer.md
+    family: architect-reviewer
+    profiles: [core, task-start, review, qa-smoke, research, handoff-full]
+  claude:python-engineer:
+    target: claude
+    source: paperclips/roles/python-engineer.md
+    family: implementation
+    profiles: [core, task-start, implementation, handoff]
+  claude:qa-engineer:
+    target: claude
+    source: paperclips/roles/qa-engineer.md
+    family: qa
+    profiles: [core, task-start, qa-smoke, implementation, handoff-full, merge-deploy]
+  claude:research-agent:
+    target: claude
+    source: paperclips/roles/research-agent.md
+    family: research
+    profiles: [core, task-start, research, handoff]
+  claude:security-auditor:
+    target: claude
+    source: paperclips/roles/security-auditor.md
+    family: security-review
+    profiles: [core, task-start, review, research, handoff-full]
+  claude:technical-writer:
+    target: claude
+    source: paperclips/roles/technical-writer.md
+    family: writer
+    profiles: [core, task-start, research, handoff]
+  codex:codex-architect-reviewer:
+    target: codex
+    source: paperclips/roles-codex/codex-architect-reviewer.md
+    family: architect-reviewer
+    profiles: [core, task-start, review, qa-smoke, research, handoff-full]
+  codex:cx-code-reviewer:
+    target: codex
+    source: paperclips/roles-codex/cx-code-reviewer.md
+    family: code-reviewer
+    profiles: [core, task-start, review, qa-smoke, handoff-full, merge-deploy]
+  codex:cx-cto:
+    target: codex
+    source: paperclips/roles-codex/cx-cto.md
+    family: cto
+    profiles: [core, task-start, review, qa-smoke, handoff-full, merge-deploy]
+  codex:cx-infra-engineer:
+    target: codex
+    source: paperclips/roles-codex/cx-infra-engineer.md
+    family: infra
+    profiles: [core, task-start, implementation, handoff-full, merge-deploy]
+  codex:cx-mcp-engineer:
+    target: codex
+    source: paperclips/roles-codex/cx-mcp-engineer.md
+    family: implementation
+    profiles: [core, task-start, implementation, handoff]
+  codex:cx-python-engineer:
+    target: codex
+    source: paperclips/roles-codex/cx-python-engineer.md
+    family: implementation
+    profiles: [core, task-start, implementation, handoff]
+  codex:cx-qa-engineer:
+    target: codex
+    source: paperclips/roles-codex/cx-qa-engineer.md
+    family: qa
+    profiles: [core, task-start, qa-smoke, implementation, handoff-full, merge-deploy]
+  codex:cx-research-agent:
+    target: codex
+    source: paperclips/roles-codex/cx-research-agent.md
+    family: research
+    profiles: [core, task-start, research, handoff]
+  codex:cx-technical-writer:
+    target: codex
+    source: paperclips/roles-codex/cx-technical-writer.md
+    family: writer
+    profiles: [core, task-start, research, handoff]
+
+rules:
+  stale-session-heartbeat:
+    required_profiles: [core]
+    role_ids: all
+    markers: ["Source of truth", "idle exit"]
+  branch-spec-gate:
+    required_profiles: [task-start]
+    role_ids: all
+    markers: ["git fetch origin --prune", "docs/superpowers/specs"]
+  short-handoff:
+    required_profiles: [handoff]
+    role_ids:
+      - claude:blockchain-engineer
+      - claude:mcp-engineer
+      - claude:python-engineer
+      - claude:research-agent
+      - claude:technical-writer
+      - codex:cx-mcp-engineer
+      - codex:cx-python-engineer
+      - codex:cx-research-agent
+      - codex:cx-technical-writer
+    markers: ["handoff", "next agent"]
+  full-phase-matrix:
+    required_profiles: [handoff-full]
+    role_ids:
+      - claude:code-reviewer
+      - claude:cto
+      - claude:infra-engineer
+      - claude:opus-architect-reviewer
+      - claude:qa-engineer
+      - claude:security-auditor
+      - codex:codex-architect-reviewer
+      - codex:cx-code-reviewer
+      - codex:cx-cto
+      - codex:cx-infra-engineer
+      - codex:cx-qa-engineer
+    markers: ["Phase", "handoff"]
+  qa-evidence:
+    required_profiles: [qa-smoke]
+    role_ids:
+      - claude:code-reviewer
+      - claude:cto
+      - claude:opus-architect-reviewer
+      - claude:qa-engineer
+      - codex:codex-architect-reviewer
+      - codex:cx-code-reviewer
+      - codex:cx-cto
+      - codex:cx-qa-engineer
+    markers: ["Evidence", "smoke"]
+  merge-readiness:
+    required_profiles: [merge-deploy]
+    role_ids:
+      - claude:code-reviewer
+      - claude:cto
+      - claude:infra-engineer
+      - claude:qa-engineer
+      - codex:cx-code-reviewer
+      - codex:cx-cto
+      - codex:cx-infra-engineer
+      - codex:cx-qa-engineer
+    markers: ["mergeStateStatus", "merge-readiness"]
+  implementation-verification:
+    required_profiles: [implementation]
+    role_ids:
+      - claude:blockchain-engineer
+      - claude:infra-engineer
+      - claude:mcp-engineer
+      - claude:python-engineer
+      - claude:qa-engineer
+      - codex:cx-infra-engineer
+      - codex:cx-mcp-engineer
+      - codex:cx-python-engineer
+      - codex:cx-qa-engineer
+    markers: ["verification", "test"]
+  research-evidence:
+    required_profiles: [research]
+    role_ids:
+      - claude:opus-architect-reviewer
+      - claude:research-agent
+      - claude:security-auditor
+      - claude:technical-writer
+      - codex:codex-architect-reviewer
+      - codex:cx-research-agent
+      - codex:cx-technical-writer
+    markers: ["citation", "source"]
