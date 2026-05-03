@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -70,6 +70,30 @@ class EscalationConfig:
     comment_marker: str
 
 
+_HANDOFF_KNOWN_KEYS = frozenset(
+    {
+        "handoff_alert_enabled",
+        "handoff_comment_lookback_min",
+        "handoff_wrong_assignee_min",
+        "handoff_review_owner_min",
+        "handoff_comments_per_issue",
+        "handoff_max_issues_per_tick",
+        "handoff_alert_cooldown_min",
+    }
+)
+
+
+@dataclass(frozen=True)
+class HandoffConfig:
+    handoff_alert_enabled: bool = False
+    handoff_comment_lookback_min: int = 5
+    handoff_wrong_assignee_min: int = 3
+    handoff_review_owner_min: int = 5
+    handoff_comments_per_issue: int = 5
+    handoff_max_issues_per_tick: int = 30
+    handoff_alert_cooldown_min: int = 30
+
+
 @dataclass(frozen=True)
 class Config:
     version: int
@@ -79,6 +103,7 @@ class Config:
     cooldowns: CooldownsConfig
     logging: LoggingConfig
     escalation: EscalationConfig
+    handoff: HandoffConfig = field(default_factory=HandoffConfig)
 
 
 def _resolve_api_key(source: str) -> str | None:
@@ -227,6 +252,22 @@ def load_config(path: Path) -> Config:
         comment_marker=str(escalation_raw.get("comment_marker", "<!-- watchdog-escalation -->")),
     )
 
+    handoff_raw = raw.get("handoff") or {}
+    if not isinstance(handoff_raw, dict):
+        raise ConfigError("handoff section must be a mapping")
+    unknown = set(handoff_raw.keys()) - _HANDOFF_KNOWN_KEYS
+    if unknown:
+        raise ConfigError(f"handoff section has unknown keys: {sorted(unknown)}")
+    handoff = HandoffConfig(
+        handoff_alert_enabled=bool(handoff_raw.get("handoff_alert_enabled", False)),
+        handoff_comment_lookback_min=int(handoff_raw.get("handoff_comment_lookback_min", 5)),
+        handoff_wrong_assignee_min=int(handoff_raw.get("handoff_wrong_assignee_min", 3)),
+        handoff_review_owner_min=int(handoff_raw.get("handoff_review_owner_min", 5)),
+        handoff_comments_per_issue=int(handoff_raw.get("handoff_comments_per_issue", 5)),
+        handoff_max_issues_per_tick=int(handoff_raw.get("handoff_max_issues_per_tick", 30)),
+        handoff_alert_cooldown_min=int(handoff_raw.get("handoff_alert_cooldown_min", 30)),
+    )
+
     return Config(
         version=version,
         paperclip=paperclip,
@@ -235,4 +276,5 @@ def load_config(path: Path) -> Config:
         cooldowns=cooldowns,
         logging=logging_cfg,
         escalation=escalation,
+        handoff=handoff,
     )

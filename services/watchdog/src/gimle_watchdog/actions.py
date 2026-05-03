@@ -1,4 +1,4 @@
-"""Actions — trigger_respawn + kill_hanged_proc."""
+"""Actions — trigger_respawn + kill_hanged_proc + handoff alert."""
 
 from __future__ import annotations
 
@@ -8,8 +8,17 @@ import os
 import signal
 import subprocess
 from dataclasses import dataclass
+from datetime import datetime
 
 from gimle_watchdog.detection import HangedProc, PS_FILTER_TOKENS
+from gimle_watchdog.models import (
+    AlertResult,
+    CommentOnlyHandoffFinding,
+    Finding,
+    FindingType,
+    ReviewOwnedByImplementerFinding,
+    WrongAssigneeFinding,
+)
 from gimle_watchdog.paperclip import Issue, PaperclipClient, PaperclipError
 
 
@@ -108,3 +117,118 @@ async def kill_hanged_proc(proc: HangedProc) -> KillResult:
         return KillResult(pid=proc.pid, status="forced")
     except ProcessLookupError:
         return KillResult(pid=proc.pid, status="clean")
+
+
+# --- handoff alerts -------------------------------------------------------------
+
+_REASON: dict[FindingType, str] = {
+    FindingType.COMMENT_ONLY_HANDOFF: "@-mention from current assignee but assigneeAgentId not updated",
+    FindingType.WRONG_ASSIGNEE: "assigneeAgentId is not a hired agent",
+    FindingType.REVIEW_OWNED_BY_IMPLEMENTER: "in_review with implementer-class assignee",
+}
+
+_EXPECTED: dict[FindingType, str] = {
+    FindingType.COMMENT_ONLY_HANDOFF: "assigneeAgentId updated to mentioned agent; valid hired agent UUID required",
+    FindingType.WRONG_ASSIGNEE: "valid hired agent UUID required",
+    FindingType.REVIEW_OWNED_BY_IMPLEMENTER: "reassign to a code-reviewer-class agent",
+}
+
+
+def render_handoff_alert_comment(
+    finding: Finding,
+    version: str,
+    ts: datetime,
+    current_assignee_name: str | None,
+) -> str:
+    ftype = finding.type
+    ts_iso = ts.isoformat().replace("+00:00", "Z")
+    name_display = current_assignee_name or "(unknown)"
+
+    if isinstance(finding, CommentOnlyHandoffFinding):
+        assignee_id = finding.current_assignee_id
+        issue_number = finding.issue_number
+        status = finding.issue_status
+        extra_lines = [
+            f"- Mention comment: {finding.mention_comment_id}",
+            f"- Mentioned agent: {finding.mentioned_agent_id}",
+        ]
+    elif isinstance(finding, WrongAssigneeFinding):
+        assignee_id = finding.bogus_assignee_id
+        issue_number = finding.issue_number
+        status = finding.issue_status
+        extra_lines = []
+    else:
+        assert isinstance(finding, ReviewOwnedByImplementerFinding)
+        assignee_id = finding.implementer_assignee_id
+        issue_number = finding.issue_number
+        status = "in_review"
+        extra_lines = [
+            f"- Role: {finding.implementer_role_name} ({finding.implementer_role_class})"
+        ]
+
+    lines = [
+        f"## Watchdog handoff alert — {ftype}",
+        "",
+        f"Reason: {_REASON[ftype]}",
+        "",
+        "Detected state:",
+        f"- Issue: GIM-{issue_number} (status={status})",
+        f"- Current assignee: {assignee_id} ({name_display})",
+        f"- Expected: {_EXPECTED[ftype]}",
+        *extra_lines,
+        "",
+        f"Detector: gimle-watchdog v{version}, tick {ts_iso}.",
+        "This alert is informational; no automatic repair will be performed.",
+    ]
+    return "\n".join(lines)
+
+
+async def post_handoff_alert(
+    client: PaperclipClient,
+    finding: Finding,
+    version: str,
+    ts: datetime,
+    current_assignee_name: str | None,
+) -> AlertResult:
+    body = render_handoff_alert_comment(finding, version, ts, current_assignee_name)
+    try:
+        comment_id = await client.post_issue_comment(finding.issue_id, body)
+        log.info(
+            "handoff_alert_posted issue=%s type=%s comment=%s",
+            finding.issue_id,
+            finding.type,
+            comment_id,
+            extra={
+                "event": "handoff_alert_posted",
+                "issue_id": finding.issue_id,
+                "finding_type": str(finding.type),
+                "comment_id": comment_id,
+            },
+        )
+        return AlertResult(
+            finding_type=finding.type,
+            issue_id=finding.issue_id,
+            posted=True,
+            comment_id=comment_id,
+            error=None,
+        )
+    except Exception as exc:
+        log.warning(
+            "handoff_alert_failed issue=%s type=%s error=%s",
+            finding.issue_id,
+            finding.type,
+            exc,
+            extra={
+                "event": "handoff_alert_failed",
+                "issue_id": finding.issue_id,
+                "finding_type": str(finding.type),
+                "error": str(exc),
+            },
+        )
+        return AlertResult(
+            finding_type=finding.type,
+            issue_id=finding.issue_id,
+            posted=False,
+            comment_id=None,
+            error=str(exc),
+        )

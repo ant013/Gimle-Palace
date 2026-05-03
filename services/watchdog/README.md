@@ -38,6 +38,34 @@ gimle-watchdog uninstall                  # remove service
 
 **Filter drift.** If `status` shows `procs matching filter: 0` across multiple days while agents are active, Anthropic may have renamed `--append-system-prompt-file`. Update `PS_FILTER_TOKENS` in `src/gimle_watchdog/detection.py`.
 
+## Handoff alert detection (GIM-181)
+
+Watchdog also detects semantic handoff inconsistencies — situations where an
+agent failed to properly transfer ownership. This runs as Phase 3 in every tick
+(after the respawn pass) and is **alert-only** (no automatic repair).
+
+Enable in `~/.paperclip/watchdog-config.yaml`:
+
+```yaml
+handoff:
+  handoff_alert_enabled: true
+  handoff_alert_cooldown_min: 30  # minutes between re-alerts for the same issue
+```
+
+Detected finding types:
+
+- **`comment_only_handoff`** — agent @-mentioned a successor but never updated `assigneeAgentId`
+- **`wrong_assignee`** — `assigneeAgentId` references a UUID that is not a hired agent
+- **`review_owned_by_implementer`** — issue in `in_review` but assigned to an implementer (not a reviewer)
+
+Inspect alerts:
+
+```bash
+cat ~/.paperclip/watchdog.log | jq -c 'select(.event=="handoff_alert_posted")' | tail -20
+```
+
+Full runbook: `docs/runbooks/watchdog-handoff-alerts.md`
+
 ## Live smoke tests
 
 1. **Mid-work-died test**: create disposable paperclip issue assigned to idle agent. PATCH status=in_progress. Wait for Claude process spawn. `pkill -TERM` that process. Within 3-5 minutes, log should show `wake_result via=patch`.

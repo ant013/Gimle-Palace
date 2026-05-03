@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import threading
 import time
 from contextlib import contextmanager
@@ -13,6 +14,13 @@ from typing import Any
 import pytest
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    skip_marker = pytest.mark.skip(reason="PAPERCLIP_API_KEY not set")
+    for item in items:
+        if "requires_paperclip" in item.keywords and not os.environ.get("PAPERCLIP_API_KEY"):
+            item.add_marker(skip_marker)
 
 
 @dataclass

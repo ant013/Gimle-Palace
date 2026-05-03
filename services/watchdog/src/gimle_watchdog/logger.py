@@ -10,9 +10,37 @@ from logging.handlers import RotatingFileHandler
 from gimle_watchdog.config import LoggingConfig
 
 
+_STDLIB_RECORD_ATTRS = frozenset(
+    {
+        "name",
+        "msg",
+        "args",
+        "levelname",
+        "levelno",
+        "pathname",
+        "filename",
+        "module",
+        "exc_info",
+        "exc_text",
+        "stack_info",
+        "lineno",
+        "funcName",
+        "created",
+        "msecs",
+        "relativeCreated",
+        "thread",
+        "threadName",
+        "processName",
+        "process",
+        "message",
+        "taskName",
+    }
+)
+
+
 class _JSONFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
-        payload = {
+        payload: dict[str, object] = {
             "ts": datetime.fromtimestamp(record.created, tz=timezone.utc)
             .isoformat()
             .replace("+00:00", "Z"),
@@ -20,6 +48,10 @@ class _JSONFormatter(logging.Formatter):
             "name": record.name,
             "message": record.getMessage(),
         }
+        # Promote user-defined extra fields to top level for jq filtering.
+        for key, val in record.__dict__.items():
+            if key not in _STDLIB_RECORD_ATTRS and not key.startswith("_"):
+                payload[key] = val
         if record.exc_info:
             payload["exc"] = self.formatException(record.exc_info)
         return json.dumps(payload, default=str)
