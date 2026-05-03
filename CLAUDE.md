@@ -168,10 +168,12 @@ the container.
 | `gimle`      | `/Users/Shared/Ios/Gimle-Palace`                                                    | `/repos/gimle:ro`        |
 | `oz-v5-mini` | `services/palace-mcp/tests/extractors/fixtures/oz-v5-mini-project` (repo-relative) | `/repos/oz-v5-mini:ro`   |
 | `uw-android` | `/Users/Shared/Android/unstoppable-wallet-android`                                  | `/repos/uw-android:ro`   |
+| `uw-ios-mini`| `services/palace-mcp/tests/extractors/fixtures/uw-ios-mini-project` (repo-relative) | `/repos/uw-ios-mini:ro` |
+| `uw-ios`     | `/Users/Shared/Ios/unstoppable-wallet-ios`                                          | `/repos/uw-ios:ro`       |
 
 ### Non-iMac contributors
 
-Real-project bind-mounts (`gimle`, `uw-android`) use absolute Mac paths
+Real-project bind-mounts (`gimle`, `uw-android`, `uw-ios`) use absolute Mac paths
 (`/Users/Shared/...`) for operator-iMac convention. Non-iMac contributors
 should:
 
@@ -179,9 +181,6 @@ should:
 - Run `docker compose --profile review up` excluding affected services and use only
   fixture-based mounts (paths under `./services/palace-mcp/tests/extractors/fixtures/`)
   which work cross-platform.
-
-iOS-related mounts (`uw-ios`) intentionally NOT yet present — Slice 3 (iOS extractor)
-will add them. UW-ios may be cloned now as discretionary ops-prep but is not gated.
 
 **To add a new project:**
 1. Add a bind-mount entry to `docker-compose.yml` under `palace-mcp.volumes`:
@@ -242,6 +241,12 @@ invoked via MCP tool `palace.ingest.run_extractor(name, project)`.
   Rust/cbor2 transitive dep). Handles `.sol` files. Same 3-phase bootstrap as
   `symbol_index_python`. Uses `PALACE_SCIP_INDEX_PATHS` — set the project slug to the
   scip_emit/solidity output path. SCIP scheme: `scip-solidity ethereum <path> . <descriptor>`.
+- `symbol_index_swift` — Swift symbol indexer (GIM-128).
+  Reads a pre-generated `.scip` file emitted by
+  `services/palace-mcp/scip_emit_swift` from Apple IndexStoreDB on a dev Mac.
+  Handles `.swift` occurrences with the same 3-phase bootstrap as the other
+  SCIP-backed extractors. Uses `PALACE_SCIP_INDEX_PATHS` — merge-gate fixture
+  slug is `uw-ios-mini`; optional real-source follow-up slug is `uw-ios`.
 
 ### Operator workflow: Java/Kotlin symbol index
 
@@ -298,6 +303,50 @@ auto-mode; pin to AGP ≤8.13.x until upstream fixes (GIM-127; Sourcegraph issue
 5. Query (after GIM-126 lands; currently use `palace.memory.lookup`):
    ```
    palace.code.find_references(qualified_name="WalletDao", project="uw-android")
+   ```
+
+### Operator workflow: iOS Swift symbol index
+
+Swift indexing uses the custom emitter package at
+`services/palace-mcp/scip_emit_swift`, which reads Apple IndexStoreDB and emits
+canonical SCIP protobuf for the Python-side `symbol_index_swift` extractor.
+
+Track A is the merge gate and uses the committed fixture:
+
+1. Set env var for palace-mcp container in `.env`:
+   ```
+   PALACE_SCIP_INDEX_PATHS={..., "uw-ios-mini":"/repos/uw-ios-mini/scip/index.scip"}
+   ```
+
+2. Run the extractor on the committed fixture:
+   ```
+   palace.ingest.run_extractor(name="symbol_index_swift", project="uw-ios-mini")
+   ```
+
+3. Query references once the ingest succeeds:
+   ```
+   palace.code.find_references(qualified_name="UwMiniCore WalletStore", project="uw-ios-mini")
+   ```
+
+Track B is optional real-source follow-up on a dev Mac:
+
+1. Clone the real project on the operator host:
+   ```bash
+   git clone https://github.com/horizontalsystems/unstoppable-wallet-ios.git \
+     /Users/Shared/Ios/unstoppable-wallet-ios
+   ```
+
+2. Build and emit SCIP on the dev Mac with the locked toolchain described in:
+   `services/palace-mcp/tests/extractors/fixtures/uw-ios-mini-project/REGEN.md`
+
+3. Set env var for palace-mcp container in `.env`:
+   ```
+   PALACE_SCIP_INDEX_PATHS={..., "uw-ios":"/repos/uw-ios/scip/index.scip"}
+   ```
+
+4. Run the extractor on the real-source index:
+   ```
+   palace.ingest.run_extractor(name="symbol_index_swift", project="uw-ios")
    ```
 
 ### Operator workflow: Python symbol index

@@ -1,0 +1,4 @@
+.derived-data/
+.index-store/
+.build/
+scip/*.tmp
