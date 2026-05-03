@@ -10,6 +10,8 @@ from typing import Any
 
 import httpx
 
+from gimle_watchdog.models import Agent, Comment
+
 
 log = logging.getLogger("watchdog.paperclip")
 
@@ -30,6 +32,7 @@ class Issue:
     execution_run_id: str | None
     status: str
     updated_at: datetime
+    issue_number: int = 0
 
 
 async def _sleep(seconds: float) -> None:
@@ -48,6 +51,30 @@ def _issue_from_json(data: dict[str, Any]) -> Issue:
         execution_run_id=data.get("executionRunId"),
         status=str(data.get("status", "")),
         updated_at=_parse_iso(str(data.get("updatedAt", "1970-01-01T00:00:00Z"))),
+        issue_number=int(data.get("issueNumber") or 0),
+    )
+
+
+def _comment_from_json(data: dict[str, Any]) -> Comment:
+    raw_ts = str(data.get("createdAt", ""))
+    # Parse without tz coercion first to detect naive timestamps.
+    dt_raw = datetime.fromisoformat(raw_ts.replace("Z", "+00:00"))
+    if dt_raw.tzinfo is None:
+        raise PaperclipError(f"comment createdAt is naive (server contract violation): {raw_ts!r}")
+    dt = dt_raw.astimezone(timezone.utc)
+    return Comment(
+        id=str(data["id"]),
+        body=str(data.get("body", "")),
+        author_agent_id=data.get("authorAgentId"),
+        created_at=dt,
+    )
+
+
+def _agent_from_json(data: dict[str, Any]) -> Agent:
+    return Agent(
+        id=str(data["id"]),
+        name=str(data.get("name", "")),
+        status=str(data.get("status", "")),
     )
 
 
@@ -122,5 +149,25 @@ class PaperclipClient:
     async def post_release(self, issue_id: str) -> None:
         await self._request("POST", f"/api/issues/{issue_id}/release")
 
-    async def post_issue_comment(self, issue_id: str, body: str) -> None:
-        await self._request("POST", f"/api/issues/{issue_id}/comments", json={"body": body})
+    async def post_issue_comment(self, issue_id: str, body: str) -> str | None:
+        resp = await self._request("POST", f"/api/issues/{issue_id}/comments", json={"body": body})
+        data = resp.json()
+        if isinstance(data, dict):
+            return str(data.get("id", "")) or None
+        return None
+
+    async def list_recent_comments(self, issue_id: str, limit: int = 5) -> list[Comment]:
+        """GET /api/issues/{issue_id}/comments?limit={N}. Returns tz-aware UTC Comment list."""
+        resp = await self._request("GET", f"/api/issues/{issue_id}/comments?limit={limit}")
+        data = resp.json()
+        if not isinstance(data, list):
+            raise PaperclipError(f"expected list from comments, got {type(data).__name__}")
+        return [_comment_from_json(d) for d in data]
+
+    async def list_company_agents(self, company_id: str) -> list[Agent]:
+        """GET /api/companies/{company_id}/agents. Returns all hired Agent dataclasses."""
+        resp = await self._request("GET", f"/api/companies/{company_id}/agents")
+        data = resp.json()
+        if not isinstance(data, list):
+            raise PaperclipError(f"expected list from agents, got {type(data).__name__}")
+        return [_agent_from_json(d) for d in data]

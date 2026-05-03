@@ -1,0 +1,13 @@
+[
+  {
+    "id": "bbb00001-0000-0000-0000-000000000001",
+    "companyId": "9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64",
+    "issueId": "issue-co-handoff-1",
+    "authorAgentId": "127068ee-b564-4b37-9370-616c81c63f35",
+    "authorUserId": null,
+    "createdByRunId": "run-002",
+    "body": "[@CodeReviewer](agent://bd2d7e20-7ed8-474c-91fc-353d610f4c52?i=eye) please review.",
+    "createdAt": "2026-05-03T09:00:00Z",
+    "updatedAt": "2026-05-03T09:00:00Z"
+  }
+]

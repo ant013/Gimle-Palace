@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import json as _json
 from datetime import datetime, timezone
+from pathlib import Path
 
 import httpx
 import pytest
 
 from gimle_watchdog import paperclip as pc
 import gimle_watchdog.paperclip as _pc_mod
+
+_FIXTURES = Path(__file__).parent / "fixtures"
 
 
 BASE = "http://paperclip.test"
@@ -197,4 +201,146 @@ async def test_401_terminal_no_retry():
             await client.list_in_progress_issues(CO_ID)
         assert call_count == 1
     finally:
+        await client.aclose()
+
+
+# ---------------------------------------------------------------------------
+# T3: list_recent_comments + list_company_agents
+# ---------------------------------------------------------------------------
+
+_COMMENT_JSON = {
+    "id": "cmt-001",
+    "companyId": CO_ID,
+    "issueId": ISSUE_ID,
+    "authorAgentId": "127068ee-b564-4b37-9370-616c81c63f35",
+    "authorUserId": None,
+    "createdByRunId": "run-001",
+    "body": "[@CodeReviewer](agent://bd2d7e20-7ed8-474c-91fc-353d610f4c52?i=eye) LGTM",
+    "createdAt": "2026-05-03T10:00:00Z",
+    "updatedAt": "2026-05-03T10:00:00Z",
+}
+
+_AGENT_JSON = {
+    "id": "7fb0fdbb-e17f-4487-a4da-16993a907bec",
+    "companyId": CO_ID,
+    "name": "CTO",
+    "role": "engineer",
+    "title": "CTO",
+    "icon": "crown",
+    "status": "idle",
+    "reportsTo": None,
+    "createdAt": "2026-04-14T00:00:00Z",
+    "updatedAt": "2026-05-03T10:00:00Z",
+}
+
+
+@pytest.mark.asyncio
+async def test_list_recent_comments_returns_parsed_objects():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert str(request.url) == f"{BASE}/api/issues/{ISSUE_ID}/comments?limit=5"
+        return httpx.Response(200, json=[_COMMENT_JSON])
+
+    client = await _client_with_mock(handler)
+    try:
+        comments = await client.list_recent_comments(ISSUE_ID)
+        assert len(comments) == 1
+        c = comments[0]
+        assert c.id == "cmt-001"
+        assert c.body == _COMMENT_JSON["body"]
+        assert c.author_agent_id == "127068ee-b564-4b37-9370-616c81c63f35"
+        assert c.created_at == datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc)
+        assert c.created_at.tzinfo is not None
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_list_recent_comments_handles_empty_response():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[])
+
+    client = await _client_with_mock(handler)
+    try:
+        comments = await client.list_recent_comments(ISSUE_ID)
+        assert comments == []
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_list_recent_comments_propagates_429():
+    original_sleep = _pc_mod._sleep
+    _pc_mod._sleep = _noop_sleep
+    call_count = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal call_count
+        call_count += 1
+        return httpx.Response(429, json={"error": "slow_down"})
+
+    client = await _client_with_mock(handler)
+    try:
+        with pytest.raises(pc.PaperclipError):
+            await client.list_recent_comments(ISSUE_ID)
+        assert call_count > 1  # retried
+    finally:
+        _pc_mod._sleep = original_sleep
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_list_recent_comments_rejects_naive_created_at():
+    naive_comment = dict(_COMMENT_JSON, createdAt="2026-05-03T10:00:00")  # no tz
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[naive_comment])
+
+    client = await _client_with_mock(handler)
+    try:
+        with pytest.raises((pc.PaperclipError, ValueError)):
+            await client.list_recent_comments(ISSUE_ID)
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_list_company_agents_returns_parsed_objects():
+    fixture = _json.loads((_FIXTURES / "company_agents.json").read_text())
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert str(request.url) == f"{BASE}/api/companies/{CO_ID}/agents"
+        return httpx.Response(200, json=fixture)
+
+    client = await _client_with_mock(handler)
+    try:
+        agents = await client.list_company_agents(CO_ID)
+        assert len(agents) == 3
+        names = {a.name for a in agents}
+        assert "CTO" in names
+        assert "CodeReviewer" in names
+        assert "PythonEngineer" in names
+        # All have ids
+        assert all(a.id for a in agents)
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_list_company_agents_propagates_429():
+    original_sleep = _pc_mod._sleep
+    _pc_mod._sleep = _noop_sleep
+    call_count = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal call_count
+        call_count += 1
+        return httpx.Response(429, json={"error": "slow_down"})
+
+    client = await _client_with_mock(handler)
+    try:
+        with pytest.raises(pc.PaperclipError):
+            await client.list_company_agents(CO_ID)
+        assert call_count > 1
+    finally:
+        _pc_mod._sleep = original_sleep
         await client.aclose()

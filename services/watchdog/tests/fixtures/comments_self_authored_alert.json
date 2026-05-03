@@ -1,0 +1,13 @@
+[
+  {
+    "id": "ccc00001-0000-0000-0000-000000000001",
+    "companyId": "9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64",
+    "issueId": "issue-self-alert-1",
+    "authorAgentId": null,
+    "authorUserId": null,
+    "createdByRunId": "run-watchdog-003",
+    "body": "## Watchdog handoff alert — comment_only_handoff\n\nReason: @-mention from current assignee but assigneeAgentId not updated\n\nDetected state:\n- Issue: GIM-42 (status=in_progress)\n- Current assignee: 127068ee-b564-4b37-9370-616c81c63f35 (PythonEngineer)\n- Expected: assigneeAgentId should be bd2d7e20-7ed8-474c-91fc-353d610f4c52 per comment bbb00001-0000-0000-0000-000000000001\n\nDetector: gimle-watchdog v0.2.0, tick 2026-05-03T10:05:00Z.\nThis alert is informational; no automatic repair will be performed.",
+    "createdAt": "2026-05-03T10:05:00Z",
+    "updatedAt": "2026-05-03T10:05:00Z"
+  }
+]
