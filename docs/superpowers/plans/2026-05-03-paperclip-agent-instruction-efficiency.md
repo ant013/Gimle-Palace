@@ -30,11 +30,16 @@ without reading the full incident narrative.
 | Decision | Value |
 |---|---|
 | Role/profile declaration | YAML front matter before first heading |
+| Generated bundle metadata | builder strips YAML front matter from `dist` |
+| Coverage source of truth | `paperclips/instruction-coverage.matrix.yaml` |
+| Role identity | canonical IDs: `<target>:<role-file-stem>` |
 | Initial size enforcement | baseline bytes/lines plus no-growth guard |
+| Baseline file | `paperclips/bundle-size-baseline.json` |
+| Allowlist file | `paperclips/bundle-size-allowlist.json` |
 | Growth failure threshold | generated bundle grows more than 10 percent |
 | New fragment warning | above 2 KB |
 | New fragment failure | above 3 KB unless allowlisted |
-| `handoff-full` default roles | CTO, CodeReviewer, ArchitectReviewer, QAEngineer |
+| `handoff-full` default roles | `cto`, `code-reviewer`, `architect-reviewer`, `qa` families, resolved to explicit Claude/Codex role IDs |
 | Other roles | short `handoff` profile by default |
 | Lesson text | runbook/lesson files, not repeated in every generated bundle |
 
@@ -44,18 +49,23 @@ without reading the full incident narrative.
 **Files:**
 - `paperclips/roles/*.md`
 - `paperclips/roles-codex/*.md`
-- new validator/report output as needed
+- `paperclips/instruction-coverage.matrix.yaml`
+- `paperclips/bundle-size-baseline.json`
 
 **Work:**
 - Record current bytes and line counts for all generated Claude and Codex
   bundles.
 - Add profile declarations to role files without removing existing includes.
-- Add a reviewable safety coverage matrix file or embedded validator data.
+- Add canonical role IDs using `<target>:<role-file-stem>`.
+- Add machine-readable safety coverage matrix data.
 
 **Acceptance:**
 - Every Claude and Codex role declares `target` and `profiles`.
 - Baseline report covers `paperclips/dist/*.md` and
   `paperclips/dist/codex/*.md`.
+- Baseline data is committed to `paperclips/bundle-size-baseline.json`.
+- Coverage matrix is committed to `paperclips/instruction-coverage.matrix.yaml`
+  and references explicit role IDs.
 - No generated bundle content is slimmed in this task.
 
 ## Task 2: Validators Without Slimming
@@ -64,10 +74,12 @@ without reading the full incident narrative.
 **Files:**
 - `paperclips/build.sh`
 - `paperclips/validate-codex-target.sh`
+- `paperclips/bundle-size-allowlist.json`
 - new validation script if cleaner
 
 **Work:**
 - Validate YAML profile declarations.
+- Strip YAML front matter from generated bundles.
 - Validate required profiles against the safety coverage matrix.
 - Add bundle-size reporting.
 - Fail only on new no-growth violations or malformed declarations.
@@ -77,6 +89,9 @@ without reading the full incident narrative.
 - Codex build still emits `paperclips/dist/codex/*.md`.
 - Codex validation still rejects Claude-only runtime assumptions.
 - Validator reports size, profile coverage, and missing required rules.
+- Generated bundles do not contain source role YAML front matter.
+- No-growth exceptions must be listed in
+  `paperclips/bundle-size-allowlist.json`.
 
 ## Task 3: Pilot Profile Split
 
@@ -98,38 +113,43 @@ without reading the full incident narrative.
 - Safety matrix has no missing required rules for pilot roles.
 - Reviewer can identify where each required rule came from.
 
-## Task 4: Claude Target Rollout
+## Task 4: Symmetric Role-Group Rollout
 
 **Owner:** implementation engineer
 **Dependencies:** Tasks 1-3 reviewed
 
 **Work:**
-- Apply profile split to Claude roles by role group.
+- Apply profile split by role group across Claude and Codex together.
+- Preferred order: reviewers, QA, implementation engineers, research/writer,
+  then CTO/infra/architect.
 - Avoid keeping heavy fragments in roles that only need short mandatory rules.
-- Preserve Claude-specific runtime text where it is actually required.
+- Preserve Claude production-baseline behavior.
+- Preserve Codex runtime behavior.
 
 **Acceptance:**
 - All Claude bundles build.
-- All Claude roles pass profile coverage validation.
+- All Codex bundles build.
+- All changed Claude and Codex roles pass profile coverage validation.
 - Future target bands are reported, but existing oversize roles are not failed
   solely for missing the future band.
 
-## Task 5: Codex Target Rollout
+## Task 5: Target-Specific Cleanup
 
 **Owner:** implementation engineer
 **Dependencies:** Tasks 1-4 reviewed
 
 **Work:**
-- Apply the same profile model to Codex roles.
 - Replace broad post-build string substitutions with target-aware fragments
   where practical.
 - Keep Codex instructions grounded in `AGENTS.md`, `codebase-memory`, `serena`,
   Codex agents, and Codex skills only where the role needs them.
+- Keep Claude-specific runtime text only where Claude roles need it.
 
 **Acceptance:**
-- All Codex bundles build.
+- All Claude and Codex bundles build.
 - `paperclips/validate-codex-target.sh` passes.
 - Codex bundles do not contain Claude-only runtime assumptions.
+- Claude bundles do not lose required production-baseline safety behavior.
 
 ## Task 6: Shared Fragments Upstream
 
@@ -177,10 +197,20 @@ find paperclips/dist -maxdepth 2 -type f -name '*.md' -print0 | xargs -0 wc -c |
 find paperclips/dist -maxdepth 2 -type f -name '*.md' -print0 | xargs -0 wc -l | sort -n
 ```
 
+Validator-specific checks:
+
+```bash
+test -f paperclips/instruction-coverage.matrix.yaml
+test -f paperclips/bundle-size-baseline.json
+test -f paperclips/bundle-size-allowlist.json
+```
+
 ## Review Gates
 
 1. Spec and plan committed and pushed to the feature branch.
 2. Plan-first review confirms the safety coverage matrix is specific enough.
 3. Implementation begins only after approval.
 4. Pilot split is reviewed before broad Claude/Codex rollout.
-5. Live deploy is a separate approved step after generated bundles pass review.
+5. Broad rollout proceeds by symmetric role groups, not all Claude before all
+   Codex.
+6. Live deploy is a separate approved step after generated bundles pass review.
