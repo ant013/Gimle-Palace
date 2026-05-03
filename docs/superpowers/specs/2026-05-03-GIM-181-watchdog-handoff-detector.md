@@ -2,7 +2,7 @@
 slug: watchdog-handoff-detector
 status: proposed
 branch: feature/GIM-181-watchdog-handoff-detector
-paperclip_issue: 180
+paperclip_issue: 181
 predecessor: 9262aca (fix: require atomic paperclip handoffs — PR #77)
 date: 2026-05-03
 ---

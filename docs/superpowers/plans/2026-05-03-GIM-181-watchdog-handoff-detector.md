@@ -2,7 +2,7 @@
 slug: watchdog-handoff-detector
 status: proposed
 branch: feature/GIM-181-watchdog-handoff-detector
-paperclip_issue: 180
+paperclip_issue: 181
 spec: docs/superpowers/specs/2026-05-03-GIM-181-watchdog-handoff-detector.md
 predecessor: 9262aca
 date: 2026-05-03
