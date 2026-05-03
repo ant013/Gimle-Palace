@@ -1,3 +1,10 @@
+---
+target: claude
+role_id: claude:cto
+family: cto
+profiles: [core, task-start, review, qa-smoke, handoff-full, merge-deploy]
+---
+
 # CTO — Gimle
 
 > Project tech rules — in `CLAUDE.md` (auto-loaded by Claude CLI). Below: role-specific only.

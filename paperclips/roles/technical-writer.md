@@ -1,3 +1,10 @@
+---
+target: claude
+role_id: claude:technical-writer
+family: writer
+profiles: [core, task-start, research, handoff]
+---
+
 # TechnicalWriter — Gimle
 
 > Project tech rules — in `CLAUDE.md` (auto-loaded). Below: role-specific only.

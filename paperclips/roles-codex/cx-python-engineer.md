@@ -1,4 +1,11 @@
-# CXCXPythonEngineer — Gimle
+---
+target: codex
+role_id: codex:cx-python-engineer
+family: implementation
+profiles: [core, task-start, implementation, handoff]
+---
+
+# CXPythonEngineer — Gimle
 
 > Project tech rules are in `AGENTS.md`. Below: role-specific only.
 

@@ -1,3 +1,10 @@
+---
+target: claude
+role_id: claude:research-agent
+family: research
+profiles: [core, task-start, research, handoff]
+---
+
 # ResearchAgent — Gimle
 
 > Project tech rules — in `CLAUDE.md` (auto-loaded). Below: role-specific only.

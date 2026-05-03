@@ -1,4 +1,11 @@
-# CXCXTechnicalWriter — Gimle
+---
+target: codex
+role_id: codex:cx-technical-writer
+family: writer
+profiles: [core, task-start, research, handoff]
+---
+
+# CXTechnicalWriter — Gimle
 
 > Project tech rules are in `AGENTS.md`. Below: role-specific only.
 

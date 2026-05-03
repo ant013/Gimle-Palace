@@ -1,3 +1,10 @@
+---
+target: claude
+role_id: claude:qa-engineer
+family: qa
+profiles: [core, task-start, qa-smoke, implementation, handoff-full, merge-deploy]
+---
+
 # QAEngineer — Gimle
 
 > Project tech rules — in `CLAUDE.md` (auto-loaded). Below: role-specific only.

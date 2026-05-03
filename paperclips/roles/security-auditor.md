@@ -1,3 +1,10 @@
+---
+target: claude
+role_id: claude:security-auditor
+family: security-review
+profiles: [core, task-start, review, research, handoff-full]
+---
+
 # SecurityAuditor — Gimle
 
 > Project tech rules — in `CLAUDE.md` (auto-loaded). Below: role-specific only.

@@ -1,4 +1,11 @@
-# CXCXMCPEngineer — Gimle
+---
+target: codex
+role_id: codex:cx-mcp-engineer
+family: implementation
+profiles: [core, task-start, implementation, handoff]
+---
+
+# CXMCPEngineer — Gimle
 
 > Project tech rules are in `AGENTS.md`. Below: role-specific only.
 

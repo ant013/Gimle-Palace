@@ -1,3 +1,10 @@
+---
+target: codex
+role_id: codex:cx-cto
+family: cto
+profiles: [core, task-start, review, qa-smoke, handoff-full, merge-deploy]
+---
+
 # CXCTO — Gimle
 
 > Project tech rules are in `AGENTS.md`. Below: role-specific only.

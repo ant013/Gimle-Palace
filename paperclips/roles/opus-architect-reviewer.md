@@ -1,3 +1,10 @@
+---
+target: claude
+role_id: claude:opus-architect-reviewer
+family: architect-reviewer
+profiles: [core, task-start, review, qa-smoke, research, handoff-full]
+---
+
 # OpusArchitectReviewer — Gimle
 
 > Project tech rules — in `CLAUDE.md` (auto-loaded). Below: role-specific only.
