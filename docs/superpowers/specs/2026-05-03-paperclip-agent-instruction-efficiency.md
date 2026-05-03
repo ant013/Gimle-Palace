@@ -164,25 +164,81 @@ output contains the required profile fragments. Existing `@include` expansion
 can remain during migration, but profile metadata becomes the reviewable source
 of truth for which rules belong to each role.
 
+Generated bundles must not include this YAML front matter. The builder should
+strip the metadata block from `paperclips/dist/*.md` and
+`paperclips/dist/codex/*.md`; validators should read metadata from source role
+files before build output is written.
+
+## Canonical Role IDs
+
+Validators must use canonical role IDs instead of display names or loose role
+classes. The canonical ID format is:
+
+```text
+<target>:<role-file-stem>
+```
+
+Initial role IDs:
+
+| Role ID | Source file | Family |
+|---|---|---|
+| `claude:blockchain-engineer` | `paperclips/roles/blockchain-engineer.md` | `implementation` |
+| `claude:code-reviewer` | `paperclips/roles/code-reviewer.md` | `code-reviewer` |
+| `claude:cto` | `paperclips/roles/cto.md` | `cto` |
+| `claude:infra-engineer` | `paperclips/roles/infra-engineer.md` | `infra` |
+| `claude:mcp-engineer` | `paperclips/roles/mcp-engineer.md` | `implementation` |
+| `claude:opus-architect-reviewer` | `paperclips/roles/opus-architect-reviewer.md` | `architect-reviewer` |
+| `claude:python-engineer` | `paperclips/roles/python-engineer.md` | `implementation` |
+| `claude:qa-engineer` | `paperclips/roles/qa-engineer.md` | `qa` |
+| `claude:research-agent` | `paperclips/roles/research-agent.md` | `research` |
+| `claude:security-auditor` | `paperclips/roles/security-auditor.md` | `security-review` |
+| `claude:technical-writer` | `paperclips/roles/technical-writer.md` | `writer` |
+| `codex:codex-architect-reviewer` | `paperclips/roles-codex/codex-architect-reviewer.md` | `architect-reviewer` |
+| `codex:cx-code-reviewer` | `paperclips/roles-codex/cx-code-reviewer.md` | `code-reviewer` |
+| `codex:cx-cto` | `paperclips/roles-codex/cx-cto.md` | `cto` |
+| `codex:cx-infra-engineer` | `paperclips/roles-codex/cx-infra-engineer.md` | `infra` |
+| `codex:cx-mcp-engineer` | `paperclips/roles-codex/cx-mcp-engineer.md` | `implementation` |
+| `codex:cx-python-engineer` | `paperclips/roles-codex/cx-python-engineer.md` | `implementation` |
+| `codex:cx-qa-engineer` | `paperclips/roles-codex/cx-qa-engineer.md` | `qa` |
+| `codex:cx-research-agent` | `paperclips/roles-codex/cx-research-agent.md` | `research` |
+| `codex:cx-technical-writer` | `paperclips/roles-codex/cx-technical-writer.md` | `writer` |
+
+The coverage validator should resolve role families to explicit role IDs before
+checking generated bundles. Review summaries may mention role families, but the
+machine-readable source must list exact role IDs.
+
 ## Safety Coverage Matrix
 
-The first implementation slice must create a machine-readable or
-review-friendly matrix with this minimum content:
+The first implementation slice must create a machine-readable matrix at:
+
+```text
+paperclips/instruction-coverage.matrix.yaml
+```
+
+This file is the source of truth for validator coverage. The table below is a
+human-readable summary of the minimum content:
 
 | Rule area | Risk guarded | Required profiles | Required roles | Validation check |
 |---|---|---|---|---|
 | stale-session / heartbeat | agent acts from stale memory or idle wake | `core` | all roles | all bundles include concise source-of-truth and idle rule |
 | branch/spec gate | implementation starts before reviewed scope | `task-start` | all active roles | profile manifest and generated bundle check |
 | short handoff | issue becomes ownerless between phases | `handoff` | all roles | generated bundle includes mandatory handoff rule |
-| full phase matrix | QA/review/merge gate is skipped | `handoff-full` | CTO, CodeReviewer, ArchitectReviewer, QAEngineer | generated bundle includes phase matrix or approved runbook reference |
-| QA evidence | weak or fake smoke evidence reaches merge | `qa-smoke` | QAEngineer, CodeReviewer, ArchitectReviewer, CTO | bundle includes evidence checklist or structured schema reference |
-| merge readiness | PR closes without tested merge/deploy state | `merge-deploy` | CTO, InfraEngineer, QAEngineer | bundle includes merge/deploy pre-close checklist |
-| implementation verification | code lands without tests/commands | `implementation` | engineer roles, QAEngineer | bundle includes test/verification checklist |
-| research evidence | uncited claims drive architecture | `research` | ResearchAgent, ArchitectReviewer | bundle includes citation/source rule |
+| full phase matrix | QA/review/merge gate is skipped | `handoff-full` | `cto`, `code-reviewer`, `architect-reviewer`, `qa` families resolved to explicit role IDs | generated bundle includes phase matrix or approved runbook reference |
+| QA evidence | weak or fake smoke evidence reaches merge | `qa-smoke` | `qa`, `code-reviewer`, `architect-reviewer`, `cto` families resolved to explicit role IDs | bundle includes evidence checklist or structured schema reference |
+| merge readiness | PR closes without tested merge/deploy state | `merge-deploy` | `cto`, `infra`, `qa` families resolved to explicit role IDs | bundle includes merge/deploy pre-close checklist |
+| implementation verification | code lands without tests/commands | `implementation` | `implementation`, `qa` families resolved to explicit role IDs | bundle includes test/verification checklist |
+| research evidence | uncited claims drive architecture | `research` | `research`, `architect-reviewer` families resolved to explicit role IDs | bundle includes citation/source rule |
 
 Reviewers should use this matrix as the oracle for safety preservation. A
 bundle-size reduction is not acceptable if it removes a required rule without
 an equivalent short rule or runbook-backed profile.
+
+The YAML format should include:
+
+- role IDs and their source files, targets, families, and required profiles;
+- rule IDs, required profiles, explicit role IDs, and validation markers;
+- allowlisted runbook references, if a rule is backed by a runbook rather than
+  full inline text.
 
 ## Runbook Access Model
 
@@ -211,6 +267,17 @@ baseline-first policy:
 - New validation fails if a generated bundle grows more than 10 percent from
   the recorded baseline without an explicit allowlist entry.
 - New fragments warn above 2 KB and fail above 3 KB unless allowlisted.
+
+The baseline and allowlist must be stored in fixed paths:
+
+```text
+paperclips/bundle-size-baseline.json
+paperclips/bundle-size-allowlist.json
+```
+
+The baseline file records generated bundle path, target, role ID, byte count,
+line count, and measurement commit. The allowlist file records explicit
+exceptions with reason, owner, expiry/review date, and the rule it overrides.
 
 Post-split target bands:
 
@@ -263,12 +330,19 @@ Required behavior:
 - `paperclips/fragments/shared/fragments/**`
 - `paperclips/build.sh`
 - `paperclips/validate-codex-target.sh`
+- `paperclips/instruction-coverage.matrix.yaml`
+- `paperclips/bundle-size-baseline.json`
+- `paperclips/bundle-size-allowlist.json`
 - future validation scripts for bundle size and profile coverage
 - shared fragments repository, if the same changes need to be upstreamed
 
 ## Acceptance Criteria
 
 - Each Claude and Codex role declares the instruction profiles it needs.
+- YAML front matter metadata is stripped from generated bundles.
+- `paperclips/instruction-coverage.matrix.yaml` is machine-readable and is the
+  validator source of truth.
+- Coverage validation uses canonical role IDs and target-specific mappings.
 - Generated Claude and Codex bundles preserve required safety rules according
   to the safety coverage matrix.
 - Role bundles no longer include full heavy lifecycle runbooks unless the role
@@ -282,6 +356,9 @@ Required behavior:
 - Codex validation still rejects Claude-only runtime assumptions.
 - New validation reports bundle size and fails or warns on oversized fragments
   according to an explicit threshold.
+- Bundle baseline and allowlist are stored in
+  `paperclips/bundle-size-baseline.json` and
+  `paperclips/bundle-size-allowlist.json`.
 - Reviewers and QA still receive enough handoff/evidence rules to catch the
   bugs that motivated the original fragments.
 - No live Paperclip agent is modified by this spec-only slice.
@@ -291,21 +368,26 @@ Required behavior:
 1. Baseline measurement and profile manifest.
    - Measure current bundle bytes/lines.
    - Add role/profile declarations.
-   - Add safety coverage matrix.
+   - Add canonical role IDs and `paperclips/instruction-coverage.matrix.yaml`.
+   - Add `paperclips/bundle-size-baseline.json`.
    - Do not remove heavy fragments yet.
 2. Validators without slimming.
    - Validate profile declarations.
    - Validate role/profile coverage.
    - Add bundle-size report and no-growth guard.
+   - Add `paperclips/bundle-size-allowlist.json`.
 3. Pilot profile split.
    - Apply profile fragments to `CXCodeReviewer` and one Claude reviewer role.
    - Keep mandatory rules inline.
    - Move long lesson text to runbook references.
-4. Claude target rollout.
-   - Apply profile split to Claude roles by role group.
-   - Verify safety matrix coverage.
-5. Codex target rollout.
-   - Apply the same profile model to Codex roles.
+4. Symmetric role-group rollout.
+   - Roll out by role group across Claude and Codex together.
+   - Prefer order: reviewers, QA, implementation engineers, research/writer,
+     then CTO/infra/architect.
+   - Verify safety matrix coverage after each role group.
+5. Target-specific cleanup.
+   - Preserve Claude production-baseline behavior.
+   - Preserve Codex runtime behavior.
    - Replace regex target substitutions with target-aware fragments where
      practical.
 6. Shared-fragments upstream.
@@ -347,21 +429,29 @@ For implementation slices:
 
 4. Compare bundle sizes before and after profile splitting.
 5. Validate role/profile coverage against the safety coverage matrix.
-6. Review generated bundles for missing role-critical rules.
-7. Verify runbook access model or keep distilled rules inline.
-8. Run a canary review task with `CXCodeReviewer`.
-9. Keep live bundle deploy and agent creation out of scope until the generated
+6. Validate generated bundles do not contain YAML front matter metadata.
+7. Review generated bundles for missing role-critical rules.
+8. Verify runbook access model or keep distilled rules inline.
+9. Run a canary review task with `CXCodeReviewer`.
+10. Keep live bundle deploy and agent creation out of scope until the generated
    outputs are reviewed.
 
 ## Decisions
 
 - Bundle-size enforcement starts as baseline plus no-growth. Future target
   bands are defined in the Bundle Size Policy section.
+- Front matter is source-role metadata only; generated bundles must strip it.
+- `paperclips/instruction-coverage.matrix.yaml` is the machine-readable matrix
+  used by validators.
+- Bundle-size baseline and exceptions live in
+  `paperclips/bundle-size-baseline.json` and
+  `paperclips/bundle-size-allowlist.json`.
 - Heavy incident lessons should be proven in Gimle first under
   `paperclips/fragments/lessons/` or an equivalent local runbook directory, then
   upstreamed after the shape is reviewed.
 - Gimle proves the profile/runbook shape first. `paperclip-shared-fragments`
   should become authoritative after the first safe implementation slice.
 - `handoff-full` is required by default for CTO, CodeReviewer,
-  ArchitectReviewer, and QAEngineer. Other roles receive short `handoff` by
-  default and may read the full runbook only when needed.
+  ArchitectReviewer, and QAEngineer role families, resolved to explicit Claude
+  and Codex role IDs. Other roles receive short `handoff` by default and may
+  read the full runbook only when needed.
