@@ -717,11 +717,19 @@
       "source": "paperclips/roles-codex/cx-mcp-engineer.md",
       "dist": "paperclips/dist/codex/cx-mcp-engineer.md",
       "total": {
-        "bytes": 26683,
+        "bytes": 26701,
         "lines": 509,
-        "tokenEstimate": 6671
+        "tokenEstimate": 6676
       },
       "components": [
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/targets/codex/shared/fragments/git-workflow.md",
+          "bytes": 5058,
+          "lines": 79,
+          "tokenEstimate": 1265,
+          "includeCount": 1
+        },
         {
           "kind": "inline-role-text",
           "path": "paperclips/roles-codex/cx-mcp-engineer.md",
@@ -732,15 +740,7 @@
         },
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/shared/fragments/git-workflow.md",
-          "bytes": 5040,
-          "lines": 79,
-          "tokenEstimate": 1260,
-          "includeCount": 1
-        },
-        {
-          "kind": "fragment",
-          "path": "paperclips/fragments/shared/fragments/heartbeat-discipline.md",
+          "path": "paperclips/fragments/targets/codex/shared/fragments/heartbeat-discipline.md",
           "bytes": 4110,
           "lines": 77,
           "tokenEstimate": 1028,
@@ -826,22 +826,22 @@
       "source": "paperclips/roles-codex/cx-python-engineer.md",
       "dist": "paperclips/dist/codex/cx-python-engineer.md",
       "total": {
-        "bytes": 28328,
+        "bytes": 28346,
         "lines": 574,
-        "tokenEstimate": 7082
+        "tokenEstimate": 7087
       },
       "components": [
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/shared/fragments/git-workflow.md",
-          "bytes": 5040,
+          "path": "paperclips/fragments/targets/codex/shared/fragments/git-workflow.md",
+          "bytes": 5058,
           "lines": 79,
-          "tokenEstimate": 1260,
+          "tokenEstimate": 1265,
           "includeCount": 1
         },
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/shared/fragments/heartbeat-discipline.md",
+          "path": "paperclips/fragments/targets/codex/shared/fragments/heartbeat-discipline.md",
           "bytes": 4110,
           "lines": 77,
           "tokenEstimate": 1028,
@@ -951,17 +951,17 @@
       "source": "paperclips/roles-codex/cx-research-agent.md",
       "dist": "paperclips/dist/codex/cx-research-agent.md",
       "total": {
-        "bytes": 21896,
+        "bytes": 21914,
         "lines": 408,
-        "tokenEstimate": 5474
+        "tokenEstimate": 5479
       },
       "components": [
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/shared/fragments/git-workflow.md",
-          "bytes": 5040,
+          "path": "paperclips/fragments/targets/codex/shared/fragments/git-workflow.md",
+          "bytes": 5058,
           "lines": 79,
-          "tokenEstimate": 1260,
+          "tokenEstimate": 1265,
           "includeCount": 1
         },
         {
@@ -974,7 +974,7 @@
         },
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/shared/fragments/heartbeat-discipline.md",
+          "path": "paperclips/fragments/targets/codex/shared/fragments/heartbeat-discipline.md",
           "bytes": 4110,
           "lines": 77,
           "tokenEstimate": 1028,
@@ -1036,17 +1036,17 @@
       "source": "paperclips/roles-codex/cx-technical-writer.md",
       "dist": "paperclips/dist/codex/cx-technical-writer.md",
       "total": {
-        "bytes": 21615,
+        "bytes": 21633,
         "lines": 396,
-        "tokenEstimate": 5404
+        "tokenEstimate": 5409
       },
       "components": [
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/shared/fragments/git-workflow.md",
-          "bytes": 5040,
+          "path": "paperclips/fragments/targets/codex/shared/fragments/git-workflow.md",
+          "bytes": 5058,
           "lines": 79,
-          "tokenEstimate": 1260,
+          "tokenEstimate": 1265,
           "includeCount": 1
         },
         {
@@ -1059,7 +1059,7 @@
         },
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/shared/fragments/heartbeat-discipline.md",
+          "path": "paperclips/fragments/targets/codex/shared/fragments/heartbeat-discipline.md",
           "bytes": 4110,
           "lines": 77,
           "tokenEstimate": 1028,

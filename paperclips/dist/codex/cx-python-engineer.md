@@ -203,7 +203,7 @@ This is a **compensation control** (agent remembers). An environment-level hook 
 
 ### What applies to Board, too
 
-This fragment binds **all writers** — agents, Board session, human operator. When Board writes a spec or plan, it goes on a feature branch. Board checkout location: a separate clone per `AGENTS.md § Branch Flow`. When Board pushes, it's to `feature/...` then PR — never `main` or `develop` directly.
+This fragment binds **all writers** — agents, Board session, human operator. When Board writes a spec or plan, it goes on a feature branch. Board checkout location: a separate clone per `AGENTS.md § New Task Branch And Spec Gate`. When Board pushes, it's to `feature/...` then PR — never `main` or `develop` directly.
 
 ### Phase 4.2 — Merge-readiness reality-check
 
