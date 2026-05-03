@@ -1,0 +1,585 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-05-03",
+  "tokenEstimate": "ceil(bytes / 4)",
+  "scope": "Task 1.5 heavy-bundle sample before slimming",
+  "roles": [
+    {
+      "roleId": "claude:code-reviewer",
+      "target": "claude",
+      "source": "paperclips/roles/code-reviewer.md",
+      "dist": "paperclips/dist/code-reviewer.md",
+      "total": {
+        "bytes": 35547,
+        "lines": 702,
+        "tokenEstimate": 8887
+      },
+      "components": [
+        {
+          "kind": "inline-role-text",
+          "path": "paperclips/roles/code-reviewer.md",
+          "bytes": 8979,
+          "lines": 169,
+          "tokenEstimate": 2245,
+          "includeCount": 8
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/phase-handoff.md",
+          "bytes": 5164,
+          "lines": 94,
+          "tokenEstimate": 1291,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/git-workflow.md",
+          "bytes": 5040,
+          "lines": 79,
+          "tokenEstimate": 1260,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/heartbeat-discipline.md",
+          "bytes": 4113,
+          "lines": 77,
+          "tokenEstimate": 1029,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/test-design-discipline.md",
+          "bytes": 2340,
+          "lines": 50,
+          "tokenEstimate": 585,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/escalation-blocked.md",
+          "bytes": 2142,
+          "lines": 48,
+          "tokenEstimate": 536,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/compliance-enforcement.md",
+          "bytes": 2047,
+          "lines": 53,
+          "tokenEstimate": 512,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
+          "bytes": 1362,
+          "lines": 29,
+          "tokenEstimate": 341,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/local/test-design-gimle.md",
+          "bytes": 1284,
+          "lines": 27,
+          "tokenEstimate": 321,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/async-signal-wait.md",
+          "bytes": 1069,
+          "lines": 24,
+          "tokenEstimate": 268,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/phase-review-discipline.md",
+          "bytes": 908,
+          "lines": 30,
+          "tokenEstimate": 227,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/fragment-density.md",
+          "bytes": 564,
+          "lines": 14,
+          "tokenEstimate": 141,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/plan-first-review.md",
+          "bytes": 410,
+          "lines": 5,
+          "tokenEstimate": 103,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/language.md",
+          "bytes": 125,
+          "lines": 3,
+          "tokenEstimate": 32,
+          "includeCount": 1
+        }
+      ]
+    },
+    {
+      "roleId": "claude:python-engineer",
+      "target": "claude",
+      "source": "paperclips/roles/python-engineer.md",
+      "dist": "paperclips/dist/python-engineer.md",
+      "total": {
+        "bytes": 32804,
+        "lines": 643,
+        "tokenEstimate": 8201
+      },
+      "components": [
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/phase-handoff.md",
+          "bytes": 5164,
+          "lines": 94,
+          "tokenEstimate": 1291,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/git-workflow.md",
+          "bytes": 5040,
+          "lines": 79,
+          "tokenEstimate": 1260,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/heartbeat-discipline.md",
+          "bytes": 4113,
+          "lines": 77,
+          "tokenEstimate": 1029,
+          "includeCount": 1
+        },
+        {
+          "kind": "inline-role-text",
+          "path": "paperclips/roles/python-engineer.md",
+          "bytes": 3780,
+          "lines": 59,
+          "tokenEstimate": 945,
+          "includeCount": 8
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/test-design-discipline.md",
+          "bytes": 2340,
+          "lines": 50,
+          "tokenEstimate": 585,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/escalation-blocked.md",
+          "bytes": 2142,
+          "lines": 48,
+          "tokenEstimate": 536,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/karpathy-discipline.md",
+          "bytes": 2055,
+          "lines": 43,
+          "tokenEstimate": 514,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/compliance-enforcement.md",
+          "bytes": 2047,
+          "lines": 53,
+          "tokenEstimate": 512,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/pre-work-discovery.md",
+          "bytes": 1375,
+          "lines": 27,
+          "tokenEstimate": 344,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
+          "bytes": 1362,
+          "lines": 29,
+          "tokenEstimate": 341,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/local/test-design-gimle.md",
+          "bytes": 1284,
+          "lines": 27,
+          "tokenEstimate": 321,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/async-signal-wait.md",
+          "bytes": 1069,
+          "lines": 24,
+          "tokenEstimate": 268,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/phase-review-discipline.md",
+          "bytes": 908,
+          "lines": 30,
+          "tokenEstimate": 227,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/language.md",
+          "bytes": 125,
+          "lines": 3,
+          "tokenEstimate": 32,
+          "includeCount": 1
+        }
+      ]
+    },
+    {
+      "roleId": "claude:mcp-engineer",
+      "target": "claude",
+      "source": "paperclips/roles/mcp-engineer.md",
+      "dist": "paperclips/dist/mcp-engineer.md",
+      "total": {
+        "bytes": 31152,
+        "lines": 578,
+        "tokenEstimate": 7788
+      },
+      "components": [
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/phase-handoff.md",
+          "bytes": 5164,
+          "lines": 94,
+          "tokenEstimate": 1291,
+          "includeCount": 1
+        },
+        {
+          "kind": "inline-role-text",
+          "path": "paperclips/roles/mcp-engineer.md",
+          "bytes": 5083,
+          "lines": 77,
+          "tokenEstimate": 1271,
+          "includeCount": 8
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/git-workflow.md",
+          "bytes": 5040,
+          "lines": 79,
+          "tokenEstimate": 1260,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/heartbeat-discipline.md",
+          "bytes": 4113,
+          "lines": 77,
+          "tokenEstimate": 1029,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/test-design-discipline.md",
+          "bytes": 2340,
+          "lines": 50,
+          "tokenEstimate": 585,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/escalation-blocked.md",
+          "bytes": 2142,
+          "lines": 48,
+          "tokenEstimate": 536,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/karpathy-discipline.md",
+          "bytes": 2055,
+          "lines": 43,
+          "tokenEstimate": 514,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/pre-work-discovery.md",
+          "bytes": 1375,
+          "lines": 27,
+          "tokenEstimate": 344,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
+          "bytes": 1362,
+          "lines": 29,
+          "tokenEstimate": 341,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/local/test-design-gimle.md",
+          "bytes": 1284,
+          "lines": 27,
+          "tokenEstimate": 321,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/async-signal-wait.md",
+          "bytes": 1069,
+          "lines": 24,
+          "tokenEstimate": 268,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/language.md",
+          "bytes": 125,
+          "lines": 3,
+          "tokenEstimate": 32,
+          "includeCount": 1
+        }
+      ]
+    },
+    {
+      "roleId": "claude:cto",
+      "target": "claude",
+      "source": "paperclips/roles/cto.md",
+      "dist": "paperclips/dist/cto.md",
+      "total": {
+        "bytes": 25075,
+        "lines": 441,
+        "tokenEstimate": 6269
+      },
+      "components": [
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/phase-handoff.md",
+          "bytes": 5164,
+          "lines": 94,
+          "tokenEstimate": 1291,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/git-workflow.md",
+          "bytes": 5040,
+          "lines": 79,
+          "tokenEstimate": 1260,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/heartbeat-discipline.md",
+          "bytes": 4113,
+          "lines": 77,
+          "tokenEstimate": 1029,
+          "includeCount": 1
+        },
+        {
+          "kind": "inline-role-text",
+          "path": "paperclips/roles/cto.md",
+          "bytes": 3954,
+          "lines": 59,
+          "tokenEstimate": 989,
+          "includeCount": 8
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/escalation-blocked.md",
+          "bytes": 2142,
+          "lines": 48,
+          "tokenEstimate": 536,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/pre-work-discovery.md",
+          "bytes": 1375,
+          "lines": 27,
+          "tokenEstimate": 344,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
+          "bytes": 1362,
+          "lines": 29,
+          "tokenEstimate": 341,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/cto-no-code-ban.md",
+          "bytes": 976,
+          "lines": 8,
+          "tokenEstimate": 244,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/plan-first-producer.md",
+          "bytes": 824,
+          "lines": 17,
+          "tokenEstimate": 206,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/language.md",
+          "bytes": 125,
+          "lines": 3,
+          "tokenEstimate": 32,
+          "includeCount": 1
+        }
+      ]
+    },
+    {
+      "roleId": "codex:cx-python-engineer",
+      "target": "codex",
+      "source": "paperclips/roles-codex/cx-python-engineer.md",
+      "dist": "paperclips/dist/codex/cx-python-engineer.md",
+      "total": {
+        "bytes": 32768,
+        "lines": 643,
+        "tokenEstimate": 8192
+      },
+      "components": [
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/phase-handoff.md",
+          "bytes": 5167,
+          "lines": 94,
+          "tokenEstimate": 1292,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/git-workflow.md",
+          "bytes": 5040,
+          "lines": 79,
+          "tokenEstimate": 1260,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/heartbeat-discipline.md",
+          "bytes": 4110,
+          "lines": 77,
+          "tokenEstimate": 1028,
+          "includeCount": 1
+        },
+        {
+          "kind": "inline-role-text",
+          "path": "paperclips/roles-codex/cx-python-engineer.md",
+          "bytes": 3744,
+          "lines": 59,
+          "tokenEstimate": 936,
+          "includeCount": 8
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/test-design-discipline.md",
+          "bytes": 2340,
+          "lines": 50,
+          "tokenEstimate": 585,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/escalation-blocked.md",
+          "bytes": 2142,
+          "lines": 48,
+          "tokenEstimate": 536,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/karpathy-discipline.md",
+          "bytes": 2055,
+          "lines": 43,
+          "tokenEstimate": 514,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/compliance-enforcement.md",
+          "bytes": 2047,
+          "lines": 53,
+          "tokenEstimate": 512,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/pre-work-discovery.md",
+          "bytes": 1375,
+          "lines": 27,
+          "tokenEstimate": 344,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
+          "bytes": 1362,
+          "lines": 29,
+          "tokenEstimate": 341,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/local/test-design-gimle.md",
+          "bytes": 1284,
+          "lines": 27,
+          "tokenEstimate": 321,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/async-signal-wait.md",
+          "bytes": 1069,
+          "lines": 24,
+          "tokenEstimate": 268,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/phase-review-discipline.md",
+          "bytes": 908,
+          "lines": 30,
+          "tokenEstimate": 227,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/language.md",
+          "bytes": 125,
+          "lines": 3,
+          "tokenEstimate": 32,
+          "includeCount": 1
+        }
+      ]
+    }
+  ]
+}
