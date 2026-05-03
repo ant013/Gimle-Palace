@@ -1,3 +1,10 @@
+---
+target: codex
+role_id: codex:cx-code-reviewer
+family: code-reviewer
+profiles: [core, task-start, review, qa-smoke, handoff-full, merge-deploy]
+---
+
 # CXCodeReviewer - Gimle
 
 > Project tech rules are in `AGENTS.md`. This role adds Paperclip review duties.
@@ -20,6 +27,18 @@ the full Codex team.
   errors early.
 - For code, compare actual changed files to the approved plan and call out
   scope drift.
+
+## Operational safety
+
+- On every wake, treat Paperclip issue state and repository state as the source
+  of truth. If there is no assigned task, explicit mention, or watchdog wake,
+  idle exit.
+- Before reviewing a branch, run `git fetch origin --prune`, identify the
+  relevant spec/plan, and compare the diff against that scope.
+- For phase handoff, post the reviewed branch, commit SHA, verdict, evidence,
+  and the next requested agent/action.
+- Before claiming merge-readiness, check
+  `gh pr view <N> --json mergeStateStatus,mergeable,statusCheckRollup,reviewDecision,headRefOid`.
 
 ## Compliance checklist
 

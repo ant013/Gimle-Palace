@@ -1,0 +1,49 @@
+# Task 1 manifest: profile names are declared before slimming. Existing
+# fragments remain authoritative until later tasks split short profiles.
+profiles:
+  core:
+    fragments:
+      - paperclips/fragments/shared/fragments/karpathy-discipline.md
+      - paperclips/fragments/shared/fragments/escalation-blocked.md
+      - paperclips/fragments/shared/fragments/heartbeat-discipline.md
+      - paperclips/fragments/shared/fragments/language.md
+  task-start:
+    fragments:
+      - paperclips/fragments/shared/fragments/pre-work-discovery.md
+      - paperclips/fragments/shared/fragments/git-workflow.md
+      - paperclips/fragments/shared/fragments/worktree-discipline.md
+  implementation:
+    fragments:
+      - paperclips/fragments/shared/fragments/compliance-enforcement.md
+      - paperclips/fragments/shared/fragments/test-design-discipline.md
+      - paperclips/fragments/local/test-design-gimle.md
+      - paperclips/fragments/shared/fragments/async-signal-wait.md
+  review:
+    fragments:
+      - paperclips/fragments/shared/fragments/compliance-enforcement.md
+      - paperclips/fragments/shared/fragments/plan-first-review.md
+      - paperclips/fragments/shared/fragments/phase-review-discipline.md
+      - paperclips/fragments/shared/fragments/test-design-discipline.md
+  qa-smoke:
+    fragments:
+      - paperclips/fragments/shared/fragments/test-design-discipline.md
+      - paperclips/fragments/local/test-design-gimle.md
+  research:
+    fragments:
+      - paperclips/fragments/shared/fragments/pre-work-discovery.md
+      - paperclips/fragments/shared/fragments/karpathy-discipline.md
+  handoff:
+    fragments:
+      - paperclips/fragments/profiles/handoff.md
+    runbooks:
+      - paperclips/fragments/lessons/phase-handoff.md
+    inline_rule_required: true
+  handoff-full:
+    fragments:
+      - paperclips/fragments/shared/fragments/phase-handoff.md
+      - paperclips/fragments/shared/fragments/phase-review-discipline.md
+    inline_rule_required: true
+  merge-deploy:
+    fragments:
+      - paperclips/fragments/shared/fragments/git-workflow.md
+      - paperclips/fragments/shared/fragments/phase-handoff.md

@@ -21,6 +21,18 @@ the full Codex team.
 - For code, compare actual changed files to the approved plan and call out
   scope drift.
 
+## Operational safety
+
+- On every wake, treat Paperclip issue state and repository state as the source
+  of truth. If there is no assigned task, explicit mention, or watchdog wake,
+  idle exit.
+- Before reviewing a branch, run `git fetch origin --prune`, identify the
+  relevant spec/plan, and compare the diff against that scope.
+- For phase handoff, post the reviewed branch, commit SHA, verdict, evidence,
+  and the next requested agent/action.
+- Before claiming merge-readiness, check
+  `gh pr view <N> --json mergeStateStatus,mergeable,statusCheckRollup,reviewDecision,headRefOid`.
+
 ## Compliance checklist
 
 Use this checklist mechanically. Mark every item `[x]`, `[ ]`, or `[N/A]`.
@@ -92,6 +104,10 @@ Use this checklist mechanically. Mark every item `[x]`, `[ ]`, or `[N/A]`.
 - Treat Paperclip API, issue comments, and assigned work as the source of truth.
 - Do not act from stale session memory. Re-read the issue, current assignment,
   and relevant repository state at the start of work.
+- Shared memory: use `palace.code.*` / codebase-memory with project `repos-gimle`;
+  write durable findings through `palace.memory.decide(...)` with issue, branch,
+  commit, source, `canonical` or `provisional`, and verification evidence.
+  Keep `serena` scoped to the current worktree (`cwd`).
 - Keep idle wakes cheap: if there is no assigned issue, explicit mention, or
   `PAPERCLIP_TASK_ID`, exit with a short idle note.
 
@@ -167,7 +183,7 @@ Codex hire payload shape:
   "capabilities": "Reviews implementation changes using Codex runtime, repository context MCP, and Paperclip issue workflow.",
   "adapterType": "codex_local",
   "adapterConfig": {
-    "cwd": "/Users/Shared/Ios/Gimle-Palace",
+    "cwd": "/Users/Shared/Ios/worktrees/cx/Gimle-Palace",
     "model": "gpt-5.5",
     "modelReasoningEffort": "high",
     "instructionsFilePath": "AGENTS.md",

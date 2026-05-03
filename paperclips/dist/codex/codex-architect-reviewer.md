@@ -278,7 +278,7 @@ This is a **compensation control** (agent remembers). An environment-level hook 
 
 ### What applies to Board, too
 
-This fragment binds **all writers** — agents, Board session, human operator. When Board writes a spec or plan, it goes on a feature branch. Board checkout location: a separate clone per `AGENTS.md § Branch Flow`. When Board pushes, it's to `feature/...` then PR — never `main` or `develop` directly.
+This fragment binds **all writers** — agents, Board session, human operator. When Board writes a spec or plan, it goes on a feature branch. Board checkout location: a separate clone per `AGENTS.md § New Task Branch And Spec Gate`. When Board pushes, it's to `feature/...` then PR — never `main` or `develop` directly.
 
 ### Phase 4.2 — Merge-readiness reality-check
 
@@ -336,6 +336,17 @@ Paperclip creates a git worktree per issue with an execution workspace. Work **o
 - Parallel agents work in **separate** worktrees — don't read files from neighbors' worktrees (they may be in an invalid state mid-work).
 - After PR merge — paperclip cleans the worktree itself. Don't run `git worktree remove` yourself.
 
+## Shared codebase memory
+
+Worktree isolation does not mean memory isolation. Claude and CX/Codex teams share the same code knowledge:
+
+- Use `palace.code.*` / codebase-memory with project `repos-gimle` for indexed code search, architecture, snippets, and impact.
+- Use `serena` only for the current worktree (`cwd`) and current branch state.
+- Write durable findings through `palace.memory.decide(...)`; read them through `palace.memory.lookup(...)`.
+- Each written finding needs provenance: issue id, branch, commit SHA when available, source path or symbol, `canonical` or `provisional`, and verification evidence.
+- Treat `canonical` as facts grounded in `origin/develop` or merged commits. Treat `provisional` as branch-local hints that require local verification.
+- Never treat another team's uncommitted worktree files as project truth. Share cross-team facts through commits, PRs, issue comments, or `palace.memory`.
+
 ## Cross-branch carry-over forbidden
 
 Never carry commits between parallel slice branches via cherry-pick or
@@ -348,13 +359,19 @@ CR enforcement: every changed file must be in slice's declared scope.
 
 ## QA returns checkout to develop after Phase 4.1
 
-Before run exit, QA on iMac:
+Before run exit, QA on iMac verifies the current team checkout or issue worktree
+returns to the expected integration branch state:
 
-    cd /Users/Shared/Ios/Gimle-Palace && git checkout develop && git pull --ff-only
+    git switch develop && git pull --ff-only
 
 Verify: `git branch --show-current` outputs `develop`.
 
-Why: production checkout drives deploys/observability. Incident GIM-48 (2026-04-18).
+Do not `cd` into another team's checkout to do this. Claude and CX/Codex teams
+may have separate workspace roots; use the root or worktree assigned to your
+current run.
+
+Why: team checkouts drive deploys/observability for their own runtime. Incident
+GIM-48 (2026-04-18).
 
 ## Heartbeat discipline
 
@@ -448,7 +465,7 @@ Grounded in GIM-48 (2026-04-18): CodeReviewer set `status=todo` after Phase 3.1 
 | 1.2 Plan-first (CR) | 2.x Implementation | `assignee=<implementer>` + @mention |
 | 2 Implementation | 3.1 Mechanical review | `assignee=CodeReviewer` + @mention + **git push done** |
 | 3.1 CR APPROVE | 3.2 Codex adversarial | `assignee=CodexArchitectReviewer` + @mention |
-| 3.2 Opus APPROVE | 4.1 QA live smoke | `assignee=QAEngineer` + @mention |
+| 3.2 Architect APPROVE | 4.1 QA live smoke | `assignee=QAEngineer` + @mention |
 | 4.1 QA PASS | 4.2 Merge | `assignee=<merger>` (usually CTO) + @mention |
 
 ### NEVER
@@ -545,9 +562,9 @@ PE scope reduction without comment = REQUEST CHANGES.
 
 ## Phase 3.2 — Adversarial coverage matrix audit
 
-Opus Phase 3.2 must include coverage matrix audit for fixture/vendored-data PRs.
+Architect Phase 3.2 must include coverage matrix audit for fixture/vendored-data PRs.
 
-Why: GIM-104 — Opus focused on architectural risks, missed that fixture coverage was halved.
+Why: GIM-104 — the architect reviewer focused on architectural risks, missed that fixture coverage was halved.
 
 Required output template:
 

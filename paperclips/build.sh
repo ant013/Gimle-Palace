@@ -74,31 +74,46 @@ for role_file in "$ROLES_DIR"/*.md; do
   found=1
   role_name=$(basename "$role_file")
   out_file="$OUT_DIR/$role_name"
-  awk -v frag_dir="$FRAG_DIR" '
+  awk -v frag_dir="$FRAG_DIR" -v target="$TARGET" '
+    NR == 1 && $0 == "---" {
+      in_front_matter = 1
+      next
+    }
+    in_front_matter {
+      if ($0 == "---") {
+        in_front_matter = 0
+        skip_front_matter_gap = 1
+      }
+      next
+    }
+    skip_front_matter_gap && $0 == "" {
+      skip_front_matter_gap = 0
+      next
+    }
+    {
+      skip_front_matter_gap = 0
+    }
     /<!-- @include fragments\/.*\.md -->/ {
       match($0, /fragments\/[^ ]+\.md/)
       frag = substr($0, RSTART + 10, RLENGTH - 10)
       path = frag_dir "/" frag
+      target_path = frag_dir "/targets/" target "/" frag
+      if (system("test -f " target_path) == 0) {
+        path = target_path
+      }
+      read_status = getline line < path
+      if (read_status < 0) {
+        print "ERROR: include fragment not readable: " path > "/dev/stderr"
+        close(path)
+        exit 2
+      }
+      if (read_status > 0) print line
       while ((getline line < path) > 0) print line
       close(path)
       next
     }
     { print }
   ' "$role_file" > "$out_file"
-
-  if [ "$TARGET" = "codex" ]; then
-    perl -0pi -e '
-      s/CLAUDE\.md/AGENTS.md/g;
-      s/claude CLI cache/session cache/g;
-      s/Claude CLI cache/session cache/g;
-      s/claude CLI/session cache/g;
-      s/Claude CLI/session cache/g;
-      s/OpusArchitectReviewer/CodexArchitectReviewer/g;
-      s/Opus adversarial/Codex adversarial/g;
-      s/superpowers:/codex-discipline:/g;
-      s/pr-review-toolkit:/codex-review:/g;
-    ' "$out_file"
-  fi
 
   echo "built $out_file"
 done

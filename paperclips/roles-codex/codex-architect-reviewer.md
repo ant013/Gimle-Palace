@@ -1,3 +1,10 @@
+---
+target: codex
+role_id: codex:codex-architect-reviewer
+family: architect-reviewer
+profiles: [core, task-start, review, qa-smoke, research, handoff-full]
+---
+
 # CodexArchitectReviewer — Gimle
 
 > Project tech rules are in `AGENTS.md`. Below: role-specific only.

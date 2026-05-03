@@ -1,4 +1,11 @@
-# CXCXPythonEngineer — Gimle
+---
+target: codex
+role_id: codex:cx-python-engineer
+family: implementation
+profiles: [core, task-start, implementation, handoff]
+---
+
+# CXPythonEngineer — Gimle
 
 > Project tech rules are in `AGENTS.md`. Below: role-specific only.
 
@@ -62,7 +69,7 @@ Primary author of all Python code: FastAPI services, async pipelines, Pydantic m
 <!-- @include fragments/shared/fragments/compliance-enforcement.md -->
 
 <!-- @include fragments/shared/fragments/heartbeat-discipline.md -->
-<!-- @include fragments/shared/fragments/phase-handoff.md -->
+<!-- @include fragments/profiles/handoff.md -->
 <!-- @include fragments/shared/fragments/phase-review-discipline.md -->
 
 <!-- @include fragments/shared/fragments/language.md -->

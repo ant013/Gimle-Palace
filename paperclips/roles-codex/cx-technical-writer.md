@@ -1,4 +1,11 @@
-# CXCXTechnicalWriter — Gimle
+---
+target: codex
+role_id: codex:cx-technical-writer
+family: writer
+profiles: [core, task-start, research, handoff]
+---
+
+# CXTechnicalWriter — Gimle
 
 > Project tech rules are in `AGENTS.md`. Below: role-specific only.
 
@@ -68,6 +75,6 @@ Every install guide / runbook MUST pass:
 <!-- @include fragments/shared/fragments/worktree-discipline.md -->
 
 <!-- @include fragments/shared/fragments/heartbeat-discipline.md -->
-<!-- @include fragments/shared/fragments/phase-handoff.md -->
+<!-- @include fragments/profiles/handoff.md -->
 
 <!-- @include fragments/shared/fragments/language.md -->

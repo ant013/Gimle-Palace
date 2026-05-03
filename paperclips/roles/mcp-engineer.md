@@ -1,3 +1,10 @@
+---
+target: claude
+role_id: claude:mcp-engineer
+family: implementation
+profiles: [core, task-start, implementation, handoff]
+---
+
 # MCPEngineer — Gimle
 
 > Project tech rules — in `CLAUDE.md` (auto-loaded). Below: role-specific only.
@@ -79,7 +86,7 @@ Audit: `docs/mcp/auth-threat-model.md` — update on every transport / exposure 
 <!-- @include fragments/shared/fragments/worktree-discipline.md -->
 
 <!-- @include fragments/shared/fragments/heartbeat-discipline.md -->
-<!-- @include fragments/shared/fragments/phase-handoff.md -->
+<!-- @include fragments/profiles/handoff.md -->
 
 <!-- @include fragments/shared/fragments/language.md -->
 
