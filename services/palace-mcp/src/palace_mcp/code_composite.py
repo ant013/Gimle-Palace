@@ -268,6 +268,14 @@ ORDER BY r.started_at DESC
 LIMIT 1
 """
 
+_QUERY_ANY_INGEST_RUN = """
+MATCH (r:IngestRun {project: $project})
+WHERE r.success = true
+RETURN r.run_id AS run_id, r.success AS success, r.extractor_name AS extractor_name
+ORDER BY r.started_at DESC
+LIMIT 1
+"""
+
 _QUERY_EVICTION_RECORD = """
 MATCH (e:EvictionRecord {symbol_qualified_name: $qn, project: $project})
 RETURN e.eviction_round AS eviction_round,
@@ -293,6 +301,16 @@ async def _query_ingest_run_for_project(
             project=project,
             extractor_name=extractor_name,
         )
+        record = await result.single()
+        return None if record is None else dict(record)
+
+
+async def _query_any_ingest_run_for_project(
+    driver: Any, project: str
+) -> dict[str, Any] | None:
+    """Check if any successful IngestRun exists for this project (any extractor)."""
+    async with driver.session() as session:
+        result = await session.run(_QUERY_ANY_INGEST_RUN, project=project)
         record = await result.single()
         return None if record is None else dict(record)
 
@@ -444,10 +462,8 @@ def register_code_composite_tools(
         # fallback path matches what palace.ingest.run_extractor wrote.
         resolved_project = _cm_project_to_slug(req.project or default_project)
 
-        # State B: never-indexed — check for a successful IngestRun
-        ingest_run = await _query_ingest_run_for_project(
-            driver, resolved_project, "symbol_index_python"
-        )
+        # State B: never-indexed — check for any successful IngestRun
+        ingest_run = await _query_any_ingest_run_for_project(driver, resolved_project)
         if ingest_run is None:
             return {
                 "ok": True,
@@ -455,7 +471,7 @@ def register_code_composite_tools(
                 "total_found": 0,
                 "warning": "project_not_indexed",
                 "action_required": (
-                    f"Run palace.ingest.run_extractor('symbol_index_python', "
+                    f"Run palace.ingest.run_extractor(<extractor_name>, "
                     f"'{resolved_project}') before relying on this answer"
                 ),
             }
