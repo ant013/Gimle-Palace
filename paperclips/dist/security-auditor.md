@@ -334,13 +334,19 @@ CR enforcement: every changed file must be in slice's declared scope.
 
 ## QA returns checkout to develop after Phase 4.1
 
-Before run exit, QA on iMac:
+Before run exit, QA on iMac verifies the current team checkout or issue worktree
+returns to the expected integration branch state:
 
-    cd /Users/Shared/Ios/Gimle-Palace && git checkout develop && git pull --ff-only
+    git switch develop && git pull --ff-only
 
 Verify: `git branch --show-current` outputs `develop`.
 
-Why: production checkout drives deploys/observability. Incident GIM-48 (2026-04-18).
+Do not `cd` into another team's checkout to do this. Claude and CX/Codex teams
+may have separate workspace roots; use the root or worktree assigned to your
+current run.
+
+Why: team checkouts drive deploys/observability for their own runtime. Incident
+GIM-48 (2026-04-18).
 
 ## Heartbeat discipline
 

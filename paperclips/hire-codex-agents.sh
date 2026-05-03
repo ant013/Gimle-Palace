@@ -8,7 +8,7 @@ API_BASE="${PAPERCLIP_API_URL:-https://paperclip.ant013.work}"
 SOURCE_ISSUE_ID="${PAPERCLIP_SOURCE_ISSUE_ID:-e7795ef5-a2df-4302-947b-6d8da7598bce}"
 CODEX_HOME="${PAPERCLIP_CODEX_HOME:-/Users/anton/.paperclip/instances/default/companies/$COMPANY_ID/codex-home}"
 CODEX_PATH="${PAPERCLIP_CODEX_PATH:-/Users/anton/.local/bin:/Users/anton/.nvm/versions/node/v20.20.2/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin}"
-WORKSPACE="${PAPERCLIP_WORKSPACE:-/Users/Shared/Ios/Gimle-Palace}"
+WORKSPACE="${PAPERCLIP_WORKSPACE:-/Users/Shared/Ios/worktrees/cx/Gimle-Palace}"
 
 CEO_ID="${PAPERCLIP_CEO_ID:-10a4968e-ff2c-471a-a5a8-98026aeead1b}"
 CTO_ID="${PAPERCLIP_CTO_ID:-7fb0fdbb-e17f-4487-a4da-16993a907bec}"
