@@ -241,6 +241,7 @@ def validate(repo_root: Path = REPO_ROOT) -> list[str]:
     if "entries" not in allowlist:
         errors.append("bundle-size-allowlist.json missing entries")
 
+    bundle_paths_by_role: dict[str, Path] = {}
     for bundle in baseline.get("bundles", []):
         role_id = bundle.get("roleId")
         if role_id not in role_ids:
@@ -253,6 +254,8 @@ def validate(repo_root: Path = REPO_ROOT) -> list[str]:
         if not bundle_path.is_file():
             errors.append(f"baseline bundle missing generated file: {path}")
             continue
+        if role_id:
+            bundle_paths_by_role[role_id] = bundle_path
         text = bundle_path.read_text()
         if text.startswith("---\n"):
             errors.append(f"generated bundle contains front matter: {path}")
@@ -267,6 +270,21 @@ def validate(repo_root: Path = REPO_ROOT) -> list[str]:
             errors.append(
                 f"baseline token mismatch for {path}: {bundle.get('tokenEstimate')} != {bundle_tokens}"
             )
+
+    for rule_id, rule in matrix.get("rules", {}).items():
+        rule_role_ids = role_ids if rule.get("role_ids") == "all" else set(rule.get("role_ids", []))
+        markers = [str(marker).lower() for marker in rule.get("markers", [])]
+        for role_id in rule_role_ids:
+            bundle_path = bundle_paths_by_role.get(role_id)
+            if bundle_path is None:
+                errors.append(f"rule {rule_id} cannot find generated bundle for role: {role_id}")
+                continue
+            bundle_text = bundle_path.read_text().lower()
+            for marker in markers:
+                if marker not in bundle_text:
+                    errors.append(
+                        f"rule {rule_id} marker missing for {role_id}: {marker}"
+                    )
 
     return errors
 

@@ -16,7 +16,7 @@
     {"roleId": "claude:security-auditor", "target": "claude", "path": "paperclips/dist/security-auditor.md", "bytes": 27701, "lines": 508, "tokenEstimate": 6926},
     {"roleId": "claude:technical-writer", "target": "claude", "path": "paperclips/dist/technical-writer.md", "bytes": 26090, "lines": 465, "tokenEstimate": 6523},
     {"roleId": "codex:codex-architect-reviewer", "target": "codex", "path": "paperclips/dist/codex/codex-architect-reviewer.md", "bytes": 28485, "lines": 564, "tokenEstimate": 7122},
-    {"roleId": "codex:cx-code-reviewer", "target": "codex", "path": "paperclips/dist/codex/cx-code-reviewer.md", "bytes": 7451, "lines": 206, "tokenEstimate": 1863},
+    {"roleId": "codex:cx-code-reviewer", "target": "codex", "path": "paperclips/dist/codex/cx-code-reviewer.md", "bytes": 8039, "lines": 218, "tokenEstimate": 2010},
     {"roleId": "codex:cx-cto", "target": "codex", "path": "paperclips/dist/codex/cx-cto.md", "bytes": 25051, "lines": 441, "tokenEstimate": 6263},
     {"roleId": "codex:cx-infra-engineer", "target": "codex", "path": "paperclips/dist/codex/cx-infra-engineer.md", "bytes": 30446, "lines": 557, "tokenEstimate": 7612},
     {"roleId": "codex:cx-mcp-engineer", "target": "codex", "path": "paperclips/dist/codex/cx-mcp-engineer.md", "bytes": 31123, "lines": 578, "tokenEstimate": 7781},
