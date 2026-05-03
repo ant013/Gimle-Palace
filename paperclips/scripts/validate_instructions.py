@@ -179,11 +179,17 @@ def allowlisted(allowlist: dict, role_id: str, path: str, rule: str) -> bool:
     for entry in allowlist.get("entries", []):
         if entry.get("rule") != rule:
             continue
-        if entry.get("roleId") not in {None, role_id}:
+        if entry.get("roleId") != role_id:
             continue
-        if entry.get("path") not in {None, path}:
+        if entry.get("path") != path:
             continue
-        if not entry.get("reason"):
+        if not all(
+            [
+                entry.get("reason"),
+                entry.get("owner"),
+                entry.get("reviewAfter") or entry.get("expiresAt"),
+            ]
+        ):
             continue
         return True
     return False
@@ -292,6 +298,12 @@ def validate(repo_root: Path = REPO_ROOT) -> list[str]:
         allowlist = {"entries": []}
     if "entries" not in allowlist:
         errors.append("bundle-size-allowlist.json missing entries")
+    for index, entry in enumerate(allowlist.get("entries", [])):
+        for key in ["rule", "roleId", "path", "reason", "owner"]:
+            if not entry.get(key):
+                errors.append(f"allowlist entry {index} missing {key}")
+        if not (entry.get("reviewAfter") or entry.get("expiresAt")):
+            errors.append(f"allowlist entry {index} missing reviewAfter or expiresAt")
     if "measurementCommit" not in baseline:
         errors.append("bundle-size-baseline.json missing measurementCommit")
     policy = baseline.get("policy", {})
