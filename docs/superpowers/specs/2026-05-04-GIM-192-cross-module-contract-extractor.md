@@ -1,11 +1,11 @@
 # GIM-192 - Cross-Module Contract Extractor - Phase 1.1 Spec
 
-**Статус:** Phase 1.1 formalized, ready for CXCodeReviewer plan-first review.
+**Статус:** Phase 1.1 rev2, addressing CXCodeReviewer request changes.
 **Date:** 2026-05-04.
 **Issue:** GIM-192.
 **Roadmap item:** #31 Cross-Module Contract Extractor.
 **Branch:** `feature/GIM-192-cross-module-contract`.
-**Base:** `develop@2a96786e9d9d07e02dd6283d3193f8b4302b77b6`.
+**Base:** `develop@2671a4a51185e5c0d2a4ccd8a8e8333108c7c5e3`.
 **Plan:** `docs/superpowers/plans/2026-05-04-GIM-192-cross-module-contract-extractor.md`.
 **Predecessor:** GIM-190 Public API Surface Extractor is merged and deployed on `develop@2a96786e9d9d07e02dd6283d3193f8b4302b77b6`.
 
@@ -26,16 +26,19 @@ GIM-192 не переизобретает Public API Surface. Источник e
 
 1. **Storage identity:** v1 хранит `versioned-per-commit` snapshots. `commit_sha` обязателен на каждом new contract node/edge. "Latest" является query/view policy, не отдельной моделью хранения.
 2. **No duplicate symbol schema:** v1 не добавляет `ContractSymbol`. Contract facts ссылаются на существующий `PublicApiSymbol` из GIM-190.
-3. **Default scope:** v1 строит cross-module consumption contracts. Breaking-change classification ограничена минимальным delta substrate между двумя explicitly selected commits и не включает semver advice, compatibility scoring или release policy.
-4. **Matching policy:** v1 использует только exact matching. Если `PublicApiSymbol.symbol_qualified_name` отсутствует или не совпадает с indexed occurrence key, symbol остается surface-only и не получает consumer edge.
+3. **Default scope:** v1 строит cross-module consumption contracts and minimal explicit old/new deltas. Breaking-change classification ограничена минимальным delta substrate между двумя explicitly selected commits и не включает semver advice, compatibility scoring или release policy.
+4. **Matching policy:** v1 использует только exact matching through `symbol_id_for(PublicApiSymbol.symbol_qualified_name)` into the Tantivy occurrence index. `SymbolOccurrenceShadow` is not a consumer-evidence source because it does not store commit, file, project, language, or module ownership.
 5. **Package visibility:** default external contract excludes Swift `visibility=package`. Internal/package mode может быть отдельным параметром/query path, но не должен смешиваться с external contract по умолчанию.
 6. **Roadmap:** `docs/roadmap.md` уже держит #31 downstream of #27 (`deps #27`). Открытый PR #90 отдельно обновляет roadmap lane after GIM-190, поэтому этот branch не трогает roadmap, чтобы не конфликтовать с docs-only roadmap PR.
+7. **MCP/API surface:** v1 adds no public MCP tool or API. Inspection is via extractor stats, tests, runbook queries, and direct Neo4j smoke. Any future MCP/query surface is a follow-up requiring explicit CXMCPEngineer scope.
 
 ## Verified Reference Basis
 
 Проверено 2026-05-04 перед формализацией:
 
 - GIM-190 spec and implementation define `PublicApiSurface`, `PublicApiSymbol`, `EXPORTS`, `BACKED_BY_SYMBOL`, `commit_sha`, `module_name`, `symbol_qualified_name`, and the rule that #31 must consume `PublicApiSymbol` directly.
+- `SymbolOccurrence` stores `symbol_id`, `file_path`, source position, `commit_sha`, and `ingest_run_id` in the extractor foundation model; `TantivyBridge` already indexes `symbol_id`, `commit_sha`, and `phase`, and stores `file_path` / source positions / `commit_sha`. GIM-192 can add a filtered query helper over those existing fields without a Tantivy schema migration.
+- `SymbolOccurrenceShadow` currently stores only symbol identity/scoring fields plus `group_id`; it is suitable for eviction/backing-edge presence, not commit-aware consumer evidence.
 - Kotlin Binary Compatibility Validator documents `.api` dumps plus `apiDump` / `apiCheck`; GIM-190 already consumes `.api` artifacts rather than plugin internals. Source: <https://github.com/Kotlin/binary-compatibility-validator>.
 - Swift module interface / API diffing is treated as artifact-level evidence, not as a runtime dependency for this extractor. GIM-190 uses `.swiftinterface` as primary Swift surface input; `swift-api-digester` remains diagnostic/future diff aid.
 - oasdiff is a rule-catalog inspiration for later compatibility classification only; v1 does not bind to oasdiff APIs or OpenAPI-specific rules. Source: <https://www.oasdiff.com/docs/breaking-changes>.
@@ -47,7 +50,7 @@ No implementation spec line depends on an unverified Python import or external l
 
 - GIM-190 artifacts are present for the target project before `cross_module_contract` runs.
 - Phase 1 symbol indexes still provide occurrence-level evidence. GIM-192 stores contract membership and consumer evidence, not full source occurrences.
-- Module identity comes first from `PublicApiSurface.module_name` for producer modules and from existing module/source ownership metadata for consumer files. If consumer module cannot be resolved exactly, the occurrence is skipped with explicit skip metrics.
+- Module identity comes first from `PublicApiSurface.module_name` for producer modules and from an explicit module-owner resolver for consumer `file_path`. Valid resolver inputs are either existing `(:Module)-[:CONTAINS]->(:File)` graph facts when present or a committed fixture/module-root map in tests. If consumer module cannot be resolved exactly, the occurrence is skipped with explicit skip metrics.
 - v1 runs on explicitly ingested commits. It does not crawl git history or choose commit pairs by itself.
 - GIM-191 / #5 Dependency Surface may later enrich producer/consumer candidate pruning, but GIM-192 v1 must not require that slice.
 - Generated bridge symbols are included only when they are already represented by GIM-190 fields and exact keys; KMP bridge semantics remain owned by roadmap #4.
@@ -57,9 +60,11 @@ No implementation spec line depends on an unverified Python import or external l
 ### In Scope
 
 - New extractor identity: `cross_module_contract`.
-- New graph model for module-to-module contract snapshots and optional minimal deltas.
+- New graph model for module-to-module contract snapshots and minimal deltas.
 - Consumption edges from contract snapshots to existing `PublicApiSymbol`.
-- Exact-match correlation from source occurrences / `SymbolOccurrenceShadow` to `PublicApiSymbol.symbol_qualified_name`.
+- Exact-match correlation from Tantivy `SymbolOccurrence` docs to `PublicApiSymbol.symbol_qualified_name` through `symbol_id_for`.
+- Add a filtered Tantivy helper over existing fields: `symbol_id`, `commit_sha`, `phase`, `file_path`, source position.
+- Add a concrete module-owner resolver for occurrence `file_path`.
 - Same-module exclusion: producer and consumer module must differ.
 - Commit-aware matching: producer surface, public symbol, source occurrence, and contract snapshot must share the same `commit_sha`.
 - Default filtering that excludes `visibility=package` unless internal/package mode is explicitly enabled.
@@ -75,6 +80,7 @@ No implementation spec line depends on an unverified Python import or external l
 - Git-history harvesting or automatic old/new commit selection.
 - Dependency resolver changes, package-manager graph ingestion, or manifest parsing from roadmap #5.
 - Tantivy schema migration.
+- Public MCP/API tools or broad query-surface changes.
 - Production deploy automation changes.
 
 ## Data Model
@@ -97,6 +103,7 @@ One producer/consumer module pair at one commit.
 - `file_count`
 - `skipped_symbol_count`
 - `schema_version`
+- `consumer_evidence_source`: initial value `tantivy_symbol_occurrence`
 
 ### `ModuleContractDelta`
 
@@ -124,6 +131,7 @@ Minimal comparison record for two explicitly supplied commits. This is substrate
   - `group_id`
   - `commit_sha`
   - `match_key`: `symbol_qualified_name`
+  - `match_symbol_id`
   - `use_count`
   - `file_count`
   - `first_seen_path`
@@ -146,15 +154,21 @@ Candidate producer symbols:
 
 Candidate consumer evidence:
 
-1. Use indexed source occurrences / shadows with the same `group_id`, `project`, `language`, and `commit_sha`.
-2. Keep reference/use occurrences only; definitions of the producer symbol do not count as consumption.
-3. Resolve `consumer_module_name` from exact module/file ownership metadata. If not available, skip with `consumer_module_unresolved`.
-4. Exclude same-module matches where `consumer_module_name == producer_module_name`.
+1. For each candidate `PublicApiSymbol`, compute `match_symbol_id = symbol_id_for(PublicApiSymbol.symbol_qualified_name)`.
+2. Query Tantivy occurrence docs by `symbol_id=match_symbol_id`, `commit_sha=PublicApiSymbol.commit_sha`, and consumer phases that represent references. Default v1 phase is `phase2_user_uses`; `phase3_vendor_uses` is included only when explicitly allowed by implementation scope/tests.
+3. Use returned occurrence `file_path`, `line`, `col_start`, `col_end`, and `commit_sha` as consumer evidence. Do not use `SymbolOccurrenceShadow` for this proof.
+4. Resolve `consumer_module_name` from `file_path` through an exact module-owner resolver:
+   - first choice: existing graph facts equivalent to `(:Module)-[:CONTAINS]->(:File {path})` within the same `group_id`;
+   - test/fixture fallback: committed module-root map under the cross-module contract fixture.
+5. If module ownership is missing, ambiguous, or conflicts across sources, skip with `consumer_module_unresolved`.
+6. Exclude same-module matches where `consumer_module_name == producer_module_name`.
 
 Exact match:
 
 ```text
-PublicApiSymbol.symbol_qualified_name == SymbolOccurrenceShadow.symbol_qualified_name
+symbol_id_for(PublicApiSymbol.symbol_qualified_name) == TantivyOccurrence.symbol_id
+AND PublicApiSymbol.commit_sha == TantivyOccurrence.commit_sha
+AND module_owner_for_path(TantivyOccurrence.file_path) != PublicApiSymbol.module_name
 ```
 
 No fallback is allowed in v1:
@@ -164,13 +178,14 @@ No fallback is allowed in v1:
 - no Kotlin/Swift cross-language normalization guesses;
 - no matching on `display_name` alone;
 - no matching on `signature_hash` without `symbol_qualified_name`.
+- no consumer proof from `SymbolOccurrenceShadow`.
 
 ## Version And Retention Policy
 
 GIM-192 inherits GIM-190's versioned-per-commit model.
 
 - Store snapshots for every commit explicitly ingested.
-- Store deltas only when an explicit old/new commit pair is requested by implementation or QA flow.
+- Store deltas only when an explicit old/new commit pair is requested by implementation or QA flow. Minimal `ModuleContractDelta` is in v1 and must not be deferred during Phase 2 without a spec revision and re-review.
 - Treat "latest contract" as a query over max accepted `commit_sha` / ingest time, not as a separate mutable node.
 - No eviction policy in v1. If graph volume becomes material, add a separate retention slice based on empirical node/edge counts from Phase 4.1 evidence.
 
@@ -182,10 +197,12 @@ Expected implementation paths:
 - `services/palace-mcp/src/palace_mcp/extractors/registry.py`
 - `services/palace-mcp/src/palace_mcp/extractors/foundation/models.py`
 - `services/palace-mcp/src/palace_mcp/extractors/foundation/schema.py`
+- `services/palace-mcp/src/palace_mcp/extractors/foundation/tantivy_bridge.py` for a filtered occurrence lookup helper over existing schema fields.
+- `services/palace-mcp/src/palace_mcp/extractors/foundation/module_owner.py` or an equivalent narrow helper if no existing module-owner resolver is reusable.
 - `services/palace-mcp/tests/extractors/unit/test_cross_module_contract*.py`
 - `services/palace-mcp/tests/extractors/integration/test_cross_module_contract_integration.py`
 - `services/palace-mcp/tests/extractors/fixtures/cross-module-contract-mini-project/`
-- `docs/runbooks/cross-module-contract.md` if operator workflow text is added in this slice.
+- `docs/runbooks/cross-module-contract.md`
 
 Implementation should avoid edits to `public_api_surface.py` unless a small shared helper is strictly additive and regression-tested. Any change to existing GIM-190 field semantics must include a fresh `rg`/grep call-site audit in the implementation PR.
 
@@ -200,14 +217,15 @@ Implementation should avoid edits to `public_api_surface.py` unless a small shar
 7. Symbols with null or unmatched `symbol_qualified_name` are skipped with explicit metrics.
 8. Graph writes are commit-aware; no edge crosses commit boundaries.
 9. Minimal `ModuleContractDelta` compares explicitly selected commits only and reports symbol-level add/remove/signature-change counts without semver advice.
-10. Integration tests prove graph invariants over Neo4j/testcontainer or existing extractor integration harness.
-11. QA Phase 4.1 posts runtime evidence with a real MCP/tool invocation or extractor runner smoke plus direct Neo4j invariant queries.
+10. Consumer module identity is resolved from occurrence `file_path` through a concrete resolver; unresolved/ambiguous ownership is skipped, not guessed.
+11. Integration tests prove graph invariants over Neo4j/testcontainer or existing extractor integration harness.
+12. QA Phase 4.1 posts runtime evidence with extractor runner smoke plus direct Neo4j invariant queries. MCP/tool invocation is required only if a later approved slice adds a public MCP surface.
 
 ## Verification Plan
 
 Implementation agents must provide:
 
-- Unit tests for exact matching, skip reasons, package visibility, deterministic IDs, same-module exclusion, and delta counts.
+- Unit tests for exact matching, Tantivy filtered lookup, module-owner resolution, skip reasons, package visibility, deterministic IDs, same-module exclusion, and delta counts.
 - Integration test that first loads GIM-190 public API fixture data, then runs `cross_module_contract`.
 - Direct graph invariant queries:
   - no `ContractSymbol` nodes created;
@@ -215,6 +233,7 @@ Implementation agents must provide:
   - snapshot `commit_sha` equals all consumed symbol `commit_sha`;
   - no same-module snapshots exist;
   - default run has zero `visibility=package` consumed symbols.
+  - every consumed edge has a non-empty `match_symbol_id` and at least one evidence path sample.
 - Targeted validation commands from `services/palace-mcp`:
   - `uv run pytest tests/extractors/unit/test_cross_module_contract*.py -v`
   - `uv run pytest tests/extractors/integration/test_cross_module_contract_integration.py -v`
@@ -226,6 +245,7 @@ CTO Phase 1.1 verification is docs-only: branch ancestry, docs diff, PR metadata
 ## Risks And Controls
 
 - **Sparse exact keys:** Some `PublicApiSymbol` rows may lack `symbol_qualified_name`. Control: skip explicitly; do not fuzzy-match.
+- **Consumer evidence source drift:** Neo4j shadows do not contain commit/file/module fields. Control: use Tantivy occurrence docs for consumer proof; use shadows only for existing backing/eviction behavior.
 - **Graph volume:** Per-commit producer/consumer snapshots can grow as modules increase. Control: v1 stores only explicit ingests and records counts for later retention decisions.
 - **Package/internal leakage:** Swift `package` visibility can look public in artifacts. Control: exclude by default and test internal mode separately.
 - **Cross-language bridge ambiguity:** KMP bridge symbols may have multiple representations. Control: use GIM-190 bridge metadata only when exact; defer deeper bridge semantics to #4.
@@ -234,8 +254,7 @@ CTO Phase 1.1 verification is docs-only: branch ancestry, docs diff, PR metadata
 ## Open Questions
 
 1. Should internal/package mode ship in v1 as an extractor parameter, or remain query-only follow-up after external mode is proven?
-2. Should `ModuleContractDelta` be implemented in the first engineering slice, or deferred until snapshot graph evidence from Phase 4.1 gives volume and usefulness data?
-3. Should a later #5 integration prune candidate producer modules before exact matching, or is exact occurrence correlation fast enough for the real UW-iOS bundle?
+2. Should a later #5 integration prune candidate producer modules before exact matching, or is exact occurrence correlation fast enough for the real UW-iOS bundle?
 
 ## Handoff Requirements
 
@@ -243,5 +262,5 @@ Before implementation starts:
 
 1. CXCodeReviewer must approve this spec and the plan at `docs/superpowers/plans/2026-05-04-GIM-192-cross-module-contract-extractor.md`.
 2. If CR requests changes on matching semantics or external tool assumptions, revise this spec before creating implementation subtasks.
-3. After CR approval, implementation is assigned to CXPythonEngineer unless CXMCPEngineer owns a narrow MCP/query contract change.
+3. After CR approval, implementation is assigned to CXPythonEngineer. Any MCP/query contract change is out of v1 and must be a follow-up with CXMCPEngineer review.
 4. No implementation sub-issues are created from Phase 1.1 until plan-first review passes and operator confirms the phase chain.

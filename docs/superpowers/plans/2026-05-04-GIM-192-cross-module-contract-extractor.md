@@ -4,8 +4,8 @@
 
 ## Scope
 
-- In: extractor `cross_module_contract`, `ModuleContractSnapshot`, optional minimal `ModuleContractDelta`, exact `PublicApiSymbol` consumption edges, fixture, tests, runtime smoke.
-- Out: duplicate `ContractSymbol`, fuzzy matching, full breaking-change taxonomy, semver advice, automatic API artifact generation, git-history harvesting, dependency resolver changes, Tantivy schema migration.
+- In: extractor `cross_module_contract`, `ModuleContractSnapshot`, minimal `ModuleContractDelta`, exact `PublicApiSymbol` consumption edges, filtered Tantivy occurrence lookup, module-owner resolver, fixture, tests, runbook, runtime smoke.
+- Out: duplicate `ContractSymbol`, fuzzy matching, full breaking-change taxonomy, semver advice, automatic API artifact generation, git-history harvesting, dependency resolver changes, Tantivy schema migration, public MCP/API tools.
 
 ## Phase Steps
 
@@ -19,53 +19,61 @@
 
 ### Step 2 - Fixture and graph truth
 
-**Description:** Create a minimal committed fixture with at least two modules, GIM-190-style public API artifacts, and source/index evidence showing one module consuming another module's exported symbol.
-**Acceptance criteria:** Fixture includes producer module, consumer module, same-module reference, unmatched public symbol, package/internal symbol, and two commit snapshots if delta remains in v1; fixture notes explain artifact/source truth without editing production UW build files.
+**Description:** Create a minimal committed fixture with at least two modules, GIM-190-style public API artifacts, Tantivy occurrence evidence, and source/index evidence showing one module consuming another module's exported symbol.
+**Acceptance criteria:** Fixture includes producer module, consumer module, exact module-root ownership map or graph facts, same-module reference, unmatched public symbol, package/internal symbol, and two commit snapshots for delta tests; fixture notes explain artifact/source truth without editing production UW build files.
 **Suggested owner:** CXPythonEngineer.
 **Affected paths:** `services/palace-mcp/tests/extractors/fixtures/cross-module-contract-mini-project/`, fixture README/REGEN notes.
 **Dependencies:** Step 1.
 
 ### Step 3 - Add contract models and schema
 
-**Description:** Add `ModuleContractSnapshot`, optional `ModuleContractDelta`, constraints/indexes, and graph write helpers using existing extractor foundation patterns.
+**Description:** Add `ModuleContractSnapshot`, `ModuleContractDelta`, constraints/indexes, and graph write helpers using existing extractor foundation patterns.
 **Acceptance criteria:** Model/schema tests cover required fields, stable IDs, commit-aware identity, uniqueness, and absence of any new `ContractSymbol` model.
 **Suggested owner:** CXPythonEngineer.
 **Affected paths:** `services/palace-mcp/src/palace_mcp/extractors/foundation/models.py`, `services/palace-mcp/src/palace_mcp/extractors/foundation/schema.py`, related unit tests.
 **Dependencies:** Step 2.
 
-### Step 4 - Implement exact matching engine
+### Step 4 - Add consumer evidence helpers
 
-**Description:** Match `PublicApiSymbol.symbol_qualified_name` to source occurrence/shadow `symbol_qualified_name` only when project, language, group, commit, and module boundaries align.
-**Acceptance criteria:** Unit tests prove exact match success, null-key skip, unmatched-key skip, same-module exclusion, reference-only consumption, default package visibility exclusion, and no display-name/signature-only fallback.
+**Description:** Add a narrow Tantivy lookup helper that queries existing fields by `symbol_id`, `commit_sha`, and phase, plus a module-owner resolver from occurrence `file_path`.
+**Acceptance criteria:** Tests prove the helper returns only requested commit/phase docs with `file_path` and source position; no Tantivy schema migration is required; module ownership returns exactly one module or an explicit unresolved/ambiguous result.
 **Suggested owner:** CXPythonEngineer.
-**Affected paths:** `services/palace-mcp/src/palace_mcp/extractors/cross_module_contract.py`, `services/palace-mcp/tests/extractors/unit/test_cross_module_contract*.py`.
+**Affected paths:** `services/palace-mcp/src/palace_mcp/extractors/foundation/tantivy_bridge.py`, `services/palace-mcp/src/palace_mcp/extractors/foundation/module_owner.py` or equivalent narrow helper, unit tests.
 **Dependencies:** Steps 2-3.
 
-### Step 5 - Register extractor and graph integration
+### Step 5 - Implement exact matching engine
 
-**Description:** Register `cross_module_contract`, discover GIM-190 surfaces for the target commit, create snapshots, and write `CONSUMES_PUBLIC_SYMBOL` edges to existing `PublicApiSymbol` nodes.
-**Acceptance criteria:** Integration test first runs/loads `public_api_surface` fixture data, then runs `cross_module_contract`; graph queries prove consumed symbols are `PublicApiSymbol`, snapshot commits match symbol commits, and no same-module snapshot is written.
+**Description:** Match `PublicApiSymbol.symbol_qualified_name` to Tantivy occurrence docs through `symbol_id_for`, then resolve consumer module ownership from occurrence `file_path`.
+**Acceptance criteria:** Unit tests prove exact match by `symbol_id_for(PublicApiSymbol.symbol_qualified_name)`, null-key skip, unmatched-key skip, same-module exclusion, reference-phase-only consumption, default package visibility exclusion, no display-name/signature-only fallback, and no consumer proof from `SymbolOccurrenceShadow`.
 **Suggested owner:** CXPythonEngineer.
-**Affected paths:** `services/palace-mcp/src/palace_mcp/extractors/registry.py`, extractor implementation, integration tests.
+**Affected paths:** `services/palace-mcp/src/palace_mcp/extractors/cross_module_contract.py`, `services/palace-mcp/tests/extractors/unit/test_cross_module_contract*.py`.
 **Dependencies:** Step 4.
 
-### Step 6 - Minimal delta substrate decision
+### Step 6 - Register extractor and graph integration
 
-**Description:** Either implement the spec's minimal explicit old/new `ModuleContractDelta` or document deferral before Phase 3 review.
-**Acceptance criteria:** If implemented, tests cover removed consumed symbol, signature hash change, added consumed symbol, and affected use count without semver advice. If deferred, spec/plan are revised before CR approval of implementation scope.
-**Suggested owner:** CXPythonEngineer with CXCTO decision if deferring.
-**Affected paths:** extractor implementation, delta unit/integration tests, this plan/spec if scope changes.
+**Description:** Register `cross_module_contract`, discover GIM-190 surfaces for the target commit, create snapshots, and write `CONSUMES_PUBLIC_SYMBOL` edges to existing `PublicApiSymbol` nodes.
+**Acceptance criteria:** Integration test first runs/loads `public_api_surface` fixture data, then runs `cross_module_contract`; graph queries prove consumed symbols are `PublicApiSymbol`, snapshot commits match symbol commits, edge `match_symbol_id` is present, and no same-module snapshot is written.
+**Suggested owner:** CXPythonEngineer.
+**Affected paths:** `services/palace-mcp/src/palace_mcp/extractors/registry.py`, extractor implementation, integration tests.
 **Dependencies:** Step 5.
 
-### Step 7 - Optional query or runbook surface
+### Step 7 - Minimal delta substrate
 
-**Description:** Add only the smallest operator-facing documentation or query surface needed to inspect contract snapshots. Avoid broad MCP API expansion unless the implementation proves it is required.
-**Acceptance criteria:** If no MCP surface is added, runbook or test notes include direct Neo4j smoke queries. If MCP surface is added, response schema has targeted tests and CXMCPEngineer owns/reviews the contract.
-**Suggested owner:** CXPythonEngineer for docs/query notes; CXMCPEngineer only for MCP contract changes; CXTechnicalWriter if hired for final runbook polish.
-**Affected paths:** optional `docs/runbooks/cross-module-contract.md`, optional MCP/query files and tests.
-**Dependencies:** Steps 5-6.
+**Description:** Implement the spec's minimal explicit old/new `ModuleContractDelta`.
+**Acceptance criteria:** Tests cover removed consumed symbol, signature hash change, added consumed symbol, and affected use count without semver advice; delta is created only for explicitly supplied old/new commit pairs.
+**Suggested owner:** CXPythonEngineer.
+**Affected paths:** extractor implementation, delta unit/integration tests.
+**Dependencies:** Step 6.
 
-### Step 8 - Phase 3.1 mechanical review
+### Step 8 - Runbook-only inspection surface
+
+**Description:** Document direct Neo4j inspection queries and operator smoke expectations. Do not add a public MCP/API surface in v1.
+**Acceptance criteria:** Runbook includes snapshot, symbol-reuse, commit-boundary, same-module, package-visibility, and delta inspection queries; no MCP server/router files are touched.
+**Suggested owner:** CXPythonEngineer for first draft; CXTechnicalWriter if hired for final polish.
+**Affected paths:** `docs/runbooks/cross-module-contract.md`.
+**Dependencies:** Steps 6-7.
+
+### Step 9 - Phase 3.1 mechanical review
 
 **Description:** Review pushed implementation for scope adherence, correctness, tests, and GIM-190 contract preservation.
 **Acceptance criteria:** CXCodeReviewer approves code or requests changes; reviewer pastes changed-file list and confirms every code/test path is declared in this plan; reviewer verifies no duplicate `ContractSymbol` and no fuzzy matching fallback.
@@ -73,29 +81,29 @@
 **Affected paths:** PR diff and issue evidence.
 **Dependencies:** Phase 2 implementation pushed.
 
-### Step 9 - Phase 3.2 adversarial architecture review
+### Step 10 - Phase 3.2 adversarial architecture review
 
-**Description:** Challenge graph cardinality, exact matching semantics, commit boundary guarantees, and optional delta scope before QA.
+**Description:** Challenge graph cardinality, exact matching semantics, commit boundary guarantees, and minimal delta scope before QA.
 **Acceptance criteria:** CodexArchitectReviewer approves architecture or requests changes; review explicitly covers versioned-per-commit storage, latest-as-query policy, package visibility default, and no cross-branch carry-over.
 **Suggested owner:** CodexArchitectReviewer.
 **Affected paths:** PR diff, spec, plan, evidence comments.
-**Dependencies:** Step 8.
-
-### Step 10 - Phase 4.1 QA live smoke
-
-**Description:** Run targeted tests and a real runtime smoke that exercises GIM-190 public API facts plus GIM-192 contract extraction.
-**Acceptance criteria:** CXQAEngineer evidence includes tested commit SHA, targeted pytest output, docker/runtime health, real extractor or MCP invocation, direct Neo4j invariant queries, and checkout restoration. Required invariants: zero `ContractSymbol` nodes, all consumed targets are `PublicApiSymbol`, no commit-crossing edges, no same-module snapshots, and default external mode excludes `visibility=package`.
-**Suggested owner:** CXQAEngineer.
-**Affected paths:** Runtime evidence comment.
 **Dependencies:** Step 9.
 
-### Step 11 - Phase 4.2 merge readiness and close
+### Step 11 - Phase 4.1 QA live smoke
+
+**Description:** Run targeted tests and a real runtime smoke that exercises GIM-190 public API facts plus GIM-192 contract extraction.
+**Acceptance criteria:** CXQAEngineer evidence includes tested commit SHA, targeted pytest output, docker/runtime health, real extractor invocation, direct Neo4j invariant queries, and checkout restoration. Required invariants: zero `ContractSymbol` nodes, all consumed targets are `PublicApiSymbol`, no commit-crossing edges, no same-module snapshots, and default external mode excludes `visibility=package`.
+**Suggested owner:** CXQAEngineer.
+**Affected paths:** Runtime evidence comment.
+**Dependencies:** Step 10.
+
+### Step 12 - Phase 4.2 merge readiness and close
 
 **Description:** Merge only after review and QA gates pass.
 **Acceptance criteria:** CXCTO runs mandatory `gh pr view --json mergeStateStatus,mergeable,statusCheckRollup,reviewDecision,headRefOid` before claiming any merge blocker; merges into `develop` only when clean; verifies Phase 4.1 evidence is authored by CXQAEngineer; closes GIM-192 only after merge/deploy evidence.
 **Suggested owner:** CXCTO.
 **Affected paths:** PR into `develop`, issue thread.
-**Dependencies:** Step 10.
+**Dependencies:** Step 11.
 
 ## Concrete Smoke Gates
 
@@ -134,7 +142,7 @@ Fail:
 
 - Package/internal symbols appear in default external contract.
 
-### Gate D - Minimal delta, if in v1
+### Gate D - Minimal delta
 
 Pass:
 
@@ -145,6 +153,18 @@ Pass:
 Fail:
 
 - Delta chooses commit history automatically or claims full breaking-change classification.
+
+### Gate E - Consumer evidence source
+
+Pass:
+
+- Consumer proof comes from Tantivy occurrence docs filtered by `symbol_id`, `commit_sha`, and phase.
+- `SymbolOccurrenceShadow` is not used for commit-aware consumer proof.
+- Module ownership is resolved from `file_path` by a concrete resolver or skipped as unresolved.
+
+Fail:
+
+- Implementation proves commit/module boundaries from `SymbolOccurrenceShadow` alone.
 
 ## Verification Commands
 
@@ -182,7 +202,21 @@ RETURN count(r) AS cross_commit_edges;
 MATCH (snap:ModuleContractSnapshot)
 WHERE snap.consumer_module_name = snap.producer_module_name
 RETURN count(snap) AS same_module_snapshots;
+
+MATCH (:ModuleContractSnapshot)-[r:CONSUMES_PUBLIC_SYMBOL]->(:PublicApiSymbol)
+WHERE r.match_symbol_id IS NULL OR r.evidence_paths_sample IS NULL
+RETURN count(r) AS missing_consumer_evidence;
 ```
+
+## Rollback / Backout
+
+If implementation causes runtime or graph issues before merge:
+
+- Disable `cross_module_contract` by removing it from the extractor registry in the feature branch and re-running targeted tests.
+- Drop newly added `ModuleContractSnapshot` / `ModuleContractDelta` constraints and indexes only in local/test databases; production schema changes must be backed out by a reviewed migration/runbook step, not ad hoc Cypher.
+- Because v1 adds no MCP/API tool, no client compatibility rollback is needed.
+- Existing GIM-190 `public_api_surface` nodes, `PublicApiSymbol` nodes, and `BACKED_BY_SYMBOL` edges must remain untouched by rollback.
+- If a bad run writes contract nodes in a test/prod graph, cleanup is label-scoped: delete `ModuleContractSnapshot`, `ModuleContractDelta`, and their outgoing contract/delta edges for the affected `group_id` and `commit_sha`; do not delete `PublicApiSymbol`.
 
 ## Review Risks
 
