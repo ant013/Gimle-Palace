@@ -1,0 +1,11 @@
+// swift-interface-format-version: 1.0
+// swift-compiler-version: Apple Swift version 6.2.4 (swiftlang-6.2.4.1.4 clang-1700.6.4.2)
+// swift-module-flags: -enable-library-evolution -module-name ProducerKit
+
+public struct Wallet {
+  public init(id: Swift.String)
+  public func balance() -> Swift.Int
+}
+
+public func staleExport() -> Swift.String
+package func packageHelper() -> Swift.String

@@ -1,0 +1,65 @@
+[
+  {
+    "symbol_qualified_name": "Wallet.init(id: Swift.String)",
+    "file_path": "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift",
+    "line": 5,
+    "col_start": 22,
+    "col_end": 30,
+    "commit_sha": "feedfacefeedfacefeedfacefeedfacefeedface",
+    "phase": "phase2_user_uses"
+  },
+  {
+    "symbol_qualified_name": "Wallet.balance()",
+    "file_path": "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift",
+    "line": 6,
+    "col_start": 12,
+    "col_end": 19,
+    "commit_sha": "feedfacefeedfacefeedfacefeedfacefeedface",
+    "phase": "phase2_user_uses"
+  },
+  {
+    "symbol_qualified_name": "Wallet.balance()",
+    "file_path": "ProducerKit/Sources/ProducerKit/InternalUse.swift",
+    "line": 5,
+    "col_start": 8,
+    "col_end": 15,
+    "commit_sha": "feedfacefeedfacefeedfacefeedfacefeedface",
+    "phase": "phase2_user_uses"
+  },
+  {
+    "symbol_qualified_name": "Wallet.balance()",
+    "file_path": "UnknownFeature/Sources/UnknownFeature/Loose.swift",
+    "line": 4,
+    "col_start": 10,
+    "col_end": 17,
+    "commit_sha": "feedfacefeedfacefeedfacefeedfacefeedface",
+    "phase": "phase2_user_uses"
+  },
+  {
+    "symbol_qualified_name": "packageHelper()",
+    "file_path": "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift",
+    "line": 10,
+    "col_start": 4,
+    "col_end": 17,
+    "commit_sha": "feedfacefeedfacefeedfacefeedfacefeedface",
+    "phase": "phase2_user_uses"
+  },
+  {
+    "symbol_qualified_name": "Wallet.balance()",
+    "file_path": "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift",
+    "line": 6,
+    "col_start": 12,
+    "col_end": 19,
+    "commit_sha": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+    "phase": "phase2_user_uses"
+  },
+  {
+    "symbol_qualified_name": "staleExport()",
+    "file_path": "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift",
+    "line": 12,
+    "col_start": 4,
+    "col_end": 16,
+    "commit_sha": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+    "phase": "phase2_user_uses"
+  }
+]

@@ -8,10 +8,13 @@ so they are masked in repr() and structured log output.
 Call `.get_secret_value()` only at driver/client construction sites.
 """
 
+import json
 from pathlib import Path
+from typing import Annotated, cast
 
 from pydantic import Field, SecretStr
-from pydantic_settings import BaseSettings
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, NoDecode
 
 
 class Settings(BaseSettings):
@@ -71,13 +74,24 @@ class Settings(BaseSettings):
     )
 
     # SCIP integration (101a decides pathing; 101b does the actual parse)
-    palace_scip_index_paths: dict[str, str] = Field(
+    palace_scip_index_paths: Annotated[dict[str, str], NoDecode] = Field(
         default_factory=dict,
         description=(
             "JSON-encoded dict mapping project slug → .scip file path. "
             'Example env: PALACE_SCIP_INDEX_PATHS=\'{"gimle":"/repos/gimle/.scip/index.scip"}\''
         ),
     )
+
+    @field_validator("palace_scip_index_paths", mode="before")
+    @classmethod
+    def parse_scip_index_paths(cls, value: object) -> dict[str, str] | object:
+        if value is None:
+            return {}
+        if isinstance(value, str):
+            if value.strip() == "":
+                return {}
+            return cast(object, json.loads(value))
+        return value
 
     # -----------------------------------------------------------------------
     # Git history extractor (GIM-186)

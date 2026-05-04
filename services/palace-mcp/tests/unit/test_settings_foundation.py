@@ -77,6 +77,15 @@ class TestSettingsFoundationDefaults:
 
 
 class TestSettingsFoundationOverrides:
+    def test_scip_index_paths_empty_string_maps_to_empty_dict(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        for k, v in _minimal_env().items():
+            monkeypatch.setenv(k, v)
+        monkeypatch.setenv("PALACE_SCIP_INDEX_PATHS", "")
+        s = Settings()
+        assert s.palace_scip_index_paths == {}
+
     def test_scip_index_paths_json_dict(self, monkeypatch: pytest.MonkeyPatch) -> None:
         for k, v in _minimal_env().items():
             monkeypatch.setenv(k, v)
