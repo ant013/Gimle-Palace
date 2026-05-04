@@ -1,6 +1,6 @@
-# GIM-184 - iOS C/C++/Obj-C extractor via scip-clang - Spec
+# GIM-184 - iOS C/C++ extractor via scip-clang - Spec
 
-**Status:** Operator-review spec draft, 2026-05-03.
+**Status:** Phase 1.1c scope finalized, rev3, 2026-05-04.
 **Issue:** GIM-184 (`e92ed4c3-6b7f-4d72-ab1c-c16bc70ae89e`).
 **Branch:** `feature/GIM-184-ios-clang-extractor`.
 **Base:** `develop@365c9c42233ad125728f27048101a01e4899d2cf`.
@@ -9,7 +9,7 @@
 
 ## Goal
 
-Add `symbol_index_clang`, a palace-mcp symbol extractor for iOS native C, C++, and Objective-C code using Sourcegraph `scip-clang`.
+Add `symbol_index_clang`, a palace-mcp symbol extractor for iOS native C and C++ code using Sourcegraph `scip-clang`.
 
 The extractor ingests pre-generated SCIP protobuf files into the existing symbol-index substrate, following the GIM-128 Swift and Java/Kotlin three-phase pattern:
 
@@ -17,7 +17,7 @@ The extractor ingests pre-generated SCIP protobuf files into the existing symbol
 2. `phase2_user_uses` - user-code references above the configured importance threshold.
 3. `phase3_vendor_uses` - dependency/vendor references.
 
-Objective-C support is a hard smoke gate, not an assumption. `scip-clang` officially documents C, C++, and CUDA support plus JSON compilation database input; it does not promise Objective-C as a first-class language. Therefore GIM-184 must prove `.m` quality on iMac before implementation starts. If `.m` output is missing or low quality, v1 narrows to C/C++ and Objective-C becomes a documented follow-up.
+Phase 1.1b selected final v1 scope: **C/C++ only**. Objective-C support is a documented follow-up, not part of GIM-184 v1. `scip-clang` officially documents C, C++, and CUDA support plus JSON compilation database input; it does not promise Objective-C as a first-class language. The accepted 2026-05-04 arm64 macOS smoke showed C and C++ indexing PASS, while Objective-C `.m` built under Xcode but `scip-clang 0.4.0` skipped/failed it as a non-main-file extension.
 
 `.mm` files are not a separate product scope. They are treated only as an optional Obj-C/C++ interop probe if the smoke fixture can index them cleanly.
 
@@ -35,24 +35,24 @@ Known scip-clang constraints that shape this spec:
 
 ## Assumptions
 
-- The iMac Xcode/clang toolchain is sufficient for C/C++/Obj-C smoke even if it is too old for modern Swift emitter work.
-- `scip-clang` can be installed or already exists on iMac without changing palace-mcp's runtime container.
+- The 2026-05-04 arm64 macOS smoke is the accepted host evidence path for Phase 1.1b. It confirmed full Xcode/iPhoneSimulator SDK, `clang`, and `scip-clang 0.4.0` at `/Users/ant013/.local/bin/scip-clang`.
+- `scip-clang` generated usable C and C++ SCIP output on that arm64 macOS host without changing palace-mcp's runtime container.
 - palace-mcp continues to ingest `.scip` files generated outside the container, consistent with Swift and Java/Kotlin extractor flow.
 - Native source coverage is useful even if real UW-iOS itself is mostly Swift; Pods and adjacent iOS native dependencies still need symbol visibility.
-- The implementation starts only after the iMac smoke produces evidence for the language set accepted into v1.
+- The implementation starts only after the accepted macOS smoke produces evidence for the language set accepted into v1.
 
 ## Scope
 
 ### In Scope
 
 - Parser support for `scip-clang` symbols, including empty manager fields and backtick-safe descriptor parsing.
-- Language model additions for C, C++, and Objective-C.
+- Language model additions for C and C++.
 - Optional `.mm` interop probe only if smoke proves stable output.
 - `symbol_index_clang.py` registered in the extractor registry.
-- Mixed native fixture containing app-level C/C++/Obj-C files and Pods/vendor native files.
+- Mixed native fixture containing app-level C/C++ files and Pods/vendor native files.
 - Unit tests for parser, language detection, qname canonicalization, and vendor/system classification.
 - Integration tests proving IngestRun checkpoints and Tantivy search over native occurrences by `symbol_id`.
-- iMac smoke evidence before implementation handoff.
+- Accepted macOS smoke evidence before implementation handoff.
 
 ### Out Of Scope
 
@@ -61,12 +61,15 @@ Known scip-clang constraints that shape this spec:
 - Custom clang emitter.
 - Full call graph, data-flow, or macro expansion semantics beyond DEF/DECL/USE occurrences.
 - Guaranteed `.mm` interop support.
+- Objective-C `.m` extraction in v1; it is a follow-up after an alternate extractor/tool strategy is chosen.
 - Storyboards, xib, Core Data models, asset/resource indexing.
 - Production auto-deploy changes.
 
 ## Smoke Gates
 
 Phase 1.1 must run before implementation and determines the final v1 language scope.
+
+Phase 1.1b final verdict from GIM-185: **v1 = C/C++ only**.
 
 ### Gate A - C
 
@@ -110,6 +113,8 @@ Fail:
 - v1 scope becomes C/C++ only.
 - Spec and plan must document "Objective-C follow-up" before team handoff.
 
+Phase 1.1b result: Gate C failed for extraction. Objective-C app-level Xcode build passed, but `scip-clang` skipped/failed `.m` extraction. Do not implement Objective-C language detection or fixture expectations in GIM-184 v1.
+
 ### Optional Probe - `.mm`
 
 Input: tiny `.mm` file calling both Objective-C and C++ code.
@@ -124,13 +129,13 @@ Fail:
 
 ## Compilation Database Decision
 
-Implementation cannot start until Phase 1.1 records the chosen iMac compilation database path.
+Implementation cannot start until Phase 1.1 records the chosen smoke compilation database path.
 
 Try candidates in this order:
 
 1. **Manual mini fixture compdb** for smoke:
    - Commit a tiny native fixture.
-   - Generate `compile_commands.json` directly for `.c`, `.cpp`, and `.m` commands.
+   - Generate `compile_commands.json` directly for `.c` and `.cpp` commands. `.m` remains only historical Phase 1.1b evidence and follow-up input.
    - This proves `scip-clang` and parser behavior without Xcode project noise.
 2. **Bear around xcodebuild** for Xcode/Pods:
    - Run from project root.
@@ -177,7 +182,7 @@ Language detection order:
 2. Safe extension fallback:
    - `.c` -> C
    - `.cc`, `.cpp`, `.cxx` -> C++
-   - `.m` -> Objective-C, only if Gate C passes
+   - `.m` -> UNKNOWN in GIM-184 v1; Objective-C is follow-up because Gate C did not pass
    - `.mm` -> UNKNOWN unless optional probe passes and spec is revised
 3. Header fallback:
    - `.h`, `.hh`, `.hpp`, `.hxx` must not be blindly assigned.
@@ -189,9 +194,10 @@ Expected `Language` enum values:
 
 - `Language.C = "c"`
 - `Language.CPP = "cpp"`
-- `Language.OBJECTIVE_C = "objective-c"`
 
-Do not add an Objective-C++ enum in v1. `.mm` remains `unknown` unless the optional interop probe passes and the spec is explicitly revised.
+Do not add Objective-C or Objective-C++ enum values in GIM-184 v1. `.m` and `.mm` remain `unknown` unless a follow-up spec explicitly revises the scope.
+
+Phase 1.1b smoke finding: current parser maps SCIP `doc.language='CPP'` to `Language.UNKNOWN`. GIM-184 v1 must fix that mapping for C++ before implementation handoff can pass review.
 
 Current Tantivy caveat: `TantivyBridge` has integer `role` and `language` fields, but currently writes them as `0`. GIM-184 does not require changing Tantivy schema or bridge behavior unless the implementation intentionally takes on that foundation work. Language acceptance for v1 is therefore parser/extractor-level, not Tantivy-field-level. If the implementation chooses to make native language filterable in Tantivy, add `foundation/tantivy_bridge.py` and schema migration tests to scope before coding.
 
@@ -250,7 +256,7 @@ For GIM-184 v1:
 ## Acceptance Criteria
 
 - Phase 1.1 smoke evidence is posted to GIM-184 before implementation assignment.
-- Final v1 language scope is explicitly set after smoke: either C/C++/Obj-C or narrowed C/C++.
+- Final v1 language scope is explicitly set after smoke: C/C++ only.
 - `symbol_index_clang` is registered and runnable through the extractor runner.
 - Parser handles `scip-clang` empty-manager symbols and backtick descriptors without qname corruption.
 - Parser/extractor language values follow the detection policy above; `.h` is not blindly classified.
@@ -264,9 +270,11 @@ For GIM-184 v1:
 
 ## Verification Plan
 
-### iMac Smoke
+### Accepted macOS Smoke
 
-Run on iMac before implementation:
+Accepted 2026-05-04 smoke host evidence came from arm64 macOS with full Xcode/iPhoneSimulator SDK, `clang`, and `scip-clang 0.4.0`. The original literal Intel iMac wording is superseded for Phase 1.1b because official upstream release assets provide macOS `arm64-darwin` but no x86_64 macOS binary.
+
+Smoke commands captured before implementation:
 
 ```bash
 xcodebuild -version
@@ -321,6 +329,7 @@ uv run pytest tests/extractors
 ## Risks
 
 - Objective-C may not be usable through `scip-clang`; the smoke gate must narrow scope instead of hiding this.
+- Objective-C was not usable through `scip-clang 0.4.0` in Phase 1.1b and is explicitly deferred.
 - Xcode compilation database generation may be the largest unknown; manual fixture compdb is required as the first controlled step.
 - Header documents may be ambiguous; default UNKNOWN is safer than incorrect language labels.
 - SDK/system headers may produce too much data; they are excluded by default.
@@ -328,9 +337,18 @@ uv run pytest tests/extractors
 - Tantivy does not currently store `symbol_qualified_name`, and its `role`/`language` fields are placeholders; v1 verification should not assume those fields are queryable unless foundation scope is expanded.
 - Real UW-iOS native surface may live mostly in dependencies; fixture coverage is still required even if real-source smoke is deferred.
 
+## Objective-C Follow-Up
+
+Create a separate follow-up before promising Objective-C extraction. The follow-up must choose one of:
+
+- another clang/SourceKit/native index source for `.m`,
+- a custom Objective-C emitter,
+- a future `scip-clang` release that proves usable `.m` output in a new smoke gate.
+
+Do not implement Objective-C support opportunistically inside GIM-184.
+
 ## Open Questions
 
-- Which exact `scip-clang` version/source is pinned for iMac?
-- Does the installed `scip-clang` emit useful `document.language` for `.m` files?
+- Should the pinned `scip-clang` source for fixtures be the official `scip-clang-arm64-darwin v0.4.0` asset from the accepted smoke host?
 - Should vendor DEF/DECL occurrences be routed to a dedicated future phase, or excluded in v1?
 - If placeholder qnames collide, should GIM-184 prefix package with project/vendor namespace or defer that to a foundation follow-up?
