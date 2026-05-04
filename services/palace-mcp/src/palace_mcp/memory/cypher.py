@@ -8,12 +8,88 @@ named parameters only.
 # Only palace-mcp-specific node types need DDL here.
 CREATE_CONSTRAINTS = [
     "CREATE CONSTRAINT project_slug IF NOT EXISTS FOR (p:Project) REQUIRE p.slug IS UNIQUE",
+    # GIM-182: bundle name uniqueness
+    "CREATE CONSTRAINT bundle_name IF NOT EXISTS FOR (b:Bundle) REQUIRE b.name IS UNIQUE",
 ]
 
 # --- Indexes (non-unique; speeds up group_id filter) ---
 CREATE_INDEXES = [
     "CREATE INDEX project_group_id IF NOT EXISTS FOR (p:Project) ON (p.group_id)",
+    # GIM-182: bundle group_id filter
+    "CREATE INDEX bundle_group_id IF NOT EXISTS FOR (b:Bundle) ON (b.group_id)",
 ]
+
+# --- Bundle DDL (GIM-182) ---
+
+CHECK_PROJECT_SLUG_EXISTS = """
+MATCH (p:Project {slug: $slug})
+RETURN p.slug AS slug
+LIMIT 1
+"""
+
+CHECK_BUNDLE_NAME_EXISTS = """
+MATCH (b:Bundle {name: $name})
+RETURN b.name AS b_name
+LIMIT 1
+"""
+
+UPSERT_BUNDLE = """
+MERGE (b:Bundle {name: $name})
+ON CREATE SET
+    b.group_id    = 'bundle/' + $name,
+    b.description = $description,
+    b.created_at  = $created_at
+RETURN b
+"""
+
+GET_BUNDLE_MEMBERS = """
+MATCH (b:Bundle {name: $bundle})-[c:CONTAINS]->(p:Project)
+RETURN p.slug AS slug, c.tier AS tier, c.added_at AS added_at
+ORDER BY p.slug ASC
+"""
+
+GET_BUNDLE_MEMBERS_WITH_INGEST = """
+MATCH (b:Bundle {name: $bundle})-[c:CONTAINS]->(p:Project)
+OPTIONAL MATCH (r:IngestRun)
+    WHERE r.group_id = ('project/' + p.slug)
+    AND r.finished_at IS NOT NULL
+WITH p, c, r
+ORDER BY r.started_at DESC
+WITH p, c, collect(r)[0] AS latest_run
+RETURN
+    p.slug AS slug,
+    c.tier AS tier,
+    c.added_at AS added_at,
+    latest_run.finished_at AS last_run_completed_at,
+    CASE
+        WHEN latest_run IS NULL THEN null
+        WHEN size(latest_run.errors) = 0 THEN true
+        ELSE false
+    END AS last_run_ok
+ORDER BY p.slug ASC
+"""
+
+MERGE_BUNDLE_CONTAINS_PROJECT = """
+MATCH (b:Bundle {name: $bundle})
+MATCH (p:Project {slug: $project})
+MERGE (b)-[c:CONTAINS {tier: $tier}]->(p)
+ON CREATE SET c.added_at = $added_at
+"""
+
+COUNT_BUNDLE_MEMBERS = """
+MATCH (b:Bundle {name: $name})-[:CONTAINS]->(:Project)
+RETURN count(*) AS member_count
+"""
+
+DELETE_BUNDLE_CASCADE = """
+MATCH (b:Bundle {name: $name})
+DETACH DELETE b
+"""
+
+DELETE_BUNDLE_NO_CASCADE = """
+MATCH (b:Bundle {name: $name})
+DELETE b
+"""
 
 # --- IngestRun meta-node (read by palace.memory.health) ---
 CREATE_INGEST_RUN = """
@@ -59,6 +135,8 @@ SET p.group_id            = 'project/' + $slug,
     p.language            = $language,
     p.framework           = $framework,
     p.repo_url            = $repo_url,
+    p.parent_mount        = $parent_mount,
+    p.relative_path       = $relative_path,
     p.source              = 'paperclip',
     p.source_created_at   = coalesce(p.source_created_at, $now),
     p.source_updated_at   = $now

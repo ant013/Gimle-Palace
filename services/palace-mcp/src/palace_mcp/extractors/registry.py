@@ -11,6 +11,7 @@ from palace_mcp.extractors.base import BaseExtractor
 from palace_mcp.extractors.codebase_memory_bridge import CodebaseMemoryBridgeExtractor
 from palace_mcp.extractors.git_history.extractor import GitHistoryExtractor
 from palace_mcp.extractors.heartbeat import HeartbeatExtractor
+from palace_mcp.extractors.public_api_surface import PublicApiSurfaceExtractor
 from palace_mcp.extractors.symbol_index_clang import SymbolIndexClang
 from palace_mcp.extractors.symbol_index_java import SymbolIndexJava
 from palace_mcp.extractors.symbol_index_python import SymbolIndexPython
@@ -21,6 +22,7 @@ from palace_mcp.extractors.symbol_index_typescript import SymbolIndexTypeScript
 EXTRACTORS: dict[str, BaseExtractor] = {
     "heartbeat": HeartbeatExtractor(),
     "codebase_memory_bridge": CodebaseMemoryBridgeExtractor(),
+    "public_api_surface": PublicApiSurfaceExtractor(),
     "symbol_index_python": SymbolIndexPython(),
     "symbol_index_typescript": SymbolIndexTypeScript(),
     "symbol_index_java": SymbolIndexJava(),

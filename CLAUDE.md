@@ -170,6 +170,7 @@ the container.
 | `uw-android` | `/Users/Shared/Android/unstoppable-wallet-android`                                  | `/repos/uw-android:ro`   |
 | `uw-ios-mini`| `services/palace-mcp/tests/extractors/fixtures/uw-ios-mini-project` (repo-relative) | `/repos/uw-ios-mini:ro` |
 | `uw-ios`     | `/Users/Shared/Ios/unstoppable-wallet-ios`                                          | `/repos/uw-ios:ro`       |
+| HS Kits (parent) | `/Users/Shared/Ios/HorizontalSystems` (41 repos; GIM-182 `uw-ios` bundle)   | `/repos-hs:ro`           |
 
 ### Non-iMac contributors
 
@@ -181,6 +182,11 @@ should:
 - Run `docker compose --profile review up` excluding affected services and use only
   fixture-based mounts (paths under `./services/palace-mcp/tests/extractors/fixtures/`)
   which work cross-platform.
+
+The HS parent mount (`/repos-hs`) serves all 41 UW-iOS bundle members via
+`parent_mount="hs"` + `relative_path` parameters in `register_project`. Each Kit
+resolves to `/repos-hs/<relative_path>` inside the container. Non-iMac contributors
+should override the host path in `docker-compose.override.yml`.
 
 **To add a new project:**
 1. Add a bind-mount entry to `docker-compose.yml` under `palace-mcp.volumes`:
@@ -205,6 +211,33 @@ When editing specs or plans, always reference the commit SHA or
 branch state the artefact is grounded in — do not assume "current
 develop" still means what it meant when a future reader lands here.
 Cite a predecessor slice's merge SHA in spec headers.
+
+## Bundles (GIM-182)
+
+A **bundle** is a virtual project aggregating per-member project indexes so that
+`palace.code.find_references(project="<bundle>")` resolves across all members in
+one call. Bundles use `group_id = "bundle/<name>"` (distinct from `"project/<slug>"`).
+
+**uw-ios bundle:** `uw-ios-app` (UW iOS app) + 40 first-party HorizontalSystems Swift Kits.
+Canonical member list: `services/palace-mcp/scripts/uw-ios-bundle-manifest.json`.
+
+### Bundle MCP tools
+
+- `palace.memory.register_bundle(name, description)` — create/update a Bundle node.
+- `palace.memory.add_to_bundle(bundle, project, tier)` — add a member (idempotent).
+- `palace.memory.bundle_members(bundle)` — list members with ProjectRef metadata.
+- `palace.memory.bundle_status(bundle)` — freshness/health metrics (3-way failed_slugs split).
+- `palace.memory.delete_bundle(name, cascade)` — remove bundle (not member :Project nodes).
+- `palace.ingest.run_extractor(name, bundle=...)` — async kickoff; returns `run_id` < 100 ms.
+- `palace.ingest.bundle_status(run_id)` — poll async ingest progress.
+
+**Key invariants:**
+- `register_parent_mount` is NOT a v1 tool; `parent_mount` is a param on `register_project`.
+- Bundle ingest is async — `run_extractor(bundle=...)` returns `run_id` immediately.
+- `failed_slugs` in `bundle_status` is split into 3: `query_failed_slugs` (transient),
+  `ingest_failed_slugs` (last_run failed), `never_ingested_slugs` (no run yet).
+
+Runbook: `docs/runbooks/multi-repo-spm-ingest.md`.
 
 ## Extractors
 

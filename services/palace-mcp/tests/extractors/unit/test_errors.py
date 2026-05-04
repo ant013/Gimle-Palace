@@ -6,8 +6,8 @@ from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErr
 
 
 class TestExtractorErrorCode:
-    def test_has_18_codes(self) -> None:
-        assert len(ExtractorErrorCode) == 18
+    def test_has_20_codes(self) -> None:
+        assert len(ExtractorErrorCode) == 20
 
     def test_all_codes_are_strings(self) -> None:
         for code in ExtractorErrorCode:
@@ -39,6 +39,13 @@ class TestExtractorErrorCode:
     def test_schema_codes_present(self) -> None:
         assert ExtractorErrorCode.SCHEMA_DRIFT_DETECTED == "schema_drift_detected"
         assert ExtractorErrorCode.SCHEMA_BOOTSTRAP_FAILED == "schema_bootstrap_failed"
+
+    def test_public_api_codes_present(self) -> None:
+        assert (
+            ExtractorErrorCode.PUBLIC_API_ARTIFACTS_REQUIRED
+            == "public_api_artifacts_required"
+        )
+        assert ExtractorErrorCode.PUBLIC_API_PARSE_FAILED == "public_api_parse_failed"
 
     def test_counter_code_present(self) -> None:
         assert ExtractorErrorCode.COUNTER_STATE_CORRUPT == "counter_state_corrupt"

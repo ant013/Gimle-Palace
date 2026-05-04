@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Coroutine
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,18 +29,54 @@ from palace_mcp.extractors.base import (
     ExtractorRunContext,
     ExtractorStats,
 )
+from palace_mcp.extractors.foundation.errors import (
+    ExtractorError as FoundationExtractorError,
+)
+from palace_mcp.extractors.bundle_state import (
+    finalize_state,
+    init_bundle_ingest_state,
+    update_state,
+)
 from palace_mcp.extractors.cypher import CREATE_INGEST_RUN, FINALIZE_INGEST_RUN
 from palace_mcp.extractors.schemas import (
     ExtractorErrorResponse,
     ExtractorRunResponse,
 )
+from palace_mcp.memory.bundle import bundle_members
+from palace_mcp.memory.models import IngestRunResult, ProjectRef
 from palace_mcp.memory.projects import InvalidSlug, validate_slug
 
 REPOS_ROOT = Path("/repos")
 EXTRACTOR_TIMEOUT_S = 300.0
 
+_logger = logging.getLogger(__name__)
+
 # :Project node uses {slug: $slug} as the unique merge key (OpusReviewer Phase 3.2 finding).
 GET_PROJECT = "MATCH (p:Project {slug: $slug}) RETURN p"
+
+_background_tasks: set[asyncio.Task[None]] = set()
+
+
+def _fire_and_forget(coro: Coroutine[None, None, None]) -> None:
+    """Schedule a coroutine as a background task without leaking it.
+
+    Mirrors main.py pattern: stores the task in a module-level set so the event
+    loop keeps a strong reference, then discards it on completion and logs any
+    unhandled exception.
+    """
+    task: asyncio.Task[None] = asyncio.create_task(coro)
+    _background_tasks.add(task)
+
+    def _on_done(t: asyncio.Task[None]) -> None:
+        _background_tasks.discard(t)
+        if not t.cancelled() and t.exception() is not None:
+            _logger.error(
+                "bundle ingest background task failed: %s",
+                t.exception(),
+                exc_info=t.exception(),
+            )
+
+    task.add_done_callback(_on_done)
 
 
 # --- precheck ---
@@ -135,7 +172,7 @@ async def _execute(
         msg = f"timeout after {timeout_s}s"
         logger.error("extractor.execute.timeout", extra={"run_id": ctx.run_id})
         return _ExecuteError(error_code="extractor_runtime_error", errors=[msg])
-    except ExtractorError as e:
+    except (ExtractorError, FoundationExtractorError) as e:
         logger.error(
             "extractor.execute.extractor_error",
             extra={"run_id": ctx.run_id, "error_code": e.error_code},
@@ -302,3 +339,100 @@ async def run_extractor(
         project=project,
         run_id=run_id,
     ).model_dump()
+
+
+# --- bundle ingest ---
+
+_EXTRACTOR_CODE_TO_KIND: dict[str, str] = {
+    "repo_not_mounted": "file_not_found",
+    "file_not_found": "file_not_found",
+    "extractor_config_error": "extractor_error",
+    "extractor_runtime_error": "extractor_error",
+    "neo4j_unavailable": "neo4j_unavailable",
+    "tantivy_disk_full": "tantivy_disk_full",
+}
+
+
+def _error_code_to_kind(error_code: str) -> str:
+    return _EXTRACTOR_CODE_TO_KIND.get(error_code, "unknown")
+
+
+async def _run_bundle_ingest_task(
+    *,
+    name: str,
+    bundle: str,
+    members: tuple[ProjectRef, ...],
+    state: dict[str, Any],
+) -> None:
+    """Background task: iterate members, call run_extractor, update state."""
+    driver: AsyncDriver | None = state.get("_driver")
+    graphiti: Graphiti | None = state.get("_graphiti")
+    run_id: str = str(state["run_id"])
+
+    for member in members:
+        try:
+            result_dict = await run_extractor(
+                name=name,
+                project=member.slug,
+                driver=driver,  # type: ignore[arg-type]
+                graphiti=graphiti,  # type: ignore[arg-type]
+            )
+            ok: bool = bool(result_dict.get("ok", False))
+            if ok:
+                member_result = IngestRunResult(
+                    slug=member.slug,
+                    ok=True,
+                    run_id=result_dict.get("run_id"),
+                    error_kind=None,
+                    error=None,
+                    duration_ms=int(result_dict.get("duration_ms", 0)),
+                    completed_at=datetime.now(timezone.utc),
+                )
+            else:
+                error_code = result_dict.get("error_code", "unknown")
+                member_result = IngestRunResult(
+                    slug=member.slug,
+                    ok=False,
+                    run_id=result_dict.get("run_id"),
+                    error_kind=_error_code_to_kind(error_code),
+                    error=result_dict.get("message", ""),
+                    duration_ms=0,
+                    completed_at=datetime.now(timezone.utc),
+                )
+        except Exception as exc:  # noqa: BLE001 — isolation: one member failure must not stop others
+            member_result = IngestRunResult(
+                slug=member.slug,
+                ok=False,
+                run_id=None,
+                error_kind="unknown",
+                error=f"{type(exc).__name__}: {str(exc)[:200]}",
+                duration_ms=0,
+                completed_at=datetime.now(timezone.utc),
+            )
+        update_state(run_id, member_result)
+
+    finalize_state(run_id)
+
+
+async def run_extractor_bundle(
+    name: str,
+    bundle: str,
+    *,
+    driver: AsyncDriver,
+    graphiti: Graphiti,
+) -> dict[str, Any]:
+    """Async bundle ingest: resolves members, starts background task, returns run_id < 100 ms."""
+    members = await bundle_members(driver, bundle=bundle)
+    state = init_bundle_ingest_state(bundle, members)
+
+    if state["state"] == "succeeded":  # empty bundle — done immediately
+        return state
+
+    # Stash driver/graphiti for background task (private keys stripped before MCP response)
+    state["_driver"] = driver
+    state["_graphiti"] = graphiti
+
+    _fire_and_forget(
+        _run_bundle_ingest_task(name=name, bundle=bundle, members=members, state=state)
+    )
+    return state
