@@ -1,6 +1,6 @@
 # Gimle-Palace Team Roadmap
 
-**Last updated**: 2026-05-03
+**Last updated**: 2026-05-04
 **Owner**: Board (operator + Board Claude session)
 **Primary goal**: Index Unstoppable Wallet ecosystem live (Android + iOS + EVM
 contracts). Phase 1 ends when palace-mcp produces useful queries against the
@@ -44,22 +44,22 @@ When all rows below are ✅, palace-mcp can index the entire UW production ecosy
 | Order | Slice | Status | Issue | Files | Notes |
 |-------|-------|--------|-------|-------|-------|
 | 1 | Symbol index Swift (UW-iOS, custom emitter Option C) | ✅ | GIM-128 | `services/palace-mcp/scip_emit_swift/`, `extractors/symbol_index_swift.py`, `tests/extractors/fixtures/uw-ios-mini-project/` | Merged `4ff2b2f`. Custom emitter; canonical Sourcegraph SCIP protobuf output. |
-| 2 | Symbol index C/C++/Obj-C (UW-iOS Pods, scip-clang) | 📋 | TBD | `extractors/symbol_index_clang.py`, fixtures, compose mounts | scip-clang is mature first-party; expected smaller than Swift slice |
+| 2 | Symbol index C/C++/Obj-C (UW-iOS Pods, scip-clang) | ✅ | GIM-184 | `extractors/symbol_index_clang.py`, fixtures, compose mounts | Merged `80b4f38`. Final v1 scope is C/C++; Objective-C is a documented follow-up after `scip-clang` smoke showed `.m` unsupported as first-class input. |
 
-**Launch boundary**: reached when both CX queue items above AND Claude queue C2 (Multi-repo SPM ingest, GIM-182) are ✅. UW codebase then indexable end-to-end (iOS Swift + iOS Pods + Android Java/Kotlin + EVM Solidity, with first-party HS Kits resolved via bundle).
+**Launch boundary**: reached when both CX queue items above AND Claude queue C2 (Multi-repo SPM ingest, GIM-182) are ✅. As of 2026-05-04, all launch-critical implementation rows are merged; the remaining launch close gate is operator validation that real UW queries return expected results end-to-end.
 
 ### Claude queue (parallel, infra + tooling + launch-critical C2)
 
 | Order | Slice | Status | Issue | Files | Notes |
 |-------|-------|--------|-------|-------|-------|
 | C1 | Watchdog handoff detector (Phase 1 alert-only) | ✅ | GIM-181 | `services/watchdog/*` | Detective half of atomic-handoff strategy; merged `f2f05c4` |
-| C2 | Multi-repo SPM ingest (full slice — Claude end-to-end) | 🚧 | GIM-182 | `services/palace-mcp/src/palace_mcp/{memory/bundle.py,code/find_references.py,ingest/runner.py,git/path_resolver.py}`, `services/palace-mcp/scripts/`, `docs/runbooks/multi-repo-spm-ingest.md` | Originally split (Claude=spec, CX=impl); operator decision 2026-05-03 reassigned to Claude end-to-end. Spec at `docs/superpowers/specs/2026-05-03-GIM-182-multi-repo-spm-ingest-design.md` (1237 LOC, rev2). |
+| C2 | Multi-repo SPM ingest (full slice — Claude end-to-end) | ✅ | GIM-182 | `services/palace-mcp/src/palace_mcp/{memory/bundle.py,code/find_references.py,ingest/runner.py,git/path_resolver.py}`, `services/palace-mcp/scripts/`, `docs/runbooks/multi-repo-spm-ingest.md` | Merged `f2696fa`. Originally split (Claude=spec, CX=impl); operator decision 2026-05-03 reassigned to Claude end-to-end. |
 | C3 | Watchdog handoff detector — Opus nudge follow-up | ✅ | GIM-183 | `services/watchdog/*` | 3 follow-ups merged `365c9c4` (PR #81): server-Date anchoring, 4 missing JSONL events emitted, e2e lifecycle test. |
 | C4 | Git History Harvester (Extractor #22) — Phase 2 prereq | 📋 spec+plan ready | GIM-186 | `services/palace-mcp/src/palace_mcp/extractors/git_history/`, `services/palace-mcp/tests/extractors/{unit,integration,fixtures}/`, runbook | Foundation for 6 historical extractors (#11/#12/#26/#32/#43/#44). Spec rev2 (1255 LOC) + plan (2430 LOC, 13 TDD tasks) committed on `feature/GIM-186-git-history-harvester`. **Awaiting Claude CTO availability after GIM-182 closes** — no team-chain trigger yet. |
 | C5 | iMac post-merge auto-deploy | 📋 | TBD | `paperclips/scripts/imac-deploy-listener.{sh,plist}`, webhook handler | Removes manual `imac-deploy.sh` step after every merge |
 | C6 | `palace.code.semantic_search` | 📋 | TBD | `services/palace-mcp/src/palace_mcp/code/semantic_search.py` | Deferred Slice 5 of original USE-BUILT; vector or hybrid search composite |
 
-C2 (GIM-182) is the **launch-critical Claude item** — must reach ✅ before launch boundary closes. C3/C4/C5/C6 are independent and not launch-blocking. C4 (GIM-186) is fully spec'd + plan'd; ready for team-chain trigger when CTO frees from GIM-182.
+C2 (GIM-182) is now ✅. C3/C4/C5/C6 are independent and not launch-blocking. C4 (GIM-186) is fully spec'd + plan'd; ready for team-chain trigger when CTO frees for the historical-extractor lane.
 
 ### Already merged (Phase 1 foundation)
 
@@ -74,6 +74,8 @@ C2 (GIM-182) is the **launch-critical Claude item** — must reach ✅ before la
 | Watchdog handoff detector (alert-only) | GIM-181 (`f2f05c4`) | Detective half of atomic-handoff strategy; 3 Opus nudge follow-ups closed in GIM-183 |
 | Watchdog handoff detector — Opus nudge follow-ups | GIM-183 (`365c9c4`) | Server-Date anchoring + 4 JSONL events + e2e lifecycle test |
 | Symbol index Swift (UW-iOS) | GIM-128 (`4ff2b2f`) | First-party HS Kits indexed via custom emitter; CX queue item 1 closed |
+| Symbol index C/C++ (UW-iOS native) | GIM-184 (`80b4f38`) | `scip-clang` C/C++ extractor merged; Objective-C follow-up documented out of v1 |
+| Multi-repo SPM ingest | GIM-182 (`f2696fa`) | First-party HS Kits resolved via bundle; UW iOS multi-repo path unblocked |
 | Paperclip team workspace isolation | PR #76 | Two team roots under `/Users/Shared/Ios/worktrees/{claude,cx}/` |
 | Paperclip shared CM discipline | PR #75 | Both teams share `repos-gimle` CM project + `palace.memory.decide` writes |
 | Codex/CX team build target | PR #73-74 | Codex team operational with 9 roles |
@@ -100,7 +102,7 @@ Reference: `docs/research/extractor-library/` (2026-04-18 brainstorm, 9 parallel
 | 4 | KMP Platform-Bridge Extractor | CX | — | tree-sitter-kotlin + SKIE + swift-syntax | 📦 (waits UW KMP adoption) |
 | 5 | Dependency Surface Extractor | Claude | — | dep-analysis-gradle + spmgraph + Package.resolved parser | 📦 |
 | 25 | Build System Extractor | CX | — | Gradle Tooling API + SwiftPM PackageDescription + Bazel aquery | 📦 |
-| 27 | Public API Surface Extractor | CX | — | binary-compatibility-validator + swift-api-digester + SKIE overlay | 📦 |
+| 27 | Public API Surface Extractor | CX | — | Kotlin BCV `.api` dumps + Swift `.swiftinterface` primary + optional `swift-api-digester` diagnostics + SKIE overlay | 🚧 Phase 1.1 formalized: GIM-190 / PR #88 / `docs/superpowers/specs/2026-05-04-GIM-190-public-api-surface-extractor.md` |
 | 31 | Cross-Module Contract Extractor | CX | — | Kotlin BCV + swift-public-api-diff + oasdiff | 📦 (deps #27) |
 | 33 | Dead Symbol & Binary Surface | CX | — | Periphery + Reaper SDK + CodeQL | 📦 |
 | 36 | Network Schema & API Contract | Claude | — | oasdiff + Buf CLI + graphql-inspector | 📦 |
@@ -276,8 +278,8 @@ Avoid editing during active phase chains — wait for the slice merge so the fil
 
 ## Open questions
 
-- **Phase 1 close criteria** — operator decides when "launch" is real. Suggested gate: at least 3 useful queries on real UW codebase produce results matching expectations (≥1 each on iOS / Android / EVM contract).
-- **Phase 2 ordering inside categories** — operator picks based on UW-analysis needs that surface post-launch. This file does not commit to within-category order.
+- **Phase 1 real-query validation** — launch-critical implementation rows are merged; operator still decides when "launch" is real. Suggested gate: at least 3 useful queries on real UW codebase produce results matching expectations (≥1 each on iOS / Android / EVM contract).
+- **Phase 2 ordering inside categories** — operator selected #27 Public API Surface Extractor for CX spec brainstorm on 2026-05-04; broader ordering remains demand-driven.
 - **#22 Git History promotion** — triggered by first historical-extractor request. Currently 📦.
 - **LLM infrastructure** — 6 Claude extractors require LLM. Ollama deploy + cost monitoring is a separate infra slice (not yet scheduled).
-- **CX queue refresh** — after CX queue item 2 (C/C++/Obj-C iOS) merges, operator picks next from Phase 2 §2.1-2.5 §2.6 CX rows. Multi-repo SPM ingest (GIM-182) moved to Claude C2 — see §3 Phase 1 Claude queue.
+- **CX queue refresh** — completed 2026-05-04 after GIM-184 merged; next CX docs lane is #27 Public API Surface Extractor spec brainstorm.
