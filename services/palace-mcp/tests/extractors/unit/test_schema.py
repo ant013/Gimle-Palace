@@ -18,8 +18,9 @@ from palace_mcp.extractors.foundation.schema import (
 
 
 class TestSchemaDefinition:
-    def test_has_three_constraints(self) -> None:
-        assert len(EXPECTED_SCHEMA.constraints) == 3
+    def test_has_nine_constraints(self) -> None:
+        # 3 original + 6 added by GIM-186 (git_history extractor)
+        assert len(EXPECTED_SCHEMA.constraints) == 9
 
     def test_has_five_indexes(self) -> None:
         assert len(EXPECTED_SCHEMA.indexes) == 5
@@ -27,17 +28,17 @@ class TestSchemaDefinition:
     def test_has_one_fulltext(self) -> None:
         assert len(EXPECTED_SCHEMA.fulltext_indexes) == 1
 
-    def test_total_nine_objects(self) -> None:
+    def test_total_fifteen_objects(self) -> None:
         total = (
             len(EXPECTED_SCHEMA.constraints)
             + len(EXPECTED_SCHEMA.indexes)
             + len(EXPECTED_SCHEMA.fulltext_indexes)
         )
-        assert total == 9
+        assert total == 15
 
     def test_all_names_unique(self) -> None:
         names = EXPECTED_SCHEMA.all_names()
-        assert len(names) == 9
+        assert len(names) == 15
 
     def test_expected_names_present(self) -> None:
         names = EXPECTED_SCHEMA.all_names()

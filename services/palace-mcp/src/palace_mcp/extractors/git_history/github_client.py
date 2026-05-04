@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 from datetime import datetime
+from typing import Any
 
 import httpx
 
@@ -66,7 +67,7 @@ class GitHubClient:
         repo_owner: str,
         repo_name: str,
         since: datetime | None,
-    ) -> AsyncIterator[list[dict]]:  # type: ignore[override]
+    ) -> AsyncIterator[list[dict[str, Any]]]:
         cursor: str | None = None
         while True:
             resp_json = await self._post_query(
@@ -84,7 +85,7 @@ class GitHubClient:
                 )
 
             # Yield PRs that are newer than `since`
-            batch = []
+            batch: list[dict[str, Any]] = []
             for pr in page["nodes"]:
                 pr_updated = datetime.fromisoformat(
                     pr["updatedAt"].replace("Z", "+00:00")

@@ -4,7 +4,7 @@ import re
 from datetime import datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, computed_field, field_validator
+from pydantic import BaseModel, ConfigDict, ValidationInfo, computed_field, field_validator
 
 _EMAIL_RE = re.compile(r"^[^@]+@[^@]+\.[^@]+$")
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -38,8 +38,8 @@ class Author(FrozenModel):
 
     @field_validator("identity_key", mode="after")
     @classmethod
-    def _normalize_identity(cls, v: str, info) -> str:  # type: ignore[override]
-        return v.lower() if info.data.get("provider") == "git" else v
+    def _normalize_identity(cls, v: str, info: ValidationInfo) -> str:
+        return v.lower() if (info.data or {}).get("provider") == "git" else v
 
     @field_validator("email", mode="before")
     @classmethod

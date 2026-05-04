@@ -36,7 +36,7 @@ class Pygit2Walker:
             except (KeyError, ValueError) as exc:
                 raise CommitNotFoundError(f"sha not in repo: {last_sha}") from exc
 
-        for commit in self._repo.walk(self._repo.head.target, pygit2.GIT_SORT_TIME):
+        for commit in self._repo.walk(self._repo.head.target, pygit2.GIT_SORT_TIME):  # type: ignore[arg-type]
             sha = str(commit.id)
             if last_sha is not None and sha == last_sha:
                 break
@@ -54,10 +54,10 @@ class Pygit2Walker:
         touched: list[str]
         if commit.parents:
             diff = commit.tree.diff_to_tree(commit.parents[0].tree)
-            touched = [d.delta.new_file.path for d in diff]
+            touched = [d.delta.new_file.path for d in diff if d is not None]
         else:
             # Root commit: iterate tree entries directly
-            touched = [entry.name for entry in commit.tree]
+            touched = [entry.name for entry in commit.tree if entry.name is not None]
         return {
             "sha": str(commit.id),
             "author_email": author.email,
