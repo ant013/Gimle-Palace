@@ -51,6 +51,12 @@ ROLE_SPECS = [
     ),
     ("claude:cto", "claude", "paperclips/roles/cto.md", "paperclips/dist/cto.md"),
     (
+        "codex:cx-code-reviewer",
+        "codex",
+        "paperclips/roles-codex/cx-code-reviewer.md",
+        "paperclips/dist/codex/cx-code-reviewer.md",
+    ),
+    (
         "codex:cx-mcp-engineer",
         "codex",
         "paperclips/roles-codex/cx-mcp-engineer.md",

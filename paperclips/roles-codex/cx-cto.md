@@ -71,5 +71,6 @@ Plans **must** pass CXCodeReviewer BEFORE implementation — architectural mista
 
 <!-- @include fragments/shared/fragments/heartbeat-discipline.md -->
 <!-- @include fragments/shared/fragments/phase-handoff.md -->
+<!-- @include fragments/local/agent-roster.md -->
 
 <!-- @include fragments/shared/fragments/language.md -->

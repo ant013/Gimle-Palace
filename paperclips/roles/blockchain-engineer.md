@@ -93,5 +93,6 @@ You don't do it yourself — **you delegate correctly**:
 
 <!-- @include fragments/shared/fragments/heartbeat-discipline.md -->
 <!-- @include fragments/profiles/handoff.md -->
+<!-- @include fragments/local/agent-roster.md -->
 
 <!-- @include fragments/shared/fragments/language.md -->
