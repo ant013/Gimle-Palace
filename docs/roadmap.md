@@ -102,8 +102,8 @@ Reference: `docs/research/extractor-library/` (2026-04-18 brainstorm, 9 parallel
 | 4 | KMP Platform-Bridge Extractor | CX | — | tree-sitter-kotlin + SKIE + swift-syntax | 📦 (waits UW KMP adoption) |
 | 5 | Dependency Surface Extractor | Claude | — | dep-analysis-gradle + spmgraph + Package.resolved parser | 📦 |
 | 25 | Build System Extractor | CX | — | Gradle Tooling API + SwiftPM PackageDescription + Bazel aquery | 📦 |
-| 27 | Public API Surface Extractor | CX | — | Kotlin BCV `.api` dumps + Swift `.swiftinterface` primary + optional `swift-api-digester` diagnostics + SKIE overlay | 🚧 Phase 1.1 formalized: GIM-190 / PR #88 / `docs/superpowers/specs/2026-05-04-GIM-190-public-api-surface-extractor.md` |
-| 31 | Cross-Module Contract Extractor | CX | — | Kotlin BCV + swift-public-api-diff + oasdiff | 📦 (deps #27) |
+| 27 | Public API Surface Extractor | CX | — | Kotlin BCV `.api` dumps + Swift `.swiftinterface` primary + optional `swift-api-digester` diagnostics + SKIE overlay | ✅ GIM-190 / PR #88 merged + iMac deployed at `2a96786`; `public_api_surface` registry verified |
+| 31 | Cross-Module Contract Extractor | CX | — | Kotlin BCV + swift-public-api-diff + oasdiff | 📋 GIM-192 launched for CX spec formalization; consumes #27 PublicApiSurface/PublicApiSymbol |
 | 33 | Dead Symbol & Binary Surface | CX | — | Periphery + Reaper SDK + CodeQL | 📦 |
 | 36 | Network Schema & API Contract | Claude | — | oasdiff + Buf CLI + graphql-inspector | 📦 |
 | 39 | Cross-Repo Version Skew | Claude | — | Gradle Tooling API + Renovate data + OWASP Dep-Check | 📦 (deps #5) |
@@ -279,7 +279,7 @@ Avoid editing during active phase chains — wait for the slice merge so the fil
 ## Open questions
 
 - **Phase 1 real-query validation** — launch-critical implementation rows are merged; operator still decides when "launch" is real. Suggested gate: at least 3 useful queries on real UW codebase produce results matching expectations (≥1 each on iOS / Android / EVM contract).
-- **Phase 2 ordering inside categories** — operator selected #27 Public API Surface Extractor for CX spec brainstorm on 2026-05-04; broader ordering remains demand-driven.
+- **Phase 2 ordering inside categories** — operator selected #27 Public API Surface Extractor for CX spec brainstorm on 2026-05-04; it closed as GIM-190. Next CX item is #31 Cross-Module Contract Extractor via GIM-192. Broader ordering remains demand-driven.
 - **#22 Git History promotion** — triggered by first historical-extractor request. Currently 📦.
 - **LLM infrastructure** — 6 Claude extractors require LLM. Ollama deploy + cost monitoring is a separate infra slice (not yet scheduled).
-- **CX queue refresh** — completed 2026-05-04 after GIM-184 merged; next CX docs lane is #27 Public API Surface Extractor spec brainstorm.
+- **CX queue refresh** — completed 2026-05-04 after GIM-190 merged and iMac deploy verified; active CX docs lane is #31 Cross-Module Contract Extractor spec formalization (GIM-192).
