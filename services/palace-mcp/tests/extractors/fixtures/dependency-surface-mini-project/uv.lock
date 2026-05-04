@@ -1,0 +1,13 @@
+version = 1
+
+[[package]]
+name = "neo4j"
+version = "5.28.2"
+
+[[package]]
+name = "graphiti-core"
+version = "0.28.2"
+
+[[package]]
+name = "pytest"
+version = "8.3.4"

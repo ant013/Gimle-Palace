@@ -280,12 +280,33 @@ invoked via MCP tool `palace.ingest.run_extractor(name, project)`.
   Handles `.swift` occurrences with the same 3-phase bootstrap as the other
   SCIP-backed extractors. Uses `PALACE_SCIP_INDEX_PATHS` — merge-gate fixture
   slug is `uw-ios-mini`; optional real-source follow-up slug is `uw-ios`.
+- `dependency_surface` — Dependency Surface Extractor (GIM-191). Parses declared
+  + resolved deps from SPM (`Package.swift` + `Package.resolved` v2/v3), Gradle
+  (`gradle/libs.versions.toml` + per-module `build.gradle.kts`), and Python
+  (`pyproject.toml` PEP 621 + `uv.lock`). Writes `:ExternalDependency` nodes +
+  `:DEPENDS_ON` edges. Single-phase; no SCIP file or env vars needed.
+  See `docs/runbooks/dependency-surface.md`.
 - `git_history` — Git history harvester (GIM-186). Walks pygit2 commit
   history (Phase 1) + GitHub GraphQL PR/comment data (Phase 2). Foundation for
   6 historical extractors (#11/#12/#26/#32/#43/#44). Per-project incremental
   refresh; checkpoint in `:GitHistoryCheckpoint`. Requires `PALACE_GITHUB_TOKEN`
   env var for Phase 2 (PR data); Phase 1 (commits) runs without it. Full re-walk
   on force-push detected automatically. See `docs/runbooks/git-history-harvester.md`.
+
+### Operator workflow: Dependency surface
+
+No env vars required. Extractor reads files directly from the mounted repo.
+
+1. Ensure repo mounted in `docker-compose.yml` at `/repos/<slug>`.
+2. Run the extractor:
+   ```
+   palace.ingest.run_extractor(name="dependency_surface", project="gimle")
+   ```
+3. Query results:
+   ```cypher
+   MATCH (p:Project {slug: "gimle"})-[r:DEPENDS_ON]->(d:ExternalDependency)
+   RETURN d.purl, r.scope, r.declared_in ORDER BY d.purl
+   ```
 
 ### Operator workflow: Java/Kotlin symbol index
 
