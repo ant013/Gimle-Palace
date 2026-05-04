@@ -683,7 +683,9 @@ def _resolve_git_dirs(repo_path: Path) -> tuple[Path, Path]:
 
     commondir_path = git_dir / "commondir"
     if commondir_path.exists():
-        common_dir = (git_dir / commondir_path.read_text(encoding="utf-8").strip()).resolve()
+        common_dir = (
+            git_dir / commondir_path.read_text(encoding="utf-8").strip()
+        ).resolve()
         return git_dir, common_dir
     return git_dir, git_dir
 
