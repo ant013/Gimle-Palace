@@ -29,4 +29,3 @@ JSON
 scip-clang --compdb-path="$ROOT/compile_commands.json" --index-file="$OUT"
 test -s "$OUT"
 echo "Wrote $OUT"
-

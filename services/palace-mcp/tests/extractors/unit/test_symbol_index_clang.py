@@ -58,6 +58,9 @@ def _build_clang_index(
     *,
     repo_root: Path,
     vendor_absolute: bool = False,
+    app_def_symbol: str = "scip-clang  . . app/main().",
+    app_use_symbol: str = "scip-clang  . . math/Vector#length().",
+    vendor_use_symbol: str = "scip-clang  . . vendor/Foo#helper().",
 ) -> scip_pb2.Index:
     index = scip_pb2.Index()  # type: ignore[attr-defined]
     metadata = scip_pb2.Metadata()  # type: ignore[attr-defined]
@@ -80,8 +83,8 @@ def _build_clang_index(
             "C",
             "Sources/UwMiniApp/main.c",
             [
-                ("scip-clang  . . app/main().", 1),
-                ("scip-clang  . . math/Vector#length().", 0),
+                (app_def_symbol, 1),
+                (app_use_symbol, 0),
             ],
         ),
         (
@@ -93,7 +96,7 @@ def _build_clang_index(
             ),
             [
                 ("scip-clang  . . vendor/Foo#helper().", 1),
-                ("scip-clang  . . math/Vector#length().", 0),
+                (vendor_use_symbol, 0),
             ],
         ),
         (
@@ -288,6 +291,98 @@ class TestSymbolIndexClangHappyPath:
             "Sources/UwMiniCore/Math/Vector.cpp",
         ]
         assert phase_to_paths["phase3_vendor_uses"] == ["Pods/Foo/Foo.c"]
+
+    @pytest.mark.asyncio
+    async def test_same_descriptor_app_vendor_collision_is_documented_v1_limitation(
+        self,
+        extractor: SymbolIndexClang,
+        run_ctx: ExtractorRunContext,
+        tmp_path: Path,
+    ) -> None:
+        shared_symbol = "scip-clang  . . shared/collide()."
+        scip_fixture = write_scip_fixture(
+            _build_clang_index(
+                repo_root=run_ctx.repo_path,
+                app_def_symbol=shared_symbol,
+                app_use_symbol=shared_symbol,
+                vendor_use_symbol=shared_symbol,
+            ),
+            tmp_path / "collision.scip",
+        )
+        tantivy_dir = tmp_path / "tantivy"
+        tantivy_dir.mkdir()
+        settings = MagicMock()
+        settings.palace_scip_index_paths = {"uw-ios-clang-mini": str(scip_fixture)}
+        settings.palace_tantivy_index_path = str(tantivy_dir)
+        settings.palace_tantivy_heap_mb = 100
+        settings.palace_max_occurrences_total = 50_000_000
+        settings.palace_max_occurrences_per_project = 10_000_000
+        settings.palace_importance_threshold_use = 0.0
+        settings.palace_max_occurrences_per_symbol = 5_000
+        settings.palace_recency_decay_days = 30.0
+
+        bridge_mock = AsyncMock()
+        bridge_mock.__aenter__ = AsyncMock(return_value=bridge_mock)
+        bridge_mock.__aexit__ = AsyncMock(return_value=False)
+        bridge_mock.add_or_replace_async = AsyncMock()
+        bridge_mock.commit_async = AsyncMock()
+
+        with (
+            patch("palace_mcp.mcp_server.get_driver", return_value=_make_driver()),
+            patch("palace_mcp.mcp_server.get_settings", return_value=settings),
+            patch(
+                "palace_mcp.extractors.symbol_index_clang.TantivyBridge",
+                return_value=bridge_mock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_clang.ensure_custom_schema",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_clang._get_previous_error_code",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_clang.create_ingest_run",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_clang.write_checkpoint",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_clang.finalize_ingest_run",
+                new_callable=AsyncMock,
+            ),
+        ):
+            stats = await extractor.run(graphiti=MagicMock(), ctx=run_ctx)
+
+        phase_to_occurrences: dict[str, list[object]] = {}
+        for call in bridge_mock.add_or_replace_async.await_args_list:
+            occ, phase = call.args
+            phase_to_occurrences.setdefault(phase, []).append(occ)
+
+        assert stats.nodes_written == 5
+
+        phase1_defs = phase_to_occurrences["phase1_defs"]
+        vendor_uses = phase_to_occurrences["phase3_vendor_uses"]
+
+        shared_def = next(
+            occ
+            for occ in phase1_defs
+            if occ.file_path == "Sources/UwMiniApp/main.c"
+            and occ.symbol_qualified_name == ". shared/collide()."
+        )
+        shared_vendor_use = next(
+            occ
+            for occ in vendor_uses
+            if occ.file_path == "Pods/Foo/Foo.c"
+            and occ.symbol_qualified_name == ". shared/collide()."
+        )
+
+        assert shared_def.symbol_id == shared_vendor_use.symbol_id
+        assert shared_def.symbol_qualified_name == shared_vendor_use.symbol_qualified_name
 
     @pytest.mark.asyncio
     async def test_runner_path_executes_registered_clang_extractor(
