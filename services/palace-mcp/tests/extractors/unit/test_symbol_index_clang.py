@@ -424,7 +424,9 @@ class TestSymbolIndexClangHappyPath:
         )
 
         assert shared_def.symbol_id == shared_vendor_use.symbol_id
-        assert shared_def.symbol_qualified_name == shared_vendor_use.symbol_qualified_name
+        assert (
+            shared_def.symbol_qualified_name == shared_vendor_use.symbol_qualified_name
+        )
 
     @pytest.mark.asyncio
     async def test_runner_path_executes_registered_clang_extractor(
