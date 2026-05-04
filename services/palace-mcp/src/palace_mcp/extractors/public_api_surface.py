@@ -651,24 +651,53 @@ def _stable_id(*parts: str) -> str:
 
 
 def _read_head_sha(repo_path: Path) -> str:
-    git_path = repo_path / ".git"
-    if git_path.is_dir():
-        head_path = git_path / "HEAD"
-        ref_root = git_path
-    else:
-        pointer = git_path.read_text(encoding="utf-8").strip()
-        if not pointer.startswith("gitdir: "):
-            return "unknown"
-        ref_root = (repo_path / pointer.removeprefix("gitdir: ").strip()).resolve()
-        head_path = ref_root / "HEAD"
+    try:
+        git_dir, refs_root = _resolve_git_dirs(repo_path)
+    except (FileNotFoundError, OSError, ValueError):
+        return "unknown"
+
+    head_path = git_dir / "HEAD"
     try:
         head = head_path.read_text(encoding="utf-8").strip()
     except FileNotFoundError:
         return "unknown"
     if not head.startswith("ref: "):
         return head[:40]
-    ref_path = ref_root / head.removeprefix("ref: ").strip()
+    ref_name = head.removeprefix("ref: ").strip()
+    ref_path = refs_root / ref_name
     try:
         return ref_path.read_text(encoding="utf-8").strip()[:40]
     except FileNotFoundError:
+        return _read_packed_ref(refs_root, ref_name)
+
+
+def _resolve_git_dirs(repo_path: Path) -> tuple[Path, Path]:
+    git_path = repo_path / ".git"
+    if git_path.is_dir():
+        git_dir = git_path
+    else:
+        pointer = git_path.read_text(encoding="utf-8").strip()
+        if not pointer.startswith("gitdir: "):
+            raise ValueError("invalid gitdir pointer")
+        git_dir = (repo_path / pointer.removeprefix("gitdir: ").strip()).resolve()
+
+    commondir_path = git_dir / "commondir"
+    if commondir_path.exists():
+        common_dir = (git_dir / commondir_path.read_text(encoding="utf-8").strip()).resolve()
+        return git_dir, common_dir
+    return git_dir, git_dir
+
+
+def _read_packed_ref(refs_root: Path, ref_name: str) -> str:
+    packed_refs_path = refs_root / "packed-refs"
+    try:
+        for line in packed_refs_path.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith(("#", "^")):
+                continue
+            sha, _, packed_ref_name = stripped.partition(" ")
+            if packed_ref_name == ref_name:
+                return sha[:40]
+    except FileNotFoundError:
         return "unknown"
+    return "unknown"

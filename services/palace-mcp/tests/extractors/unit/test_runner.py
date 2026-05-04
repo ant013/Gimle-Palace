@@ -16,6 +16,10 @@ from palace_mcp.extractors.base import (
     ExtractorRunContext,
     ExtractorStats,
 )
+from palace_mcp.extractors.foundation.errors import (
+    ExtractorError as FoundationExtractorError,
+    ExtractorErrorCode,
+)
 from palace_mcp.extractors.runner import run_extractor
 
 
@@ -47,6 +51,21 @@ class _Unhandled(BaseExtractor):
         self, *, graphiti: Graphiti, ctx: ExtractorRunContext
     ) -> ExtractorStats:
         raise RuntimeError("boom")
+
+
+class _FoundationFail(BaseExtractor):
+    name = "__test_foundation_fail"
+    description = "raises foundation ExtractorError"
+
+    async def run(
+        self, *, graphiti: Graphiti, ctx: ExtractorRunContext
+    ) -> ExtractorStats:
+        raise FoundationExtractorError(
+            error_code=ExtractorErrorCode.PUBLIC_API_ARTIFACTS_REQUIRED,
+            message="artifacts missing",
+            recoverable=False,
+            action="manual_cleanup",
+        )
 
 
 class _Slow(BaseExtractor):
@@ -213,6 +232,23 @@ async def test_unhandled_exception_returns_unknown(
     assert res["ok"] is False
     assert res["error_code"] == "unknown"
     assert "RuntimeError" in res.get("message", "")
+
+
+@pytest.mark.asyncio
+async def test_foundation_extractor_error_preserves_exact_code(
+    mock_driver: MagicMock, tmp_path: Path, mock_graphiti: MagicMock
+) -> None:
+    registry.register(_FoundationFail())
+    with patch("palace_mcp.extractors.runner.REPOS_ROOT", tmp_path / "repos"):
+        res = await run_extractor(
+            name="__test_foundation_fail",
+            project="testproj",
+            driver=mock_driver,
+            graphiti=mock_graphiti,
+        )
+    assert res["ok"] is False
+    assert res["error_code"] == "public_api_artifacts_required"
+    assert res["message"] == "artifacts missing"
 
 
 @pytest.mark.asyncio

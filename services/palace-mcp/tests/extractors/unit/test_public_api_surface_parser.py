@@ -6,6 +6,7 @@ from pathlib import Path
 
 from palace_mcp.extractors.foundation.models import Language
 from palace_mcp.extractors.public_api_surface import (
+    _read_head_sha,
     discover_public_api_artifacts,
     parse_kotlin_api_dump,
     parse_swift_interface,
@@ -113,3 +114,42 @@ class TestSwiftInterfaceParser:
         assert "Wallet.hiddenInternal()" not in fqns
         assert "Wallet.hiddenPrivate" not in fqns
         assert fqns["packageHelper()"].visibility.value == "package"
+
+
+class TestReadHeadSha:
+    def test_reads_packed_ref_in_standard_repo(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        git_dir = repo / ".git"
+        git_dir.mkdir(parents=True)
+        (git_dir / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+        (git_dir / "packed-refs").write_text(
+            "# pack-refs with: peeled fully-peeled sorted\n"
+            "bbc88bba86a494dcfa9b5194a1e2464db56caa3d refs/heads/main\n",
+            encoding="utf-8",
+        )
+
+        assert _read_head_sha(repo) == "bbc88bba86a494dcfa9b5194a1e2464db56caa3d"
+
+    def test_reads_packed_ref_via_worktree_common_dir(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        worktree_git = tmp_path / "git-meta" / "worktrees" / "gim190"
+        common_git = tmp_path / "git-meta"
+        repo.mkdir()
+        worktree_git.mkdir(parents=True)
+        common_git.mkdir(parents=True, exist_ok=True)
+
+        (repo / ".git").write_text(
+            f"gitdir: {worktree_git.as_posix()}\n", encoding="utf-8"
+        )
+        (worktree_git / "HEAD").write_text(
+            "ref: refs/heads/feature/GIM-190-public-api-surface-extractor\n",
+            encoding="utf-8",
+        )
+        (worktree_git / "commondir").write_text("../..\n", encoding="utf-8")
+        (common_git / "packed-refs").write_text(
+            "093c1ebf66662b01be30ad4a82d20a9ac8709104 "
+            "refs/heads/feature/GIM-190-public-api-surface-extractor\n",
+            encoding="utf-8",
+        )
+
+        assert _read_head_sha(repo) == "093c1ebf66662b01be30ad4a82d20a9ac8709104"
