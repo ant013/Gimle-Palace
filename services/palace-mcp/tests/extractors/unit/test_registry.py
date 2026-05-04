@@ -43,6 +43,12 @@ def test_symbol_index_solidity_registered() -> None:
     assert extractor.name == "symbol_index_solidity"
 
 
+def test_dependency_surface_registered() -> None:
+    extractor = registry.get("dependency_surface")
+    assert extractor is not None
+    assert extractor.name == "dependency_surface"
+
+
 def test_symbol_index_swift_registered() -> None:
     extractor = registry.get("symbol_index_swift")
     assert extractor is not None
