@@ -356,29 +356,63 @@ All `test_dependency_surface_parser_python` parametrized cases green.
 
 ### Test (write first)
 
-`tests/extractors/unit/test_dependency_surface_neo4j_writer.py` (mock driver):
+`tests/extractors/unit/test_dependency_surface_neo4j_writer.py` — uses **real
+Neo4j via testcontainers**, NOT a mock driver, because the counter-based
+idempotency contract cannot be expressed with mocks (we need real
+`ResultSummary.counters.nodes_created`).
 
 ```python
-async def test_writer_merges_external_dependency(mock_driver):
-    deps = [ParsedDep(project_id="project/x", purl="pkg:pypi/neo4j@5.28.2", ...)]
-    n, e = await write_to_neo4j(mock_driver, deps, project_slug="x", group_id="project/x")
-    # Verify Cypher MERGE called with correct params
+@pytest.mark.integration
+async def test_writer_creates_node_and_edge_first_run(neo4j_driver):
+    # Pre-register :Project
+    async with neo4j_driver.session() as s:
+        await s.run("MERGE (p:Project {slug: $s, group_id: $g})",
+                    s="x", g="project/x")
+    deps = [ParsedDep(project_id="project/x", purl="pkg:pypi/neo4j@5.28.2",
+                      ecosystem="pypi", declared_version_constraint="^5.0",
+                      resolved_version="5.28.2", scope="compile",
+                      declared_in="pyproject.toml")]
+    n, e = await write_to_neo4j(neo4j_driver, deps, project_slug="x", group_id="project/x")
     assert n == 1 and e == 1
 
-async def test_writer_skips_existing_node_idempotent(mock_driver):
-    # Second call with same dep → still 1 node (MERGE), 1 edge (MERGE on key)
+@pytest.mark.integration
+async def test_writer_idempotent_remerge_zero_counters(neo4j_driver):
+    # Same setup; first call returns (1,1); second call must return (0,0).
     ...
+    n1, e1 = await write_to_neo4j(...)
+    n2, e2 = await write_to_neo4j(...)
+    assert (n1, e1) == (1, 1)
+    assert (n2, e2) == (0, 0), "counter-precise idempotency violated"
 
-async def test_writer_handles_unresolved_version(mock_driver):
+@pytest.mark.integration
+async def test_writer_handles_unresolved_version(neo4j_driver):
     deps = [ParsedDep(..., resolved_version="unresolved")]
-    n, e = await write_to_neo4j(mock_driver, deps, ...)
-    # purl includes "@unresolved" or trailing-empty; node still merges idempotently
-    assert n == 1
+    n, e = await write_to_neo4j(...)
+    assert n == 1 and e == 1
+    # Node persists with resolved_version="unresolved" — no NULL state
+
+@pytest.mark.integration
+async def test_writer_distinct_edges_per_declared_in(neo4j_driver):
+    # Same purl declared in two files (e.g. app/build.gradle.kts AND
+    # core/build.gradle.kts) → 1 :ExternalDependency node, 2 :DEPENDS_ON edges.
+    ...
+```
+
+Mock-driver test variant kept ONLY for argument-shape assertion (verify
+Cypher params), NOT for counter behaviour:
+
+```python
+async def test_writer_passes_correct_cypher_params(mock_driver):
+    # Argument-binding shape only; no counter semantics tested here.
+    ...
 ```
 
 ### Impl
 
-`extractors/dependency_surface/neo4j_writer.py`:
+`extractors/dependency_surface/neo4j_writer.py` — uses Neo4j ResultSummary
+counters for **counter-precise idempotency** (mirror of
+`extractors/foundation/eviction.py:107-108`). Edges carry only
+`first_seen_at` (no `last_seen_at`; see spec §3.4 inv 4 rationale).
 
 ```python
 _UPSERT_EXT_DEP = """
@@ -387,8 +421,10 @@ ON CREATE SET d.ecosystem = $ecosystem,
               d.resolved_version = $resolved_version,
               d.group_id = $group_id,
               d.first_seen_at = datetime()
-ON MATCH  SET d.last_seen_at = datetime()
 """
+# Note: no ON MATCH SET clause. ExternalDependency node is first-writer-wins
+# (per spec §3.4 inv 1+2). Refresh of resolved_version on re-run is F-followup
+# if a consumer needs ExtDep freshness signaling.
 
 _UPSERT_DEPENDS_ON_EDGE = """
 MATCH (p:Project {slug: $project_slug})
@@ -396,26 +432,47 @@ MATCH (d:ExternalDependency {purl: $purl})
 MERGE (p)-[r:DEPENDS_ON {scope: $scope, declared_in: $declared_in}]->(d)
 ON CREATE SET r.declared_version_constraint = $declared_version_constraint,
               r.first_seen_at = datetime()
-ON MATCH  SET r.declared_version_constraint = $declared_version_constraint,
-              r.last_seen_at = datetime()
 """
+# No ON MATCH SET — declared_version_constraint is set on first MERGE only.
+# If a manifest's declared constraint changes between runs (e.g. operator
+# upgrades from "^1.0.0" to "^2.0.0"), F-followup adds version-history;
+# v1 keeps the first-seen value, with the live data still visible via
+# the manifest's source file.
 
 async def write_to_neo4j(driver, deps, *, project_slug, group_id) -> tuple[int, int]:
-    nodes_written = 0
-    edges_written = 0
+    """Returns (nodes_created, relationships_created) per Neo4j ResultSummary
+    counters, NOT MERGE-attempted. This is what makes spec acceptance #9
+    (re-run = 0 net writes) provable."""
+    nodes_created = 0
+    relationships_created = 0
     async with driver.session() as session:
         for dep in deps:
-            await session.run(_UPSERT_EXT_DEP, purl=dep.purl, ecosystem=dep.ecosystem,
-                              resolved_version=dep.resolved_version, group_id=group_id)
-            nodes_written += 1
-            await session.run(_UPSERT_DEPENDS_ON_EDGE, project_slug=project_slug,
-                              purl=dep.purl, scope=dep.scope, declared_in=dep.declared_in,
-                              declared_version_constraint=dep.declared_version_constraint)
-            edges_written += 1
-    return nodes_written, edges_written
+            r = await session.run(
+                _UPSERT_EXT_DEP, purl=dep.purl, ecosystem=dep.ecosystem,
+                resolved_version=dep.resolved_version, group_id=group_id,
+            )
+            summary = await r.consume()
+            nodes_created += summary.counters.nodes_created
+
+            r = await session.run(
+                _UPSERT_DEPENDS_ON_EDGE, project_slug=project_slug, purl=dep.purl,
+                scope=dep.scope, declared_in=dep.declared_in,
+                declared_version_constraint=dep.declared_version_constraint,
+            )
+            summary = await r.consume()
+            relationships_created += summary.counters.relationships_created
+    return nodes_created, relationships_created
 ```
 
-Note: `nodes_written` counts MERGE-attempted, NOT created. Real created-vs-matched accounting via Neo4j summary counters is a refinement (F). For v1 we report attempts.
+`extractor.py` returns `ExtractorStats(nodes_written=nodes_created,
+edges_written=relationships_created)` — naming preserves the foundation
+contract while semantics map to Neo4j counters underneath.
+
+`:Project` precondition: runner pre-flights `MATCH (p:Project {slug: $slug})`
+at `runner.py:116-120` and returns `error_code="project_not_registered"` if
+absent — production writer's `MATCH` always finds. **Integration tests
+(Task 11) must register `:Project` explicitly via `MERGE` since they bypass
+runner.**
 
 ### Commit
 
@@ -427,46 +484,19 @@ All `test_dependency_surface_neo4j_writer` cases green.
 
 ---
 
-## Task 7: Schema extension
+## Task 7: Schema extension — DROPPED in rev2
 
-### Test (write first)
+**Original intent**: add `dep_project_lookup` index on `Project.slug`.
 
-`tests/extractors/unit/test_dependency_surface_schema_bootstrap.py`:
+**Why dropped**: `services/palace-mcp/src/palace_mcp/memory/cypher.py:10` already
+declares `CREATE CONSTRAINT project_slug ... FOR (p:Project) REQUIRE p.slug IS UNIQUE`,
+which Neo4j auto-backs with an index — adding a second named index would either
+collide (if same name) or duplicate (if different name; Neo4j permits this but it's
+wasteful). `memory/cypher.py:17` also has a `project_group_id` index for completeness.
+No new schema work needed for this slice; the writer's `MATCH (p:Project {slug: $slug})`
+already runs index-backed.
 
-```python
-async def test_schema_bootstrap_idempotent(neo4j_driver):
-    await ensure_custom_schema(neo4j_driver)
-    await ensure_custom_schema(neo4j_driver)  # second call must not raise
-    # SHOW INDEXES and verify dep_surface index present
-
-async def test_schema_includes_project_dep_lookup_index(neo4j_driver):
-    await ensure_custom_schema(neo4j_driver)
-    rows = await driver.execute_query("SHOW INDEXES YIELD name").records
-    names = {r["name"] for r in rows}
-    assert "dep_project_lookup" in names  # index for Project.slug→DEPENDS_ON traversal
-```
-
-### Impl
-
-`extractors/foundation/schema.py` — append to `EXPECTED_SCHEMA.indexes`:
-
-```python
-IndexSpec(
-    name="dep_project_lookup",
-    label="Project",
-    properties=("slug",),
-),
-```
-
-(Note: if a `Project.slug` index already exists, this is a no-op idempotent. Verify via `SHOW INDEXES`.)
-
-### Commit
-
-`feat(GIM-191): schema extension — Project.slug index for dependency-surface queries`
-
-### Acceptance
-
-`test_dependency_surface_schema_bootstrap` green; existing `test_schema_drift` still green.
+Rev2 sequence: Task 6 → Task 8 directly.
 
 ---
 
@@ -590,26 +620,51 @@ Fixture committed; tests in tasks 3-5 reference it where useful.
 
 ### Test
 
-`tests/extractors/integration/test_dependency_surface_integration.py`:
+`tests/extractors/integration/test_dependency_surface_integration.py`. Uses
+project slug `dep-surface-mini` (matches fixture directory naming convention,
+NOT `fixture-mini` from rev1 plan).
 
 ```python
-@pytest.mark.integration
-async def test_full_flow_against_fixture(neo4j_container):
-    # 1. Spin testcontainer Neo4j; await driver
-    # 2. Set repo_path = fixtures/dependency-surface-mini-project
-    # 3. Register :Project {slug: "fixture-mini"}
-    # 4. Call extractor.run()
-    # 5. Cypher: count :ExternalDependency → expect 6 (2 SPM + 2 Gradle + 2 Python)
-    # 6. Cypher: count :DEPENDS_ON → expect 6 (one per ParsedDep, declared_in distinct)
+PROJECT_SLUG = "dep-surface-mini"
+GROUP_ID = f"project/{PROJECT_SLUG}"
+FIXTURE_PATH = Path(__file__).parents[2] / "extractors/fixtures/dependency-surface-mini-project"
+
+@pytest.fixture
+async def registered_project(neo4j_driver):
+    """Register :Project explicitly — integration tests bypass runner pre-flight,
+    so MATCH (p:Project {slug: ...}) inside the writer would otherwise return 0
+    rows and silently no-op the edge MERGE (Phase 3.2 finding from operator pre-CR
+    review, May 2026). Materialise it here."""
+    async with neo4j_driver.session() as s:
+        await s.run("MERGE (p:Project {slug: $slug, group_id: $gid})",
+                    slug=PROJECT_SLUG, gid=GROUP_ID)
+    yield
+    # Teardown: delete project + cascade
+    async with neo4j_driver.session() as s:
+        await s.run("MATCH (p:Project {slug: $slug}) DETACH DELETE p", slug=PROJECT_SLUG)
+        # Orphan ExternalDependency cleanup
+        await s.run("MATCH (d:ExternalDependency) WHERE NOT (d)<-[:DEPENDS_ON]-() DELETE d")
 
 @pytest.mark.integration
-async def test_cross_project_dedup(neo4j_container):
-    # Two synthetic projects both depending on neo4j@5.28.2 (Python)
-    # → SINGLE :ExternalDependency node, TWO :DEPENDS_ON edges from different :Project nodes
+async def test_full_flow_against_fixture(neo4j_driver, registered_project):
+    # 1. Construct ExtractorRunContext pointing at fixture
+    # 2. Call extractor.run()
+    # 3. Verify ExtractorStats(nodes_written=6, edges_written=6) — counter-precise
+    # 4. Cypher: count :ExternalDependency → expect 6 (2 SPM + 2 Gradle + 2 Python)
+    # 5. Cypher: count :DEPENDS_ON → expect 6 (one per ParsedDep, declared_in distinct)
 
 @pytest.mark.integration
-async def test_idempotent_remerge(neo4j_container):
-    # Run extractor twice on same project → same node + edge counts after each run
+async def test_cross_project_dedup(neo4j_driver):
+    # Register two :Project nodes both depending on the same purl
+    # → SINGLE :ExternalDependency, TWO :DEPENDS_ON edges with different (project, declared_in)
+    ...
+
+@pytest.mark.integration
+async def test_idempotent_remerge_counter_precise(neo4j_driver, registered_project):
+    # Call extractor.run() twice on same project + same fixture
+    # First run: ExtractorStats(nodes_written>0, edges_written>0)
+    # Second run: ExtractorStats(nodes_written=0, edges_written=0) — counter-precise
+    # Verify by re-counting :ExternalDependency / :DEPENDS_ON in DB unchanged.
 ```
 
 ### Impl
