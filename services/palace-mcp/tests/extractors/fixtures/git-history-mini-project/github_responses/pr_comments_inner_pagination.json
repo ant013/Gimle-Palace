@@ -1,0 +1,34 @@
+{
+  "data": {
+    "rateLimit": {
+      "cost": 1,
+      "remaining": 4995,
+      "limit": 5000,
+      "resetAt": "2026-05-04T13:00:00Z"
+    },
+    "repository": {
+      "pullRequests": {
+        "pageInfo": {"hasNextPage": false, "endCursor": null},
+        "nodes": [
+          {
+            "number": 3,
+            "title": "PR with many comments",
+            "body": "This PR has 100+ comments — tests inner pagination guard.",
+            "state": "OPEN",
+            "author": {"login": "foo-human"},
+            "createdAt": "2026-05-04T08:00:00Z",
+            "updatedAt": "2026-05-04T09:00:00Z",
+            "mergedAt": null,
+            "headRefOid": null,
+            "baseRef": {"name": "develop"},
+            "comments": {
+              "totalCount": 101,
+              "pageInfo": {"hasNextPage": true, "endCursor": "Y3Vyc29yOjEwMA=="},
+              "nodes": []
+            }
+          }
+        ]
+      }
+    }
+  }
+}

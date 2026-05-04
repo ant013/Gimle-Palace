@@ -1,0 +1,58 @@
+{
+  "data": {
+    "rateLimit": {
+      "cost": 1,
+      "remaining": 4999,
+      "limit": 5000,
+      "resetAt": "2026-05-03T13:00:00Z"
+    },
+    "repository": {
+      "pullRequests": {
+        "pageInfo": {"hasNextPage": false, "endCursor": null},
+        "nodes": [
+          {
+            "number": 2,
+            "title": "Add feature X",
+            "body": "This PR adds feature X to the codebase.",
+            "state": "MERGED",
+            "author": {"login": "foo-human", "email": "foo@example.com"},
+            "createdAt": "2026-05-03T10:00:00Z",
+            "updatedAt": "2026-05-03T11:00:00Z",
+            "mergedAt": "2026-05-03T11:00:00Z",
+            "headRefOid": "0000000000000000000000000000000000000001",
+            "baseRef": {"name": "develop"},
+            "comments": {
+              "totalCount": 1,
+              "pageInfo": {"hasNextPage": false, "endCursor": null},
+              "nodes": [
+                {
+                  "id": "cmt-101",
+                  "body": "Looks good to me!",
+                  "author": {"login": "reviewer1"},
+                  "createdAt": "2026-05-03T10:30:00Z"
+                }
+              ]
+            }
+          },
+          {
+            "number": 1,
+            "title": "Initial setup",
+            "body": null,
+            "state": "MERGED",
+            "author": null,
+            "createdAt": "2026-05-01T09:00:00Z",
+            "updatedAt": "2026-05-01T10:00:00Z",
+            "mergedAt": "2026-05-01T10:00:00Z",
+            "headRefOid": "0000000000000000000000000000000000000002",
+            "baseRef": {"name": "main"},
+            "comments": {
+              "totalCount": 0,
+              "pageInfo": {"hasNextPage": false, "endCursor": null},
+              "nodes": []
+            }
+          }
+        ]
+      }
+    }
+  }
+}
