@@ -1,6 +1,6 @@
 ---
 slug: dead-symbol-binary-surface
-issue: roadmap-33
+issue: GIM-193
 spec: docs/superpowers/specs/2026-05-04-roadmap-33-dead-symbol-binary-surface.md
 date: 2026-05-04
 branch: feature/roadmap-33-dead-symbol-binary-surface

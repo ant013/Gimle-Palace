@@ -2,7 +2,7 @@
 slug: dead-symbol-binary-surface
 status: proposed
 branch: feature/roadmap-33-dead-symbol-binary-surface
-paperclip_issue: unassigned
+paperclip_issue: 193
 roadmap_item: 33
 date: 2026-05-04
 authoring_team: Board/Codex brainstorm for CX handoff
