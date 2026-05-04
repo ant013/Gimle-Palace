@@ -357,29 +357,35 @@ Board cleans the queue regularly. If a resumed session "reminds" you of somethin
 
 Work starts **only** from: (a) Board/CEO/manager created/assigned an issue this session, (b) someone @mentioned you with a concrete task, (c) `PAPERCLIP_TASK_ID` was passed at wake. Else — ignore.
 
-### @-mentions: always trailing space after name
+### @-mentions: trailing space for plain mentions
 
 Paperclip's parser captures trailing punctuation into the name (e.g. `@CTO:` becomes `CTO:`), the mention doesn't resolve, no wake is queued — **chain silently stalls**.
 
 **Right:** `@CTO need a fix`, `@CodeReviewer, final review`
 **Wrong:** `@CTO: need a fix`, `@iOSEngineer;`, `(@CodeReviewer)` — punctuation goes after the space.
 
-### Handoff: always @-mention the next agent
+### Handoff: always formally mention the next agent
 
-End of phase → **always @-mention** next agent in the comment, even if already assignee.
+End of phase → **always formal-mention** next agent in the comment, even if already assignee:
+
+```
+[@CXCodeReviewer](agent://<uuid>?i=<icon>) your turn
+```
+
+Use the local agent roster for UUID/icon. Plain `@Role` can wake ordinary comments, but phase handoff requires the formal form so the recovery path is explicit and machine-verifiable.
 
 Endpoint difference:
 - `POST /api/issues/{id}/comments` — wakes assignee (if not self-comment, issue not closed) + all @-mentioned.
 - `PATCH /api/issues/{id}` with `comment` — wakes **ONLY** if assignee changed, moved out of backlog, or body has @-mentions. No-mention comment on PATCH **won't wake assignee** → silent stall.
 
-**Rule:** handoff comment always includes `@NextAgent` (trailing space). Covers both paths.
+**Rule:** handoff comment always includes a formal mention. Covers both paths and the retry/escalation rule in `phase-handoff.md`.
 
 **Self-checkout on explicit handoff:** got an @-mention with explicit handoff phrase (`"your turn"`, `"pick it up"`, `"handing over"`) and sender already pushed → `POST /api/issues/{id}/checkout` yourself, don't wait for formal reassign.
 
 Example:
 ```
 POST /api/issues/{id}/comments
-body: "@CodeReviewer fix ready ([STA-29](/STA/issues/STA-29)), please re-review"
+body: "[@CXCodeReviewer](agent://<uuid>?i=eye) fix ready ([GIM-29](/GIM/issues/GIM-29)), please re-review"
 ```
 
 ### HTTP 409 on close/update — execution lock conflict
@@ -404,22 +410,22 @@ POST /api/issues/{id}/release
 ```
 ## Phase handoff discipline (iron rule)
 
-Between plan phases (§8), always **explicit reassign** to the next-phase agent. Never leave an issue "unassigned, someone will pick up".
+Between plan phases (§8), always **explicit reassign** to the next-phase agent. Never leave "someone will pick up".
 
-ALWAYS hand off by PATCHing `status + assigneeAgentId + comment` in one API call, then GET-verify the assignee; @mention-only handoff is invalid.
+ALWAYS hand off by PATCHing `status + assigneeAgentId + comment` in one API call, then GET-verify the assignee. If verification mismatches, retry once with the same payload; if it still mismatches, mark `status=blocked` and escalate to Board with `assigneeAgentId.actual` != `expected`. Do not silently exit (work pushed to git but handoff dropped = 8h stall, GIM-182 evidence). @mention-only handoff is invalid.
 
-Grounded in GIM-48 (2026-04-18): CodeReviewer set `status=todo` after Phase 3.1 APPROVE instead of `assignee=QAEngineer`; CTO saw `todo` and closed via `done` without Phase 4.1 evidence; merged code crashed on iMac. QA gate was skipped **because no one transferred ownership**.
+GIM-48 evidence: CR set `status=todo` after approve instead of `assignee=CXQAEngineer`; CTO closed without QA evidence; merged code crashed on iMac. QA was skipped **because ownership was not transferred**.
 
 ### Handoff matrix
 
 | Phase done | Next phase | Required handoff |
 |---|---|---|
-| 1.1 Formalization (CTO) | 1.2 Plan-first review | CTO does `git mv` / rename / `GIM-57` swap **on the feature branch directly** (no sub-issue), pushes, then `assignee=CodeReviewer` + @CodeReviewer. Sub-issues for Phase 1.1 mechanical work are anti-pattern per the narrowed `cto-no-code-ban.md` scope. |
-| 1.2 Plan-first (CR) | 2.x Implementation | `assignee=<implementer>` + @mention |
-| 2 Implementation | 3.1 Mechanical review | `assignee=CodeReviewer` + @mention + **git push done** |
-| 3.1 CR APPROVE | 3.2 Codex adversarial | `assignee=CodexArchitectReviewer` + @mention |
-| 3.2 Architect APPROVE | 4.1 QA live smoke | `assignee=QAEngineer` + @mention |
-| 4.1 QA PASS | 4.2 Merge | `assignee=<merger>` (usually CTO) + @mention |
+| 1.1 Formalization (CTO) | 1.2 Plan-first review | CTO does `git mv` / rename / `GIM-57` swap **on the feature branch directly** (no sub-issue), pushes, then `assignee=CXCodeReviewer` + formal mention. Sub-issues for Phase 1.1 mechanical work are anti-pattern per the narrowed `cto-no-code-ban.md` scope. |
+| 1.2 Plan-first (CR) | 2.x Implementation | `assignee=<implementer>` + formal mention |
+| 2 Implementation | 3.1 Mechanical review | `assignee=CXCodeReviewer` + formal mention + **git push done** |
+| 3.1 CR APPROVE | 3.2 Codex adversarial | `assignee=CodexArchitectReviewer` + formal mention |
+| 3.2 Architect APPROVE | 4.1 QA live smoke | `assignee=CXQAEngineer` + formal mention |
+| 4.1 QA PASS | 4.2 Merge | `assignee=<merger>` (usually CXCTO) + formal mention |
 
 ### NEVER
 
@@ -435,27 +441,29 @@ Grounded in GIM-48 (2026-04-18): CodeReviewer set `status=todo` after Phase 3.1 
 
 [Evidence / artifacts / commits / links]
 
-@<NextAgent> your turn — Phase <N.M+1>: [what to do]
+[@<NextAgent>](agent://<NextAgent-UUID>?i=<icon>) your turn — Phase <N.M+1>: [what to do]
 ```
 
-See `heartbeat-discipline.md` §@-mentions for the parser rule. Mention wakes the next agent even if assignee is set.
+Use formal mention `[@<Role>](agent://<uuid>?i=<icon>)`, not plain `@<Role>`. Plain mentions are OK for comments, but not handoff evidence: formal form is the recovery wake when assignee PATCH flakes.
+
+See `fragments/local/agent-roster.md` for Codex UUIDs. Paperclip UI `@` auto-formats.
 
 ### Pre-handoff checklist (implementer → reviewer)
 
-Before writing "Phase 2 complete — @CodeReviewer":
+Before writing "Phase 2 complete — [@CXCodeReviewer](agent://<uuid>?i=<icon>)":
 
 - [ ] `git push origin <feature-branch>` done — commits live on origin
 - [ ] Local green: `uv run ruff check && uv run mypy src/ && uv run pytest` (or language equivalent)
 - [ ] CI on feature branch running (or auto-triggered by push)
 - [ ] PR open, or will open at Phase 4.2 (per plan §8)
-- [ ] Handoff comment includes **concrete commit SHAs** and branch link, not just "done"
+- [ ] Handoff comment includes **commit SHA** and branch link, not just "done"
 
 Skip any → CR gets "done" on code not on origin → dead end.
 
 ### Pre-close checklist (CTO → status=done)
 
-- [ ] Phase 4.2 merge done (squash-commit on develop / main)
-- [ ] Phase 4.1 evidence-comment **exists** and authored by **QAEngineer** (verify `authorAgentId` in activity log / UI)
+- [ ] Phase 4.2 merge done (squash commit on develop / main)
+- [ ] Phase 4.1 evidence-comment **exists** and is authored by **CXQAEngineer** (`authorAgentId`)
 - [ ] Evidence contains: commit SHA, runtime smoke (healthcheck / tool call), plan-specific invariant check (e.g. `MATCH ... RETURN DISTINCT n.group_id`)
 - [ ] CI green on merge commit (or admin override documented in merge message with reason)
 - [ ] Production deploy completed post-merge (merge ≠ auto-deploy on most setups — follow the project's deploy playbook)
@@ -464,7 +472,7 @@ Any item missing → **don't close**. Escalate to Board (`@Board evidence missin
 
 ### Phase 4.1 QA-evidence comment format
 
-Reference (GIM-52 Phase 4.1 PASS):
+Reference:
 
 ```
 ## Phase 4.1 — QA PASS ✅
@@ -479,10 +487,10 @@ Reference (GIM-52 Phase 4.1 PASS):
 6. Direct invariant check (plan-specific) — e.g. `MATCH (n) RETURN DISTINCT n.group_id`, expected 1 row
 7. After QA — restore the production checkout to the expected branch (follow the project's checkout-discipline rule)
 
-@<merger> Phase 4.1 green, handing to Phase 4.2 — squash-merge to develop.
+[@<merger>](agent://<merger-UUID>?i=<icon>) Phase 4.1 green, handing to Phase 4.2 — squash-merge to develop.
 ```
 
-Replacing `/healthz`-only evidence with a real tool-call is critical. `/healthz` can be green while functionality is fundamentally broken (GIM-48). Mocked-DB pytest output does NOT count — real runtime smoke required (GIM-48 lesson).
+`/healthz`-only evidence is insufficient; it can be green while functionality is broken. Mocked-DB pytest output does NOT count — real runtime smoke required.
 
 ### Lock stale edge case
 
@@ -494,10 +502,30 @@ If the workaround fails twice — escalate to Board with details (issue id, run 
 
 ### Self-check before handoff
 
-- "Did I write @NextAgent with trailing space?" — yes/no
+- "Did I write `[@NextAgent](agent://<uuid>?i=<icon>)` in formal form, not plain `@NextAgent`?" — must be formal
 - "Is current assignee the next agent or still me?" — must be next
+- "Did GET-verify after the PATCH return `assigneeAgentId == <next-agent-UUID>`?" — must be yes
 - "Is my push visible in `git ls-remote origin <branch>`?" — must be yes for implementer handoff
 - "Is the evidence in my comment mine, or did I retell someone else's work?" — for QA, only own evidence counts
+
+If GET-verify fails after retry, **do not exit silently**. Mark `status=blocked`, post `@Board handoff PATCH succeeded but GET shows assigneeAgentId=<actual>, expected=<next>`, and stop.
+## Agent UUID roster — Gimle Codex
+
+Use `[@<Role>](agent://<uuid>?i=<icon>)` in phase handoffs. Source: `paperclips/codex-agent-ids.env`.
+
+| Role | UUID | Icon |
+|---|---|---|
+| CXCTO | `da97dbd9-6627-48d0-b421-66af0750eacf` | `eye` |
+| CXCodeReviewer | `45e3b24d-a444-49aa-83bc-69db865a1897` | `eye` |
+| CodexArchitectReviewer | `fec71dea-7dba-4947-ad1f-668920a02cb6` | `eye` |
+| CXMCPEngineer | `9a5d7bef-9b6a-4e74-be1d-e01999820804` | `circuit-board` |
+| CXPythonEngineer | `e010d305-22f7-4f5c-9462-e6526b195b19` | `code` |
+| CXQAEngineer | `99d5f8f8-822f-4ddb-baaa-0bdaec6f9399` | `bug` |
+| CXInfraEngineer | `21981be0-8c51-4e57-8a0a-ca8f95f4b8d9` | `server` |
+| CXTechnicalWriter | `1b9fc009-4b02-4560-b7f5-2b241b5897d9` | `book` |
+| CXResearchAgent | `a2f7d4d2-ee96-43c3-83d8-d3af02d6674c` | `magnifying-glass` |
+
+`@Board` stays plain (operator-side, not an agent).
 
 ## Language
 
