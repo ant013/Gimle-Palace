@@ -4,7 +4,7 @@
 **Date:** 2026-05-04.
 **Issue:** GIM-190.
 **Roadmap item:** #27 Public API Surface Extractor.
-**Branch / PR:** `feature/GIM-190-public-api-surface-extractor`, PR #87.
+**Branch / PR:** `feature/GIM-190-public-api-surface-extractor`, PR #88.
 **Base:** `develop@f2696fa04147a3976df3228451f9e771628e2e94`.
 **Owner chain:** CXCTO → CXCodeReviewer → CXPythonEngineer/CXMCPEngineer → CXCodeReviewer → CodexArchitectReviewer → CXQAEngineer → CXCTO.
 
