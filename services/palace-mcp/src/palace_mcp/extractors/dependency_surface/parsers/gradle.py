@@ -90,13 +90,31 @@ def _alias_variants(raw: str) -> list[str]:
     return list({base, dot_form, hyphen_form})
 
 
-def parse_gradle(repo_path: Path, *, project_id: str) -> ManifestParseResult:
-    """Parse Gradle version catalog + build.gradle.kts files."""
+def parse_gradle(
+    repo_path: Path,
+    *,
+    project_id: str,
+    libs_files: list[Path] | None = None,
+    kts_files: list[Path] | None = None,
+) -> ManifestParseResult:
+    """Parse Gradle version catalog + build.gradle.kts files.
+
+    When libs_files/kts_files are provided (by the extractor after stop-list
+    rglob), those lists are used directly. When None, falls back to root-based
+    discovery (used by parser unit tests).
+    """
     warnings: list[str] = []
     deps: list[ParsedDep] = []
 
-    catalog_path = repo_path / "gradle" / "libs.versions.toml"
-    if not catalog_path.is_file():
+    if libs_files is None:
+        # Legacy: discover from root (parser unit tests use this path)
+        catalog_path = repo_path / "gradle" / "libs.versions.toml"
+        libs_files = [catalog_path] if catalog_path.is_file() else []
+
+    if kts_files is None:
+        kts_files = list(repo_path.rglob("build.gradle.kts"))
+
+    if not libs_files:
         return ManifestParseResult(
             ecosystem="maven",
             deps=(),
@@ -105,11 +123,11 @@ def parse_gradle(repo_path: Path, *, project_id: str) -> ManifestParseResult:
             ),
         )
 
-    catalog = tomllib.loads(catalog_path.read_text(encoding="utf-8"))
-    alias_map = _build_alias_map(catalog)
-
-    # Find all build.gradle.kts files
-    kts_files = list(repo_path.rglob("build.gradle.kts"))
+    # Merge alias maps from all catalog files (supports projects with multiple catalogs)
+    alias_map: dict[str, tuple[str, str, str]] = {}
+    for catalog_path in libs_files:
+        catalog = tomllib.loads(catalog_path.read_text(encoding="utf-8"))
+        alias_map.update(_build_alias_map(catalog))
 
     for kts_path in kts_files:
         text = kts_path.read_text(encoding="utf-8")

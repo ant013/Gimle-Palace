@@ -221,3 +221,50 @@ async def test_extractor_partial_failure_continues(tmp_path: Path, caplog: pytes
 
     # Python 2 deps succeed; Gradle warns (no toml) but yields 0 deps — no crash
     assert stats.nodes_written >= 2
+
+
+@pytest.mark.asyncio
+async def test_extractor_python_nested_manifests(tmp_path: Path) -> None:
+    """Regression: gimle-style repos have pyproject.toml under services/*, not at root."""
+    pkg1 = tmp_path / "services" / "pkg1"
+    pkg2 = tmp_path / "services" / "pkg2"
+    pkg1.mkdir(parents=True)
+    pkg2.mkdir(parents=True)
+
+    (pkg1 / "pyproject.toml").write_text(
+        "[project]\nname = \"pkg1\"\ndependencies = [\"neo4j>=5.0\"]\n"
+    )
+    (pkg1 / "uv.lock").write_text(
+        "version = 1\n[[package]]\nname = \"neo4j\"\nversion = \"5.28.2\"\n"
+    )
+    (pkg2 / "pyproject.toml").write_text(
+        "[project]\nname = \"pkg2\"\ndependencies = [\"httpx>=0.27\"]\n"
+    )
+    (pkg2 / "uv.lock").write_text(
+        "version = 1\n[[package]]\nname = \"httpx\"\nversion = \"0.27.0\"\n"
+    )
+
+    extractor = DependencySurfaceExtractor()
+    graphiti = MagicMock()
+    ctx = _make_ctx(tmp_path)
+
+    async def mock_write(driver, deps, *, project_slug, group_id):  # type: ignore[no-untyped-def]
+        count = len(list(deps))
+        return count, count
+
+    with (
+        patch("palace_mcp.mcp_server.get_driver", return_value=MagicMock()),
+        patch(
+            "palace_mcp.extractors.dependency_surface.extractor.ensure_custom_schema",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "palace_mcp.extractors.dependency_surface.extractor.write_to_neo4j",
+            side_effect=mock_write,
+        ),
+    ):
+        stats = await extractor.run(graphiti=graphiti, ctx=ctx)
+
+    # Both nested pyproject.toml files must be discovered and parsed (1 dep each = 2 total)
+    assert stats.nodes_written == 2
+    assert stats.edges_written == 2
