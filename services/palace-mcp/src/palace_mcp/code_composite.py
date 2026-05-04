@@ -14,16 +14,61 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Callable
-from typing import Any, Protocol
+from dataclasses import dataclass, field
+from typing import Any, Literal, Protocol
 
 from mcp import ClientSession
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from palace_mcp import code_router
 from palace_mcp.errors import handle_tool_error
+from palace_mcp.extractors.foundation.identifiers import symbol_id_for
+from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
+from palace_mcp.memory.bundle import bundle_status
 
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Bundle-aware slug resolution (GIM-182 §5.2)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class SlugResolution:
+    """Result of resolving a user-provided slug to its kind."""
+
+    kind: Literal["bundle", "project", "none"]
+    member_slugs: list[str] = field(default_factory=list)
+
+
+_RESOLVE_SLUG_QUERY = """
+OPTIONAL MATCH (b:Bundle {name: $slug})
+OPTIONAL MATCH (b)-[:CONTAINS]->(p:Project)
+WITH b, collect(p.slug) AS bundle_members
+OPTIONAL MATCH (proj:Project {slug: $slug})
+RETURN
+  CASE
+    WHEN b IS NOT NULL THEN 'bundle'
+    WHEN proj IS NOT NULL THEN 'project'
+    ELSE 'none'
+  END AS kind,
+  bundle_members AS member_slugs
+"""
+
+
+async def _resolve_slug(driver: Any, slug: str) -> SlugResolution:
+    """Detect whether slug is a :Bundle, :Project, or unknown (single Cypher)."""
+    async with driver.session() as session:
+        result = await session.run(_RESOLVE_SLUG_QUERY, slug=slug)
+        row = await result.single()
+    if row is None:
+        return SlugResolution(kind="none")
+    kind: Literal["bundle", "project", "none"] = row["kind"]
+    member_slugs: list[str] = list(row["member_slugs"] or [])
+    return SlugResolution(kind=kind, member_slugs=member_slugs)
+
 
 _QN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*(\.[A-Za-z_][A-Za-z0-9_-]*)*$")
 
@@ -429,8 +474,6 @@ def register_code_composite_tools(
     ) -> dict[str, Any]:
         from pathlib import Path
 
-        from palace_mcp.extractors.foundation.identifiers import symbol_id_for
-        from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
         from palace_mcp.mcp_server import get_driver, get_settings
 
         driver = get_driver()
@@ -462,6 +505,73 @@ def register_code_composite_tools(
         # fallback path matches what palace.ingest.run_extractor wrote.
         resolved_project = _cm_project_to_slug(req.project or default_project)
 
+        # §5.2: resolve slug kind FIRST — bundle vs project vs none
+        resolution = await _resolve_slug(driver, resolved_project)
+
+        if resolution.kind == "none":
+            return {
+                "ok": False,
+                "error_code": "project_not_found",
+                "requested_qualified_name": qualified_name,
+                "message": (
+                    f"'{resolved_project}' is not a registered project or bundle"
+                ),
+            }
+
+        if resolution.kind == "bundle":
+            # §5.2 bundle path: single Tantivy search across all indexed members;
+            # health classification (ingest_failed/never_ingested/stale) comes from
+            # bundle_status; Tantivy failure → all member slugs into query_failed_slugs.
+            health = await bundle_status(driver, bundle=resolved_project)
+            sym_id = symbol_id_for(req.qualified_name)
+            tantivy_path = Path(settings.palace_tantivy_index_path)
+            query_time_failures: list[str] = []
+            occurrences_bundle: list[dict[str, Any]] = []
+            try:
+                async with TantivyBridge(
+                    tantivy_path, heap_size_mb=settings.palace_tantivy_heap_mb
+                ) as bridge:
+                    raw = await bridge.search_by_symbol_id_async(
+                        sym_id, limit=req.max_results + 1
+                    )
+                for r in raw[: req.max_results]:
+                    occurrences_bundle.append(
+                        {
+                            "file_path": r["file_path"],
+                            "line": r["line"],
+                            "col_start": r["col_start"],
+                            "col_end": r["col_end"],
+                            "kind": r["kind"],
+                            "qualified_name": r.get(
+                                "symbol_qualified_name", req.qualified_name
+                            ),
+                        }
+                    )
+            except Exception:
+                logger.warning(
+                    "bundle_tantivy_query_failed bundle=%s qn=%s",
+                    resolved_project,
+                    req.qualified_name,
+                    exc_info=True,
+                )
+                query_time_failures = list(resolution.member_slugs)
+
+            if query_time_failures:
+                health = health.model_copy(
+                    update={
+                        "query_failed_slugs": tuple(sorted(set(query_time_failures)))
+                    }
+                )
+            return {
+                "ok": True,
+                "requested_qualified_name": req.qualified_name,
+                "bundle": resolved_project,
+                "occurrences": occurrences_bundle,
+                "total_found": len(occurrences_bundle),
+                "bundle_health": health.model_dump(mode="json"),
+            }
+
+        # §5.2 project path — existing behaviour unchanged
         # State B: never-indexed — check for any successful IngestRun
         ingest_run = await _query_any_ingest_run_for_project(driver, resolved_project)
         if ingest_run is None:

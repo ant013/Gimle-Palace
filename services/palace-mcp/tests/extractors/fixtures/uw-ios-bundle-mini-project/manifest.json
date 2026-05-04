@@ -1,0 +1,21 @@
+{
+  "bundle_name": "uw-ios",
+  "parent_mount": "hs",
+  "members": [
+    {
+      "slug": "uw-ios-app",
+      "relative_path": "uw-ios-mini",
+      "tier": "user"
+    },
+    {
+      "slug": "EvmKit-mini",
+      "relative_path": "EvmKit-mini",
+      "tier": "first-party"
+    },
+    {
+      "slug": "Eip20Kit-mini",
+      "relative_path": "Eip20Kit-mini",
+      "tier": "first-party"
+    }
+  ]
+}
