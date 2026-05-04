@@ -1,6 +1,6 @@
 # GIM-184 - iOS C/C++ extractor via scip-clang - Spec
 
-**Status:** Phase 1.1c scope finalized, rev3, 2026-05-04.
+**Status:** Phase 1.1d review fixes, rev4, 2026-05-04.
 **Issue:** GIM-184 (`e92ed4c3-6b7f-4d72-ab1c-c16bc70ae89e`).
 **Branch:** `feature/GIM-184-ios-clang-extractor`.
 **Base:** `develop@365c9c42233ad125728f27048101a01e4899d2cf`.
@@ -19,7 +19,7 @@ The extractor ingests pre-generated SCIP protobuf files into the existing symbol
 
 Phase 1.1b selected final v1 scope: **C/C++ only**. Objective-C support is a documented follow-up, not part of GIM-184 v1. `scip-clang` officially documents C, C++, and CUDA support plus JSON compilation database input; it does not promise Objective-C as a first-class language. The accepted 2026-05-04 arm64 macOS smoke showed C and C++ indexing PASS, while Objective-C `.m` built under Xcode but `scip-clang 0.4.0` skipped/failed it as a non-main-file extension.
 
-`.mm` files are not a separate product scope. They are treated only as an optional Obj-C/C++ interop probe if the smoke fixture can index them cleanly.
+`.mm` files are not a GIM-184 implementation scope. They are recorded only as optional historical/probe evidence; Phase 2 implementers must not add Objective-C++ support in this issue.
 
 ## Background
 
@@ -47,7 +47,6 @@ Known scip-clang constraints that shape this spec:
 
 - Parser support for `scip-clang` symbols, including empty manager fields and backtick-safe descriptor parsing.
 - Language model additions for C and C++.
-- Optional `.mm` interop probe only if smoke proves stable output.
 - `symbol_index_clang.py` registered in the extractor registry.
 - Mixed native fixture containing app-level C/C++ files and Pods/vendor native files.
 - Unit tests for parser, language detection, qname canonicalization, and vendor/system classification.
@@ -61,6 +60,7 @@ Known scip-clang constraints that shape this spec:
 - Custom clang emitter.
 - Full call graph, data-flow, or macro expansion semantics beyond DEF/DECL/USE occurrences.
 - Guaranteed `.mm` interop support.
+- Objective-C++ `.mm` implementation support; optional probe evidence is documentation-only for GIM-184.
 - Objective-C `.m` extraction in v1; it is a follow-up after an alternate extractor/tool strategy is chosen.
 - Storyboards, xib, Core Data models, asset/resource indexing.
 - Production auto-deploy changes.
@@ -115,17 +115,17 @@ Fail:
 
 Phase 1.1b result: Gate C failed for extraction. Objective-C app-level Xcode build passed, but `scip-clang` skipped/failed `.m` extraction. Do not implement Objective-C language detection or fixture expectations in GIM-184 v1.
 
-### Optional Probe - `.mm`
+### Optional Historical Probe - `.mm`
 
 Input: tiny `.mm` file calling both Objective-C and C++ code.
 
 Pass:
 
-- Document as supported interop smoke evidence.
+- Document as probe evidence only.
 
 Fail:
 
-- No v1 scope impact. `.mm` remains out of scope.
+- No v1 scope impact. `.mm` remains out of implementation scope.
 
 ## Compilation Database Decision
 
@@ -183,7 +183,7 @@ Language detection order:
    - `.c` -> C
    - `.cc`, `.cpp`, `.cxx` -> C++
    - `.m` -> UNKNOWN in GIM-184 v1; Objective-C is follow-up because Gate C did not pass
-   - `.mm` -> UNKNOWN unless optional probe passes and spec is revised
+   - `.mm` -> UNKNOWN in GIM-184 v1; optional probe evidence does not authorize implementation support
 3. Header fallback:
    - `.h`, `.hh`, `.hpp`, `.hxx` must not be blindly assigned.
    - If SCIP document language is absent, classify header language as UNKNOWN unless the implementation has translation-unit context from the compilation database and tests prove it.
@@ -219,7 +219,7 @@ Rules:
   - `third_party/`
   - `Vendor/`
 - Vendor USE occurrences go to `phase3_vendor_uses`.
-- Vendor DEF/DECL occurrences must not enter user `phase1_defs`; either route them to a vendor-def path or exclude them from v1. The implementation must make this explicit in tests.
+- Vendor DEF/DECL occurrences are excluded from GIM-184 v1 before phase selection. Do not add a dedicated vendor-def phase/path in this issue.
 - Path normalization tests are required for:
   - absolute SDK paths,
   - Xcode toolchain paths,
@@ -228,7 +228,7 @@ Rules:
   - DerivedData-rooted paths that point back to the project,
   - symlinked project paths when feasible.
 
-Default v1 choice: exclude system SDK entirely; include Pods/third-party as vendor.
+Default v1 choice: exclude system SDK entirely; include Pods/third-party USE occurrences as vendor, and exclude Pods/third-party DEF/DECL occurrences until a follow-up defines a vendor-def model.
 
 ## SCIP Path Wiring
 
@@ -262,6 +262,7 @@ For GIM-184 v1:
 - Parser/extractor language values follow the detection policy above; `.h` is not blindly classified.
 - System SDK/toolchain headers do not inflate `phase1_defs`.
 - Path normalization tests prove system SDK exclusion and in-repo Pods/vendor retention for absolute and relative paths.
+- Vendor USE occurrences are routed to `phase3_vendor_uses`; vendor DEF/DECL occurrences are excluded from v1.
 - App/vendor same-descriptor collision behavior is tested and either prevented or documented as a v1 limitation.
 - App-level native and Pods/vendor native fixture files are both represented.
 - Fixture ingest writes expected checkpoints for phases enabled by the final scope.
@@ -345,10 +346,9 @@ Create a separate follow-up before promising Objective-C extraction. The follow-
 - a custom Objective-C emitter,
 - a future `scip-clang` release that proves usable `.m` output in a new smoke gate.
 
-Do not implement Objective-C support opportunistically inside GIM-184.
+Do not implement Objective-C or Objective-C++ support opportunistically inside GIM-184.
 
 ## Open Questions
 
 - Should the pinned `scip-clang` source for fixtures be the official `scip-clang-arm64-darwin v0.4.0` asset from the accepted smoke host?
-- Should vendor DEF/DECL occurrences be routed to a dedicated future phase, or excluded in v1?
 - If placeholder qnames collide, should GIM-184 prefix package with project/vendor namespace or defer that to a foundation follow-up?
