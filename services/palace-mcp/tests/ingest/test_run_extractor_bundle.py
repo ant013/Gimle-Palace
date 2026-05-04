@@ -11,12 +11,10 @@ Covers:
 
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 
 from palace_mcp.memory.models import IngestRunResult, ProjectRef, Tier
 
@@ -192,7 +190,13 @@ class TestRunBundleIngestTask:
         members = tuple(_make_member(s) for s in ["a", "b", "c"])
         state = {"run_id": "rb-test", "members_total": 3}
 
-        ok_dict = {"ok": True, "run_id": "r-x", "nodes_written": 1, "edges_written": 0, "duration_ms": 10}
+        ok_dict = {
+            "ok": True,
+            "run_id": "r-x",
+            "nodes_written": 1,
+            "edges_written": 0,
+            "duration_ms": 10,
+        }
         finalize_calls = []
 
         with (
@@ -223,7 +227,13 @@ class TestRunBundleIngestTask:
         state = {"run_id": "rb-test", "members_total": 3}
 
         # Member "b" raises, others succeed
-        ok_dict = {"ok": True, "run_id": "r-x", "nodes_written": 1, "edges_written": 0, "duration_ms": 10}
+        ok_dict = {
+            "ok": True,
+            "run_id": "r-x",
+            "nodes_written": 1,
+            "edges_written": 0,
+            "duration_ms": 10,
+        }
 
         def side_effect(*, name: str, project: str, driver: Any, graphiti: Any) -> Any:
             if project == "b":

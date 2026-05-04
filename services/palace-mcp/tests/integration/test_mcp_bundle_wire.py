@@ -175,9 +175,7 @@ async def test_bundle_members_not_found_returns_error_envelope(mcp_url: str) -> 
     # Result may be isError=True (unknown bundle) — that's acceptable.
     # What's forbidden is a missing response or a TypeError (schema binding bug).
     if result.isError:
-        error_text = " ".join(
-            c.text for c in result.content if hasattr(c, "text")
-        )
+        error_text = " ".join(c.text for c in result.content if hasattr(c, "text"))
         assert "TypeError" not in error_text, (
             f"TypeError in tool result — schema binding broken. Error: {error_text}"
         )
@@ -198,9 +196,7 @@ async def test_bundle_status_memory_not_found_returns_error_envelope(
 
     assert result.content, "tools/call must return non-empty content"
     if result.isError:
-        error_text = " ".join(
-            c.text for c in result.content if hasattr(c, "text")
-        )
+        error_text = " ".join(c.text for c in result.content if hasattr(c, "text"))
         assert "TypeError" not in error_text, (
             f"TypeError in tool result — schema binding broken. Error: {error_text}"
         )
@@ -221,9 +217,7 @@ async def test_ingest_bundle_status_not_found_returns_error_envelope(
 
     assert result.content, "tools/call must return non-empty content"
     if result.isError:
-        error_text = " ".join(
-            c.text for c in result.content if hasattr(c, "text")
-        )
+        error_text = " ".join(c.text for c in result.content if hasattr(c, "text"))
         assert "TypeError" not in error_text, (
             f"TypeError in tool result — schema binding broken. Error: {error_text}"
         )
@@ -253,9 +247,7 @@ async def test_run_extractor_invalid_request_returns_error_envelope(
 
     assert result.content, "tools/call must return non-empty content"
     if result.isError:
-        error_text = " ".join(
-            c.text for c in result.content if hasattr(c, "text")
-        )
+        error_text = " ".join(c.text for c in result.content if hasattr(c, "text"))
         assert "TypeError" not in error_text, (
             f"TypeError in tool result — schema binding broken. Error: {error_text}"
         )
