@@ -11,7 +11,11 @@ from typing import ClassVar
 
 from graphiti_core import Graphiti
 
-from palace_mcp.extractors.base import BaseExtractor, ExtractorRunContext, ExtractorStats
+from palace_mcp.extractors.base import (
+    BaseExtractor,
+    ExtractorRunContext,
+    ExtractorStats,
+)
 from palace_mcp.extractors.dependency_surface.models import ParsedDep
 from palace_mcp.extractors.dependency_surface.neo4j_writer import write_to_neo4j
 from palace_mcp.extractors.dependency_surface.parsers.gradle import parse_gradle
@@ -31,13 +35,18 @@ class DependencySurfaceExtractor(BaseExtractor):
     constraints: ClassVar[list[str]] = []
     indexes: ClassVar[list[str]] = []
 
-    async def run(self, *, graphiti: Graphiti, ctx: ExtractorRunContext) -> ExtractorStats:
+    async def run(
+        self, *, graphiti: Graphiti, ctx: ExtractorRunContext
+    ) -> ExtractorStats:
         # Deferred import to avoid circular import (mcp_server → registry → here → mcp_server)
         from palace_mcp.mcp_server import get_driver
 
         driver = get_driver()
         if driver is None:
-            from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErrorCode
+            from palace_mcp.extractors.foundation.errors import (
+                ExtractorError,
+                ExtractorErrorCode,
+            )
 
             raise ExtractorError(
                 error_code=ExtractorErrorCode.SCHEMA_BOOTSTRAP_FAILED,

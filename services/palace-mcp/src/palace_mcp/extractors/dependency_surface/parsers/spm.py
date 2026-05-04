@@ -10,7 +10,10 @@ import json
 import re
 from pathlib import Path
 
-from palace_mcp.extractors.dependency_surface.models import ManifestParseResult, ParsedDep
+from palace_mcp.extractors.dependency_surface.models import (
+    ManifestParseResult,
+    ParsedDep,
+)
 from palace_mcp.extractors.dependency_surface.purl import spm_purl_from_url
 
 # Matches .package(url: "...", from|exact|branch|revision: "...")
@@ -66,7 +69,9 @@ def parse_spm(repo_path: Path, *, project_id: str) -> ManifestParseResult:
                 # Branch/revision pin — use short revision as marker, but keep unresolved
                 resolved_versions[_normalize_url(location)] = "unresolved"
     else:
-        warnings.append("Package.resolved missing — resolved_version set to 'unresolved'")
+        warnings.append(
+            "Package.resolved missing — resolved_version set to 'unresolved'"
+        )
 
     for url in declared:
         norm = _normalize_url(url)

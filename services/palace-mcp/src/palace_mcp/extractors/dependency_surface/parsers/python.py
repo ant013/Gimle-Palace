@@ -19,7 +19,10 @@ else:  # pragma: no cover
 
 from packaging.requirements import Requirement
 
-from palace_mcp.extractors.dependency_surface.models import ManifestParseResult, ParsedDep
+from palace_mcp.extractors.dependency_surface.models import (
+    ManifestParseResult,
+    ParsedDep,
+)
 from palace_mcp.extractors.dependency_surface.purl import build_purl
 
 # optional-dependency group → canonical scope
@@ -78,7 +81,9 @@ def parse_python(repo_path: Path, *, project_id: str) -> ManifestParseResult:
         canonical = name.lower().replace("_", "-")
         resolved = lock_map.get(canonical, "unresolved")
         if resolved == "unresolved" and lock_map:
-            warnings.append(f"'{name}' not found in uv.lock — resolved_version='unresolved'")
+            warnings.append(
+                f"'{name}' not found in uv.lock — resolved_version='unresolved'"
+            )
         purl = build_purl(ecosystem="pypi", name=name, version=resolved)
         return ParsedDep(
             project_id=project_id,

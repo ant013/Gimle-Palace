@@ -22,7 +22,9 @@ class ParsedDep(BaseModel):
         ...,
         description="compile | test | build | runtime",
     )
-    declared_in: str = Field(..., description="Relative path of the declaring manifest file")
+    declared_in: str = Field(
+        ..., description="Relative path of the declaring manifest file"
+    )
 
     @model_validator(mode="after")
     def _validate_purl_prefix(self) -> "ParsedDep":

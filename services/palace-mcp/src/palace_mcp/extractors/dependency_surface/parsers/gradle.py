@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -18,7 +19,10 @@ else:  # pragma: no cover
     except ImportError:
         import tomli as tomllib  # type: ignore[import,no-redef]
 
-from palace_mcp.extractors.dependency_surface.models import ManifestParseResult, ParsedDep
+from palace_mcp.extractors.dependency_surface.models import (
+    ManifestParseResult,
+    ParsedDep,
+)
 from palace_mcp.extractors.dependency_surface.purl import build_purl
 
 # Gradle scope → canonical scope
@@ -38,7 +42,7 @@ _SCOPE_MAP = {
 _DEP_PATTERN = re.compile(
     r"(?P<scope>implementation|api|kapt|annotationProcessor|testImplementation"
     r"|compileOnly|testCompileOnly|runtimeOnly|testRuntimeOnly)"
-    r'\s*\(\s*libs\.(?P<alias>[\w.\-]+)\s*\)'
+    r"\s*\(\s*libs\.(?P<alias>[\w.\-]+)\s*\)"
 )
 
 
@@ -47,10 +51,10 @@ def _normalize_alias(alias: str) -> str:
     return alias.replace("-", ".").lower()
 
 
-def _build_alias_map(catalog: dict) -> dict[str, tuple[str, str, str]]:
+def _build_alias_map(catalog: dict[str, Any]) -> dict[str, tuple[str, str, str]]:
     """Build {normalized_alias: (group, name, version)} from libs.versions.toml."""
-    versions = catalog.get("versions", {})
-    libraries = catalog.get("libraries", {})
+    versions: dict[str, Any] = catalog.get("versions", {})
+    libraries: dict[str, Any] = catalog.get("libraries", {})
 
     alias_map: dict[str, tuple[str, str, str]] = {}
     for raw_alias, entry in libraries.items():
@@ -96,7 +100,9 @@ def parse_gradle(repo_path: Path, *, project_id: str) -> ManifestParseResult:
         return ManifestParseResult(
             ecosystem="maven",
             deps=(),
-            parser_warnings=("libs.versions.toml not found — Gradle dep parsing skipped",),
+            parser_warnings=(
+                "libs.versions.toml not found — Gradle dep parsing skipped",
+            ),
         )
 
     catalog = tomllib.loads(catalog_path.read_text(encoding="utf-8"))
