@@ -27,6 +27,7 @@ except ImportError:  # pragma: no cover
     tantivy = None  # type: ignore[assignment]
 
 from palace_mcp.extractors.foundation.models import SymbolOccurrence
+from palace_mcp.extractors.foundation.models import TantivyOccurrenceMatch
 
 
 class TantivyBridge:
@@ -112,6 +113,26 @@ class TantivyBridge:
     async def count_docs_for_run_async(self, run_id: str, phase: str) -> int:
         """Count committed docs matching ingest_run_id and phase (for checkpoint reconciliation)."""
         return cast(int, await self._run(self._count_docs_for_run_sync, run_id, phase))
+
+    async def search_occurrences_async(
+        self,
+        *,
+        symbol_id: int,
+        commit_sha: str,
+        phases: tuple[str, ...],
+        limit: int = 1000,
+    ) -> list[TantivyOccurrenceMatch]:
+        """Return commit/phase-filtered occurrence evidence for a symbol."""
+        return cast(
+            list[TantivyOccurrenceMatch],
+            await self._run(
+                self._search_occurrences_sync,
+                symbol_id,
+                commit_sha,
+                phases,
+                limit,
+            ),
+        )
 
     # ------------------------------------------------------------------
     # Synchronous internals (run on executor thread)
@@ -223,6 +244,33 @@ class TantivyBridge:
         results = searcher.search(query, limit=1)
         return cast(int, results.count)
 
+    def _search_occurrences_sync(
+        self,
+        symbol_id: int,
+        commit_sha: str,
+        phases: tuple[str, ...],
+        limit: int,
+    ) -> list[TantivyOccurrenceMatch]:
+        assert self._index is not None
+        searcher = self._index.searcher()
+        matches_by_doc_key: dict[str, TantivyOccurrenceMatch] = {}
+
+        for phase in phases:
+            query = self._index.parse_query(
+                f"+symbol_id:{symbol_id} +commit_sha:{commit_sha} +phase:{phase}"
+            )
+            results = searcher.search(query, limit)
+            for _score, addr in results.hits:
+                doc = searcher.doc(addr).to_dict()
+                match = _doc_to_occurrence_match(
+                    doc=doc,
+                    default_symbol_id=symbol_id,
+                    default_commit_sha=commit_sha,
+                )
+                matches_by_doc_key[match.doc_key] = match
+
+        return list(matches_by_doc_key.values())
+
     # ------------------------------------------------------------------
     # Helper
     # ------------------------------------------------------------------
@@ -231,3 +279,39 @@ class TantivyBridge:
         assert self._executor is not None
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(self._executor, fn, *args)
+
+
+def _doc_to_occurrence_match(
+    *,
+    doc: dict[str, list[Any]],
+    default_symbol_id: int,
+    default_commit_sha: str,
+) -> TantivyOccurrenceMatch:
+    doc_key = _first_text(doc, "doc_key")
+    file_path = _first_text(doc, "file_path")
+    commit_sha = _first_text(doc, "commit_sha") or default_commit_sha
+    parsed_symbol_id, parsed_file_path, line, col_start = _parse_doc_key(doc_key)
+    return TantivyOccurrenceMatch(
+        doc_key=doc_key,
+        symbol_id=parsed_symbol_id
+        if parsed_symbol_id == default_symbol_id
+        else default_symbol_id,
+        file_path=file_path or parsed_file_path,
+        line=line,
+        col_start=col_start,
+        col_end=None,
+        commit_sha=commit_sha,
+    )
+
+
+def _first_text(doc: dict[str, list[Any]], field: str) -> str:
+    values = doc.get(field)
+    if not values:
+        return ""
+    return str(values[0])
+
+
+def _parse_doc_key(doc_key: str) -> tuple[int, str, int, int]:
+    head, line_text, col_start_text = doc_key.rsplit(":", 2)
+    symbol_id_text, file_path = head.split(":", 1)
+    return int(symbol_id_text), file_path, int(line_text), int(col_start_text)

@@ -310,3 +310,93 @@ class PublicApiSymbol(BaseModel):
     bridge_source: str | None = None
     symbol_qualified_name: str | None = None
     schema_version: int = Field(default=SCHEMA_VERSION_CURRENT, ge=1)
+
+
+class TantivyOccurrenceMatch(BaseModel):
+    """Committed occurrence evidence reconstructed from Tantivy stored fields."""
+
+    model_config = {"frozen": True}
+
+    doc_key: str
+    symbol_id: int = Field(..., ge=-(2**63), le=2**63 - 1)
+    file_path: str
+    line: int = Field(..., ge=0)
+    col_start: int = Field(..., ge=0)
+    # TantivyBridge v1 can reconstruct col_start from doc_key, but col_end is not
+    # stored in current segments and therefore remains optional until a future
+    # reviewed schema slice adds persisted column-end retrieval.
+    col_end: int | None = Field(default=None, ge=0)
+    commit_sha: str
+
+
+class ModuleContractConsumption(BaseModel):
+    """Edge payload from ModuleContractSnapshot to PublicApiSymbol."""
+
+    model_config = {"frozen": True}
+
+    public_symbol_id: str
+    group_id: str
+    commit_sha: str
+    match_key: Literal["symbol_qualified_name"] = "symbol_qualified_name"
+    match_symbol_id: int = Field(..., ge=-(2**63), le=2**63 - 1)
+    use_count: int = Field(..., ge=0)
+    file_count: int = Field(..., ge=0)
+    first_seen_path: str
+    evidence_paths_sample: list[str] = Field(default_factory=list)
+    schema_version: int = Field(default=SCHEMA_VERSION_CURRENT, ge=1)
+
+
+class ModuleContractAffectedSymbol(BaseModel):
+    """Delta edge payload referencing an existing PublicApiSymbol."""
+
+    model_config = {"frozen": True}
+
+    public_symbol_id: str
+    change_kind: Literal["added", "removed", "signature_changed"]
+    affected_use_count: int = Field(..., ge=0)
+    schema_version: int = Field(default=SCHEMA_VERSION_CURRENT, ge=1)
+
+
+class ModuleContractSnapshot(BaseModel):
+    """One producer/consumer module pair at one commit."""
+
+    model_config = {"frozen": True}
+
+    id: str
+    group_id: str
+    project: str
+    consumer_module_name: str
+    producer_module_name: str
+    language: Language
+    commit_sha: str
+    include_package: bool = False
+    producer_surface_id: str
+    symbol_count: int = Field(..., ge=0)
+    use_count: int = Field(..., ge=0)
+    file_count: int = Field(..., ge=0)
+    skipped_symbol_count: int = Field(..., ge=0)
+    consumer_evidence_source: Literal["tantivy_symbol_occurrence"] = (
+        "tantivy_symbol_occurrence"
+    )
+    schema_version: int = Field(default=SCHEMA_VERSION_CURRENT, ge=1)
+
+
+class ModuleContractDelta(BaseModel):
+    """Minimal explicit old/new contract comparison record."""
+
+    model_config = {"frozen": True}
+
+    id: str
+    group_id: str
+    project: str
+    consumer_module_name: str
+    producer_module_name: str
+    language: Language
+    from_commit_sha: str
+    to_commit_sha: str
+    removed_consumed_symbol_count: int = Field(..., ge=0)
+    signature_changed_consumed_symbol_count: int = Field(..., ge=0)
+    added_consumed_symbol_count: int = Field(..., ge=0)
+    affected_use_count: int = Field(..., ge=0)
+    classification_scope: Literal["minimal_symbol_delta"] = "minimal_symbol_delta"
+    schema_version: int = Field(default=SCHEMA_VERSION_CURRENT, ge=1)

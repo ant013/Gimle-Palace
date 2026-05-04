@@ -1,0 +1,16 @@
+{
+  "modules": [
+    {
+      "module_name": "ConsumerApp",
+      "roots": [
+        "ConsumerApp/Sources/ConsumerApp"
+      ]
+    },
+    {
+      "module_name": "ProducerKit",
+      "roots": [
+        "ProducerKit/Sources/ProducerKit"
+      ]
+    }
+  ]
+}
