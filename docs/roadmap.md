@@ -43,7 +43,7 @@ When all rows below are ✅, palace-mcp can index the entire UW production ecosy
 
 | Order | Slice | Status | Issue | Files | Notes |
 |-------|-------|--------|-------|-------|-------|
-| 1 | Symbol index Swift (UW-iOS, custom emitter Option C) | 🚧 | GIM-128 | `services/palace-mcp/scip_emit/swift/`, `extractors/symbol_index_swift.py`, fixtures | Custom emitter required — no scip-swift; canonical Sourcegraph SCIP protobuf output |
+| 1 | Symbol index Swift (UW-iOS, custom emitter Option C) | ✅ | GIM-128 | `services/palace-mcp/scip_emit_swift/`, `extractors/symbol_index_swift.py`, `tests/extractors/fixtures/uw-ios-mini-project/` | Merged `4ff2b2f`. Custom emitter; canonical Sourcegraph SCIP protobuf output. |
 | 2 | Symbol index C/C++/Obj-C (UW-iOS Pods, scip-clang) | 📋 | TBD | `extractors/symbol_index_clang.py`, fixtures, compose mounts | scip-clang is mature first-party; expected smaller than Swift slice |
 
 **Launch boundary**: reached when both CX queue items above AND Claude queue C2 (Multi-repo SPM ingest, GIM-182) are ✅. UW codebase then indexable end-to-end (iOS Swift + iOS Pods + Android Java/Kotlin + EVM Solidity, with first-party HS Kits resolved via bundle).
@@ -54,11 +54,12 @@ When all rows below are ✅, palace-mcp can index the entire UW production ecosy
 |-------|-------|--------|-------|-------|-------|
 | C1 | Watchdog handoff detector (Phase 1 alert-only) | ✅ | GIM-181 | `services/watchdog/*` | Detective half of atomic-handoff strategy; merged `f2f05c4` |
 | C2 | Multi-repo SPM ingest (full slice — Claude end-to-end) | 🚧 | GIM-182 | `services/palace-mcp/src/palace_mcp/{memory/bundle.py,code/find_references.py,ingest/runner.py,git/path_resolver.py}`, `services/palace-mcp/scripts/`, `docs/runbooks/multi-repo-spm-ingest.md` | Originally split (Claude=spec, CX=impl); operator decision 2026-05-03 reassigned to Claude end-to-end. Spec at `docs/superpowers/specs/2026-05-03-GIM-182-multi-repo-spm-ingest-design.md` (1237 LOC, rev2). |
-| C3 | Watchdog handoff detector — Opus nudge follow-up | 🚧 | GIM-183 | `services/watchdog/*` | 3 follow-ups from GIM-181 Opus review: server-Date anchoring, missing `handoff_alert_skipped_cooldown` + `handoff_alert_state_cleared` JSONL events, e2e lifecycle test. |
-| C4 | iMac post-merge auto-deploy | 📋 | TBD | `paperclips/scripts/imac-deploy-listener.{sh,plist}`, webhook handler | Removes manual `imac-deploy.sh` step after every merge |
-| C5 | `palace.code.semantic_search` | 📋 | TBD | `services/palace-mcp/src/palace_mcp/code/semantic_search.py` | Deferred Slice 5 of original USE-BUILT; vector or hybrid search composite |
+| C3 | Watchdog handoff detector — Opus nudge follow-up | ✅ | GIM-183 | `services/watchdog/*` | 3 follow-ups merged `365c9c4` (PR #81): server-Date anchoring, 4 missing JSONL events emitted, e2e lifecycle test. |
+| C4 | Git History Harvester (Extractor #22) — Phase 2 prereq | 📋 spec+plan ready | GIM-186 | `services/palace-mcp/src/palace_mcp/extractors/git_history/`, `services/palace-mcp/tests/extractors/{unit,integration,fixtures}/`, runbook | Foundation for 6 historical extractors (#11/#12/#26/#32/#43/#44). Spec rev2 (1255 LOC) + plan (2430 LOC, 13 TDD tasks) committed on `feature/GIM-186-git-history-harvester`. **Awaiting Claude CTO availability after GIM-182 closes** — no team-chain trigger yet. |
+| C5 | iMac post-merge auto-deploy | 📋 | TBD | `paperclips/scripts/imac-deploy-listener.{sh,plist}`, webhook handler | Removes manual `imac-deploy.sh` step after every merge |
+| C6 | `palace.code.semantic_search` | 📋 | TBD | `services/palace-mcp/src/palace_mcp/code/semantic_search.py` | Deferred Slice 5 of original USE-BUILT; vector or hybrid search composite |
 
-C2 (GIM-182) is the **launch-critical Claude item** — must reach ✅ before launch boundary closes. C3/C4/C5 are independent and not launch-blocking.
+C2 (GIM-182) is the **launch-critical Claude item** — must reach ✅ before launch boundary closes. C3/C4/C5/C6 are independent and not launch-blocking. C4 (GIM-186) is fully spec'd + plan'd; ready for team-chain trigger when CTO frees from GIM-182.
 
 ### Already merged (Phase 1 foundation)
 
@@ -70,7 +71,9 @@ C2 (GIM-182) is the **launch-critical Claude item** — must reach ✅ before la
 | Symbol index Solidity v1 | GIM-124 | DEFs only; USE-occurrences deferred to Phase 2 |
 | Watchdog mechanical | GIM-67/69/79/80 | `scan_died_mid_work` + `scan_idle_hangs` |
 | Atomic-handoff fragment | PR #77 (`9262aca`) | Preventive companion to GIM-181 |
-| Watchdog handoff detector (alert-only) | GIM-181 (`f2f05c4`) | Detective half of atomic-handoff strategy; 3 Opus nudge follow-ups in GIM-183 |
+| Watchdog handoff detector (alert-only) | GIM-181 (`f2f05c4`) | Detective half of atomic-handoff strategy; 3 Opus nudge follow-ups closed in GIM-183 |
+| Watchdog handoff detector — Opus nudge follow-ups | GIM-183 (`365c9c4`) | Server-Date anchoring + 4 JSONL events + e2e lifecycle test |
+| Symbol index Swift (UW-iOS) | GIM-128 (`4ff2b2f`) | First-party HS Kits indexed via custom emitter; CX queue item 1 closed |
 | Paperclip team workspace isolation | PR #76 | Two team roots under `/Users/Shared/Ios/worktrees/{claude,cx}/` |
 | Paperclip shared CM discipline | PR #75 | Both teams share `repos-gimle` CM project + `palace.memory.decide` writes |
 | Codex/CX team build target | PR #73-74 | Codex team operational with 9 roles |
