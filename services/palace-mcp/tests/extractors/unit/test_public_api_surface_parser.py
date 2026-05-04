@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from palace_mcp.extractors.foundation.models import Language
+from palace_mcp.extractors.foundation.models import Language, PublicApiVisibility
 from palace_mcp.extractors.public_api_surface import (
     _read_head_sha,
     discover_public_api_artifacts,
@@ -54,11 +54,45 @@ class TestKotlinApiDumpParser:
         assert "com.example.wallet.Wallet.forSubclass(kotlin.Int)" in fqns
         assert "com.example.wallet.BaseWallet.inheritedHook()" in fqns
         assert "com.example.wallet.WalletApiKt.makeWallet(kotlin.String)" in fqns
+        assert "com.example.wallet.Wallet.Listener" in fqns
+        assert "com.example.wallet.Wallet.Listener.onSynced()" in fqns
+        assert "com.example.wallet.Wallet.Nested" in fqns
+        assert "com.example.wallet.Wallet.Nested.init()" in fqns
+        assert "com.example.wallet.Wallet.Nested.nestedCall()" in fqns
+        assert "com.example.wallet.Wallet.Companion" in fqns
+        assert "com.example.wallet.Wallet.Companion.fromCache(kotlin.String)" in fqns
         assert "com.example.wallet.Wallet.hiddenInternal()" not in fqns
         assert "com.example.wallet.Wallet.hiddenPrivate()" not in fqns
         assert (
             fqns["com.example.wallet.Wallet.forSubclass(kotlin.Int)"].visibility.value
             == "protected"
+        )
+        assert fqns["com.example.wallet.Wallet.Listener"].kind.value == "interface"
+
+    def test_does_not_guess_published_api_internal_from_plain_bcv_lines(self) -> None:
+        artifact = discover_public_api_artifacts(FIXTURE_ROOT)[0]
+        _, symbols = parse_kotlin_api_dump(
+            project="public-api-mini",
+            group_id="project/public-api-mini",
+            artifact=artifact,
+            commit_sha="cafebabecafebabecafebabecafebabecafebabe",
+        )
+
+        fqns = {symbol.fqn: symbol for symbol in symbols}
+        assert "com.example.wallet.PublishedApiBridge" in fqns
+        assert (
+            "com.example.wallet.PublishedApiBridge.publishedBridge(kotlin.String)"
+            in fqns
+        )
+        assert (
+            fqns["com.example.wallet.PublishedApiBridge"].visibility
+            is PublicApiVisibility.PUBLIC
+        )
+        assert (
+            fqns[
+                "com.example.wallet.PublishedApiBridge.publishedBridge(kotlin.String)"
+            ].visibility
+            is PublicApiVisibility.PUBLIC
         )
 
     def test_stable_ids_are_deterministic(self) -> None:
@@ -105,6 +139,10 @@ class TestSwiftInterfaceParser:
         assert "Wallet.init(id: Swift.String)" in fqns
         assert "Wallet.id" in fqns
         assert "Wallet.balance()" in fqns
+        assert "WalletController" in fqns
+        assert "WalletController.init(wallet: Wallet)" in fqns
+        assert "WalletController.refresh()" in fqns
+        assert "WalletState" in fqns
         assert "Syncable" in fqns
         assert "Syncable.sync()" in fqns
         assert "packageHelper()" in fqns
@@ -114,6 +152,9 @@ class TestSwiftInterfaceParser:
         assert "Wallet.hiddenInternal()" not in fqns
         assert "Wallet.hiddenPrivate" not in fqns
         assert fqns["packageHelper()"].visibility.value == "package"
+        assert fqns["WalletController"].visibility is PublicApiVisibility.OPEN
+        assert fqns["WalletController.refresh()"].visibility is PublicApiVisibility.OPEN
+        assert fqns["WalletState"].kind.value == "enum"
 
 
 class TestReadHeadSha:

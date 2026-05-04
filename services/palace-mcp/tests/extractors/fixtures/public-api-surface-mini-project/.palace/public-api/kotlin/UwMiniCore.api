@@ -6,10 +6,23 @@ public final class com.example.wallet.Wallet {
     protected fun forSubclass(kotlin.Int): kotlin.Unit
     internal fun hiddenInternal(): kotlin.Unit
     private fun hiddenPrivate(): kotlin.Unit
+    public interface com.example.wallet.Wallet.Listener {
+        public abstract fun onSynced(): kotlin.Unit
+    }
+    public final class com.example.wallet.Wallet.Nested {
+        public constructor Nested()
+        public final fun nestedCall(): kotlin.Unit
+    }
+    public final class com.example.wallet.Wallet.Companion {
+        public final fun fromCache(kotlin.String): com.example.wallet.Wallet
+    }
 }
 public abstract class com.example.wallet.BaseWallet {
     protected constructor BaseWallet()
     protected fun inheritedHook(): kotlin.Unit
+}
+public final class com.example.wallet.PublishedApiBridge {
+    public final fun publishedBridge(kotlin.String): kotlin.String
 }
 public final class com.example.wallet.WalletApiKt {
     public static final fun makeWallet(kotlin.String): com.example.wallet.Wallet

@@ -10,6 +10,14 @@ public struct Wallet {
   private var hiddenPrivate: Swift.String { get }
 }
 
+open class WalletController {
+  public init(wallet: Wallet)
+  open func refresh() -> Swift.Void
+}
+
+public enum WalletState {
+}
+
 public protocol Syncable {
   public func sync() async throws
 }

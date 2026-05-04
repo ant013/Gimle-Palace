@@ -144,6 +144,17 @@ async def test_public_api_surface_run_writes_surfaces_symbols_and_backing_edges(
         )
         backing_row = await backing_result.single()
 
+        skie_absence_result = await session.run(
+            """
+            MATCH (symbol:PublicApiSymbol {project: $project})
+            RETURN
+                count(CASE WHEN symbol.is_bridge_exported THEN 1 END) AS bridge_exports,
+                collect(DISTINCT symbol.bridge_source) AS bridge_sources
+            """,
+            project="public-api-mini",
+        )
+        skie_absence_row = await skie_absence_result.single()
+
     assert surfaces == [
         {"module_name": "UwMiniCore", "language": "kotlin", "commit_sha": _HEAD_SHA},
         {"module_name": "UwMiniKit", "language": "swift", "commit_sha": _HEAD_SHA},
@@ -154,3 +165,6 @@ async def test_public_api_surface_run_writes_surfaces_symbols_and_backing_edges(
     assert package_row is not None and package_row["fqns"] == ["packageHelper()"]
     assert backing_row is not None
     assert set(backing_row["fqns"]) == {"Wallet.balance()", "com.example.wallet.Wallet"}
+    assert skie_absence_row is not None
+    assert skie_absence_row["bridge_exports"] == 0
+    assert skie_absence_row["bridge_sources"] == []
