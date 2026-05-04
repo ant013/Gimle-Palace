@@ -10,6 +10,7 @@ from __future__ import annotations
 from palace_mcp.extractors.base import BaseExtractor
 from palace_mcp.extractors.codebase_memory_bridge import CodebaseMemoryBridgeExtractor
 from palace_mcp.extractors.cross_module_contract import CrossModuleContractExtractor
+from palace_mcp.extractors.git_history.extractor import GitHistoryExtractor
 from palace_mcp.extractors.heartbeat import HeartbeatExtractor
 from palace_mcp.extractors.public_api_surface import PublicApiSurfaceExtractor
 from palace_mcp.extractors.symbol_index_clang import SymbolIndexClang
@@ -30,6 +31,7 @@ EXTRACTORS: dict[str, BaseExtractor] = {
     "symbol_index_solidity": SymbolIndexSolidity(),
     "symbol_index_swift": SymbolIndexSwift(),
     "symbol_index_clang": SymbolIndexClang(),
+    "git_history": GitHistoryExtractor(),
 }
 
 
