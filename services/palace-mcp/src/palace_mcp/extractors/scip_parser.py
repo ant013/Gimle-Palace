@@ -70,19 +70,15 @@ class FindScipPath:
     def resolve(
         project: str,
         settings: Any,
-        override: str | None = None,
     ) -> Path:
-        """Per-call override > Settings dict. Raises ScipPathRequiredError if neither."""
-        if override is not None:
-            return Path(override)
+        """Resolve a project's SCIP path from settings."""
         path = settings.palace_scip_index_paths.get(project)
         if path is None:
             raise ScipPathRequiredError(
                 project=project,
                 action_required=(
                     f"Set PALACE_SCIP_INDEX_PATHS env var to JSON dict including "
-                    f"'{project}' key, or pass scip_path argument to "
-                    f"palace.ingest.run_extractor"
+                    f"'{project}' key"
                 ),
             )
         return Path(path)
@@ -207,6 +203,8 @@ def _split_scip_top_level(symbol: str) -> list[str]:
 
 
 _SCIP_LANGUAGE_MAP: dict[str, Language] = {
+    "C": Language.C,
+    "CPP": Language.CPP,
     "python": Language.PYTHON,
     "typescript": Language.TYPESCRIPT,
     "TypeScriptReact": Language.TYPESCRIPT,
@@ -221,6 +219,10 @@ _SCIP_LANGUAGE_MAP: dict[str, Language] = {
 
 def _language_from_path(relative_path: str) -> Language:
     """Fallback: derive language from file extension when doc.language is empty."""
+    if relative_path.endswith(".c"):
+        return Language.C
+    if relative_path.endswith((".cc", ".cpp", ".cxx")):
+        return Language.CPP
     if relative_path.endswith((".ts", ".tsx")):
         return Language.TYPESCRIPT
     if relative_path.endswith((".js", ".jsx")):
