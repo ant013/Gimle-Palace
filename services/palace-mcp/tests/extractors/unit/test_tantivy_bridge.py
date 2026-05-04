@@ -11,6 +11,8 @@ from palace_mcp.extractors.foundation.models import (
     Language,
     SymbolKind,
     SymbolOccurrence,
+    TantivyOccurrenceMatch,
+    build_symbol_occurrence_doc_key,
 )
 from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
 
@@ -22,8 +24,15 @@ def _make_occ(
     col_start: int = 0,
     col_end: int = 3,
 ) -> SymbolOccurrence:
+    commit_sha = "abc"
     return SymbolOccurrence(
-        doc_key=f"{symbol_id}:{file_path}:{line}:{col_start}",
+        doc_key=build_symbol_occurrence_doc_key(
+            symbol_id=symbol_id,
+            file_path=file_path,
+            line=line,
+            col_start=col_start,
+            commit_sha=commit_sha,
+        ),
         symbol_id=symbol_id,
         symbol_qualified_name="foo.bar.Baz",
         kind=SymbolKind.DEF,
@@ -33,7 +42,7 @@ def _make_occ(
         col_start=col_start,
         col_end=col_end,
         importance=0.5,
-        commit_sha="abc",
+        commit_sha=commit_sha,
         ingest_run_id="run-1",
     )
 
@@ -173,3 +182,65 @@ class TestTantivyBridgeOperations:
                 count = await bridge.delete_by_symbol_ids_async([1, 2, 3])
         assert count == 3
         assert writer.delete_documents.call_count == 3
+
+    def test_search_occurrences_filters_hits_to_exact_commit(self) -> None:
+        bridge = TantivyBridge(Path("/tmp/tantivy-test"))
+        searcher = MagicMock()
+        current_doc = MagicMock()
+        current_doc.to_dict.return_value = {
+            "doc_key": [
+                build_symbol_occurrence_doc_key(
+                    symbol_id=42,
+                    file_path="src/current.py",
+                    line=8,
+                    col_start=14,
+                    commit_sha="a" * 40,
+                )
+            ],
+            "file_path": ["src/current.py"],
+            "commit_sha": ["a" * 40],
+        }
+        old_doc = MagicMock()
+        old_doc.to_dict.return_value = {
+            "doc_key": [
+                build_symbol_occurrence_doc_key(
+                    symbol_id=42,
+                    file_path="src/old.py",
+                    line=8,
+                    col_start=14,
+                    commit_sha="b" * 40,
+                )
+            ],
+            "file_path": ["src/old.py"],
+            "commit_sha": ["b" * 40],
+        }
+        searcher.doc.side_effect = [current_doc, old_doc]
+        searcher.search.return_value = MagicMock(hits=[(1.0, "current"), (1.0, "old")])
+        bridge._index = MagicMock()
+        bridge._index.searcher.return_value = searcher
+        bridge._index.parse_query.return_value = MagicMock()
+
+        matches = bridge._search_occurrences_sync(
+            symbol_id=42,
+            commit_sha="a" * 40,
+            phases=("phase2_user_uses",),
+            limit=10,
+        )
+
+        assert matches == [
+            TantivyOccurrenceMatch(
+                doc_key=build_symbol_occurrence_doc_key(
+                    symbol_id=42,
+                    file_path="src/current.py",
+                    line=8,
+                    col_start=14,
+                    commit_sha="a" * 40,
+                ),
+                symbol_id=42,
+                file_path="src/current.py",
+                line=8,
+                col_start=14,
+                col_end=None,
+                commit_sha="a" * 40,
+            )
+        ]

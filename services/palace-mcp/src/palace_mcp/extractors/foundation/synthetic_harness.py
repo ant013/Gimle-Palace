@@ -29,6 +29,7 @@ from palace_mcp.extractors.foundation.models import (
     Language,
     SymbolKind,
     SymbolOccurrence,
+    build_symbol_occurrence_doc_key,
 )
 
 _LANGUAGES = [
@@ -128,7 +129,13 @@ class SyntheticHarness:
                 importance=importance,
                 commit_sha="synthetic_0000000",
                 ingest_run_id=f"stress-{self.project}",
-                doc_key=f"{self._symbol_ids[sym_idx]}:{self._file_paths[file_idx]}:{line}:0",
+                doc_key=build_symbol_occurrence_doc_key(
+                    symbol_id=self._symbol_ids[sym_idx],
+                    file_path=self._file_paths[file_idx],
+                    line=line,
+                    col_start=0,
+                    commit_sha="synthetic_0000000",
+                ),
             )
 
     def sample(self, n: int = 1000) -> list[SymbolOccurrence]:

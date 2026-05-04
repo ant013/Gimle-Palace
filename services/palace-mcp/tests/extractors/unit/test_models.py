@@ -18,6 +18,7 @@ from palace_mcp.extractors.foundation.models import (
     SymbolKind,
     SymbolOccurrence,
     SymbolOccurrenceShadow,
+    build_symbol_occurrence_doc_key,
 )
 
 
@@ -29,8 +30,15 @@ def _sym_occ(
     col_end: int = 7,
     **kwargs: object,
 ) -> SymbolOccurrence:
+    commit_sha = str(kwargs.get("commit_sha", "abc123"))
     defaults = dict(
-        doc_key=f"{symbol_id}:{file_path}:{line}:{col_start}",
+        doc_key=build_symbol_occurrence_doc_key(
+            symbol_id=symbol_id,
+            file_path=file_path,
+            line=line,
+            col_start=col_start,
+            commit_sha=commit_sha,
+        ),
         symbol_id=symbol_id,
         symbol_qualified_name="foo.bar.Baz",
         kind=SymbolKind.DEF,
@@ -40,7 +48,7 @@ def _sym_occ(
         col_start=col_start,
         col_end=col_end,
         importance=0.5,
-        commit_sha="abc123",
+        commit_sha=commit_sha,
         ingest_run_id="run-1",
     )
     defaults.update(kwargs)  # type: ignore[arg-type]
@@ -82,12 +90,30 @@ class TestSymbolOccurrence:
 
     def test_symbol_id_min_boundary(self) -> None:
         sid = -(2**63)
-        occ = _sym_occ(symbol_id=sid, doc_key=f"{sid}:src/foo.py:10:4")
+        occ = _sym_occ(
+            symbol_id=sid,
+            doc_key=build_symbol_occurrence_doc_key(
+                symbol_id=sid,
+                file_path="src/foo.py",
+                line=10,
+                col_start=4,
+                commit_sha="abc123",
+            ),
+        )
         assert occ.symbol_id == sid
 
     def test_symbol_id_max_boundary(self) -> None:
         sid = 2**63 - 1
-        occ = _sym_occ(symbol_id=sid, doc_key=f"{sid}:src/foo.py:10:4")
+        occ = _sym_occ(
+            symbol_id=sid,
+            doc_key=build_symbol_occurrence_doc_key(
+                symbol_id=sid,
+                file_path="src/foo.py",
+                line=10,
+                col_start=4,
+                commit_sha="abc123",
+            ),
+        )
         assert occ.symbol_id == sid
 
     def test_symbol_id_overflow_raises(self) -> None:

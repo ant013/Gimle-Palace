@@ -20,6 +20,7 @@ from palace_mcp.extractors.foundation.models import (
     Language,
     SymbolKind,
     SymbolOccurrence,
+    build_symbol_occurrence_doc_key,
 )
 from palace_mcp.proto import scip_pb2
 
@@ -286,7 +287,13 @@ def iter_scip_occurrences(
             if col_end < col_start:
                 col_end = col_start
 
-            doc_key = f"{sym_id}:{file_path}:{line}:{col_start}"
+            doc_key = build_symbol_occurrence_doc_key(
+                symbol_id=sym_id,
+                file_path=file_path,
+                line=line,
+                col_start=col_start,
+                commit_sha=commit_sha,
+            )
 
             yield SymbolOccurrence(
                 doc_key=doc_key,
