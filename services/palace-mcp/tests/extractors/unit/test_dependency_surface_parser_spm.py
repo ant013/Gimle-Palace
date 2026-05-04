@@ -5,8 +5,6 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 
-import pytest
-
 from palace_mcp.extractors.dependency_surface.parsers.spm import parse_spm
 
 _PACKAGE_SWIFT_2DEPS = textwrap.dedent(

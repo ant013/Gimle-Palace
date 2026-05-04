@@ -5,8 +5,6 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 
-import pytest
-
 from palace_mcp.extractors.dependency_surface.parsers.python import parse_python
 
 _PYPROJECT_TOML = textwrap.dedent(

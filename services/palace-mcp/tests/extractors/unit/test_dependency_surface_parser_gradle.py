@@ -5,8 +5,6 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 
-import pytest
-
 from palace_mcp.extractors.dependency_surface.parsers.gradle import parse_gradle
 
 _LIBS_VERSIONS_TOML = textwrap.dedent(
