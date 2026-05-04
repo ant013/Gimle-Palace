@@ -60,8 +60,12 @@ def _build_alias_map(catalog: dict[str, Any]) -> dict[str, tuple[str, str, str]]
     for raw_alias, entry in libraries.items():
         if not isinstance(entry, dict):
             continue
-        group = entry.get("group", "")
-        name = entry.get("name", "")
+        module = entry.get("module", "")
+        if module and ":" in module:
+            group, name = module.split(":", 1)
+        else:
+            group = entry.get("group", "")
+            name = entry.get("name", "")
         version_ref = entry.get("version", {})
         if isinstance(version_ref, dict):
             ref = version_ref.get("ref", "")
