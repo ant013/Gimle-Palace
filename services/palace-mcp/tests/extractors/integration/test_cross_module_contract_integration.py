@@ -263,7 +263,7 @@ async def test_cross_module_contract_run_writes_snapshot_and_symbol_edges(
             "use_count": 2,
             "file_count": 1,
             "skipped_symbol_count": 3,
-        }
+        },
     ]
     assert edges == [
         {
@@ -305,7 +305,7 @@ async def test_cross_module_contract_run_writes_snapshot_and_symbol_edges(
                 "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift"
             ],
             "first_seen_path": "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift",
-        }
+        },
     ]
     assert deltas == [
         {
@@ -340,7 +340,9 @@ async def test_cross_module_contract_run_writes_snapshot_and_symbol_edges(
         },
     ]
     assert invalid_target_row is not None and invalid_target_row["count"] == 0
-    assert invalid_delta_target_row is not None and invalid_delta_target_row["count"] == 0
+    assert (
+        invalid_delta_target_row is not None and invalid_delta_target_row["count"] == 0
+    )
     assert cross_commit_row is not None and cross_commit_row["count"] == 0
     assert same_module_row is not None and same_module_row["count"] == 0
     assert package_row is not None and package_row["count"] == 0

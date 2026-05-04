@@ -77,9 +77,7 @@ MERGE (delta)-[rel:AFFECTS_PUBLIC_SYMBOL]->(symbol)
 SET rel += $edge_props
 """
 
-_DELTA_REQUESTS_PATH = (
-    Path(".palace") / "cross-module-contract" / "delta-requests.json"
-)
+_DELTA_REQUESTS_PATH = Path(".palace") / "cross-module-contract" / "delta-requests.json"
 
 
 @dataclass(frozen=True)
@@ -337,10 +335,7 @@ def _plan_requested_deltas(
     planned: list[_PlannedContractSnapshot],
     delta_requests: list[_DeltaRequest],
 ) -> list[_PlannedContractDelta]:
-    snapshot_lookup = {
-        _snapshot_key(item.snapshot): item
-        for item in planned
-    }
+    snapshot_lookup = {_snapshot_key(item.snapshot): item for item in planned}
     planned_deltas: dict[str, _PlannedContractDelta] = {}
     for request in delta_requests:
         from_snapshot = snapshot_lookup.get(
@@ -431,7 +426,10 @@ def plan_contract_snapshots(
                 matched_any = False
                 for occurrence in occurrences:
                     resolution = resolve_owner(occurrence.file_path)
-                    if resolution.status != "resolved" or resolution.module_name is None:
+                    if (
+                        resolution.status != "resolved"
+                        or resolution.module_name is None
+                    ):
                         continue
                     if resolution.module_name == surface.module_name:
                         continue
