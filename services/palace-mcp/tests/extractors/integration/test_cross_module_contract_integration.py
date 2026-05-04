@@ -11,6 +11,8 @@ import pytest
 from neo4j import AsyncDriver
 
 from palace_mcp.config import Settings
+from palace_mcp.extractors import registry
+from palace_mcp.extractors.cross_module_contract import CrossModuleContractExtractor
 from palace_mcp.extractors.foundation.identifiers import symbol_id_for
 from palace_mcp.extractors.foundation.models import (
     Language,
@@ -114,6 +116,12 @@ async def test_cross_module_contract_run_writes_snapshot_and_symbol_edges(
         patch("palace_mcp.extractors.runner.REPOS_ROOT", _project_and_repo),
         patch("palace_mcp.mcp_server.get_driver", return_value=driver),
         patch("palace_mcp.mcp_server.get_settings", return_value=settings),
+        # Force a fresh extractor instance so this integration test does not
+        # inherit mutated registry state from earlier tests in the full suite.
+        patch.dict(
+            registry.EXTRACTORS,
+            {"cross_module_contract": CrossModuleContractExtractor()},
+        ),
     ):
         result = await run_extractor(
             name="cross_module_contract",
