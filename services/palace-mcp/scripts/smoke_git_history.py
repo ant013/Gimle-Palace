@@ -10,6 +10,7 @@ Requires:
 
 See docs/runbooks/git-history-harvester.md for full operator guide.
 """
+
 from __future__ import annotations
 
 import asyncio

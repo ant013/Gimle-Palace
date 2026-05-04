@@ -6,6 +6,7 @@ Produces:
   5 commits, 2 authors (1 human + github-actions[bot])
   1 merge commit (c4 has 2 parents)
 """
+
 import sys
 from pathlib import Path
 
@@ -32,9 +33,11 @@ def main(out_dir: str) -> None:
     tree1 = repo.index.write_tree()
     c1 = repo.create_commit(
         "refs/heads/main",
-        _sig(*human, 0), _sig(*human, 0),
+        _sig(*human, 0),
+        _sig(*human, 0),
         "Initial commit",
-        tree1, [],
+        tree1,
+        [],
     )
 
     # Commit 2: add file2 — bot
@@ -44,9 +47,11 @@ def main(out_dir: str) -> None:
     tree2 = repo.index.write_tree()
     c2 = repo.create_commit(
         "refs/heads/main",
-        _sig(*bot, 60), _sig(*bot, 60),
+        _sig(*bot, 60),
+        _sig(*bot, 60),
         "Add file2.txt",
-        tree2, [c1],
+        tree2,
+        [c1],
     )
 
     # Commit 3 (topic tip): human adds file3 starting from tree1 (separate branch)
@@ -56,17 +61,21 @@ def main(out_dir: str) -> None:
     tree3 = builder.write()
     c3 = repo.create_commit(
         "refs/heads/topic",
-        _sig(*human, 90), _sig(*human, 90),
+        _sig(*human, 90),
+        _sig(*human, 90),
         "Add file3.txt on topic",
-        tree3, [c1],
+        tree3,
+        [c1],
     )
 
     # Commit 4 — merge (2 parents: c2 + c3); use tree2 content
     c4 = repo.create_commit(
         "refs/heads/main",
-        _sig(*human, 180), _sig(*human, 180),
+        _sig(*human, 180),
+        _sig(*human, 180),
         "Merge branch 'topic'",
-        tree2, [c2, c3],
+        tree2,
+        [c2, c3],
     )
 
     # Commit 5 — human, normal commit
@@ -77,9 +86,11 @@ def main(out_dir: str) -> None:
     tree5 = repo.index.write_tree()
     c5 = repo.create_commit(
         "refs/heads/main",
-        _sig(*human, 240), _sig(*human, 240),
+        _sig(*human, 240),
+        _sig(*human, 240),
         "Final commit",
-        tree5, [c4],
+        tree5,
+        [c4],
     )
 
     # Point HEAD to main
