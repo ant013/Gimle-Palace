@@ -1,0 +1,10 @@
+[
+  {
+    "consumer_module_name": "ConsumerApp",
+    "producer_module_name": "ProducerKit",
+    "language": "swift",
+    "from_commit_sha": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+    "to_commit_sha": "feedfacefeedfacefeedfacefeedfacefeedface",
+    "include_package": false
+  }
+]
