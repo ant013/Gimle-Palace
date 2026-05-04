@@ -1,11 +1,25 @@
 ---
 slug: dependency-surface
-status: proposed
+status: proposed (rev2)
 branch: feature/GIM-191-dependency-surface
 paperclip_issue: 191
 authoring_team: Claude (Board+Claude brainstorm); Claude implements end-to-end
 predecessor: 476acf07 (post-GIM-188 develop tip)
 date: 2026-05-04
+related_decision: docs/superpowers/decisions/2026-05-04-cross-group-external-dependency-dedup.md
+rev2_changes: |
+  Fixes 4 blockers + 3 architectural points + 3 nits from operator pre-CR review:
+  - §3.1 + §5.1 manifest detection now uses Path.rglob with explicit stop-list (gimle has no root pyproject.toml; manifests live deeper).
+  - §5.1 auto-detect any()-of-generators bug fixed; canonical `any(p.rglob(...))` form.
+  - §3.4 inv 4 + Acceptance #9 reformulated against Neo4j ResultSummary counters
+    (`nodes_created==0 and relationships_created==0` on re-run); writer uses
+    `await result.consume()` mirror of `extractors/foundation/eviction.py:107-108`.
+  - §3.6 NEW (was implicit): edge `last_seen_at` dropped — only `first_seen_at` kept.
+  - §9.1 + §9.4.5 explicit `palace.memory.register_project` pre-flight requirement
+    + correct evidence path (`docker logs`, not `~/.paperclip/palace-mcp.log`).
+  - §1 + §11 per-bundle-member ingest pattern made explicit (workflow GIM-182).
+  - §11 UW-android perf risk + F11 UNWIND batching deferred with reactivation trigger.
+  - Cross-group :ExternalDependency dedup ratified via decision doc (linked above).
 ---
 
 # GIM-191 — Dependency Surface Extractor (Phase 2 #5)
@@ -26,6 +40,8 @@ date: 2026-05-04
 **Predecessor SHA**: `476acf07` (`develop` tip after GIM-188 merge).
 
 **Authoring split**: Board + Claude session brainstorms spec + plan; Claude paperclip team implements end-to-end (per `docs/roadmap.md` §3 Claude queue + operator decision 2026-05-03).
+
+**Per-bundle-member ingest pattern** (multi-Kit Swift / multi-module Gradle): one `:Project` slug per parsable manifest root. The extractor parses ONE root per run. For `uw-ios` bundle (40 HS Kits + app), the operator iterates `palace.memory.bundle_members(bundle="uw-ios")` and triggers `palace.ingest.run_extractor(name="dependency_surface", project="<member-slug>")` per Kit — same pattern as GIM-182 bundle ingest. v1 does NOT auto-iterate members; bundle-aware run is F12 followup if a consumer needs single-call coverage.
 
 **Related artefacts** (must read before implementation):
 - `services/palace-mcp/src/palace_mcp/extractors/foundation/models.py:140` — `ExternalDependency` model (purl, ecosystem, resolved_version, group_id).
@@ -68,6 +84,8 @@ date: 2026-05-04
 | F8 | Dependency vulnerability cross-reference (OSV/GHSA) | Security consumer requests it |
 | F9 | Module-level dep granularity (separate edges per module instead of per-project) | First consumer needs "what does module X specifically depend on" (vs "what does the project depend on") |
 | F10 | `dependency-analysis-gradle-plugin` integration for usage-vs-declared diff | First consumer asks "which declared deps are unused" |
+| F11 | UNWIND-batched MERGE (single Cypher round-trip per ecosystem batch) | First real-prod smoke measures ingest >10 s; current per-dep round-trip pattern is the v1 simplest-correct baseline |
+| F12 | Bundle-aware ingest (`run_extractor(bundle="uw-ios")` auto-iterates members) | First consumer needs single-call cross-Kit coverage; until then operator iterates `bundle_members` manually |
 
 ### Silent-scope-reduction guard
 
@@ -85,11 +103,13 @@ Output must match the file list declared in §4 verbatim. Any out-of-scope file 
 
 1. **Storage**: Neo4j only (per ADR D2: structured nodes + edges in Neo4j; no Tantivy — there is no full-text body for deps). `:ExternalDependency` already namespaced via `purl` UNIQUE; `:Project -[:DEPENDS_ON]-> :ExternalDependency` edges carry per-edge metadata. Per-project group_id isolation.
 2. **Ingest**: Single-phase per-project run:
-   - Scan repo root for known manifest files (`Package.swift`, `Package.resolved`, `gradle/libs.versions.toml`, `**/build.gradle.kts`, `pyproject.toml`, `uv.lock`).
+   - Walk the repo via `Path.rglob` for known manifest files (`Package.swift`, `Package.resolved`, `gradle/libs.versions.toml`, `build.gradle.kts`, `pyproject.toml`, `uv.lock`) — manifests are NOT guaranteed to live at repo root (e.g. `gimle` has `services/palace-mcp/pyproject.toml`, `services/watchdog/pyproject.toml`).
+   - Honour an explicit stop-list during walk: `.git`, `.venv`, `node_modules`, `target`, `dist`, `build`, `__pycache__`, `tests/extractors/fixtures` (avoid ingesting fixtures into prod indices).
    - Parse each present format via its sub-parser → `list[ParsedDep]`.
    - MERGE each `ParsedDep` into `:ExternalDependency` (idempotent on `purl`).
    - MERGE each `(Project)-[:DEPENDS_ON]->(ExternalDependency)` edge with properties.
-   - Emit JSONL events; return `ExtractorStats(nodes_written, edges_written)`.
+   - Counters semantics: `ExtractorStats(nodes_written, edges_written)` reports **created** count via `result.summary.counters.{nodes_created, relationships_created}` (mirror of `extractors/foundation/eviction.py:107-108`), NOT MERGE-attempted. This is what makes `Acceptance #9` (re-run = 0 net writes) provable.
+   - Emit JSONL events.
 3. **Query** (no new MCP tool in this slice): consumers use Cypher directly. Sample queries in §9.4 smoke gate.
 
 **Why no Tantivy**: dep entries are structured (purl is essentially a key); there is no full-text body. Adding Tantivy would be over-engineering.
@@ -187,11 +207,13 @@ class IngestSummary(FrozenModel):
 
 ### 3.4 Invariants
 
-1. **purl uniqueness across runs and projects** — `:ExternalDependency` node uniqueness via `ext_dep_purl_unique` constraint (already in foundation `schema.py:60`). Same purl across UW-iOS-app and EvmKit-mini → single node, multiple `:DEPENDS_ON` edges from different `:Project` nodes.
-2. **Per-project namespacing on edges** — `:DEPENDS_ON` edge carries project context via the source node `(:Project {slug: ...})`. The `ExternalDependency` node itself does NOT carry per-project state (its `group_id` field is set on first MERGE; subsequent re-runs from other projects do NOT overwrite it — this is the documented v1 behavior; cross-project provenance is F-followup).
+1. **purl uniqueness across runs and projects** — `:ExternalDependency` node uniqueness via `ext_dep_purl_unique` constraint (already in foundation `schema.py:60`). Same purl across UW-iOS-app and EvmKit-mini → single node, multiple `:DEPENDS_ON` edges from different `:Project` nodes. **Cross-group dedup is intentional architectural choice** — see linked decision doc; this slice is the first consumer of foundation's no-group-namespace-on-purl design (vs `PALACE_DEFAULT_GROUP_ID` convention for `:Issue`/`:Comment`/etc).
+2. **Per-project namespacing on edges** — `:DEPENDS_ON` edge carries project context via the source node `(:Project {slug: ...})`. The `ExternalDependency` node itself does NOT carry per-project state (its `group_id` field is set on first MERGE; subsequent re-runs from other projects do NOT overwrite it — this is the documented v1 behaviour; per-tenant provenance is F-followup).
 3. **Resolved version sentinel** — when a manifest declares a version constraint without a lock-file pin, `resolved_version = "unresolved"` (per foundation `UNRESOLVED_VERSION_SENTINEL`). NEVER null/empty/None.
-4. **Idempotent re-parse** — re-running the extractor on unchanged manifests produces zero net writes. MERGE on `purl` for the node and on `(scope, declared_in)` for the edge.
+4. **Idempotent re-parse, counter-precise** — re-running the extractor on unchanged manifests produces `nodes_created == 0` AND `relationships_created == 0` per Neo4j `ResultSummary.counters`. MERGE on `purl` for the node and on `(scope, declared_in)` for the edge. Edge does **not** carry `last_seen_at` (run-level temporal data lives in `:IngestRun` already; storing per-edge `last_seen_at` would force `properties_set > 0` on every re-run and undermine the counter-based invariant). Only `first_seen_at` is set ON CREATE on the edge.
 5. **No transitive resolution** — v1 emits only what's declared. Closure over `Package.resolved` transitive `pins` is F3 followup; trans deps are noisy and double-count.
+
+`:Project` pre-existence is a **runner-enforced precondition**: `runner.py:116-120` runs `MATCH (p:Project {slug: $slug}) RETURN p` and returns `error_code="project_not_registered"` BEFORE invoking the extractor. Operator must call `palace.memory.register_project(slug=...)` first. Integration tests must set up `:Project` explicitly (Plan Task 11) since they bypass runner.
 
 ## 4. Component layout
 
@@ -272,12 +294,26 @@ class DependencySurfaceExtractor(BaseExtractor):
         check_resume_budget(previous_error_code=previous_error)
         await ensure_custom_schema(driver)
 
-        # 1. Auto-detect manifests
-        spm_present = (ctx.repo_path / "Package.swift").is_file()
-        gradle_present = (ctx.repo_path / "gradle" / "libs.versions.toml").is_file() or any(
-            (ctx.repo_path / sub).rglob("build.gradle.kts") for sub in [""]
-        )
-        python_present = (ctx.repo_path / "pyproject.toml").is_file()
+        # 1. Auto-detect manifests via rglob with stop-list (manifests live deeper than root,
+        #    e.g. /repos/gimle/services/palace-mcp/pyproject.toml — verified 2026-05-04 in
+        #    container; root has no pyproject.toml).
+        STOP = {".git", ".venv", "node_modules", "target", "dist", "build", "__pycache__"}
+        FIXTURE_STOP = "tests/extractors/fixtures"  # path-suffix check
+
+        def _walk(root: Path, name: str) -> Iterator[Path]:
+            for p in root.rglob(name):
+                if any(seg in STOP for seg in p.parts) or FIXTURE_STOP in p.as_posix():
+                    continue
+                yield p
+
+        spm_files = list(_walk(ctx.repo_path, "Package.swift"))
+        gradle_libs = list(_walk(ctx.repo_path, "libs.versions.toml"))
+        gradle_modules = list(_walk(ctx.repo_path, "build.gradle.kts"))
+        python_pyprojects = list(_walk(ctx.repo_path, "pyproject.toml"))
+
+        spm_present = bool(spm_files)
+        gradle_present = bool(gradle_libs) or bool(gradle_modules)
+        python_present = bool(python_pyprojects)
 
         if not (spm_present or gradle_present or python_present):
             ctx.logger.warning("dep_surface_no_manifests",
@@ -285,23 +321,31 @@ class DependencySurfaceExtractor(BaseExtractor):
                                       "project_id": ctx.group_id})
             return ExtractorStats(nodes_written=0, edges_written=0)
 
-        # 2. Parse each present ecosystem
+        # 2. Parse each present ecosystem. Multiple manifest roots per ecosystem are
+        #    supported (gimle has services/palace-mcp/pyproject.toml AND
+        #    services/watchdog/pyproject.toml); each parsed independently with
+        #    declared_in carrying the file path relative to ctx.repo_path.
         all_parsed: list[ParsedDep] = []
         warnings: list[str] = []
         ecosystems_present: list[Ecosystem] = []
 
-        if spm_present:
-            r = parse_spm(ctx.repo_path, project_id=ctx.group_id)
+        for spm_root in {p.parent for p in spm_files}:
+            r = parse_spm(spm_root, project_id=ctx.group_id, repo_root=ctx.repo_path)
             all_parsed.extend(r.deps); warnings.extend(r.parser_warnings)
-            ecosystems_present.append(r.ecosystem)
+            if r.ecosystem not in ecosystems_present: ecosystems_present.append(r.ecosystem)
+
+        # Gradle: a single pass over the whole repo (libs.versions.toml is shared by
+        # all modules; build.gradle.kts files reference it via libs.X aliases).
         if gradle_present:
-            r = parse_gradle(ctx.repo_path, project_id=ctx.group_id)
+            r = parse_gradle(ctx.repo_path, project_id=ctx.group_id,
+                             libs_files=gradle_libs, kts_files=gradle_modules)
             all_parsed.extend(r.deps); warnings.extend(r.parser_warnings)
-            ecosystems_present.append(r.ecosystem)
-        if python_present:
-            r = parse_python(ctx.repo_path, project_id=ctx.group_id)
+            if r.ecosystem not in ecosystems_present: ecosystems_present.append(r.ecosystem)
+
+        for py_root in {p.parent for p in python_pyprojects}:
+            r = parse_python(py_root, project_id=ctx.group_id, repo_root=ctx.repo_path)
             all_parsed.extend(r.deps); warnings.extend(r.parser_warnings)
-            ecosystems_present.append(r.ecosystem)
+            if r.ecosystem not in ecosystems_present: ecosystems_present.append(r.ecosystem)
 
         # 3. Write
         nodes_written, edges_written = await write_to_neo4j(
@@ -429,10 +473,12 @@ No new env vars. The extractor uses only `ctx.repo_path` (provided by runner) an
 ### 9.1 Pre-implementation (CTO Phase 1.1)
 
 1. Confirm branch starts from `476acf07`.
-2. Confirm 101a foundation primitives (`BaseExtractor`, `ExtractorRunContext`, `ExternalDependency`, `ensure_custom_schema`) stable on develop.
-3. Confirm `tomllib` usable (Python 3.13+ already required).
+2. Confirm 101a foundation primitives (`BaseExtractor`, `ExtractorRunContext`, `ExternalDependency`, `ensure_custom_schema`, `result.consume()` counter pattern at `extractors/foundation/eviction.py:107-108`) stable on develop.
+3. Confirm `tomllib` usable (Python 3.12+ required per `services/palace-mcp/pyproject.toml:requires-python`; stdlib).
 4. Confirm `packaging` package available (already a transitive dep via `uv` ecosystem).
 5. Verify CLAUDE.md mount table for `gimle`, `uw-android` (smoke targets).
+6. Verify `palace.memory.register_project` will be called for `gimle` and `uw-android` BEFORE smoke (runner returns `error_code="project_not_registered"` otherwise per `runner.py:116-120`).
+7. Verify cross-group dedup decision doc ratified (`docs/superpowers/decisions/2026-05-04-cross-group-external-dependency-dedup.md`).
 
 ### 9.2 Per-task gates
 
@@ -512,11 +558,12 @@ ssh imac-ssh.ant013.work \
 
 Smoke is GREEN iff ALL of the following:
 
-- `gimle_first.success == true` AND `gimle_first.duration_ms < 2000`
-- `gimle_first.nodes_written > 5` (palace-mcp has neo4j, graphiti-core, fastapi, ... — at least 5 deps)
-- `gimle_second.nodes_written == 0` (idempotent re-run)
-- `uw_first.success == true` AND `uw_first.duration_ms < 10000`
-- `uw_first.nodes_written > 50` (UW-android has many androidx + retrofit + okhttp deps)
+- Pre-flight: `palace.memory.register_project(slug="gimle")` and `palace.memory.register_project(slug="uw-android")` succeeded (or were already registered). If runner returns `error_code="project_not_registered"`, fix and retry.
+- `gimle_first.success == true` AND `gimle_first.duration_ms < 5000` (revised from 2000 to account for multi-pyproject walk: gimle has ≥2 pyproject.toml at `services/palace-mcp/` and `services/watchdog/`).
+- `gimle_first.nodes_written > 5` (counter-precise — `nodes_created`, NOT MERGE-attempted).
+- `gimle_second.nodes_created == 0` AND `gimle_second.relationships_created == 0` (counter-precise idempotency; `properties_set` may be > 0 if the spec extends edge properties later, but for v1 with no `last_seen_at` on edges it should also be 0).
+- `uw_first.success == true` AND `uw_first.duration_ms < 15000` (revised from 10000 — see §11 risk; F11 reactivation if measured >15s).
+- `uw_first.nodes_written > 50` (UW-android has many androidx + retrofit + okhttp deps).
 - Cross-project dedup gate via Cypher:
   ```cypher
   MATCH (p1:Project {slug:'gimle'})-[:DEPENDS_ON]->(d:ExternalDependency)<-[:DEPENDS_ON]-(p2:Project {slug:'uw-android'})
@@ -543,8 +590,10 @@ $ jq '.gimle_first, .gimle_second, .uw_first' /tmp/dep-surface-smoke-*.log
 <full ExtractorStats for each>
 
 $ ssh imac-ssh.ant013.work \
-  'cat ~/.paperclip/palace-mcp.log | jq -c "select(.event | startswith(\"dep_surface_\"))"'
-<all dep_surface_* events with full payload>
+  'docker logs gimle-palace-palace-mcp-1 2>&1 | grep -F "dep_surface_"'
+<all dep_surface_* events with full payload — palace-mcp emits to stderr,
+ captured via docker logs; no ~/.paperclip/palace-mcp.log file exists,
+ verified 2026-05-04>
 
 $ ssh imac-ssh.ant013.work 'docker compose --profile review exec neo4j cypher-shell -u neo4j -p $NEO4J_PASSWORD \
     "MATCH (d:ExternalDependency) RETURN d.ecosystem AS eco, count(d) AS n ORDER BY n DESC"'
@@ -575,6 +624,8 @@ See §2 OUT table for reactivation triggers.
 - **No `Package.swift` resolution semantics** — we DO read `Package.swift` for declared, but resolution is taken from `Package.resolved`. If `Package.resolved` is missing, every dep gets `resolved_version="unresolved"`. Operator runs `xcodebuild -resolvePackageDependencies` separately when needed.
 - **CocoaPods absence** — UW-iOS uses both SPM and CocoaPods (per fixture path `Pods/Foo`). v1 ignores CocoaPods (F1 followup); operator gets a ~5-10% gap on UW-iOS Pods deps. Acceptable since SPM dominates.
 - **No license / vulnerability data** — F7 / F8. v1 is structural-only.
+- **UW-android per-dep round-trip cost** — current writer pattern is `for dep in deps: await session.run(MERGE_NODE); await session.run(MERGE_EDGE)`. UW-android has ~150 declared deps × ~30-100 build.gradle.kts files; cold cache + first-time schema bootstrap can push ingest to 5-15 s. Smoke gate set to <15 s for UW-android (revised up from initial 10 s). Mitigation: UNWIND-batched MERGE in F11 followup with reactivation trigger "real-prod smoke measures >15 s consistently". Per-dep loop is the v1 simplest-correct baseline; correctness over throughput at this stage.
+- **`Path.rglob` traversal cost** — large monorepos with many subdirectories (e.g. UW-android with `app/`, `core-mini/`, components, fixtures) might hit IO. Stop-list (`.git`, `node_modules`, `target`, etc.) keeps walk bounded; `tests/extractors/fixtures` exclude prevents fixture-sensor self-ingest. If walk exceeds 2 s on UW-android, depth-limit becomes F-followup.
 
 ## 12. Rollout
 
