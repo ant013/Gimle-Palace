@@ -18,6 +18,7 @@ freezegun.
 **Spec:** `docs/superpowers/specs/2026-05-03-GIM-186-git-history-harvester-design.md`
 **Branch:** `feature/GIM-186-git-history-harvester`
 **Predecessor:** `57545cb` (develop tip)
+**Plan rev2:** 2026-05-04 — Fixes 4 CRITICAL + 2 WARNING from Phase 1.2 CR (import paths, call signatures, IngestRun lifecycle, schema extension, `_get_previous_error_code` locality, `_add_doc` ternary logic).
 
 ---
 
@@ -425,19 +426,21 @@ Modify `services/palace-mcp/src/palace_mcp/extractors/foundation/schema.py`
 to add 6 constraints to `EXPECTED_SCHEMA`:
 
 ```python
-# In schema.py, append to EXPECTED_SCHEMA dict:
-EXPECTED_SCHEMA["git_history_constraints"] = [
-    "CREATE CONSTRAINT git_commit_sha IF NOT EXISTS FOR (c:Commit) REQUIRE c.sha IS UNIQUE",
-    "CREATE CONSTRAINT git_author_pk IF NOT EXISTS FOR (a:Author) REQUIRE (a.provider, a.identity_key) IS UNIQUE",
-    "CREATE CONSTRAINT git_pr_pk IF NOT EXISTS FOR (p:PR) REQUIRE (p.project_id, p.number) IS UNIQUE",
-    "CREATE CONSTRAINT git_pr_comment_id IF NOT EXISTS FOR (c:PRComment) REQUIRE c.id IS UNIQUE",
-    "CREATE CONSTRAINT git_file_pk IF NOT EXISTS FOR (f:File) REQUIRE (f.project_id, f.path) IS UNIQUE",
-    "CREATE CONSTRAINT git_history_ckpt IF NOT EXISTS FOR (c:GitHistoryCheckpoint) REQUIRE c.project_id IS UNIQUE",
-]
+# In schema.py, append ConstraintSpec objects to EXPECTED_SCHEMA.constraints list.
+# EXPECTED_SCHEMA is a SchemaDefinition dataclass, NOT a dict.
+# Add after the last existing ConstraintSpec entry:
+EXPECTED_SCHEMA.constraints.extend([
+    ConstraintSpec(name="git_commit_sha", label="Commit", properties=("sha",)),
+    ConstraintSpec(name="git_author_pk", label="Author", properties=("provider", "identity_key")),
+    ConstraintSpec(name="git_pr_pk", label="PR", properties=("project_id", "number")),
+    ConstraintSpec(name="git_pr_comment_id", label="PRComment", properties=("id",)),
+    ConstraintSpec(name="git_file_pk", label="File", properties=("project_id", "path")),
+    ConstraintSpec(name="git_history_ckpt", label="GitHistoryCheckpoint", properties=("project_id",)),
+])
 ```
 
-(Exact patch shape depends on existing schema.py structure; preserve existing
-constraint ordering. Place new block after the last existing entry.)
+(EXPECTED_SCHEMA is a `SchemaDefinition` dataclass with `.constraints: list[ConstraintSpec]`.
+Preserve existing constraint ordering. Place new block after the last existing entry.)
 
 - [ ] **Step 6: Add schema-extension test**
 
@@ -446,10 +449,13 @@ Add to `tests/extractors/unit/test_git_history_models.py`:
 ```python
 def test_ensure_custom_schema_includes_git_history_constraints():
     from palace_mcp.extractors.foundation.schema import EXPECTED_SCHEMA
-    git_constraints = EXPECTED_SCHEMA.get("git_history_constraints", [])
-    assert any("Commit" in c and "UNIQUE" in c for c in git_constraints)
-    assert any("Author" in c and "provider" in c and "identity_key" in c for c in git_constraints)
-    assert any("GitHistoryCheckpoint" in c for c in git_constraints)
+    constraint_names = {c.name for c in EXPECTED_SCHEMA.constraints}
+    assert "git_commit_sha" in constraint_names
+    assert "git_author_pk" in constraint_names
+    assert "git_history_ckpt" in constraint_names
+    # Verify composite key for Author
+    author_c = next(c for c in EXPECTED_SCHEMA.constraints if c.name == "git_author_pk")
+    assert author_c.properties == ("provider", "identity_key")
 ```
 
 - [ ] **Step 7: Run all model tests**
@@ -1270,11 +1276,12 @@ class GitHistoryTantivyWriter:
             raise RuntimeError("writer not opened (use async with)")
         doc = tantivy.Document()
         for k, v in fields.items():
-            doc.add_text(k, str(v) if not isinstance(v, (bool,)) else "true" if v else "false") if k != "ts" and k != "is_bot" else None
             if k == "ts":
                 doc.add_date(k, v)
             elif k == "is_bot":
-                doc.add_boolean(k, v)
+                doc.add_text(k, "true" if v else "false")
+            else:
+                doc.add_text(k, str(v))
         await asyncio.get_running_loop().run_in_executor(
             None, self._writer.add_document, doc
         )
@@ -1722,7 +1729,11 @@ async def test_run_returns_extractor_stats(tmp_path: Path):
          patch("palace_mcp.extractors.git_history.extractor._get_previous_error_code",
                new=AsyncMock(return_value=None)), \
          patch("palace_mcp.extractors.git_history.extractor.check_resume_budget"), \
-         patch("palace_mcp.extractors.git_history.extractor.check_phase_budget"):
+         patch("palace_mcp.extractors.git_history.extractor.check_phase_budget"), \
+         patch("palace_mcp.extractors.git_history.extractor.create_ingest_run",
+               new=AsyncMock()), \
+         patch("palace_mcp.extractors.git_history.extractor.finalize_ingest_run",
+               new=AsyncMock()):
         extractor = GitHistoryExtractor()
         stats = await extractor.run(graphiti=MagicMock(),
                                     ctx=_make_ctx(Path(repo_path)))
@@ -1749,6 +1760,10 @@ async def test_run_skips_phase2_when_no_github_token(tmp_path: Path, caplog):
                new=AsyncMock(return_value=None)), \
          patch("palace_mcp.extractors.git_history.extractor.check_resume_budget"), \
          patch("palace_mcp.extractors.git_history.extractor.check_phase_budget"), \
+         patch("palace_mcp.extractors.git_history.extractor.create_ingest_run",
+               new=AsyncMock()), \
+         patch("palace_mcp.extractors.git_history.extractor.finalize_ingest_run",
+               new=AsyncMock()), \
          caplog.at_level(logging.WARNING):
         extractor = GitHistoryExtractor()
         await extractor.run(graphiti=MagicMock(), ctx=_make_ctx(Path(repo_path)))
@@ -1793,6 +1808,10 @@ async def test_run_emits_resync_event_on_invalid_checkpoint(tmp_path: Path, capl
                new=AsyncMock(return_value=None)), \
          patch("palace_mcp.extractors.git_history.extractor.check_resume_budget"), \
          patch("palace_mcp.extractors.git_history.extractor.check_phase_budget"), \
+         patch("palace_mcp.extractors.git_history.extractor.create_ingest_run",
+               new=AsyncMock()), \
+         patch("palace_mcp.extractors.git_history.extractor.finalize_ingest_run",
+               new=AsyncMock()), \
          caplog.at_level(logging.WARNING):
         extractor = GitHistoryExtractor()
         await extractor.run(graphiti=MagicMock(), ctx=_make_ctx(Path(repo_path)))
@@ -1813,15 +1832,15 @@ from datetime import datetime, timezone
 from typing import ClassVar
 
 from palace_mcp.extractors.base import (
-    BaseExtractor, ExtractorRunContext, ExtractorStats, ExtractorError,
-    ExtractorErrorCode,
+    BaseExtractor, ExtractorRunContext, ExtractorStats,
 )
-from palace_mcp.extractors.foundation.budget import (
+from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErrorCode
+from palace_mcp.extractors.foundation.circuit_breaker import (
     check_resume_budget, check_phase_budget,
 )
 from palace_mcp.extractors.foundation.schema import ensure_custom_schema
 from palace_mcp.extractors.foundation.checkpoint import (
-    create_ingest_run, _get_previous_error_code,
+    create_ingest_run, finalize_ingest_run,
 )
 from palace_mcp.extractors.git_history.bot_detector import is_bot
 from palace_mcp.extractors.git_history.checkpoint import (
@@ -1840,6 +1859,21 @@ from palace_mcp.extractors.git_history.pygit2_walker import (
 from palace_mcp.extractors.git_history.tantivy_writer import GitHistoryTantivyWriter
 
 log = logging.getLogger("watchdog.daemon")  # use module logger via spec convention
+
+
+async def _get_previous_error_code(driver: "AsyncDriver", project: str) -> str | None:
+    """Per-extractor circuit-breaker query (mirrors symbol_index_python.py:346)."""
+    _QUERY = """
+    MATCH (r:IngestRun {project: $project, extractor_name: 'git_history'})
+    WHERE r.success = false
+    RETURN r.error_code AS error_code
+    ORDER BY r.started_at DESC
+    LIMIT 1
+    """
+    async with driver.session() as session:
+        result = await session.run(_QUERY, project=project)
+        record = await result.single()
+        return record["error_code"] if record else None
 
 
 class GitHistoryExtractor(BaseExtractor):
@@ -1871,7 +1905,14 @@ class GitHistoryExtractor(BaseExtractor):
         check_resume_budget(previous_error_code=previous_error)
         await ensure_custom_schema(driver)
 
-        ckpt = await load_git_history_checkpoint(driver, ctx.group_id)
+        # IngestRun lifecycle — mirrors symbol_index_python.py:99
+        await create_ingest_run(
+            driver, run_id=ctx.run_id,
+            project=ctx.project_slug, extractor_name=self.name,
+        )
+
+        try:  # ← entire body wrapped; finalize_ingest_run in except/end
+            ckpt = await load_git_history_checkpoint(driver, ctx.group_id)
         commits_written = 0
         prs_written = 0
         pr_comments_written = 0
@@ -1879,7 +1920,11 @@ class GitHistoryExtractor(BaseExtractor):
         full_resync = False
 
         # --- Phase 1: pygit2 ---
-        check_phase_budget(commits_written, settings.git_history_max_commits_per_run, "phase1_commits")
+        check_phase_budget(
+            nodes_written_so_far=commits_written,
+            max_occurrences_total=settings.git_history_max_commits_per_run,
+            phase="phase1_commits",
+        )
         try:
             walker = Pygit2Walker(repo_path=ctx.repo_path)
             new_head_sha = walker.head_sha()
@@ -1952,6 +1997,7 @@ class GitHistoryExtractor(BaseExtractor):
                             "commits_written": commits_written,
                             "prs_written": 0, "pr_comments_written": 0,
                             "full_resync": full_resync})
+            await finalize_ingest_run(driver, run_id=ctx.run_id, success=True)
             return ExtractorStats(
                 nodes_written=commits_written,
                 edges_written=edges_written,
@@ -1962,7 +2008,7 @@ class GitHistoryExtractor(BaseExtractor):
         # (Implementation parallels Phase 1 shape using GitHubClient +
         # write_pr_with_author + write_pr_comment_with_author.)
 
-        # Final
+        # Final — finalize IngestRun lifecycle (mirrors symbol_index_python.py:226)
         log.info("git_history_complete",
                  extra={"event": "git_history_complete",
                         "project_id": ctx.group_id,
@@ -1970,10 +2016,21 @@ class GitHistoryExtractor(BaseExtractor):
                         "prs_written": prs_written,
                         "pr_comments_written": pr_comments_written,
                         "full_resync": full_resync})
-        return ExtractorStats(
-            nodes_written=commits_written + prs_written + pr_comments_written,
-            edges_written=edges_written,
-        )
+            await finalize_ingest_run(driver, run_id=ctx.run_id, success=True)
+            return ExtractorStats(
+                nodes_written=commits_written + prs_written + pr_comments_written,
+                edges_written=edges_written,
+            )
+        except ExtractorError:
+            await finalize_ingest_run(
+                driver, run_id=ctx.run_id, success=False, error_code="extractor_error",
+            )
+            raise
+        except Exception:
+            await finalize_ingest_run(
+                driver, run_id=ctx.run_id, success=False, error_code="unknown",
+            )
+            raise
 ```
 
 Phase 2 GraphQL block: implement using `GitHubClient.fetch_prs_since` + write
