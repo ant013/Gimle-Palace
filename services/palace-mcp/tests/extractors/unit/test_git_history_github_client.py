@@ -13,6 +13,12 @@ from palace_mcp.extractors.git_history.github_client import (
 async def test_fetch_prs_single_page():
     fake_response = {
         "data": {
+            "rateLimit": {
+                "cost": 1,
+                "remaining": 4999,
+                "limit": 5000,
+                "resetAt": "2026-05-03T13:00:00Z",
+            },
             "repository": {
                 "pullRequests": {
                     "pageInfo": {"hasNextPage": False, "endCursor": None},
@@ -36,13 +42,7 @@ async def test_fetch_prs_single_page():
                         }
                     ],
                 },
-                "rateLimit": {
-                    "cost": 1,
-                    "remaining": 4999,
-                    "limit": 5000,
-                    "resetAt": "2026-05-03T13:00:00Z",
-                },
-            }
+            },
         }
     }
     with respx.mock:
@@ -61,6 +61,12 @@ async def test_fetch_prs_single_page():
 async def test_fetch_prs_pagination_two_pages():
     page1 = {
         "data": {
+            "rateLimit": {
+                "cost": 1,
+                "remaining": 4998,
+                "limit": 5000,
+                "resetAt": "2026-05-03T13:00:00Z",
+            },
             "repository": {
                 "pullRequests": {
                     "pageInfo": {"hasNextPage": True, "endCursor": "CURSOR1"},
@@ -84,17 +90,17 @@ async def test_fetch_prs_pagination_two_pages():
                         }
                     ],
                 },
-                "rateLimit": {
-                    "cost": 1,
-                    "remaining": 4998,
-                    "limit": 5000,
-                    "resetAt": "2026-05-03T13:00:00Z",
-                },
-            }
+            },
         }
     }
     page2 = {
         "data": {
+            "rateLimit": {
+                "cost": 1,
+                "remaining": 4997,
+                "limit": 5000,
+                "resetAt": "2026-05-03T13:00:00Z",
+            },
             "repository": {
                 "pullRequests": {
                     "pageInfo": {"hasNextPage": False, "endCursor": None},
@@ -118,13 +124,7 @@ async def test_fetch_prs_pagination_two_pages():
                         }
                     ],
                 },
-                "rateLimit": {
-                    "cost": 1,
-                    "remaining": 4997,
-                    "limit": 5000,
-                    "resetAt": "2026-05-03T13:00:00Z",
-                },
-            }
+            },
         }
     }
     with respx.mock:
@@ -145,6 +145,12 @@ async def test_fetch_prs_stops_at_since_boundary():
     """PR with updated_at < since must NOT be yielded."""
     fake = {
         "data": {
+            "rateLimit": {
+                "cost": 1,
+                "remaining": 4999,
+                "limit": 5000,
+                "resetAt": "2026-05-03T13:00:00Z",
+            },
             "repository": {
                 "pullRequests": {
                     "pageInfo": {"hasNextPage": False, "endCursor": None},
@@ -185,13 +191,7 @@ async def test_fetch_prs_stops_at_since_boundary():
                         },
                     ],
                 },
-                "rateLimit": {
-                    "cost": 1,
-                    "remaining": 4999,
-                    "limit": 5000,
-                    "resetAt": "2026-05-03T13:00:00Z",
-                },
-            }
+            },
         }
     }
     since = datetime(2026, 5, 2, tzinfo=timezone.utc)
@@ -211,18 +211,18 @@ async def test_rate_limit_fail_fast_below_threshold():
     """remaining < 100 → raise RateLimitExhausted, NOT sleep."""
     fake = {
         "data": {
+            "rateLimit": {
+                "cost": 50,
+                "remaining": 50,
+                "limit": 5000,
+                "resetAt": "2026-05-03T13:00:00Z",
+            },
             "repository": {
                 "pullRequests": {
                     "pageInfo": {"hasNextPage": True, "endCursor": "C"},
                     "nodes": [],
                 },
-                "rateLimit": {
-                    "cost": 50,
-                    "remaining": 50,
-                    "limit": 5000,
-                    "resetAt": "2026-05-03T13:00:00Z",
-                },
-            }
+            },
         }
     }
     with respx.mock:
@@ -240,18 +240,18 @@ async def test_429_retry_with_backoff():
     """429 followed by 200 should succeed within bounded backoff."""
     fake_ok = {
         "data": {
+            "rateLimit": {
+                "cost": 1,
+                "remaining": 4999,
+                "limit": 5000,
+                "resetAt": "2026-05-03T13:00:00Z",
+            },
             "repository": {
                 "pullRequests": {
                     "pageInfo": {"hasNextPage": False, "endCursor": None},
                     "nodes": [],
                 },
-                "rateLimit": {
-                    "cost": 1,
-                    "remaining": 4999,
-                    "limit": 5000,
-                    "resetAt": "2026-05-03T13:00:00Z",
-                },
-            }
+            },
         }
     }
     with respx.mock:

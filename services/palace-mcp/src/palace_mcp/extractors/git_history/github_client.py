@@ -12,6 +12,7 @@ import httpx
 GRAPHQL_URL = "https://api.github.com/graphql"
 PR_QUERY = """
 query($owner: String!, $name: String!, $cursor: String) {
+  rateLimit { cost remaining limit resetAt }
   repository(owner: $owner, name: $name) {
     pullRequests(first: 50, after: $cursor,
                  orderBy: {field: UPDATED_AT, direction: DESC}) {
@@ -32,7 +33,6 @@ query($owner: String!, $name: String!, $cursor: String) {
         }
       }
     }
-    rateLimit { cost remaining limit resetAt }
   }
 }
 """
@@ -76,7 +76,7 @@ class GitHubClient:
             )
             repo_data = resp_json["data"]["repository"]
             page = repo_data["pullRequests"]
-            rate_limit = repo_data["rateLimit"]
+            rate_limit = resp_json["data"]["rateLimit"]
 
             # Cost-aware fail-fast (spec §5.2)
             if rate_limit["remaining"] < self._budget_floor:

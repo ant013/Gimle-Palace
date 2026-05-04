@@ -1,5 +1,11 @@
 {
   "data": {
+    "rateLimit": {
+      "cost": 1,
+      "remaining": 4999,
+      "limit": 5000,
+      "resetAt": "2026-05-03T13:00:00Z"
+    },
     "repository": {
       "pullRequests": {
         "pageInfo": {"hasNextPage": false, "endCursor": null},
@@ -46,12 +52,6 @@
             }
           }
         ]
-      },
-      "rateLimit": {
-        "cost": 1,
-        "remaining": 4999,
-        "limit": 5000,
-        "resetAt": "2026-05-03T13:00:00Z"
       }
     }
   }

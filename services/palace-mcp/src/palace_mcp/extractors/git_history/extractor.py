@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from typing import ClassVar
 
+from datetime import datetime
+
 from palace_mcp.extractors.base import (
     BaseExtractor,
     ExtractorRunContext,
@@ -224,6 +226,7 @@ class GitHistoryExtractor(BaseExtractor):
             repo_name = repo_parts[1] if len(repo_parts) > 1 else ctx.project_slug
 
             gh_client = GitHubClient(token=settings.github_token)
+            max_pr_updated_at: datetime | None = None
             try:
                 async for batch in gh_client.fetch_prs_since(
                     owner, repo_name, since=ckpt.last_pr_updated_at
@@ -255,6 +258,15 @@ class GitHistoryExtractor(BaseExtractor):
                         prs_written += 1
                         edges_written += 1
 
+                        # Track the latest PR updatedAt for checkpoint advancement.
+                        raw_updated = pr_node.get("updatedAt")
+                        if raw_updated:
+                            pr_dt = datetime.fromisoformat(
+                                raw_updated.replace("Z", "+00:00")
+                            )
+                            if max_pr_updated_at is None or pr_dt > max_pr_updated_at:
+                                max_pr_updated_at = pr_dt
+
                         for cmt in (pr_node.get("comments") or {}).get("nodes", []):
                             cmt_author = (cmt.get("author") or {}).get(
                                 "login"
@@ -281,7 +293,7 @@ class GitHistoryExtractor(BaseExtractor):
                 driver,
                 ctx.group_id,
                 last_commit_sha=new_head_sha,
-                last_pr_updated_at=None,
+                last_pr_updated_at=max_pr_updated_at or ckpt.last_pr_updated_at,
                 last_phase_completed="phase2",
             )
 
