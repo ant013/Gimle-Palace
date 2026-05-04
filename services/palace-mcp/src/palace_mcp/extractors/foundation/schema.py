@@ -74,6 +74,13 @@ EXPECTED_SCHEMA = SchemaDefinition(
             properties=("run_id", "phase", "project"),
             type="UNIQUE",
         ),
+        # GIM-186: git_history extractor constraints
+        ConstraintSpec(name="git_commit_sha", label="Commit", properties=("sha",)),
+        ConstraintSpec(name="git_author_pk", label="Author", properties=("provider", "identity_key")),
+        ConstraintSpec(name="git_pr_pk", label="PR", properties=("project_id", "number")),
+        ConstraintSpec(name="git_pr_comment_id", label="PRComment", properties=("id",)),
+        ConstraintSpec(name="git_file_pk", label="File", properties=("project_id", "path")),
+        ConstraintSpec(name="git_history_ckpt", label="GitHistoryCheckpoint", properties=("project_id",)),
     ],
     indexes=[
         IndexSpec(
