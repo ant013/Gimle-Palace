@@ -77,6 +77,43 @@ class SourceType(str, Enum):
     SYNTHETIC = "synthetic"  # test harness / synthesized occurrences
 
 
+class PublicApiArtifactKind(str, Enum):
+    """Artifact source used to build a public API snapshot."""
+
+    KOTLIN_BCV_API = "kotlin_bcv_api"
+    SWIFTINTERFACE = "swiftinterface"
+    SWIFT_API_DIGESTER = "swift_api_digester"
+    SKIE_OVERLAY = "skie_overlay"
+
+
+class PublicApiSymbolKind(str, Enum):
+    """Normalized kind for a symbol in the exported API surface."""
+
+    CLASS = "class"
+    STRUCT = "struct"
+    ENUM = "enum"
+    PROTOCOL = "protocol"
+    INTERFACE = "interface"
+    FUNCTION = "function"
+    METHOD = "method"
+    PROPERTY = "property"
+    INITIALIZER = "initializer"
+    TYPEALIAS = "typealias"
+    EXTENSION = "extension"
+    UNKNOWN = "unknown"
+
+
+class PublicApiVisibility(str, Enum):
+    """Visibility captured from an API artifact."""
+
+    PUBLIC = "public"
+    OPEN = "open"
+    PROTECTED = "protected"
+    PUBLISHED_API_INTERNAL = "published_api_internal"
+    PACKAGE = "package"
+    UNKNOWN = "unknown"
+
+
 # ---------------------------------------------------------------------------
 # Core occurrence model
 # ---------------------------------------------------------------------------
@@ -228,3 +265,48 @@ class IngestCheckpoint(BaseModel):
         ),
     )
     completed_at: datetime
+
+
+class PublicApiSurface(BaseModel):
+    """Committed snapshot of one module-level public API artifact."""
+
+    model_config = {"frozen": True}
+
+    id: str
+    group_id: str
+    project: str
+    module_name: str
+    language: Language
+    commit_sha: str
+    artifact_path: str
+    artifact_kind: PublicApiArtifactKind
+    tool_name: str
+    tool_version: str
+    generated_at: datetime | None = None
+    schema_version: int = Field(default=SCHEMA_VERSION_CURRENT, ge=1)
+
+
+class PublicApiSymbol(BaseModel):
+    """One exported symbol captured from a public API artifact."""
+
+    model_config = {"frozen": True}
+
+    id: str
+    group_id: str
+    project: str
+    module_name: str
+    language: Language
+    commit_sha: str
+    fqn: str
+    display_name: str
+    kind: PublicApiSymbolKind
+    visibility: PublicApiVisibility
+    signature: str
+    signature_hash: str
+    source_artifact_path: str
+    source_line: int | None = Field(default=None, ge=1)
+    is_generated: bool = False
+    is_bridge_exported: bool = False
+    bridge_source: str | None = None
+    symbol_qualified_name: str | None = None
+    schema_version: int = Field(default=SCHEMA_VERSION_CURRENT, ge=1)

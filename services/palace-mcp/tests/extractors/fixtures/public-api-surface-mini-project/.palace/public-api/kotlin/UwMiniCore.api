@@ -1,0 +1,17 @@
+// tool: kotlin-bcv 0.18.1
+public final class com.example.wallet.Wallet {
+    public constructor Wallet(kotlin.String)
+    public final fun displayName(): kotlin.String
+    public final val ownerName: kotlin.String
+    protected fun forSubclass(kotlin.Int): kotlin.Unit
+    internal fun hiddenInternal(): kotlin.Unit
+    private fun hiddenPrivate(): kotlin.Unit
+}
+public abstract class com.example.wallet.BaseWallet {
+    protected constructor BaseWallet()
+    protected fun inheritedHook(): kotlin.Unit
+}
+public final class com.example.wallet.WalletApiKt {
+    public static final fun makeWallet(kotlin.String): com.example.wallet.Wallet
+    internal static final fun bridgeInternal(kotlin.String): kotlin.String
+}
