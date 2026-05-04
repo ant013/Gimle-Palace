@@ -1,11 +1,4 @@
-"""Integration test: SymbolIndexSwift on real Neo4j + Tantivy.
-
-Verifies end-to-end ingest of Swift SCIP data through the 3-phase bootstrap.
-Also verifies 3-Kit bundle fixture: cross-repo Tantivy search returns
-occurrences from member slugs when bundle slug resolves correctly.
-
-Requires Neo4j running (docker compose --profile review) or testcontainers.
-"""
+"""Integration test: SymbolIndexSwift runtime path via runner + real Neo4j/Tantivy."""
 
 from __future__ import annotations
 
@@ -13,35 +6,69 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from neo4j import AsyncDriver
 
-from palace_mcp.extractors.base import ExtractorRunContext
-from palace_mcp.extractors.symbol_index_swift import SymbolIndexSwift
-from tests.extractors.fixtures.scip_factory import (
-    build_swift_scip_index,
-    write_scip_fixture,
+from palace_mcp.extractors.foundation.identifiers import symbol_id_for
+from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
+from palace_mcp.extractors.runner import run_extractor
+from palace_mcp.extractors.schema import ensure_extractors_schema
+from palace_mcp.extractors.scip_parser import parse_scip_file
+from tests.extractors.unit.test_real_scip_fixtures import (
+    _UW_IOS_N_DOCUMENTS,
+    _UW_IOS_TOOL_NAME,
+    requires_scip_uw_ios,
 )
 
-# Swift SCIP symbol format: scip-swift <manager> <package> <version> <descriptor>
-# _extract_qualified_name strips scheme+manager+version → "<package> <descriptor>"
-_EVMKIT_ADDRESS_SYMBOL = "scip-swift swift EvmKit 1.0 Address#."
-_EVMKIT_ADDRESS_QN = "EvmKit Address#."  # qualified_name after extraction
+_RUN_ID = "swift-integration-run-001"
+_SELECT_QNAME = "UwMiniCore s%3A10UwMiniCore11WalletStoreC6select8walletIDySi_tF"
+FIXTURE_SCIP = (
+    Path(__file__).parent.parent
+    / "fixtures"
+    / "uw-ios-mini-project"
+    / "scip"
+    / "index.scip"
+)
+
+
+@pytest.fixture
+async def _project_and_repo(driver: AsyncDriver, tmp_path: Path) -> Path:
+    async with driver.session() as session:
+        await session.run(
+            """
+            MERGE (p:Project {slug: $slug})
+            SET p.group_id = 'project/' + $slug,
+                p.name = $name,
+                p.tags = []
+            """,
+            slug="uw-ios-mini",
+            name="UwIosMini",
+        )
+    repo = tmp_path / "repos" / "uw-ios-mini"
+    repo.mkdir(parents=True)
+    (repo / ".git").mkdir()
+    (repo / ".git" / "HEAD").write_text("0123456789abcdef0123456789abcdef01234567\n")
+    return tmp_path / "repos"
 
 
 @pytest.mark.integration
+@requires_scip_uw_ios
 class TestSymbolIndexSwiftIntegration:
     @pytest.mark.asyncio
-    async def test_full_ingest_cycle(self, driver: object, tmp_path: Path) -> None:
-        """Ingest synthetic Swift .scip, verify :IngestRun in Neo4j."""
-        index = build_swift_scip_index(
-            relative_path="Sources/EvmKit/Address.swift",
-            symbols=[
-                (_EVMKIT_ADDRESS_SYMBOL, 1),  # def
-            ],
-        )
-        scip_path = write_scip_fixture(index, tmp_path / "evmkit.scip")
+    async def test_run_extractor_registers_and_ingests_all_three_phases(
+        self,
+        driver: AsyncDriver,
+        graphiti_mock: MagicMock,
+        _project_and_repo: Path,
+        tmp_path: Path,
+    ) -> None:
+        await ensure_extractors_schema(driver)
+        scip_path = FIXTURE_SCIP
+        parsed = parse_scip_file(scip_path)
+        assert parsed.metadata.tool_info.name == _UW_IOS_TOOL_NAME
+        assert len(parsed.documents) == _UW_IOS_N_DOCUMENTS
 
         settings = MagicMock()
-        settings.palace_scip_index_paths = {"evmkit-mini": str(scip_path)}
+        settings.palace_scip_index_paths = {"uw-ios-mini": str(scip_path)}
         tantivy_dir = tmp_path / "tantivy"
         tantivy_dir.mkdir()
         settings.palace_tantivy_index_path = str(tantivy_dir)
@@ -52,183 +79,53 @@ class TestSymbolIndexSwiftIntegration:
         settings.palace_max_occurrences_per_symbol = 5_000
         settings.palace_recency_decay_days = 30.0
 
-        ctx = ExtractorRunContext(
-            project_slug="evmkit-mini",
-            group_id="project/evmkit-mini",
-            repo_path=tmp_path,
-            run_id="swift-integration-run-001",
-            duration_ms=0,
-            logger=MagicMock(),
-        )
-
-        extractor = SymbolIndexSwift()
-        graphiti = MagicMock()
-
         with (
             patch("palace_mcp.mcp_server.get_driver", return_value=driver),
             patch("palace_mcp.mcp_server.get_settings", return_value=settings),
+            patch("palace_mcp.extractors.runner.REPOS_ROOT", _project_and_repo),
+            patch("palace_mcp.extractors.runner.uuid4", return_value=_RUN_ID),
         ):
-            stats = await extractor.run(graphiti=graphiti, ctx=ctx)
+            res = await run_extractor(
+                name="symbol_index_swift",
+                project="uw-ios-mini",
+                driver=driver,
+                graphiti=graphiti_mock,
+            )
 
-        assert stats.nodes_written >= 1  # at least the def was written
+        assert res["ok"] is True
+        assert res["extractor"] == "symbol_index_swift"
+        assert res["project"] == "uw-ios-mini"
+        assert res["success"] is True
+        assert res["nodes_written"] >= 4
 
-        async with driver.session() as session:  # type: ignore[union-attr]
+        async with driver.session() as session:
             result = await session.run(
-                "MATCH (r:IngestRun {run_id: $rid}) RETURN r.success AS success",
-                rid="swift-integration-run-001",
+                "MATCH (c:IngestCheckpoint {run_id: $rid}) "
+                "RETURN c.phase AS phase, c.expected_doc_count AS count",
+                rid=_RUN_ID,
             )
-            record = await result.single()
-            assert record is not None
-            assert record["success"] is True
+            rows = await result.data()
+        counts = {row["phase"]: row["count"] for row in rows}
+        assert counts["phase1_defs"] > 0
+        assert counts["phase2_user_uses"] > counts["phase1_defs"]
+        assert counts["phase3_vendor_uses"] > counts["phase2_user_uses"]
 
-    @pytest.mark.asyncio
-    async def test_cross_kit_tantivy_search(
-        self, driver: object, tmp_path: Path
-    ) -> None:
-        """Ingest EvmKit-mini (def) + uw-ios-app (use), verify Tantivy finds both.
-
-        This exercises the data path that bundle find_references walks:
-        open Tantivy, search symbol_id across all member projects.
-        """
-        from palace_mcp.extractors.foundation.identifiers import symbol_id_for
-        from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
-
-        tantivy_dir = tmp_path / "tantivy"
-        tantivy_dir.mkdir()
-
-        def _settings(scip_paths: dict) -> MagicMock:
-            s = MagicMock()
-            s.palace_scip_index_paths = scip_paths
-            s.palace_tantivy_index_path = str(tantivy_dir)
-            s.palace_tantivy_heap_mb = 50
-            s.palace_max_occurrences_total = 50_000_000
-            s.palace_max_occurrences_per_project = 10_000_000
-            s.palace_importance_threshold_use = 0.0
-            s.palace_max_occurrences_per_symbol = 5_000
-            s.palace_recency_decay_days = 30.0
-            return s
-
-        # 1. Ingest EvmKit-mini: defines EvmKit.Address
-        evmkit_index = build_swift_scip_index(
-            relative_path="Sources/EvmKit/Address.swift",
-            symbols=[(_EVMKIT_ADDRESS_SYMBOL, 1)],
-        )
-        evmkit_scip = write_scip_fixture(evmkit_index, tmp_path / "evmkit.scip")
-        evmkit_ctx = ExtractorRunContext(
-            project_slug="EvmKit-mini",
-            group_id="project/EvmKit-mini",
-            repo_path=tmp_path,
-            run_id="evmkit-run-001",
-            duration_ms=0,
-            logger=MagicMock(),
-        )
-        with (
-            patch("palace_mcp.mcp_server.get_driver", return_value=driver),
-            patch(
-                "palace_mcp.mcp_server.get_settings",
-                return_value=_settings({"EvmKit-mini": str(evmkit_scip)}),
-            ),
-        ):
-            await SymbolIndexSwift().run(graphiti=MagicMock(), ctx=evmkit_ctx)
-
-        # 2. Ingest uw-ios-app: uses EvmKit.Address
-        app_index = build_swift_scip_index(
-            relative_path="Sources/App/WalletView.swift",
-            symbols=[(_EVMKIT_ADDRESS_SYMBOL, 0)],  # role=0 = use
-        )
-        app_scip = write_scip_fixture(app_index, tmp_path / "app.scip")
-        app_ctx = ExtractorRunContext(
-            project_slug="uw-ios-app",
-            group_id="project/uw-ios-app",
-            repo_path=tmp_path,
-            run_id="app-run-001",
-            duration_ms=0,
-            logger=MagicMock(),
-        )
-        with (
-            patch("palace_mcp.mcp_server.get_driver", return_value=driver),
-            patch(
-                "palace_mcp.mcp_server.get_settings",
-                return_value=_settings({"uw-ios-app": str(app_scip)}),
-            ),
-        ):
-            await SymbolIndexSwift().run(graphiti=MagicMock(), ctx=app_ctx)
-
-        # 3. Search Tantivy by symbol_id — both projects' occurrences should appear
-        sym_id = symbol_id_for(_EVMKIT_ADDRESS_QN)
-        async with TantivyBridge(tantivy_dir, heap_size_mb=50) as bridge:
-            results = await bridge.search_by_symbol_id_async(sym_id, limit=50)
-
-        ingest_run_ids_found = {r.get("ingest_run_id") for r in results}
-        # Both projects wrote the same symbol_id — cross-repo expansion
-        # is evidenced by two distinct ingest_run_ids in Tantivy.
-        assert "evmkit-run-001" in ingest_run_ids_found, (
-            f"EvmKit-mini ingest_run_id missing from results: {ingest_run_ids_found}"
-        )
-        assert "app-run-001" in ingest_run_ids_found, (
-            f"uw-ios-app ingest_run_id missing from results: {ingest_run_ids_found}"
-        )
-
-    @pytest.mark.asyncio
-    async def test_app_slug_distinct_from_bundle_slug(
-        self, driver: object, tmp_path: Path
-    ) -> None:
-        """uw-ios-app slug (project) is distinct from uw-ios (bundle).
-
-        After ingesting uw-ios-app into Tantivy, a Tantivy search returns
-        uw-ios-app as the project slug — never 'uw-ios' (the bundle slug).
-        This proves the project slug and bundle slug are independent identifiers.
-        """
-        from palace_mcp.extractors.foundation.identifiers import symbol_id_for
-        from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
-
-        tantivy_dir = tmp_path / "tantivy"
-        tantivy_dir.mkdir()
-
-        settings = MagicMock()
-        settings.palace_scip_index_paths = {}
-        settings.palace_tantivy_index_path = str(tantivy_dir)
-        settings.palace_tantivy_heap_mb = 50
-        settings.palace_max_occurrences_total = 50_000_000
-        settings.palace_max_occurrences_per_project = 10_000_000
-        settings.palace_importance_threshold_use = 0.0
-        settings.palace_max_occurrences_per_symbol = 5_000
-        settings.palace_recency_decay_days = 30.0
-
-        app_index = build_swift_scip_index(
-            relative_path="Sources/App/Main.swift",
-            symbols=[(_EVMKIT_ADDRESS_SYMBOL, 0)],
-        )
-        app_scip = write_scip_fixture(app_index, tmp_path / "app.scip")
-        settings.palace_scip_index_paths = {"uw-ios-app": str(app_scip)}
-
-        ctx = ExtractorRunContext(
-            project_slug="uw-ios-app",
-            group_id="project/uw-ios-app",
-            repo_path=tmp_path,
-            run_id="slug-distinct-run-001",
-            duration_ms=0,
-            logger=MagicMock(),
-        )
-        with (
-            patch("palace_mcp.mcp_server.get_driver", return_value=driver),
-            patch("palace_mcp.mcp_server.get_settings", return_value=settings),
-        ):
-            await SymbolIndexSwift().run(graphiti=MagicMock(), ctx=ctx)
-
-        sym_id = symbol_id_for(_EVMKIT_ADDRESS_QN)
-        async with TantivyBridge(tantivy_dir, heap_size_mb=50) as bridge:
-            results = await bridge.search_by_symbol_id_async(sym_id, limit=10)
-
-        assert len(results) > 0, "Expected at least one Tantivy result"
-        ingest_run_ids_found = {r.get("ingest_run_id") for r in results}
-        # uw-ios-app was ingested with run_id "slug-distinct-run-001"
-        # The bundle slug "uw-ios" must never appear as an ingest_run_id
-        assert "slug-distinct-run-001" in ingest_run_ids_found, (
-            f"Expected uw-ios-app run_id in results: {ingest_run_ids_found}"
-        )
-        for r in results:
-            run_id = r.get("ingest_run_id", "")
-            assert "uw-ios" not in run_id or "uw-ios-app" in run_id, (
-                f"Bundle slug 'uw-ios' must not leak into per-project Tantivy run_id: {run_id}"
+        async with TantivyBridge(
+            tantivy_dir, heap_size_mb=settings.palace_tantivy_heap_mb
+        ) as bridge:
+            phase1_docs = await bridge.count_docs_for_run_async(_RUN_ID, "phase1_defs")
+            phase2_docs = await bridge.count_docs_for_run_async(
+                _RUN_ID, "phase2_user_uses"
             )
+            phase3_docs = await bridge.count_docs_for_run_async(
+                _RUN_ID, "phase3_vendor_uses"
+            )
+            hits = await bridge.search_by_symbol_id_async(symbol_id_for(_SELECT_QNAME))
+
+        assert phase1_docs > 0
+        assert phase2_docs > 0
+        assert phase3_docs > 0
+        paths = {hit["file_path"][0] for hit in hits}
+        assert "Sources/UwMiniCore/State/WalletStore.swift" in paths
+        assert "Sources/UwMiniApp/ContentView.swift" in paths
+        assert "Pods/Foo/Foo.swift" in paths

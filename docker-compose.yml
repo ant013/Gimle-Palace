@@ -55,6 +55,8 @@ services:
       # Fixture-based mounts (relative paths under ./services/...) work cross-platform.
       - /Users/Shared/Ios/Gimle-Palace:/repos/gimle:ro
       - /Users/Shared/Android/unstoppable-wallet-android:/repos/uw-android:ro
+      - ./services/palace-mcp/tests/extractors/fixtures/uw-ios-mini-project:/repos/uw-ios-mini:ro
+      - /Users/Shared/Ios/unstoppable-wallet-ios:/repos/uw-ios:ro
       - ./services/palace-mcp/tests/extractors/fixtures/oz-v5-mini-project:/repos/oz-v5-mini:ro
       # GIM-182: HorizontalSystems parent mount for uw-ios bundle (41 Swift Kits).
       # Non-iMac contributors: override in docker-compose.override.yml.

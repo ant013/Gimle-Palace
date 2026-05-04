@@ -606,12 +606,22 @@ async def _palace_ingest_run_extractor(
     if graphiti is None:
         handle_tool_error(DriverUnavailableError("Graphiti not initialised"))
     if bundle is not None and project is not None:
-        return {"ok": False, "error_code": "invalid_request", "message": "project and bundle are mutually exclusive"}
+        return {
+            "ok": False,
+            "error_code": "invalid_request",
+            "message": "project and bundle are mutually exclusive",
+        }
     if bundle is not None:
-        state = await _run_extractor_bundle(name=name, bundle=bundle, driver=driver, graphiti=graphiti)
+        state = await _run_extractor_bundle(
+            name=name, bundle=bundle, driver=driver, graphiti=graphiti
+        )
         return {k: v for k, v in state.items() if not k.startswith("_")}
     if project is None:
-        return {"ok": False, "error_code": "invalid_request", "message": "either project or bundle is required"}
+        return {
+            "ok": False,
+            "error_code": "invalid_request",
+            "message": "either project or bundle is required",
+        }
     return await _run_extractor(
         name=name, project=project, driver=driver, graphiti=graphiti
     )
@@ -628,7 +638,11 @@ async def _palace_ingest_run_extractor(
 async def _palace_ingest_bundle_status(run_id: str) -> dict[str, Any]:
     state = get_bundle_ingest_state(run_id)
     if state is None:
-        return {"ok": False, "error_code": "not_found", "message": f"bundle ingest run {run_id!r} not found or expired"}
+        return {
+            "ok": False,
+            "error_code": "not_found",
+            "message": f"bundle ingest run {run_id!r} not found or expired",
+        }
     return {"ok": True, **{k: v for k, v in state.items() if not k.startswith("_")}}
 
 

@@ -115,26 +115,60 @@ def build_solidity_scip_index(
 
 def build_swift_scip_index(
     *,
-    relative_path: str = "Sources/Example/Example.swift",
-    symbols: list[tuple[str, int]] | None = None,
+    documents: list[tuple[str, list[tuple[str, int]]]] | None = None,
 ) -> Any:
-    """Build a minimal SCIP Index for Swift testing.
+    """Build a minimal multi-document SCIP Index for Swift testing."""
+    index = scip_pb2.Index()  # type: ignore[attr-defined]
+    metadata = scip_pb2.Metadata()  # type: ignore[attr-defined]
+    metadata.version = scip_pb2.ProtocolVersion.UnspecifiedProtocolVersion  # type: ignore[attr-defined]
+    metadata.tool_info.name = "palace-swift-scip-emit"
+    metadata.tool_info.version = "0.1.0"
+    metadata.project_root = "file:///test"
+    index.metadata.CopyFrom(metadata)
 
-    Uses 'swift' as doc.language and scip-swift scheme.
-    Symbol format: scip-swift <module> . <descriptor>
-    """
-    if symbols is None:
-        symbols = [
+    if documents is None:
+        documents = [
             (
-                "scip-swift Example . `Example`/`ExampleClass`#.",
-                1,
-            )
+                "Sources/UwMiniCore/State/WalletStore.swift",
+                [
+                    ("scip-swift apple UwMiniCore . s%3A10UwMiniCore11WalletStoreC", 1),
+                    (
+                        "scip-swift apple UwMiniCore . s%3A10UwMiniCore11WalletStoreC6select8walletIDySi_tF",
+                        1,
+                    ),
+                ],
+            ),
+            (
+                "Sources/UwMiniApp/ContentView.swift",
+                [
+                    (
+                        "scip-swift apple UwMiniCore . s%3A10UwMiniCore11WalletStoreC6select8walletIDySi_tF",
+                        0,
+                    ),
+                ],
+            ),
+            (
+                "Pods/Foo/Foo.swift",
+                [
+                    (
+                        "scip-swift apple UwMiniCore . s%3A10UwMiniCore11WalletStoreC6select8walletIDySi_tF",
+                        0,
+                    ),
+                ],
+            ),
         ]
-    return build_minimal_scip_index(
-        language="swift",
-        relative_path=relative_path,
-        symbols=symbols,
-    )
+
+    for relative_path, symbols in documents:
+        doc = index.documents.add()
+        doc.relative_path = relative_path
+        doc.language = "swift"
+        for i, (sym_str, role) in enumerate(symbols, start=1):
+            occ = doc.occurrences.add()
+            occ.range.extend([i, 0, 10])
+            occ.symbol = sym_str
+            occ.symbol_roles = role
+
+    return index
 
 
 def write_scip_fixture(index: Any, path: Path) -> Path:

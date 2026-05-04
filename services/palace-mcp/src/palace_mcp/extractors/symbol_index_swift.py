@@ -1,13 +1,10 @@
-"""SymbolIndexSwift — Swift extractor on 101a foundation (GIM-182).
+"""SymbolIndexSwift — Swift extractor on 101a foundation (GIM-128).
 
-Ingest Swift symbols from pre-generated .scip files (palace-swift-scip-emit).
-3-phase bootstrap reading SCIP data produced by Swift SCIP tooling:
+Reads canonical SCIP protobuf emitted by the local Swift emitter and ingests
+Swift DEF/USE occurrences through the standard 3-phase bootstrap:
   Phase 1: defs + decls only (always runs)
   Phase 2: user-code uses above importance threshold (if budget < 50% used)
-  Phase 3: vendor uses (only if budget < 30% used)
-
-Uses 101a substrate: TantivyBridge, BoundedInDegreeCounter, ensure_custom_schema,
-IngestRun lifecycle, circuit breaker.
+  Phase 3: vendor uses (if budget < 30% used)
 """
 
 from __future__ import annotations
@@ -19,6 +16,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from graphiti_core import Graphiti
+from neo4j import AsyncDriver
 
 from palace_mcp.extractors.base import (
     BaseExtractor,
@@ -52,7 +50,6 @@ from palace_mcp.extractors.scip_parser import (
     iter_scip_occurrences,
     parse_scip_file,
 )
-from neo4j import AsyncDriver
 
 logger = logging.getLogger(__name__)
 
@@ -61,16 +58,15 @@ class SymbolIndexSwift(BaseExtractor):
     name: ClassVar[str] = "symbol_index_swift"
     description: ClassVar[str] = (
         "Ingest Swift symbols + occurrences from pre-generated SCIP file "
-        "(palace-swift-scip-emit) into Tantivy (full-text) and Neo4j (IngestRun + "
-        "checkpoint). Handles .swift sources. 3-phase bootstrap: "
-        "defs/decls → user uses → vendor uses."
+        "(palace-swift-scip-emit) into Tantivy (full-text) and Neo4j "
+        "(IngestRun + checkpoint). Handles .swift/.swiftinterface in one "
+        "pass. 3-phase bootstrap: defs/decls → user uses → vendor uses."
     )
     primary_lang: ClassVar[Language] = Language.SWIFT
 
     async def run(
         self, *, graphiti: Graphiti, ctx: ExtractorRunContext
     ) -> ExtractorStats:
-        # Deferred import to avoid circular import (mcp_server → registry → here → mcp_server)
         from palace_mcp.mcp_server import get_driver, get_settings
 
         driver = get_driver()
@@ -91,14 +87,10 @@ class SymbolIndexSwift(BaseExtractor):
                 action="retry",
             )
 
-        # 0. Pre-flight: circuit breaker — block if previous run hit budget
         previous_error = await _get_previous_error_code(driver, ctx.project_slug)
         check_resume_budget(previous_error_code=previous_error)
 
-        # 1. Idempotent schema bootstrap
         await ensure_custom_schema(driver)
-
-        # 2. Create IngestRun node
         await create_ingest_run(
             driver,
             run_id=ctx.run_id,
@@ -107,16 +99,9 @@ class SymbolIndexSwift(BaseExtractor):
         )
 
         try:
-            # 3. Resolve .scip path (raises ScipPathRequiredError if missing)
             scip_path = FindScipPath.resolve(ctx.project_slug, settings)
-
-            # 4. Parse SCIP file (raises FileNotFoundError or ScipParseError)
             scip_index = parse_scip_file(scip_path)
-
-            # 5. Get HEAD commit SHA from repo
             commit_sha = _read_head_sha(ctx.repo_path)
-
-            # 6. Iterate all occurrences — language=None for per-document auto-detection
             all_occs = list(
                 iter_scip_occurrences(
                     scip_index,
@@ -125,20 +110,17 @@ class SymbolIndexSwift(BaseExtractor):
                 )
             )
 
-            # 7. Build in-degree counter for importance scoring
             tantivy_path = Path(settings.palace_tantivy_index_path)
             counter = _load_or_reset_counter(tantivy_path, ctx.run_id)
             for occ in all_occs:
                 if occ.kind == SymbolKind.USE:
                     counter.increment(occ.symbol_qualified_name)
 
-            # 8. 3-phase ingest into Tantivy
             total_written = 0
             async with TantivyBridge(
                 tantivy_path,
                 heap_size_mb=settings.palace_tantivy_heap_mb,
             ) as bridge:
-                # Phase 1: defs + decls (always)
                 check_phase_budget(
                     nodes_written_so_far=total_written,
                     max_occurrences_total=settings.palace_max_occurrences_total,
@@ -159,7 +141,6 @@ class SymbolIndexSwift(BaseExtractor):
                 total_written += p1
                 logger.info("Phase 1 (defs+decls): %d written", p1)
 
-                # Phase 2: user-code uses (if budget < 50%)
                 p2 = 0
                 budget_frac = total_written / max(
                     settings.palace_max_occurrences_per_project, 1
@@ -192,7 +173,6 @@ class SymbolIndexSwift(BaseExtractor):
                     total_written += p2
                     logger.info("Phase 2 (user uses): %d written", p2)
 
-                # Phase 3: vendor uses (if budget < 30%)
                 p3 = 0
                 budget_frac = total_written / max(
                     settings.palace_max_occurrences_per_project, 1
@@ -221,11 +201,9 @@ class SymbolIndexSwift(BaseExtractor):
                     total_written += p3
                     logger.info("Phase 3 (vendor uses): %d written", p3)
 
-            # 9. Persist counter to disk
             counter_path = tantivy_path / "in_degree_counter.json"
             counter.to_disk(counter_path, run_id=ctx.run_id)
 
-            # 10. Finalize as success
             await finalize_ingest_run(driver, run_id=ctx.run_id, success=True)
             return ExtractorStats(nodes_written=total_written, edges_written=0)
 
@@ -252,11 +230,6 @@ class SymbolIndexSwift(BaseExtractor):
                 driver, run_id=ctx.run_id, success=False, error_code="unknown"
             )
             raise
-
-
-# ---------------------------------------------------------------------------
-# Private helpers
-# ---------------------------------------------------------------------------
 
 
 async def _ingest_batch(
@@ -320,15 +293,15 @@ def _with_importance(
 
 
 def _is_vendor(file_path: str) -> bool:
-    _VENDOR_MARKERS = (
+    vendor_markers = (
+        "Pods/",
+        "Carthage/",
+        "SourcePackages/",
         ".build/",
         ".swiftpm/",
-        "checkouts/",
-        "node_modules/",
-        "vendor/",
-        "Pods/",
+        "DerivedData/",
     )
-    return any(m in file_path for m in _VENDOR_MARKERS)
+    return any(marker in file_path for marker in vendor_markers)
 
 
 def _read_head_sha(repo_path: Path) -> str:
@@ -344,8 +317,7 @@ def _read_head_sha(repo_path: Path) -> str:
 
 
 async def _get_previous_error_code(driver: AsyncDriver, project: str) -> str | None:
-    """Read the most recent failed IngestRun error_code for circuit-breaker check."""
-    _QUERY = """
+    query = """
     MATCH (r:IngestRun {project: $project, extractor_name: 'symbol_index_swift'})
     WHERE r.success = false
     RETURN r.error_code AS error_code
@@ -353,6 +325,6 @@ async def _get_previous_error_code(driver: AsyncDriver, project: str) -> str | N
     LIMIT 1
     """
     async with driver.session() as session:
-        result = await session.run(_QUERY, project=project)
+        result = await session.run(query, project=project)
         record = await result.single()
         return None if record is None else record["error_code"]

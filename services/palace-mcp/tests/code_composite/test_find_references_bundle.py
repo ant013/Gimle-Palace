@@ -275,7 +275,9 @@ class TestFindReferencesBundlePath:
                 "palace_mcp.code_composite.bundle_status",
                 new=AsyncMock(return_value=fake_health),
             ),
-            patch("palace_mcp.code_composite.TantivyBridge", return_value=failing_bridge),
+            patch(
+                "palace_mcp.code_composite.TantivyBridge", return_value=failing_bridge
+            ),
             patch("palace_mcp.code_composite.symbol_id_for", return_value=42),
         ):
             result = await find_refs("EvmKit.Address", "uw-ios", 100)

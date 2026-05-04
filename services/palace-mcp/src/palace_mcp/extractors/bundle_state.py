@@ -83,9 +83,7 @@ def finalize_state(run_id: str) -> None:
     started_ts = state.pop("_started_ts", None)
     state["completed_at"] = now
     state["duration_ms"] = (
-        int((time.monotonic() - started_ts) * 1000)
-        if started_ts is not None
-        else 0
+        int((time.monotonic() - started_ts) * 1000) if started_ts is not None else 0
     )
     state["state"] = "succeeded" if state["members_failed"] == 0 else "failed"
 

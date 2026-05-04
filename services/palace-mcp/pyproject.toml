@@ -49,6 +49,7 @@ markers = [
     "requires_scip_java: tests requiring a real scip-java-generated index.scip (not synthetic)",
     "requires_scip_solidity: tests requiring oz-v5-mini/index.scip fixture",
     "requires_scip_uw_android: tests requiring uw-android-mini-project/index.scip fixture (real Android: Compose + Room/KSP + multi-module)",
+    "requires_scip_uw_ios: tests requiring uw-ios-mini-project/scip/index.scip fixture (real Swift emitter output)",
     "requires_slither: tests requiring slither-analyzer installed and functional",
 ]
 

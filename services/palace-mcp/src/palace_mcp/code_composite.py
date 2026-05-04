@@ -69,6 +69,7 @@ async def _resolve_slug(driver: Any, slug: str) -> SlugResolution:
     member_slugs: list[str] = list(row["member_slugs"] or [])
     return SlugResolution(kind=kind, member_slugs=member_slugs)
 
+
 _QN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*(\.[A-Za-z_][A-Za-z0-9_-]*)*$")
 
 
