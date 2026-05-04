@@ -14,6 +14,11 @@ from palace_mcp.config import Settings
 from palace_mcp.extractors.foundation.identifiers import symbol_id_for
 from palace_mcp.extractors.foundation.models import (
     Language,
+    PublicApiArtifactKind,
+    PublicApiSurface,
+    PublicApiSymbol,
+    PublicApiSymbolKind,
+    PublicApiVisibility,
     SymbolKind,
     SymbolOccurrence,
 )
@@ -27,6 +32,7 @@ FIXTURE_ROOT = (
     / "cross-module-contract-mini-project"
 )
 _HEAD_SHA = "feedfacefeedfacefeedfacefeedfacefeedface"
+_OLD_SHA = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
 
 
 @pytest.fixture
@@ -101,6 +107,7 @@ async def test_cross_module_contract_run_writes_snapshot_and_symbol_edges(
         )
     assert public_api_result["ok"] is True
 
+    await _seed_previous_public_api_surface(driver)
     await _seed_occurrences(tantivy_dir)
 
     with (
@@ -118,8 +125,8 @@ async def test_cross_module_contract_run_writes_snapshot_and_symbol_edges(
     assert result["ok"] is True
     assert result["extractor"] == "cross_module_contract"
     assert result["success"] is True
-    assert result["nodes_written"] >= 1
-    assert result["edges_written"] >= 2
+    assert result["nodes_written"] >= 3
+    assert result["edges_written"] >= 11
 
     async with driver.session() as session:
         duplicate_result = await session.run(
@@ -137,6 +144,7 @@ async def test_cross_module_contract_run_writes_snapshot_and_symbol_edges(
                    snap.use_count AS use_count,
                    snap.file_count AS file_count,
                    snap.skipped_symbol_count AS skipped_symbol_count
+            ORDER BY snap.commit_sha
             """,
             project="contract-mini",
         )
@@ -148,14 +156,47 @@ async def test_cross_module_contract_run_writes_snapshot_and_symbol_edges(
                   -[rel:CONSUMES_PUBLIC_SYMBOL]->(symbol:PublicApiSymbol)
             RETURN snap.consumer_module_name AS consumer_module_name,
                    symbol.fqn AS fqn,
+                   symbol.commit_sha AS symbol_commit_sha,
                    rel.match_symbol_id AS match_symbol_id,
                    rel.evidence_paths_sample AS evidence_paths_sample,
                    rel.first_seen_path AS first_seen_path
-            ORDER BY symbol.fqn
+            ORDER BY snap.commit_sha, symbol.fqn
             """,
             project="contract-mini",
         )
         edges = await edge_result.data()
+
+        delta_result = await session.run(
+            """
+            MATCH (delta:ModuleContractDelta {project: $project})
+                  -[:DELTA_FROM]->(from_snapshot:ModuleContractSnapshot)
+            MATCH (delta)-[:DELTA_TO]->(to_snapshot:ModuleContractSnapshot)
+            RETURN delta.from_commit_sha AS from_commit_sha,
+                   delta.to_commit_sha AS to_commit_sha,
+                   delta.removed_consumed_symbol_count AS removed_consumed_symbol_count,
+                   delta.signature_changed_consumed_symbol_count AS signature_changed_consumed_symbol_count,
+                   delta.added_consumed_symbol_count AS added_consumed_symbol_count,
+                   delta.affected_use_count AS affected_use_count,
+                   from_snapshot.commit_sha AS from_snapshot_commit_sha,
+                   to_snapshot.commit_sha AS to_snapshot_commit_sha
+            """,
+            project="contract-mini",
+        )
+        deltas = await delta_result.data()
+
+        affected_result = await session.run(
+            """
+            MATCH (delta:ModuleContractDelta {project: $project})
+                  -[rel:AFFECTS_PUBLIC_SYMBOL]->(symbol:PublicApiSymbol)
+            RETURN rel.change_kind AS change_kind,
+                   rel.affected_use_count AS affected_use_count,
+                   symbol.fqn AS fqn,
+                   symbol.commit_sha AS symbol_commit_sha
+            ORDER BY symbol.fqn
+            """,
+            project="contract-mini",
+        )
+        affected_symbols = await affected_result.data()
 
         invalid_target_result = await session.run(
             """
@@ -165,6 +206,15 @@ async def test_cross_module_contract_run_writes_snapshot_and_symbol_edges(
             """
         )
         invalid_target_row = await invalid_target_result.single()
+
+        invalid_delta_target_result = await session.run(
+            """
+            MATCH (:ModuleContractDelta)-[r:AFFECTS_PUBLIC_SYMBOL]->(s)
+            WHERE NOT s:PublicApiSymbol
+            RETURN count(r) AS count
+            """
+        )
+        invalid_delta_target_row = await invalid_delta_target_result.single()
 
         cross_commit_result = await session.run(
             """
@@ -199,25 +249,98 @@ async def test_cross_module_contract_run_writes_snapshot_and_symbol_edges(
         {
             "consumer_module_name": "ConsumerApp",
             "producer_module_name": "ProducerKit",
-            "commit_sha": _HEAD_SHA,
-            "symbol_count": 1,
-            "use_count": 1,
+            "commit_sha": _OLD_SHA,
+            "symbol_count": 2,
+            "use_count": 2,
             "file_count": 1,
-            "skipped_symbol_count": 4,
+            "skipped_symbol_count": 1,
+        },
+        {
+            "consumer_module_name": "ConsumerApp",
+            "producer_module_name": "ProducerKit",
+            "commit_sha": _HEAD_SHA,
+            "symbol_count": 2,
+            "use_count": 2,
+            "file_count": 1,
+            "skipped_symbol_count": 3,
         }
     ]
     assert edges == [
         {
             "consumer_module_name": "ConsumerApp",
             "fqn": "Wallet.balance()",
+            "symbol_commit_sha": _OLD_SHA,
             "match_symbol_id": symbol_id_for("Wallet.balance()"),
+            "evidence_paths_sample": [
+                "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift"
+            ],
+            "first_seen_path": "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift",
+        },
+        {
+            "consumer_module_name": "ConsumerApp",
+            "fqn": "staleExport()",
+            "symbol_commit_sha": _OLD_SHA,
+            "match_symbol_id": symbol_id_for("staleExport()"),
+            "evidence_paths_sample": [
+                "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift"
+            ],
+            "first_seen_path": "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift",
+        },
+        {
+            "consumer_module_name": "ConsumerApp",
+            "fqn": "Wallet.balance()",
+            "symbol_commit_sha": _HEAD_SHA,
+            "match_symbol_id": symbol_id_for("Wallet.balance()"),
+            "evidence_paths_sample": [
+                "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift"
+            ],
+            "first_seen_path": "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift",
+        },
+        {
+            "consumer_module_name": "ConsumerApp",
+            "fqn": "Wallet.init(id: Swift.String)",
+            "symbol_commit_sha": _HEAD_SHA,
+            "match_symbol_id": symbol_id_for("Wallet.init(id: Swift.String)"),
             "evidence_paths_sample": [
                 "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift"
             ],
             "first_seen_path": "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift",
         }
     ]
+    assert deltas == [
+        {
+            "from_commit_sha": _OLD_SHA,
+            "to_commit_sha": _HEAD_SHA,
+            "removed_consumed_symbol_count": 1,
+            "signature_changed_consumed_symbol_count": 1,
+            "added_consumed_symbol_count": 1,
+            "affected_use_count": 3,
+            "from_snapshot_commit_sha": _OLD_SHA,
+            "to_snapshot_commit_sha": _HEAD_SHA,
+        }
+    ]
+    assert affected_symbols == [
+        {
+            "change_kind": "signature_changed",
+            "affected_use_count": 1,
+            "fqn": "Wallet.balance()",
+            "symbol_commit_sha": _HEAD_SHA,
+        },
+        {
+            "change_kind": "added",
+            "affected_use_count": 1,
+            "fqn": "Wallet.init(id: Swift.String)",
+            "symbol_commit_sha": _HEAD_SHA,
+        },
+        {
+            "change_kind": "removed",
+            "affected_use_count": 1,
+            "fqn": "staleExport()",
+            "symbol_commit_sha": _OLD_SHA,
+        },
+    ]
     assert invalid_target_row is not None and invalid_target_row["count"] == 0
+    assert invalid_delta_target_row is not None and invalid_delta_target_row["count"] == 0
     assert cross_commit_row is not None and cross_commit_row["count"] == 0
     assert same_module_row is not None and same_module_row["count"] == 0
     assert package_row is not None and package_row["count"] == 0
@@ -250,4 +373,94 @@ async def _seed_occurrences(tantivy_dir: Path) -> None:
                     ingest_run_id="cross-module-seed",
                 ),
                 phase=row["phase"],
+            )
+
+
+async def _seed_previous_public_api_surface(driver: AsyncDriver) -> None:
+    surface = PublicApiSurface(
+        id="surface-producerkit-old",
+        group_id="project/contract-mini",
+        project="contract-mini",
+        module_name="ProducerKit",
+        language=Language.SWIFT,
+        commit_sha=_OLD_SHA,
+        artifact_path=".palace/public-api/swift/ProducerKit.swiftinterface",
+        artifact_kind=PublicApiArtifactKind.SWIFTINTERFACE,
+        tool_name="swiftc",
+        tool_version="6.2.4",
+    )
+    symbols = [
+        PublicApiSymbol(
+            id="symbol-wallet-old",
+            group_id="project/contract-mini",
+            project="contract-mini",
+            module_name="ProducerKit",
+            language=Language.SWIFT,
+            commit_sha=_OLD_SHA,
+            fqn="Wallet",
+            display_name="Wallet",
+            kind=PublicApiSymbolKind.STRUCT,
+            visibility=PublicApiVisibility.PUBLIC,
+            signature="public struct Wallet",
+            signature_hash="sig-wallet-old",
+            source_artifact_path=surface.artifact_path,
+            source_line=5,
+            symbol_qualified_name="Wallet",
+        ),
+        PublicApiSymbol(
+            id="symbol-wallet-balance-old",
+            group_id="project/contract-mini",
+            project="contract-mini",
+            module_name="ProducerKit",
+            language=Language.SWIFT,
+            commit_sha=_OLD_SHA,
+            fqn="Wallet.balance()",
+            display_name="Wallet.balance()",
+            kind=PublicApiSymbolKind.METHOD,
+            visibility=PublicApiVisibility.PUBLIC,
+            signature="public func balance() -> Swift.String",
+            signature_hash="sig-wallet-balance-old",
+            source_artifact_path=surface.artifact_path,
+            source_line=7,
+            symbol_qualified_name="Wallet.balance()",
+        ),
+        PublicApiSymbol(
+            id="symbol-stale-export-old",
+            group_id="project/contract-mini",
+            project="contract-mini",
+            module_name="ProducerKit",
+            language=Language.SWIFT,
+            commit_sha=_OLD_SHA,
+            fqn="staleExport()",
+            display_name="staleExport()",
+            kind=PublicApiSymbolKind.FUNCTION,
+            visibility=PublicApiVisibility.PUBLIC,
+            signature="public func staleExport() -> Swift.String",
+            signature_hash="sig-stale-export-old",
+            source_artifact_path=surface.artifact_path,
+            source_line=10,
+            symbol_qualified_name="staleExport()",
+        ),
+    ]
+
+    async with driver.session() as session:
+        await session.run(
+            """
+            MERGE (surface:PublicApiSurface {id: $surface_id})
+            SET surface += $surface_props
+            """,
+            surface_id=surface.id,
+            surface_props=surface.model_dump(mode="json", exclude_none=True),
+        )
+        for symbol in symbols:
+            await session.run(
+                """
+                MATCH (surface:PublicApiSurface {id: $surface_id})
+                MERGE (symbol:PublicApiSymbol {id: $symbol_id})
+                SET symbol += $symbol_props
+                MERGE (surface)-[:EXPORTS]->(symbol)
+                """,
+                surface_id=surface.id,
+                symbol_id=symbol.id,
+                symbol_props=symbol.model_dump(mode="json", exclude_none=True),
             )

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -11,6 +12,7 @@ from typing import ClassVar
 
 from graphiti_core import Graphiti
 from neo4j import AsyncDriver, AsyncSession
+from pydantic import BaseModel
 
 from palace_mcp.extractors.base import (
     BaseExtractor,
@@ -58,6 +60,27 @@ MERGE (snapshot)-[rel:CONSUMES_PUBLIC_SYMBOL]->(symbol)
 SET rel += $edge_props
 """
 
+_WRITE_DELTA = """
+MERGE (delta:ModuleContractDelta {id: $delta_id})
+SET delta += $delta_props
+WITH delta
+MATCH (from_snapshot:ModuleContractSnapshot {id: $from_snapshot_id})
+MATCH (to_snapshot:ModuleContractSnapshot {id: $to_snapshot_id})
+MERGE (delta)-[:DELTA_FROM]->(from_snapshot)
+MERGE (delta)-[:DELTA_TO]->(to_snapshot)
+"""
+
+_WRITE_DELTA_AFFECTED_SYMBOL = """
+MATCH (delta:ModuleContractDelta {id: $delta_id})
+MATCH (symbol:PublicApiSymbol {id: $symbol_id})
+MERGE (delta)-[rel:AFFECTS_PUBLIC_SYMBOL]->(symbol)
+SET rel += $edge_props
+"""
+
+_DELTA_REQUESTS_PATH = (
+    Path(".palace") / "cross-module-contract" / "delta-requests.json"
+)
+
 
 @dataclass(frozen=True)
 class _SurfaceSymbols:
@@ -69,6 +92,15 @@ class _SurfaceSymbols:
 class _PlannedContractSnapshot:
     snapshot: ModuleContractSnapshot
     consumptions: list[ModuleContractConsumption]
+    symbols_by_fqn: dict[str, PublicApiSymbol]
+
+
+@dataclass(frozen=True)
+class _PlannedContractDelta:
+    delta: ModuleContractDelta
+    affected_symbols: list[ModuleContractAffectedSymbol]
+    from_snapshot_id: str
+    to_snapshot_id: str
 
 
 @dataclass
@@ -81,6 +113,17 @@ class _PairAccumulator:
         default_factory=dict
     )
     evidence_paths: set[str] = field(default_factory=set)
+
+
+class _DeltaRequest(BaseModel):
+    model_config = {"frozen": True}
+
+    consumer_module_name: str
+    producer_module_name: str
+    language: Language
+    from_commit_sha: str
+    to_commit_sha: str
+    include_package: bool = False
 
 
 class CrossModuleContractExtractor(BaseExtractor):
@@ -135,10 +178,22 @@ class CrossModuleContractExtractor(BaseExtractor):
             )
 
         commit_sha = await asyncio.to_thread(_read_head_sha, ctx.repo_path)
-        surfaces = await _load_public_api_surfaces(
-            driver=driver, project=ctx.project_slug, commit_sha=commit_sha
+        delta_requests = await _load_delta_requests(repo_path=ctx.repo_path)
+        commit_requests = _build_commit_requests(
+            current_commit_sha=commit_sha,
+            delta_requests=delta_requests,
+            default_include_package=self._include_package,
         )
-        if not surfaces:
+        surfaces_by_commit: dict[str, list[_SurfaceSymbols]] = {}
+        for candidate_commit_sha in sorted(commit_requests):
+            surfaces_by_commit[candidate_commit_sha] = await _load_public_api_surfaces(
+                driver=driver,
+                project=ctx.project_slug,
+                commit_sha=candidate_commit_sha,
+            )
+
+        current_surfaces = surfaces_by_commit[commit_sha]
+        if not current_surfaces:
             raise ExtractorError(
                 error_code=ExtractorErrorCode.PUBLIC_API_ARTIFACTS_REQUIRED,
                 message=(
@@ -157,32 +212,34 @@ class CrossModuleContractExtractor(BaseExtractor):
         async with TantivyBridge(
             tantivy_path, heap_size_mb=settings.palace_tantivy_heap_mb
         ) as bridge:
-            for item in surfaces:
-                occurrences_by_symbol = await _load_occurrences_for_surface(
-                    bridge=bridge,
-                    symbols=item.symbols,
-                    commit_sha=commit_sha,
-                    include_package=self._include_package,
-                    phases=self._consumer_phases,
-                    cache=occurrence_cache,
-                )
-                owner_cache = await _resolve_owner_cache(
-                    driver=driver,
-                    group_id=ctx.group_id,
-                    repo_path=ctx.repo_path,
-                    occurrences_by_symbol=occurrences_by_symbol,
-                )
-                planned.extend(
-                    plan_contract_snapshots(
-                        surface=item.surface,
-                        symbols=item.symbols,
-                        occurrences_by_symbol=occurrences_by_symbol,
-                        resolve_owner=lambda file_path: owner_cache[file_path],
-                        include_package=self._include_package,
+            for candidate_commit_sha, include_package_values in sorted(
+                commit_requests.items()
+            ):
+                for include_package in sorted(include_package_values):
+                    planned.extend(
+                        await _plan_snapshots_for_commit(
+                            bridge=bridge,
+                            driver=driver,
+                            repo_path=ctx.repo_path,
+                            group_id=ctx.group_id,
+                            surfaces=surfaces_by_commit[candidate_commit_sha],
+                            commit_sha=candidate_commit_sha,
+                            include_package=include_package,
+                            phases=self._consumer_phases,
+                            cache=occurrence_cache,
+                        )
                     )
-                )
 
-        stats = await _write_contract_graph(driver=driver, planned=planned)
+        planned_deltas = _plan_requested_deltas(
+            project=ctx.project_slug,
+            planned=planned,
+            delta_requests=delta_requests,
+        )
+        stats = await _write_contract_graph(
+            driver=driver,
+            planned=planned,
+            planned_deltas=planned_deltas,
+        )
         ctx.logger.info(
             "extractor.cross_module_contract.summary",
             extra={
@@ -190,11 +247,160 @@ class CrossModuleContractExtractor(BaseExtractor):
                 "project": ctx.project_slug,
                 "commit_sha": commit_sha,
                 "snapshot_count": len(planned),
+                "delta_count": len(planned_deltas),
                 "nodes_written": stats.nodes_written,
                 "edges_written": stats.edges_written,
             },
         )
         return stats
+
+
+def _build_commit_requests(
+    *,
+    current_commit_sha: str,
+    delta_requests: list[_DeltaRequest],
+    default_include_package: bool,
+) -> dict[str, set[bool]]:
+    commit_requests: dict[str, set[bool]] = {
+        current_commit_sha: {default_include_package}
+    }
+    for request in delta_requests:
+        commit_requests.setdefault(request.from_commit_sha, set()).add(
+            request.include_package
+        )
+        commit_requests.setdefault(request.to_commit_sha, set()).add(
+            request.include_package
+        )
+    return commit_requests
+
+
+async def _plan_snapshots_for_commit(
+    *,
+    bridge: object,
+    driver: AsyncDriver,
+    repo_path: Path,
+    group_id: str,
+    surfaces: list[_SurfaceSymbols],
+    commit_sha: str,
+    include_package: bool,
+    phases: tuple[str, ...],
+    cache: dict[tuple[int, str], list[TantivyOccurrenceMatch]],
+) -> list[_PlannedContractSnapshot]:
+    planned: list[_PlannedContractSnapshot] = []
+    for item in surfaces:
+        occurrences_by_symbol = await _load_occurrences_for_surface(
+            bridge=bridge,
+            symbols=item.symbols,
+            commit_sha=commit_sha,
+            include_package=include_package,
+            phases=phases,
+            cache=cache,
+        )
+        owner_cache = await _resolve_owner_cache(
+            driver=driver,
+            group_id=group_id,
+            repo_path=repo_path,
+            occurrences_by_symbol=occurrences_by_symbol,
+        )
+        planned.extend(
+            plan_contract_snapshots(
+                surface=item.surface,
+                symbols=item.symbols,
+                occurrences_by_symbol=occurrences_by_symbol,
+                resolve_owner=lambda file_path: owner_cache[file_path],
+                include_package=include_package,
+            )
+        )
+    return planned
+
+
+async def _load_delta_requests(*, repo_path: Path) -> list[_DeltaRequest]:
+    request_path = repo_path / _DELTA_REQUESTS_PATH
+    if not request_path.exists():
+        return []
+    try:
+        payload = json.loads(await asyncio.to_thread(request_path.read_text, "utf-8"))
+        return [_DeltaRequest.model_validate(row) for row in payload]
+    except (OSError, ValueError, TypeError) as exc:
+        raise ExtractorError(
+            error_code=ExtractorErrorCode.PUBLIC_API_PARSE_FAILED,
+            message=f"Invalid delta request file: {request_path}",
+            recoverable=False,
+            action="manual_cleanup",
+            context={"path": str(request_path), "error": str(exc)},
+        ) from exc
+
+
+def _plan_requested_deltas(
+    *,
+    project: str,
+    planned: list[_PlannedContractSnapshot],
+    delta_requests: list[_DeltaRequest],
+) -> list[_PlannedContractDelta]:
+    snapshot_lookup = {
+        _snapshot_key(item.snapshot): item
+        for item in planned
+    }
+    planned_deltas: dict[str, _PlannedContractDelta] = {}
+    for request in delta_requests:
+        from_snapshot = snapshot_lookup.get(
+            (
+                request.consumer_module_name,
+                request.producer_module_name,
+                request.language.value,
+                request.from_commit_sha,
+                request.include_package,
+            )
+        )
+        if from_snapshot is None:
+            raise ExtractorError(
+                error_code=ExtractorErrorCode.PUBLIC_API_ARTIFACTS_REQUIRED,
+                message=(
+                    "Requested delta source snapshot is missing for "
+                    f"{request.consumer_module_name} -> {request.producer_module_name} "
+                    f"at commit '{request.from_commit_sha}'."
+                ),
+                recoverable=False,
+                action="manual_cleanup",
+                context={"project": project},
+            )
+        to_snapshot = snapshot_lookup.get(
+            (
+                request.consumer_module_name,
+                request.producer_module_name,
+                request.language.value,
+                request.to_commit_sha,
+                request.include_package,
+            )
+        )
+        if to_snapshot is None:
+            raise ExtractorError(
+                error_code=ExtractorErrorCode.PUBLIC_API_ARTIFACTS_REQUIRED,
+                message=(
+                    "Requested delta target snapshot is missing for "
+                    f"{request.consumer_module_name} -> {request.producer_module_name} "
+                    f"at commit '{request.to_commit_sha}'."
+                ),
+                recoverable=False,
+                action="manual_cleanup",
+                context={"project": project},
+            )
+
+        delta, affected_symbols = build_contract_delta(
+            from_snapshot=from_snapshot.snapshot,
+            to_snapshot=to_snapshot.snapshot,
+            from_symbols=from_snapshot.symbols_by_fqn,
+            to_symbols=to_snapshot.symbols_by_fqn,
+            from_consumptions=from_snapshot.consumptions,
+            to_consumptions=to_snapshot.consumptions,
+        )
+        planned_deltas[delta.id] = _PlannedContractDelta(
+            delta=delta,
+            affected_symbols=affected_symbols,
+            from_snapshot_id=from_snapshot.snapshot.id,
+            to_snapshot_id=to_snapshot.snapshot.id,
+        )
+    return [planned_deltas[key] for key in sorted(planned_deltas)]
 
 
 def plan_contract_snapshots(
@@ -211,76 +417,79 @@ def plan_contract_snapshots(
     skipped_symbol_count = 0
 
     for symbol in symbols:
+        skip_symbol = False
         if symbol.symbol_qualified_name is None:
-            skipped_symbol_count += 1
-            continue
-        if not include_package and symbol.visibility == PublicApiVisibility.PACKAGE:
-            skipped_symbol_count += 1
-            continue
+            skip_symbol = True
+        elif not include_package and symbol.visibility == PublicApiVisibility.PACKAGE:
+            skip_symbol = True
+        else:
+            match_symbol_id = symbol_id_for(symbol.symbol_qualified_name)
+            occurrences = occurrences_by_symbol.get(match_symbol_id, [])
+            if not occurrences:
+                skip_symbol = True
+            else:
+                matched_any = False
+                for occurrence in occurrences:
+                    resolution = resolve_owner(occurrence.file_path)
+                    if resolution.status != "resolved" or resolution.module_name is None:
+                        continue
+                    if resolution.module_name == surface.module_name:
+                        continue
 
-        match_symbol_id = symbol_id_for(symbol.symbol_qualified_name)
-        occurrences = occurrences_by_symbol.get(match_symbol_id, [])
-        if not occurrences:
-            skipped_symbol_count += 1
-            continue
-
-        matched_any = False
-        for occurrence in occurrences:
-            resolution = resolve_owner(occurrence.file_path)
-            if resolution.status != "resolved" or resolution.module_name is None:
-                skipped_symbol_count += 1
-                continue
-            if resolution.module_name == surface.module_name:
-                skipped_symbol_count += 1
-                continue
-
-            matched_any = True
-            pair_key = (
-                resolution.module_name,
-                surface.module_name,
-                surface.language.value,
-                surface.commit_sha,
-            )
-            accumulator = accumulators.setdefault(
-                pair_key,
-                _PairAccumulator(
-                    consumer_module_name=resolution.module_name,
-                    producer_module_name=surface.module_name,
-                    language=surface.language,
-                    commit_sha=surface.commit_sha,
-                ),
-            )
-            accumulator.evidence_paths.add(occurrence.file_path)
-            prior = accumulator.consumptions_by_symbol_id.get(symbol.id)
-            if prior is None:
-                accumulator.consumptions_by_symbol_id[symbol.id] = (
-                    ModuleContractConsumption(
-                        public_symbol_id=symbol.id,
-                        group_id=surface.group_id,
-                        commit_sha=surface.commit_sha,
-                        match_symbol_id=match_symbol_id,
-                        use_count=1,
-                        file_count=1,
-                        first_seen_path=occurrence.file_path,
-                        evidence_paths_sample=[occurrence.file_path],
+                    matched_any = True
+                    pair_key = (
+                        resolution.module_name,
+                        surface.module_name,
+                        surface.language.value,
+                        surface.commit_sha,
                     )
-                )
-                continue
-
-            paths = sorted({*prior.evidence_paths_sample, occurrence.file_path})
-            accumulator.consumptions_by_symbol_id[symbol.id] = (
-                ModuleContractConsumption(
-                    public_symbol_id=prior.public_symbol_id,
-                    group_id=prior.group_id,
-                    commit_sha=prior.commit_sha,
-                    match_symbol_id=prior.match_symbol_id,
-                    use_count=prior.use_count + 1,
-                    file_count=len(paths),
-                    first_seen_path=prior.first_seen_path,
-                    evidence_paths_sample=paths,
-                )
-            )
-        if not matched_any:
+                    accumulator = accumulators.setdefault(
+                        pair_key,
+                        _PairAccumulator(
+                            consumer_module_name=resolution.module_name,
+                            producer_module_name=surface.module_name,
+                            language=surface.language,
+                            commit_sha=surface.commit_sha,
+                        ),
+                    )
+                    accumulator.evidence_paths.add(occurrence.file_path)
+                    prior = accumulator.consumptions_by_symbol_id.get(symbol.id)
+                    if prior is None:
+                        accumulator.consumptions_by_symbol_id[symbol.id] = (
+                            ModuleContractConsumption(
+                                public_symbol_id=symbol.id,
+                                group_id=surface.group_id,
+                                commit_sha=surface.commit_sha,
+                                match_symbol_id=match_symbol_id,
+                                use_count=1,
+                                file_count=1,
+                                first_seen_path=occurrence.file_path,
+                                evidence_paths_sample=[occurrence.file_path],
+                            )
+                        )
+                        continue
+                    paths = sorted(
+                        {
+                            *prior.evidence_paths_sample,
+                            occurrence.file_path,
+                        }
+                    )
+                    accumulator.consumptions_by_symbol_id[symbol.id] = (
+                        ModuleContractConsumption(
+                            public_symbol_id=prior.public_symbol_id,
+                            group_id=prior.group_id,
+                            commit_sha=prior.commit_sha,
+                            match_symbol_id=prior.match_symbol_id,
+                            use_count=prior.use_count + 1,
+                            file_count=len(paths),
+                            first_seen_path=prior.first_seen_path,
+                            evidence_paths_sample=paths,
+                        )
+                    )
+                if not matched_any:
+                    skip_symbol = True
+        if skip_symbol:
+            skipped_symbol_count += 1
             continue
 
     planned: list[_PlannedContractSnapshot] = []
@@ -315,7 +524,11 @@ def plan_contract_snapshots(
             skipped_symbol_count=skipped_symbol_count,
         )
         planned.append(
-            _PlannedContractSnapshot(snapshot=snapshot, consumptions=consumptions)
+            _PlannedContractSnapshot(
+                snapshot=snapshot,
+                consumptions=consumptions,
+                symbols_by_fqn={symbol.fqn: symbol for symbol in symbols},
+            )
         )
     return planned
 
@@ -485,20 +698,39 @@ async def _resolve_owner_cache(
 
 
 async def _write_contract_graph(
-    *, driver: AsyncDriver, planned: list[_PlannedContractSnapshot]
+    *,
+    driver: AsyncDriver,
+    planned: list[_PlannedContractSnapshot],
+    planned_deltas: list[_PlannedContractDelta],
 ) -> ExtractorStats:
     nodes_written = 0
     edges_written = 0
     async with driver.session() as session:
-        for item in planned:
-            await _write_snapshot(session=session, snapshot=item.snapshot)
+        for planned_snapshot in planned:
+            await _write_snapshot(session=session, snapshot=planned_snapshot.snapshot)
             nodes_written += 1
             edges_written += 1
-            for consumption in item.consumptions:
+            for consumption in planned_snapshot.consumptions:
                 await _write_consumption(
                     session=session,
-                    snapshot_id=item.snapshot.id,
+                    snapshot_id=planned_snapshot.snapshot.id,
                     consumption=consumption,
+                )
+                edges_written += 1
+        for planned_delta in planned_deltas:
+            await _write_delta(
+                session=session,
+                delta=planned_delta.delta,
+                from_snapshot_id=planned_delta.from_snapshot_id,
+                to_snapshot_id=planned_delta.to_snapshot_id,
+            )
+            nodes_written += 1
+            edges_written += 2
+            for affected_symbol in planned_delta.affected_symbols:
+                await _write_delta_affected_symbol(
+                    session=session,
+                    delta_id=planned_delta.delta.id,
+                    affected_symbol=affected_symbol,
                 )
                 edges_written += 1
     return ExtractorStats(nodes_written=nodes_written, edges_written=edges_written)
@@ -531,6 +763,38 @@ async def _write_consumption(
     )
 
 
+async def _write_delta(
+    *,
+    session: AsyncSession,
+    delta: ModuleContractDelta,
+    from_snapshot_id: str,
+    to_snapshot_id: str,
+) -> None:
+    await session.run(
+        _WRITE_DELTA,
+        delta_id=delta.id,
+        delta_props=delta.model_dump(mode="json", exclude_none=True),
+        from_snapshot_id=from_snapshot_id,
+        to_snapshot_id=to_snapshot_id,
+    )
+
+
+async def _write_delta_affected_symbol(
+    *,
+    session: AsyncSession,
+    delta_id: str,
+    affected_symbol: ModuleContractAffectedSymbol,
+) -> None:
+    edge_props = affected_symbol.model_dump(mode="json", exclude_none=True)
+    edge_props.pop("public_symbol_id")
+    await session.run(
+        _WRITE_DELTA_AFFECTED_SYMBOL,
+        delta_id=delta_id,
+        symbol_id=affected_symbol.public_symbol_id,
+        edge_props=edge_props,
+    )
+
+
 def _consumptions_by_qname(
     *,
     symbols: Mapping[str, PublicApiSymbol],
@@ -549,6 +813,18 @@ def _consumptions_by_qname(
 def _stable_id(*parts: str) -> str:
     payload = "||".join(parts)
     return hashlib.blake2b(payload.encode("utf-8"), digest_size=16).hexdigest()
+
+
+def _snapshot_key(
+    snapshot: ModuleContractSnapshot,
+) -> tuple[str, str, str, str, bool]:
+    return (
+        snapshot.consumer_module_name,
+        snapshot.producer_module_name,
+        snapshot.language.value,
+        snapshot.commit_sha,
+        snapshot.include_package,
+    )
 
 
 def _read_head_sha(repo_path: Path) -> str:

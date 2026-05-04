@@ -1,7 +1,7 @@
 # Tantivy-py occurrence retrieval spike
 
-**Date:** 2026-05-04  
-**Issue:** GIM-192  
+**Date:** 2026-05-04
+**Issue:** GIM-192
 **Library:** `tantivy` from `services/palace-mcp/.venv`
 
 ## Goal

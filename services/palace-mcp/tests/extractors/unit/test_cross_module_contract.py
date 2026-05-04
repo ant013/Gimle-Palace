@@ -148,7 +148,7 @@ def test_plan_contract_snapshots_exact_match_and_skips() -> None:
     assert snapshot.symbol_count == 1
     assert snapshot.use_count == 1
     assert snapshot.file_count == 1
-    assert snapshot.skipped_symbol_count == 5
+    assert snapshot.skipped_symbol_count == 3
 
     assert len(planned[0].consumptions) == 1
     edge = planned[0].consumptions[0]

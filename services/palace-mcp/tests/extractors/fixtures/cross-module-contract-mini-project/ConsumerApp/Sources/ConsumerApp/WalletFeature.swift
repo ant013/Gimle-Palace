@@ -1,8 +1,9 @@
 import ProducerKit
 
 struct WalletFeature {
-    func render(wallet: Wallet) -> Int {
-        wallet.balance()
+    func render() -> Int {
+        let wallet = Wallet(id: "fixture")
+        return wallet.balance()
     }
 
     func packageOnly() -> String {

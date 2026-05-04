@@ -6,7 +6,7 @@
 
 - `(:ModuleContractSnapshot)` для пары `consumer_module_name` → `producer_module_name` на конкретном `commit_sha`
 - `(:ModuleContractSnapshot)-[:CONSUMES_PUBLIC_SYMBOL]->(:PublicApiSymbol)`
-- опциональный `(:ModuleContractDelta)` только для явно выбранных old/new commit pairs в будущих follow-up slices
+- опциональный `(:ModuleContractDelta)` для явно выбранных old/new commit pairs из `.palace/cross-module-contract/delta-requests.json`
 
 v1 не создает `(:ContractSymbol)` и не добавляет public MCP/API surface.
 
@@ -16,6 +16,8 @@ v1 не создает `(:ContractSymbol)` и не добавляет public MCP
 - в Tantivy уже есть occurrence docs для того же `commit_sha`
 - consumer module owner можно вывести либо из `(:Module)-[:CONTAINS]->(:File)`, либо из committed map:
   `.palace/cross-module-contract/module-owners.json`
+- если нужен minimal delta, explicit commit pair задается в:
+  `.palace/cross-module-contract/delta-requests.json`
 
 ## Базовый smoke
 
@@ -98,6 +100,35 @@ WHERE r.match_symbol_id IS NULL
    OR r.first_seen_path IS NULL
    OR r.evidence_paths_sample IS NULL
 RETURN count(r) AS missing_consumer_evidence;
+```
+
+Ожидается: `0`.
+
+### Delta inspection
+
+```cypher
+MATCH (delta:ModuleContractDelta {project: $project})
+      -[:DELTA_FROM]->(from_snapshot:ModuleContractSnapshot)
+MATCH (delta)-[:DELTA_TO]->(to_snapshot:ModuleContractSnapshot)
+RETURN delta.consumer_module_name,
+       delta.producer_module_name,
+       delta.from_commit_sha,
+       delta.to_commit_sha,
+       delta.removed_consumed_symbol_count,
+       delta.signature_changed_consumed_symbol_count,
+       delta.added_consumed_symbol_count,
+       delta.affected_use_count,
+       from_snapshot.commit_sha AS from_snapshot_commit_sha,
+       to_snapshot.commit_sha AS to_snapshot_commit_sha
+ORDER BY delta.consumer_module_name, delta.producer_module_name;
+```
+
+### Delta targets must stay on `PublicApiSymbol`
+
+```cypher
+MATCH (:ModuleContractDelta)-[r:AFFECTS_PUBLIC_SYMBOL]->(target)
+WHERE NOT target:PublicApiSymbol
+RETURN count(r) AS invalid_delta_targets;
 ```
 
 Ожидается: `0`.
