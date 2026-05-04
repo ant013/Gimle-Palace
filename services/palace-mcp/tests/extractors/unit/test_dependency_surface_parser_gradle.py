@@ -135,6 +135,40 @@ def test_gradle_parser_no_libs_versions_toml(tmp_path: Path) -> None:
     assert any("libs.versions.toml" in w for w in r.parser_warnings)
 
 
+def test_gradle_parser_module_shorthand(tmp_path: Path) -> None:
+    """module = "group:artifact" shorthand (used by 97/97 uw-android entries)."""
+    (tmp_path / "gradle").mkdir()
+    (tmp_path / "gradle" / "libs.versions.toml").write_text(
+        textwrap.dedent(
+            """
+            [versions]
+            bitcoin-kit = "0.18.0"
+            zcash-kit = "0.4.0"
+
+            [libraries]
+            bitcoin-kit-android = { module = "io.horizontalsystems:bitcoin-kit-android", version.ref = "bitcoin-kit" }
+            zcash-kit-android = { module = "io.horizontalsystems:zcash-kit-android", version.ref = "zcash-kit" }
+            """
+        )
+    )
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "build.gradle.kts").write_text(
+        textwrap.dedent(
+            """
+            dependencies {
+                implementation(libs.bitcoin.kit.android)
+                implementation(libs.zcash.kit.android)
+            }
+            """
+        )
+    )
+    r = parse_gradle(tmp_path, project_id="project/uw-android")
+    purls = {d.purl for d in r.deps}
+    assert "pkg:maven/io.horizontalsystems/bitcoin-kit-android@0.18.0" in purls
+    assert "pkg:maven/io.horizontalsystems/zcash-kit-android@0.4.0" in purls
+    assert len(r.parser_warnings) == 0
+
+
 def test_gradle_parser_scope_mapping(tmp_path: Path) -> None:
     (tmp_path / "gradle").mkdir()
     (tmp_path / "gradle" / "libs.versions.toml").write_text(
