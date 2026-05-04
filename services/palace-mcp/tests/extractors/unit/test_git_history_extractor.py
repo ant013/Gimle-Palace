@@ -126,3 +126,9 @@ async def test_run_emits_resync_event_on_invalid_checkpoint(tmp_path: Path, capl
     resync_events = [r for r in caplog.records
                      if getattr(r, "event", None) == "git_history_resync_full"]
     assert len(resync_events) == 1
+
+
+def test_extractor_registered_in_registry():
+    from palace_mcp.extractors.registry import EXTRACTORS
+    assert "git_history" in EXTRACTORS
+    assert EXTRACTORS["git_history"].name == "git_history"

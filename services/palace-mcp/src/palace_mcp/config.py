@@ -8,6 +8,8 @@ so they are masked in repr() and structured log output.
 Call `.get_secret_value()` only at driver/client construction sites.
 """
 
+from pathlib import Path
+
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings
 
@@ -75,4 +77,25 @@ class Settings(BaseSettings):
             "JSON-encoded dict mapping project slug → .scip file path. "
             'Example env: PALACE_SCIP_INDEX_PATHS=\'{"gimle":"/repos/gimle/.scip/index.scip"}\''
         ),
+    )
+
+    # -----------------------------------------------------------------------
+    # Git history extractor (GIM-186)
+    # -----------------------------------------------------------------------
+
+    github_token: str | None = Field(
+        default=None,
+        description="GitHub PAT for GraphQL PR/comment ingest (Phase 2). Optional.",
+    )
+    git_history_bot_patterns_json: str | None = Field(
+        default=None,
+        description="JSON string of extra bot email/name regex patterns.",
+    )
+    git_history_max_commits_per_run: int = Field(
+        default=50_000,
+        description="Hard cap on commits processed per Phase 1 run.",
+    )
+    git_history_tantivy_index_path: Path = Field(
+        default=Path("/var/lib/palace/tantivy/git_history"),
+        description="Path for the dedicated git_history Tantivy index.",
     )
