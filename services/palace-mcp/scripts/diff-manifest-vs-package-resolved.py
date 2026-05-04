@@ -8,6 +8,7 @@ Usage:
         --manifest services/palace-mcp/scripts/uw-ios-bundle-manifest.json \
         --package-resolved path/to/unstoppable-wallet-ios/Package.resolved
 """
+
 from __future__ import annotations
 
 import argparse
@@ -43,7 +44,9 @@ def load_resolved_packages(resolved_path: Path) -> set[str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Check manifest vs Package.resolved drift")
+    parser = argparse.ArgumentParser(
+        description="Check manifest vs Package.resolved drift"
+    )
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--package-resolved", required=True, type=Path, dest="resolved")
     args = parser.parse_args()
@@ -53,13 +56,17 @@ def main() -> int:
     resolved_names = load_resolved_packages(args.resolved)
 
     # Cross-match by relative_path (directory name) vs Package.resolved repo name
-    manifest_repo_names = {p.split("/")[-1] if "/" in p else p for p in manifest_rel_paths}
+    manifest_repo_names = {
+        p.split("/")[-1] if "/" in p else p for p in manifest_rel_paths
+    }
 
     in_resolved_not_manifest = resolved_names - manifest_repo_names
     in_manifest_not_resolved = manifest_repo_names - resolved_names
 
     if not in_resolved_not_manifest and not in_manifest_not_resolved:
-        print(f"OK: manifest and Package.resolved are in sync ({len(resolved_names)} HS packages)")
+        print(
+            f"OK: manifest and Package.resolved are in sync ({len(resolved_names)} HS packages)"
+        )
         return 0
 
     print("DRIFT DETECTED:", file=sys.stderr)

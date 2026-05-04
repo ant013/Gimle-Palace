@@ -8,6 +8,7 @@ Usage:
 Idempotent: if a repo already exists at <base>/<relative_path>, runs git fetch + pull.
 Requires: git on PATH; SSH key access to github.com (or configured HTTPS credentials).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -33,7 +34,9 @@ def clone_or_update(rel_path: str, base_dir: Path, slug: str) -> bool:
 
     if (kit_dir / ".git").exists():
         print(f"  update: {slug} ({rel_path})")
-        rc = _run(["git", "-C", str(kit_dir), "fetch", "--quiet", "origin"], cwd=base_dir)
+        rc = _run(
+            ["git", "-C", str(kit_dir), "fetch", "--quiet", "origin"], cwd=base_dir
+        )
         if rc != 0:
             print(f"  WARN: fetch failed for {slug}", file=sys.stderr)
             return False
@@ -50,7 +53,9 @@ def clone_or_update(rel_path: str, base_dir: Path, slug: str) -> bool:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Clone/update all HS Kits from manifest")
+    parser = argparse.ArgumentParser(
+        description="Clone/update all HS Kits from manifest"
+    )
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--base", required=True, type=Path)
     args = parser.parse_args()

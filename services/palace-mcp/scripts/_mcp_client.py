@@ -3,6 +3,7 @@
 Calls palace-mcp tools via the streamable-HTTP transport endpoint.
 Used by register-uw-ios-bundle.sh (via Python subprocess) and smoke_uw_ios_bundle.py.
 """
+
 from __future__ import annotations
 
 import asyncio

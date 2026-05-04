@@ -17,6 +17,7 @@ Smoke gate (§9.4.4):
     - bundle_health.members_total == 41
     - uw-ios-app NOT in query_failed/ingest_failed/never_ingested slugs
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -90,7 +91,9 @@ def assess_smoke_gate(status: dict, query: dict) -> int:
         errors.append(f"occurrences_count=0 for '{SMOKE_SYMBOL}'")
     health = query.get("bundle_health", {})
     if health.get("members_total", 0) != 41:
-        errors.append(f"bundle_health.members_total={health.get('members_total')} != 41")
+        errors.append(
+            f"bundle_health.members_total={health.get('members_total')} != 41"
+        )
     for key in ("query_failed_slugs", "ingest_failed_slugs", "never_ingested_slugs"):
         if "uw-ios-app" in (health.get(key) or []):
             errors.append(f"uw-ios-app in {key}")
@@ -127,8 +130,10 @@ async def main() -> int:
         {"name": "symbol_index_swift", "bundle": BUNDLE_NAME},
     )
     run_id = kickoff.get("run_id")
-    print(f"  kickoff: run_id={run_id}, state={kickoff.get('state')}, "
-          f"members_total={kickoff.get('members_total')}")
+    print(
+        f"  kickoff: run_id={run_id}, state={kickoff.get('state')}, "
+        f"members_total={kickoff.get('members_total')}"
+    )
 
     # 4. Poll until terminal
     print("==> Step 4: poll bundle_status")
