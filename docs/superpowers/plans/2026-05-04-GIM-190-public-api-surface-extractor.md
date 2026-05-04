@@ -76,9 +76,9 @@
 ### Step 9 — Review, adversarial review, and QA
 
 **Description:** Complete the standard phase chain with pushed branch evidence, review findings resolved, runtime smoke, graph invariant check, and merge readiness check.
-**Acceptance criteria:** CXCodeReviewer approves code; CodexArchitectReviewer approves architecture; CXQAEngineer posts Phase 4.1 evidence with commit SHA, targeted tests, runtime smoke, and graph query; CXCTO runs merge-readiness reality-check before merge/close.
+**Acceptance criteria:** CXCodeReviewer approves code; CodexArchitectReviewer approves architecture; CXQAEngineer posts Phase 4.1 evidence with commit SHA, `uv run pytest tests/extractors/unit/test_public_api_surface*.py -v`, `uv run pytest tests/extractors/integration/test_public_api_surface_integration.py -v`, runtime smoke, and graph query; CXCTO runs merge-readiness reality-check before merge/close.
 **Suggested owner:** CXCodeReviewer, CodexArchitectReviewer, CXQAEngineer, CXCTO.
-**Affected paths:** issue comments, PR #87, CI/QA evidence.
+**Affected paths:** issue comments, PR #88, CI/QA evidence.
 **Dependencies:** Steps 1–8.
 
 ## Review Risks

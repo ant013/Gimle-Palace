@@ -182,7 +182,12 @@ Implementation agents must provide:
 - Unit tests for Kotlin parser, Swift parser, stable IDs, visibility filtering, and signature hashing.
 - Integration test proving graph nodes/edges and query path over Neo4j/testcontainer or the existing extractor integration harness.
 - Real fixture artifacts committed under test fixtures; generation scripts or notes must not modify production UW/HS build files.
-- `uv run ruff check`, `uv run mypy src/`, and targeted `uv run pytest` evidence from the implementation workspace.
+- Required implementation validation commands from `services/palace-mcp`:
+  - `uv run ruff check`
+  - `uv run mypy src/`
+  - `uv run pytest tests/extractors/unit/test_public_api_surface*.py -v`
+  - `uv run pytest tests/extractors/integration/test_public_api_surface_integration.py -v`
+  - `uv run pytest tests/integration/test_mcp_*public_api* -v` if a public MCP wire surface is added.
 - QA Phase 4.1 evidence with runtime smoke, graph invariant query, and MCP/tool-level query if a public MCP surface is added.
 
 CTO Phase 1.1 verification is docs-only: branch rename, docs diff, PR metadata, and Markdown whitespace check. Runtime tests are explicitly out of scope for CTO formalization.
