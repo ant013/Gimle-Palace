@@ -24,6 +24,11 @@ Tools registered:
 - palace.code.manage_adr  [DISABLED — returns directive error]
 - palace.ops.unstick_issue
 - palace.memory.prime
+- palace.memory.register_bundle
+- palace.memory.add_to_bundle
+- palace.memory.bundle_members
+- palace.memory.bundle_status
+- palace.memory.delete_bundle
 """
 
 import logging
@@ -41,7 +46,9 @@ from starlette.applications import Starlette
 from palace_mcp.code_composite import register_code_composite_tools
 from palace_mcp.code_router import register_code_tools
 from palace_mcp.extractors import registry as _extractor_registry
+from palace_mcp.extractors.bundle_state import get_bundle_ingest_state
 from palace_mcp.extractors.runner import run_extractor as _run_extractor
+from palace_mcp.extractors.runner import run_extractor_bundle as _run_extractor_bundle
 from palace_mcp.errors import (
     VALID_ENTITY_TYPES,
     DriverUnavailableError,
@@ -73,6 +80,17 @@ from palace_mcp.memory.project_tools import (
     list_projects,
     register_project,
 )
+from palace_mcp.memory.bundle import (
+    BundleNameConflictsWithProject,
+    BundleNonEmpty,
+    BundleNotFoundError,
+    add_to_bundle,
+    bundle_members,
+    bundle_status,
+    delete_bundle,
+    register_bundle,
+)
+from palace_mcp.memory.models import Tier
 from palace_mcp.memory.projects import InvalidSlug, UnknownProjectError
 from palace_mcp.config import Settings
 from palace_mcp.memory.schema import HealthResponse as MemoryHealthResponse
@@ -405,6 +423,161 @@ async def palace_memory_get_project_overview(slug: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# palace.memory.bundle.* — multi-repo bundle management (GIM-182)
+# ---------------------------------------------------------------------------
+
+
+@_tool(
+    name="palace.memory.register_bundle",
+    description=(
+        "Create a named bundle that groups multiple :Project nodes for cross-repo queries. "
+        "Name must be lowercase, 2–31 chars, hyphens allowed (e.g. 'uw-ios'). "
+        "Idempotent on repeated calls. Raises structured error if name conflicts with "
+        "an existing :Project slug."
+    ),
+)
+async def palace_memory_register_bundle(
+    name: str,
+    description: str,
+) -> dict[str, Any]:
+    """Register a :Bundle node in the knowledge graph."""
+    driver = _driver
+    if driver is None:
+        handle_tool_error(DriverUnavailableError("Neo4j driver not initialised"))
+    try:
+        bundle = await register_bundle(driver, name=name, description=description)
+        return bundle.model_dump()
+    except BundleNameConflictsWithProject as exc:
+        return {
+            "ok": False,
+            "error_code": "bundle_name_conflicts_with_project",
+            "message": str(exc),
+        }
+    except ValueError as exc:
+        return {"ok": False, "error_code": "invalid_bundle_name", "message": str(exc)}
+    except Exception as exc:
+        handle_tool_error(exc)
+
+
+@_tool(
+    name="palace.memory.add_to_bundle",
+    description=(
+        "Add a registered :Project to a :Bundle with a tier label. "
+        "tier must be one of: 'user', 'first-party', 'vendor'. "
+        "Idempotent — safe to call multiple times for the same project. "
+        "Use palace.memory.register_bundle to create the bundle first."
+    ),
+)
+async def palace_memory_add_to_bundle(
+    bundle: str,
+    project: str,
+    tier: str,
+) -> dict[str, Any]:
+    """Add a :Project to a :Bundle with :CONTAINS edge."""
+    driver = _driver
+    if driver is None:
+        handle_tool_error(DriverUnavailableError("Neo4j driver not initialised"))
+    try:
+        tier_val = Tier(tier)
+    except ValueError:
+        return {
+            "ok": False,
+            "error_code": "invalid_tier",
+            "message": f"tier must be one of {[t.value for t in Tier]}, got {tier!r}",
+        }
+    try:
+        await add_to_bundle(driver, bundle=bundle, project=project, tier=tier_val)
+        return {"ok": True}
+    except BundleNotFoundError as exc:
+        return {"ok": False, "error_code": "bundle_not_found", "message": str(exc)}
+    except UnknownProjectError as exc:
+        return {"ok": False, "error_code": "unknown_project", "message": str(exc)}
+    except Exception as exc:
+        handle_tool_error(exc)
+
+
+@_tool(
+    name="palace.memory.bundle_members",
+    description=(
+        "Return the list of :Project slugs inside a bundle, sorted alphabetically. "
+        "Includes tier and when each project was added. "
+        "Use palace.memory.bundle_status to also get ingest freshness metrics."
+    ),
+)
+async def palace_memory_bundle_members(
+    bundle: str,
+) -> list[dict[str, Any]] | dict[str, Any]:
+    """Return ProjectRef list for a bundle."""
+    driver = _driver
+    if driver is None:
+        handle_tool_error(DriverUnavailableError("Neo4j driver not initialised"))
+    try:
+        refs = await bundle_members(driver, bundle=bundle)
+        return [r.model_dump() for r in refs]
+    except BundleNotFoundError as exc:
+        return {"ok": False, "error_code": "bundle_not_found", "message": str(exc)}
+    except Exception as exc:
+        handle_tool_error(exc)
+
+
+@_tool(
+    name="palace.memory.bundle_status",
+    description=(
+        "Return health metrics for a bundle: member count, fresh / stale / "
+        "ingest-failed / never-ingested slugs, and oldest/newest ingest timestamps. "
+        "Use before cross-repo queries to confirm data freshness. "
+        "'query_failed_slugs' are transient query-time failures; "
+        "'ingest_failed_slugs' had last ingest run fail; "
+        "'never_ingested_slugs' have no ingest run on record."
+    ),
+)
+async def palace_memory_bundle_status(bundle: str) -> dict[str, Any]:
+    """Return BundleStatus with 3-way failure taxonomy."""
+    driver = _driver
+    if driver is None:
+        handle_tool_error(DriverUnavailableError("Neo4j driver not initialised"))
+    try:
+        status = await bundle_status(driver, bundle=bundle)
+        return status.model_dump()
+    except BundleNotFoundError as exc:
+        return {"ok": False, "error_code": "bundle_not_found", "message": str(exc)}
+    except Exception as exc:
+        handle_tool_error(exc)
+
+
+@_tool(
+    name="palace.memory.delete_bundle",
+    description=(
+        "Delete a :Bundle node. "
+        "cascade=False (default): fails with structured error if the bundle has members. "
+        "cascade=True: removes the bundle and all its :CONTAINS edges; "
+        "member :Project nodes are NOT deleted."
+    ),
+)
+async def palace_memory_delete_bundle(
+    name: str,
+    cascade: bool = False,
+) -> dict[str, Any]:
+    """Delete a bundle, with optional cascade of :CONTAINS edges."""
+    driver = _driver
+    if driver is None:
+        handle_tool_error(DriverUnavailableError("Neo4j driver not initialised"))
+    try:
+        await delete_bundle(driver, name=name, cascade=cascade)
+        return {"ok": True}
+    except BundleNotFoundError as exc:
+        return {"ok": False, "error_code": "bundle_not_found", "message": str(exc)}
+    except BundleNonEmpty as exc:
+        return {
+            "ok": False,
+            "error_code": "bundle_non_empty",
+            "message": str(exc),
+        }
+    except Exception as exc:
+        handle_tool_error(exc)
+
+
+# ---------------------------------------------------------------------------
 # palace.ingest.* — extractor pipeline tools
 # ---------------------------------------------------------------------------
 
@@ -412,22 +585,65 @@ async def palace_memory_get_project_overview(slug: str) -> dict[str, Any]:
 @_tool(
     name="palace.ingest.run_extractor",
     description=(
-        "Run a named extractor against a registered project. Writes nodes/edges "
-        "scoped by group_id. Creates :IngestRun tracking. Returns run_id + "
-        "duration_ms + nodes_written + edges_written on success, or error_code "
-        "envelope on failure. Default timeout 300s per run."
+        "Run a named extractor. Pass project= to run against a single registered project. "
+        "Pass bundle= to run asynchronously across all bundle members — returns run_id "
+        "immediately; use palace.ingest.bundle_status(run_id) to poll progress. "
+        "project= and bundle= are mutually exclusive. "
+        "On success (project mode): run_id + duration_ms + nodes_written + edges_written. "
+        "On success (bundle mode): run_id + state='running' + members_total. "
+        "On failure: error_code envelope."
     ),
 )
-async def _palace_ingest_run_extractor(name: str, project: str) -> dict[str, Any]:
+async def _palace_ingest_run_extractor(
+    name: str,
+    project: str | None = None,
+    bundle: str | None = None,
+) -> dict[str, Any]:
     driver = _driver
     if driver is None:
         handle_tool_error(DriverUnavailableError("Neo4j driver not initialised"))
     graphiti = _graphiti
     if graphiti is None:
         handle_tool_error(DriverUnavailableError("Graphiti not initialised"))
+    if bundle is not None and project is not None:
+        return {
+            "ok": False,
+            "error_code": "invalid_request",
+            "message": "project and bundle are mutually exclusive",
+        }
+    if bundle is not None:
+        state = await _run_extractor_bundle(
+            name=name, bundle=bundle, driver=driver, graphiti=graphiti
+        )
+        return {k: v for k, v in state.items() if not k.startswith("_")}
+    if project is None:
+        return {
+            "ok": False,
+            "error_code": "invalid_request",
+            "message": "either project or bundle is required",
+        }
     return await _run_extractor(
         name=name, project=project, driver=driver, graphiti=graphiti
     )
+
+
+@_tool(
+    name="palace.ingest.bundle_status",
+    description=(
+        "Poll the status of an async bundle ingest started by palace.ingest.run_extractor(bundle=...). "
+        "Returns state ('running'|'succeeded'|'failed'), progress counters (members_done / members_total), "
+        "per-member run results, and timing. Returns error_code='not_found' if run_id is unknown or expired."
+    ),
+)
+async def _palace_ingest_bundle_status(run_id: str) -> dict[str, Any]:
+    state = get_bundle_ingest_state(run_id)
+    if state is None:
+        return {
+            "ok": False,
+            "error_code": "not_found",
+            "message": f"bundle ingest run {run_id!r} not found or expired",
+        }
+    return {"ok": True, **{k: v for k, v in state.items() if not k.startswith("_")}}
 
 
 @_tool(

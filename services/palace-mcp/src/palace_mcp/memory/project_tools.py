@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any
 
 from neo4j import AsyncDriver
 
 from palace_mcp.memory.cypher import (
+    CHECK_BUNDLE_NAME_EXISTS,
     GET_PROJECT,
     LIST_PROJECTS,
     PROJECT_ENTITY_COUNTS,
@@ -18,6 +20,29 @@ from palace_mcp.memory.cypher import (
 from palace_mcp.memory.schema import ProjectInfo
 
 logger = logging.getLogger(__name__)
+
+# §6.5 regexes — mirrored from path_resolver to keep validation at the boundary
+_PARENT_MOUNT_RE = re.compile(r"^[a-z][a-z0-9-]{0,15}$")
+_RELATIVE_PATH_RE = re.compile(r"^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$")
+
+
+def _validate_parent_mount(value: str) -> None:
+    if not _PARENT_MOUNT_RE.match(value):
+        raise ValueError(
+            f"invalid parent_mount name: {value!r} (must match ^[a-z][a-z0-9-]{{0,15}}$)"
+        )
+
+
+def _validate_relative_path(value: str) -> None:
+    if not _RELATIVE_PATH_RE.match(value):
+        raise ValueError(
+            f"invalid relative_path: {value!r} "
+            r"(must match ^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$)"
+        )
+    # Explicit rejection of .. components — regex allows "." but not intended for traversal
+    for part in value.split("/"):
+        if part == "..":
+            raise ValueError(f"invalid relative_path: {value!r} (contains '..')")
 
 
 def _project_info_from_row(
@@ -31,6 +56,8 @@ def _project_info_from_row(
         language=p.get("language"),
         framework=p.get("framework"),
         repo_url=p.get("repo_url"),
+        parent_mount=p.get("parent_mount"),
+        relative_path=p.get("relative_path"),
         source_created_at=p["source_created_at"],
         source_updated_at=p["source_updated_at"],
         entity_counts=entity_counts or {},
@@ -46,12 +73,28 @@ async def register_project(
     language: str | None = None,
     framework: str | None = None,
     repo_url: str | None = None,
+    parent_mount: str | None = None,
+    relative_path: str | None = None,
 ) -> ProjectInfo:
+    from palace_mcp.memory.bundle import ProjectSlugConflictsWithBundle
     from palace_mcp.memory.projects import validate_slug
 
     validate_slug(slug)
+
+    # §6.5: validate parent_mount and relative_path at boundary, before I/O
+    if parent_mount is not None:
+        _validate_parent_mount(parent_mount)
+    if relative_path is not None:
+        _validate_relative_path(relative_path)
+
     now = datetime.now(timezone.utc).isoformat()
     async with driver.session() as session:
+        # §8.15/16 namespace guard: project slug must not conflict with bundle name
+        b_result = await session.run(CHECK_BUNDLE_NAME_EXISTS, name=slug)
+        b_row = await b_result.single()
+        if b_row is not None:
+            raise ProjectSlugConflictsWithBundle(slug)
+
         await session.run(
             UPSERT_PROJECT,
             slug=slug,
@@ -60,6 +103,8 @@ async def register_project(
             language=language,
             framework=framework,
             repo_url=repo_url,
+            parent_mount=parent_mount,
+            relative_path=relative_path,
             now=now,
         )
         result = await session.run(GET_PROJECT, slug=slug)
