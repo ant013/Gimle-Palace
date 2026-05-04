@@ -17,7 +17,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from palace_mcp.extractors.base import ExtractorRunContext
-from palace_mcp.extractors.dependency_surface.extractor import DependencySurfaceExtractor
+from palace_mcp.extractors.dependency_surface.extractor import (
+    DependencySurfaceExtractor,
+)
 from palace_mcp.extractors.foundation.schema import ensure_custom_schema
 
 PROJECT_SLUG = "dep-surface-mini"
@@ -104,9 +106,7 @@ async def test_idempotent_remerge_counter_precise(driver, registered_project) ->
 
     # Node count unchanged after second run
     async with driver.session() as s:
-        result = await s.run(
-            "MATCH (d:ExternalDependency) RETURN count(d) AS cnt"
-        )
+        result = await s.run("MATCH (d:ExternalDependency) RETURN count(d) AS cnt")
         record = await result.single()
     assert record is not None
     assert record["cnt"] == EXPECTED_DEP_COUNT
@@ -170,9 +170,7 @@ async def test_cross_project_dedup(driver) -> None:  # type: ignore[no-untyped-d
 
     # Total :DEPENDS_ON edges: 2x (one per project)
     async with driver.session() as s:
-        result = await s.run(
-            "MATCH ()-[r:DEPENDS_ON]->() RETURN count(r) AS cnt"
-        )
+        result = await s.run("MATCH ()-[r:DEPENDS_ON]->() RETURN count(r) AS cnt")
         record = await result.single()
     assert record is not None
     assert record["cnt"] == EXPECTED_DEP_COUNT * 2

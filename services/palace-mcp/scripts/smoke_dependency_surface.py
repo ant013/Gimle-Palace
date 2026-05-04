@@ -28,7 +28,9 @@ async def run_smoke(project: str, repo_path: Path | None) -> None:
 
     from neo4j import AsyncGraphDatabase
 
-    from palace_mcp.extractors.dependency_surface.extractor import DependencySurfaceExtractor
+    from palace_mcp.extractors.dependency_surface.extractor import (
+        DependencySurfaceExtractor,
+    )
     from palace_mcp.extractors.base import ExtractorRunContext
     import logging
     import uuid
@@ -49,9 +51,13 @@ async def run_smoke(project: str, repo_path: Path | None) -> None:
         }
         resolved = scip_paths.get(project) or known.get(project)
         if resolved:
-            repo_path = Path(resolved).parent if resolved.endswith(".scip") else Path(resolved)
+            repo_path = (
+                Path(resolved).parent if resolved.endswith(".scip") else Path(resolved)
+            )
         else:
-            print(f"ERROR: --repo-path required for project {project!r}", file=sys.stderr)
+            print(
+                f"ERROR: --repo-path required for project {project!r}", file=sys.stderr
+            )
             sys.exit(1)
 
     print(f"Smoke: dependency_surface project={project} repo_path={repo_path}")
@@ -60,9 +66,11 @@ async def run_smoke(project: str, repo_path: Path | None) -> None:
     try:
         # Monkey-patch get_driver
         import palace_mcp.mcp_server as _ms
+
         _ms._driver = driver  # type: ignore[attr-defined]
 
         from palace_mcp.extractors.foundation.schema import ensure_custom_schema
+
         await ensure_custom_schema(driver)
 
         # Ensure :Project exists
@@ -83,6 +91,7 @@ async def run_smoke(project: str, repo_path: Path | None) -> None:
             logger=logging.getLogger("smoke"),
         )
         from unittest.mock import MagicMock
+
         stats = await extractor.run(graphiti=MagicMock(), ctx=ctx)
 
         print(f"  nodes_written={stats.nodes_written}")
@@ -100,7 +109,9 @@ async def run_smoke(project: str, repo_path: Path | None) -> None:
 
         print(f"\n  Sample deps ({min(len(records), 20)} shown):")
         for r in records:
-            print(f"    {r['purl']}  scope={r['scope']}  declared_in={r['declared_in']}")
+            print(
+                f"    {r['purl']}  scope={r['scope']}  declared_in={r['declared_in']}"
+            )
 
         print("\nSMOKE PASS")
     finally:
@@ -108,9 +119,15 @@ async def run_smoke(project: str, repo_path: Path | None) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Smoke test for dependency_surface extractor")
-    parser.add_argument("--project", required=True, help="Project slug (e.g. gimle, uw-android)")
-    parser.add_argument("--repo-path", type=Path, default=None, help="Path to repo root")
+    parser = argparse.ArgumentParser(
+        description="Smoke test for dependency_surface extractor"
+    )
+    parser.add_argument(
+        "--project", required=True, help="Project slug (e.g. gimle, uw-android)"
+    )
+    parser.add_argument(
+        "--repo-path", type=Path, default=None, help="Path to repo root"
+    )
     args = parser.parse_args()
     asyncio.run(run_smoke(args.project, args.repo_path))
 

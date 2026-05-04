@@ -10,7 +10,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from palace_mcp.extractors.base import ExtractorRunContext
-from palace_mcp.extractors.dependency_surface.extractor import DependencySurfaceExtractor
+from palace_mcp.extractors.dependency_surface.extractor import (
+    DependencySurfaceExtractor,
+)
 
 _PYPROJECT_TOML = textwrap.dedent(
     """
@@ -51,7 +53,9 @@ def _mock_writer(nodes: int, edges: int) -> AsyncMock:
 
 
 @pytest.mark.asyncio
-async def test_extractor_no_manifests_returns_zero(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+async def test_extractor_no_manifests_returns_zero(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     extractor = DependencySurfaceExtractor()
     mock_driver = MagicMock()
     graphiti = MagicMock()
@@ -184,7 +188,9 @@ async def test_extractor_all_three_ecosystems(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_extractor_partial_failure_continues(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+async def test_extractor_partial_failure_continues(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     # Only Python present; Gradle parser will raise (no libs.versions.toml but build.gradle.kts present)
     (tmp_path / "pyproject.toml").write_text(_PYPROJECT_TOML)
     (tmp_path / "uv.lock").write_text(_UV_LOCK)
@@ -232,16 +238,16 @@ async def test_extractor_python_nested_manifests(tmp_path: Path) -> None:
     pkg2.mkdir(parents=True)
 
     (pkg1 / "pyproject.toml").write_text(
-        "[project]\nname = \"pkg1\"\ndependencies = [\"neo4j>=5.0\"]\n"
+        '[project]\nname = "pkg1"\ndependencies = ["neo4j>=5.0"]\n'
     )
     (pkg1 / "uv.lock").write_text(
-        "version = 1\n[[package]]\nname = \"neo4j\"\nversion = \"5.28.2\"\n"
+        'version = 1\n[[package]]\nname = "neo4j"\nversion = "5.28.2"\n'
     )
     (pkg2 / "pyproject.toml").write_text(
-        "[project]\nname = \"pkg2\"\ndependencies = [\"httpx>=0.27\"]\n"
+        '[project]\nname = "pkg2"\ndependencies = ["httpx>=0.27"]\n'
     )
     (pkg2 / "uv.lock").write_text(
-        "version = 1\n[[package]]\nname = \"httpx\"\nversion = \"0.27.0\"\n"
+        'version = 1\n[[package]]\nname = "httpx"\nversion = "0.27.0"\n'
     )
 
     extractor = DependencySurfaceExtractor()

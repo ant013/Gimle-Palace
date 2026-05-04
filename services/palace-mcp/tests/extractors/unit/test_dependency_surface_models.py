@@ -5,7 +5,10 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from palace_mcp.extractors.dependency_surface.models import ManifestParseResult, ParsedDep
+from palace_mcp.extractors.dependency_surface.models import (
+    ManifestParseResult,
+    ParsedDep,
+)
 
 _VALID_DEP = dict(
     project_id="project/x",

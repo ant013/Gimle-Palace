@@ -99,7 +99,9 @@ def test_gradle_parser_unknown_alias_warns(tmp_path: Path) -> None:
     )
     r = parse_gradle(tmp_path, project_id="project/x")
     # Should not crash; should warn about unresolved alias
-    assert any("does.not.exist" in w or "unresolved" in w.lower() for w in r.parser_warnings)
+    assert any(
+        "does.not.exist" in w or "unresolved" in w.lower() for w in r.parser_warnings
+    )
     # Known dep still resolved
     purls = {d.purl for d in r.deps}
     assert "pkg:maven/androidx.appcompat/appcompat@1.7.1" in purls
