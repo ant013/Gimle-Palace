@@ -280,6 +280,12 @@ invoked via MCP tool `palace.ingest.run_extractor(name, project)`.
   Handles `.swift` occurrences with the same 3-phase bootstrap as the other
   SCIP-backed extractors. Uses `PALACE_SCIP_INDEX_PATHS` — merge-gate fixture
   slug is `uw-ios-mini`; optional real-source follow-up slug is `uw-ios`.
+- `git_history` — Git history harvester (GIM-186). Walks pygit2 commit
+  history (Phase 1) + GitHub GraphQL PR/comment data (Phase 2). Foundation for
+  6 historical extractors (#11/#12/#26/#32/#43/#44). Per-project incremental
+  refresh; checkpoint in `:GitHistoryCheckpoint`. Requires `PALACE_GITHUB_TOKEN`
+  env var for Phase 2 (PR data); Phase 1 (commits) runs without it. Full re-walk
+  on force-push detected automatically. See `docs/runbooks/git-history-harvester.md`.
 
 ### Operator workflow: Java/Kotlin symbol index
 

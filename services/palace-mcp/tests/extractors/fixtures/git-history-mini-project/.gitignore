@@ -1,0 +1,3 @@
+# Synthetic git repo built by regen.sh — not tracked in version control.
+# Tests build their own in tmp_path via _build_synthetic_repo().
+repo/
