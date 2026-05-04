@@ -102,7 +102,7 @@ Reference: `docs/research/extractor-library/` (2026-04-18 brainstorm, 9 parallel
 | 4 | KMP Platform-Bridge Extractor | CX | — | tree-sitter-kotlin + SKIE + swift-syntax | 📦 (waits UW KMP adoption) |
 | 5 | Dependency Surface Extractor | Claude | — | dep-analysis-gradle + spmgraph + Package.resolved parser | 📦 |
 | 25 | Build System Extractor | CX | — | Gradle Tooling API + SwiftPM PackageDescription + Bazel aquery | 📦 |
-| 27 | Public API Surface Extractor | CX | — | binary-compatibility-validator + swift-api-digester + SKIE overlay | 🚧 spec brainstorm (`docs/superpowers/specs/2026-05-04-roadmap-27-public-api-surface-extractor.md`) |
+| 27 | Public API Surface Extractor | CX | — | Kotlin BCV `.api` dumps + Swift `.swiftinterface` primary + optional `swift-api-digester` diagnostics + SKIE overlay | 🚧 Phase 1.1 formalized: GIM-190 / PR #87 / `docs/superpowers/specs/2026-05-04-GIM-190-public-api-surface-extractor.md` |
 | 31 | Cross-Module Contract Extractor | CX | — | Kotlin BCV + swift-public-api-diff + oasdiff | 📦 (deps #27) |
 | 33 | Dead Symbol & Binary Surface | CX | — | Periphery + Reaper SDK + CodeQL | 📦 |
 | 36 | Network Schema & API Contract | Claude | — | oasdiff + Buf CLI + graphql-inspector | 📦 |
