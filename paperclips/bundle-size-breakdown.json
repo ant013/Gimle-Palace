@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-05-03",
+  "generatedAt": "2026-05-04",
   "tokenEstimate": "ceil(bytes / 4)",
   "scope": "Task 1.5 heavy-bundle sample before slimming",
   "roles": [
@@ -10,9 +10,9 @@
       "source": "paperclips/roles/blockchain-engineer.md",
       "dist": "paperclips/dist/blockchain-engineer.md",
       "total": {
-        "bytes": 22549,
-        "lines": 413,
-        "tokenEstimate": 5638
+        "bytes": 25660,
+        "lines": 458,
+        "tokenEstimate": 6415
       },
       "components": [
         {
@@ -34,9 +34,17 @@
         {
           "kind": "fragment",
           "path": "paperclips/fragments/shared/fragments/heartbeat-discipline.md",
-          "bytes": 4113,
-          "lines": 77,
-          "tokenEstimate": 1029,
+          "bytes": 4434,
+          "lines": 83,
+          "tokenEstimate": 1109,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
+          "bytes": 2537,
+          "lines": 46,
+          "tokenEstimate": 635,
           "includeCount": 1
         },
         {
@@ -65,18 +73,18 @@
         },
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
-          "bytes": 1362,
-          "lines": 29,
-          "tokenEstimate": 341,
+          "path": "paperclips/fragments/profiles/handoff.md",
+          "bytes": 1342,
+          "lines": 28,
+          "tokenEstimate": 336,
           "includeCount": 1
         },
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/profiles/handoff.md",
-          "bytes": 727,
-          "lines": 25,
-          "tokenEstimate": 182,
+          "path": "paperclips/fragments/local/agent-roster.md",
+          "bytes": 1000,
+          "lines": 19,
+          "tokenEstimate": 250,
           "includeCount": 1
         },
         {
@@ -95,9 +103,9 @@
       "source": "paperclips/roles/code-reviewer.md",
       "dist": "paperclips/dist/code-reviewer.md",
       "total": {
-        "bytes": 35547,
-        "lines": 702,
-        "tokenEstimate": 8887
+        "bytes": 39881,
+        "lines": 764,
+        "tokenEstimate": 9971
       },
       "components": [
         {
@@ -111,9 +119,9 @@
         {
           "kind": "fragment",
           "path": "paperclips/fragments/shared/fragments/phase-handoff.md",
-          "bytes": 5164,
-          "lines": 94,
-          "tokenEstimate": 1291,
+          "bytes": 5991,
+          "lines": 101,
+          "tokenEstimate": 1498,
           "includeCount": 1
         },
         {
@@ -127,9 +135,25 @@
         {
           "kind": "fragment",
           "path": "paperclips/fragments/shared/fragments/heartbeat-discipline.md",
-          "bytes": 4113,
-          "lines": 77,
-          "tokenEstimate": 1029,
+          "bytes": 4434,
+          "lines": 83,
+          "tokenEstimate": 1109,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/compliance-enforcement.md",
+          "bytes": 3058,
+          "lines": 66,
+          "tokenEstimate": 765,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
+          "bytes": 2537,
+          "lines": 46,
+          "tokenEstimate": 635,
           "includeCount": 1
         },
         {
@@ -150,22 +174,6 @@
         },
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/shared/fragments/compliance-enforcement.md",
-          "bytes": 2047,
-          "lines": 53,
-          "tokenEstimate": 512,
-          "includeCount": 1
-        },
-        {
-          "kind": "fragment",
-          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
-          "bytes": 1362,
-          "lines": 29,
-          "tokenEstimate": 341,
-          "includeCount": 1
-        },
-        {
-          "kind": "fragment",
           "path": "paperclips/fragments/local/test-design-gimle.md",
           "bytes": 1284,
           "lines": 27,
@@ -178,6 +186,14 @@
           "bytes": 1069,
           "lines": 24,
           "tokenEstimate": 268,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/local/agent-roster.md",
+          "bytes": 1000,
+          "lines": 19,
+          "tokenEstimate": 250,
           "includeCount": 1
         },
         {
@@ -220,9 +236,9 @@
       "source": "paperclips/roles/python-engineer.md",
       "dist": "paperclips/dist/python-engineer.md",
       "total": {
-        "bytes": 28367,
-        "lines": 574,
-        "tokenEstimate": 7092
+        "bytes": 32489,
+        "lines": 632,
+        "tokenEstimate": 8123
       },
       "components": [
         {
@@ -236,9 +252,9 @@
         {
           "kind": "fragment",
           "path": "paperclips/fragments/shared/fragments/heartbeat-discipline.md",
-          "bytes": 4113,
-          "lines": 77,
-          "tokenEstimate": 1029,
+          "bytes": 4434,
+          "lines": 83,
+          "tokenEstimate": 1109,
           "includeCount": 1
         },
         {
@@ -248,6 +264,22 @@
           "lines": 59,
           "tokenEstimate": 945,
           "includeCount": 8
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/compliance-enforcement.md",
+          "bytes": 3058,
+          "lines": 66,
+          "tokenEstimate": 765,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
+          "bytes": 2537,
+          "lines": 46,
+          "tokenEstimate": 635,
+          "includeCount": 1
         },
         {
           "kind": "fragment",
@@ -275,14 +307,6 @@
         },
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/shared/fragments/compliance-enforcement.md",
-          "bytes": 2047,
-          "lines": 53,
-          "tokenEstimate": 512,
-          "includeCount": 1
-        },
-        {
-          "kind": "fragment",
           "path": "paperclips/fragments/shared/fragments/pre-work-discovery.md",
           "bytes": 1375,
           "lines": 27,
@@ -291,10 +315,10 @@
         },
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
-          "bytes": 1362,
-          "lines": 29,
-          "tokenEstimate": 341,
+          "path": "paperclips/fragments/profiles/handoff.md",
+          "bytes": 1342,
+          "lines": 28,
+          "tokenEstimate": 336,
           "includeCount": 1
         },
         {
@@ -315,18 +339,18 @@
         },
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/shared/fragments/phase-review-discipline.md",
-          "bytes": 908,
-          "lines": 30,
-          "tokenEstimate": 227,
+          "path": "paperclips/fragments/local/agent-roster.md",
+          "bytes": 1000,
+          "lines": 19,
+          "tokenEstimate": 250,
           "includeCount": 1
         },
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/profiles/handoff.md",
-          "bytes": 727,
-          "lines": 25,
-          "tokenEstimate": 182,
+          "path": "paperclips/fragments/shared/fragments/phase-review-discipline.md",
+          "bytes": 908,
+          "lines": 30,
+          "tokenEstimate": 227,
           "includeCount": 1
         },
         {
@@ -345,9 +369,9 @@
       "source": "paperclips/roles/mcp-engineer.md",
       "dist": "paperclips/dist/mcp-engineer.md",
       "total": {
-        "bytes": 26715,
-        "lines": 509,
-        "tokenEstimate": 6679
+        "bytes": 29826,
+        "lines": 554,
+        "tokenEstimate": 7457
       },
       "components": [
         {
@@ -369,9 +393,17 @@
         {
           "kind": "fragment",
           "path": "paperclips/fragments/shared/fragments/heartbeat-discipline.md",
-          "bytes": 4113,
-          "lines": 77,
-          "tokenEstimate": 1029,
+          "bytes": 4434,
+          "lines": 83,
+          "tokenEstimate": 1109,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
+          "bytes": 2537,
+          "lines": 46,
+          "tokenEstimate": 635,
           "includeCount": 1
         },
         {
@@ -408,10 +440,10 @@
         },
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
-          "bytes": 1362,
-          "lines": 29,
-          "tokenEstimate": 341,
+          "path": "paperclips/fragments/profiles/handoff.md",
+          "bytes": 1342,
+          "lines": 28,
+          "tokenEstimate": 336,
           "includeCount": 1
         },
         {
@@ -432,10 +464,10 @@
         },
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/profiles/handoff.md",
-          "bytes": 727,
-          "lines": 25,
-          "tokenEstimate": 182,
+          "path": "paperclips/fragments/local/agent-roster.md",
+          "bytes": 1000,
+          "lines": 19,
+          "tokenEstimate": 250,
           "includeCount": 1
         },
         {
@@ -454,9 +486,9 @@
       "source": "paperclips/roles/research-agent.md",
       "dist": "paperclips/dist/research-agent.md",
       "total": {
-        "bytes": 21902,
-        "lines": 408,
-        "tokenEstimate": 5476
+        "bytes": 25013,
+        "lines": 453,
+        "tokenEstimate": 6254
       },
       "components": [
         {
@@ -478,9 +510,17 @@
         {
           "kind": "fragment",
           "path": "paperclips/fragments/shared/fragments/heartbeat-discipline.md",
-          "bytes": 4113,
-          "lines": 77,
-          "tokenEstimate": 1029,
+          "bytes": 4434,
+          "lines": 83,
+          "tokenEstimate": 1109,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
+          "bytes": 2537,
+          "lines": 46,
+          "tokenEstimate": 635,
           "includeCount": 1
         },
         {
@@ -509,18 +549,18 @@
         },
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
-          "bytes": 1362,
-          "lines": 29,
-          "tokenEstimate": 341,
+          "path": "paperclips/fragments/profiles/handoff.md",
+          "bytes": 1342,
+          "lines": 28,
+          "tokenEstimate": 336,
           "includeCount": 1
         },
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/profiles/handoff.md",
-          "bytes": 727,
-          "lines": 25,
-          "tokenEstimate": 182,
+          "path": "paperclips/fragments/local/agent-roster.md",
+          "bytes": 1000,
+          "lines": 19,
+          "tokenEstimate": 250,
           "includeCount": 1
         },
         {
@@ -539,9 +579,9 @@
       "source": "paperclips/roles/technical-writer.md",
       "dist": "paperclips/dist/technical-writer.md",
       "total": {
-        "bytes": 21653,
-        "lines": 396,
-        "tokenEstimate": 5414
+        "bytes": 24764,
+        "lines": 441,
+        "tokenEstimate": 6191
       },
       "components": [
         {
@@ -563,9 +603,17 @@
         {
           "kind": "fragment",
           "path": "paperclips/fragments/shared/fragments/heartbeat-discipline.md",
-          "bytes": 4113,
-          "lines": 77,
-          "tokenEstimate": 1029,
+          "bytes": 4434,
+          "lines": 83,
+          "tokenEstimate": 1109,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
+          "bytes": 2537,
+          "lines": 46,
+          "tokenEstimate": 635,
           "includeCount": 1
         },
         {
@@ -594,18 +642,18 @@
         },
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
-          "bytes": 1362,
-          "lines": 29,
-          "tokenEstimate": 341,
+          "path": "paperclips/fragments/profiles/handoff.md",
+          "bytes": 1342,
+          "lines": 28,
+          "tokenEstimate": 336,
           "includeCount": 1
         },
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/profiles/handoff.md",
-          "bytes": 727,
-          "lines": 25,
-          "tokenEstimate": 182,
+          "path": "paperclips/fragments/local/agent-roster.md",
+          "bytes": 1000,
+          "lines": 19,
+          "tokenEstimate": 250,
           "includeCount": 1
         },
         {
@@ -624,17 +672,17 @@
       "source": "paperclips/roles/cto.md",
       "dist": "paperclips/dist/cto.md",
       "total": {
-        "bytes": 25075,
-        "lines": 441,
-        "tokenEstimate": 6269
+        "bytes": 28398,
+        "lines": 490,
+        "tokenEstimate": 7100
       },
       "components": [
         {
           "kind": "fragment",
           "path": "paperclips/fragments/shared/fragments/phase-handoff.md",
-          "bytes": 5164,
-          "lines": 94,
-          "tokenEstimate": 1291,
+          "bytes": 5991,
+          "lines": 101,
+          "tokenEstimate": 1498,
           "includeCount": 1
         },
         {
@@ -648,9 +696,9 @@
         {
           "kind": "fragment",
           "path": "paperclips/fragments/shared/fragments/heartbeat-discipline.md",
-          "bytes": 4113,
-          "lines": 77,
-          "tokenEstimate": 1029,
+          "bytes": 4434,
+          "lines": 83,
+          "tokenEstimate": 1109,
           "includeCount": 1
         },
         {
@@ -660,6 +708,14 @@
           "lines": 59,
           "tokenEstimate": 989,
           "includeCount": 8
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
+          "bytes": 2537,
+          "lines": 46,
+          "tokenEstimate": 635,
+          "includeCount": 1
         },
         {
           "kind": "fragment",
@@ -679,10 +735,10 @@
         },
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
-          "bytes": 1362,
-          "lines": 29,
-          "tokenEstimate": 341,
+          "path": "paperclips/fragments/local/agent-roster.md",
+          "bytes": 1000,
+          "lines": 19,
+          "tokenEstimate": 250,
           "includeCount": 1
         },
         {
@@ -712,14 +768,83 @@
       ]
     },
     {
+      "roleId": "codex:cx-code-reviewer",
+      "target": "codex",
+      "source": "paperclips/roles-codex/cx-code-reviewer.md",
+      "dist": "paperclips/dist/codex/cx-code-reviewer.md",
+      "total": {
+        "bytes": 18294,
+        "lines": 408,
+        "tokenEstimate": 4574
+      },
+      "components": [
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/targets/codex/shared/fragments/phase-handoff.md",
+          "bytes": 6013,
+          "lines": 101,
+          "tokenEstimate": 1504,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/compliance-enforcement.md",
+          "bytes": 3058,
+          "lines": 66,
+          "tokenEstimate": 765,
+          "includeCount": 1
+        },
+        {
+          "kind": "inline-role-text",
+          "path": "paperclips/roles-codex/cx-code-reviewer.md",
+          "bytes": 2904,
+          "lines": 93,
+          "tokenEstimate": 726,
+          "includeCount": 5
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/codex/create-agent.md",
+          "bytes": 2432,
+          "lines": 74,
+          "tokenEstimate": 608,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/codex/skills-and-agents.md",
+          "bytes": 1660,
+          "lines": 34,
+          "tokenEstimate": 415,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/codex/runtime.md",
+          "bytes": 1353,
+          "lines": 23,
+          "tokenEstimate": 339,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/targets/codex/local/agent-roster.md",
+          "bytes": 874,
+          "lines": 17,
+          "tokenEstimate": 219,
+          "includeCount": 1
+        }
+      ]
+    },
+    {
       "roleId": "codex:cx-mcp-engineer",
       "target": "codex",
       "source": "paperclips/roles-codex/cx-mcp-engineer.md",
       "dist": "paperclips/dist/codex/cx-mcp-engineer.md",
       "total": {
-        "bytes": 26701,
-        "lines": 509,
-        "tokenEstimate": 6676
+        "bytes": 29690,
+        "lines": 552,
+        "tokenEstimate": 7423
       },
       "components": [
         {
@@ -741,9 +866,17 @@
         {
           "kind": "fragment",
           "path": "paperclips/fragments/targets/codex/shared/fragments/heartbeat-discipline.md",
-          "bytes": 4110,
-          "lines": 77,
-          "tokenEstimate": 1028,
+          "bytes": 4435,
+          "lines": 83,
+          "tokenEstimate": 1109,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
+          "bytes": 2537,
+          "lines": 46,
+          "tokenEstimate": 635,
           "includeCount": 1
         },
         {
@@ -780,10 +913,10 @@
         },
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
-          "bytes": 1362,
-          "lines": 29,
-          "tokenEstimate": 341,
+          "path": "paperclips/fragments/profiles/handoff.md",
+          "bytes": 1342,
+          "lines": 28,
+          "tokenEstimate": 336,
           "includeCount": 1
         },
         {
@@ -804,10 +937,10 @@
         },
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/profiles/handoff.md",
-          "bytes": 727,
-          "lines": 25,
-          "tokenEstimate": 182,
+          "path": "paperclips/fragments/targets/codex/local/agent-roster.md",
+          "bytes": 874,
+          "lines": 17,
+          "tokenEstimate": 219,
           "includeCount": 1
         },
         {
@@ -826,9 +959,9 @@
       "source": "paperclips/roles-codex/cx-python-engineer.md",
       "dist": "paperclips/dist/codex/cx-python-engineer.md",
       "total": {
-        "bytes": 28369,
-        "lines": 574,
-        "tokenEstimate": 7093
+        "bytes": 32369,
+        "lines": 630,
+        "tokenEstimate": 8093
       },
       "components": [
         {
@@ -842,9 +975,9 @@
         {
           "kind": "fragment",
           "path": "paperclips/fragments/targets/codex/shared/fragments/heartbeat-discipline.md",
-          "bytes": 4110,
-          "lines": 77,
-          "tokenEstimate": 1028,
+          "bytes": 4435,
+          "lines": 83,
+          "tokenEstimate": 1109,
           "includeCount": 1
         },
         {
@@ -854,6 +987,22 @@
           "lines": 59,
           "tokenEstimate": 936,
           "includeCount": 8
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/compliance-enforcement.md",
+          "bytes": 3058,
+          "lines": 66,
+          "tokenEstimate": 765,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
+          "bytes": 2537,
+          "lines": 46,
+          "tokenEstimate": 635,
+          "includeCount": 1
         },
         {
           "kind": "fragment",
@@ -881,14 +1030,6 @@
         },
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/shared/fragments/compliance-enforcement.md",
-          "bytes": 2047,
-          "lines": 53,
-          "tokenEstimate": 512,
-          "includeCount": 1
-        },
-        {
-          "kind": "fragment",
           "path": "paperclips/fragments/shared/fragments/pre-work-discovery.md",
           "bytes": 1375,
           "lines": 27,
@@ -897,10 +1038,10 @@
         },
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
-          "bytes": 1362,
-          "lines": 29,
-          "tokenEstimate": 341,
+          "path": "paperclips/fragments/profiles/handoff.md",
+          "bytes": 1342,
+          "lines": 28,
+          "tokenEstimate": 336,
           "includeCount": 1
         },
         {
@@ -929,10 +1070,10 @@
         },
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/profiles/handoff.md",
-          "bytes": 727,
-          "lines": 25,
-          "tokenEstimate": 182,
+          "path": "paperclips/fragments/targets/codex/local/agent-roster.md",
+          "bytes": 874,
+          "lines": 17,
+          "tokenEstimate": 219,
           "includeCount": 1
         },
         {
@@ -951,9 +1092,9 @@
       "source": "paperclips/roles-codex/cx-research-agent.md",
       "dist": "paperclips/dist/codex/cx-research-agent.md",
       "total": {
-        "bytes": 21914,
-        "lines": 408,
-        "tokenEstimate": 5479
+        "bytes": 24903,
+        "lines": 451,
+        "tokenEstimate": 6226
       },
       "components": [
         {
@@ -975,9 +1116,17 @@
         {
           "kind": "fragment",
           "path": "paperclips/fragments/targets/codex/shared/fragments/heartbeat-discipline.md",
-          "bytes": 4110,
-          "lines": 77,
-          "tokenEstimate": 1028,
+          "bytes": 4435,
+          "lines": 83,
+          "tokenEstimate": 1109,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
+          "bytes": 2537,
+          "lines": 46,
+          "tokenEstimate": 635,
           "includeCount": 1
         },
         {
@@ -1006,18 +1155,18 @@
         },
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
-          "bytes": 1362,
-          "lines": 29,
-          "tokenEstimate": 341,
+          "path": "paperclips/fragments/profiles/handoff.md",
+          "bytes": 1342,
+          "lines": 28,
+          "tokenEstimate": 336,
           "includeCount": 1
         },
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/profiles/handoff.md",
-          "bytes": 727,
-          "lines": 25,
-          "tokenEstimate": 182,
+          "path": "paperclips/fragments/targets/codex/local/agent-roster.md",
+          "bytes": 874,
+          "lines": 17,
+          "tokenEstimate": 219,
           "includeCount": 1
         },
         {
@@ -1036,9 +1185,9 @@
       "source": "paperclips/roles-codex/cx-technical-writer.md",
       "dist": "paperclips/dist/codex/cx-technical-writer.md",
       "total": {
-        "bytes": 21633,
-        "lines": 396,
-        "tokenEstimate": 5409
+        "bytes": 24622,
+        "lines": 439,
+        "tokenEstimate": 6156
       },
       "components": [
         {
@@ -1060,9 +1209,17 @@
         {
           "kind": "fragment",
           "path": "paperclips/fragments/targets/codex/shared/fragments/heartbeat-discipline.md",
-          "bytes": 4110,
-          "lines": 77,
-          "tokenEstimate": 1028,
+          "bytes": 4435,
+          "lines": 83,
+          "tokenEstimate": 1109,
+          "includeCount": 1
+        },
+        {
+          "kind": "fragment",
+          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
+          "bytes": 2537,
+          "lines": 46,
+          "tokenEstimate": 635,
           "includeCount": 1
         },
         {
@@ -1091,18 +1248,18 @@
         },
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/shared/fragments/worktree-discipline.md",
-          "bytes": 1362,
-          "lines": 29,
-          "tokenEstimate": 341,
+          "path": "paperclips/fragments/profiles/handoff.md",
+          "bytes": 1342,
+          "lines": 28,
+          "tokenEstimate": 336,
           "includeCount": 1
         },
         {
           "kind": "fragment",
-          "path": "paperclips/fragments/profiles/handoff.md",
-          "bytes": 727,
-          "lines": 25,
-          "tokenEstimate": 182,
+          "path": "paperclips/fragments/targets/codex/local/agent-roster.md",
+          "bytes": 874,
+          "lines": 17,
+          "tokenEstimate": 219,
           "includeCount": 1
         },
         {

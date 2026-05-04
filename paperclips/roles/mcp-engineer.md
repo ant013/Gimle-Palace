@@ -87,6 +87,7 @@ Audit: `docs/mcp/auth-threat-model.md` — update on every transport / exposure 
 
 <!-- @include fragments/shared/fragments/heartbeat-discipline.md -->
 <!-- @include fragments/profiles/handoff.md -->
+<!-- @include fragments/local/agent-roster.md -->
 
 <!-- @include fragments/shared/fragments/language.md -->
 

@@ -1,4 +1,13 @@
 {
   "schemaVersion": 1,
-  "entries": []
+  "entries": [
+    {
+      "rule": "bundle-size-growth",
+      "roleId": "codex:cx-code-reviewer",
+      "path": "paperclips/dist/codex/cx-code-reviewer.md",
+      "reason": "Closes missing Codex reviewer handoff/compliance gate; smaller shared fragments and target roster already applied.",
+      "owner": "CTO",
+      "reviewAfter": "2026-06-15"
+    }
+  ]
 }

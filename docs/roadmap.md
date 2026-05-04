@@ -55,10 +55,11 @@ When all rows below are ✅, palace-mcp can index the entire UW production ecosy
 | C1 | Watchdog handoff detector (Phase 1 alert-only) | ✅ | GIM-181 | `services/watchdog/*` | Detective half of atomic-handoff strategy; merged `f2f05c4` |
 | C2 | Multi-repo SPM ingest (full slice — Claude end-to-end) | 🚧 | GIM-182 | `services/palace-mcp/src/palace_mcp/{memory/bundle.py,code/find_references.py,ingest/runner.py,git/path_resolver.py}`, `services/palace-mcp/scripts/`, `docs/runbooks/multi-repo-spm-ingest.md` | Originally split (Claude=spec, CX=impl); operator decision 2026-05-03 reassigned to Claude end-to-end. Spec at `docs/superpowers/specs/2026-05-03-GIM-182-multi-repo-spm-ingest-design.md` (1237 LOC, rev2). |
 | C3 | Watchdog handoff detector — Opus nudge follow-up | ✅ | GIM-183 | `services/watchdog/*` | 3 follow-ups merged `365c9c4` (PR #81): server-Date anchoring, 4 missing JSONL events emitted, e2e lifecycle test. |
-| C4 | iMac post-merge auto-deploy | 📋 | TBD | `paperclips/scripts/imac-deploy-listener.{sh,plist}`, webhook handler | Removes manual `imac-deploy.sh` step after every merge |
-| C5 | `palace.code.semantic_search` | 📋 | TBD | `services/palace-mcp/src/palace_mcp/code/semantic_search.py` | Deferred Slice 5 of original USE-BUILT; vector or hybrid search composite |
+| C4 | Git History Harvester (Extractor #22) — Phase 2 prereq | 📋 spec+plan ready | GIM-186 | `services/palace-mcp/src/palace_mcp/extractors/git_history/`, `services/palace-mcp/tests/extractors/{unit,integration,fixtures}/`, runbook | Foundation for 6 historical extractors (#11/#12/#26/#32/#43/#44). Spec rev2 (1255 LOC) + plan (2430 LOC, 13 TDD tasks) committed on `feature/GIM-186-git-history-harvester`. **Awaiting Claude CTO availability after GIM-182 closes** — no team-chain trigger yet. |
+| C5 | iMac post-merge auto-deploy | 📋 | TBD | `paperclips/scripts/imac-deploy-listener.{sh,plist}`, webhook handler | Removes manual `imac-deploy.sh` step after every merge |
+| C6 | `palace.code.semantic_search` | 📋 | TBD | `services/palace-mcp/src/palace_mcp/code/semantic_search.py` | Deferred Slice 5 of original USE-BUILT; vector or hybrid search composite |
 
-C2 (GIM-182) is the **launch-critical Claude item** — must reach ✅ before launch boundary closes. C3/C4/C5 are independent and not launch-blocking.
+C2 (GIM-182) is the **launch-critical Claude item** — must reach ✅ before launch boundary closes. C3/C4/C5/C6 are independent and not launch-blocking. C4 (GIM-186) is fully spec'd + plan'd; ready for team-chain trigger when CTO frees from GIM-182.
 
 ### Already merged (Phase 1 foundation)
 
