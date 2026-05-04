@@ -165,6 +165,48 @@ class TestSymbolIndexClangPaths:
 
         assert normalized == "Pods/Foo/Foo.c"
 
+    def test_normalize_deriveddata_path_that_resolves_back_to_repo(
+        self, tmp_path: Path
+    ) -> None:
+        repo = tmp_path / "repo"
+        repo_file = repo / "Sources/UwMiniApp/main.c"
+        repo_file.parent.mkdir(parents=True)
+        repo_file.write_text("int main(void) { return 0; }\n")
+
+        derived_file = (
+            tmp_path
+            / "DerivedData/Build/Intermediates.noindex/UwMini.build/Debug-iphonesimulator/UwMini.build/Objects-normal/arm64/main.c"
+        )
+        derived_file.parent.mkdir(parents=True)
+        derived_file.symlink_to(repo_file)
+
+        normalized = _normalize_repo_relative_path(str(derived_file), repo)
+
+        assert normalized == "Sources/UwMiniApp/main.c"
+
+    def test_normalize_symlinked_project_path_when_feasible(
+        self, tmp_path: Path
+    ) -> None:
+        repo_real = tmp_path / "repo-real"
+        repo_file = repo_real / "Sources/UwMiniCore/Math/Vector.cpp"
+        repo_file.parent.mkdir(parents=True)
+        repo_file.write_text("int vector_length(int x, int y) { return x + y; }\n")
+
+        repo_link = tmp_path / "repo-link"
+        try:
+            repo_link.symlink_to(repo_real, target_is_directory=True)
+        except OSError:
+            pytest.skip(
+                "symlinked project path normalization is infeasible on this filesystem"
+            )
+
+        normalized = _normalize_repo_relative_path(
+            str(repo_link / "Sources/UwMiniCore/Math/Vector.cpp"),
+            repo_link,
+        )
+
+        assert normalized == "Sources/UwMiniCore/Math/Vector.cpp"
+
     def test_normalize_system_path_returns_none(self, tmp_path: Path) -> None:
         repo = tmp_path / "repo"
         repo.mkdir()
