@@ -94,6 +94,11 @@ Use this checklist mechanically. Mark every item `[x]`, `[ ]`, or `[N/A]`.
 [justification]
 ```
 
+<!-- @include fragments/shared/fragments/phase-handoff.md -->
+<!-- @include fragments/local/agent-roster.md -->
+
+<!-- @include fragments/shared/fragments/compliance-enforcement.md -->
+
 <!-- @include fragments/codex/runtime.md -->
 
 <!-- @include fragments/codex/skills-and-agents.md -->

@@ -24,6 +24,8 @@ SCHEMA_VERSION_CURRENT: int = 1
 class Language(str, Enum):
     """Source language for a symbol occurrence."""
 
+    C = "c"
+    CPP = "cpp"
     PYTHON = "python"
     TYPESCRIPT = "typescript"
     JAVASCRIPT = "javascript"

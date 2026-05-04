@@ -88,5 +88,6 @@ Escalation always includes: what was attempted + where evidence ran out + who to
 
 <!-- @include fragments/shared/fragments/heartbeat-discipline.md -->
 <!-- @include fragments/profiles/handoff.md -->
+<!-- @include fragments/local/agent-roster.md -->
 
 <!-- @include fragments/shared/fragments/language.md -->

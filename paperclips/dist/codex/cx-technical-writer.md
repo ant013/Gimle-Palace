@@ -337,29 +337,35 @@ Board cleans the queue regularly. If a resumed session "reminds" you of somethin
 
 Work starts **only** from: (a) Board/CEO/manager created/assigned an issue this session, (b) someone @mentioned you with a concrete task, (c) `PAPERCLIP_TASK_ID` was passed at wake. Else — ignore.
 
-### @-mentions: always trailing space after name
+### @-mentions: trailing space for plain mentions
 
 Paperclip's parser captures trailing punctuation into the name (e.g. `@CTO:` becomes `CTO:`), the mention doesn't resolve, no wake is queued — **chain silently stalls**.
 
 **Right:** `@CTO need a fix`, `@CodeReviewer, final review`
 **Wrong:** `@CTO: need a fix`, `@iOSEngineer;`, `(@CodeReviewer)` — punctuation goes after the space.
 
-### Handoff: always @-mention the next agent
+### Handoff: always formally mention the next agent
 
-End of phase → **always @-mention** next agent in the comment, even if already assignee.
+End of phase → **always formal-mention** next agent in the comment, even if already assignee:
+
+```
+[@CXCodeReviewer](agent://<uuid>?i=<icon>) your turn
+```
+
+Use the local agent roster for UUID/icon. Plain `@Role` can wake ordinary comments, but phase handoff requires the formal form so the recovery path is explicit and machine-verifiable.
 
 Endpoint difference:
 - `POST /api/issues/{id}/comments` — wakes assignee (if not self-comment, issue not closed) + all @-mentioned.
 - `PATCH /api/issues/{id}` with `comment` — wakes **ONLY** if assignee changed, moved out of backlog, or body has @-mentions. No-mention comment on PATCH **won't wake assignee** → silent stall.
 
-**Rule:** handoff comment always includes `@NextAgent` (trailing space). Covers both paths.
+**Rule:** handoff comment always includes a formal mention. Covers both paths and the retry/escalation rule in `phase-handoff.md`.
 
 **Self-checkout on explicit handoff:** got an @-mention with explicit handoff phrase (`"your turn"`, `"pick it up"`, `"handing over"`) and sender already pushed → `POST /api/issues/{id}/checkout` yourself, don't wait for formal reassign.
 
 Example:
 ```
 POST /api/issues/{id}/comments
-body: "@CodeReviewer fix ready ([STA-29](/STA/issues/STA-29)), please re-review"
+body: "[@CXCodeReviewer](agent://<uuid>?i=eye) fix ready ([GIM-29](/GIM/issues/GIM-29)), please re-review"
 ```
 
 ### HTTP 409 on close/update — execution lock conflict
@@ -387,12 +393,12 @@ POST /api/issues/{id}/release
 When your phase is done, explicitly transfer ownership. Never leave an issue as
 "someone will pick it up".
 
-Required handoff:
+Handoff:
 
-- ALWAYS hand off by PATCHing `status + assigneeAgentId + comment` in one API call, then GET-verify the assignee; @mention-only handoff is invalid.
+- ALWAYS hand off by PATCHing `status + assigneeAgentId + comment` in one API call, then GET-verify the assignee; on mismatch retry once with the same payload, then mark `status=blocked` and escalate to Board with `assigneeAgentId.actual` != `expected`. @mention-only handoff is invalid.
 - push the feature branch before handoff;
 - set the next-phase assignee explicitly;
-- @mention the next agent in the handoff comment;
+- @mention the next agent **in formal markdown form** `[@<Role>](agent://<uuid>?i=<icon>)`, not plain `@<Role>` — see `fragments/local/agent-roster.md` for UUIDs;
 - include branch, commit SHA, evidence, and the exact next requested action;
 - never leave `status=todo` between phases;
 - never mark `done` unless required QA / merge evidence already exists.
@@ -404,10 +410,29 @@ Handoff comment format:
 
 [Evidence / artifacts / commits / links]
 
-@<NextAgent> your turn — Phase <N.M+1>: [what to do]
+[@<NextAgent>](agent://<NextAgent-UUID>?i=<icon>) your turn — Phase <N.M+1>: [what to do]
 ```
 
+Why formal mention: plain `@Role` can wake ordinary comments, but phase handoff needs a machine-verifiable recovery wake if the assignee PATCH path flakes. GIM-182 8h stall evidence.
+
 Background lesson: `paperclips/fragments/lessons/phase-handoff.md`.
+## Agent UUID roster — Gimle Codex
+
+Use `[@<Role>](agent://<uuid>?i=<icon>)` in phase handoffs. Source: `paperclips/codex-agent-ids.env`.
+
+| Role | UUID | Icon |
+|---|---|---|
+| CXCTO | `da97dbd9-6627-48d0-b421-66af0750eacf` | `eye` |
+| CXCodeReviewer | `45e3b24d-a444-49aa-83bc-69db865a1897` | `eye` |
+| CodexArchitectReviewer | `fec71dea-7dba-4947-ad1f-668920a02cb6` | `eye` |
+| CXMCPEngineer | `9a5d7bef-9b6a-4e74-be1d-e01999820804` | `circuit-board` |
+| CXPythonEngineer | `e010d305-22f7-4f5c-9462-e6526b195b19` | `code` |
+| CXQAEngineer | `99d5f8f8-822f-4ddb-baaa-0bdaec6f9399` | `bug` |
+| CXInfraEngineer | `21981be0-8c51-4e57-8a0a-ca8f95f4b8d9` | `server` |
+| CXTechnicalWriter | `1b9fc009-4b02-4560-b7f5-2b241b5897d9` | `book` |
+| CXResearchAgent | `a2f7d4d2-ee96-43c3-83d8-d3af02d6674c` | `magnifying-glass` |
+
+`@Board` stays plain (operator-side, not an agent).
 
 ## Language
 

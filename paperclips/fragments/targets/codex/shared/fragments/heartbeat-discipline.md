@@ -30,29 +30,35 @@ Board cleans the queue regularly. If a resumed session "reminds" you of somethin
 
 Work starts **only** from: (a) Board/CEO/manager created/assigned an issue this session, (b) someone @mentioned you with a concrete task, (c) `PAPERCLIP_TASK_ID` was passed at wake. Else — ignore.
 
-### @-mentions: always trailing space after name
+### @-mentions: trailing space for plain mentions
 
 Paperclip's parser captures trailing punctuation into the name (e.g. `@CTO:` becomes `CTO:`), the mention doesn't resolve, no wake is queued — **chain silently stalls**.
 
 **Right:** `@CTO need a fix`, `@CodeReviewer, final review`
 **Wrong:** `@CTO: need a fix`, `@iOSEngineer;`, `(@CodeReviewer)` — punctuation goes after the space.
 
-### Handoff: always @-mention the next agent
+### Handoff: always formally mention the next agent
 
-End of phase → **always @-mention** next agent in the comment, even if already assignee.
+End of phase → **always formal-mention** next agent in the comment, even if already assignee:
+
+```
+[@CXCodeReviewer](agent://<uuid>?i=<icon>) your turn
+```
+
+Use the local agent roster for UUID/icon. Plain `@Role` can wake ordinary comments, but phase handoff requires the formal form so the recovery path is explicit and machine-verifiable.
 
 Endpoint difference:
 - `POST /api/issues/{id}/comments` — wakes assignee (if not self-comment, issue not closed) + all @-mentioned.
 - `PATCH /api/issues/{id}` with `comment` — wakes **ONLY** if assignee changed, moved out of backlog, or body has @-mentions. No-mention comment on PATCH **won't wake assignee** → silent stall.
 
-**Rule:** handoff comment always includes `@NextAgent` (trailing space). Covers both paths.
+**Rule:** handoff comment always includes a formal mention. Covers both paths and the retry/escalation rule in `phase-handoff.md`.
 
 **Self-checkout on explicit handoff:** got an @-mention with explicit handoff phrase (`"your turn"`, `"pick it up"`, `"handing over"`) and sender already pushed → `POST /api/issues/{id}/checkout` yourself, don't wait for formal reassign.
 
 Example:
 ```
 POST /api/issues/{id}/comments
-body: "@CodeReviewer fix ready ([STA-29](/STA/issues/STA-29)), please re-review"
+body: "[@CXCodeReviewer](agent://<uuid>?i=eye) fix ready ([GIM-29](/GIM/issues/GIM-29)), please re-review"
 ```
 
 ### HTTP 409 on close/update — execution lock conflict

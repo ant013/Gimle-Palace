@@ -299,12 +299,12 @@ Why: team checkouts drive deploys/observability for their own runtime. Incident
 GIM-48 (2026-04-18).
 ## Evidence rigor
 
-Paste exact tool output (not paraphrase). For "all errors pre-existing" claims, show line counts before and after stash:
+Paste exact tool output. For "all errors pre-existing" claims, show before/after stash counts:
 
     git stash; uv run mypy --strict src/ 2>&1 | wc -l
     git stash pop; uv run mypy --strict src/ 2>&1 | wc -l
 
-CR Phase 3.1 independently re-runs and pastes its own output. Mismatch > ±1 line → REQUEST CHANGES.
+CR Phase 3.1 re-runs and pastes output. Mismatch > ±1 line → REQUEST CHANGES.
 
 ## Scope audit
 
@@ -314,29 +314,42 @@ Before APPROVE, run:
 
 Every file must trace to a spec task. Outliers → REQUEST CHANGES.
 
+If diff touches `tests/integration/` or another env-gated test dir, pytest evidence MUST include that dir with pass-counter:
+
+    uv run pytest tests/integration/test_<file>.py -m integration -v
+
+Aggregate counts excluding that dir do NOT satisfy CRITICAL test-additions. GIM-182 evidence: CR approved integration tests that never ran because env fixtures skipped silently.
+
 ## Anti-rubber-stamp (iron rule)
 
-Full compliance checklist with `[x]` + evidence quote for every item required. `[ ]` needs BLOCKER explanation.
-
-Forbidden: "LGTM" without full table; `[x]` without evidence; "I checked in my head".
-
-Bug found in prod → add new checklist item → next PR touching same files checks it mechanically.
+Full checklist required: `[x]` needs evidence quote; `[ ]` needs BLOCKER explanation. Forbidden: bare "LGTM", `[x]` without evidence, "checked in my head". Prod bug → add checklist item for the next PR touching same files.
 
 ## MCP wire-contract test
 
-Any `@mcp.tool` / passthrough-registered tool MUST have at least one test using a real MCP HTTP client (`streamable_http_client`): assert tool in `tools/list`, call succeeds with correct args, call fails with wrong args.
+Any `@mcp.tool` / passthrough tool MUST have real MCP HTTP coverage (`streamable_http_client`): tool appears in `tools/list`, succeeds with valid args, fails with invalid args.
 
-Mocks at FastMCP signature-binding level do not count. See `tests/mcp/` for reference pattern.
+FastMCP signature-binding mocks do not count. See `tests/mcp/`.
 
-CR Phase 3.1: PR adds/modifies `@mcp.tool` with no `streamable_http_client` test → REQUEST CHANGES.
+**Failure-path tests must assert the exact documented failure contract.** For Palace JSON envelopes, assert exact `error_code`, not just "no TypeError":
+
+    # bad — tautological; passes whether error_code is right or wrong:
+    if result.isError:
+        assert "TypeError" not in error_text
+
+    # good — validates canonical error_code:
+    payload = json.loads(result.content[0].text)
+    assert payload["ok"] is False
+    assert payload["error_code"] == "bundle_not_found"
+
+Tools commonly return product errors inside `content` with `result.isError == False`; `if result.isError:` may never run. GIM-182: 4 wire-tests passed while verifying nothing.
+
+**Success-path required too** — at least one wire-test must call valid setup and assert `payload["ok"] is True`. Error-only wire suites are incomplete.
+
+CR Phase 3.1: new/modified `@mcp.tool` without `streamable_http_client` test, or with tautological assertion → REQUEST CHANGES.
 
 ## Phase 4.2 squash-merge — CTO-only
 
-Only CTO calls `gh pr merge`. Other roles stop after Phase 4.1 PASS:
-they may comment, push final fixes, never merge.
-
-Why: shared `ant013` GH token; branch protection cannot enforce actor.
-See memory `feedback_single_token_review_gate`.
+Only CTO calls `gh pr merge`. Other roles stop after Phase 4.1 PASS: comment, push final fixes, never merge. Reason: shared `ant013` GH token; branch protection cannot enforce actor. See memory `feedback_single_token_review_gate`.
 
 ## Fragment edits go through PR
 
@@ -383,29 +396,35 @@ Board cleans the queue regularly. If a resumed session "reminds" you of somethin
 
 Work starts **only** from: (a) Board/CEO/manager created/assigned an issue this session, (b) someone @mentioned you with a concrete task, (c) `PAPERCLIP_TASK_ID` was passed at wake. Else — ignore.
 
-### @-mentions: always trailing space after name
+### @-mentions: trailing space for plain mentions
 
 Paperclip's parser captures trailing punctuation into the name (e.g. `@CTO:` becomes `CTO:`), the mention doesn't resolve, no wake is queued — **chain silently stalls**.
 
 **Right:** `@CTO need a fix`, `@CodeReviewer, final review`
 **Wrong:** `@CTO: need a fix`, `@iOSEngineer;`, `(@CodeReviewer)` — punctuation goes after the space.
 
-### Handoff: always @-mention the next agent
+### Handoff: always formally mention the next agent
 
-End of phase → **always @-mention** next agent in the comment, even if already assignee.
+End of phase → **always formal-mention** next agent in the comment, even if already assignee:
+
+```
+[@CodeReviewer](agent://<uuid>?i=<icon>) your turn
+```
+
+Use the local agent roster for UUID/icon. Plain `@Role` can wake ordinary comments, but phase handoff requires the formal form so the recovery path is explicit and machine-verifiable.
 
 Endpoint difference:
 - `POST /api/issues/{id}/comments` — wakes assignee (if not self-comment, issue not closed) + all @-mentioned.
 - `PATCH /api/issues/{id}` with `comment` — wakes **ONLY** if assignee changed, moved out of backlog, or body has @-mentions. No-mention comment on PATCH **won't wake assignee** → silent stall.
 
-**Rule:** handoff comment always includes `@NextAgent` (trailing space). Covers both paths.
+**Rule:** handoff comment always includes a formal mention. Covers both paths and the retry/escalation rule in `phase-handoff.md`.
 
 **Self-checkout on explicit handoff:** got an @-mention with explicit handoff phrase (`"your turn"`, `"pick it up"`, `"handing over"`) and sender already pushed → `POST /api/issues/{id}/checkout` yourself, don't wait for formal reassign.
 
 Example:
 ```
 POST /api/issues/{id}/comments
-body: "@CodeReviewer fix ready ([STA-29](/STA/issues/STA-29)), please re-review"
+body: "[@CodeReviewer](agent://<uuid>?i=eye) fix ready ([STA-29](/STA/issues/STA-29)), please re-review"
 ```
 
 ### HTTP 409 on close/update — execution lock conflict
@@ -433,12 +452,12 @@ POST /api/issues/{id}/release
 When your phase is done, explicitly transfer ownership. Never leave an issue as
 "someone will pick it up".
 
-Required handoff:
+Handoff:
 
-- ALWAYS hand off by PATCHing `status + assigneeAgentId + comment` in one API call, then GET-verify the assignee; @mention-only handoff is invalid.
+- ALWAYS hand off by PATCHing `status + assigneeAgentId + comment` in one API call, then GET-verify the assignee; on mismatch retry once with the same payload, then mark `status=blocked` and escalate to Board with `assigneeAgentId.actual` != `expected`. @mention-only handoff is invalid.
 - push the feature branch before handoff;
 - set the next-phase assignee explicitly;
-- @mention the next agent in the handoff comment;
+- @mention the next agent **in formal markdown form** `[@<Role>](agent://<uuid>?i=<icon>)`, not plain `@<Role>` — see `fragments/local/agent-roster.md` for UUIDs;
 - include branch, commit SHA, evidence, and the exact next requested action;
 - never leave `status=todo` between phases;
 - never mark `done` unless required QA / merge evidence already exists.
@@ -450,10 +469,31 @@ Handoff comment format:
 
 [Evidence / artifacts / commits / links]
 
-@<NextAgent> your turn — Phase <N.M+1>: [what to do]
+[@<NextAgent>](agent://<NextAgent-UUID>?i=<icon>) your turn — Phase <N.M+1>: [what to do]
 ```
 
+Why formal mention: plain `@Role` can wake ordinary comments, but phase handoff needs a machine-verifiable recovery wake if the assignee PATCH path flakes. GIM-182 8h stall evidence.
+
 Background lesson: `paperclips/fragments/lessons/phase-handoff.md`.
+## Agent UUID roster — Gimle Claude
+
+Use `[@<Role>](agent://<uuid>?i=<icon>)` in phase handoffs. Source: `paperclips/deploy-agents.sh`.
+
+| Role | UUID | Icon |
+|---|---|---|
+| CTO | `7fb0fdbb-e17f-4487-a4da-16993a907bec` | `eye` |
+| CodeReviewer | `bd2d7e20-7ed8-474c-91fc-353d610f4c52` | `eye` |
+| MCPEngineer | `274a0b0c-ebe8-4613-ad0e-3e745c817a97` | `circuit-board` |
+| PythonEngineer | `127068ee-b564-4b37-9370-616c81c63f35` | `code` |
+| QAEngineer | `58b68640-1e83-4d5d-978b-51a5ca9080e0` | `bug` |
+| OpusArchitectReviewer | `8d6649e2-2df6-412a-a6bc-2d94bab3b73f` | `eye` |
+| InfraEngineer | `89f8f76b-844b-4d1f-b614-edbe72a91d4b` | `server` |
+| TechnicalWriter | `0e8222fd-88b9-4593-98f6-847a448b0aab` | `book` |
+| ResearchAgent | `bbcef02c-b755-4624-bba6-84f01e5d49c8` | `magnifying-glass` |
+| BlockchainEngineer | `9874ad7a-dfbc-49b0-b3ed-d0efda6453bb` | `link` |
+| SecurityAuditor | `a56f9e4a-ef9c-46d4-a736-1db5e19bbde4` | `shield` |
+
+`@Board` stays plain (operator-side, not an agent).
 # Phase review discipline
 
 ## Phase 3.1 — Plan vs Implementation file-structure check
