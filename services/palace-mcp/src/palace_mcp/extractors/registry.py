@@ -10,6 +10,7 @@ from __future__ import annotations
 from palace_mcp.extractors.base import BaseExtractor
 from palace_mcp.extractors.codebase_memory_bridge import CodebaseMemoryBridgeExtractor
 from palace_mcp.extractors.heartbeat import HeartbeatExtractor
+from palace_mcp.extractors.symbol_index_clang import SymbolIndexClang
 from palace_mcp.extractors.symbol_index_java import SymbolIndexJava
 from palace_mcp.extractors.symbol_index_python import SymbolIndexPython
 from palace_mcp.extractors.symbol_index_solidity import SymbolIndexSolidity
@@ -24,6 +25,7 @@ EXTRACTORS: dict[str, BaseExtractor] = {
     "symbol_index_java": SymbolIndexJava(),
     "symbol_index_solidity": SymbolIndexSolidity(),
     "symbol_index_swift": SymbolIndexSwift(),
+    "symbol_index_clang": SymbolIndexClang(),
 }
 
 

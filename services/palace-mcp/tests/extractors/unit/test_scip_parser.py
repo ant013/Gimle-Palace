@@ -18,12 +18,6 @@ from palace_mcp.extractors.scip_parser import (
 
 
 class TestFindScipPath:
-    def test_override_takes_precedence(self) -> None:
-        settings = MagicMock()
-        settings.palace_scip_index_paths = {"gimle": "/default/path.scip"}
-        result = FindScipPath.resolve("gimle", settings, override="/override/path.scip")
-        assert result == Path("/override/path.scip")
-
     def test_settings_dict_lookup(self) -> None:
         settings = MagicMock()
         settings.palace_scip_index_paths = {"gimle": "/repos/gimle/scip/index.scip"}
@@ -37,6 +31,8 @@ class TestFindScipPath:
             FindScipPath.resolve("unknown_project", settings)
         assert "unknown_project" in str(exc_info.value)
         assert exc_info.value.error_code == "scip_path_required"
+        assert "PALACE_SCIP_INDEX_PATHS" in exc_info.value.action_required
+        assert "scip_path" not in exc_info.value.action_required
 
 
 @pytest.mark.parametrize(
