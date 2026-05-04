@@ -11,7 +11,7 @@ import pygit2
 # Allow opening repos owned by other users — bind mounts in Docker often present
 # as root-owned inside the container even when the process runs as non-root.
 # Mirrors the GIT_CONFIG_VALUE_0=* safe.directory approach used by palace.git.* tools.
-pygit2.option(pygit2.GIT_OPT_SET_OWNER_VALIDATION, 0)
+pygit2.option(pygit2.GIT_OPT_SET_OWNER_VALIDATION, False)  # type: ignore[call-overload]
 
 
 class CommitNotFoundError(Exception):
