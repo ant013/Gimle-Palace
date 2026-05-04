@@ -59,10 +59,13 @@ async def load_git_history_checkpoint(
             updated_at=datetime.now(timezone.utc),
         )
     row = result.records[0]
+    raw_updated_at = row["updated_at"]
     return GitHistoryCheckpoint(
         project_id=row["project_id"],
         last_commit_sha=row["last_commit_sha"],
         last_pr_updated_at=row["last_pr_updated_at"],
         last_phase_completed=row["last_phase_completed"],
-        updated_at=row["updated_at"],
+        updated_at=raw_updated_at.to_native()
+        if hasattr(raw_updated_at, "to_native")
+        else raw_updated_at,
     )

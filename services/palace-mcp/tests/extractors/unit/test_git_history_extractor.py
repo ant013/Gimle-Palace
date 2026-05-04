@@ -23,29 +23,44 @@ def _make_ctx(repo_path: Path) -> ExtractorRunContext:
 @pytest.mark.asyncio
 async def test_run_returns_extractor_stats(tmp_path: Path):
     """Smoke: extractor returns ExtractorStats with both counters set."""
-    from tests.extractors.unit.test_git_history_pygit2_walker import _build_synthetic_repo
+    from tests.extractors.unit.test_git_history_pygit2_walker import (
+        _build_synthetic_repo,
+    )
+
     repo_path = _build_synthetic_repo(tmp_path, n_commits=2)
 
     fake_driver = MagicMock()
     fake_driver.execute_query = AsyncMock(return_value=MagicMock(records=[]))
-    fake_settings = MagicMock(github_token=None,
-                              git_history_tantivy_index_path=tmp_path / "tnt")
+    fake_settings = MagicMock(
+        github_token=None, git_history_tantivy_index_path=tmp_path / "tnt"
+    )
 
-    with patch("palace_mcp.mcp_server.get_driver", return_value=fake_driver), \
-         patch("palace_mcp.mcp_server.get_settings", return_value=fake_settings), \
-         patch("palace_mcp.extractors.git_history.extractor.ensure_custom_schema",
-               new=AsyncMock()), \
-         patch("palace_mcp.extractors.git_history.extractor._get_previous_error_code",
-               new=AsyncMock(return_value=None)), \
-         patch("palace_mcp.extractors.git_history.extractor.check_resume_budget"), \
-         patch("palace_mcp.extractors.git_history.extractor.check_phase_budget"), \
-         patch("palace_mcp.extractors.git_history.extractor.create_ingest_run",
-               new=AsyncMock()), \
-         patch("palace_mcp.extractors.git_history.extractor.finalize_ingest_run",
-               new=AsyncMock()):
+    with (
+        patch("palace_mcp.mcp_server.get_driver", return_value=fake_driver),
+        patch("palace_mcp.mcp_server.get_settings", return_value=fake_settings),
+        patch(
+            "palace_mcp.extractors.git_history.extractor.ensure_custom_schema",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.git_history.extractor._get_previous_error_code",
+            new=AsyncMock(return_value=None),
+        ),
+        patch("palace_mcp.extractors.git_history.extractor.check_resume_budget"),
+        patch("palace_mcp.extractors.git_history.extractor.check_phase_budget"),
+        patch(
+            "palace_mcp.extractors.git_history.extractor.create_ingest_run",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.git_history.extractor.finalize_ingest_run",
+            new=AsyncMock(),
+        ),
+    ):
         extractor = GitHistoryExtractor()
-        stats = await extractor.run(graphiti=MagicMock(),
-                                    ctx=_make_ctx(Path(repo_path)))
+        stats = await extractor.run(
+            graphiti=MagicMock(), ctx=_make_ctx(Path(repo_path))
+        )
     assert isinstance(stats, ExtractorStats)
     assert stats.nodes_written >= 2  # at least 2 commits
     assert stats.edges_written >= 4  # AUTHORED_BY + COMMITTED_BY × 2 commits
@@ -55,29 +70,46 @@ async def test_run_returns_extractor_stats(tmp_path: Path):
 async def test_run_skips_phase2_when_no_github_token(tmp_path: Path, caplog):
     """When PALACE_GITHUB_TOKEN unset, Phase 2 emits skip event + Phase 1 still runs."""
     import logging
-    from tests.extractors.unit.test_git_history_pygit2_walker import _build_synthetic_repo
+    from tests.extractors.unit.test_git_history_pygit2_walker import (
+        _build_synthetic_repo,
+    )
+
     repo_path = _build_synthetic_repo(tmp_path, n_commits=1)
     fake_driver = MagicMock()
     fake_driver.execute_query = AsyncMock(return_value=MagicMock(records=[]))
-    fake_settings = MagicMock(github_token=None,
-                              git_history_tantivy_index_path=tmp_path / "tnt")
-    with patch("palace_mcp.mcp_server.get_driver", return_value=fake_driver), \
-         patch("palace_mcp.mcp_server.get_settings", return_value=fake_settings), \
-         patch("palace_mcp.extractors.git_history.extractor.ensure_custom_schema",
-               new=AsyncMock()), \
-         patch("palace_mcp.extractors.git_history.extractor._get_previous_error_code",
-               new=AsyncMock(return_value=None)), \
-         patch("palace_mcp.extractors.git_history.extractor.check_resume_budget"), \
-         patch("palace_mcp.extractors.git_history.extractor.check_phase_budget"), \
-         patch("palace_mcp.extractors.git_history.extractor.create_ingest_run",
-               new=AsyncMock()), \
-         patch("palace_mcp.extractors.git_history.extractor.finalize_ingest_run",
-               new=AsyncMock()), \
-         caplog.at_level(logging.WARNING):
+    fake_settings = MagicMock(
+        github_token=None, git_history_tantivy_index_path=tmp_path / "tnt"
+    )
+    with (
+        patch("palace_mcp.mcp_server.get_driver", return_value=fake_driver),
+        patch("palace_mcp.mcp_server.get_settings", return_value=fake_settings),
+        patch(
+            "palace_mcp.extractors.git_history.extractor.ensure_custom_schema",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.git_history.extractor._get_previous_error_code",
+            new=AsyncMock(return_value=None),
+        ),
+        patch("palace_mcp.extractors.git_history.extractor.check_resume_budget"),
+        patch("palace_mcp.extractors.git_history.extractor.check_phase_budget"),
+        patch(
+            "palace_mcp.extractors.git_history.extractor.create_ingest_run",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.git_history.extractor.finalize_ingest_run",
+            new=AsyncMock(),
+        ),
+        caplog.at_level(logging.WARNING),
+    ):
         extractor = GitHistoryExtractor()
         await extractor.run(graphiti=MagicMock(), ctx=_make_ctx(Path(repo_path)))
-    skip_events = [r for r in caplog.records
-                   if getattr(r, "event", None) == "git_history_phase2_skipped_no_token"]
+    skip_events = [
+        r
+        for r in caplog.records
+        if getattr(r, "event", None) == "git_history_phase2_skipped_no_token"
+    ]
     assert len(skip_events) == 1
 
 
@@ -85,7 +117,10 @@ async def test_run_skips_phase2_when_no_github_token(tmp_path: Path, caplog):
 async def test_run_emits_resync_event_on_invalid_checkpoint(tmp_path: Path, caplog):
     """Force-push scenario: load checkpoint with invalid sha; walker resyncs."""
     import logging
-    from tests.extractors.unit.test_git_history_pygit2_walker import _build_synthetic_repo
+    from tests.extractors.unit.test_git_history_pygit2_walker import (
+        _build_synthetic_repo,
+    )
+
     repo_path = _build_synthetic_repo(tmp_path, n_commits=2)
 
     bogus_sha = "f" * 40
@@ -105,30 +140,45 @@ async def test_run_emits_resync_event_on_invalid_checkpoint(tmp_path: Path, capl
         return MagicMock(records=[])
 
     fake_driver.execute_query = AsyncMock(side_effect=_fake_execute)
-    fake_settings = MagicMock(github_token=None,
-                              git_history_tantivy_index_path=tmp_path / "tnt")
+    fake_settings = MagicMock(
+        github_token=None, git_history_tantivy_index_path=tmp_path / "tnt"
+    )
 
-    with patch("palace_mcp.mcp_server.get_driver", return_value=fake_driver), \
-         patch("palace_mcp.mcp_server.get_settings", return_value=fake_settings), \
-         patch("palace_mcp.extractors.git_history.extractor.ensure_custom_schema",
-               new=AsyncMock()), \
-         patch("palace_mcp.extractors.git_history.extractor._get_previous_error_code",
-               new=AsyncMock(return_value=None)), \
-         patch("palace_mcp.extractors.git_history.extractor.check_resume_budget"), \
-         patch("palace_mcp.extractors.git_history.extractor.check_phase_budget"), \
-         patch("palace_mcp.extractors.git_history.extractor.create_ingest_run",
-               new=AsyncMock()), \
-         patch("palace_mcp.extractors.git_history.extractor.finalize_ingest_run",
-               new=AsyncMock()), \
-         caplog.at_level(logging.WARNING):
+    with (
+        patch("palace_mcp.mcp_server.get_driver", return_value=fake_driver),
+        patch("palace_mcp.mcp_server.get_settings", return_value=fake_settings),
+        patch(
+            "palace_mcp.extractors.git_history.extractor.ensure_custom_schema",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.git_history.extractor._get_previous_error_code",
+            new=AsyncMock(return_value=None),
+        ),
+        patch("palace_mcp.extractors.git_history.extractor.check_resume_budget"),
+        patch("palace_mcp.extractors.git_history.extractor.check_phase_budget"),
+        patch(
+            "palace_mcp.extractors.git_history.extractor.create_ingest_run",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.git_history.extractor.finalize_ingest_run",
+            new=AsyncMock(),
+        ),
+        caplog.at_level(logging.WARNING),
+    ):
         extractor = GitHistoryExtractor()
         await extractor.run(graphiti=MagicMock(), ctx=_make_ctx(Path(repo_path)))
-    resync_events = [r for r in caplog.records
-                     if getattr(r, "event", None) == "git_history_resync_full"]
+    resync_events = [
+        r
+        for r in caplog.records
+        if getattr(r, "event", None) == "git_history_resync_full"
+    ]
     assert len(resync_events) == 1
 
 
 def test_extractor_registered_in_registry():
     from palace_mcp.extractors.registry import EXTRACTORS
+
     assert "git_history" in EXTRACTORS
     assert EXTRACTORS["git_history"].name == "git_history"

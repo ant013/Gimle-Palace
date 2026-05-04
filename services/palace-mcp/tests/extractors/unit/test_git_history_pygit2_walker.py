@@ -4,7 +4,8 @@ import pytest
 import pygit2
 
 from palace_mcp.extractors.git_history.pygit2_walker import (
-    Pygit2Walker, CommitNotFoundError,
+    Pygit2Walker,
+    CommitNotFoundError,
 )
 
 
@@ -12,7 +13,9 @@ def _build_synthetic_repo(tmp: Path, n_commits: int = 5) -> str:
     """Create a real git repo with n linear commits. Returns path."""
     repo_path = tmp / "synth-repo"
     repo = pygit2.init_repository(str(repo_path), bare=False)
-    sig = pygit2.Signature("Foo", "foo@example.com", int(datetime.now(timezone.utc).timestamp()), 0)
+    sig = pygit2.Signature(
+        "Foo", "foo@example.com", int(datetime.now(timezone.utc).timestamp()), 0
+    )
     parent: list[pygit2.Oid] = []
     for i in range(n_commits):
         blob_id = repo.create_blob(f"content-{i}".encode())

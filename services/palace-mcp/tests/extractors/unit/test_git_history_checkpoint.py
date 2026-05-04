@@ -3,9 +3,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from palace_mcp.extractors.git_history.checkpoint import (
-    write_git_history_checkpoint, load_git_history_checkpoint,
+    write_git_history_checkpoint,
+    load_git_history_checkpoint,
 )
-from palace_mcp.extractors.git_history.models import GitHistoryCheckpoint
 
 UTC_TS = datetime(2026, 5, 3, 12, 0, tzinfo=timezone.utc)
 
@@ -15,7 +15,8 @@ async def test_write_checkpoint_phase1_only():
     driver = MagicMock()
     driver.execute_query = AsyncMock(return_value=MagicMock(records=[]))
     await write_git_history_checkpoint(
-        driver, "project/gimle",
+        driver,
+        "project/gimle",
         last_commit_sha="0" * 40,
         last_pr_updated_at=None,
         last_phase_completed="phase1",
@@ -30,7 +31,8 @@ async def test_write_checkpoint_phase2_advances_pr_timestamp():
     driver = MagicMock()
     driver.execute_query = AsyncMock(return_value=MagicMock(records=[]))
     await write_git_history_checkpoint(
-        driver, "project/gimle",
+        driver,
+        "project/gimle",
         last_commit_sha="0" * 40,
         last_pr_updated_at=UTC_TS,
         last_phase_completed="phase2",

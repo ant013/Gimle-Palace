@@ -4,7 +4,8 @@ import pytest
 import respx
 
 from palace_mcp.extractors.git_history.github_client import (
-    GitHubClient, RateLimitExhausted,
+    GitHubClient,
+    RateLimitExhausted,
 )
 
 
@@ -17,7 +18,9 @@ async def test_fetch_prs_single_page():
                     "pageInfo": {"hasNextPage": False, "endCursor": None},
                     "nodes": [
                         {
-                            "number": 1, "title": "first", "body": "b",
+                            "number": 1,
+                            "title": "first",
+                            "body": "b",
                             "state": "MERGED",
                             "author": {"login": "user1", "email": "user1@example.com"},
                             "createdAt": "2026-05-01T10:00:00Z",
@@ -33,8 +36,12 @@ async def test_fetch_prs_single_page():
                         }
                     ],
                 },
-                "rateLimit": {"cost": 1, "remaining": 4999, "limit": 5000,
-                              "resetAt": "2026-05-03T13:00:00Z"},
+                "rateLimit": {
+                    "cost": 1,
+                    "remaining": 4999,
+                    "limit": 5000,
+                    "resetAt": "2026-05-03T13:00:00Z",
+                },
             }
         }
     }
@@ -52,35 +59,74 @@ async def test_fetch_prs_single_page():
 
 @pytest.mark.asyncio
 async def test_fetch_prs_pagination_two_pages():
-    page1 = {"data": {"repository": {
-        "pullRequests": {
-            "pageInfo": {"hasNextPage": True, "endCursor": "CURSOR1"},
-            "nodes": [{"number": 1, "title": "a", "body": "",
-                       "state": "OPEN", "author": {"login": "u"},
-                       "createdAt": "2026-05-01T00:00:00Z",
-                       "updatedAt": "2026-05-01T00:00:00Z",
-                       "mergedAt": None, "headRefOid": None,
-                       "baseRef": {"name": "develop"},
-                       "comments": {"totalCount": 0, "pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": []}}],
-        },
-        "rateLimit": {"cost": 1, "remaining": 4998, "limit": 5000,
-                      "resetAt": "2026-05-03T13:00:00Z"},
-    }}}
-    page2 = {"data": {"repository": {
-        "pullRequests": {
-            "pageInfo": {"hasNextPage": False, "endCursor": None},
-            "nodes": [{"number": 2, "title": "b", "body": "",
-                       "state": "MERGED", "author": {"login": "u"},
-                       "createdAt": "2026-04-30T00:00:00Z",
-                       "updatedAt": "2026-04-30T00:00:00Z",
-                       "mergedAt": "2026-04-30T00:00:00Z",
-                       "headRefOid": "0" * 40,
-                       "baseRef": {"name": "develop"},
-                       "comments": {"totalCount": 0, "pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": []}}],
-        },
-        "rateLimit": {"cost": 1, "remaining": 4997, "limit": 5000,
-                      "resetAt": "2026-05-03T13:00:00Z"},
-    }}}
+    page1 = {
+        "data": {
+            "repository": {
+                "pullRequests": {
+                    "pageInfo": {"hasNextPage": True, "endCursor": "CURSOR1"},
+                    "nodes": [
+                        {
+                            "number": 1,
+                            "title": "a",
+                            "body": "",
+                            "state": "OPEN",
+                            "author": {"login": "u"},
+                            "createdAt": "2026-05-01T00:00:00Z",
+                            "updatedAt": "2026-05-01T00:00:00Z",
+                            "mergedAt": None,
+                            "headRefOid": None,
+                            "baseRef": {"name": "develop"},
+                            "comments": {
+                                "totalCount": 0,
+                                "pageInfo": {"hasNextPage": False, "endCursor": None},
+                                "nodes": [],
+                            },
+                        }
+                    ],
+                },
+                "rateLimit": {
+                    "cost": 1,
+                    "remaining": 4998,
+                    "limit": 5000,
+                    "resetAt": "2026-05-03T13:00:00Z",
+                },
+            }
+        }
+    }
+    page2 = {
+        "data": {
+            "repository": {
+                "pullRequests": {
+                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    "nodes": [
+                        {
+                            "number": 2,
+                            "title": "b",
+                            "body": "",
+                            "state": "MERGED",
+                            "author": {"login": "u"},
+                            "createdAt": "2026-04-30T00:00:00Z",
+                            "updatedAt": "2026-04-30T00:00:00Z",
+                            "mergedAt": "2026-04-30T00:00:00Z",
+                            "headRefOid": "0" * 40,
+                            "baseRef": {"name": "develop"},
+                            "comments": {
+                                "totalCount": 0,
+                                "pageInfo": {"hasNextPage": False, "endCursor": None},
+                                "nodes": [],
+                            },
+                        }
+                    ],
+                },
+                "rateLimit": {
+                    "cost": 1,
+                    "remaining": 4997,
+                    "limit": 5000,
+                    "resetAt": "2026-05-03T13:00:00Z",
+                },
+            }
+        }
+    }
     with respx.mock:
         route = respx.post("https://api.github.com/graphql")
         route.side_effect = [
@@ -97,29 +143,57 @@ async def test_fetch_prs_pagination_two_pages():
 @pytest.mark.asyncio
 async def test_fetch_prs_stops_at_since_boundary():
     """PR with updated_at < since must NOT be yielded."""
-    fake = {"data": {"repository": {
-        "pullRequests": {
-            "pageInfo": {"hasNextPage": False, "endCursor": None},
-            "nodes": [
-                {"number": 1, "title": "newer", "body": "",
-                 "state": "OPEN", "author": {"login": "u"},
-                 "createdAt": "2026-05-03T12:00:00Z",
-                 "updatedAt": "2026-05-03T12:00:00Z",
-                 "mergedAt": None, "headRefOid": None,
-                 "baseRef": {"name": "develop"},
-                 "comments": {"totalCount": 0, "pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": []}},
-                {"number": 2, "title": "older", "body": "",
-                 "state": "MERGED", "author": {"login": "u"},
-                 "createdAt": "2026-05-01T00:00:00Z",
-                 "updatedAt": "2026-05-01T00:00:00Z",  # before since
-                 "mergedAt": "2026-05-01T00:00:00Z", "headRefOid": "0"*40,
-                 "baseRef": {"name": "develop"},
-                 "comments": {"totalCount": 0, "pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": []}},
-            ],
-        },
-        "rateLimit": {"cost": 1, "remaining": 4999, "limit": 5000,
-                      "resetAt": "2026-05-03T13:00:00Z"},
-    }}}
+    fake = {
+        "data": {
+            "repository": {
+                "pullRequests": {
+                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    "nodes": [
+                        {
+                            "number": 1,
+                            "title": "newer",
+                            "body": "",
+                            "state": "OPEN",
+                            "author": {"login": "u"},
+                            "createdAt": "2026-05-03T12:00:00Z",
+                            "updatedAt": "2026-05-03T12:00:00Z",
+                            "mergedAt": None,
+                            "headRefOid": None,
+                            "baseRef": {"name": "develop"},
+                            "comments": {
+                                "totalCount": 0,
+                                "pageInfo": {"hasNextPage": False, "endCursor": None},
+                                "nodes": [],
+                            },
+                        },
+                        {
+                            "number": 2,
+                            "title": "older",
+                            "body": "",
+                            "state": "MERGED",
+                            "author": {"login": "u"},
+                            "createdAt": "2026-05-01T00:00:00Z",
+                            "updatedAt": "2026-05-01T00:00:00Z",  # before since
+                            "mergedAt": "2026-05-01T00:00:00Z",
+                            "headRefOid": "0" * 40,
+                            "baseRef": {"name": "develop"},
+                            "comments": {
+                                "totalCount": 0,
+                                "pageInfo": {"hasNextPage": False, "endCursor": None},
+                                "nodes": [],
+                            },
+                        },
+                    ],
+                },
+                "rateLimit": {
+                    "cost": 1,
+                    "remaining": 4999,
+                    "limit": 5000,
+                    "resetAt": "2026-05-03T13:00:00Z",
+                },
+            }
+        }
+    }
     since = datetime(2026, 5, 2, tzinfo=timezone.utc)
     with respx.mock:
         respx.post("https://api.github.com/graphql").mock(
@@ -135,12 +209,22 @@ async def test_fetch_prs_stops_at_since_boundary():
 @pytest.mark.asyncio
 async def test_rate_limit_fail_fast_below_threshold():
     """remaining < 100 → raise RateLimitExhausted, NOT sleep."""
-    fake = {"data": {"repository": {
-        "pullRequests": {"pageInfo": {"hasNextPage": True, "endCursor": "C"},
-                         "nodes": []},
-        "rateLimit": {"cost": 50, "remaining": 50, "limit": 5000,
-                      "resetAt": "2026-05-03T13:00:00Z"},
-    }}}
+    fake = {
+        "data": {
+            "repository": {
+                "pullRequests": {
+                    "pageInfo": {"hasNextPage": True, "endCursor": "C"},
+                    "nodes": [],
+                },
+                "rateLimit": {
+                    "cost": 50,
+                    "remaining": 50,
+                    "limit": 5000,
+                    "resetAt": "2026-05-03T13:00:00Z",
+                },
+            }
+        }
+    }
     with respx.mock:
         respx.post("https://api.github.com/graphql").mock(
             return_value=httpx.Response(200, json=fake)
@@ -154,11 +238,22 @@ async def test_rate_limit_fail_fast_below_threshold():
 @pytest.mark.asyncio
 async def test_429_retry_with_backoff():
     """429 followed by 200 should succeed within bounded backoff."""
-    fake_ok = {"data": {"repository": {
-        "pullRequests": {"pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": []},
-        "rateLimit": {"cost": 1, "remaining": 4999, "limit": 5000,
-                      "resetAt": "2026-05-03T13:00:00Z"},
-    }}}
+    fake_ok = {
+        "data": {
+            "repository": {
+                "pullRequests": {
+                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    "nodes": [],
+                },
+                "rateLimit": {
+                    "cost": 1,
+                    "remaining": 4999,
+                    "limit": 5000,
+                    "resetAt": "2026-05-03T13:00:00Z",
+                },
+            }
+        }
+    }
     with respx.mock:
         route = respx.post("https://api.github.com/graphql")
         route.side_effect = [

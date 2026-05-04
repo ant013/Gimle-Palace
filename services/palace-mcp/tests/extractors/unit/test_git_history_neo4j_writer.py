@@ -3,7 +3,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from palace_mcp.extractors.git_history.neo4j_writer import (
-    write_commit_with_author, _MERGE_AUTHOR_CYPHER, _MERGE_COMMIT_CYPHER,
+    write_commit_with_author,
+    _MERGE_AUTHOR_CYPHER,
+    _MERGE_COMMIT_CYPHER,
 )
 
 UTC_TS = datetime(2026, 5, 3, 12, 0, tzinfo=timezone.utc)
@@ -29,10 +31,16 @@ async def test_write_commit_executes_two_queries_per_commit():
     driver = MagicMock()
     driver.execute_query = AsyncMock(return_value=MagicMock(records=[]))
     commit_dict = {
-        "sha": "0" * 40, "author_email": "a@b.com", "author_name": "A",
-        "committer_email": "a@b.com", "committer_name": "A",
-        "message_subject": "x", "message_full_truncated": "x",
-        "committed_at": UTC_TS, "parents": (), "touched_files": ["f.py"],
+        "sha": "0" * 40,
+        "author_email": "a@b.com",
+        "author_name": "A",
+        "committer_email": "a@b.com",
+        "committer_name": "A",
+        "message_subject": "x",
+        "message_full_truncated": "x",
+        "committed_at": UTC_TS,
+        "parents": (),
+        "touched_files": ["f.py"],
     }
     await write_commit_with_author(driver, "project/gimle", commit_dict, is_bot=False)
     assert driver.execute_query.await_count >= 2

@@ -2,6 +2,7 @@
 
 See spec §9.2. Uses testcontainers Neo4j (or COMPOSE_NEO4J_URI reuse).
 """
+
 from __future__ import annotations
 
 import json
@@ -31,7 +32,9 @@ def _make_ctx(repo_path: Path, run_id: str = "integ-run-gh-001") -> ExtractorRun
     )
 
 
-def _patch_infra(driver: AsyncDriver, github_token: str | None, tantivy_path: Path) -> object:
+def _patch_infra(
+    driver: AsyncDriver, github_token: str | None, tantivy_path: Path
+) -> object:
     settings = MagicMock(
         github_token=github_token,
         git_history_tantivy_index_path=tantivy_path,
@@ -45,8 +48,10 @@ def _patch_infra(driver: AsyncDriver, github_token: str | None, tantivy_path: Pa
         check_phase_budget=MagicMock(),
         create_ingest_run=AsyncMock(),
         finalize_ingest_run=AsyncMock(),
-        **{"palace_mcp.mcp_server.get_driver": MagicMock(return_value=driver),
-           "palace_mcp.mcp_server.get_settings": MagicMock(return_value=settings)},
+        **{
+            "palace_mcp.mcp_server.get_driver": MagicMock(return_value=driver),
+            "palace_mcp.mcp_server.get_settings": MagicMock(return_value=settings),
+        },
     )
 
 
@@ -56,7 +61,10 @@ async def test_full_ingest_writes_commits_and_authors(
     driver: AsyncDriver, tmp_path: Path
 ) -> None:
     """End-to-end Phase 1: synthetic repo → :Commit + :Author nodes in Neo4j."""
-    from tests.extractors.unit.test_git_history_pygit2_walker import _build_synthetic_repo
+    from tests.extractors.unit.test_git_history_pygit2_walker import (
+        _build_synthetic_repo,
+    )
+
     repo_path = _build_synthetic_repo(tmp_path / "repo", n_commits=3)
 
     settings = MagicMock(
@@ -65,18 +73,28 @@ async def test_full_ingest_writes_commits_and_authors(
         git_history_max_commits_per_run=200_000,
     )
 
-    with patch("palace_mcp.mcp_server.get_driver", return_value=driver), \
-         patch("palace_mcp.mcp_server.get_settings", return_value=settings), \
-         patch("palace_mcp.extractors.git_history.extractor.ensure_custom_schema",
-               new=AsyncMock()), \
-         patch("palace_mcp.extractors.git_history.extractor._get_previous_error_code",
-               new=AsyncMock(return_value=None)), \
-         patch("palace_mcp.extractors.git_history.extractor.check_resume_budget"), \
-         patch("palace_mcp.extractors.git_history.extractor.check_phase_budget"), \
-         patch("palace_mcp.extractors.git_history.extractor.create_ingest_run",
-               new=AsyncMock()), \
-         patch("palace_mcp.extractors.git_history.extractor.finalize_ingest_run",
-               new=AsyncMock()):
+    with (
+        patch("palace_mcp.mcp_server.get_driver", return_value=driver),
+        patch("palace_mcp.mcp_server.get_settings", return_value=settings),
+        patch(
+            "palace_mcp.extractors.git_history.extractor.ensure_custom_schema",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.git_history.extractor._get_previous_error_code",
+            new=AsyncMock(return_value=None),
+        ),
+        patch("palace_mcp.extractors.git_history.extractor.check_resume_budget"),
+        patch("palace_mcp.extractors.git_history.extractor.check_phase_budget"),
+        patch(
+            "palace_mcp.extractors.git_history.extractor.create_ingest_run",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.git_history.extractor.finalize_ingest_run",
+            new=AsyncMock(),
+        ),
+    ):
         extractor = GitHistoryExtractor()
         stats = await extractor.run(graphiti=MagicMock(), ctx=_make_ctx(repo_path))
 
@@ -103,7 +121,10 @@ async def test_incremental_second_run_writes_zero_new_commits(
     driver: AsyncDriver, tmp_path: Path
 ) -> None:
     """Second run with same HEAD sha writes no new Commit nodes."""
-    from tests.extractors.unit.test_git_history_pygit2_walker import _build_synthetic_repo
+    from tests.extractors.unit.test_git_history_pygit2_walker import (
+        _build_synthetic_repo,
+    )
+
     repo_path = _build_synthetic_repo(tmp_path / "repo", n_commits=2)
 
     settings = MagicMock(
@@ -112,22 +133,27 @@ async def test_incremental_second_run_writes_zero_new_commits(
         git_history_max_commits_per_run=200_000,
     )
 
-    run_kwargs = dict(
-        **{
-            "palace_mcp.mcp_server.get_driver": driver,
-            "palace_mcp.mcp_server.get_settings": settings,
-        }
-    )
-
     patches = [
         patch("palace_mcp.mcp_server.get_driver", return_value=driver),
         patch("palace_mcp.mcp_server.get_settings", return_value=settings),
-        patch("palace_mcp.extractors.git_history.extractor.ensure_custom_schema", new=AsyncMock()),
-        patch("palace_mcp.extractors.git_history.extractor._get_previous_error_code", new=AsyncMock(return_value=None)),
+        patch(
+            "palace_mcp.extractors.git_history.extractor.ensure_custom_schema",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.git_history.extractor._get_previous_error_code",
+            new=AsyncMock(return_value=None),
+        ),
         patch("palace_mcp.extractors.git_history.extractor.check_resume_budget"),
         patch("palace_mcp.extractors.git_history.extractor.check_phase_budget"),
-        patch("palace_mcp.extractors.git_history.extractor.create_ingest_run", new=AsyncMock()),
-        patch("palace_mcp.extractors.git_history.extractor.finalize_ingest_run", new=AsyncMock()),
+        patch(
+            "palace_mcp.extractors.git_history.extractor.create_ingest_run",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.git_history.extractor.finalize_ingest_run",
+            new=AsyncMock(),
+        ),
     ]
 
     extractor = GitHistoryExtractor()
@@ -173,7 +199,10 @@ async def test_author_email_lowercased_on_merge(
     driver: AsyncDriver, tmp_path: Path
 ) -> None:
     """Two commits with same email in different case produce one :Author node."""
-    from tests.extractors.unit.test_git_history_pygit2_walker import _build_synthetic_repo
+    from tests.extractors.unit.test_git_history_pygit2_walker import (
+        _build_synthetic_repo,
+    )
+
     repo_path = _build_synthetic_repo(tmp_path / "repo", n_commits=2)
 
     settings = MagicMock(
@@ -182,14 +211,28 @@ async def test_author_email_lowercased_on_merge(
         git_history_max_commits_per_run=200_000,
     )
 
-    with patch("palace_mcp.mcp_server.get_driver", return_value=driver), \
-         patch("palace_mcp.mcp_server.get_settings", return_value=settings), \
-         patch("palace_mcp.extractors.git_history.extractor.ensure_custom_schema", new=AsyncMock()), \
-         patch("palace_mcp.extractors.git_history.extractor._get_previous_error_code", new=AsyncMock(return_value=None)), \
-         patch("palace_mcp.extractors.git_history.extractor.check_resume_budget"), \
-         patch("palace_mcp.extractors.git_history.extractor.check_phase_budget"), \
-         patch("palace_mcp.extractors.git_history.extractor.create_ingest_run", new=AsyncMock()), \
-         patch("palace_mcp.extractors.git_history.extractor.finalize_ingest_run", new=AsyncMock()):
+    with (
+        patch("palace_mcp.mcp_server.get_driver", return_value=driver),
+        patch("palace_mcp.mcp_server.get_settings", return_value=settings),
+        patch(
+            "palace_mcp.extractors.git_history.extractor.ensure_custom_schema",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.git_history.extractor._get_previous_error_code",
+            new=AsyncMock(return_value=None),
+        ),
+        patch("palace_mcp.extractors.git_history.extractor.check_resume_budget"),
+        patch("palace_mcp.extractors.git_history.extractor.check_phase_budget"),
+        patch(
+            "palace_mcp.extractors.git_history.extractor.create_ingest_run",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.git_history.extractor.finalize_ingest_run",
+            new=AsyncMock(),
+        ),
+    ):
         extractor = GitHistoryExtractor()
         await extractor.run(graphiti=MagicMock(), ctx=_make_ctx(repo_path))
 
@@ -206,11 +249,12 @@ async def test_author_email_lowercased_on_merge(
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_phase2_pr_ingest_with_respx(
-    driver: AsyncDriver, tmp_path: Path
-) -> None:
+async def test_phase2_pr_ingest_with_respx(driver: AsyncDriver, tmp_path: Path) -> None:
     """Phase 2 with mocked GitHub GraphQL writes :PR + :PRComment nodes."""
-    from tests.extractors.unit.test_git_history_pygit2_walker import _build_synthetic_repo
+    from tests.extractors.unit.test_git_history_pygit2_walker import (
+        _build_synthetic_repo,
+    )
+
     repo_path = _build_synthetic_repo(tmp_path / "repo", n_commits=1)
 
     fixture_response = json.loads(
@@ -223,15 +267,29 @@ async def test_phase2_pr_ingest_with_respx(
         git_history_max_commits_per_run=200_000,
     )
 
-    with respx.mock, \
-         patch("palace_mcp.mcp_server.get_driver", return_value=driver), \
-         patch("palace_mcp.mcp_server.get_settings", return_value=settings), \
-         patch("palace_mcp.extractors.git_history.extractor.ensure_custom_schema", new=AsyncMock()), \
-         patch("palace_mcp.extractors.git_history.extractor._get_previous_error_code", new=AsyncMock(return_value=None)), \
-         patch("palace_mcp.extractors.git_history.extractor.check_resume_budget"), \
-         patch("palace_mcp.extractors.git_history.extractor.check_phase_budget"), \
-         patch("palace_mcp.extractors.git_history.extractor.create_ingest_run", new=AsyncMock()), \
-         patch("palace_mcp.extractors.git_history.extractor.finalize_ingest_run", new=AsyncMock()):
+    with (
+        respx.mock,
+        patch("palace_mcp.mcp_server.get_driver", return_value=driver),
+        patch("palace_mcp.mcp_server.get_settings", return_value=settings),
+        patch(
+            "palace_mcp.extractors.git_history.extractor.ensure_custom_schema",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.git_history.extractor._get_previous_error_code",
+            new=AsyncMock(return_value=None),
+        ),
+        patch("palace_mcp.extractors.git_history.extractor.check_resume_budget"),
+        patch("palace_mcp.extractors.git_history.extractor.check_phase_budget"),
+        patch(
+            "palace_mcp.extractors.git_history.extractor.create_ingest_run",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.git_history.extractor.finalize_ingest_run",
+            new=AsyncMock(),
+        ),
+    ):
         respx.post("https://api.github.com/graphql").mock(
             return_value=httpx.Response(200, json=fixture_response)
         )

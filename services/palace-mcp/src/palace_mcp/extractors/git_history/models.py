@@ -4,7 +4,13 @@ import re
 from datetime import datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, ValidationInfo, computed_field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    ValidationInfo,
+    computed_field,
+    field_validator,
+)
 
 _EMAIL_RE = re.compile(r"^[^@]+@[^@]+\.[^@]+$")
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
