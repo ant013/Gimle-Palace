@@ -21,6 +21,7 @@ from palace_mcp.extractors.foundation.models import (
     PublicApiSymbolKind,
     PublicApiVisibility,
     TantivyOccurrenceMatch,
+    build_symbol_occurrence_doc_key,
 )
 from palace_mcp.extractors.foundation.module_owner import (
     ModuleOwnerMap,
@@ -79,7 +80,13 @@ def _symbol(
 
 def _occurrence(file_path: str, qname: str) -> TantivyOccurrenceMatch:
     return TantivyOccurrenceMatch(
-        doc_key=f"{symbol_id_for(qname)}:{file_path}:4:10",
+        doc_key=build_symbol_occurrence_doc_key(
+            symbol_id=symbol_id_for(qname),
+            file_path=file_path,
+            line=4,
+            col_start=10,
+            commit_sha="commit-current",
+        ),
         symbol_id=symbol_id_for(qname),
         file_path=file_path,
         line=4,
@@ -424,7 +431,13 @@ def _make_occurrence(
     from palace_mcp.extractors.foundation.models import SymbolKind, SymbolOccurrence
 
     return SymbolOccurrence(
-        doc_key=f"{symbol_id}:{file_path}:{line}:{col_start}",
+        doc_key=build_symbol_occurrence_doc_key(
+            symbol_id=symbol_id,
+            file_path=file_path,
+            line=line,
+            col_start=col_start,
+            commit_sha=commit_sha,
+        ),
         symbol_id=symbol_id,
         symbol_qualified_name=qname,
         kind=SymbolKind.USE,

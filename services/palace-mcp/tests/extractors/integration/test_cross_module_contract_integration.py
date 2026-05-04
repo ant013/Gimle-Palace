@@ -23,6 +23,7 @@ from palace_mcp.extractors.foundation.models import (
     PublicApiVisibility,
     SymbolKind,
     SymbolOccurrence,
+    build_symbol_occurrence_doc_key,
 )
 from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
 from palace_mcp.extractors.runner import run_extractor
@@ -367,8 +368,12 @@ async def _seed_occurrences(tantivy_dir: Path) -> None:
             symbol_id = symbol_id_for(qname)
             await bridge.add_or_replace_async(
                 occ=SymbolOccurrence(
-                    doc_key=(
-                        f"{symbol_id}:{row['file_path']}:{row['line']}:{row['col_start']}"
+                    doc_key=build_symbol_occurrence_doc_key(
+                        symbol_id=symbol_id,
+                        file_path=row["file_path"],
+                        line=row["line"],
+                        col_start=row["col_start"],
+                        commit_sha=row["commit_sha"],
                     ),
                     symbol_id=symbol_id,
                     symbol_qualified_name=qname,

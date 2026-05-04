@@ -267,6 +267,8 @@ class TantivyBridge:
                     default_symbol_id=symbol_id,
                     default_commit_sha=commit_sha,
                 )
+                if match.commit_sha != commit_sha:
+                    continue
                 matches_by_doc_key[match.doc_key] = match
 
         return list(matches_by_doc_key.values())
@@ -312,6 +314,14 @@ def _first_text(doc: dict[str, list[Any]], field: str) -> str:
 
 
 def _parse_doc_key(doc_key: str) -> tuple[int, str, int, int]:
-    head, line_text, col_start_text = doc_key.rsplit(":", 2)
+    parts = doc_key.rsplit(":", 3)
+    if len(parts) == 4 and _is_int_text(parts[1]) and _is_int_text(parts[2]):
+        head, line_text, col_start_text, _commit_sha = parts
+    else:
+        head, line_text, col_start_text = doc_key.rsplit(":", 2)
     symbol_id_text, file_path = head.split(":", 1)
     return int(symbol_id_text), file_path, int(line_text), int(col_start_text)
+
+
+def _is_int_text(value: str) -> bool:
+    return value.isdigit()

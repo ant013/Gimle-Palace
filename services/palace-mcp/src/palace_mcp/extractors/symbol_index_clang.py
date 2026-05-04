@@ -34,6 +34,7 @@ from palace_mcp.extractors.foundation.models import (
     Language,
     SymbolKind,
     SymbolOccurrence,
+    build_symbol_occurrence_doc_key,
 )
 from palace_mcp.extractors.foundation.schema import ensure_custom_schema
 from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
@@ -284,7 +285,13 @@ def _normalize_occurrence(
     if normalized_path == occ.file_path:
         return occ
     return SymbolOccurrence(
-        doc_key=f"{occ.symbol_id}:{normalized_path}:{occ.line}:{occ.col_start}",
+        doc_key=build_symbol_occurrence_doc_key(
+            symbol_id=occ.symbol_id,
+            file_path=normalized_path,
+            line=occ.line,
+            col_start=occ.col_start,
+            commit_sha=occ.commit_sha,
+        ),
         symbol_id=occ.symbol_id,
         symbol_qualified_name=occ.symbol_qualified_name,
         kind=occ.kind,

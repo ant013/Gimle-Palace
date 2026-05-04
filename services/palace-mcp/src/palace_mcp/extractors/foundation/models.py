@@ -21,6 +21,18 @@ from pydantic import BaseModel, Field, model_validator
 SCHEMA_VERSION_CURRENT: int = 1
 
 
+def build_symbol_occurrence_doc_key(
+    *,
+    symbol_id: int,
+    file_path: str,
+    line: int,
+    col_start: int,
+    commit_sha: str,
+) -> str:
+    """Build a commit-aware primary key for a Tantivy occurrence document."""
+    return f"{symbol_id}:{file_path}:{line}:{col_start}:{commit_sha}"
+
+
 class Language(str, Enum):
     """Source language for a symbol occurrence."""
 
@@ -133,7 +145,9 @@ class SymbolOccurrence(BaseModel):
 
     doc_key: str = Field(
         ...,
-        description="Primary key: '{symbol_id}:{file_path}:{line}:{col_start}'",
+        description=(
+            "Primary key: '{symbol_id}:{file_path}:{line}:{col_start}:{commit_sha}'"
+        ),
     )
     symbol_id: int = Field(..., ge=-(2**63), le=2**63 - 1)
     symbol_qualified_name: str
@@ -159,7 +173,13 @@ class SymbolOccurrence(BaseModel):
 
     @model_validator(mode="after")
     def doc_key_matches_fields(self) -> "SymbolOccurrence":
-        expected = f"{self.symbol_id}:{self.file_path}:{self.line}:{self.col_start}"
+        expected = build_symbol_occurrence_doc_key(
+            symbol_id=self.symbol_id,
+            file_path=self.file_path,
+            line=self.line,
+            col_start=self.col_start,
+            commit_sha=self.commit_sha,
+        )
         if self.doc_key != expected:
             raise ValueError(
                 f"doc_key '{self.doc_key}' does not match expected '{expected}'"
