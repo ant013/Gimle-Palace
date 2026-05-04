@@ -1,4 +1,5 @@
 """GitHub GraphQL client — see spec GIM-186 §5.2."""
+
 from __future__ import annotations
 
 import asyncio
@@ -85,7 +86,9 @@ class GitHubClient:
             # Yield PRs that are newer than `since`
             batch = []
             for pr in page["nodes"]:
-                pr_updated = datetime.fromisoformat(pr["updatedAt"].replace("Z", "+00:00"))
+                pr_updated = datetime.fromisoformat(
+                    pr["updatedAt"].replace("Z", "+00:00")
+                )
                 if since is not None and pr_updated < since:
                     yield batch
                     return  # stop outer pagination — older than checkpoint
@@ -118,7 +121,8 @@ class GitHubClient:
             if resp.status_code >= 400:
                 raise httpx.HTTPStatusError(
                     f"github graphql {resp.status_code}: {resp.text[:200]}",
-                    request=resp.request, response=resp,
+                    request=resp.request,
+                    response=resp,
                 )
             return resp.json()  # type: ignore[no-any-return]
         raise last_exc or RuntimeError("github graphql retries exhausted")

@@ -1,27 +1,34 @@
 """GitHistoryExtractor — see spec §5.1. Mirrors symbol_index_python pattern."""
+
 from __future__ import annotations
 
 import logging
 from typing import ClassVar
 
 from palace_mcp.extractors.base import (
-    BaseExtractor, ExtractorRunContext, ExtractorStats,
+    BaseExtractor,
+    ExtractorRunContext,
+    ExtractorStats,
 )
 from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErrorCode
 from palace_mcp.extractors.foundation.circuit_breaker import (
-    check_resume_budget, check_phase_budget,
+    check_resume_budget,
+    check_phase_budget,
 )
 from palace_mcp.extractors.foundation.schema import ensure_custom_schema
 from palace_mcp.extractors.foundation.checkpoint import (
-    create_ingest_run, finalize_ingest_run,
+    create_ingest_run,
+    finalize_ingest_run,
 )
 from palace_mcp.extractors.git_history.bot_detector import is_bot
 from palace_mcp.extractors.git_history.checkpoint import (
-    load_git_history_checkpoint, write_git_history_checkpoint,
+    load_git_history_checkpoint,
+    write_git_history_checkpoint,
 )
 from palace_mcp.extractors.git_history.neo4j_writer import write_commit_with_author
 from palace_mcp.extractors.git_history.pygit2_walker import (
-    Pygit2Walker, CommitNotFoundError,
+    Pygit2Walker,
+    CommitNotFoundError,
 )
 from palace_mcp.extractors.git_history.tantivy_writer import GitHistoryTantivyWriter
 
@@ -38,6 +45,7 @@ async def _get_previous_error_code(driver: object, project: str) -> str | None:
     LIMIT 1
     """
     from neo4j import AsyncDriver
+
     d: AsyncDriver = driver  # type: ignore[assignment]
     async with d.session() as session:
         result = await session.run(_QUERY, project=project)
@@ -55,7 +63,10 @@ class GitHistoryExtractor(BaseExtractor):
     indexes: ClassVar[list[str]] = []
 
     async def run(
-        self, *, graphiti: object, ctx: ExtractorRunContext,
+        self,
+        *,
+        graphiti: object,
+        ctx: ExtractorRunContext,
     ) -> ExtractorStats:
         from palace_mcp.mcp_server import get_driver, get_settings
 
@@ -129,6 +140,7 @@ class GitHistoryExtractor(BaseExtractor):
                             driver, ctx.group_id, commit, is_bot=bot_flag
                         )
                         from palace_mcp.extractors.git_history.models import Commit
+
                         commit_obj = Commit(
                             project_id=ctx.group_id,
                             sha=commit["sha"],
@@ -148,7 +160,8 @@ class GitHistoryExtractor(BaseExtractor):
                         edges_written += 2 + len(commit["touched_files"])
 
                 await write_git_history_checkpoint(
-                    driver, ctx.group_id,
+                    driver,
+                    ctx.group_id,
                     last_commit_sha=new_head_sha,
                     last_pr_updated_at=ckpt.last_pr_updated_at,
                     last_phase_completed="phase1",
@@ -202,7 +215,8 @@ class GitHistoryExtractor(BaseExtractor):
             # Phase 2 with token: fetch PRs via GraphQL
             from palace_mcp.extractors.git_history.github_client import GitHubClient
             from palace_mcp.extractors.git_history.neo4j_writer import (
-                write_pr, write_pr_comment,
+                write_pr,
+                write_pr_comment,
             )
 
             repo_parts = ctx.project_slug.split("/")
@@ -215,9 +229,9 @@ class GitHistoryExtractor(BaseExtractor):
                     owner, repo_name, since=ckpt.last_pr_updated_at
                 ):
                     for pr_node in batch:
-                        identity_key = (
-                            pr_node.get("author", {}) or {}
-                        ).get("login", "ghost")
+                        identity_key = (pr_node.get("author", {}) or {}).get(
+                            "login", "ghost"
+                        )
                         bot_flag = is_bot(None, identity_key)
                         await write_pr(
                             driver,
@@ -228,9 +242,9 @@ class GitHistoryExtractor(BaseExtractor):
                                 "body_truncated": (pr_node.get("body") or "")[:1024],
                                 "state": pr_node.get("state", "open").lower(),
                                 "head_sha": pr_node.get("headRefOid"),
-                                "base_branch": (
-                                    pr_node.get("baseRef") or {}
-                                ).get("name", ""),
+                                "base_branch": (pr_node.get("baseRef") or {}).get(
+                                    "name", ""
+                                ),
                                 "created_at": pr_node.get("createdAt"),
                                 "merged_at": pr_node.get("mergedAt"),
                             },
@@ -242,9 +256,9 @@ class GitHistoryExtractor(BaseExtractor):
                         edges_written += 1
 
                         for cmt in (pr_node.get("comments") or {}).get("nodes", []):
-                            cmt_author = (
-                                (cmt.get("author") or {}).get("login") or "ghost"
-                            )
+                            cmt_author = (cmt.get("author") or {}).get(
+                                "login"
+                            ) or "ghost"
                             await write_pr_comment(
                                 driver,
                                 ctx.group_id,
@@ -264,7 +278,8 @@ class GitHistoryExtractor(BaseExtractor):
                 await gh_client.aclose()
 
             await write_git_history_checkpoint(
-                driver, ctx.group_id,
+                driver,
+                ctx.group_id,
                 last_commit_sha=new_head_sha,
                 last_pr_updated_at=None,
                 last_phase_completed="phase2",
@@ -289,13 +304,17 @@ class GitHistoryExtractor(BaseExtractor):
 
         except ExtractorError:
             await finalize_ingest_run(
-                driver, run_id=ctx.run_id, success=False,
+                driver,
+                run_id=ctx.run_id,
+                success=False,
                 error_code="extractor_error",
             )
             raise
         except Exception:
             await finalize_ingest_run(
-                driver, run_id=ctx.run_id, success=False,
+                driver,
+                run_id=ctx.run_id,
+                success=False,
                 error_code="unknown",
             )
             raise

@@ -1,4 +1,5 @@
 """GitHistoryTantivyWriter — own schema (see spec §3.7)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -47,37 +48,43 @@ class GitHistoryTantivyWriter:
             self._writer = None
 
     async def add_commit_async(self, commit: Commit, body_full: str) -> None:
-        await self._add_doc({
-            "doc_kind": "commit",
-            "project_id": commit.project_id,
-            "doc_id": commit.sha,
-            "body": body_full[:65535],
-            "author_identity_key": commit.author_identity_key,
-            "ts": commit.committed_at,
-            "is_bot": "false",
-        })
+        await self._add_doc(
+            {
+                "doc_kind": "commit",
+                "project_id": commit.project_id,
+                "doc_id": commit.sha,
+                "body": body_full[:65535],
+                "author_identity_key": commit.author_identity_key,
+                "ts": commit.committed_at,
+                "is_bot": "false",
+            }
+        )
 
     async def add_pr_async(self, pr: PR, body_full: str) -> None:
-        await self._add_doc({
-            "doc_kind": "pr",
-            "project_id": pr.project_id,
-            "doc_id": str(pr.number),
-            "body": body_full[:65535],
-            "author_identity_key": pr.author_identity_key,
-            "ts": pr.created_at,
-            "is_bot": "false",
-        })
+        await self._add_doc(
+            {
+                "doc_kind": "pr",
+                "project_id": pr.project_id,
+                "doc_id": str(pr.number),
+                "body": body_full[:65535],
+                "author_identity_key": pr.author_identity_key,
+                "ts": pr.created_at,
+                "is_bot": "false",
+            }
+        )
 
     async def add_pr_comment_async(self, comment: PRComment, body_full: str) -> None:
-        await self._add_doc({
-            "doc_kind": "pr_comment",
-            "project_id": comment.project_id,
-            "doc_id": comment.id,
-            "body": body_full[:65535],
-            "author_identity_key": comment.author_identity_key,
-            "ts": comment.created_at,
-            "is_bot": "false",
-        })
+        await self._add_doc(
+            {
+                "doc_kind": "pr_comment",
+                "project_id": comment.project_id,
+                "doc_id": comment.id,
+                "body": body_full[:65535],
+                "author_identity_key": comment.author_identity_key,
+                "ts": comment.created_at,
+                "is_bot": "false",
+            }
+        )
 
     async def _add_doc(self, fields: dict) -> None:  # type: ignore[type-arg]
         if self._writer is None:

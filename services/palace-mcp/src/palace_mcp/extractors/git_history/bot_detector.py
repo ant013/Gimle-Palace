@@ -1,4 +1,5 @@
 """Conservative regex-based bot detector — see spec GIM-186 §6."""
+
 from __future__ import annotations
 
 import re

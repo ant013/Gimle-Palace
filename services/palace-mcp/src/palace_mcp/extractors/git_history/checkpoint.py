@@ -1,4 +1,5 @@
 """GitHistoryCheckpoint own state persistence — see spec §3.6."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone

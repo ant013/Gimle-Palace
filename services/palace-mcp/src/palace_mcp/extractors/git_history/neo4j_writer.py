@@ -2,6 +2,7 @@
 
 See spec GIM-186 §3.4 invariant 5.
 """
+
 from __future__ import annotations
 
 from neo4j import AsyncDriver
@@ -148,7 +149,9 @@ async def write_pr(
     """Write Author + PR node + AUTHORED_BY edge idempotently."""
     from datetime import datetime
 
-    ts: datetime = pr_dict.get("created_at") or pr_dict.get("merged_at") or datetime.now()
+    ts: datetime = (
+        pr_dict.get("created_at") or pr_dict.get("merged_at") or datetime.now()
+    )
     await driver.execute_query(
         _MERGE_AUTHOR_CYPHER,
         provider=author_provider,

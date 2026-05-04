@@ -1,4 +1,5 @@
 """pygit2 commit walker — see spec GIM-186 §5.1 Phase 1."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
