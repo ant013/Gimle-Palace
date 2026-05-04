@@ -145,6 +145,7 @@ See `phase-review-discipline.md` § Phase 3.2.
 <!-- @include fragments/shared/fragments/heartbeat-discipline.md -->
 
 <!-- @include fragments/shared/fragments/phase-handoff.md -->
+<!-- @include fragments/local/agent-roster.md -->
 <!-- @include fragments/shared/fragments/phase-review-discipline.md -->
 
 <!-- @include fragments/shared/fragments/language.md -->

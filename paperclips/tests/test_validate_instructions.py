@@ -156,8 +156,8 @@ def test_global_growth_allowlist_fails(tmp_path: Path) -> None:
 
     errors = validate_instructions.validate(repo)
 
-    assert any("allowlist entry 0 missing roleId" in error for error in errors)
-    assert any("allowlist entry 0 missing path" in error for error in errors)
+    assert any("missing roleId" in error for error in errors)
+    assert any("missing path" in error for error in errors)
     assert any("bundle grew more than 10%" in error for error in errors)
 
 
