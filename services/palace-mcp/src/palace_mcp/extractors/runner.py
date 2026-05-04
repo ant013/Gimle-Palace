@@ -29,6 +29,9 @@ from palace_mcp.extractors.base import (
     ExtractorRunContext,
     ExtractorStats,
 )
+from palace_mcp.extractors.foundation.errors import (
+    ExtractorError as FoundationExtractorError,
+)
 from palace_mcp.extractors.bundle_state import (
     finalize_state,
     init_bundle_ingest_state,
@@ -169,7 +172,7 @@ async def _execute(
         msg = f"timeout after {timeout_s}s"
         logger.error("extractor.execute.timeout", extra={"run_id": ctx.run_id})
         return _ExecuteError(error_code="extractor_runtime_error", errors=[msg])
-    except ExtractorError as e:
+    except (ExtractorError, FoundationExtractorError) as e:
         logger.error(
             "extractor.execute.extractor_error",
             extra={"run_id": ctx.run_id, "error_code": e.error_code},

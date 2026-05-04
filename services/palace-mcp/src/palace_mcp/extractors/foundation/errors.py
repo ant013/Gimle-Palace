@@ -8,15 +8,13 @@ from typing import Literal
 
 
 class ExtractorErrorCode(str, Enum):
-    """Exhaustive error code surface for all foundation extractor failures.
-
-    18 codes covering config, schema, counter, tantivy, neo4j, and budget
-    failure modes. Using str-Enum so codes serialize naturally to JSON.
-    """
+    """Exhaustive error code surface for all foundation extractor failures."""
 
     # Config
     INVALID_PROJECT = "invalid_project"
     SCIP_PATH_REQUIRED = "scip_path_required"  # 101b only
+    PUBLIC_API_ARTIFACTS_REQUIRED = "public_api_artifacts_required"
+    PUBLIC_API_PARSE_FAILED = "public_api_parse_failed"
 
     # Schema
     SCHEMA_DRIFT_DETECTED = "schema_drift_detected"

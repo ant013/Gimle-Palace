@@ -1,0 +1,30 @@
+// swift-interface-format-version: 1.0
+// swift-compiler-version: Apple Swift version 6.2.4 (swiftlang-6.2.4.1.4 clang-1700.6.4.2)
+// swift-module-flags: -enable-library-evolution -module-name UwMiniKit
+
+public struct Wallet {
+  public init(id: Swift.String)
+  public var id: Swift.String { get }
+  public func balance() -> Swift.Int
+  internal func hiddenInternal() -> Swift.Int
+  private var hiddenPrivate: Swift.String { get }
+}
+
+open class WalletController {
+  public init(wallet: Wallet)
+  open func refresh() -> Swift.Void
+}
+
+public enum WalletState {
+}
+
+public protocol Syncable {
+  public func sync() async throws
+}
+
+package func packageHelper() -> Swift.String
+public typealias WalletID = Swift.String
+
+public extension Wallet {
+  public func formatted() -> Swift.String
+}
