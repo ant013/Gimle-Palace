@@ -2,7 +2,7 @@
 slug: git-history-harvester
 status: proposed (rev2)
 branch: feature/GIM-186-git-history-harvester
-paperclip_issue: 185
+paperclip_issue: 186
 authoring_team: Claude (Board+Claude brainstorm); Claude implements end-to-end
 predecessor: 57545cb (docs(roadmap) PR #82 merge into develop tip)
 date: 2026-05-03
