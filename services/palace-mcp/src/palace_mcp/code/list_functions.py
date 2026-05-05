@@ -35,7 +35,9 @@ async def list_functions(
     async with driver.session() as sess:
         row = await (await sess.run(_GET_PROJECT, slug=project)).single()
     if row is None:
-        return _error("project_not_registered", f"no :Project {{slug: {project!r}}}", project)
+        return _error(
+            "project_not_registered", f"no :Project {{slug: {project!r}}}", project
+        )
     rows: list[dict[str, Any]] = []
     async with driver.session() as session:
         result = await session.run(
@@ -43,8 +45,18 @@ async def list_functions(
             {"project_id": project, "path": path, "min_ccn": int(min_ccn)},
         )
         async for rec in result:
-            rows.append({k: rec[k] for k in (
-                "name", "start_line", "end_line", "ccn",
-                "parameter_count", "nloc", "language",
-            )})
+            rows.append(
+                {
+                    k: rec[k]
+                    for k in (
+                        "name",
+                        "start_line",
+                        "end_line",
+                        "ccn",
+                        "parameter_count",
+                        "nloc",
+                        "language",
+                    )
+                }
+            )
     return {"ok": True, "result": rows}

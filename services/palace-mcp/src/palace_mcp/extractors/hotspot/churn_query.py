@@ -13,8 +13,12 @@ RETURN path, count(c) AS churn
 
 
 async def fetch_churn(
-    driver: Any, *, project_id: str, paths: list[str],
-    window_days: int, run_started_at: datetime,
+    driver: Any,
+    *,
+    project_id: str,
+    paths: list[str],
+    window_days: int,
+    run_started_at: datetime,
 ) -> dict[str, int]:
     if not paths:
         return {}

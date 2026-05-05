@@ -2,10 +2,20 @@ from __future__ import annotations
 
 import math
 from datetime import datetime, timezone
-from typing import ClassVar
+from typing import ClassVar, Literal
 
-from palace_mcp.extractors.base import BaseExtractor, ExtractorRunContext, ExtractorStats
-from palace_mcp.extractors.hotspot import churn_query, file_walker, lizard_runner, neo4j_writer
+from palace_mcp.extractors.base import (
+    BaseExtractor,
+    ExtractorRunContext,
+    ExtractorStats,
+)
+from palace_mcp.extractors.hotspot import (
+    churn_query,
+    file_walker,
+    lizard_runner,
+    neo4j_writer,
+)
+from palace_mcp.extractors.hotspot.models import ParsedFile
 
 
 class HotspotExtractor(BaseExtractor):
@@ -23,9 +33,11 @@ class HotspotExtractor(BaseExtractor):
         "CREATE INDEX function_path IF NOT EXISTS FOR (fn:Function) ON (fn.project_id, fn.path)",
     ]
 
-    async def run(self, *, graphiti: object, ctx: ExtractorRunContext) -> ExtractorStats:
+    async def run(self, *, graphiti: object, ctx: ExtractorRunContext) -> ExtractorStats:  # fmt: skip
         from palace_mcp.mcp_server import get_settings
+
         settings = get_settings()
+        assert settings is not None, "Palace settings not initialised"
         driver = graphiti.driver  # type: ignore[attr-defined]
         run_started_at = datetime.now(tz=timezone.utc)
 
@@ -33,9 +45,9 @@ class HotspotExtractor(BaseExtractor):
 
         batch_size: int = settings.palace_hotspot_lizard_batch_size
         timeout_s: int = settings.palace_hotspot_lizard_timeout_s
-        behavior: str = settings.palace_hotspot_lizard_timeout_behavior
+        behavior: Literal["drop_batch", "fail_run"] = settings.palace_hotspot_lizard_timeout_behavior
 
-        parsed_files: list = []
+        parsed_files: list[ParsedFile] = []
         for i in range(0, max(len(files), 1), batch_size):
             batch = files[i : i + batch_size]
             if not batch:

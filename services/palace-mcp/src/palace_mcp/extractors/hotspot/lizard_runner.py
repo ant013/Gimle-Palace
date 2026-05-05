@@ -13,11 +13,22 @@ from palace_mcp.extractors.hotspot.models import ParsedFile, ParsedFunction
 logger = logging.getLogger(__name__)
 
 _EXT_TO_LANG: dict[str, str] = {
-    ".py": "python", ".java": "java", ".kt": "kotlin", ".kts": "kotlin",
-    ".swift": "swift", ".ts": "typescript", ".tsx": "typescript",
-    ".js": "javascript", ".jsx": "javascript", ".sol": "solidity",
-    ".cpp": "cpp", ".cc": "cpp", ".h": "cpp", ".hpp": "cpp",
-    ".m": "objc", ".mm": "objc",
+    ".py": "python",
+    ".java": "java",
+    ".kt": "kotlin",
+    ".kts": "kotlin",
+    ".swift": "swift",
+    ".ts": "typescript",
+    ".tsx": "typescript",
+    ".js": "javascript",
+    ".jsx": "javascript",
+    ".sol": "solidity",
+    ".cpp": "cpp",
+    ".cc": "cpp",
+    ".h": "cpp",
+    ".hpp": "cpp",
+    ".m": "objc",
+    ".mm": "objc",
 }
 
 _ITEM_RE = re.compile(r"^(?P<name>[^(]+)\(.*\) at (?P<path>.+?):(?P<line>\d+)$")
@@ -35,7 +46,10 @@ class LizardRunResult:
 
 async def _invoke_lizard(files: list[Path], *, timeout_s: int) -> str:
     proc = await asyncio.create_subprocess_exec(
-        "lizard", "--xml", "--working_threads=1", *map(str, files),
+        "lizard",
+        "--xml",
+        "--working_threads=1",
+        *map(str, files),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
@@ -64,7 +78,8 @@ def parse_lizard_xml(xml_text: str, *, repo_root: Path) -> tuple[ParsedFile, ...
         except ValueError:
             continue
         values = [
-            int(v.text) for v in item.findall("value")
+            int(v.text)
+            for v in item.findall("value")
             if v.text and v.text.strip().lstrip("-").isdigit()
         ]
         if len(values) < 3:
@@ -120,7 +135,10 @@ async def run_batch(
             )
         logger.warning(
             "hotspot_lizard_batch_timeout",
-            extra={"batch_size": len(files), "first_file": skipped[0] if skipped else None},
+            extra={
+                "batch_size": len(files),
+                "first_file": skipped[0] if skipped else None,
+            },
         )
         return LizardRunResult(parsed=(), skipped_files=skipped)
     parsed = parse_lizard_xml(xml_text, repo_root=repo_root)

@@ -55,8 +55,12 @@ SET f.ccn_total = 0,
 def _functions_payload(parsed_file: Any) -> list[dict[str, Any]]:
     return [
         {
-            "name": fn.name, "start_line": fn.start_line, "end_line": fn.end_line,
-            "ccn": fn.ccn, "parameter_count": fn.parameter_count, "nloc": fn.nloc,
+            "name": fn.name,
+            "start_line": fn.start_line,
+            "end_line": fn.end_line,
+            "ccn": fn.ccn,
+            "parameter_count": fn.parameter_count,
+            "nloc": fn.nloc,
             "language": parsed_file.language,
         }
         for fn in parsed_file.functions
@@ -64,7 +68,11 @@ def _functions_payload(parsed_file: Any) -> list[dict[str, Any]]:
 
 
 async def write_file_and_functions(
-    driver: Any, *, project_id: str, parsed_file: Any, run_started_at: datetime,
+    driver: Any,
+    *,
+    project_id: str,
+    parsed_file: Any,
+    run_started_at: datetime,
 ) -> None:
     async with driver.session() as session:
         await session.run(
@@ -80,22 +88,34 @@ async def write_file_and_functions(
 
 
 async def write_hotspot_score(
-    driver: Any, *, project_id: str, path: str,
-    churn: int, score: float, window_days: int, run_started_at: datetime,
+    driver: Any,
+    *,
+    project_id: str,
+    path: str,
+    churn: int,
+    score: float,
+    window_days: int,
+    run_started_at: datetime,
 ) -> None:
     async with driver.session() as session:
         await session.run(
             PHASE_3_CYPHER,
             {
-                "project_id": project_id, "path": path,
-                "churn": churn, "score": score, "window_days": window_days,
+                "project_id": project_id,
+                "path": path,
+                "churn": churn,
+                "score": score,
+                "window_days": window_days,
                 "run_started_at": run_started_at.isoformat(),
             },
         )
 
 
 async def evict_stale_functions(
-    driver: Any, *, project_id: str, run_started_at: datetime,
+    driver: Any,
+    *,
+    project_id: str,
+    run_started_at: datetime,
 ) -> None:
     async with driver.session() as session:
         await session.run(
@@ -105,13 +125,18 @@ async def evict_stale_functions(
 
 
 async def mark_dead_files_zero(
-    driver: Any, *, project_id: str, alive_paths: list[str], run_started_at: datetime,
+    driver: Any,
+    *,
+    project_id: str,
+    alive_paths: list[str],
+    run_started_at: datetime,
 ) -> None:
     async with driver.session() as session:
         await session.run(
             PHASE_5_DEAD_CYPHER,
             {
-                "project_id": project_id, "alive_paths": alive_paths,
+                "project_id": project_id,
+                "alive_paths": alive_paths,
                 "run_started_at": run_started_at.isoformat(),
             },
         )
