@@ -113,24 +113,11 @@ See `phase-review-discipline.md` § Phase 3.2.
 - **github** — PR diff, related issues, commit history.
 - **sequential-thinking** — for complex architectural reasoning chains.
 
-**Subagents (verified available in our install):**
-- `voltagent-qa-sec:architect-reviewer` — design pattern second opinion
-- `voltagent-qa-sec:performance-engineer` — performance pattern review
-- `voltagent-qa-sec:debugger` — root-cause analysis for tricky issues
-- `codex-review:type-design-analyzer` — type system invariants + Pydantic schema quality
-- `codex-review:silent-failure-hunter` — beyond CR mechanical except check, deeper error handling
-- `codex-review:code-simplifier` — over-engineering / premature abstraction detection
-- `codex-review:comment-analyzer` — comment-rot, outdated docstrings
+**Subagents (verified by 30-day audit):**
+- `Explore` — codebase navigation
+- `code-reviewer` — delegate review (built-in / user-level)
 
-**Skills:**
-- `verification-before-completion discipline` — no APPROVE without docs evidence (citations mandatory)
-- `systematic debugging discipline` — root-cause when a subtle pattern issue surfaces
-
-**Not available (don't try to invoke):**
-- `voltagent-research:*` — research plugin not installed
-- `voltagent-lang:*` — language specialists not installed
-- `voltagent-core-dev:*` — core-dev not installed
-- If SDK landscape research is needed — ask Board to install voltagent-research, don't engineer a workaround.
+**Skills:** none mandatory at runtime — adversarial review is inline.
 
 <!-- @include fragments/shared/fragments/karpathy-discipline.md -->
 

@@ -74,8 +74,8 @@ Plans **must** pass CodeReviewer BEFORE implementation — architectural mistake
 - **github** — issues, PRs, CI status, branch state.
 - **sequential-thinking** — architectural decisions (which service, which profile, deployment topology).
 - **filesystem** — reading project state, CLAUDE.md, path existence checks.
-- **Subagents:** `architect-reviewer`, `python-pro`, `backend-architect`, `docker-expert`, `platform-engineer`, `voltagent-meta:multi-agent-coordinator`, `voltagent-meta:workflow-orchestrator`.
-- **Skills:** `superpowers:brainstorming` (before any new feature), `superpowers:writing-plans`, `superpowers:dispatching-parallel-agents`, `pr-review-toolkit:review-pr` (if plugin enabled).
+- **Subagents:** `Explore`, `code-reviewer` (delegate review when busy), `voltagent-qa-sec:code-reviewer` (deep review), `pr-review-toolkit:pr-test-analyzer` (test coverage audit).
+- **Skills:** `superpowers:writing-plans` (before any new feature plan).
 
 ## Escalating to Board when blocked
 
@@ -465,6 +465,10 @@ If the workaround fails twice — escalate to Board with details (issue id, run 
 - "Is the evidence in my comment mine, or did I retell someone else's work?" — for QA, only own evidence counts
 
 If GET-verify fails after retry, **do not exit silently**. Mark `status=blocked`, post `@Board handoff PATCH succeeded but GET shows assigneeAgentId=<actual>, expected=<next>`, and stop.
+
+### Comment ≠ handoff (iron rule)
+
+Writing "Reassigning to …" or "handing off to …" in a comment body **does not execute** a handoff. Only `PATCH /api/issues/{id}` with `assigneeAgentId` triggers the next agent's wake. Without PATCH, the issue stalls with the previous assignee indefinitely. Precedents: GIM-126 (QA→CTO stall, 2026-05-01), GIM-195 (CR→PE stall, 2026-05-05).
 ## Agent UUID roster — Gimle Claude
 
 Use `[@<Role>](agent://<uuid>?i=<icon>)` in phase handoffs. Source: `paperclips/deploy-agents.sh`.

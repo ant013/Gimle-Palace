@@ -1,0 +1,1044 @@
+[
+  {
+    "role_id": "claude:blockchain-engineer",
+    "source": "paperclips/roles/blockchain-engineer.md",
+    "includes_count": 9,
+    "inline_chars": 5566,
+    "inline_duplicates": [],
+    "inline_only_sections": [
+      {
+        "level": 2,
+        "title": "Role"
+      },
+      {
+        "level": 2,
+        "title": "Area of responsibility"
+      },
+      {
+        "level": 2,
+        "title": "Triggers (when you're called)"
+      },
+      {
+        "level": 2,
+        "title": "Principles"
+      },
+      {
+        "level": 2,
+        "title": "Subagent orchestration (main value)"
+      },
+      {
+        "level": 2,
+        "title": "MCP servers + skills"
+      },
+      {
+        "level": 2,
+        "title": "Advisory output checklist (when giving a recommendation)"
+      },
+      {
+        "level": 2,
+        "title": "Skills"
+      }
+    ],
+    "subagent_refs": {
+      "superpowers:systematic-debugging": "REFERENCED-NEVER-CALLED",
+      "superpowers:test-driven-development": "REFERENCED-NEVER-CALLED",
+      "superpowers:verification-before-completion": "REFERENCED-NEVER-CALLED",
+      "voltagent-core-dev:api-designer": "REFERENCED-NEVER-CALLED",
+      "voltagent-lang:javascript-pro": "REFERENCED-NEVER-CALLED",
+      "voltagent-lang:kotlin-specialist": "REFERENCED-NEVER-CALLED",
+      "voltagent-lang:swift-expert": "REFERENCED-NEVER-CALLED",
+      "voltagent-qa-sec:penetration-tester": "REFERENCED-NEVER-CALLED",
+      "voltagent-qa-sec:security-auditor": "REFERENCED-NEVER-CALLED",
+      "voltagent-research:search-specialist": "USED (1 calls)"
+    }
+  },
+  {
+    "role_id": "claude:code-reviewer",
+    "source": "paperclips/roles/code-reviewer.md",
+    "includes_count": 14,
+    "inline_chars": 8815,
+    "inline_duplicates": [
+      {
+        "role_heading": "Plan-first discipline",
+        "role_level": 3,
+        "fragment": "fragments/shared/fragments/plan-first-review.md",
+        "fragment_heading": "Plan-first discipline",
+        "fragment_level": 3
+      },
+      {
+        "role_heading": "Phase 3.1 \u2014 Plan vs Implementation file-structure check",
+        "role_level": 3,
+        "fragment": "fragments/shared/fragments/phase-review-discipline.md",
+        "fragment_heading": "Phase 3.1 \u2014 Plan vs Implementation file-structure check",
+        "fragment_level": 2
+      }
+    ],
+    "inline_only_sections": [
+      {
+        "level": 2,
+        "title": "Role"
+      },
+      {
+        "level": 2,
+        "title": "Principles \u2014 Adversarial Review"
+      },
+      {
+        "level": 2,
+        "title": "What you review"
+      },
+      {
+        "level": 2,
+        "title": "Compliance checklist"
+      },
+      {
+        "level": 3,
+        "title": "Python / FastAPI"
+      },
+      {
+        "level": 3,
+        "title": "Docker / Compose"
+      },
+      {
+        "level": 3,
+        "title": "MCP protocol (if palace-mcp / other MCP tools)"
+      },
+      {
+        "level": 3,
+        "title": "Testing"
+      },
+      {
+        "level": 3,
+        "title": "Code discipline (Karpathy)"
+      },
+      {
+        "level": 3,
+        "title": "Git workflow"
+      },
+      {
+        "level": 2,
+        "title": "Review format"
+      },
+      {
+        "level": 2,
+        "title": "Summary"
+      },
+      {
+        "level": 2,
+        "title": "Findings"
+      },
+      {
+        "level": 3,
+        "title": "CRITICAL (blocks merge)"
+      },
+      {
+        "level": 3,
+        "title": "WARNING"
+      },
+      {
+        "level": 3,
+        "title": "NOTE"
+      },
+      {
+        "level": 2,
+        "title": "Compliance checklist"
+      },
+      {
+        "level": 2,
+        "title": "Verdict: APPROVE | REQUEST CHANGES | REJECT"
+      },
+      {
+        "level": 3,
+        "title": "Phase 3.1 GitHub PR review bridge"
+      },
+      {
+        "level": 3,
+        "title": "Phase 4.2 merge-readiness (when CR is merger)"
+      },
+      {
+        "level": 2,
+        "title": "MCP / Subagents / Skills"
+      }
+    ],
+    "subagent_refs": {
+      "pr-review-toolkit:code-simplifier": "REFERENCED-NEVER-CALLED",
+      "pr-review-toolkit:pr-test-analyzer": "USED (1 calls)",
+      "pr-review-toolkit:review-pr": "REFERENCED-NEVER-CALLED",
+      "pr-review-toolkit:silent-failure-hunter": "REFERENCED-NEVER-CALLED",
+      "pr-review-toolkit:type-design-analyzer": "REFERENCED-NEVER-CALLED",
+      "superpowers:systematic-debugging": "REFERENCED-NEVER-CALLED",
+      "superpowers:verification-before-completion": "REFERENCED-NEVER-CALLED",
+      "voltagent-qa-sec:architect-reviewer": "REFERENCED-NEVER-CALLED",
+      "voltagent-qa-sec:code-reviewer": "USED (4 calls)",
+      "voltagent-qa-sec:debugger": "REFERENCED-NEVER-CALLED",
+      "voltagent-qa-sec:error-detective": "REFERENCED-NEVER-CALLED",
+      "voltagent-qa-sec:security-auditor": "REFERENCED-NEVER-CALLED"
+    }
+  },
+  {
+    "role_id": "claude:cto",
+    "source": "paperclips/roles/cto.md",
+    "includes_count": 10,
+    "inline_chars": 3915,
+    "inline_duplicates": [],
+    "inline_only_sections": [
+      {
+        "level": 2,
+        "title": "Role"
+      },
+      {
+        "level": 3,
+        "title": "CTO-specific: no free engineer"
+      },
+      {
+        "level": 2,
+        "title": "Delegation"
+      },
+      {
+        "level": 2,
+        "title": "Verification gates (critical)"
+      },
+      {
+        "level": 2,
+        "title": "MCP / Subagents / Skills"
+      }
+    ],
+    "subagent_refs": {
+      "pr-review-toolkit:review-pr": "REFERENCED-NEVER-CALLED",
+      "superpowers:brainstorming": "REFERENCED-NEVER-CALLED",
+      "superpowers:dispatching-parallel-agents": "REFERENCED-NEVER-CALLED",
+      "superpowers:writing-plans": "REFERENCED-NEVER-CALLED",
+      "voltagent-meta:multi-agent-coordinator": "REFERENCED-NEVER-CALLED",
+      "voltagent-meta:workflow-orchestrator": "REFERENCED-NEVER-CALLED"
+    }
+  },
+  {
+    "role_id": "claude:infra-engineer",
+    "source": "paperclips/roles/infra-engineer.md",
+    "includes_count": 11,
+    "inline_chars": 5453,
+    "inline_duplicates": [],
+    "inline_only_sections": [
+      {
+        "level": 2,
+        "title": "Role"
+      },
+      {
+        "level": 2,
+        "title": "Area of responsibility"
+      },
+      {
+        "level": 2,
+        "title": "Rules (hard)"
+      },
+      {
+        "level": 2,
+        "title": "Pre-work checklist"
+      },
+      {
+        "level": 2,
+        "title": "Anti-patterns (Gimle-specific bans)"
+      },
+      {
+        "level": 2,
+        "title": "MCP / Subagents / Skills"
+      }
+    ],
+    "subagent_refs": {
+      "superpowers:receiving-code-review": "REFERENCED-NEVER-CALLED",
+      "superpowers:systematic-debugging": "REFERENCED-NEVER-CALLED",
+      "superpowers:test-driven-development": "REFERENCED-NEVER-CALLED",
+      "superpowers:verification-before-completion": "REFERENCED-NEVER-CALLED",
+      "voltagent-infra:deployment-engineer": "REFERENCED-NEVER-CALLED",
+      "voltagent-infra:devops-engineer": "REFERENCED-NEVER-CALLED",
+      "voltagent-infra:devops-incident-responder": "REFERENCED-NEVER-CALLED",
+      "voltagent-infra:docker-expert": "REFERENCED-NEVER-CALLED",
+      "voltagent-infra:platform-engineer": "REFERENCED-NEVER-CALLED",
+      "voltagent-infra:sre-engineer": "REFERENCED-NEVER-CALLED",
+      "voltagent-qa-sec:security-auditor": "REFERENCED-NEVER-CALLED"
+    }
+  },
+  {
+    "role_id": "claude:mcp-engineer",
+    "source": "paperclips/roles/mcp-engineer.md",
+    "includes_count": 12,
+    "inline_chars": 5037,
+    "inline_duplicates": [],
+    "inline_only_sections": [
+      {
+        "level": 2,
+        "title": "Role"
+      },
+      {
+        "level": 2,
+        "title": "Area of responsibility"
+      },
+      {
+        "level": 2,
+        "title": "Principles (engineering conservatism)"
+      },
+      {
+        "level": 2,
+        "title": "Tool design rules (for the catalogue)"
+      },
+      {
+        "level": 2,
+        "title": "Transport \u2014 locked: streamable-HTTP"
+      },
+      {
+        "level": 2,
+        "title": "Auth model"
+      },
+      {
+        "level": 2,
+        "title": "PR checklist (mechanical)"
+      },
+      {
+        "level": 2,
+        "title": "MCP / Subagents / Skills"
+      }
+    ],
+    "subagent_refs": {
+      "pr-review-toolkit:type-design-analyzer": "REFERENCED-NEVER-CALLED",
+      "superpowers:systematic-debugging": "REFERENCED-NEVER-CALLED",
+      "superpowers:test-driven-development": "REFERENCED-NEVER-CALLED",
+      "superpowers:verification-before-completion": "REFERENCED-NEVER-CALLED",
+      "voltagent-core-dev:api-designer": "REFERENCED-NEVER-CALLED",
+      "voltagent-qa-sec:security-auditor": "REFERENCED-NEVER-CALLED",
+      "voltagent-research:search-specialist": "USED (1 calls)"
+    }
+  },
+  {
+    "role_id": "claude:opus-architect-reviewer",
+    "source": "paperclips/roles/opus-architect-reviewer.md",
+    "includes_count": 10,
+    "inline_chars": 6046,
+    "inline_duplicates": [],
+    "inline_only_sections": [
+      {
+        "level": 2,
+        "title": "Role"
+      },
+      {
+        "level": 2,
+        "title": "When to invoke"
+      },
+      {
+        "level": 2,
+        "title": "Review principles"
+      },
+      {
+        "level": 2,
+        "title": "Workflow"
+      },
+      {
+        "level": 2,
+        "title": "Output format"
+      },
+      {
+        "level": 2,
+        "title": "OpusArchitectReviewer review \u2014 PR #N"
+      },
+      {
+        "level": 3,
+        "title": "Independent analysis (Phase 1, untainted by prior review)"
+      },
+      {
+        "level": 3,
+        "title": "Cross-check with CR review (Phase 2)"
+      },
+      {
+        "level": 3,
+        "title": "Verdict: APPROVE / NUDGE / REQUEST REDESIGN"
+      },
+      {
+        "level": 2,
+        "title": "Anti-patterns (what NOT to do)"
+      },
+      {
+        "level": 2,
+        "title": "Phase 3.2 \u2014 Coverage matrix audit discipline"
+      },
+      {
+        "level": 2,
+        "title": "MCP / Subagents / Skills (only actually installed)"
+      }
+    ],
+    "subagent_refs": {
+      "pr-review-toolkit:code-simplifier": "REFERENCED-NEVER-CALLED",
+      "pr-review-toolkit:comment-analyzer": "REFERENCED-NEVER-CALLED",
+      "pr-review-toolkit:silent-failure-hunter": "REFERENCED-NEVER-CALLED",
+      "pr-review-toolkit:type-design-analyzer": "REFERENCED-NEVER-CALLED",
+      "superpowers:systematic-debugging": "REFERENCED-NEVER-CALLED",
+      "superpowers:verification-before-completion": "REFERENCED-NEVER-CALLED",
+      "voltagent-qa-sec:architect-reviewer": "REFERENCED-NEVER-CALLED",
+      "voltagent-qa-sec:debugger": "REFERENCED-NEVER-CALLED",
+      "voltagent-qa-sec:performance-engineer": "REFERENCED-NEVER-CALLED"
+    }
+  },
+  {
+    "role_id": "claude:python-engineer",
+    "source": "paperclips/roles/python-engineer.md",
+    "includes_count": 14,
+    "inline_chars": 3752,
+    "inline_duplicates": [],
+    "inline_only_sections": [
+      {
+        "level": 2,
+        "title": "Role"
+      },
+      {
+        "level": 2,
+        "title": "Area of responsibility"
+      },
+      {
+        "level": 2,
+        "title": "Technical conventions (hard rules)"
+      },
+      {
+        "level": 2,
+        "title": "Tests"
+      },
+      {
+        "level": 2,
+        "title": "Tooling"
+      },
+      {
+        "level": 2,
+        "title": "MCP / Subagents / Skills"
+      }
+    ],
+    "subagent_refs": {
+      "superpowers:receiving-code-review": "REFERENCED-NEVER-CALLED",
+      "superpowers:systematic-debugging": "REFERENCED-NEVER-CALLED",
+      "superpowers:test-driven-development": "REFERENCED-NEVER-CALLED",
+      "superpowers:verification-before-completion": "REFERENCED-NEVER-CALLED"
+    }
+  },
+  {
+    "role_id": "claude:qa-engineer",
+    "source": "paperclips/roles/qa-engineer.md",
+    "includes_count": 11,
+    "inline_chars": 4775,
+    "inline_duplicates": [],
+    "inline_only_sections": [
+      {
+        "level": 2,
+        "title": "Role"
+      },
+      {
+        "level": 2,
+        "title": "Principles"
+      },
+      {
+        "level": 2,
+        "title": "Test infrastructure"
+      },
+      {
+        "level": 2,
+        "title": "Docker Compose smoke gate (required for merge)"
+      },
+      {
+        "level": 2,
+        "title": "Testcontainers lifecycle (Neo4j integration)"
+      },
+      {
+        "level": 2,
+        "title": "Edge cases matrix (Gimle-specific)"
+      },
+      {
+        "level": 2,
+        "title": "PR checklist (walk mechanically \u2014 no rubber-stamping)"
+      },
+      {
+        "level": 2,
+        "title": "MCP / Subagents / Skills"
+      }
+    ],
+    "subagent_refs": {
+      "pr-review-toolkit:pr-test-analyzer": "USED (1 calls)",
+      "pr-review-toolkit:silent-failure-hunter": "REFERENCED-NEVER-CALLED",
+      "superpowers:systematic-debugging": "REFERENCED-NEVER-CALLED",
+      "superpowers:test-driven-development": "REFERENCED-NEVER-CALLED",
+      "superpowers:verification-before-completion": "REFERENCED-NEVER-CALLED"
+    }
+  },
+  {
+    "role_id": "claude:research-agent",
+    "source": "paperclips/roles/research-agent.md",
+    "includes_count": 9,
+    "inline_chars": 4923,
+    "inline_duplicates": [],
+    "inline_only_sections": [
+      {
+        "level": 2,
+        "title": "Role"
+      },
+      {
+        "level": 2,
+        "title": "Triggers"
+      },
+      {
+        "level": 2,
+        "title": "Principles"
+      },
+      {
+        "level": 2,
+        "title": "Output structure (consumer-aware)"
+      },
+      {
+        "level": 2,
+        "title": "Gap escalation"
+      },
+      {
+        "level": 2,
+        "title": "Report checklist (mechanical)"
+      },
+      {
+        "level": 2,
+        "title": "MCP / Subagents / Skills"
+      }
+    ],
+    "subagent_refs": {
+      "superpowers:verification-before-completion": "REFERENCED-NEVER-CALLED",
+      "voltagent-research:research-analyst": "REFERENCED-NEVER-CALLED",
+      "voltagent-research:search-specialist": "USED (1 calls)",
+      "voltagent-research:trend-analyst": "REFERENCED-NEVER-CALLED"
+    }
+  },
+  {
+    "role_id": "claude:security-auditor",
+    "source": "paperclips/roles/security-auditor.md",
+    "includes_count": 9,
+    "inline_chars": 6218,
+    "inline_duplicates": [],
+    "inline_only_sections": [
+      {
+        "level": 2,
+        "title": "Role"
+      },
+      {
+        "level": 2,
+        "title": "Area of responsibility"
+      },
+      {
+        "level": 2,
+        "title": "Principles (orchestration)"
+      },
+      {
+        "level": 2,
+        "title": "Workflow decomposition"
+      },
+      {
+        "level": 2,
+        "title": "Subagent invocation matrix"
+      },
+      {
+        "level": 2,
+        "title": "MCP servers (production-ready)"
+      },
+      {
+        "level": 2,
+        "title": "Gimle-specific gaps (no community coverage)"
+      },
+      {
+        "level": 3,
+        "title": "1. MCP threat model (palace-mcp specific)"
+      },
+      {
+        "level": 3,
+        "title": "2. sops + Docker Compose supply chain"
+      },
+      {
+        "level": 3,
+        "title": "3. Cloudflared tunnel scope audit"
+      },
+      {
+        "level": 2,
+        "title": "Audit deliverable checklist"
+      },
+      {
+        "level": 2,
+        "title": "Skills"
+      }
+    ],
+    "subagent_refs": {
+      "pr-review-toolkit:silent-failure-hunter": "REFERENCED-NEVER-CALLED",
+      "superpowers:systematic-debugging": "REFERENCED-NEVER-CALLED",
+      "superpowers:verification-before-completion": "REFERENCED-NEVER-CALLED",
+      "voltagent-infra:security-engineer": "REFERENCED-NEVER-CALLED",
+      "voltagent-qa-sec:architect-reviewer": "REFERENCED-NEVER-CALLED",
+      "voltagent-qa-sec:compliance-auditor": "REFERENCED-NEVER-CALLED",
+      "voltagent-qa-sec:penetration-tester": "REFERENCED-NEVER-CALLED",
+      "voltagent-qa-sec:security-auditor": "REFERENCED-NEVER-CALLED",
+      "voltagent-qa-sec:threat-modeling": "REFERENCED-NEVER-CALLED",
+      "voltagent-research:competitive-analyst": "REFERENCED-NEVER-CALLED",
+      "voltagent-research:search-specialist": "USED (1 calls)"
+    }
+  },
+  {
+    "role_id": "claude:technical-writer",
+    "source": "paperclips/roles/technical-writer.md",
+    "includes_count": 9,
+    "inline_chars": 4668,
+    "inline_duplicates": [],
+    "inline_only_sections": [
+      {
+        "level": 2,
+        "title": "Role"
+      },
+      {
+        "level": 2,
+        "title": "Principles"
+      },
+      {
+        "level": 2,
+        "title": "Output catalogue"
+      },
+      {
+        "level": 2,
+        "title": "Profile/topology matrix"
+      },
+      {
+        "level": 2,
+        "title": "Verification protocol (required before publishing)"
+      },
+      {
+        "level": 2,
+        "title": "PR checklist (walk mechanically)"
+      },
+      {
+        "level": 2,
+        "title": "MCP / Subagents / Skills"
+      }
+    ],
+    "subagent_refs": {
+      "superpowers:systematic-debugging": "REFERENCED-NEVER-CALLED",
+      "superpowers:test-driven-development": "REFERENCED-NEVER-CALLED",
+      "superpowers:verification-before-completion": "REFERENCED-NEVER-CALLED",
+      "voltagent-meta:knowledge-synthesizer": "REFERENCED-NEVER-CALLED",
+      "voltagent-qa-sec:qa-expert": "REFERENCED-NEVER-CALLED",
+      "voltagent-research:search-specialist": "USED (1 calls)"
+    }
+  },
+  {
+    "role_id": "codex:codex-architect-reviewer",
+    "source": "paperclips/roles-codex/codex-architect-reviewer.md",
+    "includes_count": 10,
+    "inline_chars": 6038,
+    "inline_duplicates": [],
+    "inline_only_sections": [
+      {
+        "level": 2,
+        "title": "Role"
+      },
+      {
+        "level": 2,
+        "title": "When to invoke"
+      },
+      {
+        "level": 2,
+        "title": "Review principles"
+      },
+      {
+        "level": 2,
+        "title": "Workflow"
+      },
+      {
+        "level": 2,
+        "title": "Output format"
+      },
+      {
+        "level": 2,
+        "title": "CodexArchitectReviewer review \u2014 PR #N"
+      },
+      {
+        "level": 3,
+        "title": "Independent analysis (Phase 1, untainted by prior review)"
+      },
+      {
+        "level": 3,
+        "title": "Cross-check with CR review (Phase 2)"
+      },
+      {
+        "level": 3,
+        "title": "Verdict: APPROVE / NUDGE / REQUEST REDESIGN"
+      },
+      {
+        "level": 2,
+        "title": "Anti-patterns (what NOT to do)"
+      },
+      {
+        "level": 2,
+        "title": "Phase 3.2 \u2014 Coverage matrix audit discipline"
+      },
+      {
+        "level": 2,
+        "title": "MCP / Subagents / Skills (only actually installed)"
+      }
+    ],
+    "subagent_refs": {
+      "codex-review:code-simplifier": "REFERENCED-NEVER-CALLED",
+      "codex-review:comment-analyzer": "REFERENCED-NEVER-CALLED",
+      "codex-review:silent-failure-hunter": "REFERENCED-NEVER-CALLED",
+      "codex-review:type-design-analyzer": "REFERENCED-NEVER-CALLED",
+      "voltagent-qa-sec:architect-reviewer": "REFERENCED-NEVER-CALLED",
+      "voltagent-qa-sec:debugger": "REFERENCED-NEVER-CALLED",
+      "voltagent-qa-sec:performance-engineer": "REFERENCED-NEVER-CALLED"
+    }
+  },
+  {
+    "role_id": "codex:cx-code-reviewer",
+    "source": "paperclips/roles-codex/cx-code-reviewer.md",
+    "includes_count": 6,
+    "inline_chars": 2904,
+    "inline_duplicates": [],
+    "inline_only_sections": [
+      {
+        "level": 2,
+        "title": "Role"
+      },
+      {
+        "level": 2,
+        "title": "Review principles"
+      },
+      {
+        "level": 2,
+        "title": "Operational safety"
+      },
+      {
+        "level": 2,
+        "title": "Compliance checklist"
+      },
+      {
+        "level": 3,
+        "title": "Plan review"
+      },
+      {
+        "level": 3,
+        "title": "Code review"
+      },
+      {
+        "level": 3,
+        "title": "Paperclip agent runtime"
+      },
+      {
+        "level": 2,
+        "title": "Review format"
+      },
+      {
+        "level": 2,
+        "title": "Summary"
+      },
+      {
+        "level": 2,
+        "title": "Findings"
+      },
+      {
+        "level": 3,
+        "title": "CRITICAL"
+      },
+      {
+        "level": 3,
+        "title": "WARNING"
+      },
+      {
+        "level": 3,
+        "title": "NOTE"
+      },
+      {
+        "level": 2,
+        "title": "Compliance checklist"
+      },
+      {
+        "level": 2,
+        "title": "Verdict: APPROVE | REQUEST CHANGES | REJECT"
+      }
+    ],
+    "subagent_refs": {}
+  },
+  {
+    "role_id": "codex:cx-cto",
+    "source": "paperclips/roles-codex/cx-cto.md",
+    "includes_count": 10,
+    "inline_chars": 3907,
+    "inline_duplicates": [],
+    "inline_only_sections": [
+      {
+        "level": 2,
+        "title": "Role"
+      },
+      {
+        "level": 3,
+        "title": "CTO-specific: no free engineer"
+      },
+      {
+        "level": 2,
+        "title": "Delegation"
+      },
+      {
+        "level": 2,
+        "title": "Verification gates (critical)"
+      },
+      {
+        "level": 2,
+        "title": "MCP / Subagents / Skills"
+      }
+    ],
+    "subagent_refs": {
+      "voltagent-meta:multi-agent-coordinator": "REFERENCED-NEVER-CALLED",
+      "voltagent-meta:workflow-orchestrator": "REFERENCED-NEVER-CALLED"
+    }
+  },
+  {
+    "role_id": "codex:cx-infra-engineer",
+    "source": "paperclips/roles-codex/cx-infra-engineer.md",
+    "includes_count": 11,
+    "inline_chars": 5419,
+    "inline_duplicates": [],
+    "inline_only_sections": [
+      {
+        "level": 2,
+        "title": "Role"
+      },
+      {
+        "level": 2,
+        "title": "Area of responsibility"
+      },
+      {
+        "level": 2,
+        "title": "Rules (hard)"
+      },
+      {
+        "level": 2,
+        "title": "Pre-work checklist"
+      },
+      {
+        "level": 2,
+        "title": "Anti-patterns (Gimle-specific bans)"
+      },
+      {
+        "level": 2,
+        "title": "MCP / Subagents / Skills"
+      }
+    ],
+    "subagent_refs": {
+      "voltagent-infra:deployment-engineer": "REFERENCED-NEVER-CALLED",
+      "voltagent-infra:devops-engineer": "REFERENCED-NEVER-CALLED",
+      "voltagent-infra:devops-incident-responder": "REFERENCED-NEVER-CALLED",
+      "voltagent-infra:docker-expert": "REFERENCED-NEVER-CALLED",
+      "voltagent-infra:platform-engineer": "REFERENCED-NEVER-CALLED",
+      "voltagent-infra:sre-engineer": "REFERENCED-NEVER-CALLED",
+      "voltagent-qa-sec:security-auditor": "REFERENCED-NEVER-CALLED"
+    }
+  },
+  {
+    "role_id": "codex:cx-mcp-engineer",
+    "source": "paperclips/roles-codex/cx-mcp-engineer.md",
+    "includes_count": 12,
+    "inline_chars": 5010,
+    "inline_duplicates": [],
+    "inline_only_sections": [
+      {
+        "level": 2,
+        "title": "Role"
+      },
+      {
+        "level": 2,
+        "title": "Area of responsibility"
+      },
+      {
+        "level": 2,
+        "title": "Principles (engineering conservatism)"
+      },
+      {
+        "level": 2,
+        "title": "Tool design rules (for the catalogue)"
+      },
+      {
+        "level": 2,
+        "title": "Transport \u2014 locked: streamable-HTTP"
+      },
+      {
+        "level": 2,
+        "title": "Auth model"
+      },
+      {
+        "level": 2,
+        "title": "PR checklist (mechanical)"
+      },
+      {
+        "level": 2,
+        "title": "MCP / Subagents / Skills"
+      }
+    ],
+    "subagent_refs": {
+      "codex-review:type-design-analyzer": "REFERENCED-NEVER-CALLED",
+      "voltagent-core-dev:api-designer": "REFERENCED-NEVER-CALLED",
+      "voltagent-qa-sec:security-auditor": "REFERENCED-NEVER-CALLED",
+      "voltagent-research:search-specialist": "USED (1 calls)"
+    }
+  },
+  {
+    "role_id": "codex:cx-python-engineer",
+    "source": "paperclips/roles-codex/cx-python-engineer.md",
+    "includes_count": 14,
+    "inline_chars": 3718,
+    "inline_duplicates": [],
+    "inline_only_sections": [
+      {
+        "level": 2,
+        "title": "Role"
+      },
+      {
+        "level": 2,
+        "title": "Area of responsibility"
+      },
+      {
+        "level": 2,
+        "title": "Technical conventions (hard rules)"
+      },
+      {
+        "level": 2,
+        "title": "Tests"
+      },
+      {
+        "level": 2,
+        "title": "Tooling"
+      },
+      {
+        "level": 2,
+        "title": "MCP / Subagents / Skills"
+      }
+    ],
+    "subagent_refs": {}
+  },
+  {
+    "role_id": "codex:cx-qa-engineer",
+    "source": "paperclips/roles-codex/cx-qa-engineer.md",
+    "includes_count": 11,
+    "inline_chars": 4732,
+    "inline_duplicates": [],
+    "inline_only_sections": [
+      {
+        "level": 2,
+        "title": "Role"
+      },
+      {
+        "level": 2,
+        "title": "Principles"
+      },
+      {
+        "level": 2,
+        "title": "Test infrastructure"
+      },
+      {
+        "level": 2,
+        "title": "Docker Compose smoke gate (required for merge)"
+      },
+      {
+        "level": 2,
+        "title": "Testcontainers lifecycle (Neo4j integration)"
+      },
+      {
+        "level": 2,
+        "title": "Edge cases matrix (Gimle-specific)"
+      },
+      {
+        "level": 2,
+        "title": "PR checklist (walk mechanically \u2014 no rubber-stamping)"
+      },
+      {
+        "level": 2,
+        "title": "MCP / Subagents / Skills"
+      }
+    ],
+    "subagent_refs": {
+      "codex-review:pr-test-analyzer": "REFERENCED-NEVER-CALLED",
+      "codex-review:silent-failure-hunter": "REFERENCED-NEVER-CALLED"
+    }
+  },
+  {
+    "role_id": "codex:cx-research-agent",
+    "source": "paperclips/roles-codex/cx-research-agent.md",
+    "includes_count": 9,
+    "inline_chars": 4922,
+    "inline_duplicates": [],
+    "inline_only_sections": [
+      {
+        "level": 2,
+        "title": "Role"
+      },
+      {
+        "level": 2,
+        "title": "Triggers"
+      },
+      {
+        "level": 2,
+        "title": "Principles"
+      },
+      {
+        "level": 2,
+        "title": "Output structure (consumer-aware)"
+      },
+      {
+        "level": 2,
+        "title": "Gap escalation"
+      },
+      {
+        "level": 2,
+        "title": "Report checklist (mechanical)"
+      },
+      {
+        "level": 2,
+        "title": "MCP / Subagents / Skills"
+      }
+    ],
+    "subagent_refs": {
+      "voltagent-research:research-analyst": "REFERENCED-NEVER-CALLED",
+      "voltagent-research:search-specialist": "USED (1 calls)",
+      "voltagent-research:trend-analyst": "REFERENCED-NEVER-CALLED"
+    }
+  },
+  {
+    "role_id": "codex:cx-technical-writer",
+    "source": "paperclips/roles-codex/cx-technical-writer.md",
+    "includes_count": 9,
+    "inline_chars": 4635,
+    "inline_duplicates": [],
+    "inline_only_sections": [
+      {
+        "level": 2,
+        "title": "Role"
+      },
+      {
+        "level": 2,
+        "title": "Principles"
+      },
+      {
+        "level": 2,
+        "title": "Output catalogue"
+      },
+      {
+        "level": 2,
+        "title": "Profile/topology matrix"
+      },
+      {
+        "level": 2,
+        "title": "Verification protocol (required before publishing)"
+      },
+      {
+        "level": 2,
+        "title": "PR checklist (walk mechanically)"
+      },
+      {
+        "level": 2,
+        "title": "MCP / Subagents / Skills"
+      }
+    ],
+    "subagent_refs": {
+      "voltagent-meta:knowledge-synthesizer": "REFERENCED-NEVER-CALLED",
+      "voltagent-qa-sec:qa-expert": "REFERENCED-NEVER-CALLED",
+      "voltagent-research:search-specialist": "USED (1 calls)"
+    }
+  }
+]

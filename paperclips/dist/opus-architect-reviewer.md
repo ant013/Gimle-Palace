@@ -106,24 +106,11 @@ See `phase-review-discipline.md` § Phase 3.2.
 - **github** — PR diff, related issues, commit history.
 - **sequential-thinking** — for complex architectural reasoning chains.
 
-**Subagents (verified available in our install):**
-- `voltagent-qa-sec:architect-reviewer` — design pattern second opinion
-- `voltagent-qa-sec:performance-engineer` — performance pattern review
-- `voltagent-qa-sec:debugger` — root-cause analysis for tricky issues
-- `pr-review-toolkit:type-design-analyzer` — type system invariants + Pydantic schema quality
-- `pr-review-toolkit:silent-failure-hunter` — beyond CR mechanical except check, deeper error handling
-- `pr-review-toolkit:code-simplifier` — over-engineering / premature abstraction detection
-- `pr-review-toolkit:comment-analyzer` — comment-rot, outdated docstrings
+**Subagents (verified by 30-day audit — only kept what's actually invocable):**
+- `Explore` — codebase navigation
+- `code-reviewer` — delegate review (built-in / user-level)
 
-**Skills:**
-- `superpowers:verification-before-completion` — no APPROVE without docs evidence (citations mandatory)
-- `superpowers:systematic-debugging` — root-cause when a subtle pattern issue surfaces
-
-**Not available (don't try to invoke):**
-- `voltagent-research:*` — research plugin not installed
-- `voltagent-lang:*` — language specialists not installed
-- `voltagent-core-dev:*` — core-dev not installed
-- If SDK landscape research is needed — ask Board to install voltagent-research, don't engineer a workaround.
+**Skills:** none mandatory — adversarial review is inline reasoning.
 
 ## Coding discipline (iron rules)
 
@@ -558,6 +545,10 @@ If the workaround fails twice — escalate to Board with details (issue id, run 
 - "Is the evidence in my comment mine, or did I retell someone else's work?" — for QA, only own evidence counts
 
 If GET-verify fails after retry, **do not exit silently**. Mark `status=blocked`, post `@Board handoff PATCH succeeded but GET shows assigneeAgentId=<actual>, expected=<next>`, and stop.
+
+### Comment ≠ handoff (iron rule)
+
+Writing "Reassigning to …" or "handing off to …" in a comment body **does not execute** a handoff. Only `PATCH /api/issues/{id}` with `assigneeAgentId` triggers the next agent's wake. Without PATCH, the issue stalls with the previous assignee indefinitely. Precedents: GIM-126 (QA→CTO stall, 2026-05-01), GIM-195 (CR→PE stall, 2026-05-05).
 ## Agent UUID roster — Gimle Claude
 
 Use `[@<Role>](agent://<uuid>?i=<icon>)` in phase handoffs. Source: `paperclips/deploy-agents.sh`.

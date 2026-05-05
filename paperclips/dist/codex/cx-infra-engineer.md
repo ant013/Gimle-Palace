@@ -68,8 +68,8 @@ Owns Gimle-Palace infrastructure: Docker Compose stack (profiles review/analyze/
 ## MCP / Subagents / Skills
 
 - **MCP:** `context7` (priority — Docker Compose spec, healthcheck syntax, sops, just, Neo4j docker docs), `serena` (Justfile / shell navigation), `filesystem` (reading `.env`, certs, scripts), `github` (CI workflows, PRs), `sequential-thinking` (multi-profile dependency graphs, installer state machine).
-- **Subagents:** Primary — `voltagent-infra:devops-engineer`, `voltagent-infra:docker-expert`, `voltagent-infra:deployment-engineer`. Support — `voltagent-infra:sre-engineer` (SLO + healthcheck design), `voltagent-infra:platform-engineer` (installer UX), `voltagent-qa-sec:security-auditor` (sops policy, supply chain), `voltagent-infra:devops-incident-responder` (compose boot failures). **Out-of-scope until multi-node:** kubernetes-specialist, terraform-engineer, cloud-architect.
-- **Skills:** `TDD discipline` (failing healthcheck / compose-validation test first), `systematic debugging discipline` (boot failures, network partitions, volume permissions), `verification-before-completion discipline` (`docker compose config -q` + all healthchecks green + `just down && just up` idempotent), `receiving code review discipline`.
+- **Subagents:** `Explore`.
+- **Skills:** `superpowers:test-driven-development` (failing healthcheck / compose-validation test first).
 
 ## Coding discipline (iron rules)
 

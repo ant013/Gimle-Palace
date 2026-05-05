@@ -54,8 +54,8 @@ Primary author of all Python code: FastAPI services, async pipelines, Pydantic m
 ## MCP / Subagents / Skills
 
 - **MCP:** `context7` (Python / FastAPI / Pydantic / pytest / asyncio / Neo4j docs — priority for API questions), `serena` (find_symbol, find_referencing_symbols, replace_symbol_body — priority for code ops), `filesystem`, `github`, `sequential-thinking` (complex async-pipeline decisions).
-- **Subagents:** `python-pro` (core language), `fastapi-developer` (async web), `test-automator` (pytest infra), `backend-developer` (architectural decisions), `performance-engineer` (profiling, async leaks), `debugger`, `security-auditor` (input validation, secrets).
-- **Skills:** `superpowers:test-driven-development` (required before implementation), `superpowers:systematic-debugging`, `superpowers:verification-before-completion`, `superpowers:receiving-code-review`.
+- **Subagents:** `Explore` (codebase navigation).
+- **Skills:** `superpowers:test-driven-development` (required before implementation).
 
 <!-- @include fragments/shared/fragments/karpathy-discipline.md -->
 
