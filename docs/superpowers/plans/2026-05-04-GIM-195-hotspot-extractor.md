@@ -132,7 +132,7 @@ Expected: all pass including the 2 new ones.
 
 ```bash
 git add services/palace-mcp/pyproject.toml services/palace-mcp/uv.lock services/palace-mcp/src/palace_mcp/config.py services/palace-mcp/tests/unit/test_settings_foundation.py
-git commit -m "feat(GIM-NN): add lizard dep + 4 PALACE_HOTSPOT_* env vars"
+git commit -m "feat(GIM-195): add lizard dep + 4 PALACE_HOTSPOT_* env vars"
 ```
 
 ---
@@ -276,7 +276,7 @@ Expected: 7 passed.
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/extractors/hotspot/__init__.py services/palace-mcp/src/palace_mcp/extractors/hotspot/models.py services/palace-mcp/tests/extractors/unit/test_hotspot_models.py
-git commit -m "feat(GIM-NN): hotspot models — ParsedFunction + ParsedFile (Pydantic frozen)"
+git commit -m "feat(GIM-195): hotspot models — ParsedFunction + ParsedFile (Pydantic frozen)"
 ```
 
 ---
@@ -405,7 +405,7 @@ Expected: 4 passed.
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/extractors/hotspot/file_walker.py services/palace-mcp/tests/extractors/unit/test_hotspot_file_walker.py
-git commit -m "feat(GIM-NN): hotspot file walker — stop-list + parts-based fixture skip"
+git commit -m "feat(GIM-195): hotspot file walker — stop-list + parts-based fixture skip"
 ```
 
 ---
@@ -639,7 +639,7 @@ Expected: 3 passed.
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/extractors/hotspot/lizard_runner.py services/palace-mcp/tests/extractors/unit/test_hotspot_lizard_runner.py
-git commit -m "feat(GIM-NN): hotspot lizard_runner — XML parse + timeout policy"
+git commit -m "feat(GIM-195): hotspot lizard_runner — XML parse + timeout policy"
 ```
 
 ---
@@ -820,7 +820,7 @@ Expected: 5 passed.
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/extractors/hotspot/neo4j_writer.py services/palace-mcp/tests/extractors/unit/test_hotspot_neo4j_writer.py
-git commit -m "feat(GIM-NN): hotspot writer Phase 1 + Cypher constants for 3/4/5 (D1 SET fresh)"
+git commit -m "feat(GIM-195): hotspot writer Phase 1 + Cypher constants for 3/4/5 (D1 SET fresh)"
 ```
 
 ---
@@ -917,7 +917,7 @@ async def fetch_churn(
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/extractors/hotspot/churn_query.py services/palace-mcp/tests/extractors/unit/test_hotspot_neo4j_writer.py
-git commit -m "feat(GIM-NN): hotspot churn_query — single Cypher round-trip"
+git commit -m "feat(GIM-195): hotspot churn_query — single Cypher round-trip"
 ```
 
 ---
@@ -1029,7 +1029,7 @@ async def mark_dead_files_zero(
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/extractors/hotspot/neo4j_writer.py services/palace-mcp/tests/extractors/unit/test_hotspot_neo4j_writer.py
-git commit -m "feat(GIM-NN): hotspot writer Phase 3/4/5 — score + evict + dead-files"
+git commit -m "feat(GIM-195): hotspot writer Phase 3/4/5 — score + evict + dead-files"
 ```
 
 ---
@@ -1092,7 +1092,7 @@ Edit `neo4j_writer.py` PHASE_3_CYPHER to insert a forbidden line (e.g., `SET f.p
 
 ```bash
 git add services/palace-mcp/tests/extractors/unit/test_cross_extractor_file_isolation.py
-git commit -m "test(GIM-NN): cross-extractor :File isolation guard (acceptance #11)"
+git commit -m "test(GIM-195): cross-extractor :File isolation guard (acceptance #11)"
 ```
 
 ---
@@ -1309,7 +1309,7 @@ class HotspotExtractor(BaseExtractor):
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/extractors/hotspot/extractor.py services/palace-mcp/tests/extractors/unit/test_hotspot_extractor.py
-git commit -m "feat(GIM-NN): HotspotExtractor.run() orchestrator (invariant 7)"
+git commit -m "feat(GIM-195): HotspotExtractor.run() orchestrator (invariant 7)"
 ```
 
 ---
@@ -1354,7 +1354,7 @@ Expected: all green.
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/extractors/registry.py services/palace-mcp/tests/extractors/unit/test_registry.py
-git commit -m "feat(GIM-NN): register hotspot in EXTRACTORS"
+git commit -m "feat(GIM-195): register hotspot in EXTRACTORS"
 ```
 
 ---
@@ -1499,7 +1499,7 @@ parser may differ slightly across versions.
 
 ```bash
 git add services/palace-mcp/tests/extractors/fixtures/hotspot-mini-project/
-git commit -m "test(GIM-NN): hotspot mini-fixture — 3-language tree with seeded git history"
+git commit -m "test(GIM-195): hotspot mini-fixture — 3-language tree with seeded git history"
 ```
 
 ---
@@ -1701,7 +1701,7 @@ Expected: 3 passed.
 
 ```bash
 git add services/palace-mcp/tests/extractors/integration/test_hotspot_integration.py
-git commit -m "test(GIM-NN): hotspot integration — pipeline + idempotency + eviction"
+git commit -m "test(GIM-195): hotspot integration — pipeline + idempotency + eviction"
 ```
 
 ---
@@ -1861,7 +1861,7 @@ Expected: 4 passed.
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/code/find_hotspots.py services/palace-mcp/src/palace_mcp/server.py services/palace-mcp/tests/integration/test_find_hotspots_tool.py services/palace-mcp/tests/integration/conftest.py
-git commit -m "feat(GIM-NN): palace.code.find_hotspots MCP tool + 4-row wire contract"
+git commit -m "feat(GIM-195): palace.code.find_hotspots MCP tool + 4-row wire contract"
 ```
 
 ---
@@ -2014,7 +2014,7 @@ Expected: 4 passed.
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/code/list_functions.py services/palace-mcp/src/palace_mcp/server.py services/palace-mcp/tests/integration/test_list_functions_tool.py
-git commit -m "feat(GIM-NN): palace.code.list_functions MCP tool + 4-row wire contract"
+git commit -m "feat(GIM-195): palace.code.list_functions MCP tool + 4-row wire contract"
 ```
 
 ---
@@ -2029,7 +2029,7 @@ git commit -m "feat(GIM-NN): palace.code.list_functions MCP tool + 4-row wire co
 In `CLAUDE.md` `### Registered extractors` section, append:
 
 ```markdown
-- `hotspot` — Code-Complexity × Churn Hotspot extractor (GIM-NN, Roadmap #44).
+- `hotspot` — Code-Complexity × Churn Hotspot extractor (GIM-195, Roadmap #44).
   Walks repo with stop-list, calls `lizard` per-batch (50 files), aggregates
   per-function CCN to per-file `ccn_total`, joins with `git_history`'s
   `(:Commit)-[:TOUCHED]->(:File)` graph for churn count in a configurable
@@ -2090,7 +2090,7 @@ storage as a separate node type.
 
 ```bash
 git add CLAUDE.md
-git commit -m "docs(GIM-NN): CLAUDE.md — hotspot row + Operator workflow subsection"
+git commit -m "docs(GIM-195): CLAUDE.md — hotspot row + Operator workflow subsection"
 ```
 
 ---
@@ -2133,8 +2133,8 @@ Expected: all green.
 - [ ] **Step 5: Push branch + open PR**
 
 ```bash
-git push -u origin feature/GIM-NN-hotspot-extractor
-gh pr create --title "feat(GIM-NN): hotspot extractor — Tornhill score + per-function complexity" --body "$(cat <<'EOF'
+git push -u origin feature/GIM-195-hotspot-extractor
+gh pr create --title "feat(GIM-195): hotspot extractor — Tornhill score + per-function complexity" --body "$(cat <<'EOF'
 ## Summary
 
 Implements Roadmap #44 — Code Complexity × Churn Hotspot extractor.
@@ -2145,7 +2145,7 @@ Implements Roadmap #44 — Code Complexity × Churn Hotspot extractor.
 - Lizard timeout policy: `drop_batch` default
 
 Spec: `docs/superpowers/specs/2026-05-04-hotspot-extractor-design.md` (rev2)
-Plan: `docs/superpowers/plans/2026-05-04-GIM-NN-hotspot-extractor.md`
+Plan: `docs/superpowers/plans/2026-05-04-GIM-195-hotspot-extractor.md`
 
 ## QA Evidence
 

@@ -3,7 +3,7 @@ title: Hotspot extractor — file-level Tornhill score + per-function complexity
 slug: hotspot-extractor
 date: 2026-05-04
 status: proposed (rev2)
-paperclip_issue: NN
+paperclip_issue: 195
 predecessor_sha: 13f6b13a4
 authoring: Board+Claude
 team: Claude
@@ -24,7 +24,7 @@ Operator pre-CR review surfaced D1–D10 + 4 minor items. Rev2 addresses all of 
 - **D5 (atomic phases)** — added invariant 7: Phase 4/5 only run after Phase 1–3 succeed. Documented in §5.7.
 - **D6 (list_functions edge cases)** — §7.2 now spells out the error matrix: registered+missing-file = success+empty, unregistered = error envelope.
 - **D7 (window oversight)** — invariant 4 reworded to include "AND identical `complexity_window_days`".
-- **D8 (plan parallel)** — plan is the immediate next deliverable in this same Board+Claude session (`docs/superpowers/plans/2026-05-04-GIM-NN-hotspot-extractor.md`); CTO Phase 1.1 verifies BOTH spec + plan paths.
+- **D8 (plan parallel)** — plan is the immediate next deliverable in this same Board+Claude session (`docs/superpowers/plans/2026-05-04-GIM-195-hotspot-extractor.md`); CTO Phase 1.1 verifies BOTH spec + plan paths.
 - **D9 (CLAUDE.md scope)** — added §2 IN line: "Update `CLAUDE.md ## Extractors` with hotspot operator workflow (env vars, git_history dependency, R4 trade-off)".
 - **D10 (roadmap citation)** — added `roadmap_source` frontmatter pointing to exact location.
 - **Minor (datetime type)** — §5.4 cites `:Commit.committed_at` as Neo4j `DATETIME` (per `git_history/neo4j_writer.py` MERGE Cypher).
@@ -595,11 +595,11 @@ in slim docker image.
 
 ### 9.1 Phase 1.1 (CTO formalize)
 
-1. Branch `feature/GIM-NN-hotspot-extractor` HEAD descends from
+1. Branch `feature/GIM-195-hotspot-extractor` HEAD descends from
    `13f6b13a4` (predecessor SHA). Verify via
    `git merge-base --is-ancestor 13f6b13a4 HEAD`.
 2. Spec exists at the path matching this filename.
-3. Plan exists at `docs/superpowers/plans/2026-05-04-GIM-NN-hotspot-extractor.md`.
+3. Plan exists at `docs/superpowers/plans/2026-05-04-GIM-195-hotspot-extractor.md`.
 4. Frontmatter `paperclip_issue` matches the issue number assigned by
    operator at issue-creation time (swap `NN` for real digits).
 5. Foundation primitives stable on branch (per §8).
@@ -755,7 +755,7 @@ contradict spec §2 IN.
 When operator approves the spec:
 
 1. Operator creates paperclip issue (gets `GIM-N`).
-2. Operator (or CTO) updates spec frontmatter `paperclip_issue: NN` →
+2. Operator (or CTO) updates spec frontmatter `paperclip_issue: 195` →
    real number, renames spec/plan filenames to include `GIM-N`.
 3. Atomic-handoff to **CTO** for Phase 1.1 Formalize per
    `paperclips/fragments/profiles/handoff.md`:
