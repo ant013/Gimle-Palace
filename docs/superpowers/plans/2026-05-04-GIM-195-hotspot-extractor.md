@@ -15,7 +15,7 @@
 | Path | Responsibility |
 |------|----------------|
 | `services/palace-mcp/pyproject.toml` | Add `lizard>=1.17.20,<2.0` to `[project.dependencies]` |
-| `services/palace-mcp/src/palace_mcp/config.py` | Add 4 `PALACE_HOTSPOT_*` env-var fields to `PalaceSettings` |
+| `services/palace-mcp/src/palace_mcp/config.py` | Add 4 `PALACE_HOTSPOT_*` env-var fields to `Settings` |
 | `services/palace-mcp/src/palace_mcp/extractors/hotspot/__init__.py` | Package init |
 | `services/palace-mcp/src/palace_mcp/extractors/hotspot/models.py` | `ParsedFunction`, `ParsedFile` Pydantic frozen models |
 | `services/palace-mcp/src/palace_mcp/extractors/hotspot/file_walker.py` | `_walk()`, `_STOP_DIRS`, `_LIZARD_EXTENSIONS`, `_FIXTURE_STOP_PARTS` |
@@ -44,7 +44,7 @@
 
 **Files:**
 - Modify: `services/palace-mcp/pyproject.toml` (`[project.dependencies]`)
-- Modify: `services/palace-mcp/src/palace_mcp/config.py:PalaceSettings`
+- Modify: `services/palace-mcp/src/palace_mcp/config.py:Settings`
 - Test: `services/palace-mcp/tests/unit/test_settings_foundation.py` (extend existing)
 
 - [ ] **Step 1: Write failing test for new settings fields**
@@ -52,46 +52,41 @@
 Append to `services/palace-mcp/tests/unit/test_settings_foundation.py`:
 
 ```python
-def test_hotspot_settings_defaults():
-    settings = PalaceSettings(
-        neo4j_uri="bolt://localhost:7687",
-        neo4j_user="neo4j",
-        neo4j_password="changeme",
-        tantivy_index_path="/tmp/tantivy",
-    )
+def test_hotspot_settings_defaults(monkeypatch):
+    """Uses monkeypatch.setenv + _minimal_env() pattern per test_settings_foundation.py."""
+    for k, v in _minimal_env().items():
+        monkeypatch.setenv(k, v)
+    settings = Settings()
     assert settings.hotspot_churn_window_days == 90
     assert settings.hotspot_lizard_batch_size == 50
     assert settings.hotspot_lizard_timeout_s == 30
     assert settings.hotspot_lizard_timeout_behavior == "drop_batch"
 
 
-def test_hotspot_lizard_timeout_behavior_invalid_rejected():
+def test_hotspot_lizard_timeout_behavior_invalid_rejected(monkeypatch):
     import pytest
     from pydantic import ValidationError
+    for k, v in _minimal_env().items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setenv("PALACE_HOTSPOT_LIZARD_TIMEOUT_BEHAVIOR", "boom")
     with pytest.raises(ValidationError):
-        PalaceSettings(
-            neo4j_uri="bolt://localhost:7687",
-            neo4j_user="neo4j",
-            neo4j_password="changeme",
-            tantivy_index_path="/tmp/tantivy",
-            hotspot_lizard_timeout_behavior="boom",
-        )
+        Settings()
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `cd services/palace-mcp && uv run pytest tests/unit/test_settings_foundation.py::test_hotspot_settings_defaults -v`
 
-Expected: FAIL with `AttributeError: 'PalaceSettings' object has no attribute 'hotspot_churn_window_days'`.
+Expected: FAIL with `AttributeError: 'Settings' object has no attribute 'hotspot_churn_window_days'`.
 
 - [ ] **Step 3: Implement settings fields**
 
-In `services/palace-mcp/src/palace_mcp/config.py`, append to `PalaceSettings`:
+In `services/palace-mcp/src/palace_mcp/config.py`, append to `Settings`:
 
 ```python
 from typing import Literal
 
-# inside PalaceSettings class
+# inside Settings class
 hotspot_churn_window_days: int = Field(
     default=90, ge=1,
     description="Window (days) for :Commit churn aggregation per :File",
@@ -371,6 +366,7 @@ _LIZARD_EXTENSIONS: frozenset[str] = frozenset({
     ".py", ".java", ".kt", ".kts", ".swift",
     ".ts", ".tsx", ".js", ".jsx",
     ".sol", ".cpp", ".cc", ".h", ".hpp", ".m", ".mm",
+    ".rb", ".php", ".scala",
 })
 
 
@@ -1197,7 +1193,6 @@ from itertools import islice
 from math import log
 from typing import ClassVar, Iterable
 
-from palace_mcp.config import get_settings
 from palace_mcp.extractors.base import (
     BaseExtractor, ExtractorRunContext, ExtractorStats,
 )
@@ -1237,6 +1232,7 @@ class HotspotExtractor(BaseExtractor):
     async def run(
         self, *, graphiti, ctx: ExtractorRunContext,
     ) -> ExtractorStats:
+        from palace_mcp.mcp_server import get_settings  # late import per extractor convention
         settings = get_settings()
         run_started_at = datetime.now(tz=timezone.utc)
         files = list(file_walker._walk(ctx.repo_path))
@@ -1717,38 +1713,62 @@ git commit -m "test(GIM-195): hotspot integration — pipeline + idempotency + e
 
 ```python
 # services/palace-mcp/tests/integration/test_find_hotspots_tool.py
+#
+# Wire-contract tests use streamablehttp_client + session.call_tool()
+# pattern from test_mcp_wire_pattern.py. No mcp_wire helper exists.
 from __future__ import annotations
 
-import pytest
+import json
 
-from tests.integration.helpers.mcp_wire import call_tool
+import pytest
+from mcp import ClientSession
+from mcp.client.streamable_http import streamablehttp_client
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_find_hotspots_unregistered_project_returns_error_envelope():
-    resp = await call_tool("palace.code.find_hotspots", {"project": "doesnotexist"})
+async def test_find_hotspots_unregistered_project_returns_error(mcp_url: str):
+    async with streamablehttp_client(mcp_url) as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.call_tool(
+                "palace.code.find_hotspots", {"project": "doesnotexist"},
+            )
+    resp = json.loads(result.content[0].text)
     assert resp["ok"] is False
     assert resp["error_code"] == "project_not_registered"
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_find_hotspots_registered_no_files_returns_empty(registered_project_empty):
-    resp = await call_tool(
-        "palace.code.find_hotspots", {"project": registered_project_empty},
-    )
+async def test_find_hotspots_registered_no_files_returns_empty(
+    mcp_url: str, registered_project_empty,
+):
+    async with streamablehttp_client(mcp_url) as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.call_tool(
+                "palace.code.find_hotspots",
+                {"project": registered_project_empty},
+            )
+    resp = json.loads(result.content[0].text)
     assert resp.get("ok") is True
     assert resp["result"] == []
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_find_hotspots_with_data_returns_sorted_descending(seeded_hotspot_project):
-    resp = await call_tool(
-        "palace.code.find_hotspots",
-        {"project": seeded_hotspot_project, "top_n": 5},
-    )
+async def test_find_hotspots_with_data_returns_sorted_descending(
+    mcp_url: str, seeded_hotspot_project,
+):
+    async with streamablehttp_client(mcp_url) as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.call_tool(
+                "palace.code.find_hotspots",
+                {"project": seeded_hotspot_project, "top_n": 5},
+            )
+    resp = json.loads(result.content[0].text)
     assert resp.get("ok") is True
     rows = resp["result"]
     assert len(rows) > 0
@@ -1762,11 +1782,17 @@ async def test_find_hotspots_with_data_returns_sorted_descending(seeded_hotspot_
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_find_hotspots_min_score_filter(seeded_hotspot_project):
-    resp = await call_tool(
-        "palace.code.find_hotspots",
-        {"project": seeded_hotspot_project, "min_score": 1.5},
-    )
+async def test_find_hotspots_min_score_filter(
+    mcp_url: str, seeded_hotspot_project,
+):
+    async with streamablehttp_client(mcp_url) as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.call_tool(
+                "palace.code.find_hotspots",
+                {"project": seeded_hotspot_project, "min_score": 1.5},
+            )
+    resp = json.loads(result.content[0].text)
     assert resp.get("ok") is True
     for r in resp["result"]:
         assert r["hotspot_score"] >= 1.5
@@ -1784,8 +1810,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from palace_mcp.errors import error_envelope
-from palace_mcp.memory.project_registry import is_project_registered
+_GET_PROJECT = "MATCH (p:Project {slug: $slug}) RETURN p LIMIT 1"
 
 _QUERY = """
 MATCH (f:File {project_id: $project_id})
@@ -1802,14 +1827,20 @@ LIMIT $top_n
 """.strip()
 
 
+def _error(code: str, message: str, project: str | None = None) -> dict[str, Any]:
+    out: dict[str, Any] = {"ok": False, "error_code": code, "message": message}
+    if project is not None:
+        out["project"] = project
+    return out
+
+
 async def find_hotspots(
     *, driver: Any, project: str, top_n: int = 20, min_score: float = 0.0,
 ) -> dict[str, Any]:
-    if not await is_project_registered(driver, project):
-        return error_envelope(
-            error_code="project_not_registered",
-            message=f"Project {project!r} is not registered in :Project",
-        )
+    async with driver.session() as sess:
+        row = await (await sess.run(_GET_PROJECT, slug=project)).single()
+    if row is None:
+        return _error("project_not_registered", f"no :Project {{slug: {project!r}}}", project)
     rows: list[dict[str, Any]] = []
     async with driver.session() as session:
         result = await session.run(
@@ -1829,7 +1860,7 @@ async def find_hotspots(
     return {"ok": True, "result": rows}
 ```
 
-If `palace_mcp.errors.error_envelope` and `palace_mcp.memory.project_registry.is_project_registered` don't exist under those exact names, locate the canonical helpers from existing MCP tools (e.g., `find_references`, `cross_module_contract`) and reuse them. Do NOT invent new helpers.
+Pattern note: project-registration check uses direct Cypher `MATCH (p:Project {slug: $slug})` + `row is None` (per `runner.py:119-126`). Error response is a plain dict `{"ok": false, "error_code": ..., "message": ...}` via inline `_error()` helper (per `git/tools.py:58-62`). No shared `error_envelope` or `is_project_registered` function exists.
 
 - [ ] **Step 4: Register tool in server.py**
 
@@ -1877,57 +1908,84 @@ git commit -m "feat(GIM-195): palace.code.find_hotspots MCP tool + 4-row wire co
 
 ```python
 # services/palace-mcp/tests/integration/test_list_functions_tool.py
+#
+# Wire-contract tests use streamablehttp_client + session.call_tool()
+# pattern from test_mcp_wire_pattern.py. No mcp_wire helper exists.
 from __future__ import annotations
 
-import pytest
+import json
 
-from tests.integration.helpers.mcp_wire import call_tool
+import pytest
+from mcp import ClientSession
+from mcp.client.streamable_http import streamablehttp_client
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_list_functions_unregistered_project_returns_error():
-    resp = await call_tool(
-        "palace.code.list_functions",
-        {"project": "doesnotexist", "path": "src/x.py"},
-    )
+async def test_list_functions_unregistered_project_returns_error(mcp_url: str):
+    async with streamablehttp_client(mcp_url) as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.call_tool(
+                "palace.code.list_functions",
+                {"project": "doesnotexist", "path": "src/x.py"},
+            )
+    resp = json.loads(result.content[0].text)
     assert resp["ok"] is False
     assert resp["error_code"] == "project_not_registered"
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_list_functions_missing_file_returns_empty(seeded_hotspot_project):
-    resp = await call_tool(
-        "palace.code.list_functions",
-        {"project": seeded_hotspot_project, "path": "src/does_not_exist.py"},
-    )
+async def test_list_functions_missing_file_returns_empty(
+    mcp_url: str, seeded_hotspot_project,
+):
+    async with streamablehttp_client(mcp_url) as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.call_tool(
+                "palace.code.list_functions",
+                {"project": seeded_hotspot_project, "path": "src/does_not_exist.py"},
+            )
+    resp = json.loads(result.content[0].text)
     assert resp.get("ok") is True
     assert resp["result"] == []
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_list_functions_min_ccn_filter_excludes_low(seeded_hotspot_project):
-    resp = await call_tool(
-        "palace.code.list_functions",
-        {
-            "project": seeded_hotspot_project,
-            "path": "src/python_complex.py",
-            "min_ccn": 100,
-        },
-    )
+async def test_list_functions_min_ccn_filter_excludes_low(
+    mcp_url: str, seeded_hotspot_project,
+):
+    async with streamablehttp_client(mcp_url) as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.call_tool(
+                "palace.code.list_functions",
+                {
+                    "project": seeded_hotspot_project,
+                    "path": "src/python_complex.py",
+                    "min_ccn": 100,
+                },
+            )
+    resp = json.loads(result.content[0].text)
     assert resp.get("ok") is True
     assert resp["result"] == []
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_list_functions_returns_sorted_by_ccn_desc(seeded_hotspot_project):
-    resp = await call_tool(
-        "palace.code.list_functions",
-        {"project": seeded_hotspot_project, "path": "src/python_complex.py", "min_ccn": 0},
-    )
+async def test_list_functions_returns_sorted_by_ccn_desc(
+    mcp_url: str, seeded_hotspot_project,
+):
+    async with streamablehttp_client(mcp_url) as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.call_tool(
+                "palace.code.list_functions",
+                {"project": seeded_hotspot_project, "path": "src/python_complex.py", "min_ccn": 0},
+            )
+    resp = json.loads(result.content[0].text)
     assert resp.get("ok") is True
     rows = resp["result"]
     assert len(rows) >= 1
@@ -1949,8 +2007,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from palace_mcp.errors import error_envelope
-from palace_mcp.memory.project_registry import is_project_registered
+_GET_PROJECT = "MATCH (p:Project {slug: $slug}) RETURN p LIMIT 1"
 
 _QUERY = """
 MATCH (f:File {project_id: $project_id, path: $path})-[:CONTAINS]->(fn:Function)
@@ -1966,14 +2023,20 @@ ORDER BY fn.ccn DESC, fn.start_line ASC
 """.strip()
 
 
+def _error(code: str, message: str, project: str | None = None) -> dict[str, Any]:
+    out: dict[str, Any] = {"ok": False, "error_code": code, "message": message}
+    if project is not None:
+        out["project"] = project
+    return out
+
+
 async def list_functions(
     *, driver: Any, project: str, path: str, min_ccn: int = 0,
 ) -> dict[str, Any]:
-    if not await is_project_registered(driver, project):
-        return error_envelope(
-            error_code="project_not_registered",
-            message=f"Project {project!r} is not registered in :Project",
-        )
+    async with driver.session() as sess:
+        row = await (await sess.run(_GET_PROJECT, slug=project)).single()
+    if row is None:
+        return _error("project_not_registered", f"no :Project {{slug: {project!r}}}", project)
     rows: list[dict[str, Any]] = []
     async with driver.session() as session:
         result = await session.run(
