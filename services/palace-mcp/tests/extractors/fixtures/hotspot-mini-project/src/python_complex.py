@@ -11,6 +11,3 @@ def classify(n):
         if n < 1000:
             return "large"
         return "huge"
-
-
-

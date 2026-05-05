@@ -802,8 +802,14 @@ async def palace_code_find_hotspots(
     """Find hotspot files ranked by complexity × churn score."""
     driver = _driver
     if driver is None:
-        return {"ok": False, "error_code": "driver_unavailable", "message": "Neo4j driver not initialised"}
-    return await _find_hotspots_impl(driver=driver, project=project, top_n=top_n, min_score=min_score)
+        return {
+            "ok": False,
+            "error_code": "driver_unavailable",
+            "message": "Neo4j driver not initialised",
+        }
+    return await _find_hotspots_impl(
+        driver=driver, project=project, top_n=top_n, min_score=min_score
+    )
 
 
 @_tool(
@@ -822,8 +828,14 @@ async def palace_code_list_functions(
     """List functions for a specific file recorded by the hotspot extractor."""
     driver = _driver
     if driver is None:
-        return {"ok": False, "error_code": "driver_unavailable", "message": "Neo4j driver not initialised"}
-    return await _list_functions_impl(driver=driver, project=project, path=path, min_ccn=min_ccn)
+        return {
+            "ok": False,
+            "error_code": "driver_unavailable",
+            "message": "Neo4j driver not initialised",
+        }
+    return await _list_functions_impl(
+        driver=driver, project=project, path=path, min_ccn=min_ccn
+    )
 
 
 # ---------------------------------------------------------------------------

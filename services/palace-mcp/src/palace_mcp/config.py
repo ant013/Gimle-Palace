@@ -119,15 +119,19 @@ class Settings(BaseSettings):
     # -----------------------------------------------------------------------
 
     palace_hotspot_churn_window_days: int = Field(
-        default=90, ge=1,
+        default=90,
+        ge=1,
         description="Window (days) for :Commit churn aggregation per :File",
     )
     palace_hotspot_lizard_batch_size: int = Field(
-        default=50, ge=1, le=500,
+        default=50,
+        ge=1,
+        le=500,
         description="Files per lizard subprocess invocation",
     )
     palace_hotspot_lizard_timeout_s: int = Field(
-        default=30, ge=1,
+        default=30,
+        ge=1,
         description="Per-batch lizard subprocess timeout (seconds)",
     )
     palace_hotspot_lizard_timeout_behavior: Literal["drop_batch", "fail_run"] = Field(

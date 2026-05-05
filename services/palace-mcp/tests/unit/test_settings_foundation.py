@@ -128,7 +128,9 @@ def test_hotspot_settings_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.palace_hotspot_lizard_timeout_behavior == "drop_batch"
 
 
-def test_hotspot_lizard_timeout_behavior_invalid_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_hotspot_lizard_timeout_behavior_invalid_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     for k, v in _minimal_env().items():
         monkeypatch.setenv(k, v)
     monkeypatch.setenv("PALACE_HOTSPOT_LIZARD_TIMEOUT_BEHAVIOR", "boom")

@@ -23,12 +23,16 @@ _EXT_TO_LANG: dict[str, str] = {
     ".js": "javascript",
     ".jsx": "javascript",
     ".sol": "solidity",
+    ".c": "c",
     ".cpp": "cpp",
     ".cc": "cpp",
     ".h": "cpp",
     ".hpp": "cpp",
     ".m": "objc",
     ".mm": "objc",
+    ".rb": "ruby",
+    ".php": "php",
+    ".scala": "scala",
 }
 
 _ITEM_RE = re.compile(r"^(?P<name>[^(]+)\(.*\) at (?P<path>.+?):(?P<line>\d+)$")

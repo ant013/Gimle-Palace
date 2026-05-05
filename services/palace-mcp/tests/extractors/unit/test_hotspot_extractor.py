@@ -28,36 +28,58 @@ async def test_run_executes_phases_in_order(tmp_path: Path):
     (src / "a.py").write_text("def x(): pass\n")
 
     pf = ParsedFile(
-        path="src/a.py", language="python",
-        functions=(ParsedFunction(
-            name="x", start_line=1, end_line=1, ccn=1,
-            parameter_count=0, nloc=1,
-        ),),
+        path="src/a.py",
+        language="python",
+        functions=(
+            ParsedFunction(
+                name="x",
+                start_line=1,
+                end_line=1,
+                ccn=1,
+                parameter_count=0,
+                nloc=1,
+            ),
+        ),
     )
     fake_run_result = LizardRunResult(parsed=(pf,), skipped_files=())
 
     graphiti = MagicMock()
     graphiti.driver = MagicMock()
     ctx = ExtractorRunContext(
-        project_slug="testproj", group_id="project/testproj",
-        repo_path=tmp_path, run_id="run-1", duration_ms=0,
+        project_slug="testproj",
+        group_id="project/testproj",
+        repo_path=tmp_path,
+        run_id="run-1",
+        duration_ms=0,
         logger=logging.getLogger("test"),
     )
 
     with (
         patch("palace_mcp.mcp_server.get_settings", return_value=_fake_settings()),
-        patch("palace_mcp.extractors.hotspot.extractor.lizard_runner.run_batch",
-              new=AsyncMock(return_value=fake_run_result)),
-        patch("palace_mcp.extractors.hotspot.extractor.churn_query.fetch_churn",
-              new=AsyncMock(return_value={"src/a.py": 5})),
-        patch("palace_mcp.extractors.hotspot.extractor.neo4j_writer.write_file_and_functions",
-              new=AsyncMock()) as m_p1,
-        patch("palace_mcp.extractors.hotspot.extractor.neo4j_writer.write_hotspot_score",
-              new=AsyncMock()) as m_p3,
-        patch("palace_mcp.extractors.hotspot.extractor.neo4j_writer.evict_stale_functions",
-              new=AsyncMock()) as m_p4,
-        patch("palace_mcp.extractors.hotspot.extractor.neo4j_writer.mark_dead_files_zero",
-              new=AsyncMock()) as m_p5,
+        patch(
+            "palace_mcp.extractors.hotspot.extractor.lizard_runner.run_batch",
+            new=AsyncMock(return_value=fake_run_result),
+        ),
+        patch(
+            "palace_mcp.extractors.hotspot.extractor.churn_query.fetch_churn",
+            new=AsyncMock(return_value={"src/a.py": 5}),
+        ),
+        patch(
+            "palace_mcp.extractors.hotspot.extractor.neo4j_writer.write_file_and_functions",
+            new=AsyncMock(),
+        ) as m_p1,
+        patch(
+            "palace_mcp.extractors.hotspot.extractor.neo4j_writer.write_hotspot_score",
+            new=AsyncMock(),
+        ) as m_p3,
+        patch(
+            "palace_mcp.extractors.hotspot.extractor.neo4j_writer.evict_stale_functions",
+            new=AsyncMock(),
+        ) as m_p4,
+        patch(
+            "palace_mcp.extractors.hotspot.extractor.neo4j_writer.mark_dead_files_zero",
+            new=AsyncMock(),
+        ) as m_p5,
     ):
         stats = await HotspotExtractor().run(graphiti=graphiti, ctx=ctx)
 
@@ -78,6 +100,7 @@ def test_run_no_try_except_around_inner_phases():
     """invariant 7: extractor.run() must not wrap inner phases in try/except."""
     import re
     from palace_mcp.extractors.hotspot import extractor as ext_mod
+
     src = Path(ext_mod.__file__).read_text(encoding="utf-8")
     m = re.search(r"async def run\(self,.*?\n(?P<body>(?: {4,}.*\n|\n)+)", src)
     assert m is not None

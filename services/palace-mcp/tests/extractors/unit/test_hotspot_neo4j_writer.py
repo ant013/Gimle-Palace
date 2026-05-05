@@ -7,8 +7,11 @@ import pytest
 
 from palace_mcp.extractors.hotspot.models import ParsedFile, ParsedFunction
 from palace_mcp.extractors.hotspot.neo4j_writer import (
-    PHASE_1_CYPHER, PHASE_3_CYPHER, PHASE_4_EVICT_CYPHER,
-    PHASE_5_DEAD_CYPHER, write_file_and_functions,
+    PHASE_1_CYPHER,
+    PHASE_3_CYPHER,
+    PHASE_4_EVICT_CYPHER,
+    PHASE_5_DEAD_CYPHER,
+    write_file_and_functions,
 )
 
 
@@ -21,13 +24,25 @@ async def test_phase1_passes_correct_params():
     driver.session.return_value.__aexit__.return_value = None
 
     pf = ParsedFile(
-        path="src/foo.py", language="python",
-        functions=(ParsedFunction(name="bar", start_line=10, end_line=20,
-                                  ccn=4, parameter_count=2, nloc=10),),
+        path="src/foo.py",
+        language="python",
+        functions=(
+            ParsedFunction(
+                name="bar",
+                start_line=10,
+                end_line=20,
+                ccn=4,
+                parameter_count=2,
+                nloc=10,
+            ),
+        ),
     )
     run_at = datetime(2026, 5, 4, 12, 0, tzinfo=timezone.utc)
     await write_file_and_functions(
-        driver, project_id="gimle", parsed_file=pf, run_started_at=run_at,
+        driver,
+        project_id="gimle",
+        parsed_file=pf,
+        run_started_at=run_at,
     )
     cypher_arg, params = session.run.await_args.args[0], session.run.await_args.args[1]
     assert cypher_arg is PHASE_1_CYPHER
@@ -35,10 +50,17 @@ async def test_phase1_passes_correct_params():
     assert params["path"] == "src/foo.py"
     assert params["ccn_total"] == 4
     assert params["run_started_at"] == run_at.isoformat()
-    assert params["functions"] == [{
-        "name": "bar", "start_line": 10, "end_line": 20,
-        "ccn": 4, "parameter_count": 2, "nloc": 10, "language": "python",
-    }]
+    assert params["functions"] == [
+        {
+            "name": "bar",
+            "start_line": 10,
+            "end_line": 20,
+            "ccn": 4,
+            "parameter_count": 2,
+            "nloc": 10,
+            "language": "python",
+        }
+    ]
 
 
 def test_phase1_cypher_sets_complexity_status_fresh():
@@ -93,8 +115,11 @@ async def test_fetch_churn_builds_correct_cypher_and_cutoff():
     run_at = datetime(2026, 5, 4, 12, 0, tzinfo=timezone.utc)
     paths = ["src/a.py", "src/b.py"]
     out = await fetch_churn(
-        driver, project_id="gimle", paths=paths,
-        window_days=90, run_started_at=run_at,
+        driver,
+        project_id="gimle",
+        paths=paths,
+        window_days=90,
+        run_started_at=run_at,
     )
     cypher_arg, params = session.run.await_args.args[0], session.run.await_args.args[1]
     assert cypher_arg is CHURN_CYPHER
@@ -108,6 +133,7 @@ async def test_fetch_churn_builds_correct_cypher_and_cutoff():
 @pytest.mark.asyncio
 async def test_write_hotspot_score_passes_correct_params():
     from palace_mcp.extractors.hotspot.neo4j_writer import write_hotspot_score
+
     driver = MagicMock()
     session = MagicMock()
     session.run = AsyncMock()
@@ -115,13 +141,21 @@ async def test_write_hotspot_score_passes_correct_params():
     driver.session.return_value.__aexit__.return_value = None
     run_at = datetime(2026, 5, 4, 12, 0, tzinfo=timezone.utc)
     await write_hotspot_score(
-        driver, project_id="gimle", path="src/foo.py",
-        churn=12, score=2.45, window_days=90, run_started_at=run_at,
+        driver,
+        project_id="gimle",
+        path="src/foo.py",
+        churn=12,
+        score=2.45,
+        window_days=90,
+        run_started_at=run_at,
     )
     params = session.run.await_args.args[1]
     assert params == {
-        "project_id": "gimle", "path": "src/foo.py",
-        "churn": 12, "score": 2.45, "window_days": 90,
+        "project_id": "gimle",
+        "path": "src/foo.py",
+        "churn": 12,
+        "score": 2.45,
+        "window_days": 90,
         "run_started_at": run_at.isoformat(),
     }
 
@@ -129,6 +163,7 @@ async def test_write_hotspot_score_passes_correct_params():
 @pytest.mark.asyncio
 async def test_evict_stale_functions_passes_run_started_at():
     from palace_mcp.extractors.hotspot.neo4j_writer import evict_stale_functions
+
     driver = MagicMock()
     session = MagicMock()
     session.run = AsyncMock()
@@ -137,13 +172,15 @@ async def test_evict_stale_functions_passes_run_started_at():
     run_at = datetime(2026, 5, 4, 12, 0, tzinfo=timezone.utc)
     await evict_stale_functions(driver, project_id="gimle", run_started_at=run_at)
     assert session.run.await_args.args[1] == {
-        "project_id": "gimle", "run_started_at": run_at.isoformat(),
+        "project_id": "gimle",
+        "run_started_at": run_at.isoformat(),
     }
 
 
 @pytest.mark.asyncio
 async def test_mark_dead_files_zero_passes_alive_paths():
     from palace_mcp.extractors.hotspot.neo4j_writer import mark_dead_files_zero
+
     driver = MagicMock()
     session = MagicMock()
     session.run = AsyncMock()
@@ -152,9 +189,13 @@ async def test_mark_dead_files_zero_passes_alive_paths():
     run_at = datetime(2026, 5, 4, 12, 0, tzinfo=timezone.utc)
     alive = ["src/a.py", "src/b.py"]
     await mark_dead_files_zero(
-        driver, project_id="gimle", alive_paths=alive, run_started_at=run_at,
+        driver,
+        project_id="gimle",
+        alive_paths=alive,
+        run_started_at=run_at,
     )
     assert session.run.await_args.args[1] == {
-        "project_id": "gimle", "alive_paths": alive,
+        "project_id": "gimle",
+        "alive_paths": alive,
         "run_started_at": run_at.isoformat(),
     }

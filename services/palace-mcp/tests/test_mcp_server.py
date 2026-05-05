@@ -58,4 +58,17 @@ class TestCodeToolRegistration:
             for t in _mcp._tool_manager.list_tools()
             if t.name.startswith("palace.code.")
         ]
-        assert len(code_tools) == 10
+        assert {tool.name for tool in code_tools} == {
+            "palace.code.detect_changes",
+            "palace.code.find_hotspots",
+            "palace.code.find_references",
+            "palace.code.get_architecture",
+            "palace.code.get_code_snippet",
+            "palace.code.list_functions",
+            "palace.code.manage_adr",
+            "palace.code.query_graph",
+            "palace.code.search_code",
+            "palace.code.search_graph",
+            "palace.code.test_impact",
+            "palace.code.trace_call_path",
+        }

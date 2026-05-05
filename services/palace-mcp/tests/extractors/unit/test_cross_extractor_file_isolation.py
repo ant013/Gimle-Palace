@@ -3,6 +3,7 @@
 Hotspot extractor must never SET :File.project_id or :File.path; both are
 owned by git_history (first-writer-wins).
 """
+
 from __future__ import annotations
 
 import re

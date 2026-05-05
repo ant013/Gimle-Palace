@@ -37,6 +37,36 @@ def test_parse_lizard_xml_extracts_per_file():
     assert by_path["src/a.py"].language == "python"
 
 
+@pytest.mark.parametrize(
+    ("rel_path", "language"),
+    [
+        ("src/native.c", "c"),
+        ("src/script.rb", "ruby"),
+        ("src/web.php", "php"),
+        ("src/pipeline.scala", "scala"),
+    ],
+)
+def test_parse_lizard_xml_maps_supported_languages(
+    rel_path: str, language: str
+) -> None:
+    repo_root = Path("/tmp/repo")
+    xml_text = f"""<?xml version="1.0"?>
+<cppncss>
+  <measure type="Function">
+    <labels><label>Nr.</label><label>NCSS</label><label>CCN</label><label>Functions</label></labels>
+    <item name="demo(...) at /tmp/repo/{rel_path}:7">
+      <value>1</value><value>10</value><value>3</value><value>demo</value>
+    </item>
+  </measure>
+</cppncss>
+"""
+
+    parsed = parse_lizard_xml(xml_text, repo_root=repo_root)
+
+    assert parsed[0].path == rel_path
+    assert parsed[0].language == language
+
+
 @pytest.mark.asyncio
 async def test_run_batch_drop_batch_on_timeout(tmp_path: Path):
     files = [tmp_path / "a.py", tmp_path / "b.py"]

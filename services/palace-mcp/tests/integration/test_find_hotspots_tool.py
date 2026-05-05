@@ -54,10 +54,21 @@ class _TestServer:
 
 
 @pytest.fixture(scope="module")
-def neo4j_uri() -> str:
+def neo4j_uri() -> Iterator[str]:
     if reuse := os.environ.get("COMPOSE_NEO4J_URI"):
-        return reuse
-    pytest.skip("COMPOSE_NEO4J_URI not set — skipping MCP wire-contract tests.")
+        yield reuse
+        return
+
+    try:
+        from testcontainers.neo4j import Neo4jContainer  # type: ignore[import]
+    except Exception as exc:
+        pytest.skip(f"testcontainers.neo4j unavailable — skipping wire tests: {exc}")
+
+    try:
+        with Neo4jContainer("neo4j:5.26.0") as container:
+            yield container.get_connection_url()
+    except Exception as exc:
+        pytest.skip(f"Could not start Neo4j testcontainer — skipping wire tests: {exc}")
 
 
 @pytest.fixture(scope="module")
@@ -161,6 +172,24 @@ async def test_find_hotspots_unregistered_project_returns_error(mcp_url: str) ->
     resp = json.loads(result.content[0].text)
     assert resp["ok"] is False
     assert resp["error_code"] == "project_not_registered"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_find_hotspots_appears_in_tools_list(mcp_url: str) -> None:
+    async with streamablehttp_client(mcp_url) as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.list_tools()
+
+    tool = next(
+        (item for item in result.tools if item.name == "palace.code.find_hotspots"),
+        None,
+    )
+    assert tool is not None, "palace.code.find_hotspots missing from tools/list"
+    assert tool.inputSchema is not None, (
+        "palace.code.find_hotspots inputSchema must not be None"
+    )
 
 
 @pytest.mark.integration

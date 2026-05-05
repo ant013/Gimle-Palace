@@ -8,8 +8,20 @@ from palace_mcp.extractors.hotspot.file_walker import _has_subseq, _walk
 def test_has_subseq_basic():
     assert _has_subseq(("a", "b", "c", "d"), ("b", "c")) is True
     assert _has_subseq(("a", "b", "c", "d"), ("c", "b")) is False
-    assert _has_subseq(("tests", "extractors", "fixtures", "x.py"), ("tests", "extractors", "fixtures")) is True
-    assert _has_subseq(("docs", "tests", "extractors", "fixtures-policy.md"), ("tests", "extractors", "fixtures")) is False
+    assert (
+        _has_subseq(
+            ("tests", "extractors", "fixtures", "x.py"),
+            ("tests", "extractors", "fixtures"),
+        )
+        is True
+    )
+    assert (
+        _has_subseq(
+            ("docs", "tests", "extractors", "fixtures-policy.md"),
+            ("tests", "extractors", "fixtures"),
+        )
+        is False
+    )
 
 
 def test_walk_picks_only_known_extensions(tmp_path: Path):

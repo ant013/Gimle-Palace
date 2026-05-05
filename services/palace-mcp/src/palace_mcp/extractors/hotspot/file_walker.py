@@ -36,6 +36,7 @@ _LIZARD_EXTENSIONS: frozenset[str] = frozenset(
         ".js",
         ".jsx",
         ".sol",
+        ".c",
         ".cpp",
         ".cc",
         ".h",
