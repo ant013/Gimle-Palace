@@ -49,13 +49,7 @@ You don't do it yourself — **you delegate correctly**:
 |---|---|---|
 | Kotlin wallet kit code (bitcoin-kit, ethereum-kit) | `voltagent-lang:kotlin-specialist` | Gradle multi-module + coroutines + SPV sync |
 | Swift wallet code (iOS Unstoppable) | `voltagent-lang:swift-expert` | Secure Enclave APIs, Keychain access groups |
-| Smart contract security (Solidity in deps) | `voltagent-qa-sec:security-auditor` | Slither / Mythril wrapper, EVM checks |
-| Wallet attack surface (transport, deeplinks, screenshots) | `voltagent-qa-sec:penetration-tester` | OWASP Mobile Top-10, mobile-specific risks |
-| DeFi / swap interface design | `voltagent-core-dev:api-designer` | Chain-agnostic interface review, versioning |
 | Blockchain dependency CVE sweep | `voltagent-research:search-specialist` | NVD + GitHub advisories for bitcoin-kit / web3j etc. |
-| Generic blockchain invariants checklist | `voltagent-lang:javascript-pro` or baseline prompt from VoltAgent `blockchain-developer` | ERC standards, reentrancy, nonce, overflow |
-
-**Don't invoke Solana rust-engineer** for Unstoppable — usually Kotlin / Swift SDK wrappers, native Rust unnecessary (unless ingesting Solana Labs source kit).
 
 ## MCP servers + skills
 
@@ -77,9 +71,6 @@ You don't do it yourself — **you delegate correctly**:
 ## Skills
 
 - `superpowers:test-driven-development` (invariant tests on crypto code)
-- `superpowers:systematic-debugging` (root cause for crypto issues)
-- `superpowers:verification-before-completion` (no advice without static evidence)
-- `voltagent-research:search-specialist` (primary tool for CVE / landscape lookup)
 
 <!-- @include fragments/shared/fragments/karpathy-discipline.md -->
 

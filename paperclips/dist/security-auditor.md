@@ -27,40 +27,24 @@
 - **Escalation discipline.** Critical / High → penetration-tester for exploitation proof. Medium / Low → remediation queue without exploit.
 - **Smallest safe change.** Recommendations must be actionable, not a "best practices wishlist".
 
-## Workflow decomposition
+## Workflow (subagents invoked when scope warrants — text retains for quarterly cadence)
 
-On request → **decompose into phases**:
+On request → audit pipeline:
 
-```
-Phase 1 — PARALLEL (no dependencies):
-├── voltagent-qa-sec:architect-reviewer    : design review (auth, transport, exposure model)
-├── voltagent-infra:security-engineer       : docker-bench-security + Trivy + GitGuardian sweep
-└── Semgrep MCP                              : SAST scan on relevant codebase
+1. **Design review + infra security + SAST scan** (parallel — when scope warrants):
+   - Design: `voltagent-qa-sec:code-reviewer` for security-focused PR review.
+   - Infra: Semgrep MCP (SAST) + Trivy (Bash, IaC + container scan) + GitGuardian (Bash, secrets).
+   - **If MCP server absent at runtime** — escalate to Board, do NOT proceed with LLM-reasoning fabrication. (See operator-memory `feedback_pe_qa_evidence_fabrication`.)
+2. **Threat categorization** — STRIDE / OWASP ASI inline reasoning, no subagent dependency.
+3. **Critical/High exploitation proof** — required for HIGH+ findings:
+   - Manual exploitation by SecurityAuditor (preferred default).
+   - Or `voltagent-qa-sec:penetration-tester` when quarterly testing scope is approved by Board.
+4. **Compliance mapping** (when scope explicitly requires regulated framework — GDPR / PCI / SOC2 / ISO):
+   - Inline reasoning for one-off audits.
+   - `voltagent-qa-sec:compliance-auditor` for repeating regulated programs (currently out-of-scope per project_palace_purpose_unstoppable memory).
+5. **Synthesis**: prioritize findings (CVSS + business context + exploitability), draft remediation plan, delegate fixes to InfraEngineer (automation) or PythonEngineer (code). Document threat-model artifact in `docs/security/<topic>-threat-model.md`.
 
-Phase 2 — SEQUENTIAL (depends on Phase 1):
-├── voltagent-qa-sec:threat-modeling (via STRIDE-style prompt) : map findings to threat categories
-└── voltagent-qa-sec:penetration-tester      : exploit top-3 critical for confirmed-severity proof
-
-Phase 3 — COMPLIANCE (parallel with Phase 2 if scope requires):
-└── voltagent-qa-sec:compliance-auditor      : map findings to GDPR / PCI / SOC2 / ISO controls
-
-Phase 4 — SYNTHESIS (you):
-├── Prioritize findings (CVSS + business context + exploitability evidence)
-├── Generate remediation plan (actionable steps, not a recommendations wishlist)
-├── Delegate fixes to voltagent-infra:security-engineer (automation) or engineers (code)
-└── Document threat model artifact
-```
-
-## Subagent invocation matrix
-
-| Subagent | When to invoke | When NOT to invoke |
-|---|---|---|
-| `voltagent-qa-sec:security-auditor` | Process orchestration, evidence collection, finding classification | Routine code review |
-| `voltagent-qa-sec:penetration-tester` | Critical / High exploitation proof, MCP tool poisoning PoC, JWT bypass | Compliance checks, code review |
-| `voltagent-qa-sec:compliance-auditor` | Regulatory framework mapping (GDPR Article checklist, SOC 2 controls, PCI-DSS) | Generic security audits |
-| `voltagent-qa-sec:architect-reviewer` | Security design review (auth, exposure, transport choice) | Implementation review |
-| `pr-review-toolkit:silent-failure-hunter` | Error-handling audit (skipped catches, secrets in error messages) | Functional bugs |
-| `voltagent-infra:security-engineer` | Remediation automation — Dockerfile fixes, hardening configs | Initial vulnerability detection |
+**Quarterly cadence note:** SecurityAuditor's exploitation-proof + compliance-mapping steps may have **0 invocations in a 30-day audit window** — this is by design. Do not interpret zero usage as obsolete capability.
 
 ## MCP servers (production-ready)
 
@@ -88,17 +72,15 @@ Not covered by community: Access policies scope creep (`everyone` rules), servic
 - [ ] Phase 2 threat categorization done (STRIDE / OWASP ASI maps applied)
 - [ ] Phase 3 compliance mapping (if applicable)
 - [ ] Phase 4 synthesis: prioritized findings + actionable remediation
-- [ ] Critical / High findings have exploitation evidence (penetration-tester invoked)
+- [ ] Critical / High findings have exploitation evidence (manual or via `voltagent-qa-sec:penetration-tester` when scope warrants)
 - [ ] Risk scoring per finding (CVSS + business context, not raw count)
 - [ ] Remediation plan delegated (security-engineer / engineers)
 - [ ] Threat model artifact saved in `docs/security/<topic>-threat-model.md`
 
-## Skills
+## Subagents / Skills
 
-- `superpowers:systematic-debugging` (root-cause for security findings)
-- `superpowers:verification-before-completion` (no APPROVE without static evidence)
-- `voltagent-research:search-specialist` (CVE landscape, threat intelligence research)
-- `voltagent-research:competitive-analyst` (threat landscape comparative analysis)
+- **Subagents:** `Explore`, `voltagent-qa-sec:code-reviewer` (security-focused PR review), `voltagent-research:search-specialist` (CVE landscape lookup).
+- **Skills:** none mandatory at runtime — pipeline above is inline.
 
 ## Coding discipline (iron rules)
 
@@ -532,6 +514,10 @@ If the workaround fails twice — escalate to Board with details (issue id, run 
 - "Is the evidence in my comment mine, or did I retell someone else's work?" — for QA, only own evidence counts
 
 If GET-verify fails after retry, **do not exit silently**. Mark `status=blocked`, post `@Board handoff PATCH succeeded but GET shows assigneeAgentId=<actual>, expected=<next>`, and stop.
+
+### Comment ≠ handoff (iron rule)
+
+Writing "Reassigning to …" or "handing off to …" in a comment body **does not execute** a handoff. Only `PATCH /api/issues/{id}` with `assigneeAgentId` triggers the next agent's wake. Without PATCH, the issue stalls with the previous assignee indefinitely. Precedents: GIM-126 (QA→CTO stall, 2026-05-01), GIM-195 (CR→PE stall, 2026-05-05).
 ## Agent UUID roster — Gimle Claude
 
 Use `[@<Role>](agent://<uuid>?i=<icon>)` in phase handoffs. Source: `paperclips/deploy-agents.sh`.

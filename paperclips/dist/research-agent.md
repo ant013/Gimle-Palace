@@ -65,9 +65,9 @@ Escalation always includes: what was attempted + where evidence ran out + who to
 
 ## MCP / Subagents / Skills
 
-- **context7** (priority — Python / MCP / Neo4j / FastAPI docs, training-cutoff resistant), **serena** (`find_symbol` for existing palace-mcp tool patterns during comparison), **github** (releases, issues, discussions), **filesystem** (existing `docs/superpowers/research/`), **sequential-thinking** (multi-source synthesis).
-- **Subagents:** `voltagent-research:search-specialist` (primary tool — agent orchestrates search-specialist for retrieval), `voltagent-research:research-analyst` (structured comparison reports), `voltagent-research:trend-analyst` (landscape evolution).
-- **Skills:** `superpowers:verification-before-completion` (no claim without citation), `research-deep` / `research-add-fields` / `research-report` skills (if installed — structured workflow).
+- **MCP:** `context7` (priority — Python / MCP / Neo4j / FastAPI docs, training-cutoff resistant), `serena` (`find_symbol` for existing palace-mcp tool patterns during comparison), `github` (releases, issues, discussions), `filesystem` (existing `docs/superpowers/research/`), `sequential-thinking` (multi-source synthesis).
+- **Subagents:** `voltagent-research:search-specialist` (primary — orchestrates search retrieval).
+- **Skills:** `research-deep` / `research-add-fields` / `research-report` (structured workflow when installed).
 
 ## Coding discipline (iron rules)
 
