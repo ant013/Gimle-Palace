@@ -220,7 +220,7 @@ Before claiming any merge-blocker, paste output of `gh pr view --json mergeState
 ## MCP / Subagents / Skills
 
 - **MCP:** `serena` (`find_symbol` / `find_referencing_symbols` for code nav), `context7` (FastAPI / Pydantic / pytest / Docker Compose / Neo4j / MCP spec docs).
-- **Subagents:** `Explore`, `code-reviewer` (built-in / user-level), `voltagent-qa-sec:code-reviewer` (deep review), `pr-review-toolkit:pr-test-analyzer` (test coverage audit).
+- **Subagents (per 30-day audit invocations):** `Explore` (5x), `deep-research-agent` (3x, user-level on iMac), `voltagent-qa-sec:code-reviewer` (2x, deep review), `general-purpose` (1x, fallback).
 - **Skills:** `superpowers:test-driven-development` (when bug-fix needs failing test first).
 
 ## Escalating to Board when blocked
@@ -583,6 +583,10 @@ If the workaround fails twice — escalate to Board with details (issue id, run 
 - "Is the evidence in my comment mine, or did I retell someone else's work?" — for QA, only own evidence counts
 
 If GET-verify fails after retry, **do not exit silently**. Mark `status=blocked`, post `@Board handoff PATCH succeeded but GET shows assigneeAgentId=<actual>, expected=<next>`, and stop.
+
+### Comment ≠ handoff (iron rule)
+
+Writing "Reassigning to …" or "handing off to …" in a comment body **does not execute** a handoff. Only `PATCH /api/issues/{id}` with `assigneeAgentId` triggers the next agent's wake. Without PATCH, the issue stalls with the previous assignee indefinitely. Precedents: GIM-126 (QA→CTO stall, 2026-05-01), GIM-195 (CR→PE stall, 2026-05-05).
 ## Agent UUID roster — Gimle Claude
 
 Use `[@<Role>](agent://<uuid>?i=<icon>)` in phase handoffs. Source: `paperclips/deploy-agents.sh`.

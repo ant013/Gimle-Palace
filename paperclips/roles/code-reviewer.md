@@ -145,7 +145,7 @@ Before claiming any merge-blocker, paste output of `gh pr view --json mergeState
 ## MCP / Subagents / Skills
 
 - **MCP:** `serena` (`find_symbol` / `find_referencing_symbols` for code nav), `context7` (FastAPI / Pydantic / pytest / Docker Compose / Neo4j / MCP spec docs).
-- **Subagents:** `Explore`, `code-reviewer` (built-in / user-level), `voltagent-qa-sec:code-reviewer` (deep review), `pr-review-toolkit:pr-test-analyzer` (test coverage audit).
+- **Subagents (per 30-day audit invocations):** `Explore` (5x), `deep-research-agent` (3x, user-level on iMac), `voltagent-qa-sec:code-reviewer` (2x, deep review), `general-purpose` (1x, fallback).
 - **Skills:** `superpowers:test-driven-development` (when bug-fix needs failing test first).
 
 <!-- @include fragments/shared/fragments/escalation-blocked.md -->

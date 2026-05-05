@@ -503,6 +503,10 @@ If the workaround fails twice — escalate to Board with details (issue id, run 
 - "Is the evidence in my comment mine, or did I retell someone else's work?" — for QA, only own evidence counts
 
 If GET-verify fails after retry, **do not exit silently**. Mark `status=blocked`, post `@Board handoff PATCH succeeded but GET shows assigneeAgentId=<actual>, expected=<next>`, and stop.
+
+### Comment ≠ handoff (iron rule)
+
+Writing "Reassigning to …" or "handing off to …" in a comment body **does not execute** a handoff. Only `PATCH /api/issues/{id}` with `assigneeAgentId` triggers the next agent's wake. Without PATCH, the issue stalls with the previous assignee indefinitely. Precedents: GIM-126 (QA→CTO stall, 2026-05-01), GIM-195 (CR→PE stall, 2026-05-05).
 ## Agent UUID roster — Gimle Claude
 
 Use `[@<Role>](agent://<uuid>?i=<icon>)` in phase handoffs. Source: `paperclips/deploy-agents.sh`.

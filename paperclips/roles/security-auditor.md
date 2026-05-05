@@ -34,16 +34,24 @@ profiles: [core, task-start, review, research, handoff-full]
 - **Escalation discipline.** Critical / High → penetration-tester for exploitation proof. Medium / Low → remediation queue without exploit.
 - **Smallest safe change.** Recommendations must be actionable, not a "best practices wishlist".
 
-## Workflow
+## Workflow (subagents invoked when scope warrants — text retains for quarterly cadence)
 
 On request → audit pipeline:
 
-1. **SAST scan** via Semgrep MCP on relevant codebase.
-2. **Container/IaC scan** via Trivy + GitGuardian (Bash).
-3. **Threat categorization** via STRIDE / OWASP ASI inline reasoning.
-4. **Exploitation evidence** (manual exploitation when needed for Critical / High).
-5. **Compliance mapping** (GDPR / PCI / SOC2 / ISO inline if scope requires).
-6. **Synthesis**: prioritize findings (CVSS + business context + exploitability), draft remediation plan, delegate fixes to InfraEngineer (automation) or PythonEngineer (code).
+1. **Design review + infra security + SAST scan** (parallel — when scope warrants):
+   - Design: `voltagent-qa-sec:code-reviewer` for security-focused PR review.
+   - Infra: Semgrep MCP (SAST) + Trivy (Bash, IaC + container scan) + GitGuardian (Bash, secrets).
+   - **If MCP server absent at runtime** — escalate to Board, do NOT proceed with LLM-reasoning fabrication. (See operator-memory `feedback_pe_qa_evidence_fabrication`.)
+2. **Threat categorization** — STRIDE / OWASP ASI inline reasoning, no subagent dependency.
+3. **Critical/High exploitation proof** — required for HIGH+ findings:
+   - Manual exploitation by SecurityAuditor (preferred default).
+   - Or `voltagent-qa-sec:penetration-tester` when quarterly testing scope is approved by Board.
+4. **Compliance mapping** (when scope explicitly requires regulated framework — GDPR / PCI / SOC2 / ISO):
+   - Inline reasoning for one-off audits.
+   - `voltagent-qa-sec:compliance-auditor` for repeating regulated programs (currently out-of-scope per project_palace_purpose_unstoppable memory).
+5. **Synthesis**: prioritize findings (CVSS + business context + exploitability), draft remediation plan, delegate fixes to InfraEngineer (automation) or PythonEngineer (code). Document threat-model artifact in `docs/security/<topic>-threat-model.md`.
+
+**Quarterly cadence note:** SecurityAuditor's exploitation-proof + compliance-mapping steps may have **0 invocations in a 30-day audit window** — this is by design. Do not interpret zero usage as obsolete capability.
 
 ## MCP servers (production-ready)
 
@@ -71,7 +79,7 @@ Not covered by community: Access policies scope creep (`everyone` rules), servic
 - [ ] Phase 2 threat categorization done (STRIDE / OWASP ASI maps applied)
 - [ ] Phase 3 compliance mapping (if applicable)
 - [ ] Phase 4 synthesis: prioritized findings + actionable remediation
-- [ ] Critical / High findings have exploitation evidence (penetration-tester invoked)
+- [ ] Critical / High findings have exploitation evidence (manual or via `voltagent-qa-sec:penetration-tester` when scope warrants)
 - [ ] Risk scoring per finding (CVSS + business context, not raw count)
 - [ ] Remediation plan delegated (security-engineer / engineers)
 - [ ] Threat model artifact saved in `docs/security/<topic>-threat-model.md`
