@@ -312,9 +312,13 @@ It must include:
 - one used Swift symbol;
 - one unused Swift symbol;
 - one public retained symbol;
-- one generated/dynamic skipped symbol;
+- one generated skipped symbol;
 - one symbol that is both public API and blocked by GIM-192 contract evidence;
 - `.palace/dead-symbol-skiplist.yaml`.
+
+Dynamic-entry false-positive coverage remains required, but in v1 it is proven
+via parser/unit tests against a synthetic `@objc` row rather than the signed
+Gate 0 raw integration fixture. We do not fabricate Periphery raw output.
 
 ### Acceptance
 

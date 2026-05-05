@@ -129,7 +129,9 @@ review:
 - Project-local skiplist support at `.palace/dead-symbol-skiplist.yaml` for
   generated and dynamic entry points.
 - Mini fixture with Swift symbols where at least one symbol is unused, one is
-  used, one is public-retained, and one is generated/dynamic-skipped.
+  used, one is public-retained, and one is generated-skipped. Dynamic-entry
+  false-positive coverage is validated at parser/unit level until a reviewed
+  raw Periphery capture exists for that case.
 - Unit tests for parser normalization, correlation, skip reasons, deterministic
   IDs, and confidence scoring.
 - Integration test proving Neo4j nodes/edges and idempotent re-runs.
@@ -265,8 +267,10 @@ read-only query helpers with focused regression tests.
    runner.
 2. Periphery fixture ingestion creates `DeadSymbolCandidate` rows for unused
    Swift declarations.
-3. Used, public-retained, generated, and dynamic-entry symbols are not emitted
-   as deletion candidates.
+3. Used, public-retained, and generated symbols from the committed integration
+   fixture are not emitted as deletion candidates. Dynamic-entry false-positive
+   behavior remains required, but v1 proves it through parser/unit coverage
+   rather than the signed raw integration fixture.
 4. Candidate IDs are deterministic across two identical runs.
 5. Exact correlation links at least one candidate to an indexed source symbol.
 6. Exported public API symbols become `retained_public_api` with a blocker
@@ -283,8 +287,10 @@ read-only query helpers with focused regression tests.
 12. No public MCP/API tool is added in v1.
 13. Fixture includes a symbol that is both public API and consumed by GIM-192,
    proving combined retained-public + contract-blocker behavior.
-14. Generated/dynamic skiplist path `.palace/dead-symbol-skiplist.yaml` is
-   loaded, validated, and covered by tests.
+14. Generated skiplist path `.palace/dead-symbol-skiplist.yaml` is loaded,
+   validated, and covered by the signed integration fixture; dynamic-entry
+   skiplist behavior is covered by parser/unit tests until a reviewed raw
+   fixture row exists.
 
 ## Verification Plan
 

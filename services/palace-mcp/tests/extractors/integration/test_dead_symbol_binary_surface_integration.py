@@ -465,7 +465,7 @@ async def test_public_and_contract_blocked_symbol_has_both_guards(
     not _HAS_NEO4J_RUNTIME,
     reason="requires Docker socket or COMPOSE_NEO4J_URI for Neo4j integration",
 )
-async def test_generated_and_dynamic_skiplist_entries_are_skipped(
+async def test_generated_skiplist_entries_are_skipped(
     driver: AsyncDriver,
     graphiti_mock: MagicMock,
     _project_repo_and_seed: Path,
