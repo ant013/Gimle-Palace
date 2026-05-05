@@ -1,0 +1,7 @@
+[versions]
+appcompat = "1.7.1"
+retrofit = "3.0.0"
+
+[libraries]
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+retrofit2 = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = "retrofit" }
