@@ -88,9 +88,10 @@ branch: core/fix-agent-infra-slim
 - `deep-research-agent` (origin TBD — Phase 0)
 - `code-reviewer` (origin TBD — Phase 0; possibly `code-review:code-reviewer` plugin)
 
-**Operator decision pending — future iOS/Android (currently 0 calls):**
-- `voltagent-lang:swift-expert` (BlockchainEngineer aspirational)
-- `voltagent-lang:kotlin-specialist` (BlockchainEngineer aspirational)
+**Operator decision Q1 (CONFIRMED 2026-05-05):**
+- `voltagent-lang:swift-expert` — **KEEP** for BlockchainEngineer (future iOS wallet review)
+- `voltagent-lang:kotlin-specialist` — **KEEP** for BlockchainEngineer (future Android wallet review)
+- All other 27 voltagent-lang agents — **DROP**
 
 ### Plugin keep / drop
 
@@ -161,6 +162,58 @@ Each phase is independent and reversible. Apply in order; gate next phase on pre
 
 ---
 
+### Phase 0.5 — Per-role deep audit (READ-ONLY)
+
+**Goal:** Replicate the depth of audit done for `claude:code-reviewer` for the remaining **19 roles**. Without this, Phase 4 cleanup is blind beyond CR.
+
+**Background:** The CR audit (2026-05-05) found:
+- 2 inline-vs-fragment **duplicates** (L84-88 plan-first → already in `plan-first-review.md`; L124-141 phase-3.1-file-structure → already in `phase-review-discipline.md`).
+- **Coverage matrix gaps** in `claude:code-reviewer` (missing `karpathy-discipline.md` and `pre-work-discovery.md` per matrix).
+- **Massive coverage gap** in `codex:cx-code-reviewer` (12 fragments missing).
+- **18+ aspirational voltagent subagent references** in MCP/Subagents/Skills section (only 2 actually invoked).
+
+These same patterns likely exist in other roles. Need systematic discovery.
+
+**Tasks:**
+
+- [ ] **Per-role inline duplication audit** (20 roles):
+  - For each `paperclips/roles/*.md` and `paperclips/roles-codex/*.md`:
+    - Read inline content
+    - For each shared fragment listed in `<!-- @include -->` directives, diff inline content vs fragment content
+    - Flag exact-duplication blocks (>5 lines redundant) for deletion in Phase 4
+  - **Output:** `/tmp/role-inline-duplication-report.md` table with `role | inline-line-range | duplicates-fragment | tokens-savings`
+
+- [ ] **Per-role coverage gap audit** (20 roles):
+  - Re-run `/tmp/bundle-audit.json` with deeper analysis: not only "extra/missing fragments" but also:
+    - Fragment present but **not actually relevant** (e.g., `compliance-enforcement.md` in PE — review-frame doesn't fit implementer)
+    - Inline rule that's NOT in any shared fragment but is **role-universal** → candidate to extract into new fragment
+  - **Output:** updated `bundle-audit.json` with per-role gap classification
+
+- [ ] **Per-role aspirational-subagent audit** (20 roles):
+  - For each role's `## MCP / Subagents / Skills` section, list every subagent mention.
+  - Cross-reference against actual invocation data (from `/tmp/agent-tool-audit.py` results).
+  - Mark each as: **USED** (≥1 call), **REFERENCED-NEVER-CALLED** (in role file but 0 calls), **NEW-CANDIDATE** (in keep-list but not yet in role file).
+  - **Output:** per-role keep/drop subagent matrix.
+
+- [ ] **Cross-team consistency audit**: claude:CR vs codex:cx-CR pattern (12 fragments missing in cx-CR per earlier audit). Apply same comparison to all paired roles:
+  - claude:CTO vs codex:cx-CTO
+  - claude:PE vs codex:cx-PE
+  - claude:MCPE vs codex:cx-MCPE
+  - claude:Infra vs codex:cx-Infra
+  - claude:QA vs codex:cx-QA
+  - claude:TW vs codex:cx-TW
+  - claude:Research vs codex:cx-Research
+  - claude:Opus vs codex:codex-architect-reviewer
+  - **Output:** cross-team coverage gap report — what codex variants need to add for parity.
+
+**Acceptance:** 4 reports generated, reviewed by operator; concrete cleanup task list per role drafted; **bundle slim target re-estimated** with full data instead of CR-only extrapolation.
+
+**Estimated work:** 1–2 sessions (read all 20 role files + cross-reference fragments).
+
+**Why before Phase 4:** Phase 4 (role .md cleanup) needs concrete inline-duplication targets per role, not generic "trim subagents" guidance. Without this audit, Phase 4 either undershoots or breaks rules silently.
+
+---
+
 ### Phase 1 — Plugin disable on operator session (zero risk, fast iteration)
 
 **Goal:** Remove eager-loaded weight of unused plugins from operator's `~/.claude/settings.json`. Operator never invokes voltagent subagents directly, so 0 functional impact.
@@ -206,31 +259,67 @@ Each phase is independent and reversible. Apply in order; gate next phase on pre
 
 ---
 
-### Phase 3 — Curate kept plugins (medium risk, single-subagent retention)
+### Phase 3 — Curate kept plugins via Path-1 (file-level rm in plugin cache)
 
-**Goal:** Three plugins (`voltagent-qa-sec`, `voltagent-research`, `pr-review-toolkit`) each contribute 1 used + many unused agents. Keep plugin enabled but trim agent count.
+**Goal:** Four plugins (`voltagent-qa-sec`, `voltagent-research`, `pr-review-toolkit`, `voltagent-lang`) each contribute 1–2 used + many unused agents. Keep plugin enabled, delete unused .md files in plugin cache.
 
-**Approach options (evaluate per plugin):**
+**Decision (CONFIRMED 2026-05-05):** Path-1 — `rm` unused .md files in plugin cache, preserving subagent name prefixes (no role-file changes needed). Catalog (`awesome-claude-code-subagents`) explicitly supports this via official Subagent Storage Locations table — `~/.claude/plugins/cache/<plugin>/<ver>/*.md` is the canonical delivery; per-file curation is the supported customization model.
 
-A) **Plugin-internal trim** (delete unused .md files): risky — plugin auto-update overwrites.
-B) **Extract to user-level** + disable plugin: clean, but renames subagent (`voltagent-qa-sec:code-reviewer` → `code-reviewer-qa-sec`); breaks role-file references.
-C) **Accept overhead** (keep entire plugin): simplest; ~921 + 546 + 642 = ~2,109 t residual cost per wake.
+**Risk mitigation:** `/plugins update voltagent-*` will restore deleted files. Mitigation: don't auto-update; document curate-script (`paperclips/scripts/curate-voltagent.sh`) for re-run after updates.
 
-**Decision criteria per plugin:**
-- voltagent-qa-sec: 14 agents @ 921t → 1 used → keep but accept 13 dead refs (~850t overhead) **OR** extract to user-level (best for slim).
-- voltagent-research: 7 agents @ 546t → 1 used → same logic (~470t overhead).
-- pr-review-toolkit: 6 agents @ 642t → 1 used → same (~530t overhead).
+**Tasks:**
 
-**Tasks (assume option C — accept overhead — for first iteration):**
-- [ ] No action; revisit in Phase 6 if combined overhead (~2,109t) needs further trim.
+- [ ] **Write curate script** `paperclips/scripts/curate-voltagent.sh`:
+  ```bash
+  #!/usr/bin/env bash
+  set -euo pipefail
+  
+  KEEP=(
+    "voltagent-qa-sec/code-reviewer.md"
+    "voltagent-research/search-specialist.md"
+    "voltagent-lang/swift-expert.md"
+    "voltagent-lang/kotlin-specialist.md"
+  )
+  
+  CACHE_ROOT="${1:-$HOME/.claude/plugins/cache/voltagent-subagents}"
+  
+  for plugin_dir in "$CACHE_ROOT"/*/; do
+    plugin_name=$(basename "$plugin_dir")
+    for ver_dir in "$plugin_dir"*/; do
+      [ -d "$ver_dir" ] || continue
+      for md in "$ver_dir"*.md; do
+        [ -e "$md" ] || continue
+        agent=$(basename "$md" .md)
+        rel="${plugin_name}/${agent}.md"
+        if [ "$agent" = "README" ] || [ "$agent" = "LICENSE" ] || [ "$agent" = "CHANGELOG" ]; then continue; fi
+        keep=0
+        for k in "${KEEP[@]}"; do [ "$k" = "$rel" ] && keep=1 && break; done
+        if [ "$keep" -eq 0 ]; then
+          echo "rm $md"
+          rm -- "$md"
+        fi
+      done
+    done
+  done
+  ```
 
-**Tasks (option B — extract — if Phase 1+2 results undershoot target):**
-- [ ] Copy `<plugin>/<used-agent>.md` → `~/.claude/agents/<used-agent>.md` (user-level).
-- [ ] Update all role files referencing the original prefix to the new prefix-less name.
-- [ ] Disable plugin.
-- [ ] Smoke each role that references the agent.
+- [ ] **Curate pr-review-toolkit similarly** (separate plugin under `claude-plugins-official`):
+  - Keep: `pr-test-analyzer.md`
+  - rm: `silent-failure-hunter.md`, `type-design-analyzer.md`, `code-simplifier.md`, `code-reviewer.md`, `comment-analyzer.md`
 
-**Acceptance:** decision documented; if option B chosen, all role-file references updated atomically.
+- [ ] **Apply on operator session** (`~/.claude/plugins/cache/...`).
+- [ ] **Apply on iMac paperclip runtime** via SSH (same paths under `/Users/anton/.claude/plugins/cache/...`).
+
+**Per-role isolation (optional — strict Q1 reading):** if "только для тех ролей которые используют" means Blockchain-only access to swift/kotlin specialists, edit per-workspace `~/.paperclip/instances/default/workspaces/<role-uuid>/.claude/settings.json` to disable `voltagent-lang` for non-Blockchain roles. Default approach: keep simple — global cache curated to 2 lang agents, all roles see them in Agent docstring (~140t cost per wake for non-Blockchain — acceptable).
+
+**Token saving (Path-1):**
+- voltagent-qa-sec: 13 of 14 agents removed → −851 t per wake
+- voltagent-research: 6 of 7 agents removed → −476 t per wake
+- voltagent-lang: 27 of 29 agents removed → −1,985 t per wake
+- pr-review-toolkit: 5 of 6 agents removed → −572 t per wake
+- **Total Phase 3: −3,884 t per wake** (= ~1.8M tokens/month for paperclip runtime alone)
+
+**Acceptance:** new session lists only kept subagents in Agent tool description; role files unchanged; smoke test on CR (calls `voltagent-qa-sec:code-reviewer`) succeeds.
 
 ---
 
@@ -303,20 +392,24 @@ C) **Accept overhead** (keep entire plugin): simplest; ~921 + 546 + 642 = ~2,109
 
 ---
 
-## Token reduction estimate (cumulative)
+## Token reduction estimate (cumulative, with Path-1 Phase 3)
 
 | Phase | Δ per wake | Δ per 30 days × 464 wakes |
 |---|---:|---:|
-| 1 (operator session disable) | −4,677 t | n/a (operator session, not paperclip) |
-| 2 (iMac runtime disable: lang+meta+infra+core-dev+frontend-design) | −4,740 t | **−2.20M t** |
-| 3 (option B extract — optional, +1,860 t) | −1,860 t | −0.86M t |
-| 4 (role .md cleanup — 200–600 t/role × 20 roles, fleet-fraction wakes) | −400 t avg | −185K t (paperclip share) |
+| 1 (operator session disable: meta+infra+core-dev+frontend-design + voltagent-lang trim) | ~−4,500 t | n/a (operator session) |
+| 2 (iMac runtime disable: meta+infra+core-dev+frontend-design) | −2,748 t | −1.27M t |
+| 3 (Path-1 — rm unused .md in qa-sec/research/lang/pr-review-toolkit caches) | −3,884 t | **−1.80M t** |
+| 4 (role .md cleanup — driven by Phase 0.5 audit findings) | TBD (~−200 to −600 t/role avg, varies by role) | −185K t conservative |
 | 5 (skill cleanup) | −1,000 t | −464K t |
-| **Total (Phases 1+2+4+5, conservative)** | **~6,140 t per wake** | **~2.85M tokens / month** |
-| **Total (+ Phase 3 option B)** | **~8,000 t per wake** | **~3.71M tokens / month** |
+| **Total (Phases 1+2+3+5, baseline)** | **~7,632 t per wake** | **~3.54M tokens / month** |
+| **Total (+ Phase 4 conservative)** | **~8,032 t per wake** | **~3.73M tokens / month** |
 
-At Sonnet 4.6 input rate $0.003/1K: ≈ $8.50/mo savings.
-At Opus 4.7 input rate $0.015/1K: ≈ $42/mo savings.
+At Sonnet 4.6 input rate $0.003/1K: ≈ **$10.6/mo savings** (paperclip runtime).
+At Opus 4.7 input rate $0.015/1K: ≈ **$53/mo savings** (paperclip runtime).
+
+(Plus operator session — comparable savings, separate budget.)
+
+**Note:** Phase 4 estimate is conservative; actual savings depend on Phase 0.5 audit findings (could be significantly higher if multiple roles have CR-style inline duplication patterns).
 
 (Plus operator session — comparable savings, separate budget.)
 
@@ -333,10 +426,19 @@ At Opus 4.7 input rate $0.015/1K: ≈ $42/mo savings.
 
 ## Open questions for operator
 
-1. **iOS prep:** keep `voltagent-lang:swift-expert` + `voltagent-lang:kotlin-specialist` for future iOS/Android wallet work? (Cost: ~150t per wake to keep both. Drop saves another ~150t.)
-2. **Phase 3 strategy:** option C (accept ~2,100t plugin overhead) for simplicity, or option B (extract subagents to user-level, lose role-file dispatch names) for maximum slim?
-3. **Skill keep**: any user-level skill (kmp, swiftui-*, etc.) operator anticipates needing in next 90 days even if 0 calls in past 30?
-4. **Phase order**: ship Phase 1 (operator session, fastest verification) first, then Phase 2+, OR all at once via paperclip slice?
+1. ~~**iOS prep:** keep `voltagent-lang:swift-expert` + `voltagent-lang:kotlin-specialist`?~~ ✅ **RESOLVED 2026-05-05**: keep both, only for BlockchainEngineer per Q1 answer. Default approach: keep in plugin cache (140t/wake cost for non-Blockchain roles is acceptable). Strict per-workspace approach (workspace-level disable for non-Blockchain): noted as optional follow-up.
+2. ~~**Phase 3 strategy:** option B vs C?~~ ✅ **RESOLVED 2026-05-05**: Path-1 (rm unused .md files in plugin cache, preserve subagent name prefix). No role file changes needed. Risk: `/plugins update` restores files; mitigation: documented curate script.
+3. **Skill keep** (open): drop default = "if 0 calls in 30 days → drop". Operator can override per-skill (e.g. swiftui-pro / kmp / swift-* for future iOS work). **Pending operator review** before Phase 5 execution.
+4. **Phase order** (open): ship Phase 1 first as smoke (faster operator-session verification), then Phase 2+. Phase 0.5 (per-role audit) runs in parallel — read-only. **Default: Phase 0 → Phase 1 → Phase 0.5 (parallel) → Phase 2 → Phase 3 → Phase 4 → Phase 5 → Phase 6.**
+
+## Scope clarification — what was deeply audited vs not
+
+- ✅ **Deep audit done**: `claude:code-reviewer` (inline duplication, fragment coverage gap, codex parity gap with 12 missing fragments). See findings inline in Phase 4 task list for CR.
+- ✅ **Subagent invocation data**: ALL 20 roles (464 sessions / 30 days) — captured in `/tmp/agent-tool-audit.py` output above.
+- ✅ **Fragment include matrix**: ALL 20 roles — captured in `/tmp/bundle-audit.json`.
+- ❌ **Per-role inline duplication audit**: Only CR done. **Phase 0.5 task** (newly added) handles the remaining 19 roles.
+- ❌ **Per-role aspirational subagent cleanup**: Only CR pattern identified. **Phase 0.5 task** maps cleanup targets per role.
+- ❌ **Cross-team gap audit**: Only claude:CR vs codex:cx-CR done. **Phase 0.5 task** extends to all 8 paired roles.
 
 ---
 
