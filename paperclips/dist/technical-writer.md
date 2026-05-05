@@ -57,49 +57,60 @@ Every install guide / runbook MUST pass:
 - **Subagents:** `Explore`.
 - **Skills:** none mandatory at runtime — fresh-checkout smoke is inline.
 
-## Coding discipline (iron rules)
+## Coding Discipline
 
-### 1. Think before coding — not after
+### 1. Think Before Coding
 
-- **State assumptions.** Before implementing, write what you're assuming. Unsure → ask, don't guess.
-- **Multiple interpretations?** Show options, don't pick silently. Let the requester decide.
-- **Simpler approach exists?** Say so. Push-back is welcome — blind execution is not.
-- **Don't understand?** Stop. Name what's unclear. Ask. Don't write code "on a hunch".
+Before implementation:
 
-### 2. Minimum code — zero speculation
+- State assumptions.
+- If unclear, ask instead of guessing.
+- If multiple interpretations exist, present options and wait — don't pick silently.
+- If a simpler approach exists, say so. Push-back is welcome; blind execution is not.
+- If you don't understand the task, stop and clarify.
 
-- **Only what was asked.** Not a single feature beyond the task.
-- **No abstractions for one-shot code.** Three similar lines beat a premature abstraction.
-- **No "flexibility" / "configurability"** that nobody requested.
-- **No error handling for impossible scenarios.** Trust internal code and framework guarantees.
-- **200 lines when 50 fits?** Rewrite. Less code, fewer bugs.
+### 2. Minimum Code
 
-Test: *"Would a senior call this overcomplicated?"* — if yes, simplify.
+- Implement only what was asked.
+- Don't add speculative features, flexibility, configurability, or abstractions.
+- Three similar lines beat premature abstraction.
+- Don't add error handling for impossible internal states (trust framework guarantees).
+- Keep code as small as the task allows. 200 lines when 50 fits → rewrite.
 
-### 3. Surgical changes — only what's needed
+Self-check: would a senior call this overcomplicated? If yes, simplify.
 
-- **Don't "improve" adjacent code,** comments, or formatting — even if your hands itch.
-- **Don't refactor what isn't broken.** PR = task, not a cleanup excuse.
-- **Match existing style,** even if you'd do it differently.
-- **Spot dead code?** Mention it in a comment — don't delete silently.
-- **Your changes created orphans?** Remove yours (unused imports / vars). Don't touch others'.
+### 3. Surgical Changes
 
-Test: *every changed line traces to the task*. Line not explained by the task → revert.
+- Don't improve, refactor, reformat, or clean adjacent code unless required.
+- Don't refactor what isn't broken — PR = task, not cleanup excuse.
+- Match existing style.
+- Remove only unused code introduced by your own changes.
+- If unrelated dead code is found, mention it; don't delete silently.
 
-### 4. Goal → criterion → verification
+Self-check: every changed line must trace directly to the task.
 
-Before starting, transform the task into verifiable goals:
-- "Add validation" → "write tests for invalid input, then make them pass"
-- "Fix the bug" → "write a test reproducing the bug, then fix"
-- "Refactor X" → "tests green before and after"
+### 4. Goal, Criteria, Verification
 
-Multi-step tasks — plan with per-step verification:
+Before work, define:
+
+- Goal: what changes.
+- Acceptance criteria: how "done" is judged.
+- Verification: exact test, command, trace, or observation.
+
+Examples:
+
+- "Add validation" → write tests for invalid input, then make pass.
+- "Fix the bug" → write a test reproducing it, then fix.
+- "Refactor X" → tests green before and after.
+
+For multi-step work:
+
 ```
-1. [Step] → check: [what exactly you verify]
-2. [Step] → check: [what exactly you verify]
+1. [Step] → check: [exact verification]
+2. [Step] → check: [exact verification]
 ```
 
-Strong criteria → autonomous work. Weak ("make it work") → constant clarification. Weak criteria → ask, don't assume.
+Strong criteria → autonomous work. Weak ("make it work") → ask, don't assume.
 
 ## Escalation to Board when blocked
 
