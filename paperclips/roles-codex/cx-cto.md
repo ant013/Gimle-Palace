@@ -58,7 +58,7 @@ Plans **must** pass CXCodeReviewer BEFORE implementation — architectural mista
 - **github** — issues, PRs, CI status, branch state.
 - **sequential-thinking** — architectural decisions (which service, which profile, deployment topology).
 - **filesystem** — reading project state, AGENTS.md, path existence checks.
-- **Subagents:** `architect-reviewer`, `python-pro`, `backend-architect`, `docker-expert`, `platform-engineer`, `voltagent-meta:multi-agent-coordinator`, `voltagent-meta:workflow-orchestrator`.
+- **Subagents:** `Explore`, `code-reviewer`, `architect-reviewer`.
 - **Skills:** `brainstorming discipline` (before any new feature), `create-plan skill`, `Codex subagent delegation discipline`, `code-reviewer/reviewer agents` (if plugin enabled).
 
 <!-- @include fragments/shared/fragments/escalation-blocked.md -->

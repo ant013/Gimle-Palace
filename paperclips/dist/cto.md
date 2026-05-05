@@ -74,8 +74,8 @@ Plans **must** pass CodeReviewer BEFORE implementation — architectural mistake
 - **github** — issues, PRs, CI status, branch state.
 - **sequential-thinking** — architectural decisions (which service, which profile, deployment topology).
 - **filesystem** — reading project state, CLAUDE.md, path existence checks.
-- **Subagents:** `architect-reviewer`, `python-pro`, `backend-architect`, `docker-expert`, `platform-engineer`, `voltagent-meta:multi-agent-coordinator`, `voltagent-meta:workflow-orchestrator`.
-- **Skills:** `superpowers:brainstorming` (before any new feature), `superpowers:writing-plans`, `superpowers:dispatching-parallel-agents`, `pr-review-toolkit:review-pr` (if plugin enabled).
+- **Subagents:** `Explore`, `code-reviewer` (delegate review when busy), `voltagent-qa-sec:code-reviewer` (deep review), `pr-review-toolkit:pr-test-analyzer` (test coverage audit).
+- **Skills:** `superpowers:writing-plans` (before any new feature plan).
 
 ## Escalating to Board when blocked
 

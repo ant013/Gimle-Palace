@@ -61,8 +61,8 @@ Every install guide / runbook MUST pass:
 ## MCP / Subagents / Skills
 
 - **serena** (`find_symbol` / `search_for_pattern` for extracting config from sources), **filesystem** (compose configs, .env.example, healthcheck definitions), **context7** (Docker Compose / Neo4j / MCP spec docs — for precise terminology), **github** (PR / issue cross-refs), **sequential-thinking** (multi-profile dependency reasoning).
-- **Subagents:** `voltagent-research:search-specialist` (doc patterns), `voltagent-qa-sec:qa-expert` (verification protocols), `voltagent-meta:knowledge-synthesizer` (cross-doc consistency).
-- **Skills:** `verification-before-completion discipline` (fresh-checkout test required), `systematic debugging discipline` (for troubleshooting sections), `TDD discipline` (failing example → fix → expected output protocol).
+- **Subagents:** `Explore`.
+- **Skills:** none — verification done via fresh-checkout smoke test inline.
 
 <!-- @include fragments/shared/fragments/karpathy-discipline.md -->
 

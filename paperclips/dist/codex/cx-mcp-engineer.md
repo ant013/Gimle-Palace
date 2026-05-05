@@ -65,8 +65,8 @@ Audit: `docs/mcp/auth-threat-model.md` — update on every transport / exposure 
 ## MCP / Subagents / Skills
 
 - **serena** (`find_symbol` for tool implementation, `find_referencing_symbols` for backward-compat audit), **context7** (MCP spec / Pydantic / FastAPI / Anthropic SDK), **filesystem** (compose configs, tool definitions), **github** (PRs / issues), **sequential-thinking** (transport / auth threat model).
-- **Subagents:** `voltagent-research:search-specialist` (MCP spec evolution lookup), `voltagent-qa-sec:security-auditor` (auth threat model audits), `voltagent-core-dev:api-designer` (tool catalogue design review), `codex-review:type-design-analyzer` (Pydantic schema invariants).
-- **Skills:** `TDD discipline` (failing integration test → tool impl), `systematic debugging discipline`, `verification-before-completion discipline` (real MCP client smoke before merge), `openai-docs` (for Anthropic SDK patterns).
+- **Subagents:** `Explore`, `voltagent-research:search-specialist` (MCP spec evolution lookup).
+- **Skills:** `superpowers:test-driven-development` (failing integration test → tool impl).
 
 ## Coding discipline (iron rules)
 

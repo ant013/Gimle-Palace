@@ -156,12 +156,6 @@ Walk **mechanically** through every PR. Every item — `[x]` with citation, `[ ]
 - [ ] Plan steps marked done as progress is made (checkbox in plan file matches reality)
 - [ ] If the plan changed mid-flight — diff the plan file in the PR (no silent scope creep)
 
-### Plan-first discipline
-- [ ] Для multi-agent tasks (3+ subtasks): plan file существует в `docs/superpowers/plans/YYYY-MM-DD-GIM-NN-*.md`
-- [ ] PR description references plan file (link), не дублирует scope из issue body
-- [ ] Plan steps отмечены done по мере прогресса (checkbox в plan file совпадает с реальностью)
-- [ ] Если plan менялся в процессе — diff plan file в PR (не silent scope creep)
-
 ### Git workflow
 - [ ] PR targets `develop` (not `main` — release-only)
 - [ ] Feature branch from `develop`
@@ -196,24 +190,6 @@ Walk **mechanically** through every PR. Every item — `[x]` with citation, `[ ]
 
 **Board escalation (bypass CTO):** if CTO is the plan author / asks for APPROVE without CRITICAL fixes.
 
-### Phase 3.1 — Plan vs Implementation file-structure check
-
-Before mechanical APPROVE, paste output of `git diff --name-only <base>..<head>` and explicitly compare against the plan's file structure table.
-
-**Required APPROVE evidence format:**
-```
-Plan Task <N> specified <X> files; landed <X>: [list]. Match.
-```
-
-**Forbidden APPROVE patterns:**
-- APPROVE without pasted `git diff --name-only` matching plan's file count.
-- APPROVE when PE cut scope without mention in commit message, comment, or plan revision.
-- "LGTM, all tests pass" without file-structure comparison — tooling checks don't catch scope drift.
-
-**If PE reduced scope with justification:** evaluate the argument. Either APPROVE reduced scope explicitly (citing the justification) or REQUEST CHANGES for full scope. Never silently accept a reduction.
-
-See `phase-review-discipline.md` § Phase 3.1.
-
 ### Phase 3.1 GitHub PR review bridge
 
 After posting the paperclip compliance comment with full tool output (`ruff check`, `mypy --strict`, `pytest -q`), mirror the approval on the GitHub PR:
@@ -243,9 +219,9 @@ Before claiming any merge-blocker, paste output of `gh pr view --json mergeState
 
 ## MCP / Subagents / Skills
 
-- **MCP:** `serena` (priority — `find_symbol`, `find_referencing_symbols` for code navigation), `context7` (docs: FastAPI, Pydantic, pytest, Docker Compose, Neo4j, MCP spec — training lag is real), `github` (PR diff, CI status, comments), `sequential-thinking` (complex security / arch aspects).
-- **Subagents:** Primary — `voltagent-qa-sec:code-reviewer`, `voltagent-qa-sec:architect-reviewer`. On-demand specialists — `voltagent-qa-sec:security-auditor` (framework-depth threats: SSRF / path-traversal / authn), `voltagent-qa-sec:debugger` (when bug logic unclear), `voltagent-qa-sec:error-detective` (silent failures, exception chains), `pr-review-toolkit:silent-failure-hunter`, `pr-review-toolkit:type-design-analyzer`, `pr-review-toolkit:pr-test-analyzer`, `pr-review-toolkit:code-simplifier`.
-- **Skills:** `pr-review-toolkit:review-pr` (first — orchestrator for PR review), `superpowers:systematic-debugging` (reproduce bug findings), `superpowers:verification-before-completion` (before APPROVE, confirm findings are reproducible).
+- **MCP:** `serena` (`find_symbol` / `find_referencing_symbols` for code nav), `context7` (FastAPI / Pydantic / pytest / Docker Compose / Neo4j / MCP spec docs).
+- **Subagents:** `Explore`, `code-reviewer` (built-in / user-level), `voltagent-qa-sec:code-reviewer` (deep review), `pr-review-toolkit:pr-test-analyzer` (test coverage audit).
+- **Skills:** `superpowers:test-driven-development` (when bug-fix needs failing test first).
 
 ## Escalating to Board when blocked
 

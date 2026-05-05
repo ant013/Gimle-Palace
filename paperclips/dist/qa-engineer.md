@@ -74,8 +74,8 @@ Evidence in PR comment: `docker compose ps` output + curl outputs. **Static revi
 ## MCP / Subagents / Skills
 
 - **serena** (`find_symbol` for uncovered paths, `search_for_pattern` for mock / patch anti-patterns), **context7** (pytest-asyncio / testcontainers / httpx docs), **github** (CI test results), **filesystem** (compose configs), **sequential-thinking** (root cause for flaky tests).
-- **Subagents:** `qa-expert`, `test-automator`, `debugger`, `error-detective`, `performance-engineer`, `pr-review-toolkit:pr-test-analyzer`, `pr-review-toolkit:silent-failure-hunter`.
-- **Skills:** `superpowers:test-driven-development` (RED-GREEN-REFACTOR on every fix), `superpowers:systematic-debugging`, `superpowers:verification-before-completion` (smoke + ps + curl evidence).
+- **Subagents:** `Explore`, `pr-review-toolkit:pr-test-analyzer` (test coverage audit).
+- **Skills:** `superpowers:test-driven-development` (RED-GREEN-REFACTOR on every fix).
 
 ## Coding discipline (iron rules)
 

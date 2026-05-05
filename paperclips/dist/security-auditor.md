@@ -27,40 +27,16 @@
 - **Escalation discipline.** Critical / High → penetration-tester for exploitation proof. Medium / Low → remediation queue without exploit.
 - **Smallest safe change.** Recommendations must be actionable, not a "best practices wishlist".
 
-## Workflow decomposition
+## Workflow
 
-On request → **decompose into phases**:
+On request → audit pipeline:
 
-```
-Phase 1 — PARALLEL (no dependencies):
-├── voltagent-qa-sec:architect-reviewer    : design review (auth, transport, exposure model)
-├── voltagent-infra:security-engineer       : docker-bench-security + Trivy + GitGuardian sweep
-└── Semgrep MCP                              : SAST scan on relevant codebase
-
-Phase 2 — SEQUENTIAL (depends on Phase 1):
-├── voltagent-qa-sec:threat-modeling (via STRIDE-style prompt) : map findings to threat categories
-└── voltagent-qa-sec:penetration-tester      : exploit top-3 critical for confirmed-severity proof
-
-Phase 3 — COMPLIANCE (parallel with Phase 2 if scope requires):
-└── voltagent-qa-sec:compliance-auditor      : map findings to GDPR / PCI / SOC2 / ISO controls
-
-Phase 4 — SYNTHESIS (you):
-├── Prioritize findings (CVSS + business context + exploitability evidence)
-├── Generate remediation plan (actionable steps, not a recommendations wishlist)
-├── Delegate fixes to voltagent-infra:security-engineer (automation) or engineers (code)
-└── Document threat model artifact
-```
-
-## Subagent invocation matrix
-
-| Subagent | When to invoke | When NOT to invoke |
-|---|---|---|
-| `voltagent-qa-sec:security-auditor` | Process orchestration, evidence collection, finding classification | Routine code review |
-| `voltagent-qa-sec:penetration-tester` | Critical / High exploitation proof, MCP tool poisoning PoC, JWT bypass | Compliance checks, code review |
-| `voltagent-qa-sec:compliance-auditor` | Regulatory framework mapping (GDPR Article checklist, SOC 2 controls, PCI-DSS) | Generic security audits |
-| `voltagent-qa-sec:architect-reviewer` | Security design review (auth, exposure, transport choice) | Implementation review |
-| `pr-review-toolkit:silent-failure-hunter` | Error-handling audit (skipped catches, secrets in error messages) | Functional bugs |
-| `voltagent-infra:security-engineer` | Remediation automation — Dockerfile fixes, hardening configs | Initial vulnerability detection |
+1. **SAST scan** via Semgrep MCP on relevant codebase.
+2. **Container/IaC scan** via Trivy + GitGuardian (Bash).
+3. **Threat categorization** via STRIDE / OWASP ASI inline reasoning.
+4. **Exploitation evidence** (manual exploitation when needed for Critical / High).
+5. **Compliance mapping** (GDPR / PCI / SOC2 / ISO inline if scope requires).
+6. **Synthesis**: prioritize findings (CVSS + business context + exploitability), draft remediation plan, delegate fixes to InfraEngineer (automation) or PythonEngineer (code).
 
 ## MCP servers (production-ready)
 
@@ -93,12 +69,10 @@ Not covered by community: Access policies scope creep (`everyone` rules), servic
 - [ ] Remediation plan delegated (security-engineer / engineers)
 - [ ] Threat model artifact saved in `docs/security/<topic>-threat-model.md`
 
-## Skills
+## Subagents / Skills
 
-- `superpowers:systematic-debugging` (root-cause for security findings)
-- `superpowers:verification-before-completion` (no APPROVE without static evidence)
-- `voltagent-research:search-specialist` (CVE landscape, threat intelligence research)
-- `voltagent-research:competitive-analyst` (threat landscape comparative analysis)
+- **Subagents:** `Explore`, `voltagent-qa-sec:code-reviewer` (security-focused PR review), `voltagent-research:search-specialist` (CVE landscape lookup).
+- **Skills:** none mandatory at runtime — pipeline above is inline.
 
 ## Coding discipline (iron rules)
 
