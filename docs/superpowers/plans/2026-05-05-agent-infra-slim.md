@@ -355,16 +355,143 @@ These same patterns likely exist in other roles. Need systematic discovery.
 
 ---
 
-### Phase 5 — Skill cleanup (user-level + plugin-level)
+### Phase 5 — Skill cleanup via `desiredSkills` API (corrected from earlier draft)
 
-**Goal:** Disable / uninstall skills with 0 invocations in 30-day audit window.
+**Goal:** Per-agent skill curation using paperclip's official `POST /api/agents/:agentId/skills/sync` endpoint. Replaces earlier "file-level rm" approach.
+
+**Background — verified in paperclip 2026.428 docs:**
+
+| Mechanism | Available? | Notes |
+|---|---|---|
+| Per-agent skill assignment via `desiredSkills` | ✅ YES | Works for **company-imported** skills |
+| Built-in `paperclip` skill exclusion per agent | ❌ NO | Auto-loaded by adapter; "Built-in Paperclip runtime skills are still added automatically when required by the adapter." |
+| Skill auto-enable on @mention | ✅ YES | v2026.416: "Mentioned skills are automatically enabled for heartbeat runs" |
+| User-level skills (`~/.claude/skills/`) precedence | ⚠ TBD | Need smoke test — see Phase 4.5 below |
 
 **Tasks:**
-- [ ] **Audit user-level skills** (`~/.claude/skills/`): keep only those operator wants. Candidates to keep: `update-config`, `prime`, `init`, `review`, `security-review` (utility skills); `swiftui-pro`, `swift-testing-pro`, `swiftdata-pro`, `swift-concurrency-pro`, `kmp`, `swiftui-development`, `swiftui-patterns` — operator decision (iOS roadmap relevance).
-- [ ] **Audit plugin skills**: `superpowers:*` — keep only invoked ones (writing-plans, executing-plans, test-driven-development, receiving-code-review) and frequently-needed planning skills (brainstorming, verification-before-completion). Drop `code-review:*`, `pr-review-toolkit:review-pr` etc. unless verified.
-- [ ] **Mirror to iMac** runtime.
 
-**Acceptance:** skill list in system reminder ≤15 skills. New session loads ≥1,000 t fewer eager tokens vs Phase 0 baseline.
+- [ ] **Inventory company skill library**:
+  ```bash
+  TOKEN=$(cat ~/.paperclip-token)
+  curl -sS -H "Authorization: Bearer $TOKEN" \
+    "https://paperclip.ant013.work/api/companies/9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64/skills"
+  ```
+  Outputs which skills are in company library (vs runtime auto-loaded).
+
+- [ ] **Compare with audit data**: which company skills actually invoked per role? Build per-role skills matrix.
+
+- [ ] **Per-role skills sync** (only company-imported skills affected):
+  ```bash
+  # For each agent:
+  curl -sS -X POST -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"desiredSkills": ["paperclip", "<skill1>", "<skill2>"]}' \
+    "$URL/api/agents/<agent-id>/skills/sync"
+  ```
+
+- [ ] **For built-in `paperclip` skill heartbeat-context concern**: see Phase 4.5/4.6 (terminology clarification + optional user-level override).
+
+- [ ] **For non-company skills** (user-level `~/.claude/skills/` or plugin-installed):
+  - On operator session: edit `~/.claude/settings.json` to disable unused plugin-skills (`code-review:code-review`, `frontend-design:frontend-design`, etc.).
+  - On iMac: same.
+  - These are NOT covered by `desiredSkills` API.
+
+**Acceptance:** company-skills list per agent matches usage data; non-company skills disabled at session level.
+
+---
+
+### Phase 4.5 — Heartbeat terminology clarification (NEW)
+
+**Goal:** Reduce agent confusion between paperclip's "heartbeat" framing and Gimle's actual event-only wake model.
+
+**Background:** Two simultaneous truths in current setup:
+
+1. **Paperclip framework terminology**: "heartbeat" = each wake-execution-window (regardless of trigger). Per `paperclip` skill SKILL.md: "You run in heartbeats". This applies to ALL wakes — scheduled, event, recovery.
+2. **Gimle's actual config**: `runtimeConfig.heartbeat.enabled: false` for codex agents (and likely claude). All wakes are event-driven (mention, assignment, blocker-resolved, recovery via watchdog). No scheduled polling.
+
+Agents see paperclip skill's "heartbeat" framing + our heartbeat-discipline.md, may infer "we run on schedule" → confused responses to operator (e.g., 2026-05-05 incident — agent quoted heartbeat language to operator who clarified "we use handoff").
+
+**The accurate framing:**
+- "Heartbeat" = wake-execution-window protocol (3-things-check + exit-if-idle).
+- "Scheduled heartbeat polling" = **DISABLED** in our config.
+- All Gimle wakes are event-triggered.
+- The protocol (heartbeat-discipline.md) applies on every wake regardless of trigger.
+
+**Tasks:**
+
+- [ ] **Rename** `paperclips/fragments/shared/fragments/heartbeat-discipline.md` → `wake-discipline.md`. Update all 19 role file `<!-- @include -->` references atomically.
+- [ ] **Edit content** to clarify:
+  ```diff
+  - ## Heartbeat discipline
+  + ## Wake discipline (event-driven)
+  
+  - On every wake (heartbeat or event) check only **three** things:
+  + Wakes are event-triggered (assignment, @mention, blocker-resolved, recovery).
+  + No scheduled poll runs in this deployment (`runtimeConfig.heartbeat.enabled: false`).
+  + On every wake, check only **three** things:
+  
+  - None of three → **exit immediately** with `No assignments, idle exit`. 
+  - Each idle heartbeat must cost **<500 tokens**.
+  + None of three → **exit immediately** with `No assignments, idle exit`. 
+  + Each idle wake must cost **<500 tokens**.
+  
+  - Forbidden on idle heartbeat
+  + Forbidden on idle wake
+  ```
+- [ ] **Add reconciliation note** at top of `wake-discipline.md`:
+  ```markdown
+  > **Note**: paperclip framework uses "heartbeat" generically for any
+  > wake-execution-window. In Gimle deployment, scheduled heartbeats are
+  > DISABLED — all wakes are event-triggered. When `paperclip` skill or
+  > runtime references "heartbeat", interpret as "wake-window".
+  ```
+
+**Acceptance:** all 19 role bundles re-render with `wake-discipline.md` instead of `heartbeat-discipline.md`. No regression in `validate_instructions.py`. Smoke: agent in next wake doesn't reference "scheduled heartbeat" or "heartbeat polling" in comments.
+
+**Token impact:** +50–80 t for the reconciliation note × 19 roles = ~1,000–1,500 t fleet cost increase. Acceptable trade-off for clarity.
+
+---
+
+### Phase 4.6 — Conditional: user-level override of `paperclip` skill (NEW, gated on smoke)
+
+**Goal:** Replace upstream `paperclip` skill's "You run in heartbeats" framing with Gimle-specific event-only framing.
+
+**Pre-requisite — smoke test (must pass before Phase 4.6 proper):**
+
+```bash
+# 1. Copy upstream paperclip skill to user-level
+mkdir -p ~/.claude/skills/paperclip
+cp /Users/anton/.npm/_npx/.../@paperclipai/server/skills/paperclip/SKILL.md \
+   ~/.claude/skills/paperclip/SKILL.md
+
+# 2. Edit user-level: add unique marker
+echo "## Custom marker — user-level override active" >> ~/.claude/skills/paperclip/SKILL.md
+
+# 3. New Claude Code session, load paperclip skill via Skill tool
+# 4. Verify: marker appears in skill body
+```
+
+**If user-level overrides plugin-installed:** proceed with Phase 4.6 proper.
+**If plugin always wins:** abandon Phase 4.6, rely on Phase 4.5 only.
+
+**Tasks (proper, gated):**
+
+- [ ] **Mirror upstream skill** to `paperclips/skills/paperclip/SKILL.md` in repo.
+- [ ] **Edit content**: replace "heartbeat" → "wake" terminology consistently. Preserve all functional rules (auth, checkout, comment, handoff, etc.). Add note at top:
+  ```markdown
+  > **Gimle-customized version of paperclip skill** — replaces upstream
+  > "heartbeat" terminology with explicit "event-driven wake" framing for
+  > clarity in our deployment (no scheduled heartbeat enabled).
+  ```
+- [ ] **Symlink to user-level** on operator Mac: `~/.claude/skills/paperclip/ → /Users/ant013/Android/Gimle-Palace/paperclips/skills/paperclip/` (so updates ride through git).
+- [ ] **Mirror on iMac**: rsync paperclips/skills/paperclip/ to iMac `~/.claude/skills/paperclip/`.
+- [ ] **Smoke**: agent wake on iMac, verify session jsonl shows skill body with our wake-terminology, not upstream "heartbeats" — though this requires diffing skill body in session vs upstream.
+
+**Risk:** upstream paperclip 2026.428+ may add features to skill that we miss. Mitigation: track upstream changes via `git log` on `paperclipai/paperclip` repo paths matching `server/skills/paperclip/**`. Cherry-pick / merge updates manually. Estimated upstream change frequency: 1–2 times per quarter based on v2026.318 → v2026.428 cadence.
+
+**Acceptance:** new agent sessions load Gimle-customized paperclip skill instead of upstream version. Heartbeat-terminology incidents (like 2026-05-05) stop occurring in next 30 days.
+
+---
 
 ---
 
@@ -392,24 +519,26 @@ These same patterns likely exist in other roles. Need systematic discovery.
 
 ---
 
-## Token reduction estimate (cumulative, with Path-1 Phase 3)
+## Token reduction estimate (cumulative, with all phases)
 
 | Phase | Δ per wake | Δ per 30 days × 464 wakes |
 |---|---:|---:|
-| 1 (operator session disable: meta+infra+core-dev+frontend-design + voltagent-lang trim) | ~−4,500 t | n/a (operator session) |
+| 1 (operator session disable) | ~−4,500 t | n/a (operator session) |
 | 2 (iMac runtime disable: meta+infra+core-dev+frontend-design) | −2,748 t | −1.27M t |
 | 3 (Path-1 — rm unused .md in qa-sec/research/lang/pr-review-toolkit caches) | −3,884 t | **−1.80M t** |
-| 4 (role .md cleanup — driven by Phase 0.5 audit findings) | TBD (~−200 to −600 t/role avg, varies by role) | −185K t conservative |
-| 5 (skill cleanup) | −1,000 t | −464K t |
-| **Total (Phases 1+2+3+5, baseline)** | **~7,632 t per wake** | **~3.54M tokens / month** |
-| **Total (+ Phase 4 conservative)** | **~8,032 t per wake** | **~3.73M tokens / month** |
+| 4 (role .md cleanup — driven by Phase 0.5 audit findings) | TBD (~−200 to −600 t/role avg) | −185K t conservative |
+| 4.5 (rename + clarify heartbeat-discipline.md → wake-discipline.md) | **+50–80 t per role** (reconciliation note) | +1,400 t (cost) |
+| 4.6 (gated — user-level paperclip skill override) | ~−500–1,000 t (replaced text shorter) | −230K t |
+| 5 (skill cleanup via desiredSkills API + non-company plugin disable) | −500 t | −230K t |
+| **Total (Phases 1+2+3+4+5+4.5, baseline)** | **~7,082 t per wake** | **~3.29M tokens / month** |
+| **Total (+ Phase 4.6 if smoke passes)** | **~8,082 t per wake** | **~3.75M tokens / month** |
 
-At Sonnet 4.6 input rate $0.003/1K: ≈ **$10.6/mo savings** (paperclip runtime).
-At Opus 4.7 input rate $0.015/1K: ≈ **$53/mo savings** (paperclip runtime).
+At Sonnet 4.6 input rate $0.003/1K: ≈ **$9.9–11.3/mo savings** (paperclip runtime).
+At Opus 4.7 input rate $0.015/1K: ≈ **$49–56/mo savings** (paperclip runtime).
 
 (Plus operator session — comparable savings, separate budget.)
 
-**Note:** Phase 4 estimate is conservative; actual savings depend on Phase 0.5 audit findings (could be significantly higher if multiple roles have CR-style inline duplication patterns).
+**Note:** Phase 5 estimate revised down (from -1,000 to -500 t) because per-agent skill API only affects company-imported skills. Built-in `paperclip` skill remains.
 
 (Plus operator session — comparable savings, separate budget.)
 
@@ -430,6 +559,23 @@ At Opus 4.7 input rate $0.015/1K: ≈ **$53/mo savings** (paperclip runtime).
 2. ~~**Phase 3 strategy:** option B vs C?~~ ✅ **RESOLVED 2026-05-05**: Path-1 (rm unused .md files in plugin cache, preserve subagent name prefix). No role file changes needed. Risk: `/plugins update` restores files; mitigation: documented curate script.
 3. **Skill keep** (open): drop default = "if 0 calls in 30 days → drop". Operator can override per-skill (e.g. swiftui-pro / kmp / swift-* for future iOS work). **Pending operator review** before Phase 5 execution.
 4. **Phase order** (open): ship Phase 1 first as smoke (faster operator-session verification), then Phase 2+. Phase 0.5 (per-role audit) runs in parallel — read-only. **Default: Phase 0 → Phase 1 → Phase 0.5 (parallel) → Phase 2 → Phase 3 → Phase 4 → Phase 5 → Phase 6.**
+
+## Paperclip API verification (corrected from earlier draft)
+
+**Verified in paperclip 2026.428 docs + v2026.416 release notes:**
+
+| Operator's earlier overview (mis-attributed) | Reality in v2026.416/.428 |
+|---|---|
+| "Plugin Overrides (v2026.416)" — implied skill/subagent override | ❌ v2026.416 plugin overrides are about **adapters** (`claude_local`, `codex_local`, etc.) — third-party adapters can override built-in ones via `overriddenBuiltin` flag. NOT about skill/subagent overrides. |
+| "Per-Agent Exclusions: restrict bundled skills... reducing heartbeat context for individual agents" | ❌ NOT documented in v2026.416 release notes or paperclip 2026.428 references. Likely AI-generated marketing text conflating multiple unrelated features. |
+| "Runtime Skill Injection" | 🟡 Closest real feature: v2026.416 "Skill auto-enable — Mentioned skills are automatically enabled for heartbeat runs". Skills enable on @mention, not arbitrary runtime injection. |
+| "Container Overrides `PAPERCLIP_HOST_FROM_CONTAINER`" | ✅ Real — env var for docker container host alias. Unrelated to skill control. |
+
+**Real skill control mechanisms in 2026.428:**
+
+- `POST /api/agents/:agentId/skills/sync` with `desiredSkills: [...]` — per-agent skill assignment for **company-imported** skills.
+- `runtimeConfig.heartbeat.enabled: false` — disables scheduled wake (already used).
+- Built-in `paperclip` skill — auto-loaded by adapter, **cannot be excluded** per agent. Modifications: direct edit (fragile) or user-level override (Phase 4.6, gated on smoke).
 
 ## Scope clarification — what was deeply audited vs not
 
