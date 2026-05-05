@@ -1,0 +1,871 @@
+[
+  {
+    "role_id": "claude:blockchain-engineer",
+    "profiles": [
+      "core",
+      "task-start",
+      "implementation",
+      "handoff"
+    ],
+    "expected": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/profiles/handoff.md",
+      "fragments/shared/fragments/async-signal-wait.md",
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/test-design-discipline.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "actual": [
+      "fragments/profiles/handoff.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "missing": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/shared/fragments/async-signal-wait.md",
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/test-design-discipline.md"
+    ],
+    "extra": [],
+    "inline_tokens": 1392,
+    "total_tokens": 5954
+  },
+  {
+    "role_id": "claude:code-reviewer",
+    "profiles": [
+      "core",
+      "task-start",
+      "review",
+      "qa-smoke",
+      "handoff-full",
+      "merge-deploy"
+    ],
+    "expected": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/phase-handoff.md",
+      "fragments/shared/fragments/phase-review-discipline.md",
+      "fragments/shared/fragments/plan-first-review.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/test-design-discipline.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "actual": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/shared/fragments/async-signal-wait.md",
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/fragment-density.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/phase-handoff.md",
+      "fragments/shared/fragments/phase-review-discipline.md",
+      "fragments/shared/fragments/plan-first-review.md",
+      "fragments/shared/fragments/test-design-discipline.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "missing": [
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/pre-work-discovery.md"
+    ],
+    "extra": [
+      "fragments/shared/fragments/async-signal-wait.md",
+      "fragments/shared/fragments/fragment-density.md"
+    ],
+    "inline_tokens": 2204,
+    "total_tokens": 9173
+  },
+  {
+    "role_id": "claude:cto",
+    "profiles": [
+      "core",
+      "task-start",
+      "review",
+      "qa-smoke",
+      "handoff-full",
+      "merge-deploy"
+    ],
+    "expected": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/phase-handoff.md",
+      "fragments/shared/fragments/phase-review-discipline.md",
+      "fragments/shared/fragments/plan-first-review.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/test-design-discipline.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "actual": [
+      "fragments/shared/fragments/cto-no-code-ban.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/phase-handoff.md",
+      "fragments/shared/fragments/plan-first-producer.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "missing": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/phase-review-discipline.md",
+      "fragments/shared/fragments/plan-first-review.md",
+      "fragments/shared/fragments/test-design-discipline.md"
+    ],
+    "extra": [
+      "fragments/shared/fragments/cto-no-code-ban.md",
+      "fragments/shared/fragments/plan-first-producer.md"
+    ],
+    "inline_tokens": 979,
+    "total_tokens": 6587
+  },
+  {
+    "role_id": "claude:infra-engineer",
+    "profiles": [
+      "core",
+      "task-start",
+      "implementation",
+      "handoff-full",
+      "merge-deploy"
+    ],
+    "expected": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/shared/fragments/async-signal-wait.md",
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/phase-handoff.md",
+      "fragments/shared/fragments/phase-review-discipline.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/test-design-discipline.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "actual": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/phase-handoff.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/test-design-discipline.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "missing": [
+      "fragments/shared/fragments/async-signal-wait.md",
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/phase-review-discipline.md"
+    ],
+    "extra": [],
+    "inline_tokens": 1363,
+    "total_tokens": 7940
+  },
+  {
+    "role_id": "claude:mcp-engineer",
+    "profiles": [
+      "core",
+      "task-start",
+      "implementation",
+      "handoff"
+    ],
+    "expected": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/profiles/handoff.md",
+      "fragments/shared/fragments/async-signal-wait.md",
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/test-design-discipline.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "actual": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/profiles/handoff.md",
+      "fragments/shared/fragments/async-signal-wait.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/test-design-discipline.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "missing": [
+      "fragments/shared/fragments/compliance-enforcement.md"
+    ],
+    "extra": [],
+    "inline_tokens": 1259,
+    "total_tokens": 6994
+  },
+  {
+    "role_id": "claude:opus-architect-reviewer",
+    "profiles": [
+      "core",
+      "task-start",
+      "review",
+      "qa-smoke",
+      "research",
+      "handoff-full"
+    ],
+    "expected": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/phase-handoff.md",
+      "fragments/shared/fragments/phase-review-discipline.md",
+      "fragments/shared/fragments/plan-first-review.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/test-design-discipline.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "actual": [
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/phase-handoff.md",
+      "fragments/shared/fragments/phase-review-discipline.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "missing": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/plan-first-review.md",
+      "fragments/shared/fragments/test-design-discipline.md"
+    ],
+    "extra": [],
+    "inline_tokens": 1512,
+    "total_tokens": 7410
+  },
+  {
+    "role_id": "claude:python-engineer",
+    "profiles": [
+      "core",
+      "task-start",
+      "implementation",
+      "handoff"
+    ],
+    "expected": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/profiles/handoff.md",
+      "fragments/shared/fragments/async-signal-wait.md",
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/test-design-discipline.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "actual": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/profiles/handoff.md",
+      "fragments/shared/fragments/async-signal-wait.md",
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/phase-review-discipline.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/test-design-discipline.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "missing": [],
+    "extra": [
+      "fragments/shared/fragments/phase-review-discipline.md"
+    ],
+    "inline_tokens": 938,
+    "total_tokens": 7411
+  },
+  {
+    "role_id": "claude:qa-engineer",
+    "profiles": [
+      "core",
+      "task-start",
+      "qa-smoke",
+      "implementation",
+      "handoff-full",
+      "merge-deploy"
+    ],
+    "expected": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/shared/fragments/async-signal-wait.md",
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/phase-handoff.md",
+      "fragments/shared/fragments/phase-review-discipline.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/test-design-discipline.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "actual": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/phase-handoff.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/test-design-discipline.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "missing": [
+      "fragments/shared/fragments/async-signal-wait.md",
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/phase-review-discipline.md"
+    ],
+    "extra": [],
+    "inline_tokens": 1194,
+    "total_tokens": 7771
+  },
+  {
+    "role_id": "claude:research-agent",
+    "profiles": [
+      "core",
+      "task-start",
+      "research",
+      "handoff"
+    ],
+    "expected": [
+      "fragments/profiles/handoff.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "actual": [
+      "fragments/profiles/handoff.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "missing": [],
+    "extra": [],
+    "inline_tokens": 1231,
+    "total_tokens": 5793
+  },
+  {
+    "role_id": "claude:security-auditor",
+    "profiles": [
+      "core",
+      "task-start",
+      "review",
+      "research",
+      "handoff-full"
+    ],
+    "expected": [
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/phase-handoff.md",
+      "fragments/shared/fragments/phase-review-discipline.md",
+      "fragments/shared/fragments/plan-first-review.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/test-design-discipline.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "actual": [
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/phase-handoff.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "missing": [
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/phase-review-discipline.md",
+      "fragments/shared/fragments/plan-first-review.md",
+      "fragments/shared/fragments/test-design-discipline.md"
+    ],
+    "extra": [],
+    "inline_tokens": 1555,
+    "total_tokens": 7226
+  },
+  {
+    "role_id": "claude:technical-writer",
+    "profiles": [
+      "core",
+      "task-start",
+      "research",
+      "handoff"
+    ],
+    "expected": [
+      "fragments/profiles/handoff.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "actual": [
+      "fragments/profiles/handoff.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "missing": [],
+    "extra": [],
+    "inline_tokens": 1167,
+    "total_tokens": 5729
+  },
+  {
+    "role_id": "codex:codex-architect-reviewer",
+    "profiles": [
+      "core",
+      "task-start",
+      "review",
+      "qa-smoke",
+      "research",
+      "handoff-full"
+    ],
+    "expected": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/phase-handoff.md",
+      "fragments/shared/fragments/phase-review-discipline.md",
+      "fragments/shared/fragments/plan-first-review.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/test-design-discipline.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "actual": [
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/phase-handoff.md",
+      "fragments/shared/fragments/phase-review-discipline.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "missing": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/plan-first-review.md",
+      "fragments/shared/fragments/test-design-discipline.md"
+    ],
+    "extra": [],
+    "inline_tokens": 1510,
+    "total_tokens": 7408
+  },
+  {
+    "role_id": "codex:cx-code-reviewer",
+    "profiles": [
+      "core",
+      "task-start",
+      "review",
+      "qa-smoke",
+      "handoff-full",
+      "merge-deploy"
+    ],
+    "expected": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/phase-handoff.md",
+      "fragments/shared/fragments/phase-review-discipline.md",
+      "fragments/shared/fragments/plan-first-review.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/test-design-discipline.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "actual": [
+      "fragments/codex/create-agent.md",
+      "fragments/codex/runtime.md",
+      "fragments/codex/skills-and-agents.md",
+      "fragments/shared/fragments/phase-handoff.md"
+    ],
+    "missing": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/phase-review-discipline.md",
+      "fragments/shared/fragments/plan-first-review.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/test-design-discipline.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "extra": [
+      "fragments/codex/create-agent.md",
+      "fragments/codex/runtime.md",
+      "fragments/codex/skills-and-agents.md"
+    ],
+    "inline_tokens": 726,
+    "total_tokens": 3414
+  },
+  {
+    "role_id": "codex:cx-cto",
+    "profiles": [
+      "core",
+      "task-start",
+      "review",
+      "qa-smoke",
+      "handoff-full",
+      "merge-deploy"
+    ],
+    "expected": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/phase-handoff.md",
+      "fragments/shared/fragments/phase-review-discipline.md",
+      "fragments/shared/fragments/plan-first-review.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/test-design-discipline.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "actual": [
+      "fragments/shared/fragments/cto-no-code-ban.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/phase-handoff.md",
+      "fragments/shared/fragments/plan-first-producer.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "missing": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/phase-review-discipline.md",
+      "fragments/shared/fragments/plan-first-review.md",
+      "fragments/shared/fragments/test-design-discipline.md"
+    ],
+    "extra": [
+      "fragments/shared/fragments/cto-no-code-ban.md",
+      "fragments/shared/fragments/plan-first-producer.md"
+    ],
+    "inline_tokens": 977,
+    "total_tokens": 6585
+  },
+  {
+    "role_id": "codex:cx-infra-engineer",
+    "profiles": [
+      "core",
+      "task-start",
+      "implementation",
+      "handoff-full",
+      "merge-deploy"
+    ],
+    "expected": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/shared/fragments/async-signal-wait.md",
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/phase-handoff.md",
+      "fragments/shared/fragments/phase-review-discipline.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/test-design-discipline.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "actual": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/phase-handoff.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/test-design-discipline.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "missing": [
+      "fragments/shared/fragments/async-signal-wait.md",
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/phase-review-discipline.md"
+    ],
+    "extra": [],
+    "inline_tokens": 1355,
+    "total_tokens": 7932
+  },
+  {
+    "role_id": "codex:cx-mcp-engineer",
+    "profiles": [
+      "core",
+      "task-start",
+      "implementation",
+      "handoff"
+    ],
+    "expected": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/profiles/handoff.md",
+      "fragments/shared/fragments/async-signal-wait.md",
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/test-design-discipline.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "actual": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/profiles/handoff.md",
+      "fragments/shared/fragments/async-signal-wait.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/test-design-discipline.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "missing": [
+      "fragments/shared/fragments/compliance-enforcement.md"
+    ],
+    "extra": [],
+    "inline_tokens": 1253,
+    "total_tokens": 6988
+  },
+  {
+    "role_id": "codex:cx-python-engineer",
+    "profiles": [
+      "core",
+      "task-start",
+      "implementation",
+      "handoff"
+    ],
+    "expected": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/profiles/handoff.md",
+      "fragments/shared/fragments/async-signal-wait.md",
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/test-design-discipline.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "actual": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/profiles/handoff.md",
+      "fragments/shared/fragments/async-signal-wait.md",
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/phase-review-discipline.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/test-design-discipline.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "missing": [],
+    "extra": [
+      "fragments/shared/fragments/phase-review-discipline.md"
+    ],
+    "inline_tokens": 930,
+    "total_tokens": 7403
+  },
+  {
+    "role_id": "codex:cx-qa-engineer",
+    "profiles": [
+      "core",
+      "task-start",
+      "qa-smoke",
+      "implementation",
+      "handoff-full",
+      "merge-deploy"
+    ],
+    "expected": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/shared/fragments/async-signal-wait.md",
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/phase-handoff.md",
+      "fragments/shared/fragments/phase-review-discipline.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/test-design-discipline.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "actual": [
+      "fragments/local/test-design-gimle.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/phase-handoff.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/test-design-discipline.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "missing": [
+      "fragments/shared/fragments/async-signal-wait.md",
+      "fragments/shared/fragments/compliance-enforcement.md",
+      "fragments/shared/fragments/phase-review-discipline.md"
+    ],
+    "extra": [],
+    "inline_tokens": 1183,
+    "total_tokens": 7760
+  },
+  {
+    "role_id": "codex:cx-research-agent",
+    "profiles": [
+      "core",
+      "task-start",
+      "research",
+      "handoff"
+    ],
+    "expected": [
+      "fragments/profiles/handoff.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "actual": [
+      "fragments/profiles/handoff.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "missing": [],
+    "extra": [],
+    "inline_tokens": 1231,
+    "total_tokens": 5793
+  },
+  {
+    "role_id": "codex:cx-technical-writer",
+    "profiles": [
+      "core",
+      "task-start",
+      "research",
+      "handoff"
+    ],
+    "expected": [
+      "fragments/profiles/handoff.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "actual": [
+      "fragments/profiles/handoff.md",
+      "fragments/shared/fragments/escalation-blocked.md",
+      "fragments/shared/fragments/git-workflow.md",
+      "fragments/shared/fragments/heartbeat-discipline.md",
+      "fragments/shared/fragments/karpathy-discipline.md",
+      "fragments/shared/fragments/language.md",
+      "fragments/shared/fragments/pre-work-discovery.md",
+      "fragments/shared/fragments/worktree-discipline.md"
+    ],
+    "missing": [],
+    "extra": [],
+    "inline_tokens": 1159,
+    "total_tokens": 5721
+  }
+]
