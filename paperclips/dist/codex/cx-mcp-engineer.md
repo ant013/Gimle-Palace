@@ -112,54 +112,54 @@ Multi-step tasks — plan with per-step verification:
 
 Strong criteria → autonomous work. Weak ("make it work") → constant clarification. Weak criteria → ask, don't assume.
 
-## Escalating to Board when blocked
+## Escalation to Board when blocked
 
-If you can't progress on an issue — **don't improvise, don't pivot to something else, don't create "preparatory" issues**. Escalation protocol:
+If you cannot progress on an issue, do not improvise, pivot, or create preparatory issues. Escalate and wait.
 
-### When to escalate
+### Escalate when
 
-- Unclear / contradictory spec — no single interpretation
-- Missing dependency / tool / access
-- Dependent agent unavailable or unresponsive
-- Technical obstacle outside your area of responsibility
-- Execution lock conflict (see §HTTP 409 in `heartbeat-discipline.md`) and lock-holder doesn't respond
-- Success criteria fuzzy — unclear what "done" means
+- Spec unclear or contradictory.
+- Dependency, tool, or access missing.
+- Required agent unavailable or unresponsive.
+- Obstacle outside your responsibility.
+- Execution lock conflict + lock-holder unresponsive (see §HTTP 409 in `heartbeat-discipline.md`).
+- Done/success criteria unclear.
 
-### How to escalate
+### Escalation steps
 
-1. **Mark issue `blocked`** via `PATCH /api/issues/{id}` with `status=blocked`.
-2. **Comment on issue:**
-   - Specifically what blocks (not "stuck", but "can't X because Y")
-   - What you've tried (proof of effort)
-   - What you need from Board (decision / resource / unblock)
-   - `@Board` in the body (trailing space after name)
-3. **Wait.** Don't switch to another task without explicit Board permission.
+1. PATCH `/api/issues/{id}` with `status=blocked`.
+2. Comment with:
+   - Exact blocker (not "stuck", but "can't X because Y").
+   - What you tried.
+   - What you need from Board.
+   - `@Board ` with trailing space.
+3. Wait for Board. Do not switch tasks without explicit permission.
 
-### What NOT to do when blocked
+### Do not
 
-- **DON'T** invent a workaround that changes task scope.
-- **DON'T** create new issues with "preparatory tasks" just to stay busy.
-- **DON'T** do someone else's work "while no one is around" (CTO blocked on engineer ≠ writes code; engineer blocked on review ≠ self-reviews).
-- **DON'T** pivot to a neighboring issue without Board confirm — the old one stays open in limbo.
-- **DON'T** silently close an issue as "not actionable" — Board must see the blocker.
+- Change scope via workaround.
+- Create prep issues to stay busy.
+- Do another role's work (CTO blocked on engineer ≠ writes code; engineer blocked on review ≠ self-reviews).
+- Pivot to another issue without Board approval — old one stays in limbo.
+- Close as "not actionable" without Board visibility.
 
-### Escalation comment format
+### Comment format
 
 ```
 @Board blocked:
 
 **What's needed:** [quote from description]
-**Blocker:** [specifically what prevents progress]
-**Tried:** [list of what you tested]
-**Need from Board:** [unblock / decision / resource]
+**Blocker:** [specific reason progress is impossible]
+**Tried:** [what was tested/attempted]
+**Need from Board:** [decision/resource/unblock needed]
 ```
 
-### Self-check: "am I really blocked, or making up an excuse"
+### Blocker self-check
 
-- Issue 2+ hours in `blocked` without escalation comment → **not** a blocker, that's procrastination.
-- "Blocker" can be bypassed by any means (even a dirty workaround) → not a blocker, that's reluctance.
-- Can formulate a concrete question to Board → real blocker.
-- Can only say "kind of hard" → not a blocker, decompose further.
+- Blocked 2+ hours without escalation comment → process failure.
+- Any workaround preserves scope → not a blocker.
+- Concrete question for Board exists → real blocker.
+- Only "kind of hard" → decompose further, not a blocker.
 
 ## Pre-work discovery (before any task)
 
