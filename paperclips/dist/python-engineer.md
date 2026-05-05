@@ -528,56 +528,46 @@ Missing rows → REQUEST CHANGES (not NUDGE).
 
 Reply in Russian. Code comments — in English. Documentation (`docs/`, README, PR description) — in Russian.
 
-## Test-design discipline (iron rule)
+## Test Design Discipline
 
-**Substrate** = external library classes (DB drivers, HTTP clients, protocol
-libraries), subprocesses, filesystem-as-subject. NOT substrate = your
-project's own modules + pure functions + time/random.
+**Substrate** means external systems/classes: DB drivers, HTTP clients, protocol libraries, subprocesses, or filesystem-as-subject.
 
-### Don't mock substrate in happy-path tests
+Not substrate: project modules, pure functions, time, or random.
 
-A type-safe mock (configured to look like an external class) passes
-attribute access the real API won't support. Common failure: test passes
-against mock, production crashes because mocked methods don't exist in
-the installed library version, or a new call path hits a method the mock
-never configured.
+### Happy Path
 
-Use real substrate where feasible: test containers for databases, real
-subprocess invocations for CLI tools, temp directories for filesystem,
-transport-level mocks for HTTP (not client-class mocks).
+Do not mock substrate classes in happy-path tests.
 
-**Error-path tests MAY continue to use mocks freely.** This rule targets
-happy-path only. Explicit examples of legitimate mock usage:
+Use real substrate where feasible:
 
-- Timeouts (`asyncio.wait_for` raising `TimeoutError` / `asyncio.TimeoutError`).
-- Driver exceptions (connection resets, service-unavailable, client errors).
-- OS-level errors in subprocess streams.
-- HTTP 5xx responses via transport-level mocks.
-- Specific race conditions hard to reproduce on real substrate.
+- Test containers for databases.
+- Real subprocesses for CLI tools.
+- Temp directories for filesystem behavior.
+- Transport-level HTTP mocks instead of client-class mocks.
 
-The rule is: use real substrate for the **success path** of substrate-touching
-code. Error paths retain mocks — real substrate rarely reproduces them cleanly
-and doing so blows up CI runtime.
+Reason: substrate-class mocks can pass methods/attributes the real installed API does not support.
 
-### Touching shared infrastructure → full test suite, not scoped
+### Error Path
 
-When your diff changes entry points (application startup), shared
-schema/storage, or framework runners, run the full test suite before
-pushing. Scoped runs (single directory, keyword filter) can miss
-downstream regressions in tests that depend on the shared code but live
-in unrelated directories.
+Mocks are allowed for error-path tests, including:
 
-### CR checklist (enforced Phase 1.2 + 3.1)
+- Timeouts.
+- Driver/client exceptions.
+- OS-level subprocess stream errors.
+- HTTP 5xx via transport-level mocks.
+- Hard-to-reproduce races.
 
-- [ ] Plan task mocks a substrate class in happy path → CRITICAL finding.
-- [ ] Diff adds a new mock of a substrate class → NUDGE; verify a
-      real-fixture integration test exists for the same code path.
-- [ ] Compliance-comment test output shows scoping (directory filter,
-      keyword filter, or similar) when the diff touches shared
-      infrastructure → NUDGE, rerun the full suite.
+### Shared Infrastructure
 
-Your project's local test-design addendum lists concrete shared-infra
-paths and past incidents.
+If a diff touches entry points, shared schema/storage, or framework runners, run the full test suite before pushing. Scoped tests are insufficient.
+
+### Code Review Checklist (Phase 1.2 + 3.1)
+
+- Happy-path substrate-class mock in plan: CRITICAL.
+- New substrate-class mock in diff: NUDGE; require real-fixture integration coverage for same path.
+- Shared-infra diff with scoped-only test output: NUDGE; rerun full suite.
+
+Project's local test-design addendum lists concrete shared-infra paths and past incidents.
 ## Test-design — Gimle specifics
 
 ### Shared-infra paths (touching any = full `uv run pytest tests/`)
