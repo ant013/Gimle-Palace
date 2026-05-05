@@ -104,7 +104,7 @@ Reference: `docs/research/extractor-library/` (2026-04-18 brainstorm, 9 parallel
 | 25 | Build System Extractor | CX | — | Gradle Tooling API + SwiftPM PackageDescription + Bazel aquery | 📦 |
 | 27 | Public API Surface Extractor | CX | — | Kotlin BCV `.api` dumps + Swift `.swiftinterface` primary + optional `swift-api-digester` diagnostics + SKIE overlay | ✅ GIM-190 / PR #88 merged + iMac deployed at `2a96786`; `public_api_surface` registry verified |
 | 31 | Cross-Module Contract Extractor | CX | — | Kotlin BCV + swift-public-api-diff + oasdiff | 📋 GIM-192 launched for CX spec formalization; consumes #27 PublicApiSurface/PublicApiSymbol |
-| 33 | Dead Symbol & Binary Surface | CX | — | Periphery + Reaper SDK + CodeQL | 📦 |
+| 33 | Dead Symbol & Binary Surface | CX | — | Periphery + Reaper SDK + CodeQL | 🚧 spec draft (`docs/superpowers/specs/2026-05-04-roadmap-33-dead-symbol-binary-surface.md`) |
 | 36 | Network Schema & API Contract | Claude | — | oasdiff + Buf CLI + graphql-inspector | 📦 |
 | 39 | Cross-Repo Version Skew | Claude | — | Gradle Tooling API + Renovate data + OWASP Dep-Check | 📦 (deps #5) |
 | 41 | SCIP/LSIF Precise Symbol Resolver | CX | — | scip-* per-language | 🚧 = Phase 1 in disguise |

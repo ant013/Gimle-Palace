@@ -235,6 +235,7 @@ class SymbolOccurrenceShadow(BaseModel):
 
     symbol_id: int = Field(..., ge=-(2**63), le=2**63 - 1)
     symbol_qualified_name: str
+    language: Language | None = None
     importance: float = Field(..., ge=0.0, le=1.0)
     kind: SymbolKind
     tier_weight: float = Field(..., ge=0.0, le=1.0)
