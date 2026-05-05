@@ -50,6 +50,7 @@ class HotspotExtractor(BaseExtractor):
         )
 
         parsed_files: list[ParsedFile] = []
+        skipped_paths: list[str] = []
         for i in range(0, max(len(files), 1), batch_size):
             batch = files[i : i + batch_size]
             if not batch:
@@ -61,8 +62,10 @@ class HotspotExtractor(BaseExtractor):
                 behavior=behavior,
             )
             parsed_files.extend(result.parsed)
+            skipped_paths.extend(result.skipped_files)
 
         paths = [pf.path for pf in parsed_files]
+        preserved_paths = sorted({*paths, *skipped_paths})
         churn_map = await churn_query.fetch_churn(
             driver,
             project_id=ctx.group_id,
@@ -98,12 +101,13 @@ class HotspotExtractor(BaseExtractor):
         await neo4j_writer.evict_stale_functions(
             driver,
             project_id=ctx.group_id,
+            preserved_paths=preserved_paths,
             run_started_at=run_started_at,
         )
         await neo4j_writer.mark_dead_files_zero(
             driver,
             project_id=ctx.group_id,
-            alive_paths=paths,
+            preserved_paths=preserved_paths,
             run_started_at=run_started_at,
         )
 

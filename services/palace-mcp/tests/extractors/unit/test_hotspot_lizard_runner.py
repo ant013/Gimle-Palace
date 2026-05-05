@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -85,6 +85,31 @@ async def test_run_batch_drop_batch_on_timeout(tmp_path: Path):
         )
     assert result.parsed == ()
     assert set(result.skipped_files) == {"a.py", "b.py"}
+
+
+@pytest.mark.asyncio
+async def test_run_batch_drop_batch_logs_full_skipped_file_list(tmp_path: Path):
+    files = [tmp_path / "a.py", tmp_path / "b.py"]
+    for f in files:
+        f.write_text("def x(): pass\n")
+
+    async def fake(*args, **kwargs):
+        raise TimeoutError("simulated")
+
+    logger_mock = MagicMock()
+    with (
+        patch(
+            "palace_mcp.extractors.hotspot.lizard_runner._invoke_lizard",
+            side_effect=fake,
+        ),
+        patch("palace_mcp.extractors.hotspot.lizard_runner.logger", logger_mock),
+    ):
+        await run_batch(files, repo_root=tmp_path, timeout_s=1, behavior="drop_batch")
+
+    assert logger_mock.warning.call_args.kwargs["extra"]["skipped_files"] == (
+        "a.py",
+        "b.py",
+    )
 
 
 @pytest.mark.asyncio

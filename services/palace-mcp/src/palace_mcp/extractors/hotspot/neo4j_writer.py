@@ -36,13 +36,14 @@ SET f.churn_count = $churn,
 
 PHASE_4_EVICT_CYPHER = """
 MATCH (f:File {project_id: $project_id})-[:CONTAINS]->(fn:Function)
-WHERE fn.last_run_at < datetime($run_started_at)
+WHERE NOT f.path IN $preserved_paths
+  AND fn.last_run_at < datetime($run_started_at)
 DETACH DELETE fn
 """.strip()
 
 PHASE_5_DEAD_CYPHER = """
 MATCH (f:File {project_id: $project_id})
-WHERE NOT f.path IN $alive_paths
+WHERE NOT f.path IN $preserved_paths
   AND coalesce(f.ccn_total, 0) > 0
 SET f.ccn_total = 0,
     f.churn_count = 0,
@@ -115,12 +116,17 @@ async def evict_stale_functions(
     driver: Any,
     *,
     project_id: str,
+    preserved_paths: list[str],
     run_started_at: datetime,
 ) -> None:
     async with driver.session() as session:
         await session.run(
             PHASE_4_EVICT_CYPHER,
-            {"project_id": project_id, "run_started_at": run_started_at.isoformat()},
+            {
+                "project_id": project_id,
+                "preserved_paths": preserved_paths,
+                "run_started_at": run_started_at.isoformat(),
+            },
         )
 
 
@@ -128,7 +134,7 @@ async def mark_dead_files_zero(
     driver: Any,
     *,
     project_id: str,
-    alive_paths: list[str],
+    preserved_paths: list[str],
     run_started_at: datetime,
 ) -> None:
     async with driver.session() as session:
@@ -136,7 +142,7 @@ async def mark_dead_files_zero(
             PHASE_5_DEAD_CYPHER,
             {
                 "project_id": project_id,
-                "alive_paths": alive_paths,
+                "preserved_paths": preserved_paths,
                 "run_started_at": run_started_at.isoformat(),
             },
         )

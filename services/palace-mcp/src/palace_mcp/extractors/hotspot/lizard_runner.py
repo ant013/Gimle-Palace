@@ -142,6 +142,7 @@ async def run_batch(
             extra={
                 "batch_size": len(files),
                 "first_file": skipped[0] if skipped else None,
+                "skipped_files": skipped,
             },
         )
         return LizardRunResult(parsed=(), skipped_files=skipped)

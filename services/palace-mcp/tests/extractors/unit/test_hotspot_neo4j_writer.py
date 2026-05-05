@@ -73,10 +73,12 @@ def test_phase3_cypher_sets_complexity_status_fresh():
 
 def test_phase5_cypher_sets_complexity_status_stale():
     assert "complexity_status = 'stale'" in PHASE_5_DEAD_CYPHER
+    assert "NOT f.path IN $preserved_paths" in PHASE_5_DEAD_CYPHER
 
 
 def test_phase4_cypher_uses_last_run_at_cutoff():
     assert "fn.last_run_at < datetime($run_started_at)" in PHASE_4_EVICT_CYPHER
+    assert "NOT f.path IN $preserved_paths" in PHASE_4_EVICT_CYPHER
     assert "DETACH DELETE fn" in PHASE_4_EVICT_CYPHER
 
 
@@ -170,15 +172,22 @@ async def test_evict_stale_functions_passes_run_started_at():
     driver.session.return_value.__aenter__.return_value = session
     driver.session.return_value.__aexit__.return_value = None
     run_at = datetime(2026, 5, 4, 12, 0, tzinfo=timezone.utc)
-    await evict_stale_functions(driver, project_id="gimle", run_started_at=run_at)
+    preserved_paths = ["src/a.py", "src/skipped.py"]
+    await evict_stale_functions(
+        driver,
+        project_id="gimle",
+        preserved_paths=preserved_paths,
+        run_started_at=run_at,
+    )
     assert session.run.await_args.args[1] == {
         "project_id": "gimle",
+        "preserved_paths": preserved_paths,
         "run_started_at": run_at.isoformat(),
     }
 
 
 @pytest.mark.asyncio
-async def test_mark_dead_files_zero_passes_alive_paths():
+async def test_mark_dead_files_zero_passes_preserved_paths():
     from palace_mcp.extractors.hotspot.neo4j_writer import mark_dead_files_zero
 
     driver = MagicMock()
@@ -187,15 +196,15 @@ async def test_mark_dead_files_zero_passes_alive_paths():
     driver.session.return_value.__aenter__.return_value = session
     driver.session.return_value.__aexit__.return_value = None
     run_at = datetime(2026, 5, 4, 12, 0, tzinfo=timezone.utc)
-    alive = ["src/a.py", "src/b.py"]
+    preserved_paths = ["src/a.py", "src/skipped.py"]
     await mark_dead_files_zero(
         driver,
         project_id="gimle",
-        alive_paths=alive,
+        preserved_paths=preserved_paths,
         run_started_at=run_at,
     )
     assert session.run.await_args.args[1] == {
         "project_id": "gimle",
-        "alive_paths": alive,
+        "preserved_paths": preserved_paths,
         "run_started_at": run_at.isoformat(),
     }
