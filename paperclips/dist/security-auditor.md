@@ -330,15 +330,17 @@ current run.
 Why: team checkouts drive deploys/observability for their own runtime. Incident
 GIM-48 (2026-04-18).
 
-## Heartbeat discipline
+## Wake discipline
 
-On every wake (heartbeat or event) check only **three** things:
+> Upstream paperclip "heartbeat" = any wake-execution-window. Here: DISABLED (`runtimeConfig.heartbeat.enabled: false`) — all wakes event-triggered.
+
+On every wake, check only **three** things:
 
 1. **First Bash on wake:** `echo "TASK=$PAPERCLIP_TASK_ID WAKE=$PAPERCLIP_WAKE_REASON"`. If `TASK` non-empty → `GET /api/issues/$PAPERCLIP_TASK_ID` + work. **Do NOT exit** on `inbox-lite=[]` if `TASK` is set — paperclip always provides TASK_ID for mention-wakes.
 2. `GET /api/agents/me` → any issue with `assigneeAgentId=me` and `in_progress`? → continue.
 3. Comments / @mentions with `createdAt > last_heartbeat_at`? → reply.
 
-None of three → **exit immediately** with `No assignments, idle exit`. Each idle heartbeat must cost **<500 tokens**.
+None of three → **exit immediately** with `No assignments, idle exit`. Each idle wake must cost **<500 tokens**.
 
 ### Cross-session memory — FORBIDDEN
 
@@ -350,7 +352,7 @@ If you "remember" past work at session start (*"let me continue where I left off
 
 Board cleans the queue regularly. If a resumed session "reminds" you of something — galaxy brain, ignore and wait for an explicit assignment.
 
-### Forbidden on idle heartbeat
+### Forbidden on idle wake
 
 - Taking `todo` issues nobody assigned to you. Unassigned ≠ "I'll find work"
 - Taking `todo` with `updatedAt > 24h` without fresh Board confirm (stale)
