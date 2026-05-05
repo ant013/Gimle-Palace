@@ -6,7 +6,7 @@ paperclip_issue: 193
 roadmap_item: 33
 date: 2026-05-04
 authoring_team: Board/Codex brainstorm for CX handoff
-base: develop@05fe1b7b0642920a63bd1f4225a12f4d786cccff
+base: develop@13f6b1372205683961f36a759bc7305dd1375852
 plan: docs/superpowers/plans/2026-05-04-roadmap-33-dead-symbol-binary-surface.md
 ---
 
@@ -41,8 +41,8 @@ Current adjacent work:
   facts.
 - GIM-192 / roadmap #31 Cross-Module Contract is merged on `develop` and proves
   which exported symbols are consumed across modules.
-- GIM-191 / roadmap #5 Dependency Surface is in review and is not a hard
-  dependency for this slice.
+- GIM-191 / roadmap #5 Dependency Surface is merged on `develop` and is not a
+  hard dependency for this slice.
 - GIM-186 Git History Harvester is merged on `develop`, but #33 v1 should not
   require historical churn data.
 
@@ -313,6 +313,10 @@ Implementation verification:
   - JSON response from `palace.ingest.run_extractor`;
   - `MATCH (d:DeadSymbolCandidate) RETURN d.candidate_state, count(*)`;
   - `MATCH (b:BinarySurfaceRecord) RETURN count(b)`;
+  - a sample `BLOCKED_BY_CONTRACT_SYMBOL` edge to a `PublicApiSymbol` with
+    `properties(rel)` showing `contract_snapshot_id`, `consumer_module_name`,
+    `producer_module_name`, `commit_sha`, `use_count`, and
+    `evidence_paths_sample`;
   - Cypher proof that no `unused_candidate` has a public/open API match or a
     `BLOCKED_BY_CONTRACT_SYMBOL` edge.
 

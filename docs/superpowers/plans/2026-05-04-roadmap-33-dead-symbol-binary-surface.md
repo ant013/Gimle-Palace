@@ -17,8 +17,9 @@ assigned.
 | Phase | Owner | Output |
 |---|---|---|
 | 1.1 Formalization | CTO / operator | This spec + plan branch |
-| 1.2 Plan review | CXCodeReviewer | Approve/request changes before implementation; must include Tool Output Gate sign-off |
-| 2 Implementation | CXPythonEngineer | TDD implementation on a real GIM branch |
+| 1.2 Plan review | CXCodeReviewer | Approve/request changes before Gate 0 |
+| 1.3 Tool Output Gate | CXPythonEngineer -> CXCodeReviewer | Periphery fixture contract captured, pushed, and explicitly signed off before implementation |
+| 2 Implementation | CXPythonEngineer | TDD implementation on a real GIM branch after Gate 0 sign-off |
 | 3.1 Mechanical review | CXCodeReviewer | Correctness, scope, tests |
 | 3.2 Architecture review | CodexArchitectReviewer | False-positive model and graph semantics |
 | 4.1 QA smoke | CXQAEngineer | Docker/review-profile evidence |
@@ -52,6 +53,33 @@ No public MCP/router/API files are in v1 scope.
 Freeze the exact input shape before writing parser code. This is a hard
 precondition for Phase 2, not an implementation task that can run in parallel.
 
+### Owner And Handoff
+
+- Suggested owner: CXPythonEngineer, because the work creates fixture artifacts
+  and validates parser-input shape before extractor implementation.
+- Reviewer/sign-off owner: CXCodeReviewer.
+- Status transition: after Phase 1.2 plan approval, assign Gate 0 to
+  CXPythonEngineer. When the fixture contract is pushed, CXPythonEngineer must
+  PATCH `status=in_review`, `assigneeAgentId=CXCodeReviewer`, and include a
+  formal mention for fixture-schema sign-off. CXCodeReviewer either requests
+  changes on the fixture contract or signs off and reassigns Phase 2
+  implementation to CXPythonEngineer.
+- Phase 2 must not begin from this plan, a child issue, or a direct assignment
+  until the CXCodeReviewer Gate 0 sign-off comment exists.
+
+### Affected Files
+
+- `docs/research/2026-05-04-dead-symbol-tool-output-spike/README.md`
+- `services/palace-mcp/tests/extractors/fixtures/dead-symbol-binary-surface-mini-project/`
+- This spec/plan only if the captured fixture invalidates parser assumptions.
+
+### Dependencies
+
+- Depends on Phase 1.2 plan approval.
+- Blocks every Phase 2 implementation task below.
+- Must not depend on Reaper, CodeQL, Android alternatives, or production
+  Xcode/Gradle project edits.
+
 ### Work
 
 - Generate or commit a small Periphery output fixture for the Swift mini project.
@@ -67,8 +95,27 @@ precondition for Phase 2, not an implementation task that can run in parallel.
 
 - `docs/research/2026-05-04-dead-symbol-tool-output-spike/README.md` exists.
 - Fixture files exist under the extractor fixture directory.
+- The README records the exact Periphery command, working directory, target or
+  project selection, Periphery version, output format, and a trimmed copy of the
+  raw output used to derive the fixture.
+- CXPythonEngineer posts the validation output in the Gate 0 handoff comment.
 - The spec is updated if the tool output invalidates parser assumptions.
 - CXCodeReviewer explicitly signs off on the fixture schema before Phase 2.
+
+## Task Dependency Map
+
+| Step | Suggested owner | Depends on | Affected paths |
+|---|---|---|---|
+| Gate 0 - Tool Output Spike | CXPythonEngineer -> CXCodeReviewer | Phase 1.2 plan approval | `docs/research/2026-05-04-dead-symbol-tool-output-spike/`, fixture directory |
+| Task 1 - Models/IDs | CXPythonEngineer | Gate 0 sign-off | `extractors/dead_symbol_binary_surface/models.py`, `identifiers.py` |
+| Task 2 - Periphery Parser | CXPythonEngineer | Gate 0 sign-off, Task 1 | `parsers/periphery.py`, parser tests, fixture directory |
+| Task 3 - Reaper No-Op | CXPythonEngineer | Task 1 | `parsers/reaper.py`, Reaper parser tests |
+| Task 4 - Correlation/Safety | CXPythonEngineer | Tasks 1-3, GIM-190/GIM-192 fixtures | `correlation.py`, correlation tests |
+| Task 5 - Neo4j Writer | CXPythonEngineer | Tasks 1 and 4 | `neo4j_writer.py`, `foundation/schema.py`, writer tests |
+| Task 6 - Extractor Orchestrator | CXPythonEngineer | Tasks 2-5 | `extractor.py`, `__init__.py`, `registry.py`, orchestrator tests |
+| Task 7 - Integration Fixture | CXPythonEngineer | Tasks 2-6 | integration test and fixture directory |
+| Task 8 - Runbook | CXPythonEngineer or CXTechnicalWriter if hired | Tasks 2-7 | `docs/runbooks/dead-symbol-binary-surface.md` |
+| Task 9 - Validation Bundle | CXPythonEngineer, then CXQAEngineer | Tasks 1-8 | command evidence and Phase 4.1 smoke output |
 
 ## Task 1 - Deterministic IDs And Pydantic Models
 
@@ -326,9 +373,27 @@ WHERE p.visibility IN ['public', 'open']
 RETURN count(*) AS invalid_public_unused;
 MATCH (d:DeadSymbolCandidate {candidate_state: 'unused_candidate'})-[:BLOCKED_BY_CONTRACT_SYMBOL]->(:PublicApiSymbol)
 RETURN count(*) AS invalid_contract_unused;
+MATCH (d:DeadSymbolCandidate)-[rel:BLOCKED_BY_CONTRACT_SYMBOL]->(p:PublicApiSymbol)
+RETURN d.id AS candidate_id,
+       p.id AS public_symbol_id,
+       p.symbol_qualified_name AS public_symbol_key,
+       properties(rel) AS blocker_provenance
+LIMIT 5;
+MATCH (:DeadSymbolCandidate)-[rel:BLOCKED_BY_CONTRACT_SYMBOL]->(:PublicApiSymbol)
+WHERE rel.contract_snapshot_id IS NULL
+   OR rel.consumer_module_name IS NULL
+   OR rel.producer_module_name IS NULL
+   OR rel.commit_sha IS NULL
+   OR rel.use_count IS NULL
+   OR rel.evidence_paths_sample IS NULL
+RETURN count(*) AS missing_contract_blocker_provenance;
 ```
 
-Expected invalid counts are zero. QA must also paste the JSON response from
+Expected invalid counts and `missing_contract_blocker_provenance` are zero. The
+sample rows must prove the relationship target is `PublicApiSymbol` and that
+`blocker_provenance` contains `contract_snapshot_id`, `consumer_module_name`,
+`producer_module_name`, `commit_sha`, `use_count`, and `evidence_paths_sample`.
+QA must also paste the JSON response from
 `palace.ingest.run_extractor(name="dead_symbol_binary_surface", project=...)`.
 
 ## Rollback
