@@ -116,3 +116,23 @@ class TestSettingsFoundationOverrides:
         monkeypatch.setenv("PALACE_IMPORTANCE_THRESHOLD_USE", "1.1")
         with pytest.raises(ValidationError):
             Settings()
+
+
+def test_hotspot_settings_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    for k, v in _minimal_env().items():
+        monkeypatch.setenv(k, v)
+    settings = Settings()
+    assert settings.palace_hotspot_churn_window_days == 90
+    assert settings.palace_hotspot_lizard_batch_size == 50
+    assert settings.palace_hotspot_lizard_timeout_s == 30
+    assert settings.palace_hotspot_lizard_timeout_behavior == "drop_batch"
+
+
+def test_hotspot_lizard_timeout_behavior_invalid_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for k, v in _minimal_env().items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setenv("PALACE_HOTSPOT_LIZARD_TIMEOUT_BEHAVIOR", "boom")
+    with pytest.raises(ValidationError):
+        Settings()

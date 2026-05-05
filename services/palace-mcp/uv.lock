@@ -736,6 +736,19 @@ wheels = [
 ]
 
 [[package]]
+name = "lizard"
+version = "1.22.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pathspec" },
+    { name = "pygments" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b3/c7/776f75710b0033d69249b45ed571f8a314c1a8980c1d3c64e3c12f541869/lizard-1.22.1.tar.gz", hash = "sha256:29fe26f3746f8539227ba909a6143c749548690271e13a3f73204b22e2e62590", size = 90616, upload-time = "2026-04-23T01:54:30.645Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/45/aa/54d9292917f0f9cc684fd053f879e3e8292bf4bc40e984d542dbfe393063/lizard-1.22.1-py2.py3-none-any.whl", hash = "sha256:cc629472d4b031f7692bd7f7e78d2574029008148fba75e45f3592774c8e7420", size = 98713, upload-time = "2026-04-23T01:54:29.008Z" },
+]
+
+[[package]]
 name = "markdown-it-py"
 version = "4.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1011,6 +1024,7 @@ dependencies = [
     { name = "fastapi", extra = ["standard"] },
     { name = "graphiti-core" },
     { name = "httpx" },
+    { name = "lizard" },
     { name = "mcp" },
     { name = "neo4j" },
     { name = "packaging" },
@@ -1040,6 +1054,7 @@ requires-dist = [
     { name = "fastapi", extras = ["standard"], specifier = ">=0.115.0" },
     { name = "graphiti-core", specifier = "==0.28.2" },
     { name = "httpx", specifier = ">=0.28.0" },
+    { name = "lizard", specifier = ">=1.17.20,<2.0" },
     { name = "mcp", specifier = ">=1.6" },
     { name = "neo4j", specifier = ">=5.0" },
     { name = "packaging", specifier = ">=24.0" },
