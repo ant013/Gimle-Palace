@@ -6,7 +6,9 @@ from unittest.mock import patch
 import pytest
 
 from palace_mcp.extractors.hotspot.lizard_runner import (
-    LizardBatchTimeout, LizardRunResult, parse_lizard_xml, run_batch,
+    LizardBatchTimeout,
+    parse_lizard_xml,
+    run_batch,
 )
 
 _SAMPLE_XML = """<?xml version="1.0"?>
@@ -48,7 +50,9 @@ async def test_run_batch_drop_batch_on_timeout(tmp_path: Path):
         "palace_mcp.extractors.hotspot.lizard_runner._invoke_lizard",
         side_effect=fake,
     ):
-        result = await run_batch(files, repo_root=tmp_path, timeout_s=1, behavior="drop_batch")
+        result = await run_batch(
+            files, repo_root=tmp_path, timeout_s=1, behavior="drop_batch"
+        )
     assert result.parsed == ()
     assert set(result.skipped_files) == {"a.py", "b.py"}
 

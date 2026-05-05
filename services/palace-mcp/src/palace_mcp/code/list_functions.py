@@ -42,7 +42,7 @@ async def list_functions(
     async with driver.session() as session:
         result = await session.run(
             _QUERY,
-            {"project_id": project, "path": path, "min_ccn": int(min_ccn)},
+            {"project_id": f"project/{project}", "path": path, "min_ccn": int(min_ccn)},
         )
         async for rec in result:
             rows.append(

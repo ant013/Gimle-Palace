@@ -817,12 +817,13 @@ async def palace_code_find_hotspots(
 async def palace_code_list_functions(
     project: str,
     path: str,
+    min_ccn: int = 0,
 ) -> dict[str, Any]:
     """List functions for a specific file recorded by the hotspot extractor."""
     driver = _driver
     if driver is None:
         return {"ok": False, "error_code": "driver_unavailable", "message": "Neo4j driver not initialised"}
-    return await _list_functions_impl(driver=driver, project=project, path=path)
+    return await _list_functions_impl(driver=driver, project=project, path=path, min_ccn=min_ccn)
 
 
 # ---------------------------------------------------------------------------

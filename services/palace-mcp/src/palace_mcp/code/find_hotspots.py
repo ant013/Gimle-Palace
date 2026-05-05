@@ -43,7 +43,11 @@ async def find_hotspots(
     async with driver.session() as session:
         result = await session.run(
             _QUERY,
-            {"project_id": project, "top_n": int(top_n), "min_score": float(min_score)},
+            {
+                "project_id": f"project/{project}",
+                "top_n": int(top_n),
+                "min_score": float(min_score),
+            },
         )
         async for rec in result:
             rows.append(

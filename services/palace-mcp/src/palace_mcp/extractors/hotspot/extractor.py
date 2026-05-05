@@ -45,7 +45,9 @@ class HotspotExtractor(BaseExtractor):
 
         batch_size: int = settings.palace_hotspot_lizard_batch_size
         timeout_s: int = settings.palace_hotspot_lizard_timeout_s
-        behavior: Literal["drop_batch", "fail_run"] = settings.palace_hotspot_lizard_timeout_behavior
+        behavior: Literal["drop_batch", "fail_run"] = (
+            settings.palace_hotspot_lizard_timeout_behavior
+        )
 
         parsed_files: list[ParsedFile] = []
         for i in range(0, max(len(files), 1), batch_size):
@@ -63,7 +65,7 @@ class HotspotExtractor(BaseExtractor):
         paths = [pf.path for pf in parsed_files]
         churn_map = await churn_query.fetch_churn(
             driver,
-            project_id=ctx.project_slug,
+            project_id=ctx.group_id,
             paths=paths,
             window_days=settings.palace_hotspot_churn_window_days,
             run_started_at=run_started_at,
@@ -74,7 +76,7 @@ class HotspotExtractor(BaseExtractor):
         for pf in parsed_files:
             await neo4j_writer.write_file_and_functions(
                 driver,
-                project_id=ctx.project_slug,
+                project_id=ctx.group_id,
                 parsed_file=pf,
                 run_started_at=run_started_at,
             )
@@ -85,7 +87,7 @@ class HotspotExtractor(BaseExtractor):
             score = math.log(pf.ccn_total + 1) * math.log(churn + 1)
             await neo4j_writer.write_hotspot_score(
                 driver,
-                project_id=ctx.project_slug,
+                project_id=ctx.group_id,
                 path=pf.path,
                 churn=churn,
                 score=score,
@@ -95,12 +97,12 @@ class HotspotExtractor(BaseExtractor):
 
         await neo4j_writer.evict_stale_functions(
             driver,
-            project_id=ctx.project_slug,
+            project_id=ctx.group_id,
             run_started_at=run_started_at,
         )
         await neo4j_writer.mark_dead_files_zero(
             driver,
-            project_id=ctx.project_slug,
+            project_id=ctx.group_id,
             alive_paths=paths,
             run_started_at=run_started_at,
         )

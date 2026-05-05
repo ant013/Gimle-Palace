@@ -30,8 +30,11 @@ def _free_port() -> int:
 class _TestServer:
     def __init__(self, app: object, port: int) -> None:
         import uvicorn
+
         self.port = port
-        config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error", access_log=False)
+        config = uvicorn.Config(
+            app, host="127.0.0.1", port=port, log_level="error", access_log=False
+        )
         self._server = uvicorn.Server(config)
         self._thread: threading.Thread | None = None
 
@@ -68,6 +71,7 @@ def neo4j_auth() -> tuple[str, str]:
 @pytest.fixture(scope="module")
 def mcp_url(neo4j_uri: str, neo4j_auth: tuple[str, str]) -> Iterator[str]:
     import palace_mcp.mcp_server as _ms
+
     drv = AsyncGraphDatabase.driver(neo4j_uri, auth=neo4j_auth)
     _ms.set_driver(drv)
     app = _ms.build_mcp_asgi_app()
@@ -85,9 +89,12 @@ def mcp_url(neo4j_uri: str, neo4j_auth: tuple[str, str]) -> Iterator[str]:
 
 
 @pytest.fixture(scope="module")
-def registered_project_empty(neo4j_uri: str, neo4j_auth: tuple[str, str]) -> Iterator[str]:
+def registered_project_empty(
+    neo4j_uri: str, neo4j_auth: tuple[str, str]
+) -> Iterator[str]:
     """Create a bare :Project node with no :File nodes; delete after module."""
     from neo4j import GraphDatabase
+
     slug = "hotspot-wire-empty"
     drv = GraphDatabase.driver(neo4j_uri, auth=neo4j_auth)
     with drv.session() as sess:
@@ -99,10 +106,14 @@ def registered_project_empty(neo4j_uri: str, neo4j_auth: tuple[str, str]) -> Ite
 
 
 @pytest.fixture(scope="module")
-def seeded_hotspot_project(neo4j_uri: str, neo4j_auth: tuple[str, str]) -> Iterator[str]:
+def seeded_hotspot_project(
+    neo4j_uri: str, neo4j_auth: tuple[str, str]
+) -> Iterator[str]:
     """Seed :Project + :File nodes with hotspot data for query tests."""
     from neo4j import GraphDatabase
+
     slug = "hotspot-wire-seeded"
+    group_id = f"project/{slug}"
     drv = GraphDatabase.driver(neo4j_uri, auth=neo4j_auth)
     with drv.session() as sess:
         sess.run("MERGE (p:Project {slug: $s})", s=slug)
@@ -111,28 +122,27 @@ def seeded_hotspot_project(neo4j_uri: str, neo4j_auth: tuple[str, str]) -> Itera
             "SET f.hotspot_score = 2.5, f.ccn_total = 8, f.churn_count = 5, "
             "f.complexity_status = 'fresh', f.complexity_window_days = 90, "
             "f.last_complexity_run_at = datetime('2026-05-01T00:00:00Z')",
-            p=slug,
+            p=group_id,
         )
         sess.run(
             "MERGE (f:File {project_id: $p, path: 'src/simple.py'}) "
             "SET f.hotspot_score = 0.8, f.ccn_total = 2, f.churn_count = 2, "
             "f.complexity_status = 'fresh', f.complexity_window_days = 90, "
             "f.last_complexity_run_at = datetime('2026-05-01T00:00:00Z')",
-            p=slug,
+            p=group_id,
         )
-        # Add a Function node for list_functions tests
         sess.run(
             "MATCH (f:File {project_id: $p, path: 'src/complex.py'}) "
             "MERGE (fn:Function {project_id: $p, path: 'src/complex.py', name: 'classify', start_line: 1}) "
             "SET fn.end_line = 13, fn.ccn = 6, fn.parameter_count = 1, fn.nloc = 13, fn.language = 'python' "
             "MERGE (f)-[:CONTAINS]->(fn)",
-            p=slug,
+            p=group_id,
         )
     yield slug
     with drv.session() as sess:
         sess.run(
-            "MATCH (n) WHERE n.project_id = $s DETACH DELETE n",
-            s=slug,
+            "MATCH (n) WHERE n.project_id = $g DETACH DELETE n",
+            g=group_id,
         )
         sess.run("MATCH (p:Project {slug: $s}) DETACH DELETE p", s=slug)
     drv.close()
@@ -145,7 +155,8 @@ async def test_find_hotspots_unregistered_project_returns_error(mcp_url: str) ->
         async with ClientSession(read, write) as session:
             await session.initialize()
             result = await session.call_tool(
-                "palace.code.find_hotspots", {"project": "doesnotexist"},
+                "palace.code.find_hotspots",
+                {"project": "doesnotexist"},
             )
     resp = json.loads(result.content[0].text)
     assert resp["ok"] is False
@@ -155,7 +166,8 @@ async def test_find_hotspots_unregistered_project_returns_error(mcp_url: str) ->
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_find_hotspots_registered_no_files_returns_empty(
-    mcp_url: str, registered_project_empty: str,
+    mcp_url: str,
+    registered_project_empty: str,
 ) -> None:
     async with streamablehttp_client(mcp_url) as (read, write, _):
         async with ClientSession(read, write) as session:
@@ -172,7 +184,8 @@ async def test_find_hotspots_registered_no_files_returns_empty(
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_find_hotspots_with_data_returns_sorted_descending(
-    mcp_url: str, seeded_hotspot_project: str,
+    mcp_url: str,
+    seeded_hotspot_project: str,
 ) -> None:
     async with streamablehttp_client(mcp_url) as (read, write, _):
         async with ClientSession(read, write) as session:
@@ -188,14 +201,22 @@ async def test_find_hotspots_with_data_returns_sorted_descending(
     scores = [r["hotspot_score"] for r in rows]
     assert scores == sorted(scores, reverse=True)
     for r in rows:
-        for k in ("path", "ccn_total", "churn_count", "hotspot_score", "computed_at", "window_days"):
+        for k in (
+            "path",
+            "ccn_total",
+            "churn_count",
+            "hotspot_score",
+            "computed_at",
+            "window_days",
+        ):
             assert k in r
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_find_hotspots_min_score_filter(
-    mcp_url: str, seeded_hotspot_project: str,
+    mcp_url: str,
+    seeded_hotspot_project: str,
 ) -> None:
     async with streamablehttp_client(mcp_url) as (read, write, _):
         async with ClientSession(read, write) as session:

@@ -8,8 +8,6 @@ tantivy/budget infra requirements.
 from __future__ import annotations
 
 import logging
-import shutil
-import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -26,6 +24,7 @@ _BUILD_SCRIPT = FIXTURE_DIR / "_build_fixture_repo.py"
 def _build_repo(tmp: Path) -> Path:
     """Build the fixture git repo into tmp via the build script."""
     import importlib.util
+
     spec = importlib.util.spec_from_file_location("_bfr", _BUILD_SCRIPT)
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
@@ -44,7 +43,9 @@ def _fake_settings() -> MagicMock:
     return s
 
 
-def _ctx(repo_path: Path, run_id: str, project_slug: str = "hs-integ") -> ExtractorRunContext:
+def _ctx(
+    repo_path: Path, run_id: str, project_slug: str = "hs-integ"
+) -> ExtractorRunContext:
     return ExtractorRunContext(
         project_slug=project_slug,
         group_id=f"project/{project_slug}",
@@ -55,38 +56,50 @@ def _ctx(repo_path: Path, run_id: str, project_slug: str = "hs-integ") -> Extrac
     )
 
 
-async def _seed_churn(driver: AsyncDriver, project_id: str, churn_map: dict[str, int]) -> None:
+async def _seed_churn(
+    driver: AsyncDriver, project_id: str, churn_map: dict[str, int]
+) -> None:
     """Seed :File + :Commit + :TOUCHED nodes to satisfy the churn query."""
     async with driver.session() as session:
         for path, count in churn_map.items():
             await session.run(
                 "MERGE (f:File {project_id: $pid, path: $path})",
-                pid=project_id, path=path,
+                pid=project_id,
+                path=path,
             )
             for i in range(count):
                 await session.run(
                     "MATCH (f:File {project_id: $pid, path: $path}) "
                     "CREATE (c:Commit {sha: $sha, committed_at: datetime('2026-04-01T00:00:00Z')}) "
                     "CREATE (c)-[:TOUCHED]->(f)",
-                    pid=project_id, path=path,
+                    pid=project_id,
+                    path=path,
                     sha=f"{path.replace('/', '_')}_{i}",
                 )
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_hotspot_full_pipeline(driver: AsyncDriver, graphiti_mock: MagicMock, tmp_path: Path) -> None:
+async def test_hotspot_full_pipeline(
+    driver: AsyncDriver, graphiti_mock: MagicMock, tmp_path: Path
+) -> None:
     repo = _build_repo(tmp_path)
-    project_id = "hs-integ"
-    await _seed_churn(driver, project_id, {
-        "src/python_simple.py": 2,
-        "src/python_complex.py": 4,
-        "src/main.kt": 1,
-        "src/util.ts": 1,
-    })
+    project_id = "project/hs-integ"
+    await _seed_churn(
+        driver,
+        project_id,
+        {
+            "src/python_simple.py": 2,
+            "src/python_complex.py": 4,
+            "src/main.kt": 1,
+            "src/util.ts": 1,
+        },
+    )
 
     with patch("palace_mcp.mcp_server.get_settings", return_value=_fake_settings()):
-        stats = await HotspotExtractor().run(graphiti=graphiti_mock, ctx=_ctx(repo, "run-1"))
+        stats = await HotspotExtractor().run(
+            graphiti=graphiti_mock, ctx=_ctx(repo, "run-1")
+        )
 
     assert stats.nodes_written > 0
 
@@ -120,13 +133,17 @@ async def test_hotspot_idempotent_via_consume_counters(
     driver: AsyncDriver, graphiti_mock: MagicMock, tmp_path: Path
 ) -> None:
     repo = _build_repo(tmp_path)
-    project_id = "hs-integ"
-    await _seed_churn(driver, project_id, {
-        "src/python_simple.py": 2,
-        "src/python_complex.py": 4,
-        "src/main.kt": 1,
-        "src/util.ts": 1,
-    })
+    project_id = "project/hs-integ"
+    await _seed_churn(
+        driver,
+        project_id,
+        {
+            "src/python_simple.py": 2,
+            "src/python_complex.py": 4,
+            "src/main.kt": 1,
+            "src/util.ts": 1,
+        },
+    )
 
     with patch("palace_mcp.mcp_server.get_settings", return_value=_fake_settings()):
         hot = HotspotExtractor()
@@ -151,13 +168,17 @@ async def test_hotspot_eviction_removes_dead_functions(
     driver: AsyncDriver, graphiti_mock: MagicMock, tmp_path: Path
 ) -> None:
     repo = _build_repo(tmp_path)
-    project_id = "hs-integ"
-    await _seed_churn(driver, project_id, {
-        "src/python_simple.py": 2,
-        "src/python_complex.py": 4,
-        "src/main.kt": 1,
-        "src/util.ts": 1,
-    })
+    project_id = "project/hs-integ"
+    await _seed_churn(
+        driver,
+        project_id,
+        {
+            "src/python_simple.py": 2,
+            "src/python_complex.py": 4,
+            "src/main.kt": 1,
+            "src/util.ts": 1,
+        },
+    )
 
     with patch("palace_mcp.mcp_server.get_settings", return_value=_fake_settings()):
         await HotspotExtractor().run(graphiti=graphiti_mock, ctx=_ctx(repo, "run-3a"))
