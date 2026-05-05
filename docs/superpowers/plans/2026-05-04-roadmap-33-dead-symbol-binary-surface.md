@@ -367,6 +367,17 @@ Phase 4.1 QA must additionally run review-profile smoke:
 docker compose --profile review up -d --wait --build
 ```
 
+Review-profile note:
+
+- `palace-mcp` health/MCP path is host-side `http://localhost:8080`.
+- Neo4j is **not** published as host-side `127.0.0.1:7687` in the shared
+  `docker-compose.yml`, so QA Cypher evidence must run via
+  `docker compose exec neo4j cypher-shell ...`.
+- The shared compose file mounts the primary checkout at `/repos/gimle`, not the
+  active paperclip worktree. QA must either override the bind mount to the
+  active worktree or copy current-branch artifacts into the running container
+  before review smoke.
+
 The PR body or QA comment must paste:
 
 ```cypher

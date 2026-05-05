@@ -126,16 +126,48 @@ guarded-skip и Phase 4.1 evidence нужно добирать на review-profi
 docker compose --profile review up -d --wait --build
 ```
 
-После этого compose Neo4j доступен с host-side тестов по localhost:
+Проверить, что review profile реально поднялся:
 
 ```bash
-export COMPOSE_NEO4J_URI=bolt://127.0.0.1:7687
-export COMPOSE_NEO4J_USER=neo4j
-export COMPOSE_NEO4J_PASSWORD="$(grep '^NEO4J_PASSWORD=' .env | cut -d= -f2-)"
+curl http://localhost:8080/health
+curl http://localhost:8080/healthz
 ```
 
-Тогда integration suite переиспользует уже поднятый compose runtime вместо
-отдельного testcontainers Neo4j.
+Важно: в текущем `docker-compose.yml` review profile **не** публикует Neo4j на
+host-side `127.0.0.1:7687`. Host-side reuse через
+`COMPOSE_NEO4J_URI=bolt://127.0.0.1:7687` не является воспроизводимым QA path
+для review profile. Для Phase 4.1:
+
+- MCP smoke идёт через `palace-mcp` на `http://localhost:8080`;
+- Cypher evidence нужно выполнять через контейнер `neo4j`, например:
+
+```bash
+docker compose exec neo4j cypher-shell -u neo4j -p "$NEO4J_PASSWORD" 'RETURN 1'
+```
+
+### Worktree caveat
+
+По умолчанию review profile монтирует primary checkout:
+
+```text
+/Users/Shared/Ios/Gimle-Palace:/repos/gimle:ro
+```
+
+Это не активный paperclip worktree. Если нужно проверить **текущую branch/worktree
+artifact state**, используйте один из двух путей:
+
+1. Локальный override mount на активный worktree:
+
+```yaml
+# docker-compose.override.yml
+services:
+  palace-mcp:
+    volumes:
+      - /Users/Shared/Ios/worktrees/cx/Gimle-Palace:/repos/gimle:ro
+```
+
+2. Либо скопируйте текущие fixture/repo artifacts в уже поднятый контейнер
+   перед smoke, например через `docker cp`.
 
 После старта окружения:
 
@@ -168,7 +200,8 @@ ORDER BY candidate_id;
 ```
 
 Нужно приложить и JSON response от `palace.ingest.run_extractor`, и результаты
-этих Cypher queries.
+этих Cypher queries. Для review profile Cypher evidence нужно брать через
+`docker compose exec neo4j cypher-shell ...`, а не через host-side Bolt.
 
 ## Полезные Neo4j проверки
 
