@@ -1,0 +1,11 @@
+{
+  "": {
+    "swift-dependencies": "/workspace/services/palace-mcp/tests/extractors/fixtures/dead-symbol-binary-surface-mini-project/.build/x86_64-unknown-linux-gnu/debug/DeadSymbolMiniApp.build/master.swiftdeps"
+  },
+  "/workspace/services/palace-mcp/tests/extractors/fixtures/dead-symbol-binary-surface-mini-project/Sources/DeadSymbolMiniApp/main.swift": {
+    "dependencies": "/workspace/services/palace-mcp/tests/extractors/fixtures/dead-symbol-binary-surface-mini-project/.build/x86_64-unknown-linux-gnu/debug/DeadSymbolMiniApp.build/main.d",
+    "object": "/workspace/services/palace-mcp/tests/extractors/fixtures/dead-symbol-binary-surface-mini-project/.build/x86_64-unknown-linux-gnu/debug/DeadSymbolMiniApp.build/main.swift.o",
+    "swiftmodule": "/workspace/services/palace-mcp/tests/extractors/fixtures/dead-symbol-binary-surface-mini-project/.build/x86_64-unknown-linux-gnu/debug/DeadSymbolMiniApp.build/main~partial.swiftmodule",
+    "swift-dependencies": "/workspace/services/palace-mcp/tests/extractors/fixtures/dead-symbol-binary-surface-mini-project/.build/x86_64-unknown-linux-gnu/debug/DeadSymbolMiniApp.build/main.swiftdeps"
+  }
+}
