@@ -126,33 +126,38 @@ If you cannot progress on an issue, do not improvise, pivot, or create preparato
 - Concrete question for Board exists → real blocker.
 - Only "kind of hard" → decompose further, not a blocker.
 
-## Pre-work discovery (before any task)
+## Pre-work Discovery
 
-Before writing code or decomposing — verify the feature / fix doesn't already exist:
+Before coding/decomposing, verify the work doesn't already exist:
 
-1. `git fetch --all && git log --all --grep="<keyword>" --oneline`
-2. `gh pr list --state all --search "<keyword>"` — open and merged
-3. `serena find_symbol` / `get_symbols_overview` — existing implementations
-4. `docs/` — spec may already be written
-5. Paperclip issues — is someone already working on it?
+1. `git fetch --all`
+2. `git log --all --grep="<keyword>" --oneline`
+3. `gh pr list --state all --search "<keyword>"`
+4. `serena find_symbol` / `get_symbols_overview` for existing implementations.
+5. `docs/` for existing specs.
+6. Paperclip issues for active ownership.
 
-**If it exists** — close as `duplicate` with a link, or reframe ("integrate X from feature/Y").
+Already exists → close as `duplicate` with link, or reframe as integration from existing branch/PR/work.
 
-## External library reference rule
+## External Library API Rule
 
-Any spec line referencing an external library API MUST be backed by a live-verified spike under `docs/research/<library-version>-spike/` or a `reference_<lib>_api_truth.md` memory file dated within 30 days.
+Any spec referencing an external library API must be backed by live verification dated within 30 days.
 
-CTO Phase 1.1 greps spec for `from <lib> import` / `<lib>.<method>` and verifies a spike exists. Missing → REQUEST CHANGES.
+Acceptable proof:
 
-Why: N+1a reverted because spec referenced `graphiti-core 0.4.3` API that didn't exist in installed version.
+- Spike under `docs/research/<library-version>-spike/`
+- Memory file `reference_<lib>_api_truth.md`
 
-## Existing-field semantic-change rule
+Applies to lines like `from <lib> import ...` or `<lib>.<method>`. CTO Phase 1.1 greps spec; missing proof → request changes.
 
-Spec changing semantics of an existing field MUST include: output of `grep -r '<field-name>' src/` + list of which call-sites change.
+## Existing Field Semantic Changes
 
-CTO Phase 1.1 re-runs grep against HEAD; REQUEST CHANGES if missing or stale.
+If a spec changes semantics of an existing field, include:
 
-Why: N+1a.1 §3.10 changed `:Project.name` semantics without auditing `UPSERT_PROJECT` callers.
+- `grep -r '<field-name>' src/` output
+- List of call sites whose behavior changes.
+
+CTO Phase 1.1 re-runs grep against HEAD; missing/stale → request changes.
 
 ## Git workflow (iron rule)
 
