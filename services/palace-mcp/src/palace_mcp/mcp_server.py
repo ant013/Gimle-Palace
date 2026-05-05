@@ -43,6 +43,8 @@ from neo4j import AsyncDriver
 from pydantic import BaseModel, ValidationError
 from starlette.applications import Starlette
 
+from palace_mcp.code.find_hotspots import find_hotspots as _find_hotspots_impl
+from palace_mcp.code.list_functions import list_functions as _list_functions_impl
 from palace_mcp.code_composite import register_code_composite_tools
 from palace_mcp.code_router import register_code_tools
 from palace_mcp.extractors import registry as _extractor_registry
@@ -781,6 +783,59 @@ register_code_composite_tools(
     # os.environ.get mirrors the same default declared in Settings.palace_cm_default_project.
     default_project=os.environ.get("PALACE_CM_DEFAULT_PROJECT", "repos-gimle"),
 )
+
+
+@_tool(
+    name="palace.code.find_hotspots",
+    description=(
+        "Return the top-N hotspot files for a project, ranked by "
+        "Tornhill log-log score (log(ccn+1) * log(churn+1)). "
+        "Only files with complexity_status='fresh' are returned. "
+        "Accepts optional min_score to filter low-signal files."
+    ),
+)
+async def palace_code_find_hotspots(
+    project: str,
+    top_n: int = 20,
+    min_score: float = 0.0,
+) -> dict[str, Any]:
+    """Find hotspot files ranked by complexity × churn score."""
+    driver = _driver
+    if driver is None:
+        return {
+            "ok": False,
+            "error_code": "driver_unavailable",
+            "message": "Neo4j driver not initialised",
+        }
+    return await _find_hotspots_impl(
+        driver=driver, project=project, top_n=top_n, min_score=min_score
+    )
+
+
+@_tool(
+    name="palace.code.list_functions",
+    description=(
+        "List :Function nodes for a given file path within a project. "
+        "Returns name, start_line, end_line, ccn, nloc, and parameter_count "
+        "for each function recorded by the hotspot extractor."
+    ),
+)
+async def palace_code_list_functions(
+    project: str,
+    path: str,
+    min_ccn: int = 0,
+) -> dict[str, Any]:
+    """List functions for a specific file recorded by the hotspot extractor."""
+    driver = _driver
+    if driver is None:
+        return {
+            "ok": False,
+            "error_code": "driver_unavailable",
+            "message": "Neo4j driver not initialised",
+        }
+    return await _list_functions_impl(
+        driver=driver, project=project, path=path, min_ccn=min_ccn
+    )
 
 
 # ---------------------------------------------------------------------------

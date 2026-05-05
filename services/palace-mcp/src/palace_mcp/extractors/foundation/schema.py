@@ -93,6 +93,16 @@ EXPECTED_SCHEMA = SchemaDefinition(
             label="GitHistoryCheckpoint",
             properties=("project_id",),
         ),
+        ConstraintSpec(
+            name="dead_symbol_candidate_id_unique",
+            label="DeadSymbolCandidate",
+            properties=("id",),
+        ),
+        ConstraintSpec(
+            name="binary_surface_record_id_unique",
+            label="BinarySurfaceRecord",
+            properties=("id",),
+        ),
     ],
     indexes=[
         IndexSpec(
@@ -119,6 +129,28 @@ EXPECTED_SCHEMA = SchemaDefinition(
             name="ingest_run_lookup",
             label="IngestRun",
             properties=("project", "extractor_name", "success"),
+        ),
+        IndexSpec(
+            name="dead_symbol_candidate_lookup",
+            label="DeadSymbolCandidate",
+            properties=(
+                "project",
+                "module_name",
+                "language",
+                "commit_sha",
+                "candidate_state",
+            ),
+        ),
+        IndexSpec(
+            name="binary_surface_record_lookup",
+            label="BinarySurfaceRecord",
+            properties=(
+                "project",
+                "module_name",
+                "language",
+                "commit_sha",
+                "surface_kind",
+            ),
         ),
     ],
     fulltext_indexes=[

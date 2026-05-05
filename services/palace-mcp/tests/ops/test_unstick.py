@@ -45,8 +45,9 @@ PID ELAPSED %CPU COMMAND
  100  00:02:00  1.2 python3 server.py
 """
 
-# executionLockedAt ~90 minutes ago → PID 42 should match strict heuristic
-_LOCKED_AT_90MIN = (datetime.now(timezone.utc) - timedelta(minutes=90)).isoformat()
+
+def _locked_at_90min() -> str:
+    return (datetime.now(timezone.utc) - timedelta(minutes=90)).isoformat()
 
 
 def _make_kwargs(
@@ -78,7 +79,7 @@ def _make_kwargs(
 
 _FAKE_ISSUE_LOCKED = {
     "executionRunId": _FAKE_RUN_ID,
-    "executionLockedAt": _LOCKED_AT_90MIN,
+    "executionLockedAt": _locked_at_90min(),
 }
 _FAKE_ISSUE_CLEAR = {"executionRunId": None, "executionLockedAt": None}
 
@@ -105,7 +106,7 @@ def test_parse_ps_output_skips_header() -> None:
 def test_find_strict_candidates_matches_timing() -> None:
     """PID 42 with etime=01:30:00 matches executionLockedAt ~90min ago."""
     rows = _parse_ps_output(_PS_IDLE_CLAUDE)
-    result = _find_strict_candidates(rows, _LOCKED_AT_90MIN)
+    result = _find_strict_candidates(rows, _locked_at_90min())
     assert len(result) == 1
     assert result[0]["pid"] == 42
 
@@ -204,7 +205,10 @@ async def test_unstick_strict_heuristic_matches_timing() -> None:
         mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
         mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
         mock_resp = MagicMock()
-        mock_resp.json.return_value = _FAKE_ISSUE_LOCKED
+        mock_resp.json.return_value = {
+            "executionRunId": _FAKE_RUN_ID,
+            "executionLockedAt": _locked_at_90min(),
+        }
         mock_client.get = AsyncMock(return_value=mock_resp)
         mock_ps.return_value = _PS_IDLE_CLAUDE
         mock_poll.return_value = True

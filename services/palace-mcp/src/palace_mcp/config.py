@@ -10,7 +10,7 @@ Call `.get_secret_value()` only at driver/client construction sites.
 
 import json
 from pathlib import Path
-from typing import Annotated, cast
+from typing import Annotated, Literal, cast
 
 from pydantic import Field, SecretStr
 from pydantic import field_validator
@@ -112,4 +112,29 @@ class Settings(BaseSettings):
     git_history_tantivy_index_path: Path = Field(
         default=Path("/var/lib/palace/tantivy/git_history"),
         description="Path for the dedicated git_history Tantivy index.",
+    )
+
+    # -----------------------------------------------------------------------
+    # Hotspot extractor (GIM-195, Roadmap #44)
+    # -----------------------------------------------------------------------
+
+    palace_hotspot_churn_window_days: int = Field(
+        default=90,
+        ge=1,
+        description="Window (days) for :Commit churn aggregation per :File",
+    )
+    palace_hotspot_lizard_batch_size: int = Field(
+        default=50,
+        ge=1,
+        le=500,
+        description="Files per lizard subprocess invocation",
+    )
+    palace_hotspot_lizard_timeout_s: int = Field(
+        default=30,
+        ge=1,
+        description="Per-batch lizard subprocess timeout (seconds)",
+    )
+    palace_hotspot_lizard_timeout_behavior: Literal["drop_batch", "fail_run"] = Field(
+        default="drop_batch",
+        description="On lizard batch timeout: skip batch (drop_batch) or error whole run (fail_run)",
     )

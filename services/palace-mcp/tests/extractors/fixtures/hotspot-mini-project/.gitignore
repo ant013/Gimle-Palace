@@ -1,0 +1,3 @@
+# Synthetic git repo — built at test time into tmp_path.
+# Not tracked in version control.
+.git/

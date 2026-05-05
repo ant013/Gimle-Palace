@@ -1,0 +1,326 @@
+"""Unit tests for dead_symbol_binary_surface correlation and safety guards."""
+
+from __future__ import annotations
+
+from dataclasses import replace
+from datetime import UTC, datetime
+
+from palace_mcp.extractors.dead_symbol_binary_surface.correlation import (
+    BlockedContractSymbol,
+    correlate_finding,
+)
+from palace_mcp.extractors.dead_symbol_binary_surface.models import (
+    CandidateState,
+    Confidence,
+    DeadSymbolKind,
+    DeadSymbolLanguage,
+    SkipReason,
+)
+from palace_mcp.extractors.dead_symbol_binary_surface.parsers.periphery import (
+    PeripheryFinding,
+)
+from palace_mcp.extractors.foundation.identifiers import symbol_id_for
+from palace_mcp.extractors.foundation.models import (
+    Language,
+    PublicApiSymbol,
+    PublicApiSymbolKind,
+    PublicApiVisibility,
+    SymbolKind,
+    SymbolOccurrenceShadow,
+)
+
+
+def _finding(
+    *,
+    symbol_key: str = "Wallet.balance()",
+    module_name: str = "ProducerKit",
+    source_file: str = "Sources/ProducerKit/Wallet.swift",
+    source_line: int = 10,
+    language: str = "swift",
+) -> PeripheryFinding:
+    return PeripheryFinding(
+        tool_symbol_id="s:wallet.balance",
+        all_ids=("s:wallet.balance",),
+        display_name=symbol_key or "Wallet.balance()",
+        symbol_key=symbol_key,
+        module_name=module_name,
+        language=DeadSymbolLanguage(language),
+        kind=DeadSymbolKind.FUNCTION,
+        accessibility="internal",
+        source_file=source_file,
+        source_line=source_line,
+        source_column=5,
+        attributes=(),
+        modifiers=(),
+        hints=("unused",),
+        candidate_state=CandidateState.UNUSED_CANDIDATE,
+        skip_reason=None,
+    )
+
+
+def _public_symbol(
+    *,
+    symbol_id: str = "public-1",
+    fqn: str = "Wallet.balance()",
+    visibility: PublicApiVisibility = PublicApiVisibility.PUBLIC,
+    language: Language = Language.SWIFT,
+    module_name: str = "ProducerKit",
+) -> PublicApiSymbol:
+    return PublicApiSymbol(
+        id=symbol_id,
+        group_id="project/test",
+        project="dead-symbol-mini",
+        module_name=module_name,
+        language=language,
+        commit_sha="commit-1",
+        fqn=fqn,
+        display_name=fqn,
+        kind=PublicApiSymbolKind.FUNCTION,
+        visibility=visibility,
+        signature=fqn,
+        signature_hash="sig",
+        source_artifact_path=".palace/public-api/swift/ProducerKit.swiftinterface",
+        source_line=1,
+        symbol_qualified_name=fqn,
+    )
+
+
+def _shadow(qname: str = "Wallet.balance()") -> SymbolOccurrenceShadow:
+    return SymbolOccurrenceShadow(
+        symbol_id=symbol_id_for(qname),
+        symbol_qualified_name=qname,
+        language=Language.SWIFT,
+        importance=0.9,
+        kind=SymbolKind.DEF,
+        tier_weight=0.8,
+        last_seen_at=datetime.now(UTC),
+        group_id="project/test",
+    )
+
+
+def _blocked_contract(public_symbol_id: str = "public-1") -> BlockedContractSymbol:
+    return BlockedContractSymbol(
+        public_symbol_id=public_symbol_id,
+        contract_snapshot_id="snapshot-1",
+        consumer_module_name="ConsumerApp",
+        producer_module_name="ProducerKit",
+        commit_sha="commit-1",
+        use_count=2,
+        evidence_paths_sample=(
+            "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift",
+            "ConsumerApp/Sources/ConsumerApp/WalletDetails.swift",
+        ),
+    )
+
+
+def test_exact_match_to_public_api_symbol_qualified_name() -> None:
+    result = correlate_finding(
+        finding=_finding(),
+        group_id="project/test",
+        project="dead-symbol-mini",
+        commit_sha="commit-1",
+        public_api_symbols=(_public_symbol(),),
+        symbol_shadows=(),
+        blocked_contract_symbols=(),
+    )
+
+    assert result.backed_public_api_symbol_id == "public-1"
+
+
+def test_exact_match_to_phase1_symbol_id_for_join_key() -> None:
+    result = correlate_finding(
+        finding=_finding(),
+        group_id="project/test",
+        project="dead-symbol-mini",
+        commit_sha="commit-1",
+        public_api_symbols=(),
+        symbol_shadows=(_shadow(),),
+        blocked_contract_symbols=(),
+    )
+
+    assert result.backed_symbol_id == symbol_id_for("Wallet.balance()")
+    assert result.candidate is not None
+    assert result.candidate.confidence is Confidence.HIGH
+
+
+def test_ambiguous_match_is_skipped() -> None:
+    result = correlate_finding(
+        finding=_finding(),
+        group_id="project/test",
+        project="dead-symbol-mini",
+        commit_sha="commit-1",
+        public_api_symbols=(),
+        symbol_shadows=(_shadow(), _shadow()),
+        blocked_contract_symbols=(),
+    )
+
+    assert result.candidate is not None
+    assert result.candidate.candidate_state is CandidateState.SKIPPED
+
+
+def test_parser_level_skip_is_preserved() -> None:
+    result = correlate_finding(
+        finding=replace(
+            _finding(source_file="Sources/ProducerKit/Generated/Auto.swift"),
+            display_name="AutoGeneratedToken",
+            symbol_key="AutoGeneratedToken",
+            candidate_state=CandidateState.SKIPPED,
+            skip_reason=SkipReason.GENERATED_CODE,
+        ),
+        group_id="project/test",
+        project="dead-symbol-mini",
+        commit_sha="commit-1",
+        public_api_symbols=(_public_symbol(fqn="AutoGeneratedToken"),),
+        symbol_shadows=(_shadow("AutoGeneratedToken"),),
+        blocked_contract_symbols=(),
+    )
+
+    assert result.candidate is not None
+    assert result.candidate.candidate_state is CandidateState.SKIPPED
+    assert result.candidate.skip_reason is SkipReason.GENERATED_CODE
+    assert result.backed_public_api_symbol_id is None
+    assert result.backed_symbol_id is None
+
+
+def test_public_api_symbol_becomes_retained_public_api() -> None:
+    result = correlate_finding(
+        finding=_finding(),
+        group_id="project/test",
+        project="dead-symbol-mini",
+        commit_sha="commit-1",
+        public_api_symbols=(_public_symbol(visibility=PublicApiVisibility.PUBLIC),),
+        symbol_shadows=(),
+        blocked_contract_symbols=(),
+    )
+
+    assert result.candidate is not None
+    assert result.candidate.candidate_state is CandidateState.RETAINED_PUBLIC_API
+
+
+def test_open_api_symbol_becomes_retained_public_api() -> None:
+    result = correlate_finding(
+        finding=_finding(),
+        group_id="project/test",
+        project="dead-symbol-mini",
+        commit_sha="commit-1",
+        public_api_symbols=(_public_symbol(visibility=PublicApiVisibility.OPEN),),
+        symbol_shadows=(),
+        blocked_contract_symbols=(),
+    )
+
+    assert result.candidate is not None
+    assert result.candidate.candidate_state is CandidateState.RETAINED_PUBLIC_API
+
+
+def test_gim192_consumed_symbol_creates_blocked_by_contract_symbol() -> None:
+    result = correlate_finding(
+        finding=_finding(),
+        group_id="project/test",
+        project="dead-symbol-mini",
+        commit_sha="commit-1",
+        public_api_symbols=(_public_symbol(),),
+        symbol_shadows=(),
+        blocked_contract_symbols=(_blocked_contract(),),
+    )
+
+    assert result.blocked_contract_symbols
+    assert result.blocked_contract_symbols[0].public_symbol_id == "public-1"
+
+
+def test_blocked_by_contract_symbol_carries_consumer_provenance() -> None:
+    blocked = _blocked_contract()
+    result = correlate_finding(
+        finding=_finding(),
+        group_id="project/test",
+        project="dead-symbol-mini",
+        commit_sha="commit-1",
+        public_api_symbols=(_public_symbol(),),
+        symbol_shadows=(),
+        blocked_contract_symbols=(blocked,),
+    )
+
+    edge = result.blocked_contract_symbols[0]
+    assert edge.contract_snapshot_id == "snapshot-1"
+    assert edge.consumer_module_name == "ConsumerApp"
+    assert edge.producer_module_name == "ProducerKit"
+    assert edge.use_count == 2
+    assert edge.evidence_paths_sample == blocked.evidence_paths_sample
+
+
+def test_missing_key_with_file_line_becomes_low_confidence() -> None:
+    result = correlate_finding(
+        finding=replace(_finding(symbol_key=""), display_name="UnknownSymbol"),
+        group_id="project/test",
+        project="dead-symbol-mini",
+        commit_sha="commit-1",
+        public_api_symbols=(),
+        symbol_shadows=(),
+        blocked_contract_symbols=(),
+    )
+
+    assert result.candidate is not None
+    assert result.candidate.confidence is Confidence.LOW
+    assert result.candidate.candidate_state is CandidateState.UNUSED_CANDIDATE
+
+
+def test_missing_key_without_file_line_is_skipped() -> None:
+    result = correlate_finding(
+        finding=replace(
+            _finding(symbol_key="", source_file="", source_line=0),
+            display_name="UnknownSymbol",
+            source_column=0,
+        ),
+        group_id="project/test",
+        project="dead-symbol-mini",
+        commit_sha="commit-1",
+        public_api_symbols=(),
+        symbol_shadows=(),
+        blocked_contract_symbols=(),
+    )
+
+    assert result.candidate is not None
+    assert result.candidate.candidate_state is CandidateState.SKIPPED
+
+
+def test_kotlin_finding_does_not_match_swift_symbol_key() -> None:
+    result = correlate_finding(
+        finding=_finding(language="kotlin"),
+        group_id="project/test",
+        project="dead-symbol-mini",
+        commit_sha="commit-1",
+        public_api_symbols=(_public_symbol(language=Language.SWIFT),),
+        symbol_shadows=(),
+        blocked_contract_symbols=(),
+    )
+
+    assert result.backed_public_api_symbol_id is None
+
+
+def test_swift_finding_does_not_match_kotlin_symbol_key() -> None:
+    result = correlate_finding(
+        finding=_finding(language="swift"),
+        group_id="project/test",
+        project="dead-symbol-mini",
+        commit_sha="commit-1",
+        public_api_symbols=(_public_symbol(language=Language.KOTLIN),),
+        symbol_shadows=(),
+        blocked_contract_symbols=(),
+    )
+
+    assert result.backed_public_api_symbol_id is None
+
+
+def test_swift_finding_does_not_match_kotlin_shadow() -> None:
+    result = correlate_finding(
+        finding=_finding(language="swift"),
+        group_id="project/test",
+        project="dead-symbol-mini",
+        commit_sha="commit-1",
+        public_api_symbols=(),
+        symbol_shadows=(_shadow().model_copy(update={"language": Language.KOTLIN}),),
+        blocked_contract_symbols=(),
+    )
+
+    assert result.backed_symbol_id is None
+    assert result.candidate is not None
+    assert result.candidate.confidence is Confidence.LOW
