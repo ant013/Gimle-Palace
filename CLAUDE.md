@@ -292,6 +292,15 @@ invoked via MCP tool `palace.ingest.run_extractor(name, project)`.
   refresh; checkpoint in `:GitHistoryCheckpoint`. Requires `PALACE_GITHUB_TOKEN`
   env var for Phase 2 (PR data); Phase 1 (commits) runs without it. Full re-walk
   on force-push detected automatically. See `docs/runbooks/git-history-harvester.md`.
+- `hotspot` — Code-Complexity × Churn Hotspot extractor (GIM-195, Roadmap #44).
+  Walks repo with stop-list, calls `lizard` per-batch (50 files), aggregates
+  per-function CCN to per-file `ccn_total`, joins with `git_history`'s
+  `(:Commit)-[:TOUCHED]->(:File)` graph for churn count in a configurable
+  window (default 90 days), writes Tornhill log-log `hotspot_score` on `:File`
+  + new `:Function` nodes. Query via `palace.code.find_hotspots(project)` for
+  top-N hotspots and `palace.code.list_functions(project, path)` for per-
+  function complexity. Requires `git_history` to have run first (otherwise
+  churn = 0).
 
 ### Operator workflow: Dependency surface
 
@@ -431,6 +440,45 @@ Track B is optional real-source follow-up on a dev Mac:
    ```
    palace.code.find_references(qualified_name="register_code_tools", project="gimle")
    ```
+
+### Operator workflow: Hotspot extractor
+
+No external `.scip` file or container env file required. The extractor
+walks the mounted repo directly and reads commit data from the Neo4j
+graph populated by `git_history`.
+
+1. Ensure the repo is mounted in `docker-compose.yml` at `/repos/<slug>`.
+2. Run `git_history` first (so `:Commit -[:TOUCHED]-> :File` exists):
+   ```
+   palace.ingest.run_extractor(name="git_history", project="<slug>")
+   ```
+3. Run hotspot:
+   ```
+   palace.ingest.run_extractor(name="hotspot", project="<slug>")
+   ```
+4. Query top-N:
+   ```
+   palace.code.find_hotspots(project="<slug>", top_n=20)
+   ```
+5. For per-function detail on a specific file:
+   ```
+   palace.code.list_functions(project="<slug>", path="<file>", min_ccn=10)
+   ```
+
+**Configurable env vars** (in `.env`, all optional with sane defaults):
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `PALACE_HOTSPOT_CHURN_WINDOW_DAYS` | `90` | Tornhill recommends 90 or 180 |
+| `PALACE_HOTSPOT_LIZARD_BATCH_SIZE` | `50` | Files per lizard subprocess |
+| `PALACE_HOTSPOT_LIZARD_TIMEOUT_S` | `30` | Per-batch subprocess timeout |
+| `PALACE_HOTSPOT_LIZARD_TIMEOUT_BEHAVIOR` | `drop_batch` | `drop_batch` or `fail_run` |
+
+**Trade-off — window changes break idempotency**: changing
+`PALACE_HOTSPOT_CHURN_WINDOW_DAYS` between runs overwrites
+`:File.churn_count`, `:File.complexity_window_days`, and
+`:File.hotspot_score`. Idempotency invariant 4 (zero net writes on
+re-run) holds only when window is unchanged.
 
 ### Running an extractor
 

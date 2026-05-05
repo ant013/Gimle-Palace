@@ -49,6 +49,18 @@ def test_dependency_surface_registered() -> None:
     assert extractor.name == "dependency_surface"
 
 
+def test_dead_symbol_binary_surface_registered() -> None:
+    extractor = registry.get("dead_symbol_binary_surface")
+    assert extractor is not None
+    assert extractor.name == "dead_symbol_binary_surface"
+
+
+def test_hotspot_registered() -> None:
+    extractor = registry.get("hotspot")
+    assert extractor is not None
+    assert extractor.name == "hotspot"
+
+
 def test_symbol_index_swift_registered() -> None:
     extractor = registry.get("symbol_index_swift")
     assert extractor is not None

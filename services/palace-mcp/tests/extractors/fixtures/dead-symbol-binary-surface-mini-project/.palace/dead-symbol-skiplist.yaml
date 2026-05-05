@@ -1,0 +1,3 @@
+rules:
+  - path_glob: Sources/DeadSymbolMiniCore/Generated/*
+    skip_reason: generated_code
