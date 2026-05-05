@@ -18,8 +18,10 @@ from palace_mcp.ops.unstick import unstick_issue
 _FAKE_RUN_ID = "abc12345-dead-beef-cafe-111122223333"
 _NEW_RUN_ID = "ffffffff-0000-1111-2222-333344445555"
 
-# executionLockedAt ~90 minutes ago → PID 42 (etime=01:30:00) matches strict
-_LOCKED_AT_90MIN = (datetime.now(timezone.utc) - timedelta(minutes=90)).isoformat()
+
+def _locked_at_90min() -> str:
+    return (datetime.now(timezone.utc) - timedelta(minutes=90)).isoformat()
+
 
 _PS_CLAUDE_90MIN = (
     "PID ELAPSED %CPU COMMAND\n"
@@ -87,7 +89,7 @@ async def test_unstick_full_flow_kill_then_clear() -> None:
     # Respawn-check call: issue is clear (same client context since poll mocked)
     mock_cls, _ = _make_http_client_mock(
         [
-            {"executionRunId": _FAKE_RUN_ID, "executionLockedAt": _LOCKED_AT_90MIN},
+            {"executionRunId": _FAKE_RUN_ID, "executionLockedAt": _locked_at_90min()},
             {"executionRunId": None, "executionLockedAt": None},  # respawn check
         ]
     )
@@ -146,7 +148,7 @@ async def test_unstick_paperclip_respawns_within_poll_window() -> None:
     # Second httpx context: respawn check after poll timeout → new run_id
     mock_cls, _ = _make_http_client_mock(
         [
-            {"executionRunId": _FAKE_RUN_ID, "executionLockedAt": _LOCKED_AT_90MIN},
+            {"executionRunId": _FAKE_RUN_ID, "executionLockedAt": _locked_at_90min()},
             {"executionRunId": _NEW_RUN_ID, "executionLockedAt": None},
         ]
     )
