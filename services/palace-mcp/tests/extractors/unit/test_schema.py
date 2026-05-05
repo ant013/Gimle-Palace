@@ -19,34 +19,39 @@ from palace_mcp.extractors.foundation.schema import (
 
 class TestSchemaDefinition:
     def test_has_nine_constraints(self) -> None:
-        # 3 original + 6 added by GIM-186 (git_history extractor)
-        assert len(EXPECTED_SCHEMA.constraints) == 9
+        # 3 original + 6 git_history + 2 dead_symbol_binary_surface
+        assert len(EXPECTED_SCHEMA.constraints) == 11
 
     def test_has_five_indexes(self) -> None:
-        assert len(EXPECTED_SCHEMA.indexes) == 5
+        assert len(EXPECTED_SCHEMA.indexes) == 7
 
     def test_has_one_fulltext(self) -> None:
         assert len(EXPECTED_SCHEMA.fulltext_indexes) == 1
 
     def test_total_fifteen_objects(self) -> None:
+        # 11 constraints + 7 indexes + 1 fulltext
         total = (
             len(EXPECTED_SCHEMA.constraints)
             + len(EXPECTED_SCHEMA.indexes)
             + len(EXPECTED_SCHEMA.fulltext_indexes)
         )
-        assert total == 15
+        assert total == 19
 
     def test_all_names_unique(self) -> None:
         names = EXPECTED_SCHEMA.all_names()
-        assert len(names) == 15
+        assert len(names) == 19
 
     def test_expected_names_present(self) -> None:
         names = EXPECTED_SCHEMA.all_names()
         assert "ext_dep_purl_unique" in names
         assert "eviction_record_unique" in names
         assert "ingest_checkpoint_unique" in names
+        assert "dead_symbol_candidate_id_unique" in names
+        assert "binary_surface_record_id_unique" in names
         assert "shadow_evict_r1" in names
         assert "shadow_count_by_group" in names
+        assert "dead_symbol_candidate_lookup" in names
+        assert "binary_surface_record_lookup" in names
         assert "symbol_qn_fulltext" in names
 
 

@@ -10,6 +10,9 @@ from __future__ import annotations
 from palace_mcp.extractors.base import BaseExtractor
 from palace_mcp.extractors.codebase_memory_bridge import CodebaseMemoryBridgeExtractor
 from palace_mcp.extractors.cross_module_contract import CrossModuleContractExtractor
+from palace_mcp.extractors.dead_symbol_binary_surface.extractor import (
+    DeadSymbolBinarySurfaceExtractor,
+)
 from palace_mcp.extractors.dependency_surface.extractor import (
     DependencySurfaceExtractor,
 )
@@ -28,6 +31,7 @@ EXTRACTORS: dict[str, BaseExtractor] = {
     "heartbeat": HeartbeatExtractor(),
     "codebase_memory_bridge": CodebaseMemoryBridgeExtractor(),
     "cross_module_contract": CrossModuleContractExtractor(),
+    "dead_symbol_binary_surface": DeadSymbolBinarySurfaceExtractor(),
     "public_api_surface": PublicApiSurfaceExtractor(),
     "symbol_index_python": SymbolIndexPython(),
     "symbol_index_typescript": SymbolIndexTypeScript(),
