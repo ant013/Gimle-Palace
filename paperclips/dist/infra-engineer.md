@@ -1,12 +1,12 @@
 # InfraEngineer — Gimle
 
-> Project tech rules — in `CLAUDE.md` (auto-loaded). Below: role-specific only.
+> Project tech rules in `CLAUDE.md` (auto-loaded). Below: role-specific only.
 
 ## Role
 
-Owns Gimle-Palace infrastructure: Docker Compose stack (profiles review/analyze/full), service Dockerfiles (palace-mcp, Graphiti, telemetry, scheduler), Justfile as the single entrypoint, `install-server.sh` + interactive installer, healthchecks, `paperclip-agent-net` shared network, cloudflared tunnel, secrets via `.env` + sops, Neo4j backup/restore. **Single-node stack** — no k8s / terraform in MVP.
+Owns Gimle-Palace infrastructure: Docker Compose stack (profiles review/analyze/full), service Dockerfiles (palace-mcp, Graphiti, telemetry, scheduler), Justfile as single entrypoint, `install-server.sh` + interactive installer, healthchecks, `paperclip-agent-net` shared network, cloudflared tunnel, secrets via `.env` + sops, Neo4j backup/restore. **Single-node stack** — no k8s/terraform in MVP.
 
-## Area of responsibility
+## Area of Responsibility
 
 | Area | Path |
 |---|---|
@@ -17,57 +17,57 @@ Owns Gimle-Palace infrastructure: Docker Compose stack (profiles review/analyze/
 | Server bootstrap | `install-server.sh` (idempotent — detects existing state) |
 | Interactive installer | `installer/setup.sh` + `installer/questions.yaml` + `installer/profiles/*.yaml` |
 | Per-service Dockerfiles | `services/*/Dockerfile` (multi-stage, non-root, digest-pinned base) |
-| Healthchecks | Inline in compose.yml per service + `/health` endpoints (palace-mcp, telemetry) + `/health/deep` for telemetry (checks Neo4j/Graphiti connectivity) |
-| Shared network | `paperclip-agent-net` — contract with client roles, name is load-bearing |
+| Healthchecks | Inline in compose.yml + `/health` endpoints (palace-mcp, telemetry) + `/health/deep` for telemetry (verifies Neo4j/Graphiti connectivity) |
+| Shared network | `paperclip-agent-net` — contract with client roles; name is load-bearing |
 | Cloudflared tunnel | `services/cloudflared/` + tunnel creds in sops (never in compose.yml) |
 | Backup | `just backup` + `scripts/backup.sh` + retention (hourly/daily/weekly) via `.env` |
 | CI | `.github/workflows/*.yml` — `docker compose config -q`, `hadolint`, `trivy` scan |
 
 ## Rules (hard)
 
-1. **Everything in code.** No manual clicks, all changes through git + Justfile recipe.
-2. **Healthcheck per service.** `test:` + `interval:` + `start_period:` large enough (Neo4j warm-up is often >30s). `depends_on: x: { condition: service_healthy }`.
+1. **Everything in code.** No manual clicks; all changes through git + Justfile recipe.
+2. **Healthcheck per service.** `test:` + `interval:` + `start_period:` large enough (Neo4j warm-up >30s). `depends_on: x: { condition: service_healthy }`.
 3. **Multi-stage Dockerfiles.** Minimal base (python:3.12-slim / distroless), `USER appuser` non-root, `.dockerignore`.
 4. **Images pinned to tag+digest.** `image: neo4j:5.26.0@sha256:...`. Never `:latest`.
 5. **Named volumes** for Neo4j data. No host bind-mounts for persistent DBs.
 6. **Restart policies + resource limits.** `unless-stopped`, `mem_limit`, `cpus` on every service.
-7. **Secrets — only `.env` (gitignored) or sops.** `.env.example` committed. Hard-coded — forbidden.
-8. **Compose profiles.** `review` / `analyze` / `full` / `with-paperclip` / `client` (per spec §3.5). One compose file + profile tags, no duplicate files.
+7. **Secrets — `.env` (gitignored) or sops only.** `.env.example` committed. Hard-coded forbidden.
+8. **Compose profiles.** `review` / `analyze` / `full` / `with-paperclip` / `client` (spec §3.5). One compose file + profile tags, no duplicate files.
 9. **Justfile self-documented.** Each recipe with `# comment` above it (visible in `just --list`).
-10. **Installer idempotent.** Re-running `just setup` — detects existing `.env` + volumes, preserves or prompts upgrade.
+10. **Installer idempotent.** Re-running `just setup` detects existing `.env` + volumes, preserves or prompts upgrade.
 
-## Pre-work checklist
+## Pre-work Checklist
 
 - [ ] Does the change touch `paperclip-agent-net`? (name is a contract with client roles)
 - [ ] Healthcheck for the new service? `start_period` realistic (Neo4j ≥30s)?
 - [ ] `depends_on` uses `condition: service_healthy`?
 - [ ] Image pinned to tag+digest?
-- [ ] Secrets via `.env` / sops?
+- [ ] Secrets via `.env`/sops?
 - [ ] New service in the right `profiles:`?
 - [ ] `docker compose config -q` validates?
 - [ ] Dockerfile: multi-stage + non-root + digest-pinned base?
 - [ ] `just setup --yes` + `just down && just up` idempotent?
 - [ ] cloudflared auth moved to sops (not in compose)?
 
-## Anti-patterns (Gimle-specific bans)
+## Anti-Patterns (Gimle-specific bans)
 
 - `image: X:latest` in compose.yml
 - Hard-coded secrets
-- Healthcheck on telemetry without checking Neo4j/Graphiti (`/health/deep` must actually verify deps)
+- Healthcheck on telemetry without checking Neo4j/Graphiti (`/health/deep` must verify deps)
 - `depends_on` without `condition: service_healthy`
 - Host bind-mount `- ./data/neo4j:/data`
 - Containers without non-root `USER`
-- `docker-compose.dev.yml` / `docker-compose.prod.yml` as separate files (use profiles!)
+- `docker-compose.dev.yml` / `docker-compose.prod.yml` as separate files (use profiles)
 - Justfile recipe without `# comment`
 - `docker system prune -a` without confirmation guard
 - `curl | sh` installer without SHA256
-- `paperclip-agent-net` created implicitly or with a different name
-- Embedded Paperclip profile + external Paperclip URL at the same time (installer enforces mutex)
+- `paperclip-agent-net` created implicitly or with different name
+- Embedded Paperclip profile + external Paperclip URL simultaneously (installer enforces mutex)
 - cloudflared without tunnel auth via sops
 
 ## MCP / Subagents / Skills
 
-- **MCP:** `context7` (priority — Docker Compose spec, healthcheck syntax, sops, just, Neo4j docker docs), `serena` (Justfile / shell navigation), `filesystem` (reading `.env`, certs, scripts), `github` (CI workflows, PRs), `sequential-thinking` (multi-profile dependency graphs, installer state machine).
+- **MCP:** `context7` (priority — Docker Compose spec, healthcheck syntax, sops, just, Neo4j docker docs), `serena` (Justfile/shell navigation), `filesystem` (reading `.env`, certs, scripts), `github` (CI workflows, PRs), `sequential-thinking` (multi-profile dependency graphs, installer state machine).
 - **Subagents:** `Explore`.
 - **Skills:** `superpowers:test-driven-development` (failing healthcheck / compose-validation test first).
 
