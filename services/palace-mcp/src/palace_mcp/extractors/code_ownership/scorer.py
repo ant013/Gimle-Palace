@@ -82,7 +82,7 @@ def score_file(
                 last_touched_at=last_touched_at,
                 lines_attributed=(b.lines if b else 0),
                 commit_count=(c.commit_count if c else 0),
-                canonical_via=canonical_via,  # type: ignore[arg-type]
+                canonical_via=canonical_via,
             )
         )
     return edges

@@ -150,12 +150,12 @@ def _iso(v: Any) -> str | None:
     if isinstance(v, datetime):
         if v.tzinfo is None:
             v = v.replace(tzinfo=timezone.utc)
-        return v.isoformat()
+        return str(v.isoformat())
     if hasattr(v, "to_native"):
         native = v.to_native()
         if native.tzinfo is None:
             native = native.replace(tzinfo=timezone.utc)
-        return native.isoformat()
+        return str(native.isoformat())
     if isinstance(v, str):
         return v
     return str(v)

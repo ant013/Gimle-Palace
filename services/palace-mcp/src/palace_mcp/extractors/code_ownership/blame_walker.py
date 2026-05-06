@@ -32,7 +32,7 @@ def walk_blame(
         # Skip binary files: check for null bytes in blob content
         try:
             head_commit = repo[head_oid]
-            blob = repo[head_commit.tree[path].id]  # type: ignore[index]
+            blob = repo[head_commit.tree[path].id]
             if isinstance(blob, pygit2.Blob) and blob.is_binary:
                 result[path] = {}
                 continue

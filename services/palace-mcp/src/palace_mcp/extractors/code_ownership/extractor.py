@@ -12,10 +12,8 @@
 from __future__ import annotations
 
 import logging
-import time
-from datetime import timezone
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar, cast
 
 import pygit2
 
@@ -237,8 +235,8 @@ class CodeOwnershipExtractor(BaseExtractor):
         alpha: float = settings.ownership_blame_weight  # type: ignore[attr-defined]
         batch_size: int = settings.ownership_write_batch_size  # type: ignore[attr-defined]
 
-        edges_all = []
-        states_all = []
+        edges_all: list[Any] = []
+        states_all: list[dict[str, str | None]] = []
         for path in dirty:
             blame = blame_per_file.get(path, {})
             churn = churn_per_file.get(path, {})
@@ -330,7 +328,7 @@ class CodeOwnershipExtractor(BaseExtractor):
             for entry in tree:
                 full = f"{prefix}{entry.name}" if not prefix else f"{prefix}/{entry.name}"
                 if entry.type_str == "tree":
-                    visit(repo[entry.id], full)
+                    visit(cast(pygit2.Tree, repo[entry.id]), full)
                 else:
                     out.add(full)
 

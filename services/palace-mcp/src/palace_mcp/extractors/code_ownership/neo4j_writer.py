@@ -10,6 +10,7 @@ any given path, never mixed.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any
 
 from neo4j import AsyncDriver
 
@@ -62,7 +63,7 @@ async def write_batch(
     *,
     project_id: str,
     edges: list[OwnershipEdge],
-    file_states: list[dict],
+    file_states: list[dict[str, Any]],
     deleted_paths: list[str],
     run_id: str,
     alpha: float,

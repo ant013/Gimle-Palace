@@ -58,7 +58,7 @@ class MailmapResolver:
             logger.info("mailmap_unsupported: pygit2.Mailmap not exposed")
             return cls(MailmapResolverPath.IDENTITY_PASSTHROUGH)
         try:
-            mm = pygit2.Mailmap.from_repository(repo)  # type: ignore[attr-defined]
+            mm = pygit2.Mailmap.from_repository(repo)
         except Exception as exc:  # broad: pygit2 raises various errors
             logger.info(
                 "mailmap_unsupported: pygit2 raised %s on repo %s",
@@ -72,7 +72,7 @@ class MailmapResolver:
         """Return canonical (name, email_lc). Email always lowercased."""
         if self.path == MailmapResolverPath.PYGIT2 and self._pygit2_mailmap is not None:
             try:
-                cn, ce = self._pygit2_mailmap.resolve(name, email)  # type: ignore[union-attr]
+                cn, ce = self._pygit2_mailmap.resolve(name, email)  # type: ignore[attr-defined]
                 return cn, ce.lower()
             except Exception:
                 pass  # fall through to identity
