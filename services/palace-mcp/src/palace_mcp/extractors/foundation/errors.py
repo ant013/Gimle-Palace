@@ -57,6 +57,12 @@ class ExtractorErrorCode(str, Enum):
     SLUG_INVALID = "slug_invalid"
     TOP_N_OUT_OF_RANGE = "top_n_out_of_range"
 
+    # Code ownership extractor (GIM-216)
+    GIT_HISTORY_NOT_INDEXED = "git_history_not_indexed"
+    OWNERSHIP_DIFF_FAILED = "ownership_diff_failed"
+    OWNERSHIP_MAX_FILES_EXCEEDED = "ownership_max_files_exceeded"
+    REPO_HEAD_INVALID = "repo_head_invalid"
+
 
 ActionType = Literal[
     "retry",

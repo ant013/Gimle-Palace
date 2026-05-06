@@ -1,4 +1,4 @@
-"""Unit tests for cross_repo_version_skew error codes in ExtractorErrorCode."""
+"""Unit tests for extractor-specific error codes in ExtractorErrorCode."""
 
 from __future__ import annotations
 
@@ -22,3 +22,14 @@ def test_version_skew_error_codes_present():
     )
     assert ExtractorErrorCode.SLUG_INVALID.value == "slug_invalid"
     assert ExtractorErrorCode.TOP_N_OUT_OF_RANGE.value == "top_n_out_of_range"
+
+
+def test_ownership_error_codes_present():
+    """Code-ownership-specific error codes are defined on the enum."""
+    assert ExtractorErrorCode.OWNERSHIP_DIFF_FAILED.value == "ownership_diff_failed"
+    assert ExtractorErrorCode.REPO_HEAD_INVALID.value == "repo_head_invalid"
+    assert (
+        ExtractorErrorCode.OWNERSHIP_MAX_FILES_EXCEEDED.value
+        == "ownership_max_files_exceeded"
+    )
+    assert ExtractorErrorCode.GIT_HISTORY_NOT_INDEXED.value == "git_history_not_indexed"

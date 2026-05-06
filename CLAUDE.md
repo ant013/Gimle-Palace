@@ -292,6 +292,15 @@ invoked via MCP tool `palace.ingest.run_extractor(name, project)`.
   refresh; checkpoint in `:GitHistoryCheckpoint`. Requires `PALACE_GITHUB_TOKEN`
   env var for Phase 2 (PR data); Phase 1 (commits) runs without it. Full re-walk
   on force-push detected automatically. See `docs/runbooks/git-history-harvester.md`.
+- `code_ownership` — Code ownership extractor (GIM-216, Roadmap #32). Reads
+  `:Author` / `:Commit` / `:TOUCHED` from `git_history` (GIM-186) + does
+  per-file `pygit2.blame` on HEAD. Writes `(:File)-[:OWNED_BY]->(:Author)`
+  edges with `weight = α × blame_share + (1-α) × recency_churn_share`
+  (α default 0.5, env `PALACE_OWNERSHIP_BLAME_WEIGHT`). Per-file
+  incremental refresh via `:OwnershipCheckpoint`. Sidecar
+  `:OwnershipFileState` for `find_owners` empty-state diagnostics.
+  `.mailmap`-aware via pygit2 (no custom parser). Query via
+  `palace.code.find_owners(file_path, project, top_n=5)`.
 - `hotspot` — Code-Complexity × Churn Hotspot extractor (GIM-195, Roadmap #44).
   Walks repo with stop-list, calls `lizard` per-batch (50 files), aggregates
   per-function CCN to per-file `ccn_total`, joins with `git_history`'s
@@ -487,6 +496,35 @@ graph populated by `git_history`.
 `:File.churn_count`, `:File.complexity_window_days`, and
 `:File.hotspot_score`. Idempotency invariant 4 (zero net writes on
 re-run) holds only when window is unchanged.
+
+### Operator workflow: Code ownership
+
+Prereq: GIM-186 `git_history` extractor must have run for the project.
+
+1. Run the extractor:
+   ```
+   palace.ingest.run_extractor(name="code_ownership", project="gimle")
+   ```
+2. Query owners:
+   ```
+   palace.code.find_owners(file_path="services/palace-mcp/...", project="gimle", top_n=5)
+   ```
+
+Optional: place `.mailmap` in the repo root to dedupe split identities
+(standard git format — see `git help check-mailmap`).
+
+Tunable knobs (`.env`):
+- `PALACE_OWNERSHIP_BLAME_WEIGHT` (default 0.5) — α in scoring formula
+- `PALACE_OWNERSHIP_MAX_FILES_PER_RUN` (default 50000)
+- `PALACE_OWNERSHIP_WRITE_BATCH_SIZE` (default 2000)
+- `PALACE_MAILMAP_MAX_BYTES` (default 1 MiB)
+
+Limitations:
+- File renames lose history pre-rename (pygit2 blame is path-bound)
+- Submodules and binary files are skipped (`no_owners_reason='binary_or_skipped'`)
+- Bundle support is not yet wired (run per-project for HS Kits)
+- PII: any caller with `palace.code.*` permissions can enumerate
+  contributor emails. See `docs/runbooks/code-ownership.md` for trust model.
 
 ### Running an extractor
 

@@ -34,10 +34,12 @@ def build_mock_app(state: MockPaperclipState) -> FastAPI:
 
     @app.get("/api/companies/{company_id}/issues")
     async def list_issues(company_id: str, status: str = "") -> list[dict[str, Any]]:
+        # Support comma-separated status filter (e.g. "todo,in_progress,in_review")
+        wanted = {s.strip() for s in status.split(",") if s.strip()}
         return [
             dict(issue, id=iid)
             for iid, issue in state.issues.items()
-            if issue.get("status") == status or not status
+            if not wanted or issue.get("status") in wanted
         ]
 
     @app.get("/api/issues/{issue_id}")
