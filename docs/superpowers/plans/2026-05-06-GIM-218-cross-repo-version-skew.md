@@ -2090,6 +2090,29 @@ async def test_acceptance_22_no_fstring_cypher_in_package():
             if fstring_match_pattern.search(line):
                 offenders.append((str(py), n))
     assert offenders == [], f"f-string MATCH found: {offenders}"
+
+
+@pytest.mark.asyncio
+async def test_bundle_member_invalid_slug_emits_warning(neo4j_driver):
+    """W11: invalid bundle member slugs must emit member_invalid_slug warnings,
+    not be silently dropped. Per spec §7 edge-case table + AC #24."""
+    async with neo4j_driver.session() as session:
+        await session.run("MATCH (n) DETACH DELETE n")
+        await session.run("""
+            MERGE (a:Project {slug: 'ok-member'})
+            MERGE (bad:Project {slug: '!!!CORRUPT!!!'})
+            MERGE (bd:Bundle {name: 'mixed'})
+            MERGE (bd)-[:HAS_MEMBER]->(a)
+            MERGE (bd)-[:HAS_MEMBER]->(bad)
+            MERGE (d1:ExternalDependency {purl: 'pkg:pypi/lib@1.0.0'})
+              SET d1.ecosystem = 'pypi', d1.resolved_version = '1.0.0'
+            MERGE (a)-[:DEPENDS_ON {scope: 'main', declared_in: 'p.toml', declared_version_constraint: '^1.0'}]->(d1)
+        """)
+    r = await find_version_skew(neo4j_driver, bundle="mixed", top_n=5)
+    assert r["ok"] is True
+    slugs_warned = [w["slug"] for w in r["warnings"] if w["code"] == "member_invalid_slug"]
+    assert "!!!CORRUPT!!!" in slugs_warned
+    assert r["target_status"]["!!!CORRUPT!!!"] == "invalid_slug"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -2105,7 +2128,8 @@ Create `services/palace-mcp/src/palace_mcp/extractors/cross_repo_version_skew/fi
 ```python
 """palace.code.find_version_skew — live MCP tool over the skew graph.
 
-Rev3: imports SLUG_RE from models.py (WARNING #8 — no regex duplication).
+Rev3: imports SLUG_RE + WarningEntry from models.py (W8 — no regex duplication;
+W11 — emit member_invalid_slug warnings in bundle path, not silent drop).
 Contains register_version_skew_tools() called from mcp_server.py.
 """
 
@@ -2118,7 +2142,7 @@ from neo4j import AsyncDriver
 from palace_mcp.extractors.cross_repo_version_skew.compute import (
     _compute_skew_groups,
 )
-from palace_mcp.extractors.cross_repo_version_skew.models import SLUG_RE, EcosystemEnum
+from palace_mcp.extractors.cross_repo_version_skew.models import SLUG_RE, EcosystemEnum, WarningEntry
 from palace_mcp.extractors.cross_repo_version_skew.semver_classify import (
     severity_rank,
 )
@@ -2161,6 +2185,7 @@ async def find_version_skew(
     mode = "project" if project else "bundle"
 
     # 2. Resolve targets + check registration
+    pre_warnings: list[WarningEntry] = []
     if mode == "project":
         proj_exists = await _project_exists(driver, project)
         if not proj_exists:
@@ -2174,8 +2199,18 @@ async def find_version_skew(
         raw_members = await _bundle_members(driver, bundle)
         if not raw_members:
             return _err("bundle_has_no_members", f"bundle {bundle!r} has zero members")
-        members = [m for m in raw_members if SLUG_RE.match(m)]
+        members: list[str] = []
+        for m in raw_members:
+            if SLUG_RE.match(m):
+                members.append(m)
+            else:
+                pre_warnings.append(WarningEntry(
+                    code="member_invalid_slug", slug=m,
+                    message=f"member {m!r} fails slug regex; excluded from query",
+                ))
         target_status = await _collect_target_status(driver, members)
+        for w in pre_warnings:
+            target_status[w.slug] = "invalid_slug"
 
     indexed_count = sum(1 for s in target_status.values() if s == "indexed")
     if indexed_count == 0:
@@ -2237,7 +2272,7 @@ async def find_version_skew(
         "summary_by_severity": summary_by_severity,
         "aligned_groups_total": aligned_groups_total,
         "target_status": target_status,
-        "warnings": [w.model_dump() for w in result.warnings],
+        "warnings": [w.model_dump() for w in pre_warnings + list(result.warnings)],
     }
 
 
