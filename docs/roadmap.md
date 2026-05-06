@@ -1,6 +1,6 @@
 # Gimle-Palace Team Roadmap
 
-**Last updated**: 2026-05-04
+**Last updated**: 2026-05-06
 **Owner**: Board (operator + Board Claude session)
 **Primary goal**: Index Unstoppable Wallet ecosystem live (Android + iOS + EVM
 contracts). Phase 1 ends when palace-mcp produces useful queries against the
@@ -55,11 +55,11 @@ When all rows below are ✅, palace-mcp can index the entire UW production ecosy
 | C1 | Watchdog handoff detector (Phase 1 alert-only) | ✅ | GIM-181 | `services/watchdog/*` | Detective half of atomic-handoff strategy; merged `f2f05c4` |
 | C2 | Multi-repo SPM ingest (full slice — Claude end-to-end) | ✅ | GIM-182 | `services/palace-mcp/src/palace_mcp/{memory/bundle.py,code/find_references.py,ingest/runner.py,git/path_resolver.py}`, `services/palace-mcp/scripts/`, `docs/runbooks/multi-repo-spm-ingest.md` | Merged `f2696fa`. Originally split (Claude=spec, CX=impl); operator decision 2026-05-03 reassigned to Claude end-to-end. |
 | C3 | Watchdog handoff detector — Opus nudge follow-up | ✅ | GIM-183 | `services/watchdog/*` | 3 follow-ups merged `365c9c4` (PR #81): server-Date anchoring, 4 missing JSONL events emitted, e2e lifecycle test. |
-| C4 | Git History Harvester (Extractor #22) — Phase 2 prereq | 📋 spec+plan ready | GIM-186 | `services/palace-mcp/src/palace_mcp/extractors/git_history/`, `services/palace-mcp/tests/extractors/{unit,integration,fixtures}/`, runbook | Foundation for 6 historical extractors (#11/#12/#26/#32/#43/#44). Spec rev2 (1255 LOC) + plan (2430 LOC, 13 TDD tasks) committed on `feature/GIM-186-git-history-harvester`. **Awaiting Claude CTO availability after GIM-182 closes** — no team-chain trigger yet. |
+| C4 | Git History Harvester (Extractor #22) — Phase 2 prereq | ✅ | GIM-186 | `services/palace-mcp/src/palace_mcp/extractors/git_history/`, `services/palace-mcp/tests/extractors/{unit,integration,fixtures}/`, runbook | Merged `b0dd44d`. Foundation for 6 historical extractors (#11/#12/#26/#32/#43/#44) — all now unblocked. |
 | C5 | iMac post-merge auto-deploy | 📋 | TBD | `paperclips/scripts/imac-deploy-listener.{sh,plist}`, webhook handler | Removes manual `imac-deploy.sh` step after every merge |
 | C6 | `palace.code.semantic_search` | 📋 | TBD | `services/palace-mcp/src/palace_mcp/code/semantic_search.py` | Deferred Slice 5 of original USE-BUILT; vector or hybrid search composite |
 
-C2 (GIM-182) is now ✅. C3/C4/C5/C6 are independent and not launch-blocking. C4 (GIM-186) is fully spec'd + plan'd; ready for team-chain trigger when CTO frees for the historical-extractor lane.
+C2 (GIM-182) and C4 (GIM-186) are now ✅. C3/C5/C6 are independent and not launch-blocking.
 
 ### Already merged (Phase 1 foundation)
 
@@ -89,7 +89,7 @@ Reference: `docs/research/extractor-library/` (2026-04-18 brainstorm, 9 parallel
 **No Phase 2 slice starts until Phase 1 closes.** Order within each category is not strict — operator picks based on actual UW analysis needs that surface after launch.
 
 **Cross-cutting prerequisites within Phase 2**:
-- Item **#22 Git History Harvester** must merge before any historical extractor (#11/#12/#26/#32/#43/#44).
+- Item **#22 Git History Harvester** ✅ merged (GIM-186, `b0dd44d`) — all 6 historical extractors (#11/#12/#26/#32/#43/#44) are unblocked.
 - All other items consume the Symbol Index (Phase 1 output) and may run in any order modulo team allocation rules in §6.
 
 ### 2.1 Structural (13 items)
@@ -100,13 +100,13 @@ Reference: `docs/research/extractor-library/` (2026-04-18 brainstorm, 9 parallel
 | 2 | Symbol Duplication Detector | Claude | — | jscpd + UniXcoder/CodeBERT embeddings + semhash | 📦 |
 | 3 | Reactive Dependency Tracer | CX | — | swift-syntax + detekt AST + Compose Stability | 📦 |
 | 4 | KMP Platform-Bridge Extractor | CX | — | tree-sitter-kotlin + SKIE + swift-syntax | 📦 (waits UW KMP adoption) |
-| 5 | Dependency Surface Extractor | Claude | — | dep-analysis-gradle + spmgraph + Package.resolved parser | 📦 |
+| 5 | Dependency Surface Extractor | Claude | — | dep-analysis-gradle + spmgraph + Package.resolved parser | ✅ GIM-191 / `9038d7f`; SPM + Gradle + Python manifests → `:ExternalDependency` + `:DEPENDS_ON`; runbook `docs/runbooks/dependency-surface.md`; unblocks #39 |
 | 25 | Build System Extractor | CX | — | Gradle Tooling API + SwiftPM PackageDescription + Bazel aquery | 📦 |
 | 27 | Public API Surface Extractor | CX | — | Kotlin BCV `.api` dumps + Swift `.swiftinterface` primary + optional `swift-api-digester` diagnostics + SKIE overlay | ✅ GIM-190 / PR #88 merged + iMac deployed at `2a96786`; `public_api_surface` registry verified |
-| 31 | Cross-Module Contract Extractor | CX | — | Kotlin BCV + swift-public-api-diff + oasdiff | 📋 GIM-192 launched for CX spec formalization; consumes #27 PublicApiSurface/PublicApiSymbol |
-| 33 | Dead Symbol & Binary Surface | CX | — | Periphery + Reaper SDK + CodeQL | 🚧 spec draft (`docs/superpowers/specs/2026-05-04-roadmap-33-dead-symbol-binary-surface.md`) |
+| 31 | Cross-Module Contract Extractor | CX | — | Kotlin BCV + swift-public-api-diff + oasdiff | ✅ GIM-192 / `05fe1b7`; consumes #27 PublicApiSurface/PublicApiSymbol |
+| 33 | Dead Symbol & Binary Surface | CX | — | Periphery + Reaper SDK + CodeQL | ✅ GIM-193 / `52cfec5` (PR #96) |
 | 36 | Network Schema & API Contract | Claude | — | oasdiff + Buf CLI + graphql-inspector | 📦 |
-| 39 | Cross-Repo Version Skew | Claude | — | Gradle Tooling API + Renovate data + OWASP Dep-Check | 📦 (deps #5) |
+| 39 | Cross-Repo Version Skew | Claude | — | Gradle Tooling API + Renovate data + OWASP Dep-Check | 🚧 GIM-218 spec rev2 + plan ready; `feature/GIM-NN-cross-repo-version-skew`; status=todo, no assignee (operator pick); v1 = pure skew detection (Renovate/CVE deferred) |
 | 41 | SCIP/LSIF Precise Symbol Resolver | CX | — | scip-* per-language | 🚧 = Phase 1 in disguise |
 | 45 | Inter-Module Event Bus | CX | — | semgrep + tree-sitter + SourceKit-LSP | 📦 |
 
@@ -128,13 +128,13 @@ Reference: `docs/research/extractor-library/` (2026-04-18 brainstorm, 9 parallel
 
 | # | Name | Team | LLM | Tool stack | Status |
 |---|------|------|:---:|------------|--------|
-| 22 | Git History Harvester (**prereq**) | Claude | — | pygit2 | 📦 (must precede 11/12/26/32/43/44) |
+| 22 | Git History Harvester (**prereq**) | Claude | — | pygit2 | ✅ GIM-186 / `b0dd44d`; unblocks 11/12/26/32/43/44 |
 | 11 | Decision History Extractor | Claude | ✅ | pygit2 + GitHub GraphQL + SZZ + ADR parser | 📦 |
 | 12 | Migration Signal Extractor | CX | — | SwiftSyntax + detekt @Deprecated + semgrep + CodeQL | 📦 |
 | 26 | Bug-Archaeology Extractor | Claude | ✅ | GitHub Issues + LLM4SZZ + pygit2 blame | 📦 |
-| 32 | Code Ownership Extractor | Claude | — | pygit2 blame + code-maat + hercules | 📦 |
+| 32 | Code Ownership Extractor | Claude | — | pygit2 blame + code-maat + hercules | 🚧 GIM-216 spec rev2 + plan ready; `feature/GIM-NN-code-ownership-extractor`; awaiting CTO Phase 1.1 |
 | 43 | PR Review Comment Knowledge Extractor | Claude | ✅ | GitHub GraphQL + LLM categorization | 📦 |
-| 44 | Code Complexity × Churn Hotspot | Claude | — | radon + lizard + git churn | 📦 |
+| 44 | Code Complexity × Churn Hotspot | Claude | — | radon + lizard + git churn | ✅ GIM-195 / `14b0257` (PR #94) |
 
 ### 2.4 Semantic (6 items)
 
@@ -280,6 +280,7 @@ Avoid editing during active phase chains — wait for the slice merge so the fil
 
 - **Phase 1 real-query validation** — launch-critical implementation rows are merged; operator still decides when "launch" is real. Suggested gate: at least 3 useful queries on real UW codebase produce results matching expectations (≥1 each on iOS / Android / EVM contract).
 - **Phase 2 ordering inside categories** — operator selected #27 Public API Surface Extractor for CX spec brainstorm on 2026-05-04; it closed as GIM-190. Next CX item is #31 Cross-Module Contract Extractor via GIM-192. Broader ordering remains demand-driven.
-- **#22 Git History promotion** — triggered by first historical-extractor request. Currently 📦.
-- **LLM infrastructure** — 6 Claude extractors require LLM. Ollama deploy + cost monitoring is a separate infra slice (not yet scheduled).
-- **CX queue refresh** — completed 2026-05-04 after GIM-190 merged and iMac deploy verified; active CX docs lane is #31 Cross-Module Contract Extractor spec formalization (GIM-192).
+- **Historical extractor lane** — #22 Git History (GIM-186) merged 2026-05-04, unblocking #11/#12/#26/#32/#43/#44. #44 Hotspot closed first (GIM-195); #32 Code Ownership in flight as GIM-216. Next Claude historical pick is operator's choice from #11/#26/#43 (LLM-blocked) — pending Ollama infra slice.
+- **Dependency-graph extractor lane** — #5 Dependency Surface (GIM-191) merged 2026-05-04, unblocking #39. #39 Cross-Repo Version Skew in flight as GIM-218 (no assignee yet — operator picks).
+- **LLM infrastructure** — 6 Claude extractors (#10/#11/#15/#26/#35/#43) require LLM. Ollama deploy + cost monitoring is a separate infra slice (not yet scheduled).
+- **CX queue refresh** — #27 (GIM-190), #31 (GIM-192), #33 (GIM-193) all merged. Active CX docs lane is now #3 Reactive Dependency Tracer (GIM-217 spec/plan formalization).
