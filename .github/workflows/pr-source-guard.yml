@@ -1,0 +1,27 @@
+name: PR Source Guard
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  source-branch-check:
+    name: source-branch-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Reject non-develop sources to main
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if [[ "$HEAD_REF" != "develop" ]]; then
+            echo "::error::PRs to main must originate from develop; got '$HEAD_REF'"
+            echo ""
+            echo "Only the develop → main release PR is allowed to target main."
+            echo "Open your PR against 'develop' instead."
+            exit 1
+          fi
+          echo "Source branch is 'develop' — allowed."
