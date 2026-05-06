@@ -22,7 +22,7 @@ class SeverityEnum(Enum):
     MAJOR = ("major", 3)
 
     def __init__(self, value: str, rank: int) -> None:
-        self._value_ = value
+        self._value_ = value  # type: ignore[assignment]
         self.rank = rank
 
 

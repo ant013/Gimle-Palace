@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 from neo4j import AsyncDriver
 
@@ -88,13 +88,13 @@ async def _compute_skew_groups(
     if mode == "project":
         if len(member_slugs) != 1:
             raise ValueError(f"project mode expects exactly 1 member; got {len(member_slugs)}")
-        params: dict = {"slug": member_slugs[0], "ecosystem": ecosystem}
+        params: dict[str, Any] = {"slug": member_slugs[0], "ecosystem": ecosystem}
         cypher = _PROJECT_MODE_CYPHER
     else:
         params = {"member_slugs": list(member_slugs), "ecosystem": ecosystem}
         cypher = _BUNDLE_MODE_CYPHER
 
-    rows: list[dict] = []
+    rows: list[dict[str, Any]] = []
     async with driver.session() as session:
         result = await session.run(cypher, **params)
         async for record in result:
@@ -108,7 +108,7 @@ async def _compute_skew_groups(
             })
 
     # Group by (purl_root, ecosystem); each group accumulates entries
-    by_group: dict[tuple[str, str], list[dict]] = {}
+    by_group: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for row in rows:
         purl_root = purl_root_for_display(row["purl"])
         key = (purl_root, row["ecosystem"])

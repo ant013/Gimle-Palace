@@ -59,16 +59,18 @@ async def find_version_skew(
     # 2. Resolve targets + check registration
     pre_warnings: list[WarningEntry] = []
     if mode == "project":
-        proj_exists = await _project_exists(driver, project)  # type: ignore[arg-type]
+        assert project is not None
+        proj_exists = await _project_exists(driver, project)
         if not proj_exists:
             return _err("project_not_registered", f"unknown project: {project!r}")
-        members = [project]  # type: ignore[list-item]
-        target_status = await _collect_target_status(driver, [project])  # type: ignore[list-item]
+        members: list[str] = [project]
+        target_status = await _collect_target_status(driver, [project])
     else:
-        bundle_exists = await _bundle_exists(driver, bundle)  # type: ignore[arg-type]
+        assert bundle is not None
+        bundle_exists = await _bundle_exists(driver, bundle)
         if not bundle_exists:
             return _err("bundle_not_registered", f"unknown bundle: {bundle!r}")
-        raw_members = await _bundle_members(driver, bundle)  # type: ignore[arg-type]
+        raw_members = await _bundle_members(driver, bundle)
         if not raw_members:
             return _err("bundle_has_no_members", f"bundle {bundle!r} has zero members")
         members = []
@@ -82,7 +84,8 @@ async def find_version_skew(
                 ))
         target_status = await _collect_target_status(driver, members)
         for w in pre_warnings:
-            target_status[w.slug] = "invalid_slug"  # type: ignore[index]
+            if w.slug is not None:
+                target_status[w.slug] = "invalid_slug"
 
     indexed_count = sum(1 for s in target_status.values() if s == "indexed")
     if indexed_count == 0:
@@ -90,19 +93,22 @@ async def find_version_skew(
 
     # 3. Compute (live)
     result = await _compute_skew_groups(
-        driver, mode=mode, member_slugs=members, ecosystem=ecosystem,  # type: ignore[arg-type]
+        driver,
+        mode=mode,  # type: ignore[arg-type]
+        member_slugs=members,
+        ecosystem=ecosystem,
     )
-    groups = result.skew_groups
+    groups = list(result.skew_groups)
 
     # 4. Apply min_severity filter
     if min_severity is not None:
         threshold = severity_rank(min_severity)  # type: ignore[arg-type]
-        groups = [g for g in groups if severity_rank(g.severity) >= threshold]  # type: ignore[arg-type]
+        groups = [g for g in groups if severity_rank(g.severity) >= threshold]
 
     # 5. Sort: severity desc, version_count desc, purl_root asc
     groups = sorted(
         groups,
-        key=lambda g: (-severity_rank(g.severity), -g.version_count, g.purl_root),  # type: ignore[arg-type]
+        key=lambda g: (-severity_rank(g.severity), -g.version_count, g.purl_root),
     )
 
     total_skew_groups = len(result.skew_groups)
@@ -176,7 +182,7 @@ def register_version_skew_tools(tool_decorator: Any, default_project: str) -> No
     Called from mcp_server.py alongside register_code_composite_tools().
     """
 
-    @tool_decorator(
+    @tool_decorator(  # type: ignore[untyped-decorator]
         name="palace.code.find_version_skew",
         description=(
             "Cross-repo / cross-bundle version skew detection over external "
@@ -192,11 +198,14 @@ def register_version_skew_tools(tool_decorator: Any, default_project: str) -> No
         min_severity: str | None = None,
         top_n: int = 50,
         include_aligned: bool = False,
-    ) -> dict:
+    ) -> dict[str, Any]:
         from palace_mcp.mcp_server import get_driver
 
+        drv = get_driver()
+        if drv is None:
+            return {"ok": False, "error_code": "driver_not_initialized", "message": "Neo4j driver not available"}
         return await find_version_skew(
-            driver=get_driver(),
+            driver=drv,
             project=project,
             bundle=bundle,
             ecosystem=ecosystem,

@@ -146,7 +146,7 @@ class CrossRepoVersionSkewExtractor(BaseExtractor):
             )
 
         result = await _compute_skew_groups(
-            driver, mode=mode, member_slugs=members, ecosystem=None,
+            driver, mode=mode, member_slugs=members, ecosystem=None,  # type: ignore[arg-type]
         )
         warnings.extend(result.warnings)
 
