@@ -54,6 +54,8 @@ Acceptance criteria:
 - Spike defines versioned tool-output JSON contracts for all three ecosystems.
 - Spike defines sandbox preflight, sanitized env, timeout, bounded output,
   process-group kill, daemon cleanup, and redaction rules.
+- Spike output is reviewed and approved before Step 3 starts. No production
+  extractor code may be written before this approval.
 - Spike result is committed under `docs/research/` only if it changes the spec.
 
 Suggested owner: CXPythonEngineer.
@@ -76,6 +78,11 @@ Acceptance criteria:
 - Fixture documents expected build roots, projects/targets/tasks/products,
   configurations, and IDs.
 - Fixture includes at least one target dependency and one task/product relation.
+- Fixture includes detected-but-skipped roots/candidates and expected zero-count
+  `BuildSystemSnapshot` rows with non-empty `skip_reasons`.
+- Fixture includes a Bazel `BUILD` / `BUILD.bazel` package marker without
+  `MODULE.bazel` / `WORKSPACE(.bazel)` and expects
+  `bazel_workspace_root_unresolved`.
 - Fixture can run in CI without requiring unavailable global tools, using
   committed machine-readable output where necessary.
 - Hostile fixtures cover env leak, hanging configuration, wrapper download
@@ -101,6 +108,7 @@ Acceptance criteria:
 - Models are frozen/typed and validate repo-relative paths.
 - Models include `build_root_path` and `build_root_id`; all child IDs include
   build root identity.
+- `schema_version` is a property but is excluded from stable IDs.
 - Constraints/indexes support deterministic MERGE and lookup by project,
   ecosystem, commit, and qualified name.
 - Constraints/indexes are declared on `BuildSystemExtractor.constraints` and
@@ -129,6 +137,10 @@ Acceptance criteria:
 - Missing tools produce structured skip records.
 - Unsandboxed execution or failed security preflight produces structured skip
   records.
+- Structured skip records are planned as zero-count `BuildSystemSnapshot` nodes,
+  never as logs only.
+- Bazel root discovery prefers nearest enclosing `MODULE.bazel`,
+  `WORKSPACE`, or `WORKSPACE.bazel`; `BUILD(.bazel)` alone is not a root.
 - Adapters redact raw command lines, absolute host paths, env values, and
   secrets before returning records.
 - Gradle and SwiftPM paths are covered by unit tests from fixture data.
@@ -156,6 +168,8 @@ Acceptance criteria:
 
 - Writer MERGEs snapshots, targets, tasks, products, configurations, and edges.
 - Writer creates one snapshot per detected build root per ecosystem per commit.
+- Writer creates zero-count skipped snapshots for detected-but-skipped
+  build roots/candidates with non-empty `skip_reasons`.
 - Writer creates explicit target ownership edges:
   `OWNS_BUILD_TASK`, `DECLARES_BUILD_PRODUCT`, and `HAS_BUILD_CONFIGURATION`.
 - No `ExternalDependency` write query exists in the implementation.
@@ -184,6 +198,8 @@ Acceptance criteria:
   skipped.
 - Missing helper/tool, unsandboxed preflight, and optional absent ecosystems are
   internal structured skips, not runner exceptions.
+- Skips are persisted as zero-count `BuildSystemSnapshot` nodes because
+  `ExtractorStats` cannot carry structured skip metadata.
 - No compile/test/package command, codegen command, host wrapper, wrapper
   download, or Bazel execution action is invoked.
 - Registry tests include `build_system`.
@@ -211,6 +227,10 @@ Acceptance criteria:
 - Integration test verifies `ExternalDependency` count is unchanged by this
   extractor.
 - Integration test verifies one snapshot per build root.
+- Integration test verifies skipped roots/candidates create zero-count snapshots
+  with non-empty `skip_reasons`.
+- Integration test verifies Bazel `BUILD(.bazel)` without workspace marker
+  creates `bazel_workspace_root_unresolved`.
 - Security tests verify redaction, timeout, process cleanup, and structured
   skips for hostile fixtures.
 - Runbook includes tool availability checks and direct Neo4j queries.
@@ -239,6 +259,8 @@ Acceptance criteria:
 - Reviewer confirms no `foundation/schema.py` Build* changes unless explicitly
   justified by a reviewed schema-ownership revision.
 - Reviewer confirms hostile fixture coverage exists or is explicitly waived.
+- Reviewer confirms `schema_version` is excluded from stable IDs.
+- Reviewer confirms skip persistence is graph-backed, not logs-only.
 
 Suggested owner: CXCodeReviewer.
 
@@ -272,7 +294,8 @@ Acceptance criteria:
   invocation, and direct Neo4j invariant queries.
 - Required invariants: at least one snapshot, no cross-commit edges, no
   `ExternalDependency` writes, deterministic IDs, idempotent rerun counters,
-  structured skips, and no compile/test/package task or Bazel action execution.
+  graph-persisted structured skips, and no compile/test/package task or Bazel
+  action execution.
 - QA includes process cleanup evidence for any tool timeout/cancellation path.
 
 Suggested owner: CXQAEngineer.
@@ -329,6 +352,9 @@ MATCH (s:BuildSystemSnapshot) RETURN s.project, s.ecosystem, count(*) AS snapsho
 
 MATCH (s:BuildSystemSnapshot)
 RETURN s.project, s.ecosystem, s.build_root_path, count(*) AS snapshots_per_root;
+
+MATCH (s:BuildSystemSnapshot {snapshot_state: 'skipped'})
+RETURN s.project, s.ecosystem, s.build_root_path, s.skip_reasons;
 
 MATCH (:BuildSystemSnapshot)-[:DECLARES_BUILD_TARGET]->(t:BuildTarget)
 RETURN t.ecosystem, count(t) AS targets;

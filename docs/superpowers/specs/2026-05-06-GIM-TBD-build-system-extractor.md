@@ -1,6 +1,6 @@
 ---
 slug: build-system-extractor
-status: proposed (rev2)
+status: proposed (rev2.1)
 branch: feature/GIM-TBD-build-system-extractor
 paperclip_issue: TBD
 authoring_team: CX/Codex spec gate; CX/Codex implements end-to-end after approval
@@ -20,6 +20,13 @@ rev2_changes: |
   - schema ownership is extractor-local via BaseExtractor.constraints/indexes.
   - missing tools are structured skip records, not extractor failures, unless
     policy explicitly escalates a single detected ecosystem with no extractable facts.
+rev2_1_changes: |
+  - structured skips persist as zero-count BuildSystemSnapshot records, not logs only.
+  - schema_version is explicitly excluded from stable node IDs; it remains a property.
+  - Bazel root discovery now requires nearest enclosing MODULE.bazel/WORKSPACE(.bazel);
+    BUILD(.bazel)-only candidates persist a skip snapshot instead of becoming roots.
+  - Step 2 tooling + security spike output is a hard approval gate before any
+    production extractor code.
 ---
 
 # GIM-TBD - Build System Extractor (Phase 2 #25)
@@ -113,6 +120,9 @@ The extractor should let operators and future extractors answer:
   partial stats rather than failing the entire run. A full extractor failure is
   allowed only when the project has exactly one detected ecosystem and the
   approved policy says that ecosystem is mandatory.
+- Structured skip reasons must be persisted in graph state. Logs alone are not
+  acceptable because `ExtractorStats` and runner `IngestRun` records currently
+  expose only aggregate counts/errors/success.
 
 ## 4. Scope
 
@@ -152,7 +162,11 @@ The extractor should let operators and future extractors answer:
      and build settings where available;
    - avoid package build/test execution.
 7. Bazel extractor path:
-   - detect `MODULE.bazel`, `WORKSPACE`, `WORKSPACE.bazel`, or `BUILD(.bazel)`;
+   - discover Bazel build roots by nearest enclosing `MODULE.bazel`,
+     `WORKSPACE`, or `WORKSPACE.bazel`;
+   - treat `BUILD` / `BUILD.bazel` files as package markers, not workspace
+     roots; if no enclosing workspace marker exists, persist a structured skip
+     snapshot with `bazel_workspace_root_unresolved`;
    - use `bazel query` and `bazel aquery --output=jsonproto` when `bazel` is
      available; textproto is an allowed fallback only when JSON proto is not
      available for the installed Bazel version;
@@ -161,8 +175,8 @@ The extractor should let operators and future extractors answer:
    - treat missing Bazel as a structured skip.
 8. One `BuildSystemSnapshot` per detected build root per ecosystem per commit.
 9. Commit-aware, deterministic IDs using `group_id`, `project`, ecosystem,
-   `build_root_path`, target/task/product/configuration key, `commit_sha`, and
-   `schema_version`.
+   `build_root_path`, target/task/product/configuration key, and `commit_sha`.
+   `schema_version` is not part of primary IDs.
 10. Unit tests for model validation, ID stability, parser normalization, skip
    reasons, and graph planning.
 11. Integration test with a fixture containing at least:
@@ -239,13 +253,18 @@ Implementation must define versioned parser contracts before graph writing:
   intermediate action inputs/outputs stay as bounded `inputs_sample` and
   `outputs_sample` on `BuildTask`.
 
+The Step 2 tooling + security spike must produce reviewer-approved output
+contracts and sandbox/preflight proof before Step 3 or any production extractor
+code starts.
+
 ## 7. Data Model
 
 ### `BuildSystemSnapshot`
 
-One detected build root for one project/ecosystem at one commit. A mono-repo
-with three independent Swift packages creates three SwiftPM snapshots, not one
-project-wide SwiftPM snapshot.
+One detected build root, or detected-but-skipped build candidate, for one
+project/ecosystem at one commit. A mono-repo with three independent Swift
+packages creates three SwiftPM snapshots, not one project-wide SwiftPM
+snapshot.
 
 - `id`
 - `group_id`
@@ -254,7 +273,8 @@ project-wide SwiftPM snapshot.
 - `commit_sha`
 - `build_root_path`: repo-relative POSIX path
 - `build_root_id`: stable hash of `group_id`, `project`, `ecosystem`,
-  `build_root_path`, `commit_sha`, and `schema_version`
+  `build_root_path`, and `commit_sha`
+- `snapshot_state`: `extracted` or `skipped`
 - `tool_name`
 - `tool_version`
 - `schema_version`
@@ -263,6 +283,13 @@ project-wide SwiftPM snapshot.
 - `product_count`
 - `configuration_count`
 - `skip_reasons`
+
+For detected-but-skipped build roots/candidates, write a zero-count snapshot
+with `snapshot_state="skipped"`, `target_count=0`, `task_count=0`,
+`product_count=0`, `configuration_count=0`, and non-empty `skip_reasons`.
+This is the persistence target for missing tools, unsandboxed execution,
+security preflight failures, unsupported tool output, and Bazel package markers
+without an enclosing workspace root.
 
 ### `BuildTarget`
 
@@ -352,19 +379,22 @@ Configuration/variant/flavor/platform/build-setting record.
 
 1. All nodes are commit-aware. No build graph edge may cross commit boundaries.
 2. IDs must be deterministic across identical fixture runs.
-3. Repo-relative paths use POSIX separators and must not be absolute.
-4. Same label/path from different ecosystems is not deduplicated.
-5. Same target/task name from two build roots in the same repo is not
+3. `schema_version` is deliberately excluded from stable node IDs. It remains a
+   property for parser/schema interpretation. Future migrations that require ID
+   forking must make that a new explicit spec decision.
+4. Repo-relative paths use POSIX separators and must not be absolute.
+5. Same label/path from different ecosystems is not deduplicated.
+6. Same target/task name from two build roots in the same repo is not
    deduplicated. `build_root_path` is part of every child node ID.
-6. Gradle project paths (`:`, `:app`, `:shared`) and task paths
+7. Gradle project paths (`:`, `:app`, `:shared`) and task paths
    (`:app:assembleDebug`) are canonical keys.
-7. SwiftPM package/target/product names are canonical keys within the package
+8. SwiftPM package/target/product names are canonical keys within the package
    root.
-8. Bazel labels are canonical keys and must preserve repository/package/target
+9. Bazel labels are canonical keys and must preserve repository/package/target
    identity.
-9. If parser output cannot determine a relationship exactly, skip the edge with
+10. If parser output cannot determine a relationship exactly, skip the edge with
    a metric. Do not infer target/task dependencies from name substrings.
-10. Build schema constraints/indexes are extractor-local via
+11. Build schema constraints/indexes are extractor-local via
     `BaseExtractor.constraints` and `BaseExtractor.indexes`. Do not add Build*
     constraints to `foundation/schema.py` unless a later reviewer explicitly
     approves a shared global schema need.
@@ -411,14 +441,18 @@ approval changes the schema ownership decision.
    executed during extraction.
 9. No build graph edge crosses commit boundaries.
 10. Missing external tools produce structured skip metrics and partial success
-    when other ecosystems are present.
-11. Security fixtures cover env leak, hanging config, wrapper download attempt,
+    when other ecosystems are present; each detected-but-skipped build
+    root/candidate has a persisted zero-count `BuildSystemSnapshot`.
+11. Bazel `BUILD` / `BUILD.bazel` package markers without an enclosing
+    `MODULE.bazel` / `WORKSPACE(.bazel)` produce
+    `bazel_workspace_root_unresolved` skip snapshots.
+12. Security fixtures cover env leak, hanging config, wrapper download attempt,
     absolute path emission, Bazel command-line leakage, timeout, and cleanup.
-12. Schema constraints/indexes are declared extractor-local, not in global
+13. Schema constraints/indexes are declared extractor-local, not in global
     `foundation/schema.py`.
-13. Runbook includes Neo4j queries for snapshots, targets, tasks, products,
+14. Runbook includes Neo4j queries for snapshots, targets, tasks, products,
     dependency edges, no external-dependency writes, and no cross-commit edges.
-14. Targeted unit/integration tests and lint/typecheck pass.
+15. Targeted unit/integration tests and lint/typecheck pass.
 
 ## 11. Verification Plan
 
@@ -444,6 +478,9 @@ QA graph invariants should include:
 
 ```cypher
 MATCH (s:BuildSystemSnapshot) RETURN s.ecosystem, count(s) AS snapshots;
+
+MATCH (s:BuildSystemSnapshot {snapshot_state: 'skipped'})
+RETURN s.ecosystem, s.build_root_path, s.skip_reasons;
 
 MATCH (s:BuildSystemSnapshot)-[:DECLARES_BUILD_TARGET]->(t:BuildTarget)
 RETURN s.ecosystem, count(t) AS targets;
