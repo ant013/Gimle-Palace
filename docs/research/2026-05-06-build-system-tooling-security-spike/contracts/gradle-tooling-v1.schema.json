@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gimle.dev/contracts/build-system/gradle-tooling-v1.schema.json",
+  "title": "Gradle tooling v1 sample",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "tool_name",
+    "tool_version",
+    "root_path",
+    "projects",
+    "tasks"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "gradle-tooling-v1"
+    },
+    "tool_name": {
+      "const": "gradle"
+    },
+    "tool_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "capture_mode": {
+      "type": "string"
+    },
+    "root_path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "projects": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "name",
+          "project_dir"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "project_dir": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        }
+      }
+    },
+    "tasks": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "name",
+          "owner_project"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "owner_project": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "group": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 128
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 512
+          },
+          "dependencies": {
+            "type": "array",
+            "maxItems": 32,
+            "items": {
+              "type": "string",
+              "maxLength": 128
+            }
+          }
+        }
+      }
+    }
+  }
+}
