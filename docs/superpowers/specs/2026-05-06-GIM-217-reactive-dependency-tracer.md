@@ -330,8 +330,8 @@ component/state is an exported symbol already represented by GIM-190. No
    Live helper execution is not part of v1.
 3. Validate helper JSON with strict Pydantic models before any graph deletion.
 4. Normalize file paths, qualified names, state kinds, and confidence.
-5. Optionally ingest Kotlin/detekt/Compose facts if the tooling contract is
-   available; otherwise emit structured skip metadata.
+5. For Kotlin/Compose candidates, emit structured skip diagnostics only. Do
+   not ingest Kotlin, detekt, or Compose facts in v1.
 6. Correlate to existing `SymbolOccurrenceShadow` or `PublicApiSymbol` only when
    exact keys are available. No fuzzy matching in v1.
 7. Write graph facts in idempotent batches:
