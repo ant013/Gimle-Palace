@@ -7,7 +7,7 @@
 - `env-leak`: PASS
 - `hanging-config`: PASS
 - `timeout`: PASS
-- `wrapper-download`: PASS
+- `wrapper-download`: PASS — refused with host_gradle_wrapper_forbidden before exec
 - `absolute-path`: PASS
 - `bazel-cmdline-leak`: PASS
 - `cancellation-cleanup`: PASS

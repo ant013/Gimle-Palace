@@ -19,6 +19,8 @@ Schema: `contracts/bazel-query-aquery-v1.schema.json`
 
 Sample: `contracts/bazel-query-aquery-v1.sample.json`
 
+JSON Schema validation: `PASS`
+
 The sample deliberately redacts raw action command lines and keeps only bounded input/output samples.
 
 ## Sources

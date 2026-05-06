@@ -5,7 +5,7 @@
 ## Command
 
 ```bash
-/usr/bin/sandbox-exec -p '(version 1) (allow default) (deny network*)' /usr/bin/swift package dump-package --package-path /var/folders/y8/dg8qs5dx7zs19xp99hwf21w00000gn/T/gim215-swiftpm-sneoddhs/swiftpm-package
+/usr/bin/sandbox-exec -p '(version 1) (allow default) (deny network*)' /usr/bin/swift package dump-package --package-path <ABSOLUTE_PATH>
 ```
 
 ## Validation
@@ -13,6 +13,8 @@
 Schema: `contracts/swiftpm-dump-package-v1.schema.json`
 
 Sample: `contracts/swiftpm-dump-package-v1.sample.json`
+
+JSON Schema validation: `PASS`
 
 Products: `2`
 

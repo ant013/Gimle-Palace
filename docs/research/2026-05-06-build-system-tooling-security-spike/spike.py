@@ -61,6 +61,10 @@ def shell_join(command: list[str]) -> str:
     return " ".join(shlex.quote(part) for part in command)
 
 
+def sanitized_command(command: list[str], extra_paths: list[str] | None = None) -> str:
+    return sanitize_text(shell_join(command), extra_paths)
+
+
 def current_home() -> str:
     return str(pathlib.Path.home())
 
@@ -166,6 +170,63 @@ def require_file(path: pathlib.Path) -> None:
         fail(f"required file missing: {path}")
 
 
+def schema_type_matches(value: Any, schema_type: str) -> bool:
+    if schema_type == "object":
+        return isinstance(value, dict)
+    if schema_type == "array":
+        return isinstance(value, list)
+    if schema_type == "string":
+        return isinstance(value, str)
+    if schema_type == "boolean":
+        return isinstance(value, bool)
+    if schema_type == "null":
+        return value is None
+    if schema_type == "number":
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if schema_type == "integer":
+        return isinstance(value, int) and not isinstance(value, bool)
+    return True
+
+
+def validate_schema_instance(value: Any, schema: dict[str, Any], path: str = "$") -> None:
+    expected_type = schema.get("type")
+    if expected_type is not None:
+        expected_types = expected_type if isinstance(expected_type, list) else [expected_type]
+        if not any(schema_type_matches(value, item) for item in expected_types):
+            fail(f"{path}: expected type {expected_types}, got {type(value).__name__}")
+
+    if "const" in schema and value != schema["const"]:
+        fail(f"{path}: expected const {schema['const']!r}, got {value!r}")
+
+    if "enum" in schema and value not in schema["enum"]:
+        fail(f"{path}: expected one of {schema['enum']!r}, got {value!r}")
+
+    if isinstance(value, str) and "minLength" in schema and len(value) < schema["minLength"]:
+        fail(f"{path}: string shorter than minLength={schema['minLength']}")
+
+    if isinstance(value, list):
+        if "minItems" in schema and len(value) < schema["minItems"]:
+            fail(f"{path}: array shorter than minItems={schema['minItems']}")
+        item_schema = schema.get("items")
+        if isinstance(item_schema, dict):
+            for index, item in enumerate(value):
+                validate_schema_instance(item, item_schema, f"{path}[{index}]")
+
+    if isinstance(value, dict):
+        for key in schema.get("required", []):
+            if key not in value:
+                fail(f"{path}: missing required key {key!r}")
+        properties = schema.get("properties", {})
+        for key, item_schema in properties.items():
+            if key in value and isinstance(item_schema, dict):
+                validate_schema_instance(value[key], item_schema, f"{path}.{key}")
+
+
+def validate_against_schema(schema_path: pathlib.Path, payload: dict[str, Any]) -> None:
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    validate_schema_instance(payload, schema)
+
+
 def validate_gradle_contract(payload: dict[str, Any]) -> None:
     required = ["schema_version", "tool_name", "tool_version", "root_path", "projects", "tasks"]
     for key in required:
@@ -236,6 +297,25 @@ def validate_bazel_contract(payload: dict[str, Any]) -> None:
                 fail(f"bazel action missing {key}")
         if action.get("commandline_redacted") is not True:
             fail("bazel action is not marked redacted")
+
+
+def guard_gradle_wrapper(
+    root: pathlib.Path,
+    *,
+    no_host_gradlew: bool,
+    no_wrapper_download: bool,
+) -> dict[str, Any]:
+    gradlew = root / "gradlew"
+    wrapper_props = root / "gradle" / "wrapper" / "gradle-wrapper.properties"
+    if (no_host_gradlew or no_wrapper_download) and gradlew.exists() and wrapper_props.exists():
+        return {
+            "ok": False,
+            "skip_reason": "host_gradle_wrapper_forbidden",
+            "refused_before_exec": True,
+            "wrapper_path": str(gradlew),
+            "wrapper_properties_path": str(wrapper_props),
+        }
+    return {"ok": True}
 
 
 def tool_versions() -> dict[str, str]:
@@ -535,20 +615,39 @@ def capture_sandbox_preflight(args: argparse.Namespace) -> None:
     if shutil.which("sandbox-exec") is None:
         fail("sandbox-exec is not installed")
 
-    probe_command = build_sandbox_command(
+    control_command = [
+        sys.executable,
+        "-c",
+        "import socket; socket.create_connection(('1.1.1.1', 443), timeout=5).close(); print('UNSANDBOXED_CONTROL_OK')",
+    ]
+    control_result = run_command(control_command, timeout_s=5.0)
+    sandboxed_probe = build_sandbox_command(
         [
             sys.executable,
             "-c",
-            "import urllib.request; urllib.request.urlopen('https://example.com', timeout=2)",
+            "import socket; socket.create_connection(('1.1.1.1', 443), timeout=5).close(); print('SANDBOXED_PROBE_OK')",
         ]
     )
-    probe_result = run_command(probe_command, timeout_s=5.0)
-    passed = probe_result.returncode != 0 and not probe_result.timed_out
+    probe_result = run_command(sandboxed_probe, timeout_s=5.0)
+    sandbox_denied = probe_result.returncode != 0 and (
+        "PermissionError" in probe_result.stderr or "Operation not permitted" in probe_result.stderr
+    )
+    passed = control_result.returncode == 0 and sandbox_denied
     sections = [
         (
-            "Probe",
+            "Unsandboxed control",
             "```bash\n"
-            + shell_join(probe_command)
+            + shell_join(control_command)
+            + "\n```\n\n"
+            + f"Result: `{'PASS' if control_result.returncode == 0 else 'FAIL'}`\n\n"
+            + "```text\n"
+            + sanitize_text((control_result.stdout or control_result.stderr).strip() or "<empty>")
+            + "\n```",
+        ),
+        (
+            "Sandboxed probe",
+            "```bash\n"
+            + shell_join(sandboxed_probe)
             + "\n```\n\n"
             + f"Result: `{'PASS' if passed else 'FAIL'}`",
         ),
@@ -558,12 +657,12 @@ def capture_sandbox_preflight(args: argparse.Namespace) -> None:
         ),
         (
             "Interpretation",
-            "The local preflight proves a real sandbox control exists (`sandbox-exec`) and can deny network access before any build-system helper command is allowed to run.",
+            "The preflight passes only if the same network connect succeeds unsandboxed and then fails under `sandbox-exec` with an explicit sandbox denial (`PermissionError` / `Operation not permitted`).",
         ),
     ]
     write_markdown(output, "Sandbox preflight", sections)
     if not passed:
-        fail("sandbox preflight did not deny network access")
+        fail("sandbox preflight did not prove sandbox-specific network denial")
 
 
 def capture_gradle_contract(args: argparse.Namespace) -> None:
@@ -576,6 +675,13 @@ def capture_gradle_contract(args: argparse.Namespace) -> None:
     with tempfile.TemporaryDirectory(prefix="gim215-gradle-") as tmp:
         tmp_root = pathlib.Path(tmp)
         fixture = make_gradle_fixture(tmp_root)
+        guard = guard_gradle_wrapper(
+            fixture,
+            no_host_gradlew=args.no_host_gradlew,
+            no_wrapper_download=args.no_wrapper_download,
+        )
+        if guard["ok"] is False:
+            fail("gradle contract fixture unexpectedly hit wrapper guard")
         temp_home = tmp_root / "home"
         temp_home.mkdir(parents=True, exist_ok=True)
         init_script = tmp_root / "gradle-probe.init.gradle"
@@ -617,6 +723,7 @@ def capture_gradle_contract(args: argparse.Namespace) -> None:
                 "- Contract shape is still captured as a committed reviewer sample, but the local Gradle runtime path remains unproven.\n"
                 "- This is a release blocker for production Step 3 on this machine."
             )
+        validate_against_schema(schema_path, sanitized_payload)
         validate_gradle_contract(sanitized_payload)
         write_json(sample_path, sanitized_payload)
         write_markdown(
@@ -625,12 +732,13 @@ def capture_gradle_contract(args: argparse.Namespace) -> None:
             [
                 (
                     "Command",
-                    "```bash\n" + shell_join(command) + "\n```",
+                    "```bash\n" + sanitized_command(command, [str(fixture), str(tmp_root)]) + "\n```",
                 ),
                 (
                     "Validation",
                     "Schema: `" + str(schema_path.relative_to(ROOT)) + "`\n\n"
                     "Sample: `" + str(sample_path.relative_to(ROOT)) + "`\n\n"
+                    "JSON Schema validation: `PASS`\n\n"
                     f"Projects: `{len(sanitized_payload['projects'])}`\n\n"
                     f"Tasks: `{len(sanitized_payload['tasks'])}`",
                 ),
@@ -716,6 +824,7 @@ def capture_swiftpm_contract(args: argparse.Namespace) -> None:
                 "Sandboxed SwiftPM introspection failed locally because `xcrun --show-sdk-platform-path` "
                 "could not resolve `PlatformPath` from the Command Line Tools installation."
             )
+        validate_against_schema(schema_path, contract)
         validate_swiftpm_contract(contract)
         write_json(sample_path, contract)
         write_markdown(
@@ -724,12 +833,13 @@ def capture_swiftpm_contract(args: argparse.Namespace) -> None:
             [
                 (
                     "Command",
-                    "```bash\n" + shell_join(command) + "\n```",
+                    "```bash\n" + sanitized_command(command, [str(fixture), str(tmp_root)]) + "\n```",
                 ),
                 (
                     "Validation",
                     "Schema: `" + str(schema_path.relative_to(ROOT)) + "`\n\n"
                     "Sample: `" + str(sample_path.relative_to(ROOT)) + "`\n\n"
+                    "JSON Schema validation: `PASS`\n\n"
                     f"Products: `{len(contract['package']['products'])}`\n\n"
                     f"Targets: `{len(contract['package']['targets'])}`",
                 ),
@@ -795,6 +905,7 @@ def capture_bazel_contract(args: argparse.Namespace) -> None:
     if bazel_bin:
         fail("local bazel execution path is intentionally not implemented in this spike")
     payload = bazel_sample_payload()
+    validate_against_schema(schema_path, payload)
     validate_bazel_contract(payload)
     write_json(sample_path, payload)
     write_markdown(
@@ -810,12 +921,13 @@ def capture_bazel_contract(args: argparse.Namespace) -> None:
                 "```bash\nbazel query 'deps(//app:wallet)'\n"
                 "bazel aquery --output=jsonproto 'deps(//app:wallet)'\n```",
             ),
-            (
-                "Validation",
-                "Schema: `" + str(schema_path.relative_to(ROOT)) + "`\n\n"
-                "Sample: `" + str(sample_path.relative_to(ROOT)) + "`\n\n"
-                "The sample deliberately redacts raw action command lines and keeps only bounded input/output samples.",
-            ),
+                (
+                    "Validation",
+                    "Schema: `" + str(schema_path.relative_to(ROOT)) + "`\n\n"
+                    "Sample: `" + str(sample_path.relative_to(ROOT)) + "`\n\n"
+                    "JSON Schema validation: `PASS`\n\n"
+                    "The sample deliberately redacts raw action command lines and keeps only bounded input/output samples.",
+                ),
             (
                 "Sources",
                 f"- Official query docs: {BAZEL_QUERY_DOC_URL}\n- Official aquery docs: {BAZEL_AQUERY_DOC_URL}",
@@ -866,15 +978,23 @@ def run_hostile_fixtures(args: argparse.Namespace) -> None:
             tmp_root = pathlib.Path(tmp)
             gradlew = tmp_root / "gradlew"
             wrapper_props = tmp_root / "gradle" / "wrapper" / "gradle-wrapper.properties"
+            executed_marker = tmp_root / "wrapper-executed.txt"
             wrapper_props.parent.mkdir(parents=True, exist_ok=True)
-            write_text(gradlew, "#!/usr/bin/env bash\necho wrapper-run\n")
+            write_text(gradlew, f"#!/usr/bin/env bash\necho wrapper-run > {shlex.quote(str(executed_marker))}\n")
             os.chmod(gradlew, 0o755)
             write_text(
                 wrapper_props,
                 "distributionUrl=https\\://services.gradle.org/distributions/gradle-9.3.1-bin.zip\n",
             )
-            blocked = gradlew.exists() and wrapper_props.exists()
-            cases.append(("wrapper-download", "PASS" if blocked else "FAIL"))
+            guard = guard_gradle_wrapper(tmp_root, no_host_gradlew=True, no_wrapper_download=True)
+            blocked = (
+                guard["ok"] is False
+                and guard["skip_reason"] == "host_gradle_wrapper_forbidden"
+                and guard["refused_before_exec"] is True
+                and not executed_marker.exists()
+            )
+            detail = "PASS — refused with host_gradle_wrapper_forbidden before exec" if blocked else "FAIL"
+            cases.append(("wrapper-download", detail))
 
     if "absolute-path" in requested_cases:
         sample = sanitize_text(f"/Users/anton/private/tmp/file.swift:{ROOT}", [str(ROOT)])
@@ -923,7 +1043,7 @@ def run_hostile_fixtures(args: argparse.Namespace) -> None:
             ),
         ],
     )
-    failing = [name for name, status in cases if status != "PASS"]
+    failing = [name for name, status in cases if not status.startswith("PASS")]
     if failing:
         fail("hostile fixture failures: " + ", ".join(failing))
 

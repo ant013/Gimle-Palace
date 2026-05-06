@@ -5,7 +5,7 @@
 ## Command
 
 ```bash
-/usr/bin/sandbox-exec -p '(version 1) (allow default) (deny network*)' /Users/anton/.local/bin/gradle --project-dir /var/folders/y8/dg8qs5dx7zs19xp99hwf21w00000gn/T/gim215-gradle-2x5xpig6/gradle-multi-project --no-daemon --offline --console=plain -q -I /var/folders/y8/dg8qs5dx7zs19xp99hwf21w00000gn/T/gim215-gradle-2x5xpig6/gradle-probe.init.gradle buildSystemProbe -DbuildSystemProbeOutput=/var/folders/y8/dg8qs5dx7zs19xp99hwf21w00000gn/T/gim215-gradle-2x5xpig6/gradle-tooling.json
+/usr/bin/sandbox-exec -p '(version 1) (allow default) (deny network*)' <ABSOLUTE_PATH>/.local/bin/gradle --project-dir <ABSOLUTE_PATH> --no-daemon --offline --console=plain -q -I <ABSOLUTE_PATH>/gradle-probe.init.gradle buildSystemProbe -DbuildSystemProbeOutput=<ABSOLUTE_PATH>/gradle-tooling.json
 ```
 
 ## Validation
@@ -13,6 +13,8 @@
 Schema: `contracts/gradle-tooling-v1.schema.json`
 
 Sample: `contracts/gradle-tooling-v1.sample.json`
+
+JSON Schema validation: `PASS`
 
 Projects: `3`
 
