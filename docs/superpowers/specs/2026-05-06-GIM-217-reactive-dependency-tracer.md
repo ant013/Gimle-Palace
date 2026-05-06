@@ -1,6 +1,6 @@
 ---
 slug: reactive-dependency-tracer
-status: proposed (rev2)
+status: proposed (rev3)
 branch: feature/GIM-217-reactive-dependency-tracer
 paperclip_issue: 217
 authoring_team: Board/Codex spec draft for CX review
@@ -23,6 +23,12 @@ rev2_changes: |
     with partial-rerun preservation tests;
   - separated lifecycle effects from state-triggered effects;
   - defined exact symbol correlation targets and path/redaction tests.
+rev3_changes: |
+  Addressed CXCodeReviewer Phase 1.2 request-changes items:
+  - froze Kotlin/Compose v1 scope to structured skip only; no Kotlin parser
+    or detekt/Compose contract implementation is authorized in this slice;
+  - removed Kotlin/Compose implementation from open questions;
+  - fixed verification command expectations in the implementation plan.
 ---
 
 # GIM-217 - Reactive Dependency Tracer
@@ -44,9 +50,9 @@ The extractor answers:
 - Which facts are precise enough for downstream impact analysis, and which are
   only heuristic candidates?
 
-The first-class happy path is Swift code. Kotlin/Compose support is in scope
-only where it shares the same graph model and can be implemented without
-diluting the Swift acceptance criteria.
+The first-class happy path is Swift code. Kotlin/Compose runtime implementation
+is deferred for v1; this slice keeps only shared schema readiness and structured
+skip diagnostics so Swift acceptance criteria stay unambiguous.
 
 ## 2. Context
 
@@ -84,8 +90,9 @@ Primary references checked on 2026-05-06:
 
 ## 4. Assumptions
 
-- Swift is mandatory for v1. Kotlin/Compose is optional in implementation order
-  but must be represented in the schema without needing a separate redesign.
+- Swift is mandatory for v1. Kotlin/Compose parser and contract implementation
+  are deferred; v1 represents Kotlin/Compose only through schema-ready enums and
+  structured skip diagnostics.
 - The extractor parses source files and pre-generated helper outputs. It must not
   run `xcodebuild`, Gradle build tasks, app tests, or app binaries.
 - v1 ingests pre-generated Swift helper JSON only. Building or executing a
@@ -135,9 +142,11 @@ Primary references checked on 2026-05-06:
     callback candidate.
 - Swift fixture covering SwiftUI, Combine, async task, UIKit callback, and
   Observation framework syntax.
-- Kotlin/Compose schema support and parser placeholder:
-  - detekt/AST facts may be implemented after Swift facts;
-  - Compose stability facts are represented as optional `stability` properties;
+- Kotlin/Compose v1 scope is structured skip only:
+  - no Kotlin parser, detekt contract, or Compose stability contract is
+    implemented in this issue;
+  - Kotlin files may be discovered only to emit `kotlin_tooling_unavailable`
+    or `compose_stability_report_unavailable` diagnostics;
   - missing Kotlin tool context results in structured skip, not extractor
     failure.
 - Extractor-local schema declarations via `BaseExtractor.constraints` and
@@ -576,9 +585,7 @@ Diagnostic persistence requirements:
    or should v1 also model legacy `ObservableObject` as the primary path?
 3. Should UIKit target/action and delegate facts remain low-confidence in v1, or
    be excluded until a second slice with more precise type context?
-4. Should Kotlin/Compose implementation be a separate follow-up after Swift
-   graph schema lands, or remain in this issue behind structured skips?
-5. Which downstream query should be considered the launch smoke:
+4. Which downstream query should be considered the launch smoke:
    "what changes when this state changes?" or "which state drives this view?"
 
 ## 14. Initial File Impact

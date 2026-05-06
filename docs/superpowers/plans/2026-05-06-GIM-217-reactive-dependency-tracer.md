@@ -11,11 +11,15 @@ explicitly approves the rev2 spec and this plan.
 
 Implement `reactive_dependency_tracer`, a Swift-first extractor for reactive
 state dependencies in SwiftUI/UIKit/Combine/async code, with Kotlin/Compose
-schema support where it shares the same model. v1 consumes pre-generated Swift
-helper JSON only; it must not execute a SwiftSyntax helper from the extractor
-process.
+schema readiness and structured skip diagnostics only. v1 consumes
+pre-generated Swift helper JSON only; it must not execute a SwiftSyntax helper
+from the extractor process, and it must not parse Kotlin/Compose facts.
 
 ## Phase 0 - Review Gate Before Code
+
+Rev3 decision: v1 implementation is Swift-first plus Kotlin/Compose structured
+skip only. Kotlin parser, detekt contract parsing, and Compose stability contract
+ingest are deferred to a follow-up slice after Swift graph schema lands.
 
 Owner: Board/operator + CX review when explicitly started.
 
@@ -23,8 +27,9 @@ Owner: Board/operator + CX review when explicitly started.
 - [ ] Confirm pre-generated Swift helper JSON fixture/input path for v1.
 - [ ] Confirm that live SwiftSyntax helper execution remains deferred until a
   hardened launcher spec exists.
-- [ ] Confirm whether Kotlin/Compose implementation is part of this issue or a
-  follow-up after Swift graph schema lands.
+- [ ] Confirm Kotlin/Compose remains structured skip only in v1; no Kotlin
+  parser, detekt contract, or Compose stability contract is implemented in
+  this issue.
 - [ ] Confirm graph labels and relationship names.
 - [ ] Confirm launch smoke query:
   - "what changes when this state changes?"
@@ -42,7 +47,7 @@ Owner: Board/operator + CX review when explicitly started.
 | `.../diagnostics.py` | Structured skip/warning diagnostic records |
 | `.../normalizer.py` | State/effect/edge normalization |
 | `.../confidence.py` | Confidence scoring |
-| `.../file_discovery.py` | Swift/Kotlin source discovery and skip filtering |
+| `.../file_discovery.py` | Swift source discovery plus Kotlin/Compose structured skip detection |
 | `.../neo4j_writer.py` | Idempotent graph writer |
 | `.../extractor.py` | `ReactiveDependencyTracerExtractor(BaseExtractor)` |
 | `services/palace-mcp/src/palace_mcp/extractors/registry.py` | Register extractor |
@@ -376,30 +381,41 @@ Commit:
 
 - `feat(GIM-217): register reactive dependency tracer`
 
-## Task 12 - Kotlin/Compose Placeholder Or Implementation
+## Task 12 - Kotlin/Compose Structured Skip Only
 
-Scope depends on Phase 0.
+Rev3 fixed scope: Kotlin/Compose implementation is deferred. v1 may detect
+Kotlin/Compose inputs only to persist structured skip diagnostics; it must not
+parse detekt output, Compose stability reports, or Kotlin AST facts in this
+issue.
 
 Files:
 
-- `reactive_dependency_tracer/kotlin_contract.py` if implemented
-- `tests/extractors/unit/test_reactive_dependency_tracer_kotlin.py`
+- `reactive_dependency_tracer/file_discovery.py`
+- `reactive_dependency_tracer/diagnostics.py`
+- `reactive_dependency_tracer/extractor.py`
+- `tests/extractors/unit/test_reactive_dependency_tracer_kotlin_skips.py`
 
 Steps:
 
-- [ ] If not implementing Kotlin in v1, emit `kotlin_tooling_unavailable` or
-  `compose_stability_report_unavailable` structured skips.
-- [ ] If implementing Kotlin in v1, parse a reviewed detekt/Compose contract,
-  not ad hoc text output.
-- [ ] Ensure Kotlin facts do not block Swift extraction.
+- [ ] Discover Kotlin/Compose candidate files only far enough to emit skip
+  diagnostics.
+- [ ] Emit `kotlin_tooling_unavailable` and
+  `compose_stability_report_unavailable` as `ReactiveDiagnostic` records when
+  Kotlin/Compose inputs are present.
+- [ ] Add a guard test proving no `kotlin_contract.py`, detekt contract parser,
+  Compose stability parser, or Kotlin AST fact model is added in v1.
+- [ ] Ensure Kotlin/Compose skips do not block Swift extraction or fail a
+  Swift-only run.
 
 Acceptance:
 
-- Swift tests pass whether Kotlin tooling is present or absent.
+- Swift tests pass whether Kotlin/Compose files are present or absent.
+- Kotlin/Compose presence produces structured skips only, with no Kotlin graph
+  facts or parser contract.
 
 Commit:
 
-- `feat(GIM-217): add Kotlin reactive tracing skip path`
+- `feat(GIM-217): add Kotlin Compose structured skips`
 
 ## Task 13 - Runbook And Operator Query
 
@@ -450,8 +466,8 @@ Expected commands:
 
 ```bash
 uv run pytest services/palace-mcp/tests/extractors/unit/test_reactive_dependency_tracer_*.py -v
-uv run pytest services/palace-mcp/tests/extractors/integration/test_reactive_dependency_tracer_integration.py -v
-uv run pytest services/palace-mcp/tests/extractors/test_registry.py -v
+uv run pytest services/palace-mcp/tests/extractors/integration/test_reactive_dependency_tracer_integration.py -m integration -v
+uv run pytest services/palace-mcp/tests/extractors/unit/test_registry.py -v
 ```
 
 ## Review Checklist
