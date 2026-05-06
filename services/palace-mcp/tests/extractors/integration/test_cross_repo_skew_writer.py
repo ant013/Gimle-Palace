@@ -15,7 +15,7 @@ async def test_write_run_extras_sets_properties(driver):  # type: ignore[no-unty
     async with driver.session() as session:
         await session.run("MATCH (n) DETACH DELETE n")
         await session.run("""
-            CREATE (r:IngestRun {run_id: 'r1'})
+            CREATE (r:IngestRun {id: 'r1'})
             SET r.extractor_name = 'cross_repo_version_skew',
                 r.project = 'uw-ios-mini',
                 r.success = true
@@ -37,7 +37,7 @@ async def test_write_run_extras_sets_properties(driver):  # type: ignore[no-unty
 
     async with driver.session() as session:
         result = await session.run("""
-            MATCH (r:IngestRun {run_id: 'r1'})
+            MATCH (r:IngestRun {id: 'r1'})
             RETURN r.mode AS mode, r.target_slug AS target,
                    r.skew_groups_total AS total,
                    r.skew_groups_major AS major,

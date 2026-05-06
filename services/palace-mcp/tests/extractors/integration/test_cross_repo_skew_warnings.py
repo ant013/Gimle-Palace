@@ -82,7 +82,7 @@ async def test_acceptance_20_malformed_purl_warning(driver):  # type: ignore[no-
     run_id = "warn-malformed-001"
     async with driver.session() as session:
         await session.run(
-            "CREATE (r:IngestRun {run_id: $rid, extractor_name: 'cross_repo_version_skew', success: true})",
+            "CREATE (r:IngestRun {id: $rid, extractor_name: 'cross_repo_version_skew', success: true})",
             rid=run_id,
         )
     ext = CrossRepoVersionSkewExtractor()
@@ -93,7 +93,7 @@ async def test_acceptance_20_malformed_purl_warning(driver):  # type: ignore[no-
     assert stats.nodes_written == 1
     async with driver.session() as session:
         out = await session.run(
-            "MATCH (r:IngestRun {run_id: $rid}) RETURN r.warnings_purl_malformed_count AS cnt",
+            "MATCH (r:IngestRun {id: $rid}) RETURN r.warnings_purl_malformed_count AS cnt",
             rid=run_id,
         )
         row = await out.single()
@@ -120,7 +120,7 @@ async def test_acceptance_24_member_not_registered_warning(driver):  # type: ign
     run_id = "warn-ghost-001"
     async with driver.session() as session:
         await session.run(
-            "CREATE (r:IngestRun {run_id: $rid, extractor_name: 'cross_repo_version_skew', success: true})",
+            "CREATE (r:IngestRun {id: $rid, extractor_name: 'cross_repo_version_skew', success: true})",
             rid=run_id,
         )
     ext = CrossRepoVersionSkewExtractor()

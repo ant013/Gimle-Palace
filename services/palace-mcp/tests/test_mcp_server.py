@@ -63,6 +63,7 @@ class TestCodeToolRegistration:
             "palace.code.find_hotspots",
             "palace.code.find_owners",
             "palace.code.find_references",
+            "palace.code.find_version_skew",
             "palace.code.get_architecture",
             "palace.code.get_code_snippet",
             "palace.code.list_functions",
