@@ -265,7 +265,8 @@ class CodeOwnershipExtractor(BaseExtractor):
             )
 
         edges_written = 0
-        paths_in_dirty = list(dirty)
+        # sorted: deterministic batch order regardless of PYTHONHASHSEED
+        paths_in_dirty = sorted(dirty)
         for i in range(0, max(len(paths_in_dirty), 1), batch_size):
             batch_paths = set(paths_in_dirty[i : i + batch_size])
             batch_edges = [e for e in edges_all if e.path in batch_paths]
@@ -283,7 +284,7 @@ class CodeOwnershipExtractor(BaseExtractor):
             )
             edges_written += len(batch_edges)
 
-        deleted_list = list(deleted)
+        deleted_list = sorted(deleted)
         for i in range(0, max(len(deleted_list), 1), batch_size):
             batch = deleted_list[i : i + batch_size]
             if not batch:
