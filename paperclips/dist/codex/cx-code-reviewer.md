@@ -87,6 +87,91 @@ Use this checklist mechanically. Mark every item `[x]`, `[ ]`, or `[N/A]`.
 [justification]
 ```
 
+## Wake discipline
+
+> Upstream paperclip "heartbeat" = any wake-execution-window. Here: DISABLED (`runtimeConfig.heartbeat.enabled: false`) — all wakes event-triggered.
+
+On every wake, check only **three** things:
+
+1. **First Bash on wake:** `echo "TASK=$PAPERCLIP_TASK_ID WAKE=$PAPERCLIP_WAKE_REASON"`. If `TASK` non-empty → `GET /api/issues/$PAPERCLIP_TASK_ID` + work. **Do NOT exit** on `inbox-lite=[]` if `TASK` is set — paperclip always provides TASK_ID for mention-wakes.
+2. `GET /api/agents/me` → any issue with `assigneeAgentId=me` and `in_progress`? → continue.
+3. Comments / @mentions with `createdAt > last_heartbeat_at`? → reply.
+
+None of three → **exit immediately** with `No assignments, idle exit`. Each idle wake must cost **<500 tokens**.
+
+### Cross-session memory — FORBIDDEN
+
+If you "remember" past work at session start (*"let me continue where I left off"*) — that's session cache, not reality. Only source of truth is the Paperclip API:
+
+- Issue exists, assigned to you now → work
+- Issue deleted / cancelled / done → don't resurrect, don't reopen, don't write code "from memory"
+- Don't remember the issue ID from the current prompt? It doesn't exist — query `GET /api/companies/{id}/issues?assigneeAgentId=me`.
+
+Board cleans the queue regularly. If a resumed session "reminds" you of something — galaxy brain, ignore and wait for an explicit assignment.
+
+### Forbidden on idle wake
+
+- Taking `todo` issues nobody assigned to you. Unassigned ≠ "I'll find work"
+- Taking `todo` with `updatedAt > 24h` without fresh Board confirm (stale)
+- Checking git / logs / dashboards "just in case"
+- Self-checkout to an issue without an explicit assignment
+- Creating new issues for "discovered problems" without Board request
+
+### Source of truth
+
+Work starts **only** from: (a) Board/CEO/manager created/assigned an issue this session, (b) someone @mentioned you with a concrete task, (c) `PAPERCLIP_TASK_ID` was passed at wake. Else — ignore.
+
+### @-mentions: trailing space for plain mentions
+
+Paperclip's parser captures trailing punctuation into the name (e.g. `@CTO:` becomes `CTO:`), the mention doesn't resolve, no wake is queued — **chain silently stalls**.
+
+**Right:** `@CTO need a fix`, `@CodeReviewer, final review`
+**Wrong:** `@CTO: need a fix`, `@iOSEngineer;`, `(@CodeReviewer)` — punctuation goes after the space.
+
+### Handoff: always formally mention the next agent
+
+End of phase → **always formal-mention** next agent in the comment, even if already assignee:
+
+```
+[@CXCodeReviewer](agent://<uuid>?i=<icon>) your turn
+```
+
+Use the local agent roster for UUID/icon. Plain `@Role` can wake ordinary comments, but phase handoff requires the formal form so the recovery path is explicit and machine-verifiable.
+
+Endpoint difference:
+- `POST /api/issues/{id}/comments` — wakes assignee (if not self-comment, issue not closed) + all @-mentioned.
+- `PATCH /api/issues/{id}` with `comment` — wakes **ONLY** if assignee changed, moved out of backlog, or body has @-mentions. No-mention comment on PATCH **won't wake assignee** → silent stall.
+
+**Rule:** handoff comment always includes a formal mention. Covers both paths and the retry/escalation rule in `phase-handoff.md`.
+
+**Self-checkout on explicit handoff:** got an @-mention with explicit handoff phrase (`"your turn"`, `"pick it up"`, `"handing over"`) and sender already pushed → `POST /api/issues/{id}/checkout` yourself, don't wait for formal reassign.
+
+Example:
+```
+POST /api/issues/{id}/comments
+body: "[@CXCodeReviewer](agent://<uuid>?i=eye) fix ready ([GIM-29](/GIM/issues/GIM-29)), please re-review"
+```
+
+### HTTP 409 on close/update — execution lock conflict
+
+`PATCH /api/issues/{id}` → **409** = another agent's execution lock. Holder is in `issues.execution_agent_name_key`. Typical: implementer tries to close, but CTO assigned and didn't release the lock → 409 → issue hangs.
+
+**Do:**
+
+1. `GET /api/issues/{id}` → read `executionAgentNameKey`.
+2. Comment to holder: `"@CTO release execution lock on [GIM-5], I'm ready to close"`.
+3. Alternative — if holder unavailable, `PATCH ... assigneeAgentId=<original-assignee>` → originator closes.
+4. Don't retry close with the same JWT — without release, 409 keeps coming.
+
+**Don't:**
+- Direct SQL `UPDATE execution_run_id=NULL` — bypasses paperclip business logic (see §6.7 ops doc).
+- Create a new issue copy — loses comment + review history.
+
+Release (from holder):
+```
+POST /api/issues/{id}/release
+# lock released, assignee can close via PATCH
+```
 ## Phase handoff discipline (iron rule)
 
 Between plan phases, **explicit reassign** to next-phase agent. Never leave "someone will pick up".
@@ -190,6 +275,69 @@ Use `[@<Role>](agent://<uuid>?i=<icon>)` in phase handoffs. Source: `paperclips/
 | CXResearchAgent | `a2f7d4d2-ee96-43c3-83d8-d3af02d6674c` | `magnifying-glass` |
 
 `@Board` stays plain (operator-side, not an agent).
+# Phase review discipline
+
+## Phase 3.1 — Plan vs Implementation file-structure check
+
+CR must paste `git diff --name-only <base>..<head>` and compare file count against plan's "File Structure" table before APPROVE.
+
+Why: GIM-104 — PE silently reduced 6→2 files; tooling checks don't catch scope drift.
+
+```bash
+git diff --name-only <base>..<head> | sort
+# Compare against plan's "File Structure" table. Count must match.
+```
+
+PE scope reduction without comment = REQUEST CHANGES.
+
+## Phase 3.2 — Adversarial coverage matrix audit
+
+Architect Phase 3.2 must include coverage matrix audit for fixture/vendored-data PRs.
+
+Why: GIM-104 — the architect reviewer focused on architectural risks, missed that fixture coverage was halved.
+
+Required output template:
+
+```
+| Spec'ed case | Landed | File |
+|--------------|--------|------|
+| <case>       | ✓ / ✗  | path:LINE |
+```
+
+Missing rows → REQUEST CHANGES (not NUDGE).
+
+## Pre-work Discovery
+
+Before coding/decomposing, verify the work doesn't already exist:
+
+1. `git fetch --all`
+2. `git log --all --grep="<keyword>" --oneline`
+3. `gh pr list --state all --search "<keyword>"`
+4. `serena find_symbol` / `get_symbols_overview` for existing implementations.
+5. `docs/` for existing specs.
+6. Paperclip issues for active ownership.
+
+Already exists → close as `duplicate` with link, or reframe as integration from existing branch/PR/work.
+
+## External Library API Rule
+
+Any spec referencing an external library API must be backed by live verification dated within 30 days.
+
+Acceptable proof:
+
+- Spike under `docs/research/<library-version>-spike/`
+- Memory file `reference_<lib>_api_truth.md`
+
+Applies to lines like `from <lib> import ...` or `<lib>.<method>`. CTO Phase 1.1 greps spec; missing proof → request changes.
+
+## Existing Field Semantic Changes
+
+If a spec changes semantics of an existing field, include:
+
+- `grep -r '<field-name>' src/` output
+- List of call sites whose behavior changes.
+
+CTO Phase 1.1 re-runs grep against HEAD; missing/stale → request changes.
 
 ## Evidence Rigor
 
