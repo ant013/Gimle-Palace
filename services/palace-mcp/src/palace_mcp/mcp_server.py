@@ -47,6 +47,9 @@ from palace_mcp.code.find_hotspots import find_hotspots as _find_hotspots_impl
 from palace_mcp.code.find_owners import find_owners as _find_owners_impl
 from palace_mcp.code.list_functions import list_functions as _list_functions_impl
 from palace_mcp.code_composite import register_code_composite_tools
+from palace_mcp.extractors.cross_repo_version_skew.find_version_skew import (
+    register_version_skew_tools,
+)
 from palace_mcp.code_router import register_code_tools
 from palace_mcp.extractors import registry as _extractor_registry
 from palace_mcp.extractors.bundle_state import get_bundle_ingest_state
@@ -782,6 +785,10 @@ register_code_composite_tools(
     # Module-level init runs before set_settings(); Settings() would fail here
     # because required fields (e.g. openai_api_key) are absent at import time.
     # os.environ.get mirrors the same default declared in Settings.palace_cm_default_project.
+    default_project=os.environ.get("PALACE_CM_DEFAULT_PROJECT", "repos-gimle"),
+)
+register_version_skew_tools(
+    _tool,
     default_project=os.environ.get("PALACE_CM_DEFAULT_PROJECT", "repos-gimle"),
 )
 

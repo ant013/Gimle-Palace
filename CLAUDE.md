@@ -310,6 +310,14 @@ invoked via MCP tool `palace.ingest.run_extractor(name, project)`.
   top-N hotspots and `palace.code.list_functions(project, path)` for per-
   function complexity. Requires `git_history` to have run first (otherwise
   churn = 0).
+- `cross_repo_version_skew` — Cross-repo version skew (GIM-218, Roadmap #39).
+  Reads `:Project-[:DEPENDS_ON]->:ExternalDependency` from `dependency_surface`
+  (GIM-191) — fully read-only; writes only one `:IngestRun` per call. Hybrid:
+  small extractor (audit/observability via `:IngestRun` extras) + live MCP
+  tool `palace.code.find_version_skew` for real-time aggregation. Project
+  mode finds intra-module skew via `r.declared_in`; bundle mode aggregates
+  across `:Bundle{name}-[:HAS_MEMBER]` members. See limitations in
+  `docs/runbooks/cross-repo-version-skew.md`.
 
 ### Operator workflow: Dependency surface
 
@@ -602,6 +610,35 @@ All vars in `PalaceSettings` (config.py), prefix `PALACE_`:
 | `PALACE_TANTIVY_INDEX_PATH` | (required) | Host path for Tantivy index |
 | `PALACE_TANTIVY_HEAP_MB` | 100 | Tantivy writer heap in MB |
 | `PALACE_SCIP_INDEX_PATHS` | `{}` | JSON map `{slug: path}` for SCIP extractors |
+
+### Operator workflow: Cross-repo version skew
+
+Prereq: `dependency_surface` (GIM-191) has run for the target project /
+every member of the target bundle.
+
+1. Run the extractor (writes one :IngestRun per call):
+   ```
+   palace.ingest.run_extractor(name="cross_repo_version_skew", project="uw-android")
+   # or for a bundle:
+   palace.ingest.run_extractor(name="cross_repo_version_skew", bundle="uw-ios")
+   ```
+
+2. Query skew:
+   ```
+   palace.code.find_version_skew(bundle="uw-ios", min_severity="minor", top_n=20)
+   ```
+
+Tunable knobs (`.env`):
+- `PALACE_VERSION_SKEW_TOP_N_MAX` (default 500)
+- `PALACE_VERSION_SKEW_QUERY_TIMEOUT_S` (default 30)
+
+Limitations:
+- Project mode for canonical-Gradle / SPM / Python projects finds zero
+  intra-module skew (aliases / single manifest = same version per scope).
+  Use bundle-of-1 for forward compatibility.
+- Compares resolved_version only; declared-constraint skew is followup.
+- Calendar versions / git-shas / custom schemes classify as 'unknown'.
+- No Renovate "latest version" data; no OWASP CVE enrichment.
 
 ### Known limitations
 

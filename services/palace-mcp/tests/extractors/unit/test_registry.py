@@ -119,3 +119,12 @@ def test_list_all_preserves_insertion_order() -> None:
     a_idx = all_names.index("__test_a")
     b_idx = all_names.index("__test_b")
     assert a_idx < b_idx
+
+
+def test_cross_repo_version_skew_registered():
+    from palace_mcp.extractors.registry import EXTRACTORS
+
+    assert "cross_repo_version_skew" in EXTRACTORS
+    cls_or_inst = EXTRACTORS["cross_repo_version_skew"]
+    name = cls_or_inst.name if hasattr(cls_or_inst, "name") else cls_or_inst.__name__
+    assert name == "cross_repo_version_skew" or name == "CrossRepoVersionSkewExtractor"
