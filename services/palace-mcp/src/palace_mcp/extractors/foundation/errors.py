@@ -44,6 +44,18 @@ class ExtractorErrorCode(str, Enum):
     # Checkpoint
     CHECKPOINT_DOC_COUNT_MISMATCH = "checkpoint_doc_count_mismatch"
 
+    # Cross-repo version skew (GIM-218, Roadmap #39)
+    BUNDLE_HAS_NO_MEMBERS = "bundle_has_no_members"
+    BUNDLE_INVALID = "bundle_invalid"
+    BUNDLE_NOT_REGISTERED = "bundle_not_registered"
+    DEPENDENCY_SURFACE_NOT_INDEXED = "dependency_surface_not_indexed"
+    INVALID_ECOSYSTEM_FILTER = "invalid_ecosystem_filter"
+    INVALID_SEVERITY_FILTER = "invalid_severity_filter"
+    MISSING_TARGET = "missing_target"
+    MUTUALLY_EXCLUSIVE_ARGS = "mutually_exclusive_args"
+    SLUG_INVALID = "slug_invalid"
+    TOP_N_OUT_OF_RANGE = "top_n_out_of_range"
+
 
 ActionType = Literal[
     "retry",
