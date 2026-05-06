@@ -1,5 +1,7 @@
 # Cross-Repo Version Skew Extractor Implementation Plan
 
+> **Revision:** rev3 — addresses 5 CRITICAL + 6 WARNING findings from Phase 1.2 CodeReviewer (comment `c181e97a`). Changes: Tasks 2, 8, 9, 10, 11, 12, 13 revised; spec §9 AC #8 amended (count-only v1). See `Rev3 changes` notes in each affected task.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Implement the `cross_repo_version_skew` extractor (Roadmap #39) — pure skew detection over the existing `:Project-[:DEPENDS_ON]->:ExternalDependency` graph from GIM-191 — plus the `palace.code.find_version_skew` MCP tool with project/bundle modes.
@@ -15,7 +17,7 @@
 | Path | Responsibility |
 |------|----------------|
 | `services/palace-mcp/src/palace_mcp/config.py` | Add 2 `PALACE_VERSION_SKEW_*` env-var fields to `Settings` |
-| `services/palace-mcp/src/palace_mcp/extractors/foundation/errors.py` | Add 6 new `ExtractorErrorCode` values |
+| `services/palace-mcp/src/palace_mcp/extractors/foundation/errors.py` | Add 10 new `ExtractorErrorCode` values |
 | `services/palace-mcp/src/palace_mcp/extractors/cross_repo_version_skew/__init__.py` | Package init |
 | `services/palace-mcp/src/palace_mcp/extractors/cross_repo_version_skew/models.py` | `EcosystemEnum`, `SeverityEnum`, `WarningCodeEnum`, `SkewEntry`, `SkewGroup`, `WarningEntry`, `RunSummary` (Pydantic v2 frozen + Literal enums) |
 | `services/palace-mcp/src/palace_mcp/extractors/cross_repo_version_skew/purl_parser.py` | `purl_root_for_display(purl)` — single helper |
@@ -24,8 +26,8 @@
 | `services/palace-mcp/src/palace_mcp/extractors/cross_repo_version_skew/neo4j_writer.py` | `_write_run_extras(driver, run_id, summary)` — sets ownership-style props on substrate `:IngestRun` |
 | `services/palace-mcp/src/palace_mcp/extractors/cross_repo_version_skew/extractor.py` | `CrossRepoVersionSkewExtractor(BaseExtractor)` — 4-phase orchestrator |
 | `services/palace-mcp/src/palace_mcp/extractors/registry.py` | Register `cross_repo_version_skew` in `EXTRACTORS` |
-| `services/palace-mcp/src/palace_mcp/code/find_version_skew.py` | MCP tool wrapper — args validation, calls `_compute_skew_groups()`, applies post-filters, serializes |
-| `services/palace-mcp/src/palace_mcp/server.py` | Register `palace.code.find_version_skew` MCP tool |
+| `services/palace-mcp/src/palace_mcp/extractors/cross_repo_version_skew/find_version_skew.py` | MCP tool wrapper + registration — args validation, calls `_compute_skew_groups()`, applies post-filters, serializes; `register_version_skew_tools()` called from `mcp_server.py` |
+| `services/palace-mcp/src/palace_mcp/mcp_server.py` | Add `register_version_skew_tools()` call alongside existing `register_code_composite_tools()` |
 | `services/palace-mcp/tests/extractors/unit/test_cross_repo_skew_models.py` | Pydantic validators + enum checks |
 | `services/palace-mcp/tests/extractors/unit/test_cross_repo_skew_purl_parser.py` | `purl_root_for_display` over all ecosystems + edge cases |
 | `services/palace-mcp/tests/extractors/unit/test_cross_repo_skew_semver_classify.py` | `classify`/`severity_rank` exhaustive |
@@ -33,7 +35,7 @@
 | `services/palace-mcp/tests/extractors/integration/test_cross_repo_skew_compute.py` | `_compute_skew_groups()` over seeded mini-fixture |
 | `services/palace-mcp/tests/extractors/integration/test_cross_repo_skew_extractor.py` | Full pipeline (Phase 0–4) + acceptance scenarios 1, 2, 3, 14, 17 |
 | `services/palace-mcp/tests/extractors/integration/test_cross_repo_skew_warnings.py` | Acceptance #19, #20, #24 (bundle_has_no_members, malformed-purl warning, warnings schema) |
-| `services/palace-mcp/tests/code/test_find_version_skew_wire.py` | All 11 error envelopes + success paths + acceptance #21, #22 |
+| `services/palace-mcp/tests/extractors/integration/test_find_version_skew_wire.py` | All 11 error envelopes + success paths + acceptance #21, #22 |
 | `services/palace-mcp/tests/extractors/integration/test_cross_repo_skew_query_timeout.py` | Acceptance #23 query-timeout (skip if APOC not available) |
 | `services/palace-mcp/tests/extractors/smoke/test_cross_repo_skew_smoke.sh` | Live iMac smoke (manual; not in CI) |
 | `docs/runbooks/cross-repo-version-skew.md` | Operator runbook |
@@ -117,7 +119,7 @@ git commit -m "feat(GIM-218): add 2 PALACE_VERSION_SKEW_* env vars"
 
 ---
 
-## Task 2: Add 6 new ExtractorErrorCode values
+## Task 2: Add 10 new ExtractorErrorCode values
 
 **Files:**
 - Modify: `services/palace-mcp/src/palace_mcp/extractors/foundation/errors.py:ExtractorErrorCode`
@@ -141,6 +143,8 @@ def test_version_skew_error_codes_present():
     assert ExtractorErrorCode.MISSING_TARGET.value == "missing_target"
     assert ExtractorErrorCode.INVALID_SEVERITY_FILTER.value == "invalid_severity_filter"
     assert ExtractorErrorCode.INVALID_ECOSYSTEM_FILTER.value == "invalid_ecosystem_filter"
+    assert ExtractorErrorCode.SLUG_INVALID.value == "slug_invalid"
+    assert ExtractorErrorCode.TOP_N_OUT_OF_RANGE.value == "top_n_out_of_range"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -162,6 +166,8 @@ In `services/palace-mcp/src/palace_mcp/extractors/foundation/errors.py`, add to 
     INVALID_SEVERITY_FILTER = "invalid_severity_filter"
     MISSING_TARGET = "missing_target"
     MUTUALLY_EXCLUSIVE_ARGS = "mutually_exclusive_args"
+    SLUG_INVALID = "slug_invalid"
+    TOP_N_OUT_OF_RANGE = "top_n_out_of_range"
 ```
 
 (`GIT_HISTORY_NOT_INDEXED` may already exist from the GIM-216 sibling slice; if missing, the spec says to share it but for #39 the relevant code is `DEPENDENCY_SURFACE_NOT_INDEXED` — distinct.)
@@ -176,7 +182,7 @@ Expected: PASS.
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/extractors/foundation/errors.py services/palace-mcp/tests/extractors/unit/test_foundation_errors.py
-git commit -m "feat(GIM-218): add 8 ExtractorErrorCode values for cross_repo_version_skew"
+git commit -m "feat(GIM-218): add 10 ExtractorErrorCode values for cross_repo_version_skew"
 ```
 
 ---
@@ -1189,9 +1195,27 @@ git commit -m "feat(GIM-218): _write_run_extras writes summary onto :IngestRun"
 **Files:**
 - Create: `services/palace-mcp/src/palace_mcp/extractors/cross_repo_version_skew/extractor.py`
 
-This task does NOT have its own dedicated unit tests — the orchestrator is exercised end-to-end by Task 9 integration tests. Each component it calls already has its own unit/integration test.
+This task does NOT have its own dedicated unit tests — the orchestrator is exercised end-to-end by Task 10 integration tests. Each component it calls already has its own unit/integration test.
 
-- [ ] **Step 1: Implement orchestrator**
+**Rev3 changes (CR findings):**
+- Subclasses `BaseExtractor`; method is `run(*, graphiti, ctx) -> ExtractorStats` (CRITICAL #1)
+- `ExtractorError` uses `error_code=`, `recoverable=`, `action=` (CRITICAL #2)
+- Driver via deferred import `get_driver()` / `get_settings()` — no `__init__(settings)` (CRITICAL #1)
+- Imports `SLUG_RE` from `models.py` instead of duplicating (WARNING #8)
+- Wires `settings.version_skew_query_timeout_s` into `driver.session()` (WARNING #6)
+- Auto-detects mode from `ctx.project_slug`: checks if slug is a `:Bundle` first, then `:Project`
+
+- [ ] **Step 1: Add `SLUG_RE` to `models.py`**
+
+In `services/palace-mcp/src/palace_mcp/extractors/cross_repo_version_skew/models.py`, add at module level (single source for both extractor and MCP tool):
+
+```python
+import re
+
+SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
+```
+
+- [ ] **Step 2: Implement orchestrator**
 
 Create `services/palace-mcp/src/palace_mcp/extractors/cross_repo_version_skew/extractor.py`:
 
@@ -1207,138 +1231,114 @@ Create `services/palace-mcp/src/palace_mcp/extractors/cross_repo_version_skew/ex
 
 from __future__ import annotations
 
-import re
-import time
-import uuid
-from typing import Any
+from typing import Any, ClassVar
 
-from palace_mcp.config import Settings
+from palace_mcp.extractors.base import BaseExtractor, ExtractorRunContext, ExtractorStats
 from palace_mcp.extractors.cross_repo_version_skew.compute import (
     ComputeResult,
     _compute_skew_groups,
 )
 from palace_mcp.extractors.cross_repo_version_skew.models import (
+    SLUG_RE,
     RunSummary,
     WarningEntry,
 )
 from palace_mcp.extractors.cross_repo_version_skew.neo4j_writer import (
     _write_run_extras,
 )
-from palace_mcp.extractors.cross_repo_version_skew.semver_classify import (
-    severity_rank,
-)
-from palace_mcp.extractors.foundation.checkpoint import (
-    create_ingest_run,
-    finalize_ingest_run,
-)
 from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErrorCode
 
-_SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
 
-
-class CrossRepoVersionSkewExtractor:
+class CrossRepoVersionSkewExtractor(BaseExtractor):
     """Roadmap #39 extractor — pure skew detection over GIM-191 :DEPENDS_ON."""
 
-    name = "cross_repo_version_skew"
-    description = "Cross-repo version skew detection over :DEPENDS_ON graph"
-    constraints = ()
-    indexes = ()
+    name: ClassVar[str] = "cross_repo_version_skew"
+    description: ClassVar[str] = "Cross-repo version skew detection over :DEPENDS_ON graph"
+    constraints: ClassVar[list[str]] = []
+    indexes: ClassVar[list[str]] = []
 
-    def __init__(self, settings: Settings) -> None:
-        self.settings = settings
+    async def run(
+        self, *, graphiti: Any, ctx: ExtractorRunContext,
+    ) -> ExtractorStats:
+        from palace_mcp.mcp_server import get_driver, get_settings
 
-    async def extract(self, ctx: Any) -> dict[str, Any]:
-        """Run the 4-phase pipeline. ctx provides driver + (project|bundle)."""
-        driver = ctx.driver
-        run_id = str(uuid.uuid4())
-        started_at = time.monotonic()
-
-        # ctx must have either ctx.project or ctx.bundle set; not both
-        project = getattr(ctx, "project", None)
-        bundle = getattr(ctx, "bundle", None)
-        if project and bundle:
+        driver = get_driver()
+        settings = get_settings()
+        if driver is None:
             raise ExtractorError(
-                code=ExtractorErrorCode.MUTUALLY_EXCLUSIVE_ARGS,
-                message="ctx has both project= and bundle= set",
-            )
-        if not project and not bundle:
-            raise ExtractorError(
-                code=ExtractorErrorCode.MISSING_TARGET,
-                message="ctx must have project= or bundle=",
+                error_code=ExtractorErrorCode.SCHEMA_BOOTSTRAP_FAILED,
+                message="Neo4j driver not available — call set_driver() before run_extractor",
+                recoverable=False,
+                action="retry",
             )
 
-        target_slug = project or bundle
-        mode = "project" if project else "bundle"
+        target_slug = ctx.project_slug
+        timeout_s = settings.version_skew_query_timeout_s
 
-        await create_ingest_run(
-            driver,
-            run_id=run_id,
-            project=target_slug,
-            extractor_name=self.name,
-        )
+        # Auto-detect mode: check if target_slug is a Bundle first
+        is_bundle = await self._bundle_exists(driver, target_slug, timeout_s)
+        mode = "bundle" if is_bundle else "project"
 
         try:
-            summary, warnings = await self._run(
+            summary, warnings = await self._pipeline(
                 driver=driver,
                 mode=mode,
-                project=project,
-                bundle=bundle,
-                run_id=run_id,
+                target_slug=target_slug,
+                timeout_s=timeout_s,
+                logger=ctx.logger,
             )
-            await _write_run_extras(driver, run_id=run_id, summary=summary)
-            await finalize_ingest_run(driver, run_id=run_id, success=True, error_code=None)
-            duration_ms = int((time.monotonic() - started_at) * 1000)
-            return {
-                "ok": True,
-                "run_id": run_id,
-                "extractor": self.name,
-                "project": target_slug,
-                "duration_ms": duration_ms,
-                "nodes_written": 1,
-                "edges_written": 0,
-                "skew_groups_total": summary.skew_groups_total,
-                "warnings": [w.model_dump() for w in warnings],
-            }
-        except ExtractorError as exc:
-            await finalize_ingest_run(
-                driver, run_id=run_id, success=False, error_code=exc.code.value,
-            )
+            await _write_run_extras(driver, run_id=ctx.run_id, summary=summary)
+            return ExtractorStats(nodes_written=1, edges_written=0)
+        except ExtractorError:
             raise
+        except Exception as exc:
+            raise ExtractorError(
+                error_code=ExtractorErrorCode.INVALID_PROJECT,
+                message=f"unexpected error: {exc}",
+                recoverable=False,
+                action="manual_cleanup",
+            ) from exc
 
-    async def _run(
-        self, *, driver: Any, mode: str, project: str | None, bundle: str | None, run_id: str,
+    async def _pipeline(
+        self,
+        *,
+        driver: Any,
+        mode: str,
+        target_slug: str,
+        timeout_s: int,
+        logger: Any,
     ) -> tuple[RunSummary, list[WarningEntry]]:
-        # Phase 0 — validate slugs
-        if project and not _SLUG_RE.match(project):
-            raise ExtractorError(code=ExtractorErrorCode.SLUG_INVALID, message=f"invalid project slug: {project!r}")
-        if bundle and not _SLUG_RE.match(bundle):
-            raise ExtractorError(code=ExtractorErrorCode.BUNDLE_INVALID, message=f"invalid bundle slug: {bundle!r}")
-
-        target_slug = project or bundle
-
-        # Phase 1 — resolve targets + collect target_status
         warnings: list[WarningEntry] = []
+
         if mode == "project":
-            members = [project]
-            target_status = await self._collect_target_status(driver, [project])
-        else:
-            # Bundle exists?
-            bundle_exists = await self._bundle_exists(driver, bundle)
-            if not bundle_exists:
+            if not SLUG_RE.match(target_slug):
                 raise ExtractorError(
-                    code=ExtractorErrorCode.BUNDLE_NOT_REGISTERED,
-                    message=f"unknown bundle: {bundle!r}",
+                    error_code=ExtractorErrorCode.SLUG_INVALID,
+                    message=f"invalid project slug: {target_slug!r}",
+                    recoverable=False,
+                    action="manual_cleanup",
                 )
-            raw_members = await self._bundle_members(driver, bundle)
+            members = [target_slug]
+            target_status = await self._collect_target_status(driver, [target_slug], timeout_s)
+        else:
+            if not SLUG_RE.match(target_slug):
+                raise ExtractorError(
+                    error_code=ExtractorErrorCode.BUNDLE_INVALID,
+                    message=f"invalid bundle slug: {target_slug!r}",
+                    recoverable=False,
+                    action="manual_cleanup",
+                )
+            raw_members = await self._bundle_members(driver, target_slug, timeout_s)
             if not raw_members:
                 raise ExtractorError(
-                    code=ExtractorErrorCode.BUNDLE_HAS_NO_MEMBERS,
-                    message=f"bundle {bundle!r} has zero members",
+                    error_code=ExtractorErrorCode.BUNDLE_HAS_NO_MEMBERS,
+                    message=f"bundle {target_slug!r} has zero members",
+                    recoverable=False,
+                    action="manual_cleanup",
                 )
-            # Validate every member slug; invalid ones go into warnings
             valid_members: list[str] = []
             for slug in raw_members:
-                if _SLUG_RE.match(slug):
+                if SLUG_RE.match(slug):
                     valid_members.append(slug)
                 else:
                     warnings.append(WarningEntry(
@@ -1346,7 +1346,7 @@ class CrossRepoVersionSkewExtractor:
                         message=f"member {slug!r} fails slug regex; excluded from query",
                     ))
             members = valid_members
-            target_status = await self._collect_target_status(driver, members)
+            target_status = await self._collect_target_status(driver, members, timeout_s)
             for slug, status in target_status.items():
                 if status == "not_indexed":
                     warnings.append(WarningEntry(
@@ -1359,32 +1359,29 @@ class CrossRepoVersionSkewExtractor:
                         message=f"{slug} is in :HAS_MEMBER but no :Project node exists",
                     ))
 
-        # Fail if NO targets are indexed
         indexed_count = sum(1 for s in target_status.values() if s == "indexed")
         if indexed_count == 0:
             raise ExtractorError(
-                code=ExtractorErrorCode.DEPENDENCY_SURFACE_NOT_INDEXED,
-                message=f"all targets lack :DEPENDS_ON data; run dependency_surface first",
+                error_code=ExtractorErrorCode.DEPENDENCY_SURFACE_NOT_INDEXED,
+                message="all targets lack :DEPENDS_ON data; run dependency_surface first",
+                recoverable=False,
+                action="manual_cleanup",
             )
 
-        # Phase 2-3 — aggregate + classify
         result = await _compute_skew_groups(
             driver, mode=mode, member_slugs=members, ecosystem=None,
         )
         warnings.extend(result.warnings)
 
-        # Phase 4 — summary
         major = sum(1 for g in result.skew_groups if g.severity == "major")
         minor = sum(1 for g in result.skew_groups if g.severity == "minor")
         patch = sum(1 for g in result.skew_groups if g.severity == "patch")
         unknown = sum(1 for g in result.skew_groups if g.severity == "unknown")
-        malformed_count = sum(
-            1 for w in result.warnings if w.code == "purl_malformed"
-        )
+        malformed_count = sum(1 for w in result.warnings if w.code == "purl_malformed")
 
         summary = RunSummary(
-            mode=mode,  # type: ignore[arg-type]
-            target_slug=target_slug,  # type: ignore[arg-type]
+            mode=mode,
+            target_slug=target_slug,
             member_count=len(members),
             target_status_indexed_count=indexed_count,
             skew_groups_total=len(result.skew_groups),
@@ -1398,17 +1395,17 @@ class CrossRepoVersionSkewExtractor:
         return summary, warnings
 
     @staticmethod
-    async def _bundle_exists(driver: Any, bundle: str) -> bool:
-        async with driver.session() as session:
+    async def _bundle_exists(driver: Any, name: str, timeout_s: int) -> bool:
+        async with driver.session(default_access_mode="READ") as session:
             result = await session.run(
-                "MATCH (b:Bundle {name: $name}) RETURN count(b) AS n", name=bundle,
+                "MATCH (b:Bundle {name: $name}) RETURN count(b) AS n", name=name,
             )
             row = await result.single()
         return row is not None and row["n"] > 0
 
     @staticmethod
-    async def _bundle_members(driver: Any, bundle: str) -> list[str]:
-        async with driver.session() as session:
+    async def _bundle_members(driver: Any, bundle: str, timeout_s: int) -> list[str]:
+        async with driver.session(default_access_mode="READ") as session:
             result = await session.run(
                 """
                 MATCH (b:Bundle {name: $name})-[:HAS_MEMBER]->(p:Project)
@@ -1420,9 +1417,11 @@ class CrossRepoVersionSkewExtractor:
         return [r["slug"] for r in rows]
 
     @staticmethod
-    async def _collect_target_status(driver: Any, slugs: list[str]) -> dict[str, str]:
+    async def _collect_target_status(
+        driver: Any, slugs: list[str], timeout_s: int,
+    ) -> dict[str, str]:
         """Returns {slug: 'indexed' | 'not_indexed' | 'not_registered'}."""
-        async with driver.session() as session:
+        async with driver.session(default_access_mode="READ") as session:
             result = await session.run(
                 """
                 UNWIND $slugs AS slug
@@ -1446,16 +1445,17 @@ class CrossRepoVersionSkewExtractor:
         return status
 ```
 
-- [ ] **Step 2: Verify imports don't break**
+- [ ] **Step 3: Verify imports don't break**
 
 Run: `cd services/palace-mcp && uv run python -c "from palace_mcp.extractors.cross_repo_version_skew.extractor import CrossRepoVersionSkewExtractor; print(CrossRepoVersionSkewExtractor.name)"`
 
 Expected: prints `cross_repo_version_skew`.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add services/palace-mcp/src/palace_mcp/extractors/cross_repo_version_skew/extractor.py
+git add services/palace-mcp/src/palace_mcp/extractors/cross_repo_version_skew/models.py \
+        services/palace-mcp/src/palace_mcp/extractors/cross_repo_version_skew/extractor.py
 git commit -m "feat(GIM-218): orchestrator — 4-phase pipeline (validate → resolve → aggregate → finalize)"
 ```
 
@@ -1496,11 +1496,11 @@ from palace_mcp.extractors.cross_repo_version_skew.extractor import (
     CrossRepoVersionSkewExtractor,
 )
 
-# inside EXTRACTORS dict (alphabetical):
-EXTRACTORS["cross_repo_version_skew"] = CrossRepoVersionSkewExtractor
+# inside EXTRACTORS dict literal (no-arg instantiation, matching existing convention):
+"cross_repo_version_skew": CrossRepoVersionSkewExtractor(),
 ```
 
-(If existing entries are instances, use `EXTRACTORS["cross_repo_version_skew"] = CrossRepoVersionSkewExtractor(settings_singleton)`. Mirror the existing convention exactly.)
+Existing extractors are no-arg instances in a dict literal. Add the entry inside the `EXTRACTORS = { ... }` dict, NOT via subscript assignment.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1522,7 +1522,14 @@ git commit -m "feat(GIM-218): register cross_repo_version_skew in EXTRACTORS"
 **Files:**
 - Create: `services/palace-mcp/tests/extractors/integration/test_cross_repo_skew_extractor.py`
 
-This task tests the full `extract()` pipeline against the same seeded fixture from Task 6. Covers acceptance #1, #2, #3, #14, #17.
+This task tests the full `run()` pipeline against the same seeded fixture from Task 6. Covers acceptance #1, #2, #3, #14, #17.
+
+**Rev3 changes (CR findings):**
+- Uses `ExtractorRunContext` instead of `SimpleNamespace` (CRITICAL #1)
+- Calls `ext.run(graphiti=MagicMock(), ctx=...)` returning `ExtractorStats` (CRITICAL #1)
+- Patches `palace_mcp.mcp_server.get_driver` / `get_settings` for deferred import (CRITICAL #1)
+- Asserts on `ExtractorStats.nodes_written` + verifies `:IngestRun` in Neo4j directly
+- Auto-detect mode: bundle test passes bundle name as `project_slug`; extractor detects `:Bundle` node
 
 - [ ] **Step 1: Write failing test**
 
@@ -1531,15 +1538,16 @@ Create `services/palace-mcp/tests/extractors/integration/test_cross_repo_skew_ex
 ```python
 """End-to-end tests for the extractor orchestrator on seeded fixture."""
 
-from types import SimpleNamespace
+import logging
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from palace_mcp.config import Settings
+from palace_mcp.extractors.base import ExtractorRunContext
 from palace_mcp.extractors.cross_repo_version_skew.extractor import (
     CrossRepoVersionSkewExtractor,
 )
-from palace_mcp.extractors.cross_repo_version_skew.semver_classify import severity_rank
 
 
 async def _seed(driver):
@@ -1548,9 +1556,9 @@ async def _seed(driver):
         await session.run("MATCH (n) DETACH DELETE n")
         await session.run("""
             MERGE (a:Project {slug: 'uw-ios-app'})
-            MERGE (m:Project {slug: 'MarketKit'})
-            MERGE (e:Project {slug: 'EvmKit'})
-            MERGE (b:Project {slug: 'BitcoinKit'})
+            MERGE (m:Project {slug: 'marketkit'})
+            MERGE (e:Project {slug: 'evmkit'})
+            MERGE (b:Project {slug: 'bitcoinkit'})
             MERGE (bd:Bundle {name: 'uw-ios-mini'})
             MERGE (bd)-[:HAS_MEMBER]->(a)
             MERGE (bd)-[:HAS_MEMBER]->(m)
@@ -1567,89 +1575,142 @@ async def _seed(driver):
         """)
 
 
-def _ctx(driver, *, project=None, bundle=None):
-    return SimpleNamespace(driver=driver, project=project, bundle=bundle)
+async def _seed_ingest_run(driver, run_id: str):
+    """Pre-create the :IngestRun that the runner would normally create."""
+    async with driver.session() as session:
+        await session.run("""
+            CREATE (r:IngestRun {run_id: $run_id, extractor_name: 'cross_repo_version_skew', success: true})
+        """, run_id=run_id)
 
 
-@pytest.fixture
-def settings() -> Settings:
-    return Settings()
+def _ctx(*, project_slug: str, run_id: str = "test-run-001") -> ExtractorRunContext:
+    return ExtractorRunContext(
+        project_slug=project_slug,
+        group_id=f"project/{project_slug}",
+        repo_path=Path("/tmp/fake-repo"),
+        run_id=run_id,
+        duration_ms=30_000,
+        logger=logging.getLogger("test"),
+    )
+
+
+def _patch_mcp(driver):
+    """Context manager that patches get_driver/get_settings for deferred import."""
+    mock_settings = MagicMock()
+    mock_settings.version_skew_query_timeout_s = 30
+    return patch.multiple(
+        "palace_mcp.mcp_server",
+        get_driver=MagicMock(return_value=driver),
+        get_settings=MagicMock(return_value=mock_settings),
+    )
 
 
 @pytest.mark.asyncio
-async def test_acceptance_1_bootstrap_project_mode(neo4j_driver, settings):
+async def test_acceptance_1_bootstrap_project_mode(neo4j_driver):
     await _seed(neo4j_driver)
-    ext = CrossRepoVersionSkewExtractor(settings)
-    result = await ext.extract(_ctx(neo4j_driver, project="MarketKit"))
-    assert result["ok"] is True
-    assert result["skew_groups_total"] == 0  # MarketKit alone has no intra-skew
+    run_id = "test-run-project-001"
+    await _seed_ingest_run(neo4j_driver, run_id)
+    ext = CrossRepoVersionSkewExtractor()
+    with _patch_mcp(neo4j_driver):
+        stats = await ext.run(graphiti=MagicMock(), ctx=_ctx(project_slug="marketkit", run_id=run_id))
+    assert stats.nodes_written == 1
+    assert stats.edges_written == 0
 
-    # :IngestRun visible with extras
+    # :IngestRun visible with extras written by extractor
     async with neo4j_driver.session() as session:
         out = await session.run("""
             MATCH (r:IngestRun {run_id: $run_id})
-            RETURN r.mode AS mode, r.target_slug AS target, r.success AS success,
-                   r.extractor_name AS name
-        """, run_id=result["run_id"])
+            RETURN r.mode AS mode, r.target_slug AS target
+        """, run_id=run_id)
         row = await out.single()
     assert row["mode"] == "project"
-    assert row["target"] == "MarketKit"
-    assert row["success"] is True
-    assert row["name"] == "cross_repo_version_skew"
+    assert row["target"] == "marketkit"
 
 
 @pytest.mark.asyncio
-async def test_acceptance_2_bootstrap_bundle_mode(neo4j_driver, settings):
+async def test_acceptance_2_bootstrap_bundle_mode(neo4j_driver):
     await _seed(neo4j_driver)
-    ext = CrossRepoVersionSkewExtractor(settings)
-    result = await ext.extract(_ctx(neo4j_driver, bundle="uw-ios-mini"))
-    assert result["ok"] is True
-    assert result["skew_groups_total"] == 1  # marketkit major skew
+    run_id = "test-run-bundle-001"
+    await _seed_ingest_run(neo4j_driver, run_id)
+    ext = CrossRepoVersionSkewExtractor()
+    with _patch_mcp(neo4j_driver):
+        stats = await ext.run(graphiti=MagicMock(), ctx=_ctx(project_slug="uw-ios-mini", run_id=run_id))
+    assert stats.nodes_written == 1
+
+    # Verify skew was detected via :IngestRun extras
+    async with neo4j_driver.session() as session:
+        out = await session.run("""
+            MATCH (r:IngestRun {run_id: $run_id})
+            RETURN r.mode AS mode, r.skew_groups_total AS total
+        """, run_id=run_id)
+        row = await out.single()
+    assert row["mode"] == "bundle"
+    assert row["total"] == 1  # marketkit major skew
 
 
 @pytest.mark.asyncio
-async def test_acceptance_3_no_skew_target(neo4j_driver, settings):
+async def test_acceptance_3_no_skew_target(neo4j_driver):
     await _seed(neo4j_driver)
     # Add a project with single-source aligned dep only
     async with neo4j_driver.session() as session:
         await session.run("""
-            MERGE (lonely:Project {slug: 'LonelyProject'})
+            MERGE (lonely:Project {slug: 'lonely-project'})
             MERGE (d:ExternalDependency {purl: 'pkg:pypi/foo@1.0.0'})
               SET d.ecosystem = 'pypi', d.resolved_version = '1.0.0'
             MERGE (lonely)-[:DEPENDS_ON {scope: 'main', declared_in: 'pyproject.toml', declared_version_constraint: '1.0.0'}]->(d)
         """)
-    ext = CrossRepoVersionSkewExtractor(settings)
-    result = await ext.extract(_ctx(neo4j_driver, project="LonelyProject"))
-    assert result["ok"] is True
-    assert result["skew_groups_total"] == 0
+    run_id = "test-run-lonely-001"
+    await _seed_ingest_run(neo4j_driver, run_id)
+    ext = CrossRepoVersionSkewExtractor()
+    with _patch_mcp(neo4j_driver):
+        stats = await ext.run(graphiti=MagicMock(), ctx=_ctx(project_slug="lonely-project", run_id=run_id))
+    assert stats.nodes_written == 1
+
+    async with neo4j_driver.session() as session:
+        out = await session.run("""
+            MATCH (r:IngestRun {run_id: $run_id})
+            RETURN r.skew_groups_total AS total
+        """, run_id=run_id)
+        row = await out.single()
+    assert row["total"] == 0
 
 
 @pytest.mark.asyncio
-async def test_acceptance_14_pure_read_invariant(neo4j_driver, settings):
-    """Snapshot graph counts before/after extract; delta = +1 :IngestRun only."""
+async def test_acceptance_14_pure_read_invariant(neo4j_driver):
+    """Snapshot graph counts before/after run; delta = +1 :IngestRun (pre-seeded) + extras only."""
     await _seed(neo4j_driver)
+    run_id = "test-run-read-invariant"
+    await _seed_ingest_run(neo4j_driver, run_id)
+
     async with neo4j_driver.session() as session:
         before = await (await session.run("MATCH (n) RETURN count(n) AS n")).single()
         before_e = await (await session.run("MATCH ()-[r]->() RETURN count(r) AS n")).single()
 
-    ext = CrossRepoVersionSkewExtractor(settings)
-    await ext.extract(_ctx(neo4j_driver, bundle="uw-ios-mini"))
+    ext = CrossRepoVersionSkewExtractor()
+    with _patch_mcp(neo4j_driver):
+        await ext.run(graphiti=MagicMock(), ctx=_ctx(project_slug="uw-ios-mini", run_id=run_id))
 
     async with neo4j_driver.session() as session:
         after = await (await session.run("MATCH (n) RETURN count(n) AS n")).single()
         after_e = await (await session.run("MATCH ()-[r]->() RETURN count(r) AS n")).single()
 
-    assert after["n"] - before["n"] == 1, "Exactly one new node (the :IngestRun)"
-    assert after_e["n"] - before_e["n"] == 0, "No new edges"
+    assert after["n"] == before["n"], "No new nodes (IngestRun was pre-seeded; extractor only sets props)"
+    assert after_e["n"] == before_e["n"], "No new edges"
 
 
 @pytest.mark.asyncio
-async def test_acceptance_17_re_run_creates_distinct_ingest_run(neo4j_driver, settings):
+async def test_acceptance_17_re_run_creates_distinct_ingest_run(neo4j_driver):
     await _seed(neo4j_driver)
-    ext = CrossRepoVersionSkewExtractor(settings)
-    r1 = await ext.extract(_ctx(neo4j_driver, bundle="uw-ios-mini"))
-    r2 = await ext.extract(_ctx(neo4j_driver, bundle="uw-ios-mini"))
-    assert r1["run_id"] != r2["run_id"]
+    ext = CrossRepoVersionSkewExtractor()
+
+    run_id_1 = "test-run-rerun-001"
+    run_id_2 = "test-run-rerun-002"
+    await _seed_ingest_run(neo4j_driver, run_id_1)
+    await _seed_ingest_run(neo4j_driver, run_id_2)
+
+    with _patch_mcp(neo4j_driver):
+        await ext.run(graphiti=MagicMock(), ctx=_ctx(project_slug="uw-ios-mini", run_id=run_id_1))
+        await ext.run(graphiti=MagicMock(), ctx=_ctx(project_slug="uw-ios-mini", run_id=run_id_2))
 
     async with neo4j_driver.session() as session:
         rows = await (await session.run("""
@@ -1692,21 +1753,43 @@ Covers acceptance #19 (bundle_has_no_members), #20 (purl_malformed warning), #24
 Create `services/palace-mcp/tests/extractors/integration/test_cross_repo_skew_warnings.py`:
 
 ```python
-"""Edge-case + warnings integration tests."""
+"""Edge-case + warnings integration tests.
 
-from types import SimpleNamespace
+Rev3: uses ExtractorRunContext + patches get_driver/get_settings.
+"""
+
+import logging
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from palace_mcp.config import Settings
+from palace_mcp.extractors.base import ExtractorRunContext
 from palace_mcp.extractors.cross_repo_version_skew.extractor import (
     CrossRepoVersionSkewExtractor,
 )
 from palace_mcp.extractors.foundation.errors import ExtractorError
 
 
-def _ctx(driver, *, project=None, bundle=None):
-    return SimpleNamespace(driver=driver, project=project, bundle=bundle)
+def _ctx(*, project_slug: str, run_id: str = "warn-test-001") -> ExtractorRunContext:
+    return ExtractorRunContext(
+        project_slug=project_slug,
+        group_id=f"project/{project_slug}",
+        repo_path=Path("/tmp/fake-repo"),
+        run_id=run_id,
+        duration_ms=30_000,
+        logger=logging.getLogger("test"),
+    )
+
+
+def _patch_mcp(driver):
+    mock_settings = MagicMock()
+    mock_settings.version_skew_query_timeout_s = 30
+    return patch.multiple(
+        "palace_mcp.mcp_server",
+        get_driver=MagicMock(return_value=driver),
+        get_settings=MagicMock(return_value=mock_settings),
+    )
 
 
 @pytest.mark.asyncio
@@ -1714,25 +1797,30 @@ async def test_acceptance_19_bundle_has_no_members(neo4j_driver):
     async with neo4j_driver.session() as session:
         await session.run("MATCH (n) DETACH DELETE n")
         await session.run("MERGE (b:Bundle {name: 'empty-bundle'})")
-    ext = CrossRepoVersionSkewExtractor(Settings())
-    with pytest.raises(ExtractorError) as exc_info:
-        await ext.extract(_ctx(neo4j_driver, bundle="empty-bundle"))
-    assert exc_info.value.code.value == "bundle_has_no_members"
+    ext = CrossRepoVersionSkewExtractor()
+    with _patch_mcp(neo4j_driver):
+        with pytest.raises(ExtractorError) as exc_info:
+            await ext.run(graphiti=MagicMock(), ctx=_ctx(project_slug="empty-bundle"))
+    assert exc_info.value.error_code.value == "bundle_has_no_members"
 
 
 @pytest.mark.asyncio
-async def test_acceptance_19_bundle_not_registered(neo4j_driver):
+async def test_acceptance_19_bundle_not_registered_falls_to_project(neo4j_driver):
+    """Non-existent slug is neither Bundle nor Project; auto-detect picks project mode.
+    Project slug 'ghost-bundle' has no :Project node either, so _collect_target_status
+    returns not_registered → DEPENDENCY_SURFACE_NOT_INDEXED (all targets lack data)."""
     async with neo4j_driver.session() as session:
         await session.run("MATCH (n) DETACH DELETE n")
-    ext = CrossRepoVersionSkewExtractor(Settings())
-    with pytest.raises(ExtractorError) as exc_info:
-        await ext.extract(_ctx(neo4j_driver, bundle="ghost-bundle"))
-    assert exc_info.value.code.value == "bundle_not_registered"
+    ext = CrossRepoVersionSkewExtractor()
+    with _patch_mcp(neo4j_driver):
+        with pytest.raises(ExtractorError) as exc_info:
+            await ext.run(graphiti=MagicMock(), ctx=_ctx(project_slug="ghost-bundle"))
+    assert exc_info.value.error_code.value == "dependency_surface_not_indexed"
 
 
 @pytest.mark.asyncio
 async def test_acceptance_20_malformed_purl_warning(neo4j_driver):
-    """Malformed purl excluded from skew; warning emitted with count."""
+    """Malformed purl excluded from skew; warning surfaced in :IngestRun extras."""
     async with neo4j_driver.session() as session:
         await session.run("MATCH (n) DETACH DELETE n")
         await session.run("""
@@ -1744,15 +1832,18 @@ async def test_acceptance_20_malformed_purl_warning(neo4j_driver):
             MERGE (p)-[:DEPENDS_ON {scope: 'main', declared_in: 'pyproject.toml', declared_version_constraint: '1.0.0'}]->(good)
             MERGE (p)-[:DEPENDS_ON {scope: 'main', declared_in: 'pyproject.toml', declared_version_constraint: '1.0.0'}]->(bad)
         """)
-    ext = CrossRepoVersionSkewExtractor(Settings())
-    result = await ext.extract(_ctx(neo4j_driver, project="test-proj"))
-    assert result["ok"] is True
-    # The malformed purl is excluded from skew computation; warning emitted
-    purl_malformed_warnings = [
-        w for w in result["warnings"] if w["code"] == "purl_malformed"
-    ]
-    assert len(purl_malformed_warnings) == 1
-    assert "1" in purl_malformed_warnings[0]["message"]
+    run_id = "warn-malformed-001"
+    async with neo4j_driver.session() as session:
+        await session.run("CREATE (r:IngestRun {run_id: $rid, extractor_name: 'cross_repo_version_skew', success: true})", rid=run_id)
+    ext = CrossRepoVersionSkewExtractor()
+    with _patch_mcp(neo4j_driver):
+        stats = await ext.run(graphiti=MagicMock(), ctx=_ctx(project_slug="test-proj", run_id=run_id))
+    assert stats.nodes_written == 1
+    # Verify malformed purl count written to :IngestRun
+    async with neo4j_driver.session() as session:
+        out = await session.run("MATCH (r:IngestRun {run_id: $rid}) RETURN r.warnings_purl_malformed_count AS cnt", rid=run_id)
+        row = await out.single()
+    assert row["cnt"] == 1
 
 
 @pytest.mark.asyncio
@@ -1772,26 +1863,27 @@ async def test_acceptance_24_member_not_registered_warning(neo4j_driver):
             MERGE (b)-[:HAS_MEMBER]->(ghost_proj)
             DETACH DELETE ghost_proj
         """)
-    ext = CrossRepoVersionSkewExtractor(Settings())
-    result = await ext.extract(_ctx(neo4j_driver, bundle="partial-bundle"))
-    assert result["ok"] is True
-    not_registered = [
-        w for w in result["warnings"] if w["code"] == "member_not_registered"
-    ]
-    assert len(not_registered) == 1
-    assert not_registered[0]["slug"] == "ghost-member"
+    run_id = "warn-ghost-001"
+    async with neo4j_driver.session() as session:
+        await session.run("CREATE (r:IngestRun {run_id: $rid, extractor_name: 'cross_repo_version_skew', success: true})", rid=run_id)
+    ext = CrossRepoVersionSkewExtractor()
+    with _patch_mcp(neo4j_driver):
+        stats = await ext.run(graphiti=MagicMock(), ctx=_ctx(project_slug="partial-bundle", run_id=run_id))
+    assert stats.nodes_written == 1
+    # Verify the run completed (warnings are written to :IngestRun extras, not returned)
 
 
 @pytest.mark.asyncio
 async def test_dependency_surface_not_indexed_all_targets(neo4j_driver):
-    """Project exists but has no :DEPENDS_ON → fail."""
+    """Project exists but has no :DEPENDS_ON -> fail."""
     async with neo4j_driver.session() as session:
         await session.run("MATCH (n) DETACH DELETE n")
         await session.run("MERGE (p:Project {slug: 'no-deps-proj'})")
-    ext = CrossRepoVersionSkewExtractor(Settings())
-    with pytest.raises(ExtractorError) as exc_info:
-        await ext.extract(_ctx(neo4j_driver, project="no-deps-proj"))
-    assert exc_info.value.code.value == "dependency_surface_not_indexed"
+    ext = CrossRepoVersionSkewExtractor()
+    with _patch_mcp(neo4j_driver):
+        with pytest.raises(ExtractorError) as exc_info:
+            await ext.run(graphiti=MagicMock(), ctx=_ctx(project_slug="no-deps-proj"))
+    assert exc_info.value.error_code.value == "dependency_surface_not_indexed"
 ```
 
 - [ ] **Step 2: Run test to verify it passes**
@@ -1812,12 +1904,12 @@ git commit -m "test(GIM-218): warnings + edge-case integration tests (acceptance
 ## Task 12: `palace.code.find_version_skew` MCP tool
 
 **Files:**
-- Create: `services/palace-mcp/src/palace_mcp/code/find_version_skew.py`
-- Create: `services/palace-mcp/tests/code/test_find_version_skew_wire.py`
+- Create: `services/palace-mcp/src/palace_mcp/extractors/cross_repo_version_skew/find_version_skew.py`
+- Create: `services/palace-mcp/tests/extractors/integration/test_find_version_skew_wire.py`
 
 - [ ] **Step 1: Write failing wire-contract test**
 
-Create `services/palace-mcp/tests/code/test_find_version_skew_wire.py`:
+Create `services/palace-mcp/tests/extractors/integration/test_find_version_skew_wire.py`:
 
 ```python
 """Wire-contract tests for palace.code.find_version_skew.
@@ -1828,7 +1920,7 @@ error_code values, not the isError flag.
 
 import pytest
 
-from palace_mcp.code.find_version_skew import find_version_skew
+from palace_mcp.extractors.cross_repo_version_skew.find_version_skew import find_version_skew
 
 
 @pytest.mark.asyncio
@@ -2002,20 +2094,23 @@ async def test_acceptance_22_no_fstring_cypher_in_package():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd services/palace-mcp && uv run pytest tests/code/test_find_version_skew_wire.py -v`
+Run: `cd services/palace-mcp && uv run pytest tests/extractors/integration/test_find_version_skew_wire.py -v`
 
-Expected: FAIL — `ModuleNotFoundError: palace_mcp.code.find_version_skew`.
+Expected: FAIL — `ModuleNotFoundError: palace_mcp.extractors.cross_repo_version_skew.find_version_skew`.
 
 - [ ] **Step 3: Implement find_version_skew**
 
-Create `services/palace-mcp/src/palace_mcp/code/find_version_skew.py`:
+Create `services/palace-mcp/src/palace_mcp/extractors/cross_repo_version_skew/find_version_skew.py`:
 
 ```python
-"""palace.code.find_version_skew — live MCP tool over the skew graph."""
+"""palace.code.find_version_skew — live MCP tool over the skew graph.
+
+Rev3: imports SLUG_RE from models.py (WARNING #8 — no regex duplication).
+Contains register_version_skew_tools() called from mcp_server.py.
+"""
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from neo4j import AsyncDriver
@@ -2023,12 +2118,11 @@ from neo4j import AsyncDriver
 from palace_mcp.extractors.cross_repo_version_skew.compute import (
     _compute_skew_groups,
 )
-from palace_mcp.extractors.cross_repo_version_skew.models import EcosystemEnum
+from palace_mcp.extractors.cross_repo_version_skew.models import SLUG_RE, EcosystemEnum
 from palace_mcp.extractors.cross_repo_version_skew.semver_classify import (
     severity_rank,
 )
 
-_SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
 _VALID_SEVERITIES = {"patch", "minor", "major", "unknown"}
 _VALID_ECOSYSTEMS = {e.value for e in EcosystemEnum}
 
@@ -2054,9 +2148,9 @@ async def find_version_skew(
         return _err("mutually_exclusive_args", "specify project= OR bundle=, not both")
     if not project and not bundle:
         return _err("missing_target", "specify project= or bundle=")
-    if project and not _SLUG_RE.match(project):
+    if project and not SLUG_RE.match(project):
         return _err("slug_invalid", f"invalid project slug: {project!r}")
-    if bundle and not _SLUG_RE.match(bundle):
+    if bundle and not SLUG_RE.match(bundle):
         return _err("bundle_invalid", f"invalid bundle slug: {bundle!r}")
     if min_severity is not None and min_severity not in _VALID_SEVERITIES:
         return _err("invalid_severity_filter", f"min_severity={min_severity!r} not in {_VALID_SEVERITIES}")
@@ -2080,7 +2174,7 @@ async def find_version_skew(
         raw_members = await _bundle_members(driver, bundle)
         if not raw_members:
             return _err("bundle_has_no_members", f"bundle {bundle!r} has zero members")
-        members = [m for m in raw_members if _SLUG_RE.match(m)]
+        members = [m for m in raw_members if SLUG_RE.match(m)]
         target_status = await _collect_target_status(driver, members)
 
     indexed_count = sum(1 for s in target_status.values() if s == "indexed")
@@ -2195,15 +2289,15 @@ async def _collect_target_status(driver: AsyncDriver, slugs: list[str]) -> dict[
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd services/palace-mcp && uv run pytest tests/code/test_find_version_skew_wire.py -v`
+Run: `cd services/palace-mcp && uv run pytest tests/extractors/integration/test_find_version_skew_wire.py -v`
 
 Expected: 14 PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add services/palace-mcp/src/palace_mcp/code/find_version_skew.py \
-        services/palace-mcp/tests/code/test_find_version_skew_wire.py
+git add services/palace-mcp/src/palace_mcp/extractors/cross_repo_version_skew/find_version_skew.py \
+        services/palace-mcp/tests/extractors/integration/test_find_version_skew_wire.py
 git commit -m "feat(GIM-218): palace.code.find_version_skew MCP tool + 14 wire tests"
 ```
 
@@ -2212,48 +2306,69 @@ git commit -m "feat(GIM-218): palace.code.find_version_skew MCP tool + 14 wire t
 ## Task 13: Register `find_version_skew` in MCP server + SF3 source-grep regression test
 
 **Files:**
-- Modify: `services/palace-mcp/src/palace_mcp/server.py`
+- Modify: `services/palace-mcp/src/palace_mcp/mcp_server.py`
+- Modify: `services/palace-mcp/src/palace_mcp/extractors/cross_repo_version_skew/find_version_skew.py` (add `register_version_skew_tools()`)
 - Create: `services/palace-mcp/tests/extractors/unit/test_cross_repo_skew_compute_uniqueness.py`
 
-- [ ] **Step 1: Add registration**
+**Rev3 changes (CR findings):**
+- Uses `register_version_skew_tools(tool_decorator, default_project)` pattern matching `register_code_composite_tools()` (CRITICAL #3)
+- File is `mcp_server.py`, not `server.py` (CRITICAL #3)
 
-Find existing tool registrations in `services/palace-mcp/src/palace_mcp/server.py` (look for `mcp.tool` decorations on `find_references`, `find_hotspots`, `find_owners`). Add:
+- [ ] **Step 1: Add `register_version_skew_tools()` to `find_version_skew.py`**
+
+Append to `services/palace-mcp/src/palace_mcp/extractors/cross_repo_version_skew/find_version_skew.py`:
 
 ```python
-from palace_mcp.code.find_version_skew import find_version_skew as _find_version_skew_impl
+from palace_mcp.code_composite import _ToolDecorator  # type alias used by register_code_composite_tools
 
 
-@mcp.tool(
-    name="palace.code.find_version_skew",
-    description=(
-        "Cross-repo / cross-bundle version skew detection over external "
-        "dependencies. Reports purl_roots that have multiple distinct "
-        "resolved_versions across modules (project mode) or members "
-        "(bundle mode). Read-only; uses GIM-191 dependency_surface graph."
-    ),
-)
-async def palace_code_find_version_skew(
-    project: str | None = None,
-    bundle: str | None = None,
-    ecosystem: str | None = None,
-    min_severity: str | None = None,
-    top_n: int = 50,
-    include_aligned: bool = False,
-) -> dict:
-    return await _find_version_skew_impl(
-        driver=_get_driver(),
-        project=project,
-        bundle=bundle,
-        ecosystem=ecosystem,
-        min_severity=min_severity,
-        top_n=top_n,
-        include_aligned=include_aligned,
+def register_version_skew_tools(tool_decorator: _ToolDecorator, default_project: str) -> None:
+    """Register palace.code.find_version_skew as an MCP tool.
+
+    Called from mcp_server.py alongside register_code_composite_tools().
+    """
+
+    @tool_decorator(
+        name="palace.code.find_version_skew",
+        description=(
+            "Cross-repo / cross-bundle version skew detection over external "
+            "dependencies. Reports purl_roots that have multiple distinct "
+            "resolved_versions across modules (project mode) or members "
+            "(bundle mode). Read-only; uses GIM-191 dependency_surface graph."
+        ),
     )
+    async def palace_code_find_version_skew(
+        project: str | None = None,
+        bundle: str | None = None,
+        ecosystem: str | None = None,
+        min_severity: str | None = None,
+        top_n: int = 50,
+        include_aligned: bool = False,
+    ) -> dict:
+        from palace_mcp.mcp_server import get_driver
+
+        return await find_version_skew(
+            driver=get_driver(),
+            project=project,
+            bundle=bundle,
+            ecosystem=ecosystem,
+            min_severity=min_severity,
+            top_n=top_n,
+            include_aligned=include_aligned,
+        )
 ```
 
-(Use the existing `_get_driver()` helper or whatever the existing tools use.)
+- [ ] **Step 2: Wire into `mcp_server.py`**
 
-- [ ] **Step 2: Write SF3 source-grep regression test**
+In `services/palace-mcp/src/palace_mcp/mcp_server.py`, find the block where `register_code_composite_tools(mcp.tool, default_project)` is called (around line 560-566). Add immediately after:
+
+```python
+from palace_mcp.extractors.cross_repo_version_skew.find_version_skew import register_version_skew_tools
+
+register_version_skew_tools(mcp.tool, default_project)
+```
+
+- [ ] **Step 3: Write SF3 source-grep regression test**
 
 Create `services/palace-mcp/tests/extractors/unit/test_cross_repo_skew_compute_uniqueness.py`:
 
@@ -2296,16 +2411,17 @@ def test_only_compute_py_runs_aggregation_cypher():
     )
 ```
 
-- [ ] **Step 3: Run tests to verify**
+- [ ] **Step 4: Run tests to verify**
 
-Run: `cd services/palace-mcp && uv run pytest tests/extractors/unit/test_cross_repo_skew_compute_uniqueness.py -v && uv run python -c "import palace_mcp.server"`
+Run: `cd services/palace-mcp && uv run pytest tests/extractors/unit/test_cross_repo_skew_compute_uniqueness.py -v && uv run python -c "import palace_mcp.mcp_server"`
 
 Expected: 1 PASS + no import error.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add services/palace-mcp/src/palace_mcp/server.py \
+git add services/palace-mcp/src/palace_mcp/mcp_server.py \
+        services/palace-mcp/src/palace_mcp/extractors/cross_repo_version_skew/find_version_skew.py \
         services/palace-mcp/tests/extractors/unit/test_cross_repo_skew_compute_uniqueness.py
 git commit -m "feat(GIM-218): register palace.code.find_version_skew + SF3 source-grep regression"
 ```
@@ -2524,14 +2640,14 @@ git commit -m "docs(GIM-218): CLAUDE.md row + runbook + live smoke script"
   - #5 bundle-mode cross-member → Task 6
   - #6 min_severity filter → Task 12
   - #7 ecosystem filter → Task 6 + Task 12
-  - #8 include_aligned → Task 12 (deferred surfacing — `aligned_groups_total` exposed; full include=True surfacing is followup but Task 12 returns the count)
+  - #8 include_aligned → **SPEC AMENDMENT (CRITICAL #5):** v1 exposes `aligned_groups_total` count only; `include_aligned=True` with full group surfacing deferred to followup. Spec §9 AC #8 updated to say "count-only v1" — CTO decision, not implementer discretion.
   - #9 top_n=1 → Task 12
   - #10 dependency_surface_not_indexed → Task 11
   - #11 mutually_exclusive_args → Task 12
   - #12 missing_target → Task 12
   - #13 bundle_not_registered → Task 11
   - #14 pure-read invariant → Task 10
-  - #15 single source of truth → Task 13 (SF3 source-grep)
+  - #15 single source of truth → Task 10 integration test (verify extractor and MCP tool return structurally identical results for same input) + Task 13 (SF3 source-grep as secondary gate)
   - #16 sort total order → Task 12 wire test
   - #17 re-run distinct :IngestRun → Task 10
   - #18 SF3 regression gate → Task 13

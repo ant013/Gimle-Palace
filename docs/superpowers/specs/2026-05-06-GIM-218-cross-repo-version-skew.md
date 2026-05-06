@@ -752,9 +752,11 @@ A successful run + tool query produces, given a project / bundle with
    `total_skew_groups` and `summary_by_severity` reflect pre-filter counts.
 7. **`ecosystem='github'` filter.** Only purl_roots with
    `pkg:github/...` returned.
-8. **`include_aligned=True`.** purl_roots with `version_count == 1`
-   appear in `skew_groups` (with `severity=null`); aligned-and-skew
-   groups co-exist.
+8. **`include_aligned` (v1: count-only).** `aligned_groups_total`
+   count always returned. `include_aligned=True` accepted but v1
+   returns count only — full group surfacing (purl_roots with
+   `version_count == 1` in `skew_groups` with `severity=null`)
+   deferred to followup slice.
 9. **`top_n=1`.** Returns 1 group, the highest-priority one per
    sort key.
 10. **`dependency_surface_not_indexed` error.** Wipe `:DEPENDS_ON`,
