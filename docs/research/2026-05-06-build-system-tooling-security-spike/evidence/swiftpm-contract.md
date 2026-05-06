@@ -18,6 +18,10 @@ JSON Schema validation: `PASS`
 
 Nested bound negative check: `PASS — $.package.targets[0].name: string longer than maxLength=128`
 
+Unknown target field check: `PASS — $.package.targets[0]: unexpected keys ['unexpected_field']`
+
+Unknown product field check: `PASS — $.package.products[0]: unexpected keys ['unexpected_field']`
+
 Products: `2`
 
 Targets: `3`

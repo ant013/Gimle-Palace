@@ -10,6 +10,7 @@
     "package_root",
     "package"
   ],
+  "additionalProperties": false,
   "properties": {
     "schema_version": {
       "const": "swiftpm-dump-package-v1"
@@ -37,6 +38,7 @@
         "products",
         "targets"
       ],
+      "additionalProperties": false,
       "properties": {
         "name": {
           "type": "string",
@@ -53,6 +55,7 @@
               "name",
               "targets"
             ],
+            "additionalProperties": false,
             "properties": {
               "name": {
                 "type": "string",
@@ -71,6 +74,7 @@
               },
               "type": {
                 "type": "object",
+                "additionalProperties": false,
                 "properties": {
                   "library": {
                     "type": "array",
@@ -102,6 +106,7 @@
               "name",
               "dependencies"
             ],
+            "additionalProperties": false,
             "properties": {
               "name": {
                 "type": "string",
@@ -118,6 +123,7 @@
                 "maxItems": 16,
                 "items": {
                   "type": "object",
+                  "additionalProperties": false,
                   "properties": {
                     "byName": {
                       "type": "array",
@@ -143,6 +149,7 @@
                     "rule",
                     "path"
                   ],
+                  "additionalProperties": false,
                   "properties": {
                     "rule": {
                       "type": "string",
@@ -167,6 +174,7 @@
                     "name",
                     "value"
                   ],
+                  "additionalProperties": false,
                   "properties": {
                     "tool": {
                       "type": "string",
@@ -193,7 +201,15 @@
           "type": [
             "object",
             "null"
-          ]
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "_version": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32
+            }
+          }
         }
       }
     }

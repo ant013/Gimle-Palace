@@ -271,9 +271,17 @@ def validate_schema_instance(value: Any, schema: dict[str, Any], path: str = "$"
             if key not in value:
                 fail(f"{path}: missing required key {key!r}")
         properties = schema.get("properties", {})
-        for key, item_schema in properties.items():
-            if key in value and isinstance(item_schema, dict):
-                validate_schema_instance(value[key], item_schema, f"{path}.{key}")
+        additional_properties = schema.get("additionalProperties", True)
+        for key, item_value in value.items():
+            if key in properties:
+                item_schema = properties[key]
+                if isinstance(item_schema, dict):
+                    validate_schema_instance(item_value, item_schema, f"{path}.{key}")
+                continue
+            if additional_properties is False:
+                fail(f"{path}: unexpected keys {[key]!r}")
+            if isinstance(additional_properties, dict):
+                validate_schema_instance(item_value, additional_properties, f"{path}.{key}")
 
 
 def validate_against_schema(schema_path: pathlib.Path, payload: dict[str, Any]) -> None:
@@ -538,6 +546,98 @@ def fallback_swift_sample() -> dict[str, Any]:
     }
 
 
+def project_swiftpm_product_type(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {}
+    projected: dict[str, Any] = {}
+    if "library" in payload and isinstance(payload["library"], list):
+        projected["library"] = payload["library"]
+    if "executable" in payload and (isinstance(payload["executable"], str) or payload["executable"] is None):
+        projected["executable"] = payload["executable"]
+    return projected
+
+
+def project_swiftpm_product(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {"name": "", "targets": []}
+    projected: dict[str, Any] = {
+        "name": payload.get("name", ""),
+        "targets": payload.get("targets", []),
+    }
+    product_type = project_swiftpm_product_type(payload.get("type"))
+    if product_type:
+        projected["type"] = product_type
+    return projected
+
+
+def project_swiftpm_dependency(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {}
+    projected: dict[str, Any] = {}
+    by_name = payload.get("byName")
+    if isinstance(by_name, list):
+        projected["byName"] = by_name
+    return projected
+
+
+def project_swiftpm_resource(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {"rule": "", "path": ""}
+    return {
+        "rule": payload.get("rule", ""),
+        "path": payload.get("path", ""),
+    }
+
+
+def project_swiftpm_setting(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {"tool": "", "name": "", "value": ""}
+    return {
+        "tool": payload.get("tool", ""),
+        "name": payload.get("name", ""),
+        "value": payload.get("value", ""),
+    }
+
+
+def project_swiftpm_target(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {"name": "", "dependencies": []}
+    projected: dict[str, Any] = {
+        "name": payload.get("name", ""),
+        "dependencies": [project_swiftpm_dependency(item) for item in payload.get("dependencies", [])],
+    }
+    if "type" in payload:
+        projected["type"] = payload.get("type", "")
+    if "resources" in payload:
+        projected["resources"] = [project_swiftpm_resource(item) for item in payload.get("resources", [])]
+    if "settings" in payload:
+        projected["settings"] = [project_swiftpm_setting(item) for item in payload.get("settings", [])]
+    return projected
+
+
+def project_swiftpm_tools_version(payload: Any) -> dict[str, Any] | None:
+    if not isinstance(payload, dict):
+        return None
+    version = payload.get("_version")
+    if not isinstance(version, str):
+        return None
+    return {"_version": version}
+
+
+def project_swiftpm_package(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {"name": "", "products": [], "targets": []}
+    projected: dict[str, Any] = {
+        "name": payload.get("name", ""),
+        "products": [project_swiftpm_product(item) for item in payload.get("products", [])],
+        "targets": [project_swiftpm_target(item) for item in payload.get("targets", [])],
+    }
+    tools_version = project_swiftpm_tools_version(payload.get("toolsVersion"))
+    if tools_version is not None:
+        projected["toolsVersion"] = tools_version
+    return projected
+
+
 def assert_success(result: ExecResult, label: str) -> None:
     if result.timed_out or result.returncode != 0:
         rendered = sanitize_text(
@@ -733,7 +833,7 @@ def capture_swiftpm_contract(args: argparse.Namespace) -> None:
                     "tool_name": "swift",
                     "tool_version": run_command([swift_bin, "--version"], timeout_s=5.0).stdout.strip().splitlines()[0],
                     "package_root": str(fixture),
-                    "package": dump_payload,
+                    "package": project_swiftpm_package(dump_payload),
                 },
                 [str(fixture), str(tmp_root)],
             )
@@ -755,6 +855,24 @@ def capture_swiftpm_contract(args: argparse.Namespace) -> None:
             nested_bound_note = f"PASS — {exc}"
         if not nested_bound_note.startswith("PASS"):
             fail("swiftpm nested field bounds did not reject oversized target name")
+        unknown_target_contract = json.loads(json.dumps(contract))
+        unknown_target_contract["package"]["targets"][0]["unexpected_field"] = "accepted?"
+        unknown_target_note = "FAIL"
+        try:
+            validate_against_schema(schema_path, unknown_target_contract)
+        except SystemExit as exc:
+            unknown_target_note = f"PASS — {exc}"
+        if not unknown_target_note.startswith("PASS"):
+            fail("swiftpm target schema accepted unknown nested field")
+        unknown_product_contract = json.loads(json.dumps(contract))
+        unknown_product_contract["package"]["products"][0]["unexpected_field"] = "accepted?"
+        unknown_product_note = "FAIL"
+        try:
+            validate_against_schema(schema_path, unknown_product_contract)
+        except SystemExit as exc:
+            unknown_product_note = f"PASS — {exc}"
+        if not unknown_product_note.startswith("PASS"):
+            fail("swiftpm product schema accepted unknown nested field")
         write_json(sample_path, contract)
         write_markdown(
             output,
@@ -770,6 +888,8 @@ def capture_swiftpm_contract(args: argparse.Namespace) -> None:
                     "Sample: `" + str(sample_path.relative_to(ROOT)) + "`\n\n"
                     "JSON Schema validation: `PASS`\n\n"
                     f"Nested bound negative check: `{nested_bound_note}`\n\n"
+                    f"Unknown target field check: `{unknown_target_note}`\n\n"
+                    f"Unknown product field check: `{unknown_product_note}`\n\n"
                     f"Products: `{len(contract['package']['products'])}`\n\n"
                     f"Targets: `{len(contract['package']['targets'])}`",
                 ),
