@@ -11,6 +11,7 @@
 - `absolute-path`: PASS
 - `bazel-cmdline-leak`: PASS
 - `cancellation-cleanup`: PASS
+- `unbounded-output`: PASS — stdout truncated at 16384 bytes and process killed on output bound
 
 ## Interpretation
 

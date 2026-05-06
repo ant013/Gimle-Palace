@@ -28,7 +28,7 @@ Target: x86_64-apple-darwin22.6.0
 ./run-spike.sh gradle-contract --fixture throwaway-gradle --no-host-gradlew --no-wrapper-download --no-build-tasks --schema contracts/gradle-tooling-v1.schema.json --write evidence/gradle-contract.md
 ./run-spike.sh swiftpm-contract --fixture throwaway-swiftpm --command "swift package dump-package --type json --package-path <root>" --schema contracts/swiftpm-dump-package-v1.schema.json --write evidence/swiftpm-contract.md
 ./run-spike.sh bazel-contract --fixture committed-sample --commands "bazel query" "bazel aquery --output=jsonproto" --schema contracts/bazel-query-aquery-v1.schema.json --write evidence/bazel-contract.md
-./run-hostile-fixtures.sh --cases env-leak,hanging-config,wrapper-download,absolute-path,bazel-cmdline-leak,timeout,cancellation-cleanup --write evidence/hostile-fixtures.md
+./run-hostile-fixtures.sh --cases env-leak,hanging-config,wrapper-download,absolute-path,bazel-cmdline-leak,timeout,unbounded-output,cancellation-cleanup --write evidence/hostile-fixtures.md
 ```
 
 ## Contracts
@@ -51,7 +51,7 @@ Target: x86_64-apple-darwin22.6.0
 
 ## Recommendation
 
-The spike proves sandbox preflight, structured unsandboxed skips, contract schemas, and hostile-case handling, but it does not prove a complete sandboxed runtime path for all three ecosystems on this machine: Gradle could not resolve a Java runtime inside the sandbox, SwiftPM failed in sandbox via `xcrun`/`PlatformPath`, and Bazel is not installed locally. Production implementation across all three ecosystems should stay blocked until at least one real sandboxed Gradle capture, one real sandboxed SwiftPM capture, and one real sandboxed Bazel capture are committed.
+The spike now proves sandbox preflight, structured unsandboxed skips, bounded hostile-output handling, schema-bounded contract samples, and wrapper/env/path redaction controls, but it still does not prove a complete sandboxed runtime path for all three ecosystems on this machine: Gradle remains intentionally unresolved until a configuration-only or Tooling-API-based capture is proven without task-action execution, SwiftPM still fails in sandbox via `xcrun`/`PlatformPath`, and Bazel is not installed locally. Production implementation across all three ecosystems should stay blocked until all three live paths are proven.
 
 ## Notes
 

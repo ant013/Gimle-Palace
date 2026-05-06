@@ -4,8 +4,8 @@
 
 ## Command
 
-```bash
-/usr/bin/sandbox-exec -p '(version 1) (allow default) (deny network*)' <ABSOLUTE_PATH>/.local/bin/gradle --project-dir <ABSOLUTE_PATH> --no-daemon --offline --console=plain -q -I <ABSOLUTE_PATH>/gradle-probe.init.gradle buildSystemProbe -DbuildSystemProbeOutput=<ABSOLUTE_PATH>/gradle-tooling.json
+```text
+No project-level Gradle command executed in this spike revision.
 ```
 
 ## Validation
@@ -22,18 +22,18 @@ Tasks: `3`
 
 ## Security notes
 
-- Local sandbox preflight exists, but the sandboxed Gradle launcher could not resolve a Java runtime on this machine.
-- Contract shape is still captured as a committed reviewer sample, but the local Gradle runtime path remains unproven.
-- This is a release blocker for production Step 3 on this machine.
+- Project-level Gradle interrogation is intentionally unresolved in this spike revision.
+- The previous trusted-helper-task approach was removed because it still executed a task action and did not satisfy the Step 2 `no build task/action execution` rule.
+- The committed contract sample remains reviewable, but Step 3 stays blocked until a configuration-only or Tooling-API-based capture is proven.
 
 ## Sources
 
 - Local tool: `gradle --version` on 2026-05-06
 - Official docs: https://docs.gradle.org/current/userguide/command_line_interface_basics.html
+- Official dry-run docs: https://docs.gradle.org/current/userguide/command_line_interface.html#sec:command_line_execution_options
 
 ## Observed output
 
 ```text
-The operation couldn’t be completed. Unable to locate a Java Runtime.
-Please visit http://www.java.com for information on installing Java.
+Gradle contract sample retained; live project capture intentionally not executed.
 ```

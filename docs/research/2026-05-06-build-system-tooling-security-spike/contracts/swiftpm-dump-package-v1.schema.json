@@ -19,14 +19,16 @@
     },
     "tool_version": {
       "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "maxLength": 160
     },
     "capture_mode": {
       "type": "string"
     },
     "package_root": {
       "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "maxLength": 256
     },
     "package": {
       "type": "object",
@@ -38,15 +40,18 @@
       "properties": {
         "name": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 128
         },
         "products": {
           "type": "array",
-          "minItems": 1
+          "minItems": 1,
+          "maxItems": 32
         },
         "targets": {
           "type": "array",
-          "minItems": 1
+          "minItems": 1,
+          "maxItems": 64
         },
         "toolsVersion": {
           "type": [

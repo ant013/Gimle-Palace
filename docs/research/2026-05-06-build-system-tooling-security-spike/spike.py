@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import locale
 import os
 import pathlib
 import re
+import selectors
 import shlex
 import shutil
 import signal
@@ -22,6 +24,8 @@ ROOT = pathlib.Path(__file__).resolve().parent
 CONTRACTS_DIR = ROOT / "contracts"
 EVIDENCE_DIR = ROOT / "evidence"
 DEFAULT_TIMEOUT_S = 20.0
+STREAM_LIMIT_BYTES = 16 * 1024
+READ_CHUNK_BYTES = 4096
 LOCAL_DATE = "2026-05-06"
 GRADLE_DOC_URL = "https://docs.gradle.org/current/userguide/command_line_interface_basics.html"
 SWIFTPM_DOC_URL = "https://docs.swift.org/package-manager/PackageDescription/PackageDescription.html"
@@ -37,6 +41,9 @@ class ExecResult:
     stderr: str
     duration_s: float
     timed_out: bool = False
+    stdout_truncated: bool = False
+    stderr_truncated: bool = False
+    output_limit_hit: bool = False
 
 
 def ensure_parent(path: pathlib.Path) -> None:
@@ -122,6 +129,14 @@ def sanitized_env(temp_home: pathlib.Path) -> dict[str, str]:
     return env
 
 
+def decode_bytes(buffer: bytearray, *, truncated: bool) -> str:
+    encoding = locale.getpreferredencoding(False) or "utf-8"
+    text = buffer.decode(encoding, errors="replace")
+    if truncated:
+        text += f"\n...[truncated after {STREAM_LIMIT_BYTES} bytes]"
+    return text
+
+
 def run_command(
     command: list[str],
     *,
@@ -136,29 +151,64 @@ def run_command(
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        text=True,
+        text=False,
         start_new_session=True,
     )
+    selector = selectors.DefaultSelector()
+    assert proc.stdout is not None
+    assert proc.stderr is not None
+    selector.register(proc.stdout, selectors.EVENT_READ, data="stdout")
+    selector.register(proc.stderr, selectors.EVENT_READ, data="stderr")
+    buffers = {"stdout": bytearray(), "stderr": bytearray()}
+    truncated = {"stdout": False, "stderr": False}
+    timed_out = False
+    output_limit_hit = False
+    killed = False
+
+    while selector.get_map():
+        if not killed and (time.monotonic() - start) > timeout_s:
+            os.killpg(proc.pid, signal.SIGKILL)
+            timed_out = True
+            killed = True
+
+        events = selector.select(timeout=0.1)
+        for key, _ in events:
+            stream_name = key.data
+            chunk = key.fileobj.read1(READ_CHUNK_BYTES)
+            if not chunk:
+                selector.unregister(key.fileobj)
+                continue
+            remaining = STREAM_LIMIT_BYTES - len(buffers[stream_name])
+            if remaining > 0:
+                buffers[stream_name].extend(chunk[:remaining])
+            if len(chunk) > remaining:
+                truncated[stream_name] = True
+                if not killed:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                    output_limit_hit = True
+                    killed = True
+
+        if proc.poll() is not None and not events:
+            break
+
+    selector.close()
     try:
-        stdout, stderr = proc.communicate(timeout=timeout_s)
-        return ExecResult(
-            command=command,
-            returncode=proc.returncode,
-            stdout=stdout,
-            stderr=stderr,
-            duration_s=time.monotonic() - start,
-        )
+        proc.wait(timeout=1.0)
     except subprocess.TimeoutExpired:
         os.killpg(proc.pid, signal.SIGKILL)
-        stdout, stderr = proc.communicate()
-        return ExecResult(
-            command=command,
-            returncode=-signal.SIGKILL,
-            stdout=stdout,
-            stderr=stderr,
-            duration_s=time.monotonic() - start,
-            timed_out=True,
-        )
+        proc.wait(timeout=1.0)
+
+    return ExecResult(
+        command=command,
+        returncode=proc.returncode,
+        stdout=decode_bytes(buffers["stdout"], truncated=truncated["stdout"]),
+        stderr=decode_bytes(buffers["stderr"], truncated=truncated["stderr"]),
+        duration_s=time.monotonic() - start,
+        timed_out=timed_out,
+        stdout_truncated=truncated["stdout"],
+        stderr_truncated=truncated["stderr"],
+        output_limit_hit=output_limit_hit,
+    )
 
 
 def fail(message: str) -> None:
@@ -203,10 +253,14 @@ def validate_schema_instance(value: Any, schema: dict[str, Any], path: str = "$"
 
     if isinstance(value, str) and "minLength" in schema and len(value) < schema["minLength"]:
         fail(f"{path}: string shorter than minLength={schema['minLength']}")
+    if isinstance(value, str) and "maxLength" in schema and len(value) > schema["maxLength"]:
+        fail(f"{path}: string longer than maxLength={schema['maxLength']}")
 
     if isinstance(value, list):
         if "minItems" in schema and len(value) < schema["minItems"]:
             fail(f"{path}: array shorter than minItems={schema['minItems']}")
+        if "maxItems" in schema and len(value) > schema["maxItems"]:
+            fail(f"{path}: array longer than maxItems={schema['maxItems']}")
         item_schema = schema.get("items")
         if isinstance(item_schema, dict):
             for index, item in enumerate(value):
@@ -347,95 +401,6 @@ def write_markdown(path: pathlib.Path, title: str, sections: list[tuple[str, str
     write_text(path, "\n".join(lines).rstrip() + "\n")
 
 
-def make_gradle_fixture(base: pathlib.Path, *, env_leak: bool = False, hanging: bool = False) -> pathlib.Path:
-    root = base / "gradle-multi-project"
-    (root / "app").mkdir(parents=True, exist_ok=True)
-    (root / "lib").mkdir(parents=True, exist_ok=True)
-    top_level = []
-    if env_leak:
-        top_level.append('println("ENVLEAK=" + String.valueOf(System.getenv("BUILD_SYSTEM_SECRET")))')
-    if hanging:
-        top_level.append("Thread.sleep(30000)")
-    build_root = "\n".join(top_level + ["plugins { base }"])
-    write_text(root / "settings.gradle.kts", 'rootProject.name = "gradle-multi-project"\ninclude(":app", ":lib")\n')
-    write_text(root / "build.gradle.kts", build_root + "\n")
-    write_text(
-        root / "app" / "build.gradle.kts",
-        textwrap.dedent(
-            """\
-            plugins { base }
-
-            tasks.register("hello") {
-                group = "verification"
-                description = "Print hello from app"
-            }
-            """
-        ),
-    )
-    write_text(
-        root / "lib" / "build.gradle.kts",
-        textwrap.dedent(
-            """\
-            plugins { base }
-
-            tasks.register("verifyLib") {
-                group = "verification"
-                description = "Verify lib configuration"
-            }
-            """
-        ),
-    )
-    return root
-
-
-def gradle_probe_init_script(path: pathlib.Path) -> None:
-    write_text(
-        path,
-        textwrap.dedent(
-            """\
-            import groovy.json.JsonOutput
-
-            gradle.projectsEvaluated {
-                def root = gradle.rootProject
-                root.tasks.register("buildSystemProbe") {
-                    doLast {
-                        def payload = [
-                            schema_version: "gradle-tooling-v1",
-                            tool_name: "gradle",
-                            tool_version: gradle.gradleVersion,
-                            root_path: root.projectDir.absolutePath,
-                            projects: root.allprojects.collect { project ->
-                                [
-                                    path: project.path,
-                                    name: project.name,
-                                    project_dir: project.projectDir.absolutePath,
-                                ]
-                            },
-                            tasks: root.allprojects.collectMany { project ->
-                                project.tasks.collect { task ->
-                                    [
-                                        path: task.path,
-                                        name: task.name,
-                                        owner_project: project.path,
-                                        group: task.group,
-                                        description: task.description,
-                                        dependencies: task.taskDependencies.getDependencies(task)
-                                            .collect { dep -> dep.path }
-                                            .sort(),
-                                    ]
-                                }
-                            }.sort { left, right -> left.path <=> right.path },
-                        ]
-                        new File(System.getProperty("buildSystemProbeOutput"))
-                            .text = JsonOutput.prettyPrint(JsonOutput.toJson(payload))
-                    }
-                }
-            }
-            """
-        ),
-    )
-
-
 def make_swift_fixture(base: pathlib.Path) -> pathlib.Path:
     root = base / "swiftpm-package"
     (root / "Sources" / "WalletCore").mkdir(parents=True, exist_ok=True)
@@ -496,7 +461,7 @@ def fallback_gradle_sample() -> dict[str, Any]:
         "schema_version": "gradle-tooling-v1",
         "tool_name": "gradle",
         "tool_version": "9.3.1",
-        "capture_mode": "sandbox_exec_blocked_local_install",
+        "capture_mode": "committed_sample_no_task_execution_proof",
         "root_path": "<ABSOLUTE_PATH>",
         "projects": [
             {"path": ":", "name": "gradle-multi-project", "project_dir": "<ABSOLUTE_PATH>"},
@@ -509,7 +474,7 @@ def fallback_gradle_sample() -> dict[str, Any]:
                 "name": "buildSystemProbe",
                 "owner_project": ":",
                 "group": None,
-                "description": "Trusted helper task registered by the init script.",
+                "description": "Hypothetical helper task shape retained only as a contract sample.",
                 "dependencies": [],
             },
             {
@@ -669,12 +634,10 @@ def capture_gradle_contract(args: argparse.Namespace) -> None:
     output = pathlib.Path(args.write)
     schema_path = pathlib.Path(args.schema).resolve()
     sample_path = sample_path_for(schema_path)
-    gradle_bin = shutil.which("gradle")
-    if gradle_bin is None:
-        fail("gradle not installed")
     with tempfile.TemporaryDirectory(prefix="gim215-gradle-") as tmp:
         tmp_root = pathlib.Path(tmp)
-        fixture = make_gradle_fixture(tmp_root)
+        fixture = tmp_root / "gradle-multi-project"
+        fixture.mkdir(parents=True, exist_ok=True)
         guard = guard_gradle_wrapper(
             fixture,
             no_host_gradlew=args.no_host_gradlew,
@@ -682,47 +645,7 @@ def capture_gradle_contract(args: argparse.Namespace) -> None:
         )
         if guard["ok"] is False:
             fail("gradle contract fixture unexpectedly hit wrapper guard")
-        temp_home = tmp_root / "home"
-        temp_home.mkdir(parents=True, exist_ok=True)
-        init_script = tmp_root / "gradle-probe.init.gradle"
-        gradle_probe_init_script(init_script)
-        raw_path = tmp_root / "gradle-tooling.json"
-        env = sanitized_env(temp_home)
-        command = build_sandbox_command(
-            [
-                gradle_bin,
-                "--project-dir",
-                str(fixture),
-                "--no-daemon",
-                "--offline",
-                "--console=plain",
-                "-q",
-                "-I",
-                str(init_script),
-                "buildSystemProbe",
-                f"-DbuildSystemProbeOutput={raw_path}",
-            ]
-        )
-        result = run_command(command, env=env, timeout_s=25.0)
-        if result.returncode == 0 and not result.timed_out:
-            raw_payload = json.loads(raw_path.read_text(encoding="utf-8"))
-            sanitized_payload = sanitize_json(raw_payload, [str(fixture), str(tmp_root)])
-            live_summary = (
-                "- Used local `gradle` binary, not `gradlew`.\n"
-                "- `--offline` and sandbox network deny were both active.\n"
-                "- Only the trusted helper task `buildSystemProbe` executed; no compile/test/package task names were invoked."
-            )
-        else:
-            sanitized_payload = fallback_gradle_sample()
-            if "Unable to locate a Java Runtime" in result.stderr:
-                blocker = "the sandboxed Gradle launcher could not resolve a Java runtime on this machine"
-            else:
-                blocker = "the sandboxed Gradle launcher did not complete successfully on this machine"
-            live_summary = (
-                f"- Local sandbox preflight exists, but {blocker}.\n"
-                "- Contract shape is still captured as a committed reviewer sample, but the local Gradle runtime path remains unproven.\n"
-                "- This is a release blocker for production Step 3 on this machine."
-            )
+        sanitized_payload = fallback_gradle_sample()
         validate_against_schema(schema_path, sanitized_payload)
         validate_gradle_contract(sanitized_payload)
         write_json(sample_path, sanitized_payload)
@@ -732,7 +655,7 @@ def capture_gradle_contract(args: argparse.Namespace) -> None:
             [
                 (
                     "Command",
-                    "```bash\n" + sanitized_command(command, [str(fixture), str(tmp_root)]) + "\n```",
+                    "```text\nNo project-level Gradle command executed in this spike revision.\n```",
                 ),
                 (
                     "Validation",
@@ -744,20 +667,17 @@ def capture_gradle_contract(args: argparse.Namespace) -> None:
                 ),
                 (
                     "Security notes",
-                    live_summary,
+                    "- Project-level Gradle interrogation is intentionally unresolved in this spike revision.\n"
+                    "- The previous trusted-helper-task approach was removed because it still executed a task action and did not satisfy the Step 2 `no build task/action execution` rule.\n"
+                    "- The committed contract sample remains reviewable, but Step 3 stays blocked until a configuration-only or Tooling-API-based capture is proven.",
                 ),
                 (
                     "Sources",
-                    f"- Local tool: `gradle --version` on {LOCAL_DATE}\n- Official docs: {GRADLE_DOC_URL}",
+                    f"- Local tool: `gradle --version` on {LOCAL_DATE}\n- Official docs: {GRADLE_DOC_URL}\n- Official dry-run docs: https://docs.gradle.org/current/userguide/command_line_interface.html#sec:command_line_execution_options",
                 ),
                 (
                     "Observed output",
-                    "```text\n"
-                    + sanitize_text(
-                        ((result.stdout or "") + "\n" + (result.stderr or "")).strip() or "<empty>",
-                        [str(fixture), str(tmp_root)],
-                    )
-                    + "\n```",
+                    "```text\nGradle contract sample retained; live project capture intentionally not executed.\n```",
                 ),
             ],
         )
@@ -1031,6 +951,23 @@ def run_hostile_fixtures(args: argparse.Namespace) -> None:
             child_alive = subprocess.run(["ps", "-p", str(child_pid)], capture_output=True, text=True).returncode == 0
             cases.append(("cancellation-cleanup", "PASS" if result.timed_out and not child_alive else "FAIL"))
 
+    if "unbounded-output" in requested_cases:
+        result = run_command(
+            [
+                sys.executable,
+                "-c",
+                "import sys\nfor i in range(20000):\n print('X'*64)\n sys.stdout.flush()\n",
+            ],
+            timeout_s=10.0,
+        )
+        bounded = result.output_limit_hit and result.stdout_truncated and "...[truncated after" in result.stdout
+        detail = (
+            f"PASS — stdout truncated at {STREAM_LIMIT_BYTES} bytes and process killed on output bound"
+            if bounded
+            else "FAIL"
+        )
+        cases.append(("unbounded-output", detail))
+
     bullet_lines = "\n".join(f"- `{name}`: {status}" for name, status in cases)
     write_markdown(
         output,
@@ -1075,11 +1012,12 @@ def summarize(args: argparse.Namespace) -> None:
 
     recommendation = "NO-GO"
     rationale = (
-        "The spike proves sandbox preflight, structured unsandboxed skips, contract schemas, and hostile-case handling, "
-        "but it does not prove a complete sandboxed runtime path for all three ecosystems on this machine: "
-        "Gradle could not resolve a Java runtime inside the sandbox, SwiftPM failed in sandbox via `xcrun`/`PlatformPath`, "
-        "and Bazel is not installed locally. Production implementation across all three ecosystems should stay blocked "
-        "until at least one real sandboxed Gradle capture, one real sandboxed SwiftPM capture, and one real sandboxed Bazel capture are committed."
+        "The spike now proves sandbox preflight, structured unsandboxed skips, bounded hostile-output handling, "
+        "schema-bounded contract samples, and wrapper/env/path redaction controls, but it still does not prove a complete "
+        "sandboxed runtime path for all three ecosystems on this machine: Gradle remains intentionally unresolved until a "
+        "configuration-only or Tooling-API-based capture is proven without task-action execution, SwiftPM still fails in "
+        "sandbox via `xcrun`/`PlatformPath`, and Bazel is not installed locally. Production implementation across all "
+        "three ecosystems should stay blocked until all three live paths are proven."
     )
     commands = textwrap.dedent(
         """\
@@ -1088,7 +1026,7 @@ def summarize(args: argparse.Namespace) -> None:
         ./run-spike.sh gradle-contract --fixture throwaway-gradle --no-host-gradlew --no-wrapper-download --no-build-tasks --schema contracts/gradle-tooling-v1.schema.json --write evidence/gradle-contract.md
         ./run-spike.sh swiftpm-contract --fixture throwaway-swiftpm --command "swift package dump-package --type json --package-path <root>" --schema contracts/swiftpm-dump-package-v1.schema.json --write evidence/swiftpm-contract.md
         ./run-spike.sh bazel-contract --fixture committed-sample --commands "bazel query" "bazel aquery --output=jsonproto" --schema contracts/bazel-query-aquery-v1.schema.json --write evidence/bazel-contract.md
-        ./run-hostile-fixtures.sh --cases env-leak,hanging-config,wrapper-download,absolute-path,bazel-cmdline-leak,timeout,cancellation-cleanup --write evidence/hostile-fixtures.md
+        ./run-hostile-fixtures.sh --cases env-leak,hanging-config,wrapper-download,absolute-path,bazel-cmdline-leak,timeout,unbounded-output,cancellation-cleanup --write evidence/hostile-fixtures.md
         """
     ).rstrip()
     lines = [

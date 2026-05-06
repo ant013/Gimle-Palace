@@ -1,5 +1,5 @@
 {
-  "capture_mode": "sandbox_exec_blocked_local_install",
+  "capture_mode": "committed_sample_no_task_execution_proof",
   "projects": [
     {
       "name": "gradle-multi-project",
@@ -22,7 +22,7 @@
   "tasks": [
     {
       "dependencies": [],
-      "description": "Trusted helper task registered by the init script.",
+      "description": "Hypothetical helper task shape retained only as a contract sample.",
       "group": null,
       "name": "buildSystemProbe",
       "owner_project": ":",
