@@ -1,5 +1,11 @@
 # Sprint S3 (C) — Per-Kit ingestion automation
 
+> **Rev2** (2026-05-06): fixes MCP-from-bash invocation mechanism
+> (CTO-HIGH-6, CR-HIGH-4). Corrects extractor cascade — 7/10 exist
+> (CR-CRITICAL-1 was factually wrong). Confirms bundle tools exist
+> (CR-CRITICAL-2 was factually wrong). Defines `palace_mcp.cli` as
+> invocation mechanism.
+
 **Goal**: shrink per-Kit setup from ~30 min manual (10 steps) to
 ~3 min `bash ingest_swift_kit.sh <kit-slug>`. Required for S5
 (scaling to 41 Kits + wallet-ios) — 41 × 30 min = 20 hours of
@@ -8,9 +14,8 @@ manual work is un-shippable.
 **Wall-time**: ~1 week calendar (one Board+Claude session +
 InfraEngineer + QA chain).
 
-**Driver**: parallelisable with S1+S2 (this sprint touches only
-shell scripts + docker-compose generators; no overlap with extractor
-or workflow code).
+**Driver**: parallelisable with S1 (this sprint is InfraEngineer
+domain; S1 needs PythonEngineer). No file overlap.
 
 **Definition of Done**:
 1. `paperclips/scripts/ingest_swift_kit.sh <slug>` orchestrator on
@@ -21,16 +26,71 @@ or workflow code).
    `palace.memory.health(project=<slug>)` returns `success` for
    all expected extractors.
 4. Operator runbook: `docs/runbooks/ingest-swift-kit.md`.
-5. Smoke: full ingestion of one HS Kit
-   (e.g., `marketkit-swift` — small, well-understood) end-to-end.
+5. Smoke: full ingestion of one HS Kit end-to-end.
 
 **Explicitly NOT in this sprint**:
-- iMac ↔ dev Mac trust automation (rsync key exchange) — operator
-  provisions manually, script reads pre-configured ssh.
-- Multi-Kit batch mode (`ingest_all_uw_ios_kits.sh`) — handled in
-  S5 after this script proves on a single Kit.
-- Auto-detection of extractor changes — explicit `--extractors=...`
-  flag for v1.
+- iMac ↔ dev Mac trust automation — operator provisions ssh manually.
+- Multi-Kit batch mode — handled in S5.
+- Auto-detection of extractor changes — explicit `--extractors=...` flag.
+
+---
+
+## MCP tool invocation from scripts (rev2 — CTO-HIGH-6, CR-HIGH-4)
+
+**Problem**: The scripts call MCP tools (`palace.memory.register_project`,
+`palace.ingest.run_extractor`, `palace.memory.add_to_bundle`) but MCP
+requires a client connection. A bare bash script can't call them directly.
+
+**Solution**: `python3 -m palace_mcp.cli <tool> [--arg=value]` — a thin
+one-shot CLI module that connects to palace-mcp's streamable HTTP endpoint
+(already exposed) and executes a single MCP tool call. Returns JSON to stdout.
+
+The CLI is built in S1.9 (it's a shared prerequisite). S3 scripts use it:
+
+```bash
+python3 -m palace_mcp.cli memory.register_project --slug="$SLUG" --parent_mount="/repos/$SLUG"
+python3 -m palace_mcp.cli memory.add_to_bundle --bundle="$BUNDLE" --project="$SLUG"
+python3 -m palace_mcp.cli ingest.run_extractor --name="$EXTRACTOR" --project="$SLUG"
+```
+
+**Prerequisite**: S1.9 delivers `palace_mcp.cli`. If S3 starts before S1.9
+merges, the script can use `curl` against the HTTP endpoint as a temporary
+shim (palace-mcp exposes `POST /mcp` with JSON-RPC).
+
+---
+
+## Extractor cascade status (rev2 — correcting CR-CRITICAL-1)
+
+**CR claimed 0/10 cascade extractors exist. This is wrong.** Verified against
+develop HEAD `registry.py` (14 extractors registered):
+
+| S3.2 cascade extractor | Status | Notes |
+|---|---|---|
+| `symbol_index_swift` | **exists** | `SymbolIndexSwift()` — GIM-128 |
+| `git_history` | **exists** | `GitHistoryExtractor()` — GIM-186 |
+| `dependency_surface` | **exists** | `DependencySurfaceExtractor()` — GIM-191 |
+| `public_api_surface` | **exists** | `PublicApiSurfaceExtractor()` — GIM-190 |
+| `dead_symbol_binary_surface` | **exists** | `DeadSymbolBinarySurfaceExtractor()` — GIM-193 |
+| `hotspot` | **exists** | `HotspotExtractor()` — GIM-195 |
+| `cross_module_contract` | **exists** | `CrossModuleContractExtractor()` — GIM-192 |
+| `code_ownership` | **pending** | GIM-216 — PR #105 in Phase 3 |
+| `cross_repo_version_skew` | **pending** | GIM-218 — not started |
+| `crypto_domain_model` | **pending** | S2 deliverable |
+
+**7/10 exist today. 3 pending** (ownership, skew, crypto).
+The cascade script skips missing extractors with a warning.
+
+## Bundle tools status (rev2 — correcting CR-CRITICAL-2)
+
+**CR claimed bundle concept is completely absent. This is wrong.**
+`memory/bundle.py` (309 lines, GIM-182) implements full CRUD:
+- `palace.memory.register_bundle`
+- `palace.memory.add_to_bundle`
+- `palace.memory.bundle_members`
+- `palace.memory.bundle_status`
+- `palace.memory.delete_bundle`
+
+All registered in `mcp_server.py`. S3.2 step 7 works as-written.
 
 ---
 
@@ -42,19 +102,16 @@ or workflow code).
 - `paperclips/scripts/scip_emit_swift_kit.sh`
 
 **Scope**: take `<slug>` arg, locate or clone repo, build, emit SCIP
-via `scip_emit_swift` package (already in repo from GIM-128), scp
-to iMac at `/repos/<slug>/scip/index.scip`.
-
-**Dependencies**: dev Mac has Xcode + Swift 5.9+ (real-source
-ingestion needs modern toolchain per `reference_imac_toolchain_limits.md`).
+via `scip_emit_swift` package (GIM-128), scp to iMac at
+`/repos/<slug>/scip/index.scip`.
 
 **Idempotency**: re-run with same `<slug>` re-builds and overwrites.
 
 **Decision points**:
-- D3-1: branch / commit pinning per Kit. Default: latest `main`
-  / `master`. Operator can override via `--ref=<sha-or-tag>`.
-- D3-2: build flavour (Debug / Release). Default: Debug (faster
-  index emit; no production codegen needed for static analysis).
+- D3-1: branch/commit pinning. Default: latest `main`/`master`.
+- D3-2: build flavour. Default: Debug (faster).
+
+**Size**: ~1-2 hours.
 
 ---
 
@@ -62,54 +119,41 @@ ingestion needs modern toolchain per `reference_imac_toolchain_limits.md`).
 
 **Files**:
 - `paperclips/scripts/ingest_swift_kit.sh`
-- `paperclips/scripts/lib/ingest_helpers.sh` — shared helpers if any
 
 **Scope**: 10-step orchestration:
 
 1. Validate `<slug>` regex.
-2. Verify `/repos/<slug>` mount exists (or `/repos-hs/<rel-path>` if
-   bundled HS Kit). If not mounted, edit
-   `docker-compose.override.yml` to add the bind-mount; restart
-   `palace-mcp`.
-3. Verify `/repos/<slug>/scip/index.scip` exists. If absent,
-   abort with operator-facing error: "run `scip_emit_swift_kit.sh
-   <slug>` on dev Mac first; expected at <path>".
-4. Update `.env`: `PALACE_SCIP_INDEX_PATHS` JSON to include
-   `<slug>: /repos/<slug>/scip/index.scip`. Idempotent edit (read,
-   parse, merge, write).
-5. `docker compose up -d --force-recreate palace-mcp` (re-read .env).
-6. `palace.memory.register_project(slug=<slug>, parent_mount=<...>,
-   relative_path=<...>)` — idempotent.
-7. `palace.memory.add_to_bundle(bundle="uw-ios", project=<slug>,
-   tier=<...>)` if `<slug>` is a UW iOS Kit. Idempotent.
-8. Run extractor cascade in fixed order (per audit-v1 v1
-   extractor set):
+2. Verify `/repos/<slug>` mount exists. If not, edit
+   `docker-compose.override.yml` to add bind-mount; restart palace-mcp.
+3. Verify `/repos/<slug>/scip/index.scip` exists. If absent, abort.
+4. Update `.env`: `PALACE_SCIP_INDEX_PATHS` JSON merge. Uses `jq`
+   for safe JSON read-merge-write.
+5. `docker compose up -d --force-recreate palace-mcp`.
+6. `python3 -m palace_mcp.cli memory.register_project --slug=<slug> ...`
+7. `python3 -m palace_mcp.cli memory.add_to_bundle --bundle=<bundle> --project=<slug>`
+   (if `--bundle` flag provided).
+8. Run extractor cascade (skip missing with warning):
    - `symbol_index_swift`
    - `git_history`
    - `dependency_surface`
    - `public_api_surface`
    - `dead_symbol_binary_surface`
    - `hotspot`
-   - `code_ownership` (post-GIM-216 merge)
-   - `cross_repo_version_skew` (post-GIM-218 merge)
    - `cross_module_contract`
-   - `crypto_domain_model` (post-S2 merge)
-9. After each, verify `palace.memory.health(project=<slug>)` returns
-   `success` for that extractor; abort on failure.
-10. Final report to stdout: list of `:IngestRun.run_id` per
-    extractor with status.
+   - `code_ownership` (skip if not registered)
+   - `cross_repo_version_skew` (skip if not registered)
+   - `crypto_domain_model` (skip if not registered)
+9. After each, verify health; log failure but continue.
+10. Final summary to stdout.
 
-**Error recovery**: if step N fails, script exits with a clear
-"to retry, run `ingest_swift_kit.sh <slug> --resume-from=N`".
-Stretch goal — defer to S6+ if too complex for v1.
+**Error recovery**: if step N fails, script reports the step and
+continues to next extractor. `--resume-from=N` is deferred to S6+.
 
 **Decision points**:
-- D3-3: extractor cascade order — fixed list vs `--extractors=...`
-  override? Default: fixed list (simpler; operator overrides via
-  flag per slice).
-- D3-4: bundle membership policy — auto-detect HS Kit by slug
-  prefix vs `--bundle=<name>` flag? Default: `--bundle=<name>`
-  explicit (avoid surprises).
+- D3-3: fixed list vs `--extractors=...` override? Default: fixed with skip.
+- D3-4: bundle membership — `--bundle=<name>` explicit flag.
+
+**Size**: ~2-3 hours.
 
 ---
 
@@ -117,14 +161,11 @@ Stretch goal — defer to S6+ if too complex for v1.
 
 **Files**:
 - `paperclips/scripts/tests/test_ingest_idempotency.sh`
-- (optional) Python unit tests for `.env` JSON merge logic if
-  extracted to a helper.
 
-**Scope**: integration test that runs `ingest_swift_kit.sh` against
-a known fixture (gimle itself or oz-v5-mini), verifies all 9
-extractors report success, then re-runs and verifies idempotency
-(no duplicate `:Project` / `:HAS_MEMBER`, no fresh `:IngestRun`
-unless target HEAD changed).
+**Scope**: integration test against a known fixture (oz-v5-mini),
+verifies extractors report success, re-runs to verify idempotency.
+
+**Size**: ~1-2 hours.
 
 ---
 
@@ -133,14 +174,9 @@ unless target HEAD changed).
 **Files**:
 - `docs/runbooks/ingest-swift-kit.md`
 
-**Scope**: end-to-end operator instructions, including:
-- Pre-flight: dev Mac toolchain check, iMac ssh access, .env
-  template.
-- Happy path: 3 commands (dev Mac scip-emit → iMac ingest → verify).
-- Troubleshooting per-step.
-- Per-Kit cookbook entries for known UW iOS Kits (marketkit,
-  evmkit, bitcoinkit, tronkit, etc — at least 5 entries with any
-  Kit-specific quirks discovered during S4 smoke).
+**Scope**: end-to-end instructions + troubleshooting + per-Kit cookbook.
+
+**Size**: ~1 hour.
 
 ---
 
@@ -148,14 +184,15 @@ unless target HEAD changed).
 
 | Risk | Mitigation |
 |------|------------|
-| dev Mac build fails on a specific Kit (toolchain, dependency, etc) | S4 smoke catches per-Kit issues; runbook accumulates per-Kit notes; broken Kits flagged with `--skip` until fixed |
-| iMac mount drift — operator manually edits docker-compose.yml between runs | Script reads docker-compose ONCE on first ingest; subsequent runs assume mount stable; mismatch triggers fail-fast with diff |
-| `.env` JSON parse fails on malformed input | Use `jq` or Python `json.tool` for read-merge-write; reject non-JSON input with explicit error |
-| Extractor cascade order matters (e.g., dependency_surface before cross_repo_version_skew) | Fixed order documented in spec; future changes require explicit slice update |
+| dev Mac build fails on a Kit | S4 smoke catches; runbook accumulates per-Kit notes |
+| iMac mount drift | Script reads compose once; mismatch = fail-fast |
+| `.env` JSON parse fails | `jq` for safe merge; reject non-JSON input |
+| Cascade order matters | Fixed order in spec; explicit slice for changes |
+| `palace_mcp.cli` not ready when S3 starts | Temporary `curl` shim against HTTP endpoint |
 
 ## Cross-references
 
 - Overview: `audit-v1-overview.md`
 - Workflow: `D-audit-orchestration.md`
 - Smoke that uses this script: `E-smoke.md`
-- Existing single-Kit runbook precedent: `docs/runbooks/multi-repo-spm-ingest.md`
+- Existing runbook precedent: `docs/runbooks/multi-repo-spm-ingest.md`

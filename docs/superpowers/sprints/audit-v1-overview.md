@@ -1,6 +1,6 @@
 # Audit-V1 — first product release: overview
 
-**Status**: pre-S1 (Board+Claude session 2026-05-06 produced this plan).
+**Status**: pre-S1 (rev2 — incorporating CTO + CodeReviewer + OpusArchitectReviewer findings).
 **Driver**: operator goal — first complete audit run on `tronkit-swift`,
 then `bitcoinkit-swift`, then remaining HS Kits + `wallet-ios`. After
 v1, every additional extractor is a tiny isolated slice that just
@@ -13,9 +13,48 @@ and *tradeoff log* so future readers understand the why.
 
 ---
 
+> ### Rev2 changelog (2026-05-06)
+>
+> Synthesised from 3-reviewer audit of rev1 (`4deb538`):
+> CTO (3C/6H/3M/1L), CodeReviewer (3C/6H/5M/2L), OpusArchitectReviewer (2C/3H/2M/1L).
+>
+> **CR factual corrections applied first:**
+> - CR-CRITICAL-1 wrong: 7/10 cascade extractors exist in registry (not 0/10).
+> - CR-CRITICAL-2 wrong: Bundle infra fully implemented in GIM-182 (`memory/bundle.py`, 5 MCP tools).
+> - CR-HIGH-6 wrong: `symbol_index_swift` is registered as `SymbolIndexSwift()`.
+> - CTO-HIGH-5 wrong: `palace.memory.add_to_bundle` exists at `mcp_server.py:465`.
+>
+> **Structural changes in rev2:**
+> 1. Added **S0 — Foundation prerequisites** sprint (IngestRun schema unification, missing composite tools, audit-mode agent prompts, templates directory).
+> 2. Removed **AuditSynthesizer** agent role — replaced with Python renderer function (saves tokens, prevents hallucination).
+> 3. Rewrote **§4 paved-path** around `BaseExtractor.audit_contract()` — real plug-and-play, not aspirational.
+> 4. Split **`palace.audit.run`** into sync data-tool + async workflow launcher (CTO-CRITICAL-2).
+> 5. Redesigned **S1.9** to use Paperclip child issues for parallel agent dispatch (OPUS-HIGH-1).
+> 6. Added **mandatory semgrep-Swift spike** as S2 prerequisite (OPUS-HIGH-3).
+> 7. Added **token budget** decision point AV1-D6 (CTO-HIGH-1).
+> 8. Added **blind-spot acceptance** decision point AV1-D7 (CTO-HIGH-2).
+> 9. Honest **slice sizing** throughout — dropped "≤30 min" claims where unrealistic.
+> 10. Added **S4 measurable acceptance criteria** (CR-MED-4).
+> 11. Padded **S5 to 3 weeks** with 1 week per-Kit debugging budget (OPUS-MEDIUM-1).
+> 12. Moved **roadmap archive** from HTML comments to `docs/roadmap-archive.md` (OPUS-LOW-1).
+> 13. Templates in `audit/templates/<extractor>.md`, not `extractors/<name>/` (avoids flat-to-dir refactor, CTO-LOW-1).
+> 14. GIM-218 contingency: explicit demotion to "nice-to-have" for S4 if not started within 1 week.
+
+---
+
 ## 1. What we ship in v1
 
-A single MCP composite tool: `palace.audit.run(project: str | None = None, bundle: str | None = None, depth: str = "full") → AuditReport`.
+Two tools, two purposes:
+
+**`palace.audit.run(project, depth="full") → AuditReport`** — synchronous MCP tool.
+Fetches data from graph, renders markdown report from extractor outputs. No agent involvement.
+Returns immediately. Used for smoke testing, ad-hoc checks, operator review.
+
+**`audit-workflow-launcher.sh <slug>`** — async multi-agent workflow.
+Creates a parent Paperclip issue + 3 child issues (one per domain agent). Each agent queries
+palace MCP tools, produces a structured sub-report. Parent collects results via
+`issue_children_completed` wake, then calls `palace.audit.render()` to produce the final report.
+Used for production audit runs where agent reasoning adds value.
 
 `AuditReport` is a structured markdown document with these sections:
 
@@ -29,7 +68,8 @@ A single MCP composite tool: `palace.audit.run(project: str | None = None, bundl
    #7), crypto-domain findings (S2 #40), known taint patterns (LLM
    blind spot — pending #35).
 5. **Dependencies** — external surface (GIM-191), version skew
-   (GIM-218), single-source picks.
+   (GIM-218 if merged; otherwise marked "blind spot — GIM-218 pending"),
+   single-source picks.
 6. **Ownership** — file-level owners (GIM-216), bus-factor=1 files,
    recently-active vs. dormant authors.
 7. **Crypto-domain (Kits with `pkg:github/horizontalsystems/*` Swift
@@ -47,20 +87,23 @@ runbooks, audit logs. JSON export is post-v1 (AV1-D1).
 
 ## 2. The team that produces it
 
-Per AV1-D2 (default = "reuse + 1 new + Synthesizer"):
+Per AV1-D2 (rev2: reuse 3 + 1 new Auditor; NO AuditSynthesizer):
 
-| Agent | Role | What it queries / contributes |
-|-------|------|--------------------------------|
-| **OpusArchitectReviewer** | Architecture findings | `palace.code.find_references`, public API surface, cross-module contract |
-| **SecurityAuditor** | Security findings | `palace.code.find_owners`, error-handling counters, crypto-domain output (S2) |
-| **BlockchainEngineer** | Crypto-Kit specifics | `palace.code.find_owners`, crypto-domain output (S2), purl scopes |
-| **Auditor** (NEW role, S1) | Quality + Dependencies + Historical synthesised view | `palace.code.find_hotspots`, `palace.code.find_owners`, `palace.code.find_version_skew`, `:IngestRun` provenance |
-| **AuditSynthesizer** (NEW role, S1) | Final markdown report | Reads all 4 agents' outputs, applies template, renders markdown |
+| Agent | Role | Audit-mode additions | What it queries |
+|-------|------|---------------------|------------------|
+| **OpusArchitectReviewer** | Architecture findings | Audit-mode prompt section: input format (fetcher JSON), output format (sub-report markdown), severity grading from extractor metrics | `palace.code.find_references`, public API surface, cross-module contract |
+| **SecurityAuditor** | Security findings | Audit-mode prompt section: same contract | `palace.code.find_owners`, error-handling counters, crypto-domain output (S2) |
+| **BlockchainEngineer** | Crypto-Kit specifics | Audit-mode prompt section: same contract | `palace.code.find_owners`, crypto-domain output (S2), purl scopes |
+| **Auditor** (NEW role, S1) | Quality + Dependencies + Historical | Full audit role prompt from scratch | `palace.code.find_hotspots`, `palace.code.find_owners`, `palace.code.find_version_skew`, `:IngestRun` provenance |
 
-Three reuses + 1 new role + 1 synthesizer. No specialised
-Quality/Dependency/Historical roles for v1 (operator can split the
-single `Auditor` later if needed). Two new role files to author:
-`paperclips/roles/auditor.md` + `paperclips/roles/audit-synthesizer.md`.
+**AuditSynthesizer removed** (rev2, OPUS-HIGH-2): the renderer is pure Python
+(`audit/renderer.py`). LLM reasoning is unnecessary for template rendering and
+risks hallucinating/modifying findings — which §4 explicitly prohibits. The
+workflow launcher calls `palace.audit.render(sub_reports)` directly.
+
+Three reuses (with audit-mode prompt additions) + 1 new role. One new role
+file to author: `paperclips/roles/auditor.md`. Three existing role files
+need an `## Audit mode` section appended.
 
 ## 3. Why this scope is the fastest viable v1
 
@@ -87,47 +130,66 @@ deployment + cost monitoring + agent-llm cost budgeting — that's
 a separate slice not yet specced. Decision AV1-D4: defer. v1 ships
 with the LLM-blocked sections explicitly noted as blind spots.
 
-## 4. The "post-v1 paved path" promise
+## 4. The "post-v1 paved path" promise (rev2 — `audit_contract()`)
 
 The crucial design constraint: **after v1 lands, adding extractor X
-must NOT require any change to the audit workflow, agents, or report
-template**.
+requires implementing ONE method on the extractor class — no
+orchestrator, renderer, or agent changes.**
 
-This is enforced by:
+This is enforced by the **`BaseExtractor.audit_contract()`** pattern
+(rev2, OPUS-CRITICAL-2):
 
-- **Synthesizer template enumerates extractor outputs from the graph**,
-  not from a hardcoded list. New `:IngestRun{extractor_name='X'}`
-  appears → synthesizer adds a section to the report automatically.
-- **Section template per extractor lives WITH the extractor** in
-  `extractors/<name>/audit_section_template.md`. The synthesizer
-  reads it. New extractor = new template file.
-- **Per-domain agents query MCP via composite tools** (`palace.code.*`),
-  not via raw Cypher. New extractor that adds a new entity type ships
-  with a matching composite tool; agents pick it up via tool
-  introspection.
-- **Audit report severity ranks come from extractor output**, not
-  from agent judgment. Each extractor labels its own findings
-  (`hotspot` already does this via score; `crypto_domain_model` will
-  too). Synthesizer aggregates without re-judging.
+```python
+class BaseExtractor:
+    def audit_contract(self) -> AuditContract | None:
+        """Return None if this extractor has no audit section."""
+        return None
+
+@dataclass
+class AuditContract:
+    query: str           # Cypher query that fetches audit-relevant data
+    response_model: type # Pydantic model for the query result
+    template_path: Path  # Path to Jinja template for the audit section
+    severity_mapper: Callable[[Any], str]  # Maps findings → severity
+```
+
+The discovery→fetch→render pipeline is fully generic:
+1. **Discovery** (`audit/discovery.py`): queries `:IngestRun` for latest
+   successful runs per extractor — schema unified in S0.
+2. **Fetch**: for each discovered extractor, calls
+   `extractor.audit_contract().query` — no per-extractor `fetch_X()` functions.
+3. **Render** (`audit/renderer.py`): loads `audit_contract().template_path`,
+   renders with fetched data — no per-extractor renderer logic.
+
+The only thing a new extractor must provide:
+- `audit_contract()` returning its query, model, and template
+- The template file at `audit/templates/<name>.md`
+
+**No orchestrator changes. No new composite tools. No agent changes.**
 
 If a future extractor needs a new agent role (e.g., LLM-bearing
 agent for #26 Bug-Archaeology that needs reasoning over commit
 messages), that's a v2 extension. v1's promise stops at "non-LLM
-extractors plug in unchanged".
+extractors plug in unchanged via `audit_contract()`".
 
 ## 5. Pre-S1 checklist
 
 Before starting S1 brainstorm, operator should confirm:
 
 - [ ] AV1-D1 — markdown only? (default yes)
-- [ ] AV1-D2 — reuse + 1 new Auditor + Synthesizer? (default yes)
+- [ ] AV1-D2 — reuse 3 + 1 new Auditor, NO Synthesizer agent? (rev2 default yes)
 - [ ] AV1-D3 — manual trigger only for v1? (default yes)
 - [ ] AV1-D4 — LLM-blocked extractors deferred to S6+? (default yes)
 - [ ] AV1-D5 — Track A/B SCIP emit pattern preserved? (default yes)
-- [ ] **GIM-216** + **GIM-218** kept on track to land before S4 (smoke).
-  These two are not blocking S1/S2/S3 starts but are blocking the
-  smoke (S4) success criteria for "Ownership" and "Dependencies"
-  report sections.
+- [ ] AV1-D6 — Max token budget per agent per audit run? (rev2, CTO-HIGH-1.
+  Default: 50K input / 10K output per domain agent. Measured after S4 dry run.)
+- [ ] AV1-D7 — Blind spots #1 (Architecture Layer) and #7 (Error Handling)
+  acceptable for v1 blockchain audit quality bar? (rev2, CTO-HIGH-2.
+  Default: yes — disclosed in report §9. Operator must explicitly confirm.)
+- [ ] **S0 prerequisite sprint** approved (rev2 addition — IngestRun unification + composite tools).
+- [ ] **GIM-218** status check: if still zero progress within 1 week of
+  rev2 approval, demote version-skew to blind spot for S4 and descope
+  from v1 critical path. GIM-216 is on track (PR #105, Phase 3 in progress).
 
 ## 6. What this overview is NOT
 
@@ -143,11 +205,13 @@ Before starting S1 brainstorm, operator should confirm:
 ## 7. Cross-references
 
 - High-level table + decision points: `docs/roadmap.md` §"Audit-V1"
+- S0 (Foundation prerequisites) detail: `D-audit-orchestration.md` §S0
 - S1 (Audit Orchestration) detail: `D-audit-orchestration.md`
 - S2 (Crypto Domain Extractor) detail: `B-audit-extractors.md`
 - S3 (Ingestion Automation) detail: `C-ingestion-automation.md`
 - S4 (Smoke) detail: `E-smoke.md`
 - S5 (Scale) detail: `F-scale.md`
+- Archived Phase 2-6 backlog: `docs/roadmap-archive.md`
 - Memory queue updated: `project_next_claude_extractor_queue.md`
 - Existing in-flight: GIM-216 (`feature/GIM-NN-code-ownership-extractor`),
   GIM-218 (`feature/GIM-NN-cross-repo-version-skew`)

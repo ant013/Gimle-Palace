@@ -1,5 +1,8 @@
 # Sprint S4 (E) — Smoke run on tronKit-swift + bitcoinKit-swift
 
+> **Rev2** (2026-05-06): adds measurable acceptance criteria (CR-MED-4).
+> Adds GIM-218 contingency plan. Adds audit-mode prompt validation step.
+
 **Goal**: validate end-to-end that v1 product works on real crypto-Kit
 source. Two Kits: tronKit-swift (first — simpler), bitcoinKit-swift
 (second — generalisation check).
@@ -14,21 +17,71 @@ human can read and act on.
 **Definition of Done**:
 1. `palace.audit.run(project="tronkit-swift")` produces a complete
    markdown audit report.
-2. Report passes operator review: findings are credible, severity
-   ranks make sense, sections cover all expected domains, blind
-   spots disclosed honestly.
+2. Report passes acceptance criteria (see below).
 3. Same for `bitcoinkit-swift`.
-4. Operator-facing demo doc: `docs/audit-reports/2026-MM-DD-tronkit-swift.md`
-   and `docs/audit-reports/2026-MM-DD-bitcoinkit-swift.md` (the
-   actual audit reports become artifacts).
-5. List of v1 product gaps captured per the report's blind-spots
-   section, prioritised for S6+ intake.
+4. Operator-facing artifacts: `docs/audit-reports/2026-MM-DD-tronkit-swift.md`
+   and `docs/audit-reports/2026-MM-DD-bitcoinkit-swift.md`.
+5. Gap-list for S6+ captured in retrospective.
 
 **Dependencies**:
+- S0 (Foundation prerequisites) merged.
 - S1 (D) merged: workflow + agents + composite tool live on iMac.
 - S2 (B-min) merged: `crypto_domain_model` extractor in registry.
 - S3 (C) merged: ingestion automation works.
-- GIM-216 + GIM-218 merged: ownership + skew sections populated.
+- GIM-216 merged (PR #105, expected ~1 week).
+- GIM-218: see contingency below.
+
+---
+
+## GIM-218 contingency (rev2, CTO-CRITICAL-3)
+
+GIM-218 (cross_repo_version_skew) has zero progress — no branch, no spec,
+no assignee. Realistic minimum: 2-3 weeks from first touch to merge.
+
+**Decision (per rev2 checklist AV1-D7)**: If GIM-218 is not started within
+1 week of rev2 approval:
+- **Demote** version-skew from S4 required section to S4 blind spot.
+- S4 acceptance criteria below adjust: "Dependencies" section ships without
+  version skew; report explicitly states "blind spot — GIM-218 pending".
+- S5 bundle-mode cross-Kit skew also degrades to blind spot.
+- GIM-218 becomes a post-v1 S6+ slice.
+
+This avoids blocking the entire v1 on a single unstarted dependency.
+
+---
+
+## Acceptance criteria (rev2 — CR-MED-4)
+
+S4 is not "run it and see". Each audit report must pass these **measurable
+thresholds** to be accepted:
+
+### Per-Kit report acceptance
+
+| Criterion | Threshold | How to measure |
+|-----------|-----------|----------------|
+| Sections populated | ≥5 of 10 sections contain findings or "no findings" (not blank) | Count non-empty sections |
+| Non-informational findings | ≥3 findings with severity ≥ `low` | Count findings in report |
+| False-positive rate (top-5) | ≤2 of top-5 flagged items are false-positives | Manual review by operator + BlockchainEngineer |
+| Blind spots declared | All missing extractors listed in §9 with rationale | Verify against registry diff |
+| Provenance complete | Every populated section traces to an `:IngestRun` with run_id | Verify run_ids exist in Neo4j |
+| Executive summary | Present, ≤500 words, covers top-3 findings | Word count + content check |
+
+### Bundle report acceptance (S4.3)
+
+| Criterion | Threshold |
+|-----------|-----------|
+| Cross-Kit sections present | At least 1 of: version skew, contract drift, ownership concentration |
+| Bundle members listed | Both Kits appear in report header |
+
+### Audit-mode prompt validation (rev2)
+
+During S4.1, verify that the 3 reused agents (with S0.3 audit-mode prompts)
+can consume fetcher output and produce structured sub-reports:
+- Each agent receives real fetcher data (not synthetic fixtures).
+- Each agent produces a sub-report that: follows the output format, cites
+  only extractor data (no invented findings), uses severity grading rules.
+- If an agent's output is unusable, flag the role prompt for revision before
+  S4.2.
 
 ---
 
@@ -39,65 +92,44 @@ human can read and act on.
 1. Dev Mac: `bash scip_emit_swift_kit.sh tronkit-swift`.
 2. iMac: `bash ingest_swift_kit.sh tronkit-swift --bundle=uw-ios`.
    Verify all extractor `:IngestRun` records show `success`.
-3. iMac: `palace.audit.run(project="tronkit-swift")` — produces
-   markdown report.
-4. Operator reviews markdown:
-   - Are top-N hotspots actually hot? (manually correlate with git
-     log).
-   - Are dead symbols actually dead? (spot-check 2-3).
-   - Are crypto-domain findings legitimate? (BlockchainEngineer
-     review of each high-severity item).
-   - Are ownership claims accurate? (sanity-check vs git blame on
-     1 file).
-   - Does the report have ALL expected sections per `D-audit-orchestration.md`
-     §S1.1 deliverable spec?
-5. Capture deltas: false-positives, missed findings, format issues.
-6. File these as v1 product backlog (small followup PRs, not v2
-   blockers).
+3. iMac: `palace.audit.run(project="tronkit-swift")` — sync report.
+4. iMac: `bash audit-workflow-launcher.sh tronkit-swift` — async
+   multi-agent report (validates child-issue dispatch).
+5. Operator reviews both reports against acceptance criteria above.
+6. Validate audit-mode prompts: review each agent's sub-report
+   for format compliance and finding accuracy.
+7. Capture deltas: false-positives, missed findings, format issues.
+8. File small followups as v1.1 backlog.
 
 ### S4.2 — bitcoinKit-swift second audit
 
-Same flow as S4.1. The point is to verify v1 generalises beyond
-the first Kit. Differences expected (different package layout,
-different Swift version target, different crypto patterns) — they
-should NOT require workflow changes; they may surface
-extractor-side gaps.
+Same flow as S4.1. Validates v1 generalises beyond first Kit.
+Differences expected — should NOT require workflow changes.
 
 ### S4.3 — Bundle smoke
 
 After both Kit audits succeed individually:
 
-1. iMac: `palace.audit.run(bundle="uw-ios", depth="full")`.
-2. Verify cross-Kit sections appear:
-   - Cross-repo version skew (from GIM-218).
-   - Cross-module contract drift (from GIM-192).
-   - Bundle-wide ownership concentration.
+1. `palace.audit.run(bundle="uw-ios", depth="full")`.
+2. Verify cross-Kit sections appear (per bundle acceptance criteria).
 3. Operator review.
 
-If `uw-ios` bundle has only 2 members at this point (tronKit +
-bitcoinKit), cross-Kit signal will be sparse. Smoke validates the
-SHAPE of the cross-Kit report; the quality signal comes after S5
-when the full 41-Kit bundle is populated.
+With only 2 members, cross-Kit signal will be sparse. Validates the
+SHAPE of the cross-Kit report; quality signal comes after S5.
 
 ### S4.4 — Smoke retrospective + gap-list
 
 **Files**:
-- `docs/superpowers/sprints/E-smoke-retrospective.md` (output of
-  this slice)
+- `docs/superpowers/sprints/E-smoke-retrospective.md`
 
-**Scope**: write a retrospective document covering:
-- What worked.
-- What broke.
-- What's the v1.1 backlog (small fixes).
-- What's the v2 backlog (bigger gaps — extractor adds, role
-  splits, etc).
-- Should `Auditor` (single multi-domain role) split into
-  Quality/Dependency/Historical? Operator decides per smoke
-  evidence.
-- Is `crypto_domain_model` rule set sufficient, or are there
-  obvious gaps that need rule additions?
-
-This retrospective drives S6+ slice prioritisation.
+**Scope**:
+- What worked / what broke.
+- v1.1 backlog (small fixes).
+- v2 backlog (bigger gaps).
+- Auditor role split decision (AV1-S4-D1).
+- Crypto-domain rule expansion assessment (AV1-S4-D2).
+- Token budget measurement: actual tokens consumed per agent per
+  Kit audit vs. AV1-D6 budget. Adjust if over.
 
 ---
 
@@ -105,9 +137,10 @@ This retrospective drives S6+ slice prioritisation.
 
 | ID | Question | Default outcome |
 |----|----------|------------------|
-| AV1-S4-D1 | Auditor role — keep single multi-domain or split? | Decided after smoke evidence; default keep single |
-| AV1-S4-D2 | crypto_domain_model rule expansion priority | Decided per smoke false-negatives; default add 5 more rules in v1.1 |
-| AV1-S4-D3 | Extractor backlog priority (#1 vs #34 vs #7 vs LLM infra)? | Decided per smoke blind-spot complaints; default operator picks one |
+| AV1-S4-D1 | Auditor role — keep single or split? | Decided after smoke evidence |
+| AV1-S4-D2 | crypto_domain_model rule expansion | Decided per false-negatives |
+| AV1-S4-D3 | Extractor backlog priority | Decided per blind-spot complaints |
+| AV1-S4-D4 | Token budget revision (rev2) | Measured vs. AV1-D6 target |
 
 ## Cross-references
 

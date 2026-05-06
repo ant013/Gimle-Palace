@@ -1,40 +1,103 @@
 # Sprint S1 (D) — Audit Orchestration
 
+> **Rev2** (2026-05-06): addresses CTO-CRITICAL-1/2, OPUS-CRITICAL-1/2,
+> OPUS-HIGH-1/2, CR-CRITICAL-3, CTO-HIGH-3/6, CTO-LOW-1, CR-MED-2.
+> See `audit-v1-overview.md` rev2 changelog for full list.
+
 **Goal**: ship the audit pipeline framework — workflow, agent roles,
 report format, composite MCP tool — into which any extractor's data
 plugs in without code changes to the orchestration layer.
 
-**Wall-time**: ~3 weeks calendar (≈8-10 paperclip slices, mostly
-sequential because each refines the contract for the next).
+**Wall-time**: ~4-5 weeks calendar (S0 prerequisite: ~1 week; S1 main:
+~3-4 weeks at 2-3 slices/day with phase chains).
 
 **Driver**: `palace.audit.run(project="tronkit-swift")` returns a
 structured markdown audit report.
 
 **Definition of Done**:
-1. New role files for `Auditor` + `AuditSynthesizer` agents deployed.
-2. New MCP composite tool `palace.audit.run` registered in server.
-3. Markdown report template at `services/palace-mcp/src/palace_mcp/audit/report_template.md`.
-4. Per-extractor section templates at
-   `services/palace-mcp/src/palace_mcp/extractors/*/audit_section_template.md`
+1. New role file for `Auditor` agent deployed.
+2. Audit-mode prompt sections appended to `OpusArchitectReviewer`,
+   `SecurityAuditor`, `BlockchainEngineer` role files.
+3. New MCP composite tool `palace.audit.run` (synchronous data+render) registered.
+4. Async workflow launcher `audit-workflow-launcher.sh` with child-issue dispatch.
+5. Markdown report template at `services/palace-mcp/src/palace_mcp/audit/report_template.md`.
+6. Per-extractor section templates at `services/palace-mcp/src/palace_mcp/audit/templates/<name>.md`
    for: `hotspot`, `dead_symbol_binary_surface`, `dependency_surface`,
    `code_ownership` (post-GIM-216), `cross_repo_version_skew`
-   (post-GIM-218), `public_api_surface`, `cross_module_contract`.
-   `git_history` and `symbol_index_*` produce no audit section
-   directly (they feed others).
-5. End-to-end synthetic test: seed graph with known fixture data,
-   run orchestrator, assert report contains expected per-extractor
-   sections in correct order with severity-graded findings.
-6. Workflow doc: `docs/runbooks/audit-orchestration.md`.
+   (post-GIM-218 or blind-spot stub), `public_api_surface`, `cross_module_contract`.
+7. End-to-end synthetic test: seed graph with known fixture data,
+   run tool, assert report contains expected per-extractor sections
+   in correct order with severity-graded findings.
+8. Workflow doc: `docs/runbooks/audit-orchestration.md`.
 
 **NOT in this sprint** (deferred to S6+):
 - Cron / on-merge trigger.
 - JSON / Cypher snapshot export.
 - LLM-bearing agent roles.
 - Per-domain split into Quality / Dependency / Historical agents.
+- AuditSynthesizer agent (removed in rev2 — Python renderer is sufficient).
 
 ---
 
-## Slices (small, ≤30min each for impl by paperclip team)
+## S0 — Foundation prerequisites (rev2 addition)
+
+Three prerequisite slices that must land before S1 work starts.
+These address the structural gaps identified by all 3 reviewers.
+
+### S0.1 — Unify IngestRun schema (OPUS-CRITICAL-1)
+
+**Problem**: Two competing `:IngestRun` creation paths with incompatible schemas:
+- Path A (runner.py/cypher.py): `{id, source, group_id, ...}` — used by hotspot, dead_symbol, dependency_surface, etc.
+- Path B (foundation/checkpoint.py): `{run_id, project, extractor_name, ...}` — used by symbol_index_*.
+
+S1.4 discovery Cypher uses Path B fields (`extractor_name`, `project`) and would
+miss all Path A IngestRun records.
+
+**Scope**: Add `extractor_name` and `project` as canonical fields to Path A
+IngestRun creation. Specifically:
+- `extractors/cypher.py` — add `extractor_name = $extractor_name, project = $project` to CREATE.
+- `extractors/runner.py` — pass `extractor_name` (derived from `source` field minus `extractor.` prefix) and `project` (derived from `group_id` minus `project/` prefix).
+- Migration query for existing IngestRun nodes: `MATCH (r:IngestRun) WHERE r.extractor_name IS NULL SET r.extractor_name = ...`.
+- Test: verify both paths produce `:IngestRun` nodes queryable by `extractor_name + project`.
+
+**Size**: 2-4 hours (schema migration + tests).
+**Branch**: `feature/GIM-NN-unify-ingest-run-schema`
+
+### S0.2 — Create missing composite MCP tools (CR-CRITICAL-3)
+
+**Problem**: S1 fetchers need `palace.code.find_*` composite tools.
+Currently exist: `find_references`, `test_impact`, `find_hotspots` (3 of 8 needed).
+Missing: `find_owners`, `find_version_skew`, `find_dead_symbols`,
+`find_public_api`, `find_cross_module_contracts`.
+
+**Scope**: Create 5 composite tools in `code_composite.py`, each wrapping
+existing Cypher queries with Pydantic response models. Each tool is a
+thin wrapper — the underlying extractors and graph data already exist.
+
+**Size**: 4-6 hours (5 tools × ~1 hour each including tests).
+**Branch**: `feature/GIM-NN-audit-composite-tools`
+**Parallelisable**: can run alongside S0.1 (different files).
+
+### S0.3 — Audit-mode prompt sections for 3 reused agents (OPUS-MEDIUM-2)
+
+**Problem**: OpusArchitectReviewer, SecurityAuditor, BlockchainEngineer have
+role prompts optimized for code review, not audit report generation. They
+need to know: how to consume fetcher output, what constitutes a "finding",
+how to grade severity from extractor metrics, sub-report output format.
+
+**Scope**: Append `## Audit mode` section to each of the 3 role files:
+- Input format: JSON blob from `palace.audit.run` fetcher output.
+- Output format: markdown sub-report with severity-graded findings.
+- Severity grading rules: map extractor scores → critical/high/medium/low.
+- Hard rule: NO inventing findings beyond what fetcher data shows.
+
+**Size**: 1-2 hours (3 role file additions + review).
+**Branch**: `feature/GIM-NN-audit-mode-prompts`
+**Parallelisable**: independent of S0.1 and S0.2.
+
+---
+
+## S1 Slices (honest sizing per rev2)
 
 ### S1.1 — Audit deliverable spec
 
@@ -48,133 +111,159 @@ What the spec answers:
 - Severity rank: `critical | high | medium | low | informational`.
   Per-extractor mapping documented (e.g., `hotspot.score >= 0.8` =
   high; `cross_repo_version_skew.severity = 'major'` = high).
-- Per-section length budget (Executive ≤500 words; per-domain
-  ≤2000 words).
+- Per-section length budget (Executive ≤500 words; per-domain ≤2000 words).
+- Token budget per agent (AV1-D6): target 50K input / 10K output
+  per domain agent; measured after S4 dry run.
 - Empty-section behaviour: when an extractor has no findings,
   section reads "No findings — extractor X ran at <run_id> on
   <head_sha>, scanned N files, found 0 issues."
-- Blind-spot disclosure: explicit list of extractors NOT yet merged
-  with rationale.
+- Blind-spot disclosure: explicit list of extractors NOT yet merged.
 - Provenance trailer format.
+- `BaseExtractor.audit_contract()` schema definition (rev2).
+- IngestRun schema contract: all extractors MUST write `:IngestRun`
+  with `{run_id, extractor_name, project, success, completed_at}`.
 
-**Why first**: every subsequent slice references this spec for
-section templates.
-
----
-
-### S1.2 — Per-extractor section template files
-
-**Files** (one per extractor):
-- `services/palace-mcp/src/palace_mcp/extractors/hotspot/audit_section_template.md`
-- `.../dead_symbol_binary_surface/audit_section_template.md`
-- `.../dependency_surface/audit_section_template.md`
-- `.../code_ownership/audit_section_template.md` (created in GIM-216 slice)
-- `.../cross_repo_version_skew/audit_section_template.md` (created in GIM-218 slice)
-- `.../public_api_surface/audit_section_template.md`
-- `.../cross_module_contract/audit_section_template.md`
-
-**Format**: Jinja-like template (or plain Python f-string) with
-slots for: `top_n_findings`, `summary_stats`, `provenance_run_id`,
-`provenance_completed_at`. Each ships with its OWN extractor PR —
-adding a future extractor is "drop a new template file" + register
-in the synthesizer's discovery loop.
-
-**Spec file**: `docs/superpowers/specs/<date>-GIM-NN-audit-section-templates.md`
-
-**Scope**: define the template contract (what variables synthesizer
-provides, what each extractor must emit). All 7 templates above are
-authored in this slice.
-
-**Out of scope**: rendering logic (S1.3); discovery from `:IngestRun`
-(S1.4).
+**Size**: ~1 hour.
+**Why first**: every subsequent slice references this spec.
 
 ---
 
-### S1.3 — Markdown rendering engine
+### S1.2 — Per-extractor section template files (rev2: in `audit/templates/`)
+
+**Files** (one per extractor, in `audit/templates/` — NOT inside extractor dirs):
+- `services/palace-mcp/src/palace_mcp/audit/templates/hotspot.md`
+- `.../templates/dead_symbol_binary_surface.md`
+- `.../templates/dependency_surface.md`
+- `.../templates/code_ownership.md`
+- `.../templates/cross_repo_version_skew.md`
+- `.../templates/public_api_surface.md`
+- `.../templates/cross_module_contract.md`
+
+**Rev2 change**: Templates live in `audit/templates/<name>.md`, not
+`extractors/<name>/audit_section_template.md`. This avoids the flat-to-directory
+extractor refactor (CTO-LOW-1, CR-MED-2). The `audit_contract()` method on each
+extractor returns a `template_path` pointing here.
+
+**Format**: Jinja2 template with standardized variable contract defined in S1.1.
+Each template receives: `findings` (list), `summary_stats` (dict),
+`provenance_run_id`, `provenance_completed_at`.
+
+**Size**: ~2-3 hours (7 templates + template contract spec).
+
+---
+
+### S1.3 — Markdown rendering engine + `audit_contract()` base class
 
 **Files**:
 - `services/palace-mcp/src/palace_mcp/audit/__init__.py`
 - `services/palace-mcp/src/palace_mcp/audit/renderer.py`
 - `services/palace-mcp/src/palace_mcp/audit/report_template.md`
+- `services/palace-mcp/src/palace_mcp/extractors/base.py` — add `audit_contract()` method
 - `tests/audit/unit/test_audit_renderer.py`
 
-**Scope**: pure-function renderer. Inputs: extractor outputs (already
-fetched). Output: complete markdown string.
+**Scope**: pure-function renderer + base class contract.
 
-- Reads top-level template (`report_template.md`) which has slots
-  for executive, per-section, blind-spots, provenance.
-- For each known extractor name, looks up `extractors/<name>/audit_section_template.md`,
-  renders with that extractor's data.
+- `BaseExtractor.audit_contract() → AuditContract | None` (rev2).
+- Renderer reads top-level template (`report_template.md`).
+- For each extractor with non-None `audit_contract()`, loads
+  `audit_contract().template_path`, renders with fetched data.
 - Severity sort: in-section findings sorted critical → low; sections
-  ordered by max severity first (critical-bearing sections precede
-  low-only).
+  ordered by max severity first.
 
-**Test fixtures**: hand-crafted extractor output dicts; assert
-markdown matches golden file.
+**Test fixtures**: hand-crafted extractor output dicts; assert markdown
+matches golden file.
 
-**Spec file**: `docs/superpowers/specs/<date>-GIM-NN-audit-renderer.md`
-**Plan file**: matching `plans/`.
+**Size**: ~3-4 hours (renderer + base class + tests).
 
 ---
 
-### S1.4 — Extractor discovery via `:IngestRun`
+### S1.4 — Extractor discovery via `:IngestRun` (rev2: unified schema)
 
 **Files**:
 - `services/palace-mcp/src/palace_mcp/audit/discovery.py`
 - `tests/audit/integration/test_audit_discovery.py`
 
 **Scope**: query `:IngestRun` for the latest successful run per
-`extractor_name` for a given `project`/`bundle`. Return a dict
-`{extractor_name: {run_id, completed_at, exit_reason, ...extras}}`.
+`extractor_name` for a given `project`/`bundle`.
 
-This is the load-bearing piece that makes the post-v1 paved path
-work — adding a new extractor with `extractor_name='X'` automatically
-shows up in `discovery()` output without any orchestrator change.
+**Rev2 change**: After S0.1 unifies the schema, ALL IngestRun records have
+`extractor_name` and `project` fields. Discovery Cypher:
 
-**Cypher**:
 ```cypher
 MATCH (r:IngestRun {project: $project, success: true})
+WHERE r.extractor_name IS NOT NULL
 WITH r.extractor_name AS name, r
 ORDER BY r.completed_at DESC
 WITH name, head(collect(r)) AS latest
 RETURN name, latest.run_id AS run_id,
        latest.completed_at AS completed_at,
-       latest // for properties
+       latest
 ```
 
-**Out of scope**: per-extractor data fetch (S1.5).
+**IngestRun schema contract** (rev2, CR-MED-3): documented in S1.1 spec.
+
+**Size**: ~1-2 hours.
+**Can run parallel with S1.3.**
 
 ---
 
-### S1.5 — Per-extractor data fetchers
+### S1.5 — Generic audit data fetcher via `audit_contract()` (rev2)
 
 **Files**:
-- `services/palace-mcp/src/palace_mcp/audit/fetchers.py`
-- `tests/audit/integration/test_audit_fetchers.py`
+- `services/palace-mcp/src/palace_mcp/audit/fetcher.py`
+- `tests/audit/integration/test_audit_fetcher.py`
 
-**Scope**: for each known extractor, a function that fetches its
-audit-relevant data given `(project, bundle, run_id)`. Examples:
+**Rev2 rewrite (CTO-CRITICAL-1, OPUS-CRITICAL-2)**: Single generic fetcher
+instead of 7 hardcoded `fetch_X()` functions:
 
-- `fetch_hotspot(driver, project, top_n) → list[HotspotFinding]`
-  uses `palace.code.find_hotspots` underneath.
-- `fetch_ownership(driver, project, top_n) → list[OwnerSummary]`
-  uses `palace.code.find_owners` per high-hotspot file.
-- `fetch_version_skew(driver, project_or_bundle, min_severity) → list[SkewGroup]`
-  uses `palace.code.find_version_skew`.
-- `fetch_dead_symbols(driver, project) → list[DeadSymbol]`
-- `fetch_public_api(driver, project) → PublicApiSummary`
-- `fetch_cross_module(driver, project) → list[ContractDiff]`
-- `fetch_crypto_domain(driver, project) → list[CryptoFinding]` —
-  added in S2 once #40 lands.
+```python
+async def fetch_audit_data(
+    driver: AsyncDriver,
+    discovery_result: dict[str, IngestRunInfo],
+    extractor_registry: dict[str, BaseExtractor],
+) -> dict[str, AuditSectionData]:
+    results = {}
+    for name, run_info in discovery_result.items():
+        extractor = extractor_registry.get(name)
+        if not extractor or not extractor.audit_contract():
+            continue
+        contract = extractor.audit_contract()
+        raw = await driver.execute_query(contract.query, project=run_info.project)
+        parsed = contract.response_model.model_validate(raw)
+        results[name] = AuditSectionData(
+            extractor_name=name, data=parsed,
+            template_path=contract.template_path, provenance=run_info,
+        )
+    return results
+```
 
-Each fetcher has an `extractor_name` constant tying it to discovery.
-
-**Out of scope**: agent-level synthesis (S1.6); composite MCP tool
-(S1.8).
+**Prerequisite**: S0.1 + S0.2 + S1.3 (base class) + S1.4 (discovery).
+**Size**: ~2-3 hours.
 
 ---
 
-### S1.6 — Auditor agent role file
+### S1.6 — Implement `audit_contract()` on 7 existing extractors
+
+**Files**: 7 extractor `.py` files + 7 template files from S1.2.
+
+**Scope**: For each of the 7 extractor classes that produce audit data, implement
+`audit_contract()` returning query, response model, and template path.
+
+| Extractor | Query source |
+|-----------|-------------|
+| `hotspot` | `palace.code.find_hotspots` Cypher (from S0.2) |
+| `dead_symbol_binary_surface` | `find_dead_symbols` Cypher (from S0.2) |
+| `dependency_surface` | existing Cypher in extractor |
+| `public_api_surface` | `find_public_api` Cypher (from S0.2) |
+| `cross_module_contract` | `find_cross_module_contracts` Cypher (from S0.2) |
+| `code_ownership` | `find_owners` Cypher (from S0.2) — post-GIM-216 |
+| `cross_repo_version_skew` | `find_version_skew` Cypher (from S0.2) — post-GIM-218 or stub |
+
+**Size**: ~4-6 hours (7 implementations × ~45 min each with tests).
+
+---
+
+### S1.7 — Auditor agent role file (rev2: single new role, no Synthesizer)
 
 **Files**:
 - `paperclips/roles/auditor.md`
@@ -183,59 +272,31 @@ Each fetcher has an `extractor_name` constant tying it to discovery.
 - `paperclips/scripts/deploy-agents.sh` — add `auditor` to AGENT_NAMES
 
 **Scope**: role prompt for a multi-domain auditor. The agent:
-- Receives a project/bundle + a fetcher-output bundle.
-- Returns per-domain markdown sub-reports (Quality / Dependencies /
-  Ownership).
-- Does NOT make subjective judgment beyond what extractors already
-  say (severity comes from extractor; agent describes WHY a finding
-  is high-severity in plain language).
-- Hard rule: NO inventing findings — only re-narrate what fetchers
-  returned.
+- Receives a project/bundle + `palace.audit.run` output.
+- Returns per-domain markdown sub-reports (Quality / Dependencies / Ownership).
+- Does NOT make subjective judgment beyond what extractors already say.
+- Hard rule: NO inventing findings — only re-narrate fetcher data.
 
-**UUID**: assigned at deploy. Update `reference_agent_ids.md` memory.
+**Rev2**: No AuditSynthesizer role. Synthesis = Python function call.
+**UUID**: assigned at deploy.
+**Size**: ~1-2 hours.
 
 ---
 
-### S1.7 — AuditSynthesizer agent role file
-
-**Files**:
-- `paperclips/roles/audit-synthesizer.md`
-- `paperclips/roles-codex/audit-synthesizer.md`
-- `paperclips/dist/codex/audit-synthesizer.md`
-- `paperclips/scripts/deploy-agents.sh` — add to AGENT_NAMES
-
-**Scope**: role prompt for the final-report-assembler. The agent:
-- Receives sub-reports from Auditor + OpusArchitectReviewer +
-  SecurityAuditor + BlockchainEngineer.
-- Calls `audit/renderer.py` (via composite tool wrapper) to produce
-  the final markdown.
-- Returns ONE deliverable: the markdown blob.
-
-The synthesizer is intentionally thin — most logic lives in the
-Python renderer. The agent role exists so the workflow remains a
-paperclip-team pattern (handoff-able, auditable in `:IngestRun`)
-rather than a hidden Python call.
-
----
-
-### S1.8 — `palace.audit.run` composite MCP tool
+### S1.8 — `palace.audit.run` synchronous MCP tool (rev2: no agent_subreports)
 
 **Files**:
 - `services/palace-mcp/src/palace_mcp/audit/run.py`
 - `services/palace-mcp/src/palace_mcp/server.py` — register tool
 - `tests/audit/integration/test_audit_run_e2e.py`
 
-**Scope**: composite tool that:
+**Rev2 rewrite (CTO-CRITICAL-2)**: Synchronous data+render only.
+
 1. Validates args (`project` XOR `bundle`, regex on slugs, `depth` ∈ {`quick`, `full`}).
 2. Calls `audit/discovery.py` for available extractors.
-3. Calls `audit/fetchers.py` for each.
-4. Returns the raw fetched data + computed report.
-
-**Args**:
-- `project: str | None`
-- `bundle: str | None`
-- `depth: str = "full"` — `quick` skips deep cross-Kit analysis;
-  `full` enables it for bundle mode.
+3. Calls `audit/fetcher.py` generic fetcher for each.
+4. Calls `audit/renderer.py` to produce markdown.
+5. Returns report.
 
 **Returns**:
 ```json
@@ -244,50 +305,40 @@ rather than a hidden Python call.
   "report_markdown": "# Audit report — tronkit-swift\n...",
   "fetched_extractors": ["hotspot", "dead_symbol_binary_surface", ...],
   "blind_spots": ["crypto_domain_model: NOT MERGED", "code_smell: BLIND"],
-  "provenance": {...},
-  "agent_subreports": {
-    "Auditor": "...",
-    "OpusArchitectReviewer": "...",
-    "SecurityAuditor": "...",
-    "BlockchainEngineer": "..."
-  }
+  "provenance": {...}
 }
 ```
 
-`agent_subreports` are populated when the tool is invoked from a
-paperclip workflow that pre-collected them. Direct CLI/MCP-client
-invocation can pass `--skip-agents` and get a synthesizer-only output
-(useful for smoke testing, raw data review).
-
-**Out of scope**: triggering the paperclip workflow itself (S1.9).
+No `agent_subreports` — async workflow is separate (S1.9).
+**Size**: ~2-4 hours.
 
 ---
 
-### S1.9 — Workflow trigger + paperclip handoff sequence
+### S1.9 — Async workflow launcher + child-issue dispatch (rev2: redesigned)
 
 **Files**:
+- `services/palace-mcp/src/palace_mcp/cli.py` — one-shot MCP CLI wrapper
 - `paperclips/scripts/audit-workflow-launcher.sh`
 - `docs/runbooks/audit-orchestration.md`
 
-**Scope**: define the manual-trigger sequence:
+**Rev2 rewrite (OPUS-HIGH-1)**: Uses Paperclip child issues for parallel dispatch.
 
-1. Operator runs `bash paperclips/scripts/audit-workflow-launcher.sh tronkit-swift`.
-2. Script creates a paperclip issue: title
-   `audit: <slug>`, assigned to `Auditor` (NEW agent UUID).
-3. Auditor wakes, calls `palace.audit.run(project=<slug>, --skip-agents)` to
-   get raw data, writes its sub-report, hands off to
-   `OpusArchitectReviewer` + `SecurityAuditor` + `BlockchainEngineer`
-   in parallel (4-agent dispatch).
-4. Each of the 3 reviewers reads raw data via direct MCP queries +
-   writes their sub-report into the issue thread as a comment.
-5. After all 3 done, Auditor (or `audit-workflow-launcher.sh` polling)
-   detects readiness and reassigns to `AuditSynthesizer`.
-6. Synthesizer combines all sub-reports + raw data into the final
-   markdown via `palace.audit.run(--render-only)`. Posts as final
-   comment + closes issue.
+**Workflow**:
+1. Operator: `bash audit-workflow-launcher.sh tronkit-swift`.
+2. Script calls `python3 -m palace_mcp.cli audit.run --project=<slug>` to verify data exists.
+3. Creates parent issue: `audit: <slug>`, assigned to `Auditor`.
+4. Creates 3 child issues with `blockedByIssueIds`:
+   - `audit-arch: <slug>` → `OpusArchitectReviewer`
+   - `audit-sec: <slug>` → `SecurityAuditor`
+   - `audit-crypto: <slug>` → `BlockchainEngineer`
+5. Parent status `blocked`, `blockedByIssueIds` = [3 child IDs].
+6. Each domain agent wakes, queries palace tools, posts sub-report, marks `done`.
+7. `issue_children_completed` → Auditor wakes → collects sub-reports → renders final report.
 
-**Out of scope**: cron triggers, on-merge CI, multi-tenant ACL
-(deferred per AV1-D3, AV1-D4, broader trust-model slice).
+**MCP invocation from bash** (CTO-HIGH-6, CR-HIGH-4): `palace_mcp.cli` module —
+thin one-shot wrapper connecting to palace-mcp's streamable HTTP endpoint.
+
+**Size**: ~3-4 hours (CLI wrapper ~2h + launcher script ~1h + runbook ~1h).
 
 ---
 
@@ -295,66 +346,58 @@ invocation can pass `--skip-agents` and get a synthesizer-only output
 
 **Files**:
 - `services/palace-mcp/tests/audit/smoke/test_audit_e2e.sh`
-- `services/palace-mcp/tests/audit/fixtures/audit-mini-project/` — synthetic
-  graph with all 7 extractor outputs pre-seeded.
+- `services/palace-mcp/tests/audit/fixtures/audit-mini-project/`
 
-**Scope**: verify the full pipeline against a synthetic fixture
-without requiring real extractors to have run. Catches integration
-breaks early.
+**Scope**: verify full pipeline against synthetic fixture.
+Creates 7 successful `:IngestRun` records (unified schema) + output nodes.
+Runs `palace.audit.run`, asserts golden-file match.
 
-The fixture is hand-crafted Cypher that creates 7 successful
-`:IngestRun` records + per-extractor output nodes/edges. Smoke runs
-`palace.audit.run` against it, asserts the rendered markdown
-matches a golden file.
+Also verifies paved-path regression: adding a fixture extractor entry
+produces a new section without orchestrator changes.
 
-This is also the regression gate for "post-v1 paved path": when
-adding extractor X in S6+, the developer adds a new fixture entry,
-re-runs smoke, sees the new section appear in the golden file.
+**Size**: ~2-3 hours.
 
 ---
 
-## Slice ordering rationale
+## Slice ordering (rev2)
 
-| Slice | Why this position |
-|-------|--------------------|
-| 1.1 deliverable spec | defines contracts for all later slices |
-| 1.2 templates | needed before renderer (1.3) can be tested |
-| 1.3 renderer | pure function, testable in isolation, blocks 1.5/1.8 |
-| 1.4 discovery | low-risk Cypher slice; can run parallel with 1.3 |
-| 1.5 fetchers | needs discovery (1.4) and renderer (1.3) for tests |
-| 1.6 Auditor role | independent of Python work; can run early |
-| 1.7 Synthesizer role | similar |
-| 1.8 composite tool | needs fetchers (1.5) ready |
-| 1.9 workflow | needs roles (1.6, 1.7) deployed |
-| 1.10 smoke | last — verifies end-to-end |
+| Slice | Size | Position rationale |
+|-------|------|-------------------|
+| S0.1 IngestRun unify | 2-4h | Prerequisite for all discovery |
+| S0.2 Composite tools | 4-6h | Prerequisite for fetcher queries; ‖ S0.1 |
+| S0.3 Audit-mode prompts | 1-2h | Independent; ‖ S0.1+S0.2 |
+| S1.1 deliverable spec | ~1h | Defines contracts |
+| S1.2 templates | 2-3h | Before renderer |
+| S1.3 renderer + base | 3-4h | Pure function, testable alone |
+| S1.4 discovery | 1-2h | Low-risk Cypher; ‖ S1.3 |
+| S1.5 generic fetcher | 2-3h | Needs S1.3 + S1.4 |
+| S1.6 audit_contract() × 7 | 4-6h | Needs S1.5 + S0.2 + S1.2 |
+| S1.7 Auditor role | 1-2h | Independent of Python |
+| S1.8 composite tool | 2-4h | Needs S1.5 + S1.6 |
+| S1.9 workflow | 3-4h | Needs S1.7 + S1.8 |
+| S1.10 smoke | 2-3h | End-to-end verification |
 
-Parallelisation hint: 1.1 → (1.2, 1.4, 1.6, 1.7) all parallel →
-1.3 → 1.5 → 1.8 → 1.9 → 1.10.
+**Total impl**: ~30-42 hours. **Calendar**: ~4-5 weeks (including S0).
 
-## Decision points to resolve in S1.1 brainstorm
+**Team allocation** (rev2, CTO-MEDIUM-1): PythonEngineer needed for S0+S1.
+S2 also needs PE. Since one PE can't run S1 and S2 in parallel, **S2
+starts after S1.6 frees PE** (~week 3). S3 (InfraEngineer) is truly
+parallel with S1.
 
-- AV1-D1 (markdown only?) — confirm.
-- AV1-D2 (agent set) — confirm or split Auditor.
-- AV1-D3 (manual trigger only?) — confirm.
-- Severity rank scheme: 5-level vs 3-level. Default 5.
-- Empty-section verbosity: full disclosure vs hide-empty. Default
-  full.
-- Per-extractor template ownership: who edits when extractor X
-  changes its output schema? Default: extractor's own slice owner.
-
-## Risks
+## Risks (rev2)
 
 | Risk | Mitigation |
 |------|------------|
-| Per-extractor templates drift from extractor output schema | Smoke test (1.10) uses synthetic fixture matching real schema; CI fails if template's expected fields don't appear in fetcher output. |
-| Auditor agent invents findings beyond what extractors report | Hard rule in role prompt + sub-report integration test that asserts every claim in agent output traces back to a fetcher row. |
-| Synthesizer report bloat | 500-word executive cap + per-section length budget enforced by renderer. Truncation with "(N more findings — see full audit data)" trailer. |
-| New extractor in S6+ breaks paved path | 1.10 smoke updated as part of every new extractor slice. Renderer is template-driven; no orchestrator code touches per-extractor specifics. |
+| `audit_contract()` queries drift from extractor output | S1.10 smoke with synthetic fixture; CI fails on drift |
+| Auditor invents findings | Role prompt hard rule + integration test tracing claims to fetcher rows |
+| Report bloat | 500-word cap + per-section budget; renderer truncates with trailer |
+| Paved-path regression | S1.10 gate: add fixture entry → new section without code changes |
+| Child-issue workflow complexity | S1.9 runbook + S1.10 happy-path coverage |
 
 ## Cross-references
 
 - Overview: `audit-v1-overview.md`
 - Roadmap: `docs/roadmap.md` §"Audit-V1"
-- B-min slice (parallel): `B-audit-extractors.md`
-- C ingestion (parallel): `C-ingestion-automation.md`
-- Smoke (after S1+S2+S3): `E-smoke.md`
+- B-min slice (after S1.6): `B-audit-extractors.md`
+- C ingestion (parallel with S1): `C-ingestion-automation.md`
+- Smoke (after S0+S1+S2+S3): `E-smoke.md`
