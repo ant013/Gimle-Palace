@@ -1,7 +1,7 @@
-# GIM-TBD - Build System Extractor - Implementation Plan
+# GIM-215 - Build System Extractor - Implementation Plan
 
 Plan source of truth:
-`docs/superpowers/specs/2026-05-06-GIM-TBD-build-system-extractor.md`.
+`docs/superpowers/specs/2026-05-06-GIM-215-build-system-extractor.md`.
 
 Implementation must not start until the spec and this plan are reviewed and
 approved by the CX phase chain.
@@ -33,7 +33,7 @@ Suggested owner: CXCodeReviewer.
 
 Affected paths:
 
-- `docs/superpowers/specs/2026-05-06-GIM-TBD-build-system-extractor.md`
+- `docs/superpowers/specs/2026-05-06-GIM-215-build-system-extractor.md`
 - this plan
 
 ### Step 2 - Tooling + security spike before production code

@@ -1,13 +1,13 @@
 ---
 slug: build-system-extractor
 status: proposed (rev2.1)
-branch: feature/GIM-TBD-build-system-extractor
-paperclip_issue: TBD
+branch: feature/GIM-215-build-system-extractor
+paperclip_issue: 215
 authoring_team: CX/Codex spec gate; CX/Codex implements end-to-end after approval
 predecessor: 0a9c236 (origin/develop, post #102)
 date: 2026-05-06
 roadmap_item: "Phase 2 #25 Build System Extractor"
-plan: docs/superpowers/plans/2026-05-06-GIM-TBD-build-system-extractor.md
+plan: docs/superpowers/plans/2026-05-06-GIM-215-build-system-extractor.md
 rev2_changes: |
   Addressed read-only audit blockers before implementation:
   - build identity is now one snapshot per detected build root per ecosystem per commit;
@@ -29,7 +29,7 @@ rev2_1_changes: |
     production extractor code.
 ---
 
-# GIM-TBD - Build System Extractor (Phase 2 #25)
+# GIM-215 - Build System Extractor (Phase 2 #25)
 
 ## 1. Context
 
@@ -52,7 +52,7 @@ must not be duplicated:
 This slice adds the missing build graph substrate: build targets, tasks,
 products, configurations, and target-to-target build dependencies. It is
 separate from GIM-191 dependency surface. GIM-191 answers "which external
-packages does this project declare/resolve?" GIM-TBD answers "which build
+packages does this project declare/resolve?" GIM-215 answers "which build
 targets/tasks/configurations exist, how are they wired, and which outputs do
 they produce?"
 
