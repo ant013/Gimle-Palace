@@ -746,6 +746,15 @@ def capture_swiftpm_contract(args: argparse.Namespace) -> None:
             )
         validate_against_schema(schema_path, contract)
         validate_swiftpm_contract(contract)
+        negative_contract = json.loads(json.dumps(contract))
+        negative_contract["package"]["targets"][0]["name"] = "X" * 129
+        nested_bound_note = "FAIL"
+        try:
+            validate_against_schema(schema_path, negative_contract)
+        except SystemExit as exc:
+            nested_bound_note = f"PASS — {exc}"
+        if not nested_bound_note.startswith("PASS"):
+            fail("swiftpm nested field bounds did not reject oversized target name")
         write_json(sample_path, contract)
         write_markdown(
             output,
@@ -760,6 +769,7 @@ def capture_swiftpm_contract(args: argparse.Namespace) -> None:
                     "Schema: `" + str(schema_path.relative_to(ROOT)) + "`\n\n"
                     "Sample: `" + str(sample_path.relative_to(ROOT)) + "`\n\n"
                     "JSON Schema validation: `PASS`\n\n"
+                    f"Nested bound negative check: `{nested_bound_note}`\n\n"
                     f"Products: `{len(contract['package']['products'])}`\n\n"
                     f"Targets: `{len(contract['package']['targets'])}`",
                 ),

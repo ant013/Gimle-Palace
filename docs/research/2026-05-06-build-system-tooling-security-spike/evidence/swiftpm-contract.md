@@ -16,6 +16,8 @@ Sample: `contracts/swiftpm-dump-package-v1.sample.json`
 
 JSON Schema validation: `PASS`
 
+Nested bound negative check: `PASS — $.package.targets[0].name: string longer than maxLength=128`
+
 Products: `2`
 
 Targets: `3`
