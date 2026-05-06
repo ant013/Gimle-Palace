@@ -3,7 +3,7 @@ title: Code ownership extractor — file-level blame_share + recency-weighted ch
 slug: code-ownership-extractor
 date: 2026-05-06
 status: proposed (rev2)
-paperclip_issue: GIM-NN
+paperclip_issue: GIM-216
 predecessor_sha: 0a9c2363a
 authoring: Board+Claude
 team: Claude
@@ -1027,7 +1027,7 @@ Limitations:
   troubleshooting, mailmap recipes).
 - `CLAUDE.md ## Extractors` — register `code_ownership` row + add the
   workflow block above.
-- `docs/superpowers/plans/2026-05-06-GIM-NN-code-ownership-extractor.md`
+- `docs/superpowers/plans/2026-05-06-GIM-216-code-ownership-extractor.md`
   — TDD plan (immediate next deliverable in this same Board+Claude
   session).
 

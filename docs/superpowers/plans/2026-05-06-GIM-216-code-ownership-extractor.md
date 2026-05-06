@@ -4,7 +4,7 @@
 
 **Goal:** Implement the `code_ownership` extractor (Roadmap #32) — file-level `weight = α × blame_share + (1-α) × recency_churn_share` ownership graph, plus the `palace.code.find_owners` MCP tool.
 
-**Architecture:** Per `docs/superpowers/specs/2026-05-06-GIM-NN-code-ownership-extractor.md` (rev2). Stand-alone Python extractor under `services/palace-mcp/src/palace_mcp/extractors/code_ownership/`. Hybrid signal: `pygit2.blame` on HEAD + count-based recency-weighted churn from existing `git_history` `:Commit-[:TOUCHED]->:File` graph (reversed query, server-side aggregation). `.mailmap`-aware via `pygit2.Mailmap` (no custom parser; identity-passthrough fallback). Per-file incremental refresh via `:OwnershipCheckpoint{project_id, last_head_sha, last_completed_at}` + `pygit2.Diff`. Atomic-replace per batch (`PALACE_OWNERSHIP_WRITE_BATCH_SIZE=2000`). `:OwnershipFileState` sidecar for `find_owners` empty-state disambiguation. Substrate-aligned `:IngestRun{source='extractor.code_ownership'}` (no separate `:OwnershipRun` label).
+**Architecture:** Per `docs/superpowers/specs/2026-05-06-GIM-216-code-ownership-extractor.md` (rev2). Stand-alone Python extractor under `services/palace-mcp/src/palace_mcp/extractors/code_ownership/`. Hybrid signal: `pygit2.blame` on HEAD + count-based recency-weighted churn from existing `git_history` `:Commit-[:TOUCHED]->:File` graph (reversed query, server-side aggregation). `.mailmap`-aware via `pygit2.Mailmap` (no custom parser; identity-passthrough fallback). Per-file incremental refresh via `:OwnershipCheckpoint{project_id, last_head_sha, last_completed_at}` + `pygit2.Diff`. Atomic-replace per batch (`PALACE_OWNERSHIP_WRITE_BATCH_SIZE=2000`). `:OwnershipFileState` sidecar for `find_owners` empty-state disambiguation. Substrate-aligned `:IngestRun{source='extractor.code_ownership'}` (no separate `:OwnershipRun` label).
 
 **Tech Stack:** Python 3.13+, Pydantic v2, `pygit2` (already pinned for git_history GIM-186), Neo4j (graphiti async driver), pytest + testcontainers, MCP via FastMCP.
 
@@ -127,7 +127,7 @@ Expected: 3 PASS.
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/config.py services/palace-mcp/tests/unit/test_settings_foundation.py
-git commit -m "feat(GIM-NN): add 4 PALACE_OWNERSHIP_* / MAILMAP env vars for code_ownership extractor"
+git commit -m "feat(GIM-216): add 4 PALACE_OWNERSHIP_* / MAILMAP env vars for code_ownership extractor"
 ```
 
 ---
@@ -181,7 +181,7 @@ Expected: PASS.
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/extractors/foundation/errors.py services/palace-mcp/tests/extractors/unit/test_foundation_errors.py
-git commit -m "feat(GIM-NN): add 4 ExtractorErrorCode values for code_ownership"
+git commit -m "feat(GIM-216): add 4 ExtractorErrorCode values for code_ownership"
 ```
 
 ---
@@ -498,7 +498,7 @@ Expected: 11 PASS.
 git add services/palace-mcp/src/palace_mcp/extractors/code_ownership/__init__.py \
         services/palace-mcp/src/palace_mcp/extractors/code_ownership/models.py \
         services/palace-mcp/tests/extractors/unit/test_code_ownership_models.py
-git commit -m "feat(GIM-NN): code_ownership Pydantic frozen models"
+git commit -m "feat(GIM-216): code_ownership Pydantic frozen models"
 ```
 
 ---
@@ -605,7 +605,7 @@ Expected: 3 PASS.
 ```bash
 git add services/palace-mcp/src/palace_mcp/extractors/code_ownership/schema_extension.py \
         services/palace-mcp/tests/extractors/integration/test_code_ownership_schema.py
-git commit -m "feat(GIM-NN): code_ownership schema extension (2 constraints, no rel index)"
+git commit -m "feat(GIM-216): code_ownership schema extension (2 constraints, no rel index)"
 ```
 
 ---
@@ -796,7 +796,7 @@ Expected: 4 PASS, 1 SKIP if libgit2 doesn't expose `Mailmap` (acceptable).
 ```bash
 git add services/palace-mcp/src/palace_mcp/extractors/code_ownership/mailmap.py \
         services/palace-mcp/tests/extractors/unit/test_code_ownership_mailmap.py
-git commit -m "feat(GIM-NN): MailmapResolver — pygit2 if exposed else identity passthrough"
+git commit -m "feat(GIM-216): MailmapResolver — pygit2 if exposed else identity passthrough"
 ```
 
 ---
@@ -962,7 +962,7 @@ Expected: 3 PASS.
 ```bash
 git add services/palace-mcp/src/palace_mcp/extractors/code_ownership/checkpoint.py \
         services/palace-mcp/tests/extractors/integration/test_code_ownership_checkpoint.py
-git commit -m "feat(GIM-NN): :OwnershipCheckpoint load/update"
+git commit -m "feat(GIM-216): :OwnershipCheckpoint load/update"
 ```
 
 ---
@@ -1159,7 +1159,7 @@ Expected: 3 PASS.
 ```bash
 git add services/palace-mcp/src/palace_mcp/extractors/code_ownership/blame_walker.py \
         services/palace-mcp/tests/extractors/unit/test_code_ownership_blame_walker.py
-git commit -m "feat(GIM-NN): blame_walker — per-file pygit2.blame + mailmap + bot filter"
+git commit -m "feat(GIM-216): blame_walker — per-file pygit2.blame + mailmap + bot filter"
 ```
 
 ---
@@ -1445,7 +1445,7 @@ Expected: 2 PASS.
 ```bash
 git add services/palace-mcp/src/palace_mcp/extractors/code_ownership/churn_aggregator.py \
         services/palace-mcp/tests/extractors/integration/test_code_ownership_churn_aggregator.py
-git commit -m "feat(GIM-NN): churn_aggregator — reversed-direction Cypher + server-side aggregation"
+git commit -m "feat(GIM-216): churn_aggregator — reversed-direction Cypher + server-side aggregation"
 ```
 
 ---
@@ -1718,7 +1718,7 @@ Expected: 6 PASS. (Note: `test_canonical_via_mailmap_synthetic` checks the synth
 ```bash
 git add services/palace-mcp/src/palace_mcp/extractors/code_ownership/scorer.py \
         services/palace-mcp/tests/extractors/unit/test_code_ownership_scorer.py
-git commit -m "feat(GIM-NN): scorer — α-blend + per-file normalization + canonical_via"
+git commit -m "feat(GIM-216): scorer — α-blend + per-file normalization + canonical_via"
 ```
 
 ---
@@ -2107,7 +2107,7 @@ Expected: 5 PASS.
 ```bash
 git add services/palace-mcp/src/palace_mcp/extractors/code_ownership/neo4j_writer.py \
         services/palace-mcp/tests/extractors/integration/test_code_ownership_neo4j_writer.py
-git commit -m "feat(GIM-NN): neo4j_writer — per-batch atomic replace + :OwnershipFileState"
+git commit -m "feat(GIM-216): neo4j_writer — per-batch atomic replace + :OwnershipFileState"
 ```
 
 ---
@@ -2314,7 +2314,7 @@ The fixture's `.git` is recreated locally by `regen.sh` — we do NOT commit a n
 git add services/palace-mcp/tests/extractors/fixtures/code-ownership-mini-project/REGEN.md \
         services/palace-mcp/tests/extractors/fixtures/code-ownership-mini-project/regen.sh \
         services/palace-mcp/tests/extractors/fixtures/code-ownership-mini-project/.gitignore
-git commit -m "test(GIM-NN): add code-ownership mini fixture (REGEN.md + regen.sh)"
+git commit -m "test(GIM-216): add code-ownership mini fixture (REGEN.md + regen.sh)"
 ```
 
 ---
@@ -2764,7 +2764,7 @@ Expected: `code_ownership`
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/extractors/code_ownership/extractor.py
-git commit -m "feat(GIM-NN): orchestrator — 5-phase pipeline (bootstrap → write)"
+git commit -m "feat(GIM-216): orchestrator — 5-phase pipeline (bootstrap → write)"
 ```
 
 ---
@@ -2816,7 +2816,7 @@ Expected: PASS.
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/extractors/registry.py services/palace-mcp/tests/extractors/unit/test_registry.py
-git commit -m "feat(GIM-NN): register code_ownership in EXTRACTORS"
+git commit -m "feat(GIM-216): register code_ownership in EXTRACTORS"
 ```
 
 ---
@@ -3220,7 +3220,7 @@ Expected: 8 PASS.
 
 ```bash
 git add services/palace-mcp/tests/extractors/integration/test_code_ownership_integration.py
-git commit -m "test(GIM-NN): integration — 8 scenarios on mini-fixture"
+git commit -m "test(GIM-216): integration — 8 scenarios on mini-fixture"
 ```
 
 ---
@@ -3614,7 +3614,7 @@ Expected: 8 PASS.
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/code/find_owners.py services/palace-mcp/tests/code/test_find_owners_wire.py
-git commit -m "feat(GIM-NN): palace.code.find_owners MCP tool + wire contract tests"
+git commit -m "feat(GIM-216): palace.code.find_owners MCP tool + wire contract tests"
 ```
 
 ---
@@ -3670,7 +3670,7 @@ Skip if no fast harness; live smoke covers this in Task 18.
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/server.py
-git commit -m "feat(GIM-NN): register palace.code.find_owners MCP tool"
+git commit -m "feat(GIM-216): register palace.code.find_owners MCP tool"
 ```
 
 ---
@@ -3746,7 +3746,7 @@ Expected: PASS (assuming Task 5/7 logging didn't sneak emails into log calls).
 
 ```bash
 git add services/palace-mcp/tests/extractors/unit/test_code_ownership_pii_redaction.py
-git commit -m "test(GIM-NN): PII redaction guard on code_ownership package"
+git commit -m "test(GIM-216): PII redaction guard on code_ownership package"
 ```
 
 ---
@@ -3819,7 +3819,7 @@ Run: `chmod +x services/palace-mcp/tests/extractors/smoke/test_code_ownership_sm
 
 ```bash
 git add services/palace-mcp/tests/extractors/smoke/test_code_ownership_smoke.sh
-git commit -m "test(GIM-NN): live smoke script for code_ownership (manual, iMac)"
+git commit -m "test(GIM-216): live smoke script for code_ownership (manual, iMac)"
 ```
 
 ---
@@ -3834,7 +3834,7 @@ git commit -m "test(GIM-NN): live smoke script for code_ownership (manual, iMac)
 Find the bullet list in `CLAUDE.md` under `### Registered extractors` (or equivalent). Add after the existing entries:
 
 ```markdown
-- `code_ownership` — Code ownership extractor (GIM-NN, Roadmap #32). Reads
+- `code_ownership` — Code ownership extractor (GIM-216, Roadmap #32). Reads
   `:Author` / `:Commit` / `:TOUCHED` from `git_history` (GIM-186) + does
   per-file `pygit2.blame` on HEAD. Writes `(:File)-[:OWNED_BY]->(:Author)`
   edges with `weight = α × blame_share + (1-α) × recency_churn_share`
@@ -3884,7 +3884,7 @@ Limitations:
 
 ```bash
 git add CLAUDE.md
-git commit -m "docs(GIM-NN): CLAUDE.md — register code_ownership + operator workflow"
+git commit -m "docs(GIM-216): CLAUDE.md — register code_ownership + operator workflow"
 ```
 
 ---
@@ -4000,7 +4000,7 @@ mechanical diffs); flip `is_bot` manually if confirmed bot.
 
 ```bash
 git add docs/runbooks/code-ownership.md
-git commit -m "docs(GIM-NN): runbook for code_ownership extractor"
+git commit -m "docs(GIM-216): runbook for code_ownership extractor"
 ```
 
 - [ ] **Step 3: Update roadmap on merge (post-merge step, not in this branch)**
@@ -4014,7 +4014,7 @@ done`).
 Format the row:
 
 ```
-| 32 | Code Ownership Extractor | Claude | — | pygit2 blame + recency churn | ✅ GIM-NN / `<merge-sha>` (PR #NNN) |
+| 32 | Code Ownership Extractor | Claude | — | pygit2 blame + recency churn | ✅ GIM-216 / `<merge-sha>` (PR #NNN) |
 ```
 
 This step is not committed in this feature branch.
@@ -4036,7 +4036,7 @@ This step is not committed in this feature branch.
   `load_checkpoint`, `update_checkpoint`, `ensure_ownership_schema`,
   `find_owners`, `OWNERSHIP_SOURCE`).
 - [ ] All commits are atomic and follow the existing
-  `feat(GIM-NN): ...` / `test(GIM-NN): ...` / `docs(GIM-NN): ...`
+  `feat(GIM-216): ...` / `test(GIM-216): ...` / `docs(GIM-216): ...`
   prefix pattern.
 - [ ] Final task includes the post-merge roadmap update (deferred
   outside the feature branch by convention).
