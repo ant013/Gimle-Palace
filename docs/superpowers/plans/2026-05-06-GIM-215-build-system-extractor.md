@@ -56,17 +56,63 @@ Acceptance criteria:
   process-group kill, daemon cleanup, and redaction rules.
 - Spike output is reviewed and approved before Step 3 starts. No production
   extractor code may be written before this approval.
-- Spike result is committed under `docs/research/` only if it changes the spec.
+- Результат spike всегда коммитится как устойчивый датированный артефакт в
+  `docs/research/2026-05-06-build-system-tooling-security-spike/` до старта
+  Step 3. Артефакт обязателен даже если spec не меняется, потому что proof по
+  внешним API/tooling является проектным gate.
+- Артефакт включает понятные reviewer-у Gradle, SwiftPM и Bazel v1
+  samples/schemas контрактов, точные выполненные команды, sanitized outputs,
+  результаты hostile fixtures, sandbox preflight и go/no-go recommendation.
 
 Suggested owner: CXPythonEngineer.
 
 Affected paths:
 
-- optional `docs/research/2026-05-06-build-system-tooling-security-spike/`
+- `docs/research/2026-05-06-build-system-tooling-security-spike/README.md`
+- `docs/research/2026-05-06-build-system-tooling-security-spike/contracts/`
+- `docs/research/2026-05-06-build-system-tooling-security-spike/evidence/`
 
 No production extractor code in this step.
 
 Dependencies: Step 1.
+
+Обязательные Step 2 validation commands/artifacts:
+
+```bash
+cd docs/research/2026-05-06-build-system-tooling-security-spike
+
+# 1. Sandbox preflight и skip-if-unsandboxed proof.
+./run-spike.sh sandbox-preflight --require-sandbox --write evidence/sandbox-preflight.md
+./run-spike.sh sandbox-preflight --force-unsandboxed \
+  --expect-skip build_system_unsandboxed \
+  --write evidence/skip-if-unsandboxed.md
+
+# 2. Tool-output contract capture и validation.
+./run-spike.sh gradle-contract --fixture fixtures/gradle-multi-project \
+  --no-host-gradlew --no-wrapper-download --no-build-tasks \
+  --schema contracts/gradle-tooling-v1.schema.json \
+  --write evidence/gradle-contract.md
+./run-spike.sh swiftpm-contract --fixture fixtures/swiftpm-package \
+  --command "swift package dump-package --type json --package-path <root>" \
+  --schema contracts/swiftpm-dump-package-v1.schema.json \
+  --write evidence/swiftpm-contract.md
+./run-spike.sh bazel-contract --fixture fixtures/bazel-workspace \
+  --commands "bazel query" "bazel aquery --output=jsonproto" \
+  --schema contracts/bazel-query-aquery-v1.schema.json \
+  --write evidence/bazel-contract.md
+
+# 3. Security/hostile fixture proof.
+./run-hostile-fixtures.sh \
+  --cases env-leak,hanging-config,wrapper-download,absolute-path,bazel-cmdline-leak,timeout,cancellation-cleanup \
+  --write evidence/hostile-fixtures.md
+
+# 4. Финальный reviewer artifact.
+./summarize-go-no-go.sh --write README.md
+```
+
+Если CXPythonEngineer выберет другие имена spike helpers, committed `README.md`
+должен включать точные эквивалентные команды, outputs и rationale. Review gate
+смотрит на committed evidence, а не на неперсистентные console logs.
 
 ### Step 3 - Fixture and expected graph truth
 
@@ -318,6 +364,16 @@ Suggested owner: CXCTO.
 Dependencies: Step 11.
 
 ## Verification Commands
+
+Step 2 spike gate до production code:
+
+```bash
+test -f docs/research/2026-05-06-build-system-tooling-security-spike/README.md
+test -d docs/research/2026-05-06-build-system-tooling-security-spike/contracts
+test -d docs/research/2026-05-06-build-system-tooling-security-spike/evidence
+rg -n "Gradle|SwiftPM|Bazel|sandbox|hostile|go/no-go|no-go" \
+  docs/research/2026-05-06-build-system-tooling-security-spike
+```
 
 Targeted tests:
 

@@ -1,6 +1,6 @@
 ---
 slug: build-system-extractor
-status: proposed (rev2.1)
+status: proposed (rev2.2)
 branch: feature/GIM-215-build-system-extractor
 paperclip_issue: 215
 authoring_team: CX/Codex spec gate; CX/Codex implements end-to-end after approval
@@ -27,6 +27,12 @@ rev2_1_changes: |
     BUILD(.bazel)-only candidates persist a skip snapshot instead of becoming roots.
   - Step 2 tooling + security spike output is a hard approval gate before any
     production extractor code.
+rev2_2_changes: |
+  - Step 2 tooling + security evidence теперь обязательный датированный
+    docs/research artifact, а не optional repo output.
+  - Step 2 должен включать точные validation commands/results для sandbox
+    preflight, Gradle/SwiftPM/Bazel contracts, hostile fixtures, cleanup,
+    redaction и go/no-go до handoff на production implementation.
 ---
 
 # GIM-215 - Build System Extractor (Phase 2 #25)
@@ -255,7 +261,12 @@ Implementation must define versioned parser contracts before graph writing:
 
 The Step 2 tooling + security spike must produce reviewer-approved output
 contracts and sandbox/preflight proof before Step 3 or any production extractor
-code starts.
+code starts. Этот proof обязателен и должен быть закоммичен в
+`docs/research/2026-05-06-build-system-tooling-security-spike/` с датированной
+Gradle, SwiftPM и Bazel API/tooling verification, точными командами, sanitized
+outputs, hostile-fixture evidence, cleanup/redaction proof и go/no-go
+recommendation. Console-only evidence недостаточен для external API rule или
+implementation handoff.
 
 ## 7. Data Model
 
