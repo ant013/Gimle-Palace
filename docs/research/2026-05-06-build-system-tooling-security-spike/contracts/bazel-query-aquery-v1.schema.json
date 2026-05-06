@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gimle.dev/contracts/build-system/bazel-query-aquery-v1.schema.json",
+  "title": "Bazel query + aquery v1 sample",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "tool_name",
+    "tool_version",
+    "workspace_root",
+    "capture_mode",
+    "query",
+    "aquery"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "bazel-query-aquery-v1"
+    },
+    "tool_name": {
+      "const": "bazel"
+    },
+    "tool_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "workspace_root": {
+      "type": "string",
+      "minLength": 1
+    },
+    "capture_mode": {
+      "type": "string",
+      "enum": [
+        "live_bazel",
+        "committed_sample_no_local_bazel"
+      ]
+    },
+    "query": {
+      "type": "object",
+      "required": [
+        "labels"
+      ],
+      "properties": {
+        "labels": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "aquery": {
+      "type": "object",
+      "required": [
+        "actions"
+      ],
+      "properties": {
+        "actions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "target_label",
+              "mnemonic",
+              "commandline_redacted",
+              "inputs_sample",
+              "outputs_sample"
+            ],
+            "properties": {
+              "target_label": {
+                "type": "string",
+                "minLength": 1
+              },
+              "mnemonic": {
+                "type": "string",
+                "minLength": 1
+              },
+              "commandline_redacted": {
+                "type": "boolean",
+                "const": true
+              },
+              "inputs_sample": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "outputs_sample": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
