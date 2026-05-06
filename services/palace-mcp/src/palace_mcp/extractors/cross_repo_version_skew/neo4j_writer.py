@@ -12,7 +12,7 @@ from neo4j import AsyncDriver
 from palace_mcp.extractors.cross_repo_version_skew.models import RunSummary
 
 _WRITE_EXTRAS_CYPHER = """
-MATCH (r:IngestRun {run_id: $run_id})
+MATCH (r:IngestRun {id: $run_id})
 SET r.mode                            = $mode,
     r.target_slug                     = $target_slug,
     r.member_count                    = $member_count,

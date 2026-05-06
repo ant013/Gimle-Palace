@@ -42,7 +42,7 @@ async def _seed_ingest_run(driver, run_id: str) -> None:  # type: ignore[no-unty
     async with driver.session() as session:
         await session.run(
             """
-            CREATE (r:IngestRun {run_id: $run_id, extractor_name: 'cross_repo_version_skew', success: true})
+            CREATE (r:IngestRun {id: $run_id, extractor_name: 'cross_repo_version_skew', success: true})
         """,
             run_id=run_id,
         )
@@ -85,7 +85,7 @@ async def test_acceptance_1_bootstrap_project_mode(driver):  # type: ignore[no-u
     async with driver.session() as session:
         out = await session.run(
             """
-            MATCH (r:IngestRun {run_id: $run_id})
+            MATCH (r:IngestRun {id: $run_id})
             RETURN r.mode AS mode, r.target_slug AS target
         """,
             run_id=run_id,
@@ -110,7 +110,7 @@ async def test_acceptance_2_bootstrap_bundle_mode(driver):  # type: ignore[no-un
     async with driver.session() as session:
         out = await session.run(
             """
-            MATCH (r:IngestRun {run_id: $run_id})
+            MATCH (r:IngestRun {id: $run_id})
             RETURN r.mode AS mode, r.skew_groups_total AS total
         """,
             run_id=run_id,
@@ -142,7 +142,7 @@ async def test_acceptance_3_no_skew_target(driver):  # type: ignore[no-untyped-d
     async with driver.session() as session:
         out = await session.run(
             """
-            MATCH (r:IngestRun {run_id: $run_id})
+            MATCH (r:IngestRun {id: $run_id})
             RETURN r.skew_groups_total AS total
         """,
             run_id=run_id,
