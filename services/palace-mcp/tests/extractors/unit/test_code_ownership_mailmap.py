@@ -1,4 +1,3 @@
-
 import pygit2
 import pytest
 

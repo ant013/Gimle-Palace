@@ -1,4 +1,3 @@
-
 import pytest
 
 from palace_mcp.extractors.code_ownership.churn_aggregator import aggregate_churn

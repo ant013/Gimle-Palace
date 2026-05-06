@@ -77,17 +77,14 @@ async def aggregate_churn(
             elif hasattr(t, "to_native"):
                 native = t.to_native()
                 py_ts.append(
-                    native
-                    if native.tzinfo
-                    else native.replace(tzinfo=timezone.utc)
+                    native if native.tzinfo else native.replace(tzinfo=timezone.utc)
                 )
             elif isinstance(t, str):
                 py_ts.append(datetime.fromisoformat(t))
         if not py_ts:
             continue
         recency_score = sum(
-            math.exp(-(now - ts).total_seconds() / decay_seconds)
-            for ts in py_ts
+            math.exp(-(now - ts).total_seconds() / decay_seconds) for ts in py_ts
         )
         last_touched_at = max(py_ts)
         commit_count = int(r["commit_count"])

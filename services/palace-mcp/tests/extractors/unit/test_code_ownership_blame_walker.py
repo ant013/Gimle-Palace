@@ -1,4 +1,3 @@
-
 import pygit2
 import pytest
 
@@ -19,7 +18,9 @@ def mini_repo(tmp_path) -> pygit2.Repository:
     sig1 = pygit2.Signature("Author One", "a1@example.com", 1_700_000_000, 0)
     sig2 = pygit2.Signature("Author Two", "a2@example.com", 1_700_001_000, 0)
 
-    def commit(msg: str, files: dict[str, bytes], parents: list, sig: pygit2.Signature) -> str:
+    def commit(
+        msg: str, files: dict[str, bytes], parents: list, sig: pygit2.Signature
+    ) -> str:
         for name, data in files.items():
             (repo_path / name).write_bytes(data)
             repo.index.add(name)

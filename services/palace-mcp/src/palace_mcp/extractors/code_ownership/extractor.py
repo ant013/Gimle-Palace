@@ -17,7 +17,11 @@ from typing import Any, ClassVar, cast
 
 import pygit2
 
-from palace_mcp.extractors.base import BaseExtractor, ExtractorRunContext, ExtractorStats
+from palace_mcp.extractors.base import (
+    BaseExtractor,
+    ExtractorRunContext,
+    ExtractorStats,
+)
 from palace_mcp.extractors.code_ownership.blame_walker import walk_blame
 from palace_mcp.extractors.code_ownership.checkpoint import (
     load_checkpoint,
@@ -27,7 +31,9 @@ from palace_mcp.extractors.code_ownership.churn_aggregator import aggregate_chur
 from palace_mcp.extractors.code_ownership.mailmap import MailmapResolver
 from palace_mcp.extractors.code_ownership.models import OwnershipRunSummary
 from palace_mcp.extractors.code_ownership.neo4j_writer import write_batch
-from palace_mcp.extractors.code_ownership.schema_extension import ensure_ownership_schema
+from palace_mcp.extractors.code_ownership.schema_extension import (
+    ensure_ownership_schema,
+)
 from palace_mcp.extractors.code_ownership.scorer import score_file
 from palace_mcp.extractors.foundation.checkpoint import (
     create_ingest_run,
@@ -42,7 +48,9 @@ class CodeOwnershipExtractor(BaseExtractor):
     """Roadmap #32 extractor — file-level ownership graph."""
 
     name: ClassVar[str] = "code_ownership"
-    description: ClassVar[str] = "File-level ownership: blame_share + recency-weighted churn"
+    description: ClassVar[str] = (
+        "File-level ownership: blame_share + recency-weighted churn"
+    )
     constraints: ClassVar[list[str]] = []
     indexes: ClassVar[list[str]] = []
 
@@ -76,7 +84,9 @@ class CodeOwnershipExtractor(BaseExtractor):
             await finalize_ingest_run(driver, run_id=ctx.run_id, success=True)
             await self._write_run_extras(driver, ctx.run_id, summary)
             return ExtractorStats(
-                nodes_written=summary.dirty_files_count + summary.deleted_files_count + 1,
+                nodes_written=summary.dirty_files_count
+                + summary.deleted_files_count
+                + 1,
                 edges_written=summary.edges_written,
             )
         except ExtractorError as exc:
@@ -122,7 +132,8 @@ class CodeOwnershipExtractor(BaseExtractor):
             ) from exc
 
         mailmap = MailmapResolver.from_repo(
-            repo, max_bytes=settings.mailmap_max_bytes  # type: ignore[attr-defined]
+            repo,
+            max_bytes=settings.mailmap_max_bytes,  # type: ignore[attr-defined]
         )
 
         bot_keys = await self._fetch_bot_identity_keys(driver, project_id)
@@ -240,7 +251,11 @@ class CodeOwnershipExtractor(BaseExtractor):
         for path in dirty:
             if path in binary_paths:
                 states_all.append(
-                    {"path": path, "status": "skipped", "no_owners_reason": "binary_or_skipped"}
+                    {
+                        "path": path,
+                        "status": "skipped",
+                        "no_owners_reason": "binary_or_skipped",
+                    }
                 )
                 continue
             blame = blame_per_file.get(path, {})
@@ -331,7 +346,9 @@ class CodeOwnershipExtractor(BaseExtractor):
 
         def visit(tree: pygit2.Tree, prefix: str = "") -> None:
             for entry in tree:
-                full = f"{prefix}{entry.name}" if not prefix else f"{prefix}/{entry.name}"
+                full = (
+                    f"{prefix}{entry.name}" if not prefix else f"{prefix}/{entry.name}"
+                )
                 if entry.type_str == "tree":
                     visit(cast(pygit2.Tree, repo[entry.id]), full)
                 else:

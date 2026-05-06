@@ -58,12 +58,16 @@ async def find_owners(
         return _err("top_n_out_of_range", f"top_n={top_n} not in [1, 100]")
 
     async with driver.session() as session:
-        proj_row = await (await session.run(_PROJECT_EXISTS_CYPHER, slug=project)).single()
+        proj_row = await (
+            await session.run(_PROJECT_EXISTS_CYPHER, slug=project)
+        ).single()
     if proj_row is None or proj_row["n"] == 0:
         return _err("project_not_registered", f"unknown project: {project!r}")
 
     async with driver.session() as session:
-        cp_row = await (await session.run(_CHECKPOINT_EXISTS_CYPHER, slug=project)).single()
+        cp_row = await (
+            await session.run(_CHECKPOINT_EXISTS_CYPHER, slug=project)
+        ).single()
     if cp_row is None:
         return _err(
             "ownership_not_indexed_yet",
@@ -86,7 +90,9 @@ async def find_owners(
     alpha = None
     if last_run_id:
         async with driver.session() as session:
-            run_row = await (await session.run(_RUN_LOOKUP_CYPHER, run_id=last_run_id)).single()
+            run_row = await (
+                await session.run(_RUN_LOOKUP_CYPHER, run_id=last_run_id)
+            ).single()
         if run_row:
             alpha = run_row["alpha"]
 

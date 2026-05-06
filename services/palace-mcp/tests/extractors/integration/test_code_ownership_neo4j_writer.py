@@ -49,9 +49,7 @@ async def test_write_batch_creates_owned_by_with_source(driver):
         driver,
         project_id="gimle",
         edges=[_edge("a.py", "a@x.com", 1.0)],
-        file_states=[
-            {"path": "a.py", "status": "processed", "no_owners_reason": None}
-        ],
+        file_states=[{"path": "a.py", "status": "processed", "no_owners_reason": None}],
         deleted_paths=[],
         run_id="r1",
         alpha=0.5,
@@ -91,9 +89,7 @@ async def test_atomic_replace_wipes_old_then_writes_new(driver):
         driver,
         project_id="gimle",
         edges=[_edge("a.py", "old@x.com", 1.0)],
-        file_states=[
-            {"path": "a.py", "status": "processed", "no_owners_reason": None}
-        ],
+        file_states=[{"path": "a.py", "status": "processed", "no_owners_reason": None}],
         deleted_paths=[],
         run_id="r1",
         alpha=0.5,
@@ -103,9 +99,7 @@ async def test_atomic_replace_wipes_old_then_writes_new(driver):
         driver,
         project_id="gimle",
         edges=[_edge("a.py", "new@x.com", 1.0)],
-        file_states=[
-            {"path": "a.py", "status": "processed", "no_owners_reason": None}
-        ],
+        file_states=[{"path": "a.py", "status": "processed", "no_owners_reason": None}],
         deleted_paths=[],
         run_id="r2",
         alpha=0.5,
@@ -173,8 +167,16 @@ async def test_file_state_sidecar_written(driver):
         project_id="gimle",
         edges=[],
         file_states=[
-            {"path": "a.py", "status": "skipped", "no_owners_reason": "all_bot_authors"},
-            {"path": "b.bin", "status": "skipped", "no_owners_reason": "binary_or_skipped"},
+            {
+                "path": "a.py",
+                "status": "skipped",
+                "no_owners_reason": "all_bot_authors",
+            },
+            {
+                "path": "b.bin",
+                "status": "skipped",
+                "no_owners_reason": "binary_or_skipped",
+            },
         ],
         deleted_paths=[],
         run_id="r1",
@@ -201,9 +203,7 @@ async def test_synthetic_author_merged_when_canonical_unknown(driver):
     await ensure_ownership_schema(driver)
     async with driver.session() as session:
         await session.run("MATCH (n) DETACH DELETE n")
-        await session.run(
-            "MERGE (f:File {project_id: 'gimle', path: 'a.py'})"
-        )
+        await session.run("MERGE (f:File {project_id: 'gimle', path: 'a.py'})")
     edge = _edge("a.py", "synthetic@x.com", 1.0)
     edge_dict = edge.model_dump()
     edge_dict["canonical_via"] = "mailmap_synthetic"
@@ -212,9 +212,7 @@ async def test_synthetic_author_merged_when_canonical_unknown(driver):
         driver,
         project_id="gimle",
         edges=[syn_edge],
-        file_states=[
-            {"path": "a.py", "status": "processed", "no_owners_reason": None}
-        ],
+        file_states=[{"path": "a.py", "status": "processed", "no_owners_reason": None}],
         deleted_paths=[],
         run_id="r1",
         alpha=0.5,

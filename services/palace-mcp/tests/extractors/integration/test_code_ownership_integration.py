@@ -65,13 +65,17 @@ def _ctx(repo_path: Path, run_id: str | None = None) -> ExtractorRunContext:
 
 async def _seed_git_history(driver: AsyncDriver, repo_path: Path) -> None:
     """Seed :Commit + :Author + :TOUCHED edges mirroring what git_history writes."""
-    log = subprocess.run(
-        ["git", "log", "--all", "--reverse", "--pretty=format:%H|%aN|%aE|%cI|%P"],
-        cwd=str(repo_path),
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip().split("\n")
+    log = (
+        subprocess.run(
+            ["git", "log", "--all", "--reverse", "--pretty=format:%H|%aN|%aE|%cI|%P"],
+            cwd=str(repo_path),
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        .stdout.strip()
+        .split("\n")
+    )
 
     bot_emails = {"bot@example.com"}
     rows = []
@@ -127,7 +131,14 @@ async def _seed_git_history(driver: AsyncDriver, repo_path: Path) -> None:
 
         for r in rows:
             if len(r["parents"]) > 1:
-                cmd = ["git", "diff-tree", "--no-commit-id", "-r", r["parents"][0], r["sha"]]
+                cmd = [
+                    "git",
+                    "diff-tree",
+                    "--no-commit-id",
+                    "-r",
+                    r["parents"][0],
+                    r["sha"],
+                ]
             else:
                 cmd = ["git", "diff-tree", "--no-commit-id", "-r", "--root", r["sha"]]
             out = subprocess.run(
@@ -220,9 +231,7 @@ async def test_scenario_2_no_op_re_run(driver: AsyncDriver) -> None:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_scenario_3_incremental_edit(
-    driver: AsyncDriver, tmp_path: Path
-) -> None:
+async def test_scenario_3_incremental_edit(driver: AsyncDriver, tmp_path: Path) -> None:
     """Append a commit → only that file reprocessed, checkpoint advances."""
     repo_path = Path(tmp_path / "repo")
     subprocess.run(
@@ -239,11 +248,23 @@ async def test_scenario_3_incremental_edit(
         await ext.run(graphiti=_graphiti(driver), ctx=_ctx(repo_path))
 
     # Append a commit changing one file
-    subprocess.run(["git", "config", "user.email", "new@example.com"], cwd=str(repo_path), check=True)
-    subprocess.run(["git", "config", "user.name", "Anton Stavnichiy"], cwd=str(repo_path), check=True)
-    (repo_path / "apps" / "main.py").write_text("def main():\n    return 999\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "config", "user.email", "new@example.com"],
+        cwd=str(repo_path),
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Anton Stavnichiy"],
+        cwd=str(repo_path),
+        check=True,
+    )
+    (repo_path / "apps" / "main.py").write_text(
+        "def main():\n    return 999\n", encoding="utf-8"
+    )
     subprocess.run(["git", "add", "apps/main.py"], cwd=str(repo_path), check=True)
-    subprocess.run(["git", "commit", "-m", "increment main"], cwd=str(repo_path), check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "increment main"], cwd=str(repo_path), check=True
+    )
 
     await _seed_git_history(driver, repo_path)
 

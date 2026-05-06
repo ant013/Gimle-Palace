@@ -34,9 +34,7 @@ class MailmapResolver:
         self._pygit2_mailmap = pygit2_mailmap
 
     @classmethod
-    def from_repo(
-        cls, repo: pygit2.Repository, *, max_bytes: int
-    ) -> "MailmapResolver":
+    def from_repo(cls, repo: pygit2.Repository, *, max_bytes: int) -> "MailmapResolver":
         """Try pygit2.Mailmap; fall back to identity on any failure."""
         mailmap_file = Path(repo.workdir or repo.path) / ".mailmap"
         if not mailmap_file.is_file():

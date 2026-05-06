@@ -55,7 +55,10 @@ def test_per_file_shares_sum_to_one():
         project_id="gimle",
         path="x.py",
         blame={"a@x.com": _blame("a@x.com", 30), "b@x.com": _blame("b@x.com", 70)},
-        churn={"a@x.com": _churn("a@x.com", 1.0, 1), "b@x.com": _churn("b@x.com", 3.0, 3)},
+        churn={
+            "a@x.com": _churn("a@x.com", 1.0, 1),
+            "b@x.com": _churn("b@x.com", 3.0, 3),
+        },
         alpha=0.5,
         known_author_ids={"a@x.com", "b@x.com"},
     )
@@ -72,7 +75,10 @@ def test_alpha_zero_uses_only_churn():
         project_id="gimle",
         path="x.py",
         blame={"a@x.com": _blame("a@x.com", 100)},  # blame says all-a
-        churn={"a@x.com": _churn("a@x.com", 1.0, 1), "b@x.com": _churn("b@x.com", 4.0, 4)},
+        churn={
+            "a@x.com": _churn("a@x.com", 1.0, 1),
+            "b@x.com": _churn("b@x.com", 4.0, 4),
+        },
         alpha=0.0,
         known_author_ids={"a@x.com", "b@x.com"},
     )

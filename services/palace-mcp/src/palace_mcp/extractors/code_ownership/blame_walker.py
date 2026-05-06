@@ -47,9 +47,7 @@ def walk_blame(
         try:
             blame = repo.blame(path, newest_commit=head_oid)
         except (pygit2.GitError, KeyError, ValueError) as exc:
-            logger.info(
-                "blame_failed: skipping path %s (%s)", path, type(exc).__name__
-            )
+            logger.info("blame_failed: skipping path %s (%s)", path, type(exc).__name__)
             continue
 
         per_author: dict[str, BlameAttribution] = {}
