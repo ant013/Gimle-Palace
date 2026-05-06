@@ -36,7 +36,7 @@ RETURN c.last_head_sha AS head_sha,
 """
 
 _RUN_LOOKUP_CYPHER = """
-MATCH (r:IngestRun {run_id: $run_id})
+MATCH (r:IngestRun {id: $run_id})
 RETURN r.alpha_used AS alpha
 """
 

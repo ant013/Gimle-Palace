@@ -35,10 +35,6 @@ from palace_mcp.extractors.code_ownership.schema_extension import (
     ensure_ownership_schema,
 )
 from palace_mcp.extractors.code_ownership.scorer import score_file
-from palace_mcp.extractors.foundation.checkpoint import (
-    create_ingest_run,
-    finalize_ingest_run,
-)
 from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErrorCode
 
 logger = logging.getLogger(__name__)
@@ -66,37 +62,18 @@ class CodeOwnershipExtractor(BaseExtractor):
         project_id = ctx.group_id
         repo_path = ctx.repo_path
 
-        await create_ingest_run(
-            driver,
+        summary = await self._run(
+            driver=driver,
+            project_id=project_id,
+            repo_path=repo_path,
             run_id=ctx.run_id,
-            project=project_id,
-            extractor_name=self.name,
+            settings=settings,
         )
-
-        try:
-            summary = await self._run(
-                driver=driver,
-                project_id=project_id,
-                repo_path=repo_path,
-                run_id=ctx.run_id,
-                settings=settings,
-            )
-            await finalize_ingest_run(driver, run_id=ctx.run_id, success=True)
-            await self._write_run_extras(driver, ctx.run_id, summary)
-            return ExtractorStats(
-                nodes_written=summary.dirty_files_count
-                + summary.deleted_files_count
-                + 1,
-                edges_written=summary.edges_written,
-            )
-        except ExtractorError as exc:
-            await finalize_ingest_run(
-                driver,
-                run_id=ctx.run_id,
-                success=False,
-                error_code=exc.error_code.value,
-            )
-            raise
+        await self._write_run_extras(driver, ctx.run_id, summary)
+        return ExtractorStats(
+            nodes_written=summary.dirty_files_count + summary.deleted_files_count + 1,
+            edges_written=summary.edges_written,
+        )
 
     async def _run(
         self,
@@ -107,6 +84,7 @@ class CodeOwnershipExtractor(BaseExtractor):
         run_id: str,
         settings: object,
     ) -> OwnershipRunSummary:
+        alpha: float = settings.ownership_blame_weight  # type: ignore[attr-defined]
         await ensure_ownership_schema(driver)  # type: ignore[arg-type]
         checkpoint = await load_checkpoint(driver, project_id=project_id)  # type: ignore[arg-type]
 
@@ -173,6 +151,7 @@ class CodeOwnershipExtractor(BaseExtractor):
                 mailmap_resolver_path=mailmap.path.value,
                 exit_reason="no_change",
                 duration_ms=0,
+                alpha_used=alpha,
             )
         else:
             try:
@@ -224,6 +203,7 @@ class CodeOwnershipExtractor(BaseExtractor):
                 mailmap_resolver_path=mailmap.path.value,
                 exit_reason="no_dirty",
                 duration_ms=0,
+                alpha_used=alpha,
             )
 
         # Phase 2 — blame walk
@@ -243,7 +223,6 @@ class CodeOwnershipExtractor(BaseExtractor):
         )
 
         # Phase 4 — scoring + atomic-replace per batch
-        alpha: float = settings.ownership_blame_weight  # type: ignore[attr-defined]
         batch_size: int = settings.ownership_write_batch_size  # type: ignore[attr-defined]
 
         edges_all: list[Any] = []
@@ -337,6 +316,7 @@ class CodeOwnershipExtractor(BaseExtractor):
             mailmap_resolver_path=mailmap.path.value,
             exit_reason="success",
             duration_ms=0,
+            alpha_used=alpha,
         )
 
     @staticmethod
@@ -399,14 +379,15 @@ class CodeOwnershipExtractor(BaseExtractor):
         async with driver.session() as session:  # type: ignore[attr-defined]
             await session.run(
                 """
-                MATCH (r:IngestRun {run_id: $run_id})
+                MATCH (r:IngestRun {id: $run_id})
                 SET r.head_sha = $head_sha,
                     r.prev_head_sha = $prev_head_sha,
                     r.dirty_files_count = $dirty,
                     r.deleted_files_count = $deleted,
                     r.edges_written = $edges_written,
                     r.mailmap_resolver_path = $mailmap_path,
-                    r.exit_reason = $exit_reason
+                    r.exit_reason = $exit_reason,
+                    r.alpha_used = $alpha
                 """,
                 run_id=run_id,
                 head_sha=summary.head_sha,
@@ -416,4 +397,5 @@ class CodeOwnershipExtractor(BaseExtractor):
                 edges_written=summary.edges_written,
                 mailmap_path=summary.mailmap_resolver_path,
                 exit_reason=summary.exit_reason,
+                alpha=summary.alpha_used,
             )

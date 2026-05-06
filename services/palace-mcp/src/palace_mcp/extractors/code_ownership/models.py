@@ -103,3 +103,4 @@ class OwnershipRunSummary(FrozenModel):
     mailmap_resolver_path: Literal["pygit2", "identity_passthrough"]
     exit_reason: Literal["success", "no_change", "no_dirty", "failed"]
     duration_ms: int
+    alpha_used: float

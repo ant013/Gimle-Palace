@@ -158,5 +158,6 @@ def test_ownership_run_summary_basic():
         mailmap_resolver_path="pygit2",
         exit_reason="success",
         duration_ms=1234,
+        alpha_used=0.5,
     )
     assert s.exit_reason == "success"
