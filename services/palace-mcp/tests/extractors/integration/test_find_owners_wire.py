@@ -52,7 +52,7 @@ async def test_unknown_file_returns_unknown_file_error(driver: AsyncDriver) -> N
         await session.run(
             """
             MERGE (p:Project {slug: 'gimle'})
-            MERGE (c:OwnershipCheckpoint {project_id: 'gimle'})
+            MERGE (c:OwnershipCheckpoint {project_id: 'project/gimle'})
               SET c.last_head_sha='deadbeef',
                   c.last_completed_at=datetime(),
                   c.run_id='r1',
@@ -71,11 +71,11 @@ async def test_success_with_owners(driver: AsyncDriver) -> None:
         await session.run(
             """
             MERGE (p:Project {slug: 'gimle'})
-            MERGE (c:OwnershipCheckpoint {project_id: 'gimle'})
+            MERGE (c:OwnershipCheckpoint {project_id: 'project/gimle'})
               SET c.last_head_sha='deadbeef',
                   c.last_completed_at=datetime(),
                   c.run_id='r1', c.updated_at=datetime()
-            MERGE (f:File {project_id: 'gimle', path: 'a.py'})
+            MERGE (f:File {project_id: 'project/gimle', path: 'a.py'})
             MERGE (a:Author {provider: 'git', identity_key: 'a@x.com'})
               SET a.email='a@x.com', a.name='A', a.is_bot=false
             MERGE (b:Author {provider: 'git', identity_key: 'b@x.com'})
@@ -94,7 +94,7 @@ async def test_success_with_owners(driver: AsyncDriver) -> None:
                   r2.lines_attributed=30, r2.commit_count=3,
                   r2.run_id_provenance='r1', r2.alpha_used=0.5,
                   r2.canonical_via='identity'
-            MERGE (st:OwnershipFileState {project_id: 'gimle', path: 'a.py'})
+            MERGE (st:OwnershipFileState {project_id: 'project/gimle', path: 'a.py'})
               SET st.status='processed', st.no_owners_reason=null,
                   st.last_run_id='r1', st.updated_at=datetime()
             """
@@ -115,12 +115,12 @@ async def test_success_binary_skipped(driver: AsyncDriver) -> None:
         await session.run(
             """
             MERGE (p:Project {slug: 'gimle'})
-            MERGE (c:OwnershipCheckpoint {project_id: 'gimle'})
+            MERGE (c:OwnershipCheckpoint {project_id: 'project/gimle'})
               SET c.last_head_sha='deadbeef',
                   c.last_completed_at=datetime(),
                   c.run_id='r1', c.updated_at=datetime()
-            MERGE (f:File {project_id: 'gimle', path: 'b.png'})
-            MERGE (st:OwnershipFileState {project_id: 'gimle', path: 'b.png'})
+            MERGE (f:File {project_id: 'project/gimle', path: 'b.png'})
+            MERGE (st:OwnershipFileState {project_id: 'project/gimle', path: 'b.png'})
               SET st.status='skipped',
                   st.no_owners_reason='binary_or_skipped',
                   st.last_run_id='r1', st.updated_at=datetime()
@@ -139,11 +139,11 @@ async def test_success_file_not_yet_processed(driver: AsyncDriver) -> None:
         await session.run(
             """
             MERGE (p:Project {slug: 'gimle'})
-            MERGE (c:OwnershipCheckpoint {project_id: 'gimle'})
+            MERGE (c:OwnershipCheckpoint {project_id: 'project/gimle'})
               SET c.last_head_sha='deadbeef',
                   c.last_completed_at=datetime(),
                   c.run_id='r1', c.updated_at=datetime()
-            MERGE (f:File {project_id: 'gimle', path: 'fresh.py'})
+            MERGE (f:File {project_id: 'project/gimle', path: 'fresh.py'})
             """
         )
     result = await find_owners(driver, file_path="fresh.py", project="gimle", top_n=5)

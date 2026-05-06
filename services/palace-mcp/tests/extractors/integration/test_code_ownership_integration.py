@@ -23,6 +23,7 @@ from palace_mcp.extractors.code_ownership.extractor import CodeOwnershipExtracto
 from palace_mcp.extractors.code_ownership.schema_extension import (
     ensure_ownership_schema,
 )
+import palace_mcp.extractors.code_ownership.extractor as _ownership_extractor_module
 
 FIXTURE_DIR = (
     Path(__file__).resolve().parents[2]
@@ -411,3 +412,148 @@ async def test_scenario_8_binary_skipped(driver: AsyncDriver) -> None:
         )
         row = await result.single()
     assert row is None or row["n"] == 0
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_scenario_9_crash_recovery(driver: AsyncDriver) -> None:
+    """Phase 4 write_batch crash leaves no checkpoint; re-run completes cleanly (AC10)."""
+    repo_path = _rebuild_fixture()
+    await ensure_ownership_schema(driver)
+    await _seed_git_history(driver, repo_path)
+
+    with patch.object(
+        _ownership_extractor_module,
+        "write_batch",
+        side_effect=RuntimeError("simulated Phase 4 crash"),
+    ):
+        with pytest.raises(RuntimeError, match="simulated Phase 4 crash"):
+            with patch("palace_mcp.mcp_server.get_settings", return_value=_make_settings()):
+                await CodeOwnershipExtractor().run(
+                    graphiti=_graphiti(driver), ctx=_ctx(repo_path)
+                )
+
+    async with driver.session() as session:
+        result = await session.run(
+            "MATCH (c:OwnershipCheckpoint {project_id: $proj}) RETURN c",
+            proj=PROJECT_ID,
+        )
+        row = await result.single()
+    assert row is None, "checkpoint must not be written after crash"
+
+    with patch("palace_mcp.mcp_server.get_settings", return_value=_make_settings()):
+        stats = await CodeOwnershipExtractor().run(
+            graphiti=_graphiti(driver), ctx=_ctx(repo_path)
+        )
+    assert stats.edges_written > 0, "re-run after crash must write edges"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_scenario_10_alpha_used_provenance(driver: AsyncDriver) -> None:
+    """Edges written with alpha=0.5; after advancing HEAD and re-running with alpha=0.7,
+    the dirty file's edges carry alpha_used=0.7 (AC11)."""
+    repo_path = _rebuild_fixture()
+    await ensure_ownership_schema(driver)
+    await _seed_git_history(driver, repo_path)
+
+    settings_50 = _make_settings()
+    settings_50.ownership_blame_weight = 0.5
+
+    with patch("palace_mcp.mcp_server.get_settings", return_value=settings_50):
+        await CodeOwnershipExtractor().run(
+            graphiti=_graphiti(driver), ctx=_ctx(repo_path)
+        )
+
+    async with driver.session() as session:
+        result = await session.run(
+            "MATCH ()-[r:OWNED_BY {source: 'extractor.code_ownership'}]->() "
+            "RETURN DISTINCT r.alpha_used AS alpha",
+        )
+        rows = await result.data()
+    assert rows, "expected OWNED_BY edges after first run"
+    assert all(
+        abs(row["alpha"] - 0.5) < 1e-9 for row in rows
+    ), f"expected alpha=0.5 but got {rows}"
+
+    # Advance HEAD so the second run has at least one DIRTY file
+    subprocess.run(
+        ["git", "config", "user.email", "new@example.com"], cwd=str(repo_path), check=True
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Anton Stavnichiy"], cwd=str(repo_path), check=True
+    )
+    (repo_path / "apps" / "main.py").write_text("def main():\n    return 999\n", encoding="utf-8")
+    subprocess.run(["git", "add", "apps/main.py"], cwd=str(repo_path), check=True)
+    subprocess.run(["git", "commit", "-m", "alpha provenance test"], cwd=str(repo_path), check=True)
+    await _seed_git_history(driver, repo_path)
+
+    settings_70 = _make_settings()
+    settings_70.ownership_blame_weight = 0.7
+
+    with patch("palace_mcp.mcp_server.get_settings", return_value=settings_70):
+        await CodeOwnershipExtractor().run(
+            graphiti=_graphiti(driver), ctx=_ctx(repo_path)
+        )
+
+    async with driver.session() as session:
+        result = await session.run(
+            """
+            MATCH (f:File {project_id: $proj, path: 'apps/main.py'})
+                  -[r:OWNED_BY {source: 'extractor.code_ownership'}]->()
+            RETURN DISTINCT r.alpha_used AS alpha
+            """,
+            proj=PROJECT_ID,
+        )
+        rows = await result.data()
+    assert rows, "expected OWNED_BY edges for apps/main.py after second run"
+    assert all(
+        abs(row["alpha"] - 0.7) < 1e-9 for row in rows
+    ), f"expected alpha=0.7 on dirty file but got {rows}"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_scenario_11_per_batch_atomicity(driver: AsyncDriver) -> None:
+    """With batch_size=1, a Phase 4 crash on the 2nd batch commits batch 1 but
+    leaves checkpoint unwritten — subsequent re-run processes all files (AC15)."""
+    repo_path = _rebuild_fixture()
+    await ensure_ownership_schema(driver)
+    await _seed_git_history(driver, repo_path)
+
+    call_count = 0
+    original_write_batch = _ownership_extractor_module.write_batch
+
+    async def _fail_on_second(*args: object, **kwargs: object) -> None:
+        nonlocal call_count
+        call_count += 1
+        if call_count >= 2:
+            raise RuntimeError("simulated batch-2 crash")
+        await original_write_batch(*args, **kwargs)  # type: ignore[arg-type]
+
+    settings = _make_settings()
+    settings.ownership_write_batch_size = 1
+
+    with patch.object(_ownership_extractor_module, "write_batch", side_effect=_fail_on_second):
+        with pytest.raises(RuntimeError, match="simulated batch-2 crash"):
+            with patch("palace_mcp.mcp_server.get_settings", return_value=settings):
+                await CodeOwnershipExtractor().run(
+                    graphiti=_graphiti(driver), ctx=_ctx(repo_path)
+                )
+
+    assert call_count >= 2, "expected at least 2 write_batch calls with batch_size=1"
+
+    async with driver.session() as session:
+        result = await session.run(
+            "MATCH (c:OwnershipCheckpoint {project_id: $proj}) RETURN c",
+            proj=PROJECT_ID,
+        )
+        row = await result.single()
+    assert row is None, "checkpoint must not be written after partial-batch crash"
+
+    async with driver.session() as session:
+        result = await session.run(
+            "MATCH ()-[r:OWNED_BY {source: 'extractor.code_ownership'}]->() RETURN count(r) AS n"
+        )
+        row = await result.single()
+    assert row is not None and row["n"] > 0, "batch 1 must have committed at least one edge"

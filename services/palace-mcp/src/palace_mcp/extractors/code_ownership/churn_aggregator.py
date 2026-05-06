@@ -65,6 +65,7 @@ async def aggregate_churn(
         raw_id = r["raw_id"]
         raw_name = r["raw_name"]
         timestamps = r["timestamps"]
+        # raw_id is a.identity_key, which git_history stores as email (GIM-186)
         cn, ce = mailmap.canonicalize(raw_name, raw_id)
         canonical_id = ce
         if canonical_id in bot_keys:

@@ -17,8 +17,7 @@ OPTIONAL MATCH (f)-[r:OWNED_BY {source: 'extractor.code_ownership'}]->(a:Author)
 WITH f, st, r, a
 ORDER BY r.weight DESC
 WITH f, st, collect({r: r, a: a}) AS pairs
-RETURN f IS NOT NULL AS file_exists,
-       st.status           AS status,
+RETURN st.status           AS status,
        st.no_owners_reason AS reason,
        st.last_run_id      AS last_run_id,
        pairs
@@ -30,7 +29,7 @@ RETURN count(p) AS n
 """
 
 _CHECKPOINT_EXISTS_CYPHER = """
-MATCH (c:OwnershipCheckpoint {project_id: $slug})
+MATCH (c:OwnershipCheckpoint {project_id: $project_id})
 RETURN c.last_head_sha AS head_sha,
        c.last_completed_at AS completed_at
 """
@@ -57,6 +56,8 @@ async def find_owners(
     if not (1 <= top_n <= 100):
         return _err("top_n_out_of_range", f"top_n={top_n} not in [1, 100]")
 
+    project_id = f"project/{project}"
+
     async with driver.session() as session:
         proj_row = await (
             await session.run(_PROJECT_EXISTS_CYPHER, slug=project)
@@ -66,7 +67,7 @@ async def find_owners(
 
     async with driver.session() as session:
         cp_row = await (
-            await session.run(_CHECKPOINT_EXISTS_CYPHER, slug=project)
+            await session.run(_CHECKPOINT_EXISTS_CYPHER, project_id=project_id)
         ).single()
     if cp_row is None:
         return _err(
@@ -78,7 +79,7 @@ async def find_owners(
     last_run_at_cp = cp_row["completed_at"]
 
     async with driver.session() as session:
-        result = await session.run(_QUERY_CYPHER, proj=project, path=file_path)
+        result = await session.run(_QUERY_CYPHER, proj=project_id, path=file_path)
         row = await result.single()
     if row is None:
         return _err("unknown_file", f"no :File at {file_path!r} in {project!r}")
