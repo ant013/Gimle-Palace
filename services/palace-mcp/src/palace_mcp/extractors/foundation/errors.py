@@ -44,6 +44,12 @@ class ExtractorErrorCode(str, Enum):
     # Checkpoint
     CHECKPOINT_DOC_COUNT_MISMATCH = "checkpoint_doc_count_mismatch"
 
+    # Code ownership extractor (GIM-216)
+    GIT_HISTORY_NOT_INDEXED = "git_history_not_indexed"
+    OWNERSHIP_DIFF_FAILED = "ownership_diff_failed"
+    OWNERSHIP_MAX_FILES_EXCEEDED = "ownership_max_files_exceeded"
+    REPO_HEAD_INVALID = "repo_head_invalid"
+
 
 ActionType = Literal[
     "retry",
