@@ -1,6 +1,6 @@
 ---
 slug: build-system-extractor
-status: proposed (rev1)
+status: proposed (rev2)
 branch: feature/GIM-TBD-build-system-extractor
 paperclip_issue: TBD
 authoring_team: CX/Codex spec gate; CX/Codex implements end-to-end after approval
@@ -8,6 +8,18 @@ predecessor: 0a9c236 (origin/develop, post #102)
 date: 2026-05-06
 roadmap_item: "Phase 2 #25 Build System Extractor"
 plan: docs/superpowers/plans/2026-05-06-GIM-TBD-build-system-extractor.md
+rev2_changes: |
+  Addressed read-only audit blockers before implementation:
+  - build identity is now one snapshot per detected build root per ecosystem per commit;
+    build_root_path/build_root_id are part of all child node IDs.
+  - graph ownership now has explicit BuildTarget ownership edges for tasks,
+    products, and configurations.
+  - "no build execution" is narrowed to "no build task/action execution";
+    configuration/manifest/analysis phases are allowed only under security controls.
+  - added sandbox/security constraints for untrusted build metadata evaluation.
+  - schema ownership is extractor-local via BaseExtractor.constraints/indexes.
+  - missing tools are structured skip records, not extractor failures, unless
+    policy explicitly escalates a single detected ecosystem with no extractable facts.
 ---
 
 # GIM-TBD - Build System Extractor (Phase 2 #25)
@@ -65,7 +77,10 @@ Reference links checked during spec authoring:
 ## 2. Goal
 
 Implement extractor `build_system` that creates commit-aware build graph facts
-for Gradle, SwiftPM, and Bazel projects without executing full project builds.
+for Gradle, SwiftPM, and Bazel projects without executing compile/test/package
+build tasks or Bazel execution actions. The extractor may run controlled build
+configuration, SwiftPM manifest evaluation, and Bazel analysis/query phases
+because those are the source-of-truth interfaces for build metadata.
 
 The extractor should let operators and future extractors answer:
 
@@ -82,8 +97,10 @@ The extractor should let operators and future extractors answer:
   required for `build_system` to run.
 - `dependency_surface` may already have written `:ExternalDependency` nodes, but
   this extractor must not create or mutate those nodes in v1.
-- Build graph extraction may configure a Gradle/SwiftPM/Bazel project, but must
-  not execute compile/test/package tasks.
+- Build graph extraction may configure a Gradle/SwiftPM/Bazel project, evaluate
+  Swift manifests, and run Bazel query/analysis phases, but must not execute
+  compile/test/package tasks, code generation tasks, or Bazel execution
+  actions.
 - SwiftPM extraction can use SwiftPM's manifest evaluation JSON output as the
   practical representation of `PackageDescription`; v1 should not parse
   arbitrary Swift manifest syntax with regex.
@@ -91,9 +108,11 @@ The extractor should let operators and future extractors answer:
   present, the Bazel parser is skipped with metrics, not an error.
 - Some UW repos may not use Bazel. A no-Bazel result is acceptable when Gradle
   and/or SwiftPM facts are present.
-- If a required external tool is absent, the extractor records a structured
-  skip reason for that ecosystem and returns partial stats rather than failing
-  the entire run, unless the selected project contains only that ecosystem.
+- If a required external tool is absent or the security preflight fails, the
+  extractor records a structured skip reason for that ecosystem and returns
+  partial stats rather than failing the entire run. A full extractor failure is
+  allowed only when the project has exactly one detected ecosystem and the
+  approved policy says that ecosystem is mandatory.
 
 ## 4. Scope
 
@@ -102,7 +121,7 @@ The extractor should let operators and future extractors answer:
 1. New extractor identity: `build_system`.
 2. New package:
    `services/palace-mcp/src/palace_mcp/extractors/build_system/`.
-3. New foundation models for build graph storage:
+3. New extractor-local models for build graph storage:
    - `BuildSystemSnapshot`
    - `BuildTarget`
    - `BuildTask`
@@ -111,45 +130,49 @@ The extractor should let operators and future extractors answer:
 4. New graph edges:
    - `(Project)-[:HAS_BUILD_SNAPSHOT]->(BuildSystemSnapshot)`
    - `(BuildSystemSnapshot)-[:DECLARES_BUILD_TARGET]->(BuildTarget)`
-   - `(BuildSystemSnapshot)-[:DECLARES_BUILD_TASK]->(BuildTask)`
-   - `(BuildSystemSnapshot)-[:DECLARES_BUILD_PRODUCT]->(BuildProduct)`
-   - `(BuildSystemSnapshot)-[:DECLARES_BUILD_CONFIGURATION]->(BuildConfiguration)`
+   - `(BuildTarget)-[:OWNS_BUILD_TASK]->(BuildTask)`
+   - `(BuildTarget)-[:DECLARES_BUILD_PRODUCT]->(BuildProduct)`
+   - `(BuildTarget)-[:HAS_BUILD_CONFIGURATION]->(BuildConfiguration)`
    - `(BuildTarget)-[:BUILD_TARGET_DEPENDS_ON]->(BuildTarget)`
    - `(BuildTask)-[:TASK_DEPENDS_ON]->(BuildTask)`
    - `(BuildTask)-[:PRODUCES_BUILD_PRODUCT]->(BuildProduct)`
 5. Gradle extractor path:
    - detect `settings.gradle`, `settings.gradle.kts`, `build.gradle`,
      `build.gradle.kts`, and `gradlew`;
-   - query build/project/task model via a narrow Tooling API helper;
+   - query build/project/task model via a trusted narrow Tooling API helper;
    - capture project path, task path, group, description, project ownership,
      static cacheability when available, and dependencies when exposed by the
      helper;
-   - avoid running compile/test/package tasks.
+   - do not execute host repo `gradlew` or allow wrapper downloads.
 6. SwiftPM extractor path:
    - detect `Package.swift`;
-   - evaluate manifest through SwiftPM JSON output;
+   - evaluate manifest through `swift package dump-package --type json
+     --package-path <root>`;
    - capture package name, products, targets, target dependencies, resources,
      and build settings where available;
    - avoid package build/test execution.
 7. Bazel extractor path:
    - detect `MODULE.bazel`, `WORKSPACE`, `WORKSPACE.bazel`, or `BUILD(.bazel)`;
-   - use `bazel query`/`bazel aquery` machine-readable output when `bazel` is
-     available;
+   - use `bazel query` and `bazel aquery --output=jsonproto` when `bazel` is
+     available; textproto is an allowed fallback only when JSON proto is not
+     available for the installed Bazel version;
    - capture configured target/action/task-like facts, mnemonics, inputs,
      outputs, and action owner labels;
    - treat missing Bazel as a structured skip.
-8. Commit-aware, deterministic IDs using `group_id`, `project`, ecosystem,
-   target/task/product/configuration key, `commit_sha`, and `schema_version`.
-9. Unit tests for model validation, ID stability, parser normalization, skip
+8. One `BuildSystemSnapshot` per detected build root per ecosystem per commit.
+9. Commit-aware, deterministic IDs using `group_id`, `project`, ecosystem,
+   `build_root_path`, target/task/product/configuration key, `commit_sha`, and
+   `schema_version`.
+10. Unit tests for model validation, ID stability, parser normalization, skip
    reasons, and graph planning.
-10. Integration test with a fixture containing at least:
+11. Integration test with a fixture containing at least:
     - one minimal Gradle multi-project build;
     - one minimal SwiftPM package with product and multiple targets;
     - one minimal Bazel workspace if Bazel is available in CI, otherwise a
       committed parser fixture from JSON/proto output and a skip-path test.
-11. Runbook at `docs/runbooks/build-system.md` with direct Neo4j inspection
+12. Runbook at `docs/runbooks/build-system.md` with direct Neo4j inspection
     queries and tool availability notes.
-12. Registry entry in `extractors/registry.py`.
+13. Registry entry in `extractors/registry.py`.
 
 ### Out Of Scope
 
@@ -160,23 +183,78 @@ The extractor should let operators and future extractors answer:
   cleanly in v1.
 - Android-specific APK/AAB packaging output analysis.
 - Xcode project/workspace build graph extraction outside SwiftPM.
-- Executing project builds, tests, package tasks, or code generation tasks.
+- Executing project builds, tests, package tasks, code generation tasks, or
+  Bazel action execution.
+- Persisting raw stdout/stderr, raw Bazel command lines, environment variables,
+  secrets, or unbounded tool output.
 - Public MCP/API query surface. v1 uses extractor stats, tests, runbook queries,
   and direct Neo4j smoke.
 - Automatic bundle iteration. Operator can run per project/member.
 
-## 5. Data Model
+## 5. Security Constraints
+
+Build metadata extraction evaluates untrusted repo-controlled code or build
+configuration. v1 must fail closed at the ecosystem level unless these controls
+are true:
+
+1. Tool execution is sandbox-only. The implementation must have an explicit
+   sandbox preflight; if the sandbox cannot be asserted, the ecosystem is
+   skipped with `build_system_unsandboxed`.
+2. Do not execute host repo `gradlew` or allow repo wrapper downloads. Gradle
+   extraction uses a trusted helper/tooling runtime shipped or pinned by Gimle.
+3. Do not allow network access or automatic dependency/tool downloads during
+   extraction. Any required helper must already exist in the runtime image or be
+   preinstalled by an approved setup step.
+4. Use a sanitized environment based on the `palace_mcp.git.command` pattern:
+   minimal `PATH`, no inherited secrets, fixed `HOME`, no terminal prompts, and
+   no user shell startup.
+5. All subprocesses must have timeout, bounded stdout/stderr capture,
+   process-group kill, and cleanup for child daemons. Gradle daemon cleanup is
+   required when the helper starts a daemon.
+6. Raw stdout/stderr is never persisted. Logs include only structured event
+   names, sanitized tool version, duration, bounded counts, and redacted error
+   categories.
+7. Tool output samples are bounded and sanitized. Absolute host paths, env var
+   values, command-line secrets, and raw Bazel command lines are redacted before
+   models or logs see them.
+8. Hostile fixtures must cover env leak attempts, hanging configuration,
+   wrapper download attempts, absolute path emission, Bazel command-line
+   leakage, timeout, and cancellation cleanup.
+
+## 6. Tool Output Contracts
+
+Implementation must define versioned parser contracts before graph writing:
+
+- **Gradle v1:** trusted JVM helper JSON contract. Required fields: root path,
+  Gradle version, projects, tasks, task owner project, static cacheable flag
+  when available, and explicit task dependencies when available. Host repo
+  wrapper execution is forbidden.
+- **SwiftPM v1:** JSON from
+  `swift package dump-package --type json --package-path <root>`. Required
+  fields: package name, tools version if available, products, targets, target
+  dependencies, resources, and settings when present.
+- **Bazel v1:** `bazel query` target labels plus
+  `bazel aquery --output=jsonproto` actions. `--output=textproto` may be
+  parsed only as a fallback. Persisted facts must not include raw command lines;
+  intermediate action inputs/outputs stay as bounded `inputs_sample` and
+  `outputs_sample` on `BuildTask`.
+
+## 7. Data Model
 
 ### `BuildSystemSnapshot`
 
-One project/ecosystem snapshot at one commit.
+One detected build root for one project/ecosystem at one commit. A mono-repo
+with three independent Swift packages creates three SwiftPM snapshots, not one
+project-wide SwiftPM snapshot.
 
 - `id`
 - `group_id`
 - `project`
 - `ecosystem`: `gradle`, `swiftpm`, or `bazel`
 - `commit_sha`
-- `root_path`
+- `build_root_path`: repo-relative POSIX path
+- `build_root_id`: stable hash of `group_id`, `project`, `ecosystem`,
+  `build_root_path`, `commit_sha`, and `schema_version`
 - `tool_name`
 - `tool_version`
 - `schema_version`
@@ -196,6 +274,8 @@ SwiftPM target `WalletCore`, Bazel label `//app:app`.
 - `project`
 - `ecosystem`
 - `commit_sha`
+- `build_root_path`
+- `build_root_id`
 - `name`
 - `qualified_name`
 - `target_kind`
@@ -213,6 +293,8 @@ Task or action-like build operation.
 - `project`
 - `ecosystem`
 - `commit_sha`
+- `build_root_path`
+- `build_root_id`
 - `name`
 - `qualified_name`
 - `owner_target_id`
@@ -225,17 +307,24 @@ Task or action-like build operation.
 - `schema_version`
 
 `cacheable` is static only. #42 may later add `cacheable_verified` from runtime
-evidence.
+evidence. `inputs_sample` and `outputs_sample` are bounded sanitized samples,
+not complete artifact inventories.
 
 ### `BuildProduct`
 
-Build output declared by the build system.
+Top-level product/output declared by the build system. Examples: SwiftPM
+product, Gradle archive/product-like declared output, or Bazel requested target
+output when it is a top-level deliverable. Bazel intermediate action outputs are
+not `BuildProduct` nodes in v1; they remain bounded sanitized samples on
+`BuildTask`.
 
 - `id`
 - `group_id`
 - `project`
 - `ecosystem`
 - `commit_sha`
+- `build_root_path`
+- `build_root_id`
 - `name`
 - `product_kind`
 - `path`
@@ -251,35 +340,41 @@ Configuration/variant/flavor/platform/build-setting record.
 - `project`
 - `ecosystem`
 - `commit_sha`
+- `build_root_path`
+- `build_root_id`
 - `name`
 - `configuration_kind`
 - `owner_target_id`
 - `attributes`
 - `schema_version`
 
-## 6. Matching And Identity Rules
+## 8. Matching And Identity Rules
 
 1. All nodes are commit-aware. No build graph edge may cross commit boundaries.
 2. IDs must be deterministic across identical fixture runs.
 3. Repo-relative paths use POSIX separators and must not be absolute.
 4. Same label/path from different ecosystems is not deduplicated.
-5. Gradle project paths (`:`, `:app`, `:shared`) and task paths
+5. Same target/task name from two build roots in the same repo is not
+   deduplicated. `build_root_path` is part of every child node ID.
+6. Gradle project paths (`:`, `:app`, `:shared`) and task paths
    (`:app:assembleDebug`) are canonical keys.
-6. SwiftPM package/target/product names are canonical keys within the package
+7. SwiftPM package/target/product names are canonical keys within the package
    root.
-7. Bazel labels are canonical keys and must preserve repository/package/target
+8. Bazel labels are canonical keys and must preserve repository/package/target
    identity.
-8. If parser output cannot determine a relationship exactly, skip the edge with
+9. If parser output cannot determine a relationship exactly, skip the edge with
    a metric. Do not infer target/task dependencies from name substrings.
+10. Build schema constraints/indexes are extractor-local via
+    `BaseExtractor.constraints` and `BaseExtractor.indexes`. Do not add Build*
+    constraints to `foundation/schema.py` unless a later reviewer explicitly
+    approves a shared global schema need.
 
-## 7. Affected Areas After Approval
+## 9. Affected Areas After Approval
 
 Expected implementation paths:
 
 - `services/palace-mcp/src/palace_mcp/extractors/build_system/`
 - `services/palace-mcp/src/palace_mcp/extractors/registry.py`
-- `services/palace-mcp/src/palace_mcp/extractors/foundation/models.py`
-- `services/palace-mcp/src/palace_mcp/extractors/foundation/schema.py`
 - `services/palace-mcp/tests/extractors/unit/test_build_system*.py`
 - `services/palace-mcp/tests/extractors/integration/test_build_system_integration.py`
 - `services/palace-mcp/tests/extractors/fixtures/build-system-mini-project/`
@@ -290,15 +385,19 @@ fixtures or a JVM helper:
 
 - `services/palace-mcp/src/palace_mcp/extractors/build_system/tooling/`
 - `services/palace-mcp/tests/extractors/fixtures/build-system-tool-output/`
+- `docs/research/2026-05-06-build-system-tooling-security-spike/`
 
 Implementation must avoid edits to `dependency_surface` unless a tiny shared
 manifest-walk helper is explicitly approved during review.
+Implementation must avoid edits to `foundation/schema.py` unless reviewer
+approval changes the schema ownership decision.
 
-## 8. Acceptance Criteria
+## 10. Acceptance Criteria
 
 1. `build_system` is registered and runnable through the existing extractor
    runner.
-2. Minimal fixture creates at least one `BuildSystemSnapshot`.
+2. Minimal fixture creates one `BuildSystemSnapshot` per detected build root per
+   ecosystem per commit.
 3. Gradle fixture creates multiple `BuildTarget` nodes and `BuildTask` nodes.
 4. SwiftPM fixture creates `BuildTarget` and `BuildProduct` nodes with target
    dependency edges.
@@ -308,15 +407,20 @@ manifest-walk helper is explicitly approved during review.
 6. Snapshot/target/task/product/configuration IDs are deterministic across two
    identical fixture runs.
 7. No `ExternalDependency` nodes are created or mutated by this extractor.
-8. No compile/test/package task is executed during extraction.
+8. No compile/test/package task, codegen task, or Bazel execution action is
+   executed during extraction.
 9. No build graph edge crosses commit boundaries.
 10. Missing external tools produce structured skip metrics and partial success
     when other ecosystems are present.
-11. Runbook includes Neo4j queries for snapshots, targets, tasks, products,
+11. Security fixtures cover env leak, hanging config, wrapper download attempt,
+    absolute path emission, Bazel command-line leakage, timeout, and cleanup.
+12. Schema constraints/indexes are declared extractor-local, not in global
+    `foundation/schema.py`.
+13. Runbook includes Neo4j queries for snapshots, targets, tasks, products,
     dependency edges, no external-dependency writes, and no cross-commit edges.
-12. Targeted unit/integration tests and lint/typecheck pass.
+14. Targeted unit/integration tests and lint/typecheck pass.
 
-## 9. Verification Plan
+## 11. Verification Plan
 
 Targeted tests after implementation:
 
@@ -344,6 +448,12 @@ MATCH (s:BuildSystemSnapshot) RETURN s.ecosystem, count(s) AS snapshots;
 MATCH (s:BuildSystemSnapshot)-[:DECLARES_BUILD_TARGET]->(t:BuildTarget)
 RETURN s.ecosystem, count(t) AS targets;
 
+MATCH (target:BuildTarget)-[:OWNS_BUILD_TASK]->(task:BuildTask)
+RETURN count(*) AS target_tasks;
+
+MATCH (target:BuildTarget)-[:DECLARES_BUILD_PRODUCT]->(product:BuildProduct)
+RETURN count(*) AS target_products;
+
 MATCH (task:BuildTask)-[:PRODUCES_BUILD_PRODUCT]->(product:BuildProduct)
 RETURN count(*) AS task_products;
 
@@ -355,11 +465,12 @@ MATCH (n:ExternalDependency)
 RETURN count(n) AS external_dependency_count_after_build_system;
 ```
 
-## 10. Open Questions
+## 12. Open Questions
 
 1. Should Gradle extraction require a small JVM helper in this repository, or
-   should it invoke a checked-in init script/build action via the existing
-   wrapper? The implementation plan treats this as Step 2 spike before code.
+   should it invoke a checked-in init script/build action via a trusted Gradle
+   runtime? Host repo wrapper execution is disallowed either way. The
+   implementation plan treats this as Step 2 spike before code.
 2. Should Bazel v1 be pure fixture/parser support until a real Bazel project is
    present, or should CI install/use Bazel for an executable integration test?
 3. How much Gradle variant/flavor detail is required for the first UW query?
@@ -369,7 +480,7 @@ RETURN count(n) AS external_dependency_count_after_build_system;
    ownership facts exist? v1 stores build targets independently and avoids
    guessing.
 
-## 11. Followups
+## 13. Followups
 
 - #42 Build Reproducibility: annotate `BuildTask.cacheable_verified` and
   runtime cache-hit evidence.
