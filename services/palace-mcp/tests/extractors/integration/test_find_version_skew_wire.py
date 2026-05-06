@@ -6,7 +6,9 @@ error_code values, not the isError flag.
 
 import pytest
 
-from palace_mcp.extractors.cross_repo_version_skew.find_version_skew import find_version_skew
+from palace_mcp.extractors.cross_repo_version_skew.find_version_skew import (
+    find_version_skew,
+)
 
 
 @pytest.mark.asyncio
@@ -152,12 +154,16 @@ async def test_acceptance_21_min_severity_excludes_lower(driver):
             MERGE (c)-[:DEPENDS_ON {scope:'main', declared_in:'p', declared_version_constraint:'x'}]->(d4)
         """)
 
-    r_major = await find_version_skew(driver, bundle="mix", min_severity="major", top_n=10)
+    r_major = await find_version_skew(
+        driver, bundle="mix", min_severity="major", top_n=10
+    )
     assert r_major["ok"] is True
     severities = {g["severity"] for g in r_major["skew_groups"]}
     assert severities == {"major"}
 
-    r_unknown = await find_version_skew(driver, bundle="mix", min_severity="unknown", top_n=10)
+    r_unknown = await find_version_skew(
+        driver, bundle="mix", min_severity="unknown", top_n=10
+    )
     assert r_unknown["ok"] is True
     assert len(r_unknown["skew_groups"]) >= 2  # major + patch + possibly more
 
@@ -167,8 +173,17 @@ async def test_acceptance_22_no_fstring_cypher_in_package():
     """Source-grep audit: no f-string Cypher in cross_repo_version_skew/."""
     import re
     from pathlib import Path
-    pkg = Path(__file__).resolve().parents[2] / "src" / "palace_mcp" / "extractors" / "cross_repo_version_skew"
-    fstring_match_pattern = re.compile(r'f"\s*MATCH|f"""\s*MATCH|\.format\(.*MATCH', re.DOTALL)
+
+    pkg = (
+        Path(__file__).resolve().parents[2]
+        / "src"
+        / "palace_mcp"
+        / "extractors"
+        / "cross_repo_version_skew"
+    )
+    fstring_match_pattern = re.compile(
+        r'f"\s*MATCH|f"""\s*MATCH|\.format\(.*MATCH', re.DOTALL
+    )
     offenders: list[tuple[str, int]] = []
     for py in sorted(pkg.rglob("*.py")):
         text = py.read_text()
@@ -196,6 +211,8 @@ async def test_bundle_member_invalid_slug_emits_warning(driver):
         """)
     r = await find_version_skew(driver, bundle="mixed", top_n=5)
     assert r["ok"] is True
-    slugs_warned = [w["slug"] for w in r["warnings"] if w["code"] == "member_invalid_slug"]
+    slugs_warned = [
+        w["slug"] for w in r["warnings"] if w["code"] == "member_invalid_slug"
+    ]
     assert "!!!CORRUPT!!!" in slugs_warned
     assert r["target_status"]["!!!CORRUPT!!!"] == "invalid_slug"

@@ -9,7 +9,6 @@ from __future__ import annotations
 import pytest
 
 from palace_mcp.extractors.cross_repo_version_skew.compute import (
-    ComputeResult,
     _compute_skew_groups,
 )
 
@@ -84,12 +83,18 @@ async def test_compute_bundle_mode_finds_two_skew_groups(driver):  # type: ignor
     assert "pkg:github/numerics/big" in purl_roots
 
     # marketkit severity = major (1.5.0 vs 2.0.1)
-    mk = next(g for g in result.skew_groups if g.purl_root == "pkg:github/horizontalsystems/marketkit")
+    mk = next(
+        g
+        for g in result.skew_groups
+        if g.purl_root == "pkg:github/horizontalsystems/marketkit"
+    )
     assert mk.severity == "major"
     assert mk.version_count == 2
 
     # big severity = minor (1.0.5/1.0.7 → patch; vs 1.1.0 → minor; max = minor)
-    big = next(g for g in result.skew_groups if g.purl_root == "pkg:github/numerics/big")
+    big = next(
+        g for g in result.skew_groups if g.purl_root == "pkg:github/numerics/big"
+    )
     assert big.severity == "minor"
     assert big.version_count == 3
 

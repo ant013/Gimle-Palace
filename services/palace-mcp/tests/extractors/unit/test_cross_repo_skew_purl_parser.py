@@ -22,10 +22,7 @@ def test_maven_purl_strips_version():
 
 
 def test_pypi_purl_strips_version():
-    assert (
-        purl_root_for_display("pkg:pypi/requests@2.31.0")
-        == "pkg:pypi/requests"
-    )
+    assert purl_root_for_display("pkg:pypi/requests@2.31.0") == "pkg:pypi/requests"
 
 
 def test_generic_spm_purl_with_query_qualifier():
@@ -42,10 +39,7 @@ def test_generic_spm_purl_with_query_qualifier():
 
 def test_multiple_at_uses_rsplit():
     """Last @ is the version separator (defensive)."""
-    assert (
-        purl_root_for_display("pkg:maven/g/a@b@1.0.0")
-        == "pkg:maven/g/a@b"
-    )
+    assert purl_root_for_display("pkg:maven/g/a@b@1.0.0") == "pkg:maven/g/a@b"
 
 
 def test_no_version_returns_input_unchanged():

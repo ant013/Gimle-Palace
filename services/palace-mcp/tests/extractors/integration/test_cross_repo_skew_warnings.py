@@ -81,13 +81,21 @@ async def test_acceptance_20_malformed_purl_warning(driver):  # type: ignore[no-
         """)
     run_id = "warn-malformed-001"
     async with driver.session() as session:
-        await session.run("CREATE (r:IngestRun {run_id: $rid, extractor_name: 'cross_repo_version_skew', success: true})", rid=run_id)
+        await session.run(
+            "CREATE (r:IngestRun {run_id: $rid, extractor_name: 'cross_repo_version_skew', success: true})",
+            rid=run_id,
+        )
     ext = CrossRepoVersionSkewExtractor()
     with _patch_mcp(driver):
-        stats = await ext.run(graphiti=MagicMock(), ctx=_ctx(project_slug="test-proj", run_id=run_id))
+        stats = await ext.run(
+            graphiti=MagicMock(), ctx=_ctx(project_slug="test-proj", run_id=run_id)
+        )
     assert stats.nodes_written == 1
     async with driver.session() as session:
-        out = await session.run("MATCH (r:IngestRun {run_id: $rid}) RETURN r.warnings_purl_malformed_count AS cnt", rid=run_id)
+        out = await session.run(
+            "MATCH (r:IngestRun {run_id: $rid}) RETURN r.warnings_purl_malformed_count AS cnt",
+            rid=run_id,
+        )
         row = await out.single()
     assert row["cnt"] == 1
 
@@ -111,10 +119,15 @@ async def test_acceptance_24_member_not_registered_warning(driver):  # type: ign
         """)
     run_id = "warn-ghost-001"
     async with driver.session() as session:
-        await session.run("CREATE (r:IngestRun {run_id: $rid, extractor_name: 'cross_repo_version_skew', success: true})", rid=run_id)
+        await session.run(
+            "CREATE (r:IngestRun {run_id: $rid, extractor_name: 'cross_repo_version_skew', success: true})",
+            rid=run_id,
+        )
     ext = CrossRepoVersionSkewExtractor()
     with _patch_mcp(driver):
-        stats = await ext.run(graphiti=MagicMock(), ctx=_ctx(project_slug="partial-bundle", run_id=run_id))
+        stats = await ext.run(
+            graphiti=MagicMock(), ctx=_ctx(project_slug="partial-bundle", run_id=run_id)
+        )
     assert stats.nodes_written == 1
 
 

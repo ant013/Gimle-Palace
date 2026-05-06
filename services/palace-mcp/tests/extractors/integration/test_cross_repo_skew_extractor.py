@@ -40,9 +40,12 @@ async def _seed(driver) -> None:  # type: ignore[no-untyped-def]
 
 async def _seed_ingest_run(driver, run_id: str) -> None:  # type: ignore[no-untyped-def]
     async with driver.session() as session:
-        await session.run("""
+        await session.run(
+            """
             CREATE (r:IngestRun {run_id: $run_id, extractor_name: 'cross_repo_version_skew', success: true})
-        """, run_id=run_id)
+        """,
+            run_id=run_id,
+        )
 
 
 def _ctx(*, project_slug: str, run_id: str = "test-run-001") -> ExtractorRunContext:
@@ -73,15 +76,20 @@ async def test_acceptance_1_bootstrap_project_mode(driver):  # type: ignore[no-u
     await _seed_ingest_run(driver, run_id)
     ext = CrossRepoVersionSkewExtractor()
     with _patch_mcp(driver):
-        stats = await ext.run(graphiti=MagicMock(), ctx=_ctx(project_slug="marketkit", run_id=run_id))
+        stats = await ext.run(
+            graphiti=MagicMock(), ctx=_ctx(project_slug="marketkit", run_id=run_id)
+        )
     assert stats.nodes_written == 1
     assert stats.edges_written == 0
 
     async with driver.session() as session:
-        out = await session.run("""
+        out = await session.run(
+            """
             MATCH (r:IngestRun {run_id: $run_id})
             RETURN r.mode AS mode, r.target_slug AS target
-        """, run_id=run_id)
+        """,
+            run_id=run_id,
+        )
         row = await out.single()
     assert row["mode"] == "project"
     assert row["target"] == "marketkit"
@@ -94,14 +102,19 @@ async def test_acceptance_2_bootstrap_bundle_mode(driver):  # type: ignore[no-un
     await _seed_ingest_run(driver, run_id)
     ext = CrossRepoVersionSkewExtractor()
     with _patch_mcp(driver):
-        stats = await ext.run(graphiti=MagicMock(), ctx=_ctx(project_slug="uw-ios-mini", run_id=run_id))
+        stats = await ext.run(
+            graphiti=MagicMock(), ctx=_ctx(project_slug="uw-ios-mini", run_id=run_id)
+        )
     assert stats.nodes_written == 1
 
     async with driver.session() as session:
-        out = await session.run("""
+        out = await session.run(
+            """
             MATCH (r:IngestRun {run_id: $run_id})
             RETURN r.mode AS mode, r.skew_groups_total AS total
-        """, run_id=run_id)
+        """,
+            run_id=run_id,
+        )
         row = await out.single()
     assert row["mode"] == "bundle"
     assert row["total"] == 1  # marketkit major skew
@@ -121,14 +134,19 @@ async def test_acceptance_3_no_skew_target(driver):  # type: ignore[no-untyped-d
     await _seed_ingest_run(driver, run_id)
     ext = CrossRepoVersionSkewExtractor()
     with _patch_mcp(driver):
-        stats = await ext.run(graphiti=MagicMock(), ctx=_ctx(project_slug="lonely-project", run_id=run_id))
+        stats = await ext.run(
+            graphiti=MagicMock(), ctx=_ctx(project_slug="lonely-project", run_id=run_id)
+        )
     assert stats.nodes_written == 1
 
     async with driver.session() as session:
-        out = await session.run("""
+        out = await session.run(
+            """
             MATCH (r:IngestRun {run_id: $run_id})
             RETURN r.skew_groups_total AS total
-        """, run_id=run_id)
+        """,
+            run_id=run_id,
+        )
         row = await out.single()
     assert row["total"] == 0
 
@@ -142,17 +160,25 @@ async def test_acceptance_14_pure_read_invariant(driver):  # type: ignore[no-unt
 
     async with driver.session() as session:
         before = await (await session.run("MATCH (n) RETURN count(n) AS n")).single()
-        before_e = await (await session.run("MATCH ()-[r]->() RETURN count(r) AS n")).single()
+        before_e = await (
+            await session.run("MATCH ()-[r]->() RETURN count(r) AS n")
+        ).single()
 
     ext = CrossRepoVersionSkewExtractor()
     with _patch_mcp(driver):
-        await ext.run(graphiti=MagicMock(), ctx=_ctx(project_slug="uw-ios-mini", run_id=run_id))
+        await ext.run(
+            graphiti=MagicMock(), ctx=_ctx(project_slug="uw-ios-mini", run_id=run_id)
+        )
 
     async with driver.session() as session:
         after = await (await session.run("MATCH (n) RETURN count(n) AS n")).single()
-        after_e = await (await session.run("MATCH ()-[r]->() RETURN count(r) AS n")).single()
+        after_e = await (
+            await session.run("MATCH ()-[r]->() RETURN count(r) AS n")
+        ).single()
 
-    assert after["n"] == before["n"], "No new nodes (IngestRun was pre-seeded; extractor only sets props)"
+    assert after["n"] == before["n"], (
+        "No new nodes (IngestRun was pre-seeded; extractor only sets props)"
+    )
     assert after_e["n"] == before_e["n"], "No new edges"
 
 
@@ -167,12 +193,18 @@ async def test_acceptance_17_re_run_creates_distinct_ingest_run(driver):  # type
     await _seed_ingest_run(driver, run_id_2)
 
     with _patch_mcp(driver):
-        await ext.run(graphiti=MagicMock(), ctx=_ctx(project_slug="uw-ios-mini", run_id=run_id_1))
-        await ext.run(graphiti=MagicMock(), ctx=_ctx(project_slug="uw-ios-mini", run_id=run_id_2))
+        await ext.run(
+            graphiti=MagicMock(), ctx=_ctx(project_slug="uw-ios-mini", run_id=run_id_1)
+        )
+        await ext.run(
+            graphiti=MagicMock(), ctx=_ctx(project_slug="uw-ios-mini", run_id=run_id_2)
+        )
 
     async with driver.session() as session:
-        rows = await (await session.run("""
+        rows = await (
+            await session.run("""
             MATCH (r:IngestRun {extractor_name: 'cross_repo_version_skew'})
             RETURN count(r) AS n
-        """)).single()
+        """)
+        ).single()
     assert rows["n"] == 2

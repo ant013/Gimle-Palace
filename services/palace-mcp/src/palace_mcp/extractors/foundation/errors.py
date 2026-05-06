@@ -49,6 +49,7 @@ class ExtractorErrorCode(str, Enum):
     BUNDLE_INVALID = "bundle_invalid"
     BUNDLE_NOT_REGISTERED = "bundle_not_registered"
     DEPENDENCY_SURFACE_NOT_INDEXED = "dependency_surface_not_indexed"
+    EXTRACTOR_RUNTIME_ERROR = "extractor_runtime_error"
     INVALID_ECOSYSTEM_FILTER = "invalid_ecosystem_filter"
     INVALID_SEVERITY_FILTER = "invalid_severity_filter"
     MISSING_TARGET = "missing_target"

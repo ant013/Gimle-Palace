@@ -87,7 +87,9 @@ async def _compute_skew_groups(
     """
     if mode == "project":
         if len(member_slugs) != 1:
-            raise ValueError(f"project mode expects exactly 1 member; got {len(member_slugs)}")
+            raise ValueError(
+                f"project mode expects exactly 1 member; got {len(member_slugs)}"
+            )
         params: dict[str, Any] = {"slug": member_slugs[0], "ecosystem": ecosystem}
         cypher = _PROJECT_MODE_CYPHER
     else:
@@ -98,14 +100,16 @@ async def _compute_skew_groups(
     async with driver.session() as session:
         result = await session.run(cypher, **params)
         async for record in result:
-            rows.append({
-                "purl": record["purl"],
-                "ecosystem": record["ecosystem"],
-                "version": record["version"],
-                "scope_id": record["scope_id"],
-                "declared_in": record["declared_in"],
-                "declared_constraint": record["declared_constraint"],
-            })
+            rows.append(
+                {
+                    "purl": record["purl"],
+                    "ecosystem": record["ecosystem"],
+                    "version": record["version"],
+                    "scope_id": record["scope_id"],
+                    "declared_in": record["declared_in"],
+                    "declared_constraint": record["declared_constraint"],
+                }
+            )
 
     # Group by (purl_root, ecosystem); each group accumulates entries
     by_group: dict[tuple[str, str], list[dict[str, Any]]] = {}
@@ -134,28 +138,34 @@ async def _compute_skew_groups(
             )
             for r in group_rows
         )
-        skew_groups.append(SkewGroup(
-            purl_root=purl_root,
-            ecosystem=ecosystem_value,
-            severity=severity,
-            version_count=len(distinct_versions),
-            entries=entries,
-        ))
+        skew_groups.append(
+            SkewGroup(
+                purl_root=purl_root,
+                ecosystem=ecosystem_value,
+                severity=severity,
+                version_count=len(distinct_versions),
+                entries=entries,
+            )
+        )
 
     # Diagnostic: count malformed purls (those missing pkg: prefix) that
     # would have been ignored above.
     target_slugs = list(member_slugs)
     warnings: list[WarningEntry] = []
     async with driver.session() as session:
-        diag = await session.run(_MALFORMED_DIAGNOSTIC_CYPHER, target_slugs=target_slugs)
+        diag = await session.run(
+            _MALFORMED_DIAGNOSTIC_CYPHER, target_slugs=target_slugs
+        )
         diag_row = await diag.single()
     malformed_count = diag_row["malformed_count"] if diag_row else 0
     if malformed_count > 0:
-        warnings.append(WarningEntry(
-            code="purl_malformed",
-            slug=None,
-            message=f"{malformed_count} :ExternalDependency rows lacked 'pkg:' prefix; excluded from skew",
-        ))
+        warnings.append(
+            WarningEntry(
+                code="purl_malformed",
+                slug=None,
+                message=f"{malformed_count} :ExternalDependency rows lacked 'pkg:' prefix; excluded from skew",
+            )
+        )
 
     return ComputeResult(
         skew_groups=skew_groups,

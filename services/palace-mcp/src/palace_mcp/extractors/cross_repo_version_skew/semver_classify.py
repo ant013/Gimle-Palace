@@ -43,7 +43,9 @@ def max_pairwise_severity(versions: list[str]) -> Severity:
     inputs raise ValueError (this function is meant for skew groups).
     """
     if len(versions) < 2:
-        raise ValueError(f"max_pairwise_severity requires >= 2 versions; got {len(versions)}")
+        raise ValueError(
+            f"max_pairwise_severity requires >= 2 versions; got {len(versions)}"
+        )
 
     best: Severity = "unknown"
     best_rank = _RANK[best]

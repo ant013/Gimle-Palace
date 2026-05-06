@@ -14,7 +14,11 @@ from neo4j import AsyncDriver
 from palace_mcp.extractors.cross_repo_version_skew.compute import (
     _compute_skew_groups,
 )
-from palace_mcp.extractors.cross_repo_version_skew.models import SLUG_RE, EcosystemEnum, WarningEntry
+from palace_mcp.extractors.cross_repo_version_skew.models import (
+    SLUG_RE,
+    EcosystemEnum,
+    WarningEntry,
+)
 from palace_mcp.extractors.cross_repo_version_skew.semver_classify import (
     severity_rank,
 )
@@ -49,9 +53,15 @@ async def find_version_skew(
     if bundle and not SLUG_RE.match(bundle):
         return _err("bundle_invalid", f"invalid bundle slug: {bundle!r}")
     if min_severity is not None and min_severity not in _VALID_SEVERITIES:
-        return _err("invalid_severity_filter", f"min_severity={min_severity!r} not in {_VALID_SEVERITIES}")
+        return _err(
+            "invalid_severity_filter",
+            f"min_severity={min_severity!r} not in {_VALID_SEVERITIES}",
+        )
     if ecosystem is not None and ecosystem not in _VALID_ECOSYSTEMS:
-        return _err("invalid_ecosystem_filter", f"ecosystem={ecosystem!r} not in {_VALID_ECOSYSTEMS}")
+        return _err(
+            "invalid_ecosystem_filter",
+            f"ecosystem={ecosystem!r} not in {_VALID_ECOSYSTEMS}",
+        )
 
     target_slug = project or bundle
     mode = "project" if project else "bundle"
@@ -78,10 +88,13 @@ async def find_version_skew(
             if SLUG_RE.match(m):
                 members.append(m)
             else:
-                pre_warnings.append(WarningEntry(
-                    code="member_invalid_slug", slug=m,
-                    message=f"member {m!r} fails slug regex; excluded from query",
-                ))
+                pre_warnings.append(
+                    WarningEntry(
+                        code="member_invalid_slug",
+                        slug=m,
+                        message=f"member {m!r} fails slug regex; excluded from query",
+                    )
+                )
         target_status = await _collect_target_status(driver, members)
         for w in pre_warnings:
             if w.slug is not None:
@@ -89,7 +102,9 @@ async def find_version_skew(
 
     indexed_count = sum(1 for s in target_status.values() if s == "indexed")
     if indexed_count == 0:
-        return _err("dependency_surface_not_indexed", "no targets have :DEPENDS_ON data")
+        return _err(
+            "dependency_surface_not_indexed", "no targets have :DEPENDS_ON data"
+        )
 
     # 3. Compute (live)
     result = await _compute_skew_groups(
@@ -155,14 +170,18 @@ async def find_version_skew(
 
 async def _project_exists(driver: AsyncDriver, slug: str) -> bool:
     async with driver.session() as session:
-        result = await session.run("MATCH (p:Project {slug: $slug}) RETURN count(p) AS n", slug=slug)
+        result = await session.run(
+            "MATCH (p:Project {slug: $slug}) RETURN count(p) AS n", slug=slug
+        )
         row = await result.single()
     return row is not None and row["n"] > 0
 
 
 async def _bundle_exists(driver: AsyncDriver, name: str) -> bool:
     async with driver.session() as session:
-        result = await session.run("MATCH (b:Bundle {name: $name}) RETURN count(b) AS n", name=name)
+        result = await session.run(
+            "MATCH (b:Bundle {name: $name}) RETURN count(b) AS n", name=name
+        )
         row = await result.single()
     return row is not None and row["n"] > 0
 
@@ -203,7 +222,11 @@ def register_version_skew_tools(tool_decorator: Any, default_project: str) -> No
 
         drv = get_driver()
         if drv is None:
-            return {"ok": False, "error_code": "driver_not_initialized", "message": "Neo4j driver not available"}
+            return {
+                "ok": False,
+                "error_code": "driver_not_initialized",
+                "message": "Neo4j driver not available",
+            }
         return await find_version_skew(
             driver=drv,
             project=project,
@@ -215,7 +238,9 @@ def register_version_skew_tools(tool_decorator: Any, default_project: str) -> No
         )
 
 
-async def _collect_target_status(driver: AsyncDriver, slugs: list[str]) -> dict[str, str]:
+async def _collect_target_status(
+    driver: AsyncDriver, slugs: list[str]
+) -> dict[str, str]:
     if not slugs:
         return {}
     async with driver.session() as session:

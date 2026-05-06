@@ -8,12 +8,8 @@ been duplicated. This test fails CI on such duplication.
 import re
 from pathlib import Path
 
-import pytest
-
 PKG_ROOT = Path(__file__).resolve().parents[3] / "src" / "palace_mcp"
-EXEMPT_FILE = (
-    PKG_ROOT / "extractors" / "cross_repo_version_skew" / "compute.py"
-)
+EXEMPT_FILE = PKG_ROOT / "extractors" / "cross_repo_version_skew" / "compute.py"
 
 MATCH_PATTERN = re.compile(r"MATCH.*Project.*\)-\[:DEPENDS_ON", re.DOTALL)
 

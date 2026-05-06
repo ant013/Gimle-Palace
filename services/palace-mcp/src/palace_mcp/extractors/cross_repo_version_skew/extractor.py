@@ -11,7 +11,11 @@ from __future__ import annotations
 
 from typing import Any, ClassVar
 
-from palace_mcp.extractors.base import BaseExtractor, ExtractorRunContext, ExtractorStats
+from palace_mcp.extractors.base import (
+    BaseExtractor,
+    ExtractorRunContext,
+    ExtractorStats,
+)
 from palace_mcp.extractors.cross_repo_version_skew.compute import (
     _compute_skew_groups,
 )
@@ -30,12 +34,17 @@ class CrossRepoVersionSkewExtractor(BaseExtractor):
     """Roadmap #39 extractor — pure skew detection over GIM-191 :DEPENDS_ON."""
 
     name: ClassVar[str] = "cross_repo_version_skew"
-    description: ClassVar[str] = "Cross-repo version skew detection over :DEPENDS_ON graph"
+    description: ClassVar[str] = (
+        "Cross-repo version skew detection over :DEPENDS_ON graph"
+    )
     constraints: ClassVar[list[str]] = []
     indexes: ClassVar[list[str]] = []
 
     async def run(
-        self, *, graphiti: Any, ctx: ExtractorRunContext,
+        self,
+        *,
+        graphiti: Any,
+        ctx: ExtractorRunContext,
     ) -> ExtractorStats:
         from palace_mcp.mcp_server import get_driver, get_settings
 
@@ -70,7 +79,7 @@ class CrossRepoVersionSkewExtractor(BaseExtractor):
             raise
         except Exception as exc:
             raise ExtractorError(
-                error_code=ExtractorErrorCode.INVALID_PROJECT,
+                error_code=ExtractorErrorCode.EXTRACTOR_RUNTIME_ERROR,
                 message=f"unexpected error: {exc}",
                 recoverable=False,
                 action="manual_cleanup",
@@ -96,7 +105,9 @@ class CrossRepoVersionSkewExtractor(BaseExtractor):
                     action="manual_cleanup",
                 )
             members = [target_slug]
-            target_status = await self._collect_target_status(driver, [target_slug], timeout_s)
+            target_status = await self._collect_target_status(
+                driver, [target_slug], timeout_s
+            )
         else:
             if not SLUG_RE.match(target_slug):
                 raise ExtractorError(
@@ -118,23 +129,34 @@ class CrossRepoVersionSkewExtractor(BaseExtractor):
                 if SLUG_RE.match(slug):
                     valid_members.append(slug)
                 else:
-                    warnings.append(WarningEntry(
-                        code="member_invalid_slug", slug=slug,
-                        message=f"member {slug!r} fails slug regex; excluded from query",
-                    ))
+                    warnings.append(
+                        WarningEntry(
+                            code="member_invalid_slug",
+                            slug=slug,
+                            message=f"member {slug!r} fails slug regex; excluded from query",
+                        )
+                    )
             members = valid_members
-            target_status = await self._collect_target_status(driver, members, timeout_s)
+            target_status = await self._collect_target_status(
+                driver, members, timeout_s
+            )
             for slug, status in target_status.items():
                 if status == "not_indexed":
-                    warnings.append(WarningEntry(
-                        code="member_not_indexed", slug=slug,
-                        message=f"{slug} has no :DEPENDS_ON edges; dependency_surface not indexed yet",
-                    ))
+                    warnings.append(
+                        WarningEntry(
+                            code="member_not_indexed",
+                            slug=slug,
+                            message=f"{slug} has no :DEPENDS_ON edges; dependency_surface not indexed yet",
+                        )
+                    )
                 elif status == "not_registered":
-                    warnings.append(WarningEntry(
-                        code="member_not_registered", slug=slug,
-                        message=f"{slug} is in :HAS_MEMBER but no :Project node exists",
-                    ))
+                    warnings.append(
+                        WarningEntry(
+                            code="member_not_registered",
+                            slug=slug,
+                            message=f"{slug} is in :HAS_MEMBER but no :Project node exists",
+                        )
+                    )
 
         indexed_count = sum(1 for s in target_status.values() if s == "indexed")
         if indexed_count == 0:
@@ -146,7 +168,10 @@ class CrossRepoVersionSkewExtractor(BaseExtractor):
             )
 
         result = await _compute_skew_groups(
-            driver, mode=mode, member_slugs=members, ecosystem=None,  # type: ignore[arg-type]
+            driver,
+            mode=mode,  # type: ignore[arg-type]
+            member_slugs=members,
+            ecosystem=None,
         )
         warnings.extend(result.warnings)
 
@@ -175,7 +200,8 @@ class CrossRepoVersionSkewExtractor(BaseExtractor):
     async def _bundle_exists(driver: Any, name: str, timeout_s: int) -> bool:
         async with driver.session(default_access_mode="READ") as session:
             result = await session.run(
-                "MATCH (b:Bundle {name: $name}) RETURN count(b) AS n", name=name,
+                "MATCH (b:Bundle {name: $name}) RETURN count(b) AS n",
+                name=name,
             )
             row = await result.single()
         return row is not None and row["n"] > 0
@@ -195,7 +221,9 @@ class CrossRepoVersionSkewExtractor(BaseExtractor):
 
     @staticmethod
     async def _collect_target_status(
-        driver: Any, slugs: list[str], timeout_s: int,
+        driver: Any,
+        slugs: list[str],
+        timeout_s: int,
     ) -> dict[str, str]:
         """Returns {slug: 'indexed' | 'not_indexed' | 'not_registered'}."""
         async with driver.session(default_access_mode="READ") as session:
