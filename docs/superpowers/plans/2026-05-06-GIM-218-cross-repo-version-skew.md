@@ -4,7 +4,7 @@
 
 **Goal:** Implement the `cross_repo_version_skew` extractor (Roadmap #39) — pure skew detection over the existing `:Project-[:DEPENDS_ON]->:ExternalDependency` graph from GIM-191 — plus the `palace.code.find_version_skew` MCP tool with project/bundle modes.
 
-**Architecture:** Per `docs/superpowers/specs/2026-05-06-GIM-NN-cross-repo-version-skew.md` (rev2). Hybrid: minimal extractor that writes only one substrate `:IngestRun{extractor_name='cross_repo_version_skew'}` per call (audit/observability), plus a live MCP tool that runs the same aggregation Cypher on demand. Single-source-of-truth in `compute.py` shared by both. Read-only over the graph; no new node labels, no new constraints.
+**Architecture:** Per `docs/superpowers/specs/2026-05-06-GIM-218-cross-repo-version-skew.md` (rev2). Hybrid: minimal extractor that writes only one substrate `:IngestRun{extractor_name='cross_repo_version_skew'}` per call (audit/observability), plus a live MCP tool that runs the same aggregation Cypher on demand. Single-source-of-truth in `compute.py` shared by both. Read-only over the graph; no new node labels, no new constraints.
 
 **Tech Stack:** Python 3.13+, Pydantic v2, `packaging.version` (PEP 440 — already transitively available via existing deps), Neo4j async driver, pytest + testcontainers. NO new package dependencies.
 
@@ -112,7 +112,7 @@ Expected: 3 PASS.
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/config.py services/palace-mcp/tests/unit/test_settings_foundation.py
-git commit -m "feat(GIM-NN): add 2 PALACE_VERSION_SKEW_* env vars"
+git commit -m "feat(GIM-218): add 2 PALACE_VERSION_SKEW_* env vars"
 ```
 
 ---
@@ -176,7 +176,7 @@ Expected: PASS.
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/extractors/foundation/errors.py services/palace-mcp/tests/extractors/unit/test_foundation_errors.py
-git commit -m "feat(GIM-NN): add 8 ExtractorErrorCode values for cross_repo_version_skew"
+git commit -m "feat(GIM-218): add 8 ExtractorErrorCode values for cross_repo_version_skew"
 ```
 
 ---
@@ -414,7 +414,7 @@ Expected: 9 PASS.
 git add services/palace-mcp/src/palace_mcp/extractors/cross_repo_version_skew/__init__.py \
         services/palace-mcp/src/palace_mcp/extractors/cross_repo_version_skew/models.py \
         services/palace-mcp/tests/extractors/unit/test_cross_repo_skew_models.py
-git commit -m "feat(GIM-NN): cross_repo_version_skew Pydantic models + enums"
+git commit -m "feat(GIM-218): cross_repo_version_skew Pydantic models + enums"
 ```
 
 ---
@@ -523,7 +523,7 @@ Expected: 6 PASS.
 ```bash
 git add services/palace-mcp/src/palace_mcp/extractors/cross_repo_version_skew/purl_parser.py \
         services/palace-mcp/tests/extractors/unit/test_cross_repo_skew_purl_parser.py
-git commit -m "feat(GIM-NN): purl_root_for_display helper (rsplit on @)"
+git commit -m "feat(GIM-218): purl_root_for_display helper (rsplit on @)"
 ```
 
 ---
@@ -685,7 +685,7 @@ Expected: 11 PASS.
 ```bash
 git add services/palace-mcp/src/palace_mcp/extractors/cross_repo_version_skew/semver_classify.py \
         services/palace-mcp/tests/extractors/unit/test_cross_repo_skew_semver_classify.py
-git commit -m "feat(GIM-NN): semver_classify — pairwise + max-rank"
+git commit -m "feat(GIM-218): semver_classify — pairwise + max-rank"
 ```
 
 ---
@@ -1041,7 +1041,7 @@ Expected: 5 PASS.
 ```bash
 git add services/palace-mcp/src/palace_mcp/extractors/cross_repo_version_skew/compute.py \
         services/palace-mcp/tests/extractors/integration/test_cross_repo_skew_compute.py
-git commit -m "feat(GIM-NN): _compute_skew_groups single source of truth"
+git commit -m "feat(GIM-218): _compute_skew_groups single source of truth"
 ```
 
 ---
@@ -1179,7 +1179,7 @@ Expected: PASS.
 ```bash
 git add services/palace-mcp/src/palace_mcp/extractors/cross_repo_version_skew/neo4j_writer.py \
         services/palace-mcp/tests/extractors/integration/test_cross_repo_skew_writer.py
-git commit -m "feat(GIM-NN): _write_run_extras writes summary onto :IngestRun"
+git commit -m "feat(GIM-218): _write_run_extras writes summary onto :IngestRun"
 ```
 
 ---
@@ -1456,7 +1456,7 @@ Expected: prints `cross_repo_version_skew`.
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/extractors/cross_repo_version_skew/extractor.py
-git commit -m "feat(GIM-NN): orchestrator — 4-phase pipeline (validate → resolve → aggregate → finalize)"
+git commit -m "feat(GIM-218): orchestrator — 4-phase pipeline (validate → resolve → aggregate → finalize)"
 ```
 
 ---
@@ -1512,7 +1512,7 @@ Expected: PASS.
 
 ```bash
 git add services/palace-mcp/src/palace_mcp/extractors/registry.py services/palace-mcp/tests/extractors/unit/test_registry.py
-git commit -m "feat(GIM-NN): register cross_repo_version_skew in EXTRACTORS"
+git commit -m "feat(GIM-218): register cross_repo_version_skew in EXTRACTORS"
 ```
 
 ---
@@ -1675,7 +1675,7 @@ Expected: 5 PASS.
 
 ```bash
 git add services/palace-mcp/tests/extractors/integration/test_cross_repo_skew_extractor.py
-git commit -m "test(GIM-NN): integration tests for orchestrator (acceptance #1-3, #14, #17)"
+git commit -m "test(GIM-218): integration tests for orchestrator (acceptance #1-3, #14, #17)"
 ```
 
 ---
@@ -1804,7 +1804,7 @@ Expected: 5 PASS.
 
 ```bash
 git add services/palace-mcp/tests/extractors/integration/test_cross_repo_skew_warnings.py
-git commit -m "test(GIM-NN): warnings + edge-case integration tests (acceptance #19, #20, #24)"
+git commit -m "test(GIM-218): warnings + edge-case integration tests (acceptance #19, #20, #24)"
 ```
 
 ---
@@ -2204,7 +2204,7 @@ Expected: 14 PASS.
 ```bash
 git add services/palace-mcp/src/palace_mcp/code/find_version_skew.py \
         services/palace-mcp/tests/code/test_find_version_skew_wire.py
-git commit -m "feat(GIM-NN): palace.code.find_version_skew MCP tool + 14 wire tests"
+git commit -m "feat(GIM-218): palace.code.find_version_skew MCP tool + 14 wire tests"
 ```
 
 ---
@@ -2307,7 +2307,7 @@ Expected: 1 PASS + no import error.
 ```bash
 git add services/palace-mcp/src/palace_mcp/server.py \
         services/palace-mcp/tests/extractors/unit/test_cross_repo_skew_compute_uniqueness.py
-git commit -m "feat(GIM-NN): register palace.code.find_version_skew + SF3 source-grep regression"
+git commit -m "feat(GIM-218): register palace.code.find_version_skew + SF3 source-grep regression"
 ```
 
 ---
@@ -2324,7 +2324,7 @@ git commit -m "feat(GIM-NN): register palace.code.find_version_skew + SF3 source
 Find `### Registered extractors` (or equivalent) in `CLAUDE.md`. Append:
 
 ```markdown
-- `cross_repo_version_skew` — Cross-repo version skew (GIM-NN, Roadmap #39).
+- `cross_repo_version_skew` — Cross-repo version skew (GIM-218, Roadmap #39).
   Reads `:Project-[:DEPENDS_ON]->:ExternalDependency` from `dependency_surface`
   (GIM-191) — fully read-only; writes only one `:IngestRun` per call. Hybrid:
   small extractor (audit/observability via `:IngestRun` extras) + live MCP
@@ -2508,7 +2508,7 @@ echo "==> SMOKE PASS"
 chmod +x services/palace-mcp/tests/extractors/smoke/test_cross_repo_skew_smoke.sh
 git add CLAUDE.md docs/runbooks/cross-repo-version-skew.md \
         services/palace-mcp/tests/extractors/smoke/test_cross_repo_skew_smoke.sh
-git commit -m "docs(GIM-NN): CLAUDE.md row + runbook + live smoke script"
+git commit -m "docs(GIM-218): CLAUDE.md row + runbook + live smoke script"
 ```
 
 ---
@@ -2544,5 +2544,5 @@ git commit -m "docs(GIM-NN): CLAUDE.md row + runbook + live smoke script"
 - [ ] All 14 tasks have concrete failing-test code (no "write a test" placeholders).
 - [ ] All 14 tasks have concrete implementation code (no "implement the function" placeholders).
 - [ ] Type names / function signatures match across tasks (`SkewEntry`, `SkewGroup`, `WarningEntry`, `RunSummary`, `EcosystemEnum`, `SeverityEnum`, `_compute_skew_groups`, `_write_run_extras`, `find_version_skew`).
-- [ ] All commits use `feat(GIM-NN): ...` / `test(GIM-NN): ...` / `docs(GIM-NN): ...` prefix.
+- [ ] All commits use `feat(GIM-218): ...` / `test(GIM-218): ...` / `docs(GIM-218): ...` prefix.
 - [ ] Post-merge step: file a `docs(roadmap):` PR marking #39 ✅ in `docs/roadmap.md §2.1` (not in this branch).

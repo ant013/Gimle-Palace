@@ -3,7 +3,7 @@ title: Cross-repo version skew extractor — pure skew detection over GIM-191 :D
 slug: cross-repo-version-skew
 date: 2026-05-06
 status: proposed (rev2)
-paperclip_issue: GIM-NN
+paperclip_issue: GIM-218
 predecessor_sha: 0a9c2363a
 authoring: Board+Claude
 team: Claude
@@ -936,7 +936,7 @@ Limitations:
   `palace.memory.lookup`).
 - `CLAUDE.md ## Extractors` — register `cross_repo_version_skew`
   row + workflow block above.
-- `docs/superpowers/plans/2026-05-06-GIM-NN-cross-repo-version-skew.md`
+- `docs/superpowers/plans/2026-05-06-GIM-218-cross-repo-version-skew.md`
   — TDD plan (next deliverable in same Board+Claude session).
 
 ## 13. Known limitations (in v1; documented for users)
