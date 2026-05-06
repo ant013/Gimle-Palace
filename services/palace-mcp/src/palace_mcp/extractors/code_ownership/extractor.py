@@ -216,7 +216,7 @@ class CodeOwnershipExtractor(BaseExtractor):
             )
 
         # Phase 2 — blame walk
-        blame_per_file = walk_blame(
+        blame_per_file, binary_paths = walk_blame(
             repo, paths=dirty, mailmap=mailmap, bot_keys=bot_keys
         )
 
@@ -238,6 +238,11 @@ class CodeOwnershipExtractor(BaseExtractor):
         edges_all: list[Any] = []
         states_all: list[dict[str, str | None]] = []
         for path in dirty:
+            if path in binary_paths:
+                states_all.append(
+                    {"path": path, "status": "skipped", "no_owners_reason": "binary_or_skipped"}
+                )
+                continue
             blame = blame_per_file.get(path, {})
             churn = churn_per_file.get(path, {})
             edges = score_file(

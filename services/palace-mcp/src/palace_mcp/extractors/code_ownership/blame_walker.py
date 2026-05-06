@@ -24,9 +24,14 @@ def walk_blame(
     paths: Iterable[str],
     mailmap: MailmapResolver,
     bot_keys: set[str],
-) -> dict[str, dict[str, BlameAttribution]]:
-    """Per-path, per-author blame line counts after mailmap + bot filter."""
+) -> tuple[dict[str, dict[str, BlameAttribution]], set[str]]:
+    """Per-path, per-author blame line counts after mailmap + bot filter.
+
+    Returns (blame_dict, binary_paths). Binary paths are omitted from
+    blame_dict so the orchestrator can skip churn scoring for them too.
+    """
     result: dict[str, dict[str, BlameAttribution]] = {}
+    binary_paths: set[str] = set()
     head_oid = repo.head.target
     for path in paths:
         # Skip binary files: check for null bytes in blob content
@@ -34,7 +39,7 @@ def walk_blame(
             head_commit = repo[head_oid]
             blob = repo[head_commit.tree[path].id]
             if isinstance(blob, pygit2.Blob) and blob.is_binary:
-                result[path] = {}
+                binary_paths.add(path)
                 continue
         except (KeyError, AttributeError):
             pass
@@ -76,4 +81,4 @@ def walk_blame(
                     lines=existing.lines + line_count,
                 )
         result[path] = per_author
-    return result
+    return result, binary_paths

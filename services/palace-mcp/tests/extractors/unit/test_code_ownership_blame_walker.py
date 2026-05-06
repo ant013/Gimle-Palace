@@ -1,5 +1,3 @@
-import os
-from pathlib import Path
 
 import pygit2
 import pytest
@@ -48,39 +46,41 @@ def mini_repo(tmp_path) -> pygit2.Repository:
 
 def test_walk_blame_attributes_lines_to_two_authors(mini_repo):
     resolver = MailmapResolver.from_repo(mini_repo, max_bytes=1_048_576)
-    result = walk_blame(
+    blame_dict, binary_paths = walk_blame(
         mini_repo,
         paths={"a.py"},
         mailmap=resolver,
         bot_keys=set(),
     )
-    assert "a.py" in result
-    by_author = {b.canonical_id: b.lines for b in result["a.py"].values()}
+    assert "a.py" in blame_dict
+    by_author = {b.canonical_id: b.lines for b in blame_dict["a.py"].values()}
     # Author One wrote lines 1+4 (2 lines), Author Two rewrote 2+3 (2 lines)
     assert by_author["a1@example.com"] == 2
     assert by_author["a2@example.com"] == 2
+    assert "a.py" not in binary_paths
 
 
 def test_walk_blame_skips_binary(mini_repo):
     resolver = MailmapResolver.from_repo(mini_repo, max_bytes=1_048_576)
-    result = walk_blame(
+    blame_dict, binary_paths = walk_blame(
         mini_repo,
         paths={"b.bin"},
         mailmap=resolver,
         bot_keys=set(),
     )
-    # Either absent from result or empty dict — both are "skipped"
-    assert result.get("b.bin", {}) == {}
+    # Binary path reported in binary_paths, not in blame_dict
+    assert "b.bin" in binary_paths
+    assert "b.bin" not in blame_dict
 
 
 def test_walk_blame_excludes_bots(mini_repo):
     resolver = MailmapResolver.from_repo(mini_repo, max_bytes=1_048_576)
-    result = walk_blame(
+    blame_dict, binary_paths = walk_blame(
         mini_repo,
         paths={"a.py"},
         mailmap=resolver,
         bot_keys={"a2@example.com"},  # treat Author Two as bot
     )
-    by_author = {b.canonical_id: b.lines for b in result["a.py"].values()}
+    by_author = {b.canonical_id: b.lines for b in blame_dict["a.py"].values()}
     assert "a2@example.com" not in by_author
     assert by_author["a1@example.com"] == 2  # only the lines author1 still owns

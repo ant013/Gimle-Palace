@@ -1,5 +1,3 @@
-import math
-from datetime import datetime, timezone
 
 import pytest
 
