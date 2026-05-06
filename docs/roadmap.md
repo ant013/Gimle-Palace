@@ -1,6 +1,6 @@
 # Gimle-Palace Team Roadmap
 
-**Last updated**: 2026-05-04
+**Last updated**: 2026-05-06 (rev: audit-v1 restructure)
 **Owner**: Board (operator + Board Claude session)
 **Primary goal**: Index Unstoppable Wallet ecosystem live (Android + iOS + EVM
 contracts). Phase 1 ends when palace-mcp produces useful queries against the
@@ -81,6 +81,121 @@ C2 (GIM-182) is now ✅. C3/C4/C5/C6 are independent and not launch-blocking. C4
 | Codex/CX team build target | PR #73-74 | Codex team operational with 9 roles |
 
 ---
+
+## Audit-V1 — first product release (current focus)
+
+**Goal**: ship a working audit pipeline end-to-end — pick `tronKit-swift`,
+get a complete audit report from a paperclip agent team, MCP fully
+populated. After v1 ships, every additional extractor is a tiny isolated
+slice that just enriches MCP without touching workflow.
+
+**Definition of Done for v1:**
+1. `palace.audit.run(project="tronkit-swift")` returns a structured
+   markdown report with sections covering architecture, security,
+   quality, dependencies, ownership, crypto-domain.
+2. The report is produced by a paperclip agent team (not a single
+   agent) running in parallel; results synthesised by an
+   `AuditSynthesizer`.
+3. The same command works (manually) on `bitcoinkit-swift` and any
+   other Swift Kit operator points it at.
+4. After v1, adding extractor X = (a) write spec+plan via Board,
+   (b) merge slice, (c) re-run `palace.audit.run` — without touching
+   the audit workflow, agents, or report format.
+
+### Sprint sequence (parallel where possible)
+
+| ID | Sprint | Detail file | Wall-time | Depends on |
+|----|--------|-------------|-----------|------------|
+| **S1 (D)** | Audit Orchestration — workflow + agents + report format + composite tool | [`docs/superpowers/sprints/D-audit-orchestration.md`](superpowers/sprints/D-audit-orchestration.md) | ~3 weeks | nothing (Board work, runs first) |
+| **S2 (B-min)** | Audit-critical extractor: `crypto_domain_model` (#40) | [`docs/superpowers/sprints/B-audit-extractors.md`](superpowers/sprints/B-audit-extractors.md) | ~1.5 weeks | nothing (parallel with S1) |
+| **S3 (C)** | Per-Kit ingestion automation | [`docs/superpowers/sprints/C-ingestion-automation.md`](superpowers/sprints/C-ingestion-automation.md) | ~1 week | nothing (parallel with S1+S2) |
+| **S4 (E)** | Smoke run on tronKit-swift + bitcoinKit-swift | [`docs/superpowers/sprints/E-smoke.md`](superpowers/sprints/E-smoke.md) | ~1 week | S1 + S2 + S3 |
+| **S5 (F)** | Scale to all 41 HS Kits + uw-ios-app | [`docs/superpowers/sprints/F-scale.md`](superpowers/sprints/F-scale.md) | ~2 weeks | S4 |
+| **S6+** | Iterative extractor backlog (#1, #2, #34, #7, etc) | TBD per slice | ongoing | post-v1 |
+
+### Path justification (why this order)
+
+- **S1 first / parallel-permitted**: defines the product surface
+  (what queries audit agents make). Without S1, S2 has no driver
+  for which extractor signals matter most. S1 is meta-spec work
+  in the Board+Claude session — does NOT block S2 paperclip-team
+  impl work which can run concurrently.
+- **S2 = ONLY #40 Crypto Domain** for v1 (not the broader Phase B
+  set #1/#2/#34/#7). Reason: operator's product target is
+  `tronkit-swift` / `bitcoinkit-swift` — crypto Kits where #40
+  signal (address validation, decimal handling, checksum invariants)
+  is the highest-ROI new extractor. The other 4 in Phase B are
+  good but their absence won't kill v1 — agents can return findings
+  with a known-blind-spot caveat. v1 ships sooner; #1/#2/#34/#7
+  become S6+ slices and just enrich MCP without re-touching workflow.
+- **S3 in parallel** with S1/S2: ingestion automation is independent
+  of workflow design. Shrinks per-Kit setup from ~30 min manual to
+  ~3 min `bash ingest_swift_kit.sh tronkit-swift`. Critical for S5
+  (41 Kits at 30 min each = 20 hours — un-shippable).
+- **S4 sequence after S1+S2+S3 land**: real smoke needs all three
+  ready. tronKit first (smallest crypto Kit; fast iteration on
+  template), bitcoinKit second (validates that v1 generalizes).
+- **S5 last**: scaling decision. Smoke might surface that some Kit
+  has unusual structure (e.g., legacy Obj-C or KMP shim) requiring
+  per-Kit tuning. Don't commit to scale before knowing the failure
+  modes.
+- **S6+ post-v1**: operator's stated goal. After v1, every new
+  extractor (`#1` Architecture Layer, `#2` Symbol Duplication,
+  `#34` Code Smell Structural, `#7` Error Handling Policy, plus
+  LLM-blocked #11/#26/#35/#43 once Ollama infra lands) plugs in
+  via the same `EXTRACTORS` registry pattern, runs through the
+  unchanged ingestion automation, and is queried by the unchanged
+  audit team. Each extractor = one Board+Claude session + one
+  paperclip slice; no v1 framework touch needed.
+
+### Critical decision points (pre-S1 start)
+
+| ID | Question | Default | When operator decides |
+|----|----------|---------|------------------------|
+| AV1-D1 | Audit report format: markdown only, or also JSON / Cypher snapshot? | markdown only | At S1 brainstorming Q-round |
+| AV1-D2 | Audit agent set: reuse SecurityAuditor + OpusArchitect + BlockchainEngineer + 1 new "Auditor" + Synthesizer? Or 3 specialised new roles (Quality/Dependency/Historical) + Synth? | reuse + 1 new `Auditor` (multi-domain) + `AuditSynthesizer` | S1 brainstorming |
+| AV1-D3 | Trigger: manual `palace.audit.run` only, or also schedule (cron) and on-merge (CI)? | manual for v1; cron/CI in S6+ | S1 brainstorming |
+| AV1-D4 | LLM extractors (#11/#26/#35/#43): wait or run Ollama infra slice in parallel? | post-v1 (don't block on LLM infra) | After S4 smoke (real signal: did v1 audit feel thin without these?) |
+| AV1-D5 | iMac vs dev Mac for SCIP emit: keep Track A/B split or push automation entirely to dev Mac? | Track A/B (dev Mac builds + scp's to iMac mount) | S3 brainstorming |
+
+### In-flight slices (Phase 2 archive — see legacy section below)
+
+These were started before audit-v1 restructure; they fold into v1 as
+data-providers (S2-adjacent), not as new sprints:
+
+- **GIM-216** code_ownership — feeds HistoricalAuditor / Auditor in S1.
+  Awaiting CTO Phase 1.1.
+- **GIM-218** cross_repo_version_skew — feeds DependencyAuditor /
+  Auditor in S1. Status `todo`, no assignee yet.
+
+These two should LAND BEFORE S4 (smoke) so the audit report has
+ownership + skew sections populated.
+
+### Post-v1 slice intake protocol (operator's stated goal)
+
+After v1 ships, adding extractor X follows the **paved path**:
+
+1. Board+Claude session: brainstorm + spec rev1 + 4-agent audit + spec rev2.
+2. Paperclip team: CTO Phase 1.1 → CR plan-review → PE/MCPEngineer impl → CR Phase 3.1 → Opus Phase 3.2 → QA Phase 4.1 → CTO merge.
+3. iMac deploy: `bash paperclips/scripts/imac-deploy.sh` (manual today; S6+ candidate for auto-trigger).
+4. Per-existing-Kit re-ingest: `bash scripts/ingest_swift_kit.sh <slug> --extractors=X` (added to ingestion script in S3).
+5. Re-run `palace.audit.run(project=<slug>)` — report includes new section automatically because audit synthesizer reads `:IngestRun` for ALL extractors with `extractor_name=*`.
+
+The audit pipeline is **extractor-name-agnostic** — synthesizer template enumerates available extractor outputs from the graph, not a hardcoded list. This is the design constraint that makes "just add extractors" work.
+
+---
+
+<!-- ============================================================ -->
+<!-- ARCHIVE — Original Phase 2-6 plan                          -->
+<!--                                                            -->
+<!-- Superseded 2026-05-06 by Audit-V1 plan above. Slices not   -->
+<!-- yet started are paused; in-flight slices (GIM-216 #32,     -->
+<!-- GIM-218 #39, GIM-217 #3 CX) continue and fold into S2.     -->
+<!-- Re-activate sections individually per S6+ intake protocol  -->
+<!-- as operator demand surfaces.                               -->
+<!-- ============================================================ -->
+
+<!--
 
 ## Phase 2 — Post-launch deep analysis
 
@@ -237,6 +352,12 @@ Product features and infra that are not extractors per se. Some launch-blocking,
 | E5 | `palace.code.manage_adr` writable v2 | Claude | 📦 | After Phase 1 |
 | E6 | CX team — hire BlockchainEngineer + SecurityAuditor | Board | 📦 | Phase 4 (smart contract / Rust work needs them) |
 
+-->
+
+<!-- ============================================================ -->
+<!-- END ARCHIVE                                                  -->
+<!-- ============================================================ -->
+
 ---
 
 ## Parallelization rules
@@ -278,8 +399,7 @@ Avoid editing during active phase chains — wait for the slice merge so the fil
 
 ## Open questions
 
-- **Phase 1 real-query validation** — launch-critical implementation rows are merged; operator still decides when "launch" is real. Suggested gate: at least 3 useful queries on real UW codebase produce results matching expectations (≥1 each on iOS / Android / EVM contract).
-- **Phase 2 ordering inside categories** — operator selected #27 Public API Surface Extractor for CX spec brainstorm on 2026-05-04; it closed as GIM-190. Next CX item is #31 Cross-Module Contract Extractor via GIM-192. Broader ordering remains demand-driven.
-- **#22 Git History promotion** — triggered by first historical-extractor request. Currently 📦.
-- **LLM infrastructure** — 6 Claude extractors require LLM. Ollama deploy + cost monitoring is a separate infra slice (not yet scheduled).
-- **CX queue refresh** — completed 2026-05-04 after GIM-190 merged and iMac deploy verified; active CX docs lane is #31 Cross-Module Contract Extractor spec formalization (GIM-192).
+- **Audit-V1 decision points** — see `Audit-V1 — first product release` section above for AV1-D1..AV1-D5. To be resolved during S1 brainstorming.
+- **Phase 1 real-query validation** — launch-critical implementation rows are merged; operator still decides when "launch" is real. Suggested gate: at least 3 useful queries on real UW codebase produce results matching expectations. The S4 smoke (`palace.audit.run` on tronkit-swift) is the de facto launch validation.
+- **LLM infrastructure** — 6 Claude extractors (#10/#11/#15/#26/#35/#43) require LLM. Ollama deploy + cost monitoring is a separate infra slice. Decision per AV1-D4: post-v1; do not block audit-v1 on LLM infra.
+- **Archived Phase 2-6 backlog** — see HTML-commented section above. Re-activate individual rows via S6+ intake protocol if/when audit-v1 surfaces a concrete need.
