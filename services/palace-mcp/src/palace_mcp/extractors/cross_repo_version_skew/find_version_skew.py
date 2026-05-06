@@ -170,6 +170,42 @@ async def _bundle_members(driver: AsyncDriver, name: str) -> list[str]:
         return [r["slug"] for r in await result.data()]
 
 
+def register_version_skew_tools(tool_decorator: Any, default_project: str) -> None:
+    """Register palace.code.find_version_skew as an MCP tool.
+
+    Called from mcp_server.py alongside register_code_composite_tools().
+    """
+
+    @tool_decorator(
+        name="palace.code.find_version_skew",
+        description=(
+            "Cross-repo / cross-bundle version skew detection over external "
+            "dependencies. Reports purl_roots that have multiple distinct "
+            "resolved_versions across modules (project mode) or members "
+            "(bundle mode). Read-only; uses GIM-191 dependency_surface graph."
+        ),
+    )
+    async def palace_code_find_version_skew(
+        project: str | None = None,
+        bundle: str | None = None,
+        ecosystem: str | None = None,
+        min_severity: str | None = None,
+        top_n: int = 50,
+        include_aligned: bool = False,
+    ) -> dict:
+        from palace_mcp.mcp_server import get_driver
+
+        return await find_version_skew(
+            driver=get_driver(),
+            project=project,
+            bundle=bundle,
+            ecosystem=ecosystem,
+            min_severity=min_severity,
+            top_n=top_n,
+            include_aligned=include_aligned,
+        )
+
+
 async def _collect_target_status(driver: AsyncDriver, slugs: list[str]) -> dict[str, str]:
     if not slugs:
         return {}
