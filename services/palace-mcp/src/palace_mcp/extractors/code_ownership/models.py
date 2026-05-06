@@ -55,6 +55,12 @@ class BlameAttribution(FrozenModel):
     canonical_name: str
     canonical_email: str
     lines: int
+    last_commit_at: datetime | None = None
+
+    @field_validator("last_commit_at")
+    @classmethod
+    def _tz(cls, v: datetime | None) -> datetime | None:
+        return _validate_tz(v) if v is not None else None
 
 
 class ChurnShare(FrozenModel):

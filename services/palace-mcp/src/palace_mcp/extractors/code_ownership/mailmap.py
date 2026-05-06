@@ -72,6 +72,8 @@ class MailmapResolver:
             try:
                 cn, ce = self._pygit2_mailmap.resolve(name, email)  # type: ignore[attr-defined]
                 return cn, ce.lower()
-            except Exception:
-                pass  # fall through to identity
+            except Exception as exc:
+                logger.debug(
+                    "mailmap_resolve_failed: %s — falling through to identity", exc
+                )
         return name, email.lower()

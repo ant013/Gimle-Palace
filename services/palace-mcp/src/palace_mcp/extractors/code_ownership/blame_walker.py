@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable
+from datetime import datetime, timezone
 
 import pygit2
 
@@ -63,6 +64,7 @@ def walk_blame(
             if canonical_id in bot_keys:
                 continue
             line_count = int(hunk.lines_in_hunk)
+            commit_time = datetime.fromtimestamp(commit.author.time, tz=timezone.utc)
             existing = per_author.get(canonical_id)
             if existing is None:
                 per_author[canonical_id] = BlameAttribution(
@@ -70,6 +72,7 @@ def walk_blame(
                     canonical_name=cn,
                     canonical_email=ce,
                     lines=line_count,
+                    last_commit_at=commit_time,
                 )
             else:
                 per_author[canonical_id] = BlameAttribution(
@@ -77,6 +80,9 @@ def walk_blame(
                     canonical_name=cn,
                     canonical_email=ce,
                     lines=existing.lines + line_count,
+                    last_commit_at=max(
+                        existing.last_commit_at or commit_time, commit_time
+                    ),
                 )
         result[path] = per_author
     return result, binary_paths

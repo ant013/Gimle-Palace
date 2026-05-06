@@ -18,12 +18,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 from neo4j import AsyncDriver
 
+import palace_mcp.extractors.code_ownership.extractor as _ownership_extractor_module
+from palace_mcp.config import Settings
 from palace_mcp.extractors.base import ExtractorRunContext
 from palace_mcp.extractors.code_ownership.extractor import CodeOwnershipExtractor
 from palace_mcp.extractors.code_ownership.schema_extension import (
     ensure_ownership_schema,
 )
-import palace_mcp.extractors.code_ownership.extractor as _ownership_extractor_module
 
 FIXTURE_DIR = (
     Path(__file__).resolve().parents[2]
@@ -44,7 +45,7 @@ def _rebuild_fixture() -> Path:
 
 
 def _make_settings() -> MagicMock:
-    s = MagicMock()
+    s = MagicMock(spec=Settings)
     s.ownership_blame_weight = 0.5
     s.ownership_max_files_per_run = 50_000
     s.ownership_write_batch_size = 2_000
@@ -428,7 +429,9 @@ async def test_scenario_9_crash_recovery(driver: AsyncDriver) -> None:
         side_effect=RuntimeError("simulated Phase 4 crash"),
     ):
         with pytest.raises(RuntimeError, match="simulated Phase 4 crash"):
-            with patch("palace_mcp.mcp_server.get_settings", return_value=_make_settings()):
+            with patch(
+                "palace_mcp.mcp_server.get_settings", return_value=_make_settings()
+            ):
                 await CodeOwnershipExtractor().run(
                     graphiti=_graphiti(driver), ctx=_ctx(repo_path)
                 )
@@ -472,20 +475,28 @@ async def test_scenario_10_alpha_used_provenance(driver: AsyncDriver) -> None:
         )
         rows = await result.data()
     assert rows, "expected OWNED_BY edges after first run"
-    assert all(
-        abs(row["alpha"] - 0.5) < 1e-9 for row in rows
-    ), f"expected alpha=0.5 but got {rows}"
+    assert all(abs(row["alpha"] - 0.5) < 1e-9 for row in rows), (
+        f"expected alpha=0.5 but got {rows}"
+    )
 
     # Advance HEAD so the second run has at least one DIRTY file
     subprocess.run(
-        ["git", "config", "user.email", "new@example.com"], cwd=str(repo_path), check=True
+        ["git", "config", "user.email", "new@example.com"],
+        cwd=str(repo_path),
+        check=True,
     )
     subprocess.run(
-        ["git", "config", "user.name", "Anton Stavnichiy"], cwd=str(repo_path), check=True
+        ["git", "config", "user.name", "Anton Stavnichiy"],
+        cwd=str(repo_path),
+        check=True,
     )
-    (repo_path / "apps" / "main.py").write_text("def main():\n    return 999\n", encoding="utf-8")
+    (repo_path / "apps" / "main.py").write_text(
+        "def main():\n    return 999\n", encoding="utf-8"
+    )
     subprocess.run(["git", "add", "apps/main.py"], cwd=str(repo_path), check=True)
-    subprocess.run(["git", "commit", "-m", "alpha provenance test"], cwd=str(repo_path), check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "alpha provenance test"], cwd=str(repo_path), check=True
+    )
     await _seed_git_history(driver, repo_path)
 
     settings_70 = _make_settings()
@@ -507,9 +518,9 @@ async def test_scenario_10_alpha_used_provenance(driver: AsyncDriver) -> None:
         )
         rows = await result.data()
     assert rows, "expected OWNED_BY edges for apps/main.py after second run"
-    assert all(
-        abs(row["alpha"] - 0.7) < 1e-9 for row in rows
-    ), f"expected alpha=0.7 on dirty file but got {rows}"
+    assert all(abs(row["alpha"] - 0.7) < 1e-9 for row in rows), (
+        f"expected alpha=0.7 on dirty file but got {rows}"
+    )
 
 
 @pytest.mark.integration
@@ -534,7 +545,9 @@ async def test_scenario_11_per_batch_atomicity(driver: AsyncDriver) -> None:
     settings = _make_settings()
     settings.ownership_write_batch_size = 1
 
-    with patch.object(_ownership_extractor_module, "write_batch", side_effect=_fail_on_second):
+    with patch.object(
+        _ownership_extractor_module, "write_batch", side_effect=_fail_on_second
+    ):
         with pytest.raises(RuntimeError, match="simulated batch-2 crash"):
             with patch("palace_mcp.mcp_server.get_settings", return_value=settings):
                 await CodeOwnershipExtractor().run(
@@ -556,4 +569,6 @@ async def test_scenario_11_per_batch_atomicity(driver: AsyncDriver) -> None:
             "MATCH ()-[r:OWNED_BY {source: 'extractor.code_ownership'}]->() RETURN count(r) AS n"
         )
         row = await result.single()
-    assert row is not None and row["n"] > 0, "batch 1 must have committed at least one edge"
+    assert row is not None and row["n"] > 0, (
+        "batch 1 must have committed at least one edge"
+    )

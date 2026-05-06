@@ -61,6 +61,8 @@ def score_file(
         last_touched_at: datetime
         if c is not None:
             last_touched_at = c.last_touched_at
+        elif b is not None and b.last_commit_at is not None:
+            last_touched_at = b.last_commit_at
         else:
             last_touched_at = datetime.now(tz=timezone.utc)
 

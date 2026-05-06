@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from pathlib import Path
 from typing import Any, ClassVar, cast
@@ -131,7 +132,7 @@ class CodeOwnershipExtractor(BaseExtractor):
         deleted: set[str] = set()
         prev_head_sha = checkpoint.last_head_sha if checkpoint else None
         if prev_head_sha is None:
-            dirty = self._all_files_in_head(repo)
+            dirty = await asyncio.to_thread(self._all_files_in_head, repo)
         elif prev_head_sha == current_head:
             await update_checkpoint(
                 driver,  # type: ignore[arg-type]
@@ -206,9 +207,9 @@ class CodeOwnershipExtractor(BaseExtractor):
                 alpha_used=alpha,
             )
 
-        # Phase 2 — blame walk
-        blame_per_file, binary_paths = walk_blame(
-            repo, paths=dirty, mailmap=mailmap, bot_keys=bot_keys
+        # Phase 2 — blame walk (CPU-bound pygit2 calls; offloaded to thread)
+        blame_per_file, binary_paths = await asyncio.to_thread(
+            walk_blame, repo, paths=dirty, mailmap=mailmap, bot_keys=bot_keys
         )
 
         # Phase 3 — churn aggregation

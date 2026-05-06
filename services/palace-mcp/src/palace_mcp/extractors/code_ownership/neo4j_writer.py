@@ -35,9 +35,8 @@ MERGE (a:Author {provider: 'git', identity_key: e.canonical_id})
                 a.is_bot = false,
                 a.first_seen_at = e.last_touched_at,
                 a.last_seen_at = e.last_touched_at
-MERGE (f)-[r:OWNED_BY]->(a)
-SET r.source = $source,
-    r.weight = e.weight,
+MERGE (f)-[r:OWNED_BY {source: $source}]->(a)
+SET r.weight = e.weight,
     r.blame_share = e.blame_share,
     r.recency_churn_share = e.recency_churn_share,
     r.last_touched_at = e.last_touched_at,
