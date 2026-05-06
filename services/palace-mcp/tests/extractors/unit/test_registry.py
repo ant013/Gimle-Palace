@@ -61,6 +61,13 @@ def test_hotspot_registered() -> None:
     assert extractor.name == "hotspot"
 
 
+def test_code_ownership_registered() -> None:
+    """GIM-216: code_ownership extractor must be present in EXTRACTORS."""
+    extractor = registry.get("code_ownership")
+    assert extractor is not None
+    assert extractor.name == "code_ownership"
+
+
 def test_symbol_index_swift_registered() -> None:
     extractor = registry.get("symbol_index_swift")
     assert extractor is not None
