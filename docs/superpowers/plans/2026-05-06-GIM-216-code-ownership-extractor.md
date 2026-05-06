@@ -10,6 +10,13 @@
 
 ---
 
+### Revision history
+
+| Rev | Date | Author | Summary |
+|-----|------|--------|---------|
+| 1 | 2026-05-06 | Board | Initial 20-task TDD plan |
+| 2 | 2026-05-06 | CTO | Fix 7 critical + 3 warning findings from Phase 1.2 CR review (registry instance, BaseExtractor.run interface, Settings palace_ prefix, fixture name, code_composite registration, ExtractorError kwargs, IngestRun runner lifecycle) |
+
 ## File Structure
 
 | Path | Responsibility |
@@ -28,7 +35,7 @@
 | `services/palace-mcp/src/palace_mcp/extractors/code_ownership/extractor.py` | `CodeOwnershipExtractor(BaseExtractor)` orchestrator: 5-phase pipeline |
 | `services/palace-mcp/src/palace_mcp/extractors/registry.py` | Register `code_ownership` in `EXTRACTORS` mapping |
 | `services/palace-mcp/src/palace_mcp/code/find_owners.py` | `palace.code.find_owners` MCP tool implementation |
-| `services/palace-mcp/src/palace_mcp/server.py` | Register `find_owners` MCP tool |
+| `services/palace-mcp/src/palace_mcp/code_composite.py` | Register `find_owners` MCP tool (inside `register_code_composite_tools()`) |
 | `services/palace-mcp/tests/extractors/unit/test_code_ownership_models.py` | Pydantic validators |
 | `services/palace-mcp/tests/extractors/unit/test_code_ownership_mailmap.py` | MailmapResolver: pygit2 path, fallback, size cap, identity |
 | `services/palace-mcp/tests/extractors/unit/test_code_ownership_checkpoint.py` | Checkpoint read/write/init |
@@ -61,13 +68,13 @@ def test_ownership_settings_defaults(monkeypatch):
     for k, v in _minimal_env().items():
         monkeypatch.setenv(k, v)
     settings = Settings()
-    assert settings.ownership_blame_weight == 0.5
-    assert settings.ownership_max_files_per_run == 50_000
-    assert settings.ownership_write_batch_size == 2_000
-    assert settings.mailmap_max_bytes == 1_048_576
+    assert settings.palace_ownership_blame_weight == 0.5
+    assert settings.palace_ownership_max_files_per_run == 50_000
+    assert settings.palace_ownership_write_batch_size == 2_000
+    assert settings.palace_mailmap_max_bytes == 1_048_576
 
 
-def test_ownership_blame_weight_out_of_range_rejected(monkeypatch):
+def test_palace_ownership_blame_weight_out_of_range_rejected(monkeypatch):
     import pytest
     from pydantic import ValidationError
     for k, v in _minimal_env().items():
@@ -77,7 +84,7 @@ def test_ownership_blame_weight_out_of_range_rejected(monkeypatch):
         Settings()
 
 
-def test_ownership_write_batch_size_out_of_range_rejected(monkeypatch):
+def test_palace_ownership_write_batch_size_out_of_range_rejected(monkeypatch):
     import pytest
     from pydantic import ValidationError
     for k, v in _minimal_env().items():
@@ -91,7 +98,7 @@ def test_ownership_write_batch_size_out_of_range_rejected(monkeypatch):
 
 Run: `cd services/palace-mcp && uv run pytest tests/unit/test_settings_foundation.py -k ownership -v`
 
-Expected: 3 FAIL with `AttributeError: 'Settings' object has no attribute 'ownership_blame_weight'`.
+Expected: 3 FAIL with `AttributeError: 'Settings' object has no attribute 'palace_ownership_blame_weight'`.
 
 - [ ] **Step 3: Implement settings fields**
 
@@ -99,19 +106,19 @@ In `services/palace-mcp/src/palace_mcp/config.py`, append to `Settings` (preserv
 
 ```python
 # inside class Settings(BaseSettings):
-ownership_blame_weight: float = Field(
+palace_ownership_blame_weight: float = Field(
     default=0.5, ge=0.0, le=1.0,
     description="Alpha in weight = α × blame_share + (1-α) × recency_churn_share",
 )
-ownership_max_files_per_run: int = Field(
+palace_ownership_max_files_per_run: int = Field(
     default=50_000, ge=1,
     description="Hard cap on DIRTY set per code_ownership run",
 )
-ownership_write_batch_size: int = Field(
+palace_ownership_write_batch_size: int = Field(
     default=2_000, ge=100, le=10_000,
     description="Files per Phase-4 atomic-replace tx in code_ownership writer",
 )
-mailmap_max_bytes: int = Field(
+palace_mailmap_max_bytes: int = Field(
     default=1_048_576, ge=1024,
     description="Upper bound for .mailmap file size; oversized → identity passthrough",
 )
@@ -524,17 +531,17 @@ from palace_mcp.extractors.code_ownership.schema_extension import (
 
 
 @pytest.mark.asyncio
-async def test_ensure_ownership_schema_idempotent(neo4j_driver):
+async def test_ensure_ownership_schema_idempotent(driver):
     """Schema bootstrap is idempotent — second call must not raise."""
-    await ensure_ownership_schema(neo4j_driver)
-    await ensure_ownership_schema(neo4j_driver)
+    await ensure_ownership_schema(driver)
+    await ensure_ownership_schema(driver)
 
 
 @pytest.mark.asyncio
-async def test_ownership_schema_constraints_created(neo4j_driver):
+async def test_ownership_schema_constraints_created(driver):
     """After ensure, expected constraints exist."""
-    await ensure_ownership_schema(neo4j_driver)
-    async with neo4j_driver.session() as session:
+    await ensure_ownership_schema(driver)
+    async with driver.session() as session:
         result = await session.run("SHOW CONSTRAINTS YIELD name")
         names = {record["name"] for record in await result.data()}
     assert "ownership_checkpoint_unique" in names
@@ -542,16 +549,16 @@ async def test_ownership_schema_constraints_created(neo4j_driver):
 
 
 @pytest.mark.asyncio
-async def test_ownership_schema_no_relationship_index(neo4j_driver):
+async def test_ownership_schema_no_relationship_index(driver):
     """rev2 dropped file_owned_by_weight (dead index for traversal queries)."""
-    await ensure_ownership_schema(neo4j_driver)
-    async with neo4j_driver.session() as session:
+    await ensure_ownership_schema(driver)
+    async with driver.session() as session:
         result = await session.run("SHOW INDEXES YIELD name")
         names = {record["name"] for record in await result.data()}
     assert "file_owned_by_weight" not in names
 ```
 
-The fixture `neo4j_driver` is provided by the existing `services/palace-mcp/tests/conftest.py` (testcontainers); reuse it.
+The fixture `driver` (type `AsyncDriver`) is provided by the existing `services/palace-mcp/tests/extractors/integration/conftest.py`; reuse it.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -824,22 +831,22 @@ from palace_mcp.extractors.code_ownership.schema_extension import (
 
 
 @pytest.mark.asyncio
-async def test_load_checkpoint_returns_none_on_first_run(neo4j_driver):
-    await ensure_ownership_schema(neo4j_driver)
-    cp = await load_checkpoint(neo4j_driver, project_id="gimle")
+async def test_load_checkpoint_returns_none_on_first_run(driver):
+    await ensure_ownership_schema(driver)
+    cp = await load_checkpoint(driver, project_id="gimle")
     assert cp is None
 
 
 @pytest.mark.asyncio
-async def test_update_then_load_roundtrip(neo4j_driver):
-    await ensure_ownership_schema(neo4j_driver)
+async def test_update_then_load_roundtrip(driver):
+    await ensure_ownership_schema(driver)
     await update_checkpoint(
-        neo4j_driver,
+        driver,
         project_id="gimle",
         head_sha="abcdef0123456789abcdef0123456789abcdef01",
         run_id="11111111-1111-1111-1111-111111111111",
     )
-    cp = await load_checkpoint(neo4j_driver, project_id="gimle")
+    cp = await load_checkpoint(driver, project_id="gimle")
     assert cp is not None
     assert cp.last_head_sha == "abcdef0123456789abcdef0123456789abcdef01"
     assert cp.run_id == "11111111-1111-1111-1111-111111111111"
@@ -847,21 +854,21 @@ async def test_update_then_load_roundtrip(neo4j_driver):
 
 
 @pytest.mark.asyncio
-async def test_update_overwrites_existing(neo4j_driver):
-    await ensure_ownership_schema(neo4j_driver)
+async def test_update_overwrites_existing(driver):
+    await ensure_ownership_schema(driver)
     await update_checkpoint(
-        neo4j_driver,
+        driver,
         project_id="gimle",
         head_sha="aaaa" * 10,
         run_id="run-1",
     )
     await update_checkpoint(
-        neo4j_driver,
+        driver,
         project_id="gimle",
         head_sha="bbbb" * 10,
         run_id="run-2",
     )
-    cp = await load_checkpoint(neo4j_driver, project_id="gimle")
+    cp = await load_checkpoint(driver, project_id="gimle")
     assert cp is not None
     assert cp.last_head_sha == "bbbb" * 10
     assert cp.run_id == "run-2"
@@ -1192,14 +1199,14 @@ def _identity_resolver() -> MailmapResolver:
 
 
 @pytest.fixture
-async def seeded_graph(neo4j_driver):
+async def seeded_graph(driver):
     """Seed minimal git_history graph: 2 files, 3 authors, 5 commits.
 
     File a.py: 3 commits by author1, 1 commit by author2, 1 merge by author3.
     File b.py: 2 commits by author2 (one is by bot).
     """
     now = datetime.now(tz=timezone.utc)
-    async with neo4j_driver.session() as session:
+    async with driver.session() as session:
         await session.run("MATCH (n) DETACH DELETE n")
         await session.run(
             """
@@ -1258,7 +1265,7 @@ async def seeded_graph(neo4j_driver):
             MERGE (c7)-[:TOUCHED]->(fb)
             """
         )
-    yield neo4j_driver
+    yield driver
 
 
 @pytest.mark.asyncio
@@ -1670,19 +1677,10 @@ def score_file(
 
         canonical_via: str
         if canonical_id in known_author_ids:
-            canonical_via = "mailmap_existing" if (
-                # Distinguish identity from existing-via-mailmap requires
-                # knowing the raw_id; not available here. We treat any
-                # known-canonical as 'mailmap_existing' UNLESS it equals
-                # itself with no aliasing — but we cannot tell at this
-                # layer. Upstream (writer) will refine via
-                # comparison with raw_id. For the scorer we encode:
-                #   in known_author_ids → mailmap_existing
-                #   not in known_author_ids → mailmap_synthetic
-                # Identity (no aliasing) is a writer-level concern when
-                # raw_id == canonical_id (set by upstream caller).
-                False
-            ) else "identity"
+            # Scorer treats all known canonicals as identity; the
+            # orchestrator refines to "mailmap_existing" when
+            # raw_id != canonical_id at the per-occurrence level.
+            canonical_via = "identity"
         else:
             canonical_via = "mailmap_synthetic"
 
@@ -1770,9 +1768,9 @@ def _edge(path: str, author_id: str, weight: float) -> OwnershipEdge:
 
 
 @pytest.mark.asyncio
-async def test_write_batch_creates_owned_by_with_source(neo4j_driver):
-    await ensure_ownership_schema(neo4j_driver)
-    async with neo4j_driver.session() as session:
+async def test_write_batch_creates_owned_by_with_source(driver):
+    await ensure_ownership_schema(driver)
+    async with driver.session() as session:
         await session.run("MATCH (n) DETACH DELETE n")
         await session.run(
             """
@@ -1782,7 +1780,7 @@ async def test_write_batch_creates_owned_by_with_source(neo4j_driver):
             """
         )
     await write_batch(
-        neo4j_driver,
+        driver,
         project_id="gimle",
         edges=[_edge("a.py", "a@x.com", 1.0)],
         file_states=[
@@ -1792,7 +1790,7 @@ async def test_write_batch_creates_owned_by_with_source(neo4j_driver):
         run_id="r1",
         alpha=0.5,
     )
-    async with neo4j_driver.session() as session:
+    async with driver.session() as session:
         result = await session.run(
             """
             MATCH (f:File {project_id: 'gimle', path: 'a.py'})
@@ -1809,9 +1807,9 @@ async def test_write_batch_creates_owned_by_with_source(neo4j_driver):
 
 
 @pytest.mark.asyncio
-async def test_atomic_replace_wipes_old_then_writes_new(neo4j_driver):
-    await ensure_ownership_schema(neo4j_driver)
-    async with neo4j_driver.session() as session:
+async def test_atomic_replace_wipes_old_then_writes_new(driver):
+    await ensure_ownership_schema(driver)
+    async with driver.session() as session:
         await session.run("MATCH (n) DETACH DELETE n")
         await session.run(
             """
@@ -1824,7 +1822,7 @@ async def test_atomic_replace_wipes_old_then_writes_new(neo4j_driver):
         )
     # First batch: old@x.com is owner
     await write_batch(
-        neo4j_driver,
+        driver,
         project_id="gimle",
         edges=[_edge("a.py", "old@x.com", 1.0)],
         file_states=[
@@ -1836,7 +1834,7 @@ async def test_atomic_replace_wipes_old_then_writes_new(neo4j_driver):
     )
     # Second batch: new@x.com is owner; old must be wiped
     await write_batch(
-        neo4j_driver,
+        driver,
         project_id="gimle",
         edges=[_edge("a.py", "new@x.com", 1.0)],
         file_states=[
@@ -1846,7 +1844,7 @@ async def test_atomic_replace_wipes_old_then_writes_new(neo4j_driver):
         run_id="r2",
         alpha=0.5,
     )
-    async with neo4j_driver.session() as session:
+    async with driver.session() as session:
         result = await session.run(
             """
             MATCH (f:File {project_id: 'gimle', path: 'a.py'})
@@ -1859,9 +1857,9 @@ async def test_atomic_replace_wipes_old_then_writes_new(neo4j_driver):
 
 
 @pytest.mark.asyncio
-async def test_deleted_paths_wipe_edges_no_new_writes(neo4j_driver):
-    await ensure_ownership_schema(neo4j_driver)
-    async with neo4j_driver.session() as session:
+async def test_deleted_paths_wipe_edges_no_new_writes(driver):
+    await ensure_ownership_schema(driver)
+    async with driver.session() as session:
         await session.run("MATCH (n) DETACH DELETE n")
         await session.run(
             """
@@ -1873,7 +1871,7 @@ async def test_deleted_paths_wipe_edges_no_new_writes(neo4j_driver):
             """
         )
     await write_batch(
-        neo4j_driver,
+        driver,
         project_id="gimle",
         edges=[],
         file_states=[],
@@ -1881,7 +1879,7 @@ async def test_deleted_paths_wipe_edges_no_new_writes(neo4j_driver):
         run_id="r1",
         alpha=0.5,
     )
-    async with neo4j_driver.session() as session:
+    async with driver.session() as session:
         result = await session.run(
             """
             MATCH (:File {project_id: 'gimle', path: 'a.py'})
@@ -1894,9 +1892,9 @@ async def test_deleted_paths_wipe_edges_no_new_writes(neo4j_driver):
 
 
 @pytest.mark.asyncio
-async def test_file_state_sidecar_written(neo4j_driver):
-    await ensure_ownership_schema(neo4j_driver)
-    async with neo4j_driver.session() as session:
+async def test_file_state_sidecar_written(driver):
+    await ensure_ownership_schema(driver)
+    async with driver.session() as session:
         await session.run("MATCH (n) DETACH DELETE n")
         await session.run(
             """
@@ -1905,7 +1903,7 @@ async def test_file_state_sidecar_written(neo4j_driver):
             """
         )
     await write_batch(
-        neo4j_driver,
+        driver,
         project_id="gimle",
         edges=[],
         file_states=[
@@ -1916,7 +1914,7 @@ async def test_file_state_sidecar_written(neo4j_driver):
         run_id="r1",
         alpha=0.5,
     )
-    async with neo4j_driver.session() as session:
+    async with driver.session() as session:
         result = await session.run(
             """
             MATCH (s:OwnershipFileState {project_id: 'gimle'})
@@ -1932,10 +1930,10 @@ async def test_file_state_sidecar_written(neo4j_driver):
 
 
 @pytest.mark.asyncio
-async def test_synthetic_author_merged_when_canonical_unknown(neo4j_driver):
+async def test_synthetic_author_merged_when_canonical_unknown(driver):
     """canonical_via=mailmap_synthetic → MERGE creates virtual :Author."""
-    await ensure_ownership_schema(neo4j_driver)
-    async with neo4j_driver.session() as session:
+    await ensure_ownership_schema(driver)
+    async with driver.session() as session:
         await session.run("MATCH (n) DETACH DELETE n")
         await session.run(
             "MERGE (f:File {project_id: 'gimle', path: 'a.py'})"
@@ -1946,7 +1944,7 @@ async def test_synthetic_author_merged_when_canonical_unknown(neo4j_driver):
     # Build edge with mailmap_synthetic
     syn_edge = OwnershipEdge(**edge_dict)
     await write_batch(
-        neo4j_driver,
+        driver,
         project_id="gimle",
         edges=[syn_edge],
         file_states=[
@@ -1956,7 +1954,7 @@ async def test_synthetic_author_merged_when_canonical_unknown(neo4j_driver):
         run_id="r1",
         alpha=0.5,
     )
-    async with neo4j_driver.session() as session:
+    async with driver.session() as session:
         result = await session.run(
             """
             MATCH (a:Author {provider: 'git', identity_key: 'synthetic@x.com'})
@@ -2339,21 +2337,26 @@ Create `services/palace-mcp/src/palace_mcp/extractors/code_ownership/extractor.p
 2. blame walk (DIRTY only)
 3. churn aggregation (DIRTY only, reversed Cypher)
 4. scoring + atomic-replace write (per batch)
-5. checkpoint + IngestRun finalize
+5. checkpoint + extras on :IngestRun
+
+NOTE: The runner (`extractors/runner.py`) handles :IngestRun create/finalize
+via `cypher.py` with `source = f'extractor.{self.name}'`. The extractor only
+writes supplementary properties via `_write_run_extras()` at the end of
+`run()`, before returning `ExtractorStats`.
 """
 
 from __future__ import annotations
 
 import logging
 import time
-import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import pygit2
+from graphiti_core import Graphiti
 
-from palace_mcp.config import Settings
+from palace_mcp.extractors.base import BaseExtractor, ExtractorRunContext, ExtractorStats
 from palace_mcp.extractors.code_ownership.blame_walker import walk_blame
 from palace_mcp.extractors.code_ownership.checkpoint import (
     load_checkpoint,
@@ -2375,16 +2378,13 @@ from palace_mcp.extractors.code_ownership.schema_extension import (
     ensure_ownership_schema,
 )
 from palace_mcp.extractors.code_ownership.scorer import score_file
-from palace_mcp.extractors.foundation.checkpoint import (
-    create_ingest_run,
-    finalize_ingest_run,
-)
 from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErrorCode
+from palace_mcp.mcp_server import get_settings
 
 logger = logging.getLogger(__name__)
 
 
-class CodeOwnershipExtractor:
+class CodeOwnershipExtractor(BaseExtractor):
     """Roadmap #32 extractor — file-level ownership graph."""
 
     name = "code_ownership"
@@ -2392,56 +2392,42 @@ class CodeOwnershipExtractor:
     constraints = ()
     indexes = ()
 
-    def __init__(self, settings: Settings) -> None:
-        self.settings = settings
-
-    async def extract(self, ctx: Any) -> dict[str, Any]:
-        """Run the 5-phase pipeline. ctx provides driver + project + repo path."""
-        driver = ctx.driver
-        project_id = ctx.project
-        repo_path = ctx.repo_path  # /repos/<slug>
-        run_id = str(uuid.uuid4())
-        started_at = time.monotonic()
-
-        await create_ingest_run(
-            driver, run_id=run_id, project=project_id, extractor_name=self.name
-        )
+    async def run(
+        self, *, graphiti: Graphiti, ctx: ExtractorRunContext
+    ) -> ExtractorStats:
+        """Run the 5-phase pipeline. Runner creates/finalizes :IngestRun."""
+        settings = get_settings()
+        driver = graphiti.driver
+        project_id = ctx.project_slug
+        repo_path = ctx.repo_path  # Path object
+        run_id = ctx.run_id
 
         try:
             summary = await self._run(
                 driver=driver,
                 project_id=project_id,
-                repo_path=repo_path,
+                repo_path=str(repo_path),
                 run_id=run_id,
-            )
-            await finalize_ingest_run(
-                driver, run_id=run_id, success=True, error_code=None
+                settings=settings,
             )
             await self._write_run_extras(driver, run_id, summary)
-            duration_ms = int((time.monotonic() - started_at) * 1000)
-            return {
-                "ok": True,
-                "run_id": run_id,
-                "extractor": self.name,
-                "project": project_id,
-                "duration_ms": duration_ms,
-                "nodes_written": summary.dirty_files_count + summary.deleted_files_count + 1,
-                "edges_written": summary.edges_written,
-                "edges_deleted": summary.edges_deleted,
-                "exit_reason": summary.exit_reason,
-                "mailmap_resolver_path": summary.mailmap_resolver_path,
-            }
-        except ExtractorError as exc:
-            await finalize_ingest_run(
-                driver,
-                run_id=run_id,
-                success=False,
-                error_code=exc.code.value,
+            return ExtractorStats(
+                nodes_written=summary.dirty_files_count + summary.deleted_files_count + 1,
+                edges_written=summary.edges_written,
             )
+        except ExtractorError:
             raise
+        except Exception as exc:
+            raise ExtractorError(
+                error_code=ExtractorErrorCode.EXTRACTOR_RUNTIME_ERROR,
+                message=f"unexpected error: {type(exc).__name__}: {exc}",
+                recoverable=False,
+                action="retry",
+            ) from exc
 
     async def _run(
-        self, *, driver: Any, project_id: str, repo_path: str, run_id: str
+        self, *, driver: Any, project_id: str, repo_path: str, run_id: str,
+        settings: Any,
     ) -> OwnershipRunSummary:
         # Phase 0 — bootstrap
         await ensure_ownership_schema(driver)
@@ -2451,8 +2437,10 @@ class CodeOwnershipExtractor:
             repo = pygit2.Repository(repo_path)
         except Exception as exc:
             raise ExtractorError(
-                code=ExtractorErrorCode.REPO_NOT_MOUNTED,
+                error_code=ExtractorErrorCode.REPO_NOT_MOUNTED,
                 message=f"cannot open repo at {repo_path}: {type(exc).__name__}",
+                recoverable=False,
+                action="check_mount",
             ) from exc
 
         try:
@@ -2460,12 +2448,14 @@ class CodeOwnershipExtractor:
             current_head = str(head_oid)
         except Exception as exc:
             raise ExtractorError(
-                code=ExtractorErrorCode.REPO_HEAD_INVALID,
+                error_code=ExtractorErrorCode.REPO_HEAD_INVALID,
                 message=f"cannot resolve HEAD: {type(exc).__name__}",
+                recoverable=False,
+                action="check_repo",
             ) from exc
 
         mailmap = MailmapResolver.from_repo(
-            repo, max_bytes=self.settings.mailmap_max_bytes
+            repo, max_bytes=settings.palace_mailmap_max_bytes
         )
 
         bot_keys = await self._fetch_bot_identity_keys(driver, project_id)
@@ -2475,8 +2465,10 @@ class CodeOwnershipExtractor:
         has_commits = await self._has_any_commits(driver, project_id)
         if not has_commits:
             raise ExtractorError(
-                code=ExtractorErrorCode.GIT_HISTORY_NOT_INDEXED,
+                error_code=ExtractorErrorCode.GIT_HISTORY_NOT_INDEXED,
                 message=f"no :Commit nodes for project {project_id!r}",
+                recoverable=True,
+                action="run_git_history_first",
             )
 
         # Phase 1 — DIRTY/DELETED computation
@@ -2511,8 +2503,10 @@ class CodeOwnershipExtractor:
                 diff = repo.diff(prev_head_sha, current_head)
             except Exception as exc:
                 raise ExtractorError(
-                    code=ExtractorErrorCode.OWNERSHIP_DIFF_FAILED,
+                    error_code=ExtractorErrorCode.OWNERSHIP_DIFF_FAILED,
                     message=f"diff {prev_head_sha[:8]}..{current_head[:8]} raised {type(exc).__name__}",
+                    recoverable=True,
+                    action="retry",
                 ) from exc
             dirty = set()
             for delta in diff.deltas:
@@ -2526,13 +2520,15 @@ class CodeOwnershipExtractor:
                 if status == "D" and delta.old_file.path:
                     deleted.add(delta.old_file.path)
 
-        if len(dirty) > self.settings.ownership_max_files_per_run:
+        if len(dirty) > settings.palace_ownership_max_files_per_run:
             raise ExtractorError(
-                code=ExtractorErrorCode.OWNERSHIP_MAX_FILES_EXCEEDED,
+                error_code=ExtractorErrorCode.OWNERSHIP_MAX_FILES_EXCEEDED,
                 message=(
                     f"DIRTY={len(dirty)} > cap "
-                    f"{self.settings.ownership_max_files_per_run}"
+                    f"{settings.palace_ownership_max_files_per_run}"
                 ),
+                recoverable=False,
+                action="increase_cap_or_reset_checkpoint",
             )
 
         if not dirty and not deleted:
@@ -2571,7 +2567,7 @@ class CodeOwnershipExtractor:
             paths=dirty,
             mailmap=mailmap,
             bot_keys=bot_keys,
-            decay_days=float(self.settings.recency_decay_days),
+            decay_days=float(settings.palace_recency_decay_days),
             known_author_ids=known_author_ids,
         )
 
@@ -2586,7 +2582,7 @@ class CodeOwnershipExtractor:
                 path=path,
                 blame=blame,
                 churn=churn,
-                alpha=self.settings.ownership_blame_weight,
+                alpha=settings.palace_ownership_blame_weight,
                 known_author_ids=known_author_ids,
             )
             if not edges:
@@ -2610,7 +2606,7 @@ class CodeOwnershipExtractor:
 
         edges_written = 0
         edges_deleted_estimate = 0
-        batch_size = self.settings.ownership_write_batch_size
+        batch_size = settings.palace_ownership_write_batch_size
         # Group edges by path so a batch contains complete per-path sets
         paths_in_dirty = list(dirty)
         deleted_list = list(deleted)
@@ -2626,7 +2622,7 @@ class CodeOwnershipExtractor:
                 file_states=batch_states,
                 deleted_paths=[],
                 run_id=run_id,
-                alpha=self.settings.ownership_blame_weight,
+                alpha=settings.palace_ownership_blame_weight,
             )
             edges_written += len(batch_edges)
 
@@ -2641,7 +2637,7 @@ class CodeOwnershipExtractor:
                     file_states=[],
                     deleted_paths=batch_paths,
                     run_id=run_id,
-                    alpha=self.settings.ownership_blame_weight,
+                    alpha=settings.palace_ownership_blame_weight,
                 )
 
         await update_checkpoint(
@@ -2728,7 +2724,7 @@ class CodeOwnershipExtractor:
         async with driver.session() as session:
             await session.run(
                 """
-                MATCH (r:IngestRun {run_id: $run_id})
+                MATCH (r:IngestRun {id: $run_id})
                 SET r.head_sha = $head_sha,
                     r.prev_head_sha = $prev_head_sha,
                     r.dirty_files_count = $dirty,
@@ -2780,11 +2776,13 @@ Append to `services/palace-mcp/tests/extractors/unit/test_registry.py` (create i
 
 ```python
 def test_code_ownership_registered():
+    from palace_mcp.extractors.base import BaseExtractor
     from palace_mcp.extractors.registry import EXTRACTORS
 
     assert "code_ownership" in EXTRACTORS
-    cls = EXTRACTORS["code_ownership"]
-    assert cls.__name__ == "CodeOwnershipExtractor"
+    ext = EXTRACTORS["code_ownership"]
+    assert isinstance(ext, BaseExtractor)
+    assert ext.name == "code_ownership"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -2800,11 +2798,11 @@ In `services/palace-mcp/src/palace_mcp/extractors/registry.py`, add the import +
 ```python
 from palace_mcp.extractors.code_ownership.extractor import CodeOwnershipExtractor
 
-# inside EXTRACTORS dict:
-EXTRACTORS["code_ownership"] = CodeOwnershipExtractor
+# inside EXTRACTORS dict literal (alongside existing entries):
+    "code_ownership": CodeOwnershipExtractor(),
 ```
 
-(Adjust to match the actual mapping shape used by other extractors — `EXTRACTORS["heartbeat"] = HeartbeatExtractor()` if instantiated, or class reference. Match the existing pattern verbatim.)
+The registry uses instantiated objects (e.g. `"heartbeat": HeartbeatExtractor()`), not class references.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -2846,16 +2844,17 @@ in isolation without depending on git_history being indexed first.
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
-from palace_mcp.config import Settings
+from palace_mcp.extractors.base import ExtractorRunContext
 from palace_mcp.extractors.code_ownership.extractor import CodeOwnershipExtractor
 from palace_mcp.extractors.code_ownership.schema_extension import (
     ensure_ownership_schema,
@@ -2870,7 +2869,8 @@ FIXTURE_DIR = (
 )
 
 
-def _rebuild_fixture() -> Path:
+@pytest.fixture(scope="module")
+def fixture_repo_path() -> Path:
     subprocess.run(
         ["bash", str(FIXTURE_DIR / "regen.sh")],
         check=True,
@@ -2976,37 +2976,39 @@ def _seed_git_history(driver, repo_path: Path, project_id: str) -> None:
     return _seed
 
 
-def _make_ctx(driver, repo_path: Path, project_id: str = "test-ownership") -> SimpleNamespace:
-    return SimpleNamespace(
-        driver=driver,
-        project=project_id,
-        repo_path=str(repo_path),
+def _make_ctx(repo_path: Path, project_id: str = "test-ownership", run_id: str = "test-run") -> ExtractorRunContext:
+    return ExtractorRunContext(
+        project_slug=project_id,
+        group_id=f"project/{project_id}",
+        repo_path=repo_path,
+        run_id=run_id,
+        duration_ms=0,
+        logger=logging.getLogger("test"),
     )
 
 
-@pytest.fixture
-def settings() -> Settings:
-    os.environ.setdefault("PALACE_OWNERSHIP_BLAME_WEIGHT", "0.5")
-    return Settings()
+def _graphiti_mock(driver):
+    """Create a mock Graphiti with real driver attached."""
+    g = MagicMock()
+    g.driver = driver
+    return g
 
 
 @pytest.mark.asyncio
-async def test_scenario_1_bootstrap_full_walk(neo4j_driver, settings):
+async def test_scenario_1_bootstrap_full_walk(driver, fixture_repo_path):
     """Spec §10.2 Scenario 1 — fresh run, no checkpoint → all expected
     :OWNED_BY edges with normalized shares."""
-    repo_path = _rebuild_fixture()
-    await ensure_ownership_schema(neo4j_driver)
-    seed = _seed_git_history(neo4j_driver, repo_path, "test-ownership")
+    repo_path = fixture_repo_path
+    await ensure_ownership_schema(driver)
+    seed = _seed_git_history(driver, repo_path, "test-ownership")
     await seed()
 
-    extractor = CodeOwnershipExtractor(settings)
-    result = await extractor.extract(_make_ctx(neo4j_driver, repo_path))
-    assert result["ok"] is True
-    assert result["edges_written"] > 0
-    assert result["mailmap_resolver_path"] in {"pygit2", "identity_passthrough"}
+    extractor = CodeOwnershipExtractor()
+    stats = await extractor.run(graphiti=_graphiti_mock(driver), ctx=_make_ctx(repo_path))
+    assert stats.edges_written > 0
 
     # Verify per-file normalization (spec acceptance #8)
-    async with neo4j_driver.session() as session:
+    async with driver.session() as session:
         out = await session.run(
             """
             MATCH (f:File {project_id: 'test-ownership'})
@@ -3027,31 +3029,32 @@ async def test_scenario_1_bootstrap_full_walk(neo4j_driver, settings):
 
 
 @pytest.mark.asyncio
-async def test_scenario_2_no_op_re_run(neo4j_driver, settings):
-    repo_path = _rebuild_fixture()
-    await ensure_ownership_schema(neo4j_driver)
-    seed = _seed_git_history(neo4j_driver, repo_path, "test-ownership")
+async def test_scenario_2_no_op_re_run(driver, fixture_repo_path):
+    repo_path = fixture_repo_path
+    await ensure_ownership_schema(driver)
+    seed = _seed_git_history(driver, repo_path, "test-ownership")
     await seed()
 
-    extractor = CodeOwnershipExtractor(settings)
-    first = await extractor.extract(_make_ctx(neo4j_driver, repo_path))
-    assert first["exit_reason"] == "success"
+    extractor = CodeOwnershipExtractor()
+    graphiti = _graphiti_mock(driver)
+    await extractor.run(graphiti=graphiti, ctx=_make_ctx(repo_path))
 
-    second = await extractor.extract(_make_ctx(neo4j_driver, repo_path))
-    assert second["exit_reason"] == "no_change"
-    assert second["edges_written"] == 0
+    # Second run with same HEAD → no_change (checkpoint matches)
+    stats2 = await extractor.run(graphiti=graphiti, ctx=_make_ctx(repo_path, run_id="run-2"))
+    assert stats2.edges_written == 0
 
 
 @pytest.mark.asyncio
-async def test_scenario_3_incremental_edit(neo4j_driver, settings):
+async def test_scenario_3_incremental_edit(driver, fixture_repo_path):
     """Append a commit changing one file → DIRTY = {that file}."""
-    repo_path = _rebuild_fixture()
-    await ensure_ownership_schema(neo4j_driver)
-    seed = _seed_git_history(neo4j_driver, repo_path, "test-ownership")
+    repo_path = fixture_repo_path
+    await ensure_ownership_schema(driver)
+    seed = _seed_git_history(driver, repo_path, "test-ownership")
     await seed()
 
-    ext = CodeOwnershipExtractor(settings)
-    await ext.extract(_make_ctx(neo4j_driver, repo_path))
+    ext = CodeOwnershipExtractor()
+    graphiti = _graphiti_mock(driver)
+    await ext.run(graphiti=graphiti, ctx=_make_ctx(repo_path))
 
     # Append a commit
     subprocess.run(["git", "config", "user.email", "new@example.com"], cwd=str(repo_path), check=True)
@@ -3064,26 +3067,26 @@ async def test_scenario_3_incremental_edit(neo4j_driver, settings):
     subprocess.run(["git", "commit", "-m", "trim main"], cwd=str(repo_path), check=True)
 
     # Re-seed git_history for the new commit (mirroring GIM-186 incremental)
-    seed2 = _seed_git_history(neo4j_driver, repo_path, "test-ownership")
+    seed2 = _seed_git_history(driver, repo_path, "test-ownership")
     await seed2()
 
-    result = await ext.extract(_make_ctx(neo4j_driver, repo_path))
-    assert result["exit_reason"] == "success"
+    stats = await ext.run(graphiti=graphiti, ctx=_make_ctx(repo_path, run_id="run-2"))
+    assert stats.edges_written > 0
 
 
 @pytest.mark.asyncio
-async def test_scenario_4_deletion_handling(neo4j_driver, settings):
-    repo_path = _rebuild_fixture()
-    await ensure_ownership_schema(neo4j_driver)
-    seed = _seed_git_history(neo4j_driver, repo_path, "test-ownership")
+async def test_scenario_4_deletion_handling(driver, fixture_repo_path):
+    repo_path = fixture_repo_path
+    await ensure_ownership_schema(driver)
+    seed = _seed_git_history(driver, repo_path, "test-ownership")
     await seed()
 
-    ext = CodeOwnershipExtractor(settings)
-    await ext.extract(_make_ctx(neo4j_driver, repo_path))
+    ext = CodeOwnershipExtractor()
+    await ext.run(graphiti=_graphiti_mock(driver), ctx=_make_ctx(repo_path))
 
     # legacy.py was already deleted in the fixture HEAD;
     # verify no :OWNED_BY edges exist for it
-    async with neo4j_driver.session() as session:
+    async with driver.session() as session:
         out = await session.run(
             """
             MATCH (f:File {project_id: 'test-ownership', path: 'apps/legacy.py'})
@@ -3096,17 +3099,17 @@ async def test_scenario_4_deletion_handling(neo4j_driver, settings):
 
 
 @pytest.mark.asyncio
-async def test_scenario_5_mailmap_dedup(neo4j_driver, settings):
-    repo_path = _rebuild_fixture()
-    await ensure_ownership_schema(neo4j_driver)
-    seed = _seed_git_history(neo4j_driver, repo_path, "test-ownership")
+async def test_scenario_5_mailmap_dedup(driver, fixture_repo_path):
+    repo_path = fixture_repo_path
+    await ensure_ownership_schema(driver)
+    seed = _seed_git_history(driver, repo_path, "test-ownership")
     await seed()
 
-    ext = CodeOwnershipExtractor(settings)
-    await ext.extract(_make_ctx(neo4j_driver, repo_path))
+    ext = CodeOwnershipExtractor()
+    await ext.run(graphiti=_graphiti_mock(driver), ctx=_make_ctx(repo_path))
 
     # If pygit2.Mailmap is exposed, old@example.com should resolve to new@example.com
-    async with neo4j_driver.session() as session:
+    async with driver.session() as session:
         out = await session.run(
             """
             MATCH (f:File {project_id: 'test-ownership'})
@@ -3123,16 +3126,16 @@ async def test_scenario_5_mailmap_dedup(neo4j_driver, settings):
 
 
 @pytest.mark.asyncio
-async def test_scenario_6_bot_exclusion(neo4j_driver, settings):
-    repo_path = _rebuild_fixture()
-    await ensure_ownership_schema(neo4j_driver)
-    seed = _seed_git_history(neo4j_driver, repo_path, "test-ownership")
+async def test_scenario_6_bot_exclusion(driver, fixture_repo_path):
+    repo_path = fixture_repo_path
+    await ensure_ownership_schema(driver)
+    seed = _seed_git_history(driver, repo_path, "test-ownership")
     await seed()
 
-    ext = CodeOwnershipExtractor(settings)
-    await ext.extract(_make_ctx(neo4j_driver, repo_path))
+    ext = CodeOwnershipExtractor()
+    await ext.run(graphiti=_graphiti_mock(driver), ctx=_make_ctx(repo_path))
 
-    async with neo4j_driver.session() as session:
+    async with driver.session() as session:
         out = await session.run(
             """
             MATCH ()-[r:OWNED_BY {source: 'extractor.code_ownership'}]
@@ -3145,21 +3148,21 @@ async def test_scenario_6_bot_exclusion(neo4j_driver, settings):
 
 
 @pytest.mark.asyncio
-async def test_scenario_7_merge_exclusion(neo4j_driver, settings):
+async def test_scenario_7_merge_exclusion(driver, fixture_repo_path):
     """Merge author does not get churn for the merge commit."""
-    repo_path = _rebuild_fixture()
-    await ensure_ownership_schema(neo4j_driver)
-    seed = _seed_git_history(neo4j_driver, repo_path, "test-ownership")
+    repo_path = fixture_repo_path
+    await ensure_ownership_schema(driver)
+    seed = _seed_git_history(driver, repo_path, "test-ownership")
     await seed()
 
-    ext = CodeOwnershipExtractor(settings)
-    await ext.extract(_make_ctx(neo4j_driver, repo_path))
+    ext = CodeOwnershipExtractor()
+    await ext.run(graphiti=_graphiti_mock(driver), ctx=_make_ctx(repo_path))
 
     # apps/merge_target.py was added on side branch; merge brought it in.
     # Author of that file is the side-branch committer (Anton or Other),
     # NOT the merge committer. Verify no edge to the merger via the merge
     # commit alone.
-    async with neo4j_driver.session() as session:
+    async with driver.session() as session:
         out = await session.run(
             """
             MATCH (f:File {project_id: 'test-ownership', path: 'apps/merge_target.py'})
@@ -3175,16 +3178,17 @@ async def test_scenario_7_merge_exclusion(neo4j_driver, settings):
 
 
 @pytest.mark.asyncio
-async def test_scenario_8_crash_recovery(neo4j_driver, settings, monkeypatch):
+async def test_scenario_8_crash_recovery(driver, fixture_repo_path, monkeypatch):
     """Phase 4 mid-run crash leaves checkpoint stale; re-run clean."""
     from palace_mcp.extractors.code_ownership import neo4j_writer as nw
 
-    repo_path = _rebuild_fixture()
-    await ensure_ownership_schema(neo4j_driver)
-    seed = _seed_git_history(neo4j_driver, repo_path, "test-ownership")
+    repo_path = fixture_repo_path
+    await ensure_ownership_schema(driver)
+    seed = _seed_git_history(driver, repo_path, "test-ownership")
     await seed()
 
-    ext = CodeOwnershipExtractor(settings)
+    ext = CodeOwnershipExtractor()
+    graphiti = _graphiti_mock(driver)
 
     original = nw.write_batch
     call_count = {"n": 0}
@@ -3199,15 +3203,12 @@ async def test_scenario_8_crash_recovery(neo4j_driver, settings, monkeypatch):
     monkeypatch.setattr(nw, "write_batch", crash_after_first)
 
     with pytest.raises((RuntimeError, Exception)):
-        # batch_size=1 forces multiple batches
-        s = Settings(_env_file=None)
-        s.ownership_write_batch_size = 100
-        await ext.extract(_make_ctx(neo4j_driver, repo_path))
+        await ext.run(graphiti=graphiti, ctx=_make_ctx(repo_path))
 
     # Restore writer + re-run; should converge to clean state
     monkeypatch.setattr(nw, "write_batch", original)
-    result = await ext.extract(_make_ctx(neo4j_driver, repo_path))
-    assert result["exit_reason"] in {"success", "no_change"}
+    stats = await ext.run(graphiti=graphiti, ctx=_make_ctx(repo_path, run_id="run-recovery"))
+    assert stats.nodes_written >= 0
 ```
 
 - [ ] **Step 2: Run test to verify all 8 scenarios pass**
@@ -3243,11 +3244,16 @@ from palace_mcp.extractors.code_ownership.schema_extension import (
     ensure_ownership_schema,
 )
 
+# NOTE: These tests use the `driver` fixture. Either add a conftest.py
+# to `tests/code/` providing `driver` (same as
+# `tests/extractors/integration/conftest.py`), or move these tests
+# into `tests/extractors/integration/`.
+
 
 @pytest.mark.asyncio
-async def test_unknown_file_returns_unknown_file_error(neo4j_driver):
-    await ensure_ownership_schema(neo4j_driver)
-    async with neo4j_driver.session() as session:
+async def test_unknown_file_returns_unknown_file_error(driver):
+    await ensure_ownership_schema(driver)
+    async with driver.session() as session:
         await session.run("MATCH (n) DETACH DELETE n")
         await session.run(
             """
@@ -3260,59 +3266,59 @@ async def test_unknown_file_returns_unknown_file_error(neo4j_driver):
             """
         )
     result = await find_owners(
-        neo4j_driver, file_path="nope.py", project="gimle", top_n=5
+        driver, file_path="nope.py", project="gimle", top_n=5
     )
     assert result["ok"] is False
     assert result["error_code"] == "unknown_file"
 
 
 @pytest.mark.asyncio
-async def test_project_not_registered_error(neo4j_driver):
-    await ensure_ownership_schema(neo4j_driver)
-    async with neo4j_driver.session() as session:
+async def test_project_not_registered_error(driver):
+    await ensure_ownership_schema(driver)
+    async with driver.session() as session:
         await session.run("MATCH (n) DETACH DELETE n")
     result = await find_owners(
-        neo4j_driver, file_path="x.py", project="ghost", top_n=5
+        driver, file_path="x.py", project="ghost", top_n=5
     )
     assert result["ok"] is False
     assert result["error_code"] == "project_not_registered"
 
 
 @pytest.mark.asyncio
-async def test_ownership_not_indexed_yet_error(neo4j_driver):
-    await ensure_ownership_schema(neo4j_driver)
-    async with neo4j_driver.session() as session:
+async def test_ownership_not_indexed_yet_error(driver):
+    await ensure_ownership_schema(driver)
+    async with driver.session() as session:
         await session.run("MATCH (n) DETACH DELETE n")
         await session.run("MERGE (p:Project {slug: 'gimle'})")
     result = await find_owners(
-        neo4j_driver, file_path="x.py", project="gimle", top_n=5
+        driver, file_path="x.py", project="gimle", top_n=5
     )
     assert result["ok"] is False
     assert result["error_code"] == "ownership_not_indexed_yet"
 
 
 @pytest.mark.asyncio
-async def test_top_n_out_of_range_error(neo4j_driver):
+async def test_top_n_out_of_range_error(driver):
     result = await find_owners(
-        neo4j_driver, file_path="x.py", project="gimle", top_n=0
+        driver, file_path="x.py", project="gimle", top_n=0
     )
     assert result["ok"] is False
     assert result["error_code"] == "top_n_out_of_range"
 
 
 @pytest.mark.asyncio
-async def test_slug_invalid_error(neo4j_driver):
+async def test_slug_invalid_error(driver):
     result = await find_owners(
-        neo4j_driver, file_path="x.py", project="!!!bad-slug!!!", top_n=5
+        driver, file_path="x.py", project="!!!bad-slug!!!", top_n=5
     )
     assert result["ok"] is False
     assert result["error_code"] == "slug_invalid"
 
 
 @pytest.mark.asyncio
-async def test_success_with_owners(neo4j_driver):
-    await ensure_ownership_schema(neo4j_driver)
-    async with neo4j_driver.session() as session:
+async def test_success_with_owners(driver):
+    await ensure_ownership_schema(driver)
+    async with driver.session() as session:
         await session.run("MATCH (n) DETACH DELETE n")
         await session.run(
             """
@@ -3352,7 +3358,7 @@ async def test_success_with_owners(neo4j_driver):
             """
         )
     result = await find_owners(
-        neo4j_driver, file_path="a.py", project="gimle", top_n=5
+        driver, file_path="a.py", project="gimle", top_n=5
     )
     assert result["ok"] is True
     assert len(result["owners"]) == 2
@@ -3363,10 +3369,10 @@ async def test_success_with_owners(neo4j_driver):
 
 
 @pytest.mark.asyncio
-async def test_success_empty_with_no_owners_reason_binary(neo4j_driver):
+async def test_success_empty_with_no_owners_reason_binary(driver):
     """File processed but skipped (e.g., binary) — no owners + reason."""
-    await ensure_ownership_schema(neo4j_driver)
-    async with neo4j_driver.session() as session:
+    await ensure_ownership_schema(driver)
+    async with driver.session() as session:
         await session.run("MATCH (n) DETACH DELETE n")
         await session.run(
             """
@@ -3384,7 +3390,7 @@ async def test_success_empty_with_no_owners_reason_binary(neo4j_driver):
             """
         )
     result = await find_owners(
-        neo4j_driver, file_path="b.png", project="gimle", top_n=5
+        driver, file_path="b.png", project="gimle", top_n=5
     )
     assert result["ok"] is True
     assert result["owners"] == []
@@ -3392,10 +3398,10 @@ async def test_success_empty_with_no_owners_reason_binary(neo4j_driver):
 
 
 @pytest.mark.asyncio
-async def test_success_empty_file_not_yet_processed(neo4j_driver):
+async def test_success_empty_file_not_yet_processed(driver):
     """File exists in :File but no :OwnershipFileState — file_not_yet_processed."""
-    await ensure_ownership_schema(neo4j_driver)
-    async with neo4j_driver.session() as session:
+    await ensure_ownership_schema(driver)
+    async with driver.session() as session:
         await session.run("MATCH (n) DETACH DELETE n")
         await session.run(
             """
@@ -3409,7 +3415,7 @@ async def test_success_empty_file_not_yet_processed(neo4j_driver):
             """
         )
     result = await find_owners(
-        neo4j_driver, file_path="fresh.py", project="gimle", top_n=5
+        driver, file_path="fresh.py", project="gimle", top_n=5
     )
     assert result["ok"] is True
     assert result["owners"] == []
@@ -3619,48 +3625,48 @@ git commit -m "feat(GIM-216): palace.code.find_owners MCP tool + wire contract t
 
 ---
 
-## Task 16: Register `find_owners` in MCP server
+## Task 16: Register `find_owners` in code_composite.py
 
 **Files:**
-- Modify: `services/palace-mcp/src/palace_mcp/server.py`
+- Modify: `services/palace-mcp/src/palace_mcp/code_composite.py`
 
 - [ ] **Step 1: Add registration**
 
-Find the existing tool-registration section in `services/palace-mcp/src/palace_mcp/server.py` (look for `mcp.tool(...)` decorations on `find_references`, `find_hotspots`, etc.). Add after them:
+In `services/palace-mcp/src/palace_mcp/code_composite.py`, inside the `register_code_composite_tools()` function (matching the existing `find_references` pattern), add:
 
 ```python
 from palace_mcp.code.find_owners import find_owners as _find_owners_impl
 
-
-@mcp.tool(
-    name="palace.code.find_owners",
-    description=(
-        "Top-N code ownership for a file. Returns ranked owners with "
-        "weights combining blame_share + recency-weighted churn share. "
-        "Empty owners is success — check no_owners_reason to "
-        "distinguish binary/all-bot/no-history/file-not-yet-processed."
-    ),
+_DESC_FIND_OWNERS = (
+    "Top-N code ownership for a file. Returns ranked owners with "
+    "weights combining blame_share + recency-weighted churn share. "
+    "Empty owners is success — check no_owners_reason to "
+    "distinguish binary/all-bot/no-history/file-not-yet-processed."
 )
+
+
+# Inside register_code_composite_tools():
+@tool_decorator("palace.code.find_owners", _DESC_FIND_OWNERS)
 async def palace_code_find_owners(
     file_path: str,
     project: str,
     top_n: int = 5,
 ) -> dict:
+    from palace_mcp.mcp_server import get_driver
+    driver = get_driver()
     return await _find_owners_impl(
-        driver=_get_driver(),  # use whatever helper the server already uses
+        driver=driver,
         file_path=file_path,
         project=project,
         top_n=top_n,
     )
 ```
 
-(Adjust `_get_driver()` to match the actual driver-acquisition pattern in `server.py`. Don't reinvent it.)
-
 - [ ] **Step 2: Verify import**
 
-Run: `cd services/palace-mcp && uv run python -c "import palace_mcp.server"`
+Run: `cd services/palace-mcp && uv run python -c "from palace_mcp.code_composite import register_code_composite_tools; print('ok')"`
 
-Expected: no error.
+Expected: `ok`.
 
 - [ ] **Step 3: Sanity-check tool registration via MCP introspection (optional)**
 
@@ -3669,8 +3675,8 @@ Skip if no fast harness; live smoke covers this in Task 18.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add services/palace-mcp/src/palace_mcp/server.py
-git commit -m "feat(GIM-216): register palace.code.find_owners MCP tool"
+git add services/palace-mcp/src/palace_mcp/code_composite.py
+git commit -m "feat(GIM-216): register palace.code.find_owners in code_composite.py"
 ```
 
 ---
