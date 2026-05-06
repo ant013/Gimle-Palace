@@ -136,3 +136,33 @@ def test_hotspot_lizard_timeout_behavior_invalid_rejected(
     monkeypatch.setenv("PALACE_HOTSPOT_LIZARD_TIMEOUT_BEHAVIOR", "boom")
     with pytest.raises(ValidationError):
         Settings()
+
+
+def test_ownership_settings_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    for k, v in _minimal_env().items():
+        monkeypatch.setenv(k, v)
+    settings = Settings()
+    assert settings.ownership_blame_weight == 0.5
+    assert settings.ownership_max_files_per_run == 50_000
+    assert settings.ownership_write_batch_size == 2_000
+    assert settings.mailmap_max_bytes == 1_048_576
+
+
+def test_ownership_blame_weight_out_of_range_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for k, v in _minimal_env().items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setenv("PALACE_OWNERSHIP_BLAME_WEIGHT", "1.5")
+    with pytest.raises(ValidationError):
+        Settings()
+
+
+def test_ownership_write_batch_size_out_of_range_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for k, v in _minimal_env().items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setenv("PALACE_OWNERSHIP_WRITE_BATCH_SIZE", "5")
+    with pytest.raises(ValidationError):
+        Settings()
