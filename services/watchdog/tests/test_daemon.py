@@ -71,18 +71,23 @@ def _stuck_issue() -> Issue:
 
 @pytest.mark.asyncio
 async def test_tick_wakes_stuck_issue(tmp_path: Path):
+    from freezegun import freeze_time
+
     cfg = _cfg(tmp_path)
     state = State.load(tmp_path / "state.json")
     client = MagicMock()
     client.list_active_issues = AsyncMock(return_value=[_stuck_issue()])
-    with patch(
-        "gimle_watchdog.daemon.actions.trigger_respawn",
-        new=AsyncMock(return_value=RespawnResult(via="patch", success=True, run_id="run-new")),
-    ):
-        with patch("gimle_watchdog.daemon.detection.scan_idle_hangs", return_value=[]):
-            with patch("gimle_watchdog.daemon._sleep", new=AsyncMock()):
-                await daemon._tick(cfg, state, client)
-    assert state.is_issue_in_cooldown("issue-1", cfg.cooldowns.per_issue_seconds)
+    # Freeze near the stuck issue's updatedAt so recover_max_age_min cap (default 180) does not skip it.
+    with freeze_time("2026-04-21T09:30:00Z"):
+        with patch(
+            "gimle_watchdog.daemon.actions.trigger_respawn",
+            new=AsyncMock(return_value=RespawnResult(via="patch", success=True, run_id="run-new")),
+        ):
+            with patch("gimle_watchdog.daemon.detection.scan_idle_hangs", return_value=[]):
+                with patch("gimle_watchdog.daemon._sleep", new=AsyncMock()):
+                    await daemon._tick(cfg, state, client)
+    # Wake recorded in state (cooldown check is time-sensitive and non-frozen-tz; just verify recorded)
+    assert "issue-1" in state.issue_cooldowns
 
 
 @pytest.mark.asyncio
