@@ -97,6 +97,7 @@ Evidence in PR comment: `docker compose ps` output + curl outputs. Static review
 <!-- @include fragments/shared/fragments/heartbeat-discipline.md -->
 <!-- @include fragments/shared/fragments/phase-handoff.md -->
 <!-- @include fragments/local/agent-roster.md -->
+<!-- @include fragments/shared/fragments/phase-review-discipline.md -->
 
 <!-- @include fragments/shared/fragments/language.md -->
 

@@ -588,4 +588,60 @@ At Opus 4.7 input rate $0.015/1K: ≈ **$49–56/mo savings** (paperclip runtime
 
 ---
 
+## Completion notes (2026-05-06)
+
+### What landed (PR #97 + follow-up)
+
+| Phase | Status | Detail |
+|---|---|---|
+| 1. Operator session plugin disable | ✅ done | 5 plugins disabled in `~/.claude/settings.json` |
+| 2. iMac plugin disable + cache cleanup | ✅ done | 6 voltagent caches removed; 6 marketplace categories removed; 117 user-level agents moved to backup; SuperClaude fully uninstalled (pipx + `~/.claude/CLAUDE.md` + 26 sc:* commands + 19 framework files) |
+| 4. Role .md trim | ✅ done | 11 claude roles trimmed (-7% aggregate), 8 fragments trimmed (~152K fleet bytes saved) |
+| 4.5 Wake terminology | ✅ done | shared submodule + codex target override |
+| 4.6 prep | ✅ done | upstream skill copy + marker on operator + iMac |
+| 4.6 proper | ⏸ deferred | gated on smoke; operator decided to skip — Phase 4.5 sufficient |
+
+### Real source of plain top-level subagents (key learning)
+
+Phase 2 settings.json `enabledPlugins: false` is **cosmetic** — it removes the `<namespace>:` prefix from agent listings but does NOT prevent loading. The actual sources of plain top-level subagents on iMac (visible in CR Round 2 with 130+ entries):
+
+1. `~/.claude/agents/*.md` — **primary source** (127 files, installed by SuperClaude)
+2. `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/` — leak source for disabled plugins
+3. `~/.claude/plugins/marketplaces/voltagent-subagents/categories/<NN>-*/` — category-level marketplace catalogue
+
+Removing only namespaced visibility (Phase 2) does not reduce token cost. Real cleanup requires:
+- Move user-level `~/.claude/agents/*.md` files (file-based discovery — no registry)
+- Delete plugin cache dirs for unused plugins
+- Delete marketplace category dirs for unused plugins
+
+### CR Round 1/2/3 smoke evidence
+
+- **Round 1** (pre-cleanup, GIM-197 yesterday): ~150 subagents, ~50 skills (incl 26 sc:*).
+- **Round 2** (post-namespace+categories cleanup, GIM-200 today): 172 subagents (no runtime drop), 33 skills (sc:* gone ✓).
+- **Round 3** (post user-level agents/ cleanup, GIM-201 today): **55 subagents**, **33 skills**. **−68% subagent count.**
+
+Token impact per agent wake: ~15K tokens saved (subagents −8K, skills −3K, framework files −5K from CLAUDE.md auto-load). Fleet @ 11 agents × 10 wakes/day ≈ **1.65M t/day**.
+
+### Curate-script (F2)
+
+`paperclips/scripts/curate-claude-plugins.sh` — idempotent removal of unused plugin/agent/skill artefacts. Run on iMac after any `/plugins update` or fresh setup. `--dry-run` flag for safety.
+
+### Discovered bugs in CR/QA @include lists
+
+CR's bundle was missing `pre-work-discovery.md` (dropped during Phase 4 trim oversight). QA's bundle was missing `phase-review-discipline.md`. Both fixed in this follow-up commit.
+
+### Backup locations
+
+iMac: `~/slim-backups/20260506-005352/` (~6.7M)
+Operator local Mac: `~/slim-backups-operator-mac/20260506-092458/`
+
+### Pending follow-ups (out of scope here)
+
+- Codex roles trim (9 files) — deferred per operator
+- Phase 5 desiredSkills API per-agent — for company-imported skills only
+- Phase 6 rebaseline — `bundle-size-baseline.json` after dust settles
+- iMac paperclipai daemon restart + post-restart audit (operator-driven)
+
+---
+
 _End of plan_
