@@ -12,6 +12,7 @@
     "query",
     "aquery"
   ],
+  "additionalProperties": false,
   "properties": {
     "schema_version": {
       "const": "bazel-query-aquery-v1"
@@ -41,6 +42,7 @@
       "required": [
         "labels"
       ],
+      "additionalProperties": false,
       "properties": {
         "labels": {
           "type": "array",
@@ -59,6 +61,7 @@
       "required": [
         "actions"
       ],
+      "additionalProperties": false,
       "properties": {
         "actions": {
           "type": "array",
@@ -73,6 +76,7 @@
               "inputs_sample",
               "outputs_sample"
             ],
+            "additionalProperties": false,
             "properties": {
               "target_label": {
                 "type": "string",

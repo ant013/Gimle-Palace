@@ -21,6 +21,8 @@ Sample: `contracts/bazel-query-aquery-v1.sample.json`
 
 JSON Schema validation: `PASS`
 
+Unknown action field check: `PASS — $.aquery.actions[0]: unexpected keys ['raw_command_line']`
+
 The sample deliberately redacts raw action command lines and keeps only bounded input/output samples.
 
 ## Sources

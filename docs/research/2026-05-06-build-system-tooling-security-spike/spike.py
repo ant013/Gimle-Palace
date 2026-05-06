@@ -748,6 +748,15 @@ def capture_gradle_contract(args: argparse.Namespace) -> None:
         sanitized_payload = fallback_gradle_sample()
         validate_against_schema(schema_path, sanitized_payload)
         validate_gradle_contract(sanitized_payload)
+        raw_stdout_contract = json.loads(json.dumps(sanitized_payload))
+        raw_stdout_contract["tasks"][0]["raw_stdout"] = "SECRET=leak"
+        raw_stdout_note = "FAIL"
+        try:
+            validate_against_schema(schema_path, raw_stdout_contract)
+        except SystemExit as exc:
+            raw_stdout_note = f"PASS — {exc}"
+        if not raw_stdout_note.startswith("PASS"):
+            fail("gradle schema accepted unexpected raw_stdout field")
         write_json(sample_path, sanitized_payload)
         write_markdown(
             output,
@@ -762,6 +771,7 @@ def capture_gradle_contract(args: argparse.Namespace) -> None:
                     "Schema: `" + str(schema_path.relative_to(ROOT)) + "`\n\n"
                     "Sample: `" + str(sample_path.relative_to(ROOT)) + "`\n\n"
                     "JSON Schema validation: `PASS`\n\n"
+                    f"Unknown task field check: `{raw_stdout_note}`\n\n"
                     f"Projects: `{len(sanitized_payload['projects'])}`\n\n"
                     f"Tasks: `{len(sanitized_payload['tasks'])}`",
                 ),
@@ -957,6 +967,15 @@ def capture_bazel_contract(args: argparse.Namespace) -> None:
     payload = bazel_sample_payload()
     validate_against_schema(schema_path, payload)
     validate_bazel_contract(payload)
+    raw_command_contract = json.loads(json.dumps(payload))
+    raw_command_contract["aquery"]["actions"][0]["raw_command_line"] = "SECRET=leak gcc ..."
+    raw_command_note = "FAIL"
+    try:
+        validate_against_schema(schema_path, raw_command_contract)
+    except SystemExit as exc:
+        raw_command_note = f"PASS — {exc}"
+    if not raw_command_note.startswith("PASS"):
+        fail("bazel schema accepted unexpected raw_command_line field")
     write_json(sample_path, payload)
     write_markdown(
         output,
@@ -976,6 +995,7 @@ def capture_bazel_contract(args: argparse.Namespace) -> None:
                     "Schema: `" + str(schema_path.relative_to(ROOT)) + "`\n\n"
                     "Sample: `" + str(sample_path.relative_to(ROOT)) + "`\n\n"
                     "JSON Schema validation: `PASS`\n\n"
+                    f"Unknown action field check: `{raw_command_note}`\n\n"
                     "The sample deliberately redacts raw action command lines and keeps only bounded input/output samples.",
                 ),
             (

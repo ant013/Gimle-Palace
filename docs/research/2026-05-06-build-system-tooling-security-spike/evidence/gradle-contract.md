@@ -16,6 +16,8 @@ Sample: `contracts/gradle-tooling-v1.sample.json`
 
 JSON Schema validation: `PASS`
 
+Unknown task field check: `PASS — $.tasks[0]: unexpected keys ['raw_stdout']`
+
 Projects: `3`
 
 Tasks: `3`

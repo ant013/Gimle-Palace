@@ -11,6 +11,7 @@
     "projects",
     "tasks"
   ],
+  "additionalProperties": false,
   "properties": {
     "schema_version": {
       "const": "gradle-tooling-v1"
@@ -42,6 +43,7 @@
           "name",
           "project_dir"
         ],
+        "additionalProperties": false,
         "properties": {
           "path": {
             "type": "string",
@@ -72,6 +74,7 @@
           "name",
           "owner_project"
         ],
+        "additionalProperties": false,
         "properties": {
           "path": {
             "type": "string",
