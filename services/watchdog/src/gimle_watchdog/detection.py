@@ -41,7 +41,7 @@ class Action:
 
 
 class _IssueLister(Protocol):
-    async def list_in_progress_issues(self, company_id: str) -> list[Issue]: ...
+    async def list_active_issues(self, company_id: str) -> list[Issue]: ...
 
 
 # --- ps field parsers ----------------------------------------------------------
@@ -217,7 +217,10 @@ async def scan_died_mid_work(
     """Find issues stuck in assignee-set + no-run + stale-updatedAt state."""
     now = _dt.datetime.now(_dt.timezone.utc)
     threshold_dt = now - _dt.timedelta(minutes=company.thresholds.died_min)
-    issues = await client.list_in_progress_issues(company.id)
+    # GIM-216 (2026-05-06): scan in_review too — handoff PATCH may land but
+    # wake-event may be lost (e.g. when source PATCH was authored by a
+    # SIGTERM'd run). list_active_issues covers todo + in_progress + in_review.
+    issues = await client.list_active_issues(company.id)
     actions: list[Action] = []
     for issue in issues:
         if issue.assignee_agent_id is None:

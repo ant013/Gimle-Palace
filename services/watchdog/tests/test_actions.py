@@ -53,6 +53,8 @@ async def test_trigger_respawn_via_patch_succeeds():
 
 @pytest.mark.asyncio
 async def test_trigger_respawn_patch_fails_release_patch_succeeds():
+    """Fallback path: PATCH then release+PATCH. Second PATCH must restore
+    status because POST /release resets it server-side (GIM-216)."""
     client = MagicMock(spec=PaperclipClient)
     client.patch_issue = AsyncMock()
     client.post_release = AsyncMock()
@@ -67,6 +69,92 @@ async def test_trigger_respawn_patch_fails_release_patch_succeeds():
     assert result.success is True
     client.post_release.assert_awaited_once_with("issue-1")
     assert client.patch_issue.await_count == 2
+    # Primary PATCH: assignee only
+    assert client.patch_issue.await_args_list[0].args == (
+        "issue-1",
+        {"assigneeAgentId": "agent-1"},
+    )
+    # Fallback PATCH: assignee + status restored
+    assert client.patch_issue.await_args_list[1].args == (
+        "issue-1",
+        {"assigneeAgentId": "agent-1", "status": "in_progress"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_trigger_respawn_release_path_preserves_in_review_status():
+    """GIM-216 case: in_review issue must come out of release+patch still in_review."""
+    client = MagicMock(spec=PaperclipClient)
+    client.patch_issue = AsyncMock()
+    client.post_release = AsyncMock()
+    responses = [_issue(run_id=None)] * 6 + [_issue(run_id="run-new")] * 6
+    client.get_issue = AsyncMock(side_effect=responses)
+
+    in_review = Issue(
+        id="issue-1",
+        assignee_agent_id="agent-1",
+        execution_run_id=None,
+        status="in_review",
+        updated_at=datetime(2026, 5, 6, 12, 0, tzinfo=timezone.utc),
+    )
+
+    with patch.object(act, "_sleep", new=AsyncMock()):
+        result = await act.trigger_respawn(client, in_review, "agent-1")
+
+    assert result.via == "release_patch"
+    assert client.patch_issue.await_args_list[1].args == (
+        "issue-1",
+        {"assigneeAgentId": "agent-1", "status": "in_review"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_trigger_respawn_release_path_skips_status_when_empty():
+    """If Issue.status is empty (paperclip API edge), omit status field —
+    sending status='' may be rejected; let server keep current state."""
+    client = MagicMock(spec=PaperclipClient)
+    client.patch_issue = AsyncMock()
+    client.post_release = AsyncMock()
+    responses = [_issue(run_id=None)] * 6 + [_issue(run_id="run-new")] * 6
+    client.get_issue = AsyncMock(side_effect=responses)
+
+    empty_status = Issue(
+        id="issue-1",
+        assignee_agent_id="agent-1",
+        execution_run_id=None,
+        status="",
+        updated_at=datetime(2026, 5, 6, 12, 0, tzinfo=timezone.utc),
+    )
+
+    with patch.object(act, "_sleep", new=AsyncMock()):
+        await act.trigger_respawn(client, empty_status, "agent-1")
+
+    # Fallback PATCH must NOT carry a status field when source status is empty
+    assert client.patch_issue.await_args_list[1].args == (
+        "issue-1",
+        {"assigneeAgentId": "agent-1"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_trigger_respawn_primary_patch_omits_status_field():
+    """Primary path (no release call): PATCH must be assignee-only.
+    Avoid polluting the diff with status writes on the happy path."""
+    client = MagicMock(spec=PaperclipClient)
+    client.patch_issue = AsyncMock()
+    client.post_release = AsyncMock()
+    client.get_issue = AsyncMock(return_value=_issue(run_id="run-new"))
+
+    with patch.object(act, "_sleep", new=AsyncMock()):
+        result = await act.trigger_respawn(client, _issue(), "agent-1")
+
+    assert result.via == "patch"
+    assert client.patch_issue.await_count == 1
+    assert client.patch_issue.await_args_list[0].args == (
+        "issue-1",
+        {"assigneeAgentId": "agent-1"},
+    )
+    client.post_release.assert_not_awaited()
 
 
 @pytest.mark.asyncio

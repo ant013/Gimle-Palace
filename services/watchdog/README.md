@@ -1,8 +1,10 @@
 # Gimle Agent Watchdog (GIM-63)
 
 Host-native daemon that recovers paperclip agents from:
-1. **Mid-work process death** — Claude subprocess dies unexpectedly; paperclip doesn't auto-respawn because heartbeat is disabled. Watchdog PATCHes assigneeAgentId=same to trigger paperclip's "assignment" wake event.
+1. **Mid-work process death** — Claude subprocess dies unexpectedly; paperclip doesn't auto-respawn because heartbeat is disabled. Watchdog PATCHes assigneeAgentId=same to trigger paperclip's "assignment" wake event. Covers `todo`, `in_progress`, AND `in_review` issues (GIM-216 expanded scope from `in_progress`-only).
 2. **Idle-hang** — Claude subprocess stays alive with near-zero CPU after completing its work (known upstream issue with MCP child processes keeping the node event loop alive). Watchdog kills it; next tick respawns.
+3. **Lost handoff to in_review** (GIM-216) — when an implementer's atomic
+   `PATCH(assignee=reviewer + status=in_review)` lands but the wake-event for the new assignee is lost (e.g. when source PATCH was authored by a SIGTERM'd run, paperclip suppresses the event). Watchdog's fallback path (`POST /release` + `PATCH assigneeAgentId+status`) restores both wake AND original status — `release` resets status to `todo` server-side, the fallback PATCH restores it from `Issue.status`.
 
 ## Install
 
