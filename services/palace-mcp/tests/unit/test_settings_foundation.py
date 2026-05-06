@@ -136,3 +136,31 @@ def test_hotspot_lizard_timeout_behavior_invalid_rejected(
     monkeypatch.setenv("PALACE_HOTSPOT_LIZARD_TIMEOUT_BEHAVIOR", "boom")
     with pytest.raises(ValidationError):
         Settings()
+
+
+def test_version_skew_settings_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    for k, v in _minimal_env().items():
+        monkeypatch.setenv(k, v)
+    settings = Settings()
+    assert settings.palace_version_skew_top_n_max == 500
+    assert settings.palace_version_skew_query_timeout_s == 30
+
+
+def test_version_skew_top_n_max_lower_bound_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for k, v in _minimal_env().items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setenv("PALACE_VERSION_SKEW_TOP_N_MAX", "0")
+    with pytest.raises(ValidationError):
+        Settings()
+
+
+def test_version_skew_timeout_upper_bound_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for k, v in _minimal_env().items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setenv("PALACE_VERSION_SKEW_QUERY_TIMEOUT_S", "1000")
+    with pytest.raises(ValidationError):
+        Settings()

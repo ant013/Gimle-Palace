@@ -118,6 +118,23 @@ class Settings(BaseSettings):
     # Hotspot extractor (GIM-195, Roadmap #44)
     # -----------------------------------------------------------------------
 
+    # -----------------------------------------------------------------------
+    # Cross-repo version skew extractor (GIM-218, Roadmap #39)
+    # -----------------------------------------------------------------------
+
+    palace_version_skew_top_n_max: int = Field(
+        default=500,
+        ge=1,
+        le=10_000,
+        description="Upper bound for find_version_skew top_n arg",
+    )
+    palace_version_skew_query_timeout_s: int = Field(
+        default=30,
+        ge=1,
+        le=600,
+        description="Bolt session timeout for cross-repo skew aggregation Cypher (seconds)",
+    )
+
     palace_hotspot_churn_window_days: int = Field(
         default=90,
         ge=1,
