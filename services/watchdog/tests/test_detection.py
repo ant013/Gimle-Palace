@@ -286,7 +286,7 @@ class _FakeClient:
     def __init__(self, issues: list[Issue]):
         self._issues = issues
 
-    async def list_in_progress_issues(self, company_id: str) -> list[Issue]:
+    async def list_active_issues(self, company_id: str) -> list[Issue]:
         return list(self._issues)
 
 
@@ -399,6 +399,27 @@ async def test_scan_died_auto_unescalates_on_touch(tmp_path: Path):
     # Should clear escalation AND produce wake action
     assert not st.is_escalated("issue-1")
     assert any(a.kind == "wake" for a in actions)
+
+
+@pytest.mark.asyncio
+@freeze_time("2026-04-21T10:05:00Z")
+async def test_scan_died_wakes_in_review_issue(tmp_path: Path):
+    """GIM-216: in_review handoffs whose wake-event was lost must be picked up."""
+    cfg = _make_config()
+    st = State.load(tmp_path / "s.json")
+    in_review_issue = Issue(
+        id="issue-216",
+        assignee_agent_id="cr-1",
+        execution_run_id=None,
+        status="in_review",
+        updated_at=_dt.datetime(2026, 4, 21, 10, 0, tzinfo=_dt.timezone.utc),
+    )
+    client = _FakeClient([in_review_issue])
+    actions = await det.scan_died_mid_work(cfg.companies[0], client, st, cfg)
+    assert len(actions) == 1
+    assert actions[0].kind == "wake"
+    assert actions[0].issue.status == "in_review"
+    assert actions[0].agent_id == "cr-1"
 
 
 @pytest.mark.asyncio

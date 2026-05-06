@@ -56,20 +56,33 @@ async def _wait_for_respawn(client: PaperclipClient, issue_id: str) -> str | Non
 
 
 async def trigger_respawn(client: PaperclipClient, issue: Issue, assignee_id: str) -> RespawnResult:
-    """PATCH assigneeAgentId=same as primary; POST /release + PATCH as fallback."""
-    # Primary
+    """PATCH assigneeAgentId=same as primary; POST /release + PATCH as fallback.
+
+    GIM-216 (2026-05-06): the fallback PATCH must restore Issue.status, because
+    POST /release resets status to "todo" server-side. Without restoration,
+    in_review issues silently regress to todo after recovery.
+    """
+    # Primary — assignee-only PATCH; status was not modified, don't pollute the diff.
     await client.patch_issue(issue.id, {"assigneeAgentId": assignee_id})
     run_id = await _wait_for_respawn(client, issue.id)
     if run_id is not None:
         return RespawnResult(via="patch", success=True, run_id=run_id)
 
-    # Fallback
-    log.info("respawn_fallback_release_patch issue=%s", issue.id)
+    # Fallback — release wipes status; restore it in the same PATCH that re-triggers wake.
+    log.info(
+        "respawn_fallback_release_patch issue=%s preserving_status=%s",
+        issue.id,
+        issue.status or "(empty)",
+    )
     try:
         await client.post_release(issue.id)
     except PaperclipError as e:
         log.warning("release_failed issue=%s error=%s", issue.id, e)
-    await client.patch_issue(issue.id, {"assigneeAgentId": assignee_id})
+    fallback_body: dict[str, str] = {"assigneeAgentId": assignee_id}
+    if issue.status:
+        # Skip when empty — sending status="" may be rejected; let server keep current.
+        fallback_body["status"] = issue.status
+    await client.patch_issue(issue.id, fallback_body)
     run_id = await _wait_for_respawn(client, issue.id)
     if run_id is not None:
         return RespawnResult(via="release_patch", success=True, run_id=run_id)
