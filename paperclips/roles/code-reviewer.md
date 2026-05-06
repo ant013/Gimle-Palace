@@ -149,6 +149,8 @@ See `git-workflow.md` § Merge-readiness check.
 
 <!-- @include fragments/shared/fragments/escalation-blocked.md -->
 
+<!-- @include fragments/shared/fragments/pre-work-discovery.md -->
+
 <!-- @include fragments/shared/fragments/git-workflow.md -->
 
 <!-- @include fragments/shared/fragments/worktree-discipline.md -->

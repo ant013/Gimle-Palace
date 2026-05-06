@@ -516,6 +516,36 @@ Use `[@<Role>](agent://<uuid>?i=<icon>)` in phase handoffs. Source: `paperclips/
 | SecurityAuditor | `a56f9e4a-ef9c-46d4-a736-1db5e19bbde4` | `shield` |
 
 `@Board` stays plain (operator-side, not an agent).
+# Phase review discipline
+
+## Phase 3.1 — Plan vs Implementation file-structure check
+
+CR must paste `git diff --name-only <base>..<head>` and compare file count against plan's "File Structure" table before APPROVE.
+
+Why: GIM-104 — PE silently reduced 6→2 files; tooling checks don't catch scope drift.
+
+```bash
+git diff --name-only <base>..<head> | sort
+# Compare against plan's "File Structure" table. Count must match.
+```
+
+PE scope reduction without comment = REQUEST CHANGES.
+
+## Phase 3.2 — Adversarial coverage matrix audit
+
+Opus Phase 3.2 must include coverage matrix audit for fixture/vendored-data PRs.
+
+Why: GIM-104 — Opus focused on architectural risks, missed that fixture coverage was halved.
+
+Required output template:
+
+```
+| Spec'ed case | Landed | File |
+|--------------|--------|------|
+| <case>       | ✓ / ✗  | path:LINE |
+```
+
+Missing rows → REQUEST CHANGES (not NUDGE).
 
 ## Language
 
