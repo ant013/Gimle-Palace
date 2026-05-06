@@ -2,7 +2,7 @@
 title: Code ownership extractor — file-level blame_share + recency-weighted churn
 slug: code-ownership-extractor
 date: 2026-05-06
-status: proposed
+status: proposed (rev2)
 paperclip_issue: GIM-NN
 predecessor_sha: 0a9c2363a
 authoring: Board+Claude
@@ -12,6 +12,104 @@ roadmap_source: "docs/roadmap.md §2.3 Historical, row #32 (verified 2026-05-06 
 ---
 
 # Code ownership extractor (Roadmap #32)
+
+## rev2 changelog (2026-05-06)
+
+Operator pre-CR review across 4 independent agents (Architect / Security
+/ Silent-failure / Performance) surfaced one correctness bug + 17
+material gaps. Rev2 closes all 18:
+
+- **C1 (correctness, Performance Risk 1)** — Phase 4 DELETE filter
+  `r.run_id_provenance = 'extractor.code_ownership'` was unmatched after
+  first run because `run_id_provenance` is a per-run UUID. Added stable
+  `r.source = 'extractor.code_ownership'` for filtering;
+  `run_id_provenance` retained as UUID audit trail.
+- **C2 (atomicity, Architect + Silent + Performance Risk 3)** — Phase 4
+  pseudocode `;` was misleading. Now explicit
+  `async with session.begin_transaction() as tx` with batched DELETE+MERGE
+  by `PALACE_OWNERSHIP_WRITE_BATCH_SIZE` (default 2000 paths). Per-batch
+  atomic contract: a file's old edges are deleted + new edges written
+  in one tx → readers always see consistent per-file ownership.
+- **C3 (mailmap, Architect + Security F2 + Silent)** — dropped custom
+  parser. v1 uses **only** `pygit2.Mailmap.from_repository(repo)` if the
+  bound libgit2 exposes it; else identity-passthrough fallback (no
+  parser). Bounds: `PALACE_MAILMAP_MAX_BYTES=1_048_576` (1 MiB);
+  oversized → `mailmap_unsupported` log + identity passthrough. Resolver
+  path logged as `:IngestRun.mailmap_resolver_path ∈ {'pygit2',
+  'identity_passthrough'}`.
+- **C4 (find_owners empty-state, Silent HIGH)** — added `:OwnershipFileState`
+  sidecar node `(project_id, path)` with `status ∈ {processed, skipped}`
+  and `no_owners_reason ∈ {binary_or_skipped, all_bot_authors,
+  no_commit_history, file_not_yet_processed}`. `find_owners` exposes
+  `no_owners_reason` and `last_run_id` so caller distinguishes
+  "no humans" from "not yet processed".
+- **C5 (synthetic flag, Architect + Silent MED)** — moved `_synthetic_from_mailmap`
+  off `:Author` (where ON CREATE only fired). New per-edge property
+  `r.canonical_via ∈ {'identity', 'mailmap_existing', 'mailmap_synthetic'}`
+  set on every write; provenance stays accurate across re-runs.
+- **C6 (dead index, Architect + Performance)** — removed
+  `file_owned_by_weight` relationship-property index. `find_owners`
+  uses `:File` PK lookup + outgoing expand + in-memory sort; the index
+  helps full-scans, not traversals from a starting node.
+- **C7 (Phase 3 perf, Performance Risk 2)** — reversed query direction:
+  `MATCH (f:File {project_id, path})<-[:TOUCHED]-(c:Commit)` uses File
+  PK index; partial server-side aggregation by `a.identity_key` returns
+  collected `committed_at` timestamps + counts, ~3 orders of magnitude
+  faster than client-pulling raw rows.
+- **C8 (substrate alignment, Architect C1)** — dropped duplicate
+  `:OwnershipRun` label (rev1 design). Now writes `(:IngestRun {source:
+  'extractor.code_ownership', ...substrate fields, ...ownership extras})`.
+  Honors CLAUDE.md `palace.memory.lookup(entity_type='IngestRun',
+  filters={source: 'extractor.<name>'})` contract. `:OwnershipCheckpoint`
+  retained as per-extractor label (mirrors GIM-186
+  `:GitHistoryCheckpoint` precedent).
+- **C9 (decision-log honesty, Architect)** — R5 reworded: α=0.5 is a
+  neutral start without empirical validation; tunable env-var lets
+  operators A/B retroactively via `alpha_used` provenance. R7
+  reworded: 5-15 min is an estimate; concrete number TBD during
+  plan-validation phase on UW Android fixture.
+- **C10 (bot prefetch scoping, Security F4)** — bot prefetch query
+  rewritten to project-scope via `:Commit{project_id}` join + `LIMIT
+  10000` defensive cap.
+- **C11 (PII redaction, Security F6)** — explicit invariant in §8:
+  `error_message` and INFO logs MUST NOT contain raw email addresses.
+  `mailmap_unsupported` and `blame_failed` warnings reference paths,
+  not authors.
+- **C12 (privacy / PII, Security F7)** — new §15 Privacy: PII inventory,
+  erasure Cypher template (`MATCH (a:Author{identity_key:$email})
+  DETACH DELETE a` + downstream `:OWNED_BY` cleanup), retention
+  guidance, runbook reference.
+- **C13 (bot-laundering, Security F5)** — new §14 risk row + runbook
+  spot-check guidance.
+- **C14 (trust model, Security F1)** — §1 expanded with explicit
+  trust-model statement: ownership data is more PII-sensitive than
+  symbol queries; project-level ACL is a separate palace-mcp slice
+  (not blocking #32). Operators with multi-tenant deployments must
+  treat `find_owners` as PII-bearing.
+- **C15 (substrate caps clarification, Performance)** — §6 note: the
+  Tantivy-related substrate caps (`PALACE_MAX_OCCURRENCES_*`) do NOT
+  apply to code_ownership (no Tantivy writes).
+- **C16 (find_owners SLO, Performance)** — added p99 < 50 ms target
+  for warm cache after bootstrap; documented as soft contract verified
+  by integration test on bootstrapped fixture.
+- **C17 (new error codes, Silent)** — added `ownership_diff_failed`
+  (pygit2.Diff between checkpoint and HEAD raises),
+  `repo_head_invalid` (pygit2 cannot resolve HEAD); `:IngestRun.exit_reason`
+  enum: `'success' | 'no_change' | 'no_dirty' | 'failed'`. Replaces the
+  `head_unchanged_no_dirty` informational pseudo-code.
+- **C18 (acceptance #15-17)** — explicit acceptance for atomicity
+  contract (kill simulation between batches), substrate `:IngestRun`
+  visibility via `palace.memory.lookup`, and `find_owners` empty-state
+  disambiguation.
+
+**Skipped (operator triage)**: `PALACE_OWNERSHIP_PROJECT_ALLOWLIST`
+(broader palace-mcp ACL, not #32); per-file blame timeout (defer until
+measured); `bot_classification_drift` (vague — GIM-186 heuristic is
+non-deterministic by design); `mailmap_resolver_disagreement` (moot
+after C3); `mailmap_drift_detected` (next full re-walk auto-corrects);
+`extractor_tx_atomicity_violation` (internal assert, not error code);
+`ownership_checkpoint_orphaned` (self-healing); intermediate blame
+checkpoint (premature); per-file edge-count cap (top_n covers it).
 
 ## 1. Context
 
@@ -44,7 +142,18 @@ it lately).
 
 `palace.code.find_owners(file_path, project, top_n=5)` → ranked owners
 `(author_email, author_name, weight, blame_share, recency_churn_share,
-last_touched_at)` with provenance metadata `(last_run_at, total_authors)`.
+last_touched_at)` with provenance metadata `(last_run_at, total_authors,
+no_owners_reason)`.
+
+**Trust model (PII sensitivity).** Ownership data exposes raw committer
+emails and blame attribution — strictly more PII-bearing than symbol
+queries. Operators running palace-mcp in multi-tenant deployments MUST
+treat `find_owners` as PII-bearing: any caller with `palace.code.*`
+permissions can enumerate every contributor's email for any registered
+project. Project-level ACLs are not implemented in palace-mcp v1
+(broader slice; not blocking #32). Single-tenant or trusted-team
+deployments can run as-is. This is documented in `docs/runbooks/code-ownership.md`
+under "Trust assumptions".
 
 ## 2. Scope
 
@@ -60,14 +169,16 @@ last_touched_at)` with provenance metadata `(last_run_at, total_authors)`.
 - Recency-weighted churn aggregation via Cypher over existing
   `:Commit/:TOUCHED` edges (no fresh git walk for churn).
 - `.mailmap` support — implemented as `MailmapResolver` in
-  `extractors/code_ownership/mailmap.py`. v1 prefers
-  `pygit2.Mailmap.from_repository(repo)` if the bound libgit2 build
-  exposes it; otherwise falls back to a small in-process parser
-  following the format documented in `git help check-mailmap`
-  (entries: `Real Name <real@x> Old Name <old@x>` and three other
-  forms). Either path yields `canonicalize(name, email) → (name,
-  email)`. If `.mailmap` is absent → identity passthrough. The
-  resolver is unit-tested independently of the pygit2 path.
+  `extractors/code_ownership/mailmap.py`. **v1 single source: `pygit2.Mailmap.from_repository(repo)`**.
+  If the bound libgit2 does not expose this API, OR if `.mailmap` exceeds
+  `PALACE_MAILMAP_MAX_BYTES` (1 MiB default), OR if pygit2 raises during
+  parse → fall back to **identity passthrough** (`canonicalize(name,
+  email) = (name, email.lower())`). No custom parser. The resolver path
+  used (`'pygit2' | 'identity_passthrough'`) is logged once at run-start
+  and recorded as `:IngestRun.mailmap_resolver_path` for reproducibility.
+  Rationale: `.mailmap` is checked-in repo content (untrusted); pygit2 is
+  the upstream-vetted parser. A second in-house parser would split test
+  surface and is the wrong attack-surface trade-off.
 - Linear-combo scoring `weight = α × blame_share + (1-α) × recency_churn_share`,
   α default `0.5`, env-tunable `PALACE_OWNERSHIP_BLAME_WEIGHT`.
 - Per-file incremental refresh — `:OwnershipCheckpoint{project_id,
@@ -130,37 +241,44 @@ last_touched_at)` with provenance metadata `(last_run_at, total_authors)`.
   occurrences; Swift uses custom emitter spans). Directory aggregates
   (F2) are cheap Cypher on demand.
 
-- **R3 (identity) — `.mailmap`-aware, no heuristic merge.** UW history
-  spans 2017-2026; multiple email-per-person is real. `.mailmap` is
-  the standard git solution. v1 implements its own `MailmapResolver`
-  (small parser, format documented at `git help check-mailmap`);
-  pygit2's `Mailmap` is preferred if exposed by the bound libgit2,
-  else custom parser is used unconditionally. Heuristic merge (F5)
+- **R3 (identity) — `.mailmap`-aware via pygit2; no custom parser, no
+  heuristic merge.** UW history spans 2017-2026; multiple email-per-person
+  is real. `.mailmap` is the standard git solution. v1 uses
+  `pygit2.Mailmap.from_repository(repo)` exclusively; absence /
+  oversized / pygit2-unsupported → identity passthrough (no custom
+  parser; `.mailmap` is untrusted repo content). Heuristic merge (F5)
   risks false-positive cross-author merges and is deferred. **Edge
   case — synthetic canonical email**: if `.mailmap` rewrites to an
-  email never used in any commit (rare), the resolver returns the
-  canonical pair and the writer MERGEs a virtual `:Author{provider:
-  'git', identity_key: canonical_email_lc}` node. Documented in §4
-  Phase 4.
+  email never used in any commit (rare), Phase 4 MERGEs a synthetic
+  `:Author{provider:'git', identity_key: canonical_email_lc}` and
+  records `r.canonical_via='mailmap_synthetic'` on the edge. Documented
+  in §4 Phase 4.
 
 - **R4 (MCP surface) — single tool: `find_owners`.** Symmetric with
   #44's `find_hotspots`. Orphan-files / module-owners are followups
   (F6/F7) with their own tuning knobs.
 
 - **R5 (scoring) — `α × blame + (1-α) × churn`, α=0.5 default.** Two
-  sub-questions ("who wrote it" vs "who maintains it") both matter;
-  α=0.5 is a neutral middle. Env-tunable
-  `PALACE_OWNERSHIP_BLAME_WEIGHT` for operator override. Each edge
-  records `alpha_used` for reproducibility across env changes.
+  sub-questions ("who wrote it" vs "who maintains it") both matter; we
+  start at α=0.5 as a **neutral midpoint without empirical
+  validation** — there is no UW data yet to tune against. Env-tunable
+  `PALACE_OWNERSHIP_BLAME_WEIGHT` lets operators retune; per-edge
+  `alpha_used` provenance enables retroactive A/B comparison once we
+  have real query traffic. A tuning slice (with measured signal-quality
+  metrics) is a possible followup if α=0.5 produces complaints.
 
 - **R6 (scope) — single-project per run.** Symmetric with #44 and
   #5 (dependency_surface). Bundle support (F3) is structurally
   identical to GIM-182 multi-repo SPM ingest; can be lifted later.
 
 - **R7 (incrementality) — per-file incremental with checkpoint.** UW
-  Android (~3k Kotlin/Java files) full blame walk is 5-15 min; on
-  per-merge refresh that's prohibitive. Checkpoint + DIRTY-set diff
-  brings re-run cost to seconds for typical refreshes.
+  Android (~3k Kotlin/Java files in HEAD) full blame walk is the
+  bootstrap cost; **wall-time TBD — to be measured during plan
+  validation phase**, not asserted here. Whatever the measured
+  bootstrap cost, per-merge incremental refresh on the typical
+  10-50-file diff converges to seconds (one Phase-2 blame call per
+  changed file). The checkpoint pattern preserves bootstrap cost as
+  one-time and shrinks the steady-state cost to per-merge size.
 
 - **R8 (bots/merges) — exclude.** GIM-186 already detects bots
   (`Author.is_bot=true`); merges are conflict resolution, not
@@ -199,11 +317,27 @@ Phase 0 — bootstrap
   • repo = pygit2.Repository("/repos/<slug>")
   • mailmap = MailmapResolver.from_repo(repo)   ← may be no-op
   • bot_identity_keys = {row.identity_key
-        for row in MATCH (a:Author {provider: 'git'})
+        for row in MATCH (c:Commit {project_id: $proj})
+                         -[:AUTHORED_BY]->(a:Author)
                    WHERE a.is_bot = true
-                   RETURN a.identity_key}
-    // small set (typically 1–5 bots per project); used client-side
-    // by blame_walker to drop bot lines and by writer to skip bot edges.
+                   RETURN DISTINCT a.identity_key
+                   LIMIT 10000}
+    // project-scoped (Author is global per GIM-186 schema, so bot
+    // detection is shared across projects, but we want only bots that
+    // actually appear in this project's commit graph).
+    // LIMIT 10000 is defensive; typical projects have 1–5 bots.
+  • mailmap_resolver_path = "pygit2" if pygit2.Mailmap exposed
+                             AND .mailmap size ≤ PALACE_MAILMAP_MAX_BYTES
+                             else "identity_passthrough"
+  • known_author_ids = {row.identity_key
+        for row in MATCH (c:Commit {project_id: $proj})
+                         -[:AUTHORED_BY]->(a:Author)
+                   RETURN DISTINCT a.identity_key}
+    // used by Phase 3/4 to set r.canonical_via:
+    //   'identity'           if raw_id == canonical_id
+    //   'mailmap_existing'   if canonical_id in known_author_ids
+    //   'mailmap_synthetic'  otherwise (need to MERGE virtual :Author)
+  • read repo HEAD via pygit2; on failure → repo_head_invalid
   • assert there is at least one :Commit{project_id} in graph else
     fail with git_history_not_indexed
 
@@ -212,13 +346,22 @@ Phase 1 — DIRTY/DELETED set computation
   • if checkpoint.last_head_sha is None:
       DIRTY = all files in repo.head.peel().tree (recursive)
       DELETED = ∅
+      exit_reason = (pending; set after Phase 4)
   • else if last_head_sha == current_head:
-      → emit success no-op (no edges touched, checkpoint + run written)
+      → exit_reason = "no_change"; success no-op
+        (checkpoint untouched, :IngestRun written for audit)
   • else:
-      diff = pygit2.Diff between last_head_sha and current_head
-      DIRTY = files modified or added in diff
-      DELETED = files removed in diff
+      try diff = repo.diff(last_head_sha, current_head)
+      except pygit2.GitError → fail with ownership_diff_failed
+        (operator likely needs to git fetch / repair the mounted clone)
+      DIRTY = paths with delta.status ∈ {ADDED, MODIFIED, RENAMED}
+              (RENAMED: NEW path enters DIRTY; OLD path enters DELETED)
+      DELETED = paths with delta.status == DELETED
   • assert len(DIRTY) ≤ PALACE_OWNERSHIP_MAX_FILES_PER_RUN
+    else fail with ownership_max_files_exceeded
+  • if DIRTY = ∅ and DELETED = ∅ (e.g., only commits to non-text
+    binaries that DELETED-pass through but blame fails uniformly):
+      exit_reason = "no_dirty"; same shortcut as no_change
 
 Phase 2 — blame walk (DIRTY only)
   • for path in DIRTY:
@@ -235,26 +378,42 @@ Phase 2 — blame walk (DIRTY only)
               lines, canonical_name, canonical_email)]]
 
 Phase 3 — churn aggregation (DIRTY only)
-  • for path in DIRTY:
-      MATCH (c:Commit {project_id: $proj})-[:TOUCHED]->(f:File {path: $path})
-      MATCH (c)-[:AUTHORED_BY]->(a:Author)
-      WHERE NOT a.is_bot AND NOT c.is_merge
-      WITH a.identity_key AS raw_id,
-           a.name AS raw_name,
-           c.committed_at AS ts
-      RETURN raw_id, raw_name, ts
-      // raw rows; aggregation happens in Python after mailmap canonicalize
-  • client-side: for each row,
+  // Query starts from :File (PK lookup via UNIQUE(project_id, path)
+  // index from GIM-186) — orders of magnitude faster than starting
+  // from :Commit (which has no project_id index, would full-scan).
+  // Server-side preliminary aggregation by raw_id (a.identity_key)
+  // collapses N rows-per-author down to 1 row-per-author per file.
+  // Mailmap canonicalize is unavoidably client-side; we still aggregate
+  // a second pass over the canonical key after mailmap.
+  • UNWIND $dirty_paths AS p
+    MATCH (f:File {project_id: $proj, path: p})<-[:TOUCHED]-(c:Commit)
+    WHERE NOT c.is_merge
+    MATCH (c)-[:AUTHORED_BY]->(a:Author)
+    WHERE NOT a.is_bot
+    WITH p, a.identity_key AS raw_id, a.name AS raw_name,
+         collect(c.committed_at) AS timestamps
+    RETURN p, raw_id, raw_name,
+           timestamps,
+           size(timestamps) AS commit_count
+  • client-side per row:
       (canonical_name, canonical_email) = mailmap.canonicalize(raw_name, raw_id)
       canonical_id = canonical_email.lower()
-      if canonical_id in bot_identity_keys: continue
-  • client-side aggregate per (path, canonical_id):
-      recency_score = Σ exp(-Δseconds / (decay_days × 86400))
-      last_touched_at = max(ts)
-      commit_count = len(rows)
-  • result: dict[path, dict[canonical_id, ChurnShare(
-              recency_score, last_touched_at, commit_count,
-              canonical_name, canonical_email)]]
+      if canonical_id in bot_identity_keys: continue  // post-mailmap bot check
+      decay_seconds = decay_days × 86400
+      recency_score = Σ exp(-(now - ts).total_seconds() / decay_seconds)
+                      for ts in timestamps
+      last_touched_at = max(timestamps)
+      // Second-pass merge per canonical_id (mailmap may collapse two raw_ids):
+      churn_per_file[p][canonical_id].recency_score += recency_score
+      churn_per_file[p][canonical_id].commit_count  += commit_count
+      churn_per_file[p][canonical_id].last_touched_at = max(...)
+      churn_per_file[p][canonical_id].canonical_via = (
+          'identity'             if (raw_id == canonical_id)
+          else 'mailmap_existing' if (canonical_id in :Author identity keys
+                                       — pre-fetched in Phase 0)
+          else 'mailmap_synthetic'
+      )
+  • result: dict[path, dict[canonical_id, ChurnShare(...)]]
 
 Phase 4 — scoring + atomic replace write
   • merge blame and churn dicts per file (keyed by canonical_id)
@@ -274,38 +433,80 @@ Phase 4 — scoring + atomic replace write
     incomplete history): recency_churn_share = 0 for all,
     weight = α × blame_share.
   • emit OwnershipEdge per (path, canonical_id)
-  • single tx:
-      UNWIND $dirty_paths_and_deleted AS p
-      MATCH (f:File {project_id: $proj, path: p})
-            -[r:OWNED_BY {run_id_provenance: 'extractor.code_ownership'}]
-            ->()
-      DELETE r
-      ;
-      UNWIND $edges AS e
-      MATCH (f:File {project_id: $proj, path: e.path})
-      // MERGE author on canonical: handles synthetic mailmap targets
-      // (canonical email that never appeared as raw commit email).
-      // For non-synthetic cases this is idempotent — Author already exists.
-      MERGE (a:Author {provider: 'git', identity_key: e.canonical_id})
-        ON CREATE SET a.email = e.canonical_email,
-                      a.name = e.canonical_name,
-                      a.is_bot = false,
-                      a.first_seen_at = e.first_seen_at,
-                      a.last_seen_at = e.last_touched_at,
-                      a._synthetic_from_mailmap = true
-      MERGE (f)-[r:OWNED_BY]->(a)
-      SET r.weight = e.weight,
-          r.blame_share = e.blame_share,
-          r.recency_churn_share = e.recency_churn_share,
-          r.last_touched_at = e.last_touched_at,
-          r.lines_attributed = e.lines_attributed,
-          r.commit_count = e.commit_count,
-          r.run_id_provenance = $run_id,
-          r.alpha_used = $alpha
-  • update :OwnershipCheckpoint{last_head_sha=current_head,
-                                 last_completed_at=NOW(),
-                                 run_id=$run_id}
-  • write :OwnershipRun success node
+  • Atomic-replace contract: per-batch (NOT per-run). Within one tx,
+    a batch's DIRTY+DELETED paths' old :OWNED_BY edges are removed and
+    new edges written. Readers querying a path covered by batch N see
+    either the pre-batch-N state or the post-batch-N state, never a
+    mixed state. Across batches, eventual consistency: the per-file
+    contract is what matters.
+  • Pseudocode:
+      batches = chunk(dirty_paths + deleted_paths,
+                      size=PALACE_OWNERSHIP_WRITE_BATCH_SIZE)
+      for batch_paths, batch_edges in batches:
+          async with session.begin_transaction() as tx:
+              # 1. Wipe old edges for ALL batch paths (DIRTY + DELETED).
+              #    Filter by stable r.source — the per-run UUID is
+              #    in r.run_id_provenance, NOT here.
+              await tx.run("""
+                  UNWIND $paths AS p
+                  MATCH (f:File {project_id: $proj, path: p})
+                        -[r:OWNED_BY {source: 'extractor.code_ownership'}]
+                        ->()
+                  DELETE r
+              """, paths=batch_paths, proj=project_id)
+
+              # 2. Write new edges for the DIRTY paths in this batch
+              #    (DELETED paths have no corresponding e in batch_edges).
+              #    MERGE author on canonical: handles synthetic mailmap
+              #    targets. For non-synthetic, idempotent.
+              await tx.run("""
+                  UNWIND $edges AS e
+                  MATCH (f:File {project_id: $proj, path: e.path})
+                  MERGE (a:Author {provider: 'git',
+                                   identity_key: e.canonical_id})
+                    ON CREATE SET a.email = e.canonical_email,
+                                  a.name = e.canonical_name,
+                                  a.is_bot = false,
+                                  a.first_seen_at = e.last_touched_at,
+                                  a.last_seen_at = e.last_touched_at
+                  MERGE (f)-[r:OWNED_BY]->(a)
+                  SET r.source = 'extractor.code_ownership',
+                      r.weight = e.weight,
+                      r.blame_share = e.blame_share,
+                      r.recency_churn_share = e.recency_churn_share,
+                      r.last_touched_at = e.last_touched_at,
+                      r.lines_attributed = e.lines_attributed,
+                      r.commit_count = e.commit_count,
+                      r.run_id_provenance = $run_id,
+                      r.alpha_used = $alpha,
+                      r.canonical_via = e.canonical_via
+              """, edges=batch_edges, proj=project_id,
+                   run_id=run_id, alpha=alpha)
+
+              # 3. Sidecar :OwnershipFileState for empty-state
+              #    disambiguation in find_owners.
+              await tx.run("""
+                  UNWIND $states AS s
+                  MERGE (st:OwnershipFileState {project_id: $proj,
+                                                path: s.path})
+                  SET st.status = s.status,
+                      st.no_owners_reason = s.no_owners_reason,
+                      st.last_run_id = $run_id,
+                      st.updated_at = $now
+              """, states=batch_states, proj=project_id,
+                   run_id=run_id, now=now)
+              # tx auto-commits on context exit
+  • after all batches commit:
+      update :OwnershipCheckpoint{last_head_sha=current_head,
+                                   last_completed_at=NOW(),
+                                   run_id=$run_id}
+      write :IngestRun {source: 'extractor.code_ownership',
+                        ...substrate fields,
+                        head_sha, prev_head_sha,
+                        dirty_files_count, deleted_files_count,
+                        edges_written, edges_deleted,
+                        mailmap_resolver_path,
+                        exit_reason: 'success'}
 
 Phase 5 — stats
   • return ExtractorStats(nodes_written=run+checkpoint, edges_written, …)
@@ -327,27 +528,53 @@ Phase 5 — stats
 
 `CREATE CONSTRAINT ownership_checkpoint_unique IF NOT EXISTS FOR (c:OwnershipCheckpoint) REQUIRE c.project_id IS UNIQUE;`
 
-**`:OwnershipRun`** (one per run, append-only; mirrors substrate `:IngestRun`)
+**`:IngestRun`** (substrate; append-only; one per ownership run)
+
+We do NOT introduce a separate `:OwnershipRun` label (rev1 had one;
+rev2 dropped it). Per CLAUDE.md
+extractor convention (`palace.memory.lookup(entity_type='IngestRun',
+filters={source: 'extractor.<name>'})`), all extractor runs write to
+the substrate `:IngestRun`. We add ownership-specific properties on
+the same node; substrate properties unchanged.
+
+Substrate properties (from `foundation/checkpoint.py:create_ingest_run`):
+`run_id` (UUID, PK), `project_id`, `source`, `started_at`,
+`completed_at`, `success`, `nodes_written`, `edges_written`,
+`error_code`, `error_message`, `duration_ms`.
+
+Ownership-extension properties (set by this extractor only):
 
 | Property | Type | Note |
 |----------|------|------|
-| `run_id` | string (UUID) | unique key |
-| `project_id` | string | indexed |
-| `source` | string | hardcoded `"extractor.code_ownership"` |
-| `started_at` | datetime | UTC |
-| `completed_at` | datetime \| null | null on crash |
-| `success` | bool | |
 | `head_sha` | string | target HEAD of run |
 | `prev_head_sha` | string \| null | for diff-tracing |
 | `dirty_files_count` | int | files re-blamed |
 | `deleted_files_count` | int | files removed in HEAD |
-| `edges_written` | int | new `:OWNED_BY` written |
 | `edges_deleted` | int | old `:OWNED_BY` removed |
-| `error_code` | string \| null | per `ExtractorErrorCode` |
-| `error_message` | string \| null | truncated 1024 |
+| `mailmap_resolver_path` | string | `'pygit2' \| 'identity_passthrough'` |
+| `exit_reason` | string | `'success' \| 'no_change' \| 'no_dirty' \| 'failed'` |
 
-`CREATE CONSTRAINT ownership_run_unique IF NOT EXISTS FOR (r:OwnershipRun) REQUIRE r.run_id IS UNIQUE;`
-`CREATE INDEX ownership_run_project IF NOT EXISTS FOR (r:OwnershipRun) ON (r.project_id, r.completed_at);`
+For `source = "extractor.code_ownership"`. Substrate's UNIQUE constraint
+on `:IngestRun.run_id` is reused; no new constraint needed.
+
+**`:OwnershipFileState`** (one per `(project_id, path)` for files
+seen by ownership; sidecar for empty-state disambiguation in
+`find_owners`)
+
+| Property | Type | Note |
+|----------|------|------|
+| `project_id` | string | composite PK part 1 |
+| `path` | string | composite PK part 2 |
+| `status` | string | `'processed' \| 'skipped'` |
+| `no_owners_reason` | string \| null | `'binary_or_skipped' \| 'all_bot_authors' \| 'no_commit_history' \| null` (null when status='processed' AND `:OWNED_BY` edges exist) |
+| `last_run_id` | string (UUID) | run that last touched this state |
+| `updated_at` | datetime (UTC) | |
+
+`CREATE CONSTRAINT ownership_file_state_unique IF NOT EXISTS FOR (s:OwnershipFileState) REQUIRE (s.project_id, s.path) IS UNIQUE;`
+
+A `:File` that has NO `:OwnershipFileState` was never DIRTY in any
+ownership run → `find_owners` returns
+`no_owners_reason='file_not_yet_processed'`.
 
 ### New edge
 
@@ -355,19 +582,26 @@ Phase 5 — stats
 
 | Property | Type | Note |
 |----------|------|------|
+| `source` | string | stable filter key, hardcoded `"extractor.code_ownership"`; used by Phase 4 DELETE filter |
 | `weight` | float [0..1] | combined score |
 | `blame_share` | float [0..1] | line-share in HEAD blame |
 | `recency_churn_share` | float [0..1] | decay-weighted commit-share |
 | `last_touched_at` | datetime | max committed_at by this author on this file |
 | `lines_attributed` | int | absolute blame line count |
 | `commit_count` | int | absolute commit count (no decay) |
-| `run_id_provenance` | string (UUID) | run that wrote the edge |
+| `run_id_provenance` | string (UUID) | run that wrote the edge (audit trail; UUID, not stable filter key) |
 | `alpha_used` | float | α at write time |
+| `canonical_via` | string | `'identity' \| 'mailmap_existing' \| 'mailmap_synthetic'` — how `:Author.identity_key` was reached |
 
 Cardinality: one edge per `(File, Author)` per project (enforced by
 `MATCH (f) MATCH (a) MERGE (f)-[r:OWNED_BY]->(a)`).
 
-`CREATE INDEX file_owned_by_weight IF NOT EXISTS FOR ()-[r:OWNED_BY]->() ON (r.weight);`
+**No relationship-property index.** `find_owners` uses `:File` PK
+lookup → outgoing `:OWNED_BY` traversal → in-memory sort by
+`r.weight` over the small per-file owner set (typically ≤ 20).
+A relationship-property index would only help full-scan predicates,
+not traversals from a starting node. Indexing the property would
+just add write cost on every MERGE without speeding up the read path.
 
 ### Read-only inputs (from GIM-186)
 
@@ -393,9 +627,23 @@ Added to `PalaceSettings` (`config.py`), prefix `PALACE_`:
 |----------|---------|-------------|
 | `PALACE_OWNERSHIP_BLAME_WEIGHT` | `0.5` | α in `weight = α × blame + (1-α) × churn`; range `[0.0, 1.0]` enforced; out of range → `extractor_config_error` |
 | `PALACE_OWNERSHIP_MAX_FILES_PER_RUN` | `50000` | hard cap on DIRTY set size; exceeded → `ownership_max_files_exceeded` |
+| `PALACE_OWNERSHIP_WRITE_BATCH_SIZE` | `2000` | paths per Phase-4 atomic-replace tx; range `[100, 10000]` enforced |
+| `PALACE_MAILMAP_MAX_BYTES` | `1048576` (1 MiB) | upper bound for `.mailmap` file; oversized → `mailmap_unsupported` log + identity passthrough |
 
 Reused from substrate (no change):
 - `PALACE_RECENCY_DECAY_DAYS = 30` — half-life for `exp(-Δdays/T)`
+
+**Substrate caps that do NOT apply to this extractor:**
+- `PALACE_MAX_OCCURRENCES_TOTAL`, `PALACE_MAX_OCCURRENCES_PER_PROJECT`,
+  `PALACE_MAX_OCCURRENCES_PER_SYMBOL` — these gate Tantivy occurrence
+  writes; ownership extractor does NOT write to Tantivy.
+- `PALACE_TANTIVY_*` — same reason.
+- `PALACE_IMPORTANCE_THRESHOLD_USE` — substrate eviction gate; not
+  invoked for ownership data.
+
+`check_phase_budget()` is still called at the start of each phase per
+substrate convention, but its node/edge cap inputs reflect ownership-
+specific counters (DIRTY size, edges_written), not Tantivy occurrences.
 
 ## 7. MCP tool contract
 
@@ -424,15 +672,36 @@ Reused from substrate (no change):
             "last_touched_at": "2026-04-12T18:42:01Z",
             "lines_attributed": 145,
             "commit_count": 12,
+            "canonical_via": "identity",   # or 'mailmap_existing' | 'mailmap_synthetic'
         },
         # ...
     ],
-    "total_authors": 14,    # before top_n filter
+    "total_authors": 14,           # before top_n filter
+    "no_owners_reason": null,      # set when owners is empty (see below)
+    "last_run_id": "uuid-...",     # :OwnershipFileState.last_run_id
     "last_run_at": "2026-05-06T08:30:11Z",
     "head_sha": "0a9c2363a39b94f14e5bcdc5e3db44233c8a349c",
     "alpha_used": 0.5,
 }
 ```
+
+**Empty-owners disambiguation.** When `owners=[]` and `total_authors=0`,
+`no_owners_reason` is one of:
+
+| Value | Meaning |
+|-------|---------|
+| `"binary_or_skipped"` | blame_walker raised on this path (binary, symlink, submodule) |
+| `"all_bot_authors"` | all blame attributions resolve to bot identities |
+| `"no_commit_history"` | `:File` exists but no `:TOUCHED` history (rare; possible if GIM-186 is partial) AND blame produced no humans |
+| `"file_not_yet_processed"` | `:File` exists but no `:OwnershipFileState` — the file has not been DIRTY in any run since the extractor started running. Caller should re-run the extractor. |
+
+**Performance SLO (soft).** For a project that has a successful
+bootstrap run on file in `:File` graph with `:OwnershipFileState`
+already populated: `find_owners` p99 latency target < 50 ms (warm
+Neo4j cache, top_n ≤ 20). Verified by integration test on the
+mini-fixture; CI failure threshold = p99 > 200 ms (loose to avoid
+flake). Production deviation is a follow-up perf investigation, not
+a hard merge gate.
 
 **Error envelopes:**
 
@@ -450,13 +719,30 @@ Reused from substrate (no change):
    `top_n_out_of_range` before hitting Neo4j.
 2. check `(:Project {slug})` exists — fail `project_not_registered`.
 3. check `(:OwnershipCheckpoint {project_id: $slug})` exists — fail
-   `ownership_not_indexed_yet`.
+   `ownership_not_indexed_yet` (extractor was never run for this
+   project).
 4. check `(:File {project_id: $slug, path: $file_path})` exists —
    fail `unknown_file` if not.
-5. **Success-empty when the file exists but has no `:OWNED_BY`** —
-   binary/skipped/all-bot files. Return `ok=True` with `owners=[]`,
-   `total_authors=0`. NOT an error — the file is known but has no
-   human ownership signal.
+5. fetch `:OwnershipFileState {project_id, path}` and `:OWNED_BY`
+   edges in one query:
+   ```cypher
+   MATCH (f:File {project_id: $slug, path: $file_path})
+   OPTIONAL MATCH (st:OwnershipFileState {project_id: $slug, path: $file_path})
+   OPTIONAL MATCH (f)-[r:OWNED_BY {source: 'extractor.code_ownership'}]->(a:Author)
+   WITH st, collect({r: r, a: a}) AS owner_rows
+   RETURN st, owner_rows
+   ```
+6. Compose response based on the join:
+   - `owner_rows` non-empty → success with sorted top_n owners,
+     `no_owners_reason=null`.
+   - `owner_rows` empty AND `st` not null → success-empty with
+     `no_owners_reason = st.no_owners_reason`,
+     `last_run_id = st.last_run_id`.
+   - `owner_rows` empty AND `st` is null → success-empty with
+     `no_owners_reason = "file_not_yet_processed"`,
+     `last_run_id = null`. Caller should re-run extractor; the file
+     was added to `:File` (e.g., by GIM-186 walking a new commit) but
+     the ownership extractor has not yet had it in a DIRTY set.
 
 ## 8. Error handling and idempotency
 
@@ -466,18 +752,43 @@ Reused from substrate (no change):
 |------|------|
 | `ownership_max_files_exceeded` | DIRTY > `PALACE_OWNERSHIP_MAX_FILES_PER_RUN` |
 | `git_history_not_indexed` | `count((c:Commit{project_id:$slug}))` = 0 |
-| `mailmap_parse_error` | `.mailmap` present but unparseable; logged, run continues without mailmap |
-| `blame_failed` | per-file warning only — NOT a run-failure code; aggregated in `run.error_message` summary if non-zero |
-| `head_unchanged_no_dirty` | informational success-shortcut, not a real error code |
+| `ownership_diff_failed` | `pygit2.Repository.diff(last_head_sha, current_head)` raises (corrupt local clone, fetch needed); fail-fast with the SHA pair in `error_message` |
+| `repo_head_invalid` | `pygit2.Repository(path).head` raises (detached HEAD with no fetch, corrupt refs) |
+| `mailmap_unsupported` | log-level info, NOT a run-failure code: pygit2.Mailmap unavailable OR `.mailmap` exceeds `PALACE_MAILMAP_MAX_BYTES` OR pygit2 raises while reading; resolver falls back to identity passthrough |
+| `blame_failed` | per-file warning only — NOT a run-failure code; aggregated count goes to `:IngestRun.error_message` summary if non-zero (path-only, NEVER author email) |
 
 Existing substrate codes used as-is: `repo_not_mounted`,
 `project_not_registered`, `extractor_config_error`,
 `extractor_runtime_error`.
 
+`:IngestRun.exit_reason` enum (replaces the rev1
+`head_unchanged_no_dirty` informational pseudo-code):
+
+| Value | Meaning |
+|-------|---------|
+| `success` | run completed and at least one batch wrote edges |
+| `no_change` | `last_head_sha == current_head` shortcut taken |
+| `no_dirty` | DIRTY ∪ DELETED = ∅ (rare; e.g., commits only changed binary files) |
+| `failed` | run aborted; `error_code` and `error_message` populated |
+
+### PII / email redaction (Security F6)
+
+Invariant: **`error_message` and INFO-level logs MUST NOT contain raw
+email addresses.** Mailmap and blame errors reference paths and SHAs,
+not authors. The author identity exposed in `:Author.email` and
+`:OWNED_BY` properties is the only authorized PII surface; logs and
+error envelopes are NOT.
+
+Audit-time check: a unit test scans the `extractors/code_ownership/`
+package source for `f"... {email}"` / `f"... {a.email}"` style
+log call-sites and fails CI on match (regex-based; conservative;
+maintainers explicitly opt-in via `# noqa: PII` if a log call must
+include an email — none should in v1).
+
 ### Idempotency invariants
 
 1. **No-op re-run** — same HEAD, no DIRTY → 0 edges touched; new
-   `:OwnershipRun` written for audit; checkpoint `last_completed_at`
+   `:IngestRun{source='extractor.code_ownership'}` written for audit; checkpoint `last_completed_at`
    advances.
 2. **Identical re-run** — same DIRTY set → `MERGE … SET …` rewrites
    identical property values; net change zero.
@@ -512,12 +823,12 @@ A successful run produces, given a project `gimle` mounted at
 
 1. **Bootstrap completes without checkpoint.** First-ever run with
    `last_head_sha = NULL` blames every file in HEAD tree; produces
-   `:OwnershipCheckpoint` and `:OwnershipRun{success=true}`; emits
+   `:OwnershipCheckpoint` and `:IngestRun{source: 'extractor.code_ownership', success: true, exit_reason: 'success'}`; emits
    `:OWNED_BY` edges for every non-binary, non-submodule file.
 
 2. **No-op re-run when HEAD unchanged.** Second run with identical
    HEAD writes 0 new edges, deletes 0 edges, but persists a new
-   `:OwnershipRun` and advances `last_completed_at`.
+   `:IngestRun{source='extractor.code_ownership'}` and advances `last_completed_at`.
 
 3. **Incremental refresh after a single-file edit.** After modifying
    one file and committing, re-run blames exactly one file; existing
@@ -558,7 +869,7 @@ A successful run produces, given a project `gimle` mounted at
    returns `top_n` owners ranked by `weight` for any file in
    `:File`; `total_authors` matches the count of `:OWNED_BY` edges
    for that file; `last_run_at` and `head_sha` match the most
-   recent successful `:OwnershipRun`.
+   recent successful `:IngestRun{source='extractor.code_ownership'}`.
 
 10. **Crash recovery is consistent.** A monkeypatched failure
     between Phase 3 and Phase 4 leaves checkpoint untouched; next
@@ -583,6 +894,31 @@ A successful run produces, given a project `gimle` mounted at
 14. **Schema bootstrap idempotent.** Two consecutive runs do not
     raise on constraint creation; `ensure_ownership_schema` uses
     `IF NOT EXISTS`.
+
+15. **Per-batch atomicity contract.** Integration test with
+    `PALACE_OWNERSHIP_WRITE_BATCH_SIZE=1` (forces one batch per file),
+    monkeypatched failure between batch 3 and batch 4. After re-run:
+    files in batches 1-3 reflect the new HEAD state; files in batches
+    4-N revert to old state via the next run's atomic-replace. No
+    file is left in a "half-deleted, half-written" state. Verified by
+    Cypher count: every `:File` in DIRTY has either zero `:OWNED_BY`
+    edges (old wiped, new not yet written → next-run fixes) OR a
+    fully consistent set with all required properties present.
+
+16. **Substrate `:IngestRun` visibility.** `palace.memory.lookup(
+    entity_type='IngestRun', filters={'source': 'extractor.code_ownership',
+    'project_id': '<slug>'})` returns the most recent successful run
+    with `exit_reason`, `head_sha`, `dirty_files_count`,
+    `mailmap_resolver_path` populated. No `:OwnershipRun` label exists
+    in the graph (rev1 design dropped in rev2).
+
+17. **`find_owners` empty-state disambiguation.** For each empty-state
+    case (binary, all-bot, no-history, file-not-yet-processed),
+    `find_owners` returns `ok=True, owners=[], total_authors=0` AND a
+    distinct `no_owners_reason` value. A file in `:File` not yet seen
+    by ownership extractor → `"file_not_yet_processed"` (last_run_id
+    is null). A binary file processed by ownership extractor →
+    `"binary_or_skipped"` (last_run_id matches a real `:IngestRun`).
 
 ## 10. Test plan
 
@@ -708,9 +1044,70 @@ Listed for future memory; not blocking this slice:
 
 | Risk | Mitigation |
 |------|------------|
-| `pygit2.blame` slow on huge files (>10k LOC) | Per-file timeout policy in `blame_walker.py`: log warn, skip; aggregate skipped count in `:OwnershipRun`. Document threshold (`PALACE_OWNERSHIP_BLAME_TIMEOUT_S` if needed — defer until measured). |
-| `.mailmap` parsing edge cases | pygit2 native API is the upstream-preferred path; if it bugs out, fall back to identity passthrough with `mailmap_parse_error` warn. Do not implement own parser. |
-| GIM-186 schema evolution may rename `:Commit.is_merge` semantics | Acceptance #7 covers this; drift caught at integration test time, not in production. |
+| `pygit2.blame` slow on huge files (>10k LOC) | Per-file blame is bounded by file size, not history depth. Wall-time on UW Android files TBD during plan validation; if any file exceeds 30 s we add `PALACE_OWNERSHIP_BLAME_TIMEOUT_S` then. v1 ships without a hard timeout to surface real signal. |
+| `.mailmap` is checked-in, untrusted content | pygit2 is the only parser; size-bounded by `PALACE_MAILMAP_MAX_BYTES`; oversized → identity passthrough. Resolver path logged on every run. |
+| Bot-laundering via `git config user.name "github-actions[bot]"` | GIM-186 bot detection is heuristic. A human can spoof bot-name (or vice versa, an actual bot uses a human name). v1 trusts GIM-186's classification and documents the limitation in the operator runbook. Spot-check guidance: after bootstrap run, `palace.code.find_owners` for high-stake files; if a stranger appears, audit by querying their `:Commit` history. |
+| Email leakage in error envelopes / logs | Hard rule: `error_message` and INFO logs MUST NOT contain raw emails (§8). Audited by a unit test that greps the package source. |
+| Multi-tenant PII enumeration | `find_owners` enumerates committer emails of any registered project; project-level ACLs are not in scope here. Documented in §1 trust-model statement and `docs/runbooks/code-ownership.md`. |
+| GIM-186 schema evolution (`:Commit.is_merge`, `:Author.is_bot`) | Acceptance #6/#7 cover the current contract; drift caught at integration test time. If GIM-186 changes semantics, ownership extractor updates in lockstep. |
 | α tuning unclear without data | `alpha_used` provenance lets us A/B retroactively. Followup tuning slice if v1 yields complaints. |
+| Long-tail authors (drive-by typo-fixes) inflate `total_authors` | `find_owners.top_n` filters; if operators want stricter cuts, add `min_weight` knob in v2. v1 ships unfiltered to preserve signal. |
+
+## 15. Privacy / PII
+
+### Inventory
+
+| Surface | PII content | Source |
+|---------|-------------|--------|
+| `:Author.email` | raw committer email | GIM-186 (read-only here) |
+| `:Author.name` | committer display name | GIM-186 (read-only here) |
+| `(:File)-[:OWNED_BY]->(:Author)` traversal | "person X has touched file Y, with Z line attribution" | this extractor |
+| `find_owners` response | enumerated emails per file | this extractor |
+| `:IngestRun.error_message` | path / SHA only — NEVER email (enforced §8 invariant) | this extractor |
+| `INFO log lines` | path / SHA only — NEVER email (enforced §8 invariant) | this extractor |
+| `.mailmap` resolver state | parsed in-memory only; never serialized to graph | this extractor |
+
+### Erasure (right-to-be-forgotten)
+
+To erase author X's footprint after they exercise GDPR Art. 17 or
+similar:
+
+```cypher
+// 1. Identify the canonical Author node.
+MATCH (a:Author {provider: 'git', identity_key: $email_lc})
+WITH a
+
+// 2. Detach all :OWNED_BY edges sourced by ownership extractor.
+//    (Author also has :AUTHORED_BY/:COMMITTED_BY from GIM-186 —
+//    those need a separate erasure pass on :Commit if required.)
+OPTIONAL MATCH (a)<-[r:OWNED_BY {source: 'extractor.code_ownership'}]-()
+DELETE r
+
+// 3. Optionally delete the Author node entirely if no other references.
+//    WARNING: this also removes their git_history attribution.
+WITH a
+OPTIONAL MATCH (a)<-[any]-()
+WITH a, count(any) AS remaining
+WHERE remaining = 0
+DELETE a
+```
+
+A cleaner flow: rewrite `:Author.email`/`:Author.name` to a tombstone
+(e.g., `redacted-<hash>`) instead of deleting; keeps git-history graph
+shape intact. Operator decides per request.
+
+### Retention
+
+`:Author` and `:OWNED_BY` accumulate indefinitely; v1 has no retention
+sweep. Operators handling PII should run the erasure Cypher above on
+demand. A retention-policy slice (TTL on `:Author.last_seen_at`,
+automatic edge pruning) is a Phase 5 product candidate.
+
+### Runbook reference
+
+`docs/runbooks/code-ownership.md` mirrors this section operationally:
+how to look up a person across `:Author.identity_key` (mailmap-aware),
+how to apply the erasure Cypher safely, how to re-run the extractor
+after a manual `:Author` rewrite.
 
 ---
