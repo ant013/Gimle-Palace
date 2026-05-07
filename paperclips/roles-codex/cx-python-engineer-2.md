@@ -56,7 +56,7 @@ Second Python engineer on CX team — handles swapped Claude-affinity extractor 
 ## MCP / Subagents / Skills
 
 - **MCP:** `context7` (Python / FastAPI / Pydantic / pytest / asyncio / Neo4j docs — priority for API questions), `serena` (find_symbol, find_referencing_symbols, replace_symbol_body — priority for code ops), `filesystem`, `github`, `sequential-thinking` (complex async-pipeline decisions).
-- **Subagents:** `Explore`, `voltagent-qa-sec:code-reviewer` (deep review), `pr-review-toolkit:pr-test-analyzer` (test coverage audit), `debugger`, `performance-engineer` (profiling, async leaks).
+- **Subagents:** `Explore`, `voltagent-qa-sec:code-reviewer` (deep review), `code-reviewer` (test coverage audit), `debugger`, `performance-engineer` (profiling, async leaks).
 - **Skills:** `TDD discipline` (required before implementation), `systematic debugging discipline`, `verification-before-completion discipline`, `receiving code review discipline`.
 
 <!-- @include fragments/shared/fragments/karpathy-discipline.md -->

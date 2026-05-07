@@ -18,13 +18,16 @@
     {"roleId": "claude:security-auditor","target": "claude","path": "paperclips/dist/security-auditor.md","bytes": 28876,"lines": 525,"tokenEstimate": 7219},
     {"roleId": "claude:technical-writer","target": "claude","path": "paperclips/dist/technical-writer.md","bytes": 22828,"lines": 413,"tokenEstimate": 5707},
     {"roleId": "codex:codex-architect-reviewer","target": "codex","path": "paperclips/dist/codex/codex-architect-reviewer.md","bytes": 29706,"lines": 581,"tokenEstimate": 7427},
+    {"roleId": "codex:cx-blockchain-engineer","target": "codex","path": "paperclips/dist/codex/cx-blockchain-engineer.md","bytes": 25623,"lines": 564,"tokenEstimate": 6406},
     {"roleId": "codex:cx-code-reviewer","target": "codex","path": "paperclips/dist/codex/cx-code-reviewer.md","bytes": 8347,"lines": 222,"tokenEstimate": 2087},
     {"roleId": "codex:cx-cto","target": "codex","path": "paperclips/dist/codex/cx-cto.md","bytes": 26256,"lines": 458,"tokenEstimate": 6564},
     {"roleId": "codex:cx-infra-engineer","target": "codex","path": "paperclips/dist/codex/cx-infra-engineer.md","bytes": 31644,"lines": 574,"tokenEstimate": 7911},
     {"roleId": "codex:cx-mcp-engineer","target": "codex","path": "paperclips/dist/codex/cx-mcp-engineer.md","bytes": 27876,"lines": 526,"tokenEstimate": 6969},
     {"roleId": "codex:cx-python-engineer","target": "codex","path": "paperclips/dist/codex/cx-python-engineer.md","bytes": 29544,"lines": 591,"tokenEstimate": 7386},
+    {"roleId": "codex:cx-python-engineer-2","target": "codex","path": "paperclips/dist/codex/cx-python-engineer-2.md","bytes": 28133,"lines": 671,"tokenEstimate": 7034},
     {"roleId": "codex:cx-qa-engineer","target": "codex","path": "paperclips/dist/codex/cx-qa-engineer.md","bytes": 30964,"lines": 580,"tokenEstimate": 7741},
     {"roleId": "codex:cx-research-agent","target": "codex","path": "paperclips/dist/codex/cx-research-agent.md","bytes": 23089,"lines": 425,"tokenEstimate": 5773},
+    {"roleId": "codex:cx-security-auditor","target": "codex","path": "paperclips/dist/codex/cx-security-auditor.md","bytes": 29454,"lines": 651,"tokenEstimate": 7364},
     {"roleId": "codex:cx-technical-writer","target": "codex","path": "paperclips/dist/codex/cx-technical-writer.md","bytes": 22808,"lines": 413,"tokenEstimate": 5702}
   ]
 }

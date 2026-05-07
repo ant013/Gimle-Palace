@@ -54,7 +54,7 @@ profiles: [core, task-start, implementation, handoff]
 
 - **MCP:** `context7` (Docker / Kotlin / Swift docs), `serena` (find_symbol for wallet code patterns, find_referencing_symbols for chain abstraction analysis), `filesystem`, `github`.
 - **Subagents:** `Explore`, `voltagent-research:search-specialist` (CVE landscape lookup), `general-purpose` (fallback for Kotlin/Swift code reading when language-specialist plugins not enabled).
-- **Skills:** `superpowers:test-driven-development` (invariant tests on crypto code).
+- **Skills:** `TDD discipline` (invariant tests on crypto code).
 
 ## Advisory Output Checklist
 
