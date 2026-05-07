@@ -292,6 +292,15 @@ invoked via MCP tool `palace.ingest.run_extractor(name, project)`.
   refresh; checkpoint in `:GitHistoryCheckpoint`. Requires `PALACE_GITHUB_TOKEN`
   env var for Phase 2 (PR data); Phase 1 (commits) runs without it. Full re-walk
   on force-push detected automatically. See `docs/runbooks/git-history-harvester.md`.
+- `code_ownership` — Code ownership extractor (GIM-216, Roadmap #32). Reads
+  `:Author` / `:Commit` / `:TOUCHED` from `git_history` (GIM-186) + does
+  per-file `pygit2.blame` on HEAD. Writes `(:File)-[:OWNED_BY]->(:Author)`
+  edges with `weight = α × blame_share + (1-α) × recency_churn_share`
+  (α default 0.5, env `PALACE_OWNERSHIP_BLAME_WEIGHT`). Per-file
+  incremental refresh via `:OwnershipCheckpoint`. Sidecar
+  `:OwnershipFileState` for `find_owners` empty-state diagnostics.
+  `.mailmap`-aware via pygit2 (no custom parser). Query via
+  `palace.code.find_owners(file_path, project, top_n=5)`.
 - `hotspot` — Code-Complexity × Churn Hotspot extractor (GIM-195, Roadmap #44).
   Walks repo with stop-list, calls `lizard` per-batch (50 files), aggregates
   per-function CCN to per-file `ccn_total`, joins with `git_history`'s
@@ -308,6 +317,14 @@ invoked via MCP tool `palace.ingest.run_extractor(name, project)`.
   and `PublicApiSymbol` when those backing facts exist. v1 does not execute a
   live Swift helper and treats Kotlin/Compose only as structured skip evidence.
   See `docs/runbooks/reactive-dependency-tracer.md`.
+- `cross_repo_version_skew` — Cross-repo version skew (GIM-218, Roadmap #39).
+  Reads `:Project-[:DEPENDS_ON]->:ExternalDependency` from `dependency_surface`
+  (GIM-191) — fully read-only; writes only one `:IngestRun` per call. Hybrid:
+  small extractor (audit/observability via `:IngestRun` extras) + live MCP
+  tool `palace.code.find_version_skew` for real-time aggregation. Project
+  mode finds intra-module skew via `r.declared_in`; bundle mode aggregates
+  across `:Bundle{name}-[:HAS_MEMBER]` members. See limitations in
+  `docs/runbooks/cross-repo-version-skew.md`.
 
 ### Operator workflow: Dependency surface
 
@@ -501,6 +518,35 @@ graph populated by `git_history`.
 `:File.hotspot_score`. Idempotency invariant 4 (zero net writes on
 re-run) holds only when window is unchanged.
 
+### Operator workflow: Code ownership
+
+Prereq: GIM-186 `git_history` extractor must have run for the project.
+
+1. Run the extractor:
+   ```
+   palace.ingest.run_extractor(name="code_ownership", project="gimle")
+   ```
+2. Query owners:
+   ```
+   palace.code.find_owners(file_path="services/palace-mcp/...", project="gimle", top_n=5)
+   ```
+
+Optional: place `.mailmap` in the repo root to dedupe split identities
+(standard git format — see `git help check-mailmap`).
+
+Tunable knobs (`.env`):
+- `PALACE_OWNERSHIP_BLAME_WEIGHT` (default 0.5) — α in scoring formula
+- `PALACE_OWNERSHIP_MAX_FILES_PER_RUN` (default 50000)
+- `PALACE_OWNERSHIP_WRITE_BATCH_SIZE` (default 2000)
+- `PALACE_MAILMAP_MAX_BYTES` (default 1 MiB)
+
+Limitations:
+- File renames lose history pre-rename (pygit2 blame is path-bound)
+- Submodules and binary files are skipped (`no_owners_reason='binary_or_skipped'`)
+- Bundle support is not yet wired (run per-project for HS Kits)
+- PII: any caller with `palace.code.*` permissions can enumerate
+  contributor emails. See `docs/runbooks/code-ownership.md` for trust model.
+
 ### Running an extractor
 
 From Claude Code (or any MCP client connected to palace-mcp):
@@ -585,6 +631,35 @@ All vars in `PalaceSettings` (config.py), prefix `PALACE_`:
 | `PALACE_TANTIVY_INDEX_PATH` | (required) | Host path for Tantivy index |
 | `PALACE_TANTIVY_HEAP_MB` | 100 | Tantivy writer heap in MB |
 | `PALACE_SCIP_INDEX_PATHS` | `{}` | JSON map `{slug: path}` for SCIP extractors |
+
+### Operator workflow: Cross-repo version skew
+
+Prereq: `dependency_surface` (GIM-191) has run for the target project /
+every member of the target bundle.
+
+1. Run the extractor (writes one :IngestRun per call):
+   ```
+   palace.ingest.run_extractor(name="cross_repo_version_skew", project="uw-android")
+   # or for a bundle:
+   palace.ingest.run_extractor(name="cross_repo_version_skew", bundle="uw-ios")
+   ```
+
+2. Query skew:
+   ```
+   palace.code.find_version_skew(bundle="uw-ios", min_severity="minor", top_n=20)
+   ```
+
+Tunable knobs (`.env`):
+- `PALACE_VERSION_SKEW_TOP_N_MAX` (default 500)
+- `PALACE_VERSION_SKEW_QUERY_TIMEOUT_S` (default 30)
+
+Limitations:
+- Project mode for canonical-Gradle / SPM / Python projects finds zero
+  intra-module skew (aliases / single manifest = same version per scope).
+  Use bundle-of-1 for forward compatibility.
+- Compares resolved_version only; declared-constraint skew is followup.
+- Calendar versions / git-shas / custom schemes classify as 'unknown'.
+- No Renovate "latest version" data; no OWASP CVE enrichment.
 
 ### Known limitations
 

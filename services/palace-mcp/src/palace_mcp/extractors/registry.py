@@ -8,7 +8,11 @@ no thread-safety needed.
 from __future__ import annotations
 
 from palace_mcp.extractors.base import BaseExtractor
+from palace_mcp.extractors.code_ownership.extractor import CodeOwnershipExtractor
 from palace_mcp.extractors.codebase_memory_bridge import CodebaseMemoryBridgeExtractor
+from palace_mcp.extractors.cross_repo_version_skew.extractor import (
+    CrossRepoVersionSkewExtractor,
+)
 from palace_mcp.extractors.cross_module_contract import CrossModuleContractExtractor
 from palace_mcp.extractors.dead_symbol_binary_surface.extractor import (
     DeadSymbolBinarySurfaceExtractor,
@@ -32,6 +36,7 @@ from palace_mcp.extractors.symbol_index_typescript import SymbolIndexTypeScript
 
 EXTRACTORS: dict[str, BaseExtractor] = {
     "heartbeat": HeartbeatExtractor(),
+    "code_ownership": CodeOwnershipExtractor(),
     "codebase_memory_bridge": CodebaseMemoryBridgeExtractor(),
     "cross_module_contract": CrossModuleContractExtractor(),
     "dead_symbol_binary_surface": DeadSymbolBinarySurfaceExtractor(),
@@ -46,6 +51,7 @@ EXTRACTORS: dict[str, BaseExtractor] = {
     "reactive_dependency_tracer": ReactiveDependencyTracerExtractor(),
     "git_history": GitHistoryExtractor(),
     "hotspot": HotspotExtractor(),
+    "cross_repo_version_skew": CrossRepoVersionSkewExtractor(),
 }
 
 

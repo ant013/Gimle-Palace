@@ -44,8 +44,12 @@ from pydantic import BaseModel, ValidationError
 from starlette.applications import Starlette
 
 from palace_mcp.code.find_hotspots import find_hotspots as _find_hotspots_impl
+from palace_mcp.code.find_owners import find_owners as _find_owners_impl
 from palace_mcp.code.list_functions import list_functions as _list_functions_impl
 from palace_mcp.code_composite import register_code_composite_tools
+from palace_mcp.extractors.cross_repo_version_skew.find_version_skew import (
+    register_version_skew_tools,
+)
 from palace_mcp.code_router import register_code_tools
 from palace_mcp.extractors import registry as _extractor_registry
 from palace_mcp.extractors.bundle_state import get_bundle_ingest_state
@@ -783,6 +787,10 @@ register_code_composite_tools(
     # os.environ.get mirrors the same default declared in Settings.palace_cm_default_project.
     default_project=os.environ.get("PALACE_CM_DEFAULT_PROJECT", "repos-gimle"),
 )
+register_version_skew_tools(
+    _tool,
+    default_project=os.environ.get("PALACE_CM_DEFAULT_PROJECT", "repos-gimle"),
+)
 
 
 @_tool(
@@ -835,6 +843,33 @@ async def palace_code_list_functions(
         }
     return await _list_functions_impl(
         driver=driver, project=project, path=path, min_ccn=min_ccn
+    )
+
+
+@_tool(
+    name="palace.code.find_owners",
+    description=(
+        "Top-N code ownership for a file. Returns ranked owners with "
+        "weights combining blame_share + recency-weighted churn share. "
+        "Empty owners is success — check no_owners_reason to distinguish "
+        "binary/all-bot/no-history/file-not-yet-processed."
+    ),
+)
+async def palace_code_find_owners(
+    file_path: str,
+    project: str,
+    top_n: int = 5,
+) -> dict[str, Any]:
+    """Find top-N owners of a file by blame share + recency-weighted churn."""
+    driver = _driver
+    if driver is None:
+        return {
+            "ok": False,
+            "error_code": "driver_unavailable",
+            "message": "Neo4j driver not initialised",
+        }
+    return await _find_owners_impl(
+        driver=driver, file_path=file_path, project=project, top_n=top_n
     )
 
 

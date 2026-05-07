@@ -112,142 +112,126 @@ See `phase-review-discipline.md` § Phase 3.2.
 
 **Skills:** none mandatory at runtime — adversarial review is inline.
 
-## Coding Discipline
+## Coding discipline (iron rules)
 
-### 1. Think Before Coding
+### 1. Think before coding — not after
 
-Before implementation:
+- **State assumptions.** Before implementing, write what you're assuming. Unsure → ask, don't guess.
+- **Multiple interpretations?** Show options, don't pick silently. Let the requester decide.
+- **Simpler approach exists?** Say so. Push-back is welcome — blind execution is not.
+- **Don't understand?** Stop. Name what's unclear. Ask. Don't write code "on a hunch".
 
-- State assumptions.
-- If unclear, ask instead of guessing.
-- If multiple interpretations exist, present options and wait — don't pick silently.
-- If a simpler approach exists, say so. Push-back is welcome; blind execution is not.
-- If you don't understand the task, stop and clarify.
+### 2. Minimum code — zero speculation
 
-### 2. Minimum Code
+- **Only what was asked.** Not a single feature beyond the task.
+- **No abstractions for one-shot code.** Three similar lines beat a premature abstraction.
+- **No "flexibility" / "configurability"** that nobody requested.
+- **No error handling for impossible scenarios.** Trust internal code and framework guarantees.
+- **200 lines when 50 fits?** Rewrite. Less code, fewer bugs.
 
-- Implement only what was asked.
-- Don't add speculative features, flexibility, configurability, or abstractions.
-- Three similar lines beat premature abstraction.
-- Don't add error handling for impossible internal states (trust framework guarantees).
-- Keep code as small as the task allows. 200 lines when 50 fits → rewrite.
+Test: *"Would a senior call this overcomplicated?"* — if yes, simplify.
 
-Self-check: would a senior call this overcomplicated? If yes, simplify.
+### 3. Surgical changes — only what's needed
 
-### 3. Surgical Changes
+- **Don't "improve" adjacent code,** comments, or formatting — even if your hands itch.
+- **Don't refactor what isn't broken.** PR = task, not a cleanup excuse.
+- **Match existing style,** even if you'd do it differently.
+- **Spot dead code?** Mention it in a comment — don't delete silently.
+- **Your changes created orphans?** Remove yours (unused imports / vars). Don't touch others'.
 
-- Don't improve, refactor, reformat, or clean adjacent code unless required.
-- Don't refactor what isn't broken — PR = task, not cleanup excuse.
-- Match existing style.
-- Remove only unused code introduced by your own changes.
-- If unrelated dead code is found, mention it; don't delete silently.
+Test: *every changed line traces to the task*. Line not explained by the task → revert.
 
-Self-check: every changed line must trace directly to the task.
+### 4. Goal → criterion → verification
 
-### 4. Goal, Criteria, Verification
+Before starting, transform the task into verifiable goals:
+- "Add validation" → "write tests for invalid input, then make them pass"
+- "Fix the bug" → "write a test reproducing the bug, then fix"
+- "Refactor X" → "tests green before and after"
 
-Before work, define:
-
-- Goal: what changes.
-- Acceptance criteria: how "done" is judged.
-- Verification: exact test, command, trace, or observation.
-
-Examples:
-
-- "Add validation" → write tests for invalid input, then make pass.
-- "Fix the bug" → write a test reproducing it, then fix.
-- "Refactor X" → tests green before and after.
-
-For multi-step work:
-
+Multi-step tasks — plan with per-step verification:
 ```
-1. [Step] → check: [exact verification]
-2. [Step] → check: [exact verification]
+1. [Step] → check: [what exactly you verify]
+2. [Step] → check: [what exactly you verify]
 ```
 
-Strong criteria → autonomous work. Weak ("make it work") → ask, don't assume.
+Strong criteria → autonomous work. Weak ("make it work") → constant clarification. Weak criteria → ask, don't assume.
 
-## Escalation to Board when blocked
+## Escalating to Board when blocked
 
-If you cannot progress on an issue, do not improvise, pivot, or create preparatory issues. Escalate and wait.
+If you can't progress on an issue — **don't improvise, don't pivot to something else, don't create "preparatory" issues**. Escalation protocol:
 
-### Escalate when
+### When to escalate
 
-- Spec unclear or contradictory.
-- Dependency, tool, or access missing.
-- Required agent unavailable or unresponsive.
-- Obstacle outside your responsibility.
-- Execution lock conflict + lock-holder unresponsive (see §HTTP 409 in `heartbeat-discipline.md`).
-- Done/success criteria unclear.
+- Unclear / contradictory spec — no single interpretation
+- Missing dependency / tool / access
+- Dependent agent unavailable or unresponsive
+- Technical obstacle outside your area of responsibility
+- Execution lock conflict (see §HTTP 409 in `heartbeat-discipline.md`) and lock-holder doesn't respond
+- Success criteria fuzzy — unclear what "done" means
 
-### Escalation steps
+### How to escalate
 
-1. PATCH `/api/issues/{id}` with `status=blocked`.
-2. Comment with:
-   - Exact blocker (not "stuck", but "can't X because Y").
-   - What you tried.
-   - What you need from Board.
-   - `@Board ` with trailing space.
-3. Wait for Board. Do not switch tasks without explicit permission.
+1. **Mark issue `blocked`** via `PATCH /api/issues/{id}` with `status=blocked`.
+2. **Comment on issue:**
+   - Specifically what blocks (not "stuck", but "can't X because Y")
+   - What you've tried (proof of effort)
+   - What you need from Board (decision / resource / unblock)
+   - `@Board` in the body (trailing space after name)
+3. **Wait.** Don't switch to another task without explicit Board permission.
 
-### Do not
+### What NOT to do when blocked
 
-- Change scope via workaround.
-- Create prep issues to stay busy.
-- Do another role's work (CTO blocked on engineer ≠ writes code; engineer blocked on review ≠ self-reviews).
-- Pivot to another issue without Board approval — old one stays in limbo.
-- Close as "not actionable" without Board visibility.
+- **DON'T** invent a workaround that changes task scope.
+- **DON'T** create new issues with "preparatory tasks" just to stay busy.
+- **DON'T** do someone else's work "while no one is around" (CTO blocked on engineer ≠ writes code; engineer blocked on review ≠ self-reviews).
+- **DON'T** pivot to a neighboring issue without Board confirm — the old one stays open in limbo.
+- **DON'T** silently close an issue as "not actionable" — Board must see the blocker.
 
-### Comment format
+### Escalation comment format
 
 ```
 @Board blocked:
 
 **What's needed:** [quote from description]
-**Blocker:** [specific reason progress is impossible]
-**Tried:** [what was tested/attempted]
-**Need from Board:** [decision/resource/unblock needed]
+**Blocker:** [specifically what prevents progress]
+**Tried:** [list of what you tested]
+**Need from Board:** [unblock / decision / resource]
 ```
 
-### Blocker self-check
+### Self-check: "am I really blocked, or making up an excuse"
 
-- Blocked 2+ hours without escalation comment → process failure.
-- Any workaround preserves scope → not a blocker.
-- Concrete question for Board exists → real blocker.
-- Only "kind of hard" → decompose further, not a blocker.
+- Issue 2+ hours in `blocked` without escalation comment → **not** a blocker, that's procrastination.
+- "Blocker" can be bypassed by any means (even a dirty workaround) → not a blocker, that's reluctance.
+- Can formulate a concrete question to Board → real blocker.
+- Can only say "kind of hard" → not a blocker, decompose further.
 
-## Pre-work Discovery
+## Pre-work discovery (before any task)
 
-Before coding/decomposing, verify the work doesn't already exist:
+Before writing code or decomposing — verify the feature / fix doesn't already exist:
 
-1. `git fetch --all`
-2. `git log --all --grep="<keyword>" --oneline`
-3. `gh pr list --state all --search "<keyword>"`
-4. `serena find_symbol` / `get_symbols_overview` for existing implementations.
-5. `docs/` for existing specs.
-6. Paperclip issues for active ownership.
+1. `git fetch --all && git log --all --grep="<keyword>" --oneline`
+2. `gh pr list --state all --search "<keyword>"` — open and merged
+3. `serena find_symbol` / `get_symbols_overview` — existing implementations
+4. `docs/` — spec may already be written
+5. Paperclip issues — is someone already working on it?
 
-Already exists → close as `duplicate` with link, or reframe as integration from existing branch/PR/work.
+**If it exists** — close as `duplicate` with a link, or reframe ("integrate X from feature/Y").
 
-## External Library API Rule
+## External library reference rule
 
-Any spec referencing an external library API must be backed by live verification dated within 30 days.
+Any spec line referencing an external library API MUST be backed by a live-verified spike under `docs/research/<library-version>-spike/` or a `reference_<lib>_api_truth.md` memory file dated within 30 days.
 
-Acceptable proof:
+CTO Phase 1.1 greps spec for `from <lib> import` / `<lib>.<method>` and verifies a spike exists. Missing → REQUEST CHANGES.
 
-- Spike under `docs/research/<library-version>-spike/`
-- Memory file `reference_<lib>_api_truth.md`
+Why: N+1a reverted because spec referenced `graphiti-core 0.4.3` API that didn't exist in installed version.
 
-Applies to lines like `from <lib> import ...` or `<lib>.<method>`. CTO Phase 1.1 greps spec; missing proof → request changes.
+## Existing-field semantic-change rule
 
-## Existing Field Semantic Changes
+Spec changing semantics of an existing field MUST include: output of `grep -r '<field-name>' src/` + list of which call-sites change.
 
-If a spec changes semantics of an existing field, include:
+CTO Phase 1.1 re-runs grep against HEAD; REQUEST CHANGES if missing or stale.
 
-- `grep -r '<field-name>' src/` output
-- List of call sites whose behavior changes.
-
-CTO Phase 1.1 re-runs grep against HEAD; missing/stale → request changes.
+Why: N+1a.1 §3.10 changed `:Project.name` semantics without auditing `UPSERT_PROJECT` callers.
 
 ## Git workflow (iron rule)
 
@@ -322,40 +306,50 @@ Author cannot approve own PR (GitHub global rule). If `required_pull_request_rev
 
 ## Worktree discipline
 
-Paperclip creates a git worktree per issue. Work only inside it:
+Paperclip creates a git worktree per issue with an execution workspace. Work **only** inside that worktree:
 
-- `cwd` at wake = worktree path. Never `cd` into primary repo.
-- No cross-branch git (`checkout main`, `rebase` from main repo).
-- Commit/push/PR — all from the worktree.
-- Parallel agents in separate worktrees; don't read neighbors' files (may be mid-work).
-- Post-merge — paperclip cleans worktree itself; don't `git worktree remove` manually.
+- `cwd` at wake = worktree path. Never `cd` into the primary repo directory.
+- Don't run `git` commands that change other branches (`checkout main`, `rebase origin/develop` from main repo).
+- Commit changes to the worktree branch, push, open PR — all from the worktree.
+- Parallel agents work in **separate** worktrees — don't read files from neighbors' worktrees (they may be in an invalid state mid-work).
+- After PR merge — paperclip cleans the worktree itself. Don't run `git worktree remove` yourself.
 
 ## Shared codebase memory
 
-Worktree isolation ≠ memory isolation. Claude/CX teams share code knowledge:
+Worktree isolation does not mean memory isolation. Claude and CX/Codex teams share the same code knowledge:
 
-- `palace.code.*` / codebase-memory with project `repos-gimle` for indexed search/architecture/impact.
-- `serena` only for current worktree + branch state.
-- Durable findings: write via `palace.memory.decide(...)`, read via `palace.memory.lookup(...)`.
-- Each finding needs provenance: issue id, branch, commit SHA, source path/symbol, `canonical|provisional`, evidence.
-- `canonical` = grounded in `origin/develop` or merged commits. `provisional` = branch-local hints needing local verification.
-- Never treat other team's uncommitted files as project truth — share via commits/PRs/comments/`palace.memory`.
+- Use `palace.code.*` / codebase-memory with project `repos-gimle` for indexed code search, architecture, snippets, and impact.
+- Use `serena` only for the current worktree (`cwd`) and current branch state.
+- Write durable findings through `palace.memory.decide(...)`; read them through `palace.memory.lookup(...)`.
+- Each written finding needs provenance: issue id, branch, commit SHA when available, source path or symbol, `canonical` or `provisional`, and verification evidence.
+- Treat `canonical` as facts grounded in `origin/develop` or merged commits. Treat `provisional` as branch-local hints that require local verification.
+- Never treat another team's uncommitted worktree files as project truth. Share cross-team facts through commits, PRs, issue comments, or `palace.memory`.
 
 ## Cross-branch carry-over forbidden
 
-No cherry-pick / copy-paste between parallel slice branches. If Slice B needs Slice A, declare `depends_on: A` in spec, rebase on develop after A merges. CR enforces: every changed file must be in slice's declared scope.
+Never carry commits between parallel slice branches via cherry-pick or
+copy-paste. If Slice B's tests need Slice A, declare `depends_on: A`
+in spec and rebase on develop after A merges.
 
-Why: GIM-75/76 (2026-04-24) — see `docs/postmortems/2026-04-26-fragment-extraction-postmortems.md`.
+Why: GIM-75/76 incident (2026-04-24) — see `docs/postmortems/2026-04-26-fragment-extraction-postmortems.md`.
 
-## QA: restore checkout to develop after Phase 4.1
+CR enforcement: every changed file must be in slice's declared scope.
 
-Before run exit, on iMac:
+## QA returns checkout to develop after Phase 4.1
+
+Before run exit, QA on iMac verifies the current team checkout or issue worktree
+returns to the expected integration branch state:
 
     git switch develop && git pull --ff-only
 
-Verify `git branch --show-current` = `develop`. Don't `cd` into another team's checkout — Claude/CX may have separate roots; use yours.
+Verify: `git branch --show-current` outputs `develop`.
 
-Why: team checkouts drive their own deploys/observability. GIM-48 (2026-04-18).
+Do not `cd` into another team's checkout to do this. Claude and CX/Codex teams
+may have separate workspace roots; use the root or worktree assigned to your
+current run.
+
+Why: team checkouts drive deploys/observability for their own runtime. Incident
+GIM-48 (2026-04-18).
 
 ## Wake discipline
 
@@ -487,6 +481,20 @@ Formal mention `[@](agent://uuid)` only — not plain `@Role`. Plain works for c
 - [ ] Local green (lint + typecheck + test, language-appropriate)
 - [ ] CI running on FB (or auto-triggered by push)
 - [ ] Handoff comment includes commit SHA + branch link
+
+### Exit Protocol — after handoff PATCH succeeds
+
+After the handoff PATCH returns 200 and GET-verify confirms `assigneeAgentId == <next>`:
+
+- **Stop tool use immediately.** The handoff PATCH is your last tool call. No more bash, curl, serena, gh, or any other tool — even read-only ones.
+- Output your final summary as plain assistant text, then end the turn.
+- Do **not** re-fetch the issue, do **not** post a second confirmation comment, do **not** check git status. Your phase is closed.
+
+Why: between the PATCH (which changes assignee away from you) and your subprocess exit, paperclip's run-supervisor sees the issue is no longer yours and SIGTERMs the process. Any tool call in that window dies mid-flight, the run is marked `claude_transient_upstream` (Exit 143), and a retry is queued — only to be cancelled with `issue_reassigned` once the next agent picks up.
+
+Evidence: GIM-216 — 11 successful handoffs misclassified as failures because agents kept making tool calls after the PATCH. Pre-slim baseline GIM-193 had zero such failures.
+
+If post-handoff cleanup is genuinely needed (e.g. local worktree state), do it BEFORE the handoff PATCH, not after.
 
 ### Pre-close checklist (CTO → status=done)
 

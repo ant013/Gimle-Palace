@@ -75,207 +75,219 @@ Plans **must** pass CodeReviewer BEFORE implementation.
 - **Subagents:** `Explore`, `code-reviewer`, `voltagent-qa-sec:code-reviewer`, `pr-review-toolkit:pr-test-analyzer`.
 - **Skills:** `superpowers:writing-plans` (before any new feature plan).
 
-## Escalation to Board when blocked
+## Escalating to Board when blocked
 
-If you cannot progress on an issue, do not improvise, pivot, or create preparatory issues. Escalate and wait.
+If you can't progress on an issue — **don't improvise, don't pivot to something else, don't create "preparatory" issues**. Escalation protocol:
 
-### Escalate when
+### When to escalate
 
-- Spec unclear or contradictory.
-- Dependency, tool, or access missing.
-- Required agent unavailable or unresponsive.
-- Obstacle outside your responsibility.
-- Execution lock conflict + lock-holder unresponsive (see §HTTP 409 in `heartbeat-discipline.md`).
-- Done/success criteria unclear.
+- Unclear / contradictory spec — no single interpretation
+- Missing dependency / tool / access
+- Dependent agent unavailable or unresponsive
+- Technical obstacle outside your area of responsibility
+- Execution lock conflict (see §HTTP 409 in `heartbeat-discipline.md`) and lock-holder doesn't respond
+- Success criteria fuzzy — unclear what "done" means
 
-### Escalation steps
+### How to escalate
 
-1. PATCH `/api/issues/{id}` with `status=blocked`.
-2. Comment with:
-   - Exact blocker (not "stuck", but "can't X because Y").
-   - What you tried.
-   - What you need from Board.
-   - `@Board ` with trailing space.
-3. Wait for Board. Do not switch tasks without explicit permission.
+1. **Mark issue `blocked`** via `PATCH /api/issues/{id}` with `status=blocked`.
+2. **Comment on issue:**
+   - Specifically what blocks (not "stuck", but "can't X because Y")
+   - What you've tried (proof of effort)
+   - What you need from Board (decision / resource / unblock)
+   - `@Board` in the body (trailing space after name)
+3. **Wait.** Don't switch to another task without explicit Board permission.
 
-### Do not
+### What NOT to do when blocked
 
-- Change scope via workaround.
-- Create prep issues to stay busy.
-- Do another role's work (CTO blocked on engineer ≠ writes code; engineer blocked on review ≠ self-reviews).
-- Pivot to another issue without Board approval — old one stays in limbo.
-- Close as "not actionable" without Board visibility.
+- **DON'T** invent a workaround that changes task scope.
+- **DON'T** create new issues with "preparatory tasks" just to stay busy.
+- **DON'T** do someone else's work "while no one is around" (CTO blocked on engineer ≠ writes code; engineer blocked on review ≠ self-reviews).
+- **DON'T** pivot to a neighboring issue without Board confirm — the old one stays open in limbo.
+- **DON'T** silently close an issue as "not actionable" — Board must see the blocker.
 
-### Comment format
+### Escalation comment format
 
 ```
 @Board blocked:
 
 **What's needed:** [quote from description]
-**Blocker:** [specific reason progress is impossible]
-**Tried:** [what was tested/attempted]
-**Need from Board:** [decision/resource/unblock needed]
+**Blocker:** [specifically what prevents progress]
+**Tried:** [list of what you tested]
+**Need from Board:** [unblock / decision / resource]
 ```
 
-### Blocker self-check
+### Self-check: "am I really blocked, or making up an excuse"
 
-- Blocked 2+ hours without escalation comment → process failure.
-- Any workaround preserves scope → not a blocker.
-- Concrete question for Board exists → real blocker.
-- Only "kind of hard" → decompose further, not a blocker.
+- Issue 2+ hours in `blocked` without escalation comment → **not** a blocker, that's procrastination.
+- "Blocker" can be bypassed by any means (even a dirty workaround) → not a blocker, that's reluctance.
+- Can formulate a concrete question to Board → real blocker.
+- Can only say "kind of hard" → not a blocker, decompose further.
 
-## Pre-work Discovery
+## Pre-work discovery (before any task)
 
-Before coding/decomposing, verify the work doesn't already exist:
+Before writing code or decomposing — verify the feature / fix doesn't already exist:
 
-1. `git fetch --all`
-2. `git log --all --grep="<keyword>" --oneline`
-3. `gh pr list --state all --search "<keyword>"`
-4. `serena find_symbol` / `get_symbols_overview` for existing implementations.
-5. `docs/` for existing specs.
-6. Paperclip issues for active ownership.
+1. `git fetch --all && git log --all --grep="<keyword>" --oneline`
+2. `gh pr list --state all --search "<keyword>"` — open and merged
+3. `serena find_symbol` / `get_symbols_overview` — existing implementations
+4. `docs/` — spec may already be written
+5. Paperclip issues — is someone already working on it?
 
-Already exists → close as `duplicate` with link, or reframe as integration from existing branch/PR/work.
+**If it exists** — close as `duplicate` with a link, or reframe ("integrate X from feature/Y").
 
-## External Library API Rule
+## External library reference rule
 
-Any spec referencing an external library API must be backed by live verification dated within 30 days.
+Any spec line referencing an external library API MUST be backed by a live-verified spike under `docs/research/<library-version>-spike/` or a `reference_<lib>_api_truth.md` memory file dated within 30 days.
 
-Acceptable proof:
+CTO Phase 1.1 greps spec for `from <lib> import` / `<lib>.<method>` and verifies a spike exists. Missing → REQUEST CHANGES.
 
-- Spike under `docs/research/<library-version>-spike/`
-- Memory file `reference_<lib>_api_truth.md`
+Why: N+1a reverted because spec referenced `graphiti-core 0.4.3` API that didn't exist in installed version.
 
-Applies to lines like `from <lib> import ...` or `<lib>.<method>`. CTO Phase 1.1 greps spec; missing proof → request changes.
+## Existing-field semantic-change rule
 
-## Existing Field Semantic Changes
+Spec changing semantics of an existing field MUST include: output of `grep -r '<field-name>' src/` + list of which call-sites change.
 
-If a spec changes semantics of an existing field, include:
+CTO Phase 1.1 re-runs grep against HEAD; REQUEST CHANGES if missing or stale.
 
-- `grep -r '<field-name>' src/` output
-- List of call sites whose behavior changes.
-
-CTO Phase 1.1 re-runs grep against HEAD; missing/stale → request changes.
+Why: N+1a.1 §3.10 changed `:Project.name` semantics without auditing `UPSERT_PROJECT` callers.
 
 ## Git workflow (iron rule)
 
-- Only feature branches: `git checkout -b feature/X origin/develop`.
-- PR into `develop` (not `main`). `main` = release flow only.
-- Pre-PR: `git fetch origin && git rebase origin/develop`.
-- Force-push forbidden on `main`/`develop`. Feature branch = `--force-with-lease` only.
-- No direct commits to `main`/`develop`.
-- Diverged branches → escalate Board.
+- Work **only** in a feature branch. Create from `develop`: `git checkout -b feature/X origin/develop`.
+- Open PR **into `develop`**, not `main`. `main` updates only via release flow (develop → main).
+- Before PR: `git fetch origin && git rebase origin/develop`.
+- Force push on `main` / `develop` — **forbidden**. On a feature branch — only `--force-with-lease`.
+- Direct commits to `main` / `develop` — **forbidden**.
+- Branches diverged (develop diverged from main) — escalate to Board, don't act yourself.
 
 ### Fresh-fetch on wake
 
-Always before `git log`/`show`/`checkout`:
+Before any `git log` / `git show` / `git checkout` in a new run:
 
 ```bash
 git fetch origin --prune
 ```
 
-Shared parent clone → stale parent = stale `origin/*` refs everywhere. Compensation control (agent memory; env-level hook = followup).
+Parent clone is shared across worktrees; a stale parent means stale `origin/*` refs for every worktree on the host. A single `fetch` updates all. Skip this and you will chase artifacts "not found on main" when they are pushed but uncached locally.
 
-### Force-push discipline (feature branches)
+This is a **compensation control** (agent remembers). An environment-level hook (paperclip worktree pre-wake fetch or a `deploy-agents.sh` wrapper) is a followup — until it lands, this rule is load-bearing.
 
-`--force-with-lease` only when:
+### Force-push discipline on feature branches
 
-1. Just `git fetch origin`.
-2. Sole writer (no parallel QA evidence / CR-rev).
+- `--force-with-lease` allowed on **feature branches only**.
+- Use it ONLY when:
+  1. You have fetched immediately prior (`git fetch origin`).
+  2. You are the **sole writer** of the current phase (no parallel QA evidence, no parallel CR-rev from another agent).
+- Multi-writer phases (e.g., QA adding evidence-docs alongside MCPEngineer's impl commits): regular `git push` only, and rebase-then-push instead of force.
+- Force-push on `develop` / `main` — forbidden, always. Protection will reject; don't retry with `--force`.
 
-Multi-writer: regular `git push`, rebase-then-push. `develop`/`main` = never; protection rejects — don't retry with plain `--force`.
+### What applies to Board, too
 
-### Board too
+This fragment binds **all writers** — agents, Board session, human operator. When Board writes a spec or plan, it goes on a feature branch. Board checkout location: a separate clone per `CLAUDE.md § Branch Flow`. When Board pushes, it's to `feature/...` then PR — never `main` or `develop` directly.
 
-All writers (agents/Board/human) → feature branch → PR. Board = separate clone per `CLAUDE.md § Branch Flow`.
+### Phase 4.2 — Merge-readiness reality-check
 
-### Merge-readiness check
+Before escalating **any** merge blocker, run these commands and paste their output in the same comment. An escalation without this evidence is a protocol violation — symmetric to the anti-rubber-stamp rule for code review.
 
-Pre-escalation mandatory (paste output in same comment):
+#### Mandatory pre-escalation commands
 
 ```bash
-# 1. PR state
+# 1. PR merge state + CI status
 gh pr view <N> --json mergeStateStatus,mergeable,statusCheckRollup,reviewDecision,headRefOid
 
-# 2. Check-runs
+# 2. Individual check-runs (when statusCheckRollup is empty or unclear)
 gh api repos/<owner>/<repo>/commits/<head>/check-runs
 
-# 3. Protection
+# 3. Branch protection rules (when claiming review or check requirements block merge)
 gh api repos/<owner>/<repo>/branches/develop/protection \
   | jq '.required_status_checks.contexts, (.required_pull_request_reviews // "NONE")'
 ```
 
-#### `mergeStateStatus` decoder
+#### `mergeStateStatus` decoder table
 
 | Value | Meaning | Fix |
 |---|---|---|
-| `CLEAN` | Ready | `gh pr merge --squash --auto` |
-| `BEHIND` | Base advanced | `gh pr update-branch <N>` → CI → merge |
-| `DIRTY` | Conflict | `git merge origin/develop` → push |
-| `BLOCKED` | Checks/reviews fail | Inspect rollup; see `feedback_single_token_review_gate` |
-| `UNSTABLE` | Non-required checks fail | Merge if required pass |
-| `UNKNOWN` | Computing | Wait 5–10s |
-| `DRAFT` | Draft PR | `gh pr ready <N>` |
-| `HAS_HOOKS` | GHE hooks exist | Merge normally |
+| `CLEAN` | Ready to merge | `gh pr merge --squash --auto` |
+| `BEHIND` | Branch base has advanced (sibling PR merged) | `gh pr update-branch <N>` → wait CI → merge |
+| `DIRTY` | Merge conflict against base | Forward-merge: `git merge origin/develop` on feature branch, push |
+| `BLOCKED` | Failing checks OR missing reviews | Inspect `statusCheckRollup` first; if reviews issue + agent is PR author, see `feedback_single_token_review_gate` (do NOT relax protection) |
+| `UNSTABLE` | Non-required checks failing | Usually mergeable — inspect rollup, proceed if required checks pass |
+| `UNKNOWN` | GitHub still computing | Wait 5–10s, re-query |
+| `DRAFT` | PR is a draft (deprecated — GitHub recommends `PullRequest.isDraft` instead, but `gh pr view --json mergeStateStatus` still returns this value) | Convert to ready-for-review: `gh pr ready <N>` |
+| `HAS_HOOKS` | GitHub Enterprise pre-receive hooks exist | Mergeable — pre-receive hooks execute server-side on merge. Proceed normally |
 
-#### Forbidden without evidence
+#### Forbidden response patterns
 
-- "0 checks" — no `check-runs` output.
-- "Protection blocks" — no `statusCheckRollup`/`protection` output.
-- "GitHub/CI broken" — no `gh run list` output.
+These claims are **banned** without the corresponding evidence output pasted in the same comment:
 
-#### Self-approval
+- «GitHub Actions returned 0 checks» — without `total_count` from `gh api .../check-runs` output.
+- «Branch protection requires N checks but received 0» — without `gh pr view --json statusCheckRollup` output.
+- «Required reviews blocking merge» — without `gh api .../protection` output showing `required_pull_request_reviews` is present (not `"NONE"`).
+- «GitHub broken» / «CI not running» — without `gh run list --branch <name>` output.
 
-Author cannot approve own PR (GitHub global rule). If `required_pull_request_reviews` is `"NONE"` in protection JSON → approval not required; rejection is harmless, doesn't block merge. See `feedback_single_token_review_gate`.
+#### Self-approval clarification
+
+GitHub's global rule «PR author cannot approve their own PR» applies **always** — this is a platform constraint, NOT branch-protection. If `required_pull_request_reviews` is absent in the protection JSON (shows `"NONE"`), then approval is **not required** for merge. The author-cannot-self-approve rejection is harmless in this case — it does not block merge.
+
+See `feedback_single_token_review_gate` in operator memory for the full context on this distinction.
 
 ## Worktree discipline
 
-Paperclip creates a git worktree per issue. Work only inside it:
+Paperclip creates a git worktree per issue with an execution workspace. Work **only** inside that worktree:
 
-- `cwd` at wake = worktree path. Never `cd` into primary repo.
-- No cross-branch git (`checkout main`, `rebase` from main repo).
-- Commit/push/PR — all from the worktree.
-- Parallel agents in separate worktrees; don't read neighbors' files (may be mid-work).
-- Post-merge — paperclip cleans worktree itself; don't `git worktree remove` manually.
+- `cwd` at wake = worktree path. Never `cd` into the primary repo directory.
+- Don't run `git` commands that change other branches (`checkout main`, `rebase origin/develop` from main repo).
+- Commit changes to the worktree branch, push, open PR — all from the worktree.
+- Parallel agents work in **separate** worktrees — don't read files from neighbors' worktrees (they may be in an invalid state mid-work).
+- After PR merge — paperclip cleans the worktree itself. Don't run `git worktree remove` yourself.
 
 ## Shared codebase memory
 
-Worktree isolation ≠ memory isolation. Claude/CX teams share code knowledge:
+Worktree isolation does not mean memory isolation. Claude and CX/Codex teams share the same code knowledge:
 
-- `palace.code.*` / codebase-memory with project `repos-gimle` for indexed search/architecture/impact.
-- `serena` only for current worktree + branch state.
-- Durable findings: write via `palace.memory.decide(...)`, read via `palace.memory.lookup(...)`.
-- Each finding needs provenance: issue id, branch, commit SHA, source path/symbol, `canonical|provisional`, evidence.
-- `canonical` = grounded in `origin/develop` or merged commits. `provisional` = branch-local hints needing local verification.
-- Never treat other team's uncommitted files as project truth — share via commits/PRs/comments/`palace.memory`.
+- Use `palace.code.*` / codebase-memory with project `repos-gimle` for indexed code search, architecture, snippets, and impact.
+- Use `serena` only for the current worktree (`cwd`) and current branch state.
+- Write durable findings through `palace.memory.decide(...)`; read them through `palace.memory.lookup(...)`.
+- Each written finding needs provenance: issue id, branch, commit SHA when available, source path or symbol, `canonical` or `provisional`, and verification evidence.
+- Treat `canonical` as facts grounded in `origin/develop` or merged commits. Treat `provisional` as branch-local hints that require local verification.
+- Never treat another team's uncommitted worktree files as project truth. Share cross-team facts through commits, PRs, issue comments, or `palace.memory`.
 
 ## Cross-branch carry-over forbidden
 
-No cherry-pick / copy-paste between parallel slice branches. If Slice B needs Slice A, declare `depends_on: A` in spec, rebase on develop after A merges. CR enforces: every changed file must be in slice's declared scope.
+Never carry commits between parallel slice branches via cherry-pick or
+copy-paste. If Slice B's tests need Slice A, declare `depends_on: A`
+in spec and rebase on develop after A merges.
 
-Why: GIM-75/76 (2026-04-24) — see `docs/postmortems/2026-04-26-fragment-extraction-postmortems.md`.
+Why: GIM-75/76 incident (2026-04-24) — see `docs/postmortems/2026-04-26-fragment-extraction-postmortems.md`.
 
-## QA: restore checkout to develop after Phase 4.1
+CR enforcement: every changed file must be in slice's declared scope.
 
-Before run exit, on iMac:
+## QA returns checkout to develop after Phase 4.1
+
+Before run exit, QA on iMac verifies the current team checkout or issue worktree
+returns to the expected integration branch state:
 
     git switch develop && git pull --ff-only
 
-Verify `git branch --show-current` = `develop`. Don't `cd` into another team's checkout — Claude/CX may have separate roots; use yours.
+Verify: `git branch --show-current` outputs `develop`.
 
-Why: team checkouts drive their own deploys/observability. GIM-48 (2026-04-18).
+Do not `cd` into another team's checkout to do this. Claude and CX/Codex teams
+may have separate workspace roots; use the root or worktree assigned to your
+current run.
 
-## Wake discipline
+Why: team checkouts drive deploys/observability for their own runtime. Incident
+GIM-48 (2026-04-18).
 
-> Upstream paperclip "heartbeat" = any wake-execution-window. Here: DISABLED (`runtimeConfig.heartbeat.enabled: false`) — all wakes event-triggered.
+## Heartbeat discipline
 
-On every wake, check only **three** things:
+On every wake (heartbeat or event) check only **three** things:
 
 1. **First Bash on wake:** `echo "TASK=$PAPERCLIP_TASK_ID WAKE=$PAPERCLIP_WAKE_REASON"`. If `TASK` non-empty → `GET /api/issues/$PAPERCLIP_TASK_ID` + work. **Do NOT exit** on `inbox-lite=[]` if `TASK` is set — paperclip always provides TASK_ID for mention-wakes.
 2. `GET /api/agents/me` → any issue with `assigneeAgentId=me` and `in_progress`? → continue.
 3. Comments / @mentions with `createdAt > last_heartbeat_at`? → reply.
 
-None of three → **exit immediately** with `No assignments, idle exit`. Each idle wake must cost **<500 tokens**.
+None of three → **exit immediately** with `No assignments, idle exit`. Each idle heartbeat must cost **<500 tokens**.
 
 ### Cross-session memory — FORBIDDEN
 
@@ -287,7 +299,7 @@ If you "remember" past work at session start (*"let me continue where I left off
 
 Board cleans the queue regularly. If a resumed session "reminds" you of something — galaxy brain, ignore and wait for an explicit assignment.
 
-### Forbidden on idle wake
+### Forbidden on idle heartbeat
 
 - Taking `todo` issues nobody assigned to you. Unassigned ≠ "I'll find work"
 - Taking `todo` with `updatedAt > 24h` without fresh Board confirm (stale)
@@ -352,29 +364,29 @@ POST /api/issues/{id}/release
 ```
 ## Phase handoff discipline (iron rule)
 
-Between plan phases, **explicit reassign** to next-phase agent. Never leave "someone will pick up".
+Between plan phases (§8), always **explicit reassign** to the next-phase agent. Never leave "someone will pick up".
 
-Hand off via PATCH `status + assigneeAgentId + comment` in one call, then GET-verify assignee. Mismatch → retry once; still mismatch → `status=blocked` + escalate Board with `actual` vs `expected`. Silent exit (push without handoff) = 8h stall (GIM-182, GIM-48 precedents).
+ALWAYS hand off by PATCHing `status + assigneeAgentId + comment` in one API call, then GET-verify the assignee. If verification mismatches, retry once with the same payload; if it still mismatches, mark `status=blocked` and escalate to Board with `assigneeAgentId.actual` != `expected`. Do not silently exit (work pushed to git but handoff dropped = 8h stall, GIM-182 evidence). @mention-only handoff is invalid.
+
+GIM-48 evidence: CR set `status=todo` after approve instead of `assignee=QAEngineer`; CTO closed without QA evidence; merged code crashed on iMac. QA was skipped **because ownership was not transferred**.
 
 ### Handoff matrix
 
-| Phase done | Next | Required handoff |
+| Phase done | Next phase | Required handoff |
 |---|---|---|
-| 1.1 Formalization (CTO) | 1.2 Plan-first | `git mv`/rename/`GIM-N` swap on FB directly (no sub-issue) → push → `assignee=CodeReviewer` + formal mention |
+| 1.1 Formalization (CTO) | 1.2 Plan-first review | CTO does `git mv` / rename / `GIM-57` swap **on the feature branch directly** (no sub-issue), pushes, then `assignee=CodeReviewer` + formal mention. Sub-issues for Phase 1.1 mechanical work are anti-pattern per the narrowed `cto-no-code-ban.md` scope. |
 | 1.2 Plan-first (CR) | 2.x Implementation | `assignee=<implementer>` + formal mention |
-| 2 Implementation | 3.1 Mechanical CR | `assignee=CodeReviewer` + push done + formal mention |
-| 3.1 CR APPROVE | 3.2 Opus | `assignee=OpusArchitectReviewer` + formal mention |
-| 3.2 Opus APPROVE | 4.1 QA | `assignee=QAEngineer` + formal mention |
+| 2 Implementation | 3.1 Mechanical review | `assignee=CodeReviewer` + formal mention + **git push done** |
+| 3.1 CR APPROVE | 3.2 Opus adversarial | `assignee=OpusArchitectReviewer` + formal mention |
+| 3.2 Opus APPROVE | 4.1 QA live smoke | `assignee=QAEngineer` + formal mention |
 | 4.1 QA PASS | 4.2 Merge | `assignee=<merger>` (usually CTO) + formal mention |
-
-Sub-issues for Phase 1.1 mechanical work are anti-pattern per `cto-no-code-ban.md` narrowed scope.
 
 ### NEVER
 
-- `status=todo` between phases (= unassigned, free to claim).
-- `release` lock without simultaneous `PATCH assignee=<next>` — issue hangs ownerless.
-- Keep `assignee=me, status=in_progress` after my phase ends — reassign before handoff comment.
-- `status=done` without Phase 4.1 evidence comment authored by **QAEngineer** (`authorAgentId`).
+- `status=todo` between phases. `todo` = "unassigned, free to claim" — phases require **explicit assignee**.
+- `release` execution lock without simultaneous `PATCH assignee=<next-phase-agent>` — issue hangs ownerless.
+- Keeping `assignee=me, status=in_progress` after my phase ends. Reassign before writing the handoff comment.
+- `status=done` without verifying Phase 4.1 evidence-comment exists **from the right agent** (QAEngineer, not implementer or CR).
 
 ### Handoff comment format
 
@@ -386,60 +398,89 @@ Sub-issues for Phase 1.1 mechanical work are anti-pattern per `cto-no-code-ban.m
 [@<NextAgent>](agent://<NextAgent-UUID>?i=<icon>) your turn — Phase <N.M+1>: [what to do]
 ```
 
-Formal mention `[@](agent://uuid)` only — not plain `@Role`. Plain works for comments, but handoff needs the formal recovery-wake form. UUIDs in `fragments/local/agent-roster.md`.
+Use formal mention `[@<Role>](agent://<uuid>?i=<icon>)`, not plain `@<Role>`. Plain mentions are OK for comments, but not handoff evidence: formal form is the recovery wake when assignee PATCH flakes.
+
+See local `fragments/local/agent-roster.md` for UUIDs. Paperclip UI `@` auto-formats.
 
 ### Pre-handoff checklist (implementer → reviewer)
 
+Before writing "Phase 2 complete — [@CodeReviewer](agent://<uuid>?i=<icon>)":
+
 - [ ] `git push origin <feature-branch>` done — commits live on origin
-- [ ] Local green (lint + typecheck + test, language-appropriate)
-- [ ] CI running on FB (or auto-triggered by push)
-- [ ] Handoff comment includes commit SHA + branch link
+- [ ] Local green: `uv run ruff check && uv run mypy src/ && uv run pytest` (or language equivalent)
+- [ ] CI on feature branch running (or auto-triggered by push)
+- [ ] PR open, or will open at Phase 4.2 (per plan §8)
+- [ ] Handoff comment includes **commit SHA** and branch link, not just "done"
+
+Skip any → CR gets "done" on code not on origin → dead end.
+
+### Exit Protocol — after handoff PATCH succeeds
+
+After the handoff PATCH returns 200 and GET-verify confirms `assigneeAgentId == <next>`:
+
+- **Stop tool use immediately.** The handoff PATCH is your last tool call. No more bash, curl, serena, gh, or any other tool — even read-only ones.
+- Output your final summary as plain assistant text, then end the turn.
+- Do **not** re-fetch the issue, do **not** post a second confirmation comment, do **not** check git status. Your phase is closed.
+
+Why: between the PATCH (which changes assignee away from you) and your subprocess exit, paperclip's run-supervisor sees the issue is no longer yours and SIGTERMs the process. Any tool call in that window dies mid-flight, the run is marked `claude_transient_upstream` (Exit 143), and a retry is queued — only to be cancelled with `issue_reassigned` once the next agent picks up.
+
+Evidence: GIM-216 — 11 successful handoffs misclassified as failures because agents kept making tool calls after the PATCH; pre-slim baseline GIM-193 had zero such failures.
+
+If post-handoff cleanup is genuinely needed (e.g. local worktree state), do it BEFORE the handoff PATCH, not after.
 
 ### Pre-close checklist (CTO → status=done)
 
-- [ ] Phase 4.2 merged (squash on develop)
-- [ ] Phase 4.1 evidence comment exists + `authorAgentId == QAEngineer`
-- [ ] Evidence: commit SHA + runtime smoke + plan-specific invariant
-- [ ] CI green on merge commit (or admin override documented in merge message)
-- [ ] Production deploy completed (merge ≠ auto-deploy on most setups)
+- [ ] Phase 4.2 merge done (squash commit on develop / main)
+- [ ] Phase 4.1 evidence-comment **exists** and is authored by **QAEngineer** (`authorAgentId`)
+- [ ] Evidence contains: commit SHA, runtime smoke (healthcheck / tool call), plan-specific invariant check (e.g. `MATCH ... RETURN DISTINCT n.group_id`)
+- [ ] CI green on merge commit (or admin override documented in merge message with reason)
+- [ ] Production deploy completed post-merge (merge ≠ auto-deploy on most setups — follow the project's deploy playbook)
 
-Any missing → don't close, escalate Board.
+Any item missing → **don't close**. Escalate to Board (`@Board evidence missing on Phase 4.1 before close`).
 
 ### Phase 4.1 QA-evidence comment format
+
+Reference:
 
 ```
 ## Phase 4.1 — QA PASS ✅
 
 ### Evidence
-1. Commit SHA: `<git rev-parse HEAD on FB>`
-2. `docker compose --profile <x> ps` — containers healthy
-3. `/healthz` — `{"status":"ok",...}` (or service equivalent)
-4. Real MCP tool call — `palace.<tool>()` + output (not just healthz)
-5. Ingest CLI / runtime smoke — command output
-6. Plan-specific invariant — e.g. `MATCH (n) RETURN DISTINCT n.group_id`, expected 1 row
-7. Production checkout restored to expected branch (per project's checkout-discipline)
 
-[@<merger>](agent://<merger-UUID>?i=<icon>) Phase 4.1 green → Phase 4.2 squash-merge to develop.
+1. Commit SHA tested: `<git rev-parse HEAD on feature branch>`
+2. `docker compose --profile <x> ps` — [containers healthy]
+3. `/healthz` — `{"status":"ok","neo4j":"reachable"}` (or service equivalent)
+4. MCP tool: `palace.memory.<tool>()` → [output] (real MCP call, not just healthz)
+5. Ingest CLI / runtime smoke — [command output]
+6. Direct invariant check (plan-specific) — e.g. `MATCH (n) RETURN DISTINCT n.group_id`, expected 1 row
+7. After QA — restore the production checkout to the expected branch (follow the project's checkout-discipline rule)
+
+[@<merger>](agent://<merger-UUID>?i=<icon>) Phase 4.1 green, handing to Phase 4.2 — squash-merge to develop.
 ```
 
-`/healthz`-only or mocked-DB pytest = insufficient; real runtime smoke required.
+`/healthz`-only evidence is insufficient; it can be green while functionality is broken. Mocked-DB pytest output does NOT count — real runtime smoke required.
 
 ### Lock stale edge case
 
-If `POST /release` returns 200 but `executionAgentNameKey` doesn't reset (GIM-52, reported by OpusArchitectReviewer) — try `PATCH assignee=me` → `POST /release` → `PATCH assignee=<next>`. Fails twice → escalate Board with issue id, run id, attempt sequence.
+If `POST /release` returns 200 but `executionAgentNameKey` doesn't reset (GIM-52 Phase 4.1, reported by OpusArchitectReviewer) — **don't ignore**.
+
+Observed workaround (GIM-52, GIM-53): `PATCH assignee=me` → `POST /release` → `PATCH assignee=<next>` clears it. Try this first.
+
+If the workaround fails twice — escalate to Board with details (issue id, run id, attempt sequence). Either paperclip bug or endpoint rename — Board decides.
 
 ### Self-check before handoff
 
-- Formal mention written (not plain `@`)?
-- Current assignee = next agent (GET-verified)?
-- Push visible in `git ls-remote origin <branch>` (implementer only)?
-- Evidence in my comment is mine, not retold (QA only)?
+- "Did I write `[@NextAgent](agent://<uuid>?i=<icon>)` in formal form, not plain `@NextAgent`?" — must be formal
+- "Is current assignee the next agent or still me?" — must be next
+- "Did GET-verify after the PATCH return `assigneeAgentId == <next-agent-UUID>`?" — must be yes
+- "Is my push visible in `git ls-remote origin <branch>`?" — must be yes for implementer handoff
+- "Is the evidence in my comment mine, or did I retell someone else's work?" — for QA, only own evidence counts
 
-GET-verify fails after retry → `status=blocked` + `@Board handoff PATCH ok but GET shows actual=<x>, expected=<y>` + stop. Don't exit silently.
+If GET-verify fails after retry, **do not exit silently**. Mark `status=blocked`, post `@Board handoff PATCH succeeded but GET shows assigneeAgentId=<actual>, expected=<next>`, and stop.
 
 ### Comment ≠ handoff (iron rule)
 
-Writing "Reassigning…" or "handing off…" in a comment body **does not execute** handoff. Only `PATCH /api/issues/{id}` with `assigneeAgentId` triggers the next agent's wake. Without PATCH, issue stalls with previous assignee indefinitely. Precedents: GIM-126 (QA→CTO 2026-05-01), GIM-195 (CR→PE 2026-05-05).
+Writing "Reassigning to …" or "handing off to …" in a comment body **does not execute** a handoff. Only `PATCH /api/issues/{id}` with `assigneeAgentId` triggers the next agent's wake. Without PATCH, the issue stalls with the previous assignee indefinitely. Precedents: GIM-126 (QA→CTO stall, 2026-05-01), GIM-195 (CR→PE stall, 2026-05-05).
 ## Agent UUID roster — Gimle Claude
 
 Use `[@<Role>](agent://<uuid>?i=<icon>)` in phase handoffs. Source: `paperclips/deploy-agents.sh`.
