@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import math
 from datetime import datetime, timezone
-from typing import ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 from palace_mcp.extractors.base import (
     BaseExtractor,
     ExtractorRunContext,
     ExtractorStats,
 )
+
+if TYPE_CHECKING:
+    from palace_mcp.audit.contracts import AuditContract
 from palace_mcp.extractors.hotspot import (
     churn_query,
     file_walker,
@@ -112,3 +115,35 @@ class HotspotExtractor(BaseExtractor):
         )
 
         return ExtractorStats(nodes_written=nodes_w, edges_written=edges_w)
+
+    def audit_contract(self) -> "AuditContract":
+        from palace_mcp.audit.contracts import AuditContract, Severity
+
+        return AuditContract(
+            extractor_name="hotspot",
+            template_name="hotspot.md",
+            query="""
+MATCH (f:File {project_id: $project_id})
+WHERE coalesce(f.hotspot_score, 0.0) > 0
+  AND coalesce(f.complexity_status, 'stale') = 'fresh'
+RETURN f.path AS path,
+       f.ccn_total AS ccn_total,
+       f.churn_count AS churn_count,
+       f.hotspot_score AS hotspot_score,
+       f.complexity_window_days AS window_days
+ORDER BY f.hotspot_score DESC
+LIMIT 100
+""".strip(),
+            severity_column="hotspot_score",
+            severity_mapper=lambda v: (
+                Severity.CRITICAL
+                if v is not None and float(v) >= 5.0
+                else Severity.HIGH
+                if v is not None and float(v) >= 3.0
+                else Severity.MEDIUM
+                if v is not None and float(v) >= 1.5
+                else Severity.LOW
+                if v is not None and float(v) > 0
+                else Severity.INFORMATIONAL
+            ),
+        )
