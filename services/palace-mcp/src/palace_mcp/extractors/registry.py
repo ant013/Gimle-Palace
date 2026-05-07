@@ -24,6 +24,9 @@ from palace_mcp.extractors.git_history.extractor import GitHistoryExtractor
 from palace_mcp.extractors.heartbeat import HeartbeatExtractor
 from palace_mcp.extractors.hotspot.extractor import HotspotExtractor
 from palace_mcp.extractors.public_api_surface import PublicApiSurfaceExtractor
+from palace_mcp.extractors.reactive_dependency_tracer.extractor import (
+    ReactiveDependencyTracerExtractor,
+)
 from palace_mcp.extractors.symbol_index_clang import SymbolIndexClang
 from palace_mcp.extractors.symbol_index_java import SymbolIndexJava
 from palace_mcp.extractors.symbol_index_python import SymbolIndexPython
@@ -45,6 +48,7 @@ EXTRACTORS: dict[str, BaseExtractor] = {
     "symbol_index_swift": SymbolIndexSwift(),
     "symbol_index_clang": SymbolIndexClang(),
     "dependency_surface": DependencySurfaceExtractor(),
+    "reactive_dependency_tracer": ReactiveDependencyTracerExtractor(),
     "git_history": GitHistoryExtractor(),
     "hotspot": HotspotExtractor(),
     "cross_repo_version_skew": CrossRepoVersionSkewExtractor(),

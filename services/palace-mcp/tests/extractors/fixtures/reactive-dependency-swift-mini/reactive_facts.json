@@ -1,0 +1,385 @@
+{
+  "tool_name": "palace-swift-reactive-probe",
+  "tool_version": "0.1.0",
+  "schema_version": 1,
+  "swift_syntax_version": "600.0.1",
+  "swift_toolchain": "Swift 6.0",
+  "files": [
+    {
+      "path": "Sources/App/CounterView.swift",
+      "module_name": "App",
+      "parse_status": "ok",
+      "components": [
+        {
+          "component_ref": "counter_component",
+          "module_name": "App",
+          "component_kind": "swiftui_view",
+          "qualified_name": "App.CounterView",
+          "display_name": "CounterView",
+          "range": {
+            "start_line": 4,
+            "start_col": 1,
+            "end_line": 19,
+            "end_col": 2
+          },
+          "resolution_status": "syntax_exact"
+        }
+      ],
+      "states": [
+        {
+          "state_ref": "counter_count",
+          "owner_component_ref": "counter_component",
+          "module_name": "App",
+          "state_name": "count",
+          "state_kind": "state",
+          "wrapper_or_api": "@State",
+          "declared_type": "Int",
+          "range": {
+            "start_line": 5,
+            "start_col": 5,
+            "end_line": 5,
+            "end_col": 33
+          },
+          "resolution_status": "syntax_exact"
+        },
+        {
+          "state_ref": "counter_binding",
+          "owner_component_ref": "counter_component",
+          "module_name": "App",
+          "state_name": "externalCount",
+          "state_kind": "binding",
+          "wrapper_or_api": "@Binding",
+          "declared_type": "Int",
+          "range": {
+            "start_line": 6,
+            "start_col": 5,
+            "end_line": 6,
+            "end_col": 35
+          },
+          "resolution_status": "syntax_exact"
+        },
+        {
+          "state_ref": "counter_session",
+          "owner_component_ref": "counter_component",
+          "module_name": "App",
+          "state_name": "session",
+          "state_kind": "observable_object",
+          "wrapper_or_api": "@ObservedObject",
+          "declared_type": "SessionModel",
+          "range": {
+            "start_line": 7,
+            "start_col": 5,
+            "end_line": 7,
+            "end_col": 47
+          },
+          "resolution_status": "syntax_exact"
+        }
+      ],
+      "effects": [
+        {
+          "effect_ref": "counter_on_change",
+          "owner_component_ref": "counter_component",
+          "effect_kind": "on_change",
+          "callee_name": "onChange",
+          "trigger_expression_kind": "on_change_of",
+          "range": {
+            "start_line": 13,
+            "start_col": 14,
+            "end_line": 15,
+            "end_col": 14
+          },
+          "resolution_status": "syntax_exact"
+        },
+        {
+          "effect_ref": "counter_task",
+          "owner_component_ref": "counter_component",
+          "effect_kind": "task",
+          "callee_name": "task",
+          "trigger_expression_kind": null,
+          "range": {
+            "start_line": 16,
+            "start_col": 14,
+            "end_line": 18,
+            "end_col": 14
+          },
+          "resolution_status": "syntax_exact"
+        }
+      ],
+      "edges": [
+        {
+          "edge_ref": "counter_binding_edge",
+          "edge_kind": "binds_to",
+          "from_ref": "counter_binding",
+          "to_ref": "counter_count",
+          "owner_component_ref": "counter_component",
+          "access_path": "externalCount",
+          "binding_kind": "swiftui_binding",
+          "trigger_expression_kind": null,
+          "range": {
+            "start_line": 11,
+            "start_col": 39,
+            "end_line": 11,
+            "end_col": 52
+          },
+          "confidence_hint": "high",
+          "resolution_status": "syntax_exact"
+        },
+        {
+          "edge_ref": "counter_trigger_edge",
+          "edge_kind": "triggers_effect",
+          "from_ref": "counter_count",
+          "to_ref": "counter_on_change",
+          "owner_component_ref": "counter_component",
+          "access_path": "count",
+          "binding_kind": null,
+          "trigger_expression_kind": "on_change_of",
+          "range": {
+            "start_line": 13,
+            "start_col": 26,
+            "end_line": 13,
+            "end_col": 31
+          },
+          "confidence_hint": "high",
+          "resolution_status": "syntax_exact"
+        },
+        {
+          "edge_ref": "counter_write_binding",
+          "edge_kind": "writes_state",
+          "from_ref": "counter_on_change",
+          "to_ref": "counter_binding",
+          "owner_component_ref": "counter_component",
+          "access_path": "externalCount",
+          "binding_kind": null,
+          "trigger_expression_kind": null,
+          "range": {
+            "start_line": 14,
+            "start_col": 17,
+            "end_line": 14,
+            "end_col": 38
+          },
+          "confidence_hint": "high",
+          "resolution_status": "syntax_exact"
+        },
+        {
+          "edge_ref": "counter_reads_session",
+          "edge_kind": "reads_state",
+          "from_ref": "counter_component",
+          "to_ref": "counter_session",
+          "owner_component_ref": "counter_component",
+          "access_path": "session",
+          "binding_kind": null,
+          "trigger_expression_kind": null,
+          "range": {
+            "start_line": 17,
+            "start_col": 17,
+            "end_line": 17,
+            "end_col": 24
+          },
+          "confidence_hint": "high",
+          "resolution_status": "syntax_exact"
+        }
+      ],
+      "diagnostics": []
+    },
+    {
+      "path": "Sources/App/SessionModel.swift",
+      "module_name": "App",
+      "parse_status": "ok",
+      "components": [
+        {
+          "component_ref": "session_component",
+          "module_name": "App",
+          "component_kind": "observable_type",
+          "qualified_name": "App.SessionModel",
+          "display_name": "SessionModel",
+          "range": {
+            "start_line": 4,
+            "start_col": 1,
+            "end_line": 23,
+            "end_col": 2
+          },
+          "resolution_status": "syntax_exact"
+        }
+      ],
+      "states": [
+        {
+          "state_ref": "session_username",
+          "owner_component_ref": "session_component",
+          "module_name": "App",
+          "state_name": "username",
+          "state_kind": "published",
+          "wrapper_or_api": "@Published",
+          "declared_type": "String",
+          "range": {
+            "start_line": 5,
+            "start_col": 5,
+            "end_line": 5,
+            "end_col": 33
+          },
+          "resolution_status": "syntax_exact"
+        },
+        {
+          "state_ref": "session_ticker",
+          "owner_component_ref": "session_component",
+          "module_name": "App",
+          "state_name": "ticker",
+          "state_kind": "publisher",
+          "wrapper_or_api": "PassthroughSubject",
+          "declared_type": "PassthroughSubject<String, Never>",
+          "range": {
+            "start_line": 6,
+            "start_col": 5,
+            "end_line": 6,
+            "end_col": 51
+          },
+          "resolution_status": "syntax_exact"
+        }
+      ],
+      "effects": [
+        {
+          "effect_ref": "session_sink",
+          "owner_component_ref": "session_component",
+          "effect_kind": "sink",
+          "callee_name": "sink",
+          "trigger_expression_kind": "publisher_sink",
+          "range": {
+            "start_line": 10,
+            "start_col": 13,
+            "end_line": 12,
+            "end_col": 14
+          },
+          "resolution_status": "syntax_exact"
+        }
+      ],
+      "edges": [
+        {
+          "edge_ref": "session_trigger_sink",
+          "edge_kind": "triggers_effect",
+          "from_ref": "session_ticker",
+          "to_ref": "session_sink",
+          "owner_component_ref": "session_component",
+          "access_path": "ticker",
+          "binding_kind": null,
+          "trigger_expression_kind": "publisher_sink",
+          "range": {
+            "start_line": 9,
+            "start_col": 9,
+            "end_line": 10,
+            "end_col": 18
+          },
+          "confidence_hint": "high",
+          "resolution_status": "syntax_exact"
+        },
+        {
+          "edge_ref": "session_write_username",
+          "edge_kind": "writes_state",
+          "from_ref": "session_sink",
+          "to_ref": "session_username",
+          "owner_component_ref": "session_component",
+          "access_path": "username",
+          "binding_kind": null,
+          "trigger_expression_kind": null,
+          "range": {
+            "start_line": 11,
+            "start_col": 17,
+            "end_line": 11,
+            "end_col": 39
+          },
+          "confidence_hint": "high",
+          "resolution_status": "syntax_exact"
+        }
+      ],
+      "diagnostics": []
+    },
+    {
+      "path": "Sources/App/LegacyController.swift",
+      "module_name": "App",
+      "parse_status": "ok",
+      "components": [
+        {
+          "component_ref": "legacy_component",
+          "module_name": "App",
+          "component_kind": "uikit_controller",
+          "qualified_name": "App.LegacyController",
+          "display_name": "LegacyController",
+          "range": {
+            "start_line": 3,
+            "start_col": 1,
+            "end_line": 15,
+            "end_col": 2
+          },
+          "resolution_status": "syntax_heuristic"
+        }
+      ],
+      "states": [
+        {
+          "state_ref": "legacy_on_tap",
+          "owner_component_ref": "legacy_component",
+          "module_name": "App",
+          "state_name": "onTap",
+          "state_kind": "callback",
+          "wrapper_or_api": "closure",
+          "declared_type": "((String) -> Void)?",
+          "range": {
+            "start_line": 4,
+            "start_col": 5,
+            "end_line": 4,
+            "end_col": 37
+          },
+          "resolution_status": "syntax_heuristic"
+        }
+      ],
+      "effects": [
+        {
+          "effect_ref": "legacy_callback",
+          "owner_component_ref": "legacy_component",
+          "effect_kind": "callback",
+          "callee_name": "UIAction",
+          "trigger_expression_kind": null,
+          "range": {
+            "start_line": 9,
+            "start_col": 13,
+            "end_line": 11,
+            "end_col": 14
+          },
+          "resolution_status": "syntax_heuristic"
+        }
+      ],
+      "edges": [
+        {
+          "edge_ref": "legacy_reads_callback",
+          "edge_kind": "reads_state",
+          "from_ref": "legacy_component",
+          "to_ref": "legacy_on_tap",
+          "owner_component_ref": "legacy_component",
+          "access_path": "onTap",
+          "binding_kind": null,
+          "trigger_expression_kind": null,
+          "range": {
+            "start_line": 10,
+            "start_col": 23,
+            "end_line": 10,
+            "end_col": 28
+          },
+          "confidence_hint": "low",
+          "resolution_status": "syntax_heuristic"
+        }
+      ],
+      "diagnostics": [
+        {
+          "code": "macro_unexpanded",
+          "severity": "warning",
+          "ref": "legacy_callback",
+          "message": "UIKit callback analysis remains syntax-only in this fixture",
+          "range": {
+            "start_line": 9,
+            "start_col": 13,
+            "end_line": 11,
+            "end_col": 14
+          }
+        }
+      ]
+    }
+  ],
+  "run_diagnostics": []
+}

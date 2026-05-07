@@ -74,6 +74,12 @@ def test_symbol_index_swift_registered() -> None:
     assert extractor.name == "symbol_index_swift"
 
 
+def test_reactive_dependency_tracer_registered() -> None:
+    extractor = registry.get("reactive_dependency_tracer")
+    assert extractor is not None
+    assert extractor.name == "reactive_dependency_tracer"
+
+
 def test_register_and_get() -> None:
     e = _FakeExtractor()
     registry.register(e)

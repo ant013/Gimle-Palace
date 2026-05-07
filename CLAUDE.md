@@ -310,6 +310,13 @@ invoked via MCP tool `palace.ingest.run_extractor(name, project)`.
   top-N hotspots and `palace.code.list_functions(project, path)` for per-
   function complexity. Requires `git_history` to have run first (otherwise
   churn = 0).
+- `reactive_dependency_tracer` — Swift-first reactive state/effect extractor
+  (GIM-217, Roadmap #3). Reads pre-generated `reactive_facts.json` from repo
+  root, writes `ReactiveComponent` / `ReactiveState` / `ReactiveEffect` /
+  `ReactiveDiagnostic` plus exact correlation edges to `SymbolOccurrenceShadow`
+  and `PublicApiSymbol` when those backing facts exist. v1 does not execute a
+  live Swift helper and treats Kotlin/Compose only as structured skip evidence.
+  See `docs/runbooks/reactive-dependency-tracer.md`.
 - `cross_repo_version_skew` — Cross-repo version skew (GIM-218, Roadmap #39).
   Reads `:Project-[:DEPENDS_ON]->:ExternalDependency` from `dependency_surface`
   (GIM-191) — fully read-only; writes only one `:IngestRun` per call. Hybrid:
@@ -333,6 +340,20 @@ No env vars required. Extractor reads files directly from the mounted repo.
    MATCH (p:Project {slug: "gimle"})-[r:DEPENDS_ON]->(d:ExternalDependency)
    RETURN d.purl, r.scope, r.declared_in ORDER BY d.purl
    ```
+
+### Operator workflow: Reactive dependency tracer
+
+1. Ensure the target repo contains a pre-generated `reactive_facts.json` at repo
+   root. v1 does not launch SwiftSyntax or any helper binary from the extractor.
+2. Run the extractor:
+   ```
+   palace.ingest.run_extractor(name="reactive_dependency_tracer", project="<slug>")
+   ```
+3. Verify resulting graph slices with the Cypher snippets in
+   `docs/runbooks/reactive-dependency-tracer.md`.
+4. If the run emits `swift_helper_unavailable`, `swift_parse_failed`, or
+   `symbol_correlation_unavailable`, use the troubleshooting section in the
+   runbook instead of retrying with a live helper path.
 
 ### Operator workflow: Java/Kotlin symbol index
 
