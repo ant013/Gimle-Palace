@@ -45,9 +45,7 @@ S1.5 fetcher has no composite MCP tools to call, and the 3 reused agents
    (only `cx-code-reviewer.md`, `cx-cto.md`, etc. + `codex-architect-reviewer.md`).
    E6 hires create the CX security/blockchain role files **with**
    the audit-mode fragment-include already in place.
-4. End-to-end smoke: `palace.audit.run(project="<any-real>")` returns
-   a fetcher payload that includes IngestRun records from BOTH paths
-   and successfully calls all 5 new composite tools.
+4. **Removed** — `palace.audit.run` is S1.6 scope (see §8), not S0.
 
 ## 2. Why now / why this scope
 
@@ -112,10 +110,9 @@ surface for ad-hoc queries during S1.9 workflows, not consumed by
 the in-process fetcher. S0.2 dependency therefore moves from S1.5 to
 S1.9.
 
-**Target end state**: 3 new composite MCP tools registered (location
-TBD per existing convention — `code_composite.py` for orchestrated,
-or per-extractor module like existing `find_hotspots.py` /
-`find_owners.py`):
+**Target end state**: 3 new composite MCP tools registered as per-tool
+modules under `services/palace-mcp/src/palace_mcp/code/` (Pattern B —
+matching existing `find_hotspots.py` / `find_owners.py` / `list_functions.py`):
 
 | Tool | Backing extractor | Response model |
 |---|---|---|
@@ -127,9 +124,9 @@ Each tool is a thin wrapper: `await tx.run(<cypher>) → response_model`.
 Tests cover happy-path + empty-result + project-not-registered.
 
 **Files in scope** (rev4 — 3 new tools, not 5):
-- 3 new tool registration sites — either in `code_composite.py` or
-  per-extractor modules following the pattern of existing
-  `find_hotspots.py` / `find_owners.py`.
+- 3 new per-tool modules under `services/palace-mcp/src/palace_mcp/code/`:
+  `find_dead_symbols.py`, `find_public_api.py`, `find_cross_module_contracts.py`
+  (Pattern B — matching existing `find_hotspots.py` / `find_owners.py`).
 - 3 response Pydantic models (location: alongside tool registration).
 - Register each new tool in `mcp_server.py` following the existing
   pattern (lines 797 / 824 / 850).
@@ -242,11 +239,11 @@ that runs this query.
 - **Unit (S0.2)**: each composite tool against an empty graph returns
   empty list; against a seeded fixture returns expected response shape.
 - **Integration (S0.1+S0.2)**: end-to-end test seeds graph with mixed
-  Path A + Path B IngestRuns and 1 record per extractor; calls all 5
-  composite tools; asserts row counts.
+  Path A + Path B IngestRuns and 1 record per extractor; calls all 3
+  NEW composite tools; asserts row counts.
 - **Lint (S0.3)**: role files pass markdown-lint + the audit-mode
-  section follows the same heading template across all 6 files (3 Claude
-  + 3 Codex).
+  section follows the same heading template across all 3 Claude role
+  files (CX-side deferred to E6).
 
 ## 7. Risks
 
@@ -258,7 +255,7 @@ that runs this query.
   ..." comment at the top; CR Phase 3.1 must `diff` the audit-mode sections
   between team pairs before APPROVE.
 - **R3**: composite tool schema accidentally breaks an external palace.code
-  consumer. Mitigation: 5 tools are NEW (no overload), so no break risk;
+  consumer. Mitigation: 3 tools are NEW (no overload), so no break risk;
   registry registration only.
 
 ## 8. Out of scope / explicitly NOT in S0

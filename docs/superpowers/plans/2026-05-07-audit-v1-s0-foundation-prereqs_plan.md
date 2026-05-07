@@ -29,9 +29,8 @@ single PR. CTO swaps if a 2nd Claude engineer is free.
 **Owner:** CTO.
 
 - [ ] Open paperclip issue titled `Audit-V1 S0 — Foundation Prerequisites`.
-- [ ] Body = link to spec + this plan, with `GIM-228` placeholders.
-- [ ] After creation, edit-pass replaces `GIM-228` with assigned issue
-      number in spec, plan, and branch name.
+- [x] Body = link to spec + this plan.
+- [x] GIM-NN → GIM-228 edit-pass applied to spec, plan, and branch name.
 - [ ] Reassign to CodeReviewer for plan-first review.
 
 **Acceptance:** issue exists, key substituted, CR is assignee.
@@ -146,13 +145,10 @@ single PR. CTO swaps if a 2nd Claude engineer is free.
 
 **Owner:** PythonEngineer.
 **Files:**
-- 3 new tool registration sites — follow existing pattern. Either
-  inline in `services/palace-mcp/src/palace_mcp/code_composite.py`
-  (top-level, where `find_references` + `test_impact` already live),
-  or per-tool modules under
-  `services/palace-mcp/src/palace_mcp/code/<tool>.py` (matching
-  pattern of `find_hotspots.py` / `find_owners.py`). Decide on plan-
-  first review based on consistency of existing surface.
+- 3 new per-tool modules under `services/palace-mcp/src/palace_mcp/code/`
+  (Pattern B — matching existing `find_hotspots.py` / `find_owners.py` /
+  `list_functions.py`): `find_dead_symbols.py`, `find_public_api.py`,
+  `find_cross_module_contracts.py`.
 - 3 new Pydantic response models alongside their tool registration:
   `DeadSymbolList`, `PublicApiList`, `ContractDriftList`.
 - `services/palace-mcp/src/palace_mcp/mcp_server.py` — register
@@ -280,8 +276,10 @@ reviewable as standalone markdown.
 - [ ] Verify diff covers ALL files listed in plan §"Files in scope" of
       spec — no silent scope reduction (per
       `feedback_silent_scope_reduction.md`).
-- [ ] Audit-mode fragment diff'd against itself in 6 rendered AGENTS.md
-      files: same content, no Claude/Codex drift.
+- [ ] Audit-mode fragment diff'd against itself in 3 rendered Claude
+      role files (`dist/opus-architect-reviewer.md`,
+      `dist/security-auditor.md`, `dist/blockchain-engineer.md`):
+      same content, no drift. CX-side deferred to E6.
 
 **Acceptance:** APPROVE on paperclip + `gh pr review --approve`. Reassign
 to OpusArchitectReviewer.
@@ -295,9 +293,9 @@ to OpusArchitectReviewer.
       (e.g., paperclip ingest)?
 - [ ] Probe: does composite tool `find_owners` correctly handle an
       empty `:Owner` graph (no extractor has run yet)?
-- [ ] Probe: do the 6 audit-mode sections actually contain identical
-      text after rendering, or did Claude/Codex divergence sneak in?
-- [ ] Probe: any of the 5 new composite tools accidentally expose
+- [ ] Probe: do the 3 rendered Claude audit-mode sections actually
+      contain identical text, or did inter-role divergence sneak in?
+- [ ] Probe: any of the 3 new composite tools accidentally expose
       data outside the requested project scope?
 
 **Acceptance:** APPROVE / NUDGE / BLOCK comment. If NUDGE/BLOCK, return
@@ -383,7 +381,7 @@ runs `palace.code.find_owners` etc. against live data successfully.
 
 - R1 — migration overlap with active extractor runs.
 - R2 — Claude/Codex audit-mode prompt drift.
-- R3 — composite tool schema breakage (low; all 5 are net-new).
+- R3 — composite tool schema breakage (low; all 3 are net-new).
 
 ---
 
