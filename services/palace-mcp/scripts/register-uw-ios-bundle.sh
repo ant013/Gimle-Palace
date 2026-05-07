@@ -10,7 +10,7 @@
 #   bash services/palace-mcp/scripts/register-uw-ios-bundle.sh
 #
 # Environment variables:
-#   PALACE_MCP_URL  — default http://localhost:8080/mcp
+#   PALACE_MCP_URL  — default http://localhost:18080/mcp
 #   GIMLE_ROOT      — repo root; default $(git rev-parse --show-toplevel)
 
 set -euo pipefail
@@ -18,7 +18,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MANIFEST="${SCRIPT_DIR}/uw-ios-bundle-manifest.json"
 MCP_CLIENT="${SCRIPT_DIR}/_mcp_client.py"
-PALACE_MCP_URL="${PALACE_MCP_URL:-http://localhost:8080/mcp}"
+PALACE_MCP_URL="${PALACE_MCP_URL:-http://localhost:18080/mcp}"
 export PALACE_MCP_URL
 
 if [ ! -f "$MANIFEST" ]; then

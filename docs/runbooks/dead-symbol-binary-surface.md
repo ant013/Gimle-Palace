@@ -129,16 +129,20 @@ docker compose --profile review up -d --wait --build
 Проверить, что review profile реально поднялся:
 
 ```bash
-curl http://localhost:8080/health
-curl http://localhost:8080/healthz
+curl "http://localhost:${PALACE_MCP_HOST_PORT:-18080}/health"
+curl "http://localhost:${PALACE_MCP_HOST_PORT:-18080}/healthz"
 ```
 
-Важно: в текущем `docker-compose.yml` review profile **не** публикует Neo4j на
+Важно: `palace-mcp` по умолчанию публикуется на host-side `localhost:18080`,
+потому что на operator host `localhost:8080` может обслуживаться системным nginx
+и не указывать на compose stack.
+
+Также review profile **не** публикует Neo4j на
 host-side `127.0.0.1:7687`. Host-side reuse через
 `COMPOSE_NEO4J_URI=bolt://127.0.0.1:7687` не является воспроизводимым QA path
 для review profile. Для Phase 4.1:
 
-- MCP smoke идёт через `palace-mcp` на `http://localhost:8080`;
+- MCP smoke идёт через `palace-mcp` на `http://localhost:${PALACE_MCP_HOST_PORT:-18080}`;
 - Cypher evidence нужно выполнять через контейнер `neo4j`, например:
 
 ```bash

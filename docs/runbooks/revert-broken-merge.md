@@ -43,7 +43,7 @@ cd /Users/Shared/Ios/Gimle-Palace
 
 docker compose --profile full ps
 docker compose --profile full logs --tail=100 palace-mcp | tail -50
-curl -s http://localhost:8080/healthz
+curl -s "http://localhost:${PALACE_MCP_HOST_PORT:-18080}/healthz"
 ```
 
 Capture the traceback verbatim. If the container is stuck in
@@ -85,7 +85,7 @@ git fetch origin && git checkout develop && git pull --ff-only
 docker compose --profile full down
 docker compose --profile full build --no-cache palace-mcp
 docker compose --profile full up -d
-curl -s http://localhost:8080/healthz   # expect 200 ok
+curl -s "http://localhost:${PALACE_MCP_HOST_PORT:-18080}/healthz"   # expect 200 ok
 ```
 
 **After rebuild:** do a real functional check, not just `/healthz`.
@@ -201,7 +201,7 @@ docker compose --profile full up -d
 # Allow startup
 sleep 30
 docker compose --profile full ps
-curl -s http://localhost:8080/healthz
+curl -s "http://localhost:${PALACE_MCP_HOST_PORT:-18080}/healthz"
 ```
 
 Then the **functional check** (not just healthz):

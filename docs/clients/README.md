@@ -1,13 +1,14 @@
 # MCP Client Configuration
 
 Ready-to-paste config snippets for connecting MCP clients to the Palace MCP server
-running locally on `http://localhost:8080/mcp` (streamable-HTTP transport).
+running locally on `http://localhost:18080/mcp` by default (streamable-HTTP transport).
 
 > **Prerequisite:** The Palace stack must be running before connecting a client.
 > Start it with:
 > ```bash
 > docker compose --profile review up -d
 > ```
+> If you override `PALACE_MCP_HOST_PORT` in `.env`, substitute that port below.
 
 ---
 
@@ -39,7 +40,7 @@ and confirm `palace` appears.
 
 | Field | Value | Notes |
 |-------|-------|-------|
-| `mcpServers.palace.url` | `http://localhost:8080/mcp` | Streamable-HTTP endpoint served by `palace-mcp` |
+| `mcpServers.palace.url` | `http://localhost:18080/mcp` | Streamable-HTTP endpoint served by `palace-mcp` (or your overridden `PALACE_MCP_HOST_PORT`) |
 
 The `url` field follows the
 [MCP streamable-HTTP transport spec](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http).

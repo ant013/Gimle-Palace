@@ -33,7 +33,7 @@ def neo4j_password() -> str:
     return pw
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def live_driver(neo4j_uri: str, neo4j_password: str):  # type: ignore[no-untyped-def]
     from neo4j import AsyncGraphDatabase
 
@@ -53,7 +53,7 @@ async def live_driver(neo4j_uri: str, neo4j_password: str):  # type: ignore[no-u
 
 
 @pytest.mark.integration
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="module")
 async def test_ensure_schema_runs_without_error(live_driver: Any) -> None:
     """ensure_schema completes idempotently on a live Neo4j."""
     from palace_mcp.memory.constraints import ensure_schema
@@ -61,3 +61,18 @@ async def test_ensure_schema_runs_without_error(live_driver: Any) -> None:
     await ensure_schema(live_driver, default_group_id="project/integration-test")
     # A second run must also succeed (idempotency).
     await ensure_schema(live_driver, default_group_id="project/integration-test")
+
+    async with live_driver.session() as session:
+        row = await (
+            await session.run(
+                "MATCH (p:Project {slug: 'integration-test'}) "
+                "RETURN p.group_id AS group_id, "
+                "p.parent_mount AS parent_mount, "
+                "p.relative_path AS relative_path"
+            )
+        ).single()
+
+    assert row is not None
+    assert row["group_id"] == "project/integration-test"
+    assert row["parent_mount"] is None
+    assert row["relative_path"] is None

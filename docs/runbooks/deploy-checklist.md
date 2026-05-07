@@ -11,9 +11,9 @@ Run before and after every `docker compose up` on the iMac deploy host.
 
 2. Verify required env vars are non-empty:
    ```bash
-   grep -E "^(NEO4J_PASSWORD|OPENAI_API_KEY|PAPERCLIP_API_KEY)=." .env
+   grep -E "^(NEO4J_PASSWORD|OPENAI_API_KEY|PAPERCLIP_API_KEY|PALACE_MCP_HOST_PORT)=." .env
    ```
-   Expected: 3 lines. If fewer, populate `.env` from `.env.example` + `~/.paperclip/auth.json`.
+   Expected: 4 lines. If fewer, populate `.env` from `.env.example` + `~/.paperclip/auth.json`.
 
 3. Bring up services:
    ```bash
@@ -22,7 +22,7 @@ Run before and after every `docker compose up` on the iMac deploy host.
 
 4. Health check:
    ```bash
-   curl -fsS http://localhost:8080/healthz
+   curl -fsS "http://localhost:${PALACE_MCP_HOST_PORT:-18080}/healthz"
    ```
    Expected: `{"status":"ok"}`.
 

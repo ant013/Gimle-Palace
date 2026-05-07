@@ -14,7 +14,7 @@ from typing import Any
 
 import httpx
 
-PALACE_MCP_URL = os.environ.get("PALACE_MCP_URL", "http://localhost:8080/mcp")
+PALACE_MCP_URL = os.environ.get("PALACE_MCP_URL", "http://localhost:18080/mcp")
 _TIMEOUT = httpx.Timeout(60.0)
 _RPC_ID = 0
 

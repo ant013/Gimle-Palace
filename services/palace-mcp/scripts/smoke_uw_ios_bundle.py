@@ -30,7 +30,7 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent
 MANIFEST = SCRIPT_DIR / "uw-ios-bundle-manifest.json"
-PALACE_MCP_URL = os.environ.get("PALACE_MCP_URL", "http://localhost:8080/mcp")
+PALACE_MCP_URL = os.environ.get("PALACE_MCP_URL", "http://localhost:18080/mcp")
 BUNDLE_NAME = "uw-ios"
 POLL_INTERVAL_S = 15
 SMOKE_SYMBOL = "EvmKit.Address"

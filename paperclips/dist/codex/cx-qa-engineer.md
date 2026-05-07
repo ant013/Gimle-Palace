@@ -30,8 +30,8 @@ Before merging a PR with compose / Docker changes — MANDATORY live smoke on ev
 
 ```bash
 docker compose --profile review up -d --wait      # --wait blocks until healthy
-curl -fsS http://localhost:8080/health            # → {"status":"ok"}
-curl -fsS http://localhost:8080/healthz           # → {"status":"ok","neo4j":"reachable"}
+curl -fsS "http://localhost:${PALACE_MCP_HOST_PORT:-18080}/health"   # → {"status":"ok"}
+curl -fsS "http://localhost:${PALACE_MCP_HOST_PORT:-18080}/healthz"  # → {"status":"ok","neo4j":"reachable"}
 docker compose --profile review down
 # repeat for --profile analyze and --profile full
 ```

@@ -36,7 +36,8 @@ Owns palace-mcp service: MCP protocol implementation (FastAPI + streamable-HTTP 
 
 ## Transport — locked: streamable-HTTP
 
-palace-mcp = FastAPI on 8080:8000 (compose.yml). Transport decision is **closed:**
+palace-mcp = FastAPI on 8000 in-container, published on host `PALACE_MCP_HOST_PORT`
+(default `18080`) in compose. Transport decision is **closed:**
 - ✅ streamable-HTTP (Anthropic default per spec 2025-11-25)
 - ❌ stdio (not applicable to a networked service)
 - ❌ SSE (deprecated in spec)

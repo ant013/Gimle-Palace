@@ -48,7 +48,8 @@ services:
       neo4j:
         condition: service_healthy
     ports:
-      - "8080:8000"
+      # Default host port avoids local nginx on :8080; override in .env if needed.
+      - "${PALACE_MCP_HOST_PORT:-18080}:8000"
     volumes:
       # NOTE: real-project bind-mounts use absolute Mac paths (operator-iMac convention).
       # Non-iMac contributors should override these in docker-compose.override.yml.
