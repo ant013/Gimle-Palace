@@ -25,16 +25,26 @@ S1.5 fetcher has no composite MCP tools to call, and the 3 reused agents
    via `cypher.py` AND `foundation/checkpoint.py`) write the same
    canonical fields (`extractor_name`, `project`) on every `:IngestRun`
    node.
-2. **S0.2 Five composite MCP tools exist** in `code_composite.py`:
-   `find_owners`, `find_version_skew`, `find_dead_symbols`,
-   `find_public_api`, `find_cross_module_contracts`. Each is a thin
+2. **S0.2 Three NEW composite MCP tools exist** (`find_dead_symbols`,
+   `find_public_api`, `find_cross_module_contracts`). Each is a thin
    wrapper around an existing extractor's Cypher query, returns a
-   Pydantic response model.
-3. **S0.3 Audit-mode prompt sections** appended to three role files:
-   `paperclips/roles/opusarchitectreviewer.md`,
-   `.../securityauditor.md`, `.../blockchainengineer.md`. CX-side
-   parity: same sections appended to `paperclips/roles-codex/cx-*`
-   counterparts (per `feedback_slim_both_claude_codex.md`).
+   Pydantic response model. **(rev4 correction)**: `find_owners`
+   already registered at `mcp_server.py:850` (GIM-216, merged
+   `2d6e6c1`); `find_version_skew` registered via
+   `register_version_skew_tools()` at `mcp_server.py:790` (GIM-218,
+   merged `603c840`). S0.2 scope reduced from 5 → 3.
+3. **S0.3 Audit-mode prompt fragment** authored at
+   `paperclips/fragments/local/audit-mode.md` (NOT in role files
+   directly), included via `<!-- @include fragments/local/audit-mode.md -->`
+   marker in 3 Claude role files (kebab-case, per `paperclips/build.sh`):
+   `paperclips/roles/opus-architect-reviewer.md`,
+   `paperclips/roles/security-auditor.md`,
+   `paperclips/roles/blockchain-engineer.md`. CX-side mirror is
+   **deferred to E6** because CX-side `cx-blockchain-engineer.md` /
+   `cx-security-auditor.md` files **don't exist on develop yet**
+   (only `cx-code-reviewer.md`, `cx-cto.md`, etc. + `codex-architect-reviewer.md`).
+   E6 hires create the CX security/blockchain role files **with**
+   the audit-mode fragment-include already in place.
 4. End-to-end smoke: `palace.audit.run(project="<any-real>")` returns
    a fetcher payload that includes IngestRun records from BOTH paths
    and successfully calls all 5 new composite tools.
@@ -86,20 +96,29 @@ back-filled by a one-shot migration query.
 **Out of scope**: changing the Path B schema. Path B already has the
 canonical fields; Path A is the loser of this convergence.
 
-### 3.2 S0.2 — Five composite MCP tools (CR-CRITICAL-3)
+### 3.2 S0.2 — Three NEW composite MCP tools (rev4 — was 5, scope corrected)
 
-**Problem state**: the S1.5 fetcher is designed to call
-`palace.code.find_<thing>` for each extractor's report section, but
-only 3 of the 8 tools exist (`find_references`, `test_impact`,
-`find_hotspots`). Without the missing 5, S1 has nothing to fetch from.
+**Problem state (rev4)**: The S1.9 async workflow needs domain agents
+to query per-extractor data via MCP composites. Currently registered
+on develop (verified against `mcp_server.py` HEAD): `find_references`,
+`test_impact`, `find_hotspots`, `list_functions`, `find_owners`
+(GIM-216), `find_version_skew` (GIM-218). Three are still missing:
+`find_dead_symbols`, `find_public_api`, `find_cross_module_contracts`.
 
-**Target end state**: 5 new composite MCP tools in
-`services/palace-mcp/src/palace_mcp/code/code_composite.py`:
+**Note for S1.5 fetcher**: the fetcher uses **direct Cypher** via
+`audit_contract().query`, NOT MCP composite tools (per OPUS-H1
+correction in rev4 review). Composite tools are an **agent-facing**
+surface for ad-hoc queries during S1.9 workflows, not consumed by
+the in-process fetcher. S0.2 dependency therefore moves from S1.5 to
+S1.9.
+
+**Target end state**: 3 new composite MCP tools registered (location
+TBD per existing convention — `code_composite.py` for orchestrated,
+or per-extractor module like existing `find_hotspots.py` /
+`find_owners.py`):
 
 | Tool | Backing extractor | Response model |
 |---|---|---|
-| `palace.code.find_owners` | `code_ownership` (#32, GIM-216) | `OwnersList` |
-| `palace.code.find_version_skew` | `cross_repo_version_skew` (#39, GIM-218) | `VersionSkewList` |
 | `palace.code.find_dead_symbols` | `dead_symbol_binary_surface` (#33, GIM-193) | `DeadSymbolList` |
 | `palace.code.find_public_api` | `public_api_surface` (#27, GIM-190) | `PublicApiList` |
 | `palace.code.find_cross_module_contracts` | `cross_module_contract` (#31, GIM-192) | `ContractDriftList` |
@@ -107,19 +126,22 @@ only 3 of the 8 tools exist (`find_references`, `test_impact`,
 Each tool is a thin wrapper: `await tx.run(<cypher>) → response_model`.
 Tests cover happy-path + empty-result + project-not-registered.
 
-**Files in scope**:
-- `services/palace-mcp/src/palace_mcp/code/code_composite.py` — new
-  functions, register on `mcp_server.py`.
-- `services/palace-mcp/src/palace_mcp/code/models.py` — 5 response
-  Pydantic models.
-- Tests under `services/palace-mcp/tests/code/test_composite_*`.
-- `services/palace-mcp/tests/integration/test_audit_composite_e2e.py`
-  — seed graph + call all 5 tools + assert shapes.
+**Files in scope** (rev4 — 3 new tools, not 5):
+- 3 new tool registration sites — either in `code_composite.py` or
+  per-extractor modules following the pattern of existing
+  `find_hotspots.py` / `find_owners.py`.
+- 3 response Pydantic models (location: alongside tool registration).
+- Register each new tool in `mcp_server.py` following the existing
+  pattern (lines 797 / 824 / 850).
+- Tests under `services/palace-mcp/tests/` for each new tool —
+  3 tools × 3 cases (empty / seeded / project-not-registered) = 9 tests.
+- 1 integration test seeding graph + calling all 3 tools.
 
-**Out of scope**: the audit fetcher itself (S1.5). Tools must be
-consumable from outside the audit — they're general-purpose.
+**Out of scope**: the audit fetcher itself (S1.5 uses direct Cypher,
+not MCP). Tools must be consumable from outside the audit — they're
+general-purpose for agent ad-hoc queries during S1.9 workflows.
 
-### 3.3 S0.3 — Audit-mode prompt sections (OPUS-MEDIUM-2)
+### 3.3 S0.3 — Audit-mode prompt fragment (OPUS-MEDIUM-2; rev4-corrected)
 
 **Problem state**: the 3 reused agents
 (`OpusArchitectReviewer`, `SecurityAuditor`, `BlockchainEngineer`)
@@ -128,9 +150,17 @@ generation. When called from the workflow launcher, each will
 ad-lib the format, severity grading, and what counts as a finding —
 output won't be consistent across audit runs.
 
-**Target end state**: each of the three role files (and the CX-side
-mirror `cx-*` files) has an `## Audit mode` section appended that
-specifies:
+**Target end state (rev4)**: a new fragment file at
+`paperclips/fragments/local/audit-mode.md` is included via
+`<!-- @include fragments/local/audit-mode.md -->` marker (correct
+syntax per `paperclips/build.sh` HEAD) into 3 Claude role files
+(kebab-case naming, verified against `git ls-tree origin/develop`):
+
+- `paperclips/roles/opus-architect-reviewer.md`
+- `paperclips/roles/security-auditor.md`
+- `paperclips/roles/blockchain-engineer.md`
+
+The fragment defines:
 
 - **Input format**: JSON blob shape from `palace.audit.run` fetcher.
 - **Output format**: markdown sub-report — section header, severity-
@@ -142,17 +172,29 @@ specifies:
   data shows. If fetcher returns 0 findings for a section, sub-
   report says "no findings" — no synthesis from agent's training data.
 
-**Files in scope** (Claude side):
-- `paperclips/roles/opusarchitectreviewer.md`
-- `paperclips/roles/securityauditor.md`
-- `paperclips/roles/blockchainengineer.md`
+**Verification step**: run `bash paperclips/build.sh --target claude`
+after editing; verify rendered `paperclips/dist/<role>.md` contains
+the audit-mode section (build.sh awk script expands the marker).
 
-**Files in scope** (Codex / CX side, per `feedback_slim_both_claude_codex.md`):
-- `paperclips/roles-codex/cx-opusarchitectreviewer.md`
-- `paperclips/roles-codex/cx-securityauditor.md`
-- `paperclips/roles-codex/cx-blockchainengineer.md`
+**CX-side parity (rev4 — DEFERRED to E6)**:
+On develop, only `cx-code-reviewer.md`, `cx-cto.md`, `cx-infra-engineer.md`,
+`cx-mcp-engineer.md`, `cx-python-engineer.md`, `cx-qa-engineer.md`,
+`cx-research-agent.md`, `cx-technical-writer.md`, plus
+`codex-architect-reviewer.md` (different prefix) exist.
+**There is no `cx-security-auditor.md` or `cx-blockchain-engineer.md`
+on develop yet** — those files are E6 deliverables. E6 (CX hire)
+spec must include the `<!-- @include fragments/local/audit-mode.md -->`
+marker at creation time.
 
-**Out of scope**: the Auditor role file (new role, lands in S1.7).
+**Files in scope** (Claude side, rev4):
+- `paperclips/fragments/local/audit-mode.md` (new)
+- `paperclips/roles/opus-architect-reviewer.md` (append marker)
+- `paperclips/roles/security-auditor.md` (append marker)
+- `paperclips/roles/blockchain-engineer.md` (append marker)
+- `paperclips/dist/<role>.md` × 3 (regenerated)
+
+**Out of scope**: the Auditor role file (new role, lands in S1.7);
+CX-side audit-mode markers (deferred to E6).
 
 ## 4. Schema impact
 

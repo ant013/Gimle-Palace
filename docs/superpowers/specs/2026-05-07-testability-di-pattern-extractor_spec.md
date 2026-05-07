@@ -7,7 +7,9 @@
 **Slice ID:** Phase 2 §2.2 #8 Testability/DI Pattern Extractor
 **Companion plan:** `2026-05-07-testability-di-pattern-extractor_plan.md`
 **Branch:** `feature/GIM-NN-testability-di-extractor`
-**Blocker:** **E6 closure** (CX hire).
+**Blockers (rev4):**
+- **E6 closure** (CX hire).
+- **S0.1 IngestRun schema unification** (rev4 — CTO-XF-H1) — uses unified schema; wait for S0 if it lands later than E6.
 
 ---
 
@@ -62,6 +64,23 @@ in the original 45-extractor research inventory.
 - Coverage gap (#28 covers actual coverage measurement).
 - Mutation testing.
 - Test runner config drift.
+
+### Cross-reference with #6 Coding Convention (rev4 — CTO-#8-M1)
+
+#6 also has a `structural.di_style` rule. To avoid double-counting
+DI patterns:
+
+- **#8 (this extractor) is the AUTHORITATIVE source** for DI analysis.
+  Audit report §3 Quality cites `:DiPattern` rows.
+- **#6's `structural.di_style`** is a coarse convention summary signal
+  only; it should NOT contradict #8. If #6 detects "init_injection"
+  in a module where #8 finds "framework_bound (Hilt)", #8 wins (more
+  detail).
+- **Recommended action during #6 implementation**: drop
+  `structural.di_style` from #6's rule set entirely (down to 7 rules)
+  and add a cross-link in the audit template referencing #8's
+  `:DiPattern` for DI questions. This is a #6 spec change, not a #8
+  one — flagged here for cross-coordination.
 
 ## 3. Detection strategy
 

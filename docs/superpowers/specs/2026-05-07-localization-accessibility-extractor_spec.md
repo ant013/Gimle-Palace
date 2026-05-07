@@ -7,7 +7,9 @@
 **Slice ID:** Phase 2 §2.2 #9 Localization & Accessibility Extractor
 **Companion plan:** `2026-05-07-localization-accessibility-extractor_plan.md`
 **Branch:** `feature/GIM-NN-localization-accessibility-extractor`
-**Blocker:** **E6 closure** (CX hire).
+**Blockers (rev4):**
+- **E6 closure** (CX hire).
+- **S0.1 IngestRun schema unification** (rev4 — CTO-XF-H1) — uses unified schema; wait for S0 if it lands later than E6.
 
 ---
 

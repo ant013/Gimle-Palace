@@ -21,23 +21,55 @@
 
 - [ ] Verify E6 ✅. If not, queue with `blockedByIssueIds=[<E6 id>]`.
 
-### Step 0.2: Capture fixture profiles (out-of-extractor manual step)
+### Step 0.2: Capture fixture profiles (rev4 — owner+deadline + decoupling)
 
-**Owner:** Board (operator + Mac dev).
+> **Rev4 (CTO-#17-H1)**: real-trace fixture capture is a separate,
+> deferred deliverable. Unit tests must NOT block on it.
+
+#### Step 0.2a — Synthetic stubs for unit tests (NO blocker)
+
+**Owner:** PythonEngineer (during Phase 2.2 / 2.3).
+**Files:** `services/palace-mcp/tests/extractors/fixtures/hot-path-fixture/synthetic/{instruments-stub.json,perfetto-stub.pftrace}`.
+
+- [ ] Author minimal synthetic Instruments JSON (~10 sample frames,
+      hand-crafted — does NOT need real Mac capture).
+- [ ] Author minimal synthetic Perfetto trace (~10 events; can be
+      generated via `traceconv` from a JSON fixture, or hand-rolled
+      protobuf for maximum determinism).
+- [ ] These stubs feed **Phase 2.2** (Instruments parser unit tests)
+      and **Phase 2.3** (Perfetto parser unit tests). Phase 2 work
+      proceeds without waiting for real trace capture.
+
+**Acceptance:** synthetic stubs committed; Phase 2.2 + 2.3 unit tests
+runnable + GREEN against stubs.
+
+#### Step 0.2b — Real-trace fixtures for integration + smoke (deferred)
+
+**Owner:** Operator (anton.stavnichiy@gmail.com).
+**Deadline:** within 1 week of E6 close (rev4 — explicit owner +
+deadline per CTO-#17-H1).
 
 - [ ] On a Mac with Xcode: capture an Instruments Time Profiler trace
       of `tronkit-swift` unit tests; export as JSON via
       `xctrace export --input <trace> --xpath ...`.
 - [ ] On an Android dev box: capture a Perfetto trace of UW-Android
       app cold start.
-- [ ] Trim each trace to ~1MB if possible (anonymise / sub-sample).
+- [ ] Trim each trace to ~1MB (anonymise / sub-sample).
 - [ ] Commit under
       `services/palace-mcp/tests/extractors/fixtures/hot-path-fixture/profiles/`.
 - [ ] Document the exact `xctrace` / `traceconv` invocations in
       `docs/runbooks/hot-path-profiler.md` (authored in Phase 2.5).
 
-**Acceptance:** at least 1 `.json` (Instruments) + 1 `.pftrace`
-(Perfetto) committed; sizes documented.
+**Acceptance:** at least 1 `.json` (Instruments, real) + 1 `.pftrace`
+(Perfetto, real) committed; sizes documented; integration tests
+(Phase 2.4) runnable against real fixtures (replaces stubs for E2E
+coverage but unit tests keep stubs for determinism).
+
+**Contingency**: if operator deadline slips past 1w, escalate via
+paperclip comment on this slice's issue. Slice can still merge with
+unit tests + stub-driven integration tests + a documented "real-trace
+follow-up" sub-task; this lets the rest of CX queue progress without
+blocking.
 
 ### Step 0.3: Issue + branch
 

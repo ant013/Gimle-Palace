@@ -34,7 +34,7 @@ slice. Adjustments to standard 7-phase chain:
 
 **Owner:** Board.
 
-- [ ] `curl -H "Authorization: Bearer $PAPERCLIP_API_KEY" "$PAPERCLIP_API_URL/api/companies/$COMPANY_ID/agents"` and grep for any existing `nameKey` collision (`cx-blockchainengineer`, `cx-securityauditor`, candidate name from D-1).
+- [ ] `curl -H "Authorization: Bearer $PAPERCLIP_API_KEY" "$PAPERCLIP_API_URL/api/companies/$COMPANY_ID/agents"` and grep for any existing `name` collision (`BlockchainEngineer`, `SecurityAuditor`, candidate name from D-1). Note (rev4): paperclip agent records use `name` field, not `nameKey` — schema verified against develop.
 - [ ] If collision: pause; revisit naming via D-1 with operator.
 
 **Acceptance:** no `nameKey` collisions; clear naming decided.
@@ -68,7 +68,7 @@ slice. Adjustments to standard 7-phase chain:
 **Owner:** Board (operator session).
 
 - [ ] Confirm D-1 (third-agent naming) with operator. Default
-      `cx-pythonengineer-2`. Capture decision in commit message.
+      `cx-python-engineer-2` (kebab-case rev4). Capture decision in commit message.
 - [ ] Confirm D-2 (shared vs per-role Python-orch fragment) — default
       shared, but if a domain-specific fragment makes sense, plan a
       stub now and defer authoring until first user.
@@ -77,12 +77,12 @@ slice. Adjustments to standard 7-phase chain:
 
 **Acceptance:** D-1..D-5 resolved; decisions noted in PR body draft.
 
-### Step 2.2: Author cx-blockchainengineer.md
+### Step 2.2: Author cx-blockchain-engineer.md
 
 **Owner:** Board.
-**Files:** `paperclips/roles-codex/cx-blockchainengineer.md` (new).
+**Files:** `paperclips/roles-codex/cx-blockchain-engineer.md` (new).
 
-- [ ] Start by reading `paperclips/roles/blockchainengineer.md`
+- [ ] Start by reading `paperclips/roles/blockchain-engineer.md`
       (Claude-side baseline).
 - [ ] Mirror to CX-side, replacing:
   - workspace path → `/Users/ant013/Android/Gimle-Palace`
@@ -101,24 +101,24 @@ slice. Adjustments to standard 7-phase chain:
 **Acceptance:** file exists, passes markdown-lint, fragment-include
 validator (`paperclips/scripts/curate-script.sh`) returns clean.
 
-### Step 2.3: Author cx-securityauditor.md
+### Step 2.3: Author cx-security-auditor.md
 
 **Owner:** Board.
-**Files:** `paperclips/roles-codex/cx-securityauditor.md` (new).
+**Files:** `paperclips/roles-codex/cx-security-auditor.md` (new).
 
-- [ ] Same mirror process from `paperclips/roles/securityauditor.md`.
+- [ ] Same mirror process from `paperclips/roles/security-auditor.md`.
 - [ ] Domain-knowledge anchor: OWASP top-10 mobile, Apple Secure
       Enclave, Android Keystore, common iOS/Android crypto missteps,
       taint-analysis methodology, supply-chain risk patterns.
 
 **Acceptance:** as Step 2.2.
 
-### Step 2.4: Author cx-pythonengineer-2.md (or D-1 alternative name)
+### Step 2.4: Author cx-python-engineer-2.md (or D-1 alternative name)
 
 **Owner:** Board.
-**Files:** `paperclips/roles-codex/cx-pythonengineer-2.md` (new).
+**Files:** `paperclips/roles-codex/cx-python-engineer-2.md` (new).
 
-- [ ] Mirror from `paperclips/roles-codex/cx-pythonengineer.md`
+- [ ] Mirror from `paperclips/roles-codex/cx-python-engineer.md`
       (existing CX PE).
 - [ ] Adjust scope blurb: "second Python engineer on CX team —
       handles swapped Claude-affinity extractor work + LLM-bearing

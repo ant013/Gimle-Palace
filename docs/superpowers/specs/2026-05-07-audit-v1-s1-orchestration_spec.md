@@ -19,10 +19,15 @@ S1 has **hard prerequisites in S0** that have not yet merged:
 - **Blocked-on-S0.1**: S1.4 (Extractor discovery via `:IngestRun`) reads
   the unified `extractor_name`/`project` schema. Until S0.1 lands, the
   discovery Cypher cannot be written against a stable contract.
-- **Blocked-on-S0.2**: S1.5 (Generic fetcher) calls 5 composite MCP
-  tools (`find_owners`, `find_version_skew`, `find_dead_symbols`,
-  `find_public_api`, `find_cross_module_contracts`) — none exist yet.
-  Until S0.2 lands, the fetcher cannot be tested end-to-end.
+- **Blocked-on-S0.2** (REVISED in rev4): S1.5 (Generic fetcher) does
+  **NOT** depend on S0.2. The fetcher uses **direct Cypher** via
+  `audit_contract().query` (per spec §3.5 code sample below). The
+  composite MCP tools from S0.2 are an **agent-facing** surface for
+  ad-hoc queries during S1.9 workflows; the in-process fetcher
+  bypasses MCP entirely and reads Cypher directly via the Neo4j
+  driver. Therefore S1.5 has no S0.2 dependency. **S1.9** (workflow
+  launcher) DOES depend on S0.2 — domain agents call the composite
+  tools when posting sub-reports.
 - **Blocked-on-S0.3**: S1.7 (Auditor role) and S1.9 (workflow launcher)
   hand work to 3 reused agents whose audit-mode prompts S0.3 authors.
   Until S0.3 lands, the workflow can be drafted but smoke-tested only
@@ -165,15 +170,32 @@ async def fetch_audit_data(driver, discovery_result, extractor_registry):
     return results
 ```
 
-Calls into the 5 new composite tools from S0.2 + 3 existing tools.
+**(rev4 correction)**: Fetcher uses **direct Cypher** through
+`audit_contract().query` — NOT MCP composite tools. Composite tools
+serve agent-facing ad-hoc queries during S1.9; the in-process fetcher
+goes directly via the Neo4j driver to avoid serialisation overhead.
 
-`<<DEPENDS ON S0.2 — 5 composite tools>>`
+`<<NO S0.2 dependency>>` — S0.2 dependency moves to S1.9 (workflow
+launcher), where domain agents query MCP composites.
 
 ### 3.6 S1.6 — Implement `audit_contract()` × 7 (~4-6h)
 
 For each of 7 extractors, implement `audit_contract()` returning
-query, response model, template path. **This is also the boundary
-that frees PE to start S2.1 in the rev3 critical path.**
+query, response model, template path. **(rev4 correction)**: each
+extractor's `audit_contract().query` cites the **extractor's own
+Cypher source** (e.g., for hotspot, the existing query in
+`extractors/hotspot/extractor.py`), NOT S0.2 composite tools. S0.2
+composite tools wrap the **same** underlying Cypher for MCP-client
+consumption; `audit_contract()` is for in-process fetcher consumption
+and uses raw Cypher.
+
+**Rev4 PE-freed boundary correction**: The S1.6 commit does NOT free
+PE to start S2.1 — S1.7 / S1.8 / S1.9 / S1.10 are still PE-bound
+(S1.7 is markdown-only and could be picked up by Board, but S1.8 /
+S1.9 / S1.10 require Python work). Realistic timeline: PE finishes
+S1.10 → then S2.1 starts. Net effect: critical path = +1w on rev3
+estimate (17-18w → 18-19w), pushing into the 18w envelope's tail
+margin.
 
 ### 3.7 S1.7 — Auditor agent role file (~1-2h)
 
@@ -214,6 +236,8 @@ Workflow: parent issue + 3 child issues
 Domain agents post sub-reports → `issue_children_completed` wakes
 Auditor → renders final report.
 
+`<<DEPENDS ON S0.2 — 3 composite tools for agent ad-hoc queries
+(rev4 — moved here from S1.5)>>`
 `<<DEPENDS ON S0.3 — audit-mode prompts>>` (workflow can be drafted
 without; smoke test §3.10 must wait for S0.3 to test agent output
 quality).

@@ -14,6 +14,10 @@
 **Source branch:** `feature/GIM-NN-audit-v1-s1-orchestration` cut from `origin/develop` **after S0 merges**.
 **Target branch:** `develop`. Squash-merge after S0 is on develop AND all CI green.
 **Team:** Claude (single Claude PE; possibly 2 if S1 splits per S1-D1).
+**Wall-time (rev4):** 4-5 weeks (was 3-4w in rev3). +1w buffer per CTO-S1-H1
+finding: historical evidence (GIM-216 multi-week Phase 3 review) shows
+slice phase-chain overhead is significant. S1.9 (async workflow launcher)
+identified as scope-cuttable to v1.1 if margin breaks against 18w envelope.
 
 ---
 
@@ -201,7 +205,7 @@ signatures all present.
 
 ### Phase 2.5 — S1.5 generic fetcher (~2-3h)
 
-#### Step 2.5.1: Failing test (`<<DEPENDS ON S0.2>>`)
+#### Step 2.5.1: Failing test (rev4 — NO S0.2 dependency)
 
 **Owner:** PythonEngineer.
 **Files:** `services/palace-mcp/tests/audit/integration/test_audit_fetcher.py`.
@@ -209,9 +213,13 @@ signatures all present.
 - [ ] Seed Neo4j; populate registry with 7 fake extractors each
       returning a known `AuditContract`.
 - [ ] Call `fetch_audit_data(...)`.
-- [ ] Assert: response includes 1 `AuditSectionData` per extractor;
-      each calls the right composite tool from S0.2; data shape
-      matches `audit_contract().response_model`.
+- [ ] Assert (rev4 — direct Cypher, not MCP tool calls):
+      response includes 1 `AuditSectionData` per extractor; each
+      `AuditSectionData.data` is the result of executing
+      `audit_contract().query` against the seeded graph and parsing
+      via `audit_contract().response_model`. Cypher executes via the
+      Neo4j async driver in the fetcher's process — there are NO
+      MCP round-trips inside the fetcher.
 - [ ] RED initially.
 
 **Acceptance:** 1 RED test (with multiple sub-assertions).
@@ -257,11 +265,18 @@ signatures all present.
 
 **Acceptance:** 7 GREEN.
 
-#### Step 2.6.3: Commit S1.6 — **PE-bound boundary in critical path**
+#### Step 2.6.3: Commit S1.6 (rev4 — boundary correction)
 
 - [ ] Commit: `feat(GIM-NN): audit_contract() on 7 existing extractors (S1.6)`.
-- [ ] Notify CTO that S2.1 can now begin (PE freed); S1.7..S1.10
-      continue in parallel for remaining S1 work.
+- [ ] **(rev4)**: do NOT notify CTO that S2.1 can begin — S1.7..S1.10
+      are still PE-bound (S1.7 markdown-only could be picked up by Board,
+      but S1.8/S1.9/S1.10 require Python work and stay with PE). PE
+      continues sequentially: S1.7 → S1.8 → S1.9 → S1.10. After S1.10
+      merge, S2.1 starts. Net effect on rev3 critical path: +1w (17-18w
+      → 18-19w), tight against 18w envelope. Operator-aware risk.
+      Mitigation if margin breaks: cut S1.9 (async workflow launcher)
+      from v1 scope — sync `palace.audit.run` MCP tool alone is
+      sufficient for v1 smoke. S1.9 lands as v1.1.
 
 ---
 
@@ -285,16 +300,35 @@ signatures all present.
 
 **Acceptance:** 2 role files exist; render artefacts validated.
 
-#### Step 2.7.2: Register Auditor in deploy script
+#### Step 2.7.2: Register Auditor in deploy script (rev4 — inline API call)
 
 - [ ] Edit `paperclips/scripts/deploy-agents.sh` (or canonical
       list) to include `auditor` in `AGENT_NAMES`.
-- [ ] POST agent identity to paperclip (similar to E6 step).
+- [ ] POST agent identity to paperclip — exact API call (rev4 inline,
+      removes forward-reference to E6 plan):
+      ```
+      curl -X POST \
+        -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "companyId": "9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64",
+          "name": "Auditor",
+          "adapterType": "claude_local",
+          "status": "idle",
+          "title": "Auditor — Quality + Dependencies + Historical (audit-v1)",
+          "icon": "shield-check",
+          "reportsTo": "<CTO id 7fb0fdbb-...>"
+        }' \
+        "$PAPERCLIP_API_URL/api/companies/$COMPANY_ID/agents"
+      ```
+      Response body contains the new agent's `id` (UUID).
 - [ ] Capture UUID; update Board memory `reference_agent_ids.md`.
+- [ ] Verify with GET listing: agent appears with `name=Auditor`,
+      `status=idle`.
 
 **Acceptance:** Auditor agent listed in
-`GET /api/companies/<id>/agents` with `nameKey=auditor`,
-`adapter=claude_local` (Claude side).
+`GET /api/companies/<id>/agents` with `name=Auditor`,
+`adapterType=claude_local`.
 
 #### Step 2.7.3: Commit S1.7
 
@@ -341,21 +375,31 @@ signatures all present.
 
 ### Phase 2.9 — S1.9 async workflow launcher (~3-4h)
 
-#### Step 2.9.1: Author CLI wrapper
+#### Step 2.9.1: Author CLI wrapper (rev4 — adds CI-compatible tests)
 
 **Owner:** PythonEngineer.
-**Files:** `services/palace-mcp/src/palace_mcp/cli.py` (new).
+**Files:**
+- `services/palace-mcp/src/palace_mcp/cli.py` (new).
+- `services/palace-mcp/tests/cli/test_audit_cli_unit.py` (new) — CI-level.
+- `services/palace-mcp/tests/cli/test_audit_cli_e2e.py` (existing scope) — QA-level.
 
 - [ ] Subcommand `audit run --project=<slug>` calls MCP via
       streamable-HTTP, returns markdown to stdout.
 - [ ] Subcommand `audit launch --project=<slug>` creates parent +
       3 child paperclip issues.
-- [ ] Test: `python3 -m palace_mcp.cli audit run --project=...` against
-      a running palace-mcp instance.
+- [ ] **(rev4 — CR-H3)**: CI-compatible unit test
+      `test_audit_cli_unit.py`:
+  - mocks the streamable-HTTP transport;
+  - asserts arg-parse semantics, request payload construction,
+    error envelope on missing args, slug regex validation.
+  - runs in CI without a live palace-mcp instance.
+- [ ] Existing E2E test (live palace-mcp instance, QA-only) covers
+      live-stack regression.
 
-**Acceptance:** CLI exits 0; markdown on stdout.
+**Acceptance:** CLI exits 0; markdown on stdout (E2E); CI unit tests
+pass without live stack.
 
-#### Step 2.9.2: Author launcher script
+#### Step 2.9.2: Author launcher script (rev4 — adds dry-run mode for CI)
 
 **Owner:** PythonEngineer.
 **Files:** `paperclips/scripts/audit-workflow-launcher.sh` (new).
@@ -364,10 +408,17 @@ signatures all present.
 - [ ] Creates parent issue `audit: <slug>` assigned to Auditor.
 - [ ] Creates 3 child issues with `blockedByIssueIds` →
       OpusArchitectReviewer, SecurityAuditor, BlockchainEngineer
-      (`<<DEPENDS ON S0.3 — audit-mode prompts on these agents>>`).
+      (`<<DEPENDS ON S0.3 — audit-mode prompts on these agents
+      (Claude side); CX-side audit-mode wired via E6 file creation>>`).
+- [ ] **(rev4 — CR-H3)**: support `--dry-run` flag that prints all
+      4 issue payloads to stdout WITHOUT calling the paperclip API.
+      CI smoke test invokes `--dry-run` and asserts payloads are
+      well-formed JSON with expected fields. This gives CI coverage
+      of the launcher without needing a live paperclip instance.
 
-**Acceptance:** dry-run on iMac creates 4 issues; child issues block
-parent; parent's `assigneeAgentId` is Auditor.
+**Acceptance:** dry-run on iMac creates 4 real issues; child issues
+block parent; parent's `assigneeAgentId` is Auditor. CI dry-run
+exits 0 with valid JSON payloads on stdout.
 
 #### Step 2.9.3: Author runbook
 

@@ -114,7 +114,7 @@ slice that just enriches MCP without touching workflow.
 | **S2.2 (B+1)** | Architecture Layer extractor (#1) | [`B-audit-extractors.md`](superpowers/sprints/B-audit-extractors.md) | ~3 weeks | S2.1 frees PE | Claude PE |
 | **S2.3 (B+7)** | Error Handling Policy extractor (#7) | [`B-audit-extractors.md`](superpowers/sprints/B-audit-extractors.md) | ~3 weeks | S2.2 frees PE (or ‖ if a 2nd Claude engineer is free) | Claude PE |
 | **S3 (C)** | Per-Kit ingestion automation | [`C-ingestion-automation.md`](superpowers/sprints/C-ingestion-automation.md) | ~1 week | S1.9 (palace_mcp.cli) | Infra (‖ S1) |
-| **S4 (E)** | Smoke on tronKit-swift + bitcoinKit-swift | [`E-smoke.md`](superpowers/sprints/E-smoke.md) | ~1 week | S0 + S1 + S2.1 + S2.2 + S2.3 + S3 + GIM-216 | QA + operator |
+| **S4 (E)** | Smoke on tronKit-swift + bitcoinKit-swift | [`E-smoke.md`](superpowers/sprints/E-smoke.md) | ~1 week | S0 + S1 + S2.1 + S2.2 + S2.3 + S3 (GIM-216 ✅ merged `2d6e6c1`; GIM-218 ✅ merged `603c840`) | QA + operator |
 | **S5 (F)** | Scale to 41 HS Kits + uw-ios-app | [`F-scale.md`](superpowers/sprints/F-scale.md) | ~3 weeks | S4 | operator + Infra |
 | **S6+** | Iterative extractor backlog (#2, #34, etc — #1/#7 NOT here in rev3) | TBD per slice | ongoing | post-v1 | per slice |
 
@@ -122,7 +122,7 @@ slice that just enriches MCP without touching workflow.
 S2.1 (2w PE) → S2.2 (3w PE, #1 Arch Layer) → S2.3 (3w PE, #7 Error Handling) →
 S4 (1w) → S5 (3w) = **~17-18 weeks**.
 S3 runs ‖ S1 (different engineer).
-GIM-218 either lands by S4 or degrades to blind spot.
+GIM-218 contingency closed: extractor merged `603c840` 2026-05-07.
 **Parallel S2.2 ‖ S2.3 option**: if a second Claude engineer becomes available
 after S2.1 (different files: arch_layer/* vs error_handling/*), max(3w, 3w) = 3w
 collapses to **~14-15 weeks** total. Operator-chosen 18w envelope tolerates the
@@ -172,13 +172,8 @@ sequential path with ~0-1w margin; parallelisation is upside, not gating.
 
 ### In-flight slices feeding v1
 
-- **GIM-216** code_ownership — PR #105, Phase 3 in progress. Expected
-  ~1 week to merge. Feeds Ownership report section in S4.
-- **GIM-218** cross_repo_version_skew — **zero progress** (CTO-CRITICAL-3).
-  No branch, no spec, no assignee. **Contingency (rev2)**: if not started
-  within 1 week of rev2 approval → demote to blind spot for S4; version-skew
-  section ships as "blind spot — GIM-218 pending". Avoids blocking entire
-  v1 on one unstarted dependency.
+- **GIM-216** code_ownership — ✅ merged `2d6e6c1` 2026-05-06. Feeds Ownership report section in S4. `palace.code.find_owners` registered at `mcp_server.py:850`.
+- **GIM-218** cross_repo_version_skew — ✅ merged `603c840` 2026-05-07. Feeds Dependencies §5 of audit report. `palace.code.find_version_skew` registered via `register_version_skew_tools()` at `mcp_server.py:790`. **Rev2 contingency closed** — extractor landed before contingency trigger fired; no blind-spot fallback needed.
 
 ### Post-v1 slice intake protocol (rev2 — `audit_contract()` paved path)
 
@@ -257,4 +252,4 @@ Avoid editing during active phase chains — wait for the slice merge so the fil
 - **Phase 1 real-query validation** — launch-critical rows are merged; S4 smoke is the de facto launch validation.
 - **LLM infrastructure** — 6 extractors require LLM. Decision per AV1-D4: post-v1.
 - **Archived Phase 2-6 backlog** — moved to `docs/roadmap-archive.md` (rev2). Re-activate via S6+ intake protocol.
-- **GIM-218 contingency** (rev2) — if zero progress within 1 week of rev2 approval, demote version-skew to blind spot for S4/S5. See In-flight slices section above.
+- ~~GIM-218 contingency~~ (rev2) — **closed in rev4**: GIM-218 merged `603c840` 2026-05-07; version-skew shipped, no blind-spot fallback needed.

@@ -99,8 +99,11 @@ single PR. CTO swaps if a 2nd Claude engineer is free.
       `group_id` field (strip `project/` prefix).
 - [ ] Update `runner.py::run_extractor()` to pass both fields explicitly
       (don't rely on cypher.py to parse — explicit > implicit).
-- [ ] Implement migration script: idempotent Cypher per spec §4.
-- [ ] Wire `palace_mcp.cli migrate ingest-run-unify` subcommand.
+- [ ] Implement migration as a standalone module (rev4 — was incorrectly
+      proposed as `palace_mcp.cli` subcommand which doesn't exist on
+      develop): `services/palace-mcp/src/palace_mcp/migrations/2026_05_xx_unify_ingest_run.py`.
+      Idempotent Cypher per spec §4. Runnable via
+      `python -m palace_mcp.migrations.2026_05_xx_unify_ingest_run`.
 - [ ] `uv run pytest services/palace-mcp/tests/extractors/unit/test_ingest_run_schema.py services/palace-mcp/tests/integration/test_ingest_run_unification.py` — 4 GREEN.
 - [ ] Run full extractor suite to ensure no regression: `uv run pytest services/palace-mcp/tests/extractors/`.
 
@@ -113,112 +116,138 @@ single PR. CTO swaps if a 2nd Claude engineer is free.
 
 ---
 
-### Phase 2.2 — Sub-slice S0.2 (5 composite MCP tools)
+### Phase 2.2 — Sub-slice S0.2 (3 NEW composite MCP tools — rev4)
+
+> **rev4 correction**: scope reduced from 5 tools → 3.
+> `find_owners` already on develop (mcp_server.py:850, GIM-216 `2d6e6c1`).
+> `find_version_skew` already on develop (mcp_server.py:790, GIM-218 `603c840`).
 
 #### Step 2.2.1: Failing tests first
 
 **Owner:** PythonEngineer.
 **Files:**
-- `services/palace-mcp/tests/code/test_composite_find_owners.py` (new)
-- `... test_composite_find_version_skew.py` (new)
-- `... test_composite_find_dead_symbols.py` (new)
-- `... test_composite_find_public_api.py` (new)
-- `... test_composite_find_cross_module_contracts.py` (new)
+- `services/palace-mcp/tests/code/test_composite_find_dead_symbols.py` (new)
+- `services/palace-mcp/tests/code/test_composite_find_public_api.py` (new)
+- `services/palace-mcp/tests/code/test_composite_find_cross_module_contracts.py` (new)
 - `services/palace-mcp/tests/integration/test_audit_composite_e2e.py` (new)
 
-- [ ] For each of 5 tools, create unit test file with 3 cases:
+- [ ] For each of 3 tools, create unit test file with 3 cases:
   - empty-graph → returns empty `[]`
   - seeded fixture → returns expected items
   - project-not-registered → raises `ProjectNotRegisteredError`
-- [ ] Integration test: seed graph with 1 row per extractor across all 5,
-      call all tools, assert non-empty results with expected shape.
-- [ ] `uv run pytest services/palace-mcp/tests/code/ services/palace-mcp/tests/integration/test_audit_composite_e2e.py` — confirms 16 RED tests.
+- [ ] Integration test: seed graph with 1 row per extractor across all 3
+      new tools (plus existing 6 already-registered tools), call the 3
+      new tools, assert non-empty results with expected shape.
+- [ ] `uv run pytest services/palace-mcp/tests/code/ services/palace-mcp/tests/integration/test_audit_composite_e2e.py` — confirms 9 RED tests (3 tools × 3 cases) + 1 integration test.
 
-**Acceptance:** 16 RED tests.
+**Acceptance:** 10 RED tests (rev4: was incorrectly stated as "16").
 
 #### Step 2.2.2: Implement composite tools
 
 **Owner:** PythonEngineer.
 **Files:**
-- `services/palace-mcp/src/palace_mcp/code/code_composite.py` — 5 new
-  async functions.
-- `services/palace-mcp/src/palace_mcp/code/models.py` — 5 new
-  Pydantic response models (`OwnersList`, `VersionSkewList`,
-  `DeadSymbolList`, `PublicApiList`, `ContractDriftList`).
+- 3 new tool registration sites — follow existing pattern. Either
+  inline in `services/palace-mcp/src/palace_mcp/code_composite.py`
+  (top-level, where `find_references` + `test_impact` already live),
+  or per-tool modules under
+  `services/palace-mcp/src/palace_mcp/code/<tool>.py` (matching
+  pattern of `find_hotspots.py` / `find_owners.py`). Decide on plan-
+  first review based on consistency of existing surface.
+- 3 new Pydantic response models alongside their tool registration:
+  `DeadSymbolList`, `PublicApiList`, `ContractDriftList`.
 - `services/palace-mcp/src/palace_mcp/mcp_server.py` — register
-  5 tools on the FastMCP instance.
+  3 new tools on the FastMCP instance (follow existing pattern at
+  lines 797 / 824 / 850).
 - (test file additions from 2.2.1).
 
 - [ ] Implement each function: thin wrapper around extractor's
-      published Cypher (already exists per registry).
+      published Cypher. The 3 underlying extractors already exist on
+      develop:
+      `dead_symbol_binary_surface` (GIM-193 `52cfec5`),
+      `public_api_surface` (GIM-190 `2a96786`),
+      `cross_module_contract` (GIM-192 `05fe1b7`).
 - [ ] Each tool calls `assert_project_registered(project)` first.
 - [ ] Pydantic models include `provenance: IngestRunRef` field
       (run_id + completed_at) so audit renderer can cite source.
-- [ ] Verify MCP tool registration: `uv run python -c "from palace_mcp.mcp_server import server; print([t.name for t in server.list_tools()])"` includes 5 new names.
-- [ ] `uv run pytest services/palace-mcp/tests/code/ services/palace-mcp/tests/integration/test_audit_composite_e2e.py` — 16 GREEN.
+- [ ] Verify MCP tool registration: `uv run python -c "from palace_mcp.mcp_server import server; print([t.name for t in server.list_tools()])"` includes 3 new names.
+- [ ] `uv run pytest services/palace-mcp/tests/code/ services/palace-mcp/tests/integration/test_audit_composite_e2e.py` — 10 GREEN.
 
-**Acceptance:** 16 tests GREEN; all 5 tools listed in MCP server tool
-inventory.
+**Acceptance:** 10 tests GREEN; all 3 NEW tools listed in MCP server
+tool inventory (alongside the 6 already-existing palace.code.* tools).
 
 #### Step 2.2.3: Commit S0.2
 
-- [ ] Commit: `feat(GIM-NN): add 5 composite MCP tools for audit fetcher (S0.2)`.
+- [ ] Commit: `feat(GIM-NN): add 3 composite MCP tools for audit (S0.2 — rev4 scope)`.
 
 ---
 
-### Phase 2.3 — Sub-slice S0.3 (audit-mode prompts)
+### Phase 2.3 — Sub-slice S0.3 (audit-mode prompt fragment) — rev4-corrected
 
-#### Step 2.3.1: Author audit-mode section template
+> **rev4 corrections** (per CR-C2 / OPUS-C2):
+> - Real fragment-include syntax is `<!-- @include fragments/<path>.md -->`
+>   (with `@`), per `paperclips/build.sh` HEAD on develop.
+> - Role file names are kebab-case, NOT camelCase.
+> - CX-side `cx-security-auditor.md` / `cx-blockchain-engineer.md` do not
+>   exist on develop yet — those are E6 deliverables. S0.3 ships only
+>   the Claude side; CX-side audit-mode markers added during E6 file creation.
+
+#### Step 2.3.1: Author audit-mode fragment
 
 **Owner:** PythonEngineer (low Python content; mostly markdown).
 **Files:**
-- `paperclips/fragments/audit-mode-section.md` (new shared fragment).
+- `paperclips/fragments/local/audit-mode.md` (new local fragment;
+  located under `local/` because it is project-specific to the audit
+  workflow, not a shared cross-project concept).
 
 - [ ] Author the canonical `## Audit mode` section per spec §3.3.
       Include: input format spec, output format spec, severity-grading
       table, hard "no invented findings" rule, example output.
-- [ ] Include block at top: "This fragment is appended to 3 reusable
-      audit agents — keep changes here, not in individual role files."
+- [ ] Include block at top: "This fragment is included by 3 audit-
+      participating role files — keep changes here, not in individual
+      role files."
 
-**Acceptance:** fragment file exists; reviewable as standalone markdown.
+**Acceptance:** fragment file exists at `paperclips/fragments/local/audit-mode.md`;
+reviewable as standalone markdown.
 
-#### Step 2.3.2: Wire fragment into 3 Claude role files
-
-**Owner:** PythonEngineer.
-**Files:**
-- `paperclips/roles/opusarchitectreviewer.md`
-- `paperclips/roles/securityauditor.md`
-- `paperclips/roles/blockchainengineer.md`
-
-- [ ] Append `<!-- include:audit-mode-section.md -->` at the bottom
-      of each role file (or whatever the project's fragment-include
-      directive is — verify against `paperclips/scripts/curate-script.sh`).
-- [ ] Run the role-bundle render command to confirm the fragment
-      lands in the rendered AGENTS.md output.
-- [ ] Diff rendered output: `git diff` should show only the fragment
-      content appended at expected position; nothing else changed.
-
-**Acceptance:** rendered AGENTS.md for 3 agents contains the audit-mode
-section verbatim from the fragment file.
-
-#### Step 2.3.3: Mirror to 3 Codex / CX role files
+#### Step 2.3.2: Wire fragment into 3 Claude role files (kebab-case names)
 
 **Owner:** PythonEngineer.
-**Files:**
-- `paperclips/roles-codex/cx-opusarchitectreviewer.md`
-- `paperclips/roles-codex/cx-securityauditor.md`
-- `paperclips/roles-codex/cx-blockchainengineer.md`
+**Files** (verified against `git ls-tree origin/develop paperclips/roles/`):
+- `paperclips/roles/opus-architect-reviewer.md`
+- `paperclips/roles/security-auditor.md`
+- `paperclips/roles/blockchain-engineer.md`
 
-- [ ] Apply the same `<!-- include:audit-mode-section.md -->` directive
-      to each cx-* file.
-- [ ] Re-render Codex bundles; confirm fragment lands in cx-* AGENTS.md.
+- [ ] Append `<!-- @include fragments/local/audit-mode.md -->` at an
+      appropriate location in each role file body (after the `---`
+      YAML frontmatter, in a section thematically aligned with audit
+      participation — typically after the role's "Responsibilities"
+      section; final placement decided per-file).
+- [ ] Run `bash paperclips/build.sh --target claude` to render
+      `paperclips/dist/<role>.md` for the 3 affected files.
+- [ ] Diff rendered output: `git diff paperclips/dist/` should show
+      the audit-mode fragment expanded inline at expected position;
+      nothing else changed.
 
-**Acceptance:** 6 files (3 Claude + 3 Codex) all carry the audit-mode
-section after render.
+**Acceptance:** rendered `paperclips/dist/opus-architect-reviewer.md`,
+`paperclips/dist/security-auditor.md`, and
+`paperclips/dist/blockchain-engineer.md` each contain the
+`## Audit mode` section verbatim from the fragment file.
+
+#### Step 2.3.3: CX-side mirror — DEFERRED to E6
+
+- [ ] Document in PR body: "CX-side audit-mode wiring is deferred to E6.
+      `cx-security-auditor.md` and `cx-blockchain-engineer.md` do not
+      exist on develop yet (only Claude side). E6 spec
+      (`2026-05-07-cx-team-hire-blockchain-security-pyorch_*.md`) must
+      include the `<!-- @include fragments/local/audit-mode.md -->`
+      marker at file creation time."
+- [ ] No CX file edits in S0.3.
+
+**Acceptance:** PR body explicit about CX-side deferral.
 
 #### Step 2.3.4: Commit S0.3
 
-- [ ] Commit: `feat(GIM-NN): add audit-mode prompt fragment + wire to 6 role files (S0.3)`.
+- [ ] Commit: `feat(GIM-NN): add audit-mode fragment + wire to 3 Claude role files (S0.3)`.
 
 ---
 
@@ -287,13 +316,13 @@ to PE for fix; loop until APPROVE.
       branch into a temp worktree.
 - [ ] Build palace-mcp container: `docker compose --profile review build`.
 - [ ] Up: `docker compose --profile review up -d`.
-- [ ] Run migration: `docker compose exec palace-mcp uv run palace_mcp.cli migrate ingest-run-unify`.
+- [ ] Run migration (rev4 — standalone module, NOT cli.py):
+      `docker compose exec palace-mcp python -m palace_mcp.migrations.2026_05_xx_unify_ingest_run`.
       Capture stdout; expect `migrated N rows` (N depends on existing data).
 - [ ] Re-run migration; expect `migrated 0 rows` (idempotency check).
-- [ ] Live MCP call all 5 new composite tools via `npx @modelcontextprotocol/inspector` against the iMac MCP socket. Capture each response.
+- [ ] Live MCP call all 3 NEW composite tools (rev4 — was 5; 2 already on develop) via `npx @modelcontextprotocol/inspector` against the iMac MCP socket. Capture each response.
 - [ ] Cypher direct check: `MATCH (r:IngestRun) WHERE r.extractor_name IS NULL RETURN count(r)` → expect 0.
-- [ ] Render audit-mode prompt for OpusArchitectReviewer via paperclip
-      role-bundle render command; grep for `## Audit mode`; expect 1 hit.
+- [ ] Render audit-mode for 3 Claude roles: `bash paperclips/build.sh --target claude` then `grep -c "## Audit mode" paperclips/dist/{opus-architect-reviewer,security-auditor,blockchain-engineer}.md` — expect 1 each.
 
 ### Step 4.2: Author QA Evidence comment
 
@@ -333,10 +362,16 @@ runs `palace.code.find_owners` etc. against live data successfully.
 
 ## Definition-of-Done checklist
 
-- [ ] S0.1 — IngestRun schema unified; migration idempotent.
-- [ ] S0.2 — 5 composite tools live; all return Pydantic-typed responses.
-- [ ] S0.3 — `## Audit mode` fragment landed in 6 role files
-      (3 Claude + 3 Codex).
+- [ ] S0.1 — IngestRun schema unified; migration idempotent; runnable
+      via `python -m palace_mcp.migrations.2026_05_xx_unify_ingest_run`.
+- [ ] S0.2 — **3 NEW composite tools** live (rev4 — `find_dead_symbols`,
+      `find_public_api`, `find_cross_module_contracts`); all return
+      Pydantic-typed responses. Existing `find_owners` + `find_version_skew`
+      untouched.
+- [ ] S0.3 — `## Audit mode` fragment at
+      `paperclips/fragments/local/audit-mode.md` included via
+      `<!-- @include fragments/local/audit-mode.md -->` into 3 Claude
+      role files (kebab-case). CX-side deferred to E6.
 - [ ] All tests GREEN locally + on iMac.
 - [ ] PR squash-merged with QA evidence.
 - [ ] Roadmap updated.

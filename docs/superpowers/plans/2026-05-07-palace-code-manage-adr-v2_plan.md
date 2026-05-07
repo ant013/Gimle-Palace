@@ -8,14 +8,33 @@
 **Target branch:** `develop`. Squash-merge on APPROVE.
 **Team:** Claude. Phase chain: CTO → CodeReviewer (plan-first) → MCPEngineer or PythonEngineer → CR (mechanical) → OpusArchitectReviewer (adversarial) → QAEngineer → CTO merge.
 
-> No external blocker. Slice runs ‖ Audit-V1 chain (different file
-> trees: `code_router.py` + new `adr/` module vs `audit/`).
+> **Rev4 — scheduling correction** (CTO-E5-C1):
+> Single Claude PE is fully occupied on AV1 critical path. E5 starts
+> AFTER S2.3 merges (approx. week 15 of 18w envelope). Wall-time:
+> ~2-3w. Operator may choose to defer to post-v1 if late-stage AV1
+> work crowds the remaining envelope tail. **PE bandwidth check
+> mandatory before cutting branch.**
 
 ---
 
 ## Phase 0 — Prereqs (Board)
 
-### Step 0.1: Issue + branch
+### Step 0.1: PE-bandwidth gate (rev4 addition)
+
+**Owner:** Board.
+
+- [ ] Verify AV1 S2.3 (`#7 Error Handling`) is ✅ on develop.
+      If not, do NOT cut E5 branch — Claude PE is still occupied.
+- [ ] Verify operator confirms E5 schedule slot:
+  - **Option A (default)**: E5 starts immediately after S2.3 merges.
+    Tail of 18w envelope; ends approx. week 17-18.
+  - **Option B**: E5 deferred to post-v1 (after S5 ships). Operator
+    decides based on what S4 smoke surfaces.
+- [ ] Document chosen option in PR body + paperclip issue.
+
+**Acceptance:** S2.3 merged; option chosen + recorded.
+
+### Step 0.2: Issue + branch
 
 - [ ] Open paperclip issue `palace.code.manage_adr writable v2 (E5)`.
 - [ ] Body = link to spec + plan; `GIM-NN` placeholder.

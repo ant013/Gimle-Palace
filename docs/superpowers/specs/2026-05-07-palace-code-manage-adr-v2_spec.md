@@ -1,7 +1,10 @@
 # `palace.code.manage_adr` Writable v2 (E5) — Specification
 
 **Document date:** 2026-05-07
-**Status:** Draft · awaiting Claude CTO formalisation
+**Status:** Draft · **scheduled after Audit-V1 S2.3 completes** (rev4 — CTO-E5-C1 finding)
+**Wall-time:** ~2-3w (PE-bound)
+**Earliest start:** post-S2.3 merge (week 15+ of 18w AV1 envelope), or post-v1
+**Engineer:** Claude PE (same single PE as AV1 critical path; cannot run ‖)
 **Author:** Board+Claude session (operator + Claude Opus 4.7)
 **Team:** Claude (Python orchestration; existing manage_adr surface is in `code_router.py` + `mcp_server.py`)
 **Slice ID:** Phase 6 E5 (Phase-1-aligned product slice; Claude side)
@@ -43,10 +46,23 @@ Audit and Board sessions need to:
 
 ## 2. Why now / why this scope
 
-**Now**: Claude side has bandwidth (post-Audit-V1 chain start; this
-slice runs ‖ AV1 because it touches different files). E5 is in
-Phase 6 backlog with status "📦 After Phase 1" — Phase 1 is closed,
-so trigger is satisfied.
+**Now (rev4 — CTO-E5-C1 finding)**: Initial framing claimed "Claude
+side has bandwidth, runs ‖ AV1." This is **incorrect** — single
+Claude PE is 100% occupied on AV1 chain (S0 → S1 → S2.1 → S2.2 →
+S2.3 = 12-14w PE-bound sequential, plus S1.7-S1.10 PE-bound after
+S1.6, plus +1w rev4 buffer). E5 has no PE bandwidth in the AV1
+envelope.
+
+**Rev4 scheduling**: E5 is **scheduled to start after S2.3 merges**
+(approximately week 15 of the 18w envelope). E5 wall-time ~2-3w fits
+the remaining envelope tail (week 15 → week 17) before S4 smoke
+(week 14, but parallel-with-late-S2 in rev3 critical path) +
+S5 scale (week 15-17). Operator may also choose to defer E5 entirely
+to post-v1 if other late-stage work crowds it out.
+
+E5 is in Phase 6 backlog (`📦 After Phase 1`); Phase 1 is closed, so
+the trigger is satisfied — but PE-bandwidth scheduling within the AV1
+envelope governs actual start.
 
 **Scope choice**: write-tool surface intentionally limited to
 section-level (not free-text-edit) so the tool can stay idempotent

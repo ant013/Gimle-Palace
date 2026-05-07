@@ -7,7 +7,10 @@
 **Slice ID:** Phase 2 §2.5 #17 Hot-Path Profiler Extractor
 **Companion plan:** `2026-05-07-hot-path-profiler-extractor_plan.md`
 **Branch:** `feature/GIM-NN-hot-path-profiler-extractor`
-**Blocker:** **E6 closure** (CX hire) + **profile-data fixtures** (see §8).
+**Blockers (rev4):**
+- **E6 closure** (CX hire).
+- **S0.1 IngestRun schema unification** (rev4 — CTO-XF-H1) — uses unified schema.
+- **Profile-data fixtures** (see §8) — synthetic stubs unblock unit tests; real-trace fixtures deferred to operator (within 1 week of E6 close per plan Step 0.2b).
 
 ---
 
@@ -111,10 +114,15 @@ Indices:
 
 ```python
 def audit_contract(self) -> AuditContract:
+    # rev4 fix (CTO-#17-M1): threshold parameterised — read from
+    # :HotPathSummary.threshold_cpu_share (per-run configured) instead
+    # of hardcoded 0.05 in Cypher.
     return AuditContract(
         query="""
+            MATCH (sum:HotPathSummary {project: $project})
+            WITH sum.threshold_cpu_share AS threshold
             MATCH (s:HotPathSample {project: $project})
-            WHERE s.cpu_samples * 1.0 / s.total_samples_in_trace >= 0.05
+            WHERE s.cpu_samples * 1.0 / s.total_samples_in_trace >= threshold
             RETURN s ORDER BY s.cpu_samples DESC LIMIT 25
         """,
         response_model=HotPathAuditList,

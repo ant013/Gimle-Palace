@@ -7,7 +7,9 @@
 **Slice ID:** Phase 2 §2.2 #6 (Coding Convention Extractor)
 **Companion plan:** `2026-05-07-coding-convention-extractor_plan.md`
 **Branch:** `feature/GIM-NN-coding-convention-extractor`
-**Blocker:** **E6 closure** (CX BlockchainEng + SecAud + PythonEngineer-2 hire) — slice can be specced now, but team-chain execution awaits the third CX engineer's slot. Audit chain runs through CXCodeReviewer + CXPythonEngineer (existing) only if PE-2 isn't strictly needed; team_chain assigns first available.
+**Blockers (rev4):**
+- **E6 closure** (CX BlockchainEng + SecAud + PE-2 hire) — slice can be specced now, but team-chain execution awaits the third CX engineer's slot.
+- **S0.1 IngestRun schema unification** (rev4 — CTO-XF-H1) — extractor writes `:IngestRun` nodes; must use unified `extractor_name + project` schema. If S0 delays past E6 closure (unlikely — S0 is ~1w, parallelisable with E6), this slice waits for S0 before cutting branch to avoid writing legacy-schema IngestRuns that need post-hoc migration.
 
 ---
 
@@ -57,7 +59,9 @@ batch of Codex queue.
 
 **Out of scope (deferred or covered elsewhere)**:
 - Test smell / flaky tests → #38.
-- DI patterns deep-dive → #8.
+- **DI patterns** → **#8 is authoritative** (rev4 — CTO-#8-M1 finding).
+  Drop `structural.di_style` from §6 rule set (down to 7 rules).
+  Audit template cross-references #8's `:DiPattern` rows.
 - Error handling smells → #7 (S2.3 in audit-v1).
 - Dead code → #33 (already merged GIM-193).
 - Complexity hotspots → #44 (already merged GIM-195).
@@ -138,9 +142,11 @@ def audit_contract(self) -> AuditContract:
 Audit report renders per-module convention summary + outlier list +
 per-violation severity-graded lines.
 
-## 6. Initial rule set (≤8 rules for v1)
+## 6. Initial rule set (≤7 rules for v1, rev4 — was 8)
 
-Concrete rule list, refined in CX-CTO formalisation:
+Concrete rule list, refined in CX-CTO formalisation. **Rev4 dropped
+`structural.di_style`** — DI is #8's authoritative remit
+(CTO-#8-M1 cross-coordination).
 
 1. **`naming.type_class`** — UpperCamel vs UPPER_SNAKE on `class` /
    `struct` declarations.
@@ -152,12 +158,12 @@ Concrete rule list, refined in CX-CTO formalisation:
    enum-with-associated-values (Swift) vs class hierarchy.
 5. **`structural.error_modeling`** — Result / throws / nullable /
    sentinel-string for error returns.
-6. **`structural.di_style`** — init-injection / property-injection /
-   framework-bound (Hilt/Koin/Resolver).
-7. **`idiom.collection_init`** — `[]` vs `Array()` vs `listOf()` /
+6. **`idiom.collection_init`** — `[]` vs `Array()` vs `listOf()` /
    typealias usage rates.
-8. **`idiom.computed_vs_property`** — computed properties for derived
+7. **`idiom.computed_vs_property`** — computed properties for derived
    values vs cached `@Lazy` / `lazy var`.
+
+(Rule 6 `structural.di_style` from rev3 dropped — see Out-of-scope §2.)
 
 ## 7. Decision points
 
