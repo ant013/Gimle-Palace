@@ -1,6 +1,6 @@
 # Gimle-Palace Team Roadmap
 
-**Last updated**: 2026-05-04
+**Last updated**: 2026-05-06 (rev2: audit-v1 plan — 3-reviewer synthesis)
 **Owner**: Board (operator + Board Claude session)
 **Primary goal**: Index Unstoppable Wallet ecosystem live (Android + iOS + EVM
 contracts). Phase 1 ends when palace-mcp produces useful queries against the
@@ -82,160 +82,130 @@ C2 (GIM-182) is now ✅. C3/C4/C5/C6 are independent and not launch-blocking. C4
 
 ---
 
-## Phase 2 — Post-launch deep analysis
+## Audit-V1 — first product release (current focus)
 
-Reference: `docs/research/extractor-library/` (2026-04-18 brainstorm, 9 parallel research deep-dives over 45 candidate extractors).
+**Goal**: ship a working audit pipeline end-to-end — pick `tronKit-swift`,
+get a complete audit report from a paperclip agent team, MCP fully
+populated. After v1 ships, every additional extractor is a tiny isolated
+slice that just enriches MCP without touching workflow.
 
-**No Phase 2 slice starts until Phase 1 closes.** Order within each category is not strict — operator picks based on actual UW analysis needs that surface after launch.
+**Definition of Done for v1 (rev3):**
+1. `palace.audit.run(project="tronkit-swift")` returns a structured
+   markdown report (synchronous data+render, no agent involvement).
+2. `audit-workflow-launcher.sh tronkit-swift` triggers a multi-agent
+   audit via Paperclip child issues; final report posted to parent.
+3. The same commands work on `bitcoinkit-swift` and any other Swift Kit.
+4. After v1, adding extractor X = (a) implement `audit_contract()` on
+   extractor class, (b) add template file, (c) re-run — no orchestrator
+   or agent changes needed (enforced by `BaseExtractor.audit_contract()`
+   pattern).
+5. Audit report ships **with populated** Architecture Layering (extractor
+   #1) and Error Handling Policy (extractor #7) sections — these are
+   NOT blind spots in v1 (rev3, AV1-D7 flipped from "yes/blind-spot" to
+   "no/included"; +6w to envelope).
 
-**Cross-cutting prerequisites within Phase 2**:
-- Item **#22 Git History Harvester** must merge before any historical extractor (#11/#12/#26/#32/#43/#44).
-- All other items consume the Symbol Index (Phase 1 output) and may run in any order modulo team allocation rules in §6.
+### Sprint sequence (rev3 — #1 + #7 included; 18w envelope)
 
-### 2.1 Structural (13 items)
+| ID | Sprint | Detail file | Wall-time | Depends on | Team |
+|----|--------|-------------|-----------|------------|------|
+| **S0** | Foundation prerequisites (IngestRun unify, composite tools, audit-mode prompts) | [`D-audit-orchestration.md` §S0](superpowers/sprints/D-audit-orchestration.md) | ~1 week | nothing | PE (S0.1+S0.2) ‖ any (S0.3) |
+| **S1 (D)** | Audit Orchestration — workflow + agents + report format + tool | [`D-audit-orchestration.md`](superpowers/sprints/D-audit-orchestration.md) | ~3-4 weeks | S0 | PE |
+| **S2.1 (B-min)** | Audit-critical extractor: `crypto_domain_model` (#40) | [`B-audit-extractors.md`](superpowers/sprints/B-audit-extractors.md) | ~2 weeks | S1.6 frees PE + semgrep spike | Claude PE |
+| **S2.2 (B+1)** | Architecture Layer extractor (#1) | [`B-audit-extractors.md`](superpowers/sprints/B-audit-extractors.md) | ~3 weeks | S2.1 frees PE | Claude PE |
+| **S2.3 (B+7)** | Error Handling Policy extractor (#7) | [`B-audit-extractors.md`](superpowers/sprints/B-audit-extractors.md) | ~3 weeks | S2.2 frees PE (or ‖ if a 2nd Claude engineer is free) | Claude PE |
+| **S3 (C)** | Per-Kit ingestion automation | [`C-ingestion-automation.md`](superpowers/sprints/C-ingestion-automation.md) | ~1 week | S1.9 (palace_mcp.cli) | Infra (‖ S1) |
+| **S4 (E)** | Smoke on tronKit-swift + bitcoinKit-swift | [`E-smoke.md`](superpowers/sprints/E-smoke.md) | ~1 week | S0 + S1 + S2.1 + S2.2 + S2.3 + S3 (GIM-216 ✅ merged `2d6e6c1`; GIM-218 ✅ merged `603c840`) | QA + operator |
+| **S5 (F)** | Scale to 41 HS Kits + uw-ios-app | [`F-scale.md`](superpowers/sprints/F-scale.md) | ~3 weeks | S4 | operator + Infra |
+| **S6+** | Iterative extractor backlog (#2, #34, etc — #1/#7 NOT here in rev3) | TBD per slice | ongoing | post-v1 | per slice |
 
-| # | Name | Team | LLM | Tool stack | Status |
-|---|------|------|:---:|------------|--------|
-| 1 | Architecture Layer Extractor | Claude | — | tree-sitter + modules-graph-assert + ArchUnit + Package.swift | 📦 |
-| 2 | Symbol Duplication Detector | Claude | — | jscpd + UniXcoder/CodeBERT embeddings + semhash | 📦 |
-| 3 | Reactive Dependency Tracer | CX | — | swift-syntax + detekt AST + Compose Stability | 📦 |
-| 4 | KMP Platform-Bridge Extractor | CX | — | tree-sitter-kotlin + SKIE + swift-syntax | 📦 (waits UW KMP adoption) |
-| 5 | Dependency Surface Extractor | Claude | — | dep-analysis-gradle + spmgraph + Package.resolved parser | 📦 |
-| 25 | Build System Extractor | CX | — | Gradle Tooling API + SwiftPM PackageDescription + Bazel aquery | 📦 |
-| 27 | Public API Surface Extractor | CX | — | Kotlin BCV `.api` dumps + Swift `.swiftinterface` primary + optional `swift-api-digester` diagnostics + SKIE overlay | ✅ GIM-190 / PR #88 merged + iMac deployed at `2a96786`; `public_api_surface` registry verified |
-| 31 | Cross-Module Contract Extractor | CX | — | Kotlin BCV + swift-public-api-diff + oasdiff | 📋 GIM-192 launched for CX spec formalization; consumes #27 PublicApiSurface/PublicApiSymbol |
-| 33 | Dead Symbol & Binary Surface | CX | — | Periphery + Reaper SDK + CodeQL | 🚧 spec draft (`docs/superpowers/specs/2026-05-04-roadmap-33-dead-symbol-binary-surface.md`) |
-| 36 | Network Schema & API Contract | Claude | — | oasdiff + Buf CLI + graphql-inspector | 📦 |
-| 39 | Cross-Repo Version Skew | Claude | — | Gradle Tooling API + Renovate data + OWASP Dep-Check | 📦 (deps #5) |
-| 41 | SCIP/LSIF Precise Symbol Resolver | CX | — | scip-* per-language | 🚧 = Phase 1 in disguise |
-| 45 | Inter-Module Event Bus | CX | — | semgrep + tree-sitter + SourceKit-LSP | 📦 |
+**Rev3 critical path** (sequential, single Claude PE): S0 (1w) → S1 (3-4w, PE-bound) →
+S2.1 (2w PE) → S2.2 (3w PE, #1 Arch Layer) → S2.3 (3w PE, #7 Error Handling) →
+S4 (1w) → S5 (3w) = **~17-18 weeks**.
+S3 runs ‖ S1 (different engineer).
+GIM-218 contingency closed: extractor merged `603c840` 2026-05-07.
+**Parallel S2.2 ‖ S2.3 option**: if a second Claude engineer becomes available
+after S2.1 (different files: arch_layer/* vs error_handling/*), max(3w, 3w) = 3w
+collapses to **~14-15 weeks** total. Operator-chosen 18w envelope tolerates the
+sequential path with ~0-1w margin; parallelisation is upside, not gating.
 
-### 2.2 Conventional (9 items)
+### Path justification (rev2 — incorporates team allocation)
 
-| # | Name | Team | LLM | Tool stack | Status |
-|---|------|------|:---:|------------|--------|
-| 6 | Coding Convention Extractor | CX | — | SwiftSyntax + Harmonize + Konsist + detekt + semgrep | 📦 |
-| 7 | Error Handling Policy Extractor | Claude | — | semgrep + ast-grep + detekt | 📦 |
-| 8 | Testability/DI Pattern Extractor | CX | — | Konsist + Harmonize + detekt + MockK/Mockito patterns | 📦 |
-| 9 | Localization & Accessibility Extractor | CX | — | xcstrings parser + Android Lint + Google ATF | 📦 (overlaps Slice 2-lite — see B3) |
-| 10 | Domain Naming & Glossary Extractor | Claude | ✅ | tree-sitter + Graphiti entity + sentence-transformers | 📦 |
-| 28 | Coverage-Gap Extractor | CX | — | Kover + JaCoCo + Xcode llvm-cov + xcresult | 📦 |
-| 29 | Resource/Asset Usage Extractor | CX | — | Android Lint UnusedResources + FengNiao + SwiftGen | 📦 |
-| 37 | Documentation Coverage Extractor | CX | — | Dokka 2.2.0 + swift-doc-coverage + DocC | 📦 |
-| 38 | Test Smell & Flaky Test Extractor | CX | — | tsDetect ports + FlakyLens + Develocity | 📦 |
+- **S0 first**: prerequisite foundation fixes (IngestRun schema unification,
+  missing composite tools, audit-mode agent prompts). Without S0, S1.4
+  discovery misses half the extractors (OPUS-CRITICAL-1) and S1.5 fetcher
+  has no tools to call (CR-CRITICAL-3).
+- **S1 after S0**: defines the product surface. PythonEngineer-bound.
+- **S2.1 after S1.6** (rev2 change): S2.1 also needs PE. Rev1 claimed S1‖S2
+  parallel — impossible with one PE (CTO-MEDIUM-1). S2.1 starts when S1.6
+  (`audit_contract()` implementations) frees PE. Requires completed semgrep
+  spike (S2-prereq). S2.1 = `crypto_domain_model` (#40).
+- **S2.2 after S2.1** (rev3): Architecture Layer extractor (#1). Reuses
+  the semgrep / tree-sitter substrate from S2.1 prereq spike. Deterministic
+  (no LLM); writes `:Module/:Layer/:ArchViolation`. Critical for
+  blockchain-audit "wallet-core must not import UI", "Kit X must not
+  depend on Kit Y" findings.
+- **S2.3 after S2.2** (rev3): Error Handling Policy extractor (#7). Heuristic
+  (semgrep + ast-grep + detekt rules). Writes `:CatchSite/:ErrorPolicy`.
+  Critical for crypto-Kits — swallowed errors in signing/balance paths
+  → potential lost funds.
+- **S3 ‖ S1**: InfraEngineer domain, no file overlap. Ingestion automation
+  shrinks per-Kit setup from ~30 min to ~3 min. Needs `palace_mcp.cli`
+  from S1.9 (or `curl` shim until then).
+- **S4 after S0+S1+S2.{1,2,3}+S3**: real smoke on tronKit-swift +
+  bitcoinKit-swift. Measurable acceptance criteria (rev2, CR-MED-4)
+  + per-extractor sections required for #1 + #7 (rev3, AV1-D7 flip).
+- **S5 last**: scaling to 41 Kits. 3 weeks (rev2, padded from 2 — OPUS-MEDIUM-1).
+- **S6+ post-v1**: each new extractor plugs in via `audit_contract()` —
+  no orchestrator/agent changes.
 
-### 2.3 Historical (6 items + #22 prereq)
+### Critical decision points (rev2 — pre-S0 start)
 
-| # | Name | Team | LLM | Tool stack | Status |
-|---|------|------|:---:|------------|--------|
-| 22 | Git History Harvester (**prereq**) | Claude | — | pygit2 | 📦 (must precede 11/12/26/32/43/44) |
-| 11 | Decision History Extractor | Claude | ✅ | pygit2 + GitHub GraphQL + SZZ + ADR parser | 📦 |
-| 12 | Migration Signal Extractor | CX | — | SwiftSyntax + detekt @Deprecated + semgrep + CodeQL | 📦 |
-| 26 | Bug-Archaeology Extractor | Claude | ✅ | GitHub Issues + LLM4SZZ + pygit2 blame | 📦 |
-| 32 | Code Ownership Extractor | Claude | — | pygit2 blame + code-maat + hercules | 📦 |
-| 43 | PR Review Comment Knowledge Extractor | Claude | ✅ | GitHub GraphQL + LLM categorization | 📦 |
-| 44 | Code Complexity × Churn Hotspot | Claude | — | radon + lizard + git churn | 📦 |
+| ID | Question | Default | Impact of non-default | When |
+|----|----------|---------|----------------------|------|
+| AV1-D1 | Report format: markdown only, or also JSON? | markdown only | JSON adds ~1 slice to S1.3 | S1.1 brainstorm |
+| AV1-D2 | Agent set: reuse 3 + 1 new Auditor, NO Synthesizer? (rev2) | reuse 3 + Auditor, no Synth | Adding Synth = +1 agent role + token cost per audit | S1 brainstorm |
+| AV1-D3 | Trigger: manual only for v1? | manual; cron/CI in S6+ | Cron adds ~2 slices | S1 brainstorm |
+| AV1-D4 | LLM extractors deferred to post-v1? | yes | If no → +12 weeks for Ollama infra | After S4 |
+| AV1-D5 | SCIP emit Track A/B preserved? | yes | Single-machine = simpler but slower | S3 brainstorm |
+| AV1-D6 | Max tokens per agent per audit run? (rev2) | 50K in / 10K out | Higher = richer sub-reports but more cost | S1.1 brainstorm; measured in S4 |
+| AV1-D7 | Blind spots #1 (Arch Layer) + #7 (Error Handling) acceptable for v1? (**rev3 — flipped**) | **NO — both extractors INCLUDED in v1; envelope expanded 12w → 18w** | If yes (revert to rev2) → 12w envelope, sections shipped as blind spots in §9 | Resolved pre-rev3 (operator decision 2026-05-07) |
 
-### 2.4 Semantic (6 items)
+### In-flight slices feeding v1
 
-| # | Name | Team | LLM | Tool stack | Status |
-|---|------|------|:---:|------------|--------|
-| 13 | Invariant & Contract Extractor | Claude | — | tree-sitter + semgrep + Z3 (optional) | 📦 |
-| 14 | Lifecycle & State Extractor | CX | — | swift-syntax + detekt + Compose state graph | 📦 |
-| 15 | Domain Edge-Case Extractor | Claude | ✅ | semgrep + LLM | 📦 |
-| 16 | Read/Write Path Asymmetry | Claude | — | tree-sitter + AST diff | 📦 |
-| 34 | Code Smell Structural | Claude | — | radon + lizard + detekt CodeSmell | 📦 |
-| 40 | Crypto Domain Model | Claude | — | semgrep custom rules (addresses/checksums/decimals) | 📦 |
+- **GIM-216** code_ownership — ✅ merged `2d6e6c1` 2026-05-06. Feeds Ownership report section in S4. `palace.code.find_owners` registered at `mcp_server.py:850`.
+- **GIM-218** cross_repo_version_skew — ✅ merged `603c840` 2026-05-07. Feeds Dependencies §5 of audit report. `palace.code.find_version_skew` registered via `register_version_skew_tools()` at `mcp_server.py:790`. **Rev2 contingency closed** — extractor landed before contingency trigger fired; no blind-spot fallback needed.
 
-### 2.5 Contextual (7 items)
+### Post-v1 slice intake protocol (rev2 — `audit_contract()` paved path)
 
-| # | Name | Team | LLM | Tool stack | Status |
-|---|------|------|:---:|------------|--------|
-| 17 | Hot-Path Profiler | CX | — | Instruments + Perfetto + xctrace | 📦 |
-| 18 | Concurrency Ownership Map | CX | — | swift-syntax actor + detekt coroutine scope | 📦 |
-| 19 | Feature Flag & Config | Claude | — | semgrep + custom flag-detector | 📦 |
-| 20 | Logging Policy | Claude | — | semgrep + AST | 📦 |
-| 30 | Performance Pattern | Claude | — | tree-sitter | 📦 |
-| 35 | Taint & PII Data-Flow | Claude | ✅ | CodeQL + semgrep | 📦 |
-| 42 | Build Reproducibility | CX | — | Develocity build cache + cacheable_verified | 📦 |
+After v1 ships, adding extractor X follows the **paved path**:
 
-### 2.6 Support / cross-cutting (5)
+1. Board+Claude session: brainstorm + spec rev1 + 4-agent audit + spec rev2.
+2. Paperclip team: standard 7-phase chain.
+3. Implementer adds `audit_contract()` method to extractor class + template file.
+4. iMac deploy: `bash paperclips/scripts/imac-deploy.sh`.
+5. Per-existing-Kit re-ingest: `bash scripts/ingest_swift_kit.sh <slug> --extractors=X`.
+6. Re-run `palace.audit.run(project=<slug>)` — report includes new section
+   automatically because the generic fetcher discovers it via `:IngestRun`
+   and calls `audit_contract()` for query + template.
 
-| # | Name | Team | LLM | Note |
-|---|------|------|:---:|------|
-| 21 | Symbol Index Extractor | CX | — | = Phase 1; partially done |
-| 22 | Git History Harvester | Claude | — | listed in 2.3 |
-| 23 | Test Harness Adapter | Claude | — | pytest/junit/xctest output normalizer |
-| 24 | AST Pattern Matcher | Claude | — | semgrep wrapper + custom matchers |
-| 41 | SCIP/LSIF Precise Resolver | CX | — | = Phase 1; partially done |
-
-### 2.7 Tally
-
-- **CX assignments**: 18 extractors (compiled-language native tooling-heavy)
-- **Claude assignments**: 22 extractors (Python orchestration, LLM, embedding, git history)
-- **Done or in-flight**: 5 (= Phase 1 work, all CX-style)
-
-LLM-required: 7 (#10, #11, #15, #26, #35, #43 + #15 again — 6 unique). All Claude. Concentrates LLM cost on one team's infra.
-
----
-
-## Phase 3 — Cross-language bridges (`:BRIDGES_TO`)
-
-Per ADR D1 — bridges are extractors that build cross-language `:BRIDGES_TO` edges from existing per-language symbol graphs. **Phase 3 starts when both languages of a given bridge are complete in Phase 1 + Phase 2.**
-
-| # | Bridge | Source ↔ Target | Source-of-truth artefact | Team | Deps |
-|---|--------|----|------|------|------|
-| C1 | SKIE Swift ↔ Kotlin (KMP) | UW-iOS ↔ UW-Android shared KMP modules | `*.kt` `expect`/`actual` + Swift extension declarations | CX | Phase 1 done + UW ships KMP shared modules |
-| C2 | Solidity ABI ↔ TS/JS | dApp frontend ↔ smart contract calls | contract `*.abi.json` + TS `import` statements | Claude | Phase 1 done + GIM-104 + Solidity USE v2 |
-| C3 | Anchor IDL ↔ TS/JS | Solana dApp ↔ Solana program | Anchor-generated IDL + TS `Program(idl)` references | Claude | Phase 1 done + GIM-104 + Anchor IDL extractor (B6) |
-| C4 | EVM contract ↔ EVM contract (proxy/impl) | Inheritance + delegatecall analysis | Solidity AST + storage layout | Claude | Phase 1 done + Solidity USE v2 |
-
----
-
-## Phase 4 — Beyond UW (low priority unless UW expands)
-
-Operator-flagged secondary stack per `project_palace_purpose_unstoppable.md`. Schedule only when UW analysis surface stops generating slice candidates.
-
-| # | Slice | Team | Tool stack | Trigger |
-|---|-------|------|------------|---------|
-| B1 | Solidity USE-occurrences v2 | Claude | extends `scip_emit/solidity/`, slither AST | Operator requests data-flow queries on EVM contracts |
-| B2 | iOS Swift v2 (Storyboards/xib + Core Data .xcdatamodeld) | CX | XML parser + xcdatamodeld parser | UW uses Storyboards or Core Data and operator requests |
-| B3 | Android Slice 2-lite (Manifest + strings) | CX | XML parser | Operator requests `R.string` cross-ref queries |
-| B4 | Python extractor cross-module type-flow | Claude | mypy `dmypy` + tree-sitter | Internal palace-mcp need only |
-| B5 | TS/JS — JSX/TSX prop usage tracking | Claude | tree-sitter-tsx | Frontend dApp analysis needed |
-| B6 | Anchor IDL extractor (Solana) | Claude | custom IDL JSON parser | UW expands to Solana |
-| B7 | FunC extractor (TON) | Claude | tree-sitter-func + custom emitter | UW expands to TON |
-| B8 | Rust general extractor | CX | scip-rust / rust-analyzer SCIP | UW or operator needs systems-Rust analysis |
+The pipeline is **extractor-name-agnostic** — discovery enumerates from the
+graph, fetcher dispatches via `audit_contract()`, renderer loads the template.
+No hardcoded lists anywhere in the orchestrator (rev2 fix for CTO-CRITICAL-1,
+OPUS-CRITICAL-2).
 
 ---
 
-## Phase 5 — Non-extractor product slices
+### Archived Phase 2-6 backlog
 
-Product features and infra that are not extractors per se. Some launch-blocking, others post-launch.
+Moved to [`docs/roadmap-archive.md`](roadmap-archive.md) in rev2
+(OPUS-LOW-1: HTML comments are invisible to search/grep/agent tools).
+Re-activate individual rows via S6+ intake protocol.
 
-| # | Slice | Team | Status | Trigger / Phase |
-|---|-------|------|--------|-----------------|
-| D1 | `palace.code.semantic_search` | Claude | 📋 (= C4 in §3) | Phase 1 parallel infra |
-| D2 | `palace.code.test_impact` opt-in post-filter | Claude | 📦 | Phase 2; small followup to GIM-98 |
-| D3 | Watchdog Phase 2 auto-repair | Claude | ⏸ | After GIM-181 + 7 days zero false-positive |
-| D4 | Webhook async-signal v2 | Claude | 📦 | If GIM-48 pattern reproduces |
-| D5 | `code_composite.py` → package refactor | Claude | ⏸ | After 2nd composite tool ships |
-| D6 | Watchdog detector — missing QA evidence | Claude | 📦 | After GIM-127 fabrication pattern reproduces |
-| D7 | Watchdog detector — missing branch-spec gate | Claude | 📦 | Sibling to D6 |
-| D8 | iMac post-merge auto-deploy | Claude | 📋 (= C3 in §3) | Phase 1 parallel infra |
+<!-- rev3 (2026-05-07): inline HTML-commented duplicate of Phase 2-6
+     fully removed; canonical content lives in docs/roadmap-archive.md.
+     This closes OPUS-LOW-1 — search/grep/agent tools no longer need
+     to peek inside HTML comments to see archived rows. -->
 
----
-
-## Phase 6 — Meta / infrastructure
-
-| # | Slice | Team | Status | Trigger |
-|---|-------|------|--------|---------|
-| E1 | iMac post-merge auto-deploy | Claude | 📋 | = D8 / C3 |
-| E2 | iMac AGENTS.md auto-deploy on release-cut | Claude | 📦 | Symmetric to imac-agents-deploy.sh; auto-trigger |
-| E3 | This roadmap file (`docs/roadmap.md`) | Board | ✅ | Always live; updated on every slice merge |
-| E4 | Drift-detection weekly Action (GIM-181 role taxonomy) | Claude | 📦 | If hire frequency exceeds 1 / 2 weeks |
-| E5 | `palace.code.manage_adr` writable v2 | Claude | 📦 | After Phase 1 |
-| E6 | CX team — hire BlockchainEngineer + SecurityAuditor | Board | 📦 | Phase 4 (smart contract / Rust work needs them) |
 
 ---
 
@@ -278,8 +248,8 @@ Avoid editing during active phase chains — wait for the slice merge so the fil
 
 ## Open questions
 
-- **Phase 1 real-query validation** — launch-critical implementation rows are merged; operator still decides when "launch" is real. Suggested gate: at least 3 useful queries on real UW codebase produce results matching expectations (≥1 each on iOS / Android / EVM contract).
-- **Phase 2 ordering inside categories** — operator selected #27 Public API Surface Extractor for CX spec brainstorm on 2026-05-04; it closed as GIM-190. Next CX item is #31 Cross-Module Contract Extractor via GIM-192. Broader ordering remains demand-driven.
-- **#22 Git History promotion** — triggered by first historical-extractor request. Currently 📦.
-- **LLM infrastructure** — 6 Claude extractors require LLM. Ollama deploy + cost monitoring is a separate infra slice (not yet scheduled).
-- **CX queue refresh** — completed 2026-05-04 after GIM-190 merged and iMac deploy verified; active CX docs lane is #31 Cross-Module Contract Extractor spec formalization (GIM-192).
+- **Audit-V1 decision points** — see `Audit-V1 — first product release` section above for AV1-D1..AV1-D7 (rev2 adds D6 token budget + D7 blind spot acceptance). Resolve pre-S0 start.
+- **Phase 1 real-query validation** — launch-critical rows are merged; S4 smoke is the de facto launch validation.
+- **LLM infrastructure** — 6 extractors require LLM. Decision per AV1-D4: post-v1.
+- **Archived Phase 2-6 backlog** — moved to `docs/roadmap-archive.md` (rev2). Re-activate via S6+ intake protocol.
+- ~~GIM-218 contingency~~ (rev2) — **closed in rev4**: GIM-218 merged `603c840` 2026-05-07; version-skew shipped, no blind-spot fallback needed.
