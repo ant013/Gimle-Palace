@@ -4,7 +4,7 @@
 
 **Slice:** S0 of Audit-V1 sprint sequence (rev3).
 **Spec:** `docs/superpowers/specs/2026-05-07-audit-v1-s0-foundation-prereqs_spec.md`.
-**Source branch:** `feature/GIM-NN-audit-v1-s0-foundation-prereqs` cut from `origin/develop`.
+**Source branch:** `feature/GIM-228-audit-v1-s0-foundation-prereqs` cut from `origin/develop`.
 **Target branch:** `develop`. Squash-merge on APPROVE + QA evidence.
 **Team:** Claude. Phase chain: CTO → CR (plan-first) → PythonEngineer → CR (mechanical) → OpusArchitectReviewer → QAEngineer → CTO merge.
 
@@ -29,8 +29,8 @@ single PR. CTO swaps if a 2nd Claude engineer is free.
 **Owner:** CTO.
 
 - [ ] Open paperclip issue titled `Audit-V1 S0 — Foundation Prerequisites`.
-- [ ] Body = link to spec + this plan, with `GIM-NN` placeholders.
-- [ ] After creation, edit-pass replaces `GIM-NN` with assigned issue
+- [ ] Body = link to spec + this plan, with `GIM-228` placeholders.
+- [ ] After creation, edit-pass replaces `GIM-228` with assigned issue
       number in spec, plan, and branch name.
 - [ ] Reassign to CodeReviewer for plan-first review.
 
@@ -112,7 +112,7 @@ single PR. CTO swaps if a 2nd Claude engineer is free.
 #### Step 2.1.3: Commit S0.1
 
 - [ ] `git add` only files in scope.
-- [ ] Commit: `feat(GIM-NN): unify IngestRun schema across Path A/B (S0.1)`.
+- [ ] Commit: `feat(GIM-228): unify IngestRun schema across Path A/B (S0.1)`.
 
 ---
 
@@ -177,7 +177,7 @@ tool inventory (alongside the 6 already-existing palace.code.* tools).
 
 #### Step 2.2.3: Commit S0.2
 
-- [ ] Commit: `feat(GIM-NN): add 3 composite MCP tools for audit (S0.2 — rev4 scope)`.
+- [ ] Commit: `feat(GIM-228): add 3 composite MCP tools for audit (S0.2 — rev4 scope)`.
 
 ---
 
@@ -247,16 +247,16 @@ reviewable as standalone markdown.
 
 #### Step 2.3.4: Commit S0.3
 
-- [ ] Commit: `feat(GIM-NN): add audit-mode fragment + wire to 3 Claude role files (S0.3)`.
+- [ ] Commit: `feat(GIM-228): add audit-mode fragment + wire to 3 Claude role files (S0.3)`.
 
 ---
 
 ### Step 2.4: Push branch
 
-- [ ] `git push -u origin feature/GIM-NN-audit-v1-s0-foundation-prereqs`.
-- [ ] Open PR titled `feat(GIM-NN): Audit-V1 S0 foundation prerequisites`.
+- [ ] `git push -u origin feature/GIM-228-audit-v1-s0-foundation-prereqs`.
+- [ ] Open PR titled `feat(GIM-228): Audit-V1 S0 foundation prerequisites`.
 - [ ] PR body includes:
-  - "Closes GIM-NN"
+  - "Closes GIM-228"
   - bullet list mapping commits → S0.1/S0.2/S0.3
   - QA Evidence section will be filled in Phase 4.
 

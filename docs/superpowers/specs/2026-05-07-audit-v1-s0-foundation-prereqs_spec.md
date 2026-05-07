@@ -1,14 +1,14 @@
 # Audit-V1 S0 — Foundation Prerequisites — Specification
 
 **Document date:** 2026-05-07
-**Status:** Draft · awaiting CTO formalisation
+**Status:** Formalised (GIM-228)
 **Author:** Board+Claude session (operator + Claude Opus 4.7)
 **Team:** Claude
 **Slice ID:** S0 (Audit-V1 sprint sequence, rev3)
 **Companion plan:** `2026-05-07-audit-v1-s0-foundation-prereqs_plan.md`
 **Source sprint file:** `docs/superpowers/sprints/D-audit-orchestration.md` §S0 (rev2)
 **Roadmap row:** `docs/roadmap.md` §"Audit-V1" sprint table — S0
-**Branch:** `feature/GIM-NN-audit-v1-s0-foundation-prereqs` (CTO swaps `GIM-NN` → real issue number on Phase 1.1).
+**Branch:** `feature/GIM-228-audit-v1-s0-foundation-prereqs`.
 
 ---
 
