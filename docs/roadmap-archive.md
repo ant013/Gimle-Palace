@@ -26,10 +26,10 @@ Reference: `docs/research/extractor-library/` (2026-04-18 brainstorm, 9 parallel
 |---|------|------|:---:|------------|--------|
 | 1 | Architecture Layer Extractor | Claude | — | tree-sitter + modules-graph-assert + ArchUnit + Package.swift | deferred |
 | 2 | Symbol Duplication Detector | Claude | — | jscpd + UniXcoder/CodeBERT embeddings + semhash | deferred |
-| 3 | Reactive Dependency Tracer | CX | — | swift-syntax + detekt AST + Compose Stability | deferred |
+| 3 | Reactive Dependency Tracer | CX | — | swift-syntax + detekt AST + Compose Stability | ✅ GIM-217 (merged `2bb7bbd` 2026-05-07) |
 | 4 | KMP Platform-Bridge Extractor | CX | — | tree-sitter-kotlin + SKIE + swift-syntax | deferred (waits UW KMP adoption) |
 | 5 | Dependency Surface Extractor | Claude | — | dep-analysis-gradle + spmgraph + Package.resolved parser | merged (GIM-191) |
-| 25 | Build System Extractor | CX | — | Gradle Tooling API + SwiftPM PackageDescription + Bazel aquery | deferred |
+| 25 | Build System Extractor | CX | — | Gradle Tooling API + SwiftPM PackageDescription + Bazel aquery | 📋 GIM-215 spec+plan+security spike merged `5155ef7`; extractor impl pending |
 | 27 | Public API Surface Extractor | CX | — | Kotlin BCV + Swift .swiftinterface | merged (GIM-190) |
 | 31 | Cross-Module Contract Extractor | CX | — | Kotlin BCV + swift-public-api-diff + oasdiff | merged (GIM-192) |
 | 33 | Dead Symbol & Binary Surface | CX | — | Periphery + Reaper SDK + CodeQL | merged (GIM-193) |
@@ -91,6 +91,13 @@ Reference: `docs/research/extractor-library/` (2026-04-18 brainstorm, 9 parallel
 
 - **CX**: 18 extractors. **Claude**: 22 extractors.
 - **LLM-required**: 6 unique (#10, #11, #15, #26, #35, #43). All Claude.
+- **Merged as of 2026-05-07** (10 extractors): #3 (GIM-217 `2bb7bbd`),
+  #5 (GIM-191), #21 Phase 1 family (TS+Java+Solidity+Swift+clang),
+  #22 (GIM-186 `b0dd44d`), #27 (GIM-190), #31 (GIM-192), #32 (GIM-216
+  `2d6e6c1`), #33 (GIM-193), #39 (GIM-218 `603c840`), #44 (GIM-195).
+- **Audit-V1 in flight** (3 extractors as v1 critical-path slices):
+  #1 (S2.2), #7 (S2.3), #40 (S2.1) — see `roadmap.md` §"Audit-V1".
+- **Spec+plan ready, impl pending**: #25 (GIM-215 `5155ef7`).
 
 ---
 
