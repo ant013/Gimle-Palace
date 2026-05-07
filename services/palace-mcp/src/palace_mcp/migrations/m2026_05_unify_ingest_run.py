@@ -18,6 +18,8 @@ import asyncio
 import logging
 import os
 
+from neo4j import AsyncDriver
+
 _MIGRATION_CYPHER = """
 MATCH (r:IngestRun)
 WHERE r.extractor_name IS NULL
@@ -37,12 +39,12 @@ RETURN count(*) AS migrated
 _logger = logging.getLogger(__name__)
 
 
-async def run_migration(driver: object) -> int:
+async def run_migration(driver: AsyncDriver) -> int:
     """Back-fill Path A :IngestRun nodes with canonical fields.
 
     Returns the number of rows migrated (0 on subsequent idempotent runs).
     """
-    async with driver.session() as session:  # type: ignore[union-attr]
+    async with driver.session() as session:
         result = await session.run(_MIGRATION_CYPHER)
         record = await result.single()
     migrated = int(record["migrated"]) if record else 0
