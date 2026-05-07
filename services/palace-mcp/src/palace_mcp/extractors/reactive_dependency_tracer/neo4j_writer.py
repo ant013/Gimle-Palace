@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from neo4j import AsyncDriver
+from pydantic import BaseModel
 
 from palace_mcp.extractors.foundation.models import Language
 from palace_mcp.extractors.reactive_dependency_tracer.models import (
@@ -205,7 +206,7 @@ async def _write_batch(tx: Any, batch: NormalizedReactiveFile) -> ReactiveWriteS
                 tx,
                 _MERGE_COMPONENT,
                 node_id=component.id,
-                node_props=component.model_dump(mode="json", exclude_none=True),
+                node_props=_neo4j_node_props(component),
             ),
         )
     for state in batch.states:
@@ -215,7 +216,7 @@ async def _write_batch(tx: Any, batch: NormalizedReactiveFile) -> ReactiveWriteS
                 tx,
                 _MERGE_STATE,
                 node_id=state.id,
-                node_props=state.model_dump(mode="json", exclude_none=True),
+                node_props=_neo4j_node_props(state),
             ),
         )
     for effect in batch.effects:
@@ -225,7 +226,7 @@ async def _write_batch(tx: Any, batch: NormalizedReactiveFile) -> ReactiveWriteS
                 tx,
                 _MERGE_EFFECT,
                 node_id=effect.id,
-                node_props=effect.model_dump(mode="json", exclude_none=True),
+                node_props=_neo4j_node_props(effect),
             ),
         )
     for diagnostic in batch.diagnostics:
@@ -235,7 +236,7 @@ async def _write_batch(tx: Any, batch: NormalizedReactiveFile) -> ReactiveWriteS
                 tx,
                 _MERGE_DIAGNOSTIC,
                 node_id=diagnostic.id,
-                node_props=diagnostic.model_dump(mode="json", exclude_none=True),
+                node_props=_neo4j_node_props(diagnostic),
             ),
         )
         if diagnostic.ref is None:
@@ -305,6 +306,28 @@ async def _write_edge(tx: Any, edge: ReactiveEdge) -> ReactiveWriteSummary:
         relationship_id=edge.id,
         relationship_props=props,
     )
+
+
+def _neo4j_node_props(node: BaseModel) -> dict[str, object]:
+    props: dict[str, object] = {
+        key: value
+        for key, value in node.model_dump(mode="json", exclude_none=True).items()
+    }
+    range_props = props.pop("range", None)
+    if isinstance(range_props, dict):
+        start_line = range_props.get("start_line")
+        start_col = range_props.get("start_col")
+        end_line = range_props.get("end_line")
+        end_col = range_props.get("end_col")
+        if isinstance(start_line, int):
+            props["range_start_line"] = start_line
+        if isinstance(start_col, int):
+            props["range_start_col"] = start_col
+        if isinstance(end_line, int):
+            props["range_end_line"] = end_line
+        if isinstance(end_col, int):
+            props["range_end_col"] = end_col
+    return props
 
 
 def _add(

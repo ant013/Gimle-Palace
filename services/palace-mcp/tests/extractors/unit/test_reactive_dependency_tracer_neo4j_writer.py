@@ -57,9 +57,11 @@ class _FakeTx:
     def __init__(self, counters_by_marker: dict[str, _FakeCounters]) -> None:
         self.counters_by_marker = counters_by_marker
         self.queries: list[str] = []
+        self.params_by_query: list[dict[str, object]] = []
 
-    async def run(self, query: str, **_: object) -> _FakeResult:
+    async def run(self, query: str, **params: object) -> _FakeResult:
         self.queries.append(query)
+        self.params_by_query.append(dict(params))
         marker = "default"
         for candidate in self.counters_by_marker:
             if candidate != "default" and candidate in query:
@@ -258,3 +260,39 @@ async def test_writer_rerun_reports_zero_when_counters_zero() -> None:
     summary = await write_reactive_graph(driver=driver, batches=(_batch(),))
 
     assert summary == ReactiveWriteSummary()
+
+
+@pytest.mark.asyncio
+async def test_writer_flattens_range_props_for_neo4j() -> None:
+    tx = _FakeTx({"default": _FakeCounters()})
+    driver = _FakeDriver(_FakeSession(tx))
+
+    await write_reactive_graph(driver=driver, batches=(_batch(),))
+
+    component_props = next(
+        params["node_props"]
+        for query, params in zip(tx.queries, tx.params_by_query, strict=True)
+        if "MERGE (node:ReactiveComponent" in query
+    )
+    effect_props = next(
+        params["node_props"]
+        for query, params in zip(tx.queries, tx.params_by_query, strict=True)
+        if "MERGE (node:ReactiveEffect" in query
+    )
+    diagnostic_props = next(
+        params["node_props"]
+        for query, params in zip(tx.queries, tx.params_by_query, strict=True)
+        if "MERGE (node:ReactiveDiagnostic" in query
+    )
+
+    assert "range" not in component_props
+    assert component_props["range_start_line"] == 1
+    assert component_props["range_end_col"] == 1
+
+    assert "range" not in effect_props
+    assert effect_props["range_start_line"] == 7
+    assert effect_props["range_end_line"] == 9
+
+    assert "range" not in diagnostic_props
+    assert diagnostic_props["range_start_col"] == 1
+    assert diagnostic_props["range_end_col"] == 5
