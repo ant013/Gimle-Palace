@@ -48,7 +48,8 @@ def e2e_seeded_project(neo4j_uri: str, neo4j_auth: tuple[str, str]) -> Iterator[
                 commit_sha: 'c1', symbol_key: 'AppModule.OldHelper', schema_version: 1
             })
             """,
-            slug=slug, gid=gid,
+            slug=slug,
+            gid=gid,
         )
         # PublicApiSurface + PublicApiSymbol
         sess.run(
@@ -70,7 +71,8 @@ def e2e_seeded_project(neo4j_uri: str, neo4j_auth: tuple[str, str]) -> Iterator[
             })
             MERGE (s)-[:EXPORTS]->(sym)
             """,
-            slug=slug, gid=gid,
+            slug=slug,
+            gid=gid,
         )
         # ModuleContractDelta
         sess.run(
@@ -84,13 +86,15 @@ def e2e_seeded_project(neo4j_uri: str, neo4j_auth: tuple[str, str]) -> Iterator[
                 classification_scope: 'minimal_symbol_delta', schema_version: 1
             })
             """,
-            slug=slug, gid=gid,
+            slug=slug,
+            gid=gid,
         )
     yield slug
     with drv.session() as sess:
         sess.run(
             "MATCH (n) WHERE n.project = $s OR n.group_id = $g DETACH DELETE n",
-            s=slug, g=gid,
+            s=slug,
+            g=gid,
         )
         sess.run("MATCH (p:Project {slug: $s}) DETACH DELETE p", s=slug)
     drv.close()

@@ -56,9 +56,7 @@ class TestPathACanonicalFields:
         """project must be a Cypher parameter ($project), not hardcoded."""
         # Accept $project appearing as $project (not just inside $project_id etc.)
         matches = re.findall(r"\$project\b", CREATE_INGEST_RUN)
-        assert len(matches) >= 1, (
-            "CREATE_INGEST_RUN must use $project parameter"
-        )
+        assert len(matches) >= 1, "CREATE_INGEST_RUN must use $project parameter"
 
     @pytest.mark.asyncio
     async def test_runner_passes_extractor_name_and_project(self) -> None:
@@ -78,9 +76,15 @@ class TestPathACanonicalFields:
             group_id="project/gimle",
         )
 
-        with patch.object(runner, "_precheck", return_value=ok), \
-             patch.object(runner, "_execute", return_value=MM(stats=MM(nodes_written=0, edges_written=0))), \
-             patch.object(runner, "_finalize", return_value=(0, 0, [], True)):
+        with (
+            patch.object(runner, "_precheck", return_value=ok),
+            patch.object(
+                runner,
+                "_execute",
+                return_value=MM(stats=MM(nodes_written=0, edges_written=0)),
+            ),
+            patch.object(runner, "_finalize", return_value=(0, 0, [], True)),
+        ):
             await runner.run_extractor(
                 "hotspot", "gimle", driver=driver, graphiti=graphiti
             )

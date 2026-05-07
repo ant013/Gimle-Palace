@@ -76,7 +76,10 @@ def _seed_path_b_row(
 
 def _delete_rows(drv: object, run_ids: list[str]) -> None:
     with drv.session() as sess:  # type: ignore[union-attr]
-        sess.run("MATCH (r:IngestRun) WHERE r.id IN $ids OR r.run_id IN $ids DETACH DELETE r", ids=run_ids)
+        sess.run(
+            "MATCH (r:IngestRun) WHERE r.id IN $ids OR r.run_id IN $ids DETACH DELETE r",
+            ids=run_ids,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -98,7 +101,9 @@ def sync_drv(neo4j_uri: str, neo4j_auth: tuple[str, str]) -> Iterator[object]:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_migration_idempotent(neo4j_uri: str, neo4j_auth: tuple[str, str]) -> None:
+async def test_migration_idempotent(
+    neo4j_uri: str, neo4j_auth: tuple[str, str]
+) -> None:
     """Migration back-fills Path A rows and is safe to re-run (zero net writes)."""
     from neo4j import AsyncGraphDatabase
     from palace_mcp.migrations.m2026_05_unify_ingest_run import run_migration
@@ -106,9 +111,21 @@ async def test_migration_idempotent(neo4j_uri: str, neo4j_auth: tuple[str, str])
     drv = _sync_driver(neo4j_uri, neo4j_auth)
     ids = [str(uuid.uuid4()) for _ in range(3)]
     try:
-        _seed_path_a_row(drv, run_id=ids[0], source="extractor.hotspot", group_id="project/gimle")
-        _seed_path_a_row(drv, run_id=ids[1], source="extractor.dependency_surface", group_id="project/other")
-        _seed_path_a_row(drv, run_id=ids[2], source="extractor.code_ownership", group_id="bundle/uw-ios")
+        _seed_path_a_row(
+            drv, run_id=ids[0], source="extractor.hotspot", group_id="project/gimle"
+        )
+        _seed_path_a_row(
+            drv,
+            run_id=ids[1],
+            source="extractor.dependency_surface",
+            group_id="project/other",
+        )
+        _seed_path_a_row(
+            drv,
+            run_id=ids[2],
+            source="extractor.code_ownership",
+            group_id="bundle/uw-ios",
+        )
 
         async_drv = AsyncGraphDatabase.driver(neo4j_uri, auth=neo4j_auth)
         try:
@@ -129,10 +146,16 @@ async def test_migration_idempotent(neo4j_uri: str, neo4j_auth: tuple[str, str])
                     assert row is not None
                     expected_name = source.removeprefix("extractor.")
                     expected_project = (
-                        group_id.removeprefix("project/") if group_id.startswith("project/") else group_id
+                        group_id.removeprefix("project/")
+                        if group_id.startswith("project/")
+                        else group_id
                     )
-                    assert row["en"] == expected_name, f"extractor_name mismatch for {run_id}"
-                    assert row["p"] == expected_project, f"project mismatch for {run_id}"
+                    assert row["en"] == expected_name, (
+                        f"extractor_name mismatch for {run_id}"
+                    )
+                    assert row["p"] == expected_project, (
+                        f"project mismatch for {run_id}"
+                    )
 
             # Idempotency: re-run should affect 0 rows
             migrated_again = await run_migration(async_drv)
@@ -157,8 +180,12 @@ async def test_audit_discovery_sees_both_paths(
     path_a_id = str(uuid.uuid4())
     path_b_id = str(uuid.uuid4())
     try:
-        _seed_path_a_row(drv, run_id=path_a_id, source="extractor.hotspot", group_id="project/gimle")
-        _seed_path_b_row(drv, run_id=path_b_id, extractor_name="hotspot", project="gimle")
+        _seed_path_a_row(
+            drv, run_id=path_a_id, source="extractor.hotspot", group_id="project/gimle"
+        )
+        _seed_path_b_row(
+            drv, run_id=path_b_id, extractor_name="hotspot", project="gimle"
+        )
 
         async_drv = AsyncGraphDatabase.driver(neo4j_uri, auth=neo4j_auth)
         try:

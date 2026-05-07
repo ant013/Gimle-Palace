@@ -46,7 +46,9 @@ from starlette.applications import Starlette
 from palace_mcp.code.find_cross_module_contracts import (
     find_cross_module_contracts as _find_cross_module_contracts_impl,
 )
-from palace_mcp.code.find_dead_symbols import find_dead_symbols as _find_dead_symbols_impl
+from palace_mcp.code.find_dead_symbols import (
+    find_dead_symbols as _find_dead_symbols_impl,
+)
 from palace_mcp.code.find_hotspots import find_hotspots as _find_hotspots_impl
 from palace_mcp.code.find_owners import find_owners as _find_owners_impl
 from palace_mcp.code.find_public_api import find_public_api as _find_public_api_impl

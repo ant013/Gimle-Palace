@@ -83,7 +83,8 @@ def contracts_seeded_project(
     with drv.session() as sess:
         sess.run(
             "MATCH (n) WHERE n.project = $s OR n.group_id = $g DETACH DELETE n",
-            s=slug, g=f"project/{slug}",
+            s=slug,
+            g=f"project/{slug}",
         )
         sess.run("MATCH (p:Project {slug: $s}) DETACH DELETE p", s=slug)
     drv.close()
@@ -101,7 +102,9 @@ async def test_find_cross_module_contracts_empty_graph(
 
     drv = AsyncGraphDatabase.driver(neo4j_uri, auth=neo4j_auth)
     try:
-        result = await find_cross_module_contracts(driver=drv, project=contracts_empty_project)
+        result = await find_cross_module_contracts(
+            driver=drv, project=contracts_empty_project
+        )
     finally:
         await drv.close()
     assert result["ok"] is True
@@ -120,14 +123,22 @@ async def test_find_cross_module_contracts_seeded(
 
     drv = AsyncGraphDatabase.driver(neo4j_uri, auth=neo4j_auth)
     try:
-        result = await find_cross_module_contracts(driver=drv, project=contracts_seeded_project)
+        result = await find_cross_module_contracts(
+            driver=drv, project=contracts_seeded_project
+        )
     finally:
         await drv.close()
     assert result["ok"] is True
     rows = result["result"]
     assert len(rows) >= 1
     row = rows[0]
-    for field in ("consumer_module", "producer_module", "language", "removed_count", "added_count"):
+    for field in (
+        "consumer_module",
+        "producer_module",
+        "language",
+        "removed_count",
+        "added_count",
+    ):
         assert field in row, f"Missing field: {field}"
     assert row["consumer_module"] == "AppModule"
     assert row["producer_module"] == "CoreKit"

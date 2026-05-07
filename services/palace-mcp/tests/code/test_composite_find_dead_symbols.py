@@ -100,7 +100,8 @@ def dead_symbols_seeded_project(
     with drv.session() as sess:
         sess.run(
             "MATCH (n) WHERE n.project = $s OR n.group_id = $g DETACH DELETE n",
-            s=slug, g=f"project/{slug}",
+            s=slug,
+            g=f"project/{slug}",
         )
         sess.run("MATCH (p:Project {slug: $s}) DETACH DELETE p", s=slug)
     drv.close()
@@ -139,14 +140,23 @@ async def test_find_dead_symbols_seeded(
 
     drv = AsyncGraphDatabase.driver(neo4j_uri, auth=neo4j_auth)
     try:
-        result = await find_dead_symbols(driver=drv, project=dead_symbols_seeded_project)
+        result = await find_dead_symbols(
+            driver=drv, project=dead_symbols_seeded_project
+        )
     finally:
         await drv.close()
     assert result["ok"] is True
     rows = result["result"]
     assert len(rows) >= 1
     row = rows[0]
-    for field in ("display_name", "kind", "module_name", "language", "candidate_state", "confidence"):
+    for field in (
+        "display_name",
+        "kind",
+        "module_name",
+        "language",
+        "candidate_state",
+        "confidence",
+    ):
         assert field in row, f"Missing field: {field}"
     assert row["display_name"] == "UnusedView"
     assert row["candidate_state"] == "unused_candidate"

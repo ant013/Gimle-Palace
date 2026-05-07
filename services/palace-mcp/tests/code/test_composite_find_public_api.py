@@ -93,7 +93,8 @@ def public_api_seeded_project(
     with drv.session() as sess:
         sess.run(
             "MATCH (n) WHERE n.project = $s OR n.group_id = $g DETACH DELETE n",
-            s=slug, g=f"project/{slug}",
+            s=slug,
+            g=f"project/{slug}",
         )
         sess.run("MATCH (p:Project {slug: $s}) DETACH DELETE p", s=slug)
     drv.close()
