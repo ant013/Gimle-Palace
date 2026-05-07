@@ -29,6 +29,7 @@ Tools registered:
 - palace.memory.bundle_members
 - palace.memory.bundle_status
 - palace.memory.delete_bundle
+- palace.audit.run
 """
 
 import logging
@@ -43,6 +44,7 @@ from neo4j import AsyncDriver
 from pydantic import BaseModel, ValidationError
 from starlette.applications import Starlette
 
+from palace_mcp.audit.run import run_audit as _run_audit
 from palace_mcp.code.find_cross_module_contracts import (
     find_cross_module_contracts as _find_cross_module_contracts_impl,
 )
@@ -1065,3 +1067,40 @@ async def palace_memory_prime(
         "tokens_estimated": tokens_estimated,
         "truncated": truncated,
     }
+
+
+# ---------------------------------------------------------------------------
+# palace.audit.run — synchronous audit report
+# ---------------------------------------------------------------------------
+
+
+@_tool(
+    name="palace.audit.run",
+    description=(
+        "Run a synchronous audit report for a project or bundle. "
+        "Discovers the latest successful IngestRun for each extractor, "
+        "fetches findings from Neo4j, renders a structured markdown report, "
+        "and returns report_markdown + blind_spots (extractors with no IngestRun). "
+        "Exactly one of 'project' or 'bundle' must be provided. "
+        "depth: 'quick' (first 3 extractors only) or 'full' (all)."
+    ),
+)
+async def palace_audit_run(
+    project: str | None = None,
+    bundle: str | None = None,
+    depth: str = "full",
+) -> dict[str, Any]:
+    """Run synchronous audit report: discovery → fetch → render."""
+    if _driver is None:
+        return {
+            "ok": False,
+            "error_code": "driver_unavailable",
+            "message": "Neo4j driver not initialised",
+        }
+    return await _run_audit(
+        _driver,
+        _extractor_registry.EXTRACTORS,
+        project=project,
+        bundle=bundle,
+        depth=depth,
+    )
