@@ -15,7 +15,6 @@ Two test classes:
 
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 from pathlib import Path
@@ -26,7 +25,7 @@ import pytest
 
 from palace_mcp.audit.contracts import AuditContract
 from palace_mcp.audit.run import run_audit
-from palace_mcp.extractors.base import BaseExtractor, ExtractorRunContext, ExtractorStats
+from palace_mcp.extractors.base import BaseExtractor, ExtractorStats
 
 _SMOKE_SCRIPT = Path(__file__).parent / "test_audit_e2e.sh"
 

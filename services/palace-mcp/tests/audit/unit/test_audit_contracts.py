@@ -10,9 +10,7 @@ Each test asserts:
 
 from __future__ import annotations
 
-from pathlib import Path
 
-import pytest
 
 from palace_mcp.audit.contracts import AuditContract
 from palace_mcp.audit.renderer import _TEMPLATES_DIR

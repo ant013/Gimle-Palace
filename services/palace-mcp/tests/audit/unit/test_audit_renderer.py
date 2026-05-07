@@ -10,7 +10,7 @@ Tests:
 
 from __future__ import annotations
 
-from palace_mcp.audit.contracts import AuditContract, AuditSectionData, Severity
+from palace_mcp.audit.contracts import AuditSectionData, Severity
 from palace_mcp.audit.renderer import render_report, render_section
 
 
@@ -190,3 +190,40 @@ class TestBlindSpotSection:
             blind_spots=[],
         )
         assert "No blind spots" in report or "All registered" in report
+
+
+class TestExtractorPluralization:
+    def test_singular_extractor_label(self) -> None:
+        section = _hotspot_section()
+        report = render_report(
+            project="p",
+            sections={"hotspot": section},
+            severity_columns={"hotspot": "sev"},
+            max_findings_per_section={"hotspot": 100},
+            blind_spots=[],
+        )
+        assert "1 extractor contributed data" in report
+        assert "1 extractors" not in report
+
+    def test_plural_extractor_label(self) -> None:
+        sections = {
+            "hotspot": _hotspot_section(),
+            "dead_symbol_binary_surface": AuditSectionData(
+                extractor_name="dead_symbol_binary_surface",
+                run_id="run-d",
+                project="p",
+                completed_at=None,
+                findings=[],
+                summary_stats={"total": 0, "confirmed_dead": 0, "unused_candidate": 0, "skipped": 0},
+                max_severity=Severity.INFORMATIONAL,
+            ),
+        }
+        report = render_report(
+            project="p",
+            sections=sections,
+            severity_columns={"hotspot": "sev", "dead_symbol_binary_surface": "candidate_state"},
+            max_findings_per_section={"hotspot": 100, "dead_symbol_binary_surface": 100},
+            blind_spots=[],
+        )
+        assert "2 extractors contributed data" in report
+        assert "{ '' if" not in report

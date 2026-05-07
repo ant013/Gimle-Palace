@@ -14,7 +14,6 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 from palace_mcp.audit.contracts import (
     AuditSectionData,
-    RunInfo,
     Severity,
     SEVERITY_RANK,
     severity_from_str,
@@ -133,7 +132,7 @@ def render_report(
     )
     executive_lines = [
         f"Audit of project `{project}` at depth `{depth}`.",
-        f"{len(sections)} extractor{{ '' if len(sections) == 1 else 's' }} contributed data.",
+        f"{len(sections)} extractor{'s' if len(sections) != 1 else ''} contributed data.",
     ]
     if blind_spots:
         executive_lines.append(f"{len(blind_spots)} extractor(s) had no data (blind spots): {', '.join(f'`{b}`' for b in blind_spots)}.")

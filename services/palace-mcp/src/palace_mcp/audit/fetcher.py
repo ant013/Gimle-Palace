@@ -3,28 +3,42 @@
 Uses direct Cypher via the Neo4j async driver (no MCP round-trips).
 Per spec §3.5 rev4: composite MCP tools are agent-facing; in-process
 fetcher goes directly to Neo4j to avoid serialisation overhead.
+
+Parameter note: the fetcher binds BOTH ``$project`` (bare slug, e.g. ``gimle``)
+and ``$project_id`` (prefixed form, e.g. ``project/gimle``) in every Cypher
+call.  Extractor contracts may use either parameter name — ``hotspot`` and
+``code_ownership`` use ``$project_id``; the remaining five use ``$project``.
+Both bindings must stay present to avoid silent empty-result regressions when
+contracts are refactored.
 """
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from palace_mcp.audit.contracts import AuditSectionData, RunInfo
 from palace_mcp.extractors.base import BaseExtractor
+
+log = logging.getLogger(__name__)
 
 
 async def fetch_audit_data(
     driver: Any,
     discovery_result: dict[str, RunInfo],
     extractor_registry: dict[str, BaseExtractor],
+    *,
+    failed_extractors: list[str] | None = None,
 ) -> dict[str, AuditSectionData]:
     """Fetch audit data for all discovered extractors.
 
     For each extractor in discovery_result:
     - Look up the extractor in the registry.
     - Skip if not found or audit_contract() returns None.
-    - Execute contract.query via the Neo4j driver with $project param.
+    - Execute contract.query via the Neo4j driver with $project and $project_id params.
     - Build AuditSectionData from the results.
+    - On Neo4j error, log a warning and append the extractor name to
+      ``failed_extractors`` (if provided) so callers can surface it as a blind spot.
 
     Returns dict keyed by extractor_name.
     """
@@ -38,14 +52,20 @@ async def fetch_audit_data(
             continue
 
         findings: list[dict[str, Any]] = []
-        async with driver.session() as session:
-            result = await session.run(
-                contract.query,
-                project=run_info.project,
-                project_id=f"project/{run_info.project}",
-            )
-            async for rec in result:
-                findings.append(dict(rec))
+        try:
+            async with driver.session() as session:
+                result = await session.run(
+                    contract.query,
+                    project=run_info.project,
+                    project_id=f"project/{run_info.project}",
+                )
+                async for rec in result:
+                    findings.append(dict(rec))
+        except Exception:
+            log.warning("audit fetch failed for extractor %r", extractor_name, exc_info=True)
+            if failed_extractors is not None:
+                failed_extractors.append(extractor_name)
+            continue
 
         results[extractor_name] = AuditSectionData(
             extractor_name=extractor_name,

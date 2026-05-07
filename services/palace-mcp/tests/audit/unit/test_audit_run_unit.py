@@ -10,10 +10,9 @@ import json
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 
-from palace_mcp.audit.contracts import AuditContract, AuditSectionData, RunInfo
-from palace_mcp.extractors.base import BaseExtractor, ExtractorRunContext, ExtractorStats
+from palace_mcp.audit.contracts import AuditContract
+from palace_mcp.extractors.base import BaseExtractor, ExtractorStats
 
 
 # ---------------------------------------------------------------------------

@@ -8,7 +8,6 @@ per extractor via direct Cypher (no MCP round-trips).
 from __future__ import annotations
 
 from collections.abc import Iterator
-from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
@@ -16,7 +15,7 @@ from neo4j import AsyncDriver, AsyncGraphDatabase
 import os
 
 from palace_mcp.audit.contracts import AuditContract, AuditSectionData, RunInfo
-from palace_mcp.extractors.base import BaseExtractor, ExtractorRunContext, ExtractorStats
+from palace_mcp.extractors.base import BaseExtractor, ExtractorStats
 
 
 # ---------------------------------------------------------------------------

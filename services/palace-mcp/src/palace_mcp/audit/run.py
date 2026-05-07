@@ -10,10 +10,9 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
-from palace_mcp.audit.contracts import AuditContract, Severity
 from palace_mcp.audit.discovery import find_latest_runs
 from palace_mcp.audit.fetcher import fetch_audit_data
-from palace_mcp.audit.renderer import _SECTION_ORDER, render_report
+from palace_mcp.audit.renderer import render_report
 
 _SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
 _VALID_DEPTHS = {"quick", "full"}
@@ -45,7 +44,8 @@ async def run_audit(
         return _err("invalid_args", "exactly one of 'project' or 'bundle' must be provided")
 
     target = project or bundle
-    assert target is not None
+    if target is None:
+        return _err("invalid_args", "exactly one of 'project' or 'bundle' must be provided")
 
     if not _SLUG_RE.match(target):
         return _err("invalid_slug", f"slug {target!r} must match [a-z0-9-]{{1,64}}")
@@ -64,8 +64,11 @@ async def run_audit(
     }
     blind_spots = sorted(audit_extractors - set(discovery.keys()))
 
-    # Fetcher
-    sections = await fetch_audit_data(driver, discovery, extractor_registry)
+    # Fetcher — failed_extractors receives names of any extractor whose Cypher errored;
+    # they are appended to blind_spots so the report flags them as unavailable.
+    fetch_failed: list[str] = []
+    sections = await fetch_audit_data(driver, discovery, extractor_registry, failed_extractors=fetch_failed)
+    blind_spots = sorted(set(blind_spots) | set(fetch_failed))
 
     # Build per-section metadata for renderer
     severity_columns: dict[str, str] = {}

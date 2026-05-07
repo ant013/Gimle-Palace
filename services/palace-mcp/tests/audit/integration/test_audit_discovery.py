@@ -10,7 +10,6 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 import pytest
-import pytest_asyncio
 from neo4j import AsyncDriver, AsyncGraphDatabase
 
 import os
