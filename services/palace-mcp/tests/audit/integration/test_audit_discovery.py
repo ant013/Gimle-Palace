@@ -21,6 +21,7 @@ def neo4j_uri() -> Iterator[str]:
         yield reuse
         return
     from testcontainers.neo4j import Neo4jContainer  # type: ignore[import]
+
     with Neo4jContainer("neo4j:5.26.0") as container:
         yield container.get_connection_url()
 
@@ -78,12 +79,35 @@ async def _seed_ingest_run(
 
 @pytest.mark.integration
 class TestAuditDiscovery:
-    async def test_finds_latest_successful_run_per_extractor(self, driver: AsyncDriver) -> None:
+    async def test_finds_latest_successful_run_per_extractor(
+        self, driver: AsyncDriver
+    ) -> None:
         from palace_mcp.audit.discovery import find_latest_runs
 
-        await _seed_ingest_run(driver, run_id="r1", extractor_name="hotspot", project="test-proj", success=True, started_at="2026-05-07T10:00:00Z")
-        await _seed_ingest_run(driver, run_id="r2", extractor_name="hotspot", project="test-proj", success=True, started_at="2026-05-07T12:00:00Z")
-        await _seed_ingest_run(driver, run_id="r3", extractor_name="dead_symbol_binary_surface", project="test-proj", success=True, started_at="2026-05-07T11:00:00Z")
+        await _seed_ingest_run(
+            driver,
+            run_id="r1",
+            extractor_name="hotspot",
+            project="test-proj",
+            success=True,
+            started_at="2026-05-07T10:00:00Z",
+        )
+        await _seed_ingest_run(
+            driver,
+            run_id="r2",
+            extractor_name="hotspot",
+            project="test-proj",
+            success=True,
+            started_at="2026-05-07T12:00:00Z",
+        )
+        await _seed_ingest_run(
+            driver,
+            run_id="r3",
+            extractor_name="dead_symbol_binary_surface",
+            project="test-proj",
+            success=True,
+            started_at="2026-05-07T11:00:00Z",
+        )
 
         result = await find_latest_runs(driver, project="test-proj")
 
@@ -95,8 +119,22 @@ class TestAuditDiscovery:
     async def test_ignores_failed_runs(self, driver: AsyncDriver) -> None:
         from palace_mcp.audit.discovery import find_latest_runs
 
-        await _seed_ingest_run(driver, run_id="r-ok", extractor_name="hotspot", project="p", success=True, started_at="2026-05-07T09:00:00Z")
-        await _seed_ingest_run(driver, run_id="r-fail", extractor_name="hotspot", project="p", success=False, started_at="2026-05-07T11:00:00Z")
+        await _seed_ingest_run(
+            driver,
+            run_id="r-ok",
+            extractor_name="hotspot",
+            project="p",
+            success=True,
+            started_at="2026-05-07T09:00:00Z",
+        )
+        await _seed_ingest_run(
+            driver,
+            run_id="r-fail",
+            extractor_name="hotspot",
+            project="p",
+            success=False,
+            started_at="2026-05-07T11:00:00Z",
+        )
 
         result = await find_latest_runs(driver, project="p")
         assert result["hotspot"].run_id == "r-ok"
@@ -110,8 +148,22 @@ class TestAuditDiscovery:
     async def test_different_projects_are_isolated(self, driver: AsyncDriver) -> None:
         from palace_mcp.audit.discovery import find_latest_runs
 
-        await _seed_ingest_run(driver, run_id="r-a", extractor_name="hotspot", project="proj-a", success=True, started_at="2026-05-07T10:00:00Z")
-        await _seed_ingest_run(driver, run_id="r-b", extractor_name="hotspot", project="proj-b", success=True, started_at="2026-05-07T10:00:00Z")
+        await _seed_ingest_run(
+            driver,
+            run_id="r-a",
+            extractor_name="hotspot",
+            project="proj-a",
+            success=True,
+            started_at="2026-05-07T10:00:00Z",
+        )
+        await _seed_ingest_run(
+            driver,
+            run_id="r-b",
+            extractor_name="hotspot",
+            project="proj-b",
+            success=True,
+            started_at="2026-05-07T10:00:00Z",
+        )
 
         result_a = await find_latest_runs(driver, project="proj-a")
         result_b = await find_latest_runs(driver, project="proj-b")

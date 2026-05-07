@@ -65,6 +65,7 @@ class DependencySurfaceExtractor(BaseExtractor):
 
     def audit_contract(self) -> "AuditContract":
         from palace_mcp.audit.contracts import AuditContract, Severity
+
         return AuditContract(
             extractor_name="dependency_surface",
             template_name="dependency_surface.md",

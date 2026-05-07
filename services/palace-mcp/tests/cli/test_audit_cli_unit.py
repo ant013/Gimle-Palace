@@ -94,7 +94,13 @@ class TestArgParsing:
     def test_audit_launch_dry_run_parsed(self) -> None:
         parser = build_parser()
         args = parser.parse_args(
-            ["audit", "launch", "--project=gimle", "--auditor-id=test-uuid", "--dry-run"]
+            [
+                "audit",
+                "launch",
+                "--project=gimle",
+                "--auditor-id=test-uuid",
+                "--dry-run",
+            ]
         )
         assert args.dry_run is True
         assert args.auditor_id == "test-uuid"
@@ -146,11 +152,15 @@ class TestBuildParentPayload:
 
 class TestBuildChildPayload:
     def test_title_format(self) -> None:
-        c = build_child_payload("gimle", "audit-arch", "agent-uuid", "parent-id", "co-id")
+        c = build_child_payload(
+            "gimle", "audit-arch", "agent-uuid", "parent-id", "co-id"
+        )
         assert c["title"] == "audit-domain: gimle/audit-arch"
 
     def test_parent_id_wired(self) -> None:
-        c = build_child_payload("gimle", "audit-arch", "agent-uuid", "parent-123", "co-id")
+        c = build_child_payload(
+            "gimle", "audit-arch", "agent-uuid", "parent-123", "co-id"
+        )
         assert c["parentIssueId"] == "parent-123"
 
     def test_agent_id_wired(self) -> None:
@@ -200,7 +210,9 @@ class TestCmdAuditRunErrors:
 
 
 class TestCmdAuditLaunchDryRun:
-    def test_dry_run_prints_4_payloads(self, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_dry_run_prints_4_payloads(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         args = argparse.Namespace(
             project="gimle",
             bundle=None,

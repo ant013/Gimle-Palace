@@ -62,7 +62,9 @@ async def fetch_audit_data(
                 async for rec in result:
                     findings.append(dict(rec))
         except Exception:
-            log.warning("audit fetch failed for extractor %r", extractor_name, exc_info=True)
+            log.warning(
+                "audit fetch failed for extractor %r", extractor_name, exc_info=True
+            )
             if failed_extractors is not None:
                 failed_extractors.append(extractor_name)
             continue
@@ -79,14 +81,18 @@ async def fetch_audit_data(
     return results
 
 
-def _build_summary_stats(extractor_name: str, findings: list[dict[str, Any]]) -> dict[str, Any]:
+def _build_summary_stats(
+    extractor_name: str, findings: list[dict[str, Any]]
+) -> dict[str, Any]:
     """Build basic summary stats from raw findings list."""
     stats: dict[str, Any] = {"total": len(findings)}
 
     if extractor_name == "hotspot":
         scores = [f.get("hotspot_score", 0.0) for f in findings]
         stats["file_count"] = len(findings)
-        stats["max_score"] = max((float(s) for s in scores if s is not None), default=0.0)
+        stats["max_score"] = max(
+            (float(s) for s in scores if s is not None), default=0.0
+        )
         window_days = findings[0].get("window_days") if findings else None
         stats["window_days"] = int(window_days) if window_days else 90
 
@@ -116,7 +122,11 @@ def _build_summary_stats(extractor_name: str, findings: list[dict[str, Any]]) ->
         stats["module_count"] = len(modules)
 
     elif extractor_name == "cross_module_contract":
-        stats["breaking"] = sum(1 for f in findings if (f.get("removed_count") or 0) > 0)
-        stats["signature_changes"] = sum(1 for f in findings if (f.get("signature_changed_count") or 0) > 0)
+        stats["breaking"] = sum(
+            1 for f in findings if (f.get("removed_count") or 0) > 0
+        )
+        stats["signature_changes"] = sum(
+            1 for f in findings if (f.get("signature_changed_count") or 0) > 0
+        )
 
     return stats

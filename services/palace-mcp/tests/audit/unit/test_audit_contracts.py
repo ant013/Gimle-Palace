@@ -11,7 +11,6 @@ Each test asserts:
 from __future__ import annotations
 
 
-
 from palace_mcp.audit.contracts import AuditContract
 from palace_mcp.audit.renderer import _TEMPLATES_DIR
 
@@ -22,7 +21,9 @@ def _assert_valid_contract(contract: AuditContract | None, expected_name: str) -
     assert contract.extractor_name == expected_name
     assert contract.template_name, "template_name must be non-empty"
     template_path = _TEMPLATES_DIR / contract.template_name
-    assert template_path.exists(), f"template {contract.template_name!r} not found at {template_path}"
+    assert template_path.exists(), (
+        f"template {contract.template_name!r} not found at {template_path}"
+    )
     assert "MATCH" in contract.query, "query must contain MATCH clause"
     assert contract.severity_column, "severity_column must be non-empty"
     assert contract.max_findings > 0
@@ -31,6 +32,7 @@ def _assert_valid_contract(contract: AuditContract | None, expected_name: str) -
 class TestHotspotAuditContract:
     def test_returns_valid_contract(self) -> None:
         from palace_mcp.extractors.hotspot.extractor import HotspotExtractor
+
         contract = HotspotExtractor().audit_contract()
         _assert_valid_contract(contract, "hotspot")
         assert "hotspot.md" in contract.template_name  # type: ignore[union-attr]
@@ -38,28 +40,40 @@ class TestHotspotAuditContract:
 
 class TestDeadSymbolAuditContract:
     def test_returns_valid_contract(self) -> None:
-        from palace_mcp.extractors.dead_symbol_binary_surface.extractor import DeadSymbolBinarySurfaceExtractor
+        from palace_mcp.extractors.dead_symbol_binary_surface.extractor import (
+            DeadSymbolBinarySurfaceExtractor,
+        )
+
         contract = DeadSymbolBinarySurfaceExtractor().audit_contract()
         _assert_valid_contract(contract, "dead_symbol_binary_surface")
 
 
 class TestDependencySurfaceAuditContract:
     def test_returns_valid_contract(self) -> None:
-        from palace_mcp.extractors.dependency_surface.extractor import DependencySurfaceExtractor
+        from palace_mcp.extractors.dependency_surface.extractor import (
+            DependencySurfaceExtractor,
+        )
+
         contract = DependencySurfaceExtractor().audit_contract()
         _assert_valid_contract(contract, "dependency_surface")
 
 
 class TestCodeOwnershipAuditContract:
     def test_returns_valid_contract(self) -> None:
-        from palace_mcp.extractors.code_ownership.extractor import CodeOwnershipExtractor
+        from palace_mcp.extractors.code_ownership.extractor import (
+            CodeOwnershipExtractor,
+        )
+
         contract = CodeOwnershipExtractor().audit_contract()
         _assert_valid_contract(contract, "code_ownership")
 
 
 class TestCrossRepoVersionSkewAuditContract:
     def test_returns_valid_contract(self) -> None:
-        from palace_mcp.extractors.cross_repo_version_skew.extractor import CrossRepoVersionSkewExtractor
+        from palace_mcp.extractors.cross_repo_version_skew.extractor import (
+            CrossRepoVersionSkewExtractor,
+        )
+
         contract = CrossRepoVersionSkewExtractor().audit_contract()
         _assert_valid_contract(contract, "cross_repo_version_skew")
 
@@ -67,13 +81,17 @@ class TestCrossRepoVersionSkewAuditContract:
 class TestPublicApiSurfaceAuditContract:
     def test_returns_valid_contract(self) -> None:
         from palace_mcp.extractors.public_api_surface import PublicApiSurfaceExtractor
+
         contract = PublicApiSurfaceExtractor().audit_contract()
         _assert_valid_contract(contract, "public_api_surface")
 
 
 class TestCrossModuleContractAuditContract:
     def test_returns_valid_contract(self) -> None:
-        from palace_mcp.extractors.cross_module_contract import CrossModuleContractExtractor
+        from palace_mcp.extractors.cross_module_contract import (
+            CrossModuleContractExtractor,
+        )
+
         contract = CrossModuleContractExtractor().audit_contract()
         _assert_valid_contract(contract, "cross_module_contract")
 
@@ -82,4 +100,5 @@ class TestBaseExtractorDefaultReturnsNone:
     def test_heartbeat_has_no_contract(self) -> None:
         """Heartbeat extractor does not participate in audits."""
         from palace_mcp.extractors.heartbeat import HeartbeatExtractor
+
         assert HeartbeatExtractor().audit_contract() is None

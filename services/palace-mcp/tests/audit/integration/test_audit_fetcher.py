@@ -29,6 +29,7 @@ def neo4j_uri() -> Iterator[str]:
         yield reuse
         return
     from testcontainers.neo4j import Neo4jContainer  # type: ignore[import]
+
     with Neo4jContainer("neo4j:5.26.0") as container:
         yield container.get_connection_url()
 
@@ -94,7 +95,9 @@ class TestAuditFetcher:
         from palace_mcp.audit.fetcher import fetch_audit_data
 
         await _seed_fake_nodes(driver, project="p")
-        run_info = RunInfo(run_id="r1", extractor_name="fake_extractor", project="p", completed_at=None)
+        run_info = RunInfo(
+            run_id="r1", extractor_name="fake_extractor", project="p", completed_at=None
+        )
         contract = AuditContract(
             extractor_name="fake_extractor",
             template_name="hotspot.md",  # reuse any valid template
@@ -120,7 +123,9 @@ class TestAuditFetcher:
             async def run(self, *, graphiti: Any, ctx: Any) -> ExtractorStats:
                 return ExtractorStats()
 
-        run_info = RunInfo(run_id="r2", extractor_name="no_contract", project="p", completed_at=None)
+        run_info = RunInfo(
+            run_id="r2", extractor_name="no_contract", project="p", completed_at=None
+        )
         registry: dict[str, Any] = {"no_contract": NoContractExtractor()}
         result = await fetch_audit_data(driver, {"no_contract": run_info}, registry)
         assert "no_contract" not in result
@@ -128,7 +133,9 @@ class TestAuditFetcher:
     async def test_skips_extractor_not_in_registry(self, driver: AsyncDriver) -> None:
         from palace_mcp.audit.fetcher import fetch_audit_data
 
-        run_info = RunInfo(run_id="r3", extractor_name="ghost", project="p", completed_at=None)
+        run_info = RunInfo(
+            run_id="r3", extractor_name="ghost", project="p", completed_at=None
+        )
         result = await fetch_audit_data(driver, {"ghost": run_info}, {})
         assert result == {}
 
@@ -136,7 +143,12 @@ class TestAuditFetcher:
         from palace_mcp.audit.fetcher import fetch_audit_data
 
         await _seed_fake_nodes(driver, project="q")
-        run_info = RunInfo(run_id="run-xyz", extractor_name="fake_extractor", project="q", completed_at="2026-05-07T10:00:00Z")
+        run_info = RunInfo(
+            run_id="run-xyz",
+            extractor_name="fake_extractor",
+            project="q",
+            completed_at="2026-05-07T10:00:00Z",
+        )
         contract = AuditContract(
             extractor_name="fake_extractor",
             template_name="hotspot.md",

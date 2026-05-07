@@ -148,6 +148,7 @@ class CrossModuleContractExtractor(BaseExtractor):
 
     def audit_contract(self) -> "AuditContract":
         from palace_mcp.audit.contracts import AuditContract, Severity
+
         return AuditContract(
             extractor_name="cross_module_contract",
             template_name="cross_module_contract.md",
@@ -167,10 +168,13 @@ LIMIT 100
 """.strip(),
             severity_column="removed_count",
             severity_mapper=lambda v: (
-                Severity.HIGH   if v is not None and int(v) > 10 else
-                Severity.MEDIUM if v is not None and int(v) > 3  else
-                Severity.LOW    if v is not None and int(v) > 0  else
-                Severity.INFORMATIONAL
+                Severity.HIGH
+                if v is not None and int(v) > 10
+                else Severity.MEDIUM
+                if v is not None and int(v) > 3
+                else Severity.LOW
+                if v is not None and int(v) > 0
+                else Severity.INFORMATIONAL
             ),
         )
 

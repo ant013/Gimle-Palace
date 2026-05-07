@@ -41,11 +41,15 @@ async def run_audit(
     """
     # Validation
     if (project is None) == (bundle is None):
-        return _err("invalid_args", "exactly one of 'project' or 'bundle' must be provided")
+        return _err(
+            "invalid_args", "exactly one of 'project' or 'bundle' must be provided"
+        )
 
     target = project or bundle
     if target is None:
-        return _err("invalid_args", "exactly one of 'project' or 'bundle' must be provided")
+        return _err(
+            "invalid_args", "exactly one of 'project' or 'bundle' must be provided"
+        )
 
     if not _SLUG_RE.match(target):
         return _err("invalid_slug", f"slug {target!r} must match [a-z0-9-]{{1,64}}")
@@ -67,7 +71,9 @@ async def run_audit(
     # Fetcher — failed_extractors receives names of any extractor whose Cypher errored;
     # they are appended to blind_spots so the report flags them as unavailable.
     fetch_failed: list[str] = []
-    sections = await fetch_audit_data(driver, discovery, extractor_registry, failed_extractors=fetch_failed)
+    sections = await fetch_audit_data(
+        driver, discovery, extractor_registry, failed_extractors=fetch_failed
+    )
     blind_spots = sorted(set(blind_spots) | set(fetch_failed))
 
     # Build per-section metadata for renderer

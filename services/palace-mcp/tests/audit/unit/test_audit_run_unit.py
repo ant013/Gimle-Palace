@@ -19,6 +19,7 @@ from palace_mcp.extractors.base import BaseExtractor, ExtractorStats
 # Minimal fake extractor with a known AuditContract
 # ---------------------------------------------------------------------------
 
+
 class FakeAuditExtractor(BaseExtractor):
     name = "fake_auditable"
     description = "test only"
@@ -82,7 +83,9 @@ def _register_and_call_run() -> Any:
         registry: dict[str, BaseExtractor] = {
             "fake_auditable": FakeAuditExtractor(has_contract=True),
         }
-        return await run_audit(drv, registry, project=project, bundle=bundle, depth=depth)
+        return await run_audit(
+            drv, registry, project=project, bundle=bundle, depth=depth
+        )
 
     return mcp
 
@@ -113,7 +116,9 @@ class TestPalaceAuditRunMCPTool:
 
     async def test_both_project_and_bundle_errors(self) -> None:
         mcp = _register_and_call_run()
-        result = await mcp.call_tool("palace.audit.run", {"project": "a", "bundle": "b"})
+        result = await mcp.call_tool(
+            "palace.audit.run", {"project": "a", "bundle": "b"}
+        )
         payload = json.loads(result[0][0].text)  # type: ignore[index]
         assert payload["ok"] is False
 
@@ -126,7 +131,9 @@ class TestPalaceAuditRunMCPTool:
 
     async def test_invalid_depth_errors(self) -> None:
         mcp = _register_and_call_run()
-        result = await mcp.call_tool("palace.audit.run", {"project": "gimle", "depth": "ultra"})
+        result = await mcp.call_tool(
+            "palace.audit.run", {"project": "gimle", "depth": "ultra"}
+        )
         payload = json.loads(result[0][0].text)  # type: ignore[index]
         assert payload["ok"] is False
         assert "invalid_depth" in payload["error_code"]

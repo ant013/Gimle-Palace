@@ -132,6 +132,7 @@ class PublicApiSurfaceExtractor(BaseExtractor):
 
     def audit_contract(self) -> "AuditContract":
         from palace_mcp.audit.contracts import AuditContract, Severity
+
         return AuditContract(
             extractor_name="public_api_surface",
             template_name="public_api_surface.md",

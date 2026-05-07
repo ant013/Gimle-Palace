@@ -92,9 +92,15 @@ def render_section(
     1. ``section.template_name`` (set by the fetcher from ``AuditContract.template_name``)
     2. ``{section.extractor_name}.md`` (backward-compat fallback)
     """
-    template_file = section.template_name if section.template_name else f"{section.extractor_name}.md"
+    template_file = (
+        section.template_name
+        if section.template_name
+        else f"{section.extractor_name}.md"
+    )
     template = _JINJA_ENV.get_template(template_file)
-    annotated_findings, _ = _annotate_severity(section.findings, severity_column, max_findings, severity_mapper)
+    annotated_findings, _ = _annotate_severity(
+        section.findings, severity_column, max_findings, severity_mapper
+    )
     return template.render(
         findings=annotated_findings,
         summary_stats=section.summary_stats,
@@ -171,7 +177,8 @@ def render_report(
     ]
 
     total_critical = sum(
-        1 for s in sections.values()
+        1
+        for s in sections.values()
         if _section_max_severity(s) in (Severity.CRITICAL, Severity.HIGH)
     )
     executive_lines = [
@@ -179,9 +186,13 @@ def render_report(
         f"{len(sections)} extractor{'s' if len(sections) != 1 else ''} contributed data.",
     ]
     if blind_spots:
-        executive_lines.append(f"{len(blind_spots)} extractor(s) had no data (blind spots): {', '.join(f'`{b}`' for b in blind_spots)}.")
+        executive_lines.append(
+            f"{len(blind_spots)} extractor(s) had no data (blind spots): {', '.join(f'`{b}`' for b in blind_spots)}."
+        )
     if total_critical:
-        executive_lines.append(f"⚠ {total_critical} section(s) have critical/high findings requiring attention.")
+        executive_lines.append(
+            f"⚠ {total_critical} section(s) have critical/high findings requiring attention."
+        )
     else:
         executive_lines.append("No critical or high severity findings.")
 

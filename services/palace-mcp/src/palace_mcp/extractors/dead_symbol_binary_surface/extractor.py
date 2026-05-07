@@ -81,6 +81,7 @@ class DeadSymbolBinarySurfaceExtractor(BaseExtractor):
 
     def audit_contract(self) -> "AuditContract":
         from palace_mcp.audit.contracts import AuditContract, Severity
+
         return AuditContract(
             extractor_name="dead_symbol_binary_surface",
             template_name="dead_symbol_binary_surface.md",
@@ -102,9 +103,11 @@ LIMIT 100
 """.strip(),
             severity_column="candidate_state",
             severity_mapper=lambda v: (
-                Severity.HIGH   if v == "CONFIRMED_DEAD"   else
-                Severity.MEDIUM if v == "UNUSED_CANDIDATE" else
-                Severity.INFORMATIONAL
+                Severity.HIGH
+                if v == "CONFIRMED_DEAD"
+                else Severity.MEDIUM
+                if v == "UNUSED_CANDIDATE"
+                else Severity.INFORMATIONAL
             ),
         )
 

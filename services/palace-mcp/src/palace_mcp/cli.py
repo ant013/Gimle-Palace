@@ -96,7 +96,7 @@ def build_child_payload(
         "body": (
             f"Domain audit sub-report for `{target}`.\n\n"
             f"Domain: `{domain}`.\n"
-            f"Fetch data via `palace.audit.run(project=\"{target}\")`, "
+            f'Fetch data via `palace.audit.run(project="{target}")`, '
             f"produce a markdown sub-report per Auditor role instructions."
         ),
         "assigneeAgentId": agent_id,
@@ -148,7 +148,9 @@ async def _call_audit_run(
             result = await session.call_tool("palace.audit.run", call_args)
     first = result.content[0]
     if not isinstance(first, TextContent):
-        raise ValueError(f"unexpected content type from palace.audit.run: {type(first)}")
+        raise ValueError(
+            f"unexpected content type from palace.audit.run: {type(first)}"
+        )
     return json.loads(first.text)  # type: ignore[no-any-return]
 
 

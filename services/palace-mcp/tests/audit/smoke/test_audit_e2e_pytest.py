@@ -287,7 +287,10 @@ class TestPavedPathRegression:
         assert "brand_new_extractor" in result["fetched_extractors"]
         assert "brand_new_extractor" not in result["blind_spots"]
         # Fallback section (TemplateNotFound path) must appear in report
-        assert "brand_new_extractor" in result["report_markdown"].lower() or "brand new extractor" in result["report_markdown"].lower()
+        assert (
+            "brand_new_extractor" in result["report_markdown"].lower()
+            or "brand new extractor" in result["report_markdown"].lower()
+        )
 
     async def test_known_extractor_with_data_renders_full_section(self) -> None:
         """Known extractor with data renders its full template section.
@@ -329,4 +332,7 @@ class TestPavedPathRegression:
         assert result["ok"] is True
         assert "hotspot" in result["fetched_extractors"]
         # hotspot_score=5.5 → CRITICAL → executive summary warns
-        assert "critical/high" in result["report_markdown"].lower() or "critical" in result["report_markdown"].lower()
+        assert (
+            "critical/high" in result["report_markdown"].lower()
+            or "critical" in result["report_markdown"].lower()
+        )

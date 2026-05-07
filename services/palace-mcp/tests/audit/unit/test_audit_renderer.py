@@ -32,7 +32,12 @@ def _dead_section(findings: list[dict] | None = None) -> AuditSectionData:
         project="test-project",
         completed_at="2026-05-07T12:00:00+00:00",
         findings=findings or [],
-        summary_stats={"total": 0, "confirmed_dead": 0, "unused_candidate": 0, "skipped": 0},
+        summary_stats={
+            "total": 0,
+            "confirmed_dead": 0,
+            "unused_candidate": 0,
+            "skipped": 0,
+        },
     )
 
 
@@ -85,7 +90,9 @@ class TestRendererDispatchesViaAuditContract:
 
     def test_empty_section_shows_no_findings_message(self) -> None:
         section = _hotspot_section(findings=[])
-        rendered = render_section(section, severity_column="hotspot_score", max_findings=100)
+        rendered = render_section(
+            section, severity_column="hotspot_score", max_findings=100
+        )
         assert "No findings" in rendered
         assert "run-001" in rendered
 
@@ -107,7 +114,9 @@ class TestRendererDispatchesViaAuditContract:
             findings=findings,
             summary_stats={"file_count": 1, "max_score": 3.5, "window_days": 90},
         )
-        rendered = render_section(section, severity_column="hotspot_score_severity", max_findings=100)
+        rendered = render_section(
+            section, severity_column="hotspot_score_severity", max_findings=100
+        )
         assert "src/foo.py" in rendered
         assert "3.50" in rendered
 
@@ -115,9 +124,27 @@ class TestRendererDispatchesViaAuditContract:
 class TestSeveritySortWithinSection:
     def test_critical_findings_before_low(self) -> None:
         findings = [
-            {"path": "low.py", "hotspot_score": 0.5, "ccn_total": 1, "churn_count": 1, "sev": "low"},
-            {"path": "critical.py", "hotspot_score": 5.0, "ccn_total": 50, "churn_count": 20, "sev": "critical"},
-            {"path": "medium.py", "hotspot_score": 1.5, "ccn_total": 10, "churn_count": 5, "sev": "medium"},
+            {
+                "path": "low.py",
+                "hotspot_score": 0.5,
+                "ccn_total": 1,
+                "churn_count": 1,
+                "sev": "low",
+            },
+            {
+                "path": "critical.py",
+                "hotspot_score": 5.0,
+                "ccn_total": 50,
+                "churn_count": 20,
+                "sev": "critical",
+            },
+            {
+                "path": "medium.py",
+                "hotspot_score": 1.5,
+                "ccn_total": 10,
+                "churn_count": 5,
+                "sev": "medium",
+            },
         ]
         section = AuditSectionData(
             extractor_name="hotspot",
@@ -142,7 +169,13 @@ class TestSectionOrderByMaxSeverity:
             project="p",
             completed_at=None,
             findings=[
-                {"path": "x.py", "hotspot_score": 5.0, "ccn_total": 50, "churn_count": 20, "sev": "critical"}
+                {
+                    "path": "x.py",
+                    "hotspot_score": 5.0,
+                    "ccn_total": 50,
+                    "churn_count": 20,
+                    "sev": "critical",
+                }
             ],
             summary_stats={"file_count": 1, "max_score": 5.0, "window_days": 90},
             max_severity=Severity.CRITICAL,
@@ -153,14 +186,28 @@ class TestSectionOrderByMaxSeverity:
             project="p",
             completed_at=None,
             findings=[],
-            summary_stats={"total": 0, "confirmed_dead": 0, "unused_candidate": 0, "skipped": 0},
+            summary_stats={
+                "total": 0,
+                "confirmed_dead": 0,
+                "unused_candidate": 0,
+                "skipped": 0,
+            },
             max_severity=Severity.INFORMATIONAL,
         )
         report = render_report(
             project="p",
-            sections={"hotspot": hotspot_section, "dead_symbol_binary_surface": dead_section},
-            severity_columns={"hotspot": "sev", "dead_symbol_binary_surface": "candidate_state"},
-            max_findings_per_section={"hotspot": 100, "dead_symbol_binary_surface": 100},
+            sections={
+                "hotspot": hotspot_section,
+                "dead_symbol_binary_surface": dead_section,
+            },
+            severity_columns={
+                "hotspot": "sev",
+                "dead_symbol_binary_surface": "candidate_state",
+            },
+            max_findings_per_section={
+                "hotspot": 100,
+                "dead_symbol_binary_surface": 100,
+            },
             blind_spots=[],
         )
         hotspot_pos = report.index("## Code Hotspots")
@@ -214,15 +261,26 @@ class TestExtractorPluralization:
                 project="p",
                 completed_at=None,
                 findings=[],
-                summary_stats={"total": 0, "confirmed_dead": 0, "unused_candidate": 0, "skipped": 0},
+                summary_stats={
+                    "total": 0,
+                    "confirmed_dead": 0,
+                    "unused_candidate": 0,
+                    "skipped": 0,
+                },
                 max_severity=Severity.INFORMATIONAL,
             ),
         }
         report = render_report(
             project="p",
             sections=sections,
-            severity_columns={"hotspot": "sev", "dead_symbol_binary_surface": "candidate_state"},
-            max_findings_per_section={"hotspot": 100, "dead_symbol_binary_surface": 100},
+            severity_columns={
+                "hotspot": "sev",
+                "dead_symbol_binary_surface": "candidate_state",
+            },
+            max_findings_per_section={
+                "hotspot": 100,
+                "dead_symbol_binary_surface": 100,
+            },
             blind_spots=[],
         )
         assert "2 extractors contributed data" in report

@@ -118,6 +118,7 @@ class HotspotExtractor(BaseExtractor):
 
     def audit_contract(self) -> "AuditContract":
         from palace_mcp.audit.contracts import AuditContract, Severity
+
         return AuditContract(
             extractor_name="hotspot",
             template_name="hotspot.md",
@@ -135,10 +136,14 @@ LIMIT 100
 """.strip(),
             severity_column="hotspot_score",
             severity_mapper=lambda v: (
-                Severity.CRITICAL if v is not None and float(v) >= 5.0 else
-                Severity.HIGH     if v is not None and float(v) >= 3.0 else
-                Severity.MEDIUM   if v is not None and float(v) >= 1.5 else
-                Severity.LOW      if v is not None and float(v) > 0   else
-                Severity.INFORMATIONAL
+                Severity.CRITICAL
+                if v is not None and float(v) >= 5.0
+                else Severity.HIGH
+                if v is not None and float(v) >= 3.0
+                else Severity.MEDIUM
+                if v is not None and float(v) >= 1.5
+                else Severity.LOW
+                if v is not None and float(v) > 0
+                else Severity.INFORMATIONAL
             ),
         )
