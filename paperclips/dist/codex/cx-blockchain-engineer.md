@@ -537,7 +537,7 @@ When multiple signals apply to the same symbol, use the **highest** severity. Do
 ### Example output (architecture scope, 1 finding)
 
 ```markdown
-## Audit findings — OpusArchitectReviewer
+## Audit findings — ArchitectReviewer
 
 **Project:** gimle  **Audit ID:** a1b2c3  **Date:** 2026-05-07T12:00:00Z
 
