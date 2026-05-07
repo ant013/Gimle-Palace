@@ -8,7 +8,10 @@ import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
+
+if TYPE_CHECKING:
+    from palace_mcp.audit.contracts import AuditContract
 
 from graphiti_core import Graphiti
 from neo4j import AsyncDriver, AsyncSession
@@ -142,6 +145,28 @@ class CrossModuleContractExtractor(BaseExtractor):
         "CREATE INDEX module_contract_delta_lookup IF NOT EXISTS "
         "FOR (n:ModuleContractDelta) ON (n.project, n.consumer_module_name, n.producer_module_name, n.language, n.from_commit_sha, n.to_commit_sha)",
     ]
+
+    def audit_contract(self) -> "AuditContract":
+        from palace_mcp.audit.contracts import AuditContract
+        return AuditContract(
+            extractor_name="cross_module_contract",
+            template_name="cross_module_contract.md",
+            query="""
+MATCH (d:ModuleContractDelta {project: $project})
+RETURN d.consumer_module_name AS consumer_module,
+       d.producer_module_name AS producer_module,
+       d.language AS language,
+       d.from_commit_sha AS from_commit,
+       d.to_commit_sha AS to_commit,
+       coalesce(d.removed_consumed_symbol_count, 0) AS removed_count,
+       coalesce(d.added_consumed_symbol_count, 0) AS added_count,
+       coalesce(d.signature_changed_consumed_symbol_count, 0) AS signature_changed_count,
+       coalesce(d.affected_use_count, 0) AS affected_use_count
+ORDER BY d.to_commit_sha DESC, d.consumer_module_name
+LIMIT 100
+""".strip(),
+            severity_column="removed_count",
+        )
 
     def __init__(
         self,

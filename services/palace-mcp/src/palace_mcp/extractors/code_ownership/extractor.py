@@ -14,7 +14,10 @@ from __future__ import annotations
 import asyncio
 import logging
 from pathlib import Path
-from typing import Any, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, cast
+
+if TYPE_CHECKING:
+    from palace_mcp.audit.contracts import AuditContract
 
 import pygit2
 
@@ -50,6 +53,26 @@ class CodeOwnershipExtractor(BaseExtractor):
     )
     constraints: ClassVar[list[str]] = []
     indexes: ClassVar[list[str]] = []
+
+    def audit_contract(self) -> "AuditContract":
+        from palace_mcp.audit.contracts import AuditContract
+        return AuditContract(
+            extractor_name="code_ownership",
+            template_name="code_ownership.md",
+            query="""
+MATCH (f:File {project_id: $project_id})
+OPTIONAL MATCH (f)-[r:OWNED_BY {source: 'extractor.code_ownership'}]->(a:Author)
+WITH f, r, a ORDER BY r.weight DESC
+WITH f, collect({r: r, a: a})[0] AS top_pair, count(r) AS total_authors
+RETURN f.path AS path,
+       top_pair.a.email AS top_owner_email,
+       top_pair.r.weight AS top_owner_weight,
+       total_authors
+ORDER BY top_owner_weight ASC
+LIMIT 100
+""".strip(),
+            severity_column="top_owner_weight",
+        )
 
     async def run(
         self, *, graphiti: object, ctx: ExtractorRunContext

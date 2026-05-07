@@ -9,7 +9,10 @@
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
+
+if TYPE_CHECKING:
+    from palace_mcp.audit.contracts import AuditContract
 
 from palace_mcp.extractors.base import (
     BaseExtractor,
@@ -39,6 +42,25 @@ class CrossRepoVersionSkewExtractor(BaseExtractor):
     )
     constraints: ClassVar[list[str]] = []
     indexes: ClassVar[list[str]] = []
+
+    def audit_contract(self) -> "AuditContract":
+        from palace_mcp.audit.contracts import AuditContract
+        return AuditContract(
+            extractor_name="cross_repo_version_skew",
+            template_name="cross_repo_version_skew.md",
+            query="""
+MATCH (p:Project {slug: $project})-[r:DEPENDS_ON]->(d:ExternalDependency)
+WITH d.purl AS purl, collect(distinct r.resolved_version) AS versions
+WHERE size(versions) > 1
+RETURN purl,
+       versions,
+       size(versions) AS member_count,
+       'unknown' AS skew_severity
+ORDER BY purl
+LIMIT 100
+""".strip(),
+            severity_column="skew_severity",
+        )
 
     async def run(
         self,

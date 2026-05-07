@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
+
+if TYPE_CHECKING:
+    from palace_mcp.audit.contracts import AuditContract
 
 from graphiti_core import Graphiti
 from neo4j import AsyncDriver
@@ -75,6 +78,30 @@ class DeadSymbolBinarySurfaceExtractor(BaseExtractor):
         "Ingest dead-symbol candidates and binary-surface retention facts from "
         "pre-generated Periphery fixtures with Reaper no-op handling."
     )
+
+    def audit_contract(self) -> "AuditContract":
+        from palace_mcp.audit.contracts import AuditContract
+        return AuditContract(
+            extractor_name="dead_symbol_binary_surface",
+            template_name="dead_symbol_binary_surface.md",
+            query="""
+MATCH (c:DeadSymbolCandidate {project: $project})
+RETURN c.id AS id,
+       c.display_name AS display_name,
+       c.kind AS kind,
+       c.module_name AS module_name,
+       c.language AS language,
+       c.candidate_state AS candidate_state,
+       c.confidence AS confidence,
+       c.source_file AS source_file,
+       c.source_line AS source_line,
+       c.commit_sha AS commit_sha,
+       c.evidence_source AS evidence_source
+ORDER BY c.module_name, c.display_name
+LIMIT 100
+""".strip(),
+            severity_column="candidate_state",
+        )
 
     async def run(
         self, *, graphiti: Graphiti, ctx: ExtractorRunContext
