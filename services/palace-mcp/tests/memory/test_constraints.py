@@ -60,7 +60,8 @@ async def test_ensure_schema_bootstraps_default_project(live_driver: Any) -> Non
     async with live_driver.session() as s:
         result = await s.run(
             "MATCH (p:Project {slug: 'test-bootstrap'}) RETURN p.slug AS slug, "
-            "p.group_id AS g, p.source_created_at AS ts"
+            "p.group_id AS g, p.source_created_at AS ts, "
+            "p.parent_mount AS parent_mount, p.relative_path AS relative_path"
         )
         row = await result.single()
 
@@ -68,6 +69,8 @@ async def test_ensure_schema_bootstraps_default_project(live_driver: Any) -> Non
     assert row["slug"] == "test-bootstrap"
     assert row["g"] == "project/test-bootstrap"
     assert row["ts"] is not None
+    assert row["parent_mount"] is None
+    assert row["relative_path"] is None
 
 
 @pytest.mark.integration
@@ -85,10 +88,14 @@ async def test_ensure_schema_bootstrap_idempotent(live_driver: Any) -> None:
     async with live_driver.session() as s:
         row2 = await (
             await s.run(
-                "MATCH (p:Project {slug: 'test-idem'}) RETURN p.source_created_at AS t"
+                "MATCH (p:Project {slug: 'test-idem'}) "
+                "RETURN p.source_created_at AS t, "
+                "p.parent_mount AS parent_mount, p.relative_path AS relative_path"
             )
         ).single()
     assert row1["t"] == row2["t"], "source_created_at must be preserved"
+    assert row2["parent_mount"] is None
+    assert row2["relative_path"] is None
 
 
 # ---------------------------------------------------------------------------
