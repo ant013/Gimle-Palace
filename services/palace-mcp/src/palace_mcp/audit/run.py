@@ -73,11 +73,14 @@ async def run_audit(
     # Build per-section metadata for renderer
     severity_columns: dict[str, str] = {}
     max_findings_per_section: dict[str, int] = {}
+    severity_mappers = {}
     for name, ext in extractor_registry.items():
         contract = ext.audit_contract()
         if contract is not None:
             severity_columns[name] = contract.severity_column
             max_findings_per_section[name] = contract.max_findings
+            if contract.severity_mapper is not None:
+                severity_mappers[name] = contract.severity_mapper
 
     # Render
     generated_at = datetime.now(tz=timezone.utc).isoformat()
@@ -87,6 +90,7 @@ async def run_audit(
         severity_columns=severity_columns,
         max_findings_per_section=max_findings_per_section,
         blind_spots=blind_spots,
+        severity_mappers=severity_mappers,
         depth=depth,
         generated_at=generated_at,
     )

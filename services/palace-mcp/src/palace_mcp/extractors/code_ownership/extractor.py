@@ -55,7 +55,7 @@ class CodeOwnershipExtractor(BaseExtractor):
     indexes: ClassVar[list[str]] = []
 
     def audit_contract(self) -> "AuditContract":
-        from palace_mcp.audit.contracts import AuditContract
+        from palace_mcp.audit.contracts import AuditContract, Severity
         return AuditContract(
             extractor_name="code_ownership",
             template_name="code_ownership.md",
@@ -72,6 +72,12 @@ ORDER BY top_owner_weight ASC
 LIMIT 100
 """.strip(),
             severity_column="top_owner_weight",
+            # Low top_owner_weight → very diffuse ownership → higher severity
+            severity_mapper=lambda v: (
+                Severity.HIGH   if v is None or float(v) < 0.1 else
+                Severity.MEDIUM if float(v) < 0.2               else
+                Severity.INFORMATIONAL
+            ),
         )
 
     async def run(

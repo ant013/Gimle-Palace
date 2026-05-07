@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, Callable
 
 from pydantic import BaseModel, ConfigDict
 
@@ -53,6 +53,14 @@ class AuditContract:
     query: str  # Cypher query; receives $project param; returns list of rows
     severity_column: str  # key in each result row that drives severity mapping
     max_findings: int = field(default=100)
+    # Optional domain-specific severity mapper: (raw_value) -> Severity.
+    # When None, the renderer falls back to severity_from_str(str(raw_value)),
+    # which maps anything not in {"critical","high","medium","low","informational"}
+    # to INFORMATIONAL. Extractors that use domain-typed columns (floats, ints,
+    # enum strings like "CONFIRMED_DEAD") must supply a mapper.
+    severity_mapper: Callable[[Any], "Severity"] | None = field(
+        default=None, hash=False, compare=False
+    )
 
 
 class RunInfo(BaseModel):
@@ -78,3 +86,7 @@ class AuditSectionData(BaseModel):
     findings: list[dict[str, Any]]
     summary_stats: dict[str, Any]
     max_severity: Severity | None = None
+    # Template filename from AuditContract.template_name.
+    # None only for AuditSectionData objects created outside the fetcher
+    # (e.g., in unit tests); renderer falls back to f"{extractor_name}.md".
+    template_name: str | None = None

@@ -8,9 +8,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
-from jinja2 import Environment, FileSystemLoader, StrictUndefined
+from jinja2 import Environment, FileSystemLoader, TemplateNotFound, StrictUndefined
 
 from palace_mcp.audit.contracts import (
     AuditSectionData,
@@ -54,12 +54,25 @@ def _section_max_severity(section: AuditSectionData) -> Severity:
     return worst
 
 
-def _annotate_severity(findings: list[dict[str, Any]], severity_column: str, max_findings: int) -> tuple[list[dict[str, Any]], Severity | None]:
-    """Annotate findings with _severity key, sort by severity, cap at max_findings."""
+def _annotate_severity(
+    findings: list[dict[str, Any]],
+    severity_column: str,
+    max_findings: int,
+    severity_mapper: Callable[[Any], Severity] | None = None,
+) -> tuple[list[dict[str, Any]], Severity | None]:
+    """Annotate findings with _severity key, sort by severity, cap at max_findings.
+
+    If ``severity_mapper`` is provided it takes the raw field value and returns
+    a Severity directly, enabling domain-typed columns (floats, ints, enum
+    strings).  When None, falls back to ``severity_from_str(str(raw))``.
+    """
     annotated = []
     for f in findings:
         raw = f.get(severity_column)
-        sev = severity_from_str(str(raw) if raw is not None else None)
+        if severity_mapper is not None:
+            sev = severity_mapper(raw)
+        else:
+            sev = severity_from_str(str(raw) if raw is not None else None)
         annotated.append({**f, "_severity": sev.value})
     annotated.sort(key=lambda f: SEVERITY_RANK[severity_from_str(f["_severity"])])
     capped = annotated[:max_findings]
@@ -71,10 +84,17 @@ def render_section(
     section: AuditSectionData,
     severity_column: str,
     max_findings: int,
+    severity_mapper: Callable[[Any], Severity] | None = None,
 ) -> str:
-    """Render one extractor section to markdown."""
-    template = _JINJA_ENV.get_template(f"{section.extractor_name}.md")
-    annotated_findings, _ = _annotate_severity(section.findings, severity_column, max_findings)
+    """Render one extractor section to markdown.
+
+    Template resolution order:
+    1. ``section.template_name`` (set by the fetcher from ``AuditContract.template_name``)
+    2. ``{section.extractor_name}.md`` (backward-compat fallback)
+    """
+    template_file = section.template_name if section.template_name else f"{section.extractor_name}.md"
+    template = _JINJA_ENV.get_template(template_file)
+    annotated_findings, _ = _annotate_severity(section.findings, severity_column, max_findings, severity_mapper)
     return template.render(
         findings=annotated_findings,
         summary_stats=section.summary_stats,
@@ -91,6 +111,7 @@ def render_report(
     severity_columns: dict[str, str],
     max_findings_per_section: dict[str, int],
     blind_spots: list[str],
+    severity_mappers: dict[str, Callable[[Any], Severity]] | None = None,
     depth: str = "full",
     generated_at: str | None = None,
 ) -> str:
@@ -102,19 +123,42 @@ def render_report(
         severity_columns: dict keyed by extractor_name → column name for severity mapping.
         max_findings_per_section: dict keyed by extractor_name → cap.
         blind_spots: extractor names with no IngestRun data.
+        severity_mappers: optional dict keyed by extractor_name → domain severity mapper.
+            When provided, overrides the default severity_from_str fallback for the
+            corresponding extractor so domain-typed columns (floats, ints, enum strings)
+            produce real severity values instead of universally INFORMATIONAL.
         depth: "quick" or "full".
         generated_at: ISO-8601 string; defaults to now.
     """
     ts = generated_at or datetime.now(tz=timezone.utc).isoformat()
+    _mappers = severity_mappers or {}
 
     rendered_sections: list[tuple[Severity, str]] = []
+    seen: set[str] = set()
+
+    # 1. Known extractors in preferred display order
     for name in _SECTION_ORDER:
         if name not in sections:
             continue
+        seen.add(name)
         sec = sections[name]
         col = severity_columns.get(name, "_severity")
         cap = max_findings_per_section.get(name, 100)
-        rendered = render_section(sec, col, cap)
+        rendered = render_section(sec, col, cap, severity_mapper=_mappers.get(name))
+        max_sev = _section_max_severity(sec)
+        rendered_sections.append((max_sev, rendered))
+
+    # 2. Any extra extractors not in _SECTION_ORDER (paved-path: new extractors
+    #    plug in via audit_contract() without requiring orchestrator code changes)
+    for name, sec in sections.items():
+        if name in seen:
+            continue
+        col = severity_columns.get(name, "_severity")
+        cap = max_findings_per_section.get(name, 100)
+        try:
+            rendered = render_section(sec, col, cap, severity_mapper=_mappers.get(name))
+        except TemplateNotFound:
+            rendered = f"## {name.replace('_', ' ').title()}\n\n{len(sec.findings)} finding(s) — no template available.\n"
         max_sev = _section_max_severity(sec)
         rendered_sections.append((max_sev, rendered))
 

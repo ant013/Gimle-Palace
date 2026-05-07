@@ -131,7 +131,7 @@ class PublicApiSurfaceExtractor(BaseExtractor):
     ]
 
     def audit_contract(self) -> "AuditContract":
-        from palace_mcp.audit.contracts import AuditContract
+        from palace_mcp.audit.contracts import AuditContract, Severity
         return AuditContract(
             extractor_name="public_api_surface",
             template_name="public_api_surface.md",
@@ -149,6 +149,8 @@ ORDER BY surface.module_name, sym.fqn
 LIMIT 100
 """.strip(),
             severity_column="kind",
+            # Public API surface is a catalogue — severity is informational by design
+            severity_mapper=lambda v: Severity.INFORMATIONAL,
         )
 
     async def run(

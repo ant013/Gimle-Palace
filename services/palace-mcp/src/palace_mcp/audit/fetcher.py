@@ -74,6 +74,7 @@ async def fetch_audit_data(
             completed_at=run_info.completed_at,
             findings=findings,
             summary_stats=_build_summary_stats(extractor_name, findings),
+            template_name=contract.template_name,
         )
     return results
 

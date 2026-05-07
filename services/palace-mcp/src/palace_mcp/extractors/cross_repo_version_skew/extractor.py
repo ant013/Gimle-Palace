@@ -44,7 +44,7 @@ class CrossRepoVersionSkewExtractor(BaseExtractor):
     indexes: ClassVar[list[str]] = []
 
     def audit_contract(self) -> "AuditContract":
-        from palace_mcp.audit.contracts import AuditContract
+        from palace_mcp.audit.contracts import AuditContract, Severity
         return AuditContract(
             extractor_name="cross_repo_version_skew",
             template_name="cross_repo_version_skew.md",
@@ -60,6 +60,12 @@ ORDER BY purl
 LIMIT 100
 """.strip(),
             severity_column="skew_severity",
+            severity_mapper=lambda v: (
+                Severity.HIGH   if v == "major"   else
+                Severity.MEDIUM if v == "minor"   else
+                Severity.LOW    if v == "patch"   else
+                Severity.INFORMATIONAL  # "unknown" and calendar/git-sha versions
+            ),
         )
 
     async def run(
