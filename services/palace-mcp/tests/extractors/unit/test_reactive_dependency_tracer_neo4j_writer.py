@@ -217,6 +217,12 @@ async def test_writer_merges_nodes_edges_and_diagnostic_relations() -> None:
             "MERGE (node:ReactiveDiagnostic": _FakeCounters(nodes_created=1),
             "MERGE (src)-[rel:TRIGGERS_EFFECT": _FakeCounters(relationships_created=1),
             "MERGE (diag)-[rel:DIAGNOSTIC_FOR": _FakeCounters(relationships_created=1),
+            "MERGE (component)-[rel:CORRELATES_SYMBOL": _FakeCounters(
+                relationships_created=1
+            ),
+            "MERGE (component)-[rel:CORRELATES_PUBLIC_API": _FakeCounters(
+                relationships_created=1
+            ),
         }
     )
     driver = _FakeDriver(_FakeSession(tx))
@@ -224,10 +230,12 @@ async def test_writer_merges_nodes_edges_and_diagnostic_relations() -> None:
     summary = await write_reactive_graph(driver=driver, batches=(_batch(),))
 
     assert summary.nodes_created == 4
-    assert summary.relationships_created == 2
+    assert summary.relationships_created == 4
     assert any("ReactiveComponent" in query for query in tx.queries)
     assert any("TRIGGERS_EFFECT" in query for query in tx.queries)
     assert any("DIAGNOSTIC_FOR" in query for query in tx.queries)
+    assert any("CORRELATES_SYMBOL" in query for query in tx.queries)
+    assert any("CORRELATES_PUBLIC_API" in query for query in tx.queries)
 
 
 @pytest.mark.asyncio
@@ -296,3 +304,32 @@ async def test_writer_flattens_range_props_for_neo4j() -> None:
     assert "range" not in diagnostic_props
     assert diagnostic_props["range_start_col"] == 1
     assert diagnostic_props["range_end_col"] == 5
+
+
+@pytest.mark.asyncio
+async def test_writer_uses_exact_symbol_lookup_props_for_correlations() -> None:
+    tx = _FakeTx({"default": _FakeCounters()})
+    driver = _FakeDriver(_FakeSession(tx))
+
+    await write_reactive_graph(driver=driver, batches=(_batch(),))
+
+    symbol_props = next(
+        params
+        for query, params in zip(tx.queries, tx.params_by_query, strict=True)
+        if "MERGE (component)-[rel:CORRELATES_SYMBOL" in query
+    )
+    public_props = next(
+        params
+        for query, params in zip(tx.queries, tx.params_by_query, strict=True)
+        if "MERGE (component)-[rel:CORRELATES_PUBLIC_API" in query
+    )
+
+    assert symbol_props["symbol_key"] == "App.CounterView"
+    assert symbol_props["group_id"] == "group/x"
+    assert (
+        symbol_props["relationship_props"]["target_label"] == "SymbolOccurrenceShadow"
+    )
+
+    assert public_props["project"] == "proj"
+    assert public_props["commit_sha"] == "abc123"
+    assert public_props["relationship_props"]["symbol_key"] == "App.CounterView"

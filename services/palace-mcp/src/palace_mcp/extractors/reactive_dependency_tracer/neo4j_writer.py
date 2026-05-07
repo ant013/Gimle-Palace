@@ -8,9 +8,11 @@ from typing import Any
 from neo4j import AsyncDriver
 from pydantic import BaseModel
 
+from palace_mcp.extractors.foundation.identifiers import symbol_id_for
 from palace_mcp.extractors.foundation.models import Language
 from palace_mcp.extractors.reactive_dependency_tracer.models import (
     REACTIVE_TRACER_SOURCE,
+    ReactiveConfidence,
     ReactiveEdge,
     ReactiveEdgeKind,
 )
@@ -64,6 +66,33 @@ MATCH (diag:ReactiveDiagnostic {id: $diagnostic_id})
 MATCH (target {id: $target_id})
 MERGE (diag)-[rel:DIAGNOSTIC_FOR {id: $relationship_id}]->(target)
 SET rel += $relationship_props
+"""
+
+_MERGE_CORRELATES_SYMBOL = """
+MATCH (component:ReactiveComponent {id: $component_id})
+OPTIONAL MATCH (shadow:SymbolOccurrenceShadow {
+    group_id: $group_id,
+    symbol_id: $symbol_id,
+    symbol_qualified_name: $symbol_key
+})
+FOREACH (_ IN CASE WHEN shadow IS NULL THEN [] ELSE [1] END |
+    MERGE (component)-[rel:CORRELATES_SYMBOL {id: $relationship_id}]->(shadow)
+    SET rel += $relationship_props
+)
+"""
+
+_MERGE_CORRELATES_PUBLIC_API = """
+MATCH (component:ReactiveComponent {id: $component_id})
+OPTIONAL MATCH (symbol:PublicApiSymbol {
+    project: $project,
+    commit_sha: $commit_sha,
+    language: $language,
+    symbol_qualified_name: $symbol_key
+})
+FOREACH (_ IN CASE WHEN symbol IS NULL THEN [] ELSE [1] END |
+    MERGE (component)-[rel:CORRELATES_PUBLIC_API {id: $relationship_id}]->(symbol)
+    SET rel += $relationship_props
+)
 """
 
 _EDGE_QUERY_BY_KIND: dict[ReactiveEdgeKind, str] = {
@@ -209,6 +238,7 @@ async def _write_batch(tx: Any, batch: NormalizedReactiveFile) -> ReactiveWriteS
                 node_props=_neo4j_node_props(component),
             ),
         )
+        summary = _add(summary, await _write_component_correlations(tx, component))
     for state in batch.states:
         summary = _add(
             summary,
@@ -328,6 +358,49 @@ def _neo4j_node_props(node: BaseModel) -> dict[str, object]:
         if isinstance(end_col, int):
             props["range_end_col"] = end_col
     return props
+
+
+async def _write_component_correlations(
+    tx: Any, component: BaseModel
+) -> ReactiveWriteSummary:
+    symbol_key = getattr(component, "qualified_name")
+    summary = ReactiveWriteSummary()
+    summary = _add(
+        summary,
+        await _consume(
+            tx,
+            _MERGE_CORRELATES_SYMBOL,
+            component_id=getattr(component, "id"),
+            group_id=getattr(component, "group_id"),
+            symbol_id=symbol_id_for(symbol_key),
+            symbol_key=symbol_key,
+            relationship_id=f"{getattr(component, 'id')}:symbol:{symbol_key}",
+            relationship_props={
+                "id": f"{getattr(component, 'id')}:symbol:{symbol_key}",
+                "symbol_key": symbol_key,
+                "target_label": "SymbolOccurrenceShadow",
+                "confidence": ReactiveConfidence.HIGH.value,
+            },
+        ),
+    )
+    return _add(
+        summary,
+        await _consume(
+            tx,
+            _MERGE_CORRELATES_PUBLIC_API,
+            component_id=getattr(component, "id"),
+            project=getattr(component, "project"),
+            commit_sha=getattr(component, "commit_sha"),
+            language=getattr(component, "language").value,
+            symbol_key=symbol_key,
+            relationship_id=f"{getattr(component, 'id')}:public_api:{symbol_key}",
+            relationship_props={
+                "id": f"{getattr(component, 'id')}:public_api:{symbol_key}",
+                "symbol_key": symbol_key,
+                "confidence": ReactiveConfidence.HIGH.value,
+            },
+        ),
+    )
 
 
 def _add(
