@@ -43,8 +43,13 @@ from neo4j import AsyncDriver
 from pydantic import BaseModel, ValidationError
 from starlette.applications import Starlette
 
+from palace_mcp.code.find_cross_module_contracts import (
+    find_cross_module_contracts as _find_cross_module_contracts_impl,
+)
+from palace_mcp.code.find_dead_symbols import find_dead_symbols as _find_dead_symbols_impl
 from palace_mcp.code.find_hotspots import find_hotspots as _find_hotspots_impl
 from palace_mcp.code.find_owners import find_owners as _find_owners_impl
+from palace_mcp.code.find_public_api import find_public_api as _find_public_api_impl
 from palace_mcp.code.list_functions import list_functions as _list_functions_impl
 from palace_mcp.code_composite import register_code_composite_tools
 from palace_mcp.extractors.cross_repo_version_skew.find_version_skew import (
@@ -870,6 +875,81 @@ async def palace_code_find_owners(
         }
     return await _find_owners_impl(
         driver=driver, file_path=file_path, project=project, top_n=top_n
+    )
+
+
+@_tool(
+    name="palace.code.find_dead_symbols",
+    description=(
+        "List dead symbol candidates for a project as recorded by the "
+        "dead_symbol_binary_surface extractor. Returns symbols identified by "
+        "Periphery static analysis that are unused or binary-surface retained. "
+        "Accepts optional limit (default 200)."
+    ),
+)
+async def palace_code_find_dead_symbols(
+    project: str,
+    limit: int = 200,
+) -> dict[str, Any]:
+    """List dead symbol candidates ranked by module and display name."""
+    driver = _driver
+    if driver is None:
+        return {
+            "ok": False,
+            "error_code": "driver_unavailable",
+            "message": "Neo4j driver not initialised",
+        }
+    return await _find_dead_symbols_impl(driver=driver, project=project, limit=limit)
+
+
+@_tool(
+    name="palace.code.find_public_api",
+    description=(
+        "List public API symbols for a project as recorded by the "
+        "public_api_surface extractor. Returns symbols exported from "
+        "Swift .swiftinterface or Kotlin BCV .api artifacts. "
+        "Accepts optional limit (default 500)."
+    ),
+)
+async def palace_code_find_public_api(
+    project: str,
+    limit: int = 500,
+) -> dict[str, Any]:
+    """List public API symbols recorded by the public_api_surface extractor."""
+    driver = _driver
+    if driver is None:
+        return {
+            "ok": False,
+            "error_code": "driver_unavailable",
+            "message": "Neo4j driver not initialised",
+        }
+    return await _find_public_api_impl(driver=driver, project=project, limit=limit)
+
+
+@_tool(
+    name="palace.code.find_cross_module_contracts",
+    description=(
+        "List cross-module contract drift records for a project as recorded by "
+        "the cross_module_contract extractor. Returns ModuleContractDelta rows "
+        "showing which consumer→producer pairs have added, removed, or "
+        "signature-changed symbols between commits. "
+        "Accepts optional limit (default 200)."
+    ),
+)
+async def palace_code_find_cross_module_contracts(
+    project: str,
+    limit: int = 200,
+) -> dict[str, Any]:
+    """List cross-module contract drift records ordered by commit and consumer."""
+    driver = _driver
+    if driver is None:
+        return {
+            "ok": False,
+            "error_code": "driver_unavailable",
+            "message": "Neo4j driver not initialised",
+        }
+    return await _find_cross_module_contracts_impl(
+        driver=driver, project=project, limit=limit
     )
 
 
