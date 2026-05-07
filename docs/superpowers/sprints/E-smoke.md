@@ -1,5 +1,9 @@
 # Sprint S4 (E) — Smoke run on tronKit-swift + bitcoinKit-swift
 
+> **Rev3** (2026-05-07): acceptance criteria extended to require populated
+> Architecture Layer (#1) and Error Handling (#7) sections — no longer §9
+> blind spots. AV1-D7 flipped per operator decision GIM-219.
+>
 > **Rev2** (2026-05-06): adds measurable acceptance criteria (CR-MED-4).
 > Adds GIM-218 contingency plan. Adds audit-mode prompt validation step.
 
@@ -26,7 +30,9 @@ human can read and act on.
 **Dependencies**:
 - S0 (Foundation prerequisites) merged.
 - S1 (D) merged: workflow + agents + composite tool live on iMac.
-- S2 (B-min) merged: `crypto_domain_model` extractor in registry.
+- **S2.1 (B-min) merged**: `crypto_domain_model` extractor in registry.
+- **S2.2 (B+1) merged**: `arch_layer` extractor in registry (rev3).
+- **S2.3 (B+7) merged**: `error_handling_policy` extractor in registry (rev3).
 - S3 (C) merged: ingestion automation works.
 - GIM-216 merged (PR #105, expected ~1 week).
 - GIM-218: see contingency below.
@@ -59,10 +65,12 @@ thresholds** to be accepted:
 
 | Criterion | Threshold | How to measure |
 |-----------|-----------|----------------|
-| Sections populated | ≥5 of 10 sections contain findings or "no findings" (not blank) | Count non-empty sections |
+| Sections populated | ≥7 of 10 sections contain findings or explicit "no findings" (not blank) — rev3 raised from ≥5 because §1 Arch and §4 Security are now required | Count non-empty sections |
 | Non-informational findings | ≥3 findings with severity ≥ `low` | Count findings in report |
-| False-positive rate (top-5) | ≤2 of top-5 flagged items are false-positives | Manual review by operator + BlockchainEngineer |
-| Blind spots declared | All missing extractors listed in §9 with rationale | Verify against registry diff |
+| **§1 Architecture content (rev3)** | Populated module DAG + ≥0 ArchViolation entries OR explicit "no violations — rules clean" with cited rule set | Verify `:ArchViolation` query + `:Module` count > 1 |
+| **§4 Security error-handling content (rev3)** | Populated `:CatchSite` aggregate + ≥1 ErrorFinding OR explicit "no critical-path swallowed catches" with file count cited | Verify `:CatchSite` count > 0 + ErrorFinding query |
+| False-positive rate (top-5 across §1, §4, §7) | ≤2 of top-5 flagged items per section are false-positives | Manual review by operator + BlockchainEngineer |
+| Blind spots declared | All missing extractors listed in §9 with rationale (#1, #7 NOT here in rev3) | Verify against registry diff |
 | Provenance complete | Every populated section traces to an `:IngestRun` with run_id | Verify run_ids exist in Neo4j |
 | Executive summary | Present, ≤500 words, covers top-3 findings | Word count + content check |
 

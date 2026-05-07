@@ -1,6 +1,6 @@
 # Audit-V1 — first product release: overview
 
-**Status**: pre-S1 (rev2 — incorporating CTO + CodeReviewer + OpusArchitectReviewer findings).
+**Status**: pre-S1 (rev3 — operator flipped AV1-D7 → #1 + #7 included, envelope expanded 12w → 18w).
 **Driver**: operator goal — first complete audit run on `tronkit-swift`,
 then `bitcoinkit-swift`, then remaining HS Kits + `wallet-ios`. After
 v1, every additional extractor is a tiny isolated slice that just
@@ -13,6 +13,31 @@ and *tradeoff log* so future readers understand the why.
 
 ---
 
+> ### Rev3 changelog (2026-05-07)
+>
+> Operator decision applied to GIM-219 after rev2 review:
+>
+> 1. **AV1-D7 flipped from "yes/blind-spot" to "no/included"** — Architecture
+>    Layer Extractor (#1) and Error Handling Policy Extractor (#7) are now
+>    in v1 scope, not deferred to S6+.
+> 2. **Wall-time envelope expanded 12w → 18w** to absorb +6w (~3w each for #1
+>    and #7, sequential on single Claude PE). Parallel S2.2 ‖ S2.3 collapses
+>    back to ~14-15w if a 2nd Claude engineer is available.
+> 3. **S2 split into S2.1 (#40), S2.2 (#1), S2.3 (#7)** — each its own
+>    paperclip slice, all on Claude team per `roadmap.md` §2.1/§2.2 team
+>    allocation.
+> 4. **S4 acceptance criteria** extended: §1 Architecture and §4 Security
+>    sections now require populated content from #1 / #7 (not "blind spot —
+>    pending"). See `E-smoke.md` rev3.
+> 5. **OPUS-LOW-1 closed entirely** — `roadmap.md` HTML-commented Phase 2-6
+>    duplicate removed; canonical archive in `docs/roadmap-archive.md` only.
+>
+> Rationale: for a blockchain/security audit of WalletKit's, layer-violation
+> detection (#1) and swallowed-error detection (#7) are foundational —
+> swallowed crypto errors → potential lost funds; cross-module boundary
+> breaks → security boundary breaches. Operator weighed +6w cost vs. these
+> sections shipping as §9 disclaimers and chose full coverage.
+>
 > ### Rev2 changelog (2026-05-06)
 >
 > Synthesised from 3-reviewer audit of rev1 (`4deb538`):
@@ -59,14 +84,15 @@ Used for production audit runs where agent reasoning adds value.
 `AuditReport` is a structured markdown document with these sections:
 
 1. **Executive summary** — top-N findings, severity-graded, ≤500 words.
-2. **Architecture** — layer model, module boundaries, public API surface,
-   cross-module contract drift (from GIM-190/192).
+2. **Architecture** — layer model + module boundaries + violations
+   (S2.2 #1, rev3), public API surface, cross-module contract drift
+   (from GIM-190/192).
 3. **Quality** — hotspots (GIM-195), dead symbols (GIM-193), code-smell
    counters (Phase B if/when added; for v1 marked "blind spot — pending
    #34").
-4. **Security** — error-handling smells (Phase B blind spot — pending
-   #7), crypto-domain findings (S2 #40), known taint patterns (LLM
-   blind spot — pending #35).
+4. **Security** — error-handling policy + swallowed-catch findings
+   (S2.3 #7, rev3), crypto-domain findings (S2.1 #40), known taint
+   patterns (LLM blind spot — pending #35).
 5. **Dependencies** — external surface (GIM-191), version skew
    (GIM-218 if merged; otherwise marked "blind spot — GIM-218 pending"),
    single-source picks.
@@ -115,13 +141,16 @@ prompts. Doubles the synthesis surface. Operator can split the single
 `Auditor` role into Quality / Dependency / Historical / etc later if
 S4 smoke surfaces real differentiation pressure. Until then YAGNI.
 
-### Rejected — "full Phase B extractor backlog before v1"
-Phase B (#1 Architecture Layer + #2 Symbol Duplication + #34 Code
-Smell + #7 Error Handling) is ~3 weeks of Board+paperclip work each.
-Total: ~12 weeks for v1 — unacceptable. v1 ships with #40 only
-(crypto-Kit relevance is highest among the 5). Other 4 explicitly
-listed as "blind spot" in the report; operator sees the gap and
-prioritises them in S6+ based on what S4 smoke surfaced.
+### Partially accepted — Phase B subset for v1 (rev3)
+Original Phase B candidates: #1 Arch Layer + #2 Symbol Dup + #34
+Code Smell + #7 Error Handling (~3 weeks each). Rev2 shipped only
+#40 to fit a 12-week envelope. **Rev3 (operator decision 2026-05-07)
+expands envelope to 18 weeks and adds #1 + #7** — both deemed
+foundational for blockchain audit (layer violations + swallowed
+errors are unacceptable §9 blind spots for a Wallet Kit audit).
+**Still rejected for v1**: #2 Symbol Duplication (needs embeddings
+infra) and #34 Code Smell Structural (overlaps Hotspot/CCN —
+post-smoke decision). Both remain S6+.
 
 ### Rejected — "wait for LLM infra before v1"
 LLM-blocked extractors (#11 Decision History, #26 Bug-Archaeology,
@@ -183,9 +212,10 @@ Before starting S1 brainstorm, operator should confirm:
 - [ ] AV1-D5 — Track A/B SCIP emit pattern preserved? (default yes)
 - [ ] AV1-D6 — Max token budget per agent per audit run? (rev2, CTO-HIGH-1.
   Default: 50K input / 10K output per domain agent. Measured after S4 dry run.)
-- [ ] AV1-D7 — Blind spots #1 (Architecture Layer) and #7 (Error Handling)
-  acceptable for v1 blockchain audit quality bar? (rev2, CTO-HIGH-2.
-  Default: yes — disclosed in report §9. Operator must explicitly confirm.)
+- [x] AV1-D7 — Blind spots #1 (Architecture Layer) and #7 (Error Handling)
+  acceptable for v1 blockchain audit quality bar? **NO (rev3 flip).** Both
+  extractors included as S2.2 + S2.3; envelope expanded 12w → 18w to
+  absorb +6w sequential. Operator confirmed 2026-05-07 (GIM-219).
 - [ ] **S0 prerequisite sprint** approved (rev2 addition — IngestRun unification + composite tools).
 - [ ] **GIM-218** status check: if still zero progress within 1 week of
   rev2 approval, demote version-skew to blind spot for S4 and descope
