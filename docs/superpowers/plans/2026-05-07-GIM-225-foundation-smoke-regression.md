@@ -131,6 +131,11 @@
 - `uv run mypy src/` green from `services/palace-mcp`.
 - `uv run pytest` green for `services/palace-mcp`.
 - `docker compose build` green.
+- `docker compose --profile review up` brings `neo4j` and `palace-mcp` healthy for the review profile.
+- Review-profile host smoke uses the documented review base URL and proves the response comes from the compose `palace-mcp`, not host nginx:
+  - `curl -fsS -D - "$PALACE_REVIEW_BASE_URL/healthz"`
+  - expected: palace-mcp health body, not `HTTP/1.1 404 Not Found`;
+  - expected: response headers do not identify `Server: nginx/1.29.6` for the review smoke target.
 - `docker compose --profile full up` healthchecks green.
 - Host-side smoke hits the intended compose endpoint, not host nginx.
 - Real MCP tool call succeeds after startup.
@@ -151,6 +156,33 @@
 - Paste check-runs and `develop` branch protection evidence before claiming any merge blocker.
 - Squash-merge to `develop` only after review and QA gates pass.
 - Close GIM-225 only after merge commit, QA evidence, and production deploy evidence are present.
+
+## Rollback
+
+**Owner:** Implementer of the failing phase, then CXCTO for merge discipline if the failure is found after merge.  
+**Principle:** rollback must not change the existing production agent team, agent ids, or agent workspaces.
+
+### Python startup rollback
+
+Use if the Phase 2.1 `ensure_schema` / `UPSERT_PROJECT` fix causes startup, schema, or project-registration regression.
+
+- Before merge: revert only the Phase 2.1 commit on the feature branch and push the revert for review.
+- After merge: open a revert PR against `develop` for the merged Phase 2.1 change; do not patch production state directly.
+- Restore the previous `ensure_schema()` call behavior and its tests together; do not leave tests asserting the reverted contract.
+- Re-run the smallest proving set before handoff back to review:
+  - targeted `ensure_schema` / project tests;
+  - runtime startup smoke against Neo4j if the failure was only visible at startup.
+- If reverting Phase 2.1 reintroduces the original missing-parameter startup failure, mark GIM-225 `blocked` and escalate to Board instead of changing `:Project` semantics ad hoc.
+
+### Review host routing rollback
+
+Use if the Phase 2.2 compose/docs routing change breaks operator access, client docs, or review-profile smoke.
+
+- Before merge: revert only the Phase 2.2 commit on the feature branch and push the revert for review.
+- After merge: open a revert PR against `develop` for the merged Phase 2.2 change; do not alter the production agent team checkout or agent runtime configuration as a workaround.
+- Restore the previous host mapping/docs as a matched set so docs do not point to a non-existent endpoint.
+- Keep container-local healthchecks targeting `http://localhost:8000/healthz` inside `palace-mcp`.
+- If the rollback restores `localhost:8080` while nginx still owns host port 8080, leave host-side review smoke blocked with evidence (`lsof` + `curl`), and require Board/operator decision on the host port before implementation proceeds.
 
 ## Handoff order
 
