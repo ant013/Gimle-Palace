@@ -257,6 +257,8 @@ async def run_extractor(
             id=run_id,
             source=source,
             group_id=pre.group_id,
+            extractor_name=name,
+            project=project,
             started_at=started_at,
         )
 

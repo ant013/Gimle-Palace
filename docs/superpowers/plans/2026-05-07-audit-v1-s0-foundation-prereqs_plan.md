@@ -4,7 +4,7 @@
 
 **Slice:** S0 of Audit-V1 sprint sequence (rev3).
 **Spec:** `docs/superpowers/specs/2026-05-07-audit-v1-s0-foundation-prereqs_spec.md`.
-**Source branch:** `feature/GIM-NN-audit-v1-s0-foundation-prereqs` cut from `origin/develop`.
+**Source branch:** `feature/GIM-228-audit-v1-s0-foundation-prereqs` cut from `origin/develop`.
 **Target branch:** `develop`. Squash-merge on APPROVE + QA evidence.
 **Team:** Claude. Phase chain: CTO → CR (plan-first) → PythonEngineer → CR (mechanical) → OpusArchitectReviewer → QAEngineer → CTO merge.
 
@@ -29,9 +29,8 @@ single PR. CTO swaps if a 2nd Claude engineer is free.
 **Owner:** CTO.
 
 - [ ] Open paperclip issue titled `Audit-V1 S0 — Foundation Prerequisites`.
-- [ ] Body = link to spec + this plan, with `GIM-NN` placeholders.
-- [ ] After creation, edit-pass replaces `GIM-NN` with assigned issue
-      number in spec, plan, and branch name.
+- [x] Body = link to spec + this plan.
+- [x] GIM-NN → GIM-228 edit-pass applied to spec, plan, and branch name.
 - [ ] Reassign to CodeReviewer for plan-first review.
 
 **Acceptance:** issue exists, key substituted, CR is assignee.
@@ -112,7 +111,7 @@ single PR. CTO swaps if a 2nd Claude engineer is free.
 #### Step 2.1.3: Commit S0.1
 
 - [ ] `git add` only files in scope.
-- [ ] Commit: `feat(GIM-NN): unify IngestRun schema across Path A/B (S0.1)`.
+- [ ] Commit: `feat(GIM-228): unify IngestRun schema across Path A/B (S0.1)`.
 
 ---
 
@@ -146,13 +145,10 @@ single PR. CTO swaps if a 2nd Claude engineer is free.
 
 **Owner:** PythonEngineer.
 **Files:**
-- 3 new tool registration sites — follow existing pattern. Either
-  inline in `services/palace-mcp/src/palace_mcp/code_composite.py`
-  (top-level, where `find_references` + `test_impact` already live),
-  or per-tool modules under
-  `services/palace-mcp/src/palace_mcp/code/<tool>.py` (matching
-  pattern of `find_hotspots.py` / `find_owners.py`). Decide on plan-
-  first review based on consistency of existing surface.
+- 3 new per-tool modules under `services/palace-mcp/src/palace_mcp/code/`
+  (Pattern B — matching existing `find_hotspots.py` / `find_owners.py` /
+  `list_functions.py`): `find_dead_symbols.py`, `find_public_api.py`,
+  `find_cross_module_contracts.py`.
 - 3 new Pydantic response models alongside their tool registration:
   `DeadSymbolList`, `PublicApiList`, `ContractDriftList`.
 - `services/palace-mcp/src/palace_mcp/mcp_server.py` — register
@@ -177,7 +173,7 @@ tool inventory (alongside the 6 already-existing palace.code.* tools).
 
 #### Step 2.2.3: Commit S0.2
 
-- [ ] Commit: `feat(GIM-NN): add 3 composite MCP tools for audit (S0.2 — rev4 scope)`.
+- [ ] Commit: `feat(GIM-228): add 3 composite MCP tools for audit (S0.2 — rev4 scope)`.
 
 ---
 
@@ -247,16 +243,16 @@ reviewable as standalone markdown.
 
 #### Step 2.3.4: Commit S0.3
 
-- [ ] Commit: `feat(GIM-NN): add audit-mode fragment + wire to 3 Claude role files (S0.3)`.
+- [ ] Commit: `feat(GIM-228): add audit-mode fragment + wire to 3 Claude role files (S0.3)`.
 
 ---
 
 ### Step 2.4: Push branch
 
-- [ ] `git push -u origin feature/GIM-NN-audit-v1-s0-foundation-prereqs`.
-- [ ] Open PR titled `feat(GIM-NN): Audit-V1 S0 foundation prerequisites`.
+- [ ] `git push -u origin feature/GIM-228-audit-v1-s0-foundation-prereqs`.
+- [ ] Open PR titled `feat(GIM-228): Audit-V1 S0 foundation prerequisites`.
 - [ ] PR body includes:
-  - "Closes GIM-NN"
+  - "Closes GIM-228"
   - bullet list mapping commits → S0.1/S0.2/S0.3
   - QA Evidence section will be filled in Phase 4.
 
@@ -280,8 +276,10 @@ reviewable as standalone markdown.
 - [ ] Verify diff covers ALL files listed in plan §"Files in scope" of
       spec — no silent scope reduction (per
       `feedback_silent_scope_reduction.md`).
-- [ ] Audit-mode fragment diff'd against itself in 6 rendered AGENTS.md
-      files: same content, no Claude/Codex drift.
+- [ ] Audit-mode fragment diff'd against itself in 3 rendered Claude
+      role files (`dist/opus-architect-reviewer.md`,
+      `dist/security-auditor.md`, `dist/blockchain-engineer.md`):
+      same content, no drift. CX-side deferred to E6.
 
 **Acceptance:** APPROVE on paperclip + `gh pr review --approve`. Reassign
 to OpusArchitectReviewer.
@@ -295,9 +293,9 @@ to OpusArchitectReviewer.
       (e.g., paperclip ingest)?
 - [ ] Probe: does composite tool `find_owners` correctly handle an
       empty `:Owner` graph (no extractor has run yet)?
-- [ ] Probe: do the 6 audit-mode sections actually contain identical
-      text after rendering, or did Claude/Codex divergence sneak in?
-- [ ] Probe: any of the 5 new composite tools accidentally expose
+- [ ] Probe: do the 3 rendered Claude audit-mode sections actually
+      contain identical text, or did inter-role divergence sneak in?
+- [ ] Probe: any of the 3 new composite tools accidentally expose
       data outside the requested project scope?
 
 **Acceptance:** APPROVE / NUDGE / BLOCK comment. If NUDGE/BLOCK, return
@@ -383,7 +381,7 @@ runs `palace.code.find_owners` etc. against live data successfully.
 
 - R1 — migration overlap with active extractor runs.
 - R2 — Claude/Codex audit-mode prompt drift.
-- R3 — composite tool schema breakage (low; all 5 are net-new).
+- R3 — composite tool schema breakage (low; all 3 are net-new).
 
 ---
 
