@@ -365,7 +365,20 @@
           "resolution_status": "syntax_heuristic"
         }
       ],
-      "diagnostics": []
+      "diagnostics": [
+        {
+          "code": "macro_unexpanded",
+          "severity": "warning",
+          "ref": "legacy_callback",
+          "message": "UIKit callback analysis remains syntax-only in this fixture",
+          "range": {
+            "start_line": 9,
+            "start_col": 13,
+            "end_line": 11,
+            "end_col": 14
+          }
+        }
+      ]
     }
   ],
   "run_diagnostics": []

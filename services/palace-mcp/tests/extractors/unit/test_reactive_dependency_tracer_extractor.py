@@ -20,6 +20,9 @@ from palace_mcp.extractors.reactive_dependency_tracer.models import (
 from palace_mcp.extractors.reactive_dependency_tracer.neo4j_writer import (
     ReactiveWriteSummary,
 )
+from palace_mcp.extractors.reactive_dependency_tracer.swift_helper_contract import (
+    MAX_FILES_PER_RUN,
+)
 
 
 def _make_ctx(repo_path: Path) -> ExtractorRunContext:
@@ -268,6 +271,45 @@ async def test_extractor_unsupported_schema_writes_version_diagnostic(
             any(
                 diagnostic.diagnostic_code
                 is ReactiveDiagnosticCode.SWIFT_HELPER_VERSION_UNSUPPORTED
+                for diagnostic in batch.diagnostics
+            )
+            for batch in batches
+        )
+        return ReactiveWriteSummary(nodes_created=1, relationships_created=0)
+
+    with (
+        patch("palace_mcp.mcp_server.get_driver", return_value=MagicMock()),
+        patch(
+            "palace_mcp.extractors.reactive_dependency_tracer.extractor.ensure_custom_schema",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "palace_mcp.extractors.reactive_dependency_tracer.extractor.write_reactive_graph",
+            side_effect=_capture_write,
+        ),
+    ):
+        stats = await extractor.run(graphiti=MagicMock(), ctx=ctx)
+
+    assert stats.nodes_written == 1
+
+
+@pytest.mark.asyncio
+async def test_extractor_rejects_helper_payload_over_max_files_per_run(
+    tmp_path: Path,
+) -> None:
+    repo = _fixture_repo(tmp_path)
+    fixture_path = repo / "reactive_facts.json"
+    payload = json.loads(fixture_path.read_text(encoding="utf-8"))
+    payload["files"] = [payload["files"][0]] * (MAX_FILES_PER_RUN + 1)
+    fixture_path.write_text(json.dumps(payload), encoding="utf-8")
+    extractor = ReactiveDependencyTracerExtractor()
+    ctx = _make_ctx(repo)
+
+    async def _capture_write(*, driver, batches):  # type: ignore[no-untyped-def]
+        assert any(
+            any(
+                diagnostic.diagnostic_code is ReactiveDiagnosticCode.SWIFT_PARSE_FAILED
+                and diagnostic.file_path is None
                 for diagnostic in batch.diagnostics
             )
             for batch in batches

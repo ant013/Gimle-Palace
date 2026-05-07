@@ -39,6 +39,7 @@ from palace_mcp.extractors.reactive_dependency_tracer.normalizer import (
     normalize_swift_helper_file,
 )
 from palace_mcp.extractors.reactive_dependency_tracer.swift_helper_contract import (
+    MAX_FILES_PER_RUN,
     SUPPORTED_SCHEMA_VERSION,
     SwiftHelperDocument,
     SwiftHelperFile,
@@ -396,6 +397,8 @@ def _parse_helper_payload(payload: str, *, repo_root: Path) -> _ParsedHelperPayl
     raw_files = raw.get("files")
     if not isinstance(raw_files, list):
         raise ValueError("files must be an array")
+    if len(raw_files) > MAX_FILES_PER_RUN:
+        raise ValueError("max files per run exceeded")
 
     parsed_files: list[SwiftHelperFile] = []
     file_failures: list[_FileFailure] = []

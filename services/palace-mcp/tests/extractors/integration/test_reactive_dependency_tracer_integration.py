@@ -175,7 +175,7 @@ async def test_reactive_dependency_tracer_writes_expected_graph(
             """
             MATCH (:ReactiveDiagnostic {project: $project})
                   -[:DIAGNOSTIC_FOR]->
-                  (:ReactiveComponent {project: $project})
+                  ({project: $project})
             RETURN count(*) AS cnt
             """,
             project=PROJECT_SLUG,
@@ -256,12 +256,12 @@ async def test_reactive_dependency_tracer_writes_expected_graph(
     assert component_count is not None and component_count["cnt"] == 3
     assert state_count is not None and state_count["cnt"] == 6
     assert effect_count is not None and effect_count["cnt"] == 4
-    assert diagnostic_count is not None and diagnostic_count["cnt"] == 2
+    assert diagnostic_count is not None and diagnostic_count["cnt"] == 3
     assert declares_count is not None and declares_count["cnt"] == 6
     assert triggers_count is not None and triggers_count["cnt"] == 2
     assert binds_count is not None and binds_count["cnt"] == 1
     assert writes_count is not None and writes_count["cnt"] == 2
-    assert diagnostic_edge_count is not None and diagnostic_edge_count["cnt"] == 1
+    assert diagnostic_edge_count is not None and diagnostic_edge_count["cnt"] == 2
     assert correlates_symbol_count is not None and correlates_symbol_count["cnt"] == 1
     assert correlates_public_count is not None and correlates_public_count["cnt"] == 1
     assert vendor_skip_count is not None and vendor_skip_count["cnt"] == 1
@@ -318,7 +318,7 @@ async def test_reactive_dependency_tracer_rerun_keeps_graph_counts_stable(
     assert record["components"] == 3
     assert record["states"] == 6
     assert record["effects"] == 4
-    assert record["diagnostics"] == 2
+    assert record["diagnostics"] == 3
     assert record["declares_edges"] == 6
     assert record["trigger_edges"] == 2
     assert record["symbol_edges"] == 1
