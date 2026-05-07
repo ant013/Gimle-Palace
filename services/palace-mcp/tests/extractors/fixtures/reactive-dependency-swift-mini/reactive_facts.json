@@ -1,0 +1,86 @@
+{
+  "tool_name": "palace-swift-reactive-probe",
+  "tool_version": "0.1.0",
+  "schema_version": 1,
+  "swift_syntax_version": "600.0.1",
+  "swift_toolchain": "Swift 6.0",
+  "files": [
+    {
+      "path": "Sources/App/CounterView.swift",
+      "module_name": "App",
+      "parse_status": "ok",
+      "components": [
+        {
+          "component_ref": "c1",
+          "module_name": "App",
+          "component_kind": "swiftui_view",
+          "qualified_name": "App.CounterView",
+          "display_name": "CounterView",
+          "range": {
+            "start_line": 1,
+            "start_col": 1,
+            "end_line": 10,
+            "end_col": 1
+          },
+          "resolution_status": "syntax_exact"
+        }
+      ],
+      "states": [
+        {
+          "state_ref": "s1",
+          "owner_component_ref": "c1",
+          "module_name": "App",
+          "state_name": "count",
+          "state_kind": "state",
+          "wrapper_or_api": "@State",
+          "declared_type": "Int",
+          "range": {
+            "start_line": 4,
+            "start_col": 5,
+            "end_line": 4,
+            "end_col": 29
+          },
+          "resolution_status": "syntax_exact"
+        }
+      ],
+      "effects": [
+        {
+          "effect_ref": "e1",
+          "owner_component_ref": "c1",
+          "effect_kind": "on_change",
+          "callee_name": "onChange",
+          "trigger_expression_kind": "on_change_of",
+          "range": {
+            "start_line": 7,
+            "start_col": 13,
+            "end_line": 9,
+            "end_col": 14
+          },
+          "resolution_status": "syntax_exact"
+        }
+      ],
+      "edges": [
+        {
+          "edge_ref": "r1",
+          "edge_kind": "triggers_effect",
+          "from_ref": "s1",
+          "to_ref": "e1",
+          "owner_component_ref": "c1",
+          "access_path": "count",
+          "binding_kind": null,
+          "trigger_expression_kind": "on_change_of",
+          "range": {
+            "start_line": 7,
+            "start_col": 25,
+            "end_line": 7,
+            "end_col": 30
+          },
+          "confidence_hint": "high",
+          "resolution_status": "syntax_exact"
+        }
+      ],
+      "diagnostics": []
+    }
+  ],
+  "run_diagnostics": []
+}
