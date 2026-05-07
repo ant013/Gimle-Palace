@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from dataclasses import field
 from typing import Mapping
 
 from palace_mcp.extractors.foundation.models import Language
@@ -48,6 +49,7 @@ class NormalizedReactiveFile:
     edges: tuple[ReactiveEdge, ...]
     diagnostics: tuple[ReactiveDiagnostic, ...]
     ref_to_node_id: Mapping[str, str]
+    replace_existing_facts: bool = field(default=True)
 
 
 def normalize_swift_helper_file(

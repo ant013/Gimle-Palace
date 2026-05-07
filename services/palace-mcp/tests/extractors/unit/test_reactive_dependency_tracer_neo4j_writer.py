@@ -271,6 +271,31 @@ async def test_writer_rerun_reports_zero_when_counters_zero() -> None:
 
 
 @pytest.mark.asyncio
+async def test_writer_invalid_file_diagnostic_batch_skips_delete_scope() -> None:
+    invalid_batch = NormalizedReactiveFile(
+        file_path="Sources/App/CounterView.swift",
+        language=Language.SWIFT,
+        components=(),
+        states=(),
+        effects=(),
+        edges=(),
+        diagnostics=(_batch().diagnostics[0],),
+        ref_to_node_id={},
+        replace_existing_facts=False,
+    )
+    tx = _FakeTx({"MERGE (node:ReactiveDiagnostic": _FakeCounters(nodes_created=1)})
+    driver = _FakeDriver(_FakeSession(tx))
+
+    summary = await write_reactive_graph(driver=driver, batches=(invalid_batch,))
+
+    assert summary.nodes_created == 1
+    assert not any(
+        "MATCH (n)\nWHERE n.source = $source" in query for query in tx.queries
+    )
+    assert any("MERGE (node:ReactiveDiagnostic" in query for query in tx.queries)
+
+
+@pytest.mark.asyncio
 async def test_writer_flattens_range_props_for_neo4j() -> None:
     tx = _FakeTx({"default": _FakeCounters()})
     driver = _FakeDriver(_FakeSession(tx))

@@ -404,3 +404,82 @@ async def test_reactive_dependency_tracer_partial_invalid_file_preserves_valid_b
     assert record is not None
     assert record["components"] == 3
     assert record["bad_file_diagnostics"] == 1
+
+
+@pytest.mark.integration
+async def test_reactive_dependency_tracer_invalid_rerun_keeps_prior_facts_for_same_file(
+    driver: AsyncDriver, fixture_repo: Path
+) -> None:
+    extractor = ReactiveDependencyTracerExtractor()
+    ctx = _make_ctx(fixture_repo)
+    await _seed_correlation_targets(driver)
+
+    with patch("palace_mcp.mcp_server.get_driver", return_value=driver):
+        await extractor.run(graphiti=MagicMock(), ctx=ctx)
+
+    fixture_path = fixture_repo / "reactive_facts.json"
+    payload = json.loads(fixture_path.read_text(encoding="utf-8"))
+    session_model_entry = next(
+        file_entry
+        for file_entry in payload["files"]
+        if file_entry["path"] == "Sources/App/SessionModel.swift"
+    )
+    session_model_entry["edges"] = [
+        {
+            "edge_ref": "session_invalid_edge",
+            "edge_kind": "triggers_effect",
+            "from_ref": "session_ticker",
+            "to_ref": "missing_ref",
+            "owner_component_ref": "session_component",
+            "access_path": "ticker",
+            "binding_kind": None,
+            "trigger_expression_kind": "publisher_sink",
+            "range": {
+                "start_line": 9,
+                "start_col": 9,
+                "end_line": 10,
+                "end_col": 18,
+            },
+            "confidence_hint": "high",
+            "resolution_status": "syntax_exact",
+        }
+    ]
+    fixture_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with patch("palace_mcp.mcp_server.get_driver", return_value=driver):
+        await extractor.run(graphiti=MagicMock(), ctx=ctx)
+
+    async with driver.session() as session:
+        result = await session.run(
+            """
+            MATCH (c:ReactiveComponent {
+                project: $project,
+                file_path: 'Sources/App/SessionModel.swift'
+            })
+            WITH count(c) AS components
+            MATCH (s:ReactiveState {
+                project: $project,
+                file_path: 'Sources/App/SessionModel.swift'
+            })
+            WITH components, count(s) AS states
+            MATCH (e:ReactiveEffect {
+                project: $project,
+                file_path: 'Sources/App/SessionModel.swift'
+            })
+            WITH components, states, count(e) AS effects
+            MATCH (d:ReactiveDiagnostic {
+                project: $project,
+                file_path: 'Sources/App/SessionModel.swift',
+                diagnostic_code: 'swift_parse_failed'
+            })
+            RETURN components, states, effects, count(d) AS parse_failures
+            """,
+            project=PROJECT_SLUG,
+        )
+        record = await result.single()
+
+    assert record is not None
+    assert record["components"] == 1
+    assert record["states"] == 2
+    assert record["effects"] == 1
+    assert record["parse_failures"] == 1

@@ -207,7 +207,9 @@ def _validate_batch_scope(batch: NormalizedReactiveFile) -> None:
 
 async def _write_batch(tx: Any, batch: NormalizedReactiveFile) -> ReactiveWriteSummary:
     summary = ReactiveWriteSummary()
-    if batch.file_path is None:
+    if batch.replace_existing_facts is False:
+        delete_summary = ReactiveWriteSummary()
+    elif batch.file_path is None:
         delete_summary = await _consume(
             tx,
             _DELETE_RUN_SCOPE,

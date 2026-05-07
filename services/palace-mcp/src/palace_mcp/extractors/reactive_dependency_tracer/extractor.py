@@ -367,6 +367,7 @@ def _file_failure_batch(
         edges=(),
         diagnostics=(diagnostic,),
         ref_to_node_id={},
+        replace_existing_facts=False,
     )
 
 
