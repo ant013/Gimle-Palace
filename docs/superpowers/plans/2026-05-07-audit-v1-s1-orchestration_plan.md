@@ -11,7 +11,7 @@
 
 **Slice:** S1 of Audit-V1 sprint sequence (rev3).
 **Spec:** `docs/superpowers/specs/2026-05-07-audit-v1-s1-orchestration_spec.md`.
-**Source branch:** `feature/GIM-NN-audit-v1-s1-orchestration` cut from `origin/develop` **after S0 merges**.
+**Source branch:** `feature/GIM-233-audit-v1-s1-orchestration` cut from `origin/develop` (S0 merged `0a02ade`).
 **Target branch:** `develop`. Squash-merge after S0 is on develop AND all CI green.
 **Team:** Claude (single Claude PE; possibly 2 if S1 splits per S1-D1).
 **Wall-time (rev4):** 4-5 weeks (was 3-4w in rev3). +1w buffer per CTO-S1-H1
@@ -28,7 +28,7 @@ identified as scope-cuttable to v1.1 if margin breaks against 18w envelope.
 **Owner:** CTO.
 
 - [ ] Verify `docs/roadmap.md` Audit-V1 S0 row = ✅ + merge SHA.
-- [ ] Verify `git log origin/develop --grep="GIM-NN-audit-v1-s0"` returns the squash commit.
+- [ ] Verify `git log origin/develop --grep="GIM-228"` returns the squash commit (`0a02ade`).
 - [ ] If S0 not yet merged: pause; do NOT cut S1 branch — too much
       drift risk. Re-check daily.
 
@@ -39,7 +39,7 @@ identified as scope-cuttable to v1.1 if margin breaks against 18w envelope.
 **Owner:** CTO.
 
 - [ ] Open paperclip issue `Audit-V1 S1 — Audit Orchestration`.
-- [ ] Body = link to spec + this plan; `GIM-NN` placeholders.
+- [ ] Body = link to spec + this plan; `GIM-233` placeholders.
 - [ ] Branch off `origin/develop` (which now carries S0 outputs).
 - [ ] Reassign to CodeReviewer for plan-first review.
 
@@ -92,7 +92,7 @@ signatures all present.
 
 #### Step 2.1.2: Commit S1.1
 
-- [ ] Commit: `docs(GIM-NN): audit deliverable contract spec (S1.1)`.
+- [ ] Commit: `docs(GIM-233): audit deliverable contract spec (S1.1)`.
 
 ---
 
@@ -127,7 +127,7 @@ signatures all present.
 
 #### Step 2.2.3: Commit S1.2
 
-- [ ] Commit: `feat(GIM-NN): per-extractor audit section templates (S1.2)`.
+- [ ] Commit: `feat(GIM-233): per-extractor audit section templates (S1.2)`.
 
 ---
 
@@ -168,7 +168,7 @@ signatures all present.
 
 #### Step 2.3.3: Commit S1.3
 
-- [ ] Commit: `feat(GIM-NN): audit renderer + BaseExtractor.audit_contract() (S1.3)`.
+- [ ] Commit: `feat(GIM-233): audit renderer + BaseExtractor.audit_contract() (S1.3)`.
 
 ---
 
@@ -199,7 +199,7 @@ signatures all present.
 
 #### Step 2.4.3: Commit S1.4
 
-- [ ] Commit: `feat(GIM-NN): audit extractor discovery via :IngestRun (S1.4)`.
+- [ ] Commit: `feat(GIM-233): audit extractor discovery via :IngestRun (S1.4)`.
 
 ---
 
@@ -236,7 +236,7 @@ signatures all present.
 
 #### Step 2.5.3: Commit S1.5
 
-- [ ] Commit: `feat(GIM-NN): generic audit fetcher via audit_contract() (S1.5)`.
+- [ ] Commit: `feat(GIM-233): generic audit fetcher via audit_contract() (S1.5)`.
 
 ---
 
@@ -267,7 +267,7 @@ signatures all present.
 
 #### Step 2.6.3: Commit S1.6 (rev4 — boundary correction)
 
-- [ ] Commit: `feat(GIM-NN): audit_contract() on 7 existing extractors (S1.6)`.
+- [ ] Commit: `feat(GIM-233): audit_contract() on 7 existing extractors (S1.6)`.
 - [ ] **(rev4)**: do NOT notify CTO that S2.1 can begin — S1.7..S1.10
       are still PE-bound (S1.7 markdown-only could be picked up by Board,
       but S1.8/S1.9/S1.10 require Python work and stay with PE). PE
@@ -332,7 +332,7 @@ signatures all present.
 
 #### Step 2.7.3: Commit S1.7
 
-- [ ] Commit: `feat(GIM-NN): Auditor role file (S1.7)`.
+- [ ] Commit: `feat(GIM-233): Auditor role file (S1.7)`.
 
 ---
 
@@ -369,7 +369,7 @@ signatures all present.
 
 #### Step 2.8.3: Commit S1.8
 
-- [ ] Commit: `feat(GIM-NN): palace.audit.run sync MCP tool (S1.8)`.
+- [ ] Commit: `feat(GIM-233): palace.audit.run sync MCP tool (S1.8)`.
 
 ---
 
@@ -432,7 +432,7 @@ exits 0 with valid JSON payloads on stdout.
 
 #### Step 2.9.4: Commit S1.9
 
-- [ ] Commit: `feat(GIM-NN): async audit workflow launcher (S1.9)`.
+- [ ] Commit: `feat(GIM-233): async audit workflow launcher (S1.9)`.
 
 ---
 
@@ -457,16 +457,16 @@ exits 0 with valid JSON payloads on stdout.
 
 #### Step 2.10.2: Commit S1.10
 
-- [ ] Commit: `feat(GIM-NN): audit E2E smoke + paved-path regression test (S1.10)`.
+- [ ] Commit: `feat(GIM-233): audit E2E smoke + paved-path regression test (S1.10)`.
 
 ---
 
 ### Step 2.11: Push + open PR
 
-- [ ] `git push -u origin feature/GIM-NN-audit-v1-s1-orchestration`.
-- [ ] Open PR `feat(GIM-NN): Audit-V1 S1 — audit orchestration`.
+- [ ] `git push -u origin feature/GIM-233-audit-v1-s1-orchestration`.
+- [ ] Open PR `feat(GIM-233): Audit-V1 S1 — audit orchestration`.
 - [ ] PR body lists 10 commits → S1.1..S1.10 mapping.
-- [ ] PR body includes "Closes GIM-NN" + QA Evidence placeholder.
+- [ ] PR body includes "Closes GIM-233" + QA Evidence placeholder.
 - [ ] Reassign issue to CR for Phase 3.1.
 
 **Acceptance:** PR open; CI runs.

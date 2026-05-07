@@ -1,14 +1,13 @@
 # Audit-V1 S1 — Audit Orchestration — Specification
 
 **Document date:** 2026-05-07
-**Status:** Draft · **PARTIALLY BLOCKED on S0 merge** (per operator rule:
-documenting blockers in the file rather than fabricating dependent details)
+**Status:** Draft · S0 merged (`0a02ade` on develop, 2026-05-07)
 **Author:** Board+Claude session (operator + Claude Opus 4.7)
 **Team:** Claude
 **Slice ID:** S1 (Audit-V1 sprint sequence, rev3) — sub-divides into S1.1 .. S1.10
 **Companion plan:** `2026-05-07-audit-v1-s1-orchestration_plan.md`
 **Source sprint file:** `docs/superpowers/sprints/D-audit-orchestration.md` §S1 (rev2)
-**Branch:** `feature/GIM-NN-audit-v1-s1-orchestration` cut from develop **after S0 merges**
+**Branch:** `feature/GIM-233-audit-v1-s1-orchestration` cut from develop (S0 merged `0a02ade`)
 
 ---
 
