@@ -108,7 +108,7 @@ slice that just enriches MCP without touching workflow.
 
 | ID | Sprint | Detail file | Wall-time | Depends on | Team |
 |----|--------|-------------|-----------|------------|------|
-| **S0** | Foundation prerequisites (IngestRun unify, composite tools, audit-mode prompts) | [`D-audit-orchestration.md` §S0](superpowers/sprints/D-audit-orchestration.md) | ~1 week | nothing | PE (S0.1+S0.2) ‖ any (S0.3) |
+| **S0** ✅ | Foundation prerequisites (IngestRun unify, composite tools, audit-mode prompts) | [`D-audit-orchestration.md` §S0](superpowers/sprints/D-audit-orchestration.md) | ~1 week | nothing | PE (S0.1+S0.2) ‖ any (S0.3) | `0a02ade` |
 | **S1 (D)** | Audit Orchestration — workflow + agents + report format + tool | [`D-audit-orchestration.md`](superpowers/sprints/D-audit-orchestration.md) | ~3-4 weeks | S0 | PE |
 | **S2.1 (B-min)** | Audit-critical extractor: `crypto_domain_model` (#40) | [`B-audit-extractors.md`](superpowers/sprints/B-audit-extractors.md) | ~2 weeks | S1.6 frees PE + semgrep spike | Claude PE |
 | **S2.2 (B+1)** | Architecture Layer extractor (#1) | [`B-audit-extractors.md`](superpowers/sprints/B-audit-extractors.md) | ~3 weeks | S2.1 frees PE | Claude PE |
