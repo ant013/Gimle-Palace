@@ -12,7 +12,7 @@ It detects:
 - untestable seams as `:UntestableSite`
 
 The extractor writes graph rows with `project_id="project/<slug>"` and feeds
-audit-v1 through `palace.audit.run_audit(extractor="testability_di", ...)`.
+audit-v1 through `palace.audit.run(project="<slug>", depth="full")`.
 
 ## Local verification
 
@@ -66,6 +66,20 @@ Then rerun the integration command above.
 
 ## MCP invocation
 
+Precondition: the target slug must resolve to a real git-backed mount inside
+the container. Before invoking the extractor, verify:
+
+```bash
+docker compose exec -T palace-mcp sh -lc '
+  test -e /repos/uw-ios/.git &&
+  git -C /repos/uw-ios rev-parse --is-inside-work-tree
+'
+```
+
+If this precheck fails, `repo_not_mounted` is an environment/mount problem,
+not an extractor regression. Fix the bind-mount or register a temporary
+git-backed QA repo before continuing smoke.
+
 Extractor-only ingest:
 
 ```text
@@ -89,11 +103,7 @@ Expected success envelope:
 Audit rendering:
 
 ```text
-palace.audit.run_audit(
-  extractor="testability_di",
-  project="uw-ios",
-  kit_name="UnstoppableWallet-iOS"
-)
+palace.audit.run(project="uw-ios", depth="full")
 ```
 
 ## Cypher checks
