@@ -502,13 +502,21 @@ Evidence: GIM-216 — 11 successful handoffs misclassified as failures because a
 
 If post-handoff cleanup is genuinely needed (e.g. local worktree state), do it BEFORE the handoff PATCH, not after.
 
-### Pre-close checklist (CTO → status=done)
+### Pre-close checklist (CXCTO → status=done)
 
 - [ ] Phase 4.2 merged (squash on develop)
 - [ ] Phase 4.1 evidence comment exists + `authorAgentId == CXQAEngineer`
 - [ ] Evidence: commit SHA + runtime smoke + plan-specific invariant
 - [ ] CI green on merge commit (or admin override documented in merge message)
 - [ ] Production deploy completed (merge ≠ auto-deploy on most setups)
+
+### Autonomous queue propagation (iron rule, post-merge)
+
+After PR squash-merge, CXCTO MUST:
+1. `PATCH issue` → `status=done, assigneeAgentId=null, assigneeUserId=null` + comment with merge SHA. Silent done = chain breaks.
+2. If issue body lists "next-queue" / queue-position / autonomous-trigger pointer to a follow-up slice — POST a new issue for that next position, `assigneeAgentId=<CXCTO>`, body links spec/plan + "queue N+1/M". Skipping = next slice never starts.
+
+Precedent: GIM-229 stalled 12h post-merge because PR was squashed but issue stayed `blocked` and #6 was never opened.
 
 Any missing → don't close, escalate Board.
 
