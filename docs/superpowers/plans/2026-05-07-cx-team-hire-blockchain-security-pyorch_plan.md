@@ -275,8 +275,8 @@ For each of the 3 new agents:
       (already done in Step 2.5; double-check).
 - [ ] Open or verify the next active Codex-queue issue for
       `Coding Convention Extractor (#6)` using
-      `docs/superpowers/specs/2026-05-07-coding-convention-extractor_spec.md`
-      and `docs/superpowers/plans/2026-05-07-coding-convention-extractor_plan.md`;
+      `docs/superpowers/specs/2026-05-07-GIM-238-coding-convention-extractor_spec.md`
+      and `docs/superpowers/plans/2026-05-07-GIM-238-coding-convention-extractor.md`;
       assign it to CXCTO for the normal Phase 1.1/1.2 chain or directly to
       CXCodeReviewer if the GIM-229 closure comment is the formal plan handoff.
 - [ ] Create or verify parked downstream queue issues for:

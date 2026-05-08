@@ -96,6 +96,21 @@ class TestCrossModuleContractAuditContract:
         _assert_valid_contract(contract, "cross_module_contract")
 
 
+class TestCodingConventionAuditContract:
+    def test_returns_valid_contract(self) -> None:
+        from palace_mcp.extractors.coding_convention import CodingConventionExtractor
+
+        contract = CodingConventionExtractor().audit_contract()
+        _assert_valid_contract(contract, "coding_convention")
+        assert contract is not None
+        assert "Convention" in contract.query
+        assert "ConventionViolation" in contract.query
+        assert contract.severity_mapper is not None
+        assert contract.severity_mapper(0.2).value == "high"
+        assert contract.severity_mapper(0.05).value == "medium"
+        assert contract.severity_mapper(0.0).value == "low"
+
+
 class TestBaseExtractorDefaultReturnsNone:
     def test_heartbeat_has_no_contract(self) -> None:
         """Heartbeat extractor does not participate in audits."""
