@@ -21,7 +21,9 @@ def _build_repo(root: Path) -> Path:
     repo = root / "repo"
     git_dir = repo / ".git"
     git_dir.mkdir(parents=True)
-    (git_dir / "HEAD").write_text("0123456789abcdef0123456789abcdef01234567\n", encoding="utf-8")
+    (git_dir / "HEAD").write_text(
+        "0123456789abcdef0123456789abcdef01234567\n", encoding="utf-8"
+    )
 
     _write(
         repo / "Sources" / "WalletCore" / "WalletStore.swift",
@@ -99,7 +101,14 @@ lazy var cachedSummary = makeSummary()
         "final class LegacyWalletSpec {}\n",
     )
     _write(
-        repo / "app-mini" / "src" / "main" / "kotlin" / "io" / "example" / "WalletState.kt",
+        repo
+        / "app-mini"
+        / "src"
+        / "main"
+        / "kotlin"
+        / "io"
+        / "example"
+        / "WalletState.kt",
         """
 sealed class WalletState
 interface WalletCaching

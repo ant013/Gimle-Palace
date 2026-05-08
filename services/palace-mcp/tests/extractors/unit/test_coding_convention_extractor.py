@@ -95,7 +95,14 @@ lazy var cachedSummary = makeSummary()
         "final class LegacyWalletSpec {}\n",
     )
     _write(
-        repo / "app-mini" / "src" / "main" / "kotlin" / "io" / "example" / "WalletState.kt",
+        repo
+        / "app-mini"
+        / "src"
+        / "main"
+        / "kotlin"
+        / "io"
+        / "example"
+        / "WalletState.kt",
         """
 sealed class WalletState
 interface WalletCaching
@@ -124,7 +131,9 @@ def test_collect_conventions_aggregates_dominant_choices_and_outliers(
 ) -> None:
     repo = _build_repo(tmp_path)
 
-    summary = collect_conventions(project_id="coding-mini", repo_path=repo, run_id="run-1")
+    summary = collect_conventions(
+        project_id="coding-mini", repo_path=repo, run_id="run-1"
+    )
     convention_by_kind = {
         (finding.module, finding.kind): finding for finding in summary.findings
     }

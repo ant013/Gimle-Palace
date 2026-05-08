@@ -23,7 +23,9 @@ from palace_mcp.extractors.coding_convention.models import (
     ConventionSignal,
     ConventionViolation,
 )
-from palace_mcp.extractors.coding_convention.neo4j_writer import replace_project_snapshot
+from palace_mcp.extractors.coding_convention.neo4j_writer import (
+    replace_project_snapshot,
+)
 from palace_mcp.extractors.foundation.checkpoint import (
     create_ingest_run,
     finalize_ingest_run,
@@ -91,18 +93,28 @@ _SWIFT_CLASS_HIERARCHY_RE = re.compile(
     re.MULTILINE,
 )
 _SWIFT_THROWS_RE = re.compile(r"^\s*func\s+\w+\s*\([^)]*\)\s+throws\b", re.MULTILINE)
-_SWIFT_RESULT_RE = re.compile(r"^\s*func\s+\w+\s*\([^)]*\)\s*->\s*Result<", re.MULTILINE)
-_SWIFT_NULLABLE_RE = re.compile(r"^\s*func\s+\w+\s*\([^)]*\)\s*->\s*[^=\n]+\?", re.MULTILINE)
+_SWIFT_RESULT_RE = re.compile(
+    r"^\s*func\s+\w+\s*\([^)]*\)\s*->\s*Result<", re.MULTILINE
+)
+_SWIFT_NULLABLE_RE = re.compile(
+    r"^\s*func\s+\w+\s*\([^)]*\)\s*->\s*[^=\n]+\?", re.MULTILINE
+)
 _KOTLIN_RESULT_RE = re.compile(r"^\s*fun\s+\w+\s*\([^)]*\)\s*:\s*Result<", re.MULTILINE)
-_KOTLIN_NULLABLE_RE = re.compile(r"^\s*fun\s+\w+\s*\([^)]*\)\s*:\s*[^=\n]+\?", re.MULTILINE)
+_KOTLIN_NULLABLE_RE = re.compile(
+    r"^\s*fun\s+\w+\s*\([^)]*\)\s*:\s*[^=\n]+\?", re.MULTILINE
+)
 _SWIFT_COLLECTION_LITERAL_RE = re.compile(r"=\s*\[\s*\]")
-_SWIFT_COLLECTION_CONSTRUCTOR_RE = re.compile(r"=\s*(?:Array<[^>]+>\(\)|\[[^\]]+\]\(\))")
+_SWIFT_COLLECTION_CONSTRUCTOR_RE = re.compile(
+    r"=\s*(?:Array<[^>]+>\(\)|\[[^\]]+\]\(\))"
+)
 _KOTLIN_COLLECTION_FACTORY_RE = re.compile(r"=\s*(?:listOf|mutableListOf|emptyList)\(")
 _KOTLIN_COLLECTION_CONSTRUCTOR_RE = re.compile(r"=\s*(?:ArrayList|mutableListOf)\(")
 _SWIFT_LAZY_RE = re.compile(r"^\s*lazy\s+var\s+(?P<name>\w+)", re.MULTILINE)
 _SWIFT_COMPUTED_RE = re.compile(r"^\s*var\s+(?P<name>\w+)[^{=\n]*\{", re.MULTILINE)
 _KOTLIN_LAZY_RE = re.compile(r"^\s*val\s+(?P<name>\w+).*by\s+lazy\s*\{", re.MULTILINE)
-_KOTLIN_COMPUTED_RE = re.compile(r"^\s*val\s+(?P<name>\w+)[^=\n]*\s+get\(\)\s*=", re.MULTILINE)
+_KOTLIN_COMPUTED_RE = re.compile(
+    r"^\s*val\s+(?P<name>\w+)[^=\n]*\s+get\(\)\s*=", re.MULTILINE
+)
 
 
 class CodingConventionExtractor(BaseExtractor):
@@ -181,7 +193,9 @@ LIMIT 100
 
         driver = get_driver()
         if driver is None:
-            raise ExtractorConfigError("Neo4j driver not available for coding_convention")
+            raise ExtractorConfigError(
+                "Neo4j driver not available for coding_convention"
+            )
 
         await create_ingest_run(
             driver,
@@ -317,7 +331,9 @@ def _infer_module(rel_path: str, fallback: str) -> str:
     return parts[0] if parts else fallback
 
 
-def _extract_signals(*, module: str, rel_path: str, text: str) -> list[ConventionSignal]:
+def _extract_signals(
+    *, module: str, rel_path: str, text: str
+) -> list[ConventionSignal]:
     signals: list[ConventionSignal] = []
     is_test_file = _is_test_file(rel_path)
 
