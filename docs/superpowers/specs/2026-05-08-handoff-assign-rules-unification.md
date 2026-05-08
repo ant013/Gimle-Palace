@@ -186,6 +186,11 @@ expected.
 
 After verified handoff, make no further Paperclip mutations or comments for
 this issue in the same run. If local cleanup is needed, do it before handoff.
+
+If a write returns `403 Cloudflare 1010` or `429`, this is a control-plane
+block, not an agent error. Comment `@Board infra-block <code>` if any
+non-blocked write path is available, then exit. Do NOT silent-exit and
+do NOT loop on retries.
 ```
 
 ## Full Agent Task Cycle
@@ -442,6 +447,69 @@ If repair remains in this slice, restrict it to same-team CTO fallback only.
 Phase-matrix next-role repair should be a follow-up after team ownership and
 phase detection have live confidence.
 
+### Control-plane class (Cloudflare 1010, 429, 502)
+
+Distinct from agent-decision stalls but same observable effect (issue
+stuck, no PATCH). When agent's last write returned `403 Cloudflare 1010`
+or `429` rate-limit:
+
+- Agent must comment `@Board infra-block <code>` and exit. **Do not** silent-exit.
+- Watchdog must NOT auto-repair these — it is a control-plane issue, not
+  an agent issue. Escalate with `infra_block` finding tag.
+- Repair = operator manually retries write or restarts paperclip.
+
+This case applied to GIM-238 (CXQAEngineer 10:07Z) and is not in
+the same equivalence class as cross-team or ownerless errors.
+
+### Time-bound alert→auto-repair transition
+
+Auto-repair phase enabled when **all** of:
+
+- ≥2 weeks alert-only without false-positives;
+- ≥3 real detections successfully alerted (cross-team or ownerless);
+- operator explicit approval marker in `services/watchdog/config.yaml`
+  (default `auto_repair_enabled: false`).
+
+Default target on first auto-repair phase: same-team CTO fallback only.
+Phase-matrix next-role auto-repair stays follow-up.
+
+## Bundle Propagation
+
+Stale bundles are a known root cause: GIM-239's PE used a bundle rendered
+before the disclaimer landed (PR #121) and consequently picked the wrong
+team's CTO during handoff. The spec must address how new fragment content
+reaches live agents.
+
+### Build-time
+
+After submodule pointer bump on `develop`, every Claude and Codex bundle
+must be re-rendered + committed in the same PR (per existing convention).
+This is enforced today.
+
+### Deploy-time (currently manual)
+
+`paperclips/scripts/imac-agents-deploy.sh` is invoked manually after
+develop merge. Add follow-up issue: post-merge auto-deploy hook (e.g.,
+GitHub Actions on develop merge → SSH iMac → run script).
+
+### Runtime (in-flight runs hold stale bundle in RAM)
+
+A running agent process keeps its instruction bundle in memory until
+process restart. After fragment update on develop:
+
+- New agent runs (next wake) read fresh bundle. ✅
+- In-flight runs retain stale bundle until SIGTERM / completion. ⚠
+
+Mitigation in this slice (alert-only):
+
+- Track `bundleSourceSha` in agent's `runtime-state` after each run start.
+- Watchdog new finding `stale_bundle`: if agent's `bundleSourceSha`
+  differs from current `develop` submodule pointer SHA by >24 hours,
+  alert. No auto-restart in this slice.
+- Operator can force fresh bundle by restarting paperclip
+  (`launchctl bootout` + `bootstrap`) — already documented in
+  `docs/runbooks/claude-oauth-recovery.md`.
+
 ## Acceptance Criteria
 
 1. Main repo submodule points at `paperclip-shared-fragments@1a932f9` or newer
@@ -483,6 +551,15 @@ phase detection have live confidence.
     - `in_review` lost-wake recovery.
 16. Verification documents any pre-existing baseline validator failures before
     using validators as feature gates.
+17. Watchdog has new findings + tests for control-plane class:
+    - `infra_block` (1010 / 429) — alert-only, never auto-repair;
+    - `stale_bundle` — agent's `bundleSourceSha` >24h behind develop submodule
+      pointer SHA, alert.
+18. Synthetic e2e test (in `services/watchdog/tests/`) exercises a live
+    cross-team scenario: create test issue with `Team=Claude` body marker,
+    PATCH assignee to CXCTO, wait ≤2× scan interval, assert
+    `cross_team_handoff` finding emitted with `expected_team=Claude,
+    actual_team=Codex`.
 
 ## Verification Plan
 
@@ -531,15 +608,69 @@ cd services/watchdog
 uv run pytest
 ```
 
-## Open Questions
+### Synthetic cross-team e2e (proves the rule actually fires)
 
-1. Should wrong-team anti-pattern examples stay in runtime bundles, or move to
-   lessons/runbooks after validators become scoped?
-2. Should a symmetric `validate-claude-target.sh` wrapper be added, or should
-   Claude leakage checks live only in `validate_instructions.py`?
-3. Should watchdog auto-repair be split into a follow-up issue after alert-only
-   live confidence?
-4. Should the phase matrix remain in all roles, or only in roles that perform
-   non-default phase transitions?
-5. Should deploy scripts refuse to upload bundles when cross-team validator
-   checks fail, even in dry-run mode?
+Compile-time validators + unit tests are necessary but not sufficient.
+This e2e proves watchdog catches a live violation:
+
+```bash
+# Setup: create test issue with team marker
+$CURL -s -X POST -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"[wd-e2e] cross-team test","description":"**Team**: Claude","companyId":"<id>","projectId":"<id>"}' \
+  "$PAPERCLIP_API_URL/api/companies/<id>/issues" -o /tmp/e2e.json
+
+ISSUE_ID=$(jq -r .id /tmp/e2e.json)
+
+# Inject violation: assign Claude issue to CXCTO
+$CURL -s -X PATCH -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"assigneeAgentId":"da97dbd9-6627-48d0-b421-66af0750eacf"}' \
+  "$PAPERCLIP_API_URL/api/issues/$ISSUE_ID"
+
+# Wait 2× scan interval (default 60s); assert finding emitted
+sleep 130
+$CURL -s -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
+  "$PAPERCLIP_API_URL/api/companies/<id>/issues?status=blocked" | \
+  jq '.[] | select(.id == "'"$ISSUE_ID"'") | .body | contains("cross_team_handoff")' \
+  | grep -q true || { echo FAIL; exit 1; }
+
+# Cleanup
+$CURL -s -X PATCH -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
+  -d '{"status":"cancelled"}' \
+  "$PAPERCLIP_API_URL/api/issues/$ISSUE_ID"
+echo PASS
+```
+
+Run as part of watchdog smoke gate before merge to develop.
+
+### Synthetic ownerless e2e (proves "no next owner" detection)
+
+```bash
+# Setup: create test issue, assign to Claude PE
+ISSUE_ID=$(...)  # similar setup
+$CURL -X PATCH -d '{"assigneeAgentId":"127068ee-..."}' .../issues/$ISSUE_ID
+
+# Inject: post phase-complete comment, then null assignee but keep status=in_progress
+$CURL -X POST -d '{"body":"## Phase 2 complete — see commit abc"}' .../comments
+$CURL -X PATCH -d '{"assigneeAgentId":null,"status":"in_progress"}' .../issues/$ISSUE_ID
+
+# Wait + assert ownerless finding
+sleep 130
+# Expect: ownerless_completion finding with phase_complete=true, has_owner=false
+```
+
+## Decisions
+
+Default answers below resolve the original Open Questions before
+implementation. Implementer may override any default in PR body with
+explicit rationale and re-request review; silent override is forbidden
+per `feedback_silent_scope_reduction.md`.
+
+| # | Question | Default | Rationale |
+|---|----------|---------|-----------|
+| 1 | Wrong-team anti-pattern examples in runtime bundles? | Keep inline, clearly labeled `❌ NOT` | Agent reads "DO X / DON'T do Y" together — better comprehension than cross-doc lookup. Validator already distinguishes anti-pattern sections from active tables. |
+| 2 | Symmetric `validate-claude-target.sh` wrapper? | No — fold all checks into `validate_instructions.py` | Single validator surface, single failure point, no script-vs-script drift. |
+| 3 | Watchdog auto-repair split into follow-up? | Yes — split. This slice ships alert-only. | Confidence requires ≥2 weeks alert-only with no false-positives + ≥3 real detections successfully alerted. |
+| 4 | Phase matrix in all roles or specific only? | All roles | ~30 lines per bundle cost, eliminates cross-fragment lookup at runtime, low maintenance. |
+| 5 | Deploy refuses upload on validator fail (incl. dry-run)? | Yes — fail-closed | Prevents cross-team UUID leakage into production bundles. Dry-run with explicit `--allow-validator-fail` flag for emergencies. |
