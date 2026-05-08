@@ -148,37 +148,79 @@ Writer requirements:
 Expected query shape:
 
 ```cypher
-MATCH (di:DiPattern {project_id: $project_id})
-OPTIONAL MATCH (td:TestDouble {project_id: $project_id, module: di.module})
-OPTIONAL MATCH (us:UntestableSite {project_id: $project_id, module: di.module})
-WITH di,
-     collect(DISTINCT td {
+CALL {
+  MATCH (di:DiPattern {project_id: $project_id})
+  RETURN di.module AS module
+  UNION
+  MATCH (td:TestDouble {project_id: $project_id})
+  RETURN td.module AS module
+  UNION
+  MATCH (us:UntestableSite {project_id: $project_id})
+  RETURN us.module AS module
+}
+WITH DISTINCT module
+OPTIONAL MATCH (di:DiPattern {project_id: $project_id, module: module})
+WITH module,
+     [pattern IN collect(DISTINCT di {
+       .language, .style, .framework, .sample_count, .outliers, .confidence
+     }) WHERE pattern.style IS NOT NULL] AS di_patterns
+OPTIONAL MATCH (td:TestDouble {project_id: $project_id, module: module})
+WITH module,
+     di_patterns,
+     [double IN collect(DISTINCT td {
        .kind, .language, .target_symbol, .test_file
-     }) AS test_doubles,
-     collect(DISTINCT us {
-       .file, .start_line, .end_line, .category,
+     }) WHERE double.kind IS NOT NULL] AS test_doubles
+OPTIONAL MATCH (us:UntestableSite {project_id: $project_id, module: module})
+WITH module,
+     di_patterns,
+     test_doubles,
+     [site IN collect(DISTINCT us {
+       .file, .language, .start_line, .end_line, .category,
        .symbol_referenced, .severity, .message
-     }) AS untestable_sites
-RETURN di.module AS module,
-       di.language AS language,
-       di.style AS style,
-       di.framework AS framework,
-       di.sample_count AS sample_count,
-       di.outliers AS outliers,
-       di.confidence AS confidence,
+     }) WHERE site.file IS NOT NULL] AS untestable_sites
+WITH module,
+     CASE
+       WHEN size(di_patterns) = 0 THEN [{
+         language: coalesce(
+           head([double IN test_doubles WHERE double.language IS NOT NULL | double.language]),
+           head([site IN untestable_sites WHERE site.language IS NOT NULL | site.language]),
+           "unknown"
+         ),
+         style: null,
+         framework: null,
+         sample_count: 0,
+         outliers: 0,
+         confidence: "heuristic"
+       }]
+       ELSE di_patterns
+     END AS rows,
+     test_doubles,
+     untestable_sites
+UNWIND rows AS row
+RETURN module AS module,
+       row.language AS language,
+       row.style AS style,
+       row.framework AS framework,
+       row.sample_count AS sample_count,
+       row.outliers AS outliers,
+       row.confidence AS confidence,
        test_doubles AS test_doubles,
        untestable_sites AS untestable_sites,
        CASE
          WHEN any(site IN untestable_sites WHERE site.severity = "high") THEN "high"
-         WHEN di.style = "service_locator" THEN "high"
-         WHEN size(untestable_sites) > 0 OR di.outliers > 0 THEN "medium"
+         WHEN row.style = "service_locator" THEN "high"
+         WHEN size(untestable_sites) > 0 OR row.outliers > 0 THEN "medium"
          ELSE "low"
        END AS max_severity
-ORDER BY max_severity DESC, di.module, di.style
+ORDER BY max_severity DESC, module, style
 LIMIT 100
 ```
 
-The implementation may refactor the Cypher for Neo4j syntax correctness, but the returned columns and severity semantics are acceptance criteria.
+Notes:
+
+- The audit contract MUST start from the union of `:DiPattern`, `:TestDouble`, and `:UntestableSite` module keyspaces. A repo/module with only test doubles or only untestable sites is still a valid audit finding.
+- Synthetic standalone rows may return `style = null`, `framework = null`, `sample_count = 0`, `outliers = 0`; the markdown template renders these as `STANDALONE_SIGNAL`.
+- The implementation may refactor the Cypher for Neo4j syntax correctness, but the returned columns and severity semantics are acceptance criteria.
 
 ## 6. Initial rule set
 

@@ -118,19 +118,67 @@ RETURN count(u) AS untestable_sites;
 Audit-facing rollup:
 
 ```cypher
-MATCH (di:DiPattern {project_id: "project/uw-ios"})
-OPTIONAL MATCH (td:TestDouble {project_id: "project/uw-ios", module: di.module})
-OPTIONAL MATCH (us:UntestableSite {project_id: "project/uw-ios", module: di.module})
-RETURN di.module,
-       di.language,
-       di.style,
-       di.framework,
-       di.sample_count,
-       di.outliers,
-       size(collect(DISTINCT td)) AS test_doubles,
-       size(collect(DISTINCT us)) AS untestable_sites
-ORDER BY di.module, di.style;
+CALL {
+  MATCH (di:DiPattern {project_id: "project/uw-ios"})
+  RETURN di.module AS module
+  UNION
+  MATCH (td:TestDouble {project_id: "project/uw-ios"})
+  RETURN td.module AS module
+  UNION
+  MATCH (us:UntestableSite {project_id: "project/uw-ios"})
+  RETURN us.module AS module
+}
+WITH DISTINCT module
+OPTIONAL MATCH (di:DiPattern {project_id: "project/uw-ios", module: module})
+WITH module,
+     [pattern IN collect(DISTINCT di {
+       .language, .style, .framework, .sample_count, .outliers, .confidence
+     }) WHERE pattern.style IS NOT NULL] AS di_patterns
+OPTIONAL MATCH (td:TestDouble {project_id: "project/uw-ios", module: module})
+WITH module,
+     di_patterns,
+     [double IN collect(DISTINCT td {
+       .kind, .language, .target_symbol, .test_file
+     }) WHERE double.kind IS NOT NULL] AS test_doubles
+OPTIONAL MATCH (us:UntestableSite {project_id: "project/uw-ios", module: module})
+WITH module,
+     di_patterns,
+     test_doubles,
+     [site IN collect(DISTINCT us {
+       .file, .language, .start_line, .end_line, .category,
+       .symbol_referenced, .severity, .message
+     }) WHERE site.file IS NOT NULL] AS untestable_sites
+WITH module,
+     CASE
+       WHEN size(di_patterns) = 0 THEN [{
+         language: coalesce(
+           head([double IN test_doubles WHERE double.language IS NOT NULL | double.language]),
+           head([site IN untestable_sites WHERE site.language IS NOT NULL | site.language]),
+           "unknown"
+         ),
+         style: null,
+         framework: null,
+         sample_count: 0,
+         outliers: 0,
+         confidence: "heuristic"
+       }]
+       ELSE di_patterns
+     END AS rows,
+     test_doubles,
+     untestable_sites
+UNWIND rows AS row
+RETURN module,
+       row.language AS language,
+       row.style AS style,
+       row.framework AS framework,
+       row.sample_count AS sample_count,
+       row.outliers AS outliers,
+       size(test_doubles) AS test_doubles,
+       size(untestable_sites) AS untestable_sites
+ORDER BY module, style;
 ```
+
+Если `style` вернулся как `null`, это standalone audit row без `:DiPattern`; в markdown-рендере он отображается как `STANDALONE_SIGNAL`.
 
 ## Labels and indexes
 
