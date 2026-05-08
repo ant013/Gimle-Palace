@@ -3,39 +3,40 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: `superpowers:test-driven-development`. Atomic-handoff discipline mandatory.
 
 **Slice:** Phase 2 §2.2 #6 Coding Convention Extractor.
-**Spec:** `docs/superpowers/specs/2026-05-07-coding-convention-extractor_spec.md`.
-**Source branch:** `feature/GIM-NN-coding-convention-extractor` cut from `origin/develop` **after E6 closes**.
+**Spec:** `docs/superpowers/specs/2026-05-07-GIM-238-coding-convention-extractor_spec.md`.
+**Source branch:** `feature/GIM-238-coding-convention-extractor` cut from `origin/develop` at `e2f9a09`.
 **Target branch:** `develop`. Squash-merge on APPROVE.
-**Team:** Codex. Phase chain: CXCTO → CXCodeReviewer (plan-first) → CXPythonEngineer (or PE-2 from E6) → CXCodeReviewer (mechanical) → OpusArchitectReviewer (adversarial; cross-team OK for adversarial pass) → CXQAEngineer → CXCTO merge.
+**Team:** Codex. Phase chain: CXCTO → CXCodeReviewer (plan-first) → CXPythonEngineer → CXCodeReviewer (mechanical) → CodexArchitectReviewer (adversarial) → CXQAEngineer → CXCTO merge.
 
-> **Blocked-on-E6**: this plan can be drafted now, but team-chain
-> execution starts only after E6 (CX hire of BlockchainEng + SecAud +
-> PE-2) closes. Until then, the slice sits in CXCTO queue with
-> `status=blocked, blockedByIssueIds=[<E6 issue id>]`.
+> **GIM-238 formalisation note (2026-05-08):** E6 is closed via
+> GIM-229 / PR #116 (`e2f9a09`). The rev5 operator decision says this
+> slice no longer depends on the newly hired forward-looking roles; the
+> first implementation handoff is to CXPythonEngineer after plan-first
+> review.
 
 ---
 
-## Phase 0 — Wait for E6 + branch (Board)
+## Phase 0 — Resolved prerequisites + branch (Board/CXCTO)
 
-### Step 0.1: Block until E6 lands
+### Step 0.1: Verify E6 landed
 
-**Owner:** Board.
+**Owner:** Board / CXCTO.
 
-- [ ] Verify `docs/roadmap.md` E6 row = ✅ + merge SHA.
-- [ ] Verify 3 new agents listed in
-      `GET /api/companies/<id>/agents` per E6 acceptance.
-- [ ] If E6 not yet merged: pause; create issue with
-      `blockedByIssueIds=[<E6 issue id>]`. Re-check daily.
+- [x] Verify E6 merge SHA: GIM-229 / PR #116 squash merge `e2f9a09`.
+- [x] Verify this slice is unblocked by rev5 operator decision; no
+      forward-looking new-hire dependency remains for #6.
 
-**Acceptance:** E6 ✅; new CX agents available.
+**Acceptance:** E6 ✅; no hiring blocker remains for #6.
 
 ### Step 0.2: Resolve issue + branch
 
 **Owner:** Board.
 
-- [ ] Open paperclip issue `Coding Convention Extractor (#6)`.
-- [ ] Body = link to spec + this plan; `GIM-NN` placeholders.
-- [ ] Reassign to CXCTO for Phase 1 formalisation.
+- [x] Open paperclip issue `GIM-238 Coding Convention Extractor (#6)`.
+- [x] Body = link to spec + this plan.
+- [x] Create branch `feature/GIM-238-coding-convention-extractor`
+      from `origin/develop` at `e2f9a09`.
+- [x] Reassign to CXCTO for Phase 1 formalisation.
 
 **Acceptance:** issue exists; CXCTO is assignee.
 
@@ -47,11 +48,15 @@
 
 **Owner:** CXCTO.
 
-- [ ] Verify spec §3 detection strategy is consistent with existing
+- [x] Verify spec §3 detection strategy is consistent with existing
       Phase 1 symbol-index outputs (Swift + Kotlin).
-- [ ] Resolve decision points CC-D1..CC-D5 with operator (or default).
-- [ ] Verify §6 initial rule set is concrete enough to test (each rule
+- [x] Resolve decision points CC-D1..CC-D5 with operator (or default).
+- [x] Verify §6 initial rule set is concrete enough to test (each rule
       maps to ≥1 unit-test fixture file).
+- [x] Resolve CC-D1..CC-D5 by default: both Swift+Kotlin, Harmonize
+      aid for SwiftSyntax, Konsist primary for Kotlin, semgrep for
+      portable cross-language patterns, 10% outlier threshold with
+      `min_sample_count=5`.
 - [ ] Reassign to CXCodeReviewer.
 
 ### Step 1.2: Plan-first review
@@ -63,13 +68,13 @@
 - [ ] Verify acceptance criteria measurable (sample counts, severity
       thresholds).
 - [ ] Per `feedback_anti_rubber_stamp.md`: full review with evidence.
-- [ ] APPROVE → CXPythonEngineer (or PE-2 if assigned by CXCTO).
+- [ ] APPROVE → CXPythonEngineer.
 
-**Acceptance:** APPROVE; assignee = CXPythonEngineer/PE-2.
+**Acceptance:** APPROVE; assignee = CXPythonEngineer.
 
 ---
 
-## Phase 2 — Implementation (CXPythonEngineer / PE-2)
+## Phase 2 — Implementation (CXPythonEngineer)
 
 ### Phase 2.1 — Foundation: extractor scaffolding
 
@@ -99,20 +104,20 @@
 
 #### Step 2.1.3: Commit
 
-- [ ] Commit: `feat(GIM-NN): coding_convention extractor scaffolding`.
+- [ ] Commit: `feat(GIM-238): coding_convention extractor scaffolding`.
 
 ---
 
 ### Phase 2.2 — Rule implementations (one TDD pass per rule from §6)
 
-For each of the 8 rules in spec §6:
+For each of the 7 rules in spec §6:
 
 #### Step 2.2.X.1: Failing tests
 
 - [ ] Add Swift fixture under
-      `tests/extractors/fixtures/coding-convention-fixture/swift/<rule>/{good,bad,outlier}/*.swift`.
+      `services/palace-mcp/tests/extractors/fixtures/coding-convention-fixture/swift/<rule>/{good,bad,outlier}/*.swift`.
 - [ ] Add Kotlin fixture under
-      `tests/extractors/fixtures/coding-convention-fixture/kotlin/<rule>/{good,bad,outlier}/*.kt`.
+      `services/palace-mcp/tests/extractors/fixtures/coding-convention-fixture/kotlin/<rule>/{good,bad,outlier}/*.kt`.
 - [ ] Unit test: classifier on each fixture returns expected
       `:Convention` row + `:ConventionViolation` rows.
 - [ ] RED.
@@ -120,7 +125,7 @@ For each of the 8 rules in spec §6:
 #### Step 2.2.X.2: Rule classifier
 
 **Files:**
-- `extractors/coding_convention/rules/<rule_name>.py` (one per rule).
+- `services/palace-mcp/src/palace_mcp/extractors/coding_convention/rules/<rule_name>.py` (one per rule).
 - For Swift: SwiftSyntax visitor invoked via subprocess (or direct
   Python binding if available).
 - For Kotlin: Konsist DSL invoked via subprocess (Kotlin script
@@ -133,9 +138,9 @@ For each of the 8 rules in spec §6:
 
 #### Step 2.2.X.3: Commit
 
-- [ ] Commit: `feat(GIM-NN): coding_convention rule <rule_name>`.
+- [ ] Commit: `feat(GIM-238): coding_convention rule <rule_name>`.
 
-**Total**: 8 × 3 steps = ~24 small commits or 8 squashable feature
+**Total**: 7 × 3 steps = ~21 small commits or 7 squashable feature
 commits depending on team-chain preference.
 
 ---
@@ -147,7 +152,7 @@ commits depending on team-chain preference.
 **Files:** `tests/extractors/integration/test_coding_convention_e2e.py` (new).
 
 - [ ] Real Neo4j (testcontainers or compose-reuse).
-- [ ] Run extractor on `tests/extractors/fixtures/coding-convention-fixture/` (multi-rule fixture).
+- [ ] Run extractor on `services/palace-mcp/tests/extractors/fixtures/coding-convention-fixture/` (multi-rule fixture).
 - [ ] Assert: `:Convention` count ≥ 5; `:ConventionViolation` count ≥ 3.
 - [ ] Assert: every node has `run_id` referencing a successful
       `:IngestRun`.
@@ -156,8 +161,8 @@ commits depending on team-chain preference.
 #### Step 2.3.2: extract() orchestration
 
 **Files:**
-- `extractors/coding_convention/extractor.py::extract()`.
-- `extractors/coding_convention/neo4j_writer.py` (new).
+- `services/palace-mcp/src/palace_mcp/extractors/coding_convention/extractor.py::extract()`.
+- `services/palace-mcp/src/palace_mcp/extractors/coding_convention/neo4j_writer.py` (new).
 
 - [ ] `extract()` iterates rules → collects findings → batches Neo4j writes.
 - [ ] Use `extractors/cypher.py::create_ingest_run()` (post-S0.1
@@ -166,7 +171,7 @@ commits depending on team-chain preference.
 
 #### Step 2.3.3: Commit
 
-- [ ] Commit: `feat(GIM-NN): coding_convention extract() orchestration + neo4j writer`.
+- [ ] Commit: `feat(GIM-238): coding_convention extract() orchestration + neo4j writer`.
 
 ---
 
@@ -192,7 +197,7 @@ commits depending on team-chain preference.
 
 #### Step 2.4.3: Commit
 
-- [ ] Commit: `feat(GIM-NN): coding_convention audit_contract + template`.
+- [ ] Commit: `feat(GIM-238): coding_convention audit_contract + template`.
 
 ---
 
@@ -209,14 +214,14 @@ commits depending on team-chain preference.
 
 - [ ] Add `coding_convention` entry to `CLAUDE.md` §"Registered
       extractors" with its team affinity (Codex), language coverage
-      (Swift + Kotlin), and rule count (8).
+      (Swift + Kotlin), and rule count (7).
 
 #### Step 2.5.3: Commit + push
 
-- [ ] Commit: `docs(GIM-NN): coding_convention runbook + CLAUDE.md catalogue entry`.
+- [ ] Commit: `docs(GIM-238): coding_convention runbook + CLAUDE.md catalogue entry`.
 - [ ] Push branch.
-- [ ] Open PR `feat(GIM-NN): coding_convention extractor (#6)`.
-- [ ] PR body: closes GIM-NN; commit list mapping → 8 rules + scaffolding + integration; QA Evidence placeholder.
+- [ ] Open PR `feat(GIM-238): coding_convention extractor (#6)`.
+- [ ] PR body: closes GIM-238; commit list mapping → 7 rules + scaffolding + integration; QA Evidence placeholder.
 - [ ] Reassign to CXCodeReviewer.
 
 **Acceptance:** PR open; CI runs.
@@ -230,14 +235,14 @@ commits depending on team-chain preference.
 - [ ] Paste `gh pr checks` — required CI green
       (lint, typecheck, test, docker-build, qa-evidence-present).
 - [ ] Paste full pytest output for new tests.
-- [ ] Verify all 8 rules have tests + implementation + commit.
+- [ ] Verify all 7 rules have tests + implementation + commit.
 - [ ] Verify scope matches spec §6 (no silent additions or omissions per
       `feedback_silent_scope_reduction.md`).
-- [ ] APPROVE on paperclip + GitHub. Reassign to OpusArchitectReviewer.
+- [ ] APPROVE on paperclip + GitHub. Reassign to CodexArchitectReviewer.
 
 **Acceptance:** APPROVE.
 
-### Phase 3.2 — Adversarial review (OpusArchitectReviewer or CXCodeReviewer-2)
+### Phase 3.2 — Adversarial review (CodexArchitectReviewer)
 
 - [ ] Probe: does each rule classifier handle edge cases (empty
       module, file with no top-level types, file with mixed
@@ -290,7 +295,7 @@ commits depending on team-chain preference.
 
 ## Definition-of-Done checklist
 
-- [ ] Scaffolding + 8 rules + integration + audit_contract +
+- [ ] Scaffolding + 7 rules + integration + audit_contract +
       runbook + CLAUDE.md update — all merged.
 - [ ] Smoke run on tronkit-swift + UW-Android produces expected
       `:Convention` rows.
@@ -307,7 +312,7 @@ module detection · R4 performance.
 
 ## Cross-references
 
-- Spec: `2026-05-07-coding-convention-extractor_spec.md`.
+- Spec: `2026-05-07-GIM-238-coding-convention-extractor_spec.md`.
 - Roadmap: `docs/roadmap-archive.md` §2.2 #6.
 - Predecessor: E6 (`2026-05-07-cx-team-hire-blockchain-security-pyorch_*.md`).
 - Audit-V1 integration: feeds §2 Architecture / §3 Quality of report.

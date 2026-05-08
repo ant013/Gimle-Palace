@@ -1,15 +1,20 @@
 # Coding Convention Extractor (#6) — Specification
 
 **Document date:** 2026-05-07
-**Status:** Draft · awaiting CX-CTO formalisation (post-E6 close)
+**Status:** Formalised for GIM-238 · awaiting CXCodeReviewer plan-first review
 **Author:** Board+Claude session (operator + Claude Opus 4.7)
 **Team:** Codex (CX-native: SwiftSyntax + Konsist + detekt + semgrep)
 **Slice ID:** Phase 2 §2.2 #6 (Coding Convention Extractor)
-**Companion plan:** `2026-05-07-coding-convention-extractor_plan.md`
-**Branch:** `feature/GIM-NN-coding-convention-extractor`
-**Blockers (rev4):**
-- **E6 closure** (CX BlockchainEng + SecAud + PE-2 hire) — slice can be specced now, but team-chain execution awaits the third CX engineer's slot.
-- **S0.1 IngestRun schema unification** (rev4 — CTO-XF-H1) — extractor writes `:IngestRun` nodes; must use unified `extractor_name + project` schema. If S0 delays past E6 closure (unlikely — S0 is ~1w, parallelisable with E6), this slice waits for S0 before cutting branch to avoid writing legacy-schema IngestRuns that need post-hoc migration.
+**Companion plan:** `2026-05-07-GIM-238-coding-convention-extractor.md`
+**Branch:** `feature/GIM-238-coding-convention-extractor`
+**Blockers (rev6 formalisation):** none.
+
+**Resolved prerequisites (rev6 formalisation):**
+- E6 closed via GIM-229 / PR #116 squash merge `e2f9a09` on
+  2026-05-08.
+- S0.1 IngestRun schema unification is present on `origin/develop`:
+  `services/palace-mcp/src/palace_mcp/extractors/cypher.py`
+  writes `extractor_name + project` on `:IngestRun`.
 
 ---
 
@@ -83,8 +88,8 @@ batch of Codex queue.
 
 ### 3.3 Cross-language alignment
 - **Tool**: semgrep custom rule pack as a portable layer for
-  patterns expressible in plain pattern matching (e.g., "DI
-  init-injection style").
+  patterns expressible in plain pattern matching (e.g.,
+  cross-language naming or structural outlier shapes).
 - **Why semgrep**: shared rule format across Swift and Kotlin avoids
   reimplementing each rule twice.
 
@@ -129,13 +134,13 @@ Indices:
 def audit_contract(self) -> AuditContract:
     return AuditContract(
         query="""
-            MATCH (c:Convention {project: $project})
-            OPTIONAL MATCH (v:ConventionViolation {project: $project, kind: c.kind})
+            MATCH (c:Convention {project_id: $project})
+            OPTIONAL MATCH (v:ConventionViolation {project_id: $project, kind: c.kind})
             RETURN c, collect(v) AS violations
         """,
         response_model=ConventionAuditList,
         template_path=Path("audit/templates/coding_convention.md"),
-        severity_mapper=lambda c: "high" if c.outliers > c.sample_count * 0.2 else "medium" if c.outliers > 0 else "low",
+        severity_mapper=lambda c: "high" if c.outliers >= c.sample_count * 0.1 else "medium" if c.outliers > 0 else "low",
     )
 ```
 
@@ -218,4 +223,4 @@ Concrete rule list, refined in CX-CTO formalisation. **Rev4 dropped
 - Audit-V1 integration: feeds §2 Architecture and §3 Quality
   sections of audit report (after extractor merges).
 - E6 prereq: `2026-05-07-cx-team-hire-blockchain-security-pyorch_*.md`.
-- Companion: `2026-05-07-coding-convention-extractor_plan.md`.
+- Companion: `2026-05-07-GIM-238-coding-convention-extractor.md`.
