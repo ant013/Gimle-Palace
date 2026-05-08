@@ -329,7 +329,9 @@ def load_team_uuids_from_repo(repo_root: Path) -> dict[str, set[str]]:
     spec = importlib.util.spec_from_file_location("_validate_instructions", script)
     if spec is None or spec.loader is None:
         return {"claude": set(), "codex": set()}
+    import sys as _sys
     mod = importlib.util.module_from_spec(spec)
+    _sys.modules["_validate_instructions"] = mod  # required for dataclass forward-ref resolution
     try:
         loader = spec.loader
         loader.exec_module(mod)
