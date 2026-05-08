@@ -77,4 +77,6 @@ profiles: [core, task-start, implementation, handoff]
 <!-- @include fragments/profiles/handoff.md -->
 <!-- @include fragments/local/agent-roster.md -->
 
+<!-- @include fragments/local/audit-mode.md -->
+
 <!-- @include fragments/shared/fragments/language.md -->

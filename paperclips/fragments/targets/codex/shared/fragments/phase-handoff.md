@@ -1,8 +1,12 @@
+<!-- paperclip:handoff-contract:v2 -->
 ## Phase handoff discipline (iron rule)
 
+<!-- paperclip:team-local-roster:v1 -->
 Between plan phases, **explicit reassign** to next-phase agent. Never leave "someone will pick up".
 
-Hand off via PATCH `status + assigneeAgentId + comment` in one call, then GET-verify assignee. Mismatch → retry once; still mismatch → `status=blocked` + escalate Board with `actual` vs `expected`. Silent exit (push without handoff) = 8h stall (GIM-182, GIM-48 precedents).
+<!-- paperclip:handoff-exit-shapes:v1 -->
+<!-- paperclip:handoff-verify-status-assignee:v1 -->
+Before exit: `status=done` OR `assigneeAgentId` set to next agent / your CXCTO. Mandatory. PATCH `status + assigneeAgentId + comment` in one call → GET-verify both `status` and `assigneeAgentId`; mismatch → retry once → still mismatch → `status=blocked` + escalate Board.
 
 ### Handoff matrix
 
@@ -43,13 +47,35 @@ Formal mention `[@](agent://uuid)` only — not plain `@Role`. Plain works for c
 - [ ] CI running on FB (or auto-triggered by push)
 - [ ] Handoff comment includes commit SHA + branch link
 
-### Pre-close checklist (CTO → status=done)
+### Exit Protocol — after handoff PATCH succeeds
+
+After the handoff PATCH returns 200 and GET-verify confirms `assigneeAgentId == <next>`:
+
+- **Stop tool use immediately.** The handoff PATCH is your last tool call. No more bash, curl, serena, gh, or any other tool — even read-only ones.
+- Output your final summary as plain assistant text, then end the turn.
+- Do **not** re-fetch the issue, do **not** post a second confirmation comment, do **not** check git status. Your phase is closed.
+
+Why: between the PATCH (which changes assignee away from you) and your subprocess exit, paperclip's run-supervisor sees the issue is no longer yours and SIGTERMs the process. Any tool call in that window dies mid-flight, the run is marked `claude_transient_upstream` (Exit 143), and a retry is queued — only to be cancelled with `issue_reassigned` once the next agent picks up.
+
+Evidence: GIM-216 — 11 successful handoffs misclassified as failures because agents kept making tool calls after the PATCH. Pre-slim baseline GIM-193 had zero such failures.
+
+If post-handoff cleanup is genuinely needed (e.g. local worktree state), do it BEFORE the handoff PATCH, not after.
+
+### Pre-close checklist (CXCTO → status=done)
 
 - [ ] Phase 4.2 merged (squash on develop)
 - [ ] Phase 4.1 evidence comment exists + `authorAgentId == CXQAEngineer`
 - [ ] Evidence: commit SHA + runtime smoke + plan-specific invariant
 - [ ] CI green on merge commit (or admin override documented in merge message)
 - [ ] Production deploy completed (merge ≠ auto-deploy on most setups)
+
+### Autonomous queue propagation (iron rule, post-merge)
+
+After PR squash-merge, CXCTO MUST:
+1. `PATCH issue` → `status=done, assigneeAgentId=null, assigneeUserId=null` + comment with merge SHA. Silent done = chain breaks.
+2. If issue body lists "next-queue" / queue-position / autonomous-trigger pointer to a follow-up slice — POST a new issue for that next position, `assigneeAgentId=<CXCTO>`, body links spec/plan + "queue N+1/M". Skipping = next slice never starts.
+
+Precedent: GIM-229 stalled 12h post-merge because PR was squashed but issue stayed `blocked` and #6 was never opened.
 
 Any missing → don't close, escalate Board.
 

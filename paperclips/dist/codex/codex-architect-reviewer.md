@@ -443,11 +443,15 @@ POST /api/issues/{id}/release
 # lock released, assignee can close via PATCH
 ```
 
+<!-- paperclip:handoff-contract:v2 -->
 ## Phase handoff discipline (iron rule)
 
+<!-- paperclip:team-local-roster:v1 -->
 Between plan phases, **explicit reassign** to next-phase agent. Never leave "someone will pick up".
 
-Hand off via PATCH `status + assigneeAgentId + comment` in one call, then GET-verify assignee. Mismatch → retry once; still mismatch → `status=blocked` + escalate Board with `actual` vs `expected`. Silent exit (push without handoff) = 8h stall (GIM-182, GIM-48 precedents).
+<!-- paperclip:handoff-exit-shapes:v1 -->
+<!-- paperclip:handoff-verify-status-assignee:v1 -->
+Before exit: `status=done` OR `assigneeAgentId` set to next agent / your CXCTO. Mandatory. PATCH `status + assigneeAgentId + comment` in one call → GET-verify both `status` and `assigneeAgentId`; mismatch → retry once → still mismatch → `status=blocked` + escalate Board.
 
 ### Handoff matrix
 
@@ -488,13 +492,35 @@ Formal mention `[@](agent://uuid)` only — not plain `@Role`. Plain works for c
 - [ ] CI running on FB (or auto-triggered by push)
 - [ ] Handoff comment includes commit SHA + branch link
 
-### Pre-close checklist (CTO → status=done)
+### Exit Protocol — after handoff PATCH succeeds
+
+After the handoff PATCH returns 200 and GET-verify confirms `assigneeAgentId == <next>`:
+
+- **Stop tool use immediately.** The handoff PATCH is your last tool call. No more bash, curl, serena, gh, or any other tool — even read-only ones.
+- Output your final summary as plain assistant text, then end the turn.
+- Do **not** re-fetch the issue, do **not** post a second confirmation comment, do **not** check git status. Your phase is closed.
+
+Why: between the PATCH (which changes assignee away from you) and your subprocess exit, paperclip's run-supervisor sees the issue is no longer yours and SIGTERMs the process. Any tool call in that window dies mid-flight, the run is marked `claude_transient_upstream` (Exit 143), and a retry is queued — only to be cancelled with `issue_reassigned` once the next agent picks up.
+
+Evidence: GIM-216 — 11 successful handoffs misclassified as failures because agents kept making tool calls after the PATCH. Pre-slim baseline GIM-193 had zero such failures.
+
+If post-handoff cleanup is genuinely needed (e.g. local worktree state), do it BEFORE the handoff PATCH, not after.
+
+### Pre-close checklist (CXCTO → status=done)
 
 - [ ] Phase 4.2 merged (squash on develop)
 - [ ] Phase 4.1 evidence comment exists + `authorAgentId == CXQAEngineer`
 - [ ] Evidence: commit SHA + runtime smoke + plan-specific invariant
 - [ ] CI green on merge commit (or admin override documented in merge message)
 - [ ] Production deploy completed (merge ≠ auto-deploy on most setups)
+
+### Autonomous queue propagation (iron rule, post-merge)
+
+After PR squash-merge, CXCTO MUST:
+1. `PATCH issue` → `status=done, assigneeAgentId=null, assigneeUserId=null` + comment with merge SHA. Silent done = chain breaks.
+2. If issue body lists "next-queue" / queue-position / autonomous-trigger pointer to a follow-up slice — POST a new issue for that next position, `assigneeAgentId=<CXCTO>`, body links spec/plan + "queue N+1/M". Skipping = next slice never starts.
+
+Precedent: GIM-229 stalled 12h post-merge because PR was squashed but issue stayed `blocked` and #6 was never opened.
 
 Any missing → don't close, escalate Board.
 
@@ -529,13 +555,24 @@ If `POST /release` returns 200 but `executionAgentNameKey` doesn't reset (GIM-52
 - Evidence in my comment is mine, not retold (QA only)?
 
 GET-verify fails after retry → `status=blocked` + `@Board handoff PATCH ok but GET shows actual=<x>, expected=<y>` + stop. Don't exit silently.
-## Agent UUID roster — Gimle Codex
+## Agent UUID roster — Gimle Codex / CX
 
-Use `[@<Role>](agent://<uuid>?i=<icon>)` in phase handoffs. Source: `paperclips/codex-agent-ids.env`.
+Use `[@<CXRole>](agent://<uuid>?i=<icon>)` in phase handoffs.
+Source: `paperclips/codex-agent-ids.env`.
+
+**Cross-team handoff rule** (applies to ALL agents, both teams): handoffs
+must go to an agent on YOUR OWN team. CX-side roles handoff to CX-side
+agents (CX prefix); Claude-side roles handoff to Claude-side agents
+(bare names). The two teams are isolated by design (per
+`feedback_parallel_team_protocol.md`). When you say "next CTO" — that's
+**CXCTO**, NEVER bare `CTO` (which is the Claude-side CTO and would
+cross team boundaries). If your handoff message contains
+`[@CTO](agent://7fb0fdbb-...)` — STOP, that's a Claude UUID, you must
+use `[@CXCTO](agent://da97dbd9-...)` instead.
 
 | Role | UUID | Icon |
 |---|---|---|
-| CXCTO | `da97dbd9-6627-48d0-b421-66af0750eacf` | `eye` |
+| CXCTO | `da97dbd9-6627-48d0-b421-66af0750eacf` | `crown` |
 | CXCodeReviewer | `45e3b24d-a444-49aa-83bc-69db865a1897` | `eye` |
 | CodexArchitectReviewer | `fec71dea-7dba-4947-ad1f-668920a02cb6` | `eye` |
 | CXMCPEngineer | `9a5d7bef-9b6a-4e74-be1d-e01999820804` | `circuit-board` |
@@ -544,8 +581,26 @@ Use `[@<Role>](agent://<uuid>?i=<icon>)` in phase handoffs. Source: `paperclips/
 | CXInfraEngineer | `21981be0-8c51-4e57-8a0a-ca8f95f4b8d9` | `server` |
 | CXTechnicalWriter | `1b9fc009-4b02-4560-b7f5-2b241b5897d9` | `book` |
 | CXResearchAgent | `a2f7d4d2-ee96-43c3-83d8-d3af02d6674c` | `magnifying-glass` |
+| CXBlockchainEngineer | `4e348572-1890-4122-b831-2185d9d50609` | `gem` |
+| CXSecurityAuditor | `f67918f9-662d-47c0-b6f7-5d66870d2702` | `shield` |
 
 `@Board` stays plain (operator-side, not an agent).
+
+### Routing rule (when in doubt — Episodes 1+2 prevention)
+
+| You need to address... | Use... | NOT |
+|---|---|---|
+| "the CTO" | `[@CXCTO]` (`da97dbd9`) | `[@CTO]` (`7fb0fdbb`) ❌ Claude side |
+| "the CodeReviewer" | `[@CXCodeReviewer]` (`45e3b24d`) | `[@CodeReviewer]` (`bd2d7e20`) ❌ |
+| "the QAEngineer" | `[@CXQAEngineer]` (`99d5f8f8`) | `[@QAEngineer]` (`58b68640`) ❌ |
+| "the BlockchainEngineer" | `[@CXBlockchainEngineer]` (`4e348572`) | `[@BlockchainEngineer]` (`9874ad7a`) ❌ |
+| "the SecurityAuditor" | `[@CXSecurityAuditor]` (`f67918f9`) | `[@SecurityAuditor]` (`a56f9e4a`) ❌ |
+| "the architect-reviewer" | `[@CodexArchitectReviewer]` (`fec71dea`) | `[@OpusArchitectReviewer]` (`8d6649e2`) ❌ |
+
+If you find yourself wanting to use a Claude-side UUID — you're crossing
+team boundaries. Operator caught this exact bug on 2026-05-07 in GIM-229
+(Episode 1 at 15:53 — CXCodeReviewer handed to Claude CTO; Episode 2 at
+16:34 — CR Phase 3.1 review addressed Claude CTO again). Don't repeat it.
 # Phase review discipline
 
 ## Phase 3.1 — Plan vs Implementation file-structure check

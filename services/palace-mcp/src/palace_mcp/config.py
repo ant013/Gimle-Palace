@@ -118,6 +118,23 @@ class Settings(BaseSettings):
     # Hotspot extractor (GIM-195, Roadmap #44)
     # -----------------------------------------------------------------------
 
+    # -----------------------------------------------------------------------
+    # Cross-repo version skew extractor (GIM-218, Roadmap #39)
+    # -----------------------------------------------------------------------
+
+    palace_version_skew_top_n_max: int = Field(
+        default=500,
+        ge=1,
+        le=10_000,
+        description="Upper bound for find_version_skew top_n arg",
+    )
+    palace_version_skew_query_timeout_s: int = Field(
+        default=30,
+        ge=1,
+        le=600,
+        description="Bolt session timeout for cross-repo skew aggregation Cypher (seconds)",
+    )
+
     palace_hotspot_churn_window_days: int = Field(
         default=90,
         ge=1,
@@ -137,4 +154,35 @@ class Settings(BaseSettings):
     palace_hotspot_lizard_timeout_behavior: Literal["drop_batch", "fail_run"] = Field(
         default="drop_batch",
         description="On lizard batch timeout: skip batch (drop_batch) or error whole run (fail_run)",
+    )
+
+    # -----------------------------------------------------------------------
+    # Code ownership extractor (GIM-216, Roadmap #32)
+    # -----------------------------------------------------------------------
+
+    ownership_blame_weight: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        alias="PALACE_OWNERSHIP_BLAME_WEIGHT",
+        description="Alpha in weight = α × blame_share + (1-α) × recency_churn_share",
+    )
+    ownership_max_files_per_run: int = Field(
+        default=50_000,
+        ge=1,
+        alias="PALACE_OWNERSHIP_MAX_FILES_PER_RUN",
+        description="Hard cap on DIRTY set per code_ownership run",
+    )
+    ownership_write_batch_size: int = Field(
+        default=2_000,
+        ge=100,
+        le=10_000,
+        alias="PALACE_OWNERSHIP_WRITE_BATCH_SIZE",
+        description="Files per Phase-4 atomic-replace tx in code_ownership writer",
+    )
+    mailmap_max_bytes: int = Field(
+        default=1_048_576,
+        ge=1024,
+        alias="PALACE_MAILMAP_MAX_BYTES",
+        description="Upper bound for .mailmap file size; oversized → identity passthrough",
     )

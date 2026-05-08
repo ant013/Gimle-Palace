@@ -407,11 +407,17 @@ Release (from holder):
 POST /api/issues/{id}/release
 # lock released, assignee can close via PATCH
 ```
+<!-- paperclip:handoff-contract:v2 -->
 ## Phase handoff discipline (iron rule)
+
+<!-- paperclip:team-local-roster:v1 -->
+> **Naming**: role names in this fragment (`CTO`, `CodeReviewer`, `QAEngineer`, `OpusArchitectReviewer`, `PythonEngineer`, etc.) refer to role **families**, not specific agents. Your project's actual agent names follow your team's naming convention (e.g., `CXCTO`, `TGCodeReviewer`, `MedicQA`). Always resolve concrete name + UUID via `fragments/local/agent-roster.md` for your team — that's the authoritative mapping.
 
 Between plan phases, **explicit reassign** to next-phase agent. Never leave "someone will pick up".
 
-Hand off via PATCH `status + assigneeAgentId + comment` in one call, then GET-verify assignee. Mismatch → retry once; still mismatch → `status=blocked` + escalate Board with `actual` vs `expected`. Silent exit (push without handoff) = 8h stall (GIM-182, GIM-48 precedents).
+<!-- paperclip:handoff-exit-shapes:v1 -->
+<!-- paperclip:handoff-verify-status-assignee:v1 -->
+Before exit: `status=done` OR `assigneeAgentId` set to next agent / your CTO. Mandatory. PATCH `status + assigneeAgentId + comment` in one call → GET-verify both `status` and `assigneeAgentId`; mismatch → retry once → still mismatch → `status=blocked` + escalate Board.
 
 ### Handoff matrix
 
@@ -452,6 +458,20 @@ Formal mention `[@](agent://uuid)` only — not plain `@Role`. Plain works for c
 - [ ] CI running on FB (or auto-triggered by push)
 - [ ] Handoff comment includes commit SHA + branch link
 
+### Exit Protocol — after handoff PATCH succeeds
+
+After the handoff PATCH returns 200 and GET-verify confirms `assigneeAgentId == <next>`:
+
+- **Stop tool use immediately.** The handoff PATCH is your last tool call. No more bash, curl, serena, gh, or any other tool — even read-only ones.
+- Output your final summary as plain assistant text, then end the turn.
+- Do **not** re-fetch the issue, do **not** post a second confirmation comment, do **not** check git status. Your phase is closed.
+
+Why: between the PATCH (which changes assignee away from you) and your subprocess exit, paperclip's run-supervisor sees the issue is no longer yours and SIGTERMs the process. Any tool call in that window dies mid-flight, the run is marked `claude_transient_upstream` (Exit 143), and a retry is queued — only to be cancelled with `issue_reassigned` once the next agent picks up.
+
+Evidence: GIM-216 — 11 successful handoffs misclassified as failures because agents kept making tool calls after the PATCH; pre-slim baseline GIM-193 had zero such failures.
+
+If post-handoff cleanup is genuinely needed (e.g. local worktree state), do it BEFORE the handoff PATCH, not after.
+
 ### Pre-close checklist (CTO → status=done)
 
 - [ ] Phase 4.2 merged (squash on develop)
@@ -461,6 +481,10 @@ Formal mention `[@](agent://uuid)` only — not plain `@Role`. Plain works for c
 - [ ] Production deploy completed (merge ≠ auto-deploy on most setups)
 
 Any missing → don't close, escalate Board.
+
+### Autonomous queue propagation (post-merge)
+
+CTO after squash-merge: `PATCH status=done, assignee=null` (per top rule) + POST new issue for next queue position if body lists one. Skip = chain dies.
 
 ### Phase 4.1 QA-evidence comment format
 
@@ -499,7 +523,19 @@ GET-verify fails after retry → `status=blocked` + `@Board handoff PATCH ok but
 Writing "Reassigning…" or "handing off…" in a comment body **does not execute** handoff. Only `PATCH /api/issues/{id}` with `assigneeAgentId` triggers the next agent's wake. Without PATCH, issue stalls with previous assignee indefinitely. Precedents: GIM-126 (QA→CTO 2026-05-01), GIM-195 (CR→PE 2026-05-05).
 ## Agent UUID roster — Gimle Claude
 
-Use `[@<Role>](agent://<uuid>?i=<icon>)` in phase handoffs. Source: `paperclips/deploy-agents.sh`.
+Use `[@<Role>](agent://<uuid>?i=<icon>)` in phase handoffs.
+Source: `paperclips/deploy-agents.sh`.
+
+**Cross-team handoff rule** (applies to ALL agents, both teams): handoffs
+must go to an agent on YOUR OWN team. Claude-side roles handoff to
+Claude-side agents (bare names, no prefix); CX-side roles handoff to
+CX-side agents (CX prefix). The two teams are isolated by design (per
+`feedback_parallel_team_protocol.md`). When you say "next CTO" — that's
+the CTO of your team. NEVER address an agent on the other team in a
+phase handoff. The build pipeline ships **target-specific** rosters:
+Claude target gets THIS file (Claude UUIDs); Codex target gets the
+override at `paperclips/fragments/targets/codex/local/agent-roster.md`
+(CX UUIDs).
 
 | Role | UUID | Icon |
 |---|---|---|

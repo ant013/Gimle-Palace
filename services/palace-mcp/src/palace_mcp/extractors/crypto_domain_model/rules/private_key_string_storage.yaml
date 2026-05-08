@@ -1,0 +1,47 @@
+rules:
+  - id: mnemonic_userdefaults_storage
+    languages: [swift]
+    severity: ERROR
+    message: >
+      Mnemonic/seed words stored in UserDefaults. UserDefaults is not encrypted
+      and is accessible to any process with the same bundle ID. Store sensitive
+      key material in the iOS Keychain instead.
+    metadata:
+      category: crypto-security
+      kind: private_key_string_storage
+    patterns:
+      - pattern: "UserDefaults.standard.set($VAL, forKey: $KEY)"
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: "^\"?(mnemonic|words|seed|private_?key|privateKey|keyPhrase|recoveryPhrase|secretKey)\"?$"
+
+  - id: private_key_type_string
+    languages: [swift]
+    severity: HIGH
+    message: >
+      Private key or seed phrase declared as a plain String type. Use Data or
+      a SecureBytes wrapper to reduce accidental logging and memory exposure.
+    metadata:
+      category: crypto-security
+      kind: private_key_string_storage
+    pattern-either:
+      - pattern: "let privateKey: String = ..."
+      - pattern: "var privateKey: String = ..."
+      - pattern: "let private_key: String = ..."
+      - pattern: "var private_key: String = ..."
+      - pattern: "let mnemonic: String = ..."
+      - pattern: "var mnemonic: String = ..."
+      - pattern: "let seedPhrase: String = ..."
+      - pattern: "var seedPhrase: String = ..."
+
+  - id: words_joined_userdefaults
+    languages: [swift]
+    severity: ERROR
+    message: >
+      Mnemonic words array joined to a String and stored in UserDefaults.
+      This pattern places the wallet recovery phrase in unencrypted storage.
+      Use Keychain or an encrypted container.
+    metadata:
+      category: crypto-security
+      kind: private_key_string_storage
+    pattern: "UserDefaults.standard.set($WORDS.joined(separator: \" \"), forKey: $KEY)"

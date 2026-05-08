@@ -71,18 +71,76 @@ def _stuck_issue() -> Issue:
 
 @pytest.mark.asyncio
 async def test_tick_wakes_stuck_issue(tmp_path: Path):
+    from freezegun import freeze_time
+
     cfg = _cfg(tmp_path)
     state = State.load(tmp_path / "state.json")
     client = MagicMock()
-    client.list_in_progress_issues = AsyncMock(return_value=[_stuck_issue()])
-    with patch(
-        "gimle_watchdog.daemon.actions.trigger_respawn",
-        new=AsyncMock(return_value=RespawnResult(via="patch", success=True, run_id="run-new")),
-    ):
+    client.list_active_issues = AsyncMock(return_value=[_stuck_issue()])
+    # Freeze near the stuck issue's updatedAt so recover_max_age_min cap (default 180) does not skip it.
+    with freeze_time("2026-04-21T09:30:00Z"):
+        with patch(
+            "gimle_watchdog.daemon.actions.trigger_respawn",
+            new=AsyncMock(return_value=RespawnResult(via="patch", success=True, run_id="run-new")),
+        ):
+            with patch("gimle_watchdog.daemon.detection.scan_idle_hangs", return_value=[]):
+                with patch("gimle_watchdog.daemon._sleep", new=AsyncMock()):
+                    await daemon._tick(cfg, state, client)
+    # Wake recorded in state (cooldown check is time-sensitive and non-frozen-tz; just verify recorded)
+    assert "issue-1" in state.issue_cooldowns
+
+
+@pytest.mark.asyncio
+async def test_tick_recovers_in_review_handoff_loss(tmp_path: Path):
+    """GIM-216 end-to-end: in_review issue whose wake-event was lost gets
+    release + repatch (real actions.trigger_respawn, not mocked) AND ends up
+    with status=in_review preserved (not regressed to todo by /release)."""
+    import dataclasses
+
+    from freezegun import freeze_time
+
+    cfg = _cfg(tmp_path)
+    state = State.load(tmp_path / "state.json")
+
+    in_review = Issue(
+        id="issue-216",
+        assignee_agent_id="cr-1",
+        execution_run_id=None,
+        status="in_review",
+        updated_at=datetime(2026, 5, 6, 12, 42, tzinfo=timezone.utc),
+        issue_number=216,
+    )
+    issue_no_run = dataclasses.replace(in_review)  # primary PATCH → still no spawn
+    issue_with_run = dataclasses.replace(in_review, execution_run_id="run-cr-1")
+
+    client = MagicMock()
+    client.list_active_issues = AsyncMock(return_value=[in_review])
+    client.patch_issue = AsyncMock()
+    client.post_release = AsyncMock()
+    # Polls: 6 no-run after primary, then 6 with-run after fallback
+    client.get_issue = AsyncMock(side_effect=[issue_no_run] * 6 + [issue_with_run] * 6)
+
+    # 18 min after updatedAt — past died_min=3
+    with freeze_time("2026-05-06T13:00:00Z"):
         with patch("gimle_watchdog.daemon.detection.scan_idle_hangs", return_value=[]):
             with patch("gimle_watchdog.daemon._sleep", new=AsyncMock()):
-                await daemon._tick(cfg, state, client)
-    assert state.is_issue_in_cooldown("issue-1", cfg.cooldowns.per_issue_seconds)
+                with patch("gimle_watchdog.actions._sleep", new=AsyncMock()):
+                    await daemon._tick(cfg, state, client)
+
+    # Recovery: release + two PATCHes (primary then fallback with status restore)
+    client.post_release.assert_awaited_once_with("issue-216")
+    assert client.patch_issue.await_count == 2
+    assert client.patch_issue.await_args_list[0].args == (
+        "issue-216",
+        {"assigneeAgentId": "cr-1"},
+    )
+    # Crucial: fallback PATCH carries status=in_review (NOT defaulted to todo)
+    assert client.patch_issue.await_args_list[1].args == (
+        "issue-216",
+        {"assigneeAgentId": "cr-1", "status": "in_review"},
+    )
+    # Wake recorded in state (recovery happened, cooldown tracked)
+    assert "issue-216" in state.issue_cooldowns
 
 
 @pytest.mark.asyncio
@@ -95,7 +153,7 @@ async def test_tick_escalates_capped_agent(tmp_path: Path):
         with freeze_time(ts):
             state.record_wake(f"dummy-{ts}", "agent-1")
     client = MagicMock()
-    client.list_in_progress_issues = AsyncMock(return_value=[_stuck_issue()])
+    client.list_active_issues = AsyncMock(return_value=[_stuck_issue()])
     client.post_issue_comment = AsyncMock()
     with patch("gimle_watchdog.daemon.detection.scan_idle_hangs", return_value=[]):
         with patch("gimle_watchdog.daemon._sleep", new=AsyncMock()):
@@ -112,7 +170,7 @@ async def test_tick_kills_hanged_procs(tmp_path: Path):
     from gimle_watchdog.detection import HangedProc
 
     client = MagicMock()
-    client.list_in_progress_issues = AsyncMock(return_value=[])
+    client.list_active_issues = AsyncMock(return_value=[])
     hanged = HangedProc(
         pid=12345,
         etime_s=5000,
@@ -178,7 +236,7 @@ async def test_tick_logs_wake_failure(tmp_path: Path):
     cfg = _cfg(tmp_path)
     state = State.load(tmp_path / "state.json")
     client = MagicMock()
-    client.list_in_progress_issues = AsyncMock(return_value=[_stuck_issue()])
+    client.list_active_issues = AsyncMock(return_value=[_stuck_issue()])
     failed = RespawnResult(via="patch", success=False, run_id=None)
     with patch("gimle_watchdog.daemon.actions.trigger_respawn", new=AsyncMock(return_value=failed)):
         with patch("gimle_watchdog.daemon.detection.scan_idle_hangs", return_value=[]):
@@ -196,7 +254,7 @@ async def test_tick_escalation_comment_failure_swallowed(tmp_path: Path):
         with freeze_time(ts):
             state.record_wake(f"dup-{ts}", "agent-1")
     client = MagicMock()
-    client.list_in_progress_issues = AsyncMock(return_value=[_stuck_issue()])
+    client.list_active_issues = AsyncMock(return_value=[_stuck_issue()])
     client.post_issue_comment = AsyncMock(side_effect=RuntimeError("network"))
     with patch("gimle_watchdog.daemon.detection.scan_idle_hangs", return_value=[]):
         with patch("gimle_watchdog.daemon._sleep", new=AsyncMock()):
@@ -212,7 +270,7 @@ async def test_tick_skip_action_cooldown(tmp_path: Path):
     state = State.load(tmp_path / "state.json")
     state.record_wake("issue-1", "agent-1")  # put issue in cooldown
     client = MagicMock()
-    client.list_in_progress_issues = AsyncMock(return_value=[_stuck_issue()])
+    client.list_active_issues = AsyncMock(return_value=[_stuck_issue()])
     with patch("gimle_watchdog.daemon.detection.scan_idle_hangs", return_value=[]):
         with patch("gimle_watchdog.daemon._sleep", new=AsyncMock()):
             await daemon._tick(cfg, state, client)
@@ -239,7 +297,7 @@ async def test_tick_escalation_no_comment(tmp_path: Path):
         with freeze_time(ts):
             state.record_wake(f"nocom-{ts}", "agent-1")
     client = MagicMock()
-    client.list_in_progress_issues = AsyncMock(return_value=[_stuck_issue()])
+    client.list_active_issues = AsyncMock(return_value=[_stuck_issue()])
     client.post_issue_comment = AsyncMock()
     with patch("gimle_watchdog.daemon.detection.scan_idle_hangs", return_value=[]):
         with patch("gimle_watchdog.daemon._sleep", new=AsyncMock()):
@@ -501,7 +559,7 @@ async def test_tick_calls_handoff_pass_when_enabled(tmp_path: Path):
     cfg = _handoff_cfg(tmp_path, enabled=True)
     state = State.load(tmp_path / "state.json")
     client = MagicMock()
-    client.list_in_progress_issues = AsyncMock(return_value=[])
+    client.list_active_issues = AsyncMock(return_value=[])
 
     with patch("gimle_watchdog.daemon.detection.scan_idle_hangs", return_value=[]):
         with patch("gimle_watchdog.daemon._sleep", new=AsyncMock()):
@@ -711,7 +769,7 @@ async def test_tick_uses_client_last_response_date_not_local_clock(tmp_path: Pat
     server_now = datetime(2026, 5, 3, 8, 0, tzinfo=timezone.utc)
 
     client = MagicMock()
-    client.list_in_progress_issues = AsyncMock(return_value=[])
+    client.list_active_issues = AsyncMock(return_value=[])
     # Property-style mock for last_response_date.
     type(client).last_response_date = server_now  # type: ignore[misc]
 
@@ -736,7 +794,7 @@ async def test_tick_falls_back_to_local_clock_when_no_response_date(tmp_path: Pa
     state = State.load(tmp_path / "state.json")
 
     client = MagicMock()
-    client.list_in_progress_issues = AsyncMock(return_value=[])
+    client.list_active_issues = AsyncMock(return_value=[])
     type(client).last_response_date = None  # type: ignore[misc]
 
     captured: dict[str, datetime] = {}

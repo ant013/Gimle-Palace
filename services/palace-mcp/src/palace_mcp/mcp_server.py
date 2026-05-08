@@ -29,6 +29,7 @@ Tools registered:
 - palace.memory.bundle_members
 - palace.memory.bundle_status
 - palace.memory.delete_bundle
+- palace.audit.run
 """
 
 import logging
@@ -43,9 +44,21 @@ from neo4j import AsyncDriver
 from pydantic import BaseModel, ValidationError
 from starlette.applications import Starlette
 
+from palace_mcp.audit.run import run_audit as _run_audit
+from palace_mcp.code.find_cross_module_contracts import (
+    find_cross_module_contracts as _find_cross_module_contracts_impl,
+)
+from palace_mcp.code.find_dead_symbols import (
+    find_dead_symbols as _find_dead_symbols_impl,
+)
 from palace_mcp.code.find_hotspots import find_hotspots as _find_hotspots_impl
+from palace_mcp.code.find_owners import find_owners as _find_owners_impl
+from palace_mcp.code.find_public_api import find_public_api as _find_public_api_impl
 from palace_mcp.code.list_functions import list_functions as _list_functions_impl
 from palace_mcp.code_composite import register_code_composite_tools
+from palace_mcp.extractors.cross_repo_version_skew.find_version_skew import (
+    register_version_skew_tools,
+)
 from palace_mcp.code_router import register_code_tools
 from palace_mcp.extractors import registry as _extractor_registry
 from palace_mcp.extractors.bundle_state import get_bundle_ingest_state
@@ -783,6 +796,10 @@ register_code_composite_tools(
     # os.environ.get mirrors the same default declared in Settings.palace_cm_default_project.
     default_project=os.environ.get("PALACE_CM_DEFAULT_PROJECT", "repos-gimle"),
 )
+register_version_skew_tools(
+    _tool,
+    default_project=os.environ.get("PALACE_CM_DEFAULT_PROJECT", "repos-gimle"),
+)
 
 
 @_tool(
@@ -835,6 +852,108 @@ async def palace_code_list_functions(
         }
     return await _list_functions_impl(
         driver=driver, project=project, path=path, min_ccn=min_ccn
+    )
+
+
+@_tool(
+    name="palace.code.find_owners",
+    description=(
+        "Top-N code ownership for a file. Returns ranked owners with "
+        "weights combining blame_share + recency-weighted churn share. "
+        "Empty owners is success — check no_owners_reason to distinguish "
+        "binary/all-bot/no-history/file-not-yet-processed."
+    ),
+)
+async def palace_code_find_owners(
+    file_path: str,
+    project: str,
+    top_n: int = 5,
+) -> dict[str, Any]:
+    """Find top-N owners of a file by blame share + recency-weighted churn."""
+    driver = _driver
+    if driver is None:
+        return {
+            "ok": False,
+            "error_code": "driver_unavailable",
+            "message": "Neo4j driver not initialised",
+        }
+    return await _find_owners_impl(
+        driver=driver, file_path=file_path, project=project, top_n=top_n
+    )
+
+
+@_tool(
+    name="palace.code.find_dead_symbols",
+    description=(
+        "List dead symbol candidates for a project as recorded by the "
+        "dead_symbol_binary_surface extractor. Returns symbols identified by "
+        "Periphery static analysis that are unused or binary-surface retained. "
+        "Accepts optional limit (default 200)."
+    ),
+)
+async def palace_code_find_dead_symbols(
+    project: str,
+    limit: int = 200,
+) -> dict[str, Any]:
+    """List dead symbol candidates ranked by module and display name."""
+    driver = _driver
+    if driver is None:
+        return {
+            "ok": False,
+            "error_code": "driver_unavailable",
+            "message": "Neo4j driver not initialised",
+        }
+    return await _find_dead_symbols_impl(driver=driver, project=project, limit=limit)
+
+
+@_tool(
+    name="palace.code.find_public_api",
+    description=(
+        "List public API symbols for a project as recorded by the "
+        "public_api_surface extractor. Returns symbols exported from "
+        "Swift .swiftinterface or Kotlin BCV .api artifacts. "
+        "Accepts optional limit (default 500)."
+    ),
+)
+async def palace_code_find_public_api(
+    project: str,
+    limit: int = 500,
+) -> dict[str, Any]:
+    """List public API symbols recorded by the public_api_surface extractor."""
+    driver = _driver
+    if driver is None:
+        return {
+            "ok": False,
+            "error_code": "driver_unavailable",
+            "message": "Neo4j driver not initialised",
+        }
+    return await _find_public_api_impl(driver=driver, project=project, limit=limit)
+
+
+@_tool(
+    name="palace.code.find_cross_module_contracts",
+    description=(
+        "List cross-module contract drift records for a project as recorded by "
+        "the cross_module_contract extractor. Returns ModuleContractDelta rows "
+        "showing which consumer→producer pairs have added, removed, or "
+        "signature-changed symbols between commits. "
+        "Accepts optional limit (default 200)."
+    ),
+)
+async def palace_code_find_cross_module_contracts(
+    project: str,
+    limit: int = 200,
+) -> dict[str, Any]:
+    """List cross-module contract drift records ordered by commit and consumer."""
+    driver = _driver
+    if driver is None:
+        return {
+            "ok": False,
+            "error_code": "driver_unavailable",
+            "message": "Neo4j driver not initialised",
+        }
+    return await _find_cross_module_contracts_impl(
+        driver=driver, project=project, limit=limit
     )
 
 
@@ -948,3 +1067,40 @@ async def palace_memory_prime(
         "tokens_estimated": tokens_estimated,
         "truncated": truncated,
     }
+
+
+# ---------------------------------------------------------------------------
+# palace.audit.run — synchronous audit report
+# ---------------------------------------------------------------------------
+
+
+@_tool(
+    name="palace.audit.run",
+    description=(
+        "Run a synchronous audit report for a project or bundle. "
+        "Discovers the latest successful IngestRun for each extractor, "
+        "fetches findings from Neo4j, renders a structured markdown report, "
+        "and returns report_markdown + blind_spots (extractors with no IngestRun). "
+        "Exactly one of 'project' or 'bundle' must be provided. "
+        "depth: 'quick' (first 3 extractors only) or 'full' (all)."
+    ),
+)
+async def palace_audit_run(
+    project: str | None = None,
+    bundle: str | None = None,
+    depth: str = "full",
+) -> dict[str, Any]:
+    """Run synchronous audit report: discovery → fetch → render."""
+    if _driver is None:
+        return {
+            "ok": False,
+            "error_code": "driver_unavailable",
+            "message": "Neo4j driver not initialised",
+        }
+    return await _run_audit(
+        _driver,
+        _extractor_registry.EXTRACTORS,
+        project=project,
+        bundle=bundle,
+        depth=depth,
+    )

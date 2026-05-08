@@ -5,12 +5,150 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# Stable handoff markers required in every generated role bundle (per
+# docs/superpowers/specs/2026-05-08-handoff-assign-rules-unification.md
+# acceptance #3).
+REQUIRED_HANDOFF_MARKERS = (
+    "paperclip:handoff-contract:v2",
+    "paperclip:handoff-exit-shapes:v1",
+    "paperclip:handoff-verify-status-assignee:v1",
+    "paperclip:team-local-roster:v1",
+)
+
+# Anti-pattern markers — a foreign-team UUID inside a section/line marked
+# as anti-pattern (e.g., the routing-rule lookup table in agent-roster)
+# is allowed; only actionable foreign UUIDs are flagged.
+_ANTIPATTERN_LINE_TOKENS = ("❌", "WRONG", "NOT", "NEVER", "forbidden", "anti-pattern", "antipattern", "do not use")
+_ANTIPATTERN_HEADER_TOKENS = ("not example", "wrong", "anti-pattern", "antipattern", "routing rule", "forbidden")
+
+_UUID_RE = re.compile(r"\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b")
+
+
+def load_team_uuids(repo_root: Path) -> dict[str, set[str]]:
+    """Return {'claude': {uuid, ...}, 'codex': {uuid, ...}} parsed from
+    the project's existing single-sources-of-truth.
+
+    Claude: paperclips/deploy-agents.sh (case-statement uuids).
+    Codex:  paperclips/codex-agent-ids.env (KEY=uuid lines).
+    """
+    teams: dict[str, set[str]] = {"claude": set(), "codex": set()}
+
+    deploy_sh = repo_root / "paperclips" / "deploy-agents.sh"
+    if deploy_sh.is_file():
+        # Only `<role>) echo "<UUID>"` case-statement lines — skip COMPANY_ID etc.
+        case_re = re.compile(r'^\s*[a-z][\w-]*\)\s+echo\s+"([0-9a-f-]{36})"', re.MULTILINE)
+        teams["claude"].update(case_re.findall(deploy_sh.read_text()))
+
+    codex_env = repo_root / "paperclips" / "codex-agent-ids.env"
+    if codex_env.is_file():
+        for line in codex_env.read_text().splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or "=" not in stripped:
+                continue
+            _, val = stripped.split("=", 1)
+            uuid_match = _UUID_RE.fullmatch(val.strip())
+            if uuid_match:
+                teams["codex"].add(uuid_match.group(1))
+
+    return teams
+
+
+def _is_antipattern_context(text: str, position: int) -> bool:
+    """True if `position` is inside a section or line clearly labeled as
+    anti-pattern (foreign-team examples allowed there).
+    """
+    line_start = text.rfind("\n", 0, position) + 1
+    line_end_idx = text.find("\n", position)
+    line_end = len(text) if line_end_idx == -1 else line_end_idx
+    line = text[line_start:line_end].lower()
+    for token in _ANTIPATTERN_LINE_TOKENS:
+        if token.lower() in line:
+            return True
+
+    # Check headers in the recent 2 KB looking back — if the closest header
+    # is anti-pattern flavored, the context is anti-pattern too.
+    window_start = max(0, position - 2048)
+    window = text[window_start:position]
+    headers = list(re.finditer(r"^#{1,6} .*$", window, re.MULTILINE))
+    if headers:
+        last_header = headers[-1].group(0).lower()
+        for token in _ANTIPATTERN_HEADER_TOKENS:
+            if token in last_header:
+                return True
+
+    return False
+
+
+def validate_handoff_markers(
+    bundle_paths_by_role: dict[str, Path],
+    repo_root: Path,
+) -> list[str]:
+    """Bundles that include the phase-handoff fragment must contain all 4 stable markers.
+
+    Trigger: presence of the heading `## Phase handoff discipline (iron rule)`.
+    Roles that don't participate in plan-phase handoffs (writers, research) skip the check.
+    """
+    errors: list[str] = []
+    trigger = "## Phase handoff discipline (iron rule)"
+    for role_id, bundle_path in bundle_paths_by_role.items():
+        try:
+            text = bundle_path.read_text()
+        except OSError:
+            continue
+        if trigger not in text:
+            continue
+        for marker in REQUIRED_HANDOFF_MARKERS:
+            if marker not in text:
+                errors.append(
+                    f"handoff marker missing for {role_id} ({bundle_path.relative_to(repo_root)}): {marker}"
+                )
+    return errors
+
+
+def validate_cross_team_targets(
+    bundle_paths_by_role: dict[str, Path],
+    role_meta_by_id: dict[str, "RoleMeta"],
+    repo_root: Path,
+) -> list[str]:
+    """A bundle whose role target is `<my>` must not contain any
+    `<other>`-team UUID outside of anti-pattern sections / lines.
+    """
+    errors: list[str] = []
+    teams = load_team_uuids(repo_root)
+    if not teams["claude"] or not teams["codex"]:
+        # No source-of-truth data → cannot validate, skip silently
+        return errors
+
+    for role_id, bundle_path in bundle_paths_by_role.items():
+        meta = role_meta_by_id.get(role_id)
+        if not meta or meta.target not in ("claude", "codex"):
+            continue
+        foreign_team = "codex" if meta.target == "claude" else "claude"
+        foreign_uuids = teams[foreign_team]
+        try:
+            text = bundle_path.read_text()
+        except OSError:
+            continue
+        rel = bundle_path.relative_to(repo_root)
+        for foreign_uuid in foreign_uuids:
+            for match in re.finditer(re.escape(foreign_uuid), text):
+                if not _is_antipattern_context(text, match.start()):
+                    line_no = text[: match.start()].count("\n") + 1
+                    errors.append(
+                        f"cross-team UUID in active section: {rel}:{line_no} "
+                        f"contains {foreign_team} UUID {foreign_uuid[:8]}… "
+                        f"in {meta.target} bundle"
+                    )
+                    break  # one error per foreign UUID per bundle is enough
+    return errors
 
 
 @dataclass
@@ -236,6 +374,7 @@ def validate(repo_root: Path = REPO_ROOT) -> list[str]:
 
     role_sources_seen: set[Path] = set()
     role_profiles_by_id: dict[str, set[str]] = {}
+    role_meta_by_id: dict[str, RoleMeta] = {}
     for role_id, role in matrix.get("roles", {}).items():
         source = role.get("source")
         if not source:
@@ -251,6 +390,7 @@ def validate(repo_root: Path = REPO_ROOT) -> list[str]:
         except ValueError as exc:
             errors.append(str(exc))
             continue
+        role_meta_by_id[role_id] = metadata
         if metadata.role_id != role_id:
             errors.append(f"{source}: role_id {metadata.role_id} != matrix id {role_id}")
         if metadata.target != role.get("target"):
@@ -360,6 +500,11 @@ def validate(repo_root: Path = REPO_ROOT) -> list[str]:
                     errors.append(
                         f"rule {rule_id} marker missing for {role_id}: {marker}"
                     )
+
+    errors.extend(validate_handoff_markers(bundle_paths_by_role, repo_root))
+    errors.extend(
+        validate_cross_team_targets(bundle_paths_by_role, role_meta_by_id, repo_root)
+    )
 
     return errors
 

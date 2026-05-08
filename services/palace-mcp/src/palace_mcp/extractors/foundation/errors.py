@@ -44,6 +44,25 @@ class ExtractorErrorCode(str, Enum):
     # Checkpoint
     CHECKPOINT_DOC_COUNT_MISMATCH = "checkpoint_doc_count_mismatch"
 
+    # Cross-repo version skew (GIM-218, Roadmap #39)
+    BUNDLE_HAS_NO_MEMBERS = "bundle_has_no_members"
+    BUNDLE_INVALID = "bundle_invalid"
+    BUNDLE_NOT_REGISTERED = "bundle_not_registered"
+    DEPENDENCY_SURFACE_NOT_INDEXED = "dependency_surface_not_indexed"
+    EXTRACTOR_RUNTIME_ERROR = "extractor_runtime_error"
+    INVALID_ECOSYSTEM_FILTER = "invalid_ecosystem_filter"
+    INVALID_SEVERITY_FILTER = "invalid_severity_filter"
+    MISSING_TARGET = "missing_target"
+    MUTUALLY_EXCLUSIVE_ARGS = "mutually_exclusive_args"
+    SLUG_INVALID = "slug_invalid"
+    TOP_N_OUT_OF_RANGE = "top_n_out_of_range"
+
+    # Code ownership extractor (GIM-216)
+    GIT_HISTORY_NOT_INDEXED = "git_history_not_indexed"
+    OWNERSHIP_DIFF_FAILED = "ownership_diff_failed"
+    OWNERSHIP_MAX_FILES_EXCEEDED = "ownership_max_files_exceeded"
+    REPO_HEAD_INVALID = "repo_head_invalid"
+
 
 ActionType = Literal[
     "retry",
