@@ -9,6 +9,52 @@
 
 ---
 
+## File Structure
+
+Phase 3.1 must compare implementation scope mechanically:
+
+```bash
+git diff --name-only origin/develop..HEAD | sort
+```
+
+Expected planned implementation scope is **30 files**:
+
+| Status | Path |
+|---|---|
+| NEW | `services/palace-mcp/src/palace_mcp/extractors/arch_layer/__init__.py` |
+| NEW | `services/palace-mcp/src/palace_mcp/extractors/arch_layer/models.py` |
+| NEW | `services/palace-mcp/src/palace_mcp/extractors/arch_layer/rules.py` |
+| NEW | `services/palace-mcp/src/palace_mcp/extractors/arch_layer/parsers/__init__.py` |
+| NEW | `services/palace-mcp/src/palace_mcp/extractors/arch_layer/parsers/spm.py` |
+| NEW | `services/palace-mcp/src/palace_mcp/extractors/arch_layer/parsers/gradle.py` |
+| NEW | `services/palace-mcp/src/palace_mcp/extractors/arch_layer/imports.py` |
+| NEW | `services/palace-mcp/src/palace_mcp/extractors/arch_layer/evaluator.py` |
+| NEW | `services/palace-mcp/src/palace_mcp/extractors/arch_layer/neo4j_writer.py` |
+| NEW | `services/palace-mcp/src/palace_mcp/extractors/arch_layer/extractor.py` |
+| MOD | `services/palace-mcp/src/palace_mcp/extractors/registry.py` |
+| NEW | `services/palace-mcp/src/palace_mcp/audit/templates/arch_layer.md` |
+| NEW | `services/palace-mcp/tests/extractors/unit/test_arch_layer_models.py` |
+| NEW | `services/palace-mcp/tests/extractors/unit/test_arch_layer_rules.py` |
+| NEW | `services/palace-mcp/tests/extractors/unit/test_arch_layer_parser_spm.py` |
+| NEW | `services/palace-mcp/tests/extractors/unit/test_arch_layer_parser_gradle.py` |
+| NEW | `services/palace-mcp/tests/extractors/unit/test_arch_layer_imports.py` |
+| NEW | `services/palace-mcp/tests/extractors/unit/test_arch_layer_evaluator.py` |
+| NEW | `services/palace-mcp/tests/extractors/unit/test_arch_layer_extractor.py` |
+| MOD | `services/palace-mcp/tests/extractors/unit/test_registry.py` |
+| NEW | `services/palace-mcp/tests/extractors/integration/test_arch_layer_integration.py` |
+| MOD | `services/palace-mcp/tests/audit/unit/test_templates.py` |
+| NEW | `services/palace-mcp/tests/extractors/fixtures/arch-layer-mini-project/.palace/architecture-rules.yaml` |
+| NEW | `services/palace-mcp/tests/extractors/fixtures/arch-layer-mini-project/Package.swift` |
+| NEW | `services/palace-mcp/tests/extractors/fixtures/arch-layer-mini-project/settings.gradle.kts` |
+| NEW | `services/palace-mcp/tests/extractors/fixtures/arch-layer-mini-project/core/build.gradle.kts` |
+| NEW | `services/palace-mcp/tests/extractors/fixtures/arch-layer-mini-project/ui/build.gradle.kts` |
+| NEW | `services/palace-mcp/tests/extractors/fixtures/arch-layer-mini-project/Sources/Core/WalletCore.swift` |
+| NEW | `services/palace-mcp/tests/extractors/fixtures/arch-layer-mini-project/Sources/UI/WalletView.swift` |
+| NEW | `docs/runbooks/arch-layer.md` |
+
+If implementation needs a different file, the implementer must update this
+table in the same PR before Phase 3.1 handoff and explain why the scope changed.
+
 ## Phase 1.1 — CTO formalisation
 
 ### Step 1.1.1: Verify S2.2 against current develop
@@ -242,8 +288,7 @@ Acceptance criteria:
 
 Description:
 
-- Run targeted unit and integration tests for `arch_layer`.
-- Run registry/audit template tests touched by this slice.
+- Run the exact validation commands below from `services/palace-mcp`.
 - Push the branch and open/update PR into `develop`.
 
 Acceptance criteria:
@@ -251,6 +296,39 @@ Acceptance criteria:
 - Targeted tests are green or failures are documented with exact blocker.
 - PR includes spec + plan links.
 - Paperclip handoff includes branch, commit SHA and test evidence.
+
+Validation commands:
+
+```bash
+cd services/palace-mcp
+
+uv run pytest \
+  tests/extractors/unit/test_arch_layer_models.py \
+  tests/extractors/unit/test_arch_layer_rules.py \
+  tests/extractors/unit/test_arch_layer_parser_spm.py \
+  tests/extractors/unit/test_arch_layer_parser_gradle.py \
+  tests/extractors/unit/test_arch_layer_imports.py \
+  tests/extractors/unit/test_arch_layer_evaluator.py \
+  tests/extractors/unit/test_arch_layer_extractor.py \
+  -v
+
+uv run pytest \
+  tests/extractors/unit/test_registry.py \
+  tests/audit/unit/test_templates.py \
+  -v
+
+uv run pytest \
+  tests/extractors/integration/test_arch_layer_integration.py \
+  -m integration \
+  -v
+
+uv run ruff check \
+  src/palace_mcp/extractors/arch_layer \
+  tests/extractors/unit/test_arch_layer_*.py \
+  tests/extractors/integration/test_arch_layer_integration.py
+
+uv run mypy src/palace_mcp/extractors/arch_layer
+```
 
 ## Phase 3.1 — Mechanical code review
 
@@ -263,6 +341,8 @@ Acceptance criteria:
 Description:
 
 - Verify changed files are within declared scope.
+- Run `git diff --name-only origin/develop..HEAD | sort` and compare against
+  the `File Structure` table above, including the expected 30-file count.
 - Verify graph schema does not reuse `:DEPENDS_ON` for module edges.
 - Verify no external tooling dependency was added without spike.
 - Verify tests cover all V1 rule kinds and idempotent writes.
