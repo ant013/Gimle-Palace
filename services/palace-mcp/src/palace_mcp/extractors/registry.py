@@ -13,6 +13,9 @@ from palace_mcp.extractors.crypto_domain_model.extractor import (
     CryptoDomainModelExtractor,
 )
 from palace_mcp.extractors.codebase_memory_bridge import CodebaseMemoryBridgeExtractor
+from palace_mcp.extractors.coding_convention.extractor import (
+    CodingConventionExtractor,
+)
 from palace_mcp.extractors.cross_repo_version_skew.extractor import (
     CrossRepoVersionSkewExtractor,
 )
@@ -42,6 +45,7 @@ EXTRACTORS: dict[str, BaseExtractor] = {
     "code_ownership": CodeOwnershipExtractor(),
     "crypto_domain_model": CryptoDomainModelExtractor(),
     "codebase_memory_bridge": CodebaseMemoryBridgeExtractor(),
+    "coding_convention": CodingConventionExtractor(),
     "cross_module_contract": CrossModuleContractExtractor(),
     "dead_symbol_binary_surface": DeadSymbolBinarySurfaceExtractor(),
     "public_api_surface": PublicApiSurfaceExtractor(),
