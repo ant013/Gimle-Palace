@@ -76,6 +76,7 @@ def _cfg(tmp_path: Path, repair_delay_min: int = 5) -> Config:
 # Unit: detector fires when done with no QA comment
 # ---------------------------------------------------------------------------
 
+
 def test_detector_fires_when_done_and_no_qa_comment():
     issue = Issue(
         id="issue-ol-1",
@@ -128,6 +129,7 @@ def test_detector_no_finding_when_status_not_done():
 # E2E: tier-1 alert + tier-2 repair re-opens as blocked
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_ownerless_tier1_alert_posted(mock_paperclip, tmp_path: Path):
     base_url, pstate = mock_paperclip
@@ -151,7 +153,9 @@ async def test_ownerless_tier1_alert_posted(mock_paperclip, tmp_path: Path):
     with (
         patch.object(daemon, "_REPO_ROOT", tmp_path),
         patch("gimle_watchdog.detection.scan_idle_hangs", return_value=[]),
-        patch("gimle_watchdog.detection.scan_died_mid_work", new_callable=AsyncMock, return_value=[]),
+        patch(
+            "gimle_watchdog.detection.scan_died_mid_work", new_callable=AsyncMock, return_value=[]
+        ),
     ):
         with freeze_time(T0):
             await daemon._run_tier_pass(cfg, state, client, T0, tmp_path)
@@ -185,7 +189,9 @@ async def test_ownerless_tier2_repair_reopens_as_blocked(mock_paperclip, tmp_pat
     with (
         patch.object(daemon, "_REPO_ROOT", tmp_path),
         patch("gimle_watchdog.detection.scan_idle_hangs", return_value=[]),
-        patch("gimle_watchdog.detection.scan_died_mid_work", new_callable=AsyncMock, return_value=[]),
+        patch(
+            "gimle_watchdog.detection.scan_died_mid_work", new_callable=AsyncMock, return_value=[]
+        ),
     ):
         with freeze_time(T0):
             await daemon._run_tier_pass(cfg, state, client, T0, tmp_path)

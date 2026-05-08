@@ -501,7 +501,7 @@ async def test_max_issues_cap_limits_evaluation():
 # ---------------------------------------------------------------------------
 
 _CLAUDE_UUID = "58b68640-1e83-4d5d-978b-51a5ca9080e0"  # Claude QA
-_CODEX_UUID = "99d5f8f8-822f-4ddb-baaa-0bdaec6f9399"   # Codex QA (stub)
+_CODEX_UUID = "99d5f8f8-822f-4ddb-baaa-0bdaec6f9399"  # Codex QA (stub)
 _TEAM_UUIDS: dict[str, set[str]] = {
     "claude": {PE_ID, CR_ID, CTO_ID, _CLAUDE_UUID},
     "codex": {_CODEX_UUID},

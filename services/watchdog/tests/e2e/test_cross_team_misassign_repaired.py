@@ -91,6 +91,7 @@ def _cfg(tmp_path: Path, repair_delay_min: int = 5) -> Config:
 # Unit: detector fires on cross-team assignment
 # ---------------------------------------------------------------------------
 
+
 def test_detector_fires_on_cx_cto_assignment():
     issue = Issue(
         id="issue-xt-1",
@@ -144,6 +145,7 @@ def test_detector_no_finding_for_same_team():
 # E2E: tier-1 alert + tier-2 repair via mock Paperclip server
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_cross_team_tier1_alert_created(mock_paperclip, tmp_path: Path):
     base_url, pstate = mock_paperclip
@@ -174,7 +176,9 @@ async def test_cross_team_tier1_alert_created(mock_paperclip, tmp_path: Path):
             return_value=TEAM_UUIDS,
         ),
         patch("gimle_watchdog.detection.scan_idle_hangs", return_value=[]),
-        patch("gimle_watchdog.detection.scan_died_mid_work", new_callable=AsyncMock, return_value=[]),
+        patch(
+            "gimle_watchdog.detection.scan_died_mid_work", new_callable=AsyncMock, return_value=[]
+        ),
     ):
         with freeze_time(T0):
             await daemon._run_tier_pass(cfg, state, client, T0, tmp_path)
@@ -219,7 +223,9 @@ async def test_cross_team_tier2_repair_patches_assignee(mock_paperclip, tmp_path
             return_value=TEAM_UUIDS,
         ),
         patch("gimle_watchdog.detection.scan_idle_hangs", return_value=[]),
-        patch("gimle_watchdog.detection.scan_died_mid_work", new_callable=AsyncMock, return_value=[]),
+        patch(
+            "gimle_watchdog.detection.scan_died_mid_work", new_callable=AsyncMock, return_value=[]
+        ),
     ):
         # Tick 1: issue discovered → tier 1
         with freeze_time(T0):
@@ -236,4 +242,6 @@ async def test_cross_team_tier2_repair_patches_assignee(mock_paperclip, tmp_path
     # After repair: assignee should be Claude CTO
     assert pstate.issues["issue-xt-1"]["assigneeAgentId"] == CLAUDE_CTO_UUID
     # State entry cleared (repaired)
-    assert key not in state.alerted_handoffs or state.alerted_handoffs.get(key, {}).get("repaired_at")
+    assert key not in state.alerted_handoffs or state.alerted_handoffs.get(key, {}).get(
+        "repaired_at"
+    )

@@ -319,9 +319,7 @@ async def post_tier_escalation(
     )
     try:
         await client.post_issue_comment(issue_id, body)
-        log.warning(
-            "tier_escalation_posted issue=%s ftype=%s", issue_id, ftype.value
-        )
+        log.warning("tier_escalation_posted issue=%s ftype=%s", issue_id, ftype.value)
         return True
     except Exception as exc:
         log.warning("tier_escalation_failed issue=%s ftype=%s error=%s", issue_id, ftype, exc)

@@ -281,7 +281,7 @@ def detect_stale_bundle(
         ts_str = parts[0]
         for part in parts[1:]:
             if part.startswith("main_sha="):
-                last_sha = part[len("main_sha="):]
+                last_sha = part[len("main_sha=") :]
                 last_ts = ts_str
     if last_sha is None or not last_ts:
         return None
@@ -330,6 +330,7 @@ def load_team_uuids_from_repo(repo_root: Path) -> dict[str, set[str]]:
     if spec is None or spec.loader is None:
         return {"claude": set(), "codex": set()}
     import sys as _sys
+
     mod = importlib.util.module_from_spec(spec)
     _sys.modules["_validate_instructions"] = mod  # required for dataclass forward-ref resolution
     try:

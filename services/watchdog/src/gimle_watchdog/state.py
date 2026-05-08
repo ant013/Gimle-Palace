@@ -295,9 +295,7 @@ class State:
         if entry is not None:
             entry["escalated_at"] = _iso(escalated_at)
 
-    def get_handoff_alerted_at(
-        self, issue_id: str, ftype: FindingType
-    ) -> _dt.datetime | None:
+    def get_handoff_alerted_at(self, issue_id: str, ftype: FindingType) -> _dt.datetime | None:
         key = f"{issue_id}:{ftype.value}"
         entry = self.alerted_handoffs.get(key)
         if not entry:

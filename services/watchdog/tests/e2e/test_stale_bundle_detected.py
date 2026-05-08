@@ -35,6 +35,7 @@ def _write_log(path: Path, ts: datetime, sha: str) -> None:
 # Unit: detector logic
 # ---------------------------------------------------------------------------
 
+
 def test_detect_stale_bundle_fires_when_sha_differs_and_stale(tmp_path: Path):
     log = tmp_path / "imac-agents-deploy.log"
     _write_log(log, DEPLOY_TIME, DEPLOYED_SHA)
@@ -96,6 +97,7 @@ def test_detect_stale_no_finding_when_log_missing(tmp_path: Path):
 # ---------------------------------------------------------------------------
 # E2E: tier pass records state + posts board comment
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_stale_bundle_recorded_in_state_and_board_comment_posted(

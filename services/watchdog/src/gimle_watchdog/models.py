@@ -60,7 +60,7 @@ class CrossTeamHandoffFinding:
     issue_number: int
     assignee_id: str
     assignee_team: str  # "codex" | "claude"
-    company_team: str   # the expected / owning team
+    company_team: str  # the expected / owning team
     issue_status: str
 
 
@@ -76,13 +76,14 @@ class InfraBlockFinding:
     type: Literal[FindingType.INFRA_BLOCK]
     issue_id: str
     issue_number: int
-    error_kind: str       # e.g. "cloudflare_1010", "rate_limit_429"
+    error_kind: str  # e.g. "cloudflare_1010", "rate_limit_429"
     actionable: bool = False  # infra blocks auto-resolve; no repair attempted
 
 
 @dataclass(frozen=True, slots=True)
 class StaleBundleFinding:
     """Global (not per-issue) — bundle SHA in deploy log differs from origin/main."""
+
     type: Literal[FindingType.STALE_BUNDLE]
     deployed_sha: str
     current_sha: str

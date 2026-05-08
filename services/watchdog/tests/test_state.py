@@ -286,9 +286,7 @@ def test_record_handoff_alert_actionable_false(tmp_path: Path):
     s = st.State.load(tmp_path / "state.json")
     alerted_at = datetime(2026, 5, 8, 10, 0, tzinfo=timezone.utc)
     snap = {"error_kind": "cloudflare_1010"}
-    s.record_handoff_alert(
-        "issue-2", FindingType.INFRA_BLOCK, snap, alerted_at, actionable=False
-    )
+    s.record_handoff_alert("issue-2", FindingType.INFRA_BLOCK, snap, alerted_at, actionable=False)
     key = f"issue-2:{FindingType.INFRA_BLOCK.value}"
     assert s.alerted_handoffs[key]["actionable"] is False
 

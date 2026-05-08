@@ -152,7 +152,10 @@ async def _handle_tier_finding(
     existing_snap = (state.alerted_handoffs.get(f"{issue_id}:{ftype.value}") or {}).get(
         "snapshot", {}
     )
-    from gimle_watchdog.state import _SNAPSHOT_KEYS  # local import to avoid circular  # noqa: PLC0415
+    from gimle_watchdog.state import (
+        _SNAPSHOT_KEYS,
+    )  # local import to avoid circular  # noqa: PLC0415
+
     snap_keys = _SNAPSHOT_KEYS.get(ftype, ())
     if any(existing_snap.get(k) != snapshot.get(k) for k in snap_keys):
         actionable = getattr(finding, "actionable", True)
@@ -196,9 +199,9 @@ async def _handle_tier_finding(
         # Skip to escalation
         if current_tier < 3:
             state.promote_handoff_tier(issue_id, ftype, 3, now_server)
-        already_escalated = (
-            state.alerted_handoffs.get(f"{issue_id}:{ftype.value}") or {}
-        ).get("escalated_at")
+        already_escalated = (state.alerted_handoffs.get(f"{issue_id}:{ftype.value}") or {}).get(
+            "escalated_at"
+        )
         if not already_escalated:
             await actions.post_tier_escalation(client, issue_id, ftype, version, now_server)
             state.set_handoff_escalated(issue_id, ftype, now_server)
@@ -247,15 +250,18 @@ async def _run_tier_pass(
                         issue.id, h.handoff_ownerless_comment_limit
                     )
                     # Run enabled detectors (at most one finding per issue per tick)
-                    finding: CrossTeamHandoffFinding | OwnerlessCompletionFinding | InfraBlockFinding | None = None
+                    finding: (
+                        CrossTeamHandoffFinding
+                        | OwnerlessCompletionFinding
+                        | InfraBlockFinding
+                        | None
+                    ) = None
                     if h.handoff_cross_team_enabled and finding is None:
                         finding = detection_semantic._detect_cross_team_handoff(
                             issue, comments, team_uuids
                         )
                     if h.handoff_ownerless_enabled and finding is None:
-                        finding = detection_semantic._detect_ownerless_completion(
-                            issue, comments
-                        )
+                        finding = detection_semantic._detect_ownerless_completion(issue, comments)
                     if h.handoff_infra_block_enabled and finding is None:
                         finding = detection_semantic._detect_infra_block(
                             issue, comments, now=now_server
@@ -280,13 +286,9 @@ async def _run_tier_pass(
                         ):
                             state.clear_handoff_alert(issue.id, ftype)
                 except Exception as exc:
-                    log.exception(
-                        "tier_pass_issue_failed issue=%s error=%s", issue.id, repr(exc)
-                    )
+                    log.exception("tier_pass_issue_failed issue=%s error=%s", issue.id, repr(exc))
         except Exception as exc:
-            log.exception(
-                "tier_pass_company_failed company=%s error=%s", company.id, repr(exc)
-            )
+            log.exception("tier_pass_company_failed company=%s error=%s", company.id, repr(exc))
 
     # Stale-bundle check (global — not per-issue)
     if h.handoff_stale_bundle_enabled:
