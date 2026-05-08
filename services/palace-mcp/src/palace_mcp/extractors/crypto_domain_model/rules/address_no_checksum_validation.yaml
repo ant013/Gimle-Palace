@@ -1,0 +1,13 @@
+rules:
+  - id: address_no_checksum_validation
+    languages: [swift]
+    severity: WARNING
+    message: >
+      Raw hex address string literal used without checksum validation (EIP-55).
+      Store addresses as validated types or call a checksum function before use.
+    metadata:
+      category: crypto-correctness
+      kind: address_no_checksum_validation
+    # pattern-regex catches hex address literals (>=10 hex chars after 0x)
+    # directly in source — no AST needed for string content matching.
+    pattern-regex: '"0x[0-9a-fA-F]{10,}"'

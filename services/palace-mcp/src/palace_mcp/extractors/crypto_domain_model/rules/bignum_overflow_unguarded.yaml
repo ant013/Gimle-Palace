@@ -1,0 +1,32 @@
+rules:
+  - id: bignum_overflow_unguarded
+    languages: [swift]
+    severity: WARNING
+    message: >
+      Int or Int64 addition/subtraction without overflow guards on a variable
+      named 'amount', 'balance', or 'value'. Use BigInt/BigUInt or checked
+      arithmetic (&+, &-) to prevent silent integer overflow.
+    metadata:
+      category: crypto-correctness
+      kind: bignum_overflow_unguarded
+    patterns:
+      - pattern: $AMOUNT + $OTHER
+      - metavariable-regex:
+          metavariable: $AMOUNT
+          regex: ^(amount|balance|value|totalAmount|totalBalance|totalValue)$
+
+  - id: bignum_overflow_unguarded_sub
+    languages: [swift]
+    severity: WARNING
+    message: >
+      Int or Int64 subtraction without overflow guards on a variable
+      named 'amount', 'balance', or 'value'. Use BigInt/BigUInt or checked
+      arithmetic (&+, &-) to prevent silent integer overflow.
+    metadata:
+      category: crypto-correctness
+      kind: bignum_overflow_unguarded
+    patterns:
+      - pattern: $AMOUNT - $OTHER
+      - metavariable-regex:
+          metavariable: $AMOUNT
+          regex: ^(amount|balance|value|totalAmount|totalBalance|totalValue)$

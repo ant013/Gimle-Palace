@@ -1,0 +1,13 @@
+rules:
+  - id: wei_eth_unit_mix_string
+    languages: [swift]
+    severity: WARNING
+    message: >
+      Potential wei/eth unit mismatch — literal string "eth" or "wei" used
+      near an integer amount variable. Mixing units without explicit conversion
+      can cause incorrect value calculations.
+    metadata:
+      category: crypto-correctness
+      kind: wei_eth_unit_mix
+    # pattern-regex matches bare unit-name string literals; typed enums are safe.
+    pattern-regex: '"(wei|gwei|sun|eth|trx|satoshi)"'

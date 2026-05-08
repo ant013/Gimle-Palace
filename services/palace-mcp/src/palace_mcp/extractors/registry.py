@@ -9,6 +9,9 @@ from __future__ import annotations
 
 from palace_mcp.extractors.base import BaseExtractor
 from palace_mcp.extractors.code_ownership.extractor import CodeOwnershipExtractor
+from palace_mcp.extractors.crypto_domain_model.extractor import (
+    CryptoDomainModelExtractor,
+)
 from palace_mcp.extractors.codebase_memory_bridge import CodebaseMemoryBridgeExtractor
 from palace_mcp.extractors.coding_convention.extractor import (
     CodingConventionExtractor,
@@ -40,6 +43,7 @@ from palace_mcp.extractors.symbol_index_typescript import SymbolIndexTypeScript
 EXTRACTORS: dict[str, BaseExtractor] = {
     "heartbeat": HeartbeatExtractor(),
     "code_ownership": CodeOwnershipExtractor(),
+    "crypto_domain_model": CryptoDomainModelExtractor(),
     "codebase_memory_bridge": CodebaseMemoryBridgeExtractor(),
     "coding_convention": CodingConventionExtractor(),
     "cross_module_contract": CrossModuleContractExtractor(),
