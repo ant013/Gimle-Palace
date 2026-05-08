@@ -9,7 +9,10 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterator
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
+
+if TYPE_CHECKING:
+    from palace_mcp.audit.contracts import AuditContract
 
 from graphiti_core import Graphiti
 
@@ -59,6 +62,26 @@ class DependencySurfaceExtractor(BaseExtractor):
     )
     constraints: ClassVar[list[str]] = []
     indexes: ClassVar[list[str]] = []
+
+    def audit_contract(self) -> "AuditContract":
+        from palace_mcp.audit.contracts import AuditContract, Severity
+
+        return AuditContract(
+            extractor_name="dependency_surface",
+            template_name="dependency_surface.md",
+            query="""
+MATCH (p:Project {slug: $project})-[r:DEPENDS_ON]->(d:ExternalDependency)
+RETURN d.purl AS purl,
+       r.scope AS scope,
+       r.declared_in AS declared_in,
+       r.declared_version_constraint AS declared_version_constraint
+ORDER BY d.purl
+LIMIT 100
+""".strip(),
+            severity_column="purl",
+            # Dependency listings are informational — severity lives in cross_repo_version_skew
+            severity_mapper=lambda v: Severity.INFORMATIONAL,
+        )
 
     async def run(
         self, *, graphiti: Graphiti, ctx: ExtractorRunContext
