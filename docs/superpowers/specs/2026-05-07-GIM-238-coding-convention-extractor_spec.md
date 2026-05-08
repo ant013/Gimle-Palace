@@ -1,13 +1,13 @@
 # Coding Convention Extractor (#6) — Specification
 
 **Document date:** 2026-05-07
-**Status:** Formalised for GIM-238 · awaiting CXCodeReviewer plan-first review
+**Status:** Formalised for GIM-238 · rev7 CTO re-scope to heuristic v1
 **Author:** Board+Claude session (operator + Claude Opus 4.7)
-**Team:** Codex (CX-native: SwiftSyntax + Konsist + detekt + semgrep)
+**Team:** Codex (CX-native Python heuristic v1; AST toolchains deferred)
 **Slice ID:** Phase 2 §2.2 #6 (Coding Convention Extractor)
 **Companion plan:** `2026-05-07-GIM-238-coding-convention-extractor.md`
 **Branch:** `feature/GIM-238-coding-convention-extractor`
-**Blockers (rev6 formalisation):** none.
+**Blockers (rev7 formalisation):** none.
 
 **Resolved prerequisites (rev6 formalisation):**
 - E6 closed via GIM-229 / PR #116 squash merge `e2f9a09` on
@@ -15,6 +15,16 @@
 - S0.1 IngestRun schema unification is present on `origin/develop`:
   `services/palace-mcp/src/palace_mcp/extractors/cypher.py`
   writes `extractor_name + project` on `:IngestRun`.
+
+**Rev7 CTO re-scope (2026-05-08):**
+- GIM-238 v1 ships a deterministic Python heuristic/file-structure
+  extractor for the 7 rules in §6.
+- SwiftSyntax, Konsist, detekt and semgrep runtime integration is
+  deferred until a live-verified spike and toolchain provisioning exist.
+- Reason: the original AST/toolchain path references external APIs that
+  are not yet verified in `docs/research/`, while the implementation
+  workspace lacks Kotlin and semgrep executables. Shipping unverified
+  external API usage would violate the project external-library rule.
 
 ---
 
@@ -74,30 +84,35 @@ batch of Codex queue.
 ## 3. Detection strategy
 
 ### 3.1 Swift surface
-- **Tool**: SwiftSyntax (semantic AST, not regex).
-- **Library aids**: Harmonize (rule-based linter), SwiftSyntax cookbooks
-  for visitor patterns.
-- **Approach**: AST visitor walks declarations; per-rule classifier
-  emits `:Convention` records keyed on `kind + module + sample_paths`.
+- **Tool**: Python source scanner over `.swift` files for v1.
+- **Approach**: deterministic declaration/name/idiom classifiers infer
+  convention candidates from file contents and path/module structure,
+  then emit `:Convention` records keyed on `kind + module +
+  sample_paths`.
+- **Future hardening**: SwiftSyntax/Harmonize may replace or augment the
+  scanner after a live-verified spike is checked in.
 
 ### 3.2 Kotlin surface
-- **Tool**: Konsist (production library for AST queries) +
-  detekt rules (some can be reused).
-- **Approach**: Konsist DSL queries enumerate constructs; per-rule
-  classifier emits `:Convention` records.
+- **Tool**: Python source scanner over `.kt` files for v1.
+- **Approach**: deterministic class/interface/sealed/error/collection
+  classifiers infer convention candidates and emit `:Convention`
+  records.
+- **Future hardening**: Konsist/detekt may replace or augment the scanner
+  after toolchain provisioning and a live-verified spike are available.
 
 ### 3.3 Cross-language alignment
-- **Tool**: semgrep custom rule pack as a portable layer for
-  patterns expressible in plain pattern matching (e.g.,
-  cross-language naming or structural outlier shapes).
-- **Why semgrep**: shared rule format across Swift and Kotlin avoids
-  reimplementing each rule twice.
+- **Tool**: shared Python classifier model for v1.
+- **Approach**: use the same rule ids, dominant-choice aggregation and
+  outlier thresholding for Swift and Kotlin so audit output is comparable
+  across both ecosystems.
+- **Future hardening**: semgrep custom rules may be added later for
+  patterns that can be expressed portably across Swift and Kotlin.
 
 ### 3.4 Confidence vs heuristic
 Per the original research inventory, confidence is `heuristic`. The
-extractor reports a `confidence` field (`certain` for AST-derived,
-`heuristic` for semgrep-derived) on each finding so the audit
-renderer can grade severity accordingly.
+extractor reports `confidence="heuristic"` for v1 findings so the audit
+renderer can grade severity accordingly. `confidence="certain"` is
+reserved for future AST-backed collectors.
 
 ## 4. Schema impact
 
@@ -197,15 +212,15 @@ Concrete rule list, refined in CX-CTO formalisation. **Rev4 dropped
 | ID | Question | Default | Impact of non-default |
 |----|----------|---------|----------------------|
 | **CC-D1** | Run on Swift only, Kotlin only, or both for v1? | both (CX team parity) | Swift-only = halves smoke time but breaks UW-Android ROI |
-| **CC-D2** | Use Harmonize library or hand-roll SwiftSyntax visitors? | Harmonize for Swift (proven library) | hand-roll = +5d but no external dep |
-| **CC-D3** | Use Konsist DSL or detekt rules for Kotlin? | Konsist (production AST DSL) | detekt = simpler but rule set is mostly check-mode, not classify-mode |
-| **CC-D4** | semgrep adds value, or AST is sufficient? | semgrep adds value for cross-lang rules | drop semgrep = pure-AST, simpler but more code duplication across langs |
+| **CC-D2** | Swift collector implementation for v1? | Python heuristic scanner | SwiftSyntax/Harmonize deferred until verified spike |
+| **CC-D3** | Kotlin collector implementation for v1? | Python heuristic scanner | Konsist/detekt deferred until toolchain + verified spike |
+| **CC-D4** | semgrep in v1? | no; shared Python classifier model | semgrep deferred for future cross-language hardening |
 | **CC-D5** | Threshold for "outlier" status: percent vs absolute count? | 10% threshold + `min_sample_count=5` | absolute = simpler but breaks on small modules |
 
 ## 8. Test plan summary
 
-- **Unit per rule**: synthetic Swift / Kotlin fixtures (good case +
-  bad case + outlier case) → assert classifier returns correct
+- **Unit per rule**: synthetic Swift / Kotlin samples cover all 7 rule
+  kinds and low-sample suppression → assert classifier returns correct
   `:Convention` + `:ConventionViolation` rows.
 - **Integration**: real `tronkit-swift` ingest → assert ≥3
   `:Convention` rows + ≥0 violations.
@@ -219,16 +234,16 @@ Concrete rule list, refined in CX-CTO formalisation. **Rev4 dropped
 - **R1 — false positives**: heuristic rules will surface non-issues.
   Mitigation: ship `confidence` field; renderer down-grades severity
   on heuristic-derived findings.
-- **R2 — Swift / Kotlin tooling drift**: SwiftSyntax / Konsist
-  versions move. Mitigation: pin in `pyproject.toml`; integration
-  tests run on CI weekly to catch breakage.
+- **R2 — heuristic blind spots**: source scanners can miss complex AST
+  shapes. Mitigation: mark findings as `heuristic`, keep rule samples in
+  unit tests, and add AST-backed collectors only after verified spikes.
 - **R3 — module / target detection**: SwiftPM target boundary is
   clearer than Gradle module hierarchy. Mitigation: use existing
   `:Module` / `:Target` from Phase 1 symbol-index; do NOT
   re-discover.
-- **R4 — performance**: walking large repos AST'ly is slow. Mitigation:
-  per-batch processing (50 files × parallel workers); cache by file
-  SHA (skip re-walk if file unchanged since last run).
+- **R4 — performance**: scanning large repos can be slow. Mitigation:
+  per-batch processing and cache by file SHA where the extractor runtime
+  supports it.
 
 ## 10. Out of scope
 
@@ -236,6 +251,8 @@ Concrete rule list, refined in CX-CTO formalisation. **Rev4 dropped
 - Cross-project convention comparison (post-v1 if useful).
 - Suggestions / auto-fixes (audit is read-only).
 - Test-smell rules — covered by #38.
+- SwiftSyntax, Konsist, detekt and semgrep runtime integration until
+  separate verified spikes/toolchain provisioning exist.
 
 ## 11. Cross-references
 

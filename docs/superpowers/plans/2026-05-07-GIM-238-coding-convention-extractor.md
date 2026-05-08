@@ -13,6 +13,13 @@
 > slice no longer depends on the newly hired forward-looking roles; the
 > first implementation handoff is to CXPythonEngineer after plan-first
 > review.
+>
+> **Rev7 CTO re-scope (2026-05-08):** v1 is formally scoped to a
+> deterministic Python heuristic/file-structure extractor for the 7
+> approved rules. SwiftSyntax, Konsist, detekt and semgrep runtime
+> integration are deferred until toolchains and live-verified spikes
+> exist. This avoids implementing unverified external API contracts while
+> still delivering audit-v1 convention signals.
 
 ---
 
@@ -48,15 +55,15 @@
 
 **Owner:** CXCTO.
 
-- [x] Verify spec §3 detection strategy is consistent with existing
-      Phase 1 symbol-index outputs (Swift + Kotlin).
+- [x] Verify spec §3 detection strategy is consistent with the current
+      branch constraints: Python heuristic scanning over Swift + Kotlin
+      source, with AST/toolchain collectors deferred.
 - [x] Resolve decision points CC-D1..CC-D5 with operator (or default).
 - [x] Verify §6 initial rule set is concrete enough to test (each rule
       maps to ≥1 unit-test fixture file).
-- [x] Resolve CC-D1..CC-D5 by default: both Swift+Kotlin, Harmonize
-      aid for SwiftSyntax, Konsist primary for Kotlin, semgrep for
-      portable cross-language patterns, 10% outlier threshold with
-      `min_sample_count=5`.
+- [x] Resolve CC-D1..CC-D5 by rev7 default: both Swift+Kotlin, Python
+      heuristic scanner for v1, no semgrep in v1, 10% outlier threshold
+      with `min_sample_count=5`.
 - [ ] Reassign to CXCodeReviewer.
 
 ### Step 1.2: Plan-first review
@@ -114,24 +121,21 @@ For each of the 7 rules in spec §6:
 
 #### Step 2.2.X.1: Failing tests
 
-- [ ] Add Swift fixture under
-      `services/palace-mcp/tests/extractors/fixtures/coding-convention-fixture/swift/<rule>/{good,bad,outlier}/*.swift`.
-- [ ] Add Kotlin fixture under
-      `services/palace-mcp/tests/extractors/fixtures/coding-convention-fixture/kotlin/<rule>/{good,bad,outlier}/*.kt`.
-- [ ] Unit test: classifier on each fixture returns expected
-      `:Convention` row + `:ConventionViolation` rows.
+- [ ] Add synthetic Swift/Kotlin samples or fixtures that exercise the
+      rule's dominant choice, outlier choice and low-sample suppression.
+- [ ] Unit test: classifier/aggregation returns expected `:Convention`
+      row + `:ConventionViolation` rows.
 - [ ] RED.
 
 #### Step 2.2.X.2: Rule classifier
 
 **Files:**
-- `services/palace-mcp/src/palace_mcp/extractors/coding_convention/rules/<rule_name>.py` (one per rule).
-- For Swift: SwiftSyntax visitor invoked via subprocess (or direct
-  Python binding if available).
-- For Kotlin: Konsist DSL invoked via subprocess (Kotlin script
-  dispatched from Python).
-- For semgrep-portable rules: YAML rule file under
-  `services/palace-mcp/src/palace_mcp/extractors/coding_convention/rules/semgrep/<rule_name>.yaml`.
+- `services/palace-mcp/src/palace_mcp/extractors/coding_convention/extractor.py`
+  and/or focused helper modules under
+  `services/palace-mcp/src/palace_mcp/extractors/coding_convention/`.
+- For Swift: Python scanner/classifier over `.swift` file contents.
+- For Kotlin: Python scanner/classifier over `.kt` file contents.
+- No SwiftSyntax/Konsist/detekt/semgrep runtime dependency in v1.
 
 - [ ] Implement rule classifier.
 - [ ] Tests GREEN.
@@ -152,7 +156,8 @@ commits depending on team-chain preference.
 **Files:** `services/palace-mcp/tests/extractors/integration/test_coding_convention_e2e.py` (new).
 
 - [ ] Real Neo4j (testcontainers or compose-reuse).
-- [ ] Run extractor on `services/palace-mcp/tests/extractors/fixtures/coding-convention-fixture/` (multi-rule fixture).
+- [ ] Run extractor on synthetic Swift/Kotlin project samples or the
+      fixture tree, depending on the implementation layout.
 - [ ] Assert: `:Convention` count ≥ 5; `:ConventionViolation` count ≥ 3.
 - [ ] Assert: every node has `run_id` referencing a successful
       `:IngestRun`.
@@ -245,7 +250,7 @@ commits depending on team-chain preference.
       `uv run pytest tests/extractors/unit/test_coding_convention_*.py tests/extractors/unit/test_registry.py -v`
 - [ ] Paste exact env-gated integration output from `services/palace-mcp`:
       `uv run pytest tests/extractors/integration/test_coding_convention_e2e.py -m integration -v`
-- [ ] Verify all 7 rules have tests + implementation + commit.
+- [ ] Verify all 7 rules have tests + implementation evidence.
 - [ ] Verify scope matches spec §6 (no silent additions or omissions per
       `feedback_silent_scope_reduction.md`).
 - [ ] APPROVE on paperclip + GitHub. Reassign to CodexArchitectReviewer.
@@ -259,10 +264,9 @@ commits depending on team-chain preference.
       Swift+ObjC headers)?
 - [ ] Probe: outlier threshold (CC-D5 default 10%) — sane on small
       modules?
-- [ ] Probe: heuristic findings clearly distinguished from certain
-      ones in the report?
-- [ ] Probe: cross-language rules (semgrep) actually fire on both
-      Swift and Kotlin fixtures?
+- [ ] Probe: heuristic findings clearly distinguished in the report?
+- [ ] Probe: cross-language rule ids produce comparable Swift and
+      Kotlin findings without semgrep in v1?
 
 **Acceptance:** APPROVE / NUDGE / BLOCK.
 
@@ -315,8 +319,8 @@ commits depending on team-chain preference.
 
 ## Risks (from spec §9)
 
-R1 false positives · R2 SwiftSyntax/Konsist version drift · R3
-module detection · R4 performance.
+R1 false positives · R2 heuristic blind spots · R3 module detection · R4
+performance.
 
 ---
 
