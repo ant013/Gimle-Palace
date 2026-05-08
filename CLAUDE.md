@@ -301,6 +301,13 @@ invoked via MCP tool `palace.ingest.run_extractor(name, project)`.
   `:OwnershipFileState` for `find_owners` empty-state diagnostics.
   `.mailmap`-aware via pygit2 (no custom parser). Query via
   `palace.code.find_owners(file_path, project, top_n=5)`.
+- `coding_convention` — Coding convention extractor (GIM-238, Roadmap #6).
+  Scans Swift + Kotlin source files directly from the mounted repo and derives
+  per-module dominant style choices plus outliers for 7 heuristic rule kinds:
+  type naming, test naming, protocol/interface naming, ADT pattern, error
+  modeling, collection initialization, and computed-vs-lazy property style.
+  Writes `:Convention`, `:ConventionViolation`, and extractor-scoped
+  `:IngestRun` rows. See `docs/runbooks/coding-convention.md`.
 - `hotspot` — Code-Complexity × Churn Hotspot extractor (GIM-195, Roadmap #44).
   Walks repo with stop-list, calls `lizard` per-batch (50 files), aggregates
   per-function CCN to per-file `ccn_total`, joins with `git_history`'s
