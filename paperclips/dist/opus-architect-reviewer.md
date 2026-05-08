@@ -431,11 +431,17 @@ POST /api/issues/{id}/release
 # lock released, assignee can close via PATCH
 ```
 
+<!-- paperclip:handoff-contract:v2 -->
 ## Phase handoff discipline (iron rule)
+
+<!-- paperclip:team-local-roster:v1 -->
+> **Naming**: role names in this fragment (`CTO`, `CodeReviewer`, `QAEngineer`, `OpusArchitectReviewer`, `PythonEngineer`, etc.) refer to role **families**, not specific agents. Your project's actual agent names follow your team's naming convention (e.g., `CXCTO`, `TGCodeReviewer`, `MedicQA`). Always resolve concrete name + UUID via `fragments/local/agent-roster.md` for your team — that's the authoritative mapping.
 
 Between plan phases, **explicit reassign** to next-phase agent. Never leave "someone will pick up".
 
-Hand off via PATCH `status + assigneeAgentId + comment` in one call, then GET-verify assignee. Mismatch → retry once; still mismatch → `status=blocked` + escalate Board with `actual` vs `expected`. Silent exit (push without handoff) = 8h stall (GIM-182, GIM-48 precedents).
+<!-- paperclip:handoff-exit-shapes:v1 -->
+<!-- paperclip:handoff-verify-status-assignee:v1 -->
+Before exit: `status=done` OR `assigneeAgentId` set to next agent / your CTO. Mandatory. PATCH `status + assigneeAgentId + comment` in one call → GET-verify both `status` and `assigneeAgentId`; mismatch → retry once → still mismatch → `status=blocked` + escalate Board.
 
 ### Handoff matrix
 
@@ -500,13 +506,9 @@ If post-handoff cleanup is genuinely needed (e.g. local worktree state), do it B
 
 Any missing → don't close, escalate Board.
 
-### Autonomous queue propagation (iron rule, post-merge)
+### Autonomous queue propagation (post-merge)
 
-After PR squash-merge, CTO MUST:
-1. `PATCH issue` → `status=done, assigneeAgentId=null, assigneeUserId=null` + comment with merge SHA. Silent done = chain breaks.
-2. If issue body lists "next-queue" / queue-position / autonomous-trigger pointer to a follow-up slice — POST a new issue for that next position, `assigneeAgentId=<my-team CTO>`, body links spec/plan + "queue N+1/M". Skipping = next slice never starts.
-
-Precedent: GIM-229 stalled 12h post-merge because PR was squashed but issue stayed `blocked` and #6 was never opened.
+CTO after squash-merge: `PATCH status=done, assignee=null` (per top rule) + POST new issue for next queue position if body lists one. Skip = chain dies.
 
 ### Phase 4.1 QA-evidence comment format
 
