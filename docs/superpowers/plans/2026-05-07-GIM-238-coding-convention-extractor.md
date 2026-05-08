@@ -131,7 +131,7 @@ For each of the 7 rules in spec §6:
 - For Kotlin: Konsist DSL invoked via subprocess (Kotlin script
   dispatched from Python).
 - For semgrep-portable rules: YAML rule file under
-  `extractors/coding_convention/rules/semgrep/<rule_name>.yaml`.
+  `services/palace-mcp/src/palace_mcp/extractors/coding_convention/rules/semgrep/<rule_name>.yaml`.
 
 - [ ] Implement rule classifier.
 - [ ] Tests GREEN.
@@ -149,7 +149,7 @@ commits depending on team-chain preference.
 
 #### Step 2.3.1: Failing integration test
 
-**Files:** `tests/extractors/integration/test_coding_convention_e2e.py` (new).
+**Files:** `services/palace-mcp/tests/extractors/integration/test_coding_convention_e2e.py` (new).
 
 - [ ] Real Neo4j (testcontainers or compose-reuse).
 - [ ] Run extractor on `services/palace-mcp/tests/extractors/fixtures/coding-convention-fixture/` (multi-rule fixture).
@@ -165,8 +165,9 @@ commits depending on team-chain preference.
 - `services/palace-mcp/src/palace_mcp/extractors/coding_convention/neo4j_writer.py` (new).
 
 - [ ] `extract()` iterates rules → collects findings → batches Neo4j writes.
-- [ ] Use `extractors/cypher.py::create_ingest_run()` (post-S0.1
-      unified schema).
+- [ ] Use `palace_mcp.extractors.foundation.checkpoint.create_ingest_run(driver, run_id=..., project=..., extractor_name="coding_convention")`.
+- [ ] Use `palace_mcp.extractors.foundation.checkpoint.finalize_ingest_run(...)`
+      on success/failure; do not duplicate `:IngestRun` lifecycle Cypher.
 - [ ] Tests GREEN.
 
 #### Step 2.3.3: Commit
@@ -180,18 +181,20 @@ commits depending on team-chain preference.
 #### Step 2.4.1: Failing test
 
 - [ ] Test: `extractor.audit_contract()` returns
-      `AuditContract(query=..., response_model=ConventionAuditList,
-      template_path=Path("audit/templates/coding_convention.md"))`.
+      `AuditContract(extractor_name="coding_convention",
+      template_name="coding_convention.md", query=...,
+      severity_column="outlier_ratio", severity_mapper=...)`.
 - [ ] Test: rendering template with synthetic data produces
       expected markdown structure (sections, severity sort).
 
 #### Step 2.4.2: Implement `audit_contract()` + template
 
 **Files:**
-- `extractors/coding_convention/extractor.py::audit_contract()`.
+- `services/palace-mcp/src/palace_mcp/extractors/coding_convention/extractor.py::audit_contract()`.
 - `services/palace-mcp/src/palace_mcp/audit/templates/coding_convention.md` (new).
-- `services/palace-mcp/src/palace_mcp/audit/models.py` — add
-  `ConventionAuditList` Pydantic model.
+- No `response_model` / `ConventionAuditList` addition unless the audit
+  platform first grows explicit support for typed response models in
+  `palace_mcp.audit.contracts.AuditContract`.
 
 - [ ] Tests GREEN.
 
@@ -234,7 +237,14 @@ commits depending on team-chain preference.
 
 - [ ] Paste `gh pr checks` — required CI green
       (lint, typecheck, test, docker-build, qa-evidence-present).
-- [ ] Paste full pytest output for new tests.
+- [ ] Paste exact local validation output from `services/palace-mcp`:
+      `uv run ruff check src/palace_mcp/extractors/coding_convention src/palace_mcp/extractors/registry.py tests/extractors/unit/test_coding_convention_*.py tests/extractors/integration/test_coding_convention_e2e.py`
+- [ ] Paste exact local validation output from `services/palace-mcp`:
+      `uv run mypy src/palace_mcp/extractors/coding_convention src/palace_mcp/extractors/registry.py`
+- [ ] Paste exact local validation output from `services/palace-mcp`:
+      `uv run pytest tests/extractors/unit/test_coding_convention_*.py tests/extractors/unit/test_registry.py -v`
+- [ ] Paste exact env-gated integration output from `services/palace-mcp`:
+      `uv run pytest tests/extractors/integration/test_coding_convention_e2e.py -m integration -v`
 - [ ] Verify all 7 rules have tests + implementation + commit.
 - [ ] Verify scope matches spec §6 (no silent additions or omissions per
       `feedback_silent_scope_reduction.md`).
@@ -283,7 +293,7 @@ commits depending on team-chain preference.
 
 ## Phase 5 — Merge (CXCTO)
 
-- [ ] Verify CI green; CR + Opus APPROVE; QA Evidence present.
+- [ ] Verify CI green; CXCodeReviewer + CodexArchitectReviewer APPROVE; QA Evidence present.
 - [ ] Squash-merge.
 - [ ] Update `docs/roadmap-archive.md` §2.2 #6 row: deferred →
       ✅ + merge SHA.

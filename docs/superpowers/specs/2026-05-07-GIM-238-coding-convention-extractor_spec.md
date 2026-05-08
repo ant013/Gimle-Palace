@@ -132,15 +132,37 @@ Indices:
 
 ```python
 def audit_contract(self) -> AuditContract:
+    from palace_mcp.audit.contracts import AuditContract, Severity
+
+    def severity_from_outlier_ratio(ratio: float) -> Severity:
+        if ratio >= 0.1:
+            return Severity.HIGH
+        if ratio > 0:
+            return Severity.MEDIUM
+        return Severity.LOW
+
     return AuditContract(
+        extractor_name="coding_convention",
+        template_name="coding_convention.md",
         query="""
             MATCH (c:Convention {project_id: $project})
             OPTIONAL MATCH (v:ConventionViolation {project_id: $project, kind: c.kind})
-            RETURN c, collect(v) AS violations
-        """,
-        response_model=ConventionAuditList,
-        template_path=Path("audit/templates/coding_convention.md"),
-        severity_mapper=lambda c: "high" if c.outliers >= c.sample_count * 0.1 else "medium" if c.outliers > 0 else "low",
+            WITH c, collect(v) AS violations,
+                 CASE
+                   WHEN c.sample_count = 0 THEN 0.0
+                   ELSE toFloat(c.outliers) / toFloat(c.sample_count)
+                 END AS outlier_ratio
+            RETURN c.module AS module,
+                   c.kind AS kind,
+                   c.dominant_choice AS dominant_choice,
+                   c.confidence AS confidence,
+                   c.sample_count AS sample_count,
+                   c.outliers AS outliers,
+                   violations AS violations,
+                   outlier_ratio AS outlier_ratio
+        """.strip(),
+        severity_column="outlier_ratio",
+        severity_mapper=severity_from_outlier_ratio,
     )
 ```
 
