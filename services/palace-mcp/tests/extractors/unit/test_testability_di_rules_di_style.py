@@ -26,10 +26,15 @@ def test_extract_di_patterns_detects_swift_and_kotlin_styles() -> None:
     assert lookup[("swift", "init_injection", None)].sample_count == 1
     assert lookup[("swift", "property_injection", None)].sample_count == 1
     assert lookup[("swift", "framework_bound", "resolver")].sample_count == 1
+    assert lookup[("swift", "framework_bound", "swinject")].sample_count == 1
+    assert lookup[("swift", "framework_bound", "factory")].sample_count == 1
+    assert lookup[("swift", "framework_bound", "needle")].sample_count == 1
     assert lookup[("swift", "service_locator", None)].sample_count == 1
     assert lookup[("kotlin", "init_injection", None)].sample_count == 1
-    assert lookup[("kotlin", "property_injection", None)].sample_count == 1
+    assert lookup[("kotlin", "property_injection", None)].sample_count == 2
     assert lookup[("kotlin", "framework_bound", "hilt")].sample_count == 1
+    assert lookup[("kotlin", "framework_bound", "dagger")].sample_count == 1
+    assert lookup[("kotlin", "framework_bound", "koin")].sample_count == 1
     assert lookup[("kotlin", "service_locator", None)].sample_count == 1
 
 

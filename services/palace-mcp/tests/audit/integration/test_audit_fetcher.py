@@ -259,6 +259,118 @@ class TestAuditFetcher:
         assert "2 test doubles" in rendered
         assert "1 untestable site" in rendered
 
+    async def test_testability_di_audit_includes_test_double_only_modules(
+        self, driver: AsyncDriver
+    ) -> None:
+        from palace_mcp.audit.fetcher import fetch_audit_data
+
+        async with driver.session() as session:
+            await session.run(
+                """
+                CREATE (:TestDouble {
+                  project_id: 'project/wallet',
+                  module: 'WalletKitTests',
+                  language: 'swift',
+                  kind: 'fake',
+                  target_symbol: 'WalletService',
+                  test_file: 'Tests/WalletKitTests/WalletServiceTests.swift',
+                  run_id: 'run-standalone-double'
+                })
+                """
+            )
+
+        run_info = RunInfo(
+            run_id="run-standalone-double",
+            extractor_name="testability_di",
+            project="wallet",
+            completed_at="2026-05-08T11:00:00Z",
+        )
+        extractor = TestabilityDiExtractor()
+        result = await fetch_audit_data(
+            driver,
+            {"testability_di": run_info},
+            {"testability_di": extractor},
+        )
+
+        section = result["testability_di"]
+        assert section.summary_stats == {
+            "total": 1,
+            "patterns": 0,
+            "test_doubles": 1,
+            "untestable_sites": 0,
+        }
+        assert len(section.findings) == 1
+        assert section.findings[0]["module"] == "WalletKitTests"
+        assert section.findings[0]["style"] is None
+        assert section.findings[0]["test_doubles"][0]["kind"] == "fake"
+
+        rendered = render_section(
+            section,
+            extractor.audit_contract().severity_column,
+            100,
+            severity_mapper=extractor.audit_contract().severity_mapper,
+        )
+        assert "STANDALONE_SIGNAL" in rendered
+        assert "1 test double" in rendered
+
+    async def test_testability_di_audit_includes_untestable_only_modules(
+        self, driver: AsyncDriver
+    ) -> None:
+        from palace_mcp.audit.fetcher import fetch_audit_data
+
+        async with driver.session() as session:
+            await session.run(
+                """
+                CREATE (:UntestableSite {
+                  project_id: 'project/wallet',
+                  module: 'WalletKit',
+                  language: 'swift',
+                  file: 'Sources/WalletKit/WalletManager.swift',
+                  start_line: 8,
+                  end_line: 8,
+                  category: 'service_locator',
+                  symbol_referenced: 'ServiceLocator.shared',
+                  severity: 'high',
+                  message: 'Service locator usage hides dependencies from tests.',
+                  run_id: 'run-standalone-site'
+                })
+                """
+            )
+
+        run_info = RunInfo(
+            run_id="run-standalone-site",
+            extractor_name="testability_di",
+            project="wallet",
+            completed_at="2026-05-08T11:00:00Z",
+        )
+        extractor = TestabilityDiExtractor()
+        result = await fetch_audit_data(
+            driver,
+            {"testability_di": run_info},
+            {"testability_di": extractor},
+        )
+
+        section = result["testability_di"]
+        assert section.summary_stats == {
+            "total": 1,
+            "patterns": 0,
+            "test_doubles": 0,
+            "untestable_sites": 1,
+        }
+        assert len(section.findings) == 1
+        assert section.findings[0]["module"] == "WalletKit"
+        assert section.findings[0]["style"] is None
+        assert section.findings[0]["max_severity"] == "high"
+
+        rendered = render_section(
+            section,
+            extractor.audit_contract().severity_column,
+            100,
+            severity_mapper=extractor.audit_contract().severity_mapper,
+        )
+        assert "ServiceLocator.shared" in rendered
+        assert "STANDALONE_SIGNAL" in rendered
+
 
 async def _seed_fake_nodes(driver: AsyncDriver, *, project: str) -> None:
     async with driver.session() as session:

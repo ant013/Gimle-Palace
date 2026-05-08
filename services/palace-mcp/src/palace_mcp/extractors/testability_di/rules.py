@@ -22,7 +22,9 @@ _KOTLIN_INIT_RE = re.compile(
     re.MULTILINE,
 )
 _SWIFT_PROPERTY_RE = re.compile(r"@(?:Injected|LazyInjected|InjectedObject)\b")
-_KOTLIN_PROPERTY_RE = re.compile(r"@Inject\s+lateinit\s+var\b|\bby\s+inject\s*\(")
+_KOTLIN_PROPERTY_RE = re.compile(
+    r"@Inject\s+lateinit\s+var\b|\bby\s+inject(?:<[^>]+>)?\s*\("
+)
 _SWIFT_SERVICE_LOCATOR_RE = re.compile(
     r"\b(?:ServiceLocator\.shared|Resolver\.(?:root|resolve)\b|\w+\.resolve\s*\()"
 )
@@ -38,7 +40,7 @@ _SWIFT_FRAMEWORKS: dict[str, re.Pattern[str]] = {
 _KOTLIN_FRAMEWORKS: dict[str, re.Pattern[str]] = {
     "hilt": re.compile(r"\bdagger\.hilt\b|@InstallIn\b|SingletonComponent"),
     "dagger": re.compile(r"\bimport\s+dagger\.(?!hilt)"),
-    "koin": re.compile(r"\bimport\s+org\.koin\b|\bby\s+inject\s*\("),
+    "koin": re.compile(r"\bimport\s+org\.koin\b|\bby\s+inject(?:<[^>]+>)?\s*\("),
 }
 _SWIFT_DOUBLE_FRAMEWORKS: dict[TestDoubleKind, re.Pattern[str]] = {
     "cuckoo": re.compile(r"\bimport\s+Cuckoo\b"),
@@ -204,11 +206,14 @@ def _matches_service_locator(source: SourceFile) -> bool:
 
 def _frameworks_for_source(source: SourceFile) -> list[str]:
     patterns = _SWIFT_FRAMEWORKS if source.language == "swift" else _KOTLIN_FRAMEWORKS
-    return [
+    frameworks = [
         framework
         for framework, pattern in patterns.items()
         if pattern.search(source.text) is not None
     ]
+    if source.language == "kotlin" and "hilt" in frameworks and "dagger" in frameworks:
+        frameworks.remove("dagger")
+    return frameworks
 
 
 def _framework_double_kinds(source: SourceFile) -> list[TestDoubleKind]:

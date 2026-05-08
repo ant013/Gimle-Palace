@@ -6,11 +6,11 @@
 | Severity | Module | Language | Style | Framework | Samples | Outliers | Confidence |
 |----------|--------|----------|-------|-----------|---------|----------|------------|
 {% for finding in findings %}
-| {{ finding._severity | upper }} | {{ finding.module }} | {{ finding.language }} | `{{ finding.style | upper }}` | {{ finding.framework or "-" }} | {{ finding.sample_count }} | {{ finding.outliers }} | {{ finding.confidence }} |
+| {{ finding._severity | upper }} | {{ finding.module }} | {{ finding.language }} | `{{ finding.style | default("standalone_signal", true) | upper }}` | {{ finding.framework or "-" }} | {{ finding.sample_count | default(0, true) }} | {{ finding.outliers | default(0, true) }} | {{ finding.confidence | default("heuristic", true) }} |
 {% endfor %}
 
 {% for finding in findings %}
-### {{ finding.module }} · `{{ finding.style | upper }}` · {{ finding._severity | upper }}
+### {{ finding.module }} · `{{ finding.style | default("standalone_signal", true) | upper }}` · {{ finding._severity | upper }}
 
 {% if finding.test_doubles %}
 Test doubles:
