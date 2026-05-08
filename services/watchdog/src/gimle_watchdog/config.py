@@ -35,6 +35,10 @@ class Thresholds:
     hang_cpu_max_s: int | None  # deprecated; None when new fields are used
     idle_cpu_ratio_max: float  # CPU time / elapsed time ratio below which proc is idle
     hang_stream_idle_max_s: int  # seconds since last stream-json event before proc is stalled
+    # Skip recovery for issues whose updatedAt is older than this many minutes — avoids
+    # waking long-abandoned in_review issues from the archive (GIM-NN, 2026-05-06: after
+    # broader scope landed in 6b2419f, watchdog woke 3 weeks-old GIM-44 / 20 / 28 etc.).
+    recover_max_age_min: int = field(default=180, kw_only=True)
 
 
 @dataclass(frozen=True)
@@ -158,6 +162,12 @@ def _parse_thresholds(raw: dict[str, object]) -> Thresholds:
     if not (0.0 < ratio < 1.0):
         raise ConfigError(f"thresholds.idle_cpu_ratio_max must be in (0.0, 1.0), got {ratio!r}")
 
+    # GIM-NN: optional with safe default (3 hours). Older yaml configs work unchanged.
+    recover_max_age_min_raw = raw.get("recover_max_age_min", 180)
+    recover_max_age_min = _require_positive_int(
+        recover_max_age_min_raw, "thresholds.recover_max_age_min"
+    )
+
     return Thresholds(
         died_min=_require_positive_int(raw.get("died_min"), "thresholds.died_min"),
         hang_etime_min=_require_positive_int(
@@ -168,6 +178,7 @@ def _parse_thresholds(raw: dict[str, object]) -> Thresholds:
         hang_stream_idle_max_s=_require_positive_int(
             raw.get("hang_stream_idle_max_s"), "thresholds.hang_stream_idle_max_s"
         ),
+        recover_max_age_min=recover_max_age_min,
     )
 
 

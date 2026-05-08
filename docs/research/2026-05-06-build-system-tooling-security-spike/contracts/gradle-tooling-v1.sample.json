@@ -1,0 +1,50 @@
+{
+  "capture_mode": "committed_sample_no_task_execution_proof",
+  "projects": [
+    {
+      "name": "gradle-multi-project",
+      "path": ":",
+      "project_dir": "<ABSOLUTE_PATH>"
+    },
+    {
+      "name": "app",
+      "path": ":app",
+      "project_dir": "<ABSOLUTE_PATH>"
+    },
+    {
+      "name": "lib",
+      "path": ":lib",
+      "project_dir": "<ABSOLUTE_PATH>"
+    }
+  ],
+  "root_path": "<ABSOLUTE_PATH>",
+  "schema_version": "gradle-tooling-v1",
+  "tasks": [
+    {
+      "dependencies": [],
+      "description": "Hypothetical helper task shape retained only as a contract sample.",
+      "group": null,
+      "name": "buildSystemProbe",
+      "owner_project": ":",
+      "path": ":buildSystemProbe"
+    },
+    {
+      "dependencies": [],
+      "description": "Print hello from app",
+      "group": "verification",
+      "name": "hello",
+      "owner_project": ":app",
+      "path": ":app:hello"
+    },
+    {
+      "dependencies": [],
+      "description": "Verify lib configuration",
+      "group": "verification",
+      "name": "verifyLib",
+      "owner_project": ":lib",
+      "path": ":lib:verifyLib"
+    }
+  ],
+  "tool_name": "gradle",
+  "tool_version": "9.3.1"
+}

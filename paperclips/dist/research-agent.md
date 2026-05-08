@@ -427,10 +427,36 @@ Handoff comment format:
 
 Why formal mention: plain `@Role` can wake ordinary comments, but phase handoff needs a machine-verifiable recovery wake if the assignee PATCH path flakes. GIM-182 8h stall evidence.
 
+### Exit Protocol — after handoff PATCH succeeds
+
+After the handoff PATCH returns 200 and GET-verify confirms `assigneeAgentId == <next>`:
+
+- **Stop tool use immediately.** The handoff PATCH is your last tool call. No more bash, curl, serena, gh, or any other tool — even read-only ones.
+- Output your final summary as plain assistant text, then end the turn.
+- Do **not** re-fetch the issue, do **not** post a second confirmation comment, do **not** check git status. Your phase is closed.
+
+Why: between the PATCH (which changes assignee away from you) and your subprocess exit, paperclip's run-supervisor sees the issue is no longer yours and SIGTERMs the process. Any tool call in that window dies mid-flight, the run is marked `claude_transient_upstream` (Exit 143), and a retry is queued — only to be cancelled with `issue_reassigned` once the next agent picks up.
+
+Evidence: GIM-216 — 11 successful handoffs misclassified as failures because agents kept making tool calls after the PATCH. Pre-slim baseline GIM-193 had zero such failures.
+
+If post-handoff cleanup is genuinely needed (e.g. local worktree state), do it BEFORE the handoff PATCH, not after.
+
 Background lesson: `paperclips/fragments/lessons/phase-handoff.md`.
 ## Agent UUID roster — Gimle Claude
 
-Use `[@<Role>](agent://<uuid>?i=<icon>)` in phase handoffs. Source: `paperclips/deploy-agents.sh`.
+Use `[@<Role>](agent://<uuid>?i=<icon>)` in phase handoffs.
+Source: `paperclips/deploy-agents.sh`.
+
+**Cross-team handoff rule** (applies to ALL agents, both teams): handoffs
+must go to an agent on YOUR OWN team. Claude-side roles handoff to
+Claude-side agents (bare names, no prefix); CX-side roles handoff to
+CX-side agents (CX prefix). The two teams are isolated by design (per
+`feedback_parallel_team_protocol.md`). When you say "next CTO" — that's
+the CTO of your team. NEVER address an agent on the other team in a
+phase handoff. The build pipeline ships **target-specific** rosters:
+Claude target gets THIS file (Claude UUIDs); Codex target gets the
+override at `paperclips/fragments/targets/codex/local/agent-roster.md`
+(CX UUIDs).
 
 | Role | UUID | Icon |
 |---|---|---|

@@ -11,9 +11,12 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from graphiti_core import Graphiti
+
+if TYPE_CHECKING:
+    from palace_mcp.audit.contracts import AuditContract
 
 
 class BaseExtractor(ABC):
@@ -38,6 +41,15 @@ class BaseExtractor(ABC):
         runner catches + finalizes :IngestRun as errored.
         """
         raise NotImplementedError
+
+    def audit_contract(self) -> "AuditContract | None":
+        """Return audit contract for this extractor, or None to opt out.
+
+        Default: None. Override in extractors that participate in palace.audit.run.
+        The returned AuditContract tells the fetcher which Cypher query to run
+        and which Jinja2 template to render results with.
+        """
+        return None
 
 
 @dataclass(frozen=True)

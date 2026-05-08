@@ -106,4 +106,6 @@ Not community-covered: Access policies scope creep (`everyone` rules), service t
 <!-- @include fragments/shared/fragments/phase-handoff.md -->
 <!-- @include fragments/local/agent-roster.md -->
 
+<!-- @include fragments/local/audit-mode.md -->
+
 <!-- @include fragments/shared/fragments/language.md -->
