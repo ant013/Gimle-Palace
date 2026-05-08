@@ -8,6 +8,8 @@ related:
   - GIM-229
   - GIM-216
   - GIM-181
+review:
+  - 2026-05-08 multi-agent spec review incorporated
 ---
 
 # Handoff / Assign Rules Unification
@@ -18,8 +20,9 @@ Paperclip agents currently learn handoff and assignment behavior from several
 Markdown layers:
 
 - `paperclips/fragments/profiles/handoff.md`
-- `paperclips/fragments/shared/fragments/phase-handoff.md`
-- `paperclips/fragments/shared/fragments/heartbeat-discipline.md`
+- shared-fragment submodule sources under `paperclips/fragments/shared`
+- target-materialized shared copies such as
+  `paperclips/fragments/targets/codex/shared/fragments/phase-handoff.md`
 - `paperclips/fragments/local/agent-roster.md`
 - `paperclips/fragments/targets/codex/local/agent-roster.md`
 - generated `paperclips/dist/**`
@@ -48,16 +51,18 @@ The shared fragments repository has already moved forward:
 
 Make handoff/assign behavior a single, unambiguous runtime contract for agents:
 
-1. Every completed agent phase exits in an owned state:
-   `status=done` or `assigneeAgentId` set to a valid next owner.
+1. Every completed agent phase exits in exactly one valid shape:
+   close (`status=done`, assignees cleared) or handoff (active status plus
+   `assigneeAgentId` set to a valid next owner).
 2. If the next phase owner is unclear, the agent assigns to **its own team CTO**.
 3. Agents resolve concrete names and UUIDs only through their team-local roster.
 4. Claude-side agents never hand off to `CX*` agents; CX/Codex-side agents never
    hand off to bare Claude-side agents.
-5. Build and validation fail if generated bundles omit the invariant or contain
-   cross-team UUID/name leakage.
-6. Watchdog detects, alerts, and optionally repairs obvious cross-team or
-   ownerless handoff states.
+5. Build and validation fail if generated bundles omit stable handoff markers
+   or contain actionable cross-team targets.
+6. Watchdog detects and alerts on obvious cross-team or ownerless handoff
+   states. Automatic repair is a follow-up unless team ownership is proven
+   unambiguous.
 
 ## Non-Goals
 
@@ -67,6 +72,8 @@ Make handoff/assign behavior a single, unambiguous runtime contract for agents:
 - Do not remove phase matrices; this is a consolidation and guardrail pass.
 - Do not depend on agents reliably interpreting incident narratives. The runtime
   rule must be concise and machine-verifiable.
+- Do not make watchdog auto-reassign issues in this slice unless an
+  unambiguous same-team target is available and the repair is explicitly gated.
 
 ## Assumptions
 
@@ -78,6 +85,9 @@ Make handoff/assign behavior a single, unambiguous runtime contract for agents:
 - `@Board` remains operator-side and is not a normal agent UUID target.
 - Live agents consume generated/deployed `AGENTS.md`, not shared fragments
   directly; rebuild and deploy are required after fragment changes.
+- Wrong-team examples may remain in runtime bundles only when they are clearly
+  labeled as anti-patterns. Validators must reject actionable wrong-team
+  targets, not every foreign UUID string.
 
 ## Affected Areas
 
@@ -86,17 +96,26 @@ Make handoff/assign behavior a single, unambiguous runtime contract for agents:
 - `paperclips/fragments/shared` submodule pointer
 - upstream shared fragment:
   `paperclip-shared-fragments/fragments/phase-handoff.md`
+- local materialized target copies produced from shared fragments, including
+  `paperclips/fragments/targets/codex/shared/fragments/phase-handoff.md`
 
 ### Local Paperclip instruction sources
 
 - `paperclips/fragments/profiles/handoff.md`
+- new shared/core handoff fragment, if introduced
 - `paperclips/fragments/local/agent-roster.md`
 - `paperclips/fragments/targets/codex/local/agent-roster.md`
 - `paperclips/fragments/targets/codex/shared/fragments/phase-handoff.md`
 - `paperclips/fragments/targets/codex/shared/fragments/heartbeat-discipline.md`
+- `paperclips/instruction-profiles.yaml`
 - `paperclips/instruction-coverage.matrix.yaml`
+- `paperclips/bundle-size-baseline.json`
+- `paperclips/bundle-size-allowlist.json`
 - `paperclips/scripts/validate_instructions.py`
+- `paperclips/tests/test_validate_instructions.py`
 - `paperclips/validate-codex-target.sh`
+- Claude-side validation wrapper, if added
+- deploy scripts that upload generated agent bundles
 - generated `paperclips/dist/**`
 
 ### Watchdog
@@ -114,29 +133,174 @@ The canonical agent-facing rule should appear once as the primary decision
 model, then be referenced by narrower fragments.
 
 ```md
+<!-- paperclip:handoff-contract:v2 -->
+
 ## Exit / Handoff Rule
 
-Before you exit, the issue MUST be in exactly one terminal/owned state:
+Before exit, choose exactly one valid exit shape.
 
-1. `status=done` only after required merge / QA / deploy evidence exists; OR
-2. `assigneeAgentId` is set to the next agent in YOUR TEAM; OR
-3. if unsure who is next, assign to YOUR TEAM CTO.
+### Close
 
-Never leave `status=todo`, unassigned, or assigned to yourself after your phase
-is complete.
+Use only when required QA / merge / deploy evidence already exists:
 
-Role names in the matrix are role families. Resolve concrete name + UUID from
-`fragments/local/agent-roster.md`. Do not use another team's UUID.
+- `status=done`
+- `assigneeAgentId=null`
+- `assigneeUserId=null`
+- final comment contains evidence and merge / deploy SHA when applicable
 
-Handoff must be one API update:
+### Handoff
+
+Use when another agent must continue the issue:
+
+- `status=<explicit active handoff status>` (`in_progress` or `in_review` as
+  required by the phase)
+- `assigneeAgentId=<next owner from YOUR TEAM roster>`
+- `comment=<evidence + formal mention + exact next action>`
+
+If the next owner is unclear, assign to YOUR TEAM CTO.
+
+Invalid exit states:
+
+- `status=done` with an agent assignee still set
+- non-`done` status with no `assigneeAgentId`
+- assigned to yourself after your phase is complete
+- assigned to another team's agent
+- comment-only handoff without PATCH
+
+Matrix role names are role families. Resolve `role_family -> concrete agent`
+using the current team's local roster. Do not use another team's names or UUIDs
+as active targets.
+
+Handoff must be one ownership update:
 `PATCH status + assigneeAgentId + comment`
 
-Then `GET` verify `assigneeAgentId == expected`.
-Mismatch -> retry once.
-Still mismatch -> `status=blocked` + `@Board`.
+Then `GET` verify both:
 
-After verified handoff: stop tool use immediately.
+- `status == expected`
+- `assigneeAgentId == expected`
+
+If PATCH or GET verification is ambiguous, do not blindly duplicate comments.
+Retry once only when the first ownership write is known not to have committed.
+Still mismatched or ambiguous -> `status=blocked` + `@Board` with actual vs
+expected.
+
+After verified handoff, make no further Paperclip mutations or comments for
+this issue in the same run. If local cleanup is needed, do it before handoff.
 ```
+
+## Full Agent Task Cycle
+
+This is the intended end-to-end cycle for one Paperclip task. The concrete
+agent names differ by team, but role families and ownership rules stay the same.
+
+### Team Mapping
+
+| Role family | Claude team concrete agent | CX/Codex team concrete agent |
+|---|---|---|
+| CTO | `CTO` (`7fb0fdbb`) | `CXCTO` (`da97dbd9`) |
+| Code reviewer | `CodeReviewer` | `CXCodeReviewer` |
+| Implementer | `PythonEngineer` / `MCPEngineer` / `InfraEngineer` / domain engineer | `CXPythonEngineer` / `CXMCPEngineer` / `CXInfraEngineer` / domain engineer |
+| Architect reviewer | `OpusArchitectReviewer` | `CodexArchitectReviewer` |
+| QA | `QAEngineer` | `CXQAEngineer` |
+| Writer / research / security | team-local role | team-local `CX*` role |
+
+`Role family` values are the only names allowed in the phase matrix. Concrete
+agent names and UUIDs must come from the current team's local roster.
+
+### Phase Cycle
+
+| Step | Current owner | Required action | Next owner |
+|---|---|---|---|
+| 0. Intake / wake | Assigned agent | `GET /agents/me`, locate assigned issue, claim or continue existing run | same owner |
+| 1. Formalization | CTO | normalize issue, scope, acceptance, branch/spec gate | Code reviewer |
+| 2. Plan review | Code reviewer | review spec/plan for feasibility, missing gates, phase ownership | Implementer or CTO if blocked |
+| 3. Implementation | Implementer | make scoped code/doc changes, push branch, provide evidence | Code reviewer |
+| 4. Mechanical review | Code reviewer | review diff, request fixes or approve | Implementer on changes, architect reviewer on approve |
+| 5. Architecture review | Architect reviewer | review boundaries, integration risks, long-term maintainability | Implementer on changes, QA on approve |
+| 6. QA / runtime validation | QA | run required tests/smoke, post owned evidence | CTO |
+| 7. Merge / close | CTO | verify QA evidence, merge, deploy/smoke if required, close | done or next queue issue |
+
+Typical status by next owner:
+
+- reviewer / architect-reviewer phase -> `status=in_review`
+- implementer / QA / merger phase -> `status=in_progress`
+- terminal close -> `status=done`, assignees cleared
+
+If existing Paperclip status conventions for a specific phase disagree, the
+phase-specific convention wins, but the issue must still have a next owner
+unless it is truly `done`.
+
+### Agent-To-Agent Call Matrix
+
+| From role family | To role family | Required call |
+|---|---|---|
+| CTO | Code reviewer | "Phase 1.1 complete: review the spec/plan, risks, and ownership. Request changes or hand to implementer." |
+| Code reviewer | Implementer | "Plan approved: implement this scoped slice on the named branch, push commits, and hand back for review." |
+| Code reviewer | CTO | "Plan blocked: decision needed. Here are the blockers and options." |
+| Implementer | Code reviewer | "Implementation complete: review this branch/commit with listed verification evidence." |
+| Code reviewer | Implementer | "Changes requested: address these findings and hand back with new commit/evidence." |
+| Code reviewer | Architect reviewer | "Mechanical review approved: review architecture/integration risks and either approve or request changes." |
+| Architect reviewer | Implementer | "Architecture changes requested: address these boundary/design issues and hand back." |
+| Architect reviewer | QA | "Architecture approved: run QA/runtime validation using this evidence checklist." |
+| QA | Implementer | "QA failed: fix these reproducible failures and hand back for review/QA as required." |
+| QA | CTO | "QA passed: merge/deploy readiness evidence is attached; perform Phase 4.2 close." |
+| CTO | Team CTO for next queue | "Merged and closed: create or claim the next queued slice if issue body specifies queue continuation." |
+
+All calls resolve concrete names through the current team roster. For example,
+the Claude implementation-complete call goes to `CodeReviewer`, while the
+CX/Codex implementation-complete call goes to `CXCodeReviewer`.
+
+### Handoff Call Pattern
+
+Every phase-to-phase call uses the same pattern:
+
+1. Finish local work and collect evidence before changing ownership.
+2. Push commits / publish artifacts required by the next owner.
+3. Resolve next owner through current team roster.
+4. PATCH issue in one call:
+   - `status=<expected next status>`
+   - `assigneeAgentId=<next owner uuid>`
+   - `comment=<phase complete + evidence + formal mention + exact ask>`
+5. GET issue and verify both `status` and `assigneeAgentId`.
+6. If mismatch and first write definitely did not commit, retry once.
+7. If still mismatched or ambiguous, PATCH `status=blocked` and comment `@Board`
+   with actual vs expected.
+8. After verified handoff, stop Paperclip mutations/comments for this issue.
+
+Handoff comment template:
+
+```md
+## Phase <N.M> complete — <short result>
+
+Evidence:
+- Branch: `<branch>`
+- Commit: `<sha>`
+- Verification: `<commands / CI / smoke / review evidence>`
+
+[@<TeamLocalNextAgent>](agent://<team-local-uuid>?i=<icon>) your turn —
+Phase <N.M+1>: <exact next action>.
+```
+
+### Fallback Calls
+
+- Unknown next implementer -> current team CTO.
+- Phase matrix conflict -> current team CTO.
+- Missing roster UUID -> `status=blocked` + `@Board`, do not guess.
+- Execution lock conflict (`409`) -> ask current lock holder to release; if
+  unresolved, `status=blocked` + `@Board`.
+- Current team cannot be determined -> alert/escalate, no auto-repair.
+
+### Autonomous Queue Continuation
+
+After merge/close, CTO must inspect the issue body for next-queue or autonomous
+trigger pointers.
+
+- No next queue -> close as `done` with assignees cleared.
+- Next queue exists -> close current issue as `done`, then create the next issue
+  assigned to the same team's CTO with source issue, merge SHA, queue position,
+  and spec/plan links.
+- If next queue exists but required data is missing -> `status=blocked` +
+  `@Board`; do not silently close.
 
 ## Consolidation Plan
 
@@ -149,8 +313,13 @@ After verified handoff: stop tool use immediately.
      - autonomous queue propagation;
      - comment-is-not-handoff rule.
 
-2. **Make `phase-handoff.md` canonical**
-   - Keep phase matrix and exit invariant in `phase-handoff.md`.
+2. **Introduce one canonical handoff core**
+   - Prefer a small `handoff-core` fragment with stable marker
+     `paperclip:handoff-contract:v2`.
+   - Include that core from both short `profiles/handoff.md` and full
+     `phase-handoff.md`, or duplicate only through the build system if includes
+     cannot be nested.
+   - Keep phase matrix in `phase-handoff.md`.
    - Treat role names as role families, not concrete names.
    - Add explicit fallback: unclear next owner -> own-team CTO.
 
@@ -165,35 +334,64 @@ After verified handoff: stop tool use immediately.
    - Claude roster lists only Claude roles and UUIDs.
    - Codex/CX roster lists only CX roles and UUIDs.
    - Both rosters state that "your CTO" means the CTO of the current team.
+   - Foreign-team UUIDs are allowed only in clearly labeled anti-pattern text,
+     never in active roster tables or positive handoff templates.
 
 5. **Rebuild generated bundles**
    - Rebuild Claude and Codex bundles.
    - Commit generated `paperclips/dist/**` diffs with the source changes.
+   - Record shared-fragment SHA and generated bundle SHA in deploy evidence.
 
 ## Validation Plan
 
 Add validation that fails closed when generated bundles are inconsistent:
 
-1. Every generated role bundle contains the before-exit invariant marker:
-   - `status=done OR assigneeAgentId`
-   - `your team CTO` or equivalent team-local fallback language
-2. Every generated role bundle contains the atomic handoff marker:
+1. Every generated role bundle contains stable markers, not loose prose:
+   - `paperclip:handoff-contract:v2`
+   - `paperclip:handoff-exit-shapes:v1`
+   - `paperclip:handoff-verify-status-assignee:v1`
+   - `paperclip:team-local-roster:v1`
+2. Every generated role bundle contains the atomic handoff requirements:
    - `PATCH status + assigneeAgentId + comment`
-   - `GET` verify
-3. Claude generated bundles must not contain:
-   - `CXCTO`
-   - `CXCodeReviewer`
-   - known CX UUIDs such as `da97dbd9`
-   - Codex/CX roster header text
-4. Codex generated bundles must not contain:
-   - bare Claude handoff examples such as `[@CTO](agent://7fb0fdbb`
-   - known Claude UUIDs where a CX equivalent exists
-   - Claude roster header text
-5. Validator reports the exact bundle path and offending marker.
+   - verify both `status` and `assigneeAgentId`
+   - unclear next owner -> current team CTO
+3. Scoped cross-team validation:
+   - Claude bundles must not contain actionable CX targets in active roster
+     tables or positive handoff templates.
+   - Codex bundles must not contain actionable Claude targets in active roster
+     tables or positive handoff templates.
+   - Foreign-team names/UUIDs are allowed only inside sections explicitly marked
+     as anti-pattern / NOT examples.
+4. Validator tests cover:
+   - missing stable markers;
+   - actionable wrong-team target rejected;
+   - wrong-team anti-pattern example allowed;
+   - exact role id, bundle path, and offending marker in error output.
+5. Bundle-size policy remains enforced. If the canonical block increases size
+   beyond policy, update `bundle-size-baseline.json` or allowlist with owner,
+   reason, and review/expiry date.
+6. Validator reports the exact bundle path and offending marker.
 
 ## Watchdog Plan
 
-Extend semantic handoff detection beyond "valid hired UUID" checks.
+Extend semantic handoff detection beyond "valid hired UUID" checks. This spec
+implements alert-first detection. Auto-repair is gated behind explicit
+confidence checks and may be split into a follow-up.
+
+### Team Resolution
+
+Use this precedence:
+
+1. Explicit issue metadata or body marker such as `Team = Claude` or
+   `Team = CX`, if present and parseable.
+2. Latest formal handoff comment author team, resolved from committed
+   UUID-to-team roster map.
+3. Previous assignee team, resolved from committed UUID-to-team roster map.
+4. If signals conflict or are missing, team is ambiguous.
+
+The committed roster map is authoritative for `uuid -> team -> role_family`.
+Issue text is authoritative only for the intended issue team. Ambiguous team
+resolution allows alerting but forbids automatic reassignment.
 
 ### New finding: `cross_team_handoff`
 
@@ -224,7 +422,7 @@ Detect likely "phase complete but no owner" states:
 
 ### Repair policy
 
-Phase 1 may be alert-only if the team marker is ambiguous.
+Phase 1 is alert-only by default.
 
 Safe repair is allowed only when all are true:
 
@@ -240,52 +438,82 @@ Otherwise:
 - set `status=blocked` only if configured for repair mode;
 - mention `@Board` with actual vs expected assignee.
 
+If repair remains in this slice, restrict it to same-team CTO fallback only.
+Phase-matrix next-role repair should be a follow-up after team ownership and
+phase detection have live confidence.
+
 ## Acceptance Criteria
 
 1. Main repo submodule points at `paperclip-shared-fragments@1a932f9` or newer
    containing the naming disclaimer and before-exit invariant.
-2. Claude and Codex generated bundles both contain the canonical exit/handoff
-   rule.
-3. Claude generated bundles contain only Claude roster UUIDs for phase handoff.
-4. Codex generated bundles contain only CX/Codex roster UUIDs for phase handoff.
-5. `PythonEngineer` generated bundle contains enough text to prevent the GIM-239
+2. Short and full handoff profiles both include the same canonical handoff core
+   marker `paperclip:handoff-contract:v2`.
+3. Claude and Codex generated bundles both contain the canonical exit/handoff
+   rule and stable validator markers.
+4. Claude generated bundles contain only Claude roster UUIDs in active roster
+   tables and positive handoff templates.
+5. Codex generated bundles contain only CX/Codex roster UUIDs in active roster
+   tables and positive handoff templates.
+6. Foreign-team UUIDs in generated bundles are either absent or confined to
+   explicitly labeled anti-pattern / NOT sections.
+7. `PythonEngineer` generated bundle contains enough text to prevent the GIM-239
    mistake:
    - "your team CTO" maps to `CTO`, not `CXCTO`;
    - `CTO` UUID is `7fb0fdbb`.
-6. `CXPythonEngineer` generated bundle contains the mirror rule:
+8. `CXPythonEngineer` generated bundle contains the mirror rule:
    - "your team CTO" maps to `CXCTO`, not `CTO`;
    - `CXCTO` UUID is `da97dbd9`.
-7. Validator fails when a Claude bundle contains `da97dbd9` or `CXCTO`.
-8. Validator fails when a Codex bundle contains `7fb0fdbb` in a handoff example.
-9. Watchdog has tests for:
-   - Claude issue assigned to `CXCTO`;
-   - CX issue assigned to `CTO`;
-   - phase-complete comment with no next assignee;
-   - ambiguous team marker -> alert-only, no unsafe repair.
-10. Existing watchdog handoff detectors still pass:
+9. Validator fails when a Claude bundle contains an actionable CX handoff target.
+10. Validator fails when a Codex bundle contains an actionable Claude handoff
+    target.
+11. Validator allows explicitly labeled wrong-team anti-pattern examples.
+12. Validator unit tests cover marker presence, scoped cross-team checks, and
+    path/marker error messages.
+13. Bundle-size growth is either within policy or explicitly allowed with owner
+    and expiry/review date.
+14. Watchdog has tests for:
+    - Claude issue assigned to `CXCTO`;
+    - CX issue assigned to `CTO`;
+    - phase-complete comment with no next assignee;
+    - ambiguous team marker -> alert-only, no unsafe repair.
+15. Existing watchdog handoff detectors still pass:
     - `comment_only_handoff`;
     - `wrong_assignee`;
     - `review_owned_by_implementer`;
     - `in_review` lost-wake recovery.
+16. Verification documents any pre-existing baseline validator failures before
+    using validators as feature gates.
 
 ## Verification Plan
+
+### Baseline Prerequisite
+
+Before using validators as feature gates, initialize/update
+`paperclips/fragments/shared` and document whether current validators are green.
+If validators fail on pre-existing metadata drift, record the exact unrelated
+failures and either fix them first or list them as implementation blockers with
+owners.
 
 Instruction bundle verification:
 
 ```bash
 ./paperclips/build.sh --target claude
 ./paperclips/build.sh --target codex
-./paperclips/validate-codex-target.sh
 python3 paperclips/scripts/validate_instructions.py
+python3 -m pytest -q paperclips/tests/test_validate_instructions.py
+./paperclips/validate-codex-target.sh
 ```
 
 Targeted grep checks:
 
 ```bash
-rg -n "CXCTO|da97dbd9" paperclips/dist/*.md
-rg -n "\\[@CTO\\]\\(agent://7fb0fdbb" paperclips/dist/codex/*.md
-rg -n "status=done OR assigneeAgentId|your team CTO" paperclips/dist paperclips/dist/codex
+rg -n "paperclip:handoff-contract:v2|paperclip:team-local-roster:v1" paperclips/dist paperclips/dist/codex
+rg -n 'PATCH status \+ assigneeAgentId \+ comment|verify both `status` and `assigneeAgentId`' paperclips/dist paperclips/dist/codex
 ```
+
+Do not use raw absence of `CXCTO`, `CTO`, `da97dbd9`, or `7fb0fdbb` as the
+feature gate, because explicit anti-pattern sections may intentionally contain
+wrong-team examples.
 
 Watchdog verification:
 
@@ -305,16 +533,13 @@ uv run pytest
 
 ## Open Questions
 
-1. What is the most reliable source of issue team ownership?
-   - explicit issue body marker such as `Team = Claude`;
-   - assignee role prefix;
-   - project / queue metadata;
-   - Paperclip company/team API, if available.
-2. Should watchdog auto-repair cross-team assignments immediately, or start
-   alert-only and promote to repair after live confidence?
-3. Should the phase matrix remain in all roles, or only in roles that perform
+1. Should wrong-team anti-pattern examples stay in runtime bundles, or move to
+   lessons/runbooks after validators become scoped?
+2. Should a symmetric `validate-claude-target.sh` wrapper be added, or should
+   Claude leakage checks live only in `validate_instructions.py`?
+3. Should watchdog auto-repair be split into a follow-up issue after alert-only
+   live confidence?
+4. Should the phase matrix remain in all roles, or only in roles that perform
    non-default phase transitions?
-4. Should `profiles/handoff.md` include the full canonical rule despite bundle
-   size, or should validation require the canonical markers via another include?
 5. Should deploy scripts refuse to upload bundles when cross-team validator
    checks fail, even in dry-run mode?
