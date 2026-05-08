@@ -3,7 +3,7 @@ import Foundation
 
 class PaymentService {
     func transferUnit() -> String {
-        // Raw unit string literal — mixing "wei" / "gwei" without typed conversion
+        // Raw unit string literal — mixing wei/gwei without typed conversion
         let unit = "wei"
         return unit
     }

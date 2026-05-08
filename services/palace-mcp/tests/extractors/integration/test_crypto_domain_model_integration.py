@@ -1,7 +1,7 @@
 """Integration tests for crypto_domain_model extractor (GIM-239).
 
 D.1 — test_run_integration_synthetic: invoke extractor against the mini-project
-       fixture using a real Neo4j testcontainer; assert 3 :CryptoFinding nodes.
+       fixture using a real Neo4j testcontainer; assert 7 :CryptoFinding nodes.
 D.2 — test_schema_creation_idempotent: verify crypto constraints + indexes are
        created and re-creating them (IF NOT EXISTS) does not error.
 """
@@ -33,8 +33,9 @@ _FIXTURE_SOURCES = (
 PROJECT_SLUG = "crypto-integ"
 GROUP_ID = f"project/{PROJECT_SLUG}"
 
-# 3 bad files → 3 distinct (file, line, kind) findings after D5 dedup
-EXPECTED_FINDING_COUNT = 3
+# 5 bad files: 2 (AddressChecksum) + 1 (BigNum) + 1 (DecimalArith) + 1 (PrivateKey) + 2 (WeiEthMix)
+# All 7 have distinct (file, line, kind) keys; D5 dedup leaves them intact.
+EXPECTED_FINDING_COUNT = 7
 
 
 def _make_ctx(repo_path: Path) -> ExtractorRunContext:
@@ -61,7 +62,7 @@ async def test_run_integration_synthetic(
     graphiti_mock: MagicMock,
     tmp_path: Path,
 ) -> None:
-    """D.1: extractor writes exactly EXPECTED_FINDING_COUNT :CryptoFinding nodes."""
+    """D.1: extractor writes exactly 7 :CryptoFinding nodes from 5 bad fixtures."""
     # Copy fixtures out of tests/ to avoid semgrep's default .semgrepignore
     target = tmp_path / "Sources"
     shutil.copytree(_FIXTURE_SOURCES, target)
@@ -91,7 +92,7 @@ async def test_run_integration_idempotent(
     graphiti_mock: MagicMock,
     tmp_path: Path,
 ) -> None:
-    """D.1b: second run MERGEs the same nodes — node count stays at 3."""
+    """D.1b: second run MERGEs the same nodes — node count stays at 7."""
     target = tmp_path / "Sources"
     shutil.copytree(_FIXTURE_SOURCES, target)
 
@@ -111,7 +112,7 @@ async def test_run_integration_idempotent(
         stats2 = await extractor.run(graphiti=graphiti_mock, ctx=ctx2)
 
     assert stats1.nodes_written == EXPECTED_FINDING_COUNT
-    # MERGE on same (project_id, kind, file, start_line, end_line) → no new nodes
+    # MERGE on same (project_id, kind, file, start_line, end_line) → idempotent, same count
     assert stats2.nodes_written == EXPECTED_FINDING_COUNT
 
     async with driver.session() as session:

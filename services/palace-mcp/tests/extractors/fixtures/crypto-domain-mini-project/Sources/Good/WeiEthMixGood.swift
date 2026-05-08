@@ -7,12 +7,12 @@ enum EthUnit {
 
 class PaymentService {
     // Typed enum avoids raw unit string literals
-    func transfer(amount: UInt256, unit: EthUnit) {
+    func transfer(qty: UInt256, unit: EthUnit) {
         let inWei: UInt256
         switch unit {
-        case .wei: inWei = amount
-        case .gwei: inWei = amount * 1_000_000_000
-        case .eth: inWei = amount * 1_000_000_000_000_000_000
+        case .wei: inWei = qty
+        case .gwei: inWei = qty * 1_000_000_000
+        case .eth: inWei = qty * 1_000_000_000_000_000_000
         }
         send(inWei)
     }
