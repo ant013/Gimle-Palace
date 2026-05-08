@@ -15,7 +15,6 @@ from gimle_watchdog.config import Config
 from gimle_watchdog.detection_semantic import HandoffDetectionConfig
 from gimle_watchdog.models import (
     CommentOnlyHandoffFinding,
-    CrossTeamHandoffFinding,
     Finding,
     FindingType,
     InfraBlockFinding,
@@ -104,8 +103,6 @@ def _alert_decision(
 
 def _tier_snapshot(finding: Finding) -> dict[str, Any]:
     """Extract the snapshot dict for GIM-244 tier findings."""
-    if isinstance(finding, CrossTeamHandoffFinding):
-        return {"assigneeAgentId": finding.assignee_id, "status": finding.issue_status}
     if isinstance(finding, OwnerlessCompletionFinding):
         return {"status": "done"}
     if isinstance(finding, InfraBlockFinding):
@@ -116,7 +113,7 @@ def _tier_snapshot(finding: Finding) -> dict[str, Any]:
 async def _handle_tier_finding(
     state: State,
     client: PaperclipClient,
-    finding: CrossTeamHandoffFinding | OwnerlessCompletionFinding | InfraBlockFinding,
+    finding: OwnerlessCompletionFinding | InfraBlockFinding,
     now_server: datetime,
     repair_delay_min: int,
     escalation_delay_min: int,
@@ -184,9 +181,7 @@ async def _handle_tier_finding(
     if expected_tier == 2:
         state.promote_handoff_tier(issue_id, ftype, 2, now_server)
         repaired = False
-        if isinstance(finding, CrossTeamHandoffFinding):
-            repaired = await actions.repair_cross_team_handoff(client, finding)
-        elif isinstance(finding, OwnerlessCompletionFinding):
+        if isinstance(finding, OwnerlessCompletionFinding):
             repaired = await actions.repair_ownerless_completion(client, finding)
         if repaired:
             state.set_handoff_repaired(issue_id, ftype, now_server)
@@ -214,28 +209,23 @@ async def _run_tier_pass(
     now_server: datetime,
     repo_root: Path,
 ) -> None:
-    """GIM-244: 3-tier detect→alert→repair→escalate for cross_team, ownerless, infra_block,
-    stale_bundle.  Runs after the existing alert-only handoff pass.
+    """GIM-244: 3-tier detect→alert→repair→escalate for ownerless, infra_block, stale_bundle.
+    Runs after the existing alert-only handoff pass.
     """
     h = cfg.handoff
     any_tier = (
-        h.handoff_cross_team_enabled
-        or h.handoff_ownerless_enabled
+        h.handoff_ownerless_enabled
         or h.handoff_infra_block_enabled
         or h.handoff_stale_bundle_enabled
     )
     if not any_tier:
         return
 
-    team_uuids: dict[str, set[str]] = {}
-    if h.handoff_cross_team_enabled:
-        team_uuids = detection_semantic.load_team_uuids_from_repo(repo_root)
-
     for company in cfg.companies:
         try:
             # Collect issues for enabled detectors
             issues_to_scan: list[Any] = []
-            if h.handoff_cross_team_enabled or h.handoff_infra_block_enabled:
+            if h.handoff_infra_block_enabled:
                 issues_to_scan.extend(await client.list_active_issues(company.id))
             if h.handoff_ownerless_enabled:
                 issues_to_scan.extend(await client.list_done_issues(company.id))
@@ -250,16 +240,7 @@ async def _run_tier_pass(
                         issue.id, h.handoff_ownerless_comment_limit
                     )
                     # Run enabled detectors (at most one finding per issue per tick)
-                    finding: (
-                        CrossTeamHandoffFinding
-                        | OwnerlessCompletionFinding
-                        | InfraBlockFinding
-                        | None
-                    ) = None
-                    if h.handoff_cross_team_enabled and finding is None:
-                        finding = detection_semantic._detect_cross_team_handoff(
-                            issue, comments, team_uuids
-                        )
+                    finding: OwnerlessCompletionFinding | InfraBlockFinding | None = None
                     if h.handoff_ownerless_enabled and finding is None:
                         finding = detection_semantic._detect_ownerless_completion(issue, comments)
                     if h.handoff_infra_block_enabled and finding is None:
@@ -280,7 +261,6 @@ async def _run_tier_pass(
                     else:
                         # No finding — clear any stale tier alerts for this issue
                         for ftype in (
-                            FindingType.CROSS_TEAM_HANDOFF,
                             FindingType.OWNERLESS_COMPLETION,
                             FindingType.INFRA_BLOCK,
                         ):

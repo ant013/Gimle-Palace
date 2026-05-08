@@ -32,7 +32,6 @@ _SNAPSHOT_KEYS: dict[FindingType, tuple[str, ...]] = {
     FindingType.WRONG_ASSIGNEE: ("assigneeAgentId", "status"),
     FindingType.REVIEW_OWNED_BY_IMPLEMENTER: ("assigneeAgentId", "status"),
     # GIM-244 — 3-tier detectors
-    FindingType.CROSS_TEAM_HANDOFF: ("assigneeAgentId",),
     FindingType.OWNERLESS_COMPLETION: ("status",),
     FindingType.INFRA_BLOCK: ("error_kind",),
     FindingType.STALE_BUNDLE: ("deployed_sha",),

@@ -13,7 +13,6 @@ from gimle_watchdog import detection_semantic as ds
 from gimle_watchdog.models import (
     CommentOnlyHandoffFinding,
     Comment,
-    CrossTeamHandoffFinding,
     FindingType,
     InfraBlockFinding,
     OwnerlessCompletionFinding,
@@ -494,51 +493,6 @@ async def test_max_issues_cap_limits_evaluation():
         issues, _fetch_none, HIRED_IDS, NAME_BY_ID, cfg, NOW
     )
     assert len(findings) == 30
-
-
-# ---------------------------------------------------------------------------
-# Cross-team handoff detector
-# ---------------------------------------------------------------------------
-
-_CLAUDE_UUID = "58b68640-1e83-4d5d-978b-51a5ca9080e0"  # Claude QA
-_CODEX_UUID = "99d5f8f8-822f-4ddb-baaa-0bdaec6f9399"  # Codex QA (stub)
-_TEAM_UUIDS: dict[str, set[str]] = {
-    "claude": {PE_ID, CR_ID, CTO_ID, _CLAUDE_UUID},
-    "codex": {_CODEX_UUID},
-}
-
-
-def test_cross_team_fires_when_codex_assigned_to_claude_issue():
-    issue = _issue(assignee_id=_CODEX_UUID, status="in_progress")
-    result = ds._detect_cross_team_handoff(issue, [], _TEAM_UUIDS, company_team="claude")
-    assert isinstance(result, CrossTeamHandoffFinding)
-    assert result.assignee_team == "codex"
-    assert result.company_team == "claude"
-
-
-def test_cross_team_no_finding_for_same_team():
-    issue = _issue(assignee_id=PE_ID, status="in_progress")
-    result = ds._detect_cross_team_handoff(issue, [], _TEAM_UUIDS, company_team="claude")
-    assert result is None
-
-
-def test_cross_team_no_finding_for_unassigned():
-    issue = _issue(assignee_id=None, status="in_progress")
-    result = ds._detect_cross_team_handoff(issue, [], _TEAM_UUIDS, company_team="claude")
-    assert result is None
-
-
-def test_cross_team_suppressed_by_infra_block_marker():
-    issue = _issue(assignee_id=_CODEX_UUID, status="in_progress")
-    comments = [_comment(body="operator override: infra-block approved cross-team")]
-    result = ds._detect_cross_team_handoff(issue, comments, _TEAM_UUIDS, company_team="claude")
-    assert result is None
-
-
-def test_cross_team_no_finding_for_unknown_uuid():
-    issue = _issue(assignee_id=BOGUS_ID, status="in_progress")
-    result = ds._detect_cross_team_handoff(issue, [], _TEAM_UUIDS, company_team="claude")
-    assert result is None
 
 
 # ---------------------------------------------------------------------------

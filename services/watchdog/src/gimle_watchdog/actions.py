@@ -14,7 +14,6 @@ from gimle_watchdog.detection import HangedProc, PS_FILTER_TOKENS
 from gimle_watchdog.models import (
     AlertResult,
     CommentOnlyHandoffFinding,
-    CrossTeamHandoffFinding,
     Finding,
     FindingType,
     OwnerlessCompletionFinding,
@@ -203,46 +202,7 @@ def render_handoff_alert_comment(
 # GIM-244 — tier-based repair + escalation actions
 # ---------------------------------------------------------------------------
 
-# Claude CTO UUID — target for cross-team auto-repair
-_CLAUDE_CTO_UUID = "7fb0fdbb-e17f-4487-a4da-16993a907bec"
-_CODEX_CTO_UUID = "da97dbd9-6627-48d0-b421-66af0750eacf"
-
-_TEAM_CTO: dict[str, str] = {
-    "claude": _CLAUDE_CTO_UUID,
-    "codex": _CODEX_CTO_UUID,
-}
-
 _CLAUDE_QA_UUID = "58b68640-1e83-4d5d-978b-51a5ca9080e0"
-
-
-async def repair_cross_team_handoff(
-    client: PaperclipClient,
-    finding: CrossTeamHandoffFinding,
-) -> bool:
-    """Reassign to same-team CTO + post comment. Returns True on success."""
-    cto_uuid = _TEAM_CTO.get(finding.company_team)
-    if not cto_uuid:
-        log.warning("repair_cross_team_no_cto company_team=%s", finding.company_team)
-        return False
-    try:
-        await client.patch_issue(finding.issue_id, {"assigneeAgentId": cto_uuid})
-        body = (
-            f"## Watchdog auto-repair — cross_team_handoff\n\n"
-            f"Issue was assigned to `{finding.assignee_id}` ({finding.assignee_team} team) "
-            f"but belongs to the {finding.company_team} team.\n\n"
-            f"Reassigned to {finding.company_team} CTO (`{cto_uuid}`).\n\n"
-            f"<!-- watchdog-autorepair cross_team -->"
-        )
-        await client.post_issue_comment(finding.issue_id, body)
-        log.info(
-            "cross_team_repair_ok issue=%s assignee_was=%s",
-            finding.issue_id,
-            finding.assignee_id,
-        )
-        return True
-    except Exception as exc:
-        log.warning("cross_team_repair_failed issue=%s error=%s", finding.issue_id, exc)
-        return False
 
 
 async def repair_ownerless_completion(

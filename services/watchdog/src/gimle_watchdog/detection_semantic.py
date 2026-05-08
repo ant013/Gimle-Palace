@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib.util
 import logging
 import re
 import subprocess
@@ -14,7 +13,6 @@ from pathlib import Path
 from gimle_watchdog.models import (
     Comment,
     CommentOnlyHandoffFinding,
-    CrossTeamHandoffFinding,
     Finding,
     FindingType,
     InfraBlockFinding,
@@ -48,7 +46,6 @@ class HandoffDetectionConfig:
     handoff_max_issues_per_tick: int = 30
     handoff_alert_cooldown_min: int = 30
     # GIM-244 — 3-tier detector config
-    handoff_cross_team_enabled: bool = False
     handoff_ownerless_enabled: bool = False
     handoff_infra_block_enabled: bool = False
     handoff_stale_bundle_enabled: bool = False
@@ -185,39 +182,6 @@ def _detect_review_owned_by_implementer(
     )
 
 
-def _detect_cross_team_handoff(
-    issue: Issue,
-    comments: list[Comment],
-    team_uuids: dict[str, set[str]],
-    company_team: str = "claude",
-) -> CrossTeamHandoffFinding | None:
-    """Fire when assigneeAgentId belongs to a different team than company_team.
-
-    Suppressed if any recent comment contains an 'infra-block' marker (signals
-    that a human operator intentionally crossed team boundaries).
-    """
-    if issue.assignee_agent_id is None:
-        return None
-    assignee = issue.assignee_agent_id.lower()
-    for team, uuids in team_uuids.items():
-        if assignee in {u.lower() for u in uuids}:
-            if team == company_team:
-                return None  # same team — no problem
-            # Cross-team — check for infra-block marker
-            if any("infra-block" in c.body for c in comments):
-                return None
-            return CrossTeamHandoffFinding(
-                type=FindingType.CROSS_TEAM_HANDOFF,
-                issue_id=issue.id,
-                issue_number=issue.issue_number,
-                assignee_id=issue.assignee_agent_id,
-                assignee_team=team,
-                company_team=company_team,
-                issue_status=issue.status,
-            )
-    return None  # UUID unknown to both teams
-
-
 def _detect_ownerless_completion(
     issue: Issue,
     comments: list[Comment],
@@ -313,34 +277,6 @@ def detect_stale_bundle(
         current_sha=current_sha,
         stale_hours=stale_seconds / 3600,
     )
-
-
-def load_team_uuids_from_repo(repo_root: Path) -> dict[str, set[str]]:
-    """Load team UUIDs by delegating to validate_instructions.load_team_uuids.
-
-    Uses importlib to load the script by absolute path — avoids adding
-    paperclips/ to the watchdog package's sys.path.  Falls back to empty
-    sets if the script is missing.
-    """
-    script = repo_root / "paperclips" / "scripts" / "validate_instructions.py"
-    if not script.is_file():
-        log.warning("team_uuids_script_missing path=%s", script)
-        return {"claude": set(), "codex": set()}
-    spec = importlib.util.spec_from_file_location("_validate_instructions", script)
-    if spec is None or spec.loader is None:
-        return {"claude": set(), "codex": set()}
-    import sys as _sys
-
-    mod = importlib.util.module_from_spec(spec)
-    _sys.modules["_validate_instructions"] = mod  # required for dataclass forward-ref resolution
-    try:
-        loader = spec.loader
-        loader.exec_module(mod)
-        result: dict[str, set[str]] = mod.load_team_uuids(repo_root)
-        return result
-    except Exception as exc:
-        log.warning("team_uuids_load_failed error=%s", exc)
-        return {"claude": set(), "codex": set()}
 
 
 async def _evaluate_one_issue(

@@ -266,14 +266,14 @@ def test_state_loads_pre_gim180_json(tmp_path: Path):
 # GIM-244 — tier state machine tests
 # ---------------------------------------------------------------------------
 
-_SNAP_CT = {"assigneeAgentId": "cx-cto-uuid"}
+_SNAP_OL = {"status": "done"}
 
 
 def test_record_handoff_alert_includes_tier_fields(tmp_path: Path):
     s = st.State.load(tmp_path / "state.json")
     alerted_at = datetime(2026, 5, 8, 10, 0, tzinfo=timezone.utc)
-    s.record_handoff_alert("issue-1", FindingType.CROSS_TEAM_HANDOFF, _SNAP_CT, alerted_at)
-    key = f"issue-1:{FindingType.CROSS_TEAM_HANDOFF.value}"
+    s.record_handoff_alert("issue-1", FindingType.OWNERLESS_COMPLETION, _SNAP_OL, alerted_at)
+    key = f"issue-1:{FindingType.OWNERLESS_COMPLETION.value}"
     entry = s.alerted_handoffs[key]
     assert entry["tier"] == 1
     assert entry["tier_changed_at"] == entry["alerted_at"]
@@ -295,18 +295,18 @@ def test_promote_tier_updates_entry(tmp_path: Path):
     s = st.State.load(tmp_path / "state.json")
     alerted_at = datetime(2026, 5, 8, 10, 0, tzinfo=timezone.utc)
     promoted_at = datetime(2026, 5, 8, 11, 0, tzinfo=timezone.utc)
-    s.record_handoff_alert("issue-1", FindingType.CROSS_TEAM_HANDOFF, _SNAP_CT, alerted_at)
-    s.promote_handoff_tier("issue-1", FindingType.CROSS_TEAM_HANDOFF, 2, promoted_at)
-    assert s.get_handoff_tier("issue-1", FindingType.CROSS_TEAM_HANDOFF) == 2
+    s.record_handoff_alert("issue-1", FindingType.OWNERLESS_COMPLETION, _SNAP_OL, alerted_at)
+    s.promote_handoff_tier("issue-1", FindingType.OWNERLESS_COMPLETION, 2, promoted_at)
+    assert s.get_handoff_tier("issue-1", FindingType.OWNERLESS_COMPLETION) == 2
 
 
 def test_set_repaired_records_timestamp(tmp_path: Path):
     s = st.State.load(tmp_path / "state.json")
     alerted_at = datetime(2026, 5, 8, 10, 0, tzinfo=timezone.utc)
     repaired_at = datetime(2026, 5, 8, 11, 5, tzinfo=timezone.utc)
-    s.record_handoff_alert("issue-1", FindingType.CROSS_TEAM_HANDOFF, _SNAP_CT, alerted_at)
-    s.set_handoff_repaired("issue-1", FindingType.CROSS_TEAM_HANDOFF, repaired_at)
-    key = f"issue-1:{FindingType.CROSS_TEAM_HANDOFF.value}"
+    s.record_handoff_alert("issue-1", FindingType.OWNERLESS_COMPLETION, _SNAP_OL, alerted_at)
+    s.set_handoff_repaired("issue-1", FindingType.OWNERLESS_COMPLETION, repaired_at)
+    key = f"issue-1:{FindingType.OWNERLESS_COMPLETION.value}"
     assert s.alerted_handoffs[key]["repaired_at"] is not None
 
 
@@ -314,9 +314,9 @@ def test_set_escalated_records_timestamp(tmp_path: Path):
     s = st.State.load(tmp_path / "state.json")
     alerted_at = datetime(2026, 5, 8, 10, 0, tzinfo=timezone.utc)
     escalated_at = datetime(2026, 5, 8, 11, 35, tzinfo=timezone.utc)
-    s.record_handoff_alert("issue-1", FindingType.CROSS_TEAM_HANDOFF, _SNAP_CT, alerted_at)
-    s.set_handoff_escalated("issue-1", FindingType.CROSS_TEAM_HANDOFF, escalated_at)
-    key = f"issue-1:{FindingType.CROSS_TEAM_HANDOFF.value}"
+    s.record_handoff_alert("issue-1", FindingType.OWNERLESS_COMPLETION, _SNAP_OL, alerted_at)
+    s.set_handoff_escalated("issue-1", FindingType.OWNERLESS_COMPLETION, escalated_at)
+    key = f"issue-1:{FindingType.OWNERLESS_COMPLETION.value}"
     assert s.alerted_handoffs[key]["escalated_at"] is not None
 
 
@@ -343,4 +343,4 @@ def test_state_v1_migration_adds_tier_fields(tmp_path: Path):
 
 def test_get_handoff_actionable_defaults_true_for_missing(tmp_path: Path):
     s = st.State.load(tmp_path / "state.json")
-    assert s.get_handoff_actionable("no-such", FindingType.CROSS_TEAM_HANDOFF) is True
+    assert s.get_handoff_actionable("no-such", FindingType.OWNERLESS_COMPLETION) is True

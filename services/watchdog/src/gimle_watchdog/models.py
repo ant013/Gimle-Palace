@@ -13,7 +13,6 @@ class FindingType(StrEnum):
     WRONG_ASSIGNEE = "wrong_assignee"
     REVIEW_OWNED_BY_IMPLEMENTER = "review_owned_by_implementer"
     # GIM-244 — 3-tier detectors
-    CROSS_TEAM_HANDOFF = "cross_team_handoff"
     OWNERLESS_COMPLETION = "ownerless_completion"
     INFRA_BLOCK = "infra_block"
     STALE_BUNDLE = "stale_bundle"
@@ -54,17 +53,6 @@ class ReviewOwnedByImplementerFinding:
 
 
 @dataclass(frozen=True, slots=True)
-class CrossTeamHandoffFinding:
-    type: Literal[FindingType.CROSS_TEAM_HANDOFF]
-    issue_id: str
-    issue_number: int
-    assignee_id: str
-    assignee_team: str  # "codex" | "claude"
-    company_team: str  # the expected / owning team
-    issue_status: str
-
-
-@dataclass(frozen=True, slots=True)
 class OwnerlessCompletionFinding:
     type: Literal[FindingType.OWNERLESS_COMPLETION]
     issue_id: str
@@ -94,7 +82,6 @@ Finding = (
     CommentOnlyHandoffFinding
     | WrongAssigneeFinding
     | ReviewOwnedByImplementerFinding
-    | CrossTeamHandoffFinding
     | OwnerlessCompletionFinding
     | InfraBlockFinding
 )

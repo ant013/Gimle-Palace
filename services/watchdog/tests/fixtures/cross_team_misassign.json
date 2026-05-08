@@ -1,9 +1,0 @@
-{
-  "id": "issue-xt-1",
-  "issueNumber": 999,
-  "status": "in_progress",
-  "assigneeAgentId": "da97dbd9-6627-48d0-b421-66af0750eacf",
-  "executionRunId": null,
-  "updatedAt": "2026-05-08T10:00:00Z",
-  "_note": "Claude PE (127068ee) → CXCTO (da97dbd9). No infra-block marker. Expected: cross_team_handoff fires."
-}
