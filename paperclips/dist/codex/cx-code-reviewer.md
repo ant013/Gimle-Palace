@@ -176,7 +176,7 @@ POST /api/issues/{id}/release
 
 Between plan phases, **explicit reassign** to next-phase agent. Never leave "someone will pick up".
 
-Hand off via PATCH `status + assigneeAgentId + comment` in one call, then GET-verify assignee. Mismatch → retry once; still mismatch → `status=blocked` + escalate Board with `actual` vs `expected`. Silent exit (push without handoff) = 8h stall (GIM-182, GIM-48 precedents).
+Before exit: `status=done` OR `assigneeAgentId` set to next agent / your CXCTO. Mandatory. PATCH `status + assigneeAgentId + comment` in one call → GET-verify; mismatch → retry once → still mismatch → `status=blocked` + escalate Board.
 
 ### Handoff matrix
 
@@ -239,13 +239,9 @@ If post-handoff cleanup is genuinely needed (e.g. local worktree state), do it B
 - [ ] CI green on merge commit (or admin override documented in merge message)
 - [ ] Production deploy completed (merge ≠ auto-deploy on most setups)
 
-### Autonomous queue propagation (iron rule, post-merge)
+### Autonomous queue propagation (post-merge)
 
-After PR squash-merge, CXCTO MUST:
-1. `PATCH issue` → `status=done, assigneeAgentId=null, assigneeUserId=null` + comment with merge SHA. Silent done = chain breaks.
-2. If issue body lists "next-queue" / queue-position / autonomous-trigger pointer to a follow-up slice — POST a new issue for that next position, `assigneeAgentId=<CXCTO>`, body links spec/plan + "queue N+1/M". Skipping = next slice never starts.
-
-Precedent: GIM-229 stalled 12h post-merge because PR was squashed but issue stayed `blocked` and #6 was never opened.
+CXCTO after squash-merge: `PATCH status=done, assignee=null` (per top rule) + POST new issue for next queue position if body lists one. Skip = chain dies.
 
 Any missing → don't close, escalate Board.
 
