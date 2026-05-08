@@ -98,9 +98,6 @@ class TestabilityDiExtractor(BaseExtractor):
             + len(summary.test_doubles)
             + len(summary.untestable_sites)
         )
-        if nodes_written == 0:
-            return ExtractorStats(nodes_written=0, edges_written=0)
-
         await replace_project_snapshot(
             graphiti.driver,
             project_id=ctx.group_id,

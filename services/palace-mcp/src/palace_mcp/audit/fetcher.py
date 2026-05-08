@@ -129,4 +129,11 @@ def _build_summary_stats(
             1 for f in findings if (f.get("signature_changed_count") or 0) > 0
         )
 
+    elif extractor_name == "testability_di":
+        stats["patterns"] = len(findings)
+        stats["test_doubles"] = sum(len(f.get("test_doubles") or []) for f in findings)
+        stats["untestable_sites"] = sum(
+            len(f.get("untestable_sites") or []) for f in findings
+        )
+
     return stats

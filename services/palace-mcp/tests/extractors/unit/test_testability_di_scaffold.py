@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -36,10 +36,23 @@ async def test_run_returns_empty_stats_for_empty_repo(tmp_path: Path) -> None:
         logger=logging.getLogger("test.testability_di.empty"),
     )
 
-    stats = await TestabilityDiExtractor().run(
-        graphiti=MagicMock(),
-        ctx=ctx,
-    )
+    graphiti = MagicMock()
+    with patch(
+        "palace_mcp.extractors.testability_di.extractor.replace_project_snapshot",
+        new_callable=AsyncMock,
+    ) as replace_snapshot:
+        stats = await TestabilityDiExtractor().run(
+            graphiti=graphiti,
+            ctx=ctx,
+        )
 
     assert stats.nodes_written == 0
     assert stats.edges_written == 0
+    replace_snapshot.assert_awaited_once_with(
+        graphiti.driver,
+        project_id="project/wallet",
+        run_id="run-empty",
+        di_patterns=[],
+        test_doubles=[],
+        untestable_sites=[],
+    )

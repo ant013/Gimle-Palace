@@ -91,3 +91,92 @@ async def test_run_integration_writes_all_testability_labels(
     assert td_row is not None and td_row["n"] >= 1
     assert us_row is not None and us_row["n"] >= 1
     assert convention_row is not None and convention_row["n"] == 1
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_run_integration_empty_scan_clears_stale_snapshot(
+    driver: AsyncDriver,
+    graphiti_mock: MagicMock,
+    tmp_path: Path,
+) -> None:
+    await ensure_extractors_schema(driver)
+
+    async with driver.session() as session:
+        await session.run(
+            """
+            CREATE (:DiPattern {
+              project_id: $project_id,
+              module: 'WalletKit',
+              language: 'swift',
+              style: 'init_injection',
+              framework: null,
+              sample_count: 1,
+              outliers: 0,
+              confidence: 'heuristic',
+              run_id: 'stale-run'
+            })
+            """,
+            project_id=GROUP_ID,
+        )
+        await session.run(
+            """
+            CREATE (:TestDouble {
+              project_id: $project_id,
+              module: 'WalletKit',
+              language: 'swift',
+              kind: 'fake',
+              target_symbol: 'WalletService',
+              test_file: 'Tests/WalletKitTests/WalletServiceTests.swift',
+              run_id: 'stale-run'
+            })
+            """,
+            project_id=GROUP_ID,
+        )
+        await session.run(
+            """
+            CREATE (:UntestableSite {
+              project_id: $project_id,
+              module: 'WalletKit',
+              language: 'swift',
+              file: 'Sources/WalletKit/WalletManager.swift',
+              start_line: 8,
+              end_line: 8,
+              category: 'direct_clock',
+              symbol_referenced: 'Date()',
+              severity: 'medium',
+              message: 'stale',
+              run_id: 'stale-run'
+            })
+            """,
+            project_id=GROUP_ID,
+        )
+
+    stats = await TestabilityDiExtractor().run(
+        graphiti=graphiti_mock,
+        ctx=_make_ctx(tmp_path, "run-empty-1"),
+    )
+
+    assert stats.nodes_written == 0
+
+    async with driver.session() as session:
+        di_count = await session.run(
+            "MATCH (n:DiPattern {project_id: $project_id}) RETURN count(n) AS n",
+            project_id=GROUP_ID,
+        )
+        td_count = await session.run(
+            "MATCH (n:TestDouble {project_id: $project_id}) RETURN count(n) AS n",
+            project_id=GROUP_ID,
+        )
+        us_count = await session.run(
+            "MATCH (n:UntestableSite {project_id: $project_id}) RETURN count(n) AS n",
+            project_id=GROUP_ID,
+        )
+
+        di_row = await di_count.single()
+        td_row = await td_count.single()
+        us_row = await us_count.single()
+
+    assert di_row is not None and di_row["n"] == 0
+    assert td_row is not None and td_row["n"] == 0
+    assert us_row is not None and us_row["n"] == 0

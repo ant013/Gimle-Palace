@@ -15,7 +15,9 @@ from neo4j import AsyncDriver, AsyncGraphDatabase
 import os
 
 from palace_mcp.audit.contracts import AuditContract, AuditSectionData, RunInfo
+from palace_mcp.audit.renderer import render_section
 from palace_mcp.extractors.base import BaseExtractor, ExtractorStats
+from palace_mcp.extractors.testability_di import TestabilityDiExtractor
 
 
 # ---------------------------------------------------------------------------
@@ -161,6 +163,101 @@ class TestAuditFetcher:
         section = result["fake_extractor"]
         assert section.run_id == "run-xyz"
         assert section.completed_at == "2026-05-07T10:00:00Z"
+
+    async def test_testability_di_summary_stats_follow_real_fetcher_path(
+        self, driver: AsyncDriver
+    ) -> None:
+        from palace_mcp.audit.fetcher import fetch_audit_data
+
+        async with driver.session() as session:
+            await session.run(
+                """
+                CREATE (:DiPattern {
+                  project_id: 'project/wallet',
+                  module: 'WalletKit',
+                  language: 'swift',
+                  style: 'service_locator',
+                  framework: null,
+                  sample_count: 1,
+                  outliers: 0,
+                  confidence: 'heuristic',
+                  run_id: 'run-1'
+                })
+                """
+            )
+            await session.run(
+                """
+                CREATE (:TestDouble {
+                  project_id: 'project/wallet',
+                  module: 'WalletKit',
+                  language: 'swift',
+                  kind: 'fake',
+                  target_symbol: 'WalletService',
+                  test_file: 'Tests/WalletKitTests/WalletServiceTests.swift',
+                  run_id: 'run-1'
+                })
+                """
+            )
+            await session.run(
+                """
+                CREATE (:TestDouble {
+                  project_id: 'project/wallet',
+                  module: 'WalletKit',
+                  language: 'swift',
+                  kind: 'spy',
+                  target_symbol: 'PriceFeed',
+                  test_file: 'Tests/WalletKitTests/WalletServiceTests.swift',
+                  run_id: 'run-1'
+                })
+                """
+            )
+            await session.run(
+                """
+                CREATE (:UntestableSite {
+                  project_id: 'project/wallet',
+                  module: 'WalletKit',
+                  language: 'swift',
+                  file: 'Sources/WalletKit/WalletManager.swift',
+                  start_line: 8,
+                  end_line: 8,
+                  category: 'service_locator',
+                  symbol_referenced: 'ServiceLocator.shared',
+                  severity: 'high',
+                  message: 'Service locator usage hides dependencies from tests.',
+                  run_id: 'run-1'
+                })
+                """
+            )
+
+        run_info = RunInfo(
+            run_id="run-1",
+            extractor_name="testability_di",
+            project="wallet",
+            completed_at="2026-05-08T11:00:00Z",
+        )
+        extractor = TestabilityDiExtractor()
+        result = await fetch_audit_data(
+            driver,
+            {"testability_di": run_info},
+            {"testability_di": extractor},
+        )
+
+        section = result["testability_di"]
+        assert section.summary_stats == {
+            "total": 1,
+            "patterns": 1,
+            "test_doubles": 2,
+            "untestable_sites": 1,
+        }
+
+        rendered = render_section(
+            section,
+            extractor.audit_contract().severity_column,
+            100,
+            severity_mapper=extractor.audit_contract().severity_mapper,
+        )
+        assert "2 test doubles" in rendered
+        assert "1 untestable site" in rendered
 
 
 async def _seed_fake_nodes(driver: AsyncDriver, *, project: str) -> None:
