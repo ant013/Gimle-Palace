@@ -120,6 +120,53 @@ class TestRendererDispatchesViaAuditContract:
         assert "src/foo.py" in rendered
         assert "3.50" in rendered
 
+    def test_coding_convention_section_renders_dominant_choice_and_violations(self) -> None:
+        findings = [
+            {
+                "module": "WalletKit",
+                "kind": "naming.test_class",
+                "dominant_choice": "*Tests",
+                "confidence": "certain",
+                "sample_count": 12,
+                "outliers": 2,
+                "outlier_ratio": 0.17,
+                "violations": [
+                    {
+                        "file": "Tests/WalletKit/WalletKitTest.swift",
+                        "start_line": 3,
+                        "message": "Module uses *Tests suffix.",
+                        "severity": "medium",
+                    }
+                ],
+            }
+        ]
+        section = AuditSectionData(
+            extractor_name="coding_convention",
+            run_id="run-cc",
+            project="test-project",
+            completed_at="2026-05-08T08:00:00+00:00",
+            findings=findings,
+            summary_stats={"total": 1},
+            template_name="coding_convention.md",
+        )
+        rendered = render_section(
+            section,
+            severity_column="outlier_ratio",
+            max_findings=100,
+            severity_mapper=lambda value: (
+                Severity.HIGH
+                if float(value) >= 0.1
+                else Severity.MEDIUM
+                if float(value) > 0
+                else Severity.LOW
+            ),
+        )
+        assert "## Coding Conventions" in rendered
+        assert "WalletKit" in rendered
+        assert "`*Tests`" in rendered
+        assert "WalletKitTest.swift" in rendered
+        assert "HIGH" in rendered
+
 
 class TestSeveritySortWithinSection:
     def test_critical_findings_before_low(self) -> None:
