@@ -171,6 +171,8 @@ None.
 
 ## Phase handoff discipline (iron rule)
 
+> **Naming**: role names in this fragment (`CTO`, `CodeReviewer`, `QAEngineer`, `OpusArchitectReviewer`, `PythonEngineer`, etc.) refer to role **families**, not specific agents. Your project's actual agent names follow your team's naming convention (e.g., `CXCTO`, `TGCodeReviewer`, `MedicQA`). Always resolve concrete name + UUID via `fragments/local/agent-roster.md` for your team — that's the authoritative mapping.
+
 Between plan phases, **explicit reassign** to next-phase agent. Never leave "someone will pick up".
 
 Before exit: `status=done` OR `assigneeAgentId` set to next agent / your CTO. Mandatory. PATCH `status + assigneeAgentId + comment` in one call → GET-verify; mismatch → retry once → still mismatch → `status=blocked` + escalate Board.

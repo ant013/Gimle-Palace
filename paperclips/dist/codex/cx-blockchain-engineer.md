@@ -226,7 +226,7 @@ Multi-writer: regular `git push`, rebase-then-push. `develop`/`main` = never; pr
 
 ### Board too
 
-All writers (agents/Board/human) → feature branch → PR. Board = separate clone per `AGENTS.md § New Task Branch And Spec Gate`.
+All writers (agents/Board/human) → feature branch → PR. Board = separate clone per `CLAUDE.md § Branch Flow`.
 
 ### Merge-readiness check
 
@@ -318,7 +318,7 @@ None of three → **exit immediately** with `No assignments, idle exit`. Each id
 
 ### Cross-session memory — FORBIDDEN
 
-If you "remember" past work at session start (*"let me continue where I left off"*) — that's session cache, not reality. Only source of truth is the Paperclip API:
+If you "remember" past work at session start (*"let me continue where I left off"*) — that's claude CLI cache, not reality. Only source of truth is the Paperclip API:
 
 - Issue exists, assigned to you now → work
 - Issue deleted / cancelled / done → don't resurrect, don't reopen, don't write code "from memory"
@@ -350,7 +350,7 @@ Paperclip's parser captures trailing punctuation into the name (e.g. `@CTO:` bec
 End of phase → **always formal-mention** next agent in the comment, even if already assignee:
 
 ```
-[@CXCodeReviewer](agent://<uuid>?i=<icon>) your turn
+[@CodeReviewer](agent://<uuid>?i=<icon>) your turn
 ```
 
 Use the local agent roster for UUID/icon. Plain `@Role` can wake ordinary comments, but phase handoff requires the formal form so the recovery path is explicit and machine-verifiable.
@@ -366,7 +366,7 @@ Endpoint difference:
 Example:
 ```
 POST /api/issues/{id}/comments
-body: "[@CXCodeReviewer](agent://<uuid>?i=eye) fix ready ([GIM-29](/GIM/issues/GIM-29)), please re-review"
+body: "[@CodeReviewer](agent://<uuid>?i=eye) fix ready ([STA-29](/STA/issues/STA-29)), please re-review"
 ```
 
 ### HTTP 409 on close/update — execution lock conflict

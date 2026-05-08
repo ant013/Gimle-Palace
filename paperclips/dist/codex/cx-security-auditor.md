@@ -255,7 +255,7 @@ Multi-writer: regular `git push`, rebase-then-push. `develop`/`main` = never; pr
 
 ### Board too
 
-All writers (agents/Board/human) → feature branch → PR. Board = separate clone per `AGENTS.md § New Task Branch And Spec Gate`.
+All writers (agents/Board/human) → feature branch → PR. Board = separate clone per `CLAUDE.md § Branch Flow`.
 
 ### Merge-readiness check
 
@@ -347,7 +347,7 @@ None of three → **exit immediately** with `No assignments, idle exit`. Each id
 
 ### Cross-session memory — FORBIDDEN
 
-If you "remember" past work at session start (*"let me continue where I left off"*) — that's session cache, not reality. Only source of truth is the Paperclip API:
+If you "remember" past work at session start (*"let me continue where I left off"*) — that's claude CLI cache, not reality. Only source of truth is the Paperclip API:
 
 - Issue exists, assigned to you now → work
 - Issue deleted / cancelled / done → don't resurrect, don't reopen, don't write code "from memory"
@@ -379,7 +379,7 @@ Paperclip's parser captures trailing punctuation into the name (e.g. `@CTO:` bec
 End of phase → **always formal-mention** next agent in the comment, even if already assignee:
 
 ```
-[@CXCodeReviewer](agent://<uuid>?i=<icon>) your turn
+[@CodeReviewer](agent://<uuid>?i=<icon>) your turn
 ```
 
 Use the local agent roster for UUID/icon. Plain `@Role` can wake ordinary comments, but phase handoff requires the formal form so the recovery path is explicit and machine-verifiable.
@@ -395,7 +395,7 @@ Endpoint difference:
 Example:
 ```
 POST /api/issues/{id}/comments
-body: "[@CXCodeReviewer](agent://<uuid>?i=eye) fix ready ([GIM-29](/GIM/issues/GIM-29)), please re-review"
+body: "[@CodeReviewer](agent://<uuid>?i=eye) fix ready ([STA-29](/STA/issues/STA-29)), please re-review"
 ```
 
 ### HTTP 409 on close/update — execution lock conflict
@@ -420,20 +420,22 @@ POST /api/issues/{id}/release
 ```
 ## Phase handoff discipline (iron rule)
 
+> **Naming**: role names in this fragment (`CTO`, `CodeReviewer`, `QAEngineer`, `OpusArchitectReviewer`, `PythonEngineer`, etc.) refer to role **families**, not specific agents. Your project's actual agent names follow your team's naming convention (e.g., `CXCTO`, `TGCodeReviewer`, `MedicQA`). Always resolve concrete name + UUID via `fragments/local/agent-roster.md` for your team — that's the authoritative mapping.
+
 Between plan phases, **explicit reassign** to next-phase agent. Never leave "someone will pick up".
 
-Before exit: `status=done` OR `assigneeAgentId` set to next agent / your CXCTO. Mandatory. PATCH `status + assigneeAgentId + comment` in one call → GET-verify; mismatch → retry once → still mismatch → `status=blocked` + escalate Board.
+Before exit: `status=done` OR `assigneeAgentId` set to next agent / your CTO. Mandatory. PATCH `status + assigneeAgentId + comment` in one call → GET-verify; mismatch → retry once → still mismatch → `status=blocked` + escalate Board.
 
 ### Handoff matrix
 
 | Phase done | Next | Required handoff |
 |---|---|---|
-| 1.1 Formalization (CTO) | 1.2 Plan-first | `git mv`/rename/`GIM-N` swap on FB directly (no sub-issue) → push → `assignee=CXCodeReviewer` + formal mention |
+| 1.1 Formalization (CTO) | 1.2 Plan-first | `git mv`/rename/`GIM-N` swap on FB directly (no sub-issue) → push → `assignee=CodeReviewer` + formal mention |
 | 1.2 Plan-first (CR) | 2.x Implementation | `assignee=<implementer>` + formal mention |
-| 2 Implementation | 3.1 Mechanical CR | `assignee=CXCodeReviewer` + push done + formal mention |
-| 3.1 CR APPROVE | 3.2 Codex | `assignee=CodexArchitectReviewer` + formal mention |
-| 3.2 Architect APPROVE | 4.1 QA | `assignee=CXQAEngineer` + formal mention |
-| 4.1 QA PASS | 4.2 Merge | `assignee=<merger>` (usually CXCTO) + formal mention |
+| 2 Implementation | 3.1 Mechanical CR | `assignee=CodeReviewer` + push done + formal mention |
+| 3.1 CR APPROVE | 3.2 Opus | `assignee=OpusArchitectReviewer` + formal mention |
+| 3.2 Opus APPROVE | 4.1 QA | `assignee=QAEngineer` + formal mention |
+| 4.1 QA PASS | 4.2 Merge | `assignee=<merger>` (usually CTO) + formal mention |
 
 Sub-issues for Phase 1.1 mechanical work are anti-pattern per `cto-no-code-ban.md` narrowed scope.
 
@@ -442,7 +444,7 @@ Sub-issues for Phase 1.1 mechanical work are anti-pattern per `cto-no-code-ban.m
 - `status=todo` between phases (= unassigned, free to claim).
 - `release` lock without simultaneous `PATCH assignee=<next>` — issue hangs ownerless.
 - Keep `assignee=me, status=in_progress` after my phase ends — reassign before handoff comment.
-- `status=done` without Phase 4.1 evidence comment authored by **CXQAEngineer** (`authorAgentId`).
+- `status=done` without Phase 4.1 evidence comment authored by **QAEngineer** (`authorAgentId`).
 
 ### Handoff comment format
 
@@ -454,7 +456,7 @@ Sub-issues for Phase 1.1 mechanical work are anti-pattern per `cto-no-code-ban.m
 [@<NextAgent>](agent://<NextAgent-UUID>?i=<icon>) your turn — Phase <N.M+1>: [what to do]
 ```
 
-Formal mention `[@](agent://uuid)` only — not plain `@Role`. Plain works for comments, but handoff needs the formal recovery-wake form. Codex UUIDs in `fragments/local/agent-roster.md`.
+Formal mention `[@](agent://uuid)` only — not plain `@Role`. Plain works for comments, but handoff needs the formal recovery-wake form. UUIDs in `fragments/local/agent-roster.md`.
 
 ### Pre-handoff checklist (implementer → reviewer)
 
@@ -473,23 +475,23 @@ After the handoff PATCH returns 200 and GET-verify confirms `assigneeAgentId == 
 
 Why: between the PATCH (which changes assignee away from you) and your subprocess exit, paperclip's run-supervisor sees the issue is no longer yours and SIGTERMs the process. Any tool call in that window dies mid-flight, the run is marked `claude_transient_upstream` (Exit 143), and a retry is queued — only to be cancelled with `issue_reassigned` once the next agent picks up.
 
-Evidence: GIM-216 — 11 successful handoffs misclassified as failures because agents kept making tool calls after the PATCH. Pre-slim baseline GIM-193 had zero such failures.
+Evidence: GIM-216 — 11 successful handoffs misclassified as failures because agents kept making tool calls after the PATCH; pre-slim baseline GIM-193 had zero such failures.
 
 If post-handoff cleanup is genuinely needed (e.g. local worktree state), do it BEFORE the handoff PATCH, not after.
 
-### Pre-close checklist (CXCTO → status=done)
+### Pre-close checklist (CTO → status=done)
 
 - [ ] Phase 4.2 merged (squash on develop)
-- [ ] Phase 4.1 evidence comment exists + `authorAgentId == CXQAEngineer`
+- [ ] Phase 4.1 evidence comment exists + `authorAgentId == QAEngineer`
 - [ ] Evidence: commit SHA + runtime smoke + plan-specific invariant
 - [ ] CI green on merge commit (or admin override documented in merge message)
 - [ ] Production deploy completed (merge ≠ auto-deploy on most setups)
 
+Any missing → don't close, escalate Board.
+
 ### Autonomous queue propagation (post-merge)
 
-CXCTO after squash-merge: `PATCH status=done, assignee=null` (per top rule) + POST new issue for next queue position if body lists one. Skip = chain dies.
-
-Any missing → don't close, escalate Board.
+CTO after squash-merge: `PATCH status=done, assignee=null` (per top rule) + POST new issue for next queue position if body lists one. Skip = chain dies.
 
 ### Phase 4.1 QA-evidence comment format
 
@@ -512,7 +514,7 @@ Any missing → don't close, escalate Board.
 
 ### Lock stale edge case
 
-If `POST /release` returns 200 but `executionAgentNameKey` doesn't reset (GIM-52, reported by CodexArchitectReviewer) — try `PATCH assignee=me` → `POST /release` → `PATCH assignee=<next>`. Fails twice → escalate Board with issue id, run id, attempt sequence.
+If `POST /release` returns 200 but `executionAgentNameKey` doesn't reset (GIM-52, reported by OpusArchitectReviewer) — try `PATCH assignee=me` → `POST /release` → `PATCH assignee=<next>`. Fails twice → escalate Board with issue id, run id, attempt sequence.
 
 ### Self-check before handoff
 
@@ -522,6 +524,10 @@ If `POST /release` returns 200 but `executionAgentNameKey` doesn't reset (GIM-52
 - Evidence in my comment is mine, not retold (QA only)?
 
 GET-verify fails after retry → `status=blocked` + `@Board handoff PATCH ok but GET shows actual=<x>, expected=<y>` + stop. Don't exit silently.
+
+### Comment ≠ handoff (iron rule)
+
+Writing "Reassigning…" or "handing off…" in a comment body **does not execute** handoff. Only `PATCH /api/issues/{id}` with `assigneeAgentId` triggers the next agent's wake. Without PATCH, issue stalls with previous assignee indefinitely. Precedents: GIM-126 (QA→CTO 2026-05-01), GIM-195 (CR→PE 2026-05-05).
 ## Agent UUID roster — Gimle Codex / CX
 
 Use `[@<CXRole>](agent://<uuid>?i=<icon>)` in phase handoffs.
