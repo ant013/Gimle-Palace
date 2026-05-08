@@ -38,8 +38,8 @@ slice. Adjustments to standard 7-phase chain:
 - [x] `curl -H "Authorization: Bearer $PAPERCLIP_API_KEY" "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/agents"` checked on 2026-05-07.
 - [x] Existing Claude-side names found: `BlockchainEngineer`,
       `SecurityAuditor`. Do not reuse these names.
-- [x] Final CX names selected: `CXBlockchainEngineer`,
-      `CXSecurityAuditor`, `CXPythonEngineer2`.
+- [x] Final CX names selected: `CXBlockchainEngineer`, `CXSecurityAuditor`
+      (rev5 2026-05-08: `CXPythonEngineer2` removed — operator decision).
 - [x] Paperclip agent records use `name` + generated `urlKey`; legacy
       `nameKey` payloads are stale for this slice.
 
@@ -73,7 +73,7 @@ slice. Adjustments to standard 7-phase chain:
 **Owner:** Board (operator session).
 
 - [ ] Use spec §5.1 decisions without silent renaming:
-      `CXBlockchainEngineer`, `CXSecurityAuditor`, `CXPythonEngineer2`.
+      `CXBlockchainEngineer`, `CXSecurityAuditor` (rev5: `CXPythonEngineer2` dropped per operator 2026-05-08).
 - [ ] Use CX workspace root
       `/Users/Shared/Ios/worktrees/cx/Gimle-Palace`.
 - [ ] Use per-agent smoke probes with 2-3h heartbeat SLA.
@@ -117,26 +117,17 @@ slice. Adjustments to standard 7-phase chain:
 
 **Acceptance:** as Step 2.2.
 
-### Step 2.4: Author cx-python-engineer-2.md (or D-1 alternative name)
+### ~~Step 2.4: Author cx-python-engineer-2.md~~ — **DROPPED in rev5 (2026-05-08)**
 
-**Owner:** Board.
-**Files:** `paperclips/roles-codex/cx-python-engineer-2.md` (new).
-
-- [ ] Mirror from `paperclips/roles-codex/cx-python-engineer.md`
-      (existing CX PE).
-- [ ] Adjust scope blurb: "second Python engineer on CX team —
-      handles swapped Claude-affinity extractor work + LLM-bearing
-      extractors + audit composite tools".
-- [ ] Add a note at the top: "Coordinates with CXPythonEngineer (#1)
-      via plan-first phase to avoid file overlap on the same extractor."
-
-**Acceptance:** as Step 2.2.
+Operator decision: PE-2 is not needed. CXPythonEngineer alone is
+sufficient for batch 1 of CX-native extractors (#6/#8/#9/#17). Revisit
+hire only after empirical CXPythonEngineer overload evidence.
 
 ### Step 2.5: Submit agent hire requests to paperclip
 
 **Owner:** Board.
 
-For each of the 3 new agents:
+For each of the **2** new agents (rev5 — was 3):
 
 - [ ] Use `POST /api/companies/$PAPERCLIP_COMPANY_ID/agent-hires`,
       not the stale direct-create `nameKey` payload.
@@ -151,8 +142,8 @@ For each of the 3 new agents:
       `wakeOnDemand=true`.
 - [ ] Submit identity set:
       `CXBlockchainEngineer` (`role=engineer`, `icon=gem`),
-      `CXSecurityAuditor` (`role=qa`, `icon=shield`),
-      `CXPythonEngineer2` (`role=engineer`, `icon=code`).
+      `CXSecurityAuditor` (`role=qa`, `icon=shield`).
+      (rev5 dropped: ~~`CXPythonEngineer2`~~)
 - [ ] Use top-level `instructionsBundle.files["AGENTS.md"]`; do not
       set `adapterConfig.promptTemplate` or `bootstrapPromptTemplate`.
 - [ ] Instruction-source path to state in hire comment:
@@ -174,16 +165,15 @@ For each of the 3 new agents:
 **Owner:** Board.
 
 - [ ] Run `bash paperclips/build.sh --target codex`.
-- [ ] Expected render outputs exist:
+- [ ] Expected render outputs exist (rev5 — 2 files, was 3):
   - `paperclips/dist/codex/cx-blockchain-engineer.md`
   - `paperclips/dist/codex/cx-security-auditor.md`
-  - `paperclips/dist/codex/cx-python-engineer-2.md`
 - [ ] Run `bash paperclips/validate-codex-target.sh`; expected final line: `Codex target validation OK: <repo>/paperclips/dist/codex`.
 - [ ] Verify rendered AGENTS.md for each new agent contains the
       expected sections.
 - [ ] Commit role files + render artefacts.
 - [ ] Push branch.
-- [ ] Open PR titled `feat(GIM-229): hire 3 new CX agents — BlockchainEng + SecAud + PE-2`.
+- [ ] Open PR titled `feat(GIM-229): hire 2 new CX agents — BlockchainEng + SecAud (rev5)`.
 - [ ] PR body includes:
   - "Closes GIM-229"
   - List of 3 new agent UUIDs.
@@ -302,7 +292,7 @@ For each of the 3 new agents:
 - [ ] Close paperclip issue.
 - [ ] **Unblock dependent slices**: post a comment on each blocked
       issue (Chain-Sol B1; #11/#26/#43; swapped extractors) noting
-      "E6 closed — CX BlockchainEng / SecAud / PE-2 available; this
+      "E6 closed — CX BlockchainEng + SecAud available (rev5: PE-2 dropped); this
       slice can now start when team-chain frees up."
 
 **Acceptance:** E6 ✅; all 3 agents listed in iMac agent inventory; Board memory updated; #6 active issue exists; #8/#17/#9 parked with explicit blockers/queue metadata; downstream issues unblocked-via-comment.
@@ -311,9 +301,10 @@ For each of the 3 new agents:
 
 ## Definition-of-Done checklist
 
-- [ ] 3 new role files committed (Codex side).
-- [ ] 3 agent UUIDs registered on paperclip; listed in
-      `reference_agent_ids.md`.
+- [ ] **2** new role files committed (Codex side; rev5 was 3).
+- [ ] **2** agent UUIDs registered on paperclip; listed in
+      `reference_agent_ids.md`. (rev5: was 3; PE-2 dropped per operator
+      decision 2026-05-08.)
 - [ ] Smoke-probe heartbeat received from each new agent.
 - [ ] PR squash-merged.
 - [ ] Roadmap E6 ✅; memory entries updated.

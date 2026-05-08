@@ -625,7 +625,19 @@ GET-verify fails after retry → `status=blocked` + `@Board handoff PATCH ok but
 Writing "Reassigning…" or "handing off…" in a comment body **does not execute** handoff. Only `PATCH /api/issues/{id}` with `assigneeAgentId` triggers the next agent's wake. Without PATCH, issue stalls with previous assignee indefinitely. Precedents: GIM-126 (QA→CTO 2026-05-01), GIM-195 (CR→PE 2026-05-05).
 ## Agent UUID roster — Gimle Claude
 
-Use `[@<Role>](agent://<uuid>?i=<icon>)` in phase handoffs. Source: `paperclips/deploy-agents.sh`.
+Use `[@<Role>](agent://<uuid>?i=<icon>)` in phase handoffs.
+Source: `paperclips/deploy-agents.sh`.
+
+**Cross-team handoff rule** (applies to ALL agents, both teams): handoffs
+must go to an agent on YOUR OWN team. Claude-side roles handoff to
+Claude-side agents (bare names, no prefix); CX-side roles handoff to
+CX-side agents (CX prefix). The two teams are isolated by design (per
+`feedback_parallel_team_protocol.md`). When you say "next CTO" — that's
+the CTO of your team. NEVER address an agent on the other team in a
+phase handoff. The build pipeline ships **target-specific** rosters:
+Claude target gets THIS file (Claude UUIDs); Codex target gets the
+override at `paperclips/fragments/targets/codex/local/agent-roster.md`
+(CX UUIDs).
 
 | Role | UUID | Icon |
 |---|---|---|

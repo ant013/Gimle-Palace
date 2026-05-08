@@ -91,11 +91,6 @@ roles:
     source: paperclips/roles-codex/cx-python-engineer.md
     family: implementation
     profiles: [core, task-start, implementation, handoff]
-  codex:cx-python-engineer-2:
-    target: codex
-    source: paperclips/roles-codex/cx-python-engineer-2.md
-    family: implementation
-    profiles: [core, task-start, implementation, handoff]
   codex:cx-qa-engineer:
     target: codex
     source: paperclips/roles-codex/cx-qa-engineer.md
@@ -141,7 +136,6 @@ rules:
       - codex:cx-blockchain-engineer
       - codex:cx-mcp-engineer
       - codex:cx-python-engineer
-      - codex:cx-python-engineer-2
       - codex:cx-research-agent
       - codex:cx-technical-writer
     markers: ["handoff", "next agent"]
@@ -197,7 +191,6 @@ rules:
       - codex:cx-infra-engineer
       - codex:cx-mcp-engineer
       - codex:cx-python-engineer
-      - codex:cx-python-engineer-2
       - codex:cx-qa-engineer
     markers: ["verification", "test"]
   research-evidence:
