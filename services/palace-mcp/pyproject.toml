@@ -19,6 +19,7 @@ dependencies = [
     "packaging>=24.0",
     "pygit2>=1.15,<2.0",
     "lizard>=1.17.20,<2.0",
+    "semgrep>=1.162.0",
 ]
 
 [build-system]
