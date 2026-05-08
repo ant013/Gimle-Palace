@@ -17,7 +17,7 @@ from gimle_watchdog.models import FindingType
 
 log = logging.getLogger("watchdog.state")
 
-STATE_VERSION = 1
+STATE_VERSION = 2
 PRUNE_WAKE_HISTORY_SECONDS = 3600  # keep 1h of wake history per agent
 # After this many re-escalation cycles (clear+re-escalate), stop auto-clearing.
 PERMANENT_ESCALATION_THRESHOLD = 3
@@ -31,6 +31,11 @@ _SNAPSHOT_KEYS: dict[FindingType, tuple[str, ...]] = {
     ),
     FindingType.WRONG_ASSIGNEE: ("assigneeAgentId", "status"),
     FindingType.REVIEW_OWNED_BY_IMPLEMENTER: ("assigneeAgentId", "status"),
+    # GIM-244 — 3-tier detectors
+    FindingType.CROSS_TEAM_HANDOFF: ("assigneeAgentId",),
+    FindingType.OWNERLESS_COMPLETION: ("status",),
+    FindingType.INFRA_BLOCK: ("error_kind",),
+    FindingType.STALE_BUNDLE: ("deployed_sha",),
 }
 
 
@@ -72,7 +77,21 @@ class State:
             return cls(path=path)
 
         ver = raw.get("version")
-        if ver != STATE_VERSION:
+        if ver == 1:
+            # Migrate v1 → v2: add tier fields to alerted_handoffs entries
+            log.info("state_migration v1_to_v2")
+            raw_handoffs = dict(raw.get("alerted_handoffs") or {})
+            for entry in raw_handoffs.values():
+                if "tier" not in entry:
+                    entry["tier"] = 1
+                    entry["tier_changed_at"] = entry.get("alerted_at", _iso(_now()))
+                    entry.setdefault("repaired_at", None)
+                    entry.setdefault("escalated_at", None)
+                    entry.setdefault("actionable", True)
+            raw["alerted_handoffs"] = raw_handoffs
+            raw["version"] = STATE_VERSION
+            ver = STATE_VERSION
+        elif ver != STATE_VERSION:
             ts = _now().strftime("%Y%m%dT%H%M%SZ")
             backup = path.with_suffix(path.suffix + f".bak-{ts}")
             path.rename(backup)
@@ -227,12 +246,71 @@ class State:
         ftype: FindingType,
         snapshot: dict[str, Any],
         alerted_at: _dt.datetime,
+        actionable: bool = True,
     ) -> None:
         key = f"{issue_id}:{ftype.value}"
+        snap_keys = _SNAPSHOT_KEYS.get(ftype, ())
         self.alerted_handoffs[key] = {
             "alerted_at": _iso(alerted_at),
-            "snapshot": {k: snapshot.get(k) for k in _SNAPSHOT_KEYS[ftype]},
+            "snapshot": {k: snapshot.get(k) for k in snap_keys},
+            "tier": 1,
+            "tier_changed_at": _iso(alerted_at),
+            "repaired_at": None,
+            "escalated_at": None,
+            "actionable": actionable,
         }
+
+    def get_handoff_tier(self, issue_id: str, ftype: FindingType) -> int:
+        key = f"{issue_id}:{ftype.value}"
+        entry = self.alerted_handoffs.get(key)
+        return int(entry.get("tier", 1)) if entry else 0
+
+    def promote_handoff_tier(
+        self,
+        issue_id: str,
+        ftype: FindingType,
+        new_tier: int,
+        tier_changed_at: _dt.datetime,
+    ) -> None:
+        key = f"{issue_id}:{ftype.value}"
+        entry = self.alerted_handoffs.get(key)
+        if entry is None:
+            return
+        entry["tier"] = new_tier
+        entry["tier_changed_at"] = _iso(tier_changed_at)
+
+    def set_handoff_repaired(
+        self, issue_id: str, ftype: FindingType, repaired_at: _dt.datetime
+    ) -> None:
+        key = f"{issue_id}:{ftype.value}"
+        entry = self.alerted_handoffs.get(key)
+        if entry is not None:
+            entry["repaired_at"] = _iso(repaired_at)
+
+    def set_handoff_escalated(
+        self, issue_id: str, ftype: FindingType, escalated_at: _dt.datetime
+    ) -> None:
+        key = f"{issue_id}:{ftype.value}"
+        entry = self.alerted_handoffs.get(key)
+        if entry is not None:
+            entry["escalated_at"] = _iso(escalated_at)
+
+    def get_handoff_alerted_at(
+        self, issue_id: str, ftype: FindingType
+    ) -> _dt.datetime | None:
+        key = f"{issue_id}:{ftype.value}"
+        entry = self.alerted_handoffs.get(key)
+        if not entry:
+            return None
+        try:
+            return _parse_iso(entry["alerted_at"])
+        except Exception:
+            return None
+
+    def get_handoff_actionable(self, issue_id: str, ftype: FindingType) -> bool:
+        key = f"{issue_id}:{ftype.value}"
+        entry = self.alerted_handoffs.get(key)
+        return bool(entry.get("actionable", True)) if entry else True
 
     def clear_handoff_alert(self, issue_id: str, ftype: FindingType) -> bool:
         """Remove the alert state entry for (issue_id, ftype).

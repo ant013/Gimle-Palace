@@ -45,7 +45,7 @@ def test_unknown_version_renames_and_restarts(tmp_path: Path):
     path = tmp_path / "state.json"
     path.write_text('{"version": 999, "issue_cooldowns": {}}')
     s = st.State.load(path)
-    assert s.version == 1
+    assert s.version == st.STATE_VERSION
     assert s.issue_cooldowns == {}
     # Backup should exist
     backups = list(tmp_path.glob("state.json.bak-*"))
@@ -260,3 +260,89 @@ def test_state_loads_pre_gim180_json(tmp_path: Path):
     path.write_text(fixture.read_text())
     s = st.State.load(path)
     assert s.alerted_handoffs == {}
+
+
+# ---------------------------------------------------------------------------
+# GIM-244 — tier state machine tests
+# ---------------------------------------------------------------------------
+
+_SNAP_CT = {"assigneeAgentId": "cx-cto-uuid"}
+
+
+def test_record_handoff_alert_includes_tier_fields(tmp_path: Path):
+    s = st.State.load(tmp_path / "state.json")
+    alerted_at = datetime(2026, 5, 8, 10, 0, tzinfo=timezone.utc)
+    s.record_handoff_alert("issue-1", FindingType.CROSS_TEAM_HANDOFF, _SNAP_CT, alerted_at)
+    key = f"issue-1:{FindingType.CROSS_TEAM_HANDOFF.value}"
+    entry = s.alerted_handoffs[key]
+    assert entry["tier"] == 1
+    assert entry["tier_changed_at"] == entry["alerted_at"]
+    assert entry["repaired_at"] is None
+    assert entry["escalated_at"] is None
+    assert entry["actionable"] is True
+
+
+def test_record_handoff_alert_actionable_false(tmp_path: Path):
+    s = st.State.load(tmp_path / "state.json")
+    alerted_at = datetime(2026, 5, 8, 10, 0, tzinfo=timezone.utc)
+    snap = {"error_kind": "cloudflare_1010"}
+    s.record_handoff_alert(
+        "issue-2", FindingType.INFRA_BLOCK, snap, alerted_at, actionable=False
+    )
+    key = f"issue-2:{FindingType.INFRA_BLOCK.value}"
+    assert s.alerted_handoffs[key]["actionable"] is False
+
+
+def test_promote_tier_updates_entry(tmp_path: Path):
+    s = st.State.load(tmp_path / "state.json")
+    alerted_at = datetime(2026, 5, 8, 10, 0, tzinfo=timezone.utc)
+    promoted_at = datetime(2026, 5, 8, 11, 0, tzinfo=timezone.utc)
+    s.record_handoff_alert("issue-1", FindingType.CROSS_TEAM_HANDOFF, _SNAP_CT, alerted_at)
+    s.promote_handoff_tier("issue-1", FindingType.CROSS_TEAM_HANDOFF, 2, promoted_at)
+    assert s.get_handoff_tier("issue-1", FindingType.CROSS_TEAM_HANDOFF) == 2
+
+
+def test_set_repaired_records_timestamp(tmp_path: Path):
+    s = st.State.load(tmp_path / "state.json")
+    alerted_at = datetime(2026, 5, 8, 10, 0, tzinfo=timezone.utc)
+    repaired_at = datetime(2026, 5, 8, 11, 5, tzinfo=timezone.utc)
+    s.record_handoff_alert("issue-1", FindingType.CROSS_TEAM_HANDOFF, _SNAP_CT, alerted_at)
+    s.set_handoff_repaired("issue-1", FindingType.CROSS_TEAM_HANDOFF, repaired_at)
+    key = f"issue-1:{FindingType.CROSS_TEAM_HANDOFF.value}"
+    assert s.alerted_handoffs[key]["repaired_at"] is not None
+
+
+def test_set_escalated_records_timestamp(tmp_path: Path):
+    s = st.State.load(tmp_path / "state.json")
+    alerted_at = datetime(2026, 5, 8, 10, 0, tzinfo=timezone.utc)
+    escalated_at = datetime(2026, 5, 8, 11, 35, tzinfo=timezone.utc)
+    s.record_handoff_alert("issue-1", FindingType.CROSS_TEAM_HANDOFF, _SNAP_CT, alerted_at)
+    s.set_handoff_escalated("issue-1", FindingType.CROSS_TEAM_HANDOFF, escalated_at)
+    key = f"issue-1:{FindingType.CROSS_TEAM_HANDOFF.value}"
+    assert s.alerted_handoffs[key]["escalated_at"] is not None
+
+
+def test_state_v1_migration_adds_tier_fields(tmp_path: Path):
+    """v1 state loaded and migrated to v2 — existing alerted_handoffs get tier fields."""
+    path = tmp_path / "state.json"
+    # Simulate a v1 state file with an existing handoff alert (no tier fields)
+    path.write_text(
+        '{"version": 1, "issue_cooldowns": {}, "agent_wakes": {}, '
+        '"escalated_issues": {}, "alerted_handoffs": '
+        '{"issue-old:wrong_assignee": {"alerted_at": "2026-05-01T10:00:00Z", '
+        '"snapshot": {"assigneeAgentId": "bogus", "status": "in_progress"}}}}'
+    )
+    s = st.State.load(path)
+    assert s.version == st.STATE_VERSION
+    entry = s.alerted_handoffs.get("issue-old:wrong_assignee")
+    assert entry is not None
+    assert entry["tier"] == 1
+    assert entry["tier_changed_at"] == "2026-05-01T10:00:00Z"
+    assert entry["repaired_at"] is None
+    assert entry["escalated_at"] is None
+    assert entry["actionable"] is True
+
+
+def test_get_handoff_actionable_defaults_true_for_missing(tmp_path: Path):
+    s = st.State.load(tmp_path / "state.json")
+    assert s.get_handoff_actionable("no-such", FindingType.CROSS_TEAM_HANDOFF) is True

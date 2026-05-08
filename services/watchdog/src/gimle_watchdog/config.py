@@ -83,6 +83,16 @@ _HANDOFF_KNOWN_KEYS = frozenset(
         "handoff_comments_per_issue",
         "handoff_max_issues_per_tick",
         "handoff_alert_cooldown_min",
+        # GIM-244 — 3-tier detector keys
+        "handoff_cross_team_enabled",
+        "handoff_ownerless_enabled",
+        "handoff_infra_block_enabled",
+        "handoff_stale_bundle_enabled",
+        "handoff_auto_repair_enabled",
+        "handoff_escalation_delay_min",
+        "handoff_repair_delay_min",
+        "handoff_stale_bundle_threshold_hours",
+        "handoff_ownerless_comment_limit",
     }
 )
 
@@ -96,6 +106,16 @@ class HandoffConfig:
     handoff_comments_per_issue: int = 5
     handoff_max_issues_per_tick: int = 30
     handoff_alert_cooldown_min: int = 30
+    # GIM-244 — 3-tier detector fields (all disabled by default)
+    handoff_cross_team_enabled: bool = False
+    handoff_ownerless_enabled: bool = False
+    handoff_infra_block_enabled: bool = False
+    handoff_stale_bundle_enabled: bool = False
+    handoff_auto_repair_enabled: bool = False
+    handoff_escalation_delay_min: int = 90
+    handoff_repair_delay_min: int = 60
+    handoff_stale_bundle_threshold_hours: int = 24
+    handoff_ownerless_comment_limit: int = 50
 
 
 @dataclass(frozen=True)
@@ -277,6 +297,17 @@ def load_config(path: Path) -> Config:
         handoff_comments_per_issue=int(handoff_raw.get("handoff_comments_per_issue", 5)),
         handoff_max_issues_per_tick=int(handoff_raw.get("handoff_max_issues_per_tick", 30)),
         handoff_alert_cooldown_min=int(handoff_raw.get("handoff_alert_cooldown_min", 30)),
+        handoff_cross_team_enabled=bool(handoff_raw.get("handoff_cross_team_enabled", False)),
+        handoff_ownerless_enabled=bool(handoff_raw.get("handoff_ownerless_enabled", False)),
+        handoff_infra_block_enabled=bool(handoff_raw.get("handoff_infra_block_enabled", False)),
+        handoff_stale_bundle_enabled=bool(handoff_raw.get("handoff_stale_bundle_enabled", False)),
+        handoff_auto_repair_enabled=bool(handoff_raw.get("handoff_auto_repair_enabled", False)),
+        handoff_escalation_delay_min=int(handoff_raw.get("handoff_escalation_delay_min", 90)),
+        handoff_repair_delay_min=int(handoff_raw.get("handoff_repair_delay_min", 60)),
+        handoff_stale_bundle_threshold_hours=int(
+            handoff_raw.get("handoff_stale_bundle_threshold_hours", 24)
+        ),
+        handoff_ownerless_comment_limit=int(handoff_raw.get("handoff_ownerless_comment_limit", 50)),
     )
 
     return Config(
