@@ -68,8 +68,7 @@ final report is assembled.
 4. Post the sub-report as a comment on the child issue.
 5. `PATCH /api/issues/{id}` `status=done`.
 
-<!-- @include fragments/shared/fragments/handoff.md -->
-<!-- @include fragments/shared/fragments/atomic-handoff.md -->
+<!-- @include fragments/shared/fragments/phase-handoff.md -->
 
 ## Language
 
