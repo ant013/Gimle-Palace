@@ -205,6 +205,104 @@ def test_block_list_front_matter_profiles_supported(tmp_path: Path) -> None:
     assert errors == []
 
 
+def test_handoff_markers_present_in_handoff_bundles(tmp_path: Path) -> None:
+    """All bundles that include the phase-handoff fragment must carry every stable marker."""
+    repo = make_repo(tmp_path)
+    bundle_paths = {
+        "claude:cto": repo / "paperclips" / "dist" / "cto.md",
+        "codex:cx-cto": repo / "paperclips" / "dist" / "codex" / "cx-cto.md",
+    }
+
+    errors = validate_instructions.validate_handoff_markers(bundle_paths, repo)
+
+    assert errors == []
+
+
+def test_handoff_marker_missing_fails(tmp_path: Path) -> None:
+    """Stripping a stable marker triggers a clear error message."""
+    repo = make_repo(tmp_path)
+    bundle = repo / "paperclips" / "dist" / "cto.md"
+    bundle.write_text(bundle.read_text().replace("paperclip:handoff-contract:v2", "tampered"))
+
+    errors = validate_instructions.validate_handoff_markers({"claude:cto": bundle}, repo)
+
+    assert any("paperclip:handoff-contract:v2" in error for error in errors)
+
+
+def test_handoff_markers_skip_non_handoff_bundles(tmp_path: Path) -> None:
+    """Bundles without the phase-handoff section (writers, research) skip the marker check."""
+    repo = make_repo(tmp_path)
+    bundle = repo / "paperclips" / "dist" / "technical-writer.md"
+
+    errors = validate_instructions.validate_handoff_markers({"claude:technical-writer": bundle}, repo)
+
+    assert errors == []
+
+
+def test_load_team_uuids_skips_company_id(tmp_path: Path) -> None:
+    """COMPANY_ID at the top of deploy-agents.sh must not leak into the Claude UUID set."""
+    repo = make_repo(tmp_path)
+
+    teams = validate_instructions.load_team_uuids(repo)
+
+    assert "9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64" not in teams["claude"]
+    # Real Claude agent UUID (cto) should be present
+    assert "7fb0fdbb-e17f-4487-a4da-16993a907bec" in teams["claude"]
+
+
+CLAUDE_CTO_UUID = "7fb0fdbb-e17f-4487-a4da-16993a907bec"
+
+
+def _cx_meta() -> "validate_instructions.RoleMeta":
+    return validate_instructions.RoleMeta(
+        target="codex",
+        role_id="codex:cx-cto",
+        family="cto",
+        profiles=["core"],
+    )
+
+
+def test_cross_team_clean_passes(tmp_path: Path) -> None:
+    """Current Codex CTO bundle has no Claude UUIDs in active sections."""
+    repo = make_repo(tmp_path)
+    bundle = repo / "paperclips" / "dist" / "codex" / "cx-cto.md"
+    bundle_paths = {"codex:cx-cto": bundle}
+    role_meta = {"codex:cx-cto": _cx_meta()}
+
+    errors = validate_instructions.validate_cross_team_targets(bundle_paths, role_meta, repo)
+
+    assert errors == []
+
+
+def test_cross_team_actionable_foreign_fails(tmp_path: Path) -> None:
+    """A Claude UUID injected into an active section of a Codex bundle is flagged."""
+    repo = make_repo(tmp_path)
+    bundle = repo / "paperclips" / "dist" / "codex" / "cx-cto.md"
+    bundle.write_text(bundle.read_text() + f"\n\nPATCH assigneeAgentId={CLAUDE_CTO_UUID}\n")
+
+    bundle_paths = {"codex:cx-cto": bundle}
+    role_meta = {"codex:cx-cto": _cx_meta()}
+    errors = validate_instructions.validate_cross_team_targets(bundle_paths, role_meta, repo)
+
+    assert any("cross-team UUID" in e and CLAUDE_CTO_UUID[:8] in e for e in errors)
+
+
+def test_cross_team_antipattern_context_allowed(tmp_path: Path) -> None:
+    """Foreign UUID in a NOT/anti-pattern line is allowed (lookup-table case)."""
+    repo = make_repo(tmp_path)
+    bundle = repo / "paperclips" / "dist" / "codex" / "cx-cto.md"
+    bundle.write_text(
+        bundle.read_text()
+        + f"\n\nNEVER assign Claude CTO ({CLAUDE_CTO_UUID}) — use CXCTO.\n"
+    )
+
+    bundle_paths = {"codex:cx-cto": bundle}
+    role_meta = {"codex:cx-cto": _cx_meta()}
+    errors = validate_instructions.validate_cross_team_targets(bundle_paths, role_meta, repo)
+
+    assert errors == []
+
+
 def test_runbook_profile_requires_inline_rule(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     profiles_path = repo / "paperclips" / "instruction-profiles.yaml"

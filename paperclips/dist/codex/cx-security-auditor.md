@@ -418,11 +418,15 @@ Release (from holder):
 POST /api/issues/{id}/release
 # lock released, assignee can close via PATCH
 ```
+<!-- paperclip:handoff-contract:v2 -->
 ## Phase handoff discipline (iron rule)
 
+<!-- paperclip:team-local-roster:v1 -->
 Between plan phases, **explicit reassign** to next-phase agent. Never leave "someone will pick up".
 
-Hand off via PATCH `status + assigneeAgentId + comment` in one call, then GET-verify assignee. Mismatch → retry once; still mismatch → `status=blocked` + escalate Board with `actual` vs `expected`. Silent exit (push without handoff) = 8h stall (GIM-182, GIM-48 precedents).
+<!-- paperclip:handoff-exit-shapes:v1 -->
+<!-- paperclip:handoff-verify-status-assignee:v1 -->
+Before exit: `status=done` OR `assigneeAgentId` set to next agent / your CXCTO. Mandatory. PATCH `status + assigneeAgentId + comment` in one call → GET-verify both `status` and `assigneeAgentId`; mismatch → retry once → still mismatch → `status=blocked` + escalate Board.
 
 ### Handoff matrix
 
