@@ -26,10 +26,6 @@ from palace_mcp.extractors.coding_convention.models import (
 from palace_mcp.extractors.coding_convention.neo4j_writer import (
     replace_project_snapshot,
 )
-from palace_mcp.extractors.foundation.checkpoint import (
-    create_ingest_run,
-    finalize_ingest_run,
-)
 
 if TYPE_CHECKING:
     from palace_mcp.audit.contracts import AuditContract
@@ -198,13 +194,6 @@ LIMIT 100
                 "Neo4j driver not available for coding_convention"
             )
 
-        await create_ingest_run(
-            driver,
-            run_id=ctx.run_id,
-            project=ctx.project_slug,
-            extractor_name=self.name,
-        )
-
         try:
             summary = collect_conventions(
                 project_id=ctx.project_slug,
@@ -217,30 +206,11 @@ LIMIT 100
                 findings=summary.findings,
                 violations=summary.violations,
             )
-            await finalize_ingest_run(driver, run_id=ctx.run_id, success=True)
-        except ExtractorError as exc:
-            await finalize_ingest_run(
-                driver,
-                run_id=ctx.run_id,
-                success=False,
-                error_code=exc.error_code,
-            )
+        except ExtractorError:
             raise
         except OSError as exc:
-            await finalize_ingest_run(
-                driver,
-                run_id=ctx.run_id,
-                success=False,
-                error_code="extractor_runtime_error",
-            )
             raise ExtractorRuntimeError(str(exc)) from exc
         except Exception as exc:
-            await finalize_ingest_run(
-                driver,
-                run_id=ctx.run_id,
-                success=False,
-                error_code="unknown",
-            )
             raise ExtractorRuntimeError(str(exc)) from exc
 
         return ExtractorStats(

@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-import logging
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from typing import cast
+from unittest.mock import patch
 
 import pytest
+from graphiti_core import Graphiti
 from neo4j import AsyncDriver
 
-from palace_mcp.extractors.base import ExtractorRunContext
-from palace_mcp.extractors.coding_convention.extractor import CodingConventionExtractor
+from palace_mcp.extractors import runner as extractor_runner
 from palace_mcp.extractors.schema import ensure_extractors_schema
 
 
@@ -17,8 +17,8 @@ def _write(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
-def _build_repo(root: Path) -> Path:
-    repo = root / "repo"
+def _build_repo(root: Path, project_slug: str) -> Path:
+    repo = root / project_slug
     git_dir = repo / ".git"
     git_dir.mkdir(parents=True)
     (git_dir / "HEAD").write_text(
@@ -118,28 +118,92 @@ val stateLabel: String get() = "state"
 """.strip()
         + "\n",
     )
-    return repo
-
-
-def _ctx(repo_path: Path) -> ExtractorRunContext:
-    return ExtractorRunContext(
-        project_slug="coding-mini",
-        group_id="project/coding-mini",
-        repo_path=repo_path,
-        run_id="coding-e2e-run-001",
-        duration_ms=0,
-        logger=logging.getLogger("test.coding_convention.integration"),
+    _write(
+        repo
+        / "app-mini"
+        / "src"
+        / "main"
+        / "kotlin"
+        / "io"
+        / "example"
+        / "WalletMode.kt",
+        """
+sealed class WalletMode
+interface WalletSyncing
+fun loadMode(): Result<String> = Result.success("")
+val modeItems = listOf<String>()
+val modeLabel: String get() = "mode"
+""".strip()
+        + "\n",
     )
+    _write(
+        repo
+        / "app-mini"
+        / "src"
+        / "main"
+        / "kotlin"
+        / "io"
+        / "example"
+        / "WalletPhase.kt",
+        """
+sealed class WalletPhase
+interface WalletTracking
+fun loadPhase(): Result<String> = Result.success("")
+val phaseItems = listOf<String>()
+val phaseLabel: String get() = "phase"
+""".strip()
+        + "\n",
+    )
+    _write(
+        repo
+        / "app-mini"
+        / "src"
+        / "main"
+        / "kotlin"
+        / "io"
+        / "example"
+        / "WalletFlow.kt",
+        """
+sealed class WalletFlow
+interface WalletRouting
+fun loadFlow(): Result<String> = Result.success("")
+val flowItems = listOf<String>()
+val flowLabel: String get() = "flow"
+""".strip()
+        + "\n",
+    )
+    _write(
+        repo
+        / "app-mini"
+        / "src"
+        / "main"
+        / "kotlin"
+        / "io"
+        / "example"
+        / "WalletLegacy.kt",
+        """
+enum class WalletLegacy { LEGACY }
+interface WalletProtocol
+fun loadLegacy(): String? = null
+val legacyItems = ArrayList()
+val legacyLabel by lazy { "legacy" }
+""".strip()
+        + "\n",
+    )
+    return repo
 
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_coding_convention_run_writes_snapshot_and_ingest_run(
+async def test_coding_convention_runner_path_writes_single_ingest_run_snapshot(
     driver: AsyncDriver,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    repo = _build_repo(tmp_path)
+    project_slug = "coding-mini"
+    _build_repo(tmp_path, project_slug)
     await ensure_extractors_schema(driver)
+    monkeypatch.setattr(extractor_runner, "REPOS_ROOT", tmp_path)
 
     async with driver.session() as session:
         await session.run(
@@ -149,47 +213,91 @@ async def test_coding_convention_run_writes_snapshot_and_ingest_run(
                 p.name = 'Coding Mini',
                 p.tags = []
             """,
-            slug="coding-mini",
-            group_id="project/coding-mini",
+            slug=project_slug,
+            group_id=f"project/{project_slug}",
         )
 
     with patch("palace_mcp.mcp_server.get_driver", return_value=driver):
-        stats = await CodingConventionExtractor().run(
-            graphiti=MagicMock(),
-            ctx=_ctx(repo),
+        result = await extractor_runner.run_extractor(
+            "coding_convention",
+            project_slug,
+            driver=driver,
+            graphiti=cast(Graphiti, object()),
         )
 
-    assert stats.nodes_written >= 3
+    assert result["ok"] is True
+    assert result["extractor"] == "coding_convention"
+    run_id = result["run_id"]
 
     async with driver.session() as session:
         conventions_result = await session.run(
-            "MATCH (c:Convention {project_id: $project}) RETURN count(c) AS count",
-            project="coding-mini",
+            """
+            MATCH (c:Convention {project_id: $project, run_id: $run_id})
+            RETURN count(c) AS count, collect(DISTINCT c.kind) AS kinds
+            """,
+            project=project_slug,
+            run_id=run_id,
         )
         conventions_row = await conventions_result.single()
 
         violations_result = await session.run(
-            "MATCH (v:ConventionViolation {project_id: $project}) RETURN count(v) AS count",
-            project="coding-mini",
+            """
+            MATCH (v:ConventionViolation {project_id: $project, run_id: $run_id})
+            RETURN count(v) AS count, collect(DISTINCT v.kind) AS kinds
+            """,
+            project=project_slug,
+            run_id=run_id,
         )
         violations_row = await violations_result.single()
 
-        ingest_result = await session.run(
+        ingest_by_id_result = await session.run(
             """
-            MATCH (r:IngestRun {run_id: $run_id})
-            RETURN r.project AS project,
-                   r.extractor_name AS extractor_name,
-                   r.success AS success,
-                   r.error_code AS error_code
+            MATCH (r:IngestRun {id: $id})
+            RETURN count(r) AS count,
+                   head(collect(r.project)) AS project,
+                   head(collect(r.extractor_name)) AS extractor_name,
+                   head(collect(r.success)) AS success
             """,
-            run_id="coding-e2e-run-001",
+            id=run_id,
         )
-        ingest_row = await ingest_result.single()
+        ingest_by_id_row = await ingest_by_id_result.single()
 
-    assert conventions_row is not None and conventions_row["count"] >= 3
-    assert violations_row is not None and violations_row["count"] >= 1
-    assert ingest_row is not None
-    assert ingest_row["project"] == "coding-mini"
-    assert ingest_row["extractor_name"] == "coding_convention"
-    assert ingest_row["success"] is True
-    assert ingest_row["error_code"] is None
+        ingest_by_run_id_result = await session.run(
+            "MATCH (r:IngestRun {run_id: $run_id}) RETURN count(r) AS count",
+            run_id=run_id,
+        )
+        ingest_by_run_id_row = await ingest_by_run_id_result.single()
+
+    expected_kinds = {
+        "naming.type_class",
+        "naming.test_class",
+        "naming.module_protocol",
+        "structural.adt_pattern",
+        "structural.error_modeling",
+        "idiom.collection_init",
+        "idiom.computed_vs_property",
+    }
+
+    assert conventions_row is not None
+    assert conventions_row["count"] >= 8
+    assert set(conventions_row["kinds"]) == expected_kinds
+
+    assert violations_row is not None
+    assert violations_row["count"] >= 8
+    assert {
+        "naming.test_class",
+        "naming.module_protocol",
+        "structural.adt_pattern",
+        "structural.error_modeling",
+        "idiom.collection_init",
+        "idiom.computed_vs_property",
+    }.issubset(set(violations_row["kinds"]))
+
+    assert ingest_by_id_row is not None
+    assert ingest_by_id_row["count"] == 1
+    assert ingest_by_id_row["project"] == project_slug
+    assert ingest_by_id_row["extractor_name"] == "coding_convention"
+    assert ingest_by_id_row["success"] is True
+
+    assert ingest_by_run_id_row is not None
+    assert ingest_by_run_id_row["count"] == 0

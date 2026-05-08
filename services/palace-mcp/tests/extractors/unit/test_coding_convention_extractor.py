@@ -265,6 +265,30 @@ def test_collect_conventions_aggregates_dominant_choices_and_outliers(
     assert kotlin_error_kind.outliers == 1
 
     assert any(
+        violation.kind == "naming.module_protocol"
+        and violation.file == "Sources/WalletCore/WalletSummary.swift"
+        and violation.severity == "high"
+        for violation in summary.violations
+    )
+    assert any(
+        violation.kind == "idiom.collection_init"
+        and violation.file == "Sources/WalletCore/WalletSummary.swift"
+        and violation.severity == "high"
+        for violation in summary.violations
+    )
+    assert any(
+        violation.kind == "structural.error_modeling"
+        and violation.file == "Sources/WalletCore/WalletSummary.swift"
+        and violation.severity == "high"
+        for violation in summary.violations
+    )
+    assert any(
+        violation.kind == "idiom.computed_vs_property"
+        and violation.file == "Sources/WalletCore/WalletSummary.swift"
+        and violation.severity == "high"
+        for violation in summary.violations
+    )
+    assert any(
         violation.kind == "naming.test_class"
         and violation.file == "Tests/WalletCore/LegacyWalletSpec.swift"
         and violation.severity == "high"
@@ -276,6 +300,80 @@ def test_collect_conventions_aggregates_dominant_choices_and_outliers(
         and violation.severity == "high"
         for violation in summary.violations
     )
+    assert any(
+        violation.kind == "naming.module_protocol"
+        and violation.file == "app-mini/src/main/kotlin/io/example/WalletLegacy.kt"
+        and violation.severity == "high"
+        for violation in summary.violations
+    )
+    assert any(
+        violation.kind == "structural.error_modeling"
+        and violation.file == "app-mini/src/main/kotlin/io/example/WalletLegacy.kt"
+        and violation.severity == "high"
+        for violation in summary.violations
+    )
+    assert any(
+        violation.kind == "idiom.computed_vs_property"
+        and violation.file == "app-mini/src/main/kotlin/io/example/WalletLegacy.kt"
+        and violation.severity == "high"
+        for violation in summary.violations
+    )
+
+
+def test_collect_conventions_reports_type_class_outlier_above_threshold(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    _write(
+        repo / "Sources" / "Mini" / "WalletStore.swift",
+        "struct WalletStore {}\n",
+    )
+    _write(
+        repo / "Sources" / "Mini" / "WalletFormatter.swift",
+        "class WalletFormatter {}\n",
+    )
+    _write(
+        repo / "Sources" / "Mini" / "WalletRecovery.swift",
+        "struct WalletRecovery {}\n",
+    )
+    _write(
+        repo / "Sources" / "Mini" / "WalletHistory.swift",
+        "class WalletHistory {}\n",
+    )
+    _write(
+        repo / "Sources" / "Mini" / "WALLET_LEGACY.swift", "struct WALLET_LEGACY {}\n"
+    )
+
+    summary = collect_conventions(
+        project_id="coding-mini",
+        repo_path=repo,
+        run_id="run-type-outlier",
+    )
+
+    assert len(summary.findings) == 1
+    finding = summary.findings[0]
+    assert finding.module == "Mini"
+    assert finding.kind == "naming.type_class"
+    assert finding.dominant_choice == "upper_camel"
+    assert finding.sample_count == 7
+    assert finding.outliers == 1
+
+    assert [violation.model_dump() for violation in summary.violations] == [
+        {
+            "project_id": "coding-mini",
+            "module": "Mini",
+            "kind": "naming.type_class",
+            "file": "Sources/Mini/WALLET_LEGACY.swift",
+            "start_line": 1,
+            "end_line": 1,
+            "message": (
+                "naming.type_class prefers upper_snake; found WALLET_LEGACY "
+                "in Sources/Mini/WALLET_LEGACY.swift"
+            ),
+            "severity": "high",
+            "run_id": "run-type-outlier",
+        }
+    ]
 
 
 def test_collect_conventions_skips_groups_below_min_sample_count(

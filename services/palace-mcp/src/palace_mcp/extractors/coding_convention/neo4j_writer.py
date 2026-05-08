@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from neo4j import AsyncDriver
+from neo4j import AsyncDriver, AsyncManagedTransaction
 
 from palace_mcp.extractors.coding_convention.models import (
     ConventionFinding,
@@ -49,8 +49,22 @@ async def replace_project_snapshot(
     violations: list[ConventionViolation],
 ) -> None:
     async with driver.session() as session:
-        await session.run(_DELETE_EXISTING, project_id=project_id)
-        for finding in findings:
-            await session.run(_WRITE_CONVENTION, **finding.model_dump())
-        for violation in violations:
-            await session.run(_WRITE_VIOLATION, **violation.model_dump())
+        await session.execute_write(
+            _write_snapshot,
+            project_id,
+            findings,
+            violations,
+        )
+
+
+async def _write_snapshot(
+    tx: AsyncManagedTransaction,
+    project_id: str,
+    findings: list[ConventionFinding],
+    violations: list[ConventionViolation],
+) -> None:
+    await tx.run(_DELETE_EXISTING, project_id=project_id)
+    for finding in findings:
+        await tx.run(_WRITE_CONVENTION, **finding.model_dump())
+    for violation in violations:
+        await tx.run(_WRITE_VIOLATION, **violation.model_dump())
