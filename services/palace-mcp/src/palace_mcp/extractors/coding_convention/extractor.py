@@ -50,6 +50,7 @@ _STOP_DIRS: frozenset[str] = frozenset(
     }
 )
 _SUPPORTED_SUFFIXES: frozenset[str] = frozenset({".swift", ".kt"})
+_MIN_SAMPLE_COUNT = 5
 _SWIFT_TYPE_RE = re.compile(
     r"^\s*(?:public|private|internal|fileprivate|open|final|indirect|static|\s)*"
     r"(class|struct)\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)",
@@ -108,7 +109,7 @@ _SWIFT_COLLECTION_CONSTRUCTOR_RE = re.compile(
     r"=\s*(?:Array<[^>]+>\(\)|\[[^\]]+\]\(\))"
 )
 _KOTLIN_COLLECTION_FACTORY_RE = re.compile(r"=\s*(?:listOf|mutableListOf|emptyList)\(")
-_KOTLIN_COLLECTION_CONSTRUCTOR_RE = re.compile(r"=\s*(?:ArrayList|mutableListOf)\(")
+_KOTLIN_COLLECTION_CONSTRUCTOR_RE = re.compile(r"=\s*ArrayList(?:<[^>]+>)?\(")
 _SWIFT_LAZY_RE = re.compile(r"^\s*lazy\s+var\s+(?P<name>\w+)", re.MULTILINE)
 _SWIFT_COMPUTED_RE = re.compile(r"^\s*var\s+(?P<name>\w+)[^{=\n]*\{", re.MULTILINE)
 _KOTLIN_LAZY_RE = re.compile(r"^\s*val\s+(?P<name>\w+).*by\s+lazy\s*\{", re.MULTILINE)
@@ -268,6 +269,8 @@ def collect_conventions(
             counts.items(), key=lambda item: (item[1], item[0])
         )
         sample_count = len(signals)
+        if sample_count < _MIN_SAMPLE_COUNT:
+            continue
         outliers = sample_count - dominant_count
         findings.append(
             ConventionFinding(

@@ -120,7 +120,9 @@ class TestRendererDispatchesViaAuditContract:
         assert "src/foo.py" in rendered
         assert "3.50" in rendered
 
-    def test_coding_convention_section_renders_dominant_choice_and_violations(self) -> None:
+    def test_coding_convention_section_renders_dominant_choice_and_violations(
+        self,
+    ) -> None:
         findings = [
             {
                 "module": "WalletKit",

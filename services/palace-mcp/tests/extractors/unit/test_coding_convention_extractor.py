@@ -112,6 +112,78 @@ val stateLabel: String get() = "state"
 """.strip()
         + "\n",
     )
+    _write(
+        repo
+        / "app-mini"
+        / "src"
+        / "main"
+        / "kotlin"
+        / "io"
+        / "example"
+        / "WalletMode.kt",
+        """
+sealed class WalletMode
+interface WalletSyncing
+fun loadMode(): Result<String> = Result.success("")
+val modeItems = listOf<String>()
+val modeLabel: String get() = "mode"
+""".strip()
+        + "\n",
+    )
+    _write(
+        repo
+        / "app-mini"
+        / "src"
+        / "main"
+        / "kotlin"
+        / "io"
+        / "example"
+        / "WalletPhase.kt",
+        """
+sealed class WalletPhase
+interface WalletTracking
+fun loadPhase(): Result<String> = Result.success("")
+val phaseItems = listOf<String>()
+val phaseLabel: String get() = "phase"
+""".strip()
+        + "\n",
+    )
+    _write(
+        repo
+        / "app-mini"
+        / "src"
+        / "main"
+        / "kotlin"
+        / "io"
+        / "example"
+        / "WalletFlow.kt",
+        """
+sealed class WalletFlow
+interface WalletRouting
+fun loadFlow(): Result<String> = Result.success("")
+val flowItems = listOf<String>()
+val flowLabel: String get() = "flow"
+""".strip()
+        + "\n",
+    )
+    _write(
+        repo
+        / "app-mini"
+        / "src"
+        / "main"
+        / "kotlin"
+        / "io"
+        / "example"
+        / "WalletLegacy.kt",
+        """
+enum class WalletLegacy { LEGACY }
+interface WalletProtocol
+fun loadLegacy(): String? = null
+val legacyItems = ArrayList()
+val legacyLabel by lazy { "legacy" }
+""".strip()
+        + "\n",
+    )
     return repo
 
 
@@ -153,6 +225,44 @@ def test_collect_conventions_aggregates_dominant_choices_and_outliers(
     assert collection_kind.dominant_choice == "literal_empty"
     assert collection_kind.sample_count == 5
     assert collection_kind.outliers == 1
+    assert collection_kind.confidence == "heuristic"
+
+    type_kind = convention_by_kind[("WalletCore", "naming.type_class")]
+    assert type_kind.dominant_choice == "upper_camel"
+    assert type_kind.sample_count == 12
+    assert type_kind.outliers == 0
+
+    error_kind = convention_by_kind[("WalletCore", "structural.error_modeling")]
+    assert error_kind.dominant_choice == "throws"
+    assert error_kind.sample_count == 5
+    assert error_kind.outliers == 1
+
+    property_kind = convention_by_kind[("WalletCore", "idiom.computed_vs_property")]
+    assert property_kind.dominant_choice == "computed_property"
+    assert property_kind.sample_count == 5
+    assert property_kind.outliers == 1
+
+    adt_kind = convention_by_kind[("app-mini", "structural.adt_pattern")]
+    assert adt_kind.dominant_choice == "sealed"
+    assert adt_kind.sample_count == 6
+    assert adt_kind.outliers == 2
+
+    kotlin_protocol_kind = convention_by_kind[("app-mini", "naming.module_protocol")]
+    assert kotlin_protocol_kind.dominant_choice == "suffix_ing"
+    assert kotlin_protocol_kind.sample_count == 5
+    assert kotlin_protocol_kind.outliers == 1
+
+    kotlin_property_kind = convention_by_kind[
+        ("app-mini", "idiom.computed_vs_property")
+    ]
+    assert kotlin_property_kind.dominant_choice == "computed_property"
+    assert kotlin_property_kind.sample_count == 5
+    assert kotlin_property_kind.outliers == 1
+
+    kotlin_error_kind = convention_by_kind[("app-mini", "structural.error_modeling")]
+    assert kotlin_error_kind.dominant_choice == "result"
+    assert kotlin_error_kind.sample_count == 5
+    assert kotlin_error_kind.outliers == 1
 
     assert any(
         violation.kind == "naming.test_class"
@@ -160,6 +270,30 @@ def test_collect_conventions_aggregates_dominant_choices_and_outliers(
         and violation.severity == "high"
         for violation in summary.violations
     )
+    assert any(
+        violation.kind == "structural.adt_pattern"
+        and violation.file == "app-mini/src/main/kotlin/io/example/WalletLegacy.kt"
+        and violation.severity == "high"
+        for violation in summary.violations
+    )
+
+
+def test_collect_conventions_skips_groups_below_min_sample_count(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    _write(repo / "Sources" / "Mini" / "A.swift", "struct WALLET_A {}\n")
+    _write(repo / "Sources" / "Mini" / "B.swift", "struct WalletB {}\n")
+    _write(repo / "Sources" / "Mini" / "C.swift", "struct WalletC {}\n")
+
+    summary = collect_conventions(
+        project_id="coding-mini",
+        repo_path=repo,
+        run_id="run-min-sample",
+    )
+
+    assert summary.findings == []
+    assert summary.violations == []
 
 
 @pytest.mark.asyncio
