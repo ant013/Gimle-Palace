@@ -139,16 +139,18 @@ Writer requirements:
 
 - `extractor_name="testability_di"`
 - `template_name="testability_di.md"`
-- `query` receives `$project`
+- `query` receives both `$project` (bare slug) and `$project_id`
+  (prefixed form, e.g. `project/gimle`); this extractor must match new
+  rows by `$project_id` because writer rows use `project_id=ctx.group_id`
 - `severity_column` points to a returned severity field
 - optional `severity_mapper` may reuse `Severity` parsing if the query returns canonical severity strings
 
 Expected query shape:
 
 ```cypher
-MATCH (di:DiPattern {project_id: $project})
-OPTIONAL MATCH (td:TestDouble {project_id: $project, module: di.module})
-OPTIONAL MATCH (us:UntestableSite {project_id: $project, module: di.module})
+MATCH (di:DiPattern {project_id: $project_id})
+OPTIONAL MATCH (td:TestDouble {project_id: $project_id, module: di.module})
+OPTIONAL MATCH (us:UntestableSite {project_id: $project_id, module: di.module})
 WITH di,
      collect(DISTINCT td {
        .kind, .language, .target_symbol, .test_file
@@ -214,16 +216,16 @@ Implementation tests:
 
 QA evidence:
 
-- `uv run ruff check`
-- `uv run mypy src/`
-- `uv run pytest`
+- `cd services/palace-mcp && uv run ruff check`
+- `cd services/palace-mcp && uv run mypy src/`
+- `cd services/palace-mcp && uv run pytest`
 - `docker compose build`
 - live `docker compose --profile full up` healthchecks
 - real MCP call invoking `palace.ingest.run_extractor` for `testability_di`
 - Cypher evidence:
-  - `MATCH (d:DiPattern {project_id: $project}) RETURN d.style, count(*)`
-  - `MATCH (t:TestDouble {project_id: $project}) RETURN t.kind, count(*)`
-  - `MATCH (u:UntestableSite {project_id: $project}) RETURN u.category, u.severity, count(*)`
+  - `MATCH (d:DiPattern {project_id: $project_id}) RETURN d.style, count(*)`
+  - `MATCH (t:TestDouble {project_id: $project_id}) RETURN t.kind, count(*)`
+  - `MATCH (u:UntestableSite {project_id: $project_id}) RETURN u.category, u.severity, count(*)`
 
 ## 9. Risks
 

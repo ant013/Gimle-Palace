@@ -254,9 +254,9 @@
 
 **Acceptance criteria:**
 
-- `uv run ruff check` green.
-- `uv run mypy src/` green.
-- `uv run pytest` green.
+- `cd services/palace-mcp && uv run ruff check` green.
+- `cd services/palace-mcp && uv run mypy src/` green.
+- `cd services/palace-mcp && uv run pytest` green.
 - `docker compose build` green.
 - `docker compose --profile full up` healthchecks green.
 - Real MCP tool call invokes `palace.ingest.run_extractor` with `testability_di`.
