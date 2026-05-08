@@ -173,25 +173,52 @@ log "Submodules initialised"
 log "--- Build: paperclips/build.sh ---"
 
 if ! bash paperclips/build.sh; then
-    die "paperclips/build.sh failed" 3
+    die "paperclips/build.sh (claude) failed" 3
 fi
-log "Build complete"
+log "Build (claude) complete"
+
+if ! bash paperclips/build.sh --target codex; then
+    die "paperclips/build.sh --target codex failed" 3
+fi
+log "Build (codex) complete"
 
 # ---------------------------------------------------------------------------
-# Deploy (exit code 3)
+# Deploy Claude side (exit code 3)
 # ---------------------------------------------------------------------------
 log "--- Deploy: paperclips/deploy-agents.sh --local ---"
 
 if ! bash paperclips/deploy-agents.sh --local; then
     die "paperclips/deploy-agents.sh --local failed" 3
 fi
-log "Deploy complete"
+log "Deploy (claude) complete"
+
+# ---------------------------------------------------------------------------
+# Deploy Codex side (exit code 3)
+# Requires PAPERCLIP_API_KEY — codex deploy is API-only (no local mode).
+# Falls back to a warning if the key is absent so the Claude-side
+# deploy still counts as "success" — operator can re-run after exporting.
+# ---------------------------------------------------------------------------
+log "--- Deploy: paperclips/deploy-codex-agents.sh --api ---"
+
+if [ -z "${PAPERCLIP_API_KEY:-}" ]; then
+    log "WARNING: PAPERCLIP_API_KEY not set — skipping Codex deploy."
+    log "         Re-run with PAPERCLIP_API_KEY exported to push Codex bundles."
+elif ! bash paperclips/deploy-codex-agents.sh --api; then
+    die "paperclips/deploy-codex-agents.sh --api failed" 3
+else
+    log "Deploy (codex) complete"
+fi
 
 # Capture agent count before cleanup removes worktree/dist
 DEPLOYED_COUNT=0
 DIST_DIR="$WORKTREE_PATH/paperclips/dist"
 if [ -d "$DIST_DIR" ]; then
     DEPLOYED_COUNT="$(ls -1 "$DIST_DIR"/*.md 2>/dev/null | wc -l | tr -d ' ')"
+fi
+DEPLOYED_COUNT_CODEX=0
+DIST_DIR_CODEX="$WORKTREE_PATH/paperclips/dist/codex"
+if [ -d "$DIST_DIR_CODEX" ]; then
+    DEPLOYED_COUNT_CODEX="$(ls -1 "$DIST_DIR_CODEX"/*.md 2>/dev/null | wc -l | tr -d ' ')"
 fi
 
 # Return to repo root so cleanup trap finds it cleanly
@@ -219,7 +246,7 @@ log "Verify OK: marker '${VERIFY_MARKER}' found in CTO AGENTS.md"
 # Baseline log append
 # ---------------------------------------------------------------------------
 UTC_NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-LOG_LINE="${UTC_NOW}\tmain_sha=${MAIN_SHA}\tdeployed_agents=${DEPLOYED_COUNT}"
+LOG_LINE="${UTC_NOW}\tmain_sha=${MAIN_SHA}\tdeployed_claude=${DEPLOYED_COUNT}\tdeployed_codex=${DEPLOYED_COUNT_CODEX}"
 printf "%b\n" "$LOG_LINE" >> "$DEPLOY_LOG"
 log "Baseline log: ${LOG_LINE}"
 
@@ -228,6 +255,7 @@ log "Baseline log: ${LOG_LINE}"
 # ---------------------------------------------------------------------------
 log "=== imac-agents-deploy.sh SUCCESS ==="
 log "  Main SHA        : ${MAIN_SHA}"
-log "  Deployed agents : ${DEPLOYED_COUNT}"
+log "  Deployed Claude : ${DEPLOYED_COUNT}"
+log "  Deployed Codex  : ${DEPLOYED_COUNT_CODEX}"
 log "  Run log         : ${RUN_LOG}"
 log "  Baseline        : ${DEPLOY_LOG}"

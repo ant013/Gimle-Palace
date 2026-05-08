@@ -430,7 +430,19 @@ If post-handoff cleanup is genuinely needed (e.g. local worktree state), do it B
 Background lesson: `paperclips/fragments/lessons/phase-handoff.md`.
 ## Agent UUID roster — Gimle Claude
 
-Use `[@<Role>](agent://<uuid>?i=<icon>)` in phase handoffs. Source: `paperclips/deploy-agents.sh`.
+Use `[@<Role>](agent://<uuid>?i=<icon>)` in phase handoffs.
+Source: `paperclips/deploy-agents.sh`.
+
+**Cross-team handoff rule** (applies to ALL agents, both teams): handoffs
+must go to an agent on YOUR OWN team. Claude-side roles handoff to
+Claude-side agents (bare names, no prefix); CX-side roles handoff to
+CX-side agents (CX prefix). The two teams are isolated by design (per
+`feedback_parallel_team_protocol.md`). When you say "next CTO" — that's
+the CTO of your team. NEVER address an agent on the other team in a
+phase handoff. The build pipeline ships **target-specific** rosters:
+Claude target gets THIS file (Claude UUIDs); Codex target gets the
+override at `paperclips/fragments/targets/codex/local/agent-roster.md`
+(CX UUIDs).
 
 | Role | UUID | Icon |
 |---|---|---|
@@ -536,7 +548,7 @@ When multiple signals apply to the same symbol, use the **highest** severity. Do
 ### Example output (architecture scope, 1 finding)
 
 ```markdown
-## Audit findings — OpusArchitectReviewer
+## Audit findings — ArchitectReviewer
 
 **Project:** gimle  **Audit ID:** a1b2c3  **Date:** 2026-05-07T12:00:00Z
 

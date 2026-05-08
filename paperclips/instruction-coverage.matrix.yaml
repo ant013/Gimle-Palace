@@ -61,6 +61,11 @@ roles:
     source: paperclips/roles-codex/codex-architect-reviewer.md
     family: architect-reviewer
     profiles: [core, task-start, review, qa-smoke, research, handoff-full]
+  codex:cx-blockchain-engineer:
+    target: codex
+    source: paperclips/roles-codex/cx-blockchain-engineer.md
+    family: implementation
+    profiles: [core, task-start, implementation, handoff]
   codex:cx-code-reviewer:
     target: codex
     source: paperclips/roles-codex/cx-code-reviewer.md
@@ -96,6 +101,11 @@ roles:
     source: paperclips/roles-codex/cx-research-agent.md
     family: research
     profiles: [core, task-start, research, handoff]
+  codex:cx-security-auditor:
+    target: codex
+    source: paperclips/roles-codex/cx-security-auditor.md
+    family: security-review
+    profiles: [core, task-start, review, research, handoff-full]
   codex:cx-technical-writer:
     target: codex
     source: paperclips/roles-codex/cx-technical-writer.md
@@ -123,6 +133,7 @@ rules:
       - claude:python-engineer
       - claude:research-agent
       - claude:technical-writer
+      - codex:cx-blockchain-engineer
       - codex:cx-mcp-engineer
       - codex:cx-python-engineer
       - codex:cx-research-agent
@@ -142,6 +153,7 @@ rules:
       - codex:cx-cto
       - codex:cx-infra-engineer
       - codex:cx-qa-engineer
+      - codex:cx-security-auditor
     markers: ["Phase", "handoff"]
   qa-evidence:
     required_profiles: [qa-smoke]
@@ -175,6 +187,7 @@ rules:
       - claude:mcp-engineer
       - claude:python-engineer
       - claude:qa-engineer
+      - codex:cx-blockchain-engineer
       - codex:cx-infra-engineer
       - codex:cx-mcp-engineer
       - codex:cx-python-engineer
@@ -189,5 +202,6 @@ rules:
       - claude:technical-writer
       - codex:codex-architect-reviewer
       - codex:cx-research-agent
+      - codex:cx-security-auditor
       - codex:cx-technical-writer
     markers: ["source"]

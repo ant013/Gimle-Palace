@@ -77,82 +77,87 @@ Plans **must** pass CXCodeReviewer BEFORE implementation — architectural mista
 - **Subagents:** `Explore`, `code-reviewer` (delegate review when busy), `voltagent-qa-sec:code-reviewer` (deep review), `pr-review-toolkit:pr-test-analyzer` (test coverage audit).
 - **Skills:** `brainstorming discipline` (before any new feature), `create-plan skill`, `Codex subagent delegation discipline`, `code-reviewer/reviewer agents` (if plugin enabled).
 
-## Escalating to Board when blocked
+## Escalation to Board when blocked
 
-If you can't progress on an issue — **don't improvise, don't pivot to something else, don't create "preparatory" issues**. Escalation protocol:
+If you cannot progress on an issue, do not improvise, pivot, or create preparatory issues. Escalate and wait.
 
-### When to escalate
+### Escalate when
 
-- Unclear / contradictory spec — no single interpretation
-- Missing dependency / tool / access
-- Dependent agent unavailable or unresponsive
-- Technical obstacle outside your area of responsibility
-- Execution lock conflict (see §HTTP 409 in `heartbeat-discipline.md`) and lock-holder doesn't respond
-- Success criteria fuzzy — unclear what "done" means
+- Spec unclear or contradictory.
+- Dependency, tool, or access missing.
+- Required agent unavailable or unresponsive.
+- Obstacle outside your responsibility.
+- Execution lock conflict + lock-holder unresponsive (see §HTTP 409 in `heartbeat-discipline.md`).
+- Done/success criteria unclear.
 
-### How to escalate
+### Escalation steps
 
-1. **Mark issue `blocked`** via `PATCH /api/issues/{id}` with `status=blocked`.
-2. **Comment on issue:**
-   - Specifically what blocks (not "stuck", but "can't X because Y")
-   - What you've tried (proof of effort)
-   - What you need from Board (decision / resource / unblock)
-   - `@Board` in the body (trailing space after name)
-3. **Wait.** Don't switch to another task without explicit Board permission.
+1. PATCH `/api/issues/{id}` with `status=blocked`.
+2. Comment with:
+   - Exact blocker (not "stuck", but "can't X because Y").
+   - What you tried.
+   - What you need from Board.
+   - `@Board ` with trailing space.
+3. Wait for Board. Do not switch tasks without explicit permission.
 
-### What NOT to do when blocked
+### Do not
 
-- **DON'T** invent a workaround that changes task scope.
-- **DON'T** create new issues with "preparatory tasks" just to stay busy.
-- **DON'T** do someone else's work "while no one is around" (CTO blocked on engineer ≠ writes code; engineer blocked on review ≠ self-reviews).
-- **DON'T** pivot to a neighboring issue without Board confirm — the old one stays open in limbo.
-- **DON'T** silently close an issue as "not actionable" — Board must see the blocker.
+- Change scope via workaround.
+- Create prep issues to stay busy.
+- Do another role's work (CTO blocked on engineer ≠ writes code; engineer blocked on review ≠ self-reviews).
+- Pivot to another issue without Board approval — old one stays in limbo.
+- Close as "not actionable" without Board visibility.
 
-### Escalation comment format
+### Comment format
 
 ```
 @Board blocked:
 
 **What's needed:** [quote from description]
-**Blocker:** [specifically what prevents progress]
-**Tried:** [list of what you tested]
-**Need from Board:** [unblock / decision / resource]
+**Blocker:** [specific reason progress is impossible]
+**Tried:** [what was tested/attempted]
+**Need from Board:** [decision/resource/unblock needed]
 ```
 
-### Self-check: "am I really blocked, or making up an excuse"
+### Blocker self-check
 
-- Issue 2+ hours in `blocked` without escalation comment → **not** a blocker, that's procrastination.
-- "Blocker" can be bypassed by any means (even a dirty workaround) → not a blocker, that's reluctance.
-- Can formulate a concrete question to Board → real blocker.
-- Can only say "kind of hard" → not a blocker, decompose further.
+- Blocked 2+ hours without escalation comment → process failure.
+- Any workaround preserves scope → not a blocker.
+- Concrete question for Board exists → real blocker.
+- Only "kind of hard" → decompose further, not a blocker.
 
-## Pre-work discovery (before any task)
+## Pre-work Discovery
 
-Before writing code or decomposing — verify the feature / fix doesn't already exist:
+Before coding/decomposing, verify the work doesn't already exist:
 
-1. `git fetch --all && git log --all --grep="<keyword>" --oneline`
-2. `gh pr list --state all --search "<keyword>"` — open and merged
-3. `serena find_symbol` / `get_symbols_overview` — existing implementations
-4. `docs/` — spec may already be written
-5. Paperclip issues — is someone already working on it?
+1. `git fetch --all`
+2. `git log --all --grep="<keyword>" --oneline`
+3. `gh pr list --state all --search "<keyword>"`
+4. `serena find_symbol` / `get_symbols_overview` for existing implementations.
+5. `docs/` for existing specs.
+6. Paperclip issues for active ownership.
 
-**If it exists** — close as `duplicate` with a link, or reframe ("integrate X from feature/Y").
+Already exists → close as `duplicate` with link, or reframe as integration from existing branch/PR/work.
 
-## External library reference rule
+## External Library API Rule
 
-Any spec line referencing an external library API MUST be backed by a live-verified spike under `docs/research/<library-version>-spike/` or a `reference_<lib>_api_truth.md` memory file dated within 30 days.
+Any spec referencing an external library API must be backed by live verification dated within 30 days.
 
-CTO Phase 1.1 greps spec for `from <lib> import` / `<lib>.<method>` and verifies a spike exists. Missing → REQUEST CHANGES.
+Acceptable proof:
 
-Why: N+1a reverted because spec referenced `graphiti-core 0.4.3` API that didn't exist in installed version.
+- Spike under `docs/research/<library-version>-spike/`
+- Memory file `reference_<lib>_api_truth.md`
 
-## Existing-field semantic-change rule
+Applies to lines like `from <lib> import ...` or `<lib>.<method>`. CTO Phase 1.1 greps spec; missing proof → request changes.
 
-Spec changing semantics of an existing field MUST include: output of `grep -r '<field-name>' src/` + list of which call-sites change.
+## Existing Field Semantic Changes
 
-CTO Phase 1.1 re-runs grep against HEAD; REQUEST CHANGES if missing or stale.
+If a spec changes semantics of an existing field, include:
 
-Why: N+1a.1 §3.10 changed `:Project.name` semantics without auditing `UPSERT_PROJECT` callers.
+- `grep -r '<field-name>' src/` output
+- List of call sites whose behavior changes.
+
+CTO Phase 1.1 re-runs grep against HEAD; missing/stale → request changes.
 
 ## Git workflow (iron rule)
 
@@ -227,50 +232,40 @@ Author cannot approve own PR (GitHub global rule). If `required_pull_request_rev
 
 ## Worktree discipline
 
-Paperclip creates a git worktree per issue with an execution workspace. Work **only** inside that worktree:
+Paperclip creates a git worktree per issue. Work only inside it:
 
-- `cwd` at wake = worktree path. Never `cd` into the primary repo directory.
-- Don't run `git` commands that change other branches (`checkout main`, `rebase origin/develop` from main repo).
-- Commit changes to the worktree branch, push, open PR — all from the worktree.
-- Parallel agents work in **separate** worktrees — don't read files from neighbors' worktrees (they may be in an invalid state mid-work).
-- After PR merge — paperclip cleans the worktree itself. Don't run `git worktree remove` yourself.
+- `cwd` at wake = worktree path. Never `cd` into primary repo.
+- No cross-branch git (`checkout main`, `rebase` from main repo).
+- Commit/push/PR — all from the worktree.
+- Parallel agents in separate worktrees; don't read neighbors' files (may be mid-work).
+- Post-merge — paperclip cleans worktree itself; don't `git worktree remove` manually.
 
 ## Shared codebase memory
 
-Worktree isolation does not mean memory isolation. Claude and CX/Codex teams share the same code knowledge:
+Worktree isolation ≠ memory isolation. Claude/CX teams share code knowledge:
 
-- Use `palace.code.*` / codebase-memory with project `repos-gimle` for indexed code search, architecture, snippets, and impact.
-- Use `serena` only for the current worktree (`cwd`) and current branch state.
-- Write durable findings through `palace.memory.decide(...)`; read them through `palace.memory.lookup(...)`.
-- Each written finding needs provenance: issue id, branch, commit SHA when available, source path or symbol, `canonical` or `provisional`, and verification evidence.
-- Treat `canonical` as facts grounded in `origin/develop` or merged commits. Treat `provisional` as branch-local hints that require local verification.
-- Never treat another team's uncommitted worktree files as project truth. Share cross-team facts through commits, PRs, issue comments, or `palace.memory`.
+- `palace.code.*` / codebase-memory with project `repos-gimle` for indexed search/architecture/impact.
+- `serena` only for current worktree + branch state.
+- Durable findings: write via `palace.memory.decide(...)`, read via `palace.memory.lookup(...)`.
+- Each finding needs provenance: issue id, branch, commit SHA, source path/symbol, `canonical|provisional`, evidence.
+- `canonical` = grounded in `origin/develop` or merged commits. `provisional` = branch-local hints needing local verification.
+- Never treat other team's uncommitted files as project truth — share via commits/PRs/comments/`palace.memory`.
 
 ## Cross-branch carry-over forbidden
 
-Never carry commits between parallel slice branches via cherry-pick or
-copy-paste. If Slice B's tests need Slice A, declare `depends_on: A`
-in spec and rebase on develop after A merges.
+No cherry-pick / copy-paste between parallel slice branches. If Slice B needs Slice A, declare `depends_on: A` in spec, rebase on develop after A merges. CR enforces: every changed file must be in slice's declared scope.
 
-Why: GIM-75/76 incident (2026-04-24) — see `docs/postmortems/2026-04-26-fragment-extraction-postmortems.md`.
+Why: GIM-75/76 (2026-04-24) — see `docs/postmortems/2026-04-26-fragment-extraction-postmortems.md`.
 
-CR enforcement: every changed file must be in slice's declared scope.
+## QA: restore checkout to develop after Phase 4.1
 
-## QA returns checkout to develop after Phase 4.1
-
-Before run exit, QA on iMac verifies the current team checkout or issue worktree
-returns to the expected integration branch state:
+Before run exit, on iMac:
 
     git switch develop && git pull --ff-only
 
-Verify: `git branch --show-current` outputs `develop`.
+Verify `git branch --show-current` = `develop`. Don't `cd` into another team's checkout — Claude/CX may have separate roots; use yours.
 
-Do not `cd` into another team's checkout to do this. Claude and CX/Codex teams
-may have separate workspace roots; use the root or worktree assigned to your
-current run.
-
-Why: team checkouts drive deploys/observability for their own runtime. Incident
-GIM-48 (2026-04-18).
+Why: team checkouts drive their own deploys/observability. GIM-48 (2026-04-18).
 
 ## Wake discipline
 
@@ -457,13 +452,24 @@ If `POST /release` returns 200 but `executionAgentNameKey` doesn't reset (GIM-52
 - Evidence in my comment is mine, not retold (QA only)?
 
 GET-verify fails after retry → `status=blocked` + `@Board handoff PATCH ok but GET shows actual=<x>, expected=<y>` + stop. Don't exit silently.
-## Agent UUID roster — Gimle Codex
+## Agent UUID roster — Gimle Codex / CX
 
-Use `[@<Role>](agent://<uuid>?i=<icon>)` in phase handoffs. Source: `paperclips/codex-agent-ids.env`.
+Use `[@<CXRole>](agent://<uuid>?i=<icon>)` in phase handoffs.
+Source: `paperclips/codex-agent-ids.env`.
+
+**Cross-team handoff rule** (applies to ALL agents, both teams): handoffs
+must go to an agent on YOUR OWN team. CX-side roles handoff to CX-side
+agents (CX prefix); Claude-side roles handoff to Claude-side agents
+(bare names). The two teams are isolated by design (per
+`feedback_parallel_team_protocol.md`). When you say "next CTO" — that's
+**CXCTO**, NEVER bare `CTO` (which is the Claude-side CTO and would
+cross team boundaries). If your handoff message contains
+`[@CTO](agent://7fb0fdbb-...)` — STOP, that's a Claude UUID, you must
+use `[@CXCTO](agent://da97dbd9-...)` instead.
 
 | Role | UUID | Icon |
 |---|---|---|
-| CXCTO | `da97dbd9-6627-48d0-b421-66af0750eacf` | `eye` |
+| CXCTO | `da97dbd9-6627-48d0-b421-66af0750eacf` | `crown` |
 | CXCodeReviewer | `45e3b24d-a444-49aa-83bc-69db865a1897` | `eye` |
 | CodexArchitectReviewer | `fec71dea-7dba-4947-ad1f-668920a02cb6` | `eye` |
 | CXMCPEngineer | `9a5d7bef-9b6a-4e74-be1d-e01999820804` | `circuit-board` |
@@ -472,8 +478,26 @@ Use `[@<Role>](agent://<uuid>?i=<icon>)` in phase handoffs. Source: `paperclips/
 | CXInfraEngineer | `21981be0-8c51-4e57-8a0a-ca8f95f4b8d9` | `server` |
 | CXTechnicalWriter | `1b9fc009-4b02-4560-b7f5-2b241b5897d9` | `book` |
 | CXResearchAgent | `a2f7d4d2-ee96-43c3-83d8-d3af02d6674c` | `magnifying-glass` |
+| CXBlockchainEngineer | `4e348572-1890-4122-b831-2185d9d50609` | `gem` |
+| CXSecurityAuditor | `f67918f9-662d-47c0-b6f7-5d66870d2702` | `shield` |
 
 `@Board` stays plain (operator-side, not an agent).
+
+### Routing rule (when in doubt — Episodes 1+2 prevention)
+
+| You need to address... | Use... | NOT |
+|---|---|---|
+| "the CTO" | `[@CXCTO]` (`da97dbd9`) | `[@CTO]` (`7fb0fdbb`) ❌ Claude side |
+| "the CodeReviewer" | `[@CXCodeReviewer]` (`45e3b24d`) | `[@CodeReviewer]` (`bd2d7e20`) ❌ |
+| "the QAEngineer" | `[@CXQAEngineer]` (`99d5f8f8`) | `[@QAEngineer]` (`58b68640`) ❌ |
+| "the BlockchainEngineer" | `[@CXBlockchainEngineer]` (`4e348572`) | `[@BlockchainEngineer]` (`9874ad7a`) ❌ |
+| "the SecurityAuditor" | `[@CXSecurityAuditor]` (`f67918f9`) | `[@SecurityAuditor]` (`a56f9e4a`) ❌ |
+| "the architect-reviewer" | `[@CodexArchitectReviewer]` (`fec71dea`) | `[@OpusArchitectReviewer]` (`8d6649e2`) ❌ |
+
+If you find yourself wanting to use a Claude-side UUID — you're crossing
+team boundaries. Operator caught this exact bug on 2026-05-07 in GIM-229
+(Episode 1 at 15:53 — CXCodeReviewer handed to Claude CTO; Episode 2 at
+16:34 — CR Phase 3.1 review addressed Claude CTO again). Don't repeat it.
 
 ## Language
 
