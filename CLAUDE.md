@@ -81,6 +81,16 @@ No Docker needed — the script copies rendered AGENTS.md files from a
 temporary `origin/main` worktree to live agent bundle directories.
 Paperclip reads AGENTS.md fresh on each agent run, so no restart is required.
 
+## Claude OAuth recovery on iMac
+
+Claude paperclip agents auth via Claude Max OAuth tokens in
+`~/.claude/.credentials.json`. Tokens live ~1.5-2h; CLI 2.x doesn't
+auto-refresh under paperclip. When all Claude agents fail with `401
+Invalid authentication credentials` in lockstep — that's an expired
+OAuth token. See `docs/runbooks/claude-oauth-recovery.md` for the full
+recovery procedure (kill retry loop → fresh `claude /login` → restart
+paperclip).
+
 ## Docker Compose Profiles
 
 Services use explicit profile opt-in:
