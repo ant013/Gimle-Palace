@@ -8,16 +8,6 @@ rules:
     metadata:
       category: crypto-correctness
       kind: address_no_checksum_validation
-    pattern-either:
-      # Hex address literal assigned directly to a variable
-      - pattern: |
-          let $VAR = "0x$ADDR"
-      - pattern: |
-          var $VAR = "0x$ADDR"
-      # Passed to address-like init without validation
-      - pattern: |
-          Address("0x$ADDR")
-      - pattern: |
-          TronAddress("0x$ADDR")
-      - pattern: |
-          EthAddress("0x$ADDR")
+    # pattern-regex catches hex address literals (>=10 hex chars after 0x)
+    # directly in source — no AST needed for string content matching.
+    pattern-regex: '"0x[0-9a-fA-F]{10,}"'

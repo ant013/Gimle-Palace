@@ -183,15 +183,11 @@ async def _run_semgrep(
     except TimeoutError:
         proc.kill()
         await proc.wait()
-        raise ExtractorConfigError(
-            f"semgrep timed out after {timeout_s}s on {target}"
-        )
+        raise ExtractorConfigError(f"semgrep timed out after {timeout_s}s on {target}")
 
     if proc.returncode not in (0, 1):
         stderr_text = stderr_b.decode("utf-8", errors="replace")[:500]
-        raise ExtractorConfigError(
-            f"semgrep exited {proc.returncode}: {stderr_text}"
-        )
+        raise ExtractorConfigError(f"semgrep exited {proc.returncode}: {stderr_text}")
 
     try:
         output = json.loads(stdout_b.decode("utf-8", errors="replace"))

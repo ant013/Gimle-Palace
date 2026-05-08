@@ -167,6 +167,7 @@ def _rule_ids(findings: list[dict]) -> set[str]:
 
 # ── C.1 private_key_string_storage ──────────────────────────────────────────
 
+
 def test_private_key_bad_fires() -> None:
     """C.1: words_joined_userdefaults fires on PrivateKeyBad.swift."""
     findings = _semgrep_findings(_FIXTURES_DIR / "Bad" / "PrivateKeyBad.swift")
@@ -183,6 +184,7 @@ def test_private_key_good_no_findings() -> None:
 
 
 # ── C.2 decimal_raw_uint_arithmetic ─────────────────────────────────────────
+
 
 def test_decimal_arith_bad_fires() -> None:
     """C.2: decimal_raw_uint_arithmetic_div fires on DecimalArithBad.swift."""
@@ -201,6 +203,7 @@ def test_decimal_arith_good_no_findings() -> None:
 
 # ── C.3 bignum_overflow_unguarded ────────────────────────────────────────────
 
+
 def test_bignum_bad_fires() -> None:
     """C.3: bignum_overflow_unguarded fires on BigNumBad.swift."""
     findings = _semgrep_findings(_FIXTURES_DIR / "Bad" / "BigNumBad.swift")
@@ -217,6 +220,7 @@ def test_bignum_good_no_findings() -> None:
 
 
 # ── Dedup logic (D5) ─────────────────────────────────────────────────────────
+
 
 def test_dedup_keeps_highest_severity() -> None:
     """D5: _dedup_findings coalesces same (file,line,kind) keeping highest severity."""
@@ -249,6 +253,40 @@ def test_dedup_keeps_highest_severity() -> None:
     result = _dedup_findings(raw)
     assert len(result) == 1
     assert result[0]["severity"] == "high"
+
+
+# ── C.4 address_no_checksum_validation ──────────────────────────────────────
+
+
+def test_address_checksum_bad_fires() -> None:
+    """C.4: address_no_checksum_validation fires on AddressChecksumBad.swift."""
+    findings = _semgrep_findings(_FIXTURES_DIR / "Bad" / "AddressChecksumBad.swift")
+    rule_ids = _rule_ids(findings)
+    assert "address_no_checksum_validation" in rule_ids
+
+
+def test_address_checksum_good_no_findings() -> None:
+    """C.4: no address rules fire on AddressChecksumGood.swift."""
+    findings = _semgrep_findings(_FIXTURES_DIR / "Good" / "AddressChecksumGood.swift")
+    rule_ids = _rule_ids(findings)
+    assert "address_no_checksum_validation" not in rule_ids
+
+
+# ── C.5 wei_eth_unit_mix ─────────────────────────────────────────────────────
+
+
+def test_wei_eth_mix_bad_fires() -> None:
+    """C.5: wei_eth_unit_mix_string fires on WeiEthMixBad.swift."""
+    findings = _semgrep_findings(_FIXTURES_DIR / "Bad" / "WeiEthMixBad.swift")
+    rule_ids = _rule_ids(findings)
+    assert "wei_eth_unit_mix_string" in rule_ids
+
+
+def test_wei_eth_mix_good_no_findings() -> None:
+    """C.5: no unit-mix rules fire on WeiEthMixGood.swift."""
+    findings = _semgrep_findings(_FIXTURES_DIR / "Good" / "WeiEthMixGood.swift")
+    rule_ids = _rule_ids(findings)
+    assert "wei_eth_unit_mix_string" not in rule_ids
 
 
 def test_dedup_different_lines_not_coalesced() -> None:

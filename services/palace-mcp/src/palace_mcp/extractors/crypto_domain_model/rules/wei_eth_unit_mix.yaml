@@ -9,8 +9,5 @@ rules:
     metadata:
       category: crypto-correctness
       kind: wei_eth_unit_mix
-    patterns:
-      - pattern: "$AMOUNT"
-      - metavariable-regex:
-          metavariable: $AMOUNT
-          regex: "(wei|gwei|sun|eth|trx|satoshi)"
+    # pattern-regex matches bare unit-name string literals; typed enums are safe.
+    pattern-regex: '"(wei|gwei|sun|eth|trx|satoshi)"'
