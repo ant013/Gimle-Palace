@@ -6,6 +6,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -18,6 +19,10 @@ from palace_mcp.extractors.error_handling_policy.extractor import (
     _collect_catch_sites,
     _dedup_findings,
     _ehp_severity,
+    _DELETE_EXISTING_SNAPSHOT,
+    _WRITE_CATCH_SITE,
+    _WRITE_ERROR_FINDING,
+    _write_snapshot,
 )
 
 _RULES_DIR = (
@@ -295,3 +300,83 @@ def test_catch_site_dataclass_remains_hashable() -> None:
         module="Bad",
     )
     assert {site}
+
+
+class _FakeResult:
+    async def consume(self) -> None:
+        return None
+
+
+class _FakeTx:
+    def __init__(self) -> None:
+        self.queries: list[str] = []
+
+    async def run(self, query: str, **_: object) -> _FakeResult:
+        self.queries.append(query)
+        return _FakeResult()
+
+
+class _FakeSession:
+    def __init__(self, tx: _FakeTx) -> None:
+        self.tx = tx
+        self.execute_write_calls = 0
+
+    async def __aenter__(self) -> "_FakeSession":
+        return self
+
+    async def __aexit__(self, exc_type: object, exc: object, tb: object) -> bool:
+        return False
+
+    async def execute_write(self, fn: Any, *args: object, **kwargs: object) -> None:
+        self.execute_write_calls += 1
+        await fn(self.tx, *args, **kwargs)
+
+
+class _FakeDriver:
+    def __init__(self, session: _FakeSession) -> None:
+        self._session = session
+
+    def session(self) -> _FakeSession:
+        return self._session
+
+
+@pytest.mark.asyncio
+async def test_write_snapshot_uses_single_execute_write_and_delete_then_create() -> None:
+    tx = _FakeTx()
+    session = _FakeSession(tx)
+    driver = _FakeDriver(session)
+
+    await _write_snapshot(
+        driver,
+        project_id="project/ehp",
+        run_id="run-1",
+        catch_sites=[
+            CatchSite(
+                file="Sources/Bad/EmptyCatch.swift",
+                start_line=4,
+                end_line=4,
+                kind="catch",
+                swallowed=True,
+                rethrows=False,
+                module="Bad",
+            )
+        ],
+        findings=[
+            ErrorFinding(
+                file="Sources/Bad/EmptyCatch.swift",
+                start_line=4,
+                end_line=4,
+                kind="empty_catch_block",
+                severity="high",
+                message="swallowed",
+                rule_id="empty_catch_block",
+            )
+        ],
+    )
+
+    assert session.execute_write_calls == 1
+    assert tx.queries == [
+        _DELETE_EXISTING_SNAPSHOT,
+        _WRITE_CATCH_SITE,
+        _WRITE_ERROR_FINDING,
+    ]

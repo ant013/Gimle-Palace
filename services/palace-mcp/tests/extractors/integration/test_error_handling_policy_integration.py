@@ -10,6 +10,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from neo4j import AsyncDriver
 
+from palace_mcp.audit.contracts import RunInfo
+from palace_mcp.audit.fetcher import fetch_audit_data
 from palace_mcp.extractors.base import ExtractorRunContext
 from palace_mcp.extractors.error_handling_policy.extractor import (
     ErrorHandlingPolicyExtractor,
@@ -120,6 +122,64 @@ async def test_run_integration_idempotent(
     assert finding_row is not None
     assert catch_row["n"] == EXPECTED_CATCH_SITE_COUNT
     assert finding_row["n"] == EXPECTED_FINDING_COUNT
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_clean_rerun_replaces_snapshot_and_fetcher_reads_current_contract(
+    driver: AsyncDriver,
+    graphiti_mock: MagicMock,
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "Sources"
+    shutil.copytree(_FIXTURE_SOURCES, target)
+    extractor = ErrorHandlingPolicyExtractor()
+
+    with patch("palace_mcp.mcp_server.get_settings", return_value=_fake_settings()):
+        await extractor.run(graphiti=graphiti_mock, ctx=_make_ctx(tmp_path))
+        shutil.rmtree(target / "Bad")
+        await extractor.run(
+            graphiti=graphiti_mock,
+            ctx=_make_ctx(tmp_path, run_id="integ-run-clean"),
+        )
+
+    async with driver.session() as session:
+        catch_result = await session.run(
+            "MATCH (c:CatchSite {project_id: $pid}) RETURN count(c) AS n",
+            pid=GROUP_ID,
+        )
+        catch_row = await catch_result.single()
+        finding_result = await session.run(
+            "MATCH (f:ErrorFinding {project_id: $pid}) RETURN count(f) AS n",
+            pid=GROUP_ID,
+        )
+        finding_row = await finding_result.single()
+
+    assert catch_row is not None
+    assert finding_row is not None
+    assert catch_row["n"] == 1
+    assert finding_row["n"] == 0
+
+    sections = await fetch_audit_data(
+        driver,
+        {
+            "error_handling_policy": RunInfo(
+                run_id="integ-run-clean",
+                extractor_name="error_handling_policy",
+                project=PROJECT_SLUG,
+                completed_at="2026-05-09T00:00:00Z",
+            )
+        },
+        {"error_handling_policy": extractor},
+    )
+
+    section = sections["error_handling_policy"]
+    assert len(section.findings) == 1
+    assert section.findings[0]["kind"] == ""
+    assert section.findings[0]["catch_site_count"] == 1
+    assert section.findings[0]["files_scanned"] == 1
+    assert section.findings[0]["swallowed_count"] == 0
+    assert section.findings[0]["rethrows_count"] == 1
 
 
 @pytest.mark.integration

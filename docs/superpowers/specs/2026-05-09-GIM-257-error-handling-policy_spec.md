@@ -240,32 +240,38 @@ needs aggregate context.
 
 ### 7.4 Write pattern
 
-Idempotent MERGE, same as crypto_domain_model:
+Snapshot replacement in one managed write transaction:
 
 ```cypher
-MERGE (c:CatchSite {
-    project_id: $project_id,
-    file: $file,
-    start_line: $start_line,
-    end_line: $end_line,
-    kind: $catch_site_kind
-})
-SET c.swallowed = $swallowed,
+MATCH (n)
+WHERE (n:CatchSite OR n:ErrorFinding) AND n.project_id = $project_id
+DETACH DELETE n
+
+CREATE (c:CatchSite)
+SET c.project_id = $project_id,
+    c.file = $file,
+    c.start_line = $start_line,
+    c.end_line = $end_line,
+    c.kind = $catch_site_kind,
+    c.swallowed = $swallowed,
     c.rethrows = $rethrows,
     c.module = $module,
     c.run_id = $run_id
 
-MERGE (f:ErrorFinding {
-    project_id: $project_id,
-    kind: $kind,
-    file: $file,
-    start_line: $start_line,
-    end_line: $end_line
-})
-SET f.severity = $severity,
+CREATE (f:ErrorFinding)
+SET f.project_id = $project_id,
+    f.kind = $kind,
+    f.file = $file,
+    f.start_line = $start_line,
+    f.end_line = $end_line,
+    f.severity = $severity,
     f.message = $message,
     f.run_id = $run_id
 ```
+
+Why this differs from `crypto_domain_model`: S2.3 has an explicit clean-state
+report requirement. Re-runs must replace the current project snapshot so stale
+findings disappear when the source repo is fixed.
 
 ## 8. Audit template
 
@@ -339,9 +345,11 @@ Unit:
 Integration:
 
 - synthetic fixture writes expected `:CatchSite` and `:ErrorFinding` counts;
-- second run is idempotent for both labels;
+- second run on the same repo is idempotent for both labels;
+- clean rerun after bad fixtures are removed leaves `:ErrorFinding` count at 0;
 - registry includes `error_handling_policy`;
-- audit fetcher can execute contract query.
+- `fetch_audit_data()` executes the contract query and returns the current
+  `:CatchSite` aggregate / summary row.
 
 QA smoke:
 

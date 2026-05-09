@@ -229,19 +229,25 @@ Acceptance criteria:
 
 Description:
 
-- Neo4j writer uses MERGE per `:CatchSite` and per `:ErrorFinding` (spec §7.4).
+- Neo4j writer replaces the current project snapshot in one managed write
+  transaction: delete prior `:CatchSite` / `:ErrorFinding` rows for
+  `project_id`, then create the current rows (spec §7.4).
 - Register `error_handling_policy` in `EXTRACTORS`.
 - Integration test runs extractor against fixture with real Neo4j
   (testcontainers) and verifies expected `:CatchSite` and `:ErrorFinding` node counts.
-- Idempotency test: second run writes zero duplicate nodes for both labels.
+- Idempotency test: second run on the same repo keeps counts stable for both labels.
+- Clean-rerun test: after bad fixtures are removed, stale `:ErrorFinding` rows
+  are gone and `fetch_audit_data()` returns the current contract surface.
 
 Acceptance criteria:
 
 - `EXTRACTORS["error_handling_policy"]` exists.
 - Integration test writes expected catch-site and finding counts.
-- Second run creates zero duplicates for `:CatchSite` or `:ErrorFinding`.
+- Second run on the same repo creates zero duplicate rows for either label.
+- Clean rerun removes stale `:ErrorFinding` rows.
 - Constraints + indexes are safe to run repeatedly.
 - Registry test includes `error_handling_policy`.
+- Integration test proves `fetch_audit_data()` can execute the contract query.
 
 ### Step 2.5: Add audit template and runbook
 

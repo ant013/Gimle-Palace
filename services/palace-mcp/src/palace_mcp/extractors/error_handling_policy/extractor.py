@@ -14,6 +14,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from neo4j import AsyncManagedTransaction
+
 from palace_mcp.extractors.base import (
     BaseExtractor,
     ExtractorConfigError,
@@ -119,6 +121,37 @@ _SEVERITY_RANK: dict[str, int] = {
     "low": 3,
     "informational": 4,
 }
+
+_DELETE_EXISTING_SNAPSHOT = """
+MATCH (n)
+WHERE (n:CatchSite OR n:ErrorFinding) AND n.project_id = $project_id
+DETACH DELETE n
+"""
+
+_WRITE_CATCH_SITE = """
+CREATE (c:CatchSite)
+SET c.project_id = $project_id,
+    c.file = $file,
+    c.start_line = $start_line,
+    c.end_line = $end_line,
+    c.kind = $kind,
+    c.swallowed = $swallowed,
+    c.rethrows = $rethrows,
+    c.module = $module,
+    c.run_id = $run_id
+"""
+
+_WRITE_ERROR_FINDING = """
+CREATE (f:ErrorFinding)
+SET f.project_id = $project_id,
+    f.kind = $kind,
+    f.file = $file,
+    f.start_line = $start_line,
+    f.end_line = $end_line,
+    f.severity = $severity,
+    f.message = $message,
+    f.run_id = $run_id
+"""
 
 
 def _ehp_severity(raw: object) -> "Severity":
@@ -519,66 +552,50 @@ async def _write_snapshot(
     findings: list[ErrorFinding],
 ) -> None:
     async with driver.session() as session:
-        if catch_sites:
-            cursor = await session.run(
-                """
-UNWIND $rows AS row
-MERGE (c:CatchSite {
-    project_id: $project_id,
-    file: row.file,
-    start_line: row.start_line,
-    end_line: row.end_line,
-    kind: row.kind
-})
-SET c.swallowed = row.swallowed,
-    c.rethrows = row.rethrows,
-    c.module = row.module,
-    c.run_id = $run_id
-""",
-                project_id=project_id,
-                run_id=run_id,
-                rows=[
-                    {
-                        "file": site.file,
-                        "start_line": site.start_line,
-                        "end_line": site.end_line,
-                        "kind": site.kind,
-                        "swallowed": site.swallowed,
-                        "rethrows": site.rethrows,
-                        "module": site.module,
-                    }
-                    for site in catch_sites
-                ],
-            )
-            await cursor.consume()
+        await session.execute_write(
+            _replace_snapshot_tx,
+            project_id,
+            run_id,
+            catch_sites,
+            findings,
+        )
 
-        if findings:
-            cursor = await session.run(
-                """
-UNWIND $rows AS row
-MERGE (f:ErrorFinding {
-    project_id: $project_id,
-    kind: row.kind,
-    file: row.file,
-    start_line: row.start_line,
-    end_line: row.end_line
-})
-SET f.severity = row.severity,
-    f.message = row.message,
-    f.run_id = $run_id
-""",
-                project_id=project_id,
-                run_id=run_id,
-                rows=[
-                    {
-                        "kind": finding.kind,
-                        "file": finding.file,
-                        "start_line": finding.start_line,
-                        "end_line": finding.end_line,
-                        "severity": finding.severity,
-                        "message": finding.message,
-                    }
-                    for finding in findings
-                ],
-            )
-            await cursor.consume()
+
+async def _replace_snapshot_tx(
+    tx: AsyncManagedTransaction,
+    project_id: str,
+    run_id: str,
+    catch_sites: list[CatchSite],
+    findings: list[ErrorFinding],
+) -> None:
+    delete_cursor = await tx.run(_DELETE_EXISTING_SNAPSHOT, project_id=project_id)
+    await delete_cursor.consume()
+
+    for site in catch_sites:
+        cursor = await tx.run(
+            _WRITE_CATCH_SITE,
+            project_id=project_id,
+            file=site.file,
+            start_line=site.start_line,
+            end_line=site.end_line,
+            kind=site.kind,
+            swallowed=site.swallowed,
+            rethrows=site.rethrows,
+            module=site.module,
+            run_id=run_id,
+        )
+        await cursor.consume()
+
+    for finding in findings:
+        cursor = await tx.run(
+            _WRITE_ERROR_FINDING,
+            project_id=project_id,
+            kind=finding.kind,
+            file=finding.file,
+            start_line=finding.start_line,
+            end_line=finding.end_line,
+            severity=finding.severity,
+            message=finding.message,
+            run_id=run_id,
+        )
+        await cursor.consume()
