@@ -59,7 +59,7 @@ table in the same PR before Phase 3.1 handoff and explain why the scope changed.
 
 ### Step 1.1.1: Verify S2.2 against current develop
 
-**Owner:** CXCTO
+**Owner:** CTO
 **Affected paths:** `docs/superpowers/sprints/B-audit-extractors.md`,
 `docs/superpowers/specs/2026-05-08-GIM-243-arch-layer-extractor_spec.md`,
 this plan.
@@ -77,13 +77,13 @@ Acceptance criteria:
 - Spec cites current `AuditContract` fields.
 - Plan forbids reusing `:DEPENDS_ON` for module edges.
 - Plan has explicit external-tooling spike gate.
-- Issue is handed to CXCodeReviewer for plan-first review.
+- Issue is handed to CodeReviewer for plan-first review.
 
 ## Phase 1.2 — Plan-first review
 
 ### Step 1.2.1: Review architecture and acceptance criteria
 
-**Owner:** CXCodeReviewer
+**Owner:** CodeReviewer
 **Affected paths:** spec and plan only.
 **Dependencies:** Step 1.1.1.
 
@@ -98,14 +98,14 @@ Description:
 Acceptance criteria:
 
 - Paperclip comment says APPROVE or REQUEST CHANGES.
-- If approved, issue is reassigned to CXPythonEngineer for Phase 2.
+- If approved, issue is reassigned to PythonEngineer for Phase 2.
 - If changes are requested, comments cite exact spec/plan lines.
 
 ## Phase 2 — Implementation
 
 ### Step 2.1: Scaffold `arch_layer` package and models
 
-**Owner:** CXPythonEngineer
+**Owner:** PythonEngineer
 **Affected paths:**
 
 - `services/palace-mcp/src/palace_mcp/extractors/arch_layer/__init__.py`
@@ -128,7 +128,7 @@ Acceptance criteria:
 
 ### Step 2.2: Add rule loader
 
-**Owner:** CXPythonEngineer
+**Owner:** PythonEngineer
 **Affected paths:**
 
 - `services/palace-mcp/src/palace_mcp/extractors/arch_layer/rules.py`
@@ -152,7 +152,7 @@ Acceptance criteria:
 
 ### Step 2.3: Add SwiftPM and Gradle parsers
 
-**Owner:** CXPythonEngineer
+**Owner:** PythonEngineer
 **Affected paths:**
 
 - `services/palace-mcp/src/palace_mcp/extractors/arch_layer/parsers/spm.py`
@@ -180,7 +180,7 @@ Acceptance criteria:
 
 ### Step 2.4: Add import scanner and rule evaluator
 
-**Owner:** CXPythonEngineer
+**Owner:** PythonEngineer
 **Affected paths:**
 
 - `services/palace-mcp/src/palace_mcp/extractors/arch_layer/imports.py`
@@ -207,7 +207,7 @@ Acceptance criteria:
 
 ### Step 2.5: Add Neo4j writer and schema bootstrap
 
-**Owner:** CXPythonEngineer
+**Owner:** PythonEngineer
 **Affected paths:**
 
 - `services/palace-mcp/src/palace_mcp/extractors/arch_layer/neo4j_writer.py`
@@ -232,7 +232,7 @@ Acceptance criteria:
 
 ### Step 2.6: Implement extractor, registry and audit contract
 
-**Owner:** CXPythonEngineer
+**Owner:** PythonEngineer
 **Affected paths:**
 
 - `services/palace-mcp/src/palace_mcp/extractors/arch_layer/extractor.py`
@@ -258,7 +258,7 @@ Acceptance criteria:
 
 ### Step 2.7: Add audit template and runbook
 
-**Owner:** CXPythonEngineer
+**Owner:** PythonEngineer
 **Affected paths:**
 
 - `services/palace-mcp/src/palace_mcp/audit/templates/arch_layer.md`
@@ -282,7 +282,7 @@ Acceptance criteria:
 
 ### Step 2.8: Local implementation validation and PR
 
-**Owner:** CXPythonEngineer
+**Owner:** PythonEngineer
 **Affected paths:** implementation files from Phase 2.
 **Dependencies:** Steps 2.1 through 2.7.
 
@@ -334,7 +334,7 @@ uv run mypy src/palace_mcp/extractors/arch_layer
 
 ### Step 3.1.1: Review implementation against plan
 
-**Owner:** CXCodeReviewer
+**Owner:** CodeReviewer
 **Affected paths:** all files changed by Phase 2.
 **Dependencies:** Phase 2 handoff.
 
@@ -356,7 +356,7 @@ Acceptance criteria:
 
 ### Step 3.2.1: Review architecture risk
 
-**Owner:** CodexArchitectReviewer
+**Owner:** OpusArchitectReviewer
 **Affected paths:** implementation and docs.
 **Dependencies:** Phase 3.1 APPROVE.
 
@@ -369,13 +369,13 @@ Description:
 Acceptance criteria:
 
 - APPROVE or REQUEST CHANGES.
-- If approved, issue is reassigned to CXQAEngineer.
+- If approved, issue is reassigned to QAEngineer.
 
 ## Phase 4.1 — QA live smoke
 
 ### Step 4.1.1: Run required QA evidence
 
-**Owner:** CXQAEngineer
+**Owner:** QAEngineer
 **Affected paths:** runtime only; no implementation changes unless returned.
 **Dependencies:** Phase 3.2 APPROVE.
 
@@ -396,9 +396,9 @@ Acceptance criteria:
 
 ### Step 4.2.1: Merge readiness and close/handoff
 
-**Owner:** CXCTO
+**Owner:** CTO
 **Affected paths:** Paperclip/GitHub only.
-**Dependencies:** Phase 4.1 QA PASS by CXQAEngineer.
+**Dependencies:** Phase 4.1 QA PASS by QAEngineer.
 
 Description:
 
@@ -420,4 +420,4 @@ Acceptance criteria:
 Implementation may not add `modules-graph-assert`, ArchUnit, tree-sitter or a
 new Gradle/SwiftPM parser dependency in this issue unless a fresh
 `docs/research/<tool>-arch-layer-spike/` artifact is added first and reviewed
-by CXCodeReviewer. Default plan uses conservative Python parsing only.
+by CodeReviewer. Default plan uses conservative Python parsing only.
