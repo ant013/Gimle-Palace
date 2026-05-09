@@ -1070,6 +1070,93 @@ async def test_shared_budget_carries_from_legacy_into_tier_issue_alerts(tmp_path
 
 
 @pytest.mark.asyncio
+async def test_handoff_pass_does_not_clear_tier_state_without_legacy_finding(tmp_path: Path):
+    cfg = _handoff_cfg(tmp_path)
+    cfg = Config(
+        version=cfg.version,
+        paperclip=cfg.paperclip,
+        companies=cfg.companies,
+        daemon=cfg.daemon,
+        cooldowns=cfg.cooldowns,
+        logging=cfg.logging,
+        escalation=cfg.escalation,
+        handoff=HandoffConfig(**{**cfg.handoff.__dict__, "handoff_cross_team_enabled": True}),
+    )
+    state = State.load(tmp_path / "state.json")
+    tier_issue = Issue(
+        id="issue-tier",
+        assignee_agent_id="99d5f8f8-822f-4ddb-baaa-0bdaec6f9399",
+        execution_run_id=None,
+        status="in_progress",
+        updated_at=datetime(2026, 5, 3, 11, 0, tzinfo=timezone.utc),
+        issue_number=77,
+    )
+    tier_snapshot = {"assigneeAgentId": tier_issue.assignee_agent_id, "status": tier_issue.status}
+    state.record_handoff_alert(
+        tier_issue.id,
+        FindingType.CROSS_TEAM_HANDOFF,
+        tier_snapshot,
+        _NOW_SERVER,
+    )
+    client = MagicMock()
+    client.list_company_agents = AsyncMock(return_value=[])
+    client.list_active_issues = AsyncMock(return_value=[tier_issue])
+    client.list_recent_comments = AsyncMock(return_value=[])
+
+    with patch(
+        "gimle_watchdog.daemon.detection_semantic.scan_handoff_inconsistencies",
+        new=AsyncMock(return_value=[]),
+    ):
+        await daemon._run_handoff_pass(cfg, state, client, _NOW_SERVER)
+
+    assert state.has_active_alert(tier_issue.id, FindingType.CROSS_TEAM_HANDOFF, tier_snapshot)
+
+
+@pytest.mark.asyncio
+async def test_tier_snapshot_mismatch_reposts_and_rewrites_state_after_success(tmp_path: Path):
+    state = State.load(tmp_path / "state.json")
+    client = MagicMock()
+    client.post_issue_comment = AsyncMock(return_value="tier-comment-2")
+    old_snapshot = {"assigneeAgentId": "old-agent", "status": "in_progress"}
+    state.record_handoff_alert(
+        "issue-tier",
+        FindingType.CROSS_TEAM_HANDOFF,
+        old_snapshot,
+        _NOW_SERVER,
+    )
+    finding = daemon.CrossTeamHandoffFinding(
+        type=FindingType.CROSS_TEAM_HANDOFF,
+        issue_id="issue-tier",
+        issue_number=11,
+        assignee_id="99d5f8f8-822f-4ddb-baaa-0bdaec6f9399",
+        assignee_team="codex",
+        company_team="claude",
+        issue_status="in_progress",
+    )
+    budget = daemon.AlertPostBudget(soft_limit=5, hard_limit=8)
+
+    await daemon._handle_tier_finding(
+        state,
+        client,
+        finding,
+        _NOW_SERVER,
+        repair_delay_min=60,
+        escalation_delay_min=90,
+        auto_repair_enabled=False,
+        version="watchdog",
+        budget=budget,
+    )
+
+    client.post_issue_comment.assert_awaited_once()
+    assert budget.posted_count == 1
+    assert state.has_active_alert(
+        "issue-tier",
+        FindingType.CROSS_TEAM_HANDOFF,
+        {"assigneeAgentId": finding.assignee_id, "status": finding.issue_status},
+    )
+
+
+@pytest.mark.asyncio
 async def test_shared_budget_blocks_stale_bundle_after_issue_alerts(tmp_path: Path):
     cfg = _handoff_cfg(tmp_path)
     cfg = Config(

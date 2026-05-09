@@ -85,6 +85,23 @@ async def test_get_issue():
 
 
 @pytest.mark.asyncio
+async def test_list_active_issues_includes_blocked_status():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert (
+            str(request.url)
+            == f"{BASE}/api/companies/{CO_ID}/issues?status=todo,in_progress,in_review,blocked"
+        )
+        return httpx.Response(200, json=[])
+
+    client = await _client_with_mock(handler)
+    try:
+        issues = await client.list_active_issues(CO_ID)
+        assert issues == []
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
 async def test_patch_issue_assignee():
     captured: dict = {}
 

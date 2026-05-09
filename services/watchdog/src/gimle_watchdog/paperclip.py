@@ -166,10 +166,10 @@ class PaperclipClient:
         return [_issue_from_json(d) for d in data]
 
     async def list_active_issues(self, company_id: str) -> list[Issue]:
-        """GET issues with status todo, in_progress, or in_review (for handoff detection)."""
+        """GET issues with status todo, in_progress, in_review, or blocked."""
         resp = await self._request(
             "GET",
-            f"/api/companies/{company_id}/issues?status=todo,in_progress,in_review",
+            f"/api/companies/{company_id}/issues?status=todo,in_progress,in_review,blocked",
         )
         data = resp.json()
         if not isinstance(data, list):

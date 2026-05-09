@@ -162,9 +162,9 @@ async def _handle_tier_finding(
     snapshot = _tier_snapshot(finding)
 
     existing_alerted_at = state.get_handoff_alerted_at(issue_id, ftype)
-    if existing_alerted_at is None:
-        # New finding — tier 1: post alert, then record state on success.
-        post_budget = budget or AlertPostBudget(soft_limit=sys.maxsize, hard_limit=sys.maxsize)
+    post_budget = budget or AlertPostBudget(soft_limit=sys.maxsize, hard_limit=sys.maxsize)
+
+    async def _post_tier_one_alert() -> None:
         if not post_budget.reserve(issue_id, ftype):
             return
 
@@ -181,10 +181,15 @@ async def _handle_tier_finding(
             )
         except Exception as exc:
             log.warning("tier_alert_post_failed issue=%s ftype=%s error=%s", issue_id, ftype, exc)
-        else:
-            actionable = getattr(finding, "actionable", True)
-            state.record_handoff_alert(issue_id, ftype, snapshot, now_server, actionable=actionable)
-            log.info("tier_alert_posted issue=%s ftype=%s comment=%s", issue_id, ftype, comment_id)
+            return
+
+        actionable = getattr(finding, "actionable", True)
+        state.record_handoff_alert(issue_id, ftype, snapshot, now_server, actionable=actionable)
+        log.info("tier_alert_posted issue=%s ftype=%s comment=%s", issue_id, ftype, comment_id)
+
+    if existing_alerted_at is None:
+        # New finding — tier 1: post alert, then record state on success.
+        await _post_tier_one_alert()
         return
 
     # Snapshot mismatch → reset to tier 1 (condition changed)
@@ -197,8 +202,7 @@ async def _handle_tier_finding(
 
     snap_keys = _SNAPSHOT_KEYS.get(ftype, ())
     if any(existing_snap.get(k) != snapshot.get(k) for k in snap_keys):
-        actionable = getattr(finding, "actionable", True)
-        state.record_handoff_alert(issue_id, ftype, snapshot, now_server, actionable=actionable)
+        await _post_tier_one_alert()
         return
 
     elapsed_min = (now_server - existing_alerted_at).total_seconds() / 60
@@ -456,7 +460,11 @@ async def _run_handoff_pass(
             for issue in issues:
                 finding = issues_with_findings.get(issue.id)
                 if finding is None:
-                    for ftype in FindingType:
+                    for ftype in (
+                        FindingType.COMMENT_ONLY_HANDOFF,
+                        FindingType.WRONG_ASSIGNEE,
+                        FindingType.REVIEW_OWNED_BY_IMPLEMENTER,
+                    ):
                         if state.clear_handoff_alert(issue.id, ftype):
                             log.info(
                                 "handoff_alert_state_cleared issue=%s type=%s",
