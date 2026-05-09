@@ -68,5 +68,5 @@ files = ["src"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["tantivy", "scip.*", "google.protobuf.*", "slither.*"]
+module = ["tantivy", "scip.*", "google.protobuf.*", "slither.*", "yaml"]
 ignore_missing_imports = true

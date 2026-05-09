@@ -7,6 +7,7 @@ no thread-safety needed.
 
 from __future__ import annotations
 
+from palace_mcp.extractors.arch_layer.extractor import ArchLayerExtractor
 from palace_mcp.extractors.base import BaseExtractor
 from palace_mcp.extractors.code_ownership.extractor import CodeOwnershipExtractor
 from palace_mcp.extractors.crypto_domain_model.extractor import (
@@ -41,6 +42,7 @@ from palace_mcp.extractors.symbol_index_swift import SymbolIndexSwift
 from palace_mcp.extractors.symbol_index_typescript import SymbolIndexTypeScript
 
 EXTRACTORS: dict[str, BaseExtractor] = {
+    "arch_layer": ArchLayerExtractor(),
     "heartbeat": HeartbeatExtractor(),
     "code_ownership": CodeOwnershipExtractor(),
     "crypto_domain_model": CryptoDomainModelExtractor(),

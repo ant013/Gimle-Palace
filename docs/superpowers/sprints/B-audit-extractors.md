@@ -96,7 +96,7 @@ Additionally, semgrep's Swift support maturity is unverified (OPUS-HIGH-3).
 **Plan file**: `docs/superpowers/plans/<date>-GIM-NN-crypto-domain-model.md`
 **Branch**: `feature/GIM-NN-crypto-domain-model`
 
-**Scope** (rev1 — to be refined in brainstorm):
+**Scope** (rev3 + GIM-243 formalisation):
 
 Reads from existing graph:
 - `:File` (project_id, path) — from any symbol_index_*
@@ -172,10 +172,21 @@ found 0 issues.
 
 ### S2.2 — `#1 Architecture Layer` extractor (rev3)
 
-**Spec file**: `docs/superpowers/specs/<date>-GIM-NN-arch-layer-extractor.md`
-**Plan file**: `docs/superpowers/plans/<date>-GIM-NN-arch-layer-extractor.md`
-**Branch**: `feature/GIM-NN-arch-layer-extractor`
+**Spec file**: `docs/superpowers/specs/2026-05-08-GIM-243-arch-layer-extractor_spec.md`
+**Plan file**: `docs/superpowers/plans/2026-05-08-GIM-243-arch-layer-extractor.md`
+**Branch**: `feature/GIM-243-arch-layer-extractor`
 **Team**: Claude (per `roadmap.md` §2.1 #1; deterministic, Python orchestration).
+
+**CTO formalisation (GIM-243, 2026-05-08)**:
+- `AuditContract` example below is superseded by the current S1/GIM-239 shape:
+  `extractor_name`, `template_name`, `query`, `severity_column`,
+  `max_findings`, `severity_mapper`.
+- Module-level dependencies MUST use a new `:MODULE_DEPENDS_ON` edge. Existing
+  `:DEPENDS_ON` remains owned by `dependency_surface` as
+  `(:Project)-[:DEPENDS_ON]->(:ExternalDependency)`.
+- `modules-graph-assert`, ArchUnit-compatible syntax and tree-sitter are not
+  part of v1 unless a fresh `docs/research/*arch-layer*spike/` artifact is
+  produced first. Default implementation path is conservative Python parsing.
 
 **Scope** (rev1 — to be refined in brainstorm):
 
@@ -183,13 +194,15 @@ Reads from existing graph + repo:
 - `:File` (project_id, path) — from any symbol_index_*
 - `:Symbol` — from symbol_index_swift (and clang for native deps)
 - Per-module manifests: `Package.swift` (SwiftPM), `build.gradle.kts` (Gradle)
-- `:DEPENDS_ON` edges to `:ExternalDependency` — from dependency_surface
+- Existing `dependency_surface` graph may be used as optional context, but
+  `arch_layer` must not require it and must not change its relationship shape.
 
 Writes:
 - `:Module {project_id, slug, kind: "swiftpm"|"gradle", manifest_path}`
 - `:Layer {project_id, name, rule_source}` — declared via convention or
   manifest (e.g., SwiftPM target type, Gradle plugin tag).
-- `(:Module)-[:DEPENDS_ON {scope}]->(:Module)` — intra-project edges.
+- `(:Module)-[:MODULE_DEPENDS_ON {scope, declared_in, evidence_kind, run_id}]->(:Module)`
+  — intra-project edges.
 - `(:Module)-[:IN_LAYER]->(:Layer)`.
 - `:ArchViolation {project_id, kind, severity, src_module, dst_module, rule, message, run_id}`
   — when an actual edge violates a declared layer rule.
@@ -198,9 +211,10 @@ Implements `audit_contract()`:
 ```python
 def audit_contract(self) -> AuditContract:
     return AuditContract(
-        query="MATCH (v:ArchViolation {project: $project}) ... RETURN v ...",
-        response_model=ArchViolationList,
-        template_path=Path("audit/templates/arch_layer.md"),
+        extractor_name="arch_layer",
+        template_name="arch_layer.md",
+        query="MATCH (v:ArchViolation {project_id: $project_id}) ... RETURN v ...",
+        severity_column="severity",
         severity_mapper=arch_severity,
     )
 ```
@@ -208,11 +222,11 @@ def audit_contract(self) -> AuditContract:
 **Detection strategy**:
 - **Swift**: parse `Package.swift` (Swift Package Manager) for targets +
   declared `dependencies`; build module graph; apply layer rules from
-  conventions repo file (e.g., `docs/architecture-rules.yaml`).
-- **Kotlin/Gradle**: integrate with `modules-graph-assert` or its rule format
-  (declared in `build.gradle.kts` plugin block); ArchUnit-compatible rule
-  syntax for cross-module assertions.
-- **Library**: tree-sitter for AST-level imports if manifest is incomplete.
+  `.palace/architecture-rules.yaml` or `docs/architecture-rules.yaml`.
+- **Kotlin/Gradle**: parse `settings.gradle.kts` includes and direct
+  `project(":module")` dependencies from module `build.gradle.kts` files.
+- **Import evidence**: conservative text scanner for Swift/Kotlin/Java imports.
+  No new external tooling dependency in v1 unless a fresh spike is reviewed.
 
 **Initial rule set (≤6 rules for v1)** — concrete YAML produced by spike:
 1. `wallet_core_no_ui_import` — `*-core` modules MUST NOT import `*-ui`
