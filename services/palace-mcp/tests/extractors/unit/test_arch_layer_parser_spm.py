@@ -49,7 +49,7 @@ class TestSpmParserMissing:
 class TestSpmParserExternalDep:
     def test_external_dep_skipped_with_warning(self, tmp_path: Path) -> None:
         (tmp_path / "Package.swift").write_text(
-            '''
+            """
 // swift-tools-version:5.7
 import PackageDescription
 let package = Package(
@@ -61,7 +61,7 @@ let package = Package(
         .target(name: "Core", dependencies: ["ExternalLib"]),
     ]
 )
-''',
+""",
             encoding="utf-8",
         )
         result = parse_spm(tmp_path, project_id="p", run_id="r")
@@ -72,7 +72,7 @@ let package = Package(
 class TestSpmParserUnsupported:
     def test_no_guessed_edges_for_missing_target(self, tmp_path: Path) -> None:
         (tmp_path / "Package.swift").write_text(
-            '''
+            """
 import PackageDescription
 let package = Package(
     name: "T",
@@ -80,7 +80,7 @@ let package = Package(
         .target(name: "A", dependencies: ["B"]),
     ]
 )
-''',
+""",
             encoding="utf-8",
         )
         result = parse_spm(tmp_path, project_id="p", run_id="r")

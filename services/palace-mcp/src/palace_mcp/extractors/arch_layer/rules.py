@@ -113,11 +113,11 @@ def load_rules(repo_path: Path) -> RuleSet:
     return rs
 
 
-def _parse_layers(
-    raw: Any, rule_source: str, warnings: list[str]
-) -> list[LayerDef]:
+def _parse_layers(raw: Any, rule_source: str, warnings: list[str]) -> list[LayerDef]:
     if not isinstance(raw, list):
-        warnings.append(f"{rule_source}: 'layers' must be a list; got {type(raw).__name__}")
+        warnings.append(
+            f"{rule_source}: 'layers' must be a list; got {type(raw).__name__}"
+        )
         return []
     layers = []
     for item in raw:
@@ -127,15 +127,17 @@ def _parse_layers(
         globs = item.get("module_globs", [])
         if not isinstance(globs, list):
             globs = []
-        layers.append(LayerDef(name=str(item["name"]), module_globs=tuple(str(g) for g in globs)))
+        layers.append(
+            LayerDef(name=str(item["name"]), module_globs=tuple(str(g) for g in globs))
+        )
     return layers
 
 
-def _parse_rules(
-    raw: Any, rule_source: str, warnings: list[str]
-) -> list[RuleDef]:
+def _parse_rules(raw: Any, rule_source: str, warnings: list[str]) -> list[RuleDef]:
     if not isinstance(raw, list):
-        warnings.append(f"{rule_source}: 'rules' must be a list; got {type(raw).__name__}")
+        warnings.append(
+            f"{rule_source}: 'rules' must be a list; got {type(raw).__name__}"
+        )
         return []
     rules = []
     for item in raw:
@@ -149,7 +151,9 @@ def _parse_rules(
                 f"{rule_source}: unknown rule kind {kind!r} in rule {rule_id!r} — skipped"
             )
             continue
-        severity = str(item.get("severity", _DEFAULT_SEVERITY.get(kind, "informational")))
+        severity = str(
+            item.get("severity", _DEFAULT_SEVERITY.get(kind, "informational"))
+        )
         from_layers = tuple(str(x) for x in item.get("from_layers", []))
         to_layers = tuple(str(x) for x in item.get("to_layers", []))
         from_globs = tuple(str(x) for x in item.get("from_globs", []))

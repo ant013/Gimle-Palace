@@ -104,7 +104,9 @@ def _extract_edges(
     for i, m in enumerate(target_starts):
         src_name = m.group("name")
         segment_start = m.start()
-        segment_end = target_starts[i + 1].start() if i + 1 < len(target_starts) else len(text)
+        segment_end = (
+            target_starts[i + 1].start() if i + 1 < len(target_starts) else len(text)
+        )
         segment = text[segment_start:segment_end]
 
         deps_block = _DEPS_BLOCK_RE.search(segment)

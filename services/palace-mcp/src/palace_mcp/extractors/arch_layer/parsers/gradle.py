@@ -26,7 +26,7 @@ _INCLUDE_RE = re.compile(r'include\s*\(\s*"(?P<path>:[^"]+)"\s*\)')
 
 # Matches implementation(project(":x")), api(project(":x")), etc.
 _PROJECT_DEP_RE = re.compile(
-    r'(?P<scope>implementation|api|compileOnly|testImplementation|runtimeOnly)'
+    r"(?P<scope>implementation|api|compileOnly|testImplementation|runtimeOnly)"
     r'\s*\(\s*project\s*\(\s*"(?P<path>:[^"]+)"\s*\)',
     re.DOTALL,
 )

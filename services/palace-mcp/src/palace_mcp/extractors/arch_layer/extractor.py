@@ -117,9 +117,7 @@ class ArchLayerExtractor(BaseExtractor):
 
         driver = get_driver()
         if driver is None:
-            raise ExtractorConfigError(
-                "Neo4j driver not available for arch_layer"
-            )
+            raise ExtractorConfigError("Neo4j driver not available for arch_layer")
 
         try:
             result = await _run_extraction(ctx=ctx, driver=driver)
@@ -164,9 +162,7 @@ async def _run_extraction(*, ctx: ExtractorRunContext, driver: Any) -> Extractor
         return ExtractorStats(nodes_written=0, edges_written=0)
 
     # Build module_source_roots for import scanner
-    module_source_roots = {
-        m.slug: m.source_root for m in all_modules if m.source_root
-    }
+    module_source_roots = {m.slug: m.source_root for m in all_modules if m.source_root}
     swift_modules = frozenset(m.slug for m in all_modules if m.kind == "swift_target")
     gradle_modules = frozenset(m.slug for m in all_modules if m.kind == "gradle_module")
 

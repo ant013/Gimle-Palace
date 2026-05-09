@@ -81,6 +81,8 @@ class TestGradleParserScopes:
         )
         (a_dir / "build.gradle.kts").write_text("", encoding="utf-8")
         result = parse_gradle(tmp_path, project_id="p", run_id="r")
-        scopes = {e.scope for e in result.edges if e.src_slug == "b" and e.dst_slug == "a"}
+        scopes = {
+            e.scope for e in result.edges if e.src_slug == "b" and e.dst_slug == "a"
+        }
         assert "implementation" in scopes
         assert "testImplementation" in scopes

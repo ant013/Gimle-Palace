@@ -71,16 +71,18 @@ class TestLoadRulesUnknownKind:
         rule_file = tmp_path / ".palace" / "architecture-rules.yaml"
         rule_file.parent.mkdir()
         rule_file.write_text(
-            yaml.dump({
-                "layers": [{"name": "core", "module_globs": ["Core"]}],
-                "rules": [
-                    {
-                        "id": "bad_rule",
-                        "kind": "unsupported_future_rule",
-                        "severity": "high",
-                    }
-                ],
-            }),
+            yaml.dump(
+                {
+                    "layers": [{"name": "core", "module_globs": ["Core"]}],
+                    "rules": [
+                        {
+                            "id": "bad_rule",
+                            "kind": "unsupported_future_rule",
+                            "severity": "high",
+                        }
+                    ],
+                }
+            ),
             encoding="utf-8",
         )
         rs = load_rules(tmp_path)
@@ -91,10 +93,12 @@ class TestLoadRulesUnknownKind:
         rule_file = tmp_path / ".palace" / "architecture-rules.yaml"
         rule_file.parent.mkdir()
         rule_file.write_text(
-            yaml.dump({
-                "layers": [],
-                "rules": [{"id": "r", "kind": "mystery_kind"}],
-            }),
+            yaml.dump(
+                {
+                    "layers": [],
+                    "rules": [{"id": "r", "kind": "mystery_kind"}],
+                }
+            ),
             encoding="utf-8",
         )
         rs = load_rules(tmp_path)
@@ -109,11 +113,18 @@ class TestSearchPriority:
         docs_dir.mkdir()
 
         (palace_dir / "architecture-rules.yaml").write_text(
-            yaml.dump({"layers": [{"name": "palace_layer", "module_globs": ["*"]}], "rules": []}),
+            yaml.dump(
+                {
+                    "layers": [{"name": "palace_layer", "module_globs": ["*"]}],
+                    "rules": [],
+                }
+            ),
             encoding="utf-8",
         )
         (docs_dir / "architecture-rules.yaml").write_text(
-            yaml.dump({"layers": [{"name": "docs_layer", "module_globs": ["*"]}], "rules": []}),
+            yaml.dump(
+                {"layers": [{"name": "docs_layer", "module_globs": ["*"]}], "rules": []}
+            ),
             encoding="utf-8",
         )
         rs = load_rules(tmp_path)

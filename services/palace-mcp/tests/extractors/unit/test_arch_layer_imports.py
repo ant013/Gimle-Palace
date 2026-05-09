@@ -24,7 +24,10 @@ class TestSwiftImportScanner:
             tmp_path,
             swift_modules=frozenset({"WalletCore", "WalletUI"}),
             gradle_modules=frozenset(),
-            module_source_roots={"WalletCore": "Sources/WalletCore", "WalletUI": "Sources/UI"},
+            module_source_roots={
+                "WalletCore": "Sources/WalletCore",
+                "WalletUI": "Sources/UI",
+            },
         )
         facts = [(f.src_module, f.dst_module) for f in result.facts]
         assert ("WalletUI", "WalletCore") in facts
@@ -95,7 +98,11 @@ class TestKotlinImportScanner:
             tmp_path,
             swift_modules=frozenset(),
             gradle_modules=frozenset({"co", "com"}),
-            module_source_roots={"co": "co/src/main", "com": "com/src/main", "app": "app/src/main"},
+            module_source_roots={
+                "co": "co/src/main",
+                "com": "com/src/main",
+                "app": "app/src/main",
+            },
         )
         assert any("ambiguous" in w.message for w in result.warnings)
 

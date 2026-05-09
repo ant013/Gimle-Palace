@@ -13,8 +13,12 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-_SWIFT_IMPORT_RE = re.compile(r"^import\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)$", re.MULTILINE)
-_KOTLIN_IMPORT_RE = re.compile(r"^import\s+(?P<pkg>[A-Za-z_][A-Za-z0-9_.]+)", re.MULTILINE)
+_SWIFT_IMPORT_RE = re.compile(
+    r"^import\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)$", re.MULTILINE
+)
+_KOTLIN_IMPORT_RE = re.compile(
+    r"^import\s+(?P<pkg>[A-Za-z_][A-Za-z0-9_.]+)", re.MULTILINE
+)
 
 _STOP_DIRS = frozenset(
     {
@@ -140,7 +144,8 @@ def _scan_kotlin(
         # Kotlin imports are fully qualified; try to match against module slugs
         # by checking if the import starts with a known module name (case-insensitive).
         matches = [
-            mod for mod in known_modules
+            mod
+            for mod in known_modules
             if pkg.lower().startswith(mod.lower().replace("-", ""))
         ]
         if len(matches) == 1:

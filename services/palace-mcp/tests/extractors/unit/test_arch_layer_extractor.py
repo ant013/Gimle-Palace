@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from palace_mcp.extractors.arch_layer.extractor import ArchLayerExtractor, _arch_severity
+from palace_mcp.extractors.arch_layer.extractor import (
+    ArchLayerExtractor,
+    _arch_severity,
+)
 from palace_mcp.audit.contracts import Severity
 
 
