@@ -1,0 +1,11 @@
+rules:
+  - id: empty_catch_block
+    languages: [swift]
+    severity: ERROR
+    message: >
+      Empty catch block or catch that exits immediately without handling the
+      error. Handle, rethrow, or document the deliberate swallow.
+    metadata:
+      category: error-handling
+      kind: empty_catch_block
+    pattern-regex: 'catch(?:\s+[^{}]+)?\s*\{\s*(?:return\b|break\b|continue\b)?\s*\}'

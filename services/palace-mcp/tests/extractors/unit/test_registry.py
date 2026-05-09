@@ -141,3 +141,10 @@ def test_arch_layer_registered() -> None:
     extractor = registry.get("arch_layer")
     assert extractor is not None
     assert extractor.name == "arch_layer"
+
+
+def test_error_handling_policy_registered() -> None:
+    """GIM-257: error_handling_policy must be present in EXTRACTORS."""
+    extractor = registry.get("error_handling_policy")
+    assert extractor is not None
+    assert extractor.name == "error_handling_policy"

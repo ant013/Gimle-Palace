@@ -24,7 +24,10 @@ Phase 3.1 must compare implementation scope mechanically:
 git diff --name-only origin/develop..HEAD | sort
 ```
 
-Expected planned implementation scope is **23 files** (**20 NEW + 3 MOD**):
+Expected Phase 2 implementation scope is **23 files** (**20 NEW + 3 MOD**).
+Because this branch already contains the approved spec + plan docs from
+Phase 1.x, the full branch diff versus `origin/develop` at Phase 3.1 should
+show **25 files total** (**23 implementation files below + 2 docs**):
 
 | Status | Path |
 |--------|------|

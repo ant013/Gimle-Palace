@@ -332,3 +332,58 @@ class TestArchLayerTemplate:
         assert "WalletUI" in rendered
         assert "core_no_ui_import" in rendered
         assert "HIGH" in rendered
+
+
+# ---------------------------------------------------------------------------
+# error_handling_policy
+# ---------------------------------------------------------------------------
+
+ERROR_POLICY_EMPTY = {
+    "kind": "",
+    "severity": "informational",
+    "file": "",
+    "start_line": 0,
+    "message": "",
+    "catch_site_count": 7,
+    "files_scanned": 4,
+    "swallowed_count": 2,
+    "rethrows_count": 1,
+}
+
+ERROR_POLICY_FINDING = {
+    "kind": "empty_catch_in_crypto_path",
+    "severity": "critical",
+    "file": "Sources/Bad/CryptoSigner.swift",
+    "start_line": 12,
+    "end_line": 12,
+    "message": "Empty catch in crypto path",
+    "catch_site_count": 7,
+    "files_scanned": 4,
+    "swallowed_count": 2,
+    "rethrows_count": 1,
+}
+
+
+class TestErrorHandlingPolicyTemplate:
+    def test_empty(self) -> None:
+        rendered = render_section(
+            _section("error_handling_policy", [ERROR_POLICY_EMPTY], {"total": 1}),
+            "severity",
+            100,
+        )
+        assert "No error handling issues found" in rendered
+        assert "Catch sites indexed: 7" in rendered
+
+    def test_with_findings(self) -> None:
+        rendered = render_section(
+            _section(
+                "error_handling_policy",
+                [ERROR_POLICY_FINDING],
+                {"total": 1},
+            ),
+            "severity",
+            100,
+        )
+        assert "CryptoSigner.swift" in rendered
+        assert "CRITICAL" in rendered
+        assert "Catch sites indexed: 7" in rendered
