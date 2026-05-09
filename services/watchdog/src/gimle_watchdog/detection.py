@@ -224,10 +224,13 @@ async def scan_died_mid_work(
     max_age_dt = now - _dt.timedelta(minutes=company.thresholds.recover_max_age_min)
     # GIM-216 (2026-05-06): scan in_review too — handoff PATCH may land but
     # wake-event may be lost (e.g. when source PATCH was authored by a
-    # SIGTERM'd run). list_active_issues covers todo + in_progress + in_review.
+    # SIGTERM'd run). list_active_issues also feeds infra-block tier scans, so
+    # recovery must explicitly skip blocked issues below.
     issues = await client.list_active_issues(company.id)
     actions: list[Action] = []
     for issue in issues:
+        if issue.status == "blocked":
+            continue
         if issue.assignee_agent_id is None:
             continue
         if issue.execution_run_id is not None:

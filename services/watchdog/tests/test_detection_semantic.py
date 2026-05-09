@@ -49,6 +49,7 @@ def _issue(
     assignee_id: str | None = PE_ID,
     updated_at: datetime = NOW,
     issue_number: int = 1,
+    origin_kind: str | None = None,
 ) -> Issue:
     return Issue(
         id=id,
@@ -57,6 +58,7 @@ def _issue(
         status=status,
         updated_at=updated_at,
         issue_number=issue_number,
+        origin_kind=origin_kind,
     )
 
 
@@ -79,6 +81,7 @@ def _cfg(**kwargs: object) -> ds.HandoffDetectionConfig:
         handoff_comments_per_issue=5,
         handoff_max_issues_per_tick=30,
         handoff_alert_cooldown_min=30,
+        handoff_recent_window_min=180,
     )
     defaults.update(kwargs)
     return ds.HandoffDetectionConfig(**defaults)  # type: ignore[arg-type]
@@ -173,6 +176,23 @@ def test_comment_only_status_done_no_finding():
     assert ds._detect_comment_only_handoff(issue, comments, lookback_min=5) is None
 
 
+def test_comment_only_stale_issue_no_finding():
+    issue = _issue(updated_at=NOW - timedelta(hours=4))
+    comments = [
+        _comment(body=_CO_BODY, author_id=PE_ID, created_at=NOW - timedelta(hours=4, minutes=5))
+    ]
+    assert (
+        ds._detect_comment_only_handoff(
+            issue,
+            comments,
+            lookback_min=5,
+            now_server=NOW,
+            recent_window_min=180,
+        )
+        is None
+    )
+
+
 def test_comment_only_no_mentions_in_window_no_finding():
     issue = _issue()
     comments = [_comment(body="no mentions here", author_id=PE_ID)]
@@ -231,6 +251,24 @@ def test_wrong_assignee_status_not_eligible_no_finding():
     assert ds._detect_wrong_assignee(issue, HIRED_IDS, NOW, min_age_min=3) is None
 
 
+def test_wrong_assignee_skip_origin_no_finding():
+    issue = _issue(
+        assignee_id=BOGUS_ID,
+        updated_at=NOW - timedelta(minutes=5),
+        origin_kind="stranded_issue_recovery",
+    )
+    assert (
+        ds._detect_wrong_assignee(
+            issue,
+            HIRED_IDS,
+            NOW,
+            min_age_min=3,
+            recent_window_min=180,
+        )
+        is None
+    )
+
+
 # ---------------------------------------------------------------------------
 # review_owned_by_implementer detector
 # ---------------------------------------------------------------------------
@@ -284,6 +322,21 @@ def test_review_owned_issue_too_young_no_finding():
     issue = _issue(status="in_review", assignee_id=PE_ID, updated_at=NOW - timedelta(minutes=2))
     assert (
         ds._detect_review_owned_by_implementer(issue, HIRED_IDS, NAME_BY_ID, NOW, min_age_min=5)
+        is None
+    )
+
+
+def test_review_owned_stale_issue_no_finding():
+    issue = _issue(status="in_review", assignee_id=PE_ID, updated_at=NOW - timedelta(hours=4))
+    assert (
+        ds._detect_review_owned_by_implementer(
+            issue,
+            HIRED_IDS,
+            NAME_BY_ID,
+            NOW,
+            min_age_min=5,
+            recent_window_min=180,
+        )
         is None
     )
 
@@ -412,10 +465,16 @@ async def test_scan_continues_when_wrong_assignee_detector_raises_for_one_issue(
         for n in range(4)
     ]
 
-    def raising_detect(issue, hired_ids, now_server, min_age_min):
+    def raising_detect(issue, hired_ids, now_server, min_age_min, recent_window_min=180):
         if issue.id == "i0":
             raise RuntimeError("injected")
-        return real_detect(issue, hired_ids, now_server, min_age_min)
+        return real_detect(
+            issue,
+            hired_ids,
+            now_server,
+            min_age_min,
+            recent_window_min=recent_window_min,
+        )
 
     with patch.object(ds, "_detect_wrong_assignee", side_effect=raising_detect):
         findings = await ds.scan_handoff_inconsistencies(
@@ -463,10 +522,24 @@ async def test_scan_continues_when_review_owned_detector_raises_for_one_issue():
         for n in range(4)
     ]
 
-    def raising_ro(issue, hired_ids, name_by_id, now_server, min_age_min):
+    def raising_ro(
+        issue,
+        hired_ids,
+        name_by_id,
+        now_server,
+        min_age_min,
+        recent_window_min=180,
+    ):
         if issue.id == "i0":
             raise RuntimeError("injected")
-        return real_ro(issue, hired_ids, name_by_id, now_server, min_age_min)
+        return real_ro(
+            issue,
+            hired_ids,
+            name_by_id,
+            now_server,
+            min_age_min,
+            recent_window_min=recent_window_min,
+        )
 
     with patch.object(ds, "_detect_review_owned_by_implementer", side_effect=raising_ro):
         findings = await ds.scan_handoff_inconsistencies(
@@ -535,6 +608,23 @@ def test_cross_team_suppressed_by_infra_block_marker():
     assert result is None
 
 
+def test_cross_team_no_finding_for_stale_issue():
+    issue = _issue(
+        assignee_id=_CODEX_UUID,
+        status="in_progress",
+        updated_at=NOW - timedelta(hours=4),
+    )
+    result = ds._detect_cross_team_handoff(
+        issue,
+        [],
+        _TEAM_UUIDS,
+        company_team="claude",
+        now_server=NOW,
+        recent_window_min=180,
+    )
+    assert result is None
+
+
 def test_cross_team_no_finding_for_unknown_uuid():
     issue = _issue(assignee_id=BOGUS_ID, status="in_progress")
     result = ds._detect_cross_team_handoff(issue, [], _TEAM_UUIDS, company_team="claude")
@@ -599,6 +689,17 @@ def test_ownerless_no_finding_when_not_done():
         assert result is None, f"should not fire for status={status}"
 
 
+def test_ownerless_skip_origin_no_finding():
+    issue = _issue(status="done", origin_kind="stranded_issue_recovery")
+    result = ds._detect_ownerless_completion(
+        issue,
+        [],
+        now_server=NOW,
+        recent_window_min=180,
+    )
+    assert result is None
+
+
 # ---------------------------------------------------------------------------
 # Infra-block detector
 # ---------------------------------------------------------------------------
@@ -641,6 +742,13 @@ def test_infra_block_no_finding_outside_lookback():
     issue = _issue()
     c = _comment(body="Error 1010", created_at=NOW - timedelta(minutes=90))
     result = ds._detect_infra_block(issue, [c], lookback_min=60, now=NOW)
+    assert result is None
+
+
+def test_infra_block_no_finding_for_done_status():
+    issue = _issue(status="done")
+    c = _comment(body="HTTP 429 Too Many Requests", created_at=NOW - timedelta(minutes=5))
+    result = ds._detect_infra_block(issue, [c], lookback_min=60, now=NOW, recent_window_min=180)
     assert result is None
 
 

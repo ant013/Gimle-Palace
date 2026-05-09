@@ -71,6 +71,7 @@ async def test_get_issue():
                 "executionRunId": "run-1",
                 "status": "in_progress",
                 "updatedAt": "2026-04-21T10:05:00Z",
+                "originKind": "stranded_issue_recovery",
             },
         )
 
@@ -78,6 +79,24 @@ async def test_get_issue():
     try:
         issue = await client.get_issue(ISSUE_ID)
         assert issue.execution_run_id == "run-1"
+        assert issue.origin_kind == "stranded_issue_recovery"
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_list_active_issues_includes_blocked_status():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert (
+            str(request.url)
+            == f"{BASE}/api/companies/{CO_ID}/issues?status=todo,in_progress,in_review,blocked"
+        )
+        return httpx.Response(200, json=[])
+
+    client = await _client_with_mock(handler)
+    try:
+        issues = await client.list_active_issues(CO_ID)
+        assert issues == []
     finally:
         await client.aclose()
 

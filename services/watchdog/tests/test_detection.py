@@ -270,6 +270,7 @@ def _issue(
     assignee: str | None = "agent-1",
     run_id: str | None = None,
     updated_at: _dt.datetime | None = None,
+    status: str = "in_progress",
 ) -> Issue:
     if updated_at is None:
         updated_at = _dt.datetime(2026, 4, 21, 10, 0, tzinfo=_dt.timezone.utc)
@@ -277,7 +278,7 @@ def _issue(
         id=id,
         assignee_agent_id=assignee,
         execution_run_id=run_id,
-        status="in_progress",
+        status=status,
         updated_at=updated_at,
     )
 
@@ -426,6 +427,20 @@ async def test_scan_died_wakes_issue_within_recover_max_age(tmp_path: Path):
     actions = await det.scan_died_mid_work(cfg.companies[0], client, st, cfg)
     assert len(actions) == 1
     assert actions[0].kind == "wake"
+
+
+@pytest.mark.asyncio
+@freeze_time("2026-04-21T10:30:00Z")
+async def test_scan_died_skips_blocked_issue(tmp_path: Path):
+    cfg = _make_config()
+    st = State.load(tmp_path / "s.json")
+    blocked_issue = _issue(
+        status="blocked",
+        updated_at=_dt.datetime(2026, 4, 21, 10, 0, tzinfo=_dt.timezone.utc),
+    )
+    client = _FakeClient([blocked_issue])
+    actions = await det.scan_died_mid_work(cfg.companies[0], client, st, cfg)
+    assert actions == []
 
 
 @pytest.mark.asyncio
