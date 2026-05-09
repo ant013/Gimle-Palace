@@ -260,3 +260,75 @@ class TestCrossModuleContractTemplate:
         assert "AppModule" in rendered
         assert "CoreModule" in rendered
         assert "HIGH" in rendered
+
+
+# ---------------------------------------------------------------------------
+# arch_layer
+# ---------------------------------------------------------------------------
+
+ARCH_LAYER_STATS_EMPTY_NO_RULES = {
+    "module_count": 2,
+    "edge_count": 1,
+    "rule_count": 0,
+    "parser_warning_count": 0,
+    "rule_source": "",
+    "rules_declared": False,
+}
+
+ARCH_LAYER_STATS_EMPTY_WITH_RULES = {
+    "module_count": 2,
+    "edge_count": 1,
+    "rule_count": 2,
+    "parser_warning_count": 0,
+    "rule_source": ".palace/architecture-rules.yaml",
+    "rules_declared": True,
+}
+
+ARCH_LAYER_FINDING = {
+    "kind": "forbidden_dependency",
+    "severity": "high",
+    "src_module": "WalletCore",
+    "dst_module": "WalletUI",
+    "rule_id": "core_no_ui_import",
+    "message": "Core module must not depend on UI module",
+    "evidence": "manifest edge: WalletCore -> WalletUI [target_dep]",
+    "file": "Package.swift",
+    "start_line": 0,
+    "run_id": "run-arch-1",
+}
+
+ARCH_LAYER_STATS_FULL = {
+    **ARCH_LAYER_STATS_EMPTY_WITH_RULES,
+    "module_count": 2,
+    "edge_count": 1,
+    "rule_count": 2,
+}
+
+
+class TestArchLayerTemplate:
+    def test_empty_no_rules(self) -> None:
+        rendered = render_section(
+            _section("arch_layer", [], ARCH_LAYER_STATS_EMPTY_NO_RULES),
+            "severity",
+            100,
+        )
+        assert "no architecture rules declared" in rendered.lower()
+
+    def test_empty_with_rules(self) -> None:
+        rendered = render_section(
+            _section("arch_layer", [], ARCH_LAYER_STATS_EMPTY_WITH_RULES),
+            "severity",
+            100,
+        )
+        assert "No architecture violations" in rendered or "rules pass" in rendered
+
+    def test_with_findings(self) -> None:
+        rendered = render_section(
+            _section("arch_layer", [ARCH_LAYER_FINDING], ARCH_LAYER_STATS_FULL),
+            "severity",
+            100,
+        )
+        assert "WalletCore" in rendered
+        assert "WalletUI" in rendered
+        assert "core_no_ui_import" in rendered
+        assert "HIGH" in rendered
