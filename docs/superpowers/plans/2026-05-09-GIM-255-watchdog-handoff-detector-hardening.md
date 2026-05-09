@@ -1,11 +1,11 @@
 # GIM-255 — План: hardening watchdog handoff detector после регрессии GIM-244
 
-> **Rev 1** — план-first артефакт для CodeReviewer перед реализацией.
+> **Rev 2** — закрывает CXCodeReviewer Phase 1.2 REQUEST CHANGES: явный gating для шести detectors + детерминированная shared alert-budget семантика.
 
 **Issue:** GIM-255.
 **Инцидент:** GIM-244 / PR #125 (`15c1c67`) включил tier-детекторы watchdog; после включения `handoff_*_enabled` watchdog отправил 258 alert-комментариев в 32 issue за 4 часа.
 **Ветка:** `feature/GIM-255-watchdog-handoff-detector-hardening`, от `origin/develop`.
-**Цель:** сделать tier-детекторы bounded и observable: не сканировать/алертить старые и recovery-origin issue, явно ограничить статусы, залогировать успешные alert-post, ограничить alert burst за tick и закрыть регрессию e2e-тестом.
+**Цель:** сделать все issue-bound handoff detectors bounded и observable: не сканировать/алертить старые и recovery-origin issue, явно ограничить статусы, залогировать успешные alert-post, ограничить alert burst за tick и закрыть регрессию e2e-тестом.
 **Команда:** CX. Фаза: CXCTO -> CXCodeReviewer (plan-first) -> CXPythonEngineer (impl) -> CXCodeReviewer (mechanical CR) -> CodexArchitectReviewer (architecture review) -> CXQAEngineer (runtime QA) -> CXCTO (merge).
 
 ## Discovery
@@ -16,6 +16,7 @@
 - Symbol discovery на `origin/develop`:
   - `services/watchdog/src/gimle_watchdog/paperclip.py:Issue` не содержит `origin_kind`;
   - `_issue_from_json()` не читает `originKind`;
+  - legacy issue-bound detectors находятся в `detection_semantic.py`: `_detect_comment_only_handoff()` строка 84, `_detect_wrong_assignee()` строка 126, `_detect_review_owned_by_implementer()` строка 153;
   - `_detect_cross_team_handoff()` не проверяет статус или возраст issue;
   - `_detect_ownerless_completion()` проверяет `status == "done"`, но не пропускает recovery/productivity origins;
   - `_detect_infra_block()` не проверяет статус, origin или возраст issue;
@@ -26,9 +27,9 @@
 
 **In:**
 
-- Age cap для issue-bound tier-детекторов через `handoff_recent_window_min` с дефолтом `180`.
-- Origin skip-list для issue-bound tier-детекторов: `stranded_issue_recovery`, `issue_productivity_review`.
-- Явные status whitelist для `cross_team_handoff`, `ownerless_completion`, `infra_block`.
+- Age cap для всех шести issue-bound detectors через `handoff_recent_window_min` с дефолтом `180`.
+- Origin skip-list для всех шести issue-bound detectors: `stranded_issue_recovery`, `issue_productivity_review`.
+- Явные status whitelist для всех шести issue-bound detectors.
 - Успешный лог tier-1 alert-post.
 - Per-tick budget для новых tier-alert comments.
 - Проверка cooldown/dedupe пути, который должен был подавить повторные алерты.
@@ -102,11 +103,11 @@
   - status whitelist helper без ad hoc строк в daemon.
 - Unit tests покрывают config parsing, `originKind` mapping и stale/recovery skips.
 
-## Step 4 — Detector gating
+## Step 4 — Six-detector gating
 
 **Owner:** CXPythonEngineer.
 
-**Описание:** Сделать каждый issue-bound detector bounded по age/status/origin до того, как он смотрит комментарии или пишет state.
+**Описание:** Сделать каждый из шести issue-bound detectors bounded по age/status/origin до того, как он смотрит комментарии или пишет state. `stale_bundle` остаётся global detector и не входит в acceptance phrase "all 6 detectors"; его side-effect ограничивается shared alert budget в Step 5.
 
 **Affected paths:**
 
@@ -118,36 +119,59 @@
 
 **Acceptance criteria:**
 
-- `cross_team_handoff` fires только при `status in {"todo", "in_progress", "in_review"}`, не fires для stale issue и skip origins.
-- `ownerless_completion` fires только при `status == "done"`, не fires для stale issue и skip origins.
-- `infra_block` fires только для явно разрешённых active statuses, не fires для stale issue и skip origins.
-- `stale_bundle` остаётся global detector; на него не навешивается issue status/origin gating, но его alert-post должен входить в общий tick budget.
-- Daemon передаёт `now_server` и `handoff_recent_window_min` в issue-bound detectors либо через единый config object, либо через явные параметры. Скрытых `datetime.now()` в detector tests не остаётся.
+- Все шесть issue-bound detectors вызывают один shared precondition до detector-specific logic:
+  - возвращает `None`, когда `issue.origin_kind in SKIP_ORIGINS`;
+  - возвращает `None`, когда `(now_server - issue.updated_at) > handoff_recent_window_min`;
+  - возвращает `None`, когда `issue.status` вне whitelist конкретного detector.
+- `comment_only_handoff` whitelist: `{"todo", "in_progress", "in_review"}`. Обоснование: detector ищет drift активного handoff protocol; done/cancelled/backlog issues не должны будить агентов.
+- `wrong_assignee` whitelist: `{"todo", "in_progress", "in_review"}`. Обоснование: actionable только ownership живой работы.
+- `review_owned_by_implementer` whitelist: `{"in_review"}`. Обоснование: detector имеет смысл только во время review.
+- `cross_team_handoff` whitelist: `{"todo", "in_progress", "in_review"}`. Обоснование: live ownership + защита от stale done issue spam из GIM-244.
+- `ownerless_completion` whitelist: `{"done"}`. Обоснование: completion evidence проверяется только после close, но stale done и skip-origin issues не должны alert.
+- `infra_block` whitelist: `{"todo", "in_progress", "in_review", "blocked"}`. Обоснование: infra-block comments могут объяснять live blocked work, но done/cancelled/backlog issues не должны alert.
+- Existing unit tests for legacy detectors are updated to cover stale issue, skip-origin and status-outside-whitelist cases.
+- New unit tests for tier detectors cover stale issue, skip-origin and status-outside-whitelist cases.
+- Daemon passes `now_server` and `handoff_recent_window_min` into both legacy scan and tier scan, either through one config object or explicit parameters. Hidden `datetime.now()` in detector tests is not allowed.
 
-## Step 5 — Tier alert observability + per-tick budget
+## Step 5 — Alert observability + deterministic per-tick budget
 
 **Owner:** CXPythonEngineer.
 
-**Описание:** Сделать успешные alert side-effects видимыми в логах и ограничить burst, чтобы следующий дефект не мог снова записать сотни комментариев за один deploy window.
+**Описание:** Сделать успешные alert side-effects видимыми в логах и ограничить burst через один shared budget для legacy issue alerts, tier issue alerts и `stale_bundle`.
 
 **Affected paths:**
 
 - `services/watchdog/src/gimle_watchdog/config.py`
 - `services/watchdog/src/gimle_watchdog/daemon.py`
 - `services/watchdog/src/gimle_watchdog/actions.py`
+- `services/watchdog/src/gimle_watchdog/state.py`
 - `services/watchdog/tests/test_config.py`
 - `services/watchdog/tests/test_daemon.py`
+- `services/watchdog/tests/test_state.py`
 
 **Dependencies:** Step 3.
 
 **Acceptance criteria:**
 
-- Успешный tier-1 issue alert-post логируется как `tier_alert_posted issue=%s ftype=%s comment=%s` или эквивалент с comment id, если API его возвращает.
-- Config получает мягкий лимит новых alert comments за tick, например `handoff_alert_soft_budget_per_tick: int = 5`.
-- Config получает hard cap, например `handoff_alert_hard_budget_per_tick: int = 20`.
-- При soft budget превышении watchdog прекращает новые alert-post в текущем tick и логирует deferred count; уже существующие state transitions без новых comments не ломаются.
-- При hard cap watchdog логирует warning и пропускает оставшиеся новые alerts в tick.
-- Tests доказывают, что 10 stale/done findings не создают comments, а 10 fresh findings не превышают budget.
+- Успешный issue alert-post логируется как `handoff_alert_posted` для legacy path и `tier_alert_posted issue=%s ftype=%s comment=%s` для tier path, или эквивалент с comment id, если API его возвращает.
+- Config получает `handoff_alert_soft_budget_per_tick: int = 5` и `handoff_alert_hard_budget_per_tick: int = 20`.
+- Soft budget semantics: soft budget является warning threshold, не stop condition. Когда `posted_count == soft_budget`, watchdog один раз за tick логирует `handoff_alert_soft_budget_reached posted=%s soft=%s hard=%s` и продолжает processing до hard cap.
+- Hard budget semantics: hard cap является единственным per-tick stop. Когда `posted_count >= hard_budget`, каждый оставшийся новый alert candidate откладывается до следующего tick.
+- Shared accounting: один per-tick `AlertPostBudget` или эквивалентный объект передаётся во все alert paths, которые могут писать comments:
+  - legacy `_run_handoff_pass()` issue alerts;
+  - tier `_handle_tier_finding()` tier-1 issue alerts;
+  - `stale_bundle` board alert path.
+- State semantics заданы явно:
+  - budget расходуется только непосредственно перед попыткой `post_issue_comment`;
+  - `state.record_handoff_alert()` вызывается только после успешного comment post;
+  - если budget отклоняет/defer: handoff state entry не записывается, tier promotion не происходит, watchdog логирует `handoff_alert_deferred_budget issue=%s ftype=%s posted=%s hard=%s`;
+  - если comment post бросает exception: handoff state entry не записывается, текущий failure log сохраняется;
+  - existing active alerts можно оценивать для no-comment transitions, но любой transition, который пишет новый comment, сначала резервирует budget.
+- Детерминированный порядок: в каждом tick обрабатывать companies в config order, issues в API order после de-dupe, detectors в текущем precedence order, затем `stale_bundle` последним. Tests могут assert budget results against this order.
+- Tests доказывают:
+  - 10 stale/done/recovery findings create 0 comments and 0 state entries.
+  - при soft=5 и hard=8, 10 fresh new findings пишут ровно 8 comments, один раз логируют soft threshold, defer 2 без state entries и повторяют deferred candidates на следующем tick;
+  - `stale_bundle` consumes the same budget and is deferred if the hard cap is already exhausted by issue alerts.
 
 ## Step 6 — Cooldown/dedupe regression check
 
@@ -167,7 +191,7 @@
 **Acceptance criteria:**
 
 - Test reproduces two consecutive ticks with identical finding snapshot and asserts one comment, not two.
-- Snapshot mismatch remains intentional reset path, but reset does not bypass per-tick budget.
+- Snapshot mismatch remains intentional reset path, but any reset that would post a new alert comment must reserve shared budget first.
 - State clear on no-finding remains intact and tested.
 
 ## Step 7 — Synthetic e2e no-spam regression
@@ -185,9 +209,15 @@
 
 **Acceptance criteria:**
 
-- Fixture содержит минимум 10 stale/done или recovery-origin issues, включая cross-team assignee и done-without-QA cases.
-- При включённых `handoff_cross_team_enabled`, `handoff_ownerless_enabled`, `handoff_infra_block_enabled` результат: `alerts == 0`, `comments_posted == []`, no state entries.
-- Отдельный fresh active control case всё ещё fires, чтобы test не стал false-negative из-за выключенного detector path.
+- Fixture содержит минимум 10 stale/done или recovery-origin issues, включая cases для всех шести issue-bound detectors:
+  - comment-only handoff marker on stale active issue;
+  - wrong assignee on stale active issue;
+  - review owned by implementer on stale review issue;
+  - cross-team assignee on stale active issue;
+  - done-without-QA on recovery-origin issue;
+  - infra-block marker on stale blocked/done issue.
+- При включённых legacy `handoff_alert_enabled` и tier flags `handoff_cross_team_enabled`, `handoff_ownerless_enabled`, `handoff_infra_block_enabled` результат: `alerts == 0`, `comments_posted == []`, no state entries.
+- Отдельные fresh active control cases для legacy и tier paths всё ещё fire, чтобы test не стал false-negative из-за выключенного detector path.
 
 ## Step 8 — Runbook update
 
