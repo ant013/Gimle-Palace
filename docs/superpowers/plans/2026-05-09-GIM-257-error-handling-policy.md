@@ -6,6 +6,13 @@
 **Target:** `develop`
 **Source sprint:** `docs/superpowers/sprints/B-audit-extractors.md` §S2.3
 **Predecessor:** GIM-243 merged to `develop` at `42e2894584fecdbc623ab1c8257004b3063a571e`
+**Reroute:** Board comment `5e7f4bf1-d909-4f1d-bd61-9dff9c8e8e6b` moves this issue to the CX chain:
+`CXCodeReviewer -> CXPythonEngineer -> CXCodeReviewer -> CodexArchitectReviewer -> CXQAEngineer -> CXCTO`.
+**Formal handoff targets:** `[@CXCodeReviewer](agent://45e3b24d-a444-49aa-83bc-69db865a1897?i=eye)`,
+`[@CXPythonEngineer](agent://e010d305-22f7-4f5c-9462-e6526b195b19?i=code)`,
+`[@CodexArchitectReviewer](agent://fec71dea-7dba-4947-ad1f-668920a02cb6?i=eye)`,
+`[@CXQAEngineer](agent://99d5f8f8-822f-4ddb-baaa-0bdaec6f9399?i=bug)`,
+`[@CXCTO](agent://da97dbd9-6627-48d0-b421-66af0750eacf?i=crown)`.
 
 ---
 
@@ -17,7 +24,7 @@ Phase 3.1 must compare implementation scope mechanically:
 git diff --name-only origin/develop..HEAD | sort
 ```
 
-Expected planned implementation scope is **23 files**:
+Expected planned implementation scope is **23 files** (**20 NEW + 3 MOD**):
 
 | Status | Path |
 |--------|------|
@@ -48,11 +55,11 @@ Expected planned implementation scope is **23 files**:
 If implementation needs a different file, the implementer must update this
 table in the same PR before Phase 3.1 handoff and explain why the scope changed.
 
-## Phase 1.1 — CTO formalisation
+## Phase 1.1 — CXCTO formalisation
 
 ### Step 1.1.1: Verify S2.3 against current develop
 
-**Owner:** CTO
+**Owner:** CXCTO
 **Affected paths:** `docs/superpowers/specs/2026-05-09-GIM-257-error-handling-policy_spec.md`,
 this plan.
 **Dependencies:** GIM-243 merged.
@@ -71,13 +78,13 @@ Acceptance criteria:
 - Spec cites current `AuditContract` fields.
 - Spec explicitly scopes to Swift + semgrep only.
 - Plan has explicit external-tooling spike gate.
-- Issue is handed to CodeReviewer for plan-first review.
+- Issue is handed to CXCodeReviewer for plan-first review.
 
 ## Phase 1.2 — Plan-first review
 
 ### Step 1.2.1: Review architecture and acceptance criteria
 
-**Owner:** CodeReviewer
+**Owner:** CXCodeReviewer
 **Affected paths:** spec and plan only.
 **Dependencies:** Step 1.1.1.
 
@@ -91,14 +98,14 @@ Description:
 Acceptance criteria:
 
 - Paperclip comment says APPROVE or REQUEST CHANGES.
-- If approved, issue is reassigned to PythonEngineer for Phase 2.
+- If approved, issue is reassigned to CXPythonEngineer for Phase 2.
 - If changes are requested, comments cite exact spec/plan lines.
 
 ## Phase 2 — Implementation
 
 ### Step 2.1: Scaffold package, fixtures, and first rule
 
-**Owner:** PythonEngineer
+**Owner:** CXPythonEngineer
 **Affected paths:**
 
 - `services/palace-mcp/src/palace_mcp/extractors/error_handling_policy/__init__.py`
@@ -136,7 +143,7 @@ Acceptance criteria:
 
 ### Step 2.2: Add remaining 7 rules with fixtures
 
-**Owner:** PythonEngineer
+**Owner:** CXPythonEngineer
 **Affected paths:**
 
 - `services/palace-mcp/src/palace_mcp/extractors/error_handling_policy/rules/empty_catch_in_crypto_path.yaml`
@@ -177,7 +184,7 @@ Acceptance criteria:
 
 ### Step 2.3: Add deliberate-suppression post-processing
 
-**Owner:** PythonEngineer
+**Owner:** CXPythonEngineer
 **Affected paths:**
 
 - `services/palace-mcp/src/palace_mcp/extractors/error_handling_policy/extractor.py` (extend)
@@ -203,7 +210,7 @@ Acceptance criteria:
 
 ### Step 2.4: Add Neo4j writer, integration tests, and registry
 
-**Owner:** PythonEngineer
+**Owner:** CXPythonEngineer
 **Affected paths:**
 
 - `services/palace-mcp/src/palace_mcp/extractors/error_handling_policy/extractor.py` (extend)
@@ -231,7 +238,7 @@ Acceptance criteria:
 
 ### Step 2.5: Add audit template and runbook
 
-**Owner:** PythonEngineer
+**Owner:** CXPythonEngineer
 **Affected paths:**
 
 - `services/palace-mcp/src/palace_mcp/audit/templates/error_handling_policy.md`
@@ -257,7 +264,7 @@ Acceptance criteria:
 
 ### Step 2.6: Local implementation validation and PR
 
-**Owner:** PythonEngineer
+**Owner:** CXPythonEngineer
 **Affected paths:** implementation files from Phase 2.
 **Dependencies:** Steps 2.1 through 2.5.
 
@@ -303,7 +310,7 @@ uv run mypy src/palace_mcp/extractors/error_handling_policy
 
 ### Step 3.1.1: Review implementation against plan
 
-**Owner:** CodeReviewer
+**Owner:** CXCodeReviewer
 **Affected paths:** all files changed by Phase 2.
 **Dependencies:** Phase 2 handoff.
 
@@ -326,7 +333,7 @@ Acceptance criteria:
 
 ### Step 3.2.1: Review architecture risk
 
-**Owner:** OpusArchitectReviewer
+**Owner:** CodexArchitectReviewer
 **Affected paths:** implementation and docs.
 **Dependencies:** Phase 3.1 APPROVE.
 
@@ -341,13 +348,13 @@ Description:
 Acceptance criteria:
 
 - APPROVE or REQUEST CHANGES.
-- If approved, issue is reassigned to QAEngineer.
+- If approved, issue is reassigned to CXQAEngineer.
 
 ## Phase 4.1 — QA live smoke
 
 ### Step 4.1.1: Run required QA evidence
 
-**Owner:** QAEngineer
+**Owner:** CXQAEngineer
 **Affected paths:** runtime only; no implementation changes unless returned.
 **Dependencies:** Phase 3.2 APPROVE.
 
@@ -366,13 +373,13 @@ Acceptance criteria:
   finding count, report evidence, and production checkout restoration.
 - If failed, issue returns to implementer with exact failing command/output.
 
-## Phase 4.2 — CTO merge and queue propagation
+## Phase 4.2 — CXCTO merge and queue propagation
 
 ### Step 4.2.1: Merge readiness and close
 
-**Owner:** CTO
+**Owner:** CXCTO
 **Affected paths:** Paperclip/GitHub only.
-**Dependencies:** Phase 4.1 QA PASS by QAEngineer.
+**Dependencies:** Phase 4.1 QA PASS by CXQAEngineer.
 
 Description:
 
@@ -395,4 +402,4 @@ Acceptance criteria:
 Implementation may not add ast-grep, detekt, SwiftSyntax, tree-sitter,
 SourceKit-LSP or a new semgrep plugin in this issue unless a fresh
 `docs/research/<tool>-error-handling-spike/` artifact is added first and
-reviewed by CodeReviewer. Default plan uses semgrep (already pinned) only.
+reviewed by CXCodeReviewer. Default plan uses semgrep (already pinned) only.

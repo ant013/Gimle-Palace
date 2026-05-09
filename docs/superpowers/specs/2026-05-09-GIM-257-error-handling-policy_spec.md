@@ -10,7 +10,7 @@
 
 ---
 
-## 1. CTO formalisation notes
+## 1. CXCTO formalisation notes
 
 S2.3 из sprint-файла проверен против текущего `origin/develop` после слияния
 GIM-243. Найденные расхождения, которые эта спецификация исправляет:
@@ -270,7 +270,7 @@ Implementation scope:
 | NEW | `services/palace-mcp/tests/extractors/fixtures/error-handling-mini-project/Sources/Good/TypedErrors.swift` |
 | NEW | `docs/runbooks/error-handling-policy.md` |
 
-Total: **23 files** (15 NEW + 3 MOD + fixture directory).
+Total: **23 files** (**20 NEW + 3 MOD**).
 
 Out of scope:
 
@@ -322,4 +322,4 @@ QA smoke:
 Implementation may not add ast-grep, detekt, SwiftSyntax, tree-sitter,
 SourceKit-LSP or a new semgrep plugin in this issue unless a fresh
 `docs/research/<tool>-error-handling-spike/` artifact is added first and
-reviewed by CodeReviewer. Default plan uses semgrep (already pinned) only.
+reviewed by CXCodeReviewer. Default plan uses semgrep (already pinned) only.
