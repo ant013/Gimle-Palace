@@ -6,6 +6,7 @@ import asyncio
 import datetime as _dt
 import logging
 import sys
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -37,6 +38,37 @@ log = logging.getLogger("watchdog.daemon")
 
 
 TICK_TIMEOUT_SECONDS = 60
+
+
+@dataclass
+class AlertPostBudget:
+    soft_limit: int
+    hard_limit: int
+    posted_count: int = 0
+    soft_logged: bool = False
+
+    def reserve(self, issue_id: str, ftype: FindingType | str) -> bool:
+        ftype_value = ftype.value if isinstance(ftype, FindingType) else str(ftype)
+        if self.posted_count >= self.hard_limit:
+            log.warning(
+                "handoff_alert_deferred_budget issue=%s ftype=%s posted=%s hard=%s",
+                issue_id,
+                ftype_value,
+                self.posted_count,
+                self.hard_limit,
+            )
+            return False
+
+        self.posted_count += 1
+        if not self.soft_logged and self.posted_count == self.soft_limit:
+            self.soft_logged = True
+            log.warning(
+                "handoff_alert_soft_budget_reached posted=%s soft=%s hard=%s",
+                self.posted_count,
+                self.soft_limit,
+                self.hard_limit,
+            )
+        return True
 
 
 async def _sleep(seconds: float) -> None:
@@ -122,6 +154,7 @@ async def _handle_tier_finding(
     escalation_delay_min: int,
     auto_repair_enabled: bool,
     version: str,
+    budget: AlertPostBudget | None = None,
 ) -> None:
     """Drive one finding through the 3-tier state machine for a single tick."""
     issue_id = finding.issue_id
@@ -130,11 +163,13 @@ async def _handle_tier_finding(
 
     existing_alerted_at = state.get_handoff_alerted_at(issue_id, ftype)
     if existing_alerted_at is None:
-        # New finding — tier 1: post alert, record state
-        actionable = getattr(finding, "actionable", True)
-        state.record_handoff_alert(issue_id, ftype, snapshot, now_server, actionable=actionable)
+        # New finding — tier 1: post alert, then record state on success.
+        post_budget = budget or AlertPostBudget(soft_limit=sys.maxsize, hard_limit=sys.maxsize)
+        if not post_budget.reserve(issue_id, ftype):
+            return
+
         try:
-            await client.post_issue_comment(
+            comment_id = await client.post_issue_comment(
                 issue_id,
                 (
                     f"## Watchdog alert — {ftype}\n\n"
@@ -146,6 +181,10 @@ async def _handle_tier_finding(
             )
         except Exception as exc:
             log.warning("tier_alert_post_failed issue=%s ftype=%s error=%s", issue_id, ftype, exc)
+        else:
+            actionable = getattr(finding, "actionable", True)
+            state.record_handoff_alert(issue_id, ftype, snapshot, now_server, actionable=actionable)
+            log.info("tier_alert_posted issue=%s ftype=%s comment=%s", issue_id, ftype, comment_id)
         return
 
     # Snapshot mismatch → reset to tier 1 (condition changed)
@@ -213,6 +252,7 @@ async def _run_tier_pass(
     client: PaperclipClient,
     now_server: datetime,
     repo_root: Path,
+    budget: AlertPostBudget | None = None,
 ) -> None:
     """GIM-244: 3-tier detect→alert→repair→escalate for cross_team, ownerless, infra_block,
     stale_bundle.  Runs after the existing alert-only handoff pass.
@@ -231,6 +271,11 @@ async def _run_tier_pass(
     if h.handoff_cross_team_enabled:
         team_uuids = detection_semantic.load_team_uuids_from_repo(repo_root)
 
+    post_budget = budget or AlertPostBudget(
+        soft_limit=h.handoff_alert_soft_budget_per_tick,
+        hard_limit=h.handoff_alert_hard_budget_per_tick,
+    )
+
     for company in cfg.companies:
         try:
             # Collect issues for enabled detectors
@@ -246,6 +291,40 @@ async def _run_tier_pass(
                     continue
                 seen_ids.add(issue.id)
                 try:
+                    should_fetch_comments = any(
+                        (
+                            h.handoff_cross_team_enabled
+                            and detection_semantic._issue_is_eligible(
+                                issue,
+                                allowed_statuses=detection_semantic._CROSS_TEAM_STATUSES,
+                                now_server=now_server,
+                                recent_window_min=h.handoff_recent_window_min,
+                            ),
+                            h.handoff_ownerless_enabled
+                            and detection_semantic._issue_is_eligible(
+                                issue,
+                                allowed_statuses=detection_semantic._OWNERLESS_STATUSES,
+                                now_server=now_server,
+                                recent_window_min=h.handoff_recent_window_min,
+                            ),
+                            h.handoff_infra_block_enabled
+                            and detection_semantic._issue_is_eligible(
+                                issue,
+                                allowed_statuses=detection_semantic._INFRA_BLOCK_STATUSES,
+                                now_server=now_server,
+                                recent_window_min=h.handoff_recent_window_min,
+                            ),
+                        )
+                    )
+                    if not should_fetch_comments:
+                        for ftype in (
+                            FindingType.CROSS_TEAM_HANDOFF,
+                            FindingType.OWNERLESS_COMPLETION,
+                            FindingType.INFRA_BLOCK,
+                        ):
+                            state.clear_handoff_alert(issue.id, ftype)
+                        continue
+
                     comments = await client.list_recent_comments(
                         issue.id, h.handoff_ownerless_comment_limit
                     )
@@ -258,13 +337,25 @@ async def _run_tier_pass(
                     ) = None
                     if h.handoff_cross_team_enabled and finding is None:
                         finding = detection_semantic._detect_cross_team_handoff(
-                            issue, comments, team_uuids
+                            issue,
+                            comments,
+                            team_uuids,
+                            now_server=now_server,
+                            recent_window_min=h.handoff_recent_window_min,
                         )
                     if h.handoff_ownerless_enabled and finding is None:
-                        finding = detection_semantic._detect_ownerless_completion(issue, comments)
+                        finding = detection_semantic._detect_ownerless_completion(
+                            issue,
+                            comments,
+                            now_server=now_server,
+                            recent_window_min=h.handoff_recent_window_min,
+                        )
                     if h.handoff_infra_block_enabled and finding is None:
                         finding = detection_semantic._detect_infra_block(
-                            issue, comments, now=now_server
+                            issue,
+                            comments,
+                            now=now_server,
+                            recent_window_min=h.handoff_recent_window_min,
                         )
                     if finding is not None:
                         await _handle_tier_finding(
@@ -276,6 +367,7 @@ async def _run_tier_pass(
                             h.handoff_escalation_delay_min,
                             h.handoff_auto_repair_enabled,
                             "watchdog",
+                            budget=post_budget,
                         )
                     else:
                         # No finding — clear any stale tier alerts for this issue
@@ -298,16 +390,20 @@ async def _run_tier_pass(
         )
         if sb is not None:
             sb_snap = {"deployed_sha": sb.deployed_sha}
-            if not state.has_active_alert(_STALE_BUNDLE_KEY, FindingType.STALE_BUNDLE, sb_snap):
-                state.record_handoff_alert(
-                    _STALE_BUNDLE_KEY, FindingType.STALE_BUNDLE, sb_snap, now_server
-                )
-            # Always post/update board comment (cheap and idempotent for ops visibility)
-            if cfg.escalation.post_comment_on_issue and cfg.companies:
+            if (
+                not state.has_active_alert(_STALE_BUNDLE_KEY, FindingType.STALE_BUNDLE, sb_snap)
+                and cfg.escalation.post_comment_on_issue
+                and cfg.companies
+                and post_budget.reserve(_STALE_BUNDLE_KEY, FindingType.STALE_BUNDLE)
+            ):
                 board_issue_id = cfg.companies[0].id  # use first company id as sentinel
-                await actions.post_stale_bundle_alert(
+                posted = await actions.post_stale_bundle_alert(
                     client, sb, board_issue_id, "watchdog", now_server
                 )
+                if posted:
+                    state.record_handoff_alert(
+                        _STALE_BUNDLE_KEY, FindingType.STALE_BUNDLE, sb_snap, now_server
+                    )
         else:
             state.clear_handoff_alert(_STALE_BUNDLE_KEY, FindingType.STALE_BUNDLE)
 
@@ -317,6 +413,7 @@ async def _run_handoff_pass(
     state: State,
     client: PaperclipClient,
     now_server: datetime,
+    budget: AlertPostBudget | None = None,
 ) -> None:
     h = cfg.handoff
     if not h.handoff_alert_enabled:
@@ -330,6 +427,12 @@ async def _run_handoff_pass(
         handoff_comments_per_issue=h.handoff_comments_per_issue,
         handoff_max_issues_per_tick=h.handoff_max_issues_per_tick,
         handoff_alert_cooldown_min=h.handoff_alert_cooldown_min,
+        handoff_recent_window_min=h.handoff_recent_window_min,
+    )
+
+    post_budget = budget or AlertPostBudget(
+        soft_limit=h.handoff_alert_soft_budget_per_tick,
+        hard_limit=h.handoff_alert_hard_budget_per_tick,
     )
 
     total_alerts = 0
@@ -391,6 +494,8 @@ async def _run_handoff_pass(
 
                 assignee_id = snapshot.get("assigneeAgentId", "")
                 assignee_name = name_by_id.get(assignee_id)
+                if not post_budget.reserve(issue.id, ftype):
+                    continue
                 result = await actions.post_handoff_alert(
                     client, finding, "watchdog", now_server, assignee_name
                 )
@@ -481,10 +586,14 @@ async def _tick(cfg: Config, state: State, client: PaperclipClient) -> None:
     # GETs above already populate it; only fall back to local clock
     # if no successful response was made yet (cold first tick).
     now_server = client.last_response_date or _dt.datetime.now(_dt.timezone.utc)
-    await _run_handoff_pass(cfg, state, client, now_server)
+    budget = AlertPostBudget(
+        soft_limit=cfg.handoff.handoff_alert_soft_budget_per_tick,
+        hard_limit=cfg.handoff.handoff_alert_hard_budget_per_tick,
+    )
+    await _run_handoff_pass(cfg, state, client, now_server, budget=budget)
 
     # Phase 4: GIM-244 3-tier detectors (cross_team, ownerless, infra_block, stale_bundle)
-    await _run_tier_pass(cfg, state, client, now_server, _REPO_ROOT)
+    await _run_tier_pass(cfg, state, client, now_server, _REPO_ROOT, budget=budget)
 
     state.save()
     log.info("tick_end actions=%d", total_actions)

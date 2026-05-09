@@ -71,6 +71,7 @@ async def test_get_issue():
                 "executionRunId": "run-1",
                 "status": "in_progress",
                 "updatedAt": "2026-04-21T10:05:00Z",
+                "originKind": "stranded_issue_recovery",
             },
         )
 
@@ -78,6 +79,7 @@ async def test_get_issue():
     try:
         issue = await client.get_issue(ISSUE_ID)
         assert issue.execution_run_id == "run-1"
+        assert issue.origin_kind == "stranded_issue_recovery"
     finally:
         await client.aclose()
 

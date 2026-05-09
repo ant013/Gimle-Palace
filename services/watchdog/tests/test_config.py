@@ -46,6 +46,10 @@ logging:
 escalation:
   post_comment_on_issue: true
   comment_marker: "<!-- watchdog-escalation -->"
+handoff:
+  handoff_recent_window_min: 240
+  handoff_alert_soft_budget_per_tick: 7
+  handoff_alert_hard_budget_per_tick: 11
 """,
     )
     c = cfg.load_config(path)
@@ -61,6 +65,9 @@ escalation:
     assert c.companies[0].thresholds.hang_cpu_max_s is None
     assert c.cooldowns.per_agent_cap == 3
     assert c.escalation.post_comment_on_issue is True
+    assert c.handoff.handoff_recent_window_min == 240
+    assert c.handoff.handoff_alert_soft_budget_per_tick == 7
+    assert c.handoff.handoff_alert_hard_budget_per_tick == 11
 
 
 def test_unknown_version_raises(tmp_path: Path):
