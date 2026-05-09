@@ -88,7 +88,14 @@ def _cfg(tmp_path: Path, base_url: str) -> Config:
     )
 
 
-def _issue(status: str, updated_at: datetime, *, assignee: str | None, number: int, origin_kind: str | None = None) -> dict[str, object]:
+def _issue(
+    status: str,
+    updated_at: datetime,
+    *,
+    assignee: str | None,
+    number: int,
+    origin_kind: str | None = None,
+) -> dict[str, object]:
     return {
         "assigneeAgentId": assignee,
         "status": status,
@@ -136,7 +143,9 @@ async def test_no_spam_on_stale_or_recovery_issues(mock_paperclip, tmp_path: Pat
                 "id": "c-1",
                 "body": f"[@CR](agent://{CR_ID}?i=eye) your turn",
                 "authorAgentId": PE_ID,
-                "createdAt": (stale_updated - timedelta(minutes=5)).isoformat().replace("+00:00", "Z"),
+                "createdAt": (stale_updated - timedelta(minutes=5))
+                .isoformat()
+                .replace("+00:00", "Z"),
             }
         ],
         "stale-infra": [

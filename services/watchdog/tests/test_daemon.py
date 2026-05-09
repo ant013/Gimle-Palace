@@ -911,7 +911,11 @@ async def test_handoff_pass_enforces_shared_soft_and_hard_budget(tmp_path: Path,
         logging=cfg.logging,
         escalation=cfg.escalation,
         handoff=HandoffConfig(
-            **{**cfg.handoff.__dict__, "handoff_alert_soft_budget_per_tick": 5, "handoff_alert_hard_budget_per_tick": 8}
+            **{
+                **cfg.handoff.__dict__,
+                "handoff_alert_soft_budget_per_tick": 5,
+                "handoff_alert_hard_budget_per_tick": 8,
+            }
         ),
     )
     state = State.load(tmp_path / "state.json")
@@ -957,7 +961,9 @@ async def test_handoff_pass_enforces_shared_soft_and_hard_budget(tmp_path: Path,
         "gimle_watchdog.daemon.detection_semantic.scan_handoff_inconsistencies",
         new=AsyncMock(return_value=findings),
     ):
-        with patch("gimle_watchdog.daemon.actions.post_handoff_alert", new=AsyncMock(side_effect=_post)) as mock_post:
+        with patch(
+            "gimle_watchdog.daemon.actions.post_handoff_alert", new=AsyncMock(side_effect=_post)
+        ) as mock_post:
             with caplog.at_level(logging.WARNING, logger="watchdog.daemon"):
                 await daemon._run_handoff_pass(
                     cfg,
@@ -1061,7 +1067,10 @@ async def test_shared_budget_carries_from_legacy_into_tier_issue_alerts(tmp_path
 
     with patch(
         "gimle_watchdog.detection_semantic.load_team_uuids_from_repo",
-        return_value={"claude": {_PE_ID, _CR_ID}, "codex": {"99d5f8f8-822f-4ddb-baaa-0bdaec6f9399"}},
+        return_value={
+            "claude": {_PE_ID, _CR_ID},
+            "codex": {"99d5f8f8-822f-4ddb-baaa-0bdaec6f9399"},
+        },
     ):
         await daemon._run_tier_pass(cfg, state, client, _NOW_SERVER, tmp_path, budget=budget)
 
@@ -1200,7 +1209,10 @@ async def test_shared_budget_blocks_stale_bundle_after_issue_alerts(tmp_path: Pa
 
     with patch(
         "gimle_watchdog.detection_semantic.load_team_uuids_from_repo",
-        return_value={"claude": {_PE_ID, _CR_ID}, "codex": {"99d5f8f8-822f-4ddb-baaa-0bdaec6f9399"}},
+        return_value={
+            "claude": {_PE_ID, _CR_ID},
+            "codex": {"99d5f8f8-822f-4ddb-baaa-0bdaec6f9399"},
+        },
     ):
         with patch(
             "gimle_watchdog.daemon.detection_semantic.detect_stale_bundle",
@@ -1222,4 +1234,6 @@ async def test_shared_budget_blocks_stale_bundle_after_issue_alerts(tmp_path: Pa
     client.post_issue_comment.assert_awaited_once()
     mock_stale_post.assert_not_awaited()
     assert f"{_COMPANY_ID}:{FindingType.CROSS_TEAM_HANDOFF.value}" not in state.alerted_handoffs
-    assert f"{daemon._STALE_BUNDLE_KEY}:{FindingType.STALE_BUNDLE.value}" not in state.alerted_handoffs
+    assert (
+        f"{daemon._STALE_BUNDLE_KEY}:{FindingType.STALE_BUNDLE.value}" not in state.alerted_handoffs
+    )

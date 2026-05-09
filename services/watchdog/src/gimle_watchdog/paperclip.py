@@ -54,9 +54,7 @@ def _issue_from_json(data: dict[str, Any]) -> Issue:
         status=str(data.get("status", "")),
         updated_at=_parse_iso(str(data.get("updatedAt", "1970-01-01T00:00:00Z"))),
         issue_number=int(data.get("issueNumber") or 0),
-        origin_kind=(
-            str(data["originKind"]) if data.get("originKind") is not None else None
-        ),
+        origin_kind=(str(data["originKind"]) if data.get("originKind") is not None else None),
     )
 
 
