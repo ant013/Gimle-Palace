@@ -26,9 +26,9 @@ GIM-243. Найденные расхождения, которые эта спе
    (`results/Error_Handling_Policy_Extractor.json`) описывает `:ErrorPolicy`,
    `:ErrorBoundary`, `:GOVERNS`, `:VIOLATES` nodes с layer-aware policy
    inference. Это полная v2+ vision. V1 фокусируется на конкретных
-   антипаттернах ошибок — **`:ErrorFinding`** nodes с semgrep rules, плюс
-   **`:CatchSiteAggregate`** per-module summary. Не пытаемся делать policy
-   inference или layer assignment.
+   антипаттернах ошибок — **`:ErrorFinding`** nodes с semgrep rules — и
+   сохраняет sprint smoke surface через **`:CatchSite`** inventory/aggregate
+   nodes. Не пытаемся делать `:ErrorPolicy` inference или layer assignment.
 
 3. **AuditContract shape.** Текущий `AuditContract` (contracts.py):
    `extractor_name`, `template_name`, `query`, `severity_column`,
@@ -48,13 +48,15 @@ GIM-243. Найденные расхождения, которые эта спе
 
 Добавить extractor `error_handling_policy`, который сканирует Swift исходники
 semgrep custom rules для обнаружения антипаттернов обработки ошибок (empty catch,
-swallowed errors, try? в критических paths), пишет `:ErrorFinding` nodes в Neo4j
-и подключается к Audit-V1 report через `audit_contract()`.
+swallowed errors, try? в критических paths), пишет `:CatchSite` и
+`:ErrorFinding` nodes в Neo4j и подключается к Audit-V1 report через
+`audit_contract()`.
 
 Definition of Done:
 
 1. `error_handling_policy` зарегистрирован в `EXTRACTORS`.
-2. Extractor пишет `:ErrorFinding` nodes с severity-graded findings.
+2. Extractor пишет `:CatchSite` inventory/aggregate nodes и
+   `:ErrorFinding` severity-graded findings.
 3. `ErrorHandlingPolicyExtractor.audit_contract()` возвращает текущий
    `AuditContract`.
 4. Шаблон `error_handling_policy.md` рендерит findings grouped by severity
@@ -63,8 +65,8 @@ Definition of Done:
    smoke и troubleshooting.
 6. Unit/integration tests покрывают rule loading, semgrep invocation,
    dedup, Neo4j writer, audit contract и registry.
-7. QA smoke на `tronkit-swift` доказывает, что extractor обнаруживает
-   ≥1 finding (или explicit clean с rationale).
+7. QA smoke на `tronkit-swift` доказывает `:CatchSite` count > 0 и
+   ≥1 finding (или explicit "no critical-path swallowed catches" с file count).
 
 ## 3. Non-goals
 
@@ -97,7 +99,9 @@ AuditContract(
 )
 ```
 
-`_QUERY` queries `ErrorFinding` nodes by `project_id: $project_id`.
+`_QUERY` queries `:CatchSite` aggregate rows and `:ErrorFinding` rows by
+`project_id: $project_id`, so the §4 Security report can prove both the
+catch-site smoke surface and the surfaced violations.
 
 ### 4.3 Semgrep precedent
 
@@ -141,6 +145,12 @@ Rules are YAML files in `extractors/error_handling_policy/rules/`.
 | `error_as_string` | low | Throwing/returning string-typed errors instead of typed Error |
 | `nil_coalesce_swallows_error` | medium | `try? expr ?? defaultValue` pattern swallowing error |
 
+The extractor also keeps a non-finding catch-site inventory surface. It may be
+implemented either as an informational semgrep pattern bundled with an existing
+rule file or as bounded source-line inventory in `extractor.py`; either way it
+must not create `:ErrorFinding` rows by itself. Its purpose is to populate
+`:CatchSite` for the sprint smoke gate and template aggregate.
+
 ### 6.3 Critical path heuristics (EHP-D1)
 
 File path regex determines severity escalation:
@@ -174,6 +184,18 @@ keep highest severity.
 ### 7.1 Nodes
 
 ```cypher
+(:CatchSite {
+    project_id,     -- "project/<slug>"
+    file,           -- repo-relative file path
+    start_line,     -- int
+    end_line,       -- int
+    kind,           -- "catch"|"try_optional"|"nil_coalesce_try_optional"|rule ID
+    swallowed,      -- bool; true when site maps to a swallowed-error finding
+    rethrows,       -- bool; true when catch body rethrows/throws
+    module,         -- best-effort module/path bucket for aggregate display
+    run_id          -- UUID of extractor run
+})
+
 (:ErrorFinding {
     project_id,     -- "project/<slug>"
     kind,           -- rule ID (e.g. "empty_catch_block")
@@ -198,17 +220,41 @@ FOR (f:ErrorFinding) ON (f.project_id)
 
 CREATE INDEX error_finding_severity IF NOT EXISTS
 FOR (f:ErrorFinding) ON (f.severity)
+
+CREATE CONSTRAINT catch_site_unique IF NOT EXISTS
+FOR (c:CatchSite) REQUIRE
+(c.project_id, c.file, c.start_line, c.end_line, c.kind) IS UNIQUE
+
+CREATE INDEX catch_site_project IF NOT EXISTS
+FOR (c:CatchSite) ON (c.project_id)
+
+CREATE INDEX catch_site_module IF NOT EXISTS
+FOR (c:CatchSite) ON (c.project_id, c.module)
 ```
 
 ### 7.3 Edges
 
-V1 writes no edges. `:ErrorFinding` is standalone, same as `:CryptoFinding`.
+V1 writes no edges. `:CatchSite` and `:ErrorFinding` are standalone nodes; the
+template/audit query joins them by `project_id`, `file`, and line range when it
+needs aggregate context.
 
 ### 7.4 Write pattern
 
 Idempotent MERGE, same as crypto_domain_model:
 
 ```cypher
+MERGE (c:CatchSite {
+    project_id: $project_id,
+    file: $file,
+    start_line: $start_line,
+    end_line: $end_line,
+    kind: $catch_site_kind
+})
+SET c.swallowed = $swallowed,
+    c.rethrows = $rethrows,
+    c.module = $module,
+    c.run_id = $run_id
+
 MERGE (f:ErrorFinding {
     project_id: $project_id,
     kind: $kind,
@@ -225,8 +271,8 @@ SET f.severity = $severity,
 
 `audit/templates/error_handling_policy.md`:
 
-- Module aggregate summary: files scanned, total catch sites found,
-  critical/high/medium/low breakdown.
+- Module aggregate summary: files scanned, `:CatchSite` count,
+  swallowed/rethrows breakdown, critical/high/medium/low finding breakdown.
 - Critical/high findings section.
 - Medium/low/informational findings section.
 - Clean state: "no error handling issues found" with file count.
@@ -292,15 +338,17 @@ Unit:
 
 Integration:
 
-- synthetic fixture writes expected `:ErrorFinding` count;
-- second run is idempotent;
+- synthetic fixture writes expected `:CatchSite` and `:ErrorFinding` counts;
+- second run is idempotent for both labels;
 - registry includes `error_handling_policy`;
 - audit fetcher can execute contract query.
 
 QA smoke:
 
 - run `error_handling_policy` on `tronkit-swift`;
-- verify ≥1 finding or explicit "clean" with file count;
+- verify `:CatchSite` count > 0;
+- verify ≥1 `ErrorFinding` or explicit "no critical-path swallowed catches"
+  with file count cited;
 - report renders findings or clean state.
 
 ## 12. Risks

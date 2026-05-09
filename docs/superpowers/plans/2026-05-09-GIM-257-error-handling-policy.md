@@ -122,7 +122,7 @@ Description:
 - Create extractor package following crypto_domain_model pattern.
 - Implement `ErrorHandlingPolicyExtractor(BaseExtractor)` with:
   - `name = "error_handling_policy"`
-  - `constraints` and `indexes` for `:ErrorFinding` (spec §7.2).
+  - `constraints` and `indexes` for `:CatchSite` and `:ErrorFinding` (spec §7.2).
   - `async run()` that invokes semgrep, deduplicates, writes findings.
   - `audit_contract()` returning current `AuditContract` shape.
 - Add first rule: `empty_catch_block.yaml` with semgrep Swift pattern
@@ -164,6 +164,10 @@ Acceptance criteria:
 Description:
 
 - Add 7 remaining semgrep YAML rules per spec §6.2.
+- Add the non-finding catch-site inventory surface required by spec §6.2:
+  either an informational semgrep pattern bundled with an existing rule file,
+  or bounded source-line inventory in `extractor.py`. This inventory writes
+  `:CatchSite` only and must not create standalone `:ErrorFinding` rows.
 - `empty_catch_in_crypto_path` and `try_optional_in_crypto_path` use semgrep
   `paths.include` with crypto file patterns — separate rules, not post-processing.
 - `catch_only_logs` matches `catch { print(...) }` / `catch { logger.error(...) }`
@@ -222,17 +226,17 @@ Acceptance criteria:
 
 Description:
 
-- Neo4j writer uses MERGE per finding (spec §7.4).
+- Neo4j writer uses MERGE per `:CatchSite` and per `:ErrorFinding` (spec §7.4).
 - Register `error_handling_policy` in `EXTRACTORS`.
 - Integration test runs extractor against fixture with real Neo4j
-  (testcontainers) and verifies expected `:ErrorFinding` node count.
-- Idempotency test: second run writes zero new nodes.
+  (testcontainers) and verifies expected `:CatchSite` and `:ErrorFinding` node counts.
+- Idempotency test: second run writes zero duplicate nodes for both labels.
 
 Acceptance criteria:
 
 - `EXTRACTORS["error_handling_policy"]` exists.
-- Integration test writes expected finding count.
-- Second run creates zero duplicates.
+- Integration test writes expected catch-site and finding counts.
+- Second run creates zero duplicates for `:CatchSite` or `:ErrorFinding`.
 - Constraints + indexes are safe to run repeatedly.
 - Registry test includes `error_handling_policy`.
 
@@ -250,8 +254,9 @@ Acceptance criteria:
 Description:
 
 - Add Jinja2 template following crypto_domain_model/arch_layer pattern:
-  summary stats (files scanned, finding breakdown), critical/high section,
-  medium/low/informational section, clean state, provenance.
+  summary stats (files scanned, `:CatchSite` count, swallowed/rethrows
+  breakdown, finding breakdown), critical/high section, medium/low/informational
+  section, clean state, provenance.
 - Template golden tests in `test_templates.py`.
 - Runbook: prerequisites (semgrep in container — already there), how to run,
   expected findings, rule descriptions, suppression markers, troubleshooting.
@@ -259,7 +264,9 @@ Description:
 Acceptance criteria:
 
 - Template renders without error for empty and non-empty findings.
+- Template displays catch-site aggregate count and swallowed/rethrows breakdown.
 - Runbook names all 8 rules with descriptions.
+- Runbook documents the non-finding `:CatchSite` inventory/smoke evidence.
 - Runbook documents `// ehp:ignore` suppression mechanism.
 
 ### Step 2.6: Local implementation validation and PR
@@ -321,7 +328,8 @@ Description:
   the `File Structure` table above, including the expected 23-file count.
 - Verify semgrep rules use valid Swift patterns.
 - Verify no external tooling dependency was added without spike.
-- Verify tests cover all 8 rules and idempotent writes.
+- Verify tests cover all 8 finding rules, catch-site inventory, and idempotent
+  writes for both labels.
 - Verify dedup and suppression logic.
 
 Acceptance criteria:
@@ -340,6 +348,8 @@ Acceptance criteria:
 Description:
 
 - Check graph contract compatibility with Audit-V1 S1, GIM-239, GIM-243.
+- Check `:CatchSite` smoke surface compatibility with
+  `docs/superpowers/sprints/E-smoke.md` §4 Security gate.
 - Check false-positive controls (suppression, severity mapping, critical-path
   heuristic accuracy).
 - Check no schema collisions with existing `:CryptoFinding` or `:ArchViolation`.
@@ -363,14 +373,17 @@ Description:
 - Run required quality gates from project instructions.
 - Run live smoke on `tronkit-swift`.
 - Verify a real MCP/tool path: `palace.ingest.run_extractor(name="error_handling_policy", project="tronkit-swift")`.
-- Verify `:ErrorFinding` count > 0 (or explicit "clean" with rationale).
+- Verify `:CatchSite` count > 0.
+- Verify `:ErrorFinding` count > 0 or explicit "no critical-path swallowed catches"
+  with scanned file count cited.
 - Verify audit report renders error handling section.
 - Restore production checkout per checkout discipline.
 
 Acceptance criteria:
 
 - QA PASS comment includes commit SHA, container health, extractor run output,
-  finding count, report evidence, and production checkout restoration.
+  `:CatchSite` count, finding count or explicit clean rationale, report evidence,
+  and production checkout restoration.
 - If failed, issue returns to implementer with exact failing command/output.
 
 ## Phase 4.2 — CXCTO merge and queue propagation
