@@ -215,7 +215,9 @@ class ErrorHandlingPolicyExtractor(BaseExtractor):
             severity_mapper=_ehp_severity,
         )
 
-    async def run(self, *, graphiti: object, ctx: ExtractorRunContext) -> ExtractorStats:
+    async def run(
+        self, *, graphiti: object, ctx: ExtractorRunContext
+    ) -> ExtractorStats:
         from palace_mcp.mcp_server import get_settings
 
         settings = get_settings()
@@ -254,7 +256,9 @@ class ErrorHandlingPolicyExtractor(BaseExtractor):
             target=ctx.repo_path,
             timeout_s=timeout_s,
         )
-        findings = _dedup_findings(_normalise_results(raw_findings, repo_root=ctx.repo_path))
+        findings = _dedup_findings(
+            _normalise_results(raw_findings, repo_root=ctx.repo_path)
+        )
         findings = _apply_suppressions(repo_root=ctx.repo_path, findings=findings)
         catch_sites = _collect_catch_sites(ctx.repo_path)
         catch_sites = _mark_swallowed_sites(catch_sites=catch_sites, findings=findings)
@@ -431,7 +435,9 @@ def _collect_catch_sites(repo_root: Path) -> list[CatchSite]:
         rel_path = path.relative_to(repo_root).as_posix()
         text = path.read_text(encoding="utf-8")
         module = _infer_module(rel_path)
-        sites.extend(_collect_catch_block_sites(text=text, rel_path=rel_path, module=module))
+        sites.extend(
+            _collect_catch_block_sites(text=text, rel_path=rel_path, module=module)
+        )
         sites.extend(
             _collect_try_optional_sites(text=text, rel_path=rel_path, module=module)
         )
@@ -511,7 +517,9 @@ def _mark_swallowed_sites(
 ) -> list[CatchSite]:
     updated: list[CatchSite] = []
     for site in catch_sites:
-        swallowed = any(_finding_marks_swallowed(site=site, finding=finding) for finding in findings)
+        swallowed = any(
+            _finding_marks_swallowed(site=site, finding=finding) for finding in findings
+        )
         updated.append(replace(site, swallowed=swallowed))
     return updated
 

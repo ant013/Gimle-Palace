@@ -341,7 +341,9 @@ class _FakeDriver:
 
 
 @pytest.mark.asyncio
-async def test_write_snapshot_uses_single_execute_write_and_delete_then_create() -> None:
+async def test_write_snapshot_uses_single_execute_write_and_delete_then_create() -> (
+    None
+):
     tx = _FakeTx()
     session = _FakeSession(tx)
     driver = _FakeDriver(session)

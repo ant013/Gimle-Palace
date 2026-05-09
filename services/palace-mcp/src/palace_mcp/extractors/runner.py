@@ -144,7 +144,9 @@ async def _precheck(
     return _PrecheckOk(extractor=extractor, repo_path=repo_path, group_id=group_id)
 
 
-def _resolve_repo_path(*, repos_root: Path, project: str, project_node: Any) -> Path | None:
+def _resolve_repo_path(
+    *, repos_root: Path, project: str, project_node: Any
+) -> Path | None:
     parent_mount = _node_value(project_node, "parent_mount")
     relative_path = _node_value(project_node, "relative_path")
     if parent_mount and relative_path:
