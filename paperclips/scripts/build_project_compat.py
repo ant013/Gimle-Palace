@@ -122,6 +122,45 @@ def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def load_claude_agent_ids(deploy_script: Path) -> dict[str, str]:
+    text = deploy_script.read_text()
+    pattern = re.compile(r"^\s*([a-z][\w-]*)\)\s+echo\s+\"([0-9a-f-]{36})\"", re.MULTILINE)
+    return {name: agent_id for name, agent_id in pattern.findall(text)}
+
+
+def _codex_env_to_agent_name(key: str) -> str:
+    if not key.endswith("_AGENT_ID"):
+        return ""
+    stem = key[: -len("_AGENT_ID")]
+    return stem.lower().replace("_", "-")
+
+
+def load_codex_agent_ids(env_file: Path) -> dict[str, str]:
+    ids: dict[str, str] = {}
+    if not env_file.is_file():
+        return ids
+    for line in env_file.read_text().splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        name = _codex_env_to_agent_name(key.strip())
+        agent_id = value.strip()
+        if name and re.fullmatch(r"[0-9a-f-]{36}", agent_id):
+            ids[name] = agent_id
+    return ids
+
+
+def compatibility_agent_ids(repo_root: Path, manifest_values: dict[str, str], target: str) -> dict[str, str]:
+    if target == "claude":
+        mapping = manifest_values.get("compatibility.claude_deploy_mapping", "paperclips/deploy-agents.sh")
+        return load_claude_agent_ids(repo_root / mapping)
+    if target == "codex":
+        env_file = manifest_values.get("compatibility.codex_agent_ids_env", "paperclips/codex-agent-ids.env")
+        return load_codex_agent_ids(repo_root / env_file)
+    return {}
+
+
 def manifest_entries(manifest_text: str) -> list[tuple[int, str, str, str]]:
     entries: list[tuple[int, str, str, str]] = []
     stack: list[tuple[int, str]] = []
@@ -295,13 +334,16 @@ def render_target(repo_root: Path, target: str, manifest_values: dict[str, str])
         print(f"built {out_file}")
 
 
-def role_output_entry(repo_root: Path, target: str, role_file: Path) -> dict[str, object]:
+def role_output_entry(repo_root: Path, target: str, role_file: Path, ids: dict[str, str]) -> dict[str, object]:
     _roles_dir, out_dir = target_paths(repo_root, target)
     out_file = out_dir / role_file.name
     meta = validate_instructions.load_role_front_matter(role_file)
     text = out_file.read_text()
+    name = out_file.stem
     return {
         "roleId": meta.role_id,
+        "agentName": name,
+        "agentId": ids.get(name, ""),
         "family": meta.family,
         "profiles": meta.profiles,
         "source": str(role_file.relative_to(repo_root)),
@@ -309,6 +351,22 @@ def role_output_entry(repo_root: Path, target: str, role_file: Path) -> dict[str
         "sha256": sha256_text(text),
         "bytes": len(text.encode("utf-8")),
         "lines": text.count("\n"),
+    }
+
+
+def target_output_entry(
+    repo_root: Path,
+    target: str,
+    manifest_values: dict[str, str],
+) -> dict[str, object]:
+    ids = compatibility_agent_ids(repo_root, manifest_values, target)
+    role_files = sorted(target_paths(repo_root, target)[0].glob("*.md"))
+    return {
+        **target_manifest_data(manifest_values, target),
+        "roles": [
+            role_output_entry(repo_root, target, role_file, ids)
+            for role_file in role_files
+        ],
     }
 
 
@@ -378,13 +436,7 @@ def resolved_assembly(
             "workspaceUpdateScript": manifest_values.get("compatibility.workspace_update_script", ""),
         },
         "targets": {
-            target: {
-                **target_manifest_data(manifest_values, target),
-                "roles": [
-                    role_output_entry(repo_root, target, role_file)
-                    for role_file in sorted(target_paths(repo_root, target)[0].glob("*.md"))
-                ],
-            }
+            target: target_output_entry(repo_root, target, manifest_values)
             for target in targets
         },
     }

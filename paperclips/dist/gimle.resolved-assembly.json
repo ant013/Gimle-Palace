@@ -69,6 +69,8 @@
       "instructionsBundleMode": "external-or-managed",
       "roles": [
         {
+          "agentId": "",
+          "agentName": "auditor",
           "bytes": 20786,
           "family": "auditor",
           "lines": 479,
@@ -83,6 +85,8 @@
           "source": "paperclips/roles/auditor.md"
         },
         {
+          "agentId": "9874ad7a-dfbc-49b0-b3ed-d0efda6453bb",
+          "agentName": "blockchain-engineer",
           "bytes": 25951,
           "family": "implementation",
           "lines": 575,
@@ -98,6 +102,8 @@
           "source": "paperclips/roles/blockchain-engineer.md"
         },
         {
+          "agentId": "bd2d7e20-7ed8-474c-91fc-353d610f4c52",
+          "agentName": "code-reviewer",
           "bytes": 34351,
           "family": "code-reviewer",
           "lines": 806,
@@ -115,6 +121,8 @@
           "source": "paperclips/roles/code-reviewer.md"
         },
         {
+          "agentId": "7fb0fdbb-e17f-4487-a4da-16993a907bec",
+          "agentName": "cto",
           "bytes": 24339,
           "family": "cto",
           "lines": 501,
@@ -132,6 +140,8 @@
           "source": "paperclips/roles/cto.md"
         },
         {
+          "agentId": "89f8f76b-844b-4d1f-b614-edbe72a91d4b",
+          "agentName": "infra-engineer",
           "bytes": 28877,
           "family": "infra",
           "lines": 620,
@@ -148,6 +158,8 @@
           "source": "paperclips/roles/infra-engineer.md"
         },
         {
+          "agentId": "274a0b0c-ebe8-4613-ad0e-3e745c817a97",
+          "agentName": "mcp-engineer",
           "bytes": 26022,
           "family": "implementation",
           "lines": 570,
@@ -163,6 +175,8 @@
           "source": "paperclips/roles/mcp-engineer.md"
         },
         {
+          "agentId": "8d6649e2-2df6-412a-a6bc-2d94bab3b73f",
+          "agentName": "opus-architect-reviewer",
           "bytes": 31056,
           "family": "architect-reviewer",
           "lines": 722,
@@ -180,6 +194,8 @@
           "source": "paperclips/roles/opus-architect-reviewer.md"
         },
         {
+          "agentId": "127068ee-b564-4b37-9370-616c81c63f35",
+          "agentName": "python-engineer",
           "bytes": 28441,
           "family": "implementation",
           "lines": 683,
@@ -195,6 +211,8 @@
           "source": "paperclips/roles/python-engineer.md"
         },
         {
+          "agentId": "58b68640-1e83-4d5d-978b-51a5ca9080e0",
+          "agentName": "qa-engineer",
           "bytes": 29590,
           "family": "qa",
           "lines": 656,
@@ -212,6 +230,8 @@
           "source": "paperclips/roles/qa-engineer.md"
         },
         {
+          "agentId": "bbcef02c-b755-4624-bba6-84f01e5d49c8",
+          "agentName": "research-agent",
           "bytes": 22167,
           "family": "research",
           "lines": 479,
@@ -227,6 +247,8 @@
           "source": "paperclips/roles/research-agent.md"
         },
         {
+          "agentId": "a56f9e4a-ef9c-46d4-a736-1db5e19bbde4",
+          "agentName": "security-auditor",
           "bytes": 30974,
           "family": "security-review",
           "lines": 676,
@@ -243,6 +265,8 @@
           "source": "paperclips/roles/security-auditor.md"
         },
         {
+          "agentId": "0e8222fd-88b9-4593-98f6-847a448b0aab",
+          "agentName": "technical-writer",
           "bytes": 21940,
           "family": "writer",
           "lines": 466,
@@ -266,6 +290,8 @@
       "instructionsBundleMode": "managed",
       "roles": [
         {
+          "agentId": "fec71dea-7dba-4947-ad1f-668920a02cb6",
+          "agentName": "codex-architect-reviewer",
           "bytes": 28393,
           "family": "architect-reviewer",
           "lines": 637,
@@ -283,6 +309,8 @@
           "source": "paperclips/roles-codex/codex-architect-reviewer.md"
         },
         {
+          "agentId": "",
+          "agentName": "cx-auditor",
           "bytes": 19281,
           "family": "auditor",
           "lines": 463,
@@ -297,6 +325,8 @@
           "source": "paperclips/roles-codex/cx-auditor.md"
         },
         {
+          "agentId": "4e348572-1890-4122-b831-2185d9d50609",
+          "agentName": "cx-blockchain-engineer",
           "bytes": 27380,
           "family": "implementation",
           "lines": 593,
@@ -312,6 +342,8 @@
           "source": "paperclips/roles-codex/cx-blockchain-engineer.md"
         },
         {
+          "agentId": "45e3b24d-a444-49aa-83bc-69db865a1897",
+          "agentName": "cx-code-reviewer",
           "bytes": 26051,
           "family": "code-reviewer",
           "lines": 623,
@@ -329,6 +361,8 @@
           "source": "paperclips/roles-codex/cx-code-reviewer.md"
         },
         {
+          "agentId": "da97dbd9-6627-48d0-b421-66af0750eacf",
+          "agentName": "cx-cto",
           "bytes": 26173,
           "family": "cto",
           "lines": 516,
@@ -346,6 +380,8 @@
           "source": "paperclips/roles-codex/cx-cto.md"
         },
         {
+          "agentId": "21981be0-8c51-4e57-8a0a-ca8f95f4b8d9",
+          "agentName": "cx-infra-engineer",
           "bytes": 29583,
           "family": "infra",
           "lines": 633,
@@ -362,6 +398,8 @@
           "source": "paperclips/roles-codex/cx-infra-engineer.md"
         },
         {
+          "agentId": "9a5d7bef-9b6a-4e74-be1d-e01999820804",
+          "agentName": "cx-mcp-engineer",
           "bytes": 27089,
           "family": "implementation",
           "lines": 584,
@@ -377,6 +415,8 @@
           "source": "paperclips/roles-codex/cx-mcp-engineer.md"
         },
         {
+          "agentId": "e010d305-22f7-4f5c-9462-e6526b195b19",
+          "agentName": "cx-python-engineer",
           "bytes": 29852,
           "family": "implementation",
           "lines": 698,
@@ -392,6 +432,8 @@
           "source": "paperclips/roles-codex/cx-python-engineer.md"
         },
         {
+          "agentId": "99d5f8f8-822f-4ddb-baaa-0bdaec6f9399",
+          "agentName": "cx-qa-engineer",
           "bytes": 30389,
           "family": "qa",
           "lines": 669,
@@ -409,6 +451,8 @@
           "source": "paperclips/roles-codex/cx-qa-engineer.md"
         },
         {
+          "agentId": "a2f7d4d2-ee96-43c3-83d8-d3af02d6674c",
+          "agentName": "cx-research-agent",
           "bytes": 23386,
           "family": "research",
           "lines": 493,
@@ -424,6 +468,8 @@
           "source": "paperclips/roles-codex/cx-research-agent.md"
         },
         {
+          "agentId": "f67918f9-662d-47c0-b6f7-5d66870d2702",
+          "agentName": "cx-security-auditor",
           "bytes": 31983,
           "family": "security-review",
           "lines": 692,
@@ -440,6 +486,8 @@
           "source": "paperclips/roles-codex/cx-security-auditor.md"
         },
         {
+          "agentId": "1b9fc009-4b02-4560-b7f5-2b241b5897d9",
+          "agentName": "cx-technical-writer",
           "bytes": 23018,
           "family": "writer",
           "lines": 481,

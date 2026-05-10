@@ -359,9 +359,21 @@ def validate_resolved_assembly_manifests(repo_root: Path) -> list[str]:
                     continue
                 output = role.get("output")
                 role_id = role.get("roleId", "<unknown>")
+                agent_name = role.get("agentName")
+                agent_id = role.get("agentId")
                 if not isinstance(output, str):
                     errors.append(f"resolved assembly manifest role missing output: {project}:{target}:{role_id}")
                     continue
+                expected_agent_name = Path(output).stem
+                if agent_name != expected_agent_name:
+                    errors.append(
+                        f"resolved assembly manifest agentName mismatch: "
+                        f"{project}:{target}:{role_id}: {agent_name} != {expected_agent_name}"
+                    )
+                if not isinstance(agent_id, str):
+                    errors.append(f"resolved assembly manifest role missing agentId: {project}:{target}:{role_id}")
+                elif agent_id and not _UUID_RE.fullmatch(agent_id):
+                    errors.append(f"resolved assembly manifest agentId invalid: {project}:{target}:{role_id}")
                 output_path = repo_root / output
                 if not output_path.is_file():
                     errors.append(f"resolved assembly manifest output missing: {output}")

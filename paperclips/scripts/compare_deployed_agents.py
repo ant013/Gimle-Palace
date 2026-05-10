@@ -87,9 +87,46 @@ def load_resolved_output_paths(repo_root: Path, project: str, target: str) -> di
     return outputs
 
 
+def load_resolved_agent_refs(
+    repo_root: Path,
+    project: str,
+    target: str,
+    agent: str | None,
+) -> list[AgentRef] | None:
+    path = resolved_assembly_path(repo_root, project)
+    if not path.is_file():
+        return None
+    data = json.loads(path.read_text())
+    refs: list[AgentRef] = []
+    targets = data.get("targets", {})
+    selected_targets = targets.keys() if target == "all" else [target]
+    for selected_target in selected_targets:
+        target_data = targets.get(selected_target, {})
+        if not isinstance(target_data, dict):
+            continue
+        for role in target_data.get("roles", []):
+            if not isinstance(role, dict):
+                continue
+            output = role.get("output")
+            agent_id = role.get("agentId")
+            if not isinstance(output, str) or not isinstance(agent_id, str) or not agent_id:
+                continue
+            name = role.get("agentName")
+            if not isinstance(name, str) or not name:
+                name = Path(output).stem
+            if agent and name != agent:
+                continue
+            refs.append(AgentRef(str(selected_target), name, agent_id, repo_root / output))
+    return refs
+
+
 def collect_agent_refs(repo_root: Path, project: str, target: str, agent: str | None) -> list[AgentRef]:
     paperclips = repo_root / "paperclips"
     refs: list[AgentRef] = []
+    resolved_refs = load_resolved_agent_refs(repo_root, project, target, agent)
+    if resolved_refs is not None:
+        return resolved_refs
+
     resolved_outputs = load_resolved_output_paths(repo_root, project, target)
 
     if target in ("all", "claude"):

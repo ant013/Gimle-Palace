@@ -18,15 +18,6 @@ def load_resolved(repo_root: Path, project: str) -> dict:
     return json.loads(path.read_text())
 
 
-def agent_ids(repo_root: Path, target: str) -> dict[str, str]:
-    paperclips = repo_root / "paperclips"
-    if target == "claude":
-        return compare_deployed_agents.load_claude_agent_ids(paperclips / "deploy-agents.sh")
-    if target == "codex":
-        return compare_deployed_agents.load_codex_agent_ids(paperclips / "codex-agent-ids.env")
-    raise ValueError(f"unsupported target: {target}")
-
-
 def selected_targets(resolved: dict, target: str) -> list[str]:
     targets = resolved.get("targets", {})
     if target == "all":
@@ -49,7 +40,6 @@ def dry_run(repo_root: Path, project: str, target: str, agent: str | None) -> in
             print(f"ERROR missing target in resolved assembly: {target_name}", file=sys.stderr)
             failures += 1
             continue
-        ids = agent_ids(repo_root, target_name)
         expected_adapter = target_data.get("adapterType", "")
         print(f"\nTarget: {target_name} adapter={expected_adapter}")
 
@@ -58,16 +48,18 @@ def dry_run(repo_root: Path, project: str, target: str, agent: str | None) -> in
             if not isinstance(role, dict):
                 continue
             output = role.get("output", "")
-            name = Path(str(output)).stem
+            name = role.get("agentName")
+            if not isinstance(name, str) or not name:
+                name = Path(str(output)).stem
             if agent and name != agent:
                 continue
             output_path = repo_root / str(output)
-            aid = ids.get(name, "")
+            aid = role.get("agentId", "")
             if not output_path.is_file():
                 print(f"  ERROR {name}: missing output {output}", file=sys.stderr)
                 failures += 1
                 continue
-            if not aid:
+            if not isinstance(aid, str) or not aid:
                 print(f"  PENDING {name}: no {target_name} agent id")
                 failures += 1
                 continue

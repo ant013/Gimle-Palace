@@ -113,7 +113,9 @@ def test_project_compat_writes_resolved_assembly(tmp_path: Path) -> None:
     assert resolved["capabilities"]["mcp"]["baseRequired"] == list(validate_instructions.REQUIRED_PROJECT_MCP)
     assert resolved["capabilities"]["mcp"]["codebaseMemoryProjects"]["primary"] == "repos-gimle"
     assert resolved["targets"]["codex"]["adapterType"] == "codex_local"
-    assert any(role["roleId"] == "codex:cx-cto" for role in resolved["targets"]["codex"]["roles"])
+    cx_cto = next(role for role in resolved["targets"]["codex"]["roles"] if role["roleId"] == "codex:cx-cto")
+    assert cx_cto["agentName"] == "cx-cto"
+    assert cx_cto["agentId"] == "da97dbd9-6627-48d0-b421-66af0750eacf"
 
 
 def test_resolved_assembly_stale_sha_fails(tmp_path: Path) -> None:
@@ -126,6 +128,18 @@ def test_resolved_assembly_stale_sha_fails(tmp_path: Path) -> None:
     errors = validate_instructions.validate_resolved_assembly_manifests(repo)
 
     assert any("resolved assembly manifest bundle sha stale" in error for error in errors)
+
+
+def test_resolved_assembly_invalid_agent_id_fails(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    resolved_path = repo / "paperclips" / "dist" / "gimle.resolved-assembly.json"
+    resolved = json.loads(resolved_path.read_text())
+    resolved["targets"]["codex"]["roles"][0]["agentId"] = "not-a-uuid"
+    resolved_path.write_text(json.dumps(resolved, indent=2, sort_keys=True) + "\n")
+
+    errors = validate_instructions.validate_resolved_assembly_manifests(repo)
+
+    assert any("resolved assembly manifest agentId invalid" in error for error in errors)
 
 
 def test_project_compat_substitutes_manifest_variables(tmp_path: Path) -> None:
@@ -492,6 +506,8 @@ def test_compare_deployed_agent_ids_parse_codex_names(tmp_path: Path) -> None:
 
 def test_compare_deployed_collects_refs_from_resolved_assembly(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
+    (repo / "paperclips" / "codex-agent-ids.env").write_text("# resolved manifest is canonical\n")
+
     refs = compare_deployed_agents.collect_agent_refs(repo, "gimle", "codex", "cx-cto")
 
     assert refs == [
@@ -516,6 +532,7 @@ def test_compare_deployed_path_shape() -> None:
 
 def test_project_deploy_dry_run_uses_resolved_assembly(tmp_path: Path, capsys) -> None:
     repo = make_repo(tmp_path)
+    (repo / "paperclips" / "codex-agent-ids.env").write_text("# resolved manifest is canonical\n")
 
     result = deploy_project_agents.dry_run(repo, "gimle", "codex", "cx-cto")
 
@@ -534,6 +551,16 @@ def test_project_deploy_dry_run_unknown_agent_fails(tmp_path: Path, capsys) -> N
     captured = capsys.readouterr()
     assert result == 1
     assert "unknown agent for codex: missing-agent" in captured.err
+
+
+def test_project_deploy_dry_run_pending_agent_id_fails(tmp_path: Path, capsys) -> None:
+    repo = make_repo(tmp_path)
+
+    result = deploy_project_agents.dry_run(repo, "gimle", "codex", "cx-auditor")
+
+    captured = capsys.readouterr()
+    assert result == 1
+    assert "PENDING cx-auditor: no codex agent id" in captured.out
 
 
 def test_compare_deployed_extracts_api_content_envelope() -> None:
