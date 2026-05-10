@@ -18,7 +18,8 @@
     "paperclips/fragments/local",
     "paperclips/fragments/codex",
     "paperclips/fragments/shared/fragments",
-    "paperclips/fragments/shared/templates"
+    "paperclips/fragments/shared/templates",
+    "paperclips/fragments/targets/codex/shared"
   ],
   "projectLiterals": [
     {
@@ -31,7 +32,7 @@
     {
       "classification": "project-owned",
       "id": "gimle-issue-prefix",
-      "occurrenceCount": 24,
+      "occurrenceCount": 30,
       "paths": [
         "paperclips/fragments/local/test-design-gimle.md",
         "paperclips/fragments/shared/fragments/compliance-enforcement.md",
@@ -42,6 +43,8 @@
         "paperclips/fragments/shared/fragments/role-prime/pythonengineer.md",
         "paperclips/fragments/shared/fragments/role-prime/qaengineer.md",
         "paperclips/fragments/shared/fragments/worktree-discipline.md",
+        "paperclips/fragments/targets/codex/shared/fragments/phase-handoff.md",
+        "paperclips/fragments/targets/codex/shared/fragments/phase-review-discipline.md",
         "paperclips/roles-codex/cx-qa-engineer.md",
         "paperclips/roles/qa-engineer.md"
       ],

@@ -17,6 +17,7 @@ paths:
   project_rules_file: AGENTS.md
 
 mcp:
+  tool_namespace: <mcp-tool-namespace>
   base_required:
     - codebase-memory
     - context7

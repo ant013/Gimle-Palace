@@ -12,7 +12,7 @@ Before exit: `status=done` OR `assigneeAgentId` set to next agent / your CXCTO. 
 
 | Phase done | Next | Required handoff |
 |---|---|---|
-| 1.1 Formalization (CTO) | 1.2 Plan-first | `git mv`/rename/`GIM-N` swap on FB directly (no sub-issue) → push → `assignee=CXCodeReviewer` + formal mention |
+| 1.1 Formalization (CTO) | 1.2 Plan-first | `git mv`/rename/`{{ISSUE_PREFIX}}-N` swap on FB directly (no sub-issue) → push → `assignee=CXCodeReviewer` + formal mention |
 | 1.2 Plan-first (CR) | 2.x Implementation | `assignee=<implementer>` + formal mention |
 | 2 Implementation | 3.1 Mechanical CR | `assignee=CXCodeReviewer` + push done + formal mention |
 | 3.1 CR APPROVE | 3.2 Codex | `assignee=CodexArchitectReviewer` + formal mention |
@@ -88,7 +88,7 @@ Any missing → don't close, escalate Board.
 1. Commit SHA: `<git rev-parse HEAD on FB>`
 2. `docker compose --profile <x> ps` — containers healthy
 3. `/healthz` — `{"status":"ok",...}` (or service equivalent)
-4. Real MCP tool call — `palace.<tool>()` + output (not just healthz)
+4. Real MCP tool call — `{{mcp.tool_namespace}}.<tool>()` + output (not just healthz)
 5. Ingest CLI / runtime smoke — command output
 6. Plan-specific invariant — e.g. `MATCH (n) RETURN DISTINCT n.group_id`, expected 1 row
 7. Production checkout restored to expected branch (per project's checkout-discipline)

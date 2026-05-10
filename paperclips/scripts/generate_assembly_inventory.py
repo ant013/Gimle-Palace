@@ -55,6 +55,7 @@ LITERAL_SCAN_ROOTS = (
     "paperclips/fragments/codex",
     "paperclips/fragments/shared/fragments",
     "paperclips/fragments/shared/templates",
+    "paperclips/fragments/targets/codex/shared",
 )
 
 

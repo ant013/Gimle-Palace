@@ -2,7 +2,7 @@
 
 Any issue requiring **3+ subtasks** OR **handoff between agents** — REQUIRED to use the Codex `create-plan` skill BEFORE decomposing in comments.
 
-**Output:** plan file at `docs/superpowers/plans/YYYY-MM-DD-GIM-NN-<slug>.md` with per-step:
+**Output:** plan file at `docs/superpowers/plans/YYYY-MM-DD-{{ISSUE_PREFIX}}-NN-<slug>.md` with per-step:
 - description + acceptance criteria
 - suggested owner (subagent / agent role)
 - affected files / paths

@@ -17,6 +17,7 @@ paths:
   project_rules_file: AGENTS.md
 
 mcp:
+  tool_namespace: palace
   base_required:
     - codebase-memory
     - context7
