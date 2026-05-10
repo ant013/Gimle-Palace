@@ -64,6 +64,7 @@
       "projectRulesFile": "AGENTS.md"
     },
     "project": {
+      "companyId": "9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64",
       "displayName": "Gimle",
       "integrationBranch": "develop",
       "issuePrefix": "GIM",
@@ -74,7 +75,7 @@
   "project": "gimle",
   "schemaVersion": 1,
   "sourceManifest": "paperclips/projects/gimle/paperclip-agent-assembly.yaml",
-  "sourceManifestSha256": "354298f6c226229acc2c88b838ad464cb7a0e6c166fd7fb354111d3d7ed2c123",
+  "sourceManifestSha256": "9f5823f6916655ee6901b0149c36b9017654fb8672512dbdbc1eb60f7fac9aae",
   "targets": {
     "claude": {
       "adapterType": "claude_local",

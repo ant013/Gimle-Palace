@@ -3,6 +3,7 @@ project:
   display_name: Gimle
   system_name: Gimle-Palace
   issue_prefix: GIM
+  company_id: 9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64
   integration_branch: develop
   specs_dir: docs/superpowers/specs
   plans_dir: docs/superpowers/plans

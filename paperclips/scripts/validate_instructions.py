@@ -45,7 +45,7 @@ REQUIRED_PROJECT_MANIFEST_SECTIONS = (
 )
 
 REQUIRED_PROJECT_MANIFEST_KEYS = {
-    "project": ("key", "display_name", "issue_prefix", "integration_branch", "specs_dir", "plans_dir"),
+    "project": ("key", "display_name", "issue_prefix", "company_id", "integration_branch", "specs_dir", "plans_dir"),
     "domain": ("wallet_target_short", "wallet_target_name", "wallet_target_slug"),
     "evidence": (
         "merge_without_smoke_issue",
@@ -315,6 +315,7 @@ def validate_resolved_assembly_manifests(repo_root: Path) -> list[str]:
         if "_template" in manifest.parts:
             continue
         project = manifest.parent.name
+        manifest_text = manifest.read_text()
         resolved_path = repo_root / "paperclips" / "dist" / f"{project}.resolved-assembly.json"
         if not resolved_path.is_file():
             errors.append(f"missing resolved assembly manifest: {resolved_path.relative_to(repo_root)}")
@@ -336,8 +337,16 @@ def validate_resolved_assembly_manifests(repo_root: Path) -> list[str]:
         if source_manifest != str(manifest.relative_to(repo_root)):
             errors.append(f"resolved assembly manifest sourceManifest mismatch: {resolved_path.relative_to(repo_root)}")
         source_sha = resolved.get("sourceManifestSha256")
-        if source_sha != sha256_text(manifest.read_text()):
+        if source_sha != sha256_text(manifest_text):
             errors.append(f"resolved assembly manifest sourceManifestSha256 stale: {resolved_path.relative_to(repo_root)}")
+        manifest_company_match = re.search(r"^\s{2}company_id:\s+(.+?)\s*$", manifest_text, re.MULTILINE)
+        manifest_company_id = manifest_company_match.group(1).strip("\"'") if manifest_company_match else ""
+        resolved_company_id = resolved.get("parameters", {}).get("project", {}).get("companyId")
+        if resolved_company_id != manifest_company_id:
+            errors.append(
+                f"resolved assembly manifest project.companyId mismatch for "
+                f"{resolved_path.relative_to(repo_root)}: {resolved_company_id} != {manifest_company_id}"
+            )
 
         compatibility = resolved.get("compatibility", {})
         compatibility_inputs = compatibility.get("inputs", {}) if isinstance(compatibility, dict) else {}

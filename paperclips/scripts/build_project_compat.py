@@ -403,6 +403,7 @@ def resolved_assembly(
                 "displayName": manifest_values.get("project.display_name", ""),
                 "systemName": manifest_values.get("project.system_name", ""),
                 "issuePrefix": manifest_values.get("project.issue_prefix", ""),
+                "companyId": manifest_values.get("project.company_id", ""),
                 "integrationBranch": manifest_values.get("project.integration_branch", ""),
             },
             "paths": {

@@ -3,6 +3,7 @@ project:
   display_name: <Project Display Name>
   system_name: <Project System Name>
   issue_prefix: <ISSUE>
+  company_id: <paperclip-company-id>
   integration_branch: develop
   specs_dir: docs/superpowers/specs
   plans_dir: docs/superpowers/plans

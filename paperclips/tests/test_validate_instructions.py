@@ -110,6 +110,7 @@ def test_project_compat_writes_resolved_assembly(tmp_path: Path) -> None:
 
     resolved_path = repo / "paperclips" / "dist" / "gimle.resolved-assembly.json"
     resolved = json.loads(resolved_path.read_text())
+    assert resolved["parameters"]["project"]["companyId"] == "9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64"
     assert resolved["capabilities"]["mcp"]["baseRequired"] == list(validate_instructions.REQUIRED_PROJECT_MCP)
     assert resolved["capabilities"]["mcp"]["codebaseMemoryProjects"]["primary"] == "repos-gimle"
     assert resolved["targets"]["codex"]["adapterType"] == "codex_local"
@@ -123,6 +124,22 @@ def test_project_compat_writes_resolved_assembly(tmp_path: Path) -> None:
     assert cx_cto["agentName"] == "cx-cto"
     assert cx_cto["agentId"] == "da97dbd9-6627-48d0-b421-66af0750eacf"
     assert resolved["compatibility"]["inputs"]["codexAgentIdsEnv"]["path"] == "paperclips/codex-agent-ids.env"
+
+
+def test_project_manifest_missing_company_id_fails(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    manifest = repo / "paperclips" / "projects" / "gimle" / "paperclip-agent-assembly.yaml"
+    manifest.write_text(
+        manifest.read_text().replace(
+            "  company_id: 9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64\n",
+            "",
+            1,
+        )
+    )
+
+    errors = validate_instructions.validate_project_capability_manifests(repo)
+
+    assert any("project manifest missing project.company_id" in error for error in errors)
 
 
 def test_resolved_assembly_stale_sha_fails(tmp_path: Path) -> None:
@@ -159,6 +176,18 @@ def test_resolved_assembly_missing_agent_id_fails(tmp_path: Path) -> None:
     errors = validate_instructions.validate_resolved_assembly_manifests(repo)
 
     assert any("resolved assembly manifest role missing agentId" in error for error in errors)
+
+
+def test_resolved_assembly_company_id_mismatch_fails(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    resolved_path = repo / "paperclips" / "dist" / "gimle.resolved-assembly.json"
+    resolved = json.loads(resolved_path.read_text())
+    resolved["parameters"]["project"]["companyId"] = "other-company-id"
+    resolved_path.write_text(json.dumps(resolved, indent=2, sort_keys=True) + "\n")
+
+    errors = validate_instructions.validate_resolved_assembly_manifests(repo)
+
+    assert any("resolved assembly manifest project.companyId mismatch" in error for error in errors)
 
 
 def test_resolved_assembly_stale_compatibility_input_fails(tmp_path: Path) -> None:
@@ -594,6 +623,67 @@ def test_compare_deployed_path_shape() -> None:
     )
 
     assert path == Path("/paperclip/companies/company-id/agents/agent-id/instructions/AGENTS.md")
+
+
+def test_compare_deployed_uses_project_company_id_for_local_source(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    future_project = repo / "paperclips" / "projects" / "future"
+    future_project.mkdir(parents=True, exist_ok=True)
+    future_manifest = future_project / "paperclip-agent-assembly.yaml"
+    future_manifest_text = (
+        (repo / "paperclips" / "projects" / "gimle" / "paperclip-agent-assembly.yaml")
+        .read_text()
+        .replace("  key: gimle\n", "  key: future\n", 1)
+        .replace("  display_name: Gimle\n", "  display_name: Future\n", 1)
+        .replace("  system_name: Gimle-Palace\n", "  system_name: Future-Palace\n", 1)
+        .replace("  issue_prefix: GIM\n", "  issue_prefix: FUT\n", 1)
+        .replace(
+            "  company_id: 9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64\n",
+            "  company_id: future-company-id\n",
+            1,
+        )
+        .replace(
+            "  overlay_root: paperclips/projects/gimle/overlays\n",
+            "  overlay_root: paperclips/projects/future/overlays\n",
+            1,
+        )
+    )
+    future_manifest.write_text(future_manifest_text)
+
+    resolved = json.loads((repo / "paperclips" / "dist" / "gimle.resolved-assembly.json").read_text())
+    resolved["project"] = "future"
+    resolved["sourceManifest"] = "paperclips/projects/future/paperclip-agent-assembly.yaml"
+    resolved["sourceManifestSha256"] = compare_deployed_agents.sha256_text(future_manifest_text)
+    resolved["parameters"]["project"]["key"] = "future"
+    resolved["parameters"]["project"]["displayName"] = "Future"
+    resolved["parameters"]["project"]["systemName"] = "Future-Palace"
+    resolved["parameters"]["project"]["issuePrefix"] = "FUT"
+    resolved["parameters"]["project"]["companyId"] = "future-company-id"
+    future_resolved_path = repo / "paperclips" / "dist" / "future.resolved-assembly.json"
+    future_resolved_path.write_text(json.dumps(resolved, indent=2, sort_keys=True) + "\n")
+
+    refs = compare_deployed_agents.collect_agent_refs(repo, "future", "codex", "cx-cto")
+    company_id = compare_deployed_agents.resolve_company_id(repo, "future", None)
+    deployed_path = compare_deployed_agents.deployed_agents_path(
+        repo / ".paperclip",
+        company_id,
+        refs[0].agent_id,
+    )
+    deployed_path.parent.mkdir(parents=True, exist_ok=True)
+    deployed_path.write_text("future deployed instructions\n")
+
+    deployed, source_label = compare_deployed_agents.load_deployed_instructions(
+        refs[0],
+        "local",
+        repo / ".paperclip",
+        company_id,
+        "https://paperclip.invalid",
+        None,
+    )
+
+    assert deployed == "future deployed instructions\n"
+    assert "future-company-id" in source_label
+    assert "9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64" not in source_label
 
 
 def test_project_deploy_dry_run_uses_resolved_assembly(tmp_path: Path, capsys) -> None:

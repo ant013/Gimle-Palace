@@ -16,9 +16,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-DEFAULT_COMPANY_ID = "9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64"
-
-
 @dataclass(frozen=True)
 class AgentRef:
     target: str
@@ -69,6 +66,28 @@ def load_codex_agent_ids(env_file: Path) -> dict[str, str]:
 
 def resolved_assembly_path(repo_root: Path, project: str) -> Path:
     return repo_root / "paperclips" / "dist" / f"{project}.resolved-assembly.json"
+
+
+def load_resolved_company_id(repo_root: Path, project: str) -> str | None:
+    path = resolved_assembly_path(repo_root, project)
+    if not path.is_file():
+        return None
+    data = json.loads(path.read_text())
+    company_id = data.get("parameters", {}).get("project", {}).get("companyId")
+    if isinstance(company_id, str) and company_id:
+        return company_id
+    return None
+
+
+def resolve_company_id(repo_root: Path, project: str, explicit_company_id: str | None) -> str:
+    if explicit_company_id:
+        return explicit_company_id
+    resolved_company_id = load_resolved_company_id(repo_root, project)
+    if resolved_company_id:
+        return resolved_company_id
+    raise ValueError(
+        f"missing company id for project {project}; rebuild resolved assembly or pass --company-id"
+    )
 
 
 def load_resolved_output_paths(repo_root: Path, project: str, target: str) -> dict[str, Path]:
@@ -272,7 +291,7 @@ def main() -> int:
         type=Path,
         default=Path.home() / ".paperclip" / "instances" / "default",
     )
-    parser.add_argument("--company-id", default=DEFAULT_COMPANY_ID)
+    parser.add_argument("--company-id")
     parser.add_argument("--api-base", default=os.environ.get("PAPERCLIP_API_URL", "https://paperclip.ant013.work"))
     parser.add_argument("--api-key-env", default="PAPERCLIP_API_KEY")
     parser.add_argument("--snapshot-dir", type=Path)
@@ -297,13 +316,20 @@ def main() -> int:
 
     failures = 0
     api_key = os.environ.get(args.api_key_env)
+    company_id = ""
+    if args.source == "local":
+        try:
+            company_id = resolve_company_id(repo_root, args.project, args.company_id)
+        except ValueError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
     for ref in refs:
         label = f"{ref.target}:{ref.name}"
         deployed, source_label = load_deployed_instructions(
             ref,
             args.source,
             args.paperclip_data_dir,
-            args.company_id,
+            company_id,
             args.api_base,
             api_key,
         )
