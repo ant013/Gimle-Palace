@@ -1,0 +1,22 @@
+{
+  "api_base": "https://paperclip.ant013.work",
+  "company_id": "8f55e80b-0264-4ab6-9d56-8b2652f18005",
+  "created_at": "2026-05-10T06:23:59Z",
+  "gate": "C-source-issue-create",
+  "issue": {
+    "assigneeAgentId": null,
+    "createdAt": "2026-05-10T06:23:58.670Z",
+    "id": "5fa3b1ca-0a07-4686-9db7-f42686a6c041",
+    "priority": "medium",
+    "projectId": "64871690-2f2d-4fbd-a30d-975e6bbccec9",
+    "status": "backlog",
+    "title": "UnstoppableAudit bootstrap",
+    "updatedAt": "2026-05-10T06:23:58.670Z"
+  },
+  "live_mutation": true,
+  "mode": "live",
+  "ok": true,
+  "payloadHash": "198c69fa34fa71e7fb81e37917320e5b87cfbff7e9c98dff9f9c4c6e88ceab59",
+  "project_id": "64871690-2f2d-4fbd-a30d-975e6bbccec9",
+  "team": "UnstoppableAudit"
+}

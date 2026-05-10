@@ -342,6 +342,77 @@ def test_create_source_issue_posts_minimal_payload(monkeypatch):
     ]
 
 
+def test_icon_mapping_uses_paperclip_supported_icons():
+    _, dry_run = load_manifests()
+    supported = {
+        "bot",
+        "cpu",
+        "brain",
+        "zap",
+        "rocket",
+        "code",
+        "terminal",
+        "shield",
+        "eye",
+        "search",
+        "wrench",
+        "hammer",
+        "lightbulb",
+        "sparkles",
+        "star",
+        "heart",
+        "flame",
+        "bug",
+        "cog",
+        "database",
+        "globe",
+        "lock",
+        "mail",
+        "message-square",
+        "file-code",
+        "git-branch",
+        "package",
+        "puzzle",
+        "target",
+        "wand",
+        "atom",
+        "circuit-board",
+        "radar",
+        "swords",
+        "telescope",
+        "microscope",
+        "crown",
+        "gem",
+        "hexagon",
+        "pentagon",
+        "fingerprint",
+    }
+
+    icons = {apply.icon_for_agent(agent) for agent in dry_run["agents"]}
+
+    assert icons <= supported
+
+
+def test_resume_plan_skips_successful_operations_and_preserves_created_ids():
+    preflight, dry_run = load_manifests()
+    plan = apply.build_apply_plan(preflight, dry_run, Path("rollback.json"))
+    previous = {
+        "created_agent_ids": {"AUCEO": "auceo-id", "UWACTO": "uwacto-id"},
+        "results": [
+            {"index": 1, "ok": True},
+            {"index": 2, "ok": True},
+            {"index": 3, "ok": True},
+            {"index": 4, "ok": False},
+        ],
+    }
+
+    resumed_plan, created_ids, meta = apply.resume_plan(plan, previous)
+
+    assert [operation["agentName"] for operation in resumed_plan["operations"][:2]] == ["UWICTO", "UWACryptoAuditor"]
+    assert created_ids == {"AUCEO": "auceo-id", "UWACTO": "uwacto-id"}
+    assert meta["completed_indexes"] == [1, 2, 3]
+
+
 def test_execute_operations_stops_on_pending_approval(monkeypatch):
     preflight, dry_run = load_manifests()
     plan = apply.build_apply_plan(preflight, dry_run, Path("rollback.json"))

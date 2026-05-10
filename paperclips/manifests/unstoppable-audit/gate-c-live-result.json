@@ -1,0 +1,327 @@
+{
+  "created_agent_ids": {
+    "AUCEO": "c430529b-f064-4c5b-8b5b-302c594890b7",
+    "UWACTO": "e63b7f27-cc4f-41f4-8883-b5b9677984d9",
+    "UWACryptoAuditor": "83e44735-7f4f-4673-b5a7-c3667747d21b",
+    "UWAInfraEngineer": "5f0709f8-0b05-43e7-8711-6df618b95f69",
+    "UWAKotlinAuditor": "18f0ee3e-0fd9-40e7-a3b4-99a4ad3ab400",
+    "UWAQAEngineer": "8089992b-8a51-4386-b180-9368b67bbc51",
+    "UWAResearchAgent": "3891e41b-028e-4348-b4d0-10d57251f600",
+    "UWASecurityAuditor": "fc30ec70-13a4-440f-b13e-e03e17cb63f4",
+    "UWATechnicalWriter": "ae159ee7-05e2-48af-abf9-5bbeef4017c4",
+    "UWICTO": "9f0f6fc5-e9ef-4664-ac54-15ffc64069bc",
+    "UWICryptoAuditor": "f9f115e8-2ffb-4efb-8fb1-d8b443a3b829",
+    "UWIInfraEngineer": "339e9d3f-48c0-4348-a8da-5337e6f29491",
+    "UWIQAEngineer": "d928e408-ab63-4699-8ec2-c6ac7558c268",
+    "UWIResearchAgent": "0be9b9c5-de38-45ce-8b33-25bb39434d50",
+    "UWISecurityAuditor": "5dd3e733-82c7-472c-8474-8605b916ead2",
+    "UWISwiftAuditor": "a6e2aec6-08d9-43ab-8496-d24ce99ac0de",
+    "UWITechnicalWriter": "a881b5bd-f1ef-4023-bdd7-5d9b567642d0"
+  },
+  "created_at": "2026-05-10T06:25:47Z",
+  "executed_count": 14,
+  "gate": "C-live-apply",
+  "mode": "live",
+  "ok": true,
+  "operation_count": 14,
+  "results": [
+    {
+      "agentId": "83e44735-7f4f-4673-b5a7-c3667747d21b",
+      "agentName": "UWACryptoAuditor",
+      "index": 1,
+      "kind": "hire_agent",
+      "ok": true,
+      "payloadHash": "dd1c8de37ba55f271f54af690561b0aaef3480550411541c58ae61f4e1b358d7",
+      "readback": {
+        "checked": true,
+        "divergences": [],
+        "ok": true
+      },
+      "response": {
+        "agentId": "83e44735-7f4f-4673-b5a7-c3667747d21b",
+        "agentName": "UWACryptoAuditor",
+        "agentStatus": "idle",
+        "approvalId": null,
+        "approvalStatus": null
+      }
+    },
+    {
+      "agentId": "5f0709f8-0b05-43e7-8711-6df618b95f69",
+      "agentName": "UWAInfraEngineer",
+      "index": 2,
+      "kind": "hire_agent",
+      "ok": true,
+      "payloadHash": "481eaf2c9a01f18068fe72f17f172b03d20872bcd52b22b58ed3f58debec99e9",
+      "readback": {
+        "checked": true,
+        "divergences": [],
+        "ok": true
+      },
+      "response": {
+        "agentId": "5f0709f8-0b05-43e7-8711-6df618b95f69",
+        "agentName": "UWAInfraEngineer",
+        "agentStatus": "idle",
+        "approvalId": null,
+        "approvalStatus": null
+      }
+    },
+    {
+      "agentId": "18f0ee3e-0fd9-40e7-a3b4-99a4ad3ab400",
+      "agentName": "UWAKotlinAuditor",
+      "index": 3,
+      "kind": "hire_agent",
+      "ok": true,
+      "payloadHash": "a3829b3a0758332a909602447242ff436ee4deb3964f6309336fc55a35fcef48",
+      "readback": {
+        "checked": true,
+        "divergences": [],
+        "ok": true
+      },
+      "response": {
+        "agentId": "18f0ee3e-0fd9-40e7-a3b4-99a4ad3ab400",
+        "agentName": "UWAKotlinAuditor",
+        "agentStatus": "idle",
+        "approvalId": null,
+        "approvalStatus": null
+      }
+    },
+    {
+      "agentId": "8089992b-8a51-4386-b180-9368b67bbc51",
+      "agentName": "UWAQAEngineer",
+      "index": 4,
+      "kind": "hire_agent",
+      "ok": true,
+      "payloadHash": "210b2a6a942942793e7a0451dbe270b6877b07a671e8db9b99da53c6490cc5f2",
+      "readback": {
+        "checked": true,
+        "divergences": [],
+        "ok": true
+      },
+      "response": {
+        "agentId": "8089992b-8a51-4386-b180-9368b67bbc51",
+        "agentName": "UWAQAEngineer",
+        "agentStatus": "idle",
+        "approvalId": null,
+        "approvalStatus": null
+      }
+    },
+    {
+      "agentId": "3891e41b-028e-4348-b4d0-10d57251f600",
+      "agentName": "UWAResearchAgent",
+      "index": 5,
+      "kind": "hire_agent",
+      "ok": true,
+      "payloadHash": "9a57ba8e442ffadd3d8d04865258e40d645b1a9c18f1458bed05b1cf6cecb602",
+      "readback": {
+        "checked": true,
+        "divergences": [],
+        "ok": true
+      },
+      "response": {
+        "agentId": "3891e41b-028e-4348-b4d0-10d57251f600",
+        "agentName": "UWAResearchAgent",
+        "agentStatus": "idle",
+        "approvalId": null,
+        "approvalStatus": null
+      }
+    },
+    {
+      "agentId": "fc30ec70-13a4-440f-b13e-e03e17cb63f4",
+      "agentName": "UWASecurityAuditor",
+      "index": 6,
+      "kind": "hire_agent",
+      "ok": true,
+      "payloadHash": "4db0aaee3f0b91fa81cc45c05b30ef116f8b72b412c9ed329b2a7248301a8c43",
+      "readback": {
+        "checked": true,
+        "divergences": [],
+        "ok": true
+      },
+      "response": {
+        "agentId": "fc30ec70-13a4-440f-b13e-e03e17cb63f4",
+        "agentName": "UWASecurityAuditor",
+        "agentStatus": "idle",
+        "approvalId": null,
+        "approvalStatus": null
+      }
+    },
+    {
+      "agentId": "ae159ee7-05e2-48af-abf9-5bbeef4017c4",
+      "agentName": "UWATechnicalWriter",
+      "index": 7,
+      "kind": "hire_agent",
+      "ok": true,
+      "payloadHash": "882785dd444affb4adeb8a14fef458944d6b0ded0e1389932747f52e033f1635",
+      "readback": {
+        "checked": true,
+        "divergences": [],
+        "ok": true
+      },
+      "response": {
+        "agentId": "ae159ee7-05e2-48af-abf9-5bbeef4017c4",
+        "agentName": "UWATechnicalWriter",
+        "agentStatus": "idle",
+        "approvalId": null,
+        "approvalStatus": null
+      }
+    },
+    {
+      "agentId": "f9f115e8-2ffb-4efb-8fb1-d8b443a3b829",
+      "agentName": "UWICryptoAuditor",
+      "index": 8,
+      "kind": "hire_agent",
+      "ok": true,
+      "payloadHash": "334020c84ebae7f5e8eeeead776ae8fae608b2d0b4b1d64229b025e01abe73ea",
+      "readback": {
+        "checked": true,
+        "divergences": [],
+        "ok": true
+      },
+      "response": {
+        "agentId": "f9f115e8-2ffb-4efb-8fb1-d8b443a3b829",
+        "agentName": "UWICryptoAuditor",
+        "agentStatus": "idle",
+        "approvalId": null,
+        "approvalStatus": null
+      }
+    },
+    {
+      "agentId": "339e9d3f-48c0-4348-a8da-5337e6f29491",
+      "agentName": "UWIInfraEngineer",
+      "index": 9,
+      "kind": "hire_agent",
+      "ok": true,
+      "payloadHash": "812db35da085e882e7e82d919d4dc3336bd650175e14da06dc2a8f9e39cdad5f",
+      "readback": {
+        "checked": true,
+        "divergences": [],
+        "ok": true
+      },
+      "response": {
+        "agentId": "339e9d3f-48c0-4348-a8da-5337e6f29491",
+        "agentName": "UWIInfraEngineer",
+        "agentStatus": "idle",
+        "approvalId": null,
+        "approvalStatus": null
+      }
+    },
+    {
+      "agentId": "d928e408-ab63-4699-8ec2-c6ac7558c268",
+      "agentName": "UWIQAEngineer",
+      "index": 10,
+      "kind": "hire_agent",
+      "ok": true,
+      "payloadHash": "4587411019ad7836601be9d140b28594eb336ce36053931691d3097f0d0d99c4",
+      "readback": {
+        "checked": true,
+        "divergences": [],
+        "ok": true
+      },
+      "response": {
+        "agentId": "d928e408-ab63-4699-8ec2-c6ac7558c268",
+        "agentName": "UWIQAEngineer",
+        "agentStatus": "idle",
+        "approvalId": null,
+        "approvalStatus": null
+      }
+    },
+    {
+      "agentId": "0be9b9c5-de38-45ce-8b33-25bb39434d50",
+      "agentName": "UWIResearchAgent",
+      "index": 11,
+      "kind": "hire_agent",
+      "ok": true,
+      "payloadHash": "1bb3d1680d90fb915c5fe20e83220ee3818bdf4d51920e57e42caf924c0f50fa",
+      "readback": {
+        "checked": true,
+        "divergences": [],
+        "ok": true
+      },
+      "response": {
+        "agentId": "0be9b9c5-de38-45ce-8b33-25bb39434d50",
+        "agentName": "UWIResearchAgent",
+        "agentStatus": "idle",
+        "approvalId": null,
+        "approvalStatus": null
+      }
+    },
+    {
+      "agentId": "5dd3e733-82c7-472c-8474-8605b916ead2",
+      "agentName": "UWISecurityAuditor",
+      "index": 12,
+      "kind": "hire_agent",
+      "ok": true,
+      "payloadHash": "d5e6c91a7dccd49c3611308b610f2d4ee2fe14540f55967d786e8d41ff2d1c2d",
+      "readback": {
+        "checked": true,
+        "divergences": [],
+        "ok": true
+      },
+      "response": {
+        "agentId": "5dd3e733-82c7-472c-8474-8605b916ead2",
+        "agentName": "UWISecurityAuditor",
+        "agentStatus": "idle",
+        "approvalId": null,
+        "approvalStatus": null
+      }
+    },
+    {
+      "agentId": "a6e2aec6-08d9-43ab-8496-d24ce99ac0de",
+      "agentName": "UWISwiftAuditor",
+      "index": 13,
+      "kind": "hire_agent",
+      "ok": true,
+      "payloadHash": "f08dcee1c1fb6f48be2230a4f597f4cb549010e6bf5cb3b3bdf052d0115fb25a",
+      "readback": {
+        "checked": true,
+        "divergences": [],
+        "ok": true
+      },
+      "response": {
+        "agentId": "a6e2aec6-08d9-43ab-8496-d24ce99ac0de",
+        "agentName": "UWISwiftAuditor",
+        "agentStatus": "idle",
+        "approvalId": null,
+        "approvalStatus": null
+      }
+    },
+    {
+      "agentId": "a881b5bd-f1ef-4023-bdd7-5d9b567642d0",
+      "agentName": "UWITechnicalWriter",
+      "index": 14,
+      "kind": "hire_agent",
+      "ok": true,
+      "payloadHash": "fcebd65383e191e7ba375e3a750f10661fe1e8225d4e0036ab798d735eece7f8",
+      "readback": {
+        "checked": true,
+        "divergences": [],
+        "ok": true
+      },
+      "response": {
+        "agentId": "a881b5bd-f1ef-4023-bdd7-5d9b567642d0",
+        "agentName": "UWITechnicalWriter",
+        "agentStatus": "idle",
+        "approvalId": null,
+        "approvalStatus": null
+      }
+    }
+  ],
+  "resumed_from": {
+    "completed_indexes": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "created_agent_ids": {
+      "AUCEO": "c430529b-f064-4c5b-8b5b-302c594890b7",
+      "UWACTO": "e63b7f27-cc4f-41f4-8883-b5b9677984d9",
+      "UWICTO": "9f0f6fc5-e9ef-4664-ac54-15ffc64069bc"
+    },
+    "remaining_count": 14,
+    "source_result_hash": "59747a92060e06339015e40695bc04df9815de380c89bd9f974d3f02548dbc91"
+  },
+  "source_plan_hash": "62e3f39018b63cd52eed30bf9cddf24a87510a1ba08535080ef7fe498673b0c0",
+  "stopped_reason": null,
+  "team": "UnstoppableAudit"
+}

@@ -1,21 +1,31 @@
 {
   "api_base": "https://paperclip.ant013.work",
-  "blockers": [
-    "no plausible UnstoppableAudit source issue found"
+  "blockers": [],
+  "candidates": [
+    {
+      "assigneeAgentId": null,
+      "createdAt": "2026-05-10T06:23:58.670Z",
+      "id": "5fa3b1ca-0a07-4686-9db7-f42686a6c041",
+      "priority": "medium",
+      "projectId": "64871690-2f2d-4fbd-a30d-975e6bbccec9",
+      "score": 10,
+      "status": "backlog",
+      "title": "UnstoppableAudit bootstrap",
+      "updatedAt": "2026-05-10T06:23:58.670Z"
+    }
   ],
-  "candidates": [],
-  "checked_at": "2026-05-10T06:21:42Z",
+  "checked_at": "2026-05-10T06:26:02Z",
   "company_id": "8f55e80b-0264-4ab6-9d56-8b2652f18005",
   "gate": "C-source-issue-discovery",
   "live_mutation": false,
   "mode": "safe-read-only",
-  "ok": false,
+  "ok": true,
   "project_id": "64871690-2f2d-4fbd-a30d-975e6bbccec9",
   "queries": [
     {
-      "filtered_count": 0,
+      "filtered_count": 1,
       "query": "UnstoppableAudit",
-      "result_count": 0
+      "result_count": 1
     },
     {
       "filtered_count": 0,
@@ -28,11 +38,21 @@
       "result_count": 0
     },
     {
-      "filtered_count": 0,
+      "filtered_count": 1,
       "query": "audit bootstrap",
-      "result_count": 0
+      "result_count": 1
     }
   ],
-  "selected": null,
+  "selected": {
+    "assigneeAgentId": null,
+    "createdAt": "2026-05-10T06:23:58.670Z",
+    "id": "5fa3b1ca-0a07-4686-9db7-f42686a6c041",
+    "priority": "medium",
+    "projectId": "64871690-2f2d-4fbd-a30d-975e6bbccec9",
+    "score": 10,
+    "status": "backlog",
+    "title": "UnstoppableAudit bootstrap",
+    "updatedAt": "2026-05-10T06:23:58.670Z"
+  },
   "team": "UnstoppableAudit"
 }

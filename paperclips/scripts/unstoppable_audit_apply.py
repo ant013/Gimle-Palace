@@ -147,13 +147,13 @@ def icon_for_agent(agent: dict[str, Any]) -> str:
         return "crown"
     return {
         "coordination": "crown",
-        "code-audit": "search-code",
+        "code-audit": "file-code",
         "security-audit": "shield",
-        "crypto-audit": "key-round",
+        "crypto-audit": "fingerprint",
         "infra": "wrench",
         "research": "search",
         "qa": "bug",
-        "writer": "file-text",
+        "writer": "message-square",
     }.get(family, "bot")
 
 
@@ -451,9 +451,10 @@ def execute_operations(
     company_id: str,
     replacements: dict[str, str],
     *,
+    initial_created_agent_ids: dict[str, str] | None = None,
     stop_on_pending_approval: bool = True,
 ) -> dict[str, Any]:
-    created_agent_ids: dict[str, str] = {}
+    created_agent_ids: dict[str, str] = dict(initial_created_agent_ids or {})
     results: list[dict[str, Any]] = []
     ok = True
     stopped_reason = None
@@ -523,6 +524,33 @@ def execute_operations(
         "stopped_reason": stopped_reason,
         "results": results,
     }
+
+
+def resume_plan(plan: dict[str, Any], previous_result: dict[str, Any]) -> tuple[dict[str, Any], dict[str, str], dict[str, Any]]:
+    completed_indexes = {
+        int(result["index"])
+        for result in previous_result.get("results", [])
+        if result.get("ok") and isinstance(result.get("index"), int)
+    }
+    resumed_plan = copy.deepcopy(plan)
+    resumed_plan["operations"] = [
+        operation
+        for index, operation in enumerate(plan.get("operations", []), start=1)
+        if index not in completed_indexes
+    ]
+    resumed_plan["operation_count"] = len(resumed_plan["operations"])
+    created_agent_ids = {
+        str(name): str(agent_id)
+        for name, agent_id in (previous_result.get("created_agent_ids") or {}).items()
+        if agent_id
+    }
+    resume_meta = {
+        "source_result_hash": team.sha256_json(previous_result),
+        "completed_indexes": sorted(completed_indexes),
+        "remaining_count": len(resumed_plan["operations"]),
+        "created_agent_ids": created_agent_ids,
+    }
+    return resumed_plan, created_agent_ids, resume_meta
 
 
 def find_agent_by_id(live_agents: list[dict[str, Any]], agent_id: str) -> dict[str, Any] | None:
@@ -834,6 +862,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     apply.add_argument("--source-issue-id", default="")
     apply.add_argument("--redacted-reports-chat-id", default="")
     apply.add_argument("--ops-chat-id", default="")
+    apply.add_argument("--resume-result", type=Path)
     apply.add_argument("--continue-after-pending-approval", action="store_true")
     apply.add_argument("--allow-live", action="store_true")
     apply.add_argument("--confirm", default="")
@@ -927,14 +956,23 @@ def command_apply(args: argparse.Namespace) -> int:
     config = team.load_config(args.config)
     company_id = args.company_id or str(team.prereq.get_path(config, "paperclip.company_id"))
     replacements = runtime_replacements(args, config)
+    initial_created_agent_ids: dict[str, str] | None = None
+    if args.resume_result:
+        previous_result = read_json(args.resume_result)
+        plan, initial_created_agent_ids, resume_meta = resume_plan(plan, previous_result)
+    else:
+        resume_meta = None
     result = execute_operations(
         plan,
         args.api_base,
         token,
         company_id,
         replacements,
+        initial_created_agent_ids=initial_created_agent_ids,
         stop_on_pending_approval=not args.continue_after_pending_approval,
     )
+    if resume_meta:
+        result["resumed_from"] = resume_meta
     write_json(args.result_manifest, result)
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0 if result["ok"] else 1
