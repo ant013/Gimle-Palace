@@ -1142,6 +1142,7 @@ async def test_ownerless_alert_state_persisted_before_later_timeout(tmp_path: Pa
             **{
                 **cfg.handoff.__dict__,
                 "handoff_ownerless_enabled": True,
+                "handoff_auto_repair_enabled": True,
             }
         ),
     )
@@ -1201,6 +1202,7 @@ async def test_ownerless_alert_not_reposted_after_reload_same_snapshot(tmp_path:
             **{
                 **cfg.handoff.__dict__,
                 "handoff_ownerless_enabled": True,
+                "handoff_auto_repair_enabled": True,
             }
         ),
     )

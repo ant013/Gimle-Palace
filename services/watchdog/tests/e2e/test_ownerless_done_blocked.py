@@ -249,3 +249,46 @@ async def test_ownerless_follow_up_done_issue_does_not_post_alert(mock_paperclip
     assert pstate.comments_posted == []
     key = f"issue-ol-follow-up:{FindingType.OWNERLESS_COMPLETION.value}"
     assert key not in state.alerted_handoffs
+
+
+@pytest.mark.asyncio
+async def test_ownerless_alert_only_records_state_without_comment(mock_paperclip, tmp_path: Path):
+    base_url, pstate = mock_paperclip
+    pstate.issues["issue-ol-root"] = {
+        "assigneeAgentId": CLAUDE_CTO_UUID,
+        "status": "done",
+        "issueNumber": 105,
+        "updatedAt": T0.isoformat().replace("+00:00", "Z"),
+        "executionRunId": None,
+    }
+    pstate.issue_comments["issue-ol-root"] = []
+    pstate.agents[COMPANY_ID] = [{"id": CLAUDE_CTO_UUID, "name": "CTO", "status": "idle"}]
+
+    cfg = Config(
+        version=1,
+        paperclip=PaperclipConfig(base_url="", api_key=None),
+        companies=_cfg(tmp_path).companies,
+        daemon=DaemonConfig(poll_interval_seconds=60),
+        cooldowns=_cfg(tmp_path).cooldowns,
+        logging=_cfg(tmp_path).logging,
+        escalation=EscalationConfig(post_comment_on_issue=False, comment_marker="<!-- m -->"),
+        handoff=HandoffConfig(
+            handoff_ownerless_enabled=True,
+            handoff_auto_repair_enabled=False,
+            handoff_repair_delay_min=60,
+            handoff_escalation_delay_min=90,
+        ),
+    )
+    path = tmp_path / "state.json"
+    state = State.load(path)
+    client = PaperclipClient(base_url=base_url, api_key=None)
+
+    from gimle_watchdog import daemon
+
+    with freeze_time(T0):
+        await daemon._run_tier_pass(cfg, state, client, T0, tmp_path)
+
+    reloaded = State.load(path)
+    key = f"issue-ol-root:{FindingType.OWNERLESS_COMPLETION.value}"
+    assert key in reloaded.alerted_handoffs
+    assert pstate.comments_posted == []

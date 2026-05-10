@@ -116,6 +116,7 @@ class State:
             agent_wakes=agent_wakes,
             escalated_issues=dict(raw.get("escalated_issues") or {}),
             alerted_handoffs=dict(raw.get("alerted_handoffs") or {}),
+            recovery_baseline_completed=bool(raw.get("recovery_baseline_completed", False)),
         )
 
     def save(self) -> None:
@@ -129,6 +130,7 @@ class State:
             },
             "escalated_issues": self.escalated_issues,
             "alerted_handoffs": self.alerted_handoffs,
+            "recovery_baseline_completed": self.recovery_baseline_completed,
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp_fd, tmp_name = tempfile.mkstemp(

@@ -168,6 +168,22 @@ async def _handle_tier_finding(
         if not post_budget.reserve(issue_id, ftype):
             return
 
+        if isinstance(finding, OwnerlessCompletionFinding) and not auto_repair_enabled:
+            state.record_handoff_alert(
+                issue_id,
+                ftype,
+                snapshot,
+                now_server,
+                actionable=False,
+            )
+            state.save()
+            log.info(
+                "tier_alert_suppressed_done_issue issue=%s ftype=%s mode=alert_only",
+                issue_id,
+                ftype.value,
+            )
+            return
+
         try:
             comment_id = await client.post_issue_comment(
                 issue_id,
@@ -204,6 +220,9 @@ async def _handle_tier_finding(
     snap_keys = _SNAPSHOT_KEYS.get(ftype, ())
     if any(existing_snap.get(k) != snapshot.get(k) for k in snap_keys):
         await _post_tier_one_alert()
+        return
+
+    if isinstance(finding, OwnerlessCompletionFinding) and not auto_repair_enabled:
         return
 
     elapsed_min = (now_server - existing_alerted_at).total_seconds() / 60
