@@ -292,6 +292,42 @@ def test_project_manifest_missing_base_mcp_fails(tmp_path: Path) -> None:
     assert any("project manifest missing base MCP github" in error for error in errors)
 
 
+def test_project_manifest_unresolved_placeholder_fails(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    manifest = repo / "paperclips" / "projects" / "gimle" / "paperclip-agent-assembly.yaml"
+    manifest.write_text(manifest.read_text().replace("display_name: Gimle", "display_name: <Project>"))
+
+    errors = validate_instructions.validate_project_capability_manifests(repo)
+
+    assert any("unresolved placeholder" in error for error in errors)
+
+
+def test_project_manifest_missing_skill_additions_fails(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    manifest = repo / "paperclips" / "projects" / "gimle" / "paperclip-agent-assembly.yaml"
+    manifest.write_text(manifest.read_text().replace("skills:", "skillz:", 1))
+
+    errors = validate_instructions.validate_project_capability_manifests(repo)
+
+    assert any("missing skills section" in error for error in errors)
+
+
+def test_project_manifest_allows_non_empty_additions(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    manifest = repo / "paperclips" / "projects" / "gimle" / "paperclip-agent-assembly.yaml"
+    manifest.write_text(
+        manifest.read_text().replace(
+            "  additions:\n    project: []\n    by_role: {}",
+            "  additions:\n    project:\n      - neo4j\n    by_role:\n      auditor:\n        - neo4j",
+            1,
+        )
+    )
+
+    errors = validate_instructions.validate_project_capability_manifests(repo)
+
+    assert errors == []
+
+
 def test_compare_deployed_agent_ids_parse_codex_names(tmp_path: Path) -> None:
     env_file = tmp_path / "codex-agent-ids.env"
     env_file.write_text(

@@ -37,7 +37,7 @@ subagents:
 
 targets:
   claude:
-    instruction_entry_file: CLAUDE.md
+    instruction_entry_file: AGENTS.md
     adapter_type: claude_local
     deploy_mode: local-or-api
     instructions_bundle_mode: external-or-managed
@@ -46,5 +46,11 @@ targets:
     adapter_type: codex_local
     deploy_mode: api
     instructions_bundle_mode: managed
+
+compatibility:
+  legacy_output_paths: true
+  claude_deploy_mapping: paperclips/deploy-agents.sh
+  codex_agent_ids_env: paperclips/codex-agent-ids.env
+  workspace_update_script: paperclips/update-agent-workspaces.sh
 
 agents: []

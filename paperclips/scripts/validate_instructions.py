@@ -31,6 +31,27 @@ REQUIRED_PROJECT_MCP = (
     "sequential-thinking",
 )
 
+REQUIRED_PROJECT_MANIFEST_SECTIONS = (
+    "project",
+    "paths",
+    "mcp",
+    "skills",
+    "subagents",
+    "targets",
+    "compatibility",
+)
+
+REQUIRED_PROJECT_MANIFEST_KEYS = {
+    "project": ("key", "display_name", "issue_prefix", "integration_branch", "specs_dir", "plans_dir"),
+    "paths": ("project_root", "primary_repo_root", "overlay_root", "project_rules_file"),
+}
+
+REQUIRED_COMPATIBILITY_PATH_KEYS = (
+    "claude_deploy_mapping",
+    "codex_agent_ids_env",
+    "workspace_update_script",
+)
+
 # Anti-pattern markers — a foreign-team UUID inside a section/line marked
 # as anti-pattern (e.g., the routing-rule lookup table in agent-roster)
 # is allowed; only actionable foreign UUIDs are flagged.
@@ -130,15 +151,63 @@ def validate_project_capability_manifests(repo_root: Path) -> list[str]:
     for manifest in manifests:
         text = manifest.read_text()
         rel = manifest.relative_to(repo_root)
+        is_template = "_template" in manifest.parts
+        for section in REQUIRED_PROJECT_MANIFEST_SECTIONS:
+            if not re.search(rf"^{re.escape(section)}:\s*$", text, re.MULTILINE):
+                errors.append(f"project manifest missing {section} section: {rel}")
+        if not is_template and re.search(r"<[^>\n]+>", text):
+            errors.append(f"project manifest contains unresolved placeholder: {rel}")
+        for section, keys in REQUIRED_PROJECT_MANIFEST_KEYS.items():
+            if not re.search(rf"^{re.escape(section)}:\s*$", text, re.MULTILINE):
+                continue
+            for key in keys:
+                if not re.search(rf"^\s{{2}}{re.escape(key)}:\s+\S", text, re.MULTILINE):
+                    errors.append(f"project manifest missing {section}.{key}: {rel}")
         if "mcp:" not in text:
             errors.append(f"project manifest missing mcp section: {rel}")
             continue
         if "base_required:" not in text:
             errors.append(f"project manifest missing mcp.base_required: {rel}")
             continue
+        if not re.search(r"^\s{4}primary:\s+\S", text, re.MULTILINE):
+            errors.append(f"project manifest missing mcp.codebase_memory_projects.primary: {rel}")
         for marker in REQUIRED_PROJECT_MCP:
             if not re.search(rf"^\s*-\s+{re.escape(marker)}\s*$", text, re.MULTILINE):
                 errors.append(f"project manifest missing base MCP {marker}: {rel}")
+        for section in ("mcp", "skills", "subagents"):
+            if f"{section}:" not in text:
+                continue
+            if not re.search(rf"^{re.escape(section)}:\n(?:^[ \t].*\n)*?^\s{{2}}additions:\s*$", text, re.MULTILINE):
+                errors.append(f"project manifest missing {section}.additions: {rel}")
+            if not re.search(rf"^{re.escape(section)}:\n(?:^[ \t].*\n)*?^\s{{4}}project:\s*(?:\[\])?\s*$", text, re.MULTILINE):
+                errors.append(f"project manifest missing {section}.additions.project: {rel}")
+            if not re.search(rf"^{re.escape(section)}:\n(?:^[ \t].*\n)*?^\s{{4}}by_role:\s*(?:\{{\}})?\s*$", text, re.MULTILINE):
+                errors.append(f"project manifest missing {section}.additions.by_role: {rel}")
+        for target, adapter_type in [("claude", "claude_local"), ("codex", "codex_local")]:
+            if not re.search(
+                rf"^\s{{2}}{target}:\s*$\n(?:^\s{{4}}.*\n)*?^\s{{4}}adapter_type:\s+{adapter_type}\s*$",
+                text,
+                re.MULTILINE,
+            ):
+                errors.append(f"project manifest missing targets.{target}.adapter_type={adapter_type}: {rel}")
+            if not re.search(
+                rf"^\s{{2}}{target}:\s*$\n(?:^\s{{4}}.*\n)*?^\s{{4}}instruction_entry_file:\s+AGENTS\.md\s*$",
+                text,
+                re.MULTILINE,
+            ):
+                errors.append(f"project manifest missing targets.{target}.instruction_entry_file=AGENTS.md: {rel}")
+        if not is_template:
+            for key in REQUIRED_COMPATIBILITY_PATH_KEYS:
+                match = re.search(rf"^\s{{2}}{re.escape(key)}:\s+(.+?)\s*$", text, re.MULTILINE)
+                if not match:
+                    errors.append(f"project manifest missing compatibility.{key}: {rel}")
+                    continue
+                compatibility_path = repo_root / match.group(1)
+                if not compatibility_path.exists():
+                    errors.append(
+                        f"project manifest compatibility path missing for {key}: "
+                        f"{compatibility_path.relative_to(repo_root)}"
+                    )
     return errors
 
 

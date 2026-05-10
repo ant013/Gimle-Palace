@@ -1,6 +1,16 @@
 project:
   key: gimle
   display_name: Gimle
+  issue_prefix: GIM
+  integration_branch: develop
+  specs_dir: docs/superpowers/specs
+  plans_dir: docs/superpowers/plans
+
+paths:
+  project_root: .
+  primary_repo_root: .
+  overlay_root: paperclips/projects/gimle/overlays
+  project_rules_file: AGENTS.md
 
 mcp:
   base_required:
@@ -9,6 +19,38 @@ mcp:
     - serena
     - github
     - sequential-thinking
+  codebase_memory_projects:
+    primary: repos-gimle
   additions:
     project: []
     by_role: {}
+
+skills:
+  additions:
+    project: []
+    by_role: {}
+
+subagents:
+  additions:
+    project: []
+    by_role: {}
+
+targets:
+  claude:
+    instruction_entry_file: AGENTS.md
+    adapter_type: claude_local
+    deploy_mode: local-or-api
+    instructions_bundle_mode: external-or-managed
+  codex:
+    instruction_entry_file: AGENTS.md
+    adapter_type: codex_local
+    deploy_mode: api
+    instructions_bundle_mode: managed
+
+compatibility:
+  legacy_output_paths: true
+  claude_deploy_mapping: paperclips/deploy-agents.sh
+  codex_agent_ids_env: paperclips/codex-agent-ids.env
+  workspace_update_script: paperclips/update-agent-workspaces.sh
+
+agents: []
