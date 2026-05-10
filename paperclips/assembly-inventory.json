@@ -67,26 +67,8 @@
     {
       "classification": "project-owned",
       "id": "palace-service-name",
-      "occurrenceCount": 76,
-      "paths": [
-        "paperclips/fragments/local/audit-mode.md",
-        "paperclips/fragments/local/test-design-gimle.md",
-        "paperclips/fragments/shared/fragments/role-prime/codereviewer.md",
-        "paperclips/roles-codex/cx-blockchain-engineer.md",
-        "paperclips/roles-codex/cx-cto.md",
-        "paperclips/roles-codex/cx-infra-engineer.md",
-        "paperclips/roles-codex/cx-mcp-engineer.md",
-        "paperclips/roles-codex/cx-research-agent.md",
-        "paperclips/roles-codex/cx-security-auditor.md",
-        "paperclips/roles-codex/cx-technical-writer.md",
-        "paperclips/roles/blockchain-engineer.md",
-        "paperclips/roles/cto.md",
-        "paperclips/roles/infra-engineer.md",
-        "paperclips/roles/mcp-engineer.md",
-        "paperclips/roles/research-agent.md",
-        "paperclips/roles/security-auditor.md",
-        "paperclips/roles/technical-writer.md"
-      ],
+      "occurrenceCount": 0,
+      "paths": [],
       "pattern": "\\bpalace[-_.][A-Za-z0-9_.-]+|\\bpalace\\.[A-Za-z0-9_.-]+"
     },
     {

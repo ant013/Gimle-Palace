@@ -46,12 +46,14 @@ REQUIRED_PROJECT_MANIFEST_KEYS = {
     "paths": (
         "project_root",
         "primary_repo_root",
+        "primary_mcp_service_dir",
         "production_checkout",
         "codex_team_root",
         "operator_memory_dir",
         "overlay_root",
         "project_rules_file",
     ),
+    "mcp": ("service_name", "package_name", "tool_namespace"),
 }
 
 REQUIRED_COMPATIBILITY_PATH_KEYS = (

@@ -10,6 +10,7 @@ project:
 paths:
   project_root: <absolute-or-repo-relative-project-root>
   primary_repo_root: <absolute-or-repo-relative-primary-repo-root>
+  primary_mcp_service_dir: <repo-relative-primary-mcp-service-dir>
   production_checkout: <absolute-production-checkout-root>
   codex_team_root: <absolute-codex-team-worktree-root>
   operator_memory_dir: <absolute-or-home-relative-operator-memory-dir>
@@ -17,6 +18,8 @@ paths:
   project_rules_file: AGENTS.md
 
 mcp:
+  service_name: <mcp-service-name>
+  package_name: <mcp-python-package-name>
   tool_namespace: <mcp-tool-namespace>
   base_required:
     - codebase-memory

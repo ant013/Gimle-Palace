@@ -2,9 +2,9 @@
 
 ### Shared-infra paths (touching any = full `uv run pytest tests/`)
 
-- `services/palace-mcp/src/palace_mcp/main.py` (lifespan)
-- `services/palace-mcp/src/palace_mcp/memory/` (Cypher + schema)
-- `services/palace-mcp/src/palace_mcp/extractors/schema.py` + `runner.py`
+- `{{paths.primary_mcp_service_dir}}/src/{{mcp.package_name}}/main.py` (lifespan)
+- `{{paths.primary_mcp_service_dir}}/src/{{mcp.package_name}}/memory/` (Cypher + schema)
+- `{{paths.primary_mcp_service_dir}}/src/{{mcp.package_name}}/extractors/schema.py` + `runner.py`
 
 ### Python+pytest anti-pattern examples
 

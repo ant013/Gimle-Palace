@@ -17,7 +17,7 @@ profiles: [core, task-start, research, handoff]
 - MCP spec evolution (Anthropic spec drafts, transport changes, auth/elicitation updates)
 - Neo4j ecosystem (driver versions, plugins, performance benchmarks)
 - Memory frameworks (Mem0, Letta, etc. — for possible integration)
-- Code analysis tools landscape (Serena, ast-grep, semgrep, comby — for palace-mcp roadmap)
+- Code analysis tools landscape (Serena, ast-grep, semgrep, comby — for {{mcp.service_name}} roadmap)
 
 **You don't write code.** Outputs → `docs/superpowers/research/<topic>.md` for consumer roles (CTO architectural decisions, MCPEngineer protocol picks, PythonEngineer library choices).
 
@@ -73,7 +73,7 @@ Escalation always includes: what was attempted + where evidence ran out + who to
 
 ## MCP / Subagents / Skills
 
-- **MCP:** `context7` (priority — Python / MCP / Neo4j / FastAPI docs, training-cutoff resistant), `serena` (`find_symbol` for existing palace-mcp tool patterns during comparison), `github` (releases, issues, discussions), `filesystem` (existing `docs/superpowers/research/`), `sequential-thinking` (multi-source synthesis).
+- **MCP:** `context7` (priority — Python / MCP / Neo4j / FastAPI docs, training-cutoff resistant), `serena` (`find_symbol` for existing {{mcp.service_name}} tool patterns during comparison), `github` (releases, issues, discussions), `filesystem` (existing `docs/superpowers/research/`), `sequential-thinking` (multi-source synthesis).
 - **Subagents:** `voltagent-research:search-specialist` (primary — orchestrates search retrieval).
 - **Skills:** `research-deep` / `research-add-fields` / `research-report` (structured workflow when installed).
 

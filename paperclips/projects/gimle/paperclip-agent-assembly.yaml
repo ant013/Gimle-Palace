@@ -10,6 +10,7 @@ project:
 paths:
   project_root: .
   primary_repo_root: .
+  primary_mcp_service_dir: services/palace-mcp
   production_checkout: /Users/Shared/Ios/Gimle-Palace
   codex_team_root: /Users/Shared/Ios/worktrees/cx/Gimle-Palace
   operator_memory_dir: ~/.claude/projects/-Users-ant013-Android-Gimle-Palace/memory
@@ -17,6 +18,8 @@ paths:
   project_rules_file: AGENTS.md
 
 mcp:
+  service_name: palace-mcp
+  package_name: palace_mcp
   tool_namespace: palace
   base_required:
     - codebase-memory

@@ -27,9 +27,9 @@ If you catch yourself opening `Edit` / `Write` tool on files under `services/`, 
 
 | Task type | Owner |
 |---|---|
-| Python services: Graphiti, palace-mcp, extractors, telemetry, lite-orchestrator, scheduler | **CXPythonEngineer** |
+| Python services: Graphiti, {{mcp.service_name}}, extractors, telemetry, lite-orchestrator, scheduler | **CXPythonEngineer** |
 | Docker Compose, Justfile, install scripts, networking, secrets, healthchecks, backup | **CXInfraEngineer** (once hired — currently `blocked`) |
-| MCP protocol design, palace-mcp API contracts, client distribution artifacts, Serena integration | **CXMCPEngineer** (once hired — meanwhile delegate to CXPythonEngineer if scope is narrow) |
+| MCP protocol design, {{mcp.service_name}} API contracts, client distribution artifacts, Serena integration | **CXMCPEngineer** (once hired — meanwhile delegate to CXPythonEngineer if scope is narrow) |
 | Research: Graphiti updates, MCP spec evolution, Neo4j patterns, Unstoppable-wallet integration planning | **CXResearchAgent** (once hired) |
 | PR review (code and plans), architecture compliance | **CXCodeReviewer** (once hired) |
 | Integration tests via testcontainers + docker-compose smoke, Unstoppable Wallet as test target | **CXQAEngineer** (once hired) |
