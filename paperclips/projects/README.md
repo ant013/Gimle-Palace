@@ -54,8 +54,8 @@ lists here, not duplicated in every generated agent bundle.
 
    The build writes `paperclips/dist/<project-key>.resolved-assembly.json`
    with resolved capability metadata, target adapters, role output paths, hashes,
-   sizes, `agentName`, and `agentId`. Commit it with the generated bundle
-   updates.
+   sizes, `agentName`, `agentId`, and fingerprints for declared compatibility
+   inputs. Commit it with the generated bundle updates.
 
 6. Before deploying a regenerated agent, snapshot the current live `AGENTS.md`
    and compare it with the generated bundle:
@@ -107,6 +107,8 @@ repeated lines to every bundle.
 - Legacy files such as `paperclips/codex-agent-ids.env`,
   `paperclips/deploy-agents.sh`, and `paperclips/update-agent-workspaces.sh`
   remain declared compatibility inputs until deploy tooling is manifest-driven.
+- The resolved assembly fingerprints those compatibility inputs. If one changes,
+  rebuild before validating or deploying.
 - For a pure parameterization change, generated `paperclips/dist/**` output must
   remain byte-identical for the existing project. Run `git diff -- paperclips/dist`
   after rebuilding.

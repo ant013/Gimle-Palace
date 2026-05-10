@@ -395,6 +395,9 @@ Manifest schema rules:
   but the resolved build manifest must contain the selected agent's concrete ID
   before deploy. Missing IDs remain visible as `PENDING` and are not silently
   skipped.
+- Resolved manifests fingerprint declared compatibility inputs so ID mapping
+  drift is detected when legacy env or deploy mapping files change without a
+  rebuild.
 
 ### L4: Project Overlay Fragments
 
@@ -765,6 +768,8 @@ Before any layered builder implementation:
 - Resolved role entries include `agentName` and `agentId`; validators check the
   name/path relationship and UUID shape while allowing undeployed roles to stay
   pending.
+- Validators reject stale resolved manifests when declared compatibility inputs
+  such as `codex-agent-ids.env` or `deploy-agents.sh` change without rebuilding.
 - No live deploy occurs in Slice 1.
 
 ### Future Acceptance
