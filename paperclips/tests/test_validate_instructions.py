@@ -61,6 +61,16 @@ def test_assembly_inventory_tracks_base_mcp_and_auditors() -> None:
     assert "codex:cx-auditor" in role_ids
 
 
+def test_project_literal_leakage_fails(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    role_path = repo / "paperclips" / "roles" / "python-engineer.md"
+    role_path.write_text(role_path.read_text() + "\nGimle leaked into source.\n")
+
+    errors = validate_instructions.validate_project_literal_leakage(repo)
+
+    assert any("project literal leak gimle-name" in error for error in errors)
+
+
 def test_project_compat_manifest_path() -> None:
     path = build_project_compat.project_manifest_path(Path("/repo"), "gimle")
 

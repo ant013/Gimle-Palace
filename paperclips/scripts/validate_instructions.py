@@ -242,6 +242,67 @@ def validate_project_capability_manifests(repo_root: Path) -> list[str]:
     return errors
 
 
+def validate_project_literal_leakage(repo_root: Path) -> list[str]:
+    errors: list[str] = []
+    inventory_path = repo_root / "paperclips" / "assembly-inventory.json"
+    if not inventory_path.is_file():
+        return [f"missing project literal inventory: {inventory_path.relative_to(repo_root)}"]
+
+    try:
+        inventory = json.loads(inventory_path.read_text())
+    except json.JSONDecodeError as exc:
+        return [f"invalid project literal inventory JSON: {exc}"]
+
+    roots = inventory.get("projectLiteralScanRoots", [])
+    literals = inventory.get("projectLiterals", [])
+    if not isinstance(roots, list) or not isinstance(literals, list):
+        return ["invalid project literal inventory shape"]
+
+    for literal in literals:
+        if not isinstance(literal, dict):
+            continue
+        literal_id = str(literal.get("id", "<unknown>"))
+        pattern = literal.get("pattern")
+        if not isinstance(pattern, str) or not pattern:
+            errors.append(f"project literal inventory missing pattern for {literal_id}")
+            continue
+        try:
+            regex = re.compile(pattern)
+        except re.error as exc:
+            errors.append(f"project literal inventory invalid pattern for {literal_id}: {exc}")
+            continue
+
+        occurrence_count = 0
+        paths: set[str] = set()
+        for root in roots:
+            if not isinstance(root, str):
+                continue
+            scan_root = repo_root / root
+            if scan_root.is_file():
+                candidates = [scan_root]
+            elif scan_root.is_dir():
+                candidates = [path for path in scan_root.rglob("*") if path.is_file()]
+            else:
+                continue
+            for path in candidates:
+                try:
+                    text = path.read_text()
+                except UnicodeDecodeError:
+                    continue
+                matches = regex.findall(text)
+                if matches:
+                    occurrence_count += len(matches)
+                    paths.add(str(path.relative_to(repo_root)))
+        if occurrence_count:
+            sample_paths = ", ".join(sorted(paths)[:5])
+            if len(paths) > 5:
+                sample_paths += ", ..."
+            errors.append(
+                f"project literal leak {literal_id}: {occurrence_count} occurrence(s) in {sample_paths}"
+            )
+    return errors
+
+
 def validate_cross_team_targets(
     bundle_paths_by_role: dict[str, Path],
     role_meta_by_id: dict[str, "RoleMeta"],
@@ -635,6 +696,7 @@ def validate(repo_root: Path = REPO_ROOT) -> list[str]:
 
     errors.extend(validate_handoff_markers(bundle_paths_by_role, repo_root))
     errors.extend(validate_project_capability_manifests(repo_root))
+    errors.extend(validate_project_literal_leakage(repo_root))
     errors.extend(
         validate_cross_team_targets(bundle_paths_by_role, role_meta_by_id, repo_root)
     )
