@@ -196,5 +196,6 @@ bash "$INGEST_SCRIPT" "tron-kit" \
 RESTART_COUNT="$(grep -c 'up -d --force-recreate palace-mcp' "$MOCK_DOCKER_LOG" || true)"
 [[ "$RESTART_COUNT" -eq 1 ]] || fail "expected exactly one palace-mcp restart, got $RESTART_COUNT"
 assert_contains "$MOCK_DOCKER_LOG" "--env-file $TMP_DIR/.env"
+assert_contains "$MOCK_DOCKER_LOG" "test -e '/repos-hs/TronKit.Swift/.git'"
 
 printf 'PASS: ingest idempotency test suite\n'

@@ -229,7 +229,7 @@ runtime_repo_visible_in_container() {
     fi
 
     docker exec "$container_id" sh -lc "
-        test -d '$CONTAINER_REPO_PATH/.git' &&
+        test -e '$CONTAINER_REPO_PATH/.git' &&
         test -f '$CONTAINER_REPO_PATH/Package.swift' &&
         test -f '$SCIP_PATH'
     " >/dev/null 2>&1
