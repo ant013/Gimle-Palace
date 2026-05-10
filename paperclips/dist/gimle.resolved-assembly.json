@@ -38,11 +38,11 @@
     "inputs": {
       "claudeDeployMapping": {
         "path": "paperclips/deploy-agents.sh",
-        "sha256": "1fff56dd064f0b28c8275083c64078f7908774da6a6c89669e72161eaa0e00ec"
+        "sha256": "297f9bcb25d691aaadbbd48535abfbe32686d5e03feabf724d1b58dcd8ba8acc"
       },
       "codexAgentIdsEnv": {
         "path": "paperclips/codex-agent-ids.env",
-        "sha256": "4e86d451908badac52cf71414c6683509deb3251abb116544162e776ce0c6c67"
+        "sha256": "1386afc1e397c7e7218d22c62750f3f77ee5459609723e1bf09639f9d5ad85e5"
       },
       "workspaceUpdateScript": {
         "path": "paperclips/update-agent-workspaces.sh",
@@ -83,7 +83,7 @@
       "instructionsBundleMode": "external-or-managed",
       "roles": [
         {
-          "agentId": "",
+          "agentId": "60a3c10d-76bd-4247-83c9-4ba2ddcd3c21",
           "agentName": "auditor",
           "bytes": 20786,
           "family": "auditor",
@@ -323,7 +323,7 @@
           "source": "paperclips/roles-codex/codex-architect-reviewer.md"
         },
         {
-          "agentId": "",
+          "agentId": "1fe87c1c-d349-481a-b55a-3c3eec2e3c07",
           "agentName": "cx-auditor",
           "bytes": 19281,
           "family": "auditor",

@@ -113,6 +113,12 @@ def test_project_compat_writes_resolved_assembly(tmp_path: Path) -> None:
     assert resolved["capabilities"]["mcp"]["baseRequired"] == list(validate_instructions.REQUIRED_PROJECT_MCP)
     assert resolved["capabilities"]["mcp"]["codebaseMemoryProjects"]["primary"] == "repos-gimle"
     assert resolved["targets"]["codex"]["adapterType"] == "codex_local"
+    auditor = next(role for role in resolved["targets"]["claude"]["roles"] if role["roleId"] == "claude:auditor")
+    assert auditor["agentName"] == "auditor"
+    assert auditor["agentId"] == "60a3c10d-76bd-4247-83c9-4ba2ddcd3c21"
+    cx_auditor = next(role for role in resolved["targets"]["codex"]["roles"] if role["roleId"] == "codex:cx-auditor")
+    assert cx_auditor["agentName"] == "cx-auditor"
+    assert cx_auditor["agentId"] == "1fe87c1c-d349-481a-b55a-3c3eec2e3c07"
     cx_cto = next(role for role in resolved["targets"]["codex"]["roles"] if role["roleId"] == "codex:cx-cto")
     assert cx_cto["agentName"] == "cx-cto"
     assert cx_cto["agentId"] == "da97dbd9-6627-48d0-b421-66af0750eacf"
@@ -141,6 +147,18 @@ def test_resolved_assembly_invalid_agent_id_fails(tmp_path: Path) -> None:
     errors = validate_instructions.validate_resolved_assembly_manifests(repo)
 
     assert any("resolved assembly manifest agentId invalid" in error for error in errors)
+
+
+def test_resolved_assembly_missing_agent_id_fails(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    resolved_path = repo / "paperclips" / "dist" / "gimle.resolved-assembly.json"
+    resolved = json.loads(resolved_path.read_text())
+    resolved["targets"]["codex"]["roles"][0]["agentId"] = ""
+    resolved_path.write_text(json.dumps(resolved, indent=2, sort_keys=True) + "\n")
+
+    errors = validate_instructions.validate_resolved_assembly_manifests(repo)
+
+    assert any("resolved assembly manifest role missing agentId" in error for error in errors)
 
 
 def test_resolved_assembly_stale_compatibility_input_fails(tmp_path: Path) -> None:
@@ -503,6 +521,7 @@ def test_project_manifest_allows_non_empty_additions(tmp_path: Path) -> None:
 def test_compare_deployed_agent_ids_parse_codex_names(tmp_path: Path) -> None:
     env_file = tmp_path / "codex-agent-ids.env"
     env_file.write_text(
+        "CX_AUDITOR_AGENT_ID=1fe87c1c-d349-481a-b55a-3c3eec2e3c07\n"
         "CX_CTO_AGENT_ID=da97dbd9-6627-48d0-b421-66af0750eacf\n"
         "CODEX_ARCHITECT_REVIEWER_AGENT_ID=fec71dea-7dba-4947-ad1f-668920a02cb6\n"
         "CX_RESEARCH_AGENT_AGENT_ID=a2f7d4d2-ee96-43c3-83d8-d3af02d6674c\n"
@@ -510,6 +529,7 @@ def test_compare_deployed_agent_ids_parse_codex_names(tmp_path: Path) -> None:
 
     ids = compare_deployed_agents.load_codex_agent_ids(env_file)
 
+    assert ids["cx-auditor"] == "1fe87c1c-d349-481a-b55a-3c3eec2e3c07"
     assert ids["cx-cto"] == "da97dbd9-6627-48d0-b421-66af0750eacf"
     assert ids["codex-architect-reviewer"] == "fec71dea-7dba-4947-ad1f-668920a02cb6"
     assert ids["cx-research-agent"] == "a2f7d4d2-ee96-43c3-83d8-d3af02d6674c"
@@ -533,6 +553,12 @@ def test_compare_deployed_collects_refs_from_resolved_assembly(tmp_path: Path) -
 
 def test_compare_deployed_reports_pending_resolved_agent_ids(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
+    resolved_path = repo / "paperclips" / "dist" / "gimle.resolved-assembly.json"
+    resolved = json.loads(resolved_path.read_text())
+    for role in resolved["targets"]["codex"]["roles"]:
+        if role["roleId"] == "codex:cx-auditor":
+            role["agentId"] = ""
+    resolved_path.write_text(json.dumps(resolved, indent=2, sort_keys=True) + "\n")
 
     pending = compare_deployed_agents.load_resolved_pending_agent_refs(
         repo, "gimle", "codex", "cx-auditor"
@@ -582,6 +608,12 @@ def test_project_deploy_dry_run_unknown_agent_fails(tmp_path: Path, capsys) -> N
 
 def test_project_deploy_dry_run_pending_agent_id_fails(tmp_path: Path, capsys) -> None:
     repo = make_repo(tmp_path)
+    resolved_path = repo / "paperclips" / "dist" / "gimle.resolved-assembly.json"
+    resolved = json.loads(resolved_path.read_text())
+    for role in resolved["targets"]["codex"]["roles"]:
+        if role["roleId"] == "codex:cx-auditor":
+            role["agentId"] = ""
+    resolved_path.write_text(json.dumps(resolved, indent=2, sort_keys=True) + "\n")
 
     result = deploy_project_agents.dry_run(repo, "gimle", "codex", "cx-auditor")
 

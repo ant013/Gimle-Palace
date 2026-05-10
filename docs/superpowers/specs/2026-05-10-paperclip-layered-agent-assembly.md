@@ -568,11 +568,10 @@ Before any layered builder implementation:
   `paperclips/dist/`, `paperclips/dist/codex/`,
   `paperclips/instruction-coverage.matrix.yaml`, and
   `paperclips/bundle-size-baseline.json`.
-- Resolve the current auditor drift:
-  - either add `claude:auditor` and `codex:cx-auditor` to the coverage matrix
-    and deploy/validation expectations; or
-  - intentionally remove or exclude auditor bundles from baseline and generated
-    role sets.
+- Resolve the current auditor drift: `claude:auditor` and
+  `codex:cx-auditor` are real deployable Audit-V1 agents and must be present in
+  coverage, baseline, generated output, deploy bindings, and resolved assembly
+  metadata.
 - Reconcile current Codex runtime validation conflicts without rewriting role
   semantics. Existing `superpowers:*` and `pr-review-toolkit:*` references must
   be classified as direct runtime capability, mapped equivalent, or explicit
@@ -730,8 +729,9 @@ Before any layered builder implementation:
 - Current Codex target validation is not made green by deleting or renaming real
   skills/subagents/plugins from role text. It must use a runtime capability map
   or remain a documented blocker until that map exists.
-- `auditor` / `cx-auditor` role-set decision is reflected consistently in
-  source roles, generated dist, coverage matrix, and baseline.
+- `auditor` / `cx-auditor` are treated as deployable agents and reflected
+  consistently in source roles, generated dist, coverage matrix, baseline, and
+  deploy bindings.
 - Paperclip assembly CI runs build, Codex build, instruction validation, Codex
   target validation, and validator tests.
 - A local runtime comparison tool can compare generated bundles with deployed

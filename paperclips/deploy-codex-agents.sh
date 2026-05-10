@@ -16,10 +16,11 @@ if [ -f "$ID_FILE" ]; then
   . "$ID_FILE"
 fi
 
-CODEX_AGENT_NAMES="cx-blockchain-engineer cx-code-reviewer cx-cto codex-architect-reviewer cx-python-engineer cx-infra-engineer cx-mcp-engineer cx-qa-engineer cx-research-agent cx-security-auditor cx-technical-writer"
+CODEX_AGENT_NAMES="cx-auditor cx-blockchain-engineer cx-code-reviewer cx-cto codex-architect-reviewer cx-python-engineer cx-infra-engineer cx-mcp-engineer cx-qa-engineer cx-research-agent cx-security-auditor cx-technical-writer"
 
 agent_id() {
   case "$1" in
+    cx-auditor) echo "${CX_AUDITOR_AGENT_ID:-}" ;;
     cx-blockchain-engineer) echo "${CX_BLOCKCHAIN_ENGINEER_AGENT_ID:-}" ;;
     cx-code-reviewer) echo "${CX_CODE_REVIEWER_AGENT_ID:-}" ;;
     cx-cto) echo "${CX_CTO_AGENT_ID:-}" ;;
@@ -44,6 +45,7 @@ Usage:
 Environment:
   PAPERCLIP_API_KEY              required for --api and live adapter preflight
   PAPERCLIP_CODEX_AGENT_IDS_FILE optional env file with CODEX_*_AGENT_ID values
+  CX_AUDITOR_AGENT_ID              Codex Audit-V1 domain sub-report agent id
   CX_BLOCKCHAIN_ENGINEER_AGENT_ID   Codex blockchain engineer id (E6 hire)
   CX_CODE_REVIEWER_AGENT_ID         Codex code reviewer id
   CX_CTO_AGENT_ID                   Codex CTO id
