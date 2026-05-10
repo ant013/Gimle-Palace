@@ -1,6 +1,7 @@
 project:
   key: <project-key>
   display_name: <Project Display Name>
+  system_name: <Project System Name>
   issue_prefix: <ISSUE>
   integration_branch: develop
   specs_dir: docs/superpowers/specs

@@ -11,7 +11,7 @@ profiles: [core, task-start, implementation, handoff-full, merge-deploy]
 
 ## Role
 
-Owns Gimle-Palace infrastructure: Docker Compose stack (profiles review/analyze/full), service Dockerfiles (palace-mcp, Graphiti, telemetry, scheduler), Justfile as the single entrypoint, `install-server.sh` + interactive installer, healthchecks, `paperclip-agent-net` shared network, cloudflared tunnel, secrets via `.env` + sops, Neo4j backup/restore. **Single-node stack** — no k8s / terraform in MVP.
+Owns {{project.system_name}} infrastructure: Docker Compose stack (profiles review/analyze/full), service Dockerfiles (palace-mcp, Graphiti, telemetry, scheduler), Justfile as the single entrypoint, `install-server.sh` + interactive installer, healthchecks, `paperclip-agent-net` shared network, cloudflared tunnel, secrets via `.env` + sops, Neo4j backup/restore. **Single-node stack** — no k8s / terraform in MVP.
 
 ## Area of responsibility
 

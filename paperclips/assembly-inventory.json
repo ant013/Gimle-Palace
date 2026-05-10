@@ -24,15 +24,8 @@
     {
       "classification": "project-owned",
       "id": "gimle-name",
-      "occurrenceCount": 6,
-      "paths": [
-        "paperclips/fragments/local/agent-roster.md",
-        "paperclips/fragments/local/test-design-gimle.md",
-        "paperclips/roles-codex/cx-blockchain-engineer.md",
-        "paperclips/roles-codex/cx-code-reviewer.md",
-        "paperclips/roles-codex/cx-infra-engineer.md",
-        "paperclips/roles/infra-engineer.md"
-      ],
+      "occurrenceCount": 0,
+      "paths": [],
       "pattern": "\\bGimle\\b|Gimle-Palace"
     },
     {

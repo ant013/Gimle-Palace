@@ -1,4 +1,4 @@
-## Agent UUID roster — Gimle Claude
+## Agent UUID roster — {{PROJECT}} Claude
 
 Use `[@<Role>](agent://<uuid>?i=<icon>)` in phase handoffs.
 Source: `paperclips/deploy-agents.sh`.

@@ -1,6 +1,7 @@
 project:
   key: gimle
   display_name: Gimle
+  system_name: Gimle-Palace
   issue_prefix: GIM
   integration_branch: develop
   specs_dir: docs/superpowers/specs

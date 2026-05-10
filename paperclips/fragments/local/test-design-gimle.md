@@ -1,4 +1,4 @@
-## Test-design — Gimle specifics
+## Test-design — {{PROJECT}} specifics
 
 ### Shared-infra paths (touching any = full `uv run pytest tests/`)
 

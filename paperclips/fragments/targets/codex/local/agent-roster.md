@@ -1,4 +1,4 @@
-## Agent UUID roster — Gimle Codex / CX
+## Agent UUID roster — {{PROJECT}} Codex / CX
 
 Use `[@<CXRole>](agent://<uuid>?i=<icon>)` in phase handoffs.
 Source: `paperclips/codex-agent-ids.env`.
