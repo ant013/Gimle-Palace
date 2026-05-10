@@ -89,7 +89,7 @@ The first implementation slice is intentionally narrow:
 Project: Gimle only
 Targets: existing Claude + Codex Gimle teams
 Output paths: legacy paths retained
-Deploy: no live deploy; deploy dry-run wrapper is a later slice
+Deploy: no live deploy; project-aware dry-run and compare wrappers are allowed
 Goal: manifest-driven build can regenerate current Gimle artifacts with current
       validator green and no bundle size growth
 ```
@@ -392,7 +392,9 @@ Manifest schema rules:
 - Paths are normalized relative to the project repo unless an absolute runtime
   path is explicitly required for Paperclip adapter configuration.
 - Agent IDs may come from the manifest or from a declared env/env-file source,
-  but the resolved build manifest must contain concrete IDs before deploy.
+  but the resolved build manifest must contain the selected agent's concrete ID
+  before deploy. Missing IDs remain visible as `PENDING` and are not silently
+  skipped.
 
 ### L4: Project Overlay Fragments
 
@@ -647,7 +649,8 @@ Before any layered builder implementation:
   - `--project <key>`;
   - `--target claude|codex`;
   - optional `--agent <role-key>`.
-- Wrapper reads the resolved project manifest and compatibility outputs.
+- Wrapper reads the resolved project manifest, including resolved role
+  `agentName` and `agentId` fields.
 - Claude dry-run must not copy files.
 - Codex dry-run must not upload bundles.
 - Existing deploy scripts remain available until consumer migration is complete.
@@ -741,6 +744,8 @@ Before any layered builder implementation:
   for Gimle, UAudit, Medic, and future projects.
 - The repeatable build docs include a post-deploy generated-vs-runtime
   comparison step.
+- The compare tooling reads role bindings from the resolved manifest and
+  reports missing role IDs as `PENDING` instead of silently omitting them.
 - The resolved Gimle capability manifest contains the common MCP contract:
   `codebase-memory`, `context7`, `serena`, `github`, and
   `sequential-thinking`.
@@ -757,6 +762,9 @@ Before any layered builder implementation:
 - `codex-agent-ids.env` and current deploy mappings are either imported as
   compatibility inputs or generated from the manifest; they are not independent
   authoritative sources.
+- Resolved role entries include `agentName` and `agentId`; validators check the
+  name/path relationship and UUID shape while allowing undeployed roles to stay
+  pending.
 - No live deploy occurs in Slice 1.
 
 ### Future Acceptance

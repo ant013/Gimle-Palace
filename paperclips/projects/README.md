@@ -54,7 +54,8 @@ lists here, not duplicated in every generated agent bundle.
 
    The build writes `paperclips/dist/<project-key>.resolved-assembly.json`
    with resolved capability metadata, target adapters, role output paths, hashes,
-   and sizes. Commit it with the generated bundle updates.
+   sizes, `agentName`, and `agentId`. Commit it with the generated bundle
+   updates.
 
 6. Before deploying a regenerated agent, snapshot the current live `AGENTS.md`
    and compare it with the generated bundle:
@@ -77,6 +78,8 @@ lists here, not duplicated in every generated agent bundle.
    old-live vs new-generated change. After deploying, rerun the same command
    without `--show-diff`; the deployed live bundle must match the generated
    bundle exactly. Add `--agent cto` or `--agent cx-cto` for a single role.
+   Roles without a resolved `agentId` are printed as `PENDING` so missing
+   bindings are visible.
 
 7. Run the project-aware deploy dry-run before any live upload:
 
@@ -90,8 +93,9 @@ lists here, not duplicated in every generated agent bundle.
 
    This wrapper reads `paperclips/dist/<project-key>.resolved-assembly.json`
    and prints the exact target, agent id, source bundle, hash, and size. It does
-   not upload; live deploy remains on the existing compatibility scripts until
-   manifest-driven deploy is implemented.
+   not upload. A selected role without a resolved `agentId` fails as `PENDING`;
+   live deploy remains on the existing compatibility scripts until
+   manifest-driven upload is implemented.
 
 Generated agent bundles should change only when role text, overlays, or target
 runtime text changes. Project-level capability metadata alone should not add
