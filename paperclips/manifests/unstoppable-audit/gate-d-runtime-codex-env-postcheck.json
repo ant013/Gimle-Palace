@@ -1,0 +1,728 @@
+{
+  "api_base": "https://paperclip.ant013.work",
+  "blockers": [],
+  "company_id": "8f55e80b-0264-4ab6-9d56-8b2652f18005",
+  "created_at": "2026-05-10T07:24:41Z",
+  "gate": "D-runtime-fix",
+  "live_mutation": false,
+  "mode": "dry-run",
+  "ok": true,
+  "results": [
+    {
+      "agentId": "c430529b-f064-4c5b-8b5b-302c594890b7",
+      "agentName": "AUCEO",
+      "configHashBefore": "6989e67b3dabe24d5e25401d9059de02da1f61421459a9e6e137afc8ffaad8a9",
+      "currentEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "currentExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "envChanges": {},
+      "expectedEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "expectedExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "ok": true,
+      "patched": false,
+      "targetEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "targetExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "wouldPatch": false
+    },
+    {
+      "agentId": "e63b7f27-cc4f-41f4-8883-b5b9677984d9",
+      "agentName": "UWACTO",
+      "configHashBefore": "bc21bf2472ccddc147eac34c94b56efac537d18e936385fce738484eafe25bfe",
+      "currentEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "currentExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "envChanges": {},
+      "expectedEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "expectedExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "ok": true,
+      "patched": false,
+      "targetEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "targetExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "wouldPatch": false
+    },
+    {
+      "agentId": "83e44735-7f4f-4673-b5a7-c3667747d21b",
+      "agentName": "UWACryptoAuditor",
+      "configHashBefore": "4e7104dd663c50bba634f50560b6886da783de6c74e78c3b5101e228ef1d6e40",
+      "currentEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "currentExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "envChanges": {},
+      "expectedEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "expectedExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "ok": true,
+      "patched": false,
+      "targetEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "targetExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "wouldPatch": false
+    },
+    {
+      "agentId": "5f0709f8-0b05-43e7-8711-6df618b95f69",
+      "agentName": "UWAInfraEngineer",
+      "configHashBefore": "b0b182e9357cb3c92362cb9f2a11312c3eebef6212c388fb25eedcbab9541a72",
+      "currentEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "currentExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "envChanges": {},
+      "expectedEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "expectedExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "ok": true,
+      "patched": false,
+      "targetEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "targetExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "wouldPatch": false
+    },
+    {
+      "agentId": "18f0ee3e-0fd9-40e7-a3b4-99a4ad3ab400",
+      "agentName": "UWAKotlinAuditor",
+      "configHashBefore": "6d5b6edff1dced2f2047f9156dee80d94fda5062484d49f2f57d663c37e2f134",
+      "currentEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "currentExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "envChanges": {},
+      "expectedEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "expectedExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "ok": true,
+      "patched": false,
+      "targetEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "targetExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "wouldPatch": false
+    },
+    {
+      "agentId": "8089992b-8a51-4386-b180-9368b67bbc51",
+      "agentName": "UWAQAEngineer",
+      "configHashBefore": "66a019a753d4b84232f1016c95de8d364aec32970eb07fc9328c8486c72ae68a",
+      "currentEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "currentExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "envChanges": {},
+      "expectedEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "expectedExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "ok": true,
+      "patched": false,
+      "targetEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "targetExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "wouldPatch": false
+    },
+    {
+      "agentId": "3891e41b-028e-4348-b4d0-10d57251f600",
+      "agentName": "UWAResearchAgent",
+      "configHashBefore": "f81ff311016847e742fd8da1235d77ca8063f2f8a0fca5e3f3951db73b64add9",
+      "currentEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "currentExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "envChanges": {},
+      "expectedEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "expectedExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "ok": true,
+      "patched": false,
+      "targetEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "targetExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "wouldPatch": false
+    },
+    {
+      "agentId": "fc30ec70-13a4-440f-b13e-e03e17cb63f4",
+      "agentName": "UWASecurityAuditor",
+      "configHashBefore": "3874cba9b0174e39ea357568d6586f8d48034799773790955a3eaac08c5175f6",
+      "currentEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "currentExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "envChanges": {},
+      "expectedEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "expectedExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "ok": true,
+      "patched": false,
+      "targetEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "targetExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "wouldPatch": false
+    },
+    {
+      "agentId": "ae159ee7-05e2-48af-abf9-5bbeef4017c4",
+      "agentName": "UWATechnicalWriter",
+      "configHashBefore": "7b05c67087a99d21dd3543dfd55212fe0e543a498557e3a4b759df68ebbe6dc3",
+      "currentEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "currentExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "envChanges": {},
+      "expectedEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "expectedExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "ok": true,
+      "patched": false,
+      "targetEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "targetExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "wouldPatch": false
+    },
+    {
+      "agentId": "9f0f6fc5-e9ef-4664-ac54-15ffc64069bc",
+      "agentName": "UWICTO",
+      "configHashBefore": "add5e529a48e44e65f6d88e29614ed9d1b411a1ebe7ad212417ad410c33e9e84",
+      "currentEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "currentExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "envChanges": {},
+      "expectedEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "expectedExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "ok": true,
+      "patched": false,
+      "targetEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "targetExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "wouldPatch": false
+    },
+    {
+      "agentId": "f9f115e8-2ffb-4efb-8fb1-d8b443a3b829",
+      "agentName": "UWICryptoAuditor",
+      "configHashBefore": "06a2a7084cc3e3ec3760dc9011c832b27c19e49c26108473db6a69848b08661b",
+      "currentEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "currentExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "envChanges": {},
+      "expectedEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "expectedExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "ok": true,
+      "patched": false,
+      "targetEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "targetExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "wouldPatch": false
+    },
+    {
+      "agentId": "339e9d3f-48c0-4348-a8da-5337e6f29491",
+      "agentName": "UWIInfraEngineer",
+      "configHashBefore": "95ea84c4f06cde802c4f9d4d1051b5c89df13f5e257646db04eaf45b13102457",
+      "currentEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "currentExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "envChanges": {},
+      "expectedEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "expectedExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "ok": true,
+      "patched": false,
+      "targetEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "targetExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "wouldPatch": false
+    },
+    {
+      "agentId": "d928e408-ab63-4699-8ec2-c6ac7558c268",
+      "agentName": "UWIQAEngineer",
+      "configHashBefore": "8d22260620162ac0e7a4885c8c4855fa9f5f334ebbf2a068cda4c041d1c70e66",
+      "currentEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "currentExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "envChanges": {},
+      "expectedEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "expectedExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "ok": true,
+      "patched": false,
+      "targetEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "targetExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "wouldPatch": false
+    },
+    {
+      "agentId": "0be9b9c5-de38-45ce-8b33-25bb39434d50",
+      "agentName": "UWIResearchAgent",
+      "configHashBefore": "9b76441c56c4e673d447ceaaa6d064df74a5126d5dfe0f5493a65fa4997a3a0d",
+      "currentEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "currentExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "envChanges": {},
+      "expectedEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "expectedExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "ok": true,
+      "patched": false,
+      "targetEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "targetExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "wouldPatch": false
+    },
+    {
+      "agentId": "5dd3e733-82c7-472c-8474-8605b916ead2",
+      "agentName": "UWISecurityAuditor",
+      "configHashBefore": "8c473a2449ac08f25b82670932a4f88506a016c1ea5c5430e6f51192bea06158",
+      "currentEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "currentExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "envChanges": {},
+      "expectedEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "expectedExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "ok": true,
+      "patched": false,
+      "targetEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "targetExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "wouldPatch": false
+    },
+    {
+      "agentId": "a6e2aec6-08d9-43ab-8496-d24ce99ac0de",
+      "agentName": "UWISwiftAuditor",
+      "configHashBefore": "edc401cf51781aaa03dcc13c67fa0a194f0547693abc1d8215e39795537e1a3a",
+      "currentEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "currentExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "envChanges": {},
+      "expectedEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "expectedExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "ok": true,
+      "patched": false,
+      "targetEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "targetExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "wouldPatch": false
+    },
+    {
+      "agentId": "a881b5bd-f1ef-4023-bdd7-5d9b567642d0",
+      "agentName": "UWITechnicalWriter",
+      "configHashBefore": "567ab1d75b47643ee17f56c9cc88e2bcccd6c26e9a184e32312f0e8215b6863e",
+      "currentEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "currentExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "envChanges": {},
+      "expectedEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "expectedExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "ok": true,
+      "patched": false,
+      "targetEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "CODEX_HOME",
+        "PATH",
+        "SERENA_PROJECT",
+        "TELEGRAM_OPS_CHAT_ID",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+      ],
+      "targetExtraArgs": [
+        "--skip-git-repo-check"
+      ],
+      "wouldPatch": false
+    }
+  ],
+  "source_dry_run_hash": "281ebcf192a5a2ce0c02384f8643dea74398b6233215fb7c0085155e287957c5",
+  "team": "UnstoppableAudit"
+}

@@ -3,12 +3,16 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/auceo.md",
+      "codexHome": "/Users/anton/.paperclip/instances/default/companies/8f55e80b-0264-4ab6-9d56-8b2652f18005/codex-home",
+      "codexPath": "/Users/anton/.local/bin:/Users/anton/.nvm/versions/node/v20.20.2/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
       "expectedConfig": {
         "adapterConfig": {
           "cwd": "/Users/Shared/UnstoppableAudit/runs/AUCEO/workspace",
           "dangerouslyBypassApprovalsAndSandbox": false,
           "envKeys": [
             "CODEBASE_MEMORY_PROJECT",
+            "CODEX_HOME",
+            "PATH",
             "SERENA_PROJECT",
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
@@ -32,7 +36,7 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "9ca176144c4539c17bca19d7af1372d69e3abd637a37dd79a86d396bfc1c3e46",
+      "expectedConfigHash": "33e674f1cd2436b641bc7ffaa36776bac91d65a3bc6fb17507fbdac82a74f5a3",
       "extraArgs": [
         "--skip-git-repo-check"
       ],
@@ -60,6 +64,8 @@
         "repo_url": "multiple"
       },
       "runtimeEnvKeys": [
+        "CODEX_HOME",
+        "PATH",
         "CODEBASE_MEMORY_PROJECT",
         "SERENA_PROJECT",
         "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
@@ -80,12 +86,16 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwicto.md",
+      "codexHome": "/Users/anton/.paperclip/instances/default/companies/8f55e80b-0264-4ab6-9d56-8b2652f18005/codex-home",
+      "codexPath": "/Users/anton/.local/bin:/Users/anton/.nvm/versions/node/v20.20.2/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
       "expectedConfig": {
         "adapterConfig": {
           "cwd": "/Users/Shared/UnstoppableAudit/runs/UWICTO/workspace",
           "dangerouslyBypassApprovalsAndSandbox": false,
           "envKeys": [
             "CODEBASE_MEMORY_PROJECT",
+            "CODEX_HOME",
+            "PATH",
             "SERENA_PROJECT",
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
@@ -109,7 +119,7 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "4ca846df8eb546efd780271a137e4ea191cdd02ba236b384afbdf1641d76175a",
+      "expectedConfigHash": "20f8b3d895429fa674796e3980234a1166f372d94697575f4db73a5eec2ce2f4",
       "extraArgs": [
         "--skip-git-repo-check"
       ],
@@ -137,6 +147,8 @@
         "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-ios"
       },
       "runtimeEnvKeys": [
+        "CODEX_HOME",
+        "PATH",
         "CODEBASE_MEMORY_PROJECT",
         "SERENA_PROJECT",
         "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
@@ -157,12 +169,16 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwiswiftauditor.md",
+      "codexHome": "/Users/anton/.paperclip/instances/default/companies/8f55e80b-0264-4ab6-9d56-8b2652f18005/codex-home",
+      "codexPath": "/Users/anton/.local/bin:/Users/anton/.nvm/versions/node/v20.20.2/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
       "expectedConfig": {
         "adapterConfig": {
           "cwd": "/Users/Shared/UnstoppableAudit/runs/UWISwiftAuditor/workspace",
           "dangerouslyBypassApprovalsAndSandbox": false,
           "envKeys": [
             "CODEBASE_MEMORY_PROJECT",
+            "CODEX_HOME",
+            "PATH",
             "SERENA_PROJECT",
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
@@ -186,7 +202,7 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "0785087055e58be748d9b458491e0fd0c6f742eab266d5c2793fb40e3ff12e37",
+      "expectedConfigHash": "192baacc9c1a148397fae2b16167ba8f052127e6c305363c2d88c6b4b12898cc",
       "extraArgs": [
         "--skip-git-repo-check"
       ],
@@ -214,6 +230,8 @@
         "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-ios"
       },
       "runtimeEnvKeys": [
+        "CODEX_HOME",
+        "PATH",
         "CODEBASE_MEMORY_PROJECT",
         "SERENA_PROJECT",
         "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
@@ -234,12 +252,16 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwisecurityauditor.md",
+      "codexHome": "/Users/anton/.paperclip/instances/default/companies/8f55e80b-0264-4ab6-9d56-8b2652f18005/codex-home",
+      "codexPath": "/Users/anton/.local/bin:/Users/anton/.nvm/versions/node/v20.20.2/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
       "expectedConfig": {
         "adapterConfig": {
           "cwd": "/Users/Shared/UnstoppableAudit/runs/UWISecurityAuditor/workspace",
           "dangerouslyBypassApprovalsAndSandbox": false,
           "envKeys": [
             "CODEBASE_MEMORY_PROJECT",
+            "CODEX_HOME",
+            "PATH",
             "SERENA_PROJECT",
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
@@ -263,7 +285,7 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "85eb5a276817caa8b46a4803fe56915a49072b7c616894f7d152c85f41f83929",
+      "expectedConfigHash": "496371ff5b3b73f80ae04f8710988543e8d59de97208849d1a6f605983c101f6",
       "extraArgs": [
         "--skip-git-repo-check"
       ],
@@ -291,6 +313,8 @@
         "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-ios"
       },
       "runtimeEnvKeys": [
+        "CODEX_HOME",
+        "PATH",
         "CODEBASE_MEMORY_PROJECT",
         "SERENA_PROJECT",
         "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
@@ -311,12 +335,16 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwicryptoauditor.md",
+      "codexHome": "/Users/anton/.paperclip/instances/default/companies/8f55e80b-0264-4ab6-9d56-8b2652f18005/codex-home",
+      "codexPath": "/Users/anton/.local/bin:/Users/anton/.nvm/versions/node/v20.20.2/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
       "expectedConfig": {
         "adapterConfig": {
           "cwd": "/Users/Shared/UnstoppableAudit/runs/UWICryptoAuditor/workspace",
           "dangerouslyBypassApprovalsAndSandbox": false,
           "envKeys": [
             "CODEBASE_MEMORY_PROJECT",
+            "CODEX_HOME",
+            "PATH",
             "SERENA_PROJECT",
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
@@ -340,7 +368,7 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "cd3ea4764208703a70e02861a504a80e2f75867a2ed5ad9421b8bec4ce758ee1",
+      "expectedConfigHash": "8f20eeac778372c30e982549fdc20cf1aa4b126f01b19f5b9c28324975e09690",
       "extraArgs": [
         "--skip-git-repo-check"
       ],
@@ -368,6 +396,8 @@
         "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-ios"
       },
       "runtimeEnvKeys": [
+        "CODEX_HOME",
+        "PATH",
         "CODEBASE_MEMORY_PROJECT",
         "SERENA_PROJECT",
         "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
@@ -388,12 +418,16 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwiinfraengineer.md",
+      "codexHome": "/Users/anton/.paperclip/instances/default/companies/8f55e80b-0264-4ab6-9d56-8b2652f18005/codex-home",
+      "codexPath": "/Users/anton/.local/bin:/Users/anton/.nvm/versions/node/v20.20.2/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
       "expectedConfig": {
         "adapterConfig": {
           "cwd": "/Users/Shared/UnstoppableAudit/runs/UWIInfraEngineer/workspace",
           "dangerouslyBypassApprovalsAndSandbox": false,
           "envKeys": [
             "CODEBASE_MEMORY_PROJECT",
+            "CODEX_HOME",
+            "PATH",
             "SERENA_PROJECT",
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
@@ -417,7 +451,7 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "36e7d28133b0b166044f98b4dd1d44881ee10de1790633eb6992a0777aec090c",
+      "expectedConfigHash": "bbfe123878b46f1c80cb8858f7c5ed6cc0943060ec0194217db678757ad916e7",
       "extraArgs": [
         "--skip-git-repo-check"
       ],
@@ -445,6 +479,8 @@
         "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-ios"
       },
       "runtimeEnvKeys": [
+        "CODEX_HOME",
+        "PATH",
         "CODEBASE_MEMORY_PROJECT",
         "SERENA_PROJECT",
         "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
@@ -465,12 +501,16 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwiresearchagent.md",
+      "codexHome": "/Users/anton/.paperclip/instances/default/companies/8f55e80b-0264-4ab6-9d56-8b2652f18005/codex-home",
+      "codexPath": "/Users/anton/.local/bin:/Users/anton/.nvm/versions/node/v20.20.2/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
       "expectedConfig": {
         "adapterConfig": {
           "cwd": "/Users/Shared/UnstoppableAudit/runs/UWIResearchAgent/workspace",
           "dangerouslyBypassApprovalsAndSandbox": false,
           "envKeys": [
             "CODEBASE_MEMORY_PROJECT",
+            "CODEX_HOME",
+            "PATH",
             "SERENA_PROJECT",
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
@@ -494,7 +534,7 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "1ba2998f1baea1a408391e8c36e70bd93c11291699d1d00af806c1ee3f2060b1",
+      "expectedConfigHash": "820ee14a45e0fef337896ee2fd6e26cbfdb3986403b9afd71d1af3c5a9097302",
       "extraArgs": [
         "--skip-git-repo-check"
       ],
@@ -522,6 +562,8 @@
         "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-ios"
       },
       "runtimeEnvKeys": [
+        "CODEX_HOME",
+        "PATH",
         "CODEBASE_MEMORY_PROJECT",
         "SERENA_PROJECT",
         "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
@@ -542,12 +584,16 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwiqaengineer.md",
+      "codexHome": "/Users/anton/.paperclip/instances/default/companies/8f55e80b-0264-4ab6-9d56-8b2652f18005/codex-home",
+      "codexPath": "/Users/anton/.local/bin:/Users/anton/.nvm/versions/node/v20.20.2/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
       "expectedConfig": {
         "adapterConfig": {
           "cwd": "/Users/Shared/UnstoppableAudit/runs/UWIQAEngineer/workspace",
           "dangerouslyBypassApprovalsAndSandbox": false,
           "envKeys": [
             "CODEBASE_MEMORY_PROJECT",
+            "CODEX_HOME",
+            "PATH",
             "SERENA_PROJECT",
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
@@ -571,7 +617,7 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "939fc32160596ec9481e615085fd237f62004f2ac244d61043071fdbb0f4878a",
+      "expectedConfigHash": "0afe82ac179bf99942a9d9c1f6e9b8e1892baabb99f73c45db4be2511a765f9d",
       "extraArgs": [
         "--skip-git-repo-check"
       ],
@@ -599,6 +645,8 @@
         "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-ios"
       },
       "runtimeEnvKeys": [
+        "CODEX_HOME",
+        "PATH",
         "CODEBASE_MEMORY_PROJECT",
         "SERENA_PROJECT",
         "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
@@ -619,12 +667,16 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwitechnicalwriter.md",
+      "codexHome": "/Users/anton/.paperclip/instances/default/companies/8f55e80b-0264-4ab6-9d56-8b2652f18005/codex-home",
+      "codexPath": "/Users/anton/.local/bin:/Users/anton/.nvm/versions/node/v20.20.2/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
       "expectedConfig": {
         "adapterConfig": {
           "cwd": "/Users/Shared/UnstoppableAudit/runs/UWITechnicalWriter/workspace",
           "dangerouslyBypassApprovalsAndSandbox": false,
           "envKeys": [
             "CODEBASE_MEMORY_PROJECT",
+            "CODEX_HOME",
+            "PATH",
             "SERENA_PROJECT",
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
@@ -648,7 +700,7 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "0844a0277f056067b80343cdcb9e88dd5d1a805c64dfa5f0ffa129de608f6999",
+      "expectedConfigHash": "e372979891b56aabe2343c954134fa8056e36127abe059dbf412139d0a2d3ca4",
       "extraArgs": [
         "--skip-git-repo-check"
       ],
@@ -676,6 +728,8 @@
         "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-ios"
       },
       "runtimeEnvKeys": [
+        "CODEX_HOME",
+        "PATH",
         "CODEBASE_MEMORY_PROJECT",
         "SERENA_PROJECT",
         "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
@@ -696,12 +750,16 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwacto.md",
+      "codexHome": "/Users/anton/.paperclip/instances/default/companies/8f55e80b-0264-4ab6-9d56-8b2652f18005/codex-home",
+      "codexPath": "/Users/anton/.local/bin:/Users/anton/.nvm/versions/node/v20.20.2/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
       "expectedConfig": {
         "adapterConfig": {
           "cwd": "/Users/Shared/UnstoppableAudit/runs/UWACTO/workspace",
           "dangerouslyBypassApprovalsAndSandbox": false,
           "envKeys": [
             "CODEBASE_MEMORY_PROJECT",
+            "CODEX_HOME",
+            "PATH",
             "SERENA_PROJECT",
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
@@ -725,7 +783,7 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "8832686d7f47b10238f86690094447c032562ef4d35b434aa7ec1896548c7afd",
+      "expectedConfigHash": "2bfd39c53efabb3ed46a33cf7fef1f31222499af813a25952cc2cbe0ae1c9837",
       "extraArgs": [
         "--skip-git-repo-check"
       ],
@@ -753,6 +811,8 @@
         "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-android"
       },
       "runtimeEnvKeys": [
+        "CODEX_HOME",
+        "PATH",
         "CODEBASE_MEMORY_PROJECT",
         "SERENA_PROJECT",
         "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
@@ -773,12 +833,16 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwakotlinauditor.md",
+      "codexHome": "/Users/anton/.paperclip/instances/default/companies/8f55e80b-0264-4ab6-9d56-8b2652f18005/codex-home",
+      "codexPath": "/Users/anton/.local/bin:/Users/anton/.nvm/versions/node/v20.20.2/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
       "expectedConfig": {
         "adapterConfig": {
           "cwd": "/Users/Shared/UnstoppableAudit/runs/UWAKotlinAuditor/workspace",
           "dangerouslyBypassApprovalsAndSandbox": false,
           "envKeys": [
             "CODEBASE_MEMORY_PROJECT",
+            "CODEX_HOME",
+            "PATH",
             "SERENA_PROJECT",
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
@@ -802,7 +866,7 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "4e1aedc2764d345f33449b2df9330ba8b654fd4d71702d22bfe65b38a83bb552",
+      "expectedConfigHash": "53d4b9f7b53a5358897f75f84f19f01e4e3715e11fe99c97b9c9127739dec21c",
       "extraArgs": [
         "--skip-git-repo-check"
       ],
@@ -830,6 +894,8 @@
         "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-android"
       },
       "runtimeEnvKeys": [
+        "CODEX_HOME",
+        "PATH",
         "CODEBASE_MEMORY_PROJECT",
         "SERENA_PROJECT",
         "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
@@ -850,12 +916,16 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwasecurityauditor.md",
+      "codexHome": "/Users/anton/.paperclip/instances/default/companies/8f55e80b-0264-4ab6-9d56-8b2652f18005/codex-home",
+      "codexPath": "/Users/anton/.local/bin:/Users/anton/.nvm/versions/node/v20.20.2/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
       "expectedConfig": {
         "adapterConfig": {
           "cwd": "/Users/Shared/UnstoppableAudit/runs/UWASecurityAuditor/workspace",
           "dangerouslyBypassApprovalsAndSandbox": false,
           "envKeys": [
             "CODEBASE_MEMORY_PROJECT",
+            "CODEX_HOME",
+            "PATH",
             "SERENA_PROJECT",
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
@@ -879,7 +949,7 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "4c4293304b81e00e2d39e7636a05967d08091a6f0859d5c8ef3e1dc96d203a0c",
+      "expectedConfigHash": "3ec967f027aa4d0b37157b8f6906bcdf003ffc5f20b83ed3faf123485c876850",
       "extraArgs": [
         "--skip-git-repo-check"
       ],
@@ -907,6 +977,8 @@
         "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-android"
       },
       "runtimeEnvKeys": [
+        "CODEX_HOME",
+        "PATH",
         "CODEBASE_MEMORY_PROJECT",
         "SERENA_PROJECT",
         "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
@@ -927,12 +999,16 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwacryptoauditor.md",
+      "codexHome": "/Users/anton/.paperclip/instances/default/companies/8f55e80b-0264-4ab6-9d56-8b2652f18005/codex-home",
+      "codexPath": "/Users/anton/.local/bin:/Users/anton/.nvm/versions/node/v20.20.2/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
       "expectedConfig": {
         "adapterConfig": {
           "cwd": "/Users/Shared/UnstoppableAudit/runs/UWACryptoAuditor/workspace",
           "dangerouslyBypassApprovalsAndSandbox": false,
           "envKeys": [
             "CODEBASE_MEMORY_PROJECT",
+            "CODEX_HOME",
+            "PATH",
             "SERENA_PROJECT",
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
@@ -956,7 +1032,7 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "1bdbc43abcdd8bdd646465268e921d956c1c06833fa5da3b1d743d865f7dcd1e",
+      "expectedConfigHash": "83b18b49d97fb4d223b4d6410ffcf90d95da2315a7617bb7a33bd1b01d0975f9",
       "extraArgs": [
         "--skip-git-repo-check"
       ],
@@ -984,6 +1060,8 @@
         "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-android"
       },
       "runtimeEnvKeys": [
+        "CODEX_HOME",
+        "PATH",
         "CODEBASE_MEMORY_PROJECT",
         "SERENA_PROJECT",
         "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
@@ -1004,12 +1082,16 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwainfraengineer.md",
+      "codexHome": "/Users/anton/.paperclip/instances/default/companies/8f55e80b-0264-4ab6-9d56-8b2652f18005/codex-home",
+      "codexPath": "/Users/anton/.local/bin:/Users/anton/.nvm/versions/node/v20.20.2/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
       "expectedConfig": {
         "adapterConfig": {
           "cwd": "/Users/Shared/UnstoppableAudit/runs/UWAInfraEngineer/workspace",
           "dangerouslyBypassApprovalsAndSandbox": false,
           "envKeys": [
             "CODEBASE_MEMORY_PROJECT",
+            "CODEX_HOME",
+            "PATH",
             "SERENA_PROJECT",
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
@@ -1033,7 +1115,7 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "69bf551597aa23dde09229be04b38329776114079ea7c81571bf7f9568b8aeaf",
+      "expectedConfigHash": "82807ebf960ba03745af81f6e7e7ee366f03e6b0be5f073e4a05ee9e553532fa",
       "extraArgs": [
         "--skip-git-repo-check"
       ],
@@ -1061,6 +1143,8 @@
         "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-android"
       },
       "runtimeEnvKeys": [
+        "CODEX_HOME",
+        "PATH",
         "CODEBASE_MEMORY_PROJECT",
         "SERENA_PROJECT",
         "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
@@ -1081,12 +1165,16 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwaresearchagent.md",
+      "codexHome": "/Users/anton/.paperclip/instances/default/companies/8f55e80b-0264-4ab6-9d56-8b2652f18005/codex-home",
+      "codexPath": "/Users/anton/.local/bin:/Users/anton/.nvm/versions/node/v20.20.2/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
       "expectedConfig": {
         "adapterConfig": {
           "cwd": "/Users/Shared/UnstoppableAudit/runs/UWAResearchAgent/workspace",
           "dangerouslyBypassApprovalsAndSandbox": false,
           "envKeys": [
             "CODEBASE_MEMORY_PROJECT",
+            "CODEX_HOME",
+            "PATH",
             "SERENA_PROJECT",
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
@@ -1110,7 +1198,7 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "06a744b72fcbd46ad700d3fdc99e6c239542fbd08cade00eda92ee6eacbc0409",
+      "expectedConfigHash": "69fe91cf91b125bd19188550cf1c7d21ea15707e78837bdec4d96a5a831fc51e",
       "extraArgs": [
         "--skip-git-repo-check"
       ],
@@ -1138,6 +1226,8 @@
         "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-android"
       },
       "runtimeEnvKeys": [
+        "CODEX_HOME",
+        "PATH",
         "CODEBASE_MEMORY_PROJECT",
         "SERENA_PROJECT",
         "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
@@ -1158,12 +1248,16 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwaqaengineer.md",
+      "codexHome": "/Users/anton/.paperclip/instances/default/companies/8f55e80b-0264-4ab6-9d56-8b2652f18005/codex-home",
+      "codexPath": "/Users/anton/.local/bin:/Users/anton/.nvm/versions/node/v20.20.2/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
       "expectedConfig": {
         "adapterConfig": {
           "cwd": "/Users/Shared/UnstoppableAudit/runs/UWAQAEngineer/workspace",
           "dangerouslyBypassApprovalsAndSandbox": false,
           "envKeys": [
             "CODEBASE_MEMORY_PROJECT",
+            "CODEX_HOME",
+            "PATH",
             "SERENA_PROJECT",
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
@@ -1187,7 +1281,7 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "38ae81576f40259a6e1683523b02c9f2df4b04cbb5b776924565d2628fef124e",
+      "expectedConfigHash": "c74bdeb07741bf8c7451186c8c2c592f12f70989acc0747c5a533e7058e2357e",
       "extraArgs": [
         "--skip-git-repo-check"
       ],
@@ -1215,6 +1309,8 @@
         "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-android"
       },
       "runtimeEnvKeys": [
+        "CODEX_HOME",
+        "PATH",
         "CODEBASE_MEMORY_PROJECT",
         "SERENA_PROJECT",
         "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
@@ -1235,12 +1331,16 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwatechnicalwriter.md",
+      "codexHome": "/Users/anton/.paperclip/instances/default/companies/8f55e80b-0264-4ab6-9d56-8b2652f18005/codex-home",
+      "codexPath": "/Users/anton/.local/bin:/Users/anton/.nvm/versions/node/v20.20.2/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
       "expectedConfig": {
         "adapterConfig": {
           "cwd": "/Users/Shared/UnstoppableAudit/runs/UWATechnicalWriter/workspace",
           "dangerouslyBypassApprovalsAndSandbox": false,
           "envKeys": [
             "CODEBASE_MEMORY_PROJECT",
+            "CODEX_HOME",
+            "PATH",
             "SERENA_PROJECT",
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
@@ -1264,7 +1364,7 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "6585d2b7e33e43341c3f9dd2da988c0a45a0d0afc1f5b78d5a6b78b1ca6ed8fb",
+      "expectedConfigHash": "4b0546062bb4519b67e13d6951e867c2bfd2fccadef09f71431dff87d951816f",
       "extraArgs": [
         "--skip-git-repo-check"
       ],
@@ -1292,6 +1392,8 @@
         "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-android"
       },
       "runtimeEnvKeys": [
+        "CODEX_HOME",
+        "PATH",
         "CODEBASE_MEMORY_PROJECT",
         "SERENA_PROJECT",
         "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
@@ -1315,9 +1417,9 @@
     "live_apply_allowed": false,
     "requires_authenticated_preflight": true
   },
-  "checked_at": "2026-05-10T06:52:51Z",
+  "checked_at": "2026-05-10T07:22:48Z",
   "config_path": "/Users/ant013/Android/Gimle-Palace-cx/paperclips/teams/unstoppable-audit.yaml",
-  "dry_run_config_hash": "d510dd2b86a5680eb8aebe23068a57c6f01489176dd2cf2418d5234d85adcae7",
+  "dry_run_config_hash": "254a6763cddab3fceda8a429377830ce64180b55a2068735c0d2d55ac98911fa",
   "gate": "B1",
   "live_readback": {
     "checked": false,

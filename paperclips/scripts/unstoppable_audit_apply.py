@@ -195,6 +195,8 @@ def icon_for_agent(agent: dict[str, Any]) -> str:
 def hire_payload_template(agent: dict[str, Any]) -> dict[str, Any]:
     expected = agent["expectedConfig"]["adapterConfig"]
     runtime_env = {
+        "CODEX_HOME": agent["codexHome"],
+        "PATH": agent["codexPath"],
         "CODEBASE_MEMORY_PROJECT": agent["repository"]["codebase_memory_project"],
         "SERENA_PROJECT": agent["repository"]["codebase_memory_project"],
         "TELEGRAM_REDACTED_REPORTS_CHAT_ID": "${TELEGRAM_REDACTED_REPORTS_CHAT_ID}",
@@ -418,6 +420,35 @@ def materialize_hire_payload(
             raise RuntimeError(f"{operation['agentName']}: missing created manager id for {manager_name}")
         payload["reportsTo"] = manager_id
     return payload
+
+
+def expected_runtime_env(agent: dict[str, Any], config: dict[str, Any]) -> dict[str, str]:
+    return {
+        "CODEX_HOME": str(agent.get("codexHome") or team.codex_home(config)),
+        "PATH": str(agent.get("codexPath") or team.prereq.get_path(config, "codex.path")),
+        "CODEBASE_MEMORY_PROJECT": agent["repository"]["codebase_memory_project"],
+        "SERENA_PROJECT": agent["repository"]["codebase_memory_project"],
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID": str(team.prereq.get_path(config, "telegram.redacted_reports_chat_id")),
+        "TELEGRAM_OPS_CHAT_ID": str(team.prereq.get_path(config, "telegram.ops_chat_id")),
+    }
+
+
+def env_plain_value(value: Any) -> str | None:
+    if isinstance(value, dict) and "value" in value:
+        return str(value["value"])
+    if value is None:
+        return None
+    return str(value)
+
+
+def env_with_plain_value(existing: dict[str, Any], key: str, value: str) -> Any:
+    current = existing.get(key)
+    if isinstance(current, dict) and "type" in current:
+        updated = copy.deepcopy(current)
+        updated["type"] = "plain"
+        updated["value"] = value
+        return updated
+    return value
 
 
 def response_summary(response: Any) -> dict[str, Any]:
@@ -835,6 +866,7 @@ def create_source_issue(
 
 def runtime_extra_args_fix(
     dry_run: dict[str, Any],
+    config: dict[str, Any] | None,
     api_base: str,
     token: str,
     company_id: str,
@@ -852,10 +884,12 @@ def runtime_extra_args_fix(
     for name in sorted(planned_agents):
         agent = planned_agents[name]
         expected_extra_args = sorted(agent["expectedConfig"]["adapterConfig"].get("extraArgs") or [])
+        expected_env = expected_runtime_env(agent, config) if config is not None else {}
         matches = live_by_name.get(name, [])
         result: dict[str, Any] = {
             "agentName": name,
             "expectedExtraArgs": expected_extra_args,
+            "expectedEnvKeys": sorted(expected_env),
             "ok": False,
             "patched": False,
         }
@@ -889,21 +923,38 @@ def runtime_extra_args_fix(
 
         current_extra_args = sorted(adapter_config.get("extraArgs") or [])
         target_extra_args = sorted(set(current_extra_args).union(expected_extra_args))
+        current_env = adapter_config.get("env") or {}
+        if not isinstance(current_env, dict):
+            current_env = {}
+        target_env = copy.deepcopy(current_env)
+        env_changes: dict[str, dict[str, str | None]] = {}
+        for key, value in expected_env.items():
+            current_value = env_plain_value(current_env.get(key))
+            if current_value != value:
+                target_env[key] = env_with_plain_value(current_env, key, value)
+                env_changes[key] = {
+                    "current": current_value,
+                    "target": value,
+                }
         result.update(
             {
                 "ok": True,
                 "agentId": agent_id,
                 "currentExtraArgs": current_extra_args,
                 "targetExtraArgs": target_extra_args,
+                "currentEnvKeys": sorted(current_env),
+                "targetEnvKeys": sorted(target_env),
+                "envChanges": env_changes,
                 "configHashBefore": team.sha256_json(team.sanitized_config(live_config)),
             }
         )
-        if current_extra_args != target_extra_args:
+        if current_extra_args != target_extra_args or env_changes:
             result["patched"] = apply_live
             result["wouldPatch"] = not apply_live
             if apply_live:
                 patched_adapter_config = copy.deepcopy(adapter_config)
                 patched_adapter_config["extraArgs"] = target_extra_args
+                patched_adapter_config["env"] = target_env
                 response = http_patch_json(
                     api_base,
                     token,
@@ -916,10 +967,20 @@ def runtime_extra_args_fix(
                 result["readbackExtraArgs"] = sorted(
                     ((readback or {}).get("adapterConfig") or {}).get("extraArgs") or []
                 )
+                readback_env = ((readback or {}).get("adapterConfig") or {}).get("env") or {}
+                if not isinstance(readback_env, dict):
+                    readback_env = {}
+                result["readbackEnvKeys"] = sorted(readback_env)
                 if result["readbackExtraArgs"] != target_extra_args:
                     result["ok"] = False
                     result["blocker"] = "readback extraArgs mismatch"
                     blockers.append(f"{name}: readback extraArgs mismatch")
+                for key, value in expected_env.items():
+                    if env_plain_value(readback_env.get(key)) != value:
+                        result["ok"] = False
+                        result["blocker"] = "readback runtime env mismatch"
+                        blockers.append(f"{name}: readback runtime env mismatch")
+                        break
         else:
             result["wouldPatch"] = False
         results.append(result)
@@ -1145,6 +1206,7 @@ def command_patch_runtime_extra_args(args: argparse.Namespace) -> int:
         raise RuntimeError("PAPERCLIP_API_KEY or ~/.paperclip/auth.json token is required for runtime patch")
     manifest = runtime_extra_args_fix(
         dry_run,
+        config,
         args.api_base,
         token,
         company_id,

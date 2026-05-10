@@ -32,6 +32,8 @@ FORBIDDEN_ENV_KEYS = {
     "DEPLOY_UPDATE_TOKEN",
 }
 RUNTIME_ENV_KEYS = [
+    "CODEX_HOME",
+    "PATH",
     "CODEBASE_MEMORY_PROJECT",
     "SERENA_PROJECT",
     "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
@@ -94,6 +96,12 @@ def platform_repo(config: dict[str, Any], platform: str) -> dict[str, str]:
         "repo_url": "multiple",
         "mirror_path": str(prereq.get_path(config, "roots.stable_mirror_root")),
     }
+
+
+def codex_home(config: dict[str, Any]) -> str:
+    root = str(prereq.get_path(config, "codex.home_root")).rstrip("/")
+    company_id = str(prereq.get_path(config, "paperclip.company_id"))
+    return f"{root}/{company_id}/codex-home"
 
 
 def render_bundle(agent: dict[str, Any], config: dict[str, Any]) -> str:
@@ -189,6 +197,8 @@ def build_agent_plan(config: dict[str, Any], repo_root: Path, bundle_dir: Path) 
             "runtimeEnvKeys": RUNTIME_ENV_KEYS,
             "forbiddenRuntimeEnvKeys": sorted(FORBIDDEN_ENV_KEYS),
             "repository": platform_repo(config, platform),
+            "codexHome": codex_home(config),
+            "codexPath": str(prereq.get_path(config, "codex.path")),
         }
         agent["expectedConfig"] = expected_config(agent)
         agent["expectedConfigHash"] = sha256_json(agent["expectedConfig"])

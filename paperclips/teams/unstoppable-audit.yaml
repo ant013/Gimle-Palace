@@ -18,6 +18,11 @@ telegram:
   ops_chat_id: -1003534905521
   route_readiness_required: true
 
+codex:
+  home_root: /Users/anton/.paperclip/instances/default/companies
+  path: /Users/anton/.local/bin:/Users/anton/.nvm/versions/node/v20.20.2/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+  shared_oauth_across_companies: true
+
 models:
   default_model: gpt-5.4
   default_reasoning_effort: high

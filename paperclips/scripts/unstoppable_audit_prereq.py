@@ -172,6 +172,8 @@ def verify(config_path: Path, repo_root: Path) -> dict[str, Any]:
         "repositories.android.mirror_path",
         "telegram.redacted_reports_chat_id",
         "telegram.ops_chat_id",
+        "codex.home_root",
+        "codex.path",
         "models.default_model",
         "roots.stable_mirror_root",
         "roots.run_root",

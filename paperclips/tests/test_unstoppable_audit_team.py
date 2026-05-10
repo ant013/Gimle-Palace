@@ -51,6 +51,10 @@ def test_agent_runtime_is_audit_only():
         assert agent["sandboxBypass"] is False
         assert agent["extraArgs"] == ["--skip-git-repo-check"]
         assert agent["expectedConfig"]["adapterConfig"]["extraArgs"] == ["--skip-git-repo-check"]
+        assert agent["codexHome"].endswith("/companies/8f55e80b-0264-4ab6-9d56-8b2652f18005/codex-home")
+        assert "/Users/anton/.local/bin" in agent["codexPath"]
+        assert "CODEX_HOME" in agent["runtimeEnvKeys"]
+        assert "PATH" in agent["runtimeEnvKeys"]
         assert agent["plannedOperation"] == "create"
         assert "PAPERCLIP_API_KEY" not in agent["runtimeEnvKeys"]
         assert "GITHUB_TOKEN" not in agent["runtimeEnvKeys"]

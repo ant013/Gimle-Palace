@@ -19,6 +19,8 @@ def test_config_contains_expected_ids_and_routes():
     assert prereq.get_path(config, "paperclip.existing_early_ceo_agent_id") == "dcdd8871-5b44-4563-bb00-f8cca292a69e"
     assert str(prereq.get_path(config, "telegram.redacted_reports_chat_id")) == "-1003937871684"
     assert str(prereq.get_path(config, "telegram.ops_chat_id")) == "-1003534905521"
+    assert str(prereq.get_path(config, "codex.home_root")).endswith("/companies")
+    assert "/Users/anton/.local/bin" in str(prereq.get_path(config, "codex.path"))
 
 
 @pytest.mark.parametrize(
@@ -104,6 +106,9 @@ repositories:
 telegram:
   redacted_reports_chat_id: -1003937871684
   ops_chat_id: -1003534905521
+codex:
+  home_root: /Users/anton/.paperclip/instances/default/companies
+  path: /usr/bin:/bin
 models:
   default_model: gpt-5.4
   default_reasoning_effort: high
