@@ -1,0 +1,40 @@
+{
+  "created_at": "2026-05-10T06:02:02Z",
+  "mode": "rollback-snapshot",
+  "ok": true,
+  "rollback_policy": {
+    "operator_approval_required": true,
+    "restore_only_mutated_agents": true,
+    "run_before_bundle_deploy": true
+  },
+  "snapshots": {
+    "AUCEO": {
+      "agent": {
+        "adapterType": "codex_local",
+        "companyId": "8f55e80b-0264-4ab6-9d56-8b2652f18005",
+        "id": "dcdd8871-5b44-4563-bb00-f8cca292a69e",
+        "name": "AUCEO",
+        "role": "ceo",
+        "status": "paused",
+        "title": null
+      },
+      "configuration": {
+        "adapterConfig": {
+          "cwd": null,
+          "dangerouslyBypassApprovalsAndSandbox": true,
+          "envKeys": [],
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "/Users/anton/.paperclip/instances/default/companies/8f55e80b-0264-4ab6-9d56-8b2652f18005/agents/dcdd8871-5b44-4563-bb00-f8cca292a69e/instructions/AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": null,
+          "sourceRootsReadOnly": null,
+          "writableRoots": null
+        },
+        "adapterType": "codex_local"
+      }
+    }
+  },
+  "source_preflight_hash": "944497be6b8e18aae99da09aed9de149e4e1aed54922a4a5ed22dc6967070c9d",
+  "team": "UnstoppableAudit"
+}

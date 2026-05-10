@@ -1,0 +1,957 @@
+{
+  "created_at": "2026-05-10T06:02:02Z",
+  "dry_run_hash": "2fbc8cccad819c55b841f0cdc4c624703efe3fe9c3a825fcecf321aea399d392",
+  "errors": [],
+  "gate": "C-apply-plan",
+  "live_apply_guard": {
+    "required_confirmation": "UNSTOPPABLE_AUDIT_LIVE_APPLY",
+    "required_flag": "--allow-live"
+  },
+  "live_mutation": false,
+  "mode": "dry-run",
+  "ok": true,
+  "operation_count": 18,
+  "operations": [
+    {
+      "agentId": "dcdd8871-5b44-4563-bb00-f8cca292a69e",
+      "agentName": "AUCEO",
+      "kind": "terminate_agent",
+      "rollbackSnapshotRef": "agents.AUCEO",
+      "stopOnFailure": true
+    },
+    {
+      "agentName": "AUCEO",
+      "dependsOn": [],
+      "expectedConfigHash": "24291cb343b8daa8505163998cb5a1978dbe690d9bd962a965a45901379b090f",
+      "kind": "hire_agent",
+      "payloadTemplate": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/AUCEO/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "env": {
+            "CODEBASE_MEMORY_PROJECT": "unstoppable-audit",
+            "SERENA_PROJECT": "unstoppable-audit",
+            "TELEGRAM_OPS_CHAT_ID": "${TELEGRAM_OPS_CHAT_ID}",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID": "${TELEGRAM_REDACTED_REPORTS_CHAT_ID}"
+          },
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/AUCEO",
+            "/Users/Shared/UnstoppableAudit/runs/AUCEO/scratch"
+          ]
+        },
+        "adapterType": "codex_local",
+        "budgetMonthlyCents": 0,
+        "capabilities": "UnstoppableAudit umbrella coordination role. Performs audit-only work with read-only product source and writes only to artifact/scratch roots.",
+        "icon": "crown",
+        "name": "AUCEO",
+        "reportsTo": null,
+        "role": "ceo",
+        "runtimeConfig": {
+          "heartbeat": {
+            "cooldownSec": 10,
+            "enabled": false,
+            "intervalSec": 14400,
+            "maxConcurrentRuns": 1,
+            "wakeOnDemand": true
+          }
+        },
+        "sourceIssueId": "${UNSTOPPABLE_AUDIT_SOURCE_ISSUE_ID}",
+        "title": "UnstoppableAudit CEO"
+      },
+      "requiresReadback": true,
+      "stopOnFailure": true
+    },
+    {
+      "agentName": "UWACTO",
+      "dependsOn": [
+        "AUCEO"
+      ],
+      "expectedConfigHash": "9512681bf728bc21f7dfe83da106b44931130976aaaa333731cca7e4ef80da30",
+      "kind": "hire_agent",
+      "payloadTemplate": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWACTO/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "env": {
+            "CODEBASE_MEMORY_PROJECT": "unstoppable-wallet-android",
+            "SERENA_PROJECT": "unstoppable-wallet-android",
+            "TELEGRAM_OPS_CHAT_ID": "${TELEGRAM_OPS_CHAT_ID}",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID": "${TELEGRAM_REDACTED_REPORTS_CHAT_ID}"
+          },
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWACTO",
+            "/Users/Shared/UnstoppableAudit/runs/UWACTO/scratch"
+          ]
+        },
+        "adapterType": "codex_local",
+        "budgetMonthlyCents": 0,
+        "capabilities": "UnstoppableAudit android coordination role. Performs audit-only work with read-only product source and writes only to artifact/scratch roots.",
+        "icon": "crown",
+        "name": "UWACTO",
+        "reportsTo": {
+          "agentName": "AUCEO"
+        },
+        "role": "cto",
+        "runtimeConfig": {
+          "heartbeat": {
+            "cooldownSec": 10,
+            "enabled": false,
+            "intervalSec": 14400,
+            "maxConcurrentRuns": 1,
+            "wakeOnDemand": true
+          }
+        },
+        "sourceIssueId": "${UNSTOPPABLE_AUDIT_SOURCE_ISSUE_ID}",
+        "title": "Android Audit CTO"
+      },
+      "requiresReadback": true,
+      "stopOnFailure": true
+    },
+    {
+      "agentName": "UWICTO",
+      "dependsOn": [
+        "AUCEO"
+      ],
+      "expectedConfigHash": "9930825600c3653e4d0597b8e86bac62674dabf3bbca10b9fee3e44b6788be28",
+      "kind": "hire_agent",
+      "payloadTemplate": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWICTO/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "env": {
+            "CODEBASE_MEMORY_PROJECT": "unstoppable-wallet-ios",
+            "SERENA_PROJECT": "unstoppable-wallet-ios",
+            "TELEGRAM_OPS_CHAT_ID": "${TELEGRAM_OPS_CHAT_ID}",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID": "${TELEGRAM_REDACTED_REPORTS_CHAT_ID}"
+          },
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWICTO",
+            "/Users/Shared/UnstoppableAudit/runs/UWICTO/scratch"
+          ]
+        },
+        "adapterType": "codex_local",
+        "budgetMonthlyCents": 0,
+        "capabilities": "UnstoppableAudit ios coordination role. Performs audit-only work with read-only product source and writes only to artifact/scratch roots.",
+        "icon": "crown",
+        "name": "UWICTO",
+        "reportsTo": {
+          "agentName": "AUCEO"
+        },
+        "role": "cto",
+        "runtimeConfig": {
+          "heartbeat": {
+            "cooldownSec": 10,
+            "enabled": false,
+            "intervalSec": 14400,
+            "maxConcurrentRuns": 1,
+            "wakeOnDemand": true
+          }
+        },
+        "sourceIssueId": "${UNSTOPPABLE_AUDIT_SOURCE_ISSUE_ID}",
+        "title": "iOS Audit CTO"
+      },
+      "requiresReadback": true,
+      "stopOnFailure": true
+    },
+    {
+      "agentName": "UWACryptoAuditor",
+      "dependsOn": [
+        "UWACTO"
+      ],
+      "expectedConfigHash": "dec52a78a2a1bc4759c699638a1fdf22be70fd56468b9d0ad7924fadfe0a7242",
+      "kind": "hire_agent",
+      "payloadTemplate": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWACryptoAuditor/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "env": {
+            "CODEBASE_MEMORY_PROJECT": "unstoppable-wallet-android",
+            "SERENA_PROJECT": "unstoppable-wallet-android",
+            "TELEGRAM_OPS_CHAT_ID": "${TELEGRAM_OPS_CHAT_ID}",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID": "${TELEGRAM_REDACTED_REPORTS_CHAT_ID}"
+          },
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWACryptoAuditor",
+            "/Users/Shared/UnstoppableAudit/runs/UWACryptoAuditor/scratch"
+          ]
+        },
+        "adapterType": "codex_local",
+        "budgetMonthlyCents": 0,
+        "capabilities": "UnstoppableAudit android crypto-audit role. Performs audit-only work with read-only product source and writes only to artifact/scratch roots.",
+        "icon": "key-round",
+        "name": "UWACryptoAuditor",
+        "reportsTo": {
+          "agentName": "UWACTO"
+        },
+        "role": "engineer",
+        "runtimeConfig": {
+          "heartbeat": {
+            "cooldownSec": 10,
+            "enabled": false,
+            "intervalSec": 14400,
+            "maxConcurrentRuns": 1,
+            "wakeOnDemand": true
+          }
+        },
+        "sourceIssueId": "${UNSTOPPABLE_AUDIT_SOURCE_ISSUE_ID}",
+        "title": "Android Crypto Auditor"
+      },
+      "requiresReadback": true,
+      "stopOnFailure": true
+    },
+    {
+      "agentName": "UWAInfraEngineer",
+      "dependsOn": [
+        "UWACTO"
+      ],
+      "expectedConfigHash": "df34dbe872f41acf7009cef863ed7b10fb0eac0fd4bb2af79cee809abf4a45f8",
+      "kind": "hire_agent",
+      "payloadTemplate": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWAInfraEngineer/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "env": {
+            "CODEBASE_MEMORY_PROJECT": "unstoppable-wallet-android",
+            "SERENA_PROJECT": "unstoppable-wallet-android",
+            "TELEGRAM_OPS_CHAT_ID": "${TELEGRAM_OPS_CHAT_ID}",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID": "${TELEGRAM_REDACTED_REPORTS_CHAT_ID}"
+          },
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWAInfraEngineer",
+            "/Users/Shared/UnstoppableAudit/runs/UWAInfraEngineer/scratch"
+          ]
+        },
+        "adapterType": "codex_local",
+        "budgetMonthlyCents": 0,
+        "capabilities": "UnstoppableAudit android infra role. Performs audit-only work with read-only product source and writes only to artifact/scratch roots.",
+        "icon": "wrench",
+        "name": "UWAInfraEngineer",
+        "reportsTo": {
+          "agentName": "UWACTO"
+        },
+        "role": "devops",
+        "runtimeConfig": {
+          "heartbeat": {
+            "cooldownSec": 10,
+            "enabled": false,
+            "intervalSec": 14400,
+            "maxConcurrentRuns": 1,
+            "wakeOnDemand": true
+          }
+        },
+        "sourceIssueId": "${UNSTOPPABLE_AUDIT_SOURCE_ISSUE_ID}",
+        "title": "Android Audit Infrastructure Engineer"
+      },
+      "requiresReadback": true,
+      "stopOnFailure": true
+    },
+    {
+      "agentName": "UWAKotlinAuditor",
+      "dependsOn": [
+        "UWACTO"
+      ],
+      "expectedConfigHash": "ec6b5ea55fc58d1bae03b33df04bfb5f18bda095f8bd513819976ae11beaf47f",
+      "kind": "hire_agent",
+      "payloadTemplate": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWAKotlinAuditor/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "env": {
+            "CODEBASE_MEMORY_PROJECT": "unstoppable-wallet-android",
+            "SERENA_PROJECT": "unstoppable-wallet-android",
+            "TELEGRAM_OPS_CHAT_ID": "${TELEGRAM_OPS_CHAT_ID}",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID": "${TELEGRAM_REDACTED_REPORTS_CHAT_ID}"
+          },
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWAKotlinAuditor",
+            "/Users/Shared/UnstoppableAudit/runs/UWAKotlinAuditor/scratch"
+          ]
+        },
+        "adapterType": "codex_local",
+        "budgetMonthlyCents": 0,
+        "capabilities": "UnstoppableAudit android code-audit role. Performs audit-only work with read-only product source and writes only to artifact/scratch roots.",
+        "icon": "search-code",
+        "name": "UWAKotlinAuditor",
+        "reportsTo": {
+          "agentName": "UWACTO"
+        },
+        "role": "engineer",
+        "runtimeConfig": {
+          "heartbeat": {
+            "cooldownSec": 10,
+            "enabled": false,
+            "intervalSec": 14400,
+            "maxConcurrentRuns": 1,
+            "wakeOnDemand": true
+          }
+        },
+        "sourceIssueId": "${UNSTOPPABLE_AUDIT_SOURCE_ISSUE_ID}",
+        "title": "Android Kotlin Auditor"
+      },
+      "requiresReadback": true,
+      "stopOnFailure": true
+    },
+    {
+      "agentName": "UWAQAEngineer",
+      "dependsOn": [
+        "UWACTO"
+      ],
+      "expectedConfigHash": "145a460f1cfd7940bbfcdf7d3ad80c9ca14135acbec9310f4d54c549ffc6ae04",
+      "kind": "hire_agent",
+      "payloadTemplate": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWAQAEngineer/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "env": {
+            "CODEBASE_MEMORY_PROJECT": "unstoppable-wallet-android",
+            "SERENA_PROJECT": "unstoppable-wallet-android",
+            "TELEGRAM_OPS_CHAT_ID": "${TELEGRAM_OPS_CHAT_ID}",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID": "${TELEGRAM_REDACTED_REPORTS_CHAT_ID}"
+          },
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWAQAEngineer",
+            "/Users/Shared/UnstoppableAudit/runs/UWAQAEngineer/scratch"
+          ]
+        },
+        "adapterType": "codex_local",
+        "budgetMonthlyCents": 0,
+        "capabilities": "UnstoppableAudit android qa role. Performs audit-only work with read-only product source and writes only to artifact/scratch roots.",
+        "icon": "bug",
+        "name": "UWAQAEngineer",
+        "reportsTo": {
+          "agentName": "UWACTO"
+        },
+        "role": "qa",
+        "runtimeConfig": {
+          "heartbeat": {
+            "cooldownSec": 10,
+            "enabled": false,
+            "intervalSec": 14400,
+            "maxConcurrentRuns": 1,
+            "wakeOnDemand": true
+          }
+        },
+        "sourceIssueId": "${UNSTOPPABLE_AUDIT_SOURCE_ISSUE_ID}",
+        "title": "Android Audit QA Engineer"
+      },
+      "requiresReadback": true,
+      "stopOnFailure": true
+    },
+    {
+      "agentName": "UWAResearchAgent",
+      "dependsOn": [
+        "UWACTO"
+      ],
+      "expectedConfigHash": "162e217bf6165b3753af4b30a3c2a17173686b8c1f24a3878755f228ca68605b",
+      "kind": "hire_agent",
+      "payloadTemplate": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWAResearchAgent/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "env": {
+            "CODEBASE_MEMORY_PROJECT": "unstoppable-wallet-android",
+            "SERENA_PROJECT": "unstoppable-wallet-android",
+            "TELEGRAM_OPS_CHAT_ID": "${TELEGRAM_OPS_CHAT_ID}",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID": "${TELEGRAM_REDACTED_REPORTS_CHAT_ID}"
+          },
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWAResearchAgent",
+            "/Users/Shared/UnstoppableAudit/runs/UWAResearchAgent/scratch"
+          ]
+        },
+        "adapterType": "codex_local",
+        "budgetMonthlyCents": 0,
+        "capabilities": "UnstoppableAudit android research role. Performs audit-only work with read-only product source and writes only to artifact/scratch roots.",
+        "icon": "search",
+        "name": "UWAResearchAgent",
+        "reportsTo": {
+          "agentName": "UWACTO"
+        },
+        "role": "researcher",
+        "runtimeConfig": {
+          "heartbeat": {
+            "cooldownSec": 10,
+            "enabled": false,
+            "intervalSec": 14400,
+            "maxConcurrentRuns": 1,
+            "wakeOnDemand": true
+          }
+        },
+        "sourceIssueId": "${UNSTOPPABLE_AUDIT_SOURCE_ISSUE_ID}",
+        "title": "Android Audit Research Agent"
+      },
+      "requiresReadback": true,
+      "stopOnFailure": true
+    },
+    {
+      "agentName": "UWASecurityAuditor",
+      "dependsOn": [
+        "UWACTO"
+      ],
+      "expectedConfigHash": "d5310dd94b5a701d27ecb89807881eabcf60ca82ce58011c30040fd40f14f2e8",
+      "kind": "hire_agent",
+      "payloadTemplate": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWASecurityAuditor/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "env": {
+            "CODEBASE_MEMORY_PROJECT": "unstoppable-wallet-android",
+            "SERENA_PROJECT": "unstoppable-wallet-android",
+            "TELEGRAM_OPS_CHAT_ID": "${TELEGRAM_OPS_CHAT_ID}",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID": "${TELEGRAM_REDACTED_REPORTS_CHAT_ID}"
+          },
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWASecurityAuditor",
+            "/Users/Shared/UnstoppableAudit/runs/UWASecurityAuditor/scratch"
+          ]
+        },
+        "adapterType": "codex_local",
+        "budgetMonthlyCents": 0,
+        "capabilities": "UnstoppableAudit android security-audit role. Performs audit-only work with read-only product source and writes only to artifact/scratch roots.",
+        "icon": "shield",
+        "name": "UWASecurityAuditor",
+        "reportsTo": {
+          "agentName": "UWACTO"
+        },
+        "role": "engineer",
+        "runtimeConfig": {
+          "heartbeat": {
+            "cooldownSec": 10,
+            "enabled": false,
+            "intervalSec": 14400,
+            "maxConcurrentRuns": 1,
+            "wakeOnDemand": true
+          }
+        },
+        "sourceIssueId": "${UNSTOPPABLE_AUDIT_SOURCE_ISSUE_ID}",
+        "title": "Android Security Auditor"
+      },
+      "requiresReadback": true,
+      "stopOnFailure": true
+    },
+    {
+      "agentName": "UWATechnicalWriter",
+      "dependsOn": [
+        "UWACTO"
+      ],
+      "expectedConfigHash": "307b0957b6a25f71d3e732735a52b1690917c8afa95ef7be6766337ed654bcff",
+      "kind": "hire_agent",
+      "payloadTemplate": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWATechnicalWriter/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "env": {
+            "CODEBASE_MEMORY_PROJECT": "unstoppable-wallet-android",
+            "SERENA_PROJECT": "unstoppable-wallet-android",
+            "TELEGRAM_OPS_CHAT_ID": "${TELEGRAM_OPS_CHAT_ID}",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID": "${TELEGRAM_REDACTED_REPORTS_CHAT_ID}"
+          },
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWATechnicalWriter",
+            "/Users/Shared/UnstoppableAudit/runs/UWATechnicalWriter/scratch"
+          ]
+        },
+        "adapterType": "codex_local",
+        "budgetMonthlyCents": 0,
+        "capabilities": "UnstoppableAudit android writer role. Performs audit-only work with read-only product source and writes only to artifact/scratch roots.",
+        "icon": "file-text",
+        "name": "UWATechnicalWriter",
+        "reportsTo": {
+          "agentName": "UWACTO"
+        },
+        "role": "general",
+        "runtimeConfig": {
+          "heartbeat": {
+            "cooldownSec": 10,
+            "enabled": false,
+            "intervalSec": 14400,
+            "maxConcurrentRuns": 1,
+            "wakeOnDemand": true
+          }
+        },
+        "sourceIssueId": "${UNSTOPPABLE_AUDIT_SOURCE_ISSUE_ID}",
+        "title": "Android Audit Technical Writer"
+      },
+      "requiresReadback": true,
+      "stopOnFailure": true
+    },
+    {
+      "agentName": "UWICryptoAuditor",
+      "dependsOn": [
+        "UWICTO"
+      ],
+      "expectedConfigHash": "f680c21931c6b1de40ec8196e18235a701374f11f63049ab789b510d4c02904e",
+      "kind": "hire_agent",
+      "payloadTemplate": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWICryptoAuditor/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "env": {
+            "CODEBASE_MEMORY_PROJECT": "unstoppable-wallet-ios",
+            "SERENA_PROJECT": "unstoppable-wallet-ios",
+            "TELEGRAM_OPS_CHAT_ID": "${TELEGRAM_OPS_CHAT_ID}",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID": "${TELEGRAM_REDACTED_REPORTS_CHAT_ID}"
+          },
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWICryptoAuditor",
+            "/Users/Shared/UnstoppableAudit/runs/UWICryptoAuditor/scratch"
+          ]
+        },
+        "adapterType": "codex_local",
+        "budgetMonthlyCents": 0,
+        "capabilities": "UnstoppableAudit ios crypto-audit role. Performs audit-only work with read-only product source and writes only to artifact/scratch roots.",
+        "icon": "key-round",
+        "name": "UWICryptoAuditor",
+        "reportsTo": {
+          "agentName": "UWICTO"
+        },
+        "role": "engineer",
+        "runtimeConfig": {
+          "heartbeat": {
+            "cooldownSec": 10,
+            "enabled": false,
+            "intervalSec": 14400,
+            "maxConcurrentRuns": 1,
+            "wakeOnDemand": true
+          }
+        },
+        "sourceIssueId": "${UNSTOPPABLE_AUDIT_SOURCE_ISSUE_ID}",
+        "title": "iOS Crypto Auditor"
+      },
+      "requiresReadback": true,
+      "stopOnFailure": true
+    },
+    {
+      "agentName": "UWIInfraEngineer",
+      "dependsOn": [
+        "UWICTO"
+      ],
+      "expectedConfigHash": "fcdc2c9035d0a0ee6ebc0d37a216e9a69bc8aab59dbc07cfd8608a54d6f5d0a6",
+      "kind": "hire_agent",
+      "payloadTemplate": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWIInfraEngineer/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "env": {
+            "CODEBASE_MEMORY_PROJECT": "unstoppable-wallet-ios",
+            "SERENA_PROJECT": "unstoppable-wallet-ios",
+            "TELEGRAM_OPS_CHAT_ID": "${TELEGRAM_OPS_CHAT_ID}",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID": "${TELEGRAM_REDACTED_REPORTS_CHAT_ID}"
+          },
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWIInfraEngineer",
+            "/Users/Shared/UnstoppableAudit/runs/UWIInfraEngineer/scratch"
+          ]
+        },
+        "adapterType": "codex_local",
+        "budgetMonthlyCents": 0,
+        "capabilities": "UnstoppableAudit ios infra role. Performs audit-only work with read-only product source and writes only to artifact/scratch roots.",
+        "icon": "wrench",
+        "name": "UWIInfraEngineer",
+        "reportsTo": {
+          "agentName": "UWICTO"
+        },
+        "role": "devops",
+        "runtimeConfig": {
+          "heartbeat": {
+            "cooldownSec": 10,
+            "enabled": false,
+            "intervalSec": 14400,
+            "maxConcurrentRuns": 1,
+            "wakeOnDemand": true
+          }
+        },
+        "sourceIssueId": "${UNSTOPPABLE_AUDIT_SOURCE_ISSUE_ID}",
+        "title": "iOS Audit Infrastructure Engineer"
+      },
+      "requiresReadback": true,
+      "stopOnFailure": true
+    },
+    {
+      "agentName": "UWIQAEngineer",
+      "dependsOn": [
+        "UWICTO"
+      ],
+      "expectedConfigHash": "cb33a61fd138e25a57d7e18eeeddd80acf32497e55091b8f453222df99c66fca",
+      "kind": "hire_agent",
+      "payloadTemplate": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWIQAEngineer/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "env": {
+            "CODEBASE_MEMORY_PROJECT": "unstoppable-wallet-ios",
+            "SERENA_PROJECT": "unstoppable-wallet-ios",
+            "TELEGRAM_OPS_CHAT_ID": "${TELEGRAM_OPS_CHAT_ID}",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID": "${TELEGRAM_REDACTED_REPORTS_CHAT_ID}"
+          },
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWIQAEngineer",
+            "/Users/Shared/UnstoppableAudit/runs/UWIQAEngineer/scratch"
+          ]
+        },
+        "adapterType": "codex_local",
+        "budgetMonthlyCents": 0,
+        "capabilities": "UnstoppableAudit ios qa role. Performs audit-only work with read-only product source and writes only to artifact/scratch roots.",
+        "icon": "bug",
+        "name": "UWIQAEngineer",
+        "reportsTo": {
+          "agentName": "UWICTO"
+        },
+        "role": "qa",
+        "runtimeConfig": {
+          "heartbeat": {
+            "cooldownSec": 10,
+            "enabled": false,
+            "intervalSec": 14400,
+            "maxConcurrentRuns": 1,
+            "wakeOnDemand": true
+          }
+        },
+        "sourceIssueId": "${UNSTOPPABLE_AUDIT_SOURCE_ISSUE_ID}",
+        "title": "iOS Audit QA Engineer"
+      },
+      "requiresReadback": true,
+      "stopOnFailure": true
+    },
+    {
+      "agentName": "UWIResearchAgent",
+      "dependsOn": [
+        "UWICTO"
+      ],
+      "expectedConfigHash": "23329f71ebd602088aca12dc57330e5ceddc429c6c3892c9ee01cc98f9a9348c",
+      "kind": "hire_agent",
+      "payloadTemplate": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWIResearchAgent/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "env": {
+            "CODEBASE_MEMORY_PROJECT": "unstoppable-wallet-ios",
+            "SERENA_PROJECT": "unstoppable-wallet-ios",
+            "TELEGRAM_OPS_CHAT_ID": "${TELEGRAM_OPS_CHAT_ID}",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID": "${TELEGRAM_REDACTED_REPORTS_CHAT_ID}"
+          },
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWIResearchAgent",
+            "/Users/Shared/UnstoppableAudit/runs/UWIResearchAgent/scratch"
+          ]
+        },
+        "adapterType": "codex_local",
+        "budgetMonthlyCents": 0,
+        "capabilities": "UnstoppableAudit ios research role. Performs audit-only work with read-only product source and writes only to artifact/scratch roots.",
+        "icon": "search",
+        "name": "UWIResearchAgent",
+        "reportsTo": {
+          "agentName": "UWICTO"
+        },
+        "role": "researcher",
+        "runtimeConfig": {
+          "heartbeat": {
+            "cooldownSec": 10,
+            "enabled": false,
+            "intervalSec": 14400,
+            "maxConcurrentRuns": 1,
+            "wakeOnDemand": true
+          }
+        },
+        "sourceIssueId": "${UNSTOPPABLE_AUDIT_SOURCE_ISSUE_ID}",
+        "title": "iOS Audit Research Agent"
+      },
+      "requiresReadback": true,
+      "stopOnFailure": true
+    },
+    {
+      "agentName": "UWISecurityAuditor",
+      "dependsOn": [
+        "UWICTO"
+      ],
+      "expectedConfigHash": "bf42cb5cc0dd84ee9474e88696ad33af2e9c39d13d264f72271f1c9035fce386",
+      "kind": "hire_agent",
+      "payloadTemplate": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWISecurityAuditor/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "env": {
+            "CODEBASE_MEMORY_PROJECT": "unstoppable-wallet-ios",
+            "SERENA_PROJECT": "unstoppable-wallet-ios",
+            "TELEGRAM_OPS_CHAT_ID": "${TELEGRAM_OPS_CHAT_ID}",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID": "${TELEGRAM_REDACTED_REPORTS_CHAT_ID}"
+          },
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWISecurityAuditor",
+            "/Users/Shared/UnstoppableAudit/runs/UWISecurityAuditor/scratch"
+          ]
+        },
+        "adapterType": "codex_local",
+        "budgetMonthlyCents": 0,
+        "capabilities": "UnstoppableAudit ios security-audit role. Performs audit-only work with read-only product source and writes only to artifact/scratch roots.",
+        "icon": "shield",
+        "name": "UWISecurityAuditor",
+        "reportsTo": {
+          "agentName": "UWICTO"
+        },
+        "role": "engineer",
+        "runtimeConfig": {
+          "heartbeat": {
+            "cooldownSec": 10,
+            "enabled": false,
+            "intervalSec": 14400,
+            "maxConcurrentRuns": 1,
+            "wakeOnDemand": true
+          }
+        },
+        "sourceIssueId": "${UNSTOPPABLE_AUDIT_SOURCE_ISSUE_ID}",
+        "title": "iOS Security Auditor"
+      },
+      "requiresReadback": true,
+      "stopOnFailure": true
+    },
+    {
+      "agentName": "UWISwiftAuditor",
+      "dependsOn": [
+        "UWICTO"
+      ],
+      "expectedConfigHash": "02607892b7f68b2fee128c89e1a53a3835dcb528b54e173b4d63bb9375b61b8b",
+      "kind": "hire_agent",
+      "payloadTemplate": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWISwiftAuditor/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "env": {
+            "CODEBASE_MEMORY_PROJECT": "unstoppable-wallet-ios",
+            "SERENA_PROJECT": "unstoppable-wallet-ios",
+            "TELEGRAM_OPS_CHAT_ID": "${TELEGRAM_OPS_CHAT_ID}",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID": "${TELEGRAM_REDACTED_REPORTS_CHAT_ID}"
+          },
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWISwiftAuditor",
+            "/Users/Shared/UnstoppableAudit/runs/UWISwiftAuditor/scratch"
+          ]
+        },
+        "adapterType": "codex_local",
+        "budgetMonthlyCents": 0,
+        "capabilities": "UnstoppableAudit ios code-audit role. Performs audit-only work with read-only product source and writes only to artifact/scratch roots.",
+        "icon": "search-code",
+        "name": "UWISwiftAuditor",
+        "reportsTo": {
+          "agentName": "UWICTO"
+        },
+        "role": "engineer",
+        "runtimeConfig": {
+          "heartbeat": {
+            "cooldownSec": 10,
+            "enabled": false,
+            "intervalSec": 14400,
+            "maxConcurrentRuns": 1,
+            "wakeOnDemand": true
+          }
+        },
+        "sourceIssueId": "${UNSTOPPABLE_AUDIT_SOURCE_ISSUE_ID}",
+        "title": "iOS Swift Auditor"
+      },
+      "requiresReadback": true,
+      "stopOnFailure": true
+    },
+    {
+      "agentName": "UWITechnicalWriter",
+      "dependsOn": [
+        "UWICTO"
+      ],
+      "expectedConfigHash": "461d7bed77858c9fed53901023d89514e0434ea58b7c3ee76f2c589d13ee201a",
+      "kind": "hire_agent",
+      "payloadTemplate": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWITechnicalWriter/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "env": {
+            "CODEBASE_MEMORY_PROJECT": "unstoppable-wallet-ios",
+            "SERENA_PROJECT": "unstoppable-wallet-ios",
+            "TELEGRAM_OPS_CHAT_ID": "${TELEGRAM_OPS_CHAT_ID}",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID": "${TELEGRAM_REDACTED_REPORTS_CHAT_ID}"
+          },
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWITechnicalWriter",
+            "/Users/Shared/UnstoppableAudit/runs/UWITechnicalWriter/scratch"
+          ]
+        },
+        "adapterType": "codex_local",
+        "budgetMonthlyCents": 0,
+        "capabilities": "UnstoppableAudit ios writer role. Performs audit-only work with read-only product source and writes only to artifact/scratch roots.",
+        "icon": "file-text",
+        "name": "UWITechnicalWriter",
+        "reportsTo": {
+          "agentName": "UWICTO"
+        },
+        "role": "general",
+        "runtimeConfig": {
+          "heartbeat": {
+            "cooldownSec": 10,
+            "enabled": false,
+            "intervalSec": 14400,
+            "maxConcurrentRuns": 1,
+            "wakeOnDemand": true
+          }
+        },
+        "sourceIssueId": "${UNSTOPPABLE_AUDIT_SOURCE_ISSUE_ID}",
+        "title": "iOS Audit Technical Writer"
+      },
+      "requiresReadback": true,
+      "stopOnFailure": true
+    }
+  ],
+  "preflight_hash": "944497be6b8e18aae99da09aed9de149e4e1aed54922a4a5ed22dc6967070c9d",
+  "rollback_manifest_path": "/Users/ant013/Android/Gimle-Palace-cx/paperclips/manifests/unstoppable-audit/rollback-gate-c.json",
+  "team": "UnstoppableAudit"
+}
