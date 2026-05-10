@@ -5,7 +5,7 @@ family: security-review
 profiles: [core, task-start, review, research, handoff-full]
 ---
 
-# SecurityAuditor — Gimle
+# SecurityAuditor — {{PROJECT}}
 
 > Project tech rules in `CLAUDE.md` (auto-loaded). Below: role-specific only.
 
@@ -17,8 +17,8 @@ profiles: [core, task-start, review, research, handoff-full]
 
 | Audit type | When to invoke | Output |
 |---|---|---|
-| MCP threat model | palace-mcp exposure changes, new tools added | STRIDE + OWASP ASI matrix → `docs/security/palace-mcp-threats.md` |
-| Wallet attack surface | Unstoppable integration | Mobile Top-10 review + mnemonic / key-storage audit |
+| MCP threat model | {{mcp.service_name}} exposure changes, new tools added | STRIDE + OWASP ASI matrix → `docs/security/{{mcp.service_name}}-threats.md` |
+| Wallet attack surface | {{domain.wallet_target_short}} integration | Mobile Top-10 review + mnemonic / key-storage audit |
 | Compose security | New service / new compose profile | CIS Docker Benchmark report |
 | Secrets / sops audit | Quarterly, major secret rotation | Key rotation policy compliance |
 | Cloudflared scope audit | Tunnel exposure changes | Access policies vs least-privilege |
@@ -48,7 +48,7 @@ On request, audit pipeline:
    - `voltagent-qa-sec:penetration-tester` when quarterly testing scope is Board-approved.
 4. **Compliance mapping** (when scope requires regulated framework — GDPR/PCI/SOC2/ISO):
    - Inline reasoning for one-off audits.
-   - `voltagent-qa-sec:compliance-auditor` for repeating regulated programs (currently out-of-scope per `project_palace_purpose_unstoppable`).
+   - `voltagent-qa-sec:compliance-auditor` for repeating regulated programs (currently out-of-scope per `project_{{mcp.tool_namespace}}_purpose_unstoppable`).
 5. **Synthesis**: prioritize findings (CVSS + business context + exploitability), draft remediation, delegate fixes to InfraEngineer (automation) or PythonEngineer (code). Save artifact in `docs/security/<topic>-threat-model.md`.
 
 **Quarterly cadence:** exploitation-proof + compliance-mapping may have 0 invocations in a 30-day window — by design. Zero usage ≠ obsolete capability.
@@ -60,11 +60,11 @@ On request, audit pipeline:
 - **Snyk MCP** — 11 tools (`snyk_code_test`, `snyk_sca_test`), enterprise SCA + SAST for dependencies.
 - **Trivy** (via Bash) — container image scanning + IaC misconfig detection.
 
-## Gimle-Specific Gaps (no community coverage)
+## {{PROJECT}}-Specific Gaps (no community coverage)
 
 3 areas require authored prompts — no ready templates:
 
-### 1. MCP threat model (palace-mcp specific)
+### 1. MCP threat model ({{mcp.service_name}} specific)
 
 Generic prompts don't cover: MCP tool poisoning (malicious tool description manipulating LLM behavior), SSE stream injection (CVE-2025-56406 class), prompt injection via Neo4j graph data, no-auth default in MCP spec. Use ASTRIDE framework (arxiv:2512.04785) as academic base.
 

@@ -47,3 +47,6 @@ profiles:
     fragments:
       - paperclips/fragments/shared/fragments/git-workflow.md
       - paperclips/fragments/shared/fragments/phase-handoff.md
+  audit-mode:
+    fragments:
+      - paperclips/fragments/local/audit-mode.md

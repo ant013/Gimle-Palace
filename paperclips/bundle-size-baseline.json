@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-05-03",
+  "generatedAt": "2026-05-11",
   "baseBranch": "origin/develop",
-  "measurementCommit": "65f57937408de4f6a8970c8f3701705bc8ff96a9",
+  "measurementCommit": "9993d478e94f87a0190bebfe30f1f20f2bfbc502",
   "policy": {
-    "maxGrowthPercent": 10
+    "maxGrowthPercent": 0
   },
   "tokenEstimate": "ceil(bytes / 4)",
   "bundles": [
@@ -12,9 +12,9 @@
       "roleId": "claude:auditor",
       "target": "claude",
       "path": "paperclips/dist/auditor.md",
-      "bytes": 12699,
-      "lines": 287,
-      "tokenEstimate": 3139
+      "bytes": 20786,
+      "lines": 479,
+      "tokenEstimate": 5197
     },
     {
       "roleId": "claude:blockchain-engineer",
@@ -22,31 +22,31 @@
       "path": "paperclips/dist/blockchain-engineer.md",
       "bytes": 25951,
       "lines": 575,
-      "tokenEstimate": 6425
+      "tokenEstimate": 6488
     },
     {
       "roleId": "claude:code-reviewer",
       "target": "claude",
       "path": "paperclips/dist/code-reviewer.md",
-      "bytes": 34152,
-      "lines": 804,
-      "tokenEstimate": 8462
+      "bytes": 34351,
+      "lines": 806,
+      "tokenEstimate": 8588
     },
     {
       "roleId": "claude:cto",
       "target": "claude",
       "path": "paperclips/dist/cto.md",
-      "bytes": 24140,
-      "lines": 499,
-      "tokenEstimate": 5975
+      "bytes": 24339,
+      "lines": 501,
+      "tokenEstimate": 6085
     },
     {
       "roleId": "claude:infra-engineer",
       "target": "claude",
       "path": "paperclips/dist/infra-engineer.md",
-      "bytes": 28678,
-      "lines": 618,
-      "tokenEstimate": 7106
+      "bytes": 28877,
+      "lines": 620,
+      "tokenEstimate": 7220
     },
     {
       "roleId": "claude:mcp-engineer",
@@ -54,15 +54,15 @@
       "path": "paperclips/dist/mcp-engineer.md",
       "bytes": 26022,
       "lines": 570,
-      "tokenEstimate": 6450
+      "tokenEstimate": 6506
     },
     {
       "roleId": "claude:opus-architect-reviewer",
       "target": "claude",
       "path": "paperclips/dist/opus-architect-reviewer.md",
-      "bytes": 30857,
-      "lines": 720,
-      "tokenEstimate": 7625
+      "bytes": 31056,
+      "lines": 722,
+      "tokenEstimate": 7764
     },
     {
       "roleId": "claude:python-engineer",
@@ -70,15 +70,15 @@
       "path": "paperclips/dist/python-engineer.md",
       "bytes": 28441,
       "lines": 683,
-      "tokenEstimate": 7051
+      "tokenEstimate": 7111
     },
     {
       "roleId": "claude:qa-engineer",
       "target": "claude",
       "path": "paperclips/dist/qa-engineer.md",
-      "bytes": 29391,
-      "lines": 654,
-      "tokenEstimate": 7276
+      "bytes": 29590,
+      "lines": 656,
+      "tokenEstimate": 7398
     },
     {
       "roleId": "claude:research-agent",
@@ -86,15 +86,15 @@
       "path": "paperclips/dist/research-agent.md",
       "bytes": 22167,
       "lines": 479,
-      "tokenEstimate": 5491
+      "tokenEstimate": 5542
     },
     {
       "roleId": "claude:security-auditor",
       "target": "claude",
       "path": "paperclips/dist/security-auditor.md",
-      "bytes": 30775,
-      "lines": 674,
-      "tokenEstimate": 7613
+      "bytes": 30974,
+      "lines": 676,
+      "tokenEstimate": 7744
     },
     {
       "roleId": "claude:technical-writer",
@@ -102,15 +102,23 @@
       "path": "paperclips/dist/technical-writer.md",
       "bytes": 21940,
       "lines": 466,
-      "tokenEstimate": 5432
+      "tokenEstimate": 5485
     },
     {
       "roleId": "codex:codex-architect-reviewer",
       "target": "codex",
       "path": "paperclips/dist/codex/codex-architect-reviewer.md",
-      "bytes": 28217,
-      "lines": 633,
-      "tokenEstimate": 6954
+      "bytes": 28393,
+      "lines": 637,
+      "tokenEstimate": 7099
+    },
+    {
+      "roleId": "codex:cx-auditor",
+      "target": "codex",
+      "path": "paperclips/dist/codex/cx-auditor.md",
+      "bytes": 19281,
+      "lines": 463,
+      "tokenEstimate": 4821
     },
     {
       "roleId": "codex:cx-blockchain-engineer",
@@ -118,31 +126,31 @@
       "path": "paperclips/dist/codex/cx-blockchain-engineer.md",
       "bytes": 27380,
       "lines": 593,
-      "tokenEstimate": 6778
+      "tokenEstimate": 6845
     },
     {
       "roleId": "codex:cx-code-reviewer",
       "target": "codex",
       "path": "paperclips/dist/codex/cx-code-reviewer.md",
-      "bytes": 25875,
-      "lines": 619,
-      "tokenEstimate": 6416
+      "bytes": 26051,
+      "lines": 623,
+      "tokenEstimate": 6513
     },
     {
       "roleId": "codex:cx-cto",
       "target": "codex",
       "path": "paperclips/dist/codex/cx-cto.md",
-      "bytes": 25997,
-      "lines": 512,
-      "tokenEstimate": 6433
+      "bytes": 26173,
+      "lines": 516,
+      "tokenEstimate": 6544
     },
     {
       "roleId": "codex:cx-infra-engineer",
       "target": "codex",
       "path": "paperclips/dist/codex/cx-infra-engineer.md",
-      "bytes": 29407,
-      "lines": 629,
-      "tokenEstimate": 7284
+      "bytes": 29583,
+      "lines": 633,
+      "tokenEstimate": 7396
     },
     {
       "roleId": "codex:cx-mcp-engineer",
@@ -150,7 +158,7 @@
       "path": "paperclips/dist/codex/cx-mcp-engineer.md",
       "bytes": 27089,
       "lines": 584,
-      "tokenEstimate": 6711
+      "tokenEstimate": 6773
     },
     {
       "roleId": "codex:cx-python-engineer",
@@ -158,15 +166,15 @@
       "path": "paperclips/dist/codex/cx-python-engineer.md",
       "bytes": 29852,
       "lines": 698,
-      "tokenEstimate": 7397
+      "tokenEstimate": 7463
     },
     {
       "roleId": "codex:cx-qa-engineer",
       "target": "codex",
       "path": "paperclips/dist/codex/cx-qa-engineer.md",
-      "bytes": 30213,
-      "lines": 665,
-      "tokenEstimate": 7479
+      "bytes": 30389,
+      "lines": 669,
+      "tokenEstimate": 7598
     },
     {
       "roleId": "codex:cx-research-agent",
@@ -174,15 +182,15 @@
       "path": "paperclips/dist/codex/cx-research-agent.md",
       "bytes": 23386,
       "lines": 493,
-      "tokenEstimate": 5790
+      "tokenEstimate": 5847
     },
     {
       "roleId": "codex:cx-security-auditor",
       "target": "codex",
       "path": "paperclips/dist/codex/cx-security-auditor.md",
-      "bytes": 31807,
-      "lines": 688,
-      "tokenEstimate": 7871
+      "bytes": 31983,
+      "lines": 692,
+      "tokenEstimate": 7996
     },
     {
       "roleId": "codex:cx-technical-writer",
@@ -190,7 +198,7 @@
       "path": "paperclips/dist/codex/cx-technical-writer.md",
       "bytes": 23018,
       "lines": 481,
-      "tokenEstimate": 5696
+      "tokenEstimate": 5755
     }
   ]
 }
