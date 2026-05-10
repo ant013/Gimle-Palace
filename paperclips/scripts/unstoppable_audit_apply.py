@@ -9,7 +9,10 @@ operation plan and rollback manifest that can be reviewed before live apply.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
+import os
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,6 +25,7 @@ DEFAULT_PREFLIGHT = Path("paperclips/manifests/unstoppable-audit/gate-b2-preflig
 DEFAULT_DRY_RUN = Path("paperclips/manifests/unstoppable-audit/gate-b1-dry-run.json")
 DEFAULT_APPLY_PLAN = Path("paperclips/manifests/unstoppable-audit/gate-c-apply-plan.json")
 DEFAULT_ROLLBACK = Path("paperclips/manifests/unstoppable-audit/rollback-gate-c.json")
+DEFAULT_LIVE_RESULT = Path("paperclips/manifests/unstoppable-audit/gate-c-live-result.json")
 LIVE_CONFIRMATION = "UNSTOPPABLE_AUDIT_LIVE_APPLY"
 
 
@@ -36,6 +40,40 @@ def read_json(path: Path) -> dict[str, Any]:
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def http_post_json(api_base: str, token: str, path: str, payload: dict[str, Any]) -> Any:
+    result = subprocess.run(
+        [
+            "curl",
+            "-sS",
+            "-X",
+            "POST",
+            "-w",
+            "\n%{http_code}",
+            api_base.rstrip("/") + path,
+            "-H",
+            f"Authorization: Bearer {token}",
+            "-H",
+            "Accept: application/json",
+            "-H",
+            "Content-Type: application/json",
+            "--data-binary",
+            "@-",
+        ],
+        input=json.dumps(payload, sort_keys=True),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"POST {path} failed: {result.stderr.strip()}")
+    if "\n" not in result.stdout:
+        raise RuntimeError(f"POST {path} returned malformed curl output")
+    body, http_code = result.stdout.rsplit("\n", 1)
+    if http_code not in {"200", "201", "202", "204"}:
+        raise RuntimeError(f"POST {path} failed with HTTP {http_code}: {body[:300]}")
+    return json.loads(body) if body else None
 
 
 def validate_preflight(preflight: dict[str, Any]) -> list[str]:
@@ -58,6 +96,23 @@ def validate_preflight(preflight: dict[str, Any]) -> list[str]:
             errors.append(f"{decision.get('name')}: decision ok must be true")
         if decision.get("blockers"):
             errors.append(f"{decision.get('name')}: decision blockers must be empty")
+    return errors
+
+
+def validate_apply_plan(plan: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    if not plan.get("ok"):
+        errors.append("apply plan ok must be true")
+    if plan.get("gate") != "C-apply-plan":
+        errors.append("apply plan gate must be C-apply-plan")
+    if plan.get("mode") != "dry-run":
+        errors.append("apply plan mode must be dry-run")
+    if plan.get("team") != "UnstoppableAudit":
+        errors.append("apply plan team must be UnstoppableAudit")
+    if plan.get("live_mutation"):
+        errors.append("apply plan must be generated as non-mutating dry-run")
+    if not isinstance(plan.get("operations"), list) or not plan.get("operations"):
+        errors.append("apply plan operations must be a non-empty list")
     return errors
 
 
@@ -260,6 +315,212 @@ def build_apply_plan(preflight: dict[str, Any], dry_run: dict[str, Any], rollbac
     }
 
 
+def replacement_value(cli_value: str | None, *env_names: str) -> str | None:
+    if cli_value:
+        return cli_value
+    for env_name in env_names:
+        value = os.environ.get(env_name)
+        if value:
+            return value
+    return None
+
+
+def runtime_replacements(args: argparse.Namespace, config: dict[str, Any]) -> dict[str, str]:
+    source_issue_id = replacement_value(
+        args.source_issue_id,
+        "UNSTOPPABLE_AUDIT_SOURCE_ISSUE_ID",
+        "PAPERCLIP_SOURCE_ISSUE_ID",
+    )
+    if not source_issue_id:
+        raise RuntimeError(
+            "source issue id is required; pass --source-issue-id or set "
+            "UNSTOPPABLE_AUDIT_SOURCE_ISSUE_ID/PAPERCLIP_SOURCE_ISSUE_ID"
+        )
+    reports_chat = replacement_value(
+        args.redacted_reports_chat_id,
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
+    ) or str(team.prereq.get_path(config, "telegram.redacted_reports_chat_id"))
+    ops_chat = replacement_value(
+        args.ops_chat_id,
+        "TELEGRAM_OPS_CHAT_ID",
+    ) or str(team.prereq.get_path(config, "telegram.ops_chat_id"))
+    return {
+        "${UNSTOPPABLE_AUDIT_SOURCE_ISSUE_ID}": source_issue_id,
+        "${TELEGRAM_REDACTED_REPORTS_CHAT_ID}": reports_chat,
+        "${TELEGRAM_OPS_CHAT_ID}": ops_chat,
+    }
+
+
+def substitute_placeholders(value: Any, replacements: dict[str, str]) -> Any:
+    if isinstance(value, str):
+        result = value
+        for placeholder, replacement in replacements.items():
+            result = result.replace(placeholder, replacement)
+        return result
+    if isinstance(value, list):
+        return [substitute_placeholders(item, replacements) for item in value]
+    if isinstance(value, dict):
+        return {key: substitute_placeholders(item, replacements) for key, item in value.items()}
+    return value
+
+
+def materialize_hire_payload(
+    operation: dict[str, Any],
+    created_agent_ids: dict[str, str],
+    replacements: dict[str, str],
+) -> dict[str, Any]:
+    payload = substitute_placeholders(copy.deepcopy(operation["payloadTemplate"]), replacements)
+    reports_to = payload.get("reportsTo")
+    if isinstance(reports_to, dict) and reports_to.get("agentName"):
+        manager_name = str(reports_to["agentName"])
+        manager_id = created_agent_ids.get(manager_name)
+        if not manager_id:
+            raise RuntimeError(f"{operation['agentName']}: missing created manager id for {manager_name}")
+        payload["reportsTo"] = manager_id
+    return payload
+
+
+def response_summary(response: Any) -> dict[str, Any]:
+    if not isinstance(response, dict):
+        return {"responseType": type(response).__name__}
+    agent = response.get("agent") if isinstance(response.get("agent"), dict) else response
+    approval = response.get("approval") if isinstance(response.get("approval"), dict) else {}
+    return {
+        "agentId": agent.get("id"),
+        "agentName": agent.get("name"),
+        "agentStatus": agent.get("status"),
+        "approvalId": approval.get("id"),
+        "approvalStatus": approval.get("status"),
+    }
+
+
+def extract_agent_id(response: Any) -> str:
+    if isinstance(response, dict) and isinstance(response.get("agent"), dict):
+        agent_id = response["agent"].get("id")
+        if agent_id:
+            return str(agent_id)
+    if isinstance(response, dict) and response.get("id"):
+        return str(response["id"])
+    raise RuntimeError("hire response did not include agent id")
+
+
+def is_pending_approval(response: Any) -> bool:
+    if not isinstance(response, dict):
+        return False
+    agent = response.get("agent") if isinstance(response.get("agent"), dict) else response
+    approval = response.get("approval") if isinstance(response.get("approval"), dict) else {}
+    return agent.get("status") == "pending_approval" or approval.get("status") == "pending"
+
+
+def compare_config_subset(expected_payload: dict[str, Any], live_config: dict[str, Any]) -> list[str]:
+    divergences: list[str] = []
+    expected_adapter = expected_payload.get("adapterConfig", {})
+    live_adapter = live_config.get("adapterConfig", {}) if isinstance(live_config, dict) else {}
+    if live_config.get("adapterType") != expected_payload.get("adapterType"):
+        divergences.append("adapterType mismatch")
+    for key in [
+        "cwd",
+        "model",
+        "modelReasoningEffort",
+        "instructionsFilePath",
+        "instructionsEntryFile",
+        "instructionsBundleMode",
+        "dangerouslyBypassApprovalsAndSandbox",
+        "writableRoots",
+        "sourceRootsReadOnly",
+    ]:
+        if live_adapter.get(key) != expected_adapter.get(key):
+            divergences.append(f"adapterConfig.{key} mismatch")
+    expected_env_keys = sorted((expected_adapter.get("env") or {}).keys())
+    live_env = live_adapter.get("env") or {}
+    live_env_keys = sorted(live_env.keys()) if isinstance(live_env, dict) else []
+    live_env_key_list = sorted(live_adapter.get("envKeys") or [])
+    if expected_env_keys and live_env_keys != expected_env_keys and live_env_key_list != expected_env_keys:
+        divergences.append("adapterConfig.env keys mismatch")
+    return divergences
+
+
+def execute_operations(
+    plan: dict[str, Any],
+    api_base: str,
+    token: str,
+    company_id: str,
+    replacements: dict[str, str],
+    *,
+    stop_on_pending_approval: bool = True,
+) -> dict[str, Any]:
+    created_agent_ids: dict[str, str] = {}
+    results: list[dict[str, Any]] = []
+    ok = True
+    stopped_reason = None
+    for index, operation in enumerate(plan["operations"], start=1):
+        result: dict[str, Any] = {
+            "index": index,
+            "kind": operation["kind"],
+            "agentName": operation.get("agentName"),
+            "ok": False,
+        }
+        try:
+            if operation["kind"] == "terminate_agent":
+                response = http_post_json(api_base, token, f"/api/agents/{operation['agentId']}/terminate", {})
+                result.update({"ok": True, "response": response_summary(response)})
+            elif operation["kind"] == "hire_agent":
+                payload = materialize_hire_payload(operation, created_agent_ids, replacements)
+                response = http_post_json(api_base, token, f"/api/companies/{company_id}/agent-hires", payload)
+                agent_id = extract_agent_id(response)
+                created_agent_ids[str(operation["agentName"])] = agent_id
+                result.update(
+                    {
+                        "ok": True,
+                        "agentId": agent_id,
+                        "payloadHash": team.sha256_json(payload),
+                        "response": response_summary(response),
+                    }
+                )
+                if is_pending_approval(response) and stop_on_pending_approval:
+                    result["readbackSkipped"] = "pending approval"
+                    stopped_reason = f"{operation['agentName']}: pending approval"
+                    results.append(result)
+                    break
+                if operation.get("requiresReadback"):
+                    live_config = team.http_get_json(api_base, token, f"/api/agents/{agent_id}/configuration")
+                    divergences = compare_config_subset(payload, live_config if isinstance(live_config, dict) else {})
+                    result["readback"] = {
+                        "checked": True,
+                        "ok": not divergences,
+                        "divergences": divergences,
+                    }
+                    if divergences:
+                        ok = False
+                        result["ok"] = False
+                        stopped_reason = f"{operation['agentName']}: readback divergence"
+            elif operation["kind"] == "skip_agent":
+                result.update({"ok": True, "skipped": True, "reason": operation.get("reason")})
+            else:
+                raise RuntimeError(f"unsupported operation kind {operation['kind']!r}")
+        except Exception as exc:
+            ok = False
+            result["ok"] = False
+            result["error"] = str(exc)
+        results.append(result)
+        if not result["ok"] or (operation.get("stopOnFailure") and not ok):
+            stopped_reason = stopped_reason or f"{operation.get('agentName')}: operation failed"
+            break
+    return {
+        "ok": ok and stopped_reason is None,
+        "gate": "C-live-apply",
+        "mode": "live",
+        "team": "UnstoppableAudit",
+        "created_at": now_iso(),
+        "source_plan_hash": team.sha256_json(plan),
+        "operation_count": len(plan["operations"]),
+        "executed_count": len(results),
+        "created_agent_ids": created_agent_ids,
+        "stopped_reason": stopped_reason,
+        "results": results,
+    }
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     repo_root = Path(__file__).resolve().parents[2]
     parser = argparse.ArgumentParser(description="Plan or apply UnstoppableAudit live bootstrap")
@@ -274,6 +535,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
     apply = subparsers.add_parser("apply")
     apply.add_argument("--plan", type=Path, default=repo_root / DEFAULT_APPLY_PLAN)
+    apply.add_argument("--config", type=Path, default=repo_root / "paperclips/teams/unstoppable-audit.yaml")
+    apply.add_argument("--result-manifest", type=Path, default=repo_root / DEFAULT_LIVE_RESULT)
+    apply.add_argument("--auth-path", type=Path, default=Path.home() / ".paperclip" / "auth.json")
+    apply.add_argument("--api-base", default=os.environ.get("PAPERCLIP_API_URL", "https://paperclip.ant013.work"))
+    apply.add_argument("--company-id", default="")
+    apply.add_argument("--source-issue-id", default="")
+    apply.add_argument("--redacted-reports-chat-id", default="")
+    apply.add_argument("--ops-chat-id", default="")
+    apply.add_argument("--continue-after-pending-approval", action="store_true")
     apply.add_argument("--allow-live", action="store_true")
     apply.add_argument("--confirm", default="")
     return parser.parse_args(argv)
@@ -293,13 +563,30 @@ def command_plan(args: argparse.Namespace) -> int:
 
 def command_apply(args: argparse.Namespace) -> int:
     plan = read_json(args.plan)
-    if not plan.get("ok"):
-        raise RuntimeError("apply plan is not ok")
+    errors = validate_apply_plan(plan)
+    if errors:
+        raise RuntimeError("invalid apply plan: " + "; ".join(errors))
     if not args.allow_live or args.confirm != LIVE_CONFIRMATION:
         raise RuntimeError(
             f"refusing live mutation; pass --allow-live --confirm {LIVE_CONFIRMATION} after review"
         )
-    raise RuntimeError("live mutation transport is intentionally not enabled in this slice")
+    token = team.load_auth_token(args.api_base, args.auth_path)
+    if not token:
+        raise RuntimeError("PAPERCLIP_API_KEY or ~/.paperclip/auth.json token is required for apply")
+    config = team.load_config(args.config)
+    company_id = args.company_id or str(team.prereq.get_path(config, "paperclip.company_id"))
+    replacements = runtime_replacements(args, config)
+    result = execute_operations(
+        plan,
+        args.api_base,
+        token,
+        company_id,
+        replacements,
+        stop_on_pending_approval=not args.continue_after_pending_approval,
+    )
+    write_json(args.result_manifest, result)
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0 if result["ok"] else 1
 
 
 def main(argv: list[str] | None = None) -> int:

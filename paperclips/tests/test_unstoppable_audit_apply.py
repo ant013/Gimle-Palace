@@ -83,3 +83,123 @@ def test_validate_preflight_rejects_blockers():
 
     assert "preflight ok must be true" in errors
     assert "preflight blockers must be empty" in errors
+
+
+def test_materialize_hire_payload_resolves_placeholders_and_manager_id():
+    preflight, dry_run = load_manifests()
+    operations = apply.build_operations(preflight, dry_run)
+    uwicto = next(operation for operation in operations if operation["agentName"] == "UWICTO")
+
+    payload = apply.materialize_hire_payload(
+        uwicto,
+        {"AUCEO": "auceo-id"},
+        {
+            "${UNSTOPPABLE_AUDIT_SOURCE_ISSUE_ID}": "issue-id",
+            "${TELEGRAM_REDACTED_REPORTS_CHAT_ID}": "-100reports",
+            "${TELEGRAM_OPS_CHAT_ID}": "-100ops",
+        },
+    )
+
+    assert payload["reportsTo"] == "auceo-id"
+    assert payload["sourceIssueId"] == "issue-id"
+    assert payload["adapterConfig"]["env"]["TELEGRAM_OPS_CHAT_ID"] == "-100ops"
+
+
+def test_runtime_replacements_require_source_issue_id(monkeypatch):
+    monkeypatch.delenv("UNSTOPPABLE_AUDIT_SOURCE_ISSUE_ID", raising=False)
+    monkeypatch.delenv("PAPERCLIP_SOURCE_ISSUE_ID", raising=False)
+    args = apply.parse_args(
+        [
+            "apply",
+            "--allow-live",
+            "--confirm",
+            apply.LIVE_CONFIRMATION,
+        ]
+    )
+    config = {
+        "telegram": {
+            "redacted_reports_chat_id": "-100reports",
+            "ops_chat_id": "-100ops",
+        }
+    }
+
+    with pytest.raises(RuntimeError, match="source issue id is required"):
+        apply.runtime_replacements(args, config)
+
+
+def test_execute_operations_stops_on_pending_approval(monkeypatch):
+    preflight, dry_run = load_manifests()
+    plan = apply.build_apply_plan(preflight, dry_run, Path("rollback.json"))
+    calls = []
+
+    def fake_post(api_base, token, path, payload):
+        calls.append((path, payload))
+        if path.endswith("/terminate"):
+            return {"agent": {"id": "old-auceo", "name": "AUCEO", "status": "terminated"}}
+        return {
+            "agent": {"id": "new-auceo", "name": "AUCEO", "status": "pending_approval"},
+            "approval": {"id": "approval-id", "status": "pending"},
+        }
+
+    monkeypatch.setattr(apply, "http_post_json", fake_post)
+
+    result = apply.execute_operations(
+        plan,
+        "https://paperclip.example",
+        "token",
+        "company-id",
+        {
+            "${UNSTOPPABLE_AUDIT_SOURCE_ISSUE_ID}": "issue-id",
+            "${TELEGRAM_REDACTED_REPORTS_CHAT_ID}": "-100reports",
+            "${TELEGRAM_OPS_CHAT_ID}": "-100ops",
+        },
+    )
+
+    assert result["ok"] is False
+    assert result["executed_count"] == 2
+    assert result["created_agent_ids"] == {"AUCEO": "new-auceo"}
+    assert result["stopped_reason"] == "AUCEO: pending approval"
+    assert calls[0][0] == "/api/agents/dcdd8871-5b44-4563-bb00-f8cca292a69e/terminate"
+    assert calls[1][0] == "/api/companies/company-id/agent-hires"
+
+
+def test_execute_operations_resolves_reports_to_after_created_manager(monkeypatch):
+    preflight, dry_run = load_manifests()
+    plan = apply.build_apply_plan(preflight, dry_run, Path("rollback.json"))
+    plan["operations"] = [
+        operation
+        for operation in plan["operations"]
+        if operation["kind"] == "hire_agent" and operation["agentName"] in {"AUCEO", "UWICTO"}
+    ]
+    post_payloads = []
+
+    def fake_post(api_base, token, path, payload):
+        post_payloads.append(payload)
+        name = payload["name"]
+        return {"agent": {"id": f"{name}-id", "name": name, "status": "active"}}
+
+    def fake_get(api_base, token, path):
+        agent_id = path.rsplit("/", 2)[-2]
+        payload = next(payload for payload in post_payloads if payload["name"] == agent_id.removesuffix("-id"))
+        return {"adapterType": payload["adapterType"], "adapterConfig": payload["adapterConfig"]}
+
+    monkeypatch.setattr(apply, "http_post_json", fake_post)
+    monkeypatch.setattr(apply.team, "http_get_json", fake_get)
+
+    result = apply.execute_operations(
+        plan,
+        "https://paperclip.example",
+        "token",
+        "company-id",
+        {
+            "${UNSTOPPABLE_AUDIT_SOURCE_ISSUE_ID}": "issue-id",
+            "${TELEGRAM_REDACTED_REPORTS_CHAT_ID}": "-100reports",
+            "${TELEGRAM_OPS_CHAT_ID}": "-100ops",
+        },
+        stop_on_pending_approval=False,
+    )
+
+    assert result["ok"] is True
+    assert post_payloads[0]["reportsTo"] is None
+    assert post_payloads[1]["reportsTo"] == "AUCEO-id"
+    assert result["created_agent_ids"] == {"AUCEO": "AUCEO-id", "UWICTO": "UWICTO-id"}
