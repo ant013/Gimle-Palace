@@ -15,11 +15,13 @@ bootstrap proved that copying a one-off flow creates repeated failures:
   through agent runtime env vars.
 - A new company Codex home can accidentally point at an API-key auth file while
   Gimle agents use a separate ChatGPT/OAuth auth file.
-- Paperclip can convert an instructions bundle into `external` mode; then every
-  agent workspace must physically contain `AGENTS.md`.
-- A heartbeat can initialize Codex successfully while still warning that the
-  run fell back to a generic workspace and could not read the external
-  `AGENTS.md`; OAuth success alone is not enough.
+- Paperclip can convert an instructions bundle into `external` mode, but the
+  bootstrapper did not automatically materialize each agent's workspace
+  `AGENTS.md`.
+- Agents can be hired with a generic/fallback workspace instead of the intended
+  project/issue workspace if the bootstrapper does not bind `cwd`,
+  `instructionsFilePath`, source roots, write roots, and source issue context as
+  one atomic step.
 - New agents need `--skip-git-repo-check` or a trusted/git workspace.
 - Issue prefixes are live Paperclip company state (`GIM`, `UNS`, etc.), not
   something to infer from stale manifests.
@@ -42,10 +44,12 @@ credentials and isolated knowledge storage.
 - Make Telegram routing a Paperclip plugin/company setting, not agent env.
 - Ensure codebase-memory, Serena, Neo4j, workspaces, artifacts, and source roots
   are separated per project/company.
+- Automatically create and bind every agent to the correct project workspace,
+  instructions file, source roots, write roots, and bootstrap issue context.
 - Produce enough preflight/postcheck evidence that a retry starts in the right
   chat, with the right model, credentials, instructions, and workspace.
-- Classify heartbeat output into credential, instructions, workspace-context,
-  and tool-session failures so operators do not chase the wrong blocker.
+- Use heartbeat diagnostics only as verification that automatic provisioning
+  worked, not as a manual repair workflow.
 
 ## Non-Goals
 
@@ -156,11 +160,18 @@ UnstoppableAudit gates:
    - codebase-memory project names are explicit and unique.
    - Serena project names are explicit and unique.
 8. Prepare source mirrors as read-only source roots.
-9. Prepare per-agent workspaces, scratch roots, and artifact roots.
+9. Prepare project-bound runtime layout:
+   - per-agent workspace under `runtime.run_root/<agent>/workspace`.
+   - per-agent scratch root under `runtime.run_root/<agent>/scratch`.
+   - per-agent artifact root under `runtime.artifact_root/<agent>`.
+   - source issue/project context recorded in Paperclip before the agent can
+     run.
 10. Prepare per-company Codex home.
-11. Hire or update agents.
-12. Upload instructions bundle or materialize `AGENTS.md`.
-13. Patch runtime config and env.
+11. Render instructions for every agent.
+12. Hire or update agents with the final workspace, instructions, source roots,
+    write roots, runtime env, model, and bootstrap issue context in one
+    reconciler operation.
+13. Patch runtime config and env if live state drifted.
 14. Run postcheck and smoke.
 15. Parse the smoke heartbeat transcript and fail on any unclassified runtime
     warning.
@@ -201,6 +212,8 @@ Rules:
 
 For every `codex_local` agent:
 
+- `adapterConfig.cwd` must be the generated project-bound agent workspace, not
+  a Paperclip fallback workspace.
 - `adapterConfig.env.CODEX_HOME` must point at the verified company Codex home.
 - `adapterConfig.env.PATH` must include the Codex binary path used by Paperclip.
 - `adapterConfig.extraArgs` must include `--skip-git-repo-check`, unless the
@@ -210,6 +223,34 @@ For every `codex_local` agent:
 - `adapterConfig.dangerouslyBypassApprovalsAndSandbox` should be explicit.
 - `sourceRootsReadOnly` must contain product repositories.
 - `writableRoots` must contain only per-agent artifact and scratch roots.
+- The source issue/project context used for the first run must be assigned as
+  part of agent creation or reconciliation. The bootstrapper must not rely on a
+  later manual move/retry to attach the agent to the right issue.
+
+## Agent Workspace Provisioning Rules
+
+Agent creation is not complete until filesystem layout and Paperclip live
+config agree. The bootstrapper must create or reconcile this state before any
+agent can run:
+
+- `runtime.run_root/<agent>/workspace` exists.
+- `runtime.run_root/<agent>/scratch` exists.
+- `runtime.artifact_root/<agent>` exists.
+- `adapterConfig.cwd` points to the workspace above.
+- `adapterConfig.instructionsFilePath`, when external, points to
+  `<workspace>/AGENTS.md`.
+- `writableRoots` includes only the agent scratch and artifact roots.
+- `sourceRootsReadOnly` includes the project source mirrors.
+- The Paperclip agent is attached to the intended company, project/bootstrap
+  issue, source roots, and issue prefix.
+
+The reconciler must treat these as desired state. If a newly hired agent points
+at a fallback workspace, missing workspace, missing `AGENTS.md`, wrong
+instructions path, wrong roots, or no source issue context, apply must fail or
+patch the agent automatically before the first heartbeat.
+
+Manual copying of `AGENTS.md` or moving agents between fallback and project
+workspaces is a bug in the bootstrapper, not an operator step.
 
 ## Instructions Bundle Rules
 
@@ -229,15 +270,18 @@ Postcheck must verify:
 - If `instructionsBundleMode = "external"`, the exact
   `adapterConfig.instructionsFilePath` exists before any heartbeat or smoke run
   is started.
+- If `instructionsBundleMode = "external"`, the bootstrapper renders or copies
+  `AGENTS.md` into every agent workspace during apply. Operators should never
+  need to materialize this file manually after a failed run.
 - Rendered `AGENTS.md` contains project slug, source roots, write roots, role,
   reporting line, and credential constraints.
 - No AGENTS.md contains raw secrets or bootstrap admin credentials.
 
-## Heartbeat / Smoke Diagnostics Rules
+## Provisioning Smoke Rules
 
-The first heartbeat is an acceptance test, not just a liveness ping. The
-bootstrapper must capture stdout/stderr/transcript lines and classify them
-before reporting success.
+The first heartbeat is a verification of automatic provisioning, not a manual
+repair workflow. The bootstrapper must capture stdout/stderr/transcript lines
+and use them to prove that the agent was created in the right place.
 
 Required signals:
 
@@ -248,11 +292,10 @@ Required signals:
 - The agent instructions path must be readable before launch. A line like
   `could not read agent instructions file ... AGENTS.md` is a failed
   instructions postcheck.
-- The run workspace must be the project/issue workspace intended by the
-  package. A line like `No project or prior session workspace was available.
-  Using fallback workspace ...` is workspace-context drift. It is not an OAuth
-  problem, but it means the agent may be waking without the assigned Paperclip
-  issue/project context.
+- The run workspace must be the project/issue workspace created by the
+  bootstrapper. A line like `No project or prior session workspace was
+  available. Using fallback workspace ...` means provisioning failed. It is not
+  an acceptable post-bootstrap state.
 - A line like `write_stdin failed: stdin is closed for this session` is a
   tool-session failure. If Codex initialized and instructions/workspace checks
   passed, classify it separately and inspect which command/session attempted the
@@ -263,7 +306,7 @@ Postcheck output must include:
 - credential result: `chatgpt`, `apikey`, missing, malformed, or unknown.
 - instructions result: managed path or external `AGENTS.md` existence.
 - workspace result: assigned project/issue workspace, prior session workspace,
-  or fallback workspace.
+  or fallback workspace marked as provisioning failure.
 - tool-session result: no router errors, or the exact router error class.
 
 Known UnstoppableAudit lesson:
@@ -271,9 +314,9 @@ Known UnstoppableAudit lesson:
 - AUCEO reached Codex initialization after the company `CODEX_HOME` was copied
   from Gimle's ChatGPT/OAuth home, but the heartbeat still warned about missing
   `/Users/Shared/UnstoppableAudit/runs/AUCEO/workspace/AGENTS.md` and fallback
-  workspace selection. The correct fix was to materialize the external
-  `AGENTS.md` and then separately validate Paperclip project/issue workspace
-  binding.
+  workspace selection. The generic bootstrapper must prevent this by creating
+  the workspace, rendering `AGENTS.md`, and binding the Paperclip agent to the
+  project/bootstrap issue before the first AUCEO run.
 
 ## Telegram Routing Rules
 
@@ -321,6 +364,7 @@ The postcheck must produce one manifest with:
   - name, agent ID, model, status.
   - `CODEX_HOME`, auth mode, and login status.
   - `cwd`, `extraArgs`, source roots, writable roots.
+  - source issue/project binding used by the first run.
   - instructions mode and file existence.
 - Filesystem summary:
   - workspaces exist.
@@ -336,8 +380,7 @@ The postcheck must produce one manifest with:
     quota reasons.
   - heartbeat transcript is classified into credential, instructions,
     workspace-context, and tool-session results.
-  - no fallback workspace is used unless the package explicitly allows a
-    context-free heartbeat.
+  - no fallback workspace is used after project/team bootstrap.
 
 ## Affected Files / Areas
 
@@ -363,15 +406,21 @@ Expected future implementation areas:
 - Live apply is guarded by an explicit confirmation token.
 - A new company can be created with the correct issue prefix.
 - Agent roster is hired or reconciled idempotently.
+- Agent creation automatically provisions the correct per-agent workspace,
+  scratch root, artifact root, instructions file, source roots, write roots,
+  runtime env, and source issue/project binding.
 - Codex agents use verified ChatGPT/OAuth credentials, not API-key mode, when
   requested.
 - Paperclip Telegram plugin routes project events to project chats without
   changing Gimle routing.
-- Every `codex_local` agent has a valid workspace, instructions file or managed
-  bundle, `--skip-git-repo-check`, and scoped write roots.
+- Every `codex_local` agent has a valid project-bound workspace, instructions
+  file or managed bundle, `--skip-git-repo-check`, and scoped write roots before
+  its first run.
 - Heartbeat postcheck proves that the agent initializes Codex with the intended
   company `CODEX_HOME`, can read instructions, and starts from the intended
   project/issue workspace.
+- No successful bootstrap requires manually moving agents or copying
+  `AGENTS.md` into run workspaces after hiring.
 - Re-running the bootstrapper makes no changes when live state already matches
   the package.
 - A failed preflight explains the exact blocker and does not partially mutate
@@ -399,7 +448,7 @@ Expected future implementation areas:
   - Telegram start/fail event lands in the configured project ops chat.
   - no `Not inside a trusted directory` failure.
   - no missing `AGENTS.md` warning when mode is external.
-  - no fallback workspace warning unless explicitly allowed by the package.
+  - no fallback workspace warning.
   - any `stdin is closed` / router error is reported as a tool-session issue,
     not as OAuth or quota failure.
 
