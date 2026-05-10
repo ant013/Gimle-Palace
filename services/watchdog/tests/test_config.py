@@ -34,6 +34,9 @@ companies:
       hang_stream_idle_max_s: 300
 daemon:
   poll_interval_seconds: 120
+  recovery_enabled: true
+  recovery_first_run_baseline_only: false
+  max_actions_per_tick: 3
 cooldowns:
   per_issue_seconds: 300
   per_agent_cap: 3
@@ -64,10 +67,35 @@ handoff:
     assert c.companies[0].thresholds.hang_stream_idle_max_s == 300
     assert c.companies[0].thresholds.hang_cpu_max_s is None
     assert c.cooldowns.per_agent_cap == 3
+    assert c.daemon.recovery_enabled is True
+    assert c.daemon.recovery_first_run_baseline_only is False
+    assert c.daemon.max_actions_per_tick == 3
     assert c.escalation.post_comment_on_issue is True
     assert c.handoff.handoff_recent_window_min == 240
     assert c.handoff.handoff_alert_soft_budget_per_tick == 7
     assert c.handoff.handoff_alert_hard_budget_per_tick == 11
+
+
+def test_daemon_recovery_defaults_disabled(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        """
+version: 1
+paperclip: {base_url: http://x, api_key_source: "inline:k"}
+companies:
+  - id: 9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64
+    name: gimle
+    thresholds: {died_min: 3, hang_etime_min: 60, idle_cpu_ratio_max: 0.005, hang_stream_idle_max_s: 300}
+daemon: {poll_interval_seconds: 120}
+cooldowns: {per_issue_seconds: 300, per_agent_cap: 3, per_agent_window_seconds: 900}
+logging: {path: /tmp/x.log, level: INFO, rotate_max_bytes: 1, rotate_backup_count: 1}
+escalation: {post_comment_on_issue: false, comment_marker: "x"}
+""",
+    )
+    c = cfg.load_config(path)
+    assert c.daemon.recovery_enabled is False
+    assert c.daemon.recovery_first_run_baseline_only is True
+    assert c.daemon.max_actions_per_tick == 1
 
 
 def test_unknown_version_raises(tmp_path: Path):

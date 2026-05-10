@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -48,7 +49,12 @@ def _cfg(tmp_path: Path) -> Config:
                 ),
             )
         ],
-        daemon=DaemonConfig(poll_interval_seconds=120),
+        daemon=DaemonConfig(
+            poll_interval_seconds=120,
+            recovery_enabled=True,
+            recovery_first_run_baseline_only=False,
+            max_actions_per_tick=10,
+        ),
         cooldowns=CooldownsConfig(
             per_issue_seconds=300, per_agent_cap=3, per_agent_window_seconds=900
         ),
@@ -275,6 +281,116 @@ async def test_tick_skip_action_cooldown(tmp_path: Path):
         with patch("gimle_watchdog.daemon._sleep", new=AsyncMock()):
             await daemon._tick(cfg, state, client)
     assert state.is_issue_in_cooldown("issue-1", cfg.cooldowns.per_issue_seconds)
+
+
+@pytest.mark.asyncio
+async def test_tick_recovery_disabled_skips_respawn(tmp_path: Path):
+    cfg = _cfg(tmp_path)
+    cfg = Config(
+        version=cfg.version,
+        paperclip=cfg.paperclip,
+        companies=cfg.companies,
+        daemon=DaemonConfig(
+            poll_interval_seconds=cfg.daemon.poll_interval_seconds,
+            recovery_enabled=False,
+            recovery_first_run_baseline_only=True,
+            max_actions_per_tick=1,
+        ),
+        cooldowns=cfg.cooldowns,
+        logging=cfg.logging,
+        escalation=cfg.escalation,
+        handoff=cfg.handoff,
+    )
+    state = State.load(tmp_path / "state.json")
+    client = MagicMock()
+    client.list_active_issues = AsyncMock(return_value=[_stuck_issue()])
+    with patch("gimle_watchdog.daemon.actions.trigger_respawn", new=AsyncMock()) as mock_respawn:
+        with patch("gimle_watchdog.daemon.detection.scan_idle_hangs", return_value=[]):
+            await daemon._tick(cfg, state, client)
+    mock_respawn.assert_not_awaited()
+    assert state.issue_cooldowns == {}
+
+
+@pytest.mark.asyncio
+async def test_tick_recovery_first_run_baseline_only_seeds_cooldown(tmp_path: Path):
+    from freezegun import freeze_time
+
+    cfg = _cfg(tmp_path)
+    cfg = Config(
+        version=cfg.version,
+        paperclip=cfg.paperclip,
+        companies=cfg.companies,
+        daemon=DaemonConfig(
+            poll_interval_seconds=cfg.daemon.poll_interval_seconds,
+            recovery_enabled=True,
+            recovery_first_run_baseline_only=True,
+            max_actions_per_tick=10,
+        ),
+        cooldowns=cfg.cooldowns,
+        logging=cfg.logging,
+        escalation=cfg.escalation,
+        handoff=cfg.handoff,
+    )
+    state = State.load(tmp_path / "state.json")
+    client = MagicMock()
+    client.list_active_issues = AsyncMock(return_value=[_stuck_issue()])
+    with patch("gimle_watchdog.daemon.actions.trigger_respawn", new=AsyncMock()) as mock_respawn:
+        with patch("gimle_watchdog.daemon.detection.scan_idle_hangs", return_value=[]):
+            with patch("gimle_watchdog.daemon._sleep", new=AsyncMock()):
+                with patch("gimle_watchdog.actions._sleep", new=AsyncMock()):
+                    with freeze_time("2026-04-21T09:30:00Z"):
+                        client.last_response_date = None
+                        await daemon._tick(cfg, state, client)
+    mock_respawn.assert_not_awaited()
+    assert "issue-1" in state.issue_cooldowns
+    assert state.recovery_baseline_completed is True
+
+
+@pytest.mark.asyncio
+async def test_tick_recovery_respects_max_actions_per_tick(tmp_path: Path):
+    from freezegun import freeze_time
+
+    cfg = _cfg(tmp_path)
+    cfg = Config(
+        version=cfg.version,
+        paperclip=cfg.paperclip,
+        companies=cfg.companies,
+        daemon=DaemonConfig(
+            poll_interval_seconds=cfg.daemon.poll_interval_seconds,
+            recovery_enabled=True,
+            recovery_first_run_baseline_only=False,
+            max_actions_per_tick=1,
+        ),
+        cooldowns=cfg.cooldowns,
+        logging=cfg.logging,
+        escalation=cfg.escalation,
+        handoff=cfg.handoff,
+    )
+    state = State.load(tmp_path / "state.json")
+    client = MagicMock()
+    client.list_active_issues = AsyncMock(
+        return_value=[
+            _stuck_issue(),
+            Issue(
+                id="issue-2",
+                assignee_agent_id="agent-2",
+                execution_run_id=None,
+                status="in_progress",
+                updated_at=datetime(2026, 4, 21, 9, 0, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    with patch(
+        "gimle_watchdog.daemon.actions.trigger_respawn",
+        new=AsyncMock(return_value=RespawnResult(via="patch", success=True, run_id="run-new")),
+    ) as mock_respawn:
+        with patch("gimle_watchdog.daemon.detection.scan_idle_hangs", return_value=[]):
+            with patch("gimle_watchdog.daemon._sleep", new=AsyncMock()):
+                with patch("gimle_watchdog.actions._sleep", new=AsyncMock()):
+                    with freeze_time("2026-04-21T09:30:00Z"):
+                        client.last_response_date = None
+                        await daemon._tick(cfg, state, client)
+    assert mock_respawn.await_count == 1
 
 
 @pytest.mark.asyncio
@@ -1009,6 +1125,106 @@ async def test_tier_alert_failure_does_not_record_state(tmp_path: Path):
     )
 
     assert state.alerted_handoffs == {}
+
+
+@pytest.mark.asyncio
+async def test_ownerless_alert_state_persisted_before_later_timeout(tmp_path: Path):
+    cfg = _handoff_cfg(tmp_path)
+    cfg = Config(
+        version=cfg.version,
+        paperclip=cfg.paperclip,
+        companies=cfg.companies,
+        daemon=cfg.daemon,
+        cooldowns=cfg.cooldowns,
+        logging=cfg.logging,
+        escalation=cfg.escalation,
+        handoff=HandoffConfig(
+            **{
+                **cfg.handoff.__dict__,
+                "handoff_ownerless_enabled": True,
+            }
+        ),
+    )
+    path = tmp_path / "state.json"
+    state = State.load(path)
+    first_issue = Issue(
+        id="issue-ownerless-1",
+        assignee_agent_id=None,
+        execution_run_id=None,
+        status="done",
+        updated_at=_NOW_SERVER,
+        issue_number=101,
+    )
+    second_issue = Issue(
+        id="issue-ownerless-2",
+        assignee_agent_id=None,
+        execution_run_id=None,
+        status="done",
+        updated_at=_NOW_SERVER,
+        issue_number=102,
+    )
+    client = MagicMock()
+    client.list_done_issues = AsyncMock(return_value=[first_issue, second_issue])
+    client.list_recent_comments = AsyncMock(return_value=[])
+
+    async def _post(issue_id: str, body: str) -> str:
+        if issue_id == "issue-ownerless-1":
+            return "comment-1"
+        await asyncio.sleep(60)
+        return "comment-2"
+
+    client.post_issue_comment = AsyncMock(side_effect=_post)
+
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(
+            daemon._run_tier_pass(cfg, state, client, _NOW_SERVER, tmp_path),
+            timeout=0.05,
+        )
+
+    reloaded = State.load(path)
+    key = f"issue-ownerless-1:{FindingType.OWNERLESS_COMPLETION.value}"
+    assert key in reloaded.alerted_handoffs
+
+
+@pytest.mark.asyncio
+async def test_ownerless_alert_not_reposted_after_reload_same_snapshot(tmp_path: Path):
+    cfg = _handoff_cfg(tmp_path)
+    cfg = Config(
+        version=cfg.version,
+        paperclip=cfg.paperclip,
+        companies=cfg.companies,
+        daemon=cfg.daemon,
+        cooldowns=cfg.cooldowns,
+        logging=cfg.logging,
+        escalation=cfg.escalation,
+        handoff=HandoffConfig(
+            **{
+                **cfg.handoff.__dict__,
+                "handoff_ownerless_enabled": True,
+            }
+        ),
+    )
+    path = tmp_path / "state.json"
+    first_state = State.load(path)
+    issue = Issue(
+        id="issue-ownerless-1",
+        assignee_agent_id=None,
+        execution_run_id=None,
+        status="done",
+        updated_at=_NOW_SERVER,
+        issue_number=101,
+    )
+    client = MagicMock()
+    client.list_done_issues = AsyncMock(return_value=[issue])
+    client.list_recent_comments = AsyncMock(return_value=[])
+    client.post_issue_comment = AsyncMock(return_value="comment-1")
+
+    await daemon._run_tier_pass(cfg, first_state, client, _NOW_SERVER, tmp_path)
+
+    second_state = State.load(path)
+    await daemon._run_tier_pass(cfg, second_state, client, _NOW_SERVER, tmp_path)
+
+    client.post_issue_comment.assert_awaited_once()
 
 
 @pytest.mark.asyncio

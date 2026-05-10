@@ -50,6 +50,7 @@ def _issue(
     updated_at: datetime = NOW,
     issue_number: int = 1,
     origin_kind: str | None = None,
+    parent_id: str | None = None,
 ) -> Issue:
     return Issue(
         id=id,
@@ -59,6 +60,7 @@ def _issue(
         updated_at=updated_at,
         issue_number=issue_number,
         origin_kind=origin_kind,
+        parent_id=parent_id,
     )
 
 
@@ -687,6 +689,12 @@ def test_ownerless_no_finding_when_not_done():
         issue = _issue(status=status)
         result = ds._detect_ownerless_completion(issue, [])
         assert result is None, f"should not fire for status={status}"
+
+
+def test_ownerless_follow_up_child_issue_no_finding():
+    issue = _issue(status="done", parent_id="issue-parent-1")
+    result = ds._detect_ownerless_completion(issue, [])
+    assert result is None
 
 
 def test_ownerless_skip_origin_no_finding():

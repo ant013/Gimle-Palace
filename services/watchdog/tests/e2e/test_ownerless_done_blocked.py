@@ -125,6 +125,20 @@ def test_detector_no_finding_when_status_not_done():
     assert finding is None
 
 
+def test_detector_suppressed_for_follow_up_child_issue():
+    issue = Issue(
+        id="issue-ol-4",
+        assignee_agent_id=None,
+        execution_run_id=None,
+        status="done",
+        updated_at=T0,
+        issue_number=103,
+        parent_id="issue-parent-1",
+    )
+    finding = _detect_ownerless_completion(issue, [])
+    assert finding is None
+
+
 # ---------------------------------------------------------------------------
 # E2E: tier-1 alert + tier-2 repair re-opens as blocked
 # ---------------------------------------------------------------------------
@@ -206,3 +220,32 @@ async def test_ownerless_tier2_repair_reopens_as_blocked(mock_paperclip, tmp_pat
     # Entry either cleared or has repaired_at set
     entry = state.alerted_handoffs.get(key)
     assert entry is None or entry.get("repaired_at") is not None
+
+
+@pytest.mark.asyncio
+async def test_ownerless_follow_up_done_issue_does_not_post_alert(mock_paperclip, tmp_path: Path):
+    base_url, pstate = mock_paperclip
+    pstate.issues["issue-ol-follow-up"] = {
+        "assigneeAgentId": None,
+        "status": "done",
+        "issueNumber": 104,
+        "updatedAt": T0.isoformat().replace("+00:00", "Z"),
+        "executionRunId": None,
+        "parentId": "issue-parent-1",
+    }
+    pstate.issue_comments["issue-ol-follow-up"] = []
+    pstate.agents[COMPANY_ID] = []
+
+    cfg = _cfg(tmp_path, repair_delay_min=60)
+    state = State.load(tmp_path / "state.json")
+    client = PaperclipClient(base_url=base_url, api_key=None)
+
+    from gimle_watchdog import daemon
+
+    with freeze_time(T0):
+        await daemon._run_tier_pass(cfg, state, client, T0, tmp_path)
+        await daemon._run_tier_pass(cfg, state, client, T0, tmp_path)
+
+    assert pstate.comments_posted == []
+    key = f"issue-ol-follow-up:{FindingType.OWNERLESS_COMPLETION.value}"
+    assert key not in state.alerted_handoffs
