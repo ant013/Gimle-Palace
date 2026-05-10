@@ -64,6 +64,7 @@ lists here, not duplicated in every generated agent bundle.
    source <project-env-file>
    set +a
    python3 paperclips/scripts/compare_deployed_agents.py \
+     --project <project-key> \
      --source api \
      --target codex \
      --agent cx-cto \

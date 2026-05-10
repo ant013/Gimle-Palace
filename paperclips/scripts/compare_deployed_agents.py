@@ -60,13 +60,44 @@ def load_codex_agent_ids(env_file: Path) -> dict[str, str]:
     return ids
 
 
-def collect_agent_refs(repo_root: Path, target: str, agent: str | None) -> list[AgentRef]:
+def resolved_assembly_path(repo_root: Path, project: str) -> Path:
+    return repo_root / "paperclips" / "dist" / f"{project}.resolved-assembly.json"
+
+
+def load_resolved_output_paths(repo_root: Path, project: str, target: str) -> dict[str, Path]:
+    path = resolved_assembly_path(repo_root, project)
+    if not path.is_file():
+        return {}
+    data = json.loads(path.read_text())
+    outputs: dict[str, Path] = {}
+    targets = data.get("targets", {})
+    selected_targets = targets.keys() if target == "all" else [target]
+    for selected_target in selected_targets:
+        target_data = targets.get(selected_target, {})
+        if not isinstance(target_data, dict):
+            continue
+        for role in target_data.get("roles", []):
+            if not isinstance(role, dict):
+                continue
+            output = role.get("output")
+            if not isinstance(output, str):
+                continue
+            name = Path(output).stem
+            outputs[f"{selected_target}:{name}"] = repo_root / output
+    return outputs
+
+
+def collect_agent_refs(repo_root: Path, project: str, target: str, agent: str | None) -> list[AgentRef]:
     paperclips = repo_root / "paperclips"
     refs: list[AgentRef] = []
+    resolved_outputs = load_resolved_output_paths(repo_root, project, target)
 
     if target in ("all", "claude"):
         ids = load_claude_agent_ids(paperclips / "deploy-agents.sh")
-        for dist_path in sorted((paperclips / "dist").glob("*.md")):
+        dist_paths = sorted(
+            path for key, path in resolved_outputs.items() if key.startswith("claude:")
+        ) or sorted((paperclips / "dist").glob("*.md"))
+        for dist_path in dist_paths:
             name = dist_path.stem
             if agent and name != agent:
                 continue
@@ -76,7 +107,10 @@ def collect_agent_refs(repo_root: Path, target: str, agent: str | None) -> list[
 
     if target in ("all", "codex"):
         ids = load_codex_agent_ids(paperclips / "codex-agent-ids.env")
-        for dist_path in sorted((paperclips / "dist" / "codex").glob("*.md")):
+        dist_paths = sorted(
+            path for key, path in resolved_outputs.items() if key.startswith("codex:")
+        ) or sorted((paperclips / "dist" / "codex").glob("*.md"))
+        for dist_path in dist_paths:
             name = dist_path.stem
             if agent and name != agent:
                 continue
@@ -151,6 +185,7 @@ def write_snapshot(snapshot_dir: Path, snapshot_label: str, ref: AgentRef, conte
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
+    parser.add_argument("--project", default="gimle")
     parser.add_argument("--target", choices=["all", "claude", "codex"], default="all")
     parser.add_argument("--agent", help="Optional role filename stem, e.g. cto or cx-cto")
     parser.add_argument("--source", choices=["local", "api"], default="local")
@@ -173,7 +208,7 @@ def main() -> int:
     args = parser.parse_args()
 
     repo_root = args.repo_root.resolve()
-    refs = collect_agent_refs(repo_root, args.target, args.agent)
+    refs = collect_agent_refs(repo_root, args.project, args.target, args.agent)
     if not refs:
         print("ERROR: no comparable agents found", file=sys.stderr)
         return 1

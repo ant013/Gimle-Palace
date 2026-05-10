@@ -489,6 +489,20 @@ def test_compare_deployed_agent_ids_parse_codex_names(tmp_path: Path) -> None:
     assert ids["cx-research-agent"] == "a2f7d4d2-ee96-43c3-83d8-d3af02d6674c"
 
 
+def test_compare_deployed_collects_refs_from_resolved_assembly(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    refs = compare_deployed_agents.collect_agent_refs(repo, "gimle", "codex", "cx-cto")
+
+    assert refs == [
+        compare_deployed_agents.AgentRef(
+            target="codex",
+            name="cx-cto",
+            agent_id="da97dbd9-6627-48d0-b421-66af0750eacf",
+            dist_path=repo / "paperclips" / "dist" / "codex" / "cx-cto.md",
+        )
+    ]
+
+
 def test_compare_deployed_path_shape() -> None:
     path = compare_deployed_agents.deployed_agents_path(
         Path("/paperclip"),
