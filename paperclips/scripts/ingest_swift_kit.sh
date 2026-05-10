@@ -7,6 +7,7 @@ DEFAULT_MANIFEST="$REPO_ROOT/services/palace-mcp/scripts/uw-ios-bundle-manifest.
 DEFAULT_ENV_FILE="$REPO_ROOT/.env"
 DEFAULT_MCP_URL="${PALACE_MCP_URL:-http://localhost:8080/mcp}"
 DEFAULT_REPO_BASE="${PALACE_SWIFT_KIT_REPO_BASE:-/repos-hs}"
+DEFAULT_HOST_REPO_BASE="${PALACE_SWIFT_KIT_HOST_REPO_BASE:-/Users/Shared/Ios/HorizontalSystems}"
 PALACE_MCP_SERVICE_DIR="$REPO_ROOT/services/palace-mcp"
 
 DEFAULT_EXTRACTORS=(
@@ -34,6 +35,8 @@ Options:
   --extractors <csv>        Override extractor list
   --mcp-url <url>           palace-mcp MCP URL
   --repo-base <path>        Container-visible repo base (default: /repos-hs)
+  --host-repo-base <path>   Host repo base for preflight checks
+                            (default: /Users/Shared/Ios/HorizontalSystems)
   --parent-mount <name>     Explicit register_project parent_mount
   --relative-path <path>    Explicit repo-relative path under repo-base
   --manifest <path>         Manifest used for slug -> relative_path lookup
@@ -163,9 +166,12 @@ emit_summary() {
         --arg message "$message" \
         --arg slug "$SLUG" \
         --arg repo_base "$REPO_BASE" \
+        --arg host_repo_base "$HOST_REPO_BASE" \
         --arg parent_mount "${PARENT_MOUNT:-}" \
         --arg relative_path "$RELATIVE_PATH" \
-        --arg repo_path "$MOUNTED_REPO_PATH" \
+        --arg repo_path "$HOST_REPO_PATH" \
+        --arg container_repo_path "$CONTAINER_REPO_PATH" \
+        --arg host_scip_path "$HOST_SCIP_PATH" \
         --arg scip_path "$SCIP_PATH" \
         --arg bundle "${BUNDLE:-}" \
         --arg mcp_url "$MCP_URL" \
@@ -183,9 +189,12 @@ emit_summary() {
             message: $message,
             slug: $slug,
             repo_base: $repo_base,
+            host_repo_base: $host_repo_base,
             parent_mount: (if $parent_mount == "" then null else $parent_mount end),
             relative_path: $relative_path,
             repo_path: $repo_path,
+            container_repo_path: $container_repo_path,
+            host_scip_path: $host_scip_path,
             scip_path: $scip_path,
             bundle: (if $bundle == "" then null else $bundle end),
             mcp_url: $mcp_url,
@@ -205,6 +214,7 @@ BUNDLE=""
 EXTRACTORS_CSV=""
 MCP_URL="$DEFAULT_MCP_URL"
 REPO_BASE="$DEFAULT_REPO_BASE"
+HOST_REPO_BASE="$DEFAULT_HOST_REPO_BASE"
 PARENT_MOUNT=""
 RELATIVE_PATH=""
 MANIFEST_PATH="$DEFAULT_MANIFEST"
@@ -247,6 +257,15 @@ while [[ $# -gt 0 ]]; do
         --repo-base)
             [[ $# -ge 2 ]] || die "--repo-base requires a value"
             REPO_BASE="$2"
+            shift 2
+            ;;
+        --host-repo-base=*)
+            HOST_REPO_BASE="${1#*=}"
+            shift
+            ;;
+        --host-repo-base)
+            [[ $# -ge 2 ]] || die "--host-repo-base requires a value"
+            HOST_REPO_BASE="$2"
             shift 2
             ;;
         --parent-mount=*)
@@ -334,8 +353,10 @@ if [[ -z "$PARENT_MOUNT" && "$REPO_BASE" == /repos-* ]]; then
     PARENT_MOUNT="${REPO_BASE#/repos-}"
 fi
 
-MOUNTED_REPO_PATH="$REPO_BASE/$RELATIVE_PATH"
-SCIP_PATH="$MOUNTED_REPO_PATH/scip/index.scip"
+HOST_REPO_PATH="$HOST_REPO_BASE/$RELATIVE_PATH"
+CONTAINER_REPO_PATH="$REPO_BASE/$RELATIVE_PATH"
+HOST_SCIP_PATH="$HOST_REPO_PATH/scip/index.scip"
+SCIP_PATH="$CONTAINER_REPO_PATH/scip/index.scip"
 
 PROJECT_REGISTRATION_JSON='null'
 BUNDLE_REGISTRATION_JSON='null'
@@ -346,8 +367,8 @@ ENV_CHANGED="false"
 PALACE_RESTARTED="false"
 
 [[ -f "$ENV_FILE" ]] || die "env file not found: $ENV_FILE"
-[[ -d "$MOUNTED_REPO_PATH" ]] || die "repo mount not found: $MOUNTED_REPO_PATH"
-[[ -f "$SCIP_PATH" ]] || die "SCIP index not found: $SCIP_PATH"
+[[ -d "$HOST_REPO_PATH" ]] || die "repo mount not found: $HOST_REPO_PATH"
+[[ -f "$HOST_SCIP_PATH" ]] || die "SCIP index not found: $HOST_SCIP_PATH"
 
 if [[ "$DRY_RUN" == "false" ]]; then
     require_command docker

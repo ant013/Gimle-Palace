@@ -124,6 +124,7 @@ MISSING_REPO_OUT="$TMP_DIR/missing-repo.out"
 if bash "$INGEST_SCRIPT" "tron-kit" \
     --dry-run \
     --repo-base="$TMP_DIR/missing-base" \
+    --host-repo-base="$TMP_DIR/missing-base" \
     --relative-path="TronKit.Swift" \
     --env-file="$TMP_DIR/.env" >"$MISSING_REPO_OUT" 2>&1; then
     fail "missing repo unexpectedly succeeded"
@@ -134,7 +135,8 @@ rm -f "$TMP_DIR/repos-hs/TronKit.Swift/scip/index.scip"
 MISSING_SCIP_OUT="$TMP_DIR/missing-scip.out"
 if bash "$INGEST_SCRIPT" "tron-kit" \
     --dry-run \
-    --repo-base="$TMP_DIR/repos-hs" \
+    --repo-base=/repos-hs \
+    --host-repo-base="$TMP_DIR/repos-hs" \
     --relative-path="TronKit.Swift" \
     --env-file="$TMP_DIR/.env" >"$MISSING_SCIP_OUT" 2>&1; then
     fail "missing SCIP unexpectedly succeeded"
@@ -146,7 +148,8 @@ cp "$TMP_DIR/.env" "$TMP_DIR/.env.before-dry-run"
 DRY_RUN_OUT="$TMP_DIR/dry-run.out"
 bash "$INGEST_SCRIPT" "tron-kit" \
     --dry-run \
-    --repo-base="$TMP_DIR/repos-hs" \
+    --repo-base=/repos-hs \
+    --host-repo-base="$TMP_DIR/repos-hs" \
     --parent-mount=hs \
     --relative-path="TronKit.Swift" \
     --env-file="$TMP_DIR/.env" >"$DRY_RUN_OUT"
@@ -156,7 +159,8 @@ assert_contains "$DRY_RUN_OUT" '"status":"planned"'
 RUN1_OUT="$TMP_DIR/run1.out"
 bash "$INGEST_SCRIPT" "tron-kit" \
     --bundle=uw-ios \
-    --repo-base="$TMP_DIR/repos-hs" \
+    --repo-base=/repos-hs \
+    --host-repo-base="$TMP_DIR/repos-hs" \
     --parent-mount=hs \
     --relative-path="TronKit.Swift" \
     --env-file="$TMP_DIR/.env" >"$RUN1_OUT"
@@ -166,13 +170,14 @@ ENV_AFTER_RUN1="$(cat "$TMP_DIR/.env")"
 PATH_JSON="$(grep '^PALACE_SCIP_INDEX_PATHS=' "$TMP_DIR/.env" | cut -d= -f2-)"
 printf '%s' "$PATH_JSON" | jq -e '.existing == "/repos/existing/scip/index.scip"' >/dev/null || \
     fail "existing PALACE_SCIP_INDEX_PATHS entry was not preserved"
-printf '%s' "$PATH_JSON" | jq -e '."tron-kit" == "'"$TMP_DIR"'/repos-hs/TronKit.Swift/scip/index.scip"' >/dev/null || \
+printf '%s' "$PATH_JSON" | jq -e '."tron-kit" == "/repos-hs/TronKit.Swift/scip/index.scip"' >/dev/null || \
     fail "tron-kit PALACE_SCIP_INDEX_PATHS entry missing"
 
 RUN2_OUT="$TMP_DIR/run2.out"
 bash "$INGEST_SCRIPT" "tron-kit" \
     --bundle=uw-ios \
-    --repo-base="$TMP_DIR/repos-hs" \
+    --repo-base=/repos-hs \
+    --host-repo-base="$TMP_DIR/repos-hs" \
     --parent-mount=hs \
     --relative-path="TronKit.Swift" \
     --env-file="$TMP_DIR/.env" >"$RUN2_OUT"

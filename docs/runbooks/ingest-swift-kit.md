@@ -63,6 +63,7 @@ Dry-run first:
 ```bash
 bash paperclips/scripts/ingest_swift_kit.sh tron-kit \
   --bundle uw-ios \
+  --host-repo-base /Users/Shared/Ios/HorizontalSystems \
   --dry-run
 ```
 
@@ -70,13 +71,15 @@ Live run:
 
 ```bash
 bash paperclips/scripts/ingest_swift_kit.sh tron-kit \
-  --bundle uw-ios
+  --bundle uw-ios \
+  --host-repo-base /Users/Shared/Ios/HorizontalSystems
 ```
 
 What it does:
 
-- resolves `tron-kit` to `/repos-hs/TronKit.Swift`;
-- verifies `/repos-hs/TronKit.Swift/scip/index.scip` exists before mutating state;
+- resolves `tron-kit` to host path `/Users/Shared/Ios/HorizontalSystems/TronKit.Swift`
+  and container path `/repos-hs/TronKit.Swift`;
+- verifies the host-side `scip/index.scip` exists before mutating state;
 - merges `PALACE_SCIP_INDEX_PATHS` in `.env` with `jq`;
 - recreates `palace-mcp` only when the env file changed;
 - calls:
@@ -126,6 +129,7 @@ Successful live runs end with:
 
 `repo mount not found`
 
+- Confirm the iMac host repo exists under `/Users/Shared/Ios/HorizontalSystems`.
 - Confirm the iMac checkout mounts `/Users/Shared/Ios/HorizontalSystems:/repos-hs:ro`.
 - If the repo is not in the manifest, pass `--relative-path <repo-dir>`.
 
