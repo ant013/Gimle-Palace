@@ -1,0 +1,317 @@
+{
+  "api_base": "https://paperclip.ant013.work",
+  "apply_policy": {
+    "live_apply_allowed": false,
+    "requires_operator_approval": true,
+    "requires_rollback_snapshot_before_mutation": true,
+    "stop_on_first_failure": true
+  },
+  "blockers": [
+    "AUCEO: AUCEO live status is paused; operator recreate/update decision required",
+    "AUCEO: AUCEO readback diverges: reasoningEffort: expected 'high', got None; instructionsFilePath: expected 'AGENTS.md', got '/Users/anton/.paperclip/instances/default/companies/8f55e80b-0264-4ab6-9d56-8b2652f18005/agents/dcdd8871-5b44-4563-bb00-f8cca292a69e/instructions/AGENTS.md'; sandboxBypass: expected False, got True; runtimeEnvKeys: expected ['CODEBASE_MEMORY_PROJECT', 'SERENA_PROJECT', 'TELEGRAM_OPS_CHAT_ID', 'TELEGRAM_REDACTED_REPORTS_CHAT_ID'], got []; workspacePath: expected '/Users/Shared/UnstoppableAudit/runs/AUCEO/workspace', got None"
+  ],
+  "checked_at": "2026-05-10T05:04:28Z",
+  "config_path": "/Users/ant013/Android/Gimle-Palace-cx/paperclips/teams/unstoppable-audit.yaml",
+  "decisions": [
+    {
+      "blockers": [
+        "AUCEO live status is paused; operator recreate/update decision required",
+        "AUCEO readback diverges: reasoningEffort: expected 'high', got None; instructionsFilePath: expected 'AGENTS.md', got '/Users/anton/.paperclip/instances/default/companies/8f55e80b-0264-4ab6-9d56-8b2652f18005/agents/dcdd8871-5b44-4563-bb00-f8cca292a69e/instructions/AGENTS.md'; sandboxBypass: expected False, got True; runtimeEnvKeys: expected ['CODEBASE_MEMORY_PROJECT', 'SERENA_PROJECT', 'TELEGRAM_OPS_CHAT_ID', 'TELEGRAM_REDACTED_REPORTS_CHAT_ID'], got []; workspacePath: expected '/Users/Shared/UnstoppableAudit/runs/AUCEO/workspace', got None"
+      ],
+      "decision": "refuse",
+      "expectedConfigHash": "24291cb343b8daa8505163998cb5a1978dbe690d9bd962a965a45901379b090f",
+      "live": {
+        "agent": {
+          "adapterType": "codex_local",
+          "companyId": "8f55e80b-0264-4ab6-9d56-8b2652f18005",
+          "id": "dcdd8871-5b44-4563-bb00-f8cca292a69e",
+          "name": "AUCEO",
+          "role": "ceo",
+          "status": "paused",
+          "title": null
+        },
+        "found": true
+      },
+      "name": "AUCEO",
+      "ok": false,
+      "plannedOperation": "create",
+      "readback": {
+        "checked": true,
+        "configHash": "24974c422e11a5019fb51e54acf87866d0f75652f32050bac91d700178dc5b21",
+        "fields": {
+          "adapterType": "codex_local",
+          "instructionsBundleMode": "managed",
+          "instructionsFilePath": "/Users/anton/.paperclip/instances/default/companies/8f55e80b-0264-4ab6-9d56-8b2652f18005/agents/dcdd8871-5b44-4563-bb00-f8cca292a69e/instructions/AGENTS.md",
+          "model": "gpt-5.4",
+          "reasoningEffort": null,
+          "runtimeEnvKeys": [],
+          "sandboxBypass": true,
+          "sourceRootsReadOnly": null,
+          "workspacePath": null,
+          "writableRoots": null
+        }
+      },
+      "rollbackSnapshot": {
+        "agent": {
+          "adapterType": "codex_local",
+          "companyId": "8f55e80b-0264-4ab6-9d56-8b2652f18005",
+          "id": "dcdd8871-5b44-4563-bb00-f8cca292a69e",
+          "name": "AUCEO",
+          "role": "ceo",
+          "status": "paused",
+          "title": null
+        },
+        "configuration": {
+          "adapterConfig": {
+            "cwd": null,
+            "dangerouslyBypassApprovalsAndSandbox": true,
+            "envKeys": [],
+            "instructionsBundleMode": "managed",
+            "instructionsEntryFile": "AGENTS.md",
+            "instructionsFilePath": "/Users/anton/.paperclip/instances/default/companies/8f55e80b-0264-4ab6-9d56-8b2652f18005/agents/dcdd8871-5b44-4563-bb00-f8cca292a69e/instructions/AGENTS.md",
+            "model": "gpt-5.4",
+            "modelReasoningEffort": null,
+            "sourceRootsReadOnly": null,
+            "writableRoots": null
+          },
+          "adapterType": "codex_local"
+        }
+      }
+    },
+    {
+      "blockers": [],
+      "decision": "create",
+      "expectedConfigHash": "9930825600c3653e4d0597b8e86bac62674dabf3bbca10b9fee3e44b6788be28",
+      "live": {
+        "found": false
+      },
+      "name": "UWICTO",
+      "ok": true,
+      "plannedOperation": "create",
+      "readback": {
+        "checked": false
+      }
+    },
+    {
+      "blockers": [],
+      "decision": "create",
+      "expectedConfigHash": "02607892b7f68b2fee128c89e1a53a3835dcb528b54e173b4d63bb9375b61b8b",
+      "live": {
+        "found": false
+      },
+      "name": "UWISwiftAuditor",
+      "ok": true,
+      "plannedOperation": "create",
+      "readback": {
+        "checked": false
+      }
+    },
+    {
+      "blockers": [],
+      "decision": "create",
+      "expectedConfigHash": "bf42cb5cc0dd84ee9474e88696ad33af2e9c39d13d264f72271f1c9035fce386",
+      "live": {
+        "found": false
+      },
+      "name": "UWISecurityAuditor",
+      "ok": true,
+      "plannedOperation": "create",
+      "readback": {
+        "checked": false
+      }
+    },
+    {
+      "blockers": [],
+      "decision": "create",
+      "expectedConfigHash": "f680c21931c6b1de40ec8196e18235a701374f11f63049ab789b510d4c02904e",
+      "live": {
+        "found": false
+      },
+      "name": "UWICryptoAuditor",
+      "ok": true,
+      "plannedOperation": "create",
+      "readback": {
+        "checked": false
+      }
+    },
+    {
+      "blockers": [],
+      "decision": "create",
+      "expectedConfigHash": "fcdc2c9035d0a0ee6ebc0d37a216e9a69bc8aab59dbc07cfd8608a54d6f5d0a6",
+      "live": {
+        "found": false
+      },
+      "name": "UWIInfraEngineer",
+      "ok": true,
+      "plannedOperation": "create",
+      "readback": {
+        "checked": false
+      }
+    },
+    {
+      "blockers": [],
+      "decision": "create",
+      "expectedConfigHash": "23329f71ebd602088aca12dc57330e5ceddc429c6c3892c9ee01cc98f9a9348c",
+      "live": {
+        "found": false
+      },
+      "name": "UWIResearchAgent",
+      "ok": true,
+      "plannedOperation": "create",
+      "readback": {
+        "checked": false
+      }
+    },
+    {
+      "blockers": [],
+      "decision": "create",
+      "expectedConfigHash": "cb33a61fd138e25a57d7e18eeeddd80acf32497e55091b8f453222df99c66fca",
+      "live": {
+        "found": false
+      },
+      "name": "UWIQAEngineer",
+      "ok": true,
+      "plannedOperation": "create",
+      "readback": {
+        "checked": false
+      }
+    },
+    {
+      "blockers": [],
+      "decision": "create",
+      "expectedConfigHash": "461d7bed77858c9fed53901023d89514e0434ea58b7c3ee76f2c589d13ee201a",
+      "live": {
+        "found": false
+      },
+      "name": "UWITechnicalWriter",
+      "ok": true,
+      "plannedOperation": "create",
+      "readback": {
+        "checked": false
+      }
+    },
+    {
+      "blockers": [],
+      "decision": "create",
+      "expectedConfigHash": "9512681bf728bc21f7dfe83da106b44931130976aaaa333731cca7e4ef80da30",
+      "live": {
+        "found": false
+      },
+      "name": "UWACTO",
+      "ok": true,
+      "plannedOperation": "create",
+      "readback": {
+        "checked": false
+      }
+    },
+    {
+      "blockers": [],
+      "decision": "create",
+      "expectedConfigHash": "ec6b5ea55fc58d1bae03b33df04bfb5f18bda095f8bd513819976ae11beaf47f",
+      "live": {
+        "found": false
+      },
+      "name": "UWAKotlinAuditor",
+      "ok": true,
+      "plannedOperation": "create",
+      "readback": {
+        "checked": false
+      }
+    },
+    {
+      "blockers": [],
+      "decision": "create",
+      "expectedConfigHash": "d5310dd94b5a701d27ecb89807881eabcf60ca82ce58011c30040fd40f14f2e8",
+      "live": {
+        "found": false
+      },
+      "name": "UWASecurityAuditor",
+      "ok": true,
+      "plannedOperation": "create",
+      "readback": {
+        "checked": false
+      }
+    },
+    {
+      "blockers": [],
+      "decision": "create",
+      "expectedConfigHash": "dec52a78a2a1bc4759c699638a1fdf22be70fd56468b9d0ad7924fadfe0a7242",
+      "live": {
+        "found": false
+      },
+      "name": "UWACryptoAuditor",
+      "ok": true,
+      "plannedOperation": "create",
+      "readback": {
+        "checked": false
+      }
+    },
+    {
+      "blockers": [],
+      "decision": "create",
+      "expectedConfigHash": "df34dbe872f41acf7009cef863ed7b10fb0eac0fd4bb2af79cee809abf4a45f8",
+      "live": {
+        "found": false
+      },
+      "name": "UWAInfraEngineer",
+      "ok": true,
+      "plannedOperation": "create",
+      "readback": {
+        "checked": false
+      }
+    },
+    {
+      "blockers": [],
+      "decision": "create",
+      "expectedConfigHash": "162e217bf6165b3753af4b30a3c2a17173686b8c1f24a3878755f228ca68605b",
+      "live": {
+        "found": false
+      },
+      "name": "UWAResearchAgent",
+      "ok": true,
+      "plannedOperation": "create",
+      "readback": {
+        "checked": false
+      }
+    },
+    {
+      "blockers": [],
+      "decision": "create",
+      "expectedConfigHash": "145a460f1cfd7940bbfcdf7d3ad80c9ca14135acbec9310f4d54c549ffc6ae04",
+      "live": {
+        "found": false
+      },
+      "name": "UWAQAEngineer",
+      "ok": true,
+      "plannedOperation": "create",
+      "readback": {
+        "checked": false
+      }
+    },
+    {
+      "blockers": [],
+      "decision": "create",
+      "expectedConfigHash": "307b0957b6a25f71d3e732735a52b1690917c8afa95ef7be6766337ed654bcff",
+      "live": {
+        "found": false
+      },
+      "name": "UWATechnicalWriter",
+      "ok": true,
+      "plannedOperation": "create",
+      "readback": {
+        "checked": false
+      }
+    }
+  ],
+  "dry_run_manifest_hash": "2fbc8cccad819c55b841f0cdc4c624703efe3fe9c3a825fcecf321aea399d392",
+  "dry_run_manifest_path": "/Users/ant013/Android/Gimle-Palace-cx/paperclips/manifests/unstoppable-audit/gate-b1-dry-run.json",
+  "gate": "B2",
+  "live_agent_count": 1,
+  "mode": "authenticated-preflight",
+  "ok": false,
+  "paperclip": {
+    "company_id": "8f55e80b-0264-4ab6-9d56-8b2652f18005",
+    "project_id": "64871690-2f2d-4fbd-a30d-975e6bbccec9"
+  },
+  "team": "UnstoppableAudit"
+}

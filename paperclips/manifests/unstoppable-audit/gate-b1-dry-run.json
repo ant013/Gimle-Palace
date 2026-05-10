@@ -3,6 +3,33 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/auceo.md",
+      "expectedConfig": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/AUCEO/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "envKeys": [
+            "CODEBASE_MEMORY_PROJECT",
+            "SERENA_PROJECT",
+            "TELEGRAM_OPS_CHAT_ID",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+          ],
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/AUCEO",
+            "/Users/Shared/UnstoppableAudit/runs/AUCEO/scratch"
+          ]
+        },
+        "adapterType": "codex_local"
+      },
+      "expectedConfigHash": "24291cb343b8daa8505163998cb5a1978dbe690d9bd962a965a45901379b090f",
       "family": "coordination",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -47,6 +74,33 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwicto.md",
+      "expectedConfig": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWICTO/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "envKeys": [
+            "CODEBASE_MEMORY_PROJECT",
+            "SERENA_PROJECT",
+            "TELEGRAM_OPS_CHAT_ID",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+          ],
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWICTO",
+            "/Users/Shared/UnstoppableAudit/runs/UWICTO/scratch"
+          ]
+        },
+        "adapterType": "codex_local"
+      },
+      "expectedConfigHash": "9930825600c3653e4d0597b8e86bac62674dabf3bbca10b9fee3e44b6788be28",
       "family": "coordination",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -91,6 +145,33 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwiswiftauditor.md",
+      "expectedConfig": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWISwiftAuditor/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "envKeys": [
+            "CODEBASE_MEMORY_PROJECT",
+            "SERENA_PROJECT",
+            "TELEGRAM_OPS_CHAT_ID",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+          ],
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWISwiftAuditor",
+            "/Users/Shared/UnstoppableAudit/runs/UWISwiftAuditor/scratch"
+          ]
+        },
+        "adapterType": "codex_local"
+      },
+      "expectedConfigHash": "02607892b7f68b2fee128c89e1a53a3835dcb528b54e173b4d63bb9375b61b8b",
       "family": "code-audit",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -135,6 +216,33 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwisecurityauditor.md",
+      "expectedConfig": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWISecurityAuditor/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "envKeys": [
+            "CODEBASE_MEMORY_PROJECT",
+            "SERENA_PROJECT",
+            "TELEGRAM_OPS_CHAT_ID",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+          ],
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWISecurityAuditor",
+            "/Users/Shared/UnstoppableAudit/runs/UWISecurityAuditor/scratch"
+          ]
+        },
+        "adapterType": "codex_local"
+      },
+      "expectedConfigHash": "bf42cb5cc0dd84ee9474e88696ad33af2e9c39d13d264f72271f1c9035fce386",
       "family": "security-audit",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -179,6 +287,33 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwicryptoauditor.md",
+      "expectedConfig": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWICryptoAuditor/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "envKeys": [
+            "CODEBASE_MEMORY_PROJECT",
+            "SERENA_PROJECT",
+            "TELEGRAM_OPS_CHAT_ID",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+          ],
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWICryptoAuditor",
+            "/Users/Shared/UnstoppableAudit/runs/UWICryptoAuditor/scratch"
+          ]
+        },
+        "adapterType": "codex_local"
+      },
+      "expectedConfigHash": "f680c21931c6b1de40ec8196e18235a701374f11f63049ab789b510d4c02904e",
       "family": "crypto-audit",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -223,6 +358,33 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwiinfraengineer.md",
+      "expectedConfig": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWIInfraEngineer/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "envKeys": [
+            "CODEBASE_MEMORY_PROJECT",
+            "SERENA_PROJECT",
+            "TELEGRAM_OPS_CHAT_ID",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+          ],
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWIInfraEngineer",
+            "/Users/Shared/UnstoppableAudit/runs/UWIInfraEngineer/scratch"
+          ]
+        },
+        "adapterType": "codex_local"
+      },
+      "expectedConfigHash": "fcdc2c9035d0a0ee6ebc0d37a216e9a69bc8aab59dbc07cfd8608a54d6f5d0a6",
       "family": "infra",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -267,6 +429,33 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwiresearchagent.md",
+      "expectedConfig": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWIResearchAgent/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "envKeys": [
+            "CODEBASE_MEMORY_PROJECT",
+            "SERENA_PROJECT",
+            "TELEGRAM_OPS_CHAT_ID",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+          ],
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWIResearchAgent",
+            "/Users/Shared/UnstoppableAudit/runs/UWIResearchAgent/scratch"
+          ]
+        },
+        "adapterType": "codex_local"
+      },
+      "expectedConfigHash": "23329f71ebd602088aca12dc57330e5ceddc429c6c3892c9ee01cc98f9a9348c",
       "family": "research",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -311,6 +500,33 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwiqaengineer.md",
+      "expectedConfig": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWIQAEngineer/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "envKeys": [
+            "CODEBASE_MEMORY_PROJECT",
+            "SERENA_PROJECT",
+            "TELEGRAM_OPS_CHAT_ID",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+          ],
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWIQAEngineer",
+            "/Users/Shared/UnstoppableAudit/runs/UWIQAEngineer/scratch"
+          ]
+        },
+        "adapterType": "codex_local"
+      },
+      "expectedConfigHash": "cb33a61fd138e25a57d7e18eeeddd80acf32497e55091b8f453222df99c66fca",
       "family": "qa",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -355,6 +571,33 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwitechnicalwriter.md",
+      "expectedConfig": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWITechnicalWriter/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "envKeys": [
+            "CODEBASE_MEMORY_PROJECT",
+            "SERENA_PROJECT",
+            "TELEGRAM_OPS_CHAT_ID",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+          ],
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWITechnicalWriter",
+            "/Users/Shared/UnstoppableAudit/runs/UWITechnicalWriter/scratch"
+          ]
+        },
+        "adapterType": "codex_local"
+      },
+      "expectedConfigHash": "461d7bed77858c9fed53901023d89514e0434ea58b7c3ee76f2c589d13ee201a",
       "family": "writer",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -399,6 +642,33 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwacto.md",
+      "expectedConfig": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWACTO/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "envKeys": [
+            "CODEBASE_MEMORY_PROJECT",
+            "SERENA_PROJECT",
+            "TELEGRAM_OPS_CHAT_ID",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+          ],
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWACTO",
+            "/Users/Shared/UnstoppableAudit/runs/UWACTO/scratch"
+          ]
+        },
+        "adapterType": "codex_local"
+      },
+      "expectedConfigHash": "9512681bf728bc21f7dfe83da106b44931130976aaaa333731cca7e4ef80da30",
       "family": "coordination",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -443,6 +713,33 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwakotlinauditor.md",
+      "expectedConfig": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWAKotlinAuditor/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "envKeys": [
+            "CODEBASE_MEMORY_PROJECT",
+            "SERENA_PROJECT",
+            "TELEGRAM_OPS_CHAT_ID",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+          ],
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWAKotlinAuditor",
+            "/Users/Shared/UnstoppableAudit/runs/UWAKotlinAuditor/scratch"
+          ]
+        },
+        "adapterType": "codex_local"
+      },
+      "expectedConfigHash": "ec6b5ea55fc58d1bae03b33df04bfb5f18bda095f8bd513819976ae11beaf47f",
       "family": "code-audit",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -487,6 +784,33 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwasecurityauditor.md",
+      "expectedConfig": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWASecurityAuditor/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "envKeys": [
+            "CODEBASE_MEMORY_PROJECT",
+            "SERENA_PROJECT",
+            "TELEGRAM_OPS_CHAT_ID",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+          ],
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWASecurityAuditor",
+            "/Users/Shared/UnstoppableAudit/runs/UWASecurityAuditor/scratch"
+          ]
+        },
+        "adapterType": "codex_local"
+      },
+      "expectedConfigHash": "d5310dd94b5a701d27ecb89807881eabcf60ca82ce58011c30040fd40f14f2e8",
       "family": "security-audit",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -531,6 +855,33 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwacryptoauditor.md",
+      "expectedConfig": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWACryptoAuditor/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "envKeys": [
+            "CODEBASE_MEMORY_PROJECT",
+            "SERENA_PROJECT",
+            "TELEGRAM_OPS_CHAT_ID",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+          ],
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWACryptoAuditor",
+            "/Users/Shared/UnstoppableAudit/runs/UWACryptoAuditor/scratch"
+          ]
+        },
+        "adapterType": "codex_local"
+      },
+      "expectedConfigHash": "dec52a78a2a1bc4759c699638a1fdf22be70fd56468b9d0ad7924fadfe0a7242",
       "family": "crypto-audit",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -575,6 +926,33 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwainfraengineer.md",
+      "expectedConfig": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWAInfraEngineer/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "envKeys": [
+            "CODEBASE_MEMORY_PROJECT",
+            "SERENA_PROJECT",
+            "TELEGRAM_OPS_CHAT_ID",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+          ],
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWAInfraEngineer",
+            "/Users/Shared/UnstoppableAudit/runs/UWAInfraEngineer/scratch"
+          ]
+        },
+        "adapterType": "codex_local"
+      },
+      "expectedConfigHash": "df34dbe872f41acf7009cef863ed7b10fb0eac0fd4bb2af79cee809abf4a45f8",
       "family": "infra",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -619,6 +997,33 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwaresearchagent.md",
+      "expectedConfig": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWAResearchAgent/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "envKeys": [
+            "CODEBASE_MEMORY_PROJECT",
+            "SERENA_PROJECT",
+            "TELEGRAM_OPS_CHAT_ID",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+          ],
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWAResearchAgent",
+            "/Users/Shared/UnstoppableAudit/runs/UWAResearchAgent/scratch"
+          ]
+        },
+        "adapterType": "codex_local"
+      },
+      "expectedConfigHash": "162e217bf6165b3753af4b30a3c2a17173686b8c1f24a3878755f228ca68605b",
       "family": "research",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -663,6 +1068,33 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwaqaengineer.md",
+      "expectedConfig": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWAQAEngineer/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "envKeys": [
+            "CODEBASE_MEMORY_PROJECT",
+            "SERENA_PROJECT",
+            "TELEGRAM_OPS_CHAT_ID",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+          ],
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWAQAEngineer",
+            "/Users/Shared/UnstoppableAudit/runs/UWAQAEngineer/scratch"
+          ]
+        },
+        "adapterType": "codex_local"
+      },
+      "expectedConfigHash": "145a460f1cfd7940bbfcdf7d3ad80c9ca14135acbec9310f4d54c549ffc6ae04",
       "family": "qa",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -707,6 +1139,33 @@
     {
       "adapterType": "codex_local",
       "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwatechnicalwriter.md",
+      "expectedConfig": {
+        "adapterConfig": {
+          "cwd": "/Users/Shared/UnstoppableAudit/runs/UWATechnicalWriter/workspace",
+          "dangerouslyBypassApprovalsAndSandbox": false,
+          "envKeys": [
+            "CODEBASE_MEMORY_PROJECT",
+            "SERENA_PROJECT",
+            "TELEGRAM_OPS_CHAT_ID",
+            "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
+          ],
+          "instructionsBundleMode": "managed",
+          "instructionsEntryFile": "AGENTS.md",
+          "instructionsFilePath": "AGENTS.md",
+          "model": "gpt-5.4",
+          "modelReasoningEffort": "high",
+          "sourceRootsReadOnly": [
+            "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+            "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git"
+          ],
+          "writableRoots": [
+            "/Users/Shared/UnstoppableAudit/artifacts/UWATechnicalWriter",
+            "/Users/Shared/UnstoppableAudit/runs/UWATechnicalWriter/scratch"
+          ]
+        },
+        "adapterType": "codex_local"
+      },
+      "expectedConfigHash": "307b0957b6a25f71d3e732735a52b1690917c8afa95ef7be6766337ed654bcff",
       "family": "writer",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -754,8 +1213,9 @@
     "live_apply_allowed": false,
     "requires_authenticated_preflight": true
   },
-  "checked_at": "2026-05-10T04:51:49Z",
+  "checked_at": "2026-05-10T04:58:35Z",
   "config_path": "/Users/ant013/Android/Gimle-Palace-cx/paperclips/teams/unstoppable-audit.yaml",
+  "dry_run_config_hash": "bcdeb902d303e0cebafeffb50abe7713f8685372a910aff16854a7d5713dd0a7",
   "gate": "B1",
   "live_readback": {
     "checked": false,

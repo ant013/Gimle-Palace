@@ -66,6 +66,7 @@ def test_manifest_marks_live_readback_unchecked():
     assert manifest["live_readback"]["checked"] is False
     assert manifest["apply_policy"]["live_apply_allowed"] is False
     assert manifest["apply_policy"]["requires_authenticated_preflight"] is True
+    assert manifest["dry_run_config_hash"]
 
 
 def test_rendered_bundle_contains_required_ua_markers(tmp_path):
@@ -97,3 +98,90 @@ def test_validate_agent_plan_rejects_admin_runtime_env():
 
     with pytest.raises(ValueError, match="forbidden runtime env"):
         team.validate_agent_plan(agent)
+
+
+def test_preflight_rejects_stale_dry_run_manifest():
+    config_path = Path(__file__).resolve().parents[1] / "teams" / "unstoppable-audit.yaml"
+    config = team.load_config(config_path)
+    agents = team.build_agent_plan(config, Path(__file__).resolve().parents[2], Path("paperclips/dist/codex/unstoppable-audit"))
+    current = team.build_manifest(config, agents, config_path)
+    stale = dict(current)
+    stale["dry_run_config_hash"] = "stale"
+
+    errors = team.assert_fresh_dry_run(stale, current)
+
+    assert "dry-run manifest is stale against current team config" in errors
+
+
+def test_decide_agent_refuses_paused_auceo():
+    config = load_team_config()
+    agents = team.build_agent_plan(config, Path(__file__).resolve().parents[2], Path("paperclips/dist/codex/unstoppable-audit"))
+    auceo = next(agent for agent in agents if agent["name"] == "AUCEO")
+    live = {
+        "id": "dcdd8871-5b44-4563-bb00-f8cca292a69e",
+        "name": "AUCEO",
+        "status": "paused",
+    }
+    live_config = {
+        "adapterType": "codex_local",
+        "adapterConfig": {
+            "cwd": auceo["workspacePath"],
+            "model": auceo["model"],
+            "modelReasoningEffort": auceo["reasoningEffort"],
+            "instructionsFilePath": "AGENTS.md",
+            "instructionsBundleMode": "managed",
+            "dangerouslyBypassApprovalsAndSandbox": False,
+            "env": {key: "redacted" for key in auceo["runtimeEnvKeys"]},
+        },
+    }
+
+    decision = team.decide_agent(
+        auceo,
+        [live],
+        live_config,
+        "dcdd8871-5b44-4563-bb00-f8cca292a69e",
+    )
+
+    assert decision["decision"] == "refuse"
+    assert decision["ok"] is False
+    assert any("status is paused" in blocker for blocker in decision["blockers"])
+
+
+def test_decide_agent_allows_create_when_missing():
+    config = load_team_config()
+    agents = team.build_agent_plan(config, Path(__file__).resolve().parents[2], Path("paperclips/dist/codex/unstoppable-audit"))
+    agent = next(agent for agent in agents if agent["name"] == "UWICTO")
+
+    decision = team.decide_agent(agent, [], None, "dcdd8871-5b44-4563-bb00-f8cca292a69e")
+
+    assert decision["decision"] == "create"
+    assert decision["ok"] is True
+    assert decision["live"]["found"] is False
+
+
+def test_compare_readback_rejects_forbidden_live_env_key():
+    config = load_team_config()
+    agents = team.build_agent_plan(config, Path(__file__).resolve().parents[2], Path("paperclips/dist/codex/unstoppable-audit"))
+    agent = next(agent for agent in agents if agent["name"] == "UWICTO")
+    live_config = {
+        "adapterType": "codex_local",
+        "adapterConfig": {
+            "cwd": agent["workspacePath"],
+            "model": agent["model"],
+            "modelReasoningEffort": agent["reasoningEffort"],
+            "instructionsFilePath": "AGENTS.md",
+            "instructionsBundleMode": "managed",
+            "dangerouslyBypassApprovalsAndSandbox": False,
+            "env": {
+                "CODEBASE_MEMORY_PROJECT": "redacted",
+                "SERENA_PROJECT": "redacted",
+                "TELEGRAM_REDACTED_REPORTS_CHAT_ID": "redacted",
+                "TELEGRAM_OPS_CHAT_ID": "redacted",
+                "PAPERCLIP_API_KEY": "redacted",
+            },
+        },
+    }
+
+    divergences = team.compare_readback(agent, live_config)
+
+    assert any("forbidden keys" in divergence for divergence in divergences)
