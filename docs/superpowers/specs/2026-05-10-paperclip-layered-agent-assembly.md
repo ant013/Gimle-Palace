@@ -89,7 +89,7 @@ The first implementation slice is intentionally narrow:
 Project: Gimle only
 Targets: existing Claude + Codex Gimle teams
 Output paths: legacy paths retained
-Deploy: dry-run only until generated output is reviewed
+Deploy: no live deploy; deploy dry-run wrapper is a later slice
 Goal: manifest-driven build can regenerate current Gimle artifacts with current
       validator green and no bundle size growth
 ```
@@ -111,6 +111,12 @@ paperclips/codex-agent-ids.env
 Existing deploy scripts, watchdog consumers, validators, and workspace update
 scripts must continue to work against those legacy paths until a separate
 consumer-migration spec changes them.
+
+Compatibility authority rule: the project manifest is the canonical logical
+source for project facts, but Slice 1 may import existing compatibility inputs
+such as `codex-agent-ids.env` and current deploy name mappings. Those files are
+not a second source of truth; they are legacy inputs used to resolve the
+manifest until a later slice generates them from the manifest.
 
 ## Source Of Truth
 
@@ -392,15 +398,16 @@ agent artifact.
 
 Owned by project deploy config plus generic deploy tooling.
 
-Deploy tooling should not hard-code Gimle, Medic, or UAudit. It should read the
-project manifest and upload/copy each generated bundle to the matching agent.
+Future deploy tooling should not hard-code Gimle, Medic, or UAudit. It should
+read the project manifest and upload/copy each generated bundle to the matching
+agent.
 
-Required deploy behaviors:
+Future deploy behaviors:
 
 - refuse upload to an agent whose live adapter type does not match the target;
 - deploy only generated bundle content;
 - verify at least one stable marker per target agent after deploy;
-- support dry-run and single-agent deploy;
+- support dry-run and single-agent deploy by project, target, and agent;
 - write a deploy summary with project key, target, agent count, source SHA, and
   generated bundle hashes;
 - never mutate another project's agents.
@@ -502,21 +509,15 @@ Before any layered builder implementation:
 - Run `python3 paperclips/scripts/validate_instructions.py --repo-root .` green
   before changing build semantics.
 - Record the green baseline commit and generated bundle sizes.
+- Add a Paperclip assembly CI job after the validator is green:
+  - `git submodule update --init --recursive`;
+  - `bash paperclips/build.sh`;
+  - `bash paperclips/build.sh --target codex`;
+  - `python3 paperclips/scripts/validate_instructions.py --repo-root .`;
+  - `bash paperclips/validate-codex-target.sh`;
+  - `python3 -m pytest paperclips/tests/test_validate_instructions.py`.
 
-### Phase 1: Gimle-Only Manifest Compatibility Slice
-
-- Add Gimle manifest and overlays.
-- Keep legacy output paths:
-  - `paperclips/dist/*.md`;
-  - `paperclips/dist/codex/*.md`.
-- Generate current Gimle Claude and Codex artifacts from the manifest.
-- Keep `codex-agent-ids.env`, current deploy mappings, and current deploy modes
-  compatible.
-- Prove generated bundles contain the same required markers.
-- Prove no bundle grows relative to baseline unless allowlisted.
-- Run deploy dry-run only; do not modify live agents in this slice.
-
-### Phase 2: Inventory And Marker Extraction
+### Phase 1: Inventory And Marker Extraction
 
 - List all Gimle role bundles first; UAudit and Medic inventories are later
   phases after Gimle compatibility is proven.
@@ -524,8 +525,10 @@ Before any layered builder implementation:
 - Extract mandatory safety rules into marker inventory.
 - Identify project literals in shared fragments and role-prime files.
 - Classify each literal as shared, target, or project-owned.
+- Inventory existing shared-fragment project literals without requiring cleanup
+  in this slice.
 
-### Phase 3: Parameter Schema
+### Phase 2: Parameter Schema
 
 - Add manifest schema and sample manifests with placeholder values in
   `paperclip-shared-fragments`.
@@ -533,17 +536,10 @@ Before any layered builder implementation:
 - Define standard variables for issue prefix, paths, MCP projects, roles, and
   target names.
 - Add validation for missing variables and unused variables.
+- Define compatibility import rules for `codex-agent-ids.env` and current
+  deploy name mappings.
 
-### Phase 4: Shared Cleanup
-
-- Replace project literals in `paperclip-shared-fragments` with variables or
-  move them to project overlays.
-- Keep rule text intact unless replaced by an equivalent marked rule plus
-  background reference.
-- Add a check that `paperclip-shared-fragments` has no forbidden project
-  literals.
-
-### Phase 5: Builder
+### Phase 3: Builder Compatibility Mode
 
 - Extend or replace current include-only builder with layered assembly.
 - Preserve existing `paperclips/build.sh` behavior during compatibility mode.
@@ -551,16 +547,47 @@ Before any layered builder implementation:
 - Add project/target output paths only behind an explicit future compatibility
   flag.
 - Generate a bundle manifest with hashes and size stats.
+- Do not change live deploy consumers in this phase.
 
-### Phase 6: Gimle Deploy Migration
+### Phase 4: Gimle-Only Manifest Compatibility Slice
 
 - Express current Gimle Claude and Codex teams through a Gimle manifest.
 - Generate bundles equivalent to current outputs.
 - Prove no generated bundle grew.
 - Prove mandatory markers are present.
-- Switch Gimle deploy scripts to manifest-driven deploy.
+- Keep legacy output paths:
+  - `paperclips/dist/*.md`;
+  - `paperclips/dist/codex/*.md`.
+- Keep current deploy mappings and deploy modes compatible.
+- Do not deploy live agents in this slice.
 
-### Phase 7: UAudit Migration
+### Phase 5: Deploy Dry-Run Compatibility Wrapper
+
+- Add or adapt a deploy wrapper that supports:
+  - `--dry-run`;
+  - `--project <key>`;
+  - `--target claude|codex`;
+  - optional `--agent <role-key>`.
+- Wrapper reads the resolved project manifest and compatibility outputs.
+- Claude dry-run must not copy files.
+- Codex dry-run must not upload bundles.
+- Existing deploy scripts remain available until consumer migration is complete.
+
+### Phase 6: Gimle Deploy Migration
+
+- Switch Gimle deploy scripts to manifest-driven deploy.
+- Deploy only after generated output and dry-run behavior are reviewed.
+
+### Phase 7: Shared Cleanup
+
+- Replace project literals in `paperclip-shared-fragments` with variables or
+  move them to project overlays.
+- Keep rule text intact unless replaced by an equivalent marked rule plus
+  background reference.
+- Add a check that `paperclip-shared-fragments` has no forbidden project
+  literals in generated-bundle inputs.
+
+### Phase 8: UAudit Migration
 
 - Add UAudit manifest and overlays.
 - Generate AUCEO, CTO, Swift/Kotlin/Crypto/Security/Infra/QA/Research/Writer
@@ -568,7 +595,7 @@ Before any layered builder implementation:
 - Verify UAudit bundles include the same handoff/assign/close rules as Gimle.
 - Deploy only after generated bundles pass validation.
 
-### Phase 8: Medic Migration
+### Phase 9: Medic Migration
 
 - Add Medic manifest and overlays.
 - Generate Medic bundles from the same layered system.
@@ -604,22 +631,42 @@ Before any layered builder implementation:
 
 ## Acceptance Criteria
 
-- A documented layer model exists and is reflected in build inputs.
+### Phase 0 Acceptance
+
 - Phase 0 reconciles current role, matrix, baseline, generated output, and
   submodule preconditions.
 - Current `validate_instructions.py` is green before layered migration changes
   build semantics.
-- First implementation slice is Gimle-only and retains legacy output paths.
-- Project-specific literals are not present in shared fragments except in
-  documented historical references or parameter examples.
+- `auditor` / `cx-auditor` role-set decision is reflected consistently in
+  source roles, generated dist, coverage matrix, and baseline.
+- Paperclip assembly CI runs build, Codex build, instruction validation, Codex
+  target validation, and validator tests.
+
+### Slice 1 Acceptance
+
+- A documented layer model exists and is reflected in Gimle build inputs.
+- First implementation slice is Gimle-only and retains legacy output paths:
+  `paperclips/dist/*.md` and `paperclips/dist/codex/*.md`.
 - Gimle can declare a real project manifest in Slice 1.
-- UAudit and Medic manifest support is documented but not required for Slice 1
-  deployment.
 - Generated bundles contain no unresolved variables or includes.
 - Generated bundles contain all required safety markers for their profiles.
 - Generated bundle size does not increase per agent or per project target.
+- Existing shared-fragment project literals are inventoried; Slice 1 does not
+  need to remove all of them.
+- New manifest/overlay inputs do not introduce new shared-fragment project
+  literals.
+- `codex-agent-ids.env` and current deploy mappings are either imported as
+  compatibility inputs or generated from the manifest; they are not independent
+  authoritative sources.
+- No live deploy occurs in Slice 1.
+
+### Future Acceptance
+
 - Deploy tooling can dry-run by project, target, and agent.
 - Deploy tooling refuses to deploy to agents outside the selected project.
+- Project-specific literals are not present in shared generated-bundle inputs
+  except in documented historical references or parameter examples.
+- UAudit and Medic can each declare project manifests.
 - Future UAudit generated bundles must use the same shared lifecycle logic as
   Gimle with only UAudit project values substituted.
 - Existing live bundles are not modified until generated outputs are reviewed.
@@ -642,7 +689,7 @@ Before any layered builder implementation:
   - role/profile coverage;
   - size budget;
   - manifest agent IDs and target adapter expectations.
-- Run deploy dry-run for Gimle.
+- Do not run deploy dry-run until the deploy wrapper phase.
 - Do not run UAudit or Medic deploy in Slice 1.
 - In later UAudit phase, review generated AUCEO/CTO/Infra bundles specifically
   for handoff, assign, blocked, and close behavior.
