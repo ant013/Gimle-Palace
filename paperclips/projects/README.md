@@ -78,6 +78,21 @@ lists here, not duplicated in every generated agent bundle.
    without `--show-diff`; the deployed live bundle must match the generated
    bundle exactly. Add `--agent cto` or `--agent cx-cto` for a single role.
 
+7. Run the project-aware deploy dry-run before any live upload:
+
+   ```bash
+   python3 paperclips/scripts/deploy_project_agents.py \
+     --project <project-key> \
+     --target codex \
+     --agent cx-cto \
+     --dry-run
+   ```
+
+   This wrapper reads `paperclips/dist/<project-key>.resolved-assembly.json`
+   and prints the exact target, agent id, source bundle, hash, and size. It does
+   not upload; live deploy remains on the existing compatibility scripts until
+   manifest-driven deploy is implemented.
+
 Generated agent bundles should change only when role text, overlays, or target
 runtime text changes. Project-level capability metadata alone should not add
 repeated lines to every bundle.

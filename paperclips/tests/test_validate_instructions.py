@@ -12,6 +12,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 import validate_instructions  # noqa: E402
 import build_project_compat  # noqa: E402
 import compare_deployed_agents  # noqa: E402
+import deploy_project_agents  # noqa: E402
 import generate_assembly_inventory  # noqa: E402
 import validate_codex_target_runtime  # noqa: E402
 
@@ -511,6 +512,28 @@ def test_compare_deployed_path_shape() -> None:
     )
 
     assert path == Path("/paperclip/companies/company-id/agents/agent-id/instructions/AGENTS.md")
+
+
+def test_project_deploy_dry_run_uses_resolved_assembly(tmp_path: Path, capsys) -> None:
+    repo = make_repo(tmp_path)
+
+    result = deploy_project_agents.dry_run(repo, "gimle", "codex", "cx-cto")
+
+    captured = capsys.readouterr()
+    assert result == 0
+    assert "DRY-RUN project=gimle" in captured.out
+    assert "Target: codex adapter=codex_local" in captured.out
+    assert "WOULD DEPLOY cx-cto -> da97dbd9-6627-48d0-b421-66af0750eacf" in captured.out
+
+
+def test_project_deploy_dry_run_unknown_agent_fails(tmp_path: Path, capsys) -> None:
+    repo = make_repo(tmp_path)
+
+    result = deploy_project_agents.dry_run(repo, "gimle", "codex", "missing-agent")
+
+    captured = capsys.readouterr()
+    assert result == 1
+    assert "unknown agent for codex: missing-agent" in captured.err
 
 
 def test_compare_deployed_extracts_api_content_envelope() -> None:
