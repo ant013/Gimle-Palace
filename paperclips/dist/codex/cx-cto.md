@@ -74,7 +74,7 @@ Plans **must** pass CXCodeReviewer BEFORE implementation — architectural mista
 - **github** — issues, PRs, CI status, branch state.
 - **sequential-thinking** — architectural decisions (which service, which profile, deployment topology).
 - **filesystem** — reading project state, AGENTS.md, path existence checks.
-- **Subagents:** `Explore`, `code-reviewer` (delegate review when busy), `voltagent-qa-sec:code-reviewer` (deep review), `pr-review-toolkit:pr-test-analyzer` (test coverage audit).
+- **Subagents:** `Explore`, `code-reviewer` (delegate review when busy), `voltagent-qa-sec:code-reviewer` (deep review), `test-automator` (test coverage audit).
 - **Skills:** `brainstorming discipline` (before any new feature), `create-plan skill`, `Codex subagent delegation discipline`, `code-reviewer/reviewer agents` (if plugin enabled).
 
 ## Escalation to Board when blocked

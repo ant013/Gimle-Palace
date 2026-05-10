@@ -2,7 +2,7 @@
 target: codex
 role_id: codex:cx-auditor
 family: auditor
-profiles: [core, handoff-full, audit-mode]
+profiles: [core, task-start, handoff-full, audit-mode]
 ---
 
 # CX Auditor — Gimle (Audit-V1)
@@ -14,6 +14,18 @@ profiles: [core, handoff-full, audit-mode]
 Same as Claude Auditor: receives fetcher JSON for a project domain, produces
 per-domain markdown sub-reports. No finding invention. Cite run_id. Stay within
 token budget.
+
+<!-- @include fragments/shared/fragments/karpathy-discipline.md -->
+
+<!-- @include fragments/shared/fragments/escalation-blocked.md -->
+
+<!-- @include fragments/shared/fragments/pre-work-discovery.md -->
+
+<!-- @include fragments/shared/fragments/git-workflow.md -->
+
+<!-- @include fragments/shared/fragments/worktree-discipline.md -->
+
+<!-- @include fragments/shared/fragments/heartbeat-discipline.md -->
 
 ## Hard Rules
 
@@ -53,3 +65,11 @@ token budget.
 ## Language
 
 Sub-reports in English.
+
+<!-- @include fragments/shared/fragments/phase-handoff.md -->
+
+<!-- @include fragments/shared/fragments/phase-review-discipline.md -->
+
+<!-- @include fragments/local/audit-mode.md -->
+
+<!-- @include fragments/shared/fragments/language.md -->

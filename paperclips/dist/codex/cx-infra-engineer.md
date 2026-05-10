@@ -69,7 +69,7 @@ Owns Gimle-Palace infrastructure: Docker Compose stack (profiles review/analyze/
 
 - **MCP:** `context7` (priority — Docker Compose spec, healthcheck syntax, sops, just, Neo4j docker docs), `serena` (Justfile / shell navigation), `filesystem` (reading `.env`, certs, scripts), `github` (CI workflows, PRs), `sequential-thinking` (multi-profile dependency graphs, installer state machine).
 - **Subagents:** `Explore`.
-- **Skills:** `superpowers:test-driven-development` (failing healthcheck / compose-validation test first).
+- **Skills:** `test-automator` (failing healthcheck / compose-validation test first).
 
 ## Coding Discipline
 

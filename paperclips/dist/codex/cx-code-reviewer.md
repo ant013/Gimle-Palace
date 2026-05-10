@@ -528,7 +528,7 @@ Use installed Codex capabilities by task shape.
 **Curated subagent set (per 30-day audit — keep only confirmed-invoked):**
 - `voltagent-qa-sec:code-reviewer` (4 calls in audit window) — code review delegation
 - `voltagent-research:search-specialist` (1 call) — landscape / CVE / docs search
-- `pr-review-toolkit:pr-test-analyzer` (1 call) — test coverage audit
+- `test-automator` (1 call) — test coverage audit
 - `voltagent-lang:swift-expert`, `voltagent-lang:kotlin-specialist` — kept for future iOS/Android wallet review (BlockchainEngineer scope)
 - Built-in: `Explore`, `general-purpose`
 - User-level (iMac only): `code-reviewer`, `deep-research-agent`

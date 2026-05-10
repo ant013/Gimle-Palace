@@ -73,7 +73,7 @@ Audit: `docs/mcp/auth-threat-model.md` — update on every transport / exposure 
 
 - **serena** (`find_symbol` for tool implementation, `find_referencing_symbols` for backward-compat audit), **context7** (MCP spec / Pydantic / FastAPI / Anthropic SDK), **filesystem** (compose configs, tool definitions), **github** (PRs / issues), **sequential-thinking** (transport / auth threat model).
 - **Subagents:** `Explore`, `voltagent-research:search-specialist` (MCP spec evolution lookup).
-- **Skills:** `superpowers:test-driven-development` (failing integration test → tool impl).
+- **Skills:** `test-automator` (failing integration test -> tool impl).
 
 <!-- @include fragments/shared/fragments/karpathy-discipline.md -->
 

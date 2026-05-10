@@ -1,6 +1,11 @@
 # Task 1 safety matrix. Validators in later tasks should treat this file as
 # the machine-readable source of truth for required profile coverage.
 roles:
+  claude:auditor:
+    target: claude
+    source: paperclips/roles/auditor.md
+    family: auditor
+    profiles: [core, task-start, handoff-full, audit-mode]
   claude:blockchain-engineer:
     target: claude
     source: paperclips/roles/blockchain-engineer.md
@@ -61,6 +66,11 @@ roles:
     source: paperclips/roles-codex/codex-architect-reviewer.md
     family: architect-reviewer
     profiles: [core, task-start, review, qa-smoke, research, handoff-full]
+  codex:cx-auditor:
+    target: codex
+    source: paperclips/roles-codex/cx-auditor.md
+    family: auditor
+    profiles: [core, task-start, handoff-full, audit-mode]
   codex:cx-blockchain-engineer:
     target: codex
     source: paperclips/roles-codex/cx-blockchain-engineer.md

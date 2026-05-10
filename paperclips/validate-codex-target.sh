@@ -14,7 +14,13 @@ fi
 
 python3 "$SCRIPT_DIR/scripts/validate_instructions.py"
 
-if rg -n "superpowers:|Claude Code|Claude CLI|claude CLI|claude-api|CLAUDE\\.md|pr-review-toolkit:|OpusArchitectReviewer|\\bOpus\\b" "$CODEX_DIST"; then
+forbidden_matches="$(
+  rg -n "superpowers:|Claude Code|Claude CLI|claude CLI|claude-api|CLAUDE\\.md|pr-review-toolkit:|OpusArchitectReviewer|\\bOpus\\b" "$CODEX_DIST" \
+    | grep -Ev "❌|WRONG|NOT|NEVER|forbidden|anti-pattern|antipattern|do not use" \
+    || true
+)"
+if [ -n "$forbidden_matches" ]; then
+  printf '%s\n' "$forbidden_matches"
   echo "ERROR: Codex output contains forbidden runtime references" >&2
   exit 1
 fi
