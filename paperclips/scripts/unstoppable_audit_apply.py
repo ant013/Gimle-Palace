@@ -30,6 +30,7 @@ DEFAULT_READINESS = Path("paperclips/manifests/unstoppable-audit/gate-c-readines
 DEFAULT_SOURCE_ISSUE = Path("paperclips/manifests/unstoppable-audit/gate-c-source-issue.json")
 DEFAULT_SOURCE_ISSUE_CREATE = Path("paperclips/manifests/unstoppable-audit/gate-c-source-issue-create.json")
 DEFAULT_LIVE_RESULT = Path("paperclips/manifests/unstoppable-audit/gate-c-live-result.json")
+DEFAULT_RUNTIME_FIX = Path("paperclips/manifests/unstoppable-audit/gate-d-runtime-fix.json")
 LIVE_CONFIRMATION = "UNSTOPPABLE_AUDIT_LIVE_APPLY"
 
 
@@ -77,6 +78,40 @@ def http_post_json(api_base: str, token: str, path: str, payload: dict[str, Any]
     body, http_code = result.stdout.rsplit("\n", 1)
     if http_code not in {"200", "201", "202", "204"}:
         raise RuntimeError(f"POST {path} failed with HTTP {http_code}: {body[:300]}")
+    return json.loads(body) if body else None
+
+
+def http_patch_json(api_base: str, token: str, path: str, payload: dict[str, Any]) -> Any:
+    result = subprocess.run(
+        [
+            "curl",
+            "-sS",
+            "-X",
+            "PATCH",
+            "-w",
+            "\n%{http_code}",
+            api_base.rstrip("/") + path,
+            "-H",
+            f"Authorization: Bearer {token}",
+            "-H",
+            "Accept: application/json",
+            "-H",
+            "Content-Type: application/json",
+            "--data-binary",
+            "@-",
+        ],
+        input=json.dumps(payload, sort_keys=True),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"PATCH {path} failed: {result.stderr.strip()}")
+    if "\n" not in result.stdout:
+        raise RuntimeError(f"PATCH {path} returned malformed curl output")
+    body, http_code = result.stdout.rsplit("\n", 1)
+    if http_code not in {"200", "201", "202", "204"}:
+        raise RuntimeError(f"PATCH {path} failed with HTTP {http_code}: {body[:300]}")
     return json.loads(body) if body else None
 
 
@@ -184,6 +219,7 @@ def hire_payload_template(agent: dict[str, Any]) -> dict[str, Any]:
             "instructionsEntryFile": expected["instructionsEntryFile"],
             "instructionsBundleMode": expected["instructionsBundleMode"],
             "dangerouslyBypassApprovalsAndSandbox": False,
+            "extraArgs": expected["extraArgs"],
             "env": runtime_env,
             "writableRoots": expected["writableRoots"],
             "sourceRootsReadOnly": expected["sourceRootsReadOnly"],
@@ -430,6 +466,7 @@ def compare_config_subset(expected_payload: dict[str, Any], live_config: dict[st
         "instructionsEntryFile",
         "instructionsBundleMode",
         "dangerouslyBypassApprovalsAndSandbox",
+        "extraArgs",
         "writableRoots",
         "sourceRootsReadOnly",
     ]:
@@ -796,6 +833,112 @@ def create_source_issue(
     }
 
 
+def runtime_extra_args_fix(
+    dry_run: dict[str, Any],
+    api_base: str,
+    token: str,
+    company_id: str,
+    *,
+    apply_live: bool,
+) -> dict[str, Any]:
+    planned_agents = agents_by_name(dry_run)
+    live_agents = team.http_get_json(api_base, token, f"/api/companies/{company_id}/agents")
+    if not isinstance(live_agents, list):
+        raise RuntimeError("company agents response must be a list")
+    live_by_name = team.index_live_agents(live_agents)
+    results: list[dict[str, Any]] = []
+    blockers: list[str] = []
+
+    for name in sorted(planned_agents):
+        agent = planned_agents[name]
+        expected_extra_args = sorted(agent["expectedConfig"]["adapterConfig"].get("extraArgs") or [])
+        matches = live_by_name.get(name, [])
+        result: dict[str, Any] = {
+            "agentName": name,
+            "expectedExtraArgs": expected_extra_args,
+            "ok": False,
+            "patched": False,
+        }
+        if not matches:
+            result["blocker"] = "live agent not found"
+            blockers.append(f"{name}: live agent not found")
+            results.append(result)
+            continue
+        if len(matches) > 1:
+            result["blocker"] = "duplicate live agents found"
+            result["matches"] = [team.sanitized_agent(match) for match in matches]
+            blockers.append(f"{name}: duplicate live agents found")
+            results.append(result)
+            continue
+
+        live_agent = matches[0]
+        agent_id = str(live_agent.get("id") or "")
+        if not agent_id:
+            result["blocker"] = "live agent id missing"
+            blockers.append(f"{name}: live agent id missing")
+            results.append(result)
+            continue
+
+        live_config = team.http_get_json(api_base, token, f"/api/agents/{agent_id}/configuration")
+        adapter_config = (live_config or {}).get("adapterConfig") if isinstance(live_config, dict) else None
+        if not isinstance(adapter_config, dict):
+            result["blocker"] = "adapterConfig missing"
+            blockers.append(f"{name}: adapterConfig missing")
+            results.append(result)
+            continue
+
+        current_extra_args = sorted(adapter_config.get("extraArgs") or [])
+        target_extra_args = sorted(set(current_extra_args).union(expected_extra_args))
+        result.update(
+            {
+                "ok": True,
+                "agentId": agent_id,
+                "currentExtraArgs": current_extra_args,
+                "targetExtraArgs": target_extra_args,
+                "configHashBefore": team.sha256_json(team.sanitized_config(live_config)),
+            }
+        )
+        if current_extra_args != target_extra_args:
+            result["patched"] = apply_live
+            result["wouldPatch"] = not apply_live
+            if apply_live:
+                patched_adapter_config = copy.deepcopy(adapter_config)
+                patched_adapter_config["extraArgs"] = target_extra_args
+                response = http_patch_json(
+                    api_base,
+                    token,
+                    f"/api/agents/{agent_id}",
+                    {"adapterConfig": patched_adapter_config},
+                )
+                result["response"] = response_summary(response)
+                readback = team.http_get_json(api_base, token, f"/api/agents/{agent_id}/configuration")
+                result["configHashAfter"] = team.sha256_json(team.sanitized_config(readback))
+                result["readbackExtraArgs"] = sorted(
+                    ((readback or {}).get("adapterConfig") or {}).get("extraArgs") or []
+                )
+                if result["readbackExtraArgs"] != target_extra_args:
+                    result["ok"] = False
+                    result["blocker"] = "readback extraArgs mismatch"
+                    blockers.append(f"{name}: readback extraArgs mismatch")
+        else:
+            result["wouldPatch"] = False
+        results.append(result)
+
+    return {
+        "ok": not blockers,
+        "gate": "D-runtime-fix",
+        "mode": "live" if apply_live else "dry-run",
+        "team": "UnstoppableAudit",
+        "created_at": now_iso(),
+        "api_base": api_base.rstrip("/"),
+        "company_id": company_id,
+        "live_mutation": apply_live,
+        "source_dry_run_hash": team.sha256_json(dry_run),
+        "blockers": blockers,
+        "results": results,
+    }
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     repo_root = Path(__file__).resolve().parents[2]
     parser = argparse.ArgumentParser(description="Plan or apply UnstoppableAudit live bootstrap")
@@ -866,6 +1009,17 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     apply.add_argument("--continue-after-pending-approval", action="store_true")
     apply.add_argument("--allow-live", action="store_true")
     apply.add_argument("--confirm", default="")
+
+    runtime_fix = subparsers.add_parser("patch-runtime-extra-args")
+    runtime_fix.add_argument("--dry-run", type=Path, default=repo_root / DEFAULT_DRY_RUN)
+    runtime_fix.add_argument("--config", type=Path, default=repo_root / "paperclips/teams/unstoppable-audit.yaml")
+    runtime_fix.add_argument("--manifest", type=Path, default=repo_root / DEFAULT_RUNTIME_FIX)
+    runtime_fix.add_argument("--auth-path", type=Path, default=Path.home() / ".paperclip" / "auth.json")
+    runtime_fix.add_argument("--api-base", default=os.environ.get("PAPERCLIP_API_URL", "https://paperclip.ant013.work"))
+    runtime_fix.add_argument("--company-id", default="")
+    runtime_fix.add_argument("--write-manifest", action="store_true")
+    runtime_fix.add_argument("--allow-live", action="store_true")
+    runtime_fix.add_argument("--confirm", default="")
     return parser.parse_args(argv)
 
 
@@ -978,6 +1132,30 @@ def command_apply(args: argparse.Namespace) -> int:
     return 0 if result["ok"] else 1
 
 
+def command_patch_runtime_extra_args(args: argparse.Namespace) -> int:
+    if args.allow_live and args.confirm != LIVE_CONFIRMATION:
+        raise RuntimeError(
+            f"refusing live runtime patch; pass --allow-live --confirm {LIVE_CONFIRMATION} after review"
+        )
+    dry_run = read_json(args.dry_run)
+    config = team.load_config(args.config)
+    company_id = args.company_id or str(team.prereq.get_path(config, "paperclip.company_id"))
+    token = team.load_auth_token(args.api_base, args.auth_path)
+    if not token:
+        raise RuntimeError("PAPERCLIP_API_KEY or ~/.paperclip/auth.json token is required for runtime patch")
+    manifest = runtime_extra_args_fix(
+        dry_run,
+        args.api_base,
+        token,
+        company_id,
+        apply_live=args.allow_live,
+    )
+    if args.write_manifest or args.allow_live:
+        write_json(args.manifest, manifest)
+    print(json.dumps(manifest, indent=2, sort_keys=True))
+    return 0 if manifest["ok"] else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
     if args.command == "plan":
@@ -990,6 +1168,8 @@ def main(argv: list[str] | None = None) -> int:
         return command_create_source_issue(args)
     if args.command == "apply":
         return command_apply(args)
+    if args.command == "patch-runtime-extra-args":
+        return command_patch_runtime_extra_args(args)
     raise RuntimeError(f"unsupported command: {args.command}")
 
 

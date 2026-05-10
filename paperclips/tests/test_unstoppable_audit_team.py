@@ -49,6 +49,8 @@ def test_agent_runtime_is_audit_only():
         assert agent["instructionsBundleMode"] == "managed"
         assert agent["instructionsFilePath"] == "AGENTS.md"
         assert agent["sandboxBypass"] is False
+        assert agent["extraArgs"] == ["--skip-git-repo-check"]
+        assert agent["expectedConfig"]["adapterConfig"]["extraArgs"] == ["--skip-git-repo-check"]
         assert agent["plannedOperation"] == "create"
         assert "PAPERCLIP_API_KEY" not in agent["runtimeEnvKeys"]
         assert "GITHUB_TOKEN" not in agent["runtimeEnvKeys"]

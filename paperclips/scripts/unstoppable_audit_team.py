@@ -21,6 +21,7 @@ TEAM_SLUG = "unstoppable-audit"
 DEFAULT_MANIFEST = Path("paperclips/manifests/unstoppable-audit/gate-b1-dry-run.json")
 DEFAULT_PREFLIGHT_MANIFEST = Path("paperclips/manifests/unstoppable-audit/gate-b2-preflight.json")
 DEFAULT_BUNDLE_DIR = Path("paperclips/dist/codex/unstoppable-audit")
+CODEX_EXTRA_ARGS = ["--skip-git-repo-check"]
 FORBIDDEN_ENV_KEYS = {
     "PAPERCLIP_API_KEY",
     "PAPERCLIP_TOKEN",
@@ -43,6 +44,7 @@ PREFLIGHT_REQUIRED_FIELDS = [
     "instructionsFilePath",
     "instructionsBundleMode",
     "sandboxBypass",
+    "extraArgs",
     "runtimeEnvKeys",
     "workspacePath",
 ]
@@ -177,6 +179,7 @@ def build_agent_plan(config: dict[str, Any], repo_root: Path, bundle_dir: Path) 
             "sandboxBypass": False,
             "plannedOperation": "create",
             "workspacePath": f"{run_root}/{name}/workspace",
+            "extraArgs": list(CODEX_EXTRA_ARGS),
             "bundlePath": str(bundle_path),
             "writableRoots": [agent_artifact_root, scratch_root],
             "sourceRootsReadOnly": [
@@ -205,6 +208,7 @@ def expected_config(agent: dict[str, Any]) -> dict[str, Any]:
             "instructionsEntryFile": agent["instructionsFilePath"],
             "instructionsBundleMode": agent["instructionsBundleMode"],
             "dangerouslyBypassApprovalsAndSandbox": agent["sandboxBypass"],
+            "extraArgs": sorted(agent["extraArgs"]),
             "envKeys": sorted(agent["runtimeEnvKeys"]),
             "writableRoots": sorted(agent["writableRoots"]),
             "sourceRootsReadOnly": sorted(agent["sourceRootsReadOnly"]),
@@ -361,6 +365,7 @@ def sanitized_config(config: dict[str, Any] | None) -> dict[str, Any]:
             "dangerouslyBypassApprovalsAndSandbox": adapter_config.get(
                 "dangerouslyBypassApprovalsAndSandbox"
             ),
+            "extraArgs": sorted(adapter_config.get("extraArgs") or []),
             "envKeys": env_keys,
             "writableRoots": adapter_config.get("writableRoots"),
             "sourceRootsReadOnly": adapter_config.get("sourceRootsReadOnly"),
@@ -378,6 +383,7 @@ def config_readback(config: dict[str, Any] | None) -> dict[str, Any]:
         "instructionsFilePath": adapter_config.get("instructionsFilePath"),
         "instructionsBundleMode": adapter_config.get("instructionsBundleMode"),
         "sandboxBypass": adapter_config.get("dangerouslyBypassApprovalsAndSandbox"),
+        "extraArgs": sorted(adapter_config.get("extraArgs") or []),
         "runtimeEnvKeys": sorted(adapter_config.get("envKeys") or []),
         "workspacePath": adapter_config.get("cwd"),
         "writableRoots": adapter_config.get("writableRoots"),
@@ -394,6 +400,7 @@ def compare_readback(agent: dict[str, Any], config: dict[str, Any] | None) -> li
         "instructionsFilePath": agent["instructionsFilePath"],
         "instructionsBundleMode": agent["instructionsBundleMode"],
         "sandboxBypass": agent["sandboxBypass"],
+        "extraArgs": sorted(agent["extraArgs"]),
         "runtimeEnvKeys": sorted(agent["runtimeEnvKeys"]),
         "workspacePath": agent["workspacePath"],
     }

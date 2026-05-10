@@ -13,6 +13,9 @@
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
           ],
+          "extraArgs": [
+            "--skip-git-repo-check"
+          ],
           "instructionsBundleMode": "managed",
           "instructionsEntryFile": "AGENTS.md",
           "instructionsFilePath": "AGENTS.md",
@@ -29,7 +32,10 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "24291cb343b8daa8505163998cb5a1978dbe690d9bd962a965a45901379b090f",
+      "expectedConfigHash": "9ca176144c4539c17bca19d7af1372d69e3abd637a37dd79a86d396bfc1c3e46",
+      "extraArgs": [
+        "--skip-git-repo-check"
+      ],
       "family": "coordination",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -84,6 +90,9 @@
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
           ],
+          "extraArgs": [
+            "--skip-git-repo-check"
+          ],
           "instructionsBundleMode": "managed",
           "instructionsEntryFile": "AGENTS.md",
           "instructionsFilePath": "AGENTS.md",
@@ -100,7 +109,10 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "9930825600c3653e4d0597b8e86bac62674dabf3bbca10b9fee3e44b6788be28",
+      "expectedConfigHash": "4ca846df8eb546efd780271a137e4ea191cdd02ba236b384afbdf1641d76175a",
+      "extraArgs": [
+        "--skip-git-repo-check"
+      ],
       "family": "coordination",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -155,6 +167,9 @@
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
           ],
+          "extraArgs": [
+            "--skip-git-repo-check"
+          ],
           "instructionsBundleMode": "managed",
           "instructionsEntryFile": "AGENTS.md",
           "instructionsFilePath": "AGENTS.md",
@@ -171,7 +186,10 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "02607892b7f68b2fee128c89e1a53a3835dcb528b54e173b4d63bb9375b61b8b",
+      "expectedConfigHash": "0785087055e58be748d9b458491e0fd0c6f742eab266d5c2793fb40e3ff12e37",
+      "extraArgs": [
+        "--skip-git-repo-check"
+      ],
       "family": "code-audit",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -226,6 +244,9 @@
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
           ],
+          "extraArgs": [
+            "--skip-git-repo-check"
+          ],
           "instructionsBundleMode": "managed",
           "instructionsEntryFile": "AGENTS.md",
           "instructionsFilePath": "AGENTS.md",
@@ -242,7 +263,10 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "bf42cb5cc0dd84ee9474e88696ad33af2e9c39d13d264f72271f1c9035fce386",
+      "expectedConfigHash": "85eb5a276817caa8b46a4803fe56915a49072b7c616894f7d152c85f41f83929",
+      "extraArgs": [
+        "--skip-git-repo-check"
+      ],
       "family": "security-audit",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -297,6 +321,9 @@
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
           ],
+          "extraArgs": [
+            "--skip-git-repo-check"
+          ],
           "instructionsBundleMode": "managed",
           "instructionsEntryFile": "AGENTS.md",
           "instructionsFilePath": "AGENTS.md",
@@ -313,7 +340,10 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "f680c21931c6b1de40ec8196e18235a701374f11f63049ab789b510d4c02904e",
+      "expectedConfigHash": "cd3ea4764208703a70e02861a504a80e2f75867a2ed5ad9421b8bec4ce758ee1",
+      "extraArgs": [
+        "--skip-git-repo-check"
+      ],
       "family": "crypto-audit",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -368,6 +398,9 @@
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
           ],
+          "extraArgs": [
+            "--skip-git-repo-check"
+          ],
           "instructionsBundleMode": "managed",
           "instructionsEntryFile": "AGENTS.md",
           "instructionsFilePath": "AGENTS.md",
@@ -384,7 +417,10 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "fcdc2c9035d0a0ee6ebc0d37a216e9a69bc8aab59dbc07cfd8608a54d6f5d0a6",
+      "expectedConfigHash": "36e7d28133b0b166044f98b4dd1d44881ee10de1790633eb6992a0777aec090c",
+      "extraArgs": [
+        "--skip-git-repo-check"
+      ],
       "family": "infra",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -439,6 +475,9 @@
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
           ],
+          "extraArgs": [
+            "--skip-git-repo-check"
+          ],
           "instructionsBundleMode": "managed",
           "instructionsEntryFile": "AGENTS.md",
           "instructionsFilePath": "AGENTS.md",
@@ -455,7 +494,10 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "23329f71ebd602088aca12dc57330e5ceddc429c6c3892c9ee01cc98f9a9348c",
+      "expectedConfigHash": "1ba2998f1baea1a408391e8c36e70bd93c11291699d1d00af806c1ee3f2060b1",
+      "extraArgs": [
+        "--skip-git-repo-check"
+      ],
       "family": "research",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -510,6 +552,9 @@
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
           ],
+          "extraArgs": [
+            "--skip-git-repo-check"
+          ],
           "instructionsBundleMode": "managed",
           "instructionsEntryFile": "AGENTS.md",
           "instructionsFilePath": "AGENTS.md",
@@ -526,7 +571,10 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "cb33a61fd138e25a57d7e18eeeddd80acf32497e55091b8f453222df99c66fca",
+      "expectedConfigHash": "939fc32160596ec9481e615085fd237f62004f2ac244d61043071fdbb0f4878a",
+      "extraArgs": [
+        "--skip-git-repo-check"
+      ],
       "family": "qa",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -581,6 +629,9 @@
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
           ],
+          "extraArgs": [
+            "--skip-git-repo-check"
+          ],
           "instructionsBundleMode": "managed",
           "instructionsEntryFile": "AGENTS.md",
           "instructionsFilePath": "AGENTS.md",
@@ -597,7 +648,10 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "461d7bed77858c9fed53901023d89514e0434ea58b7c3ee76f2c589d13ee201a",
+      "expectedConfigHash": "0844a0277f056067b80343cdcb9e88dd5d1a805c64dfa5f0ffa129de608f6999",
+      "extraArgs": [
+        "--skip-git-repo-check"
+      ],
       "family": "writer",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -652,6 +706,9 @@
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
           ],
+          "extraArgs": [
+            "--skip-git-repo-check"
+          ],
           "instructionsBundleMode": "managed",
           "instructionsEntryFile": "AGENTS.md",
           "instructionsFilePath": "AGENTS.md",
@@ -668,7 +725,10 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "9512681bf728bc21f7dfe83da106b44931130976aaaa333731cca7e4ef80da30",
+      "expectedConfigHash": "8832686d7f47b10238f86690094447c032562ef4d35b434aa7ec1896548c7afd",
+      "extraArgs": [
+        "--skip-git-repo-check"
+      ],
       "family": "coordination",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -723,6 +783,9 @@
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
           ],
+          "extraArgs": [
+            "--skip-git-repo-check"
+          ],
           "instructionsBundleMode": "managed",
           "instructionsEntryFile": "AGENTS.md",
           "instructionsFilePath": "AGENTS.md",
@@ -739,7 +802,10 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "ec6b5ea55fc58d1bae03b33df04bfb5f18bda095f8bd513819976ae11beaf47f",
+      "expectedConfigHash": "4e1aedc2764d345f33449b2df9330ba8b654fd4d71702d22bfe65b38a83bb552",
+      "extraArgs": [
+        "--skip-git-repo-check"
+      ],
       "family": "code-audit",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -794,6 +860,9 @@
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
           ],
+          "extraArgs": [
+            "--skip-git-repo-check"
+          ],
           "instructionsBundleMode": "managed",
           "instructionsEntryFile": "AGENTS.md",
           "instructionsFilePath": "AGENTS.md",
@@ -810,7 +879,10 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "d5310dd94b5a701d27ecb89807881eabcf60ca82ce58011c30040fd40f14f2e8",
+      "expectedConfigHash": "4c4293304b81e00e2d39e7636a05967d08091a6f0859d5c8ef3e1dc96d203a0c",
+      "extraArgs": [
+        "--skip-git-repo-check"
+      ],
       "family": "security-audit",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -865,6 +937,9 @@
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
           ],
+          "extraArgs": [
+            "--skip-git-repo-check"
+          ],
           "instructionsBundleMode": "managed",
           "instructionsEntryFile": "AGENTS.md",
           "instructionsFilePath": "AGENTS.md",
@@ -881,7 +956,10 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "dec52a78a2a1bc4759c699638a1fdf22be70fd56468b9d0ad7924fadfe0a7242",
+      "expectedConfigHash": "1bdbc43abcdd8bdd646465268e921d956c1c06833fa5da3b1d743d865f7dcd1e",
+      "extraArgs": [
+        "--skip-git-repo-check"
+      ],
       "family": "crypto-audit",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -936,6 +1014,9 @@
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
           ],
+          "extraArgs": [
+            "--skip-git-repo-check"
+          ],
           "instructionsBundleMode": "managed",
           "instructionsEntryFile": "AGENTS.md",
           "instructionsFilePath": "AGENTS.md",
@@ -952,7 +1033,10 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "df34dbe872f41acf7009cef863ed7b10fb0eac0fd4bb2af79cee809abf4a45f8",
+      "expectedConfigHash": "69bf551597aa23dde09229be04b38329776114079ea7c81571bf7f9568b8aeaf",
+      "extraArgs": [
+        "--skip-git-repo-check"
+      ],
       "family": "infra",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -1007,6 +1091,9 @@
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
           ],
+          "extraArgs": [
+            "--skip-git-repo-check"
+          ],
           "instructionsBundleMode": "managed",
           "instructionsEntryFile": "AGENTS.md",
           "instructionsFilePath": "AGENTS.md",
@@ -1023,7 +1110,10 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "162e217bf6165b3753af4b30a3c2a17173686b8c1f24a3878755f228ca68605b",
+      "expectedConfigHash": "06a744b72fcbd46ad700d3fdc99e6c239542fbd08cade00eda92ee6eacbc0409",
+      "extraArgs": [
+        "--skip-git-repo-check"
+      ],
       "family": "research",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -1078,6 +1168,9 @@
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
           ],
+          "extraArgs": [
+            "--skip-git-repo-check"
+          ],
           "instructionsBundleMode": "managed",
           "instructionsEntryFile": "AGENTS.md",
           "instructionsFilePath": "AGENTS.md",
@@ -1094,7 +1187,10 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "145a460f1cfd7940bbfcdf7d3ad80c9ca14135acbec9310f4d54c549ffc6ae04",
+      "expectedConfigHash": "38ae81576f40259a6e1683523b02c9f2df4b04cbb5b776924565d2628fef124e",
+      "extraArgs": [
+        "--skip-git-repo-check"
+      ],
       "family": "qa",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -1149,6 +1245,9 @@
             "TELEGRAM_OPS_CHAT_ID",
             "TELEGRAM_REDACTED_REPORTS_CHAT_ID"
           ],
+          "extraArgs": [
+            "--skip-git-repo-check"
+          ],
           "instructionsBundleMode": "managed",
           "instructionsEntryFile": "AGENTS.md",
           "instructionsFilePath": "AGENTS.md",
@@ -1165,7 +1264,10 @@
         },
         "adapterType": "codex_local"
       },
-      "expectedConfigHash": "307b0957b6a25f71d3e732735a52b1690917c8afa95ef7be6766337ed654bcff",
+      "expectedConfigHash": "6585d2b7e33e43341c3f9dd2da988c0a45a0d0afc1f5b78d5a6b78b1ca6ed8fb",
+      "extraArgs": [
+        "--skip-git-repo-check"
+      ],
       "family": "writer",
       "forbiddenRuntimeEnvKeys": [
         "BOOTSTRAP_ADMIN_TOKEN",
@@ -1213,9 +1315,9 @@
     "live_apply_allowed": false,
     "requires_authenticated_preflight": true
   },
-  "checked_at": "2026-05-10T04:58:35Z",
+  "checked_at": "2026-05-10T06:52:51Z",
   "config_path": "/Users/ant013/Android/Gimle-Palace-cx/paperclips/teams/unstoppable-audit.yaml",
-  "dry_run_config_hash": "bcdeb902d303e0cebafeffb50abe7713f8685372a910aff16854a7d5713dd0a7",
+  "dry_run_config_hash": "d510dd2b86a5680eb8aebe23068a57c6f01489176dd2cf2418d5234d85adcae7",
   "gate": "B1",
   "live_readback": {
     "checked": false,

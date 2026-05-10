@@ -102,6 +102,7 @@ def test_materialize_hire_payload_resolves_placeholders_and_manager_id():
 
     assert payload["reportsTo"] == "auceo-id"
     assert payload["sourceIssueId"] == "issue-id"
+    assert payload["adapterConfig"]["extraArgs"] == ["--skip-git-repo-check"]
     assert payload["adapterConfig"]["env"]["TELEGRAM_OPS_CHAT_ID"] == "-100ops"
 
 
@@ -489,3 +490,55 @@ def test_execute_operations_resolves_reports_to_after_created_manager(monkeypatc
     assert post_payloads[0]["reportsTo"] is None
     assert post_payloads[1]["reportsTo"] == "AUCEO-id"
     assert result["created_agent_ids"] == {"AUCEO": "AUCEO-id", "UWICTO": "UWICTO-id"}
+
+
+def test_runtime_extra_args_fix_patches_missing_codex_arg(monkeypatch):
+    _, dry_run = load_manifests()
+    dry_run["agents"] = [agent for agent in dry_run["agents"] if agent["name"] == "AUCEO"]
+    dry_run["agents"][0]["expectedConfig"]["adapterConfig"]["extraArgs"] = ["--skip-git-repo-check"]
+    calls = []
+    live_extra_args = []
+
+    def fake_get(api_base, token, path):
+        calls.append(path)
+        if path == "/api/companies/company-id/agents":
+            return [{"id": "auceo-id", "name": "AUCEO", "status": "failed"}]
+        if path == "/api/agents/auceo-id/configuration":
+            return {
+                "adapterType": "codex_local",
+                "adapterConfig": {
+                    "cwd": "/tmp/auceo",
+                    "model": "gpt-5.4",
+                    "extraArgs": live_extra_args,
+                },
+            }
+        raise AssertionError(path)
+
+    def fake_patch(api_base, token, path, payload):
+        nonlocal live_extra_args
+        calls.append(path)
+        assert path == "/api/agents/auceo-id"
+        assert payload["adapterConfig"]["extraArgs"] == ["--skip-git-repo-check"]
+        live_extra_args = payload["adapterConfig"]["extraArgs"]
+        return {"agent": {"id": "auceo-id"}}
+
+    monkeypatch.setattr(apply.team, "http_get_json", fake_get)
+    monkeypatch.setattr(apply, "http_patch_json", fake_patch)
+
+    manifest = apply.runtime_extra_args_fix(
+        dry_run,
+        "https://paperclip.example",
+        "token",
+        "company-id",
+        apply_live=True,
+    )
+
+    assert manifest["ok"] is True
+    assert manifest["live_mutation"] is True
+    assert manifest["results"][0]["patched"] is True
+    assert calls == [
+        "/api/companies/company-id/agents",
+        "/api/agents/auceo-id/configuration",
+        "/api/agents/auceo-id",
+        "/api/agents/auceo-id/configuration",
+    ]
