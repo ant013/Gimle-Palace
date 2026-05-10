@@ -43,7 +43,7 @@ docker compose --profile review down
 # repeat for --profile analyze and --profile full
 ```
 
-Evidence in PR comment: `docker compose ps` output + curl outputs. Static review + unit tests ≠ live smoke — incident GIM-10 showed these are two different trust levels.
+Evidence in PR comment: `docker compose ps` output + curl outputs. Static review + unit tests ≠ live smoke — incident {{evidence.merge_without_smoke_issue}} showed these are two different trust levels.
 
 ## Testcontainers Lifecycle (Neo4j integration)
 
@@ -62,7 +62,7 @@ Evidence in PR comment: `docker compose ps` output + curl outputs. Static review
 | Collections | Empty Neo4j result, 10k+ nodes, disconnected graph |
 | Concurrent | 2 MCP clients writing same Neo4j node, Neo4j failover mid-transaction |
 | Auth | Expired JWT, wrong NEO4J_AUTH, MCP protocol mismatch |
-| Docker | Stale volume (GIM-10), startup race (depends_on healthcheck), profile mismatch |
+| Docker | Stale volume ({{evidence.merge_without_smoke_issue}}), startup race (depends_on healthcheck), profile mismatch |
 | Secrets | `.env` missing, `changeme` default in production, sops unlock failure |
 
 ## PR Checklist (walk mechanically — no rubber-stamping)

@@ -12,6 +12,23 @@ domain:
   wallet_target_name: Unstoppable Wallet
   wallet_target_slug: Unstoppable-wallet
 
+evidence:
+  merge_without_smoke_issue: GIM-10
+  graphiti_mock_issue: GIM-48
+  release_reset_issue: GIM-52
+  asyncmock_driver_issue: GIM-59
+  worktree_discipline_issue_pair: GIM-75/76
+  qa_worktree_discipline_issue: GIM-90
+  mcp_wire_contract_issue: GIM-91
+  qa_deploy_checklist_issue: GIM-94
+  review_scope_drift_issue: GIM-104
+  qa_to_cto_stall_issue: GIM-126
+  handoff_flake_issue: GIM-182
+  pre_slim_baseline_issue: GIM-193
+  cr_to_pe_stall_issue: GIM-195
+  handoff_misclassified_issue: GIM-216
+  post_merge_stall_issue: GIM-229
+
 paths:
   project_root: .
   primary_repo_root: .

@@ -41,6 +41,6 @@ use `[@CXCTO](agent://da97dbd9-...)` instead.
 | "the architect-reviewer" | `[@CodexArchitectReviewer]` (`fec71dea`) | `[@OpusArchitectReviewer]` (`8d6649e2`) ❌ |
 
 If you find yourself wanting to use a Claude-side UUID — you're crossing
-team boundaries. Operator caught this exact bug on 2026-05-07 in GIM-229
+team boundaries. Operator caught this exact bug on 2026-05-07 in {{evidence.post_merge_stall_issue}}
 (Episode 1 at 15:53 — CXCodeReviewer handed to Claude CTO; Episode 2 at
 16:34 — CR Phase 3.1 review addressed Claude CTO again). Don't repeat it.

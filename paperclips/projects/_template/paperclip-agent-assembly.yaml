@@ -12,6 +12,23 @@ domain:
   wallet_target_name: <wallet-target-display-name>
   wallet_target_slug: <wallet-target-slug>
 
+evidence:
+  merge_without_smoke_issue: <project-issue-ref-or-neutral-label>
+  graphiti_mock_issue: <project-issue-ref-or-neutral-label>
+  release_reset_issue: <project-issue-ref-or-neutral-label>
+  asyncmock_driver_issue: <project-issue-ref-or-neutral-label>
+  worktree_discipline_issue_pair: <project-issue-ref-or-neutral-label>
+  qa_worktree_discipline_issue: <project-issue-ref-or-neutral-label>
+  mcp_wire_contract_issue: <project-issue-ref-or-neutral-label>
+  qa_deploy_checklist_issue: <project-issue-ref-or-neutral-label>
+  review_scope_drift_issue: <project-issue-ref-or-neutral-label>
+  qa_to_cto_stall_issue: <project-issue-ref-or-neutral-label>
+  handoff_flake_issue: <project-issue-ref-or-neutral-label>
+  pre_slim_baseline_issue: <project-issue-ref-or-neutral-label>
+  cr_to_pe_stall_issue: <project-issue-ref-or-neutral-label>
+  handoff_misclassified_issue: <project-issue-ref-or-neutral-label>
+  post_merge_stall_issue: <project-issue-ref-or-neutral-label>
+
 paths:
   project_root: <absolute-or-repo-relative-project-root>
   primary_repo_root: <absolute-or-repo-relative-primary-repo-root>
