@@ -293,6 +293,8 @@ def _detect_ownerless_completion(
         recent_window_min=recent_window_min,
     ):
         return None
+    if issue.parent_id is not None:
+        return None
     for c in comments:
         if c.author_agent_id in _QA_UUIDS:
             if _PHASE_41_RE.search(c.body) and _QA_PASS_RE.search(c.body):

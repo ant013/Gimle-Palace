@@ -25,12 +25,14 @@ def test_state_roundtrip(tmp_path: Path):
     path = tmp_path / "state.json"
     s = st.State.load(path)
     s.record_wake("issue-1", "agent-1")
+    s.recovery_baseline_completed = True
     s.save()
     assert path.exists()
     reloaded = st.State.load(path)
     assert reloaded.issue_cooldowns["issue-1"]["last_wake_at"]
     assert "agent-1" in reloaded.agent_wakes
     assert len(reloaded.agent_wakes["agent-1"]) == 1
+    assert reloaded.recovery_baseline_completed is True
 
 
 def test_corrupt_state_returns_empty(tmp_path: Path, caplog):

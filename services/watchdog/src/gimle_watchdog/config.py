@@ -51,6 +51,9 @@ class CompanyConfig:
 @dataclass(frozen=True)
 class DaemonConfig:
     poll_interval_seconds: int
+    recovery_enabled: bool = False
+    recovery_first_run_baseline_only: bool = True
+    max_actions_per_tick: int = 1
 
 
 @dataclass(frozen=True)
@@ -250,6 +253,14 @@ def load_config(path: Path) -> Config:
     daemon = DaemonConfig(
         poll_interval_seconds=_require_positive_int(
             daemon_raw.get("poll_interval_seconds"), "daemon.poll_interval_seconds"
+        ),
+        recovery_enabled=bool(daemon_raw.get("recovery_enabled", False)),
+        recovery_first_run_baseline_only=bool(
+            daemon_raw.get("recovery_first_run_baseline_only", True)
+        ),
+        max_actions_per_tick=_require_positive_int(
+            daemon_raw.get("max_actions_per_tick", 1),
+            "daemon.max_actions_per_tick",
         ),
     )
 

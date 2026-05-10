@@ -64,6 +64,7 @@ class State:
     agent_wakes: dict[str, list[_dt.datetime]] = field(default_factory=dict)
     escalated_issues: dict[str, dict[str, Any]] = field(default_factory=dict)
     alerted_handoffs: dict[str, dict[str, Any]] = field(default_factory=dict)
+    recovery_baseline_completed: bool = False
 
     @classmethod
     def load(cls, path: Path) -> "State":
@@ -115,6 +116,7 @@ class State:
             agent_wakes=agent_wakes,
             escalated_issues=dict(raw.get("escalated_issues") or {}),
             alerted_handoffs=dict(raw.get("alerted_handoffs") or {}),
+            recovery_baseline_completed=bool(raw.get("recovery_baseline_completed", False)),
         )
 
     def save(self) -> None:
@@ -128,6 +130,7 @@ class State:
             },
             "escalated_issues": self.escalated_issues,
             "alerted_handoffs": self.alerted_handoffs,
+            "recovery_baseline_completed": self.recovery_baseline_completed,
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp_fd, tmp_name = tempfile.mkstemp(
@@ -145,9 +148,13 @@ class State:
                 pass
             raise
 
+    def record_issue_cooldown(self, issue_id: str, recorded_at: _dt.datetime | None = None) -> None:
+        now = recorded_at or _now()
+        self.issue_cooldowns[issue_id] = {"last_wake_at": _iso(now)}
+
     def record_wake(self, issue_id: str, agent_id: str) -> None:
         now = _now()
-        self.issue_cooldowns[issue_id] = {"last_wake_at": _iso(now)}
+        self.record_issue_cooldown(issue_id, now)
         wakes = self.agent_wakes.setdefault(agent_id, [])
         wakes.append(now)
         cutoff = now - _dt.timedelta(seconds=PRUNE_WAKE_HISTORY_SECONDS)

@@ -40,7 +40,12 @@ def _cfg(base_url: str, tmp_path: Path) -> Config:
                 ),
             )
         ],
-        daemon=DaemonConfig(poll_interval_seconds=120),
+        daemon=DaemonConfig(
+            poll_interval_seconds=120,
+            recovery_enabled=True,
+            recovery_first_run_baseline_only=False,
+            max_actions_per_tick=10,
+        ),
         cooldowns=CooldownsConfig(
             per_issue_seconds=300, per_agent_cap=3, per_agent_window_seconds=900
         ),

@@ -168,6 +168,22 @@ async def _handle_tier_finding(
         if not post_budget.reserve(issue_id, ftype):
             return
 
+        if isinstance(finding, OwnerlessCompletionFinding) and not auto_repair_enabled:
+            state.record_handoff_alert(
+                issue_id,
+                ftype,
+                snapshot,
+                now_server,
+                actionable=False,
+            )
+            state.save()
+            log.info(
+                "tier_alert_suppressed_done_issue issue=%s ftype=%s mode=alert_only",
+                issue_id,
+                ftype.value,
+            )
+            return
+
         try:
             comment_id = await client.post_issue_comment(
                 issue_id,
@@ -185,6 +201,7 @@ async def _handle_tier_finding(
 
         actionable = getattr(finding, "actionable", True)
         state.record_handoff_alert(issue_id, ftype, snapshot, now_server, actionable=actionable)
+        state.save()
         log.info("tier_alert_posted issue=%s ftype=%s comment=%s", issue_id, ftype, comment_id)
 
     if existing_alerted_at is None:
@@ -203,6 +220,9 @@ async def _handle_tier_finding(
     snap_keys = _SNAPSHOT_KEYS.get(ftype, ())
     if any(existing_snap.get(k) != snapshot.get(k) for k in snap_keys):
         await _post_tier_one_alert()
+        return
+
+    if isinstance(finding, OwnerlessCompletionFinding) and not auto_repair_enabled:
         return
 
     elapsed_min = (now_server - existing_alerted_at).total_seconds() / 60
@@ -509,6 +529,7 @@ async def _run_handoff_pass(
                 )
                 if result.posted:
                     state.record_handoff_alert(issue.id, ftype, snapshot, now_server)
+                    state.save()
                     total_alerts += 1
         except Exception as exc:
             log.exception(
@@ -526,6 +547,88 @@ async def _run_handoff_pass(
         total_alerts,
         extra={"event": "handoff_pass_complete", "alerts": total_alerts},
     )
+
+
+async def _run_recovery_pass(cfg: Config, state: State, client: PaperclipClient) -> int:
+    if not cfg.daemon.recovery_enabled:
+        log.info("recovery_pass_disabled")
+        return 0
+
+    total_actions = 0
+    effectful_actions = 0
+    baseline_mode = (
+        cfg.daemon.recovery_first_run_baseline_only and not state.recovery_baseline_completed
+    )
+    baseline_candidates = 0
+
+    for company in cfg.companies:
+        died = await detection.scan_died_mid_work(company, client, state, cfg)
+        if baseline_mode:
+            for action in died:
+                state.record_issue_cooldown(action.issue.id)
+                baseline_candidates += 1
+            continue
+
+        for action in died:
+            if (
+                action.kind in {"wake", "escalate"}
+                and effectful_actions >= cfg.daemon.max_actions_per_tick
+            ):
+                log.warning(
+                    "recovery_action_deferred_cap issue=%s kind=%s cap=%d",
+                    action.issue.id,
+                    action.kind,
+                    cfg.daemon.max_actions_per_tick,
+                )
+                continue
+
+            if action.kind == "wake":
+                result = await actions.trigger_respawn(client, action.issue, action.agent_id)
+                state.record_wake(action.issue.id, action.agent_id)
+                log.info(
+                    "wake_result issue=%s via=%s success=%s",
+                    action.issue.id,
+                    result.via,
+                    result.success,
+                )
+                if not result.success:
+                    log.error(
+                        "wake_failed issue=%s — will retry next tick unless cap hit",
+                        action.issue.id,
+                    )
+                effectful_actions += 1
+            elif action.kind == "escalate":
+                state.record_escalation(action.issue.id, action.reason)
+                log.warning(
+                    "escalation issue=%s reason=%s count=%d permanent=%s",
+                    action.issue.id,
+                    action.reason,
+                    state.escalation_count(action.issue.id),
+                    state.is_permanently_escalated(action.issue.id),
+                )
+                if cfg.escalation.post_comment_on_issue:
+                    body = _build_escalation_body(
+                        action.issue.id, action.agent_id, state, cfg.escalation.comment_marker
+                    )
+                    try:
+                        await client.post_issue_comment(action.issue.id, body)
+                    except Exception as e:
+                        log.error("escalation_comment_failed issue=%s error=%s", action.issue.id, e)
+                effectful_actions += 1
+            elif action.kind == "skip":
+                log.info("skip issue=%s reason=%s", action.issue.id, action.reason)
+
+            total_actions += 1
+
+    if baseline_mode:
+        state.recovery_baseline_completed = True
+        log.info(
+            "recovery_baseline_seeded candidates=%d",
+            baseline_candidates,
+            extra={"event": "recovery_baseline_seeded", "candidates": baseline_candidates},
+        )
+
+    return total_actions
 
 
 async def _tick(cfg: Config, state: State, client: PaperclipClient) -> None:
@@ -549,44 +652,7 @@ async def _tick(cfg: Config, state: State, client: PaperclipClient) -> None:
         await _sleep(10)
 
     # Phase 2: respawn stuck assignees per company
-    total_actions = 0
-    for company in cfg.companies:
-        died = await detection.scan_died_mid_work(company, client, state, cfg)
-        for action in died:
-            if action.kind == "wake":
-                result = await actions.trigger_respawn(client, action.issue, action.agent_id)
-                state.record_wake(action.issue.id, action.agent_id)
-                log.info(
-                    "wake_result issue=%s via=%s success=%s",
-                    action.issue.id,
-                    result.via,
-                    result.success,
-                )
-                if not result.success:
-                    log.error(
-                        "wake_failed issue=%s — will retry next tick unless cap hit",
-                        action.issue.id,
-                    )
-            elif action.kind == "escalate":
-                state.record_escalation(action.issue.id, action.reason)
-                log.warning(
-                    "escalation issue=%s reason=%s count=%d permanent=%s",
-                    action.issue.id,
-                    action.reason,
-                    state.escalation_count(action.issue.id),
-                    state.is_permanently_escalated(action.issue.id),
-                )
-                if cfg.escalation.post_comment_on_issue:
-                    body = _build_escalation_body(
-                        action.issue.id, action.agent_id, state, cfg.escalation.comment_marker
-                    )
-                    try:
-                        await client.post_issue_comment(action.issue.id, body)
-                    except Exception as e:
-                        log.error("escalation_comment_failed issue=%s error=%s", action.issue.id, e)
-            elif action.kind == "skip":
-                log.info("skip issue=%s reason=%s", action.issue.id, action.reason)
-            total_actions += 1
+    total_actions = await _run_recovery_pass(cfg, state, client)
 
     # Phase 3: handoff inconsistency detection (alert-only)
     # Spec §4.2.1: anchor "now" to server clock via the most recent
