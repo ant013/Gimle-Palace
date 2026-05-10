@@ -48,6 +48,7 @@ REQUIRED_PROJECT_MANIFEST_KEYS = {
         "primary_repo_root",
         "production_checkout",
         "codex_team_root",
+        "operator_memory_dir",
         "overlay_root",
         "project_rules_file",
     ),

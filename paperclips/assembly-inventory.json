@@ -24,11 +24,10 @@
     {
       "classification": "project-owned",
       "id": "gimle-name",
-      "occurrenceCount": 38,
+      "occurrenceCount": 37,
       "paths": [
         "paperclips/fragments/local/agent-roster.md",
         "paperclips/fragments/local/test-design-gimle.md",
-        "paperclips/fragments/shared/fragments/role-prime/operator.md",
         "paperclips/roles-codex/codex-architect-reviewer.md",
         "paperclips/roles-codex/cx-auditor.md",
         "paperclips/roles-codex/cx-blockchain-engineer.md",

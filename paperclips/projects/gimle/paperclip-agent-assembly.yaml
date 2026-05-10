@@ -11,6 +11,7 @@ paths:
   primary_repo_root: .
   production_checkout: /Users/Shared/Ios/Gimle-Palace
   codex_team_root: /Users/Shared/Ios/worktrees/cx/Gimle-Palace
+  operator_memory_dir: ~/.claude/projects/-Users-ant013-Android-Gimle-Palace/memory
   overlay_root: paperclips/projects/gimle/overlays
   project_rules_file: AGENTS.md
 
