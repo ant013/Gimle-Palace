@@ -1,0 +1,14 @@
+project:
+  key: gimle
+  display_name: Gimle
+
+mcp:
+  base_required:
+    - codebase-memory
+    - context7
+    - serena
+    - github
+    - sequential-thinking
+  additions:
+    project: []
+    by_role: {}

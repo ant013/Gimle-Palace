@@ -213,13 +213,36 @@ Defines differences between target runtimes:
 
 - Claude vs Codex instruction entry file;
 - `CLAUDE.md` vs `AGENTS.md` wording;
-- available tools, MCP servers, skills, and subagents;
+- target capability contracts for tools, MCP servers, skills, and subagents;
 - target-specific mention/agent naming conventions;
 - target-specific deploy mode.
 
 Target overlays must not contain product-specific repo paths, company IDs, or
 issue prefixes. If a target needs a roster, it receives it from the project
 manifest for that target.
+
+The base MCP contract is project-independent and is declared once in the
+project/target assembly metadata, not duplicated in every agent bundle:
+
+```yaml
+base_mcp_required:
+  - codebase-memory
+  - context7
+  - serena
+  - github
+  - sequential-thinking
+```
+
+`codebase-memory` is common, but its project/index names are project-owned
+values. Shared fragments may say "use codebase-memory first"; they must not
+hard-code `repos-gimle`, UAudit repo names, or Medic repo names.
+
+Role-owned skills and subagents remain in role templates or shared role
+fragments when they are genuinely role semantics, for example CTO review
+delegation or QA test-audit delegation. Project manifests may append
+project/runtime-specific capabilities; they must not silently remove role
+capabilities. Shared/common capability lists are validated from the resolved
+manifest so they do not inflate every generated agent.
 
 ### L3: Project Manifest
 
@@ -267,8 +290,18 @@ paths:
   project_rules_file: AGENTS.md
 
 mcp:
+  base_required:
+    - codebase-memory
+    - context7
+    - serena
+    - github
+    - sequential-thinking
   codebase_memory_projects:
     primary: repos-gimle
+  additions:
+    project: []
+    by_role:
+      security-auditor: []
 
 agents:
   - role_key: cto
@@ -284,6 +317,10 @@ agents:
     overlays:
       - delegation-map.md
       - verification-gates.md
+    capability_additions:
+      mcp: []
+      skills: []
+      subagents: []
   - role_key: cx-cto
     target: codex
     display_name: CXCTO
@@ -297,6 +334,10 @@ agents:
     overlays:
       - delegation-map-codex.md
       - verification-gates.md
+    capability_additions:
+      mcp: []
+      skills: []
+      subagents: []
 ```
 
 The manifest may include multiple repos and MCP indexes for projects such as
@@ -309,9 +350,21 @@ paths:
     android: /Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android
 
 mcp:
+  base_required:
+    - codebase-memory
+    - context7
+    - serena
+    - github
+    - sequential-thinking
   codebase_memory_projects:
     ios: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
     android: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
+  additions:
+    project:
+      - neo4j
+    by_role:
+      auditor:
+        - neo4j
 ```
 
 Manifest schema rules:
@@ -327,6 +380,15 @@ Manifest schema rules:
 - Overlay resolution order is fixed:
   `shared template -> shared include -> target overlay -> project overlay ->
   agent overlay`.
+- Capability resolution order is additive:
+  `base required MCP -> target capability contract -> role skills/subagents ->
+  project additions -> agent additions`. Project additions append entries such
+  as UAudit `neo4j` MCP; they do not replace the common MCP set or role-owned
+  skills/subagents.
+- Builders must emit a resolved capability manifest next to generated bundles.
+  Validation checks the resolved manifest for common MCP and project additions.
+  Agent bundles only receive capability text when a role-specific instruction
+  actually needs it.
 - Paths are normalized relative to the project repo unless an absolute runtime
   path is explicitly required for Paperclip adapter configuration.
 - Agent IDs may come from the manifest or from a declared env/env-file source,
@@ -506,10 +568,15 @@ Before any layered builder implementation:
     and deploy/validation expectations; or
   - intentionally remove or exclude auditor bundles from baseline and generated
     role sets.
+- Reconcile current Codex runtime validation conflicts without rewriting role
+  semantics. Existing `superpowers:*` and `pr-review-toolkit:*` references must
+  be classified as direct runtime capability, mapped equivalent, or explicit
+  gap in the runtime capability map before any validator blocks or permits them.
 - Run `python3 paperclips/scripts/validate_instructions.py --repo-root .` green
   before changing build semantics.
 - Record the green baseline commit and generated bundle sizes.
-- Add a Paperclip assembly CI job after the validator is green:
+- Add a Paperclip assembly CI job after instruction validation and
+  capability-aware target validation are green:
   - `git submodule update --init --recursive`;
   - `bash paperclips/build.sh`;
   - `bash paperclips/build.sh --target codex`;
@@ -532,9 +599,12 @@ Before any layered builder implementation:
 
 - Add manifest schema and sample manifests with placeholder values in
   `paperclip-shared-fragments`.
+- Add project-local template files that show how to repeat a build for a new
+  project without copying shared capability text into every generated agent.
 - Add real Gimle manifest in the Gimle repo.
-- Define standard variables for issue prefix, paths, MCP projects, roles, and
-  target names.
+- Define standard variables for issue prefix, paths, required MCP set,
+  codebase-memory projects, project capability additions, roles, and target
+  names.
 - Add validation for missing variables and unused variables.
 - Define compatibility import rules for `codex-agent-ids.env` and current
   deploy name mappings.
@@ -617,6 +687,7 @@ Before any layered builder implementation:
 - `paperclips/fragments/shared/`
 - `paperclips/fragments/local/`
 - `paperclips/fragments/targets/`
+- `paperclips/fragments/shared/targets/*/runtime-map.json`
 - `paperclips/roles/`
 - `paperclips/roles-codex/`
 - `paperclips/instruction-coverage.matrix.yaml`
@@ -626,6 +697,8 @@ Before any layered builder implementation:
 - watchdog and handoff detector consumers that assume role IDs, issue prefixes,
   output paths, or agent names
 - proposed `paperclips/projects/`
+- `paperclips/projects/README.md`
+- `paperclips/projects/_template/paperclip-agent-assembly.yaml`
 - validation scripts under `paperclips/scripts/`
 - `paperclip-shared-fragments` repository
 
@@ -637,10 +710,15 @@ Before any layered builder implementation:
   submodule preconditions.
 - Current `validate_instructions.py` is green before layered migration changes
   build semantics.
+- Current Codex target validation is not made green by deleting or renaming real
+  skills/subagents/plugins from role text. It must use a runtime capability map
+  or remain a documented blocker until that map exists.
 - `auditor` / `cx-auditor` role-set decision is reflected consistently in
   source roles, generated dist, coverage matrix, and baseline.
 - Paperclip assembly CI runs build, Codex build, instruction validation, Codex
   target validation, and validator tests.
+- A local runtime comparison tool can compare generated bundles with deployed
+  Paperclip `AGENTS.md` files without editing live agents.
 
 ### Slice 1 Acceptance
 
@@ -648,6 +726,16 @@ Before any layered builder implementation:
 - First implementation slice is Gimle-only and retains legacy output paths:
   `paperclips/dist/*.md` and `paperclips/dist/codex/*.md`.
 - Gimle can declare a real project manifest in Slice 1.
+- A reusable template manifest and README document the repeatable build cycle
+  for Gimle, UAudit, Medic, and future projects.
+- The repeatable build docs include a post-deploy generated-vs-runtime
+  comparison step.
+- The resolved Gimle capability manifest contains the common MCP contract:
+  `codebase-memory`, `context7`, `serena`, `github`, and
+  `sequential-thinking`.
+- Project capability additions are additive in the resolved manifest; an empty
+  Gimle additions list is valid, and later UAudit can add `neo4j` without
+  changing shared role templates or every generated bundle.
 - Generated bundles contain no unresolved variables or includes.
 - Generated bundles contain all required safety markers for their profiles.
 - Generated bundle size does not increase per agent or per project target.

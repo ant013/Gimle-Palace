@@ -23,6 +23,14 @@ REQUIRED_HANDOFF_MARKERS = (
     "paperclip:team-local-roster:v1",
 )
 
+REQUIRED_PROJECT_MCP = (
+    "codebase-memory",
+    "context7",
+    "serena",
+    "github",
+    "sequential-thinking",
+)
+
 # Anti-pattern markers — a foreign-team UUID inside a section/line marked
 # as anti-pattern (e.g., the routing-rule lookup table in agent-roster)
 # is allowed; only actionable foreign UUIDs are flagged.
@@ -110,6 +118,27 @@ def validate_handoff_markers(
                 errors.append(
                     f"handoff marker missing for {role_id} ({bundle_path.relative_to(repo_root)}): {marker}"
                 )
+    return errors
+
+
+def validate_project_capability_manifests(repo_root: Path) -> list[str]:
+    errors: list[str] = []
+    manifests = sorted((repo_root / "paperclips" / "projects").glob("*/paperclip-agent-assembly.yaml"))
+    if not manifests:
+        return errors
+
+    for manifest in manifests:
+        text = manifest.read_text()
+        rel = manifest.relative_to(repo_root)
+        if "mcp:" not in text:
+            errors.append(f"project manifest missing mcp section: {rel}")
+            continue
+        if "base_required:" not in text:
+            errors.append(f"project manifest missing mcp.base_required: {rel}")
+            continue
+        for marker in REQUIRED_PROJECT_MCP:
+            if not re.search(rf"^\s*-\s+{re.escape(marker)}\s*$", text, re.MULTILINE):
+                errors.append(f"project manifest missing base MCP {marker}: {rel}")
     return errors
 
 
@@ -502,6 +531,7 @@ def validate(repo_root: Path = REPO_ROOT) -> list[str]:
                     )
 
     errors.extend(validate_handoff_markers(bundle_paths_by_role, repo_root))
+    errors.extend(validate_project_capability_manifests(repo_root))
     errors.extend(
         validate_cross_team_targets(bundle_paths_by_role, role_meta_by_id, repo_root)
     )

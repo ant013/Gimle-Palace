@@ -10,6 +10,8 @@ SCRIPT_DIR = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPT_DIR))
 
 import validate_instructions  # noqa: E402
+import compare_deployed_agents  # noqa: E402
+import validate_codex_target_runtime  # noqa: E402
 
 
 def write(path: Path, content: str) -> None:
@@ -237,6 +239,97 @@ def test_handoff_markers_skip_non_handoff_bundles(tmp_path: Path) -> None:
     errors = validate_instructions.validate_handoff_markers({"claude:technical-writer": bundle}, repo)
 
     assert errors == []
+
+
+def test_codex_runtime_refs_allow_mapped_capabilities(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    bundle = repo / "paperclips" / "dist" / "codex" / "cx-example.md"
+    write(
+        bundle,
+        "- **Skills:** `superpowers:test-driven-development`.\n"
+        "- **Subagents:** `pr-review-toolkit:pr-test-analyzer`.\n",
+    )
+
+    errors = validate_codex_target_runtime.validate_codex_runtime_refs(
+        repo / "paperclips" / "dist" / "codex",
+        repo / "paperclips" / "fragments" / "shared" / "targets" / "codex" / "runtime-map.json",
+    )
+
+    assert errors == []
+
+
+def test_project_manifest_missing_base_mcp_fails(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    manifest = repo / "paperclips" / "projects" / "gimle" / "paperclip-agent-assembly.yaml"
+    manifest.write_text(manifest.read_text().replace("    - github\n", ""))
+
+    errors = validate_instructions.validate_project_capability_manifests(repo)
+
+    assert any("project manifest missing base MCP github" in error for error in errors)
+
+
+def test_compare_deployed_agent_ids_parse_codex_names(tmp_path: Path) -> None:
+    env_file = tmp_path / "codex-agent-ids.env"
+    env_file.write_text(
+        "CX_CTO_AGENT_ID=da97dbd9-6627-48d0-b421-66af0750eacf\n"
+        "CODEX_ARCHITECT_REVIEWER_AGENT_ID=fec71dea-7dba-4947-ad1f-668920a02cb6\n"
+        "CX_RESEARCH_AGENT_AGENT_ID=a2f7d4d2-ee96-43c3-83d8-d3af02d6674c\n"
+    )
+
+    ids = compare_deployed_agents.load_codex_agent_ids(env_file)
+
+    assert ids["cx-cto"] == "da97dbd9-6627-48d0-b421-66af0750eacf"
+    assert ids["codex-architect-reviewer"] == "fec71dea-7dba-4947-ad1f-668920a02cb6"
+    assert ids["cx-research-agent"] == "a2f7d4d2-ee96-43c3-83d8-d3af02d6674c"
+
+
+def test_compare_deployed_path_shape() -> None:
+    path = compare_deployed_agents.deployed_agents_path(
+        Path("/paperclip"),
+        "company-id",
+        "agent-id",
+    )
+
+    assert path == Path("/paperclip/companies/company-id/agents/agent-id/instructions/AGENTS.md")
+
+
+def test_codex_runtime_refs_fail_on_gap_capability(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    bundle = repo / "paperclips" / "dist" / "codex" / "cx-example.md"
+    write(bundle, "- **Skills:** `claude-api`.\n")
+
+    errors = validate_codex_target_runtime.validate_codex_runtime_refs(
+        repo / "paperclips" / "dist" / "codex",
+        repo / "paperclips" / "fragments" / "shared" / "targets" / "codex" / "runtime-map.json",
+    )
+
+    assert any("runtime capability gap" in error.message for error in errors)
+
+
+def test_codex_runtime_refs_fail_on_unmapped_capability(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    bundle = repo / "paperclips" / "dist" / "codex" / "cx-example.md"
+    write(bundle, "- **Skills:** `superpowers:unknown-skill`.\n")
+
+    errors = validate_codex_target_runtime.validate_codex_runtime_refs(
+        repo / "paperclips" / "dist" / "codex",
+        repo / "paperclips" / "fragments" / "shared" / "targets" / "codex" / "runtime-map.json",
+    )
+
+    assert any("unmapped Codex runtime capability reference" in error.message for error in errors)
+
+
+def test_codex_runtime_refs_fail_on_hard_forbidden_claude_runtime(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    bundle = repo / "paperclips" / "dist" / "codex" / "cx-example.md"
+    write(bundle, "Read `CLAUDE.md` before doing the task.\n")
+
+    errors = validate_codex_target_runtime.validate_codex_runtime_refs(
+        repo / "paperclips" / "dist" / "codex",
+        repo / "paperclips" / "fragments" / "shared" / "targets" / "codex" / "runtime-map.json",
+    )
+
+    assert any("hard-forbidden Claude runtime reference" in error.message for error in errors)
 
 
 def test_load_team_uuids_skips_company_id(tmp_path: Path) -> None:

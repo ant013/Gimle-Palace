@@ -12,9 +12,9 @@
       "roleId": "claude:auditor",
       "target": "claude",
       "path": "paperclips/dist/auditor.md",
-      "bytes": 12699,
-      "lines": 287,
-      "tokenEstimate": 3139
+      "bytes": 20786,
+      "lines": 479,
+      "tokenEstimate": 5197
     },
     {
       "roleId": "claude:blockchain-engineer",
@@ -111,6 +111,14 @@
       "bytes": 28217,
       "lines": 633,
       "tokenEstimate": 6954
+    },
+    {
+      "roleId": "codex:cx-auditor",
+      "target": "codex",
+      "path": "paperclips/dist/codex/cx-auditor.md",
+      "bytes": 19281,
+      "lines": 463,
+      "tokenEstimate": 4821
     },
     {
       "roleId": "codex:cx-blockchain-engineer",

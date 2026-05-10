@@ -68,6 +68,12 @@ final report is assembled.
 4. Post the sub-report as a comment on the child issue.
 5. `PATCH /api/issues/{id}` `status=done`.
 
+<!-- @include fragments/shared/fragments/karpathy-discipline.md -->
+
+<!-- @include fragments/shared/fragments/escalation-blocked.md -->
+
+<!-- @include fragments/shared/fragments/heartbeat-discipline.md -->
+
 <!-- @include fragments/shared/fragments/phase-handoff.md -->
 
 ## Language

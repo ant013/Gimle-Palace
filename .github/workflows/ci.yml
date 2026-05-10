@@ -118,3 +118,27 @@ jobs:
         working-directory: services/watchdog
       - run: uv run pytest tests/ -v --cov=gimle_watchdog --cov-config=.coveragerc --cov-fail-under=85
         working-directory: services/watchdog
+
+  paperclip-assembly:
+    name: paperclip-assembly
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build Claude bundles
+        run: bash paperclips/build.sh
+      - name: Build Codex bundles
+        run: bash paperclips/build.sh --target codex
+      - name: Validate instruction bundles
+        run: python3 paperclips/scripts/validate_instructions.py --repo-root .
+      - name: Validate Codex target
+        run: bash paperclips/validate-codex-target.sh
+      - name: Install validator test dependency
+        run: python3 -m pip install pytest
+      - name: Run validator tests
+        run: python3 -m pytest paperclips/tests/test_validate_instructions.py

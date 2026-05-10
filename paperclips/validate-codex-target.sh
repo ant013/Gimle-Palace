@@ -13,11 +13,9 @@ if [ ! -d "$CODEX_DIST" ]; then
 fi
 
 python3 "$SCRIPT_DIR/scripts/validate_instructions.py"
-
-if rg -n "superpowers:|Claude Code|Claude CLI|claude CLI|claude-api|CLAUDE\\.md|pr-review-toolkit:|OpusArchitectReviewer|\\bOpus\\b" "$CODEX_DIST"; then
-  echo "ERROR: Codex output contains forbidden runtime references" >&2
-  exit 1
-fi
+python3 "$SCRIPT_DIR/scripts/validate_codex_target_runtime.py" \
+  --codex-dist "$CODEX_DIST" \
+  --runtime-map "$SCRIPT_DIR/fragments/shared/targets/codex/runtime-map.json"
 
 if ! rg -n "AGENTS\\.md|codex_local|codebase-memory|serena" "$CODEX_DIST" >/dev/null; then
   echo "ERROR: Codex output is missing expected Codex runtime guidance" >&2

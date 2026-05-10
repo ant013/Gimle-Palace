@@ -1,0 +1,50 @@
+project:
+  key: <project-key>
+  display_name: <Project Display Name>
+  issue_prefix: <ISSUE>
+  integration_branch: develop
+  specs_dir: docs/superpowers/specs
+  plans_dir: docs/superpowers/plans
+
+paths:
+  project_root: <absolute-or-repo-relative-project-root>
+  primary_repo_root: <absolute-or-repo-relative-primary-repo-root>
+  overlay_root: paperclips/projects/<project-key>/overlays
+  project_rules_file: AGENTS.md
+
+mcp:
+  base_required:
+    - codebase-memory
+    - context7
+    - serena
+    - github
+    - sequential-thinking
+  codebase_memory_projects:
+    primary: <codebase-memory-project-name>
+  additions:
+    project: []
+    by_role: {}
+
+skills:
+  additions:
+    project: []
+    by_role: {}
+
+subagents:
+  additions:
+    project: []
+    by_role: {}
+
+targets:
+  claude:
+    instruction_entry_file: CLAUDE.md
+    adapter_type: claude_local
+    deploy_mode: local-or-api
+    instructions_bundle_mode: external-or-managed
+  codex:
+    instruction_entry_file: AGENTS.md
+    adapter_type: codex_local
+    deploy_mode: api
+    instructions_bundle_mode: managed
+
+agents: []
