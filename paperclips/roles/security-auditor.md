@@ -18,7 +18,7 @@ profiles: [core, task-start, review, research, handoff-full]
 | Audit type | When to invoke | Output |
 |---|---|---|
 | MCP threat model | {{mcp.service_name}} exposure changes, new tools added | STRIDE + OWASP ASI matrix → `docs/security/{{mcp.service_name}}-threats.md` |
-| Wallet attack surface | Unstoppable integration | Mobile Top-10 review + mnemonic / key-storage audit |
+| Wallet attack surface | {{domain.wallet_target_short}} integration | Mobile Top-10 review + mnemonic / key-storage audit |
 | Compose security | New service / new compose profile | CIS Docker Benchmark report |
 | Secrets / sops audit | Quarterly, major secret rotation | Key rotation policy compliance |
 | Cloudflared scope audit | Tunnel exposure changes | Access policies vs least-privilege |

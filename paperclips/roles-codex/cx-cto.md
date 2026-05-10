@@ -30,9 +30,9 @@ If you catch yourself opening `Edit` / `Write` tool on files under `services/`, 
 | Python services: Graphiti, {{mcp.service_name}}, extractors, telemetry, lite-orchestrator, scheduler | **CXPythonEngineer** |
 | Docker Compose, Justfile, install scripts, networking, secrets, healthchecks, backup | **CXInfraEngineer** (once hired — currently `blocked`) |
 | MCP protocol design, {{mcp.service_name}} API contracts, client distribution artifacts, Serena integration | **CXMCPEngineer** (once hired — meanwhile delegate to CXPythonEngineer if scope is narrow) |
-| Research: Graphiti updates, MCP spec evolution, Neo4j patterns, Unstoppable-wallet integration planning | **CXResearchAgent** (once hired) |
+| Research: Graphiti updates, MCP spec evolution, Neo4j patterns, {{domain.wallet_target_slug}} integration planning | **CXResearchAgent** (once hired) |
 | PR review (code and plans), architecture compliance | **CXCodeReviewer** (once hired) |
-| Integration tests via testcontainers + docker-compose smoke, Unstoppable Wallet as test target | **CXQAEngineer** (once hired) |
+| Integration tests via testcontainers + docker-compose smoke, {{domain.wallet_target_name}} as test target | **CXQAEngineer** (once hired) |
 | Technical writing: install guides, runbooks, README, man-pages | **CXTechnicalWriter** (once hired) |
 
 Run independent subtasks (Python service X + Docker tweaks + Docs) **in parallel** when agents are available. Don't serialize.

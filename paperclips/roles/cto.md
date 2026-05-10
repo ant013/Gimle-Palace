@@ -28,7 +28,7 @@ If you catch yourself opening `Edit`/`Write` on files under `services/`, `tests/
 | Python services: Graphiti, {{mcp.service_name}}, extractors, telemetry, lite-orchestrator, scheduler | **PythonEngineer** |
 | Docker Compose, Justfile, install scripts, networking, secrets, healthchecks, backup | **InfraEngineer** |
 | MCP protocol design, {{mcp.service_name}} API contracts, client distribution, Serena integration | **MCPEngineer** |
-| Research: Graphiti updates, MCP spec, Neo4j patterns, Unstoppable-wallet planning | **ResearchAgent** |
+| Research: Graphiti updates, MCP spec, Neo4j patterns, {{domain.wallet_target_slug}} planning | **ResearchAgent** |
 | PR review (code + plans), architecture compliance | **CodeReviewer** |
 | Integration tests via testcontainers + docker-compose smoke, UW as test target | **QAEngineer** |
 | Technical writing: install guides, runbooks, README, man-pages | **TechnicalWriter** |

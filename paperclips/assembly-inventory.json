@@ -74,15 +74,8 @@
     {
       "classification": "project-owned",
       "id": "unstoppable-domain-reference",
-      "occurrenceCount": 13,
-      "paths": [
-        "paperclips/roles-codex/cx-blockchain-engineer.md",
-        "paperclips/roles-codex/cx-cto.md",
-        "paperclips/roles-codex/cx-security-auditor.md",
-        "paperclips/roles/blockchain-engineer.md",
-        "paperclips/roles/cto.md",
-        "paperclips/roles/security-auditor.md"
-      ],
+      "occurrenceCount": 0,
+      "paths": [],
       "pattern": "\\bUnstoppable\\b"
     }
   ],

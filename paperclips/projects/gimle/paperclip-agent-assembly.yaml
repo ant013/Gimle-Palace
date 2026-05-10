@@ -7,6 +7,11 @@ project:
   specs_dir: docs/superpowers/specs
   plans_dir: docs/superpowers/plans
 
+domain:
+  wallet_target_short: Unstoppable
+  wallet_target_name: Unstoppable Wallet
+  wallet_target_slug: Unstoppable-wallet
+
 paths:
   project_root: .
   primary_repo_root: .

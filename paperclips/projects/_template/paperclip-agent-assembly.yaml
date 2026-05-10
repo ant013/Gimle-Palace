@@ -7,6 +7,11 @@ project:
   specs_dir: docs/superpowers/specs
   plans_dir: docs/superpowers/plans
 
+domain:
+  wallet_target_short: <wallet-target-short-name>
+  wallet_target_name: <wallet-target-display-name>
+  wallet_target_slug: <wallet-target-slug>
+
 paths:
   project_root: <absolute-or-repo-relative-project-root>
   primary_repo_root: <absolute-or-repo-relative-primary-repo-root>
