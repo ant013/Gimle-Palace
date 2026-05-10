@@ -1,0 +1,52 @@
+team: UnstoppableAudit
+
+paperclip:
+  company_id: 8f55e80b-0264-4ab6-9d56-8b2652f18005
+  onboarding_project_id: 64871690-2f2d-4fbd-a30d-975e6bbccec9
+  existing_early_ceo_agent_id: dcdd8871-5b44-4563-bb00-f8cca292a69e
+
+repositories:
+  ios:
+    url: https://github.com/horizontalsystems/unstoppable-wallet-ios
+    mirror_path: /Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git
+  android:
+    url: https://github.com/horizontalsystems/unstoppable-wallet-android
+    mirror_path: /Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git
+
+telegram:
+  redacted_reports_chat_id: -1003937871684
+  ops_chat_id: -1003534905521
+  route_readiness_required: true
+
+models:
+  default_model: gpt-5.4
+  default_reasoning_effort: high
+  ceo_model: gpt-5.4
+
+roots:
+  stable_mirror_root: /Users/Shared/UnstoppableAudit/repos
+  run_root: /Users/Shared/UnstoppableAudit/runs
+  artifact_root: /Users/Shared/UnstoppableAudit/artifacts
+
+retention:
+  workspace_ttl_days: 14
+  artifact_retention_days: 30
+
+codebase_memory:
+  ios_project: unstoppable-wallet-ios
+  android_project: unstoppable-wallet-android
+  audit_storage_phase1: skipped
+
+neo4j:
+  audit_storage_phase1: skipped
+  namespace_required_before_write: true
+
+credential_classes:
+  paperclip_bootstrap_admin:
+    runtime_exposure: never
+  github_readonly:
+    runtime_exposure: audit_agents
+  telegram_bot_token:
+    runtime_exposure: notification_adapter_only
+  neo4j_admin:
+    runtime_exposure: none_phase1

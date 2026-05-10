@@ -1,0 +1,144 @@
+{
+  "checked_at": "2026-05-10T04:40:59Z",
+  "checks": [
+    {
+      "message": "all required keys are present",
+      "name": "config.required_keys",
+      "status": "pass"
+    },
+    {
+      "message": "team is UnstoppableAudit",
+      "name": "config.team",
+      "status": "pass"
+    },
+    {
+      "message": "valid UUID",
+      "name": "paperclip.company_id",
+      "status": "pass"
+    },
+    {
+      "message": "valid UUID",
+      "name": "paperclip.onboarding_project_id",
+      "status": "pass"
+    },
+    {
+      "message": "valid UUID",
+      "name": "paperclip.existing_early_ceo_agent_id",
+      "status": "pass"
+    },
+    {
+      "message": "repository URL matches",
+      "name": "repositories.ios.url",
+      "status": "pass"
+    },
+    {
+      "details": {
+        "mirror_path": "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git",
+        "sha": "705d8c431eba659f50cce1c1f32330a04fbe1758"
+      },
+      "message": "mirror HEAD resolved",
+      "name": "repositories.ios.mirror_sha",
+      "status": "pass"
+    },
+    {
+      "message": "repository URL matches",
+      "name": "repositories.android.url",
+      "status": "pass"
+    },
+    {
+      "details": {
+        "mirror_path": "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+        "sha": "f830bb528998855dcfe276c1e4ff927a1e2cd9a1"
+      },
+      "message": "mirror HEAD resolved",
+      "name": "repositories.android.mirror_sha",
+      "status": "pass"
+    },
+    {
+      "message": "valid private supergroup chat id",
+      "name": "telegram.redacted_reports_chat_id",
+      "status": "pass"
+    },
+    {
+      "message": "valid private supergroup chat id",
+      "name": "telegram.ops_chat_id",
+      "status": "pass"
+    },
+    {
+      "details": {
+        "path": "/Users/Shared/UnstoppableAudit/repos"
+      },
+      "message": "path exists with owner-only permissions",
+      "name": "roots.stable_mirror_root",
+      "status": "pass"
+    },
+    {
+      "details": {
+        "path": "/Users/Shared/UnstoppableAudit/runs"
+      },
+      "message": "path exists with owner-only permissions",
+      "name": "roots.run_root",
+      "status": "pass"
+    },
+    {
+      "details": {
+        "path": "/Users/Shared/UnstoppableAudit/artifacts"
+      },
+      "message": "path exists with owner-only permissions",
+      "name": "roots.artifact_root",
+      "status": "pass"
+    },
+    {
+      "message": "required local substrate file exists",
+      "name": "repo.paperclips/build.sh",
+      "status": "pass"
+    },
+    {
+      "message": "required local substrate file exists",
+      "name": "repo.paperclips/validate-codex-target.sh",
+      "status": "pass"
+    },
+    {
+      "message": "required local substrate file exists",
+      "name": "repo.paperclips/scripts/validate_instructions.py",
+      "status": "pass"
+    },
+    {
+      "message": "Neo4j audit storage is disabled for phase 1",
+      "name": "neo4j.phase1",
+      "status": "pass"
+    }
+  ],
+  "config_path": "/Users/ant013/Android/Gimle-Palace-cx/paperclips/teams/unstoppable-audit.yaml",
+  "decisions": {
+    "default_model": "gpt-5.4",
+    "default_reasoning_effort": "high",
+    "neo4j_audit_storage_phase1": "skipped"
+  },
+  "inputs": {
+    "codebase_memory": {
+      "android_project": "unstoppable-wallet-android",
+      "audit_storage_phase1": "skipped",
+      "ios_project": "unstoppable-wallet-ios"
+    },
+    "early_ceo_agent_id": "dcdd8871-5b44-4563-bb00-f8cca292a69e",
+    "onboarding_project_id": "64871690-2f2d-4fbd-a30d-975e6bbccec9",
+    "paperclip_company_id": "8f55e80b-0264-4ab6-9d56-8b2652f18005",
+    "repositories": {
+      "android": {
+        "mirror_path": "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+        "url": "https://github.com/horizontalsystems/unstoppable-wallet-android"
+      },
+      "ios": {
+        "mirror_path": "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git",
+        "url": "https://github.com/horizontalsystems/unstoppable-wallet-ios"
+      }
+    },
+    "telegram": {
+      "ops_chat_id": "-1003534905521",
+      "redacted_reports_chat_id": "-1003937871684"
+    }
+  },
+  "ok": true,
+  "team": "UnstoppableAudit"
+}
