@@ -188,9 +188,7 @@ async def _call_tool(
 
     first = result.content[0]
     if not isinstance(first, TextContent):
-        raise ValueError(
-            f"unexpected content type from {tool_name}: {type(first)}"
-        )
+        raise ValueError(f"unexpected content type from {tool_name}: {type(first)}")
     return json.loads(first.text)  # type: ignore[no-any-return]
 
 
@@ -281,7 +279,9 @@ def build_parser() -> argparse.ArgumentParser:
     tool_sub = tool_p.add_subparsers(dest="tool_command", required=True)
 
     tool_call_p = tool_sub.add_parser("call", help="Call a Palace MCP tool")
-    tool_call_p.add_argument("tool_name", help="Tool name, with or without palace. prefix")
+    tool_call_p.add_argument(
+        "tool_name", help="Tool name, with or without palace. prefix"
+    )
     tool_call_p.add_argument(
         "--url", default=_DEFAULT_MCP_URL, help="palace-mcp MCP URL"
     )
