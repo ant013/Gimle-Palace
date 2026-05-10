@@ -39,15 +39,26 @@ lists here, not duplicated in every generated agent bundle.
    python3 -m pytest paperclips/tests/test_validate_instructions.py
    ```
 
-6. After deploying to Paperclip, compare generated bundles with deployed
-   `AGENTS.md` files:
+6. Before deploying a regenerated agent, snapshot the current live `AGENTS.md`
+   and compare it with the generated bundle:
 
    ```bash
-   python3 paperclips/scripts/compare_deployed_agents.py --target all
+   set -a
+   source <project-env-file>
+   set +a
+   python3 paperclips/scripts/compare_deployed_agents.py \
+     --source api \
+     --target codex \
+     --agent cx-cto \
+     --snapshot-dir /tmp/paperclip-agent-snapshots \
+     --snapshot-label current \
+     --show-diff
    ```
 
-   Add `--agent cto` or `--agent cx-cto` for a single role, and `--show-diff`
-   when investigating drift.
+   A diff before deploy is acceptable only when it is the reviewed, intentional
+   old-live vs new-generated change. After deploying, rerun the same command
+   without `--show-diff`; the deployed live bundle must match the generated
+   bundle exactly. Add `--agent cto` or `--agent cx-cto` for a single role.
 
 Generated agent bundles should change only when role text, overlays, or target
 runtime text changes. Project-level capability metadata alone should not add

@@ -575,6 +575,10 @@ Before any layered builder implementation:
 - Run `python3 paperclips/scripts/validate_instructions.py --repo-root .` green
   before changing build semantics.
 - Record the green baseline commit and generated bundle sizes.
+- Add a live/generated comparison gate that can read current Paperclip
+  `AGENTS.md` through the API, save it as a snapshot, and compare it with the
+  generated bundle. Before deploy this is a reviewed old-live vs new-generated
+  diff; after deploy it must be an exact live vs generated match.
 - Add a Paperclip assembly CI job after instruction validation and
   capability-aware target validation are green:
   - `git submodule update --init --recursive`;

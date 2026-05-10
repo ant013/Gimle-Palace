@@ -293,6 +293,36 @@ def test_compare_deployed_path_shape() -> None:
     assert path == Path("/paperclip/companies/company-id/agents/agent-id/instructions/AGENTS.md")
 
 
+def test_compare_deployed_extracts_api_content_envelope() -> None:
+    raw = json.dumps({"content": "# Agent\n\nInstructions.\n", "path": "AGENTS.md"})
+
+    content = compare_deployed_agents.extract_instruction_content(raw)
+
+    assert content == "# Agent\n\nInstructions.\n"
+
+
+def test_compare_deployed_keeps_raw_markdown_content() -> None:
+    raw = "# Agent\n\nInstructions.\n"
+
+    content = compare_deployed_agents.extract_instruction_content(raw)
+
+    assert content == raw
+
+
+def test_compare_deployed_snapshot_label(tmp_path: Path) -> None:
+    ref = compare_deployed_agents.AgentRef(
+        target="codex",
+        name="cx-cto",
+        agent_id="da97dbd9-6627-48d0-b421-66af0750eacf",
+        dist_path=Path("paperclips/dist/codex/cx-cto.md"),
+    )
+
+    path = compare_deployed_agents.write_snapshot(tmp_path, "current", ref, "live content\n")
+
+    assert path == tmp_path / "codex-cx-cto.current.AGENTS.md"
+    assert path.read_text() == "live content\n"
+
+
 def test_codex_runtime_refs_fail_on_gap_capability(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     bundle = repo / "paperclips" / "dist" / "codex" / "cx-example.md"

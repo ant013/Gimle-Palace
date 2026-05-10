@@ -6,8 +6,12 @@ from __future__ import annotations
 import argparse
 import difflib
 import hashlib
+import json
+import os
 import re
 import sys
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -87,17 +91,83 @@ def deployed_agents_path(paperclip_data_dir: Path, company_id: str, agent_id: st
     return paperclip_data_dir / "companies" / company_id / "agents" / agent_id / "instructions" / "AGENTS.md"
 
 
+def extract_instruction_content(raw: str) -> str:
+    """Return AGENTS.md content from either raw markdown or Paperclip API JSON."""
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return raw
+    if isinstance(data, dict) and isinstance(data.get("content"), str):
+        return data["content"]
+    return raw
+
+
+def fetch_agent_instructions(api_base: str, api_key: str, agent_id: str) -> str:
+    url = f"{api_base.rstrip('/')}/api/agents/{agent_id}/instructions-bundle/file?path=AGENTS.md"
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "User-Agent": "paperclip-agent-compare/1.0",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return extract_instruction_content(response.read().decode("utf-8"))
+
+
+def load_deployed_instructions(
+    ref: AgentRef,
+    source: str,
+    paperclip_data_dir: Path,
+    company_id: str,
+    api_base: str,
+    api_key: str | None,
+) -> tuple[str | None, str]:
+    if source == "local":
+        path = deployed_agents_path(paperclip_data_dir.expanduser(), company_id, ref.agent_id)
+        if not path.is_file():
+            return None, str(path)
+        return extract_instruction_content(path.read_text()), str(path)
+
+    if not api_key:
+        return None, "PAPERCLIP_API_KEY is not set"
+    try:
+        return fetch_agent_instructions(api_base, api_key, ref.agent_id), (
+            f"{api_base.rstrip('/')}/api/agents/{ref.agent_id}/instructions-bundle/file?path=AGENTS.md"
+        )
+    except urllib.error.HTTPError as exc:
+        return None, f"HTTP {exc.code} {exc.reason}"
+    except urllib.error.URLError as exc:
+        return None, str(exc.reason)
+
+
+def write_snapshot(snapshot_dir: Path, snapshot_label: str, ref: AgentRef, content: str) -> Path:
+    snapshot_dir.mkdir(parents=True, exist_ok=True)
+    path = snapshot_dir / f"{ref.target}-{ref.name}.{snapshot_label}.AGENTS.md"
+    path.write_text(content)
+    return path
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     parser.add_argument("--target", choices=["all", "claude", "codex"], default="all")
     parser.add_argument("--agent", help="Optional role filename stem, e.g. cto or cx-cto")
+    parser.add_argument("--source", choices=["local", "api"], default="local")
     parser.add_argument(
         "--paperclip-data-dir",
         type=Path,
         default=Path.home() / ".paperclip" / "instances" / "default",
     )
     parser.add_argument("--company-id", default=DEFAULT_COMPANY_ID)
+    parser.add_argument("--api-base", default=os.environ.get("PAPERCLIP_API_URL", "https://paperclip.ant013.work"))
+    parser.add_argument("--api-key-env", default="PAPERCLIP_API_KEY")
+    parser.add_argument("--snapshot-dir", type=Path)
+    parser.add_argument(
+        "--snapshot-label",
+        default="live",
+        help="Filename label for --snapshot-dir output, e.g. current, before, after, live",
+    )
     parser.add_argument("--allow-missing", action="store_true")
     parser.add_argument("--show-diff", action="store_true")
     args = parser.parse_args()
@@ -109,11 +179,19 @@ def main() -> int:
         return 1
 
     failures = 0
+    api_key = os.environ.get(args.api_key_env)
     for ref in refs:
-        deployed_path = deployed_agents_path(args.paperclip_data_dir.expanduser(), args.company_id, ref.agent_id)
         label = f"{ref.target}:{ref.name}"
-        if not deployed_path.is_file():
-            message = f"{label}: missing deployed AGENTS.md at {deployed_path}"
+        deployed, source_label = load_deployed_instructions(
+            ref,
+            args.source,
+            args.paperclip_data_dir,
+            args.company_id,
+            args.api_base,
+            api_key,
+        )
+        if deployed is None:
+            message = f"{label}: missing deployed AGENTS.md from {source_label}"
             if args.allow_missing:
                 print(f"SKIP {message}")
                 continue
@@ -122,9 +200,11 @@ def main() -> int:
             continue
 
         generated = ref.dist_path.read_text()
-        deployed = deployed_path.read_text()
         generated_hash = sha256_text(generated)
         deployed_hash = sha256_text(deployed)
+        if args.snapshot_dir:
+            snapshot_path = write_snapshot(args.snapshot_dir, args.snapshot_label, ref, deployed)
+            print(f"SNAP {label} {snapshot_path}")
         if generated_hash == deployed_hash:
             print(f"OK   {label} {generated_hash[:12]}")
             continue
@@ -139,7 +219,7 @@ def main() -> int:
                 generated.splitlines(),
                 deployed.splitlines(),
                 fromfile=str(ref.dist_path),
-                tofile=str(deployed_path),
+                tofile=source_label,
                 lineterm="",
             )
             for line in diff:
