@@ -25,9 +25,12 @@ from palace_mcp.cli import (
     build_mcp_run_args,
     build_parent_payload,
     build_parser,
+    normalize_tool_name,
+    parse_tool_json_arg,
     validate_slug,
     _cmd_audit_run,
     _cmd_audit_launch,
+    _cmd_tool_call,
 )
 
 
@@ -111,6 +114,16 @@ class TestArgParsing:
             parser.parse_args(["audit", "launch", "--project=gimle"])
         assert exc_info.value.code != 0
 
+    def test_tool_call_parsed(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args(
+            ["tool", "call", "memory.health", "--json", '{"project":"gimle"}']
+        )
+        assert args.command == "tool"
+        assert args.tool_command == "call"
+        assert args.tool_name == "memory.health"
+        assert args.json == '{"project":"gimle"}'
+
 
 # ---------------------------------------------------------------------------
 # Payload builders
@@ -129,6 +142,21 @@ class TestBuildMcpRunArgs:
     def test_no_extra_keys(self) -> None:
         args = build_mcp_run_args(project="gimle", bundle=None, depth="full")
         assert "bundle" not in args
+
+
+class TestToolHelpers:
+    def test_normalize_tool_name_adds_prefix(self) -> None:
+        assert normalize_tool_name("memory.health") == "palace.memory.health"
+
+    def test_normalize_tool_name_keeps_existing_prefix(self) -> None:
+        assert normalize_tool_name("palace.memory.health") == "palace.memory.health"
+
+    def test_parse_tool_json_arg_accepts_object(self) -> None:
+        assert parse_tool_json_arg('{"slug":"gimle"}') == {"slug": "gimle"}
+
+    def test_parse_tool_json_arg_rejects_non_object(self) -> None:
+        with pytest.raises(ValueError, match="expected a JSON object"):
+            parse_tool_json_arg('["not","an","object"]')
 
 
 class TestBuildParentPayload:
@@ -259,3 +287,58 @@ class TestCmdAuditLaunchDryRun:
         for child in payloads[1:]:
             assert "parentIssueId" in child
             assert "assigneeAgentId" in child
+
+
+class TestCmdToolCall:
+    def test_invalid_json_returns_2(self, capsys: pytest.CaptureFixture[str]) -> None:
+        args = argparse.Namespace(
+            tool_name="memory.health",
+            url="http://localhost:8000/mcp",
+            json="{bad json",
+        )
+        rc = _cmd_tool_call(args)
+        assert rc == 2
+        captured = capsys.readouterr()
+        assert "invalid JSON" in captured.err
+
+    def test_ok_false_returns_1(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        async def fake_call_tool(
+            *, url: str, tool_name: str, arguments: dict[str, Any]
+        ) -> dict[str, Any]:
+            assert url == "http://localhost:8000/mcp"
+            assert tool_name == "palace.memory.health"
+            assert arguments == {"project": "gimle"}
+            return {"ok": False, "error_code": "bad_thing"}
+
+        monkeypatch.setattr("palace_mcp.cli._call_tool", fake_call_tool)
+        args = argparse.Namespace(
+            tool_name="memory.health",
+            url="http://localhost:8000/mcp",
+            json='{"project":"gimle"}',
+        )
+        rc = _cmd_tool_call(args)
+        assert rc == 1
+        captured = capsys.readouterr()
+        assert '"error_code": "bad_thing"' in captured.out
+
+    def test_success_returns_0(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        async def fake_call_tool(
+            *, url: str, tool_name: str, arguments: dict[str, Any]
+        ) -> dict[str, Any]:
+            assert tool_name == "palace.memory.health"
+            return {"ok": True, "projects": ["gimle"]}
+
+        monkeypatch.setattr("palace_mcp.cli._call_tool", fake_call_tool)
+        args = argparse.Namespace(
+            tool_name="palace.memory.health",
+            url="http://localhost:8000/mcp",
+            json="{}",
+        )
+        rc = _cmd_tool_call(args)
+        assert rc == 0
+        captured = capsys.readouterr()
+        assert '"projects": [' in captured.out

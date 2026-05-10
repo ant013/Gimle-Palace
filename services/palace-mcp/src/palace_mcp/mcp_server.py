@@ -371,6 +371,8 @@ async def palace_memory_register_project(
     language: str | None = None,
     framework: str | None = None,
     repo_url: str | None = None,
+    parent_mount: str | None = None,
+    relative_path: str | None = None,
 ) -> dict[str, Any]:
     """Register or update a project in the knowledge graph."""
     driver = _driver
@@ -385,12 +387,20 @@ async def palace_memory_register_project(
             language=language,
             framework=framework,
             repo_url=repo_url,
+            parent_mount=parent_mount,
+            relative_path=relative_path,
         )
         return info.model_dump()
     except InvalidSlug as exc:
         return {
             "ok": False,
             "error_code": "invalid_slug",
+            "message": str(exc),
+        }
+    except ValueError as exc:
+        return {
+            "ok": False,
+            "error_code": "invalid_request",
             "message": str(exc),
         }
     except Exception as exc:
