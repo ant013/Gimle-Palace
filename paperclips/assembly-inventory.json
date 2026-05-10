@@ -61,24 +61,18 @@
     {
       "classification": "project-owned",
       "id": "gimle-issue-prefix",
-      "occurrenceCount": 33,
+      "occurrenceCount": 24,
       "paths": [
         "paperclips/fragments/local/test-design-gimle.md",
         "paperclips/fragments/shared/fragments/compliance-enforcement.md",
-        "paperclips/fragments/shared/fragments/cto-no-code-ban.md",
         "paperclips/fragments/shared/fragments/heartbeat-discipline.md",
         "paperclips/fragments/shared/fragments/phase-handoff.md",
         "paperclips/fragments/shared/fragments/phase-review-discipline.md",
-        "paperclips/fragments/shared/fragments/plan-first-producer.md",
-        "paperclips/fragments/shared/fragments/plan-first-review.md",
-        "paperclips/fragments/shared/fragments/role-prime/cto.md",
         "paperclips/fragments/shared/fragments/role-prime/opusarchitectreviewer.md",
         "paperclips/fragments/shared/fragments/role-prime/pythonengineer.md",
         "paperclips/fragments/shared/fragments/role-prime/qaengineer.md",
         "paperclips/fragments/shared/fragments/worktree-discipline.md",
-        "paperclips/roles-codex/cx-cto.md",
         "paperclips/roles-codex/cx-qa-engineer.md",
-        "paperclips/roles/cto.md",
         "paperclips/roles/qa-engineer.md"
       ],
       "pattern": "\\bGIM-\\d+\\b|\\bGIM-NN?\\b"

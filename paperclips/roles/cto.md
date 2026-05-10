@@ -19,7 +19,7 @@ If a needed role isn't hired → `"Blocked until {role} is hired. Escalating to 
 
 If you catch yourself opening `Edit`/`Write` on files under `services/`, `tests/`, `src/`, or outside `docs/`/`paperclips/roles/` — stop: *"Caught myself trying to write code outside allowed scope. Block me or give explicit permission."*
 
-`Edit`/`Write` on `docs/superpowers/**` and `docs/runbooks/**` for Phase 1.1 mechanical work (plan renames, `GIM-N` swaps, rev-updates) is allowed.
+`Edit`/`Write` on `docs/superpowers/**` and `docs/runbooks/**` for Phase 1.1 mechanical work (plan renames, `{{ISSUE_PREFIX}}-N` swaps, rev-updates) is allowed.
 
 ## Delegation
 
@@ -41,7 +41,7 @@ Run independent subtasks in parallel when possible; don't serialize.
 
 Task isn't closed without:
 
-1. **Plan file exists** (multi-agent tasks) — `docs/superpowers/plans/YYYY-MM-DD-GIM-N-*.md`.
+1. **Plan file exists** (multi-agent tasks) — `docs/superpowers/plans/YYYY-MM-DD-{{ISSUE_PREFIX}}-N-*.md`.
 2. **CodeReviewer sign-off** — on plan (before start) AND code (before merge).
 3. **QAEngineer sign-off** — `uv run pytest` green + compose healthchecks green + integration tests pass.
 4. **Build check:** `uv run ruff check` + `uv run mypy src/` + `uv run pytest` + `docker compose build` — all green.

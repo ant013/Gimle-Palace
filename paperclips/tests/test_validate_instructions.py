@@ -170,6 +170,16 @@ def test_generated_front_matter_fails(tmp_path: Path) -> None:
     assert any("generated bundle contains front matter" in error for error in errors)
 
 
+def test_generated_unresolved_variable_fails(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    dist_path = repo / "paperclips" / "dist" / "python-engineer.md"
+    dist_path.write_text(dist_path.read_text() + "\n{{ISSUE_PREFIX}}\n")
+
+    errors = validate_instructions.validate(repo)
+
+    assert any("generated bundle contains unresolved variable" in error for error in errors)
+
+
 def test_baseline_allows_smaller_bundle(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     baseline_path = repo / "paperclips" / "bundle-size-baseline.json"

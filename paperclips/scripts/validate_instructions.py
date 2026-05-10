@@ -59,6 +59,7 @@ _ANTIPATTERN_LINE_TOKENS = ("❌", "WRONG", "NOT", "NEVER", "forbidden", "anti-p
 _ANTIPATTERN_HEADER_TOKENS = ("not example", "wrong", "anti-pattern", "antipattern", "routing rule", "forbidden")
 
 _UUID_RE = re.compile(r"\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b")
+_UNRESOLVED_VARIABLE_RE = re.compile(r"\{\{[^}\n]+\}\}")
 
 
 def load_team_uuids(repo_root: Path) -> dict[str, set[str]]:
@@ -565,6 +566,9 @@ def validate(repo_root: Path = REPO_ROOT) -> list[str]:
         text = bundle_path.read_text()
         if text.startswith("---\n"):
             errors.append(f"generated bundle contains front matter: {path}")
+        unresolved = _UNRESOLVED_VARIABLE_RE.search(text)
+        if unresolved:
+            errors.append(f"generated bundle contains unresolved variable: {path}: {unresolved.group(0)}")
         byte_count = len(text.encode("utf-8"))
         baseline_bytes = bundle.get("bytes")
         if not isinstance(baseline_bytes, int):
