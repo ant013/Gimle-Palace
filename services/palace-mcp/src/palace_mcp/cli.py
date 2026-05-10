@@ -1,4 +1,4 @@
-"""palace-mcp CLI — audit subcommands.
+"""palace-mcp CLI — audit and generic MCP tool subcommands.
 
 Entrypoint:
     python -m palace_mcp.cli <command> [args]
@@ -7,6 +7,7 @@ Commands:
     audit run   --project=<slug>|--bundle=<name> [--url=<mcp-url>] [--depth=full|quick]
     audit launch --project=<slug>|--bundle=<name> --auditor-id=<uuid>
                  [--api-url=<url>] [--company-id=<id>] [--api-key=<key>] [--dry-run]
+    tool call <tool-name> [--url=<mcp-url>] [--json=<json-args>]
 """
 
 from __future__ import annotations
@@ -65,6 +66,22 @@ def build_mcp_run_args(
     if bundle:
         args["bundle"] = bundle
     return args
+
+
+def normalize_tool_name(name: str) -> str:
+    if name.startswith("palace."):
+        return name
+    return f"palace.{name}"
+
+
+def parse_tool_json_arg(payload: str) -> dict[str, Any]:
+    try:
+        parsed = json.loads(payload)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid JSON arguments: {exc}") from exc
+    if not isinstance(parsed, dict):
+        raise ValueError("invalid JSON arguments: expected a JSON object")
+    return parsed
 
 
 def build_parent_payload(
@@ -154,6 +171,29 @@ async def _call_audit_run(
     return json.loads(first.text)  # type: ignore[no-any-return]
 
 
+async def _call_tool(
+    *,
+    url: str,
+    tool_name: str,
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    from mcp import ClientSession
+    from mcp.client.streamable_http import streamablehttp_client
+    from mcp.types import TextContent
+
+    async with streamablehttp_client(url) as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.call_tool(tool_name, arguments)
+
+    first = result.content[0]
+    if not isinstance(first, TextContent):
+        raise ValueError(
+            f"unexpected content type from {tool_name}: {type(first)}"
+        )
+    return json.loads(first.text)  # type: ignore[no-any-return]
+
+
 async def _create_issues(
     api_url: str,
     api_key: str,
@@ -237,6 +277,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print all 4 issue payloads as JSON without calling the Paperclip API",
     )
 
+    tool_p = top.add_parser("tool", help="Generic MCP tool commands")
+    tool_sub = tool_p.add_subparsers(dest="tool_command", required=True)
+
+    tool_call_p = tool_sub.add_parser("call", help="Call a Palace MCP tool")
+    tool_call_p.add_argument("tool_name", help="Tool name, with or without palace. prefix")
+    tool_call_p.add_argument(
+        "--url", default=_DEFAULT_MCP_URL, help="palace-mcp MCP URL"
+    )
+    tool_call_p.add_argument(
+        "--json",
+        default="{}",
+        help="JSON object of tool arguments (default: {})",
+    )
+
     return parser
 
 
@@ -316,6 +370,28 @@ def _cmd_audit_launch(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_tool_call(args: argparse.Namespace) -> int:
+    try:
+        tool_name = normalize_tool_name(args.tool_name)
+        payload = parse_tool_json_arg(args.json)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    try:
+        result = asyncio.run(
+            _call_tool(url=args.url, tool_name=tool_name, arguments=payload)
+        )
+    except Exception as exc:
+        print(f"error: MCP call failed: {exc}", file=sys.stderr)
+        return 1
+
+    print(json.dumps(result, indent=2))
+    if isinstance(result, dict) and result.get("ok") is False:
+        return 1
+    return 0
+
+
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
@@ -325,6 +401,9 @@ def main() -> None:
             sys.exit(_cmd_audit_run(args))
         if args.audit_command == "launch":
             sys.exit(_cmd_audit_launch(args))
+    if args.command == "tool":
+        if args.tool_command == "call":
+            sys.exit(_cmd_tool_call(args))
 
     parser.print_help()
     sys.exit(2)

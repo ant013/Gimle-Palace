@@ -227,3 +227,42 @@ async def test_search_graph_call_flat_args_no_type_error(mcp_url: str) -> None:
             f"Got TypeError in tool result — GIM-89 regression detected. "
             f"Error: {error_text}"
         )
+
+
+@pytest.mark.integration
+async def test_cli_call_tool_round_trips_over_streamable_http(mcp_url: str) -> None:
+    """palace_mcp.cli._call_tool must use the real streamable HTTP transport."""
+    from palace_mcp.cli import _call_tool
+
+    result = await _call_tool(
+        url=mcp_url,
+        tool_name="palace.memory.health",
+        arguments={},
+    )
+
+    assert isinstance(result, dict)
+    assert "neo4j_reachable" in result
+
+
+@pytest.mark.integration
+async def test_register_project_parent_mount_round_trips_over_wire(
+    mcp_url: str,
+) -> None:
+    """palace.memory.register_project accepts parent_mount/relative_path on the wire."""
+    from palace_mcp.cli import _call_tool
+
+    slug = "wire-parent-mount-kit"
+    result = await _call_tool(
+        url=mcp_url,
+        tool_name="palace.memory.register_project",
+        arguments={
+            "slug": slug,
+            "name": slug,
+            "parent_mount": "hs",
+            "relative_path": "TronKit.Swift",
+        },
+    )
+
+    assert result["slug"] == slug
+    assert result["parent_mount"] == "hs"
+    assert result["relative_path"] == "TronKit.Swift"
