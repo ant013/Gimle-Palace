@@ -397,6 +397,26 @@ def test_project_manifest_missing_skill_additions_fails(tmp_path: Path) -> None:
     assert any("missing skills section" in error for error in errors)
 
 
+def test_project_manifest_missing_domain_key_fails(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    manifest = repo / "paperclips" / "projects" / "gimle" / "paperclip-agent-assembly.yaml"
+    manifest.write_text(manifest.read_text().replace("  wallet_target_slug: Unstoppable-wallet\n", ""))
+
+    errors = validate_instructions.validate_project_capability_manifests(repo)
+
+    assert any("project manifest missing domain.wallet_target_slug" in error for error in errors)
+
+
+def test_project_manifest_missing_evidence_key_fails(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    manifest = repo / "paperclips" / "projects" / "gimle" / "paperclip-agent-assembly.yaml"
+    manifest.write_text(manifest.read_text().replace("  handoff_misclassified_issue: GIM-216\n", ""))
+
+    errors = validate_instructions.validate_project_capability_manifests(repo)
+
+    assert any("project manifest missing evidence.handoff_misclassified_issue" in error for error in errors)
+
+
 def test_project_manifest_allows_non_empty_additions(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     manifest = repo / "paperclips" / "projects" / "gimle" / "paperclip-agent-assembly.yaml"

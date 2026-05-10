@@ -33,6 +33,8 @@ REQUIRED_PROJECT_MCP = (
 
 REQUIRED_PROJECT_MANIFEST_SECTIONS = (
     "project",
+    "domain",
+    "evidence",
     "paths",
     "mcp",
     "skills",
@@ -43,6 +45,24 @@ REQUIRED_PROJECT_MANIFEST_SECTIONS = (
 
 REQUIRED_PROJECT_MANIFEST_KEYS = {
     "project": ("key", "display_name", "issue_prefix", "integration_branch", "specs_dir", "plans_dir"),
+    "domain": ("wallet_target_short", "wallet_target_name", "wallet_target_slug"),
+    "evidence": (
+        "merge_without_smoke_issue",
+        "graphiti_mock_issue",
+        "release_reset_issue",
+        "asyncmock_driver_issue",
+        "worktree_discipline_issue_pair",
+        "qa_worktree_discipline_issue",
+        "mcp_wire_contract_issue",
+        "qa_deploy_checklist_issue",
+        "review_scope_drift_issue",
+        "qa_to_cto_stall_issue",
+        "handoff_flake_issue",
+        "pre_slim_baseline_issue",
+        "cr_to_pe_stall_issue",
+        "handoff_misclassified_issue",
+        "post_merge_stall_issue",
+    ),
     "paths": (
         "project_root",
         "primary_repo_root",
