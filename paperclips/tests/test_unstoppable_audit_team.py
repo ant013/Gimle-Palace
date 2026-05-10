@@ -147,6 +147,43 @@ def test_decide_agent_refuses_paused_auceo():
     assert any("status is paused" in blocker for blocker in decision["blockers"])
 
 
+def test_decide_agent_recreate_policy_accepts_paused_auceo_with_snapshot():
+    config = load_team_config()
+    agents = team.build_agent_plan(config, Path(__file__).resolve().parents[2], Path("paperclips/dist/codex/unstoppable-audit"))
+    auceo = next(agent for agent in agents if agent["name"] == "AUCEO")
+    live = {
+        "id": "dcdd8871-5b44-4563-bb00-f8cca292a69e",
+        "name": "AUCEO",
+        "status": "paused",
+    }
+    live_config = {
+        "adapterType": "codex_local",
+        "adapterConfig": {
+            "cwd": None,
+            "model": auceo["model"],
+            "instructionsFilePath": "/tmp/live/AGENTS.md",
+            "instructionsBundleMode": "managed",
+            "dangerouslyBypassApprovalsAndSandbox": True,
+            "env": {},
+        },
+    }
+
+    decision = team.decide_agent(
+        auceo,
+        [live],
+        live_config,
+        "dcdd8871-5b44-4563-bb00-f8cca292a69e",
+        "recreate",
+    )
+
+    assert decision["decision"] == "recreate"
+    assert decision["ok"] is True
+    assert decision["blockers"] == []
+    assert decision["rollbackSnapshot"]["agent"]["id"] == "dcdd8871-5b44-4563-bb00-f8cca292a69e"
+    assert decision["recreatePlan"]["terminate_existing_agent_id"] == "dcdd8871-5b44-4563-bb00-f8cca292a69e"
+    assert any("readback diverges" in warning for warning in decision["warnings"])
+
+
 def test_decide_agent_allows_create_when_missing():
     config = load_team_config()
     agents = team.build_agent_plan(config, Path(__file__).resolve().parents[2], Path("paperclips/dist/codex/unstoppable-audit"))

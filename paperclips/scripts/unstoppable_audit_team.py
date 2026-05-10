@@ -414,6 +414,7 @@ def decide_agent(
     live_matches: list[dict[str, Any]],
     live_config: dict[str, Any] | None,
     existing_early_ceo_agent_id: str,
+    auceo_policy: str = "refuse",
 ) -> dict[str, Any]:
     decision = {
         "name": agent["name"],
@@ -455,13 +456,30 @@ def decide_agent(
             decision["blockers"].append(
                 f"AUCEO live id {live_id} does not match expected early CEO id {existing_early_ceo_agent_id}"
             )
-        if live_status in {"paused", "failed", "terminated", "unknown"}:
+        status_blocker = live_status in {"paused", "failed", "terminated", "unknown"}
+        if status_blocker and auceo_policy != "recreate":
             decision["blockers"].append(f"AUCEO live status is {live_status}; operator recreate/update decision required")
-        if divergences:
+        if divergences and auceo_policy != "recreate":
             decision["blockers"].append("AUCEO readback diverges: " + "; ".join(divergences))
         if decision["blockers"]:
             decision["decision"] = "refuse"
             decision["ok"] = False
+        elif auceo_policy == "recreate":
+            decision["decision"] = "recreate"
+            decision["ok"] = True
+            decision["operatorPolicy"] = "recreate"
+            decision["recreatePlan"] = {
+                "terminate_existing_agent_id": live_id,
+                "create_replacement_name": agent["name"],
+                "requires_rollback_snapshot": True,
+                "requires_operator_approval": True,
+            }
+            reasons = []
+            if status_blocker:
+                reasons.append(f"live status is {live_status}")
+            if divergences:
+                reasons.append("readback diverges: " + "; ".join(divergences))
+            decision["warnings"] = reasons
         else:
             decision["decision"] = "skip"
         return decision
@@ -497,6 +515,7 @@ def build_preflight_manifest(
     config_path: Path,
     dry_run_path: Path,
     api_base: str,
+    auceo_policy: str = "refuse",
 ) -> dict[str, Any]:
     errors = assert_fresh_dry_run(dry_run_manifest, current_manifest)
     live_by_name = index_live_agents(live_agents)
@@ -508,7 +527,7 @@ def build_preflight_manifest(
             live_config = None
             if len(matches) == 1 and matches[0].get("id"):
                 live_config = live_configs_by_id.get(str(matches[0]["id"]))
-            decisions.append(decide_agent(agent, matches, live_config, existing_early_ceo_agent_id))
+            decisions.append(decide_agent(agent, matches, live_config, existing_early_ceo_agent_id, auceo_policy))
 
     blockers = list(errors)
     blockers.extend(
@@ -535,6 +554,9 @@ def build_preflight_manifest(
             "requires_operator_approval": True,
             "requires_rollback_snapshot_before_mutation": True,
             "stop_on_first_failure": True,
+        },
+        "operator_policy": {
+            "auceo": auceo_policy,
         },
         "blockers": blockers,
         "live_agent_count": len(live_agents),
@@ -581,6 +603,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     preflight.add_argument("--bundle-dir", type=Path, default=DEFAULT_BUNDLE_DIR)
     preflight.add_argument("--auth-path", type=Path, default=Path.home() / ".paperclip" / "auth.json")
     preflight.add_argument("--api-base", default=os.environ.get("PAPERCLIP_API_URL", "https://paperclip.ant013.work"))
+    preflight.add_argument(
+        "--auceo-policy",
+        choices=["refuse", "recreate"],
+        default="refuse",
+        help="explicit operator policy for existing AUCEO divergence",
+    )
     preflight.add_argument("--write-manifest", action="store_true")
     return parser.parse_args(argv)
 
@@ -615,6 +643,7 @@ def main(argv: list[str] | None = None) -> int:
             args.config,
             args.dry_run_manifest,
             args.api_base,
+            args.auceo_policy,
         )
     if args.write_manifest:
         write_json(args.manifest, manifest)

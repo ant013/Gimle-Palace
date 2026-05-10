@@ -6,19 +6,13 @@
     "requires_rollback_snapshot_before_mutation": true,
     "stop_on_first_failure": true
   },
-  "blockers": [
-    "AUCEO: AUCEO live status is paused; operator recreate/update decision required",
-    "AUCEO: AUCEO readback diverges: reasoningEffort: expected 'high', got None; instructionsFilePath: expected 'AGENTS.md', got '/Users/anton/.paperclip/instances/default/companies/8f55e80b-0264-4ab6-9d56-8b2652f18005/agents/dcdd8871-5b44-4563-bb00-f8cca292a69e/instructions/AGENTS.md'; sandboxBypass: expected False, got True; runtimeEnvKeys: expected ['CODEBASE_MEMORY_PROJECT', 'SERENA_PROJECT', 'TELEGRAM_OPS_CHAT_ID', 'TELEGRAM_REDACTED_REPORTS_CHAT_ID'], got []; workspacePath: expected '/Users/Shared/UnstoppableAudit/runs/AUCEO/workspace', got None"
-  ],
-  "checked_at": "2026-05-10T05:04:28Z",
+  "blockers": [],
+  "checked_at": "2026-05-10T05:13:12Z",
   "config_path": "/Users/ant013/Android/Gimle-Palace-cx/paperclips/teams/unstoppable-audit.yaml",
   "decisions": [
     {
-      "blockers": [
-        "AUCEO live status is paused; operator recreate/update decision required",
-        "AUCEO readback diverges: reasoningEffort: expected 'high', got None; instructionsFilePath: expected 'AGENTS.md', got '/Users/anton/.paperclip/instances/default/companies/8f55e80b-0264-4ab6-9d56-8b2652f18005/agents/dcdd8871-5b44-4563-bb00-f8cca292a69e/instructions/AGENTS.md'; sandboxBypass: expected False, got True; runtimeEnvKeys: expected ['CODEBASE_MEMORY_PROJECT', 'SERENA_PROJECT', 'TELEGRAM_OPS_CHAT_ID', 'TELEGRAM_REDACTED_REPORTS_CHAT_ID'], got []; workspacePath: expected '/Users/Shared/UnstoppableAudit/runs/AUCEO/workspace', got None"
-      ],
-      "decision": "refuse",
+      "blockers": [],
+      "decision": "recreate",
       "expectedConfigHash": "24291cb343b8daa8505163998cb5a1978dbe690d9bd962a965a45901379b090f",
       "live": {
         "agent": {
@@ -33,7 +27,8 @@
         "found": true
       },
       "name": "AUCEO",
-      "ok": false,
+      "ok": true,
+      "operatorPolicy": "recreate",
       "plannedOperation": "create",
       "readback": {
         "checked": true,
@@ -50,6 +45,12 @@
           "workspacePath": null,
           "writableRoots": null
         }
+      },
+      "recreatePlan": {
+        "create_replacement_name": "AUCEO",
+        "requires_operator_approval": true,
+        "requires_rollback_snapshot": true,
+        "terminate_existing_agent_id": "dcdd8871-5b44-4563-bb00-f8cca292a69e"
       },
       "rollbackSnapshot": {
         "agent": {
@@ -76,7 +77,11 @@
           },
           "adapterType": "codex_local"
         }
-      }
+      },
+      "warnings": [
+        "live status is paused",
+        "readback diverges: reasoningEffort: expected 'high', got None; instructionsFilePath: expected 'AGENTS.md', got '/Users/anton/.paperclip/instances/default/companies/8f55e80b-0264-4ab6-9d56-8b2652f18005/agents/dcdd8871-5b44-4563-bb00-f8cca292a69e/instructions/AGENTS.md'; sandboxBypass: expected False, got True; runtimeEnvKeys: expected ['CODEBASE_MEMORY_PROJECT', 'SERENA_PROJECT', 'TELEGRAM_OPS_CHAT_ID', 'TELEGRAM_REDACTED_REPORTS_CHAT_ID'], got []; workspacePath: expected '/Users/Shared/UnstoppableAudit/runs/AUCEO/workspace', got None"
+      ]
     },
     {
       "blockers": [],
@@ -308,7 +313,10 @@
   "gate": "B2",
   "live_agent_count": 1,
   "mode": "authenticated-preflight",
-  "ok": false,
+  "ok": true,
+  "operator_policy": {
+    "auceo": "recreate"
+  },
   "paperclip": {
     "company_id": "8f55e80b-0264-4ab6-9d56-8b2652f18005",
     "project_id": "64871690-2f2d-4fbd-a30d-975e6bbccec9"
