@@ -228,6 +228,120 @@ def test_readiness_identity_failure_is_warning_when_company_checks_pass(monkeypa
     assert manifest["warnings"] == ["identity check failed: HTTP 401"]
 
 
+def test_discover_source_issue_selects_best_project_candidate(monkeypatch):
+    calls = []
+
+    def fake_get(api_base, token, path):
+        calls.append(path)
+        return [
+            {
+                "id": "low",
+                "title": "General audit",
+                "status": "open",
+                "projectId": "project-id",
+                "updatedAt": "2026-05-09T00:00:00Z",
+            },
+            {
+                "id": "best",
+                "title": "UnstoppableAudit bootstrap",
+                "status": "open",
+                "projectId": "project-id",
+                "updatedAt": "2026-05-10T00:00:00Z",
+            },
+            {
+                "id": "other-project",
+                "title": "UnstoppableAudit bootstrap",
+                "status": "open",
+                "projectId": "other",
+                "updatedAt": "2026-05-10T00:00:00Z",
+            },
+        ]
+
+    monkeypatch.setattr(apply.team, "http_get_json", fake_get)
+
+    manifest = apply.discover_source_issue(
+        "https://paperclip.example",
+        "token",
+        "company-id",
+        ["UnstoppableAudit bootstrap"],
+        "project-id",
+    )
+
+    assert manifest["ok"] is True
+    assert manifest["selected"]["id"] == "best"
+    assert manifest["queries"] == [
+        {
+            "query": "UnstoppableAudit bootstrap",
+            "result_count": 3,
+            "filtered_count": 2,
+        }
+    ]
+    assert calls == ["/api/companies/company-id/issues?q=UnstoppableAudit%20bootstrap"]
+
+
+def test_discover_source_issue_reports_no_candidate(monkeypatch):
+    monkeypatch.setattr(apply.team, "http_get_json", lambda api_base, token, path: [])
+
+    manifest = apply.discover_source_issue(
+        "https://paperclip.example",
+        "token",
+        "company-id",
+        ["nothing"],
+        "project-id",
+    )
+
+    assert manifest["ok"] is False
+    assert manifest["selected"] is None
+    assert manifest["blockers"] == ["no plausible UnstoppableAudit source issue found"]
+
+
+def test_create_source_issue_refuses_without_live_confirmation():
+    args = apply.parse_args(["create-source-issue"])
+
+    with pytest.raises(RuntimeError, match="refusing source issue creation"):
+        apply.command_create_source_issue(args)
+
+
+def test_create_source_issue_posts_minimal_payload(monkeypatch):
+    calls = []
+
+    def fake_post(api_base, token, path, payload):
+        calls.append((path, payload))
+        return {
+            "id": "issue-id",
+            "title": payload["title"],
+            "status": "backlog",
+            "projectId": payload["projectId"],
+            "createdAt": "2026-05-10T00:00:00Z",
+        }
+
+    monkeypatch.setattr(apply, "http_post_json", fake_post)
+
+    manifest = apply.create_source_issue(
+        "https://paperclip.example",
+        "token",
+        "company-id",
+        "project-id",
+        "UnstoppableAudit bootstrap",
+        "body",
+    )
+
+    assert manifest["ok"] is True
+    assert manifest["live_mutation"] is True
+    assert manifest["issue"]["id"] == "issue-id"
+    assert calls == [
+        (
+            "/api/companies/company-id/issues",
+            {
+                "title": "UnstoppableAudit bootstrap",
+                "body": "body",
+                "companyId": "company-id",
+                "projectId": "project-id",
+            },
+        )
+    ]
+
+
 def test_execute_operations_stops_on_pending_approval(monkeypatch):
     preflight, dry_run = load_manifests()
     plan = apply.build_apply_plan(preflight, dry_run, Path("rollback.json"))

@@ -17,6 +17,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import unstoppable_audit_team as team
 
@@ -26,6 +27,8 @@ DEFAULT_DRY_RUN = Path("paperclips/manifests/unstoppable-audit/gate-b1-dry-run.j
 DEFAULT_APPLY_PLAN = Path("paperclips/manifests/unstoppable-audit/gate-c-apply-plan.json")
 DEFAULT_ROLLBACK = Path("paperclips/manifests/unstoppable-audit/rollback-gate-c.json")
 DEFAULT_READINESS = Path("paperclips/manifests/unstoppable-audit/gate-c-readiness.json")
+DEFAULT_SOURCE_ISSUE = Path("paperclips/manifests/unstoppable-audit/gate-c-source-issue.json")
+DEFAULT_SOURCE_ISSUE_CREATE = Path("paperclips/manifests/unstoppable-audit/gate-c-source-issue-create.json")
 DEFAULT_LIVE_RESULT = Path("paperclips/manifests/unstoppable-audit/gate-c-live-result.json")
 LIVE_CONFIRMATION = "UNSTOPPABLE_AUDIT_LIVE_APPLY"
 
@@ -639,6 +642,132 @@ def build_readiness_manifest(
     }
 
 
+def issue_summary(issue: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: issue.get(key)
+        for key in [
+            "id",
+            "key",
+            "number",
+            "title",
+            "status",
+            "priority",
+            "projectId",
+            "assigneeAgentId",
+            "createdAt",
+            "updatedAt",
+        ]
+        if key in issue
+    }
+
+
+def score_source_issue(issue: dict[str, Any]) -> int:
+    text = " ".join(str(issue.get(key, "")) for key in ["title", "description", "key"]).lower()
+    score = 0
+    if "unstoppableaudit" in text:
+        score += 5
+    if "unstoppable audit" in text:
+        score += 5
+    if "bootstrap" in text:
+        score += 3
+    if "audit" in text:
+        score += 1
+    if issue.get("status") not in {"done", "closed", "cancelled"}:
+        score += 1
+    return score
+
+
+def discover_source_issue(
+    api_base: str,
+    token: str,
+    company_id: str,
+    queries: list[str],
+    project_id: str | None = None,
+) -> dict[str, Any]:
+    seen: dict[str, dict[str, Any]] = {}
+    query_results: list[dict[str, Any]] = []
+    for query in queries:
+        path = f"/api/companies/{company_id}/issues?q={quote(query)}"
+        issues = team.http_get_json(api_base, token, path)
+        if not isinstance(issues, list):
+            raise RuntimeError(f"issues search for {query!r} returned non-list payload")
+        filtered = [
+            issue
+            for issue in issues
+            if isinstance(issue, dict) and (not project_id or str(issue.get("projectId", "")) == project_id)
+        ]
+        for issue in filtered:
+            issue_id = str(issue.get("id", ""))
+            if issue_id:
+                seen[issue_id] = issue
+        query_results.append(
+            {
+                "query": query,
+                "result_count": len(issues),
+                "filtered_count": len(filtered),
+            }
+        )
+    ranked = sorted(
+        (issue_summary(issue) | {"score": score_source_issue(issue)} for issue in seen.values()),
+        key=lambda item: (-int(item["score"]), str(item.get("updatedAt", "")), str(item.get("id", ""))),
+    )
+    selected = ranked[0] if ranked and int(ranked[0]["score"]) > 0 else None
+    blockers: list[str] = []
+    if not selected:
+        blockers.append("no plausible UnstoppableAudit source issue found")
+    return {
+        "ok": not blockers,
+        "gate": "C-source-issue-discovery",
+        "mode": "safe-read-only",
+        "team": "UnstoppableAudit",
+        "checked_at": now_iso(),
+        "api_base": api_base.rstrip("/"),
+        "company_id": company_id,
+        "project_id": project_id,
+        "live_mutation": False,
+        "queries": query_results,
+        "blockers": blockers,
+        "selected": selected,
+        "candidates": ranked[:10],
+    }
+
+
+def source_issue_payload(company_id: str, project_id: str, title: str, body: str) -> dict[str, Any]:
+    return {
+        "title": title,
+        "body": body,
+        "companyId": company_id,
+        "projectId": project_id,
+    }
+
+
+def create_source_issue(
+    api_base: str,
+    token: str,
+    company_id: str,
+    project_id: str,
+    title: str,
+    body: str,
+) -> dict[str, Any]:
+    payload = source_issue_payload(company_id, project_id, title, body)
+    response = http_post_json(api_base, token, f"/api/companies/{company_id}/issues", payload)
+    if not isinstance(response, dict) or not response.get("id"):
+        raise RuntimeError("source issue create response did not include issue id")
+    return {
+        "ok": True,
+        "gate": "C-source-issue-create",
+        "mode": "live",
+        "team": "UnstoppableAudit",
+        "created_at": now_iso(),
+        "api_base": api_base.rstrip("/"),
+        "company_id": company_id,
+        "project_id": project_id,
+        "live_mutation": True,
+        "payloadHash": team.sha256_json(payload),
+        "issue": issue_summary(response),
+    }
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     repo_root = Path(__file__).resolve().parents[2]
     parser = argparse.ArgumentParser(description="Plan or apply UnstoppableAudit live bootstrap")
@@ -660,6 +789,40 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     readiness.add_argument("--company-id", default="")
     readiness.add_argument("--source-issue-id", default="")
     readiness.add_argument("--write-manifest", action="store_true")
+
+    source_issue = subparsers.add_parser("discover-source-issue")
+    source_issue.add_argument("--config", type=Path, default=repo_root / "paperclips/teams/unstoppable-audit.yaml")
+    source_issue.add_argument("--manifest", type=Path, default=repo_root / DEFAULT_SOURCE_ISSUE)
+    source_issue.add_argument("--auth-path", type=Path, default=Path.home() / ".paperclip" / "auth.json")
+    source_issue.add_argument("--api-base", default=os.environ.get("PAPERCLIP_API_URL", "https://paperclip.ant013.work"))
+    source_issue.add_argument("--company-id", default="")
+    source_issue.add_argument("--project-id", default="")
+    source_issue.add_argument(
+        "--query",
+        action="append",
+        default=[],
+        help="Issue search query. Can be repeated.",
+    )
+    source_issue.add_argument("--write-manifest", action="store_true")
+
+    create_source = subparsers.add_parser("create-source-issue")
+    create_source.add_argument("--config", type=Path, default=repo_root / "paperclips/teams/unstoppable-audit.yaml")
+    create_source.add_argument("--manifest", type=Path, default=repo_root / DEFAULT_SOURCE_ISSUE_CREATE)
+    create_source.add_argument("--auth-path", type=Path, default=Path.home() / ".paperclip" / "auth.json")
+    create_source.add_argument("--api-base", default=os.environ.get("PAPERCLIP_API_URL", "https://paperclip.ant013.work"))
+    create_source.add_argument("--company-id", default="")
+    create_source.add_argument("--project-id", default="")
+    create_source.add_argument("--title", default="UnstoppableAudit bootstrap")
+    create_source.add_argument(
+        "--body",
+        default=(
+            "Bootstrap source issue for the UnstoppableAudit Paperclip team. "
+            "Tracks gated creation of AUCEO plus iOS/Android audit roles, with read-only repository access, "
+            "team-scoped artifact roots, and explicit approval gates."
+        ),
+    )
+    create_source.add_argument("--allow-live", action="store_true")
+    create_source.add_argument("--confirm", default="")
 
     apply = subparsers.add_parser("apply")
     apply.add_argument("--plan", type=Path, default=repo_root / DEFAULT_APPLY_PLAN)
@@ -712,6 +875,43 @@ def command_readiness(args: argparse.Namespace) -> int:
     return 0 if manifest["ok"] else 1
 
 
+def command_discover_source_issue(args: argparse.Namespace) -> int:
+    config = team.load_config(args.config)
+    company_id = args.company_id or str(team.prereq.get_path(config, "paperclip.company_id"))
+    project_id = args.project_id or str(team.prereq.get_path(config, "paperclip.onboarding_project_id"))
+    token = team.load_auth_token(args.api_base, args.auth_path)
+    if not token:
+        raise RuntimeError("PAPERCLIP_API_KEY or ~/.paperclip/auth.json token is required for source issue discovery")
+    queries = args.query or [
+        "UnstoppableAudit",
+        "Unstoppable Audit",
+        "unstoppable wallet audit bootstrap",
+        "audit bootstrap",
+    ]
+    manifest = discover_source_issue(args.api_base, token, company_id, queries, project_id)
+    if args.write_manifest:
+        write_json(args.manifest, manifest)
+    print(json.dumps(manifest, indent=2, sort_keys=True))
+    return 0 if manifest["ok"] else 1
+
+
+def command_create_source_issue(args: argparse.Namespace) -> int:
+    if not args.allow_live or args.confirm != LIVE_CONFIRMATION:
+        raise RuntimeError(
+            f"refusing source issue creation; pass --allow-live --confirm {LIVE_CONFIRMATION} after review"
+        )
+    config = team.load_config(args.config)
+    company_id = args.company_id or str(team.prereq.get_path(config, "paperclip.company_id"))
+    project_id = args.project_id or str(team.prereq.get_path(config, "paperclip.onboarding_project_id"))
+    token = team.load_auth_token(args.api_base, args.auth_path)
+    if not token:
+        raise RuntimeError("PAPERCLIP_API_KEY or ~/.paperclip/auth.json token is required for source issue creation")
+    manifest = create_source_issue(args.api_base, token, company_id, project_id, args.title, args.body)
+    write_json(args.manifest, manifest)
+    print(json.dumps(manifest, indent=2, sort_keys=True))
+    return 0
+
+
 def command_apply(args: argparse.Namespace) -> int:
     plan = read_json(args.plan)
     errors = validate_apply_plan(plan)
@@ -746,6 +946,10 @@ def main(argv: list[str] | None = None) -> int:
         return command_plan(args)
     if args.command == "readiness":
         return command_readiness(args)
+    if args.command == "discover-source-issue":
+        return command_discover_source_issue(args)
+    if args.command == "create-source-issue":
+        return command_create_source_issue(args)
     if args.command == "apply":
         return command_apply(args)
     raise RuntimeError(f"unsupported command: {args.command}")

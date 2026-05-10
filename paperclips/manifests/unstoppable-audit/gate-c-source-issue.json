@@ -1,0 +1,38 @@
+{
+  "api_base": "https://paperclip.ant013.work",
+  "blockers": [
+    "no plausible UnstoppableAudit source issue found"
+  ],
+  "candidates": [],
+  "checked_at": "2026-05-10T06:21:42Z",
+  "company_id": "8f55e80b-0264-4ab6-9d56-8b2652f18005",
+  "gate": "C-source-issue-discovery",
+  "live_mutation": false,
+  "mode": "safe-read-only",
+  "ok": false,
+  "project_id": "64871690-2f2d-4fbd-a30d-975e6bbccec9",
+  "queries": [
+    {
+      "filtered_count": 0,
+      "query": "UnstoppableAudit",
+      "result_count": 0
+    },
+    {
+      "filtered_count": 0,
+      "query": "Unstoppable Audit",
+      "result_count": 0
+    },
+    {
+      "filtered_count": 0,
+      "query": "unstoppable wallet audit bootstrap",
+      "result_count": 0
+    },
+    {
+      "filtered_count": 0,
+      "query": "audit bootstrap",
+      "result_count": 0
+    }
+  ],
+  "selected": null,
+  "team": "UnstoppableAudit"
+}
