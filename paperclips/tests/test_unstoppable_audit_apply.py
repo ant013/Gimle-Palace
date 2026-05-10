@@ -127,6 +127,107 @@ def test_runtime_replacements_require_source_issue_id(monkeypatch):
         apply.runtime_replacements(args, config)
 
 
+def test_readiness_manifest_reports_missing_source_issue_without_network():
+    preflight, dry_run = load_manifests()
+    plan = apply.build_apply_plan(preflight, dry_run, Path("rollback.json"))
+
+    manifest = apply.build_readiness_manifest(
+        plan,
+        "https://paperclip.example",
+        None,
+        "company-id",
+        False,
+    )
+
+    assert manifest["ok"] is False
+    assert manifest["live_mutation"] is False
+    assert manifest["safe_methods_only"] is True
+    assert any("source issue id is required" in blocker for blocker in manifest["blockers"])
+    assert any("token is required" in blocker for blocker in manifest["blockers"])
+    assert manifest["warnings"] == []
+    assert manifest["checks"] == []
+
+
+def test_readiness_manifest_checks_identity_company_and_rollback_config(monkeypatch):
+    preflight, dry_run = load_manifests()
+    plan = apply.build_apply_plan(preflight, dry_run, Path("rollback.json"))
+    calls = []
+
+    def fake_get(api_base, token, path):
+        calls.append(path)
+        if path == "/api/agents/me":
+            return {"id": "operator-id", "name": "Operator"}
+        if path == "/api/companies/company-id/agents":
+            return [
+                {
+                    "id": "dcdd8871-5b44-4563-bb00-f8cca292a69e",
+                    "name": "AUCEO",
+                    "status": "paused",
+                }
+            ]
+        if path == "/api/agents/dcdd8871-5b44-4563-bb00-f8cca292a69e/configuration":
+            return {"adapterType": "codex_local", "adapterConfig": {}}
+        raise AssertionError(path)
+
+    monkeypatch.setattr(apply.team, "http_get_json", fake_get)
+
+    manifest = apply.build_readiness_manifest(
+        plan,
+        "https://paperclip.example",
+        "token",
+        "company-id",
+        True,
+    )
+
+    assert manifest["ok"] is True
+    assert manifest["blockers"] == []
+    assert calls == [
+        "/api/agents/me",
+        "/api/companies/company-id/agents",
+        "/api/agents/dcdd8871-5b44-4563-bb00-f8cca292a69e/configuration",
+    ]
+    assert {check["name"] for check in manifest["checks"]} == {
+        "identity",
+        "company_agents",
+        "terminate_target",
+        "rollback_config_readback",
+    }
+
+
+def test_readiness_identity_failure_is_warning_when_company_checks_pass(monkeypatch):
+    preflight, dry_run = load_manifests()
+    plan = apply.build_apply_plan(preflight, dry_run, Path("rollback.json"))
+
+    def fake_get(api_base, token, path):
+        if path == "/api/agents/me":
+            raise RuntimeError("HTTP 401")
+        if path == "/api/companies/company-id/agents":
+            return [
+                {
+                    "id": "dcdd8871-5b44-4563-bb00-f8cca292a69e",
+                    "name": "AUCEO",
+                    "status": "paused",
+                }
+            ]
+        if path == "/api/agents/dcdd8871-5b44-4563-bb00-f8cca292a69e/configuration":
+            return {"adapterType": "codex_local", "adapterConfig": {}}
+        raise AssertionError(path)
+
+    monkeypatch.setattr(apply.team, "http_get_json", fake_get)
+
+    manifest = apply.build_readiness_manifest(
+        plan,
+        "https://paperclip.example",
+        "token",
+        "company-id",
+        True,
+    )
+
+    assert manifest["ok"] is True
+    assert manifest["blockers"] == []
+    assert manifest["warnings"] == ["identity check failed: HTTP 401"]
+
+
 def test_execute_operations_stops_on_pending_approval(monkeypatch):
     preflight, dry_run = load_manifests()
     plan = apply.build_apply_plan(preflight, dry_run, Path("rollback.json"))

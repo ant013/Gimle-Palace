@@ -25,6 +25,7 @@ DEFAULT_PREFLIGHT = Path("paperclips/manifests/unstoppable-audit/gate-b2-preflig
 DEFAULT_DRY_RUN = Path("paperclips/manifests/unstoppable-audit/gate-b1-dry-run.json")
 DEFAULT_APPLY_PLAN = Path("paperclips/manifests/unstoppable-audit/gate-c-apply-plan.json")
 DEFAULT_ROLLBACK = Path("paperclips/manifests/unstoppable-audit/rollback-gate-c.json")
+DEFAULT_READINESS = Path("paperclips/manifests/unstoppable-audit/gate-c-readiness.json")
 DEFAULT_LIVE_RESULT = Path("paperclips/manifests/unstoppable-audit/gate-c-live-result.json")
 LIVE_CONFIRMATION = "UNSTOPPABLE_AUDIT_LIVE_APPLY"
 
@@ -521,6 +522,123 @@ def execute_operations(
     }
 
 
+def find_agent_by_id(live_agents: list[dict[str, Any]], agent_id: str) -> dict[str, Any] | None:
+    for agent in live_agents:
+        if str(agent.get("id", "")) == agent_id:
+            return agent
+    return None
+
+
+def build_readiness_manifest(
+    plan: dict[str, Any],
+    api_base: str,
+    token: str | None,
+    company_id: str,
+    source_issue_id_present: bool,
+) -> dict[str, Any]:
+    blockers = validate_apply_plan(plan)
+    warnings: list[str] = []
+    checks: list[dict[str, Any]] = []
+    if not token:
+        blockers.append("PAPERCLIP_API_KEY or ~/.paperclip/auth.json token is required")
+    if not source_issue_id_present:
+        blockers.append(
+            "source issue id is required; pass --source-issue-id or set "
+            "UNSTOPPABLE_AUDIT_SOURCE_ISSUE_ID/PAPERCLIP_SOURCE_ISSUE_ID"
+        )
+
+    live_agents: list[dict[str, Any]] = []
+    if token and not validate_apply_plan(plan):
+        try:
+            me = team.http_get_json(api_base, token, "/api/agents/me")
+            checks.append(
+                {
+                    "name": "identity",
+                    "ok": True,
+                    "agentId": me.get("id") if isinstance(me, dict) else None,
+                    "agentName": me.get("name") if isinstance(me, dict) else None,
+                }
+            )
+        except Exception as exc:
+            warnings.append(f"identity check failed: {exc}")
+            checks.append({"name": "identity", "ok": False, "error": str(exc)})
+        try:
+            agents = team.http_get_json(api_base, token, f"/api/companies/{company_id}/agents")
+            if not isinstance(agents, list):
+                raise RuntimeError("company agents endpoint returned non-list payload")
+            live_agents = agents
+            checks.append({"name": "company_agents", "ok": True, "count": len(live_agents)})
+        except Exception as exc:
+            blockers.append(f"company agents check failed: {exc}")
+            checks.append({"name": "company_agents", "ok": False, "error": str(exc)})
+
+        for operation in plan.get("operations", []):
+            if operation.get("kind") != "terminate_agent":
+                continue
+            agent_id = str(operation.get("agentId", ""))
+            live_agent = find_agent_by_id(live_agents, agent_id)
+            terminate_check: dict[str, Any] = {
+                "name": "terminate_target",
+                "ok": bool(live_agent),
+                "agentName": operation.get("agentName"),
+                "agentId": agent_id,
+            }
+            if live_agent:
+                terminate_check["status"] = live_agent.get("status")
+                if live_agent.get("status") == "terminated":
+                    terminate_check["ok"] = False
+                    blockers.append(f"{operation.get('agentName')}: terminate target is already terminated")
+            else:
+                blockers.append(f"{operation.get('agentName')}: terminate target {agent_id} was not found")
+            checks.append(terminate_check)
+            try:
+                config = team.http_get_json(api_base, token, f"/api/agents/{agent_id}/configuration")
+                checks.append(
+                    {
+                        "name": "rollback_config_readback",
+                        "ok": isinstance(config, dict),
+                        "agentName": operation.get("agentName"),
+                        "agentId": agent_id,
+                    }
+                )
+                if not isinstance(config, dict):
+                    blockers.append(f"{operation.get('agentName')}: rollback config readback returned non-object")
+            except Exception as exc:
+                blockers.append(f"{operation.get('agentName')}: rollback config readback failed: {exc}")
+                checks.append(
+                    {
+                        "name": "rollback_config_readback",
+                        "ok": False,
+                        "agentName": operation.get("agentName"),
+                        "agentId": agent_id,
+                        "error": str(exc),
+                    }
+                )
+
+    return {
+        "ok": not blockers,
+        "gate": "C-readiness",
+        "mode": "safe-read-only",
+        "team": "UnstoppableAudit",
+        "checked_at": now_iso(),
+        "api_base": api_base.rstrip("/"),
+        "company_id": company_id,
+        "source_plan_hash": team.sha256_json(plan),
+        "operation_count": len(plan.get("operations", [])),
+        "token_present": bool(token),
+        "source_issue_id_present": source_issue_id_present,
+        "live_mutation": False,
+        "safe_methods_only": True,
+        "next_live_guard": {
+            "required_flag": "--allow-live",
+            "required_confirmation": LIVE_CONFIRMATION,
+        },
+        "blockers": blockers,
+        "warnings": warnings,
+        "checks": checks,
+    }
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     repo_root = Path(__file__).resolve().parents[2]
     parser = argparse.ArgumentParser(description="Plan or apply UnstoppableAudit live bootstrap")
@@ -532,6 +650,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     plan.add_argument("--manifest", type=Path, default=repo_root / DEFAULT_APPLY_PLAN)
     plan.add_argument("--rollback-manifest", type=Path, default=repo_root / DEFAULT_ROLLBACK)
     plan.add_argument("--write-manifest", action="store_true")
+
+    readiness = subparsers.add_parser("readiness")
+    readiness.add_argument("--plan", type=Path, default=repo_root / DEFAULT_APPLY_PLAN)
+    readiness.add_argument("--config", type=Path, default=repo_root / "paperclips/teams/unstoppable-audit.yaml")
+    readiness.add_argument("--manifest", type=Path, default=repo_root / DEFAULT_READINESS)
+    readiness.add_argument("--auth-path", type=Path, default=Path.home() / ".paperclip" / "auth.json")
+    readiness.add_argument("--api-base", default=os.environ.get("PAPERCLIP_API_URL", "https://paperclip.ant013.work"))
+    readiness.add_argument("--company-id", default="")
+    readiness.add_argument("--source-issue-id", default="")
+    readiness.add_argument("--write-manifest", action="store_true")
 
     apply = subparsers.add_parser("apply")
     apply.add_argument("--plan", type=Path, default=repo_root / DEFAULT_APPLY_PLAN)
@@ -559,6 +687,29 @@ def command_plan(args: argparse.Namespace) -> int:
         write_json(args.manifest, plan)
     print(json.dumps(plan, indent=2, sort_keys=True))
     return 0 if plan["ok"] else 1
+
+
+def command_readiness(args: argparse.Namespace) -> int:
+    plan = read_json(args.plan)
+    config = team.load_config(args.config)
+    company_id = args.company_id or str(team.prereq.get_path(config, "paperclip.company_id"))
+    token = team.load_auth_token(args.api_base, args.auth_path)
+    source_issue_id = replacement_value(
+        args.source_issue_id,
+        "UNSTOPPABLE_AUDIT_SOURCE_ISSUE_ID",
+        "PAPERCLIP_SOURCE_ISSUE_ID",
+    )
+    manifest = build_readiness_manifest(
+        plan,
+        args.api_base,
+        token,
+        company_id,
+        bool(source_issue_id),
+    )
+    if args.write_manifest:
+        write_json(args.manifest, manifest)
+    print(json.dumps(manifest, indent=2, sort_keys=True))
+    return 0 if manifest["ok"] else 1
 
 
 def command_apply(args: argparse.Namespace) -> int:
@@ -593,6 +744,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
     if args.command == "plan":
         return command_plan(args)
+    if args.command == "readiness":
+        return command_readiness(args)
     if args.command == "apply":
         return command_apply(args)
     raise RuntimeError(f"unsupported command: {args.command}")

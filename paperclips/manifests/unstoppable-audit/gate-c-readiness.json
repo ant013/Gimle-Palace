@@ -1,0 +1,48 @@
+{
+  "api_base": "https://paperclip.ant013.work",
+  "blockers": [],
+  "checked_at": "2026-05-10T06:14:43Z",
+  "checks": [
+    {
+      "error": "GET /api/agents/me failed with HTTP 401: {\"error\":\"Agent authentication required\"}",
+      "name": "identity",
+      "ok": false
+    },
+    {
+      "count": 1,
+      "name": "company_agents",
+      "ok": true
+    },
+    {
+      "agentId": "dcdd8871-5b44-4563-bb00-f8cca292a69e",
+      "agentName": "AUCEO",
+      "name": "terminate_target",
+      "ok": true,
+      "status": "paused"
+    },
+    {
+      "agentId": "dcdd8871-5b44-4563-bb00-f8cca292a69e",
+      "agentName": "AUCEO",
+      "name": "rollback_config_readback",
+      "ok": true
+    }
+  ],
+  "company_id": "8f55e80b-0264-4ab6-9d56-8b2652f18005",
+  "gate": "C-readiness",
+  "live_mutation": false,
+  "mode": "safe-read-only",
+  "next_live_guard": {
+    "required_confirmation": "UNSTOPPABLE_AUDIT_LIVE_APPLY",
+    "required_flag": "--allow-live"
+  },
+  "ok": true,
+  "operation_count": 18,
+  "safe_methods_only": true,
+  "source_issue_id_present": true,
+  "source_plan_hash": "01b38940627b83f3cd42b883f60738c6c45b30e4e69a4b507aefeaca1ddd2c21",
+  "team": "UnstoppableAudit",
+  "token_present": true,
+  "warnings": [
+    "identity check failed: GET /api/agents/me failed with HTTP 401: {\"error\":\"Agent authentication required\"}"
+  ]
+}
