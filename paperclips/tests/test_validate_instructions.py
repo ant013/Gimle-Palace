@@ -520,6 +520,22 @@ def test_compare_deployed_collects_refs_from_resolved_assembly(tmp_path: Path) -
     ]
 
 
+def test_compare_deployed_reports_pending_resolved_agent_ids(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+
+    pending = compare_deployed_agents.load_resolved_pending_agent_refs(
+        repo, "gimle", "codex", "cx-auditor"
+    )
+
+    assert pending == [
+        compare_deployed_agents.PendingAgentRef(
+            target="codex",
+            name="cx-auditor",
+            dist_path=repo / "paperclips" / "dist" / "codex" / "cx-auditor.md",
+        )
+    ]
+
+
 def test_compare_deployed_path_shape() -> None:
     path = compare_deployed_agents.deployed_agents_path(
         Path("/paperclip"),
