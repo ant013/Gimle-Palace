@@ -27,6 +27,9 @@ from palace_mcp.extractors.dead_symbol_binary_surface.extractor import (
 from palace_mcp.extractors.dependency_surface.extractor import (
     DependencySurfaceExtractor,
 )
+from palace_mcp.extractors.error_handling_policy import (
+    ErrorHandlingPolicyExtractor,
+)
 from palace_mcp.extractors.git_history.extractor import GitHistoryExtractor
 from palace_mcp.extractors.heartbeat import HeartbeatExtractor
 from palace_mcp.extractors.hotspot.extractor import HotspotExtractor
@@ -58,6 +61,7 @@ EXTRACTORS: dict[str, BaseExtractor] = {
     "symbol_index_swift": SymbolIndexSwift(),
     "symbol_index_clang": SymbolIndexClang(),
     "dependency_surface": DependencySurfaceExtractor(),
+    "error_handling_policy": ErrorHandlingPolicyExtractor(),
     "reactive_dependency_tracer": ReactiveDependencyTracerExtractor(),
     "git_history": GitHistoryExtractor(),
     "hotspot": HotspotExtractor(),
