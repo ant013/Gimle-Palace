@@ -8,7 +8,7 @@ import re
 import subprocess
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from gimle_watchdog.models import (
@@ -36,6 +36,13 @@ _UUID_RE = re.compile(
 )
 
 _ELIGIBLE_STATUSES = frozenset({"todo", "in_progress", "in_review"})
+_COMMENT_ONLY_STATUSES = _ELIGIBLE_STATUSES
+_WRONG_ASSIGNEE_STATUSES = _ELIGIBLE_STATUSES
+_REVIEW_OWNED_STATUSES = frozenset({"in_review"})
+_CROSS_TEAM_STATUSES = _ELIGIBLE_STATUSES
+_OWNERLESS_STATUSES = frozenset({"done"})
+_INFRA_BLOCK_STATUSES = frozenset({"todo", "in_progress", "in_review", "blocked"})
+SKIP_ORIGINS = frozenset({"stranded_issue_recovery", "issue_productivity_review"})
 
 
 @dataclass(frozen=True)
@@ -47,6 +54,9 @@ class HandoffDetectionConfig:
     handoff_comments_per_issue: int = 5
     handoff_max_issues_per_tick: int = 30
     handoff_alert_cooldown_min: int = 30
+    handoff_recent_window_min: int = 180
+    handoff_alert_soft_budget_per_tick: int = 5
+    handoff_alert_hard_budget_per_tick: int = 20
     # GIM-244 — 3-tier detector config
     handoff_cross_team_enabled: bool = False
     handoff_ownerless_enabled: bool = False
@@ -81,12 +91,36 @@ def parse_mention_targets(comment_body: str) -> list[str]:
     return [m.group(1).lower() for m in _UUID_RE.finditer(comment_body)]
 
 
+def _issue_is_eligible(
+    issue: Issue,
+    *,
+    allowed_statuses: frozenset[str],
+    now_server: datetime,
+    recent_window_min: int,
+) -> bool:
+    if issue.origin_kind in SKIP_ORIGINS:
+        return False
+    if issue.status not in allowed_statuses:
+        return False
+    age_seconds = (now_server - issue.updated_at).total_seconds()
+    return age_seconds <= recent_window_min * 60
+
+
 def _detect_comment_only_handoff(
     issue: Issue,
     comments: list[Comment],
     lookback_min: int,
+    *,
+    now_server: datetime | None = None,
+    recent_window_min: int = 180,
 ) -> CommentOnlyHandoffFinding | None:
-    if issue.status not in _ELIGIBLE_STATUSES:
+    server_now = now_server or issue.updated_at
+    if not _issue_is_eligible(
+        issue,
+        allowed_statuses=_COMMENT_ONLY_STATUSES,
+        now_server=server_now,
+        recent_window_min=recent_window_min,
+    ):
         return None
     if issue.assignee_agent_id is None:
         return None
@@ -128,8 +162,15 @@ def _detect_wrong_assignee(
     hired_ids: frozenset[str],
     now_server: datetime,
     min_age_min: int,
+    *,
+    recent_window_min: int = 180,
 ) -> WrongAssigneeFinding | None:
-    if issue.status not in _ELIGIBLE_STATUSES:
+    if not _issue_is_eligible(
+        issue,
+        allowed_statuses=_WRONG_ASSIGNEE_STATUSES,
+        now_server=now_server,
+        recent_window_min=recent_window_min,
+    ):
         return None
     if issue.assignee_agent_id is None:
         return None
@@ -156,8 +197,15 @@ def _detect_review_owned_by_implementer(
     name_by_id: dict[str, str],
     now_server: datetime,
     min_age_min: int,
+    *,
+    recent_window_min: int = 180,
 ) -> ReviewOwnedByImplementerFinding | None:
-    if issue.status != "in_review":
+    if not _issue_is_eligible(
+        issue,
+        allowed_statuses=_REVIEW_OWNED_STATUSES,
+        now_server=now_server,
+        recent_window_min=recent_window_min,
+    ):
         return None
     if issue.assignee_agent_id is None:
         return None
@@ -190,12 +238,23 @@ def _detect_cross_team_handoff(
     comments: list[Comment],
     team_uuids: dict[str, set[str]],
     company_team: str = "claude",
+    *,
+    now_server: datetime | None = None,
+    recent_window_min: int = 180,
 ) -> CrossTeamHandoffFinding | None:
     """Fire when assigneeAgentId belongs to a different team than company_team.
 
     Suppressed if any recent comment contains an 'infra-block' marker (signals
     that a human operator intentionally crossed team boundaries).
     """
+    server_now = now_server or issue.updated_at
+    if not _issue_is_eligible(
+        issue,
+        allowed_statuses=_CROSS_TEAM_STATUSES,
+        now_server=server_now,
+        recent_window_min=recent_window_min,
+    ):
+        return None
     if issue.assignee_agent_id is None:
         return None
     assignee = issue.assignee_agent_id.lower()
@@ -221,9 +280,18 @@ def _detect_cross_team_handoff(
 def _detect_ownerless_completion(
     issue: Issue,
     comments: list[Comment],
+    *,
+    now_server: datetime | None = None,
+    recent_window_min: int = 180,
 ) -> OwnerlessCompletionFinding | None:
     """Fire when issue is done but no Phase 4.1 QA PASS comment from a QA agent exists."""
-    if issue.status != "done":
+    server_now = now_server or issue.updated_at
+    if not _issue_is_eligible(
+        issue,
+        allowed_statuses=_OWNERLESS_STATUSES,
+        now_server=server_now,
+        recent_window_min=recent_window_min,
+    ):
         return None
     for c in comments:
         if c.author_agent_id in _QA_UUIDS:
@@ -241,10 +309,18 @@ def _detect_infra_block(
     comments: list[Comment],
     lookback_min: int = 60,
     now: datetime | None = None,
+    recent_window_min: int = 180,
 ) -> InfraBlockFinding | None:
     """Fire when a recent comment contains known infrastructure error patterns."""
     if now is None:
-        now = datetime.now(timezone.utc)
+        now = issue.updated_at
+    if not _issue_is_eligible(
+        issue,
+        allowed_statuses=_INFRA_BLOCK_STATUSES,
+        now_server=now,
+        recent_window_min=recent_window_min,
+    ):
+        return None
     cutoff = now - timedelta(minutes=lookback_min)
     for c in comments:
         if c.created_at < cutoff:
@@ -351,17 +427,43 @@ async def _evaluate_one_issue(
     cfg: HandoffDetectionConfig,
     now_server: datetime,
 ) -> Finding | None:
-    wrong = _detect_wrong_assignee(issue, hired_ids, now_server, cfg.handoff_wrong_assignee_min)
+    wrong = _detect_wrong_assignee(
+        issue,
+        hired_ids,
+        now_server,
+        cfg.handoff_wrong_assignee_min,
+        recent_window_min=cfg.handoff_recent_window_min,
+    )
     if wrong is not None:
         return wrong
 
+    should_fetch_comments = _issue_is_eligible(
+        issue,
+        allowed_statuses=_COMMENT_ONLY_STATUSES | _REVIEW_OWNED_STATUSES,
+        now_server=now_server,
+        recent_window_min=cfg.handoff_recent_window_min,
+    )
+    if not should_fetch_comments:
+        return None
+
     comments = await fetch_comments(issue.id)
-    comment_only = _detect_comment_only_handoff(issue, comments, cfg.handoff_comment_lookback_min)
+    comment_only = _detect_comment_only_handoff(
+        issue,
+        comments,
+        cfg.handoff_comment_lookback_min,
+        now_server=now_server,
+        recent_window_min=cfg.handoff_recent_window_min,
+    )
     if comment_only is not None:
         return comment_only
 
     return _detect_review_owned_by_implementer(
-        issue, hired_ids, name_by_id, now_server, cfg.handoff_review_owner_min
+        issue,
+        hired_ids,
+        name_by_id,
+        now_server,
+        cfg.handoff_review_owner_min,
+        recent_window_min=cfg.handoff_recent_window_min,
     )
 
 
