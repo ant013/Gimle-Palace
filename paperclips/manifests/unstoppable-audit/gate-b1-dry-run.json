@@ -1,0 +1,771 @@
+{
+  "agents": [
+    {
+      "adapterType": "codex_local",
+      "bundlePath": "paperclips/dist/codex/unstoppable-audit/auceo.md",
+      "family": "coordination",
+      "forbiddenRuntimeEnvKeys": [
+        "BOOTSTRAP_ADMIN_TOKEN",
+        "DEPLOY_UPDATE_TOKEN",
+        "GITHUB_TOKEN",
+        "GITHUB_WRITE_TOKEN",
+        "NEO4J_PASSWORD",
+        "PAPERCLIP_API_KEY",
+        "PAPERCLIP_TOKEN"
+      ],
+      "instructionsBundleMode": "managed",
+      "instructionsFilePath": "AGENTS.md",
+      "model": "gpt-5.4",
+      "name": "AUCEO",
+      "plannedOperation": "create",
+      "platform": "umbrella",
+      "reasoningEffort": "high",
+      "reports_to": "Board",
+      "repository": {
+        "codebase_memory_project": "unstoppable-audit",
+        "mirror_path": "/Users/Shared/UnstoppableAudit/repos",
+        "repo_url": "multiple"
+      },
+      "runtimeEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "SERENA_PROJECT",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
+        "TELEGRAM_OPS_CHAT_ID"
+      ],
+      "sandboxBypass": false,
+      "sourceRootsReadOnly": [
+        "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git",
+        "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git"
+      ],
+      "title": "UnstoppableAudit CEO",
+      "workspacePath": "/Users/Shared/UnstoppableAudit/runs/AUCEO/workspace",
+      "writableRoots": [
+        "/Users/Shared/UnstoppableAudit/artifacts/AUCEO",
+        "/Users/Shared/UnstoppableAudit/runs/AUCEO/scratch"
+      ]
+    },
+    {
+      "adapterType": "codex_local",
+      "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwicto.md",
+      "family": "coordination",
+      "forbiddenRuntimeEnvKeys": [
+        "BOOTSTRAP_ADMIN_TOKEN",
+        "DEPLOY_UPDATE_TOKEN",
+        "GITHUB_TOKEN",
+        "GITHUB_WRITE_TOKEN",
+        "NEO4J_PASSWORD",
+        "PAPERCLIP_API_KEY",
+        "PAPERCLIP_TOKEN"
+      ],
+      "instructionsBundleMode": "managed",
+      "instructionsFilePath": "AGENTS.md",
+      "model": "gpt-5.4",
+      "name": "UWICTO",
+      "plannedOperation": "create",
+      "platform": "ios",
+      "reasoningEffort": "high",
+      "reports_to": "AUCEO",
+      "repository": {
+        "codebase_memory_project": "unstoppable-wallet-ios",
+        "mirror_path": "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git",
+        "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-ios"
+      },
+      "runtimeEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "SERENA_PROJECT",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
+        "TELEGRAM_OPS_CHAT_ID"
+      ],
+      "sandboxBypass": false,
+      "sourceRootsReadOnly": [
+        "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git",
+        "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git"
+      ],
+      "title": "iOS Audit CTO",
+      "workspacePath": "/Users/Shared/UnstoppableAudit/runs/UWICTO/workspace",
+      "writableRoots": [
+        "/Users/Shared/UnstoppableAudit/artifacts/UWICTO",
+        "/Users/Shared/UnstoppableAudit/runs/UWICTO/scratch"
+      ]
+    },
+    {
+      "adapterType": "codex_local",
+      "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwiswiftauditor.md",
+      "family": "code-audit",
+      "forbiddenRuntimeEnvKeys": [
+        "BOOTSTRAP_ADMIN_TOKEN",
+        "DEPLOY_UPDATE_TOKEN",
+        "GITHUB_TOKEN",
+        "GITHUB_WRITE_TOKEN",
+        "NEO4J_PASSWORD",
+        "PAPERCLIP_API_KEY",
+        "PAPERCLIP_TOKEN"
+      ],
+      "instructionsBundleMode": "managed",
+      "instructionsFilePath": "AGENTS.md",
+      "model": "gpt-5.4",
+      "name": "UWISwiftAuditor",
+      "plannedOperation": "create",
+      "platform": "ios",
+      "reasoningEffort": "high",
+      "reports_to": "UWICTO",
+      "repository": {
+        "codebase_memory_project": "unstoppable-wallet-ios",
+        "mirror_path": "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git",
+        "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-ios"
+      },
+      "runtimeEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "SERENA_PROJECT",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
+        "TELEGRAM_OPS_CHAT_ID"
+      ],
+      "sandboxBypass": false,
+      "sourceRootsReadOnly": [
+        "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git",
+        "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git"
+      ],
+      "title": "iOS Swift Auditor",
+      "workspacePath": "/Users/Shared/UnstoppableAudit/runs/UWISwiftAuditor/workspace",
+      "writableRoots": [
+        "/Users/Shared/UnstoppableAudit/artifacts/UWISwiftAuditor",
+        "/Users/Shared/UnstoppableAudit/runs/UWISwiftAuditor/scratch"
+      ]
+    },
+    {
+      "adapterType": "codex_local",
+      "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwisecurityauditor.md",
+      "family": "security-audit",
+      "forbiddenRuntimeEnvKeys": [
+        "BOOTSTRAP_ADMIN_TOKEN",
+        "DEPLOY_UPDATE_TOKEN",
+        "GITHUB_TOKEN",
+        "GITHUB_WRITE_TOKEN",
+        "NEO4J_PASSWORD",
+        "PAPERCLIP_API_KEY",
+        "PAPERCLIP_TOKEN"
+      ],
+      "instructionsBundleMode": "managed",
+      "instructionsFilePath": "AGENTS.md",
+      "model": "gpt-5.4",
+      "name": "UWISecurityAuditor",
+      "plannedOperation": "create",
+      "platform": "ios",
+      "reasoningEffort": "high",
+      "reports_to": "UWICTO",
+      "repository": {
+        "codebase_memory_project": "unstoppable-wallet-ios",
+        "mirror_path": "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git",
+        "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-ios"
+      },
+      "runtimeEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "SERENA_PROJECT",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
+        "TELEGRAM_OPS_CHAT_ID"
+      ],
+      "sandboxBypass": false,
+      "sourceRootsReadOnly": [
+        "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git",
+        "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git"
+      ],
+      "title": "iOS Security Auditor",
+      "workspacePath": "/Users/Shared/UnstoppableAudit/runs/UWISecurityAuditor/workspace",
+      "writableRoots": [
+        "/Users/Shared/UnstoppableAudit/artifacts/UWISecurityAuditor",
+        "/Users/Shared/UnstoppableAudit/runs/UWISecurityAuditor/scratch"
+      ]
+    },
+    {
+      "adapterType": "codex_local",
+      "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwicryptoauditor.md",
+      "family": "crypto-audit",
+      "forbiddenRuntimeEnvKeys": [
+        "BOOTSTRAP_ADMIN_TOKEN",
+        "DEPLOY_UPDATE_TOKEN",
+        "GITHUB_TOKEN",
+        "GITHUB_WRITE_TOKEN",
+        "NEO4J_PASSWORD",
+        "PAPERCLIP_API_KEY",
+        "PAPERCLIP_TOKEN"
+      ],
+      "instructionsBundleMode": "managed",
+      "instructionsFilePath": "AGENTS.md",
+      "model": "gpt-5.4",
+      "name": "UWICryptoAuditor",
+      "plannedOperation": "create",
+      "platform": "ios",
+      "reasoningEffort": "high",
+      "reports_to": "UWICTO",
+      "repository": {
+        "codebase_memory_project": "unstoppable-wallet-ios",
+        "mirror_path": "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git",
+        "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-ios"
+      },
+      "runtimeEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "SERENA_PROJECT",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
+        "TELEGRAM_OPS_CHAT_ID"
+      ],
+      "sandboxBypass": false,
+      "sourceRootsReadOnly": [
+        "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git",
+        "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git"
+      ],
+      "title": "iOS Crypto Auditor",
+      "workspacePath": "/Users/Shared/UnstoppableAudit/runs/UWICryptoAuditor/workspace",
+      "writableRoots": [
+        "/Users/Shared/UnstoppableAudit/artifacts/UWICryptoAuditor",
+        "/Users/Shared/UnstoppableAudit/runs/UWICryptoAuditor/scratch"
+      ]
+    },
+    {
+      "adapterType": "codex_local",
+      "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwiinfraengineer.md",
+      "family": "infra",
+      "forbiddenRuntimeEnvKeys": [
+        "BOOTSTRAP_ADMIN_TOKEN",
+        "DEPLOY_UPDATE_TOKEN",
+        "GITHUB_TOKEN",
+        "GITHUB_WRITE_TOKEN",
+        "NEO4J_PASSWORD",
+        "PAPERCLIP_API_KEY",
+        "PAPERCLIP_TOKEN"
+      ],
+      "instructionsBundleMode": "managed",
+      "instructionsFilePath": "AGENTS.md",
+      "model": "gpt-5.4",
+      "name": "UWIInfraEngineer",
+      "plannedOperation": "create",
+      "platform": "ios",
+      "reasoningEffort": "high",
+      "reports_to": "UWICTO",
+      "repository": {
+        "codebase_memory_project": "unstoppable-wallet-ios",
+        "mirror_path": "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git",
+        "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-ios"
+      },
+      "runtimeEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "SERENA_PROJECT",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
+        "TELEGRAM_OPS_CHAT_ID"
+      ],
+      "sandboxBypass": false,
+      "sourceRootsReadOnly": [
+        "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git",
+        "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git"
+      ],
+      "title": "iOS Audit Infrastructure Engineer",
+      "workspacePath": "/Users/Shared/UnstoppableAudit/runs/UWIInfraEngineer/workspace",
+      "writableRoots": [
+        "/Users/Shared/UnstoppableAudit/artifacts/UWIInfraEngineer",
+        "/Users/Shared/UnstoppableAudit/runs/UWIInfraEngineer/scratch"
+      ]
+    },
+    {
+      "adapterType": "codex_local",
+      "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwiresearchagent.md",
+      "family": "research",
+      "forbiddenRuntimeEnvKeys": [
+        "BOOTSTRAP_ADMIN_TOKEN",
+        "DEPLOY_UPDATE_TOKEN",
+        "GITHUB_TOKEN",
+        "GITHUB_WRITE_TOKEN",
+        "NEO4J_PASSWORD",
+        "PAPERCLIP_API_KEY",
+        "PAPERCLIP_TOKEN"
+      ],
+      "instructionsBundleMode": "managed",
+      "instructionsFilePath": "AGENTS.md",
+      "model": "gpt-5.4",
+      "name": "UWIResearchAgent",
+      "plannedOperation": "create",
+      "platform": "ios",
+      "reasoningEffort": "high",
+      "reports_to": "UWICTO",
+      "repository": {
+        "codebase_memory_project": "unstoppable-wallet-ios",
+        "mirror_path": "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git",
+        "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-ios"
+      },
+      "runtimeEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "SERENA_PROJECT",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
+        "TELEGRAM_OPS_CHAT_ID"
+      ],
+      "sandboxBypass": false,
+      "sourceRootsReadOnly": [
+        "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git",
+        "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git"
+      ],
+      "title": "iOS Audit Research Agent",
+      "workspacePath": "/Users/Shared/UnstoppableAudit/runs/UWIResearchAgent/workspace",
+      "writableRoots": [
+        "/Users/Shared/UnstoppableAudit/artifacts/UWIResearchAgent",
+        "/Users/Shared/UnstoppableAudit/runs/UWIResearchAgent/scratch"
+      ]
+    },
+    {
+      "adapterType": "codex_local",
+      "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwiqaengineer.md",
+      "family": "qa",
+      "forbiddenRuntimeEnvKeys": [
+        "BOOTSTRAP_ADMIN_TOKEN",
+        "DEPLOY_UPDATE_TOKEN",
+        "GITHUB_TOKEN",
+        "GITHUB_WRITE_TOKEN",
+        "NEO4J_PASSWORD",
+        "PAPERCLIP_API_KEY",
+        "PAPERCLIP_TOKEN"
+      ],
+      "instructionsBundleMode": "managed",
+      "instructionsFilePath": "AGENTS.md",
+      "model": "gpt-5.4",
+      "name": "UWIQAEngineer",
+      "plannedOperation": "create",
+      "platform": "ios",
+      "reasoningEffort": "high",
+      "reports_to": "UWICTO",
+      "repository": {
+        "codebase_memory_project": "unstoppable-wallet-ios",
+        "mirror_path": "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git",
+        "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-ios"
+      },
+      "runtimeEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "SERENA_PROJECT",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
+        "TELEGRAM_OPS_CHAT_ID"
+      ],
+      "sandboxBypass": false,
+      "sourceRootsReadOnly": [
+        "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git",
+        "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git"
+      ],
+      "title": "iOS Audit QA Engineer",
+      "workspacePath": "/Users/Shared/UnstoppableAudit/runs/UWIQAEngineer/workspace",
+      "writableRoots": [
+        "/Users/Shared/UnstoppableAudit/artifacts/UWIQAEngineer",
+        "/Users/Shared/UnstoppableAudit/runs/UWIQAEngineer/scratch"
+      ]
+    },
+    {
+      "adapterType": "codex_local",
+      "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwitechnicalwriter.md",
+      "family": "writer",
+      "forbiddenRuntimeEnvKeys": [
+        "BOOTSTRAP_ADMIN_TOKEN",
+        "DEPLOY_UPDATE_TOKEN",
+        "GITHUB_TOKEN",
+        "GITHUB_WRITE_TOKEN",
+        "NEO4J_PASSWORD",
+        "PAPERCLIP_API_KEY",
+        "PAPERCLIP_TOKEN"
+      ],
+      "instructionsBundleMode": "managed",
+      "instructionsFilePath": "AGENTS.md",
+      "model": "gpt-5.4",
+      "name": "UWITechnicalWriter",
+      "plannedOperation": "create",
+      "platform": "ios",
+      "reasoningEffort": "high",
+      "reports_to": "UWICTO",
+      "repository": {
+        "codebase_memory_project": "unstoppable-wallet-ios",
+        "mirror_path": "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git",
+        "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-ios"
+      },
+      "runtimeEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "SERENA_PROJECT",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
+        "TELEGRAM_OPS_CHAT_ID"
+      ],
+      "sandboxBypass": false,
+      "sourceRootsReadOnly": [
+        "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git",
+        "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git"
+      ],
+      "title": "iOS Audit Technical Writer",
+      "workspacePath": "/Users/Shared/UnstoppableAudit/runs/UWITechnicalWriter/workspace",
+      "writableRoots": [
+        "/Users/Shared/UnstoppableAudit/artifacts/UWITechnicalWriter",
+        "/Users/Shared/UnstoppableAudit/runs/UWITechnicalWriter/scratch"
+      ]
+    },
+    {
+      "adapterType": "codex_local",
+      "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwacto.md",
+      "family": "coordination",
+      "forbiddenRuntimeEnvKeys": [
+        "BOOTSTRAP_ADMIN_TOKEN",
+        "DEPLOY_UPDATE_TOKEN",
+        "GITHUB_TOKEN",
+        "GITHUB_WRITE_TOKEN",
+        "NEO4J_PASSWORD",
+        "PAPERCLIP_API_KEY",
+        "PAPERCLIP_TOKEN"
+      ],
+      "instructionsBundleMode": "managed",
+      "instructionsFilePath": "AGENTS.md",
+      "model": "gpt-5.4",
+      "name": "UWACTO",
+      "plannedOperation": "create",
+      "platform": "android",
+      "reasoningEffort": "high",
+      "reports_to": "AUCEO",
+      "repository": {
+        "codebase_memory_project": "unstoppable-wallet-android",
+        "mirror_path": "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+        "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-android"
+      },
+      "runtimeEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "SERENA_PROJECT",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
+        "TELEGRAM_OPS_CHAT_ID"
+      ],
+      "sandboxBypass": false,
+      "sourceRootsReadOnly": [
+        "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git",
+        "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git"
+      ],
+      "title": "Android Audit CTO",
+      "workspacePath": "/Users/Shared/UnstoppableAudit/runs/UWACTO/workspace",
+      "writableRoots": [
+        "/Users/Shared/UnstoppableAudit/artifacts/UWACTO",
+        "/Users/Shared/UnstoppableAudit/runs/UWACTO/scratch"
+      ]
+    },
+    {
+      "adapterType": "codex_local",
+      "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwakotlinauditor.md",
+      "family": "code-audit",
+      "forbiddenRuntimeEnvKeys": [
+        "BOOTSTRAP_ADMIN_TOKEN",
+        "DEPLOY_UPDATE_TOKEN",
+        "GITHUB_TOKEN",
+        "GITHUB_WRITE_TOKEN",
+        "NEO4J_PASSWORD",
+        "PAPERCLIP_API_KEY",
+        "PAPERCLIP_TOKEN"
+      ],
+      "instructionsBundleMode": "managed",
+      "instructionsFilePath": "AGENTS.md",
+      "model": "gpt-5.4",
+      "name": "UWAKotlinAuditor",
+      "plannedOperation": "create",
+      "platform": "android",
+      "reasoningEffort": "high",
+      "reports_to": "UWACTO",
+      "repository": {
+        "codebase_memory_project": "unstoppable-wallet-android",
+        "mirror_path": "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+        "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-android"
+      },
+      "runtimeEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "SERENA_PROJECT",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
+        "TELEGRAM_OPS_CHAT_ID"
+      ],
+      "sandboxBypass": false,
+      "sourceRootsReadOnly": [
+        "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git",
+        "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git"
+      ],
+      "title": "Android Kotlin Auditor",
+      "workspacePath": "/Users/Shared/UnstoppableAudit/runs/UWAKotlinAuditor/workspace",
+      "writableRoots": [
+        "/Users/Shared/UnstoppableAudit/artifacts/UWAKotlinAuditor",
+        "/Users/Shared/UnstoppableAudit/runs/UWAKotlinAuditor/scratch"
+      ]
+    },
+    {
+      "adapterType": "codex_local",
+      "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwasecurityauditor.md",
+      "family": "security-audit",
+      "forbiddenRuntimeEnvKeys": [
+        "BOOTSTRAP_ADMIN_TOKEN",
+        "DEPLOY_UPDATE_TOKEN",
+        "GITHUB_TOKEN",
+        "GITHUB_WRITE_TOKEN",
+        "NEO4J_PASSWORD",
+        "PAPERCLIP_API_KEY",
+        "PAPERCLIP_TOKEN"
+      ],
+      "instructionsBundleMode": "managed",
+      "instructionsFilePath": "AGENTS.md",
+      "model": "gpt-5.4",
+      "name": "UWASecurityAuditor",
+      "plannedOperation": "create",
+      "platform": "android",
+      "reasoningEffort": "high",
+      "reports_to": "UWACTO",
+      "repository": {
+        "codebase_memory_project": "unstoppable-wallet-android",
+        "mirror_path": "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+        "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-android"
+      },
+      "runtimeEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "SERENA_PROJECT",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
+        "TELEGRAM_OPS_CHAT_ID"
+      ],
+      "sandboxBypass": false,
+      "sourceRootsReadOnly": [
+        "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git",
+        "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git"
+      ],
+      "title": "Android Security Auditor",
+      "workspacePath": "/Users/Shared/UnstoppableAudit/runs/UWASecurityAuditor/workspace",
+      "writableRoots": [
+        "/Users/Shared/UnstoppableAudit/artifacts/UWASecurityAuditor",
+        "/Users/Shared/UnstoppableAudit/runs/UWASecurityAuditor/scratch"
+      ]
+    },
+    {
+      "adapterType": "codex_local",
+      "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwacryptoauditor.md",
+      "family": "crypto-audit",
+      "forbiddenRuntimeEnvKeys": [
+        "BOOTSTRAP_ADMIN_TOKEN",
+        "DEPLOY_UPDATE_TOKEN",
+        "GITHUB_TOKEN",
+        "GITHUB_WRITE_TOKEN",
+        "NEO4J_PASSWORD",
+        "PAPERCLIP_API_KEY",
+        "PAPERCLIP_TOKEN"
+      ],
+      "instructionsBundleMode": "managed",
+      "instructionsFilePath": "AGENTS.md",
+      "model": "gpt-5.4",
+      "name": "UWACryptoAuditor",
+      "plannedOperation": "create",
+      "platform": "android",
+      "reasoningEffort": "high",
+      "reports_to": "UWACTO",
+      "repository": {
+        "codebase_memory_project": "unstoppable-wallet-android",
+        "mirror_path": "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+        "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-android"
+      },
+      "runtimeEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "SERENA_PROJECT",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
+        "TELEGRAM_OPS_CHAT_ID"
+      ],
+      "sandboxBypass": false,
+      "sourceRootsReadOnly": [
+        "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git",
+        "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git"
+      ],
+      "title": "Android Crypto Auditor",
+      "workspacePath": "/Users/Shared/UnstoppableAudit/runs/UWACryptoAuditor/workspace",
+      "writableRoots": [
+        "/Users/Shared/UnstoppableAudit/artifacts/UWACryptoAuditor",
+        "/Users/Shared/UnstoppableAudit/runs/UWACryptoAuditor/scratch"
+      ]
+    },
+    {
+      "adapterType": "codex_local",
+      "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwainfraengineer.md",
+      "family": "infra",
+      "forbiddenRuntimeEnvKeys": [
+        "BOOTSTRAP_ADMIN_TOKEN",
+        "DEPLOY_UPDATE_TOKEN",
+        "GITHUB_TOKEN",
+        "GITHUB_WRITE_TOKEN",
+        "NEO4J_PASSWORD",
+        "PAPERCLIP_API_KEY",
+        "PAPERCLIP_TOKEN"
+      ],
+      "instructionsBundleMode": "managed",
+      "instructionsFilePath": "AGENTS.md",
+      "model": "gpt-5.4",
+      "name": "UWAInfraEngineer",
+      "plannedOperation": "create",
+      "platform": "android",
+      "reasoningEffort": "high",
+      "reports_to": "UWACTO",
+      "repository": {
+        "codebase_memory_project": "unstoppable-wallet-android",
+        "mirror_path": "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+        "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-android"
+      },
+      "runtimeEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "SERENA_PROJECT",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
+        "TELEGRAM_OPS_CHAT_ID"
+      ],
+      "sandboxBypass": false,
+      "sourceRootsReadOnly": [
+        "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git",
+        "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git"
+      ],
+      "title": "Android Audit Infrastructure Engineer",
+      "workspacePath": "/Users/Shared/UnstoppableAudit/runs/UWAInfraEngineer/workspace",
+      "writableRoots": [
+        "/Users/Shared/UnstoppableAudit/artifacts/UWAInfraEngineer",
+        "/Users/Shared/UnstoppableAudit/runs/UWAInfraEngineer/scratch"
+      ]
+    },
+    {
+      "adapterType": "codex_local",
+      "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwaresearchagent.md",
+      "family": "research",
+      "forbiddenRuntimeEnvKeys": [
+        "BOOTSTRAP_ADMIN_TOKEN",
+        "DEPLOY_UPDATE_TOKEN",
+        "GITHUB_TOKEN",
+        "GITHUB_WRITE_TOKEN",
+        "NEO4J_PASSWORD",
+        "PAPERCLIP_API_KEY",
+        "PAPERCLIP_TOKEN"
+      ],
+      "instructionsBundleMode": "managed",
+      "instructionsFilePath": "AGENTS.md",
+      "model": "gpt-5.4",
+      "name": "UWAResearchAgent",
+      "plannedOperation": "create",
+      "platform": "android",
+      "reasoningEffort": "high",
+      "reports_to": "UWACTO",
+      "repository": {
+        "codebase_memory_project": "unstoppable-wallet-android",
+        "mirror_path": "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+        "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-android"
+      },
+      "runtimeEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "SERENA_PROJECT",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
+        "TELEGRAM_OPS_CHAT_ID"
+      ],
+      "sandboxBypass": false,
+      "sourceRootsReadOnly": [
+        "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git",
+        "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git"
+      ],
+      "title": "Android Audit Research Agent",
+      "workspacePath": "/Users/Shared/UnstoppableAudit/runs/UWAResearchAgent/workspace",
+      "writableRoots": [
+        "/Users/Shared/UnstoppableAudit/artifacts/UWAResearchAgent",
+        "/Users/Shared/UnstoppableAudit/runs/UWAResearchAgent/scratch"
+      ]
+    },
+    {
+      "adapterType": "codex_local",
+      "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwaqaengineer.md",
+      "family": "qa",
+      "forbiddenRuntimeEnvKeys": [
+        "BOOTSTRAP_ADMIN_TOKEN",
+        "DEPLOY_UPDATE_TOKEN",
+        "GITHUB_TOKEN",
+        "GITHUB_WRITE_TOKEN",
+        "NEO4J_PASSWORD",
+        "PAPERCLIP_API_KEY",
+        "PAPERCLIP_TOKEN"
+      ],
+      "instructionsBundleMode": "managed",
+      "instructionsFilePath": "AGENTS.md",
+      "model": "gpt-5.4",
+      "name": "UWAQAEngineer",
+      "plannedOperation": "create",
+      "platform": "android",
+      "reasoningEffort": "high",
+      "reports_to": "UWACTO",
+      "repository": {
+        "codebase_memory_project": "unstoppable-wallet-android",
+        "mirror_path": "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+        "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-android"
+      },
+      "runtimeEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "SERENA_PROJECT",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
+        "TELEGRAM_OPS_CHAT_ID"
+      ],
+      "sandboxBypass": false,
+      "sourceRootsReadOnly": [
+        "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git",
+        "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git"
+      ],
+      "title": "Android Audit QA Engineer",
+      "workspacePath": "/Users/Shared/UnstoppableAudit/runs/UWAQAEngineer/workspace",
+      "writableRoots": [
+        "/Users/Shared/UnstoppableAudit/artifacts/UWAQAEngineer",
+        "/Users/Shared/UnstoppableAudit/runs/UWAQAEngineer/scratch"
+      ]
+    },
+    {
+      "adapterType": "codex_local",
+      "bundlePath": "paperclips/dist/codex/unstoppable-audit/uwatechnicalwriter.md",
+      "family": "writer",
+      "forbiddenRuntimeEnvKeys": [
+        "BOOTSTRAP_ADMIN_TOKEN",
+        "DEPLOY_UPDATE_TOKEN",
+        "GITHUB_TOKEN",
+        "GITHUB_WRITE_TOKEN",
+        "NEO4J_PASSWORD",
+        "PAPERCLIP_API_KEY",
+        "PAPERCLIP_TOKEN"
+      ],
+      "instructionsBundleMode": "managed",
+      "instructionsFilePath": "AGENTS.md",
+      "model": "gpt-5.4",
+      "name": "UWATechnicalWriter",
+      "plannedOperation": "create",
+      "platform": "android",
+      "reasoningEffort": "high",
+      "reports_to": "UWACTO",
+      "repository": {
+        "codebase_memory_project": "unstoppable-wallet-android",
+        "mirror_path": "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git",
+        "repo_url": "https://github.com/horizontalsystems/unstoppable-wallet-android"
+      },
+      "runtimeEnvKeys": [
+        "CODEBASE_MEMORY_PROJECT",
+        "SERENA_PROJECT",
+        "TELEGRAM_REDACTED_REPORTS_CHAT_ID",
+        "TELEGRAM_OPS_CHAT_ID"
+      ],
+      "sandboxBypass": false,
+      "sourceRootsReadOnly": [
+        "/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios.git",
+        "/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android.git"
+      ],
+      "title": "Android Audit Technical Writer",
+      "workspacePath": "/Users/Shared/UnstoppableAudit/runs/UWATechnicalWriter/workspace",
+      "writableRoots": [
+        "/Users/Shared/UnstoppableAudit/artifacts/UWATechnicalWriter",
+        "/Users/Shared/UnstoppableAudit/runs/UWATechnicalWriter/scratch"
+      ]
+    }
+  ],
+  "apply_policy": {
+    "default_operation": "create-only",
+    "live_apply_allowed": false,
+    "requires_authenticated_preflight": true
+  },
+  "checked_at": "2026-05-10T04:51:49Z",
+  "config_path": "/Users/ant013/Android/Gimle-Palace-cx/paperclips/teams/unstoppable-audit.yaml",
+  "gate": "B1",
+  "live_readback": {
+    "checked": false,
+    "reason": "Gate B1 is intentionally unauthenticated and performs no Paperclip API mutation."
+  },
+  "mode": "unauthenticated-dry-run",
+  "ok": true,
+  "paperclip": {
+    "company_id": "8f55e80b-0264-4ab6-9d56-8b2652f18005",
+    "project_id": "64871690-2f2d-4fbd-a30d-975e6bbccec9"
+  },
+  "team": "UnstoppableAudit"
+}

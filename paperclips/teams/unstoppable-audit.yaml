@@ -50,3 +50,90 @@ credential_classes:
     runtime_exposure: notification_adapter_only
   neo4j_admin:
     runtime_exposure: none_phase1
+
+roster:
+  AUCEO:
+    title: UnstoppableAudit CEO
+    platform: umbrella
+    family: coordination
+    reports_to: Board
+  UWICTO:
+    title: iOS Audit CTO
+    platform: ios
+    family: coordination
+    reports_to: AUCEO
+  UWISwiftAuditor:
+    title: iOS Swift Auditor
+    platform: ios
+    family: code-audit
+    reports_to: UWICTO
+  UWISecurityAuditor:
+    title: iOS Security Auditor
+    platform: ios
+    family: security-audit
+    reports_to: UWICTO
+  UWICryptoAuditor:
+    title: iOS Crypto Auditor
+    platform: ios
+    family: crypto-audit
+    reports_to: UWICTO
+  UWIInfraEngineer:
+    title: iOS Audit Infrastructure Engineer
+    platform: ios
+    family: infra
+    reports_to: UWICTO
+  UWIResearchAgent:
+    title: iOS Audit Research Agent
+    platform: ios
+    family: research
+    reports_to: UWICTO
+  UWIQAEngineer:
+    title: iOS Audit QA Engineer
+    platform: ios
+    family: qa
+    reports_to: UWICTO
+  UWITechnicalWriter:
+    title: iOS Audit Technical Writer
+    platform: ios
+    family: writer
+    reports_to: UWICTO
+  UWACTO:
+    title: Android Audit CTO
+    platform: android
+    family: coordination
+    reports_to: AUCEO
+  UWAKotlinAuditor:
+    title: Android Kotlin Auditor
+    platform: android
+    family: code-audit
+    reports_to: UWACTO
+  UWASecurityAuditor:
+    title: Android Security Auditor
+    platform: android
+    family: security-audit
+    reports_to: UWACTO
+  UWACryptoAuditor:
+    title: Android Crypto Auditor
+    platform: android
+    family: crypto-audit
+    reports_to: UWACTO
+  UWAInfraEngineer:
+    title: Android Audit Infrastructure Engineer
+    platform: android
+    family: infra
+    reports_to: UWACTO
+  UWAResearchAgent:
+    title: Android Audit Research Agent
+    platform: android
+    family: research
+    reports_to: UWACTO
+  UWAQAEngineer:
+    title: Android Audit QA Engineer
+    platform: android
+    family: qa
+    reports_to: UWACTO
+  UWATechnicalWriter:
+    title: Android Audit Technical Writer
+    platform: android
+    family: writer
+    reports_to: UWACTO
