@@ -339,6 +339,28 @@ def validate_resolved_assembly_manifests(repo_root: Path) -> list[str]:
         if source_sha != sha256_text(manifest.read_text()):
             errors.append(f"resolved assembly manifest sourceManifestSha256 stale: {resolved_path.relative_to(repo_root)}")
 
+        compatibility = resolved.get("compatibility", {})
+        compatibility_inputs = compatibility.get("inputs", {}) if isinstance(compatibility, dict) else {}
+        if not isinstance(compatibility_inputs, dict) or not compatibility_inputs:
+            errors.append(f"resolved assembly manifest missing compatibility inputs: {resolved_path.relative_to(repo_root)}")
+        else:
+            for input_name in ["claudeDeployMapping", "codexAgentIdsEnv", "workspaceUpdateScript"]:
+                input_data = compatibility_inputs.get(input_name)
+                if not isinstance(input_data, dict):
+                    errors.append(f"resolved assembly manifest missing compatibility input {input_name}: {resolved_path.relative_to(repo_root)}")
+                    continue
+                input_path = input_data.get("path")
+                input_sha = input_data.get("sha256")
+                if not isinstance(input_path, str) or not input_path:
+                    errors.append(f"resolved assembly manifest compatibility input {input_name} missing path")
+                    continue
+                source_path = repo_root / input_path
+                if not source_path.is_file():
+                    errors.append(f"resolved assembly manifest compatibility input missing: {input_path}")
+                    continue
+                if input_sha != sha256_text(source_path.read_text()):
+                    errors.append(f"resolved assembly manifest compatibility input stale: {input_path}")
+
         mcp = resolved.get("capabilities", {}).get("mcp", {})
         base_required = set(mcp.get("baseRequired", []))
         for marker in REQUIRED_PROJECT_MCP:

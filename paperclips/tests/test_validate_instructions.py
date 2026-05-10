@@ -116,6 +116,7 @@ def test_project_compat_writes_resolved_assembly(tmp_path: Path) -> None:
     cx_cto = next(role for role in resolved["targets"]["codex"]["roles"] if role["roleId"] == "codex:cx-cto")
     assert cx_cto["agentName"] == "cx-cto"
     assert cx_cto["agentId"] == "da97dbd9-6627-48d0-b421-66af0750eacf"
+    assert resolved["compatibility"]["inputs"]["codexAgentIdsEnv"]["path"] == "paperclips/codex-agent-ids.env"
 
 
 def test_resolved_assembly_stale_sha_fails(tmp_path: Path) -> None:
@@ -140,6 +141,16 @@ def test_resolved_assembly_invalid_agent_id_fails(tmp_path: Path) -> None:
     errors = validate_instructions.validate_resolved_assembly_manifests(repo)
 
     assert any("resolved assembly manifest agentId invalid" in error for error in errors)
+
+
+def test_resolved_assembly_stale_compatibility_input_fails(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    env_file = repo / "paperclips" / "codex-agent-ids.env"
+    env_file.write_text(env_file.read_text() + "\n# changed without rebuilding resolved assembly\n")
+
+    errors = validate_instructions.validate_resolved_assembly_manifests(repo)
+
+    assert any("resolved assembly manifest compatibility input stale" in error for error in errors)
 
 
 def test_project_compat_substitutes_manifest_variables(tmp_path: Path) -> None:

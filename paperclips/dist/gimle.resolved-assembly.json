@@ -35,6 +35,20 @@
   "compatibility": {
     "claudeDeployMapping": "paperclips/deploy-agents.sh",
     "codexAgentIdsEnv": "paperclips/codex-agent-ids.env",
+    "inputs": {
+      "claudeDeployMapping": {
+        "path": "paperclips/deploy-agents.sh",
+        "sha256": "1fff56dd064f0b28c8275083c64078f7908774da6a6c89669e72161eaa0e00ec"
+      },
+      "codexAgentIdsEnv": {
+        "path": "paperclips/codex-agent-ids.env",
+        "sha256": "4e86d451908badac52cf71414c6683509deb3251abb116544162e776ce0c6c67"
+      },
+      "workspaceUpdateScript": {
+        "path": "paperclips/update-agent-workspaces.sh",
+        "sha256": "7721ac2ce8a9cf99f6b2784081fdec444ed83e95f5e0809c1fe9859214d40016"
+      }
+    },
     "legacyOutputPaths": "true",
     "workspaceUpdateScript": "paperclips/update-agent-workspaces.sh"
   },

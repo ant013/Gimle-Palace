@@ -122,6 +122,12 @@ def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def sha256_file(path: Path) -> str:
+    if not path.is_file():
+        return ""
+    return sha256_text(path.read_text())
+
+
 def load_claude_agent_ids(deploy_script: Path) -> dict[str, str]:
     text = deploy_script.read_text()
     pattern = re.compile(r"^\s*([a-z][\w-]*)\)\s+echo\s+\"([0-9a-f-]{36})\"", re.MULTILINE)
@@ -370,6 +376,14 @@ def target_output_entry(
     }
 
 
+def compatibility_input_entry(repo_root: Path, relative_path: str) -> dict[str, str]:
+    path = repo_root / relative_path
+    return {
+        "path": relative_path,
+        "sha256": sha256_file(path),
+    }
+
+
 def resolved_assembly(
     repo_root: Path,
     project: str,
@@ -434,6 +448,20 @@ def resolved_assembly(
             "claudeDeployMapping": manifest_values.get("compatibility.claude_deploy_mapping", ""),
             "codexAgentIdsEnv": manifest_values.get("compatibility.codex_agent_ids_env", ""),
             "workspaceUpdateScript": manifest_values.get("compatibility.workspace_update_script", ""),
+            "inputs": {
+                "claudeDeployMapping": compatibility_input_entry(
+                    repo_root,
+                    manifest_values.get("compatibility.claude_deploy_mapping", ""),
+                ),
+                "codexAgentIdsEnv": compatibility_input_entry(
+                    repo_root,
+                    manifest_values.get("compatibility.codex_agent_ids_env", ""),
+                ),
+                "workspaceUpdateScript": compatibility_input_entry(
+                    repo_root,
+                    manifest_values.get("compatibility.workspace_update_script", ""),
+                ),
+            },
         },
         "targets": {
             target: target_output_entry(repo_root, target, manifest_values)
