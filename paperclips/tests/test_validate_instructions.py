@@ -291,6 +291,19 @@ def test_baseline_allows_growth_under_policy_threshold(tmp_path: Path) -> None:
     assert errors == []
 
 
+def test_baseline_growth_over_default_zero_threshold_fails(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    baseline_path = repo / "paperclips" / "bundle-size-baseline.json"
+    baseline = json.loads(baseline_path.read_text())
+    actual_bytes = (repo / baseline["bundles"][0]["path"]).stat().st_size
+    baseline["bundles"][0]["bytes"] = actual_bytes - 1
+    baseline_path.write_text(json.dumps(baseline, indent=2) + "\n")
+
+    errors = validate_instructions.validate(repo)
+
+    assert any("bundle grew more than 0%" in error for error in errors)
+
+
 def test_baseline_growth_over_policy_threshold_fails(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     baseline_path = repo / "paperclips" / "bundle-size-baseline.json"
@@ -309,7 +322,7 @@ def test_baseline_growth_allowlist_passes(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     baseline_path = repo / "paperclips" / "bundle-size-baseline.json"
     baseline = json.loads(baseline_path.read_text())
-    baseline["policy"]["maxGrowthPercent"] = 10
+    baseline["policy"]["maxGrowthPercent"] = 0
     role_id = baseline["bundles"][0]["roleId"]
     path = baseline["bundles"][0]["path"]
     baseline["bundles"][0]["bytes"] = int(baseline["bundles"][0]["bytes"] * 0.80)
@@ -337,7 +350,7 @@ def test_global_growth_allowlist_fails(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     baseline_path = repo / "paperclips" / "bundle-size-baseline.json"
     baseline = json.loads(baseline_path.read_text())
-    baseline["policy"]["maxGrowthPercent"] = 10
+    baseline["policy"]["maxGrowthPercent"] = 0
     baseline["bundles"][0]["bytes"] = int(baseline["bundles"][0]["bytes"] * 0.80)
     baseline_path.write_text(json.dumps(baseline, indent=2) + "\n")
     allowlist_path = repo / "paperclips" / "bundle-size-allowlist.json"
@@ -354,7 +367,7 @@ def test_global_growth_allowlist_fails(tmp_path: Path) -> None:
 
     assert any("missing roleId" in error for error in errors)
     assert any("missing path" in error for error in errors)
-    assert any("bundle grew more than 10%" in error for error in errors)
+    assert any("bundle grew more than 0%" in error for error in errors)
 
 
 def test_rule_required_profile_missing_fails(tmp_path: Path) -> None:

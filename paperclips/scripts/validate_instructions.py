@@ -739,7 +739,7 @@ def validate(repo_root: Path = REPO_ROOT) -> list[str]:
     if "measurementCommit" not in baseline:
         errors.append("bundle-size-baseline.json missing measurementCommit")
     policy = baseline.get("policy", {})
-    max_growth_percent = int(policy.get("maxGrowthPercent", 10))
+    max_growth_percent = int(policy.get("maxGrowthPercent", 0))
 
     bundle_paths_by_role: dict[str, Path] = {}
     for bundle in baseline.get("bundles", []):
