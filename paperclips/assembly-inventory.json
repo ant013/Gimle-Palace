@@ -24,13 +24,11 @@
     {
       "classification": "project-owned",
       "id": "gimle-name",
-      "occurrenceCount": 40,
+      "occurrenceCount": 38,
       "paths": [
-        "paperclips/fragments/codex/create-agent.md",
         "paperclips/fragments/local/agent-roster.md",
         "paperclips/fragments/local/test-design-gimle.md",
         "paperclips/fragments/shared/fragments/role-prime/operator.md",
-        "paperclips/fragments/shared/fragments/role-prime/qaengineer.md",
         "paperclips/roles-codex/codex-architect-reviewer.md",
         "paperclips/roles-codex/cx-auditor.md",
         "paperclips/roles-codex/cx-blockchain-engineer.md",
@@ -87,11 +85,8 @@
     {
       "classification": "project-owned",
       "id": "gimle-shared-worktree-path",
-      "occurrenceCount": 2,
-      "paths": [
-        "paperclips/fragments/codex/create-agent.md",
-        "paperclips/fragments/shared/fragments/role-prime/qaengineer.md"
-      ],
+      "occurrenceCount": 0,
+      "paths": [],
       "pattern": "/Users/Shared/Ios/[A-Za-z0-9_./-]*Gimle-Palace"
     },
     {

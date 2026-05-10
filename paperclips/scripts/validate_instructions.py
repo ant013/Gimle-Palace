@@ -43,7 +43,14 @@ REQUIRED_PROJECT_MANIFEST_SECTIONS = (
 
 REQUIRED_PROJECT_MANIFEST_KEYS = {
     "project": ("key", "display_name", "issue_prefix", "integration_branch", "specs_dir", "plans_dir"),
-    "paths": ("project_root", "primary_repo_root", "overlay_root", "project_rules_file"),
+    "paths": (
+        "project_root",
+        "primary_repo_root",
+        "production_checkout",
+        "codex_team_root",
+        "overlay_root",
+        "project_rules_file",
+    ),
 }
 
 REQUIRED_COMPATIBILITY_PATH_KEYS = (

@@ -9,6 +9,8 @@ project:
 paths:
   project_root: .
   primary_repo_root: .
+  production_checkout: /Users/Shared/Ios/Gimle-Palace
+  codex_team_root: /Users/Shared/Ios/worktrees/cx/Gimle-Palace
   overlay_root: paperclips/projects/gimle/overlays
   project_rules_file: AGENTS.md
 
