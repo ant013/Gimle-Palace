@@ -5,7 +5,7 @@ family: qa
 profiles: [core, task-start, qa-smoke, implementation, handoff-full, merge-deploy]
 ---
 
-# CXQAEngineer — Gimle
+# CXQAEngineer — {{PROJECT}}
 
 > Project tech rules are in `AGENTS.md`. Below: role-specific only.
 
@@ -52,7 +52,7 @@ Evidence in PR comment: `docker compose ps` output + curl outputs. **Static revi
 - No shared state between tests — each test assumes an empty DB.
 - Version pinning: `Neo4jContainer("neo4j:5.26.0")` matches the production compose image.
 
-## Edge cases matrix (Gimle-specific)
+## Edge cases matrix ({{PROJECT}}-specific)
 
 | Category | Examples |
 |---|---|

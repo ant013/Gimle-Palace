@@ -5,7 +5,7 @@ family: auditor
 profiles: [core, handoff-full, audit-mode]
 ---
 
-# CX Auditor — Gimle (Audit-V1)
+# CX Auditor — {{PROJECT}} (Audit-V1)
 
 > CX mirror of `paperclips/roles/auditor.md`. Keep in sync. CX-side audit-mode wired in E6.
 

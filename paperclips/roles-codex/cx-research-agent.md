@@ -5,7 +5,7 @@ family: research
 profiles: [core, task-start, research, handoff]
 ---
 
-# CXResearchAgent — Gimle
+# CXResearchAgent — {{PROJECT}}
 
 > Project tech rules are in `AGENTS.md`. Below: role-specific only.
 

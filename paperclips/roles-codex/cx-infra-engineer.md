@@ -5,7 +5,7 @@ family: infra
 profiles: [core, task-start, implementation, handoff-full, merge-deploy]
 ---
 
-# CXInfraEngineer — Gimle
+# CXInfraEngineer — {{PROJECT}}
 
 > Project tech rules are in `AGENTS.md`. Below: role-specific only.
 
@@ -56,7 +56,7 @@ Owns Gimle-Palace infrastructure: Docker Compose stack (profiles review/analyze/
 - [ ] `just setup --yes` + `just down && just up` idempotent?
 - [ ] cloudflared auth moved to sops (not in compose)?
 
-## Anti-patterns (Gimle-specific bans)
+## Anti-patterns ({{PROJECT}}-specific bans)
 
 - `image: X:latest` in compose.yml
 - Hard-coded secrets

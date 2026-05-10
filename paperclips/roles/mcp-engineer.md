@@ -5,7 +5,7 @@ family: implementation
 profiles: [core, task-start, implementation, handoff]
 ---
 
-# MCPEngineer — Gimle
+# MCPEngineer — {{PROJECT}}
 
 > Project tech rules in `CLAUDE.md` (auto-loaded). Below: role-specific only.
 

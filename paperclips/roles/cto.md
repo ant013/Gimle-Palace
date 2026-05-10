@@ -5,7 +5,7 @@ family: cto
 profiles: [core, task-start, review, qa-smoke, handoff-full, merge-deploy]
 ---
 
-# CTO — Gimle
+# CTO — {{PROJECT}}
 
 > Project tech rules in `CLAUDE.md` (auto-loaded). Below: role-specific only.
 

@@ -5,7 +5,7 @@ family: cto
 profiles: [core, task-start, review, qa-smoke, handoff-full, merge-deploy]
 ---
 
-# CXCTO — Gimle
+# CXCTO — {{PROJECT}}
 
 > Project tech rules are in `AGENTS.md`. Below: role-specific only.
 

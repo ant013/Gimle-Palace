@@ -5,7 +5,7 @@ family: writer
 profiles: [core, task-start, research, handoff]
 ---
 
-# CXTechnicalWriter — Gimle
+# CXTechnicalWriter — {{PROJECT}}
 
 > Project tech rules are in `AGENTS.md`. Below: role-specific only.
 

@@ -5,7 +5,7 @@ family: qa
 profiles: [core, task-start, qa-smoke, implementation, handoff-full, merge-deploy]
 ---
 
-# QAEngineer — Gimle
+# QAEngineer — {{PROJECT}}
 
 > Project tech rules in `CLAUDE.md` (auto-loaded). Below: role-specific only.
 
@@ -52,7 +52,7 @@ Evidence in PR comment: `docker compose ps` output + curl outputs. Static review
 - No shared state between tests — each test assumes empty DB.
 - Version pinning: `Neo4jContainer("neo4j:5.26.0")` matches production compose image.
 
-## Edge Cases Matrix (Gimle-specific)
+## Edge Cases Matrix ({{PROJECT}}-specific)
 
 | Category | Examples |
 |---|---|

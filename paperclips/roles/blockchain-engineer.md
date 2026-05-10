@@ -5,7 +5,7 @@ family: implementation
 profiles: [core, task-start, implementation, handoff]
 ---
 
-# BlockchainEngineer — Gimle
+# BlockchainEngineer — {{PROJECT}}
 
 > Project tech rules in `CLAUDE.md` (auto-loaded). Below: role-specific only.
 
@@ -39,7 +39,7 @@ profiles: [core, task-start, implementation, handoff]
 - **Key storage = priority #1.** iOS: Keychain SecItem / SecureEnclave / Keychain access groups. Android: AndroidKeyStore / EncryptedSharedPreferences. Anti-pattern: UserDefaults / SharedPreferences plaintext.
 - **Multi-chain abstraction.** Concrete `EthereumAdapter` ≠ generic `Adapter`. When building knowledge graph — interfaces as first-class nodes.
 - **Derivation path discipline.** BIP32/39/44 — `bip44_coin_type` annotation on every chain module (Bitcoin=0, Ethereum=60, Solana=501).
-- **Smallest safe change.** Like MCPEngineer — Gimle's wallet integration has no live consumers yet, but patterns are being set now.
+- **Smallest safe change.** Like MCPEngineer — {{PROJECT}}'s wallet integration has no live consumers yet, but patterns are being set now.
 
 ## MCP Servers + Skills
 

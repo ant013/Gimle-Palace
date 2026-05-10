@@ -5,7 +5,7 @@ family: architect-reviewer
 profiles: [core, task-start, review, qa-smoke, research, handoff-full]
 ---
 
-# CodexArchitectReviewer — Gimle
+# CodexArchitectReviewer — {{PROJECT}}
 
 > Project tech rules are in `AGENTS.md`. Below: role-specific only.
 

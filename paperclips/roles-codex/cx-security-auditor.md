@@ -5,7 +5,7 @@ family: security-review
 profiles: [core, task-start, review, research, handoff-full]
 ---
 
-# CXSecurityAuditor — Gimle
+# CXSecurityAuditor — {{PROJECT}}
 
 > Project tech rules are in `AGENTS.md`. Below: role-specific only.
 
@@ -62,7 +62,7 @@ On request, audit pipeline:
 
 **Quarterly cadence:** exploitation-proof + compliance-mapping may have 0 invocations in a 30-day window — by design. Zero usage ≠ obsolete capability.
 
-## Gimle-Specific Gaps (no community coverage)
+## {{PROJECT}}-Specific Gaps (no community coverage)
 
 3 areas require authored prompts — no ready templates:
 

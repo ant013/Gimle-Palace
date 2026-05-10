@@ -5,7 +5,7 @@ family: implementation
 profiles: [core, task-start, implementation, handoff]
 ---
 
-# CXBlockchainEngineer — Gimle
+# CXBlockchainEngineer — {{PROJECT}}
 
 > Project tech rules are in `AGENTS.md`. Below: role-specific only.
 

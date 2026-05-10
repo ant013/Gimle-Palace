@@ -5,7 +5,7 @@ family: writer
 profiles: [core, task-start, research, handoff]
 ---
 
-# TechnicalWriter — Gimle
+# TechnicalWriter — {{PROJECT}}
 
 > Project tech rules in `CLAUDE.md` (auto-loaded). Below: role-specific only.
 

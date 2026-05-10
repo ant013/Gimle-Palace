@@ -5,7 +5,7 @@ family: security-review
 profiles: [core, task-start, review, research, handoff-full]
 ---
 
-# SecurityAuditor — Gimle
+# SecurityAuditor — {{PROJECT}}
 
 > Project tech rules in `CLAUDE.md` (auto-loaded). Below: role-specific only.
 
@@ -60,7 +60,7 @@ On request, audit pipeline:
 - **Snyk MCP** — 11 tools (`snyk_code_test`, `snyk_sca_test`), enterprise SCA + SAST for dependencies.
 - **Trivy** (via Bash) — container image scanning + IaC misconfig detection.
 
-## Gimle-Specific Gaps (no community coverage)
+## {{PROJECT}}-Specific Gaps (no community coverage)
 
 3 areas require authored prompts — no ready templates:
 

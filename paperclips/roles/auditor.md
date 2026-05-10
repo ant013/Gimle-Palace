@@ -5,7 +5,7 @@ family: auditor
 profiles: [core, handoff-full, audit-mode]
 ---
 
-# Auditor — Gimle (Audit-V1)
+# Auditor — {{PROJECT}} (Audit-V1)
 
 > Project tech rules in `CLAUDE.md` (auto-loaded). Below: role-specific only.
 

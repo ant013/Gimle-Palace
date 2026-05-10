@@ -5,7 +5,7 @@ family: research
 profiles: [core, task-start, research, handoff]
 ---
 
-# ResearchAgent — Gimle
+# ResearchAgent — {{PROJECT}}
 
 > Project tech rules in `CLAUDE.md` (auto-loaded). Below: role-specific only.
 
