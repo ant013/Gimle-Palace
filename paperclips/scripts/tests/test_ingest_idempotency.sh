@@ -17,7 +17,7 @@ fail() {
 assert_contains() {
     local file="$1"
     local needle="$2"
-    grep -Fq "$needle" "$file" || fail "expected '$needle' in $file"
+    grep -Fq -- "$needle" "$file" || fail "expected '$needle' in $file"
 }
 
 mkdir -p "$TMP_DIR/bin" "$TMP_DIR/repos-hs/TronKit.Swift/scip"
@@ -99,9 +99,19 @@ cat > "$TMP_DIR/bin/docker" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >> "$MOCK_DOCKER_LOG"
+if [[ "$*" == *"ps -q palace-mcp"* ]]; then
+  printf 'mock-palace-mcp\n'
+fi
 exit 0
 EOF
 chmod +x "$TMP_DIR/bin/docker"
+
+cat > "$TMP_DIR/bin/curl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+chmod +x "$TMP_DIR/bin/curl"
 
 PATH="$TMP_DIR/bin:$PATH"
 export PALACE_MCP_CLI_BIN="$TMP_DIR/bin/mock-mcp-cli"
@@ -183,7 +193,8 @@ bash "$INGEST_SCRIPT" "tron-kit" \
     --env-file="$TMP_DIR/.env" >"$RUN2_OUT"
 [[ "$ENV_AFTER_RUN1" == "$(cat "$TMP_DIR/.env")" ]] || fail "second run changed env file"
 
-RESTART_COUNT="$(grep -c 'compose up -d --force-recreate palace-mcp' "$MOCK_DOCKER_LOG" || true)"
+RESTART_COUNT="$(grep -c 'up -d --force-recreate palace-mcp' "$MOCK_DOCKER_LOG" || true)"
 [[ "$RESTART_COUNT" -eq 1 ]] || fail "expected exactly one palace-mcp restart, got $RESTART_COUNT"
+assert_contains "$MOCK_DOCKER_LOG" "--env-file $TMP_DIR/.env"
 
 printf 'PASS: ingest idempotency test suite\n'

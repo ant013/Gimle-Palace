@@ -12,6 +12,12 @@ The scripts are designed for the current HorizontalSystems mount convention:
 - iMac bind-mount at `/Users/Shared/Ios/HorizontalSystems`;
 - container-visible path `/repos-hs/<relative_path>`.
 
+When the Docker runtime is `colima` and `/Users/Shared/...` is not shared into
+the VM, `ingest_swift_kit.sh` stages the single repo under
+`$HOME/.cache/palace/swift-kit-mounts/hs-stage` and recreates `palace-mcp`
+with a temporary `/repos-hs-stage/<relative_path>` bind mount for the live
+extractor run.
+
 When a slug exists in
 `services/palace-mcp/scripts/uw-ios-bundle-manifest.json`, the scripts reuse the
 manifest's `relative_path`, `tier`, and `parent_mount`.
@@ -80,8 +86,10 @@ What it does:
 - resolves `tron-kit` to host path `/Users/Shared/Ios/HorizontalSystems/TronKit.Swift`
   and container path `/repos-hs/TronKit.Swift`;
 - verifies the host-side `scip/index.scip` exists before mutating state;
+- on `colima`, stages the repo under `$HOME/.cache/palace/swift-kit-mounts`
+  when `/Users/Shared/...` is not visible in the VM;
 - merges `PALACE_SCIP_INDEX_PATHS` in `.env` with `jq`;
-- recreates `palace-mcp` only when the env file changed;
+- recreates `palace-mcp` with the same `--env-file` the script updated;
 - calls:
   - `palace.memory.register_project`
   - `palace.memory.register_bundle` when `--bundle` is set
@@ -132,6 +140,13 @@ Successful live runs end with:
 - Confirm the iMac host repo exists under `/Users/Shared/Ios/HorizontalSystems`.
 - Confirm the iMac checkout mounts `/Users/Shared/Ios/HorizontalSystems:/repos-hs:ro`.
 - If the repo is not in the manifest, pass `--relative-path <repo-dir>`.
+
+`palace-mcp runtime cannot see repo content`
+
+- On `colima`, this means `/Users/Shared/...` is not shared into the VM.
+- Re-run the script and let it stage the repo under
+  `$HOME/.cache/palace/swift-kit-mounts`, or explicitly share the HS path into
+  Colima if you want to keep using `/repos-hs`.
 
 `SCIP index not found`
 

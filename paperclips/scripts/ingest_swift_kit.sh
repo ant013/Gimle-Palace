@@ -8,6 +8,7 @@ DEFAULT_ENV_FILE="$REPO_ROOT/.env"
 DEFAULT_MCP_URL="${PALACE_MCP_URL:-http://localhost:8080/mcp}"
 DEFAULT_REPO_BASE="${PALACE_SWIFT_KIT_REPO_BASE:-/repos-hs}"
 DEFAULT_HOST_REPO_BASE="${PALACE_SWIFT_KIT_HOST_REPO_BASE:-/Users/Shared/Ios/HorizontalSystems}"
+DEFAULT_STAGE_ROOT="${PALACE_SWIFT_KIT_STAGE_ROOT:-$HOME/.cache/palace/swift-kit-mounts}"
 PALACE_MCP_SERVICE_DIR="$REPO_ROOT/services/palace-mcp"
 
 DEFAULT_EXTRACTORS=(
@@ -75,6 +76,15 @@ json_bool() {
         printf 'true'
     else
         printf 'false'
+    fi
+}
+
+json_or_null() {
+    local value="${1:-}"
+    if [[ -n "$value" ]] && printf '%s' "$value" | jq -e . >/dev/null 2>&1; then
+        printf '%s' "$value"
+    else
+        printf 'null'
     fi
 }
 
@@ -152,8 +162,90 @@ call_mcp() {
 docker_compose() {
     (
         cd "$REPO_ROOT"
-        docker compose "$@"
+        local -a compose_args
+        compose_args=(--env-file "$ENV_FILE" -f "$REPO_ROOT/docker-compose.yml")
+        if [[ -f "$REPO_ROOT/docker-compose.override.yml" ]]; then
+            compose_args+=(-f "$REPO_ROOT/docker-compose.override.yml")
+        fi
+        if [[ -n "${COMPOSE_OVERRIDE_FILE:-}" ]]; then
+            compose_args+=(-f "$COMPOSE_OVERRIDE_FILE")
+        fi
+        docker compose "${compose_args[@]}" "$@"
     )
+}
+
+runtime_stage_parent_mount() {
+    local base="$1"
+    local candidate="${base}-stage"
+    if [[ ${#candidate} -le 16 ]]; then
+        printf '%s' "$candidate"
+    else
+        printf 'stage'
+    fi
+}
+
+host_path_requires_staging() {
+    local host_path="$1"
+    local docker_context
+    docker_context="$(docker context show 2>/dev/null || true)"
+    if [[ "$docker_context" != "colima" ]]; then
+        return 1
+    fi
+    case "$host_path" in
+        "$HOME"/*)
+            return 1
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+}
+
+prepare_runtime_stage() {
+    local stage_parent_mount="$1"
+
+    require_command rsync
+
+    STAGE_ROOT="$DEFAULT_STAGE_ROOT/$stage_parent_mount"
+    STAGED_REPO_PATH="$STAGE_ROOT/$RELATIVE_PATH"
+    COMPOSE_OVERRIDE_FILE="$STAGE_ROOT/palace-mcp.override.yml"
+
+    mkdir -p "$STAGED_REPO_PATH"
+    rsync -a --delete --exclude '.build/' "$HOST_REPO_PATH/" "$STAGED_REPO_PATH/"
+
+    cat > "$COMPOSE_OVERRIDE_FILE" <<EOF
+services:
+  palace-mcp:
+    volumes:
+      - $STAGE_ROOT:/repos-$stage_parent_mount:ro
+EOF
+}
+
+runtime_repo_visible_in_container() {
+    local container_id
+    container_id="$(docker_compose ps -q palace-mcp 2>/dev/null || true)"
+    if [[ -z "$container_id" ]]; then
+        return 1
+    fi
+
+    docker exec "$container_id" sh -lc "
+        test -d '$CONTAINER_REPO_PATH/.git' &&
+        test -f '$CONTAINER_REPO_PATH/Package.swift' &&
+        test -f '$SCIP_PATH'
+    " >/dev/null 2>&1
+}
+
+wait_for_mcp_health() {
+    local health_url="${MCP_URL%/mcp}/healthz"
+    local attempts=30
+    local i
+    for ((i = 1; i <= attempts; i++)); do
+        if curl -fsS "$health_url" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 2
+    done
+    return 1
 }
 
 emit_summary() {
@@ -175,14 +267,16 @@ emit_summary() {
         --arg scip_path "$SCIP_PATH" \
         --arg bundle "${BUNDLE:-}" \
         --arg mcp_url "$MCP_URL" \
+        --arg stage_root "$STAGE_ROOT" \
         --argjson dry_run "$(json_bool "$DRY_RUN")" \
         --argjson env_changed "$(json_bool "$ENV_CHANGED")" \
         --argjson palace_restarted "$(json_bool "$PALACE_RESTARTED")" \
+        --argjson runtime_stage_used "$(json_bool "$RUNTIME_STAGE_USED")" \
         --argjson extractors "$EXTRACTOR_RESULTS_JSON" \
-        --argjson project_registration "$PROJECT_REGISTRATION_JSON" \
-        --argjson bundle_registration "$BUNDLE_REGISTRATION_JSON" \
-        --argjson bundle_membership "$BUNDLE_MEMBERSHIP_JSON" \
-        --argjson health "$LAST_HEALTH_JSON" \
+        --argjson project_registration "$(json_or_null "$PROJECT_REGISTRATION_JSON")" \
+        --argjson bundle_registration "$(json_or_null "$BUNDLE_REGISTRATION_JSON")" \
+        --argjson bundle_membership "$(json_or_null "$BUNDLE_MEMBERSHIP_JSON")" \
+        --argjson health "$(json_or_null "$LAST_HEALTH_JSON")" \
         '{
             stage: $stage,
             status: $status,
@@ -198,9 +292,11 @@ emit_summary() {
             scip_path: $scip_path,
             bundle: (if $bundle == "" then null else $bundle end),
             mcp_url: $mcp_url,
+            stage_root: (if $stage_root == "" then null else $stage_root end),
             dry_run: $dry_run,
             env_changed: $env_changed,
             palace_restarted: $palace_restarted,
+            runtime_stage_used: $runtime_stage_used,
             project_registration: $project_registration,
             bundle_registration: $bundle_registration,
             bundle_membership: $bundle_membership,
@@ -357,6 +453,10 @@ HOST_REPO_PATH="$HOST_REPO_BASE/$RELATIVE_PATH"
 CONTAINER_REPO_PATH="$REPO_BASE/$RELATIVE_PATH"
 HOST_SCIP_PATH="$HOST_REPO_PATH/scip/index.scip"
 SCIP_PATH="$CONTAINER_REPO_PATH/scip/index.scip"
+COMPOSE_OVERRIDE_FILE=""
+RUNTIME_STAGE_USED="false"
+STAGE_ROOT=""
+STAGED_REPO_PATH=""
 
 PROJECT_REGISTRATION_JSON='null'
 BUNDLE_REGISTRATION_JSON='null'
@@ -372,9 +472,22 @@ PALACE_RESTARTED="false"
 
 if [[ "$DRY_RUN" == "false" ]]; then
     require_command docker
+    require_command curl
     if [[ -z "${PALACE_MCP_CLI_BIN:-}" ]]; then
         require_command uv
     fi
+
+    if host_path_requires_staging "$HOST_REPO_PATH"; then
+        stage_parent_mount="$(runtime_stage_parent_mount "$PARENT_MOUNT")"
+        log "staging $HOST_REPO_PATH into $DEFAULT_STAGE_ROOT for docker context colima"
+        prepare_runtime_stage "$stage_parent_mount"
+        PARENT_MOUNT="$stage_parent_mount"
+        REPO_BASE="/repos-$PARENT_MOUNT"
+        CONTAINER_REPO_PATH="$REPO_BASE/$RELATIVE_PATH"
+        SCIP_PATH="$CONTAINER_REPO_PATH/scip/index.scip"
+        RUNTIME_STAGE_USED="true"
+    fi
+
     docker_compose version >/dev/null
 fi
 
@@ -409,8 +522,12 @@ else
     log "PALACE_SCIP_INDEX_PATHS already contains $SLUG"
 fi
 
-if [[ "$ENV_CHANGED" == "true" ]]; then
-    log "recreating palace-mcp after env change"
+if [[ "$ENV_CHANGED" == "true" || "$RUNTIME_STAGE_USED" == "true" ]]; then
+    if [[ "$RUNTIME_STAGE_USED" == "true" ]]; then
+        log "recreating palace-mcp with staged runtime repo mount"
+    else
+        log "recreating palace-mcp after env change"
+    fi
     if [[ "$DRY_RUN" == "false" ]]; then
         docker_compose up -d --force-recreate palace-mcp
     else
@@ -422,6 +539,13 @@ fi
 if [[ "$DRY_RUN" == "true" ]]; then
     emit_summary "dry-run" "planned" "validated inputs; skipped docker and MCP mutations"
     exit 0
+fi
+
+if ! runtime_repo_visible_in_container; then
+    die "palace-mcp runtime cannot see repo content at $CONTAINER_REPO_PATH (expected .git, Package.swift, and scip/index.scip). If docker context is colima, ensure the repo is staged under \$HOME or share $HOST_REPO_BASE into the VM."
+fi
+if ! wait_for_mcp_health; then
+    die "palace-mcp did not become healthy at ${MCP_URL%/mcp}/healthz"
 fi
 
 registered_extractors_json="$(call_mcp "palace.ingest.list_extractors" '{}' || true)"
