@@ -35,6 +35,7 @@ lists here, not duplicated in every generated agent bundle.
    bash paperclips/build.sh
    bash paperclips/build.sh --target codex
    python3 paperclips/scripts/validate_instructions.py --repo-root .
+   python3 paperclips/scripts/generate_assembly_inventory.py --check
    bash paperclips/validate-codex-target.sh
    python3 -m pytest paperclips/tests/test_validate_instructions.py
    ```

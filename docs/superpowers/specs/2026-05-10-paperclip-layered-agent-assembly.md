@@ -585,6 +585,7 @@ Before any layered builder implementation:
   - `bash paperclips/build.sh`;
   - `bash paperclips/build.sh --target codex`;
   - `python3 paperclips/scripts/validate_instructions.py --repo-root .`;
+  - `python3 paperclips/scripts/generate_assembly_inventory.py --check`;
   - `bash paperclips/validate-codex-target.sh`;
   - `python3 -m pytest paperclips/tests/test_validate_instructions.py`.
 
@@ -598,6 +599,8 @@ Before any layered builder implementation:
 - Classify each literal as shared, target, or project-owned.
 - Inventory existing shared-fragment project literals without requiring cleanup
   in this slice.
+- Commit `paperclips/assembly-inventory.json` as generated metadata and enforce
+  freshness with `paperclips/scripts/generate_assembly_inventory.py --check`.
 
 ### Phase 2: Parameter Schema
 
@@ -685,8 +688,10 @@ Before any layered builder implementation:
 - `paperclips/update-agent-workspaces.sh`
 - `paperclips/validate-codex-target.sh`
 - `paperclips/scripts/imac-agents-deploy.sh`
+- `paperclips/scripts/generate_assembly_inventory.py`
 - `paperclips/scripts/validate_instructions.py`
 - `paperclips/tests/test_validate_instructions.py`
+- `paperclips/assembly-inventory.json`
 - `paperclips/scripts/audit-workflow-launcher.sh`
 - `paperclips/fragments/shared/`
 - `paperclips/fragments/local/`
@@ -770,6 +775,8 @@ Before any layered builder implementation:
 - Run existing build for baseline and record size stats.
 - Run current validator green before layered migration:
   `python3 paperclips/scripts/validate_instructions.py --repo-root .`.
+- Verify assembly inventory freshness:
+  `python3 paperclips/scripts/generate_assembly_inventory.py --check`.
 - Verify auditor/cx-auditor role-set decision is reflected consistently in
   source roles, generated dist, coverage matrix, and baseline.
 - Run layered build for Gimle in dry-run mode.

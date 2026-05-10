@@ -136,6 +136,8 @@ jobs:
         run: bash paperclips/build.sh --target codex
       - name: Validate instruction bundles
         run: python3 paperclips/scripts/validate_instructions.py --repo-root .
+      - name: Validate assembly inventory
+        run: python3 paperclips/scripts/generate_assembly_inventory.py --check
       - name: Validate Codex target
         run: bash paperclips/validate-codex-target.sh
       - name: Install validator test dependency

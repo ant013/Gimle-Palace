@@ -11,6 +11,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 import validate_instructions  # noqa: E402
 import compare_deployed_agents  # noqa: E402
+import generate_assembly_inventory  # noqa: E402
 import validate_codex_target_runtime  # noqa: E402
 
 
@@ -34,6 +35,29 @@ def make_repo(tmp_path: Path) -> Path:
 def test_current_repo_metadata_valid() -> None:
     errors = validate_instructions.validate(Path(__file__).resolve().parents[2])
     assert errors == []
+
+
+def test_assembly_inventory_current() -> None:
+    repo = Path(__file__).resolve().parents[2]
+    expected = generate_assembly_inventory.canonical_json(
+        generate_assembly_inventory.build_inventory(repo)
+    )
+
+    assert (repo / "paperclips" / "assembly-inventory.json").read_text() == expected
+
+
+def test_assembly_inventory_tracks_base_mcp_and_auditors() -> None:
+    repo = Path(__file__).resolve().parents[2]
+    inventory = generate_assembly_inventory.build_inventory(repo)
+    role_ids = {
+        role["roleId"]
+        for target in inventory["targets"].values()
+        for role in target["roles"]
+    }
+
+    assert inventory["requiredProjectMcp"] == list(validate_instructions.REQUIRED_PROJECT_MCP)
+    assert "claude:auditor" in role_ids
+    assert "codex:cx-auditor" in role_ids
 
 
 def test_unknown_profile_fails(tmp_path: Path) -> None:
