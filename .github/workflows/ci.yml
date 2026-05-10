@@ -130,10 +130,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Build Claude bundles
-        run: bash paperclips/build.sh
-      - name: Build Codex bundles
-        run: bash paperclips/build.sh --target codex
+      - name: Build project bundles
+        run: python3 paperclips/scripts/build_project_compat.py --project gimle --inventory skip
       - name: Validate instruction bundles
         run: python3 paperclips/scripts/validate_instructions.py --repo-root .
       - name: Validate assembly inventory

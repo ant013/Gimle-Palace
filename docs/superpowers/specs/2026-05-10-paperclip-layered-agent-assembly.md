@@ -582,8 +582,7 @@ Before any layered builder implementation:
 - Add a Paperclip assembly CI job after instruction validation and
   capability-aware target validation are green:
   - `git submodule update --init --recursive`;
-  - `bash paperclips/build.sh`;
-  - `bash paperclips/build.sh --target codex`;
+  - `python3 paperclips/scripts/build_project_compat.py --project gimle --inventory skip`;
   - `python3 paperclips/scripts/validate_instructions.py --repo-root .`;
   - `python3 paperclips/scripts/generate_assembly_inventory.py --check`;
   - `bash paperclips/validate-codex-target.sh`;
@@ -620,6 +619,9 @@ Before any layered builder implementation:
 
 - Extend or replace current include-only builder with layered assembly.
 - Preserve existing `paperclips/build.sh` behavior during compatibility mode.
+- Add a manifest-driven compatibility wrapper that reads the Gimle project
+  manifest, invokes the existing target builder, and emits the same legacy
+  output paths.
 - Emit legacy paths for Gimle Slice 1.
 - Add project/target output paths only behind an explicit future compatibility
   flag.

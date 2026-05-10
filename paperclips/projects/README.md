@@ -32,8 +32,7 @@ lists here, not duplicated in every generated agent bundle.
 5. Rebuild and validate from the repository root:
 
    ```bash
-   bash paperclips/build.sh
-   bash paperclips/build.sh --target codex
+   python3 paperclips/scripts/build_project_compat.py --project <project-key>
    python3 paperclips/scripts/validate_instructions.py --repo-root .
    python3 paperclips/scripts/generate_assembly_inventory.py --check
    bash paperclips/validate-codex-target.sh

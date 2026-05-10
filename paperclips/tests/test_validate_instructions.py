@@ -10,6 +10,7 @@ SCRIPT_DIR = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPT_DIR))
 
 import validate_instructions  # noqa: E402
+import build_project_compat  # noqa: E402
 import compare_deployed_agents  # noqa: E402
 import generate_assembly_inventory  # noqa: E402
 import validate_codex_target_runtime  # noqa: E402
@@ -58,6 +59,19 @@ def test_assembly_inventory_tracks_base_mcp_and_auditors() -> None:
     assert inventory["requiredProjectMcp"] == list(validate_instructions.REQUIRED_PROJECT_MCP)
     assert "claude:auditor" in role_ids
     assert "codex:cx-auditor" in role_ids
+
+
+def test_project_compat_manifest_path() -> None:
+    path = build_project_compat.project_manifest_path(Path("/repo"), "gimle")
+
+    assert path == Path("/repo/paperclips/projects/gimle/paperclip-agent-assembly.yaml")
+
+
+def test_project_compat_declared_targets() -> None:
+    repo = Path(__file__).resolve().parents[2]
+    manifest = repo / "paperclips" / "projects" / "gimle" / "paperclip-agent-assembly.yaml"
+
+    assert build_project_compat.declared_targets(manifest.read_text()) == ["claude", "codex"]
 
 
 def test_unknown_profile_fails(tmp_path: Path) -> None:
