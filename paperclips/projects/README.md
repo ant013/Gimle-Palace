@@ -52,6 +52,10 @@ lists here, not duplicated in every generated agent bundle.
    python3 -m pytest paperclips/tests/test_validate_instructions.py
    ```
 
+   The build writes `paperclips/dist/<project-key>.resolved-assembly.json`
+   with resolved capability metadata, target adapters, role output paths, hashes,
+   and sizes. Commit it with the generated bundle updates.
+
 6. Before deploying a regenerated agent, snapshot the current live `AGENTS.md`
    and compare it with the generated bundle:
 

@@ -96,6 +96,37 @@ def test_project_compat_render_matches_committed_dist() -> None:
     assert rendered == dist.read_text()
 
 
+def test_project_compat_writes_resolved_assembly(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    manifest = repo / "paperclips" / "projects" / "gimle" / "paperclip-agent-assembly.yaml"
+    manifest_text = manifest.read_text()
+    values = build_project_compat.flatten_manifest_scalars(manifest_text)
+    targets = build_project_compat.declared_targets(manifest_text)
+    for target in targets:
+        build_project_compat.render_target(repo, target, values)
+
+    build_project_compat.write_resolved_assembly(repo, "gimle", manifest, manifest_text, values, targets)
+
+    resolved_path = repo / "paperclips" / "dist" / "gimle.resolved-assembly.json"
+    resolved = json.loads(resolved_path.read_text())
+    assert resolved["capabilities"]["mcp"]["baseRequired"] == list(validate_instructions.REQUIRED_PROJECT_MCP)
+    assert resolved["capabilities"]["mcp"]["codebaseMemoryProjects"]["primary"] == "repos-gimle"
+    assert resolved["targets"]["codex"]["adapterType"] == "codex_local"
+    assert any(role["roleId"] == "codex:cx-cto" for role in resolved["targets"]["codex"]["roles"])
+
+
+def test_resolved_assembly_stale_sha_fails(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    resolved_path = repo / "paperclips" / "dist" / "gimle.resolved-assembly.json"
+    resolved = json.loads(resolved_path.read_text())
+    resolved["targets"]["codex"]["roles"][0]["sha256"] = "stale"
+    resolved_path.write_text(json.dumps(resolved, indent=2, sort_keys=True) + "\n")
+
+    errors = validate_instructions.validate_resolved_assembly_manifests(repo)
+
+    assert any("resolved assembly manifest bundle sha stale" in error for error in errors)
+
+
 def test_project_compat_substitutes_manifest_variables(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     role = repo / "paperclips" / "roles" / "example.md"

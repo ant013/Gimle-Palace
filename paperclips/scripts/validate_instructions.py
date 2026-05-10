@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -90,6 +91,10 @@ _ANTIPATTERN_HEADER_TOKENS = ("not example", "wrong", "anti-pattern", "antipatte
 
 _UUID_RE = re.compile(r"\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b")
 _UNRESOLVED_VARIABLE_RE = re.compile(r"\{\{[^}\n]+\}\}")
+
+
+def sha256_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def load_team_uuids(repo_root: Path) -> dict[str, set[str]]:
@@ -300,6 +305,69 @@ def validate_project_literal_leakage(repo_root: Path) -> list[str]:
             errors.append(
                 f"project literal leak {literal_id}: {occurrence_count} occurrence(s) in {sample_paths}"
             )
+    return errors
+
+
+def validate_resolved_assembly_manifests(repo_root: Path) -> list[str]:
+    errors: list[str] = []
+    manifests = sorted((repo_root / "paperclips" / "projects").glob("*/paperclip-agent-assembly.yaml"))
+    for manifest in manifests:
+        if "_template" in manifest.parts:
+            continue
+        project = manifest.parent.name
+        resolved_path = repo_root / "paperclips" / "dist" / f"{project}.resolved-assembly.json"
+        if not resolved_path.is_file():
+            errors.append(f"missing resolved assembly manifest: {resolved_path.relative_to(repo_root)}")
+            continue
+        try:
+            resolved = json.loads(resolved_path.read_text())
+        except json.JSONDecodeError as exc:
+            errors.append(f"invalid resolved assembly manifest JSON: {resolved_path.relative_to(repo_root)}: {exc}")
+            continue
+
+        if resolved.get("schemaVersion") != 1:
+            errors.append(f"resolved assembly manifest schemaVersion must be 1: {resolved_path.relative_to(repo_root)}")
+        if resolved.get("project") != project:
+            errors.append(
+                f"resolved assembly manifest project mismatch for {resolved_path.relative_to(repo_root)}: "
+                f"{resolved.get('project')} != {project}"
+            )
+        source_manifest = resolved.get("sourceManifest")
+        if source_manifest != str(manifest.relative_to(repo_root)):
+            errors.append(f"resolved assembly manifest sourceManifest mismatch: {resolved_path.relative_to(repo_root)}")
+        source_sha = resolved.get("sourceManifestSha256")
+        if source_sha != sha256_text(manifest.read_text()):
+            errors.append(f"resolved assembly manifest sourceManifestSha256 stale: {resolved_path.relative_to(repo_root)}")
+
+        mcp = resolved.get("capabilities", {}).get("mcp", {})
+        base_required = set(mcp.get("baseRequired", []))
+        for marker in REQUIRED_PROJECT_MCP:
+            if marker not in base_required:
+                errors.append(f"resolved assembly manifest missing base MCP {marker}: {resolved_path.relative_to(repo_root)}")
+
+        targets = resolved.get("targets", {})
+        if not isinstance(targets, dict) or not targets:
+            errors.append(f"resolved assembly manifest missing targets: {resolved_path.relative_to(repo_root)}")
+            continue
+        for target, target_data in targets.items():
+            roles = target_data.get("roles", []) if isinstance(target_data, dict) else []
+            if not roles:
+                errors.append(f"resolved assembly manifest target has no roles: {project}:{target}")
+                continue
+            for role in roles:
+                if not isinstance(role, dict):
+                    continue
+                output = role.get("output")
+                role_id = role.get("roleId", "<unknown>")
+                if not isinstance(output, str):
+                    errors.append(f"resolved assembly manifest role missing output: {project}:{target}:{role_id}")
+                    continue
+                output_path = repo_root / output
+                if not output_path.is_file():
+                    errors.append(f"resolved assembly manifest output missing: {output}")
+                    continue
+                if role.get("sha256") != sha256_text(output_path.read_text()):
+                    errors.append(f"resolved assembly manifest bundle sha stale: {output}")
     return errors
 
 
@@ -697,6 +765,7 @@ def validate(repo_root: Path = REPO_ROOT) -> list[str]:
     errors.extend(validate_handoff_markers(bundle_paths_by_role, repo_root))
     errors.extend(validate_project_capability_manifests(repo_root))
     errors.extend(validate_project_literal_leakage(repo_root))
+    errors.extend(validate_resolved_assembly_manifests(repo_root))
     errors.extend(
         validate_cross_team_targets(bundle_paths_by_role, role_meta_by_id, repo_root)
     )

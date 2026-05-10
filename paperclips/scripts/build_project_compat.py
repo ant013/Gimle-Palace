@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import re
 import sys
 from pathlib import Path
@@ -116,6 +118,120 @@ def flatten_manifest_scalars(manifest_text: str) -> dict[str, str]:
     return values
 
 
+def sha256_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def manifest_entries(manifest_text: str) -> list[tuple[int, str, str, str]]:
+    entries: list[tuple[int, str, str, str]] = []
+    stack: list[tuple[int, str]] = []
+    for raw_line in manifest_text.splitlines():
+        line = raw_line.split("#", 1)[0].rstrip()
+        if not line.strip() or line.lstrip().startswith("- "):
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        text = line.strip()
+        if ":" not in text:
+            continue
+        key, raw_value = text.split(":", 1)
+        key = key.strip()
+        value = raw_value.strip().strip("\"'")
+        while stack and stack[-1][0] >= indent:
+            stack.pop()
+        path = ".".join([item[1] for item in stack] + [key])
+        entries.append((indent, path, key, value))
+        if not value or value in {"[]", "{}"}:
+            stack.append((indent, key))
+    return entries
+
+
+def manifest_path_entry(manifest_text: str, path: str) -> tuple[int, int, str] | None:
+    for index, (indent, entry_path, _key, value) in enumerate(manifest_entries(manifest_text)):
+        if entry_path == path:
+            return index, indent, value
+    return None
+
+
+def manifest_list(manifest_text: str, path: str) -> list[str]:
+    entry = manifest_path_entry(manifest_text, path)
+    if entry is None:
+        return []
+    index, indent, value = entry
+    if value == "[]":
+        return []
+    items: list[str] = []
+    lines = manifest_text.splitlines()
+    entry_line = 0
+    current_entry = -1
+    for line_index, raw_line in enumerate(lines):
+        line = raw_line.split("#", 1)[0].rstrip()
+        if not line.strip() or line.lstrip().startswith("- "):
+            continue
+        current_entry += 1
+        if current_entry == index:
+            entry_line = line_index
+            break
+    for raw_line in lines[entry_line + 1 :]:
+        line = raw_line.split("#", 1)[0].rstrip()
+        if not line.strip():
+            continue
+        line_indent = len(line) - len(line.lstrip(" "))
+        stripped = line.strip()
+        if line_indent <= indent:
+            break
+        if line_indent == indent + 2 and stripped.startswith("- "):
+            items.append(stripped[2:].strip().strip("\"'"))
+    return items
+
+
+def manifest_mapping_of_lists(manifest_text: str, path: str) -> dict[str, list[str]]:
+    entry = manifest_path_entry(manifest_text, path)
+    if entry is None:
+        return {}
+    index, indent, value = entry
+    if value == "{}":
+        return {}
+    lines = manifest_text.splitlines()
+    entry_line = 0
+    current_entry = -1
+    for line_index, raw_line in enumerate(lines):
+        line = raw_line.split("#", 1)[0].rstrip()
+        if not line.strip() or line.lstrip().startswith("- "):
+            continue
+        current_entry += 1
+        if current_entry == index:
+            entry_line = line_index
+            break
+
+    result: dict[str, list[str]] = {}
+    current_key: str | None = None
+    for raw_line in lines[entry_line + 1 :]:
+        line = raw_line.split("#", 1)[0].rstrip()
+        if not line.strip():
+            continue
+        line_indent = len(line) - len(line.lstrip(" "))
+        stripped = line.strip()
+        if line_indent <= indent:
+            break
+        if line_indent == indent + 2 and stripped.endswith(":"):
+            current_key = stripped[:-1].strip()
+            result[current_key] = []
+            continue
+        if current_key and line_indent == indent + 4 and stripped.startswith("- "):
+            result[current_key].append(stripped[2:].strip().strip("\"'"))
+    return result
+
+
+def target_manifest_data(manifest_values: dict[str, str], target: str) -> dict[str, str]:
+    prefix = f"targets.{target}."
+    return {
+        "instructionEntryFile": manifest_values.get(f"{prefix}instruction_entry_file", ""),
+        "adapterType": manifest_values.get(f"{prefix}adapter_type", ""),
+        "deployMode": manifest_values.get(f"{prefix}deploy_mode", ""),
+        "instructionsBundleMode": manifest_values.get(f"{prefix}instructions_bundle_mode", ""),
+    }
+
+
 def substitute_variables(text: str, values: dict[str, str]) -> str:
     def replace(match: re.Match[str]) -> str:
         key = match.group(0)[2:-2].strip()
@@ -179,6 +295,115 @@ def render_target(repo_root: Path, target: str, manifest_values: dict[str, str])
         print(f"built {out_file}")
 
 
+def role_output_entry(repo_root: Path, target: str, role_file: Path) -> dict[str, object]:
+    _roles_dir, out_dir = target_paths(repo_root, target)
+    out_file = out_dir / role_file.name
+    meta = validate_instructions.load_role_front_matter(role_file)
+    text = out_file.read_text()
+    return {
+        "roleId": meta.role_id,
+        "family": meta.family,
+        "profiles": meta.profiles,
+        "source": str(role_file.relative_to(repo_root)),
+        "output": str(out_file.relative_to(repo_root)),
+        "sha256": sha256_text(text),
+        "bytes": len(text.encode("utf-8")),
+        "lines": text.count("\n"),
+    }
+
+
+def resolved_assembly(
+    repo_root: Path,
+    project: str,
+    manifest: Path,
+    manifest_text: str,
+    manifest_values: dict[str, str],
+    targets: list[str],
+) -> dict[str, object]:
+    return {
+        "schemaVersion": 1,
+        "project": project,
+        "sourceManifest": str(manifest.relative_to(repo_root)),
+        "sourceManifestSha256": sha256_text(manifest_text),
+        "parameters": {
+            "project": {
+                "key": manifest_values.get("project.key", ""),
+                "displayName": manifest_values.get("project.display_name", ""),
+                "systemName": manifest_values.get("project.system_name", ""),
+                "issuePrefix": manifest_values.get("project.issue_prefix", ""),
+                "integrationBranch": manifest_values.get("project.integration_branch", ""),
+            },
+            "paths": {
+                "projectRoot": manifest_values.get("paths.project_root", ""),
+                "primaryRepoRoot": manifest_values.get("paths.primary_repo_root", ""),
+                "primaryMcpServiceDir": manifest_values.get("paths.primary_mcp_service_dir", ""),
+                "productionCheckout": manifest_values.get("paths.production_checkout", ""),
+                "codexTeamRoot": manifest_values.get("paths.codex_team_root", ""),
+                "operatorMemoryDir": manifest_values.get("paths.operator_memory_dir", ""),
+                "overlayRoot": manifest_values.get("paths.overlay_root", ""),
+                "projectRulesFile": manifest_values.get("paths.project_rules_file", ""),
+            },
+        },
+        "capabilities": {
+            "mcp": {
+                "serviceName": manifest_values.get("mcp.service_name", ""),
+                "packageName": manifest_values.get("mcp.package_name", ""),
+                "toolNamespace": manifest_values.get("mcp.tool_namespace", ""),
+                "baseRequired": manifest_list(manifest_text, "mcp.base_required"),
+                "codebaseMemoryProjects": {
+                    "primary": manifest_values.get("mcp.codebase_memory_projects.primary", ""),
+                },
+                "additions": {
+                    "project": manifest_list(manifest_text, "mcp.additions.project"),
+                    "byRole": manifest_mapping_of_lists(manifest_text, "mcp.additions.by_role"),
+                },
+            },
+            "skills": {
+                "additions": {
+                    "project": manifest_list(manifest_text, "skills.additions.project"),
+                    "byRole": manifest_mapping_of_lists(manifest_text, "skills.additions.by_role"),
+                },
+            },
+            "subagents": {
+                "additions": {
+                    "project": manifest_list(manifest_text, "subagents.additions.project"),
+                    "byRole": manifest_mapping_of_lists(manifest_text, "subagents.additions.by_role"),
+                },
+            },
+        },
+        "compatibility": {
+            "legacyOutputPaths": manifest_values.get("compatibility.legacy_output_paths", ""),
+            "claudeDeployMapping": manifest_values.get("compatibility.claude_deploy_mapping", ""),
+            "codexAgentIdsEnv": manifest_values.get("compatibility.codex_agent_ids_env", ""),
+            "workspaceUpdateScript": manifest_values.get("compatibility.workspace_update_script", ""),
+        },
+        "targets": {
+            target: {
+                **target_manifest_data(manifest_values, target),
+                "roles": [
+                    role_output_entry(repo_root, target, role_file)
+                    for role_file in sorted(target_paths(repo_root, target)[0].glob("*.md"))
+                ],
+            }
+            for target in targets
+        },
+    }
+
+
+def write_resolved_assembly(
+    repo_root: Path,
+    project: str,
+    manifest: Path,
+    manifest_text: str,
+    manifest_values: dict[str, str],
+    targets: list[str],
+) -> None:
+    output = repo_root / "paperclips" / "dist" / f"{project}.resolved-assembly.json"
+    data = resolved_assembly(repo_root, project, manifest, manifest_text, manifest_values, targets)
+    output.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+    print(f"wrote {output.relative_to(repo_root)}")
+
+
 def check_project_manifest(repo_root: Path, project: str) -> Path:
     manifest = project_manifest_path(repo_root, project)
     if not manifest.is_file():
@@ -228,6 +453,7 @@ def main() -> int:
             raise ValueError(f"project {args.project} declares no build targets for {args.target}")
         for target in targets:
             render_target(repo_root, target, manifest_values)
+        write_resolved_assembly(repo_root, args.project, manifest, manifest_text, manifest_values, targets)
         run_inventory(repo_root, args.inventory)
     except (FileNotFoundError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
