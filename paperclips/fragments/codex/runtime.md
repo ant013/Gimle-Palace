@@ -15,7 +15,7 @@
 - Treat Paperclip API, issue comments, and assigned work as the source of truth.
 - Do not act from stale session memory. Re-read the issue, current assignment,
   and relevant repository state at the start of work.
-- Shared memory: use `palace.code.*` / codebase-memory with project `repos-gimle`;
+- Shared memory: use `palace.code.*` / codebase-memory with project `{{CODEBASE_MEMORY_PROJECT}}`;
   write durable findings through `palace.memory.decide(...)` with issue, branch,
   commit, source, `canonical` or `provisional`, and verification evidence.
   Keep `serena` scoped to the current worktree (`cwd`).

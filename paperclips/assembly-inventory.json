@@ -86,16 +86,8 @@
     {
       "classification": "project-owned",
       "id": "gimle-codebase-memory-project",
-      "occurrenceCount": 16,
-      "paths": [
-        "paperclips/fragments/codex/runtime.md",
-        "paperclips/fragments/shared/fragments/role-prime/codereviewer.md",
-        "paperclips/fragments/shared/fragments/role-prime/operator.md",
-        "paperclips/fragments/shared/fragments/role-prime/opusarchitectreviewer.md",
-        "paperclips/fragments/shared/fragments/role-prime/pythonengineer.md",
-        "paperclips/fragments/shared/fragments/role-prime/qaengineer.md",
-        "paperclips/fragments/shared/fragments/worktree-discipline.md"
-      ],
+      "occurrenceCount": 0,
+      "paths": [],
       "pattern": "\\brepos-gimle\\b"
     },
     {
