@@ -619,9 +619,9 @@ Before any layered builder implementation:
 
 - Extend or replace current include-only builder with layered assembly.
 - Preserve existing `paperclips/build.sh` behavior during compatibility mode.
-- Add a manifest-driven compatibility wrapper that reads the Gimle project
-  manifest, invokes the existing target builder, and emits the same legacy
-  output paths.
+- Add a manifest-driven compatibility builder that reads the Gimle project
+  manifest, renders role sources directly, resolves target-specific fragments,
+  substitutes manifest variables, and emits the same legacy output paths.
 - Emit legacy paths for Gimle Slice 1.
 - Add project/target output paths only behind an explicit future compatibility
   flag.

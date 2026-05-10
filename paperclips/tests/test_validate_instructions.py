@@ -74,6 +74,67 @@ def test_project_compat_declared_targets() -> None:
     assert build_project_compat.declared_targets(manifest.read_text()) == ["claude", "codex"]
 
 
+def test_project_compat_render_matches_committed_dist() -> None:
+    repo = Path(__file__).resolve().parents[2]
+    manifest = repo / "paperclips" / "projects" / "gimle" / "paperclip-agent-assembly.yaml"
+    values = build_project_compat.flatten_manifest_scalars(manifest.read_text())
+    role = repo / "paperclips" / "roles-codex" / "cx-cto.md"
+    dist = repo / "paperclips" / "dist" / "codex" / "cx-cto.md"
+
+    rendered = build_project_compat.render_role(repo, "codex", role, values)
+
+    assert rendered == dist.read_text()
+
+
+def test_project_compat_substitutes_manifest_variables(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    role = repo / "paperclips" / "roles" / "example.md"
+    write(
+        role,
+        "---\n"
+        "target: claude\n"
+        "role_id: claude:example\n"
+        "family: test\n"
+        "profiles: [core]\n"
+        "---\n\n"
+        "# {{PROJECT}}\n"
+        "Issue prefix: {{ project.issue_prefix }}\n"
+        "CM: {{ CODEBASE_MEMORY_PROJECT }}\n",
+    )
+    manifest = repo / "paperclips" / "projects" / "gimle" / "paperclip-agent-assembly.yaml"
+    values = build_project_compat.flatten_manifest_scalars(manifest.read_text())
+
+    rendered = build_project_compat.render_role(repo, "claude", role, values)
+
+    assert "# Gimle\n" in rendered
+    assert "Issue prefix: GIM\n" in rendered
+    assert "CM: repos-gimle\n" in rendered
+
+
+def test_project_compat_unresolved_variable_fails(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    role = repo / "paperclips" / "roles" / "example.md"
+    write(
+        role,
+        "---\n"
+        "target: claude\n"
+        "role_id: claude:example\n"
+        "family: test\n"
+        "profiles: [core]\n"
+        "---\n\n"
+        "# {{UNKNOWN_VARIABLE}}\n",
+    )
+    manifest = repo / "paperclips" / "projects" / "gimle" / "paperclip-agent-assembly.yaml"
+    values = build_project_compat.flatten_manifest_scalars(manifest.read_text())
+
+    try:
+        build_project_compat.render_role(repo, "claude", role, values)
+    except ValueError as exc:
+        assert "unresolved variable" in str(exc)
+    else:
+        raise AssertionError("expected unresolved variable failure")
+
+
 def test_unknown_profile_fails(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     role_path = repo / "paperclips" / "roles" / "python-engineer.md"
