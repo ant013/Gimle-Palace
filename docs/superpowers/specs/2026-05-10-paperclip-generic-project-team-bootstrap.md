@@ -17,6 +17,9 @@ bootstrap proved that copying a one-off flow creates repeated failures:
   Gimle agents use a separate ChatGPT/OAuth auth file.
 - Paperclip can convert an instructions bundle into `external` mode; then every
   agent workspace must physically contain `AGENTS.md`.
+- A heartbeat can initialize Codex successfully while still warning that the
+  run fell back to a generic workspace and could not read the external
+  `AGENTS.md`; OAuth success alone is not enough.
 - New agents need `--skip-git-repo-check` or a trusted/git workspace.
 - Issue prefixes are live Paperclip company state (`GIM`, `UNS`, etc.), not
   something to infer from stale manifests.
@@ -41,6 +44,8 @@ credentials and isolated knowledge storage.
   are separated per project/company.
 - Produce enough preflight/postcheck evidence that a retry starts in the right
   chat, with the right model, credentials, instructions, and workspace.
+- Classify heartbeat output into credential, instructions, workspace-context,
+  and tool-session failures so operators do not chase the wrong blocker.
 
 ## Non-Goals
 
@@ -157,6 +162,8 @@ UnstoppableAudit gates:
 12. Upload instructions bundle or materialize `AGENTS.md`.
 13. Patch runtime config and env.
 14. Run postcheck and smoke.
+15. Parse the smoke heartbeat transcript and fail on any unclassified runtime
+    warning.
 
 ## Runtime Credential Rules
 
@@ -219,9 +226,54 @@ Postcheck must verify:
   managed company/agent instructions path.
 - If `instructionsBundleMode = "external"`, every workspace contains
   `AGENTS.md`.
+- If `instructionsBundleMode = "external"`, the exact
+  `adapterConfig.instructionsFilePath` exists before any heartbeat or smoke run
+  is started.
 - Rendered `AGENTS.md` contains project slug, source roots, write roots, role,
   reporting line, and credential constraints.
 - No AGENTS.md contains raw secrets or bootstrap admin credentials.
+
+## Heartbeat / Smoke Diagnostics Rules
+
+The first heartbeat is an acceptance test, not just a liveness ping. The
+bootstrapper must capture stdout/stderr/transcript lines and classify them
+before reporting success.
+
+Required signals:
+
+- Codex must reach initialization, for example `initmodel codex` or equivalent
+  session-start evidence.
+- The run must use the intended `CODEX_HOME`; `codex login status` for that home
+  must already be verified as ChatGPT/OAuth when required.
+- The agent instructions path must be readable before launch. A line like
+  `could not read agent instructions file ... AGENTS.md` is a failed
+  instructions postcheck.
+- The run workspace must be the project/issue workspace intended by the
+  package. A line like `No project or prior session workspace was available.
+  Using fallback workspace ...` is workspace-context drift. It is not an OAuth
+  problem, but it means the agent may be waking without the assigned Paperclip
+  issue/project context.
+- A line like `write_stdin failed: stdin is closed for this session` is a
+  tool-session failure. If Codex initialized and instructions/workspace checks
+  passed, classify it separately and inspect which command/session attempted the
+  write instead of treating it as quota or credential failure.
+
+Postcheck output must include:
+
+- credential result: `chatgpt`, `apikey`, missing, malformed, or unknown.
+- instructions result: managed path or external `AGENTS.md` existence.
+- workspace result: assigned project/issue workspace, prior session workspace,
+  or fallback workspace.
+- tool-session result: no router errors, or the exact router error class.
+
+Known UnstoppableAudit lesson:
+
+- AUCEO reached Codex initialization after the company `CODEX_HOME` was copied
+  from Gimle's ChatGPT/OAuth home, but the heartbeat still warned about missing
+  `/Users/Shared/UnstoppableAudit/runs/AUCEO/workspace/AGENTS.md` and fallback
+  workspace selection. The correct fix was to materialize the external
+  `AGENTS.md` and then separately validate Paperclip project/issue workspace
+  binding.
 
 ## Telegram Routing Rules
 
@@ -282,6 +334,10 @@ The postcheck must produce one manifest with:
   - at least one low-cost agent run starts in the correct Telegram chat.
   - the run does not fail for trusted-directory, missing AGENTS.md, or API-key
     quota reasons.
+  - heartbeat transcript is classified into credential, instructions,
+    workspace-context, and tool-session results.
+  - no fallback workspace is used unless the package explicitly allows a
+    context-free heartbeat.
 
 ## Affected Files / Areas
 
@@ -313,6 +369,9 @@ Expected future implementation areas:
   changing Gimle routing.
 - Every `codex_local` agent has a valid workspace, instructions file or managed
   bundle, `--skip-git-repo-check`, and scoped write roots.
+- Heartbeat postcheck proves that the agent initializes Codex with the intended
+  company `CODEX_HOME`, can read instructions, and starts from the intended
+  project/issue workspace.
 - Re-running the bootstrapper makes no changes when live state already matches
   the package.
 - A failed preflight explains the exact blocker and does not partially mutate
@@ -340,6 +399,9 @@ Expected future implementation areas:
   - Telegram start/fail event lands in the configured project ops chat.
   - no `Not inside a trusted directory` failure.
   - no missing `AGENTS.md` warning when mode is external.
+  - no fallback workspace warning unless explicitly allowed by the package.
+  - any `stdin is closed` / router error is reported as a tool-session issue,
+    not as OAuth or quota failure.
 
 ## Open Questions
 
