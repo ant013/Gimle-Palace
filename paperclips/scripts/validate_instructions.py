@@ -634,6 +634,24 @@ def allowlisted(allowlist: dict, role_id: str, path: str, rule: str) -> bool:
     return False
 
 
+def target_allowlisted(allowlist: dict, target: str, rule: str) -> bool:
+    for entry in allowlist.get("entries", []):
+        if entry.get("rule") != rule:
+            continue
+        if entry.get("target") != target:
+            continue
+        if not all(
+            [
+                entry.get("reason"),
+                entry.get("owner"),
+                entry.get("reviewAfter") or entry.get("expiresAt"),
+            ]
+        ):
+            continue
+        return True
+    return False
+
+
 def validate(repo_root: Path = REPO_ROOT) -> list[str]:
     errors: list[str] = []
     paperclips = repo_root / "paperclips"
@@ -740,17 +758,29 @@ def validate(repo_root: Path = REPO_ROOT) -> list[str]:
     if "entries" not in allowlist:
         errors.append("bundle-size-allowlist.json missing entries")
     for index, entry in enumerate(allowlist.get("entries", [])):
-        for key in ["rule", "roleId", "path", "reason", "owner"]:
+        for key in ["rule", "reason", "owner"]:
             if not entry.get(key):
                 errors.append(f"allowlist entry {index} missing {key}")
+        if entry.get("rule") == "bundle-size-growth":
+            for key in ["roleId", "path"]:
+                if not entry.get(key):
+                    errors.append(f"allowlist entry {index} missing {key}")
+        if entry.get("rule") == "bundle-target-size-growth" and not entry.get("target"):
+            errors.append(f"allowlist entry {index} missing target")
         if not (entry.get("reviewAfter") or entry.get("expiresAt")):
             errors.append(f"allowlist entry {index} missing reviewAfter or expiresAt")
     if "measurementCommit" not in baseline:
         errors.append("bundle-size-baseline.json missing measurementCommit")
     policy = baseline.get("policy", {})
     max_growth_percent = int(policy.get("maxGrowthPercent", 0))
+    if max_growth_percent != 0:
+        errors.append(
+            "bundle-size-baseline.json policy.maxGrowthPercent must be 0; "
+            "use bundle-size-allowlist.json for reviewed exceptions"
+        )
 
     bundle_paths_by_role: dict[str, Path] = {}
+    totals_by_target: dict[str, dict[str, int]] = {}
     for bundle in baseline.get("bundles", []):
         role_id = bundle.get("roleId")
         if role_id not in role_ids:
@@ -776,14 +806,30 @@ def validate(repo_root: Path = REPO_ROOT) -> list[str]:
         if not isinstance(baseline_bytes, int):
             errors.append(f"baseline byte count missing for {path}")
             continue
+        target = str(bundle.get("target", ""))
+        if not target:
+            errors.append(f"baseline bundle missing target for {path}")
+        else:
+            totals = totals_by_target.setdefault(target, {"baseline": 0, "actual": 0})
+            totals["baseline"] += baseline_bytes
+            totals["actual"] += byte_count
         growth_allowance = (baseline_bytes * max_growth_percent + 99) // 100
         max_allowed_bytes = baseline_bytes + growth_allowance
         if byte_count > max_allowed_bytes and not allowlisted(
             allowlist, str(role_id), str(path), "bundle-size-growth"
         ):
             errors.append(
-                f"bundle grew more than {max_growth_percent}% for {path}: "
+                f"bundle grew without reviewed allowlist for {path}: "
                 f"{byte_count} > {max_allowed_bytes}"
+            )
+
+    for target, totals in sorted(totals_by_target.items()):
+        if totals["actual"] > totals["baseline"] and not target_allowlisted(
+            allowlist, target, "bundle-target-size-growth"
+        ):
+            errors.append(
+                f"target bundle total grew without reviewed allowlist for {target}: "
+                f"{totals['actual']} > {totals['baseline']}"
             )
 
     for rule_id, rule in matrix.get("rules", {}).items():
