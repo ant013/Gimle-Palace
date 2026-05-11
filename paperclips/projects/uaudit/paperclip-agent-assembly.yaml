@@ -59,6 +59,13 @@ mcp:
       - neo4j
     by_role: {}
 
+report_delivery:
+  issue_prefix: UNS
+  telegram_plugin_id: 60023916-4b6c-40f5-829f-bc8b98abc4ed
+  default_owner: UWAInfraEngineer
+  android_owner: UWAInfraEngineer
+  ios_owner: UWIInfraEngineer
+
 skills:
   additions:
     project: []

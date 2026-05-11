@@ -14,3 +14,11 @@
 Before ending a Paperclip issue, post Status/Evidence/Blockers/Next owner and
 use the exact UAudit agent name from the roster. `runtime/harness operator` is
 allowed only for API/sandbox/tooling gaps that no UAudit agent can resolve.
+
+## Report Delivery
+
+Non-delivery roles: save final/user-requested Markdown reports in the writable
+artifact root, comment the absolute path, and hand off delivery to
+`{{report_delivery.default_owner}}` by default (`{{report_delivery.ios_owner}}`
+only for explicitly iOS-only issues). Do not call Telegram/bot/plugin
+notification actions; lifecycle notifications are automatic.
