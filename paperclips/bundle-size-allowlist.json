@@ -8,6 +8,20 @@
       "reason": "Closes missing Codex reviewer handoff/compliance gate; smaller shared fragments and target roster already applied.",
       "owner": "CTO",
       "reviewAfter": "2026-06-15"
+    },
+    {
+      "rule": "bundle-target-size-growth",
+      "target": "claude",
+      "reason": "Reviewed Slice 1 migration exception for aggregate Claude output; individual growing bundles are either baselined or enumerated.",
+      "owner": "CTO",
+      "reviewAfter": "2026-06-15"
+    },
+    {
+      "rule": "bundle-target-size-growth",
+      "target": "codex",
+      "reason": "Reviewed Slice 1 migration exception for aggregate Codex output; individual growing bundles are either baselined or enumerated.",
+      "owner": "CTO",
+      "reviewAfter": "2026-06-15"
     }
   ]
 }
