@@ -3,6 +3,9 @@
 Bot `@gimle_palace_bot` bridges Paperclip ↔ GimleOps Telegram supergroup (`-1003521772993`).
 Plugin: `paperclip-plugin-telegram v0.3.0`.
 
+For manual Markdown report delivery, see
+[`telegram-report-delivery.md`](telegram-report-delivery.md).
+
 ---
 
 ## 1. Install
