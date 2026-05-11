@@ -126,6 +126,43 @@ def test_project_compat_writes_resolved_assembly(tmp_path: Path) -> None:
     assert resolved["compatibility"]["inputs"]["codexAgentIdsEnv"]["path"] == "paperclips/codex-agent-ids.env"
 
 
+def test_project_compat_renders_explicit_project_agents(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    manifest = repo / "paperclips" / "projects" / "uaudit" / "paperclip-agent-assembly.yaml"
+    manifest_text = manifest.read_text()
+    values = build_project_compat.flatten_manifest_scalars(manifest_text)
+
+    agents = build_project_compat.manifest_agents(manifest_text, "codex")
+    assert agents[0]["agent_name"] == "AUCEO"
+
+    build_project_compat.render_target(repo, "codex", values, manifest_text)
+    build_project_compat.write_resolved_assembly(repo, "uaudit", manifest, manifest_text, values, ["codex"])
+
+    output = repo / "paperclips" / "dist" / "uaudit" / "codex" / "AUCEO.md"
+    rendered = output.read_text()
+    resolved = json.loads((repo / "paperclips" / "dist" / "uaudit.resolved-assembly.json").read_text())
+
+    assert "Runtime agent: `AUCEO`" in rendered
+    assert "UAudit project MCP addition: `neo4j`" in rendered
+    assert "c430529b-f064-4c5b-8b5b-302c594890b7" in rendered
+    assert "da97dbd9-6627-48d0-b421-66af0750eacf" not in rendered
+    assert resolved["targets"]["codex"]["roles"][0]["agentName"] == "AUCEO"
+    assert resolved["targets"]["codex"]["roles"][0]["workspaceCwd"] == (
+        "/Users/Shared/UnstoppableAudit/runs/AUCEO/workspace"
+    )
+    assert resolved["capabilities"]["mcp"]["codebaseMemoryProjects"]["android"] == (
+        "Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android"
+    )
+
+
+def test_project_manifest_allows_codex_only_uaudit(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+
+    errors = validate_instructions.validate_project_capability_manifests(repo)
+
+    assert errors == []
+
+
 def test_project_manifest_missing_company_id_fails(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     manifest = repo / "paperclips" / "projects" / "gimle" / "paperclip-agent-assembly.yaml"

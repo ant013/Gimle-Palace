@@ -219,7 +219,11 @@ def validate_project_capability_manifests(repo_root: Path) -> list[str]:
                 errors.append(f"project manifest missing {section}.additions.project: {rel}")
             if not re.search(rf"^{re.escape(section)}:\n(?:^[ \t].*\n)*?^\s{{4}}by_role:\s*(?:\{{\}})?\s*$", text, re.MULTILINE):
                 errors.append(f"project manifest missing {section}.additions.by_role: {rel}")
+        declared_target_count = 0
         for target, adapter_type in [("claude", "claude_local"), ("codex", "codex_local")]:
+            if not re.search(rf"^\s{{2}}{target}:\s*$", text, re.MULTILINE):
+                continue
+            declared_target_count += 1
             if not re.search(
                 rf"^\s{{2}}{target}:\s*$\n(?:^\s{{4}}.*\n)*?^\s{{4}}adapter_type:\s+{adapter_type}\s*$",
                 text,
@@ -232,6 +236,8 @@ def validate_project_capability_manifests(repo_root: Path) -> list[str]:
                 re.MULTILINE,
             ):
                 errors.append(f"project manifest missing targets.{target}.instruction_entry_file=AGENTS.md: {rel}")
+        if declared_target_count == 0:
+            errors.append(f"project manifest declares no supported targets: {rel}")
         if not is_template:
             for key in REQUIRED_COMPATIBILITY_PATH_KEYS:
                 match = re.search(rf"^\s{{2}}{re.escape(key)}:\s+(.+?)\s*$", text, re.MULTILINE)
