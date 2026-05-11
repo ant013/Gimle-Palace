@@ -7,6 +7,7 @@ set -euo pipefail
 COMPANY_ID="${PAPERCLIP_COMPANY_ID:-9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64}"
 SHARED_CODEX_HOME="${SHARED_CODEX_HOME:-$HOME/.codex}"
 MANAGED_CODEX_HOME="${MANAGED_CODEX_HOME:-$HOME/.paperclip/instances/default/companies/$COMPANY_ID/codex-home}"
+TRUST_WORKSPACE_ROOTS="${PAPERCLIP_TRUST_WORKSPACE_ROOTS:-}"
 
 if [ ! -d "$SHARED_CODEX_HOME" ]; then
   echo "ERROR: shared Codex home not found: $SHARED_CODEX_HOME" >&2
@@ -49,6 +50,25 @@ for tool in rg jq node npm; do
     echo "WARNING: expected runtime tool missing from stable PATH: $tool" >&2
   fi
 done
+
+if [ -n "$TRUST_WORKSPACE_ROOTS" ]; then
+  CONFIG_FILE="$MANAGED_CODEX_HOME/config.toml"
+  touch "$CONFIG_FILE"
+  IFS=":" read -r -a trust_roots <<< "$TRUST_WORKSPACE_ROOTS"
+  for trust_root in "${trust_roots[@]}"; do
+    [ -d "$trust_root" ] || continue
+    while IFS= read -r workspace; do
+      project_header="[projects.\"$workspace\"]"
+      if ! grep -Fqx "$project_header" "$CONFIG_FILE"; then
+        {
+          echo
+          echo "$project_header"
+          echo 'trust_level = "trusted"'
+        } >> "$CONFIG_FILE"
+      fi
+    done < <(find "$trust_root" -mindepth 3 -maxdepth 3 -type f -name AGENTS.md -path "*/workspace/AGENTS.md" -exec dirname {} \; | sort)
+  done
+fi
 
 echo "Managed Codex home: $MANAGED_CODEX_HOME"
 printf "Agents: "
