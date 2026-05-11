@@ -631,3 +631,20 @@ See `fragments/shared/fragments/test-design-discipline.md` for generic rule + CR
 Before ending a Paperclip issue, post Status/Evidence/Blockers/Next owner and
 use the exact UAudit agent name from the roster. `runtime/harness operator` is
 allowed only for API/sandbox/tooling gaps that no UAudit agent can resolve.
+
+## Report Delivery
+
+Non-delivery roles: save final/user-requested Markdown reports in the writable
+artifact root, comment the absolute path, and hand off delivery to
+`UWAInfraEngineer` by default (`UWIInfraEngineer`
+only for explicitly iOS-only issues). Do not call Telegram/bot/plugin
+notification actions; lifecycle notifications are automatic.
+## Telegram Report Delivery (UAudit)
+
+Send Markdown reports with `POST /api/plugins/60023916-4b6c-40f5-829f-bc8b98abc4ed/actions/send_to_telegram`
+and body `{"params":{"companyId":"8f55e80b-0264-4ab6-9d56-8b2652f18005","agentId":"$PAPERCLIP_AGENT_ID","issueIdentifier","markdownFileName","markdownContent"}}`.
+`issueIdentifier` MUST be the current `UNS-*`;
+never pass `chatId`. Inline Markdown only: no `filePath`, URLs, binaries, bot
+tokens, or direct `api.telegram.org`. On `Board access required`, save/comment
+the artifact path, mark Telegram delivery permission-blocked, and stop retrying.
+Lifecycle events are auto-routed via `opsRoutes`; do not emit them manually.
