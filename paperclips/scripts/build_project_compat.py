@@ -59,25 +59,47 @@ def strip_front_matter(text: str) -> str:
     return "\n".join(body) + "\n"
 
 
-def include_fragment_path(repo_root: Path, target: str, include_line: str) -> Path:
+def include_fragment_path(
+    repo_root: Path,
+    target: str,
+    include_line: str,
+    manifest_values: dict[str, str] | None = None,
+) -> Path:
     match = INCLUDE_RE.search(include_line)
     if not match:
         raise ValueError(f"include marker missing fragment path: {include_line}")
     fragment_rel = match.group(0)[len("fragments/") :]
     fragments_root = repo_root / "paperclips" / "fragments"
+    if manifest_values:
+        project_key = manifest_values.get("project.key", "")
+        if project_key:
+            project_fragments_root = (
+                repo_root / "paperclips" / "projects" / project_key / "fragments"
+            )
+            project_target_fragment = project_fragments_root / "targets" / target / fragment_rel
+            if project_target_fragment.is_file():
+                return project_target_fragment
+            project_shared_fragment = project_fragments_root / fragment_rel
+            if project_shared_fragment.is_file():
+                return project_shared_fragment
     target_fragment = fragments_root / "targets" / target / fragment_rel
     if target_fragment.is_file():
         return target_fragment
     return fragments_root / fragment_rel
 
 
-def expand_includes(repo_root: Path, target: str, text: str) -> str:
+def expand_includes(
+    repo_root: Path,
+    target: str,
+    text: str,
+    manifest_values: dict[str, str] | None = None,
+) -> str:
     rendered: list[str] = []
     for line in text.splitlines():
         if "<!-- @include fragments/" not in line:
             rendered.append(line)
             continue
-        fragment_path = include_fragment_path(repo_root, target, line)
+        fragment_path = include_fragment_path(repo_root, target, line, manifest_values)
         if not fragment_path.is_file():
             raise FileNotFoundError(f"include fragment not readable: {fragment_path}")
         rendered.extend(fragment_path.read_text().splitlines())
@@ -267,6 +289,68 @@ def manifest_mapping_of_lists(manifest_text: str, path: str) -> dict[str, list[s
     return result
 
 
+def manifest_mapping_scalars(manifest_text: str, path: str) -> dict[str, str]:
+    prefix = f"{path}."
+    values = flatten_manifest_scalars(manifest_text)
+    return {
+        key[len(prefix) :]: value
+        for key, value in values.items()
+        if key.startswith(prefix)
+    }
+
+
+def manifest_object_list(manifest_text: str, path: str) -> list[dict[str, str]]:
+    entry = manifest_path_entry(manifest_text, path)
+    if entry is None:
+        return []
+    index, indent, value = entry
+    if value == "[]":
+        return []
+
+    lines = manifest_text.splitlines()
+    entry_line = 0
+    current_entry = -1
+    for line_index, raw_line in enumerate(lines):
+        line = raw_line.split("#", 1)[0].rstrip()
+        if not line.strip() or line.lstrip().startswith("- "):
+            continue
+        current_entry += 1
+        if current_entry == index:
+            entry_line = line_index
+            break
+
+    items: list[dict[str, str]] = []
+    current: dict[str, str] | None = None
+    for raw_line in lines[entry_line + 1 :]:
+        line = raw_line.split("#", 1)[0].rstrip()
+        if not line.strip():
+            continue
+        line_indent = len(line) - len(line.lstrip(" "))
+        stripped = line.strip()
+        if line_indent <= indent:
+            break
+        if line_indent == indent + 2 and stripped.startswith("- "):
+            current = {}
+            items.append(current)
+            stripped = stripped[2:].strip()
+            if not stripped:
+                continue
+        if current is None or ":" not in stripped:
+            continue
+        key, raw_value = stripped.split(":", 1)
+        value = raw_value.strip().strip("\"'")
+        if value and value not in {"[]", "{}"}:
+            current[key.strip()] = value
+    return items
+
+
+def manifest_agents(manifest_text: str, target: str | None = None) -> list[dict[str, str]]:
+    agents = manifest_object_list(manifest_text, "agents")
+    if target is None:
+        return agents
+    return [agent for agent in agents if agent.get("target") == target]
+
+
 def target_manifest_data(manifest_values: dict[str, str], target: str) -> dict[str, str]:
     prefix = f"targets.{target}."
     return {
@@ -295,11 +379,17 @@ def apply_overlay(
     overlay_root = manifest_values.get("paths.overlay_root")
     if not overlay_root:
         return text
-    overlay_path = repo_root / overlay_root / target / role_name
-    if not overlay_path.is_file():
-        return text
-    separator = "" if text.endswith("\n") else "\n"
-    return f"{text}{separator}{overlay_path.read_text()}"
+    overlay_names = ["_common.md", role_name]
+    agent_name = manifest_values.get("agent.agent_name", "")
+    if agent_name:
+        overlay_names.append(f"{agent_name}.md")
+    for overlay_name in overlay_names:
+        overlay_path = repo_root / overlay_root / target / overlay_name
+        if not overlay_path.is_file():
+            continue
+        separator = "" if text.endswith("\n") else "\n"
+        text = f"{text}{separator}{overlay_path.read_text()}"
+    return text
 
 
 def render_role(
@@ -307,11 +397,15 @@ def render_role(
     target: str,
     role_file: Path,
     manifest_values: dict[str, str],
+    agent_values: dict[str, str] | None = None,
 ) -> str:
+    values = dict(manifest_values)
+    if agent_values:
+        values.update({f"agent.{key}": value for key, value in agent_values.items()})
     text = strip_front_matter(role_file.read_text())
-    text = expand_includes(repo_root, target, text)
-    text = apply_overlay(repo_root, manifest_values, target, role_file.name, text)
-    text = substitute_variables(text, manifest_values)
+    text = expand_includes(repo_root, target, text, values)
+    text = apply_overlay(repo_root, values, target, role_file.name, text)
+    text = substitute_variables(text, values)
     unresolved = UNRESOLVED_VARIABLE_RE.search(text)
     if unresolved:
         raise ValueError(
@@ -321,7 +415,28 @@ def render_role(
     return text
 
 
-def render_target(repo_root: Path, target: str, manifest_values: dict[str, str]) -> None:
+def render_target(
+    repo_root: Path,
+    target: str,
+    manifest_values: dict[str, str],
+    manifest_text: str = "",
+) -> None:
+    explicit_agents = manifest_agents(manifest_text, target) if manifest_text else []
+    if explicit_agents:
+        for agent in explicit_agents:
+            role_source = agent.get("role_source", "")
+            output_path = agent.get("output_path", "")
+            if not role_source or not output_path:
+                raise ValueError(f"manifest agent missing role_source/output_path for target {target}: {agent}")
+            role_file = repo_root / role_source
+            if not role_file.is_file():
+                raise FileNotFoundError(f"agent role source missing: {role_source}")
+            out_file = repo_root / output_path
+            out_file.parent.mkdir(parents=True, exist_ok=True)
+            out_file.write_text(render_role(repo_root, target, role_file, manifest_values, agent))
+            print(f"built {out_file}")
+        return
+
     roles_dir, out_dir = target_paths(repo_root, target)
     if not roles_dir.is_dir():
         raise FileNotFoundError(f"roles directory not found for target '{target}': {roles_dir}")
@@ -360,12 +475,53 @@ def role_output_entry(repo_root: Path, target: str, role_file: Path, ids: dict[s
     }
 
 
+def agent_output_entry(
+    repo_root: Path,
+    target: str,
+    agent: dict[str, str],
+    ids: dict[str, str],
+) -> dict[str, object]:
+    role_source = agent.get("role_source", "")
+    output = agent.get("output_path", "")
+    if not role_source or not output:
+        raise ValueError(f"manifest agent missing role_source/output_path for target {target}: {agent}")
+    role_file = repo_root / role_source
+    out_file = repo_root / output
+    meta = validate_instructions.load_role_front_matter(role_file)
+    text = out_file.read_text()
+    name = agent.get("agent_name") or out_file.stem
+    return {
+        "roleId": meta.role_id,
+        "agentName": name,
+        "agentId": agent.get("agent_id") or ids.get(name, ""),
+        "family": meta.family,
+        "profiles": meta.profiles,
+        "source": str(role_file.relative_to(repo_root)),
+        "output": str(out_file.relative_to(repo_root)),
+        "workspaceCwd": agent.get("workspace_cwd", ""),
+        "platform": agent.get("platform", ""),
+        "sha256": sha256_text(text),
+        "bytes": len(text.encode("utf-8")),
+        "lines": text.count("\n"),
+    }
+
+
 def target_output_entry(
     repo_root: Path,
     target: str,
     manifest_values: dict[str, str],
+    manifest_text: str = "",
 ) -> dict[str, object]:
     ids = compatibility_agent_ids(repo_root, manifest_values, target)
+    explicit_agents = manifest_agents(manifest_text, target) if manifest_text else []
+    if explicit_agents:
+        return {
+            **target_manifest_data(manifest_values, target),
+            "roles": [
+                agent_output_entry(repo_root, target, agent, ids)
+                for agent in explicit_agents
+            ],
+        }
     role_files = sorted(target_paths(repo_root, target)[0].glob("*.md"))
     return {
         **target_manifest_data(manifest_values, target),
@@ -424,7 +580,7 @@ def resolved_assembly(
                 "toolNamespace": manifest_values.get("mcp.tool_namespace", ""),
                 "baseRequired": manifest_list(manifest_text, "mcp.base_required"),
                 "codebaseMemoryProjects": {
-                    "primary": manifest_values.get("mcp.codebase_memory_projects.primary", ""),
+                    **manifest_mapping_scalars(manifest_text, "mcp.codebase_memory_projects"),
                 },
                 "additions": {
                     "project": manifest_list(manifest_text, "mcp.additions.project"),
@@ -465,7 +621,7 @@ def resolved_assembly(
             },
         },
         "targets": {
-            target: target_output_entry(repo_root, target, manifest_values)
+            target: target_output_entry(repo_root, target, manifest_values, manifest_text)
             for target in targets
         },
     }
@@ -533,7 +689,7 @@ def main() -> int:
         if not targets:
             raise ValueError(f"project {args.project} declares no build targets for {args.target}")
         for target in targets:
-            render_target(repo_root, target, manifest_values)
+            render_target(repo_root, target, manifest_values, manifest_text)
         write_resolved_assembly(repo_root, args.project, manifest, manifest_text, manifest_values, targets)
         run_inventory(repo_root, args.inventory)
     except (FileNotFoundError, ValueError) as exc:
