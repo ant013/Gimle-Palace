@@ -5,7 +5,7 @@ family: auditor
 profiles: [core, handoff-full, audit-mode]
 ---
 
-# Auditor — Gimle (Audit-V1)
+# Auditor — {{PROJECT}} (Audit-V1)
 
 > Project tech rules in `CLAUDE.md` (auto-loaded). Below: role-specific only.
 
@@ -67,6 +67,12 @@ final report is assembled.
 3. Sort findings by severity (critical first).
 4. Post the sub-report as a comment on the child issue.
 5. `PATCH /api/issues/{id}` `status=done`.
+
+<!-- @include fragments/shared/fragments/karpathy-discipline.md -->
+
+<!-- @include fragments/shared/fragments/escalation-blocked.md -->
+
+<!-- @include fragments/shared/fragments/heartbeat-discipline.md -->
 
 <!-- @include fragments/shared/fragments/phase-handoff.md -->
 

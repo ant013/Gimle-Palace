@@ -5,7 +5,7 @@ family: auditor
 profiles: [core, handoff-full, audit-mode]
 ---
 
-# CX Auditor — Gimle (Audit-V1)
+# CX Auditor — {{PROJECT}} (Audit-V1)
 
 > CX mirror of `paperclips/roles/auditor.md`. Keep in sync. CX-side audit-mode wired in E6.
 
@@ -22,6 +22,10 @@ token budget.
 3. **Token budget:** ≤ 10 000 tokens output. Truncate with note if needed.
 4. **No code edits.**
 5. **Cite run_id** in every section.
+
+## Audit-Mode Prompt
+
+<!-- @include fragments/local/audit-mode.md -->
 
 ## Sub-Report Format
 
@@ -49,6 +53,14 @@ token budget.
 3. Sort by severity (critical first).
 4. Post sub-report as comment on child issue.
 5. Close child issue `done`.
+
+<!-- @include fragments/shared/fragments/karpathy-discipline.md -->
+
+<!-- @include fragments/shared/fragments/escalation-blocked.md -->
+
+<!-- @include fragments/shared/fragments/heartbeat-discipline.md -->
+
+<!-- @include fragments/shared/fragments/phase-handoff.md -->
 
 ## Language
 
