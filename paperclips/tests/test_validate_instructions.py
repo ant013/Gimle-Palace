@@ -804,6 +804,74 @@ def test_project_deploy_dry_run_pending_agent_id_fails(tmp_path: Path, capsys) -
     assert "PENDING cx-auditor: no codex agent id" in captured.out
 
 
+def _point_resolved_agent_workspace(repo: Path, project: str, agent: str, workspace: Path) -> None:
+    resolved_path = repo / "paperclips" / "dist" / f"{project}.resolved-assembly.json"
+    resolved = json.loads(resolved_path.read_text())
+    for target_data in resolved["targets"].values():
+        for role in target_data["roles"]:
+            if role["agentName"] == agent:
+                role["workspaceCwd"] = str(workspace)
+                resolved_path.write_text(json.dumps(resolved, indent=2, sort_keys=True) + "\n")
+                return
+    raise AssertionError(f"agent not found: {agent}")
+
+
+def test_project_deploy_live_local_writes_backup_and_bundle(tmp_path: Path, capsys) -> None:
+    repo = make_repo(tmp_path)
+    workspace = tmp_path / "runs" / "AUCEO" / "workspace"
+    workspace.mkdir(parents=True)
+    live_agents = workspace / "AGENTS.md"
+    live_agents.write_text("old live instructions\n")
+    _point_resolved_agent_workspace(repo, "uaudit", "AUCEO", workspace)
+
+    result = deploy_project_agents.live_local(
+        repo,
+        "uaudit",
+        "codex",
+        "AUCEO",
+        tmp_path / "backups",
+    )
+
+    captured = capsys.readouterr()
+    source = repo / "paperclips" / "dist" / "uaudit" / "codex" / "AUCEO.md"
+    backups = sorted((tmp_path / "backups" / "uaudit" / "codex").glob("AUCEO.AGENTS.*.bak.md"))
+    assert result == 0
+    assert live_agents.read_text() == source.read_text()
+    assert backups[0].read_text() == "old live instructions\n"
+    assert backups[0].with_suffix(".json").is_file()
+    assert "LIVE-LOCAL DEPLOYED AUCEO" in captured.out
+
+
+def test_project_deploy_rollback_restores_backup(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    workspace = tmp_path / "runs" / "AUCEO" / "workspace"
+    workspace.mkdir(parents=True)
+    live_agents = workspace / "AGENTS.md"
+    live_agents.write_text("old live instructions\n")
+    backup_dir = tmp_path / "backups"
+    _point_resolved_agent_workspace(repo, "uaudit", "AUCEO", workspace)
+    deploy_project_agents.live_local(repo, "uaudit", "codex", "AUCEO", backup_dir)
+    backup = next((backup_dir / "uaudit" / "codex").glob("AUCEO.AGENTS.*.bak.md"))
+    live_agents.write_text("bad deploy\n")
+
+    result = deploy_project_agents.rollback(backup, backup_dir)
+
+    assert result == 0
+    assert live_agents.read_text() == "old live instructions\n"
+
+
+def test_project_deploy_live_local_missing_workspace_fails(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    _point_resolved_agent_workspace(repo, "uaudit", "AUCEO", tmp_path / "missing-workspace")
+
+    try:
+        deploy_project_agents.live_local(repo, "uaudit", "codex", "AUCEO", tmp_path / "backups")
+    except FileNotFoundError as exc:
+        assert "workspaceCwd missing" in str(exc)
+    else:
+        raise AssertionError("expected missing workspace failure")
+
+
 def test_compare_deployed_extracts_api_content_envelope() -> None:
     raw = json.dumps({"content": "# Agent\n\nInstructions.\n", "path": "AGENTS.md"})
 
