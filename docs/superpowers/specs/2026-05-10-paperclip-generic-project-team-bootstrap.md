@@ -207,6 +207,10 @@ Rules:
 - Keep agents/skills as links or copied folders according to existing
   `sync-codex-runtime-home.sh`, but include `auth.json` and `config.toml` in the
   validation surface.
+- When a project has generated per-agent workspaces, run Codex home sync with
+  `PAPERCLIP_TRUST_WORKSPACE_ROOTS=<run_root>` so `config.toml` trusts every
+  `*/workspace` containing `AGENTS.md`; otherwise agents can start in a fallback
+  workspace even when their adapter `cwd` is correct.
 
 ## Codex Adapter Rules
 
@@ -391,8 +395,9 @@ Expected future implementation areas:
 - `paperclips/schemas/project-team-bootstrap.schema.json` - package schema.
 - `paperclips/templates/team/*.yaml` - reusable team templates.
 - `paperclips/templates/project/*.yaml` - project package examples.
-- `paperclips/sync-codex-runtime-home.sh` - include auth/config validation or
-  split into a reusable Codex home preparation command.
+- `paperclips/sync-codex-runtime-home.sh` - include auth/config validation and
+  project workspace trust generation, or split into a reusable Codex home
+  preparation command.
 - `paperclips/tests/` - unit tests for planning, credential validation,
   Telegram routing diff, and instructions mode handling.
 - `docs/paperclip-operations/telegram-bot.md` - update with multi-company
