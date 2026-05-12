@@ -12,7 +12,9 @@ from palace_mcp.extractors.hot_path_profiler.models import HotPathSample, HotPat
 DEFAULT_THRESHOLD = 0.05
 
 
-def parse_instruments_trace(trace_path: Path) -> tuple[HotPathSummary, list[HotPathSample]]:
+def parse_instruments_trace(
+    trace_path: Path,
+) -> tuple[HotPathSummary, list[HotPathSample]]:
     """Parse one normalized Instruments JSON trace fixture."""
 
     try:
@@ -36,7 +38,9 @@ def parse_instruments_trace(trace_path: Path) -> tuple[HotPathSummary, list[HotP
         payload.get("total_cpu_samples") or summary_block.get("total_cpu_samples")
     )
     if total_cpu_samples <= 0:
-        total_cpu_samples = sum(max(_as_int(sample.get("cpu_samples")), 0) for sample in raw_samples)
+        total_cpu_samples = sum(
+            max(_as_int(sample.get("cpu_samples")), 0) for sample in raw_samples
+        )
     if total_cpu_samples <= 0:
         raise ExtractorRuntimeError(
             f"trace fixture at {trace_path} must contain positive cpu_samples totals"
@@ -46,7 +50,9 @@ def parse_instruments_trace(trace_path: Path) -> tuple[HotPathSummary, list[HotP
         payload.get("total_wall_ms") or summary_block.get("total_wall_ms")
     )
     if total_wall_ms <= 0:
-        total_wall_ms = sum(max(_as_int(sample.get("wall_ms")), 0) for sample in raw_samples)
+        total_wall_ms = sum(
+            max(_as_int(sample.get("wall_ms")), 0) for sample in raw_samples
+        )
 
     threshold = _as_float(
         payload.get("threshold_cpu_share")

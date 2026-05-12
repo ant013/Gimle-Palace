@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import json
 import shutil
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -17,9 +18,9 @@ from palace_mcp.extractors.base import ExtractorRunContext
 from palace_mcp.extractors.hot_path_profiler.extractor import HotPathProfilerExtractor
 from palace_mcp.extractors.schema import ensure_extractors_schema
 
-_HAS_NEO4J_RUNTIME = bool(os.environ.get("COMPOSE_NEO4J_URI")) or Path(
-    "/var/run/docker.sock"
-).exists()
+_HAS_NEO4J_RUNTIME = (
+    bool(os.environ.get("COMPOSE_NEO4J_URI")) or Path("/var/run/docker.sock").exists()
+)
 
 pytestmark = [
     pytest.mark.integration,
@@ -188,3 +189,102 @@ async def test_audit_fetcher_reads_hot_path_contract(
     section = sections["hot_path_profiler"]
     assert len(section.findings) == 3
     assert section.findings[0]["qualified_name"] == "WalletApp.AppDelegate.bootstrap()"
+
+
+@pytest.mark.asyncio
+async def test_run_integration_clears_stale_function_enrichment_on_repeat_run(
+    driver: AsyncDriver,
+    graphiti_mock: MagicMock,
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    profiles = repo / "profiles"
+    profiles.mkdir(parents=True)
+    trace_path = profiles / "track-a-instruments-time-profile.json"
+    shutil.copy(
+        _FIXTURE_ROOT / "track-a-instruments-time-profile.json",
+        trace_path,
+    )
+
+    await ensure_extractors_schema(driver)
+    await _seed_functions(driver, "project/hot-path-integ")
+    extractor = HotPathProfilerExtractor()
+
+    await extractor.run(graphiti=graphiti_mock, ctx=_ctx(repo, run_id="run-first"))
+
+    trace_path.write_text(
+        json.dumps(
+            {
+                "trace_id": "track-a-launch",
+                "source_format": "instruments",
+                "threshold_cpu_share": 0.05,
+                "summary": {
+                    "total_cpu_samples": 500,
+                    "total_wall_ms": 220,
+                },
+                "samples": [
+                    {
+                        "symbol_name": "WalletApp.HomeViewModel.loadDashboard()",
+                        "cpu_samples": 400,
+                        "wall_ms": 160,
+                        "thread_name": "com.apple.main-thread",
+                    },
+                    {
+                        "symbol_name": "ThirdParty.LegacyCryptoSigner.sign()",
+                        "cpu_samples": 100,
+                        "wall_ms": 60,
+                        "thread_name": "com.apple.main-thread",
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    await extractor.run(graphiti=graphiti_mock, ctx=_ctx(repo, run_id="run-second"))
+
+    async with driver.session() as session:
+        bootstrap_result = await session.run(
+            """
+            MATCH (fn:Function {project_id: $pid, qualified_name: $qualified_name})
+            RETURN fn.cpu_share AS cpu_share,
+                   fn.wall_share AS wall_share,
+                   fn.is_hot_path AS is_hot_path
+            """,
+            pid="project/hot-path-integ",
+            qualified_name="WalletApp.AppDelegate.bootstrap()",
+        )
+        dashboard_result = await session.run(
+            """
+            MATCH (fn:Function {project_id: $pid, qualified_name: $qualified_name})
+            RETURN fn.cpu_share AS cpu_share,
+                   fn.wall_share AS wall_share,
+                   fn.is_hot_path AS is_hot_path
+            """,
+            pid="project/hot-path-integ",
+            qualified_name="WalletApp.HomeViewModel.loadDashboard()",
+        )
+        summary_result = await session.run(
+            """
+            MATCH (s:HotPathSummary {project_id: $pid, trace_id: $trace_id})
+            RETURN s.hot_function_count AS hot_function_count
+            """,
+            pid="project/hot-path-integ",
+            trace_id="track-a-launch",
+        )
+        bootstrap_row = await bootstrap_result.single()
+        dashboard_row = await dashboard_result.single()
+        summary_row = await summary_result.single()
+
+    assert bootstrap_row is not None
+    assert bootstrap_row["cpu_share"] is None
+    assert bootstrap_row["wall_share"] is None
+    assert bootstrap_row["is_hot_path"] is False
+
+    assert dashboard_row is not None
+    assert dashboard_row["cpu_share"] == pytest.approx(0.8)
+    assert dashboard_row["wall_share"] == pytest.approx(160 / 220)
+    assert dashboard_row["is_hot_path"] is True
+
+    assert summary_row is not None
+    assert summary_row["hot_function_count"] == 1

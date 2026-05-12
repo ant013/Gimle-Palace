@@ -73,7 +73,9 @@ def parse_perfetto_trace(
         )
 
     if total_cpu_samples <= 0:
-        raise ExtractorRuntimeError(f"Perfetto trace {trace_path} produced zero samples")
+        raise ExtractorRuntimeError(
+            f"Perfetto trace {trace_path} produced zero samples"
+        )
 
     normalised = [
         sample.model_copy(

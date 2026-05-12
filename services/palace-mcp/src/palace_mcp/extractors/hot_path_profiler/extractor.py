@@ -73,6 +73,7 @@ class HotPathProfilerExtractor(BaseExtractor):
                 project_id=ctx.group_id,
                 samples=samples,
             )
+            summary = self._resolved_summary(summary, resolved)
             nodes, edges = await neo4j_writer.write_snapshot(
                 driver,
                 project_id=ctx.group_id,
@@ -161,3 +162,13 @@ LIMIT 25
         if trace_path.suffix == ".pftrace":
             return parse_perfetto_trace(trace_path)
         raise ExtractorConfigError(f"unsupported trace file: {trace_path}")
+
+    def _resolved_summary(
+        self,
+        summary: HotPathSummary,
+        resolved: list[HotPathSample],
+    ) -> HotPathSummary:
+        hot_function_count = sum(
+            1 for sample in resolved if sample.cpu_share >= summary.threshold_cpu_share
+        )
+        return summary.model_copy(update={"hot_function_count": hot_function_count})

@@ -14,6 +14,15 @@ WHERE n.project_id = $project_id
 DETACH DELETE n
 """.strip()
 
+_RESET_FUNCTION_ENRICHMENT = """
+MATCH (fn:Function {project_id: $project_id})-[:HOT_PATH_SAMPLE]->(
+    sample:HotPathSample {project_id: $project_id, trace_id: $trace_id}
+)
+SET fn.cpu_share = null,
+    fn.wall_share = null,
+    fn.is_hot_path = false
+""".strip()
+
 _WRITE_SUMMARY = """
 CREATE (sum:HotPathSummary)
 SET sum.project_id = $project_id,
@@ -108,6 +117,13 @@ async def _write_snapshot_tx(
     resolved: list[HotPathSample],
     unresolved: list[HotPathSample],
 ) -> tuple[int, int]:
+    cursor = await tx.run(
+        _RESET_FUNCTION_ENRICHMENT,
+        project_id=project_id,
+        trace_id=summary.trace_id,
+    )
+    await cursor.consume()
+
     cursor = await tx.run(
         _DELETE_EXISTING,
         project_id=project_id,

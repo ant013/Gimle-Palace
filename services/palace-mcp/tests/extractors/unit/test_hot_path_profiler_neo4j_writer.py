@@ -93,4 +93,9 @@ async def test_write_snapshot_counts_nodes_and_edges() -> None:
 
     assert nodes == 3
     assert edges == 1
-    assert len(tx.calls) == 4
+    assert len(tx.calls) == 5
+    assert "SET fn.cpu_share = null" in tx.calls[0][0]
+    assert tx.calls[0][1] == {
+        "project_id": "project/test",
+        "trace_id": "track-a",
+    }
