@@ -643,6 +643,7 @@ notification actions; lifecycle notifications are automatic.
 
 Send Markdown reports with `POST /api/plugins/60023916-4b6c-40f5-829f-bc8b98abc4ed/actions/send_to_telegram`
 and body `{"params":{"companyId":"8f55e80b-0264-4ab6-9d56-8b2652f18005","agentId":"$PAPERCLIP_AGENT_ID","issueIdentifier","markdownFileName","markdownContent"}}`.
+Use `PAPERCLIP_API_KEY` and `PAPERCLIP_API_URL` from your runtime environment for this delivery call; do not read `.env` files.
 `issueIdentifier` MUST be the current `UNS-*`;
 never pass `chatId`. Inline Markdown only: no `filePath`, URLs, binaries, bot
 tokens, or direct `api.telegram.org`. On `Board access required`, save/comment
