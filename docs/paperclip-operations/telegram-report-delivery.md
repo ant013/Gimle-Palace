@@ -17,6 +17,28 @@ This is an operator path. Do not add this full procedure to agent instructions.
 
 The Telegram chat is selected by plugin `fileRoutes`. Do not pass `chatId`.
 
+## Daily UAudit Delta Delivery
+
+UAudit daily version-branch audits are owned end-to-end by infra agents:
+
+- iOS: `UWIInfraEngineer`
+- Android: `UWAInfraEngineer`
+
+Their scheduled issues contain `UAudit daily version-branch delta audit`.
+Infra fetches the version branch, compares the branch head with the platform
+cursor, refreshes codebase-memory, runs the UAudit subagents, writes
+`audit.md`, sends the report through this Telegram plugin, and only then
+advances the cursor.
+
+Cursor files:
+
+- `/Users/Shared/UnstoppableAudit/state/ios-version-audit.json`
+- `/Users/Shared/UnstoppableAudit/state/android-version-audit.json`
+
+Do not manually advance a cursor after a failed or permission-blocked delivery.
+The cursor represents `last_successfully_audited_sha`, not merely the local
+checkout state.
+
 ## Infra Agent Runtime Env Repair
 
 Use this when an infra agent builds the correct Telegram plugin payload but the
