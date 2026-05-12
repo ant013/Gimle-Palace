@@ -4,11 +4,11 @@
 
 **Slice:** Phase 2 §2.2 #9 Localization & Accessibility.
 **Spec:** `docs/superpowers/specs/2026-05-07-localization-accessibility-extractor_spec.md`.
-**Source branch:** `feature/GIM-NN-localization-accessibility-extractor` cut from `origin/develop` **after E6 closes**.
+**Source branch:** `feature/GIM-275-localization-accessibility-extractor` cut from `origin/develop` **after E6 closes**.
 **Target branch:** `develop`. Squash-merge on APPROVE.
-**Team:** Codex. Phase chain: CXCTO → CXCodeReviewer (plan-first) → CXPythonEngineer (or PE-2) → CXCodeReviewer (mechanical) → OpusArchitectReviewer (adversarial) → CXQAEngineer → CXCTO merge.
+**Team:** Claude (reassigned 2026-05-12). Phase chain: CTO → CodeReviewer (plan-first) → PythonEngineer → CodeReviewer (mechanical) → OpusArchitectReviewer (adversarial) → QAEngineer → CTO merge.
 
-> **Blocked-on-E6**.
+> ~~Blocked-on-E6~~ — E6 gate no longer applies (reassigned from Codex to Claude team 2026-05-12).
 
 ---
 
@@ -21,23 +21,23 @@
 ### Step 0.2 (Issue + branch)
 
 - [ ] Open paperclip issue `Localization & Accessibility Extractor (#9)`.
-- [ ] Body = link to spec + plan; `GIM-NN` placeholder.
-- [ ] Reassign CXCTO.
+- [ ] Body = link to spec + plan; `GIM-275` placeholder.
+- [ ] Reassign CTO.
 
 ---
 
-## Phase 1 — CXCTO formalisation + plan-first review
+## Phase 1 — CTO formalisation + plan-first review
 
-### Step 1.1 (CXCTO)
+### Step 1.1 (CTO)
 
 - [ ] Resolve LA-D1..LA-D5 (defaults from spec).
-- [ ] Reassign CXCodeReviewer.
+- [ ] Reassign CodeReviewer.
 
-### Step 1.2 (CXCodeReviewer plan-first)
+### Step 1.2 (CodeReviewer plan-first)
 
 - [ ] Verify each of 6 rules has test+impl+commit.
 - [ ] Verify allowlist mechanism (LA-D4) is implementable.
-- [ ] APPROVE → CXPythonEngineer.
+- [ ] APPROVE → PythonEngineer.
 
 ---
 
@@ -50,7 +50,7 @@
       `extractors/localization_accessibility/{__init__,extractor}.py`.
 - [ ] Add to `EXTRACTORS` registry.
 - [ ] Tests GREEN.
-- [ ] Commit: `feat(GIM-NN): localization_accessibility scaffolding`.
+- [ ] Commit: `feat(GIM-275): localization_accessibility scaffolding`.
 
 ### Phase 2.2 — Locale resource parsers
 
@@ -107,7 +107,7 @@ For each of `a11y.missing_label_swiftui`, `a11y.missing_compose`:
       hard-coded detection.
 - [ ] Implement allowlist loader.
 - [ ] Tests GREEN.
-- [ ] Commit: `feat(GIM-NN): loc-a11y allowlist support`.
+- [ ] Commit: `feat(GIM-275): loc-a11y allowlist support`.
 
 ### Phase 2.6 — extract() orchestration + Neo4j writer
 
@@ -143,14 +143,14 @@ For each of `a11y.missing_label_swiftui`, `a11y.missing_compose`:
 - [ ] Add `localization_accessibility` row to `CLAUDE.md` §"Registered
       extractors".
 - [ ] Push branch.
-- [ ] Open PR `feat(GIM-NN): localization_accessibility extractor (#9)`.
-- [ ] Reassign CXCodeReviewer.
+- [ ] Open PR `feat(GIM-275): localization_accessibility extractor (#9)`.
+- [ ] Reassign CodeReviewer.
 
 ---
 
 ## Phase 3 — Review
 
-### Phase 3.1 — Mechanical (CXCodeReviewer)
+### Phase 3.1 — Mechanical (CodeReviewer)
 
 - [ ] `gh pr checks` green; pytest output for new tests.
 - [ ] Verify all 6 rules covered.
@@ -168,7 +168,7 @@ For each of `a11y.missing_label_swiftui`, `a11y.missing_compose`:
 
 ---
 
-## Phase 4 — QA evidence (CXQAEngineer on iMac)
+## Phase 4 — QA evidence (QAEngineer on iMac)
 
 - [ ] iMac live: bring up palace-mcp.
 - [ ] Live MCP call: `palace.ingest.run_extractor(name="localization_accessibility", project="uw-android")`.
@@ -179,7 +179,7 @@ For each of `a11y.missing_label_swiftui`, `a11y.missing_compose`:
 
 ---
 
-## Phase 5 — Merge (CXCTO)
+## Phase 5 — Merge (CTO)
 
 - [ ] CI green; CR + Opus APPROVE; QA Evidence.
 - [ ] Squash-merge.

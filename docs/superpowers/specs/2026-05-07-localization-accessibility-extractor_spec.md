@@ -3,13 +3,13 @@
 **Document date:** 2026-05-07
 **Status:** Draft · awaiting CX-CTO formalisation (post-E6 close)
 **Author:** Board+Claude session (operator + Claude Opus 4.7)
-**Team:** Codex (CX-native: xcstrings parser + Android Lint + Google ATF + detekt)
+**Team:** Claude (reassigned 2026-05-12 per roadmap rev3 §Stalled GIM-219 slices)
 **Slice ID:** Phase 2 §2.2 #9 Localization & Accessibility Extractor
 **Companion plan:** `2026-05-07-localization-accessibility-extractor_plan.md`
-**Branch:** `feature/GIM-NN-localization-accessibility-extractor`
-**Blockers (rev4):**
-- **E6 closure** (CX hire).
-- **S0.1 IngestRun schema unification** (rev4 — CTO-XF-H1) — uses unified schema; wait for S0 if it lands later than E6.
+**Branch:** `feature/GIM-275-localization-accessibility-extractor`
+**Blockers (rev4 — updated 2026-05-12):**
+- ~~E6 closure (CX hire)~~ — no longer applies; reassigned to Claude team.
+- **S0.1 IngestRun schema unification** (rev4 — CTO-XF-H1) — uses unified schema; if not yet landed, use existing `BaseExtractor` + `create_ingest_run` pattern (non-blocking).
 
 ---
 
@@ -171,6 +171,18 @@ strings + top a11y misses.
 | **LA-D3** | A11y check applies to test code? | no — skip test files | yes = inflated finding count |
 | **LA-D4** | Allowlist legitimate hard-coded strings (e.g., trademark "Bitcoin") | yes — allowlist file `<project>/.gimle/loc-allowlist.txt` | no allowlist = noise |
 | **LA-D5** | Locale base reference | `"en"` for both iOS+Android | other = configurable per-project |
+
+## 7a. Decision resolutions (CTO Phase 1.1, 2026-05-12)
+
+| ID | Resolution | Rationale |
+|----|-----------|-----------|
+| **LA-D1** | **iOS: full. Android: Slice 2-lite (Manifest + strings.xml only).** | UW-Android is Compose-first (1418 @Composable, 9 layouts, 0 ViewBinding per 2026-04-30 inventory). Full Android a11y scan is dead scope — 80% of detection rules target View XML that doesn't exist. Android side limited to `strings.xml` locale-resource parsing + hard-coded-in-Compose detection. Defer Android layout/View a11y scan as out-of-scope. |
+| **LA-D2** | Default: string visible in UI control directly → severity=high. | Spec default accepted. |
+| **LA-D3** | No — skip test files. | Spec default accepted. |
+| **LA-D4** | Yes — allowlist at `<project>/.gimle/loc-allowlist.txt`. | Spec default accepted. |
+| **LA-D5** | `"en"` for both platforms. | Spec default accepted. |
+
+**Slice 2-lite narrowing (Android side):** ViewBinding/layout XML scan, `android:contentDescription` on View XML, and `android:labelFor` are **deferred** — no implementation in this slice. Rule `a11y.missing_compose` remains in scope (Compose semantics detection). Rule 6 from spec §6 is narrowed to Compose-only (no View XML `contentDescription` check).
 
 ## 8. Test plan
 
