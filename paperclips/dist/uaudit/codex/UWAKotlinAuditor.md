@@ -817,5 +817,30 @@ and `pr.diff` under `$RUN/smoke/` and prove:
 - malformed subagent JSON blocks the run;
 - subagents do not write files or read forbidden secret paths.
 
-Save smoke summaries under `$RUN/smoke/`. Do not include raw PR diff content,
-secrets, or auth material in comments.
+Save smoke artifacts under this layout:
+
+```text
+$RUN/smoke/
+  pr.json
+  pr.diff
+  subagents/
+    uaudit-kotlin-audit-specialist.json
+    uaudit-bug-hunter.json
+    uaudit-security-auditor.json
+    uaudit-blockchain-auditor.json
+  summary.json
+```
+
+`summary.json` must include `expected_subagent_count`, `completed_subagent_count`,
+the exact subagent names, whether any generic/default agent was used, and one
+short outcome per subagent. Do not include raw PR diff content, secrets, or auth
+material in comments.
+
+After `summary.json` is written, hand off the same issue to `UWAInfraEngineer`
+for Telegram delivery:
+
+1. touch `$RUN/status/smoke.done`;
+2. post a short comment:
+   `UAudit subagent smoke summary ready for UNS-<N> Android. Handing off to UWAInfraEngineer for Telegram delivery.`;
+3. PATCH assignee to `5f0709f8-0b05-43e7-8711-6df618b95f69`;
+4. touch `$RUN/status/handoff.done`.

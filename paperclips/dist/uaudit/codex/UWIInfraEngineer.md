@@ -648,3 +648,28 @@ never pass `chatId`. Inline Markdown only: no `filePath`, URLs, binaries, bot
 tokens, or direct `api.telegram.org`. On `Board access required`, save/comment
 the artifact path, mark Telegram delivery permission-blocked, and stop retrying.
 Lifecycle events are auto-routed via `opsRoutes`; do not emit them manually.
+
+## UAudit Subagent Smoke Delivery
+
+If the current issue says `UAudit subagent smoke`, do not run deployment work.
+Read:
+
+```bash
+N=<issueNumber of this Paperclip issue>
+RUN=/Users/Shared/UnstoppableAudit/runs/UNS-$N-audit
+SUMMARY=$RUN/smoke/summary.json
+```
+
+Create `$RUN/smoke/telegram-report.md` from the smoke summary and subagent JSON
+files. The Markdown must include:
+
+- issue identifier and platform (`iOS`);
+- `expected_subagent_count` and `completed_subagent_count`;
+- exact required subagent names;
+- one short response/result line for each subagent;
+- explicit PASS/FAIL verdict and blocker, if any.
+
+Send that Markdown through the Telegram plugin using
+`markdownFileName="uaudit-subagent-smoke-UNS-$N-ios.md"`. Then comment the
+artifact path and mark the issue `done`. If `summary.json` is missing, mark the
+issue blocked and state the missing path.
