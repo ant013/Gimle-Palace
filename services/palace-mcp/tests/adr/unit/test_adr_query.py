@@ -76,7 +76,6 @@ class TestQueryAdrs:
         call_kwargs = session.run.call_args
         assert call_kwargs is not None
         # section_filter should be forwarded to Cypher as parameter
-        args = call_kwargs[0] if call_kwargs[0] else []
         kwargs = call_kwargs[1] if len(call_kwargs) > 1 else {}
         combined = {**(kwargs if isinstance(kwargs, dict) else {})}
         # Check that section_filter was passed somewhere
