@@ -19,6 +19,8 @@ Options:
   --repo-root <path>          Parent dir containing kit repos (default: $PWD)
   --repo-path <path>          Explicit local repo path; bypass manifest lookup
   --manifest <path>           Manifest used for slug -> relative_path lookup
+  --scheme <name>             xcodebuild scheme (default: auto-detect from Package.swift name)
+  --destination <spec>        xcodebuild -destination (default: 'generic/platform=iOS Simulator')
   --remote-host <host>        SSH host for the iMac
   --remote-base <path>        Remote base dir that contains kit repos
   --remote-relative-path <p>  Override remote repo-relative path
@@ -31,7 +33,12 @@ Notes:
   - Slug validation matches Palace project slugs.
   - When a manifest contains the slug, its relative_path is used so kit slugs
     like tron-kit resolve to repo dirs like TronKit.Swift.
-  - This script currently targets SwiftPM-style kit repos with Package.swift.
+  - Targets SwiftPM-style kit repos with Package.swift; built via xcodebuild
+    against iOS Simulator (the canonical target for HS Kits). This avoids
+    the macOS-platform compatibility cascade hit by `swift build` when Kit
+    Package.swift declares only `.iOS(...)` in `platforms`.
+  - xcodebuild writes index store into <derived-data>/Index.noindex/DataStore
+    directly; no intermediate copy step needed.
 EOF
 }
 
@@ -87,6 +94,8 @@ SLUG=""
 REPO_ROOT_ARG="${HS_REPO_ROOT:-$PWD}"
 REPO_PATH_ARG=""
 MANIFEST_PATH="$DEFAULT_MANIFEST"
+SCHEME=""
+DESTINATION="${SCIP_EMIT_DESTINATION:-generic/platform=iOS Simulator}"
 REMOTE_HOST="$DEFAULT_REMOTE_HOST"
 REMOTE_BASE="$DEFAULT_REMOTE_BASE"
 REMOTE_RELATIVE_PATH=""
@@ -121,6 +130,24 @@ while [[ $# -gt 0 ]]; do
         --manifest)
             [[ $# -ge 2 ]] || die "--manifest requires a value"
             MANIFEST_PATH="$2"
+            shift 2
+            ;;
+        --scheme=*)
+            SCHEME="${1#*=}"
+            shift
+            ;;
+        --scheme)
+            [[ $# -ge 2 ]] || die "--scheme requires a value"
+            SCHEME="$2"
+            shift 2
+            ;;
+        --destination=*)
+            DESTINATION="${1#*=}"
+            shift
+            ;;
+        --destination)
+            [[ $# -ge 2 ]] || die "--destination requires a value"
+            DESTINATION="$2"
             shift 2
             ;;
         --remote-host=*)
@@ -199,6 +226,7 @@ validate_slug "$SLUG"
 require_command python3
 require_command xcrun
 require_command swift
+require_command xcodebuild
 require_command ssh
 require_command scp
 
@@ -220,14 +248,18 @@ if [[ -z "$EMITTER_BIN" ]]; then
     EMITTER_BIN="$EMITTER_DIR/.build/release/palace-swift-scip-emit-cli"
 fi
 
-SCRATCH_PATH="$LOCAL_REPO_PATH/.palace-scip-build"
-INDEX_STORE="$LOCAL_REPO_PATH/.palace-scip-index-store"
 DERIVED_DATA="$LOCAL_REPO_PATH/.palace-scip-derived-data"
 OUTPUT_PATH="$LOCAL_REPO_PATH/scip/index.scip"
 REMOTE_DEST_DIR="$REMOTE_BASE/$RELATIVE_PATH/scip"
 REMOTE_DEST_PATH="$REMOTE_DEST_DIR/index.scip"
 
-log "slug=$SLUG local_repo=$LOCAL_REPO_PATH remote_path=$REMOTE_DEST_PATH"
+# Auto-detect scheme from Package.swift `name: "..."` if not provided.
+if [[ -z "$SCHEME" ]]; then
+    SCHEME="$(grep -oE 'name:[[:space:]]*"[^"]+"' "$LOCAL_REPO_PATH/Package.swift" | head -1 | sed -E 's/.*"([^"]+)"/\1/')"
+fi
+[[ -n "$SCHEME" ]] || die "could not derive xcodebuild scheme; pass --scheme"
+
+log "slug=$SLUG scheme=$SCHEME destination='$DESTINATION' local_repo=$LOCAL_REPO_PATH remote_path=$REMOTE_DEST_PATH"
 
 if [[ ! -x "$EMITTER_BIN" ]]; then
     log "building palace-swift-scip-emit"
@@ -237,22 +269,29 @@ fi
 
 log "preparing local build directories"
 if [[ "$DRY_RUN" == "false" ]]; then
-    rm -rf "$SCRATCH_PATH" "$INDEX_STORE" "$DERIVED_DATA"
+    rm -rf "$DERIVED_DATA"
     mkdir -p "$DERIVED_DATA/Index.noindex" "$(dirname "$OUTPUT_PATH")"
 else
-    printf 'DRY-RUN: rm -rf %q %q %q\n' "$SCRATCH_PATH" "$INDEX_STORE" "$DERIVED_DATA"
+    printf 'DRY-RUN: rm -rf %q\n' "$DERIVED_DATA"
     printf 'DRY-RUN: mkdir -p %q %q\n' "$DERIVED_DATA/Index.noindex" "$(dirname "$OUTPUT_PATH")"
 fi
 
-log "building Swift package with index-store emission"
-run_cmd xcrun swift build \
-    --package-path "$LOCAL_REPO_PATH" \
-    --scratch-path "$SCRATCH_PATH" \
-    -Xswiftc -index-store-path \
-    -Xswiftc "$INDEX_STORE"
+log "building Swift package via xcodebuild ($DESTINATION)"
+if [[ "$DRY_RUN" == "true" ]]; then
+    printf 'DRY-RUN: (cd %q && xcodebuild build -scheme %q -destination %q -derivedDataPath %q)\n' \
+        "$LOCAL_REPO_PATH" "$SCHEME" "$DESTINATION" "$DERIVED_DATA"
+else
+    (cd "$LOCAL_REPO_PATH" && xcodebuild build \
+        -scheme "$SCHEME" \
+        -destination "$DESTINATION" \
+        -derivedDataPath "$DERIVED_DATA" \
+        -quiet)
+fi
 
-log "copying index store into DerivedData layout"
-run_cmd cp -R "$INDEX_STORE" "$DERIVED_DATA/Index.noindex/DataStore"
+# xcodebuild writes index store into $DERIVED_DATA/Index.noindex/DataStore directly.
+if [[ "$DRY_RUN" == "false" && ! -d "$DERIVED_DATA/Index.noindex/DataStore" ]]; then
+    die "expected index data store not found at $DERIVED_DATA/Index.noindex/DataStore (xcodebuild did not emit index)"
+fi
 
 log "emitting SCIP"
 run_cmd "$EMITTER_BIN" \
