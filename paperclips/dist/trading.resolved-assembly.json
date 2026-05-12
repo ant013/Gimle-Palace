@@ -1,0 +1,200 @@
+{
+  "capabilities": {
+    "mcp": {
+      "additions": {
+        "byRole": {},
+        "project": []
+      },
+      "baseRequired": [
+        "codebase-memory",
+        "context7",
+        "serena",
+        "github",
+        "sequential-thinking"
+      ],
+      "codebaseMemoryProjects": {
+        "primary": "trading-agents"
+      },
+      "packageName": "trading_agents",
+      "serviceName": "trading",
+      "toolNamespace": "trading"
+    },
+    "skills": {
+      "additions": {
+        "byRole": {},
+        "project": []
+      }
+    },
+    "subagents": {
+      "additions": {
+        "byRole": {},
+        "project": []
+      }
+    }
+  },
+  "compatibility": {
+    "claudeDeployMapping": "paperclips/deploy-agents.sh",
+    "codexAgentIdsEnv": "paperclips/codex-agent-ids.env",
+    "inputs": {
+      "claudeDeployMapping": {
+        "path": "paperclips/deploy-agents.sh",
+        "sha256": "297f9bcb25d691aaadbbd48535abfbe32686d5e03feabf724d1b58dcd8ba8acc"
+      },
+      "codexAgentIdsEnv": {
+        "path": "paperclips/codex-agent-ids.env",
+        "sha256": "1386afc1e397c7e7218d22c62750f3f77ee5459609723e1bf09639f9d5ad85e5"
+      },
+      "workspaceUpdateScript": {
+        "path": "paperclips/update-agent-workspaces.sh",
+        "sha256": "7721ac2ce8a9cf99f6b2784081fdec444ed83e95f5e0809c1fe9859214d40016"
+      }
+    },
+    "legacyOutputPaths": "false",
+    "workspaceUpdateScript": "paperclips/update-agent-workspaces.sh"
+  },
+  "parameters": {
+    "paths": {
+      "codexTeamRoot": "/Users/Shared/Trading/runs",
+      "operatorMemoryDir": "~/.claude/projects/-Users-Shared-Trading/memory",
+      "overlayRoot": "paperclips/projects/trading/overlays",
+      "primaryMcpServiceDir": "/Users/Shared/Trading",
+      "primaryRepoRoot": "/Users/Shared/Trading/repo",
+      "productionCheckout": "/Users/Shared/Trading",
+      "projectRoot": "/Users/Shared/Trading",
+      "projectRulesFile": "AGENTS.md"
+    },
+    "project": {
+      "companyId": "09edf17a-31d5-46cb-9812-6f07623b1c45",
+      "displayName": "Trading",
+      "integrationBranch": "develop",
+      "issuePrefix": "TRD",
+      "key": "trading",
+      "systemName": "Trading"
+    }
+  },
+  "project": "trading",
+  "schemaVersion": 1,
+  "sourceManifest": "paperclips/projects/trading/paperclip-agent-assembly.yaml",
+  "sourceManifestSha256": "6889e4cbef44112baf50c5bd2ddc678d39a0b842e958ebcd0b2fcf78cfbfaf6a",
+  "targets": {
+    "claude": {
+      "adapterType": "claude_local",
+      "deployMode": "api",
+      "instructionEntryFile": "AGENTS.md",
+      "instructionsBundleMode": "managed",
+      "roles": [
+        {
+          "agentId": "4289e2d6-990b-4c53-b879-2a1dc90fe72b",
+          "agentName": "CTO",
+          "bytes": 24333,
+          "family": "cto",
+          "lines": 501,
+          "output": "paperclips/dist/trading/claude/CTO.md",
+          "platform": "",
+          "profiles": [
+            "core",
+            "task-start",
+            "review",
+            "qa-smoke",
+            "handoff-full",
+            "merge-deploy"
+          ],
+          "roleId": "claude:cto",
+          "sha256": "f3602db41789cef8135f545a43694ec679afeaa837fc3af15d978f0f8e830852",
+          "source": "paperclips/roles/cto.md",
+          "workspaceCwd": "/Users/Shared/Trading/runs/CTO/workspace"
+        }
+      ]
+    },
+    "codex": {
+      "adapterType": "codex_local",
+      "deployMode": "api",
+      "instructionEntryFile": "AGENTS.md",
+      "instructionsBundleMode": "managed",
+      "roles": [
+        {
+          "agentId": "3649a8df-94ed-4025-a998-fb8be40975af",
+          "agentName": "CEO",
+          "bytes": 26197,
+          "family": "cto",
+          "lines": 516,
+          "output": "paperclips/dist/trading/codex/CEO.md",
+          "platform": "",
+          "profiles": [
+            "core",
+            "task-start",
+            "review",
+            "qa-smoke",
+            "handoff-full",
+            "merge-deploy"
+          ],
+          "roleId": "codex:cx-cto",
+          "sha256": "6a4c361c625330a7f19004c4f50688c127fe7f4b7a533a5e5f879be69db6a6a5",
+          "source": "paperclips/roles-codex/cx-cto.md",
+          "workspaceCwd": "/Users/Shared/Trading/runs/CEO/workspace"
+        },
+        {
+          "agentId": "8eeda1b1-704f-4b97-839f-e050f9f765d2",
+          "agentName": "CodeReviewer",
+          "bytes": 26089,
+          "family": "code-reviewer",
+          "lines": 623,
+          "output": "paperclips/dist/trading/codex/CodeReviewer.md",
+          "platform": "",
+          "profiles": [
+            "core",
+            "task-start",
+            "review",
+            "qa-smoke",
+            "handoff-full",
+            "merge-deploy"
+          ],
+          "roleId": "codex:cx-code-reviewer",
+          "sha256": "0fd5950d1b3d0d22908d00db504d6b62bd4f8e7cfa8ed8023beef6fe4e912b43",
+          "source": "paperclips/roles-codex/cx-code-reviewer.md",
+          "workspaceCwd": "/Users/Shared/Trading/runs/CodeReviewer/workspace"
+        },
+        {
+          "agentId": "2705af9c-7dda-464c-9f6c-8d0deb38816a",
+          "agentName": "PythonEngineer",
+          "bytes": 29933,
+          "family": "implementation",
+          "lines": 698,
+          "output": "paperclips/dist/trading/codex/PythonEngineer.md",
+          "platform": "",
+          "profiles": [
+            "core",
+            "task-start",
+            "implementation",
+            "handoff"
+          ],
+          "roleId": "codex:cx-python-engineer",
+          "sha256": "5c4393d51bc65156a039392ddd48b7b3b66c94a102ea783d161bed0210651bff",
+          "source": "paperclips/roles-codex/cx-python-engineer.md",
+          "workspaceCwd": "/Users/Shared/Trading/runs/PythonEngineer/workspace"
+        },
+        {
+          "agentId": "fbd3d0e4-6abb-4797-83d2-e4dc99dbed44",
+          "agentName": "QAEngineer",
+          "bytes": 30494,
+          "family": "qa",
+          "lines": 669,
+          "output": "paperclips/dist/trading/codex/QAEngineer.md",
+          "platform": "",
+          "profiles": [
+            "core",
+            "task-start",
+            "qa-smoke",
+            "implementation",
+            "handoff-full",
+            "merge-deploy"
+          ],
+          "roleId": "codex:cx-qa-engineer",
+          "sha256": "61f73306e805d7fa5a4ec9d961c9e24ecef5af4f3c860e9bb849ebeb71035eea",
+          "source": "paperclips/roles-codex/cx-qa-engineer.md",
+          "workspaceCwd": "/Users/Shared/Trading/runs/QAEngineer/workspace"
+        }
+      ]
+    }
+  }
+}
