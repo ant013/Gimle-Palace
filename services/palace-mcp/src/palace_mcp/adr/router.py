@@ -9,11 +9,16 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, NoReturn
 
 from neo4j import AsyncDriver
 
 logger = logging.getLogger(__name__)
+
+
+def _assert_never(value: NoReturn) -> NoReturn:
+    raise AssertionError(f"Unhandled mode: {value!r}")
+
 
 _TOOL_DESCRIPTION = (
     "Read/write/query ADR documents stored under docs/postulates/. "
@@ -39,7 +44,7 @@ def register_adr_tools(
     driver_getter: callable that returns the live AsyncDriver (or None).
     """
 
-    @tool_decorator("palace.code.manage_adr", _TOOL_DESCRIPTION)
+    @tool_decorator("palace.code.manage_adr", _TOOL_DESCRIPTION)  # type: ignore[untyped-decorator]
     async def palace_code_manage_adr(
         mode: Literal["read", "write", "supersede", "query"],
         slug: str | None = None,
@@ -127,8 +132,4 @@ def register_adr_tools(
                 driver=driver,
             )
 
-        return {
-            "ok": False,
-            "error_code": "invalid_mode",
-            "message": f"Unknown mode {mode!r}; valid: read, write, supersede, query",
-        }
+        _assert_never(mode)

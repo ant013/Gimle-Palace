@@ -123,7 +123,7 @@ def decision_id(neo4j_uri: str, neo4j_auth: tuple[str, str]) -> str:
         try:
             async with drv.session() as s:
                 await s.run(
-                    "MERGE (d:Decision {id: $id}) SET d.title = 'Wire test decision'",
+                    "MERGE (d:Decision {uuid: $id}) SET d.title = 'Wire test decision'",
                     id=did,
                 )
         finally:

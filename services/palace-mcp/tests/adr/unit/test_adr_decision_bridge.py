@@ -28,7 +28,7 @@ class TestDecisionBridge:
         from palace_mcp.adr.decision_bridge import create_cited_by_edge
 
         # session.run().single() returns a record (decision found)
-        driver, session = _make_session_returning({"id": _DECISION_UUID})
+        driver, session = _make_session_returning({"uuid": _DECISION_UUID})
 
         result = await create_cited_by_edge(
             decision_id=_DECISION_UUID,

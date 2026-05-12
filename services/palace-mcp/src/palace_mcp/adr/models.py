@@ -45,6 +45,24 @@ class AdrDocument(BaseModel):
     source_path: str  # relative path: docs/postulates/<slug>.md
 
 
+CYPHER_UPSERT_SECTION = """
+MERGE (d:AdrDocument {slug: $slug})
+MERGE (s:AdrSection {doc_slug: $slug, section_name: $section_name})
+ON CREATE SET
+  s.body_hash    = $body_hash,
+  s.body_excerpt = $body_excerpt,
+  s.last_edit    = datetime()
+ON MATCH SET
+  s.body_hash    = $body_hash,
+  s.body_excerpt = $body_excerpt,
+  s.last_edit    = CASE
+    WHEN s.body_hash <> $body_hash THEN datetime()
+    ELSE s.last_edit
+  END
+MERGE (d)-[:HAS_SECTION]->(s)
+"""
+
+
 class AdrSection(BaseModel):
     section_name: SectionName
     body: str

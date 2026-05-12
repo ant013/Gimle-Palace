@@ -12,9 +12,9 @@ from neo4j import AsyncDriver
 
 logger = logging.getLogger(__name__)
 
-_CHECK_DECISION = "MATCH (d:Decision {id: $decision_id}) RETURN d.id"
+_CHECK_DECISION = "MATCH (d:Decision {uuid: $decision_id}) RETURN d.uuid"
 _CREATE_EDGE = """
-MATCH (d:Decision {id: $decision_id})
+MATCH (d:Decision {uuid: $decision_id})
 MATCH (a:AdrDocument {slug: $slug})
 MERGE (d)-[:CITED_BY]->(a)
 """

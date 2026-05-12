@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from neo4j import AsyncDriver
 
-from palace_mcp.adr.models import CANONICAL_SECTIONS, body_hash_for, validate_slug
+from palace_mcp.adr.models import (
+    CANONICAL_SECTIONS,
+    CYPHER_UPSERT_SECTION,
+    body_hash_for,
+    validate_slug,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +23,7 @@ async def read_adr(
     slug: str,
     base_dir: Path,
     driver: AsyncDriver | None,
-) -> dict:
+) -> dict[str, Any]:
     """Read an ADR file and project it to the graph. Returns MCP envelope."""
     try:
         validate_slug(slug)
@@ -55,7 +60,7 @@ async def read_adr(
     }
 
 
-def _parse_adr_file(content: str) -> tuple[str, list[dict]]:
+def _parse_adr_file(content: str) -> tuple[str, list[dict[str, Any]]]:
     """Parse markdown ADR file → (title, [{name, body}]).
 
     Recognises lines starting with '# ' as the title and '## SECTION' as
@@ -64,7 +69,7 @@ def _parse_adr_file(content: str) -> tuple[str, list[dict]]:
     """
     lines = content.splitlines(keepends=True)
     title = ""
-    sections: list[dict] = []
+    sections: list[dict[str, Any]] = []
     current_section: str | None = None
     current_body: list[str] = []
 
@@ -106,29 +111,11 @@ ON MATCH SET
   d.source_path  = $source_path
 """
 
-_UPSERT_SECTION = """
-MERGE (d:AdrDocument {slug: $slug})
-MERGE (s:AdrSection {doc_slug: $slug, section_name: $section_name})
-ON CREATE SET
-  s.body_hash    = $body_hash,
-  s.body_excerpt = $body_excerpt,
-  s.last_edit    = datetime()
-ON MATCH SET
-  s.body_hash    = $body_hash,
-  s.body_excerpt = $body_excerpt,
-  s.last_edit    = CASE
-    WHEN s.body_hash <> $body_hash THEN datetime()
-    ELSE s.last_edit
-  END
-MERGE (d)-[:HAS_SECTION]->(s)
-"""
-
-
 async def _project_to_graph(
     slug: str,
     title: str,
     source_path: str,
-    sections: list[dict],
+    sections: list[dict[str, Any]],
     driver: AsyncDriver,
 ) -> None:
     async with driver.session() as session:
@@ -136,7 +123,7 @@ async def _project_to_graph(
         for sec in sections:
             bh = body_hash_for(sec["body"])
             await session.run(
-                _UPSERT_SECTION,
+                CYPHER_UPSERT_SECTION,
                 slug=slug,
                 section_name=sec["name"],
                 body_hash=bh,

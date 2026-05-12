@@ -36,6 +36,7 @@ import logging
 import os
 import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, Literal, TypeVar
 
 from graphiti_core import Graphiti
@@ -802,9 +803,7 @@ async def _palace_git_ls_tree(
 register_code_tools(_tool, _mcp)
 register_adr_tools(
     _tool,
-    base_dir=__import__("pathlib").Path(
-        os.environ.get("PALACE_ADR_BASE_DIR", "docs/postulates")
-    ),
+    base_dir=Path(os.environ.get("PALACE_ADR_BASE_DIR", "docs/postulates")),
     driver_getter=get_driver,
 )
 register_code_composite_tools(

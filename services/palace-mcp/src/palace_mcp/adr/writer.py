@@ -13,7 +13,12 @@ from typing import Any
 
 from neo4j import AsyncDriver
 
-from palace_mcp.adr.models import CANONICAL_SECTIONS, body_hash_for, validate_slug
+from palace_mcp.adr.models import (
+    CANONICAL_SECTIONS,
+    CYPHER_UPSERT_SECTION,
+    body_hash_for,
+    validate_slug,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -46,24 +51,6 @@ ON MATCH SET
   d.updated_at   = datetime(),
   d.source_path  = $source_path
 """
-
-_UPSERT_SECTION = """
-MERGE (d:AdrDocument {slug: $slug})
-MERGE (s:AdrSection {doc_slug: $slug, section_name: $section_name})
-ON CREATE SET
-  s.body_hash    = $body_hash,
-  s.body_excerpt = $body_excerpt,
-  s.last_edit    = datetime()
-ON MATCH SET
-  s.body_hash    = $body_hash,
-  s.body_excerpt = $body_excerpt,
-  s.last_edit    = CASE
-    WHEN s.body_hash <> $body_hash THEN datetime()
-    ELSE s.last_edit
-  END
-MERGE (d)-[:HAS_SECTION]->(s)
-"""
-
 
 async def write_adr(
     slug: str,
@@ -102,7 +89,7 @@ async def write_adr(
     async with driver.session() as session:
         await session.run(_UPSERT_DOC, slug=slug, title=title, source_path=source_path)
         await session.run(
-            _UPSERT_SECTION,
+            CYPHER_UPSERT_SECTION,
             slug=slug,
             section_name=section,
             body_hash=new_hash,
@@ -153,7 +140,7 @@ def _write_section_to_file(
         finally:
             fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
-    return changed  # type: ignore[return-value]
+    return changed
 
 
 def _splice_section(
