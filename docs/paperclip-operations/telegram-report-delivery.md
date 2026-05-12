@@ -17,6 +17,58 @@ This is an operator path. Do not add this full procedure to agent instructions.
 
 The Telegram chat is selected by plugin `fileRoutes`. Do not pass `chatId`.
 
+## Daily UAudit Delta Delivery
+
+UAudit daily version-branch audits are owned end-to-end by infra agents:
+
+- iOS: `UWIInfraEngineer`
+- Android: `UWAInfraEngineer`
+
+Their scheduled issues contain `UAudit daily version-branch delta audit`.
+Infra fetches the version branch, compares the branch head with the platform
+cursor, refreshes codebase-memory, runs the UAudit subagents, writes
+`audit.md`, sends the report through this Telegram plugin, and only then
+advances the cursor.
+
+Cursor files:
+
+- `/Users/Shared/UnstoppableAudit/state/ios-version-audit.json`
+- `/Users/Shared/UnstoppableAudit/state/android-version-audit.json`
+
+Do not manually advance a cursor after a failed or permission-blocked delivery.
+The cursor represents `last_successfully_audited_sha`, not merely the local
+checkout state.
+
+## Infra Agent Runtime Env Repair
+
+Use this when an infra agent builds the correct Telegram plugin payload but the
+plugin returns `{"error":"Board access required"}`.
+
+Cause: the infra agent runtime does not have a Board-scoped
+`PAPERCLIP_API_KEY`. Host `.env` may be correct, but Paperclip issue runs only
+see values present in the live agent `adapterConfig.env`.
+
+Fix the live infra agent configuration, not the report payload:
+
+- Add `PAPERCLIP_API_KEY` to the infra agent `adapterConfig.env` from the
+  operator Board token.
+- Add `PAPERCLIP_API_URL` to the same `adapterConfig.env`.
+- Preserve the existing `adapterConfig` fields, especially `cwd`,
+  `CODEX_HOME`, `PATH`, model, sandbox, and extra args.
+- Keep agent instructions short: tell infra to use `PAPERCLIP_API_KEY` and
+  `PAPERCLIP_API_URL` from runtime env for delivery, and not to read `.env`.
+- Redeploy or save that agent configuration, then retry only the blocked
+  delivery issue.
+
+Do not "fix" this by passing `chatId`, raw Telegram bot tokens, direct
+`api.telegram.org` calls, `filePath`, URLs, or by teaching runtime agents to
+read operator `.env`/`auth.json` files. Those paths bypass the file-route
+contract and are the source of recurring drift.
+
+Post-fix proof is a plugin response containing `ok:true`,
+`routeSource:"file_route"`, `routeName` for the project, `mode:"document"`, and
+a `messageId`.
+
 ## Manual Markdown Delivery
 
 Run from the iMac host where `.env` contains a Board-capable

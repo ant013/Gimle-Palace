@@ -317,6 +317,14 @@ invoked via MCP tool `palace.ingest.run_extractor(name, project)`.
   top-N hotspots and `palace.code.list_functions(project, path)` for per-
   function complexity. Requires `git_history` to have run first (otherwise
   churn = 0).
+- `hot_path_profiler` — Runtime hot-path profiler extractor (GIM-276,
+  Roadmap #17). Reads committed trace artifacts from `/repos/<slug>/profiles/`
+  and currently supports normalized Instruments JSON fixtures plus Perfetto
+  `.pftrace` input. Resolves hot samples onto existing `:Function` nodes,
+  writes `:HotPathSample`, `:HotPathSummary`, and unresolved trace rows, and
+  exposes audit output via `audit/templates/hot_path_profiler.md`. Track A
+  merge-gate fixture lives under
+  `services/palace-mcp/tests/extractors/fixtures/hot-path-fixture/profiles/`.
 - `reactive_dependency_tracer` — Swift-first reactive state/effect extractor
   (GIM-217, Roadmap #3). Reads pre-generated `reactive_facts.json` from repo
   root, writes `ReactiveComponent` / `ReactiveState` / `ReactiveEffect` /
@@ -341,6 +349,26 @@ invoked via MCP tool `palace.ingest.run_extractor(name, project)`.
   mode finds intra-module skew via `r.declared_in`; bundle mode aggregates
   across `:Bundle{name}-[:HAS_MEMBER]` members. See limitations in
   `docs/runbooks/cross-repo-version-skew.md`.
+
+### `palace.code.manage_adr` v2 — ADR read/write/supersede/query (GIM-274)
+
+Native `@mcp.tool` (not CM subprocess). Files live in `docs/postulates/<slug>.md`
+(env `PALACE_ADR_BASE_DIR`). Neo4j = projection layer (`:AdrDocument`, `:AdrSection`).
+Schema bootstrapped in server lifespan via `ensure_adr_schema()`.
+
+**4 modes:**
+- `read(slug)` — read file + project to graph (idempotent).
+- `write(slug, section, body, decision_id?)` — idempotent section upsert via SHA-256;
+  optional `decision_id` creates `(:Decision)-[:CITED_BY]->(:AdrDocument)`.
+- `supersede(old_slug, new_slug, reason)` — marks old ADR superseded; banner + graph edge.
+- `query(keyword?, section_filter?, project_filter?)` — Cypher-only graph search.
+
+**6-section format:** PURPOSE / STACK / ARCHITECTURE / PATTERNS / TRADEOFFS / PHILOSOPHY.
+
+**File/graph drift:** call `read(slug)` to re-project manually edited files.
+
+See `docs/runbooks/manage-adr-v2.md` for full usage, drift recovery, decision bridge,
+and iMac smoke test.
 
 ### Operator workflow: Dependency surface
 

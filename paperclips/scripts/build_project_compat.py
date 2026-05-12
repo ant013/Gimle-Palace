@@ -78,9 +78,19 @@ def include_fragment_path(
             )
             project_target_fragment = project_fragments_root / "targets" / target / fragment_rel
             if project_target_fragment.is_file():
+                print(
+                    f"  override applied: {project_target_fragment.relative_to(repo_root)} "
+                    f"(was: paperclips/fragments/targets/{target}/{fragment_rel})",
+                    file=sys.stderr,
+                )
                 return project_target_fragment
             project_shared_fragment = project_fragments_root / fragment_rel
             if project_shared_fragment.is_file():
+                print(
+                    f"  override applied: {project_shared_fragment.relative_to(repo_root)} "
+                    f"(was: paperclips/fragments/{fragment_rel})",
+                    file=sys.stderr,
+                )
                 return project_shared_fragment
     target_fragment = fragments_root / "targets" / target / fragment_rel
     if target_fragment.is_file():
