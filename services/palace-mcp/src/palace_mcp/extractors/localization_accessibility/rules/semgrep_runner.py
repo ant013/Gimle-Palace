@@ -48,6 +48,30 @@ class SemgrepFinding:
     message: str
 
 
+_SEMGREP_EXTENSIONS = frozenset((".swift", ".kt", ".kts"))
+# Relative path components (within the target repo) that identify test code (LA-D3)
+_TEST_PATH_PARTS = frozenset({
+    "Tests",        # iOS XCTest directories
+    "Test",         # iOS XCTest (singular)
+    "UnitTests",    # iOS unit test directories
+    "UITests",      # iOS UI test directories
+    "test",         # Kotlin/Android src/test/
+    "androidTest",  # Android instrumented test src
+    "AndroidTest",  # Android instrumented test src (uppercase variant)
+})
+
+
+def _is_test_path(path: Path, *, relative_to: Path) -> bool:
+    """Return True if path (relative to repo root) looks like a test file."""
+    if ".test." in path.stem.lower():
+        return True
+    try:
+        rel_parts = path.relative_to(relative_to).parts
+    except ValueError:
+        rel_parts = path.parts
+    return any(part in _TEST_PATH_PARTS for part in rel_parts)
+
+
 async def run_semgrep(
     *,
     rules_dir: Path,
@@ -55,9 +79,28 @@ async def run_semgrep(
     timeout_s: int = 120,
     extra_args: list[str] | None = None,
 ) -> list[dict[str, Any]]:
-    """Invoke semgrep as async subprocess, return raw results list."""
+    """Invoke semgrep as async subprocess, return raw results list.
+
+    Semgrep OSS does not reliably discover Swift/Kotlin files when scanning
+    a directory (``paths.scanned`` is empty even with ``--include``).  When
+    given a directory we therefore enumerate eligible files ourselves and pass
+    them as individual path arguments, skipping test files per LA-D3.
+    """
     if not rules_dir.exists():
         raise ExtractorConfigError(f"semgrep rules directory not found: {rules_dir}")
+
+    if target.is_dir():
+        file_targets = sorted(
+            p for p in target.rglob("*")
+            if p.is_file()
+            and p.suffix in _SEMGREP_EXTENSIONS
+            and not _is_test_path(p, relative_to=target)
+        )
+        if not file_targets:
+            return []
+        target_strs = [str(p) for p in file_targets]
+    else:
+        target_strs = [str(target)]
 
     cmd = [
         "semgrep",
@@ -66,7 +109,7 @@ async def run_semgrep(
         "--json",
         "--quiet",
         *(extra_args or []),
-        str(target),
+        *target_strs,
     ]
 
     proc = await asyncio.create_subprocess_exec(

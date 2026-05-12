@@ -118,8 +118,6 @@ class LocalizationAccessibilityExtractor(BaseExtractor):
                 rules_dir=_RULES_DIR,
                 target=ctx.repo_path,
                 timeout_s=180,
-                # skip test files (LA-D3)
-                extra_args=["--exclude", "*.test.*", "--exclude", "Tests/*"],
             )
             all_findings = normalise_findings(raw, repo_root=ctx.repo_path)
             if allowlist:
