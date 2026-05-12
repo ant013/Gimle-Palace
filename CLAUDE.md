@@ -350,6 +350,26 @@ invoked via MCP tool `palace.ingest.run_extractor(name, project)`.
   across `:Bundle{name}-[:HAS_MEMBER]` members. See limitations in
   `docs/runbooks/cross-repo-version-skew.md`.
 
+### `palace.code.manage_adr` v2 — ADR read/write/supersede/query (GIM-274)
+
+Native `@mcp.tool` (not CM subprocess). Files live in `docs/postulates/<slug>.md`
+(env `PALACE_ADR_BASE_DIR`). Neo4j = projection layer (`:AdrDocument`, `:AdrSection`).
+Schema bootstrapped in server lifespan via `ensure_adr_schema()`.
+
+**4 modes:**
+- `read(slug)` — read file + project to graph (idempotent).
+- `write(slug, section, body, decision_id?)` — idempotent section upsert via SHA-256;
+  optional `decision_id` creates `(:Decision)-[:CITED_BY]->(:AdrDocument)`.
+- `supersede(old_slug, new_slug, reason)` — marks old ADR superseded; banner + graph edge.
+- `query(keyword?, section_filter?, project_filter?)` — Cypher-only graph search.
+
+**6-section format:** PURPOSE / STACK / ARCHITECTURE / PATTERNS / TRADEOFFS / PHILOSOPHY.
+
+**File/graph drift:** call `read(slug)` to re-project manually edited files.
+
+See `docs/runbooks/manage-adr-v2.md` for full usage, drift recovery, decision bridge,
+and iMac smoke test.
+
 ### Operator workflow: Dependency surface
 
 No env vars required. Extractor reads files directly from the mounted repo.
