@@ -124,6 +124,12 @@ class TestEnsureAdrSchema:
             "Expected UNIQUE constraint for AdrDocument"
         )
         assert any(
+            "AdrSection" in c and "UNIQUE" in c and "doc_slug" in c for c in calls
+        ), "Expected composite UNIQUE constraint for AdrSection(doc_slug, section_name)"
+        assert not any("NODE KEY" in c for c in calls), (
+            "NODE KEY requires Neo4j Enterprise Edition; use IS UNIQUE instead"
+        )
+        assert any(
             "INDEX" in c and "AdrDocument" in c and "status" in c for c in calls
         ), "Expected INDEX on AdrDocument.status"
         assert any(

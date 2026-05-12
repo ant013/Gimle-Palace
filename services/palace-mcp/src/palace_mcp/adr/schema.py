@@ -12,7 +12,7 @@ _CONSTRAINTS: tuple[str, ...] = (
     "CREATE CONSTRAINT adr_document_slug IF NOT EXISTS "
     "FOR (d:AdrDocument) REQUIRE d.slug IS UNIQUE",
     "CREATE CONSTRAINT adr_section_unique IF NOT EXISTS "
-    "FOR (s:AdrSection) REQUIRE (s.doc_slug, s.section_name) IS NODE KEY",
+    "FOR (s:AdrSection) REQUIRE (s.doc_slug, s.section_name) IS UNIQUE",
 )
 
 _INDEXES: tuple[str, ...] = (
