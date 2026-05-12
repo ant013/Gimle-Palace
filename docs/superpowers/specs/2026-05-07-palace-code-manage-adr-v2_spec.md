@@ -9,7 +9,7 @@
 **Team:** Claude (Python orchestration; existing manage_adr surface is in `code_router.py` + `mcp_server.py`)
 **Slice ID:** Phase 6 E5 (Phase-1-aligned product slice; Claude side)
 **Companion plan:** `2026-05-07-palace-code-manage-adr-v2_plan.md`
-**Branch:** `feature/GIM-NN-palace-code-manage-adr-v2`
+**Branch:** `feature/GIM-274-palace-code-manage-adr-v2`
 
 ---
 

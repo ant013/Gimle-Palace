@@ -4,7 +4,7 @@
 
 **Slice:** Phase 6 E5 — `palace.code.manage_adr` v2 (writable + graph projection).
 **Spec:** `docs/superpowers/specs/2026-05-07-palace-code-manage-adr-v2_spec.md`.
-**Source branch:** `feature/GIM-NN-palace-code-manage-adr-v2` cut from `origin/develop`.
+**Source branch:** `feature/GIM-274-palace-code-manage-adr-v2` cut from `origin/develop`.
 **Target branch:** `develop`. Squash-merge on APPROVE.
 **Team:** Claude. Phase chain: CTO → CodeReviewer (plan-first) → MCPEngineer or PythonEngineer → CR (mechanical) → OpusArchitectReviewer (adversarial) → QAEngineer → CTO merge.
 
@@ -37,7 +37,7 @@
 ### Step 0.2: Issue + branch
 
 - [ ] Open paperclip issue `palace.code.manage_adr writable v2 (E5)`.
-- [ ] Body = link to spec + plan; `GIM-NN` placeholder.
+- [ ] Body = link to spec + plan; `GIM-274` placeholder.
 - [ ] Reassign CTO.
 
 ---
@@ -92,7 +92,7 @@
 
 #### Step 2.1.3: Commit
 
-- [ ] Commit: `feat(GIM-NN): manage_adr v2 schema + Pydantic models`.
+- [ ] Commit: `feat(GIM-274): manage_adr v2 schema + Pydantic models`.
 
 ---
 
@@ -118,7 +118,7 @@
 
 #### Step 2.2.3: Commit
 
-- [ ] Commit: `refactor(GIM-NN): manage_adr read mode projects to graph`.
+- [ ] Commit: `refactor(GIM-274): manage_adr read mode projects to graph`.
 
 ---
 
@@ -151,7 +151,7 @@
 
 #### Step 2.3.3: Commit
 
-- [ ] Commit: `feat(GIM-NN): manage_adr write mode (idempotent section upsert)`.
+- [ ] Commit: `feat(GIM-274): manage_adr write mode (idempotent section upsert)`.
 
 ---
 
@@ -177,7 +177,7 @@
 
 #### Step 2.4.3: Commit
 
-- [ ] Commit: `feat(GIM-NN): manage_adr supersede mode`.
+- [ ] Commit: `feat(GIM-274): manage_adr supersede mode`.
 
 ---
 
@@ -203,7 +203,7 @@
 
 #### Step 2.5.3: Commit
 
-- [ ] Commit: `feat(GIM-NN): manage_adr query mode (graph-augmented)`.
+- [ ] Commit: `feat(GIM-274): manage_adr query mode (graph-augmented)`.
 
 ---
 
@@ -225,7 +225,7 @@
 
 #### Step 2.6.3: Commit
 
-- [ ] Commit: `feat(GIM-NN): manage_adr decision bridge (CITED_BY)`.
+- [ ] Commit: `feat(GIM-274): manage_adr decision bridge (CITED_BY)`.
 
 ---
 
@@ -239,7 +239,7 @@
 - [ ] Update `CLAUDE.md` to reference manage_adr v2 (replace v1 entry
       if exists; otherwise add new entry).
 - [ ] Push branch.
-- [ ] Open PR `feat(GIM-NN): palace.code.manage_adr writable v2 (E5)`.
+- [ ] Open PR `feat(GIM-274): palace.code.manage_adr writable v2 (E5)`.
 - [ ] Reassign CodeReviewer.
 
 ---
