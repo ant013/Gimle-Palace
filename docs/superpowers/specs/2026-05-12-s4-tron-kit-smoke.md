@@ -30,7 +30,7 @@ registry and bundle use.
 | code_ownership | GIM-216 | `2d6e6c1` |
 | version-skew | GIM-218 | `603c840` |
 
-19 extractors live in registry. `palace.audit.run` MCP tool at
+23 extractors live in registry. `palace.audit.run` MCP tool at
 `services/palace-mcp/src/palace_mcp/audit/run.py`.
 
 ## Acceptance criteria (from E-smoke.md rev3)
@@ -43,10 +43,25 @@ Every threshold below must pass before Phase 4.2 close:
 | 2 | Non-informational findings | ≥3 findings with severity ≥ `low` |
 | 3 | §1 Architecture content | Populated module DAG + ≥0 ArchViolation entries OR explicit "no violations — rules clean" with cited rule set |
 | 4 | §4 Security error-handling content | Populated `:CatchSite` aggregate + ≥1 ErrorFinding OR explicit "no critical-path swallowed catches" with file count cited |
-| 5 | False-positive rate | ≤2 of top-5 flagged items per section (§1, §4, §7) are false positives — manual review by operator + BlockchainEngineer |
+| 5 | False-positive rate | ≤2 of top-5 flagged items per section (§1, §4, §7) are false positives — manual review by operator + BlockchainEngineer (`9874ad7a`) post-Phase 4.1. Operator opens the report, BlockchainEngineer spot-checks top-5 flagged items per §1/§4/§7 in the issue thread. Pass/fail recorded in a Phase 4.1 sub-comment before merge. |
 | 6 | Blind spots declared | All missing extractors listed in §9 with rationale (#1, #7 NOT here in rev3) |
 | 7 | Provenance complete | Every populated section traces to an `:IngestRun` with run_id |
 | 8 | Executive summary | Present, ≤500 words, top-3 findings |
+
+### Section-to-extractor mapping (10 audit sections)
+
+| § | Section | Extractor | Audit template |
+|---|---------|-----------|----------------|
+| 1 | Architecture | `arch_layer` | `templates/arch_layer.md` |
+| 2 | Hotspots | `hotspot` | `templates/hotspot.md` |
+| 3 | Dead symbols | `dead_symbol_binary_surface` | `templates/dead_symbol_binary_surface.md` |
+| 4 | Security / error handling | `error_handling_policy` | `templates/error_handling_policy.md` |
+| 5 | Dependencies | `dependency_surface` | `templates/dependency_surface.md` |
+| 6 | Ownership | `code_ownership` | `templates/code_ownership.md` |
+| 7 | Crypto domain | `crypto_domain_model` | `templates/crypto_domain_model.md` |
+| 8 | Public API | `public_api_surface` | `templates/public_api_surface.md` |
+| 9 | Cross-module contract | `cross_module_contract` | `templates/cross_module_contract.md` |
+| 10 | Version skew | `cross_repo_version_skew` | `templates/cross_repo_version_skew.md` |
 
 ## MacBook gate — explicit pause (Phase 2 hard block)
 
@@ -63,7 +78,13 @@ has never been generated on iMac.
    > **MacBook gate**: need real-source `.scip` for tron-kit. Operator: please run `bash paperclips/scripts/scip_emit_swift_kit.sh tron-kit` on a dev Mac with modern Xcode + cloned `tronkit-swift` repo, then `scp <output>.scip imac-ssh.ant013.work:/Users/Shared/Ios/scip-inputs/tron-kit.scip`. PATCH this issue back to me (PythonEngineer, `127068ee-b564-4b37-9370-616c81c63f35`) with `status=in_progress` once file is delivered.
 5. Operator delivers file + reassigns. PE wakes up.
 6. iMac: verify `/Users/Shared/Ios/scip-inputs/tron-kit.scip` exists and is recent (`stat -f "%m" <file>` within 24h).
-7. iMac: `bash paperclips/scripts/ingest_swift_kit.sh tron-kit --bundle=uw-ios`. Read all extractor `:IngestRun` records; every relevant extractor must report `success`. Capture run_ids.
+7. iMac: run ingest with **all 12 audit-relevant extractors** (script defaults miss `arch_layer` + `error_handling_policy`):
+   ```bash
+   bash paperclips/scripts/ingest_swift_kit.sh tron-kit --bundle=uw-ios \
+     --extractors=symbol_index_swift,git_history,dependency_surface,public_api_surface,dead_symbol_binary_surface,hotspot,cross_module_contract,code_ownership,cross_repo_version_skew,crypto_domain_model,arch_layer,error_handling_policy
+   ```
+   Read all extractor `:IngestRun` records; every relevant extractor must report `success`. Capture run_ids.
+   > **Note:** updating `ingest_swift_kit.sh` DEFAULT_EXTRACTORS to include `arch_layer` + `error_handling_policy` is a followup — not in scope for this issue.
 8. iMac: call `palace.audit.run(project="tron-kit")` via MCP. Capture full markdown report.
 9. iMac: save markdown to `docs/audit-reports/2026-05-12-tron-kit.md` on feature branch.
 10. iMac: ALSO run `bash paperclips/scripts/audit-workflow-launcher.sh tron-kit` — async multi-agent flavor. Capture child-issue identifiers + final reports.
