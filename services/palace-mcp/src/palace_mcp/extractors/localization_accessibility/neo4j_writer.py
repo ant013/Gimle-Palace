@@ -67,7 +67,7 @@ async def write_snapshot(
 ) -> tuple[int, int]:
     """Write all loc-a11y data in a single transaction; return (nodes, edges)."""
     async with driver.session() as session:
-        return await session.execute_write(
+        result: tuple[int, int] = await session.execute_write(
             _write_snapshot_tx,
             project_id,
             run_id,
@@ -75,6 +75,7 @@ async def write_snapshot(
             hardcoded,
             a11y_missing,
         )
+        return result
 
 
 async def _write_snapshot_tx(
