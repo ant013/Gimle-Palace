@@ -50,17 +50,40 @@ infra, and an existing src/tests structure. Agents work on it, not from scratch.
 
 ## ROADMAP.md walk rule
 
-Existing ROADMAP.md uses narrative sub-sections (no checkboxes). CTO's
-heuristic for "next pick":
+ROADMAP.md uses narrative sub-sections without checkboxes. To track
+completion explicitly, each implemented sub-section gets a status line **right
+under its heading**:
+
+```markdown
+### 2L.5d Replay Integrity Validator
+**Status:** ✅ Implemented — PR #142 (2026-05-13, commit `a1b2c3d`)
+
+- Implement `validate-real-baseline-replay`.
+- ...
+```
+
+The status line is added by the CTO at **Phase 7 (merge)** of the inner loop;
+it lands on `main` as part of the squashed implementation PR, so the iron rule
+"no direct push to `main`" is preserved.
+
+**Walker pick rule** (CTO at the parent issue):
 
 1. Scan ROADMAP.md top-to-bottom.
-2. Under the first `## Phase X` heading not yet fully complete, find the
-   first `### X.Yz <Name>` sub-section whose corresponding
-   `docs/specs/phase-XYz-<slug>.md` does NOT exist on `main`.
-3. That sub-section becomes the child issue title.
+2. For each `### X.Yz <Name>` heading, look at the next 3 lines.
+3. **If `**Status:** ✅` is present** → sub-section is done; skip.
+4. **If `**Status:** ✅` is absent** → this is the next pick.
+5. The chosen sub-section becomes the child issue title.
 
-If ambiguous (no clear "next"), CTO posts to parent issue with current candidates
-and waits for operator clarification — does NOT guess.
+If a `## Phase X` heading has all its sub-sections marked `**Status:** ✅`,
+the walker moves to the next `## Phase` heading.
+
+If no `### X.Yz` sub-section remains unmarked (full ROADMAP done), CTO posts
+to parent issue with status summary and waits — does NOT guess what to do
+next.
+
+If the walker hits an ambiguity (e.g., two parallel sub-sections, no
+linear order), CTO posts to parent and waits for operator — does NOT pick
+arbitrarily.
 
 ---
 
@@ -77,7 +100,7 @@ spec, once on code.
 | 4 | Implement | PE | TDD per plan on `feature/<phase-id>-<slug>`. Frequent push. Final commit + open PR to `main` | PATCH `assignee=CR, comment="impl ready, PR #X"` |
 | 5 | Code review | CR | Run `uv run ruff check && uv run mypy && uv run pytest && uv run coverage report` — paste output in APPROVE comment. Read diff for quality (no rubber-stamps). Flag scope drift if file-set ≠ plan | PATCH `assignee=QA, comment="code OK, ready for smoke"` |
 | 6 | Smoke | QA | Per QA criteria (below): run impl end-to-end, verify acceptance from spec, check coverage threshold + scope drift | PATCH per QA criteria |
-| 7 | Close | CTO | Merge PR to `main` (squash), close child issue, advance parent | `status=done` on child |
+| 7 | Close | CTO | **Add ROADMAP.md status line** `**Status:** ✅ Implemented — PR #<N> (<YYYY-MM-DD>, commit `<SHA>`)` under the `### X.Yz` heading on the feature branch, commit, push. Then `gh pr merge --squash --delete-branch` — the ROADMAP update lands on `main` as part of the squashed PR. Close child issue, advance parent | `status=done` on child |
 
 ---
 

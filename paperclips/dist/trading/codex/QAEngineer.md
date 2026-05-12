@@ -704,7 +704,7 @@ This bundle inherits the proven Gimle/CX role text above. The base text was auth
 
 Trading runs **two loops**:
 
-- **Outer loop** — parent `roadmap walker` issue. CTO reads `ROADMAP.md` at trading-agents root, finds the next `### X.Yz <Name>` sub-section whose `docs/specs/phase-XYz-<slug>.md` does NOT exist on `main`, spawns one child issue per such row, waits, then advances.
+- **Outer loop** — parent `roadmap walker` issue. CTO reads `ROADMAP.md` at trading-agents root, finds the next `### X.Yz <Name>` sub-section that is **NOT followed by a `**Status:** ✅` line within 3 lines** (the explicit completion marker), spawns one child issue, waits, then advances. At Phase 7 of each child, CTO adds the `**Status:** ✅ Implemented — PR #<N>` line under the matching `### X.Yz` heading on the feature branch — it lands on `main` via the same squashed PR (no direct push to main).
 - **Inner loop** (per child) — 7 transitions:
 
   1. **CTO** cuts `feature/<phase-id>-<slug>` from `main` + drafts spec → 2. **CR** reviews spec via 3 voltAgent subagents (arch / security / cost) → 3. **CTO** writes plan addressing CR blockers → 4. **PE** implements + opens PR to `main` → 5. **CR** reviews code (mechanical via `uv run ruff/mypy/pytest/coverage` + quality, paste output) → 6. **QA** smoke with pinned routing criteria → 7. **CTO** merges PR to `main` + closes child + advances parent.
