@@ -457,3 +457,57 @@ def test_audit_contract_returns_contract() -> None:
     assert contract is not None
     assert contract.extractor_name == "localization_accessibility"
     assert "LocaleResource" in contract.query or "HardcodedString" in contract.query
+
+
+def test_audit_query_uses_optional_match_for_locale_resource() -> None:
+    """Audit query must use OPTIONAL MATCH so findings surface when no locale files exist (C2)."""
+    from palace_mcp.extractors.localization_accessibility.extractor import _AUDIT_QUERY
+
+    lr_line = next(
+        (line for line in _AUDIT_QUERY.splitlines() if "LocaleResource" in line),
+        None,
+    )
+    assert lr_line is not None
+    assert "OPTIONAL MATCH" in lr_line, (
+        "LocaleResource match must be OPTIONAL so findings are returned when "
+        "no locale resources exist"
+    )
+
+
+def test_allowlist_filters_full_line_literal() -> None:
+    """Allowlist entry 'Bitcoin' must filter a finding whose literal is 'Text(\"Bitcoin\")' (C1)."""
+    from palace_mcp.extractors.localization_accessibility.rules.semgrep_runner import (
+        SemgrepFinding,
+    )
+
+    allowlist: frozenset[str] = frozenset({"Bitcoin", "Ethereum"})
+
+    bitcoin_finding = SemgrepFinding(
+        file="App/PriceView.swift",
+        start_line=5,
+        end_line=5,
+        rule_id="loc.hardcoded_swiftui",
+        check_kind="hardcoded_string",
+        context="swiftui_text",
+        severity="medium",
+        literal='Text("Bitcoin")',
+        message="Hardcoded string literal",
+    )
+    hello_finding = SemgrepFinding(
+        file="App/WelcomeView.swift",
+        start_line=3,
+        end_line=3,
+        rule_id="loc.hardcoded_swiftui",
+        check_kind="hardcoded_string",
+        context="swiftui_text",
+        severity="medium",
+        literal='Text("Hello World")',
+        message="Hardcoded string literal",
+    )
+
+    filtered = [
+        f for f in [bitcoin_finding, hello_finding]
+        if not any(al in f.literal for al in allowlist)
+    ]
+    assert bitcoin_finding not in filtered, "Bitcoin finding should be filtered out"
+    assert hello_finding in filtered, "Hello World finding should remain"

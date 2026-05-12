@@ -121,8 +121,17 @@ Semgrep scans all `.swift`, `.kt`, `.kts` files not in test directories
   modifier but no `semantics` are not covered.
 - **Large repos** — file enumeration collects all Swift/Kotlin files
   before invoking semgrep. On repos with >5 000 such files the command
-  line could become very long; the extractor logs a warning in that case
+  line could become very long; the extractor logs a warning and continues
   (followup: batching).
+- **SwiftUI a11y multi-line modifier chains** — the `a11y.missing_label_swiftui`
+  rule uses a single-line negative lookahead (`Image(...) (?!.accessibilityLabel)`).
+  Idiomatic SwiftUI places modifiers on the next line, so a correctly-labelled
+  `Image` will be falsely reported as missing a label. Expected high false-positive
+  rate on real-world SwiftUI code. Followup: multi-line regex or context-line scan.
+- **Locale base source ambiguity** — when multiple English source files exist
+  (e.g. both `.xcstrings` and `Localizable.strings`), `compute_coverage` uses
+  the first encountered `"en"` resource as the base key count. Coverage percentages
+  may differ slightly depending on which file is found first during traversal.
 
 ## Troubleshooting
 

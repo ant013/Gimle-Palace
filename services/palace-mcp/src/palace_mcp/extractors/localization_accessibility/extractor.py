@@ -52,10 +52,10 @@ _RULES_DIR = Path(__file__).parent / "semgrep_rules"
 _ANDROID_LOCALE_RE = re.compile(r"values-([a-z]{2,3}(?:-r[A-Z]{2})?)")
 
 _AUDIT_QUERY = """
-MATCH (lr:LocaleResource {project_id: $project_id})
-WITH collect({locale: lr.locale, key_count: lr.key_count,
-              coverage_pct: lr.coverage_pct, surface: lr.surface,
-              source: lr.source}) AS locales
+OPTIONAL MATCH (lr:LocaleResource {project_id: $project_id})
+WITH [x IN collect({locale: lr.locale, key_count: lr.key_count,
+                    coverage_pct: lr.coverage_pct, surface: lr.surface,
+                    source: lr.source}) WHERE x.locale IS NOT NULL] AS locales
 OPTIONAL MATCH (h:HardcodedString {project_id: $project_id})
 WITH locales, collect({file: h.file, start_line: h.start_line,
                         literal: h.literal, context: h.context,
@@ -121,9 +121,11 @@ class LocalizationAccessibilityExtractor(BaseExtractor):
             )
             all_findings = normalise_findings(raw, repo_root=ctx.repo_path)
             if allowlist:
+                # f.literal is the full matched source line (e.g. Text("Bitcoin")),
+                # so check substring containment rather than exact match.
                 all_findings = [
                     f for f in all_findings
-                    if f.literal not in allowlist
+                    if not any(al in f.literal for al in allowlist)
                 ]
         else:
             logger.warning(

@@ -24,14 +24,6 @@ _SEMGREP_SEVERITY_MAP: dict[str, str] = {
     "INFO": "low",
 }
 
-# Contexts matched by rule metadata.context field
-_CONTEXT_MAP: dict[str, str] = {
-    "swiftui_text": "swiftui_text",
-    "uikit_label": "uikit_label",
-    "compose_text": "compose_text",
-    "view_xml": "view_xml",
-}
-
 
 @dataclass(frozen=True)
 class SemgrepFinding:
@@ -98,6 +90,12 @@ async def run_semgrep(
         )
         if not file_targets:
             return []
+        if len(file_targets) > 5000:
+            logger.warning(
+                "localization_accessibility: %d source files collected; "
+                "command line may be very long (followup: batching)",
+                len(file_targets),
+            )
         target_strs = [str(p) for p in file_targets]
     else:
         target_strs = [str(target)]
