@@ -334,3 +334,54 @@ class TestExtractorPluralization:
         )
         assert "2 extractors contributed data" in report
         assert "{ '' if" not in report
+
+
+class TestExecutiveSummary:
+    def test_severity_count_uses_severity_mapper(self) -> None:
+        """Regression: executive summary must count HIGH findings via severity_mapper,
+        not via raw _severity key (which raw findings don't have before annotation)."""
+        from palace_mcp.audit.contracts import Severity
+
+        def _mapper(raw: object) -> Severity:
+            return Severity.HIGH if str(raw) == "high" else Severity.INFORMATIONAL
+
+        section = AuditSectionData(
+            extractor_name="extra",
+            run_id="r1",
+            project="p",
+            completed_at=None,
+            findings=[{"severity": "high", "message": "bad thing", "file": "foo.py", "start_line": 1}],
+            summary_stats={},
+        )
+        report = render_report(
+            project="p",
+            sections={"extra": section},
+            severity_columns={"extra": "severity"},
+            max_findings_per_section={"extra": 100},
+            blind_spots=[],
+            severity_mappers={"extra": _mapper},
+        )
+        assert "⚠ 1 section(s) have critical/high findings" in report
+        assert "No critical or high severity findings" not in report
+
+    def test_top3_findings_in_executive_summary(self) -> None:
+        section = AuditSectionData(
+            extractor_name="extra",
+            run_id="r1",
+            project="p",
+            completed_at=None,
+            findings=[
+                {"_severity": "high", "message": "finding one", "file": "a.py", "start_line": 10},
+                {"_severity": "medium", "message": "finding two", "file": "b.py", "start_line": 20},
+            ],
+            summary_stats={},
+        )
+        report = render_report(
+            project="p",
+            sections={"extra": section},
+            severity_columns={"extra": "_severity"},
+            max_findings_per_section={"extra": 100},
+            blind_spots=[],
+        )
+        assert "Top findings:" in report
+        assert "finding one" in report
