@@ -308,26 +308,18 @@ def _check_ids(findings: list[dict[str, Any]]) -> set[str]:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(
-    not (_RULES_DIR / "loc_hardcoded_swiftui.yaml").exists(),
-    reason="semgrep rule not yet implemented",
-)
 def test_hardcoded_swiftui_bad_fixture_triggers() -> None:
-    bad_dir = _FIXTURE_ROOT / "hardcoded-swiftui" / "bad"
+    bad_file = _FIXTURE_ROOT / "hardcoded-swiftui" / "bad" / "HardcodedView.swift"
     rule_file = _RULES_DIR / "loc_hardcoded_swiftui.yaml"
-    findings = _run_semgrep_on_rule(rule_file, bad_dir)
+    findings = _run_semgrep_on_rule(rule_file, bad_file)
     assert len(findings) >= 1, "Expected ≥1 finding on bad SwiftUI fixture"
 
 
-@pytest.mark.skipif(
-    not (_RULES_DIR / "loc_hardcoded_swiftui.yaml").exists(),
-    reason="semgrep rule not yet implemented",
-)
 def test_hardcoded_swiftui_good_fixture_silent() -> None:
-    good_dir = _FIXTURE_ROOT / "hardcoded-swiftui" / "good"
+    """Text(verbatim:) must NOT be flagged (spec §9 R2)."""
+    good_file = _FIXTURE_ROOT / "hardcoded-swiftui" / "good" / "LocalizedView.swift"
     rule_file = _RULES_DIR / "loc_hardcoded_swiftui.yaml"
-    findings = _run_semgrep_on_rule(rule_file, good_dir)
-    # Text(verbatim:) must NOT be flagged
+    findings = _run_semgrep_on_rule(rule_file, good_file)
     assert len(findings) == 0, f"False positive on good SwiftUI fixture: {findings}"
 
 
@@ -336,25 +328,17 @@ def test_hardcoded_swiftui_good_fixture_silent() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(
-    not (_RULES_DIR / "loc_hardcoded_compose.yaml").exists(),
-    reason="semgrep rule not yet implemented",
-)
 def test_hardcoded_compose_bad_fixture_triggers() -> None:
-    bad_dir = _FIXTURE_ROOT / "hardcoded-compose" / "bad"
+    bad_file = _FIXTURE_ROOT / "hardcoded-compose" / "bad" / "HardcodedScreen.kt"
     rule_file = _RULES_DIR / "loc_hardcoded_compose.yaml"
-    findings = _run_semgrep_on_rule(rule_file, bad_dir)
+    findings = _run_semgrep_on_rule(rule_file, bad_file)
     assert len(findings) >= 1, "Expected ≥1 finding on bad Compose fixture"
 
 
-@pytest.mark.skipif(
-    not (_RULES_DIR / "loc_hardcoded_compose.yaml").exists(),
-    reason="semgrep rule not yet implemented",
-)
 def test_hardcoded_compose_good_fixture_silent() -> None:
-    good_dir = _FIXTURE_ROOT / "hardcoded-compose" / "good"
+    good_file = _FIXTURE_ROOT / "hardcoded-compose" / "good" / "LocalizedScreen.kt"
     rule_file = _RULES_DIR / "loc_hardcoded_compose.yaml"
-    findings = _run_semgrep_on_rule(rule_file, good_dir)
+    findings = _run_semgrep_on_rule(rule_file, good_file)
     assert len(findings) == 0, f"False positive on good Compose fixture: {findings}"
 
 
@@ -363,25 +347,17 @@ def test_hardcoded_compose_good_fixture_silent() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(
-    not (_RULES_DIR / "loc_hardcoded_uikit.yaml").exists(),
-    reason="semgrep rule not yet implemented",
-)
 def test_hardcoded_uikit_bad_fixture_triggers() -> None:
-    bad_dir = _FIXTURE_ROOT / "hardcoded-uikit" / "bad"
+    bad_file = _FIXTURE_ROOT / "hardcoded-uikit" / "bad" / "HardcodedViewController.swift"
     rule_file = _RULES_DIR / "loc_hardcoded_uikit.yaml"
-    findings = _run_semgrep_on_rule(rule_file, bad_dir)
+    findings = _run_semgrep_on_rule(rule_file, bad_file)
     assert len(findings) >= 1, "Expected ≥1 finding on bad UIKit fixture"
 
 
-@pytest.mark.skipif(
-    not (_RULES_DIR / "loc_hardcoded_uikit.yaml").exists(),
-    reason="semgrep rule not yet implemented",
-)
 def test_hardcoded_uikit_good_fixture_silent() -> None:
-    good_dir = _FIXTURE_ROOT / "hardcoded-uikit" / "good"
+    good_file = _FIXTURE_ROOT / "hardcoded-uikit" / "good" / "LocalizedViewController.swift"
     rule_file = _RULES_DIR / "loc_hardcoded_uikit.yaml"
-    findings = _run_semgrep_on_rule(rule_file, good_dir)
+    findings = _run_semgrep_on_rule(rule_file, good_file)
     assert len(findings) == 0, f"False positive on good UIKit fixture: {findings}"
 
 
@@ -390,25 +366,17 @@ def test_hardcoded_uikit_good_fixture_silent() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(
-    not (_RULES_DIR / "a11y_missing_label_swiftui.yaml").exists(),
-    reason="semgrep rule not yet implemented",
-)
 def test_a11y_missing_swiftui_bad_fixture_triggers() -> None:
-    bad_dir = _FIXTURE_ROOT / "a11y-missing-swiftui" / "bad"
+    bad_file = _FIXTURE_ROOT / "a11y-missing-swiftui" / "bad" / "MissingLabelView.swift"
     rule_file = _RULES_DIR / "a11y_missing_label_swiftui.yaml"
-    findings = _run_semgrep_on_rule(rule_file, bad_dir)
+    findings = _run_semgrep_on_rule(rule_file, bad_file)
     assert len(findings) >= 1, "Expected ≥1 finding on bad SwiftUI a11y fixture"
 
 
-@pytest.mark.skipif(
-    not (_RULES_DIR / "a11y_missing_label_swiftui.yaml").exists(),
-    reason="semgrep rule not yet implemented",
-)
 def test_a11y_missing_swiftui_good_fixture_silent() -> None:
-    good_dir = _FIXTURE_ROOT / "a11y-missing-swiftui" / "good"
+    good_file = _FIXTURE_ROOT / "a11y-missing-swiftui" / "good" / "AccessibleView.swift"
     rule_file = _RULES_DIR / "a11y_missing_label_swiftui.yaml"
-    findings = _run_semgrep_on_rule(rule_file, good_dir)
+    findings = _run_semgrep_on_rule(rule_file, good_file)
     assert len(findings) == 0, f"False positive on good SwiftUI a11y fixture: {findings}"
 
 
@@ -417,25 +385,17 @@ def test_a11y_missing_swiftui_good_fixture_silent() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(
-    not (_RULES_DIR / "a11y_missing_compose.yaml").exists(),
-    reason="semgrep rule not yet implemented",
-)
 def test_a11y_missing_compose_bad_fixture_triggers() -> None:
-    bad_dir = _FIXTURE_ROOT / "a11y-missing-compose" / "bad"
+    bad_file = _FIXTURE_ROOT / "a11y-missing-compose" / "bad" / "MissingSemantics.kt"
     rule_file = _RULES_DIR / "a11y_missing_compose.yaml"
-    findings = _run_semgrep_on_rule(rule_file, bad_dir)
+    findings = _run_semgrep_on_rule(rule_file, bad_file)
     assert len(findings) >= 1, "Expected ≥1 finding on bad Compose a11y fixture"
 
 
-@pytest.mark.skipif(
-    not (_RULES_DIR / "a11y_missing_compose.yaml").exists(),
-    reason="semgrep rule not yet implemented",
-)
 def test_a11y_missing_compose_good_fixture_silent() -> None:
-    good_dir = _FIXTURE_ROOT / "a11y-missing-compose" / "good"
+    good_file = _FIXTURE_ROOT / "a11y-missing-compose" / "good" / "AccessibleModifier.kt"
     rule_file = _RULES_DIR / "a11y_missing_compose.yaml"
-    findings = _run_semgrep_on_rule(rule_file, good_dir)
+    findings = _run_semgrep_on_rule(rule_file, good_file)
     assert len(findings) == 0, f"False positive on good Compose a11y fixture: {findings}"
 
 
