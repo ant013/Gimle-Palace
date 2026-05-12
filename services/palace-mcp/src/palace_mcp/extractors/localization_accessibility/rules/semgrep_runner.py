@@ -42,15 +42,17 @@ class SemgrepFinding:
 
 _SEMGREP_EXTENSIONS = frozenset((".swift", ".kt", ".kts"))
 # Relative path components (within the target repo) that identify test code (LA-D3)
-_TEST_PATH_PARTS = frozenset({
-    "Tests",        # iOS XCTest directories
-    "Test",         # iOS XCTest (singular)
-    "UnitTests",    # iOS unit test directories
-    "UITests",      # iOS UI test directories
-    "test",         # Kotlin/Android src/test/
-    "androidTest",  # Android instrumented test src
-    "AndroidTest",  # Android instrumented test src (uppercase variant)
-})
+_TEST_PATH_PARTS = frozenset(
+    {
+        "Tests",  # iOS XCTest directories
+        "Test",  # iOS XCTest (singular)
+        "UnitTests",  # iOS unit test directories
+        "UITests",  # iOS UI test directories
+        "test",  # Kotlin/Android src/test/
+        "androidTest",  # Android instrumented test src
+        "AndroidTest",  # Android instrumented test src (uppercase variant)
+    }
+)
 
 
 def _is_test_path(path: Path, *, relative_to: Path) -> bool:
@@ -83,7 +85,8 @@ async def run_semgrep(
 
     if target.is_dir():
         file_targets = sorted(
-            p for p in target.rglob("*")
+            p
+            for p in target.rglob("*")
             if p.is_file()
             and p.suffix in _SEMGREP_EXTENSIONS
             and not _is_test_path(p, relative_to=target)
@@ -127,9 +130,7 @@ async def run_semgrep(
     # semgrep exits 0 on no findings, 1 on findings found — both are fine
     if proc.returncode not in (0, 1):
         stderr_text = stderr_b.decode("utf-8", errors="replace")[:500]
-        raise ExtractorConfigError(
-            f"semgrep exited {proc.returncode}: {stderr_text}"
-        )
+        raise ExtractorConfigError(f"semgrep exited {proc.returncode}: {stderr_text}")
 
     try:
         output = json.loads(stdout_b.decode("utf-8", errors="replace"))
@@ -158,7 +159,9 @@ def normalise_findings(
         path_str = str(result.get("path", ""))
         file = _relative_path(repo_root, path_str)
         start_line = int(start.get("line", 1)) if isinstance(start, dict) else 1
-        end_line = int(end.get("line", start_line)) if isinstance(end, dict) else start_line
+        end_line = (
+            int(end.get("line", start_line)) if isinstance(end, dict) else start_line
+        )
 
         rule_id = str(result.get("check_id", "unknown"))
         severity = _SEMGREP_SEVERITY_MAP.get(

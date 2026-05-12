@@ -10,9 +10,7 @@ from typing import Any
 
 import pytest
 
-_FIXTURE_ROOT = (
-    Path(__file__).parent.parent / "fixtures" / "loc-a11y-fixture"
-)
+_FIXTURE_ROOT = Path(__file__).parent.parent / "fixtures" / "loc-a11y-fixture"
 _RULES_DIR = (
     Path(__file__).parent.parent.parent.parent
     / "src"
@@ -63,8 +61,12 @@ def test_xcstrings_parser_basic() -> None:
         "strings": {
             "hello_world": {
                 "localizations": {
-                    "en": {"stringUnit": {"state": "translated", "value": "Hello World"}},
-                    "ru": {"stringUnit": {"state": "translated", "value": "Привет мир"}},
+                    "en": {
+                        "stringUnit": {"state": "translated", "value": "Hello World"}
+                    },
+                    "ru": {
+                        "stringUnit": {"state": "translated", "value": "Привет мир"}
+                    },
                 }
             },
             "goodbye": {
@@ -128,7 +130,9 @@ def test_localizable_strings_parser_basic() -> None:
 "farewell" = "Goodbye";
 "app_name" = "MyApp";
 """
-    row = parse_localizable_strings(content, locale="en", source_file="en.lproj/Localizable.strings")
+    row = parse_localizable_strings(
+        content, locale="en", source_file="en.lproj/Localizable.strings"
+    )
     assert row.locale == "en"
     assert row.key_count == 3
     assert row.surface == "ios"
@@ -140,8 +144,10 @@ def test_localizable_strings_parser_ignores_comments() -> None:
         parse_localizable_strings,
     )
 
-    content = '/* comment only */\n'
-    row = parse_localizable_strings(content, locale="de", source_file="de.lproj/Localizable.strings")
+    content = "/* comment only */\n"
+    row = parse_localizable_strings(
+        content, locale="de", source_file="de.lproj/Localizable.strings"
+    )
     assert row.key_count == 0
 
 
@@ -151,7 +157,9 @@ def test_localizable_strings_parser_escaped_quotes() -> None:
     )
 
     content = r'"key_with_quote" = "He said \"hello\"";' + "\n"
-    row = parse_localizable_strings(content, locale="en", source_file="en.lproj/Localizable.strings")
+    row = parse_localizable_strings(
+        content, locale="en", source_file="en.lproj/Localizable.strings"
+    )
     assert row.key_count == 1
 
 
@@ -171,7 +179,9 @@ def test_android_strings_parser_basic() -> None:
     <string name="greeting">Hello</string>
     <string name="farewell">Goodbye</string>
 </resources>"""
-    row = parse_android_strings_xml(xml, locale="en", source_file="res/values/strings.xml")
+    row = parse_android_strings_xml(
+        xml, locale="en", source_file="res/values/strings.xml"
+    )
     assert row.locale == "en"
     assert row.key_count == 3
     assert row.surface == "android"
@@ -186,7 +196,9 @@ def test_android_strings_parser_locale_dir() -> None:
 <resources>
     <string name="greeting">Привет</string>
 </resources>"""
-    row = parse_android_strings_xml(xml, locale="ru", source_file="res/values-ru/strings.xml")
+    row = parse_android_strings_xml(
+        xml, locale="ru", source_file="res/values-ru/strings.xml"
+    )
     assert row.locale == "ru"
     assert row.key_count == 1
 
@@ -206,7 +218,9 @@ def test_android_strings_parser_ignores_non_string() -> None:
         <item>red</item>
     </string-array>
 </resources>"""
-    row = parse_android_strings_xml(xml, locale="en", source_file="res/values/strings.xml")
+    row = parse_android_strings_xml(
+        xml, locale="en", source_file="res/values/strings.xml"
+    )
     # only <string> elements count
     assert row.key_count == 1
 
@@ -223,9 +237,24 @@ def test_locale_coverage_basic() -> None:
     )
 
     resources = [
-        LocaleResource(locale="en", key_count=100, source="en.lproj/Localizable.strings", surface="ios"),
-        LocaleResource(locale="ru", key_count=80, source="ru.lproj/Localizable.strings", surface="ios"),
-        LocaleResource(locale="es", key_count=60, source="es.lproj/Localizable.strings", surface="ios"),
+        LocaleResource(
+            locale="en",
+            key_count=100,
+            source="en.lproj/Localizable.strings",
+            surface="ios",
+        ),
+        LocaleResource(
+            locale="ru",
+            key_count=80,
+            source="ru.lproj/Localizable.strings",
+            surface="ios",
+        ),
+        LocaleResource(
+            locale="es",
+            key_count=60,
+            source="es.lproj/Localizable.strings",
+            surface="ios",
+        ),
     ]
     result = compute_coverage(resources, base_locale="en")
     by_locale = {r.locale: r for r in result}
@@ -348,14 +377,18 @@ def test_hardcoded_compose_good_fixture_silent() -> None:
 
 
 def test_hardcoded_uikit_bad_fixture_triggers() -> None:
-    bad_file = _FIXTURE_ROOT / "hardcoded-uikit" / "bad" / "HardcodedViewController.swift"
+    bad_file = (
+        _FIXTURE_ROOT / "hardcoded-uikit" / "bad" / "HardcodedViewController.swift"
+    )
     rule_file = _RULES_DIR / "loc_hardcoded_uikit.yaml"
     findings = _run_semgrep_on_rule(rule_file, bad_file)
     assert len(findings) >= 1, "Expected ≥1 finding on bad UIKit fixture"
 
 
 def test_hardcoded_uikit_good_fixture_silent() -> None:
-    good_file = _FIXTURE_ROOT / "hardcoded-uikit" / "good" / "LocalizedViewController.swift"
+    good_file = (
+        _FIXTURE_ROOT / "hardcoded-uikit" / "good" / "LocalizedViewController.swift"
+    )
     rule_file = _RULES_DIR / "loc_hardcoded_uikit.yaml"
     findings = _run_semgrep_on_rule(rule_file, good_file)
     assert len(findings) == 0, f"False positive on good UIKit fixture: {findings}"
@@ -377,7 +410,9 @@ def test_a11y_missing_swiftui_good_fixture_silent() -> None:
     good_file = _FIXTURE_ROOT / "a11y-missing-swiftui" / "good" / "AccessibleView.swift"
     rule_file = _RULES_DIR / "a11y_missing_label_swiftui.yaml"
     findings = _run_semgrep_on_rule(rule_file, good_file)
-    assert len(findings) == 0, f"False positive on good SwiftUI a11y fixture: {findings}"
+    assert len(findings) == 0, (
+        f"False positive on good SwiftUI a11y fixture: {findings}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -393,10 +428,14 @@ def test_a11y_missing_compose_bad_fixture_triggers() -> None:
 
 
 def test_a11y_missing_compose_good_fixture_silent() -> None:
-    good_file = _FIXTURE_ROOT / "a11y-missing-compose" / "good" / "AccessibleModifier.kt"
+    good_file = (
+        _FIXTURE_ROOT / "a11y-missing-compose" / "good" / "AccessibleModifier.kt"
+    )
     rule_file = _RULES_DIR / "a11y_missing_compose.yaml"
     findings = _run_semgrep_on_rule(rule_file, good_file)
-    assert len(findings) == 0, f"False positive on good Compose a11y fixture: {findings}"
+    assert len(findings) == 0, (
+        f"False positive on good Compose a11y fixture: {findings}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -506,7 +545,8 @@ def test_allowlist_filters_full_line_literal() -> None:
     )
 
     filtered = [
-        f for f in [bitcoin_finding, hello_finding]
+        f
+        for f in [bitcoin_finding, hello_finding]
         if not any(al in f.literal for al in allowlist)
     ]
     assert bitcoin_finding not in filtered, "Bitcoin finding should be filtered out"

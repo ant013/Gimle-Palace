@@ -124,7 +124,8 @@ class LocalizationAccessibilityExtractor(BaseExtractor):
                 # f.literal is the full matched source line (e.g. Text("Bitcoin")),
                 # so check substring containment rather than exact match.
                 all_findings = [
-                    f for f in all_findings
+                    f
+                    for f in all_findings
                     if not any(al in f.literal for al in allowlist)
                 ]
         else:
@@ -134,12 +135,8 @@ class LocalizationAccessibilityExtractor(BaseExtractor):
                 extra={"rules_dir": str(_RULES_DIR)},
             )
 
-        hardcoded = [
-            f for f in all_findings if f.check_kind == "hardcoded_string"
-        ]
-        a11y_missing = [
-            f for f in all_findings if f.check_kind == "a11y_missing"
-        ]
+        hardcoded = [f for f in all_findings if f.check_kind == "hardcoded_string"]
+        a11y_missing = [f for f in all_findings if f.check_kind == "a11y_missing"]
 
         logger.info(
             "localization_accessibility: semgrep complete",

@@ -35,9 +35,7 @@ def compute_coverage(
 
     When base_locale is absent or has 0 keys, coverage_pct = 0.0 for all.
     """
-    base_count = next(
-        (r.key_count for r in resources if r.locale == base_locale), 0
-    )
+    base_count = next((r.key_count for r in resources if r.locale == base_locale), 0)
     result: list[LocaleCoverage] = []
     for r in resources:
         if base_count > 0:

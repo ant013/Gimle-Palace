@@ -29,9 +29,7 @@ from palace_mcp.extractors.localization_accessibility.extractor import (
 
 PROJECT_SLUG = "loc-a11y-mini"
 GROUP_ID = f"project/{PROJECT_SLUG}"
-FIXTURE_PATH = (
-    Path(__file__).parents[2] / "extractors/fixtures/loc-a11y-mini-project"
-)
+FIXTURE_PATH = Path(__file__).parents[2] / "extractors/fixtures/loc-a11y-mini-project"
 
 MIN_LOCALE_RESOURCES = 2
 MIN_HARDCODED_STRINGS = 3

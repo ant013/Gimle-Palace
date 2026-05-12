@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import re
 
-from palace_mcp.extractors.localization_accessibility.parsers.coverage import LocaleResource
+from palace_mcp.extractors.localization_accessibility.parsers.coverage import (
+    LocaleResource,
+)
 
 # Matches: "key" = "value"; — handles escaped quotes inside value
 _ENTRY_RE = re.compile(
