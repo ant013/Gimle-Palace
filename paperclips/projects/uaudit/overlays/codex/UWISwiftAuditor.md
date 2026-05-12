@@ -46,6 +46,13 @@ If the tool schema rejects any required `agent_type`, write
 `$RUN/status/blocked` with the rejected name and stop. Do not retry that slot
 with a generic agent.
 
+After intake or smoke fixtures exist, immediately start the four required
+subagents in parallel. Do not perform solo audit analysis before the fanout.
+Use a bounded wait for subagent completion; if any required subagent does not
+finish within 180 seconds, retry that exact `agent_type` once. If the retry also
+times out, write `$RUN/status/blocked` with `subagent timeout: <agent_type>` and
+stop.
+
 ### Run State
 
 Bind state on every wake:
@@ -172,6 +179,7 @@ and `pr.diff` under `$RUN/smoke/` and prove:
 
 - all four required subagent names were invoked via explicit
   `spawn_agent.agent_type`;
+- no subagent wait exceeded the bounded timeout/retry policy;
 - missing required subagent blocks the run;
 - malformed subagent JSON blocks the run;
 - subagents do not write files or read forbidden secret paths.
