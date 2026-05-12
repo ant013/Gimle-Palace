@@ -1,0 +1,11 @@
+rules:
+  - id: nil_coalesce_swallows_error
+    languages: [swift]
+    severity: WARNING
+    message: >
+      try? combined with ?? hides the thrown error behind a default value.
+      Consider explicit error handling before defaulting.
+    metadata:
+      category: error-handling
+      kind: nil_coalesce_swallows_error
+    pattern-regex: 'try\?\s*[^\n;]+?\?\?'

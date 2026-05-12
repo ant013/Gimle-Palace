@@ -1,0 +1,87 @@
+project:
+  key: gimle
+  display_name: Gimle
+  system_name: Gimle-Palace
+  issue_prefix: GIM
+  company_id: 9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64
+  integration_branch: develop
+  specs_dir: docs/superpowers/specs
+  plans_dir: docs/superpowers/plans
+
+domain:
+  wallet_target_short: Unstoppable
+  wallet_target_name: Unstoppable Wallet
+  wallet_target_slug: Unstoppable-wallet
+
+evidence:
+  merge_without_smoke_issue: GIM-10
+  graphiti_mock_issue: GIM-48
+  release_reset_issue: GIM-52
+  asyncmock_driver_issue: GIM-59
+  worktree_discipline_issue_pair: GIM-75/76
+  qa_worktree_discipline_issue: GIM-90
+  mcp_wire_contract_issue: GIM-91
+  qa_deploy_checklist_issue: GIM-94
+  review_scope_drift_issue: GIM-104
+  qa_to_cto_stall_issue: GIM-126
+  handoff_flake_issue: GIM-182
+  pre_slim_baseline_issue: GIM-193
+  cr_to_pe_stall_issue: GIM-195
+  handoff_misclassified_issue: GIM-216
+  post_merge_stall_issue: GIM-229
+
+paths:
+  project_root: .
+  primary_repo_root: .
+  primary_mcp_service_dir: services/palace-mcp
+  production_checkout: /Users/Shared/Ios/Gimle-Palace
+  codex_team_root: /Users/Shared/Ios/worktrees/cx/Gimle-Palace
+  operator_memory_dir: ~/.claude/projects/-Users-ant013-Android-Gimle-Palace/memory
+  overlay_root: paperclips/projects/gimle/overlays
+  project_rules_file: AGENTS.md
+
+mcp:
+  service_name: palace-mcp
+  package_name: palace_mcp
+  tool_namespace: palace
+  base_required:
+    - codebase-memory
+    - context7
+    - serena
+    - github
+    - sequential-thinking
+  codebase_memory_projects:
+    primary: repos-gimle
+  additions:
+    project: []
+    by_role: {}
+
+skills:
+  additions:
+    project: []
+    by_role: {}
+
+subagents:
+  additions:
+    project: []
+    by_role: {}
+
+targets:
+  claude:
+    instruction_entry_file: AGENTS.md
+    adapter_type: claude_local
+    deploy_mode: local-or-api
+    instructions_bundle_mode: external-or-managed
+  codex:
+    instruction_entry_file: AGENTS.md
+    adapter_type: codex_local
+    deploy_mode: api
+    instructions_bundle_mode: managed
+
+compatibility:
+  legacy_output_paths: true
+  claude_deploy_mapping: paperclips/deploy-agents.sh
+  codex_agent_ids_env: paperclips/codex-agent-ids.env
+  workspace_update_script: paperclips/update-agent-workspaces.sh
+
+agents: []

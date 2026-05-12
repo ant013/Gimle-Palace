@@ -4,7 +4,7 @@
 
 **Slice:** Phase 6 E5 — `palace.code.manage_adr` v2 (writable + graph projection).
 **Spec:** `docs/superpowers/specs/2026-05-07-palace-code-manage-adr-v2_spec.md`.
-**Source branch:** `feature/GIM-NN-palace-code-manage-adr-v2` cut from `origin/develop`.
+**Source branch:** `feature/GIM-274-palace-code-manage-adr-v2` cut from `origin/develop`.
 **Target branch:** `develop`. Squash-merge on APPROVE.
 **Team:** Claude. Phase chain: CTO → CodeReviewer (plan-first) → MCPEngineer or PythonEngineer → CR (mechanical) → OpusArchitectReviewer (adversarial) → QAEngineer → CTO merge.
 
@@ -37,7 +37,7 @@
 ### Step 0.2: Issue + branch
 
 - [ ] Open paperclip issue `palace.code.manage_adr writable v2 (E5)`.
-- [ ] Body = link to spec + plan; `GIM-NN` placeholder.
+- [ ] Body = link to spec + plan; `GIM-274` placeholder.
 - [ ] Reassign CTO.
 
 ---
@@ -67,7 +67,7 @@
 #### Step 2.1.1: Failing tests (schema)
 
 **Files:**
-- `services/palace-mcp/tests/code/unit/test_adr_schema.py` (new).
+- `services/palace-mcp/tests/adr/unit/test_adr_schema.py` (new).
 
 - [ ] Test: `AdrDocument` Pydantic model serialises/deserialises.
 - [ ] Test: `AdrSection` Pydantic model with `body_hash` derives
@@ -76,55 +76,78 @@
       idempotently.
 - [ ] All RED initially.
 
-#### Step 2.1.2: Implement models + migration
+#### Step 2.1.2: Implement models + schema + router skeleton
 
 **Files:**
+- `services/palace-mcp/src/palace_mcp/adr/__init__.py` (new).
 - `services/palace-mcp/src/palace_mcp/adr/models.py` (new).
 - `services/palace-mcp/src/palace_mcp/adr/schema.py` (new) —
-  Cypher constraints + indices, idempotent.
-- Schema bootstrap call wired into existing
-  `extractors/foundation/schema.py::ensure_custom_schema()` or sibling.
+  `ensure_adr_schema()`: Cypher constraints + indices, idempotent.
+- `services/palace-mcp/src/palace_mcp/adr/router.py` (new) —
+  `register_adr_tools(tool_decorator)` skeleton (modes wired in
+  subsequent phases).
+- `services/palace-mcp/src/palace_mcp/mcp_server.py` — import and call
+  `register_adr_tools(_tool)` alongside existing `register_code_*` calls.
+  Call `ensure_adr_schema(driver)` in server lifespan (AD-D8).
+- `services/palace-mcp/src/palace_mcp/code_router.py` — remove
+  `"manage_adr"` from `_DISABLED_CM_TOOLS` dict (AD-D7).
+- `docs/postulates/` — create directory (W1; can be empty initially,
+  `.gitkeep` file to ensure git tracks it).
 
 - [ ] Implement Pydantic models per spec §4.
 - [ ] Implement schema migration with `CALL { … } IN TRANSACTIONS`
       and `IF NOT EXISTS` clauses.
+- [ ] Schema bootstrap in server lifespan, NOT extractor pipeline (AD-D8).
+- [ ] Native `@mcp.tool` registration, NOT CM subprocess passthrough (AD-D7).
 - [ ] Tests GREEN.
 
 #### Step 2.1.3: Commit
 
-- [ ] Commit: `feat(GIM-NN): manage_adr v2 schema + Pydantic models`.
+- [ ] Commit: `feat(GIM-274): manage_adr v2 schema + Pydantic models`.
 
 ---
 
-### Phase 2.2 — `read` mode (existing v1 → keep working)
+### Phase 2.2 — `read` mode (NEW — no v1 exists)
 
-#### Step 2.2.1: Backwards-compat regression test
+> **Note:** v1 `manage_adr` was DISABLED (`_DISABLED_CM_TOOLS` in
+> `code_router.py:151`). `read` is a new implementation, not a refactor.
+> There is no backwards-compat regression test.
 
-- [ ] Test: `manage_adr(mode="read", slug="<existing-adr>")` returns
-      same shape as v1 (markdown body + section list).
-
-#### Step 2.2.2: Adjust v1 read to project graph
+#### Step 2.2.1: Failing tests
 
 **Files:**
-- `services/palace-mcp/src/palace_mcp/code_router.py` — branch on
-  `mode` parameter.
-- `services/palace-mcp/src/palace_mcp/adr/reader.py` (new) —
-  factor v1 read out into module.
+- `services/palace-mcp/tests/adr/unit/test_adr_reader.py` (new).
 
-- [ ] Read continues to use file as source of truth.
+- [ ] Test: `read(slug="test-adr")` reads file from
+      `docs/postulates/test-adr.md`, returns markdown body + section list.
+- [ ] Test: `read(slug="nonexistent")` returns error envelope
+      `error_code="adr_not_found"`.
+- [ ] Test: `read` side-effect: idempotent graph projection (file
+      → `:AdrDocument` + `:AdrSection` nodes).
+- [ ] All RED.
+
+#### Step 2.2.2: Implement reader
+
+**Files:**
+- `services/palace-mcp/src/palace_mcp/adr/reader.py` (new).
+
+- [ ] Read uses file as source of truth (AD-D1: file canonical).
 - [ ] Side-effect: `read` triggers idempotent graph projection (file
       → `:AdrDocument` + `:AdrSection`).
-- [ ] Tests GREEN; v1 regression test still passes.
+- [ ] Tests GREEN.
 
 #### Step 2.2.3: Commit
 
-- [ ] Commit: `refactor(GIM-NN): manage_adr read mode projects to graph`.
+- [ ] Commit: `feat(GIM-274): manage_adr read mode (file-to-graph projection)`.
 
 ---
 
 ### Phase 2.3 — `write` mode (NEW)
 
 #### Step 2.3.1: Failing tests
+
+**Files:**
+- `services/palace-mcp/tests/adr/unit/test_adr_writer.py` (new).
 
 - [ ] Test: `write(slug="x", section="PURPOSE", body="...")` creates
       file under `docs/postulates/x.md` with proper structure.
@@ -140,10 +163,11 @@
 
 **Files:**
 - `services/palace-mcp/src/palace_mcp/adr/writer.py` (new).
-- `services/palace-mcp/src/palace_mcp/code_router.py` — wire `mode="write"`.
+- `services/palace-mcp/src/palace_mcp/adr/router.py` — wire `mode="write"`.
 
 - [ ] Validate inputs (Pydantic at MCP boundary).
-- [ ] File-level `flock` on `docs/postulates/<slug>.md`.
+- [ ] File-level advisory lock via `fcntl.flock` (AD-D9; stdlib `fcntl`
+      module, no third-party `filelock` package).
 - [ ] Read existing file → parse 6 sections → splice in new body
       for target section → write back.
 - [ ] In same transaction (driver-level): upsert `:AdrSection`.
@@ -151,13 +175,16 @@
 
 #### Step 2.3.3: Commit
 
-- [ ] Commit: `feat(GIM-NN): manage_adr write mode (idempotent section upsert)`.
+- [ ] Commit: `feat(GIM-274): manage_adr write mode (idempotent section upsert)`.
 
 ---
 
 ### Phase 2.4 — `supersede` mode (NEW)
 
 #### Step 2.4.1: Failing tests
+
+**Files:**
+- `services/palace-mcp/tests/adr/unit/test_adr_supersede.py` (new).
 
 - [ ] Test: `supersede(old_slug="a", new_slug="b", reason="...")`:
   - Old `:AdrDocument.status = "superseded"`.
@@ -170,20 +197,25 @@
 
 #### Step 2.4.2: Implement supersede
 
-**Files:** `services/palace-mcp/src/palace_mcp/adr/supersede.py` (new).
+**Files:**
+- `services/palace-mcp/src/palace_mcp/adr/supersede.py` (new).
+- `services/palace-mcp/src/palace_mcp/adr/router.py` — wire `mode="supersede"`.
 
-- [ ] Same flock + file edit + graph update transactional pattern.
+- [ ] Same `fcntl.flock` + file edit + graph update transactional pattern.
 - [ ] Tests GREEN.
 
 #### Step 2.4.3: Commit
 
-- [ ] Commit: `feat(GIM-NN): manage_adr supersede mode`.
+- [ ] Commit: `feat(GIM-274): manage_adr supersede mode`.
 
 ---
 
-### Phase 2.5 — `query` mode (existing v1 → graph-augmented)
+### Phase 2.5 — `query` mode (NEW)
 
 #### Step 2.5.1: Failing tests
+
+**Files:**
+- `services/palace-mcp/tests/adr/unit/test_adr_query.py` (new).
 
 - [ ] Test: `query(keyword="X")` returns ADRs whose section
       `body_excerpt` contains "X".
@@ -195,15 +227,17 @@
 
 #### Step 2.5.2: Implement query
 
-**Files:** `services/palace-mcp/src/palace_mcp/adr/query.py` (new).
+**Files:**
+- `services/palace-mcp/src/palace_mcp/adr/query.py` (new).
+- `services/palace-mcp/src/palace_mcp/adr/router.py` — wire `mode="query"`.
 
-- [ ] Use Cypher with `body_excerpt` text search; for full-text use
-      Tantivy bridge if existing.
+- [ ] Cypher-only text search via `body_excerpt CONTAINS` / `STARTS WITH`
+      (AD-D6: no Tantivy — ADR corpus is tens of documents, Cypher sufficient).
 - [ ] Tests GREEN.
 
 #### Step 2.5.3: Commit
 
-- [ ] Commit: `feat(GIM-NN): manage_adr query mode (graph-augmented)`.
+- [ ] Commit: `feat(GIM-274): manage_adr query mode (graph-augmented)`.
 
 ---
 
@@ -211,21 +245,61 @@
 
 #### Step 2.6.1: Failing test
 
-- [ ] Test: `manage_adr(mode="write", ..., decision_id="<uuid>")`
-      creates `(:Decision {id})-[:CITED_BY]->(:AdrDocument {slug})`
-      edge.
+**Files:**
+- `services/palace-mcp/tests/adr/unit/test_adr_decision_bridge.py` (new).
+
+- [ ] Test: `manage_adr(mode="write", slug="x", section="PURPOSE",
+      body="...", decision_id="<uuid>")` creates
+      `(:Decision {id})-[:CITED_BY]->(:AdrDocument {slug})` edge.
+      (`decision_id` param is in spec §5 signature — AD-D5: manual bridge.)
 - [ ] Test: writing without `decision_id` does NOT create edge.
+- [ ] Test: `decision_id` referencing non-existent `:Decision` →
+      error envelope `error_code="decision_not_found"` (no orphan edge).
 
 #### Step 2.6.2: Implement bridge
 
-**Files:** `services/palace-mcp/src/palace_mcp/adr/decision_bridge.py` (new).
+**Files:**
+- `services/palace-mcp/src/palace_mcp/adr/decision_bridge.py` (new).
+- `services/palace-mcp/src/palace_mcp/adr/writer.py` — call bridge
+  conditionally when `decision_id` present.
 
 - [ ] Conditional edge creation when `decision_id` present.
+- [ ] Validate `:Decision` exists before creating edge.
 - [ ] Tests GREEN.
 
 #### Step 2.6.3: Commit
 
-- [ ] Commit: `feat(GIM-NN): manage_adr decision bridge (CITED_BY)`.
+- [ ] Commit: `feat(GIM-274): manage_adr decision bridge (CITED_BY)`.
+
+---
+
+### Phase 2.8 — MCP wire tests (`streamablehttp_client`)
+
+> Per GIM-182 rule: any `@mcp.tool` must have real MCP HTTP coverage.
+> Pattern: `tests/integration/test_palace_memory_decide_wire.py`.
+
+#### Step 2.8.1: Wire test file
+
+**Files:**
+- `services/palace-mcp/tests/integration/test_manage_adr_wire.py` (new).
+
+- [ ] Test: `palace.code.manage_adr` appears in `tools/list`.
+- [ ] Test: `read` mode — valid slug succeeds, `payload["ok"] is True`.
+- [ ] Test: `read` mode — nonexistent slug fails, `error_code="adr_not_found"`.
+- [ ] Test: `write` mode — valid args succeed, `payload["ok"] is True`.
+- [ ] Test: `write` mode — invalid section fails, exact `error_code`.
+- [ ] Test: `supersede` mode — valid args succeed.
+- [ ] Test: `supersede` mode — nonexistent old slug fails.
+- [ ] Test: `query` mode — valid args succeed (empty result = ok, not error).
+- [ ] Test: `write` with `decision_id` — valid Decision succeeds.
+- [ ] Test: `write` with `decision_id` — nonexistent Decision fails,
+      `error_code="decision_not_found"`.
+- [ ] No tautological assertions.
+- [ ] All GREEN (run after all unit/integration tests pass).
+
+#### Step 2.8.2: Commit
+
+- [ ] Commit: `test(GIM-274): manage_adr MCP wire tests (streamablehttp_client)`.
 
 ---
 
@@ -239,7 +313,7 @@
 - [ ] Update `CLAUDE.md` to reference manage_adr v2 (replace v1 entry
       if exists; otherwise add new entry).
 - [ ] Push branch.
-- [ ] Open PR `feat(GIM-NN): palace.code.manage_adr writable v2 (E5)`.
+- [ ] Open PR `feat(GIM-274): palace.code.manage_adr writable v2 (E5)`.
 - [ ] Reassign CodeReviewer.
 
 ---
@@ -249,8 +323,9 @@
 ### Phase 3.1 — Mechanical (CodeReviewer)
 
 - [ ] `gh pr checks` green; pytest output for new tests.
-- [ ] Verify v1 backwards-compat — `read` mode unchanged shape.
-- [ ] Verify all 4 modes covered + bridge.
+- [ ] Verify `manage_adr` removed from `_DISABLED_CM_TOOLS` (AD-D7).
+- [ ] Verify all 4 modes covered + bridge + wire tests.
+- [ ] File count matches File Structure table (N1).
 - [ ] APPROVE → OpusArchitectReviewer.
 
 ### Phase 3.2 — Adversarial (Opus)
@@ -301,6 +376,35 @@
 
 ---
 
+## File Structure (N1)
+
+| File | Type | Phase |
+|------|------|-------|
+| `services/palace-mcp/src/palace_mcp/adr/__init__.py` | new | 2.1 |
+| `services/palace-mcp/src/palace_mcp/adr/models.py` | new | 2.1 |
+| `services/palace-mcp/src/palace_mcp/adr/schema.py` | new | 2.1 |
+| `services/palace-mcp/src/palace_mcp/adr/router.py` | new | 2.1–2.5 |
+| `services/palace-mcp/src/palace_mcp/adr/reader.py` | new | 2.2 |
+| `services/palace-mcp/src/palace_mcp/adr/writer.py` | new | 2.3 |
+| `services/palace-mcp/src/palace_mcp/adr/supersede.py` | new | 2.4 |
+| `services/palace-mcp/src/palace_mcp/adr/query.py` | new | 2.5 |
+| `services/palace-mcp/src/palace_mcp/adr/decision_bridge.py` | new | 2.6 |
+| `services/palace-mcp/src/palace_mcp/code_router.py` | modify | 2.1 (remove from `_DISABLED_CM_TOOLS`) |
+| `services/palace-mcp/src/palace_mcp/mcp_server.py` | modify | 2.1 (import + register + lifespan) |
+| `services/palace-mcp/tests/adr/unit/test_adr_schema.py` | new | 2.1 |
+| `services/palace-mcp/tests/adr/unit/test_adr_reader.py` | new | 2.2 |
+| `services/palace-mcp/tests/adr/unit/test_adr_writer.py` | new | 2.3 |
+| `services/palace-mcp/tests/adr/unit/test_adr_supersede.py` | new | 2.4 |
+| `services/palace-mcp/tests/adr/unit/test_adr_query.py` | new | 2.5 |
+| `services/palace-mcp/tests/adr/unit/test_adr_decision_bridge.py` | new | 2.6 |
+| `services/palace-mcp/tests/integration/test_manage_adr_wire.py` | new | 2.8 |
+| `docs/postulates/.gitkeep` | new | 2.1 |
+| `docs/runbooks/manage-adr-v2.md` | new | 2.7 |
+
+**Total:** 18 new files, 2 modified files.
+
+---
+
 ## Risks (from spec §8)
 
 R1 file/graph drift · R2 section name typos · R3 concurrent writes
@@ -311,7 +415,8 @@ R1 file/graph drift · R2 section name typos · R3 concurrent writes
 ## Cross-references
 
 - Spec: `2026-05-07-palace-code-manage-adr-v2_spec.md`.
-- Predecessor (v1): existing manage_adr in `code_router.py`.
+- Predecessor: `manage_adr` DISABLED in `code_router.py:151`
+  (`_DISABLED_CM_TOOLS`). No functioning v1.
 - Sibling: GIM-95 `palace.memory.decide` write tool.
 - Roadmap: `docs/roadmap-archive.md` §"Phase 6" E5 row.
 - Memory: `reference_cm_adr_postulate_pattern.md` — 6-section format.

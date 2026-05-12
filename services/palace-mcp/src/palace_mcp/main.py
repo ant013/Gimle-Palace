@@ -10,6 +10,7 @@ from fastapi import Depends, FastAPI, Request, Response
 from neo4j import AsyncDriver, AsyncGraphDatabase
 from starlette.applications import Starlette
 
+from palace_mcp.adr.schema import ensure_adr_schema
 from palace_mcp.code_router import start_cm_subprocess, stop_cm_subprocess
 from palace_mcp.config import Settings
 from palace_mcp.extractors.schema import ensure_extractors_schema
@@ -72,6 +73,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         ensure_schema(driver, default_group_id=settings.palace_default_group_id)
     )
     await ensure_extractors_schema(driver)
+    await ensure_adr_schema(driver)
     await ensure_graphiti_schema(graphiti)
     async with _mcp_asgi_app.router.lifespan_context(_mcp_asgi_app):
         yield

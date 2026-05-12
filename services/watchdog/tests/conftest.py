@@ -27,6 +27,10 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 class MockPaperclipState:
     issues: dict[str, dict[str, Any]] = field(default_factory=dict)
     comments_posted: list[tuple[str, str]] = field(default_factory=list)
+    # issue_id → list of comment dicts (for GET /comments)
+    issue_comments: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    # company_id → list of agent dicts (for GET /agents)
+    agents: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
 
 
 def build_mock_app(state: MockPaperclipState) -> FastAPI:
@@ -60,6 +64,11 @@ def build_mock_app(state: MockPaperclipState) -> FastAPI:
             state.issues[issue_id]["updatedAt"] = (
                 datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
             )
+        if "status" in body:
+            state.issues[issue_id]["status"] = body["status"]
+            state.issues[issue_id]["updatedAt"] = (
+                datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            )
         return dict(state.issues[issue_id], id=issue_id)
 
     @app.post("/api/issues/{issue_id}/release")
@@ -70,11 +79,20 @@ def build_mock_app(state: MockPaperclipState) -> FastAPI:
         state.issues[issue_id]["executionRunId"] = None
         return {"ok": True}
 
+    @app.get("/api/issues/{issue_id}/comments")
+    async def list_comments(issue_id: str, limit: int = 5) -> list[dict[str, Any]]:
+        comments = state.issue_comments.get(issue_id, [])
+        return comments[-limit:] if limit else comments
+
     @app.post("/api/issues/{issue_id}/comments")
     async def post_comment(issue_id: str, request: Request) -> dict[str, Any]:
         body = await request.json()
         state.comments_posted.append((issue_id, body.get("body", "")))
         return {"id": f"comment-{len(state.comments_posted)}"}
+
+    @app.get("/api/companies/{company_id}/agents")
+    async def list_agents(company_id: str) -> list[dict[str, Any]]:
+        return state.agents.get(company_id, [])
 
     return app
 

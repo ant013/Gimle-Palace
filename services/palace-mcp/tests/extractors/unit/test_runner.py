@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Generator
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -80,7 +81,7 @@ class _Slow(BaseExtractor):
 
 
 @pytest.fixture(autouse=True)
-def _isolate_registry() -> None:
+def _isolate_registry() -> Generator[None, None, None]:
     snap = dict(registry.EXTRACTORS)
     yield
     registry.EXTRACTORS.clear()
@@ -176,6 +177,35 @@ async def test_repo_not_mounted_returns_error(
 
     assert res["ok"] is False
     assert res["error_code"] == "repo_not_mounted"
+
+
+@pytest.mark.asyncio
+async def test_parent_mount_project_path_resolves_without_git_in_subdir(
+    tmp_path: Path, mock_graphiti: MagicMock
+) -> None:
+    registry.register(_Ok())
+    mounted_repo = tmp_path / "repos-hs" / "TronKit.Swift"
+    mounted_repo.mkdir(parents=True)
+    driver, _ = _make_session_mock(
+        {
+            "p": {
+                "name": "tronkit-swift",
+                "parent_mount": "hs",
+                "relative_path": "TronKit.Swift",
+            }
+        }
+    )
+
+    with patch("palace_mcp.extractors.runner.REPOS_ROOT", tmp_path / "repos"):
+        res = await run_extractor(
+            name="__test_ok",
+            project="tronkit-swift",
+            driver=driver,
+            graphiti=mock_graphiti,
+        )
+
+    assert res["ok"] is True
+    assert res["project"] == "tronkit-swift"
 
 
 @pytest.mark.asyncio

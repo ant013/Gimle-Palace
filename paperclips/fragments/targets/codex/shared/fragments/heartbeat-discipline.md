@@ -60,7 +60,7 @@ Endpoint difference:
 Example:
 ```
 POST /api/issues/{id}/comments
-body: "[@CXCodeReviewer](agent://<uuid>?i=eye) fix ready ([GIM-29](/GIM/issues/GIM-29)), please re-review"
+body: "[@CXCodeReviewer](agent://<uuid>?i=eye) fix ready ([{{ISSUE_PREFIX}}-29](/{{ISSUE_PREFIX}}/issues/{{ISSUE_PREFIX}}-29)), please re-review"
 ```
 
 ### HTTP 409 on close/update — execution lock conflict
@@ -70,7 +70,7 @@ body: "[@CXCodeReviewer](agent://<uuid>?i=eye) fix ready ([GIM-29](/GIM/issues/G
 **Do:**
 
 1. `GET /api/issues/{id}` → read `executionAgentNameKey`.
-2. Comment to holder: `"@CTO release execution lock on [GIM-5], I'm ready to close"`.
+2. Comment to holder: `"@CTO release execution lock on [{{ISSUE_PREFIX}}-5], I'm ready to close"`.
 3. Alternative — if holder unavailable, `PATCH ... assigneeAgentId=<original-assignee>` → originator closes.
 4. Don't retry close with the same JWT — without release, 409 keeps coming.
 

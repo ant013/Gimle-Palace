@@ -34,6 +34,8 @@ class Issue:
     status: str
     updated_at: datetime
     issue_number: int = 0
+    origin_kind: str | None = None
+    parent_id: str | None = None
 
 
 async def _sleep(seconds: float) -> None:
@@ -53,6 +55,8 @@ def _issue_from_json(data: dict[str, Any]) -> Issue:
         status=str(data.get("status", "")),
         updated_at=_parse_iso(str(data.get("updatedAt", "1970-01-01T00:00:00Z"))),
         issue_number=int(data.get("issueNumber") or 0),
+        origin_kind=(str(data["originKind"]) if data.get("originKind") is not None else None),
+        parent_id=(str(data["parentId"]) if data.get("parentId") is not None else None),
     )
 
 
@@ -113,20 +117,26 @@ class PaperclipClient:
         await self._client.aclose()
 
     async def _request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+        retry_statuses = set(kwargs.pop("_retry_statuses", RETRY_STATUSES))
+        retry_request_errors = bool(kwargs.pop("_retry_request_errors", True))
+        max_retries = int(kwargs.pop("_max_retries", MAX_RETRIES))
+        retry_delays = RETRY_DELAYS_SECONDS[:max_retries]
         last_exc: Exception | None = None
-        for attempt in range(MAX_RETRIES + 1):
+        for attempt in range(max_retries + 1):
             if attempt > 0:
-                await _sleep(RETRY_DELAYS_SECONDS[attempt - 1])
+                await _sleep(retry_delays[attempt - 1])
             try:
                 resp = await self._client.request(method, url, **kwargs)
             except httpx.RequestError as e:
                 last_exc = e
                 log.warning("paperclip_request_error attempt=%d url=%s error=%s", attempt, url, e)
+                if not retry_request_errors:
+                    break
                 continue
             if resp.status_code < 400:
                 self._capture_response_date(resp)
                 return resp
-            if resp.status_code in RETRY_STATUSES:
+            if resp.status_code in retry_statuses:
                 log.warning(
                     "paperclip_retry status=%d attempt=%d url=%s", resp.status_code, attempt, url
                 )
@@ -139,7 +149,7 @@ class PaperclipClient:
                 f"paperclip {method} {url} returned {resp.status_code}: {resp.text[:200]}"
             )
         raise PaperclipError(
-            f"paperclip {method} {url} exhausted {MAX_RETRIES + 1} attempts: {last_exc}"
+            f"paperclip {method} {url} exhausted {max_retries + 1} attempts: {last_exc}"
         ) from last_exc
 
     def _capture_response_date(self, resp: httpx.Response) -> None:
@@ -162,10 +172,21 @@ class PaperclipClient:
         return [_issue_from_json(d) for d in data]
 
     async def list_active_issues(self, company_id: str) -> list[Issue]:
-        """GET issues with status todo, in_progress, or in_review (for handoff detection)."""
+        """GET issues with status todo, in_progress, in_review, or blocked."""
         resp = await self._request(
             "GET",
-            f"/api/companies/{company_id}/issues?status=todo,in_progress,in_review",
+            f"/api/companies/{company_id}/issues?status=todo,in_progress,in_review,blocked",
+        )
+        data = resp.json()
+        if not isinstance(data, list):
+            raise PaperclipError(f"expected list, got {type(data).__name__}")
+        return [_issue_from_json(d) for d in data]
+
+    async def list_done_issues(self, company_id: str) -> list[Issue]:
+        """GET issues with status=done (for ownerless_completion detection)."""
+        resp = await self._request(
+            "GET",
+            f"/api/companies/{company_id}/issues?status=done",
         )
         data = resp.json()
         if not isinstance(data, list):
@@ -183,7 +204,14 @@ class PaperclipClient:
         await self._request("POST", f"/api/issues/{issue_id}/release")
 
     async def post_issue_comment(self, issue_id: str, body: str) -> str | None:
-        resp = await self._request("POST", f"/api/issues/{issue_id}/comments", json={"body": body})
+        resp = await self._request(
+            "POST",
+            f"/api/issues/{issue_id}/comments",
+            json={"body": body},
+            _retry_statuses=frozenset(),
+            _retry_request_errors=False,
+            _max_retries=0,
+        )
         data = resp.json()
         if isinstance(data, dict):
             return str(data.get("id", "")) or None
