@@ -1,6 +1,6 @@
 # Gimle-Palace Team Roadmap
 
-**Last updated**: 2026-05-06 (rev2: audit-v1 plan — 3-reviewer synthesis)
+**Last updated**: 2026-05-12 (rev4: all 3 reassigned GIM-219 slices merged — extractor backlog post-S3 cleaned up)
 **Owner**: Board (operator + Board Claude session)
 **Primary goal**: Index Unstoppable Wallet ecosystem live (Android + iOS + EVM
 contracts). Phase 1 ends when palace-mcp produces useful queries against the
@@ -109,11 +109,11 @@ slice that just enriches MCP without touching workflow.
 | ID | Sprint | Detail file | Wall-time | Depends on | Team |
 |----|--------|-------------|-----------|------------|------|
 | **S0** ✅ | Foundation prerequisites (IngestRun unify, composite tools, audit-mode prompts) | [`D-audit-orchestration.md` §S0](superpowers/sprints/D-audit-orchestration.md) | ~1 week | nothing | PE (S0.1+S0.2) ‖ any (S0.3) | `0a02ade` |
-| **S1 (D)** | Audit Orchestration — workflow + agents + report format + tool | [`D-audit-orchestration.md`](superpowers/sprints/D-audit-orchestration.md) | ~3-4 weeks | S0 | PE |
-| **S2.1 (B-min)** | Audit-critical extractor: `crypto_domain_model` (#40) | [`B-audit-extractors.md`](superpowers/sprints/B-audit-extractors.md) | ~2 weeks | S1.6 frees PE + semgrep spike | Claude PE |
-| **S2.2 (B+1)** | Architecture Layer extractor (#1) | [`B-audit-extractors.md`](superpowers/sprints/B-audit-extractors.md) | ~3 weeks | S2.1 frees PE | Claude PE |
-| **S2.3 (B+7)** | Error Handling Policy extractor (#7) | [`B-audit-extractors.md`](superpowers/sprints/B-audit-extractors.md) | ~3 weeks | S2.2 frees PE (or ‖ if a 2nd Claude engineer is free) | Claude PE |
-| **S3 (C)** | Per-Kit ingestion automation | [`C-ingestion-automation.md`](superpowers/sprints/C-ingestion-automation.md) | ~1 week | S1.9 (palace_mcp.cli) | Infra (‖ S1) |
+| **S1 (D)** ✅ | Audit Orchestration — workflow + agents + report format + tool | [`D-audit-orchestration.md`](superpowers/sprints/D-audit-orchestration.md) | ~3-4 weeks | S0 | PE | `c405082` 2026-05-07 |
+| **S2.1 (B-min)** ✅ | Audit-critical extractor: `crypto_domain_model` (#40) | [`B-audit-extractors.md`](superpowers/sprints/B-audit-extractors.md) | ~2 weeks | S1.6 frees PE + semgrep spike | Claude PE | `700a17a` 2026-05-08 |
+| **S2.2 (B+1)** ✅ | Architecture Layer extractor (#1) | [`B-audit-extractors.md`](superpowers/sprints/B-audit-extractors.md) | ~3 weeks | S2.1 frees PE | Claude PE | `42e2894` 2026-05-09 |
+| **S2.3 (B+7)** ✅ | Error Handling Policy extractor (#7) | [`B-audit-extractors.md`](superpowers/sprints/B-audit-extractors.md) | ~3 weeks | S2.2 frees PE (or ‖ if a 2nd Claude engineer is free) | Claude PE | `430f58e` 2026-05-10 |
+| **S3 (C)** ✅ | Per-Kit ingestion automation | [`C-ingestion-automation.md`](superpowers/sprints/C-ingestion-automation.md) | ~1 week | S1.9 (palace_mcp.cli) | Infra (‖ S1) | `9dddb08` 2026-05-10 |
 | **S4 (E)** | Smoke on tronKit-swift + bitcoinKit-swift | [`E-smoke.md`](superpowers/sprints/E-smoke.md) | ~1 week | S0 + S1 + S2.1 + S2.2 + S2.3 + S3 (GIM-216 ✅ merged `2d6e6c1`; GIM-218 ✅ merged `603c840`) | QA + operator |
 | **S5 (F)** | Scale to 41 HS Kits + uw-ios-app | [`F-scale.md`](superpowers/sprints/F-scale.md) | ~3 weeks | S4 | operator + Infra |
 | **S6+** | Iterative extractor backlog (#2, #34, etc — #1/#7 NOT here in rev3) | TBD per slice | ongoing | post-v1 | per slice |
@@ -174,6 +174,35 @@ sequential path with ~0-1w margin; parallelisation is upside, not gating.
 
 - **GIM-216** code_ownership — ✅ merged `2d6e6c1` 2026-05-06. Feeds Ownership report section in S4. `palace.code.find_owners` registered at `mcp_server.py:850`.
 - **GIM-218** cross_repo_version_skew — ✅ merged `603c840` 2026-05-07. Feeds Dependencies §5 of audit report. `palace.code.find_version_skew` registered via `register_version_skew_tools()` at `mcp_server.py:790`. **Rev2 contingency closed** — extractor landed before contingency trigger fired; no blind-spot fallback needed.
+
+### Stalled GIM-219 slices — reassigned 2026-05-12 (rev3)
+
+Of the 8 slice spec+plan pairs dumped on 2026-05-07 (commit `0ae3b5c`), 5 merged
+through paperclip team chains and 3 never started — no commits, no feature
+branches, no GitHub issues. Spec + plan files still live under
+`docs/superpowers/specs/2026-05-07-*` and `docs/superpowers/plans/2026-05-07-*`.
+
+**Operator decision (2026-05-12)**: pick up after S4 smoke closes, not before.
+All three are Tier B/D extractors per the 2026-05-01 Swift audit roadmap and are
+NOT on the audit-v1 DoD critical path.
+
+| # | Slice | Issue | Owner | Team chain | Spec / plan | Status |
+|---|-------|-------|-------|------------|-------------|--------|
+| 1 | `hot_path_profiler` (#17) — xctrace runtime hot paths, JSON-trace parser → `:HotPath` nodes | [GIM-276](https://github.com/ant013/Gimle-Palace/issues/140) | **CX/Codex** PythonEngineer | CXCTO → CXCR → CXPE → CXCR → CodexArchRev → CXQA → CXCTO merge | `specs/2026-05-07-hot-path-profiler-extractor_spec.md` + `plans/2026-05-07-hot-path-profiler-extractor_plan.md` | ✅ merged `35151ca` 2026-05-12 (PR #142) |
+| 2 | `localization_accessibility` (#9) — `.strings` / `.xcstrings` / a11y-attr scan → `:LocResource` / `:A11yIssue` nodes | [GIM-275](https://github.com/ant013/Gimle-Palace/issues/139) | **Claude** PythonEngineer | CTO → CR → PE → CR → Opus → QA → CTO merge | `specs/2026-05-07-localization-accessibility-extractor_spec.md` + `plans/2026-05-07-localization-accessibility-extractor_plan.md` | ✅ merged `5f821f4` 2026-05-12 (PR #143) |
+| 3 | `palace.code.manage_adr` v2 — composite-tool upgrade (multi-section diff, idempotent re-emit, history view) | [GIM-274](https://github.com/ant013/Gimle-Palace/issues/138) | **Claude** MCPEngineer | CTO → CR → MCP → CR → Opus → QA → CTO merge | `specs/2026-05-07-palace-code-manage-adr-v2_spec.md` + `plans/2026-05-07-palace-code-manage-adr-v2_plan.md` | ✅ merged `e57850d` 2026-05-12 (PR #141); auto-propagated CTO → MCPEngineer (autonomous queue rule `1c4014b`) |
+
+**Parallelization** (per `feedback_parallel_team_protocol.md`): all three are
+Claude team, touch disjoint files (`extractors/hot_path/`,
+`extractors/localization_accessibility/`, `code/manage_adr.py`). Slices 1 + 2
+share PythonEngineer — sequential unless a 2nd Claude PE frees up. Slice 3 is
+MCPEngineer — runs in parallel with whichever PE slice is active.
+
+**All 3 merged 2026-05-12** through paperclip team chains (created → spec → CR review → implementation → QA smoke → CTO merge in <8 hours, including parallel CX team work on GIM-276). Split Claude×2 + CX×1 successfully avoided the single-CTO overload observed on the original 8-slice GIM-219 dump.
+
+- GIM-274 manage_adr v2 → PR #141 `e57850d`
+- GIM-275 localization_accessibility → PR #143 `5f821f4`
+- GIM-276 hot_path_profiler → PR #142 `35151ca`
 
 ### Post-v1 slice intake protocol (rev2 — `audit_contract()` paved path)
 
