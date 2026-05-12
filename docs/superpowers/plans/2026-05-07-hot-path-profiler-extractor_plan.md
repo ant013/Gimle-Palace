@@ -4,9 +4,9 @@
 
 **Slice:** Phase 2 §2.5 #17 Hot-Path Profiler Extractor.
 **Spec:** `docs/superpowers/specs/2026-05-07-hot-path-profiler-extractor_spec.md`.
-**Source branch:** `feature/GIM-NN-hot-path-profiler-extractor` cut from `origin/develop` **after E6 closes**.
+**Source branch:** `feature/GIM-276-hot-path-profiler-extractor` cut from `origin/develop` **after E6 closes**.
 **Target branch:** `develop`. Squash-merge on APPROVE.
-**Team:** Codex. Phase chain: CXCTO → CXCodeReviewer (plan-first) → CXPythonEngineer (or PE-2) → CXCodeReviewer (mechanical) → OpusArchitectReviewer (adversarial) → CXQAEngineer → CXCTO merge.
+**Team:** Codex. Phase chain: CXCTO → CXCodeReviewer (plan-first) → CXPythonEngineer (or PE-2) → CXCodeReviewer (mechanical) → CodexArchitectReviewer (adversarial) → CXQAEngineer → CXCTO merge.
 
 > **Blocked-on-E6** (CX hire) **+ profile-data fixtures**: this slice
 > needs at least one Instruments `.json` + one Perfetto `.pftrace`
@@ -74,7 +74,7 @@ blocking.
 ### Step 0.3: Issue + branch
 
 - [ ] Open paperclip issue `Hot-Path Profiler Extractor (#17)`.
-- [ ] Body = link to spec + plan; `GIM-NN` placeholder.
+- [ ] Body = link to spec + plan; `GIM-276` placeholder resolved.
 - [ ] Reassign CXCTO.
 
 ---
@@ -105,7 +105,7 @@ blocking.
       `extractors/hot_path_profiler/{__init__,extractor}.py`.
 - [ ] Add to `EXTRACTORS` registry.
 - [ ] Tests GREEN.
-- [ ] Commit: `feat(GIM-NN): hot_path_profiler scaffolding`.
+- [ ] Commit: `feat(GIM-276): hot_path_profiler scaffolding`.
 
 ### Phase 2.2 — Instruments JSON parser (Mac side)
 
@@ -114,7 +114,7 @@ blocking.
 - [ ] Implement parser under
       `extractors/hot_path_profiler/parsers/instruments.py`.
 - [ ] Tests GREEN.
-- [ ] Commit: `feat(GIM-NN): Instruments xctrace JSON parser`.
+- [ ] Commit: `feat(GIM-276): Instruments xctrace JSON parser`.
 
 ### Phase 2.3 — Perfetto pftrace parser (Android side)
 
@@ -123,7 +123,7 @@ blocking.
       `extractors/hot_path_profiler/parsers/perfetto.py` using Perfetto
       SDK or subprocess `traceconv`.
 - [ ] Tests GREEN.
-- [ ] Commit: `feat(GIM-NN): Perfetto pftrace parser`.
+- [ ] Commit: `feat(GIM-276): Perfetto pftrace parser`.
 
 ### Phase 2.4 — Symbol resolution + Neo4j writer
 
@@ -145,7 +145,7 @@ blocking.
 - [ ] `extractors/hot_path_profiler/neo4j_writer.py` — batch writes;
       use S0.1 unified `:IngestRun` schema.
 - [ ] Tests GREEN.
-- [ ] Commit: `feat(GIM-NN): hot_path_profiler symbol resolver + writer`.
+- [ ] Commit: `feat(GIM-276): hot_path_profiler symbol resolver + writer`.
 
 ### Phase 2.5 — extract() orchestration + runbook
 
@@ -172,7 +172,7 @@ blocking.
 
 #### Step 2.5.3: Commit
 
-- [ ] Commit: `feat(GIM-NN): hot_path_profiler extract() + runbook`.
+- [ ] Commit: `feat(GIM-276): hot_path_profiler extract() + runbook`.
 
 ### Phase 2.6 — `audit_contract()` + template
 
@@ -182,7 +182,7 @@ blocking.
 - [ ] Author `audit/templates/hot_path_profiler.md`.
 - [ ] Add `HotPathAuditList` Pydantic model.
 - [ ] Tests GREEN.
-- [ ] Commit: `feat(GIM-NN): hot_path_profiler audit_contract + template`.
+- [ ] Commit: `feat(GIM-276): hot_path_profiler audit_contract + template`.
 
 ### Phase 2.7 — CLAUDE.md catalogue
 
@@ -190,7 +190,7 @@ blocking.
       extractors" with team affinity (Codex), trace-file dependency
       note, and runbook reference.
 - [ ] Push branch.
-- [ ] Open PR `feat(GIM-NN): hot_path_profiler extractor (#17)`.
+- [ ] Open PR `feat(GIM-276): hot_path_profiler extractor (#17)`.
 - [ ] Reassign CXCodeReviewer.
 
 ---
@@ -201,7 +201,7 @@ blocking.
 
 - [ ] `gh pr checks` green; pytest output for new tests.
 - [ ] Verify trace-file fixture sizes ≤ 1MB each (per Step 0.2).
-- [ ] APPROVE → OpusArchitectReviewer.
+- [ ] APPROVE → CodexArchitectReviewer.
 
 ### Phase 3.2 — Adversarial
 

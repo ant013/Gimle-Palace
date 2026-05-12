@@ -6,7 +6,7 @@
 **Team:** Codex (CX-native: Instruments xctrace + Perfetto / simpleperf + xcodetracemcp MCP)
 **Slice ID:** Phase 2 §2.5 #17 Hot-Path Profiler Extractor
 **Companion plan:** `2026-05-07-hot-path-profiler-extractor_plan.md`
-**Branch:** `feature/GIM-NN-hot-path-profiler-extractor`
+**Branch:** `feature/GIM-276-hot-path-profiler-extractor`
 **Blockers (rev4):**
 - **E6 closure** (CX hire).
 - **S0.1 IngestRun schema unification** (rev4 — CTO-XF-H1) — uses unified schema.
