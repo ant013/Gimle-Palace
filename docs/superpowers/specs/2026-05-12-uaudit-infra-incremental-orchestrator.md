@@ -1,126 +1,176 @@
-# UAudit Infra Incremental PR Orchestrator
+# UAudit Daily Version-Branch Delta Audit
 
 ## Goal
 
-Move incremental PR audit orchestration from Swift/Kotlin auditor roles into the
-UAudit infra roles so one Paperclip wake owns the full path:
+Replace manual incremental PR audit orchestration with two scheduled UAudit
+infra routines:
 
-1. prepare PR checkout, diff, and metadata;
-2. refresh codebase-memory context for the PR head;
-3. run three required UAudit Codex subagents in parallel;
-4. aggregate one English `audit.md`;
-5. send the report to Telegram;
-6. close the issue.
+- iOS: `UWIInfraEngineer`, daily at 18:00.
+- Android: `UWAInfraEngineer`, daily at 18:10.
 
-This removes the current coordinator-to-infra handoff delay while preserving the
-explicit subagent contract.
+Each infra agent owns the full cycle in one Paperclip issue: detect new commits
+on the configured version branch, enrich codebase context, run four UAudit
+Codex subagents in parallel, aggregate a Markdown audit report, deliver it to
+Telegram, and update the audit cursor only after delivery succeeds.
 
 ## Assumptions
 
 - UAudit Codex subagents are already installed and smoke-tested:
   `uaudit-swift-audit-specialist`, `uaudit-kotlin-audit-specialist`,
-  `uaudit-security-auditor`, `uaudit-blockchain-auditor`.
+  `uaudit-bug-hunter`, `uaudit-security-auditor`,
+  `uaudit-blockchain-auditor`.
 - `UWIInfraEngineer` and `UWAInfraEngineer` already have runtime
   `PAPERCLIP_API_KEY` and `PAPERCLIP_API_URL` for Telegram delivery.
-- Paperclip runtime can run `gh`, `git`, and the codebase-memory MCP/indexer
-  against `/Users/Shared/UnstoppableAudit/repos/*`.
-- New incremental audit issues can be assigned directly to infra roles.
+- Paperclip routines can create scheduled issues assigned to a specific agent.
+- The target release branches are:
+  - iOS: `version/0.49`
+  - Android: `version/0.49`
+- The shared repos are:
+  - iOS: `/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios`
+  - Android:
+    `/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android`
 
 ## Scope
 
 - Update UAudit Codex infra overlays:
   - `paperclips/projects/uaudit/overlays/codex/UWIInfraEngineer.md`
   - `paperclips/projects/uaudit/overlays/codex/UWAInfraEngineer.md`
-- Update Swift/Kotlin auditor overlays so PR audit issues are no longer their
-  default coordinator path; they remain available as subagent/domain roles.
+- Keep the old "prepared audit.md delivery" path for backward compatibility.
 - Update generated UAudit Codex dist via `paperclips/build.sh`.
-- Update docs/runbook text for assigning new incremental audit issues directly
-  to infra.
-- Deploy updated UAudit Codex infra/auditor bundles to Paperclip.
-- Create a real Android audit issue for
-  `https://github.com/horizontalsystems/unstoppable-wallet-android/pull/9195`
-  assigned to `UWAInfraEngineer`.
+- Document the routine/cursor contract.
+- Deploy updated infra bundles to Paperclip.
+- Create or reconcile two Paperclip routines for the daily iOS/Android delta
+  audit.
+- Trigger Android PR #9195 manually by making the Android version-branch delta
+  routine run once after deploy, if that PR is present in the version branch.
 
 ## Out Of Scope
 
 - Changing the Telegram plugin.
-- Changing Paperclip issue scheduling.
-- Adding new test agents.
-- Reintroducing QA/tester agents for this flow.
-- Full repo audit mode; this spec is only for PR incremental audit.
+- Replacing Paperclip routines with our own scheduler.
+- Adding tester/QA agents to the delta audit.
+- Updating cursors before successful Telegram delivery.
+- Full repo audit mode.
 
-## New Infra Contract
+## Delta Contract
 
-When `UWIInfraEngineer` sees an iOS PR URL, it owns the full flow using:
+Each infra role stores its cursor under:
+
+- iOS:
+  `/Users/Shared/UnstoppableAudit/state/ios-version-audit.json`
+- Android:
+  `/Users/Shared/UnstoppableAudit/state/android-version-audit.json`
+
+Cursor shape:
+
+```json
+{
+  "platform": "ios | android",
+  "branch": "version/0.49",
+  "last_successfully_audited_sha": "<sha>",
+  "last_successful_issue": "UNS-<N>",
+  "last_successful_at": "<UTC ISO-8601>"
+}
+```
+
+The cursor is the source of truth. Do not use local branch position as proof
+that commits were audited.
+
+For each scheduled issue:
+
+1. Fetch the remote version branch.
+2. Resolve:
+   - `from = cursor.last_successfully_audited_sha`
+   - `to = remote version branch HEAD`
+3. If `from == to`, comment `No new commits`, write a no-op marker, and mark
+   the issue `done`.
+4. If new commits exist, check size limits:
+   - more than 30 commits blocks the run with a split-required comment;
+   - more than 3000 changed diff lines blocks the run with a split-required
+     comment.
+5. Checkout the repo at `to`.
+6. Save artifacts under
+   `/Users/Shared/UnstoppableAudit/runs/UNS-<N>-audit/`:
+   - `commits.json`
+   - `files.json`
+   - `diff.patch`
+   - `subagents/*.json`
+   - `audit.md`
+7. Refresh/enrich codebase-memory for the repo after checkout and before
+   subagent fanout.
+8. Start four required subagents in parallel with explicit
+   `spawn_agent.agent_type`.
+9. Aggregate one English `audit.md` covering the whole commit delta.
+10. Send the report through the Telegram plugin with `issueIdentifier`, not
+    `chatId`.
+11. Only after Telegram returns `ok:true`, update the cursor to `to` and mark
+    the issue `done`.
+
+If any step after diff creation fails, leave the cursor unchanged.
+
+## Required Subagents
+
+iOS:
 
 - `uaudit-swift-audit-specialist`
+- `uaudit-bug-hunter`
 - `uaudit-security-auditor`
 - `uaudit-blockchain-auditor`
 
-When `UWAInfraEngineer` sees an Android PR URL, it owns the full flow using:
+Android:
 
 - `uaudit-kotlin-audit-specialist`
+- `uaudit-bug-hunter`
 - `uaudit-security-auditor`
 - `uaudit-blockchain-auditor`
 
-`uaudit-bug-hunter` is removed from the default incremental path to keep the
-fast path at three subagents. It remains available for separate bug-hunt modes.
+Default/generic Codex agents are forbidden. Missing subagent, malformed JSON, or
+generic fallback blocks the run.
 
-The infra role must:
+## Routine Contract
 
-- derive `$RUN=/Users/Shared/UnstoppableAudit/runs/UNS-<N>-audit`;
-- fetch PR metadata to `$RUN/pr.json`;
-- fetch full PR diff to `$RUN/pr.diff`;
-- checkout/fetch the PR head in the platform repo;
-- refresh/enrich codebase-memory for the platform repo after checkout;
-- start the three required subagents in parallel with explicit
-  `spawn_agent.agent_type`;
-- reject default/generic subagent fallback;
-- require JSON outputs with the existing finding schema;
-- write `$RUN/audit.md`;
-- send `audit.md` through the Telegram plugin using `issueIdentifier`, not
-  `chatId`;
-- comment the artifact path, delivery message id, and status;
-- mark the issue `done`.
+Paperclip routines should create visible UAudit issues with:
+
+- `projectId`: `64871690-2f2d-4fbd-a30d-975e6bbccec9`
+- `projectWorkspaceId`: `3ba77e45-88be-41f0-bdcd-b7558de3a16b`
+- status: `todo`
+- priority: `high`
+- iOS assignee: `UWIInfraEngineer`
+  (`339e9d3f-48c0-4348-a8da-5337e6f29491`)
+- Android assignee: `UWAInfraEngineer`
+  (`5f0709f8-0b05-43e7-8711-6df618b95f69`)
+
+The issue body must include the platform, branch, repo root, cursor path, and a
+clear phrase such as `UAudit daily version-branch delta audit`.
 
 ## Affected Files
 
 - `paperclips/projects/uaudit/overlays/codex/UWIInfraEngineer.md`
 - `paperclips/projects/uaudit/overlays/codex/UWAInfraEngineer.md`
-- `paperclips/projects/uaudit/overlays/codex/UWISwiftAuditor.md`
-- `paperclips/projects/uaudit/overlays/codex/UWAKotlinAuditor.md`
 - `paperclips/dist/uaudit/**`
 - `docs/paperclip-operations/telegram-report-delivery.md`
-- `docs/runbooks/deploy-checklist.md` if needed
 
 ## Acceptance Criteria
 
-- New iOS incremental PR issue can be assigned directly to `UWIInfraEngineer`.
-- New Android incremental PR issue can be assigned directly to
-  `UWAInfraEngineer`.
-- Infra instructions clearly require three explicit subagents and forbid
-  default/generic fallback.
-- Infra instructions include checkout plus codebase-memory refresh before
-  subagent fanout.
-- Infra writes `audit.md` and sends it to Telegram in the same issue lifecycle.
-- Swift/Kotlin auditor instructions no longer claim to own the default
-  incremental PR coordinator path.
+- `UWIInfraEngineer` and `UWAInfraEngineer` instructions define the daily
+  version-branch delta path.
+- Infra instructions use four exact UAudit subagents per platform.
+- Infra instructions require codebase-memory refresh before fanout.
+- Cursor update happens only after successful Telegram delivery.
+- No-op runs close cleanly without updating cursor.
+- Oversized deltas block instead of producing partial reports.
 - UAudit Codex build and instruction validation pass.
-- Updated bundles are deployed to live Paperclip.
-- Android PR #9195 issue is created and starts under `UWAInfraEngineer`.
+- Updated infra bundles are deployed to live Paperclip.
+- Two Paperclip routines are created or reconciled.
 
 ## Verification Plan
 
 - `./paperclips/build.sh --project uaudit --target codex`
 - `python3 paperclips/scripts/validate_instructions.py --repo-root .`
 - `uv run python -m pytest paperclips/tests/test_validate_instructions.py`
-- Deploy changed UAudit Codex agents through
+- Deploy `UWIInfraEngineer` and `UWAInfraEngineer` through
   `paperclips/scripts/deploy_project_agents.py --project uaudit --target codex --api`.
-- Create Android PR #9195 issue assigned to `UWAInfraEngineer`.
-- Verify the issue is visible and moves to `in_progress`.
-
-## Open Questions
-
-- Whether infra should continue to support the old "prepared audit.md only"
-  delivery path. Default answer: yes, keep it for backward compatibility, but
-  PR URLs take the new orchestrator path.
+- Verify live infra bundles compare OK.
+- Create/reconcile routines and verify they are visible through Paperclip API.
+- Manually trigger or create the first Android delta issue for PR #9195 after
+  deploy.
