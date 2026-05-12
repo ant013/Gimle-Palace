@@ -144,3 +144,40 @@ async def test_run_recomputes_hot_function_count_from_resolved_samples(
     assert writer.await_count == 1
     effective_summary = writer.await_args.kwargs["summary"]
     assert effective_summary.hot_function_count == 1
+
+
+def test_parse_trace_routes_simpleperf_fixture() -> None:
+    trace_path = (
+        Path(__file__).parent.parent
+        / "fixtures"
+        / "hot-path-fixture"
+        / "synthetic"
+        / "simpleperf-stub.trace"
+    )
+
+    summary, samples = HotPathProfilerExtractor()._parse_trace(trace_path)
+
+    assert summary.source_format == "simpleperf"
+    assert len(samples) == 3
+
+
+def test_discover_trace_files_includes_simpleperf_artifacts(tmp_path: Path) -> None:
+    (tmp_path / "track-a.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "cpu-profile.pftrace").write_text("stub", encoding="utf-8")
+    (tmp_path / "android-samples.trace").write_bytes(
+        b"SIMPLEPERF\x01\x00\x00\x00\x00\x00"
+    )
+    (tmp_path / "android-samples.proto").write_bytes(
+        b"SIMPLEPERF\x01\x00\x00\x00\x00\x00"
+    )
+    (tmp_path / "android-samples.pb").write_bytes(b"SIMPLEPERF\x01\x00\x00\x00\x00\x00")
+
+    files = HotPathProfilerExtractor()._discover_trace_files(tmp_path)
+
+    assert [path.name for path in files] == [
+        "track-a.json",
+        "cpu-profile.pftrace",
+        "android-samples.trace",
+        "android-samples.proto",
+        "android-samples.pb",
+    ]

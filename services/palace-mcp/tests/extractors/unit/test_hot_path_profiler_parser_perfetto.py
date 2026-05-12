@@ -73,3 +73,10 @@ def test_parse_perfetto_trace_uses_trace_processor_factory() -> None:
     assert summary.total_wall_ms == 200
     assert [sample.cpu_samples for sample in samples] == [8, 5]
     assert samples[0].cpu_share == 8 / 13
+
+
+def test_perfetto_query_targets_cpu_profile_tables() -> None:
+    assert "cpu_profiling_samples" in PERFETTO_HOT_PATH_SQL
+    assert "stack_profile_callsite" in PERFETTO_HOT_PATH_SQL
+    assert "stack_profile_frame" in PERFETTO_HOT_PATH_SQL
+    assert "FROM slice" not in PERFETTO_HOT_PATH_SQL

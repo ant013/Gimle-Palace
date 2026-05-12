@@ -20,8 +20,10 @@ from palace_mcp.extractors.hot_path_profiler.models import (
     HotPathSummary,
 )
 from palace_mcp.extractors.hot_path_profiler.parsers import (
+    is_simpleperf_trace,
     parse_instruments_trace,
     parse_perfetto_trace,
+    parse_simpleperf_trace,
 )
 
 
@@ -151,6 +153,9 @@ LIMIT 25
         files = [
             *sorted(profiles_dir.glob("*.json")),
             *sorted(profiles_dir.glob("*.pftrace")),
+            *sorted(profiles_dir.glob("*.trace")),
+            *sorted(profiles_dir.glob("*.proto")),
+            *sorted(profiles_dir.glob("*.pb")),
         ]
         return [path for path in files if path.is_file()]
 
@@ -161,6 +166,10 @@ LIMIT 25
             return parse_instruments_trace(trace_path)
         if trace_path.suffix == ".pftrace":
             return parse_perfetto_trace(trace_path)
+        if trace_path.suffix in {".trace", ".proto", ".pb"} and is_simpleperf_trace(
+            trace_path
+        ):
+            return parse_simpleperf_trace(trace_path)
         raise ExtractorConfigError(f"unsupported trace file: {trace_path}")
 
     def _resolved_summary(

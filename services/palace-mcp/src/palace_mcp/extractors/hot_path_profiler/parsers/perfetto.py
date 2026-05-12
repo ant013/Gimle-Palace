@@ -11,17 +11,17 @@ from palace_mcp.extractors.hot_path_profiler.models import HotPathSample, HotPat
 
 DEFAULT_THRESHOLD = 0.05
 PERFETTO_HOT_PATH_SQL = """
+INCLUDE PERFETTO MODULE stacks.cpu_profiling;
 SELECT
-  COALESCE(slice.name, thread.name, 'unknown') AS symbol_name,
+  COALESCE(frame.name, samples.thread_name, 'unknown') AS symbol_name,
   COUNT(*) AS cpu_samples,
-  CAST(COALESCE(SUM(slice.dur) / 1000000, 0) AS INT) AS wall_ms,
-  thread.name AS thread_name
-FROM slice
-LEFT JOIN thread_track ON slice.track_id = thread_track.id
-LEFT JOIN thread USING (utid)
-WHERE slice.name IS NOT NULL
+  0 AS wall_ms,
+  samples.thread_name AS thread_name
+FROM cpu_profiling_samples AS samples
+JOIN stack_profile_callsite AS callsite ON samples.callsite_id = callsite.id
+JOIN stack_profile_frame AS frame ON callsite.frame_id = frame.id
 GROUP BY symbol_name, thread_name
-ORDER BY cpu_samples DESC, wall_ms DESC, symbol_name ASC
+ORDER BY cpu_samples DESC, symbol_name ASC
 """.strip()
 
 

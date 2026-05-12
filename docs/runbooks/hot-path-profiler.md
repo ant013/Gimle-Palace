@@ -3,6 +3,7 @@
 ## Назначение
 
 `hot_path_profiler` читает профили выполнения из `/repos/<slug>/profiles/`,
+поддерживает Instruments JSON, Perfetto `.pftrace` и simpleperf protobuf,
 сводит горячие функции по CPU/wall-time и связывает их с существующими
 `:Function` узлами.
 
@@ -50,6 +51,23 @@ cd services/palace-mcp
 uv run python -c "from perfetto.trace_processor import TraceProcessor"
 ```
 
+## Как подготовить simpleperf fixture
+
+1. На Android-стороне снимите `perf.data` через `simpleperf record`.
+2. Преобразуйте raw profile в protobuf-формат c callchain:
+
+```bash
+simpleperf report-sample \
+  --protobuf \
+  --show-callchain \
+  -i perf.data \
+  -o perf.trace
+```
+
+3. Если символов с host-side debug info больше, повторите шаг с `--symdir`.
+4. Положите итоговый protobuf-файл (`perf.trace`, `*.proto` или `*.pb`) в
+   `/repos/<slug>/profiles/`.
+
 ## Запуск extractor’а
 
 ```text
@@ -73,3 +91,5 @@ ORDER BY s.cpu_samples DESC
   names с `qualified_name`/`display_name` на `:Function`.
 - Если Perfetto parser падает на импорте, выполните `uv sync` в
   `services/palace-mcp/` и повторите import validation.
+- Если simpleperf файл не распознаётся, проверьте magic header `SIMPLEPERF`
+  и версию protobuf-обёртки, которую выдал `simpleperf report-sample`.
