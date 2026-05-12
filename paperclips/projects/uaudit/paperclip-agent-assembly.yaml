@@ -73,7 +73,12 @@ skills:
 
 subagents:
   additions:
-    project: []
+    project:
+      - uaudit-swift-audit-specialist
+      - uaudit-kotlin-audit-specialist
+      - uaudit-bug-hunter
+      - uaudit-security-auditor
+      - uaudit-blockchain-auditor
     by_role: {}
 
 targets:
