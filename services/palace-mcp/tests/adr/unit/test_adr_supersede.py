@@ -35,7 +35,9 @@ New purpose.
 """
 
 
-def _make_mock_driver_with_query(records: list | None = None) -> tuple[MagicMock, AsyncMock]:
+def _make_mock_driver_with_query(
+    records: list | None = None,
+) -> tuple[MagicMock, AsyncMock]:
     """Driver mock that returns pre-set records from session.run().single()."""
     mock_result = AsyncMock()
     mock_result.single = AsyncMock(return_value=None if not records else records[0])

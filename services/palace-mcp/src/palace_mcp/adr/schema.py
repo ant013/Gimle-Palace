@@ -16,8 +16,7 @@ _CONSTRAINTS: tuple[str, ...] = (
 )
 
 _INDEXES: tuple[str, ...] = (
-    "CREATE INDEX adr_document_status IF NOT EXISTS "
-    "FOR (d:AdrDocument) ON (d.status)",
+    "CREATE INDEX adr_document_status IF NOT EXISTS FOR (d:AdrDocument) ON (d.status)",
     "CREATE INDEX adr_section_name IF NOT EXISTS "
     "FOR (s:AdrSection) ON (s.section_name)",
 )

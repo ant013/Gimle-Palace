@@ -83,7 +83,9 @@ def _parse_adr_file(content: str) -> tuple[str, list[dict[str, Any]]]:
                 sections.append(
                     {"name": current_section, "body": "".join(current_body).strip()}
                 )
-            current_section = section_name if section_name in CANONICAL_SECTIONS else None
+            current_section = (
+                section_name if section_name in CANONICAL_SECTIONS else None
+            )
             current_body = []
         elif current_section is not None:
             current_body.append(line)
@@ -110,6 +112,7 @@ ON MATCH SET
   d.updated_at   = datetime(),
   d.source_path  = $source_path
 """
+
 
 async def _project_to_graph(
     slug: str,

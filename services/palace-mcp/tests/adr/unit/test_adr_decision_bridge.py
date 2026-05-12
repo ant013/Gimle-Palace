@@ -68,7 +68,9 @@ class TestDecisionBridge:
         mock_session = AsyncMock()
         mock_session.run = AsyncMock(return_value=mock_result)
         mock_driver = MagicMock()
-        mock_driver.session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_driver.session.return_value.__aenter__ = AsyncMock(
+            return_value=mock_session
+        )
         mock_driver.session.return_value.__aexit__ = AsyncMock(return_value=False)
 
         result = await write_adr(
@@ -99,7 +101,9 @@ class TestDecisionBridge:
         mock_session = AsyncMock()
         mock_session.run = AsyncMock(return_value=mock_result)
         mock_driver = MagicMock()
-        mock_driver.session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_driver.session.return_value.__aenter__ = AsyncMock(
+            return_value=mock_session
+        )
         mock_driver.session.return_value.__aexit__ = AsyncMock(return_value=False)
 
         result = await write_adr(

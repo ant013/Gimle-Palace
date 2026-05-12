@@ -12,7 +12,10 @@ def _make_mock_driver(rows: list[dict] | None = None) -> tuple[MagicMock, AsyncM
     mock_result = AsyncMock()
 
     async def _values():
-        return [[r.get("slug"), r.get("section_name"), r.get("body_excerpt")] for r in (rows or [])]
+        return [
+            [r.get("slug"), r.get("section_name"), r.get("body_excerpt")]
+            for r in (rows or [])
+        ]
 
     mock_result.values = _values
     mock_session = AsyncMock()
@@ -29,7 +32,11 @@ class TestQueryAdrs:
         from palace_mcp.adr.query import query_adrs
 
         rows = [
-            {"slug": "gimle-purpose", "section_name": "PURPOSE", "body_excerpt": "palace of knowledge"},
+            {
+                "slug": "gimle-purpose",
+                "section_name": "PURPOSE",
+                "body_excerpt": "palace of knowledge",
+            },
         ]
         driver, session = _make_mock_driver(rows)
 

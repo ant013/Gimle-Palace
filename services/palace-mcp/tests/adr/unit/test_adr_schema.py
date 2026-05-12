@@ -112,7 +112,9 @@ class TestEnsureAdrSchema:
 
         mock_session = AsyncMock()
         mock_driver = MagicMock()
-        mock_driver.session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_driver.session.return_value.__aenter__ = AsyncMock(
+            return_value=mock_session
+        )
         mock_driver.session.return_value.__aexit__ = AsyncMock(return_value=False)
 
         await ensure_adr_schema(mock_driver)
@@ -121,12 +123,12 @@ class TestEnsureAdrSchema:
         assert any("AdrDocument" in c and "UNIQUE" in c for c in calls), (
             "Expected UNIQUE constraint for AdrDocument"
         )
-        assert any("INDEX" in c and "AdrDocument" in c and "status" in c for c in calls), (
-            "Expected INDEX on AdrDocument.status"
-        )
-        assert any("INDEX" in c and "AdrSection" in c and "section_name" in c for c in calls), (
-            "Expected INDEX on AdrSection.section_name"
-        )
+        assert any(
+            "INDEX" in c and "AdrDocument" in c and "status" in c for c in calls
+        ), "Expected INDEX on AdrDocument.status"
+        assert any(
+            "INDEX" in c and "AdrSection" in c and "section_name" in c for c in calls
+        ), "Expected INDEX on AdrSection.section_name"
 
     @pytest.mark.asyncio
     async def test_idempotent_uses_if_not_exists(self) -> None:

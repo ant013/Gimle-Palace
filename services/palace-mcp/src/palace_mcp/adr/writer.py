@@ -52,6 +52,7 @@ ON MATCH SET
   d.source_path  = $source_path
 """
 
+
 async def write_adr(
     slug: str,
     section: str,

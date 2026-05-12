@@ -117,7 +117,6 @@ class TestToolRegistration:
             )
 
 
-
 class TestPassthroughSerialization:
     @pytest.mark.asyncio
     async def test_call_tool_arguments_forwarded(self) -> None:

@@ -43,8 +43,7 @@ async def query_adrs(
         rows = await result.values()
 
     items = [
-        {"slug": row[0], "section_name": row[1], "body_excerpt": row[2]}
-        for row in rows
+        {"slug": row[0], "section_name": row[1], "body_excerpt": row[2]} for row in rows
     ]
     logger.debug(
         "adr.query keyword=%r section=%r project=%r hits=%d",

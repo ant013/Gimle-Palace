@@ -84,6 +84,7 @@ def mcp_url(neo4j_uri: str, neo4j_auth: tuple[str, str]) -> Iterator[str]:
 
     # Ensure base_dir exists (set via conftest.pytest_configure → PALACE_ADR_BASE_DIR).
     from pathlib import Path
+
     adr_base = Path(os.environ.get("PALACE_ADR_BASE_DIR", "docs/postulates"))
     adr_base.mkdir(parents=True, exist_ok=True)
 

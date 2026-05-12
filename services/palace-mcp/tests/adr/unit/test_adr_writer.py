@@ -37,7 +37,14 @@ class TestWriteAdr:
         assert path.exists()
         content = path.read_text()
         # All 6 section headers present
-        for section in ("PURPOSE", "STACK", "ARCHITECTURE", "PATTERNS", "TRADEOFFS", "PHILOSOPHY"):
+        for section in (
+            "PURPOSE",
+            "STACK",
+            "ARCHITECTURE",
+            "PATTERNS",
+            "TRADEOFFS",
+            "PHILOSOPHY",
+        ):
             assert f"## {section}" in content
         assert "This is the purpose." in content
 
