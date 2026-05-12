@@ -210,7 +210,7 @@
 
 ---
 
-### Phase 2.5 — `query` mode (existing v1 → graph-augmented)
+### Phase 2.5 — `query` mode (NEW)
 
 #### Step 2.5.1: Failing tests
 
