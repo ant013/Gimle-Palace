@@ -317,6 +317,14 @@ invoked via MCP tool `palace.ingest.run_extractor(name, project)`.
   top-N hotspots and `palace.code.list_functions(project, path)` for per-
   function complexity. Requires `git_history` to have run first (otherwise
   churn = 0).
+- `hot_path_profiler` — Runtime hot-path profiler extractor (GIM-276,
+  Roadmap #17). Reads committed trace artifacts from `/repos/<slug>/profiles/`
+  and currently supports normalized Instruments JSON fixtures plus Perfetto
+  `.pftrace` input. Resolves hot samples onto existing `:Function` nodes,
+  writes `:HotPathSample`, `:HotPathSummary`, and unresolved trace rows, and
+  exposes audit output via `audit/templates/hot_path_profiler.md`. Track A
+  merge-gate fixture lives under
+  `services/palace-mcp/tests/extractors/fixtures/hot-path-fixture/profiles/`.
 - `reactive_dependency_tracer` — Swift-first reactive state/effect extractor
   (GIM-217, Roadmap #3). Reads pre-generated `reactive_facts.json` from repo
   root, writes `ReactiveComponent` / `ReactiveState` / `ReactiveEffect` /

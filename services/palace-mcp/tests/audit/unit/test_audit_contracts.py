@@ -1,4 +1,4 @@
-"""Unit tests for audit_contract() on all 7 extractors (S1.6).
+"""Unit tests for audit_contract() on supported extractors with audit output.
 
 Each test asserts:
 - audit_contract() returns non-None AuditContract.
@@ -36,6 +36,21 @@ class TestHotspotAuditContract:
         contract = HotspotExtractor().audit_contract()
         _assert_valid_contract(contract, "hotspot")
         assert "hotspot.md" in contract.template_name  # type: ignore[union-attr]
+
+
+class Test_hot_path_profiler_AuditContract:
+    def test_hot_path_profiler_returns_valid_contract(self) -> None:
+        from palace_mcp.extractors.hot_path_profiler import HotPathProfilerExtractor
+
+        contract = HotPathProfilerExtractor().audit_contract()
+        _assert_valid_contract(contract, "hot_path_profiler")
+        assert contract is not None
+        assert "HotPathSample" in contract.query
+        assert "threshold_cpu_share" in contract.query
+        assert contract.severity_mapper is not None
+        assert contract.severity_mapper(0.2).value == "high"
+        assert contract.severity_mapper(0.1).value == "medium"
+        assert contract.severity_mapper(0.01).value == "low"
 
 
 class TestDeadSymbolAuditContract:
