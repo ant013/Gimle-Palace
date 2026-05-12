@@ -65,9 +65,7 @@ def test_parse_perfetto_trace_uses_trace_processor_factory() -> None:
         assert trace == str(_FIXTURE)
         return processor
 
-    summary, samples = parse_perfetto_trace(
-        _FIXTURE, trace_processor_factory=_factory
-    )
+    summary, samples = parse_perfetto_trace(_FIXTURE, trace_processor_factory=_factory)
 
     assert processor.queries == [PERFETTO_HOT_PATH_SQL]
     assert summary.source_format == "perfetto"
