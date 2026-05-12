@@ -30,6 +30,22 @@ Subagents are read-only reviewers. They must not write files, post Paperclip
 comments, deploy, or read secrets. Give each subagent only the prepared
 `pr.diff` path, `pr.json` path, iOS repository root, and a narrow role prompt.
 
+When using the Codex `spawn_agent` tool, set `agent_type` explicitly to the
+exact subagent name. A `spawn_agent` call with omitted `agent_type`, `default`,
+or any generic role is a failed smoke/audit attempt and must block the run.
+Use exactly these mappings:
+
+| Required output file | Required `spawn_agent.agent_type` |
+| --- | --- |
+| `$RUN/subagents/uaudit-swift-audit-specialist.json` | `uaudit-swift-audit-specialist` |
+| `$RUN/subagents/uaudit-bug-hunter.json` | `uaudit-bug-hunter` |
+| `$RUN/subagents/uaudit-security-auditor.json` | `uaudit-security-auditor` |
+| `$RUN/subagents/uaudit-blockchain-auditor.json` | `uaudit-blockchain-auditor` |
+
+If the tool schema rejects any required `agent_type`, write
+`$RUN/status/blocked` with the rejected name and stop. Do not retry that slot
+with a generic agent.
+
 ### Run State
 
 Bind state on every wake:
@@ -118,6 +134,8 @@ Require each subagent to return JSON with this shape:
 
 Malformed JSON, missing required fields, missing subagent, or generic-agent
 fallback blocks the run. Write `$RUN/status/blocked` with one concise reason.
+Every JSON result must contain `"agent"` equal to the required `agent_type`
+used for that slot.
 
 ### Aggregation
 
@@ -152,7 +170,8 @@ Infra computes its own hash and delivery payload.
 If the issue explicitly says `UAudit subagent smoke`, use synthetic `pr.json`
 and `pr.diff` under `$RUN/smoke/` and prove:
 
-- all four required subagent names were invoked;
+- all four required subagent names were invoked via explicit
+  `spawn_agent.agent_type`;
 - missing required subagent blocks the run;
 - malformed subagent JSON blocks the run;
 - subagents do not write files or read forbidden secret paths.
