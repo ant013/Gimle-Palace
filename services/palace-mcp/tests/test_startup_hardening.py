@@ -22,6 +22,7 @@ def _mock_graphiti_runtime() -> None:
         patch("palace_mcp.main.ensure_graphiti_schema", new_callable=AsyncMock),
         patch("palace_mcp.main.close_graphiti", new_callable=AsyncMock),
         patch("palace_mcp.main.ensure_extractors_schema", new_callable=AsyncMock),
+        patch("palace_mcp.main.ensure_adr_schema", new_callable=AsyncMock),
     ):
         yield  # type: ignore[misc]
 

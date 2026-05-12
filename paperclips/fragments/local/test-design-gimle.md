@@ -1,10 +1,10 @@
-## Test-design — Gimle specifics
+## Test-design — {{PROJECT}} specifics
 
 ### Shared-infra paths (touching any = full `uv run pytest tests/`)
 
-- `services/palace-mcp/src/palace_mcp/main.py` (lifespan)
-- `services/palace-mcp/src/palace_mcp/memory/` (Cypher + schema)
-- `services/palace-mcp/src/palace_mcp/extractors/schema.py` + `runner.py`
+- `{{paths.primary_mcp_service_dir}}/src/{{mcp.package_name}}/main.py` (lifespan)
+- `{{paths.primary_mcp_service_dir}}/src/{{mcp.package_name}}/memory/` (Cypher + schema)
+- `{{paths.primary_mcp_service_dir}}/src/{{mcp.package_name}}/extractors/schema.py` + `runner.py`
 
 ### Python+pytest anti-pattern examples
 
@@ -18,9 +18,9 @@
 
 ### Past incidents caught by this rule
 
-- **GIM-48** (2026-04-18) — mocked `Graphiti.nodes.*`; real graphiti-core
-  0.4.3 lacks `.nodes`. `docs/postmortems/2026-04-18-GIM-48-n1a-broken-merge.md`.
-- **GIM-59** (2026-04-20) — `AsyncMock(driver)` regression in
+- **{{evidence.graphiti_mock_issue}}** (2026-04-18) — mocked `Graphiti.nodes.*`; real graphiti-core
+  0.4.3 lacks `.nodes`. `docs/postmortems/2026-04-18-{{evidence.graphiti_mock_issue}}-n1a-broken-merge.md`.
+- **{{evidence.asyncmock_driver_issue}}** (2026-04-20) — `AsyncMock(driver)` regression in
   `tests/test_startup_hardening.py` after lifespan added
   `ensure_extractors_schema`. Scoped `pytest tests/extractors/` missed it.
 

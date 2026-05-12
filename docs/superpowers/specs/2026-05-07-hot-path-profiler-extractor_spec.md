@@ -1,16 +1,18 @@
 # Hot-Path Profiler Extractor (#17) — Specification
 
 **Document date:** 2026-05-07
-**Status:** Draft · awaiting CX-CTO formalisation (post-E6 close)
+**Status:** Draft · CR-rev1 after CXCodeReviewer plan-first REQUEST CHANGES
 **Author:** Board+Claude session (operator + Claude Opus 4.7)
-**Team:** Codex (CX-native: Instruments xctrace + Perfetto / simpleperf + xcodetracemcp MCP)
+**Team:** Codex (CX-native: Instruments xctrace + Perfetto / simpleperf)
 **Slice ID:** Phase 2 §2.5 #17 Hot-Path Profiler Extractor
 **Companion plan:** `2026-05-07-hot-path-profiler-extractor_plan.md`
-**Branch:** `feature/GIM-NN-hot-path-profiler-extractor`
+**Branch:** `feature/GIM-276-hot-path-profiler-extractor`
 **Blockers (rev4):**
 - **E6 closure** (CX hire).
 - **S0.1 IngestRun schema unification** (rev4 — CTO-XF-H1) — uses unified schema.
-- **Profile-data fixtures** (see §8) — synthetic stubs unblock unit tests; real-trace fixtures deferred to operator (within 1 week of E6 close per plan Step 0.2b).
+- **Track A profile fixture** (see §8) — committed pre-recorded
+  xctrace-derived JSON fixture is the merge gate. Track B live capture
+  on a dev Mac is deferred follow-up evidence, not required for merge.
 
 ---
 
@@ -43,11 +45,9 @@ in the original 45-extractor research inventory.
 ## 2. Scope
 
 ### In scope
-- **Trace formats**: Instruments `.trace` exported via xctrace
-  (Time Profiler instrument), Perfetto / simpleperf `.pftrace`
-  (Android), iOS DTPS `.signpost`. Optionally
-  [xcodetracemcp](https://github.com/Sourceful-AI/xcodetracemcp) MCP
-  for Mac-side capture-as-MCP-tool.
+- **Trace formats**: normalized JSON derived from Instruments
+  `xctrace export` Time Profiler tables, Perfetto `.pftrace`, and
+  simpleperf protobuf samples.
 - **Sample aggregation**: per-function CPU-share and wall-time-share
   across the trace.
 - **Symbol resolution**: link samples to `:Function` nodes via
@@ -64,14 +64,16 @@ in the original 45-extractor research inventory.
 - Battery / energy profiling.
 - Network / disk I/O profiling — that's #30 Performance Pattern's
   remit.
+- `xcodetracemcp` integration. It is not verified for v1 and remains a
+  separate follow-up if needed.
 
 ## 3. Detection / ingest strategy
 
 | Surface | Source | Method |
 |---|---|---|
-| iOS Time Profiler | xctrace export `.json` | parse via Sourcegraph xctrace JSON schema |
-| Android CPU profile | Perfetto trace | parse via Perfetto SDK / `traceconv` |
-| Android sampling | simpleperf `.data` | parse via simpleperf `report-sample --proto` |
+| iOS Time Profiler | normalized JSON fixture derived from `xctrace export` | parse the committed Track A fixture shape; raw `xctrace export` is XML/table-oriented per `reference_xctrace_perfetto_traceconv_simpleperf_api_truth.md` |
+| Android CPU profile | Perfetto `.pftrace` | parse via `perfetto.trace_processor.TraceProcessor`; `traceconv` is runbook/fixture tooling only unless pinned |
+| Android sampling | simpleperf `.data` / protobuf | parse simpleperf protobuf output produced by `simpleperf report-sample --protobuf --show-callchain` |
 | Symbol resolution | Phase 1 symbol-index `:Function` nodes | match `qualified_name` (post-symbol-index merge of trace samples) |
 
 ### Confidence
@@ -119,11 +121,19 @@ def audit_contract(self) -> AuditContract:
     # of hardcoded 0.05 in Cypher.
     return AuditContract(
         query="""
-            MATCH (sum:HotPathSummary {project: $project})
-            WITH sum.threshold_cpu_share AS threshold
-            MATCH (s:HotPathSample {project: $project})
-            WHERE s.cpu_samples * 1.0 / s.total_samples_in_trace >= threshold
-            RETURN s ORDER BY s.cpu_samples DESC LIMIT 25
+            MATCH (sum:HotPathSummary {project_id: $project_id})
+            WITH sum.threshold_cpu_share AS threshold, sum.run_id AS run_id,
+                 sum.trace_id AS trace_id
+            MATCH (s:HotPathSample {
+                project_id: $project_id,
+                run_id: run_id,
+                trace_id: trace_id
+            })
+            WITH s, threshold,
+                 toFloat(s.cpu_samples) / s.total_samples_in_trace AS cpu_share
+            WHERE cpu_share >= threshold
+            RETURN s {.*, cpu_share: cpu_share} AS sample
+            ORDER BY cpu_share DESC LIMIT 25
         """,
         response_model=HotPathAuditList,
         template_path=Path("audit/templates/hot_path_profiler.md"),
@@ -152,27 +162,31 @@ def audit_contract(self) -> AuditContract:
 | **HP-D2** | Hot-path threshold default | 5% CPU share | lower = more findings (noisier); higher = miss medium hot spots |
 | **HP-D3** | Trace input format — file path or content blob? | file path under `/repos/<slug>/profiles/<trace>` | content blob = self-contained but fat MCP payload |
 | **HP-D4** | Trigger inside extractor or external profile-capture step? | external (Mac/Android dev runs Instruments / Perfetto, commits trace under `profiles/`) | inside-extractor = brittle (needs UI bring-up) |
-| **HP-D5** | xcodetracemcp MCP integration v1 or follow-up? | follow-up (own slice if needed) | v1 = adds external MCP dep, complicates Docker setup |
+| **HP-D5** | xcodetracemcp MCP integration v1 or follow-up? | follow-up only | v1 would require a separate live-verified MCP spike |
 
 ## 8. Test plan
 
-- **Unit per parser**: synthetic small trace files (Instruments JSON,
-  Perfetto pftrace) → assert `:HotPathSample` rows match expected.
-- **Integration**: testcontainers Neo4j + small fixture trace +
+- **Unit per parser**: synthetic small trace files under
+  `services/palace-mcp/tests/extractors/fixtures/hot-path-fixture/synthetic/`
+  → assert parsed sample rows match expected.
+- **Track A merge gate**: committed pre-recorded xctrace-derived JSON
+  fixture at
+  `services/palace-mcp/tests/extractors/fixtures/hot-path-fixture/profiles/track-a-instruments-time-profile.json`.
+- **Integration**: testcontainers Neo4j + Track A fixture trace +
   pre-seeded `:Function` nodes → assert `:HotPathSample` rows
   reference `:Function` correctly + `:Function` properties enriched.
-- **Smoke**: a real Instruments-captured trace from `tronkit-swift`
-  unit-test run → operator + BlockchainEngineer review top-5 hot
-  paths for plausibility.
+- **Smoke**: run the extractor against Track A fixture data and, when
+  Track B is available, compare top hot paths from live dev-Mac
+  capture for plausibility.
 
 ### Profile-data fixtures (extractor blocker)
 
-Before merge, the team needs **at least one Instruments + one
-Perfetto fixture** committed under
-`tests/extractors/fixtures/hot-path-fixture/profiles/`. Generating
-fixtures requires a Mac (Xcode Instruments) + Android dev box
-(Perfetto / simpleperf). This is an out-of-extractor manual step
-documented in the runbook.
+Before merge, the team needs the Track A xctrace-derived JSON fixture
+committed under
+`services/palace-mcp/tests/extractors/fixtures/hot-path-fixture/profiles/`.
+Generating fresh traces requires a Mac with Xcode Instruments, but CI
+and merge review use the committed fixture. Track B live capture on a
+dev Mac is deferred follow-up evidence and must not block this slice.
 
 ## 9. Risks
 
@@ -205,4 +219,5 @@ documented in the runbook.
 - E6 prereq: `2026-05-07-cx-team-hire-blockchain-security-pyorch_*.md`.
 - Audit-V1 integration: feeds §3 Quality of report.
 - xcodetracemcp follow-up: HP-D5; tracked as separate slice if pursued.
+- API truth: `docs/superpowers/specs/reference_xctrace_perfetto_traceconv_simpleperf_api_truth.md`.
 - Companion: `2026-05-07-hot-path-profiler-extractor_plan.md`.

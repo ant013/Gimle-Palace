@@ -1252,6 +1252,7 @@ dependencies = [
     { name = "mcp" },
     { name = "neo4j" },
     { name = "packaging" },
+    { name = "perfetto" },
     { name = "protobuf" },
     { name = "pycryptodome" },
     { name = "pydantic" },
@@ -1283,6 +1284,7 @@ requires-dist = [
     { name = "mcp", specifier = ">=1.6" },
     { name = "neo4j", specifier = ">=5.0" },
     { name = "packaging", specifier = ">=24.0" },
+    { name = "perfetto", specifier = "==0.14.0" },
     { name = "protobuf", specifier = ">=4.25" },
     { name = "pycryptodome", specifier = ">=3.20" },
     { name = "pydantic", specifier = ">=2.0.0" },
@@ -1321,6 +1323,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/88/b0/79462b42e89764998756e0557f2b58a15610a5b4512fbbcccae58fba7237/peewee-3.19.0.tar.gz", hash = "sha256:f88292a6f0d7b906cb26bca9c8599b8f4d8920ebd36124400d0cbaaaf915511f", size = 974035, upload-time = "2026-01-07T17:24:59.597Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1a/41/19c65578ef9a54b3083253c68a607f099642747168fe00f3a2bceb7c3a34/peewee-3.19.0-py3-none-any.whl", hash = "sha256:de220b94766e6008c466e00ce4ba5299b9a832117d9eb36d45d0062f3cfd7417", size = 411885, upload-time = "2026-01-07T17:24:58.33Z" },
+]
+
+[[package]]
+name = "perfetto"
+version = "0.14.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "protobuf" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/05/12/5911bfc449e20ecf3b43f5982e4e9a11b4c6ab721b6910994fb6f9ef09a8/perfetto-0.14.0.tar.gz", hash = "sha256:edc2639fb4c2b476d41d9fc3a1f82bf4aacc6a62e71a3225f54d6aa8dc869f30", size = 292485, upload-time = "2025-08-19T03:17:31.49Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d2/2d/05467db8f95b709db0e825bf6ab6a59079b7d00e8d47ea3e229673096ec6/perfetto-0.14.0-py3-none-any.whl", hash = "sha256:3faef8da24f01440a4b978ce580b73c93b45c9e4b95ebce697bbcaa1bd3d31b8", size = 305754, upload-time = "2025-08-19T03:17:29.477Z" },
 ]
 
 [[package]]

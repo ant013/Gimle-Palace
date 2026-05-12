@@ -4,14 +4,15 @@
 
 **Slice:** Phase 2 §2.5 #17 Hot-Path Profiler Extractor.
 **Spec:** `docs/superpowers/specs/2026-05-07-hot-path-profiler-extractor_spec.md`.
-**Source branch:** `feature/GIM-NN-hot-path-profiler-extractor` cut from `origin/develop` **after E6 closes**.
+**Source branch:** `feature/GIM-276-hot-path-profiler-extractor` cut from `origin/develop` **after E6 closes**.
 **Target branch:** `develop`. Squash-merge on APPROVE.
-**Team:** Codex. Phase chain: CXCTO → CXCodeReviewer (plan-first) → CXPythonEngineer (or PE-2) → CXCodeReviewer (mechanical) → OpusArchitectReviewer (adversarial) → CXQAEngineer → CXCTO merge.
+**Team:** Codex. Phase chain: CXCTO → CXCodeReviewer (plan-first) → CXPythonEngineer (`e010d305-22f7-4f5c-9462-e6526b195b19`) → CXCodeReviewer (mechanical) → CodexArchitectReviewer (adversarial) → CXQAEngineer → CXCTO merge.
 
-> **Blocked-on-E6** (CX hire) **+ profile-data fixtures**: this slice
-> needs at least one Instruments `.json` + one Perfetto `.pftrace`
-> fixture committed before integration tests can pass. Capture is a
-> Mac/Android dev workflow; document it in the runbook (Phase 2.5).
+> **Track A / Track B rule (CR-rev1):** Track A is a committed,
+> pre-recorded xctrace-derived JSON fixture and is the merge gate.
+> Track B is optional live `xctrace` capture on a dev Mac and is
+> deferred follow-up evidence. CI and merge review must not depend on
+> local Instruments availability.
 
 ---
 
@@ -21,21 +22,21 @@
 
 - [ ] Verify E6 ✅. If not, queue with `blockedByIssueIds=[<E6 id>]`.
 
-### Step 0.2: Capture fixture profiles (rev4 — owner+deadline + decoupling)
+### Step 0.2: Fixture profiles (CR-rev1 Track A/B split)
 
-> **Rev4 (CTO-#17-H1)**: real-trace fixture capture is a separate,
-> deferred deliverable. Unit tests must NOT block on it.
+> **CR-rev1:** Track A is mandatory and merge-blocking. Track B is
+> deferred.
 
-#### Step 0.2a — Synthetic stubs for unit tests (NO blocker)
+#### Step 0.2a — Synthetic stubs for parser unit tests
 
-**Owner:** PythonEngineer (during Phase 2.2 / 2.3).
+**Owner:** CXPythonEngineer (during Phase 2.2 / 2.3).
 **Files:** `services/palace-mcp/tests/extractors/fixtures/hot-path-fixture/synthetic/{instruments-stub.json,perfetto-stub.pftrace}`.
 
 - [ ] Author minimal synthetic Instruments JSON (~10 sample frames,
       hand-crafted — does NOT need real Mac capture).
 - [ ] Author minimal synthetic Perfetto trace (~10 events; can be
-      generated via `traceconv` from a JSON fixture, or hand-rolled
-      protobuf for maximum determinism).
+      generated with Perfetto trace-builder tooling or hand-rolled as
+      a minimal protobuf for maximum determinism).
 - [ ] These stubs feed **Phase 2.2** (Instruments parser unit tests)
       and **Phase 2.3** (Perfetto parser unit tests). Phase 2 work
       proceeds without waiting for real trace capture.
@@ -43,38 +44,45 @@
 **Acceptance:** synthetic stubs committed; Phase 2.2 + 2.3 unit tests
 runnable + GREEN against stubs.
 
-#### Step 0.2b — Real-trace fixtures for integration + smoke (deferred)
+#### Step 0.2b — Track A fixture (merge gate)
 
-**Owner:** Operator (anton.stavnichiy@gmail.com).
-**Deadline:** within 1 week of E6 close (rev4 — explicit owner +
-deadline per CTO-#17-H1).
+**Owner:** CXPythonEngineer, with Operator providing source trace if
+needed.
+**Files:**
+- `services/palace-mcp/tests/extractors/fixtures/hot-path-fixture/profiles/track-a-instruments-time-profile.json`
+- `services/palace-mcp/tests/extractors/fixtures/hot-path-fixture/profiles/track-a-instruments-time-profile.metadata.json`
 
 - [ ] On a Mac with Xcode: capture an Instruments Time Profiler trace
-      of `tronkit-swift` unit tests; export as JSON via
-      `xctrace export --input <trace> --xpath ...`.
-- [ ] On an Android dev box: capture a Perfetto trace of UW-Android
-      app cold start.
-- [ ] Trim each trace to ~1MB (anonymise / sub-sample).
-- [ ] Commit under
-      `services/palace-mcp/tests/extractors/fixtures/hot-path-fixture/profiles/`.
-- [ ] Document the exact `xctrace` / `traceconv` invocations in
-      `docs/runbooks/hot-path-profiler.md` (authored in Phase 2.5).
+      of `tronkit-swift` or `uw-ios-mini` execution; export the Time
+      Profiler table via `xctrace export --input <trace> --xpath ...`.
+- [ ] Normalize the exported table into the JSON parser input fixture
+      above. Metadata file records Xcode version, source table XPath,
+      source workload, anonymization/sub-sampling notes, and source
+      command.
+- [ ] Keep each committed fixture file ≤ 1MB.
+- [ ] Add an integration test that fails if the Track A fixture is
+      missing, empty, malformed, or produces zero `:HotPathSample`
+      rows.
 
-**Acceptance:** at least 1 `.json` (Instruments, real) + 1 `.pftrace`
-(Perfetto, real) committed; sizes documented; integration tests
-(Phase 2.4) runnable against real fixtures (replaces stubs for E2E
-coverage but unit tests keep stubs for determinism).
+**Acceptance:** Track A fixture + metadata committed; Phase 2.4
+integration test uses this fixture and is GREEN. Merge is blocked if
+Track A fixture or test evidence is absent.
 
-**Contingency**: if operator deadline slips past 1w, escalate via
-paperclip comment on this slice's issue. Slice can still merge with
-unit tests + stub-driven integration tests + a documented "real-trace
-follow-up" sub-task; this lets the rest of CX queue progress without
-blocking.
+#### Step 0.2c — Track B live capture (deferred follow-up)
+
+**Owner:** Operator / CXQAEngineer after implementation is reviewable.
+
+- [ ] Run live `xctrace` capture on a dev Mac and compare top hot paths
+      against Track A fixture behavior.
+- [ ] Post evidence in the issue/PR if available.
+
+**Acceptance:** optional only. Track B absence is not a merge blocker
+once Track A fixture evidence is present.
 
 ### Step 0.3: Issue + branch
 
 - [ ] Open paperclip issue `Hot-Path Profiler Extractor (#17)`.
-- [ ] Body = link to spec + plan; `GIM-NN` placeholder.
+- [ ] Body = link to spec + plan; `GIM-276` placeholder resolved.
 - [ ] Reassign CXCTO.
 
 ---
@@ -85,6 +93,8 @@ blocking.
 
 - [ ] Verify spec §3 trace formats match captured fixtures.
 - [ ] Resolve HP-D1..HP-D5 (defaults from spec).
+- [ ] Verify API truth file exists:
+      `docs/superpowers/specs/reference_xctrace_perfetto_traceconv_simpleperf_api_truth.md`.
 - [ ] Reassign CXCodeReviewer.
 
 ### Step 1.2 (CXCodeReviewer plan-first)
@@ -92,6 +102,9 @@ blocking.
 - [ ] Verify each parser has test+impl+commit.
 - [ ] Verify symbol resolution path uses Phase 1 symbol-index
       `:Function` nodes (no parallel symbol scheme).
+- [ ] Verify Track A fixture path and Track B deferral are explicit.
+- [ ] Verify implementation write scope and validation commands are
+      concrete enough for Phase 3.1 comparison.
 - [ ] APPROVE → CXPythonEngineer.
 
 ---
@@ -102,28 +115,38 @@ blocking.
 
 - [ ] Failing test: `HotPathProfilerExtractor` class exists, registered.
 - [ ] Implement under
-      `extractors/hot_path_profiler/{__init__,extractor}.py`.
-- [ ] Add to `EXTRACTORS` registry.
-- [ ] Tests GREEN.
-- [ ] Commit: `feat(GIM-NN): hot_path_profiler scaffolding`.
+      `services/palace-mcp/src/palace_mcp/extractors/hot_path_profiler/{__init__.py,extractor.py,models.py}`.
+- [ ] Add to `EXTRACTORS` registry in
+      `services/palace-mcp/src/palace_mcp/extractors/registry.py`.
+- [ ] Tests GREEN:
+      `cd services/palace-mcp && uv run pytest tests/extractors/unit/test_hot_path_profiler_scaffold.py tests/extractors/unit/test_registry.py -k hot_path_profiler`.
+- [ ] Commit: `feat(GIM-276): hot_path_profiler scaffolding`.
 
 ### Phase 2.2 — Instruments JSON parser (Mac side)
 
 - [ ] Failing test: synthetic Instruments JSON → expected
       `:HotPathSample` rows.
 - [ ] Implement parser under
-      `extractors/hot_path_profiler/parsers/instruments.py`.
-- [ ] Tests GREEN.
-- [ ] Commit: `feat(GIM-NN): Instruments xctrace JSON parser`.
+      `services/palace-mcp/src/palace_mcp/extractors/hot_path_profiler/parsers/instruments.py`.
+- [ ] Tests GREEN:
+      `cd services/palace-mcp && uv run pytest tests/extractors/unit/test_hot_path_profiler_parser_instruments.py`.
+- [ ] Commit: `feat(GIM-276): Instruments xctrace JSON parser`.
 
 ### Phase 2.3 — Perfetto pftrace parser (Android side)
 
 - [ ] Failing test: synthetic Perfetto trace → expected rows.
+- [ ] Add `perfetto` runtime dependency in
+      `services/palace-mcp/pyproject.toml` and refresh
+      `services/palace-mcp/uv.lock`.
 - [ ] Implement parser under
-      `extractors/hot_path_profiler/parsers/perfetto.py` using Perfetto
-      SDK or subprocess `traceconv`.
-- [ ] Tests GREEN.
-- [ ] Commit: `feat(GIM-NN): Perfetto pftrace parser`.
+      `services/palace-mcp/src/palace_mcp/extractors/hot_path_profiler/parsers/perfetto.py` using `perfetto.trace_processor.TraceProcessor`.
+- [ ] Keep `traceconv` in fixture/runbook tooling unless the
+      implementer pins a deterministic binary path.
+- [ ] Dependency import validation:
+      `cd services/palace-mcp && uv run python -c "from perfetto.trace_processor import TraceProcessor"`.
+- [ ] Tests GREEN:
+      `cd services/palace-mcp && uv run pytest tests/extractors/unit/test_hot_path_profiler_parser_perfetto.py`.
+- [ ] Commit: `feat(GIM-276): Perfetto pftrace parser`.
 
 ### Phase 2.4 — Symbol resolution + Neo4j writer
 
@@ -131,21 +154,25 @@ blocking.
 
 - [ ] testcontainers Neo4j + pre-seeded `:Function` nodes (mock Phase 1
       symbol index output).
-- [ ] Run extractor on fixture profile → expect:
+- [ ] Run extractor on Track A fixture
+      `services/palace-mcp/tests/extractors/fixtures/hot-path-fixture/profiles/track-a-instruments-time-profile.json` → expect:
   - `:HotPathSample` rows linked by `qualified_name` to `:Function`.
   - `:Function` enriched with `cpu_share`, `wall_share`,
     `is_hot_path` properties.
   - `:HotPathSummary` row matches input trace metadata.
+- [ ] Tests GREEN:
+      `cd services/palace-mcp && uv run pytest tests/extractors/integration/test_hot_path_profiler_integration.py`.
 
 #### Step 2.4.2: Implement symbol resolver + writer
 
-- [ ] `extractors/hot_path_profiler/symbol_resolver.py` — match
+- [ ] `services/palace-mcp/src/palace_mcp/extractors/hot_path_profiler/symbol_resolver.py` — match
       Instruments / Perfetto symbol names to SCIP qualified names;
       log unresolved as `:HotPathSampleUnresolved`.
-- [ ] `extractors/hot_path_profiler/neo4j_writer.py` — batch writes;
-      use S0.1 unified `:IngestRun` schema.
-- [ ] Tests GREEN.
-- [ ] Commit: `feat(GIM-NN): hot_path_profiler symbol resolver + writer`.
+- [ ] `services/palace-mcp/src/palace_mcp/extractors/hot_path_profiler/neo4j_writer.py` — batch writes;
+      use S0.1 unified `:IngestRun` schema and canonical `project_id`.
+- [ ] Tests GREEN:
+      `cd services/palace-mcp && uv run pytest tests/extractors/unit/test_hot_path_profiler_symbol_resolver.py tests/extractors/unit/test_hot_path_profiler_neo4j_writer.py tests/extractors/integration/test_hot_path_profiler_integration.py`.
+- [ ] Commit: `feat(GIM-276): hot_path_profiler symbol resolver + writer`.
 
 ### Phase 2.5 — extract() orchestration + runbook
 
@@ -154,7 +181,8 @@ blocking.
 - [ ] Wire scaffolding to call parsers + resolver + writer.
 - [ ] Configure trace-file discovery: read trace files from
       `/repos/<slug>/profiles/*.{json,pftrace}` in the mounted repo.
-- [ ] Tests GREEN.
+- [ ] Tests GREEN:
+      `cd services/palace-mcp && uv run pytest tests/extractors/unit/test_hot_path_profiler_extractor.py tests/extractors/integration/test_hot_path_profiler_integration.py`.
 
 #### Step 2.5.2: Author runbook
 
@@ -164,25 +192,27 @@ blocking.
   - How to capture Instruments trace on a Mac (xctrace export
     command with concrete flags).
   - How to capture Perfetto trace on Android (steps, config).
-  - Where to commit traces in the project (`profiles/` directory in
-    the target repo).
+  - Where to commit Track A fixtures in
+    `services/palace-mcp/tests/extractors/fixtures/hot-path-fixture/profiles/`.
   - Expected fixture-file format / size.
   - How to run extractor: `palace.ingest.run_extractor(name="hot_path_profiler", project="<slug>")`.
   - Troubleshooting symbol resolution mismatches.
 
 #### Step 2.5.3: Commit
 
-- [ ] Commit: `feat(GIM-NN): hot_path_profiler extract() + runbook`.
+- [ ] Commit: `feat(GIM-276): hot_path_profiler extract() + runbook`.
 
 ### Phase 2.6 — `audit_contract()` + template
 
 - [ ] Failing test: `audit_contract()` returns expected.
 - [ ] Failing test: template renders synthetic data.
 - [ ] Implement per spec §5.
-- [ ] Author `audit/templates/hot_path_profiler.md`.
+- [ ] Author
+      `services/palace-mcp/src/palace_mcp/audit/templates/hot_path_profiler.md`.
 - [ ] Add `HotPathAuditList` Pydantic model.
-- [ ] Tests GREEN.
-- [ ] Commit: `feat(GIM-NN): hot_path_profiler audit_contract + template`.
+- [ ] Tests GREEN:
+      `cd services/palace-mcp && uv run pytest tests/audit/unit/test_audit_contracts.py tests/audit/unit/test_templates.py -k hot_path_profiler`.
+- [ ] Commit: `feat(GIM-276): hot_path_profiler audit_contract + template`.
 
 ### Phase 2.7 — CLAUDE.md catalogue
 
@@ -190,7 +220,7 @@ blocking.
       extractors" with team affinity (Codex), trace-file dependency
       note, and runbook reference.
 - [ ] Push branch.
-- [ ] Open PR `feat(GIM-NN): hot_path_profiler extractor (#17)`.
+- [ ] Open PR `feat(GIM-276): hot_path_profiler extractor (#17)`.
 - [ ] Reassign CXCodeReviewer.
 
 ---
@@ -199,9 +229,23 @@ blocking.
 
 ### Phase 3.1 — Mechanical (CXCodeReviewer)
 
-- [ ] `gh pr checks` green; pytest output for new tests.
-- [ ] Verify trace-file fixture sizes ≤ 1MB each (per Step 0.2).
-- [ ] APPROVE → OpusArchitectReviewer.
+- [ ] `gh pr checks` green; pytest output for the exact Phase 2
+      commands above.
+- [ ] Verify changed files are within approved scope:
+  - `services/palace-mcp/src/palace_mcp/extractors/hot_path_profiler/**`
+  - `services/palace-mcp/src/palace_mcp/extractors/registry.py`
+  - `services/palace-mcp/src/palace_mcp/audit/templates/hot_path_profiler.md`
+  - `services/palace-mcp/pyproject.toml`
+  - `services/palace-mcp/uv.lock`
+  - `services/palace-mcp/tests/extractors/unit/test_hot_path_profiler_*.py`
+  - `services/palace-mcp/tests/extractors/integration/test_hot_path_profiler_integration.py`
+  - `services/palace-mcp/tests/extractors/fixtures/hot-path-fixture/**`
+  - `services/palace-mcp/tests/audit/unit/*` only for hot_path_profiler cases
+  - `docs/runbooks/hot-path-profiler.md`
+  - `CLAUDE.md`
+- [ ] Verify Track A fixture files are committed and ≤ 1MB each.
+- [ ] If Perfetto support remains in v1, verify `services/palace-mcp/pyproject.toml` and `services/palace-mcp/uv.lock` contain the pinned `perfetto` dependency and import validation output is present.
+- [ ] APPROVE → CodexArchitectReviewer.
 
 ### Phase 3.2 — Adversarial
 
@@ -231,7 +275,7 @@ blocking.
 
 ## Phase 5 — Merge (CXCTO)
 
-- [ ] CI green; CR + Opus APPROVE; QA Evidence.
+- [ ] CI green; CXCodeReviewer + CodexArchitectReviewer APPROVE; QA Evidence.
 - [ ] Squash-merge.
 - [ ] Update `docs/roadmap-archive.md` §2.5 #17 row → ✅ + SHA.
 - [ ] iMac deploy.
@@ -245,7 +289,10 @@ blocking.
       template + CLAUDE.md update — merged.
 - [ ] Smoke runs on fixture profile produce ≥3 hot-path entries.
 - [ ] Roadmap updated.
-- [ ] Profile fixtures committed (Step 0.2 outputs).
+- [ ] Track A xctrace-derived JSON fixture + metadata committed
+      (Step 0.2b outputs).
+- [ ] Track B live capture is either posted as optional evidence or
+      explicitly deferred in the issue/PR.
 
 ---
 

@@ -23,7 +23,7 @@ Handoff comment format:
 [@<NextAgent>](agent://<NextAgent-UUID>?i=<icon>) your turn — Phase <N.M+1>: [what to do]
 ```
 
-Why formal mention: plain `@Role` can wake ordinary comments, but phase handoff needs a machine-verifiable recovery wake if the assignee PATCH path flakes. GIM-182 8h stall evidence.
+Why formal mention: plain `@Role` can wake ordinary comments, but phase handoff needs a machine-verifiable recovery wake if the assignee PATCH path flakes. {{evidence.handoff_flake_issue}} 8h stall evidence.
 
 ### Exit Protocol — after handoff PATCH succeeds
 
@@ -35,7 +35,7 @@ After the handoff PATCH returns 200 and GET-verify confirms `assigneeAgentId == 
 
 Why: between the PATCH (which changes assignee away from you) and your subprocess exit, paperclip's run-supervisor sees the issue is no longer yours and SIGTERMs the process. Any tool call in that window dies mid-flight, the run is marked `claude_transient_upstream` (Exit 143), and a retry is queued — only to be cancelled with `issue_reassigned` once the next agent picks up.
 
-Evidence: GIM-216 — 11 successful handoffs misclassified as failures because agents kept making tool calls after the PATCH. Pre-slim baseline GIM-193 had zero such failures.
+Evidence: {{evidence.handoff_misclassified_issue}} — 11 successful handoffs misclassified as failures because agents kept making tool calls after the PATCH. Pre-slim baseline {{evidence.pre_slim_baseline_issue}} had zero such failures.
 
 If post-handoff cleanup is genuinely needed (e.g. local worktree state), do it BEFORE the handoff PATCH, not after.
 

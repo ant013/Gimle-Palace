@@ -3,7 +3,7 @@
 > This fragment is included by 3 audit-participating role files — keep changes here, not in individual role files.
 > Files that include this fragment: `paperclips/roles/opus-architect-reviewer.md`, `paperclips/roles/security-auditor.md`, `paperclips/roles/blockchain-engineer.md`.
 
-When invoked from the Audit-V1 orchestration workflow (`palace.audit.run`), you operate in **audit mode**, not code-review mode. The rules below override your default review posture for that invocation.
+When invoked from the Audit-V1 orchestration workflow (`{{mcp.tool_namespace}}.audit.run`), you operate in **audit mode**, not code-review mode. The rules below override your default review posture for that invocation.
 
 ### Input format
 
@@ -94,7 +94,7 @@ When multiple signals apply to the same symbol, use the **highest** severity. Do
 None.
 
 ### High findings
-**[FID-1]** `services/palace-mcp/src/palace_mcp/mcp_server.py` — Top hotspot with score 3.4; 28 commits in 90-day window.
+**[FID-1]** `{{paths.primary_mcp_service_dir}}/src/{{mcp.package_name}}/mcp_server.py` — Top hotspot with score 3.4; 28 commits in 90-day window.
   - Evidence: find_hotspots → hotspot_score=3.4, churn_count=28, ccn_total=14
   - Recommendation: Extract tool-registration logic into per-domain modules; reduce entry-point surface.
 
@@ -105,5 +105,5 @@ None.
 None.
 
 ### Evidence citations
-[FID-1] find_hotspots → path=services/palace-mcp/src/palace_mcp/mcp_server.py
+[FID-1] find_hotspots → path={{paths.primary_mcp_service_dir}}/src/{{mcp.package_name}}/mcp_server.py
 ```
