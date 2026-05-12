@@ -1,7 +1,4 @@
-"""Unit tests for per-extractor Jinja2 section templates (S1.2).
-
-14 tests: 7 empty-case + 7 with-findings-case, one per extractor template.
-"""
+"""Unit tests for per-extractor Jinja2 section templates (S1.2)."""
 
 from __future__ import annotations
 
@@ -54,6 +51,45 @@ class TestHotspotTemplate:
         assert "src/heavy.py" in rendered
         assert "4.20" in rendered
         assert "CRITICAL" in rendered
+
+
+# ---------------------------------------------------------------------------
+# hot_path_profiler
+# ---------------------------------------------------------------------------
+
+HOT_PATH_STATS_EMPTY = {"total": 0}
+HOT_PATH_FINDING = {
+    "trace_id": "track-a-launch",
+    "qualified_name": "WalletApp.AppDelegate.bootstrap()",
+    "symbol_name": "WalletApp.AppDelegate.bootstrap()",
+    "cpu_samples": 420,
+    "wall_ms": 260,
+    "cpu_share": 0.35,
+    "wall_share": 0.34,
+    "source_format": "instruments",
+    "sev": "high",
+}
+HOT_PATH_STATS_FULL = {"total": 1}
+
+
+class Test_hot_path_profiler_Template:
+    def test_hot_path_profiler_empty(self) -> None:
+        rendered = render_section(
+            _section("hot_path_profiler", [], HOT_PATH_STATS_EMPTY), "sev", 100
+        )
+        assert "No findings" in rendered
+        assert "hot_path_profiler" in rendered
+
+    def test_hot_path_profiler_with_findings(self) -> None:
+        rendered = render_section(
+            _section("hot_path_profiler", [HOT_PATH_FINDING], HOT_PATH_STATS_FULL),
+            "sev",
+            100,
+        )
+        assert "track-a-launch" in rendered
+        assert "WalletApp.AppDelegate.bootstrap()" in rendered
+        assert "35.00%" in rendered
+        assert "HIGH" in rendered
 
 
 # ---------------------------------------------------------------------------

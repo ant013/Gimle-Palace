@@ -21,7 +21,7 @@ Tools registered:
 - palace.code.get_architecture
 - palace.code.get_code_snippet
 - palace.code.search_code
-- palace.code.manage_adr  [DISABLED — returns directive error]
+- palace.code.manage_adr  (native — read/write/supersede/query)
 - palace.ops.unstick_issue
 - palace.memory.prime
 - palace.memory.register_bundle
@@ -36,6 +36,7 @@ import logging
 import os
 import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, Literal, TypeVar
 
 from graphiti_core import Graphiti
@@ -55,6 +56,7 @@ from palace_mcp.code.find_hotspots import find_hotspots as _find_hotspots_impl
 from palace_mcp.code.find_owners import find_owners as _find_owners_impl
 from palace_mcp.code.find_public_api import find_public_api as _find_public_api_impl
 from palace_mcp.code.list_functions import list_functions as _list_functions_impl
+from palace_mcp.adr.router import register_adr_tools
 from palace_mcp.code_composite import register_code_composite_tools
 from palace_mcp.extractors.cross_repo_version_skew.find_version_skew import (
     register_version_skew_tools,
@@ -799,6 +801,11 @@ async def _palace_git_ls_tree(
 # ---------------------------------------------------------------------------
 
 register_code_tools(_tool, _mcp)
+register_adr_tools(
+    _tool,
+    base_dir=Path(os.environ.get("PALACE_ADR_BASE_DIR", "docs/postulates")),
+    driver_getter=get_driver,
+)
 register_code_composite_tools(
     _tool,
     # Module-level init runs before set_settings(); Settings() would fail here
