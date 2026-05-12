@@ -6,8 +6,11 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import shutil
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 import compare_deployed_agents
@@ -188,6 +191,71 @@ def live_local(repo_root: Path, project: str, target: str, agent: str, backup_di
     return 0
 
 
+def fetch_adapter_type(api_base: str, api_key: str, agent_id: str) -> str:
+    request = urllib.request.Request(
+        f"{api_base.rstrip('/')}/api/agents/{agent_id}/configuration",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "User-Agent": "paperclip-project-agent-deploy/1.0",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        data = json.loads(response.read().decode("utf-8"))
+    adapter = data.get("adapterType", "")
+    return adapter if isinstance(adapter, str) else ""
+
+
+def put_instruction_bundle(api_base: str, api_key: str, agent_id: str, content: str) -> int:
+    body = json.dumps({"path": "AGENTS.md", "content": content}).encode("utf-8")
+    request = urllib.request.Request(
+        f"{api_base.rstrip('/')}/api/agents/{agent_id}/instructions-bundle/file",
+        data=body,
+        method="PUT",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "User-Agent": "paperclip-project-agent-deploy/1.0",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=60) as response:
+        return int(response.status)
+
+
+def live_api(
+    repo_root: Path,
+    project: str,
+    target: str,
+    agent: str,
+    api_base: str,
+    api_key: str,
+) -> int:
+    resolved = load_resolved(repo_root, project)
+    if target == "all":
+        raise ValueError("--api requires a concrete --target")
+    target_name, target_data, role = find_role(resolved, target, agent)
+    adapter = target_data.get("adapterType", "")
+    if adapter != "codex_local":
+        raise ValueError(f"--api refuses non-codex_local adapter for {agent}: {adapter}")
+    source = verify_source_bundle(repo_root, role)
+    agent_id = role.get("agentId")
+    if not isinstance(agent_id, str) or not agent_id:
+        raise ValueError(f"missing agentId for {agent}")
+    live_adapter = fetch_adapter_type(api_base, api_key, agent_id)
+    if live_adapter != adapter:
+        raise ValueError(f"refusing upload to {agent_id}; expected {adapter}, got {live_adapter!r}")
+    content = source.read_text()
+    status = put_instruction_bundle(api_base, api_key, agent_id, content)
+    if status not in {200, 204}:
+        raise ValueError(f"upload failed for {agent}: HTTP {status}")
+    print(f"API DEPLOYED {agent}")
+    print(f"  project: {project} target: {target_name}")
+    print(f"  source: {source.relative_to(repo_root)}")
+    print(f"  agentId: {agent_id}")
+    print(f"  adapterType: {live_adapter}")
+    print(f"  sha256: {role.get('sha256', '')[:12]}")
+    return 0
+
+
 def rollback(backup: Path, backup_dir: Path) -> int:
     backup_file = ensure_backup_under_dir(backup, backup_dir)
     if not backup_file.is_file():
@@ -220,19 +288,24 @@ def main() -> int:
     parser.add_argument("--agent", help="Optional role filename stem, e.g. cto or cx-cto")
     parser.add_argument("--dry-run", action="store_true", help="Print the resolved deploy actions without writing")
     parser.add_argument("--live-local", action="store_true", help="Write one resolved bundle to its local workspace")
+    parser.add_argument("--api", action="store_true", help="Upload one resolved Codex bundle through Paperclip API")
+    parser.add_argument("--api-base", default=os.environ.get("PAPERCLIP_API_URL", "https://paperclip.ant013.work"))
     parser.add_argument("--backup-dir", type=Path, help="Directory for live-local backups and rollback guard")
     parser.add_argument("--rollback", type=Path, help="Restore one backup file created by --live-local")
     args = parser.parse_args()
 
-    selected_modes = sum(bool(mode) for mode in [args.dry_run, args.live_local, args.rollback])
+    selected_modes = sum(bool(mode) for mode in [args.dry_run, args.live_local, args.api, args.rollback])
     if selected_modes != 1:
-        print("ERROR: choose exactly one of --dry-run, --live-local, or --rollback", file=sys.stderr)
+        print("ERROR: choose exactly one of --dry-run, --live-local, --api, or --rollback", file=sys.stderr)
         return 2
-    if args.live_local and not args.agent:
-        print("ERROR: --live-local requires --agent", file=sys.stderr)
+    if (args.live_local or args.api) and not args.agent:
+        print("ERROR: --live-local/--api require --agent", file=sys.stderr)
         return 2
     if (args.live_local or args.rollback) and not args.backup_dir:
         print("ERROR: --live-local/--rollback require --backup-dir", file=sys.stderr)
+        return 2
+    if args.api and not os.environ.get("PAPERCLIP_API_KEY"):
+        print("ERROR: --api requires PAPERCLIP_API_KEY", file=sys.stderr)
         return 2
 
     try:
@@ -241,8 +314,17 @@ def main() -> int:
             return dry_run(repo_root, args.project, args.target, args.agent)
         if args.live_local:
             return live_local(repo_root, args.project, args.target, args.agent or "", args.backup_dir)
+        if args.api:
+            return live_api(
+                repo_root,
+                args.project,
+                args.target,
+                args.agent or "",
+                args.api_base,
+                os.environ["PAPERCLIP_API_KEY"],
+            )
         return rollback(args.rollback, args.backup_dir)
-    except (FileNotFoundError, ValueError, json.JSONDecodeError) as exc:
+    except (FileNotFoundError, ValueError, json.JSONDecodeError, urllib.error.URLError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
