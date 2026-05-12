@@ -1,0 +1,15 @@
+rules:
+  - id: loc_hardcoded_compose
+    languages: [kotlin]
+    severity: WARNING
+    message: >
+      Hard-coded string literal in Compose Text() call.
+      Use stringResource(R.string.key) instead.
+    metadata:
+      category: localization
+      kind: hardcoded_string
+      context: compose_text
+    patterns:
+      - pattern: Text("...")
+      - pattern-not: Text("")
+      - pattern-not: Text(text = "")
