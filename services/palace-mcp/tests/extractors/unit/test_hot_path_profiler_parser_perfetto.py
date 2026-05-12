@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
+
+from perfetto.trace_processor import TraceProcessor, TraceProcessorConfig
 
 from palace_mcp.extractors.hot_path_profiler.parsers.perfetto import (
     PERFETTO_HOT_PATH_SQL,
@@ -19,60 +20,28 @@ _FIXTURE = (
 )
 
 
-@dataclass(frozen=True)
-class _Row:
-    symbol_name: str
-    cpu_samples: int
-    wall_ms: int
-    thread_name: str
-
-
-class _FakeTraceProcessor:
-    def __init__(self, *, trace: str) -> None:
-        self.trace = trace
-        self.queries: list[str] = []
-
-    def __enter__(self) -> "_FakeTraceProcessor":
-        return self
-
-    def __exit__(self, exc_type, exc, tb) -> None:
-        return None
-
-    def query(self, sql: str):
-        self.queries.append(sql)
-        return iter(
-            [
-                _Row(
-                    symbol_name="WalletApp.AppDelegate.bootstrap()",
-                    cpu_samples=8,
-                    wall_ms=120,
-                    thread_name="main",
-                ),
-                _Row(
-                    symbol_name="WalletApp.HomeViewModel.loadDashboard()",
-                    cpu_samples=5,
-                    wall_ms=80,
-                    thread_name="main",
-                ),
-            ]
-        )
-
-
-def test_parse_perfetto_trace_uses_trace_processor_factory() -> None:
-    processor = _FakeTraceProcessor(trace=str(_FIXTURE))
-
-    def _factory(*, trace: str) -> _FakeTraceProcessor:
+def test_parse_perfetto_trace_loads_real_perfetto_fixture() -> None:
+    def _factory(*, trace: str) -> TraceProcessor:
         assert trace == str(_FIXTURE)
-        return processor
+        return TraceProcessor(
+            trace=trace,
+            config=TraceProcessorConfig(load_timeout=10),
+        )
 
     summary, samples = parse_perfetto_trace(_FIXTURE, trace_processor_factory=_factory)
 
-    assert processor.queries == [PERFETTO_HOT_PATH_SQL]
     assert summary.source_format == "perfetto"
-    assert summary.total_cpu_samples == 13
-    assert summary.total_wall_ms == 200
-    assert [sample.cpu_samples for sample in samples] == [8, 5]
-    assert samples[0].cpu_share == 8 / 13
+    assert summary.total_cpu_samples == 4
+    assert summary.total_wall_ms == 0
+    assert summary.hot_function_count == 3
+    assert [sample.symbol_name for sample in samples] == [
+        "WalletApp.AppDelegate.bootstrap()",
+        "WalletApp.HomeViewModel.loadDashboard()",
+        "WalletApp.MarketDataPrefetcher.prefetch()",
+    ]
+    assert [sample.cpu_samples for sample in samples] == [2, 1, 1]
+    assert samples[0].cpu_share == 0.5
+    assert all(sample.thread_name is None for sample in samples)
 
 
 def test_perfetto_query_targets_cpu_profile_tables() -> None:
