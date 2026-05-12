@@ -4,9 +4,9 @@ project:
   system_name: Trading
   issue_prefix: TRD
   company_id: 09edf17a-31d5-46cb-9812-6f07623b1c45
-  integration_branch: develop
-  specs_dir: docs/superpowers/specs
-  plans_dir: docs/superpowers/plans
+  integration_branch: main
+  specs_dir: docs/specs
+  plans_dir: docs/plans
 
 domain:
   wallet_target_short: Trading

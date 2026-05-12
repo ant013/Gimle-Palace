@@ -66,7 +66,7 @@
     "project": {
       "companyId": "09edf17a-31d5-46cb-9812-6f07623b1c45",
       "displayName": "Trading",
-      "integrationBranch": "develop",
+      "integrationBranch": "main",
       "issuePrefix": "TRD",
       "key": "trading",
       "systemName": "Trading"
@@ -75,7 +75,7 @@
   "project": "trading",
   "schemaVersion": 1,
   "sourceManifest": "paperclips/projects/trading/paperclip-agent-assembly.yaml",
-  "sourceManifestSha256": "6889e4cbef44112baf50c5bd2ddc678d39a0b842e958ebcd0b2fcf78cfbfaf6a",
+  "sourceManifestSha256": "2b11a2f8e30be67acd82ccc6963a9ce9eb2a463596ffc92c13043713022c4a40",
   "targets": {
     "claude": {
       "adapterType": "claude_local",
@@ -86,9 +86,9 @@
         {
           "agentId": "4289e2d6-990b-4c53-b879-2a1dc90fe72b",
           "agentName": "CTO",
-          "bytes": 27520,
+          "bytes": 28338,
           "family": "cto",
-          "lines": 556,
+          "lines": 560,
           "output": "paperclips/dist/trading/claude/CTO.md",
           "platform": "",
           "profiles": [
@@ -100,7 +100,7 @@
             "merge-deploy"
           ],
           "roleId": "claude:cto",
-          "sha256": "fad35f4e654faed80ee50598180575b150a6cd872a726a04167b19b84ee6caf1",
+          "sha256": "91f253e2636e5983b1d9803d0a44c354de1f27972036d3c193526007578b660f",
           "source": "paperclips/roles/cto.md",
           "workspaceCwd": "/Users/Shared/Trading/runs/CTO/workspace"
         }
@@ -115,9 +115,9 @@
         {
           "agentId": "3649a8df-94ed-4025-a998-fb8be40975af",
           "agentName": "CEO",
-          "bytes": 29384,
+          "bytes": 30202,
           "family": "cto",
-          "lines": 571,
+          "lines": 575,
           "output": "paperclips/dist/trading/codex/CEO.md",
           "platform": "",
           "profiles": [
@@ -129,16 +129,16 @@
             "merge-deploy"
           ],
           "roleId": "codex:cx-cto",
-          "sha256": "00dd1433cf1ee4c1dcdda0002183fba80d4fee605971d48f187b1f09dc38e9db",
+          "sha256": "740cf2fe341a31bc3f7ebca43e8fa4727c095d862106cb141f40503d887d1b27",
           "source": "paperclips/roles-codex/cx-cto.md",
           "workspaceCwd": "/Users/Shared/Trading/runs/CEO/workspace"
         },
         {
           "agentId": "8eeda1b1-704f-4b97-839f-e050f9f765d2",
           "agentName": "CodeReviewer",
-          "bytes": 29303,
+          "bytes": 30121,
           "family": "code-reviewer",
-          "lines": 678,
+          "lines": 682,
           "output": "paperclips/dist/trading/codex/CodeReviewer.md",
           "platform": "",
           "profiles": [
@@ -150,16 +150,16 @@
             "merge-deploy"
           ],
           "roleId": "codex:cx-code-reviewer",
-          "sha256": "bde1c9bec8e88a055813f922972bf91963b055b6159b69df194ad12c211f5d47",
+          "sha256": "dde51c4168c44ed2579314294262e872154bc6c05d231f63fe02ad6bc8c9cb17",
           "source": "paperclips/roles-codex/cx-code-reviewer.md",
           "workspaceCwd": "/Users/Shared/Trading/runs/CodeReviewer/workspace"
         },
         {
           "agentId": "2705af9c-7dda-464c-9f6c-8d0deb38816a",
           "agentName": "PythonEngineer",
-          "bytes": 33153,
+          "bytes": 33971,
           "family": "implementation",
-          "lines": 753,
+          "lines": 757,
           "output": "paperclips/dist/trading/codex/PythonEngineer.md",
           "platform": "",
           "profiles": [
@@ -169,16 +169,16 @@
             "handoff"
           ],
           "roleId": "codex:cx-python-engineer",
-          "sha256": "05a346617efa70b45b8d46e76e3d29b976e831cd9b81b0c568a0aef21fba4d46",
+          "sha256": "0f23eb461393e4c4cdfc84981e7b68328be58f061c5aaadd7a1dac6abb8a2511",
           "source": "paperclips/roles-codex/cx-python-engineer.md",
           "workspaceCwd": "/Users/Shared/Trading/runs/PythonEngineer/workspace"
         },
         {
           "agentId": "fbd3d0e4-6abb-4797-83d2-e4dc99dbed44",
           "agentName": "QAEngineer",
-          "bytes": 33702,
+          "bytes": 34520,
           "family": "qa",
-          "lines": 724,
+          "lines": 728,
           "output": "paperclips/dist/trading/codex/QAEngineer.md",
           "platform": "",
           "profiles": [
@@ -190,7 +190,7 @@
             "merge-deploy"
           ],
           "roleId": "codex:cx-qa-engineer",
-          "sha256": "35720be0e9820a9e3a24bfb1afedb46664ecd5ddce7a748eec2f4a1926c14e6d",
+          "sha256": "abada66076ff1c5930b1077ea311b047a75ba195e5e6d91ec054e02ada00d055",
           "source": "paperclips/roles-codex/cx-qa-engineer.md",
           "workspaceCwd": "/Users/Shared/Trading/runs/QAEngineer/workspace"
         }
