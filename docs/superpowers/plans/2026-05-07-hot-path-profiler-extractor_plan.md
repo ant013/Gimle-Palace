@@ -119,7 +119,7 @@ once Track A fixture evidence is present.
 - [ ] Add to `EXTRACTORS` registry in
       `services/palace-mcp/src/palace_mcp/extractors/registry.py`.
 - [ ] Tests GREEN:
-      `uv run pytest services/palace-mcp/tests/extractors/unit/test_hot_path_profiler_scaffold.py services/palace-mcp/tests/extractors/unit/test_registry.py -k hot_path_profiler`.
+      `cd services/palace-mcp && uv run pytest tests/extractors/unit/test_hot_path_profiler_scaffold.py tests/extractors/unit/test_registry.py -k hot_path_profiler`.
 - [ ] Commit: `feat(GIM-276): hot_path_profiler scaffolding`.
 
 ### Phase 2.2 — Instruments JSON parser (Mac side)
@@ -129,18 +129,23 @@ once Track A fixture evidence is present.
 - [ ] Implement parser under
       `services/palace-mcp/src/palace_mcp/extractors/hot_path_profiler/parsers/instruments.py`.
 - [ ] Tests GREEN:
-      `uv run pytest services/palace-mcp/tests/extractors/unit/test_hot_path_profiler_parser_instruments.py`.
+      `cd services/palace-mcp && uv run pytest tests/extractors/unit/test_hot_path_profiler_parser_instruments.py`.
 - [ ] Commit: `feat(GIM-276): Instruments xctrace JSON parser`.
 
 ### Phase 2.3 — Perfetto pftrace parser (Android side)
 
 - [ ] Failing test: synthetic Perfetto trace → expected rows.
+- [ ] Add `perfetto` runtime dependency in
+      `services/palace-mcp/pyproject.toml` and refresh
+      `services/palace-mcp/uv.lock`.
 - [ ] Implement parser under
       `services/palace-mcp/src/palace_mcp/extractors/hot_path_profiler/parsers/perfetto.py` using `perfetto.trace_processor.TraceProcessor`.
 - [ ] Keep `traceconv` in fixture/runbook tooling unless the
       implementer pins a deterministic binary path.
+- [ ] Dependency import validation:
+      `cd services/palace-mcp && uv run python -c "from perfetto.trace_processor import TraceProcessor"`.
 - [ ] Tests GREEN:
-      `uv run pytest services/palace-mcp/tests/extractors/unit/test_hot_path_profiler_parser_perfetto.py`.
+      `cd services/palace-mcp && uv run pytest tests/extractors/unit/test_hot_path_profiler_parser_perfetto.py`.
 - [ ] Commit: `feat(GIM-276): Perfetto pftrace parser`.
 
 ### Phase 2.4 — Symbol resolution + Neo4j writer
@@ -156,7 +161,7 @@ once Track A fixture evidence is present.
     `is_hot_path` properties.
   - `:HotPathSummary` row matches input trace metadata.
 - [ ] Tests GREEN:
-      `uv run pytest services/palace-mcp/tests/extractors/integration/test_hot_path_profiler_integration.py`.
+      `cd services/palace-mcp && uv run pytest tests/extractors/integration/test_hot_path_profiler_integration.py`.
 
 #### Step 2.4.2: Implement symbol resolver + writer
 
@@ -166,7 +171,7 @@ once Track A fixture evidence is present.
 - [ ] `services/palace-mcp/src/palace_mcp/extractors/hot_path_profiler/neo4j_writer.py` — batch writes;
       use S0.1 unified `:IngestRun` schema and canonical `project_id`.
 - [ ] Tests GREEN:
-      `uv run pytest services/palace-mcp/tests/extractors/unit/test_hot_path_profiler_symbol_resolver.py services/palace-mcp/tests/extractors/unit/test_hot_path_profiler_neo4j_writer.py services/palace-mcp/tests/extractors/integration/test_hot_path_profiler_integration.py`.
+      `cd services/palace-mcp && uv run pytest tests/extractors/unit/test_hot_path_profiler_symbol_resolver.py tests/extractors/unit/test_hot_path_profiler_neo4j_writer.py tests/extractors/integration/test_hot_path_profiler_integration.py`.
 - [ ] Commit: `feat(GIM-276): hot_path_profiler symbol resolver + writer`.
 
 ### Phase 2.5 — extract() orchestration + runbook
@@ -177,7 +182,7 @@ once Track A fixture evidence is present.
 - [ ] Configure trace-file discovery: read trace files from
       `/repos/<slug>/profiles/*.{json,pftrace}` in the mounted repo.
 - [ ] Tests GREEN:
-      `uv run pytest services/palace-mcp/tests/extractors/unit/test_hot_path_profiler_extractor.py services/palace-mcp/tests/extractors/integration/test_hot_path_profiler_integration.py`.
+      `cd services/palace-mcp && uv run pytest tests/extractors/unit/test_hot_path_profiler_extractor.py tests/extractors/integration/test_hot_path_profiler_integration.py`.
 
 #### Step 2.5.2: Author runbook
 
@@ -206,7 +211,7 @@ once Track A fixture evidence is present.
       `services/palace-mcp/src/palace_mcp/audit/templates/hot_path_profiler.md`.
 - [ ] Add `HotPathAuditList` Pydantic model.
 - [ ] Tests GREEN:
-      `uv run pytest services/palace-mcp/tests/audit/unit/test_audit_contracts.py services/palace-mcp/tests/audit/unit/test_templates.py -k hot_path_profiler`.
+      `cd services/palace-mcp && uv run pytest tests/audit/unit/test_audit_contracts.py tests/audit/unit/test_templates.py -k hot_path_profiler`.
 - [ ] Commit: `feat(GIM-276): hot_path_profiler audit_contract + template`.
 
 ### Phase 2.7 — CLAUDE.md catalogue
@@ -230,6 +235,8 @@ once Track A fixture evidence is present.
   - `services/palace-mcp/src/palace_mcp/extractors/hot_path_profiler/**`
   - `services/palace-mcp/src/palace_mcp/extractors/registry.py`
   - `services/palace-mcp/src/palace_mcp/audit/templates/hot_path_profiler.md`
+  - `services/palace-mcp/pyproject.toml`
+  - `services/palace-mcp/uv.lock`
   - `services/palace-mcp/tests/extractors/unit/test_hot_path_profiler_*.py`
   - `services/palace-mcp/tests/extractors/integration/test_hot_path_profiler_integration.py`
   - `services/palace-mcp/tests/extractors/fixtures/hot-path-fixture/**`
@@ -237,6 +244,7 @@ once Track A fixture evidence is present.
   - `docs/runbooks/hot-path-profiler.md`
   - `CLAUDE.md`
 - [ ] Verify Track A fixture files are committed and ≤ 1MB each.
+- [ ] If Perfetto support remains in v1, verify `services/palace-mcp/pyproject.toml` and `services/palace-mcp/uv.lock` contain the pinned `perfetto` dependency and import validation output is present.
 - [ ] APPROVE → CodexArchitectReviewer.
 
 ### Phase 3.2 — Adversarial
