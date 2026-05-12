@@ -29,10 +29,13 @@ Audit and Board sessions need to:
 
 **Definition of Done:**
 
-1. `palace.code.manage_adr` MCP tool extended to support 4 modes:
-   `read` (existing), `write` (new — section-level idempotent
-   write), `supersede` (new — mark old as superseded by new),
-   `query` (existing — keyword + section filters).
+1. `palace.code.manage_adr` MCP tool implements 4 modes:
+   `read` (new — file-to-graph projection), `write` (new — section-level
+   idempotent upsert), `supersede` (new — mark old as superseded by new),
+   `query` (new — keyword + section graph search).
+   Note: v1 `manage_adr` was DISABLED (returns directive error via
+   `_DISABLED_CM_TOOLS` in `code_router.py`). v2 replaces it entirely
+   as a native `@mcp.tool` — no CM subprocess passthrough.
 2. `:AdrDocument` + `:AdrSection` Neo4j schema; `:Decision`
    bridge edges (`(d:Decision)-[:CITED_BY]->(a:AdrDocument)`).
 3. ADR storage source-of-truth = files in
@@ -79,15 +82,16 @@ agent commits to an architectural choice. Edge `:CITED_BY` lets
 ## 3. Scope
 
 ### In scope
-- **Tool modes**:
-  - `read(slug)` → markdown body + section list (existing v1).
-  - `write(slug, section, body, run_id?)` → idempotent upsert of a
+- **Tool modes** (all NEW — v1 `manage_adr` was DISABLED, not functioning):
+  - `read(slug)` → markdown body + section list; side-effect:
+    idempotent file-to-graph projection.
+  - `write(slug, section, body, decision_id?)` → idempotent upsert of a
     named section in the ADR; updates file + graph in same
-    transaction.
+    transaction. Optional `decision_id` creates `:CITED_BY` edge.
   - `supersede(old_slug, new_slug, reason)` → marks old as
     superseded; adds reverse link.
-  - `query(keyword?, section_filter?, project_filter?)` → existing
-    list-search.
+  - `query(keyword?, section_filter?, project_filter?)` → graph-based
+    list-search via Cypher.
 - **Schema**:
   - `:AdrDocument {slug, title, status, created_at, updated_at, head_sha}`.
   - `:AdrSection {section_name, body_hash, body_excerpt, last_edit}`.
@@ -158,13 +162,15 @@ async def manage_adr(
     keyword: str | None = None,
     section_filter: str | None = None,
     project_filter: str | None = None,
+    decision_id: str | None = None,
 ) -> dict:
     """
     Read/write/query ADR documents.
 
     Modes:
     - read(slug): full markdown + section list.
-    - write(slug, section, body): idempotent upsert.
+    - write(slug, section, body, decision_id?): idempotent upsert;
+      optional decision_id creates (:Decision)-[:CITED_BY]->(:AdrDocument) edge.
     - supersede(old_slug, new_slug, reason): mark old as superseded.
     - query(keyword?, section_filter?, project_filter?): list/search.
     """
@@ -178,13 +184,17 @@ Validation:
 
 ## 6. Decision points
 
-| ID | Question | Default | Impact |
-|----|----------|---------|--------|
-| **AD-D1** | Source of truth = file or Neo4j? | file (markdown remains canonical) | Neo4j-first = harder to git-diff; loses human review |
-| **AD-D2** | `write` mode allows new sections beyond canonical 6? | no — strict (operator extends in v3 if needed) | yes = drift between projects |
-| **AD-D3** | `supersede` is one-way only or allows re-revival? | one-way (status → "superseded"; no re-revival) | re-revival = simpler UX but messy graph history |
-| **AD-D4** | Cross-project ADR scope or project-scoped? | both (Project ADR has slug like `<project>-<topic>`; cross-project has bare slug) | project-only = easier filter; bare = cross-project intent unclear |
-| **AD-D5** | Auto-bridge to `:Decision` (every Decision creates a CITED_BY edge if ADR matches) or manual only? | manual (operator passes `decision_id` arg) | auto = magic; manual = explicit and auditable |
+| ID | Question | Decision | Impact |
+|----|----------|----------|--------|
+| **AD-D1** | Source of truth = file or Neo4j? | **file** (markdown remains canonical) | Neo4j-first = harder to git-diff; loses human review |
+| **AD-D2** | `write` mode allows new sections beyond canonical 6? | **no** — strict (operator extends in v3 if needed) | yes = drift between projects |
+| **AD-D3** | `supersede` is one-way only or allows re-revival? | **one-way** (status → "superseded"; no re-revival) | re-revival = simpler UX but messy graph history |
+| **AD-D4** | Cross-project ADR scope or project-scoped? | **both** (Project ADR has slug like `<project>-<topic>`; cross-project has bare slug) | project-only = easier filter; bare = cross-project intent unclear |
+| **AD-D5** | Auto-bridge to `:Decision` or manual only? | **manual** (caller passes `decision_id` param on `write`) | auto = magic; manual = explicit and auditable |
+| **AD-D6** | Text search: Tantivy or Cypher? | **Cypher-only** (`body_excerpt CONTAINS` / `STARTS WITH`). ADR corpus is small (tens of documents); Tantivy overhead unjustified. | Tantivy = full-text ranking but adds dependency; Cypher = simpler, sufficient for corpus size |
+| **AD-D7** | Registration: CM passthrough or native `@mcp.tool`? | **native** — register via `register_adr_tools()` in `adr/router.py`, called from `mcp_server.py`. Remove `manage_adr` from `_DISABLED_CM_TOOLS` in `code_router.py`. | CM passthrough = can't access Neo4j driver directly; native = full control, same pattern as `code_composite.py` |
+| **AD-D8** | Schema bootstrap location? | **server lifespan** — `ensure_adr_schema()` called from `mcp_server.py` lifespan, NOT extractor pipeline. ADR is a tool, not an extractor. | Extractor bootstrap = wrong lifecycle; lifespan = runs once on startup |
+| **AD-D9** | File lock API? | **`fcntl.flock`** (stdlib `fcntl` module, advisory lock). No third-party `filelock` package. | `filelock` = cross-platform but unnecessary (palace-mcp runs on Linux/macOS only) |
 
 ## 7. Test plan
 
@@ -203,6 +213,16 @@ Validation:
   - Supersede ADR; assert old `status="superseded"`, new
     `status="active"`, edge present.
   - Query by keyword across multiple ADRs.
+- **Wire tests** (per GIM-182 rule: any `@mcp.tool` must have
+  `streamablehttp_client` coverage):
+  - `palace.code.manage_adr` appears in `tools/list`.
+  - Valid args succeed for all 4 modes (`read`, `write`, `supersede`,
+    `query`).
+  - Invalid args fail with error envelope (`error_code`).
+  - Success-path asserts `payload["ok"] is True`.
+  - Failure-path asserts exact `error_code`.
+  - No tautological assertions.
+  - Pattern: `tests/integration/test_palace_memory_decide_wire.py`.
 - **Smoke**: real ADR file under `docs/postulates/` (e.g.,
   `gimle-purpose.md`) — extract sections via tool, verify graph
   reflects file.
@@ -234,7 +254,8 @@ Validation:
 
 - Memory: `reference_cm_adr_postulate_pattern.md` — canonical 6-section
   format.
-- Predecessor (read-only v1): existing manage_adr in `code_router.py`.
+- Predecessor: `manage_adr` was DISABLED in `code_router.py:151`
+  (`_DISABLED_CM_TOOLS` dict). No functioning v1 exists.
 - Sibling: GIM-95 `palace.memory.decide` write tool (`a82c549`).
 - Roadmap: `docs/roadmap-archive.md` §"Phase 6" E5 row.
 - Audit-V1 integration: `:CITED_BY` edges may surface in audit
