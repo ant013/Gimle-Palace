@@ -85,28 +85,19 @@ def test_template_renders_without_error() -> None:
     )
     tmpl = env.get_template("crypto_domain_model.md")
 
-    # Non-empty case
+    # Non-empty case — summary_stats carries kit_name; _severity is added by renderer
     rendered_findings = tmpl.render(
-        kit_name="TronKit",
+        summary_stats={"kit_name": "TronKit"},
         findings=[
             {
                 "severity": "HIGH",
+                "_severity": "high",
                 "kind": "private_key_string_storage",
                 "file": "Sources/Core/Manager.swift",
                 "start_line": 79,
                 "message": "Mnemonic stored in UserDefaults",
             }
         ],
-        critical_high=[
-            {
-                "severity": "HIGH",
-                "kind": "private_key_string_storage",
-                "file": "Sources/Core/Manager.swift",
-                "start_line": 79,
-                "message": "Mnemonic stored in UserDefaults",
-            }
-        ],
-        medium_low=[],
         run_id="test-run-123",
         completed_at="2026-05-08T00:00:00Z",
     )
@@ -115,10 +106,8 @@ def test_template_renders_without_error() -> None:
 
     # Empty-findings case
     rendered_empty = tmpl.render(
-        kit_name="CleanKit",
+        summary_stats={"kit_name": "CleanKit"},
         findings=[],
-        critical_high=[],
-        medium_low=[],
         run_id="test-run-456",
         completed_at="2026-05-08T00:00:00Z",
         files_scanned=97,
