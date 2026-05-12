@@ -1,0 +1,14 @@
+rules:
+  - id: a11y_missing_label_swiftui
+    languages: [swift]
+    severity: WARNING
+    message: >
+      Image() without .accessibilityLabel() or .accessibilityHidden(true).
+      Screen readers cannot describe this image without an accessibility label.
+    metadata:
+      category: accessibility
+      kind: a11y_missing
+      context: image
+    # Matches Image(...) NOT immediately followed by .accessibilityLabel or .accessibilityHidden.
+    # Negative lookahead ensures labelled / deliberately-hidden images are excluded.
+    pattern-regex: 'Image\([^)]*\)(?!\.accessibilityLabel)(?!\.accessibilityHidden)'

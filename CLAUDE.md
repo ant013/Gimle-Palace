@@ -324,6 +324,15 @@ invoked via MCP tool `palace.ingest.run_extractor(name, project)`.
   and `PublicApiSymbol` when those backing facts exist. v1 does not execute a
   live Swift helper and treats Kotlin/Compose only as structured skip evidence.
   See `docs/runbooks/reactive-dependency-tracer.md`.
+- `localization_accessibility` — Localization & Accessibility extractor (GIM-275,
+  Roadmap #9). Parses `.xcstrings` / `Localizable.strings` (iOS) and
+  `res/values*/strings.xml` (Android) for per-locale key counts and coverage
+  relative to English base. Runs 5 semgrep rules to detect hard-coded string
+  literals in SwiftUI, UIKit, and Compose, plus missing a11y labels on SwiftUI
+  `Image()` and Compose `Modifier.clickable`. Writes `:LocaleResource`,
+  `:HardcodedString`, and `:A11yMissing` nodes. No `.scip` file or env vars
+  needed. Supports `.gimle/loc-allowlist.txt` for product-name exceptions.
+  See `docs/runbooks/localization-accessibility.md`.
 - `cross_repo_version_skew` — Cross-repo version skew (GIM-218, Roadmap #39).
   Reads `:Project-[:DEPENDS_ON]->:ExternalDependency` from `dependency_surface`
   (GIM-191) — fully read-only; writes only one `:IngestRun` per call. Hybrid:
