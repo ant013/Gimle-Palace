@@ -1,7 +1,7 @@
 # Localization & Accessibility Extractor (#9) — Specification
 
 **Document date:** 2026-05-07
-**Status:** Draft · awaiting CX-CTO formalisation (post-E6 close)
+**Status:** Formalized (CTO Phase 1.1 2026-05-12) · plan-first review in progress
 **Author:** Board+Claude session (operator + Claude Opus 4.7)
 **Team:** Claude (reassigned 2026-05-12 per roadmap rev3 §Stalled GIM-219 slices)
 **Slice ID:** Phase 2 §2.2 #9 Localization & Accessibility Extractor
@@ -44,8 +44,8 @@ original 45-extractor research inventory.
 
 ### In scope
 - **iOS Swift surface**:
-  - `.xcstrings` (Xcode 15+ catalog), legacy `Localizable.strings`,
-    `*.stringsdict`.
+  - `.xcstrings` (Xcode 15+ catalog), legacy `Localizable.strings`.
+    (`*.stringsdict` deferred to v2 — plural rules XML plist, low ROI for coverage metric.)
   - `NSLocalizedString(...)` invocations vs hard-coded `"text"` in
     UI code (SwiftUI `Text("...")`, UIKit `label.text = "..."`).
   - SwiftUI `.accessibilityLabel(...)`, `.accessibilityHint(...)`.
