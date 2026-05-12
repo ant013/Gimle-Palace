@@ -317,6 +317,14 @@ invoked via MCP tool `palace.ingest.run_extractor(name, project)`.
   top-N hotspots and `palace.code.list_functions(project, path)` for per-
   function complexity. Requires `git_history` to have run first (otherwise
   churn = 0).
+- `hot_path_profiler` — Runtime hot-path profiler extractor (GIM-276,
+  Roadmap #17). Reads committed trace artifacts from `/repos/<slug>/profiles/`
+  and currently supports normalized Instruments JSON fixtures plus Perfetto
+  `.pftrace` input. Resolves hot samples onto existing `:Function` nodes,
+  writes `:HotPathSample`, `:HotPathSummary`, and unresolved trace rows, and
+  exposes audit output via `audit/templates/hot_path_profiler.md`. Track A
+  merge-gate fixture lives under
+  `services/palace-mcp/tests/extractors/fixtures/hot-path-fixture/profiles/`.
 - `reactive_dependency_tracer` — Swift-first reactive state/effect extractor
   (GIM-217, Roadmap #3). Reads pre-generated `reactive_facts.json` from repo
   root, writes `ReactiveComponent` / `ReactiveState` / `ReactiveEffect` /
@@ -324,6 +332,15 @@ invoked via MCP tool `palace.ingest.run_extractor(name, project)`.
   and `PublicApiSymbol` when those backing facts exist. v1 does not execute a
   live Swift helper and treats Kotlin/Compose only as structured skip evidence.
   See `docs/runbooks/reactive-dependency-tracer.md`.
+- `localization_accessibility` — Localization & Accessibility extractor (GIM-275,
+  Roadmap #9). Parses `.xcstrings` / `Localizable.strings` (iOS) and
+  `res/values*/strings.xml` (Android) for per-locale key counts and coverage
+  relative to English base. Runs 5 semgrep rules to detect hard-coded string
+  literals in SwiftUI, UIKit, and Compose, plus missing a11y labels on SwiftUI
+  `Image()` and Compose `Modifier.clickable`. Writes `:LocaleResource`,
+  `:HardcodedString`, and `:A11yMissing` nodes. No `.scip` file or env vars
+  needed. Supports `.gimle/loc-allowlist.txt` for product-name exceptions.
+  See `docs/runbooks/localization-accessibility.md`.
 - `cross_repo_version_skew` — Cross-repo version skew (GIM-218, Roadmap #39).
   Reads `:Project-[:DEPENDS_ON]->:ExternalDependency` from `dependency_surface`
   (GIM-191) — fully read-only; writes only one `:IngestRun` per call. Hybrid:

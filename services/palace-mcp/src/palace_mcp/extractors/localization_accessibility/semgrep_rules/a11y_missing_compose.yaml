@@ -1,0 +1,15 @@
+rules:
+  - id: a11y_missing_compose
+    languages: [kotlin]
+    severity: WARNING
+    message: >
+      Clickable Compose modifier without Modifier.semantics { contentDescription }.
+      TalkBack cannot describe this interactive element.
+    metadata:
+      category: accessibility
+      kind: a11y_missing
+      context: tappable_view
+    patterns:
+      - pattern: Modifier.clickable(...)
+      - pattern-not: Modifier.clickable(...).semantics(...)
+      - pattern-not: Modifier.semantics(...).clickable(...)
