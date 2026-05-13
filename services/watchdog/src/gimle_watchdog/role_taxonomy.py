@@ -16,6 +16,7 @@ _ROLE_CLASS_RAW: dict[str, str] = {
     "ResearchAgent": "research",
     "TechnicalWriter": "writer",
     "SecurityAuditor": "reviewer",
+    "Auditor": "reviewer",
     # CX team
     "CXCTO": "cto",
     "CXCodeReviewer": "reviewer",
@@ -28,6 +29,7 @@ _ROLE_CLASS_RAW: dict[str, str] = {
     "CXQAEngineer": "qa",
     "CXResearchAgent": "research",
     "CXTechnicalWriter": "writer",
+    "CXAuditor": "reviewer",
 }
 
 _ROLE_CLASS: dict[str, str] = {k.casefold(): v for k, v in _ROLE_CLASS_RAW.items()}

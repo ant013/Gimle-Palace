@@ -6,6 +6,7 @@ import logging
 import os
 import re
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 
 import yaml
@@ -103,6 +104,44 @@ _HANDOFF_KNOWN_KEYS = frozenset(
 )
 
 
+class EffectiveMode(str, Enum):
+    """Operational mode summarising recovery + alert + auto-repair posture."""
+
+    OBSERVE_ONLY = "observe-only"
+    ALERT_ONLY = "alert-only"
+    RECOVERY_ONLY = "recovery-only"
+    FULL_WATCHDOG = "full-watchdog"
+    UNSAFE_AUTO_REPAIR = "unsafe-auto-repair"
+
+
+ALERT_FLAG_NAMES: frozenset[str] = frozenset(
+    {
+        "handoff_alert_enabled",
+        "handoff_cross_team_enabled",
+        "handoff_ownerless_enabled",
+        "handoff_infra_block_enabled",
+        "handoff_stale_bundle_enabled",
+    }
+)
+
+AUTO_REPAIR_FLAG_NAME: str = "handoff_auto_repair_enabled"
+
+# Every code path that calls PaperclipClient.post_issue_comment MUST be
+# enumerated here as "<module_stem>:<enclosing_function>". The AST-based
+# registry test fails closed when a new caller lands without updating this set.
+POST_COMMENT_PATHS: frozenset[str] = frozenset(
+    {
+        "actions:post_handoff_alert",
+        "actions:post_stale_bundle_alert",
+        "actions:post_tier_escalation",
+        "actions:repair_cross_team_handoff",
+        "actions:repair_ownerless_completion",
+        "daemon:_post_tier_one_alert",
+        "daemon:_run_recovery_pass",
+    }
+)
+
+
 @dataclass(frozen=True)
 class HandoffConfig:
     handoff_alert_enabled: bool = False
@@ -137,6 +176,38 @@ class Config:
     logging: LoggingConfig
     escalation: EscalationConfig
     handoff: HandoffConfig = field(default_factory=HandoffConfig)
+
+
+def describe_effective_mode(cfg: Config) -> EffectiveMode:
+    """Classify the watchdog operational posture.
+
+    Total function over (recovery_enabled, any_alert_path_on, auto_repair_enabled).
+    Raises ConfigError if a handoff_*_enabled field exists outside the registered
+    alert and auto-repair flag sets.
+    """
+
+    handoff = cfg.handoff
+    known_flags = ALERT_FLAG_NAMES | {AUTO_REPAIR_FLAG_NAME}
+    for attr in vars(handoff):
+        if attr.startswith("handoff_") and attr.endswith("_enabled") and attr not in known_flags:
+            raise ConfigError(
+                f"unknown handoff_*_enabled flag {attr!r}; add to "
+                "ALERT_FLAG_NAMES or AUTO_REPAIR_FLAG_NAME"
+            )
+
+    if getattr(handoff, AUTO_REPAIR_FLAG_NAME):
+        return EffectiveMode.UNSAFE_AUTO_REPAIR
+
+    any_alert_path_on = any(getattr(handoff, flag) for flag in ALERT_FLAG_NAMES)
+    recovery_on = cfg.daemon.recovery_enabled
+
+    if not recovery_on and not any_alert_path_on:
+        return EffectiveMode.OBSERVE_ONLY
+    if not recovery_on and any_alert_path_on:
+        return EffectiveMode.ALERT_ONLY
+    if recovery_on and not any_alert_path_on:
+        return EffectiveMode.RECOVERY_ONLY
+    return EffectiveMode.FULL_WATCHDOG
 
 
 def _resolve_api_key(source: str) -> str | None:

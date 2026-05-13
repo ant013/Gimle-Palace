@@ -5,6 +5,9 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from unittest.mock import AsyncMock
+
+import httpx
 
 from gimle_watchdog import __main__ as cli
 
@@ -44,16 +47,16 @@ escalation: {post_comment_on_issue: true, comment_marker: "<!-- x -->"}
     assert "work.ant013.gimle-watchdog" in out
 
 
-def _minimal_cfg(tmp_path: Path) -> Path:
+def _minimal_cfg(tmp_path: Path, *, paperclip_base_url: str = "http://x") -> Path:
     cfg_path = tmp_path / "cfg.yaml"
     log_path = tmp_path / "watchdog.log"
     cfg_path.write_text(f"""
 version: 1
-paperclip: {{base_url: http://x, api_key_source: "inline:k"}}
+paperclip: {{base_url: {paperclip_base_url}, api_key_source: "inline:k"}}
 companies:
   - id: 9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64
     name: gimle
-    thresholds: {{died_min: 3, hang_etime_min: 60, idle_cpu_ratio_max: 0.005, hang_stream_idle_max_s: 300}}
+    thresholds: {{died_min: 3, hang_etime_min: 60, idle_cpu_ratio_max: 0.005, hang_stream_idle_max_s: 300, recover_max_age_min: 180}}
 daemon: {{poll_interval_seconds: 120}}
 cooldowns: {{per_issue_seconds: 300, per_agent_cap: 3, per_agent_window_seconds: 900}}
 logging: {{path: {log_path}, level: INFO, rotate_max_bytes: 10485760, rotate_backup_count: 5}}
@@ -62,16 +65,104 @@ escalation: {{post_comment_on_issue: true, comment_marker: "<!-- x -->"}}
     return cfg_path
 
 
-def test_cmd_status(tmp_path: Path, capsys, monkeypatch):
-    cfg_path = _minimal_cfg(tmp_path)
-    # Redirect default state path so the test is isolated from the real watchdog state file
+def test_cmd_status(tmp_path: Path, capsys, monkeypatch, mock_paperclip):
+    base_url, state_mock = mock_paperclip
+    state_mock.companies = [
+        {"id": "9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64", "name": "gimle", "archived": False}
+    ]
+    cfg_path = _minimal_cfg(tmp_path, paperclip_base_url=base_url)
     state_file = tmp_path / "watchdog-state.json"
     monkeypatch.setattr(cli, "_DEFAULT_STATE_PATH", str(state_file))
     rc = cli.main(["watchdog", "status", "--config", str(cfg_path)])
     out = capsys.readouterr().out
     assert rc == 0
+    assert "Effective mode:" in out
     assert "Companies configured: 1" in out
     assert "Active cooldowns: 0" in out
+
+
+def test_cmd_status_prints_mode_and_reconciliation(capsys, monkeypatch, observe_only_config_file):
+    monkeypatch.setattr(
+        "gimle_watchdog.__main__.PaperclipClient.list_companies",
+        AsyncMock(
+            return_value=[
+                {
+                    "id": "9d8f432c-0000-4000-8000-000000000001",
+                    "name": "Test",
+                    "archived": False,
+                }
+            ]
+        ),
+    )
+
+    rc = cli.main(["watchdog", "status", "--config", str(observe_only_config_file)])
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert "Effective mode: observe-only" in out
+    assert "Recovery enabled: false" in out
+    assert "Handoff recent window min: 180" in out
+    assert "recover_max_age_min=180" in out
+    assert "configured_but_missing" not in out
+    assert "live_but_unconfigured" not in out
+    assert "Companies configured: 1" in out
+    assert "Active cooldowns:" in out
+
+
+def test_cmd_status_warns_on_live_but_unconfigured(
+    capsys, monkeypatch, observe_only_config_file
+):
+    monkeypatch.setattr(
+        "gimle_watchdog.__main__.PaperclipClient.list_companies",
+        AsyncMock(
+            return_value=[
+                {
+                    "id": "9d8f432c-0000-4000-8000-000000000001",
+                    "name": "Test",
+                    "archived": False,
+                },
+                {"id": "uuid-7", "name": "Trading", "archived": False},
+            ]
+        ),
+    )
+
+    rc = cli.main(["watchdog", "status", "--config", str(observe_only_config_file)])
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert "live_but_unconfigured=uuid-7" in out
+    assert "name=Trading" in out
+
+
+def test_cmd_status_exits_2_on_api_failure(capsys, monkeypatch, observe_only_config_file):
+    monkeypatch.setattr(
+        "gimle_watchdog.__main__.PaperclipClient.list_companies",
+        AsyncMock(side_effect=httpx.ConnectError("dns")),
+    )
+
+    rc = cli.main(["watchdog", "status", "--config", str(observe_only_config_file)])
+    out = capsys.readouterr().out
+
+    assert rc == 2
+    assert "company_inventory=unreachable" in out
+    assert "reason=" in out
+
+
+def test_cmd_status_allow_degraded_returns_0_on_api_failure(
+    capsys, monkeypatch, observe_only_config_file
+):
+    monkeypatch.setattr(
+        "gimle_watchdog.__main__.PaperclipClient.list_companies",
+        AsyncMock(side_effect=httpx.ConnectError("dns")),
+    )
+
+    rc = cli.main(
+        ["watchdog", "status", "--allow-degraded", "--config", str(observe_only_config_file)]
+    )
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert "company_inventory=unreachable" in out
 
 
 def test_cmd_tail_no_log(tmp_path: Path, capsys):

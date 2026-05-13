@@ -9,11 +9,15 @@ import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import pytest
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
+
+from gimle_watchdog.config import Config
+from gimle_watchdog.paperclip import PaperclipClient
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
@@ -31,6 +35,7 @@ class MockPaperclipState:
     issue_comments: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     # company_id → list of agent dicts (for GET /agents)
     agents: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    companies: list[dict[str, Any]] = field(default_factory=list)
 
 
 def build_mock_app(state: MockPaperclipState) -> FastAPI:
@@ -94,6 +99,10 @@ def build_mock_app(state: MockPaperclipState) -> FastAPI:
     async def list_agents(company_id: str) -> list[dict[str, Any]]:
         return state.agents.get(company_id, [])
 
+    @app.get("/api/companies")
+    async def list_companies() -> list[dict[str, Any]]:
+        return list(state.companies)
+
     return app
 
 
@@ -121,3 +130,99 @@ def mock_paperclip():  # type: ignore[misc]
     app = build_mock_app(state)
     with _run_server(app) as base_url:
         yield base_url, state
+
+
+@pytest.fixture
+def observe_only_config() -> Config:
+    from tests._factories import _make_config
+
+    return _make_config()
+
+
+@pytest.fixture
+def recovery_only_config() -> Config:
+    from tests._factories import _make_config
+
+    return _make_config(recovery_enabled=True)
+
+
+@pytest.fixture
+def alert_only_config() -> Config:
+    from tests._factories import _make_config
+
+    return _make_config(any_alert=True)
+
+
+@pytest.fixture
+def full_watchdog_config() -> Config:
+    from tests._factories import _make_config
+
+    return _make_config(recovery_enabled=True, any_alert=True)
+
+
+@pytest.fixture
+def full_alert_config(full_watchdog_config: Config) -> Config:
+    return full_watchdog_config
+
+
+@pytest.fixture
+def unsafe_auto_repair_config() -> Config:
+    from tests._factories import _make_config
+
+    return _make_config(auto_repair=True)
+
+
+@pytest.fixture
+def observe_only_config_file(tmp_path: Path) -> Path:
+    cfg_path = tmp_path / "observe-only.yaml"
+    cfg_path.write_text(
+        """
+version: 1
+paperclip: {base_url: http://test, api_key_source: "inline:k"}
+companies:
+  - id: 9d8f432c-0000-4000-8000-000000000001
+    name: Test
+    thresholds:
+      died_min: 30
+      hang_etime_min: 45
+      idle_cpu_ratio_max: 0.01
+      hang_stream_idle_max_s: 300
+      recover_max_age_min: 180
+daemon:
+  poll_interval_seconds: 60
+  recovery_enabled: false
+cooldowns:
+  per_issue_seconds: 60
+  per_agent_cap: 10
+  per_agent_window_seconds: 3600
+logging:
+  path: /tmp/test-watchdog.log
+  level: INFO
+  rotate_max_bytes: 1000000
+  rotate_backup_count: 3
+escalation:
+  post_comment_on_issue: false
+  comment_marker: "[test]"
+handoff:
+  handoff_alert_enabled: false
+  handoff_cross_team_enabled: false
+  handoff_ownerless_enabled: false
+  handoff_infra_block_enabled: false
+  handoff_stale_bundle_enabled: false
+  handoff_auto_repair_enabled: false
+"""
+    )
+    return cfg_path
+
+
+@pytest.fixture
+async def fake_paperclip_client(mock_paperclip):
+    base_url, state = mock_paperclip
+    state.companies = [
+        {"id": "9d8f432c-0000-4000-8000-000000000001", "name": "Test", "archived": False}
+    ]
+    client = PaperclipClient(base_url=base_url, api_key="test")
+    try:
+        yield client
+    finally:
+        await client.aclose()
