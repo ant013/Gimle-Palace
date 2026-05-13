@@ -350,7 +350,14 @@ class TestExecutiveSummary:
             run_id="r1",
             project="p",
             completed_at=None,
-            findings=[{"severity": "high", "message": "bad thing", "file": "foo.py", "start_line": 1}],
+            findings=[
+                {
+                    "severity": "high",
+                    "message": "bad thing",
+                    "file": "foo.py",
+                    "start_line": 1,
+                }
+            ],
             summary_stats={},
         )
         report = render_report(
@@ -371,8 +378,18 @@ class TestExecutiveSummary:
             project="p",
             completed_at=None,
             findings=[
-                {"_severity": "high", "message": "finding one", "file": "a.py", "start_line": 10},
-                {"_severity": "medium", "message": "finding two", "file": "b.py", "start_line": 20},
+                {
+                    "_severity": "high",
+                    "message": "finding one",
+                    "file": "a.py",
+                    "start_line": 10,
+                },
+                {
+                    "_severity": "medium",
+                    "message": "finding two",
+                    "file": "b.py",
+                    "start_line": 20,
+                },
             ],
             summary_stats={},
         )
