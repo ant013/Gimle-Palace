@@ -42,6 +42,9 @@ volumes/
 Justfile.local
 .env
 
+# Docker Compose local overrides (operator-specific paths, ports)
+docker-compose.override.yml
+
 # paperclips/dist is committed (role bundles for deploy) — negate the Node dist/ rule above
 !paperclips/dist/
 services/watchdog/.venv/
