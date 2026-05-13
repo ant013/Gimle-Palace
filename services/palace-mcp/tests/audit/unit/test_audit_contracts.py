@@ -126,6 +126,35 @@ class TestCodingConventionAuditContract:
         assert contract.severity_mapper(0.0).value == "low"
 
 
+class TestReactiveDependencyTracerAuditContract:
+    def test_returns_valid_contract(self) -> None:
+        from palace_mcp.extractors.reactive_dependency_tracer.extractor import (
+            ReactiveDependencyTracerExtractor,
+        )
+        from palace_mcp.audit.contracts import Severity
+
+        contract = ReactiveDependencyTracerExtractor().audit_contract()
+        _assert_valid_contract(contract, "reactive_dependency_tracer")
+        assert contract is not None
+        assert "ReactiveDiagnostic" in contract.query
+        assert contract.severity_mapper is not None
+        assert contract.severity_mapper("error") == Severity.HIGH
+        assert contract.severity_mapper("warning") == Severity.MEDIUM
+        assert contract.severity_mapper("info") == Severity.INFORMATIONAL
+
+
+class TestTestabilityDiAuditContract:
+    def test_returns_valid_contract(self) -> None:
+        from palace_mcp.extractors.testability_di.extractor import (
+            TestabilityDiExtractor,
+        )
+
+        contract = TestabilityDiExtractor().audit_contract()
+        _assert_valid_contract(contract, "testability_di")
+        assert contract is not None
+        assert "DiPattern" in contract.query or "UntestableSite" in contract.query
+
+
 class TestBaseExtractorDefaultReturnsNone:
     def test_heartbeat_has_no_contract(self) -> None:
         """Heartbeat extractor does not participate in audits."""
