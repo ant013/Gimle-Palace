@@ -40,13 +40,15 @@ S4.1 smoke (GIM-277, tron-kit) produced the first real Audit-V1 report end-to-en
 - `docker exec gimle-palace-palace-mcp-1 ls /app/src/palace_mcp/extractors/` shows no `testability_di`.
 - Roadmap rev4 (PR #146 merged 2026-05-13) lists GIM-242 as ✅ merged — **but the artefact is not on develop**.
 
-**Root cause (to verify):** PR for GIM-242 was either never merged to develop, or was merged then reverted in a subsequent commit. Need bisect.
+**Root cause (verified 2026-05-13):** GIM-242 PR was **never opened, never merged, never reverted**. The feature branch `origin/feature/GIM-242-testability-di-pattern-extractor` (7 commits, last 2026-05-08) sits stale; develop has moved 39 commits ahead since the branch cut. Implementation chain reached Phase 3.1 (CR mechanical review rounds — last PE fix `23a4d93` is "fix(GIM-242): accept runner-shaped audit runs") but never advanced to Opus / QA / CTO merge. The work is complete on the FB (extractor + spec + plan + runbook + registry wiring + audit/fetcher integration ≈ 1000 LOC) — it just needs the back-half of the chain.
+
+**Note on roadmap rev4 entry:** my own PR #146 marked GIM-242 as ✅ merged based on `git log --all` showing commits exist; that conflated "commits exist in the repo" with "merged to develop". Roadmap rev4 needs a correction (downgrade ✅ → 📋 for the GIM-242 row).
 
 **Proposed fix:**
-1. `git log origin/develop --diff-filter=A -- services/palace-mcp/src/palace_mcp/extractors/testability_di/ -- 'services/palace-mcp/src/palace_mcp/extractors/testability_di*'` — find add commit if any.
-2. If no add commit ever landed → cherry-pick from the GIM-242 feature branch as a standard CR → PE chain slice; treat as completion of GIM-242.
-3. If add commit + later revert exists → write postmortem (`docs/postmortems/2026-05-13-GIM-242-testability-di-revert.md`), re-merge with revert annotation.
-4. Update roadmap rev4 row to reflect actual state (downgrade ✅ → 🚧 until restored, then re-✅).
+1. Open a PR from `feature/GIM-242-testability-di-pattern-extractor` to `develop` (operator or CTO).
+2. Resume the chain from where it stopped: Phase 3.2 Opus adversarial review → 4.1 QA smoke → 4.2 CTO merge.
+3. Resolve any rebase conflicts (39 commits develop-ahead may have touched some of the same paths).
+4. Fix roadmap rev4 GIM-242 row (✅ → 📋).
 
 **Acceptance:**
 - `git ls-tree origin/develop services/palace-mcp/src/palace_mcp/extractors/testability_di/` returns non-empty.
@@ -330,9 +332,9 @@ After each slice merges:
 ## Open questions
 
 - **B1 root cause** — is it never-merged, or merge-then-reverted? Answer dictates fix complexity (cherry-pick vs revert investigation + postmortem).
-- **B7 schema migration** — how do we handle existing `:Finding` nodes in Neo4j without `source_context`? Add as optional field, default `library` for back-compat? Or run a one-shot reclassification pass?
-- **B8 heuristic regex** — the proposed list `(signer|key|crypto|hd_wallet|hmac|sign|auth)` is a first cut; needs review by BlockchainEngineer for completeness.
-- **B11 ordering** — should `crypto_domain_model` come before `error_handling_policy` (severity-first) or after (alphabetical with intentional category grouping)? Trade-off: readability vs convention.
+- **B7 schema migration — resolved 2026-05-13**: recommended approach = **migration script** (option β) — one-shot pass classifies all existing `:Finding` nodes by `file_path`. Fallback in code = **optional field with default `library`** (option α) for any node missed by the script. Rejected: option γ wipe+re-ingest (loses audit history) and option δ compute-on-read (renderer hot-path complexity).
+- **B8 heuristic regex — resolved 2026-05-13**: list `(signer|key|crypto|hd_wallet|hmac|sign|auth)` is a **placeholder for BlockchainEngineer review** in Phase 1.2 plan-first of the implementing slice. Candidate additions to evaluate: `mnemonic`, `seed`, `pubkey`, `keystore`, `wallet`, `secp`, `ed25519`, `ripemd`, `address.*generate`, `wif`. CR Phase 1.2 must explicitly call BlockchainEngineer subagent for completeness check before approving.
+- **B11 ordering — resolved 2026-05-13**: use **severity-first** ordering — security-critical sections (crypto_domain, error_handling, arch_layer) at the top. Rationale: Audit-V1 v1 use case is initial security audit of crypto Kits; operator scans top-down looking for "what's worst". Categorical grouping is better for reference docs (future v1.x consideration). Final ordering proposed: `crypto_domain_model` → `error_handling_policy` → `arch_layer` → `hotspot` → `dead_symbol_binary_surface` → `dependency_surface` → `code_ownership` → `cross_repo_version_skew` → `cross_module_contract` → `public_api_surface` → `coding_convention` → `localization_accessibility` → `reactive_dependency_tracer` → `testability_di` → `hot_path_profiler`.
 
 ## Out of scope (explicit)
 
