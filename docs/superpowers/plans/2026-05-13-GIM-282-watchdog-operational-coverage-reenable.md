@@ -17,12 +17,13 @@
   after the gate passes. **Cohort literal gate (spec §9):** before
   reassigning to CR, CTO must confirm the operator has committed real
   incident literals into `services/watchdog/tests/fixtures/gim255_cohort.json`
-  (the 32 Paperclip issue UUIDs, their GIM-N numbers, the 258 spam
-  comment UUIDs, posted-at time window, and spam-detector agent UUID).
-  Task 11 ships a synthetic skeleton for plan-review only; **CI cohort
-  harness in Task 12 is not meaningful evidence until real literals
-  replace the synthetic ones**. If the operator has not provided
-  literals, CTO halts here — do not proceed to Phase 1.2.
+  (the committed PR #160 fixture has 52 Paperclip issue UUIDs, matching
+  GIM-N numbers, 379 spam comment UUIDs, posted-at time window, and Board
+  author user UUID; older 32/258 prose is historical incident shorthand).
+  Task 11 preserves the real fixture and adds schema/coverage validation;
+  **CI cohort harness in Task 12 is only meaningful against those committed
+  real literals**. If the operator has not provided literals, CTO halts here
+  — do not proceed to Phase 1.2.
 - 1.2 Plan-first review (CX/CR) — every task below has concrete test + impl + commit. CR APPROVE before Phase 2.
 - 2 Implement (CX/PE) — TDD through tasks below on `feature/GIM-<N>-watchdog-operational-coverage-reenable`.
 - 3.1 Mechanical review (CX/CR) — paste `uv run ruff check services/watchdog/`, `uv run mypy services/watchdog/src/`, `uv run pytest services/watchdog/ -v`, AND `gh pr checks <num>` output verbatim. No "LGTM" approve without all four.
@@ -37,11 +38,12 @@
 ## File Structure
 
 **Create:**
-- `services/watchdog/tests/fixtures/gim255_cohort.json` — incident evidence fixture (synthetic UUIDs initially; operator replaces with incident literals before merge).
+- `services/watchdog/tests/_factories.py` — shared `_make_config` helper for mode/posture/cohort tests.
 - `services/watchdog/tests/test_modes.py` — `EffectiveMode` + `describe_effective_mode` unit and partition tests.
 - `services/watchdog/tests/test_posture_log.py` — `watchdog_starting` + `watchdog_posture` event emission tests.
 - `services/watchdog/tests/test_comment_registry.py` — `POST_COMMENT_PATHS` enforcement test.
 - `services/watchdog/tests/test_list_companies.py` — `PaperclipClient.list_companies()` unit tests (mocked httpx).
+- `services/watchdog/tests/test_cohort_fixture_schema.py` — schema/coverage guard for the committed real incident fixture.
 - `services/watchdog/tests/e2e/test_gim255_cohort_isolation.py` — per-detector cohort harness.
 - `services/watchdog/tests/e2e/test_observe_only_smoke.py` — daemon-level mode-contract behavioral test.
 - `docs/runbooks/watchdog-operational-reenable.md` — staged re-enable runbook (mirrors spec §5.4).
@@ -55,6 +57,7 @@
 - `services/watchdog/tests/test_daemon.py` — add shared-budget identity regression test.
 
 **Touch (verify, do not modify):**
+- `services/watchdog/tests/fixtures/gim255_cohort.json` — real incident evidence fixture committed by PR #160; do not overwrite with placeholders.
 - `services/watchdog/src/gimle_watchdog/detection.py` — recovery age gate stays as-is (`updated_at + recover_max_age_min`).
 - `services/watchdog/src/gimle_watchdog/detection_semantic.py` — `_issue_is_eligible` stays as-is (`origin_kind in SKIP_ORIGINS`).
 
@@ -170,22 +173,30 @@ git commit -m "feat(watchdog): add EffectiveMode enum + alert flag-name constant
 
 **Files:**
 - Modify: `services/watchdog/src/gimle_watchdog/config.py` (add after Task 1 additions).
+- Create: `services/watchdog/tests/_factories.py` (shared config factory).
 - Test: `services/watchdog/tests/test_modes.py` (extend).
 
-- [ ] **Step 1: Add failing test cases**
+- [ ] **Step 1a: Create the shared config factory**
 
-Append to `services/watchdog/tests/test_modes.py`:
+Create `services/watchdog/tests/_factories.py` so later suites do not import
+helpers from another test module:
 
 ```python
-import itertools
-from dataclasses import replace
+"""Shared watchdog test factories."""
+from __future__ import annotations
+
+from pathlib import Path
 
 from gimle_watchdog.config import (
+    CompanyConfig,
     Config,
-    ConfigError,
+    CooldownsConfig,
     DaemonConfig,
+    EscalationConfig,
     HandoffConfig,
-    describe_effective_mode,
+    LoggingConfig,
+    PaperclipConfig,
+    Thresholds,
 )
 
 
@@ -194,6 +205,7 @@ def _make_config(
     recovery_enabled: bool = False,
     any_alert: bool = False,
     auto_repair: bool = False,
+    companies: list[CompanyConfig] | None = None,
 ) -> Config:
     """Build a minimal Config with the requested posture bits.
 
@@ -202,15 +214,9 @@ def _make_config(
     values — the classifier under test only reads `daemon.recovery_enabled`
     and `handoff.handoff_*_enabled`, so the other sub-configs are inert
     fillers.
+    The default includes one company so daemon/e2e tests have a company id to
+    iterate. Classifier-only tests may pass `companies=[]` explicitly.
     """
-    from pathlib import Path
-    from gimle_watchdog.config import (
-        PaperclipConfig,
-        CooldownsConfig,
-        LoggingConfig,
-        EscalationConfig,
-    )
-
     handoff_kwargs: dict[str, bool] = {flag: False for flag in (
         "handoff_alert_enabled",
         "handoff_cross_team_enabled",
@@ -224,9 +230,22 @@ def _make_config(
     if auto_repair:
         handoff_kwargs["handoff_auto_repair_enabled"] = True
     return Config(
+        version=1,
         paperclip=PaperclipConfig(base_url="http://test", api_key="test"),
         daemon=DaemonConfig(poll_interval_seconds=60, recovery_enabled=recovery_enabled),
-        companies=[],
+        companies=companies if companies is not None else [
+            CompanyConfig(
+                id="9d8f432c-test",
+                name="Test",
+                thresholds=Thresholds(
+                    died_min=30,
+                    hang_etime_min=45,
+                    hang_cpu_max_s=None,
+                    idle_cpu_ratio_max=0.01,
+                    hang_stream_idle_max_s=300,
+                ),
+            )
+        ],
         cooldowns=CooldownsConfig(
             per_issue_seconds=60, per_agent_cap=10, per_agent_window_seconds=3600
         ),
@@ -239,6 +258,23 @@ def _make_config(
         escalation=EscalationConfig(post_comment_on_issue=False, comment_marker="[test]"),
         handoff=HandoffConfig(**handoff_kwargs),
     )
+```
+
+- [ ] **Step 1b: Add failing test cases**
+
+Append to `services/watchdog/tests/test_modes.py`:
+
+```python
+import itertools
+from dataclasses import replace
+
+from gimle_watchdog.config import (
+    ConfigError,
+    EffectiveMode,
+    describe_effective_mode,
+)
+
+from tests._factories import _make_config
 
 
 @pytest.mark.parametrize(
@@ -342,7 +378,7 @@ Expected: 6 passed (3 from Task 1 + 3 new).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add services/watchdog/src/gimle_watchdog/config.py services/watchdog/tests/test_modes.py
+git add services/watchdog/src/gimle_watchdog/config.py services/watchdog/tests/_factories.py services/watchdog/tests/test_modes.py
 git commit -m "feat(watchdog): describe_effective_mode classifier with partition test"
 ```
 
@@ -823,16 +859,14 @@ async def test_watchdog_posture_emitted_at_tick_start(
     assert isinstance(r.recover_max_age_min_per_company, dict)
 ```
 
-The test depends on `observe_only_config` (add to `conftest.py`) and reuses the existing `mock_paperclip` fixture for the Paperclip client. `observe_only_config` is built by calling the `_make_config` helper from `tests/test_modes.py` Task 2, OR — better — promote `_make_config` to `conftest.py` so all suites share it. Add this to `conftest.py`:
+The test depends on `observe_only_config` (add to `conftest.py`) and reuses the existing `mock_paperclip` fixture for the Paperclip client. `observe_only_config` is built by calling the shared `_make_config` helper from `tests/_factories.py` created in Task 2. Add this to `conftest.py`:
 
 ```python
 @pytest.fixture
 def observe_only_config():
-    from tests.test_modes import _make_config  # or import from conftest helpers
+    from tests._factories import _make_config
     return _make_config()  # all flags False = observe-only
 ```
-
-If a cyclic import arises (tests importing each other), promote `_make_config` to a small `tests/_factories.py` module and import from there in both `test_modes.py` and `conftest.py`.
 
 - [ ] **Step 2: Run to verify failure**
 
@@ -1523,39 +1557,31 @@ git commit -m "test(watchdog): per-mode behavioral side-effect contracts"
 
 ---
 
-## Task 11: Commit cohort fixture (synthetic data)
+## Task 11: Validate committed cohort fixture (real incident data)
 
 **Files:**
-- Create: `services/watchdog/tests/fixtures/gim255_cohort.json`.
+- Touch / verify only: `services/watchdog/tests/fixtures/gim255_cohort.json`.
+- Create: `services/watchdog/tests/test_cohort_fixture_schema.py`.
 
-Background: spec §4 / §9 — fixture exists as test evidence. Real incident literals are provided by the operator before merge; this task ships the structure so the harness in Task 12 can be wired.
+Background: spec §4 / §9 — fixture exists as test evidence. PR #160 has
+already committed the real GIM-244/GIM-255 incident literals to
+`services/watchdog/tests/fixtures/gim255_cohort.json`. Do **not** create,
+overwrite, regenerate, or replace this fixture with placeholders. The fixture is
+test evidence only; production code must never load it as a runtime skip list.
 
-- [ ] **Step 1: Write the fixture file with synthetic-data placeholders**
+- [ ] **Step 1: Verify the real fixture is present and has expected coverage**
 
-Create `services/watchdog/tests/fixtures/gim255_cohort.json`:
+Run:
 
-```json
-{
-  "_note": "GIM-255 spam-incident cohort. Used by tests/e2e/test_gim255_cohort_isolation.py to prove general GIM-255 hardening covers the historical cohort. NOT loaded by production watchdog code. Synthetic UUIDs below are placeholders; operator replaces with incident literals before merge.",
-  "paperclip_issue_ids": [
-    "00000000-0000-0000-0000-000000000001",
-    "00000000-0000-0000-0000-000000000002"
-  ],
-  "issue_numbers": [244, 255],
-  "comment_ids": [
-    "10000000-0000-0000-0000-000000000001",
-    "10000000-0000-0000-0000-000000000002"
-  ],
-  "comment_markers": [],
-  "posted_at_window": {
-    "from": "2026-04-30T00:00:00Z",
-    "to": "2026-04-30T04:00:00Z"
-  },
-  "author_agent_ids": [
-    "20000000-0000-0000-0000-000000000001"
-  ]
-}
+```bash
+test -f services/watchdog/tests/fixtures/gim255_cohort.json
+jq '{issue_count:(.paperclip_issue_ids|length), issue_number_count:(.issue_numbers|length), comment_count:(.comment_ids|length), author_agent_count:(.author_agent_ids|length), author_user_count:(.author_user_ids|length), posted_at_window}' services/watchdog/tests/fixtures/gim255_cohort.json
 ```
+
+Expected: `issue_count=52`, `issue_number_count=52`, `comment_count=379`,
+`author_agent_count=0`, `author_user_count=1`, and posted-at window
+`2026-05-08T17:12:07.843000Z..2026-05-08T17:29:04.951000Z`.
+If these counts drift, stop and ask Board; do not "fix" the fixture locally.
 
 - [ ] **Step 2: Add a schema-validation test**
 
@@ -1577,14 +1603,22 @@ _FIXTURE = (
 def test_fixture_has_required_schema():
     data = json.loads(_FIXTURE.read_text())
     assert isinstance(data["paperclip_issue_ids"], list)
+    assert len(data["paperclip_issue_ids"]) == 52
     assert all(_is_uuid(s) for s in data["paperclip_issue_ids"])
     assert isinstance(data["issue_numbers"], list)
+    assert len(data["issue_numbers"]) == len(data["paperclip_issue_ids"])
     assert all(isinstance(n, int) for n in data["issue_numbers"])
     assert isinstance(data["comment_ids"], list)
+    assert len(data["comment_ids"]) == 379
     assert all(_is_uuid(s) for s in data["comment_ids"])
     assert data["posted_at_window"]["from"].endswith("Z")
     assert data["posted_at_window"]["to"].endswith("Z")
+    assert isinstance(data["comment_markers"], list)
+    # Real incident comments were posted via the Board user's API key, not
+    # an agent identity; author_agent_ids may legitimately be empty.
     assert all(_is_uuid(s) for s in data["author_agent_ids"])
+    assert all(_is_uuid(s) for s in data["author_user_ids"])
+    assert data["author_agent_ids"] or data["author_user_ids"]
 
 
 def _is_uuid(s: str) -> bool:
@@ -1606,8 +1640,8 @@ Expected: 1 passed.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add services/watchdog/tests/fixtures/gim255_cohort.json services/watchdog/tests/test_cohort_fixture_schema.py
-git commit -m "test(watchdog): cohort fixture skeleton (synthetic; operator fills before merge)"
+git add services/watchdog/tests/test_cohort_fixture_schema.py
+git commit -m "test(watchdog): validate committed GIM-255 cohort fixture"
 ```
 
 ---
@@ -1635,7 +1669,7 @@ Create `services/watchdog/tests/e2e/test_gim255_cohort_isolation.py`:
 
 ```python
 """GIM-255 cohort isolation — proves general GIM-255 hardening covers the
-historical 258-comment / 32-issue cohort. Spec §7.
+real Board-provided 379-comment / 52-issue cohort. Spec §7.
 """
 from __future__ import annotations
 
@@ -1655,6 +1689,7 @@ from gimle_watchdog.state import State
 _FIXTURE = (
     Path(__file__).resolve().parents[1] / "fixtures" / "gim255_cohort.json"
 )
+_TEST_ASSIGNEE_AGENT_ID = "00000000-0000-0000-0000-000000000001"
 
 
 @pytest.fixture(scope="module")
@@ -1682,7 +1717,12 @@ def _seed_cohort_into_mock(state_mock, cohort: dict, company_id: str) -> None:
             "id": issue_uuid,
             "title": f"GIM-{gim_n}",
             "status": "in_progress",
-            "assigneeAgentId": cohort["author_agent_ids"][0],
+            # Do not derive test assignment from incident authorship. The real
+            # fixture has author_agent_ids=[] because comments were posted via
+            # the Board user's API key; the harness only needs a stable agent id
+            # so detector code can evaluate the cohort issue.
+            "assigneeAgentId": _TEST_ASSIGNEE_AGENT_ID,
+            "assigneeUserId": (cohort.get("author_user_ids") or [None])[0],
             "executionRunId": None,
             "originKind": "agent",
             "updatedAt": old,
@@ -1769,9 +1809,9 @@ async def test_cohort_isolation_recovery_path(
 ```
 
 The `observe_only_config` and `recovery_only_config` fixtures must include
-at least one `CompanyConfig` so detectors have a company id to iterate.
-Update `_make_config` in `tests/_factories.py` to accept a `companies`
-kwarg (default `[CompanyConfig(id="9d8f432c-test", name="Test", thresholds=Thresholds(...))]`).
+at least one `CompanyConfig` so detectors have a company id to iterate. Keep
+the Task 2 `_make_config` default company, and use its `companies` kwarg only
+when a test needs to override the company list explicitly.
 
 - [ ] **Step 2: Run**
 
@@ -1897,7 +1937,7 @@ Create `docs/runbooks/watchdog-operational-reenable.md`:
 
 **When to use:** taking `gimle-watchdog` from observe-only back into mechanical recovery (and later bounded alerting). One-way ratchet — do not skip phases or scale beyond evidence.
 
-**Audit-trail context:** the 258 spam comments from the GIM-244/GIM-255 incident remain on the 32 affected issues. Watchdog ignores them via the general GIM-255 hardening (per-issue age gates, `origin_kind` eligibility, `AlertPostBudget`, cooldown bookkeeping) — there is no runtime cohort-skip list.
+**Audit-trail context:** the committed PR #160 fixture records 379 spam comments across 52 affected issues for the GIM-244/GIM-255 incident. Watchdog ignores them via the general GIM-255 hardening (per-issue age gates, `origin_kind` eligibility, `AlertPostBudget`, cooldown bookkeeping) — there is no runtime cohort-skip list.
 
 ## Phase 1 — Observe-only precheck (recovery OFF)
 
