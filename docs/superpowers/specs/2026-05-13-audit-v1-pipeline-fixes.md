@@ -44,11 +44,13 @@ S4.1 smoke (GIM-277, tron-kit) produced the first real Audit-V1 report end-to-en
 
 **Note on roadmap rev4 entry:** my own PR #146 marked GIM-242 as ✅ merged based on `git log --all` showing commits exist; that conflated "commits exist in the repo" with "merged to develop". Roadmap rev4 needs a correction (downgrade ✅ → 📋 for the GIM-242 row).
 
-**Proposed fix:**
-1. Open a PR from `feature/GIM-242-testability-di-pattern-extractor` to `develop` (operator or CTO).
-2. Resume the chain from where it stopped: Phase 3.2 Opus adversarial review → 4.1 QA smoke → 4.2 CTO merge.
-3. Resolve any rebase conflicts (39 commits develop-ahead may have touched some of the same paths).
-4. Fix roadmap rev4 GIM-242 row (✅ → 📋).
+**Proposed fix (operator decision 2026-05-13 — continue GIM-242 chain):**
+1. Re-activate the existing paperclip GIM-242 issue (if `status=done` was set incorrectly, reopen). Assign to **CTO** for Phase 3.1 re-check (verify state of feature branch on `2026-05-13` vs the last activity `2026-05-08`).
+2. Forward-merge `origin/develop` into `feature/GIM-242-testability-di-pattern-extractor` to absorb the 39 develop-ahead commits and resolve any conflicts.
+3. Open the PR from feature branch to develop.
+4. Resume the chain from where it stopped: **Phase 3.2 OpusArchitectReviewer adversarial review → Phase 4.1 QAEngineer smoke → Phase 4.2 CTO merge**.
+5. Fix roadmap rev4 GIM-242 row in a follow-up `docs(roadmap):` PR (✅ → 📋 while chain resumes, then re-✅ on merge).
+6. After GIM-242 merges → testability_di extractor available; can be invoked on tron-kit smoke re-run for verification.
 
 **Acceptance:**
 - `git ls-tree origin/develop services/palace-mcp/src/palace_mcp/extractors/testability_di/` returns non-empty.
@@ -332,7 +334,7 @@ After each slice merges:
 ## Open questions
 
 - **B1 root cause** — is it never-merged, or merge-then-reverted? Answer dictates fix complexity (cherry-pick vs revert investigation + postmortem).
-- **B7 schema migration — resolved 2026-05-13**: recommended approach = **migration script** (option β) — one-shot pass classifies all existing `:Finding` nodes by `file_path`. Fallback in code = **optional field with default `library`** (option α) for any node missed by the script. Rejected: option γ wipe+re-ingest (loses audit history) and option δ compute-on-read (renderer hot-path complexity).
+- **B7 schema migration — resolved 2026-05-13 (operator decision)**: **wipe + re-ingest** (option γ). Rationale: the 2026-05-12 tron-kit smoke is acknowledged as invalid (12 bugs B1–B11 + Opus 6 NUDGEs polluted the dataset). Migrating obviously-flawed `:Finding` nodes to a new schema makes no sense; the right thing is to blow them away and re-run extractors after the slice-1–5 bugfixes land. This also aligns with the verification plan at the bottom of this spec — clean re-run is the success criterion anyway. **Implementation**: each slice that touches extractor output schema drops the relevant `:Finding` / `:CatchSite` / etc. nodes for the affected project(s) before re-ingesting; `dependency_surface` etc. that don't change schema can leave their data. Schema migration tooling not built; field is added as required with no fallback default.
 - **B8 heuristic regex — resolved 2026-05-13**: list `(signer|key|crypto|hd_wallet|hmac|sign|auth)` is a **placeholder for BlockchainEngineer review** in Phase 1.2 plan-first of the implementing slice. Candidate additions to evaluate: `mnemonic`, `seed`, `pubkey`, `keystore`, `wallet`, `secp`, `ed25519`, `ripemd`, `address.*generate`, `wif`. CR Phase 1.2 must explicitly call BlockchainEngineer subagent for completeness check before approving.
 - **B11 ordering — resolved 2026-05-13**: use **severity-first** ordering — security-critical sections (crypto_domain, error_handling, arch_layer) at the top. Rationale: Audit-V1 v1 use case is initial security audit of crypto Kits; operator scans top-down looking for "what's worst". Categorical grouping is better for reference docs (future v1.x consideration). Final ordering proposed: `crypto_domain_model` → `error_handling_policy` → `arch_layer` → `hotspot` → `dead_symbol_binary_surface` → `dependency_surface` → `code_ownership` → `cross_repo_version_skew` → `cross_module_contract` → `public_api_surface` → `coding_convention` → `localization_accessibility` → `reactive_dependency_tracer` → `testability_di` → `hot_path_profiler`.
 
