@@ -2,8 +2,21 @@
 
 **Date:** 2026-05-13
 **Spec:** `docs/superpowers/specs/2026-05-13-audit-v1-pipeline-fixes.md` (rev2 — addresses Codex-subagent Gate Call NO-GO)
-**Status:** draft, awaiting CR Phase 1.2 review
+**Status:** rev2 — addresses CR Phase 1.2 REQUEST CHANGES (3 CRITICALs + 3 WARNINGs)
 **Team:** Claude (CTO + CR + PythonEngineer + Opus + QA)
+
+### Rev2 changelog (2026-05-13)
+
+Addresses CodeReviewer Phase 1.2 findings from [GIM-285 comment c01add93](/GIM/issues/GIM-285#comment-c01add93-606a-4982-ae17-69504f50d12e):
+
+| # | Type | Finding | Fix |
+|---|------|---------|-----|
+| C1 | CRITICAL | Bundle-mode discovery missing from Slice 2 | Added **Task 2.3b** — per-member discovery via `(:Bundle)-[:HAS_MEMBER]->(:Project)` traversal, 3 RED tests |
+| C2 | CRITICAL | Last-attempt-wins edge case untested | Added `test_latest_failed_overrides_earlier_success` to Task 2.2 RED |
+| C3 | CRITICAL | Task 2.6/2.7 duplicate RED test | Task 2.6 RED now targets root cause (mount-path/stop-list/prerequisite per 2.5 findings); `data_mismatch_zero_scan_with_files_present` test lives exclusively in Task 2.7 |
+| W1 | WARNING | Files-owned misattributes `blind_spots.md` as existing | Fixed: `report_template.md` (modify) + 3 NEW templates listed separately |
+| W2 | WARNING | Backfill Cypher includes non-mounted `uw-android-mini` | Removed from slug list (6 projects now); added explanatory comment |
+| W3 | WARNING | Task 2.4 test files missing from Files-owned | Added all test file paths to Files-owned section |
 
 This plan splits into **5 paperclip issues** (placeholders `GIM-283-1` through `GIM-283-5`); each ships its own FB + PR. **Sequencing is strictly serial** — no two issues run in parallel because each touches `audit/renderer.py` or its neighbours (per spec §Sequencing).
 
@@ -13,7 +26,7 @@ Estimated wall-time (with serial chain + smoke verification between slices): **3
 
 | GIM-283 | Slice | Spec items | Tasks | Wall-time |
 |--------|-------|-----------|-------|-----------|
-| GIM-283-1 | Slice 2 — Status taxonomy + failure visibility | B4, B5, B6, §Status taxonomy | 8 | ~1 week |
+| GIM-283-1 | Slice 2 — Status taxonomy + failure visibility | B4, B5, B6, §Status taxonomy | 9 (rev2: +Task 2.3b bundle-mode) | ~1 week |
 | GIM-283-2 | Slice 1 — Coverage (testability_di + reactive + ingest defaults) | B1, B2, B3 | 6 (+ GIM-242 chain resumption sub-issue) | ~1 week |
 | GIM-283-3 | Slice 4 — Data quality (deps + arch_layer) | B9, B10 | 5 | ~3-5 days |
 | GIM-283-4 | Slice 3 — Source-context (annotation + try? tuning) | B7, B8 | 8 | ~1.5-2 weeks |
@@ -34,9 +47,17 @@ Estimated wall-time (with serial chain + smoke verification between slices): **3
 - `services/palace-mcp/src/palace_mcp/audit/discovery.py`
 - `services/palace-mcp/src/palace_mcp/audit/run.py`
 - `services/palace-mcp/src/palace_mcp/audit/renderer.py` (status logic only — no ordering changes; that's Slice 5)
-- `services/palace-mcp/src/palace_mcp/audit/templates/blind_spots.md` (split into 3 templates: blind_spots, failed_extractors, data_quality_issues)
+- `services/palace-mcp/src/palace_mcp/audit/report_template.md` (remove inline blind-spots section, lines 20-30)
+- `services/palace-mcp/src/palace_mcp/audit/templates/blind_spots.md` (NEW)
+- `services/palace-mcp/src/palace_mcp/audit/templates/failed_extractors.md` (NEW)
+- `services/palace-mcp/src/palace_mcp/audit/templates/data_quality_issues.md` (NEW)
 - `services/palace-mcp/tests/audit/test_discovery_status_taxonomy.py` (NEW)
 - `services/palace-mcp/tests/audit/test_renderer_status_sections.py` (NEW)
+- `services/palace-mcp/tests/audit/test_renderer_profile_coverage_appendix.py` (NEW)
+- `services/palace-mcp/tests/audit/test_renderer_coverage_count_mismatch_fails.py` (NEW)
+- `services/palace-mcp/tests/audit/test_run_uses_status_taxonomy.py` (NEW)
+- `services/palace-mcp/tests/audit/test_run_preserves_fetch_failed_path.py` (NEW)
+- `services/palace-mcp/tests/audit/test_bundle_mode_discovery.py` (NEW)
 
 ### Task 2.0 — Project-language-profile backfill + manifest inference
 
@@ -53,16 +74,16 @@ Estimated wall-time (with serial chain + smoke verification between slices): **3
 1. Extend `palace.memory.register_project` MCP tool to accept `language_profile` field (Pydantic schema update + Cypher MERGE).
 2. Backfill migration: one-shot Cypher in `services/palace-mcp/scripts/backfill_language_profile.cypher`:
    ```cypher
-   MATCH (p:Project) WHERE p.slug IN ['gimle','tron-kit','uw-android','uw-ios','uw-ios-mini','uw-android-mini','oz-v5-mini']
+   MATCH (p:Project) WHERE p.slug IN ['gimle','tron-kit','uw-android','uw-ios','uw-ios-mini','oz-v5-mini']
    SET p.language_profile = CASE p.slug
      WHEN 'gimle' THEN 'python_service'
      WHEN 'tron-kit' THEN 'swift_kit'
      WHEN 'uw-ios' THEN 'swift_kit'
      WHEN 'uw-ios-mini' THEN 'swift_kit'
      WHEN 'uw-android' THEN 'android_kit'
-     WHEN 'uw-android-mini' THEN 'android_kit'
      WHEN 'oz-v5-mini' THEN 'python_service'
      ELSE p.language_profile END
+   -- Note: uw-android-mini excluded — test fixture only, not mounted in docker-compose.yml
    ```
    Run as part of slice-2 deploy script with idempotency guard.
 
@@ -115,7 +136,9 @@ def resolve_profile(project_slug: str, driver) -> LanguageProfile:
 
 ### Task 2.2 — Discovery returns typed statuses
 
-**RED:** `tests/audit/test_discovery_status_taxonomy.py::test_discovery_classifies_each_extractor` — 5 fixture extractors (NOT_APPLICABLE / NOT_ATTEMPTED / RUN_FAILED / FETCH_FAILED / OK) and asserts each classified correctly.
+**RED:**
+- `tests/audit/test_discovery_status_taxonomy.py::test_discovery_classifies_each_extractor` — 5 fixture extractors (NOT_APPLICABLE / NOT_ATTEMPTED / RUN_FAILED / FETCH_FAILED / OK) and asserts each classified correctly.
+- `tests/audit/test_discovery_status_taxonomy.py::test_latest_failed_overrides_earlier_success` — **(CR C2 fix)** fixture with 2 IngestRuns for the same extractor: first `success=True, completed_at=T1`; second `success=False, completed_at=T2` where `T2 > T1`. Assert status == `RUN_FAILED`, not `OK`. Validates last-attempt-wins discovery per spec §Last-attempt-wins — the `WHERE r.success` filter must be dropped in favor of ordering by `completed_at DESC LIMIT 1`.
 
 **GREEN:** Modify `audit/discovery.py`:
 ```python
@@ -159,6 +182,35 @@ async def discover_extractor_statuses(driver, project, profile, registry) -> dic
 
 **Commit:** `feat(audit): run.py consumes typed statuses; preserves fetcher out-parameter mechanism`
 
+### Task 2.3b — Bundle-mode discovery in run.py (CR C1 fix)
+
+**Addresses spec §Status taxonomy "Bundle mode" + Plan checklist C2.** Spec requires per-member discovery when `bundle=` is passed: _"for each (:Bundle{name})-[:HAS_MEMBER]->(:Project), run discover_extractor_statuses(...) separately; each member has its own profile."_
+
+Current `run.py:30` accepts `bundle=` but line 61 passes it as a plain slug to `find_latest_runs(driver, project=target)` — no per-member iteration, no `member_slug` column.
+
+**RED:**
+- `tests/audit/test_bundle_mode_discovery.py::test_bundle_mode_discovers_per_member` — fixture bundle with 2 members (`tron-kit` profile=swift_kit, `oz-v5-mini` profile=python_service); call `run_audit(bundle="uw-ios")`; assert discovery returns per-member status dicts keyed by `(member_slug, extractor_name)`, each member resolved against its own profile.
+- `tests/audit/test_bundle_mode_discovery.py::test_bundle_mode_aggregates_failed_across_members` — fixture where member-A has `hotspot=RUN_FAILED` and member-B has `hotspot=OK`; assert §Failed Extractors section includes the member-A failure with `member_slug` column.
+- `tests/audit/test_bundle_mode_discovery.py::test_single_project_mode_unchanged` — `run_audit(project="tron-kit")` still works as before (no `member_slug` column, flat status dict).
+
+**GREEN:** In `audit/run.py`:
+
+1. When `bundle` argument is provided:
+   ```python
+   members = await resolve_bundle_members(driver, bundle)  # query (:Bundle{name})-[:HAS_MEMBER]->(:Project)
+   all_statuses = {}
+   for member in members:
+       profile = resolve_profile(member.slug, driver)
+       member_statuses = await discover_extractor_statuses(driver, member.slug, profile, registry)
+       for name, status in member_statuses.items():
+           all_statuses[(member.slug, name)] = status
+   ```
+2. Pass `member_slug` dimension to renderer when in bundle mode — renderer adds column.
+3. §Profile Coverage appendix in bundle mode: per-member subtotals + grand total with same `R == N+M+K+F+L` invariant per member.
+4. Single-project path (`bundle=None`) unchanged — call `discover_extractor_statuses` once, flat dict.
+
+**Commit:** `feat(audit): bundle-mode per-member discovery in run.py`
+
 ### Task 2.4 — Renderer creates Failed / Data-Quality / Blind-Spots sections + Profile-Coverage appendix
 
 **Addresses Gate Call C5 + N1 — existing blind-spots is inline in `report_template.md` + `run.py:69`, not a templated file; this is a CREATE, not split.**
@@ -200,9 +252,16 @@ Create three NEW templates in `audit/templates/`: `failed_extractors.md`, `data_
 
 **Gate:** Phase 1.2 plan-first CR review of Task 2.6 MUST cite the postmortem commit SHA in its APPROVE comment. Without the artifact on the FB, Task 2.6 RED tests don't get green-lit.
 
-### Task 2.6 — B6 hotspot fix (depends on 2.5 findings)
+### Task 2.6 — B6 hotspot root-cause fix (depends on 2.5 findings) (CR C3 fix — scope clarified)
 
-**RED:** `tests/extractors/test_hotspot_scan_zero_files_with_files_present_fails.py` — fixture with `:File` count > 0 but mount path mismatch, assert extractor returns `success=False, error_code="data_mismatch_zero_scan_with_files_present"`.
+**Scope:** This task fixes the ROOT CAUSE identified in the 2.5 investigation postmortem. It does NOT add the defensive multi-invariant checks — those belong exclusively to Task 2.7. The RED test here targets the specific root cause, not the generic `data_mismatch_zero_scan_with_files_present` invariant.
+
+**RED (exact test depends on 2.5 root cause — one of the following):**
+- If (a) mount-path mismatch: `tests/extractors/test_hotspot_mount_path_resolution.py::test_hotspot_resolves_correct_repo_mount` — fixture with `:Project` slug mapped to `/repos/<slug>`; assert hotspot walks the correct mount path, not a stale/wrong one.
+- If (b) stop-list overzealous: `tests/extractors/test_hotspot_stoplist_swift.py::test_swift_source_files_not_excluded` — fixture repo with `.swift` files under `Sources/`; assert hotspot does NOT stop-list them (currently excludes too aggressively).
+- If (c) ordering/prerequisite: `tests/extractors/test_hotspot_prerequisite_check.py::test_hotspot_fails_fast_without_git_history` — run hotspot on project with no `:Commit` nodes; assert `error_code="prerequisite_missing"` instead of silently returning 0 scanned files.
+
+PE selects the matching test based on the committed postmortem finding. If root cause is a combination, PE writes tests for each contributing factor.
 
 **GREEN:** Based on root cause from 2.5:
 - (a) mount path mismatch → align path conventions + pre-flight sanity check
@@ -676,8 +735,8 @@ CR must verify before APPROVE:
 - [ ] **C3 enforcement gates** are spelled out in implementation tasks (not just intentions):
   - GIM-283-4 Task 3.3 requires committed `docs/research/2026-05-NN-try-optional-critical-path-keywords.md` BEFORE CR Phase 3.1 APPROVE. CR Phase 3.1 paste includes the artifact SHA.
   - GIM-283-5 Task 5.3 requires committed `docs/research/2026-05-NN-tron-kit-ac5-manual-review.md` BEFORE CTO Phase 4.2 merge. QA Phase 4.1 paste includes the artifact SHA.
-- [ ] **C1 backfill landed**: GIM-283-1 Task 2.0 includes the language_profile backfill Cypher for all 4 currently-mounted projects. Verify the migration script is in `services/palace-mcp/scripts/` and idempotent.
-- [ ] **C2 bundle-mode**: `discover_extractor_statuses` signature accommodates bundle traversal (per-member). Even if v1.1 only smokes single-Kit, the API surface must support `bundle=` consumption for S4.3 forward-compat.
+- [ ] **C1 backfill landed**: GIM-283-1 Task 2.0 includes the language_profile backfill Cypher for all 6 currently-mounted projects (uw-android-mini excluded — test fixture only, not mounted). Verify the migration script is in `services/palace-mcp/scripts/` and idempotent.
+- [ ] **C2 bundle-mode**: Task 2.3b implements bundle-mode per-member discovery in `run.py`. `discover_extractor_statuses` called per `(:Bundle)-[:HAS_MEMBER]->(:Project)` member, each with its own profile. RED tests cover per-member aggregation + single-project backward compat.
 - [ ] **C5 coverage appendix**: Task 2.4 §Profile Coverage appendix has a render-time `R == N+M+K+F+L` assertion (raises `coverage_count_mismatch` error on drift).
 - [ ] **C4 source_context**: Task 3.5 (renderer) emits `library=X example=Y test=Z other=W` summary, supports `.gimle/source-context-overrides.yaml`, and emits `library_findings_empty` warning when applicable.
 - [ ] B6 investigation (Task 2.5) explicitly precedes Task 2.6 fix — root cause must be in committed `docs/postmortems/2026-05-13-hotspot-zero-scan-investigation.md` artifact.
