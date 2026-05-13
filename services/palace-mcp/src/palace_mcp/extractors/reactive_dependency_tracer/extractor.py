@@ -75,6 +75,8 @@ def _reactive_severity_mapper(value: str | None) -> Severity:
         "info": Severity.INFORMATIONAL,
     }
     return mapping.get(str(value).lower() if value else "", Severity.INFORMATIONAL)
+
+
 _PATH_DIAGNOSTIC_CODES = {
     "path_empty": ReactiveDiagnosticCode.PATH_EMPTY,
     "path_parent_traversal": ReactiveDiagnosticCode.PATH_PARENT_TRAVERSAL,

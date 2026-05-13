@@ -14,7 +14,9 @@ from pathlib import Path
 
 _SCRIPT_PATH = (
     Path(__file__).parent.parent.parent.parent.parent
-    / "paperclips" / "scripts" / "ingest_swift_kit.sh"
+    / "paperclips"
+    / "scripts"
+    / "ingest_swift_kit.sh"
 )
 
 

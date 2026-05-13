@@ -32,7 +32,9 @@ def contract(extractor: ReactiveDependencyTracerExtractor) -> AuditContract:
     return result
 
 
-def test_extractor_has_audit_contract(extractor: ReactiveDependencyTracerExtractor) -> None:
+def test_extractor_has_audit_contract(
+    extractor: ReactiveDependencyTracerExtractor,
+) -> None:
     assert extractor.audit_contract() is not None
 
 
