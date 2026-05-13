@@ -26,6 +26,7 @@ cause is understood enough to write up. Status values: `open`, `mitigated`,
 | PBUG-1 | 2026-05-12 | Gimle / handoff form | HIGH | open | PE comment-only handoff: no atomic PATCH, no formal mention → silent stall ~1.5h on GIM-277 |
 | PBUG-2 | 2026-05-12 | Gimle / phase order | MEDIUM | open | PE unauthorized phase-skip Phase 2 → Phase 3.2, bypassing CR Phase 3.1 (GIM-277) |
 | PBUG-3 | 2026-05-12 | Gimle / exit protocol | MEDIUM | open | PE continued tool-use after Phase-complete comment, woke second time in same run, enabled PBUG-2 (GIM-277) |
+| PBUG-3b | 2026-05-13 | Anthropic API / wake propagation | MEDIUM | open | Streaming upstream-error after successful handoff PATCH → run exits 143 → retry cancelled by `issue_reassigned` → wake-of-next-assignee never emitted → new assignee idle (GIM-285) |
 | PBUG-4 | 2026-05-12 | Trading / roster | HIGH | fixed | Trading codex bundles fell back to Gimle CX agent-roster → PE addressed `45e3b24d` (CXCodeReviewer) → paperclip 404 → silent PR-comment fallback (TRD-4) |
 | PBUG-5 | 2026-05-12 | Paperclip server / execution lock | HIGH | open | Later agent runs get 403 on PATCH/POST — exec-lock still bound to earlier run-id (TRD-4, GIM-277) |
 | PBUG-6 | 2026-05-13 | Paperclip API contract | HIGH | open | Agents send comment payloads with wrong JSON shape (`comment` vs `body`, or object vs string) → server 400 and lost evidence |
@@ -253,6 +254,104 @@ self-terminate."
 - Or: add to PE AGENTS.md — "if you just posted a Phase-complete comment
   without a PATCH-handoff, stop all further tool calls until the next
   paperclip heartbeat. Do not try to recover within the same run."
+
+---
+
+### PBUG-3b — Streaming upstream-error after successful handoff PATCH → wake-of-next-assignee lost
+
+**Found:** 2026-05-13 (timeline all `+06`), GIM-285 (CodeReviewer on `claude-opus-4-6` local).
+
+**Related:** symptomatically close to PBUG-3 (post-handoff tool activity), but
+the trigger is an external Anthropic API hiccup mid-stream, **not** the agent
+trying to continue work. CR completed its handoff correctly.
+
+**What happened:** CR's full sequence executed cleanly:
+
+| `+06` time | Event |
+|---|---|
+| 14:36:20 | CR run start (claude-opus-4-6 local) |
+| 15:19:19 | `POST /api/issues/{cc800234-…}/comments` → 201 (APPROVE comment posted) |
+| 15:19:24 | `PATCH /api/issues/{cc800234-…}` → 200 (assignee=`OpusArchitectReviewer`, status=`in_progress`) |
+| 15:19:38 | CR process exit **143** (SIGTERM) + `claude_transient_upstream` marker; the streaming final assistant text was cut mid-flight |
+| (then) | Paperclip scheduled retry attempt `eb4fda6a` |
+| (later) | Retry cancelled with reason `issue_reassigned` |
+
+The "error" body for the run shows the streamed-but-cut final text:
+*"Handoff verified: assigneeAgentId = OpusArchitectReviewer…"* — i.e. CR
+actually finished the work cleanly. 14 seconds after the 200 PATCH the
+Anthropic API aborted the streaming response with a transient upstream
+error. The paperclip wrapper interpreted that as a process failure and
+SIGTERM'd the run.
+
+Net effect: `OpusArchitectReviewer` stayed `idle`. No wake event ever
+reached it. Issue sat unworked until operator intervened manually.
+
+**Why the next assignee did NOT wake (root cause hypothesis):**
+
+1. Paperclip's primary wake of a new assignee is normally tied to
+   *run-completion* events, not to PATCH-as-such (or both, but
+   PATCH-wake is supplemental).
+2. Here the run completed abnormally (exit 143), so the run-completion
+   wake never fired.
+3. The auto-retry path that paperclip schedules on abnormal exit *might*
+   have re-emitted the wake — but paperclip correctly detected that the
+   issue had already been reassigned (PATCH at 15:19:24), so it
+   cancelled the retry with reason `issue_reassigned`.
+4. That cancellation branch clears state but does **NOT** re-issue
+   wake-of-the-new-assignee.
+5. Neither path delivered a wake → Opus stayed idle.
+
+**Detection signature (for triage + future watchdog detector):**
+
+- Run log shows `claude_transient_upstream` marker, exit code `143`.
+- Followed by paperclip retry-scheduled then retry-cancelled with reason
+  `issue_reassigned`.
+- The PATCH that triggered the cancellation succeeded (200) and switched
+  assignee.
+- New assignee's `agent.status` stays `idle` AND there is no `wake_*` /
+  `agent_spawned` event for that assignee in the window.
+- The previous run's exit was abnormal-but-after-PATCH (i.e. PATCH event
+  timestamp < run-exit timestamp).
+
+In one line: **`retry cancellation reason = issue_reassigned` WITHOUT a
+matching wake event on the new assignee = bug.**
+
+**Impact:** GIM-285 stalled until manual operator PATCH/comment to wake
+Opus. No data loss (CR's work was committed). Operational stall of
+unknown duration in worse cases (depends on operator latency). Below
+PBUG-1's severity because the silent stall window is bounded by the
+operator's normal issue-list scan.
+
+**Current mitigation:** Operator-eye watch. The currently deployed
+watchdog (GIM-282) will **NOT** catch this autonomously today:
+
+- Watchdog is in `observe-only` mode (`recovery_enabled: false`), so it
+  is not scanning candidates.
+- Even with `recovery_enabled: true`, recovery's eligibility gates skip
+  on `execution_run_id is not None` (`services/watchdog/src/gimle_watchdog/detection.py:236`).
+  Whether paperclip nulls `executionRunId` after `retry-cancel-by-reassign`
+  is the open question — if it does, recovery picks the issue up after
+  `died_min` (~5 min) and rewakes the new assignee; if it doesn't, the
+  watchdog stays blind.
+
+**Pending fixes / followups (server-side, preferred):**
+
+- Paperclip: `PATCH /api/issues/{id}` that changes `assigneeAgentId`
+  MUST always enqueue a wake event for the new assignee, independent
+  of the previous run's lifecycle state.
+- Or: the `retry-cancel-with-reason=issue_reassigned` branch must
+  re-emit a wake event for the current assignee before clearing state.
+
+**Pending fixes / followups (watchdog compensating control):**
+
+- Add a `wake_loss` detector class (sits between mechanical recovery
+  and tier-handoff semantics): triggers when `assignee_agent_id`
+  changed within the last N minutes via PATCH, the new assignee's
+  `agent.last_active` shows no activity since the PATCH, and no
+  `wake_*` / `agent_spawned` event exists for that assignee.
+- Register the new flag in `ALERT_FLAG_NAMES` (`services/watchdog/src/gimle_watchdog/config.py`),
+  default off; gated by `recovery_enabled` + `handoff_recent_window_min`
+  same as other issue-bound detectors.
 
 ---
 
