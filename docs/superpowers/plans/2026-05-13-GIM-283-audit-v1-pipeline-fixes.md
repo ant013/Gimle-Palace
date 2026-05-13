@@ -5,29 +5,29 @@
 **Status:** draft, awaiting CR Phase 1.2 review
 **Team:** Claude (CTO + CR + PythonEngineer + Opus + QA)
 
-This plan splits into **5 paperclip issues** (placeholders `GIM-NN-1` through `GIM-NN-5`); each ships its own FB + PR. **Sequencing is strictly serial** — no two issues run in parallel because each touches `audit/renderer.py` or its neighbours (per spec §Sequencing).
+This plan splits into **5 paperclip issues** (placeholders `GIM-283-1` through `GIM-283-5`); each ships its own FB + PR. **Sequencing is strictly serial** — no two issues run in parallel because each touches `audit/renderer.py` or its neighbours (per spec §Sequencing).
 
 Estimated wall-time (with serial chain + smoke verification between slices): **3-4 weeks total**, dominated by Slice 3 (source_context schema change).
 
 ## Slice mapping
 
-| GIM-NN | Slice | Spec items | Tasks | Wall-time |
+| GIM-283 | Slice | Spec items | Tasks | Wall-time |
 |--------|-------|-----------|-------|-----------|
-| GIM-NN-1 | Slice 2 — Status taxonomy + failure visibility | B4, B5, B6, §Status taxonomy | 8 | ~1 week |
-| GIM-NN-2 | Slice 1 — Coverage (testability_di + reactive + ingest defaults) | B1, B2, B3 | 6 (+ GIM-242 chain resumption sub-issue) | ~1 week |
-| GIM-NN-3 | Slice 4 — Data quality (deps + arch_layer) | B9, B10 | 5 | ~3-5 days |
-| GIM-NN-4 | Slice 3 — Source-context (annotation + try? tuning) | B7, B8 | 8 | ~1.5-2 weeks |
-| GIM-NN-5 | Slice 5 — Pinned ordering renderer | B11 | 3 | ~1-2 days |
+| GIM-283-1 | Slice 2 — Status taxonomy + failure visibility | B4, B5, B6, §Status taxonomy | 8 | ~1 week |
+| GIM-283-2 | Slice 1 — Coverage (testability_di + reactive + ingest defaults) | B1, B2, B3 | 6 (+ GIM-242 chain resumption sub-issue) | ~1 week |
+| GIM-283-3 | Slice 4 — Data quality (deps + arch_layer) | B9, B10 | 5 | ~3-5 days |
+| GIM-283-4 | Slice 3 — Source-context (annotation + try? tuning) | B7, B8 | 8 | ~1.5-2 weeks |
+| GIM-283-5 | Slice 5 — Pinned ordering renderer | B11 | 3 | ~1-2 days |
 
 ---
 
-## GIM-NN-1 — Slice 2: Status taxonomy + failure visibility (foundation)
+## GIM-283-1 — Slice 2: Status taxonomy + failure visibility (foundation)
 
 **Goal:** Introduce typed extractor statuses (`NOT_APPLICABLE` / `NOT_ATTEMPTED` / `RUN_FAILED` / `FETCH_FAILED` / `OK`) and render each distinctly. Fix `hotspot` 0-scan as part of the same slice since failure visibility is needed to surface the underlying issue.
 
 **Why first:** Slices 2-5 all consume the taxonomy. Without it, "this extractor failed" is indistinguishable from "this extractor was never invoked".
 
-**Branch:** `feature/GIM-NN-1-audit-status-taxonomy`
+**Branch:** `feature/GIM-283-1-audit-status-taxonomy`
 
 **Files owned:**
 - `services/palace-mcp/src/palace_mcp/extractors/foundation/profiles.py` (NEW)
@@ -100,7 +100,7 @@ PROFILES = {
         "cross_module_contract", "cross_repo_version_skew", "dead_symbol_binary_surface",
         "dependency_surface", "error_handling_policy", "hot_path_profiler", "hotspot",
         "localization_accessibility", "public_api_surface", "reactive_dependency_tracer",
-        "testability_di",  # once GIM-NN-2 lands; until then absent
+        "testability_di",  # once GIM-283-2 lands; until then absent
     })),
     "android_kit": ...,  # post-tron-kit work; deferred
 }
@@ -243,11 +243,11 @@ if scanned_files > 0 and parsed_functions == 0:
 
 ---
 
-## GIM-NN-2 — Slice 1: Coverage (testability_di + reactive + DEFAULT_EXTRACTORS)
+## GIM-283-2 — Slice 1: Coverage (testability_di + reactive + DEFAULT_EXTRACTORS)
 
 **Goal:** Plug all in-profile extractors. Depends on Slice 2 statuses being live.
 
-**Branch:** `feature/GIM-NN-2-audit-coverage-gaps`
+**Branch:** `feature/GIM-283-2-audit-coverage-gaps`
 
 **Files owned:**
 - `services/palace-mcp/src/palace_mcp/extractors/registry.py`
@@ -259,17 +259,17 @@ if scanned_files > 0 and parsed_functions == 0:
 
 ### Task 1.1 — GIM-242 chain resumption (sub-issue + blocker)
 
-**Addresses Gate Call P9 — GIM-NN-2 Phase 4.2 merge MUST block until GIM-242 chain merges to develop.**
+**Addresses Gate Call P9 — GIM-283-2 Phase 4.2 merge MUST block until GIM-242 chain merges to develop.**
 
 This is a chain-resumption, not a code task. Spawn a separate paperclip issue:
-- **Title:** "GIM-NN-2.1: resume GIM-242 testability_di chain to merge"
+- **Title:** "GIM-283-2.1: resume GIM-242 testability_di chain to merge"
 - **Initial assignee:** CTO Phase 1.1
 - **Branch:** `feature/GIM-242-testability-di-pattern-extractor` (already exists, stale)
 - **First action:** forward-merge `origin/develop` into the branch, resolve conflicts (39 commits ahead).
 - **Then:** Phase 3.2 (Opus) → Phase 4.1 (QA, including a real-tron-kit smoke) → Phase 4.2 (CTO merge).
 - **Roadmap update:** in PR description, include `docs(roadmap):` change ✅ → 📋 first, then ✅ at merge.
 
-**Blocker invariant:** GIM-NN-2 Phase 4.2 (CTO merge of slice 1) MUST verify GIM-242 is merged-to-develop via `git ls-tree origin/develop -- services/palace-mcp/src/palace_mcp/extractors/testability_di/` returning non-empty before approving its own merge. Documented in `§Phase chain reminder` below.
+**Blocker invariant:** GIM-283-2 Phase 4.2 (CTO merge of slice 1) MUST verify GIM-242 is merged-to-develop via `git ls-tree origin/develop -- services/palace-mcp/src/palace_mcp/extractors/testability_di/` returning non-empty before approving its own merge. Documented in `§Phase chain reminder` below.
 
 Acceptance: `git ls-tree origin/develop services/palace-mcp/src/palace_mcp/extractors/testability_di/` returns non-empty; registered in `registry.py` on develop.
 
@@ -336,11 +336,11 @@ Save artifact to `docs/audit-reports/2026-05-13-tron-kit-after-slice-1.md`. Veri
 
 ---
 
-## GIM-NN-3 — Slice 4: Data quality (deps + arch_layer)
+## GIM-283-3 — Slice 4: Data quality (deps + arch_layer)
 
 **Goal:** Close Opus N1 + N2 small-template-side fixes.
 
-**Branch:** `feature/GIM-NN-3-audit-data-quality`
+**Branch:** `feature/GIM-283-3-audit-data-quality`
 
 **Files owned:**
 - `services/palace-mcp/src/palace_mcp/extractors/dependency_surface/extractor.py`
@@ -421,11 +421,11 @@ Save to `docs/audit-reports/2026-05-13-tron-kit-after-slice-4.md`. Verify:
 
 ---
 
-## GIM-NN-4 — Slice 3: Source-context annotation (B7 + B8)
+## GIM-283-4 — Slice 3: Source-context annotation (B7 + B8)
 
 **Goal:** Add `source_context: library | example | test | other` to findings; render it; tune `error_handling_policy` `try?` severity. Biggest scope; ~2 weeks.
 
-**Branch:** `feature/GIM-NN-4-audit-source-context`
+**Branch:** `feature/GIM-283-4-audit-source-context`
 
 **Files owned (5 extractors + foundation + templates + renderer):**
 - `services/palace-mcp/src/palace_mcp/extractors/foundation/source_context.py` (NEW)
@@ -552,11 +552,11 @@ Save to `docs/audit-reports/2026-05-13-tron-kit-after-slice-3.md`. Verify:
 
 ---
 
-## GIM-NN-5 — Slice 5: Pinned-then-severity ordering
+## GIM-283-5 — Slice 5: Pinned-then-severity ordering
 
 **Goal:** Replace renderer's global severity sort with pinned-then-severity strategy.
 
-**Branch:** `feature/GIM-NN-5-audit-pinned-ordering`
+**Branch:** `feature/GIM-283-5-audit-pinned-ordering`
 
 **Files owned:**
 - `services/palace-mcp/src/palace_mcp/audit/renderer.py` only.
@@ -674,23 +674,23 @@ CR must verify before APPROVE:
 - [ ] No task overlaps shared files with another task in the same slice (file-ownership map per spec §Sequencing).
 - [ ] **No-rebase-overwrite guard** (addresses Gate Call P15): each task's `Files` declaration explicitly notes if a file is touched by a prior slice. Specifically: `profiles.py` is owned by Slice 1 (created), modified by Slice 2 (additions). `arch_layer/extractor.py` is owned by Slice 4 (summary_stats), modified by Slice 3 (source_context). Slice 3/4 PEs MUST `git pull` + verify content before pushing additive edits.
 - [ ] **C3 enforcement gates** are spelled out in implementation tasks (not just intentions):
-  - GIM-NN-4 Task 3.3 requires committed `docs/research/2026-05-NN-try-optional-critical-path-keywords.md` BEFORE CR Phase 3.1 APPROVE. CR Phase 3.1 paste includes the artifact SHA.
-  - GIM-NN-5 Task 5.3 requires committed `docs/research/2026-05-NN-tron-kit-ac5-manual-review.md` BEFORE CTO Phase 4.2 merge. QA Phase 4.1 paste includes the artifact SHA.
-- [ ] **C1 backfill landed**: GIM-NN-1 Task 2.0 includes the language_profile backfill Cypher for all 4 currently-mounted projects. Verify the migration script is in `services/palace-mcp/scripts/` and idempotent.
+  - GIM-283-4 Task 3.3 requires committed `docs/research/2026-05-NN-try-optional-critical-path-keywords.md` BEFORE CR Phase 3.1 APPROVE. CR Phase 3.1 paste includes the artifact SHA.
+  - GIM-283-5 Task 5.3 requires committed `docs/research/2026-05-NN-tron-kit-ac5-manual-review.md` BEFORE CTO Phase 4.2 merge. QA Phase 4.1 paste includes the artifact SHA.
+- [ ] **C1 backfill landed**: GIM-283-1 Task 2.0 includes the language_profile backfill Cypher for all 4 currently-mounted projects. Verify the migration script is in `services/palace-mcp/scripts/` and idempotent.
 - [ ] **C2 bundle-mode**: `discover_extractor_statuses` signature accommodates bundle traversal (per-member). Even if v1.1 only smokes single-Kit, the API surface must support `bundle=` consumption for S4.3 forward-compat.
 - [ ] **C5 coverage appendix**: Task 2.4 §Profile Coverage appendix has a render-time `R == N+M+K+F+L` assertion (raises `coverage_count_mismatch` error on drift).
 - [ ] **C4 source_context**: Task 3.5 (renderer) emits `library=X example=Y test=Z other=W` summary, supports `.gimle/source-context-overrides.yaml`, and emits `library_findings_empty` warning when applicable.
 - [ ] B6 investigation (Task 2.5) explicitly precedes Task 2.6 fix — root cause must be in committed `docs/postmortems/2026-05-13-hotspot-zero-scan-investigation.md` artifact.
 - [ ] Final verification (Slice 5 / Task 5.3) wipes the right node labels and re-ingests via `ingest_swift_kit.sh`, NOT `palace.audit.run` alone.
-- [ ] Each slice ships its own PR; serial merge order = 1 → 2 → 3 → 4 → 5 (numbered as in this plan, which is reordered from the spec's slice numbering for clarity: spec Slice 2 = plan GIM-NN-1, spec Slice 1 = plan GIM-NN-2, spec Slice 4 = plan GIM-NN-3, spec Slice 3 = plan GIM-NN-4, spec Slice 5 = plan GIM-NN-5).
-- [ ] **GIM-NN-2 Phase 4.2 blocker** (Gate Call P9): CTO verifies `testability_di/` is in `origin/develop` before Phase 4.2 merge of slice 1.
+- [ ] Each slice ships its own PR; serial merge order = 1 → 2 → 3 → 4 → 5 (numbered as in this plan, which is reordered from the spec's slice numbering for clarity: spec Slice 2 = plan GIM-283-1, spec Slice 1 = plan GIM-283-2, spec Slice 4 = plan GIM-283-3, spec Slice 3 = plan GIM-283-4, spec Slice 5 = plan GIM-283-5).
+- [ ] **GIM-283-2 Phase 4.2 blocker** (Gate Call P9): CTO verifies `testability_di/` is in `origin/develop` before Phase 4.2 merge of slice 1.
 
 ## Phase chain reminder (per slice)
 
 Standard Gimle 7-phase. Special notes per this plan:
 
-- **Phase 1.2 of GIM-NN-4 (Slice 3)**: CR MUST dispatch BlockchainEngineer subagent for B8 regex completeness review before approving.
-- **Phase 2.5 of GIM-NN-1 (Slice 2)**: Investigation task — PE produces a write-up before Task 2.6 coding starts.
+- **Phase 1.2 of GIM-283-4 (Slice 3)**: CR MUST dispatch BlockchainEngineer subagent for B8 regex completeness review before approving.
+- **Phase 2.5 of GIM-283-1 (Slice 2)**: Investigation task — PE produces a write-up before Task 2.6 coding starts.
 - **Phase 4.1 of every slice**: QA performs the slice-specific Verification step from the relevant Slice §Verification subsection. Real `:IngestRun` against tron-kit, real audit report artifact, real diff vs prior. No mocks.
 - **Phase 4.2 of every slice**: CTO merges only after the slice's verification artifact exists in `docs/audit-reports/` on the FB.
-- **After GIM-NN-5 merge**: operator + BlockchainEngineer perform AC5 manual review (per spec §Acceptance criteria item 10).
+- **After GIM-283-5 merge**: operator + BlockchainEngineer perform AC5 manual review (per spec §Acceptance criteria item 10).
