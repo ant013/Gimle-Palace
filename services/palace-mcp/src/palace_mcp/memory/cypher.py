@@ -137,6 +137,7 @@ SET p.group_id            = 'project/' + $slug,
     p.repo_url            = $repo_url,
     p.parent_mount        = $parent_mount,
     p.relative_path       = $relative_path,
+    p.language_profile    = coalesce($language_profile, p.language_profile),
     p.source              = 'paperclip',
     p.source_created_at   = coalesce(p.source_created_at, $now),
     p.source_updated_at   = $now

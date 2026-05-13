@@ -8,11 +8,11 @@ from __future__ import annotations
 
 import json
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
-
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from palace_mcp.audit.contracts import AuditContract
 from palace_mcp.extractors.base import BaseExtractor, ExtractorStats
+from palace_mcp.extractors.foundation.profiles import LanguageProfile
 
 
 # ---------------------------------------------------------------------------
@@ -47,13 +47,16 @@ class FakeAuditExtractor(BaseExtractor):
 
 
 class _EmptyAsyncResult:
-    """Async-iterable result that yields no rows."""
+    """Async-iterable result that yields no rows. Also supports .single() → None."""
 
     def __aiter__(self) -> "_EmptyAsyncResult":
         return self
 
     async def __anext__(self) -> None:
         raise StopAsyncIteration
+
+    async def single(self) -> None:
+        return None
 
 
 def _make_empty_driver() -> Any:
@@ -65,6 +68,10 @@ def _make_empty_driver() -> Any:
     drv = MagicMock()
     drv.session = MagicMock(return_value=session)
     return drv
+
+
+# Profile that includes fake_auditable so NOT_ATTEMPTED ends up in blind_spots
+_FAKE_PROFILE = LanguageProfile("swift_kit", frozenset({"fake_auditable"}))
 
 
 def _register_and_call_run() -> Any:
@@ -83,9 +90,13 @@ def _register_and_call_run() -> Any:
         registry: dict[str, BaseExtractor] = {
             "fake_auditable": FakeAuditExtractor(has_contract=True),
         }
-        return await run_audit(
-            drv, registry, project=project, bundle=bundle, depth=depth
-        )
+        with patch(
+            "palace_mcp.audit.run.resolve_profile",
+            new=AsyncMock(return_value=_FAKE_PROFILE),
+        ):
+            return await run_audit(
+                drv, registry, project=project, bundle=bundle, depth=depth
+            )
 
     return mcp
 
