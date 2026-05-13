@@ -15,7 +15,7 @@ WHERE r.extractor_name IS NOT NULL
 WITH r.extractor_name AS extractor_name, r ORDER BY r.started_at DESC
 WITH extractor_name, collect(r)[0] AS latest
 RETURN extractor_name,
-       latest.run_id AS run_id,
+       coalesce(latest.run_id, latest.id) AS run_id,
        latest.started_at AS completed_at
 """
 

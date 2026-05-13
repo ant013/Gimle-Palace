@@ -140,19 +140,30 @@ def render_report(
     _mappers = severity_mappers or {}
 
     rendered_sections: list[tuple[Severity, str]] = []
+    # Annotated findings collected for executive summary top-3 computation.
+    # _annotate_severity is called here (for max_sev) and again inside render_section;
+    # the duplication is intentional to keep render_section's API unchanged.
+    all_annotated: list[dict[str, Any]] = []
     seen: set[str] = set()
+
+    def _render_one(name: str, sec: AuditSectionData) -> tuple[Severity, str]:
+        col = severity_columns.get(name, "_severity")
+        cap = max_findings_per_section.get(name, 100)
+        mapper = _mappers.get(name)
+        annotated, max_sev_or_none = _annotate_severity(sec.findings, col, cap, mapper)
+        all_annotated.extend(annotated[:3])
+        max_sev = (
+            max_sev_or_none if max_sev_or_none is not None else Severity.INFORMATIONAL
+        )
+        rendered = render_section(sec, col, cap, severity_mapper=mapper)
+        return max_sev, rendered
 
     # 1. Known extractors in preferred display order
     for name in _SECTION_ORDER:
         if name not in sections:
             continue
         seen.add(name)
-        sec = sections[name]
-        col = severity_columns.get(name, "_severity")
-        cap = max_findings_per_section.get(name, 100)
-        rendered = render_section(sec, col, cap, severity_mapper=_mappers.get(name))
-        max_sev = _section_max_severity(sec)
-        rendered_sections.append((max_sev, rendered))
+        rendered_sections.append(_render_one(name, sections[name]))
 
     # 2. Any extra extractors not in _SECTION_ORDER (paved-path: new extractors
     #    plug in via audit_contract() without requiring orchestrator code changes)
@@ -161,11 +172,16 @@ def render_report(
             continue
         col = severity_columns.get(name, "_severity")
         cap = max_findings_per_section.get(name, 100)
+        mapper = _mappers.get(name)
+        annotated, max_sev_or_none = _annotate_severity(sec.findings, col, cap, mapper)
+        all_annotated.extend(annotated[:3])
+        max_sev = (
+            max_sev_or_none if max_sev_or_none is not None else Severity.INFORMATIONAL
+        )
         try:
-            rendered = render_section(sec, col, cap, severity_mapper=_mappers.get(name))
+            rendered = render_section(sec, col, cap, severity_mapper=mapper)
         except TemplateNotFound:
             rendered = f"## {name.replace('_', ' ').title()}\n\n{len(sec.findings)} finding(s) — no template available.\n"
-        max_sev = _section_max_severity(sec)
         rendered_sections.append((max_sev, rendered))
 
     rendered_sections.sort(key=lambda t: SEVERITY_RANK[t[0]])
@@ -177,10 +193,15 @@ def render_report(
     ]
 
     total_critical = sum(
-        1
-        for s in sections.values()
-        if _section_max_severity(s) in (Severity.CRITICAL, Severity.HIGH)
+        1 for sev, _ in rendered_sections if sev in (Severity.CRITICAL, Severity.HIGH)
     )
+
+    # Top-3 findings for executive summary (worst severity first, across all sections)
+    all_annotated.sort(
+        key=lambda f: SEVERITY_RANK[severity_from_str(f.get("_severity"))]
+    )
+    top3 = all_annotated[:3]
+
     executive_lines = [
         f"Audit of project `{project}` at depth `{depth}`.",
         f"{len(sections)} extractor{'s' if len(sections) != 1 else ''} contributed data.",
@@ -195,6 +216,24 @@ def render_report(
         )
     else:
         executive_lines.append("No critical or high severity findings.")
+    if top3:
+        top3_strs: list[str] = []
+        for f in top3:
+            sev = (f.get("_severity") or "").upper()
+            kind = f.get("kind") or ""
+            loc = f.get("file") or f.get("path") or ""
+            line = f.get("start_line") or f.get("line") or ""
+            msg = (f.get("message") or f.get("description") or "")[:120]
+            loc_str = f"`{loc}:{line}`" if loc and line else (f"`{loc}`" if loc else "")
+            parts = [f"**{sev}**"]
+            if kind:
+                parts.append(f"[{kind}]")
+            if loc_str:
+                parts.append(loc_str)
+            if msg:
+                parts.append(f"— {msg}")
+            top3_strs.append(" ".join(parts))
+        executive_lines.append("Top findings: " + "; ".join(top3_strs) + ".")
 
     report_template = _JINJA_ENV.get_template("report_template.md")
     return report_template.render(
