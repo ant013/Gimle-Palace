@@ -57,7 +57,9 @@ async def test_cohort_isolation_per_detector_flag(
     ]
     _seed_cohort_into_mock(state_mock, cohort)
 
-    cfg = replace(observe_only_config, handoff=replace(observe_only_config.handoff, **{flag_name: True}))
+    cfg = replace(
+        observe_only_config, handoff=replace(observe_only_config.handoff, **{flag_name: True})
+    )
     client = PaperclipClient(base_url=base_url, api_key="test")
     state = State.load(tmp_path / "state.json")
     try:
@@ -76,7 +78,9 @@ async def test_cohort_isolation_per_detector_flag(
         if issue_id in cohort_ids and issue.get("executionRunId") is not None
     ]
     assert not posted_against_cohort, f"{flag_name} posted on cohort: {posted_against_cohort}"
-    assert not patched_against_cohort, f"{flag_name} patched cohort issues: {patched_against_cohort}"
+    assert not patched_against_cohort, (
+        f"{flag_name} patched cohort issues: {patched_against_cohort}"
+    )
     errors = [record for record in caplog.records if record.levelno >= logging.ERROR]
     assert not errors, f"{flag_name} produced unexpected errors: {errors}"
 

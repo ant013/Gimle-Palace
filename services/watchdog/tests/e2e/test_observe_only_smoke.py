@@ -57,7 +57,9 @@ async def test_observe_only_tick_emits_zero_side_effects(
 
 
 @pytest.mark.asyncio
-async def test_recovery_only_emits_no_alerts(recovery_only_config, mock_paperclip, tmp_path) -> None:
+async def test_recovery_only_emits_no_alerts(
+    recovery_only_config, mock_paperclip, tmp_path
+) -> None:
     assert describe_effective_mode(recovery_only_config) == EffectiveMode.RECOVERY_ONLY
 
     cfg = replace(
@@ -109,7 +111,9 @@ async def test_alert_only_emits_no_recovery(alert_only_config, mock_paperclip, t
 
 
 @pytest.mark.asyncio
-async def test_full_watchdog_budget_respected(full_watchdog_config, mock_paperclip, tmp_path) -> None:
+async def test_full_watchdog_budget_respected(
+    full_watchdog_config, mock_paperclip, tmp_path
+) -> None:
     assert describe_effective_mode(full_watchdog_config) == EffectiveMode.FULL_WATCHDOG
 
     base_url, state_mock = mock_paperclip
@@ -155,6 +159,8 @@ async def test_unsafe_auto_repair_mode_in_posture_log(
     finally:
         await client.aclose()
 
-    posture = [record for record in caplog.records if getattr(record, "event", None) == "watchdog_posture"]
+    posture = [
+        record for record in caplog.records if getattr(record, "event", None) == "watchdog_posture"
+    ]
     assert posture
     assert posture[0].mode == "unsafe-auto-repair"

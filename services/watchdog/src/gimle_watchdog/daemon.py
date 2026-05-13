@@ -631,9 +631,7 @@ async def _run_recovery_pass(cfg: Config, state: State, client: PaperclipClient)
     return total_actions
 
 
-async def _reconcile_companies(
-    cfg: Config, client: PaperclipClient
-) -> tuple[list[str], list[str]]:
+async def _reconcile_companies(cfg: Config, client: PaperclipClient) -> tuple[list[str], list[str]]:
     """Return (configured_but_missing, live_but_unconfigured) company IDs."""
 
     # Do not let posture-only inventory reads shift the detector clock anchor.

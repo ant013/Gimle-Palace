@@ -109,9 +109,7 @@ def test_cmd_status_prints_mode_and_reconciliation(capsys, monkeypatch, observe_
     assert "Active cooldowns:" in out
 
 
-def test_cmd_status_warns_on_live_but_unconfigured(
-    capsys, monkeypatch, observe_only_config_file
-):
+def test_cmd_status_warns_on_live_but_unconfigured(capsys, monkeypatch, observe_only_config_file):
     monkeypatch.setattr(
         "gimle_watchdog.__main__.PaperclipClient.list_companies",
         AsyncMock(
