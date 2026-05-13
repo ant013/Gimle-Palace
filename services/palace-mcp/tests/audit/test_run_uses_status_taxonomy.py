@@ -9,7 +9,7 @@ Verifies:
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -102,7 +102,9 @@ async def test_run_uses_discover_extractor_statuses() -> None:
     mock_discover.assert_called_once()
     # Verify project arg passed correctly
     _, kwargs = mock_discover.call_args
-    assert kwargs.get("project") == "gimle" or mock_discover.call_args[0][1:] == ("gimle",)
+    assert kwargs.get("project") == "gimle" or mock_discover.call_args[0][1:] == (
+        "gimle",
+    )
 
 
 @pytest.mark.asyncio
@@ -123,7 +125,11 @@ async def test_run_exposes_status_counts_in_result() -> None:
     with (
         patch(
             "palace_mcp.audit.run.resolve_profile",
-            new=AsyncMock(return_value=LanguageProfile("swift_kit", frozenset({"ok_ext", "failed_ext"}))),
+            new=AsyncMock(
+                return_value=LanguageProfile(
+                    "swift_kit", frozenset({"ok_ext", "failed_ext"})
+                )
+            ),
         ),
         patch(
             "palace_mcp.audit.run.discover_extractor_statuses",
@@ -153,7 +159,9 @@ async def test_run_not_attempted_in_blind_spots_field() -> None:
     with (
         patch(
             "palace_mcp.audit.run.resolve_profile",
-            new=AsyncMock(return_value=LanguageProfile("swift_kit", frozenset({"never_run"}))),
+            new=AsyncMock(
+                return_value=LanguageProfile("swift_kit", frozenset({"never_run"}))
+            ),
         ),
         patch(
             "palace_mcp.audit.run.discover_extractor_statuses",

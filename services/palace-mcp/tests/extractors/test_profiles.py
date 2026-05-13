@@ -136,10 +136,18 @@ def test_swift_kit_includes_expected_extractors() -> None:
     from palace_mcp.extractors.foundation.profiles import PROFILES
 
     expected = {
-        "arch_layer", "code_ownership", "coding_convention",
-        "crypto_domain_model", "cross_module_contract", "cross_repo_version_skew",
-        "dead_symbol_binary_surface", "dependency_surface", "error_handling_policy",
-        "hotspot", "localization_accessibility", "public_api_surface",
+        "arch_layer",
+        "code_ownership",
+        "coding_convention",
+        "crypto_domain_model",
+        "cross_module_contract",
+        "cross_repo_version_skew",
+        "dead_symbol_binary_surface",
+        "dependency_surface",
+        "error_handling_policy",
+        "hotspot",
+        "localization_accessibility",
+        "public_api_surface",
         "reactive_dependency_tracer",
     }
     actual = PROFILES["swift_kit"].audit_extractors

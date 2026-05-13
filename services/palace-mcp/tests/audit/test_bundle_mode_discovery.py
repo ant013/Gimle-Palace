@@ -46,6 +46,7 @@ def _make_extractor(name: str) -> BaseExtractor:
 
 def _project_ref(slug: str) -> ProjectRef:
     from datetime import datetime, timezone
+
     return ProjectRef(
         slug=slug,
         tier="first-party",
@@ -104,13 +105,21 @@ async def test_bundle_mode_discovers_per_member() -> None:
         # Both members: hotspot = NOT_ATTEMPTED
         return {"hotspot": ExtractorStatus("hotspot", "NOT_ATTEMPTED")}
 
-    async def _fake_resolve_profile(driver: Any, slug: str, repo_path: Any = None) -> LanguageProfile:
+    async def _fake_resolve_profile(
+        driver: Any, slug: str, repo_path: Any = None
+    ) -> LanguageProfile:
         return profile_by_slug[slug]
 
     with (
-        patch("palace_mcp.memory.bundle.bundle_members", new=AsyncMock(return_value=members)),
+        patch(
+            "palace_mcp.memory.bundle.bundle_members",
+            new=AsyncMock(return_value=members),
+        ),
         patch("palace_mcp.audit.run.resolve_profile", new=_fake_resolve_profile),
-        patch("palace_mcp.audit.run.discover_extractor_statuses", new=_fake_discover_extractor_statuses),
+        patch(
+            "palace_mcp.audit.run.discover_extractor_statuses",
+            new=_fake_discover_extractor_statuses,
+        ),
     ):
         result = await run_audit(drv, registry, bundle="uw-ios")
 
@@ -137,13 +146,17 @@ async def test_bundle_mode_aggregates_failed_across_members() -> None:
                     "hotspot", "RUN_FAILED", last_run_id="r-a", error_code="some_err"
                 )
             }
-        return {
-            "hotspot": ExtractorStatus("hotspot", "OK", last_run_id="r-b")
-        }
+        return {"hotspot": ExtractorStatus("hotspot", "OK", last_run_id="r-b")}
 
     with (
-        patch("palace_mcp.memory.bundle.bundle_members", new=AsyncMock(return_value=members)),
-        patch("palace_mcp.audit.run.resolve_profile", new=AsyncMock(return_value=_SWIFT_KIT_PROFILE)),
+        patch(
+            "palace_mcp.memory.bundle.bundle_members",
+            new=AsyncMock(return_value=members),
+        ),
+        patch(
+            "palace_mcp.audit.run.resolve_profile",
+            new=AsyncMock(return_value=_SWIFT_KIT_PROFILE),
+        ),
         patch("palace_mcp.audit.run.discover_extractor_statuses", new=_fake_discover),
     ):
         result = await run_audit(drv, registry, bundle="uw-ios")
@@ -166,8 +179,13 @@ async def test_single_project_mode_unchanged() -> None:
     statuses = {"hotspot": ExtractorStatus("hotspot", "NOT_ATTEMPTED")}
 
     with (
-        patch("palace_mcp.audit.run.resolve_profile", new=AsyncMock(return_value=profile)),
-        patch("palace_mcp.audit.run.discover_extractor_statuses", new=AsyncMock(return_value=statuses)),
+        patch(
+            "palace_mcp.audit.run.resolve_profile", new=AsyncMock(return_value=profile)
+        ),
+        patch(
+            "palace_mcp.audit.run.discover_extractor_statuses",
+            new=AsyncMock(return_value=statuses),
+        ),
     ):
         result = await run_audit(drv, registry, project="tron-kit")
 

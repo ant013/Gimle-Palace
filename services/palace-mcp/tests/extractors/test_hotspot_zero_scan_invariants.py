@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -41,7 +41,7 @@ def _driver_with_git_history(db_file_count: int = 0) -> MagicMock:
     file_count_row = {"n": db_file_count}
 
     results = [
-        _single_result(prereq_row),   # prerequisite query
+        _single_result(prereq_row),  # prerequisite query
         _single_result(file_count_row),  # db file count query
     ]
     session = AsyncMock()

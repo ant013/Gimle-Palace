@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from palace_mcp.audit.contracts import AuditContract, RunInfo
+from palace_mcp.audit.contracts import AuditContract
 from palace_mcp.audit.discovery import ExtractorStatus
 from palace_mcp.extractors.base import BaseExtractor, ExtractorStats
 from palace_mcp.extractors.foundation.profiles import LanguageProfile
@@ -73,12 +73,17 @@ async def test_fetcher_out_parameter_still_populated() -> None:
     # discover says flaky_ext = OK (so fetcher will try to fetch it)
     ok_status = ExtractorStatus("flaky_ext", "OK", last_run_id="r1")
 
-    with patch(
-        "palace_mcp.audit.run.resolve_profile",
-        new=AsyncMock(return_value=LanguageProfile("swift_kit", frozenset({"flaky_ext"}))),
-    ), patch(
-        "palace_mcp.audit.run.discover_extractor_statuses",
-        new=AsyncMock(return_value={"flaky_ext": ok_status}),
+    with (
+        patch(
+            "palace_mcp.audit.run.resolve_profile",
+            new=AsyncMock(
+                return_value=LanguageProfile("swift_kit", frozenset({"flaky_ext"}))
+            ),
+        ),
+        patch(
+            "palace_mcp.audit.run.discover_extractor_statuses",
+            new=AsyncMock(return_value={"flaky_ext": ok_status}),
+        ),
     ):
         drv = _make_failing_driver()
         result = await run_audit(drv, registry, project="gimle")

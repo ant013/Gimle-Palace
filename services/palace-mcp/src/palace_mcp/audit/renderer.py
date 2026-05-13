@@ -270,7 +270,9 @@ def render_report(
     # Render status sections
     failed_extractors_section = ""
     if _run_failed:
-        failed_extractors_section = _JINJA_ENV.get_template("failed_extractors.md").render(
+        failed_extractors_section = _JINJA_ENV.get_template(
+            "failed_extractors.md"
+        ).render(
             project=project,
             run_failed=_run_failed,
         )

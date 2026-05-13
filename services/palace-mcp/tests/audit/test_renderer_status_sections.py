@@ -74,12 +74,8 @@ def test_blind_spots_not_attempted_renders_correctly() -> None:
 
 def test_three_separate_sections_all_present() -> None:
     """All three status sections present when all three buckets non-empty."""
-    run_failed = {
-        "ext_a": ExtractorStatus("ext_a", "RUN_FAILED", error_code="err")
-    }
-    fetch_failed = {
-        "ext_b": ExtractorStatus("ext_b", "FETCH_FAILED")
-    }
+    run_failed = {"ext_a": ExtractorStatus("ext_a", "RUN_FAILED", error_code="err")}
+    fetch_failed = {"ext_b": ExtractorStatus("ext_b", "FETCH_FAILED")}
     md = _render(
         blind_spots=["ext_c"],
         run_failed=run_failed,

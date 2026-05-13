@@ -44,7 +44,9 @@ def test_appendix_counts_each_status() -> None:
         blind_spots=["ext_na", "ext_ff"],
     )
     # Profile Coverage section must appear
-    assert "Profile Coverage" in md, f"Expected 'Profile Coverage' in report:\n{md[:500]}"
+    assert "Profile Coverage" in md, (
+        f"Expected 'Profile Coverage' in report:\n{md[:500]}"
+    )
     # Each status must be named
     assert "OK" in md
     assert "RUN_FAILED" in md or "Run Failed" in md or "Failed" in md

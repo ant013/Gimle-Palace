@@ -99,9 +99,9 @@ def _make_data_driver(extractor_name: str) -> Any:
         "window_days": 90,
     }
     call_results = [
-        _EmptyAsyncResult(),               # resolve_profile: returns None → ValueError → fallback profile
+        _EmptyAsyncResult(),  # resolve_profile: returns None → ValueError → fallback profile
         _RowAsyncResult([discovery_row]),  # discover_extractor_statuses: success run
-        _RowAsyncResult([finding_row]),    # fetch_audit_data: findings
+        _RowAsyncResult([finding_row]),  # fetch_audit_data: findings
     ]
     session = AsyncMock()
     session.run = AsyncMock(side_effect=call_results)

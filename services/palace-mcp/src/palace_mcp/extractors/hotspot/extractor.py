@@ -26,9 +26,7 @@ _PREREQ_QUERY = (
     "WHERE r.success = true RETURN count(r) AS n"
 )
 
-_FILE_COUNT_QUERY = (
-    "MATCH (f:File {project_id: $project_id}) RETURN count(f) AS n"
-)
+_FILE_COUNT_QUERY = "MATCH (f:File {project_id: $project_id}) RETURN count(f) AS n"
 
 
 class _HotspotError(ExtractorError):
@@ -77,7 +75,9 @@ class HotspotExtractor(BaseExtractor):
         run_started_at = datetime.now(tz=timezone.utc)
 
         # Prerequisite: git_history must have run first (else all churn = 0 → all scores = 0)
-        git_history_runs = await _count_git_history_runs(driver, project=ctx.project_slug)
+        git_history_runs = await _count_git_history_runs(
+            driver, project=ctx.project_slug
+        )
         if git_history_runs == 0:
             raise _HotspotError(
                 "prerequisite_missing",

@@ -85,26 +85,42 @@ async def test_hotspot_proceeds_when_git_history_present(tmp_path: Path) -> None
     )
 
     # Lizard result must include ≥1 function to pass the lizard_parser_zero_functions invariant
-    one_fn = ParsedFunction(name="bar", start_line=1, end_line=1, ccn=1, parameter_count=0, nloc=1)
+    one_fn = ParsedFunction(
+        name="bar", start_line=1, end_line=1, ccn=1, parameter_count=0, nloc=1
+    )
     lizard_result = LizardRunResult(
-        parsed=(ParsedFile(path="src/foo.swift", language="swift", functions=(one_fn,)),),
+        parsed=(
+            ParsedFile(path="src/foo.swift", language="swift", functions=(one_fn,)),
+        ),
         skipped_files=(),
     )
 
     with (
         patch("palace_mcp.mcp_server.get_settings", return_value=_fake_settings()),
-        patch("palace_mcp.extractors.hotspot.extractor.lizard_runner.run_batch",
-              new=AsyncMock(return_value=lizard_result)),
-        patch("palace_mcp.extractors.hotspot.extractor.churn_query.fetch_churn",
-              new=AsyncMock(return_value={"src/foo.swift": 3})),
-        patch("palace_mcp.extractors.hotspot.extractor.neo4j_writer.write_file_and_functions",
-              new=AsyncMock()),
-        patch("palace_mcp.extractors.hotspot.extractor.neo4j_writer.write_hotspot_score",
-              new=AsyncMock()),
-        patch("palace_mcp.extractors.hotspot.extractor.neo4j_writer.evict_stale_functions",
-              new=AsyncMock()),
-        patch("palace_mcp.extractors.hotspot.extractor.neo4j_writer.mark_dead_files_zero",
-              new=AsyncMock()),
+        patch(
+            "palace_mcp.extractors.hotspot.extractor.lizard_runner.run_batch",
+            new=AsyncMock(return_value=lizard_result),
+        ),
+        patch(
+            "palace_mcp.extractors.hotspot.extractor.churn_query.fetch_churn",
+            new=AsyncMock(return_value={"src/foo.swift": 3}),
+        ),
+        patch(
+            "palace_mcp.extractors.hotspot.extractor.neo4j_writer.write_file_and_functions",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.hotspot.extractor.neo4j_writer.write_hotspot_score",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.hotspot.extractor.neo4j_writer.evict_stale_functions",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.hotspot.extractor.neo4j_writer.mark_dead_files_zero",
+            new=AsyncMock(),
+        ),
     ):
         stats = await HotspotExtractor().run(graphiti=graphiti, ctx=ctx)
 

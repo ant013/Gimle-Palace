@@ -12,7 +12,6 @@ from typing import Any
 
 from palace_mcp.audit.discovery import (
     ExtractorStatus,
-    ExtractorStatusValue,
     discover_extractor_statuses,
 )
 from palace_mcp.audit.contracts import RunInfo
@@ -72,7 +71,10 @@ async def run_audit(
     else:
         # bundle mode — Task 2.3b
         return await _run_bundle(
-            driver, extractor_registry, bundle=bundle, depth=depth  # type: ignore[arg-type]
+            driver,
+            extractor_registry,
+            bundle=bundle,
+            depth=depth,  # type: ignore[arg-type]
         )
 
 
@@ -90,10 +92,12 @@ async def _run_single_project(
     except ValueError:
         # Unknown profile — include all auditable registry extractors as applicable
         auditable_names = frozenset(
-            name for name, ext in extractor_registry.items()
+            name
+            for name, ext in extractor_registry.items()
             if ext.audit_contract() is not None
         )
         from palace_mcp.extractors.foundation.profiles import LanguageProfile
+
         profile = LanguageProfile("unknown", auditable_names)
 
     # 2. Discover extractor statuses (last-attempt-wins, no success filter)
@@ -152,9 +156,7 @@ async def _run_single_project(
     generated_at = datetime.now(tz=timezone.utc).isoformat()
 
     # Buckets by status for renderer new sections (Task 2.4)
-    run_failed = {
-        n: s for n, s in all_statuses.items() if s.status == "RUN_FAILED"
-    }
+    run_failed = {n: s for n, s in all_statuses.items() if s.status == "RUN_FAILED"}
     fetch_failed_statuses = {
         n: s for n, s in all_statuses.items() if s.status == "FETCH_FAILED"
     }
@@ -222,6 +224,7 @@ async def _run_bundle(
             profile = await resolve_profile(driver, slug)
         except ValueError:
             from palace_mcp.extractors.foundation.profiles import LanguageProfile
+
             profile = LanguageProfile("unknown", frozenset())
 
         member_statuses = await discover_extractor_statuses(
@@ -247,8 +250,11 @@ async def _run_bundle(
         )
         for name in fetch_failed:
             member_statuses[name] = ExtractorStatus(
-                extractor_name=name, status="FETCH_FAILED",
-                last_run_id=member_statuses.get(name, ExtractorStatus(name, "OK")).last_run_id,
+                extractor_name=name,
+                status="FETCH_FAILED",
+                last_run_id=member_statuses.get(
+                    name, ExtractorStatus(name, "OK")
+                ).last_run_id,
             )
             bundle_statuses[(slug, name)] = member_statuses[name]
 
@@ -256,7 +262,9 @@ async def _run_bundle(
         for name, sec in sections.items():
             all_sections[f"{slug}/{name}"] = sec
         for name in (
-            n for n, s in member_statuses.items() if s.status in ("NOT_ATTEMPTED", "FETCH_FAILED")
+            n
+            for n, s in member_statuses.items()
+            if s.status in ("NOT_ATTEMPTED", "FETCH_FAILED")
         ):
             all_blind_spots.append(f"{slug}/{name}")
         for name, s in member_statuses.items():
