@@ -120,6 +120,11 @@ def render_report(
     severity_mappers: dict[str, Callable[[Any], Severity]] | None = None,
     depth: str = "full",
     generated_at: str | None = None,
+    # Task 2.4 — typed status buckets (accepted now, rendered in Task 2.4)
+    all_statuses: dict[str, Any] | None = None,
+    run_failed: dict[str, Any] | None = None,
+    fetch_failed_statuses: dict[str, Any] | None = None,
+    not_applicable: dict[str, Any] | None = None,
 ) -> str:
     """Render the complete audit report as markdown.
 
