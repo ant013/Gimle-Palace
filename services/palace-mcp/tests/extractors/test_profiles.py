@@ -177,6 +177,21 @@ def test_profile_name_matches_key() -> None:
         assert p.name == k, f"PROFILES[{k!r}].name = {p.name!r}"
 
 
+def test_swift_kit_includes_new_extractors() -> None:
+    """Regression: testability_di + reactive_dependency_tracer must stay in swift_kit profile.
+
+    Both were added via GIM-284 (PR #163). This test guards against removal.
+    Already satisfied on develop @ 0ac5e02 — kept as regression guard (W1).
+    """
+    from palace_mcp.extractors.foundation.profiles import PROFILES
+
+    actual = PROFILES["swift_kit"].audit_extractors
+    assert "testability_di" in actual, "testability_di missing from swift_kit profile"
+    assert "reactive_dependency_tracer" in actual, (
+        "reactive_dependency_tracer missing from swift_kit profile"
+    )
+
+
 def test_audit_extractors_is_frozen() -> None:
     """audit_extractors is immutable (frozenset)."""
     from palace_mcp.extractors.foundation.profiles import PROFILES

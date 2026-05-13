@@ -15,13 +15,20 @@ DEFAULT_EXTRACTORS=(
     symbol_index_swift
     git_history
     dependency_surface
-    public_api_surface
-    dead_symbol_binary_surface
+    arch_layer
+    error_handling_policy
+    crypto_domain_model
     hotspot
-    cross_module_contract
     code_ownership
     cross_repo_version_skew
-    crypto_domain_model
+    public_api_surface
+    cross_module_contract
+    dead_symbol_binary_surface
+    coding_convention
+    localization_accessibility
+    reactive_dependency_tracer
+    testability_di
+    hot_path_profiler
 )
 
 usage() {
