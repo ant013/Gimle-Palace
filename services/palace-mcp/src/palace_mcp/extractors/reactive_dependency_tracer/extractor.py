@@ -9,8 +9,6 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from graphiti_core import Graphiti
 
-from palace_mcp.audit.contracts import Severity
-
 from palace_mcp.extractors.base import (
     BaseExtractor,
     ExtractorRunContext,
@@ -49,7 +47,7 @@ from palace_mcp.extractors.reactive_dependency_tracer.swift_helper_contract impo
 )
 
 if TYPE_CHECKING:
-    from palace_mcp.audit.contracts import AuditContract
+    from palace_mcp.audit.contracts import AuditContract, Severity
 
 _HELPER_JSON_FILENAME = "reactive_facts.json"
 
@@ -68,7 +66,9 @@ ORDER BY
 """
 
 
-def _reactive_severity_mapper(value: str | None) -> Severity:
+def _reactive_severity_mapper(value: str | None) -> "Severity":
+    from palace_mcp.audit.contracts import Severity
+
     mapping = {
         "error": Severity.HIGH,
         "warning": Severity.MEDIUM,
