@@ -5,9 +5,11 @@ from __future__ import annotations
 from collections import defaultdict
 import json
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from graphiti_core import Graphiti
+
+from palace_mcp.audit.contracts import Severity
 
 from palace_mcp.extractors.base import (
     BaseExtractor,
@@ -46,6 +48,9 @@ from palace_mcp.extractors.reactive_dependency_tracer.swift_helper_contract impo
     parse_swift_helper_contract,
 )
 
+if TYPE_CHECKING:
+    from palace_mcp.audit.contracts import AuditContract
+
 _HELPER_JSON_FILENAME = "reactive_facts.json"
 
 _AUDIT_QUERY = """\
@@ -63,9 +68,7 @@ ORDER BY
 """
 
 
-def _reactive_severity_mapper(value: str | None) -> "Severity":
-    from palace_mcp.audit.contracts import Severity
-
+def _reactive_severity_mapper(value: str | None) -> Severity:
     mapping = {
         "error": Severity.HIGH,
         "warning": Severity.MEDIUM,
@@ -113,7 +116,7 @@ class ReactiveDependencyTracerExtractor(BaseExtractor):
         "FOR (n:ReactiveDiagnostic) ON (n.project, n.commit_sha, n.language, n.file_path, n.diagnostic_code)",
     ]
 
-    def audit_contract(self) -> "AuditContract":
+    def audit_contract(self) -> AuditContract:
         from palace_mcp.audit.contracts import AuditContract
 
         return AuditContract(
