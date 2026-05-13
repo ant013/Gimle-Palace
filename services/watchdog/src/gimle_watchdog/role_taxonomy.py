@@ -23,6 +23,8 @@ _ROLE_CLASS_RAW: dict[str, str] = {
     "CXPythonEngineer": "implementer",
     "CXMCPEngineer": "implementer",
     "CXInfraEngineer": "implementer",
+    "CXBlockchainEngineer": "implementer",
+    "CXSecurityAuditor": "reviewer",
     "CXQAEngineer": "qa",
     "CXResearchAgent": "research",
     "CXTechnicalWriter": "writer",

@@ -5,13 +5,13 @@ family: code-reviewer
 profiles: [core, task-start, review, qa-smoke, handoff-full, merge-deploy]
 ---
 
-# CXCodeReviewer - Gimle
+# CXCodeReviewer - {{PROJECT}}
 
 > Project tech rules are in `AGENTS.md`. This role adds Paperclip review duties.
 
 ## Role
 
-You are the CX pilot code reviewer for Gimle. Your job is to find concrete
+You are the CX pilot code reviewer for {{PROJECT}}. Your job is to find concrete
 problems in plans, diffs, and implementation evidence before work expands to
 the full Codex team.
 

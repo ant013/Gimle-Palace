@@ -51,6 +51,9 @@ class CompanyConfig:
 @dataclass(frozen=True)
 class DaemonConfig:
     poll_interval_seconds: int
+    recovery_enabled: bool = False
+    recovery_first_run_baseline_only: bool = True
+    max_actions_per_tick: int = 1
 
 
 @dataclass(frozen=True)
@@ -83,6 +86,19 @@ _HANDOFF_KNOWN_KEYS = frozenset(
         "handoff_comments_per_issue",
         "handoff_max_issues_per_tick",
         "handoff_alert_cooldown_min",
+        "handoff_recent_window_min",
+        "handoff_alert_soft_budget_per_tick",
+        "handoff_alert_hard_budget_per_tick",
+        # GIM-244 — 3-tier detector keys
+        "handoff_cross_team_enabled",
+        "handoff_ownerless_enabled",
+        "handoff_infra_block_enabled",
+        "handoff_stale_bundle_enabled",
+        "handoff_auto_repair_enabled",
+        "handoff_escalation_delay_min",
+        "handoff_repair_delay_min",
+        "handoff_stale_bundle_threshold_hours",
+        "handoff_ownerless_comment_limit",
     }
 )
 
@@ -96,6 +112,19 @@ class HandoffConfig:
     handoff_comments_per_issue: int = 5
     handoff_max_issues_per_tick: int = 30
     handoff_alert_cooldown_min: int = 30
+    handoff_recent_window_min: int = 180
+    handoff_alert_soft_budget_per_tick: int = 5
+    handoff_alert_hard_budget_per_tick: int = 20
+    # GIM-244 — 3-tier detector fields (all disabled by default)
+    handoff_cross_team_enabled: bool = False
+    handoff_ownerless_enabled: bool = False
+    handoff_infra_block_enabled: bool = False
+    handoff_stale_bundle_enabled: bool = False
+    handoff_auto_repair_enabled: bool = False
+    handoff_escalation_delay_min: int = 90
+    handoff_repair_delay_min: int = 60
+    handoff_stale_bundle_threshold_hours: int = 24
+    handoff_ownerless_comment_limit: int = 50
 
 
 @dataclass(frozen=True)
@@ -225,6 +254,14 @@ def load_config(path: Path) -> Config:
         poll_interval_seconds=_require_positive_int(
             daemon_raw.get("poll_interval_seconds"), "daemon.poll_interval_seconds"
         ),
+        recovery_enabled=bool(daemon_raw.get("recovery_enabled", False)),
+        recovery_first_run_baseline_only=bool(
+            daemon_raw.get("recovery_first_run_baseline_only", True)
+        ),
+        max_actions_per_tick=_require_positive_int(
+            daemon_raw.get("max_actions_per_tick", 1),
+            "daemon.max_actions_per_tick",
+        ),
     )
 
     cooldowns_raw = raw.get("cooldowns") or {}
@@ -271,12 +308,63 @@ def load_config(path: Path) -> Config:
         raise ConfigError(f"handoff section has unknown keys: {sorted(unknown)}")
     handoff = HandoffConfig(
         handoff_alert_enabled=bool(handoff_raw.get("handoff_alert_enabled", False)),
-        handoff_comment_lookback_min=int(handoff_raw.get("handoff_comment_lookback_min", 5)),
-        handoff_wrong_assignee_min=int(handoff_raw.get("handoff_wrong_assignee_min", 3)),
-        handoff_review_owner_min=int(handoff_raw.get("handoff_review_owner_min", 5)),
-        handoff_comments_per_issue=int(handoff_raw.get("handoff_comments_per_issue", 5)),
-        handoff_max_issues_per_tick=int(handoff_raw.get("handoff_max_issues_per_tick", 30)),
-        handoff_alert_cooldown_min=int(handoff_raw.get("handoff_alert_cooldown_min", 30)),
+        handoff_comment_lookback_min=_require_positive_int(
+            handoff_raw.get("handoff_comment_lookback_min", 5),
+            "handoff.handoff_comment_lookback_min",
+        ),
+        handoff_wrong_assignee_min=_require_positive_int(
+            handoff_raw.get("handoff_wrong_assignee_min", 3),
+            "handoff.handoff_wrong_assignee_min",
+        ),
+        handoff_review_owner_min=_require_positive_int(
+            handoff_raw.get("handoff_review_owner_min", 5),
+            "handoff.handoff_review_owner_min",
+        ),
+        handoff_comments_per_issue=_require_positive_int(
+            handoff_raw.get("handoff_comments_per_issue", 5),
+            "handoff.handoff_comments_per_issue",
+        ),
+        handoff_max_issues_per_tick=_require_positive_int(
+            handoff_raw.get("handoff_max_issues_per_tick", 30),
+            "handoff.handoff_max_issues_per_tick",
+        ),
+        handoff_alert_cooldown_min=_require_positive_int(
+            handoff_raw.get("handoff_alert_cooldown_min", 30),
+            "handoff.handoff_alert_cooldown_min",
+        ),
+        handoff_recent_window_min=_require_positive_int(
+            handoff_raw.get("handoff_recent_window_min", 180),
+            "handoff.handoff_recent_window_min",
+        ),
+        handoff_alert_soft_budget_per_tick=_require_positive_int(
+            handoff_raw.get("handoff_alert_soft_budget_per_tick", 5),
+            "handoff.handoff_alert_soft_budget_per_tick",
+        ),
+        handoff_alert_hard_budget_per_tick=_require_positive_int(
+            handoff_raw.get("handoff_alert_hard_budget_per_tick", 20),
+            "handoff.handoff_alert_hard_budget_per_tick",
+        ),
+        handoff_cross_team_enabled=bool(handoff_raw.get("handoff_cross_team_enabled", False)),
+        handoff_ownerless_enabled=bool(handoff_raw.get("handoff_ownerless_enabled", False)),
+        handoff_infra_block_enabled=bool(handoff_raw.get("handoff_infra_block_enabled", False)),
+        handoff_stale_bundle_enabled=bool(handoff_raw.get("handoff_stale_bundle_enabled", False)),
+        handoff_auto_repair_enabled=bool(handoff_raw.get("handoff_auto_repair_enabled", False)),
+        handoff_escalation_delay_min=_require_positive_int(
+            handoff_raw.get("handoff_escalation_delay_min", 90),
+            "handoff.handoff_escalation_delay_min",
+        ),
+        handoff_repair_delay_min=_require_positive_int(
+            handoff_raw.get("handoff_repair_delay_min", 60),
+            "handoff.handoff_repair_delay_min",
+        ),
+        handoff_stale_bundle_threshold_hours=_require_positive_int(
+            handoff_raw.get("handoff_stale_bundle_threshold_hours", 24),
+            "handoff.handoff_stale_bundle_threshold_hours",
+        ),
+        handoff_ownerless_comment_limit=_require_positive_int(
+            handoff_raw.get("handoff_ownerless_comment_limit", 50),
+            "handoff.handoff_ownerless_comment_limit",
+        ),
     )
 
     return Config(

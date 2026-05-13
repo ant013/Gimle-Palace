@@ -1,14 +1,18 @@
+<!-- paperclip:handoff-contract:v2 -->
 ## Phase handoff discipline (iron rule)
 
+<!-- paperclip:team-local-roster:v1 -->
 Between plan phases, **explicit reassign** to next-phase agent. Never leave "someone will pick up".
 
-Hand off via PATCH `status + assigneeAgentId + comment` in one call, then GET-verify assignee. Mismatch → retry once; still mismatch → `status=blocked` + escalate Board with `actual` vs `expected`. Silent exit (push without handoff) = 8h stall (GIM-182, GIM-48 precedents).
+<!-- paperclip:handoff-exit-shapes:v1 -->
+<!-- paperclip:handoff-verify-status-assignee:v1 -->
+Before exit: `status=done` OR `assigneeAgentId` set to next agent / your CXCTO. Mandatory. PATCH `status + assigneeAgentId + comment` in one call → GET-verify both `status` and `assigneeAgentId`; mismatch → retry once → still mismatch → `status=blocked` + escalate Board.
 
 ### Handoff matrix
 
 | Phase done | Next | Required handoff |
 |---|---|---|
-| 1.1 Formalization (CTO) | 1.2 Plan-first | `git mv`/rename/`GIM-N` swap on FB directly (no sub-issue) → push → `assignee=CXCodeReviewer` + formal mention |
+| 1.1 Formalization (CTO) | 1.2 Plan-first | `git mv`/rename/`{{ISSUE_PREFIX}}-N` swap on FB directly (no sub-issue) → push → `assignee=CXCodeReviewer` + formal mention |
 | 1.2 Plan-first (CR) | 2.x Implementation | `assignee=<implementer>` + formal mention |
 | 2 Implementation | 3.1 Mechanical CR | `assignee=CXCodeReviewer` + push done + formal mention |
 | 3.1 CR APPROVE | 3.2 Codex | `assignee=CodexArchitectReviewer` + formal mention |
@@ -53,7 +57,7 @@ After the handoff PATCH returns 200 and GET-verify confirms `assigneeAgentId == 
 
 Why: between the PATCH (which changes assignee away from you) and your subprocess exit, paperclip's run-supervisor sees the issue is no longer yours and SIGTERMs the process. Any tool call in that window dies mid-flight, the run is marked `claude_transient_upstream` (Exit 143), and a retry is queued — only to be cancelled with `issue_reassigned` once the next agent picks up.
 
-Evidence: GIM-216 — 11 successful handoffs misclassified as failures because agents kept making tool calls after the PATCH. Pre-slim baseline GIM-193 had zero such failures.
+Evidence: {{evidence.handoff_misclassified_issue}} — 11 successful handoffs misclassified as failures because agents kept making tool calls after the PATCH. Pre-slim baseline {{evidence.pre_slim_baseline_issue}} had zero such failures.
 
 If post-handoff cleanup is genuinely needed (e.g. local worktree state), do it BEFORE the handoff PATCH, not after.
 
@@ -71,7 +75,7 @@ After PR squash-merge, CXCTO MUST:
 1. `PATCH issue` → `status=done, assigneeAgentId=null, assigneeUserId=null` + comment with merge SHA. Silent done = chain breaks.
 2. If issue body lists "next-queue" / queue-position / autonomous-trigger pointer to a follow-up slice — POST a new issue for that next position, `assigneeAgentId=<CXCTO>`, body links spec/plan + "queue N+1/M". Skipping = next slice never starts.
 
-Precedent: GIM-229 stalled 12h post-merge because PR was squashed but issue stayed `blocked` and #6 was never opened.
+Precedent: {{evidence.post_merge_stall_issue}} stalled 12h post-merge because PR was squashed but issue stayed `blocked` and #6 was never opened.
 
 Any missing → don't close, escalate Board.
 
@@ -84,7 +88,7 @@ Any missing → don't close, escalate Board.
 1. Commit SHA: `<git rev-parse HEAD on FB>`
 2. `docker compose --profile <x> ps` — containers healthy
 3. `/healthz` — `{"status":"ok",...}` (or service equivalent)
-4. Real MCP tool call — `palace.<tool>()` + output (not just healthz)
+4. Real MCP tool call — `{{mcp.tool_namespace}}.<tool>()` + output (not just healthz)
 5. Ingest CLI / runtime smoke — command output
 6. Plan-specific invariant — e.g. `MATCH (n) RETURN DISTINCT n.group_id`, expected 1 row
 7. Production checkout restored to expected branch (per project's checkout-discipline)
@@ -96,7 +100,7 @@ Any missing → don't close, escalate Board.
 
 ### Lock stale edge case
 
-If `POST /release` returns 200 but `executionAgentNameKey` doesn't reset (GIM-52, reported by CodexArchitectReviewer) — try `PATCH assignee=me` → `POST /release` → `PATCH assignee=<next>`. Fails twice → escalate Board with issue id, run id, attempt sequence.
+If `POST /release` returns 200 but `executionAgentNameKey` doesn't reset ({{evidence.release_reset_issue}}, reported by CodexArchitectReviewer) — try `PATCH assignee=me` → `POST /release` → `PATCH assignee=<next>`. Fails twice → escalate Board with issue id, run id, attempt sequence.
 
 ### Self-check before handoff
 

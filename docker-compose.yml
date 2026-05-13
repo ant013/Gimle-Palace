@@ -42,6 +42,7 @@ services:
       PAPERCLIP_API_URL: "${PALACE_PAPERCLIP_API_URL:-http://host.docker.internal:3100}"
       PAPERCLIP_API_KEY: "${PAPERCLIP_API_KEY:-}"
       PALACE_SCIP_INDEX_PATHS: "${PALACE_SCIP_INDEX_PATHS:-}"
+      PALACE_ADR_BASE_DIR: "${PALACE_ADR_BASE_DIR:-/var/lib/palace/adr}"
     # Non-root user for security hardening (GIM-101a, T10 — Architect F19)
     user: "1000:1000"
     depends_on:

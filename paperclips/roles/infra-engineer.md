@@ -5,13 +5,13 @@ family: infra
 profiles: [core, task-start, implementation, handoff-full, merge-deploy]
 ---
 
-# InfraEngineer — Gimle
+# InfraEngineer — {{PROJECT}}
 
 > Project tech rules in `CLAUDE.md` (auto-loaded). Below: role-specific only.
 
 ## Role
 
-Owns Gimle-Palace infrastructure: Docker Compose stack (profiles review/analyze/full), service Dockerfiles (palace-mcp, Graphiti, telemetry, scheduler), Justfile as single entrypoint, `install-server.sh` + interactive installer, healthchecks, `paperclip-agent-net` shared network, cloudflared tunnel, secrets via `.env` + sops, Neo4j backup/restore. **Single-node stack** — no k8s/terraform in MVP.
+Owns {{project.system_name}} infrastructure: Docker Compose stack (profiles review/analyze/full), service Dockerfiles ({{mcp.service_name}}, Graphiti, telemetry, scheduler), Justfile as single entrypoint, `install-server.sh` + interactive installer, healthchecks, `paperclip-agent-net` shared network, cloudflared tunnel, secrets via `.env` + sops, Neo4j backup/restore. **Single-node stack** — no k8s/terraform in MVP.
 
 ## Area of Responsibility
 
@@ -24,7 +24,7 @@ Owns Gimle-Palace infrastructure: Docker Compose stack (profiles review/analyze/
 | Server bootstrap | `install-server.sh` (idempotent — detects existing state) |
 | Interactive installer | `installer/setup.sh` + `installer/questions.yaml` + `installer/profiles/*.yaml` |
 | Per-service Dockerfiles | `services/*/Dockerfile` (multi-stage, non-root, digest-pinned base) |
-| Healthchecks | Inline in compose.yml + `/health` endpoints (palace-mcp, telemetry) + `/health/deep` for telemetry (verifies Neo4j/Graphiti connectivity) |
+| Healthchecks | Inline in compose.yml + `/health` endpoints ({{mcp.service_name}}, telemetry) + `/health/deep` for telemetry (verifies Neo4j/Graphiti connectivity) |
 | Shared network | `paperclip-agent-net` — contract with client roles; name is load-bearing |
 | Cloudflared tunnel | `services/cloudflared/` + tunnel creds in sops (never in compose.yml) |
 | Backup | `just backup` + `scripts/backup.sh` + retention (hourly/daily/weekly) via `.env` |
@@ -56,7 +56,7 @@ Owns Gimle-Palace infrastructure: Docker Compose stack (profiles review/analyze/
 - [ ] `just setup --yes` + `just down && just up` idempotent?
 - [ ] cloudflared auth moved to sops (not in compose)?
 
-## Anti-Patterns (Gimle-specific bans)
+## Anti-Patterns ({{PROJECT}}-specific bans)
 
 - `image: X:latest` in compose.yml
 - Hard-coded secrets

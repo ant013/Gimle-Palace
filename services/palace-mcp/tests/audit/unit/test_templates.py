@@ -1,7 +1,4 @@
-"""Unit tests for per-extractor Jinja2 section templates (S1.2).
-
-14 tests: 7 empty-case + 7 with-findings-case, one per extractor template.
-"""
+"""Unit tests for per-extractor Jinja2 section templates (S1.2)."""
 
 from __future__ import annotations
 
@@ -54,6 +51,45 @@ class TestHotspotTemplate:
         assert "src/heavy.py" in rendered
         assert "4.20" in rendered
         assert "CRITICAL" in rendered
+
+
+# ---------------------------------------------------------------------------
+# hot_path_profiler
+# ---------------------------------------------------------------------------
+
+HOT_PATH_STATS_EMPTY = {"total": 0}
+HOT_PATH_FINDING = {
+    "trace_id": "track-a-launch",
+    "qualified_name": "WalletApp.AppDelegate.bootstrap()",
+    "symbol_name": "WalletApp.AppDelegate.bootstrap()",
+    "cpu_samples": 420,
+    "wall_ms": 260,
+    "cpu_share": 0.35,
+    "wall_share": 0.34,
+    "source_format": "instruments",
+    "sev": "high",
+}
+HOT_PATH_STATS_FULL = {"total": 1}
+
+
+class Test_hot_path_profiler_Template:
+    def test_hot_path_profiler_empty(self) -> None:
+        rendered = render_section(
+            _section("hot_path_profiler", [], HOT_PATH_STATS_EMPTY), "sev", 100
+        )
+        assert "No findings" in rendered
+        assert "hot_path_profiler" in rendered
+
+    def test_hot_path_profiler_with_findings(self) -> None:
+        rendered = render_section(
+            _section("hot_path_profiler", [HOT_PATH_FINDING], HOT_PATH_STATS_FULL),
+            "sev",
+            100,
+        )
+        assert "track-a-launch" in rendered
+        assert "WalletApp.AppDelegate.bootstrap()" in rendered
+        assert "35.00%" in rendered
+        assert "HIGH" in rendered
 
 
 # ---------------------------------------------------------------------------
@@ -260,3 +296,130 @@ class TestCrossModuleContractTemplate:
         assert "AppModule" in rendered
         assert "CoreModule" in rendered
         assert "HIGH" in rendered
+
+
+# ---------------------------------------------------------------------------
+# arch_layer
+# ---------------------------------------------------------------------------
+
+ARCH_LAYER_STATS_EMPTY_NO_RULES = {
+    "module_count": 2,
+    "edge_count": 1,
+    "rule_count": 0,
+    "parser_warning_count": 0,
+    "rule_source": "",
+    "rules_declared": False,
+}
+
+ARCH_LAYER_STATS_EMPTY_WITH_RULES = {
+    "module_count": 2,
+    "edge_count": 1,
+    "rule_count": 2,
+    "parser_warning_count": 0,
+    "rule_source": ".palace/architecture-rules.yaml",
+    "rules_declared": True,
+}
+
+ARCH_LAYER_FINDING = {
+    "kind": "forbidden_dependency",
+    "severity": "high",
+    "src_module": "WalletCore",
+    "dst_module": "WalletUI",
+    "rule_id": "core_no_ui_import",
+    "message": "Core module must not depend on UI module",
+    "evidence": "manifest edge: WalletCore -> WalletUI [target_dep]",
+    "file": "Package.swift",
+    "start_line": 0,
+    "run_id": "run-arch-1",
+}
+
+ARCH_LAYER_STATS_FULL = {
+    **ARCH_LAYER_STATS_EMPTY_WITH_RULES,
+    "module_count": 2,
+    "edge_count": 1,
+    "rule_count": 2,
+}
+
+
+class TestArchLayerTemplate:
+    def test_empty_no_rules(self) -> None:
+        rendered = render_section(
+            _section("arch_layer", [], ARCH_LAYER_STATS_EMPTY_NO_RULES),
+            "severity",
+            100,
+        )
+        assert "no architecture rules declared" in rendered.lower()
+
+    def test_empty_with_rules(self) -> None:
+        rendered = render_section(
+            _section("arch_layer", [], ARCH_LAYER_STATS_EMPTY_WITH_RULES),
+            "severity",
+            100,
+        )
+        assert "No architecture violations" in rendered or "rules pass" in rendered
+
+    def test_with_findings(self) -> None:
+        rendered = render_section(
+            _section("arch_layer", [ARCH_LAYER_FINDING], ARCH_LAYER_STATS_FULL),
+            "severity",
+            100,
+        )
+        assert "WalletCore" in rendered
+        assert "WalletUI" in rendered
+        assert "core_no_ui_import" in rendered
+        assert "HIGH" in rendered
+
+
+# ---------------------------------------------------------------------------
+# error_handling_policy
+# ---------------------------------------------------------------------------
+
+ERROR_POLICY_EMPTY = {
+    "kind": "",
+    "severity": "informational",
+    "file": "",
+    "start_line": 0,
+    "message": "",
+    "catch_site_count": 7,
+    "files_scanned": 4,
+    "swallowed_count": 2,
+    "rethrows_count": 1,
+}
+
+ERROR_POLICY_FINDING = {
+    "kind": "empty_catch_in_crypto_path",
+    "severity": "critical",
+    "file": "Sources/Bad/CryptoSigner.swift",
+    "start_line": 12,
+    "end_line": 12,
+    "message": "Empty catch in crypto path",
+    "catch_site_count": 7,
+    "files_scanned": 4,
+    "swallowed_count": 2,
+    "rethrows_count": 1,
+}
+
+
+class TestErrorHandlingPolicyTemplate:
+    def test_empty(self) -> None:
+        rendered = render_section(
+            _section("error_handling_policy", [ERROR_POLICY_EMPTY], {"total": 1}),
+            "severity",
+            100,
+        )
+        assert "No error handling issues found" in rendered
+        assert "Catch sites indexed: 7" in rendered
+
+    def test_with_findings(self) -> None:
+        rendered = render_section(
+            _section(
+                "error_handling_policy",
+                [ERROR_POLICY_FINDING],
+                {"total": 1},
+            ),
+            "severity",
+            100,
+        )
+        assert "CryptoSigner.swift" in rendered
+        assert "CRITICAL" in rendered
+        assert "Catch sites indexed: 7" in rendered

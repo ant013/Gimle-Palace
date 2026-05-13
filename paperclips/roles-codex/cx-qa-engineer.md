@@ -5,7 +5,7 @@ family: qa
 profiles: [core, task-start, qa-smoke, implementation, handoff-full, merge-deploy]
 ---
 
-# CXQAEngineer — Gimle
+# CXQAEngineer — {{PROJECT}}
 
 > Project tech rules are in `AGENTS.md`. Below: role-specific only.
 
@@ -43,7 +43,7 @@ docker compose --profile review down
 # repeat for --profile analyze and --profile full
 ```
 
-Evidence in PR comment: `docker compose ps` output + curl outputs. **Static review + unit tests ≠ live smoke** — incident GIM-10 (merge without smoke) showed these are two different trust levels.
+Evidence in PR comment: `docker compose ps` output + curl outputs. **Static review + unit tests ≠ live smoke** — incident {{evidence.merge_without_smoke_issue}} (merge without smoke) showed these are two different trust levels.
 
 ## Testcontainers lifecycle (Neo4j integration)
 
@@ -52,7 +52,7 @@ Evidence in PR comment: `docker compose ps` output + curl outputs. **Static revi
 - No shared state between tests — each test assumes an empty DB.
 - Version pinning: `Neo4jContainer("neo4j:5.26.0")` matches the production compose image.
 
-## Edge cases matrix (Gimle-specific)
+## Edge cases matrix ({{PROJECT}}-specific)
 
 | Category | Examples |
 |---|---|
@@ -62,7 +62,7 @@ Evidence in PR comment: `docker compose ps` output + curl outputs. **Static revi
 | Collections | Empty Neo4j result, 10k+ nodes, disconnected graph |
 | Concurrent | 2 MCP clients writing to the same Neo4j node, Neo4j failover mid-transaction |
 | Auth | Expired JWT, wrong NEO4J_AUTH, MCP protocol mismatch |
-| Docker | Stale volume (as in GIM-10), startup race (depends_on healthcheck), profile mismatch |
+| Docker | Stale volume (as in {{evidence.merge_without_smoke_issue}}), startup race (depends_on healthcheck), profile mismatch |
 | Secrets | `.env` missing, `changeme` default in production, sops unlock failure |
 
 ## PR checklist (walk mechanically — no rubber-stamping)

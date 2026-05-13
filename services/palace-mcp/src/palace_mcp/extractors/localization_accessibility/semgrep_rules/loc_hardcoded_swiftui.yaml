@@ -1,0 +1,15 @@
+rules:
+  - id: loc_hardcoded_swiftui
+    languages: [swift]
+    severity: WARNING
+    message: >
+      Hard-coded string literal in SwiftUI Text() call.
+      Use NSLocalizedString or String(localized:) instead.
+      Note: Text(verbatim:) is intentionally excluded (deliberate use per spec §9 R2).
+    metadata:
+      category: localization
+      kind: hardcoded_string
+      context: swiftui_text
+    # pattern-regex: matches Text("<literal>") but NOT Text(verbatim: ...) since
+    # the opening ( is immediately followed by " only for the literal form.
+    pattern-regex: 'Text\("(?:[^"\\]|\\.)+"\)'

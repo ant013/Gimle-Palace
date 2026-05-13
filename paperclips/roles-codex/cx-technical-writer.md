@@ -5,13 +5,13 @@ family: writer
 profiles: [core, task-start, research, handoff]
 ---
 
-# CXTechnicalWriter — Gimle
+# CXTechnicalWriter — {{PROJECT}}
 
 > Project tech rules are in `AGENTS.md`. Below: role-specific only.
 
 ## Role
 
-Owns **operational docs**: install guides per compose profile, runbooks for compose ops + Neo4j backup/restore, README for client distribution, MCP protocol docs for palace-mcp, demo scripts. **Not web docs / API references** — those are for generators.
+Owns **operational docs**: install guides per compose profile, runbooks for compose ops + Neo4j backup/restore, README for client distribution, MCP protocol docs for {{mcp.service_name}}, demo scripts. **Not web docs / API references** — those are for generators.
 
 ## Principles
 
@@ -25,9 +25,9 @@ Owns **operational docs**: install guides per compose profile, runbooks for comp
 | Doc type | Coverage | Location |
 |---|---|---|
 | Install guides per profile | review / analyze / full / with-paperclip / client | `docs/install/<profile>.md` |
-| Operational runbooks per service | palace-mcp, neo4j (start / stop / health / backup / restore / scale / troubleshoot) | `docs/runbooks/<service>.md` |
+| Operational runbooks per service | {{mcp.service_name}}, neo4j (start / stop / health / backup / restore / scale / troubleshoot) | `docs/runbooks/<service>.md` |
 | README | clone-to-running quickstart, screencast link, links to detailed guides | `README.md` |
-| MCP protocol docs | palace-mcp tool catalogue, request / response schemas, error codes, examples | `docs/mcp/palace-mcp.md` |
+| MCP protocol docs | {{mcp.service_name}} tool catalogue, request / response schemas, error codes, examples | `docs/mcp/{{mcp.service_name}}.md` |
 | Demo scripts | install → populate Neo4j with sample data → first MCP query → verify result | `docs/demo/first-run.md` |
 | Architecture decision records (ADR) | "why this choice" for significant decisions (Neo4j vs Postgres, single-node, profile model) | `docs/adr/NNNN-title.md` |
 

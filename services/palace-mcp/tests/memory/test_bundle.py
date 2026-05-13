@@ -402,6 +402,7 @@ def test_compute_bundle_health_min_max_tracking() -> None:
         members=members,
         last_runs=last_runs,
         query_time_failures=[],
+        as_of=_NOW,
     )
     assert status.oldest_member_ingest_at == older
     assert status.newest_member_ingest_at == newer
@@ -427,6 +428,7 @@ def test_compute_bundle_health_all_three_failure_buckets() -> None:
         members=members,
         last_runs=last_runs,
         query_time_failures=["hs-toolkit"],
+        as_of=_NOW,
     )
     assert status.members_total == 3
     assert status.members_fresh_within_7d == 1
@@ -441,6 +443,7 @@ def test_compute_bundle_health_empty_bundle() -> None:
         members=(),
         last_runs={},
         query_time_failures=[],
+        as_of=_NOW,
     )
     assert status.members_total == 0
     assert status.members_fresh_within_7d == 0
@@ -459,6 +462,7 @@ def test_compute_bundle_health_stale_member() -> None:
         members=members,
         last_runs=last_runs,
         query_time_failures=[],
+        as_of=_NOW,
     )
     assert status.members_stale == 1
     assert "evm-kit" in status.stale_slugs
