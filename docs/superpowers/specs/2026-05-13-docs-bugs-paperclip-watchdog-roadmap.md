@@ -1,6 +1,6 @@
 ---
 slug: docs-bugs-paperclip-watchdog-roadmap
-status: proposed
+status: implemented
 branch: docs/bugs-watchdog-roadmap-spec
 base: origin/develop@69ce650
 date: 2026-05-13
@@ -31,11 +31,15 @@ and a recommended prevention action.
   behind 9` in another worktree. To avoid rewriting unrelated work, this spec
   branch is based on current `origin/develop`.
 - `docs/superpowers/specs/` is the established spec location.
-- `docs/BUGS.md` is not present in the clean `origin/develop` worktree.
-- `server.logs` is not present in the clean `origin/develop` worktree.
-- The original dirty worktree also did not contain `docs/BUGS.md` or
-  `server.logs` via `rg --files -uu` / `find`; only Playwright console logs
-  were found under `.playwright-mcp/`.
+- Operator clarified that `docs/BUGS.md` was added by PR #154 on `main`
+  (`origin/main@568888a`) and also exists locally at
+  `/Users/ant013/Android/Gimle-Palace-claude/docs/BUGS.md`.
+- The clean `origin/develop@69ce650` ref in this worktree still does not
+  contain `docs/BUGS.md`; implementation therefore restored the file from
+  `origin/main:docs/BUGS.md` before extending it.
+- `server.logs` is not a repository file. The authoritative Paperclip server
+  log is on iMac production at
+  `/Users/anton/.paperclip/instances/default/logs/server.log`.
 - Relevant watchdog context already exists:
   - `docs/superpowers/specs/2026-05-03-GIM-181-watchdog-handoff-detector.md`
     defines alert-only semantic handoff detection.
@@ -55,10 +59,11 @@ and a recommended prevention action.
 ## Assumptions
 
 - The intended `server.logs` are Paperclip server logs, not watchdog JSONL logs.
-- If the logs are outside the repository, implementation will use the path
-  provided by the operator and will not invent incidents from stale memory.
+- Implementation will sample iMac logs over SSH and record aggregate evidence
+  instead of copying log files into the repository.
 - If `docs/BUGS.md` is absent on the implementation base, the implementation
-  may create it.
+  may restore it from `origin/main` / the local Claude checkout and then
+  extend it.
 - This task is documentation and planning first. Code changes to watchdog or
   Paperclip server require a follow-up implementation spec or explicit approval
   after this analysis lands.
