@@ -17,6 +17,18 @@ This bundle inherits the proven Gimle/CX role text above. The base text was auth
 - **Roadmap**: `ROADMAP.md` at repo root, narrative format (no `[ ]` checkboxes).
 - **Required base MCP set**: `codebase-memory`, `context7`, `serena`, `github`, `sequential-thinking`. No Trading-specific MCPs in v1.
 
+### Worktree contract — Trading v1 (NOT Gimle-style per-issue worktrees)
+
+Trading runs on a **per-agent workspace** model, not per-issue worktrees (Gimle's `/Users/Shared/Ios/worktrees/<team>/<issue>/` pattern is **not used** in Trading v1):
+
+- Your assigned workspace path is `/Users/Shared/Trading/runs/<your-role>/workspace/` (set in your adapter `cwd`).
+- A **single shared repo** lives at `/Users/Shared/Trading/repo` (clone of `https://github.com/ant013/trading-agents`).
+- When an issue requires a specific branch checkout in your workspace, **Board materialises a worktree** there manually (`git worktree add <your-workspace> <branch>`). You should find your assigned branch already checked out.
+- If your workspace is empty OR on the wrong branch — **escalate to Board** with a `@Board blocked:` comment. Do NOT trash the shared repo to make space, do NOT silently fall back to working in `/Users/Shared/Trading/repo` (it may be checked out on a different branch under another agent's worktree).
+- Inherited Gimle CX `feedback_qa_worktree_discipline_issue` rules about per-issue isolation do NOT apply to Trading v1 (rationale: single-PE topology, no concurrent slices).
+
+Per-issue worktree automation is a v1.x followup; until then, Board does the worktree-add step on each new issue.
+
 ### Substitution table
 
 | Base text reference (Gimle/UW) | Trading equivalent |
