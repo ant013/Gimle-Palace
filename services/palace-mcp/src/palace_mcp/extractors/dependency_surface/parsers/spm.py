@@ -43,7 +43,9 @@ def parse_spm(repo_path: Path, *, project_id: str) -> ManifestParseResult:
         )
 
     text = package_swift.read_text(encoding="utf-8")
-    declared: list[str] = [m.group("url") for m in _PKG_PATTERN.finditer(text)]
+    declared: list[tuple[str, str]] = [
+        (m.group("url"), m.group("ver") or "") for m in _PKG_PATTERN.finditer(text)
+    ]
 
     # Build resolution map from Package.resolved
     resolved_versions: dict[str, str] = {}
@@ -73,7 +75,7 @@ def parse_spm(repo_path: Path, *, project_id: str) -> ManifestParseResult:
             "Package.resolved missing — resolved_version set to 'unresolved'"
         )
 
-    for url in declared:
+    for url, ver in declared:
         norm = _normalize_url(url)
         resolved = resolved_versions.get(norm, "unresolved")
         purl = spm_purl_from_url(url, resolved)
@@ -82,7 +84,7 @@ def parse_spm(repo_path: Path, *, project_id: str) -> ManifestParseResult:
                 project_id=project_id,
                 purl=purl,
                 ecosystem="github",
-                declared_version_constraint="",
+                declared_version_constraint=ver,
                 resolved_version=resolved,
                 scope="compile",
                 declared_in="Package.swift",
