@@ -45,8 +45,15 @@ def _seed_cohort_into_mock(state_mock, cohort: dict) -> None:
 @pytest.mark.parametrize("flag_name", sorted(ALERT_FLAG_NAMES))
 @pytest.mark.asyncio
 async def test_cohort_isolation_per_detector_flag(
-    flag_name: str, cohort: dict, observe_only_config, mock_paperclip, tmp_path, caplog
+    flag_name: str,
+    cohort: dict,
+    observe_only_config,
+    mock_paperclip,
+    tmp_path,
+    caplog,
+    monkeypatch,
 ) -> None:
+    monkeypatch.setattr("gimle_watchdog.detection.scan_idle_hangs", lambda _cfg: [])
     base_url, state_mock = mock_paperclip
     state_mock.companies = [
         {
@@ -87,8 +94,9 @@ async def test_cohort_isolation_per_detector_flag(
 
 @pytest.mark.asyncio
 async def test_cohort_isolation_recovery_path(
-    cohort: dict, recovery_only_config, mock_paperclip, tmp_path, caplog
+    cohort: dict, recovery_only_config, mock_paperclip, tmp_path, caplog, monkeypatch
 ) -> None:
+    monkeypatch.setattr("gimle_watchdog.detection.scan_idle_hangs", lambda _cfg: [])
     base_url, state_mock = mock_paperclip
     state_mock.companies = [
         {

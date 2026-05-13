@@ -30,8 +30,9 @@ def _seed_stuck_issue(state_mock, *, issue_id: str = "issue-stuck-1") -> None:
 
 @pytest.mark.asyncio
 async def test_observe_only_tick_emits_zero_side_effects(
-    observe_only_config, mock_paperclip, tmp_path, caplog
+    observe_only_config, mock_paperclip, tmp_path, caplog, monkeypatch
 ) -> None:
+    monkeypatch.setattr("gimle_watchdog.detection.scan_idle_hangs", lambda _cfg: [])
     assert describe_effective_mode(observe_only_config) == EffectiveMode.OBSERVE_ONLY
 
     base_url, state_mock = mock_paperclip
