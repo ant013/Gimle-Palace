@@ -37,6 +37,7 @@
 ## File Structure
 
 **Create:**
+- `services/watchdog/tests/_factories.py` — shared `_make_config(...)` builders for mode/posture/e2e tests.
 - `services/watchdog/tests/fixtures/gim255_cohort.json` — incident evidence fixture (synthetic UUIDs initially; operator replaces with incident literals before merge).
 - `services/watchdog/tests/test_modes.py` — `EffectiveMode` + `describe_effective_mode` unit and partition tests.
 - `services/watchdog/tests/test_posture_log.py` — `watchdog_starting` + `watchdog_posture` event emission tests.
@@ -44,6 +45,7 @@
 - `services/watchdog/tests/test_list_companies.py` — `PaperclipClient.list_companies()` unit tests (mocked httpx).
 - `services/watchdog/tests/e2e/test_gim255_cohort_isolation.py` — per-detector cohort harness.
 - `services/watchdog/tests/e2e/test_observe_only_smoke.py` — daemon-level mode-contract behavioral test.
+- `services/watchdog/tests/COVERAGE.md` — explicit stale-age gate mapping artifact from Task 13.
 - `docs/runbooks/watchdog-operational-reenable.md` — staged re-enable runbook (mirrors spec §5.4).
 
 **Modify:**
@@ -51,6 +53,8 @@
 - `services/watchdog/src/gimle_watchdog/paperclip.py` — add `list_companies()` method.
 - `services/watchdog/src/gimle_watchdog/daemon.py` — emit `watchdog_posture` at top of `_tick`; keep existing `tick_start` line for backward compat.
 - `services/watchdog/src/gimle_watchdog/__main__.py` — emit `watchdog_starting` as first line of `main`; extend `_cmd_status` with mode/reconciliation/warnings/`--allow-degraded`.
+- `services/watchdog/src/gimle_watchdog/role_taxonomy.py` — include hired agent names `Auditor` and `CXAuditor` in role-class mapping for live taxonomy coverage test.
+- `services/watchdog/tests/conftest.py` — add shared fixtures and mock `/api/companies` support used by status reconciliation/e2e coverage.
 - `services/watchdog/tests/test_cli.py` — extend existing `test_cmd_status` assertions for new lines; backward-compat assertions stay.
 - `services/watchdog/tests/test_daemon.py` — add shared-budget identity regression test.
 

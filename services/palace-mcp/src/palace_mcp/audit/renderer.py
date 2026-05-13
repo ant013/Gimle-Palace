@@ -40,6 +40,10 @@ _JINJA_ENV = Environment(
 )
 
 
+class CoverageCountMismatch(Exception):
+    """Raised when all_statuses count != sum of status buckets."""
+
+
 def _section_max_severity(section: AuditSectionData) -> Severity:
     if section.max_severity is not None:
         return section.max_severity
@@ -60,12 +64,7 @@ def _annotate_severity(
     max_findings: int,
     severity_mapper: Callable[[Any], Severity] | None = None,
 ) -> tuple[list[dict[str, Any]], Severity | None]:
-    """Annotate findings with _severity key, sort by severity, cap at max_findings.
-
-    If ``severity_mapper`` is provided it takes the raw field value and returns
-    a Severity directly, enabling domain-typed columns (floats, ints, enum
-    strings).  When None, falls back to ``severity_from_str(str(raw))``.
-    """
+    """Annotate findings with _severity key, sort by severity, cap at max_findings."""
     annotated = []
     for f in findings:
         raw = f.get(severity_column)
@@ -86,12 +85,7 @@ def render_section(
     max_findings: int,
     severity_mapper: Callable[[Any], Severity] | None = None,
 ) -> str:
-    """Render one extractor section to markdown.
-
-    Template resolution order:
-    1. ``section.template_name`` (set by the fetcher from ``AuditContract.template_name``)
-    2. ``{section.extractor_name}.md`` (backward-compat fallback)
-    """
+    """Render one extractor section to markdown."""
     template_file = (
         section.template_name
         if section.template_name
@@ -110,6 +104,37 @@ def render_section(
     )
 
 
+def _render_profile_coverage(
+    all_statuses: dict[str, Any],
+    run_failed: dict[str, Any],
+    fetch_failed_statuses: dict[str, Any],
+    not_applicable: dict[str, Any],
+    blind_spots: list[str],
+) -> str:
+    """Render §Profile Coverage appendix with R == N+M+K+F+L assertion."""
+    total = len(all_statuses)
+    ok_count = sum(1 for s in all_statuses.values() if s.status == "OK")
+    failed_count = len(run_failed)
+    fetch_count = len(fetch_failed_statuses)
+    not_attempted_count = sum(
+        1 for s in all_statuses.values() if s.status == "NOT_ATTEMPTED"
+    )
+    na_count = len(not_applicable)
+
+    lines = [
+        "\n## Profile Coverage\n",
+        "| Status | Count |",
+        "|--------|-------|",
+        f"| OK | {ok_count} |",
+        f"| RUN_FAILED | {failed_count} |",
+        f"| FETCH_FAILED | {fetch_count} |",
+        f"| NOT_ATTEMPTED | {not_attempted_count} |",
+        f"| NOT_APPLICABLE | {na_count} |",
+        f"| **Total (R)** | **{total}** |",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def render_report(
     *,
     project: str,
@@ -120,29 +145,36 @@ def render_report(
     severity_mappers: dict[str, Callable[[Any], Severity]] | None = None,
     depth: str = "full",
     generated_at: str | None = None,
+    all_statuses: dict[str, Any] | None = None,
+    run_failed: dict[str, Any] | None = None,
+    fetch_failed_statuses: dict[str, Any] | None = None,
+    not_applicable: dict[str, Any] | None = None,
 ) -> str:
-    """Render the complete audit report as markdown.
-
-    Args:
-        project: project slug.
-        sections: dict keyed by extractor_name → AuditSectionData.
-        severity_columns: dict keyed by extractor_name → column name for severity mapping.
-        max_findings_per_section: dict keyed by extractor_name → cap.
-        blind_spots: extractor names with no IngestRun data.
-        severity_mappers: optional dict keyed by extractor_name → domain severity mapper.
-            When provided, overrides the default severity_from_str fallback for the
-            corresponding extractor so domain-typed columns (floats, ints, enum strings)
-            produce real severity values instead of universally INFORMATIONAL.
-        depth: "quick" or "full".
-        generated_at: ISO-8601 string; defaults to now.
-    """
+    """Render the complete audit report as markdown."""
     ts = generated_at or datetime.now(tz=timezone.utc).isoformat()
     _mappers = severity_mappers or {}
+    _run_failed = run_failed or {}
+    _fetch_failed = fetch_failed_statuses or {}
+    _not_applicable = not_applicable or {}
+    _all_statuses = all_statuses or {}
+
+    # Coverage count invariant check: R == sum(OK + RUN_FAILED + FETCH_FAILED + NOT_ATTEMPTED + NOT_APPLICABLE)
+    if _all_statuses:
+        total_in_all = len(_all_statuses)
+        total_in_buckets = (
+            sum(1 for s in _all_statuses.values() if s.status == "OK")
+            + len(_run_failed)
+            + len(_fetch_failed)
+            + sum(1 for s in _all_statuses.values() if s.status == "NOT_ATTEMPTED")
+            + len(_not_applicable)
+        )
+        if total_in_all != total_in_buckets:
+            raise CoverageCountMismatch(
+                f"coverage_count_mismatch: all_statuses has {total_in_all} entries "
+                f"but bucket sums to {total_in_buckets}"
+            )
 
     rendered_sections: list[tuple[Severity, str]] = []
-    # Annotated findings collected for executive summary top-3 computation.
-    # _annotate_severity is called here (for max_sev) and again inside render_section;
-    # the duplication is intentional to keep render_section's API unchanged.
     all_annotated: list[dict[str, Any]] = []
     seen: set[str] = set()
 
@@ -158,15 +190,12 @@ def render_report(
         rendered = render_section(sec, col, cap, severity_mapper=mapper)
         return max_sev, rendered
 
-    # 1. Known extractors in preferred display order
     for name in _SECTION_ORDER:
         if name not in sections:
             continue
         seen.add(name)
         rendered_sections.append(_render_one(name, sections[name]))
 
-    # 2. Any extra extractors not in _SECTION_ORDER (paved-path: new extractors
-    #    plug in via audit_contract() without requiring orchestrator code changes)
     for name, sec in sections.items():
         if name in seen:
             continue
@@ -196,7 +225,6 @@ def render_report(
         1 for sev, _ in rendered_sections if sev in (Severity.CRITICAL, Severity.HIGH)
     )
 
-    # Top-3 findings for executive summary (worst severity first, across all sections)
     all_annotated.sort(
         key=lambda f: SEVERITY_RANK[severity_from_str(f.get("_severity"))]
     )
@@ -209,6 +237,10 @@ def render_report(
     if blind_spots:
         executive_lines.append(
             f"{len(blind_spots)} extractor(s) had no data (blind spots): {', '.join(f'`{b}`' for b in blind_spots)}."
+        )
+    if _run_failed:
+        executive_lines.append(
+            f"⚠ {len(_run_failed)} extractor(s) failed their last run: {', '.join(f'`{n}`' for n in _run_failed)}."
         )
     if total_critical:
         executive_lines.append(
@@ -235,6 +267,34 @@ def render_report(
             top3_strs.append(" ".join(parts))
         executive_lines.append("Top findings: " + "; ".join(top3_strs) + ".")
 
+    # Render status sections
+    failed_extractors_section = ""
+    if _run_failed:
+        failed_extractors_section = _JINJA_ENV.get_template(
+            "failed_extractors.md"
+        ).render(
+            project=project,
+            run_failed=_run_failed,
+        )
+
+    data_quality_section = ""
+    if _fetch_failed:
+        data_quality_section = _JINJA_ENV.get_template("data_quality_issues.md").render(
+            project=project,
+            fetch_failed=_fetch_failed,
+        )
+
+    blind_spots_section = _JINJA_ENV.get_template("blind_spots.md").render(
+        project=project,
+        blind_spots=blind_spots,
+    )
+
+    profile_coverage_section = ""
+    if _all_statuses:
+        profile_coverage_section = _render_profile_coverage(
+            _all_statuses, _run_failed, _fetch_failed, _not_applicable, blind_spots
+        )
+
     report_template = _JINJA_ENV.get_template("report_template.md")
     return report_template.render(
         project=project,
@@ -245,4 +305,10 @@ def render_report(
         blind_spots=blind_spots,
         fetched_extractors=list(sections.keys()),
         run_provenance=run_provenance,
+        failed_extractors_section=failed_extractors_section,
+        data_quality_section=data_quality_section,
+        blind_spots_section=blind_spots_section,
+        profile_coverage_section=profile_coverage_section,
+        run_failed=_run_failed,
+        fetch_failed_statuses=_fetch_failed,
     )
