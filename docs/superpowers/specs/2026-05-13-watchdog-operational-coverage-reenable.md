@@ -27,6 +27,8 @@ GIM-255 then landed the important safety work:
 - issue-bound detectors have age/status/origin gates;
 - `originKind` is parsed into `Issue.origin_kind`;
 - `handoff_recent_window_min` defaults to 180;
+- mechanical recovery has `recover_max_age_min` and must use the same
+  3-hour default boundary unless an explicit per-company override is approved;
 - `AlertPostBudget` applies one shared soft/hard per-tick budget;
 - successful alert posts are observable;
 - no-spam e2e coverage exists for stale/recovery-origin issues.
@@ -59,6 +61,13 @@ companies and projects. In particular:
 The 258 spam comments are kept as incident audit trail. This spec assumes
 deleting them is not a viable recovery path and does not include comment
 cleanup.
+
+Those old comments must also be operationally inert: watchdog must not treat
+the historical GIM-244/GIM-255 spam-alert comments as fresh evidence, wake
+signals, ownerless-completion evidence gaps, infra-block markers, or reasons
+to re-alert. The safe behavior is to identify the incident cohort and ignore
+those comments/issues during re-enable validation unless an operator
+explicitly selects one as a fresh control case.
 
 ## 2. Goal
 
@@ -134,15 +143,23 @@ foundation:
   1. confirm GIM-255 hardening is deployed;
   2. put all live company IDs into config;
   3. run observe-only status;
-  4. enable mechanical recovery with first-run baseline;
-  5. verify baseline seeds cooldowns but takes no action;
-  6. run one tick with `max_actions_per_tick=1`;
-  7. scale gradually;
-  8. keep `handoff_auto_repair_enabled=false`;
-  9. enable handoff/tier alert flags one at a time only after recovery is
+  4. confirm both `handoff_recent_window_min` and every company
+     `recover_max_age_min` are `180` minutes unless there is a documented
+     override;
+  5. load the known GIM-255 spam cohort / comment markers into the re-enable
+     checklist and verify they produce zero new actions;
+  6. enable mechanical recovery with first-run baseline;
+  7. verify baseline seeds cooldowns but takes no action;
+  8. run one tick with `max_actions_per_tick=1`;
+  9. scale gradually;
+  10. keep `handoff_auto_repair_enabled=false`;
+  11. enable handoff/tier alert flags one at a time only after recovery is
      stable.
 - Add tests for the new status output and posture warnings.
 - Document that the 258 spam comments remain as audit trail.
+- Document that watchdog must ignore issue-bound findings on issues older than
+  3 hours. `stale_bundle` is the only global detector exempt from this rule
+  because it is not issue-bound.
 
 ### Out
 
@@ -243,11 +260,18 @@ The runbook must explicitly separate mechanical recovery from alerting:
    - `recovery_enabled: false`;
    - all handoff flags false;
    - `gimle-watchdog status` shows all expected companies.
+   - status shows `handoff_recent_window_min=180` and each company
+     `recover_max_age_min=180`.
+   - status/runbook names the known GIM-255 incident cohort so operators do
+     not use old spammed issues as fresh controls.
 2. **Baseline tick**
    - set `recovery_enabled: true`;
    - keep `recovery_first_run_baseline_only: true`;
    - keep `max_actions_per_tick: 1`;
    - verify `recovery_baseline_seeded` appears, but no wake actions happen.
+   - verify issues older than 3 hours produce no recovery actions.
+   - verify the known 258 spam-comment cohort produces no alert comments, no
+     recovery actions, and no new state entries.
 3. **Controlled recovery**
    - run one normal tick;
    - verify at most one `wake_result`;
@@ -283,7 +307,8 @@ This spec file:
 
 - `gimle-watchdog status` prints effective mode, recovery settings, first-run
   baseline state, max actions per tick, company names/IDs, handoff flags,
-  auto-repair state, alert budgets, cooldown counts, escalation counts, and
+  auto-repair state, alert budgets, `handoff_recent_window_min`,
+  per-company `recover_max_age_min`, cooldown counts, escalation counts, and
   warnings.
 - Status output clearly distinguishes observe-only, alert-only,
   recovery-only, full-watchdog, and unsafe-auto-repair.
@@ -298,8 +323,17 @@ This spec file:
   - unsafe auto-repair warning;
   - multiple company status rendering;
   - posture log fields.
+- New or existing tests prove issue-bound watchdog paths ignore issues older
+  than 3 hours:
+  - mechanical recovery skips stale active issues via `recover_max_age_min`;
+  - legacy handoff detectors skip stale issues via `handoff_recent_window_min`;
+  - tier issue-bound detectors skip stale issues via `handoff_recent_window_min`.
+- Re-enable smoke explicitly proves the known GIM-255 32-issue / 258-comment
+  cohort produces zero new alert comments, recovery actions, or new state
+  entries.
 - Runbook gives exact staged re-enable steps and explicitly says the 258 spam
-  comments remain as audit trail.
+  comments remain as audit trail and must be ignored by watchdog during
+  re-enable validation.
 - No production auto-repair is enabled.
 - No new detector posts comments beyond existing GIM-255 bounded paths.
 
