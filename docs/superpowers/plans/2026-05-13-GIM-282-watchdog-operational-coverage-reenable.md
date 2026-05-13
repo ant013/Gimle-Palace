@@ -13,8 +13,8 @@
 **Tech Stack:** Python 3.11, `dataclass(frozen=True)`, `argparse`, `httpx` (existing `PaperclipClient`), `pytest`, `pytest-asyncio`, `ruff`, `mypy`, `uv`.
 
 **Workflow gates (paperclip phases):**
-- 1.1 Formalize (CX/CTO) — swap `GIM-NN` placeholder with real issue
-  number; reassign to CR. **Cohort literal gate (spec §9):** before
+- 1.1 Formalize (CX/CTO) — issue number is `GIM-282`; reassign to CR
+  after the gate passes. **Cohort literal gate (spec §9):** before
   reassigning to CR, CTO must confirm the operator has committed real
   incident literals into `services/watchdog/tests/fixtures/gim255_cohort.json`
   (the 32 Paperclip issue UUIDs, their GIM-N numbers, the 258 spam
