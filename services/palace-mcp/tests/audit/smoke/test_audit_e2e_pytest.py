@@ -42,12 +42,16 @@ class _EmptyAsyncResult:
     async def __anext__(self) -> None:
         raise StopAsyncIteration
 
+    async def single(self) -> None:
+        return None
+
 
 class _RowAsyncResult:
     """Async-iterable result that yields a fixed list of row dicts."""
 
     def __init__(self, rows: list[dict[str, Any]]) -> None:
-        self._iter = iter(rows)
+        self._rows = list(rows)
+        self._iter = iter(self._rows)
 
     def __aiter__(self) -> "_RowAsyncResult":
         return self
@@ -57,6 +61,9 @@ class _RowAsyncResult:
             return next(self._iter)
         except StopIteration:
             raise StopAsyncIteration
+
+    async def single(self) -> dict[str, Any] | None:
+        return self._rows[0] if self._rows else None
 
 
 def _make_empty_driver() -> Any:
@@ -79,6 +86,9 @@ def _make_data_driver(extractor_name: str) -> Any:
         "extractor_name": extractor_name,
         "run_id": "run-test-001",
         "completed_at": None,
+        "success": True,
+        "error_code": None,
+        "error_message": None,
     }
     # Hotspot-shaped row so hotspot.md template renders without error
     finding_row = {
@@ -89,8 +99,9 @@ def _make_data_driver(extractor_name: str) -> Any:
         "window_days": 90,
     }
     call_results = [
-        _RowAsyncResult([discovery_row]),
-        _RowAsyncResult([finding_row]),
+        _EmptyAsyncResult(),               # resolve_profile: returns None → ValueError → fallback profile
+        _RowAsyncResult([discovery_row]),  # discover_extractor_statuses: success run
+        _RowAsyncResult([finding_row]),    # fetch_audit_data: findings
     ]
     session = AsyncMock()
     session.run = AsyncMock(side_effect=call_results)

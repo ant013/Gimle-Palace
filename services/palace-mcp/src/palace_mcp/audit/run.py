@@ -88,9 +88,13 @@ async def _run_single_project(
     try:
         profile = await resolve_profile(driver, project)
     except ValueError:
-        # Unknown profile — treat all extractors as NOT_APPLICABLE
+        # Unknown profile — include all auditable registry extractors as applicable
+        auditable_names = frozenset(
+            name for name, ext in extractor_registry.items()
+            if ext.audit_contract() is not None
+        )
         from palace_mcp.extractors.foundation.profiles import LanguageProfile
-        profile = LanguageProfile("unknown", frozenset())
+        profile = LanguageProfile("unknown", auditable_names)
 
     # 2. Discover extractor statuses (last-attempt-wins, no success filter)
     all_statuses: dict[str, ExtractorStatus] = await discover_extractor_statuses(
