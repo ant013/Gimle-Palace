@@ -70,11 +70,12 @@ async def run_audit(
         )
     else:
         # bundle mode — Task 2.3b
+        assert bundle is not None
         return await _run_bundle(
             driver,
             extractor_registry,
             bundle=bundle,
-            depth=depth,  # type: ignore[arg-type]
+            depth=depth,
         )
 
 

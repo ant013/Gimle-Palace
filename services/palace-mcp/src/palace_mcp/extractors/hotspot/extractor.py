@@ -34,7 +34,7 @@ class _HotspotError(ExtractorError):
 
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
-        self.error_code: str = code  # type: ignore[assignment]
+        self.error_code: str = code  # type: ignore[misc]
 
 
 async def _count_git_history_runs(driver: Any, *, project: str) -> int:
