@@ -12,11 +12,11 @@ S4.1 smoke (GIM-277, tron-kit) produced the first real Audit-V1 report end-to-en
 ## Goals
 
 - Restore the missing `testability_di` extractor on `develop`.
-- Make the pipeline call every registered extractor on every project, with explicit failure / skip reporting — no silent misses, no failures masked as blind spots.
+- Define typed extractor statuses (`NOT_APPLICABLE` / `NOT_ATTEMPTED` / `RUN_FAILED` / `FETCH_FAILED` / `OK`) and render each distinctly — no silent misses, no failures masked as blind spots. Scope is **profile-matched auditable extractors** (i.e., those with `audit_contract()` and language fit for the project), not every registry entry.
 - Fix the false-pass on `hotspot` 0-scan; identify and patch the actual cause (mount path or prerequisite ordering).
 - Add `source_context: library | example | test | other` annotation to every finding; let the renderer differentiate severity / display by context.
 - Close out Opus N1, N2, N3, N4, N5, N6 from GIM-277 Phase 3.2 review.
-- Re-run S4.1 smoke and validate all 8 acceptance criteria pass with NO false-positive HIGH (Opus N4) and NO 0-scan extractor (Opus N3).
+- Re-run S4.1 smoke (with explicit re-ingest of extractors, not just re-render) and validate all 10 acceptance criteria pass with NO false-positive HIGH (Opus N4) and NO 0-scan extractor (Opus N3).
 
 ## Non-goals
 
@@ -25,6 +25,30 @@ S4.1 smoke (GIM-277, tron-kit) produced the first real Audit-V1 report end-to-en
 - Stricter severity rules in `crypto_domain_model` beyond the source-context distinction (Opus N4 fix is sufficient for v1.1).
 - Replacing the heuristic in `error_handling_policy` with full data-flow analysis (Opus N5 is a tuning fix, not a rewrite).
 - Watchdog / paperclip-server improvements (separate track).
+
+## Status taxonomy (foundation for B2, B4, B5)
+
+Today `audit/discovery.py` collapses three different conditions into "blind spot":
+
+1. Extractor exists in registry but has no `audit_contract()` → **not part of audit by design**.
+2. Extractor has `audit_contract()` but never ran for this project → **never tried**.
+3. Extractor ran with `success=false` → **bug to surface**.
+
+The report wording ("run command to populate") fits only case 2. This spec replaces the binary `ok | blind-spot` taxonomy with five typed statuses:
+
+| Status | Meaning | Rendering |
+|---|---|---|
+| `NOT_APPLICABLE` | Registered, no `audit_contract()` OR language mismatch with project profile (e.g. `symbol_index_python` on a Swift Kit). | Not surfaced in report at all — only in run-log / debug. |
+| `NOT_ATTEMPTED` | Has `audit_contract()`, profile match, but no `:IngestRun` exists. | §Blind Spots row with `palace.ingest.run_extractor(...)` invocation hint. |
+| `RUN_FAILED` | `:IngestRun.success=false` (extractor errored). | §Failed Extractors row with last `run_id`, `error_code`, error message, suggested next action. |
+| `FETCH_FAILED` | `:IngestRun.success=true` but the fetcher (renderer-side Cypher) errored reading findings. | §Data-Quality Issues row with extractor, failed-query trace, suggestion. |
+| `OK` | `:IngestRun.success=true` + fetcher OK. | Normal section in report. |
+
+**Profile matching**: `extractors/foundation/profiles.py` defines which extractors apply to which language profile (e.g. `swift_kit`: { arch_layer, error_handling_policy, crypto_domain_model, …, but **not** symbol_index_python }). Project-language matching is a small lookup (already implied by `ingest_swift_kit.sh`'s curated `DEFAULT_EXTRACTORS`; this spec formalises it).
+
+This taxonomy is implemented as part of **Slice 2** (failure visibility). Slices 1 + 3 + 4 + 5 depend on it.
+
+---
 
 ## Inventory of concerns
 
@@ -59,24 +83,32 @@ S4.1 smoke (GIM-277, tron-kit) produced the first real Audit-V1 report end-to-en
 
 ---
 
-#### B2: `reactive_dependency_tracer` silent miss in audit pipeline
+#### B2: `reactive_dependency_tracer` invisible to audit pipeline
 
 **Evidence:**
 - `palace.ingest.list_extractors()` returns `reactive_dependency_tracer` (registered).
-- No `:IngestRun` for `extractor.reactive_dependency_tracer` exists with `group_id="project/tron-kit"`.
-- `docs/audit-reports/2026-05-12-tron-kit.md` "Blind Spots" section **does not** list `reactive_dependency_tracer`.
-- Audit pipeline does not call it for Swift Kits even though SwiftUI/Combine patterns are exactly its target.
+- Live runtime: `ext.audit_contract() is None` — extractor **has no audit_contract** override.
+- `audit/run.py:63` filters `audit_extractors = {name for name, ext in extractor_registry.items() if ext.audit_contract() is not None}`. With `audit_contract=None`, reactive is excluded from `audit_extractors` set entirely.
+- Result: `reactive_dependency_tracer` is invisible to discovery, doesn't appear in `:Blind Spots`, no `:IngestRun` exists for tron-kit.
+- Runbook `docs/runbooks/reactive-dependency-tracer.md` confirms extractor expects pre-generated `reactive_facts.json` from a Swift helper outside `palace-mcp` runtime — without it, extractor emits only diagnostics, no findings.
 
-**Root cause hypothesis:** `audit/discovery.py` enumerates only extractors that have an existing `:IngestRun` for the project. Extractors never invoked are invisible. There is no "expected vs actual" diff against the registry.
+**Root cause:** Two issues stack:
+1. **No `audit_contract()` override** → status taxonomy classifies it as `NOT_APPLICABLE` (out of audit scope), so even after the taxonomy fix (slice 2) it stays hidden.
+2. **Helper-generation prerequisite is out-of-band** → even if we wire it in, without `reactive_facts.json` in tron-kit repo, runs produce zero findings.
 
-**Proposed fix:**
-1. In `audit/discovery.py`, after gathering existing `:IngestRun` data, compute `registered − ran` and emit each missing entry as a `NOT_ATTEMPTED` blind-spot row with the suggested invocation command (matches current blind-spot format for known-not-run extractors).
-2. Update `ingest_swift_kit.sh` `DEFAULT_EXTRACTORS` to explicitly include `reactive_dependency_tracer` for Swift Kits (alongside `arch_layer`, `error_handling_policy`, `crypto_domain_model`).
-3. Add a defensive log warning when an extractor is in the registry but neither in DEFAULT_EXTRACTORS for any language profile nor reachable via `--extractors=`.
+**Proposed fix (scoped for v1.1; helper-generation deferred):**
+
+1. Add `audit_contract()` override to `reactive_dependency_tracer` so it joins `audit_extractors` set. Contract declares severity column, max findings cap, and severity mapper based on `:ReactiveDiagnostic` and `:ReactiveEffect` node properties.
+2. Add Swift to the extractor's language profile (currently undocumented; verify it's reachable from `swift_kit` profile lookup).
+3. Update `ingest_swift_kit.sh` `DEFAULT_EXTRACTORS` to include `reactive_dependency_tracer`.
+4. With no `reactive_facts.json` present, extractor emits `swift_helper_unavailable` diagnostic — this is the **expected v1.1 state** until a separate slice ships the helper. Renderer surfaces this as `RUN_FAILED` with helpful error ("install Swift helper from `tools/reactive-helper/`; see runbook") under the taxonomy from §Status taxonomy.
+
+**Deferred to a separate slice (out of scope here):**
+- Swift helper to generate `reactive_facts.json` from real source. Will be a new slice in v1.2; tracked in §Followups.
 
 **Acceptance:**
-- `audit/discovery.py` returns blind-spot rows for every registered extractor that has no run, even those not in the operator-curated list.
-- Re-running `palace.audit.run(project="tron-kit")` lists `reactive_dependency_tracer` in §Blind Spots (or under §Reactive Dependencies once it runs).
+- `palace.audit.run(project="tron-kit")` after re-ingest: `reactive_dependency_tracer` appears in either §Failed Extractors (status=RUN_FAILED, reason=`swift_helper_unavailable`) or — if helper present — populated §Reactive Dependencies section.
+- Status is no longer `NOT_APPLICABLE` (audit_contract() returns a contract).
 
 ---
 
@@ -233,71 +265,99 @@ This is a pragmatic tuning; final solution (per-call-site critical-path analysis
 
 #### B10: `arch_layer` module DAG missing when no rules declared (Opus N1)
 
-**Evidence:** `templates/arch_layer.md` has a `Module DAG summary` block only in the `{% if findings %}` branch. The `{% else %}` (no rules → no findings) branch omits `summary_stats.module_count` entirely. AC3 borderline because of this.
+**Evidence:** `templates/arch_layer.md` already has two no-findings branches:
+- `{% if summary_stats.get("rules_declared") %}` — rules exist + zero violations → renders "rules clean" message
+- `{% else %}` — no rule file → renders "No architecture rules declared" + Neo4j note + runbook pointer
 
-**Proposed fix:** one-line template fix:
+**Neither branch renders `module_count`**, even though `module_count` IS rendered in the findings branch. So an operator reading the no-rules report can't tell whether anything was indexed at all (vs the extractor having silently failed).
 
-```diff
-- (rules clean — no architecture violations)
-+ (rules clean — {{ summary_stats.get("module_count", "?") }} modules indexed; no architecture violations)
+**Verification needed:** does the `arch_layer` extractor populate `summary_stats.module_count` unconditionally, or only when findings exist? Per the spec inspection: contract appears to set `module_count` in `summary_stats` regardless of findings, but this **must be verified** in Phase 1.2 plan-first review before implementing the template fix.
+
+**Proposed fix (extractor + template, not template-only):**
+
+1. **Verify**: confirm `arch_layer/extractor.py` always emits `summary_stats={"module_count": N, "edge_count": M, "rules_declared": bool, "rule_source": str}` regardless of whether findings exist.
+2. **Extractor patch** (if step 1 reveals a gap): always populate `module_count`, `rules_declared`, `rule_source` in `summary_stats`; never omit them.
+3. **Fetcher patch** (`audit/fetcher.py`): ensure the no-findings rows carry the `summary_stats` through to the renderer.
+4. **Template patch** (`templates/arch_layer.md`): add module-count line to both no-findings branches:
+
+```jinja
+{% if summary_stats.get("rules_declared") %}
+No architecture violations found — {{ summary_stats.get("module_count", "?") }} modules indexed; all layer rules pass.
+**Rule source:** `{{ summary_stats.get("rule_source", "unknown") }}`
+{% else %}
+No architecture rules declared — {{ summary_stats.get("module_count", "?") }} modules indexed in Neo4j (no rule evaluation possible).
+...
+{% endif %}
 ```
 
-Plus: when no rule file exists in the project (vs rules exist + clean), distinguish the two cases in the template; today both render identically.
-
 **Acceptance:**
-- Re-run tron-kit audit §1 shows `(no arch rules declared — N modules indexed in Neo4j)`.
-- A future project with a rule file + zero violations renders as `(rules clean — N modules indexed; no architecture violations)`.
+- `arch_layer` extractor regression test: `summary_stats.module_count` present in **all** code paths (findings / rules-clean / no-rules).
+- Re-run tron-kit audit §1 shows `No architecture rules declared — N modules indexed in Neo4j` with non-`?` N.
+- A test fixture project with rule file + zero violations renders `No architecture violations found — N modules indexed; all layer rules pass`.
 
 ---
 
 ### Slice 5 — Renderer + section ordering
 
-#### B11: `_SECTION_ORDER` incomplete (Opus N6)
+#### B11: section ordering — pinned-then-severity required (Opus N6)
 
-**Evidence:** `audit/renderer.py:25-33` `_SECTION_ORDER` lists 7 extractors but excludes the 3 most audit-critical:
-- `error_handling_policy`
-- `arch_layer`
-- `crypto_domain_model`
+**Evidence:** Two-part bug in `audit/renderer.py`:
 
-They fall through to the "extra extractors" catch-all and sort by severity AFTER the ordered set. In the committed report, they appear in the wrong position because of a separate severity-sort bug (pre-fix renderer).
+1. `_SECTION_ORDER` (lines 25-33) lists 7 extractors but excludes the 3 most audit-critical: `error_handling_policy`, `arch_layer`, `crypto_domain_model`. They fall through to the "extra extractors" catch-all.
+2. **Final pass globally sorts everything by severity**: `rendered_sections.sort(key=lambda t: SEVERITY_RANK[t[0]])` (line ~190). This **overrides** any order produced by the `_SECTION_ORDER`-then-extras assembly — adding the 3 missing extractors to the list would still not pin them at the top because the global sort rearranges.
 
-**Proposed fix:** add the 3 to `_SECTION_ORDER` explicitly:
+In the committed tron-kit report, sections appear in a severity-sorted order that buries `crypto_domain_model` (HIGH section, semantically the most security-critical) deep down because the final sort doesn't know about audit-critical pinning.
+
+**Proposed fix (renderer code change, not just data):**
+
+Replace the global `sort` with a stable pinned-then-severity strategy:
 
 ```python
+# 1. Render in pinned order using _SECTION_ORDER (security-first).
 _SECTION_ORDER = (
-    "crypto_domain_model",       # NEW — top, security-critical
-    "error_handling_policy",     # NEW — second, security-adjacent
-    "arch_layer",                # NEW — third, structural
-    "hotspot",
+    "crypto_domain_model",          # pinned-top: security
+    "error_handling_policy",        # pinned-top: security
+    "arch_layer",                   # pinned-top: structural
+    "hotspot",                      # pinned-mid: code health
     "dead_symbol_binary_surface",
     "dependency_surface",
     "code_ownership",
     "cross_repo_version_skew",
-    # ...rest unchanged
+    "cross_module_contract",
+    "public_api_surface",
+    "coding_convention",
+    "localization_accessibility",
+    "reactive_dependency_tracer",
+    "testability_di",
+    "hot_path_profiler",
 )
+
+# 2. Pinned sections in _SECTION_ORDER preserve list order, NOT severity-sorted.
+# 3. Any extractor not in _SECTION_ORDER goes to a "remainder" bucket, sorted by severity.
+# 4. Final order = pinned[in list order] + remainder[severity desc].
 ```
 
-(Operator: validate exact ordering; current proposal puts security findings first.)
+The pinned list **completely replaces** the global severity sort for known extractors. New / unknown extractors still sort by severity in the remainder bucket — preserves the paved-path property from Opus N6 commentary.
 
 **Acceptance:**
-- Re-run tron-kit audit produces sections in the new order.
-- Section header table reflects the same.
+- Re-run tron-kit audit §Sections (after taxonomy + reactive fixes): order is `crypto_domain_model` → `error_handling_policy` → `arch_layer` → … → `hot_path_profiler`. Verify by reading the `## ` headings sequentially.
+- Test fixture: register a "test_extractor" not in `_SECTION_ORDER`; verify it lands in the remainder section sorted by its severity, after the last pinned extractor.
 
 ---
 
-## Sequencing
+## Sequencing — serial, with file-ownership map
 
-Recommend implementation order:
+Slices share core pipeline files (`audit/discovery.py`, `audit/run.py`, `audit/renderer.py`, `audit/fetcher.py`, `ingest_swift_kit.sh`, several `templates/*.md`). Parallel parallel work creates merge conflicts and a moving target for the verification re-runs. **Run strictly serially**:
 
-| Order | Slice | Reason |
-|-------|-------|--------|
-| 1 | Slice 1 (B1–B3) | Pipeline coverage gaps — pre-requisite for re-running smoke; otherwise every fix is unverifiable. |
-| 2 | Slice 2 (B4–B6) | Failure visibility — without this, B5/B6 work is invisible. Slice 2 ALSO triggers ad-hoc investigation of public_api_surface / cross_module_contract / hotspot underlying bugs as follow-on PRs. |
-| 3 | Slice 4 (B9–B10) | Small, easy data-quality wins. Cheap to land while harder slices brew. |
-| 4 | Slice 3 (B7–B8) | Source-context — bigger schema change, ~2 weeks of work, needs careful testing per extractor. Schedule after pipeline correctness is restored (Slices 1+2). |
-| 5 | Slice 5 (B11) | Pure renderer cosmetic. Last because it depends on B7 (source_context column in tables). |
+| Order | Slice | Why this order | Owns |
+|-------|-------|---|---|
+| 1 | Slice 2 — Failure visibility + status taxonomy (§Status taxonomy + B4 + B5 + B6) | Establishes the typed status model that every other slice depends on for reporting. Without it, slices 1/3/4/5 can't classify their output correctly. | `audit/discovery.py`, `audit/run.py`, `audit/renderer.py` (status logic), `extractors/foundation/profiles.py` (new), `audit/templates/blind_spots.md` (new) |
+| 2 | Slice 1 — Coverage (B1 + B2 + B3) | Now that statuses exist, plug in the missing extractors. B1 (testability_di GIM-242 chain resumption), B2 (reactive `audit_contract()` + helper-unavailable diagnostic), B3 (DEFAULT_EXTRACTORS update). | `extractors/registry.py`, `extractors/testability_di/*` (recovered), `extractors/reactive_dependency_tracer/extractor.py` (audit_contract), `paperclips/scripts/ingest_swift_kit.sh` |
+| 3 | Slice 4 — Data quality (B9 + B10) | Small extractor + template patches, no schema change. Cheap to land before the big slice 3. | `extractors/dependency_surface/*`, `extractors/arch_layer/extractor.py`, `audit/templates/dependency_surface.md`, `audit/templates/arch_layer.md` |
+| 4 | Slice 3 — Source-context (B7 + B8) | Schema change across 5 extractors. Largest blast radius. Schedule after pipeline correctness is restored. | `extractors/foundation/source_context.py` (new), 5 extractor schemas, all related templates, finding-rendering code in renderer |
+| 5 | Slice 5 — Pinned ordering (B11) | Pure renderer change. Run last because it depends on the taxonomy (slice 2 statuses) and source-context column (slice 3). | `audit/renderer.py` only |
 
-**Parallelism:** Slices 1, 2, 4 can run in parallel (no shared files). Slice 3 + 5 are sequential.
+**No parallelism**. Reasoning: slices 1, 2, 3, 4, 5 all touch `audit/renderer.py` and at least one of `audit/discovery.py` / `audit/fetcher.py` / `audit/run.py`. Per `feedback_parallel_team_protocol`, shared-file edits in parallel are forbidden.
 
 ## Acceptance criteria (whole spec)
 
@@ -324,19 +384,64 @@ Repeat tron-kit smoke with all fixes landed and validate:
 
 ## Verification plan
 
-After each slice merges:
+`palace.audit.run()` is **render-only** — it reads existing `:IngestRun` data and renders. It does NOT re-execute extractors. Re-running audit alone after a slice merges will produce the same report as before, even if the underlying bugfix is correct, until extractors are re-ingested. Verification must therefore include explicit ingest steps.
 
-1. Re-run `palace.audit.run(project="tron-kit")` from iMac MCP.
-2. Save new audit report to `docs/audit-reports/2026-05-13-tron-kit-rerun-after-<slice>.md`.
-3. Diff against `docs/audit-reports/2026-05-12-tron-kit.md` to confirm the targeted change landed and nothing else regressed.
-4. After all 5 slices merge: full Phase 4.1 QA re-validation with all 10 acceptance criteria; if pass, close the parent issue + spawn S4.2 (bitcoin-core smoke).
+### Per-slice (after each slice merges to develop)
+
+Run the relevant subset based on what the slice touched:
+
+1. **Wipe affected data** (if the slice touched extractor schema, particularly slice 3 source-context):
+   ```cypher
+   MATCH (n {group_id: "project/tron-kit"})
+   WHERE labels(n) IN [["Finding"], ["CatchSite"], ["ErrorFinding"], ["ArchViolation"], ["CryptoFinding"], ["LocResource"], ["A11yIssue"]]
+   DETACH DELETE n
+   ```
+2. **Re-ingest** the relevant extractors:
+   ```bash
+   bash paperclips/scripts/ingest_swift_kit.sh tron-kit --bundle=uw-ios \
+       --extractors=<comma-separated-list-from-the-slice>
+   ```
+3. **Re-render audit**:
+   ```
+   palace.audit.run(project="tron-kit")
+   ```
+4. Save artifact: `docs/audit-reports/2026-05-13-tron-kit-rerun-after-<slice>.md`.
+5. Diff against `docs/audit-reports/2026-05-12-tron-kit.md` to confirm the targeted fix landed and nothing else regressed.
+
+### Final (after all 5 slices merge)
+
+Single full wipe + re-ingest + audit (operator-decision option γ from §Open questions):
+
+```cypher
+MATCH (n {group_id: "project/tron-kit"})
+WHERE labels(n) IN [["Finding"], ["CatchSite"], ["ErrorFinding"], ["ArchViolation"], ["CryptoFinding"], ["LocResource"], ["A11yIssue"], ["IngestRun"]]
+DETACH DELETE n
+```
+
+(Keep `:File`, `:Module`, `:Author`, `:Symbol*` — these are foundation data and don't carry the new schema.)
+
+Then:
+
+```bash
+bash paperclips/scripts/ingest_swift_kit.sh tron-kit --bundle=uw-ios   # uses NEW DEFAULT_EXTRACTORS
+palace.audit.run(project="tron-kit")
+```
+
+Save final artifact `docs/audit-reports/2026-05-13-tron-kit-rerun-final.md` and run full Phase 4.1 QA re-validation against all 10 acceptance criteria. If pass → close the parent issue + spawn S4.2 (bitcoin-core smoke).
 
 ## Open questions
 
-- **B1 root cause** — is it never-merged, or merge-then-reverted? Answer dictates fix complexity (cherry-pick vs revert investigation + postmortem).
-- **B7 schema migration — resolved 2026-05-13 (operator decision)**: **wipe + re-ingest** (option γ). Rationale: the 2026-05-12 tron-kit smoke is acknowledged as invalid (12 bugs B1–B11 + Opus 6 NUDGEs polluted the dataset). Migrating obviously-flawed `:Finding` nodes to a new schema makes no sense; the right thing is to blow them away and re-run extractors after the slice-1–5 bugfixes land. This also aligns with the verification plan at the bottom of this spec — clean re-run is the success criterion anyway. **Implementation**: each slice that touches extractor output schema drops the relevant `:Finding` / `:CatchSite` / etc. nodes for the affected project(s) before re-ingesting; `dependency_surface` etc. that don't change schema can leave their data. Schema migration tooling not built; field is added as required with no fallback default.
-- **B8 heuristic regex — resolved 2026-05-13**: list `(signer|key|crypto|hd_wallet|hmac|sign|auth)` is a **placeholder for BlockchainEngineer review** in Phase 1.2 plan-first of the implementing slice. Candidate additions to evaluate: `mnemonic`, `seed`, `pubkey`, `keystore`, `wallet`, `secp`, `ed25519`, `ripemd`, `address.*generate`, `wif`. CR Phase 1.2 must explicitly call BlockchainEngineer subagent for completeness check before approving.
-- **B11 ordering — resolved 2026-05-13**: use **severity-first** ordering — security-critical sections (crypto_domain, error_handling, arch_layer) at the top. Rationale: Audit-V1 v1 use case is initial security audit of crypto Kits; operator scans top-down looking for "what's worst". Categorical grouping is better for reference docs (future v1.x consideration). Final ordering proposed: `crypto_domain_model` → `error_handling_policy` → `arch_layer` → `hotspot` → `dead_symbol_binary_surface` → `dependency_surface` → `code_ownership` → `cross_repo_version_skew` → `cross_module_contract` → `public_api_surface` → `coding_convention` → `localization_accessibility` → `reactive_dependency_tracer` → `testability_di` → `hot_path_profiler`.
+All four questions resolved during 2026-05-13 review (Gate Call NO-GO via Codex subagent + operator). Capturing decisions for future readers:
+
+- **B1 root cause** — resolved 2026-05-13. GIM-242 was never opened as a PR. Feature branch is stale with completed work. Fix: resume Phase 3.2 → 4.1 → 4.2 chain (see B1 §Proposed fix). No revert / postmortem needed.
+- **B7 schema migration** — resolved 2026-05-13 (operator decision: option γ). Single project-wide wipe + re-ingest at the END after all 5 slices land (see §Verification plan). Per-slice wipes would mix old/new schemas across reports (audit selects "latest successful run per extractor"). Schema migration tooling not built; field is required with no fallback default.
+- **B8 heuristic regex** — resolved 2026-05-13. List `(signer|key|crypto|hd_wallet|hmac|sign|auth)` is a placeholder; **CR Phase 1.2 of slice 3 must dispatch BlockchainEngineer subagent for completeness check**. Candidate additions: `mnemonic`, `seed`, `pubkey`, `keystore`, `wallet`, `secp`, `ed25519`, `ripemd`, `address.*generate`, `wif`.
+- **B11 ordering** — resolved 2026-05-13. Severity-first pinned ordering via _SECTION_ORDER list; renderer's global severity sort is replaced with pinned-then-severity strategy (see B11 §Proposed fix). Crypto/error/arch at top; everything else explicit-listed; unknown extractors sort severity-desc in remainder.
+
+### New (post-Gate-Call) clarifications
+
+- **B6 hotspot stop-list**: B6 §Proposed fix lists (a)/(b)/(c) hypotheses but doesn't pin one. Slice 4 Phase 1.2 must collect the actual root cause through the proposed investigation steps before coding the fix.
+- **Status taxonomy field schema**: how are statuses stored — as a property on `:IngestRun` (`run_status: "ok"|"failed"|...`), or computed at discovery time from existing `success` + presence checks? Recommend computed at discovery (no schema change) → simpler.
 
 ## Out of scope (explicit)
 
