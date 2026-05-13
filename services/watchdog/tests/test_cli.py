@@ -77,7 +77,15 @@ def test_cmd_status(tmp_path: Path, capsys, monkeypatch, mock_paperclip):
     out = capsys.readouterr().out
     assert rc == 0
     assert "Effective mode:" in out
-    assert "Companies configured: 1" in out
+    assert "First-run baseline: pending" in out
+    assert "Handoff alerts: disabled" in out
+    assert (
+        "Tier detectors: cross_team=false ownerless=false infra_block=false stale_bundle=false"
+        in out
+    )
+    assert "Auto repair: disabled" in out
+    assert "Alert budget: soft=5 hard=20" in out
+    assert "Configured companies: 1" in out
     assert "Active cooldowns: 0" in out
 
 
@@ -101,12 +109,22 @@ def test_cmd_status_prints_mode_and_reconciliation(capsys, monkeypatch, observe_
     assert rc == 0
     assert "Effective mode: observe-only" in out
     assert "Recovery enabled: false" in out
+    assert "First-run baseline: pending" in out
+    assert "Handoff alerts: disabled" in out
+    assert (
+        "Tier detectors: cross_team=false ownerless=false infra_block=false stale_bundle=false"
+        in out
+    )
+    assert "Auto repair: disabled" in out
+    assert "Alert budget: soft=5 hard=20" in out
     assert "Handoff recent window min: 180" in out
     assert "recover_max_age_min=180" in out
     assert "configured_but_missing" not in out
     assert "live_but_unconfigured" not in out
-    assert "Companies configured: 1" in out
+    assert "Configured companies: 1" in out
     assert "Active cooldowns:" in out
+    assert "Warnings:" in out
+    assert "recovery disabled while active companies are configured" in out
 
 
 def test_cmd_status_warns_on_live_but_unconfigured(capsys, monkeypatch, observe_only_config_file):

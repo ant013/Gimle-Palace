@@ -237,8 +237,28 @@ def _cmd_status(args: argparse.Namespace) -> int:
         print("!!! UNSAFE AUTO-REPAIR ENABLED - Board has not approved !!!")
     print(f"Effective mode: {mode.value}")
     print(f"Recovery enabled: {str(cfg.daemon.recovery_enabled).lower()}")
+    baseline_status = (
+        "disabled"
+        if not cfg.daemon.recovery_first_run_baseline_only
+        else ("completed" if state.recovery_baseline_completed else "pending")
+    )
+    print(f"First-run baseline: {baseline_status}")
     print(f"Max actions per tick: {cfg.daemon.max_actions_per_tick}")
     print(f"Handoff recent window min: {cfg.handoff.handoff_recent_window_min}")
+    print(f"Handoff alerts: {'enabled' if cfg.handoff.handoff_alert_enabled else 'disabled'}")
+    print(
+        "Tier detectors: "
+        f"cross_team={str(cfg.handoff.handoff_cross_team_enabled).lower()} "
+        f"ownerless={str(cfg.handoff.handoff_ownerless_enabled).lower()} "
+        f"infra_block={str(cfg.handoff.handoff_infra_block_enabled).lower()} "
+        f"stale_bundle={str(cfg.handoff.handoff_stale_bundle_enabled).lower()}"
+    )
+    print(f"Auto repair: {'enabled' if cfg.handoff.handoff_auto_repair_enabled else 'disabled'}")
+    print(
+        "Alert budget: "
+        f"soft={cfg.handoff.handoff_alert_soft_budget_per_tick} "
+        f"hard={cfg.handoff.handoff_alert_hard_budget_per_tick}"
+    )
 
     try:
         result = subprocess.run(
@@ -252,7 +272,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
     except Exception:
         matches = -1
 
-    print(f"Companies configured: {len(cfg.companies)}")
+    print(f"Configured companies: {len(cfg.companies)}")
     for company in cfg.companies:
         print(
             f"  - {company.name} ({company.id}) "
@@ -268,6 +288,13 @@ def _cmd_status(args: argparse.Namespace) -> int:
     print(f"Active escalations: {len(state.escalated_issues)}")
     perm_count = sum(1 for e in state.escalated_issues.values() if e.get("permanent"))
     print(f"Permanent escalations: {perm_count}")
+    warnings: list[str] = []
+    if not cfg.daemon.recovery_enabled and cfg.companies:
+        warnings.append("recovery disabled while active companies are configured")
+    if warnings:
+        print("Warnings:")
+        for warning in warnings:
+            print(f"  - {warning}")
     return 0
 
 

@@ -45,6 +45,7 @@
 - `services/watchdog/tests/test_list_companies.py` — `PaperclipClient.list_companies()` unit tests (mocked httpx).
 - `services/watchdog/tests/e2e/test_gim255_cohort_isolation.py` — per-detector cohort harness.
 - `services/watchdog/tests/e2e/test_observe_only_smoke.py` — daemon-level mode-contract behavioral test.
+- `services/watchdog/tests/COVERAGE.md` — explicit stale-age gate mapping artifact from Task 13.
 - `docs/runbooks/watchdog-operational-reenable.md` — staged re-enable runbook (mirrors spec §5.4).
 
 **Modify:**
