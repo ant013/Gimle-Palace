@@ -2,8 +2,18 @@
 
 **Date:** 2026-05-13
 **Spec:** `docs/superpowers/specs/2026-05-13-audit-v1-pipeline-fixes.md` (rev2 — addresses Codex-subagent Gate Call NO-GO)
-**Status:** rev2 — addresses CR Phase 1.2 REQUEST CHANGES (3 CRITICALs + 3 WARNINGs)
+**Status:** rev3 — addresses CR Phase 1.2 REQUEST CHANGES on GIM-283-3 (3 CRITICALs)
 **Team:** Claude (CTO + CR + PythonEngineer + Opus + QA)
+
+### Rev3 changelog (2026-05-14)
+
+Addresses CodeReviewer Phase 1.2 findings from [GIM-288 comment 33f63caf](/GIM/issues/GIM-288#comment-33f63caf-189a-448b-a255-193f66d89033):
+
+| # | Type | Finding | Fix |
+|---|------|---------|-----|
+| C1 | CRITICAL | `summary_stats` plumbing gap — Tasks 4.1/4.3 say "set in extractor" but `ExtractorStats` has no `summary_stats` field; `_build_summary_stats()` is findings-only, no driver access | Task 4.1: lockfile detection moved to `_build_summary_stats` dep_surface branch (derives from all-unresolved findings + audit query extended with `resolved_version`). Task 4.3: arch_layer module_count fetched via secondary Cypher query in new `_fetch_arch_layer_supplement()` async helper in `fetcher.py` |
+| C2 | CRITICAL | `fetcher.py` listed as conditional in Files-owned | Made unconditional — both Task 4.1 and 4.3 require `fetcher.py` changes |
+| C3 | CRITICAL | SPM parser hard-codes `declared_version_constraint=""` — B9 acceptance ("shows declared constraints, not @unresolved") unsatisfiable | Added Task 4.1b: fix `parsers/spm.py` to populate `declared_version_constraint` from captured regex group `ver` + add `parsers/spm.py` to Files-owned |
 
 ### Rev2 changelog (2026-05-13)
 
@@ -401,24 +411,110 @@ Save artifact to `docs/audit-reports/2026-05-13-tron-kit-after-slice-1.md`. Veri
 
 **Branch:** `feature/GIM-283-3-audit-data-quality`
 
+**Rev3 design note — `summary_stats` plumbing (addresses C1):**
+
+`ExtractorStats` (base.py:68–72) has only `nodes_written` and `edges_written` — no `summary_stats` field.
+The `summary_stats` dict consumed by Jinja templates is built inside `fetcher.py` by `_build_summary_stats()`,
+which is a pure function over the findings list (no driver access, no filesystem access). This is the
+correct plumbing path for any stat derivable from audit query results. For stats that require a separate
+Cypher query (e.g. arch_layer `module_count` when `findings=[]`), a new async helper in `fetcher.py`
+runs the supplemental query and merges results into `summary_stats` before handing off to the renderer.
+
 **Files owned:**
 - `services/palace-mcp/src/palace_mcp/extractors/dependency_surface/extractor.py`
+- `services/palace-mcp/src/palace_mcp/extractors/dependency_surface/parsers/spm.py`
 - `services/palace-mcp/src/palace_mcp/extractors/arch_layer/extractor.py`
 - `services/palace-mcp/src/palace_mcp/audit/templates/dependency_surface.md`
 - `services/palace-mcp/src/palace_mcp/audit/templates/arch_layer.md`
-- `services/palace-mcp/src/palace_mcp/audit/fetcher.py` (if `summary_stats` plumbing needs change for arch_layer no-rules path)
+- `services/palace-mcp/src/palace_mcp/audit/fetcher.py`
+- `tests/extractors/dependency_surface/test_lockfile_warning.py` (NEW)
+- `tests/extractors/dependency_surface/test_spm_constraint_parsing.py` (NEW)
+- `tests/audit/test_dependency_surface_template.py` (NEW)
+- `tests/extractors/arch_layer/test_summary_stats_always_populated.py` (NEW)
+- `tests/audit/test_arch_layer_template.py` (NEW)
 
-### Task 4.1 — dependency_surface lockfile detection
+### Task 4.1 — dependency_surface: extend audit query + lockfile detection in fetcher
 
-**RED:** `tests/extractors/dependency_surface/test_lockfile_warning.py::test_missing_package_resolved_emits_warning` — fixture `Package.swift` without `Package.resolved`; assert run output `summary_stats["missing_lockfile"] = True`.
+**Problem (C1):** The current dep_surface audit query (`extractor.py:72–79`) returns only 4 columns:
+`purl`, `scope`, `declared_in`, `declared_version_constraint`. It does NOT return `resolved_version`.
+Without `resolved_version` in the findings, `_build_summary_stats` cannot determine whether a lockfile
+was present (all-unresolved = no lockfile). The old plan said "set summary_stats in the extractor" —
+this is wrong because `ExtractorStats` has no `summary_stats` field.
 
-**GREEN:** In `extractors/dependency_surface/extractor.py`: check for `Package.resolved` / `uv.lock` / `gradle.lockfile`; set `summary_stats["missing_lockfile"]` + relevant field per language.
+**Correct path:**
 
-**Commit:** `feat(extractors/dependency_surface): emit missing_lockfile warning in summary_stats`
+1. Extend the `audit_contract().query` in `extractors/dependency_surface/extractor.py` to also return
+   `r.resolved_version AS resolved_version` (5th column).
+2. Add an `arch_layer`-independent lockfile detection branch to `_build_summary_stats` in `fetcher.py`:
+
+```python
+elif extractor_name == "dependency_surface":
+    scopes = list({f.get("scope") for f in findings if f.get("scope")})
+    stats["scopes"] = scopes
+    # Lockfile detection: if ALL findings have resolved_version == "unresolved",
+    # no lockfile was available for this ecosystem.
+    if findings:
+        all_unresolved = all(
+            f.get("resolved_version") == "unresolved" for f in findings
+        )
+        stats["missing_lockfile"] = all_unresolved
+    else:
+        stats["missing_lockfile"] = False
+```
+
+**RED:** `tests/extractors/dependency_surface/test_lockfile_warning.py`:
+- `test_missing_lockfile_detected_when_all_unresolved` — findings with all `resolved_version="unresolved"` → `summary_stats["missing_lockfile"] == True`
+- `test_lockfile_present_when_some_resolved` — findings with mixed resolved/unresolved → `summary_stats["missing_lockfile"] == False`
+- `test_empty_findings_no_lockfile_false` — `findings=[]` → `summary_stats["missing_lockfile"] == False`
+
+**GREEN:** Changes in `extractor.py` (query extension) + `fetcher.py` (`_build_summary_stats` dep_surface branch).
+
+**Commit:** `feat(audit/dep_surface): extend audit query with resolved_version + lockfile detection in fetcher`
+
+### Task 4.1b — SPM parser: populate declared_version_constraint (addresses C3)
+
+**Problem (C3):** `parsers/spm.py:85` hard-codes `declared_version_constraint=""` for all SPM deps.
+The regex `_PKG_PATTERN` (line 20–24) already captures the `ver` group from `from:`, `exact:`,
+`branch:`, `revision:` constraints, but line 46 extracts only `url` — `ver` is discarded.
+B9 acceptance requires "shows declared constraints, not `@unresolved`" — unsatisfiable without
+this fix.
+
+**Correct path:**
+
+1. In `parse_spm()`, change line 46 to also capture the constraint type + value:
+```python
+for m in _PKG_PATTERN.finditer(text):
+    url = m.group("url")
+    ver = m.group("ver") or ""
+    # ... use ver below
+```
+
+2. Populate `declared_version_constraint` with the captured value instead of `""`:
+```python
+declared_version_constraint=ver,  # was: ""
+```
+
+3. Optionally prefix with constraint type (e.g. `from: 5.0.0`, `exact: 1.2.3`) for clarity.
+   This requires extending the regex to also capture the constraint keyword. If this adds
+   complexity, plain version string (e.g. `5.0.0`) is acceptable for rev3.
+
+**RED:** `tests/extractors/dependency_surface/test_spm_constraint_parsing.py`:
+- `test_from_constraint_captured` — `Package.swift` with `.package(url: "...", from: "5.0.0")` → `declared_version_constraint == "5.0.0"` (or `"from: 5.0.0"`)
+- `test_exact_constraint_captured` — `exact: "1.2.3"` → captured
+- `test_branch_constraint_captured` — `branch: "main"` → captured
+- `test_no_constraint_stays_empty` — `.package(url: "...")` with no version clause → `declared_version_constraint == ""`
+
+**GREEN:** Fix `parsers/spm.py` lines 46 + 85.
+
+**Commit:** `fix(parsers/spm): populate declared_version_constraint from captured regex group`
 
 ### Task 4.2 — dependency_surface template Data Quality block
 
 **RED:** `tests/audit/test_dependency_surface_template.py::test_missing_lockfile_renders_warning` — fixture with `summary_stats.missing_lockfile=True`; assert rendered markdown has "No Package.resolved found" warning text.
+
+**Additional RED:** `test_declared_constraint_shown_when_lockfile_missing` — fixture with
+`summary_stats.missing_lockfile=True` + findings with `declared_version_constraint="5.0.0"` +
+`resolved_version="unresolved"` → deps table shows `5.0.0` (not `@unresolved`).
 
 **GREEN:** Update `audit/templates/dependency_surface.md`:
 ```jinja
@@ -430,19 +526,59 @@ No `Package.resolved` (or `uv.lock` / `gradle.lockfile`) found in `{{ project }}
 {% endif %}
 ```
 
-Also: replace `@unresolved` placeholder with `<declared_constraint>` in the deps table when no lockfile.
+In the deps table: when `missing_lockfile`, show `declared_version_constraint` column instead of
+`resolved_version`. When lockfile present, show `resolved_version` as before. Jinja conditional:
+```jinja
+{% if summary_stats.get("missing_lockfile") %}
+| {{ f.declared_version_constraint or '—' }} |
+{% else %}
+| {{ f.resolved_version or '—' }} |
+{% endif %}
+```
 
 **Commit:** `feat(audit/templates/dependency_surface): data-quality warning + declared-constraint fallback`
 
-### Task 4.3 — arch_layer summary_stats unconditional
+### Task 4.3 — arch_layer module_count via supplemental query in fetcher (addresses C1)
 
-**Investigation first:** verify the current claim that `summary_stats.module_count` is missing in no-findings paths. Read `extractors/arch_layer/extractor.py` and trace the no-findings code path.
+**Problem (C1):** `_build_summary_stats` has no `arch_layer` branch. When `findings=[]` (no violations),
+`summary_stats = {"total": 0}` — no `module_count`. The arch_layer audit query (`_QUERY`) returns only
+`:ArchViolation` rows, so module_count cannot be derived from findings. The extractor's `run()` knows
+`len(all_modules)` (line 220) but `ExtractorStats` cannot carry this.
 
-**RED:** `tests/extractors/arch_layer/test_summary_stats_always_populated.py::test_no_rules_path_includes_module_count` — fixture with module structure but no rule file; assert run output `summary_stats["module_count"] > 0`, `summary_stats["rules_declared"] == False`, `summary_stats["rule_source"] in (None, "")`.
+**Correct path:** Add a supplemental async query in `fetcher.py`. Specifically:
 
-**GREEN:** Update `extractors/arch_layer/extractor.py` to always populate `module_count`, `edge_count`, `rules_declared`, `rule_source` in `summary_stats` regardless of findings.
+1. Add `_ARCH_LAYER_SUPPLEMENT` Cypher constant:
+```python
+_ARCH_LAYER_SUPPLEMENT = """
+MATCH (m:Module {project_id: $project_id})
+OPTIONAL MATCH (m)-[e:IMPORTS]->(m2:Module {project_id: $project_id})
+WITH count(DISTINCT m) AS module_count, count(e) AS edge_count
+OPTIONAL MATCH (r:ArchRule {project_id: $project_id})
+RETURN module_count, edge_count,
+       count(r) > 0 AS rules_declared,
+       r.source AS rule_source
+LIMIT 1
+"""
+```
 
-**Commit:** `fix(extractors/arch_layer): always populate summary_stats fields, regardless of findings`
+2. In `fetch_audit_data`, after `_build_summary_stats` for `arch_layer`, run the supplement:
+```python
+if extractor_name == "arch_layer":
+    supplement = await _fetch_arch_layer_supplement(driver, run_info)
+    results[extractor_name].summary_stats.update(supplement)
+```
+
+3. `_fetch_arch_layer_supplement(driver, run_info) -> dict` is a new async helper that
+   runs the Cypher and returns `{"module_count": N, "edge_count": M, "rules_declared": bool, "rule_source": str|None}`.
+
+**RED:** `tests/extractors/arch_layer/test_summary_stats_always_populated.py`:
+- `test_no_rules_path_includes_module_count` — mock driver returns 12 modules, 0 rules → `summary_stats["module_count"] == 12`, `summary_stats["rules_declared"] == False`
+- `test_with_rules_path_includes_module_count` — mock driver returns 8 modules, 3 rules → `summary_stats["module_count"] == 8`, `summary_stats["rules_declared"] == True`
+- `test_empty_project_zero_modules` — mock driver returns 0 → `summary_stats["module_count"] == 0`
+
+**GREEN:** New helper + integration in `fetcher.py`.
+
+**Commit:** `feat(audit/fetcher): add arch_layer supplemental query for module_count + rules_declared`
 
 ### Task 4.4 — arch_layer template no-rules branch
 
@@ -475,8 +611,9 @@ palace.audit.run(project="tron-kit")
 ```
 
 Save to `docs/audit-reports/2026-05-13-tron-kit-after-slice-4.md`. Verify:
-- §Dependency Surface shows declared constraints + "No Package.resolved found" warning.
-- §Architecture rendering shows `(no arch rules declared — N modules indexed)`.
+- §Dependency Surface shows declared constraints (e.g. `5.0.0`) + "No Package.resolved found" warning. NOT `@unresolved`.
+- §Architecture rendering shows `No architecture rules declared — N modules indexed in Neo4j` with concrete N.
+- Regression: a fixture project WITH Package.resolved still shows resolved versions correctly.
 
 ---
 
