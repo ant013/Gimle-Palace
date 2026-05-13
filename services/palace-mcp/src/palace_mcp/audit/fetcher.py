@@ -129,4 +129,34 @@ def _build_summary_stats(
             1 for f in findings if (f.get("signature_changed_count") or 0) > 0
         )
 
+    elif extractor_name == "testability_di":
+        stats["patterns"] = sum(1 for f in findings if f.get("style") is not None)
+        stats["test_doubles"] = len(
+            {
+                (
+                    double.get("kind"),
+                    double.get("language"),
+                    double.get("target_symbol"),
+                    double.get("test_file"),
+                )
+                for finding in findings
+                for double in finding.get("test_doubles") or []
+            }
+        )
+        stats["untestable_sites"] = len(
+            {
+                (
+                    site.get("file"),
+                    site.get("start_line"),
+                    site.get("end_line"),
+                    site.get("category"),
+                    site.get("symbol_referenced"),
+                    site.get("severity"),
+                    site.get("message"),
+                )
+                for finding in findings
+                for site in finding.get("untestable_sites") or []
+            }
+        )
+
     return stats
