@@ -1,5 +1,7 @@
-## Crypto domain findings ({{ kit_name }})
+## Crypto domain findings{% if summary_stats.get('kit_name') %} ({{ summary_stats.kit_name }}){% endif %}
 
+{% set critical_high = (findings | selectattr('_severity', 'equalto', 'critical') | list) + (findings | selectattr('_severity', 'equalto', 'high') | list) %}
+{% set medium_low = (findings | selectattr('_severity', 'equalto', 'medium') | list) + (findings | selectattr('_severity', 'equalto', 'low') | list) %}
 {% if findings %}
 ### Critical / high
 {% if critical_high %}
