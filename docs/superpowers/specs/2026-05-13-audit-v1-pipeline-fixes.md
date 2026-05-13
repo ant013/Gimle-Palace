@@ -28,7 +28,7 @@ S4.1 smoke (GIM-277, tron-kit) produced the first real Audit-V1 report end-to-en
 
 ## Status taxonomy (foundation for B2, B4, B5)
 
-Today `audit/discovery.py` collapses three different conditions into "blind spot":
+Today `audit/run.py:64-77` (NOT `discovery.py` — discovery is just a filter-by-success Cypher) collapses three different conditions into "blind spot":
 
 1. Extractor exists in registry but has no `audit_contract()` → **not part of audit by design**.
 2. Extractor has `audit_contract()` but never ran for this project → **never tried**.
@@ -46,7 +46,51 @@ The report wording ("run command to populate") fits only case 2. This spec repla
 
 **Profile matching**: `extractors/foundation/profiles.py` defines which extractors apply to which language profile (e.g. `swift_kit`: { arch_layer, error_handling_policy, crypto_domain_model, …, but **not** symbol_index_python }). Project-language matching is a small lookup (already implied by `ingest_swift_kit.sh`'s curated `DEFAULT_EXTRACTORS`; this spec formalises it).
 
+### Profile resolution + bundle mode (addresses 5th-round Gate Call C1, C2)
+
+**Single-project resolution.** `resolve_profile(project_slug, driver) -> LanguageProfile` follows this lookup order:
+
+1. **Explicit field on `:Project`**: query `MATCH (p:Project {slug: $slug}) RETURN p.language_profile`. If present, use it.
+2. **Manifest inference fallback**: scan `/repos[-*]/<relative_path>/` for marker files — `Package.swift` → `swift_kit`, `build.gradle.kts` / `settings.gradle.kts` → `android_kit`, `pyproject.toml` → `python_service`, etc. Inference rules table-driven in `profiles.py`.
+3. **Explicit fail**: if neither (1) nor (2) resolve, raise `unknown_language_profile` with `error_code` + suggestion ("set `:Project.language_profile` via `palace.memory.register_project` or add a manifest file"). Do NOT silently default to a profile.
+
+**Backfill obligation** (slice 2 task — see plan Task 2.0): for the 4 currently-mounted projects (`gimle`, `tron-kit`, `uw-android`, `uw-ios` per docker-compose.yml) — write a one-shot Cypher migration setting `language_profile`. Do not assume inference covers all of them on the first run.
+
+**Bundle mode.** `palace.audit.run(bundle="uw-ios")` already exists (`run.py:39`). For bundles:
+
+- **Per-member discovery**: for each `(:Bundle{name})-[:HAS_MEMBER]->(:Project)`, run `discover_extractor_statuses(...)` separately; each member has its own profile.
+- **Per-section aggregation**: per (member, extractor) → cell status. The report's per-extractor section becomes a grouped table by member (one row per member with status). Per-bundle findings are aggregated `UNION`-style across `OK`-status members; `RUN_FAILED` / `NOT_ATTEMPTED` / `FETCH_FAILED` per member surfaces in §Failed-Extractors / §Blind-Spots / §Data-Quality with a `member_slug` column.
+- **Profile mismatch tolerated**: a bundle with mixed `swift_kit` + `python_service` members renders each in its applicable extractors; a Swift-only extractor's row is omitted for Python members (treated as `NOT_APPLICABLE` silently for that member, but the section as a whole exists).
+
 This taxonomy is implemented as part of **Slice 2** (failure visibility). Slices 1 + 3 + 4 + 5 depend on it.
+
+### Last-attempt-wins discovery (addresses 5th-round Gate Call "LA" finding)
+
+Current `discovery.py:13` Cypher filters `WHERE r.success: true`. Effect: extractor that ran `success` → `success` → **failed** returns the previous success (latest-OK), and RUN_FAILED is never surfaced. Wrong operator-trust semantics.
+
+Slice 2 must drop the `WHERE r.success` filter and instead select **latest by `completed_at`** regardless of success — then classify per the taxonomy table above. If latest IS the failure, RUN_FAILED is surfaced; older successes don't override it.
+
+### Observability invariants (addresses 5th-round Gate Call C5)
+
+Every audit report MUST include a **§Profile Coverage** appendix:
+
+```
+| Status | Extractor count |
+|--------|-----------------|
+| OK | N |
+| RUN_FAILED | M |
+| NOT_ATTEMPTED | K |
+| FETCH_FAILED | F |
+| NOT_APPLICABLE | L (hidden in main report, shown here) |
+
+Total registered: R = N + M + K + F + L
+```
+
+Renderer-side invariant: if `R != N + M + K + F + L`, abort render with `coverage_count_mismatch` error_code. This makes profile typos and registry drift loud-fail.
+
+### FETCH_FAILED mechanism (addresses 5th-round Gate Call "FF" finding)
+
+`audit/run.py:71-77` already has the right plumbing: `fetch_audit_data()` accepts an out-parameter `failed_extractors: list[str]` and appends names whose Cypher errored. Slice 2 work is **typing this list**, not inventing the mechanism. Implementation: keep the out-parameter contract; map names in `failed_extractors` to `FETCH_FAILED` status in the new `discover_extractor_statuses` result.
 
 ---
 
@@ -223,6 +267,10 @@ This taxonomy is implemented as part of **Slice 2** (failure visibility). Slices
 - Executive summary "1 HIGH" claim is computed only over library findings (so the `iOS Example/` HIGH no longer counts as v1 headline).
 - §Crypto domain table has a `source` column visible to operators.
 - Audit-report renderer documents the classification rules in the §Known Limitations appendix.
+- **Distribution observability** (addresses Gate Call C4): every report's §Executive Summary header line includes `Findings by source: library=X example=Y test=Z other=W`. Operator can spot misclassification at a glance.
+- **Empty-library warning** (addresses Gate Call C4): if `source_context=='library'` count is 0 AND total findings > 10 for the project, renderer emits a `data_quality: library_findings_empty` warning above the §Executive Summary. This catches projects where greedy-regex misclassification or non-standard layout consumed everything as `example` / `other`.
+- **Per-project override** (addresses Gate Call C4): `<project_repo>/.gimle/source-context-overrides.yaml` accepted as optional file; entries are explicit `glob → context` pairs that override the regex classifier. Pattern follows `localization_accessibility`'s `loc-allowlist.txt` for consistency. Documented in `docs/runbooks/source-context-classifier.md` (new).
+- **Case-insensitive regex** (addresses Gate Call C4): classifier uses `re.IGNORECASE` flag; tests cover `iOS Example/`, `ios-example/`, `IOS_EXAMPLE/` variants.
 
 ---
 
@@ -243,6 +291,7 @@ This is a pragmatic tuning; final solution (per-call-site critical-path analysis
 - Re-run tron-kit `try_optional_swallow` finding count: ≤10 MEDIUM (down from 34), with the remaining MEDIUMs in identifiable crypto/auth paths.
 - LOW `try?` findings present but not on the §Executive Summary's top-3.
 - Operator + BlockchainEngineer manual review of the new MEDIUM set hits the AC5 false-positive threshold (≤2 of top-5 FP).
+- **Enforcement artifact** (addresses Gate Call C3): the BlockchainEng subagent review producing the final regex list MUST land as a committed file `docs/research/2026-05-NN-try-optional-critical-path-keywords.md` with explicit operator/BlockchainEng sign-off. The slice's Phase 3.1 CR mechanical review MUST paste the artifact's commit SHA. Without the artifact + SHA paste, Phase 4.2 is blocked. This converts the soft "CR dispatches subagent" intention into a hard, verifiable gate.
 
 ---
 
@@ -372,7 +421,7 @@ Repeat tron-kit smoke with all fixes landed and validate:
 7. **B9**: §Dependency Surface shows declared constraints + missing-lockfile warning, not `@unresolved`.
 8. **B10**: §Architecture rendering shows `(no arch rules declared — N modules indexed)`.
 9. **B11**: §Sections render in the new `_SECTION_ORDER` with security findings first.
-10. **AC5 spec compliance**: operator + BlockchainEngineer perform manual review of top-5 in §1, §4, §7 (this is the Phase 4.1 step that was skipped on GIM-277; refer to PBUG-10 fix track).
+10. **AC5 spec compliance**: operator + BlockchainEngineer perform manual review of top-5 in §1, §4, §7. **Enforcement** (addresses Gate Call C3): the review output MUST be a committed artifact `docs/research/2026-05-NN-tron-kit-ac5-manual-review.md` with operator + BlockchainEng sign-off lines. Slice 5 Phase 4.1 QA pastes the artifact's commit SHA as evidence. Without artifact → Phase 4.2 blocked. AC10 is now machine-verifiable. (Also tracked as PBUG-10 / process track for future audits.)
 
 ## Followups (out of scope for this spec)
 

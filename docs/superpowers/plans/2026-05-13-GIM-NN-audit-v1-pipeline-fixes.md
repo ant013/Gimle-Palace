@@ -38,6 +38,51 @@ Estimated wall-time (with serial chain + smoke verification between slices): **3
 - `services/palace-mcp/tests/audit/test_discovery_status_taxonomy.py` (NEW)
 - `services/palace-mcp/tests/audit/test_renderer_status_sections.py` (NEW)
 
+### Task 2.0 — Project-language-profile backfill + manifest inference
+
+**Addresses Gate Call C1.**
+
+**RED:**
+- `tests/extractors/test_profiles.py::test_register_project_accepts_language_profile` — calls `palace.memory.register_project(slug, language_profile="swift_kit")`, asserts node `:Project {slug, language_profile: "swift_kit"}` exists.
+- `tests/extractors/test_profiles.py::test_resolve_profile_explicit_wins` — fixture with `:Project.language_profile="swift_kit"`, no manifest; assert `resolve_profile` returns swift_kit.
+- `tests/extractors/test_profiles.py::test_resolve_profile_manifest_inference` — fixture with `Package.swift` but no `:Project.language_profile`; assert resolved to `swift_kit`.
+- `tests/extractors/test_profiles.py::test_resolve_profile_unknown_raises` — fixture with neither; assert `unknown_language_profile` error.
+
+**GREEN:**
+
+1. Extend `palace.memory.register_project` MCP tool to accept `language_profile` field (Pydantic schema update + Cypher MERGE).
+2. Backfill migration: one-shot Cypher in `services/palace-mcp/scripts/backfill_language_profile.cypher`:
+   ```cypher
+   MATCH (p:Project) WHERE p.slug IN ['gimle','tron-kit','uw-android','uw-ios','uw-ios-mini','uw-android-mini','oz-v5-mini']
+   SET p.language_profile = CASE p.slug
+     WHEN 'gimle' THEN 'python_service'
+     WHEN 'tron-kit' THEN 'swift_kit'
+     WHEN 'uw-ios' THEN 'swift_kit'
+     WHEN 'uw-ios-mini' THEN 'swift_kit'
+     WHEN 'uw-android' THEN 'android_kit'
+     WHEN 'uw-android-mini' THEN 'android_kit'
+     WHEN 'oz-v5-mini' THEN 'python_service'
+     ELSE p.language_profile END
+   ```
+   Run as part of slice-2 deploy script with idempotency guard.
+
+3. Manifest inference rules table in `profiles.py`:
+   ```python
+   _MANIFEST_RULES = (
+       ("Package.swift", "swift_kit"),
+       ("build.gradle.kts", "android_kit"),
+       ("settings.gradle.kts", "android_kit"),
+       ("pyproject.toml", "python_service"),
+       # ...
+   )
+   ```
+
+4. `resolve_profile` order: explicit `:Project.language_profile` → manifest inference → `unknown_language_profile` error (NO silent default).
+
+**Commit:** `feat(extractors/foundation/profiles): backfill + manifest inference for project language_profile`
+
+---
+
 ### Task 2.1 — Language profile lookup
 
 **RED:** `tests/extractors/test_profiles.py::test_swift_kit_profile_returns_audit_extractors` fails — module doesn't exist.
@@ -97,35 +142,47 @@ async def discover_extractor_statuses(driver, project, profile, registry) -> dic
 
 **Commit:** `feat(audit): typed extractor statuses (NOT_APPLICABLE / NOT_ATTEMPTED / RUN_FAILED / FETCH_FAILED / OK)`
 
-### Task 2.3 — run.py consumes new discovery
+### Task 2.3 — run.py consumes new discovery (preserve existing fetch_failed semantics)
 
-**RED:** `tests/audit/test_run_uses_status_taxonomy.py::test_render_called_with_status_buckets` — mock renderer, verify it receives 5 separate buckets (or one dict keyed by status).
+**Addresses Gate Call FF + N4 — existing mechanism (`run.py:71-77`) must be preserved.**
+
+**RED:**
+- `tests/audit/test_run_uses_status_taxonomy.py::test_render_called_with_status_buckets` — mock renderer, verify it receives 5 separate buckets (or one dict keyed by status).
+- `tests/audit/test_run_preserves_fetch_failed_path.py::test_fetcher_out_parameter_still_populated` — fixture with extractor that raises in fetcher; assert fetcher's `failed_extractors` out-list contains the name AND the new status taxonomy classifies it as `FETCH_FAILED`.
 
 **GREEN:** `audit/run.py:60-90` updated to:
+
 1. Call `discover_extractor_statuses(...)` instead of `find_latest_runs()`.
-2. Pass status taxonomy to renderer.
-3. Skip `audit_extractors = {... if audit_contract() is not None}` filter (replaced by profile lookup).
+2. **Preserve existing fetch_failed plumbing** (out-parameter passed to `fetch_audit_data` per `run.py:71-77`). Map names in `failed_extractors` to `FETCH_FAILED` status in the typed result.
+3. Pass typed status to renderer.
+4. Replace `audit_extractors = {... if audit_contract() is not None}` filter with profile-based lookup (profile-matched extractors with `audit_contract()`).
 
-**Commit:** `feat(audit): run.py consumes typed statuses from discovery`
+**Commit:** `feat(audit): run.py consumes typed statuses; preserves fetcher out-parameter mechanism`
 
-### Task 2.4 — Renderer splits Blind Spots into 3 sections
+### Task 2.4 — Renderer creates Failed / Data-Quality / Blind-Spots sections + Profile-Coverage appendix
 
-**RED:** `tests/audit/test_renderer_status_sections.py::test_failed_extractors_render_separately` — fixture with one RUN_FAILED + one NOT_ATTEMPTED + one FETCH_FAILED; assert 3 separate report sections produced.
+**Addresses Gate Call C5 + N1 — existing blind-spots is inline in `report_template.md` + `run.py:69`, not a templated file; this is a CREATE, not split.**
+
+**RED:**
+- `tests/audit/test_renderer_status_sections.py::test_failed_extractors_render_separately` — fixture with one RUN_FAILED + one NOT_ATTEMPTED + one FETCH_FAILED; assert 3 separate report sections produced.
+- `tests/audit/test_renderer_profile_coverage_appendix.py::test_appendix_counts_each_status` — fixture with each status present; assert §Profile Coverage appendix renders correct counts and `R == sum(N,M,K,F,L)`.
+- `tests/audit/test_renderer_coverage_count_mismatch_fails.py::test_count_drift_aborts_render` — fixture with R ≠ N+M+K+F+L (simulated by registry mutation between discovery + render); assert renderer aborts with `coverage_count_mismatch` error_code.
 
 **GREEN:** Modify `audit/renderer.py` to emit:
-- §Failed Extractors (RUN_FAILED bucket) — extractor name, last run_id, error_code, error message, "next action"
-- §Data-Quality Issues (FETCH_FAILED bucket) — extractor name, failed query trace, suggestion
-- §Blind Spots (NOT_ATTEMPTED bucket) — same as today, with `palace.ingest.run_extractor(...)` hint
+- §Failed Extractors (RUN_FAILED bucket) — extractor name, last run_id, error_code, error message, "next action".
+- §Data-Quality Issues (FETCH_FAILED bucket) — extractor name, failed query trace, suggestion.
+- §Blind Spots (NOT_ATTEMPTED bucket) — same as today's inline blind_spots, with `palace.ingest.run_extractor(...)` hint.
+- **§Profile Coverage appendix** (Gate Call C5): table of OK / RUN_FAILED / NOT_ATTEMPTED / FETCH_FAILED / NOT_APPLICABLE with counts + invariant assertion `R == N+M+K+F+L`.
 
-NOT_APPLICABLE doesn't render — log-only.
+Create three NEW templates in `audit/templates/`: `failed_extractors.md`, `data_quality_issues.md`, `blind_spots.md`. Remove inline blind-spot rendering from `report_template.md`.
 
-Update `audit/templates/`: split `blind_spots.md` into three: `failed_extractors.md`, `data_quality_issues.md`, `blind_spots.md`.
+**Commit:** `feat(audit/renderer): three new status sections + Profile-Coverage appendix; remove inline blind-spot rendering`
 
-**Commit:** `feat(audit/renderer): split Blind Spots into Failed / Data-Quality / Blind-Spots sections`
+### Task 2.5 — B6 hotspot 0-scan investigation (committed deliverable)
 
-### Task 2.5 — B6 hotspot 0-scan investigation
+**Investigation tasks (no test/impl yet — discovery work). Addresses Gate Call P10 — deliverable becomes a committed artifact reviewed before Task 2.6 RED.**
 
-**Investigation tasks (no test/impl yet — discovery work):**
+**Steps:**
 
 1. Query Neo4j on iMac:
    ```cypher
@@ -135,7 +192,13 @@ Update `audit/templates/`: split `blind_spots.md` into three: `failed_extractors
 2. `docker logs gimle-palace-palace-mcp-1 --since 2026-05-12T15:00 | grep -iE "hotspot|lizard" | head -50`
 3. Check `extractors/hotspot/` source code for stop-list rules vs Swift file paths.
 
-**Output:** Phase 1.2 plan-first review must include findings before approving Task 2.6.
+**Deliverable:** committed artifact `docs/postmortems/2026-05-13-hotspot-zero-scan-investigation.md` containing:
+- Query outputs.
+- Identified condition (a) mount-path mismatch / (b) stop-list / (c) ordering / (d) other.
+- Root cause statement with file:line citations.
+- Recommended fix scope.
+
+**Gate:** Phase 1.2 plan-first CR review of Task 2.6 MUST cite the postmortem commit SHA in its APPROVE comment. Without the artifact on the FB, Task 2.6 RED tests don't get green-lit.
 
 ### Task 2.6 — B6 hotspot fix (depends on 2.5 findings)
 
@@ -148,17 +211,29 @@ Update `audit/templates/`: split `blind_spots.md` into three: `failed_extractors
 
 **Commit:** `fix(extractors/hotspot): <root cause-specific message>`
 
-### Task 2.7 — Hotspot tightened success criterion
+### Task 2.7 — Hotspot tightened success criteria (multi-invariant)
 
-**RED:** `tests/extractors/test_hotspot_zero_scan_with_files_present_fails_loudly.py` — same fixture as 2.6 but on the WRONG path (extractor previously passed); assert it now fails with the new error code.
+**Addresses Gate Call P11 — extend invariants beyond the single 0-scan check.**
+
+**RED:**
+
+- `tests/extractors/test_hotspot_zero_scan_with_files_present_fails_loudly.py` — fixture with `:File` count > 0 but `scanned_files == 0`; assert `success=False, error_code="data_mismatch_zero_scan_with_files_present"`.
+- `tests/extractors/test_hotspot_zero_parsed_with_scanned_files_fails.py` — fixture where `scanned_files > 0` (lizard reads files) but `parsed_functions == 0` (lizard finds zero functions — likely parser breakage); assert `success=False, error_code="lizard_parser_zero_functions"`.
+- `tests/extractors/test_hotspot_empty_project_fails_distinctly.py` — fixture where both `scanned_files == 0` AND `file_count_from_neo4j == 0` (genuinely empty project); assert `success=False, error_code="empty_project"` (distinct error so operator can tell "really empty" from "mount mismatch").
 
 **GREEN:** In `extractors/hotspot/extractor.py`:
 ```python
-if scanned_files == 0 and file_count_from_neo4j > 0:
+file_count = await self._query_file_count(driver, project)
+if scanned_files == 0 and file_count > 0:
     return ExtractorStats(success=False, error_code="data_mismatch_zero_scan_with_files_present", ...)
+if scanned_files == 0 and file_count == 0:
+    return ExtractorStats(success=False, error_code="empty_project", message="No :File nodes for project; run symbol_index_swift first.")
+if scanned_files > 0 and parsed_functions == 0:
+    return ExtractorStats(success=False, error_code="lizard_parser_zero_functions", ...)
+# OK path
 ```
 
-**Commit:** `fix(extractors/hotspot): fail loudly on 0-scan with files-present mismatch`
+**Commit:** `fix(extractors/hotspot): three loud-fail invariants (mount-mismatch / parser / empty-project)`
 
 ### Task 2.8 — End-to-end regression test
 
@@ -182,7 +257,9 @@ if scanned_files == 0 and file_count_from_neo4j > 0:
 - `docs/runbooks/ingest-swift-kit.md`
 - `docs/roadmap.md` (correct GIM-242 row ✅ → 📋 then back to ✅ at chain close)
 
-### Task 1.1 — GIM-242 chain resumption (sub-issue)
+### Task 1.1 — GIM-242 chain resumption (sub-issue + blocker)
+
+**Addresses Gate Call P9 — GIM-NN-2 Phase 4.2 merge MUST block until GIM-242 chain merges to develop.**
 
 This is a chain-resumption, not a code task. Spawn a separate paperclip issue:
 - **Title:** "GIM-NN-2.1: resume GIM-242 testability_di chain to merge"
@@ -191,6 +268,8 @@ This is a chain-resumption, not a code task. Spawn a separate paperclip issue:
 - **First action:** forward-merge `origin/develop` into the branch, resolve conflicts (39 commits ahead).
 - **Then:** Phase 3.2 (Opus) → Phase 4.1 (QA, including a real-tron-kit smoke) → Phase 4.2 (CTO merge).
 - **Roadmap update:** in PR description, include `docs(roadmap):` change ✅ → 📋 first, then ✅ at merge.
+
+**Blocker invariant:** GIM-NN-2 Phase 4.2 (CTO merge of slice 1) MUST verify GIM-242 is merged-to-develop via `git ls-tree origin/develop -- services/palace-mcp/src/palace_mcp/extractors/testability_di/` returning non-empty before approving its own merge. Documented in `§Phase chain reminder` below.
 
 Acceptance: `git ls-tree origin/develop services/palace-mcp/src/palace_mcp/extractors/testability_di/` returns non-empty; registered in `registry.py` on develop.
 
@@ -389,19 +468,38 @@ def classify(path: str) -> Literal["library", "example", "test", "other"]:
 
 **Commit:** `feat(extractors/crypto_domain_model): emit source_context per finding`
 
-### Task 3.3 — error_handling_policy emits source_context + B8 try? tuning
+### Task 3.3 — error_handling_policy emits source_context + B8 try? tuning + word-boundary regex
 
-**RED:**
-- `tests/extractors/error_handling_policy/test_finding_includes_source_context.py` — same shape as 3.2.
-- `tests/extractors/error_handling_policy/test_try_optional_severity_critical_path.py::test_crypto_path_yields_medium` — fixture finding in `Sources/TronKit/Crypto/Signer.swift`, assert severity == MEDIUM.
-- `tests/extractors/error_handling_policy/test_try_optional_severity_convenience_path.py::test_ui_path_yields_low` — fixture in `Sources/TronKit/UI/View.swift`, assert severity == LOW.
+**Addresses Gate Call C3 (enforcement) + P12 (fixtures explicit + false-positive coverage).**
+
+**RED — explicit fixture inventory:**
+
+| Fixture file | Expected severity | What it tests |
+|---|---|---|
+| `Sources/TronKit/Crypto/Signer.swift` (with `try?`) | MEDIUM | crypto path → MEDIUM |
+| `Sources/TronKit/HDWallet/HDWalletKit.swift` (with `try?`) | MEDIUM | hd_wallet path → MEDIUM |
+| `Sources/TronKit/Network/Auth.swift` (with `try?`) | MEDIUM | auth path → MEDIUM |
+| `Sources/TronKit/UI/Authorization.swift` (with `try?`) | LOW | **false-positive guard**: word `Authorization` substring-matches `auth`, but with word-boundary regex `\bauth\b` should NOT match. Severity = LOW. |
+| `Sources/TronKit/UI/View.swift` (with `try?`) | LOW | UI path → LOW |
+| `iOS Example/Sources/Manager.swift` (with `try?` in `signer/` subdir) | LOW | source_context=example → downgrade despite crypto regex match |
+| `Tests/CryptoTests.swift` (with `try?`) | LOW | source_context=test → downgrade despite crypto regex match |
+
+**Plus** test for each finding having `source_context` set (shape from 3.2).
 
 **GREEN:**
-1. Set `source_context` on each finding.
-2. Add critical-path detection: file or function name matches regex `(?i)(signer|key|crypto|hd_wallet|hmac|sign|auth)` → MEDIUM `try?`; otherwise LOW.
-3. **B8 placeholder note:** the regex list is the **starting point**. CR Phase 1.2 review of this PR MUST dispatch a BlockchainEngineer subagent (per spec §Open questions B8) to validate the regex list. Candidate additions to evaluate: `mnemonic|seed|pubkey|keystore|wallet|secp|ed25519|ripemd|address.*generate|wif`. PE adjusts the regex per BlockchainEng recommendation before pushing for Opus.
 
-**Commit:** `feat(extractors/error_handling_policy): source_context + try-optional critical-path severity tuning`
+1. Set `source_context` on each finding.
+2. Add critical-path detection: file or function name matches regex `(?i)\b(signer|key|crypto|hd_wallet|hmac|sign|auth)\b` (word-boundary, case-insensitive) → MEDIUM `try?`; otherwise LOW.
+3. Source-context downgrade: when `source_context in {"example", "test"}`, force severity ≤ LOW (overrides path-regex MEDIUM).
+4. **B8 enforcement** (spec §B8 acceptance):
+   - The regex list is a **placeholder** starting from `(signer|key|crypto|hd_wallet|hmac|sign|auth)`.
+   - CR Phase 1.2 review MUST dispatch a BlockchainEngineer subagent per spec §B8.
+   - BlockchainEng output → committed artifact `docs/research/2026-05-NN-try-optional-critical-path-keywords.md`. The artifact specifies the final regex + rationale + operator/BlockchainEng sign-off.
+   - PE Phase 2 adjusts the regex per the committed artifact's spec.
+   - **CR Phase 3.1 paste**: artifact's commit SHA + grep showing the regex matches the artifact's recommended list. Without paste → REQUEST CHANGES, slice blocks at Phase 3.1.
+   - Phase 4.2 verifies the SHA exists on the FB.
+
+**Commit:** `feat(extractors/error_handling_policy): source_context + word-boundary critical-path tuning + per-artifact regex`
 
 ### Task 3.4 — arch_layer + code_ownership + coding_convention emit source_context
 
@@ -514,6 +612,21 @@ _SECTION_ORDER = (
 
 **Commit:** `feat(audit/renderer): _SECTION_ORDER pins all 15 audit-critical extractors`
 
+### Task 5.2b — Stub templates for reactive_dependency_tracer + testability_di
+
+**Addresses Gate Call N2 — these two extractors are in `_SECTION_ORDER` (slice 5) but have no templates in `audit/templates/`. Renderer's `TemplateNotFound` fallback (`renderer.py:182-184`) produces a stub heading + "no template available" message. AC11 ("verify by reading ## headings") would pass but the sections look broken.**
+
+**RED:** `tests/audit/test_renderer_minimum_template_coverage.py::test_section_order_extractors_have_templates` — iterate over `_SECTION_ORDER`, assert a template exists in `audit/templates/<name>.md` for each.
+
+**GREEN:** Create stub templates at minimum:
+
+- `audit/templates/reactive_dependency_tracer.md` — renders the helper-unavailable diagnostic + reactive findings table when present + Provenance line.
+- `audit/templates/testability_di.md` — renders DI-pattern findings table + per-extractor severity + Provenance line.
+
+Both follow the same shape as `code_ownership.md` / similar minimal templates.
+
+**Commit:** `feat(audit/templates): stub templates for reactive_dependency_tracer + testability_di`
+
 ### Task 5.3 — Final verification — full smoke re-run
 
 After all 5 slices merge:
@@ -559,10 +672,18 @@ CR must verify before APPROVE:
 
 - [ ] Every task above has explicit RED test, GREEN impl, and Commit.
 - [ ] No task overlaps shared files with another task in the same slice (file-ownership map per spec §Sequencing).
-- [ ] B8 regex placeholder is flagged for BlockchainEngineer subagent dispatch at Phase 1.2 of GIM-NN-4 (slice 3).
-- [ ] B6 investigation (Task 2.5) explicitly precedes Task 2.6 fix — root cause must be identified, not guessed.
+- [ ] **No-rebase-overwrite guard** (addresses Gate Call P15): each task's `Files` declaration explicitly notes if a file is touched by a prior slice. Specifically: `profiles.py` is owned by Slice 1 (created), modified by Slice 2 (additions). `arch_layer/extractor.py` is owned by Slice 4 (summary_stats), modified by Slice 3 (source_context). Slice 3/4 PEs MUST `git pull` + verify content before pushing additive edits.
+- [ ] **C3 enforcement gates** are spelled out in implementation tasks (not just intentions):
+  - GIM-NN-4 Task 3.3 requires committed `docs/research/2026-05-NN-try-optional-critical-path-keywords.md` BEFORE CR Phase 3.1 APPROVE. CR Phase 3.1 paste includes the artifact SHA.
+  - GIM-NN-5 Task 5.3 requires committed `docs/research/2026-05-NN-tron-kit-ac5-manual-review.md` BEFORE CTO Phase 4.2 merge. QA Phase 4.1 paste includes the artifact SHA.
+- [ ] **C1 backfill landed**: GIM-NN-1 Task 2.0 includes the language_profile backfill Cypher for all 4 currently-mounted projects. Verify the migration script is in `services/palace-mcp/scripts/` and idempotent.
+- [ ] **C2 bundle-mode**: `discover_extractor_statuses` signature accommodates bundle traversal (per-member). Even if v1.1 only smokes single-Kit, the API surface must support `bundle=` consumption for S4.3 forward-compat.
+- [ ] **C5 coverage appendix**: Task 2.4 §Profile Coverage appendix has a render-time `R == N+M+K+F+L` assertion (raises `coverage_count_mismatch` error on drift).
+- [ ] **C4 source_context**: Task 3.5 (renderer) emits `library=X example=Y test=Z other=W` summary, supports `.gimle/source-context-overrides.yaml`, and emits `library_findings_empty` warning when applicable.
+- [ ] B6 investigation (Task 2.5) explicitly precedes Task 2.6 fix — root cause must be in committed `docs/postmortems/2026-05-13-hotspot-zero-scan-investigation.md` artifact.
 - [ ] Final verification (Slice 5 / Task 5.3) wipes the right node labels and re-ingests via `ingest_swift_kit.sh`, NOT `palace.audit.run` alone.
 - [ ] Each slice ships its own PR; serial merge order = 1 → 2 → 3 → 4 → 5 (numbered as in this plan, which is reordered from the spec's slice numbering for clarity: spec Slice 2 = plan GIM-NN-1, spec Slice 1 = plan GIM-NN-2, spec Slice 4 = plan GIM-NN-3, spec Slice 3 = plan GIM-NN-4, spec Slice 5 = plan GIM-NN-5).
+- [ ] **GIM-NN-2 Phase 4.2 blocker** (Gate Call P9): CTO verifies `testability_di/` is in `origin/develop` before Phase 4.2 merge of slice 1.
 
 ## Phase chain reminder (per slice)
 
