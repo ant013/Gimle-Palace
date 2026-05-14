@@ -3,10 +3,10 @@
 {% if findings %}
 *{{ findings | length }} file{{ 's' if findings | length != 1 else '' }} with diffuse ownership (capped at {{ max_findings }}).*
 
-| Severity | Path | Top Owner | Weight | Total Authors |
-|----------|------|-----------|--------|--------------|
+| Severity | Path | Top Owner | Weight | Total Authors | Source |
+|----------|------|-----------|--------|--------------|--------|
 {% for f in findings %}
-| {{ f._severity | upper }} | `{{ f.path }}` | {{ f.top_owner_email or '—' }} | {{ "%.2f" | format(f.top_owner_weight | float) if f.top_owner_weight is not none else '—' }} | {{ f.total_authors }} |
+| {{ f._severity | upper }} | `{{ f.path }}` | {{ f.top_owner_email or '—' }} | {{ "%.2f" | format(f.top_owner_weight | float) if f.top_owner_weight is not none else '—' }} | {{ f.total_authors }} | {{ f.source_context | default('other') }} |
 {% endfor %}
 
 **Summary:** {{ summary_stats.files_analysed }} file{{ 's' if summary_stats.files_analysed != 1 else '' }} analysed,

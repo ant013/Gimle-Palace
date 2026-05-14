@@ -372,6 +372,7 @@ def test_collect_conventions_reports_type_class_outlier_above_threshold(
             ),
             "severity": "high",
             "run_id": "run-type-outlier",
+            "source_context": "library",
         }
     ]
 

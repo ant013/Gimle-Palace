@@ -174,7 +174,8 @@ RETURN c.module AS module,
        c.sample_count AS sample_count,
        c.outliers AS outliers,
        violations AS violations,
-       outlier_ratio AS outlier_ratio
+       outlier_ratio AS outlier_ratio,
+       coalesce(c.source_context, 'other') AS source_context
 ORDER BY outlier_ratio DESC, c.module, c.kind
 LIMIT 100
 """.strip(),
@@ -222,6 +223,8 @@ LIMIT 100
 def collect_conventions(
     *, project_id: str, repo_path: Path, run_id: str
 ) -> ConventionExtractionSummary:
+    from palace_mcp.extractors.foundation.source_context import classify
+
     grouped: dict[tuple[str, str], list[ConventionSignal]] = defaultdict(list)
 
     for path in _iter_source_files(repo_path):
@@ -242,6 +245,8 @@ def collect_conventions(
         if sample_count < _MIN_SAMPLE_COUNT:
             continue
         outliers = sample_count - dominant_count
+        # Classify module source_context from first signal's file path
+        module_ctx = classify(signals[0].file)
         findings.append(
             ConventionFinding(
                 project_id=project_id,
@@ -252,6 +257,7 @@ def collect_conventions(
                 sample_count=sample_count,
                 outliers=outliers,
                 run_id=run_id,
+                source_context=module_ctx,
             )
         )
         severity = _violation_severity(sample_count=sample_count, outliers=outliers)
@@ -269,6 +275,7 @@ def collect_conventions(
                     message=signal.message,
                     severity=severity,
                     run_id=run_id,
+                    source_context=classify(signal.file),
                 )
             )
 

@@ -24,6 +24,7 @@ SET c.project_id = $project_id,
     c.confidence = $confidence,
     c.sample_count = $sample_count,
     c.outliers = $outliers,
+    c.source_context = $source_context,
     c.run_id = $run_id
 """
 
@@ -37,6 +38,7 @@ SET v.project_id = $project_id,
     v.end_line = $end_line,
     v.message = $message,
     v.severity = $severity,
+    v.source_context = $source_context,
     v.run_id = $run_id
 """
 

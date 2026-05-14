@@ -5,6 +5,12 @@
 
 ---
 
+{% if library_findings_warning %}
+{{ library_findings_warning }}
+
+---
+
+{% endif %}
 ## Executive Summary
 
 {{ executive_summary }}
@@ -17,20 +23,28 @@
 ---
 
 {% endfor %}
-## Blind Spots
-
-{% if blind_spots %}
-The following extractors have not run for project `{{ project }}` and are excluded from this report:
-
-{% for name in blind_spots %}
-- ⚠ `{{ name }}` — run `palace.ingest.run_extractor(name="{{ name }}", project="{{ project }}")` to populate
-{% endfor %}
-{% else %}
-All registered audit extractors produced data. No blind spots.
-{% endif %}
+{% if run_failed %}
+{{ failed_extractors_section }}
 
 ---
 
+{% endif %}
+{% if fetch_failed_statuses %}
+{{ data_quality_section }}
+
+---
+
+{% endif %}
+{{ blind_spots_section }}
+
+---
+
+{% if profile_coverage_section %}
+{{ profile_coverage_section }}
+
+---
+
+{% endif %}
 ## Provenance
 
 | Field | Value |

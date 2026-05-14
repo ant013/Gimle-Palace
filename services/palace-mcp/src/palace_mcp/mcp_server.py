@@ -375,6 +375,7 @@ async def palace_memory_register_project(
     repo_url: str | None = None,
     parent_mount: str | None = None,
     relative_path: str | None = None,
+    language_profile: str | None = None,
 ) -> dict[str, Any]:
     """Register or update a project in the knowledge graph."""
     driver = _driver
@@ -391,6 +392,7 @@ async def palace_memory_register_project(
             repo_url=repo_url,
             parent_mount=parent_mount,
             relative_path=relative_path,
+            language_profile=language_profile,
         )
         return info.model_dump()
     except InvalidSlug as exc:

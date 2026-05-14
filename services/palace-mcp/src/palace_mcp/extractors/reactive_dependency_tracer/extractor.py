@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 import json
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from graphiti_core import Graphiti
 
@@ -46,7 +46,37 @@ from palace_mcp.extractors.reactive_dependency_tracer.swift_helper_contract impo
     parse_swift_helper_contract,
 )
 
+if TYPE_CHECKING:
+    from palace_mcp.audit.contracts import AuditContract, Severity
+
 _HELPER_JSON_FILENAME = "reactive_facts.json"
+
+_AUDIT_QUERY = """\
+MATCH (d:ReactiveDiagnostic {project: $project})
+RETURN
+    d.diagnostic_code   AS diagnostic_code,
+    d.severity          AS severity,
+    d.file_path         AS file_path,
+    d.message_redacted  AS message,
+    d.language          AS language,
+    d.run_id            AS run_id
+ORDER BY
+    CASE d.severity WHEN 'error' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END,
+    d.file_path
+"""
+
+
+def _reactive_severity_mapper(value: str | None) -> "Severity":
+    from palace_mcp.audit.contracts import Severity
+
+    mapping = {
+        "error": Severity.HIGH,
+        "warning": Severity.MEDIUM,
+        "info": Severity.INFORMATIONAL,
+    }
+    return mapping.get(str(value).lower() if value else "", Severity.INFORMATIONAL)
+
+
 _PATH_DIAGNOSTIC_CODES = {
     "path_empty": ReactiveDiagnosticCode.PATH_EMPTY,
     "path_parent_traversal": ReactiveDiagnosticCode.PATH_PARENT_TRAVERSAL,
@@ -87,6 +117,18 @@ class ReactiveDependencyTracerExtractor(BaseExtractor):
         "CREATE INDEX reactive_diagnostic_lookup IF NOT EXISTS "
         "FOR (n:ReactiveDiagnostic) ON (n.project, n.commit_sha, n.language, n.file_path, n.diagnostic_code)",
     ]
+
+    def audit_contract(self) -> AuditContract:
+        from palace_mcp.audit.contracts import AuditContract
+
+        return AuditContract(
+            extractor_name="reactive_dependency_tracer",
+            template_name="reactive_dependency_tracer.md",
+            query=_AUDIT_QUERY,
+            severity_column="severity",
+            max_findings=50,
+            severity_mapper=_reactive_severity_mapper,
+        )
 
     async def run(
         self, *, graphiti: Graphiti, ctx: ExtractorRunContext
