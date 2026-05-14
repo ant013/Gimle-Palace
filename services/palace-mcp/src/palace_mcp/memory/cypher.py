@@ -10,6 +10,9 @@ CREATE_CONSTRAINTS = [
     "CREATE CONSTRAINT project_slug IF NOT EXISTS FOR (p:Project) REQUIRE p.slug IS UNIQUE",
     # GIM-182: bundle name uniqueness
     "CREATE CONSTRAINT bundle_name IF NOT EXISTS FOR (b:Bundle) REQUIRE b.name IS UNIQUE",
+    "CREATE CONSTRAINT analysis_lock_key IF NOT EXISTS FOR (l:AnalysisLock) REQUIRE l.key IS UNIQUE",
+    "CREATE CONSTRAINT analysis_run_id IF NOT EXISTS FOR (r:AnalysisRun) REQUIRE r.run_id IS UNIQUE",
+    "CREATE CONSTRAINT analysis_checkpoint_unique IF NOT EXISTS FOR (c:AnalysisCheckpoint) REQUIRE (c.run_id, c.extractor) IS UNIQUE",
 ]
 
 # --- Indexes (non-unique; speeds up group_id filter) ---
@@ -17,7 +20,120 @@ CREATE_INDEXES = [
     "CREATE INDEX project_group_id IF NOT EXISTS FOR (p:Project) ON (p.group_id)",
     # GIM-182: bundle group_id filter
     "CREATE INDEX bundle_group_id IF NOT EXISTS FOR (b:Bundle) ON (b.group_id)",
+    "CREATE INDEX analysis_run_lock_key IF NOT EXISTS FOR (r:AnalysisRun) ON (r.lock_key)",
+    "CREATE INDEX analysis_run_status IF NOT EXISTS FOR (r:AnalysisRun) ON (r.status)",
 ]
+
+# --- AnalysisRun durable state (GIM-301 / project analyze) ---
+
+ACQUIRE_ANALYSIS_LOCK = """
+MERGE (l:AnalysisLock {key: $key})
+ON CREATE SET l.created_at = $created_at
+SET l.touched_at = $touched_at
+RETURN l
+"""
+
+GET_ACTIVE_ANALYSIS_RUN = """
+MATCH (r:AnalysisRun {lock_key: $lock_key})
+WHERE r.status IN $active_statuses
+RETURN r
+ORDER BY r.created_at DESC
+LIMIT 1
+"""
+
+CREATE_ANALYSIS_RUN = """
+CREATE (r:AnalysisRun {
+    run_id: $run_id,
+    lock_key: $lock_key,
+    slug: $slug,
+    project_name: $project_name,
+    parent_mount: $parent_mount,
+    relative_path: $relative_path,
+    language_profile: $language_profile,
+    bundle: $bundle,
+    extractors: $extractors,
+    depth: $depth,
+    continue_on_failure: $continue_on_failure,
+    idempotency_key: $idempotency_key,
+    status: $status,
+    created_at: $created_at,
+    updated_at: $updated_at,
+    started_at: $started_at,
+    finished_at: $finished_at,
+    lease_owner: $lease_owner,
+    lease_expires_at: $lease_expires_at,
+    last_completed_extractor: $last_completed_extractor,
+    overview_json: $overview_json,
+    audit_json: $audit_json,
+    report_markdown: $report_markdown,
+    next_actions_json: $next_actions_json
+})
+RETURN r
+"""
+
+GET_ANALYSIS_RUN_WITH_CHECKPOINTS = """
+MATCH (r:AnalysisRun {run_id: $run_id})
+OPTIONAL MATCH (r)-[:HAS_ANALYSIS_CHECKPOINT]->(c:AnalysisCheckpoint)
+RETURN r, c
+ORDER BY c.position ASC
+"""
+
+UPSERT_ANALYSIS_CHECKPOINT = """
+MATCH (r:AnalysisRun {run_id: $run_id})
+MERGE (c:AnalysisCheckpoint {run_id: $run_id, extractor: $extractor})
+SET c.position = $position,
+    c.status = $status,
+    c.started_at = $started_at,
+    c.finished_at = $finished_at,
+    c.error_code = $error_code,
+    c.message = $message,
+    c.ingest_run_id = $ingest_run_id,
+    c.next_action = $next_action
+MERGE (r)-[:HAS_ANALYSIS_CHECKPOINT]->(c)
+RETURN c
+"""
+
+UPDATE_ANALYSIS_RUN_LEASE = """
+MATCH (r:AnalysisRun {run_id: $run_id})
+SET r.status = $status,
+    r.updated_at = $updated_at,
+    r.lease_owner = $lease_owner,
+    r.lease_expires_at = $lease_expires_at
+RETURN r
+"""
+
+MARK_ANALYSIS_RUN_RESUMABLE = """
+MATCH (r:AnalysisRun {run_id: $run_id})
+SET r.status = $status,
+    r.updated_at = $updated_at,
+    r.lease_owner = null,
+    r.lease_expires_at = null
+RETURN r
+"""
+
+UPDATE_ANALYSIS_RUN_PROGRESS = """
+MATCH (r:AnalysisRun {run_id: $run_id})
+SET r.updated_at = $updated_at,
+    r.last_completed_extractor = $last_completed_extractor,
+    r.status = $status,
+    r.lease_owner = $lease_owner,
+    r.lease_expires_at = $lease_expires_at
+RETURN r
+"""
+
+FINALIZE_ANALYSIS_RUN = """
+MATCH (r:AnalysisRun {run_id: $run_id})
+SET r.status = $status,
+    r.updated_at = $updated_at,
+    r.finished_at = $finished_at,
+    r.lease_owner = null,
+    r.lease_expires_at = null,
+    r.overview_json = $overview_json,
+    r.audit_json = $audit_json,
+    r.report_markdown = $report_markdown,
+    r.next_actions_json = $next_actions_json
+RETURN r
+"""
 
 # --- Bundle DDL (GIM-182) ---
 
