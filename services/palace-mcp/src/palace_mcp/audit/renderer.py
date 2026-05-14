@@ -24,13 +24,21 @@ _TEMPLATES_DIR = Path(__file__).parent / "templates"
 _REPORT_TEMPLATE = Path(__file__).parent / "report_template.md"
 
 _SECTION_ORDER = (
+    "crypto_domain_model",
+    "error_handling_policy",
+    "arch_layer",
     "hotspot",
     "dead_symbol_binary_surface",
     "dependency_surface",
     "code_ownership",
     "cross_repo_version_skew",
-    "public_api_surface",
     "cross_module_contract",
+    "public_api_surface",
+    "coding_convention",
+    "localization_accessibility",
+    "reactive_dependency_tracer",
+    "testability_di",
+    "hot_path_profiler",
 )
 
 _JINJA_ENV = Environment(
