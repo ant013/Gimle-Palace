@@ -54,6 +54,9 @@ class DaemonConfig:
     poll_interval_seconds: int
     recovery_enabled: bool = False
     recovery_first_run_baseline_only: bool = True
+    recovery_dry_run: bool = (
+        False  # persistent scan+log mode; never acts; ignores baseline_completed
+    )
     max_actions_per_tick: int = 1
 
 
@@ -329,6 +332,7 @@ def load_config(path: Path) -> Config:
         recovery_first_run_baseline_only=bool(
             daemon_raw.get("recovery_first_run_baseline_only", True)
         ),
+        recovery_dry_run=bool(daemon_raw.get("recovery_dry_run", False)),
         max_actions_per_tick=_require_positive_int(
             daemon_raw.get("max_actions_per_tick", 1),
             "daemon.max_actions_per_tick",
