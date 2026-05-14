@@ -6,7 +6,7 @@ Between plan phases, **explicit reassign** to next-phase agent. Never leave "som
 
 <!-- paperclip:handoff-exit-shapes:v1 -->
 <!-- paperclip:handoff-verify-status-assignee:v1 -->
-Before exit: `status=done` OR `assigneeAgentId` set to next agent / your CXCTO. Mandatory. PATCH `status + assigneeAgentId + comment` in one call → GET-verify both `status` and `assigneeAgentId`; mismatch → retry once → still mismatch → `status=blocked` + escalate Board.
+Before exit: `status=done` OR atomic handoff = one PATCH (`status + assigneeAgentId + comment` ending `[@Next](agent://uuid) your turn.`), then GET-verify — last tool call, end of turn. Mismatch → retry once → still mismatch → `status=blocked` + escalate Board.
 
 ### Handoff matrix
 
@@ -46,20 +46,6 @@ Formal mention `[@](agent://uuid)` only — not plain `@Role`. Plain works for c
 - [ ] Local green (lint + typecheck + test, language-appropriate)
 - [ ] CI running on FB (or auto-triggered by push)
 - [ ] Handoff comment includes commit SHA + branch link
-
-### Exit Protocol — after handoff PATCH succeeds
-
-After the handoff PATCH returns 200 and GET-verify confirms `assigneeAgentId == <next>`:
-
-- **Stop tool use immediately.** The handoff PATCH is your last tool call. No more bash, curl, serena, gh, or any other tool — even read-only ones.
-- Output your final summary as plain assistant text, then end the turn.
-- Do **not** re-fetch the issue, do **not** post a second confirmation comment, do **not** check git status. Your phase is closed.
-
-Why: between the PATCH (which changes assignee away from you) and your subprocess exit, paperclip's run-supervisor sees the issue is no longer yours and SIGTERMs the process. Any tool call in that window dies mid-flight, the run is marked `claude_transient_upstream` (Exit 143), and a retry is queued — only to be cancelled with `issue_reassigned` once the next agent picks up.
-
-Evidence: {{evidence.handoff_misclassified_issue}} — 11 successful handoffs misclassified as failures because agents kept making tool calls after the PATCH. Pre-slim baseline {{evidence.pre_slim_baseline_issue}} had zero such failures.
-
-If post-handoff cleanup is genuinely needed (e.g. local worktree state), do it BEFORE the handoff PATCH, not after.
 
 ### Pre-close checklist (CXCTO → status=done)
 
