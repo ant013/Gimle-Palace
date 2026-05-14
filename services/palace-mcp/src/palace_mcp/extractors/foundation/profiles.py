@@ -32,6 +32,28 @@ _MANIFEST_RULES: tuple[tuple[str, str], ...] = (
 class LanguageProfile:
     name: str
     audit_extractors: frozenset[str]
+    extractor_order: tuple[str, ...] = ()
+
+
+SWIFT_KIT_EXTRACTOR_ORDER: tuple[str, ...] = (
+    "symbol_index_swift",
+    "arch_layer",
+    "code_ownership",
+    "coding_convention",
+    "crypto_domain_model",
+    "cross_module_contract",
+    "cross_repo_version_skew",
+    "dead_symbol_binary_surface",
+    "dependency_surface",
+    "error_handling_policy",
+    "git_history",
+    "hot_path_profiler",
+    "hotspot",
+    "localization_accessibility",
+    "public_api_surface",
+    "reactive_dependency_tracer",
+    "testability_di",
+)
 
 
 PROFILES: dict[str, LanguageProfile] = {
@@ -56,6 +78,7 @@ PROFILES: dict[str, LanguageProfile] = {
                 "testability_di",
             }
         ),
+        SWIFT_KIT_EXTRACTOR_ORDER,
     ),
     "python_service": LanguageProfile(
         "python_service",
@@ -65,6 +88,11 @@ PROFILES: dict[str, LanguageProfile] = {
                 "dependency_surface",
                 "hotspot",
             }
+        ),
+        (
+            "code_ownership",
+            "dependency_surface",
+            "hotspot",
         ),
     ),
     "android_kit": LanguageProfile(
@@ -77,8 +105,26 @@ PROFILES: dict[str, LanguageProfile] = {
                 "hotspot",
             }
         ),
+        (
+            "arch_layer",
+            "code_ownership",
+            "dependency_surface",
+            "hotspot",
+        ),
     ),
 }
+
+
+def get_ordered_extractors(profile_name: str) -> tuple[str, ...]:
+    """Return the default orchestration order for a language profile."""
+    try:
+        profile = PROFILES[profile_name]
+    except KeyError as exc:
+        raise ValueError(f"unknown_language_profile: {profile_name!r}") from exc
+
+    if profile.extractor_order:
+        return profile.extractor_order
+    return tuple(sorted(profile.audit_extractors))
 
 
 async def resolve_profile(
