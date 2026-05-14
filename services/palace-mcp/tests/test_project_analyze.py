@@ -16,7 +16,6 @@ from palace_mcp.project_analyze import (
     AnalysisRunStartResult,
     AnalysisRunStatus,
     ExtractorAttemptResult,
-    Neo4jAnalysisRunStore,
     ProjectAnalysisService,
 )
 
@@ -203,6 +202,7 @@ def _build_service(
         register_bundle_func=_register_noop,
         add_to_bundle_func=_register_noop,
         audit_runner=audit_runner or _default_audit_runner,
+        ensure_schema_func=_register_noop,
         lease_seconds=10,
         lease_owner="pytest",
         clock=clock or _utc,
@@ -214,54 +214,58 @@ async def _default_audit_runner(*args: object, **kwargs: object) -> dict[str, An
 
 
 @pytest.mark.asyncio
-async def test_neo4j_store_ensures_schema_before_lock_transaction(
-    monkeypatch: pytest.MonkeyPatch,
+async def test_service_start_run_ensures_schema_before_project_registration_and_store_start(
 ) -> None:
     events: list[str] = []
 
     async def fake_ensure_schema(driver: object, *, default_group_id: str) -> None:
         events.append(f"schema:{default_group_id}")
 
-    class FakeSession:
-        async def __aenter__(self) -> FakeSession:
-            return self
+    class RecordingStore(InMemoryAnalysisRunStore):
+        async def start_run(self, run: AnalysisRun) -> AnalysisRunStartResult:
+            events.append(f"store:{run.parent_mount}:{run.relative_path}")
+            return await super().start_run(run)
 
-        async def __aexit__(self, exc_type: object, exc: object, tb: object) -> bool:
-            return False
+    async def register_project(
+        driver: object,
+        *,
+        slug: str,
+        name: str,
+        tags: list[str],
+        parent_mount: str,
+        relative_path: str,
+        language_profile: str,
+    ) -> None:
+        events.append(f"register:{parent_mount}:{relative_path}:{language_profile}")
 
-        async def execute_write(self, fn: object, run: AnalysisRun) -> AnalysisRunStartResult:
-            events.append(f"write:{run.slug}")
-            return AnalysisRunStartResult(run=run, active_run_reused=False)
+    service = ProjectAnalysisService(
+        driver=object(),  # runtime-only dependency is stubbed in unit tests
+        store=RecordingStore(),
+        extractor_registry=registry.EXTRACTORS,
+        register_project_func=register_project,
+        register_bundle_func=_register_noop,
+        add_to_bundle_func=_register_noop,
+        audit_runner=_default_audit_runner,
+        ensure_schema_func=fake_ensure_schema,
+        lease_seconds=10,
+        lease_owner="pytest",
+        clock=_utc,
+    )
 
-    class FakeDriver:
-        def session(self) -> FakeSession:
-            return FakeSession()
-
-    monkeypatch.setattr("palace_mcp.project_analyze.ensure_schema", fake_ensure_schema)
-
-    store = Neo4jAnalysisRunStore(FakeDriver())  # type: ignore[arg-type]
-    now = _iso(_utc())
-    run = AnalysisRun(
-        run_id="run-1",
+    result = await service.start_run(
         slug="tron-kit",
-        project_name="tron-kit",
         parent_mount="hs",
         relative_path="TronKit.Swift",
         language_profile="swift_kit",
-        extractors=["symbol_index_swift"],
-        depth="full",
         idempotency_key="idem-1",
-        status=AnalysisRunStatus.PENDING,
-        created_at=now,
-        updated_at=now,
-        started_at=now,
-        checkpoints=[AnalysisCheckpoint(extractor="symbol_index_swift", position=0)],
     )
 
-    result = await store.start_run(run)
-
     assert result.active_run_reused is False
-    assert events == ["schema:project/tron-kit", "write:tron-kit"]
+    assert events == [
+        "schema:project/tron-kit",
+        "register:hs:TronKit.Swift:swift_kit",
+        "store:hs:TronKit.Swift",
+    ]
 
 
 def test_resolve_default_extractors_matches_swift_kit_contract() -> None:

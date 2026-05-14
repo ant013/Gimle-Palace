@@ -205,6 +205,7 @@ class AnalysisRunStore(Protocol):
 
 ExtractorExecutor = Callable[[str, AnalysisRun], Awaitable[ExtractorAttemptResult]]
 AuditRunner = Callable[..., Awaitable[dict[str, Any]]]
+SchemaEnsurer = Callable[..., Awaitable[None]]
 Clock = Callable[[], datetime]
 
 
@@ -331,7 +332,6 @@ class Neo4jAnalysisRunStore:
         self._driver = driver
 
     async def start_run(self, run: AnalysisRun) -> AnalysisRunStartResult:
-        await ensure_schema(self._driver, default_group_id=f"project/{run.slug}")
         async with self._driver.session() as session:
             return await session.execute_write(self._tx_start_run, run)
 
@@ -635,6 +635,7 @@ class ProjectAnalysisService:
         register_bundle_func: Callable[..., Awaitable[Any]] = register_bundle,
         add_to_bundle_func: Callable[..., Awaitable[Any]] = add_to_bundle,
         audit_runner: AuditRunner = run_audit,
+        ensure_schema_func: SchemaEnsurer = ensure_schema,
         lease_seconds: int = 900,
         lease_owner: str | None = None,
         clock: Clock = _utc_now,
@@ -652,6 +653,7 @@ class ProjectAnalysisService:
         self._register_bundle = register_bundle_func
         self._add_to_bundle = add_to_bundle_func
         self._audit_runner = audit_runner
+        self._ensure_schema = ensure_schema_func
         self._lease_seconds = lease_seconds
         self._lease_owner = lease_owner or f"project-analyze@{socket.gethostname()}"
         self._clock = clock
@@ -709,8 +711,10 @@ class ProjectAnalysisService:
             extractors=extractors,
         )
         project_name = name or slug
+        driver = self._require_driver()
+        await self._ensure_schema(driver, default_group_id=f"project/{slug}")
         await self._register_project(
-            self._require_driver(),
+            driver,
             slug=slug,
             name=project_name,
             tags=[],
@@ -720,12 +724,12 @@ class ProjectAnalysisService:
         )
         if bundle is not None:
             await self._register_bundle(
-                self._require_driver(),
+                driver,
                 name=bundle,
                 description=f"project analyze bundle {bundle}",
             )
             await self._add_to_bundle(
-                self._require_driver(),
+                driver,
                 bundle=bundle,
                 project=slug,
                 tier=Tier.FIRST_PARTY,
