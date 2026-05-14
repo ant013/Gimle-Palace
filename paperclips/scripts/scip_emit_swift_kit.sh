@@ -7,6 +7,8 @@ DEFAULT_MANIFEST="$REPO_ROOT/services/palace-mcp/scripts/uw-ios-bundle-manifest.
 DEFAULT_EMITTER_DIR="$REPO_ROOT/services/palace-mcp/scip_emit_swift"
 DEFAULT_REMOTE_HOST="${IMAC_HOST:-imac-ssh.ant013.work}"
 DEFAULT_REMOTE_BASE="${IMAC_HS_PATH:-/Users/Shared/Ios/HorizontalSystems}"
+EMITTER_NAME="palace-swift-scip-emit-cli"
+EMITTER_VERSION="2026-05-15"
 
 usage() {
     cat <<'EOF'
@@ -224,8 +226,10 @@ SCRATCH_PATH="$LOCAL_REPO_PATH/.palace-scip-build"
 INDEX_STORE="$LOCAL_REPO_PATH/.palace-scip-index-store"
 DERIVED_DATA="$LOCAL_REPO_PATH/.palace-scip-derived-data"
 OUTPUT_PATH="$LOCAL_REPO_PATH/scip/index.scip"
+META_PATH="$LOCAL_REPO_PATH/scip/index.scip.meta.json"
 REMOTE_DEST_DIR="$REMOTE_BASE/$RELATIVE_PATH/scip"
 REMOTE_DEST_PATH="$REMOTE_DEST_DIR/index.scip"
+REMOTE_META_PATH="$REMOTE_DEST_DIR/index.scip.meta.json"
 
 log "slug=$SLUG local_repo=$LOCAL_REPO_PATH remote_path=$REMOTE_DEST_PATH"
 
@@ -263,6 +267,34 @@ run_cmd "$EMITTER_BIN" \
 
 if [[ "$DRY_RUN" == "false" ]]; then
     [[ -s "$OUTPUT_PATH" ]] || die "generated SCIP file is missing or empty: $OUTPUT_PATH"
+    HEAD_SHA="$(git -C "$LOCAL_REPO_PATH" rev-parse HEAD)"
+    python3 - "$META_PATH" "$SLUG" "$LOCAL_REPO_PATH" "$REMOTE_BASE/$RELATIVE_PATH" "$HEAD_SHA" "$EMITTER_NAME" "$EMITTER_VERSION" <<'PY'
+import json
+import socket
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+meta_path = Path(sys.argv[1])
+slug = sys.argv[2]
+source_repo = Path(sys.argv[3]).resolve()
+destination_repo = Path(sys.argv[4]).resolve()
+head_sha = sys.argv[5]
+emitter_name = sys.argv[6]
+emitter_version = sys.argv[7]
+payload = {
+    "slug": slug,
+    "repo_head_sha": head_sha,
+    "emitter_name": emitter_name,
+    "emitter_version": emitter_version,
+    "generated_at": datetime.now(timezone.utc).isoformat(),
+    "package_path": "Package.swift",
+    "generator_host": socket.gethostname(),
+    "source_repo_path": str(source_repo),
+    "destination_repo_path": str(destination_repo),
+}
+meta_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+PY
 fi
 
 log "creating remote destination"
@@ -270,6 +302,10 @@ run_cmd ssh "$REMOTE_HOST" "mkdir -p $(printf '%q' "$REMOTE_DEST_DIR")"
 
 log "copying SCIP to remote host"
 run_cmd scp "$OUTPUT_PATH" "$REMOTE_HOST:$REMOTE_DEST_PATH"
+if [[ "$DRY_RUN" == "false" ]]; then
+    log "copying SCIP metadata to remote host"
+    run_cmd scp "$META_PATH" "$REMOTE_HOST:$REMOTE_META_PATH"
+fi
 
 if [[ "$DRY_RUN" == "false" ]]; then
     size_bytes="$(wc -c < "$OUTPUT_PATH" | tr -d ' ')"
@@ -281,6 +317,7 @@ cat <<EOF
 slug=$SLUG
 source=$OUTPUT_PATH
 destination=$REMOTE_HOST:$REMOTE_DEST_PATH
+metadata=$REMOTE_HOST:$REMOTE_META_PATH
 size_bytes=$size_bytes
 dry_run=$DRY_RUN
 EOF

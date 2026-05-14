@@ -41,6 +41,7 @@ volumes/
 # Justfile local overrides
 Justfile.local
 .env
+.gimle/runtime/
 
 # Docker Compose local overrides (operator-specific paths, ports)
 docker-compose.override.yml
