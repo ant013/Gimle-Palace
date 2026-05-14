@@ -144,6 +144,55 @@ def test_swift_scip_metadata_needs_regeneration_on_generator_host_mismatch(
     assert reason == "generator_host mismatch"
 
 
+def test_swift_scip_metadata_accepts_remote_copy_provenance(
+    tmp_path: Path,
+) -> None:
+    repo_path = tmp_path / "TronKit.Swift"
+    repo_path.mkdir()
+
+    stale, reason = cli.swift_scip_metadata_needs_regeneration(
+        repo_path=repo_path,
+        repo_head_sha="abc123",
+        metadata={
+            "repo_head_sha": "abc123",
+            "emitter_name": "palace-swift-scip-emit-cli",
+            "emitter_version": "2026-05-15",
+            "artifact_origin": "remote_copy",
+            "package_path": "Package.swift",
+            "generator_host": "macbook-host",
+            "source_repo_path": "/Users/ant013/Ios/HorizontalSystems/TronKit.Swift",
+            "destination_repo_path": str(repo_path.resolve()),
+        },
+    )
+
+    assert stale is False
+    assert reason == "metadata current (remote_copy)"
+
+
+def test_build_macbook_fallback_command_uses_macbook_repo_path() -> None:
+    spec = cli.ProjectRuntimeSpec(
+        repo_path=Path("/Users/Shared/Ios/HorizontalSystems/TronKit.Swift"),
+        slug="tron-kit",
+        language_profile="swift_kit",
+        bundle=None,
+        parent_mount="hs",
+        relative_path="TronKit.Swift",
+        container_repo_path="/repos-hs/TronKit.Swift",
+        container_scip_path="/repos-hs/TronKit.Swift/scip/index.scip",
+        env_file=Path("/tmp/.env"),
+        compose_override_path=Path("/tmp/docker-compose.project-analyze.yml"),
+        report_out=Path("/tmp/report.md"),
+        summary_out=Path("/tmp/summary.json"),
+        host_mount_path=None,
+        container_mount_path=None,
+    )
+
+    command = cli._build_macbook_fallback_command(spec)
+
+    assert "--repo-path /Users/ant013/Ios/HorizontalSystems/TronKit.Swift" in command
+    assert "/Users/Shared/Ios/HorizontalSystems/TronKit.Swift" not in command
+
+
 def test_project_analyze_writes_summary_and_report(
     tmp_path: Path,
     monkeypatch,
