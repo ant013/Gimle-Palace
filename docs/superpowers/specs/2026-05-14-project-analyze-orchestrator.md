@@ -24,10 +24,16 @@ This proves the pieces, but not the product promise. The desired UX is:
 
 ## Assumptions
 
-- V1 is local-host only: the host CLI runs on the same machine that owns the
-  repository path and runs Docker Compose.
-- Remote dev Mac to iMac SCIP generation/copy is out of scope for V1. A later
-  slice may add explicit `--remote-host` and `--remote-base` flags.
+- V1 production smoke runs against the iMac Docker runtime. The primary repo
+  path is `/Users/Shared/Ios/HorizontalSystems/TronKit.Swift` and the primary
+  Gimle checkout is `/Users/Shared/Ios/Gimle-Palace`.
+- V1 supports exactly one hybrid fallback: when iMac cannot emit Swift SCIP
+  because Xcode/macOS is too old, a dev Mac/MacBook may emit SCIP and copy
+  `scip/index.scip` plus `scip/index.scip.meta.json` to the iMac repo path
+  before the iMac Docker analysis continues.
+- Arbitrary remote orchestration is out of scope. V1 does not manage remote
+  cloning, remote Docker over SSH, generic file sync, or multi-host lifecycle
+  beyond the bounded MacBook SCIP emit -> iMac copy fallback.
 - The host CLI talks to Docker-published MCP at `http://localhost:8080/mcp` by
   default. In-container port `8000` is not the host default.
 - Swift SCIP is visible to the MCP container only after the host command updates
@@ -61,15 +67,19 @@ This proves the pieces, but not the product promise. The desired UX is:
 - Running arbitrary host shell commands from the MCP server without an explicit
   host-side command. The MCP server may live inside Docker; it cannot bootstrap
   the container that hosts itself.
-- Solving remote SCIP generation/copy in this slice.
+- Solving arbitrary remote orchestration. Only the MacBook SCIP emit -> iMac
+  copy fallback is in scope.
 - Keeping a single blocking MCP request open for the entire extractor cascade.
 
 ## Scope
 
-This slice changes the local analysis orchestration contract only:
+This slice changes the production iMac analysis orchestration contract:
 
-- Host CLI for local repo path analysis.
-- Docker mount and `.env` SCIP visibility management needed by that CLI.
+- Host CLI for iMac repo path analysis.
+- Docker mount and `.env` SCIP visibility management needed by that CLI on
+  iMac.
+- Optional MacBook SCIP emit fallback that copies artifacts to the iMac repo
+  path before iMac Docker analysis.
 - MCP `AnalysisRun` start/status/resume surface.
 - Ordered `swift_kit` profile source of truth.
 - Tests, runbook, and `tron-kit` smoke verification.
@@ -85,7 +95,7 @@ Add a CLI command under `services/palace-mcp/src/palace_mcp/cli.py`:
 
 ```bash
 uv run --directory services/palace-mcp python -m palace_mcp.cli project analyze \
-  --repo-path /Users/ant013/Ios/HorizontalSystems/TronKit.Swift \
+  --repo-path /Users/Shared/Ios/HorizontalSystems/TronKit.Swift \
   --slug tron-kit \
   --bundle uw-ios \
   --language-profile swift_kit \
@@ -97,24 +107,31 @@ uv run --directory services/palace-mcp python -m palace_mcp.cli project analyze 
 
 Responsibilities:
 
-1. Validate local repo path, slug, and local-host execution model.
+1. Validate iMac repo path, slug, and iMac Docker execution model.
 2. For SwiftPM repos, optionally generate `scip/index.scip` when missing or
-   stale (`--emit-scip auto|always|never`) on the same host that runs Docker.
-3. Create or update a deterministic Docker Compose override that mounts the
+   stale (`--emit-scip auto|always|never`) on iMac.
+3. If iMac SCIP emit fails because the toolchain is unsupported, fail with a
+   structured `SCIP_EMIT_TOOLCHAIN_UNSUPPORTED` result that includes the exact
+   MacBook fallback command using `paperclips/scripts/scip_emit_swift_kit.sh`.
+   The fallback command emits on MacBook and copies SCIP artifacts to
+   `/Users/Shared/Ios/HorizontalSystems/<relative_path>/scip/` on iMac. After
+   fallback succeeds, rerun the iMac command with `--emit-scip never` or
+   `--emit-scip auto` so the iMac analysis consumes the copied SCIP.
+4. Create or update a deterministic Docker Compose override that mounts the
    repo under a container-visible parent mount.
-4. Compute the container SCIP path, normally
+5. Compute the container SCIP path, normally
    `{container_repo_path}/scip/index.scip`.
-5. Update `.env` `PALACE_SCIP_INDEX_PATHS` by merging the new
+6. Update `.env` `PALACE_SCIP_INDEX_PATHS` by merging the new
    `{slug: container_scip_path}` entry without deleting existing entries.
-6. Start the local Gimle runtime with `docker compose --profile review up -d`;
+7. Start the iMac Gimle runtime with `docker compose --profile review up -d`;
    recreate `palace-mcp` when mount or env changes require it.
-7. Wait for `/healthz`.
-8. Compute a stable idempotency key from slug, language profile, repo HEAD SHA,
+8. Wait for `/healthz`.
+9. Compute a stable idempotency key from slug, language profile, repo HEAD SHA,
    depth, extractor list, and container repo path.
-9. Start the MCP analysis run and poll status until terminal state. If the
+10. Start the MCP analysis run and poll status until terminal state. If the
    previous CLI process lost its response, a repeat invocation with the same
    inputs must recover the existing active run instead of starting a duplicate.
-10. Save the report markdown and machine-readable summary.
+11. Save the report markdown and machine-readable summary.
 
 The host default URL for this command is `http://localhost:8080/mcp`. Existing
 subcommands may keep their current default only if tests make the distinction
@@ -122,11 +139,13 @@ explicit; the product smoke command must not silently target `localhost:8000`.
 
 For `--emit-scip auto`, staleness is defined by
 `scip/index.scip.meta.json`. The metadata must include repo HEAD SHA, emitter
-name/version, generated timestamp, package path, and absolute host repo path.
+name/version, generated timestamp, package path, generator host name, source
+repo path, and destination iMac repo path.
 `auto` regenerates SCIP when the index is missing, empty, unreadable, metadata
 is missing/invalid, repo HEAD SHA changed, emitter version changed, package path
-changed, or host repo path changed. `always` ignores metadata and regenerates.
-`never` fails fast when a usable SCIP index and metadata are absent.
+changed, source repo path changed, destination repo path changed, or generator
+host changed. `always` ignores metadata and regenerates. `never` fails fast when
+a usable SCIP index and metadata are absent.
 
 ### MCP orchestration tools
 
@@ -186,11 +205,14 @@ Allowed run statuses:
 
 Only one active `AnalysisRun` may exist per `(slug, language_profile)`.
 Concurrent `palace.project.analyze` calls for the same pair must not start a
-second extractor cascade. If the idempotency key matches, return the existing
-active run with `active_run_reused=true`. If a different active run exists,
-return an `ACTIVE_ANALYSIS_RUN_EXISTS` error with the existing `run_id`.
-`force_new=true` may create a new run only after the previous run is terminal;
-it must not override an active run.
+second extractor cascade. This requires an atomic Neo4j lock pattern, not a
+read-then-create check. The implementation must acquire or create an
+`:AnalysisLock {key: "<slug>|<language_profile>"}` in the same write
+transaction that creates or reuses the `:AnalysisRun`. If the idempotency key
+matches, return the existing active run with `active_run_reused=true`. If a
+different active run exists, return an `ACTIVE_ANALYSIS_RUN_EXISTS` error with
+the existing `run_id`. `force_new=true` may create a new run only after the
+previous run is terminal; it must not override an active run.
 
 After MCP process restart, `palace.project.analyze_status` must read Neo4j and
 return the last durable checkpoint. If a run was `RUNNING` but its lease expired,
@@ -215,9 +237,11 @@ Responsibilities:
 8. Run `palace.audit.run(project=slug, depth=depth)` after extractor attempts
    complete.
 9. Pin final report provenance to this `AnalysisRun`'s checkpointed
-   `ingest_run_id` values. If `palace.audit.run` still uses latest-run discovery,
-   the analysis report must still include the pinned per-extractor run ids and
-   must not hide a provenance mismatch.
+   `ingest_run_id` values. The analysis report must not silently use latest-run
+   data for an extractor that failed or was not attempted in the current run.
+   Either the audit path must accept pinned run ids, or `project_analyze.py` must
+   render pinned section status itself and mark any latest-run fallback as
+   `STALE_EXTERNAL_RUN`.
 10. Return terminal state with:
    - `ok`
    - `run_id`
@@ -261,6 +285,12 @@ If `paperclips/scripts/ingest_swift_kit.sh` remains as an operator helper, it
 must consume or be tested against this source of truth so the shell script and
 Python profile cannot drift silently.
 
+The legacy shell path remains part of the production smoke fallback until the
+new CLI replaces it. Add a drift test that compares
+`paperclips/scripts/ingest_swift_kit.sh` `DEFAULT_EXTRACTORS` to the ordered
+Python `swift_kit` profile, or change the script to read the Python profile
+directly.
+
 ### Runtime boundary
 
 The host CLI handles host-only concerns: Docker lifecycle, bind mounts, `.env`
@@ -269,10 +299,12 @@ product concerns: Memory Palace registration, extractor orchestration, graph
 writes, checkpoint status, and audit rendering.
 
 For V1, all paths are local to the Docker host. A command that points at
-`/Users/ant013/Ios/HorizontalSystems/TronKit.Swift` must either mount that exact
+`/Users/Shared/Ios/HorizontalSystems/TronKit.Swift` must either mount that exact
 path into Docker or stage it into the existing runtime mount pattern before
 starting analysis. The generated SCIP path passed through
 `PALACE_SCIP_INDEX_PATHS` must be the container-visible path, not the host path.
+When SCIP is generated on MacBook, the iMac-side path remains authoritative for
+Docker and `PALACE_SCIP_INDEX_PATHS`; the MacBook source path is metadata only.
 
 Compose override strategy is deterministic:
 
@@ -290,6 +322,8 @@ Compose override strategy is deterministic:
 - Cleanup is explicit only; V1 must not silently remove generated overrides or
   staged repos after a run because they are part of the resumable runtime
   contract.
+- `.gimle/runtime/` is expected local runtime state and must be ignored by git.
+  The implementation must add or verify a `.gitignore` rule before smoke.
 
 ## Affected Files
 
@@ -303,6 +337,10 @@ Expected implementation areas:
 - `services/palace-mcp/tests/test_project_analyze.py` (new)
 - `services/palace-mcp/tests/test_mcp_server_project_analyze.py` (new)
 - `services/palace-mcp/tests/test_project_analyze_cli.py` (new)
+- `paperclips/scripts/scip_emit_swift_kit.sh`
+- `paperclips/scripts/ingest_swift_kit.sh`
+- `paperclips/scripts/tests/test_ingest_idempotency.sh`
+- `.gitignore`
 - `docs/runbooks/project-analyze.md` (new)
 - `docs/audit-reports/` only for smoke evidence, not unit tests
 
@@ -311,150 +349,20 @@ Existing scripts may be reused or wrapped:
 - `paperclips/scripts/scip_emit_swift_kit.sh`
 - `paperclips/scripts/ingest_swift_kit.sh`
 
-## Agent Execution Plan
+## Paperclip Execution Plan
 
-The implementation must be split into small Codex-agent work packages. Agents
-are not alone in the codebase: each package has an explicit write scope, and no
-agent should revert edits outside its assigned files.
-
-### Wave 0: Prep
-
-1. Agent `coordinator`: create implementation branch from current approved spec.
-   - Write scope: none except git metadata.
-   - Output: branch name, clean status, base commit.
-   - Verification: `git status --short --branch`.
-
-2. Agent `code-mapper`: confirm current extractor/profile/CLI/MCP seams.
-   - Write scope: none.
-   - Output: short map of relevant symbols and tests.
-   - Verification: cite exact files/functions to edit.
-
-### Wave 1: Profile Contract
-
-3. Agent `profile-worker`: add ordered profile data.
-   - Write scope:
-     `services/palace-mcp/src/palace_mcp/extractors/foundation/profiles.py`.
-   - Change: expose ordered `swift_kit` extractor sequence while preserving
-     existing audit coverage behavior and `:Project.language_profile` lookup.
-   - Verification: targeted unit tests added in the next package must pass.
-
-4. Agent `profile-test-worker`: add drift tests for profile ordering.
-   - Write scope: `services/palace-mcp/tests/extractors/test_profiles.py`.
-   - Change: assert exact 17-extractor order and membership in
-     `registry.EXTRACTORS`.
-   - Verification:
-     `cd services/palace-mcp && uv run pytest tests/extractors/test_profiles.py`.
-
-### Wave 2: AnalysisRun Core
-
-5. Agent `analysis-model-worker`: add `AnalysisRun` data model.
-   - Write scope: `services/palace-mcp/src/palace_mcp/project_analyze.py`,
-     `services/palace-mcp/src/palace_mcp/memory/cypher.py`.
-   - Change: define Neo4j-backed run status, checkpoint schema, terminal
-     states, lease fields, active-run uniqueness, and report summary
-     structures.
-   - Verification: model tests prove durable serialization and one active run
-     per `(slug, language_profile)`.
-
-6. Agent `analysis-state-worker`: add run persistence/resume adapter.
-   - Write scope: `services/palace-mcp/src/palace_mcp/project_analyze.py`.
-   - Change: persist state in Neo4j, mark expired `RUNNING` leases as
-     `RESUMABLE`, and resume from the last completed checkpoint.
-   - Verification: unit test proves an interrupted run reloads checkpoint state
-     after process restart.
-
-7. Agent `analysis-runner-worker`: add extractor orchestration.
-   - Write scope: `services/palace-mcp/src/palace_mcp/project_analyze.py`.
-   - Change: run ordered extractors serially, continue on failure, record
-     `OK`, `RUN_FAILED`, `FETCH_FAILED`, or `NOT_ATTEMPTED`, and pin each
-     checkpoint to its `ingest_run_id`.
-   - Verification: unit test with fake extractor runner covers success, failure,
-     and continue-on-failure.
-
-8. Agent `analysis-audit-worker`: add audit/report finalization.
-   - Write scope: `services/palace-mcp/src/palace_mcp/project_analyze.py`.
-   - Change: call audit after extractor attempts and assemble
-     `report_markdown`, `overview`, `audit`, and `next_actions`.
-   - Verification: unit test with fake audit client verifies terminal payload.
-
-### Wave 3: MCP Surface
-
-9. Agent `mcp-tool-worker`: register project analysis MCP tools.
-   - Write scope: `services/palace-mcp/src/palace_mcp/mcp_server.py`.
-   - Change: add keyword-only `palace.project.analyze`,
-     `palace.project.analyze_status`, and `palace.project.analyze_resume`.
-   - Verification:
-     `cd services/palace-mcp && uv run pytest tests/test_mcp_server_project_analyze.py`.
-
-10. Agent `mcp-test-worker`: add MCP tool tests.
-    - Write scope: `services/palace-mcp/tests/test_mcp_server_project_analyze.py`.
-    - Change: prove required args, quick `run_id` return, status lookup, resume,
-      and existing `language_profile` storage behavior.
-    - Verification:
-      `cd services/palace-mcp && uv run pytest tests/test_mcp_server_project_analyze.py`.
-
-### Wave 4: Host CLI
-
-11. Agent `cli-parser-worker`: add `project analyze` parser.
-    - Write scope: `services/palace-mcp/src/palace_mcp/cli.py`.
-    - Change: add command args, validate local path/slug, and set product-smoke
-      URL default to `http://localhost:8080/mcp`.
-    - Verification: parser unit tests pass.
-
-12. Agent `cli-scip-worker`: add SCIP generation/env mapping helpers.
-    - Write scope: `services/palace-mcp/src/palace_mcp/cli.py`.
-    - Change: implement `--emit-scip`, compute container SCIP path, merge
-      `.env` `PALACE_SCIP_INDEX_PATHS`, preserve existing JSON entries, and
-      write/read `scip/index.scip.meta.json` for stale detection.
-    - Verification: tests cover missing env, existing env, invalid JSON, and
-      container path vs host path, plus stale/missing metadata cases.
-
-13. Agent `cli-docker-worker`: add Docker lifecycle helpers.
-    - Write scope: `services/palace-mcp/src/palace_mcp/cli.py`.
-    - Change: create/update `.gimle/runtime/project-analyze/` compose override,
-      call Docker Compose with the pinned `--env-file` and ordered `-f` files,
-      start review profile, recreate `palace-mcp` only when env or mount
-      changes, wait for health.
-    - Verification: command-construction tests use fakes, not real Docker.
-
-14. Agent `cli-poll-worker`: add AnalysisRun polling/report output.
-    - Write scope: `services/palace-mcp/src/palace_mcp/cli.py`.
-    - Change: call analyze, poll status, handle terminal states, write markdown
-      and JSON summary.
-    - Verification: fake MCP client test covers successful and failed terminal
-      states.
-
-15. Agent `cli-test-worker`: add CLI integration tests.
-    - Write scope: `services/palace-mcp/tests/test_project_analyze_cli.py`.
-    - Change: cover URL default, env update, restart decision, status polling,
-      and report output path.
-    - Verification:
-      `cd services/palace-mcp && uv run pytest tests/test_project_analyze_cli.py`.
-
-### Wave 5: Docs And Smoke
-
-16. Agent `docs-worker`: add runbook.
-    - Write scope: `docs/runbooks/project-analyze.md`.
-    - Change: document local prerequisites, host port 8080, SCIP env update,
-      Docker recreate behavior, and Memory Palace follow-up queries.
-    - Verification: runbook commands match CLI help.
-
-17. Agent `verification-worker`: run full local validation.
-    - Write scope: `docs/audit-reports/` only if smoke evidence is generated.
-    - Change: no source edits unless a prior agent is reassigned.
-    - Verification: run the unit/integration commands and then the full
-      `tron-kit` product smoke.
-
-18. Agent `reviewer`: final review before merge.
-    - Write scope: none unless explicitly assigned follow-up fixes.
-    - Output: findings first, with file/line refs; confirm no unrelated files
-      such as `.serena/`, `.coverage`, or submodule dirt are staged.
-    - Verification: `git diff --stat`, `git status --short`, and test summary.
+The implementation plan lives in
+`docs/superpowers/plans/2026-05-14-project-analyze-orchestrator-codex-task.md`.
+That plan is authoritative for team execution and assigns work to the real
+Gimle Paperclip Codex team (`cx-cto`, `cx-python-engineer`, `cx-mcp-engineer`,
+`cx-infra-engineer`, `cx-qa-engineer`, `cx-technical-writer`, and
+`codex-architect-reviewer`). Do not execute this work with local ad-hoc Codex
+subagents.
 
 ## Acceptance Criteria
 
-1. A single host command can analyze `tron-kit` from a local repo path and write
-   a full audit report.
+1. A single host command can analyze `tron-kit` from the iMac repo path and
+   write a full audit report.
 2. The command starts the Docker runtime when it is not already running.
 3. The command does not require the operator to manually edit `.env` for
    `PALACE_SCIP_INDEX_PATHS`; it merges `{slug: container_scip_path}` itself and
@@ -466,37 +374,46 @@ agent should revert edits outside its assigned files.
 6. `palace.project.analyze` starts an `AnalysisRun` and returns `run_id` without
    waiting for the full 17-extractor cascade.
 7. `palace.project.analyze_status` exposes per-extractor checkpoint status.
-8. `AnalysisRun` and checkpoints are durable in Neo4j and survive
-   `palace-mcp` process restart or container recreate.
+8. `AnalysisRun` and checkpoints are durable in Neo4j and survive a real
+   `palace-mcp` process restart or container recreate verified by smoke.
 9. Only one active `AnalysisRun` can exist per `(slug, language_profile)`;
-   duplicate starts reuse the same idempotent run or return
-   `ACTIVE_ANALYSIS_RUN_EXISTS`.
+   duplicate starts are protected by an atomic Neo4j lock transaction and reuse
+   the same idempotent run or return `ACTIVE_ANALYSIS_RUN_EXISTS`.
 10. Interrupted runs can be resumed after process restart from the last
     completed checkpoint.
 11. `--emit-scip auto` regenerates when `scip/index.scip.meta.json` is missing
-    or mismatches repo HEAD SHA, emitter version, package path, or host repo
-    path.
+    or mismatches repo HEAD SHA, emitter version, package path, generator host,
+    source repo path, or destination iMac repo path.
 12. The generated compose override path, env file, and exact `docker compose`
     file list are deterministic and recorded in the summary output.
-13. `palace.memory.list_projects` includes `tron-kit` after the run.
-14. `palace.memory.get_project_overview(slug="tron-kit")` returns non-empty
+13. If iMac cannot emit SCIP due unsupported Xcode/macOS, the CLI returns a
+    structured fallback command for MacBook SCIP emit and iMac copy; the iMac
+    Docker analysis can then resume using the copied SCIP artifact.
+14. `.gimle/runtime/` is ignored by git and does not appear as an untracked
+    source artifact after smoke.
+15. Pinned audit provenance prevents stale latest-run sections from being hidden;
+    any latest-run fallback is marked `STALE_EXTERNAL_RUN`.
+16. `paperclips/scripts/ingest_swift_kit.sh` cannot drift silently from the
+    ordered Python `swift_kit` profile.
+17. `palace.memory.list_projects` includes `tron-kit` after the run.
+18. `palace.memory.get_project_overview(slug="tron-kit")` returns non-empty
     ingest metadata.
-15. `palace.ingest.list_extractors` exposes all default `swift_kit` extractors.
-16. `palace.audit.run(project="tron-kit", depth="full")` returns markdown with:
+19. `palace.ingest.list_extractors` exposes all default `swift_kit` extractors.
+20. `palace.audit.run(project="tron-kit", depth="full")` returns markdown with:
     - Profile Coverage appendix
     - per-extractor status summary
     - run ids for populated sections
     - explicit `RUN_FAILED`, `FETCH_FAILED`, or `NOT_ATTEMPTED` entries when
       applicable
-17. The smoke output records whether `reactive_dependency_tracer` failed because
+21. The smoke output records whether `reactive_dependency_tracer` failed because
     `reactive_facts.json` is absent; that is an expected diagnostic, not a
     hidden blind spot.
-18. `swift_kit` profile tests prove the ordered list exactly matches the
+22. `swift_kit` profile tests prove the ordered list exactly matches the
     expected 17-extractor sequence and each extractor exists in
     `registry.EXTRACTORS`.
-19. Registration tests prove `language_profile` is stored in existing
+23. Registration tests prove `language_profile` is stored in existing
     `:Project.language_profile` and consumed by profile resolution.
-20. No unrelated local artifacts such as `.coverage` or `.serena/` are
+24. No unrelated local artifacts such as `.coverage` or `.serena/` are
     committed.
 
 ## Verification Plan
@@ -516,7 +433,7 @@ Product smoke:
 
 ```bash
 uv run --directory services/palace-mcp python -m palace_mcp.cli project analyze \
-  --repo-path /Users/ant013/Ios/HorizontalSystems/TronKit.Swift \
+  --repo-path /Users/Shared/Ios/HorizontalSystems/TronKit.Swift \
   --slug tron-kit \
   --bundle uw-ios \
   --language-profile swift_kit \
@@ -525,6 +442,20 @@ uv run --directory services/palace-mcp python -m palace_mcp.cli project analyze 
   --url http://localhost:8080/mcp \
   --report-out docs/audit-reports/2026-05-14-tron-kit-rerun.md
 ```
+
+If iMac SCIP emit fails with `SCIP_EMIT_TOOLCHAIN_UNSUPPORTED`, run the emitted
+MacBook fallback command, equivalent to:
+
+```bash
+bash paperclips/scripts/scip_emit_swift_kit.sh tron-kit \
+  --repo-path /Users/ant013/Ios/HorizontalSystems/TronKit.Swift \
+  --remote-host imac-ssh.ant013.work \
+  --remote-base /Users/Shared/Ios/HorizontalSystems \
+  --remote-relative-path TronKit.Swift
+```
+
+Then rerun the iMac product smoke with `--emit-scip auto` or
+`--emit-scip never` so Docker consumes the copied iMac SCIP artifact.
 
 Post-smoke MCP checks:
 

@@ -19,7 +19,7 @@ The first production smoke target is:
 
 ```bash
 uv run --directory services/palace-mcp python -m palace_mcp.cli project analyze \
-  --repo-path /Users/ant013/Ios/HorizontalSystems/TronKit.Swift \
+  --repo-path /Users/Shared/Ios/HorizontalSystems/TronKit.Swift \
   --slug tron-kit \
   --bundle uw-ios \
   --language-profile swift_kit \
@@ -59,15 +59,21 @@ Supporting files:
 - MCP owns product work: project/bundle registration, durable `AnalysisRun`,
   extractor orchestration, checkpoint status, resume, and audit report assembly.
 - `AnalysisRun` state is durable in Neo4j, not in-memory only.
-- Only one active `AnalysisRun` may exist for `(slug, language_profile)`.
+- Only one active `AnalysisRun` may exist for `(slug, language_profile)`, and
+  the start path must use an atomic Neo4j lock transaction.
 - Repeated CLI invocation with the same idempotency key must recover the
   existing active run.
 - `--emit-scip auto` uses `scip/index.scip.meta.json` and regenerates on stale
-  repo SHA, emitter version, package path, host repo path, missing index, empty
-  index, or invalid metadata.
+  repo SHA, emitter version, package path, generator host, source repo path,
+  destination iMac repo path, missing index, empty index, or invalid metadata.
+- Production smoke runs on iMac Docker. If iMac cannot emit Swift SCIP because
+  Xcode/macOS is too old, MacBook emits SCIP and copies
+  `scip/index.scip` plus metadata to the iMac repo path; iMac Docker still runs
+  the analysis.
 - Host MCP URL default for this product command is `http://localhost:8080/mcp`.
 - Compose override path is deterministic:
   `.gimle/runtime/project-analyze/docker-compose.project-analyze.yml`.
+- `.gimle/runtime/` is gitignored runtime state.
 - Work must happen in the Gimle Paperclip Codex workspace unless CXCTO records a
   specific reason to use another checkout.
 
@@ -112,6 +118,10 @@ Confirm in the Paperclip Codex workspace:
   - `0246f8b docs(spec): pin analysis run durability`
 - `origin/develop` is an ancestor.
 - No unrelated files are staged.
+- If `/Users/Shared/Ios/worktrees/cx/Gimle-Palace` does not exist, assign
+  `cx-infra-engineer` to create/update the workspace before implementation
+  starts. Until then, this local operator checkout may only update planning
+  docs; it is not the Paperclip execution workspace.
 
 Verification:
 
@@ -119,9 +129,40 @@ Verification:
 git status --short --branch
 git merge-base --is-ancestor origin/develop HEAD
 git log --oneline --max-count 8
+test -d /Users/Shared/Ios/worktrees/cx/Gimle-Palace
 ```
 
-### Task 0.2: CXCTO Codebase-Memory Read
+### Task 0.2: Paperclip Workspace Bootstrap
+
+**Assignee:** `cx-infra-engineer`
+**Review:** `cx-cto`
+**Write scope:**
+
+- Paperclip workspace filesystem only:
+  `/Users/Shared/Ios/worktrees/cx/Gimle-Palace`
+
+If the Codex team root is absent or stale, create/update it from the production
+checkout and set it to the implementation branch before any role starts code
+work.
+
+Preferred commands:
+
+```bash
+cd /Users/Shared/Ios/Gimle-Palace
+bash paperclips/scripts/imac-team-workspaces.sh --apply
+git -C /Users/Shared/Ios/worktrees/cx/Gimle-Palace fetch origin --prune
+git -C /Users/Shared/Ios/worktrees/cx/Gimle-Palace switch feature/GIM-NN-project-analyze-orchestrator-impl
+git -C /Users/Shared/Ios/worktrees/cx/Gimle-Palace pull --ff-only
+```
+
+Acceptance:
+
+- Codex team root exists.
+- Agent `cwd` still matches the Gimle project assembly or CXCTO records the
+  required Paperclip config update.
+- Branch and commit match the implementation branch.
+
+### Task 0.3: CXCTO Codebase-Memory Read
 
 **Assignee:** `cx-cto`
 **Write scope:** none
@@ -171,6 +212,9 @@ Add tests proving:
 
 - Exact 17-extractor order.
 - Every extractor exists in `registry.EXTRACTORS`.
+- `paperclips/scripts/ingest_swift_kit.sh` `DEFAULT_EXTRACTORS` matches the
+  ordered Python `swift_kit` profile, unless the script has been changed to
+  read the Python profile directly.
 - Existing profile inference behavior still passes.
 
 Verification:
@@ -217,8 +261,12 @@ Required fields:
 Acceptance:
 
 - One active run per `(slug, language_profile)`.
+- Active-run uniqueness is enforced in one Neo4j write transaction using an
+  `:AnalysisLock {key}` or equivalent lock node.
 - Existing idempotency key reuses active run.
 - Different active run returns `ACTIVE_ANALYSIS_RUN_EXISTS`.
+- Concurrent-start test proves two simultaneous starts cannot create two active
+  runs.
 
 ### Task 2.2: Resume And Lease Semantics
 
@@ -241,6 +289,8 @@ Acceptance:
 
 - Unit test simulates process restart by recreating service object and reading
   Neo4j-backed state.
+- Integration or smoke test starts a run, recreates/restarts `palace-mcp`, calls
+  `palace.project.analyze_status`, then resumes the run.
 
 ### Task 2.3: Extractor Orchestration
 
@@ -275,7 +325,11 @@ Acceptance:
 
 - Audit runs only after extractor attempts finish.
 - Report includes pinned per-extractor run ids.
-- Provenance mismatch with latest-run discovery is visible, not hidden.
+- Report does not silently fill failed or skipped extractors from older latest
+  successful runs.
+- Any fallback to latest-run audit data is explicitly marked
+  `STALE_EXTERNAL_RUN`, or the audit path accepts pinned run ids from the
+  current `AnalysisRun`.
 
 ## Wave 3: MCP Surface
 
@@ -350,6 +404,8 @@ Acceptance:
 
 - `services/palace-mcp/src/palace_mcp/cli.py`
 - `services/palace-mcp/tests/test_project_analyze_cli.py`
+- `paperclips/scripts/scip_emit_swift_kit.sh`
+- `paperclips/scripts/tests/test_ingest_idempotency.sh`
 
 Implement:
 
@@ -357,13 +413,18 @@ Implement:
 - `--emit-scip auto` stale detection.
 - container SCIP path computation.
 - `.env` `PALACE_SCIP_INDEX_PATHS` JSON merge preserving existing entries.
+- MacBook SCIP fallback metadata and copy support for
+  `paperclips/scripts/scip_emit_swift_kit.sh`.
 
 Acceptance:
 
 - Missing/empty index regenerates.
 - Missing/invalid metadata regenerates.
-- SHA/version/path mismatch regenerates.
+- SHA/version/path/generator-host/source-path/destination-iMac-path mismatch
+  regenerates.
 - Invalid existing env JSON fails clearly.
+- iMac toolchain failure is reported as `SCIP_EMIT_TOOLCHAIN_UNSUPPORTED` with
+  a copy-paste-safe MacBook fallback command.
 
 ### Task 4.3: Compose And Docker Lifecycle
 
@@ -373,6 +434,7 @@ Acceptance:
 
 - `services/palace-mcp/src/palace_mcp/cli.py`
 - `services/palace-mcp/tests/test_project_analyze_cli.py`
+- `.gitignore`
 
 Implement:
 
@@ -383,11 +445,13 @@ Implement:
 - start review profile
 - recreate `palace-mcp` only when env or mount changes
 - health wait
+- `.gimle/runtime/` gitignore rule
 
 Acceptance:
 
 - Tests use fakes, not real Docker.
 - Summary records compose files and env file.
+- Smoke does not leave `.gimle/runtime/` as an untracked source artifact.
 
 ### Task 4.4: CLI Polling And Outputs
 
@@ -452,6 +516,28 @@ cd services/palace-mcp && uv run mypy
 ```
 
 Then run the full `tron-kit` smoke command from this task.
+
+Required production smoke sequence:
+
+1. On iMac, run the product command against
+   `/Users/Shared/Ios/HorizontalSystems/TronKit.Swift`.
+2. If SCIP emit fails because iMac Xcode/macOS is too old, run the MacBook
+   fallback command from the CLI error output:
+
+   ```bash
+   bash paperclips/scripts/scip_emit_swift_kit.sh tron-kit \
+     --repo-path /Users/ant013/Ios/HorizontalSystems/TronKit.Swift \
+     --remote-host imac-ssh.ant013.work \
+     --remote-base /Users/Shared/Ios/HorizontalSystems \
+     --remote-relative-path TronKit.Swift
+   ```
+
+3. Re-run the iMac product command with `--emit-scip auto` or
+   `--emit-scip never`, using the copied iMac SCIP artifact.
+4. Start a run, recreate/restart `palace-mcp`, call
+   `palace.project.analyze_status`, then call `palace.project.analyze_resume`.
+5. Run a concurrent-start check for the same `(slug, language_profile)`.
+6. Verify `.gimle/runtime/` is ignored and no unrelated files are staged.
 
 ### Task 5.3: Final Paperclip Review
 
