@@ -114,7 +114,10 @@ RETURN r
 UPDATE_ANALYSIS_RUN_PROGRESS = """
 MATCH (r:AnalysisRun {run_id: $run_id})
 SET r.updated_at = $updated_at,
-    r.last_completed_extractor = $last_completed_extractor
+    r.last_completed_extractor = $last_completed_extractor,
+    r.status = $status,
+    r.lease_owner = $lease_owner,
+    r.lease_expires_at = $lease_expires_at
 RETURN r
 """
 

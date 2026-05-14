@@ -5,10 +5,12 @@ RED tests — fail until profiles.py is implemented.
 
 from __future__ import annotations
 
-import pytest
+import re
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 
 # ---------------------------------------------------------------------------
@@ -48,6 +50,29 @@ def _make_driver_with_profile(language_profile: str | None) -> Any:
     driver = MagicMock()
     driver.session = MagicMock(return_value=session)
     return driver
+
+
+def _parse_default_extractors() -> tuple[str, ...]:
+    script_path = (
+        Path(__file__).resolve().parents[4]
+        / "paperclips"
+        / "scripts"
+        / "ingest_swift_kit.sh"
+    )
+    text = script_path.read_text()
+    match = re.search(
+        r"DEFAULT_EXTRACTORS=\(\s*(.*?)\s*\)",
+        text,
+        re.DOTALL,
+    )
+    assert match is not None, f"DEFAULT_EXTRACTORS array not found in {script_path}"
+    names = tuple(
+        token
+        for line in match.group(1).splitlines()
+        for token in line.split("#")[0].split()
+        if token
+    )
+    return names
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +177,26 @@ def test_swift_kit_includes_expected_extractors() -> None:
     }
     actual = PROFILES["swift_kit"].audit_extractors
     assert expected.issubset(actual), f"Missing: {expected - actual}"
+
+
+def test_swift_kit_order_matches_contract() -> None:
+    from palace_mcp.extractors import registry
+    from palace_mcp.extractors.foundation.profiles import (
+        SWIFT_KIT_EXTRACTOR_ORDER,
+        get_ordered_extractors,
+    )
+
+    ordered = get_ordered_extractors("swift_kit")
+
+    assert ordered == SWIFT_KIT_EXTRACTOR_ORDER
+    assert len(ordered) == 17
+    assert all(name in registry.EXTRACTORS for name in ordered)
+
+
+def test_ingest_swift_kit_defaults_match_ordered_python_profile() -> None:
+    from palace_mcp.extractors.foundation.profiles import get_ordered_extractors
+
+    assert _parse_default_extractors() == get_ordered_extractors("swift_kit")
 
 
 def test_python_service_profile_exists() -> None:

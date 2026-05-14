@@ -127,6 +127,9 @@ class InMemoryAnalysisRunStore:
         *,
         updated_at: str,
         last_completed_extractor: str | None,
+        status: AnalysisRunStatus,
+        lease_owner: str | None,
+        lease_expires_at: str | None,
     ) -> AnalysisRun:
         run = self._require(run_id)
         checkpoints = [
@@ -135,7 +138,10 @@ class InMemoryAnalysisRunStore:
         ]
         updated = run.model_copy(
             update={
+                "status": status,
                 "updated_at": updated_at,
+                "lease_owner": lease_owner,
+                "lease_expires_at": lease_expires_at,
                 "last_completed_extractor": last_completed_extractor,
                 "checkpoints": checkpoints,
             }
@@ -350,23 +356,16 @@ async def test_execute_run_continues_after_failure_and_marks_stale_external_run(
 
 
 @pytest.mark.asyncio
-async def test_execute_run_runs_audit_after_all_extractors_succeed() -> None:
+async def test_execute_run_marks_success_path_stale_until_audit_supports_pinned_inputs() -> (
+    None
+):
     store = InMemoryAnalysisRunStore()
-    audit_calls: list[tuple[str, str]] = []
+    audit_called = False
 
-    async def _audit_runner(
-        driver: object,
-        extractor_registry: dict[str, Any],
-        *,
-        project: str,
-        depth: str,
-    ) -> dict[str, Any]:
-        audit_calls.append((project, depth))
-        return {
-            "ok": True,
-            "report_markdown": "# pinned audit\n",
-            "provenance": {"project": project},
-        }
+    async def _audit_runner(*args: object, **kwargs: object) -> dict[str, Any]:
+        nonlocal audit_called
+        audit_called = True
+        return {"ok": True, "report_markdown": "# unexpected\n"}
 
     service = _build_service(store=store, audit_runner=_audit_runner)
     started = await service.start_run(
@@ -390,10 +389,76 @@ async def test_execute_run_runs_audit_after_all_extractors_succeed() -> None:
 
     finished = await service.execute_run(started.run.run_id, executor=_executor)
 
-    assert finished.status == AnalysisRunStatus.SUCCEEDED
-    assert finished.report_markdown == "# pinned audit\n"
+    assert finished.status == AnalysisRunStatus.SUCCEEDED_WITH_FAILURES
     assert finished.overview["OK"] == 2
-    assert audit_calls == [("gimle", "quick")]
+    assert finished.audit is not None
+    assert finished.audit["error_code"] == "STALE_EXTERNAL_RUN"
+    assert "STALE_EXTERNAL_RUN" in (finished.report_markdown or "")
+    assert audit_called is False
+
+
+@pytest.mark.asyncio
+async def test_execute_run_renews_lease_while_checkpointing() -> None:
+    class RecordingAnalysisRunStore(InMemoryAnalysisRunStore):
+        def __init__(self) -> None:
+            super().__init__()
+            self.saved_leases: list[str] = []
+
+        async def save_checkpoint(
+            self,
+            run_id: str,
+            checkpoint: AnalysisCheckpoint,
+            *,
+            updated_at: str,
+            last_completed_extractor: str | None,
+            status: AnalysisRunStatus,
+            lease_owner: str | None,
+            lease_expires_at: str | None,
+        ) -> AnalysisRun:
+            assert lease_owner == "pytest"
+            assert lease_expires_at is not None
+            self.saved_leases.append(lease_expires_at)
+            return await super().save_checkpoint(
+                run_id,
+                checkpoint,
+                updated_at=updated_at,
+                last_completed_extractor=last_completed_extractor,
+                status=status,
+                lease_owner=lease_owner,
+                lease_expires_at=lease_expires_at,
+            )
+
+    store = RecordingAnalysisRunStore()
+    current_time = [_utc()]
+
+    def _clock() -> datetime:
+        return current_time[0]
+
+    service = _build_service(store=store, clock=_clock)
+    started = await service.start_run(
+        slug="gimle",
+        parent_mount="hs",
+        relative_path="Gimle",
+        language_profile="python_service",
+        extractors=["code_ownership", "dependency_surface"],
+        idempotency_key="lease-renewal",
+    )
+
+    async def _executor(
+        extractor_name: str,
+        run: AnalysisRun,
+    ) -> ExtractorAttemptResult:
+        current_time[0] = current_time[0] + timedelta(seconds=8)
+        return ExtractorAttemptResult(
+            status=AnalysisCheckpointStatus.OK,
+            ingest_run_id=f"ingest-{extractor_name}",
+        )
+
+    finished = await service.execute_run(started.run.run_id, executor=_executor)
+
+    assert len(store.saved_leases) == 2
+    assert store.saved_leases[0] < store.saved_leases[1]
+    assert finished.status == AnalysisRunStatus.SUCCEEDED_WITH_FAILURES
 
 
 @pytest.mark.asyncio
@@ -427,6 +492,9 @@ async def test_resume_continues_after_last_completed_extractor() -> None:
         first_checkpoint,
         updated_at=first_checkpoint.finished_at or _iso(current_time[0]),
         last_completed_extractor=first_checkpoint.extractor,
+        status=AnalysisRunStatus.RUNNING,
+        lease_owner="pytest",
+        lease_expires_at=_iso(current_time[0] + timedelta(seconds=10)),
     )
 
     seen: list[str] = []
@@ -444,4 +512,6 @@ async def test_resume_continues_after_last_completed_extractor() -> None:
     finished = await service.execute_run(started.run.run_id, executor=_executor)
 
     assert seen == ["dependency_surface", "hotspot"]
-    assert finished.status == AnalysisRunStatus.SUCCEEDED
+    assert finished.status == AnalysisRunStatus.SUCCEEDED_WITH_FAILURES
+    assert finished.audit is not None
+    assert finished.audit["error_code"] == "STALE_EXTERNAL_RUN"

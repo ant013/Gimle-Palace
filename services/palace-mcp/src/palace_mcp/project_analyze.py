@@ -184,6 +184,9 @@ class AnalysisRunStore(Protocol):
         *,
         updated_at: str,
         last_completed_extractor: str | None,
+        status: AnalysisRunStatus,
+        lease_owner: str | None,
+        lease_expires_at: str | None,
     ) -> AnalysisRun: ...
 
     async def finalize_run(
@@ -511,6 +514,9 @@ class Neo4jAnalysisRunStore:
         *,
         updated_at: str,
         last_completed_extractor: str | None,
+        status: AnalysisRunStatus,
+        lease_owner: str | None,
+        lease_expires_at: str | None,
     ) -> AnalysisRun:
         async with self._driver.session() as session:
             return await session.execute_write(
@@ -519,6 +525,9 @@ class Neo4jAnalysisRunStore:
                 checkpoint,
                 updated_at,
                 last_completed_extractor,
+                status,
+                lease_owner,
+                lease_expires_at,
             )
 
     @staticmethod
@@ -528,6 +537,9 @@ class Neo4jAnalysisRunStore:
         checkpoint: AnalysisCheckpoint,
         updated_at: str,
         last_completed_extractor: str | None,
+        status: AnalysisRunStatus,
+        lease_owner: str | None,
+        lease_expires_at: str | None,
     ) -> AnalysisRun:
         await tx.run(
             UPSERT_ANALYSIS_CHECKPOINT,
@@ -547,6 +559,9 @@ class Neo4jAnalysisRunStore:
             run_id=run_id,
             updated_at=updated_at,
             last_completed_extractor=last_completed_extractor,
+            status=status.value,
+            lease_owner=lease_owner,
+            lease_expires_at=lease_expires_at,
         )
         return await Neo4jAnalysisRunStore._read_run_tx(
             tx,
@@ -780,11 +795,17 @@ class ProjectAnalysisService:
                     "next_action": attempt.next_action,
                 }
             )
+            checkpoint_updated_at = self._clock()
             run = await self._store.save_checkpoint(
                 run.run_id,
                 updated_checkpoint,
-                updated_at=finished_at,
+                updated_at=_iso(checkpoint_updated_at),
                 last_completed_extractor=updated_checkpoint.extractor,
+                status=AnalysisRunStatus.RUNNING,
+                lease_owner=self._lease_owner,
+                lease_expires_at=_iso(
+                    checkpoint_updated_at + timedelta(seconds=self._lease_seconds)
+                ),
             )
             if (
                 attempt.status != AnalysisCheckpointStatus.OK
@@ -800,36 +821,31 @@ class ProjectAnalysisService:
         )
 
         if all_ok:
-            audit_payload = await self._run_audit(project=run.slug, depth=run.depth)
-            if audit_payload.get("ok") is True:
-                final_status = AnalysisRunStatus.SUCCEEDED
-                report_markdown = str(audit_payload.get("report_markdown") or "")
-                next_actions: list[str] = []
-            else:
-                final_status = AnalysisRunStatus.FAILED
-                report_markdown = self._render_checkpoint_report(
-                    run,
-                    audit_payload,
-                    stale_external=False,
-                )
-                next_actions = [
-                    "Inspect the audit payload error and retry finalization once the audit path is healthy."
-                ]
+            audit_payload = self._build_stale_external_audit_payload(
+                run,
+                message=(
+                    "Current audit path only supports latest-run discovery; "
+                    "successful AnalysisRun finalization must stay pinned to "
+                    "checkpoint provenance until audit accepts ingest_run_id inputs."
+                ),
+            )
+            final_status = AnalysisRunStatus.SUCCEEDED_WITH_FAILURES
+            report_markdown = self._render_checkpoint_report(
+                run,
+                audit_payload,
+                stale_external=True,
+            )
+            next_actions = [
+                "Add pinned audit inputs before promoting successful AnalysisRun finalization to SUCCEEDED."
+            ]
         else:
-            audit_payload = {
-                "ok": False,
-                "error_code": "STALE_EXTERNAL_RUN",
-                "message": (
+            audit_payload = self._build_stale_external_audit_payload(
+                run,
+                message=(
                     "Current AnalysisRun contains failed or skipped extractors; "
                     "latest-run audit fallback would break pinned provenance."
                 ),
-                "run_id": run.run_id,
-                "checkpoint_run_ids": {
-                    checkpoint.extractor: checkpoint.ingest_run_id
-                    for checkpoint in run.checkpoints
-                    if checkpoint.ingest_run_id is not None
-                },
-            }
+            )
             final_status = AnalysisRunStatus.SUCCEEDED_WITH_FAILURES
             report_markdown = self._render_checkpoint_report(
                 run,
@@ -891,6 +907,24 @@ class ProjectAnalysisService:
             project=project,
             depth=depth,
         )
+
+    def _build_stale_external_audit_payload(
+        self,
+        run: AnalysisRun,
+        *,
+        message: str,
+    ) -> dict[str, Any]:
+        return {
+            "ok": False,
+            "error_code": "STALE_EXTERNAL_RUN",
+            "message": message,
+            "run_id": run.run_id,
+            "checkpoint_run_ids": {
+                checkpoint.extractor: checkpoint.ingest_run_id
+                for checkpoint in run.checkpoints
+                if checkpoint.ingest_run_id is not None
+            },
+        }
 
     def _require_driver(self) -> AsyncDriver:
         if self._driver is None:
