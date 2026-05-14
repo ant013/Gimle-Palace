@@ -65,19 +65,17 @@ class TestSourceDistributionLine:
 
     def test_library_findings_empty_warning_when_total_over_threshold(self) -> None:
         # 15 findings, 0 library → warning
-        findings = (
-            [_finding(f"Example/E{i}.swift", "example") for i in range(8)]
-            + [_finding(f"Tests/T{i}.swift", "test") for i in range(7)]
-        )
+        findings = [_finding(f"Example/E{i}.swift", "example") for i in range(8)] + [
+            _finding(f"Tests/T{i}.swift", "test") for i in range(7)
+        ]
         result = _render(findings)
         assert "library_findings_empty" in result
 
     def test_no_warning_when_library_findings_present(self) -> None:
         # 15 findings, 3 library → no warning
-        findings = (
-            [_finding(f"Sources/S{i}.swift", "library") for i in range(3)]
-            + [_finding(f"Example/E{i}.swift", "example") for i in range(12)]
-        )
+        findings = [_finding(f"Sources/S{i}.swift", "library") for i in range(3)] + [
+            _finding(f"Example/E{i}.swift", "example") for i in range(12)
+        ]
         result = _render(findings)
         assert "library_findings_empty" not in result
 

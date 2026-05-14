@@ -7,15 +7,15 @@ Verifies:
 
 from __future__ import annotations
 
-import pytest
-
 
 # ---------------------------------------------------------------------------
 # Helper: minimal raw semgrep-style finding
 # ---------------------------------------------------------------------------
 
 
-def _raw(path: str, kind: str = "crypto_key_exposure", severity: str = "WARNING") -> dict:
+def _raw(
+    path: str, kind: str = "crypto_key_exposure", severity: str = "WARNING"
+) -> dict:
     return {
         "path": path,
         "check_id": kind,

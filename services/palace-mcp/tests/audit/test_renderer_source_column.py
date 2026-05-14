@@ -9,7 +9,9 @@ from palace_mcp.audit.contracts import AuditSectionData, Severity
 from palace_mcp.audit.renderer import render_section
 
 
-def _section(extractor: str, findings: list[dict], stats: dict | None = None) -> AuditSectionData:
+def _section(
+    extractor: str, findings: list[dict], stats: dict | None = None
+) -> AuditSectionData:
     return AuditSectionData(
         extractor_name=extractor,
         run_id="run-001",
@@ -39,7 +41,11 @@ class TestCodeOwnershipSourceColumn:
             },
         ]
         result = render_section(
-            _section("code_ownership", findings, {"files_analysed": 2, "diffuse_ownership_count": 1}),
+            _section(
+                "code_ownership",
+                findings,
+                {"files_analysed": 2, "diffuse_ownership_count": 1},
+            ),
             severity_column="top_owner_weight",
             max_findings=100,
             severity_mapper=lambda v: Severity.HIGH,
@@ -66,7 +72,11 @@ class TestCodeOwnershipSourceColumn:
             },
         ]
         result = render_section(
-            _section("code_ownership", findings, {"files_analysed": 2, "diffuse_ownership_count": 0}),
+            _section(
+                "code_ownership",
+                findings,
+                {"files_analysed": 2, "diffuse_ownership_count": 0},
+            ),
             severity_column="top_owner_weight",
             max_findings=100,
             severity_mapper=lambda v: Severity.LOW,

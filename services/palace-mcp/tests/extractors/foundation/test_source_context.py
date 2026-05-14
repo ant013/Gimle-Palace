@@ -74,9 +74,11 @@ def test_overrides_yaml_applied(tmp_path: Path) -> None:
     gimle_dir = tmp_path / ".gimle"
     gimle_dir.mkdir()
     overrides_file = gimle_dir / "source-context-overrides.yaml"
-    overrides_file.write_text(textwrap.dedent("""\
+    overrides_file.write_text(
+        textwrap.dedent("""\
         "**/Vendor/**": "other"
-    """))
+    """)
+    )
 
     overrides = load_overrides(str(tmp_path))
     assert overrides is not None
@@ -101,10 +103,12 @@ def test_overrides_invalid_value_ignored(tmp_path: Path) -> None:
 
     gimle_dir = tmp_path / ".gimle"
     gimle_dir.mkdir()
-    (gimle_dir / "source-context-overrides.yaml").write_text(textwrap.dedent("""\
+    (gimle_dir / "source-context-overrides.yaml").write_text(
+        textwrap.dedent("""\
         "**/Vendor/**": "invalid_context"
         "**/Shims/**": "other"
-    """))
+    """)
+    )
 
     overrides = load_overrides(str(tmp_path))
     assert overrides is not None

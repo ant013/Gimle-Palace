@@ -215,10 +215,13 @@ async def _run_extraction(*, ctx: ExtractorRunContext, driver: Any) -> Extractor
     )
 
     # Annotate each violation with source_context based on its file path
-    from palace_mcp.extractors.foundation.source_context import classify as _classify_ctx
+    from palace_mcp.extractors.foundation.source_context import (
+        classify as _classify_ctx,
+    )
 
     violations = [
-        v.model_copy(update={"source_context": _classify_ctx(v.file)}) for v in violations
+        v.model_copy(update={"source_context": _classify_ctx(v.file)})
+        for v in violations
     ]
 
     logger.info(

@@ -17,7 +17,8 @@ SourceContext = Literal["library", "example", "test", "other"]
 _I = re.IGNORECASE
 
 _EXAMPLE_RE = re.compile(
-    r"(^|/)(?:[^/]*[-_ ])?(Example|Examples|Sample|Samples|Demo|Demos)(?:[-_ ][^/]*)?(/|$)", _I
+    r"(^|/)(?:[^/]*[-_ ])?(Example|Examples|Sample|Samples|Demo|Demos)(?:[-_ ][^/]*)?(/|$)",
+    _I,
 )
 _TEST_RE = re.compile(r"(^|/)(Tests?|spec)(/|$)", _I)
 _TEST_SUFFIX_RE = re.compile(r"Test(s)?\.swift$|_test\.py$|Test\.kt$", _I)
@@ -72,9 +73,5 @@ def load_overrides(repo_root: str) -> dict[str, str] | None:
         return None
 
     valid_contexts: frozenset[str] = frozenset({"library", "example", "test", "other"})
-    result = {
-        str(k): str(v)
-        for k, v in data.items()
-        if str(v) in valid_contexts
-    }
+    result = {str(k): str(v) for k, v in data.items() if str(v) in valid_contexts}
     return result or None

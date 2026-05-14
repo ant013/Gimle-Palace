@@ -49,7 +49,11 @@ _SWALLOWING_KINDS: frozenset[str] = frozenset(
 
 # Kinds affected by B8 critical-path severity tuning (try? usage variants)
 _TRY_OPTIONAL_KINDS: frozenset[str] = frozenset(
-    {"try_optional_swallow", "try_optional_in_crypto_path", "nil_coalesce_swallows_error"}
+    {
+        "try_optional_swallow",
+        "try_optional_in_crypto_path",
+        "nil_coalesce_swallows_error",
+    }
 )
 
 # B8 artifact §5 — verbatim regex for critical-path file detection

@@ -9,7 +9,9 @@ from palace_mcp.audit.contracts import AuditSectionData, Severity
 from palace_mcp.audit.renderer import render_report
 
 
-def _section(name: str, findings: list[dict], stats: dict | None = None) -> AuditSectionData:
+def _section(
+    name: str, findings: list[dict], stats: dict | None = None
+) -> AuditSectionData:
     return AuditSectionData(
         extractor_name=name,
         run_id=f"run-{name}",
@@ -76,7 +78,13 @@ class TestLibraryOnlyHighCount:
 
     def test_all_library_high_sections_counted(self) -> None:
         """Two sections, both with library HIGH → 2 counted."""
-        f1 = {"path": "Sources/A.swift", "top_owner_email": "a@a.com", "top_owner_weight": 0.05, "total_authors": 1, "source_context": "library"}
+        f1 = {
+            "path": "Sources/A.swift",
+            "top_owner_email": "a@a.com",
+            "top_owner_weight": 0.05,
+            "total_authors": 1,
+            "source_context": "library",
+        }
         f2 = {
             "file": "Sources/B.swift",
             "start_line": 1,
@@ -89,14 +97,26 @@ class TestLibraryOnlyHighCount:
         result = render_report(
             project="test-project",
             sections={
-                "code_ownership": _section("code_ownership", [f1], {"files_analysed": 1, "diffuse_ownership_count": 1}),
+                "code_ownership": _section(
+                    "code_ownership",
+                    [f1],
+                    {"files_analysed": 1, "diffuse_ownership_count": 1},
+                ),
                 "error_handling_policy": _section("error_handling_policy", [f2]),
             },
-            severity_columns={"code_ownership": "top_owner_weight", "error_handling_policy": "severity"},
-            max_findings_per_section={"code_ownership": 100, "error_handling_policy": 100},
+            severity_columns={
+                "code_ownership": "top_owner_weight",
+                "error_handling_policy": "severity",
+            },
+            max_findings_per_section={
+                "code_ownership": 100,
+                "error_handling_policy": 100,
+            },
             blind_spots=[],
             severity_mappers={
-                "code_ownership": lambda v: Severity.HIGH if v is not None and float(v) < 0.1 else Severity.LOW,
+                "code_ownership": lambda v: (
+                    Severity.HIGH if v is not None and float(v) < 0.1 else Severity.LOW
+                ),
             },
         )
         assert "2 section" in result
@@ -113,7 +133,11 @@ class TestLibraryOnlyHighCount:
         }
         result = render_report(
             project="test-project",
-            sections={"crypto_domain_model": _section("crypto_domain_model", [example_finding])},
+            sections={
+                "crypto_domain_model": _section(
+                    "crypto_domain_model", [example_finding]
+                )
+            },
             severity_columns={"crypto_domain_model": "severity"},
             max_findings_per_section={"crypto_domain_model": 100},
             blind_spots=[],

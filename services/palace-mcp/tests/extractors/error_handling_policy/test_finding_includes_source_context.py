@@ -9,9 +9,6 @@ Verifies:
 
 from __future__ import annotations
 
-from dataclasses import replace
-from pathlib import Path
-
 import pytest
 
 
@@ -21,7 +18,9 @@ import pytest
 # ---------------------------------------------------------------------------
 
 
-def _make_raw(path: str, kind: str = "try_optional_swallow", severity: str = "WARNING") -> dict:
+def _make_raw(
+    path: str, kind: str = "try_optional_swallow", severity: str = "WARNING"
+) -> dict:
     return {
         "path": path,
         "check_id": kind,
@@ -35,7 +34,9 @@ def _make_raw(path: str, kind: str = "try_optional_swallow", severity: str = "WA
     }
 
 
-def _normalise(path: str, kind: str = "try_optional_swallow", severity: str = "WARNING") -> object:
+def _normalise(
+    path: str, kind: str = "try_optional_swallow", severity: str = "WARNING"
+) -> object:
     from pathlib import Path
     from palace_mcp.extractors.error_handling_policy.extractor import (
         _normalise_results,
@@ -84,7 +85,9 @@ def _apply_cp(findings: list) -> list:
     return _apply_critical_path_severity(findings)
 
 
-def _lib_finding(path: str, kind: str = "try_optional_swallow", severity: str = "medium"):
+def _lib_finding(
+    path: str, kind: str = "try_optional_swallow", severity: str = "medium"
+):
     from palace_mcp.extractors.error_handling_policy.extractor import ErrorFinding
 
     return ErrorFinding(
@@ -99,7 +102,12 @@ def _lib_finding(path: str, kind: str = "try_optional_swallow", severity: str = 
     )
 
 
-def _ctx_finding(path: str, source_context: str, kind: str = "try_optional_swallow", severity: str = "medium"):
+def _ctx_finding(
+    path: str,
+    source_context: str,
+    kind: str = "try_optional_swallow",
+    severity: str = "medium",
+):
     from palace_mcp.extractors.error_handling_policy.extractor import ErrorFinding
 
     return ErrorFinding(
@@ -151,7 +159,11 @@ def test_no_keyword_view_stays_low() -> None:
 
 # example context: signer path but example → LOW despite regex match
 def test_example_context_overrides_regex_to_low() -> None:
-    f = _ctx_finding("iOS Example/Sources/signer/Manager.swift", source_context="example", severity="low")
+    f = _ctx_finding(
+        "iOS Example/Sources/signer/Manager.swift",
+        source_context="example",
+        severity="low",
+    )
     result = _apply_cp([f])
     assert result[0].severity == "low"
 
@@ -165,27 +177,36 @@ def test_test_context_overrides_regex_to_low() -> None:
 
 # Non try_optional kinds should not be affected by critical path logic
 def test_non_try_optional_unaffected() -> None:
-    f = _lib_finding("Sources/TronKit/Crypto/Signer.swift", kind="empty_catch_block", severity="medium")
+    f = _lib_finding(
+        "Sources/TronKit/Crypto/Signer.swift",
+        kind="empty_catch_block",
+        severity="medium",
+    )
     result = _apply_cp([f])
     assert result[0].severity == "medium"
 
 
 # B8 keywords: mnemonic, seed, pubkey, keystore, secp256k1, ed25519, ripemd160
-@pytest.mark.parametrize("path", [
-    "Sources/Kit/Mnemonic.swift",
-    "Sources/Kit/Seed.swift",
-    "Sources/Kit/pubkey/PubKey.swift",
-    "Sources/Kit/keystore/Keystore.swift",
-    "Sources/Kit/secp256k1.swift",
-    "Sources/Kit/ed25519.swift",
-    "Sources/Kit/Ripemd160.swift",
-    "Sources/Kit/HsCryptoKit/Crypto.swift",
-    "Sources/Kit/hmac/HMAC.swift",
-])
+@pytest.mark.parametrize(
+    "path",
+    [
+        "Sources/Kit/Mnemonic.swift",
+        "Sources/Kit/Seed.swift",
+        "Sources/Kit/pubkey/PubKey.swift",
+        "Sources/Kit/keystore/Keystore.swift",
+        "Sources/Kit/secp256k1.swift",
+        "Sources/Kit/ed25519.swift",
+        "Sources/Kit/Ripemd160.swift",
+        "Sources/Kit/HsCryptoKit/Crypto.swift",
+        "Sources/Kit/hmac/HMAC.swift",
+    ],
+)
 def test_b8_keywords_elevate_to_medium(path: str) -> None:
     f = _lib_finding(path, severity="low")
     result = _apply_cp([f])
-    assert result[0].severity == "medium", f"Expected MEDIUM for {path!r}, got {result[0].severity!r}"
+    assert result[0].severity == "medium", (
+        f"Expected MEDIUM for {path!r}, got {result[0].severity!r}"
+    )
 
 
 # ---------------------------------------------------------------------------

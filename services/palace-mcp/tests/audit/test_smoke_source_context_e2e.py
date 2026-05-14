@@ -6,7 +6,7 @@ assert headline severity excludes example HIGHs and distribution line is present
 
 from __future__ import annotations
 
-from palace_mcp.audit.contracts import AuditSectionData, Severity
+from palace_mcp.audit.contracts import AuditSectionData
 from palace_mcp.audit.renderer import render_report
 
 
@@ -71,9 +71,9 @@ class TestSmokeSourceContextE2E:
         ]
         result = _render_full_audit(library_findings, example_findings)
         assert "No critical or high severity findings" in result
-        assert "⚠" not in result.split("## Executive Summary")[1].split("---")[0].strip().replace(
-            "⚠ **data_quality:", ""
-        )
+        assert "⚠" not in result.split("## Executive Summary")[1].split("---")[
+            0
+        ].strip().replace("⚠ **data_quality:", "")
 
     def test_headline_counts_library_highs_only(self) -> None:
         """Library HIGH + example HIGH → exec summary counts 1 section (library only)."""
