@@ -5,6 +5,12 @@
 
 ---
 
+{% if library_findings_warning %}
+{{ library_findings_warning }}
+
+---
+
+{% endif %}
 ## Executive Summary
 
 {{ executive_summary }}

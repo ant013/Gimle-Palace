@@ -356,6 +356,7 @@ class TestExecutiveSummary:
                     "message": "bad thing",
                     "file": "foo.py",
                     "start_line": 1,
+                    "source_context": "library",
                 }
             ],
             summary_stats={},
@@ -383,12 +384,14 @@ class TestExecutiveSummary:
                     "message": "finding one",
                     "file": "a.py",
                     "start_line": 10,
+                    "source_context": "library",
                 },
                 {
                     "_severity": "medium",
                     "message": "finding two",
                     "file": "b.py",
                     "start_line": 20,
+                    "source_context": "library",
                 },
             ],
             summary_stats={},

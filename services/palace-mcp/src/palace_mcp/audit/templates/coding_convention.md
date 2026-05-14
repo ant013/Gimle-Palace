@@ -3,10 +3,10 @@
 {% if findings %}
 *{{ findings | length }} convention{{ 's' if findings | length != 1 else '' }} found (capped at {{ max_findings }}).*
 
-| Severity | Module | Rule | Dominant Choice | Confidence | Samples | Outliers |
-|----------|--------|------|-----------------|------------|---------|----------|
+| Severity | Module | Rule | Dominant Choice | Confidence | Samples | Outliers | Source |
+|----------|--------|------|-----------------|------------|---------|----------|--------|
 {% for f in findings %}
-| {{ f._severity | upper }} | {{ f.module }} | `{{ f.kind }}` | `{{ f.dominant_choice }}` | {{ f.confidence }} | {{ f.sample_count }} | {{ f.outliers }} |
+| {{ f._severity | upper }} | {{ f.module }} | `{{ f.kind }}` | `{{ f.dominant_choice }}` | {{ f.confidence }} | {{ f.sample_count }} | {{ f.outliers }} | {{ f.source_context | default('other') }} |
 {% endfor %}
 
 {% for f in findings if f.violations %}

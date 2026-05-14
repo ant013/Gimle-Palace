@@ -68,7 +68,8 @@ WITH f, collect({r: r, a: a})[0] AS top_pair, count(r) AS total_authors
 RETURN f.path AS path,
        top_pair.a.email AS top_owner_email,
        top_pair.r.weight AS top_owner_weight,
-       total_authors
+       total_authors,
+       coalesce(f.source_context, 'other') AS source_context
 ORDER BY top_owner_weight ASC
 LIMIT 100
 """.strip(),

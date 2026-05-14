@@ -36,7 +36,7 @@ to the repository. See the runbook at `docs/runbooks/arch-layer.md`.
 {% set critical_high = findings | selectattr("severity", "in", ["critical", "high"]) | list %}
 {% if critical_high %}
 {% for f in critical_high %}
-- **{{ f.severity | upper }}** [{{ f.kind }}] `{{ f.src_module }}` → `{{ f.dst_module }}` (rule: `{{ f.rule_id }}`)
+- **{{ f.severity | upper }}** [{{ f.kind }}] `{{ f.src_module }}` → `{{ f.dst_module }}` (rule: `{{ f.rule_id }}`, src: `{{ f.source_context | default('other') }}`)
   {{ f.message }}{% if f.evidence %} — *{{ f.evidence }}*{% endif %}
 {% endfor %}
 {% else %}
@@ -48,7 +48,7 @@ to the repository. See the runbook at `docs/runbooks/arch-layer.md`.
 {% set medium_low = findings | rejectattr("severity", "in", ["critical", "high"]) | list %}
 {% if medium_low %}
 {% for f in medium_low %}
-- {{ f.severity }} [{{ f.kind }}] `{{ f.src_module }}` → `{{ f.dst_module }}` (rule: `{{ f.rule_id }}`)
+- {{ f.severity }} [{{ f.kind }}] `{{ f.src_module }}` → `{{ f.dst_module }}` (rule: `{{ f.rule_id }}`, src: `{{ f.source_context | default('other') }}`)
   {{ f.message }}{% if f.evidence %} — *{{ f.evidence }}*{% endif %}
 {% endfor %}
 {% else %}

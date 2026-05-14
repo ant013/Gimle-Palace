@@ -6,7 +6,7 @@
 ### Critical / high
 {% if critical_high %}
 {% for f in critical_high %}
-- **{{ f.severity | upper }}** [{{ f.kind }}] `{{ f.file }}:{{ f.start_line }}` — {{ f.message }}
+- **{{ f.severity | upper }}** [{{ f.kind }}] `{{ f.file }}:{{ f.start_line }}` \[{{ f.source_context | default('other') }}\] — {{ f.message }}
 {% endfor %}
 {% else %}
 *No critical or high severity findings.*
@@ -15,7 +15,7 @@
 ### Medium / low
 {% if medium_low %}
 {% for f in medium_low %}
-- {{ f.severity }} [{{ f.kind }}] `{{ f.file }}:{{ f.start_line }}` — {{ f.message }}
+- {{ f.severity }} [{{ f.kind }}] `{{ f.file }}:{{ f.start_line }}` \[{{ f.source_context | default('other') }}\] — {{ f.message }}
 {% endfor %}
 {% else %}
 *No medium or low severity findings.*

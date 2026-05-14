@@ -34,7 +34,8 @@ RETURN f.kind AS kind,
        f.start_line AS start_line,
        f.end_line AS end_line,
        f.message AS message,
-       f.run_id AS run_id
+       f.run_id AS run_id,
+       f.source_context AS source_context
 ORDER BY
   CASE f.severity
     WHEN 'critical' THEN 0
@@ -222,6 +223,8 @@ def _dedup_findings(
     raw: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Coalesce findings per (file, start_line, end_line, kind), keep highest severity."""
+    from palace_mcp.extractors.foundation.source_context import classify
+
     best: dict[tuple[str, int, int, str], dict[str, Any]] = {}
     for r in raw:
         path = r.get("path", "")
@@ -246,6 +249,7 @@ def _dedup_findings(
                 "severity": severity,
                 "message": r.get("extra", {}).get("message", ""),
                 "rule_id": rule_id,
+                "source_context": classify(path),
             }
     return list(best.values())
 
@@ -269,6 +273,7 @@ MERGE (f:CryptoFinding {
 })
 SET f.severity = $severity,
     f.message = $message,
+    f.source_context = $source_context,
     f.run_id = $run_id
 """,
             project_id=project_id,
@@ -278,5 +283,6 @@ SET f.severity = $severity,
             end_line=finding["end_line"],
             severity=finding["severity"],
             message=finding["message"],
+            source_context=finding["source_context"],
             run_id=run_id,
         )
