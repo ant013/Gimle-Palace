@@ -391,7 +391,9 @@ POST /api/issues/{id}/release
 When your phase is done, explicitly transfer ownership. Never leave an issue as
 "someone will pick it up".
 
-Handoff = one PATCH (`status + assigneeAgentId + comment` ending `[@Next](agent://uuid) your turn.`), then GET-verify — last tool call, end of turn. Mismatch → retry once → still mismatch → `status=blocked` + escalate Board.
+Handoff to next agent (or your CTO) = one PATCH (`status + assigneeAgentId + comment` ending `[@Next](agent://uuid) your turn.`), then GET-verify. Stop. No more output.
+
+Mismatch on verify → retry once; still mismatch → `status=blocked` + escalate Board.
 
 - push the feature branch BEFORE the PATCH;
 - the PATCH comment body carries branch, commit SHA, evidence, and the formal `[@<Role>](agent://<uuid>?i=<icon>)` mention (UUIDs in `fragments/local/agent-roster.md`);

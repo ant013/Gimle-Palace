@@ -426,7 +426,9 @@ Between plan phases, **explicit reassign** to next-phase agent. Never leave "som
 
 <!-- paperclip:handoff-exit-shapes:v1 -->
 <!-- paperclip:handoff-verify-status-assignee:v1 -->
-Before exit: `status=done` OR atomic handoff = one PATCH (`status + assigneeAgentId + comment` ending `[@Next](agent://uuid) your turn.`), then GET-verify — last tool call, end of turn. Mismatch → retry once → still mismatch → `status=blocked` + escalate Board.
+Before exit: `status=done` OR atomic handoff to next agent (or your CXCTO) — one PATCH (`status + assigneeAgentId + comment` ending `[@Next](agent://uuid) your turn.`), then GET-verify. Stop. No more output.
+
+Mismatch on verify → retry once; still mismatch → `status=blocked` + escalate Board.
 
 ### Handoff matrix
 
