@@ -82,7 +82,7 @@
     "claude": {
       "roles": [
         {
-          "bytes": 20786,
+          "bytes": 19635,
           "dist": "paperclips/dist/auditor.md",
           "family": "auditor",
           "handoffMarkers": {
@@ -91,19 +91,19 @@
             "paperclip:handoff-verify-status-assignee:v1": true,
             "paperclip:team-local-roster:v1": true
           },
-          "lines": 479,
+          "lines": 467,
           "profiles": [
             "core",
             "handoff-full",
             "audit-mode"
           ],
           "roleId": "claude:auditor",
-          "sha256": "da0bd692afa8df8dbefc2bbcc69d50245767a1f35d94b16aa4a81be04b2a2c24",
+          "sha256": "6da1a4501b6cdb3689881c1b4d8724f47a174eafd6756f726cd70ff8cd92f54c",
           "source": "paperclips/roles/auditor.md",
-          "tokenEstimate": 5197
+          "tokenEstimate": 4909
         },
         {
-          "bytes": 25951,
+          "bytes": 24629,
           "dist": "paperclips/dist/blockchain-engineer.md",
           "family": "implementation",
           "handoffMarkers": {
@@ -112,7 +112,7 @@
             "paperclip:handoff-verify-status-assignee:v1": false,
             "paperclip:team-local-roster:v1": false
           },
-          "lines": 575,
+          "lines": 560,
           "profiles": [
             "core",
             "task-start",
@@ -120,12 +120,12 @@
             "handoff"
           ],
           "roleId": "claude:blockchain-engineer",
-          "sha256": "d6351b6fc78cf90ee033eb7f4c2ed241408dd547bb0a17d2f2dd60b826f29479",
+          "sha256": "8cf724271bdec17d287a871715d90c4540ff1c7185a79a48a0828350ce110616",
           "source": "paperclips/roles/blockchain-engineer.md",
-          "tokenEstimate": 6488
+          "tokenEstimate": 6158
         },
         {
-          "bytes": 34351,
+          "bytes": 33200,
           "dist": "paperclips/dist/code-reviewer.md",
           "family": "code-reviewer",
           "handoffMarkers": {
@@ -134,7 +134,7 @@
             "paperclip:handoff-verify-status-assignee:v1": true,
             "paperclip:team-local-roster:v1": true
           },
-          "lines": 806,
+          "lines": 794,
           "profiles": [
             "core",
             "task-start",
@@ -144,12 +144,12 @@
             "merge-deploy"
           ],
           "roleId": "claude:code-reviewer",
-          "sha256": "6e3ae58a1d9cc06212f011baf894dd4b8777061d020ae4c17e0f5ec391a27f71",
+          "sha256": "d9ae336dd15b90c6598f3c8c9df811be7e9eebb98f2c63d33d807ac0bd0421eb",
           "source": "paperclips/roles/code-reviewer.md",
-          "tokenEstimate": 8588
+          "tokenEstimate": 8300
         },
         {
-          "bytes": 24339,
+          "bytes": 23188,
           "dist": "paperclips/dist/cto.md",
           "family": "cto",
           "handoffMarkers": {
@@ -158,7 +158,7 @@
             "paperclip:handoff-verify-status-assignee:v1": true,
             "paperclip:team-local-roster:v1": true
           },
-          "lines": 501,
+          "lines": 489,
           "profiles": [
             "core",
             "task-start",
@@ -168,12 +168,12 @@
             "merge-deploy"
           ],
           "roleId": "claude:cto",
-          "sha256": "0603347110da793afafca016d05fe944c005595f7548a451fd127f5b57db55f6",
+          "sha256": "893bef6fe631eed99c3db6345b3c495a2ea37a11fef381d4b273a189182d4123",
           "source": "paperclips/roles/cto.md",
-          "tokenEstimate": 6085
+          "tokenEstimate": 5797
         },
         {
-          "bytes": 28877,
+          "bytes": 27726,
           "dist": "paperclips/dist/infra-engineer.md",
           "family": "infra",
           "handoffMarkers": {
@@ -182,7 +182,7 @@
             "paperclip:handoff-verify-status-assignee:v1": true,
             "paperclip:team-local-roster:v1": true
           },
-          "lines": 620,
+          "lines": 608,
           "profiles": [
             "core",
             "task-start",
@@ -191,12 +191,12 @@
             "merge-deploy"
           ],
           "roleId": "claude:infra-engineer",
-          "sha256": "3887391fc4500803a1d1c3b107e786bb4732be520bf48c96e625e00d05577524",
+          "sha256": "1480d90cb605d168b59c7c53d6afe8289016ecde5c8e2912372b111957d6e98f",
           "source": "paperclips/roles/infra-engineer.md",
-          "tokenEstimate": 7220
+          "tokenEstimate": 6932
         },
         {
-          "bytes": 26022,
+          "bytes": 24700,
           "dist": "paperclips/dist/mcp-engineer.md",
           "family": "implementation",
           "handoffMarkers": {
@@ -205,7 +205,7 @@
             "paperclip:handoff-verify-status-assignee:v1": false,
             "paperclip:team-local-roster:v1": false
           },
-          "lines": 570,
+          "lines": 555,
           "profiles": [
             "core",
             "task-start",
@@ -213,12 +213,12 @@
             "handoff"
           ],
           "roleId": "claude:mcp-engineer",
-          "sha256": "8340e72482f2fdb1a5851a0f091e57f01dfd75f48f5d62e0b9ea281b89df516f",
+          "sha256": "787898e2931b69794a1468e4613091ba2c4662b56c42c1ddeb02d82c644cb07b",
           "source": "paperclips/roles/mcp-engineer.md",
-          "tokenEstimate": 6506
+          "tokenEstimate": 6175
         },
         {
-          "bytes": 31056,
+          "bytes": 29905,
           "dist": "paperclips/dist/opus-architect-reviewer.md",
           "family": "architect-reviewer",
           "handoffMarkers": {
@@ -227,7 +227,7 @@
             "paperclip:handoff-verify-status-assignee:v1": true,
             "paperclip:team-local-roster:v1": true
           },
-          "lines": 722,
+          "lines": 710,
           "profiles": [
             "core",
             "task-start",
@@ -237,13 +237,291 @@
             "handoff-full"
           ],
           "roleId": "claude:opus-architect-reviewer",
-          "sha256": "874f19858487ff92c2e4d13065e5a081ab00fe63b9a275b6cad0dff094b5e800",
+          "sha256": "a8eec4f5dd29ae51815b7a08c965a5f3756d6df515edc981ff40924c458dbcf9",
           "source": "paperclips/roles/opus-architect-reviewer.md",
-          "tokenEstimate": 7764
+          "tokenEstimate": 7477
         },
         {
-          "bytes": 28441,
+          "bytes": 27119,
           "dist": "paperclips/dist/python-engineer.md",
+          "family": "implementation",
+          "handoffMarkers": {
+            "paperclip:handoff-contract:v2": false,
+            "paperclip:handoff-exit-shapes:v1": false,
+            "paperclip:handoff-verify-status-assignee:v1": false,
+            "paperclip:team-local-roster:v1": false
+          },
+          "lines": 668,
+          "profiles": [
+            "core",
+            "task-start",
+            "implementation",
+            "handoff"
+          ],
+          "roleId": "claude:python-engineer",
+          "sha256": "f439356526d49a465065fdbd70b135ea0a2240849b385b3899431d913c503f61",
+          "source": "paperclips/roles/python-engineer.md",
+          "tokenEstimate": 6780
+        },
+        {
+          "bytes": 28439,
+          "dist": "paperclips/dist/qa-engineer.md",
+          "family": "qa",
+          "handoffMarkers": {
+            "paperclip:handoff-contract:v2": true,
+            "paperclip:handoff-exit-shapes:v1": true,
+            "paperclip:handoff-verify-status-assignee:v1": true,
+            "paperclip:team-local-roster:v1": true
+          },
+          "lines": 644,
+          "profiles": [
+            "core",
+            "task-start",
+            "qa-smoke",
+            "implementation",
+            "handoff-full",
+            "merge-deploy"
+          ],
+          "roleId": "claude:qa-engineer",
+          "sha256": "e20dc51e3263887218b9295e362c5aece8529dc38ffc9818349470aec33e2dc4",
+          "source": "paperclips/roles/qa-engineer.md",
+          "tokenEstimate": 7110
+        },
+        {
+          "bytes": 20845,
+          "dist": "paperclips/dist/research-agent.md",
+          "family": "research",
+          "handoffMarkers": {
+            "paperclip:handoff-contract:v2": false,
+            "paperclip:handoff-exit-shapes:v1": false,
+            "paperclip:handoff-verify-status-assignee:v1": false,
+            "paperclip:team-local-roster:v1": false
+          },
+          "lines": 464,
+          "profiles": [
+            "core",
+            "task-start",
+            "research",
+            "handoff"
+          ],
+          "roleId": "claude:research-agent",
+          "sha256": "05abfd90c6a7e8572dea607dfa290253d01c4db0aa55684ebad8a287ffbe63db",
+          "source": "paperclips/roles/research-agent.md",
+          "tokenEstimate": 5212
+        },
+        {
+          "bytes": 29823,
+          "dist": "paperclips/dist/security-auditor.md",
+          "family": "security-review",
+          "handoffMarkers": {
+            "paperclip:handoff-contract:v2": true,
+            "paperclip:handoff-exit-shapes:v1": true,
+            "paperclip:handoff-verify-status-assignee:v1": true,
+            "paperclip:team-local-roster:v1": true
+          },
+          "lines": 664,
+          "profiles": [
+            "core",
+            "task-start",
+            "review",
+            "research",
+            "handoff-full"
+          ],
+          "roleId": "claude:security-auditor",
+          "sha256": "17f0ee45e71baf093b7bb5a549b5d8e43a5279f669388f08d857c77bf8381bf1",
+          "source": "paperclips/roles/security-auditor.md",
+          "tokenEstimate": 7456
+        },
+        {
+          "bytes": 20618,
+          "dist": "paperclips/dist/technical-writer.md",
+          "family": "writer",
+          "handoffMarkers": {
+            "paperclip:handoff-contract:v2": false,
+            "paperclip:handoff-exit-shapes:v1": false,
+            "paperclip:handoff-verify-status-assignee:v1": false,
+            "paperclip:team-local-roster:v1": false
+          },
+          "lines": 451,
+          "profiles": [
+            "core",
+            "task-start",
+            "research",
+            "handoff"
+          ],
+          "roleId": "claude:technical-writer",
+          "sha256": "f1c91041dba017138ea2a74c176985246b86af0d87718452e4f0af4ac523ea3e",
+          "source": "paperclips/roles/technical-writer.md",
+          "tokenEstimate": 5155
+        }
+      ],
+      "totalBytes": 309827
+    },
+    "codex": {
+      "roles": [
+        {
+          "bytes": 27242,
+          "dist": "paperclips/dist/codex/codex-architect-reviewer.md",
+          "family": "architect-reviewer",
+          "handoffMarkers": {
+            "paperclip:handoff-contract:v2": true,
+            "paperclip:handoff-exit-shapes:v1": true,
+            "paperclip:handoff-verify-status-assignee:v1": true,
+            "paperclip:team-local-roster:v1": true
+          },
+          "lines": 625,
+          "profiles": [
+            "core",
+            "task-start",
+            "review",
+            "qa-smoke",
+            "research",
+            "handoff-full"
+          ],
+          "roleId": "codex:codex-architect-reviewer",
+          "sha256": "a4d1157e9ae7bee60dc9eb8d1e21a5dd138f61c2d33c6ab28796cc8c5821c179",
+          "source": "paperclips/roles-codex/codex-architect-reviewer.md",
+          "tokenEstimate": 6811
+        },
+        {
+          "bytes": 18130,
+          "dist": "paperclips/dist/codex/cx-auditor.md",
+          "family": "auditor",
+          "handoffMarkers": {
+            "paperclip:handoff-contract:v2": true,
+            "paperclip:handoff-exit-shapes:v1": true,
+            "paperclip:handoff-verify-status-assignee:v1": true,
+            "paperclip:team-local-roster:v1": true
+          },
+          "lines": 451,
+          "profiles": [
+            "core",
+            "handoff-full",
+            "audit-mode"
+          ],
+          "roleId": "codex:cx-auditor",
+          "sha256": "195eb8e4e8e715756baf1bc45c06d35770179b2fc09ea3f92132a4b6e043b175",
+          "source": "paperclips/roles-codex/cx-auditor.md",
+          "tokenEstimate": 4533
+        },
+        {
+          "bytes": 26058,
+          "dist": "paperclips/dist/codex/cx-blockchain-engineer.md",
+          "family": "implementation",
+          "handoffMarkers": {
+            "paperclip:handoff-contract:v2": false,
+            "paperclip:handoff-exit-shapes:v1": false,
+            "paperclip:handoff-verify-status-assignee:v1": false,
+            "paperclip:team-local-roster:v1": false
+          },
+          "lines": 578,
+          "profiles": [
+            "core",
+            "task-start",
+            "implementation",
+            "handoff"
+          ],
+          "roleId": "codex:cx-blockchain-engineer",
+          "sha256": "90c6fa84745175a2265ebf63d3576d170700b28e996483d7961db9771aa56881",
+          "source": "paperclips/roles-codex/cx-blockchain-engineer.md",
+          "tokenEstimate": 6515
+        },
+        {
+          "bytes": 24900,
+          "dist": "paperclips/dist/codex/cx-code-reviewer.md",
+          "family": "code-reviewer",
+          "handoffMarkers": {
+            "paperclip:handoff-contract:v2": true,
+            "paperclip:handoff-exit-shapes:v1": true,
+            "paperclip:handoff-verify-status-assignee:v1": true,
+            "paperclip:team-local-roster:v1": true
+          },
+          "lines": 611,
+          "profiles": [
+            "core",
+            "task-start",
+            "review",
+            "qa-smoke",
+            "handoff-full",
+            "merge-deploy"
+          ],
+          "roleId": "codex:cx-code-reviewer",
+          "sha256": "62cb503d701220caacdac66ad506c3c0fe8b02a59dec9fce1cc124c1ec66d6c9",
+          "source": "paperclips/roles-codex/cx-code-reviewer.md",
+          "tokenEstimate": 6225
+        },
+        {
+          "bytes": 25022,
+          "dist": "paperclips/dist/codex/cx-cto.md",
+          "family": "cto",
+          "handoffMarkers": {
+            "paperclip:handoff-contract:v2": true,
+            "paperclip:handoff-exit-shapes:v1": true,
+            "paperclip:handoff-verify-status-assignee:v1": true,
+            "paperclip:team-local-roster:v1": true
+          },
+          "lines": 504,
+          "profiles": [
+            "core",
+            "task-start",
+            "review",
+            "qa-smoke",
+            "handoff-full",
+            "merge-deploy"
+          ],
+          "roleId": "codex:cx-cto",
+          "sha256": "9dd9bee91a25ce2bb5a2ed4c7b7e11869307a9ed6d2f91cc35150310e8aac25b",
+          "source": "paperclips/roles-codex/cx-cto.md",
+          "tokenEstimate": 6256
+        },
+        {
+          "bytes": 28432,
+          "dist": "paperclips/dist/codex/cx-infra-engineer.md",
+          "family": "infra",
+          "handoffMarkers": {
+            "paperclip:handoff-contract:v2": true,
+            "paperclip:handoff-exit-shapes:v1": true,
+            "paperclip:handoff-verify-status-assignee:v1": true,
+            "paperclip:team-local-roster:v1": true
+          },
+          "lines": 621,
+          "profiles": [
+            "core",
+            "task-start",
+            "implementation",
+            "handoff-full",
+            "merge-deploy"
+          ],
+          "roleId": "codex:cx-infra-engineer",
+          "sha256": "bbedcf5152e312cb788873633c76e8efd8375fbacec5dddf8c4cf5990e773197",
+          "source": "paperclips/roles-codex/cx-infra-engineer.md",
+          "tokenEstimate": 7108
+        },
+        {
+          "bytes": 25767,
+          "dist": "paperclips/dist/codex/cx-mcp-engineer.md",
+          "family": "implementation",
+          "handoffMarkers": {
+            "paperclip:handoff-contract:v2": false,
+            "paperclip:handoff-exit-shapes:v1": false,
+            "paperclip:handoff-verify-status-assignee:v1": false,
+            "paperclip:team-local-roster:v1": false
+          },
+          "lines": 569,
+          "profiles": [
+            "core",
+            "task-start",
+            "implementation",
+            "handoff"
+          ],
+          "roleId": "codex:cx-mcp-engineer",
+          "sha256": "e236d44cad32ba0ccf0c1e104130ae8a99172cf8c9c5ff44013ecc5c32cca0af",
+          "source": "paperclips/roles-codex/cx-mcp-engineer.md",
+          "tokenEstimate": 6442
+        },
+        {
+          "bytes": 28530,
+          "dist": "paperclips/dist/codex/cx-python-engineer.md",
           "family": "implementation",
           "handoffMarkers": {
             "paperclip:handoff-contract:v2": false,
@@ -258,14 +536,14 @@
             "implementation",
             "handoff"
           ],
-          "roleId": "claude:python-engineer",
-          "sha256": "3398b14e61b4e64ce9a2a63e7e53f0347e52b3ee58095861235e149b7205499f",
-          "source": "paperclips/roles/python-engineer.md",
-          "tokenEstimate": 7111
+          "roleId": "codex:cx-python-engineer",
+          "sha256": "fbcd09b066d6d4018eedae65268739ac637dccb71bff9707fbc53ce7b06379ab",
+          "source": "paperclips/roles-codex/cx-python-engineer.md",
+          "tokenEstimate": 7133
         },
         {
-          "bytes": 29590,
-          "dist": "paperclips/dist/qa-engineer.md",
+          "bytes": 29238,
+          "dist": "paperclips/dist/codex/cx-qa-engineer.md",
           "family": "qa",
           "handoffMarkers": {
             "paperclip:handoff-contract:v2": true,
@@ -273,7 +551,7 @@
             "paperclip:handoff-verify-status-assignee:v1": true,
             "paperclip:team-local-roster:v1": true
           },
-          "lines": 656,
+          "lines": 657,
           "profiles": [
             "core",
             "task-start",
@@ -282,14 +560,14 @@
             "handoff-full",
             "merge-deploy"
           ],
-          "roleId": "claude:qa-engineer",
-          "sha256": "72f2c8fb1ec574797bdfe1d42fffd9190785ced6c980e8294c45e91e72fff4c6",
-          "source": "paperclips/roles/qa-engineer.md",
-          "tokenEstimate": 7398
+          "roleId": "codex:cx-qa-engineer",
+          "sha256": "778740172e0c1dcec148d05a3b0fd884507d8b6eb36ca9147dbdd6ba1410f05f",
+          "source": "paperclips/roles-codex/cx-qa-engineer.md",
+          "tokenEstimate": 7310
         },
         {
-          "bytes": 22167,
-          "dist": "paperclips/dist/research-agent.md",
+          "bytes": 22064,
+          "dist": "paperclips/dist/codex/cx-research-agent.md",
           "family": "research",
           "handoffMarkers": {
             "paperclip:handoff-contract:v2": false,
@@ -297,21 +575,21 @@
             "paperclip:handoff-verify-status-assignee:v1": false,
             "paperclip:team-local-roster:v1": false
           },
-          "lines": 479,
+          "lines": 478,
           "profiles": [
             "core",
             "task-start",
             "research",
             "handoff"
           ],
-          "roleId": "claude:research-agent",
-          "sha256": "f365f07633fbaef59f0ad1cf624d4e24f099c5d69f4bbb28da16a87af6dc9097",
-          "source": "paperclips/roles/research-agent.md",
-          "tokenEstimate": 5542
+          "roleId": "codex:cx-research-agent",
+          "sha256": "9b4880447b7aea382921762daf7788ab22492d8a8a086cbbac13ad5003b3d016",
+          "source": "paperclips/roles-codex/cx-research-agent.md",
+          "tokenEstimate": 5516
         },
         {
-          "bytes": 30974,
-          "dist": "paperclips/dist/security-auditor.md",
+          "bytes": 30832,
+          "dist": "paperclips/dist/codex/cx-security-auditor.md",
           "family": "security-review",
           "handoffMarkers": {
             "paperclip:handoff-contract:v2": true,
@@ -319,7 +597,7 @@
             "paperclip:handoff-verify-status-assignee:v1": true,
             "paperclip:team-local-roster:v1": true
           },
-          "lines": 676,
+          "lines": 680,
           "profiles": [
             "core",
             "task-start",
@@ -327,14 +605,14 @@
             "research",
             "handoff-full"
           ],
-          "roleId": "claude:security-auditor",
-          "sha256": "cefeed8a7501b8af4b70874bc5c014cf853eb05d79156590b8d7ee8fe31fa03c",
-          "source": "paperclips/roles/security-auditor.md",
-          "tokenEstimate": 7744
+          "roleId": "codex:cx-security-auditor",
+          "sha256": "e700f4648f09cf520de28ea66325b5b84430e44a235142f234ba0a5dda5cb45f",
+          "source": "paperclips/roles-codex/cx-security-auditor.md",
+          "tokenEstimate": 7708
         },
         {
-          "bytes": 21940,
-          "dist": "paperclips/dist/technical-writer.md",
+          "bytes": 21696,
+          "dist": "paperclips/dist/codex/cx-technical-writer.md",
           "family": "writer",
           "handoffMarkers": {
             "paperclip:handoff-contract:v2": false,
@@ -349,291 +627,13 @@
             "research",
             "handoff"
           ],
-          "roleId": "claude:technical-writer",
-          "sha256": "7937c0285cf53c85ff2e72c7830c45baa4f2ea73ff0b2b4a7c87729af6bf7ed9",
-          "source": "paperclips/roles/technical-writer.md",
-          "tokenEstimate": 5485
-        }
-      ],
-      "totalBytes": 324494
-    },
-    "codex": {
-      "roles": [
-        {
-          "bytes": 28393,
-          "dist": "paperclips/dist/codex/codex-architect-reviewer.md",
-          "family": "architect-reviewer",
-          "handoffMarkers": {
-            "paperclip:handoff-contract:v2": true,
-            "paperclip:handoff-exit-shapes:v1": true,
-            "paperclip:handoff-verify-status-assignee:v1": true,
-            "paperclip:team-local-roster:v1": true
-          },
-          "lines": 637,
-          "profiles": [
-            "core",
-            "task-start",
-            "review",
-            "qa-smoke",
-            "research",
-            "handoff-full"
-          ],
-          "roleId": "codex:codex-architect-reviewer",
-          "sha256": "f22b671774ce22c85fa297b89505564b30ede009e9c690ebe028a5d34e79549d",
-          "source": "paperclips/roles-codex/codex-architect-reviewer.md",
-          "tokenEstimate": 7099
-        },
-        {
-          "bytes": 19281,
-          "dist": "paperclips/dist/codex/cx-auditor.md",
-          "family": "auditor",
-          "handoffMarkers": {
-            "paperclip:handoff-contract:v2": true,
-            "paperclip:handoff-exit-shapes:v1": true,
-            "paperclip:handoff-verify-status-assignee:v1": true,
-            "paperclip:team-local-roster:v1": true
-          },
-          "lines": 463,
-          "profiles": [
-            "core",
-            "handoff-full",
-            "audit-mode"
-          ],
-          "roleId": "codex:cx-auditor",
-          "sha256": "7576cbf1942e1a5f81ef6f5559227fba4f06a224555ee0a42fc6ceadca313e2a",
-          "source": "paperclips/roles-codex/cx-auditor.md",
-          "tokenEstimate": 4821
-        },
-        {
-          "bytes": 27380,
-          "dist": "paperclips/dist/codex/cx-blockchain-engineer.md",
-          "family": "implementation",
-          "handoffMarkers": {
-            "paperclip:handoff-contract:v2": false,
-            "paperclip:handoff-exit-shapes:v1": false,
-            "paperclip:handoff-verify-status-assignee:v1": false,
-            "paperclip:team-local-roster:v1": false
-          },
-          "lines": 593,
-          "profiles": [
-            "core",
-            "task-start",
-            "implementation",
-            "handoff"
-          ],
-          "roleId": "codex:cx-blockchain-engineer",
-          "sha256": "d16e4effba9bdc52c8265d203bc392b69a6b630d8b919f5938251c1999a3e107",
-          "source": "paperclips/roles-codex/cx-blockchain-engineer.md",
-          "tokenEstimate": 6845
-        },
-        {
-          "bytes": 26051,
-          "dist": "paperclips/dist/codex/cx-code-reviewer.md",
-          "family": "code-reviewer",
-          "handoffMarkers": {
-            "paperclip:handoff-contract:v2": true,
-            "paperclip:handoff-exit-shapes:v1": true,
-            "paperclip:handoff-verify-status-assignee:v1": true,
-            "paperclip:team-local-roster:v1": true
-          },
-          "lines": 623,
-          "profiles": [
-            "core",
-            "task-start",
-            "review",
-            "qa-smoke",
-            "handoff-full",
-            "merge-deploy"
-          ],
-          "roleId": "codex:cx-code-reviewer",
-          "sha256": "59aac14afd5216231bda44f58e21cdb5d20789eeef06fa644055e2dd3151ce4a",
-          "source": "paperclips/roles-codex/cx-code-reviewer.md",
-          "tokenEstimate": 6513
-        },
-        {
-          "bytes": 26173,
-          "dist": "paperclips/dist/codex/cx-cto.md",
-          "family": "cto",
-          "handoffMarkers": {
-            "paperclip:handoff-contract:v2": true,
-            "paperclip:handoff-exit-shapes:v1": true,
-            "paperclip:handoff-verify-status-assignee:v1": true,
-            "paperclip:team-local-roster:v1": true
-          },
-          "lines": 516,
-          "profiles": [
-            "core",
-            "task-start",
-            "review",
-            "qa-smoke",
-            "handoff-full",
-            "merge-deploy"
-          ],
-          "roleId": "codex:cx-cto",
-          "sha256": "2d29eead989c4d0bb8b8e455d3d124bdb9218352fc629b1078811d62d92fd9e4",
-          "source": "paperclips/roles-codex/cx-cto.md",
-          "tokenEstimate": 6544
-        },
-        {
-          "bytes": 29583,
-          "dist": "paperclips/dist/codex/cx-infra-engineer.md",
-          "family": "infra",
-          "handoffMarkers": {
-            "paperclip:handoff-contract:v2": true,
-            "paperclip:handoff-exit-shapes:v1": true,
-            "paperclip:handoff-verify-status-assignee:v1": true,
-            "paperclip:team-local-roster:v1": true
-          },
-          "lines": 633,
-          "profiles": [
-            "core",
-            "task-start",
-            "implementation",
-            "handoff-full",
-            "merge-deploy"
-          ],
-          "roleId": "codex:cx-infra-engineer",
-          "sha256": "b9adf9f1da49f84cf1fa82f38320162b17ca2a298c5e4bfc0bf7ac7671fcfc92",
-          "source": "paperclips/roles-codex/cx-infra-engineer.md",
-          "tokenEstimate": 7396
-        },
-        {
-          "bytes": 27089,
-          "dist": "paperclips/dist/codex/cx-mcp-engineer.md",
-          "family": "implementation",
-          "handoffMarkers": {
-            "paperclip:handoff-contract:v2": false,
-            "paperclip:handoff-exit-shapes:v1": false,
-            "paperclip:handoff-verify-status-assignee:v1": false,
-            "paperclip:team-local-roster:v1": false
-          },
-          "lines": 584,
-          "profiles": [
-            "core",
-            "task-start",
-            "implementation",
-            "handoff"
-          ],
-          "roleId": "codex:cx-mcp-engineer",
-          "sha256": "1f2b2c66a29c6c86afaaa246feb25018bbdd2e6fe9b5e443c1941fe4017dd21c",
-          "source": "paperclips/roles-codex/cx-mcp-engineer.md",
-          "tokenEstimate": 6773
-        },
-        {
-          "bytes": 29852,
-          "dist": "paperclips/dist/codex/cx-python-engineer.md",
-          "family": "implementation",
-          "handoffMarkers": {
-            "paperclip:handoff-contract:v2": false,
-            "paperclip:handoff-exit-shapes:v1": false,
-            "paperclip:handoff-verify-status-assignee:v1": false,
-            "paperclip:team-local-roster:v1": false
-          },
-          "lines": 698,
-          "profiles": [
-            "core",
-            "task-start",
-            "implementation",
-            "handoff"
-          ],
-          "roleId": "codex:cx-python-engineer",
-          "sha256": "38f17ea3bfea43ea92125d0bb2073316ffa27156231e296152f124627098e0c7",
-          "source": "paperclips/roles-codex/cx-python-engineer.md",
-          "tokenEstimate": 7463
-        },
-        {
-          "bytes": 30389,
-          "dist": "paperclips/dist/codex/cx-qa-engineer.md",
-          "family": "qa",
-          "handoffMarkers": {
-            "paperclip:handoff-contract:v2": true,
-            "paperclip:handoff-exit-shapes:v1": true,
-            "paperclip:handoff-verify-status-assignee:v1": true,
-            "paperclip:team-local-roster:v1": true
-          },
-          "lines": 669,
-          "profiles": [
-            "core",
-            "task-start",
-            "qa-smoke",
-            "implementation",
-            "handoff-full",
-            "merge-deploy"
-          ],
-          "roleId": "codex:cx-qa-engineer",
-          "sha256": "3f7053b3e3adcceff1fc65a58b34c9da7c17529cf2e776eba88e0881b7160bc4",
-          "source": "paperclips/roles-codex/cx-qa-engineer.md",
-          "tokenEstimate": 7598
-        },
-        {
-          "bytes": 23386,
-          "dist": "paperclips/dist/codex/cx-research-agent.md",
-          "family": "research",
-          "handoffMarkers": {
-            "paperclip:handoff-contract:v2": false,
-            "paperclip:handoff-exit-shapes:v1": false,
-            "paperclip:handoff-verify-status-assignee:v1": false,
-            "paperclip:team-local-roster:v1": false
-          },
-          "lines": 493,
-          "profiles": [
-            "core",
-            "task-start",
-            "research",
-            "handoff"
-          ],
-          "roleId": "codex:cx-research-agent",
-          "sha256": "d50a75d5811901d60dc7a986272cb2d76b7d23234d9b1640ba3f35ad1f08639b",
-          "source": "paperclips/roles-codex/cx-research-agent.md",
-          "tokenEstimate": 5847
-        },
-        {
-          "bytes": 31983,
-          "dist": "paperclips/dist/codex/cx-security-auditor.md",
-          "family": "security-review",
-          "handoffMarkers": {
-            "paperclip:handoff-contract:v2": true,
-            "paperclip:handoff-exit-shapes:v1": true,
-            "paperclip:handoff-verify-status-assignee:v1": true,
-            "paperclip:team-local-roster:v1": true
-          },
-          "lines": 692,
-          "profiles": [
-            "core",
-            "task-start",
-            "review",
-            "research",
-            "handoff-full"
-          ],
-          "roleId": "codex:cx-security-auditor",
-          "sha256": "c2f0ed023a17738e06ed11d783587be7e469bb282639c0bca0b57ddc01bc4647",
-          "source": "paperclips/roles-codex/cx-security-auditor.md",
-          "tokenEstimate": 7996
-        },
-        {
-          "bytes": 23018,
-          "dist": "paperclips/dist/codex/cx-technical-writer.md",
-          "family": "writer",
-          "handoffMarkers": {
-            "paperclip:handoff-contract:v2": false,
-            "paperclip:handoff-exit-shapes:v1": false,
-            "paperclip:handoff-verify-status-assignee:v1": false,
-            "paperclip:team-local-roster:v1": false
-          },
-          "lines": 481,
-          "profiles": [
-            "core",
-            "task-start",
-            "research",
-            "handoff"
-          ],
           "roleId": "codex:cx-technical-writer",
-          "sha256": "097a1bf7ae08528c4e81325e8e2f5fb8e7a9252d8637f8e17a3668956037876e",
+          "sha256": "61cb19f04b72c8b639293e290ea35c1c629bd31734d7ed5cc2ae3e9ce8b25b81",
           "source": "paperclips/roles-codex/cx-technical-writer.md",
-          "tokenEstimate": 5755
+          "tokenEstimate": 5424
         }
       ],
-      "totalBytes": 322578
+      "totalBytes": 307911
     }
   }
 }
