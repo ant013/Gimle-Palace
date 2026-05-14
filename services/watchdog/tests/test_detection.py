@@ -444,6 +444,66 @@ async def test_scan_died_skips_blocked_issue(tmp_path: Path):
 
 
 @pytest.mark.asyncio
+@freeze_time("2026-04-21T10:30:00Z")
+async def test_scan_died_skips_parent_with_live_children(tmp_path: Path):
+    """Parent assignee idle while a child is still in_progress / in_review /
+    todo is legitimately waiting on the child to close, not stranded. Skip wake."""
+    cfg = _make_config()
+    st = State.load(tmp_path / "s.json")
+    stale = _dt.datetime(2026, 4, 21, 10, 0, tzinfo=_dt.timezone.utc)
+    parent = Issue(
+        id="parent-1",
+        assignee_agent_id="cto-1",
+        execution_run_id=None,
+        status="in_progress",
+        updated_at=stale,
+    )
+    live_child = Issue(
+        id="child-1",
+        assignee_agent_id="pe-1",
+        execution_run_id=None,
+        status="in_progress",
+        updated_at=stale,
+        parent_id="parent-1",
+    )
+    client = _FakeClient([parent, live_child])
+    actions = await det.scan_died_mid_work(cfg.companies[0], client, st, cfg)
+    parent_actions = [a for a in actions if a.issue.id == "parent-1"]
+    child_actions = [a for a in actions if a.issue.id == "child-1"]
+    assert parent_actions == []  # parent skipped
+    assert len(child_actions) == 1  # child still wakeable
+    assert child_actions[0].kind == "wake"
+
+
+@pytest.mark.asyncio
+@freeze_time("2026-04-21T10:30:00Z")
+async def test_scan_died_wakes_parent_when_children_done(tmp_path: Path):
+    """All children done — parent must wake (CTO should mark done or spawn next)."""
+    cfg = _make_config()
+    st = State.load(tmp_path / "s.json")
+    stale = _dt.datetime(2026, 4, 21, 10, 0, tzinfo=_dt.timezone.utc)
+    parent = Issue(
+        id="parent-2",
+        assignee_agent_id="cto-1",
+        execution_run_id=None,
+        status="in_progress",
+        updated_at=stale,
+    )
+    done_child = Issue(
+        id="child-2",
+        assignee_agent_id=None,
+        execution_run_id=None,
+        status="done",
+        updated_at=stale,
+        parent_id="parent-2",
+    )
+    client = _FakeClient([parent, done_child])
+    actions = await det.scan_died_mid_work(cfg.companies[0], client, st, cfg)
+    parent_wakes = [a for a in actions if a.issue.id == "parent-2" and a.kind == "wake"]
+    assert len(parent_wakes) == 1
+
+
+@pytest.mark.asyncio
 @freeze_time("2026-04-21T10:05:00Z")
 async def test_scan_died_wakes_in_review_issue(tmp_path: Path):
     """GIM-216: in_review handoffs whose wake-event was lost must be picked up."""

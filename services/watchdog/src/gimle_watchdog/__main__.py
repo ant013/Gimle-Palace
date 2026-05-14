@@ -237,6 +237,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
         print("!!! UNSAFE AUTO-REPAIR ENABLED - Board has not approved !!!")
     print(f"Effective mode: {mode.value}")
     print(f"Recovery enabled: {str(cfg.daemon.recovery_enabled).lower()}")
+    print(f"Recovery dry-run: {str(cfg.daemon.recovery_dry_run).lower()}")
     baseline_status = (
         "disabled"
         if not cfg.daemon.recovery_first_run_baseline_only

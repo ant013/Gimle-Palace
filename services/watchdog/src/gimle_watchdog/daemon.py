@@ -550,13 +550,14 @@ async def _run_handoff_pass(
 
 
 async def _run_recovery_pass(cfg: Config, state: State, client: PaperclipClient) -> int:
-    if not cfg.daemon.recovery_enabled:
+    dry_run = cfg.daemon.recovery_dry_run
+    if not cfg.daemon.recovery_enabled and not dry_run:
         log.info("recovery_pass_disabled")
         return 0
 
     total_actions = 0
     effectful_actions = 0
-    baseline_mode = (
+    baseline_mode = dry_run or (
         cfg.daemon.recovery_first_run_baseline_only and not state.recovery_baseline_completed
     )
     baseline_candidates = 0
@@ -621,11 +622,17 @@ async def _run_recovery_pass(cfg: Config, state: State, client: PaperclipClient)
             total_actions += 1
 
     if baseline_mode:
-        state.recovery_baseline_completed = True
+        if not dry_run:
+            state.recovery_baseline_completed = True
         log.info(
-            "recovery_baseline_seeded candidates=%d",
+            "recovery_baseline_seeded candidates=%d dry_run=%s",
             baseline_candidates,
-            extra={"event": "recovery_baseline_seeded", "candidates": baseline_candidates},
+            dry_run,
+            extra={
+                "event": "recovery_baseline_seeded",
+                "candidates": baseline_candidates,
+                "dry_run": dry_run,
+            },
         )
 
     return total_actions
@@ -667,6 +674,7 @@ def _build_posture_extra(
         "configured_but_missing": configured_but_missing,
         "live_but_unconfigured": live_but_unconfigured,
         "recovery_enabled": cfg.daemon.recovery_enabled,
+        "recovery_dry_run": cfg.daemon.recovery_dry_run,
         "recovery_baseline_completed": state.recovery_baseline_completed,
         "max_actions_per_tick": cfg.daemon.max_actions_per_tick,
         "handoff_recent_window_min": cfg.handoff.handoff_recent_window_min,
