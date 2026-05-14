@@ -75,7 +75,7 @@ RETURN d.purl AS purl,
        r.scope AS scope,
        r.declared_in AS declared_in,
        r.declared_version_constraint AS declared_version_constraint,
-       r.resolved_version AS resolved_version
+       d.resolved_version AS resolved_version
 ORDER BY d.purl
 LIMIT 100
 """.strip(),
