@@ -7,6 +7,8 @@ and structured error delivery for the new durable project-analyze surface.
 
 from __future__ import annotations
 
+import asyncio
+import importlib
 import json
 import socket
 import threading
@@ -46,6 +48,7 @@ class _TestServer:
     def __init__(self, app: object, port: int) -> None:
         import uvicorn
 
+        self.port = port
         config = uvicorn.Config(
             app,
             host="127.0.0.1",
@@ -55,9 +58,28 @@ class _TestServer:
         )
         self._server = uvicorn.Server(config)
         self._thread: threading.Thread | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     def start(self) -> None:
-        self._thread = threading.Thread(target=self._server.run, daemon=True)
+        def _run() -> None:
+            loop = asyncio.new_event_loop()
+            self._loop = loop
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(self._server.serve())
+            finally:
+                asyncio.set_event_loop(None)
+                pending = [task for task in asyncio.all_tasks(loop) if not task.done()]
+                for task in pending:
+                    task.cancel()
+                if pending:
+                    loop.run_until_complete(
+                        asyncio.gather(*pending, return_exceptions=True)
+                    )
+                loop.run_until_complete(loop.shutdown_asyncgens())
+                loop.close()
+
+        self._thread = threading.Thread(target=_run, daemon=True)
         self._thread.start()
         deadline = time.monotonic() + 5.0
         while not self._server.started:
@@ -108,10 +130,16 @@ def _make_run(
     )
 
 
-@pytest.fixture(autouse=True)
-def reset_project_analyze_state() -> Iterator[None]:
-    import palace_mcp.mcp_server as mcp_module
+@pytest.fixture(scope="module")
+def mcp_module() -> Iterator[object]:
+    import palace_mcp.mcp_server as loaded_mcp_module
 
+    reloaded = importlib.reload(loaded_mcp_module)
+    yield reloaded
+
+
+@pytest.fixture(autouse=True)
+def reset_project_analyze_state(mcp_module: object) -> Iterator[None]:
     original_tasks = dict(mcp_module._project_analysis_tasks)
     mcp_module._project_analysis_tasks.clear()
     yield
@@ -120,9 +148,7 @@ def reset_project_analyze_state() -> Iterator[None]:
 
 
 @pytest.fixture(scope="module")
-def mcp_url() -> Iterator[str]:
-    import palace_mcp.mcp_server as mcp_module
-
+def mcp_url(mcp_module: object) -> Iterator[str]:
     original_driver = mcp_module._driver
     original_graphiti = mcp_module._graphiti
     app = mcp_module.build_mcp_asgi_app()
@@ -166,9 +192,9 @@ async def test_project_analyze_tools_appear_in_tools_list(mcp_url: str) -> None:
 
 
 @pytest.mark.integration
-async def test_project_analyze_wire_returns_ok_payload(mcp_url: str) -> None:
-    import palace_mcp.mcp_server as mcp_module
-
+async def test_project_analyze_wire_returns_ok_payload(
+    mcp_url: str, mcp_module: object
+) -> None:
     run = _make_run()
     service = MagicMock()
     service.start_run = AsyncMock(
@@ -202,9 +228,9 @@ async def test_project_analyze_wire_returns_ok_payload(mcp_url: str) -> None:
 
 
 @pytest.mark.integration
-async def test_project_analyze_status_wire_returns_ok_payload(mcp_url: str) -> None:
-    import palace_mcp.mcp_server as mcp_module
-
+async def test_project_analyze_status_wire_returns_ok_payload(
+    mcp_url: str, mcp_module: object
+) -> None:
     run = _make_run(status=AnalysisRunStatus.RESUMABLE)
     service = MagicMock()
     service.get_status = AsyncMock(return_value=run)
@@ -230,9 +256,9 @@ async def test_project_analyze_status_wire_returns_ok_payload(mcp_url: str) -> N
 
 
 @pytest.mark.integration
-async def test_project_analyze_resume_wire_returns_ok_payload(mcp_url: str) -> None:
-    import palace_mcp.mcp_server as mcp_module
-
+async def test_project_analyze_resume_wire_returns_ok_payload(
+    mcp_url: str, mcp_module: object
+) -> None:
     run = _make_run(status=AnalysisRunStatus.RUNNING)
     service = MagicMock()
     service.resume_run = AsyncMock(return_value=run)
@@ -285,9 +311,8 @@ async def test_project_analyze_wire_invalid_depth_returns_mcp_error(
 @pytest.mark.integration
 async def test_project_analyze_wire_conflict_returns_error_envelope(
     mcp_url: str,
+    mcp_module: object,
 ) -> None:
-    import palace_mcp.mcp_server as mcp_module
-
     service = MagicMock()
     service.start_run = AsyncMock(
         side_effect=ActiveAnalysisRunExistsError("run-existing")
