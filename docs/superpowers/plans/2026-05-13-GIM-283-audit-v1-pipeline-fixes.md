@@ -2,8 +2,19 @@
 
 **Date:** 2026-05-13
 **Spec:** `docs/superpowers/specs/2026-05-13-audit-v1-pipeline-fixes.md` (rev2 — addresses Codex-subagent Gate Call NO-GO)
-**Status:** rev4 — addresses CR Phase 1.2 REQUEST CHANGES on GIM-283-4 (3 CRITICALs + 3 WARNINGs)
+**Status:** rev5 — addresses CR Phase 1.2 REQUEST CHANGES on GIM-290 (Task 5.2b DROPPED)
 **Team:** Claude (CTO + CR + PythonEngineer + Opus + QA)
+
+### Rev5 changelog (2026-05-14)
+
+Addresses CodeReviewer Phase 1.2 findings from [GIM-290 comment 23f9c4dc](/GIM/issues/GIM-290#comment-23f9c4dc-5774-4c07-8082-1a4eeff34cd3):
+
+| # | Type | Finding | Fix |
+|---|------|---------|-----|
+| C1 | CRITICAL | Task 5.2b is no-op — `reactive_dependency_tracer.md` (`fe1cb43`, GIM-283-2) and `testability_di.md` (`0ac5e02`, GIM-242) already on develop `218a929` | Task 5.2b DROPPED. Regression-guard test folded into Task 5.2 RED. |
+| W1 | WARNING | Task 5.2 shares RED with 5.1 — partial impl could pass | PE note added: hardcode full 15-entry order in RED test. |
+| W2 | WARNING | Existing test coincidentally passes under both orderings | PE note added: awareness only, no action. |
+| W3 | WARNING | Pseudocode shape mismatch (`sec_name` vs `max_sev` tuples) | PE note added: adapt to actual tuple shape. |
 
 ### Rev4 changelog (2026-05-14)
 
@@ -53,7 +64,7 @@ Estimated wall-time (with serial chain + smoke verification between slices): **3
 | GIM-283-2 | Slice 1 — Coverage (testability_di + reactive + ingest defaults) | B1, B2, B3 | 6 (+ GIM-242 chain resumption sub-issue) | ~1 week |
 | GIM-283-3 | Slice 4 — Data quality (deps + arch_layer) | B9, B10 | 5 | ~3-5 days |
 | GIM-283-4 | Slice 3 — Source-context (annotation + try? tuning) | B7, B8 | 10 (rev4: +Task 3.1b overrides YAML, +Task 3.5b distribution/warning) | ~1.5-2 weeks |
-| GIM-283-5 | Slice 5 — Pinned ordering renderer | B11 | 3 | ~1-2 days |
+| GIM-283-5 | Slice 5 — Pinned ordering renderer | B11 | 2 (rev5: Task 5.2b DROPPED) | ~1-2 days |
 
 ---
 
@@ -864,6 +875,7 @@ Save to `docs/audit-reports/2026-05-13-tron-kit-after-slice-3.md`. Verify:
 
 **Files owned:**
 - `services/palace-mcp/src/palace_mcp/audit/renderer.py` only.
+- ~~`audit/templates/` (Task 5.2b — DROPPED, templates already on develop)~~
 
 ### Task 5.1 — Replace global severity sort
 
@@ -889,9 +901,14 @@ ordered_sections = [r for _, (_, r) in pinned + remainder]
 
 **Commit:** `refactor(audit/renderer): pinned-then-severity ordering replaces global severity sort`
 
+> **PE notes (CR Phase 1.2 amendment):**
+> 1. **Pseudocode shape mismatch** — current `rendered_sections` entries are `(max_sev, rendered)` tuples (line 247), not `(sec_name, rendered)`. Adapt the pinned-then-severity logic to work with actual tuple shape; do NOT copy-paste pseudocode verbatim.
+> 2. **Implement 5.1 + 5.2 atomically or ensure the RED test hardcodes the full 15-entry order** — partial implementation (new sort + old 7-entry list) might pass a weaker RED test. The `test_pinned_first_severity_remainder` must assert the **complete 15-entry pinned prefix**.
+> 3. **Existing test `test_high_severity_section_before_informational`** (line 214) coincidentally passes under both old and new ordering. No action needed, but be aware its coverage is weaker than it appears after this change.
+
 ### Task 5.2 — Update _SECTION_ORDER full list
 
-**RED:** Same test as 5.1 verifying the new list.
+**RED:** Same test as 5.1 verifying the new list. **Additionally** (folded from dropped 5.2b): add `test_section_order_extractors_have_templates` — iterate `_SECTION_ORDER`, assert each has a template in `audit/templates/<name>.md`.
 
 **GREEN:** Replace `_SECTION_ORDER` with full 15-entry list from spec §B11:
 ```python
@@ -916,20 +933,15 @@ _SECTION_ORDER = (
 
 **Commit:** `feat(audit/renderer): _SECTION_ORDER pins all 15 audit-critical extractors`
 
-### Task 5.2b — Stub templates for reactive_dependency_tracer + testability_di
+### Task 5.2b — DROPPED (templates already exist on develop)
 
-**Addresses Gate Call N2 — these two extractors are in `_SECTION_ORDER` (slice 5) but have no templates in `audit/templates/`. Renderer's `TemplateNotFound` fallback (`renderer.py:182-184`) produces a stub heading + "no template available" message. AC11 ("verify by reading ## headings") would pass but the sections look broken.**
-
-**RED:** `tests/audit/test_renderer_minimum_template_coverage.py::test_section_order_extractors_have_templates` — iterate over `_SECTION_ORDER`, assert a template exists in `audit/templates/<name>.md` for each.
-
-**GREEN:** Create stub templates at minimum:
-
-- `audit/templates/reactive_dependency_tracer.md` — renders the helper-unavailable diagnostic + reactive findings table when present + Provenance line.
-- `audit/templates/testability_di.md` — renders DI-pattern findings table + per-extractor severity + Provenance line.
-
-Both follow the same shape as `code_ownership.md` / similar minimal templates.
-
-**Commit:** `feat(audit/templates): stub templates for reactive_dependency_tracer + testability_di`
+> **CR Phase 1.2 amendment (2026-05-14):** Both templates already exist on develop `218a929`:
+> - `reactive_dependency_tracer.md` — added by `fe1cb43` (GIM-283-2, slice 2)
+> - `testability_di.md` — added by `0ac5e02` (GIM-242)
+>
+> Original assumption ("no templates in `audit/templates/`") was stale. Task dropped per CR CRITICAL finding.
+>
+> The regression-guard test (`test_section_order_extractors_have_templates`) is folded into Task 5.2 RED as an additional assertion — PE adds it alongside the `_SECTION_ORDER` list update.
 
 ### Task 5.3 — Final verification — full smoke re-run
 
