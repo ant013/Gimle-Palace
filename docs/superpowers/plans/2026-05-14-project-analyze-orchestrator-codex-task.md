@@ -1,17 +1,19 @@
-# Codex CTO Task: Project Analyze Orchestrator
+# Paperclip Codex CTO Task: Project Analyze Orchestrator
 
 **Date:** 2026-05-14
 **Implementation branch:** `feature/GIM-NN-project-analyze-orchestrator-impl`
 **Approved spec:** `docs/superpowers/specs/2026-05-14-project-analyze-orchestrator.md`
-**Base:** `origin/develop` plus approved spec commits
-**Owner:** Codex CTO coordinator
+**Project assembly:** `paperclips/projects/gimle/paperclip-agent-assembly.yaml`
+**Resolved assembly:** `paperclips/dist/gimle.resolved-assembly.json`
+**Codex team root:** `/Users/Shared/Ios/worktrees/cx/Gimle-Palace`
+**Owner:** `CXCTO` / `codex:cx-cto`
 
-## Mission
+## Mission For CXCTO
 
-Implement the `project analyze` product path so an operator can give Gimle a
-local repository path and receive a complete MCP-backed analysis, Memory Palace
-state, and audit report without manually editing Docker mounts, `.env`, SCIP
-paths, or extractor runs.
+Own delivery of the `project analyze` product path for Gimle. The result must
+let an operator provide a local repository path and receive a complete
+MCP-backed analysis, Memory Palace state, and audit report without manually
+editing Docker mounts, `.env`, SCIP paths, or extractor runs.
 
 The first production smoke target is:
 
@@ -26,6 +28,29 @@ uv run --directory services/palace-mcp python -m palace_mcp.cli project analyze 
   --url http://localhost:8080/mcp \
   --report-out docs/audit-reports/2026-05-14-tron-kit-rerun.md
 ```
+
+## Paperclip Team Context
+
+This task belongs to the Gimle Paperclip Codex team, not local ad-hoc Codex
+subagents. CXCTO delegates through Paperclip to the existing Codex agents:
+
+| Responsibility | Paperclip agent | Agent id |
+| --- | --- | --- |
+| Technical owner, decomposition, gates | `cx-cto` | `da97dbd9-6627-48d0-b421-66af0750eacf` |
+| MCP protocol and tool surface | `cx-mcp-engineer` | `9a5d7bef-9b6a-4e74-be1d-e01999820804` |
+| Python services and Neo4j implementation | `cx-python-engineer` | `e010d305-22f7-4f5c-9462-e6526b195b19` |
+| Docker Compose, host CLI runtime boundary | `cx-infra-engineer` | `21981be0-8c51-4e57-8a0a-ca8f95f4b8d9` |
+| Test strategy, integration, smoke evidence | `cx-qa-engineer` | `99d5f8f8-822f-4ddb-baaa-0bdaec6f9399` |
+| Runbook and operator docs | `cx-technical-writer` | `1b9fc009-4b02-4560-b7f5-2b241b5897d9` |
+| Final adversarial architecture review | `codex-architect-reviewer` | `fec71dea-7dba-4947-ad1f-668920a02cb6` |
+
+Supporting files:
+
+- `paperclips/codex-agent-ids.env`
+- `paperclips/deploy-codex-agents.sh`
+- `paperclips/scripts/deploy_project_agents.py`
+- `paperclips/update-agent-workspaces.sh`
+- `paperclips/dist/codex/cx-cto.md`
 
 ## Non-Negotiable Contracts
 
@@ -43,74 +68,84 @@ uv run --directory services/palace-mcp python -m palace_mcp.cli project analyze 
 - Host MCP URL default for this product command is `http://localhost:8080/mcp`.
 - Compose override path is deterministic:
   `.gimle/runtime/project-analyze/docker-compose.project-analyze.yml`.
-- Every agent must respect assigned write scope and must not revert unrelated
-  dirty files.
+- Work must happen in the Gimle Paperclip Codex workspace unless CXCTO records a
+  specific reason to use another checkout.
 
 ## Current Dirty Files To Avoid
 
-These existed before implementation work and must not be staged unless a later
-task explicitly owns them:
+These existed before implementation planning in the local operator checkout and
+must not be staged by this task unless CXCTO explicitly takes ownership:
 
 - `paperclips/fragments/shared`
 - `.serena/`
 - `services/watchdog/.coverage`
 
-## Agent Team Rules
+## CXCTO Operating Rules
 
-- Agents are not alone in the codebase. Each package below has a write scope.
-- If an agent needs to edit outside scope, it must stop and report the reason.
-- Prefer tests before or alongside implementation for risky behavior.
-- Keep commits small enough to review by package or wave.
-- Every package must report changed files and verification command output.
-- Do not run destructive git commands.
+- CXCTO owns the plan, dependency ordering, branch discipline, and merge gate.
+- CXCTO must delegate implementation to the named Paperclip Codex team roles,
+  not to local internal Codex subagents.
+- Each assignee receives a bounded work package with write scope, expected
+  output, and verification command.
+- If a role needs to edit outside scope, it reports back to CXCTO before making
+  the edit.
+- Each role reports changed files and command evidence.
+- CXCTO keeps unrelated dirty files out of commits.
+- Final merge requires `cx-qa-engineer` verification and
+  `codex-architect-reviewer` review.
 
-## Wave 0: Context And Branch Hygiene
+## Wave 0: CTO Intake And Assignment
 
-### Task 0.1: Coordinator Branch Check
+### Task 0.1: CXCTO Intake
 
-**Agent:** `coordinator`
+**Assignee:** `cx-cto`
 **Write scope:** none
 
-Confirm:
+Confirm in the Paperclip Codex workspace:
 
-- Current branch is `feature/GIM-NN-project-analyze-orchestrator-impl`.
-- Branch contains approved spec commits.
-- `origin/develop` is an ancestor of the implementation branch.
-- Dirty unrelated files are not staged.
+- Current checkout is the Gimle project.
+- Branch is `feature/GIM-NN-project-analyze-orchestrator-impl` or a CXCTO-named
+  child branch created from it.
+- Branch contains approved spec commits:
+  - `76f61ed docs(spec): project analyze orchestrator`
+  - `05b7fde docs(spec): tighten project analyze contract`
+  - `0246f8b docs(spec): pin analysis run durability`
+- `origin/develop` is an ancestor.
+- No unrelated files are staged.
 
 Verification:
 
 ```bash
 git status --short --branch
 git merge-base --is-ancestor origin/develop HEAD
-git log --oneline --max-count 5
+git log --oneline --max-count 8
 ```
 
-### Task 0.2: Code Mapper
+### Task 0.2: CXCTO Codebase-Memory Read
 
-**Agent:** `code-mapper`
+**Assignee:** `cx-cto`
 **Write scope:** none
 
-Map exact implementation seams:
+Read codebase-memory before delegating:
 
-- `services/palace-mcp/src/palace_mcp/cli.py`
-- `services/palace-mcp/src/palace_mcp/mcp_server.py`
-- `services/palace-mcp/src/palace_mcp/memory/cypher.py`
-- `services/palace-mcp/src/palace_mcp/extractors/foundation/profiles.py`
-- extractor runner and `palace.ingest.run_extractor` call path
-- audit runner and markdown return path
+- Paperclip Gimle assembly and Codex team root.
+- Existing MCP server and CLI structure.
+- Existing profile resolver and extractor registry.
+- Existing Neo4j memory/cypher patterns.
+- Existing test locations.
 
 Output:
 
-- Symbols/functions to edit.
-- Existing tests to extend.
-- Any hidden dependency that affects task ordering.
+- Final delegation order.
+- Any changed role assignment.
+- Any blocker before Wave 1.
 
 ## Wave 1: Profile Contract
 
 ### Task 1.1: Ordered Profile Data
 
-**Agent:** `profile-worker`
+**Assignee:** `cx-python-engineer`
+**Review:** `cx-mcp-engineer`
 **Write scope:**
 
 - `services/palace-mcp/src/palace_mcp/extractors/foundation/profiles.py`
@@ -126,7 +161,8 @@ Acceptance:
 
 ### Task 1.2: Profile Drift Tests
 
-**Agent:** `profile-test-worker`
+**Assignee:** `cx-qa-engineer`
+**Support:** `cx-python-engineer`
 **Write scope:**
 
 - `services/palace-mcp/tests/extractors/test_profiles.py`
@@ -147,7 +183,8 @@ cd services/palace-mcp && uv run pytest tests/extractors/test_profiles.py
 
 ### Task 2.1: Neo4j AnalysisRun Model
 
-**Agent:** `analysis-model-worker`
+**Assignee:** `cx-python-engineer`
+**Review:** `cx-mcp-engineer`
 **Write scope:**
 
 - `services/palace-mcp/src/palace_mcp/project_analyze.py`
@@ -185,7 +222,8 @@ Acceptance:
 
 ### Task 2.2: Resume And Lease Semantics
 
-**Agent:** `analysis-state-worker`
+**Assignee:** `cx-python-engineer`
+**Review:** `cx-qa-engineer`
 **Write scope:**
 
 - `services/palace-mcp/src/palace_mcp/project_analyze.py`
@@ -206,7 +244,8 @@ Acceptance:
 
 ### Task 2.3: Extractor Orchestration
 
-**Agent:** `analysis-runner-worker`
+**Assignee:** `cx-python-engineer`
+**Review:** `cx-qa-engineer`
 **Write scope:**
 
 - `services/palace-mcp/src/palace_mcp/project_analyze.py`
@@ -223,7 +262,8 @@ Acceptance:
 
 ### Task 2.4: Audit Finalization
 
-**Agent:** `analysis-audit-worker`
+**Assignee:** `cx-python-engineer`
+**Review:** `cx-mcp-engineer`
 **Write scope:**
 
 - `services/palace-mcp/src/palace_mcp/project_analyze.py`
@@ -241,7 +281,8 @@ Acceptance:
 
 ### Task 3.1: MCP Tool Registration
 
-**Agent:** `mcp-tool-worker`
+**Assignee:** `cx-mcp-engineer`
+**Support:** `cx-python-engineer`
 **Write scope:**
 
 - `services/palace-mcp/src/palace_mcp/mcp_server.py`
@@ -260,7 +301,8 @@ Acceptance:
 
 ### Task 3.2: MCP Tests
 
-**Agent:** `mcp-test-worker`
+**Assignee:** `cx-qa-engineer`
+**Support:** `cx-mcp-engineer`
 **Write scope:**
 
 - `services/palace-mcp/tests/test_mcp_server_project_analyze.py`
@@ -280,11 +322,12 @@ Verification:
 cd services/palace-mcp && uv run pytest tests/test_mcp_server_project_analyze.py
 ```
 
-## Wave 4: Host CLI
+## Wave 4: Host CLI And Docker Boundary
 
 ### Task 4.1: CLI Parser
 
-**Agent:** `cli-parser-worker`
+**Assignee:** `cx-mcp-engineer`
+**Review:** `cx-infra-engineer`
 **Write scope:**
 
 - `services/palace-mcp/src/palace_mcp/cli.py`
@@ -301,7 +344,8 @@ Acceptance:
 
 ### Task 4.2: SCIP Metadata And Env Mapping
 
-**Agent:** `cli-scip-worker`
+**Assignee:** `cx-infra-engineer`
+**Support:** `cx-mcp-engineer`
 **Write scope:**
 
 - `services/palace-mcp/src/palace_mcp/cli.py`
@@ -323,7 +367,8 @@ Acceptance:
 
 ### Task 4.3: Compose And Docker Lifecycle
 
-**Agent:** `cli-docker-worker`
+**Assignee:** `cx-infra-engineer`
+**Review:** `cx-qa-engineer`
 **Write scope:**
 
 - `services/palace-mcp/src/palace_mcp/cli.py`
@@ -346,7 +391,8 @@ Acceptance:
 
 ### Task 4.4: CLI Polling And Outputs
 
-**Agent:** `cli-poll-worker`
+**Assignee:** `cx-mcp-engineer`
+**Support:** `cx-python-engineer`
 **Write scope:**
 
 - `services/palace-mcp/src/palace_mcp/cli.py`
@@ -370,7 +416,8 @@ Acceptance:
 
 ### Task 5.1: Runbook
 
-**Agent:** `docs-worker`
+**Assignee:** `cx-technical-writer`
+**Review:** `cx-infra-engineer`
 **Write scope:**
 
 - `docs/runbooks/project-analyze.md`
@@ -387,7 +434,8 @@ Document:
 
 ### Task 5.2: Full Verification
 
-**Agent:** `verification-worker`
+**Assignee:** `cx-qa-engineer`
+**Support:** `cx-infra-engineer`
 **Write scope:**
 
 - `docs/audit-reports/` only if smoke evidence is generated
@@ -405,10 +453,11 @@ cd services/palace-mcp && uv run mypy
 
 Then run the full `tron-kit` smoke command from this task.
 
-### Task 5.3: Final Review
+### Task 5.3: Final Paperclip Review
 
-**Agent:** `reviewer`
-**Write scope:** none unless assigned follow-up fixes
+**Assignee:** `codex-architect-reviewer`
+**Support:** `cx-code-reviewer`
+**Write scope:** none unless CXCTO assigns follow-up fixes
 
 Review stance:
 
@@ -416,6 +465,8 @@ Review stance:
 - Include file/line refs.
 - Prioritize correctness, durability, concurrency, and missing tests.
 - Confirm no unrelated dirty files are staged.
+- Confirm the implementation matches the approved spec and this Paperclip team
+  assignment.
 
 Required checks:
 
@@ -427,9 +478,12 @@ git diff --cached --stat
 
 ## Definition Of Done
 
+- CXCTO accepts the implementation plan and delegation evidence.
 - Spec contracts are implemented.
 - Unit/integration checks pass or failures are explicitly explained.
 - Full `tron-kit` smoke produces report markdown and machine-readable summary.
 - Memory Palace can answer project overview for `tron-kit`.
 - Audit output includes profile coverage and per-extractor statuses.
+- CXQAEngineer signs off on verification evidence.
+- CodexArchitectReviewer signs off on architecture and concurrency/durability.
 - No unrelated local artifacts are committed.
