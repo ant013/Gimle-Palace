@@ -1,39 +1,132 @@
 """MCP wire-contract tests for palace.project.* analyze tools.
 
 These tests go through the real streamable-HTTP transport via
-streamablehttp_client. They validate MCP tool registration, request binding,
-and structured error delivery for the new durable project-analyze surface.
+streamablehttp_client. The MCP server runs in a fresh subprocess so the tests
+do not mutate the in-process FastMCP registry used by the rest of the suite.
 """
 
 from __future__ import annotations
 
-import asyncio
-import importlib
 import json
 import socket
-import threading
+import subprocess
+import sys
+import tempfile
+import textwrap
 import time
 from collections.abc import Iterator
-from unittest.mock import AsyncMock, MagicMock, patch
+from pathlib import Path
 
 import pytest
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
-from palace_mcp.project_analyze import (
-    ActiveAnalysisRunExistsError,
-    AnalysisCheckpoint,
-    AnalysisRun,
-    AnalysisRunStartResult,
-    AnalysisRunStatus,
-)
-
-_NOW = "2026-05-15T10:00:00+00:00"
 _PROJECT_ANALYZE_TOOLS = [
     "palace.project.analyze",
     "palace.project.analyze_status",
     "palace.project.analyze_resume",
 ]
+
+_SERVER_SCRIPT = textwrap.dedent(
+    """
+    from __future__ import annotations
+
+    import sys
+
+    import uvicorn
+
+    import palace_mcp.mcp_server as mcp_module
+    from palace_mcp.project_analyze import (
+        ActiveAnalysisRunExistsError,
+        AnalysisCheckpoint,
+        AnalysisRun,
+        AnalysisRunStartResult,
+        AnalysisRunStatus,
+    )
+
+    NOW = "2026-05-15T10:00:00+00:00"
+
+
+    def make_run(
+        *,
+        run_id: str,
+        status: AnalysisRunStatus,
+        language_profile: str = "swift_kit",
+    ) -> AnalysisRun:
+        return AnalysisRun(
+            run_id=run_id,
+            slug="tron-kit",
+            project_name="TronKit",
+            parent_mount="hs",
+            relative_path="TronKit.Swift",
+            language_profile=language_profile,
+            bundle=None,
+            extractors=["code_ownership", "hotspot"],
+            depth="full",
+            continue_on_failure=True,
+            idempotency_key="idem-1",
+            status=status,
+            created_at=NOW,
+            updated_at=NOW,
+            started_at=NOW,
+            finished_at=None,
+            lease_owner=None,
+            lease_expires_at=None,
+            last_completed_extractor=None,
+            checkpoints=[
+                AnalysisCheckpoint(extractor="code_ownership", position=0),
+                AnalysisCheckpoint(extractor="hotspot", position=1),
+            ],
+            overview={},
+            audit=None,
+            report_markdown=None,
+            next_actions=[],
+        )
+
+
+    class FakeService:
+        async def start_run(
+            self,
+            *,
+            slug: str,
+            parent_mount: str,
+            relative_path: str,
+            language_profile: str,
+            name: str | None = None,
+            bundle: str | None = None,
+            extractors: list[str] | None = None,
+            depth: str = "full",
+            continue_on_failure: bool = True,
+            idempotency_key: str | None = None,
+            force_new: bool = False,
+        ) -> AnalysisRunStartResult:
+            if idempotency_key == "different-key":
+                raise ActiveAnalysisRunExistsError("run-existing")
+            run = make_run(run_id="run-123", status=AnalysisRunStatus.PENDING)
+            return AnalysisRunStartResult(run=run, active_run_reused=False)
+
+        async def get_status(self, run_id: str) -> AnalysisRun:
+            return make_run(run_id=run_id, status=AnalysisRunStatus.RESUMABLE)
+
+        async def resume_run(self, run_id: str) -> AnalysisRun:
+            return make_run(run_id=run_id, status=AnalysisRunStatus.RUNNING)
+
+
+    def build_service() -> FakeService:
+        return FakeService()
+
+
+    mcp_module._driver = object()
+    mcp_module._graphiti = object()
+    mcp_module._project_analysis_tasks.clear()
+    mcp_module._build_project_analysis_service = build_service
+    mcp_module._schedule_project_analysis_execution = lambda **kwargs: True
+
+    port = int(sys.argv[1])
+    app = mcp_module.build_mcp_asgi_app()
+    uvicorn.run(app, host="127.0.0.1", port=port, log_level="error", access_log=False)
+    """
+)
 
 
 def _free_port() -> int:
@@ -42,135 +135,55 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
-class _TestServer:
-    """Runs an ASGI app in a background daemon thread via uvicorn."""
-
-    def __init__(self, app: object, port: int) -> None:
-        import uvicorn
-
-        self.port = port
-        config = uvicorn.Config(
-            app,
-            host="127.0.0.1",
-            port=port,
-            log_level="error",
-            access_log=False,
-        )
-        self._server = uvicorn.Server(config)
-        self._thread: threading.Thread | None = None
-        self._loop: asyncio.AbstractEventLoop | None = None
-
-    def start(self) -> None:
-        def _run() -> None:
-            loop = asyncio.new_event_loop()
-            self._loop = loop
-            asyncio.set_event_loop(loop)
+def _wait_for_server(port: int, process: subprocess.Popen[str]) -> None:
+    deadline = time.monotonic() + 10.0
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            stderr = process.stderr.read() if process.stderr is not None else ""
+            raise RuntimeError(
+                f"Test MCP server exited before startup with code {process.returncode}: {stderr}"
+            )
+        with socket.socket() as sock:
+            sock.settimeout(0.2)
             try:
-                loop.run_until_complete(self._server.serve())
-            finally:
-                asyncio.set_event_loop(None)
-                pending = [task for task in asyncio.all_tasks(loop) if not task.done()]
-                for task in pending:
-                    task.cancel()
-                if pending:
-                    loop.run_until_complete(
-                        asyncio.gather(*pending, return_exceptions=True)
-                    )
-                loop.run_until_complete(loop.shutdown_asyncgens())
-                loop.close()
+                sock.connect(("127.0.0.1", port))
+            except OSError:
+                time.sleep(0.05)
+                continue
+            return
 
-        self._thread = threading.Thread(target=_run, daemon=True)
-        self._thread.start()
-        deadline = time.monotonic() + 5.0
-        while not self._server.started:
-            if time.monotonic() > deadline:
-                raise RuntimeError("Test MCP server did not start within 5 s")
-            time.sleep(0.05)
-
-    def stop(self) -> None:
-        self._server.should_exit = True
-        if self._thread is not None:
-            self._thread.join(timeout=5)
+    stderr = process.stderr.read() if process.stderr is not None else ""
+    raise RuntimeError(f"Test MCP server did not start within 10 s: {stderr}")
 
 
-def _make_run(
-    *,
-    run_id: str = "run-123",
-    status: AnalysisRunStatus = AnalysisRunStatus.PENDING,
-    language_profile: str = "swift_kit",
-) -> AnalysisRun:
-    return AnalysisRun(
-        run_id=run_id,
-        slug="tron-kit",
-        project_name="TronKit",
-        parent_mount="hs",
-        relative_path="TronKit.Swift",
-        language_profile=language_profile,
-        bundle=None,
-        extractors=["code_ownership", "hotspot"],
-        depth="full",
-        continue_on_failure=True,
-        idempotency_key="idem-1",
-        status=status,
-        created_at=_NOW,
-        updated_at=_NOW,
-        started_at=_NOW,
-        finished_at=None,
-        lease_owner=None,
-        lease_expires_at=None,
-        last_completed_extractor=None,
-        checkpoints=[
-            AnalysisCheckpoint(extractor="code_ownership", position=0),
-            AnalysisCheckpoint(extractor="hotspot", position=1),
-        ],
-        overview={},
-        audit=None,
-        report_markdown=None,
-        next_actions=[],
+@pytest.fixture(scope="module")
+def mcp_url() -> Iterator[str]:
+    port = _free_port()
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix="_project_analyze_wire_server.py", delete=False
+    ) as script_file:
+        script_file.write(_SERVER_SCRIPT)
+        script_path = Path(script_file.name)
+
+    process = subprocess.Popen(
+        [sys.executable, str(script_path), str(port)],
+        cwd=Path(__file__).resolve().parents[2],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
     )
 
-
-@pytest.fixture(scope="module")
-def mcp_module() -> Iterator[object]:
-    import palace_mcp.mcp_server as loaded_mcp_module
-
-    reloaded = importlib.reload(loaded_mcp_module)
-    yield reloaded
-
-
-@pytest.fixture(autouse=True)
-def reset_project_analyze_state(mcp_module: object) -> Iterator[None]:
-    original_tasks = dict(mcp_module._project_analysis_tasks)
-    mcp_module._project_analysis_tasks.clear()
-    yield
-    mcp_module._project_analysis_tasks.clear()
-    mcp_module._project_analysis_tasks.update(original_tasks)
-
-
-@pytest.fixture(scope="module")
-def mcp_url(mcp_module: object) -> Iterator[str]:
-    original_driver = mcp_module._driver
-    original_graphiti = mcp_module._graphiti
-    app = mcp_module.build_mcp_asgi_app()
-    port = _free_port()
-    server = _TestServer(app, port)
-
-    with (
-        patch.object(mcp_module, "_driver", new=object()),
-        patch.object(mcp_module, "_graphiti", new=object()),
-        patch.object(
-            mcp_module,
-            "_schedule_project_analysis_execution",
-            return_value=True,
-        ),
-    ):
-        server.start()
+    try:
+        _wait_for_server(port, process)
+        yield f"http://127.0.0.1:{port}/"
+    finally:
+        process.terminate()
         try:
-            yield f"http://127.0.0.1:{port}/"
-        finally:
-            server.stop()
-            mcp_module._driver = original_driver
-            mcp_module._graphiti = original_graphiti
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+        script_path.unlink(missing_ok=True)
 
 
 @pytest.mark.integration
@@ -192,33 +205,20 @@ async def test_project_analyze_tools_appear_in_tools_list(mcp_url: str) -> None:
 
 
 @pytest.mark.integration
-async def test_project_analyze_wire_returns_ok_payload(
-    mcp_url: str, mcp_module: object
-) -> None:
-    run = _make_run()
-    service = MagicMock()
-    service.start_run = AsyncMock(
-        return_value=AnalysisRunStartResult(run=run, active_run_reused=False)
-    )
-
-    with patch.object(
-        mcp_module,
-        "_build_project_analysis_service",
-        return_value=service,
-    ):
-        async with streamablehttp_client(mcp_url) as (read, write, _):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await session.call_tool(
-                    "palace.project.analyze",
-                    {
-                        "slug": "tron-kit",
-                        "parent_mount": "hs",
-                        "relative_path": "TronKit.Swift",
-                        "language_profile": "swift_kit",
-                        "idempotency_key": "idem-1",
-                    },
-                )
+async def test_project_analyze_wire_returns_ok_payload(mcp_url: str) -> None:
+    async with streamablehttp_client(mcp_url) as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.call_tool(
+                "palace.project.analyze",
+                {
+                    "slug": "tron-kit",
+                    "parent_mount": "hs",
+                    "relative_path": "TronKit.Swift",
+                    "language_profile": "swift_kit",
+                    "idempotency_key": "idem-1",
+                },
+            )
 
     assert result.isError is False
     payload = json.loads(result.content[0].text)
@@ -228,25 +228,14 @@ async def test_project_analyze_wire_returns_ok_payload(
 
 
 @pytest.mark.integration
-async def test_project_analyze_status_wire_returns_ok_payload(
-    mcp_url: str, mcp_module: object
-) -> None:
-    run = _make_run(status=AnalysisRunStatus.RESUMABLE)
-    service = MagicMock()
-    service.get_status = AsyncMock(return_value=run)
-
-    with patch.object(
-        mcp_module,
-        "_build_project_analysis_service",
-        return_value=service,
-    ):
-        async with streamablehttp_client(mcp_url) as (read, write, _):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await session.call_tool(
-                    "palace.project.analyze_status",
-                    {"run_id": "run-123"},
-                )
+async def test_project_analyze_status_wire_returns_ok_payload(mcp_url: str) -> None:
+    async with streamablehttp_client(mcp_url) as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.call_tool(
+                "palace.project.analyze_status",
+                {"run_id": "run-123"},
+            )
 
     assert result.isError is False
     payload = json.loads(result.content[0].text)
@@ -256,25 +245,14 @@ async def test_project_analyze_status_wire_returns_ok_payload(
 
 
 @pytest.mark.integration
-async def test_project_analyze_resume_wire_returns_ok_payload(
-    mcp_url: str, mcp_module: object
-) -> None:
-    run = _make_run(status=AnalysisRunStatus.RUNNING)
-    service = MagicMock()
-    service.resume_run = AsyncMock(return_value=run)
-
-    with patch.object(
-        mcp_module,
-        "_build_project_analysis_service",
-        return_value=service,
-    ):
-        async with streamablehttp_client(mcp_url) as (read, write, _):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await session.call_tool(
-                    "palace.project.analyze_resume",
-                    {"run_id": "run-123"},
-                )
+async def test_project_analyze_resume_wire_returns_ok_payload(mcp_url: str) -> None:
+    async with streamablehttp_client(mcp_url) as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.call_tool(
+                "palace.project.analyze_resume",
+                {"run_id": "run-123"},
+            )
 
     assert result.isError is False
     payload = json.loads(result.content[0].text)
@@ -311,31 +289,20 @@ async def test_project_analyze_wire_invalid_depth_returns_mcp_error(
 @pytest.mark.integration
 async def test_project_analyze_wire_conflict_returns_error_envelope(
     mcp_url: str,
-    mcp_module: object,
 ) -> None:
-    service = MagicMock()
-    service.start_run = AsyncMock(
-        side_effect=ActiveAnalysisRunExistsError("run-existing")
-    )
-
-    with patch.object(
-        mcp_module,
-        "_build_project_analysis_service",
-        return_value=service,
-    ):
-        async with streamablehttp_client(mcp_url) as (read, write, _):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await session.call_tool(
-                    "palace.project.analyze",
-                    {
-                        "slug": "tron-kit",
-                        "parent_mount": "hs",
-                        "relative_path": "TronKit.Swift",
-                        "language_profile": "swift_kit",
-                        "idempotency_key": "different-key",
-                    },
-                )
+    async with streamablehttp_client(mcp_url) as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.call_tool(
+                "palace.project.analyze",
+                {
+                    "slug": "tron-kit",
+                    "parent_mount": "hs",
+                    "relative_path": "TronKit.Swift",
+                    "language_profile": "swift_kit",
+                    "idempotency_key": "different-key",
+                },
+            )
 
     assert result.isError is False
     payload = json.loads(result.content[0].text)
