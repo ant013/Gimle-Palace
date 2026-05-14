@@ -8,9 +8,12 @@ All regex matching is case-insensitive (spec §B7 C3/C4).
 from __future__ import annotations
 
 import fnmatch
+import logging
 import re
 from pathlib import Path
 from typing import Literal
+
+logger = logging.getLogger(__name__)
 
 SourceContext = Literal["library", "example", "test", "other"]
 
@@ -66,7 +69,10 @@ def load_overrides(repo_root: str) -> dict[str, str] | None:
 
     try:
         data = yaml.safe_load(overrides_path.read_text(encoding="utf-8"))
-    except Exception:
+    except (yaml.YAMLError, OSError) as exc:
+        logger.warning(
+            "Failed to load source-context overrides from %s: %s", overrides_path, exc
+        )
         return None
 
     if not isinstance(data, dict):
