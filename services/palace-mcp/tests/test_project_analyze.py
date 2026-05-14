@@ -16,6 +16,7 @@ from palace_mcp.project_analyze import (
     AnalysisRunStartResult,
     AnalysisRunStatus,
     ExtractorAttemptResult,
+    Neo4jAnalysisRunStore,
     ProjectAnalysisService,
 )
 
@@ -210,6 +211,57 @@ def _build_service(
 
 async def _default_audit_runner(*args: object, **kwargs: object) -> dict[str, Any]:
     return {"ok": True, "report_markdown": "# audit\n"}
+
+
+@pytest.mark.asyncio
+async def test_neo4j_store_ensures_schema_before_lock_transaction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+
+    async def fake_ensure_schema(driver: object, *, default_group_id: str) -> None:
+        events.append(f"schema:{default_group_id}")
+
+    class FakeSession:
+        async def __aenter__(self) -> FakeSession:
+            return self
+
+        async def __aexit__(self, exc_type: object, exc: object, tb: object) -> bool:
+            return False
+
+        async def execute_write(self, fn: object, run: AnalysisRun) -> AnalysisRunStartResult:
+            events.append(f"write:{run.slug}")
+            return AnalysisRunStartResult(run=run, active_run_reused=False)
+
+    class FakeDriver:
+        def session(self) -> FakeSession:
+            return FakeSession()
+
+    monkeypatch.setattr("palace_mcp.project_analyze.ensure_schema", fake_ensure_schema)
+
+    store = Neo4jAnalysisRunStore(FakeDriver())  # type: ignore[arg-type]
+    now = _iso(_utc())
+    run = AnalysisRun(
+        run_id="run-1",
+        slug="tron-kit",
+        project_name="tron-kit",
+        parent_mount="hs",
+        relative_path="TronKit.Swift",
+        language_profile="swift_kit",
+        extractors=["symbol_index_swift"],
+        depth="full",
+        idempotency_key="idem-1",
+        status=AnalysisRunStatus.PENDING,
+        created_at=now,
+        updated_at=now,
+        started_at=now,
+        checkpoints=[AnalysisCheckpoint(extractor="symbol_index_swift", position=0)],
+    )
+
+    result = await store.start_run(run)
+
+    assert result.active_run_reused is False
+    assert events == ["schema:project/tron-kit", "write:tron-kit"]
 
 
 def test_resolve_default_extractors_matches_swift_kit_contract() -> None:

@@ -22,6 +22,7 @@ from palace_mcp.audit.run import run_audit
 from palace_mcp.extractors.foundation.profiles import get_ordered_extractors
 from palace_mcp.extractors.runner import run_extractor
 from palace_mcp.memory.bundle import add_to_bundle, register_bundle
+from palace_mcp.memory.constraints import ensure_schema
 from palace_mcp.memory.cypher import (
     ACQUIRE_ANALYSIS_LOCK,
     CREATE_ANALYSIS_RUN,
@@ -330,6 +331,7 @@ class Neo4jAnalysisRunStore:
         self._driver = driver
 
     async def start_run(self, run: AnalysisRun) -> AnalysisRunStartResult:
+        await ensure_schema(self._driver, default_group_id=f"project/{run.slug}")
         async with self._driver.session() as session:
             return await session.execute_write(self._tx_start_run, run)
 
