@@ -22,9 +22,10 @@ from palace_mcp.audit.run import run_audit
 from palace_mcp.extractors.foundation.profiles import get_ordered_extractors
 from palace_mcp.extractors.runner import run_extractor
 from palace_mcp.memory.bundle import add_to_bundle, register_bundle
-from palace_mcp.memory.constraints import ensure_schema
 from palace_mcp.memory.cypher import (
     ACQUIRE_ANALYSIS_LOCK,
+    CREATE_CONSTRAINTS,
+    CREATE_INDEXES,
     CREATE_ANALYSIS_RUN,
     FINALIZE_ANALYSIS_RUN,
     GET_ACTIVE_ANALYSIS_RUN,
@@ -250,6 +251,15 @@ def _deserialize_json_string_list(value: str | None) -> list[str]:
     ):
         raise ValueError("expected JSON string list payload")
     return list(parsed)
+
+
+async def ensure_project_analyze_schema(driver: AsyncDriver) -> None:
+    """Apply only DDL required for project-analyze runtime state."""
+    async with driver.session() as session:
+        for stmt in CREATE_CONSTRAINTS:
+            await session.run(stmt)
+        for stmt in CREATE_INDEXES:
+            await session.run(stmt)
 
 
 def _checkpoint_counts(
@@ -635,7 +645,7 @@ class ProjectAnalysisService:
         register_bundle_func: Callable[..., Awaitable[Any]] = register_bundle,
         add_to_bundle_func: Callable[..., Awaitable[Any]] = add_to_bundle,
         audit_runner: AuditRunner = run_audit,
-        ensure_schema_func: SchemaEnsurer = ensure_schema,
+        ensure_schema_func: SchemaEnsurer = ensure_project_analyze_schema,
         lease_seconds: int = 900,
         lease_owner: str | None = None,
         clock: Clock = _utc_now,
@@ -712,7 +722,7 @@ class ProjectAnalysisService:
         )
         project_name = name or slug
         driver = self._require_driver()
-        await self._ensure_schema(driver, default_group_id=f"project/{slug}")
+        await self._ensure_schema(driver)
         await self._register_project(
             driver,
             slug=slug,

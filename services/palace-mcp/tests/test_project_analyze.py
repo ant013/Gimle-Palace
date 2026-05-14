@@ -218,8 +218,8 @@ async def test_service_start_run_ensures_schema_before_project_registration_and_
 ) -> None:
     events: list[str] = []
 
-    async def fake_ensure_schema(driver: object, *, default_group_id: str) -> None:
-        events.append(f"schema:{default_group_id}")
+    async def fake_ensure_schema(driver: object) -> None:
+        events.append("schema")
 
     class RecordingStore(InMemoryAnalysisRunStore):
         async def start_run(self, run: AnalysisRun) -> AnalysisRunStartResult:
@@ -262,7 +262,7 @@ async def test_service_start_run_ensures_schema_before_project_registration_and_
 
     assert result.active_run_reused is False
     assert events == [
-        "schema:project/tron-kit",
+        "schema",
         "register:hs:TronKit.Swift:swift_kit",
         "store:hs:TronKit.Swift",
     ]
