@@ -214,8 +214,9 @@ async def _default_audit_runner(*args: object, **kwargs: object) -> dict[str, An
 
 
 @pytest.mark.asyncio
-async def test_service_start_run_ensures_schema_before_project_registration_and_store_start(
-) -> None:
+async def test_service_start_run_ensures_schema_before_project_registration_and_store_start() -> (
+    None
+):
     events: list[str] = []
 
     async def fake_ensure_schema(driver: object) -> None:
