@@ -6,6 +6,7 @@ renders each section via its Jinja2 template, assembles the final report.
 
 from __future__ import annotations
 
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -176,14 +177,32 @@ def render_report(
 
     rendered_sections: list[tuple[Severity, str]] = []
     all_annotated: list[dict[str, Any]] = []
+    all_library_annotated: list[dict[str, Any]] = []
+    all_source_contexts: list[str] = []
+    library_critical_sections = 0
     seen: set[str] = set()
 
     def _render_one(name: str, sec: AuditSectionData) -> tuple[Severity, str]:
+        nonlocal library_critical_sections
         col = severity_columns.get(name, "_severity")
         cap = max_findings_per_section.get(name, 100)
         mapper = _mappers.get(name)
         annotated, max_sev_or_none = _annotate_severity(sec.findings, col, cap, mapper)
         all_annotated.extend(annotated[:3])
+        # Source-context accounting (Task 3.5b + 3.6): use raw findings to avoid cap bias
+        all_source_contexts.extend(
+            f.get("source_context", "other") for f in sec.findings
+        )
+        # Library-only critical tracking: annotate without cap, filter, check severity
+        uncapped, _ = _annotate_severity(
+            sec.findings, col, len(sec.findings) if sec.findings else 1, mapper
+        )
+        lib_findings = [f for f in uncapped if f.get("source_context") == "library"]
+        all_library_annotated.extend(lib_findings[:3])
+        if lib_findings:
+            lib_max = severity_from_str(lib_findings[0]["_severity"])
+            if SEVERITY_RANK[lib_max] <= SEVERITY_RANK[Severity.HIGH]:
+                library_critical_sections += 1
         max_sev = (
             max_sev_or_none if max_sev_or_none is not None else Severity.INFORMATIONAL
         )
@@ -204,6 +223,18 @@ def render_report(
         mapper = _mappers.get(name)
         annotated, max_sev_or_none = _annotate_severity(sec.findings, col, cap, mapper)
         all_annotated.extend(annotated[:3])
+        all_source_contexts.extend(
+            f.get("source_context", "other") for f in sec.findings
+        )
+        uncapped, _ = _annotate_severity(
+            sec.findings, col, len(sec.findings) if sec.findings else 1, mapper
+        )
+        lib_findings = [f for f in uncapped if f.get("source_context") == "library"]
+        all_library_annotated.extend(lib_findings[:3])
+        if lib_findings:
+            lib_max = severity_from_str(lib_findings[0]["_severity"])
+            if SEVERITY_RANK[lib_max] <= SEVERITY_RANK[Severity.HIGH]:
+                library_critical_sections += 1
         max_sev = (
             max_sev_or_none if max_sev_or_none is not None else Severity.INFORMATIONAL
         )
@@ -221,18 +252,38 @@ def render_report(
         for s in sections.values()
     ]
 
-    total_critical = sum(
-        1 for sev, _ in rendered_sections if sev in (Severity.CRITICAL, Severity.HIGH)
-    )
+    # Library-only critical count (Task 3.6): count sections with HIGH+ library findings
+    total_critical = library_critical_sections
 
-    all_annotated.sort(
+    # Top-3 findings from library source only (Task 3.6)
+    all_library_annotated.sort(
         key=lambda f: SEVERITY_RANK[severity_from_str(f.get("_severity"))]
     )
-    top3 = all_annotated[:3]
+    top3 = all_library_annotated[:3]
+
+    # Source distribution (Task 3.5b)
+    source_dist = Counter(all_source_contexts)
+    dist_line = (
+        f"Findings by source: library={source_dist['library']} "
+        f"example={source_dist['example']} "
+        f"test={source_dist['test']} "
+        f"other={source_dist['other']}"
+    )
+
+    # Library-empty warning: only when total > 10 and 0 library findings (Task 3.5b)
+    total_findings = len(all_source_contexts)
+    library_findings_warning = ""
+    if source_dist["library"] == 0 and total_findings > 10:
+        library_findings_warning = (
+            "> ⚠ **data_quality: library_findings_empty** — "
+            f"0 library findings found out of {total_findings} total. "
+            "Source-context classification may have missed library paths."
+        )
 
     executive_lines = [
         f"Audit of project `{project}` at depth `{depth}`.",
         f"{len(sections)} extractor{'s' if len(sections) != 1 else ''} contributed data.",
+        dist_line,
     ]
     if blind_spots:
         executive_lines.append(
@@ -301,6 +352,7 @@ def render_report(
         generated_at=ts,
         depth=depth,
         executive_summary=" ".join(executive_lines),
+        library_findings_warning=library_findings_warning,
         sections=ordered_sections,
         blind_spots=blind_spots,
         fetched_extractors=list(sections.keys()),
