@@ -443,6 +443,9 @@ def _apply_critical_path_severity(findings: list[ErrorFinding]) -> list[ErrorFin
     """
     result: list[ErrorFinding] = []
     for finding in findings:
+        if finding.severity == "informational":
+            result.append(finding)
+            continue  # respect ehp:ignore suppression
         if finding.kind not in _TRY_OPTIONAL_KINDS:
             result.append(finding)
             continue
