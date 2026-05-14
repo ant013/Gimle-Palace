@@ -496,6 +496,8 @@ def swift_scip_metadata_needs_regeneration(
         "emitter_name": _SWIFT_SCIP_EMITTER_NAME,
         "emitter_version": _SWIFT_SCIP_EMITTER_VERSION,
         "package_path": "Package.swift",
+        "generator_host": socket.gethostname(),
+        "source_repo_path": str(repo_path.resolve()),
         "destination_repo_path": str(repo_path.resolve()),
     }
     for key, expected in required.items():

@@ -92,6 +92,58 @@ def test_swift_scip_metadata_needs_regeneration_on_head_mismatch(
     assert reason == "repo_head_sha mismatch"
 
 
+def test_swift_scip_metadata_needs_regeneration_on_source_repo_path_mismatch(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo_path = tmp_path / "TronKit.Swift"
+    repo_path.mkdir()
+    monkeypatch.setattr(cli.socket, "gethostname", lambda: "local-host")
+
+    stale, reason = cli.swift_scip_metadata_needs_regeneration(
+        repo_path=repo_path,
+        repo_head_sha="abc123",
+        metadata={
+            "repo_head_sha": "abc123",
+            "emitter_name": "palace-swift-scip-emit-cli",
+            "emitter_version": "2026-05-15",
+            "package_path": "Package.swift",
+            "generator_host": "local-host",
+            "source_repo_path": "/different/source",
+            "destination_repo_path": str(repo_path.resolve()),
+        },
+    )
+
+    assert stale is True
+    assert reason == "source_repo_path mismatch"
+
+
+def test_swift_scip_metadata_needs_regeneration_on_generator_host_mismatch(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo_path = tmp_path / "TronKit.Swift"
+    repo_path.mkdir()
+    monkeypatch.setattr(cli.socket, "gethostname", lambda: "current-host")
+
+    stale, reason = cli.swift_scip_metadata_needs_regeneration(
+        repo_path=repo_path,
+        repo_head_sha="abc123",
+        metadata={
+            "repo_head_sha": "abc123",
+            "emitter_name": "palace-swift-scip-emit-cli",
+            "emitter_version": "2026-05-15",
+            "package_path": "Package.swift",
+            "generator_host": "different-host",
+            "source_repo_path": str(repo_path.resolve()),
+            "destination_repo_path": str(repo_path.resolve()),
+        },
+    )
+
+    assert stale is True
+    assert reason == "generator_host mismatch"
+
+
 def test_project_analyze_writes_summary_and_report(
     tmp_path: Path,
     monkeypatch,
