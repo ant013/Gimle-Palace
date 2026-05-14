@@ -2,8 +2,21 @@
 
 **Date:** 2026-05-13
 **Spec:** `docs/superpowers/specs/2026-05-13-audit-v1-pipeline-fixes.md` (rev2 — addresses Codex-subagent Gate Call NO-GO)
-**Status:** rev3 — addresses CR Phase 1.2 REQUEST CHANGES on GIM-283-3 (3 CRITICALs)
+**Status:** rev4 — addresses CR Phase 1.2 REQUEST CHANGES on GIM-283-4 (3 CRITICALs + 3 WARNINGs)
 **Team:** Claude (CTO + CR + PythonEngineer + Opus + QA)
+
+### Rev4 changelog (2026-05-14)
+
+Addresses CodeReviewer Phase 1.2 findings from [GIM-289 comment 7b34775b](/GIM/issues/GIM-289#comment-7b34775b-fd75-40c8-8c4f-78b14461ddf3):
+
+| # | Type | Finding | Fix |
+|---|------|---------|-----|
+| C1 | CRITICAL | `hd_wallet` regex cannot match `HDWallet` (camelCase) — fixture RED fails | Replaced placeholder regex with B8 artifact final: `(?i)\b(signer\|crypto\|hd[-_]?wallet\|hmac\|sign\|auth\|mnemonic\|seed\|pubkey\|keystore\|secp256k1\|ed25519\|ripemd160)\b`. Fixture table updated. |
+| C2 | CRITICAL | 3 C4 spec requirements (distribution line, empty-library warning, overrides YAML) have no implementing task | Added Task 3.1b (overrides YAML classifier) + Task 3.5b (distribution line + empty-library warning renderer). New runbook `docs/runbooks/source-context-classifier.md`. |
+| C3 | CRITICAL | Task 3.1 classifier missing `re.IGNORECASE` — spec requires case-insensitive | Added `re.IGNORECASE` to all classifier regex. Added case-variant RED tests (`ios-example/`, `IOS_EXAMPLE/`). |
+| W1 | WARNING | Tasks 3.2–3.4 don't mention updating `audit_contract().query` to return `source_context` | Each task now explicitly says: "Update `_QUERY` to include `f.source_context AS source_context`". |
+| W2 | WARNING | Task 3.3 references non-existent `function_name` field | Dropped "or function name" — file-path matching only. |
+| W3 | WARNING | `code_ownership` uses `path` key not `file` — Task 3.4 "same shape as 3.2" would silently misclassify | Task 3.4 now explicitly specifies: for `code_ownership`, call `classify(finding["path"])`. |
 
 ### Rev3 changelog (2026-05-14)
 
@@ -39,7 +52,7 @@ Estimated wall-time (with serial chain + smoke verification between slices): **3
 | GIM-283-1 | Slice 2 — Status taxonomy + failure visibility | B4, B5, B6, §Status taxonomy | 9 (rev2: +Task 2.3b bundle-mode) | ~1 week |
 | GIM-283-2 | Slice 1 — Coverage (testability_di + reactive + ingest defaults) | B1, B2, B3 | 6 (+ GIM-242 chain resumption sub-issue) | ~1 week |
 | GIM-283-3 | Slice 4 — Data quality (deps + arch_layer) | B9, B10 | 5 | ~3-5 days |
-| GIM-283-4 | Slice 3 — Source-context (annotation + try? tuning) | B7, B8 | 8 | ~1.5-2 weeks |
+| GIM-283-4 | Slice 3 — Source-context (annotation + try? tuning) | B7, B8 | 10 (rev4: +Task 3.1b overrides YAML, +Task 3.5b distribution/warning) | ~1.5-2 weeks |
 | GIM-283-5 | Slice 5 — Pinned ordering renderer | B11 | 3 | ~1-2 days |
 
 ---
@@ -623,7 +636,7 @@ Save to `docs/audit-reports/2026-05-13-tron-kit-after-slice-4.md`. Verify:
 
 **Branch:** `feature/GIM-283-4-audit-source-context`
 
-**Files owned (5 extractors + foundation + templates + renderer):**
+**Files owned (5 extractors + foundation + templates + renderer + runbook):**
 - `services/palace-mcp/src/palace_mcp/extractors/foundation/source_context.py` (NEW)
 - `services/palace-mcp/src/palace_mcp/extractors/crypto_domain_model/extractor.py`
 - `services/palace-mcp/src/palace_mcp/extractors/error_handling_policy/extractor.py`
@@ -631,7 +644,18 @@ Save to `docs/audit-reports/2026-05-13-tron-kit-after-slice-4.md`. Verify:
 - `services/palace-mcp/src/palace_mcp/extractors/code_ownership/extractor.py`
 - `services/palace-mcp/src/palace_mcp/extractors/coding_convention/extractor.py`
 - 5 templates in `audit/templates/` to render the source column
-- `audit/renderer.py` for executive-summary library-only count
+- `services/palace-mcp/src/palace_mcp/audit/renderer.py` for executive-summary library-only count + distribution line + empty-library warning
+- `docs/runbooks/source-context-classifier.md` (NEW — documents classification rules + override YAML format)
+- `tests/extractors/foundation/test_source_context.py` (NEW)
+- `tests/extractors/crypto_domain_model/test_finding_includes_source_context.py` (NEW)
+- `tests/extractors/error_handling_policy/test_finding_includes_source_context.py` (NEW — includes critical-path severity tests)
+- `tests/extractors/arch_layer/test_finding_includes_source_context.py` (NEW)
+- `tests/extractors/code_ownership/test_finding_includes_source_context.py` (NEW)
+- `tests/extractors/coding_convention/test_finding_includes_source_context.py` (NEW)
+- `tests/audit/test_renderer_source_column.py` (NEW)
+- `tests/audit/test_renderer_source_distribution.py` (NEW)
+- `tests/audit/test_executive_summary_library_only.py` (NEW)
+- `tests/audit/test_smoke_source_context_e2e.py` (NEW)
 
 ### Task 3.1 — source_context classifier
 
@@ -640,27 +664,73 @@ Save to `docs/audit-reports/2026-05-13-tron-kit-after-slice-4.md`. Verify:
 - `iOS Example/Sources/Manager.swift` → `example`
 - `Tests/FooTests.swift` → `test`
 - `Scripts/build.sh` → `other`
+- `ios-example/Sources/Manager.swift` → `example` *(C3: case-insensitive variant)*
+- `IOS_EXAMPLE/foo.swift` → `example` *(C3: uppercase + underscore variant)*
+- `tests/unit/test_foo.py` → `test` *(C3: lowercase variant)*
+- `src/lib/core.py` → `library` *(C3: lowercase variant)*
 
 **GREEN:** Implement `extractors/foundation/source_context.py`:
 ```python
-def classify(path: str) -> Literal["library", "example", "test", "other"]:
+_I = re.IGNORECASE  # spec §B7 C4: case-insensitive regex
+
+def classify(path: str, overrides: dict[str, str] | None = None) -> Literal["library", "example", "test", "other"]:
     p = path.replace("\\", "/")
-    if re.search(r"(^|/)(Example|Examples|Sample|Samples|Demo|Demos)(/|$)", p):
+    if overrides:
+        for glob_pat, ctx in overrides.items():
+            if fnmatch.fnmatch(p, glob_pat):
+                return ctx
+    if re.search(r"(^|/)(Example|Examples|Sample|Samples|Demo|Demos)(/|$)", p, _I):
         return "example"
-    if re.search(r"(^|/)(Tests?|tests?|spec)(/|$)", p) or re.search(r"Test(s)?\.swift$|_test\.py$|Test\.kt$", p):
+    if re.search(r"(^|/)(Tests?|spec)(/|$)", p, _I) or re.search(r"Test(s)?\.swift$|_test\.py$|Test\.kt$", p, _I):
         return "test"
-    if re.search(r"(^|/)(Sources|src|lib|libs)(/|$)", p):
+    if re.search(r"(^|/)(Sources|src|lib|libs)(/|$)", p, _I):
         return "library"
     return "other"
 ```
 
-**Commit:** `feat(extractors/foundation/source_context): library/example/test/other path classifier`
+Accepts optional `overrides` dict (from Task 3.1b) for per-project YAML overrides.
+
+**Commit:** `feat(extractors/foundation/source_context): library/example/test/other path classifier (case-insensitive)`
+
+### Task 3.1b — per-project source-context overrides YAML (C2/C4)
+
+**Addresses spec §B7 C4 per-project override requirement.**
+
+**RED:** `tests/extractors/foundation/test_source_context.py::test_overrides_yaml_applied`:
+- Fixture `.gimle/source-context-overrides.yaml` with `"**/Vendor/**": "other"`.
+- Path `Sources/Vendor/ThirdParty.swift` → normally `library` (matches `Sources/`), but with override → `other`.
+- Path `Sources/TronKit/Foo.swift` → `library` (no override match, normal flow).
+
+`tests/extractors/foundation/test_source_context.py::test_overrides_missing_file_no_error`:
+- No `.gimle/source-context-overrides.yaml` file → classifier returns normally, no exception.
+
+**GREEN:** In `source_context.py`:
+```python
+def load_overrides(repo_root: str) -> dict[str, str] | None:
+    p = Path(repo_root) / ".gimle" / "source-context-overrides.yaml"
+    if not p.exists():
+        return None
+    import yaml
+    data = yaml.safe_load(p.read_text())
+    if not isinstance(data, dict):
+        return None
+    return {str(k): str(v) for k, v in data.items()
+            if v in ("library", "example", "test", "other")}
+```
+
+Extractors call `load_overrides(repo_root)` once per run and pass to `classify(path, overrides)`.
+
+**Files:** `docs/runbooks/source-context-classifier.md` (NEW) — documents classification rules, override YAML format, and examples.
+
+**Commit:** `feat(extractors/foundation/source_context): per-project .gimle/source-context-overrides.yaml`
 
 ### Task 3.2 — crypto_domain_model emits source_context
 
-**RED:** `tests/extractors/crypto_domain_model/test_finding_includes_source_context.py::test_each_finding_classified` — fixture project with paths in each context; assert every emitted `:CryptoFinding` has the field set.
+**RED:** `tests/extractors/crypto_domain_model/test_finding_includes_source_context.py::test_each_finding_classified` — fixture project with paths in each context; assert every emitted `:CryptoFinding` has the field set. Also assert `_QUERY` returns `source_context` column.
 
-**GREEN:** In `extractors/crypto_domain_model/extractor.py`, call `classify(finding.file_path)` and set `finding.source_context`.
+**GREEN:**
+1. In `extractors/crypto_domain_model/extractor.py`, call `classify(finding.file_path)` and set `finding.source_context` as a node property on write.
+2. Update `audit_contract().query` (`_QUERY`) to include `f.source_context AS source_context` in the RETURN clause. *(W1: query must propagate the field to fetcher/template.)*
 
 **Commit:** `feat(extractors/crypto_domain_model): emit source_context per finding`
 
@@ -672,36 +742,43 @@ def classify(path: str) -> Literal["library", "example", "test", "other"]:
 
 | Fixture file | Expected severity | What it tests |
 |---|---|---|
-| `Sources/TronKit/Crypto/Signer.swift` (with `try?`) | MEDIUM | crypto path → MEDIUM |
-| `Sources/TronKit/HDWallet/HDWalletKit.swift` (with `try?`) | MEDIUM | hd_wallet path → MEDIUM |
-| `Sources/TronKit/Network/Auth.swift` (with `try?`) | MEDIUM | auth path → MEDIUM |
-| `Sources/TronKit/UI/Authorization.swift` (with `try?`) | LOW | **false-positive guard**: word `Authorization` substring-matches `auth`, but with word-boundary regex `\bauth\b` should NOT match. Severity = LOW. |
-| `Sources/TronKit/UI/View.swift` (with `try?`) | LOW | UI path → LOW |
+| `Sources/TronKit/Crypto/Signer.swift` (with `try?`) | MEDIUM | `\bsigner\b` + `\bcrypto\b` match → MEDIUM |
+| `Sources/TronKit/HDWallet/HDWalletKit.swift` (with `try?`) | MEDIUM | `hd[-_]?wallet` matches `HDWallet` (C1 fix) → MEDIUM |
+| `Sources/TronKit/Network/Auth.swift` (with `try?`) | MEDIUM | `\bauth\b` matches `Auth.swift` → MEDIUM |
+| `Sources/TronKit/UI/Authorization.swift` (with `try?`) | LOW | **false-positive guard**: `\bauth\b` does NOT match `Authorization` (word boundary before `o`) → LOW |
+| `Sources/TronKit/UI/View.swift` (with `try?`) | LOW | no keyword match → LOW |
 | `iOS Example/Sources/Manager.swift` (with `try?` in `signer/` subdir) | LOW | source_context=example → downgrade despite crypto regex match |
 | `Tests/CryptoTests.swift` (with `try?`) | LOW | source_context=test → downgrade despite crypto regex match |
 
-**Plus** test for each finding having `source_context` set (shape from 3.2).
+**Plus** test for each finding having `source_context` set (shape from 3.2). Also assert `_QUERY` returns `source_context` column.
 
 **GREEN:**
 
 1. Set `source_context` on each finding.
-2. Add critical-path detection: file or function name matches regex `(?i)\b(signer|key|crypto|hd_wallet|hmac|sign|auth)\b` (word-boundary, case-insensitive) → MEDIUM `try?`; otherwise LOW.
-3. Source-context downgrade: when `source_context in {"example", "test"}`, force severity ≤ LOW (overrides path-regex MEDIUM).
-4. **B8 enforcement** (spec §B8 acceptance):
-   - The regex list is a **placeholder** starting from `(signer|key|crypto|hd_wallet|hmac|sign|auth)`.
-   - CR Phase 1.2 review MUST dispatch a BlockchainEngineer subagent per spec §B8.
-   - BlockchainEng output → committed artifact `docs/research/2026-05-NN-try-optional-critical-path-keywords.md`. The artifact specifies the final regex + rationale + operator/BlockchainEng sign-off.
-   - PE Phase 2 adjusts the regex per the committed artifact's spec.
-   - **CR Phase 3.1 paste**: artifact's commit SHA + grep showing the regex matches the artifact's recommended list. Without paste → REQUEST CHANGES, slice blocks at Phase 3.1.
+2. Update `audit_contract().query` (`_QUERY`) to include `f.source_context AS source_context` in the RETURN clause. *(W1: query must propagate the field.)*
+3. Add critical-path detection: file path matches B8 artifact regex *(W2: file path only — no `function_name` field exists on `ErrorFinding`)*:
+   ```
+   (?i)\b(signer|crypto|hd[-_]?wallet|hmac|sign|auth|mnemonic|seed|pubkey|keystore|secp256k1|ed25519|ripemd160)\b
+   ```
+   Match → MEDIUM `try?`; no match → LOW `try?`.
+4. Source-context downgrade: when `source_context in {"example", "test"}`, force severity ≤ LOW (overrides path-regex MEDIUM).
+5. Insertion point: new `_apply_critical_path_severity()` step between `_apply_suppressions` and `_write_snapshot` (per CR N1).
+6. **B8 enforcement** (spec §B8 acceptance):
+   - B8 artifact committed: `docs/research/2026-05-14-try-optional-critical-path-keywords.md` (414 lines, BlockchainEngineer sign-off).
+   - PE Phase 2 MUST use the regex from artifact §5 verbatim (the one shown above).
+   - **CR Phase 3.1 paste**: artifact's commit SHA + grep showing the regex matches the artifact's recommended list. Without paste → REQUEST CHANGES.
    - Phase 4.2 verifies the SHA exists on the FB.
 
 **Commit:** `feat(extractors/error_handling_policy): source_context + word-boundary critical-path tuning + per-artifact regex`
 
 ### Task 3.4 — arch_layer + code_ownership + coding_convention emit source_context
 
-**RED:** Same shape as 3.2 for each of the three extractors.
+**RED:** Same shape as 3.2 for each of the three extractors — fixture with mixed-context paths, assert `source_context` set on every finding node, assert `_QUERY` returns `source_context` column.
 
-**GREEN:** Same shape as 3.2.
+**GREEN:**
+1. For each of the three extractors, call `classify(path)` and set `source_context` on write.
+2. Update each `audit_contract().query` to include `f.source_context AS source_context`. *(W1)*
+3. **`code_ownership` key difference (W3):** `code_ownership` audit query returns `f.path AS path` (not `f.file AS file`). The classifier call must use `classify(finding["path"])`, not `classify(finding["file"])`. PE must verify the query column name before wiring the classifier.
 
 **Commit:** `feat(extractors): source_context per finding in arch_layer + code_ownership + coding_convention`
 
@@ -712,6 +789,35 @@ def classify(path: str) -> Literal["library", "example", "test", "other"]:
 **GREEN:** Update `audit/templates/{crypto_domain_model,error_handling_policy,arch_layer,code_ownership,coding_convention}.md` to include the column.
 
 **Commit:** `feat(audit/templates): add source column to finding tables`
+
+### Task 3.5b — Distribution line + empty-library warning (C2/C4)
+
+**Addresses spec §B7 C4 distribution observability + empty-library warning requirements.**
+
+**RED:**
+
+`tests/audit/test_renderer_source_distribution.py::test_executive_summary_distribution_line`:
+- Fixture findings: 5 library, 3 example, 2 test, 1 other.
+- Assert rendered executive summary header contains: `Findings by source: library=5 example=3 test=2 other=1`.
+
+`tests/audit/test_renderer_source_distribution.py::test_library_findings_empty_warning`:
+- Fixture: 15 total findings, 0 with `source_context="library"` (all example/test/other).
+- Assert rendered output has `data_quality: library_findings_empty` warning ABOVE §Executive Summary.
+
+`tests/audit/test_renderer_source_distribution.py::test_no_warning_when_library_present`:
+- Fixture: 15 total findings, 3 with `source_context="library"`.
+- Assert NO `library_findings_empty` warning.
+
+`tests/audit/test_renderer_source_distribution.py::test_no_warning_when_total_under_threshold`:
+- Fixture: 8 total findings, 0 library.
+- Assert NO `library_findings_empty` warning (threshold = total > 10).
+
+**GREEN:** In `audit/renderer.py`:
+1. After aggregating all findings, compute `Counter(f["source_context"] for f in all_findings)`.
+2. Emit distribution line in §Executive Summary header: `Findings by source: library={n} example={n} test={n} other={n}`.
+3. If `library_count == 0 AND total_count > 10`, emit `data_quality: library_findings_empty` warning block before §Executive Summary.
+
+**Commit:** `feat(audit/renderer): source distribution line + library_findings_empty warning`
 
 ### Task 3.6 — Executive summary library-only count
 
@@ -744,7 +850,9 @@ palace.audit.run(project="tron-kit")
 Save to `docs/audit-reports/2026-05-13-tron-kit-after-slice-3.md`. Verify:
 - Every finding row has source column populated.
 - §Executive Summary HIGH count excludes example app findings.
+- §Executive Summary header includes `Findings by source: library=X example=Y test=Z other=W` distribution line.
 - `try_optional_swallow` MEDIUM count on tron-kit ≤ 10 (down from 34).
+- No `library_findings_empty` warning (tron-kit has library findings).
 
 ---
 
@@ -875,7 +983,7 @@ CR must verify before APPROVE:
 - [ ] **C1 backfill landed**: GIM-283-1 Task 2.0 includes the language_profile backfill Cypher for all 6 currently-mounted projects (uw-android-mini excluded — test fixture only, not mounted). Verify the migration script is in `services/palace-mcp/scripts/` and idempotent.
 - [ ] **C2 bundle-mode**: Task 2.3b implements bundle-mode per-member discovery in `run.py`. `discover_extractor_statuses` called per `(:Bundle)-[:HAS_MEMBER]->(:Project)` member, each with its own profile. RED tests cover per-member aggregation + single-project backward compat.
 - [ ] **C5 coverage appendix**: Task 2.4 §Profile Coverage appendix has a render-time `R == N+M+K+F+L` assertion (raises `coverage_count_mismatch` error on drift).
-- [ ] **C4 source_context**: Task 3.5 (renderer) emits `library=X example=Y test=Z other=W` summary, supports `.gimle/source-context-overrides.yaml`, and emits `library_findings_empty` warning when applicable.
+- [ ] **C4 source_context**: Task 3.1b (classifier) loads `.gimle/source-context-overrides.yaml`. Task 3.5b (renderer) emits `library=X example=Y test=Z other=W` distribution + `library_findings_empty` warning when applicable. Task 3.1 (classifier) uses `re.IGNORECASE` on all patterns with case-variant RED tests.
 - [ ] B6 investigation (Task 2.5) explicitly precedes Task 2.6 fix — root cause must be in committed `docs/postmortems/2026-05-13-hotspot-zero-scan-investigation.md` artifact.
 - [ ] Final verification (Slice 5 / Task 5.3) wipes the right node labels and re-ingests via `ingest_swift_kit.sh`, NOT `palace.audit.run` alone.
 - [ ] Each slice ships its own PR; serial merge order = 1 → 2 → 3 → 4 → 5 (numbered as in this plan, which is reordered from the spec's slice numbering for clarity: spec Slice 2 = plan GIM-283-1, spec Slice 1 = plan GIM-283-2, spec Slice 4 = plan GIM-283-3, spec Slice 3 = plan GIM-283-4, spec Slice 5 = plan GIM-283-5).
@@ -885,7 +993,7 @@ CR must verify before APPROVE:
 
 Standard Gimle 7-phase. Special notes per this plan:
 
-- **Phase 1.2 of GIM-283-4 (Slice 3)**: CR MUST dispatch BlockchainEngineer subagent for B8 regex completeness review before approving.
+- **Phase 1.2 of GIM-283-4 (Slice 3)**: CR MUST dispatch BlockchainEngineer subagent for B8 regex completeness review before approving. *(Done — artifact committed as `docs/research/2026-05-14-try-optional-critical-path-keywords.md`, 414 lines.)*
 - **Phase 2.5 of GIM-283-1 (Slice 2)**: Investigation task — PE produces a write-up before Task 2.6 coding starts.
 - **Phase 4.1 of every slice**: QA performs the slice-specific Verification step from the relevant Slice §Verification subsection. Real `:IngestRun` against tron-kit, real audit report artifact, real diff vs prior. No mocks.
 - **Phase 4.2 of every slice**: CTO merges only after the slice's verification artifact exists in `docs/audit-reports/` on the FB.
