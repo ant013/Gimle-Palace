@@ -23,7 +23,7 @@ from palace_mcp.audit.contracts import (
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 _REPORT_TEMPLATE = Path(__file__).parent / "report_template.md"
 
-_SECTION_ORDER = [
+_SECTION_ORDER = (
     "hotspot",
     "dead_symbol_binary_surface",
     "dependency_surface",
@@ -31,7 +31,7 @@ _SECTION_ORDER = [
     "cross_repo_version_skew",
     "public_api_surface",
     "cross_module_contract",
-]
+)
 
 _JINJA_ENV = Environment(
     loader=FileSystemLoader([str(_TEMPLATES_DIR), str(_REPORT_TEMPLATE.parent)]),
@@ -175,7 +175,8 @@ def render_report(
                 f"but bucket sums to {total_in_buckets}"
             )
 
-    rendered_sections: list[tuple[Severity, str]] = []
+    pinned_rendered: list[tuple[Severity, str]] = []
+    remainder_rendered: list[tuple[Severity, str]] = []
     all_annotated: list[dict[str, Any]] = []
     all_library_annotated: list[dict[str, Any]] = []
     all_source_contexts: list[str] = []
@@ -213,7 +214,7 @@ def render_report(
         if name not in sections:
             continue
         seen.add(name)
-        rendered_sections.append(_render_one(name, sections[name]))
+        pinned_rendered.append(_render_one(name, sections[name]))
 
     for name, sec in sections.items():
         if name in seen:
@@ -242,10 +243,10 @@ def render_report(
             rendered = render_section(sec, col, cap, severity_mapper=mapper)
         except TemplateNotFound:
             rendered = f"## {name.replace('_', ' ').title()}\n\n{len(sec.findings)} finding(s) — no template available.\n"
-        rendered_sections.append((max_sev, rendered))
+        remainder_rendered.append((max_sev, rendered))
 
-    rendered_sections.sort(key=lambda t: SEVERITY_RANK[t[0]])
-    ordered_sections = [r for _, r in rendered_sections]
+    remainder_rendered.sort(key=lambda t: SEVERITY_RANK[t[0]])
+    ordered_sections = [r for _, r in pinned_rendered + remainder_rendered]
 
     run_provenance = [
         {"extractor_name": s.extractor_name, "run_id": s.run_id}
