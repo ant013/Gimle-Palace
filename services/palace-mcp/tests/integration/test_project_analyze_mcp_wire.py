@@ -135,8 +135,13 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
-def _wait_for_server(port: int, process: subprocess.Popen[str]) -> None:
-    deadline = time.monotonic() + 10.0
+def _wait_for_server(
+    port: int,
+    process: subprocess.Popen[str],
+    *,
+    timeout_seconds: float = 10.0,
+) -> None:
+    deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         if process.poll() is not None:
             stderr = process.stderr.read() if process.stderr is not None else ""
@@ -152,8 +157,17 @@ def _wait_for_server(port: int, process: subprocess.Popen[str]) -> None:
                 continue
             return
 
+    if process.poll() is None:
+        process.terminate()
+        try:
+            process.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=1)
     stderr = process.stderr.read() if process.stderr is not None else ""
-    raise RuntimeError(f"Test MCP server did not start within 10 s: {stderr}")
+    raise RuntimeError(
+        f"Test MCP server did not start within {timeout_seconds} s: {stderr}"
+    )
 
 
 @pytest.fixture(scope="module")
@@ -177,10 +191,41 @@ def mcp_url() -> Iterator[str]:
         _wait_for_server(port, process)
         yield f"http://127.0.0.1:{port}/"
     finally:
-        process.terminate()
-        try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+        script_path.unlink(missing_ok=True)
+
+
+def test_wait_for_server_timeout_terminates_child() -> None:
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix="_project_analyze_wire_hang.py", delete=False
+    ) as script_file:
+        script_file.write(
+            "import sys, time\n"
+            "sys.stderr.write('booting...')\n"
+            "sys.stderr.flush()\n"
+            "time.sleep(30)\n"
+        )
+        script_path = Path(script_file.name)
+
+    process = subprocess.Popen(
+        [sys.executable, str(script_path)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    try:
+        with pytest.raises(RuntimeError, match="did not start within"):
+            _wait_for_server(_free_port(), process, timeout_seconds=0.1)
+        assert process.poll() is not None
+    finally:
+        if process.poll() is None:
             process.kill()
             process.wait(timeout=5)
         script_path.unlink(missing_ok=True)
