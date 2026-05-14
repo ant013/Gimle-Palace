@@ -29,9 +29,13 @@ Tools registered:
 - palace.memory.bundle_members
 - palace.memory.bundle_status
 - palace.memory.delete_bundle
+- palace.project.analyze
+- palace.project.analyze_status
+- palace.project.analyze_resume
 - palace.audit.run
 """
 
+import asyncio
 import logging
 import os
 import time
@@ -109,6 +113,15 @@ from palace_mcp.memory.bundle import (
 )
 from palace_mcp.memory.models import Tier
 from palace_mcp.memory.projects import InvalidSlug, UnknownProjectError
+from palace_mcp.project_analyze import (
+    ActiveAnalysisRunExistsError,
+    AnalysisRun,
+    AnalysisRunNotFoundError,
+    AnalysisRunNotResumableError,
+    AnalysisRunStartResult,
+    AnalysisRunStatus,
+    ProjectAnalysisService,
+)
 from palace_mcp.config import Settings
 from palace_mcp.memory.schema import HealthResponse as MemoryHealthResponse
 from palace_mcp.memory.schema import LookupRequest, LookupResponse, ProjectInfo
@@ -143,6 +156,11 @@ _start_time: float = time.monotonic()
 # Pattern #21: track registered tool names for startup uniqueness assertion.
 _registered_tool_names: list[str] = []
 
+# Keep strong references to in-flight AnalysisRun tasks and suppress duplicate
+# scheduling for idempotent retries within the current process.
+_project_analysis_tasks: dict[str, asyncio.Task[None]] = {}
+_PROJECT_ANALYZE_POLL_SECONDS = 2
+
 
 def assert_unique_tool_names(names: list[str]) -> None:
     """Pattern #21: crash immediately on duplicate tool name.
@@ -164,6 +182,49 @@ class HealthStatusResponse(BaseModel):
     neo4j: Literal["reachable", "unreachable"]
     git_sha: str
     uptime_seconds: int
+
+
+class ProjectAnalyzeRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    slug: str
+    parent_mount: str
+    relative_path: str
+    language_profile: str
+    name: str | None = None
+    bundle: str | None = None
+    extractors: list[str] | None = None
+    depth: Literal["quick", "full"] = "full"
+    continue_on_failure: bool = True
+    idempotency_key: str | None = None
+    force_new: bool = False
+
+
+class ProjectAnalyzeRunIdRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    run_id: str
+
+
+class ProjectAnalyzeToolResponse(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    ok: Literal[True] = True
+    run_id: str
+    status: AnalysisRunStatus
+    run: AnalysisRun
+    next_poll_after_seconds: int = _PROJECT_ANALYZE_POLL_SECONDS
+    active_run_reused: bool | None = None
+    background_execution_scheduled: bool | None = None
+
+
+class ProjectAnalyzeToolErrorResponse(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    ok: Literal[False] = False
+    error_code: str
+    message: str
+    run_id: str | None = None
 
 
 def set_driver(driver: AsyncDriver) -> None:
@@ -192,6 +253,90 @@ def get_driver() -> AsyncDriver | None:
 def get_settings() -> Settings | None:
     """Public getter for Settings. Returns None before set_settings() call."""
     return _settings
+
+
+def _build_project_analysis_service() -> ProjectAnalysisService:
+    driver = _driver
+    if driver is None:
+        raise DriverUnavailableError("Neo4j driver not initialised")
+    return ProjectAnalysisService(
+        driver=driver,
+        extractor_registry=_extractor_registry.EXTRACTORS,
+    )
+
+
+def _project_analyze_success_response(
+    run: AnalysisRun,
+    *,
+    active_run_reused: bool | None = None,
+    background_execution_scheduled: bool | None = None,
+) -> dict[str, Any]:
+    return ProjectAnalyzeToolResponse(
+        run_id=run.run_id,
+        status=run.status,
+        run=run,
+        active_run_reused=active_run_reused,
+        background_execution_scheduled=background_execution_scheduled,
+    ).model_dump(mode="json")
+
+
+def _project_analyze_error_response(
+    error_code: str,
+    message: str,
+    *,
+    run_id: str | None = None,
+) -> dict[str, Any]:
+    return ProjectAnalyzeToolErrorResponse(
+        error_code=error_code,
+        message=message,
+        run_id=run_id,
+    ).model_dump(mode="json")
+
+
+def _project_analysis_task_is_active(run_id: str) -> bool:
+    task = _project_analysis_tasks.get(run_id)
+    return task is not None and not task.done()
+
+
+def _schedule_project_analysis_execution(
+    *,
+    run_id: str,
+    service: ProjectAnalysisService,
+    reacquire_lease: bool,
+) -> bool:
+    graphiti = _graphiti
+    if graphiti is None:
+        raise DriverUnavailableError("Graphiti not initialised")
+    if _project_analysis_task_is_active(run_id):
+        return False
+
+    async def _runner() -> None:
+        await service.execute_run(
+            run_id,
+            graphiti=graphiti,
+            reacquire_lease=reacquire_lease,
+        )
+
+    task: asyncio.Task[None] = asyncio.create_task(_runner())
+    _project_analysis_tasks[run_id] = task
+
+    def _on_done(done_task: asyncio.Task[None]) -> None:
+        current = _project_analysis_tasks.get(run_id)
+        if current is done_task:
+            _project_analysis_tasks.pop(run_id, None)
+        if done_task.cancelled():
+            return
+        exc = done_task.exception()
+        if exc is not None:
+            logger.error(
+                "project analyze background task failed for run %s: %s",
+                run_id,
+                exc,
+                exc_info=exc,
+            )
+
+    task.add_done_callback(_on_done)
+    return True
 
 
 def build_mcp_asgi_app() -> Starlette:
@@ -688,6 +833,192 @@ async def _palace_ingest_list_extractors() -> dict[str, Any]:
         for e in _extractor_registry.list_all()
     ]
     return {"ok": True, "extractors": extractors}
+
+
+# ---------------------------------------------------------------------------
+# palace.project.* — durable project-analysis MCP surface
+# ---------------------------------------------------------------------------
+
+
+@_tool(
+    name="palace.project.analyze",
+    description=(
+        "Start a durable project analysis run and return quickly with run_id, "
+        "checkpoint state, and the next poll hint. Use "
+        "palace.project.analyze_status to read durable state and "
+        "palace.project.analyze_resume to continue a RESUMABLE run."
+    ),
+)
+async def palace_project_analyze(
+    *,
+    slug: str,
+    parent_mount: str,
+    relative_path: str,
+    language_profile: str,
+    name: str | None = None,
+    bundle: str | None = None,
+    extractors: list[str] | None = None,
+    depth: Literal["quick", "full"] = "full",
+    continue_on_failure: bool = True,
+    idempotency_key: str | None = None,
+    force_new: bool = False,
+) -> dict[str, Any]:
+    """Start or recover a durable project AnalysisRun without blocking the request."""
+    if _driver is None:
+        handle_tool_error(DriverUnavailableError("Neo4j driver not initialised"))
+    if _graphiti is None:
+        handle_tool_error(DriverUnavailableError("Graphiti not initialised"))
+
+    try:
+        request = ProjectAnalyzeRequest(
+            slug=slug,
+            parent_mount=parent_mount,
+            relative_path=relative_path,
+            language_profile=language_profile,
+            name=name,
+            bundle=bundle,
+            extractors=extractors,
+            depth=depth,
+            continue_on_failure=continue_on_failure,
+            idempotency_key=idempotency_key,
+            force_new=force_new,
+        )
+    except ValidationError as exc:
+        return _project_analyze_error_response("validation_error", str(exc))
+
+    try:
+        service = _build_project_analysis_service()
+        started: AnalysisRunStartResult = await service.start_run(
+            slug=request.slug,
+            parent_mount=request.parent_mount,
+            relative_path=request.relative_path,
+            language_profile=request.language_profile,
+            name=request.name,
+            bundle=request.bundle,
+            extractors=request.extractors,
+            depth=request.depth,
+            continue_on_failure=request.continue_on_failure,
+            idempotency_key=request.idempotency_key,
+            force_new=request.force_new,
+        )
+        should_schedule = started.run.status in {
+            AnalysisRunStatus.PENDING,
+            AnalysisRunStatus.RESUMABLE,
+        }
+        scheduled = (
+            _schedule_project_analysis_execution(
+                run_id=started.run.run_id,
+                service=service,
+                reacquire_lease=True,
+            )
+            if should_schedule
+            else False
+        )
+        return _project_analyze_success_response(
+            started.run,
+            active_run_reused=started.active_run_reused,
+            background_execution_scheduled=scheduled,
+        )
+    except ActiveAnalysisRunExistsError as exc:
+        return _project_analyze_error_response(
+            "ACTIVE_ANALYSIS_RUN_EXISTS",
+            str(exc),
+            run_id=exc.run_id,
+        )
+    except ValueError as exc:
+        return _project_analyze_error_response("invalid_request", str(exc))
+    except Exception as exc:
+        handle_tool_error(exc)
+
+
+@_tool(
+    name="palace.project.analyze_status",
+    description=(
+        "Read durable AnalysisRun status from Neo4j, including checkpoint state "
+        "and whether the current palace-mcp process still has a background task "
+        "attached to the run."
+    ),
+)
+async def palace_project_analyze_status(
+    *,
+    run_id: str,
+) -> dict[str, Any]:
+    """Return durable AnalysisRun status, promoting expired RUNNING leases to RESUMABLE."""
+    if _driver is None:
+        handle_tool_error(DriverUnavailableError("Neo4j driver not initialised"))
+
+    try:
+        request = ProjectAnalyzeRunIdRequest(run_id=run_id)
+    except ValidationError as exc:
+        return _project_analyze_error_response("validation_error", str(exc))
+
+    try:
+        service = _build_project_analysis_service()
+        run = await service.get_status(request.run_id)
+        return _project_analyze_success_response(
+            run,
+            background_execution_scheduled=_project_analysis_task_is_active(
+                request.run_id
+            ),
+        )
+    except AnalysisRunNotFoundError as exc:
+        return _project_analyze_error_response(
+            "analysis_run_not_found",
+            str(exc),
+            run_id=exc.run_id,
+        )
+    except Exception as exc:
+        handle_tool_error(exc)
+
+
+@_tool(
+    name="palace.project.analyze_resume",
+    description=(
+        "Reacquire the lease for a RESUMABLE AnalysisRun and continue execution "
+        "from the next unfinished extractor without holding the current request open."
+    ),
+)
+async def palace_project_analyze_resume(
+    *,
+    run_id: str,
+) -> dict[str, Any]:
+    """Reacquire a durable run lease and resume work in a background task."""
+    if _driver is None:
+        handle_tool_error(DriverUnavailableError("Neo4j driver not initialised"))
+    if _graphiti is None:
+        handle_tool_error(DriverUnavailableError("Graphiti not initialised"))
+
+    try:
+        request = ProjectAnalyzeRunIdRequest(run_id=run_id)
+    except ValidationError as exc:
+        return _project_analyze_error_response("validation_error", str(exc))
+
+    try:
+        service = _build_project_analysis_service()
+        run = await service.resume_run(request.run_id)
+        scheduled = _schedule_project_analysis_execution(
+            run_id=run.run_id,
+            service=service,
+            reacquire_lease=False,
+        )
+        return _project_analyze_success_response(
+            run,
+            background_execution_scheduled=scheduled,
+        )
+    except AnalysisRunNotFoundError as exc:
+        return _project_analyze_error_response(
+            "analysis_run_not_found",
+            str(exc),
+            run_id=exc.run_id,
+        )
+    except AnalysisRunNotResumableError as exc:
+        return _project_analyze_error_response(
+            "analysis_run_not_resumable",
+            str(exc),
+            run_id=exc.run_id,
+        )
+    except Exception as exc:
+        handle_tool_error(exc)
 
 
 # ---------------------------------------------------------------------------
