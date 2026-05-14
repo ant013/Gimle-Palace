@@ -54,7 +54,9 @@ class DaemonConfig:
     poll_interval_seconds: int
     recovery_enabled: bool = False
     recovery_first_run_baseline_only: bool = True
-    recovery_dry_run: bool = False  # persistent scan+log mode; never acts; ignores baseline_completed
+    recovery_dry_run: bool = (
+        False  # persistent scan+log mode; never acts; ignores baseline_completed
+    )
     max_actions_per_tick: int = 1
 
 
