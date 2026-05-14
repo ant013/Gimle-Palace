@@ -790,8 +790,13 @@ class ProjectAnalysisService:
         *,
         graphiti: Graphiti | None = None,
         executor: ExtractorExecutor | None = None,
+        reacquire_lease: bool = True,
     ) -> AnalysisRun:
-        run = await self.resume_run(run_id)
+        run = (
+            await self.resume_run(run_id)
+            if reacquire_lease
+            else await self.get_status(run_id)
+        )
         step_executor = executor or self._default_executor(graphiti)
 
         for checkpoint in run.checkpoints:
