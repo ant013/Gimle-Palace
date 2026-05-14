@@ -2,12 +2,12 @@
 
 {% if not findings %}
 {% if summary_stats.get("rules_declared") %}
-No architecture violations found — all layer rules pass.
+No architecture violations found — {{ summary_stats.get("module_count", "?") }} modules indexed; all layer rules pass.
 
 **Rule source:** `{{ summary_stats.get("rule_source", "unknown") }}`
 **Provenance:** run_id `{{ run_id }}`{% if completed_at %}, completed {{ completed_at }}{% endif %}.
 {% else %}
-No architecture rules declared.
+No architecture rules declared — {{ summary_stats.get("module_count", "?") }} modules indexed in Neo4j (no rule evaluation possible).
 
 The `arch_layer` extractor ran but found no rule file at
 `.palace/architecture-rules.yaml` or `docs/architecture-rules.yaml`.
