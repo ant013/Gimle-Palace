@@ -47,6 +47,18 @@ _SWALLOWING_KINDS: frozenset[str] = frozenset(
     }
 )
 
+# Kinds affected by B8 critical-path severity tuning (try? usage variants)
+_TRY_OPTIONAL_KINDS: frozenset[str] = frozenset(
+    {"try_optional_swallow", "try_optional_in_crypto_path", "nil_coalesce_swallows_error"}
+)
+
+# B8 artifact §5 — verbatim regex for critical-path file detection
+# Source: docs/research/2026-05-14-try-optional-critical-path-keywords.md
+_B8_CRITICAL_PATH_RE = re.compile(
+    r"\b(signer|crypto|hd[-_]?wallet|hmac|sign|auth|mnemonic|seed|pubkey|keystore|secp256k1|ed25519|ripemd160)\b",
+    re.IGNORECASE,
+)
+
 _QUERY = """
 CALL {
   MATCH (c:CatchSite {project_id: $project_id})
@@ -66,7 +78,8 @@ RETURN coalesce(f.kind, '') AS kind,
        files_scanned,
        swallowed_count,
        rethrows_count,
-       coalesce(f.run_id, '') AS finding_run_id
+       coalesce(f.run_id, '') AS finding_run_id,
+       coalesce(f.source_context, 'other') AS source_context
 ORDER BY
   CASE severity
     WHEN 'critical' THEN 0
@@ -92,6 +105,7 @@ class ErrorFinding:
     severity: str
     message: str
     rule_id: str
+    source_context: str = "other"
 
 
 @dataclass(frozen=True)
@@ -150,6 +164,7 @@ SET f.project_id = $project_id,
     f.end_line = $end_line,
     f.severity = $severity,
     f.message = $message,
+    f.source_context = $source_context,
     f.run_id = $run_id
 """
 
@@ -260,6 +275,7 @@ class ErrorHandlingPolicyExtractor(BaseExtractor):
             _normalise_results(raw_findings, repo_root=ctx.repo_path)
         )
         findings = _apply_suppressions(repo_root=ctx.repo_path, findings=findings)
+        findings = _apply_critical_path_severity(findings)
         catch_sites = _collect_catch_sites(ctx.repo_path)
         catch_sites = _mark_swallowed_sites(catch_sites=catch_sites, findings=findings)
 
@@ -335,6 +351,8 @@ def _normalise_severity(semgrep_severity: str) -> str:
 def _normalise_results(
     raw: list[dict[str, Any]], *, repo_root: Path
 ) -> list[ErrorFinding]:
+    from palace_mcp.extractors.foundation.source_context import classify
+
     findings: list[ErrorFinding] = []
     for result in raw:
         extra = result.get("extra", {})
@@ -359,6 +377,7 @@ def _normalise_results(
                 severity=severity,
                 message=message,
                 rule_id=rule_id,
+                source_context=classify(path),
             )
         )
     return findings
@@ -409,6 +428,28 @@ def _apply_suppressions(
             continue
         updated.append(finding)
     return updated
+
+
+def _apply_critical_path_severity(findings: list[ErrorFinding]) -> list[ErrorFinding]:
+    """Tune try? severity via B8 critical-path regex (GIM-283-4 Task 3.3).
+
+    Applies only to try_optional_swallow / try_optional_in_crypto_path /
+    nil_coalesce_swallows_error kinds.  Example/test source_context always
+    forces LOW regardless of the path regex match.
+    """
+    result: list[ErrorFinding] = []
+    for finding in findings:
+        if finding.kind not in _TRY_OPTIONAL_KINDS:
+            result.append(finding)
+            continue
+        if finding.source_context in {"example", "test"}:
+            result.append(replace(finding, severity="low"))
+            continue
+        if _B8_CRITICAL_PATH_RE.search(finding.file):
+            result.append(replace(finding, severity="medium"))
+        else:
+            result.append(replace(finding, severity="low"))
+    return result
 
 
 def _has_suppression_marker(*, repo_root: Path, finding: ErrorFinding) -> bool:
@@ -604,6 +645,7 @@ async def _replace_snapshot_tx(
             end_line=finding.end_line,
             severity=finding.severity,
             message=finding.message,
+            source_context=finding.source_context,
             run_id=run_id,
         )
         await cursor.consume()
