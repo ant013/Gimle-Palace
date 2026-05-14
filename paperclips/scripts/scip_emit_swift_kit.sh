@@ -287,6 +287,7 @@ payload = {
     "repo_head_sha": head_sha,
     "emitter_name": emitter_name,
     "emitter_version": emitter_version,
+    "artifact_origin": "remote_copy",
     "generated_at": datetime.now(timezone.utc).isoformat(),
     "package_path": "Package.swift",
     "generator_host": socket.gethostname(),

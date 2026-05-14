@@ -45,6 +45,7 @@ _SWIFT_SCIP_EMITTER_NAME = "palace-swift-scip-emit-cli"
 _SWIFT_SCIP_EMITTER_VERSION = "2026-05-15"
 _DEFAULT_REMOTE_HOST = "imac-ssh.ant013.work"
 _DEFAULT_REMOTE_BASE = "/Users/Shared/Ios/HorizontalSystems"
+_DEFAULT_MACBOOK_BASE = "/Users/ant013/Ios/HorizontalSystems"
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _DEFAULT_ENV_FILE = _REPO_ROOT / ".env"
 _DEFAULT_RUNTIME_DIR = _REPO_ROOT / ".gimle" / "runtime" / "project-analyze"
@@ -455,12 +456,13 @@ def _git_head_sha(repo_path: Path) -> str:
 
 
 def _build_macbook_fallback_command(spec: ProjectRuntimeSpec) -> str:
+    macbook_repo_path = str(Path(_DEFAULT_MACBOOK_BASE) / spec.relative_path)
     parts = [
         "bash",
         "paperclips/scripts/scip_emit_swift_kit.sh",
         spec.slug,
         "--repo-path",
-        str(spec.repo_path),
+        macbook_repo_path,
         "--remote-host",
         _DEFAULT_REMOTE_HOST,
         "--remote-base",
@@ -491,18 +493,29 @@ def swift_scip_metadata_needs_regeneration(
 ) -> tuple[bool, str]:
     if metadata is None:
         return True, "metadata missing or invalid"
+    resolved_repo_path = str(repo_path.resolve())
     required = {
         "repo_head_sha": repo_head_sha,
         "emitter_name": _SWIFT_SCIP_EMITTER_NAME,
         "emitter_version": _SWIFT_SCIP_EMITTER_VERSION,
         "package_path": "Package.swift",
-        "generator_host": socket.gethostname(),
-        "source_repo_path": str(repo_path.resolve()),
-        "destination_repo_path": str(repo_path.resolve()),
+        "destination_repo_path": resolved_repo_path,
     }
     for key, expected in required.items():
         if metadata.get(key) != expected:
             return True, f"{key} mismatch"
+    source_repo_path = metadata.get("source_repo_path")
+    generator_host = metadata.get("generator_host")
+    if not isinstance(source_repo_path, str) or not source_repo_path:
+        return True, "source_repo_path missing"
+    if not isinstance(generator_host, str) or not generator_host:
+        return True, "generator_host missing"
+    if metadata.get("artifact_origin") == "remote_copy":
+        return False, "metadata current (remote_copy)"
+    if source_repo_path != resolved_repo_path:
+        return True, "source_repo_path mismatch"
+    if generator_host != socket.gethostname():
+        return True, "generator_host mismatch"
     return False, "metadata current"
 
 
@@ -517,6 +530,7 @@ def _write_scip_metadata(
         "repo_head_sha": repo_head_sha,
         "emitter_name": _SWIFT_SCIP_EMITTER_NAME,
         "emitter_version": _SWIFT_SCIP_EMITTER_VERSION,
+        "artifact_origin": "local",
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "package_path": "Package.swift",
         "generator_host": socket.gethostname(),
