@@ -109,12 +109,24 @@ Responsibilities:
 6. Start the local Gimle runtime with `docker compose --profile review up -d`;
    recreate `palace-mcp` when mount or env changes require it.
 7. Wait for `/healthz`.
-8. Start the MCP analysis run and poll status until terminal state.
-9. Save the report markdown and machine-readable summary.
+8. Compute a stable idempotency key from slug, language profile, repo HEAD SHA,
+   depth, extractor list, and container repo path.
+9. Start the MCP analysis run and poll status until terminal state. If the
+   previous CLI process lost its response, a repeat invocation with the same
+   inputs must recover the existing active run instead of starting a duplicate.
+10. Save the report markdown and machine-readable summary.
 
 The host default URL for this command is `http://localhost:8080/mcp`. Existing
 subcommands may keep their current default only if tests make the distinction
 explicit; the product smoke command must not silently target `localhost:8000`.
+
+For `--emit-scip auto`, staleness is defined by
+`scip/index.scip.meta.json`. The metadata must include repo HEAD SHA, emitter
+name/version, generated timestamp, package path, and absolute host repo path.
+`auto` regenerates SCIP when the index is missing, empty, unreadable, metadata
+is missing/invalid, repo HEAD SHA changed, emitter version changed, package path
+changed, or host repo path changed. `always` ignores metadata and regenerates.
+`never` fails fast when a usable SCIP index and metadata are absent.
 
 ### MCP orchestration tools
 
@@ -133,6 +145,8 @@ async def palace_project_analyze(
     extractors: list[str] | None = None,
     depth: Literal["quick", "full"] = "full",
     continue_on_failure: bool = True,
+    idempotency_key: str | None = None,
+    force_new: bool = False,
 ) -> dict[str, Any]:
     ...
 
@@ -155,6 +169,36 @@ one MCP/HTTP request open while all extractors and audit run. The host CLI polls
 `palace.project.analyze_status` and may call `palace.project.analyze_resume`
 after interruption.
 
+`AnalysisRun` state is durable in Neo4j. The implementation must create
+`:AnalysisRun` nodes and per-extractor checkpoint data, either as
+`:AnalysisCheckpoint` nodes or as structured checkpoint properties on the run.
+The durable state must include `run_id`, `slug`, `language_profile`, `bundle`,
+`extractors`, `depth`, `idempotency_key`, `status`, `created_at`, `updated_at`,
+`started_at`, `finished_at`, `lease_owner`, `lease_expires_at`,
+`last_completed_extractor`, checkpoint statuses, checkpoint `ingest_run_id`
+values, and final audit/report payload references. Terminal runs are retained
+for audit provenance in V1; automatic cleanup is out of scope.
+
+Allowed run statuses:
+
+- Active: `PENDING`, `RUNNING`, `RESUMABLE`.
+- Terminal: `SUCCEEDED`, `SUCCEEDED_WITH_FAILURES`, `FAILED`, `CANCELED`.
+
+Only one active `AnalysisRun` may exist per `(slug, language_profile)`.
+Concurrent `palace.project.analyze` calls for the same pair must not start a
+second extractor cascade. If the idempotency key matches, return the existing
+active run with `active_run_reused=true`. If a different active run exists,
+return an `ACTIVE_ANALYSIS_RUN_EXISTS` error with the existing `run_id`.
+`force_new=true` may create a new run only after the previous run is terminal;
+it must not override an active run.
+
+After MCP process restart, `palace.project.analyze_status` must read Neo4j and
+return the last durable checkpoint. If a run was `RUNNING` but its lease expired,
+status becomes `RESUMABLE`. `palace.project.analyze_resume` reacquires the lease
+and continues from the next uncompleted extractor. Re-running the host CLI after
+a lost response should pass the same idempotency key and recover the existing
+run instead of starting a duplicate.
+
 Responsibilities:
 
 1. Register/update `:Project` with `parent_mount`, `relative_path`, and existing
@@ -167,10 +211,14 @@ Responsibilities:
 6. Continue after extractor failure by default, recording `RUN_FAILED`,
    `FETCH_FAILED`, `NOT_ATTEMPTED`, or `OK` for each extractor.
 7. Checkpoint after every extractor with run id, status, started/finished times,
-   error code, and next action.
+   error code, `ingest_run_id`, and next action.
 8. Run `palace.audit.run(project=slug, depth=depth)` after extractor attempts
    complete.
-9. Return terminal state with:
+9. Pin final report provenance to this `AnalysisRun`'s checkpointed
+   `ingest_run_id` values. If `palace.audit.run` still uses latest-run discovery,
+   the analysis report must still include the pinned per-extractor run ids and
+   must not hide a provenance mismatch.
+10. Return terminal state with:
    - `ok`
    - `run_id`
    - `project`
@@ -226,6 +274,23 @@ path into Docker or stage it into the existing runtime mount pattern before
 starting analysis. The generated SCIP path passed through
 `PALACE_SCIP_INDEX_PATHS` must be the container-visible path, not the host path.
 
+Compose override strategy is deterministic:
+
+- Generate the override under a Gimle-controlled runtime directory, not inside
+  the target repo. Default path:
+  `.gimle/runtime/project-analyze/docker-compose.project-analyze.yml`.
+- Write a companion `.gimle/runtime/project-analyze/compose.env` or reuse the
+  repo `.env` explicitly; every Docker Compose invocation from the CLI must pass
+  the same `--env-file` and the same ordered `-f docker-compose.yml -f
+  <generated-override>` arguments.
+- The override is reused across runs for the same slug and rewritten
+  deterministically when repo path, staged path, or container mount changes.
+- The CLI must record the compose files and env file in the machine-readable
+  summary so a later operator or agent can reproduce the exact runtime.
+- Cleanup is explicit only; V1 must not silently remove generated overrides or
+  staged repos after a run because they are part of the resumable runtime
+  contract.
+
 ## Affected Files
 
 Expected implementation areas:
@@ -233,6 +298,7 @@ Expected implementation areas:
 - `services/palace-mcp/src/palace_mcp/cli.py`
 - `services/palace-mcp/src/palace_mcp/mcp_server.py`
 - `services/palace-mcp/src/palace_mcp/project_analyze.py` (new)
+- `services/palace-mcp/src/palace_mcp/memory/cypher.py`
 - `services/palace-mcp/src/palace_mcp/extractors/foundation/profiles.py`
 - `services/palace-mcp/tests/test_project_analyze.py` (new)
 - `services/palace-mcp/tests/test_mcp_server_project_analyze.py` (new)
@@ -273,29 +339,35 @@ agent should revert edits outside its assigned files.
    - Verification: targeted unit tests added in the next package must pass.
 
 4. Agent `profile-test-worker`: add drift tests for profile ordering.
-   - Write scope: `services/palace-mcp/tests/unit/test_profiles.py`.
+   - Write scope: `services/palace-mcp/tests/extractors/test_profiles.py`.
    - Change: assert exact 17-extractor order and membership in
      `registry.EXTRACTORS`.
    - Verification:
-     `cd services/palace-mcp && uv run pytest tests/unit/test_profiles.py`.
+     `cd services/palace-mcp && uv run pytest tests/extractors/test_profiles.py`.
 
 ### Wave 2: AnalysisRun Core
 
 5. Agent `analysis-model-worker`: add `AnalysisRun` data model.
-   - Write scope: `services/palace-mcp/src/palace_mcp/project_analyze.py`.
-   - Change: define run status, checkpoint schema, terminal states, and report
-     summary structures.
-   - Verification: model-only tests compile and serialize.
+   - Write scope: `services/palace-mcp/src/palace_mcp/project_analyze.py`,
+     `services/palace-mcp/src/palace_mcp/memory/cypher.py`.
+   - Change: define Neo4j-backed run status, checkpoint schema, terminal
+     states, lease fields, active-run uniqueness, and report summary
+     structures.
+   - Verification: model tests prove durable serialization and one active run
+     per `(slug, language_profile)`.
 
 6. Agent `analysis-state-worker`: add run persistence/resume adapter.
    - Write scope: `services/palace-mcp/src/palace_mcp/project_analyze.py`.
-   - Change: persist enough state to resume from the last completed checkpoint.
-   - Verification: unit test proves an interrupted run reloads checkpoint state.
+   - Change: persist state in Neo4j, mark expired `RUNNING` leases as
+     `RESUMABLE`, and resume from the last completed checkpoint.
+   - Verification: unit test proves an interrupted run reloads checkpoint state
+     after process restart.
 
 7. Agent `analysis-runner-worker`: add extractor orchestration.
    - Write scope: `services/palace-mcp/src/palace_mcp/project_analyze.py`.
    - Change: run ordered extractors serially, continue on failure, record
-     `OK`, `RUN_FAILED`, `FETCH_FAILED`, or `NOT_ATTEMPTED`.
+     `OK`, `RUN_FAILED`, `FETCH_FAILED`, or `NOT_ATTEMPTED`, and pin each
+     checkpoint to its `ingest_run_id`.
    - Verification: unit test with fake extractor runner covers success, failure,
      and continue-on-failure.
 
@@ -332,14 +404,17 @@ agent should revert edits outside its assigned files.
 12. Agent `cli-scip-worker`: add SCIP generation/env mapping helpers.
     - Write scope: `services/palace-mcp/src/palace_mcp/cli.py`.
     - Change: implement `--emit-scip`, compute container SCIP path, merge
-      `.env` `PALACE_SCIP_INDEX_PATHS`, preserve existing JSON entries.
+      `.env` `PALACE_SCIP_INDEX_PATHS`, preserve existing JSON entries, and
+      write/read `scip/index.scip.meta.json` for stale detection.
     - Verification: tests cover missing env, existing env, invalid JSON, and
-      container path vs host path.
+      container path vs host path, plus stale/missing metadata cases.
 
 13. Agent `cli-docker-worker`: add Docker lifecycle helpers.
     - Write scope: `services/palace-mcp/src/palace_mcp/cli.py`.
-    - Change: create/update compose override, start review profile, recreate
-      `palace-mcp` only when env or mount changes, wait for health.
+    - Change: create/update `.gimle/runtime/project-analyze/` compose override,
+      call Docker Compose with the pinned `--env-file` and ordered `-f` files,
+      start review profile, recreate `palace-mcp` only when env or mount
+      changes, wait for health.
     - Verification: command-construction tests use fakes, not real Docker.
 
 14. Agent `cli-poll-worker`: add AnalysisRun polling/report output.
@@ -391,27 +466,37 @@ agent should revert edits outside its assigned files.
 6. `palace.project.analyze` starts an `AnalysisRun` and returns `run_id` without
    waiting for the full 17-extractor cascade.
 7. `palace.project.analyze_status` exposes per-extractor checkpoint status.
-8. Interrupted runs can be resumed or safely reported as resumable with the last
-   completed checkpoint.
-9. `palace.memory.list_projects` includes `tron-kit` after the run.
-10. `palace.memory.get_project_overview(slug="tron-kit")` returns non-empty
+8. `AnalysisRun` and checkpoints are durable in Neo4j and survive
+   `palace-mcp` process restart or container recreate.
+9. Only one active `AnalysisRun` can exist per `(slug, language_profile)`;
+   duplicate starts reuse the same idempotent run or return
+   `ACTIVE_ANALYSIS_RUN_EXISTS`.
+10. Interrupted runs can be resumed after process restart from the last
+    completed checkpoint.
+11. `--emit-scip auto` regenerates when `scip/index.scip.meta.json` is missing
+    or mismatches repo HEAD SHA, emitter version, package path, or host repo
+    path.
+12. The generated compose override path, env file, and exact `docker compose`
+    file list are deterministic and recorded in the summary output.
+13. `palace.memory.list_projects` includes `tron-kit` after the run.
+14. `palace.memory.get_project_overview(slug="tron-kit")` returns non-empty
     ingest metadata.
-11. `palace.ingest.list_extractors` exposes all default `swift_kit` extractors.
-12. `palace.audit.run(project="tron-kit", depth="full")` returns markdown with:
+15. `palace.ingest.list_extractors` exposes all default `swift_kit` extractors.
+16. `palace.audit.run(project="tron-kit", depth="full")` returns markdown with:
     - Profile Coverage appendix
     - per-extractor status summary
     - run ids for populated sections
     - explicit `RUN_FAILED`, `FETCH_FAILED`, or `NOT_ATTEMPTED` entries when
       applicable
-13. The smoke output records whether `reactive_dependency_tracer` failed because
+17. The smoke output records whether `reactive_dependency_tracer` failed because
     `reactive_facts.json` is absent; that is an expected diagnostic, not a
     hidden blind spot.
-14. `swift_kit` profile tests prove the ordered list exactly matches the
+18. `swift_kit` profile tests prove the ordered list exactly matches the
     expected 17-extractor sequence and each extractor exists in
     `registry.EXTRACTORS`.
-15. Registration tests prove `language_profile` is stored in existing
+19. Registration tests prove `language_profile` is stored in existing
     `:Project.language_profile` and consumed by profile resolution.
-16. No unrelated local artifacts such as `.coverage` or `.serena/` are
+20. No unrelated local artifacts such as `.coverage` or `.serena/` are
     committed.
 
 ## Verification Plan
@@ -422,7 +507,7 @@ Unit / integration:
 cd services/palace-mcp && uv run pytest tests/test_project_analyze.py
 cd services/palace-mcp && uv run pytest tests/test_mcp_server_project_analyze.py
 cd services/palace-mcp && uv run pytest tests/test_project_analyze_cli.py
-cd services/palace-mcp && uv run pytest tests/unit/test_profiles.py
+cd services/palace-mcp && uv run pytest tests/extractors/test_profiles.py
 cd services/palace-mcp && uv run ruff check src tests
 cd services/palace-mcp && uv run mypy
 ```
@@ -463,8 +548,6 @@ uv run --directory services/palace-mcp python -m palace_mcp.cli audit run \
 
 - Should the host command live only in `palace_mcp.cli`, or should we keep a
   thin shell wrapper for operator ergonomics?
-- Should `AnalysisRun` be persisted as `:AnalysisRun` nodes in Neo4j, local JSON
-  state under the service data directory, or both?
 - Should the command support `--repo-url` cloning in this slice, or only local
   `--repo-path`?
 - Should reports be committed automatically, or only written to disk and left
