@@ -227,6 +227,18 @@ async def scan_died_mid_work(
     # SIGTERM'd run). list_active_issues also feeds infra-block tier scans, so
     # recovery must explicitly skip blocked issues below.
     issues = await client.list_active_issues(company.id)
+
+    # Build parent_id -> set of live-child IDs. A parent assignee that's
+    # idle while a child is still in_progress / in_review / todo is
+    # legitimately waiting on the child to close, not stranded. Skipping
+    # these avoids the wake → CTO-exits-idle → wake loop on parent issues
+    # (e.g. GIM-283 waiting on GIM-289).
+    _LIVE_STATUSES = {"in_progress", "in_review", "todo"}
+    live_children_by_parent: dict[str, list[str]] = {}
+    for c in issues:
+        if c.parent_id and c.status in _LIVE_STATUSES:
+            live_children_by_parent.setdefault(c.parent_id, []).append(c.id)
+
     actions: list[Action] = []
     for issue in issues:
         if issue.status == "blocked":
@@ -234,6 +246,13 @@ async def scan_died_mid_work(
         if issue.assignee_agent_id is None:
             continue
         if issue.execution_run_id is not None:
+            continue
+        if issue.id in live_children_by_parent:
+            log.info(
+                "skip issue=%s reason=parent_waits_children children=%d",
+                issue.id,
+                len(live_children_by_parent[issue.id]),
+            )
             continue
         if issue.updated_at > threshold_dt:
             continue
