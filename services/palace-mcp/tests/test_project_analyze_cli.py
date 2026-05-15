@@ -24,6 +24,73 @@ def test_project_analyze_parser_defaults_to_host_port_8080() -> None:
     assert args.url == "http://localhost:8080/mcp"
 
 
+def test_stage_project_runtime_spec_switches_to_stage_mount(tmp_path: Path, monkeypatch) -> None:
+    repo_path = tmp_path / "TronKit.Swift"
+    repo_path.mkdir()
+    spec = cli.ProjectRuntimeSpec(
+        repo_path=repo_path,
+        slug="tron-kit",
+        language_profile="swift_kit",
+        bundle=None,
+        parent_mount="hs",
+        relative_path="TronKit.Swift",
+        container_repo_path="/repos-hs/TronKit.Swift",
+        container_scip_path="/repos-hs/TronKit.Swift/scip/index.scip",
+        env_file=tmp_path / ".env",
+        compose_override_path=tmp_path / "docker-compose.project-analyze.yml",
+        report_out=tmp_path / "report.md",
+        summary_out=tmp_path / "summary.json",
+        host_mount_path=None,
+        container_mount_path=None,
+    )
+    copied: list[tuple[Path, Path]] = []
+    monkeypatch.setattr(
+        cli,
+        "_copy_runtime_stage",
+        lambda source, staged: copied.append((source, staged)),
+    )
+
+    staged_spec = cli.stage_project_runtime_spec(
+        spec,
+        stage_root=tmp_path / "project-analyze-mounts",
+    )
+
+    assert copied == [
+        (
+            repo_path,
+            tmp_path / "project-analyze-mounts" / "hs-stage" / "TronKit.Swift",
+        )
+    ]
+    assert staged_spec.repo_path == repo_path
+    assert staged_spec.parent_mount == "hs-stage"
+    assert staged_spec.container_mount_path == "/repos-hs-stage"
+    assert staged_spec.container_repo_path == "/repos-hs-stage/TronKit.Swift"
+    assert (
+        staged_spec.container_scip_path
+        == "/repos-hs-stage/TronKit.Swift/scip/index.scip"
+    )
+    assert staged_spec.host_mount_path == tmp_path / "project-analyze-mounts" / "hs-stage"
+
+
+def test_wait_for_mcp_ready_falls_back_to_loopback(monkeypatch) -> None:
+    attempts: list[str] = []
+
+    def fake_probe(url: str) -> None:
+        attempts.append(url)
+        if url == "http://localhost:8080/mcp":
+            raise ValueError("non-json response")
+
+    monkeypatch.setattr(cli, "_probe_mcp_url_once", fake_probe)
+
+    resolved = cli.wait_for_mcp_ready("http://localhost:8080/mcp", timeout_seconds=1)
+
+    assert resolved == "http://127.0.0.1:8080/mcp"
+    assert attempts == [
+        "http://localhost:8080/mcp",
+        "http://127.0.0.1:8080/mcp",
+    ]
+
+
 def test_merge_scip_index_env_mapping_preserves_existing_entries(
     tmp_path: Path,
 ) -> None:
@@ -275,6 +342,7 @@ def test_project_analyze_writes_summary_and_report(
         "get_ordered_extractors",
         lambda _profile: ("symbol_index_swift", "hotspot"),
     )
+    monkeypatch.setattr(cli, "_host_path_requires_staging", lambda _path: False)
 
     args = SimpleNamespace(
         repo_path=str(repo_path),
@@ -304,6 +372,7 @@ def test_project_analyze_writes_summary_and_report(
     assert summary["run_id"] == "run-123"
     assert summary["compose_override_changed"] is True
     assert summary["env_changed"] is True
+    assert summary["runtime_stage_used"] is False
 
 
 def test_project_analyze_toolchain_unsupported_writes_structured_summary(
