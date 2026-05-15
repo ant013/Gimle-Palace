@@ -602,8 +602,8 @@ async def test_execute_run_renews_lease_while_checkpointing() -> None:
         reacquire_lease=False,
     )
 
-    assert len(store.saved_leases) == 2
-    assert store.saved_leases[0] < store.saved_leases[1]
+    assert len(store.saved_leases) == 4
+    assert store.saved_leases[0] < store.saved_leases[-1]
     assert finished.status == AnalysisRunStatus.SUCCEEDED_WITH_FAILURES
 
 
@@ -665,3 +665,84 @@ async def test_resume_continues_after_last_completed_extractor() -> None:
     assert finished.status == AnalysisRunStatus.SUCCEEDED_WITH_FAILURES
     assert finished.audit is not None
     assert finished.audit["error_code"] == "STALE_EXTERNAL_RUN"
+
+
+@pytest.mark.asyncio
+async def test_execute_run_fail_closes_interrupted_checkpoint_instead_of_replaying() -> (
+    None
+):
+    store = InMemoryAnalysisRunStore()
+    current_time = [_utc()]
+
+    def _clock() -> datetime:
+        return current_time[0]
+
+    service = _build_service(store=store, clock=_clock)
+    started = await service.start_run(
+        slug="gimle",
+        parent_mount="hs",
+        relative_path="Gimle",
+        language_profile="python_service",
+        extractors=["dependency_surface", "error_handling_policy", "hotspot"],
+        idempotency_key="interrupted-checkpoint",
+    )
+
+    completed_checkpoint = started.run.checkpoints[0].model_copy(
+        update={
+            "status": AnalysisCheckpointStatus.OK,
+            "started_at": _iso(current_time[0]),
+            "finished_at": _iso(current_time[0] + timedelta(seconds=1)),
+            "ingest_run_id": "ingest-dependency-surface",
+        }
+    )
+    await store.save_checkpoint(
+        started.run.run_id,
+        completed_checkpoint,
+        updated_at=completed_checkpoint.finished_at or _iso(current_time[0]),
+        last_completed_extractor=completed_checkpoint.extractor,
+        status=AnalysisRunStatus.RUNNING,
+        lease_owner="pytest",
+        lease_expires_at=_iso(current_time[0] + timedelta(seconds=10)),
+    )
+
+    interrupted_checkpoint = started.run.checkpoints[1].model_copy(
+        update={
+            "started_at": _iso(current_time[0] + timedelta(seconds=2)),
+            "finished_at": None,
+        }
+    )
+    await store.save_checkpoint(
+        started.run.run_id,
+        interrupted_checkpoint,
+        updated_at=interrupted_checkpoint.started_at or _iso(current_time[0]),
+        last_completed_extractor=completed_checkpoint.extractor,
+        status=AnalysisRunStatus.RUNNING,
+        lease_owner="pytest",
+        lease_expires_at=_iso(current_time[0] + timedelta(seconds=12)),
+    )
+
+    seen: list[str] = []
+
+    async def _executor(
+        extractor_name: str,
+        run: AnalysisRun,
+    ) -> ExtractorAttemptResult:
+        seen.append(extractor_name)
+        return ExtractorAttemptResult(
+            status=AnalysisCheckpointStatus.OK,
+            ingest_run_id=f"ingest-{extractor_name}",
+        )
+
+    finished = await service.execute_run(
+        started.run.run_id,
+        executor=_executor,
+        reacquire_lease=False,
+    )
+
+    assert seen == []
+    assert finished.status == AnalysisRunStatus.FAILED
+    assert finished.error_code == "project_analyze_checkpoint_replayed"
+    assert finished.message is not None
+    assert "error_handling_policy" in finished.message
+    assert finished.report_markdown is not None
+    assert "project_analyze_checkpoint_replayed" in finished.report_markdown

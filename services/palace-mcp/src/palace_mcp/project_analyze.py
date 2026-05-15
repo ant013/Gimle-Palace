@@ -282,6 +282,14 @@ def _checkpoint_counts(
     return counts
 
 
+def _checkpoint_was_interrupted(checkpoint: AnalysisCheckpoint) -> bool:
+    return (
+        checkpoint.status == AnalysisCheckpointStatus.NOT_ATTEMPTED
+        and checkpoint.started_at is not None
+        and checkpoint.finished_at is None
+    )
+
+
 def _lease_is_expired(run: AnalysisRun, now: datetime) -> bool:
     if run.lease_expires_at is None:
         return False
@@ -921,13 +929,45 @@ class ProjectAnalysisService:
         for checkpoint in run.checkpoints:
             if checkpoint.status != AnalysisCheckpointStatus.NOT_ATTEMPTED:
                 continue
-            started_at = _iso(self._clock())
+            if _checkpoint_was_interrupted(checkpoint):
+                return await self.fail_run(
+                    run.run_id,
+                    error_code="project_analyze_checkpoint_replayed",
+                    message=(
+                        f"checkpoint {checkpoint.extractor} was interrupted "
+                        "before completion and would be replayed after restart; "
+                        "failing closed instead of re-entering extractor work."
+                    ),
+                )
+
+            checkpoint_started_at = self._clock()
+            started_checkpoint = checkpoint.model_copy(
+                update={
+                    "started_at": _iso(checkpoint_started_at),
+                    "finished_at": None,
+                    "error_code": None,
+                    "message": None,
+                    "ingest_run_id": None,
+                    "next_action": None,
+                }
+            )
+            run = await self._store.save_checkpoint(
+                run.run_id,
+                started_checkpoint,
+                updated_at=_iso(checkpoint_started_at),
+                last_completed_extractor=run.last_completed_extractor,
+                status=AnalysisRunStatus.RUNNING,
+                lease_owner=self._lease_owner,
+                lease_expires_at=_iso(
+                    checkpoint_started_at + timedelta(seconds=self._lease_seconds)
+                ),
+            )
+
             attempt = await step_executor(checkpoint.extractor, run)
             finished_at = _iso(self._clock())
-            updated_checkpoint = checkpoint.model_copy(
+            updated_checkpoint = started_checkpoint.model_copy(
                 update={
                     "status": attempt.status,
-                    "started_at": started_at,
                     "finished_at": finished_at,
                     "error_code": attempt.error_code,
                     "message": attempt.message,
