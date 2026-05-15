@@ -29,7 +29,7 @@ def test_merge_scip_index_env_mapping_preserves_existing_entries(
 ) -> None:
     env_file = tmp_path / ".env"
     env_file.write_text(
-        'OPENAI_API_KEY=sk-test\n'
+        "OPENAI_API_KEY=sk-test\n"
         'PALACE_SCIP_INDEX_PATHS={"evm-kit":"/repos-hs/EvmKit.Swift/scip/index.scip"}\n',
         encoding="utf-8",
     )
@@ -241,7 +241,9 @@ def test_project_analyze_writes_summary_and_report(
             {"tron-kit": "/repos-hs/TronKit.Swift/scip/index.scip"},
         ),
     )
-    monkeypatch.setattr(cli, "write_project_analyze_compose_override", lambda _spec: True)
+    monkeypatch.setattr(
+        cli, "write_project_analyze_compose_override", lambda _spec: True
+    )
     runtime_calls: list[bool] = []
     monkeypatch.setattr(
         cli,
@@ -249,6 +251,7 @@ def test_project_analyze_writes_summary_and_report(
         lambda **kwargs: runtime_calls.append(kwargs["recreate_palace"]),
     )
     monkeypatch.setattr(cli, "_git_head_sha", lambda _path: "abc123")
+
     async def _fake_run_project_analyze_to_terminal(**_: object) -> dict[str, object]:
         return {
             "ok": True,

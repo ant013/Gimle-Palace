@@ -55,9 +55,7 @@ _DEFAULT_COMPOSE_OVERRIDE_PATH = (
 _DEFAULT_MANIFEST_PATH = (
     _REPO_ROOT / "services" / "palace-mcp" / "scripts" / "uw-ios-bundle-manifest.json"
 )
-_DEFAULT_SWIFT_EMITTER_DIR = (
-    _REPO_ROOT / "services" / "palace-mcp" / "scip_emit_swift"
-)
+_DEFAULT_SWIFT_EMITTER_DIR = _REPO_ROOT / "services" / "palace-mcp" / "scip_emit_swift"
 
 # Domain agents that receive child audit issues (from AGENTS.md roster)
 _DOMAIN_AGENTS: list[dict[str, str]] = [
@@ -295,7 +293,9 @@ def _discover_existing_mount(repo_path: Path) -> ComposeMount | None:
             repo_path.relative_to(host_path)
         except ValueError:
             continue
-        return ComposeMount(host_path=host_path, container_path=match.group("container"))
+        return ComposeMount(
+            host_path=host_path, container_path=match.group("container")
+        )
     return None
 
 
@@ -314,7 +314,9 @@ def resolve_project_runtime_spec(
     manifest_member = _load_manifest_member(manifest_path, slug)
     existing_mount = _discover_existing_mount(repo_path)
 
-    resolved_bundle = bundle or (manifest_member.bundle_name if manifest_member else None)
+    resolved_bundle = bundle or (
+        manifest_member.bundle_name if manifest_member else None
+    )
     if existing_mount is not None:
         relative_path = repo_path.relative_to(existing_mount.host_path).as_posix()
         parent_mount = existing_mount.container_path.removeprefix("/repos-")
@@ -383,9 +385,7 @@ def merge_scip_index_env_mapping(
 ) -> tuple[bool, dict[str, str]]:
     env_file.parent.mkdir(parents=True, exist_ok=True)
     lines = (
-        env_file.read_text(encoding="utf-8").splitlines()
-        if env_file.exists()
-        else []
+        env_file.read_text(encoding="utf-8").splitlines() if env_file.exists() else []
     )
     merged: dict[str, str] = {}
     new_lines: list[str] = []
@@ -538,7 +538,9 @@ def _write_scip_metadata(
         "destination_repo_path": str(spec.repo_path.resolve()),
     }
     meta_path.parent.mkdir(parents=True, exist_ok=True)
-    meta_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    meta_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     return payload
 
 
@@ -548,7 +550,9 @@ def _emit_swift_scip(
     repo_head_sha: str,
 ) -> dict[str, Any]:
     fallback_command = _build_macbook_fallback_command(spec)
-    missing = [command for command in ("xcrun", "swift") if shutil.which(command) is None]
+    missing = [
+        command for command in ("xcrun", "swift") if shutil.which(command) is None
+    ]
     if missing:
         raise ScipEmitToolchainUnsupported(
             message=f"missing Swift toolchain command(s): {', '.join(missing)}",
@@ -764,7 +768,9 @@ def build_project_analyze_idempotency_key(
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
 
 async def _call_audit_run(
@@ -887,7 +893,11 @@ async def _run_project_analyze_to_terminal(
                 return resume_payload
         if status not in _PROJECT_ACTIVE_STATUSES:
             return status_payload
-        await asyncio.sleep(status_payload.get("next_poll_after_seconds", _DEFAULT_PROJECT_ANALYZE_POLL_SECONDS))
+        await asyncio.sleep(
+            status_payload.get(
+                "next_poll_after_seconds", _DEFAULT_PROJECT_ANALYZE_POLL_SECONDS
+            )
+        )
 
 
 def _parse_extractors_csv(value: str | None) -> list[str] | None:
@@ -1074,9 +1084,10 @@ def _cmd_project_analyze(args: argparse.Namespace) -> int:
                 request_payload=request_payload,
             )
         )
-        ok = final_payload.get("ok") is True and final_payload.get(
-            "status"
-        ) in _PROJECT_SUCCESS_STATUSES
+        ok = (
+            final_payload.get("ok") is True
+            and final_payload.get("status") in _PROJECT_SUCCESS_STATUSES
+        )
         run_payload = final_payload.get("run") or {}
         report_markdown = run_payload.get("report_markdown")
         if isinstance(report_markdown, str) and report_markdown:
