@@ -18,6 +18,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import os
 import re
 import shlex
 import shutil
@@ -296,8 +297,24 @@ def _docker_context_name() -> str:
     return result.stdout.strip()
 
 
+def _docker_host_uses_colima_socket() -> bool:
+    docker_host = os.environ.get("DOCKER_HOST", "").strip()
+    if not docker_host.startswith("unix://"):
+        return False
+    socket_path = Path(docker_host.removeprefix("unix://")).expanduser()
+    colima_root = Path.home() / ".colima"
+    try:
+        socket_path.relative_to(colima_root)
+    except ValueError:
+        return False
+    return True
+
+
 def _host_path_requires_staging(repo_path: Path) -> bool:
-    if _docker_context_name() != "colima":
+    if (
+        _docker_context_name() != "colima"
+        and not _docker_host_uses_colima_socket()
+    ):
         return False
     try:
         repo_path.relative_to(Path.home())
@@ -1169,9 +1186,7 @@ def _cmd_project_analyze(args: argparse.Namespace) -> int:
 
         runtime_stage_used = False
         runtime_stage_root: str | None = None
-        if spec.host_mount_path is not None and _host_path_requires_staging(
-            spec.repo_path
-        ):
+        if _host_path_requires_staging(spec.repo_path):
             spec = stage_project_runtime_spec(spec)
             runtime_stage_used = True
             runtime_stage_root = (

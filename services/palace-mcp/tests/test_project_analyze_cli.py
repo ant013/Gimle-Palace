@@ -379,42 +379,83 @@ def test_project_analyze_writes_summary_and_report(
     assert summary["runtime_stage_used"] is False
 
 
-def test_project_analyze_reuses_existing_mount_without_staging(
+def test_host_path_requires_staging_when_docker_host_targets_colima_socket(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(cli, "_docker_context_name", lambda: "default")
+    monkeypatch.setenv(
+        "DOCKER_HOST",
+        f"unix://{Path.home()}/.colima/default/docker.sock",
+    )
+
+    assert (
+        cli._host_path_requires_staging(
+            Path("/Users/Shared/Ios/HorizontalSystems/TronKit.Swift")
+        )
+        is True
+    )
+
+
+def test_project_analyze_full_run_uses_staged_paths_for_colima_docker_host(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
     repo_path = tmp_path / "TronKit.Swift"
     repo_path.mkdir()
+    (repo_path / "Package.swift").write_text("// swift-tools-version: 5.9\n")
     env_file = tmp_path / ".env"
     env_file.write_text("OPENAI_API_KEY=sk-test\n", encoding="utf-8")
     summary_out = tmp_path / "summary.json"
+    report_out = tmp_path / "report.md"
+    override_path = tmp_path / "docker-compose.project-analyze.yml"
 
     spec = cli.ProjectRuntimeSpec(
         repo_path=repo_path,
         slug="tron-kit",
-        language_profile="python_service",
-        bundle=None,
+        language_profile="swift_kit",
+        bundle="uw-ios",
         parent_mount="hs",
         relative_path="TronKit.Swift",
         container_repo_path="/repos-hs/TronKit.Swift",
         container_scip_path="/repos-hs/TronKit.Swift/scip/index.scip",
         env_file=env_file,
-        compose_override_path=tmp_path / "docker-compose.project-analyze.yml",
-        report_out=tmp_path / "report.md",
+        compose_override_path=override_path,
+        report_out=report_out,
         summary_out=summary_out,
         host_mount_path=None,
         container_mount_path=None,
     )
 
     monkeypatch.setattr(cli, "resolve_project_runtime_spec", lambda **_: spec)
-    monkeypatch.setattr(cli, "_host_path_requires_staging", lambda _path: True)
+    monkeypatch.setattr(cli, "_docker_context_name", lambda: "default")
+    monkeypatch.setenv(
+        "DOCKER_HOST",
+        f"unix://{Path.home()}/.colima/default/docker.sock",
+    )
+    copied: list[tuple[Path, Path]] = []
+    monkeypatch.setattr(
+        cli,
+        "_copy_runtime_stage",
+        lambda source, staged: copied.append((source, staged)),
+    )
+    real_stage_project_runtime_spec = cli.stage_project_runtime_spec
     monkeypatch.setattr(
         cli,
         "stage_project_runtime_spec",
-        lambda _spec: (_ for _ in ()).throw(AssertionError("staging not expected")),
+        lambda current_spec: real_stage_project_runtime_spec(
+            current_spec,
+            stage_root=tmp_path / "project-analyze-mounts",
+        ),
     )
     monkeypatch.setattr(
-        cli, "write_project_analyze_compose_override", lambda _spec: False
+        cli,
+        "ensure_swift_scip_artifact",
+        lambda **_: {
+            "emitted": False,
+            "host_scip_path": str(repo_path / "scip" / "index.scip"),
+            "meta_path": str(repo_path / "scip" / "index.scip.meta.json"),
+            "metadata": {"repo_head_sha": "abc123"},
+        },
     )
     monkeypatch.setattr(
         cli,
@@ -425,7 +466,7 @@ def test_project_analyze_reuses_existing_mount_without_staging(
     monkeypatch.setattr(
         cli,
         "get_ordered_extractors",
-        lambda _profile: ("code_ownership", "hotspot"),
+        lambda _profile: ("symbol_index_swift", "code_ownership"),
     )
 
     seen_payloads: list[dict[str, object]] = []
@@ -441,7 +482,7 @@ def test_project_analyze_reuses_existing_mount_without_staging(
             "run_id": "run-123",
             "status": "SUCCEEDED_WITH_FAILURES",
             "run": {
-                "report_markdown": None,
+                "report_markdown": "# AnalysisRun run-123\n",
                 "overview": {"OK": 2},
                 "audit": {"ok": False, "error_code": "STALE_EXTERNAL_RUN"},
                 "next_actions": [],
@@ -457,14 +498,14 @@ def test_project_analyze_reuses_existing_mount_without_staging(
     args = SimpleNamespace(
         repo_path=str(repo_path),
         slug="tron-kit",
-        language_profile="python_service",
-        bundle=None,
+        language_profile="swift_kit",
+        bundle="uw-ios",
         name=None,
         extractors=None,
-        emit_scip="auto",
+        emit_scip="never",
         depth="full",
         url="http://localhost:8080/mcp",
-        report_out=None,
+        report_out=str(report_out),
         summary_out=str(summary_out),
         env_file=str(env_file),
         manifest=str(tmp_path / "missing-manifest.json"),
@@ -474,21 +515,44 @@ def test_project_analyze_reuses_existing_mount_without_staging(
     exit_code = cli._cmd_project_analyze(args)
 
     assert exit_code == 0
+    assert copied == [
+        (
+            repo_path,
+            tmp_path / "project-analyze-mounts" / "hs-stage" / "TronKit.Swift",
+        )
+    ]
     assert len(seen_payloads) == 1
-    assert seen_payloads[0]["slug"] == "tron-kit"
-    assert seen_payloads[0]["parent_mount"] == "hs"
+    assert seen_payloads[0]["parent_mount"] == "hs-stage"
     assert seen_payloads[0]["relative_path"] == "TronKit.Swift"
-    assert seen_payloads[0]["language_profile"] == "python_service"
-    assert seen_payloads[0]["bundle"] is None
+    assert seen_payloads[0]["language_profile"] == "swift_kit"
+    assert seen_payloads[0]["bundle"] == "uw-ios"
     assert seen_payloads[0]["depth"] == "full"
-    assert seen_payloads[0]["continue_on_failure"] is True
-    assert seen_payloads[0]["extractors"] == ["code_ownership", "hotspot"]
-    assert isinstance(seen_payloads[0]["idempotency_key"], str)
+    assert seen_payloads[0]["extractors"] == [
+        "symbol_index_swift",
+        "code_ownership",
+    ]
     summary = json.loads(summary_out.read_text(encoding="utf-8"))
-    assert summary["parent_mount"] == "hs"
-    assert summary["container_repo_path"] == "/repos-hs/TronKit.Swift"
-    assert summary["runtime_stage_used"] is False
-    assert summary["runtime_stage_root"] is None
+    assert summary["runtime_stage_used"] is True
+    assert summary["runtime_stage_root"] == str(
+        tmp_path / "project-analyze-mounts" / "hs-stage"
+    )
+    assert summary["parent_mount"] == "hs-stage"
+    assert summary["container_repo_path"] == "/repos-hs-stage/TronKit.Swift"
+    assert (
+        summary["container_scip_path"]
+        == "/repos-hs-stage/TronKit.Swift/scip/index.scip"
+    )
+    assert summary["scip_index_paths"] == {
+        "tron-kit": "/repos-hs-stage/TronKit.Swift/scip/index.scip"
+    }
+    assert "/repos-hs/TronKit.Swift" not in summary_out.read_text(encoding="utf-8")
+    assert (
+        override_path.read_text(encoding="utf-8")
+        == "services:\n"
+        "  palace-mcp:\n"
+        "    volumes:\n"
+        f"      - {tmp_path / 'project-analyze-mounts' / 'hs-stage'}:/repos-hs-stage:ro\n"
+    )
 
 
 def test_project_analyze_toolchain_unsupported_writes_structured_summary(
