@@ -20,6 +20,9 @@ Model Context Protocol · (опционально) Paperclip AI как control p
 Одна команда на чистом сервере. Три профиля (`review` / `analyze` / `full`) под разный
 масштаб. Client ставится за одну `curl ... | sh`.
 
+Операторский ранбук для host-side `project analyze`:
+[`docs/runbooks/project-analyze.md`](docs/runbooks/project-analyze.md)
+
 См. [`docs/superpowers/specs/2026-04-15-gimle-palace-design.md`](docs/superpowers/specs/2026-04-15-gimle-palace-design.md) — полная архитектура.
 
 ## Status
