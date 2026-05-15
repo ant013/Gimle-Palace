@@ -350,12 +350,13 @@ class Neo4jAnalysisRunStore:
         tx: AsyncManagedTransaction,
         run: AnalysisRun,
     ) -> AnalysisRunStartResult:
-        await tx.run(
+        lock_result = await tx.run(
             ACQUIRE_ANALYSIS_LOCK,
             key=run.lock_key,
             created_at=run.created_at,
             touched_at=run.updated_at,
         )
+        await lock_result.consume()
         existing_result = await tx.run(
             GET_ACTIVE_ANALYSIS_RUN,
             lock_key=run.lock_key,
@@ -371,7 +372,7 @@ class Neo4jAnalysisRunStore:
                 return AnalysisRunStartResult(run=existing, active_run_reused=True)
             raise ActiveAnalysisRunExistsError(existing.run_id)
 
-        await tx.run(
+        create_result = await tx.run(
             CREATE_ANALYSIS_RUN,
             run_id=run.run_id,
             lock_key=run.lock_key,
@@ -398,8 +399,9 @@ class Neo4jAnalysisRunStore:
             report_markdown=run.report_markdown,
             next_actions_json=_serialize_json(run.next_actions),
         )
+        await create_result.consume()
         for checkpoint in run.checkpoints:
-            await tx.run(
+            checkpoint_result = await tx.run(
                 UPSERT_ANALYSIS_CHECKPOINT,
                 run_id=run.run_id,
                 extractor=checkpoint.extractor,
@@ -412,6 +414,7 @@ class Neo4jAnalysisRunStore:
                 ingest_run_id=checkpoint.ingest_run_id,
                 next_action=checkpoint.next_action,
             )
+            await checkpoint_result.consume()
         return AnalysisRunStartResult(run=run, active_run_reused=False)
 
     async def get_run(

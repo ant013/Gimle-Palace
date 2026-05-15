@@ -59,10 +59,12 @@ async def live_driver(
 @pytest_asyncio.fixture(autouse=True)
 async def clean_db(live_driver: Any):  # type: ignore[no-untyped-def]
     async with live_driver.session() as session:
-        await session.run("MATCH (n) DETACH DELETE n")
+        result = await session.run("MATCH (n) DETACH DELETE n")
+        await result.consume()
     yield
     async with live_driver.session() as session:
-        await session.run("MATCH (n) DETACH DELETE n")
+        result = await session.run("MATCH (n) DETACH DELETE n")
+        await result.consume()
 
 
 @pytest.mark.integration
@@ -131,6 +133,8 @@ async def test_start_run_persists_lock_and_lease_metadata(
 async def test_same_key_concurrent_start_creates_one_active_run(
     live_driver: Any,
 ) -> None:
+    slug = "same-key-concurrency"
+    relative_path = "SameKeyConcurrency.Swift"
     first = ProjectAnalysisService(
         driver=live_driver,
         extractor_registry=registry.EXTRACTORS,
@@ -150,9 +154,9 @@ async def test_same_key_concurrent_start_creates_one_active_run(
         idempotency_key: str,
     ) -> str:
         started = await service.start_run(
-            slug="tron-kit",
+            slug=slug,
             parent_mount="hs",
-            relative_path="TronKit.Swift",
+            relative_path=relative_path,
             language_profile="swift_kit",
             extractors=["symbol_index_swift"],
             idempotency_key=idempotency_key,
@@ -182,7 +186,7 @@ async def test_same_key_concurrent_start_creates_one_active_run(
             WHERE r.status IN $active_statuses
             RETURN count(r) AS active_runs
             """,
-            lock_key="tron-kit|swift_kit",
+            lock_key=f"{slug}|swift_kit",
             active_statuses=[status.value for status in ACTIVE_ANALYSIS_RUN_STATUSES],
         )
         row = await result.single()
@@ -196,6 +200,8 @@ async def test_same_key_concurrent_start_creates_one_active_run(
 async def test_different_keys_allow_parallel_starts(
     live_driver: Any,
 ) -> None:
+    first_slug = "parallel-start-one"
+    second_slug = "parallel-start-two"
     first = ProjectAnalysisService(
         driver=live_driver,
         extractor_registry=registry.EXTRACTORS,
@@ -225,8 +231,8 @@ async def test_different_keys_allow_parallel_starts(
         return started.run.run_id
 
     first_run_id, second_run_id = await asyncio.gather(
-        _start(first, slug="tron-kit"),
-        _start(second, slug="wallet-core"),
+        _start(first, slug=first_slug),
+        _start(second, slug=second_slug),
     )
 
     assert first_run_id != second_run_id
