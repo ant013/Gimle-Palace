@@ -330,11 +330,32 @@ def _schedule_project_analysis_execution(
         return False
 
     async def _runner() -> None:
-        await service.execute_run(
-            run_id,
-            graphiti=graphiti,
-            reacquire_lease=reacquire_lease,
-        )
+        try:
+            await service.execute_run(
+                run_id,
+                graphiti=graphiti,
+                reacquire_lease=reacquire_lease,
+            )
+        except Exception as exc:
+            logger.error(
+                "project analyze background task failed for run %s: %s",
+                run_id,
+                exc,
+                exc_info=exc,
+            )
+            try:
+                await service.fail_run(
+                    run_id,
+                    error_code="project_analyze_runtime_error",
+                    message=f"{type(exc).__name__}: {exc}",
+                )
+            except Exception as finalize_exc:
+                logger.error(
+                    "project analyze fail-closed finalization failed for run %s: %s",
+                    run_id,
+                    finalize_exc,
+                    exc_info=finalize_exc,
+                )
 
     task: asyncio.Task[None] = asyncio.create_task(_runner())
     _project_analysis_tasks[run_id] = task

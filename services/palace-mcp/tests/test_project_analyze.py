@@ -184,6 +184,8 @@ class InMemoryAnalysisRunStore:
         audit: dict[str, Any] | None,
         report_markdown: str | None,
         next_actions: list[str],
+        error_code: str | None = None,
+        message: str | None = None,
         now: datetime | None = None,
     ) -> AnalysisRun:
         current = now or _utc()
@@ -195,6 +197,8 @@ class InMemoryAnalysisRunStore:
                 "finished_at": _iso(current),
                 "lease_owner": None,
                 "lease_expires_at": None,
+                "error_code": error_code,
+                "message": message,
                 "overview": overview,
                 "audit": audit,
                 "report_markdown": report_markdown,
@@ -399,6 +403,32 @@ async def test_mark_run_resumable_clears_live_lease_before_expiry() -> None:
     assert run.status == AnalysisRunStatus.RESUMABLE
     assert run.lease_owner is None
     assert run.lease_expires_at is None
+
+
+@pytest.mark.asyncio
+async def test_fail_run_finalizes_terminal_failure_with_error_code() -> None:
+    store = InMemoryAnalysisRunStore()
+    service = _build_service(store=store)
+    started = await service.start_run(
+        slug="tron-kit",
+        parent_mount="hs-stage",
+        relative_path="TronKit.Swift",
+        language_profile="swift_kit",
+        extractors=["symbol_index_swift"],
+        idempotency_key="fail-run",
+    )
+
+    failed = await service.fail_run(
+        started.run.run_id,
+        error_code="project_analyze_runtime_error",
+        message="RuntimeError: neo4j connection dropped",
+    )
+
+    assert failed.status == AnalysisRunStatus.FAILED
+    assert failed.error_code == "project_analyze_runtime_error"
+    assert failed.message == "RuntimeError: neo4j connection dropped"
+    assert failed.audit is not None
+    assert failed.audit["error_code"] == "project_analyze_runtime_error"
 
 
 @pytest.mark.asyncio

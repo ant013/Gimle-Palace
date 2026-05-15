@@ -116,6 +116,8 @@ class AnalysisRun(BaseModel):
     lease_owner: str | None = None
     lease_expires_at: str | None = None
     last_completed_extractor: str | None = None
+    error_code: str | None = None
+    message: str | None = None
     checkpoints: list[AnalysisCheckpoint] = Field(default_factory=list)
     overview: dict[str, int] = Field(default_factory=dict)
     audit: dict[str, Any] | None = None
@@ -207,6 +209,8 @@ class AnalysisRunStore(Protocol):
         audit: dict[str, Any] | None,
         report_markdown: str | None,
         next_actions: list[str],
+        error_code: str | None = None,
+        message: str | None = None,
         now: datetime | None = None,
     ) -> AnalysisRun: ...
 
@@ -334,6 +338,8 @@ def _run_from_node(
         lease_owner=node.get("lease_owner"),
         lease_expires_at=node.get("lease_expires_at"),
         last_completed_extractor=node.get("last_completed_extractor"),
+        error_code=node.get("error_code"),
+        message=node.get("message"),
         checkpoints=checkpoints,
         overview={str(key): int(value) for key, value in overview.items()},
         audit=audit,
@@ -401,6 +407,8 @@ class Neo4jAnalysisRunStore:
             lease_owner=run.lease_owner,
             lease_expires_at=run.lease_expires_at,
             last_completed_extractor=run.last_completed_extractor,
+            error_code=run.error_code,
+            message=run.message,
             overview_json=_serialize_json(run.overview),
             audit_json=_serialize_json(run.audit),
             report_markdown=run.report_markdown,
@@ -640,6 +648,8 @@ class Neo4jAnalysisRunStore:
         audit: dict[str, Any] | None,
         report_markdown: str | None,
         next_actions: list[str],
+        error_code: str | None = None,
+        message: str | None = None,
         now: datetime | None = None,
     ) -> AnalysisRun:
         async with self._driver.session() as session:
@@ -651,6 +661,8 @@ class Neo4jAnalysisRunStore:
                 audit,
                 report_markdown,
                 next_actions,
+                error_code,
+                message,
                 now or _utc_now(),
             )
 
@@ -663,6 +675,8 @@ class Neo4jAnalysisRunStore:
         audit: dict[str, Any] | None,
         report_markdown: str | None,
         next_actions: list[str],
+        error_code: str | None,
+        message: str | None,
         now: datetime,
     ) -> AnalysisRun:
         result = await tx.run(
@@ -675,6 +689,8 @@ class Neo4jAnalysisRunStore:
             audit_json=_serialize_json(audit),
             report_markdown=report_markdown,
             next_actions_json=_serialize_json(next_actions),
+            error_code=error_code,
+            message=message,
         )
         row = await result.single()
         if row is None:
@@ -815,6 +831,8 @@ class ProjectAnalysisService:
             started_at=_iso(now),
             lease_owner=self._lease_owner,
             lease_expires_at=lease_expires_at,
+            error_code=None,
+            message=None,
             checkpoints=[
                 AnalysisCheckpoint(extractor=extractor_name, position=index)
                 for index, extractor_name in enumerate(ordered_extractors)
@@ -839,6 +857,47 @@ class ProjectAnalysisService:
 
     async def mark_run_resumable(self, run_id: str) -> AnalysisRun:
         return await self._store.mark_run_resumable(run_id, now=self._clock())
+
+    async def fail_run(
+        self,
+        run_id: str,
+        *,
+        error_code: str,
+        message: str,
+    ) -> AnalysisRun:
+        run = await self._store.get_run(run_id, now=self._clock())
+        overview = _checkpoint_counts(run.checkpoints)
+        audit_payload = {
+            "ok": False,
+            "error_code": error_code,
+            "message": message,
+            "run_id": run_id,
+        }
+        failed_run = run.model_copy(
+            update={
+                "status": AnalysisRunStatus.FAILED,
+                "error_code": error_code,
+                "message": message,
+            }
+        )
+        report_markdown = self._render_checkpoint_report(
+            failed_run,
+            audit_payload,
+            stale_external=False,
+        )
+        return await self._store.finalize_run(
+            run_id,
+            status=AnalysisRunStatus.FAILED,
+            overview=overview,
+            audit=audit_payload,
+            report_markdown=report_markdown,
+            next_actions=[
+                "Inspect palace-mcp runtime failure, then start a fresh project analyze run."
+            ],
+            error_code=error_code,
+            message=message,
+            now=self._clock(),
+        )
 
     @property
     def lease_owner(self) -> str:
@@ -944,6 +1003,8 @@ class ProjectAnalysisService:
             audit=audit_payload,
             report_markdown=report_markdown,
             next_actions=next_actions,
+            error_code=None,
+            message=None,
             now=self._clock(),
         )
 

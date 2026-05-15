@@ -46,6 +46,7 @@ _DEFAULT_COMPANY_ID = "9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64"
 _DEFAULT_PROJECT_ANALYZE_POLL_SECONDS = 2
 _DEFAULT_PROJECT_ANALYZE_RECOVERY_TIMEOUT_SECONDS = 90
 _DEFAULT_PROJECT_ANALYZE_TOOL_MAX_ATTEMPTS = 3
+_DEFAULT_PROJECT_ANALYZE_STALLED_RECOVERY_LIMIT = 5
 _PROJECT_ACTIVE_STATUSES = {"PENDING", "RUNNING", "RESUMABLE"}
 _PROJECT_SUCCESS_STATUSES = {"SUCCEEDED", "SUCCEEDED_WITH_FAILURES"}
 _SWIFT_SCIP_EMITTER_NAME = "palace-swift-scip-emit-cli"
@@ -981,7 +982,7 @@ async def _call_tool_with_runtime_recovery(
     arguments: dict[str, Any],
     recovery_timeout_seconds: int = _DEFAULT_PROJECT_ANALYZE_RECOVERY_TIMEOUT_SECONDS,
     max_attempts: int = _DEFAULT_PROJECT_ANALYZE_TOOL_MAX_ATTEMPTS,
-) -> tuple[str, dict[str, Any]]:
+) -> tuple[str, dict[str, Any], int]:
     current_url = url
     for attempt in range(1, max_attempts + 1):
         try:
@@ -1012,7 +1013,7 @@ async def _call_tool_with_runtime_recovery(
                 timeout_seconds=recovery_timeout_seconds,
             )
         else:
-            return current_url, payload
+            return current_url, payload, attempt - 1
     raise AssertionError("unreachable")
 
 
@@ -1064,7 +1065,7 @@ async def _run_project_analyze_to_terminal(
     url: str,
     request_payload: dict[str, Any],
 ) -> dict[str, Any]:
-    current_url, start_payload = await _call_tool_with_runtime_recovery(
+    current_url, start_payload, _ = await _call_tool_with_runtime_recovery(
         url=url,
         tool_name="palace.project.analyze",
         arguments=request_payload,
@@ -1073,17 +1074,46 @@ async def _run_project_analyze_to_terminal(
         return start_payload
 
     run_id = start_payload["run_id"]
+    last_progress_marker: tuple[str | None, str | None] | None = None
+    stalled_recovery_count = 0
     while True:
-        current_url, status_payload = await _call_tool_with_runtime_recovery(
+        current_url, status_payload, recovery_count = (
+            await _call_tool_with_runtime_recovery(
             url=current_url,
             tool_name="palace.project.analyze_status",
             arguments={"run_id": run_id},
+            )
         )
         if not status_payload.get("ok"):
             return status_payload
+        run_payload = status_payload.get("run")
+        if isinstance(run_payload, dict):
+            progress_marker = (
+                str(run_payload.get("updated_at"))
+                if run_payload.get("updated_at") is not None
+                else None,
+                str(run_payload.get("last_completed_extractor"))
+                if run_payload.get("last_completed_extractor") is not None
+                else None,
+            )
+            if progress_marker != last_progress_marker:
+                last_progress_marker = progress_marker
+                stalled_recovery_count = 0
+            elif recovery_count > 0:
+                stalled_recovery_count += 1
+        elif recovery_count > 0:
+            stalled_recovery_count += 1
+        if (
+            stalled_recovery_count
+            >= _DEFAULT_PROJECT_ANALYZE_STALLED_RECOVERY_LIMIT
+        ):
+            raise ProjectAnalyzeCliError(
+                "palace.project.analyze_status kept recovering without durable progress",
+                error_code="project_analyze_transport_stalled",
+            )
         status = status_payload.get("status")
         if status == "RESUMABLE":
-            current_url, resume_payload = await _call_tool_with_runtime_recovery(
+            current_url, resume_payload, _ = await _call_tool_with_runtime_recovery(
                 url=current_url,
                 tool_name="palace.project.analyze_resume",
                 arguments={"run_id": run_id},

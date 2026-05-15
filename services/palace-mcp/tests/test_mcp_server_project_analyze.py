@@ -363,6 +363,29 @@ async def test_project_analyze_resume_reacquires_lease_then_schedules_worker() -
     )
 
 
+async def test_schedule_project_analysis_execution_finalizes_failed_run() -> None:
+    service = MagicMock()
+    service.execute_run = AsyncMock(side_effect=RuntimeError("neo4j dropped"))
+    service.fail_run = AsyncMock(return_value=_make_run(status=AnalysisRunStatus.FAILED))
+    mcp_module._graphiti = object()
+
+    scheduled = mcp_module._schedule_project_analysis_execution(
+        run_id="run-123",
+        service=service,
+        reacquire_lease=False,
+    )
+
+    assert scheduled is True
+    task = mcp_module._project_analysis_tasks["run-123"]
+    await task
+    service.execute_run.assert_awaited_once()
+    service.fail_run.assert_awaited_once_with(
+        "run-123",
+        error_code="project_analyze_runtime_error",
+        message="RuntimeError: neo4j dropped",
+    )
+
+
 async def test_project_analyze_resume_does_not_duplicate_live_worker_after_lease_expiry() -> (
     None
 ):
