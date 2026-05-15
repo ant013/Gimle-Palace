@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import anyio
 import httpx
 import pytest
 
@@ -558,9 +559,19 @@ def test_project_analyze_full_run_uses_staged_paths_for_colima_docker_host(
     )
 
 
+@pytest.mark.parametrize(
+    "transport_error",
+    [
+        httpx.RemoteProtocolError(
+            "Server disconnected without sending a response."
+        ),
+        anyio.BrokenResourceError(),
+    ],
+)
 @pytest.mark.asyncio
 async def test_run_project_analyze_to_terminal_recovers_after_status_disconnect(
     monkeypatch: pytest.MonkeyPatch,
+    transport_error: Exception,
 ) -> None:
     calls: list[tuple[str, str, dict[str, object]]] = []
 
@@ -579,9 +590,7 @@ async def test_run_project_analyze_to_terminal_recovers_after_status_disconnect(
                 if seen_tool_name == "palace.project.analyze_status"
             )
             if attempt == 1:
-                raise httpx.RemoteProtocolError(
-                    "Server disconnected without sending a response."
-                )
+                raise transport_error
             return {
                 "ok": True,
                 "run_id": "run-123",
@@ -667,6 +676,86 @@ def test_project_analyze_transport_failure_writes_structured_summary(
             "palace.project.analyze_status failed after 3 attempts: Server disconnected without sending a response.",
             error_code="project_analyze_transport_error",
         )
+
+    monkeypatch.setattr(
+        cli,
+        "_run_project_analyze_to_terminal",
+        fake_run_project_analyze_to_terminal,
+    )
+
+    args = SimpleNamespace(
+        repo_path=str(repo_path),
+        slug="tron-kit",
+        language_profile="python_service",
+        bundle=None,
+        name=None,
+        extractors=None,
+        emit_scip="never",
+        depth="full",
+        url="http://localhost:8080/mcp",
+        report_out=str(report_out),
+        summary_out=str(summary_out),
+        env_file=str(env_file),
+        manifest=str(tmp_path / "missing-manifest.json"),
+        audit=True,
+    )
+
+    exit_code = cli._cmd_project_analyze(args)
+
+    assert exit_code == 1
+    summary = json.loads(summary_out.read_text(encoding="utf-8"))
+    assert summary["ok"] is False
+    assert summary["error_code"] == "project_analyze_transport_error"
+    assert summary["requested_mcp_url"] == "http://localhost:8080/mcp"
+    assert summary["parent_mount"] == "repos"
+    assert summary["container_repo_path"] == "/repos/repos/tron-kit"
+    assert summary["summary_out"] == str(summary_out)
+
+
+def test_project_analyze_broken_resource_error_writes_structured_summary(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo_path = tmp_path / "tron-kit"
+    repo_path.mkdir()
+    env_file = tmp_path / ".env"
+    env_file.write_text("OPENAI_API_KEY=sk-test\n", encoding="utf-8")
+    summary_out = tmp_path / "summary.json"
+    report_out = tmp_path / "report.md"
+
+    spec = cli.ProjectRuntimeSpec(
+        repo_path=repo_path,
+        slug="tron-kit",
+        language_profile="python_service",
+        bundle=None,
+        parent_mount="repos",
+        relative_path="tron-kit",
+        container_repo_path="/repos/repos/tron-kit",
+        container_scip_path="/repos/repos/tron-kit/scip/index.scip",
+        env_file=env_file,
+        compose_override_path=tmp_path / "docker-compose.project-analyze.yml",
+        report_out=report_out,
+        summary_out=summary_out,
+        host_mount_path=repo_path.parent,
+        container_mount_path="/repos/repos",
+    )
+
+    monkeypatch.setattr(cli, "resolve_project_runtime_spec", lambda **_: spec)
+    monkeypatch.setattr(
+        cli,
+        "ensure_project_analyze_runtime",
+        lambda **kwargs: kwargs["mcp_url"],
+    )
+    monkeypatch.setattr(cli, "_git_head_sha", lambda _path: "abc123")
+    monkeypatch.setattr(
+        cli,
+        "get_ordered_extractors",
+        lambda _profile: ("symbol_index_python",),
+    )
+    monkeypatch.setattr(cli, "_host_path_requires_staging", lambda _path: False)
+
+    async def fake_run_project_analyze_to_terminal(**_: object) -> dict[str, object]:
+        raise anyio.BrokenResourceError()
 
     monkeypatch.setattr(
         cli,

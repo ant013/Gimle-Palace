@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
+import anyio
 import httpx
 
 from palace_mcp.extractors.foundation.profiles import get_ordered_extractors
@@ -979,7 +980,7 @@ async def _call_tool_with_runtime_recovery(
                 tool_name=tool_name,
                 arguments=arguments,
             )
-        except (httpx.HTTPError, OSError) as exc:
+        except (httpx.HTTPError, OSError, anyio.BrokenResourceError) as exc:
             if attempt == max_attempts:
                 raise ProjectAnalyzeCliError(
                     f"{tool_name} failed after {max_attempts} attempts: {exc}",
@@ -1356,7 +1357,12 @@ def _cmd_project_analyze(args: argparse.Namespace) -> int:
         _write_json(summary_out, summary)
         print(json.dumps(summary, indent=2), file=sys.stderr)
         return 1
-    except (ProjectAnalyzeCliError, ValueError) as exc:
+    except (
+        ProjectAnalyzeCliError,
+        ValueError,
+        httpx.HTTPError,
+        anyio.BrokenResourceError,
+    ) as exc:
         fallback_spec = locals().get("spec")
         summary_out = (
             fallback_spec.summary_out
@@ -1368,7 +1374,11 @@ def _cmd_project_analyze(args: argparse.Namespace) -> int:
             "error_code": (
                 exc.error_code
                 if isinstance(exc, ProjectAnalyzeCliError)
-                else "invalid_project_analyze_response"
+                else (
+                    "invalid_project_analyze_response"
+                    if isinstance(exc, ValueError)
+                    else "project_analyze_transport_error"
+                )
             ),
             "message": str(exc),
             "slug": args.slug,
