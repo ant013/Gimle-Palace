@@ -120,6 +120,32 @@ class InMemoryAnalysisRunStore:
         self._runs[run_id] = updated
         return updated.model_copy(deep=True)
 
+    async def mark_run_resumable(
+        self,
+        run_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> AnalysisRun:
+        current = now or _utc()
+        run = self._require(run_id)
+        if run.status in {
+            AnalysisRunStatus.SUCCEEDED,
+            AnalysisRunStatus.SUCCEEDED_WITH_FAILURES,
+            AnalysisRunStatus.FAILED,
+            AnalysisRunStatus.CANCELED,
+        }:
+            return run.model_copy(deep=True)
+        updated = run.model_copy(
+            update={
+                "status": AnalysisRunStatus.RESUMABLE,
+                "updated_at": _iso(current),
+                "lease_owner": None,
+                "lease_expires_at": None,
+            }
+        )
+        self._runs[run_id] = updated
+        return updated.model_copy(deep=True)
+
     async def save_checkpoint(
         self,
         run_id: str,
@@ -350,6 +376,25 @@ async def test_status_turns_expired_running_lease_into_resumable_after_restart()
 
     restarted_service = _build_service(store=store, clock=_clock)
     run = await restarted_service.get_status(started.run.run_id)
+
+    assert run.status == AnalysisRunStatus.RESUMABLE
+    assert run.lease_owner is None
+    assert run.lease_expires_at is None
+
+
+@pytest.mark.asyncio
+async def test_mark_run_resumable_clears_live_lease_before_expiry() -> None:
+    store = InMemoryAnalysisRunStore()
+    service = _build_service(store=store)
+    started = await service.start_run(
+        slug="tron-kit",
+        parent_mount="hs-stage",
+        relative_path="TronKit.Swift",
+        language_profile="swift_kit",
+        idempotency_key="orphaned-run",
+    )
+
+    run = await service.mark_run_resumable(started.run.run_id)
 
     assert run.status == AnalysisRunStatus.RESUMABLE
     assert run.lease_owner is None

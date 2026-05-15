@@ -920,6 +920,16 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     )
 
 
+def _is_recoverable_transport_error(exc: BaseException) -> bool:
+    if isinstance(exc, (httpx.HTTPError, OSError, anyio.BrokenResourceError)):
+        return True
+    if isinstance(exc, BaseExceptionGroup):
+        return bool(exc.exceptions) and all(
+            _is_recoverable_transport_error(inner) for inner in exc.exceptions
+        )
+    return False
+
+
 async def _call_audit_run(
     url: str,
     project: str | None,
@@ -980,7 +990,9 @@ async def _call_tool_with_runtime_recovery(
                 tool_name=tool_name,
                 arguments=arguments,
             )
-        except (httpx.HTTPError, OSError, anyio.BrokenResourceError) as exc:
+        except Exception as exc:
+            if not _is_recoverable_transport_error(exc):
+                raise
             if attempt == max_attempts:
                 raise ProjectAnalyzeCliError(
                     f"{tool_name} failed after {max_attempts} attempts: {exc}",
@@ -1357,12 +1369,12 @@ def _cmd_project_analyze(args: argparse.Namespace) -> int:
         _write_json(summary_out, summary)
         print(json.dumps(summary, indent=2), file=sys.stderr)
         return 1
-    except (
-        ProjectAnalyzeCliError,
-        ValueError,
-        httpx.HTTPError,
-        anyio.BrokenResourceError,
-    ) as exc:
+    except Exception as exc:
+        if not (
+            isinstance(exc, (ProjectAnalyzeCliError, ValueError))
+            or _is_recoverable_transport_error(exc)
+        ):
+            raise
         fallback_spec = locals().get("spec")
         summary_out = (
             fallback_spec.summary_out

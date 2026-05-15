@@ -179,6 +179,13 @@ class AnalysisRunStore(Protocol):
         now: datetime | None = None,
     ) -> AnalysisRun: ...
 
+    async def mark_run_resumable(
+        self,
+        run_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> AnalysisRun: ...
+
     async def save_checkpoint(
         self,
         run_id: str,
@@ -522,6 +529,46 @@ class Neo4jAnalysisRunStore:
             }
         )
 
+    async def mark_run_resumable(
+        self,
+        run_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> AnalysisRun:
+        async with self._driver.session() as session:
+            return await session.execute_write(
+                self._tx_mark_run_resumable,
+                run_id,
+                now or _utc_now(),
+            )
+
+    @staticmethod
+    async def _tx_mark_run_resumable(
+        tx: AsyncManagedTransaction,
+        run_id: str,
+        now: datetime,
+    ) -> AnalysisRun:
+        current = await Neo4jAnalysisRunStore._read_run_tx(tx, run_id, now=now)
+        if current.status in TERMINAL_ANALYSIS_RUN_STATUSES:
+            return current
+        result = await tx.run(
+            MARK_ANALYSIS_RUN_RESUMABLE,
+            run_id=run_id,
+            status=AnalysisRunStatus.RESUMABLE.value,
+            updated_at=_iso(now),
+        )
+        row = await result.single()
+        if row is None:
+            raise AnalysisRunNotFoundError(run_id)
+        return current.model_copy(
+            update={
+                "status": AnalysisRunStatus.RESUMABLE,
+                "updated_at": _iso(now),
+                "lease_owner": None,
+                "lease_expires_at": None,
+            }
+        )
+
     async def save_checkpoint(
         self,
         run_id: str,
@@ -789,6 +836,13 @@ class ProjectAnalysisService:
             lease_seconds=self._lease_seconds,
             now=self._clock(),
         )
+
+    async def mark_run_resumable(self, run_id: str) -> AnalysisRun:
+        return await self._store.mark_run_resumable(run_id, now=self._clock())
+
+    @property
+    def lease_owner(self) -> str:
+        return self._lease_owner
 
     async def execute_run(
         self,

@@ -304,6 +304,19 @@ def _project_analyze_run_for_active_task(run: AnalysisRun) -> AnalysisRun:
     return run
 
 
+def _should_promote_orphaned_run(
+    *,
+    run: AnalysisRun,
+    lease_owner: str,
+    task_active: bool,
+) -> bool:
+    return (
+        run.status == AnalysisRunStatus.RUNNING
+        and not task_active
+        and run.lease_owner == lease_owner
+    )
+
+
 def _schedule_project_analysis_execution(
     *,
     run_id: str,
@@ -969,13 +982,19 @@ async def palace_project_analyze_status(
     try:
         service = _build_project_analysis_service()
         run = await service.get_status(request.run_id)
-        if _project_analysis_task_is_active(request.run_id):
+        task_active = _project_analysis_task_is_active(request.run_id)
+        service_lease_owner = getattr(service, "lease_owner", "")
+        if _should_promote_orphaned_run(
+            run=run,
+            lease_owner=service_lease_owner,
+            task_active=task_active,
+        ):
+            run = await service.mark_run_resumable(request.run_id)
+        if task_active:
             run = _project_analyze_run_for_active_task(run)
         return _project_analyze_success_response(
             run,
-            background_execution_scheduled=_project_analysis_task_is_active(
-                request.run_id
-            ),
+            background_execution_scheduled=task_active,
         )
     except AnalysisRunNotFoundError as exc:
         return _project_analyze_error_response(
