@@ -298,6 +298,12 @@ def _project_analysis_task_is_active(run_id: str) -> bool:
     return task is not None and not task.done()
 
 
+def _project_analyze_run_for_active_task(run: AnalysisRun) -> AnalysisRun:
+    if run.status == AnalysisRunStatus.RESUMABLE:
+        return run.model_copy(update={"status": AnalysisRunStatus.RUNNING})
+    return run
+
+
 def _schedule_project_analysis_execution(
     *,
     run_id: str,
@@ -901,15 +907,23 @@ async def palace_project_analyze(
             idempotency_key=request.idempotency_key,
             force_new=request.force_new,
         )
-        should_schedule = started.run.status in {
-            AnalysisRunStatus.PENDING,
-            AnalysisRunStatus.RESUMABLE,
-        }
+        reacquire_lease = started.run.status != AnalysisRunStatus.RUNNING
+        if started.active_run_reused:
+            should_schedule = started.run.status in {
+                AnalysisRunStatus.PENDING,
+                AnalysisRunStatus.RESUMABLE,
+            }
+        else:
+            should_schedule = started.run.status in {
+                AnalysisRunStatus.PENDING,
+                AnalysisRunStatus.RUNNING,
+                AnalysisRunStatus.RESUMABLE,
+            }
         scheduled = (
             _schedule_project_analysis_execution(
                 run_id=started.run.run_id,
                 service=service,
-                reacquire_lease=True,
+                reacquire_lease=reacquire_lease,
             )
             if should_schedule
             else False
@@ -955,6 +969,8 @@ async def palace_project_analyze_status(
     try:
         service = _build_project_analysis_service()
         run = await service.get_status(request.run_id)
+        if _project_analysis_task_is_active(request.run_id):
+            run = _project_analyze_run_for_active_task(run)
         return _project_analyze_success_response(
             run,
             background_execution_scheduled=_project_analysis_task_is_active(
@@ -995,6 +1011,14 @@ async def palace_project_analyze_resume(
 
     try:
         service = _build_project_analysis_service()
+        if _project_analysis_task_is_active(request.run_id):
+            run = _project_analyze_run_for_active_task(
+                await service.get_status(request.run_id)
+            )
+            return _project_analyze_success_response(
+                run,
+                background_execution_scheduled=True,
+            )
         run = await service.resume_run(request.run_id)
         scheduled = _schedule_project_analysis_execution(
             run_id=run.run_id,

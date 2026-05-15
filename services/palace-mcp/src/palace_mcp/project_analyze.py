@@ -746,6 +746,7 @@ class ProjectAnalysisService:
             )
 
         now = self._clock()
+        lease_expires_at = _iso(now + timedelta(seconds=self._lease_seconds))
         run = AnalysisRun(
             run_id=str(uuid4()),
             slug=slug,
@@ -758,10 +759,12 @@ class ProjectAnalysisService:
             depth=depth,
             continue_on_failure=continue_on_failure,
             idempotency_key=idempotency_key or str(uuid4()),
-            status=AnalysisRunStatus.PENDING,
+            status=AnalysisRunStatus.RUNNING,
             created_at=_iso(now),
             updated_at=_iso(now),
             started_at=_iso(now),
+            lease_owner=self._lease_owner,
+            lease_expires_at=lease_expires_at,
             checkpoints=[
                 AnalysisCheckpoint(extractor=extractor_name, position=index)
                 for index, extractor_name in enumerate(ordered_extractors)

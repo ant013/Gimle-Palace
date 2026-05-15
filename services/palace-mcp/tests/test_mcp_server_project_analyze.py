@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+from contextlib import suppress
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -83,7 +85,7 @@ async def test_project_analyze_requires_arguments() -> None:
 async def test_project_analyze_returns_run_id_and_schedules_background_execution() -> (
     None
 ):
-    run = _make_run()
+    run = _make_run(status=AnalysisRunStatus.RUNNING)
     service = MagicMock()
     service.start_run = AsyncMock(
         return_value=AnalysisRunStartResult(run=run, active_run_reused=False)
@@ -114,14 +116,14 @@ async def test_project_analyze_returns_run_id_and_schedules_background_execution
 
     assert structured["ok"] is True
     assert structured["run_id"] == "run-123"
-    assert structured["status"] == "PENDING"
+    assert structured["status"] == "RUNNING"
     assert structured["active_run_reused"] is False
     assert structured["background_execution_scheduled"] is True
     assert structured["run"]["language_profile"] == "swift_kit"
     schedule_mock.assert_called_once_with(
         run_id="run-123",
         service=service,
-        reacquire_lease=True,
+        reacquire_lease=False,
     )
 
 
@@ -159,6 +161,47 @@ async def test_project_analyze_reused_running_run_does_not_schedule_duplicate() 
     assert structured["active_run_reused"] is True
     assert structured["background_execution_scheduled"] is False
     schedule_mock.assert_not_called()
+
+
+async def test_project_analyze_reused_resumable_run_reacquires_lease() -> None:
+    run = _make_run(status=AnalysisRunStatus.RESUMABLE)
+    service = MagicMock()
+    service.start_run = AsyncMock(
+        return_value=AnalysisRunStartResult(run=run, active_run_reused=True)
+    )
+
+    with (
+        patch("palace_mcp.mcp_server._driver", new=MagicMock()),
+        patch("palace_mcp.mcp_server._graphiti", new=object()),
+        patch(
+            "palace_mcp.mcp_server._build_project_analysis_service",
+            return_value=service,
+        ),
+        patch(
+            "palace_mcp.mcp_server._schedule_project_analysis_execution",
+            return_value=True,
+        ) as schedule_mock,
+    ):
+        _content, structured = await _mcp.call_tool(
+            "palace.project.analyze",
+            {
+                "slug": "tron-kit",
+                "parent_mount": "hs",
+                "relative_path": "TronKit.Swift",
+                "language_profile": "swift_kit",
+                "idempotency_key": "idem-1",
+            },
+        )
+
+    assert structured["ok"] is True
+    assert structured["status"] == "RESUMABLE"
+    assert structured["active_run_reused"] is True
+    assert structured["background_execution_scheduled"] is True
+    schedule_mock.assert_called_once_with(
+        run_id="run-123",
+        service=service,
+        reacquire_lease=True,
+    )
 
 
 async def test_project_analyze_conflict_returns_structured_error() -> None:
@@ -214,6 +257,39 @@ async def test_project_analyze_status_returns_durable_state() -> None:
     assert structured["background_execution_scheduled"] is False
 
 
+async def test_project_analyze_status_keeps_running_when_local_worker_is_alive() -> (
+    None
+):
+    run = _make_run(status=AnalysisRunStatus.RESUMABLE)
+    service = MagicMock()
+    service.get_status = AsyncMock(return_value=run)
+    blocker = asyncio.Event()
+    task = asyncio.create_task(blocker.wait())
+    mcp_module._project_analysis_tasks["run-123"] = task
+
+    try:
+        with (
+            patch("palace_mcp.mcp_server._driver", new=MagicMock()),
+            patch(
+                "palace_mcp.mcp_server._build_project_analysis_service",
+                return_value=service,
+            ),
+        ):
+            _content, structured = await _mcp.call_tool(
+                "palace.project.analyze_status",
+                {"run_id": "run-123"},
+            )
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+
+    assert structured["ok"] is True
+    assert structured["status"] == "RUNNING"
+    assert structured["background_execution_scheduled"] is True
+    service.get_status.assert_awaited_once_with("run-123")
+
+
 async def test_project_analyze_resume_reacquires_lease_then_schedules_worker() -> None:
     run = _make_run(status=AnalysisRunStatus.RUNNING)
     service = MagicMock()
@@ -245,3 +321,44 @@ async def test_project_analyze_resume_reacquires_lease_then_schedules_worker() -
         service=service,
         reacquire_lease=False,
     )
+
+
+async def test_project_analyze_resume_does_not_duplicate_live_worker_after_lease_expiry() -> (
+    None
+):
+    run = _make_run(status=AnalysisRunStatus.RESUMABLE)
+    service = MagicMock()
+    service.get_status = AsyncMock(return_value=run)
+    service.resume_run = AsyncMock()
+    blocker = asyncio.Event()
+    task = asyncio.create_task(blocker.wait())
+    mcp_module._project_analysis_tasks["run-123"] = task
+
+    try:
+        with (
+            patch("palace_mcp.mcp_server._driver", new=MagicMock()),
+            patch("palace_mcp.mcp_server._graphiti", new=object()),
+            patch(
+                "palace_mcp.mcp_server._build_project_analysis_service",
+                return_value=service,
+            ),
+            patch(
+                "palace_mcp.mcp_server._schedule_project_analysis_execution",
+                return_value=True,
+            ) as schedule_mock,
+        ):
+            _content, structured = await _mcp.call_tool(
+                "palace.project.analyze_resume",
+                {"run_id": "run-123"},
+            )
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+
+    assert structured["ok"] is True
+    assert structured["status"] == "RUNNING"
+    assert structured["background_execution_scheduled"] is True
+    service.get_status.assert_awaited_once_with("run-123")
+    service.resume_run.assert_not_called()
+    schedule_mock.assert_not_called()
