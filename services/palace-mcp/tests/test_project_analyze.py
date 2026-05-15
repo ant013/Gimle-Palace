@@ -262,6 +262,9 @@ async def test_service_start_run_ensures_schema_before_project_registration_and_
     )
 
     assert result.active_run_reused is False
+    assert result.run.status == AnalysisRunStatus.RUNNING
+    assert result.run.lease_owner == "pytest"
+    assert result.run.lease_expires_at is not None
     assert events == [
         "schema",
         "register:hs:TronKit.Swift:swift_kit",
@@ -343,7 +346,6 @@ async def test_status_turns_expired_running_lease_into_resumable_after_restart()
         idempotency_key="lease-key",
     )
 
-    await service.resume_run(started.run.run_id)
     current_time[0] = current_time[0] + timedelta(seconds=30)
 
     restarted_service = _build_service(store=store, clock=_clock)
@@ -398,7 +400,11 @@ async def test_execute_run_continues_after_failure_and_marks_stale_external_run(
     ) -> ExtractorAttemptResult:
         return outcomes[extractor_name]
 
-    finished = await service.execute_run(started.run.run_id, executor=_executor)
+    finished = await service.execute_run(
+        started.run.run_id,
+        executor=_executor,
+        reacquire_lease=False,
+    )
 
     assert finished.status == AnalysisRunStatus.SUCCEEDED_WITH_FAILURES
     assert [checkpoint.status for checkpoint in finished.checkpoints] == [
@@ -444,7 +450,11 @@ async def test_execute_run_marks_success_path_stale_until_audit_supports_pinned_
             ingest_run_id=f"ingest-{extractor_name}",
         )
 
-    finished = await service.execute_run(started.run.run_id, executor=_executor)
+    finished = await service.execute_run(
+        started.run.run_id,
+        executor=_executor,
+        reacquire_lease=False,
+    )
 
     assert finished.status == AnalysisRunStatus.SUCCEEDED_WITH_FAILURES
     assert finished.overview["OK"] == 2
@@ -511,7 +521,11 @@ async def test_execute_run_renews_lease_while_checkpointing() -> None:
             ingest_run_id=f"ingest-{extractor_name}",
         )
 
-    finished = await service.execute_run(started.run.run_id, executor=_executor)
+    finished = await service.execute_run(
+        started.run.run_id,
+        executor=_executor,
+        reacquire_lease=False,
+    )
 
     assert len(store.saved_leases) == 2
     assert store.saved_leases[0] < store.saved_leases[1]
@@ -566,7 +580,11 @@ async def test_resume_continues_after_last_completed_extractor() -> None:
             ingest_run_id=f"ingest-{extractor_name}",
         )
 
-    finished = await service.execute_run(started.run.run_id, executor=_executor)
+    finished = await service.execute_run(
+        started.run.run_id,
+        executor=_executor,
+        reacquire_lease=False,
+    )
 
     assert seen == ["dependency_surface", "hotspot"]
     assert finished.status == AnalysisRunStatus.SUCCEEDED_WITH_FAILURES

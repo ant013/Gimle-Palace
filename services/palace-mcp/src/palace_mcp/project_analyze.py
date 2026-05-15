@@ -350,12 +350,13 @@ class Neo4jAnalysisRunStore:
         tx: AsyncManagedTransaction,
         run: AnalysisRun,
     ) -> AnalysisRunStartResult:
-        await tx.run(
+        lock_result = await tx.run(
             ACQUIRE_ANALYSIS_LOCK,
             key=run.lock_key,
             created_at=run.created_at,
             touched_at=run.updated_at,
         )
+        await lock_result.consume()
         existing_result = await tx.run(
             GET_ACTIVE_ANALYSIS_RUN,
             lock_key=run.lock_key,
@@ -371,7 +372,7 @@ class Neo4jAnalysisRunStore:
                 return AnalysisRunStartResult(run=existing, active_run_reused=True)
             raise ActiveAnalysisRunExistsError(existing.run_id)
 
-        await tx.run(
+        create_result = await tx.run(
             CREATE_ANALYSIS_RUN,
             run_id=run.run_id,
             lock_key=run.lock_key,
@@ -398,8 +399,9 @@ class Neo4jAnalysisRunStore:
             report_markdown=run.report_markdown,
             next_actions_json=_serialize_json(run.next_actions),
         )
+        await create_result.consume()
         for checkpoint in run.checkpoints:
-            await tx.run(
+            checkpoint_result = await tx.run(
                 UPSERT_ANALYSIS_CHECKPOINT,
                 run_id=run.run_id,
                 extractor=checkpoint.extractor,
@@ -412,6 +414,7 @@ class Neo4jAnalysisRunStore:
                 ingest_run_id=checkpoint.ingest_run_id,
                 next_action=checkpoint.next_action,
             )
+            await checkpoint_result.consume()
         return AnalysisRunStartResult(run=run, active_run_reused=False)
 
     async def get_run(
@@ -746,6 +749,7 @@ class ProjectAnalysisService:
             )
 
         now = self._clock()
+        lease_expires_at = _iso(now + timedelta(seconds=self._lease_seconds))
         run = AnalysisRun(
             run_id=str(uuid4()),
             slug=slug,
@@ -758,10 +762,12 @@ class ProjectAnalysisService:
             depth=depth,
             continue_on_failure=continue_on_failure,
             idempotency_key=idempotency_key or str(uuid4()),
-            status=AnalysisRunStatus.PENDING,
+            status=AnalysisRunStatus.RUNNING,
             created_at=_iso(now),
             updated_at=_iso(now),
             started_at=_iso(now),
+            lease_owner=self._lease_owner,
+            lease_expires_at=lease_expires_at,
             checkpoints=[
                 AnalysisCheckpoint(extractor=extractor_name, position=index)
                 for index, extractor_name in enumerate(ordered_extractors)

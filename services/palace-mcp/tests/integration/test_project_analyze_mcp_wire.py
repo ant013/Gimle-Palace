@@ -102,7 +102,7 @@ _SERVER_SCRIPT = textwrap.dedent(
         ) -> AnalysisRunStartResult:
             if idempotency_key == "different-key":
                 raise ActiveAnalysisRunExistsError("run-existing")
-            run = make_run(run_id="run-123", status=AnalysisRunStatus.PENDING)
+            run = make_run(run_id="run-123", status=AnalysisRunStatus.RUNNING)
             return AnalysisRunStartResult(run=run, active_run_reused=False)
 
         async def get_status(self, run_id: str) -> AnalysisRun:
