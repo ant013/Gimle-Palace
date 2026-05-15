@@ -379,6 +379,118 @@ def test_project_analyze_writes_summary_and_report(
     assert summary["runtime_stage_used"] is False
 
 
+def test_project_analyze_reuses_existing_mount_without_staging(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo_path = tmp_path / "TronKit.Swift"
+    repo_path.mkdir()
+    env_file = tmp_path / ".env"
+    env_file.write_text("OPENAI_API_KEY=sk-test\n", encoding="utf-8")
+    summary_out = tmp_path / "summary.json"
+
+    spec = cli.ProjectRuntimeSpec(
+        repo_path=repo_path,
+        slug="tron-kit",
+        language_profile="python_service",
+        bundle=None,
+        parent_mount="hs",
+        relative_path="TronKit.Swift",
+        container_repo_path="/repos-hs/TronKit.Swift",
+        container_scip_path="/repos-hs/TronKit.Swift/scip/index.scip",
+        env_file=env_file,
+        compose_override_path=tmp_path / "docker-compose.project-analyze.yml",
+        report_out=tmp_path / "report.md",
+        summary_out=summary_out,
+        host_mount_path=None,
+        container_mount_path=None,
+    )
+
+    monkeypatch.setattr(cli, "resolve_project_runtime_spec", lambda **_: spec)
+    monkeypatch.setattr(cli, "_host_path_requires_staging", lambda _path: True)
+    monkeypatch.setattr(
+        cli,
+        "stage_project_runtime_spec",
+        lambda _spec: (_ for _ in ()).throw(AssertionError("staging not expected")),
+    )
+    monkeypatch.setattr(
+        cli, "write_project_analyze_compose_override", lambda _spec: False
+    )
+    monkeypatch.setattr(
+        cli,
+        "ensure_project_analyze_runtime",
+        lambda **kwargs: kwargs["mcp_url"],
+    )
+    monkeypatch.setattr(cli, "_git_head_sha", lambda _path: "abc123")
+    monkeypatch.setattr(
+        cli,
+        "get_ordered_extractors",
+        lambda _profile: ("code_ownership", "hotspot"),
+    )
+
+    seen_payloads: list[dict[str, object]] = []
+
+    async def _fake_run_project_analyze_to_terminal(
+        *,
+        url: str,
+        request_payload: dict[str, object],
+    ) -> dict[str, object]:
+        seen_payloads.append(request_payload)
+        return {
+            "ok": True,
+            "run_id": "run-123",
+            "status": "SUCCEEDED_WITH_FAILURES",
+            "run": {
+                "report_markdown": None,
+                "overview": {"OK": 2},
+                "audit": {"ok": False, "error_code": "STALE_EXTERNAL_RUN"},
+                "next_actions": [],
+            },
+        }
+
+    monkeypatch.setattr(
+        cli,
+        "_run_project_analyze_to_terminal",
+        _fake_run_project_analyze_to_terminal,
+    )
+
+    args = SimpleNamespace(
+        repo_path=str(repo_path),
+        slug="tron-kit",
+        language_profile="python_service",
+        bundle=None,
+        name=None,
+        extractors=None,
+        emit_scip="auto",
+        depth="full",
+        url="http://localhost:8080/mcp",
+        report_out=None,
+        summary_out=str(summary_out),
+        env_file=str(env_file),
+        manifest=str(tmp_path / "missing-manifest.json"),
+        audit=True,
+    )
+
+    exit_code = cli._cmd_project_analyze(args)
+
+    assert exit_code == 0
+    assert len(seen_payloads) == 1
+    assert seen_payloads[0]["slug"] == "tron-kit"
+    assert seen_payloads[0]["parent_mount"] == "hs"
+    assert seen_payloads[0]["relative_path"] == "TronKit.Swift"
+    assert seen_payloads[0]["language_profile"] == "python_service"
+    assert seen_payloads[0]["bundle"] is None
+    assert seen_payloads[0]["depth"] == "full"
+    assert seen_payloads[0]["continue_on_failure"] is True
+    assert seen_payloads[0]["extractors"] == ["code_ownership", "hotspot"]
+    assert isinstance(seen_payloads[0]["idempotency_key"], str)
+    summary = json.loads(summary_out.read_text(encoding="utf-8"))
+    assert summary["parent_mount"] == "hs"
+    assert summary["container_repo_path"] == "/repos-hs/TronKit.Swift"
+    assert summary["runtime_stage_used"] is False
+    assert summary["runtime_stage_root"] is None
+
+
 def test_project_analyze_toolchain_unsupported_writes_structured_summary(
     tmp_path: Path,
     monkeypatch,

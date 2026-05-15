@@ -1169,7 +1169,9 @@ def _cmd_project_analyze(args: argparse.Namespace) -> int:
 
         runtime_stage_used = False
         runtime_stage_root: str | None = None
-        if _host_path_requires_staging(spec.repo_path):
+        if spec.host_mount_path is not None and _host_path_requires_staging(
+            spec.repo_path
+        ):
             spec = stage_project_runtime_spec(spec)
             runtime_stage_used = True
             runtime_stage_root = (
