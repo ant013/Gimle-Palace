@@ -1074,7 +1074,10 @@ async def _run_project_analyze_to_terminal(
         return start_payload
 
     run_id = start_payload["run_id"]
-    last_progress_marker: tuple[str | None, str | None] | None = None
+    last_progress_marker: (
+        tuple[str | None, tuple[tuple[str | None, str | None, str | None], ...]]
+        | None
+    ) = None
     stalled_recovery_count = 0
     while True:
         current_url, status_payload, recovery_count = (
@@ -1086,21 +1089,10 @@ async def _run_project_analyze_to_terminal(
         )
         if not status_payload.get("ok"):
             return status_payload
-        run_payload = status_payload.get("run")
-        if isinstance(run_payload, dict):
-            progress_marker = (
-                str(run_payload.get("updated_at"))
-                if run_payload.get("updated_at") is not None
-                else None,
-                str(run_payload.get("last_completed_extractor"))
-                if run_payload.get("last_completed_extractor") is not None
-                else None,
-            )
-            if progress_marker != last_progress_marker:
-                last_progress_marker = progress_marker
-                stalled_recovery_count = 0
-            elif recovery_count > 0:
-                stalled_recovery_count += 1
+        progress_marker = _project_analyze_progress_marker(status_payload)
+        if progress_marker != last_progress_marker:
+            last_progress_marker = progress_marker
+            stalled_recovery_count = 0
         elif recovery_count > 0:
             stalled_recovery_count += 1
         if (
@@ -1127,6 +1119,41 @@ async def _run_project_analyze_to_terminal(
                 "next_poll_after_seconds", _DEFAULT_PROJECT_ANALYZE_POLL_SECONDS
             )
         )
+
+
+def _project_analyze_progress_marker(
+    status_payload: dict[str, Any],
+) -> tuple[str | None, tuple[tuple[str | None, str | None, str | None], ...]] | None:
+    run_payload = status_payload.get("run")
+    if not isinstance(run_payload, dict):
+        return None
+
+    checkpoints_payload = run_payload.get("checkpoints")
+    checkpoint_marker: list[tuple[str | None, str | None, str | None]] = []
+    if isinstance(checkpoints_payload, list):
+        for checkpoint in checkpoints_payload:
+            if not isinstance(checkpoint, dict):
+                continue
+            checkpoint_marker.append(
+                (
+                    str(checkpoint.get("extractor"))
+                    if checkpoint.get("extractor") is not None
+                    else None,
+                    str(checkpoint.get("status"))
+                    if checkpoint.get("status") is not None
+                    else None,
+                    str(checkpoint.get("error_code"))
+                    if checkpoint.get("error_code") is not None
+                    else None,
+                )
+            )
+
+    return (
+        str(run_payload.get("last_completed_extractor"))
+        if run_payload.get("last_completed_extractor") is not None
+        else None,
+        tuple(checkpoint_marker),
+    )
 
 
 def _parse_extractors_csv(value: str | None) -> list[str] | None:

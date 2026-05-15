@@ -690,6 +690,77 @@ async def test_run_project_analyze_to_terminal_fails_when_recovery_keeps_repeati
     assert exc_info.value.error_code == "project_analyze_transport_stalled"
 
 
+@pytest.mark.asyncio
+async def test_run_project_analyze_to_terminal_fails_when_updated_at_moves_without_checkpoint_progress(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    responses = [
+        ("http://127.0.0.1:8080/mcp", {"ok": True, "run_id": "run-123"}, 0),
+    ]
+    for minute in range(
+        cli._DEFAULT_PROJECT_ANALYZE_STALLED_RECOVERY_LIMIT + 1
+    ):
+        responses.append(
+            (
+                "http://127.0.0.1:8080/mcp",
+                {
+                    "ok": True,
+                    "run_id": "run-123",
+                    "status": "RUNNING",
+                    "run": {
+                        "updated_at": f"2026-05-15T10:0{minute}:00+00:00",
+                        "last_completed_extractor": "dependency_surface",
+                        "checkpoints": [
+                            {
+                                "extractor": "dependency_surface",
+                                "status": "OK",
+                                "error_code": None,
+                            },
+                            {
+                                "extractor": "error_handling_policy",
+                                "status": "NOT_ATTEMPTED",
+                                "error_code": None,
+                            },
+                        ],
+                    },
+                    "next_poll_after_seconds": 0,
+                },
+                1,
+            )
+        )
+
+    async def fake_call_tool_with_runtime_recovery(
+        *,
+        url: str,
+        tool_name: str,
+        arguments: dict[str, object],
+        recovery_timeout_seconds: int = 90,
+        max_attempts: int = 3,
+    ) -> tuple[str, dict[str, object], int]:
+        assert recovery_timeout_seconds == 90
+        assert max_attempts == 3
+        assert responses
+        return responses.pop(0)
+
+    async def _no_sleep(_seconds: object) -> None:
+        return None
+
+    monkeypatch.setattr(
+        cli,
+        "_call_tool_with_runtime_recovery",
+        fake_call_tool_with_runtime_recovery,
+    )
+    monkeypatch.setattr(cli.asyncio, "sleep", _no_sleep)
+
+    with pytest.raises(cli.ProjectAnalyzeCliError) as exc_info:
+        await cli._run_project_analyze_to_terminal(
+            url="http://localhost:8080/mcp",
+            request_payload={"slug": "tron-kit"},
+        )
+
+    assert exc_info.value.error_code == "project_analyze_transport_stalled"
+
+
 def test_project_analyze_transport_failure_writes_structured_summary(
     tmp_path: Path,
     monkeypatch,
