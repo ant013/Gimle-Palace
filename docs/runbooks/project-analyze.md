@@ -1,8 +1,8 @@
 # Runbook: `project analyze`
 
-**Audience:** оператор Gimle, запускающий host-side orchestration через `palace-mcp` CLI.  
-**Goal:** от checkout до `summary.json` и `report.md` для одного проекта через `project analyze`.  
-**Target time-to-first-success:** ≤ 10 минут на хосте с рабочими `docker compose`, `uv` и `docker buildx >= 0.17.0`.  
+**Audience:** оператор Gimle, запускающий host-side orchestration через `palace-mcp` CLI.
+**Goal:** от checkout до `summary.json` и `report.md` для одного проекта через `project analyze`.
+**Target time-to-first-success:** ≤ 10 минут на хосте с рабочими `docker compose`, `uv` и `docker buildx >= 0.17.0`.
 **Measured on 2026-05-15:** полный success на этой машине не достигнут из-за двух host-specific блокеров: stale Neo4j credentials в существующем volume и `docker buildx 0.10.5`.
 
 ## Что именно делает CLI
