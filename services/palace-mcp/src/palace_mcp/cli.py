@@ -816,7 +816,9 @@ def _probe_mcp_url_once(mcp_url: str) -> None:
 def wait_for_mcp_ready(mcp_url: str, *, timeout_seconds: int = 60) -> str:
     candidates = _candidate_mcp_urls(mcp_url)
     deadline = time.time() + timeout_seconds
-    last_errors: dict[str, str] = {candidate: "not yet checked" for candidate in candidates}
+    last_errors: dict[str, str] = {
+        candidate: "not yet checked" for candidate in candidates
+    }
     while time.time() < deadline:
         for candidate in candidates:
             try:

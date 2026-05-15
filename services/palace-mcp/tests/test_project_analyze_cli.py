@@ -24,7 +24,9 @@ def test_project_analyze_parser_defaults_to_host_port_8080() -> None:
     assert args.url == "http://localhost:8080/mcp"
 
 
-def test_stage_project_runtime_spec_switches_to_stage_mount(tmp_path: Path, monkeypatch) -> None:
+def test_stage_project_runtime_spec_switches_to_stage_mount(
+    tmp_path: Path, monkeypatch
+) -> None:
     repo_path = tmp_path / "TronKit.Swift"
     repo_path.mkdir()
     spec = cli.ProjectRuntimeSpec(
@@ -69,7 +71,9 @@ def test_stage_project_runtime_spec_switches_to_stage_mount(tmp_path: Path, monk
         staged_spec.container_scip_path
         == "/repos-hs-stage/TronKit.Swift/scip/index.scip"
     )
-    assert staged_spec.host_mount_path == tmp_path / "project-analyze-mounts" / "hs-stage"
+    assert (
+        staged_spec.host_mount_path == tmp_path / "project-analyze-mounts" / "hs-stage"
+    )
 
 
 def test_wait_for_mcp_ready_falls_back_to_loopback(monkeypatch) -> None:
