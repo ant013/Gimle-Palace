@@ -30,6 +30,7 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 from palace_mcp.extractors.foundation.profiles import get_ordered_extractors
 
@@ -49,6 +50,9 @@ _DEFAULT_MACBOOK_BASE = "/Users/ant013/Ios/HorizontalSystems"
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _DEFAULT_ENV_FILE = _REPO_ROOT / ".env"
 _DEFAULT_RUNTIME_DIR = _REPO_ROOT / ".gimle" / "runtime" / "project-analyze"
+_DEFAULT_PROJECT_ANALYZE_STAGE_ROOT = (
+    Path.home() / ".cache" / "palace" / "project-analyze-mounts"
+)
 _DEFAULT_COMPOSE_OVERRIDE_PATH = (
     _DEFAULT_RUNTIME_DIR / "docker-compose.project-analyze.yml"
 )
@@ -277,6 +281,31 @@ def _sanitize_parent_mount(candidate: str) -> str:
     return normalized[:16]
 
 
+def _runtime_stage_parent_mount(parent_mount: str) -> str:
+    candidate = f"{parent_mount}-stage"
+    if len(candidate) <= 16:
+        return candidate
+    return "stage"
+
+
+def _docker_context_name() -> str:
+    try:
+        result = _run_command(["docker", "context", "show"], capture_output=True)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return ""
+    return result.stdout.strip()
+
+
+def _host_path_requires_staging(repo_path: Path) -> bool:
+    if _docker_context_name() != "colima":
+        return False
+    try:
+        repo_path.relative_to(Path.home())
+    except ValueError:
+        return True
+    return False
+
+
 def _discover_existing_mount(repo_path: Path) -> ComposeMount | None:
     compose_path = _REPO_ROOT / "docker-compose.yml"
     if not compose_path.exists():
@@ -348,6 +377,56 @@ def resolve_project_runtime_spec(
         report_out=report_out or _default_report_path(slug),
         summary_out=summary_out or _default_summary_path(slug),
         host_mount_path=host_mount_path,
+        container_mount_path=container_mount_path,
+    )
+
+
+def _copy_runtime_stage(source_repo_path: Path, staged_repo_path: Path) -> None:
+    if shutil.which("rsync") is None:
+        raise ProjectAnalyzeCliError(
+            "rsync is required for colima runtime staging but was not found on PATH",
+            error_code="missing_rsync",
+        )
+    staged_repo_path.parent.mkdir(parents=True, exist_ok=True)
+    _run_command(
+        [
+            "rsync",
+            "-a",
+            "--delete",
+            "--exclude",
+            ".build/",
+            f"{source_repo_path}/",
+            f"{staged_repo_path}/",
+        ]
+    )
+
+
+def stage_project_runtime_spec(
+    spec: ProjectRuntimeSpec,
+    *,
+    stage_root: Path = _DEFAULT_PROJECT_ANALYZE_STAGE_ROOT,
+) -> ProjectRuntimeSpec:
+    stage_parent_mount = _runtime_stage_parent_mount(spec.parent_mount)
+    stage_host_root = stage_root / stage_parent_mount
+    staged_repo_path = stage_host_root / spec.relative_path
+    _copy_runtime_stage(spec.repo_path, staged_repo_path)
+
+    container_mount_path = f"/repos-{stage_parent_mount}"
+    container_repo_path = f"{container_mount_path}/{spec.relative_path}"
+    return ProjectRuntimeSpec(
+        repo_path=spec.repo_path,
+        slug=spec.slug,
+        language_profile=spec.language_profile,
+        bundle=spec.bundle,
+        parent_mount=stage_parent_mount,
+        relative_path=spec.relative_path,
+        container_repo_path=container_repo_path,
+        container_scip_path=f"{container_repo_path}/scip/index.scip",
+        env_file=spec.env_file,
+        compose_override_path=spec.compose_override_path,
+        report_out=spec.report_out,
+        summary_out=spec.summary_out,
+        host_mount_path=stage_host_root,
         container_mount_path=container_mount_path,
     )
 
@@ -697,21 +776,67 @@ def _healthz_url(mcp_url: str) -> str:
     return f"{mcp_url.rstrip('/')}/healthz"
 
 
-def wait_for_mcp_health(mcp_url: str, *, timeout_seconds: int = 60) -> None:
-    deadline = time.time() + timeout_seconds
+def _candidate_mcp_urls(mcp_url: str) -> list[str]:
+    normalized = mcp_url.rstrip("/")
+    candidates = [normalized]
+    parsed = urlsplit(normalized)
+    if parsed.hostname != "localhost":
+        return candidates
+    netloc = "127.0.0.1"
+    if parsed.port is not None:
+        netloc = f"{netloc}:{parsed.port}"
+    loopback_url = urlunsplit(
+        (parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment)
+    ).rstrip("/")
+    if loopback_url not in candidates:
+        candidates.append(loopback_url)
+    return candidates
+
+
+async def _probe_mcp_session(url: str) -> None:
+    from mcp import ClientSession
+    from mcp.client.streamable_http import streamablehttp_client
+
+    async with streamablehttp_client(url) as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+
+
+def _probe_mcp_url_once(mcp_url: str) -> None:
     healthz_url = _healthz_url(mcp_url)
-    last_error = "timeout"
+    with urllib.request.urlopen(healthz_url, timeout=5) as response:
+        if not 200 <= response.status < 300:
+            raise ProjectAnalyzeCliError(
+                f"palace-mcp health check returned http {response.status} at {healthz_url}",
+                error_code="mcp_health_timeout",
+            )
+    asyncio.run(_probe_mcp_session(mcp_url))
+
+
+def wait_for_mcp_ready(mcp_url: str, *, timeout_seconds: int = 60) -> str:
+    candidates = _candidate_mcp_urls(mcp_url)
+    deadline = time.time() + timeout_seconds
+    last_errors: dict[str, str] = {
+        candidate: "not yet checked" for candidate in candidates
+    }
     while time.time() < deadline:
-        try:
-            with urllib.request.urlopen(healthz_url, timeout=5) as response:
-                if 200 <= response.status < 300:
-                    return
-                last_error = f"http {response.status}"
-        except urllib.error.URLError as exc:
-            last_error = str(exc)
+        for candidate in candidates:
+            try:
+                _probe_mcp_url_once(candidate)
+                return candidate
+            except (
+                ProjectAnalyzeCliError,
+                urllib.error.URLError,
+                ValueError,
+                OSError,
+            ) as exc:
+                last_errors[candidate] = str(exc)
         time.sleep(2)
+    error_summary = "; ".join(
+        f"{candidate}: {message}" for candidate, message in last_errors.items()
+    )
     raise ProjectAnalyzeCliError(
-        f"palace-mcp health check did not pass at {healthz_url}: {last_error}",
+        f"palace-mcp did not become ready via {', '.join(candidates)}: {error_summary}",
         error_code="mcp_health_timeout",
     )
 
@@ -721,7 +846,7 @@ def ensure_project_analyze_runtime(
     spec: ProjectRuntimeSpec,
     mcp_url: str,
     recreate_palace: bool,
-) -> None:
+) -> str:
     cmd = [
         "docker",
         "compose",
@@ -740,7 +865,7 @@ def ensure_project_analyze_runtime(
         cmd.append("--force-recreate")
     cmd.extend(["neo4j", "palace-mcp"])
     _run_command(cmd, cwd=_REPO_ROOT)
-    wait_for_mcp_health(mcp_url)
+    return wait_for_mcp_ready(mcp_url)
 
 
 def build_project_analyze_idempotency_key(
@@ -1041,6 +1166,17 @@ def _cmd_project_analyze(args: argparse.Namespace) -> int:
                 spec=spec,
                 emit_scip=args.emit_scip,
             )
+
+        runtime_stage_used = False
+        runtime_stage_root: str | None = None
+        if _host_path_requires_staging(spec.repo_path):
+            spec = stage_project_runtime_spec(spec)
+            runtime_stage_used = True
+            runtime_stage_root = (
+                str(spec.host_mount_path) if spec.host_mount_path is not None else None
+            )
+
+        if args.language_profile == "swift_kit":
             env_changed, merged_mapping = merge_scip_index_env_mapping(
                 env_file=spec.env_file,
                 slug=spec.slug,
@@ -1049,7 +1185,7 @@ def _cmd_project_analyze(args: argparse.Namespace) -> int:
 
         override_changed = write_project_analyze_compose_override(spec)
         recreate_palace = env_changed or override_changed
-        ensure_project_analyze_runtime(
+        resolved_mcp_url = ensure_project_analyze_runtime(
             spec=spec,
             mcp_url=args.url,
             recreate_palace=recreate_palace,
@@ -1080,7 +1216,7 @@ def _cmd_project_analyze(args: argparse.Namespace) -> int:
 
         final_payload = asyncio.run(
             _run_project_analyze_to_terminal(
-                url=args.url,
+                url=resolved_mcp_url,
                 request_payload=request_payload,
             )
         )
@@ -1101,12 +1237,15 @@ def _cmd_project_analyze(args: argparse.Namespace) -> int:
             "language_profile": args.language_profile,
             "bundle": spec.bundle,
             "emit_scip": args.emit_scip,
-            "mcp_url": args.url,
+            "requested_mcp_url": args.url,
+            "mcp_url": resolved_mcp_url,
             "env_file": str(spec.env_file),
             "compose_files": [str(path) for path in spec.compose_files],
             "compose_override_changed": override_changed,
             "env_changed": env_changed,
             "palace_recreated": recreate_palace,
+            "runtime_stage_used": runtime_stage_used,
+            "runtime_stage_root": runtime_stage_root,
             "parent_mount": spec.parent_mount,
             "relative_path": spec.relative_path,
             "container_repo_path": spec.container_repo_path,
