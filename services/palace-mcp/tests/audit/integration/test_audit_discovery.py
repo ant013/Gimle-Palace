@@ -8,22 +8,40 @@ the latest successful run per extractor.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from neo4j import AsyncDriver, AsyncGraphDatabase
 
 import os
 
+from tests.integration.neo4j_runtime_support import ensure_reachable_neo4j_uri
+
+_HAS_NEO4J_RUNTIME = (
+    bool(os.environ.get("COMPOSE_NEO4J_URI")) or Path("/var/run/docker.sock").exists()
+)
+
 
 @pytest.fixture(scope="session")
 def neo4j_uri() -> Iterator[str]:
     if reuse := os.environ.get("COMPOSE_NEO4J_URI"):
-        yield reuse
+        yield ensure_reachable_neo4j_uri(reuse)
         return
+
+    if not Path("/var/run/docker.sock").exists():
+        pytest.skip(
+            "requires Docker socket or COMPOSE_NEO4J_URI for Neo4j integration"
+        )
+
     from testcontainers.neo4j import Neo4jContainer  # type: ignore[import]
 
-    with Neo4jContainer("neo4j:5.26.0") as container:
-        yield container.get_connection_url()
+    try:
+        with Neo4jContainer("neo4j:5.26.0") as container:
+            yield container.get_connection_url()
+    except Exception as exc:
+        pytest.skip(
+            f"Could not start Neo4j testcontainer — skipping integration tests: {exc}"
+        )
 
 
 @pytest.fixture(scope="session")
@@ -110,6 +128,10 @@ async def _seed_runner_ingest_run(
 
 
 @pytest.mark.integration
+@pytest.mark.skipif(
+    not _HAS_NEO4J_RUNTIME,
+    reason="requires Docker socket or COMPOSE_NEO4J_URI for Neo4j integration",
+)
 class TestAuditDiscovery:
     async def test_finds_latest_successful_run_per_extractor(
         self, driver: AsyncDriver
