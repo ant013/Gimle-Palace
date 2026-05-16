@@ -63,9 +63,41 @@ paperclip_deploy_agents_md() {
   paperclip_put "/api/agents/${agent_id}/instructions-bundle/file" "$body"
 }
 
+# Phase C followup CRIT-1: fetch current AGENTS.md so deploy can journal the
+# OLD content as a rollback snapshot. Returns empty string + exit 0 on HTTP 404
+# (first-time deploy). Returns non-zero on 401/403/5xx so caller dies under set -e.
+paperclip_get_agent_instructions() {
+  local agent_id="$1"
+  require_env PAPERCLIP_API_URL
+  require_env PAPERCLIP_API_KEY
+  local response http body
+  response=$(curl -sS \
+    -o - -w '\n%{http_code}' \
+    -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
+    -H "User-Agent: uaa-bootstrap/1.0" \
+    "${PAPERCLIP_API_URL%/}/api/agents/${agent_id}/instructions-bundle/file" 2>/dev/null) || return 1
+  http=$(printf '%s' "$response" | tail -1)
+  body=$(printf '%s' "$response" | sed '$d')
+  case "$http" in
+    200) printf '%s' "$body" ;;
+    404) printf '' ;;
+    *) return 1 ;;
+  esac
+}
+
 paperclip_get_agent_config() {
   local agent_id="$1"
   paperclip_get "/api/agents/${agent_id}/configuration"
+}
+
+# Phase C followup CRIT-1 part 2: inverse of paperclip_hire_agent for rollback.
+paperclip_delete_agent() {
+  local agent_id="$1"
+  require_env PAPERCLIP_API_URL
+  require_env PAPERCLIP_API_KEY
+  curl -fsS -X DELETE "${PAPERCLIP_API_URL%/}/api/agents/${agent_id}" \
+    -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
+    -H "User-Agent: uaa-bootstrap/1.0"
 }
 
 # Plugin endpoints — per UAA spec §8.4 (replace-mode, MUST GET first)

@@ -120,6 +120,17 @@ for i in $(seq $((entries - 1)) -1 0); do
       log warn "version-bump snapshot found — manual rollback required. Entry contents:"
       printf '%s' "$entry" | jq .
       ;;
+    agent_hire)
+      agent_id=$(printf '%s' "$entry" | jq -r '.id')
+      agent_name=$(printf '%s' "$entry" | jq -r '.name')
+      log info "rolling back hire of $agent_name ($agent_id)"
+      if [ "$DRY_RUN" -eq 1 ]; then
+        log info "DRY RUN — would delete agent $agent_name ($agent_id)"
+      else
+        paperclip_delete_agent "$agent_id" >/dev/null
+        log ok "deleted agent $agent_name"
+      fi
+      ;;
     *)
       log warn "unknown snapshot kind: $kind — skipping"
       ;;

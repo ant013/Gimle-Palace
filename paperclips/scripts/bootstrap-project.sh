@@ -279,9 +279,14 @@ deploy_one() {
   local content_path="${REPO_ROOT}/paperclips/dist/${project_key}/${target}/${agent_name}.md"
   [ -f "$content_path" ] || die "rendered AGENTS.md missing: $content_path"
 
-  # Snapshot current AGENTS.md (best-effort — paperclip may not expose GET)
-  journal_record "$journal" "$(jq -n --arg id "$agent_id" --arg p "$content_path" \
-    '{kind:"agent_instructions_deploy",agent_id:$id,source_path:$p}')"
+  # CRIT-1 fix: snapshot OLD AGENTS.md content (kind matches rollback.sh handler).
+  local old_content
+  old_content=$(paperclip_get_agent_instructions "$agent_id") || \
+    die "deploy: failed to fetch current AGENTS.md for agent $agent_id (HTTP error — check JWT)"
+  journal_record "$journal" "$(jq -n \
+    --arg id "$agent_id" \
+    --arg old "$old_content" \
+    '{kind:"agent_instructions_snapshot",agent_id:$id,old_content:$old}')"
 
   content=$(cat "$content_path")
   paperclip_deploy_agents_md "$agent_id" "$content" >/dev/null
