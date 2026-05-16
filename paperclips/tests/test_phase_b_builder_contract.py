@@ -112,6 +112,10 @@ agents:
     finally:
         shutil.rmtree(project_root, ignore_errors=True)
         shutil.rmtree(out_dir, ignore_errors=True)
+        # Also remove the resolved-assembly artifact builder writes at dist root.
+        artifact = REPO / "paperclips" / "dist" / "synth-test-b1.resolved-assembly.json"
+        if artifact.exists():
+            artifact.unlink()
 
 
 def test_agent_with_explicit_output_path_still_works():
