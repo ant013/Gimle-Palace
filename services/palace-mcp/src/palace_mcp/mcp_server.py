@@ -395,8 +395,8 @@ def build_mcp_asgi_app() -> Starlette:
     _mcp._session_manager = None
     app = _mcp.streamable_http_app()
     session_manager = _mcp.session_manager
-    app.router.lifespan_context = (
-        lambda _app, _session_manager=session_manager: _session_manager.run()
+    app.router.lifespan_context = lambda _app, _session_manager=session_manager: (
+        _session_manager.run()
     )
     return app
 
