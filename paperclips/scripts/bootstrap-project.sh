@@ -82,7 +82,7 @@ if [ ! -f "$paths_file" ]; then
     cp "$CONFIG_FILE" "$paths_file"
   else
     log info "interactive paths.yaml setup"
-    proot=$(prompt_with_default "Local project root" "/Users/Shared/$(echo "$project_key" | sed 's/.*/\u&/')")
+    proot=$(prompt_with_default "Local project root" "/Users/Shared/${project_key^}")
     twroot=$(prompt_with_default "Team workspace root" "/Users/Shared/runs/${project_key}")
     pcheckout=$(prompt_with_default "Production checkout" "$proot")
     cat > "$paths_file" <<EOF

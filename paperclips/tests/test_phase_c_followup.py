@@ -85,3 +85,17 @@ def test_bootstrap_journals_plugin_config_snapshot():
     post_pos = section.find("paperclip_plugin_set_config")
     assert snapshot_pos < post_pos, \
         f"snapshot at {snapshot_pos} must precede POST at {post_pos}"
+
+
+def test_capitalize_uses_portable_construct():
+    """No GNU-sed \\u extension — must be bash ${var^} or awk."""
+    text = (SCRIPTS / "bootstrap-project.sh").read_text()
+    assert "sed 's/.*/\\u" not in text, \
+        "bootstrap-project.sh still uses GNU sed \\u (broken on BSD/macOS)"
+    prompt_section = text[text.find("Local project root"):text.find("Local project root") + 200]
+    portable = (
+        "${project_key^}" in prompt_section or
+        "awk '{print toupper" in prompt_section or
+        "tr '[:lower:]' '[:upper:]'" in prompt_section
+    )
+    assert portable, f"prompt section uses no portable capitalize:\n{prompt_section}"
