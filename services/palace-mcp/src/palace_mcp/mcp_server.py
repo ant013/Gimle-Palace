@@ -322,6 +322,7 @@ def _schedule_project_analysis_execution(
     run_id: str,
     service: ProjectAnalysisService,
     reacquire_lease: bool,
+    allow_interrupted_checkpoint_replay: bool = False,
 ) -> bool:
     graphiti = _graphiti
     if graphiti is None:
@@ -335,6 +336,7 @@ def _schedule_project_analysis_execution(
                 run_id,
                 graphiti=graphiti,
                 reacquire_lease=reacquire_lease,
+                allow_interrupted_checkpoint_replay=allow_interrupted_checkpoint_replay,
             )
         except Exception as exc:
             logger.error(
@@ -1064,6 +1066,7 @@ async def palace_project_analyze_resume(
             run_id=run.run_id,
             service=service,
             reacquire_lease=False,
+            allow_interrupted_checkpoint_replay=True,
         )
         return _project_analyze_success_response(
             run,

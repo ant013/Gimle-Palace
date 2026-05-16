@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _RULES_DIR = Path(__file__).parent / "rules"
+_SEMGREP_BATCH_SIZE = 64
 
 _QUERY = """
 MATCH (f:CryptoFinding {project_id: $project_id})
@@ -166,14 +167,47 @@ async def _run_semgrep(
     target: Path,
     timeout_s: int,
 ) -> list[dict[str, Any]]:
-    """Invoke semgrep as async subprocess; return list of raw result dicts."""
+    """Invoke semgrep across bounded target batches; return merged raw results."""
+    results: list[dict[str, Any]] = []
+    for batch in _semgrep_target_batches(target, batch_size=_SEMGREP_BATCH_SIZE):
+        results.extend(
+            await _run_semgrep_batch(
+                rules_dir=rules_dir,
+                targets=batch,
+                timeout_s=timeout_s,
+            )
+        )
+    return results
+
+
+def _semgrep_target_batches(target: Path, *, batch_size: int) -> list[list[Path]]:
+    if target.is_file():
+        return [[target]]
+
+    swift_files = sorted(path for path in target.rglob("*.swift") if path.is_file())
+    if not swift_files:
+        return [[target]]
+
+    return [
+        swift_files[index : index + batch_size]
+        for index in range(0, len(swift_files), batch_size)
+    ]
+
+
+async def _run_semgrep_batch(
+    *,
+    rules_dir: Path,
+    targets: list[Path],
+    timeout_s: int,
+) -> list[dict[str, Any]]:
+    """Invoke semgrep as async subprocess for one bounded target batch."""
     proc = await asyncio.create_subprocess_exec(
         "semgrep",
         "--config",
         str(rules_dir),
         "--json",
         "--quiet",
-        str(target),
+        *(str(target) for target in targets),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
@@ -184,7 +218,9 @@ async def _run_semgrep(
     except TimeoutError:
         proc.kill()
         await proc.wait()
-        raise ExtractorConfigError(f"semgrep timed out after {timeout_s}s on {target}")
+        raise ExtractorConfigError(
+            f"semgrep timed out after {timeout_s}s on {targets[0]}"
+        )
 
     if proc.returncode not in (0, 1):
         stderr_text = stderr_b.decode("utf-8", errors="replace")[:500]

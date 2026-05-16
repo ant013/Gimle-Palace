@@ -360,6 +360,7 @@ async def test_project_analyze_resume_reacquires_lease_then_schedules_worker() -
         run_id="run-123",
         service=service,
         reacquire_lease=False,
+        allow_interrupted_checkpoint_replay=True,
     )
 
 
@@ -380,7 +381,12 @@ async def test_schedule_project_analysis_execution_finalizes_failed_run() -> Non
     assert scheduled is True
     task = mcp_module._project_analysis_tasks["run-123"]
     await task
-    service.execute_run.assert_awaited_once()
+    service.execute_run.assert_awaited_once_with(
+        "run-123",
+        graphiti=mcp_module._graphiti,
+        reacquire_lease=False,
+        allow_interrupted_checkpoint_replay=False,
+    )
     service.fail_run.assert_awaited_once_with(
         "run-123",
         error_code="project_analyze_runtime_error",
