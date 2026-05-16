@@ -68,6 +68,8 @@ async def cm_session() -> AsyncIterator[CodeGraphSession]:
         index_payload = _parse_tool_result(index_result)
         project = index_payload.get("project")
         if not isinstance(project, str) or not project:
-            pytest.fail(f"index_repository did not return a project name: {index_payload}")
+            pytest.fail(
+                f"index_repository did not return a project name: {index_payload}"
+            )
 
         yield CodeGraphSession(session=session, project=project)

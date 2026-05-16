@@ -38,9 +38,7 @@ def neo4j_uri() -> Iterator[str]:
         return
 
     if not Path("/var/run/docker.sock").exists():
-        pytest.skip(
-            "requires Docker socket or COMPOSE_NEO4J_URI for Neo4j integration"
-        )
+        pytest.skip("requires Docker socket or COMPOSE_NEO4J_URI for Neo4j integration")
 
     from testcontainers.neo4j import Neo4jContainer  # type: ignore[import]
 
