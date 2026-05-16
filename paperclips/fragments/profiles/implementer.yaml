@@ -1,0 +1,13 @@
+schemaVersion: 2
+name: implementer
+inheritsUniversal: true
+includes:
+  - git/commit-and-push.md
+  - worktree/active.md
+  - pre-work/codebase-memory-first.md
+  - pre-work/sequential-thinking.md
+  - pre-work/existing-field-semantics.md
+  - handoff/basics.md
+description: |
+  Engineering profile. Commit+push (NOT merge). Worktree discipline.
+  Pre-work discovery. Handoff basics.

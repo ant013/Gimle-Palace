@@ -71,3 +71,60 @@ def test_resolve_extends_detects_cycle():
     b = {"name": "b", "extends": "a", "includes": [], "inheritsUniversal": True}
     with pytest.raises(ProfileSchemaError, match="cycle"):
         resolve_extends_chain(b, {"a": a, "b": b})
+
+
+PROFILE_NAMES = ["custom", "minimal", "research", "writer", "implementer", "qa", "reviewer", "cto"]
+
+
+def test_all_8_profiles_exist():
+    for name in PROFILE_NAMES:
+        p = PROFILES_DIR / f"{name}.yaml"
+        assert p.is_file(), f"missing profile: {p}"
+
+
+def test_all_8_profiles_validate():
+    from paperclips.scripts.profile_schema import load_profile
+    for name in PROFILE_NAMES:
+        p = PROFILES_DIR / f"{name}.yaml"
+        data = load_profile(p)
+        assert data["name"] == name
+
+
+def test_custom_opts_out_of_universal():
+    from paperclips.scripts.profile_schema import load_profile
+    p = load_profile(PROFILES_DIR / "custom.yaml")
+    assert p["inheritsUniversal"] is False
+    assert p["includes"] == []
+
+
+def test_minimal_inherits_universal_with_empty_includes():
+    from paperclips.scripts.profile_schema import load_profile
+    p = load_profile(PROFILES_DIR / "minimal.yaml")
+    assert p["inheritsUniversal"] is True
+    assert p["includes"] == []
+
+
+def test_qa_extends_implementer():
+    from paperclips.scripts.profile_schema import load_profile
+    p = load_profile(PROFILES_DIR / "qa.yaml")
+    assert p["extends"] == "implementer"
+
+
+def test_cto_extends_reviewer():
+    from paperclips.scripts.profile_schema import load_profile
+    p = load_profile(PROFILES_DIR / "cto.yaml")
+    assert p["extends"] == "reviewer"
+
+
+def test_extends_chain_resolution_for_cto():
+    from paperclips.scripts.profile_schema import load_all_profiles, resolve_extends_chain
+    all_p = load_all_profiles(PROFILES_DIR)
+    chain = resolve_extends_chain(all_p["cto"], all_p)
+    assert [p["name"] for p in chain] == ["reviewer", "cto"]
+
+
+def test_extends_chain_resolution_for_qa():
+    from paperclips.scripts.profile_schema import load_all_profiles, resolve_extends_chain
+    all_p = load_all_profiles(PROFILES_DIR)
+    chain = resolve_extends_chain(all_p["qa"], all_p)
+    assert [p["name"] for p in chain] == ["implementer", "qa"]
