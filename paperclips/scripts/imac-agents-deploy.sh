@@ -170,6 +170,18 @@ log "Submodules initialised"
 # ---------------------------------------------------------------------------
 # Build (exit code 3)
 # ---------------------------------------------------------------------------
+# UAA Phase B prereq: builder requires pyyaml (introduced when compose_agent_prompt,
+# profile_schema, validate_manifest, resolve_template_sources landed). Pin to same
+# range as services/watchdog/pyproject.toml uses (pyyaml>=6.0,<7.0).
+log "--- Pre-build: ensure pyyaml available ---"
+if ! python3 -c "import yaml" 2>/dev/null; then
+    log "pyyaml missing — installing pyyaml>=6.0,<7.0"
+    if ! python3 -m pip install --user "pyyaml>=6.0,<7.0"; then
+        die "pyyaml install failed — required by UAA Phase B builder" 3
+    fi
+fi
+python3 -c "import yaml; print('pyyaml ok:', yaml.__version__)" || die "pyyaml still missing" 3
+
 log "--- Build: paperclips/build.sh ---"
 
 if ! bash paperclips/build.sh; then

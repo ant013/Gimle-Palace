@@ -1,0 +1,11 @@
+schemaVersion: 2
+project:
+  key: synth
+  display_name: Synthetic Test
+  issue_prefix: SYN
+  integration_branch: main
+  specs_dir: docs/specs
+  plans_dir: docs/plans
+  company_id: 7f3a1234-aaaa-bbbb-cccc-deadbeefcafe
+mcp: {service_name: synth-mcp, tool_namespace: synth, base_required: [codebase-memory]}
+agents: []

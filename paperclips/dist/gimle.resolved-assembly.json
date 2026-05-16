@@ -86,169 +86,169 @@
         {
           "agentId": "fec71dea-7dba-4947-ad1f-668920a02cb6",
           "agentName": "codex-architect-reviewer",
-          "bytes": 1146,
+          "bytes": 13343,
           "family": "reviewer",
-          "lines": 29,
+          "lines": 323,
           "output": "paperclips/dist/codex/codex-architect-reviewer.md",
           "profiles": [
             "reviewer"
           ],
           "roleId": "codex:codex-architect-reviewer",
-          "sha256": "d53f40f1e14e875ce7e5d33eaa272dd338f83fb5d14ae4257ec2d013fcda4048",
+          "sha256": "c0f4da6ffb3b7accd44f4263f076ed44c31bd933ac4041af2b861a15a7cd6911",
           "source": "paperclips/roles-codex/codex-architect-reviewer.md"
         },
         {
           "agentId": "1fe87c1c-d349-481a-b55a-3c3eec2e3c07",
           "agentName": "cx-auditor",
-          "bytes": 880,
+          "bytes": 13077,
           "family": "reviewer",
-          "lines": 29,
+          "lines": 323,
           "output": "paperclips/dist/codex/cx-auditor.md",
           "profiles": [
             "reviewer"
           ],
           "roleId": "codex:cx-auditor",
-          "sha256": "b2751cfc16be5d3bd31e75bef5dca9441adfc1e07f2b925a912c171c3fd85865",
+          "sha256": "006b8e5bd9c73ac6f786114a1928c7a947a67e6aa5f70402adac1acebf22f232",
           "source": "paperclips/roles-codex/cx-auditor.md"
         },
         {
           "agentId": "4e348572-1890-4122-b831-2185d9d50609",
           "agentName": "cx-blockchain-engineer",
-          "bytes": 940,
+          "bytes": 13032,
           "family": "implementer",
-          "lines": 29,
+          "lines": 323,
           "output": "paperclips/dist/codex/cx-blockchain-engineer.md",
           "profiles": [
             "implementer"
           ],
           "roleId": "codex:cx-blockchain-engineer",
-          "sha256": "8c2c91559a32b365f931b0809cde2d4b2e7941d72fb21e58176ca188ba09829e",
+          "sha256": "df4316df6daab824c7ba07166aea46c020625adc98390f6f790235d6e2fd54d3",
           "source": "paperclips/roles-codex/cx-blockchain-engineer.md"
         },
         {
           "agentId": "45e3b24d-a444-49aa-83bc-69db865a1897",
           "agentName": "cx-code-reviewer",
-          "bytes": 1017,
+          "bytes": 13214,
           "family": "reviewer",
-          "lines": 30,
+          "lines": 324,
           "output": "paperclips/dist/codex/cx-code-reviewer.md",
           "profiles": [
             "reviewer"
           ],
           "roleId": "codex:cx-code-reviewer",
-          "sha256": "1320e6d6b0c9ea83c017b7d570839e53d894a4bc1bbdecfa09a77336ab57da4f",
+          "sha256": "f11fefd62c9d8808ef294e806d283a1ee3ffac632e8f622915977cebd7ab50f2",
           "source": "paperclips/roles-codex/cx-code-reviewer.md"
         },
         {
           "agentId": "da97dbd9-6627-48d0-b421-66af0750eacf",
           "agentName": "cx-cto",
-          "bytes": 1062,
+          "bytes": 17467,
           "family": "cto",
-          "lines": 32,
+          "lines": 419,
           "output": "paperclips/dist/codex/cx-cto.md",
           "profiles": [
             "cto"
           ],
           "roleId": "codex:cx-cto",
-          "sha256": "f3dfac8a60b43296e0bec96b825f4360b24cacbc9df20e06efe02bd76c82c91c",
+          "sha256": "8cbdf0b69a448af354214692031afd1b718fa45475c8d7218a95e7fb751c1bf9",
           "source": "paperclips/roles-codex/cx-cto.md"
         },
         {
           "agentId": "21981be0-8c51-4e57-8a0a-ca8f95f4b8d9",
           "agentName": "cx-infra-engineer",
-          "bytes": 907,
+          "bytes": 12999,
           "family": "implementer",
-          "lines": 28,
+          "lines": 322,
           "output": "paperclips/dist/codex/cx-infra-engineer.md",
           "profiles": [
             "implementer"
           ],
           "roleId": "codex:cx-infra-engineer",
-          "sha256": "460020aaec310bd926f2ab528fddae9c576ba4c6cd73ec1ead22699cc87e3c4c",
+          "sha256": "c45b5da7a3542f045299b1c55e18777c08e4945958761cb89ee882ca0169e31a",
           "source": "paperclips/roles-codex/cx-infra-engineer.md"
         },
         {
           "agentId": "9a5d7bef-9b6a-4e74-be1d-e01999820804",
           "agentName": "cx-mcp-engineer",
-          "bytes": 976,
+          "bytes": 13068,
           "family": "implementer",
-          "lines": 29,
+          "lines": 323,
           "output": "paperclips/dist/codex/cx-mcp-engineer.md",
           "profiles": [
             "implementer"
           ],
           "roleId": "codex:cx-mcp-engineer",
-          "sha256": "674c56ba9de2d7c65d09ac024835f018455d2de5fbea5d3b3ab793db9c993013",
+          "sha256": "91d63d8a17e420873cbd4f85283236096660fb50dd205839e05351ebaf1c81b5",
           "source": "paperclips/roles-codex/cx-mcp-engineer.md"
         },
         {
           "agentId": "e010d305-22f7-4f5c-9462-e6526b195b19",
           "agentName": "cx-python-engineer",
-          "bytes": 873,
+          "bytes": 12965,
           "family": "implementer",
-          "lines": 29,
+          "lines": 323,
           "output": "paperclips/dist/codex/cx-python-engineer.md",
           "profiles": [
             "implementer"
           ],
           "roleId": "codex:cx-python-engineer",
-          "sha256": "4beaee3892b43ee1c9587b5baeeeecb3a00195b0405ce8db112f93ea05ffaeb1",
+          "sha256": "f4d3577aa57973bdf26bbab02a6f688e28a511cde2f7a820618f7a15ce1a3ec8",
           "source": "paperclips/roles-codex/cx-python-engineer.md"
         },
         {
           "agentId": "99d5f8f8-822f-4ddb-baaa-0bdaec6f9399",
           "agentName": "cx-qa-engineer",
-          "bytes": 937,
+          "bytes": 15471,
           "family": "qa",
-          "lines": 29,
+          "lines": 379,
           "output": "paperclips/dist/codex/cx-qa-engineer.md",
           "profiles": [
             "qa"
           ],
           "roleId": "codex:cx-qa-engineer",
-          "sha256": "a6900639c29ec15093f4a6d1f37534707a94ba98e556dc01a9516190c58e3581",
+          "sha256": "c192ab3ad3feb49829dc4db83bf63c852929186ac60e396a0be0bc8d310ed06d",
           "source": "paperclips/roles-codex/cx-qa-engineer.md"
         },
         {
           "agentId": "a2f7d4d2-ee96-43c3-83d8-d3af02d6674c",
           "agentName": "cx-research-agent",
-          "bytes": 914,
+          "bytes": 9258,
           "family": "research",
-          "lines": 29,
+          "lines": 238,
           "output": "paperclips/dist/codex/cx-research-agent.md",
           "profiles": [
             "research"
           ],
           "roleId": "codex:cx-research-agent",
-          "sha256": "f0d35220224eec5605f2cfb1c210087205c0da7767960b0d03caacc87401832a",
+          "sha256": "c71e28b36207b45caba971a0ab5cc7441c7e50085d4a5d9ada43cc2e90a330d5",
           "source": "paperclips/roles-codex/cx-research-agent.md"
         },
         {
           "agentId": "f67918f9-662d-47c0-b6f7-5d66870d2702",
           "agentName": "cx-security-auditor",
-          "bytes": 945,
+          "bytes": 13142,
           "family": "reviewer",
-          "lines": 29,
+          "lines": 323,
           "output": "paperclips/dist/codex/cx-security-auditor.md",
           "profiles": [
             "reviewer"
           ],
           "roleId": "codex:cx-security-auditor",
-          "sha256": "b567f44b2f3af43a38e2a20c658904045d0fd8a6f63f751e872c6e89f36f335f",
+          "sha256": "e14342fe08ae57ea9f44d93f06f09cd5505836cbe10b6cdc9e9d47f2e258674f",
           "source": "paperclips/roles-codex/cx-security-auditor.md"
         },
         {
           "agentId": "1b9fc009-4b02-4560-b7f5-2b241b5897d9",
           "agentName": "cx-technical-writer",
-          "bytes": 877,
+          "bytes": 8593,
           "family": "writer",
-          "lines": 29,
+          "lines": 224,
           "output": "paperclips/dist/codex/cx-technical-writer.md",
           "profiles": [
             "writer"
           ],
           "roleId": "codex:cx-technical-writer",
-          "sha256": "8276bc555f12a682805c42c07eb8ac4adb49ac5834575eb7d3dd64437292e5cf",
+          "sha256": "e38c65c0a187114f615537cc9b5eb5dc7c6c9bf7ef4841cc2646b132030cd820",
           "source": "paperclips/roles-codex/cx-technical-writer.md"
         }
       ]
