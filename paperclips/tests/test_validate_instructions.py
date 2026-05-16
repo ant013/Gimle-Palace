@@ -283,7 +283,12 @@ def test_project_compat_unresolved_variable_fails(tmp_path: Path) -> None:
     try:
         build_project_compat.render_role(repo, "claude", role, values)
     except ValueError as exc:
-        assert "unresolved variable" in str(exc)
+        # Phase D fix: builder now resolves bindings via dual-read resolver,
+        # which routes unknown vars through resolve_template's "unknown source"
+        # branch. Accept either message — both indicate the same behavior
+        # (build fails on unresolved variable).
+        msg = str(exc)
+        assert "unresolved variable" in msg or "unresolved host-local variable" in msg, msg
     else:
         raise AssertionError("expected unresolved variable failure")
 
