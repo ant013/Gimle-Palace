@@ -146,6 +146,12 @@ jobs:
         run: python3 paperclips/scripts/generate_assembly_inventory.py --check
       - name: Validate Codex target
         run: bash paperclips/validate-codex-target.sh
+      - name: Run Phase A + B test suites
+        # UAA rev2 DevOps#8: Phase B tests were not in CI; compose correctness,
+        # profile boundaries, determinism, build contract — all CI-invisible.
+        run: |
+          pip install pytest
+          python3 -m pytest paperclips/tests/test_phase_a_*.py paperclips/tests/test_phase_b_*.py -v
       - name: Install validator test dependency
         run: python3 -m pip install pytest
       - name: Run validator tests

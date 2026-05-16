@@ -194,8 +194,6 @@ If the sender's comment includes explicit handoff phrases (`"your turn"`, `"pick
 If your handoff PATCH was authored by a SIGTERM'd run, paperclip may suppress the wake event. Watchdog Phase 2 (`services/watchdog`) detects stuck `in_review` assigneeAgentId+null-execution_run state and fires recovery. Don't rely on it as primary mechanism — author handoffs correctly.
 
 
-<!-- PHASE-A-ONLY: not deployable without Phase B compose_agent_prompt. Slim craft only. See UAA spec §10.5. -->
-
 # TechnicalWriter — Gimle
 
 > Project tech rules in `AGENTS.md` (auto-loaded). Universal layer + capability profile composed by builder. Below: role-craft only.

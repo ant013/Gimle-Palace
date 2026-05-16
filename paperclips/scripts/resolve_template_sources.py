@@ -5,6 +5,22 @@ Allowed sources:
   - host-local: bindings.*, paths.*, plugins.*
 
 Unresolved {{vars}} raise UnresolvedTemplateError (no silent fallthrough).
+
+Usage status (Phase B):
+- Used directly by builder when host-local files (~/.paperclip/projects/<key>/
+  {bindings,paths,plugins}.yaml) are present — resolves `{{bindings.X}}` /
+  `{{paths.X}}` / `{{plugins.X}}` references in composed bundles.
+- Used by Phase C bootstrap-project.sh and Phase E/F/G migrations to fill
+  host-local files that drive these refs.
+- Old `substitute_variables(text, flat_dict)` in build_project_compat.py still
+  handles `{{project.X}}` / `{{mcp.X}}` / `{{domain.X}}` from committed manifests
+  (back-compat with current trading/uaudit/gimle which still inline these).
+
+When host-local files exist, builder calls both:
+  1. substitute_variables (manifest scalars from flat dict)
+  2. resolve (host-local + manifest via nested dict)
+
+This dual-pass keeps back-compat while unlocking spec §6.5 for new migrations.
 """
 from __future__ import annotations
 

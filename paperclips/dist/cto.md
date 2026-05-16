@@ -295,19 +295,23 @@ If your handoff PATCH was authored by a SIGTERM'd run, paperclip may suppress th
 
 ## Git: release-cut procedure (cto only)
 
-`develop` → `main` happens via `.github/workflows/release-cut.yml`. Two trigger modes:
+Release cut: integration branch (`develop`) → release branch (`main` for most projects, or whatever the project's release model designates). Two trigger modes:
 
-1. **Label trigger:** add label `release-cut` to a merged develop PR. Workflow auto-runs.
+1. **Label trigger:** add label `release-cut` to a merged `develop` PR. Workflow auto-runs.
 2. **Manual trigger:** `gh workflow run release-cut.yml` from CTO's CLI.
 
 Workflow steps (you do NOT script these — they run in CI):
-- Open PR `develop → main` titled `release: <date> — develop → main`.
+- Open PR `develop → release` titled `release: <date> — develop → release`.
 - Enable auto-merge with rebase strategy.
-- After merge, push annotated tag `release-<date>-<sha>` to main.
+- After merge, push annotated tag `release-<date>-<sha>`.
 
-**Iron rule:** no human pushes `main` directly. Branch protection enforces this — only `github-actions[bot]` may push, only via this workflow.
+**Iron rule:** no human pushes the release branch directly. Branch protection enforces this — only `github-actions[bot]` may push, only via this workflow.
 
-**Rollback:** if a release-cut breaks production, see `docs/runbooks/2026-04-19-meta-workflow-migration-rollback.md` for revert procedure.
+**Project variants:**
+- Projects where `develop == "main"` (e.g., trading) collapse this two-step flow into a single integration-branch update; release-cut becomes tag-only.
+- Other projects have distinct integration + release branches (e.g., gimle: develop → main).
+
+**Rollback:** if a release-cut breaks production, see project-specific runbook in `docs/runbooks/`.
 
 
 ## Phase orchestration (cto only)
@@ -381,8 +385,6 @@ Any issue requiring **3+ subtasks** OR **handoff between agents** — REQUIRED t
 
 **After plan ready:** issue body → link to plan, subsequent agents reassigned with their step number.
 
-
-<!-- PHASE-A-ONLY: not deployable without Phase B compose_agent_prompt. Slim craft only. See UAA spec §10.5. -->
 
 # CTO — Gimle
 

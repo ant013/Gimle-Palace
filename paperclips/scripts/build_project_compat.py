@@ -13,6 +13,14 @@ from pathlib import Path
 import generate_assembly_inventory
 import validate_instructions
 from compose_agent_prompt import compose as _compose_agent_prompt
+from resolve_template_sources import (
+    UnresolvedTemplateError,
+    resolve as _resolve_template,
+)
+from validate_manifest import (
+    ManifestValidationError,
+    validate_manifest as _validate_manifest,
+)
 
 
 SUPPORTED_TARGETS = ("claude", "codex")
@@ -403,6 +411,37 @@ def apply_overlay(
     return text
 
 
+def _load_host_local_sources(project_key: str) -> dict:
+    """Load ~/.paperclip/projects/<key>/{bindings,paths,plugins}.yaml if present.
+
+    Returns nested dict for resolve_template_sources.resolve():
+      {"bindings": {...}, "paths": {...}, "plugins": {...}}
+
+    Returns empty dict if no host-local files exist (pre-migration state).
+    """
+    import os
+    home = Path(os.path.expanduser("~/.paperclip/projects")) / project_key
+    sources: dict = {}
+    if not home.is_dir():
+        return sources
+    try:
+        import yaml
+    except ImportError:
+        return sources  # pyyaml missing — silently skip host-local
+    for fname in ("bindings.yaml", "paths.yaml", "plugins.yaml"):
+        p = home / fname
+        if not p.is_file():
+            continue
+        try:
+            raw = yaml.safe_load(p.read_text()) or {}
+        except Exception:
+            continue
+        if isinstance(raw, dict):
+            key = fname.replace(".yaml", "")
+            sources[key] = raw
+    return sources
+
+
 def _collect_overlay_blocks(
     repo_root: Path,
     manifest_values: dict[str, str],
@@ -452,12 +491,18 @@ def render_role(
         # rev4 fix B-2: agent_values is flat dict; key is 'profile', NOT 'agent.profile'.
         profile_name = (agent_values or {}).get("profile")
         if not profile_name:
+            # rev2 Architect C-2: narrow except — don't swallow KeyboardInterrupt,
+            # MemoryError, etc. Only legitimate "frontmatter unreadable" cases.
             try:
                 meta = validate_instructions.load_role_front_matter(role_file)
                 if meta.profiles:
                     profile_name = meta.profiles[0]
-            except Exception:
-                pass
+            except (FileNotFoundError, ValueError, KeyError) as exc:
+                print(
+                    f"  WARN: frontmatter unreadable for {role_file.name} "
+                    f"({type(exc).__name__}: {exc}); falling back to profile lookup chain",
+                    file=sys.stderr,
+                )
         if not profile_name:
             profile_name = "minimal"
         profiles_dir = repo_root / "paperclips" / "fragments" / "profiles"
@@ -465,6 +510,17 @@ def render_role(
         custom_includes = (agent_values or {}).get("custom_includes", [])
         if isinstance(custom_includes, str):
             custom_includes = []  # back-compat / defensive
+        # rev2 Security C-3: validate custom_includes shape + reject traversal.
+        if not isinstance(custom_includes, list):
+            raise ValueError(
+                f"custom_includes must be list, got {type(custom_includes).__name__} "
+                f"for agent {(agent_values or {}).get('agent_name', '<unknown>')}",
+            )
+        for inc in custom_includes:
+            if not isinstance(inc, str):
+                raise ValueError(f"custom_includes entry must be string, got {type(inc).__name__}")
+            if inc.startswith("/") or any(p in ("..", "") for p in inc.split("/")):
+                raise ValueError(f"custom_includes entry contains traversal: {inc!r}")
         # rev4 fix B-2: same key-naming fix — flat 'agent_name', not 'agent.agent_name'.
         agent_name = (agent_values or {}).get("agent_name", "")
         overlay_blocks = _collect_overlay_blocks(
@@ -484,6 +540,37 @@ def render_role(
         text = apply_overlay(repo_root, values, target, role_file.name, text)
 
     text = substitute_variables(text, values)
+
+    # UAA Phase B rev2: host-local resolver per spec §6.5. If
+    # ~/.paperclip/projects/<key>/{bindings,paths,plugins}.yaml exist,
+    # resolve any remaining {{bindings.X}}/{{paths.X}}/{{plugins.X}} refs.
+    # Phase D/E/F/G migrations populate these files; pre-migration they're
+    # absent and host_sources is {} — refs stay unresolved and the
+    # UNRESOLVED_VARIABLE_RE check below catches them as build error.
+    project_key = manifest_values.get("project.key", "")
+    if project_key:
+        host_sources = _load_host_local_sources(project_key)
+        if host_sources:
+            # Build nested sources dict expected by resolve():
+            #   {"manifest": {project: {...}, domain: {...}, mcp: {...}},
+            #    "bindings": {...}, "paths": {...}, "plugins": {...}, "agent": {...}}
+            manifest_nested: dict = {"project": {}, "domain": {}, "mcp": {}}
+            for k, v in manifest_values.items():
+                for top in ("project", "domain", "mcp"):
+                    if k.startswith(f"{top}."):
+                        manifest_nested[top][k[len(top) + 1:]] = v
+            full_sources = {
+                "manifest": manifest_nested,
+                "agent": agent_values or {},
+                **host_sources,  # bindings / paths / plugins
+            }
+            try:
+                text = _resolve_template(text, full_sources)
+            except UnresolvedTemplateError as exc:
+                raise ValueError(
+                    f"unresolved host-local variable in {role_file.relative_to(repo_root)}: {exc}",
+                ) from exc
+
     unresolved = UNRESOLVED_VARIABLE_RE.search(text)
     if unresolved:
         raise ValueError(
@@ -787,11 +874,25 @@ def main() -> int:
     parser.add_argument("--project", default="gimle")
     parser.add_argument("--target", choices=[*SUPPORTED_TARGETS, "all"], default="all")
     parser.add_argument("--inventory", choices=["check", "update", "skip"], default="check")
+    parser.add_argument(
+        "--validate-strict",
+        action="store_true",
+        help="reject manifest with literal UUIDs / abs paths / forbidden host-local keys (UAA §6.2)",
+    )
     args = parser.parse_args()
 
     repo_root = args.repo_root.resolve()
     try:
         manifest = check_project_manifest(repo_root, args.project)
+        # UAA Phase B rev2: --validate-strict enforces spec §6.2 (path-free + UUID-free
+        # committed manifests). Trading/uaudit/gimle pre-Phase-D/E/F/G still have UUIDs +
+        # abs paths inline; --validate-strict is opt-in until those migrations land.
+        if args.validate_strict:
+            try:
+                _validate_manifest(manifest)
+            except ManifestValidationError as exc:
+                print(f"ERROR: manifest validation (strict) failed: {exc}", file=sys.stderr)
+                return 1
         manifest_text = manifest.read_text()
         manifest_values = flatten_manifest_scalars(manifest_text)
         targets = declared_targets(manifest_text)
@@ -805,6 +906,11 @@ def main() -> int:
         run_inventory(repo_root, args.inventory)
     except (FileNotFoundError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    except Exception as exc:
+        # rev2 DevOps #9: catch yaml.YAMLError + any other unanticipated parse error
+        # with clean diagnostic instead of raw Python traceback.
+        print(f"ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 1
 
     print(f"Paperclip project build OK: {args.project} ({', '.join(targets)})")

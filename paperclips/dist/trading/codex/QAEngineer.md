@@ -349,8 +349,6 @@ $ trading.ingest.run_extractor(name="my_extractor", project="nonexistent")
 After smoke completes, restore `/Users/Shared/Trading` to `main` (not the feature branch you tested) before handoff to CTO. Otherwise next session starts on stale feature branch.
 
 
-<!-- PHASE-A-ONLY: not deployable without Phase B compose_agent_prompt. Slim craft only. See UAA spec §10.5. -->
-
 # QAEngineer — Trading
 
 > Project tech rules in `AGENTS.md` (auto-loaded). Universal layer + capability profile composed by builder. Below: role-craft only.

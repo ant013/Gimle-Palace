@@ -64,6 +64,11 @@ def validate_profile(raw: dict[str, Any]) -> dict[str, Any]:
             raise ProfileSchemaError(f"includes entry must be string, got {type(inc).__name__}")
         if "/" not in inc:
             raise ProfileSchemaError(f"includes entry must be subdir/file.md form, got {inc!r}")
+        # rev2 Security C-2: reject path traversal in includes
+        if inc.startswith("/"):
+            raise ProfileSchemaError(f"includes entry must be relative (no leading /): {inc!r}")
+        if any(p in ("..", "") for p in inc.split("/")):
+            raise ProfileSchemaError(f"includes entry contains traversal: {inc!r}")
 
     return out
 

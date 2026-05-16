@@ -11,8 +11,19 @@ Composition order:
 """
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
+
+# UAA rev2 DevOps#5 fix: strip Phase A intermediate-state sentinel from composed output.
+# Sentinel lives in source craft files (paperclips/roles/*.md, roles-codex/*.md) as a
+# guard against deploying slim crafts without compose. Now that compose engine works
+# (Phase B), composed bundles are safe to deploy — strip the sentinel from output
+# so imac-agents-deploy.sh verify step doesn't false-positive block.
+PHASE_A_SENTINEL_RE = re.compile(
+    r"^<!-- PHASE-A-ONLY:[^\n]*-->\s*\n?",
+    re.MULTILINE,
+)
 
 # Make `paperclips.scripts.profile_schema` importable from this module.
 _THIS_DIR = Path(__file__).resolve().parent
@@ -33,7 +44,26 @@ UNIVERSAL_FRAGMENTS = [
 
 
 def _read_fragment(fragments_dir: Path, rel_path: str) -> str:
-    p = fragments_dir / rel_path
+    """Read fragment by 'subdir/file.md' relative path.
+
+    rev2 Security C-1/C-2/C-3 fix: reject path traversal via .. segments or
+    absolute path components. Resolved file MUST live under fragments_dir.
+    """
+    # Reject obvious traversal patterns up front
+    if rel_path.startswith("/"):
+        raise ValueError(f"fragment path must be relative, got absolute: {rel_path!r}")
+    parts = rel_path.split("/")
+    if any(part in ("..", "") for part in parts):
+        raise ValueError(f"fragment path contains traversal segment: {rel_path!r}")
+    p = (fragments_dir / rel_path).resolve()
+    base = fragments_dir.resolve()
+    # Defense-in-depth: even after .. rejection, verify resolved path stays under base.
+    try:
+        p.relative_to(base)
+    except ValueError:
+        raise ValueError(
+            f"fragment path escapes fragments_dir: {rel_path!r} → {p}",
+        )
     if not p.is_file():
         raise FileNotFoundError(f"fragment not found: {p}")
     return p.read_text()
@@ -73,7 +103,8 @@ def compose(
             f"falling back to 'minimal'",
             file=sys.stderr,
         )
-        profile_name = "minimal" if "minimal" in all_profiles else next(iter(all_profiles))
+        # rev2 DevOps #1/#4: deterministic fallback order (sorted, not filesystem-glob)
+        profile_name = "minimal" if "minimal" in all_profiles else next(iter(sorted(all_profiles)))
 
     profile = all_profiles[profile_name]
     chain = resolve_extends_chain(profile, all_profiles)
@@ -110,8 +141,9 @@ def compose(
         seen.add(inc)
         sections.append(_read_fragment(fragments_dir, inc))
 
-    # 4. Role craft
-    sections.append(role_source_text)
+    # 4. Role craft (with Phase A sentinel stripped — see PHASE_A_SENTINEL_RE comment)
+    role_text_clean = PHASE_A_SENTINEL_RE.sub("", role_source_text)
+    sections.append(role_text_clean)
 
     # 5. Overlay blocks
     for ov in overlay_blocks:
