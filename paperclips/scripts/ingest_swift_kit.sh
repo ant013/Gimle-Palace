@@ -14,6 +14,7 @@ PALACE_MCP_SERVICE_DIR="$REPO_ROOT/services/palace-mcp"
 DEFAULT_EXTRACTORS=(
     symbol_index_swift
     arch_layer
+    git_history
     code_ownership
     coding_convention
     crypto_domain_model
@@ -22,7 +23,6 @@ DEFAULT_EXTRACTORS=(
     dead_symbol_binary_surface
     dependency_surface
     error_handling_policy
-    git_history
     hot_path_profiler
     hotspot
     localization_accessibility

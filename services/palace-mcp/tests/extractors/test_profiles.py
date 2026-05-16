@@ -193,6 +193,16 @@ def test_swift_kit_order_matches_contract() -> None:
     assert all(name in registry.EXTRACTORS for name in ordered)
 
 
+def test_swift_kit_runs_git_history_before_dependent_extractors() -> None:
+    from palace_mcp.extractors.foundation.profiles import get_ordered_extractors
+
+    ordered = get_ordered_extractors("swift_kit")
+
+    git_history_index = ordered.index("git_history")
+    assert git_history_index < ordered.index("code_ownership")
+    assert git_history_index < ordered.index("hotspot")
+
+
 def test_ingest_swift_kit_defaults_match_ordered_python_profile() -> None:
     from palace_mcp.extractors.foundation.profiles import get_ordered_extractors
 
@@ -207,11 +217,38 @@ def test_python_service_profile_exists() -> None:
     assert len(PROFILES["python_service"].audit_extractors) > 0
 
 
+def test_python_service_order_runs_git_history_before_dependents() -> None:
+    from palace_mcp.extractors.foundation.profiles import get_ordered_extractors
+
+    ordered = get_ordered_extractors("python_service")
+
+    assert ordered == (
+        "git_history",
+        "code_ownership",
+        "dependency_surface",
+        "hotspot",
+    )
+
+
 def test_android_kit_profile_exists() -> None:
     """PROFILES contains 'android_kit'."""
     from palace_mcp.extractors.foundation.profiles import PROFILES
 
     assert "android_kit" in PROFILES
+
+
+def test_android_kit_order_runs_git_history_before_dependents() -> None:
+    from palace_mcp.extractors.foundation.profiles import get_ordered_extractors
+
+    ordered = get_ordered_extractors("android_kit")
+
+    assert ordered == (
+        "arch_layer",
+        "git_history",
+        "code_ownership",
+        "dependency_surface",
+        "hotspot",
+    )
 
 
 def test_profile_name_matches_key() -> None:
