@@ -2,12 +2,12 @@
 
 {% if not findings %}
 {% if summary_stats.get("rules_declared") %}
-No architecture violations found — all layer rules pass.
+No architecture violations found — {{ summary_stats.get("module_count", "?") }} modules indexed; all layer rules pass.
 
 **Rule source:** `{{ summary_stats.get("rule_source", "unknown") }}`
 **Provenance:** run_id `{{ run_id }}`{% if completed_at %}, completed {{ completed_at }}{% endif %}.
 {% else %}
-No architecture rules declared.
+No architecture rules declared — {{ summary_stats.get("module_count", "?") }} modules indexed in Neo4j (no rule evaluation possible).
 
 The `arch_layer` extractor ran but found no rule file at
 `.palace/architecture-rules.yaml` or `docs/architecture-rules.yaml`.
@@ -36,7 +36,7 @@ to the repository. See the runbook at `docs/runbooks/arch-layer.md`.
 {% set critical_high = findings | selectattr("severity", "in", ["critical", "high"]) | list %}
 {% if critical_high %}
 {% for f in critical_high %}
-- **{{ f.severity | upper }}** [{{ f.kind }}] `{{ f.src_module }}` → `{{ f.dst_module }}` (rule: `{{ f.rule_id }}`)
+- **{{ f.severity | upper }}** [{{ f.kind }}] `{{ f.src_module }}` → `{{ f.dst_module }}` (rule: `{{ f.rule_id }}`, src: `{{ f.source_context | default('other') }}`)
   {{ f.message }}{% if f.evidence %} — *{{ f.evidence }}*{% endif %}
 {% endfor %}
 {% else %}
@@ -48,7 +48,7 @@ to the repository. See the runbook at `docs/runbooks/arch-layer.md`.
 {% set medium_low = findings | rejectattr("severity", "in", ["critical", "high"]) | list %}
 {% if medium_low %}
 {% for f in medium_low %}
-- {{ f.severity }} [{{ f.kind }}] `{{ f.src_module }}` → `{{ f.dst_module }}` (rule: `{{ f.rule_id }}`)
+- {{ f.severity }} [{{ f.kind }}] `{{ f.src_module }}` → `{{ f.dst_module }}` (rule: `{{ f.rule_id }}`, src: `{{ f.source_context | default('other') }}`)
   {{ f.message }}{% if f.evidence %} — *{{ f.evidence }}*{% endif %}
 {% endfor %}
 {% else %}

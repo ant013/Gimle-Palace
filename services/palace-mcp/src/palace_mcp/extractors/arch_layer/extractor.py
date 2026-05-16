@@ -38,16 +38,17 @@ logger = logging.getLogger(__name__)
 
 _QUERY = """
 MATCH (v:ArchViolation {project_id: $project_id})
-RETURN v.kind       AS kind,
-       v.severity   AS severity,
-       v.src_module AS src_module,
-       v.dst_module AS dst_module,
-       v.rule_id    AS rule_id,
-       v.message    AS message,
-       v.evidence   AS evidence,
-       v.file       AS file,
-       v.start_line AS start_line,
-       v.run_id     AS run_id
+RETURN v.kind           AS kind,
+       v.severity       AS severity,
+       v.src_module     AS src_module,
+       v.dst_module     AS dst_module,
+       v.rule_id        AS rule_id,
+       v.message        AS message,
+       v.evidence       AS evidence,
+       v.file           AS file,
+       v.start_line     AS start_line,
+       v.run_id         AS run_id,
+       coalesce(v.source_context, 'other') AS source_context
 ORDER BY
   CASE v.severity
     WHEN 'critical' THEN 0
@@ -212,6 +213,16 @@ async def _run_extraction(*, ctx: ExtractorRunContext, driver: Any) -> Extractor
         import_facts=list(import_result.facts),
         ruleset=ruleset,
     )
+
+    # Annotate each violation with source_context based on its file path
+    from palace_mcp.extractors.foundation.source_context import (
+        classify as _classify_ctx,
+    )
+
+    violations = [
+        v.model_copy(update={"source_context": _classify_ctx(v.file)})
+        for v in violations
+    ]
 
     logger.info(
         "arch_layer: writing snapshot",

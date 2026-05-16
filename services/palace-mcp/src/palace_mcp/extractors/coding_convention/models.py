@@ -29,6 +29,7 @@ class ConventionFinding(BaseModel):
     sample_count: int
     outliers: int
     run_id: str
+    source_context: str = "other"
 
 
 class ConventionViolation(BaseModel):
@@ -41,6 +42,7 @@ class ConventionViolation(BaseModel):
     message: str
     severity: ViolationSeverity
     run_id: str
+    source_context: str = "other"
 
 
 class ConventionExtractionSummary(BaseModel):

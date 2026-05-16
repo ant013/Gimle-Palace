@@ -28,7 +28,7 @@ from gimle_watchdog.models import (
     ReviewOwnedByImplementerFinding,
 )
 
-from gimle_watchdog.paperclip import Issue
+from gimle_watchdog.paperclip import Issue, PaperclipClient
 from gimle_watchdog.state import State
 
 
@@ -344,6 +344,45 @@ async def test_tick_recovery_first_run_baseline_only_seeds_cooldown(tmp_path: Pa
     mock_respawn.assert_not_awaited()
     assert "issue-1" in state.issue_cooldowns
     assert state.recovery_baseline_completed is True
+
+
+@pytest.mark.asyncio
+async def test_tick_recovery_dry_run_scans_without_acting_persistently(tmp_path: Path):
+    """recovery_dry_run=True scans + logs candidates every tick without
+    persisting baseline_completed, so subsequent ticks stay in scan-only mode."""
+    from freezegun import freeze_time
+
+    cfg = _cfg(tmp_path)
+    cfg = Config(
+        version=cfg.version,
+        paperclip=cfg.paperclip,
+        companies=cfg.companies,
+        daemon=DaemonConfig(
+            poll_interval_seconds=cfg.daemon.poll_interval_seconds,
+            recovery_enabled=False,
+            recovery_first_run_baseline_only=False,
+            recovery_dry_run=True,
+            max_actions_per_tick=10,
+        ),
+        cooldowns=cfg.cooldowns,
+        logging=cfg.logging,
+        escalation=cfg.escalation,
+        handoff=cfg.handoff,
+    )
+    state = State.load(tmp_path / "state.json")
+    client = MagicMock()
+    client.list_active_issues = AsyncMock(return_value=[_stuck_issue()])
+    with patch("gimle_watchdog.daemon.actions.trigger_respawn", new=AsyncMock()) as mock_respawn:
+        with patch("gimle_watchdog.daemon.detection.scan_idle_hangs", return_value=[]):
+            with patch("gimle_watchdog.daemon._sleep", new=AsyncMock()):
+                with patch("gimle_watchdog.actions._sleep", new=AsyncMock()):
+                    with freeze_time("2026-04-21T09:30:00Z"):
+                        client.last_response_date = None
+                        # Run twice — dry_run must NOT flip baseline_completed
+                        await daemon._tick(cfg, state, client)
+                        await daemon._tick(cfg, state, client)
+    mock_respawn.assert_not_awaited()
+    assert state.recovery_baseline_completed is False  # never completes in dry_run
 
 
 @pytest.mark.asyncio
@@ -1455,3 +1494,32 @@ async def test_shared_budget_blocks_stale_bundle_after_issue_alerts(tmp_path: Pa
     assert (
         f"{daemon._STALE_BUNDLE_KEY}:{FindingType.STALE_BUNDLE.value}" not in state.alerted_handoffs
     )
+
+
+@pytest.mark.asyncio
+async def test_tick_passes_same_budget_to_handoff_and_tier(
+    full_alert_config: Config,
+    fake_paperclip_client: PaperclipClient,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_tick must pass the same AlertPostBudget instance to both passes."""
+
+    captured: dict[str, object] = {}
+
+    async def fake_handoff(cfg, state, client, now, *, budget=None):  # type: ignore[no-untyped-def]
+        captured["handoff"] = budget
+
+    async def fake_tier(  # type: ignore[no-untyped-def]
+        cfg, state, client, now, repo_root, *, budget=None
+    ):
+        captured["tier"] = budget
+
+    monkeypatch.setattr(daemon, "_run_handoff_pass", fake_handoff)
+    monkeypatch.setattr(daemon, "_run_tier_pass", fake_tier)
+
+    state = State.load(tmp_path / "state.json")
+    await daemon._tick(full_alert_config, state, fake_paperclip_client)
+
+    assert captured["handoff"] is captured["tier"]
+    assert captured["handoff"] is not None

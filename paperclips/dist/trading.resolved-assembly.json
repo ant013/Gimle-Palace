@@ -86,9 +86,9 @@
         {
           "agentId": "4289e2d6-990b-4c53-b879-2a1dc90fe72b",
           "agentName": "CTO",
-          "bytes": 28582,
+          "bytes": 28564,
           "family": "cto",
-          "lines": 560,
+          "lines": 566,
           "output": "paperclips/dist/trading/claude/CTO.md",
           "platform": "",
           "profiles": [
@@ -100,7 +100,7 @@
             "merge-deploy"
           ],
           "roleId": "claude:cto",
-          "sha256": "7518eb2481ff4fb9ddf31e99158c8c371fcd844aa55320334e8264f2e89b6457",
+          "sha256": "6e90a668c2f996dc2a74eb222ddf5b7785d6cf1e21886c5d2010d34739725f4c",
           "source": "paperclips/roles/cto.md",
           "workspaceCwd": "/Users/Shared/Trading/runs/CTO/workspace"
         }
@@ -115,9 +115,9 @@
         {
           "agentId": "3649a8df-94ed-4025-a998-fb8be40975af",
           "agentName": "CEO",
-          "bytes": 30446,
+          "bytes": 29756,
           "family": "cto",
-          "lines": 575,
+          "lines": 568,
           "output": "paperclips/dist/trading/codex/CEO.md",
           "platform": "",
           "profiles": [
@@ -129,16 +129,16 @@
             "merge-deploy"
           ],
           "roleId": "codex:cx-cto",
-          "sha256": "de578b049837d6d327e76a832966768a261831d4e29b0fc072902ebeea8b3f0a",
+          "sha256": "653b63a028bb91ad9a424fd86e9378a503d7d49162d013df8514d8946b12bcb2",
           "source": "paperclips/roles-codex/cx-cto.md",
           "workspaceCwd": "/Users/Shared/Trading/runs/CEO/workspace"
         },
         {
           "agentId": "8eeda1b1-704f-4b97-839f-e050f9f765d2",
           "agentName": "CodeReviewer",
-          "bytes": 30365,
+          "bytes": 29421,
           "family": "code-reviewer",
-          "lines": 682,
+          "lines": 662,
           "output": "paperclips/dist/trading/codex/CodeReviewer.md",
           "platform": "",
           "profiles": [
@@ -150,16 +150,16 @@
             "merge-deploy"
           ],
           "roleId": "codex:cx-code-reviewer",
-          "sha256": "f16fc6561cc43764dced354ea54b15470d06b526c47073a51d98c1033e1ed864",
+          "sha256": "a805bd66ba71f606af5beeb51d3ebc378ccdd3808157dd1ceebff8d3529fe51f",
           "source": "paperclips/roles-codex/cx-code-reviewer.md",
           "workspaceCwd": "/Users/Shared/Trading/runs/CodeReviewer/workspace"
         },
         {
           "agentId": "2705af9c-7dda-464c-9f6c-8d0deb38816a",
           "agentName": "PythonEngineer",
-          "bytes": 34215,
+          "bytes": 32650,
           "family": "implementation",
-          "lines": 757,
+          "lines": 737,
           "output": "paperclips/dist/trading/codex/PythonEngineer.md",
           "platform": "",
           "profiles": [
@@ -169,16 +169,16 @@
             "handoff"
           ],
           "roleId": "codex:cx-python-engineer",
-          "sha256": "6241da5a107f37495db1abd3353a0de1488150d3e09fbdd73fbf24193d336513",
+          "sha256": "55bd88e925ba77a689cf776fd418efbcdca18280796f71ff2994f21776fee416",
           "source": "paperclips/roles-codex/cx-python-engineer.md",
           "workspaceCwd": "/Users/Shared/Trading/runs/PythonEngineer/workspace"
         },
         {
           "agentId": "fbd3d0e4-6abb-4797-83d2-e4dc99dbed44",
           "agentName": "QAEngineer",
-          "bytes": 34764,
+          "bytes": 33903,
           "family": "qa",
-          "lines": 728,
+          "lines": 709,
           "output": "paperclips/dist/trading/codex/QAEngineer.md",
           "platform": "",
           "profiles": [
@@ -190,7 +190,7 @@
             "merge-deploy"
           ],
           "roleId": "codex:cx-qa-engineer",
-          "sha256": "78ebef973b8e4e4c42bf0e3be733f61b1fac324ac49ecced0c2e7cb55f3ed579",
+          "sha256": "9f9a3c73569ee2ba61d7e881f110669feaf4346d1e2c59774e6a80cb1ebfec27",
           "source": "paperclips/roles-codex/cx-qa-engineer.md",
           "workspaceCwd": "/Users/Shared/Trading/runs/QAEngineer/workspace"
         }

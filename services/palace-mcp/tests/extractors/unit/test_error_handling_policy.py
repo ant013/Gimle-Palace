@@ -15,6 +15,7 @@ from palace_mcp.extractors.error_handling_policy.extractor import (
     CatchSite,
     ErrorFinding,
     ErrorHandlingPolicyExtractor,
+    _apply_critical_path_severity,
     _apply_suppressions,
     _collect_catch_sites,
     _dedup_findings,
@@ -287,6 +288,24 @@ def test_suppression_scan_is_bounded(tmp_path: Path) -> None:
 
     result = _apply_suppressions(repo_root=tmp_path, findings=findings)
     assert result[0].severity == "high"
+
+
+def test_ehp_ignore_survives_critical_path_elevation() -> None:
+    # GIM-298: ehp:ignore sets severity=informational; critical-path step must not re-elevate.
+    finding = ErrorFinding(
+        file="Sources/Crypto/signer/SignerService.swift",
+        start_line=10,
+        end_line=10,
+        kind="try_optional_swallow",
+        severity="informational",
+        message="suppressed by ehp:ignore",
+        rule_id="try_optional_swallow",
+    )
+
+    result = _apply_critical_path_severity([finding])
+
+    assert len(result) == 1
+    assert result[0].severity == "informational"
 
 
 def test_catch_site_dataclass_remains_hashable() -> None:

@@ -66,17 +66,18 @@ SET r.project_id  = $project_id,
 
 _WRITE_ARCH_VIOLATION = """
 CREATE (v:ArchViolation)
-SET v.project_id  = $project_id,
-    v.kind        = $kind,
-    v.severity    = $severity,
-    v.src_module  = $src_module,
-    v.dst_module  = $dst_module,
-    v.rule_id     = $rule_id,
-    v.message     = $message,
-    v.evidence    = $evidence,
-    v.file        = $file,
-    v.start_line  = $start_line,
-    v.run_id      = $run_id
+SET v.project_id     = $project_id,
+    v.kind           = $kind,
+    v.severity       = $severity,
+    v.src_module     = $src_module,
+    v.dst_module     = $dst_module,
+    v.rule_id        = $rule_id,
+    v.message        = $message,
+    v.evidence       = $evidence,
+    v.file           = $file,
+    v.start_line     = $start_line,
+    v.source_context = $source_context,
+    v.run_id         = $run_id
 """
 
 # ---------------------------------------------------------------------------

@@ -59,6 +59,7 @@ class ArchViolation(BaseModel):
     file: str  # source file path, or "" if not applicable
     start_line: int  # 0 when not applicable
     run_id: str
+    source_context: str = "other"
 
     @field_validator("severity")
     @classmethod
