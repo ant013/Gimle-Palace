@@ -222,7 +222,7 @@ Switching branches inside an agent worktree drags uncommitted changes across bra
 
 ### Operator vs production checkout
 
-The `production_checkout` path (e.g. `/Users/Shared/Trading`) is the iMac deploy target. Stay on `main` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in TRD-48: feature checkout in production_checkout caused QA to test stale code.
+The `production_checkout` path (e.g. `/opt/example/trading`) is the iMac deploy target. Stay on `main` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in TRD-48: feature checkout in production_checkout caused QA to test stale code.
 
 
 ## Pre-work: codebase-memory first
@@ -329,7 +329,7 @@ This bundle inherits the proven Gimle/CX role text above. The base text was auth
 
 - **Paperclip company**: Trading (`TRD`).
 - **Runtime agent**: `PythonEngineer`.
-- **Workspace cwd**: `/Users/Shared/Trading/runs/PythonEngineer/workspace`.
+- **Workspace cwd**: `runs/PythonEngineer/workspace` (resolved at deploy time relative to operator's project root in host-local paths.yaml).
 - **Primary codebase-memory project**: `trading-agents`.
 - **Source repo**: `https://github.com/ant013/trading-agents` (private), mirrored read/write at `/Users/Shared/Trading/repo`.
 - **Project domain**: trading platform — data ingestion (news, OHLC candles, exchange feeds) → strategy synthesis → AI-agent execution.

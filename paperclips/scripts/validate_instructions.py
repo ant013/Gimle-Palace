@@ -44,6 +44,7 @@ REQUIRED_PROJECT_MANIFEST_SECTIONS = (
     "compatibility",
 )
 
+# v1 schema requirements (gimle, uaudit pre-Phase-G/F).
 REQUIRED_PROJECT_MANIFEST_KEYS = {
     "project": ("key", "display_name", "issue_prefix", "company_id", "integration_branch", "specs_dir", "plans_dir"),
     "domain": ("wallet_target_short", "wallet_target_name", "wallet_target_slug"),
@@ -75,6 +76,20 @@ REQUIRED_PROJECT_MANIFEST_KEYS = {
         "project_rules_file",
     ),
     "mcp": ("service_name", "package_name", "tool_namespace"),
+}
+
+# Phase E v2 schema (UAA): host-local fields moved to ~/.paperclip/projects/<key>/.
+# These keys are FORBIDDEN in v2 committed manifest (validated separately by
+# paperclips.scripts.validate_manifest); the v1-required-keys list is relaxed
+# accordingly for v2 manifests.
+_V2_PROJECT_FIELDS_RELAXED = {"company_id"}
+_V2_PATHS_FIELDS_RELAXED = {
+    "project_root",
+    "primary_repo_root",
+    "primary_mcp_service_dir",
+    "production_checkout",
+    "codex_team_root",
+    "operator_memory_dir",
 }
 
 REQUIRED_COMPATIBILITY_PATH_KEYS = (
@@ -279,7 +294,15 @@ def validate_project_capability_manifests(repo_root: Path) -> list[str]:
         text = manifest.read_text()
         rel = manifest.relative_to(repo_root)
         is_template = "_template" in manifest.parts
-        for section in REQUIRED_PROJECT_MANIFEST_SECTIONS:
+        # Phase E: detect v2 manifests — host-local fields are MOVED to ~/.paperclip,
+        # not absent. v1-required-keys check is relaxed for v2.
+        is_v2 = bool(re.search(r"^schemaVersion:\s*2\s*$", text, re.MULTILINE))
+        # paths section is allowed empty / minimal under v2 (overlay_root + project_rules_file only).
+        sections_to_check = list(REQUIRED_PROJECT_MANIFEST_SECTIONS)
+        if is_v2:
+            # paths can be present-but-tiny (overlay_root only) or omitted entirely under v2.
+            sections_to_check = [s for s in sections_to_check if s != "paths"]
+        for section in sections_to_check:
             if not re.search(rf"^{re.escape(section)}:\s*$", text, re.MULTILINE):
                 errors.append(f"project manifest missing {section} section: {rel}")
         if not is_template and re.search(r"<[^>\n]+>", text):
@@ -288,6 +311,11 @@ def validate_project_capability_manifests(repo_root: Path) -> list[str]:
             if not re.search(rf"^{re.escape(section)}:\s*$", text, re.MULTILINE):
                 continue
             for key in keys:
+                # Phase E v2: skip host-local-relocated keys.
+                if is_v2 and section == "project" and key in _V2_PROJECT_FIELDS_RELAXED:
+                    continue
+                if is_v2 and section == "paths" and key in _V2_PATHS_FIELDS_RELAXED:
+                    continue
                 if not re.search(rf"^\s{{2}}{re.escape(key)}:\s+\S", text, re.MULTILINE):
                     errors.append(f"project manifest missing {section}.{key}: {rel}")
         if "mcp:" not in text:
@@ -329,7 +357,10 @@ def validate_project_capability_manifests(repo_root: Path) -> list[str]:
                 errors.append(f"project manifest missing targets.{target}.instruction_entry_file=AGENTS.md: {rel}")
         if declared_target_count == 0:
             errors.append(f"project manifest declares no supported targets: {rel}")
-        if not is_template:
+        # Phase E v2: compatibility section is reduced — legacy_output_paths only.
+        # The legacy claude_deploy_mapping / codex_agent_ids_env / workspace_update_script
+        # fields are dropped because UUIDs/paths now live in ~/.paperclip/projects/<key>/.
+        if not is_template and not is_v2:
             for key in REQUIRED_COMPATIBILITY_PATH_KEYS:
                 match = re.search(rf"^\s{{2}}{re.escape(key)}:\s+(.+?)\s*$", text, re.MULTILINE)
                 if not match:
@@ -436,20 +467,29 @@ def validate_resolved_assembly_manifests(repo_root: Path) -> list[str]:
         source_sha = resolved.get("sourceManifestSha256")
         if source_sha != sha256_text(manifest_text):
             errors.append(f"resolved assembly manifest sourceManifestSha256 stale: {resolved_path.relative_to(repo_root)}")
-        manifest_company_match = re.search(r"^\s{2}company_id:\s+(.+?)\s*$", manifest_text, re.MULTILINE)
-        manifest_company_id = manifest_company_match.group(1).strip("\"'") if manifest_company_match else ""
-        resolved_company_id = resolved.get("parameters", {}).get("project", {}).get("companyId")
-        if resolved_company_id != manifest_company_id:
-            errors.append(
-                f"resolved assembly manifest project.companyId mismatch for "
-                f"{resolved_path.relative_to(repo_root)}: {resolved_company_id} != {manifest_company_id}"
-            )
+        # Phase E v2: company_id moved to host-local bindings.yaml; manifest no
+        # longer carries it. Resolver still surfaces it via bindings; downstream
+        # validator skips the manifest-vs-resolved equality for v2.
+        is_v2_manifest = bool(
+            re.search(r"^schemaVersion:\s*2\s*$", manifest_text, re.MULTILINE)
+        )
+        if not is_v2_manifest:
+            manifest_company_match = re.search(r"^\s{2}company_id:\s+(.+?)\s*$", manifest_text, re.MULTILINE)
+            manifest_company_id = manifest_company_match.group(1).strip("\"'") if manifest_company_match else ""
+            resolved_company_id = resolved.get("parameters", {}).get("project", {}).get("companyId")
+            if resolved_company_id != manifest_company_id:
+                errors.append(
+                    f"resolved assembly manifest project.companyId mismatch for "
+                    f"{resolved_path.relative_to(repo_root)}: {resolved_company_id} != {manifest_company_id}"
+                )
 
+        # Phase E v2: compatibility.inputs (legacy claudeDeployMapping etc.) is
+        # absent for v2 manifests by design — UUIDs/paths now live in host-local.
         compatibility = resolved.get("compatibility", {})
         compatibility_inputs = compatibility.get("inputs", {}) if isinstance(compatibility, dict) else {}
-        if not isinstance(compatibility_inputs, dict) or not compatibility_inputs:
+        if not is_v2_manifest and (not isinstance(compatibility_inputs, dict) or not compatibility_inputs):
             errors.append(f"resolved assembly manifest missing compatibility inputs: {resolved_path.relative_to(repo_root)}")
-        else:
+        elif not is_v2_manifest:
             for input_name in ["claudeDeployMapping", "codexAgentIdsEnv", "workspaceUpdateScript"]:
                 input_data = compatibility_inputs.get(input_name)
                 if not isinstance(input_data, dict):
@@ -498,10 +538,18 @@ def validate_resolved_assembly_manifests(repo_root: Path) -> list[str]:
                         f"resolved assembly manifest agentName mismatch: "
                         f"{project}:{target}:{role_id}: {agent_name} != {expected_agent_name}"
                     )
-                if not isinstance(agent_id, str) or not agent_id:
-                    errors.append(f"resolved assembly manifest role missing agentId: {project}:{target}:{role_id}")
-                elif not _UUID_RE.fullmatch(agent_id):
-                    errors.append(f"resolved assembly manifest agentId invalid: {project}:{target}:{role_id}")
+                # Phase E v2: agentId is empty in resolved-assembly until operator
+                # provisions host-local bindings.yaml. CI builds without host-local
+                # → empty agentId is expected, not an error. When operator builds
+                # post-bootstrap, agentId is populated via dual-read resolver.
+                if is_v2_manifest:
+                    if isinstance(agent_id, str) and agent_id and not _UUID_RE.fullmatch(agent_id):
+                        errors.append(f"resolved assembly manifest agentId invalid: {project}:{target}:{role_id}")
+                else:
+                    if not isinstance(agent_id, str) or not agent_id:
+                        errors.append(f"resolved assembly manifest role missing agentId: {project}:{target}:{role_id}")
+                    elif not _UUID_RE.fullmatch(agent_id):
+                        errors.append(f"resolved assembly manifest agentId invalid: {project}:{target}:{role_id}")
                 output_path = repo_root / output
                 if not output_path.is_file():
                     errors.append(f"resolved assembly manifest output missing: {output}")

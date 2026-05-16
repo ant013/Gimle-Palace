@@ -477,18 +477,30 @@ def _load_host_local_sources(project_key: str, repo_root: Path | None = None) ->
         pass  # pre-migration: no host-local + no legacy → silently skip
 
     # --- paths/plugins: direct read (no legacy equivalent) -------------------
-    if not home.is_dir():
-        return sources
+    # Phase E: operator's ~/.paperclip/projects/<key>/<file>.yaml takes precedence;
+    # paperclips/projects/<key>/<file>.local-example.yaml is a CI/dev fallback
+    # (committed, sanitized values; lets CI builds resolve {{paths.X}} templates
+    # without operator-only host-local files).
     try:
         import yaml
     except ImportError:
         return sources  # pyyaml missing — silently skip remaining host-local
+    fallback_dir = (
+        repo_root / "paperclips" / "projects" / project_key
+        if repo_root is not None else None
+    )
     for fname in ("paths.yaml", "plugins.yaml"):
-        p = home / fname
-        if not p.is_file():
+        chosen: Path | None = None
+        if home.is_dir() and (home / fname).is_file():
+            chosen = home / fname
+        elif fallback_dir is not None:
+            fallback = fallback_dir / fname.replace(".yaml", ".local-example.yaml")
+            if fallback.is_file():
+                chosen = fallback
+        if chosen is None:
             continue
         try:
-            raw = yaml.safe_load(p.read_text()) or {}
+            raw = yaml.safe_load(chosen.read_text()) or {}
         except Exception:
             continue
         if isinstance(raw, dict):

@@ -10,6 +10,19 @@
 
 Pinned grounding: this spec is grounded in the repo state at `main@568888a` (2026-05-14 docs/BUGS.md merge). All later commits should be cross-checked when implementing.
 
+**Phase E partial (2026-05-17, code-side — Tasks 1-5 of 9):**
+- Trading manifest migrated to v2 schema: `schemaVersion: 2`, `agent_id`/`workspace_cwd`/`paths.*` host-local fields removed; `profile` + `reportsTo` added per agent.
+- `paperclips/projects/trading/paths.local-example.yaml` committed as CI/dev fallback (sanitized paths under `/opt/example/trading`); operator's `~/.paperclip/projects/trading/paths.yaml` takes precedence at deploy time.
+- `_load_host_local_sources` in builder reads operator's `~/.paperclip/projects/<key>/{paths,plugins}.yaml` first, then falls back to `paperclips/projects/<key>/{paths,plugins}.local-example.yaml` when present.
+- `validate_instructions` detects `schemaVersion: 2` and relaxes v1-only checks: `project.company_id`, `paths.*` host-local fields, compatibility section + inputs, role agentId-required.
+- `migrate-bindings.sh` fixes surfaced by trading work: (a) `AGENT_UUIDS=()` explicit init prevents `set -u` unbound-variable crash on empty assoc-array; (b) Python+PyYAML fallback for manifest read makes the script work without yq dependency.
+- Trading overlay text updated: `{{agent.workspace_cwd}}` → `runs/{{agent.agent_name}}/workspace` (computed inline; operator's real abs cwd resolved via host-local paths.yaml at deploy).
+- Existing Phase C test (`test_trading_manifest_rejected`) updated to test v1-style uaudit + gimle as rejection cases; new `test_v2_trading_manifest_accepted` asserts trading passes validate-manifest.
+- New `paperclips/tests/test_phase_e_trading_migration.py` (13 tests): pre-migration backup smoke + manifest-shape validators + render-delta diff that asserts post-migration output differs from baseline only in `workspace_cwd` line + CI-fallback path substitution.
+- Pre-migration backup committed at `paperclips/tests/baseline/phase_e/trading-manifest-pre.yaml` + `trading-dist-pre/` for rollback/audit/determinism.
+- **DEFERRED to operator** (Tasks 6-8 = live deploy): pause trading agents in paperclip UI → `bootstrap-project.sh trading --canary` on iMac → smoke-test → unpause. Spec §14.2 risk profile: LOW (5 agents, fewest in-progress).
+- Sweep: 305 paperclip tests, 9 skipped, 0 failed.
+
 **Phase D followup (2026-05-16, in-PR — 6 CRITICAL + 2 IMP from 4-voltAgent deep-review):**
 - CRIT-C-1 — `build_project_compat.compatibility_agent_ids` for codex target now ALSO merges canonical-name keys from resolver, so Phase E projects whose manifests use canonical agent_name (CXCTO, CXMCPEngineer) get populated agentId in resolved-assembly JSON. Fixes architect's "single source of truth false" finding.
 - CRIT-C-2 — `validate_instructions.load_team_uuids` + `detection_semantic.load_team_uuids_from_repo` accept `allowed_company_ids: set[str] | None`; daemon passes `{c.id for c in cfg.companies}`. Prevents watchdog from allowlisting trading/uaudit UUIDs when running for gimle (cross-project leak).

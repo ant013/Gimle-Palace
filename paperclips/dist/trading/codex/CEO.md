@@ -425,7 +425,7 @@ This bundle inherits the proven Gimle/CX role text above. The base text was auth
 
 - **Paperclip company**: Trading (`TRD`).
 - **Runtime agent**: `CEO`.
-- **Workspace cwd**: `/Users/Shared/Trading/runs/CEO/workspace`.
+- **Workspace cwd**: `runs/CEO/workspace` (resolved at deploy time relative to operator's project root in host-local paths.yaml).
 - **Primary codebase-memory project**: `trading-agents`.
 - **Source repo**: `https://github.com/ant013/trading-agents` (private), mirrored read/write at `/Users/Shared/Trading/repo`.
 - **Project domain**: trading platform — data ingestion (news, OHLC candles, exchange feeds) → strategy synthesis → AI-agent execution.
