@@ -48,6 +48,7 @@ EOF
 done
 
 [ -n "$project_key" ] || die "project-key required (try --help)"
+validate_project_key "$project_key"
 
 require_command yq
 require_command jq

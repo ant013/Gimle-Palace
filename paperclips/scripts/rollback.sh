@@ -64,6 +64,7 @@ while [ $# -gt 0 ]; do
 done
 
 [ -n "$journal_id" ] || { usage; die "journal-id required"; }
+validate_journal_id "$journal_id"
 
 # Resolve to absolute journal path
 journal_path=""

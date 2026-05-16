@@ -37,6 +37,7 @@ while [ $# -gt 0 ]; do
 done
 
 [ -n "$project_key" ] || { usage; die "project-key required"; }
+validate_project_key "$project_key"
 
 manifest="${REPO_ROOT}/paperclips/projects/${project_key}/paperclip-agent-assembly.yaml"
 [ -f "$manifest" ] || die "manifest not found: $manifest"

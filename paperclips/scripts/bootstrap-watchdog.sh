@@ -36,6 +36,7 @@ EOF
 done
 
 [ -n "$project_key" ] || die "project-key required"
+validate_project_key "$project_key"
 
 require_command python3
 require_command yq

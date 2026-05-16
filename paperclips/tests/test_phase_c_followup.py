@@ -118,3 +118,38 @@ def test_migrate_bindings_preserves_acronyms(tmp_path, monkeypatch):
     assert "CXCto:" not in out.stdout
     assert "CXQaEngineer:" not in out.stdout
     assert "CXMcpEngineer:" not in out.stdout
+
+
+def test_path_traversal_rejected_by_bootstrap_project():
+    out = subprocess.run(
+        ["bash", str(SCRIPTS / "bootstrap-project.sh"), "../../etc"],
+        capture_output=True, text=True,
+    )
+    assert out.returncode != 0
+    assert "project key" in (out.stdout + out.stderr).lower()
+
+
+def test_path_traversal_rejected_by_migrate_bindings():
+    out = subprocess.run(
+        ["bash", str(SCRIPTS / "migrate-bindings.sh"), "../../etc", "--dry-run"],
+        capture_output=True, text=True,
+    )
+    assert out.returncode != 0
+    assert "project key" in (out.stdout + out.stderr).lower()
+
+
+def test_path_traversal_rejected_by_rollback():
+    out = subprocess.run(
+        ["bash", str(SCRIPTS / "rollback.sh"), "../../etc/passwd"],
+        capture_output=True, text=True,
+    )
+    assert out.returncode != 0
+    assert "journal" in (out.stdout + out.stderr).lower()
+
+
+def test_absolute_path_rejected_by_rollback():
+    out = subprocess.run(
+        ["bash", str(SCRIPTS / "rollback.sh"), "/etc/passwd"],
+        capture_output=True, text=True,
+    )
+    assert out.returncode != 0

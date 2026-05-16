@@ -41,3 +41,26 @@ write_json_pretty() {
   local content="$2"
   printf '%s' "$content" | jq . > "$target"
 }
+
+# CRIT-5 fix: input validation for path-bearing arguments.
+# project_key gates ~/.paperclip/projects/<key>/, paperclips/projects/<key>/,
+# yq selectors, file paths — must be canonical alphanumeric.
+validate_project_key() {
+  local key="$1"
+  if [[ ! "$key" =~ ^[a-z0-9][a-z0-9_-]{0,39}$ ]]; then
+    die "invalid project key: '$key' (must match [a-z0-9][a-z0-9_-]{0,39})"
+  fi
+}
+
+# journal_id is a filename basename — no path separators, no .., no absolute.
+validate_journal_id() {
+  local jid="$1"
+  case "$jid" in
+    */*|*..*|/*)
+      die "invalid journal id: '$jid' (no path separators, no .., no absolute path)"
+      ;;
+  esac
+  if [[ ! "$jid" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+    die "invalid journal id: '$jid' (must match [A-Za-z0-9][A-Za-z0-9._-]*)"
+  fi
+}
