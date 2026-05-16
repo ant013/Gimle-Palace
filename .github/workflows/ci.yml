@@ -130,8 +130,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Build project bundles
+      - name: Install Python deps
+        run: pip install pyyaml
+      - name: Build gimle bundles
         run: python3 paperclips/scripts/build_project_compat.py --project gimle --inventory skip
+      - name: Build trading bundles (UAA Phase B coverage expansion)
+        run: |
+          python3 paperclips/scripts/build_project_compat.py --project trading --target claude --inventory skip
+          python3 paperclips/scripts/build_project_compat.py --project trading --target codex --inventory skip
+      - name: Build uaudit bundles (UAA Phase B coverage expansion)
+        run: python3 paperclips/scripts/build_project_compat.py --project uaudit --target codex --inventory skip
       - name: Validate instruction bundles
         run: python3 paperclips/scripts/validate_instructions.py --repo-root .
       - name: Validate assembly inventory
