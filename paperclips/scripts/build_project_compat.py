@@ -436,8 +436,25 @@ def render_target(
         for agent in explicit_agents:
             role_source = agent.get("role_source", "")
             output_path = agent.get("output_path", "")
-            if not role_source or not output_path:
-                raise ValueError(f"manifest agent missing role_source/output_path for target {target}: {agent}")
+            agent_name = agent.get("agent_name", "")
+            if not role_source:
+                raise ValueError(
+                    f"manifest agent missing role_source for target {target}: {agent}",
+                )
+            # UAA Phase B (rev4 fix B-1): derive output_path from
+            # (project.key, target, agent_name) when manifest omits it.
+            # Post-migration manifests are path-free per spec §6.1.
+            if not output_path:
+                if not agent_name:
+                    raise ValueError(
+                        f"manifest agent missing agent_name AND output_path for target {target}: {agent}",
+                    )
+                project_key = manifest_values.get("project.key", "")
+                if not project_key:
+                    raise ValueError(
+                        f"manifest missing project.key; cannot derive output_path for {agent_name}",
+                    )
+                output_path = f"paperclips/dist/{project_key}/{target}/{agent_name}.md"
             role_file = repo_root / role_source
             if not role_file.is_file():
                 raise FileNotFoundError(f"agent role source missing: {role_source}")
@@ -490,11 +507,27 @@ def agent_output_entry(
     target: str,
     agent: dict[str, str],
     ids: dict[str, str],
+    manifest_values: dict[str, str] | None = None,
 ) -> dict[str, object]:
     role_source = agent.get("role_source", "")
     output = agent.get("output_path", "")
-    if not role_source or not output:
-        raise ValueError(f"manifest agent missing role_source/output_path for target {target}: {agent}")
+    agent_name = agent.get("agent_name", "")
+    if not role_source:
+        raise ValueError(
+            f"manifest agent missing role_source for target {target}: {agent}",
+        )
+    # UAA Phase B (rev4 fix B-1): same derivation as render_target.
+    if not output:
+        if not agent_name:
+            raise ValueError(
+                f"manifest agent missing agent_name AND output_path for target {target}: {agent}",
+            )
+        project_key = (manifest_values or {}).get("project.key", "")
+        if not project_key:
+            raise ValueError(
+                f"manifest missing project.key; cannot derive output_path for {agent_name}",
+            )
+        output = f"paperclips/dist/{project_key}/{target}/{agent_name}.md"
     role_file = repo_root / role_source
     out_file = repo_root / output
     meta = validate_instructions.load_role_front_matter(role_file)
@@ -528,7 +561,7 @@ def target_output_entry(
         return {
             **target_manifest_data(manifest_values, target),
             "roles": [
-                agent_output_entry(repo_root, target, agent, ids)
+                agent_output_entry(repo_root, target, agent, ids, manifest_values)
                 for agent in explicit_agents
             ],
         }
