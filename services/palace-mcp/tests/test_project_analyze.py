@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 import pytest
+from neo4j.exceptions import ServiceUnavailable
 
 from palace_mcp.extractors import registry
 from palace_mcp.extractors.foundation.profiles import SWIFT_KIT_EXTRACTOR_ORDER
@@ -223,6 +224,8 @@ def _build_service(
     store: InMemoryAnalysisRunStore,
     clock: Callable[[], datetime] | None = None,
     audit_runner: Any | None = None,
+    neo4j_retry_attempts: int = 3,
+    neo4j_retry_initial_delay_seconds: float = 0,
 ) -> ProjectAnalysisService:
     return ProjectAnalysisService(
         driver=object(),  # runtime-only dependency is stubbed in unit tests
@@ -236,6 +239,8 @@ def _build_service(
         lease_seconds=10,
         lease_owner="pytest",
         clock=clock or _utc,
+        neo4j_retry_attempts=neo4j_retry_attempts,
+        neo4j_retry_initial_delay_seconds=neo4j_retry_initial_delay_seconds,
     )
 
 
@@ -916,3 +921,81 @@ async def test_execute_run_resume_replays_interrupted_checkpoint_when_allowed() 
     assert finished.error_code is None
     assert finished.report_markdown is not None
     assert "project_analyze_checkpoint_replayed" not in finished.report_markdown
+
+
+@pytest.mark.asyncio
+async def test_execute_run_retries_transient_neo4j_failure_during_finalization() -> (
+    None
+):
+    class FlakyFinalizeStore(InMemoryAnalysisRunStore):
+        def __init__(self) -> None:
+            super().__init__()
+            self.finalize_attempts = 0
+
+        async def finalize_run(
+            self,
+            run_id: str,
+            *,
+            status: AnalysisRunStatus,
+            overview: dict[str, int],
+            audit: dict[str, Any] | None,
+            report_markdown: str | None,
+            next_actions: list[str],
+            error_code: str | None = None,
+            message: str | None = None,
+            now: datetime | None = None,
+        ) -> AnalysisRun:
+            self.finalize_attempts += 1
+            if self.finalize_attempts == 1:
+                raise ServiceUnavailable(
+                    "Failed to read from defunct connection Address(host='neo4j', port=7687)"
+                )
+            return await super().finalize_run(
+                run_id,
+                status=status,
+                overview=overview,
+                audit=audit,
+                report_markdown=report_markdown,
+                next_actions=next_actions,
+                error_code=error_code,
+                message=message,
+                now=now,
+            )
+
+    store = FlakyFinalizeStore()
+    service = _build_service(
+        store=store,
+        neo4j_retry_attempts=2,
+        neo4j_retry_initial_delay_seconds=0,
+    )
+    started = await service.start_run(
+        slug="tron-kit",
+        parent_mount="hs",
+        relative_path="TronKit.Swift",
+        language_profile="swift_kit",
+        extractors=["crypto_domain_model"],
+        idempotency_key="flaky-finalize",
+    )
+
+    async def _executor(
+        extractor_name: str,
+        run: AnalysisRun,
+    ) -> ExtractorAttemptResult:
+        assert extractor_name == "crypto_domain_model"
+        assert run.slug == "tron-kit"
+        return ExtractorAttemptResult(
+            status=AnalysisCheckpointStatus.OK,
+            ingest_run_id="ingest-crypto-domain-model",
+        )
+
+    finished = await service.execute_run(
+        started.run.run_id,
+        executor=_executor,
+        reacquire_lease=False,
+    )
+
+    assert store.finalize_attempts == 2
+    assert finished.status == AnalysisRunStatus.SUCCEEDED_WITH_FAILURES
+    assert finished.error_code is None
+    assert finished.report_markdown is not None
+    assert "project_analyze_runtime_error" not in finished.report_markdown
