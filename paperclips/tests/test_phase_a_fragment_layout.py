@@ -38,3 +38,37 @@ def test_universal_escalation_exists():
     text = p.read_text()
     assert "@Board" in text
     assert "blocker" in text.lower()
+
+
+def test_git_commit_and_push_exists():
+    p = SUBMODULE / "git" / "commit-and-push.md"
+    assert p.is_file()
+    text = p.read_text()
+    assert "fresh-fetch" in text or "git fetch" in text
+    assert "force-with-lease" in text
+    assert "release-cut" not in text.lower()
+    assert "mergeStateStatus" not in text
+
+
+def test_git_merge_readiness_exists():
+    p = SUBMODULE / "git" / "merge-readiness.md"
+    assert p.is_file()
+    text = p.read_text()
+    assert "merge-readiness" in text.lower() or "merge readiness" in text.lower()
+    assert "release-cut" not in text.lower()
+
+
+def test_git_merge_state_decoder_exists():
+    p = SUBMODULE / "git" / "merge-state-decoder.md"
+    assert p.is_file()
+    text = p.read_text()
+    for code in ["CLEAN", "DIRTY", "BEHIND", "BLOCKED"]:
+        assert code in text, f"missing mergeStateStatus code {code}"
+
+
+def test_git_release_cut_exists():
+    p = SUBMODULE / "git" / "release-cut.md"
+    assert p.is_file()
+    text = p.read_text()
+    assert "release-cut" in text.lower()
+    assert "release-cut.yml" in text or "develop → main" in text
