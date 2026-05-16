@@ -839,9 +839,7 @@ async def test_execute_run_fail_closes_interrupted_checkpoint_instead_of_replayi
 
 
 @pytest.mark.asyncio
-async def test_execute_run_resume_replays_interrupted_checkpoint_when_allowed() -> (
-    None
-):
+async def test_execute_run_resume_replays_interrupted_checkpoint_when_allowed() -> None:
     store = InMemoryAnalysisRunStore()
     current_time = [_utc()]
 
