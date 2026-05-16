@@ -153,3 +153,37 @@ def test_absolute_path_rejected_by_rollback():
         capture_output=True, text=True,
     )
     assert out.returncode != 0
+
+
+def test_watchdog_append_produces_valid_yaml(tmp_path, monkeypatch):
+    """bootstrap-watchdog.sh must produce parseable YAML + be idempotent."""
+    import yaml
+    monkeypatch.setenv("HOME", str(tmp_path))
+    project_key = "gimle"
+    manifest_dir = REPO / "paperclips" / "projects" / project_key
+    if not (manifest_dir / "paperclip-agent-assembly.yaml").is_file():
+        return
+    bindings_dir = tmp_path / ".paperclip" / "projects" / project_key
+    bindings_dir.mkdir(parents=True)
+    (bindings_dir / "bindings.yaml").write_text(
+        'schemaVersion: 2\ncompany_id: "test-company-id-9999"\nagents: {}\n'
+    )
+    monkeypatch.setenv("PAPERCLIP_API_URL", "http://localhost:3100")
+    out = subprocess.run(
+        ["bash", str(SCRIPTS / "bootstrap-watchdog.sh"), project_key, "--skip-launchd"],
+        cwd=REPO, capture_output=True, text=True,
+    )
+    assert out.returncode == 0, f"watchdog setup failed: {out.stderr}"
+    config_path = tmp_path / ".paperclip" / "watchdog-config.yaml"
+    assert config_path.is_file()
+    data = yaml.safe_load(config_path.read_text())
+    assert "companies" in data, f"companies key missing: {data}"
+    assert isinstance(data["companies"], list)
+    # Idempotent: re-run must not duplicate
+    subprocess.run(
+        ["bash", str(SCRIPTS / "bootstrap-watchdog.sh"), project_key, "--skip-launchd"],
+        cwd=REPO, capture_output=True, text=True, check=True,
+    )
+    data2 = yaml.safe_load(config_path.read_text())
+    ids = [c["id"] for c in data2["companies"]]
+    assert ids.count("test-company-id-9999") == 1, f"duplicate after re-run: {ids}"

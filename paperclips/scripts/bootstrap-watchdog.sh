@@ -39,7 +39,9 @@ done
 validate_project_key "$project_key"
 
 require_command python3
-require_command yq
+# CRIT-6 fix: bootstrap-watchdog uses python3 for all YAML (no yq dependency).
+# yq's load_str syntax differs across v3/v4 and the literal-append fallback
+# produces invalid YAML. python3+PyYAML is already required upstream.
 
 manifest="${REPO_ROOT}/paperclips/projects/${project_key}/paperclip-agent-assembly.yaml"
 bindings="${HOME}/.paperclip/projects/${project_key}/bindings.yaml"
@@ -47,11 +49,11 @@ bindings="${HOME}/.paperclip/projects/${project_key}/bindings.yaml"
 [ -f "$manifest" ] || die "manifest not found: $manifest"
 [ -f "$bindings" ] || die "bindings.yaml not found: $bindings (run bootstrap-project.sh first)"
 
-display_name=$(yq -r '.project.display_name' "$manifest")
-company_id=$(yq -r '.company_id' "$bindings")
+display_name=$(python3 -c "import yaml,sys; print(yaml.safe_load(open(sys.argv[1])).get('project',{}).get('display_name',''))" "$manifest")
+company_id=$(python3 -c "import yaml,sys; print(yaml.safe_load(open(sys.argv[1])).get('company_id',''))" "$bindings")
 
-[ -n "$display_name" ] && [ "$display_name" != "null" ] || die "project.display_name missing"
-[ -n "$company_id" ] && [ "$company_id" != "null" ] || die "company_id missing in bindings"
+[ -n "$display_name" ] && [ "$display_name" != "None" ] || die "project.display_name missing"
+[ -n "$company_id" ] && [ "$company_id" != "None" ] || die "company_id missing in bindings"
 
 config="${HOME}/.paperclip/watchdog-config.yaml"
 config_tpl="${TPL_DIR}/watchdog-config.yaml.template"
@@ -78,25 +80,40 @@ block=$(sed -e "s|{{ bindings.company_id }}|${company_id}|" \
 
 if [ "$REMOVE" -eq 1 ]; then
   log info "removing company $company_id from watchdog config"
-  yq -i "del(.companies[] | select(.id == \"${company_id}\"))" "$config"
+  python3 - "$config" "$company_id" <<'PY'
+import sys, yaml
+config_path, cid = sys.argv[1], sys.argv[2]
+with open(config_path) as f:
+    cfg = yaml.safe_load(f) or {}
+cfg.setdefault("companies", [])
+cfg["companies"] = [c for c in cfg["companies"] if c.get("id") != cid]
+with open(config_path, "w") as f:
+    yaml.safe_dump(cfg, f, sort_keys=False)
+PY
   log ok "removed"
   exit 0
 fi
 
-# Idempotent append: add only if not present
-existing=$(yq -r ".companies[] | select(.id == \"${company_id}\") | .id" "$config" 2>/dev/null || true)
-if [ -n "$existing" ]; then
-  log info "company $company_id already in config — no-op"
-else
-  log info "appending company block for $display_name ($company_id)"
-  # Append via yq merge
-  echo "$block" | yq -i '.companies += [load_str("/dev/stdin")[0]]' "$config" 2>/dev/null || {
-    # Fallback: literal append (yq versions differ)
-    echo "$block" >> "$config"
-    log warn "yq merge fallback used; verify $config structure manually"
-  }
-  log ok "appended"
-fi
+# Idempotent append: deterministic python3 merge (CRIT-6 fix).
+log info "appending company block for $display_name ($company_id)"
+python3 - "$config" "$block" "$company_id" <<'PY'
+import sys, yaml
+config_path, block_yaml, cid = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(config_path) as f:
+    cfg = yaml.safe_load(f) or {}
+cfg.setdefault("companies", [])
+if any(c.get("id") == cid for c in cfg["companies"]):
+    print(f"company {cid} already in config — no-op", file=sys.stderr)
+    sys.exit(0)
+new = yaml.safe_load(block_yaml)
+if isinstance(new, list):
+    cfg["companies"].extend(new)
+else:
+    cfg["companies"].append(new)
+with open(config_path, "w") as f:
+    yaml.safe_dump(cfg, f, sort_keys=False)
+PY
+log ok "appended (or already present)"
 
 # Install or kickstart launchd service
 if [ "$SKIP_LAUNCHD" -eq 1 ]; then
