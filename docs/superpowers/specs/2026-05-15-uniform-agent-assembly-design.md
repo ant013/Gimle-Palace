@@ -10,6 +10,20 @@
 
 Pinned grounding: this spec is grounded in the repo state at `main@568888a` (2026-05-14 docs/BUGS.md merge). All later commits should be cross-checked when implementing.
 
+**Phase C followup complete (2026-05-16):**
+- 6 CRITICAL findings from 4-voltAgent deep-review addressed:
+  - CRIT-1 — bootstrap-project + rollback now use matching journal kinds (`agent_instructions_snapshot` + new `agent_hire`); old AGENTS.md content captured before PUT via new `paperclip_get_agent_instructions`.
+  - CRIT-2 — plugin step 8 journals `plugin_config_snapshot` with `old_config` before POST so rollback can restore.
+  - CRIT-3 — BSD-incompatible `sed '\u&'` (bootstrap-project.sh:85) replaced with bash `${var^}` parameter expansion.
+  - CRIT-4 — migrate-bindings preserves acronyms (`CXCTO`/`CXMCPEngineer`/`CXQAEngineer`) per uaudit manifest convention; fixes 3 of 12 gimle codex names that previously rendered as `CXCto`/`CXMcpEngineer`/`CXQaEngineer`.
+  - CRIT-5 — `validate_project_key` + `validate_journal_id` in `lib/_common.sh` reject path traversal in 5 entry-point scripts.
+  - CRIT-6 — `bootstrap-watchdog.sh` rewritten to use python3+PyYAML for all YAML manipulation (no yq dependency); previous yq merge had wrong v4 syntax and the literal-append fallback produced invalid YAML.
+- 5 high-signal IMPORTANT addressed: curl `--max-time 30 --connect-timeout 10` on all wrappers (IMP-A); `paperclip_plugin_get_config_safe` distinguishes 404-first-config from 401/403/5xx auth errors (IMP-B); `umask 0077` + chmod 600/700 on journal + bindings files (IMP-C); dynamic shell evaluation in `_smoke_probes.sh` replaced with bash indirect expansion `${!var}` (IMP-D); `validate_agent_name` in `lib/_common.sh` prevents yq path injection (IMP-E).
+- 18 new behavioral tests in `paperclips/tests/test_phase_c_followup.py` (runtime assertions on actual script behavior, not source-string-greps).
+- One architect false-positive rejected after verification: `watchdog-config.yaml.template` does NOT contain a `---` separator (confirmed via direct file read).
+- Parked: ~15 tautological tests across earlier Phase C test files (test-quality refactor); 7 stale `test_validate_instructions.py` skips (Phase A→B reconciliation); flock for concurrent bootstrap (design decision); `update-versions.sh` snapshot scope expansion (documented as known limitation).
+- Full repo sweep: 262 passed, 7 skipped, 0 failed.
+
 **Phase C complete (2026-05-16):**
 - 8 operator scripts in `paperclips/scripts/`: install-paperclip, bootstrap-project, smoke-test, bootstrap-watchdog, update-versions, validate-manifest, rollback, migrate-bindings — all with `--help`, journal-on-mutation, and topological hire ordering where relevant.
 - Shared bash helpers in `paperclips/scripts/lib/`: `_common.sh` (log/die/require_command), `_paperclip_api.sh` (REST + agent + plugin helpers), `_journal.sh` (open/record/finalize), `_prompts.sh` (interactive), `_smoke_probes.sh` (per-profile runtime probes per spec §12.C).

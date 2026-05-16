@@ -48,6 +48,7 @@ EOF
 done
 
 [ -n "$project_key" ] || die "project-key required (try --help)"
+validate_project_key "$project_key"
 
 require_command yq
 require_command jq
@@ -82,7 +83,7 @@ if [ ! -f "$paths_file" ]; then
     cp "$CONFIG_FILE" "$paths_file"
   else
     log info "interactive paths.yaml setup"
-    proot=$(prompt_with_default "Local project root" "/Users/Shared/$(echo "$project_key" | sed 's/.*/\u&/')")
+    proot=$(prompt_with_default "Local project root" "/Users/Shared/${project_key^}")
     twroot=$(prompt_with_default "Team workspace root" "/Users/Shared/runs/${project_key}")
     pcheckout=$(prompt_with_default "Production checkout" "$proot")
     cat > "$paths_file" <<EOF
@@ -121,6 +122,8 @@ schemaVersion: 2
 company_id: "${company_id}"
 agents: {}
 EOF
+  chmod 600 "$bindings"
+  chmod 700 "$(dirname "$bindings")"
   log ok "company created: $company_id"
 else
   log ok "company reused: $company_id"
@@ -160,6 +163,7 @@ log info "hire order: $(echo "$hire_order" | tr '\n' ' ')"
 
 # Step 7: hire each agent
 for agent_name in $hire_order; do
+  validate_agent_name "$agent_name"
   existing=$(yq -r ".agents.${agent_name} // \"\"" "$bindings")
   if [ -n "$existing" ] && [ "$existing" != "null" ]; then
     if paperclip_get_agent_config "$existing" >/dev/null 2>&1; then
@@ -247,7 +251,15 @@ if [ -f "$plugins_file" ]; then
   if [ -n "$plugin_id" ] && [ -n "$chat_id" ] && [ "$chat_id" != "<operator-fills>" ]; then
     log info "  configuring plugin $plugin_id with chat $chat_id"
     # rev2 F-1: GET → diff → POST (replace mode per spec §8.4)
-    current_config=$(paperclip_plugin_get_config "$plugin_id" 2>/dev/null || echo "{}")
+    # CRIT-2 fix: snapshot current_config BEFORE POST so rollback can restore.
+    # IMP-B fix: _safe variant treats 404 as empty {} but dies on 401/403/5xx
+    #   so an expired JWT cannot silently wipe defaultChatId.
+    current_config=$(paperclip_plugin_get_config_safe "$plugin_id") || \
+      die "plugin GET failed for $plugin_id (likely auth issue — check PAPERCLIP_API_KEY)"
+    journal_record "$journal" "$(jq -n \
+      --arg pid "$plugin_id" \
+      --argjson cfg "$current_config" \
+      '{kind:"plugin_config_snapshot",plugin_id:$pid,old_config:$cfg}')"
     new_config=$(echo "$current_config" | jq --arg cid "$chat_id" '.config.defaultChatId = $cid')
     paperclip_plugin_set_config "$plugin_id" "$new_config" >/dev/null
     log ok "  telegram plugin configured"
@@ -272,6 +284,7 @@ log info "[10/13] deploying agent prompts"
 
 deploy_one() {
   local agent_name="$1"
+  validate_agent_name "$agent_name"
   local agent_id
   agent_id=$(yq -r ".agents.${agent_name}" "$bindings")
   local target
@@ -279,9 +292,14 @@ deploy_one() {
   local content_path="${REPO_ROOT}/paperclips/dist/${project_key}/${target}/${agent_name}.md"
   [ -f "$content_path" ] || die "rendered AGENTS.md missing: $content_path"
 
-  # Snapshot current AGENTS.md (best-effort — paperclip may not expose GET)
-  journal_record "$journal" "$(jq -n --arg id "$agent_id" --arg p "$content_path" \
-    '{kind:"agent_instructions_deploy",agent_id:$id,source_path:$p}')"
+  # CRIT-1 fix: snapshot OLD AGENTS.md content (kind matches rollback.sh handler).
+  local old_content
+  old_content=$(paperclip_get_agent_instructions "$agent_id") || \
+    die "deploy: failed to fetch current AGENTS.md for agent $agent_id (HTTP error — check JWT)"
+  journal_record "$journal" "$(jq -n \
+    --arg id "$agent_id" \
+    --arg old "$old_content" \
+    '{kind:"agent_instructions_snapshot",agent_id:$id,old_content:$old}')"
 
   content=$(cat "$content_path")
   paperclip_deploy_agents_md "$agent_id" "$content" >/dev/null

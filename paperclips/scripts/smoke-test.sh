@@ -32,6 +32,7 @@ EOF
 done
 
 [ -n "$project_key" ] || die "project-key required"
+validate_project_key "$project_key"
 require_env PAPERCLIP_API_URL
 require_env PAPERCLIP_API_KEY
 

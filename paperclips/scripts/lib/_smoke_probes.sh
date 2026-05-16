@@ -108,8 +108,11 @@ probe_agent_for_profile() {
     log err "  $name: no reply to git_capability"
     fail=$((fail + 1))
   else
-    eval "must_have=\$EXPECTED_GIT_${profile}_must_have"
-    eval "must_not=\$EXPECTED_GIT_${profile}_must_not_have"
+    # IMP-D fix: bash indirect expansion instead of dynamic shell evaluation.
+    local mh_var="EXPECTED_GIT_${profile}_must_have"
+    local mn_var="EXPECTED_GIT_${profile}_must_not_have"
+    must_have="${!mh_var:-}"
+    must_not="${!mn_var:-}"
     _check_markers "$reply" "${must_have:-}" "${must_not:-}" "$name/git_capability($profile)" || fail=$((fail + 1))
   fi
 

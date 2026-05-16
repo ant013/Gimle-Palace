@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 # Mutation journal per UAA spec §8.5 — snapshot before risky operations.
 # Source-only.
+#
+# IMP-C fix: journal files contain AGENTS.md content (medium sensitivity)
+# and plugin configs. Force 600/700 modes.
 
 JOURNAL_DIR="${HOME}/.paperclip/journal"
+umask 0077
 
 journal_init() {
   mkdir -p "$JOURNAL_DIR"
+  chmod 700 "$JOURNAL_DIR"
 }
 
 # Start a new journal entry; returns its path on stdout.
@@ -16,6 +21,7 @@ journal_open() {
   ts=$(date -u +%Y%m%dT%H%M%SZ)
   local path="$JOURNAL_DIR/${ts}-${op}.json"
   printf '{"op":"%s","timestamp":"%s","entries":[]}' "$op" "$ts" > "$path"
+  chmod 600 "$path"
   echo "$path"
 }
 

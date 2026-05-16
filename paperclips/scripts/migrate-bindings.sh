@@ -37,6 +37,7 @@ while [ $# -gt 0 ]; do
 done
 
 [ -n "$project_key" ] || { usage; die "project-key required"; }
+validate_project_key "$project_key"
 
 manifest="${REPO_ROOT}/paperclips/projects/${project_key}/paperclip-agent-assembly.yaml"
 [ -f "$manifest" ] || die "manifest not found: $manifest"
@@ -74,7 +75,20 @@ if [ "$project_key" = "gimle" ] && [ -f "$legacy_env" ]; then
         prefix=""
         ;;
     esac
-    camel=$(printf '%s' "$rest" | awk -F_ '{for(i=1;i<=NF;i++) printf "%s", toupper(substr($i,1,1)) tolower(substr($i,2))}')
+    # CRIT-4 fix: preserve well-known acronyms (CTO, QA, MCP, ...) per uaudit
+    # manifest convention (UWICTO, UWIQAEngineer). Plain camelCase would emit
+    # 'CXCto'/'CXQaEngineer'/'CXMcpEngineer' which don't match paperclip-API names.
+    ACRONYMS="CTO QA MCP CEO CFO CIO COO CSO CRO API CLI CI CD AI ML DB IT IO UI UX UWI UWA UW"
+    camel=$(printf '%s' "$rest" | awk -F_ -v acr="$ACRONYMS" '
+      BEGIN { split(acr, a, " "); for (i in a) is_acr[a[i]] = 1 }
+      { out = ""
+        for (i=1; i<=NF; i++) {
+          tok = toupper($i)
+          if (is_acr[tok]) { out = out tok }
+          else { out = out toupper(substr($i,1,1)) tolower(substr($i,2)) }
+        }
+        print out
+      }')
     name="${prefix}${camel}"
     AGENT_UUIDS["$name"]="$value"
   done < "$legacy_env"
@@ -129,5 +143,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
 fi
 
 mkdir -p "$target_dir"
+chmod 700 "$target_dir"
 printf '%s' "$yaml_content" > "$target_file"
+chmod 600 "$target_file"
 log ok "wrote $target_file"
