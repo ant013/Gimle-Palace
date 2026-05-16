@@ -80,6 +80,8 @@ uv run pytest tests/extractors/integration/test_public_api_surface_integration.p
 
 - `public_api_artifacts_required`:
   artifacts не найдены под `.palace/public-api/...`
+- В `project analyze` это считается optional missing input для base smoke:
+  checkpoint получает статус `MISSING_INPUT`, а не `RUN_FAILED`
 - `schema_bootstrap_failed`:
   Neo4j driver не поднят в `mcp_server`
 - Нет `BACKED_BY_SYMBOL` edges:

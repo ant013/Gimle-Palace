@@ -346,6 +346,7 @@ async def run_extractor(
 
     # 5. Return response
     if success:
+        assert isinstance(exec_result, _ExecuteOk)
         logger.info(
             "extractor.run.finish",
             extra={
@@ -367,6 +368,9 @@ async def run_extractor(
             duration_ms=duration_ms,
             nodes_written=nodes,
             edges_written=edges,
+            outcome=exec_result.stats.outcome,
+            message=exec_result.stats.message,
+            next_action=exec_result.stats.next_action,
         ).model_dump()
 
     assert isinstance(exec_result, _ExecuteError)
