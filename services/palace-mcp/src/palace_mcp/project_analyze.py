@@ -809,27 +809,39 @@ class ProjectAnalysisService:
         )
         project_name = name or slug
         driver = self._require_driver()
-        await self._ensure_schema(driver)
-        await self._register_project(
-            driver,
-            slug=slug,
-            name=project_name,
-            tags=[],
-            parent_mount=parent_mount,
-            relative_path=relative_path,
-            language_profile=language_profile,
+        await self._with_neo4j_retry(
+            action="start_run.ensure_schema",
+            operation=lambda: self._ensure_schema(driver),
+        )
+        await self._with_neo4j_retry(
+            action="start_run.register_project",
+            operation=lambda: self._register_project(
+                driver,
+                slug=slug,
+                name=project_name,
+                tags=[],
+                parent_mount=parent_mount,
+                relative_path=relative_path,
+                language_profile=language_profile,
+            ),
         )
         if bundle is not None:
-            await self._register_bundle(
-                driver,
-                name=bundle,
-                description=f"project analyze bundle {bundle}",
+            await self._with_neo4j_retry(
+                action="start_run.register_bundle",
+                operation=lambda: self._register_bundle(
+                    driver,
+                    name=bundle,
+                    description=f"project analyze bundle {bundle}",
+                ),
             )
-            await self._add_to_bundle(
-                driver,
-                bundle=bundle,
-                project=slug,
-                tier=Tier.FIRST_PARTY,
+            await self._with_neo4j_retry(
+                action="start_run.add_to_bundle",
+                operation=lambda: self._add_to_bundle(
+                    driver,
+                    bundle=bundle,
+                    project=slug,
+                    tier=Tier.FIRST_PARTY,
+                ),
             )
 
         now = self._clock()
@@ -863,19 +875,19 @@ class ProjectAnalysisService:
             # force_new only matters once previous runs are terminal; the lock
             # transaction still rejects concurrent active runs.
             run = run.model_copy(update={"idempotency_key": str(uuid4())})
-        return await self._with_store_retry(
+        return await self._with_neo4j_retry(
             action="start_run",
             operation=lambda: self._store.start_run(run),
         )
 
     async def get_status(self, run_id: str) -> AnalysisRun:
-        return await self._with_store_retry(
+        return await self._with_neo4j_retry(
             action="get_status",
             operation=lambda: self._store.get_run(run_id, now=self._clock()),
         )
 
     async def resume_run(self, run_id: str) -> AnalysisRun:
-        return await self._with_store_retry(
+        return await self._with_neo4j_retry(
             action="resume_run",
             operation=lambda: self._store.acquire_lease(
                 run_id,
@@ -886,7 +898,7 @@ class ProjectAnalysisService:
         )
 
     async def mark_run_resumable(self, run_id: str) -> AnalysisRun:
-        return await self._with_store_retry(
+        return await self._with_neo4j_retry(
             action="mark_run_resumable",
             operation=lambda: self._store.mark_run_resumable(run_id, now=self._clock()),
         )
@@ -898,7 +910,7 @@ class ProjectAnalysisService:
         error_code: str,
         message: str,
     ) -> AnalysisRun:
-        run = await self._with_store_retry(
+        run = await self._with_neo4j_retry(
             action="fail_run.get_run",
             operation=lambda: self._store.get_run(run_id, now=self._clock()),
         )
@@ -921,7 +933,7 @@ class ProjectAnalysisService:
             audit_payload,
             stale_external=False,
         )
-        return await self._with_store_retry(
+        return await self._with_neo4j_retry(
             action="fail_run.finalize_run",
             operation=lambda: self._store.finalize_run(
                 run_id,
@@ -986,7 +998,7 @@ class ProjectAnalysisService:
                     "next_action": None,
                 }
             )
-            run = await self._with_store_retry(
+            run = await self._with_neo4j_retry(
                 action=f"save_checkpoint.started.{checkpoint.extractor}",
                 operation=lambda: self._store.save_checkpoint(
                     run.run_id,
@@ -1014,7 +1026,7 @@ class ProjectAnalysisService:
                 }
             )
             checkpoint_updated_at = self._clock()
-            run = await self._with_store_retry(
+            run = await self._with_neo4j_retry(
                 action=f"save_checkpoint.finished.{checkpoint.extractor}",
                 operation=lambda: self._store.save_checkpoint(
                     run.run_id,
@@ -1034,7 +1046,7 @@ class ProjectAnalysisService:
             ):
                 break
 
-        run = await self._with_store_retry(
+        run = await self._with_neo4j_retry(
             action="execute_run.get_run",
             operation=lambda: self._store.get_run(run.run_id, now=self._clock()),
         )
@@ -1080,7 +1092,7 @@ class ProjectAnalysisService:
                 "Resume the run after failed extractors are fixed to produce a fully pinned audit report."
             ]
 
-        return await self._with_store_retry(
+        return await self._with_neo4j_retry(
             action="execute_run.finalize_run",
             operation=lambda: self._store.finalize_run(
                 run.run_id,
@@ -1095,7 +1107,7 @@ class ProjectAnalysisService:
             ),
         )
 
-    async def _with_store_retry(
+    async def _with_neo4j_retry(
         self,
         *,
         action: str,

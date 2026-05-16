@@ -19,6 +19,7 @@ from palace_mcp.project_analyze import (
     ExtractorAttemptResult,
     ProjectAnalysisService,
 )
+from palace_mcp.memory.models import Tier
 
 
 def _utc(
@@ -999,3 +1000,114 @@ async def test_execute_run_retries_transient_neo4j_failure_during_finalization()
     assert finished.error_code is None
     assert finished.report_markdown is not None
     assert "project_analyze_runtime_error" not in finished.report_markdown
+
+
+@pytest.mark.asyncio
+async def test_start_run_retries_transient_neo4j_failures_during_bootstrap() -> None:
+    attempts = {
+        "ensure_schema": 0,
+        "register_project": 0,
+        "register_bundle": 0,
+        "add_to_bundle": 0,
+    }
+    events: list[str] = []
+
+    async def flaky_ensure_schema(driver: object) -> None:
+        attempts["ensure_schema"] += 1
+        events.append(f"ensure_schema:{attempts['ensure_schema']}")
+        if attempts["ensure_schema"] == 1:
+            raise ServiceUnavailable("neo4j warming up during schema bootstrap")
+
+    async def flaky_register_project(
+        driver: object,
+        *,
+        slug: str,
+        name: str,
+        tags: list[str],
+        parent_mount: str,
+        relative_path: str,
+        language_profile: str,
+    ) -> None:
+        attempts["register_project"] += 1
+        events.append(f"register_project:{attempts['register_project']}")
+        if attempts["register_project"] == 1:
+            raise ServiceUnavailable("neo4j warming up during project registration")
+        assert slug == "tron-kit"
+        assert name == "tron-kit"
+        assert tags == []
+        assert parent_mount == "hs-stage"
+        assert relative_path == "TronKit.Swift"
+        assert language_profile == "swift_kit"
+
+    async def flaky_register_bundle(
+        driver: object,
+        *,
+        name: str,
+        description: str,
+    ) -> None:
+        attempts["register_bundle"] += 1
+        events.append(f"register_bundle:{attempts['register_bundle']}")
+        if attempts["register_bundle"] == 1:
+            raise ServiceUnavailable("neo4j warming up during bundle registration")
+        assert name == "uw-ios"
+        assert description == "project analyze bundle uw-ios"
+
+    async def flaky_add_to_bundle(
+        driver: object,
+        *,
+        bundle: str,
+        project: str,
+        tier: Tier,
+    ) -> None:
+        attempts["add_to_bundle"] += 1
+        events.append(f"add_to_bundle:{attempts['add_to_bundle']}")
+        if attempts["add_to_bundle"] == 1:
+            raise ServiceUnavailable("neo4j warming up during bundle linkage")
+        assert bundle == "uw-ios"
+        assert project == "tron-kit"
+        assert tier == Tier.FIRST_PARTY
+
+    service = ProjectAnalysisService(
+        driver=object(),  # runtime-only dependency is stubbed in unit tests
+        store=InMemoryAnalysisRunStore(),
+        extractor_registry=registry.EXTRACTORS,
+        register_project_func=flaky_register_project,
+        register_bundle_func=flaky_register_bundle,
+        add_to_bundle_func=flaky_add_to_bundle,
+        audit_runner=_default_audit_runner,
+        ensure_schema_func=flaky_ensure_schema,
+        lease_seconds=10,
+        lease_owner="pytest",
+        clock=_utc,
+        neo4j_retry_attempts=2,
+        neo4j_retry_initial_delay_seconds=0,
+    )
+
+    started = await service.start_run(
+        slug="tron-kit",
+        parent_mount="hs-stage",
+        relative_path="TronKit.Swift",
+        language_profile="swift_kit",
+        bundle="uw-ios",
+        extractors=["symbol_index_swift", "code_ownership"],
+        idempotency_key="bootstrap-retry",
+    )
+
+    assert started.active_run_reused is False
+    assert started.run.status == AnalysisRunStatus.RUNNING
+    assert attempts == {
+        "ensure_schema": 2,
+        "register_project": 2,
+        "register_bundle": 2,
+        "add_to_bundle": 2,
+    }
+    assert events == [
+        "ensure_schema:1",
+        "ensure_schema:2",
+        "register_project:1",
+        "register_project:2",
+        "register_bundle:1",
+        "register_bundle:2",
+        "add_to_bundle:1",
+        "add_to_bundle:2",
+    ]
