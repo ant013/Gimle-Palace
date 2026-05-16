@@ -92,6 +92,42 @@ async def test_ensure_schema_bootstrap_idempotent(live_driver: Any) -> None:
     assert row1["t"] == row2["t"], "source_created_at must be preserved"
 
 
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_ensure_schema_preserves_registered_project_metadata(
+    live_driver: Any,
+) -> None:
+    async with live_driver.session() as s:
+        await s.run(
+            """
+            MERGE (p:Project {slug: 'test-preserve'})
+            SET p.group_id = 'project/test-preserve',
+                p.name = 'Real Name',
+                p.parent_mount = 'hs-stage',
+                p.relative_path = 'TronKit.Swift',
+                p.language_profile = 'swift_kit'
+            """
+        )
+
+    await ensure_schema(live_driver, default_group_id="project/test-preserve")
+
+    async with live_driver.session() as s:
+        row = await (
+            await s.run(
+                "MATCH (p:Project {slug: 'test-preserve'}) "
+                "RETURN p.name AS name, p.parent_mount AS parent_mount, "
+                "p.relative_path AS relative_path, "
+                "p.language_profile AS language_profile"
+            )
+        ).single()
+
+    assert row is not None
+    assert row["name"] == "Real Name"
+    assert row["parent_mount"] == "hs-stage"
+    assert row["relative_path"] == "TronKit.Swift"
+    assert row["language_profile"] == "swift_kit"
+
+
 # ---------------------------------------------------------------------------
 # Task 4 integration tests — integrity invariant
 # ---------------------------------------------------------------------------
@@ -120,7 +156,7 @@ async def test_ensure_schema_fails_on_unregistered_group_id(live_driver: Any) ->
 async def test_ensure_schema_bootstrap_upsert_supplies_optional_project_fields() -> (
     None
 ):
-    from palace_mcp.memory.cypher import UPSERT_PROJECT
+    from palace_mcp.memory.cypher import BOOTSTRAP_PROJECT
 
     driver = AsyncMock()
     session = AsyncMock()
@@ -132,7 +168,7 @@ async def test_ensure_schema_bootstrap_upsert_supplies_optional_project_fields()
     empty_result.single.return_value = {"unregistered": []}
 
     async def run_side_effect(query: str, **kwargs: Any) -> Any:
-        if query == UPSERT_PROJECT:
+        if query == BOOTSTRAP_PROJECT:
             return None
         if "RETURN collect(g) AS unregistered" in query:
             return empty_result
@@ -143,7 +179,9 @@ async def test_ensure_schema_bootstrap_upsert_supplies_optional_project_fields()
     await ensure_schema(driver, default_group_id="project/test-bootstrap")
 
     upsert_call = next(
-        call for call in session.run.await_args_list if call.args[0] == UPSERT_PROJECT
+        call
+        for call in session.run.await_args_list
+        if call.args[0] == BOOTSTRAP_PROJECT
     )
     assert upsert_call.kwargs["parent_mount"] is None
     assert upsert_call.kwargs["relative_path"] is None

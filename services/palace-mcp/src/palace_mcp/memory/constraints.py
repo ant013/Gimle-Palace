@@ -10,10 +10,10 @@ from datetime import datetime, timezone
 from neo4j import AsyncDriver
 
 from palace_mcp.memory.cypher import (
+    BOOTSTRAP_PROJECT,
     CREATE_CONSTRAINTS,
     CREATE_INDEXES,
     UNREGISTERED_GROUP_IDS,
-    UPSERT_PROJECT,
 )
 
 
@@ -35,7 +35,7 @@ async def ensure_schema(driver: AsyncDriver, *, default_group_id: str) -> None:
         for stmt in CREATE_INDEXES:
             await session.run(stmt)
         await session.run(
-            UPSERT_PROJECT,
+            BOOTSTRAP_PROJECT,
             slug=default_slug,
             name=_bootstrap_name_for(default_slug),
             tags=["bootstrap"],

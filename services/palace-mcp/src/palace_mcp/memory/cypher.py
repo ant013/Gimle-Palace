@@ -264,6 +264,27 @@ SET p.group_id            = 'project/' + $slug,
 RETURN p
 """
 
+BOOTSTRAP_PROJECT = """
+MERGE (p:Project {slug: $slug})
+ON CREATE SET
+    p.group_id          = 'project/' + $slug,
+    p.name              = $name,
+    p.tags              = $tags,
+    p.language          = $language,
+    p.framework         = $framework,
+    p.repo_url          = $repo_url,
+    p.parent_mount      = $parent_mount,
+    p.relative_path     = $relative_path,
+    p.language_profile  = $language_profile,
+    p.source            = 'paperclip',
+    p.source_created_at = $now
+ON MATCH SET
+    p.group_id          = coalesce(p.group_id, 'project/' + $slug),
+    p.source            = coalesce(p.source, 'paperclip')
+SET p.source_updated_at = $now
+RETURN p
+"""
+
 LIST_PROJECT_SLUGS = "MATCH (p:Project) RETURN p.name AS slug ORDER BY slug"
 
 LIST_PROJECTS = "MATCH (p:Project) RETURN p ORDER BY p.slug"
