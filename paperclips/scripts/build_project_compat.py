@@ -12,6 +12,7 @@ from pathlib import Path
 
 import generate_assembly_inventory
 import validate_instructions
+from compose_agent_prompt import compose as _compose_agent_prompt
 
 
 SUPPORTED_TARGETS = ("claude", "codex")
@@ -402,6 +403,32 @@ def apply_overlay(
     return text
 
 
+def _collect_overlay_blocks(
+    repo_root: Path,
+    manifest_values: dict[str, str],
+    target: str,
+    role_name: str,
+    agent_name: str,
+) -> list[str]:
+    """Return overlay file contents per spec §6.7 (Phase B compose path).
+
+    Same lookup logic as apply_overlay, but returns blocks separately instead of
+    concatenating into role text — so compose() can place them last.
+    """
+    overlay_root = manifest_values.get("paths.overlay_root")
+    if not overlay_root:
+        return []
+    blocks: list[str] = []
+    overlay_names = ["_common.md", role_name]
+    if agent_name:
+        overlay_names.append(f"{agent_name}.md")
+    for overlay_name in overlay_names:
+        overlay_path = repo_root / overlay_root / target / overlay_name
+        if overlay_path.is_file():
+            blocks.append(overlay_path.read_text())
+    return blocks
+
+
 def render_role(
     repo_root: Path,
     target: str,
@@ -413,14 +440,55 @@ def render_role(
     if agent_values:
         values.update({f"agent.{key}": value for key, value in agent_values.items()})
     text = strip_front_matter(role_file.read_text())
-    text = expand_includes(repo_root, target, text, values)
-    text = apply_overlay(repo_root, values, target, role_file.name, text)
+
+    # UAA Phase B: detect slim crafts (no <!-- @include --> directives) and route
+    # to compose_agent_prompt() instead of legacy expand_includes.
+    if "<!-- @include fragments/" not in text:
+        # Compose path: profile-driven composition per spec §3, §5.2.1.
+        # Profile lookup order:
+        # 1. agent_values["profile"] (explicit per-agent manifest entry)
+        # 2. role file frontmatter profiles[0] (single-profile contract per Phase A)
+        # 3. fallback "minimal"
+        # rev4 fix B-2: agent_values is flat dict; key is 'profile', NOT 'agent.profile'.
+        profile_name = (agent_values or {}).get("profile")
+        if not profile_name:
+            try:
+                meta = validate_instructions.load_role_front_matter(role_file)
+                if meta.profiles:
+                    profile_name = meta.profiles[0]
+            except Exception:
+                pass
+        if not profile_name:
+            profile_name = "minimal"
+        profiles_dir = repo_root / "paperclips" / "fragments" / "profiles"
+        fragments_dir = repo_root / "paperclips" / "fragments" / "shared" / "fragments"
+        custom_includes = (agent_values or {}).get("custom_includes", [])
+        if isinstance(custom_includes, str):
+            custom_includes = []  # back-compat / defensive
+        # rev4 fix B-2: same key-naming fix — flat 'agent_name', not 'agent.agent_name'.
+        agent_name = (agent_values or {}).get("agent_name", "")
+        overlay_blocks = _collect_overlay_blocks(
+            repo_root, values, target, role_file.name, agent_name,
+        )
+        text = _compose_agent_prompt(
+            profile_name=profile_name,
+            profiles_dir=profiles_dir,
+            fragments_dir=fragments_dir,
+            role_source_text=text,
+            custom_includes=custom_includes,
+            overlay_blocks=overlay_blocks,
+        )
+    else:
+        # Legacy path: existing @include expansion + overlay merge (unchanged).
+        text = expand_includes(repo_root, target, text, values)
+        text = apply_overlay(repo_root, values, target, role_file.name, text)
+
     text = substitute_variables(text, values)
     unresolved = UNRESOLVED_VARIABLE_RE.search(text)
     if unresolved:
         raise ValueError(
             f"unresolved variable in {role_file.relative_to(repo_root)}: "
-            f"{unresolved.group(0)}"
+            f"{unresolved.group(0)}",
         )
     return text
 

@@ -30,15 +30,11 @@ def test_all_projects_still_build():
         _build(project, target)
 
 
-def test_phase_a_intermediate_state_dist_is_slim():
-    """Phase A intermediate: slim crafts produce small dist bundles (verify in CI).
-
-    Replaces rev1's silently-skipping baseline-compat test (QA reviewer rev2 finding).
-    Does not depend on baseline-shas.txt or gitignored dist-snapshot — checks
-    fresh build output directly. Hard cap: every dist file ≤ 2KB at Phase A state.
-
-    Phase B compose_agent_prompt will re-expand bundles; this test must be
-    updated/removed when Phase B lands.
+def test_dist_bundles_below_pre_uaa_baseline():
+    """Bundles after Phase B compose engine should still be MUCH smaller than
+    pre-UAA baseline. Pre-UAA bundles were 20-35KB (full inlining). With Phase B
+    profile-based composition, bundles include only profile-relevant fragments —
+    well under 20KB even for cto (which gets most content).
     """
     for project, target in [
         ("gimle", "claude"), ("gimle", "codex"),
@@ -49,10 +45,9 @@ def test_phase_a_intermediate_state_dist_is_slim():
 
     dist_dir = REPO / "paperclips" / "dist"
     too_fat: list[str] = []
-    # Phase A bundles = slim craft (~1KB) + optional project overlays (trading/uaudit
-    # have meaningful overlays adding up to ~10KB). Set cap accordingly; this is
-    # still 5-10× smaller than pre-Phase-A baselines (which were 20-35KB).
-    PHASE_A_MAX_BYTES = 15000
+    # Post Phase B with composition: cto profile = ~14-18KB, others smaller.
+    # Allow some headroom for projects with rich overlays (uaudit has per-agent overlays).
+    POST_PHASE_B_MAX_BYTES = 25000
     SCAN_DIRS = [
         dist_dir,
         dist_dir / "codex",
@@ -65,10 +60,9 @@ def test_phase_a_intermediate_state_dist_is_slim():
             continue
         for p in d.glob("*.md"):
             size = p.stat().st_size
-            if size > PHASE_A_MAX_BYTES:
-                too_fat.append(f"{p.relative_to(REPO)}: {size} bytes (limit {PHASE_A_MAX_BYTES})")
+            if size > POST_PHASE_B_MAX_BYTES:
+                too_fat.append(f"{p.relative_to(REPO)}: {size} bytes (limit {POST_PHASE_B_MAX_BYTES})")
     assert not too_fat, (
-        "Phase A intermediate state expected slim bundles; these are too fat:\n"
+        "Post-Phase-B bundles exceed expected size; likely a fragment include leak:\n"
         + "\n".join(too_fat)
-        + "\nCompose engine is Phase B; if you re-fattened a Phase A bundle, remove the bloat."
     )

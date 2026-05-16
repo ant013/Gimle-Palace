@@ -64,9 +64,16 @@ def compose(
     """
     all_profiles = load_all_profiles(profiles_dir)
     if profile_name not in all_profiles:
-        raise ValueError(
-            f"unknown profile: {profile_name}; available: {sorted(all_profiles)}",
+        # Phase B back-compat: legacy/synthetic role files may declare profile names
+        # that aren't in the new §5.1 vocabulary (e.g. "core", "task-start", etc.).
+        # Fall back to "minimal" (universal layer only) with a stderr warning.
+        # Phase E/F/G migrations will rewrite manifests to use new profile names.
+        print(
+            f"  WARN: unknown profile {profile_name!r}; available: {sorted(all_profiles)}; "
+            f"falling back to 'minimal'",
+            file=sys.stderr,
         )
+        profile_name = "minimal" if "minimal" in all_profiles else next(iter(all_profiles))
 
     profile = all_profiles[profile_name]
     chain = resolve_extends_chain(profile, all_profiles)
