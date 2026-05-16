@@ -72,3 +72,82 @@ def test_git_release_cut_exists():
     text = p.read_text()
     assert "release-cut" in text.lower()
     assert "release-cut.yml" in text or "develop → main" in text
+
+
+def test_worktree_active_exists():
+    p = SUBMODULE / "worktree" / "active.md"
+    assert p.is_file()
+    text = p.read_text()
+    assert "worktree" in text.lower()
+
+
+def test_handoff_basics_exists():
+    p = SUBMODULE / "handoff" / "basics.md"
+    assert p.is_file()
+    text = p.read_text()
+    assert "PATCH" in text
+    assert "@" in text
+    assert "Phase 1.1" not in text
+
+
+def test_handoff_phase_orchestration_exists():
+    p = SUBMODULE / "handoff" / "phase-orchestration.md"
+    assert p.is_file()
+    text = p.read_text()
+    for phase in ["1.1", "1.2", "2", "3.1", "3.2", "4.1", "4.2"]:
+        assert phase in text, f"missing phase {phase}"
+    assert "CodeReviewer" in text
+
+
+def test_code_review_approve_exists():
+    p = SUBMODULE / "code-review" / "approve.md"
+    assert p.is_file()
+    text = p.read_text()
+    assert "APPROVE" in text
+    assert "gh pr checks" in text
+
+
+def test_code_review_adversarial_exists():
+    p = SUBMODULE / "code-review" / "adversarial.md"
+    assert p.is_file()
+    text = p.read_text()
+    assert "adversarial" in text.lower() or "attack" in text.lower()
+
+
+def test_qa_smoke_and_evidence_exists():
+    p = SUBMODULE / "qa" / "smoke-and-evidence.md"
+    assert p.is_file()
+    text = p.read_text()
+    assert "QA Evidence" in text or "qa evidence" in text.lower()
+    assert "smoke" in text.lower()
+
+
+def test_prework_codebase_memory_first_exists():
+    p = SUBMODULE / "pre-work" / "codebase-memory-first.md"
+    assert p.is_file()
+    text = p.read_text()
+    assert "search_graph" in text or "codebase-memory" in text
+
+
+def test_prework_sequential_thinking_exists():
+    p = SUBMODULE / "pre-work" / "sequential-thinking.md"
+    assert p.is_file()
+    text = p.read_text()
+    assert "sequential-thinking" in text or "sequential_thinking" in text
+
+
+def test_prework_existing_field_semantics_exists():
+    p = SUBMODULE / "pre-work" / "existing-field-semantics.md"
+    assert p.is_file()
+    text = p.read_text()
+    assert "rename" in text.lower() or "field" in text.lower()
+
+
+def test_plan_producer_exists():
+    p = SUBMODULE / "plan" / "producer.md"
+    assert p.is_file()
+
+
+def test_plan_review_exists():
+    p = SUBMODULE / "plan" / "review.md"
+    assert p.is_file()
