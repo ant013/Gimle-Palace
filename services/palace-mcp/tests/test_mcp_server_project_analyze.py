@@ -366,7 +366,9 @@ async def test_project_analyze_resume_reacquires_lease_then_schedules_worker() -
 async def test_schedule_project_analysis_execution_finalizes_failed_run() -> None:
     service = MagicMock()
     service.execute_run = AsyncMock(side_effect=RuntimeError("neo4j dropped"))
-    service.fail_run = AsyncMock(return_value=_make_run(status=AnalysisRunStatus.FAILED))
+    service.fail_run = AsyncMock(
+        return_value=_make_run(status=AnalysisRunStatus.FAILED)
+    )
     mcp_module._graphiti = object()
 
     scheduled = mcp_module._schedule_project_analysis_execution(

@@ -551,8 +551,7 @@ def test_project_analyze_full_run_uses_staged_paths_for_colima_docker_host(
     }
     assert "/repos-hs/TronKit.Swift" not in summary_out.read_text(encoding="utf-8")
     assert (
-        override_path.read_text(encoding="utf-8")
-        == "services:\n"
+        override_path.read_text(encoding="utf-8") == "services:\n"
         "  palace-mcp:\n"
         "    volumes:\n"
         f"      - {tmp_path / 'project-analyze-mounts' / 'hs-stage'}:/repos-hs-stage:ro\n"
@@ -562,9 +561,7 @@ def test_project_analyze_full_run_uses_staged_paths_for_colima_docker_host(
 @pytest.mark.parametrize(
     "transport_error",
     [
-        httpx.RemoteProtocolError(
-            "Server disconnected without sending a response."
-        ),
+        httpx.RemoteProtocolError("Server disconnected without sending a response."),
         anyio.BrokenResourceError(),
     ],
 )
@@ -586,7 +583,8 @@ async def test_run_project_analyze_to_terminal_recovers_after_status_disconnect(
             return {"ok": True, "run_id": "run-123"}
         if tool_name == "palace.project.analyze_status":
             attempt = sum(
-                1 for _url, seen_tool_name, _args in calls
+                1
+                for _url, seen_tool_name, _args in calls
                 if seen_tool_name == "palace.project.analyze_status"
             )
             if attempt == 1:
@@ -652,9 +650,7 @@ async def test_run_project_analyze_to_terminal_fails_when_recovery_keeps_repeati
                 },
                 1,
             )
-            for _ in range(
-                cli._DEFAULT_PROJECT_ANALYZE_STALLED_RECOVERY_LIMIT + 1
-            )
+            for _ in range(cli._DEFAULT_PROJECT_ANALYZE_STALLED_RECOVERY_LIMIT + 1)
         ]
     )
 
@@ -697,9 +693,7 @@ async def test_run_project_analyze_to_terminal_fails_when_updated_at_moves_witho
     responses = [
         ("http://127.0.0.1:8080/mcp", {"ok": True, "run_id": "run-123"}, 0),
     ]
-    for minute in range(
-        cli._DEFAULT_PROJECT_ANALYZE_STALLED_RECOVERY_LIMIT + 1
-    ):
+    for minute in range(cli._DEFAULT_PROJECT_ANALYZE_STALLED_RECOVERY_LIMIT + 1):
         responses.append(
             (
                 "http://127.0.0.1:8080/mcp",

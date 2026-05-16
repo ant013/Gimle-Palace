@@ -317,10 +317,7 @@ def _docker_host_uses_colima_socket() -> bool:
 
 
 def _host_path_requires_staging(repo_path: Path) -> bool:
-    if (
-        _docker_context_name() != "colima"
-        and not _docker_host_uses_colima_socket()
-    ):
+    if _docker_context_name() != "colima" and not _docker_host_uses_colima_socket():
         return False
     try:
         repo_path.relative_to(Path.home())
@@ -1075,17 +1072,18 @@ async def _run_project_analyze_to_terminal(
 
     run_id = start_payload["run_id"]
     last_progress_marker: (
-        tuple[str | None, tuple[tuple[str | None, str | None, str | None], ...]]
-        | None
+        tuple[str | None, tuple[tuple[str | None, str | None, str | None], ...]] | None
     ) = None
     stalled_recovery_count = 0
     while True:
-        current_url, status_payload, recovery_count = (
-            await _call_tool_with_runtime_recovery(
+        (
+            current_url,
+            status_payload,
+            recovery_count,
+        ) = await _call_tool_with_runtime_recovery(
             url=current_url,
             tool_name="palace.project.analyze_status",
             arguments={"run_id": run_id},
-            )
         )
         if not status_payload.get("ok"):
             return status_payload
@@ -1095,10 +1093,7 @@ async def _run_project_analyze_to_terminal(
             stalled_recovery_count = 0
         elif recovery_count > 0:
             stalled_recovery_count += 1
-        if (
-            stalled_recovery_count
-            >= _DEFAULT_PROJECT_ANALYZE_STALLED_RECOVERY_LIMIT
-        ):
+        if stalled_recovery_count >= _DEFAULT_PROJECT_ANALYZE_STALLED_RECOVERY_LIMIT:
             raise ProjectAnalyzeCliError(
                 "palace.project.analyze_status kept recovering without durable progress",
                 error_code="project_analyze_transport_stalled",
