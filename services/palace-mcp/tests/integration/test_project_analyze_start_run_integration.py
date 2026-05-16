@@ -20,6 +20,7 @@ from palace_mcp.project_analyze import (
     AnalysisRunStatus,
     ProjectAnalysisService,
 )
+from tests.integration.neo4j_runtime_support import ensure_reachable_neo4j_uri
 
 
 def _colima_docker_host() -> str | None:
@@ -49,7 +50,7 @@ def _colima_docker_host() -> str | None:
 @pytest.fixture(scope="module")
 def neo4j_uri() -> Iterator[str]:
     if reuse := os.environ.get("COMPOSE_NEO4J_URI"):
-        yield reuse
+        yield ensure_reachable_neo4j_uri(reuse)
         return
 
     from testcontainers.neo4j import Neo4jContainer  # type: ignore[import]

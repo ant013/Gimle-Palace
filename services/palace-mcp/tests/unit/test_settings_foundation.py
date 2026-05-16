@@ -72,6 +72,7 @@ class TestSettingsFoundationDefaults:
     ) -> None:
         for k, v in _minimal_env().items():
             monkeypatch.setenv(k, v)
+        monkeypatch.delenv("PALACE_SCIP_INDEX_PATHS", raising=False)
         s = Settings()
         assert s.palace_scip_index_paths == {}
 

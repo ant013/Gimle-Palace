@@ -20,11 +20,14 @@ import threading
 import time
 import uuid
 from collections.abc import Iterator
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 from neo4j import AsyncGraphDatabase
+
+from tests.integration.neo4j_runtime_support import ensure_reachable_neo4j_uri
 
 
 def _free_port() -> int:
@@ -62,7 +65,7 @@ class _TestServer:
 @pytest.fixture(scope="module")
 def neo4j_uri() -> str:
     if reuse := os.environ.get("COMPOSE_NEO4J_URI"):
-        return reuse
+        return ensure_reachable_neo4j_uri(reuse)
     pytest.skip("COMPOSE_NEO4J_URI not set — skipping round-trip integration tests.")
 
 
@@ -72,6 +75,15 @@ def neo4j_auth() -> tuple[str, str]:
         os.environ.get("COMPOSE_NEO4J_USER", "neo4j"),
         os.environ.get("COMPOSE_NEO4J_PASSWORD", "password"),
     )
+
+
+def _graphiti(neo4j_uri: str, neo4j_auth: tuple[str, str]) -> MagicMock:
+    from graphiti_core.driver.neo4j_driver import Neo4jDriver
+
+    g = MagicMock()
+    g.driver = Neo4jDriver(neo4j_uri, neo4j_auth[0], neo4j_auth[1])
+    g.embedder.create = AsyncMock(return_value=[0.0])
+    return g
 
 
 @pytest.fixture(scope="module")
@@ -87,6 +99,8 @@ def mcp_url(neo4j_uri: str, neo4j_auth: tuple[str, str]) -> Iterator[str]:
     drv = AsyncGraphDatabase.driver(neo4j_uri, auth=neo4j_auth)
     _ms.set_driver(drv)
     _ms.set_settings(settings)
+    graphiti = _graphiti(neo4j_uri, neo4j_auth)
+    _ms.set_graphiti(graphiti)
 
     app = _ms.build_mcp_asgi_app()
     port = _free_port()
@@ -99,9 +113,11 @@ def mcp_url(neo4j_uri: str, neo4j_auth: tuple[str, str]) -> Iterator[str]:
     _cleanup = asyncio.new_event_loop()
     try:
         _cleanup.run_until_complete(drv.close())
+        _cleanup.run_until_complete(graphiti.driver.client.close())
     finally:
         _cleanup.close()
     _ms._driver = None  # type: ignore[attr-defined]
+    _ms._graphiti = None  # type: ignore[attr-defined]
 
 
 @pytest.mark.integration

@@ -388,7 +388,17 @@ def build_mcp_asgi_app() -> Starlette:
     returning the app. Crashes immediately on duplicate.
     """
     assert_unique_tool_names(_registered_tool_names)
-    return _mcp.streamable_http_app()
+    # FastMCP caches a single StreamableHTTPSessionManager on the server
+    # instance, but each Starlette app lifespan may only run that manager once.
+    # Tests build multiple ASGI apps in one Python process, so force a fresh
+    # session manager per app and bind the lifespan to the captured instance.
+    _mcp._session_manager = None  # type: ignore[attr-defined]
+    app = _mcp.streamable_http_app()
+    session_manager = _mcp.session_manager
+    app.router.lifespan_context = (
+        lambda _app, _session_manager=session_manager: _session_manager.run()
+    )
+    return app
 
 
 _F = TypeVar("_F", bound=Callable[..., Any])
