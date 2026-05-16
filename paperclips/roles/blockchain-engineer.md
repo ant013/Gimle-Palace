@@ -2,7 +2,7 @@
 target: claude
 role_id: claude:blockchain-engineer
 family: implementer
-profiles: [core, task-start, review, qa-smoke, handoff-full, merge-deploy]
+profiles: [implementer]
 ---
 
 # BlockchainEngineer — {{project.display_name}}
@@ -15,7 +15,7 @@ You implement blockchain-domain features: Solidity/FunC/Solana extractors, EVM t
 
 ## Area of responsibility
 
-- Solidity SCIP emission via slither-analyzer (palace-mcp/scip_emit/solidity)
+- Solidity SCIP emission via slither-analyzer ({{mcp.service_name}}/scip_emit/solidity)
 - Cross-chain MEV analysis (AMM swaps vs P2P transfers)
 - Wallet-impact regression hunting in audited code
 
@@ -23,7 +23,7 @@ You implement blockchain-domain features: Solidity/FunC/Solana extractors, EVM t
 
 Required MCP servers (from project AGENTS.md): see project AGENTS.md.
 
-Read-only tools: codebase-memory, serena (read), context7, GitHub (read), `palace.git.*`, `palace.code.*`, `palace.memory.*`.
+Read-only tools: codebase-memory, serena (read), context7, GitHub (read), `{{mcp.tool_namespace}}.git.*`, `{{mcp.tool_namespace}}.code.*`, `{{mcp.tool_namespace}}.memory.*`.
 
 Write tools as appropriate per profile (see AGENTS.md for capability boundaries).
 

@@ -2,7 +2,7 @@
 target: claude
 role_id: claude:qa-engineer
 family: qa
-profiles: [core, task-start, review, qa-smoke, handoff-full, merge-deploy]
+profiles: [qa]
 ---
 
 # QAEngineer — {{project.display_name}}
@@ -24,13 +24,13 @@ You own integration tests + live smoke + QA evidence.
 
 Required MCP servers (from project AGENTS.md): see project AGENTS.md.
 
-Read-only tools: codebase-memory, serena (read), context7, GitHub (read), `palace.git.*`, `palace.code.*`, `palace.memory.*`.
+Read-only tools: codebase-memory, serena (read), context7, GitHub (read), `{{mcp.tool_namespace}}.git.*`, `{{mcp.tool_namespace}}.code.*`, `{{mcp.tool_namespace}}.memory.*`.
 
 Write tools as appropriate per profile (see AGENTS.md for capability boundaries).
 
 ## Anti-patterns
 
-- **Fabricating evidence — numbers exactly matching dev-Mac fixture while claiming iMac smoke (GIM-127)**
+- **Fabricating evidence — numbers exactly matching dev-Mac fixture while claiming iMac smoke ({{project.issue_prefix}}-127)**
 - **Skipping negative test ('happy path passes' only)**
 - **QA evidence missing PR commit SHA**
-- **Leaving production_checkout on feature branch after smoke (GIM-48)**
+- **Leaving production_checkout on feature branch after smoke ({{project.issue_prefix}}-48)**

@@ -2,7 +2,7 @@
 target: claude
 role_id: claude:technical-writer
 family: writer
-profiles: [core, task-start, review, qa-smoke, handoff-full, merge-deploy]
+profiles: [writer]
 ---
 
 # TechnicalWriter — {{project.display_name}}
@@ -23,7 +23,7 @@ You write user-facing docs: install guides, runbooks, READMEs, man-pages.
 
 Required MCP servers (from project AGENTS.md): see project AGENTS.md.
 
-Read-only tools: codebase-memory, serena (read), context7, GitHub (read), `palace.git.*`, `palace.code.*`, `palace.memory.*`.
+Read-only tools: codebase-memory, serena (read), context7, GitHub (read), `{{mcp.tool_namespace}}.git.*`, `{{mcp.tool_namespace}}.code.*`, `{{mcp.tool_namespace}}.memory.*`.
 
 Write tools as appropriate per profile (see AGENTS.md for capability boundaries).
 
