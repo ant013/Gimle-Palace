@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 from palace_mcp.extractors.base import (
     BaseExtractor,
     ExtractorConfigError,
+    ExtractorOutcome,
     ExtractorRunContext,
     ExtractorStats,
 )
@@ -54,14 +55,27 @@ class HotPathProfilerExtractor(BaseExtractor):
     ) -> ExtractorStats:
         profiles_dir = ctx.repo_path / "profiles"
         if not profiles_dir.is_dir():
-            raise ExtractorConfigError(
-                f"profiles directory not found under repo root: {profiles_dir}"
+            return ExtractorStats(
+                outcome=ExtractorOutcome.MISSING_INPUT,
+                message=f"profiles directory not found under repo root: {profiles_dir}",
+                next_action=(
+                    "Commit runtime traces under profiles/ if hot_path_profiler "
+                    "coverage is required for this project."
+                ),
             )
 
         trace_files = self._discover_trace_files(profiles_dir)
         if not trace_files:
-            raise ExtractorConfigError(
-                f"no trace files found under {profiles_dir} (expected *.json or *.pftrace)"
+            return ExtractorStats(
+                outcome=ExtractorOutcome.MISSING_INPUT,
+                message=(
+                    f"no trace files found under {profiles_dir} "
+                    "(expected *.json, *.pftrace, *.trace, *.proto, or *.pb)"
+                ),
+                next_action=(
+                    "Add an exported profile trace under profiles/ if "
+                    "hot_path_profiler coverage is required for this project."
+                ),
             )
 
         driver = graphiti.driver

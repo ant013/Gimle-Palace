@@ -167,6 +167,7 @@ sed -n '1,160p' "$SUMMARY_OUT"
 Успех CLI считается по terminal status:
 
 - `SUCCEEDED`
+- `SUCCEEDED_WITH_SKIPS`
 - `SUCCEEDED_WITH_FAILURES`
 
 Если вернулся terminal error, смотреть `summary.json -> result`.
@@ -184,6 +185,19 @@ sed -n '1,160p' "$SUMMARY_OUT"
 # TODO: replace tron-kit with your Swift slug
 bash paperclips/scripts/scip_emit_swift_kit.sh tron-kit
 ```
+
+### Optional extractor inputs for `swift_kit`
+
+Для `tron-kit` и похожих Swift kit missing optional inputs больше не должны
+ломать base smoke:
+
+- `public_api_surface` без `.palace/public-api/...` → checkpoint `MISSING_INPUT`
+- `cross_module_contract` без результата `public_api_surface` → checkpoint `SKIPPED`
+- `hot_path_profiler` без `profiles/` или trace files → checkpoint `MISSING_INPUT`
+- `cross_repo_version_skew` без usable `:DEPENDS_ON` graph → checkpoint `MISSING_INPUT`
+
+Эти статусы могут привести к terminal result `SUCCEEDED_WITH_SKIPS`, но не
+должны переводить run в `SUCCEEDED_WITH_FAILURES`, если hard failures нет.
 
 ## Top-3 troubleshooting
 

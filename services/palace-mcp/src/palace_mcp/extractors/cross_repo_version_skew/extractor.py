@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
 from palace_mcp.extractors.base import (
     BaseExtractor,
+    ExtractorOutcome,
     ExtractorRunContext,
     ExtractorStats,
 )
@@ -107,7 +108,17 @@ LIMIT 100
             )
             await _write_run_extras(driver, run_id=ctx.run_id, summary=summary)
             return ExtractorStats(nodes_written=1, edges_written=0)
-        except ExtractorError:
+        except ExtractorError as exc:
+            if exc.error_code == ExtractorErrorCode.DEPENDENCY_SURFACE_NOT_INDEXED:
+                return ExtractorStats(
+                    outcome=ExtractorOutcome.MISSING_INPUT,
+                    message=exc.message,
+                    next_action=(
+                        "Run dependency_surface with usable dependency manifests/"
+                        "lockfiles if cross_repo_version_skew coverage is required "
+                        "for this project."
+                    ),
+                )
             raise
         except Exception as exc:
             raise ExtractorError(

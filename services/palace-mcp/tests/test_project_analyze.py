@@ -105,6 +105,7 @@ class InMemoryAnalysisRunStore:
         run = await self.get_run(run_id, now=current)
         if run.status in {
             AnalysisRunStatus.SUCCEEDED,
+            AnalysisRunStatus.SUCCEEDED_WITH_SKIPS,
             AnalysisRunStatus.SUCCEEDED_WITH_FAILURES,
             AnalysisRunStatus.FAILED,
             AnalysisRunStatus.CANCELED,
@@ -132,6 +133,7 @@ class InMemoryAnalysisRunStore:
         run = self._require(run_id)
         if run.status in {
             AnalysisRunStatus.SUCCEEDED,
+            AnalysisRunStatus.SUCCEEDED_WITH_SKIPS,
             AnalysisRunStatus.SUCCEEDED_WITH_FAILURES,
             AnalysisRunStatus.FAILED,
             AnalysisRunStatus.CANCELED,
@@ -590,7 +592,7 @@ async def test_execute_run_resume_keeps_git_history_failure_without_replay_error
 
 
 @pytest.mark.asyncio
-async def test_execute_run_marks_success_path_stale_until_audit_supports_pinned_inputs() -> (
+async def test_execute_run_marks_success_path_succeeded_and_records_audit_payload() -> (
     None
 ):
     store = InMemoryAnalysisRunStore()
@@ -627,12 +629,82 @@ async def test_execute_run_marks_success_path_stale_until_audit_supports_pinned_
         reacquire_lease=False,
     )
 
-    assert finished.status == AnalysisRunStatus.SUCCEEDED_WITH_FAILURES
+    assert finished.status == AnalysisRunStatus.SUCCEEDED
     assert finished.overview["OK"] == 2
     assert finished.audit is not None
-    assert finished.audit["error_code"] == "STALE_EXTERNAL_RUN"
-    assert "STALE_EXTERNAL_RUN" in (finished.report_markdown or "")
-    assert audit_called is False
+    assert finished.audit["ok"] is True
+    assert finished.report_markdown == "# unexpected\n"
+    assert audit_called is True
+
+
+@pytest.mark.asyncio
+async def test_execute_run_marks_optional_missing_inputs_as_succeeded_with_skips() -> (
+    None
+):
+    store = InMemoryAnalysisRunStore()
+    audit_called = False
+
+    async def _audit_runner(*args: object, **kwargs: object) -> dict[str, Any]:
+        nonlocal audit_called
+        audit_called = True
+        return {"ok": True, "report_markdown": "# audit with skips\n"}
+
+    service = _build_service(store=store, audit_runner=_audit_runner)
+    started = await service.start_run(
+        slug="tron-kit",
+        parent_mount="hs",
+        relative_path="TronKit.Swift",
+        language_profile="swift_kit",
+        extractors=["public_api_surface", "cross_module_contract", "hot_path_profiler"],
+        depth="full",
+        idempotency_key="optional-missing-inputs",
+    )
+
+    outcomes = {
+        "public_api_surface": ExtractorAttemptResult(
+            status=AnalysisCheckpointStatus.MISSING_INPUT,
+            ingest_run_id="run-public-api",
+            message="No public API artifacts found under .palace/public-api/...",
+            next_action="Commit public API snapshots under .palace/public-api/.",
+        ),
+        "cross_module_contract": ExtractorAttemptResult(
+            status=AnalysisCheckpointStatus.SKIPPED,
+            ingest_run_id="run-contracts",
+            message="No PublicApiSurface/PublicApiSymbol rows found for the current commit.",
+            next_action="Rerun public_api_surface before cross_module_contract.",
+        ),
+        "hot_path_profiler": ExtractorAttemptResult(
+            status=AnalysisCheckpointStatus.MISSING_INPUT,
+            ingest_run_id="run-hot-path",
+            message="profiles directory not found under repo root.",
+            next_action="Commit runtime traces under profiles/.",
+        ),
+    }
+
+    async def _executor(
+        extractor_name: str,
+        run: AnalysisRun,
+    ) -> ExtractorAttemptResult:
+        return outcomes[extractor_name]
+
+    finished = await service.execute_run(
+        started.run.run_id,
+        executor=_executor,
+        reacquire_lease=False,
+    )
+
+    assert finished.status == AnalysisRunStatus.SUCCEEDED_WITH_SKIPS
+    assert finished.overview["MISSING_INPUT"] == 2
+    assert finished.overview["SKIPPED"] == 1
+    assert finished.audit is not None
+    assert finished.audit["ok"] is True
+    assert finished.report_markdown == "# audit with skips\n"
+    assert finished.next_actions == [
+        "Commit public API snapshots under .palace/public-api/.",
+        "Rerun public_api_surface before cross_module_contract.",
+        "Commit runtime traces under profiles/.",
+    ]
+    assert audit_called is True
 
 
 @pytest.mark.asyncio
@@ -700,7 +772,7 @@ async def test_execute_run_renews_lease_while_checkpointing() -> None:
 
     assert len(store.saved_leases) == 4
     assert store.saved_leases[0] < store.saved_leases[-1]
-    assert finished.status == AnalysisRunStatus.SUCCEEDED_WITH_FAILURES
+    assert finished.status == AnalysisRunStatus.SUCCEEDED
 
 
 @pytest.mark.asyncio
@@ -758,9 +830,9 @@ async def test_resume_continues_after_last_completed_extractor() -> None:
     )
 
     assert seen == ["dependency_surface", "hotspot"]
-    assert finished.status == AnalysisRunStatus.SUCCEEDED_WITH_FAILURES
+    assert finished.status == AnalysisRunStatus.SUCCEEDED
     assert finished.audit is not None
-    assert finished.audit["error_code"] == "STALE_EXTERNAL_RUN"
+    assert finished.audit["ok"] is True
 
 
 @pytest.mark.asyncio
@@ -918,7 +990,7 @@ async def test_execute_run_resume_replays_interrupted_checkpoint_when_allowed() 
     )
 
     assert seen == ["error_handling_policy", "hotspot"]
-    assert finished.status == AnalysisRunStatus.SUCCEEDED_WITH_FAILURES
+    assert finished.status == AnalysisRunStatus.SUCCEEDED
     assert finished.error_code is None
     assert finished.report_markdown is not None
     assert "project_analyze_checkpoint_replayed" not in finished.report_markdown
@@ -996,7 +1068,7 @@ async def test_execute_run_retries_transient_neo4j_failure_during_finalization()
     )
 
     assert store.finalize_attempts == 2
-    assert finished.status == AnalysisRunStatus.SUCCEEDED_WITH_FAILURES
+    assert finished.status == AnalysisRunStatus.SUCCEEDED
     assert finished.error_code is None
     assert finished.report_markdown is not None
     assert "project_analyze_runtime_error" not in finished.report_markdown

@@ -56,6 +56,7 @@ class AnalysisRunStatus(StrEnum):
     RUNNING = "RUNNING"
     RESUMABLE = "RESUMABLE"
     SUCCEEDED = "SUCCEEDED"
+    SUCCEEDED_WITH_SKIPS = "SUCCEEDED_WITH_SKIPS"
     SUCCEEDED_WITH_FAILURES = "SUCCEEDED_WITH_FAILURES"
     FAILED = "FAILED"
     CANCELED = "CANCELED"
@@ -63,6 +64,8 @@ class AnalysisRunStatus(StrEnum):
 
 class AnalysisCheckpointStatus(StrEnum):
     OK = "OK"
+    SKIPPED = "SKIPPED"
+    MISSING_INPUT = "MISSING_INPUT"
     RUN_FAILED = "RUN_FAILED"
     FETCH_FAILED = "FETCH_FAILED"
     NOT_ATTEMPTED = "NOT_ATTEMPTED"
@@ -78,9 +81,25 @@ ACTIVE_ANALYSIS_RUN_STATUSES: frozenset[AnalysisRunStatus] = frozenset(
 TERMINAL_ANALYSIS_RUN_STATUSES: frozenset[AnalysisRunStatus] = frozenset(
     {
         AnalysisRunStatus.SUCCEEDED,
+        AnalysisRunStatus.SUCCEEDED_WITH_SKIPS,
         AnalysisRunStatus.SUCCEEDED_WITH_FAILURES,
         AnalysisRunStatus.FAILED,
         AnalysisRunStatus.CANCELED,
+    }
+)
+NON_FAILING_ANALYSIS_CHECKPOINT_STATUSES: frozenset[AnalysisCheckpointStatus] = (
+    frozenset(
+        {
+            AnalysisCheckpointStatus.OK,
+            AnalysisCheckpointStatus.SKIPPED,
+            AnalysisCheckpointStatus.MISSING_INPUT,
+        }
+    )
+)
+FAILING_ANALYSIS_CHECKPOINT_STATUSES: frozenset[AnalysisCheckpointStatus] = frozenset(
+    {
+        AnalysisCheckpointStatus.RUN_FAILED,
+        AnalysisCheckpointStatus.FETCH_FAILED,
     }
 )
 
@@ -285,6 +304,19 @@ def _checkpoint_counts(
     for checkpoint in checkpoints:
         counts[checkpoint.status.value] += 1
     return counts
+
+
+def _checkpoint_next_actions(
+    checkpoints: Sequence[AnalysisCheckpoint],
+) -> list[str]:
+    seen: set[str] = set()
+    next_actions: list[str] = []
+    for checkpoint in checkpoints:
+        if checkpoint.next_action is None or checkpoint.next_action in seen:
+            continue
+        seen.add(checkpoint.next_action)
+        next_actions.append(checkpoint.next_action)
+    return next_actions
 
 
 def _checkpoint_was_interrupted(checkpoint: AnalysisCheckpoint) -> bool:
@@ -1041,7 +1073,7 @@ class ProjectAnalysisService:
                 ),
             )
             if (
-                attempt.status != AnalysisCheckpointStatus.OK
+                attempt.status in FAILING_ANALYSIS_CHECKPOINT_STATUSES
                 and not run.continue_on_failure
             ):
                 break
@@ -1051,34 +1083,48 @@ class ProjectAnalysisService:
             operation=lambda: self._store.get_run(run.run_id, now=self._clock()),
         )
         overview = _checkpoint_counts(run.checkpoints)
-        all_ok = all(
-            checkpoint.status == AnalysisCheckpointStatus.OK
+        all_non_failing = all(
+            checkpoint.status in NON_FAILING_ANALYSIS_CHECKPOINT_STATUSES
             for checkpoint in run.checkpoints
         )
+        checkpoint_next_actions = _checkpoint_next_actions(run.checkpoints)
 
-        if all_ok:
-            audit_payload = self._build_stale_external_audit_payload(
-                run,
-                message=(
-                    "Current audit path only supports latest-run discovery; "
-                    "successful AnalysisRun finalization must stay pinned to "
-                    "checkpoint provenance until audit accepts ingest_run_id inputs."
-                ),
+        if all_non_failing:
+            audit_payload = await self._run_audit(project=run.slug, depth=run.depth)
+            report_markdown = (
+                audit_payload.get("report_markdown")
+                if isinstance(audit_payload.get("report_markdown"), str)
+                else self._render_checkpoint_report(
+                    run,
+                    audit_payload,
+                    stale_external=False,
+                )
             )
-            final_status = AnalysisRunStatus.SUCCEEDED_WITH_FAILURES
-            report_markdown = self._render_checkpoint_report(
-                run,
-                audit_payload,
-                stale_external=True,
-            )
-            next_actions = [
-                "Add pinned audit inputs before promoting successful AnalysisRun finalization to SUCCEEDED."
-            ]
+            if audit_payload.get("ok") is True:
+                has_optional_gaps = any(
+                    checkpoint.status
+                    in {
+                        AnalysisCheckpointStatus.SKIPPED,
+                        AnalysisCheckpointStatus.MISSING_INPUT,
+                    }
+                    for checkpoint in run.checkpoints
+                )
+                final_status = (
+                    AnalysisRunStatus.SUCCEEDED_WITH_SKIPS
+                    if has_optional_gaps
+                    else AnalysisRunStatus.SUCCEEDED
+                )
+                next_actions = checkpoint_next_actions
+            else:
+                final_status = AnalysisRunStatus.SUCCEEDED_WITH_FAILURES
+                next_actions = checkpoint_next_actions or [
+                    "Inspect audit payload and rerun project analyze if the audit output is incomplete."
+                ]
         else:
             audit_payload = self._build_stale_external_audit_payload(
                 run,
                 message=(
-                    "Current AnalysisRun contains failed or skipped extractors; "
+                    "Current AnalysisRun contains failed extractors; "
                     "latest-run audit fallback would break pinned provenance."
                 ),
             )
@@ -1088,7 +1134,7 @@ class ProjectAnalysisService:
                 audit_payload,
                 stale_external=True,
             )
-            next_actions = [
+            next_actions = checkpoint_next_actions or [
                 "Resume the run after failed extractors are fixed to produce a fully pinned audit report."
             ]
 
@@ -1153,9 +1199,26 @@ class ProjectAnalysisService:
                 ingest_run_id = response.get("run_id")
                 if not isinstance(ingest_run_id, str):
                     raise ValueError("extractor success response is missing run_id")
+                outcome = str(response.get("outcome") or "ok")
+                if outcome == "skipped":
+                    status = AnalysisCheckpointStatus.SKIPPED
+                elif outcome == "missing_input":
+                    status = AnalysisCheckpointStatus.MISSING_INPUT
+                else:
+                    status = AnalysisCheckpointStatus.OK
                 return ExtractorAttemptResult(
-                    status=AnalysisCheckpointStatus.OK,
+                    status=status,
                     ingest_run_id=ingest_run_id,
+                    message=(
+                        response.get("message")
+                        if isinstance(response.get("message"), str)
+                        else None
+                    ),
+                    next_action=(
+                        response.get("next_action")
+                        if isinstance(response.get("next_action"), str)
+                        else None
+                    ),
                 )
             maybe_run_id = response.get("run_id")
             return ExtractorAttemptResult(

@@ -19,6 +19,10 @@ v1 не создает `(:ContractSymbol)` и не добавляет public MCP
 - если нужен minimal delta, explicit commit pair задается в:
   `.palace/cross-module-contract/delta-requests.json`
 
+Если prerequisite от `public_api_surface` отсутствует, `project analyze`
+фиксирует `cross_module_contract` как `SKIPPED`, а не как отдельный hard
+failure. Это deliberate gating: сначала surface artifacts, потом contract facts.
+
 ## Базовый smoke
 
 ```bash
