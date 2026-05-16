@@ -18,6 +18,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import os
 import re
 import shlex
 import shutil
@@ -32,6 +33,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
+import anyio
+import httpx
+
 from palace_mcp.extractors.foundation.profiles import get_ordered_extractors
 
 _SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
@@ -40,6 +44,9 @@ _DEFAULT_PROJECT_ANALYZE_URL = "http://localhost:8080/mcp"
 _DEFAULT_API_URL = "http://localhost:3100"
 _DEFAULT_COMPANY_ID = "9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64"
 _DEFAULT_PROJECT_ANALYZE_POLL_SECONDS = 2
+_DEFAULT_PROJECT_ANALYZE_RECOVERY_TIMEOUT_SECONDS = 90
+_DEFAULT_PROJECT_ANALYZE_TOOL_MAX_ATTEMPTS = 3
+_DEFAULT_PROJECT_ANALYZE_STALLED_RECOVERY_LIMIT = 5
 _PROJECT_ACTIVE_STATUSES = {"PENDING", "RUNNING", "RESUMABLE"}
 _PROJECT_SUCCESS_STATUSES = {"SUCCEEDED", "SUCCEEDED_WITH_FAILURES"}
 _SWIFT_SCIP_EMITTER_NAME = "palace-swift-scip-emit-cli"
@@ -296,8 +303,21 @@ def _docker_context_name() -> str:
     return result.stdout.strip()
 
 
+def _docker_host_uses_colima_socket() -> bool:
+    docker_host = os.environ.get("DOCKER_HOST", "").strip()
+    if not docker_host.startswith("unix://"):
+        return False
+    socket_path = Path(docker_host.removeprefix("unix://")).expanduser()
+    colima_root = Path.home() / ".colima"
+    try:
+        socket_path.relative_to(colima_root)
+    except ValueError:
+        return False
+    return True
+
+
 def _host_path_requires_staging(repo_path: Path) -> bool:
-    if _docker_context_name() != "colima":
+    if _docker_context_name() != "colima" and not _docker_host_uses_colima_socket():
         return False
     try:
         repo_path.relative_to(Path.home())
@@ -898,6 +918,16 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     )
 
 
+def _is_recoverable_transport_error(exc: BaseException) -> bool:
+    if isinstance(exc, (httpx.HTTPError, OSError, anyio.BrokenResourceError)):
+        return True
+    if isinstance(exc, BaseExceptionGroup):
+        return bool(exc.exceptions) and all(
+            _is_recoverable_transport_error(inner) for inner in exc.exceptions
+        )
+    return False
+
+
 async def _call_audit_run(
     url: str,
     project: str | None,
@@ -940,6 +970,48 @@ async def _call_tool(
     if not isinstance(first, TextContent):
         raise ValueError(f"unexpected content type from {tool_name}: {type(first)}")
     return json.loads(first.text)  # type: ignore[no-any-return]
+
+
+async def _call_tool_with_runtime_recovery(
+    *,
+    url: str,
+    tool_name: str,
+    arguments: dict[str, Any],
+    recovery_timeout_seconds: int = _DEFAULT_PROJECT_ANALYZE_RECOVERY_TIMEOUT_SECONDS,
+    max_attempts: int = _DEFAULT_PROJECT_ANALYZE_TOOL_MAX_ATTEMPTS,
+) -> tuple[str, dict[str, Any], int]:
+    current_url = url
+    for attempt in range(1, max_attempts + 1):
+        try:
+            payload = await _call_tool(
+                url=current_url,
+                tool_name=tool_name,
+                arguments=arguments,
+            )
+        except Exception as exc:
+            if not _is_recoverable_transport_error(exc):
+                raise
+            if attempt == max_attempts:
+                raise ProjectAnalyzeCliError(
+                    f"{tool_name} failed after {max_attempts} attempts: {exc}",
+                    error_code="project_analyze_transport_error",
+                ) from exc
+            print(
+                (
+                    f"warning: {tool_name} transport failed on attempt "
+                    f"{attempt}/{max_attempts}: {exc}; retrying after "
+                    "palace-mcp readiness check"
+                ),
+                file=sys.stderr,
+            )
+            current_url = await asyncio.to_thread(
+                wait_for_mcp_ready,
+                current_url,
+                timeout_seconds=recovery_timeout_seconds,
+            )
+        else:
+            return current_url, payload, attempt - 1
+    raise AssertionError("unreachable")
 
 
 async def _create_issues(
@@ -990,7 +1062,7 @@ async def _run_project_analyze_to_terminal(
     url: str,
     request_payload: dict[str, Any],
 ) -> dict[str, Any]:
-    start_payload = await _call_tool(
+    current_url, start_payload, _ = await _call_tool_with_runtime_recovery(
         url=url,
         tool_name="palace.project.analyze",
         arguments=request_payload,
@@ -999,18 +1071,37 @@ async def _run_project_analyze_to_terminal(
         return start_payload
 
     run_id = start_payload["run_id"]
+    last_progress_marker: (
+        tuple[str | None, tuple[tuple[str | None, str | None, str | None], ...]] | None
+    ) = None
+    stalled_recovery_count = 0
     while True:
-        status_payload = await _call_tool(
-            url=url,
+        (
+            current_url,
+            status_payload,
+            recovery_count,
+        ) = await _call_tool_with_runtime_recovery(
+            url=current_url,
             tool_name="palace.project.analyze_status",
             arguments={"run_id": run_id},
         )
         if not status_payload.get("ok"):
             return status_payload
+        progress_marker = _project_analyze_progress_marker(status_payload)
+        if progress_marker != last_progress_marker:
+            last_progress_marker = progress_marker
+            stalled_recovery_count = 0
+        elif recovery_count > 0:
+            stalled_recovery_count += 1
+        if stalled_recovery_count >= _DEFAULT_PROJECT_ANALYZE_STALLED_RECOVERY_LIMIT:
+            raise ProjectAnalyzeCliError(
+                "palace.project.analyze_status kept recovering without durable progress",
+                error_code="project_analyze_transport_stalled",
+            )
         status = status_payload.get("status")
         if status == "RESUMABLE":
-            resume_payload = await _call_tool(
-                url=url,
+            current_url, resume_payload, _ = await _call_tool_with_runtime_recovery(
+                url=current_url,
                 tool_name="palace.project.analyze_resume",
                 arguments={"run_id": run_id},
             )
@@ -1023,6 +1114,41 @@ async def _run_project_analyze_to_terminal(
                 "next_poll_after_seconds", _DEFAULT_PROJECT_ANALYZE_POLL_SECONDS
             )
         )
+
+
+def _project_analyze_progress_marker(
+    status_payload: dict[str, Any],
+) -> tuple[str | None, tuple[tuple[str | None, str | None, str | None], ...]] | None:
+    run_payload = status_payload.get("run")
+    if not isinstance(run_payload, dict):
+        return None
+
+    checkpoints_payload = run_payload.get("checkpoints")
+    checkpoint_marker: list[tuple[str | None, str | None, str | None]] = []
+    if isinstance(checkpoints_payload, list):
+        for checkpoint in checkpoints_payload:
+            if not isinstance(checkpoint, dict):
+                continue
+            checkpoint_marker.append(
+                (
+                    str(checkpoint.get("extractor"))
+                    if checkpoint.get("extractor") is not None
+                    else None,
+                    str(checkpoint.get("status"))
+                    if checkpoint.get("status") is not None
+                    else None,
+                    str(checkpoint.get("error_code"))
+                    if checkpoint.get("error_code") is not None
+                    else None,
+                )
+            )
+
+    return (
+        str(run_payload.get("last_completed_extractor"))
+        if run_payload.get("last_completed_extractor") is not None
+        else None,
+        tuple(checkpoint_marker),
+    )
 
 
 def _parse_extractors_csv(value: str | None) -> list[str] | None:
@@ -1295,8 +1421,47 @@ def _cmd_project_analyze(args: argparse.Namespace) -> int:
         _write_json(summary_out, summary)
         print(json.dumps(summary, indent=2), file=sys.stderr)
         return 1
-    except (ProjectAnalyzeCliError, ValueError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
+    except Exception as exc:
+        if not (
+            isinstance(exc, (ProjectAnalyzeCliError, ValueError))
+            or _is_recoverable_transport_error(exc)
+        ):
+            raise
+        fallback_spec = locals().get("spec")
+        summary_out = (
+            fallback_spec.summary_out
+            if isinstance(fallback_spec, ProjectRuntimeSpec)
+            else _default_summary_path(args.slug)
+        )
+        error_summary: dict[str, Any] = {
+            "ok": False,
+            "error_code": (
+                exc.error_code
+                if isinstance(exc, ProjectAnalyzeCliError)
+                else (
+                    "invalid_project_analyze_response"
+                    if isinstance(exc, ValueError)
+                    else "project_analyze_transport_error"
+                )
+            ),
+            "message": str(exc),
+            "slug": args.slug,
+            "repo_path": str(Path(args.repo_path).expanduser()),
+            "requested_mcp_url": args.url,
+            "summary_out": str(summary_out),
+        }
+        if isinstance(fallback_spec, ProjectRuntimeSpec):
+            error_summary.update(
+                {
+                    "parent_mount": fallback_spec.parent_mount,
+                    "relative_path": fallback_spec.relative_path,
+                    "container_repo_path": fallback_spec.container_repo_path,
+                    "container_scip_path": fallback_spec.container_scip_path,
+                    "report_out": str(fallback_spec.report_out),
+                }
+            )
+        _write_json(summary_out, error_summary)
+        print(json.dumps(error_summary, indent=2), file=sys.stderr)
         return 1
 
 

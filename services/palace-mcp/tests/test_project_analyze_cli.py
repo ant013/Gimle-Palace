@@ -4,6 +4,10 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import anyio
+import httpx
+import pytest
+
 import palace_mcp.cli as cli
 
 
@@ -377,6 +381,710 @@ def test_project_analyze_writes_summary_and_report(
     assert summary["compose_override_changed"] is True
     assert summary["env_changed"] is True
     assert summary["runtime_stage_used"] is False
+
+
+def test_host_path_requires_staging_when_docker_host_targets_colima_socket(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(cli, "_docker_context_name", lambda: "default")
+    monkeypatch.setenv(
+        "DOCKER_HOST",
+        f"unix://{Path.home()}/.colima/default/docker.sock",
+    )
+
+    assert (
+        cli._host_path_requires_staging(
+            Path("/Users/Shared/Ios/HorizontalSystems/TronKit.Swift")
+        )
+        is True
+    )
+
+
+def test_project_analyze_full_run_uses_staged_paths_for_colima_docker_host(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo_path = tmp_path / "TronKit.Swift"
+    repo_path.mkdir()
+    (repo_path / "Package.swift").write_text("// swift-tools-version: 5.9\n")
+    env_file = tmp_path / ".env"
+    env_file.write_text("OPENAI_API_KEY=sk-test\n", encoding="utf-8")
+    summary_out = tmp_path / "summary.json"
+    report_out = tmp_path / "report.md"
+    override_path = tmp_path / "docker-compose.project-analyze.yml"
+
+    spec = cli.ProjectRuntimeSpec(
+        repo_path=repo_path,
+        slug="tron-kit",
+        language_profile="swift_kit",
+        bundle="uw-ios",
+        parent_mount="hs",
+        relative_path="TronKit.Swift",
+        container_repo_path="/repos-hs/TronKit.Swift",
+        container_scip_path="/repos-hs/TronKit.Swift/scip/index.scip",
+        env_file=env_file,
+        compose_override_path=override_path,
+        report_out=report_out,
+        summary_out=summary_out,
+        host_mount_path=None,
+        container_mount_path=None,
+    )
+
+    monkeypatch.setattr(cli, "resolve_project_runtime_spec", lambda **_: spec)
+    monkeypatch.setattr(cli, "_docker_context_name", lambda: "default")
+    monkeypatch.setenv(
+        "DOCKER_HOST",
+        f"unix://{Path.home()}/.colima/default/docker.sock",
+    )
+    copied: list[tuple[Path, Path]] = []
+    monkeypatch.setattr(
+        cli,
+        "_copy_runtime_stage",
+        lambda source, staged: copied.append((source, staged)),
+    )
+    real_stage_project_runtime_spec = cli.stage_project_runtime_spec
+    monkeypatch.setattr(
+        cli,
+        "stage_project_runtime_spec",
+        lambda current_spec: real_stage_project_runtime_spec(
+            current_spec,
+            stage_root=tmp_path / "project-analyze-mounts",
+        ),
+    )
+    monkeypatch.setattr(
+        cli,
+        "ensure_swift_scip_artifact",
+        lambda **_: {
+            "emitted": False,
+            "host_scip_path": str(repo_path / "scip" / "index.scip"),
+            "meta_path": str(repo_path / "scip" / "index.scip.meta.json"),
+            "metadata": {"repo_head_sha": "abc123"},
+        },
+    )
+    monkeypatch.setattr(
+        cli,
+        "ensure_project_analyze_runtime",
+        lambda **kwargs: kwargs["mcp_url"],
+    )
+    monkeypatch.setattr(cli, "_git_head_sha", lambda _path: "abc123")
+    monkeypatch.setattr(
+        cli,
+        "get_ordered_extractors",
+        lambda _profile: ("symbol_index_swift", "code_ownership"),
+    )
+
+    seen_payloads: list[dict[str, object]] = []
+
+    async def _fake_run_project_analyze_to_terminal(
+        *,
+        url: str,
+        request_payload: dict[str, object],
+    ) -> dict[str, object]:
+        seen_payloads.append(request_payload)
+        return {
+            "ok": True,
+            "run_id": "run-123",
+            "status": "SUCCEEDED_WITH_FAILURES",
+            "run": {
+                "report_markdown": "# AnalysisRun run-123\n",
+                "overview": {"OK": 2},
+                "audit": {"ok": False, "error_code": "STALE_EXTERNAL_RUN"},
+                "next_actions": [],
+            },
+        }
+
+    monkeypatch.setattr(
+        cli,
+        "_run_project_analyze_to_terminal",
+        _fake_run_project_analyze_to_terminal,
+    )
+
+    args = SimpleNamespace(
+        repo_path=str(repo_path),
+        slug="tron-kit",
+        language_profile="swift_kit",
+        bundle="uw-ios",
+        name=None,
+        extractors=None,
+        emit_scip="never",
+        depth="full",
+        url="http://localhost:8080/mcp",
+        report_out=str(report_out),
+        summary_out=str(summary_out),
+        env_file=str(env_file),
+        manifest=str(tmp_path / "missing-manifest.json"),
+        audit=True,
+    )
+
+    exit_code = cli._cmd_project_analyze(args)
+
+    assert exit_code == 0
+    assert copied == [
+        (
+            repo_path,
+            tmp_path / "project-analyze-mounts" / "hs-stage" / "TronKit.Swift",
+        )
+    ]
+    assert len(seen_payloads) == 1
+    assert seen_payloads[0]["parent_mount"] == "hs-stage"
+    assert seen_payloads[0]["relative_path"] == "TronKit.Swift"
+    assert seen_payloads[0]["language_profile"] == "swift_kit"
+    assert seen_payloads[0]["bundle"] == "uw-ios"
+    assert seen_payloads[0]["depth"] == "full"
+    assert seen_payloads[0]["extractors"] == [
+        "symbol_index_swift",
+        "code_ownership",
+    ]
+    summary = json.loads(summary_out.read_text(encoding="utf-8"))
+    assert summary["runtime_stage_used"] is True
+    assert summary["runtime_stage_root"] == str(
+        tmp_path / "project-analyze-mounts" / "hs-stage"
+    )
+    assert summary["parent_mount"] == "hs-stage"
+    assert summary["container_repo_path"] == "/repos-hs-stage/TronKit.Swift"
+    assert (
+        summary["container_scip_path"]
+        == "/repos-hs-stage/TronKit.Swift/scip/index.scip"
+    )
+    assert summary["scip_index_paths"] == {
+        "tron-kit": "/repos-hs-stage/TronKit.Swift/scip/index.scip"
+    }
+    assert "/repos-hs/TronKit.Swift" not in summary_out.read_text(encoding="utf-8")
+    assert (
+        override_path.read_text(encoding="utf-8") == "services:\n"
+        "  palace-mcp:\n"
+        "    volumes:\n"
+        f"      - {tmp_path / 'project-analyze-mounts' / 'hs-stage'}:/repos-hs-stage:ro\n"
+    )
+
+
+@pytest.mark.parametrize(
+    "transport_error",
+    [
+        httpx.RemoteProtocolError("Server disconnected without sending a response."),
+        anyio.BrokenResourceError(),
+    ],
+)
+@pytest.mark.asyncio
+async def test_run_project_analyze_to_terminal_recovers_after_status_disconnect(
+    monkeypatch: pytest.MonkeyPatch,
+    transport_error: Exception,
+) -> None:
+    calls: list[tuple[str, str, dict[str, object]]] = []
+
+    async def fake_call_tool(
+        *,
+        url: str,
+        tool_name: str,
+        arguments: dict[str, object],
+    ) -> dict[str, object]:
+        calls.append((url, tool_name, arguments))
+        if tool_name == "palace.project.analyze":
+            return {"ok": True, "run_id": "run-123"}
+        if tool_name == "palace.project.analyze_status":
+            attempt = sum(
+                1
+                for _url, seen_tool_name, _args in calls
+                if seen_tool_name == "palace.project.analyze_status"
+            )
+            if attempt == 1:
+                raise transport_error
+            return {
+                "ok": True,
+                "run_id": "run-123",
+                "status": "SUCCEEDED",
+                "next_poll_after_seconds": 0,
+            }
+        raise AssertionError(f"unexpected tool call: {tool_name}")
+
+    recovered_urls: list[tuple[str, int]] = []
+
+    def fake_wait_for_mcp_ready(url: str, *, timeout_seconds: int = 60) -> str:
+        recovered_urls.append((url, timeout_seconds))
+        return "http://127.0.0.1:8080/mcp"
+
+    monkeypatch.setattr(cli, "_call_tool", fake_call_tool)
+    monkeypatch.setattr(cli, "wait_for_mcp_ready", fake_wait_for_mcp_ready)
+
+    payload = await cli._run_project_analyze_to_terminal(
+        url="http://localhost:8080/mcp",
+        request_payload={"slug": "tron-kit"},
+    )
+
+    assert payload["ok"] is True
+    assert payload["status"] == "SUCCEEDED"
+    assert recovered_urls == [
+        (
+            "http://localhost:8080/mcp",
+            cli._DEFAULT_PROJECT_ANALYZE_RECOVERY_TIMEOUT_SECONDS,
+        )
+    ]
+    assert [tool_name for _url, tool_name, _arguments in calls] == [
+        "palace.project.analyze",
+        "palace.project.analyze_status",
+        "palace.project.analyze_status",
+    ]
+    assert calls[-1][0] == "http://127.0.0.1:8080/mcp"
+
+
+@pytest.mark.asyncio
+async def test_run_project_analyze_to_terminal_fails_when_recovery_keeps_repeating_without_progress(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    responses = [
+        ("http://127.0.0.1:8080/mcp", {"ok": True, "run_id": "run-123"}, 0),
+    ]
+    responses.extend(
+        [
+            (
+                "http://127.0.0.1:8080/mcp",
+                {
+                    "ok": True,
+                    "run_id": "run-123",
+                    "status": "RUNNING",
+                    "run": {
+                        "updated_at": "2026-05-15T10:00:00+00:00",
+                        "last_completed_extractor": None,
+                    },
+                    "next_poll_after_seconds": 0,
+                },
+                1,
+            )
+            for _ in range(cli._DEFAULT_PROJECT_ANALYZE_STALLED_RECOVERY_LIMIT + 1)
+        ]
+    )
+
+    async def fake_call_tool_with_runtime_recovery(
+        *,
+        url: str,
+        tool_name: str,
+        arguments: dict[str, object],
+        recovery_timeout_seconds: int = 90,
+        max_attempts: int = 3,
+    ) -> tuple[str, dict[str, object], int]:
+        assert recovery_timeout_seconds == 90
+        assert max_attempts == 3
+        assert responses
+        return responses.pop(0)
+
+    async def _no_sleep(_seconds: object) -> None:
+        return None
+
+    monkeypatch.setattr(
+        cli,
+        "_call_tool_with_runtime_recovery",
+        fake_call_tool_with_runtime_recovery,
+    )
+    monkeypatch.setattr(cli.asyncio, "sleep", _no_sleep)
+
+    with pytest.raises(cli.ProjectAnalyzeCliError) as exc_info:
+        await cli._run_project_analyze_to_terminal(
+            url="http://localhost:8080/mcp",
+            request_payload={"slug": "tron-kit"},
+        )
+
+    assert exc_info.value.error_code == "project_analyze_transport_stalled"
+
+
+@pytest.mark.asyncio
+async def test_run_project_analyze_to_terminal_fails_when_updated_at_moves_without_checkpoint_progress(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    responses = [
+        ("http://127.0.0.1:8080/mcp", {"ok": True, "run_id": "run-123"}, 0),
+    ]
+    for minute in range(cli._DEFAULT_PROJECT_ANALYZE_STALLED_RECOVERY_LIMIT + 1):
+        responses.append(
+            (
+                "http://127.0.0.1:8080/mcp",
+                {
+                    "ok": True,
+                    "run_id": "run-123",
+                    "status": "RUNNING",
+                    "run": {
+                        "updated_at": f"2026-05-15T10:0{minute}:00+00:00",
+                        "last_completed_extractor": "dependency_surface",
+                        "checkpoints": [
+                            {
+                                "extractor": "dependency_surface",
+                                "status": "OK",
+                                "error_code": None,
+                            },
+                            {
+                                "extractor": "error_handling_policy",
+                                "status": "NOT_ATTEMPTED",
+                                "error_code": None,
+                            },
+                        ],
+                    },
+                    "next_poll_after_seconds": 0,
+                },
+                1,
+            )
+        )
+
+    async def fake_call_tool_with_runtime_recovery(
+        *,
+        url: str,
+        tool_name: str,
+        arguments: dict[str, object],
+        recovery_timeout_seconds: int = 90,
+        max_attempts: int = 3,
+    ) -> tuple[str, dict[str, object], int]:
+        assert recovery_timeout_seconds == 90
+        assert max_attempts == 3
+        assert responses
+        return responses.pop(0)
+
+    async def _no_sleep(_seconds: object) -> None:
+        return None
+
+    monkeypatch.setattr(
+        cli,
+        "_call_tool_with_runtime_recovery",
+        fake_call_tool_with_runtime_recovery,
+    )
+    monkeypatch.setattr(cli.asyncio, "sleep", _no_sleep)
+
+    with pytest.raises(cli.ProjectAnalyzeCliError) as exc_info:
+        await cli._run_project_analyze_to_terminal(
+            url="http://localhost:8080/mcp",
+            request_payload={"slug": "tron-kit"},
+        )
+
+    assert exc_info.value.error_code == "project_analyze_transport_stalled"
+
+
+def test_project_analyze_transport_failure_writes_structured_summary(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo_path = tmp_path / "tron-kit"
+    repo_path.mkdir()
+    env_file = tmp_path / ".env"
+    env_file.write_text("OPENAI_API_KEY=sk-test\n", encoding="utf-8")
+    summary_out = tmp_path / "summary.json"
+    report_out = tmp_path / "report.md"
+
+    spec = cli.ProjectRuntimeSpec(
+        repo_path=repo_path,
+        slug="tron-kit",
+        language_profile="python_service",
+        bundle=None,
+        parent_mount="repos",
+        relative_path="tron-kit",
+        container_repo_path="/repos/repos/tron-kit",
+        container_scip_path="/repos/repos/tron-kit/scip/index.scip",
+        env_file=env_file,
+        compose_override_path=tmp_path / "docker-compose.project-analyze.yml",
+        report_out=report_out,
+        summary_out=summary_out,
+        host_mount_path=repo_path.parent,
+        container_mount_path="/repos/repos",
+    )
+
+    monkeypatch.setattr(cli, "resolve_project_runtime_spec", lambda **_: spec)
+    monkeypatch.setattr(
+        cli,
+        "ensure_project_analyze_runtime",
+        lambda **kwargs: kwargs["mcp_url"],
+    )
+    monkeypatch.setattr(cli, "_git_head_sha", lambda _path: "abc123")
+    monkeypatch.setattr(
+        cli,
+        "get_ordered_extractors",
+        lambda _profile: ("symbol_index_python",),
+    )
+    monkeypatch.setattr(cli, "_host_path_requires_staging", lambda _path: False)
+
+    async def fake_run_project_analyze_to_terminal(**_: object) -> dict[str, object]:
+        raise cli.ProjectAnalyzeCliError(
+            "palace.project.analyze_status failed after 3 attempts: Server disconnected without sending a response.",
+            error_code="project_analyze_transport_error",
+        )
+
+    monkeypatch.setattr(
+        cli,
+        "_run_project_analyze_to_terminal",
+        fake_run_project_analyze_to_terminal,
+    )
+
+    args = SimpleNamespace(
+        repo_path=str(repo_path),
+        slug="tron-kit",
+        language_profile="python_service",
+        bundle=None,
+        name=None,
+        extractors=None,
+        emit_scip="never",
+        depth="full",
+        url="http://localhost:8080/mcp",
+        report_out=str(report_out),
+        summary_out=str(summary_out),
+        env_file=str(env_file),
+        manifest=str(tmp_path / "missing-manifest.json"),
+        audit=True,
+    )
+
+    exit_code = cli._cmd_project_analyze(args)
+
+    assert exit_code == 1
+    summary = json.loads(summary_out.read_text(encoding="utf-8"))
+    assert summary["ok"] is False
+    assert summary["error_code"] == "project_analyze_transport_error"
+    assert summary["requested_mcp_url"] == "http://localhost:8080/mcp"
+    assert summary["parent_mount"] == "repos"
+    assert summary["container_repo_path"] == "/repos/repos/tron-kit"
+    assert summary["summary_out"] == str(summary_out)
+
+
+def test_project_analyze_terminal_failed_payload_writes_summary_and_report(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo_path = tmp_path / "tron-kit"
+    repo_path.mkdir()
+    env_file = tmp_path / ".env"
+    env_file.write_text("OPENAI_API_KEY=sk-test\n", encoding="utf-8")
+    summary_out = tmp_path / "summary.json"
+    report_out = tmp_path / "report.md"
+
+    spec = cli.ProjectRuntimeSpec(
+        repo_path=repo_path,
+        slug="tron-kit",
+        language_profile="python_service",
+        bundle=None,
+        parent_mount="repos",
+        relative_path="tron-kit",
+        container_repo_path="/repos/repos/tron-kit",
+        container_scip_path="/repos/repos/tron-kit/scip/index.scip",
+        env_file=env_file,
+        compose_override_path=tmp_path / "docker-compose.project-analyze.yml",
+        report_out=report_out,
+        summary_out=summary_out,
+        host_mount_path=repo_path.parent,
+        container_mount_path="/repos/repos",
+    )
+
+    monkeypatch.setattr(cli, "resolve_project_runtime_spec", lambda **_: spec)
+    monkeypatch.setattr(
+        cli,
+        "ensure_project_analyze_runtime",
+        lambda **kwargs: kwargs["mcp_url"],
+    )
+    monkeypatch.setattr(cli, "_git_head_sha", lambda _path: "abc123")
+    monkeypatch.setattr(
+        cli,
+        "get_ordered_extractors",
+        lambda _profile: ("symbol_index_python", "error_handling_policy"),
+    )
+    monkeypatch.setattr(cli, "_host_path_requires_staging", lambda _path: False)
+
+    async def fake_run_project_analyze_to_terminal(**_: object) -> dict[str, object]:
+        return {
+            "ok": True,
+            "run_id": "run-123",
+            "status": "FAILED",
+            "run": {
+                "report_markdown": "# AnalysisRun run-123\n\n- Status: `FAILED`\n",
+                "error_code": "project_analyze_checkpoint_replayed",
+            },
+        }
+
+    monkeypatch.setattr(
+        cli,
+        "_run_project_analyze_to_terminal",
+        fake_run_project_analyze_to_terminal,
+    )
+
+    args = SimpleNamespace(
+        repo_path=str(repo_path),
+        slug="tron-kit",
+        language_profile="python_service",
+        bundle=None,
+        name=None,
+        extractors=None,
+        emit_scip="never",
+        depth="full",
+        url="http://localhost:8080/mcp",
+        report_out=str(report_out),
+        summary_out=str(summary_out),
+        env_file=str(env_file),
+        manifest=str(tmp_path / "missing-manifest.json"),
+        audit=True,
+    )
+
+    exit_code = cli._cmd_project_analyze(args)
+
+    assert exit_code == 1
+    assert report_out.read_text(encoding="utf-8") == (
+        "# AnalysisRun run-123\n\n- Status: `FAILED`\n"
+    )
+    summary = json.loads(summary_out.read_text(encoding="utf-8"))
+    assert summary["ok"] is False
+    assert summary["status"] == "FAILED"
+    assert summary["run_id"] == "run-123"
+    assert summary["summary_out"] == str(summary_out)
+
+
+def test_project_analyze_broken_resource_error_writes_structured_summary(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo_path = tmp_path / "tron-kit"
+    repo_path.mkdir()
+    env_file = tmp_path / ".env"
+    env_file.write_text("OPENAI_API_KEY=sk-test\n", encoding="utf-8")
+    summary_out = tmp_path / "summary.json"
+    report_out = tmp_path / "report.md"
+
+    spec = cli.ProjectRuntimeSpec(
+        repo_path=repo_path,
+        slug="tron-kit",
+        language_profile="python_service",
+        bundle=None,
+        parent_mount="repos",
+        relative_path="tron-kit",
+        container_repo_path="/repos/repos/tron-kit",
+        container_scip_path="/repos/repos/tron-kit/scip/index.scip",
+        env_file=env_file,
+        compose_override_path=tmp_path / "docker-compose.project-analyze.yml",
+        report_out=report_out,
+        summary_out=summary_out,
+        host_mount_path=repo_path.parent,
+        container_mount_path="/repos/repos",
+    )
+
+    monkeypatch.setattr(cli, "resolve_project_runtime_spec", lambda **_: spec)
+    monkeypatch.setattr(
+        cli,
+        "ensure_project_analyze_runtime",
+        lambda **kwargs: kwargs["mcp_url"],
+    )
+    monkeypatch.setattr(cli, "_git_head_sha", lambda _path: "abc123")
+    monkeypatch.setattr(
+        cli,
+        "get_ordered_extractors",
+        lambda _profile: ("symbol_index_python",),
+    )
+    monkeypatch.setattr(cli, "_host_path_requires_staging", lambda _path: False)
+
+    async def fake_run_project_analyze_to_terminal(**_: object) -> dict[str, object]:
+        raise anyio.BrokenResourceError()
+
+    monkeypatch.setattr(
+        cli,
+        "_run_project_analyze_to_terminal",
+        fake_run_project_analyze_to_terminal,
+    )
+
+    args = SimpleNamespace(
+        repo_path=str(repo_path),
+        slug="tron-kit",
+        language_profile="python_service",
+        bundle=None,
+        name=None,
+        extractors=None,
+        emit_scip="never",
+        depth="full",
+        url="http://localhost:8080/mcp",
+        report_out=str(report_out),
+        summary_out=str(summary_out),
+        env_file=str(env_file),
+        manifest=str(tmp_path / "missing-manifest.json"),
+        audit=True,
+    )
+
+    exit_code = cli._cmd_project_analyze(args)
+
+    assert exit_code == 1
+    summary = json.loads(summary_out.read_text(encoding="utf-8"))
+    assert summary["ok"] is False
+    assert summary["error_code"] == "project_analyze_transport_error"
+    assert summary["requested_mcp_url"] == "http://localhost:8080/mcp"
+    assert summary["parent_mount"] == "repos"
+    assert summary["container_repo_path"] == "/repos/repos/tron-kit"
+    assert summary["summary_out"] == str(summary_out)
+
+
+def test_project_analyze_exception_group_writes_structured_summary(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo_path = tmp_path / "tron-kit"
+    repo_path.mkdir()
+    env_file = tmp_path / ".env"
+    env_file.write_text("OPENAI_API_KEY=sk-test\n", encoding="utf-8")
+    summary_out = tmp_path / "summary.json"
+    report_out = tmp_path / "report.md"
+
+    spec = cli.ProjectRuntimeSpec(
+        repo_path=repo_path,
+        slug="tron-kit",
+        language_profile="python_service",
+        bundle=None,
+        parent_mount="repos",
+        relative_path="tron-kit",
+        container_repo_path="/repos/repos/tron-kit",
+        container_scip_path="/repos/repos/tron-kit/scip/index.scip",
+        env_file=env_file,
+        compose_override_path=tmp_path / "docker-compose.project-analyze.yml",
+        report_out=report_out,
+        summary_out=summary_out,
+        host_mount_path=repo_path.parent,
+        container_mount_path="/repos/repos",
+    )
+
+    monkeypatch.setattr(cli, "resolve_project_runtime_spec", lambda **_: spec)
+    monkeypatch.setattr(
+        cli,
+        "ensure_project_analyze_runtime",
+        lambda **kwargs: kwargs["mcp_url"],
+    )
+    monkeypatch.setattr(cli, "_git_head_sha", lambda _path: "abc123")
+    monkeypatch.setattr(
+        cli,
+        "get_ordered_extractors",
+        lambda _profile: ("symbol_index_python",),
+    )
+    monkeypatch.setattr(cli, "_host_path_requires_staging", lambda _path: False)
+
+    async def fake_run_project_analyze_to_terminal(**_: object) -> dict[str, object]:
+        raise ExceptionGroup("mcp teardown", [anyio.BrokenResourceError()])
+
+    monkeypatch.setattr(
+        cli,
+        "_run_project_analyze_to_terminal",
+        fake_run_project_analyze_to_terminal,
+    )
+
+    args = SimpleNamespace(
+        repo_path=str(repo_path),
+        slug="tron-kit",
+        language_profile="python_service",
+        bundle=None,
+        name=None,
+        extractors=None,
+        emit_scip="never",
+        depth="full",
+        url="http://localhost:8080/mcp",
+        report_out=str(report_out),
+        summary_out=str(summary_out),
+        env_file=str(env_file),
+        manifest=str(tmp_path / "missing-manifest.json"),
+        audit=True,
+    )
+
+    exit_code = cli._cmd_project_analyze(args)
+
+    assert exit_code == 1
+    summary = json.loads(summary_out.read_text(encoding="utf-8"))
+    assert summary["ok"] is False
+    assert summary["error_code"] == "project_analyze_transport_error"
+    assert summary["requested_mcp_url"] == "http://localhost:8080/mcp"
+    assert summary["parent_mount"] == "repos"
+    assert summary["container_repo_path"] == "/repos/repos/tron-kit"
+    assert summary["summary_out"] == str(summary_out)
 
 
 def test_project_analyze_toolchain_unsupported_writes_structured_summary(

@@ -290,6 +290,46 @@ async def test_project_analyze_status_keeps_running_when_local_worker_is_alive()
     service.get_status.assert_awaited_once_with("run-123")
 
 
+async def test_project_analyze_status_promotes_orphaned_running_run_to_resumable() -> (
+    None
+):
+    run = _make_run(status=AnalysisRunStatus.RUNNING).model_copy(
+        update={
+            "lease_owner": "project-analyze@test-host",
+            "lease_expires_at": "2026-05-15T10:15:00+00:00",
+        }
+    )
+    resumable = run.model_copy(
+        update={
+            "status": AnalysisRunStatus.RESUMABLE,
+            "lease_owner": None,
+            "lease_expires_at": None,
+        }
+    )
+    service = MagicMock()
+    service.get_status = AsyncMock(return_value=run)
+    service.mark_run_resumable = AsyncMock(return_value=resumable)
+    service.lease_owner = "project-analyze@test-host"
+
+    with (
+        patch("palace_mcp.mcp_server._driver", new=MagicMock()),
+        patch(
+            "palace_mcp.mcp_server._build_project_analysis_service",
+            return_value=service,
+        ),
+    ):
+        _content, structured = await _mcp.call_tool(
+            "palace.project.analyze_status",
+            {"run_id": "run-123"},
+        )
+
+    assert structured["ok"] is True
+    assert structured["status"] == "RESUMABLE"
+    assert structured["background_execution_scheduled"] is False
+    service.get_status.assert_awaited_once_with("run-123")
+    service.mark_run_resumable.assert_awaited_once_with("run-123")
+
+
 async def test_project_analyze_resume_reacquires_lease_then_schedules_worker() -> None:
     run = _make_run(status=AnalysisRunStatus.RUNNING)
     service = MagicMock()
@@ -320,6 +360,31 @@ async def test_project_analyze_resume_reacquires_lease_then_schedules_worker() -
         run_id="run-123",
         service=service,
         reacquire_lease=False,
+    )
+
+
+async def test_schedule_project_analysis_execution_finalizes_failed_run() -> None:
+    service = MagicMock()
+    service.execute_run = AsyncMock(side_effect=RuntimeError("neo4j dropped"))
+    service.fail_run = AsyncMock(
+        return_value=_make_run(status=AnalysisRunStatus.FAILED)
+    )
+    mcp_module._graphiti = object()
+
+    scheduled = mcp_module._schedule_project_analysis_execution(
+        run_id="run-123",
+        service=service,
+        reacquire_lease=False,
+    )
+
+    assert scheduled is True
+    task = mcp_module._project_analysis_tasks["run-123"]
+    await task
+    service.execute_run.assert_awaited_once()
+    service.fail_run.assert_awaited_once_with(
+        "run-123",
+        error_code="project_analyze_runtime_error",
+        message="RuntimeError: neo4j dropped",
     )
 
 

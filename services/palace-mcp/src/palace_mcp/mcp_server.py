@@ -304,6 +304,19 @@ def _project_analyze_run_for_active_task(run: AnalysisRun) -> AnalysisRun:
     return run
 
 
+def _should_promote_orphaned_run(
+    *,
+    run: AnalysisRun,
+    lease_owner: str,
+    task_active: bool,
+) -> bool:
+    return (
+        run.status == AnalysisRunStatus.RUNNING
+        and not task_active
+        and run.lease_owner == lease_owner
+    )
+
+
 def _schedule_project_analysis_execution(
     *,
     run_id: str,
@@ -317,11 +330,32 @@ def _schedule_project_analysis_execution(
         return False
 
     async def _runner() -> None:
-        await service.execute_run(
-            run_id,
-            graphiti=graphiti,
-            reacquire_lease=reacquire_lease,
-        )
+        try:
+            await service.execute_run(
+                run_id,
+                graphiti=graphiti,
+                reacquire_lease=reacquire_lease,
+            )
+        except Exception as exc:
+            logger.error(
+                "project analyze background task failed for run %s: %s",
+                run_id,
+                exc,
+                exc_info=exc,
+            )
+            try:
+                await service.fail_run(
+                    run_id,
+                    error_code="project_analyze_runtime_error",
+                    message=f"{type(exc).__name__}: {exc}",
+                )
+            except Exception as finalize_exc:
+                logger.error(
+                    "project analyze fail-closed finalization failed for run %s: %s",
+                    run_id,
+                    finalize_exc,
+                    exc_info=finalize_exc,
+                )
 
     task: asyncio.Task[None] = asyncio.create_task(_runner())
     _project_analysis_tasks[run_id] = task
@@ -969,13 +1003,19 @@ async def palace_project_analyze_status(
     try:
         service = _build_project_analysis_service()
         run = await service.get_status(request.run_id)
-        if _project_analysis_task_is_active(request.run_id):
+        task_active = _project_analysis_task_is_active(request.run_id)
+        service_lease_owner = getattr(service, "lease_owner", "")
+        if _should_promote_orphaned_run(
+            run=run,
+            lease_owner=service_lease_owner,
+            task_active=task_active,
+        ):
+            run = await service.mark_run_resumable(request.run_id)
+        if task_active:
             run = _project_analyze_run_for_active_task(run)
         return _project_analyze_success_response(
             run,
-            background_execution_scheduled=_project_analysis_task_is_active(
-                request.run_id
-            ),
+            background_execution_scheduled=task_active,
         )
     except AnalysisRunNotFoundError as exc:
         return _project_analyze_error_response(

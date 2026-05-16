@@ -116,6 +116,8 @@ class AnalysisRun(BaseModel):
     lease_owner: str | None = None
     lease_expires_at: str | None = None
     last_completed_extractor: str | None = None
+    error_code: str | None = None
+    message: str | None = None
     checkpoints: list[AnalysisCheckpoint] = Field(default_factory=list)
     overview: dict[str, int] = Field(default_factory=dict)
     audit: dict[str, Any] | None = None
@@ -179,6 +181,13 @@ class AnalysisRunStore(Protocol):
         now: datetime | None = None,
     ) -> AnalysisRun: ...
 
+    async def mark_run_resumable(
+        self,
+        run_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> AnalysisRun: ...
+
     async def save_checkpoint(
         self,
         run_id: str,
@@ -200,6 +209,8 @@ class AnalysisRunStore(Protocol):
         audit: dict[str, Any] | None,
         report_markdown: str | None,
         next_actions: list[str],
+        error_code: str | None = None,
+        message: str | None = None,
         now: datetime | None = None,
     ) -> AnalysisRun: ...
 
@@ -271,6 +282,14 @@ def _checkpoint_counts(
     return counts
 
 
+def _checkpoint_was_interrupted(checkpoint: AnalysisCheckpoint) -> bool:
+    return (
+        checkpoint.status == AnalysisCheckpointStatus.NOT_ATTEMPTED
+        and checkpoint.started_at is not None
+        and checkpoint.finished_at is None
+    )
+
+
 def _lease_is_expired(run: AnalysisRun, now: datetime) -> bool:
     if run.lease_expires_at is None:
         return False
@@ -327,6 +346,8 @@ def _run_from_node(
         lease_owner=node.get("lease_owner"),
         lease_expires_at=node.get("lease_expires_at"),
         last_completed_extractor=node.get("last_completed_extractor"),
+        error_code=node.get("error_code"),
+        message=node.get("message"),
         checkpoints=checkpoints,
         overview={str(key): int(value) for key, value in overview.items()},
         audit=audit,
@@ -394,6 +415,8 @@ class Neo4jAnalysisRunStore:
             lease_owner=run.lease_owner,
             lease_expires_at=run.lease_expires_at,
             last_completed_extractor=run.last_completed_extractor,
+            error_code=run.error_code,
+            message=run.message,
             overview_json=_serialize_json(run.overview),
             audit_json=_serialize_json(run.audit),
             report_markdown=run.report_markdown,
@@ -522,6 +545,46 @@ class Neo4jAnalysisRunStore:
             }
         )
 
+    async def mark_run_resumable(
+        self,
+        run_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> AnalysisRun:
+        async with self._driver.session() as session:
+            return await session.execute_write(
+                self._tx_mark_run_resumable,
+                run_id,
+                now or _utc_now(),
+            )
+
+    @staticmethod
+    async def _tx_mark_run_resumable(
+        tx: AsyncManagedTransaction,
+        run_id: str,
+        now: datetime,
+    ) -> AnalysisRun:
+        current = await Neo4jAnalysisRunStore._read_run_tx(tx, run_id, now=now)
+        if current.status in TERMINAL_ANALYSIS_RUN_STATUSES:
+            return current
+        result = await tx.run(
+            MARK_ANALYSIS_RUN_RESUMABLE,
+            run_id=run_id,
+            status=AnalysisRunStatus.RESUMABLE.value,
+            updated_at=_iso(now),
+        )
+        row = await result.single()
+        if row is None:
+            raise AnalysisRunNotFoundError(run_id)
+        return current.model_copy(
+            update={
+                "status": AnalysisRunStatus.RESUMABLE,
+                "updated_at": _iso(now),
+                "lease_owner": None,
+                "lease_expires_at": None,
+            }
+        )
+
     async def save_checkpoint(
         self,
         run_id: str,
@@ -593,6 +656,8 @@ class Neo4jAnalysisRunStore:
         audit: dict[str, Any] | None,
         report_markdown: str | None,
         next_actions: list[str],
+        error_code: str | None = None,
+        message: str | None = None,
         now: datetime | None = None,
     ) -> AnalysisRun:
         async with self._driver.session() as session:
@@ -604,6 +669,8 @@ class Neo4jAnalysisRunStore:
                 audit,
                 report_markdown,
                 next_actions,
+                error_code,
+                message,
                 now or _utc_now(),
             )
 
@@ -616,6 +683,8 @@ class Neo4jAnalysisRunStore:
         audit: dict[str, Any] | None,
         report_markdown: str | None,
         next_actions: list[str],
+        error_code: str | None,
+        message: str | None,
         now: datetime,
     ) -> AnalysisRun:
         result = await tx.run(
@@ -628,6 +697,8 @@ class Neo4jAnalysisRunStore:
             audit_json=_serialize_json(audit),
             report_markdown=report_markdown,
             next_actions_json=_serialize_json(next_actions),
+            error_code=error_code,
+            message=message,
         )
         row = await result.single()
         if row is None:
@@ -768,6 +839,8 @@ class ProjectAnalysisService:
             started_at=_iso(now),
             lease_owner=self._lease_owner,
             lease_expires_at=lease_expires_at,
+            error_code=None,
+            message=None,
             checkpoints=[
                 AnalysisCheckpoint(extractor=extractor_name, position=index)
                 for index, extractor_name in enumerate(ordered_extractors)
@@ -790,6 +863,54 @@ class ProjectAnalysisService:
             now=self._clock(),
         )
 
+    async def mark_run_resumable(self, run_id: str) -> AnalysisRun:
+        return await self._store.mark_run_resumable(run_id, now=self._clock())
+
+    async def fail_run(
+        self,
+        run_id: str,
+        *,
+        error_code: str,
+        message: str,
+    ) -> AnalysisRun:
+        run = await self._store.get_run(run_id, now=self._clock())
+        overview = _checkpoint_counts(run.checkpoints)
+        audit_payload = {
+            "ok": False,
+            "error_code": error_code,
+            "message": message,
+            "run_id": run_id,
+        }
+        failed_run = run.model_copy(
+            update={
+                "status": AnalysisRunStatus.FAILED,
+                "error_code": error_code,
+                "message": message,
+            }
+        )
+        report_markdown = self._render_checkpoint_report(
+            failed_run,
+            audit_payload,
+            stale_external=False,
+        )
+        return await self._store.finalize_run(
+            run_id,
+            status=AnalysisRunStatus.FAILED,
+            overview=overview,
+            audit=audit_payload,
+            report_markdown=report_markdown,
+            next_actions=[
+                "Inspect palace-mcp runtime failure, then start a fresh project analyze run."
+            ],
+            error_code=error_code,
+            message=message,
+            now=self._clock(),
+        )
+
+    @property
+    def lease_owner(self) -> str:
+        return self._lease_owner
+
     async def execute_run(
         self,
         run_id: str,
@@ -808,13 +929,45 @@ class ProjectAnalysisService:
         for checkpoint in run.checkpoints:
             if checkpoint.status != AnalysisCheckpointStatus.NOT_ATTEMPTED:
                 continue
-            started_at = _iso(self._clock())
+            if _checkpoint_was_interrupted(checkpoint):
+                return await self.fail_run(
+                    run.run_id,
+                    error_code="project_analyze_checkpoint_replayed",
+                    message=(
+                        f"checkpoint {checkpoint.extractor} was interrupted "
+                        "before completion and would be replayed after restart; "
+                        "failing closed instead of re-entering extractor work."
+                    ),
+                )
+
+            checkpoint_started_at = self._clock()
+            started_checkpoint = checkpoint.model_copy(
+                update={
+                    "started_at": _iso(checkpoint_started_at),
+                    "finished_at": None,
+                    "error_code": None,
+                    "message": None,
+                    "ingest_run_id": None,
+                    "next_action": None,
+                }
+            )
+            run = await self._store.save_checkpoint(
+                run.run_id,
+                started_checkpoint,
+                updated_at=_iso(checkpoint_started_at),
+                last_completed_extractor=run.last_completed_extractor,
+                status=AnalysisRunStatus.RUNNING,
+                lease_owner=self._lease_owner,
+                lease_expires_at=_iso(
+                    checkpoint_started_at + timedelta(seconds=self._lease_seconds)
+                ),
+            )
+
             attempt = await step_executor(checkpoint.extractor, run)
             finished_at = _iso(self._clock())
-            updated_checkpoint = checkpoint.model_copy(
+            updated_checkpoint = started_checkpoint.model_copy(
                 update={
                     "status": attempt.status,
-                    "started_at": started_at,
                     "finished_at": finished_at,
                     "error_code": attempt.error_code,
                     "message": attempt.message,
@@ -890,6 +1043,8 @@ class ProjectAnalysisService:
             audit=audit_payload,
             report_markdown=report_markdown,
             next_actions=next_actions,
+            error_code=None,
+            message=None,
             now=self._clock(),
         )
 
