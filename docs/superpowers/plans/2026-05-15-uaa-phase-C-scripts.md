@@ -1295,9 +1295,42 @@ step_6_mcp_servers() {
 }
 
 step_7_register_mcp() {
-  log info "[7/9] Register MCP servers in claude/codex configs"
-  log warn "manual step or operator-specific automation — see docs/runbooks/mcp-registration.md (TBD)"
-  # TODO: when operator confirms canonical config locations, automate jq/yq merge.
+  log info "[7/9] Register MCP servers in claude/codex configs (rev4 C-1: no longer placeholder)"
+  # Codex config: ~/.codex/config.toml under [mcp_servers.<name>]
+  codex_config="${HOME}/.codex/config.toml"
+  if [ -f "$codex_config" ]; then
+    log info "  codex config exists; appending MCP stanzas if absent"
+    for srv in codebase-memory serena context7 sequential-thinking; do
+      if ! grep -q "^\[mcp_servers\.${srv}\]" "$codex_config"; then
+        cat >> "$codex_config" <<EOF
+
+[mcp_servers.${srv}]
+command = "${srv}"
+args = []
+EOF
+        log ok "  appended [mcp_servers.${srv}] to $codex_config"
+      else
+        log info "  [mcp_servers.${srv}] already present"
+      fi
+    done
+  else
+    log warn "  $codex_config missing — operator must run codex auth first"
+  fi
+
+  # Claude config: ~/.claude/settings.json under "mcpServers": {<name>: {...}}
+  claude_settings="${HOME}/.claude/settings.json"
+  if [ -f "$claude_settings" ]; then
+    log info "  claude settings exist; merging MCP stanzas via jq"
+    for srv in codebase-memory serena context7 sequential-thinking; do
+      tmp="${claude_settings}.tmp"
+      jq --arg name "$srv" '.mcpServers[$name] //= {command: $name, args: []}' \
+        "$claude_settings" > "$tmp" && mv "$tmp" "$claude_settings"
+    done
+    log ok "  merged 4 MCP servers into $claude_settings"
+  else
+    log warn "  $claude_settings missing — operator must run claude auth first"
+  fi
+  log ok "[7/9] MCP registration done"
 }
 
 step_8_watchdog_prep() {
@@ -1553,23 +1586,47 @@ for agent_name in $hire_order; do
   team_root=$(yq -r '.team_workspace_root // ""' "$paths_file" 2>/dev/null || echo "")
   cwd="${team_root}/${agent_name}/workspace"
 
+  # rev4 C-2: per-agent role/title/icon/model derived from manifest profile + agent metadata,
+  # not hardcoded "implementer" for all hires.
+  profile_name=$(yq -r ".agents[] | select(.agent_name == \"${agent_name}\") | .profile" "$manifest")
+  case "$profile_name" in
+    cto)         hire_role="cto";         hire_icon="🧠"; hire_model_default="auto" ;;
+    reviewer)    hire_role="reviewer";    hire_icon="🔎"; hire_model_default="auto" ;;
+    implementer) hire_role="implementer"; hire_icon="🛠"; hire_model_default="auto" ;;
+    qa)          hire_role="qa";          hire_icon="🧪"; hire_model_default="auto" ;;
+    research)    hire_role="research";    hire_icon="📚"; hire_model_default="auto" ;;
+    writer)      hire_role="writer";      hire_icon="✍";  hire_model_default="auto" ;;
+    minimal|custom) hire_role="implementer"; hire_icon="🧑"; hire_model_default="auto" ;;
+    *) die "unknown profile '$profile_name' for agent $agent_name (must be one of cto/reviewer/implementer/qa/research/writer/minimal/custom)" ;;
+  esac
+
+  # Allow per-agent override of model/effort/icon via manifest fields if present.
+  agent_model=$(yq -r ".agents[] | select(.agent_name == \"${agent_name}\") | .model // \"\"" "$manifest")
+  [ -z "$agent_model" ] || [ "$agent_model" = "null" ] && agent_model="$hire_model_default"
+  agent_effort=$(yq -r ".agents[] | select(.agent_name == \"${agent_name}\") | .modelReasoningEffort // \"medium\"" "$manifest")
+
   payload=$(jq -n \
     --arg name "$agent_name" \
-    --arg role "$role" \
+    --arg role "$hire_role" \
+    --arg title "$agent_name" \
+    --arg icon "$hire_icon" \
     --arg cwd "$cwd" \
     --arg reportsTo "$reports_to_uuid" \
     --arg adapter "${target}_local" \
+    --arg model "$agent_model" \
+    --arg effort "$agent_effort" \
     '{
       name: $name,
-      role: "implementer",
-      title: $name,
-      icon: "🧑",
+      role: $role,
+      title: $title,
+      icon: $icon,
       reportsTo: $reportsTo,
       capabilities: "default",
       adapterType: $adapter,
       adapterConfig: {
         cwd: $cwd,
-        model: "auto",
+        model: $model,
+        modelReasoningEffort: $effort,
         instructionsFilePath: "AGENTS.md",
         instructionsEntryFile: "AGENTS.md",
         instructionsBundleMode: "managed",
@@ -1610,10 +1667,15 @@ log info "[5/13] telegram plugin config"
 log info "[6/13] host-local files updated"
 # bindings.yaml already updated incrementally; paths.yaml + plugins.yaml created in steps prior
 
-# Step 7: build
+# Step 7: build (rev4 C-3: fail-fast; build errors must surface, not be hidden)
 log info "[7/13] building agent prompts"
-"${REPO_ROOT}/paperclips/build.sh" --project "$project_key" --target claude || true
-"${REPO_ROOT}/paperclips/build.sh" --project "$project_key" --target codex || true
+# Determine which targets the project actually uses (from manifest agents).
+targets_used=$(yq -r '.agents[].target' "$manifest" | sort -u)
+for target in $targets_used; do
+  log info "  building target=$target"
+  "${REPO_ROOT}/paperclips/build.sh" --project "$project_key" --target "$target" || \
+    die "build failed for project=$project_key target=$target — see output above; fix and re-run bootstrap"
+done
 
 # Step 8: deploy (with optional canary)
 log info "[8/13] deploying agent prompts"
@@ -1679,9 +1741,23 @@ done
 log info "[10/13] rendering operator-convenience AGENTS.md"
 # (omitted; see spec §3.3)
 
-# Step 11: trigger MCP indexing
+# Step 11: trigger MCP indexing (rev4 C-1: no longer placeholder)
 log info "[11/13] MCP indexing trigger (warn-and-continue per spec)"
-# (placeholder — actual MCP indexing API call goes here when ready)
+cm_project=$(yq -r '.mcp.codebase_memory_projects.primary // ""' "$manifest")
+if [ -n "$cm_project" ] && [ "$cm_project" != "null" ]; then
+  primary_repo=$(yq -r '.primary_repo_root // .project_root' "${host_dir}/paths.yaml")
+  if [ -n "$primary_repo" ] && [ -d "$primary_repo" ]; then
+    log info "  triggering codebase-memory indexing for project=$cm_project at $primary_repo"
+    # Indexing is async; bootstrap warns on timeout but doesn't block (per spec §13 open Q #6).
+    timeout 300 npx @sourcegraph/codebase-memory-mcp index_repository \
+      --project-name "$cm_project" --path "$primary_repo" 2>&1 | tee -a "$journal" || \
+      log warn "  indexing timed out / failed — smoke-test stage 5 will catch agent-side"
+  else
+    log warn "  primary_repo_root missing in paths.yaml; skipping indexing"
+  fi
+else
+  log info "  no codebase_memory_projects.primary in manifest; skipping"
+fi
 
 # Step 12: codex subagents deploy
 log info "[12/13] codex subagents (.toml deploy)"
@@ -1710,6 +1786,260 @@ chmod +x paperclips/scripts/bootstrap-project.sh
 python3 -m pytest paperclips/tests/test_phase_c_bootstrap_project.py -v
 git add paperclips/scripts/bootstrap-project.sh paperclips/tests/test_phase_c_bootstrap_project.py
 git commit -m "feat(uaa-phase-c): bootstrap-project.sh — 13-step idempotent hire+deploy with topo order + canary"
+```
+
+---
+
+## Task 8.5: `lib/_smoke_probes.sh` — runtime probe library (rev4 SM-4)
+
+**Files:**
+- Create: `paperclips/scripts/lib/_smoke_probes.sh`
+- Test: `paperclips/tests/test_phase_c_smoke_probes.py`
+
+**Why:** smoke stage 5 + 7 need concrete runtime questions and expected-marker matchers. Per spec §12.C table.
+
+- [ ] **Step 1: Failing test**
+
+```python
+# paperclips/tests/test_phase_c_smoke_probes.py
+import subprocess
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[1]
+LIB = REPO / "paperclips" / "scripts" / "lib" / "_smoke_probes.sh"
+
+
+def test_smoke_probes_lib_exists():
+    assert LIB.is_file()
+
+
+def test_defines_probe_questions():
+    text = LIB.read_text()
+    for fn in ["probe_agent_for_profile", "probe_e2e_handoff", "post_question_wait_reply"]:
+        assert fn in text, f"missing function: {fn}"
+
+
+def test_per_profile_expected_markers_defined():
+    text = LIB.read_text()
+    # Per spec §12.C: each profile family gets specific markers
+    for profile in ["implementer", "reviewer", "cto", "writer", "research", "qa"]:
+        assert profile in text, f"missing profile reference: {profile}"
+```
+
+- [ ] **Step 2: Verify FAIL**
+
+```bash
+python3 -m pytest paperclips/tests/test_phase_c_smoke_probes.py -v
+```
+
+- [ ] **Step 3: Create `paperclips/scripts/lib/_smoke_probes.sh`**
+
+```bash
+#!/usr/bin/env bash
+# UAA Phase C / rev4 SM-4: runtime probe library for smoke-test.sh.
+# Source-only. Implements concrete question/expected-marker checks per spec §12.C.
+
+# REQUIRED: previously sourced lib/_common.sh + lib/_paperclip_api.sh
+
+# Probe questions per spec §12.C table.
+PROBE_Q_MCP_LIST="List the MCP server namespaces you can call. Reply with comma-separated names only, no commentary."
+PROBE_Q_GIT_CAPABILITY="What git operations CAN you do, and what CANNOT you do? Be precise. Reply with two short lists."
+PROBE_Q_HANDOFF_PROCEDURE="Describe step-by-step how you handoff a task to another agent in this team. Include the exact API endpoints you call."
+PROBE_Q_PHASE_ORCHESTRATION="List the phase numbers you orchestrate (e.g. 1.1, 1.2, ...), comma-separated. If you do not orchestrate phases, reply: NONE."
+
+# Per-profile expected markers. Format: <key>__<profile>="space-separated tokens".
+EXPECTED_MCP_LIST="codebase-memory serena context7 github sequential-thinking"
+
+EXPECTED_GIT_implementer_must_have="commit push fetch"
+EXPECTED_GIT_implementer_must_not_have="merge release-cut"
+EXPECTED_GIT_reviewer_must_have="approve"
+EXPECTED_GIT_reviewer_must_not_have="commit push release-cut"
+EXPECTED_GIT_cto_must_have="merge release-cut"
+EXPECTED_GIT_cto_must_not_have=""
+EXPECTED_GIT_writer_must_have=""
+EXPECTED_GIT_writer_must_not_have="commit push merge"
+EXPECTED_GIT_research_must_have=""
+EXPECTED_GIT_research_must_not_have="commit push merge"
+EXPECTED_GIT_qa_must_have="commit push"
+EXPECTED_GIT_qa_must_not_have="release-cut"
+
+EXPECTED_HANDOFF_must_have="PATCH @"
+EXPECTED_HANDOFF_must_not_have=""
+
+EXPECTED_PHASES_cto_must_have="1.1 1.2 2 3.1 3.2 4.1 4.2"
+EXPECTED_PHASES_other_must_have="NONE"
+
+# post_question_wait_reply <company_id> <agent_uuid> <question_text> <timeout_s>
+# Returns reply text on stdout; empty if timeout.
+post_question_wait_reply() {
+  local company="$1"; local uuid="$2"; local question="$3"; local timeout_s="${4:-90}"
+  local title="smoke-probe-$(date -u +%Y%m%dT%H%M%SZ)-$RANDOM"
+  local body
+  body=$(jq -n --arg c "$company" --arg a "$uuid" --arg t "$title" --arg q "$question" \
+    '{companyId: $c, title: $t, body: $q, status: "todo", assigneeAgentId: $a}')
+  local issue_id
+  issue_id=$(paperclip_post "/api/companies/${company}/issues" "$body" | jq -r .id)
+  [ -n "$issue_id" ] && [ "$issue_id" != "null" ] || { log warn "issue create failed"; echo ""; return 1; }
+
+  # Poll for reply
+  local elapsed=0
+  while [ "$elapsed" -lt "$timeout_s" ]; do
+    sleep 5
+    elapsed=$((elapsed + 5))
+    local comments
+    comments=$(paperclip_get "/api/issues/${issue_id}/comments" 2>/dev/null || echo "[]")
+    # Get latest comment authored by the agent (not by us)
+    local reply
+    reply=$(echo "$comments" | jq -r --arg a "$uuid" '[.[] | select(.authorAgentId == $a)] | last.body // ""')
+    if [ -n "$reply" ] && [ "$reply" != "null" ]; then
+      # Cleanup: close issue
+      paperclip_patch "/api/issues/${issue_id}" '{"status": "done"}' >/dev/null 2>&1 || true
+      echo "$reply"
+      return 0
+    fi
+  done
+  log warn "probe timed out after ${timeout_s}s for issue $issue_id"
+  paperclip_patch "/api/issues/${issue_id}" '{"status": "done"}' >/dev/null 2>&1 || true
+  echo ""
+  return 1
+}
+
+# _check_markers <text> <must-have-tokens> <must-not-have-tokens> <label>
+# Returns 0 if pass; non-zero if any forbidden token found OR any required missing.
+_check_markers() {
+  local text="$1"; local must_have="$2"; local must_not="$3"; local label="$4"
+  local lower
+  lower=$(echo "$text" | tr '[:upper:]' '[:lower:]')
+  for tok in $must_have; do
+    if ! echo "$lower" | grep -qF "$(echo "$tok" | tr '[:upper:]' '[:lower:]')"; then
+      log err "  ${label}: missing required marker '$tok'"
+      return 1
+    fi
+  done
+  for tok in $must_not; do
+    if echo "$lower" | grep -qF "$(echo "$tok" | tr '[:upper:]' '[:lower:]')"; then
+      log err "  ${label}: contains forbidden marker '$tok'"
+      return 1
+    fi
+  done
+  return 0
+}
+
+# probe_agent_for_profile <company> <uuid> <name> <profile>
+probe_agent_for_profile() {
+  local company="$1"; local uuid="$2"; local name="$3"; local profile="$4"
+  local fail=0
+
+  # Probe 1: MCP list (all profiles)
+  local reply
+  reply=$(post_question_wait_reply "$company" "$uuid" "$PROBE_Q_MCP_LIST" 90)
+  if [ -z "$reply" ]; then
+    log err "  $name: no reply to mcp_list within 90s"
+    fail=$((fail + 1))
+  else
+    _check_markers "$reply" "$EXPECTED_MCP_LIST" "" "$name/mcp_list" || fail=$((fail + 1))
+  fi
+
+  # Probe 2: git capability (per profile)
+  reply=$(post_question_wait_reply "$company" "$uuid" "$PROBE_Q_GIT_CAPABILITY" 90)
+  if [ -z "$reply" ]; then
+    log err "  $name: no reply to git_capability"
+    fail=$((fail + 1))
+  else
+    eval "must_have=\$EXPECTED_GIT_${profile}_must_have"
+    eval "must_not=\$EXPECTED_GIT_${profile}_must_not_have"
+    _check_markers "$reply" "${must_have:-}" "${must_not:-}" "$name/git_capability($profile)" || fail=$((fail + 1))
+  fi
+
+  # Probe 3: handoff procedure (all except custom/minimal)
+  case "$profile" in
+    custom|minimal) ;;
+    *)
+      reply=$(post_question_wait_reply "$company" "$uuid" "$PROBE_Q_HANDOFF_PROCEDURE" 90)
+      if [ -z "$reply" ]; then
+        log err "  $name: no reply to handoff_procedure"
+        fail=$((fail + 1))
+      else
+        _check_markers "$reply" "$EXPECTED_HANDOFF_must_have" "$EXPECTED_HANDOFF_must_not_have" "$name/handoff" || fail=$((fail + 1))
+      fi
+      ;;
+  esac
+
+  # Probe 4: phase orchestration (cto vs others)
+  reply=$(post_question_wait_reply "$company" "$uuid" "$PROBE_Q_PHASE_ORCHESTRATION" 90)
+  if [ -z "$reply" ]; then
+    log err "  $name: no reply to phase_orchestration"
+    fail=$((fail + 1))
+  else
+    if [ "$profile" = "cto" ]; then
+      _check_markers "$reply" "$EXPECTED_PHASES_cto_must_have" "" "$name/phases(cto)" || fail=$((fail + 1))
+    else
+      _check_markers "$reply" "" "1.1 4.2 release-cut" "$name/phases(non-cto)" || fail=$((fail + 1))
+    fi
+  fi
+
+  if [ "$fail" -eq 0 ]; then
+    log ok "  $name probes pass"
+  fi
+  return "$fail"
+}
+
+# probe_e2e_handoff <company> <cto_uuid> <cto_name> <next_uuid> <next_name>
+probe_e2e_handoff() {
+  local company="$1"; local cto_uuid="$2"; local cto_name="$3"; local next_uuid="$4"; local next_name="$5"
+  local question="Reassign this issue to agent ${next_name} (uuid ${next_uuid}) and ask them to reply with exactly: 'cross-target ack'. Then STOP."
+
+  local title="smoke-e2e-$(date -u +%Y%m%dT%H%M%SZ)"
+  local body
+  body=$(jq -n --arg c "$company" --arg a "$cto_uuid" --arg t "$title" --arg q "$question" \
+    '{companyId: $c, title: $t, body: $q, status: "todo", assigneeAgentId: $a}')
+  local issue_id
+  issue_id=$(paperclip_post "/api/companies/${company}/issues" "$body" | jq -r .id)
+
+  local timeout=180; local elapsed=0
+  while [ "$elapsed" -lt "$timeout" ]; do
+    sleep 10; elapsed=$((elapsed + 10))
+    local issue
+    issue=$(paperclip_get "/api/issues/${issue_id}" 2>/dev/null || echo "{}")
+    local current_assignee
+    current_assignee=$(echo "$issue" | jq -r '.assigneeAgentId // ""')
+    if [ "$current_assignee" = "$next_uuid" ]; then
+      log ok "  CTO reassigned to ${next_name}; waiting for ack reply"
+      # Continue waiting for the ack reply from next agent
+      while [ "$elapsed" -lt "$timeout" ]; do
+        sleep 10; elapsed=$((elapsed + 10))
+        local comments
+        comments=$(paperclip_get "/api/issues/${issue_id}/comments" 2>/dev/null || echo "[]")
+        local ack
+        ack=$(echo "$comments" | jq -r --arg a "$next_uuid" '[.[] | select(.authorAgentId == $a)] | last.body // ""')
+        if echo "$ack" | grep -qi "cross-target ack"; then
+          paperclip_patch "/api/issues/${issue_id}" '{"status": "done"}' >/dev/null 2>&1 || true
+          log ok "  e2e handoff round-trip success"
+          return 0
+        fi
+      done
+      log err "  next agent never replied with ack within total ${timeout}s"
+      paperclip_patch "/api/issues/${issue_id}" '{"status": "done"}' >/dev/null 2>&1 || true
+      return 1
+    fi
+  done
+  log err "  CTO never reassigned within ${timeout}s"
+  paperclip_patch "/api/issues/${issue_id}" '{"status": "done"}' >/dev/null 2>&1 || true
+  return 1
+}
+```
+
+- [ ] **Step 4: Verify PASS**
+
+```bash
+python3 -m pytest paperclips/tests/test_phase_c_smoke_probes.py -v
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add paperclips/scripts/lib/_smoke_probes.sh paperclips/tests/test_phase_c_smoke_probes.py
+git commit -m "feat(uaa-phase-c/SM-4): runtime probe library — concrete questions+markers per profile"
 ```
 
 ---
@@ -1834,10 +2164,30 @@ stage_4_watchdog() {
 }
 
 stage_5_per_agent_mcp() {
-  log info "[5/7] per-agent MCP availability (post test issue, verify reply)"
-  log warn "stage 5 requires real agent runtime — see spec §12.C operator-live tests"
-  # Implementation: post issue with body 'list available tools', wait 90s, verify reply contains expected MCP names
-  # Skipped in synthetic test context.
+  # rev4 SM-1/SM-2: real runtime probes per spec §12.C (no longer placeholder).
+  log info "[5/7] runtime probes — mcp/git/handoff/phase per profile"
+  source "${SCRIPT_DIR}/lib/_smoke_probes.sh"
+
+  # Pick one representative agent per profile present in manifest.
+  declare -A picked
+  for name in $(yq -r '.agents | keys | .[]' "$bindings"); do
+    profile=$(yq -r ".agents[] | select(.agent_name == \"${name}\") | .profile" "$manifest")
+    [ -z "$profile" ] || [ "$profile" = "null" ] && continue
+    if [ -z "${picked[$profile]:-}" ]; then
+      picked[$profile]="$name"
+    fi
+  done
+
+  failed=0
+  for profile in "${!picked[@]}"; do
+    name="${picked[$profile]}"
+    uuid=$(yq -r ".agents.${name}" "$bindings")
+    log info "  probing $name (profile=$profile, uuid=$uuid)"
+    probe_agent_for_profile "$company_id" "$uuid" "$name" "$profile" || failed=$((failed + 1))
+  done
+
+  [ "$failed" -eq 0 ] || die "stage 5: $failed agents failed runtime probes"
+  log ok "[5/7] runtime probes green for $(echo "${!picked[@]}" | wc -w) profiles"
 }
 
 stage_6_telegram() {
@@ -1856,10 +2206,31 @@ stage_6_telegram() {
 }
 
 stage_7_e2e_handoff() {
-  log info "[7/7] end-to-end handoff (create test issue, expect echo + handoff)"
-  log warn "stage 7 requires real agent runtime — see spec §12.C operator-live tests"
-  # Implementation: create test issue assigned to first CTO; expect echo + handoff to first implementer
-  # Skipped in synthetic test context.
+  # rev4 SM-3: real e2e handoff incl. cross-target if mixed-team project.
+  log info "[7/7] end-to-end handoff probe (incl. cross-target if mixed)"
+  source "${SCRIPT_DIR}/lib/_smoke_probes.sh"
+
+  # Find first cto agent
+  cto_name=$(yq -r '.agents[] | select(.profile == "cto") | .agent_name' "$manifest" | head -1)
+  cto_uuid=$(yq -r ".agents.${cto_name}" "$bindings")
+  [ -n "$cto_uuid" ] && [ "$cto_uuid" != "null" ] || die "no cto agent in $project_key"
+
+  # Find first non-cto agent (implementer/reviewer/qa preferred)
+  next_name=$(yq -r '.agents[] | select(.profile == "implementer" or .profile == "reviewer" or .profile == "qa") | .agent_name' "$manifest" | head -1)
+  next_uuid=$(yq -r ".agents.${next_name}" "$bindings")
+  [ -n "$next_uuid" ] && [ "$next_uuid" != "null" ] || die "no implementer/reviewer/qa agent in $project_key"
+
+  # Detect mixed-target
+  cto_target=$(yq -r ".agents[] | select(.agent_name == \"${cto_name}\") | .target" "$manifest")
+  next_target=$(yq -r ".agents[] | select(.agent_name == \"${next_name}\") | .target" "$manifest")
+  if [ "$cto_target" != "$next_target" ]; then
+    log info "  mixed-target handoff probe: ${cto_name}[${cto_target}] → ${next_name}[${next_target}]"
+  fi
+
+  probe_e2e_handoff "$company_id" "$cto_uuid" "$cto_name" "$next_uuid" "$next_name" || \
+    die "stage 7: e2e handoff probe failed"
+
+  log ok "[7/7] e2e handoff green"
 }
 
 # Run stages

@@ -71,6 +71,9 @@ This is the **most important** task in Phase H. No automation — operator manua
 - [ ] **Step 1: Run watchdog log scan for last 7 days**
 
 ```bash
+# rev4 H-1: source common helpers so `log info` works as standalone snippet
+source paperclips/scripts/lib/_common.sh
+
 cutoff=$(date -u -v-7d +%Y-%m-%dT%H:%M:%SZ)
 log info "checking watchdog log for events since $cutoff"
 
@@ -547,12 +550,25 @@ Future PR will remove the parameter entirely once external callers updated.
 
 Comment out (or delete) the legacy-merge code in `resolve_all()`. Functions `_read_legacy_env` and `_normalize_legacy_name` can stay (used by tests) but are no longer called from `resolve_all` in production.
 
-Update tests in `test_phase_d_resolver.py` to skip `test_legacy_only_returns_legacy_uuids` and `test_both_*` (they test back-compat that no longer matters):
+Update tests in `test_phase_d_resolver.py` — **rev4 H-2: DELETE obsolete tests, don't skip them**. Skipped tests rot silently and pile up. Delete or rewrite to test the post-cleanup contract.
+
 ```python
-import pytest
-@pytest.mark.skip(reason="Phase H cleanup: legacy env file removed; test obsolete")
-def test_legacy_only_returns_legacy_uuids(): ...
+# DELETE these tests entirely (they test pre-cleanup back-compat that no longer exists):
+# - test_legacy_only_returns_legacy_uuids
+# - test_both_matching_no_conflicts
+# - test_both_conflicting_raises_warning
+# - test_normalize_legacy_name_to_canonical (move to a separate "historical" test file with note)
+# - test_all_normalized_names_appear_in_role_taxonomy
+
+# REPLACE with single new test that asserts post-cleanup contract:
+def test_resolve_all_uses_only_bindings_yaml():
+    """Post-Phase-H: legacy_env_path arg is ignored; only bindings.yaml drives output."""
+    from paperclips.scripts.resolve_bindings import resolve_all
+    out = resolve_all(legacy_env_path=None, bindings_yaml_path=Path("..."))
+    assert out["sources_used"] == ["bindings"]
 ```
+
+Run `git rm -r tests/...` for any test file that becomes empty.
 
 - [ ] **Step 4: Edit `services/watchdog/src/gimle_watchdog/detection_semantic.py`**
 

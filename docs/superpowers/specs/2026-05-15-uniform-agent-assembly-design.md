@@ -2,13 +2,18 @@
 
 | | |
 |---|---|
-| **Date** | 2026-05-15 (rev3 — post second deep-review) |
+| **Date** | 2026-05-15 (rev4 — post third deep-review of plans + multi-target/runtime-probe additions) |
 | **Status** | Draft (pending operator review) |
 | **Author** | brainstorm with operator |
 | **Scope** | Replace current per-project ad-hoc agent assembly (gimle legacy + trading + uaudit) with a uniform manifest+profile model; reduce per-agent prompt size by 60–80%; make paperclip+agents bring-up reproducible from a clean machine. |
 | **Non-goals** | Rewriting paperclipai or telegram plugin; replacing watchdog; changing claude/codex CLI internals; adding new agent capabilities. |
 
 Pinned grounding: this spec is grounded in the repo state at `main@568888a` (2026-05-14 docs/BUGS.md merge). All later commits should be cross-checked when implementing.
+
+**Rev4 changelog (third deep-review of plans + 2 operator strategic questions applied):**
+- §3.4 NEW — Target extensibility (`paperclips/roles-<target>/` convention; mixed-team support explicit; cross-target handoff first-class).
+- §12.C extended — concrete runtime probe-questions per profile-family (mcp_list / git_capability / handoff_procedure / phase_orchestration) with expected/forbidden markers; replaces vague "operator-live" placeholder.
+- Plan rev4 — 25 fixes (PR retarget to develop; CI failure mitigation; Phase B builder contract for output_path generation + agent.profile key fix; Phase C placeholder removal + per-agent role mapping + remove `\|\| true`; Phase D normalize fixed (CXCTO/CXMCPEngineer/CXQAEngineer per actual taxonomy) + heuristic replaced with manifest-target read; Phase F mandatory plugin GET-then-POST; Phase G watchdog-taxonomy gap as pre-flight blocker, 12 not 11; Phase H gate snippet sources _common.sh; smoke-test runtime probes per SM-1..5; multi-target docs per MA-1..3).
 
 **Rev3 changelog (second deep-review feedback applied):**
 - §14 added execution-ownership constraint: phases tagged `operator` / `team` / `operator + team` because Phases A–D are self-modifying (gimle team would edit its own runtime contract).
@@ -173,6 +178,28 @@ Universal-layer fragments (`karpathy.md`, `wake-and-handoff-basics.md`, `escalat
 **Why v1 keeps it inlined:** paperclip serves one bundle to the agent. There is no native paperclip mechanism for "common project preamble + per-agent body". Splitting would require either (a) operator manually merging two files in workspace, or (b) duplicating universal content in per-workspace AGENTS.md outside paperclip's contract. Both options are fragile.
 
 **Cost:** v1 keeps the EXISTING inlining cost — current `paperclips/fragments/shared/fragments/karpathy-discipline.md`, `heartbeat-discipline.md`, `phase-handoff.md` already inline into every agent today. The redesign does NOT introduce new duplication; it merely preserves what's there. v2 (§13) revisits if/when paperclip API supports multi-bundle delivery.
+
+### 3.4 Multi-target teams + target extensibility (rev4)
+
+Manifest declares `target: <string>` per agent. The string is **opaque** at the schema level; supported values come from filesystem convention: a value `<X>` requires `paperclips/roles-<X>/` to exist with target-appropriate craft files, and paperclip-server must support `<X>_local` adapter type.
+
+| target | role-files dir | adapter type | currently supported |
+|---|---|---|---|
+| `claude` | `paperclips/roles/` | `claude_local` | yes (default) |
+| `codex` | `paperclips/roles-codex/` | `codex_local` | yes |
+| `<future>` | `paperclips/roles-<future>/` | `<future>_local` | requires (a) new craft files, (b) paperclip adapter, (c) bootstrap-script update if hire payload differs |
+
+**Mixed teams within one project are explicitly supported.** trading uses `target: claude` for CTO + `target: codex` for the rest; gimle runs 12-claude + 12-codex teams in parallel under the same company; uaudit is codex-only. Future projects (e.g. ios-wallet) may declare `target: codex` for SwiftEngineer × N + `target: claude` for OpusReviewer.
+
+**Cross-target handoff is a first-class scenario** — when CTO[claude] reassigns to PythonEngineer[codex], the hire payload differences (model id, sandbox flags) are configured at hire time, not at handoff time; paperclip routes events identically regardless of target. Phase C smoke-test §12.C explicitly validates one cross-target handoff per mixed-team project.
+
+**What stays target-agnostic:**
+- Profile library (`paperclips/fragments/profiles/*.yaml`).
+- Fragment library (`paperclips/fragments/shared/fragments/`).
+- Project manifests (only `target: <string>` field touches it).
+- bootstrap-project.sh / smoke-test.sh / watchdog (read `target` from manifest, branch on it locally).
+
+Adding a new target is **additive, not breaking** — existing projects unaffected.
 
 ### 3.3 Workspace and root AGENTS.md / CLAUDE.md (operator convenience only)
 
@@ -1043,6 +1070,26 @@ Run against a stub paperclip server in CI (httpx mock or similar).
 - [ ] `rollback.sh <journal-id>` replays inverse mutations.
 
 ### 12.C Operator live smoke (requires real paperclip + macOS host)
+
+**Runtime probe-questions per profile-family.** Smoke-test posts these questions as test issues to one agent per profile in each migrated project; agent reply must contain expected markers. This validates the profile boundaries actually work at runtime, not just at deploy time.
+
+| Probe | Asked to | Expected markers in reply | Forbidden in reply |
+|---|---|---|---|
+| `mcp_list` — "List MCP namespaces you can call. Reply with comma-separated names." | every profile | `codebase-memory`, `serena`, `context7`, `github`, `sequential-thinking` (+ project-specific from manifest's `mcp.base_required` and `palace.*` for gimle) | (none) |
+| `git_capability` — "What git operations CAN you do? CANNOT? Be precise." | implementer | CAN: `commit`, `push`, `fetch`, `--force-with-lease` | `merge`, `release-cut` |
+| `git_capability` | reviewer | CAN: read, `gh pr review --approve`, mergeStateStatus decode | `commit`, `push`, `release-cut` |
+| `git_capability` | cto | CAN: all reviewer + `release-cut`, merge to integration_branch | (none) |
+| `git_capability` | writer / research | CANNOT: commit, push, merge | `commit`, `push`, `merge` |
+| `handoff_procedure` — "Describe step-by-step your handoff to next agent." | every profile except custom | `PATCH /api/issues/<id>` with `assigneeAgentId`; `POST /api/issues/<id>/comments` with `@mention` (trailing space); STOP | (none) |
+| `phase_orchestration` — "List phase numbers you orchestrate, comma-separated." | cto | `1.1`, `1.2`, `2`, `3.1`, `3.2`, `4.1`, `4.2` | (none) |
+| `phase_orchestration` | every non-cto | "I do not orchestrate phases" or empty | any phase number |
+
+**Cross-target handoff** (mixed-team projects only): smoke posts test issue to `target: claude` CTO with body "Reassign to first `target: codex` agent in your team and ask them to echo 'cross-target ack' back". Successful round-trip in <120s required.
+
+Probe-question library + expected-marker matchers are committed in `paperclips/scripts/lib/_smoke_probes.sh`. Smoke-test invokes them via stage 5 (mcp/skills/git/handoff probes per profile) and stage 7 (e2e handoff incl. cross-target).
+
+**Original §12.C deployment-side checks remain (below).**
+
 
 Run by operator on real iMac/Mac with full toolchain.
 

@@ -69,9 +69,9 @@ CX_QA_ENGINEER_AGENT_ID=99d5f8f8-822f-4ddb-baaa-0bdaec6f9399
 schemaVersion: 2
 company_id: "9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64"
 agents:
-  CXCto: "da97dbd9-6627-48d0-b421-66af0750eacf"
+  CXCTO: "da97dbd9-6627-48d0-b421-66af0750eacf"
   CXPythonEngineer: "e010d305-22f7-4f5c-9462-e6526b195b19"
-  CXQaEngineer: "99d5f8f8-822f-4ddb-baaa-0bdaec6f9399"
+  CXQAEngineer: "99d5f8f8-822f-4ddb-baaa-0bdaec6f9399"
 ```
 
 `paperclips/tests/fixtures/phase_d/bindings_conflicting.yaml`:
@@ -79,9 +79,9 @@ agents:
 schemaVersion: 2
 company_id: "9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64"
 agents:
-  CXCto: "DIFFERENT-uuid-from-legacy"
+  CXCTO: "DIFFERENT-uuid-from-legacy"
   CXPythonEngineer: "e010d305-22f7-4f5c-9462-e6526b195b19"
-  CXQaEngineer: "99d5f8f8-822f-4ddb-baaa-0bdaec6f9399"
+  CXQAEngineer: "99d5f8f8-822f-4ddb-baaa-0bdaec6f9399"
 ```
 
 `paperclips/tests/fixtures/phase_d/bindings_only_new.yaml`:
@@ -89,9 +89,9 @@ agents:
 schemaVersion: 2
 company_id: "9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64"
 agents:
-  CXCto: "da97dbd9-6627-48d0-b421-66af0750eacf"
+  CXCTO: "da97dbd9-6627-48d0-b421-66af0750eacf"
   CXPythonEngineer: "e010d305-22f7-4f5c-9462-e6526b195b19"
-  CXQaEngineer: "99d5f8f8-822f-4ddb-baaa-0bdaec6f9399"
+  CXQAEngineer: "99d5f8f8-822f-4ddb-baaa-0bdaec6f9399"
   CXNewAgent: "fresh-uuid-only-in-bindings"
 ```
 
@@ -113,7 +113,7 @@ def test_legacy_only_returns_legacy_uuids():
         legacy_env_path=FIX / "codex-agent-ids.env",
         bindings_yaml_path=None,
     )
-    assert out["agents"]["CXCto"] == "da97dbd9-6627-48d0-b421-66af0750eacf"
+    assert out["agents"]["CXCTO"] == "da97dbd9-6627-48d0-b421-66af0750eacf"
     assert out["sources_used"] == ["legacy"]
     assert out["conflicts"] == []
 
@@ -124,7 +124,7 @@ def test_bindings_only_returns_new_uuids():
         legacy_env_path=None,
         bindings_yaml_path=FIX / "bindings_only_new.yaml",
     )
-    assert out["agents"]["CXCto"] == "da97dbd9-6627-48d0-b421-66af0750eacf"
+    assert out["agents"]["CXCTO"] == "da97dbd9-6627-48d0-b421-66af0750eacf"
     assert out["sources_used"] == ["bindings"]
     assert "CXNewAgent" in out["agents"]
 
@@ -149,10 +149,10 @@ def test_both_conflicting_raises_warning():
             bindings_yaml_path=FIX / "bindings_conflicting.yaml",
         )
     # Bindings wins (precedence: new > legacy)
-    assert out["agents"]["CXCto"] == "DIFFERENT-uuid-from-legacy"
+    assert out["agents"]["CXCTO"] == "DIFFERENT-uuid-from-legacy"
     # Conflict captured
     assert len(out["conflicts"]) == 1
-    assert out["conflicts"][0]["agent"] == "CXCto"
+    assert out["conflicts"][0]["agent"] == "CXCTO"
     assert out["conflicts"][0]["legacy"] == "da97dbd9-6627-48d0-b421-66af0750eacf"
     assert out["conflicts"][0]["bindings"] == "DIFFERENT-uuid-from-legacy"
     # Warning emitted
@@ -161,17 +161,43 @@ def test_both_conflicting_raises_warning():
 
 
 def test_normalize_legacy_name_to_canonical():
-    """CX_PYTHON_ENGINEER_AGENT_ID env-var name → CXPythonEngineer manifest agent_name."""
+    """env-var → canonical name MUST match watchdog/role_taxonomy.py exactly."""
     from paperclips.scripts.resolve_bindings import _normalize_legacy_name
+    # Acronym preserved (per role_taxonomy.py entries):
+    assert _normalize_legacy_name("CX_CTO_AGENT_ID") == "CXCTO"
+    assert _normalize_legacy_name("CX_QA_ENGINEER_AGENT_ID") == "CXQAEngineer"
+    assert _normalize_legacy_name("CX_MCP_ENGINEER_AGENT_ID") == "CXMCPEngineer"
+    # PascalCase for non-acronym words:
     assert _normalize_legacy_name("CX_PYTHON_ENGINEER_AGENT_ID") == "CXPythonEngineer"
-    assert _normalize_legacy_name("CX_CTO_AGENT_ID") == "CXCto"
+    assert _normalize_legacy_name("CX_CODE_REVIEWER_AGENT_ID") == "CXCodeReviewer"
+    # CODEX_ prefix:
     assert _normalize_legacy_name("CODEX_ARCHITECT_REVIEWER_AGENT_ID") == "CodexArchitectReviewer"
+
+
+def test_all_normalized_names_appear_in_role_taxonomy():
+    """Smoke: every name produced by normalization is recognized by watchdog taxonomy."""
+    import sys
+    sys.path.insert(0, str(REPO / "services" / "watchdog" / "src"))
+    from gimle_watchdog.role_taxonomy import _ROLE_CLASS_RAW
+    from paperclips.scripts.resolve_bindings import _read_legacy_env
+
+    legacy_path = REPO / "paperclips" / "codex-agent-ids.env"
+    if not legacy_path.is_file():
+        import pytest
+        pytest.skip("legacy env file already removed (post Phase H)")
+    extracted = _read_legacy_env(legacy_path)
+    unknown = [n for n in extracted if n not in _ROLE_CLASS_RAW]
+    assert not unknown, (
+        f"normalization produces names unknown to watchdog taxonomy: {unknown}\n"
+        f"Either fix _normalize_legacy_name() or add entries to "
+        f"services/watchdog/src/gimle_watchdog/role_taxonomy.py"
+    )
 
 
 def test_resolve_one_agent_returns_uuid():
     from paperclips.scripts.resolve_bindings import resolve_one
     uuid = resolve_one(
-        agent_name="CXCto",
+        agent_name="CXCTO",
         legacy_env_path=FIX / "codex-agent-ids.env",
         bindings_yaml_path=FIX / "bindings_matching.yaml",
     )
@@ -226,12 +252,18 @@ class BindingsConflictWarning(UserWarning):
 def _normalize_legacy_name(env_var: str) -> str:
     """CX_PYTHON_ENGINEER_AGENT_ID → CXPythonEngineer.
 
+    Output MUST match canonical names in services/watchdog/src/gimle_watchdog/role_taxonomy.py
+    (verified against develop@c7b1310 — entries like CXCTO, CXMCPEngineer, CXQAEngineer
+    preserve acronym case; entries like CXPythonEngineer, CXCodeReviewer use PascalCase).
+
     Algorithm:
     - Strip _AGENT_ID suffix.
     - Special case: CX_ prefix → "CX" prefix on the result.
     - Special case: CODEX_ prefix → preserve "Codex" prefix.
-    - Snake_case → PascalCase.
+    - Snake_case → PascalCase, with PRESERVED ACRONYMS (CTO, QA, MCP, CR, CEO, API).
     """
+    PRESERVED_ACRONYMS = {"CTO", "CEO", "QA", "MCP", "CR", "API", "URL", "UUID"}
+
     name = env_var
     if name.endswith("_AGENT_ID"):
         name = name[: -len("_AGENT_ID")]
@@ -249,8 +281,13 @@ def _normalize_legacy_name(env_var: str) -> str:
         prefix = "Codex"
         rest = parts[1:]
 
-    pascal = "".join(p.capitalize() for p in rest)
-    return prefix + pascal
+    out_parts: list[str] = []
+    for p in rest:
+        if p in PRESERVED_ACRONYMS:
+            out_parts.append(p)
+        else:
+            out_parts.append(p.capitalize())
+    return prefix + "".join(out_parts)
 
 
 def _read_legacy_env(path: Path) -> dict[str, str]:
@@ -646,12 +683,30 @@ def load_team_uuids_from_repo(repo_root: Path) -> dict[str, set[str]]:
             )
         except FileNotFoundError:
             continue
+
+        # Read manifest to get authoritative target per agent (NOT name-prefix heuristic).
+        # uaudit has UWICTO/UWAKotlinAuditor — codex agents that don't start with CX.
+        manifest_path = repo_root / "paperclips" / "projects" / project_dir.name / "paperclip-agent-assembly.yaml"
+        target_by_name: dict[str, str] = {}
+        if manifest_path.is_file():
+            try:
+                import yaml
+                m = yaml.safe_load(manifest_path.read_text())
+                for a in m.get("agents", []):
+                    target_by_name[a["agent_name"]] = a.get("target", "claude")
+            except Exception as e:
+                log.warning("watchdog: could not read manifest for %s: %s", project_dir.name, e)
+
         for name, uuid in data["agents"].items():
-            # Heuristic: CX prefix → codex; everything else → claude
-            if name.startswith("CX") or name.startswith("Codex"):
-                out["codex"].add(uuid)
-            else:
-                out["claude"].add(uuid)
+            target = target_by_name.get(name)
+            if target is None:
+                # Pre-Phase-A: legacy gimle env has names not in manifest. Codex env file = codex agents.
+                target = "codex" if project_dir.name == "gimle" and name.startswith("CX") else "claude"
+            if target not in out:
+                # Defensive: unknown target string treated as claude
+                target = "claude"
+            out[target].add(uuid)
+
         if data.get("conflicts"):
             log.warning(
                 "watchdog: bindings conflicts for project %s — %d agents differ between legacy and new",
@@ -713,7 +768,7 @@ def test_migrate_warns_on_conflict(tmp_path, monkeypatch):
     proj = tmp_path / ".paperclip" / "projects" / "gimle"
     proj.mkdir(parents=True)
     (proj / "bindings.yaml").write_text(
-        'schemaVersion: 2\ncompany_id: "abc"\nagents:\n  CXCto: "different-uuid"\n'
+        'schemaVersion: 2\ncompany_id: "abc"\nagents:\n  CXCTO: "different-uuid"\n'
     )
     # Run with --check-conflicts mode
     out = subprocess.run(

@@ -10,6 +10,8 @@
 
 **Goal:** Reorganize `paperclips/fragments/shared/fragments/*.md` into a hierarchical layout (`universal/`, `git/`, `worktree/`, `handoff/`, `code-review/`, `qa/`, `pre-work/`, `plan/`) and split heavy mixed-content role files into legacy-deprecated + new craft-only files.
 
+**Multi-target note (rev4 MA-2):** Phase A touches role-files in `paperclips/roles/` (claude) and `paperclips/roles-codex/` (codex). The directory naming is convention: a future target X (e.g. `gemini`) would have `paperclips/roles-gemini/` paralleling these. Phase A does NOT introduce new targets; it only reorganizes existing two. See spec §3.4 for target extensibility.
+
 **Architecture:** Two parallel refactor tracks, both committed to the `paperclip-shared-fragments` submodule (`ant013/paperclip-shared-fragments.git`):
 1. **Fragment hierarchy** — move/split 13 existing fragment files into 16 new files organized by selectivity (some fragments split, some renamed, none deleted in Phase A — preserves backward compat for existing builder until Phase B).
 2. **Role-split (hybrid)** — copy each `paperclips/roles/*.md` and `paperclips/roles-codex/cx-*.md` to `paperclips/roles/legacy/` (and `roles-codex/legacy/`); rewrite originals as slim craft-only files that defer capability to profile composition.

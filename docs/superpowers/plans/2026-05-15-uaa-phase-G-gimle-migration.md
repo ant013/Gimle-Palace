@@ -151,6 +151,34 @@ Manually confirm in UI:
 
 If any blocker, postpone Phase G.
 
+- [ ] **Step 5 (rev4 G-2): PRE-FLIGHT — watchdog taxonomy covers all gimle agents**
+
+Done BEFORE pausing agents. If taxonomy doesn't know an agent's canonical name, watchdog can't classify its handoffs and Phase 3 alerts will misfire on production work post-migration.
+
+```bash
+PYTHONPATH=. python3 -c "
+import sys, yaml
+sys.path.insert(0, 'services/watchdog/src')
+from gimle_watchdog.role_taxonomy import _ROLE_CLASS_RAW
+manifest = yaml.safe_load(open('paperclips/projects/gimle/paperclip-agent-assembly.yaml').read())
+manifest_agents = [a['agent_name'] for a in manifest.get('agents', [])]
+unknown = [n for n in manifest_agents if n not in _ROLE_CLASS_RAW]
+if unknown:
+    print(f'BLOCKER: watchdog role_taxonomy.py does not know agents: {unknown}', file=sys.stderr)
+    print('Fix: edit services/watchdog/src/gimle_watchdog/role_taxonomy.py before proceeding.', file=sys.stderr)
+    sys.exit(1)
+print(f'PRE-FLIGHT pass: all {len(manifest_agents)} gimle agent_name canonical names present in role_taxonomy')
+"
+```
+
+If BLOCKER, edit `services/watchdog/src/gimle_watchdog/role_taxonomy.py` to add missing entries with correct role-classes BEFORE proceeding. Re-run pre-flight until pass.
+
+After fix, re-deploy watchdog config + restart service:
+```bash
+./paperclips/scripts/bootstrap-watchdog.sh gimle
+launchctl kickstart "gui/$(id -u)/work.ant013.gimle-watchdog"
+```
+
 ---
 
 ## Task 3: Pause all 24 gimle agents
@@ -205,7 +233,7 @@ journal_record "$journal" "$(jq -n --arg ts "$(date -u +%Y%m%dT%H%M%SZ)" --argjs
 ./paperclips/scripts/migrate-bindings.sh gimle --dry-run
 ```
 
-Inspect output. Expected: 24 agents listed (11 from codex-agent-ids.env + 13 from API; some overlap if both sources have same agent — bindings precedence per Phase D).
+Inspect output. Expected: 24 agents listed (12 from codex-agent-ids.env + 12 from API; bindings precedence per Phase D resolves any overlap). rev4 G-1 fix: codex-agent-ids.env contains 12 IDs (one per codex agent), not 11.
 
 - [ ] **Step 2: Run for real**
 
@@ -640,19 +668,19 @@ agents:
   - { agent_name: Auditor,                   role_source: roles/auditor.md,                  profile: reviewer,    target: claude, reportsTo: CTO }
 
   # === Codex team (12) ===
-  - { agent_name: CXCto,                     role_source: roles-codex/cx-cto.md,             profile: cto,         target: codex }
-  - { agent_name: CXCodeReviewer,            role_source: roles-codex/cx-code-reviewer.md,   profile: reviewer,    target: codex, reportsTo: CXCto }
-  - { agent_name: CodexArchitectReviewer,    role_source: roles-codex/codex-architect-reviewer.md, profile: reviewer, target: codex, reportsTo: CXCto,
+  - { agent_name: CXCTO,                     role_source: roles-codex/cx-cto.md,             profile: cto,         target: codex }
+  - { agent_name: CXCodeReviewer,            role_source: roles-codex/cx-code-reviewer.md,   profile: reviewer,    target: codex, reportsTo: CXCTO }
+  - { agent_name: CodexArchitectReviewer,    role_source: roles-codex/codex-architect-reviewer.md, profile: reviewer, target: codex, reportsTo: CXCTO,
       custom_includes: [code-review/adversarial.md] }
-  - { agent_name: CXPythonEngineer,          role_source: roles-codex/cx-python-engineer.md, profile: implementer, target: codex, reportsTo: CXCto }
-  - { agent_name: CXMcpEngineer,             role_source: roles-codex/cx-mcp-engineer.md,    profile: implementer, target: codex, reportsTo: CXCto }
-  - { agent_name: CXInfraEngineer,           role_source: roles-codex/cx-infra-engineer.md,  profile: implementer, target: codex, reportsTo: CXCto }
-  - { agent_name: CXBlockchainEngineer,      role_source: roles-codex/cx-blockchain-engineer.md, profile: implementer, target: codex, reportsTo: CXCto }
-  - { agent_name: CXSecurityAuditor,         role_source: roles-codex/cx-security-auditor.md, profile: reviewer,   target: codex, reportsTo: CXCto }
-  - { agent_name: CXQaEngineer,              role_source: roles-codex/cx-qa-engineer.md,     profile: qa,          target: codex, reportsTo: CXCto }
-  - { agent_name: CXResearchAgent,           role_source: roles-codex/cx-research-agent.md,  profile: research,    target: codex, reportsTo: CXCto }
-  - { agent_name: CXTechnicalWriter,         role_source: roles-codex/cx-technical-writer.md, profile: writer,     target: codex, reportsTo: CXCto }
-  - { agent_name: CXAuditor,                 role_source: roles-codex/cx-auditor.md,         profile: reviewer,    target: codex, reportsTo: CXCto }
+  - { agent_name: CXPythonEngineer,          role_source: roles-codex/cx-python-engineer.md, profile: implementer, target: codex, reportsTo: CXCTO }
+  - { agent_name: CXMCPEngineer,             role_source: roles-codex/cx-mcp-engineer.md,    profile: implementer, target: codex, reportsTo: CXCTO }
+  - { agent_name: CXInfraEngineer,           role_source: roles-codex/cx-infra-engineer.md,  profile: implementer, target: codex, reportsTo: CXCTO }
+  - { agent_name: CXBlockchainEngineer,      role_source: roles-codex/cx-blockchain-engineer.md, profile: implementer, target: codex, reportsTo: CXCTO }
+  - { agent_name: CXSecurityAuditor,         role_source: roles-codex/cx-security-auditor.md, profile: reviewer,   target: codex, reportsTo: CXCTO }
+  - { agent_name: CXQAEngineer,              role_source: roles-codex/cx-qa-engineer.md,     profile: qa,          target: codex, reportsTo: CXCTO }
+  - { agent_name: CXResearchAgent,           role_source: roles-codex/cx-research-agent.md,  profile: research,    target: codex, reportsTo: CXCTO }
+  - { agent_name: CXTechnicalWriter,         role_source: roles-codex/cx-technical-writer.md, profile: writer,     target: codex, reportsTo: CXCTO }
+  - { agent_name: CXAuditor,                 role_source: roles-codex/cx-auditor.md,         profile: reviewer,    target: codex, reportsTo: CXCTO }
 ```
 
 **Naming alignment with bindings.yaml**: ensure `agent_name` matches the canonical name in bindings.yaml (resolved by `_normalize_legacy_name` in Phase D). Verify:
@@ -785,7 +813,7 @@ Expected: 24 entries, all `heartbeat=false`.
 Verify:
 ```bash
 ls /Users/Shared/Ios/worktrees/claude/CTO/workspace/AGENTS.md
-ls /Users/Shared/Ios/worktrees/cx/Gimle-Palace/CXCto/workspace/AGENTS.md
+ls /Users/Shared/Ios/worktrees/cx/Gimle-Palace/CXCTO/workspace/AGENTS.md
 ```
 
 ---
@@ -820,9 +848,10 @@ tail -f ~/.paperclip/watchdog.log | jq -c 'select(.event | IN("wake_failed", "ha
 
 Expected: zero events for gimle company in 2h.
 
-If `handoff_alert_posted` for gimle: investigate immediately. Likely cause:
-- Agent name mismatch between bindings and watchdog role-taxonomy (Phase A.1 role-split renamed agents).
-- New canonical name (e.g., `CXCto`) not in `services/watchdog/src/gimle_watchdog/role_taxonomy.py` — mark as TODO, see open Q in spec §13.
+If `handoff_alert_posted` for gimle: investigate immediately. Should NOT happen if Task 2 Step 5 pre-flight (rev4 G-2) passed. If it does:
+- Roll back: `./paperclips/scripts/rollback.sh <journal-id>` (restores prior AGENTS.md to all 24 agents).
+- Investigate which canonical name watchdog couldn't classify; add to `role_taxonomy.py`; re-run pre-flight; redeploy.
+- Do NOT continue migration with watchdog blind to handoff failures.
 
 - [ ] **Step 4: Verify in-progress issues survived**
 

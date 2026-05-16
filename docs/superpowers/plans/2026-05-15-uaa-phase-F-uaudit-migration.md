@@ -171,11 +171,25 @@ overlay_root: paperclips/projects/uaudit/overlays
 EOF
 ```
 
-- [ ] **Step 5: Extract telegram plugin_id from current manifest**
+- [ ] **Step 5: Extract telegram plugin_id + chat_id from LIVE plugin config (rev4 F-1)**
+
+**No operator-filled placeholder.** `chat_id` MUST be retrieved from the current live plugin config via `GET /api/plugins/<id>`, not guessed. If GET shows no chat_id configured, fail-fast — operator must configure plugin first via paperclip UI.
 
 ```bash
 plugin_id=$(yq -r '.report_delivery.telegram_plugin_id' paperclips/projects/uaudit/paperclip-agent-assembly.yaml)
-chat_id="<operator-fills-from-current-paperclip-instance>"
+[ -n "$plugin_id" ] && [ "$plugin_id" != "null" ] || { echo "ERROR: no telegram_plugin_id in manifest"; exit 1; }
+
+# Mandatory: GET current plugin config
+current_config=$(curl -fsS "${PAPERCLIP_API_URL}/api/plugins/${plugin_id}" \
+  -H "Authorization: Bearer ${PAPERCLIP_API_KEY}")
+
+# Extract chat_id from primary route (or operator-confirmed default)
+chat_id=$(echo "$current_config" | jq -r '.config.defaultChatId // .config.routes[0].chatId // ""')
+[ -n "$chat_id" ] && [ "$chat_id" != "null" ] || die "no chat_id in current plugin config; configure plugin via paperclip UI first"
+
+# Snapshot current full config for journal/rollback (per spec §8.5)
+mkdir -p paperclips/tests/baseline/phase_f
+echo "$current_config" > paperclips/tests/baseline/phase_f/telegram-plugin-config-pre.json
 
 cat > ~/.paperclip/projects/uaudit/plugins.yaml <<EOF
 schemaVersion: 2
@@ -183,9 +197,16 @@ telegram:
   plugin_id: "${plugin_id}"
   chat_id: "${chat_id}"
 EOF
+echo "wrote plugins.yaml with chat_id=$chat_id"
 ```
 
-If `chat_id` unknown, `paperclip plugin show ${plugin_id}` (or `GET /api/plugins/${plugin_id}`) to retrieve current routes.
+**Re-confirmation gate before any POST /config:** `bootstrap-project.sh` step 5 (telegram plugin config) does:
+1. GET current config → snapshot to journal.
+2. Diff against intended new config (merge of host plugins.yaml + manifest defaults).
+3. If diff non-trivial, prompt operator to confirm OR pass `--accept-plugin-config-diff` flag to skip prompt.
+4. Only then POST replaced config.
+
+This is the spec §8.4 contract enforced as code. No silent overwrite of live plugin config.
 
 - [ ] **Step 6: Verify PASS**
 

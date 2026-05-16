@@ -1058,6 +1058,134 @@ git commit -m "feat(uaa-phase-b): template-source resolver per §6.5"
 
 ---
 
+## Task 5.5: Builder contract — derive output_path from (project.key, target, agent_name)
+
+**Files:**
+- Modify: `paperclips/scripts/build_project_compat.py` — extend `manifest_agents()` and `render_target()` to accept agents WITHOUT explicit `output_path`.
+- Test: `paperclips/tests/test_phase_b_builder_contract.py`
+
+**Why this is a separate task (rev4 fix B-1):** current builder (`build_project_compat.py:437-446`) raises `ValueError("manifest agent missing role_source/output_path")` if `output_path` absent. All migration plans (E/F/G) rewrite manifests WITHOUT `output_path`. Without this task, every migration breaks at build step.
+
+- [ ] **Step 1: Failing test**
+
+```python
+# paperclips/tests/test_phase_b_builder_contract.py
+"""Phase B contract: builder derives output_path when manifest agent omits it."""
+import subprocess
+import tempfile
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[1]
+
+
+def test_agent_without_output_path_produces_default_path(tmp_path):
+    """For agent {agent_name: X, role_source: roles/x.md, target: codex} without output_path,
+    builder writes paperclips/dist/<project>/<target>/X.md."""
+    # Use synthetic manifest fixture (Phase B Task 8) — agents without output_path
+    project_root = REPO / "paperclips" / "projects" / "synth-test-b1"
+    if project_root.exists():
+        import shutil
+        shutil.rmtree(project_root)
+    project_root.mkdir(parents=True)
+
+    (project_root / "paperclip-agent-assembly.yaml").write_text("""\
+schemaVersion: 2
+project:
+  key: synth-test-b1
+  display_name: Synth B1
+  issue_prefix: SYN
+  integration_branch: main
+  specs_dir: docs/specs
+  plans_dir: docs/plans
+mcp:
+  service_name: synth
+  tool_namespace: synth
+  base_required: [codebase-memory]
+agents:
+  - agent_name: TestAgent
+    role_source: roles/python-engineer.md
+    profile: implementer
+    target: codex
+""")
+    try:
+        result = subprocess.run(
+            ["./paperclips/build.sh", "--project", "synth-test-b1", "--target", "codex"],
+            cwd=REPO, capture_output=True, text=True,
+        )
+        assert result.returncode == 0, f"build failed:\n{result.stdout}\n{result.stderr}"
+        # Output written at paperclips/dist/synth-test-b1/codex/TestAgent.md
+        out = REPO / "paperclips" / "dist" / "synth-test-b1" / "codex" / "TestAgent.md"
+        assert out.is_file(), f"expected output at {out}"
+    finally:
+        import shutil
+        shutil.rmtree(project_root)
+        out_dir = REPO / "paperclips" / "dist" / "synth-test-b1"
+        if out_dir.exists():
+            shutil.rmtree(out_dir)
+
+
+def test_agent_with_explicit_output_path_still_works():
+    """Back-compat: agents with explicit output_path keep working."""
+    # Trading currently has explicit output_path (Phase E hasn't run yet); build must succeed.
+    import subprocess
+    result = subprocess.run(
+        ["./paperclips/build.sh", "--project", "trading", "--target", "codex"],
+        cwd=REPO, capture_output=True, text=True,
+    )
+    # Will pass if pre-Phase-E (explicit output_path) OR post-Phase-E (derived); both valid.
+    assert result.returncode == 0, f"trading build broke:\n{result.stderr}"
+```
+
+- [ ] **Step 2: Verify FAIL (build raises "missing role_source/output_path")**
+
+```bash
+python3 -m pytest paperclips/tests/test_phase_b_builder_contract.py -v
+```
+
+- [ ] **Step 3: Modify `build_project_compat.py:render_target()`**
+
+Find the block (around line 437):
+```python
+        for agent in explicit_agents:
+            role_source = agent.get("role_source", "")
+            output_path = agent.get("output_path", "")
+            if not role_source or not output_path:
+                raise ValueError(f"manifest agent missing role_source/output_path for target {target}: {agent}")
+```
+
+Replace with:
+```python
+        for agent in explicit_agents:
+            role_source = agent.get("role_source", "")
+            output_path = agent.get("output_path", "")
+            agent_name = agent.get("agent_name", "")
+            if not role_source:
+                raise ValueError(f"manifest agent missing role_source for target {target}: {agent}")
+            # rev4 B-1: derive output_path if not explicit (post-UAA-spec manifests omit it).
+            if not output_path:
+                if not agent_name:
+                    raise ValueError(f"manifest agent missing agent_name AND output_path for target {target}: {agent}")
+                project_key = manifest_values.get("project.key", "")
+                if not project_key:
+                    raise ValueError(f"manifest missing project.key; cannot derive output_path for {agent_name}")
+                output_path = f"paperclips/dist/{project_key}/{target}/{agent_name}.md"
+```
+
+- [ ] **Step 4: Verify PASS**
+
+```bash
+python3 -m pytest paperclips/tests/test_phase_b_builder_contract.py -v
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add paperclips/scripts/build_project_compat.py paperclips/tests/test_phase_b_builder_contract.py
+git commit -m "fix(uaa-phase-b/B-1): derive output_path from (project.key, target, agent_name) when manifest omits it"
+```
+
+---
+
 ## Task 6: Wire compose + validate + resolve into build_project_compat.py
 
 **Files:**
@@ -1121,17 +1249,21 @@ def render_role(
 
     # Phase B: detect new craft files (no <!-- @include --> directives)
     if "<!-- @include fragments/" not in text:
-        # New craft path: compose via profile system
-        profile_name = (agent_values or {}).get("agent.profile", "minimal")
+        # New craft path: compose via profile system.
+        # rev4 B-2: agent_values is a flat dict from manifest_agents() — keys are top-level
+        # fields of the agent yaml entry (profile, role_source, target, agent_name, etc.).
+        # NOT 'agent.profile' (no namespacing happens in manifest_agents).
+        profile_name = (agent_values or {}).get("profile", "minimal")
         profiles_dir = repo_root / "paperclips" / "fragments" / "profiles"
         fragments_dir = repo_root / "paperclips" / "fragments" / "shared" / "fragments"
-        custom_includes = (agent_values or {}).get("agent.custom_includes", [])
+        custom_includes = (agent_values or {}).get("custom_includes", [])
         if isinstance(custom_includes, str):
             custom_includes = []  # back-compat
         # Compute overlay blocks (preserves existing apply_overlay logic, but as pre-compute)
+        # rev4 B-2: same key-naming fix — flat 'agent_name', not 'agent.agent_name'.
         overlay_blocks = _collect_overlay_blocks(
             repo_root, manifest_values, target, role_file.name,
-            (agent_values or {}).get("agent.agent_name", ""),
+            (agent_values or {}).get("agent_name", ""),
         )
         text = compose(
             profile_name=profile_name,
