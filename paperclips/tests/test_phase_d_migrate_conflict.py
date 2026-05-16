@@ -31,8 +31,11 @@ def test_migrate_check_conflicts_detects_disagreement(tmp_path, monkeypatch):
         env={**os.environ, "HOME": str(tmp_path)},
     )
     combined = (out.stdout + out.stderr).lower()
-    assert "conflict" in combined or out.returncode != 0, \
-        f"--check-conflicts did not surface disagreement: rc={out.returncode}\n{combined}"
+    # Strict gate (was 'or' — passed on unrelated errors): both conditions must hold.
+    assert out.returncode != 0, \
+        f"--check-conflicts must exit non-zero on disagreement; got rc=0\n{combined}"
+    assert "conflict" in combined, \
+        f"--check-conflicts must print 'conflict' on disagreement:\n{combined}"
 
 
 def test_migrate_check_conflicts_clean_when_matching(tmp_path, monkeypatch):
@@ -57,3 +60,23 @@ def test_migrate_check_conflicts_clean_when_matching(tmp_path, monkeypatch):
     assert out.returncode == 0, \
         f"--check-conflicts failed on matching bindings: rc={out.returncode}\n{combined}"
     assert "conflict" not in combined or "no conflicts" in combined
+
+
+def test_migrate_check_conflicts_no_sources_exits_zero(tmp_path, monkeypatch):
+    """Pre-bootstrap project (no legacy + no bindings) must exit 0 with 'skipped' log.
+
+    Prevents CI cron from treating 'nothing to check yet' as failure.
+    """
+    monkeypatch.setenv("HOME", str(tmp_path))
+    # `trading` has no legacy codex-agent-ids.env equivalent in this repo state,
+    # and tmp_path home has no bindings.yaml for trading.
+    out = subprocess.run(
+        ["bash", str(REPO / "paperclips" / "scripts" / "migrate-bindings.sh"),
+         "trading", "--check-conflicts"],
+        cwd=REPO, capture_output=True, text=True,
+        env={**os.environ, "HOME": str(tmp_path)},
+    )
+    combined = (out.stdout + out.stderr).lower()
+    assert out.returncode == 0, \
+        f"--check-conflicts on pre-bootstrap project must exit 0; got {out.returncode}\n{combined}"
+    assert "skipped" in combined or "no sources" in combined

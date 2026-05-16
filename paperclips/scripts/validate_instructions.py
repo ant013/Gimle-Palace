@@ -97,7 +97,10 @@ def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def load_team_uuids(repo_root: Path) -> dict[str, set[str]]:
+def load_team_uuids(
+    repo_root: Path,
+    allowed_company_ids: "set[str] | None" = None,
+) -> dict[str, set[str]]:
     """Return {'claude': {uuid, ...}, 'codex': {uuid, ...}}.
 
     Phase D dual-read sources:
@@ -106,6 +109,11 @@ def load_team_uuids(repo_root: Path) -> dict[str, set[str]]:
                  + ~/.paperclip/projects/<key>/bindings.yaml (new — for every
                    project that has been bootstrapped). resolve_bindings handles
                    precedence + conflict warnings.
+
+    D-fix C-2: when ``allowed_company_ids`` is provided, only include UUIDs from
+    bindings whose ``company_id`` is in the set. This prevents watchdog from
+    conflating UUIDs across trading/uaudit/gimle when running for a single
+    company. When None (legacy behavior), iterate every project subdir.
     """
     teams: dict[str, set[str]] = {"claude": set(), "codex": set()}
 
@@ -128,16 +136,25 @@ def load_team_uuids(repo_root: Path) -> dict[str, set[str]]:
     resolver_path = Path(__file__).resolve().parent / "resolve_bindings.py"
     resolve_all = None
     if resolver_path.is_file():
-        spec = importlib.util.spec_from_file_location(
-            "_phase_d_resolve_bindings", resolver_path
-        )
-        if spec is not None and spec.loader is not None:
-            try:
-                mod = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(mod)
-                resolve_all = mod.resolve_all
-            except Exception:
-                resolve_all = None
+        # D-fix I7: dedupe via sys.modules so repeated calls reuse the same
+        # module object (prevents duplicate BindingsConflictWarning classes
+        # under multi-tick watchdog runs).
+        cached_mod = sys.modules.get("_phase_d_resolve_bindings")
+        if cached_mod is not None:
+            resolve_all = getattr(cached_mod, "resolve_all", None)
+        else:
+            spec = importlib.util.spec_from_file_location(
+                "_phase_d_resolve_bindings", resolver_path
+            )
+            if spec is not None and spec.loader is not None:
+                try:
+                    mod = importlib.util.module_from_spec(spec)
+                    sys.modules["_phase_d_resolve_bindings"] = mod
+                    spec.loader.exec_module(mod)
+                    resolve_all = mod.resolve_all
+                except Exception:
+                    sys.modules.pop("_phase_d_resolve_bindings", None)
+                    resolve_all = None
 
     if resolve_all is None:
         # Fallback: legacy env only (preserves pre-Phase-D behavior).
@@ -180,11 +197,21 @@ def load_team_uuids(repo_root: Path) -> dict[str, set[str]]:
             )
         except FileNotFoundError:
             continue
+        # D-fix C-2: scope per company_id when caller supplied a filter, so a
+        # gimle watchdog cannot accidentally allowlist trading/uaudit UUIDs.
+        if allowed_company_ids is not None:
+            this_company = data.get("company_id")
+            # Pre-Phase-E gimle has no company_id in legacy-only mode; skip filter
+            # only if we have NO id to compare (legacy-only path), otherwise enforce.
+            if this_company is not None and this_company not in allowed_company_ids:
+                continue
         # Codex bucket — Phase D treats every bindings UUID as codex by default,
         # because the only currently-migrated path is the codex env file. Phase
         # E/F will introduce per-agent target metadata.
         for uuid in data["agents"].values():
-            if _UUID_RE.fullmatch(uuid) or len(uuid) >= 8:
+            # D-fix C-3: enforce full UUID format. The 'len >= 8' fallback
+            # let any 8+ char string into the watchdog allowlist — security gap.
+            if uuid and _UUID_RE.fullmatch(uuid):
                 teams["codex"].add(uuid)
 
     return teams

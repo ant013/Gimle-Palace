@@ -208,7 +208,32 @@ def compatibility_agent_ids(repo_root: Path, manifest_values: dict[str, str], ta
         return load_claude_agent_ids(repo_root / mapping)
     if target == "codex":
         env_file = manifest_values.get("compatibility.codex_agent_ids_env", "paperclips/codex-agent-ids.env")
-        return load_codex_agent_ids(repo_root / env_file)
+        ids = load_codex_agent_ids(repo_root / env_file)
+        # D-fix C-1: also merge bindings.yaml via dual-read resolver so the
+        # canonical-name lookup (CXCTO, CXMCPEngineer) works for projects whose
+        # manifests use canonical agent_name (Phase E trading/uaudit/gimle).
+        # Result dict keeps both kebab keys (legacy compat) AND canonical keys
+        # so downstream `ids.get(agent_name)` succeeds in either vocabulary.
+        project_key = manifest_values.get("project.key", "")
+        if project_key:
+            from os.path import expanduser
+            bindings_path = Path(expanduser(f"~/.paperclip/projects/{project_key}/bindings.yaml"))
+            legacy_path = (
+                repo_root / "paperclips" / "codex-agent-ids.env"
+                if project_key == "gimle"
+                else None
+            )
+            try:
+                merged = _resolve_bindings_all(
+                    legacy_env_path=legacy_path,
+                    bindings_yaml_path=bindings_path,
+                )
+                for canonical_name, uuid in merged.get("agents", {}).items():
+                    if uuid and canonical_name not in ids:
+                        ids[canonical_name] = uuid
+            except FileNotFoundError:
+                pass
+        return ids
     return {}
 
 

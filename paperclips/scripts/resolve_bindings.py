@@ -4,12 +4,16 @@ Precedence: new (bindings.yaml) > legacy (env). Conflicts emit BindingsConflictW
 """
 from __future__ import annotations
 
+import re
 import sys
 import warnings
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+# D-fix IMP-D1: parity with shell-side validate_project_key (lib/_common.sh).
+_PROJECT_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,39}$")
 
 
 class BindingsConflictWarning(UserWarning):
@@ -18,7 +22,24 @@ class BindingsConflictWarning(UserWarning):
     pass
 
 
-_PRESERVED_ACRONYMS = frozenset({"CTO", "CEO", "QA", "MCP", "CR", "API", "URL", "UUID"})
+def _load_acronyms() -> frozenset[str]:
+    """Read shared canonical-acronyms list from lib/canonical_acronyms.txt.
+
+    Same source-of-truth consumed by migrate-bindings.sh; prevents drift between
+    Python normalization and bash camelization (Phase D deep-review CRIT-C-4).
+    """
+    p = Path(__file__).resolve().parent / "lib" / "canonical_acronyms.txt"
+    if not p.is_file():
+        # Fallback to embedded list if file removed/missing — keeps unit-test
+        # discoverability and never silently produces wrong names.
+        return frozenset({"CTO", "CEO", "QA", "MCP", "CR", "API", "URL", "UUID"})
+    return frozenset(
+        line.strip() for line in p.read_text().splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    )
+
+
+_PRESERVED_ACRONYMS = _load_acronyms()
 
 
 def _normalize_legacy_name(env_var: str) -> str:
@@ -158,6 +179,14 @@ def main() -> int:
     parser.add_argument("--legacy-env", help="path to legacy codex-agent-ids.env")
     parser.add_argument("--bindings", help="path to ~/.paperclip/projects/<key>/bindings.yaml")
     args = parser.parse_args()
+
+    # D-fix IMP-D1: reject path-traversal / non-canonical project keys before
+    # any filesystem use. Matches shell-side validate_project_key in _common.sh.
+    if not _PROJECT_KEY_RE.fullmatch(args.project_key):
+        parser.error(
+            f"invalid project_key: {args.project_key!r} "
+            f"(must match {_PROJECT_KEY_RE.pattern})"
+        )
 
     repo_root = Path.cwd()
     home = Path.home()

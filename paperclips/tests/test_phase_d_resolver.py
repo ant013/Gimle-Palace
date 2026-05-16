@@ -114,3 +114,66 @@ def test_no_sources_raises():
     from paperclips.scripts.resolve_bindings import resolve_all
     with pytest.raises(FileNotFoundError):
         resolve_all(legacy_env_path=None, bindings_yaml_path=None)
+
+
+def test_python_and_bash_share_acronym_source():
+    """D-fix C-4: resolve_bindings.py + migrate-bindings.sh must agree.
+
+    Both load from paperclips/scripts/lib/canonical_acronyms.txt.
+    """
+    from paperclips.scripts.resolve_bindings import _PRESERVED_ACRONYMS
+
+    acronym_file = REPO / "paperclips" / "scripts" / "lib" / "canonical_acronyms.txt"
+    assert acronym_file.is_file(), "shared acronym file missing"
+
+    file_acronyms = {
+        line.strip()
+        for line in acronym_file.read_text().splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    }
+    assert _PRESERVED_ACRONYMS == file_acronyms, (
+        "Python _PRESERVED_ACRONYMS drifted from shared lib/canonical_acronyms.txt:\n"
+        f"  Python only: {_PRESERVED_ACRONYMS - file_acronyms}\n"
+        f"  file only:   {file_acronyms - _PRESERVED_ACRONYMS}"
+    )
+
+    # Bash side: read the script and verify it sources the same file.
+    bash_script = (REPO / "paperclips" / "scripts" / "migrate-bindings.sh").read_text()
+    assert "canonical_acronyms.txt" in bash_script, \
+        "migrate-bindings.sh must read shared canonical_acronyms.txt"
+
+
+def test_cli_rejects_path_traversal_project_key():
+    """D-fix IMP-D1: Python CLI must reject ../../etc-style project keys."""
+    import subprocess
+    out = subprocess.run(
+        ["python3", "-m", "paperclips.scripts.resolve_bindings", "../../etc"],
+        cwd=REPO, capture_output=True, text=True,
+    )
+    assert out.returncode != 0
+    assert "invalid project_key" in (out.stdout + out.stderr).lower()
+
+
+def test_cli_rejects_uppercase_project_key():
+    """D-fix IMP-D1: only lowercase + digit + dash/underscore allowed."""
+    import subprocess
+    out = subprocess.run(
+        ["python3", "-m", "paperclips.scripts.resolve_bindings", "GIMLE"],
+        cwd=REPO, capture_output=True, text=True,
+    )
+    assert out.returncode != 0
+    assert "invalid project_key" in (out.stdout + out.stderr).lower()
+
+
+def test_cli_accepts_canonical_project_key():
+    """D-fix IMP-D1: lowercase-alphanumeric passes validation."""
+    import subprocess
+    # gimle is a real project — should at least pass validation (may exit non-zero
+    # on missing ~/.paperclip/projects/gimle, but NOT due to validation).
+    out = subprocess.run(
+        ["python3", "-m", "paperclips.scripts.resolve_bindings", "gimle"],
+        cwd=REPO, capture_output=True, text=True,
+    )
+    combined = out.stdout + out.stderr
+    assert "invalid project_key" not in combined.lower(), \
+        f"valid key rejected: {combined}"

@@ -25,7 +25,9 @@ usage() {
 Usage:
   $(basename "$0") <project-key>                     # extract → ~/.paperclip/projects/<key>/bindings.yaml
   $(basename "$0") <project-key> --dry-run           # print bindings.yaml contents without writing
-  $(basename "$0") <project-key> --check-conflicts   # compare legacy env vs current bindings; exit 1 on disagreement
+  $(basename "$0") <project-key> --check-conflicts   # compare legacy env vs current bindings
+                                                       # exit 0 on agreement (incl. pre-bootstrap with no sources)
+                                                       # exit 1 on disagreement (lists CONFLICT lines to stderr)
 EOF
 }
 
@@ -64,9 +66,12 @@ bindings = Path(bindings_arg) if Path(bindings_arg).is_file() else None
 
 try:
     out = resolve_all(legacy_env_path=legacy, bindings_yaml_path=bindings)
-except FileNotFoundError as e:
-    print(f"no sources: {e}", file=sys.stderr)
-    sys.exit(2)
+except FileNotFoundError:
+    # Pre-bootstrap project (no legacy env, no bindings yet) — not an error.
+    # CI cron + operator dry-runs see this as 'nothing to check', exit 0.
+    print(f"skipped: no sources for project '{project_key}' (pre-bootstrap)",
+          file=sys.stderr)
+    sys.exit(0)
 
 if out["conflicts"]:
     for c in out["conflicts"]:
@@ -111,10 +116,15 @@ if [ "$project_key" = "gimle" ] && [ -f "$legacy_env" ]; then
         prefix=""
         ;;
     esac
-    # CRIT-4 fix: preserve well-known acronyms (CTO, QA, MCP, ...) per uaudit
-    # manifest convention (UWICTO, UWIQAEngineer). Plain camelCase would emit
-    # 'CXCto'/'CXQaEngineer'/'CXMcpEngineer' which don't match paperclip-API names.
-    ACRONYMS="CTO QA MCP CEO CFO CIO COO CSO CRO API CLI CI CD AI ML DB IT IO UI UX UWI UWA UW"
+    # CRIT-4 + D-fix C-4: preserve canonical acronyms per uaudit manifest convention.
+    # Single source of truth shared with Python resolver:
+    #   paperclips/scripts/lib/canonical_acronyms.txt
+    ACRONYM_FILE="${SCRIPT_DIR}/lib/canonical_acronyms.txt"
+    if [ -f "$ACRONYM_FILE" ]; then
+      ACRONYMS=$(grep -vE '^\s*(#|$)' "$ACRONYM_FILE" | tr '\n' ' ')
+    else
+      ACRONYMS="CTO QA MCP CEO CFO CIO COO CSO CRO API CLI CI CD AI ML DB IT IO UI UX UWI UWA UW"
+    fi
     camel=$(printf '%s' "$rest" | awk -F_ -v acr="$ACRONYMS" '
       BEGIN { split(acr, a, " "); for (i in a) is_acr[a[i]] = 1 }
       { out = ""
