@@ -70,3 +70,18 @@ def test_rollback_handles_plugin_config_snapshot(tmp_path, monkeypatch):
     combined = out.stdout + out.stderr
     assert out.returncode == 0
     assert "telegram" in combined, f"plugin_config_snapshot not surfaced: {combined}"
+
+
+def test_bootstrap_journals_plugin_config_snapshot():
+    text = (SCRIPTS / "bootstrap-project.sh").read_text()
+    plugin_section_start = text.find("[8/13] telegram plugin config")
+    assert plugin_section_start != -1, "could not locate telegram step"
+    plugin_section_end = text.find("[9/13]", plugin_section_start)
+    section = text[plugin_section_start:plugin_section_end] if plugin_section_end != -1 else text[plugin_section_start:]
+    assert "paperclip_plugin_get_config" in section
+    assert "plugin_config_snapshot" in section, \
+        "plugin step must journal plugin_config_snapshot before POST"
+    snapshot_pos = section.find("plugin_config_snapshot")
+    post_pos = section.find("paperclip_plugin_set_config")
+    assert snapshot_pos < post_pos, \
+        f"snapshot at {snapshot_pos} must precede POST at {post_pos}"

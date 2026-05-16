@@ -247,7 +247,12 @@ if [ -f "$plugins_file" ]; then
   if [ -n "$plugin_id" ] && [ -n "$chat_id" ] && [ "$chat_id" != "<operator-fills>" ]; then
     log info "  configuring plugin $plugin_id with chat $chat_id"
     # rev2 F-1: GET → diff → POST (replace mode per spec §8.4)
+    # CRIT-2 fix: snapshot current_config BEFORE POST so rollback can restore.
     current_config=$(paperclip_plugin_get_config "$plugin_id" 2>/dev/null || echo "{}")
+    journal_record "$journal" "$(jq -n \
+      --arg pid "$plugin_id" \
+      --argjson cfg "$current_config" \
+      '{kind:"plugin_config_snapshot",plugin_id:$pid,old_config:$cfg}')"
     new_config=$(echo "$current_config" | jq --arg cid "$chat_id" '.config.defaultChatId = $cid')
     paperclip_plugin_set_config "$plugin_id" "$new_config" >/dev/null
     log ok "  telegram plugin configured"
