@@ -151,3 +151,52 @@ def test_plan_producer_exists():
 def test_plan_review_exists():
     p = SUBMODULE / "plan" / "review.md"
     assert p.is_file()
+
+
+EXPECTED_HIERARCHY = {
+    "universal": {"karpathy.md", "wake-and-handoff-basics.md", "escalation-board.md"},
+    "git": {"commit-and-push.md", "merge-readiness.md", "merge-state-decoder.md", "release-cut.md"},
+    "worktree": {"active.md"},
+    "handoff": {"basics.md", "phase-orchestration.md"},
+    "code-review": {"approve.md", "adversarial.md"},
+    "qa": {"smoke-and-evidence.md"},
+    "pre-work": {"codebase-memory-first.md", "sequential-thinking.md", "existing-field-semantics.md"},
+    "plan": {"producer.md", "review.md"},
+}
+
+
+def test_hierarchy_complete():
+    for subdir, expected_files in EXPECTED_HIERARCHY.items():
+        actual = {p.name for p in (SUBMODULE / subdir).glob("*.md")}
+        missing = expected_files - actual
+        assert not missing, f"{subdir}/ missing: {missing}"
+
+
+def test_no_orphan_files_in_subdirs():
+    for subdir, expected_files in EXPECTED_HIERARCHY.items():
+        actual = {p.name for p in (SUBMODULE / subdir).glob("*.md")}
+        unexpected = actual - expected_files
+        assert not unexpected, f"{subdir}/ has unexpected: {unexpected}"
+
+
+def test_deprecated_files_have_banner():
+    deprecated = [
+        "karpathy-discipline.md", "heartbeat-discipline.md", "escalation-blocked.md",
+        "git-workflow.md", "worktree-discipline.md", "phase-handoff.md",
+        "compliance-enforcement.md", "test-design-discipline.md", "pre-work-discovery.md",
+        "plan-first-producer.md", "plan-first-review.md",
+    ]
+    for fname in deprecated:
+        p = SUBMODULE / fname
+        text = p.read_text()
+        assert "DEPRECATED" in text, f"{fname} missing deprecation banner"
+        assert "UAA Phase A" in text, f"{fname} banner doesn't reference UAA Phase A"
+
+
+def test_unchanged_files_preserved():
+    """cto-no-code-ban.md and language.md stay as-is in Phase A."""
+    for fname in ["cto-no-code-ban.md", "language.md"]:
+        p = SUBMODULE / fname
+        assert p.is_file()
+        text = p.read_text()
+        assert "DEPRECATED" not in text, f"{fname} should NOT be deprecated"
