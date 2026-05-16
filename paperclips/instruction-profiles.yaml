@@ -1,52 +1,76 @@
-# Task 1 manifest: profile names are declared before slimming. Existing
-# fragments remain authoritative until later tasks split short profiles.
+# UAA Phase A — new profile vocabulary per spec §5.1.
+#
+# Phase A intermediate state: profiles map to fragment sets, but the
+# compose_agent_prompt builder lands in Phase B. Until then, slim role files
+# contain ONLY craft (identity/area/MCP/anti-patterns); profiles below are
+# declarative ground-truth for Phase B builder, not active inclusions.
+#
+# Spec §5.1: 8 profiles — custom, minimal, research, writer, implementer,
+# qa, reviewer, cto. Universal layer (karpathy + wake-and-handoff-basics +
+# escalation-board) is inlined per agent by Phase B builder.
 profiles:
-  core:
+  custom:
     fragments:
-      - paperclips/fragments/shared/fragments/karpathy-discipline.md
-      - paperclips/fragments/shared/fragments/escalation-blocked.md
-      - paperclips/fragments/shared/fragments/heartbeat-discipline.md
-      - paperclips/fragments/shared/fragments/language.md
-  task-start:
+    empty_allowed: "true"
+    description: |
+      Opts out of universal layer. Caller composes via custom_includes in
+      manifest. Total freedom; no safety floor.
+  minimal:
     fragments:
-      - paperclips/fragments/shared/fragments/pre-work-discovery.md
-      - paperclips/fragments/shared/fragments/git-workflow.md
-      - paperclips/fragments/shared/fragments/worktree-discipline.md
-  implementation:
-    fragments:
-      - paperclips/fragments/shared/fragments/compliance-enforcement.md
-      - paperclips/fragments/shared/fragments/test-design-discipline.md
-      - paperclips/fragments/local/test-design-gimle.md
-      - paperclips/fragments/shared/fragments/async-signal-wait.md
-  review:
-    fragments:
-      - paperclips/fragments/shared/fragments/compliance-enforcement.md
-      - paperclips/fragments/shared/fragments/plan-first-review.md
-      - paperclips/fragments/shared/fragments/phase-review-discipline.md
-      - paperclips/fragments/shared/fragments/test-design-discipline.md
-  qa-smoke:
-    fragments:
-      - paperclips/fragments/shared/fragments/test-design-discipline.md
-      - paperclips/fragments/local/test-design-gimle.md
+    empty_allowed: "true"
+    description: |
+      Universal layer only (composed by Phase B builder). No capability
+      content. Safety floor for any agent.
   research:
     fragments:
-      - paperclips/fragments/shared/fragments/pre-work-discovery.md
-      - paperclips/fragments/shared/fragments/karpathy-discipline.md
-  handoff:
+      - paperclips/fragments/shared/fragments/pre-work/codebase-memory-first.md
+      - paperclips/fragments/shared/fragments/handoff/basics.md
+    description: |
+      Read-only research. Pre-work via codebase-memory. Handoff basics for
+      reassigning research outputs.
+  writer:
     fragments:
-      - paperclips/fragments/profiles/handoff.md
-    runbooks:
-      - paperclips/fragments/lessons/phase-handoff.md
-    inline_rule_required: true
-  handoff-full:
+      - paperclips/fragments/shared/fragments/handoff/basics.md
+    description: |
+      Documentation-only. Handoff basics. No git/worktree (writer doesn't
+      commit code).
+  implementer:
     fragments:
-      - paperclips/fragments/shared/fragments/phase-handoff.md
-      - paperclips/fragments/shared/fragments/phase-review-discipline.md
-    inline_rule_required: true
-  merge-deploy:
+      - paperclips/fragments/shared/fragments/git/commit-and-push.md
+      - paperclips/fragments/shared/fragments/worktree/active.md
+      - paperclips/fragments/shared/fragments/pre-work/codebase-memory-first.md
+      - paperclips/fragments/shared/fragments/pre-work/sequential-thinking.md
+      - paperclips/fragments/shared/fragments/pre-work/existing-field-semantics.md
+      - paperclips/fragments/shared/fragments/handoff/basics.md
+    description: |
+      Engineering profile. Commit+push (NOT merge). Worktree discipline.
+      Pre-work discovery. Handoff basics.
+  qa:
+    extends: implementer
     fragments:
-      - paperclips/fragments/shared/fragments/git-workflow.md
-      - paperclips/fragments/shared/fragments/phase-handoff.md
-  audit-mode:
+      - paperclips/fragments/shared/fragments/qa/smoke-and-evidence.md
+    description: |
+      QA profile. Inherits implementer (qa commits test fixtures). Adds
+      smoke checklist + evidence format + iMac restore-checkout.
+  reviewer:
     fragments:
-      - paperclips/fragments/local/audit-mode.md
+      - paperclips/fragments/shared/fragments/pre-work/codebase-memory-first.md
+      - paperclips/fragments/shared/fragments/pre-work/sequential-thinking.md
+      - paperclips/fragments/shared/fragments/git/merge-readiness.md
+      - paperclips/fragments/shared/fragments/git/merge-state-decoder.md
+      - paperclips/fragments/shared/fragments/code-review/approve.md
+      - paperclips/fragments/shared/fragments/plan/review.md
+      - paperclips/fragments/shared/fragments/handoff/basics.md
+    description: |
+      Review profile. Merge-readiness check. APPROVE format. Plan review.
+      NO commit-and-push (reviewer doesn't write code). NO release-cut.
+  cto:
+    extends: reviewer
+    fragments:
+      - paperclips/fragments/shared/fragments/git/release-cut.md
+      - paperclips/fragments/shared/fragments/handoff/phase-orchestration.md
+      - paperclips/fragments/shared/fragments/plan/producer.md
+    description: |
+      CTO profile. Inherits reviewer (CTO also reviews). Adds release-cut
+      (CTO orchestrates main releases). Phase orchestration (CTO sequences
+      slice phases). Plan producer (CTO writes Board specs as plans).
