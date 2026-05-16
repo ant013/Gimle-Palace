@@ -7,15 +7,18 @@ interruption without keeping orchestration state in memory.
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import socket
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 from uuid import uuid4
 
 from neo4j import AsyncDriver, AsyncManagedTransaction
+from neo4j.exceptions import ServiceUnavailable, SessionExpired
 from pydantic import BaseModel, ConfigDict, Field
 
 from palace_mcp.audit.run import run_audit
@@ -44,6 +47,8 @@ if TYPE_CHECKING:
 
 
 CFG = ConfigDict(extra="forbid")
+logger = logging.getLogger(__name__)
+_T = TypeVar("_T")
 
 
 class AnalysisRunStatus(StrEnum):
@@ -723,9 +728,15 @@ class ProjectAnalysisService:
         lease_seconds: int = 900,
         lease_owner: str | None = None,
         clock: Clock = _utc_now,
+        neo4j_retry_attempts: int = 3,
+        neo4j_retry_initial_delay_seconds: float = 0.25,
     ) -> None:
         if store is None and driver is None:
             raise ValueError("driver is required when store is not provided")
+        if neo4j_retry_attempts < 1:
+            raise ValueError("neo4j_retry_attempts must be >= 1")
+        if neo4j_retry_initial_delay_seconds < 0:
+            raise ValueError("neo4j_retry_initial_delay_seconds must be >= 0")
         self._driver = driver
         if store is not None:
             self._store = store
@@ -741,6 +752,8 @@ class ProjectAnalysisService:
         self._lease_seconds = lease_seconds
         self._lease_owner = lease_owner or f"project-analyze@{socket.gethostname()}"
         self._clock = clock
+        self._neo4j_retry_attempts = neo4j_retry_attempts
+        self._neo4j_retry_initial_delay_seconds = neo4j_retry_initial_delay_seconds
 
     def resolve_default_extractors(
         self,
@@ -850,21 +863,33 @@ class ProjectAnalysisService:
             # force_new only matters once previous runs are terminal; the lock
             # transaction still rejects concurrent active runs.
             run = run.model_copy(update={"idempotency_key": str(uuid4())})
-        return await self._store.start_run(run)
+        return await self._with_store_retry(
+            action="start_run",
+            operation=lambda: self._store.start_run(run),
+        )
 
     async def get_status(self, run_id: str) -> AnalysisRun:
-        return await self._store.get_run(run_id, now=self._clock())
+        return await self._with_store_retry(
+            action="get_status",
+            operation=lambda: self._store.get_run(run_id, now=self._clock()),
+        )
 
     async def resume_run(self, run_id: str) -> AnalysisRun:
-        return await self._store.acquire_lease(
-            run_id,
-            lease_owner=self._lease_owner,
-            lease_seconds=self._lease_seconds,
-            now=self._clock(),
+        return await self._with_store_retry(
+            action="resume_run",
+            operation=lambda: self._store.acquire_lease(
+                run_id,
+                lease_owner=self._lease_owner,
+                lease_seconds=self._lease_seconds,
+                now=self._clock(),
+            ),
         )
 
     async def mark_run_resumable(self, run_id: str) -> AnalysisRun:
-        return await self._store.mark_run_resumable(run_id, now=self._clock())
+        return await self._with_store_retry(
+            action="mark_run_resumable",
+            operation=lambda: self._store.mark_run_resumable(run_id, now=self._clock()),
+        )
 
     async def fail_run(
         self,
@@ -873,7 +898,10 @@ class ProjectAnalysisService:
         error_code: str,
         message: str,
     ) -> AnalysisRun:
-        run = await self._store.get_run(run_id, now=self._clock())
+        run = await self._with_store_retry(
+            action="fail_run.get_run",
+            operation=lambda: self._store.get_run(run_id, now=self._clock()),
+        )
         overview = _checkpoint_counts(run.checkpoints)
         audit_payload = {
             "ok": False,
@@ -893,18 +921,21 @@ class ProjectAnalysisService:
             audit_payload,
             stale_external=False,
         )
-        return await self._store.finalize_run(
-            run_id,
-            status=AnalysisRunStatus.FAILED,
-            overview=overview,
-            audit=audit_payload,
-            report_markdown=report_markdown,
-            next_actions=[
-                "Inspect palace-mcp runtime failure, then start a fresh project analyze run."
-            ],
-            error_code=error_code,
-            message=message,
-            now=self._clock(),
+        return await self._with_store_retry(
+            action="fail_run.finalize_run",
+            operation=lambda: self._store.finalize_run(
+                run_id,
+                status=AnalysisRunStatus.FAILED,
+                overview=overview,
+                audit=audit_payload,
+                report_markdown=report_markdown,
+                next_actions=[
+                    "Inspect palace-mcp runtime failure, then start a fresh project analyze run."
+                ],
+                error_code=error_code,
+                message=message,
+                now=self._clock(),
+            ),
         )
 
     @property
@@ -955,15 +986,18 @@ class ProjectAnalysisService:
                     "next_action": None,
                 }
             )
-            run = await self._store.save_checkpoint(
-                run.run_id,
-                started_checkpoint,
-                updated_at=_iso(checkpoint_started_at),
-                last_completed_extractor=run.last_completed_extractor,
-                status=AnalysisRunStatus.RUNNING,
-                lease_owner=self._lease_owner,
-                lease_expires_at=_iso(
-                    checkpoint_started_at + timedelta(seconds=self._lease_seconds)
+            run = await self._with_store_retry(
+                action=f"save_checkpoint.started.{checkpoint.extractor}",
+                operation=lambda: self._store.save_checkpoint(
+                    run.run_id,
+                    started_checkpoint,
+                    updated_at=_iso(checkpoint_started_at),
+                    last_completed_extractor=run.last_completed_extractor,
+                    status=AnalysisRunStatus.RUNNING,
+                    lease_owner=self._lease_owner,
+                    lease_expires_at=_iso(
+                        checkpoint_started_at + timedelta(seconds=self._lease_seconds)
+                    ),
                 ),
             )
 
@@ -980,15 +1014,18 @@ class ProjectAnalysisService:
                 }
             )
             checkpoint_updated_at = self._clock()
-            run = await self._store.save_checkpoint(
-                run.run_id,
-                updated_checkpoint,
-                updated_at=_iso(checkpoint_updated_at),
-                last_completed_extractor=updated_checkpoint.extractor,
-                status=AnalysisRunStatus.RUNNING,
-                lease_owner=self._lease_owner,
-                lease_expires_at=_iso(
-                    checkpoint_updated_at + timedelta(seconds=self._lease_seconds)
+            run = await self._with_store_retry(
+                action=f"save_checkpoint.finished.{checkpoint.extractor}",
+                operation=lambda: self._store.save_checkpoint(
+                    run.run_id,
+                    updated_checkpoint,
+                    updated_at=_iso(checkpoint_updated_at),
+                    last_completed_extractor=updated_checkpoint.extractor,
+                    status=AnalysisRunStatus.RUNNING,
+                    lease_owner=self._lease_owner,
+                    lease_expires_at=_iso(
+                        checkpoint_updated_at + timedelta(seconds=self._lease_seconds)
+                    ),
                 ),
             )
             if (
@@ -997,7 +1034,10 @@ class ProjectAnalysisService:
             ):
                 break
 
-        run = await self._store.get_run(run.run_id, now=self._clock())
+        run = await self._with_store_retry(
+            action="execute_run.get_run",
+            operation=lambda: self._store.get_run(run.run_id, now=self._clock()),
+        )
         overview = _checkpoint_counts(run.checkpoints)
         all_ok = all(
             checkpoint.status == AnalysisCheckpointStatus.OK
@@ -1040,17 +1080,47 @@ class ProjectAnalysisService:
                 "Resume the run after failed extractors are fixed to produce a fully pinned audit report."
             ]
 
-        return await self._store.finalize_run(
-            run.run_id,
-            status=final_status,
-            overview=overview,
-            audit=audit_payload,
-            report_markdown=report_markdown,
-            next_actions=next_actions,
-            error_code=None,
-            message=None,
-            now=self._clock(),
+        return await self._with_store_retry(
+            action="execute_run.finalize_run",
+            operation=lambda: self._store.finalize_run(
+                run.run_id,
+                status=final_status,
+                overview=overview,
+                audit=audit_payload,
+                report_markdown=report_markdown,
+                next_actions=next_actions,
+                error_code=None,
+                message=None,
+                now=self._clock(),
+            ),
         )
+
+    async def _with_store_retry(
+        self,
+        *,
+        action: str,
+        operation: Callable[[], Awaitable[_T]],
+    ) -> _T:
+        delay_seconds = self._neo4j_retry_initial_delay_seconds
+        for attempt in range(1, self._neo4j_retry_attempts + 1):
+            try:
+                return await operation()
+            except (ServiceUnavailable, SessionExpired) as exc:
+                if attempt >= self._neo4j_retry_attempts:
+                    raise
+                logger.warning(
+                    "project_analyze.neo4j_retry",
+                    extra={
+                        "action": action,
+                        "attempt": attempt,
+                        "max_attempts": self._neo4j_retry_attempts,
+                        "delay_seconds": delay_seconds,
+                        "error": str(exc),
+                    },
+                )
+                await asyncio.sleep(delay_seconds)
+                delay_seconds *= 2
+        raise AssertionError("unreachable: retry loop must return or raise")
 
     def _default_executor(self, graphiti: Graphiti | None) -> ExtractorExecutor:
         if graphiti is None:
