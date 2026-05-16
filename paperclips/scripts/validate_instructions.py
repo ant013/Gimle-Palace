@@ -98,30 +98,94 @@ def sha256_text(text: str) -> str:
 
 
 def load_team_uuids(repo_root: Path) -> dict[str, set[str]]:
-    """Return {'claude': {uuid, ...}, 'codex': {uuid, ...}} parsed from
-    the project's existing single-sources-of-truth.
+    """Return {'claude': {uuid, ...}, 'codex': {uuid, ...}}.
 
-    Claude: paperclips/deploy-agents.sh (case-statement uuids).
-    Codex:  paperclips/codex-agent-ids.env (KEY=uuid lines).
+    Phase D dual-read sources:
+      - Claude:  paperclips/deploy-agents.sh (case-statement uuids; legacy).
+      - Codex:   paperclips/codex-agent-ids.env (legacy KEY=uuid env file)
+                 + ~/.paperclip/projects/<key>/bindings.yaml (new — for every
+                   project that has been bootstrapped). resolve_bindings handles
+                   precedence + conflict warnings.
     """
     teams: dict[str, set[str]] = {"claude": set(), "codex": set()}
 
+    # --- Claude: legacy deploy-agents.sh (no bindings.yaml equivalent yet) ---
     deploy_sh = repo_root / "paperclips" / "deploy-agents.sh"
     if deploy_sh.is_file():
-        # Only `<role>) echo "<UUID>"` case-statement lines — skip COMPANY_ID etc.
         case_re = re.compile(r'^\s*[a-z][\w-]*\)\s+echo\s+"([0-9a-f-]{36})"', re.MULTILINE)
         teams["claude"].update(case_re.findall(deploy_sh.read_text()))
 
-    codex_env = repo_root / "paperclips" / "codex-agent-ids.env"
-    if codex_env.is_file():
-        for line in codex_env.read_text().splitlines():
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#") or "=" not in stripped:
-                continue
-            _, val = stripped.split("=", 1)
-            uuid_match = _UUID_RE.fullmatch(val.strip())
-            if uuid_match:
-                teams["codex"].add(uuid_match.group(1))
+    # --- Codex: dual-read via resolver -------------------------------------
+    legacy_env = repo_root / "paperclips" / "codex-agent-ids.env"
+    home_projects = Path.home() / ".paperclip" / "projects"
+
+    # Import resolver via importlib (validate_instructions is itself loaded by
+    # absolute path from the watchdog, so the surrounding `paperclips.scripts`
+    # package may not be on sys.path). Resolve sibling-of-this-file, not
+    # repo_root, so callers passing a synthetic repo_root (tests) still find it.
+    import importlib.util
+
+    resolver_path = Path(__file__).resolve().parent / "resolve_bindings.py"
+    resolve_all = None
+    if resolver_path.is_file():
+        spec = importlib.util.spec_from_file_location(
+            "_phase_d_resolve_bindings", resolver_path
+        )
+        if spec is not None and spec.loader is not None:
+            try:
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                resolve_all = mod.resolve_all
+            except Exception:
+                resolve_all = None
+
+    if resolve_all is None:
+        # Fallback: legacy env only (preserves pre-Phase-D behavior).
+        if legacy_env.is_file():
+            for line in legacy_env.read_text().splitlines():
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#") or "=" not in stripped:
+                    continue
+                _, val = stripped.split("=", 1)
+                uuid_match = _UUID_RE.fullmatch(val.strip())
+                if uuid_match:
+                    teams["codex"].add(uuid_match.group(1))
+        return teams
+
+    # Resolver available: gather UUIDs from per-project bindings + legacy env.
+    project_dirs: list[Path] = []
+    if home_projects.is_dir():
+        project_dirs = [p for p in home_projects.iterdir() if p.is_dir()]
+
+    if not project_dirs and legacy_env.is_file():
+        # Pre-Phase-E: no per-project bindings yet, only legacy env exists.
+        try:
+            data = resolve_all(legacy_env_path=legacy_env, bindings_yaml_path=None)
+            for uuid in data["agents"].values():
+                if _UUID_RE.fullmatch(uuid) or len(uuid) >= 8:
+                    teams["codex"].add(uuid)
+        except FileNotFoundError:
+            pass
+        return teams
+
+    for project_dir in project_dirs:
+        bindings = project_dir / "bindings.yaml"
+        legacy_for_project = legacy_env if project_dir.name == "gimle" else None
+        if not bindings.is_file() and legacy_for_project is None:
+            continue
+        try:
+            data = resolve_all(
+                legacy_env_path=legacy_for_project,
+                bindings_yaml_path=bindings if bindings.is_file() else None,
+            )
+        except FileNotFoundError:
+            continue
+        # Codex bucket — Phase D treats every bindings UUID as codex by default,
+        # because the only currently-migrated path is the codex env file. Phase
+        # E/F will introduce per-agent target metadata.
+        for uuid in data["agents"].values():
+            if _UUID_RE.fullmatch(uuid) or len(uuid) >= 8:
+                teams["codex"].add(uuid)
 
     return teams
 
