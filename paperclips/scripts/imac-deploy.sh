@@ -66,6 +66,18 @@ die()  { log "ERROR: $*" >&2; exit "${2:-1}"; }
 
 log "=== imac-deploy.sh start (run log: $RUN_LOG) ==="
 
+resolve_container_ref() {
+    local service="$1"
+    local fallback_name="$2"
+    local ref=""
+    ref="$(docker compose --profile "$COMPOSE_PROFILE" ps -q "$service" 2>/dev/null | head -n 1 | tr -d '\r')"
+    if [[ -n "$ref" ]]; then
+        echo "$ref"
+        return 0
+    fi
+    echo "$fallback_name"
+}
+
 # ---------------------------------------------------------------------------
 # Pre-flight (exit code 1)
 # ---------------------------------------------------------------------------
@@ -137,11 +149,12 @@ fi
 # ---------------------------------------------------------------------------
 log "--- Capturing prev image ID for rollback ---"
 PREV_IMAGE_ID=""
-if docker inspect --format='{{.Image}}' "$PALACE_CONTAINER" >/dev/null 2>&1; then
-    PREV_IMAGE_ID="$(docker inspect --format='{{.Image}}' "$PALACE_CONTAINER" 2>/dev/null || true)"
+PALACE_REF="$(resolve_container_ref "palace-mcp" "$PALACE_CONTAINER")"
+if docker inspect --format='{{.Image}}' "$PALACE_REF" >/dev/null 2>&1; then
+    PREV_IMAGE_ID="$(docker inspect --format='{{.Image}}' "$PALACE_REF" 2>/dev/null || true)"
     log "Prev palace-mcp image: $PREV_IMAGE_ID"
 else
-    log "INFO: container $PALACE_CONTAINER not running — no prev image to capture"
+    log "INFO: container/service ref $PALACE_REF not running — no prev image to capture"
 fi
 
 # ---------------------------------------------------------------------------
@@ -163,24 +176,27 @@ fi
 log "--- Waiting for containers to be healthy (timeout: $((HEALTH_POLL_MAX * HEALTH_POLL_SLEEP))s) ---"
 
 wait_healthy() {
-    local container="$1"
+    local service="$1"
+    local fallback_name="$2"
     local poll=0
+    local container_ref
+    container_ref="$(resolve_container_ref "$service" "$fallback_name")"
     while [[ $poll -lt $HEALTH_POLL_MAX ]]; do
         local status
-        status="$(docker inspect --format='{{.State.Health.Status}}' "$container" 2>/dev/null || echo "missing")"
+        status="$(docker inspect --format='{{.State.Health.Status}}' "$container_ref" 2>/dev/null || echo "missing")"
         if [[ "$status" == "healthy" ]]; then
-            log "$container: healthy"
+            log "$service ($container_ref): healthy"
             return 0
         fi
-        log "$container: $status (poll $((poll+1))/$HEALTH_POLL_MAX)"
+        log "$service ($container_ref): $status (poll $((poll+1))/$HEALTH_POLL_MAX)"
         sleep "$HEALTH_POLL_SLEEP"
         poll=$((poll + 1))
     done
-    die "$container did not become healthy within $((HEALTH_POLL_MAX * HEALTH_POLL_SLEEP))s" 2
+    die "$service ($container_ref) did not become healthy within $((HEALTH_POLL_MAX * HEALTH_POLL_SLEEP))s" 2
 }
 
-wait_healthy "$NEO4J_CONTAINER"
-wait_healthy "$PALACE_CONTAINER"
+wait_healthy "neo4j" "$NEO4J_CONTAINER"
+wait_healthy "palace-mcp" "$PALACE_CONTAINER"
 
 # ---------------------------------------------------------------------------
 # In-container extractor registry verify (gotcha #3: one-liner python in docker exec)
@@ -203,8 +219,9 @@ fi
 # Baseline log append
 # ---------------------------------------------------------------------------
 SOURCE_SHA="$(git rev-parse HEAD)"
-NEW_IMAGE_ID="$(docker inspect --format='{{.Image}}' "$PALACE_CONTAINER" 2>/dev/null || echo "unknown")"
-CONTAINER_ID="$(docker inspect --format='{{.Id}}' "$PALACE_CONTAINER" 2>/dev/null | cut -c1-12 || echo "unknown")"
+PALACE_REF="$(resolve_container_ref "palace-mcp" "$PALACE_CONTAINER")"
+NEW_IMAGE_ID="$(docker inspect --format='{{.Image}}' "$PALACE_REF" 2>/dev/null || echo "unknown")"
+CONTAINER_ID="$(docker inspect --format='{{.Id}}' "$PALACE_REF" 2>/dev/null | cut -c1-12 || echo "unknown")"
 UTC_NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 LOG_LINE="$UTC_NOW\tsource=$SOURCE_SHA\tprev_image=$PREV_IMAGE_ID\tnew_image=$NEW_IMAGE_ID\tcontainer=$CONTAINER_ID"
