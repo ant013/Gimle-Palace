@@ -392,7 +392,7 @@ def build_mcp_asgi_app() -> Starlette:
     # instance, but each Starlette app lifespan may only run that manager once.
     # Tests build multiple ASGI apps in one Python process, so force a fresh
     # session manager per app and bind the lifespan to the captured instance.
-    _mcp._session_manager = None  # type: ignore[attr-defined]
+    _mcp._session_manager = None
     app = _mcp.streamable_http_app()
     session_manager = _mcp.session_manager
     app.router.lifespan_context = (
