@@ -38,6 +38,7 @@ class LanguageProfile:
 SWIFT_KIT_EXTRACTOR_ORDER: tuple[str, ...] = (
     "symbol_index_swift",
     "arch_layer",
+    "git_history",
     "code_ownership",
     "coding_convention",
     "crypto_domain_model",
@@ -46,7 +47,6 @@ SWIFT_KIT_EXTRACTOR_ORDER: tuple[str, ...] = (
     "dead_symbol_binary_surface",
     "dependency_surface",
     "error_handling_policy",
-    "git_history",
     "hot_path_profiler",
     "hotspot",
     "localization_accessibility",
@@ -90,6 +90,7 @@ PROFILES: dict[str, LanguageProfile] = {
             }
         ),
         (
+            "git_history",
             "code_ownership",
             "dependency_surface",
             "hotspot",
@@ -107,6 +108,7 @@ PROFILES: dict[str, LanguageProfile] = {
         ),
         (
             "arch_layer",
+            "git_history",
             "code_ownership",
             "dependency_surface",
             "hotspot",
