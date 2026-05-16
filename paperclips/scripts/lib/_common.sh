@@ -52,6 +52,14 @@ validate_project_key() {
   fi
 }
 
+# IMP-E fix: agent_name reaches yq path expressions; restrict to yq-safe chars.
+validate_agent_name() {
+  local name="$1"
+  if [[ ! "$name" =~ ^[A-Za-z][A-Za-z0-9_]*$ ]]; then
+    die "invalid agent_name: '$name' (must match [A-Za-z][A-Za-z0-9_]*)"
+  fi
+}
+
 # journal_id is a filename basename — no path separators, no .., no absolute.
 validate_journal_id() {
   local jid="$1"

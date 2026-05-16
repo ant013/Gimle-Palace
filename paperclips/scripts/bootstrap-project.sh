@@ -122,6 +122,8 @@ schemaVersion: 2
 company_id: "${company_id}"
 agents: {}
 EOF
+  chmod 600 "$bindings"
+  chmod 700 "$(dirname "$bindings")"
   log ok "company created: $company_id"
 else
   log ok "company reused: $company_id"
@@ -161,6 +163,7 @@ log info "hire order: $(echo "$hire_order" | tr '\n' ' ')"
 
 # Step 7: hire each agent
 for agent_name in $hire_order; do
+  validate_agent_name "$agent_name"
   existing=$(yq -r ".agents.${agent_name} // \"\"" "$bindings")
   if [ -n "$existing" ] && [ "$existing" != "null" ]; then
     if paperclip_get_agent_config "$existing" >/dev/null 2>&1; then
@@ -249,7 +252,10 @@ if [ -f "$plugins_file" ]; then
     log info "  configuring plugin $plugin_id with chat $chat_id"
     # rev2 F-1: GET → diff → POST (replace mode per spec §8.4)
     # CRIT-2 fix: snapshot current_config BEFORE POST so rollback can restore.
-    current_config=$(paperclip_plugin_get_config "$plugin_id" 2>/dev/null || echo "{}")
+    # IMP-B fix: _safe variant treats 404 as empty {} but dies on 401/403/5xx
+    #   so an expired JWT cannot silently wipe defaultChatId.
+    current_config=$(paperclip_plugin_get_config_safe "$plugin_id") || \
+      die "plugin GET failed for $plugin_id (likely auth issue — check PAPERCLIP_API_KEY)"
     journal_record "$journal" "$(jq -n \
       --arg pid "$plugin_id" \
       --argjson cfg "$current_config" \
@@ -278,6 +284,7 @@ log info "[10/13] deploying agent prompts"
 
 deploy_one() {
   local agent_name="$1"
+  validate_agent_name "$agent_name"
   local agent_id
   agent_id=$(yq -r ".agents.${agent_name}" "$bindings")
   local target

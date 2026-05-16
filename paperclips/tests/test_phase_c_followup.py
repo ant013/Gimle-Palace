@@ -187,3 +187,97 @@ def test_watchdog_append_produces_valid_yaml(tmp_path, monkeypatch):
     data2 = yaml.safe_load(config_path.read_text())
     ids = [c["id"] for c in data2["companies"]]
     assert ids.count("test-company-id-9999") == 1, f"duplicate after re-run: {ids}"
+
+
+# ============================================================================
+# IMPORTANT batch (IMP-A..E)
+# ============================================================================
+
+
+def test_paperclip_api_has_curl_timeouts():
+    """IMP-A: all curl invocations need --max-time + --connect-timeout."""
+    import re
+    text = (SCRIPTS / "lib" / "_paperclip_api.sh").read_text()
+    # Match only actual curl invocations: `curl -...` at line-start (possibly indented),
+    # not the word "curl" in comments or `require_command curl`.
+    curls = re.findall(r"^\s*curl\s+-[^\n]*", text, re.MULTILINE)
+    assert curls, "expected at least one curl invocation"
+    bad = [c for c in curls if "--max-time" not in c]
+    assert not bad, "curl without --max-time:\n" + "\n".join(bad)
+    bad2 = [c for c in curls if "--connect-timeout" not in c]
+    assert not bad2, "curl without --connect-timeout:\n" + "\n".join(bad2)
+
+
+def test_plugin_step_fail_closes_on_non_404():
+    """IMP-B: step 8 must not silently fall back to {} on auth errors."""
+    text = (SCRIPTS / "bootstrap-project.sh").read_text()
+    plugin_start = text.find("[8/13] telegram plugin")
+    plugin_end = text.find("[9/13]", plugin_start)
+    section = text[plugin_start:plugin_end]
+    assert '|| echo "{}"' not in section, \
+        "step 8 still has || echo \"{}\" fail-soft; must distinguish 404 from auth"
+    assert "_safe" in section or "404" in section, \
+        "step 8 must explicitly handle 404 vs other errors"
+
+
+def test_journal_files_created_with_mode_600(tmp_path):
+    """IMP-C: journal files (contain AGENTS.md content) must be mode 600."""
+    import os
+    cmd = f'source {SCRIPTS / "lib" / "_journal.sh"}; journal_open test-mode'
+    result = subprocess.run(
+        ["bash", "-c", cmd], capture_output=True, text=True,
+        env={"HOME": str(tmp_path), "PATH": os.environ["PATH"]},
+    )
+    assert result.returncode == 0, f"journal_open failed: {result.stderr}"
+    journal_path = result.stdout.strip()
+    assert Path(journal_path).is_file()
+    mode = Path(journal_path).stat().st_mode & 0o777
+    assert mode == 0o600, f"journal mode {oct(mode)} != 0o600"
+    journal_dir = tmp_path / ".paperclip" / "journal"
+    dir_mode = journal_dir.stat().st_mode & 0o777
+    assert dir_mode == 0o700, f"journal dir mode {oct(dir_mode)} != 0o700"
+
+
+def test_migrate_bindings_creates_bindings_yaml_mode_600(tmp_path, monkeypatch):
+    """IMP-C: bindings.yaml has company_id + UUIDs — mode 600."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    out = subprocess.run(
+        ["bash", str(SCRIPTS / "migrate-bindings.sh"), "gimle"],
+        cwd=REPO, capture_output=True, text=True,
+    )
+    assert out.returncode == 0, f"migrate-bindings failed: {out.stderr}"
+    bindings = tmp_path / ".paperclip" / "projects" / "gimle" / "bindings.yaml"
+    assert bindings.is_file()
+    mode = bindings.stat().st_mode & 0o777
+    assert mode == 0o600, f"bindings.yaml mode {oct(mode)} != 0o600"
+
+
+def test_smoke_probes_no_shell_eval_builtin():
+    """IMP-D: replace dynamic-shell-evaluation invocations with ${!var}."""
+    text = (SCRIPTS / "lib" / "_smoke_probes.sh").read_text()
+    assert 'must_have=$EXPECTED_GIT_' not in text and \
+           'must_have=\\$EXPECTED_GIT_' not in text, \
+        "smoke_probes still uses dynamic shell evaluation for variable lookup"
+    assert '${!' in text, \
+        "smoke_probes must use bash indirect expansion ${!var}"
+
+
+def test_validate_agent_name_rejects_path_chars():
+    """IMP-E: validator rejects names with yq-unsafe characters."""
+    bad_names = ["foo.bar", "foo[0]", "foo bar", "foo;rm", "$(pwd)", "../foo"]
+    common = SCRIPTS / "lib" / "_common.sh"
+    for name in bad_names:
+        cmd = f'source {common}; validate_agent_name "{name}"'
+        out = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True)
+        assert out.returncode != 0, f"validate_agent_name accepted bad: {name!r}"
+
+
+def test_validate_agent_name_accepts_canonical():
+    good = ["CTO", "PythonEngineer", "CXCTO", "CXMCPEngineer", "UWIQAEngineer",
+            "CodexArchitectReviewer", "code_reviewer", "auditor"]
+    common = SCRIPTS / "lib" / "_common.sh"
+    for name in good:
+        cmd = f'source {common}; validate_agent_name "{name}"'
+        out = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True)
+        assert out.returncode == 0, \
+            f"validate_agent_name rejected good: {name!r}: {out.stderr}"

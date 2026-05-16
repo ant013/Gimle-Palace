@@ -9,7 +9,7 @@ paperclip_get() {
   local path="$1"
   require_env PAPERCLIP_API_URL
   require_env PAPERCLIP_API_KEY
-  curl -fsS -X GET "${PAPERCLIP_API_URL%/}${path}" \
+  curl -fsS --max-time 30 --connect-timeout 10 -X GET "${PAPERCLIP_API_URL%/}${path}" \
     -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
     -H "User-Agent: uaa-bootstrap/1.0"
 }
@@ -18,7 +18,7 @@ paperclip_post() {
   local path="$1"; local body="$2"
   require_env PAPERCLIP_API_URL
   require_env PAPERCLIP_API_KEY
-  curl -fsS -X POST "${PAPERCLIP_API_URL%/}${path}" \
+  curl -fsS --max-time 30 --connect-timeout 10 -X POST "${PAPERCLIP_API_URL%/}${path}" \
     -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
     -H "Content-Type: application/json" \
     -H "User-Agent: uaa-bootstrap/1.0" \
@@ -29,7 +29,7 @@ paperclip_put() {
   local path="$1"; local body="$2"
   require_env PAPERCLIP_API_URL
   require_env PAPERCLIP_API_KEY
-  curl -fsS -X PUT "${PAPERCLIP_API_URL%/}${path}" \
+  curl -fsS --max-time 30 --connect-timeout 10 -X PUT "${PAPERCLIP_API_URL%/}${path}" \
     -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
     -H "Content-Type: application/json" \
     -H "User-Agent: uaa-bootstrap/1.0" \
@@ -40,7 +40,7 @@ paperclip_patch() {
   local path="$1"; local body="$2"
   require_env PAPERCLIP_API_URL
   require_env PAPERCLIP_API_KEY
-  curl -fsS -X PATCH "${PAPERCLIP_API_URL%/}${path}" \
+  curl -fsS --max-time 30 --connect-timeout 10 -X PATCH "${PAPERCLIP_API_URL%/}${path}" \
     -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
     -H "Content-Type: application/json" \
     -H "User-Agent: uaa-bootstrap/1.0" \
@@ -71,7 +71,7 @@ paperclip_get_agent_instructions() {
   require_env PAPERCLIP_API_URL
   require_env PAPERCLIP_API_KEY
   local response http body
-  response=$(curl -sS \
+  response=$(curl -sS --max-time 30 --connect-timeout 10 \
     -o - -w '\n%{http_code}' \
     -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
     -H "User-Agent: uaa-bootstrap/1.0" \
@@ -95,7 +95,7 @@ paperclip_delete_agent() {
   local agent_id="$1"
   require_env PAPERCLIP_API_URL
   require_env PAPERCLIP_API_KEY
-  curl -fsS -X DELETE "${PAPERCLIP_API_URL%/}/api/agents/${agent_id}" \
+  curl -fsS --max-time 30 --connect-timeout 10 -X DELETE "${PAPERCLIP_API_URL%/}/api/agents/${agent_id}" \
     -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
     -H "User-Agent: uaa-bootstrap/1.0"
 }
@@ -110,4 +110,25 @@ paperclip_plugin_set_config() {
   local plugin_id="$1"
   local config_json="$2"
   paperclip_post "/api/plugins/${plugin_id}/config" "$config_json"
+}
+
+# Phase C followup IMP-B: distinguish 404 (first-time, return {}) from 401/403/5xx
+# (caller dies under set -e). Prevents telegram defaultChatId wipe on expired JWT.
+paperclip_plugin_get_config_safe() {
+  local plugin_id="$1"
+  require_env PAPERCLIP_API_URL
+  require_env PAPERCLIP_API_KEY
+  local response http body
+  response=$(curl -sS --max-time 30 --connect-timeout 10 \
+    -o - -w '\n%{http_code}' \
+    -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
+    -H "User-Agent: uaa-bootstrap/1.0" \
+    "${PAPERCLIP_API_URL%/}/api/plugins/${plugin_id}" 2>/dev/null) || return 1
+  http=$(printf '%s' "$response" | tail -1)
+  body=$(printf '%s' "$response" | sed '$d')
+  case "$http" in
+    200) printf '%s' "$body" ;;
+    404) printf '{}' ;;
+    *) log err "plugin GET returned HTTP $http (expected 200 or 404)"; return 1 ;;
+  esac
 }

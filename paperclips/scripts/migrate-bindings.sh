@@ -143,5 +143,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
 fi
 
 mkdir -p "$target_dir"
+chmod 700 "$target_dir"
 printf '%s' "$yaml_content" > "$target_file"
+chmod 600 "$target_file"
 log ok "wrote $target_file"
