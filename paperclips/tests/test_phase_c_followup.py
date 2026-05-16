@@ -99,3 +99,22 @@ def test_capitalize_uses_portable_construct():
         "tr '[:lower:]' '[:upper:]'" in prompt_section
     )
     assert portable, f"prompt section uses no portable capitalize:\n{prompt_section}"
+
+
+def test_migrate_bindings_preserves_acronyms(tmp_path, monkeypatch):
+    """CX_CTO → CXCTO not CXCto; CX_QA_ENGINEER → CXQAEngineer not CXQaEngineer."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    out = subprocess.run(
+        ["bash", str(SCRIPTS / "migrate-bindings.sh"), "gimle", "--dry-run"],
+        cwd=REPO, capture_output=True, text=True,
+    )
+    assert out.returncode == 0, f"failed: {out.stderr}"
+    assert "CXCTO:" in out.stdout, f"CXCTO missing (got CXCto?): {out.stdout}"
+    assert "CXQAEngineer:" in out.stdout, f"CXQAEngineer missing: {out.stdout}"
+    assert "CXMCPEngineer:" in out.stdout, f"CXMCPEngineer missing: {out.stdout}"
+    assert "CXPythonEngineer:" in out.stdout
+    assert "CXBlockchainEngineer:" in out.stdout
+    assert "CodexArchitectReviewer:" in out.stdout
+    assert "CXCto:" not in out.stdout
+    assert "CXQaEngineer:" not in out.stdout
+    assert "CXMcpEngineer:" not in out.stdout
