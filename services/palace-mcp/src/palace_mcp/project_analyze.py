@@ -918,6 +918,7 @@ class ProjectAnalysisService:
         graphiti: Graphiti | None = None,
         executor: ExtractorExecutor | None = None,
         reacquire_lease: bool = True,
+        allow_interrupted_checkpoint_replay: bool = False,
     ) -> AnalysisRun:
         run = (
             await self.resume_run(run_id)
@@ -929,7 +930,10 @@ class ProjectAnalysisService:
         for checkpoint in run.checkpoints:
             if checkpoint.status != AnalysisCheckpointStatus.NOT_ATTEMPTED:
                 continue
-            if _checkpoint_was_interrupted(checkpoint):
+            if (
+                _checkpoint_was_interrupted(checkpoint)
+                and not allow_interrupted_checkpoint_replay
+            ):
                 return await self.fail_run(
                     run.run_id,
                     error_code="project_analyze_checkpoint_replayed",
