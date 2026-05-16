@@ -1,8 +1,7 @@
 """Phase D: watchdog reads team UUIDs via dual-read resolver."""
+
 import sys
 from pathlib import Path
-
-import pytest
 
 REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO))
@@ -11,8 +10,9 @@ sys.path.insert(0, str(REPO))
 def test_validate_instructions_load_team_uuids_uses_resolver():
     """load_team_uuids must reference resolve_bindings (dual-read)."""
     text = (REPO / "paperclips" / "scripts" / "validate_instructions.py").read_text()
-    assert "resolve_bindings" in text or "resolve_all" in text, \
+    assert "resolve_bindings" in text or "resolve_all" in text, (
         "load_team_uuids must use resolve_bindings for dual-read"
+    )
 
 
 def test_load_team_uuids_merges_legacy_plus_bindings(tmp_path, monkeypatch):
@@ -27,19 +27,22 @@ def test_load_team_uuids_merges_legacy_plus_bindings(tmp_path, monkeypatch):
     bindings_dir = tmp_path / ".paperclip" / "projects" / "gimle"
     bindings_dir.mkdir(parents=True)
     (bindings_dir / "bindings.yaml").write_text(
-        'schemaVersion: 2\n'
+        "schemaVersion: 2\n"
         'company_id: "abc"\n'
-        'agents:\n'
+        "agents:\n"
         '  CXCTO: "uuid-codex-legacy-from-env"\n'
         '  CXNewCodexAgent: "uuid-codex-new-from-bindings"\n'
     )
 
     from paperclips.scripts.validate_instructions import load_team_uuids
+
     teams = load_team_uuids(fake_repo)
-    assert "uuid-codex-legacy-from-env" in teams["codex"], \
+    assert "uuid-codex-legacy-from-env" in teams["codex"], (
         f"legacy UUID missing: codex={teams['codex']}"
-    assert "uuid-codex-new-from-bindings" in teams["codex"], \
+    )
+    assert "uuid-codex-new-from-bindings" in teams["codex"], (
         f"new bindings UUID missing: codex={teams['codex']}"
+    )
 
 
 def test_load_team_uuids_pre_migration_legacy_only(tmp_path, monkeypatch):
@@ -49,10 +52,10 @@ def test_load_team_uuids_pre_migration_legacy_only(tmp_path, monkeypatch):
     (fake_repo / "paperclips").mkdir(parents=True)
     legacy = fake_repo / "paperclips" / "codex-agent-ids.env"
     legacy.write_text(
-        "CX_CTO_AGENT_ID=uuid-codex-only-legacy\n"
-        "CX_PYTHON_ENGINEER_AGENT_ID=another-codex-legacy\n"
+        "CX_CTO_AGENT_ID=uuid-codex-only-legacy\nCX_PYTHON_ENGINEER_AGENT_ID=another-codex-legacy\n"
     )
     from paperclips.scripts.validate_instructions import load_team_uuids
+
     teams = load_team_uuids(fake_repo)
     assert "uuid-codex-only-legacy" in teams["codex"]
     assert "another-codex-legacy" in teams["codex"]
@@ -68,11 +71,9 @@ def test_load_team_uuids_post_migration_bindings_only(tmp_path, monkeypatch):
     bindings_dir = tmp_path / ".paperclip" / "projects" / "gimle"
     bindings_dir.mkdir(parents=True)
     (bindings_dir / "bindings.yaml").write_text(
-        'schemaVersion: 2\n'
-        'company_id: "abc"\n'
-        'agents:\n'
-        '  CXCTO: "post-migration-codex-uuid"\n'
+        'schemaVersion: 2\ncompany_id: "abc"\nagents:\n  CXCTO: "post-migration-codex-uuid"\n'
     )
     from paperclips.scripts.validate_instructions import load_team_uuids
+
     teams = load_team_uuids(fake_repo)
     assert "post-migration-codex-uuid" in teams["codex"]
