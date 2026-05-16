@@ -300,3 +300,30 @@ def test_dedup_different_lines_not_coalesced() -> None:
     ]
     result = _dedup_findings(raw)
     assert len(result) == 2
+
+
+def test_semgrep_target_batches_chunks_swift_files(tmp_path: Path) -> None:
+    from palace_mcp.extractors.crypto_domain_model.extractor import (
+        _semgrep_target_batches,
+    )
+
+    for index in range(5):
+        (tmp_path / f"File{index}.swift").write_text("// swift\n", encoding="utf-8")
+    (tmp_path / "README.md").write_text("ignored\n", encoding="utf-8")
+
+    batches = _semgrep_target_batches(tmp_path, batch_size=2)
+
+    assert [len(batch) for batch in batches] == [2, 2, 1]
+    assert all(path.suffix == ".swift" for batch in batches for path in batch)
+
+
+def test_semgrep_target_batches_falls_back_to_root_when_no_swift_files(
+    tmp_path: Path,
+) -> None:
+    from palace_mcp.extractors.crypto_domain_model.extractor import (
+        _semgrep_target_batches,
+    )
+
+    (tmp_path / "README.md").write_text("no swift here\n", encoding="utf-8")
+
+    assert _semgrep_target_batches(tmp_path, batch_size=4) == [[tmp_path]]

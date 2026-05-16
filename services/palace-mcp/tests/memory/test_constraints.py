@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -113,3 +114,37 @@ async def test_ensure_schema_fails_on_unregistered_group_id(live_driver: Any) ->
     finally:
         async with live_driver.session() as s:
             await s.run("MATCH (n:Episode {uuid: 'stray-t4'}) DETACH DELETE n")
+
+
+@pytest.mark.asyncio
+async def test_ensure_schema_bootstrap_upsert_supplies_optional_project_fields() -> (
+    None
+):
+    from palace_mcp.memory.cypher import UPSERT_PROJECT
+
+    driver = AsyncMock()
+    session = AsyncMock()
+    session.__aenter__.return_value = session
+    session.__aexit__.return_value = None
+    driver.session = MagicMock(return_value=session)
+
+    empty_result = AsyncMock()
+    empty_result.single.return_value = {"unregistered": []}
+
+    async def run_side_effect(query: str, **kwargs: Any) -> Any:
+        if query == UPSERT_PROJECT:
+            return None
+        if "RETURN collect(g) AS unregistered" in query:
+            return empty_result
+        return None
+
+    session.run.side_effect = run_side_effect
+
+    await ensure_schema(driver, default_group_id="project/test-bootstrap")
+
+    upsert_call = next(
+        call for call in session.run.await_args_list if call.args[0] == UPSERT_PROJECT
+    )
+    assert upsert_call.kwargs["parent_mount"] is None
+    assert upsert_call.kwargs["relative_path"] is None
+    assert upsert_call.kwargs["language_profile"] is None

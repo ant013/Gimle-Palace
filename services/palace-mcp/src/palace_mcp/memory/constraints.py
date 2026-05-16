@@ -42,6 +42,9 @@ async def ensure_schema(driver: AsyncDriver, *, default_group_id: str) -> None:
             language=None,
             framework=None,
             repo_url=None,
+            parent_mount=None,
+            relative_path=None,
+            language_profile=None,
             now=now,
         )
 
