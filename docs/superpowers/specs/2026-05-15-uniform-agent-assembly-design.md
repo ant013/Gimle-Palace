@@ -10,6 +10,17 @@
 
 Pinned grounding: this spec is grounded in the repo state at `main@568888a` (2026-05-14 docs/BUGS.md merge). All later commits should be cross-checked when implementing.
 
+**Phase C complete (2026-05-16):**
+- 8 operator scripts in `paperclips/scripts/`: install-paperclip, bootstrap-project, smoke-test, bootstrap-watchdog, update-versions, validate-manifest, rollback, migrate-bindings — all with `--help`, journal-on-mutation, and topological hire ordering where relevant.
+- Shared bash helpers in `paperclips/scripts/lib/`: `_common.sh` (log/die/require_command), `_paperclip_api.sh` (REST + agent + plugin helpers), `_journal.sh` (open/record/finalize), `_prompts.sh` (interactive), `_smoke_probes.sh` (per-profile runtime probes per spec §12.C).
+- Templates in `paperclips/templates/`: `watchdog-config.yaml.template` + `watchdog-company-block.yaml.template`.
+- `bootstrap-project.sh` supports `--canary` 2-stage deploy (writer/research/qa → cto → fan-out) and `--reuse-bindings`; chains to `bootstrap-watchdog.sh` at step 13.
+- `rollback.sh` replays inverse mutations (LIFO) for agent_instructions_snapshot, plugin_config_snapshot, version_bump_snapshot.
+- `migrate-bindings.sh` extracts UUIDs from `paperclips/codex-agent-ids.env` + manifest inline + GET /api/companies/<id>/agents into `~/.paperclip/projects/<key>/bindings.yaml`.
+- `versions.env` pins every dependency (paperclipai 2026.508.0-canary.0, telegram-plugin fork `c0423e45`, pnpm 9.15.0); `update-versions.sh` re-runs install with pre-bump journal.
+- 103 Phase C tests + 12 acceptance tests; full sweep 244 passed, 7 skipped.
+- Merged: PR #191 (C1 foundation) + PR #193 (C2 lifecycle) + this PR (C3 utilities).
+
 **Phase B complete (2026-05-16):**
 - 8 profile YAMLs in `paperclips/fragments/profiles/` per spec §5.2 (custom/minimal/research/writer/implementer/qa/reviewer/cto).
 - `paperclips/scripts/compose_agent_prompt.py` composes universal + profile chain (extends + dedup) + role + custom_includes + overlays per §3.2, §5.2.1.
