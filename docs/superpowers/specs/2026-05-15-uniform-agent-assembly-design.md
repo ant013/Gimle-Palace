@@ -246,7 +246,7 @@ paperclips/fragments/shared/fragments/
     └── review.md                         (~20)   # reviewer
 ```
 
-**Total: 16 files, ~530 lines.** Current `paperclips/fragments/shared/fragments/` is **441 lines across 13 files** (verified `wc -l`). The redesign is **~20% larger** in absolute library size (530 vs 441) — but the win is per-agent: today every agent inlines essentially the entire library; in the redesign each agent inlines only its profile-selected subset. Net per-agent saving comes from selective composition, not from a smaller library.
+**Total: 18 files, ~530 lines.** (rev4 errata — previously said "16 files"; actual count is 3+4+1+2+2+1+3+2 = 18 per the enumerated tree above.) Current `paperclips/fragments/shared/fragments/` is **441 lines across 13 files** (verified `wc -l`). The redesign is **~20% larger** in absolute library size (530 vs 441) — but the win is per-agent: today every agent inlines essentially the entire library; in the redesign each agent inlines only its profile-selected subset. Net per-agent saving comes from selective composition, not from a smaller library.
 
 ### 4.2 Naming consolidation
 

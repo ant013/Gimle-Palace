@@ -240,7 +240,14 @@ fi
 if ! grep -qF "$VERIFY_MARKER" "$CTO_AGENTS_MD"; then
     die "marker '${VERIFY_MARKER}' not found in deployed CTO AGENTS.md (${CTO_AGENTS_MD})" 4
 fi
-log "Verify OK: marker '${VERIFY_MARKER}' found in CTO AGENTS.md"
+
+# UAA Phase A deploy guard: refuse to deploy slim-craft files (Phase A intermediate state).
+# Per spec §10.5: slim crafts are inert until Phase B's compose_agent_prompt composes
+# universal/profile/role/overlay into a runnable AGENTS.md. Deploying as-is = broken agents.
+if grep -qF "PHASE-A-ONLY: not deployable without Phase B" "$CTO_AGENTS_MD"; then
+    die "PHASE-A-ONLY sentinel detected in CTO AGENTS.md — Phase B compose engine not yet active. Refusing to deploy slim-craft files (would cripple live agents). See UAA spec §10.5." 5
+fi
+log "Verify OK: marker '${VERIFY_MARKER}' found in CTO AGENTS.md (no Phase A sentinel)"
 
 # ---------------------------------------------------------------------------
 # Baseline log append
