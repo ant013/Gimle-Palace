@@ -1,15 +1,16 @@
-> **DEPRECATED (UAA Phase A, 2026-05).** Replaced by:
-> - `paperclips/roles/cx-qa-engineer.md` — slim craft-only file (identity, area, MCP, anti-patterns)
-> - `profile: <appropriate>` — capability composition (phase-orchestration, merge-gate, plan-producer, etc.)
->
-> This file kept until UAA cleanup gate. Do not include in new manifests; do not edit (changes will be lost).
-
 ---
 target: codex
 role_id: codex:cx-qa-engineer
 family: qa
 profiles: [core, task-start, qa-smoke, implementation, handoff-full, merge-deploy]
 ---
+
+> **DEPRECATED (UAA Phase A, 2026-05).** Replaced by:
+> - `paperclips/roles/cx-qa-engineer.md` — slim craft-only file (identity, area, MCP, anti-patterns)
+> - `profile: <appropriate>` — capability composition (phase-orchestration, merge-gate, plan-producer, etc.)
+>
+> This file kept until UAA cleanup gate. Do not include in new manifests; do not edit (changes will be lost).
+
 
 # CXQAEngineer — {{PROJECT}}
 

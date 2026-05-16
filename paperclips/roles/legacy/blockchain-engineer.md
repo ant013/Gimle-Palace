@@ -1,15 +1,16 @@
-> **DEPRECATED (UAA Phase A, 2026-05).** Replaced by:
-> - `paperclips/roles/blockchain-engineer.md` — slim craft-only file (identity, area, MCP, anti-patterns)
-> - `profile: <appropriate>` — capability composition (phase-orchestration, merge-gate, plan-producer, etc.)
->
-> This file kept until UAA cleanup gate. Do not include in new manifests; do not edit (changes will be lost).
-
 ---
 target: claude
 role_id: claude:blockchain-engineer
 family: implementation
 profiles: [core, task-start, implementation, handoff]
 ---
+
+> **DEPRECATED (UAA Phase A, 2026-05).** Replaced by:
+> - `paperclips/roles/blockchain-engineer.md` — slim craft-only file (identity, area, MCP, anti-patterns)
+> - `profile: <appropriate>` — capability composition (phase-orchestration, merge-gate, plan-producer, etc.)
+>
+> This file kept until UAA cleanup gate. Do not include in new manifests; do not edit (changes will be lost).
+
 
 # BlockchainEngineer — {{PROJECT}}
 

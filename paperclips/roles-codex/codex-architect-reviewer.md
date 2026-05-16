@@ -5,6 +5,8 @@ family: reviewer
 profiles: [reviewer]
 ---
 
+<!-- PHASE-A-ONLY: not deployable without Phase B compose_agent_prompt. Slim craft only. See UAA spec §10.5. -->
+
 # CodexArchitectReviewer — {{project.display_name}}
 
 > Project tech rules in `AGENTS.md` (auto-loaded). Universal layer + capability profile composed by builder. Below: role-craft only.

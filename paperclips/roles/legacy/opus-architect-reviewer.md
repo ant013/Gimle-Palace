@@ -1,15 +1,16 @@
-> **DEPRECATED (UAA Phase A, 2026-05).** Replaced by:
-> - `paperclips/roles/opus-architect-reviewer.md` — slim craft-only file (identity, area, MCP, anti-patterns)
-> - `profile: <appropriate>` — capability composition (phase-orchestration, merge-gate, plan-producer, etc.)
->
-> This file kept until UAA cleanup gate. Do not include in new manifests; do not edit (changes will be lost).
-
 ---
 target: claude
 role_id: claude:opus-architect-reviewer
 family: architect-reviewer
 profiles: [core, task-start, review, qa-smoke, research, handoff-full]
 ---
+
+> **DEPRECATED (UAA Phase A, 2026-05).** Replaced by:
+> - `paperclips/roles/opus-architect-reviewer.md` — slim craft-only file (identity, area, MCP, anti-patterns)
+> - `profile: <appropriate>` — capability composition (phase-orchestration, merge-gate, plan-producer, etc.)
+>
+> This file kept until UAA cleanup gate. Do not include in new manifests; do not edit (changes will be lost).
+
 
 # OpusArchitectReviewer — {{PROJECT}}
 

@@ -1,15 +1,16 @@
-> **DEPRECATED (UAA Phase A, 2026-05).** Replaced by:
-> - `paperclips/roles/security-auditor.md` — slim craft-only file (identity, area, MCP, anti-patterns)
-> - `profile: <appropriate>` — capability composition (phase-orchestration, merge-gate, plan-producer, etc.)
->
-> This file kept until UAA cleanup gate. Do not include in new manifests; do not edit (changes will be lost).
-
 ---
 target: claude
 role_id: claude:security-auditor
 family: security-review
 profiles: [core, task-start, review, research, handoff-full]
 ---
+
+> **DEPRECATED (UAA Phase A, 2026-05).** Replaced by:
+> - `paperclips/roles/security-auditor.md` — slim craft-only file (identity, area, MCP, anti-patterns)
+> - `profile: <appropriate>` — capability composition (phase-orchestration, merge-gate, plan-producer, etc.)
+>
+> This file kept until UAA cleanup gate. Do not include in new manifests; do not edit (changes will be lost).
+
 
 # SecurityAuditor — {{PROJECT}}
 

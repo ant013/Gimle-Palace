@@ -1,15 +1,16 @@
-> **DEPRECATED (UAA Phase A, 2026-05).** Replaced by:
-> - `paperclips/roles/qa-engineer.md` — slim craft-only file (identity, area, MCP, anti-patterns)
-> - `profile: <appropriate>` — capability composition (phase-orchestration, merge-gate, plan-producer, etc.)
->
-> This file kept until UAA cleanup gate. Do not include in new manifests; do not edit (changes will be lost).
-
 ---
 target: claude
 role_id: claude:qa-engineer
 family: qa
 profiles: [core, task-start, qa-smoke, implementation, handoff-full, merge-deploy]
 ---
+
+> **DEPRECATED (UAA Phase A, 2026-05).** Replaced by:
+> - `paperclips/roles/qa-engineer.md` — slim craft-only file (identity, area, MCP, anti-patterns)
+> - `profile: <appropriate>` — capability composition (phase-orchestration, merge-gate, plan-producer, etc.)
+>
+> This file kept until UAA cleanup gate. Do not include in new manifests; do not edit (changes will be lost).
+
 
 # QAEngineer — {{PROJECT}}
 
