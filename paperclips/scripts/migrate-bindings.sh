@@ -17,20 +17,24 @@ source "${SCRIPT_DIR}/lib/_common.sh"
 source "${SCRIPT_DIR}/lib/_paperclip_api.sh"
 
 DRY_RUN=0
+CHECK_CONFLICTS=0
 project_key=""
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") <project-key> [--dry-run]
-
-Extract agent UUIDs from legacy sources into ~/.paperclip/projects/<key>/bindings.yaml.
-With --dry-run, prints the bindings.yaml contents to stdout without writing.
+Usage:
+  $(basename "$0") <project-key>                     # extract → ~/.paperclip/projects/<key>/bindings.yaml
+  $(basename "$0") <project-key> --dry-run           # print bindings.yaml contents without writing
+  $(basename "$0") <project-key> --check-conflicts   # compare legacy env vs current bindings
+                                                       # exit 0 on agreement (incl. pre-bootstrap with no sources)
+                                                       # exit 1 on disagreement (lists CONFLICT lines to stderr)
 EOF
 }
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY_RUN=1; shift ;;
+    --check-conflicts) CHECK_CONFLICTS=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) project_key="$1"; shift ;;
   esac
@@ -41,6 +45,43 @@ validate_project_key "$project_key"
 
 manifest="${REPO_ROOT}/paperclips/projects/${project_key}/paperclip-agent-assembly.yaml"
 [ -f "$manifest" ] || die "manifest not found: $manifest"
+
+# Phase D Task 4: --check-conflicts mode runs the dual-read resolver against
+# the existing bindings + legacy env and exits 1 if any agent UUID differs.
+# Runs BEFORE the extraction logic — no writes, just diagnostics.
+if [ "$CHECK_CONFLICTS" -eq 1 ]; then
+  legacy_for_check="${REPO_ROOT}/paperclips/codex-agent-ids.env"
+  bindings_for_check="${HOME}/.paperclip/projects/${project_key}/bindings.yaml"
+  require_command python3
+  PYTHONPATH="${REPO_ROOT}" python3 - "$legacy_for_check" "$bindings_for_check" "$project_key" <<'PY'
+import sys
+from pathlib import Path
+from paperclips.scripts.resolve_bindings import resolve_all
+
+legacy_arg, bindings_arg, project_key = sys.argv[1], sys.argv[2], sys.argv[3]
+legacy = Path(legacy_arg) if project_key == "gimle" else None
+if legacy is not None and not legacy.is_file():
+    legacy = None
+bindings = Path(bindings_arg) if Path(bindings_arg).is_file() else None
+
+try:
+    out = resolve_all(legacy_env_path=legacy, bindings_yaml_path=bindings)
+except FileNotFoundError:
+    # Pre-bootstrap project (no legacy env, no bindings yet) — not an error.
+    # CI cron + operator dry-runs see this as 'nothing to check', exit 0.
+    print(f"skipped: no sources for project '{project_key}' (pre-bootstrap)",
+          file=sys.stderr)
+    sys.exit(0)
+
+if out["conflicts"]:
+    for c in out["conflicts"]:
+        print(f"CONFLICT: {c['agent']} legacy={c['legacy']} bindings={c['bindings']}",
+              file=sys.stderr)
+    sys.exit(1)
+print(f"no conflicts ({len(out['agents'])} agents merged from sources={out['sources_used']})")
+PY
+  exit $?
+fi
 
 target_dir="${HOME}/.paperclip/projects/${project_key}"
 target_file="${target_dir}/bindings.yaml"
@@ -75,10 +116,15 @@ if [ "$project_key" = "gimle" ] && [ -f "$legacy_env" ]; then
         prefix=""
         ;;
     esac
-    # CRIT-4 fix: preserve well-known acronyms (CTO, QA, MCP, ...) per uaudit
-    # manifest convention (UWICTO, UWIQAEngineer). Plain camelCase would emit
-    # 'CXCto'/'CXQaEngineer'/'CXMcpEngineer' which don't match paperclip-API names.
-    ACRONYMS="CTO QA MCP CEO CFO CIO COO CSO CRO API CLI CI CD AI ML DB IT IO UI UX UWI UWA UW"
+    # CRIT-4 + D-fix C-4: preserve canonical acronyms per uaudit manifest convention.
+    # Single source of truth shared with Python resolver:
+    #   paperclips/scripts/lib/canonical_acronyms.txt
+    ACRONYM_FILE="${SCRIPT_DIR}/lib/canonical_acronyms.txt"
+    if [ -f "$ACRONYM_FILE" ]; then
+      ACRONYMS=$(grep -vE '^\s*(#|$)' "$ACRONYM_FILE" | tr '\n' ' ')
+    else
+      ACRONYMS="CTO QA MCP CEO CFO CIO COO CSO CRO API CLI CI CD AI ML DB IT IO UI UX UWI UWA UW"
+    fi
     camel=$(printf '%s' "$rest" | awk -F_ -v acr="$ACRONYMS" '
       BEGIN { split(acr, a, " "); for (i in a) is_acr[a[i]] = 1 }
       { out = ""

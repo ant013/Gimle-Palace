@@ -13,6 +13,10 @@ from pathlib import Path
 import generate_assembly_inventory
 import validate_instructions
 from compose_agent_prompt import compose as _compose_agent_prompt
+from resolve_bindings import (
+    BindingsConflictWarning,
+    resolve_all as _resolve_bindings_all,
+)
 from resolve_template_sources import (
     UnresolvedTemplateError,
     resolve as _resolve_template,
@@ -204,7 +208,32 @@ def compatibility_agent_ids(repo_root: Path, manifest_values: dict[str, str], ta
         return load_claude_agent_ids(repo_root / mapping)
     if target == "codex":
         env_file = manifest_values.get("compatibility.codex_agent_ids_env", "paperclips/codex-agent-ids.env")
-        return load_codex_agent_ids(repo_root / env_file)
+        ids = load_codex_agent_ids(repo_root / env_file)
+        # D-fix C-1: also merge bindings.yaml via dual-read resolver so the
+        # canonical-name lookup (CXCTO, CXMCPEngineer) works for projects whose
+        # manifests use canonical agent_name (Phase E trading/uaudit/gimle).
+        # Result dict keeps both kebab keys (legacy compat) AND canonical keys
+        # so downstream `ids.get(agent_name)` succeeds in either vocabulary.
+        project_key = manifest_values.get("project.key", "")
+        if project_key:
+            from os.path import expanduser
+            bindings_path = Path(expanduser(f"~/.paperclip/projects/{project_key}/bindings.yaml"))
+            legacy_path = (
+                repo_root / "paperclips" / "codex-agent-ids.env"
+                if project_key == "gimle"
+                else None
+            )
+            try:
+                merged = _resolve_bindings_all(
+                    legacy_env_path=legacy_path,
+                    bindings_yaml_path=bindings_path,
+                )
+                for canonical_name, uuid in merged.get("agents", {}).items():
+                    if uuid and canonical_name not in ids:
+                        ids[canonical_name] = uuid
+            except FileNotFoundError:
+                pass
+        return ids
     return {}
 
 
@@ -411,24 +440,50 @@ def apply_overlay(
     return text
 
 
-def _load_host_local_sources(project_key: str) -> dict:
+def _load_host_local_sources(project_key: str, repo_root: Path | None = None) -> dict:
     """Load ~/.paperclip/projects/<key>/{bindings,paths,plugins}.yaml if present.
 
     Returns nested dict for resolve_template_sources.resolve():
       {"bindings": {...}, "paths": {...}, "plugins": {...}}
 
     Returns empty dict if no host-local files exist (pre-migration state).
+
+    Phase D: bindings.yaml is resolved via resolve_bindings.resolve_all so
+    legacy paperclips/codex-agent-ids.env still contributes UUIDs alongside
+    the new bindings.yaml (with bindings winning on conflict, plus a
+    BindingsConflictWarning to surface drift).
     """
     import os
     home = Path(os.path.expanduser("~/.paperclip/projects")) / project_key
     sources: dict = {}
+
+    # --- bindings: dual-read via resolver -------------------------------------
+    bindings_yaml = home / "bindings.yaml"
+    legacy_env = (
+        repo_root / "paperclips" / "codex-agent-ids.env"
+        if (repo_root is not None and project_key == "gimle")
+        else None
+    )
+    try:
+        merged = _resolve_bindings_all(
+            legacy_env_path=legacy_env,
+            bindings_yaml_path=bindings_yaml,
+        )
+        sources["bindings"] = {
+            "company_id": merged.get("company_id"),
+            "agents": merged.get("agents", {}),
+        }
+    except FileNotFoundError:
+        pass  # pre-migration: no host-local + no legacy → silently skip
+
+    # --- paths/plugins: direct read (no legacy equivalent) -------------------
     if not home.is_dir():
         return sources
     try:
         import yaml
     except ImportError:
-        return sources  # pyyaml missing — silently skip host-local
-    for fname in ("bindings.yaml", "paths.yaml", "plugins.yaml"):
+        return sources  # pyyaml missing — silently skip remaining host-local
+    for fname in ("paths.yaml", "plugins.yaml"):
         p = home / fname
         if not p.is_file():
             continue
@@ -549,7 +604,7 @@ def render_role(
     # UNRESOLVED_VARIABLE_RE check below catches them as build error.
     project_key = manifest_values.get("project.key", "")
     if project_key:
-        host_sources = _load_host_local_sources(project_key)
+        host_sources = _load_host_local_sources(project_key, repo_root=repo_root)
         if host_sources:
             # Build nested sources dict expected by resolve():
             #   {"manifest": {project: {...}, domain: {...}, mcp: {...}},

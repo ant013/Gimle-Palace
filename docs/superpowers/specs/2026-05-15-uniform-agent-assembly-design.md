@@ -10,6 +10,26 @@
 
 Pinned grounding: this spec is grounded in the repo state at `main@568888a` (2026-05-14 docs/BUGS.md merge). All later commits should be cross-checked when implementing.
 
+**Phase D followup (2026-05-16, in-PR — 6 CRITICAL + 2 IMP from 4-voltAgent deep-review):**
+- CRIT-C-1 — `build_project_compat.compatibility_agent_ids` for codex target now ALSO merges canonical-name keys from resolver, so Phase E projects whose manifests use canonical agent_name (CXCTO, CXMCPEngineer) get populated agentId in resolved-assembly JSON. Fixes architect's "single source of truth false" finding.
+- CRIT-C-2 — `validate_instructions.load_team_uuids` + `detection_semantic.load_team_uuids_from_repo` accept `allowed_company_ids: set[str] | None`; daemon passes `{c.id for c in cfg.companies}`. Prevents watchdog from allowlisting trading/uaudit UUIDs when running for gimle (cross-project leak).
+- CRIT-C-3 — removed `len(uuid) >= 8` allowlist fallback in validate_instructions; enforces `_UUID_RE.fullmatch`. Test fixtures updated to real UUID format. Closes architect+code-reviewer's security-relevant allowlist gap.
+- CRIT-C-4 — `paperclips/scripts/lib/canonical_acronyms.txt` is the single source of truth for both Python `_PRESERVED_ACRONYMS` (loaded via `_load_acronyms`) and bash `ACRONYMS` (loaded via `grep -vE`). New test asserts the two stay in sync.
+- CRIT-C-5 — `migrate-bindings.sh --check-conflicts` on no-sources exits 0 with "skipped" log (was exit 2 → CI cron false-failure). New test for pre-bootstrap path.
+- CRIT-C-6 — `test_migrate_check_conflicts_detects_disagreement` tightened: `assert returncode != 0 AND "conflict" in output` (was `or` → passed on unrelated errors).
+- IMP-D1 — `resolve_bindings.py main()` validates `project_key` against `^[a-z0-9][a-z0-9_-]{0,39}$` (parity with shell `validate_project_key`).
+- IMP-I7 — `validate_instructions` loads resolver via importlib with `sys.modules` cache check (prevents duplicate `BindingsConflictWarning` class under multi-tick watchdog runs).
+- 1 architect false-positive parked (no spec change): "watchdog conflict-warning absorbed" — `BindingsConflictWarning` is structured in `conflicts` field of resolver return; surfaces in logs via warnings module. Spec §10.5 warn-on-conflict contract met.
+- Sweep: 291 paperclip + 352 watchdog tests, 7 skipped, 0 failed.
+
+**Phase D complete (2026-05-16):**
+- `paperclips/scripts/resolve_bindings.py` provides dual-read with precedence (new `bindings.yaml` wins over legacy `paperclips/codex-agent-ids.env`) and emits `BindingsConflictWarning` on disagreement. `_normalize_legacy_name` preserves canonical acronyms (CTO/QA/MCP) so output matches `services/watchdog/src/gimle_watchdog/role_taxonomy.py` entries.
+- Builder (`build_project_compat._load_host_local_sources`) routes bindings through the resolver; paths.yaml/plugins.yaml stay direct-read (no legacy equivalent).
+- Watchdog's `paperclips/scripts/validate_instructions.load_team_uuids` (loaded by `detection_semantic.load_team_uuids_from_repo`) iterates every `~/.paperclip/projects/<key>/bindings.yaml` and merges with legacy env via resolver. Defensive fallback if `resolve_bindings.py` is missing preserves pre-Phase-D behavior.
+- `migrate-bindings.sh --check-conflicts` runs resolver against existing bindings + legacy env; exits 1 with `CONFLICT: <agent> legacy=X bindings=Y` lines on disagreement, exits 0 with `no conflicts (N agents merged from sources=[...])` on agreement.
+- Legacy `paperclips/codex-agent-ids.env` + `paperclips/deploy-agents.sh` remain in repo until §10.5 cleanup gate. One pre-existing test (`test_project_compat_unresolved_variable_fails`) relaxed to accept new resolver-path error message; behavior identical.
+- New tests: `test_phase_d_resolver.py` (9), `test_phase_d_integration.py` (3), `test_phase_d_migrate_conflict.py` (3), `test_phase_d_acceptance.py` (8), `services/watchdog/tests/test_phase_d_resolver_integration.py` (4). Full sweep: 285 paperclip tests + 350 watchdog tests, 7 skipped, 0 failed.
+
 **Phase C followup complete (2026-05-16):**
 - 6 CRITICAL findings from 4-voltAgent deep-review addressed:
   - CRIT-1 — bootstrap-project + rollback now use matching journal kinds (`agent_instructions_snapshot` + new `agent_hire`); old AGENTS.md content captured before PUT via new `paperclip_get_agent_instructions`.
