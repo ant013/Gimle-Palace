@@ -10,6 +10,16 @@
 
 Pinned grounding: this spec is grounded in the repo state at `main@568888a` (2026-05-14 docs/BUGS.md merge). All later commits should be cross-checked when implementing.
 
+**Phase B complete (2026-05-16):**
+- 8 profile YAMLs in `paperclips/fragments/profiles/` per spec §5.2 (custom/minimal/research/writer/implementer/qa/reviewer/cto).
+- `paperclips/scripts/compose_agent_prompt.py` composes universal + profile chain (extends + dedup) + role + custom_includes + overlays per §3.2, §5.2.1.
+- `paperclips/scripts/validate_manifest.py` rejects UUIDs/abs-paths/forbidden-keys per §6.2.
+- `paperclips/scripts/resolve_template_sources.py` resolves `{{a.b.c}}` per §6.5.
+- `paperclips/scripts/profile_schema.py` validates 8-profile YAML with extends-chain + cycle detection.
+- Builder (`build_project_compat.py`) wires compose path for slim crafts (no @include); legacy expand_includes preserved for un-migrated; output_path derived from (project.key, target, agent_name) per rev4 B-1.
+- Profile boundaries verified at runtime: cto has Phase 1.1+release-cut+APPROVE; reviewer has APPROVE no release-cut; implementer has commit/push no merge; writer has Karpathy+handoff only.
+- 141 tests passing (32 new Phase B + 38 Phase A + 86 validator + 7 skip).
+
 **Rev4 changelog (third deep-review of plans + 2 operator strategic questions applied):**
 - §3.4 NEW — Target extensibility (`paperclips/roles-<target>/` convention; mixed-team support explicit; cross-target handoff first-class).
 - §12.C extended — concrete runtime probe-questions per profile-family (mcp_list / git_capability / handoff_procedure / phase_orchestration) with expected/forbidden markers; replaces vague "operator-live" placeholder.
