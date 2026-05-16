@@ -130,7 +130,10 @@ def run_git(
 
     if truncated:
         stderr_tail = _drain_and_kill(proc)
-        rc = proc.returncode if proc.returncode is not None else -1
+        # Reaching the caller's output cap is an intentional success path.
+        # Different platforms may report the killed producer as non-zero even
+        # after we have already collected the requested output.
+        rc = 0
     else:
         # Let it finish (bounded by timeout).
         try:
