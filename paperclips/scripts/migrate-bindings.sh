@@ -17,20 +17,22 @@ source "${SCRIPT_DIR}/lib/_common.sh"
 source "${SCRIPT_DIR}/lib/_paperclip_api.sh"
 
 DRY_RUN=0
+CHECK_CONFLICTS=0
 project_key=""
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") <project-key> [--dry-run]
-
-Extract agent UUIDs from legacy sources into ~/.paperclip/projects/<key>/bindings.yaml.
-With --dry-run, prints the bindings.yaml contents to stdout without writing.
+Usage:
+  $(basename "$0") <project-key>                     # extract → ~/.paperclip/projects/<key>/bindings.yaml
+  $(basename "$0") <project-key> --dry-run           # print bindings.yaml contents without writing
+  $(basename "$0") <project-key> --check-conflicts   # compare legacy env vs current bindings; exit 1 on disagreement
 EOF
 }
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY_RUN=1; shift ;;
+    --check-conflicts) CHECK_CONFLICTS=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) project_key="$1"; shift ;;
   esac
@@ -41,6 +43,40 @@ validate_project_key "$project_key"
 
 manifest="${REPO_ROOT}/paperclips/projects/${project_key}/paperclip-agent-assembly.yaml"
 [ -f "$manifest" ] || die "manifest not found: $manifest"
+
+# Phase D Task 4: --check-conflicts mode runs the dual-read resolver against
+# the existing bindings + legacy env and exits 1 if any agent UUID differs.
+# Runs BEFORE the extraction logic — no writes, just diagnostics.
+if [ "$CHECK_CONFLICTS" -eq 1 ]; then
+  legacy_for_check="${REPO_ROOT}/paperclips/codex-agent-ids.env"
+  bindings_for_check="${HOME}/.paperclip/projects/${project_key}/bindings.yaml"
+  require_command python3
+  PYTHONPATH="${REPO_ROOT}" python3 - "$legacy_for_check" "$bindings_for_check" "$project_key" <<'PY'
+import sys
+from pathlib import Path
+from paperclips.scripts.resolve_bindings import resolve_all
+
+legacy_arg, bindings_arg, project_key = sys.argv[1], sys.argv[2], sys.argv[3]
+legacy = Path(legacy_arg) if project_key == "gimle" else None
+if legacy is not None and not legacy.is_file():
+    legacy = None
+bindings = Path(bindings_arg) if Path(bindings_arg).is_file() else None
+
+try:
+    out = resolve_all(legacy_env_path=legacy, bindings_yaml_path=bindings)
+except FileNotFoundError as e:
+    print(f"no sources: {e}", file=sys.stderr)
+    sys.exit(2)
+
+if out["conflicts"]:
+    for c in out["conflicts"]:
+        print(f"CONFLICT: {c['agent']} legacy={c['legacy']} bindings={c['bindings']}",
+              file=sys.stderr)
+    sys.exit(1)
+print(f"no conflicts ({len(out['agents'])} agents merged from sources={out['sources_used']})")
+PY
+  exit $?
+fi
 
 target_dir="${HOME}/.paperclip/projects/${project_key}"
 target_file="${target_dir}/bindings.yaml"
