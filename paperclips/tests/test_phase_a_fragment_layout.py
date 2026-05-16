@@ -30,3 +30,11 @@ def test_universal_wake_and_handoff_exists():
     assert "409" in text
     # Heartbeat content removed (paperclip heartbeat is OFF)
     assert "intervalSec" not in text
+
+
+def test_universal_escalation_exists():
+    p = SUBMODULE / "universal" / "escalation-board.md"
+    assert p.is_file()
+    text = p.read_text()
+    assert "@Board" in text
+    assert "blocker" in text.lower()
