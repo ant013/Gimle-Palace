@@ -38,6 +38,17 @@ Pinned grounding: this spec is grounded in the repo state at `main@568888a` (202
 - 1 architect false-positive parked: claim that `companyId=""` ships to paperclip API — actually downstream consumers (`bootstrap-project.sh`) re-read host-local separately; the bug was data-quality in JSON, not API-leak. Fix still applies.
 - Sweep: 348 paperclip tests, 12 skipped, 0 failed.
 
+**Phase H1 partial (2026-05-17, code-side dead-legacy cleanup — gate-bypass-by-operator-directive):**
+- Per spec §10.5 the cleanup gate (≥7 days zero `wake_failed`/`handoff_alert_posted`/`per_agent_cap` events) is normally a prerequisite. Operator directive 2026-05-17 ("делай ВСЁ - несмотря ни на какие изменения") authorized H1 (dead-only artifacts) without waiting for the gate. H2 (active scripts) + H3 (dual-read code paths) remain gated until live deploys.
+- Removed `paperclips/roles/legacy/*.md` (12 files) — Phase A.1 hybrid copies, never referenced outside docs.
+- Removed `paperclips/roles-codex/legacy/*.md` (12 files) — same.
+- Removed 11 deprecated shared fragments from submodule `paperclip-shared-fragments` (PR ant013/paperclip-shared-fragments#21 merged): karpathy-discipline, heartbeat-discipline, phase-handoff, git-workflow, worktree-discipline, escalation-blocked, compliance-enforcement, test-design-discipline, pre-work-discovery, plan-first-producer, plan-first-review. Replaced by new Phase-A `fragments/{universal,handoff,git,worktree,code-review,qa,pre-work,plan}` layout (PR #20).
+- Submodule pointer bumped to `1feeb23`.
+- Audit method: `git grep -l "<pattern>" | grep -v docs/` returned zero consumer matches before deletion.
+- Deleted 3 obsolete Phase-A "hybrid hold-and-grow" tests (per Phase H plan rev4 H-2: delete, don't skip): `test_all_24_roles_have_legacy_copies`, `test_all_24_legacy_have_banners`, `test_deprecated_files_have_banner`. Their pins were Phase-A invariants no longer true post-H1.
+- New `paperclips/tests/test_phase_h_cleanup.py`: 3 H1 tests (legacy-dirs-removed, deprecated-fragments-removed, kept-fragments-still-present negative-anchor).
+- Sweep: 384 paperclip tests, 20 skipped, 0 failed.
+
 **Phase G followup (2026-05-17, in-PR — 3 verified CRITICAL + small batch from 4-voltAgent deep-review):**
 - CRIT-architect-C1 — `paperclips/scripts/resolve_bindings.py` cross-form conflict detection. Legacy normalizer produces canonical `CXCTO`; gimle bindings use kebab `cx-cto`. Pre-fix the merge loop compared by string equality only, so cross-form pairs lived in disjoint key namespaces — conflict detection was inert for gimle. New `_kebab_to_canonical()` mirrors the special-case `cx`/`codex` prefixes from `_normalize_legacy_name`; `resolve_all` builds a canonical-key index across both sides and emits `BindingsConflictWarning` (with explicit `legacy_key`/`bindings_key` fields) on cross-form disagreement. 3 new resolver tests (`test_kebab_*_conflict_detected`, `test_kebab_*_matching_no_conflict`, `test_kebab_to_canonical_helper_matches_legacy_normalizer`) pin the parity contract.
 - CRIT-code-rev-C3 — `paperclips/scripts/generate_assembly_inventory.py` bumped to `schemaVersion: 2`. New `load_manifest_output_paths` reads per-agent `output_path` from the gimle project manifest and threads it through `dist_path_for_role`, falling back to the v1 hardcoded convention when absent. Forward-compat: when gimle eventually drops `legacy_output_paths: true`, the inventory builder will follow the manifest without code changes.

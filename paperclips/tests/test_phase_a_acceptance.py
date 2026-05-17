@@ -23,19 +23,6 @@ CODEX_ROLES = [
 SIZE_LIMIT_PER_ROLE = 100  # lines
 
 
-def test_all_24_roles_have_legacy_copies():
-    for r in CLAUDE_ROLES:
-        assert (ROLES / "legacy" / r).is_file(), f"missing legacy: {r}"
-    for r in CODEX_ROLES:
-        assert (ROLES_CODEX / "legacy" / r).is_file(), f"missing legacy: {r}"
-
-
-def test_all_24_legacy_have_banners():
-    for r in CLAUDE_ROLES + CODEX_ROLES:
-        legacy = (ROLES if r in CLAUDE_ROLES else ROLES_CODEX) / "legacy" / r
-        assert "UAA Phase A" in legacy.read_text(), f"banner missing: {legacy}"
-
-
 def test_all_24_new_roles_are_slim():
     for r in CLAUDE_ROLES + CODEX_ROLES:
         new = (ROLES if r in CLAUDE_ROLES else ROLES_CODEX) / r
