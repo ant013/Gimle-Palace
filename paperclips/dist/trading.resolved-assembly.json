@@ -40,17 +40,17 @@
   },
   "parameters": {
     "paths": {
-      "codexTeamRoot": "",
-      "operatorMemoryDir": "",
+      "codexTeamRoot": "/opt/example/trading/runs",
+      "operatorMemoryDir": "~/.claude/projects/-opt-example-trading/memory",
       "overlayRoot": "paperclips/projects/trading/overlays",
-      "primaryMcpServiceDir": "",
-      "primaryRepoRoot": "",
-      "productionCheckout": "",
-      "projectRoot": "",
+      "primaryMcpServiceDir": "/opt/example/trading",
+      "primaryRepoRoot": "/opt/example/trading/repo",
+      "productionCheckout": "/opt/example/trading",
+      "projectRoot": "/opt/example/trading",
       "projectRulesFile": "AGENTS.md"
     },
     "project": {
-      "companyId": "",
+      "companyId": "00000000-0000-0000-0000-000000000002",
       "displayName": "Trading",
       "integrationBranch": "main",
       "issuePrefix": "TRD",

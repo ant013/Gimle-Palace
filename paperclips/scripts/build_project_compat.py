@@ -481,8 +481,16 @@ def _load_host_local_sources(project_key: str, repo_root: Path | None = None) ->
     home = Path(os.path.expanduser("~/.paperclip/projects")) / project_key
     sources: dict = {}
 
-    # --- bindings: dual-read via resolver -------------------------------------
+    # --- bindings: dual-read via resolver + CI fallback ----------------------
+    # Operator's ~/.paperclip/projects/<key>/bindings.yaml takes precedence;
+    # paperclips/projects/<key>/bindings.local-example.yaml is a CI/dev fallback
+    # (committed, sanitized UUIDs). Lets CI builds resolve {{bindings.X}} +
+    # {{project.company_id}} for v2 projects without operator-only host-local.
     bindings_yaml = home / "bindings.yaml"
+    if not bindings_yaml.is_file() and repo_root is not None:
+        fallback_bindings = repo_root / "paperclips" / "projects" / project_key / "bindings.local-example.yaml"
+        if fallback_bindings.is_file():
+            bindings_yaml = fallback_bindings
     legacy_env = (
         repo_root / "paperclips" / "codex-agent-ids.env"
         if (repo_root is not None and project_key == "gimle")
@@ -658,6 +666,12 @@ def render_role(
                 for top in ("project", "domain", "mcp"):
                     if k.startswith(f"{top}."):
                         manifest_nested[top][k[len(top) + 1:]] = v
+            # Phase F: v2 overlays use {{bindings.company_id}} directly
+            # (uaudit InfraEngineer overlays). No back-bridge needed — host-local
+            # bindings.yaml feeds host_sources["bindings"]["company_id"] which
+            # resolves the canonical {{bindings.X}} template. Removed the
+            # over-engineered {{project.company_id}} preservation bridge per
+            # architect's Phase F C2.
             full_sources = {
                 "manifest": manifest_nested,
                 "agent": agent_values or {},
@@ -878,6 +892,23 @@ def resolved_assembly(
     manifest_values: dict[str, str],
     targets: list[str],
 ) -> dict[str, object]:
+    # F-fix C1: v2 manifests strip company_id + paths.* (moved to host-local).
+    # Bridge values from host-local so the resolved-assembly.json doesn't ship
+    # empty strings that downstream consumers (bootstrap-project, audit, smoke
+    # tests) would mistrust or post into paperclip API. Same fix class as
+    # Phase E CRIT-1 (compatibility.inputs), generalized to parameters block.
+    project_key = manifest_values.get("project.key", "")
+    host_sources = _load_host_local_sources(project_key, repo_root=repo_root) if project_key else {}
+    host_bindings = host_sources.get("bindings") or {}
+    host_paths = host_sources.get("paths") or {}
+
+    def _hl(values_key: str, host_dict: dict, host_key: str) -> str:
+        v = manifest_values.get(values_key, "")
+        if v:
+            return v
+        hv = host_dict.get(host_key) if isinstance(host_dict, dict) else None
+        return hv if isinstance(hv, str) and hv else ""
+
     return {
         "schemaVersion": 1,
         "project": project,
@@ -889,16 +920,16 @@ def resolved_assembly(
                 "displayName": manifest_values.get("project.display_name", ""),
                 "systemName": manifest_values.get("project.system_name", ""),
                 "issuePrefix": manifest_values.get("project.issue_prefix", ""),
-                "companyId": manifest_values.get("project.company_id", ""),
+                "companyId": _hl("project.company_id", host_bindings, "company_id"),
                 "integrationBranch": manifest_values.get("project.integration_branch", ""),
             },
             "paths": {
-                "projectRoot": manifest_values.get("paths.project_root", ""),
-                "primaryRepoRoot": manifest_values.get("paths.primary_repo_root", ""),
-                "primaryMcpServiceDir": manifest_values.get("paths.primary_mcp_service_dir", ""),
-                "productionCheckout": manifest_values.get("paths.production_checkout", ""),
-                "codexTeamRoot": manifest_values.get("paths.codex_team_root", ""),
-                "operatorMemoryDir": manifest_values.get("paths.operator_memory_dir", ""),
+                "projectRoot": _hl("paths.project_root", host_paths, "project_root"),
+                "primaryRepoRoot": _hl("paths.primary_repo_root", host_paths, "primary_repo_root"),
+                "primaryMcpServiceDir": _hl("paths.primary_mcp_service_dir", host_paths, "primary_mcp_service_dir"),
+                "productionCheckout": _hl("paths.production_checkout", host_paths, "production_checkout"),
+                "codexTeamRoot": _hl("paths.codex_team_root", host_paths, "team_workspace_root"),
+                "operatorMemoryDir": _hl("paths.operator_memory_dir", host_paths, "operator_memory_dir"),
                 "overlayRoot": manifest_values.get("paths.overlay_root", ""),
                 "projectRulesFile": manifest_values.get("paths.project_rules_file", ""),
             },

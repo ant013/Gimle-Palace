@@ -40,11 +40,11 @@ def test_missing_manifest_dies():
 def test_unmigrated_v1_manifest_rejected():
     """v1 manifests with inline UUIDs/paths must be rejected.
 
-    Phase E migrated trading to v2 (clean). uaudit/gimle are still v1 with
-    inline agent_id + abs paths — they must FAIL validate-manifest so the gate
-    continues to enforce the schema until Phase F/G migrations.
+    Phase E migrated trading. Phase F migrated uaudit. Only gimle is still v1
+    with inline agent_id + abs paths — it must FAIL validate-manifest so the
+    gate continues to enforce the schema until Phase G migration lands.
     """
-    for project in ("uaudit", "gimle"):
+    for project in ("gimle",):
         out = subprocess.run(
             ["bash", str(SCRIPT), project],
             cwd=REPO, capture_output=True, text=True,
@@ -53,6 +53,17 @@ def test_unmigrated_v1_manifest_rejected():
             f"{project}: v1 manifest unexpectedly passed validate-manifest"
         assert "REJECT" in (out.stdout + out.stderr), \
             f"{project}: REJECT marker missing in output"
+
+
+def test_v2_uaudit_manifest_accepted():
+    """Phase F migrated uaudit must PASS validate-manifest (v2-clean)."""
+    out = subprocess.run(
+        ["bash", str(SCRIPT), "uaudit"],
+        cwd=REPO, capture_output=True, text=True,
+    )
+    assert out.returncode == 0, \
+        f"uaudit v2 manifest rejected: {(out.stdout + out.stderr)[:500]}"
+    assert "OK" in (out.stdout + out.stderr)
 
 
 def test_v2_trading_manifest_accepted():

@@ -1,0 +1,28 @@
+# Phase F CI fallback — overridden by operator's ~/.paperclip/projects/uaudit/bindings.yaml.
+#
+# Committed sanitized UUIDs let CI build uaudit without operator's host-local
+# files. Operator's real UUIDs (from `migrate-bindings.sh uaudit`) live at
+# ~/.paperclip/projects/uaudit/bindings.yaml and take precedence at deploy time.
+#
+# Builder precedence: ~/.paperclip/projects/uaudit/bindings.yaml (operator) →
+# paperclips/projects/uaudit/bindings.local-example.yaml (this file, CI fallback).
+schemaVersion: 2
+company_id: "00000000-0000-0000-0000-000000000001"
+agents:
+  AUCEO: "00000000-0000-0000-0000-000000000010"
+  UWICTO: "00000000-0000-0000-0000-000000000011"
+  UWACTO: "00000000-0000-0000-0000-000000000012"
+  UWISwiftAuditor: "00000000-0000-0000-0000-000000000013"
+  UWAKotlinAuditor: "00000000-0000-0000-0000-000000000014"
+  UWICryptoAuditor: "00000000-0000-0000-0000-000000000015"
+  UWACryptoAuditor: "00000000-0000-0000-0000-000000000016"
+  UWISecurityAuditor: "00000000-0000-0000-0000-000000000017"
+  UWASecurityAuditor: "00000000-0000-0000-0000-000000000018"
+  UWIQAEngineer: "00000000-0000-0000-0000-000000000019"
+  UWAQAEngineer: "00000000-0000-0000-0000-00000000001a"
+  UWIInfraEngineer: "00000000-0000-0000-0000-00000000001b"
+  UWAInfraEngineer: "00000000-0000-0000-0000-00000000001c"
+  UWIResearchAgent: "00000000-0000-0000-0000-00000000001d"
+  UWAResearchAgent: "00000000-0000-0000-0000-00000000001e"
+  UWITechnicalWriter: "00000000-0000-0000-0000-00000000001f"
+  UWATechnicalWriter: "00000000-0000-0000-0000-000000000020"

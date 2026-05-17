@@ -59,8 +59,8 @@ Bind state on every wake:
 
 ```bash
 N=<issueNumber of this Paperclip issue>
-RUN=/Users/Shared/UnstoppableAudit/runs/UNS-$N-audit
-REPO=/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios
+RUN={{paths.team_workspace_root}}/UNS-$N-audit
+REPO={{paths.primary_repo_root}}
 ```
 
 Use this layout:
