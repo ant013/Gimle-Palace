@@ -238,9 +238,7 @@ async def _fetch_arch_layer_supplement(
     }
 
 
-async def _fetch_hotspot_supplement(
-    driver: Any, run_info: RunInfo
-) -> dict[str, Any]:
+async def _fetch_hotspot_supplement(driver: Any, run_info: RunInfo) -> dict[str, Any]:
     """Run supplemental Cypher for hotspot to get the real count of processed files."""
     async with driver.session() as session:
         result = await session.run(
