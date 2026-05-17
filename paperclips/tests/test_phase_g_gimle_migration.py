@@ -243,11 +243,83 @@ def test_phase_g_render_delta_codex(agent_md):
 
 def test_company_id_bridge_via_bindings_local_example():
     """Phase F C1 fix: company_id surfaces into resolved-assembly from
-    host-local (CI fallback) when manifest is v2-stripped."""
-    resolved = json.loads((REPO / "paperclips" / "dist" / "gimle.resolved-assembly.json").read_text())
-    expected = "00000000-0000-0000-0000-000000000003"
+    host-local (CI fallback) when manifest is v2-stripped.
+
+    G-fix QA C3: read expected company_id from the actual fixture instead
+    of hardcoding — eliminates a maintenance footgun where someone updates
+    bindings.local-example.yaml and forgets to update this test."""
+    fixture = REPO / "paperclips" / "projects" / "gimle" / "bindings.local-example.yaml"
+    expected = yaml.safe_load(fixture.read_text())["company_id"]
+    resolved = json.loads(
+        (REPO / "paperclips" / "dist" / "gimle.resolved-assembly.json").read_text()
+    )
     actual = resolved["parameters"]["project"]["companyId"]
     assert actual == expected, f"gimle companyId bridge: expected {expected!r}, got {actual!r}"
+
+
+# ---------------------------------------------------------------------------
+# G-fix code-rev C1: negative coverage — synthetic v1 manifest is rejected.
+# ---------------------------------------------------------------------------
+
+
+def test_synthetic_v1_gimle_manifest_rejected(tmp_path):
+    """Post-Phase-G the gimle manifest is v2; the 5 skipped v1-fixture tests
+    removed negative-path coverage. Restore via a synthetic v1 fixture
+    asserting the validator still rejects it (no silent drift)."""
+    sys.path.insert(0, str(SCRIPTS))
+    from validate_manifest import validate_manifest, ManifestValidationError
+
+    fake = tmp_path / "paperclip-agent-assembly.yaml"
+    fake.write_text(
+        "schemaVersion: 1\n"
+        "project:\n"
+        "  key: gimle\n"
+        "  company_id: 00000000-0000-0000-0000-000000000003\n"
+        "agents:\n"
+        "  - agent_name: cto\n"
+        "    agent_id: 11111111-2222-3333-4444-555555555555\n"
+        "    role_source: paperclips/roles/cto.md\n"
+        "    target: claude\n"
+    )
+    with pytest.raises(ManifestValidationError):
+        validate_manifest(fake)
+
+
+# ---------------------------------------------------------------------------
+# G-fix QA C1: host-local bindings overrides CI fallback (port from Phase F).
+# ---------------------------------------------------------------------------
+
+
+def test_host_local_bindings_takes_precedence_over_ci_fallback(tmp_path, monkeypatch):
+    """G-fix QA C1: when operator's ~/.paperclip/projects/gimle/bindings.yaml
+    exists, it must override paperclips/projects/gimle/bindings.local-example.yaml.
+    Mirrors Phase F's test to guard precedence on gimle's 24-agent surface."""
+    sys.path.insert(0, str(SCRIPTS))
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    operator_company = "deadbeef-cafe-babe-feed-0123456789ab"
+    operator_uuid = "11111111-2222-3333-4444-555555555555"
+    proj = tmp_path / ".paperclip" / "projects" / "gimle"
+    proj.mkdir(parents=True)
+    (proj / "bindings.yaml").write_text(
+        f"schemaVersion: 2\n"
+        f'company_id: "{operator_company}"\n'
+        f"agents:\n"
+        f'  cto: "{operator_uuid}"\n'
+    )
+
+    for mod in ("build_project_compat", "resolve_bindings"):
+        sys.modules.pop(mod, None)
+    import importlib
+    bpc = importlib.import_module("build_project_compat")
+    sources = bpc._load_host_local_sources("gimle", repo_root=REPO)
+
+    assert sources.get("bindings", {}).get("company_id") == operator_company, (
+        f"host-local bindings.yaml didn't override CI fallback: "
+        f"got {sources.get('bindings', {}).get('company_id')!r}, "
+        f"expected {operator_company!r}"
+    )
+    assert sources["bindings"]["agents"].get("cto") == operator_uuid
 
 
 # ---------------------------------------------------------------------------

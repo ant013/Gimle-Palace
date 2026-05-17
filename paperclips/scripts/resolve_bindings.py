@@ -74,6 +74,56 @@ def _normalize_legacy_name(env_var: str) -> str:
     return prefix + "".join(out_parts)
 
 
+def _kebab_to_canonical(name: str) -> str:
+    """Convert kebab-form agent_name (gimle v2 vocab) to canonical PascalCase
+    form (uaudit/trading v2 vocab + legacy-env normalization output).
+
+    G-fix architect C1: legacy env produces canonical (CXCTO); gimle bindings
+    use kebab (cx-cto). Conflict detection needs a single namespace. This
+    helper canonicalizes kebab for comparison, preserving _PRESERVED_ACRONYMS.
+
+    Examples:
+        cx-cto → CXCTO
+        cx-mcp-engineer → CXMCPEngineer
+        code-reviewer → CodeReviewer
+        opus-architect-reviewer → OpusArchitectReviewer
+        codex-architect-reviewer → CodexArchitectReviewer
+        cto → CTO  (because CTO is in _PRESERVED_ACRONYMS)
+        auditor → Auditor
+    """
+    if not name:
+        return name
+    if "-" not in name and not any(c.isupper() for c in name):
+        # plain lowercase token; canonicalize if it's a known acronym
+        upper = name.upper()
+        if upper in _PRESERVED_ACRONYMS:
+            return upper
+        return name.capitalize()
+    if "-" not in name:
+        return name  # already PascalCase or mixed-form — leave as-is
+    parts = name.split("-")
+    # Mirror _normalize_legacy_name's hardcoded prefix handling so kebab
+    # 'cx-cto' → 'CXCTO' (matching legacy CX_CTO_AGENT_ID → 'CXCTO').
+    prefix = ""
+    rest = parts
+    if parts[0] == "cx":
+        prefix = "CX"
+        rest = parts[1:]
+    elif parts[0] == "codex":
+        prefix = "Codex"
+        rest = parts[1:]
+    out: list[str] = []
+    for p in rest:
+        if not p:
+            continue
+        upper = p.upper()
+        if upper in _PRESERVED_ACRONYMS:
+            out.append(upper)
+        else:
+            out.append(p.capitalize())
+    return prefix + "".join(out)
+
+
 def _read_legacy_env(path: Path) -> dict[str, str]:
     """Parse legacy KEY=VALUE env file → {canonical_agent_name: uuid}."""
     out: dict[str, str] = {}
@@ -132,18 +182,44 @@ def resolve_all(
             f"no sources available (legacy={legacy_env_path}, bindings={bindings_yaml_path})"
         )
 
+    # G-fix architect C1: build canonical-form index across both source vocabs so
+    # conflict detection fires even when sources use different forms (e.g.,
+    # legacy 'CXCTO' vs gimle bindings 'cx-cto' — same logical agent).
     merged: dict[str, str] = dict(legacy)
+    legacy_by_canonical: dict[str, str] = {_kebab_to_canonical(k): k for k in legacy}
+
     for name, uuid in bindings["agents"].items():
+        # Exact-key collision (canonical-vs-canonical or kebab-vs-kebab).
         if name in merged and merged[name] != uuid:
-            conflicts.append(
-                {"agent": name, "legacy": merged[name], "bindings": uuid}
-            )
+            conflicts.append({"agent": name, "legacy": merged[name], "bindings": uuid})
             warnings.warn(
                 f"conflict for agent {name!r}: legacy={merged[name]!r}, bindings={uuid!r}; "
                 f"using bindings value (resolve via cleanup gate per spec §10.5)",
                 BindingsConflictWarning,
                 stacklevel=2,
             )
+        # Cross-form collision (kebab-bindings vs canonical-legacy or v.v.):
+        # canonicalize bindings key, look up matching legacy entry.
+        canonical_form = _kebab_to_canonical(name)
+        cross_legacy_key = legacy_by_canonical.get(canonical_form)
+        if cross_legacy_key and cross_legacy_key != name:
+            cross_value = legacy[cross_legacy_key]
+            if cross_value != uuid:
+                conflicts.append({
+                    "agent": canonical_form,
+                    "legacy": cross_value,
+                    "bindings": uuid,
+                    "legacy_key": cross_legacy_key,
+                    "bindings_key": name,
+                })
+                warnings.warn(
+                    f"conflict (cross-form) for agent {canonical_form!r}: "
+                    f"legacy[{cross_legacy_key!r}]={cross_value!r}, "
+                    f"bindings[{name!r}]={uuid!r}; using bindings value "
+                    f"(resolve via cleanup gate per spec §10.5)",
+                    BindingsConflictWarning,
+                    stacklevel=2,
+                )
         merged[name] = uuid
 
     return {
