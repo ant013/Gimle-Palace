@@ -171,8 +171,12 @@ LIMIT 100
     async def _run_pipeline(
         self, *, driver: AsyncDriver, settings: Settings, ctx: ExtractorRunContext
     ) -> ExtractorStats:
-        report_path = _dead_symbol_periphery_report_path(settings, repo_path=ctx.repo_path)
-        contract_path = _dead_symbol_periphery_contract_path(settings, repo_path=ctx.repo_path)
+        report_path = _dead_symbol_periphery_report_path(
+            settings, repo_path=ctx.repo_path
+        )
+        contract_path = _dead_symbol_periphery_contract_path(
+            settings, repo_path=ctx.repo_path
+        )
         if not report_path.exists() or not contract_path.exists():
             missing = report_path if not report_path.exists() else contract_path
             raise ExtractorError(

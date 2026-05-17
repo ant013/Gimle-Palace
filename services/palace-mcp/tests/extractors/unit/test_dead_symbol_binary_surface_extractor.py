@@ -283,7 +283,10 @@ async def test_extractor_periphery_only_happy_path(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_extractor_missing_periphery_file_raises_error(tmp_path: Path) -> None:
-    from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErrorCode
+    from palace_mcp.extractors.foundation.errors import (
+        ExtractorError,
+        ExtractorErrorCode,
+    )
 
     fake_driver = MagicMock()
     fake_settings = _settings(tmp_path)
@@ -817,7 +820,10 @@ async def test_extractor_respects_check_resume_budget(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_run_pipeline_raises_when_report_missing(tmp_path: Path) -> None:
     """_run_pipeline raises ExtractorError(PERIPHERY_FIXTURES_MISSING) when report absent."""
-    from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErrorCode
+    from palace_mcp.extractors.foundation.errors import (
+        ExtractorError,
+        ExtractorErrorCode,
+    )
 
     contract_dir = tmp_path / "periphery"
     contract_dir.mkdir(parents=True)
@@ -861,7 +867,10 @@ async def test_run_pipeline_raises_when_report_missing(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_run_pipeline_raises_when_contract_missing(tmp_path: Path) -> None:
     """_run_pipeline raises ExtractorError(PERIPHERY_FIXTURES_MISSING) when contract absent."""
-    from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErrorCode
+    from palace_mcp.extractors.foundation.errors import (
+        ExtractorError,
+        ExtractorErrorCode,
+    )
 
     report_dir = tmp_path / "periphery"
     report_dir.mkdir(parents=True)
@@ -905,7 +914,10 @@ async def test_run_pipeline_raises_when_contract_missing(tmp_path: Path) -> None
 @pytest.mark.asyncio
 async def test_run_pipeline_raises_when_both_missing(tmp_path: Path) -> None:
     """_run_pipeline raises ExtractorError(PERIPHERY_FIXTURES_MISSING) when both absent."""
-    from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErrorCode
+    from palace_mcp.extractors.foundation.errors import (
+        ExtractorError,
+        ExtractorErrorCode,
+    )
 
     # neither periphery file exists (tmp_path is empty)
     fake_driver = MagicMock()
@@ -943,9 +955,14 @@ async def test_run_pipeline_raises_when_both_missing(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_error_handler_propagates_extractor_error_code(tmp_path: Path) -> None:
+async def test_run_error_handler_propagates_extractor_error_code(
+    tmp_path: Path,
+) -> None:
     """finalize_ingest_run receives the error_code from ExtractorError, not the hardcoded fallback."""
-    from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErrorCode
+    from palace_mcp.extractors.foundation.errors import (
+        ExtractorError,
+        ExtractorErrorCode,
+    )
 
     fake_driver = MagicMock()
     fake_settings = _settings(tmp_path)

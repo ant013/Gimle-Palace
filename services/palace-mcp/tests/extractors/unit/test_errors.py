@@ -6,8 +6,8 @@ from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErr
 
 
 class TestExtractorErrorCode:
-    def test_has_35_codes(self) -> None:
-        assert len(ExtractorErrorCode) == 35
+    def test_has_36_codes(self) -> None:
+        assert len(ExtractorErrorCode) == 36
 
     def test_all_codes_are_strings(self) -> None:
         for code in ExtractorErrorCode:
