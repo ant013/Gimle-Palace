@@ -37,22 +37,19 @@ def test_missing_manifest_dies():
     assert "manifest not found" in out.stderr or "manifest not found" in out.stdout
 
 
-def test_unmigrated_v1_manifest_rejected():
-    """v1 manifests with inline UUIDs/paths must be rejected.
-
-    Phase E migrated trading. Phase F migrated uaudit. Only gimle is still v1
-    with inline agent_id + abs paths — it must FAIL validate-manifest so the
-    gate continues to enforce the schema until Phase G migration lands.
+def test_all_v2_projects_accepted():
+    """Phase E migrated trading, Phase F uaudit, Phase G gimle. All 3 projects
+    are now v2-clean. Validator must accept all. No v1 projects remain in repo.
+    Rejection path covered by validate_manifest.py unit tests directly.
     """
-    for project in ("gimle",):
+    for project in ("trading", "uaudit", "gimle"):
         out = subprocess.run(
             ["bash", str(SCRIPT), project],
             cwd=REPO, capture_output=True, text=True,
         )
-        assert out.returncode != 0, \
-            f"{project}: v1 manifest unexpectedly passed validate-manifest"
-        assert "REJECT" in (out.stdout + out.stderr), \
-            f"{project}: REJECT marker missing in output"
+        assert out.returncode == 0, \
+            f"{project}: v2 manifest unexpectedly rejected: {(out.stdout + out.stderr)[:300]}"
+        assert "OK" in (out.stdout + out.stderr)
 
 
 def test_v2_uaudit_manifest_accepted():

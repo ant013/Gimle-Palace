@@ -222,7 +222,7 @@ Switching branches inside an agent worktree drags uncommitted changes across bra
 
 ### Operator vs production checkout
 
-The `production_checkout` path (e.g. `/opt/uaa-example/gimle`) is the iMac deploy target. Stay on `develop` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in GIM-48: feature checkout in production_checkout caused QA to test stale code.
+The `production_checkout` path (e.g. `/Users/Shared/Ios/Gimle-Palace`) is the iMac deploy target. Stay on `develop` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in GIM-48: feature checkout in production_checkout caused QA to test stale code.
 
 
 ## Pre-work: codebase-memory first
@@ -293,20 +293,20 @@ If the sender's comment includes explicit handoff phrases (`"your turn"`, `"pick
 If your handoff PATCH was authored by a SIGTERM'd run, paperclip may suppress the wake event. Watchdog Phase 2 (`services/watchdog`) detects stuck `in_review` assigneeAgentId+null-execution_run state and fires recovery. Don't rely on it as primary mechanism — author handoffs correctly.
 
 
-# InfraEngineer — Gimle
+# MCPEngineer — Gimle
 
 > Project tech rules in `AGENTS.md` (auto-loaded). Universal layer + capability profile composed by builder. Below: role-craft only.
 
 ## Role
 
-You own deploy + runtime infra: Docker compose, launchd, watchdog, scripts, networking, secrets, healthchecks.
+You implement MCP protocol surface: tool contracts, FastMCP server wiring, tool wire-tests.
 
 ## Area of responsibility
 
-- Maintain docker-compose.yml profiles (review/analyze/full)
-- iMac deploy scripts (paperclips/scripts/imac-*.sh)
-- watchdog daemon code (services/watchdog/) + config
-- SSH keys, plugin registration, host-local config templates
+- Design MCP tool signatures (args, error envelopes with error_code)
+- Wire FastMCP @mcp.tool decorators in palace-mcp
+- Wire-contract tests: every tool error path has assertion on error_code (not just isError)
+- Client distribution: ensure tool args resolve correctly via codebase-memory + serena
 
 ## MCP / Tool scope
 
@@ -318,8 +318,8 @@ Write tools as appropriate per profile (see AGENTS.md for capability boundaries)
 
 ## Anti-patterns
 
-- **Hardcoded paths in committed scripts — use env vars or paths.yaml**
-- **Manual healthcheck via 'docker ps' — must be programmatic in compose**
-- **SSH with --no-host-key-checking — explicit known_hosts management**
-- **Skipping pre-flight checks in install scripts — every requirement explicit**
+- **isError without error_code — caller can't distinguish failure modes**
+- **Renaming MCP tool args without backwards-compat shim — silent caller breaks**
+- **Adding tool without integration test against real palace-mcp container**
+- **Using deprecated streamable_http_client (use streamable_http_session per GIM-91)**
 
