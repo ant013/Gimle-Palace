@@ -164,7 +164,8 @@ log info "hire order: $(echo "$hire_order" | tr '\n' ' ')"
 # Step 7: hire each agent
 for agent_name in $hire_order; do
   validate_agent_name "$agent_name"
-  existing=$(yq -r ".agents.${agent_name} // \"\"" "$bindings")
+  # Bracket-syntax: kebab agent_names (e.g., `cx-cto`) — yq dot-path would treat `-` as subtraction.
+  existing=$(yq -r ".agents[\"${agent_name}\"] // \"\"" "$bindings")
   if [ -n "$existing" ] && [ "$existing" != "null" ]; then
     if paperclip_get_agent_config "$existing" >/dev/null 2>&1; then
       log info "agent $agent_name already hired: $existing"
@@ -180,7 +181,11 @@ for agent_name in $hire_order; do
   reports_to_name=$(echo "$agent_meta" | jq -r '.reportsTo // ""')
   reports_to_uuid=""
   if [ -n "$reports_to_name" ] && [ "$reports_to_name" != "null" ]; then
-    reports_to_uuid=$(yq -r ".agents.${reports_to_name} // \"\"" "$bindings")
+    # Security H2-followup CRIT-1: validate + use bracket-syntax — same protection
+    # as agent_name (yq dot-path would interpret `-` as subtraction; unvalidated
+    # reportsTo from manifest could yq-inject).
+    validate_agent_name "$reports_to_name"
+    reports_to_uuid=$(yq -r ".agents[\"${reports_to_name}\"] // \"\"" "$bindings")
     [ -n "$reports_to_uuid" ] || die "reportsTo $reports_to_name has no UUID (topo order broken?)"
   fi
 
@@ -238,7 +243,7 @@ for agent_name in $hire_order; do
   agent_id=$(echo "$resp" | jq -r '.agent.id // .id')
   [ -n "$agent_id" ] && [ "$agent_id" != "null" ] || die "hire returned no id for $agent_name"
 
-  yq -i ".agents.${agent_name} = \"${agent_id}\"" "$bindings"
+  yq -i ".agents[\"${agent_name}\"] = \"${agent_id}\"" "$bindings"
   journal_record "$journal" "$(jq -n --arg n "$agent_name" --arg id "$agent_id" '{kind:"agent_hire",name:$n,id:$id}')"
   log ok "hired $agent_name → $agent_id"
 done
@@ -286,10 +291,20 @@ deploy_one() {
   local agent_name="$1"
   validate_agent_name "$agent_name"
   local agent_id
-  agent_id=$(yq -r ".agents.${agent_name}" "$bindings")
+  agent_id=$(yq -r ".agents[\"${agent_name}\"]" "$bindings")
   local target
   target=$(yq -r ".agents[] | select(.agent_name == \"${agent_name}\") | .target" "$manifest")
-  local content_path="${REPO_ROOT}/paperclips/dist/${project_key}/${target}/${agent_name}.md"
+  # Phase H2-followup: prefer manifest's per-agent `output_path` (Phase G gimle uses
+  # `legacy_output_paths: true` which writes to paperclips/dist/<name>.md, NOT the
+  # canonical paperclips/dist/<project>/<target>/<name>.md). Fall back to canonical.
+  local content_path raw_output_path
+  raw_output_path=$(yq -r ".agents[] | select(.agent_name == \"${agent_name}\") | .output_path // \"paperclips/dist/${project_key}/${target}/${agent_name}.md\"" "$manifest")
+  # Security H2-followup CRIT-2: guard against path traversal in `output_path`.
+  # Without this, a malicious manifest with `output_path: /etc/passwd` (absolute) or
+  # `../../../etc/shadow` (traversal) would exfiltrate arbitrary files through the
+  # PUT-AGENTS.md API call below.
+  validate_safe_repo_path "$raw_output_path"
+  content_path="${REPO_ROOT}/${raw_output_path}"
   [ -f "$content_path" ] || die "rendered AGENTS.md missing: $content_path"
 
   # CRIT-1 fix: snapshot OLD AGENTS.md content (kind matches rollback.sh handler).
@@ -340,7 +355,11 @@ for agent_name in $hire_order; do
   ws="${team_root}/${agent_name}/workspace"
   mkdir -p "$ws"
   target=$(yq -r ".agents[] | select(.agent_name == \"${agent_name}\") | .target" "$manifest")
-  cp "${REPO_ROOT}/paperclips/dist/${project_key}/${target}/${agent_name}.md" "${ws}/AGENTS.md"
+  # Phase H2-followup: honor manifest `output_path` (same logic as deploy_one).
+  cp_src=$(yq -r ".agents[] | select(.agent_name == \"${agent_name}\") | .output_path // \"paperclips/dist/${project_key}/${target}/${agent_name}.md\"" "$manifest")
+  # Security H2-followup CRIT-2: same traversal guard as deploy_one.
+  validate_safe_repo_path "$cp_src"
+  cp "${REPO_ROOT}/${cp_src}" "${ws}/AGENTS.md"
 done
 
 # Step 12: codex subagents deploy
