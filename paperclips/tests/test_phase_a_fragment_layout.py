@@ -179,20 +179,6 @@ def test_no_orphan_files_in_subdirs():
         assert not unexpected, f"{subdir}/ has unexpected: {unexpected}"
 
 
-def test_deprecated_files_have_banner():
-    deprecated = [
-        "karpathy-discipline.md", "heartbeat-discipline.md", "escalation-blocked.md",
-        "git-workflow.md", "worktree-discipline.md", "phase-handoff.md",
-        "compliance-enforcement.md", "test-design-discipline.md", "pre-work-discovery.md",
-        "plan-first-producer.md", "plan-first-review.md",
-    ]
-    for fname in deprecated:
-        p = SUBMODULE / fname
-        text = p.read_text()
-        assert "DEPRECATED" in text, f"{fname} missing deprecation banner"
-        assert "UAA Phase A" in text, f"{fname} banner doesn't reference UAA Phase A"
-
-
 def test_unchanged_files_preserved():
     """cto-no-code-ban.md and language.md stay as-is in Phase A."""
     for fname in ["cto-no-code-ban.md", "language.md"]:
