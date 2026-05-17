@@ -22,21 +22,45 @@ REPO = Path(__file__).resolve().parents[2]
 # ---------------------------------------------------------------------------
 
 
-def test_imac_agents_deploy_is_thin_wrapper():
-    """Per Phase H plan: imac-agents-deploy.sh becomes thin wrapper around
-    bootstrap-project.sh --reuse-bindings."""
+def test_imac_agents_deploy_is_thinner_than_legacy():
+    """Per Phase H plan + architect H2 review (PR #207): imac-agents-deploy.sh
+    becomes thinner wrapper around bootstrap-project.sh but PRESERVES the
+    legacy safety envelope (worktree, --target-sha, PHASE-A guard, EXPECTED_*
+    preflight). Cap is ≤180 lines (vs pre 280)."""
     p = REPO / "paperclips" / "scripts" / "imac-agents-deploy.sh"
     assert p.is_file(), "imac-agents-deploy.sh still required as the iMac entry point"
     text = p.read_text()
     line_count = text.count("\n")
-    assert line_count <= 60, (
-        f"imac-agents-deploy.sh too large: {line_count} lines (should be ≤60 as thin wrapper)"
+    assert line_count <= 180, (
+        f"imac-agents-deploy.sh too large: {line_count} lines (target <=180)"
     )
     assert "bootstrap-project.sh" in text, (
         "imac-agents-deploy.sh must invoke bootstrap-project.sh"
     )
     assert "--reuse-bindings" in text, (
         "imac-agents-deploy.sh must use --reuse-bindings flag"
+    )
+
+
+def test_imac_agents_deploy_preserves_safety_envelope():
+    """Architect H2 CRIT-1/C-2/C-3 + I-1: wrapper MUST preserve safety
+    markers that the legacy 280-line script provided."""
+    p = REPO / "paperclips" / "scripts" / "imac-agents-deploy.sh"
+    text = p.read_text()
+    required_markers = [
+        ("origin/main", "must default deploy ref to origin/main (release-cut)"),
+        ("--target-sha", "must accept --target-sha for rollback"),
+        ("PHASE-A-ONLY", "must guard against shipping Phase-A slim-craft sentinel"),
+        ("EXPECTED_CWD", "must keep production-checkout cwd guard"),
+        ("EXPECTED_BRANCH", "must keep production branch guard"),
+        ("trap cleanup EXIT", "must keep cleanup trap"),
+        ("git worktree add --detach", "must keep detached-worktree pattern"),
+        ("DEPLOY_LOG", "must append to imac-agents-deploy.log (GIM-244 watchdog dep)"),
+    ]
+    missing = [(m, why) for m, why in required_markers if m not in text]
+    assert not missing, (
+        "wrapper lost safety markers:\n"
+        + "\n".join(f"  - {m}: {why}" for m, why in missing)
     )
 
 
