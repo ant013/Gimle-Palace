@@ -52,11 +52,14 @@ validate_project_key() {
   fi
 }
 
-# IMP-E fix: agent_name reaches yq path expressions; restrict to yq-safe chars.
+# IMP-E fix: agent_name reaches yq path expressions; restrict to safe charset.
+# Phase H2-followup: kebab `-` added — gimle Phase G manifest uses kebab agent_names
+# (e.g., `cto`, `cx-cto`). Bracket-syntax in yq paths (`.agents["${name}"]`) makes
+# `-` safe (yq would otherwise treat it as subtraction in dot-path).
 validate_agent_name() {
   local name="$1"
-  if [[ ! "$name" =~ ^[A-Za-z][A-Za-z0-9_]*$ ]]; then
-    die "invalid agent_name: '$name' (must match [A-Za-z][A-Za-z0-9_]*)"
+  if [[ ! "$name" =~ ^[A-Za-z][A-Za-z0-9_-]*$ ]]; then
+    die "invalid agent_name: '$name' (must match [A-Za-z][A-Za-z0-9_-]*)"
   fi
 }
 
