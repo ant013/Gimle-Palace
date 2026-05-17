@@ -89,6 +89,10 @@ target_file="${target_dir}/bindings.yaml"
 log info "extracting bindings for project: $project_key"
 
 declare -A AGENT_UUIDS
+# Explicit zero-init: under `set -u`, ${#AGENT_UUIDS[@]} on a declared-but-never-
+# assigned assoc-array raises 'unbound variable' in bash 4+. The empty assignment
+# anchors it as a defined-empty array.
+AGENT_UUIDS=()
 COMPANY_ID=""
 
 # Source 1: codex-agent-ids.env (gimle only)
@@ -140,13 +144,38 @@ if [ "$project_key" = "gimle" ] && [ -f "$legacy_env" ]; then
   done < "$legacy_env"
 fi
 
-# Source 2: inline manifest agent_id fields (trading/uaudit)
-if command -v yq >/dev/null 2>&1; then
+# Source 2: inline manifest agent_id fields (trading/uaudit).
+# Prefer python3+yaml (always available per Phase D); yq is optional fallback.
+if command -v python3 >/dev/null 2>&1; then
+  manifest_lines=$(python3 - "$manifest" <<'PY' 2>/dev/null || true
+import sys, yaml
+m = yaml.safe_load(open(sys.argv[1])) or {}
+cid = (m.get("project") or {}).get("company_id") or ""
+print(f"__COMPANY_ID__|{cid}")
+for a in m.get("agents", []) or []:
+    name = a.get("agent_name") or ""
+    uuid = a.get("agent_id") or ""
+    if name and uuid:
+        print(f"{name}|{uuid}")
+PY
+)
+  while IFS='|' read -r name uuid; do
+    [ -z "$name" ] && continue
+    if [ "$name" = "__COMPANY_ID__" ]; then
+      [ -n "$uuid" ] && [ "$uuid" != "null" ] && COMPANY_ID="$uuid"
+      continue
+    fi
+    [ -z "$uuid" ] && continue
+    [ "$uuid" = "null" ] && continue
+    if [ -z "${AGENT_UUIDS[$name]:-}" ]; then
+      AGENT_UUIDS["$name"]="$uuid"
+    fi
+  done <<< "$manifest_lines"
+elif command -v yq >/dev/null 2>&1; then
   while IFS='|' read -r name uuid; do
     [ -z "$name" ] && continue
     [ -z "$uuid" ] && continue
     [ "$uuid" = "null" ] && continue
-    # Don't overwrite an entry already populated from source 1.
     if [ -z "${AGENT_UUIDS[$name]:-}" ]; then
       AGENT_UUIDS["$name"]="$uuid"
     fi

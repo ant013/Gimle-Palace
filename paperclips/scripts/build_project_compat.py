@@ -202,39 +202,63 @@ def load_codex_agent_ids(env_file: Path) -> dict[str, str]:
     return ids
 
 
-def compatibility_agent_ids(repo_root: Path, manifest_values: dict[str, str], target: str) -> dict[str, str]:
-    if target == "claude":
-        mapping = manifest_values.get("compatibility.claude_deploy_mapping", "paperclips/deploy-agents.sh")
-        return load_claude_agent_ids(repo_root / mapping)
-    if target == "codex":
-        env_file = manifest_values.get("compatibility.codex_agent_ids_env", "paperclips/codex-agent-ids.env")
-        ids = load_codex_agent_ids(repo_root / env_file)
-        # D-fix C-1: also merge bindings.yaml via dual-read resolver so the
-        # canonical-name lookup (CXCTO, CXMCPEngineer) works for projects whose
-        # manifests use canonical agent_name (Phase E trading/uaudit/gimle).
-        # Result dict keeps both kebab keys (legacy compat) AND canonical keys
-        # so downstream `ids.get(agent_name)` succeeds in either vocabulary.
-        project_key = manifest_values.get("project.key", "")
-        if project_key:
-            from os.path import expanduser
-            bindings_path = Path(expanduser(f"~/.paperclip/projects/{project_key}/bindings.yaml"))
-            legacy_path = (
-                repo_root / "paperclips" / "codex-agent-ids.env"
-                if project_key == "gimle"
-                else None
-            )
-            try:
-                merged = _resolve_bindings_all(
-                    legacy_env_path=legacy_path,
-                    bindings_yaml_path=bindings_path,
-                )
-                for canonical_name, uuid in merged.get("agents", {}).items():
-                    if uuid and canonical_name not in ids:
-                        ids[canonical_name] = uuid
-            except FileNotFoundError:
-                pass
+def _merge_canonical_bindings_into_ids(
+    ids: dict[str, str],
+    repo_root: Path,
+    manifest_values: dict[str, str],
+) -> dict[str, str]:
+    """D-fix C-1 + E-fix C2: merge dual-read bindings.yaml canonical-name keys
+    into the legacy-style ids dict. Works for both claude and codex targets.
+    Caller's kebab-form entries from legacy file take precedence over bindings.
+    """
+    from os.path import expanduser
+
+    project_key = manifest_values.get("project.key", "")
+    if not project_key:
         return ids
-    return {}
+    bindings_path = Path(expanduser(f"~/.paperclip/projects/{project_key}/bindings.yaml"))
+    legacy_path = (
+        repo_root / "paperclips" / "codex-agent-ids.env"
+        if project_key == "gimle"
+        else None
+    )
+    try:
+        merged = _resolve_bindings_all(
+            legacy_env_path=legacy_path,
+            bindings_yaml_path=bindings_path,
+        )
+    except FileNotFoundError:
+        return ids
+    for canonical_name, uuid in merged.get("agents", {}).items():
+        if uuid and canonical_name not in ids:
+            ids[canonical_name] = uuid
+    return ids
+
+
+def compatibility_agent_ids(repo_root: Path, manifest_values: dict[str, str], target: str) -> dict[str, str]:
+    """Return {agent_name_or_kebab: uuid} for downstream resolved-assembly entries.
+
+    Sources merged (later does NOT overwrite earlier):
+      1. Legacy file specified by compatibility.{claude_deploy_mapping|codex_agent_ids_env}
+         (kebab-form keys; pre-Phase-E vocab; opt-in via explicit manifest field).
+      2. Canonical-name keys from ~/.paperclip/projects/<key>/bindings.yaml via
+         dual-read resolver (Phase D+E vocab).
+
+    E-fix C2: legacy lookup is EXPLICIT-only — no cross-project default. A v2
+    manifest with empty compatibility.X gets only source #2.
+    """
+    ids: dict[str, str] = {}
+    if target == "claude":
+        mapping = manifest_values.get("compatibility.claude_deploy_mapping", "")
+        if mapping:
+            ids = load_claude_agent_ids(repo_root / mapping)
+    elif target == "codex":
+        env_file = manifest_values.get("compatibility.codex_agent_ids_env", "")
+        if env_file:
+            ids = load_codex_agent_ids(repo_root / env_file)
+    else:
+        return {}
+    return _merge_canonical_bindings_into_ids(ids, repo_root, manifest_values)
 
 
 def manifest_entries(manifest_text: str) -> list[tuple[int, str, str, str]]:
@@ -477,19 +501,39 @@ def _load_host_local_sources(project_key: str, repo_root: Path | None = None) ->
         pass  # pre-migration: no host-local + no legacy → silently skip
 
     # --- paths/plugins: direct read (no legacy equivalent) -------------------
-    if not home.is_dir():
-        return sources
+    # Phase E: operator's ~/.paperclip/projects/<key>/<file>.yaml takes precedence;
+    # paperclips/projects/<key>/<file>.local-example.yaml is a CI/dev fallback
+    # (committed, sanitized values; lets CI builds resolve {{paths.X}} templates
+    # without operator-only host-local files).
     try:
         import yaml
     except ImportError:
         return sources  # pyyaml missing — silently skip remaining host-local
+    fallback_dir = (
+        repo_root / "paperclips" / "projects" / project_key
+        if repo_root is not None else None
+    )
     for fname in ("paths.yaml", "plugins.yaml"):
-        p = home / fname
-        if not p.is_file():
+        chosen: Path | None = None
+        if home.is_dir() and (home / fname).is_file():
+            chosen = home / fname
+        elif fallback_dir is not None:
+            fallback = fallback_dir / fname.replace(".yaml", ".local-example.yaml")
+            if fallback.is_file():
+                chosen = fallback
+        if chosen is None:
             continue
+        # E-fix C3: narrow except + log. Bare `except Exception` silently swallowed
+        # YAML parse errors on a COMMITTED file (paths.local-example.yaml), making
+        # corrupt-fallback regressions invisible. Now narrowed and logged.
         try:
-            raw = yaml.safe_load(p.read_text()) or {}
-        except Exception:
+            raw = yaml.safe_load(chosen.read_text()) or {}
+        except (yaml.YAMLError, OSError) as exc:
+            print(
+                f"warning: failed to load host-local file {chosen} ({exc}); "
+                f"continuing with empty {fname.replace('.yaml', '')} source",
+                file=sys.stderr,
+            )
             continue
         if isinstance(raw, dict):
             key = fname.replace(".yaml", "")
@@ -793,6 +837,39 @@ def compatibility_input_entry(repo_root: Path, relative_path: str) -> dict[str, 
     }
 
 
+def _build_compatibility_block(
+    repo_root: Path, manifest_values: dict[str, str]
+) -> dict[str, object]:
+    """Build the resolved-assembly compatibility block.
+
+    Phase E E-fix C1: omit the legacy inputs entries when the underlying
+    compatibility.X paths are empty (v2 manifests have moved those into
+    host-local files). The pre-Phase-E code emitted entries with
+    path="" + sha256="" which is garbage downstream.
+    """
+    legacy_output_paths = manifest_values.get("compatibility.legacy_output_paths", "")
+    claude_deploy = manifest_values.get("compatibility.claude_deploy_mapping", "")
+    codex_env = manifest_values.get("compatibility.codex_agent_ids_env", "")
+    workspace = manifest_values.get("compatibility.workspace_update_script", "")
+
+    block: dict[str, object] = {
+        "legacyOutputPaths": legacy_output_paths,
+        "claudeDeployMapping": claude_deploy,
+        "codexAgentIdsEnv": codex_env,
+        "workspaceUpdateScript": workspace,
+    }
+    inputs: dict[str, dict[str, str]] = {}
+    if claude_deploy:
+        inputs["claudeDeployMapping"] = compatibility_input_entry(repo_root, claude_deploy)
+    if codex_env:
+        inputs["codexAgentIdsEnv"] = compatibility_input_entry(repo_root, codex_env)
+    if workspace:
+        inputs["workspaceUpdateScript"] = compatibility_input_entry(repo_root, workspace)
+    if inputs:
+        block["inputs"] = inputs
+    return block
+
+
 def resolved_assembly(
     repo_root: Path,
     project: str,
@@ -853,26 +930,7 @@ def resolved_assembly(
                 },
             },
         },
-        "compatibility": {
-            "legacyOutputPaths": manifest_values.get("compatibility.legacy_output_paths", ""),
-            "claudeDeployMapping": manifest_values.get("compatibility.claude_deploy_mapping", ""),
-            "codexAgentIdsEnv": manifest_values.get("compatibility.codex_agent_ids_env", ""),
-            "workspaceUpdateScript": manifest_values.get("compatibility.workspace_update_script", ""),
-            "inputs": {
-                "claudeDeployMapping": compatibility_input_entry(
-                    repo_root,
-                    manifest_values.get("compatibility.claude_deploy_mapping", ""),
-                ),
-                "codexAgentIdsEnv": compatibility_input_entry(
-                    repo_root,
-                    manifest_values.get("compatibility.codex_agent_ids_env", ""),
-                ),
-                "workspaceUpdateScript": compatibility_input_entry(
-                    repo_root,
-                    manifest_values.get("compatibility.workspace_update_script", ""),
-                ),
-            },
-        },
+        "compatibility": _build_compatibility_block(repo_root, manifest_values),
         "targets": {
             target: target_output_entry(repo_root, target, manifest_values, manifest_text)
             for target in targets

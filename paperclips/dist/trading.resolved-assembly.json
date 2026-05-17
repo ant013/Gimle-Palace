@@ -33,38 +33,24 @@
     }
   },
   "compatibility": {
-    "claudeDeployMapping": "paperclips/deploy-agents.sh",
-    "codexAgentIdsEnv": "paperclips/codex-agent-ids.env",
-    "inputs": {
-      "claudeDeployMapping": {
-        "path": "paperclips/deploy-agents.sh",
-        "sha256": "297f9bcb25d691aaadbbd48535abfbe32686d5e03feabf724d1b58dcd8ba8acc"
-      },
-      "codexAgentIdsEnv": {
-        "path": "paperclips/codex-agent-ids.env",
-        "sha256": "1386afc1e397c7e7218d22c62750f3f77ee5459609723e1bf09639f9d5ad85e5"
-      },
-      "workspaceUpdateScript": {
-        "path": "paperclips/update-agent-workspaces.sh",
-        "sha256": "7721ac2ce8a9cf99f6b2784081fdec444ed83e95f5e0809c1fe9859214d40016"
-      }
-    },
+    "claudeDeployMapping": "",
+    "codexAgentIdsEnv": "",
     "legacyOutputPaths": "false",
-    "workspaceUpdateScript": "paperclips/update-agent-workspaces.sh"
+    "workspaceUpdateScript": ""
   },
   "parameters": {
     "paths": {
-      "codexTeamRoot": "/Users/Shared/Trading/runs",
-      "operatorMemoryDir": "~/.claude/projects/-Users-Shared-Trading/memory",
+      "codexTeamRoot": "",
+      "operatorMemoryDir": "",
       "overlayRoot": "paperclips/projects/trading/overlays",
-      "primaryMcpServiceDir": "/Users/Shared/Trading",
-      "primaryRepoRoot": "/Users/Shared/Trading/repo",
-      "productionCheckout": "/Users/Shared/Trading",
-      "projectRoot": "/Users/Shared/Trading",
+      "primaryMcpServiceDir": "",
+      "primaryRepoRoot": "",
+      "productionCheckout": "",
+      "projectRoot": "",
       "projectRulesFile": "AGENTS.md"
     },
     "project": {
-      "companyId": "09edf17a-31d5-46cb-9812-6f07623b1c45",
+      "companyId": "",
       "displayName": "Trading",
       "integrationBranch": "main",
       "issuePrefix": "TRD",
@@ -75,7 +61,7 @@
   "project": "trading",
   "schemaVersion": 1,
   "sourceManifest": "paperclips/projects/trading/paperclip-agent-assembly.yaml",
-  "sourceManifestSha256": "2b11a2f8e30be67acd82ccc6963a9ce9eb2a463596ffc92c13043713022c4a40",
+  "sourceManifestSha256": "b70e4f6427dca1b6e084bb10767884877db8c4acea29f9792d88d290bb4357bf",
   "targets": {
     "codex": {
       "adapterType": "codex_local",
@@ -84,9 +70,9 @@
       "instructionsBundleMode": "managed",
       "roles": [
         {
-          "agentId": "3649a8df-94ed-4025-a998-fb8be40975af",
+          "agentId": "",
           "agentName": "CEO",
-          "bytes": 21699,
+          "bytes": 21761,
           "family": "cto",
           "lines": 480,
           "output": "paperclips/dist/trading/codex/CEO.md",
@@ -95,14 +81,14 @@
             "cto"
           ],
           "roleId": "codex:cx-cto",
-          "sha256": "6c192fbb3aa77f093ebe633ba2b06a428e6b202e58ee0fa989525d045e8c7cca",
+          "sha256": "e37e4b36fc17b45f2d89d9054cc44d674a2fb4138591f6e65f6219675176457c",
           "source": "paperclips/roles-codex/cx-cto.md",
-          "workspaceCwd": "/Users/Shared/Trading/runs/CEO/workspace"
+          "workspaceCwd": ""
         },
         {
-          "agentId": "8eeda1b1-704f-4b97-839f-e050f9f765d2",
+          "agentId": "",
           "agentName": "CodeReviewer",
-          "bytes": 17497,
+          "bytes": 17559,
           "family": "reviewer",
           "lines": 385,
           "output": "paperclips/dist/trading/codex/CodeReviewer.md",
@@ -111,14 +97,14 @@
             "reviewer"
           ],
           "roleId": "codex:cx-code-reviewer",
-          "sha256": "7e1036278882e26d351a9b2b0a0e95b817040190175ea891864fac1282fb5fb3",
+          "sha256": "5cdc3c5d562a999eae22f24bfad3e711dbfc0ca837928f47e451560ee0e62301",
           "source": "paperclips/roles-codex/cx-code-reviewer.md",
-          "workspaceCwd": "/Users/Shared/Trading/runs/CodeReviewer/workspace"
+          "workspaceCwd": ""
         },
         {
-          "agentId": "2705af9c-7dda-464c-9f6c-8d0deb38816a",
+          "agentId": "",
           "agentName": "PythonEngineer",
-          "bytes": 17239,
+          "bytes": 17300,
           "family": "implementer",
           "lines": 384,
           "output": "paperclips/dist/trading/codex/PythonEngineer.md",
@@ -127,14 +113,14 @@
             "implementer"
           ],
           "roleId": "codex:cx-python-engineer",
-          "sha256": "757f1d5e7b4f550e84c6f207d586e87138fb40beef4d4420c54f804f90e0de29",
+          "sha256": "0cbe1f97a4ddbffdfd004d805b04a18de5b6fcbc4ab49bda6a31a41fc89caae5",
           "source": "paperclips/roles-codex/cx-python-engineer.md",
-          "workspaceCwd": "/Users/Shared/Trading/runs/PythonEngineer/workspace"
+          "workspaceCwd": ""
         },
         {
-          "agentId": "fbd3d0e4-6abb-4797-83d2-e4dc99dbed44",
+          "agentId": "",
           "agentName": "QAEngineer",
-          "bytes": 19703,
+          "bytes": 19762,
           "family": "qa",
           "lines": 440,
           "output": "paperclips/dist/trading/codex/QAEngineer.md",
@@ -143,9 +129,9 @@
             "qa"
           ],
           "roleId": "codex:cx-qa-engineer",
-          "sha256": "50e58d9d43acc81a510aaa20ce23e038f0379ac009f4a74de2c134527f7e25b8",
+          "sha256": "3df3fe1a07c0b63900a54d47a610c9cedf73352a969d568e939bb481ce8c5463",
           "source": "paperclips/roles-codex/cx-qa-engineer.md",
-          "workspaceCwd": "/Users/Shared/Trading/runs/QAEngineer/workspace"
+          "workspaceCwd": ""
         }
       ]
     }
