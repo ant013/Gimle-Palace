@@ -212,6 +212,13 @@ def test_phase_g_render_delta_claude(agent_md):
     for old, new in deltas:
         if "/Users/Shared/Ios/Gimle-Palace" in old and "/opt/uaa-example/gimle" in new:
             continue
+        # Phase H1b: prose cross-refs in shared fragments updated to new layout.
+        if "heartbeat-discipline.md" in old and "wake-and-handoff-basics.md" in new:
+            continue
+        if "compliance-enforcement.md" in old and ("code-review/approve.md" in new or "code-review/adversarial.md" in new):
+            continue
+        if "worktree-discipline.md" in old and "worktree/active.md" in new:
+            continue
         pytest.fail(
             f"unexpected delta in claude/{agent_md}:\n  baseline: {old!r}\n  current:  {new!r}"
         )
@@ -230,6 +237,13 @@ def test_phase_g_render_delta_codex(agent_md):
         pytest.fail(f"codex/{agent_md} line count differs: {deltas[0][1]}")
     for old, new in deltas:
         if "/Users/Shared/Ios/Gimle-Palace" in old and "/opt/uaa-example/gimle" in new:
+            continue
+        # Phase H1b: prose cross-refs in shared fragments updated to new layout.
+        if "heartbeat-discipline.md" in old and "wake-and-handoff-basics.md" in new:
+            continue
+        if "compliance-enforcement.md" in old and ("code-review/approve.md" in new or "code-review/adversarial.md" in new):
+            continue
+        if "worktree-discipline.md" in old and "worktree/active.md" in new:
             continue
         pytest.fail(
             f"unexpected delta in codex/{agent_md}:\n  baseline: {old!r}\n  current:  {new!r}"
