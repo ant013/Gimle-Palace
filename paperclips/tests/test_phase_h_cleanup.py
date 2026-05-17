@@ -160,3 +160,4 @@ def test_no_surviving_reference_to_deleted_fragments():
         )
         refs = [ln for ln in out.stdout.strip().splitlines() if ln]
         assert not refs, f"deleted fragment {frag!r} still referenced by: {refs}"
+# CI re-trigger marker (tree-hash dedupe workaround)
