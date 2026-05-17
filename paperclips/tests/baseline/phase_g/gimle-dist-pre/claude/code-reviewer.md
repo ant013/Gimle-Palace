@@ -163,68 +163,6 @@ If you cannot progress on an issue, do not improvise, pivot, or create preparato
 - Only "kind of hard" → decompose further, not a blocker.
 
 
-## Git: commit & push (implementer / qa)
-
-### Fresh-fetch on wake
-
-Every wake, before any git operation:
-```
-git fetch --all --prune
-```
-Stale local refs cause silent merge conflicts on push.
-
-### Branch naming
-
-Feature branches: `feature/GIM-N-<slug>` (e.g. `feature/IOS-12-add-swift-engineer`). Branch from `develop` (default `develop`).
-
-### Commit format
-
-- Conventional commits: `type(scope): subject`
-- Types: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`
-- Subject ≤ 70 chars, imperative mood ("add X" not "added X")
-- Body explains WHY, not WHAT (the diff shows what)
-
-### Push (your own feature branch only)
-
-```
-git push -u origin feature/GIM-N-<slug>
-```
-
-Force-push: ONLY `--force-with-lease`, ONLY when you are the sole writer of the current phase. Bare `--force` is forbidden on every branch including features (eats teammate's commits).
-
-`develop` and `main` reject force-push at branch protection (no exceptions, no admin override).
-
-### Post-commit verification
-
-Before `git push`, run the project's verification commands. For Python services:
-```
-uv run ruff check && uv run mypy src/ && uv run pytest
-```
-
-For other targets, see project AGENTS.md. Don't push commits that fail local checks — CI will block, and you'll loop.
-
-
-## Worktree discipline (implementer / reviewer / qa)
-
-### Per-team isolated worktree
-
-Each agent runs in its own workspace under `<team_workspace_root>/<AgentName>/workspace/`. This directory is the agent's `cwd`. **Do not** `cd` outside it for git operations — every commit/push originates from this worktree.
-
-### Never remove shared workspace dirs
-
-Workspaces under `<team_workspace_root>/<AgentName>/workspace/` are persistent: branch rotates per slice, the directory does not. **Never** `git worktree remove <AgentName>/workspace` — you'll wipe in-progress state of another agent if you happen to share the team_workspace_root.
-
-### Cross-branch carry-over forbidden
-
-Switching branches inside an agent worktree drags uncommitted changes across branches and contaminates the next slice. Discipline:
-- Before switching branch: commit or stash.
-- Before starting a new feature branch: `git status --short` must be clean.
-
-### Operator vs production checkout
-
-The `production_checkout` path (e.g. `/opt/uaa-example/gimle`) is the iMac deploy target. Stay on `develop` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in GIM-48: feature checkout in production_checkout caused QA to test stale code.
-
-
 ## Pre-work: codebase-memory first
 
 Before reading any code file, query the codebase-memory MCP graph:
@@ -250,16 +188,78 @@ For tasks with 3+ logical steps, branching paths, or unclear dependencies, invok
 Skip for trivial mechanical edits (rename, format, single-line fix). Use for: new feature, refactor across files, anything touching async/state machines.
 
 
-## Pre-work: existing field semantics
+## Git: merge-readiness check (cto / reviewer)
 
-Before renaming, removing, or repurposing a field on an existing data structure (Pydantic model, Cypher node label, JSON schema, env var):
+Before approving or merging a PR, verify:
 
-1. **Find all readers** via `search_graph` + `trace_path(... mode=data_flow)`.
-2. **Find all writers** (often more than readers — backfill scripts, migrations, fixtures).
-3. **Document the migration** in PR description: old → new mapping, deprecation window, rollback.
-4. **Add backwards-compat shim** if external API surface (MCP tool args, REST endpoint params) — at least one release cycle.
+1. **CI green:** `gh pr checks <PR>` — all required checks pass (`lint`, `typecheck`, `test`, `docker-build`, `qa-evidence-present` per project rules in AGENTS.md).
+2. **PR approved by CR:** GitHub PR review state = `APPROVED`.
+3. **Branch up-to-date with target:** `mergeStateStatus` = `CLEAN` (see `merge-state-decoder.md`).
+4. **No conflict markers in diff:** `gh pr diff <PR> | grep -E '^(<<<<<<<|=======|>>>>>>>)'` → empty.
+5. **Spec/plan references valid:** if PR references `docs/superpowers/plans/...`, that file exists on the branch.
 
-Renaming a field that's referenced in saved Neo4j data without migration loses that data. Renaming an MCP tool arg without shim breaks every caller silently.
+Self-approval forbidden — you cannot approve your own PR even if you are the only reviewer hired.
+
+
+## Git: mergeStateStatus decoder (cto / reviewer)
+
+`gh pr view <PR> --json mergeStateStatus` returns one of:
+
+| Status | Meaning | Action |
+|---|---|---|
+| `CLEAN` | Up-to-date, all checks green, ready to merge | Proceed with merge |
+| `BEHIND` | Branch lags target — needs rebase/merge from target | Rebase or `gh pr update-branch` |
+| `DIRTY` | Merge conflicts exist | Resolve in feature branch |
+| `BLOCKED` | Required checks failing OR review missing OR branch protection veto | `gh pr checks` to see which check; if review missing, request it |
+| `UNSTABLE` | Non-required checks failing (informational only) | Usually safe to merge; document why |
+| `HAS_HOOKS` | Pre-merge hooks pending | Wait, then re-check |
+| `BEHIND` + `BLOCKED` simultaneously | Multi-cause | Address whichever is fixable; recheck |
+
+Never merge while status is `DIRTY`, `BLOCKED`, or `BEHIND`. `UNSTABLE` is judgment call — document the override in PR comment.
+
+
+## Code review: APPROVE format (reviewer)
+
+To approve a PR, post a paperclip comment AND a GitHub PR review (both required for branch protection):
+
+```
+gh pr review <PR> --approve
+```
+
+Plus paperclip comment with **full compliance checklist + evidence**. No "LGTM" rubber-stamps.
+
+### Mandatory checklist in APPROVE comment
+
+```markdown
+## Compliance Review — GIM-N
+
+| Check | Status | Evidence |
+|---|---|---|
+| `uv run ruff check` | ✅ | <paste last 5 lines> |
+| `uv run mypy src/` | ✅ | <paste output> |
+| `uv run pytest` | ✅ | <paste tail incl. summary> |
+| `gh pr checks <PR>` | ✅ | <paste table> |
+| Plan acceptance criteria covered | ✅ | <map each criterion to a test/file> |
+| No silent scope reduction vs plan | ✅ | `git diff --name-only <base>...<head>` matches plan files |
+| QA evidence present in PR body | ✅ | <quote `## QA Evidence` block> |
+
+APPROVED. Reassigning to <next agent>.
+```
+
+### Forbidden APPROVE patterns
+
+- "LGTM" without checklist.
+- "Tests pass" without pasted output.
+- Approving with `gh pr checks` showing red checks.
+- Approving own PR (self-approval blocked at branch protection level too).
+- Approving without `git diff --stat` against plan file count (silent scope reduction risk — codified after GIM-114).
+
+
+### Plan-first discipline
+- [ ] Multi-agent tasks (3+ subtasks): plan file exists at `docs/superpowers/plans/YYYY-MM-DD-GIM-NN-*.md`
+- [ ] PR description references the plan file (link), doesn't duplicate scope from issue body
+- [ ] Plan steps marked done as progress is made (checkbox in plan file matches reality)
+- [ ] If the plan changed mid-flight — diff the plan file in the PR (no silent scope creep)
 
 
 ## Handoff basics
@@ -293,20 +293,19 @@ If the sender's comment includes explicit handoff phrases (`"your turn"`, `"pick
 If your handoff PATCH was authored by a SIGTERM'd run, paperclip may suppress the wake event. Watchdog Phase 2 (`services/watchdog`) detects stuck `in_review` assigneeAgentId+null-execution_run state and fires recovery. Don't rely on it as primary mechanism — author handoffs correctly.
 
 
-# InfraEngineer — Gimle
+# CodeReviewer — Gimle
 
 > Project tech rules in `AGENTS.md` (auto-loaded). Universal layer + capability profile composed by builder. Below: role-craft only.
 
 ## Role
 
-You own deploy + runtime infra: Docker compose, launchd, watchdog, scripts, networking, secrets, healthchecks.
+You are the project's code reviewer. You gate every PR before merge.
 
 ## Area of responsibility
 
-- Maintain docker-compose.yml profiles (review/analyze/full)
-- iMac deploy scripts (paperclips/scripts/imac-*.sh)
-- watchdog daemon code (services/watchdog/) + config
-- SSH keys, plugin registration, host-local config templates
+- Plan-first review: validate every task has concrete test+impl+commit; flag gaps; APPROVE → reassign to implementer
+- Mechanical review: verify CI green (gh pr checks), local linters/tests pass, plan acceptance criteria covered, no silent scope reduction
+- Re-review on changes: every push to a PR you reviewed → re-check
 
 ## MCP / Tool scope
 
@@ -318,8 +317,9 @@ Write tools as appropriate per profile (see AGENTS.md for capability boundaries)
 
 ## Anti-patterns
 
-- **Hardcoded paths in committed scripts — use env vars or paths.yaml**
-- **Manual healthcheck via 'docker ps' — must be programmatic in compose**
-- **SSH with --no-host-key-checking — explicit known_hosts management**
-- **Skipping pre-flight checks in install scripts — every requirement explicit**
+- **'LGTM' without checklist — codified after GIM-127**
+- **Reviewing without git diff --name-only against plan — silent scope reduction risk (GIM-114)**
+- **Self-approving — branch protection blocks technically; trying signals confusion**
+- **Approving when adversarial review is open — wait for OpusReviewer's findings**
+- **Re-reviewing only the diff — sometimes the bug is what was DELETED. Read full file context**
 

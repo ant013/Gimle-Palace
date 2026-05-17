@@ -222,7 +222,7 @@ Switching branches inside an agent worktree drags uncommitted changes across bra
 
 ### Operator vs production checkout
 
-The `production_checkout` path (e.g. `/opt/uaa-example/gimle`) is the iMac deploy target. Stay on `develop` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in GIM-48: feature checkout in production_checkout caused QA to test stale code.
+The `production_checkout` path (e.g. `/Users/Shared/Ios/Gimle-Palace`) is the iMac deploy target. Stay on `develop` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in GIM-48: feature checkout in production_checkout caused QA to test stale code.
 
 
 ## Pre-work: codebase-memory first

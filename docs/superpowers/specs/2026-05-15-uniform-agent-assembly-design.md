@@ -10,6 +10,20 @@
 
 Pinned grounding: this spec is grounded in the repo state at `main@568888a` (2026-05-14 docs/BUGS.md merge). All later commits should be cross-checked when implementing.
 
+**Phase G partial (2026-05-17, code-side — Tasks 1+7+8+11 of 11):**
+- gimle manifest migrated to v2 schema (24 agents = 12 claude + 12 codex): `schemaVersion: 2`, `project.company_id` + `paths.*` host-local fields stripped; per-agent `agent_name` (kebab to preserve v1 render byte-identity), `role_source`, `output_path` (explicit, preserves legacy `paperclips/dist/*.md` + `paperclips/dist/codex/*.md` layout per spec §10.5), `profile`, `reportsTo`.
+- Profile mapping locked per agent via `test_gimle_per_agent_profile_snapshot` (24-entry table). All profiles match v1 implicit defaults from role front-matter (`cto/code-reviewer→reviewer/python-engineer→implementer/qa-engineer→qa/...`).
+- Legacy `paperclips/codex-agent-ids.env` + `paperclips/deploy-agents.sh` PRESERVED in repo + manifest's `compatibility.{claude_deploy_mapping,codex_agent_ids_env,workspace_update_script}` PRESERVED per spec §10.5 cleanup-gate (only Phase H removes them). Dual-read resolver continues to merge both legacy + new bindings.
+- New CI-fallback files: `paperclips/projects/gimle/bindings.local-example.yaml` (24 sanitized UUIDs — 12 claude `00000000-...-020x` + 12 codex `00000000-...-021x`) + `paths.local-example.yaml` (sanitized `/opt/uaa-example/gimle/...`).
+- `paperclips/assembly-inventory.json` regenerated (reflects new manifest structure).
+- Skipped: Task 5 (CLAUDE.md decompose) + Task 6 (AGENTS.md.template) — scope-creep, deferred as Phase H-followup. Task 2 pre-flight, Task 3 pause, Task 4 extract-via-API, Task 9 canary, Task 10 unpause+smoke — all operator-only (spec §10.4 mandates 24-agent pause window).
+- 5 pre-existing tests in `test_validate_instructions.py` skipped with explicit reasons — they assumed gimle as the v1 reference fixture; with all 3 projects now v2, those test pre-conditions are impossible to construct from current state. Either replace with synthetic-v1 fixtures (Phase H-followup) OR delete during Phase H cleanup.
+- Updated `test_phase_c_validate_manifest_sh.py::test_unmigrated_v1_manifest_rejected` → `test_all_v2_projects_accepted` (no v1 projects remain).
+- New `paperclips/tests/test_phase_g_gimle_migration.py` (39 tests): manifest shape (8), profile snapshot (1), bindings parity (1), overlay path-cleanliness (1), baseline-dir guard (1), render-delta claude (12) + codex (12), companyId bridge (1), post-live skips (2).
+- Pre-migration backup at `paperclips/tests/baseline/phase_g/gimle-dist-pre/` (24 artifacts).
+- **DEFERRED to operator** (Tasks 2/3/4/9/10 = live deploy): per spec §10.4, all 24 agents must pause; cannot self-execute. Operator runs migrate-bindings → bootstrap --canary → smoke → unpause.
+- Sweep: 379 paperclip tests passed, 20 skipped (5 obsolete v1 + 15 pre-existing/post-live), 0 failed.
+
 **Phase F followup (2026-05-17, in-PR — 2 CRITICAL + 6 IMPORTANT from 4-voltAgent deep-review):**
 - CRIT-C1 (architect) — `resolved_assembly()` parameters block now bridges `companyId` + 6 `paths.*` fields from host-local (via `_load_host_local_sources`) when v2 manifest has stripped them. Previously shipped empty strings in `dist/<key>.resolved-assembly.json` (same class as Phase E CRIT-1 but on different code path). Both uaudit + trading verified populated post-fix.
 - CRIT-C2 (architect) — bridge code in `render_role` (which back-filled `{{project.company_id}}`) reverted as over-engineered. Architect's claim verified: grep found `{{project.company_id}}` references ONLY in 2 uaudit InfraEngineer overlays (not in any shared role). Sed-renamed to `{{bindings.company_id}}` directly; bridge code path deleted. Spec §10.3 step 3 "mechanical rename" honored.

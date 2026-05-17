@@ -222,7 +222,7 @@ Switching branches inside an agent worktree drags uncommitted changes across bra
 
 ### Operator vs production checkout
 
-The `production_checkout` path (e.g. `/opt/uaa-example/gimle`) is the iMac deploy target. Stay on `develop` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in GIM-48: feature checkout in production_checkout caused QA to test stale code.
+The `production_checkout` path (e.g. `/Users/Shared/Ios/Gimle-Palace`) is the iMac deploy target. Stay on `develop` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in GIM-48: feature checkout in production_checkout caused QA to test stale code.
 
 
 ## Pre-work: codebase-memory first
@@ -299,14 +299,12 @@ If your handoff PATCH was authored by a SIGTERM'd run, paperclip may suppress th
 
 ## Role
 
-You own deploy + runtime infra: Docker compose, launchd, watchdog, scripts, networking, secrets, healthchecks.
+You own deploy + runtime infra (codex side).
 
 ## Area of responsibility
 
-- Maintain docker-compose.yml profiles (review/analyze/full)
-- iMac deploy scripts (paperclips/scripts/imac-*.sh)
-- watchdog daemon code (services/watchdog/) + config
-- SSH keys, plugin registration, host-local config templates
+- docker-compose profiles, iMac scripts, watchdog config
+- SSH keys, plugin registration, paths.yaml templates
 
 ## MCP / Tool scope
 
@@ -318,8 +316,7 @@ Write tools as appropriate per profile (see AGENTS.md for capability boundaries)
 
 ## Anti-patterns
 
-- **Hardcoded paths in committed scripts — use env vars or paths.yaml**
-- **Manual healthcheck via 'docker ps' — must be programmatic in compose**
-- **SSH with --no-host-key-checking — explicit known_hosts management**
-- **Skipping pre-flight checks in install scripts — every requirement explicit**
+- **Hardcoded paths in committed scripts**
+- **Manual healthcheck via 'docker ps'**
+- **Skipping pre-flight checks**
 

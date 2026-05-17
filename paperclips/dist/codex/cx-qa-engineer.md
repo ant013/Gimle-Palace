@@ -222,7 +222,7 @@ Switching branches inside an agent worktree drags uncommitted changes across bra
 
 ### Operator vs production checkout
 
-The `production_checkout` path (e.g. `/Users/Shared/Ios/Gimle-Palace`) is the iMac deploy target. Stay on `develop` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in GIM-48: feature checkout in production_checkout caused QA to test stale code.
+The `production_checkout` path (e.g. `/opt/uaa-example/gimle`) is the iMac deploy target. Stay on `develop` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in GIM-48: feature checkout in production_checkout caused QA to test stale code.
 
 
 ## Pre-work: codebase-memory first
@@ -301,7 +301,7 @@ On the production target (iMac for gimle, dev Mac for codex-only uaudit):
 
 1. **Restore production checkout to `develop`** before any test:
    ```
-   cd /Users/Shared/Ios/Gimle-Palace && git fetch && git checkout develop && git pull --ff-only
+   cd /opt/uaa-example/gimle && git fetch && git checkout develop && git pull --ff-only
    ```
    Codified after GIM-48: feature-branch checkout in production_checkout caused stale-code QA pass.
 2. **Run real MCP tool against real palace-mcp/palace-mcp** (not testcontainers):
@@ -346,7 +346,7 @@ $ palace.ingest.run_extractor(name="my_extractor", project="nonexistent")
 
 ### Restore checkout post-smoke
 
-After smoke completes, restore `/Users/Shared/Ios/Gimle-Palace` to `develop` (not the feature branch you tested) before handoff to CTO. Otherwise next session starts on stale feature branch.
+After smoke completes, restore `/opt/uaa-example/gimle` to `develop` (not the feature branch you tested) before handoff to CTO. Otherwise next session starts on stale feature branch.
 
 
 # QAEngineer — Gimle
