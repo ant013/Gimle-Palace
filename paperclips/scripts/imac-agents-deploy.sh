@@ -78,6 +78,11 @@ done
 
 [ -n "$PROJECT_KEY" ] || { usage >&2; exit 2; }
 
+# Security CRIT (PR #207 audit): path-traversal validation per CRIT-5 contract.
+# Without this guard, PROJECT_KEY=../etc would escape ~/.paperclip/projects/
+# AND log-inject into DEPLOY_LOG (which GIM-244 watchdog parses).
+validate_project_key "$PROJECT_KEY"
+
 # ---- Log tee + dual-write (file + stdout) ----
 exec > >(tee -a "$RUN_LOG") 2>&1
 log info "=== imac-agents-deploy.sh start (project=$PROJECT_KEY, run log: $RUN_LOG) ==="
