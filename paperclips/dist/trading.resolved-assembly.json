@@ -35,20 +35,6 @@
   "compatibility": {
     "claudeDeployMapping": "",
     "codexAgentIdsEnv": "",
-    "inputs": {
-      "claudeDeployMapping": {
-        "path": "",
-        "sha256": ""
-      },
-      "codexAgentIdsEnv": {
-        "path": "",
-        "sha256": ""
-      },
-      "workspaceUpdateScript": {
-        "path": "",
-        "sha256": ""
-      }
-    },
     "legacyOutputPaths": "false",
     "workspaceUpdateScript": ""
   },
@@ -86,7 +72,7 @@
         {
           "agentId": "",
           "agentName": "CEO",
-          "bytes": 21764,
+          "bytes": 21761,
           "family": "cto",
           "lines": 480,
           "output": "paperclips/dist/trading/codex/CEO.md",
@@ -95,14 +81,14 @@
             "cto"
           ],
           "roleId": "codex:cx-cto",
-          "sha256": "688b86de65e67f92da27a7169123f63cd2f284e2efe3cab0ecb6445138a756f2",
+          "sha256": "e37e4b36fc17b45f2d89d9054cc44d674a2fb4138591f6e65f6219675176457c",
           "source": "paperclips/roles-codex/cx-cto.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "CodeReviewer",
-          "bytes": 17562,
+          "bytes": 17559,
           "family": "reviewer",
           "lines": 385,
           "output": "paperclips/dist/trading/codex/CodeReviewer.md",
@@ -111,14 +97,14 @@
             "reviewer"
           ],
           "roleId": "codex:cx-code-reviewer",
-          "sha256": "a7b94cc81245d622ab8f346bf5a3084471382fc1456db1238d3c5429df21e424",
+          "sha256": "5cdc3c5d562a999eae22f24bfad3e711dbfc0ca837928f47e451560ee0e62301",
           "source": "paperclips/roles-codex/cx-code-reviewer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "PythonEngineer",
-          "bytes": 17303,
+          "bytes": 17300,
           "family": "implementer",
           "lines": 384,
           "output": "paperclips/dist/trading/codex/PythonEngineer.md",
@@ -127,14 +113,14 @@
             "implementer"
           ],
           "roleId": "codex:cx-python-engineer",
-          "sha256": "67c3d83d9db0e1bbbad5f8eef06d5a71b7b3075555bcaa7804fc9952a1969f58",
+          "sha256": "0cbe1f97a4ddbffdfd004d805b04a18de5b6fcbc4ab49bda6a31a41fc89caae5",
           "source": "paperclips/roles-codex/cx-python-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "QAEngineer",
-          "bytes": 19765,
+          "bytes": 19762,
           "family": "qa",
           "lines": 440,
           "output": "paperclips/dist/trading/codex/QAEngineer.md",
@@ -143,7 +129,7 @@
             "qa"
           ],
           "roleId": "codex:cx-qa-engineer",
-          "sha256": "b97f9cc492b6b99d5b2ad724080b142a9e8c39aab49aa1b6d6e7284a577d745d",
+          "sha256": "3df3fe1a07c0b63900a54d47a610c9cedf73352a969d568e939bb481ce8c5463",
           "source": "paperclips/roles-codex/cx-qa-engineer.md",
           "workspaceCwd": ""
         }

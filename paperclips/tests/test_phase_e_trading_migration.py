@@ -175,6 +175,31 @@ def test_trading_manifest_uses_profile_field():
 
 
 # ---------------------------------------------------------------------------
+# E-fix C5: v2 detection robustness — covers quoted / float / commented forms.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("schemaVersion: 2\n", True),                       # canonical
+    ("schemaVersion: 2  # phase E\n", True),            # trailing comment
+    ('schemaVersion: "2"\n', True),                     # quoted string
+    ("schemaVersion: '2'\n", True),                     # single-quoted string
+    ("schemaVersion: 2.0\n", True),                     # float
+    ("schemaVersion: 1\n", False),                      # v1 — must NOT match
+    ("schemaVersion: 3\n", False),                      # future version, not v2
+    ("# schemaVersion: 2\n", False),                    # commented out
+    ("nested:\n  schemaVersion: 2\n", False),           # indented (not top-level)
+])
+def test_v2_detection_tolerant(text, expected):
+    """E-fix C5: _is_v2_manifest_text accepts canonical + quoted + float forms."""
+    import sys
+    sys.path.insert(0, str(REPO / "paperclips" / "scripts"))
+    from validate_instructions import _is_v2_manifest_text
+    assert _is_v2_manifest_text(text) == expected, \
+        f"detector got wrong result for {text!r}: expected {expected}"
+
+
+# ---------------------------------------------------------------------------
 # Task 5: re-render delta — post-Phase-E output should differ ONLY in the
 # workspace_cwd line (abs path → relative + descriptive form).
 # ---------------------------------------------------------------------------
@@ -209,6 +234,15 @@ def test_phase_e_render_delta_only_workspace_cwd_line(subpath):
     if not baseline.is_file():
         pytest.skip(f"baseline {subpath} not present (Task 1 baseline missing)")
     deltas = _diff_lines(baseline.read_text(), current.read_text())
+    # E-fix C6: explicit count-mismatch guard before the per-line loop.
+    # Previously the sentinel `__count_mismatch__` reached `pytest.fail` with
+    # an opaque "baseline: '__count_mismatch__'" message — undebuggable.
+    if deltas and deltas[0][0] == "__count_mismatch__":
+        pytest.fail(
+            f"{subpath} line count differs (baseline vs current): {deltas[0][1]} — "
+            f"a shared fragment likely added/removed a line. Refresh the baseline "
+            f"after verifying the change is intentional."
+        )
     for old, new in deltas:
         # Expected delta 1: workspace_cwd line (template form replaced inline path)
         if "Workspace cwd" in old or "Workspace cwd" in new:

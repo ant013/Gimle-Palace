@@ -112,6 +112,32 @@ def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+# E-fix C5: tolerant v2-schema detection. Accepts unquoted (`schemaVersion: 2`),
+# quoted (`schemaVersion: "2"`), float (`schemaVersion: 2.0`), and optional
+# trailing comment. Avoids YAML parse for performance + isolation; if a future
+# manifest writes the key in a non-flat-mapping form, parse fallback kicks in.
+_V2_TEXT_RE = re.compile(
+    r"^schemaVersion:\s*[\"\']?2(?:\.0)?[\"\']?\s*(?:#.*)?$",
+    re.MULTILINE,
+)
+
+
+def _is_v2_manifest_text(text: str) -> bool:
+    if _V2_TEXT_RE.search(text):
+        return True
+    # Defensive fallback: parse YAML and check field. Handles edge cases like
+    # `schemaVersion: !!int 2` or multi-line mapping forms.
+    try:
+        import yaml
+        data = yaml.safe_load(text)
+    except Exception:
+        return False
+    if not isinstance(data, dict):
+        return False
+    sv = data.get("schemaVersion")
+    return sv == 2 or sv == "2" or sv == 2.0
+
+
 def load_team_uuids(
     repo_root: Path,
     allowed_company_ids: "set[str] | None" = None,
@@ -296,7 +322,7 @@ def validate_project_capability_manifests(repo_root: Path) -> list[str]:
         is_template = "_template" in manifest.parts
         # Phase E: detect v2 manifests — host-local fields are MOVED to ~/.paperclip,
         # not absent. v1-required-keys check is relaxed for v2.
-        is_v2 = bool(re.search(r"^schemaVersion:\s*2\s*$", text, re.MULTILINE))
+        is_v2 = _is_v2_manifest_text(text)
         # paths section is allowed empty / minimal under v2 (overlay_root + project_rules_file only).
         sections_to_check = list(REQUIRED_PROJECT_MANIFEST_SECTIONS)
         if is_v2:
@@ -470,9 +496,7 @@ def validate_resolved_assembly_manifests(repo_root: Path) -> list[str]:
         # Phase E v2: company_id moved to host-local bindings.yaml; manifest no
         # longer carries it. Resolver still surfaces it via bindings; downstream
         # validator skips the manifest-vs-resolved equality for v2.
-        is_v2_manifest = bool(
-            re.search(r"^schemaVersion:\s*2\s*$", manifest_text, re.MULTILINE)
-        )
+        is_v2_manifest = _is_v2_manifest_text(manifest_text)
         if not is_v2_manifest:
             manifest_company_match = re.search(r"^\s{2}company_id:\s+(.+?)\s*$", manifest_text, re.MULTILINE)
             manifest_company_id = manifest_company_match.group(1).strip("\"'") if manifest_company_match else ""

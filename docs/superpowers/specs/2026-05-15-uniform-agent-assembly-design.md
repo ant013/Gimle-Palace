@@ -10,6 +10,16 @@
 
 Pinned grounding: this spec is grounded in the repo state at `main@568888a` (2026-05-14 docs/BUGS.md merge). All later commits should be cross-checked when implementing.
 
+**Phase E followup (2026-05-17, in-PR — 6 CRITICAL from 4-voltAgent deep-review):**
+- CRIT-C1 (architect) — `resolved_assembly` now omits empty `compatibility.inputs` entries via new `_build_compatibility_block` helper. Previously v2 manifests shipped `inputs.{claudeDeployMapping,codexAgentIdsEnv,workspaceUpdateScript}: {path:"", sha256:""}` — meaningless data downstream consumers would mistrust. Gimle/uaudit v1 retain populated inputs.
+- CRIT-C2 (architect) — `compatibility_agent_ids` no longer defaults `compatibility.claude_deploy_mapping`/`codex_agent_ids_env` to gimle's files. Trading + future v2 projects with empty fields get only the dual-read resolver merge; cross-project leak eliminated. New `_merge_canonical_bindings_into_ids` helper centralizes the resolver step for both targets.
+- CRIT-C3 (code-rev) — `_load_host_local_sources` fallback no longer swallows `Exception` blanket-style on `paths.local-example.yaml` / `plugins.local-example.yaml`. Now narrowed to `(yaml.YAMLError, OSError)` and logs to stderr — corrupt committed-fallback regressions are now visible.
+- CRIT-C4 (security) — Trading overlays (`_common-{claude,codex}.md`) had 6 inline `/Users/Shared/Trading/...` abs paths. Replaced with `{{paths.primary_repo_root}}` + `{{paths.project_root}}` templates resolved via host-local. Remaining `/Users/Shared/Ios/Gimle-Palace` references are left-side of substitution-table documentation (gimle reference being replaced) — kept.
+- CRIT-C5 (code-rev) — v2 detection regex `^schemaVersion:\s*2\s*$` was too narrow (failed on `"2"`/`2.0`/`# comment`). Replaced with `_is_v2_manifest_text` helper accepting quoted, float, commented forms + YAML-parse fallback for edge cases. 9 parametrized tests document the contract.
+- CRIT-C6 (QA + code-rev) — `_diff_lines` count-mismatch produced opaque `__count_mismatch__` failure messages. Now explicit `pytest.fail(f"{subpath} line count differs ...")` early-exit with debuggable diagnostic.
+- 1 architect false-positive parked after verification: claim that empty compat-inputs cause `IsADirectoryError` — actual behavior is empty path resolves to `repo_root`, `sha256_file` returns hash of root (also bogus, but doesn't crash). Fix still applies (omit entries).
+- Sweep: 314 paperclip tests, 9 skipped, 0 failed. +9 new behavioral tests (8 v2-detection + 1 count-mismatch guard).
+
 **Phase E partial (2026-05-17, code-side — Tasks 1-5 of 9):**
 - Trading manifest migrated to v2 schema: `schemaVersion: 2`, `agent_id`/`workspace_cwd`/`paths.*` host-local fields removed; `profile` + `reportsTo` added per agent.
 - `paperclips/projects/trading/paths.local-example.yaml` committed as CI/dev fallback (sanitized paths under `/opt/example/trading`); operator's `~/.paperclip/projects/trading/paths.yaml` takes precedence at deploy time.
