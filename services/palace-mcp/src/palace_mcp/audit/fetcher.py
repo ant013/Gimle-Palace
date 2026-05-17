@@ -22,6 +22,18 @@ from palace_mcp.extractors.base import BaseExtractor
 
 log = logging.getLogger(__name__)
 
+# Supplemental query for arch_layer: fetches module/rule counts that cannot be
+# derived from ArchViolation findings alone (when findings=[] we still need
+# module_count to render a meaningful no-rules / clean-rules message).
+_ARCH_LAYER_SUPPLEMENT = """
+OPTIONAL MATCH (m:Module {project_id: $project_id})
+WITH count(m) AS module_count
+OPTIONAL MATCH (r:ArchRule {project_id: $project_id})
+RETURN module_count,
+       count(r) > 0 AS rules_declared,
+       head(collect(r.rule_source)) AS rule_source
+""".strip()
+
 
 async def fetch_audit_data(
     driver: Any,
@@ -69,13 +81,26 @@ async def fetch_audit_data(
                 failed_extractors.append(extractor_name)
             continue
 
+        summary_stats = _build_summary_stats(extractor_name, findings)
+
+        if extractor_name == "arch_layer":
+            try:
+                supplement = await _fetch_arch_layer_supplement(driver, run_info)
+                summary_stats.update(supplement)
+            except Exception:
+                log.warning(
+                    "arch_layer supplemental query failed for project %r",
+                    run_info.project,
+                    exc_info=True,
+                )
+
         results[extractor_name] = AuditSectionData(
             extractor_name=extractor_name,
             run_id=run_info.run_id,
             project=run_info.project,
             completed_at=run_info.completed_at,
             findings=findings,
-            summary_stats=_build_summary_stats(extractor_name, findings),
+            summary_stats=summary_stats,
             template_name=contract.template_name,
         )
     return results
@@ -105,6 +130,13 @@ def _build_summary_stats(
     elif extractor_name == "dependency_surface":
         scopes = list({f.get("scope") for f in findings if f.get("scope")})
         stats["scopes"] = scopes
+        if findings:
+            all_unresolved = all(
+                f.get("resolved_version") == "unresolved" for f in findings
+            )
+            stats["missing_lockfile"] = all_unresolved
+        else:
+            stats["missing_lockfile"] = False
 
     elif extractor_name == "code_ownership":
         diffuse = [f for f in findings if (f.get("top_owner_weight") or 1.0) < 0.2]
@@ -129,4 +161,58 @@ def _build_summary_stats(
             1 for f in findings if (f.get("signature_changed_count") or 0) > 0
         )
 
+    elif extractor_name == "testability_di":
+        stats["patterns"] = sum(1 for f in findings if f.get("style") is not None)
+        stats["test_doubles"] = len(
+            {
+                (
+                    double.get("kind"),
+                    double.get("language"),
+                    double.get("target_symbol"),
+                    double.get("test_file"),
+                )
+                for finding in findings
+                for double in finding.get("test_doubles") or []
+            }
+        )
+        stats["untestable_sites"] = len(
+            {
+                (
+                    site.get("file"),
+                    site.get("start_line"),
+                    site.get("end_line"),
+                    site.get("category"),
+                    site.get("symbol_referenced"),
+                    site.get("severity"),
+                    site.get("message"),
+                )
+                for finding in findings
+                for site in finding.get("untestable_sites") or []
+            }
+        )
+
     return stats
+
+
+async def _fetch_arch_layer_supplement(
+    driver: Any, run_info: RunInfo
+) -> dict[str, Any]:
+    """Run supplemental Cypher for arch_layer to get module_count + rules_declared."""
+    async with driver.session() as session:
+        result = await session.run(
+            _ARCH_LAYER_SUPPLEMENT,
+            project_id=f"project/{run_info.project}",
+        )
+        record = await result.single()
+    if record is None:
+        return {
+            "module_count": 0,
+            "edge_count": 0,
+            "rules_declared": False,
+            "rule_source": None,
+        }
+    return {
+        "module_count": record["module_count"] or 0,
+        "rules_declared": bool(record["rules_declared"]),
+        "rule_source": record["rule_source"],
+    }

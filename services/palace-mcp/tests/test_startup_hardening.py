@@ -242,3 +242,30 @@ class TestNoBlockingExternalCallsAtStartup:
         # uri arg (positional or keyword)
         uri = call_kwargs.args[0] if call_kwargs.args else call_kwargs.kwargs.get("uri")
         assert uri == "bolt://neo4j:7687"  # default from Settings
+
+
+class TestNeo4jConnectivityWait:
+    @pytest.mark.asyncio
+    async def test_wait_for_neo4j_connectivity_retries_until_ready(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from palace_mcp.main import wait_for_neo4j_connectivity
+
+        attempts = 0
+
+        async def verify_connectivity() -> None:
+            nonlocal attempts
+            attempts += 1
+            if attempts < 3:
+                raise RuntimeError("Temporary failure in name resolution")
+
+        async def no_sleep(_: float) -> None:
+            return None
+
+        driver = MagicMock()
+        driver.verify_connectivity = AsyncMock(side_effect=verify_connectivity)
+        monkeypatch.setattr("palace_mcp.main.asyncio.sleep", no_sleep)
+
+        await wait_for_neo4j_connectivity(driver, timeout_seconds=1, interval_seconds=0)
+
+        assert attempts == 3

@@ -1,0 +1,6 @@
+schemaVersion: 2
+name: minimal
+inheritsUniversal: true
+includes: []
+description: |
+  Universal layer only. No capability content. Safety floor for any agent.

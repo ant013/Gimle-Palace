@@ -1,0 +1,17 @@
+# Phase F backfill — Phase E missed this fallback. Overridden by operator's
+# ~/.paperclip/projects/trading/bindings.yaml.
+#
+# Committed sanitized UUIDs let CI build trading without operator's host-local
+# files. Operator's real UUIDs (from `migrate-bindings.sh trading`) live at
+# ~/.paperclip/projects/trading/bindings.yaml and take precedence at deploy.
+#
+# Builder precedence: ~/.paperclip/projects/trading/bindings.yaml (operator) →
+# paperclips/projects/trading/bindings.local-example.yaml (this file, CI fallback).
+schemaVersion: 2
+company_id: "00000000-0000-0000-0000-000000000002"
+agents:
+  CEO: "00000000-0000-0000-0000-000000000110"
+  CTO: "00000000-0000-0000-0000-000000000111"
+  CodeReviewer: "00000000-0000-0000-0000-000000000112"
+  PythonEngineer: "00000000-0000-0000-0000-000000000113"
+  QAEngineer: "00000000-0000-0000-0000-000000000114"

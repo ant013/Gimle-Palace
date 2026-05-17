@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _RULES_DIR = Path(__file__).parent / "rules"
+_SEMGREP_BATCH_SIZE = 64
 
 _QUERY = """
 MATCH (f:CryptoFinding {project_id: $project_id})
@@ -34,7 +35,8 @@ RETURN f.kind AS kind,
        f.start_line AS start_line,
        f.end_line AS end_line,
        f.message AS message,
-       f.run_id AS run_id
+       f.run_id AS run_id,
+       f.source_context AS source_context
 ORDER BY
   CASE f.severity
     WHEN 'critical' THEN 0
@@ -165,14 +167,47 @@ async def _run_semgrep(
     target: Path,
     timeout_s: int,
 ) -> list[dict[str, Any]]:
-    """Invoke semgrep as async subprocess; return list of raw result dicts."""
+    """Invoke semgrep across bounded target batches; return merged raw results."""
+    results: list[dict[str, Any]] = []
+    for batch in _semgrep_target_batches(target, batch_size=_SEMGREP_BATCH_SIZE):
+        results.extend(
+            await _run_semgrep_batch(
+                rules_dir=rules_dir,
+                targets=batch,
+                timeout_s=timeout_s,
+            )
+        )
+    return results
+
+
+def _semgrep_target_batches(target: Path, *, batch_size: int) -> list[list[Path]]:
+    if target.is_file():
+        return [[target]]
+
+    swift_files = sorted(path for path in target.rglob("*.swift") if path.is_file())
+    if not swift_files:
+        return [[target]]
+
+    return [
+        swift_files[index : index + batch_size]
+        for index in range(0, len(swift_files), batch_size)
+    ]
+
+
+async def _run_semgrep_batch(
+    *,
+    rules_dir: Path,
+    targets: list[Path],
+    timeout_s: int,
+) -> list[dict[str, Any]]:
+    """Invoke semgrep as async subprocess for one bounded target batch."""
     proc = await asyncio.create_subprocess_exec(
         "semgrep",
         "--config",
         str(rules_dir),
         "--json",
         "--quiet",
-        str(target),
+        *(str(target) for target in targets),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
@@ -183,7 +218,9 @@ async def _run_semgrep(
     except TimeoutError:
         proc.kill()
         await proc.wait()
-        raise ExtractorConfigError(f"semgrep timed out after {timeout_s}s on {target}")
+        raise ExtractorConfigError(
+            f"semgrep timed out after {timeout_s}s on {targets[0]}"
+        )
 
     if proc.returncode not in (0, 1):
         stderr_text = stderr_b.decode("utf-8", errors="replace")[:500]
@@ -222,6 +259,8 @@ def _dedup_findings(
     raw: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Coalesce findings per (file, start_line, end_line, kind), keep highest severity."""
+    from palace_mcp.extractors.foundation.source_context import classify
+
     best: dict[tuple[str, int, int, str], dict[str, Any]] = {}
     for r in raw:
         path = r.get("path", "")
@@ -246,6 +285,7 @@ def _dedup_findings(
                 "severity": severity,
                 "message": r.get("extra", {}).get("message", ""),
                 "rule_id": rule_id,
+                "source_context": classify(path),
             }
     return list(best.values())
 
@@ -269,6 +309,7 @@ MERGE (f:CryptoFinding {
 })
 SET f.severity = $severity,
     f.message = $message,
+    f.source_context = $source_context,
     f.run_id = $run_id
 """,
             project_id=project_id,
@@ -278,5 +319,6 @@ SET f.severity = $severity,
             end_line=finding["end_line"],
             severity=finding["severity"],
             message=finding["message"],
+            source_context=finding["source_context"],
             run_id=run_id,
         )

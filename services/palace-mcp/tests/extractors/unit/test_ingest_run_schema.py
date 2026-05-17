@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from palace_mcp.extractors.base import ExtractorStats
 from palace_mcp.extractors.cypher import CREATE_INGEST_RUN
 
 
@@ -68,7 +69,7 @@ class TestPathACanonicalFields:
         graphiti = MM()
 
         from palace_mcp.extractors import runner
-        from palace_mcp.extractors.runner import _PrecheckOk
+        from palace_mcp.extractors.runner import _ExecuteOk, _PrecheckOk
 
         ok = _PrecheckOk(
             extractor=MM(),
@@ -81,7 +82,9 @@ class TestPathACanonicalFields:
             patch.object(
                 runner,
                 "_execute",
-                return_value=MM(stats=MM(nodes_written=0, edges_written=0)),
+                return_value=_ExecuteOk(
+                    stats=ExtractorStats(nodes_written=0, edges_written=0)
+                ),
             ),
             patch.object(runner, "_finalize", return_value=(0, 0, [], True)),
         ):

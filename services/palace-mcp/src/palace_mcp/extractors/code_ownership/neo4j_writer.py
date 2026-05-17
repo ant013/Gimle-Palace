@@ -56,6 +56,12 @@ SET st.status = s.status,
     st.updated_at = $now
 """
 
+_WRITE_FILE_SOURCE_CONTEXT_CYPHER = """
+UNWIND $paths AS p
+MATCH (f:File {project_id: $proj, path: p.path})
+SET f.source_context = p.source_context
+"""
+
 
 async def write_batch(
     driver: AsyncDriver,
@@ -68,6 +74,8 @@ async def write_batch(
     alpha: float,
 ) -> None:
     """Atomic-replace a batch of paths within a single tx."""
+    from palace_mcp.extractors.foundation.source_context import classify
+
     edges_payload = [
         {
             "path": e.path,
@@ -85,6 +93,11 @@ async def write_batch(
         for e in edges
     ]
     paths_to_wipe = list({e.path for e in edges} | set(deleted_paths))
+    # Deduplicated set of paths to stamp with source_context
+    path_ctx_payload = [
+        {"path": p, "source_context": classify(p)}
+        for p in {e.path for e in edges} | set(deleted_paths)
+    ]
     now = datetime.now(tz=timezone.utc).isoformat()
 
     async with driver.session() as session:
@@ -112,5 +125,11 @@ async def write_batch(
                     proj=project_id,
                     run_id=run_id,
                     now=now,
+                )
+            if path_ctx_payload:
+                await tx.run(
+                    _WRITE_FILE_SOURCE_CONTEXT_CYPHER,
+                    paths=path_ctx_payload,
+                    proj=project_id,
                 )
             # tx commits on context exit

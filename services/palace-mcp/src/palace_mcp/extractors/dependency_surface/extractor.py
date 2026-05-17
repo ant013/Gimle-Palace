@@ -74,7 +74,8 @@ MATCH (p:Project {slug: $project})-[r:DEPENDS_ON]->(d:ExternalDependency)
 RETURN d.purl AS purl,
        r.scope AS scope,
        r.declared_in AS declared_in,
-       r.declared_version_constraint AS declared_version_constraint
+       r.declared_version_constraint AS declared_version_constraint,
+       d.resolved_version AS resolved_version
 ORDER BY d.purl
 LIMIT 100
 """.strip(),

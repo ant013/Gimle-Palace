@@ -1,0 +1,38 @@
+# Phase G CI fallback — overridden by operator's ~/.paperclip/projects/gimle/bindings.yaml.
+#
+# Committed sanitized UUIDs let CI build gimle without operator's host-local
+# files. Operator's real UUIDs (from `migrate-bindings.sh gimle` reading the
+# legacy paperclips/codex-agent-ids.env + deploy-agents.sh + paperclip API)
+# live at ~/.paperclip/projects/gimle/bindings.yaml and take precedence.
+#
+# 24 agents: 12 claude (kebab) + 12 codex (kebab).
+# Note: keys match agent_name in manifest (kebab form) for ids.get() lookup.
+schemaVersion: 2
+company_id: "00000000-0000-0000-0000-000000000003"
+agents:
+  # Claude team (12) — kebab agent_name from manifest
+  cto: "00000000-0000-0000-0000-000000000200"
+  code-reviewer: "00000000-0000-0000-0000-000000000201"
+  python-engineer: "00000000-0000-0000-0000-000000000202"
+  qa-engineer: "00000000-0000-0000-0000-000000000203"
+  technical-writer: "00000000-0000-0000-0000-000000000204"
+  infra-engineer: "00000000-0000-0000-0000-000000000205"
+  mcp-engineer: "00000000-0000-0000-0000-000000000206"
+  research-agent: "00000000-0000-0000-0000-000000000207"
+  blockchain-engineer: "00000000-0000-0000-0000-000000000208"
+  security-auditor: "00000000-0000-0000-0000-000000000209"
+  auditor: "00000000-0000-0000-0000-00000000020a"
+  opus-architect-reviewer: "00000000-0000-0000-0000-00000000020b"
+  # Codex team (12) — kebab agent_name from manifest
+  cx-cto: "00000000-0000-0000-0000-000000000210"
+  cx-code-reviewer: "00000000-0000-0000-0000-000000000211"
+  cx-python-engineer: "00000000-0000-0000-0000-000000000212"
+  cx-qa-engineer: "00000000-0000-0000-0000-000000000213"
+  cx-technical-writer: "00000000-0000-0000-0000-000000000214"
+  cx-infra-engineer: "00000000-0000-0000-0000-000000000215"
+  cx-mcp-engineer: "00000000-0000-0000-0000-000000000216"
+  cx-research-agent: "00000000-0000-0000-0000-000000000217"
+  cx-blockchain-engineer: "00000000-0000-0000-0000-000000000218"
+  cx-security-auditor: "00000000-0000-0000-0000-000000000219"
+  cx-auditor: "00000000-0000-0000-0000-00000000021a"
+  codex-architect-reviewer: "00000000-0000-0000-0000-00000000021b"

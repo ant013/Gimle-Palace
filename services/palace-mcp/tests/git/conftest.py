@@ -53,9 +53,8 @@ def large_repo(tmp_path: Path) -> tuple[Path, Path]:
     _run(["git", "add", "."], cwd=repo)
     _run(["git", "commit", "-m", "init", "-q"], cwd=repo)
     for i in range(1, 250):
-        (repo / "f.py").write_text(f"{i}\n")
         subprocess.run(
-            ["git", "commit", "-am", f"c{i}", "-q"],
+            ["git", "commit", "--allow-empty", "-m", f"c{i}", "-q"],
             cwd=repo,
             check=True,
             capture_output=True,

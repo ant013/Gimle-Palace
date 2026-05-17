@@ -232,3 +232,18 @@ class PaperclipClient:
         if not isinstance(data, list):
             raise PaperclipError(f"expected list from agents, got {type(data).__name__}")
         return [_agent_from_json(d) for d in data]
+
+    async def list_companies(self) -> list[dict[str, Any]]:
+        """Read-only GET of /api/companies filtered to non-archived entries.
+
+        The archived discriminator is `archived: bool`, as documented in the
+        watchdog re-enable spec and mirrored by the Paperclip test mock on
+        2026-05-13. If the upstream schema changes, update this filter and the
+        reconciliation tests together.
+        """
+
+        resp = await self._request("GET", "/api/companies")
+        payload = resp.json()
+        if not isinstance(payload, list):
+            raise PaperclipError(f"expected list from companies, got {type(payload).__name__}")
+        return [company for company in payload if not company.get("archived", False)]

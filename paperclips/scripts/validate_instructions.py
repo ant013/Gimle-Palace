@@ -44,6 +44,7 @@ REQUIRED_PROJECT_MANIFEST_SECTIONS = (
     "compatibility",
 )
 
+# v1 schema requirements (gimle, uaudit pre-Phase-G/F).
 REQUIRED_PROJECT_MANIFEST_KEYS = {
     "project": ("key", "display_name", "issue_prefix", "company_id", "integration_branch", "specs_dir", "plans_dir"),
     "domain": ("wallet_target_short", "wallet_target_name", "wallet_target_slug"),
@@ -77,6 +78,20 @@ REQUIRED_PROJECT_MANIFEST_KEYS = {
     "mcp": ("service_name", "package_name", "tool_namespace"),
 }
 
+# Phase E v2 schema (UAA): host-local fields moved to ~/.paperclip/projects/<key>/.
+# These keys are FORBIDDEN in v2 committed manifest (validated separately by
+# paperclips.scripts.validate_manifest); the v1-required-keys list is relaxed
+# accordingly for v2 manifests.
+_V2_PROJECT_FIELDS_RELAXED = {"company_id"}
+_V2_PATHS_FIELDS_RELAXED = {
+    "project_root",
+    "primary_repo_root",
+    "primary_mcp_service_dir",
+    "production_checkout",
+    "codex_team_root",
+    "operator_memory_dir",
+}
+
 REQUIRED_COMPATIBILITY_PATH_KEYS = (
     "claude_deploy_mapping",
     "codex_agent_ids_env",
@@ -97,31 +112,148 @@ def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def load_team_uuids(repo_root: Path) -> dict[str, set[str]]:
-    """Return {'claude': {uuid, ...}, 'codex': {uuid, ...}} parsed from
-    the project's existing single-sources-of-truth.
+# E-fix C5: tolerant v2-schema detection. Accepts unquoted (`schemaVersion: 2`),
+# quoted (`schemaVersion: "2"`), float (`schemaVersion: 2.0`), and optional
+# trailing comment. Avoids YAML parse for performance + isolation; if a future
+# manifest writes the key in a non-flat-mapping form, parse fallback kicks in.
+_V2_TEXT_RE = re.compile(
+    r"^schemaVersion:\s*[\"\']?2(?:\.0)?[\"\']?\s*(?:#.*)?$",
+    re.MULTILINE,
+)
 
-    Claude: paperclips/deploy-agents.sh (case-statement uuids).
-    Codex:  paperclips/codex-agent-ids.env (KEY=uuid lines).
+
+def _is_v2_manifest_text(text: str) -> bool:
+    if _V2_TEXT_RE.search(text):
+        return True
+    # Defensive fallback: parse YAML and check field. Handles edge cases like
+    # `schemaVersion: !!int 2` or multi-line mapping forms.
+    try:
+        import yaml
+        data = yaml.safe_load(text)
+    except Exception:
+        return False
+    if not isinstance(data, dict):
+        return False
+    sv = data.get("schemaVersion")
+    return sv == 2 or sv == "2" or sv == 2.0
+
+
+def load_team_uuids(
+    repo_root: Path,
+    allowed_company_ids: "set[str] | None" = None,
+) -> dict[str, set[str]]:
+    """Return {'claude': {uuid, ...}, 'codex': {uuid, ...}}.
+
+    Phase D dual-read sources:
+      - Claude:  paperclips/deploy-agents.sh (case-statement uuids; legacy).
+      - Codex:   paperclips/codex-agent-ids.env (legacy KEY=uuid env file)
+                 + ~/.paperclip/projects/<key>/bindings.yaml (new — for every
+                   project that has been bootstrapped). resolve_bindings handles
+                   precedence + conflict warnings.
+
+    D-fix C-2: when ``allowed_company_ids`` is provided, only include UUIDs from
+    bindings whose ``company_id`` is in the set. This prevents watchdog from
+    conflating UUIDs across trading/uaudit/gimle when running for a single
+    company. When None (legacy behavior), iterate every project subdir.
     """
     teams: dict[str, set[str]] = {"claude": set(), "codex": set()}
 
+    # --- Claude: legacy deploy-agents.sh (no bindings.yaml equivalent yet) ---
     deploy_sh = repo_root / "paperclips" / "deploy-agents.sh"
     if deploy_sh.is_file():
-        # Only `<role>) echo "<UUID>"` case-statement lines — skip COMPANY_ID etc.
         case_re = re.compile(r'^\s*[a-z][\w-]*\)\s+echo\s+"([0-9a-f-]{36})"', re.MULTILINE)
         teams["claude"].update(case_re.findall(deploy_sh.read_text()))
 
-    codex_env = repo_root / "paperclips" / "codex-agent-ids.env"
-    if codex_env.is_file():
-        for line in codex_env.read_text().splitlines():
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#") or "=" not in stripped:
+    # --- Codex: dual-read via resolver -------------------------------------
+    legacy_env = repo_root / "paperclips" / "codex-agent-ids.env"
+    home_projects = Path.home() / ".paperclip" / "projects"
+
+    # Import resolver via importlib (validate_instructions is itself loaded by
+    # absolute path from the watchdog, so the surrounding `paperclips.scripts`
+    # package may not be on sys.path). Resolve sibling-of-this-file, not
+    # repo_root, so callers passing a synthetic repo_root (tests) still find it.
+    import importlib.util
+
+    resolver_path = Path(__file__).resolve().parent / "resolve_bindings.py"
+    resolve_all = None
+    if resolver_path.is_file():
+        # D-fix I7: dedupe via sys.modules so repeated calls reuse the same
+        # module object (prevents duplicate BindingsConflictWarning classes
+        # under multi-tick watchdog runs).
+        cached_mod = sys.modules.get("_phase_d_resolve_bindings")
+        if cached_mod is not None:
+            resolve_all = getattr(cached_mod, "resolve_all", None)
+        else:
+            spec = importlib.util.spec_from_file_location(
+                "_phase_d_resolve_bindings", resolver_path
+            )
+            if spec is not None and spec.loader is not None:
+                try:
+                    mod = importlib.util.module_from_spec(spec)
+                    sys.modules["_phase_d_resolve_bindings"] = mod
+                    spec.loader.exec_module(mod)
+                    resolve_all = mod.resolve_all
+                except Exception:
+                    sys.modules.pop("_phase_d_resolve_bindings", None)
+                    resolve_all = None
+
+    if resolve_all is None:
+        # Fallback: legacy env only (preserves pre-Phase-D behavior).
+        if legacy_env.is_file():
+            for line in legacy_env.read_text().splitlines():
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#") or "=" not in stripped:
+                    continue
+                _, val = stripped.split("=", 1)
+                uuid_match = _UUID_RE.fullmatch(val.strip())
+                if uuid_match:
+                    teams["codex"].add(uuid_match.group(1))
+        return teams
+
+    # Resolver available: gather UUIDs from per-project bindings + legacy env.
+    project_dirs: list[Path] = []
+    if home_projects.is_dir():
+        project_dirs = [p for p in home_projects.iterdir() if p.is_dir()]
+
+    if not project_dirs and legacy_env.is_file():
+        # Pre-Phase-E: no per-project bindings yet, only legacy env exists.
+        try:
+            data = resolve_all(legacy_env_path=legacy_env, bindings_yaml_path=None)
+            for uuid in data["agents"].values():
+                if _UUID_RE.fullmatch(uuid) or len(uuid) >= 8:
+                    teams["codex"].add(uuid)
+        except FileNotFoundError:
+            pass
+        return teams
+
+    for project_dir in project_dirs:
+        bindings = project_dir / "bindings.yaml"
+        legacy_for_project = legacy_env if project_dir.name == "gimle" else None
+        if not bindings.is_file() and legacy_for_project is None:
+            continue
+        try:
+            data = resolve_all(
+                legacy_env_path=legacy_for_project,
+                bindings_yaml_path=bindings if bindings.is_file() else None,
+            )
+        except FileNotFoundError:
+            continue
+        # D-fix C-2: scope per company_id when caller supplied a filter, so a
+        # gimle watchdog cannot accidentally allowlist trading/uaudit UUIDs.
+        if allowed_company_ids is not None:
+            this_company = data.get("company_id")
+            # Pre-Phase-E gimle has no company_id in legacy-only mode; skip filter
+            # only if we have NO id to compare (legacy-only path), otherwise enforce.
+            if this_company is not None and this_company not in allowed_company_ids:
                 continue
-            _, val = stripped.split("=", 1)
-            uuid_match = _UUID_RE.fullmatch(val.strip())
-            if uuid_match:
-                teams["codex"].add(uuid_match.group(1))
+        # Codex bucket — Phase D treats every bindings UUID as codex by default,
+        # because the only currently-migrated path is the codex env file. Phase
+        # E/F will introduce per-agent target metadata.
+        for uuid in data["agents"].values():
+            # D-fix C-3: enforce full UUID format. The 'len >= 8' fallback
+            # let any 8+ char string into the watchdog allowlist — security gap.
+            if uuid and _UUID_RE.fullmatch(uuid):
+                teams["codex"].add(uuid)
 
     return teams
 
@@ -188,7 +320,15 @@ def validate_project_capability_manifests(repo_root: Path) -> list[str]:
         text = manifest.read_text()
         rel = manifest.relative_to(repo_root)
         is_template = "_template" in manifest.parts
-        for section in REQUIRED_PROJECT_MANIFEST_SECTIONS:
+        # Phase E: detect v2 manifests — host-local fields are MOVED to ~/.paperclip,
+        # not absent. v1-required-keys check is relaxed for v2.
+        is_v2 = _is_v2_manifest_text(text)
+        # paths section is allowed empty / minimal under v2 (overlay_root + project_rules_file only).
+        sections_to_check = list(REQUIRED_PROJECT_MANIFEST_SECTIONS)
+        if is_v2:
+            # paths can be present-but-tiny (overlay_root only) or omitted entirely under v2.
+            sections_to_check = [s for s in sections_to_check if s != "paths"]
+        for section in sections_to_check:
             if not re.search(rf"^{re.escape(section)}:\s*$", text, re.MULTILINE):
                 errors.append(f"project manifest missing {section} section: {rel}")
         if not is_template and re.search(r"<[^>\n]+>", text):
@@ -197,6 +337,11 @@ def validate_project_capability_manifests(repo_root: Path) -> list[str]:
             if not re.search(rf"^{re.escape(section)}:\s*$", text, re.MULTILINE):
                 continue
             for key in keys:
+                # Phase E v2: skip host-local-relocated keys.
+                if is_v2 and section == "project" and key in _V2_PROJECT_FIELDS_RELAXED:
+                    continue
+                if is_v2 and section == "paths" and key in _V2_PATHS_FIELDS_RELAXED:
+                    continue
                 if not re.search(rf"^\s{{2}}{re.escape(key)}:\s+\S", text, re.MULTILINE):
                     errors.append(f"project manifest missing {section}.{key}: {rel}")
         if "mcp:" not in text:
@@ -238,7 +383,10 @@ def validate_project_capability_manifests(repo_root: Path) -> list[str]:
                 errors.append(f"project manifest missing targets.{target}.instruction_entry_file=AGENTS.md: {rel}")
         if declared_target_count == 0:
             errors.append(f"project manifest declares no supported targets: {rel}")
-        if not is_template:
+        # Phase E v2: compatibility section is reduced — legacy_output_paths only.
+        # The legacy claude_deploy_mapping / codex_agent_ids_env / workspace_update_script
+        # fields are dropped because UUIDs/paths now live in ~/.paperclip/projects/<key>/.
+        if not is_template and not is_v2:
             for key in REQUIRED_COMPATIBILITY_PATH_KEYS:
                 match = re.search(rf"^\s{{2}}{re.escape(key)}:\s+(.+?)\s*$", text, re.MULTILINE)
                 if not match:
@@ -345,20 +493,27 @@ def validate_resolved_assembly_manifests(repo_root: Path) -> list[str]:
         source_sha = resolved.get("sourceManifestSha256")
         if source_sha != sha256_text(manifest_text):
             errors.append(f"resolved assembly manifest sourceManifestSha256 stale: {resolved_path.relative_to(repo_root)}")
-        manifest_company_match = re.search(r"^\s{2}company_id:\s+(.+?)\s*$", manifest_text, re.MULTILINE)
-        manifest_company_id = manifest_company_match.group(1).strip("\"'") if manifest_company_match else ""
-        resolved_company_id = resolved.get("parameters", {}).get("project", {}).get("companyId")
-        if resolved_company_id != manifest_company_id:
-            errors.append(
-                f"resolved assembly manifest project.companyId mismatch for "
-                f"{resolved_path.relative_to(repo_root)}: {resolved_company_id} != {manifest_company_id}"
-            )
+        # Phase E v2: company_id moved to host-local bindings.yaml; manifest no
+        # longer carries it. Resolver still surfaces it via bindings; downstream
+        # validator skips the manifest-vs-resolved equality for v2.
+        is_v2_manifest = _is_v2_manifest_text(manifest_text)
+        if not is_v2_manifest:
+            manifest_company_match = re.search(r"^\s{2}company_id:\s+(.+?)\s*$", manifest_text, re.MULTILINE)
+            manifest_company_id = manifest_company_match.group(1).strip("\"'") if manifest_company_match else ""
+            resolved_company_id = resolved.get("parameters", {}).get("project", {}).get("companyId")
+            if resolved_company_id != manifest_company_id:
+                errors.append(
+                    f"resolved assembly manifest project.companyId mismatch for "
+                    f"{resolved_path.relative_to(repo_root)}: {resolved_company_id} != {manifest_company_id}"
+                )
 
+        # Phase E v2: compatibility.inputs (legacy claudeDeployMapping etc.) is
+        # absent for v2 manifests by design — UUIDs/paths now live in host-local.
         compatibility = resolved.get("compatibility", {})
         compatibility_inputs = compatibility.get("inputs", {}) if isinstance(compatibility, dict) else {}
-        if not isinstance(compatibility_inputs, dict) or not compatibility_inputs:
+        if not is_v2_manifest and (not isinstance(compatibility_inputs, dict) or not compatibility_inputs):
             errors.append(f"resolved assembly manifest missing compatibility inputs: {resolved_path.relative_to(repo_root)}")
-        else:
+        elif not is_v2_manifest:
             for input_name in ["claudeDeployMapping", "codexAgentIdsEnv", "workspaceUpdateScript"]:
                 input_data = compatibility_inputs.get(input_name)
                 if not isinstance(input_data, dict):
@@ -407,10 +562,18 @@ def validate_resolved_assembly_manifests(repo_root: Path) -> list[str]:
                         f"resolved assembly manifest agentName mismatch: "
                         f"{project}:{target}:{role_id}: {agent_name} != {expected_agent_name}"
                     )
-                if not isinstance(agent_id, str) or not agent_id:
-                    errors.append(f"resolved assembly manifest role missing agentId: {project}:{target}:{role_id}")
-                elif not _UUID_RE.fullmatch(agent_id):
-                    errors.append(f"resolved assembly manifest agentId invalid: {project}:{target}:{role_id}")
+                # Phase E v2: agentId is empty in resolved-assembly until operator
+                # provisions host-local bindings.yaml. CI builds without host-local
+                # → empty agentId is expected, not an error. When operator builds
+                # post-bootstrap, agentId is populated via dual-read resolver.
+                if is_v2_manifest:
+                    if isinstance(agent_id, str) and agent_id and not _UUID_RE.fullmatch(agent_id):
+                        errors.append(f"resolved assembly manifest agentId invalid: {project}:{target}:{role_id}")
+                else:
+                    if not isinstance(agent_id, str) or not agent_id:
+                        errors.append(f"resolved assembly manifest role missing agentId: {project}:{target}:{role_id}")
+                    elif not _UUID_RE.fullmatch(agent_id):
+                        errors.append(f"resolved assembly manifest agentId invalid: {project}:{target}:{role_id}")
                 output_path = repo_root / output
                 if not output_path.is_file():
                     errors.append(f"resolved assembly manifest output missing: {output}")

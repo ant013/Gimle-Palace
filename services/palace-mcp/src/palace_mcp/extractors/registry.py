@@ -46,6 +46,7 @@ from palace_mcp.extractors.symbol_index_java import SymbolIndexJava
 from palace_mcp.extractors.symbol_index_python import SymbolIndexPython
 from palace_mcp.extractors.symbol_index_solidity import SymbolIndexSolidity
 from palace_mcp.extractors.symbol_index_swift import SymbolIndexSwift
+from palace_mcp.extractors.testability_di.extractor import TestabilityDiExtractor
 from palace_mcp.extractors.symbol_index_typescript import SymbolIndexTypeScript
 
 EXTRACTORS: dict[str, BaseExtractor] = {
@@ -67,6 +68,7 @@ EXTRACTORS: dict[str, BaseExtractor] = {
     "dependency_surface": DependencySurfaceExtractor(),
     "error_handling_policy": ErrorHandlingPolicyExtractor(),
     "reactive_dependency_tracer": ReactiveDependencyTracerExtractor(),
+    "testability_di": TestabilityDiExtractor(),
     "git_history": GitHistoryExtractor(),
     "hotspot": HotspotExtractor(),
     "hot_path_profiler": HotPathProfilerExtractor(),

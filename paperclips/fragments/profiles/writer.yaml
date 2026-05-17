@@ -1,0 +1,7 @@
+schemaVersion: 2
+name: writer
+inheritsUniversal: true
+includes:
+  - handoff/basics.md
+description: |
+  Documentation-only. Handoff basics. No git/worktree (writer doesn't commit code).

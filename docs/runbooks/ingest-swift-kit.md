@@ -99,6 +99,41 @@ What it does:
   - `palace.memory.get_project_overview`
 - prints a final JSON summary.
 
+### Default extractor set (GIM-283-2)
+
+As of `feature/GIM-283-2-audit-coverage-gaps`, `DEFAULT_EXTRACTORS` contains all
+17 entries that cover the full `swift_kit` audit profile plus infrastructure:
+
+| Extractor | Category |
+|-----------|----------|
+| `symbol_index_swift` | infrastructure |
+| `git_history` | infrastructure |
+| `dependency_surface` | audit |
+| `arch_layer` | audit |
+| `error_handling_policy` | audit |
+| `crypto_domain_model` | audit |
+| `hotspot` | audit |
+| `code_ownership` | audit |
+| `cross_repo_version_skew` | audit |
+| `public_api_surface` | audit |
+| `cross_module_contract` | audit |
+| `dead_symbol_binary_surface` | audit |
+| `coding_convention` | audit |
+| `localization_accessibility` | audit |
+| `reactive_dependency_tracer` | audit |
+| `testability_di` | audit |
+| `hot_path_profiler` | audit |
+
+Extractors that require optional helper inputs or artifacts can now finish with
+non-failing diagnostics:
+
+- `public_api_surface` without `.palace/public-api/...` → `MISSING_INPUT`
+- `cross_module_contract` without `public_api_surface` facts → `SKIPPED`
+- `hot_path_profiler` without `profiles/` traces → `MISSING_INPUT`
+- `cross_repo_version_skew` without usable `:DEPENDS_ON` graph → `MISSING_INPUT`
+- `reactive_dependency_tracer` without `reactive_facts.json` keeps its
+  informational diagnostic path
+
 Custom extractors:
 
 ```bash

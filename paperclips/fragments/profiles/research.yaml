@@ -1,0 +1,9 @@
+schemaVersion: 2
+name: research
+inheritsUniversal: true
+includes:
+  - pre-work/codebase-memory-first.md
+  - handoff/basics.md
+description: |
+  Read-only research. Pre-work via codebase-memory. Handoff basics for
+  reassigning research outputs.

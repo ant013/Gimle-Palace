@@ -61,12 +61,16 @@ Content-diff (which purls changed) is a future slice.
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
-| `dependency_surface_not_indexed` | GIM-191 hasn't run | run `palace.ingest.run_extractor(name='dependency_surface', project=...)` first |
+| `dependency_surface_not_indexed` | usable `:DEPENDS_ON` graph is missing | run `palace.ingest.run_extractor(name='dependency_surface', project=...)` first |
 | `bundle_has_no_members` | bundle exists but `add_to_bundle` was never called | call `palace.memory.add_to_bundle` |
 | `bundle_not_registered` | bundle name has typo or was never created | call `palace.memory.register_bundle` first |
 | `top_n_out_of_range` | passed top_n ≥ 10_000 | pass smaller top_n |
 | Project-mode returns 0 skew on UW Android | by design — Gradle alias resolves to one version | use `bundle="uw-android"` (single-member) for forward compatibility |
 | Warnings include `purl_malformed` | GIM-191 wrote a row whose `purl` lacks `pkg:` prefix | inspect the row, file a `dependency_surface` regression bug |
+
+For `project analyze` base smoke this prerequisite is optional. When no usable
+`:DEPENDS_ON` graph exists, `cross_repo_version_skew` now returns checkpoint
+status `MISSING_INPUT` instead of `RUN_FAILED`.
 
 ## Erasure
 

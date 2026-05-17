@@ -1,0 +1,17 @@
+schemaVersion: 2
+project:
+  key: synth
+  display_name: Synthetic Test
+  issue_prefix: SYN
+  integration_branch: main
+  specs_dir: docs/specs
+  plans_dir: docs/plans
+mcp:
+  service_name: synth-mcp
+  tool_namespace: synth
+  base_required: [codebase-memory, serena]
+agents:
+  - agent_name: SynthCTO
+    role_source: roles/cto.md
+    profile: cto
+    target: codex

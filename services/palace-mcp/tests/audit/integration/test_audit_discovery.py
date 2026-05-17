@@ -8,22 +8,38 @@ the latest successful run per extractor.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from neo4j import AsyncDriver, AsyncGraphDatabase
 
 import os
 
+from tests.integration.neo4j_runtime_support import ensure_reachable_neo4j_uri
+
+_HAS_NEO4J_RUNTIME = (
+    bool(os.environ.get("COMPOSE_NEO4J_URI")) or Path("/var/run/docker.sock").exists()
+)
+
 
 @pytest.fixture(scope="session")
 def neo4j_uri() -> Iterator[str]:
     if reuse := os.environ.get("COMPOSE_NEO4J_URI"):
-        yield reuse
+        yield ensure_reachable_neo4j_uri(reuse)
         return
+
+    if not Path("/var/run/docker.sock").exists():
+        pytest.skip("requires Docker socket or COMPOSE_NEO4J_URI for Neo4j integration")
+
     from testcontainers.neo4j import Neo4jContainer  # type: ignore[import]
 
-    with Neo4jContainer("neo4j:5.26.0") as container:
-        yield container.get_connection_url()
+    try:
+        with Neo4jContainer("neo4j:5.26.0") as container:
+            yield container.get_connection_url()
+    except Exception as exc:
+        pytest.skip(
+            f"Could not start Neo4j testcontainer — skipping integration tests: {exc}"
+        )
 
 
 @pytest.fixture(scope="session")
@@ -77,7 +93,43 @@ async def _seed_ingest_run(
         )
 
 
+async def _seed_runner_ingest_run(
+    driver: AsyncDriver,
+    *,
+    run_id: str,
+    extractor_name: str,
+    project: str,
+    success: bool,
+    started_at: str,
+    finished_at: str,
+) -> None:
+    cypher = """
+    CREATE (r:IngestRun {
+        id: $id,
+        extractor_name: $extractor_name,
+        project: $project,
+        success: $success,
+        started_at: datetime($started_at),
+        finished_at: datetime($finished_at)
+    })
+    """
+    async with driver.session() as session:
+        await session.run(
+            cypher,
+            id=run_id,
+            extractor_name=extractor_name,
+            project=project,
+            success=success,
+            started_at=started_at,
+            finished_at=finished_at,
+        )
+
+
 @pytest.mark.integration
+@pytest.mark.skipif(
+    not _HAS_NEO4J_RUNTIME,
+    reason="requires Docker socket or COMPOSE_NEO4J_URI for Neo4j integration",
+)
 class TestAuditDiscovery:
     async def test_finds_latest_successful_run_per_extractor(
         self, driver: AsyncDriver
@@ -170,3 +222,26 @@ class TestAuditDiscovery:
 
         assert result_a["hotspot"].run_id == "r-a"
         assert result_b["hotspot"].run_id == "r-b"
+
+    async def test_accepts_runner_shaped_ingest_run_rows(
+        self, driver: AsyncDriver
+    ) -> None:
+        from palace_mcp.audit.discovery import find_latest_runs
+
+        await _seed_runner_ingest_run(
+            driver,
+            run_id="runner-run-1",
+            extractor_name="testability_di",
+            project="runner-proj",
+            success=True,
+            started_at="2026-05-08T12:00:00Z",
+            finished_at="2026-05-08T12:00:05Z",
+        )
+
+        result = await find_latest_runs(driver, project="runner-proj")
+
+        assert result["testability_di"].run_id == "runner-run-1"
+        completed_at = result["testability_di"].completed_at
+        assert completed_at is not None
+        assert completed_at.startswith("2026-05-08T12:00:05")
+        assert completed_at.endswith("+00:00")

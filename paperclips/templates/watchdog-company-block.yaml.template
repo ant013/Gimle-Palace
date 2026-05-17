@@ -1,0 +1,9 @@
+- id: "{{ bindings.company_id }}"
+  name: "{{ project.display_name }}"
+  thresholds:
+    died_min: 3
+    hang_etime_min: 60
+    hang_cpu_max_s: null
+    idle_cpu_ratio_max: 0.005
+    hang_stream_idle_max_s: 300
+    recover_max_age_min: 180

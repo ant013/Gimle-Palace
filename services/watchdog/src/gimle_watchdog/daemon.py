@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from gimle_watchdog import actions, detection, detection_semantic
-from gimle_watchdog.config import Config
+from gimle_watchdog.config import Config, describe_effective_mode
 from gimle_watchdog.detection_semantic import HandoffDetectionConfig
 from gimle_watchdog.models import (
     CommentOnlyHandoffFinding,
@@ -293,7 +293,12 @@ async def _run_tier_pass(
 
     team_uuids: dict[str, set[str]] = {}
     if h.handoff_cross_team_enabled:
-        team_uuids = detection_semantic.load_team_uuids_from_repo(repo_root)
+        # D-fix C-2: scope allowlist to this watchdog's configured companies so
+        # gimle does not allowlist trading/uaudit UUIDs (or vice versa).
+        allowed_company_ids = {company.id for company in cfg.companies}
+        team_uuids = detection_semantic.load_team_uuids_from_repo(
+            repo_root, allowed_company_ids=allowed_company_ids
+        )
 
     post_budget = budget or AlertPostBudget(
         soft_limit=h.handoff_alert_soft_budget_per_tick,
@@ -550,13 +555,14 @@ async def _run_handoff_pass(
 
 
 async def _run_recovery_pass(cfg: Config, state: State, client: PaperclipClient) -> int:
-    if not cfg.daemon.recovery_enabled:
+    dry_run = cfg.daemon.recovery_dry_run
+    if not cfg.daemon.recovery_enabled and not dry_run:
         log.info("recovery_pass_disabled")
         return 0
 
     total_actions = 0
     effectful_actions = 0
-    baseline_mode = (
+    baseline_mode = dry_run or (
         cfg.daemon.recovery_first_run_baseline_only and not state.recovery_baseline_completed
     )
     baseline_candidates = 0
@@ -621,19 +627,81 @@ async def _run_recovery_pass(cfg: Config, state: State, client: PaperclipClient)
             total_actions += 1
 
     if baseline_mode:
-        state.recovery_baseline_completed = True
+        if not dry_run:
+            state.recovery_baseline_completed = True
         log.info(
-            "recovery_baseline_seeded candidates=%d",
+            "recovery_baseline_seeded candidates=%d dry_run=%s",
             baseline_candidates,
-            extra={"event": "recovery_baseline_seeded", "candidates": baseline_candidates},
+            dry_run,
+            extra={
+                "event": "recovery_baseline_seeded",
+                "candidates": baseline_candidates,
+                "dry_run": dry_run,
+            },
         )
 
     return total_actions
 
 
+async def _reconcile_companies(cfg: Config, client: PaperclipClient) -> tuple[list[str], list[str]]:
+    """Return (configured_but_missing, live_but_unconfigured) company IDs."""
+
+    # Do not let posture-only inventory reads shift the detector clock anchor.
+    anchor_before = client.last_response_date
+    try:
+        live = await client.list_companies()
+    except Exception as exc:
+        log.warning("list_companies_failed reason=%r", exc)
+        return [], []
+    finally:
+        client._last_response_date = anchor_before  # noqa: SLF001
+
+    live_ids = {str(company["id"]) for company in live}
+    configured_ids = {company.id for company in cfg.companies}
+    return (
+        sorted(configured_ids - live_ids),
+        sorted(live_ids - configured_ids),
+    )
+
+
+def _build_posture_extra(
+    cfg: Config,
+    state: State,
+    reconciliation: tuple[list[str], list[str]],
+) -> dict[str, Any]:
+    configured_but_missing, live_but_unconfigured = reconciliation
+    return {
+        "event": "watchdog_posture",
+        "mode": describe_effective_mode(cfg).value,
+        "company_count": len(cfg.companies),
+        "company_names": [company.name for company in cfg.companies],
+        "company_ids": [company.id for company in cfg.companies],
+        "configured_but_missing": configured_but_missing,
+        "live_but_unconfigured": live_but_unconfigured,
+        "recovery_enabled": cfg.daemon.recovery_enabled,
+        "recovery_dry_run": cfg.daemon.recovery_dry_run,
+        "recovery_baseline_completed": state.recovery_baseline_completed,
+        "max_actions_per_tick": cfg.daemon.max_actions_per_tick,
+        "handoff_recent_window_min": cfg.handoff.handoff_recent_window_min,
+        "recover_max_age_min_per_company": {
+            company.id: company.thresholds.recover_max_age_min for company in cfg.companies
+        },
+        "handoff_alert_enabled": cfg.handoff.handoff_alert_enabled,
+        "handoff_cross_team_enabled": cfg.handoff.handoff_cross_team_enabled,
+        "handoff_ownerless_enabled": cfg.handoff.handoff_ownerless_enabled,
+        "handoff_infra_block_enabled": cfg.handoff.handoff_infra_block_enabled,
+        "handoff_stale_bundle_enabled": cfg.handoff.handoff_stale_bundle_enabled,
+        "handoff_auto_repair_enabled": cfg.handoff.handoff_auto_repair_enabled,
+        "alert_budget_soft": cfg.handoff.handoff_alert_soft_budget_per_tick,
+        "alert_budget_hard": cfg.handoff.handoff_alert_hard_budget_per_tick,
+    }
+
+
 async def _tick(cfg: Config, state: State, client: PaperclipClient) -> None:
     """One scan pass: kill hangs, then wake died-mid-work issues."""
     log.info("tick_start companies=%d", len(cfg.companies))
+    posture_extra = _build_posture_extra(cfg, state, await _reconcile_companies(cfg, client))
+    log.info("watchdog_posture", extra=posture_extra)
 
     # Phase 1: kill host-level idle hangs
     hanged = detection.scan_idle_hangs(cfg)

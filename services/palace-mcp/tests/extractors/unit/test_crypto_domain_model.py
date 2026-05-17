@@ -85,28 +85,19 @@ def test_template_renders_without_error() -> None:
     )
     tmpl = env.get_template("crypto_domain_model.md")
 
-    # Non-empty case
+    # Non-empty case — summary_stats carries kit_name; _severity is added by renderer
     rendered_findings = tmpl.render(
-        kit_name="TronKit",
+        summary_stats={"kit_name": "TronKit"},
         findings=[
             {
                 "severity": "HIGH",
+                "_severity": "high",
                 "kind": "private_key_string_storage",
                 "file": "Sources/Core/Manager.swift",
                 "start_line": 79,
                 "message": "Mnemonic stored in UserDefaults",
             }
         ],
-        critical_high=[
-            {
-                "severity": "HIGH",
-                "kind": "private_key_string_storage",
-                "file": "Sources/Core/Manager.swift",
-                "start_line": 79,
-                "message": "Mnemonic stored in UserDefaults",
-            }
-        ],
-        medium_low=[],
         run_id="test-run-123",
         completed_at="2026-05-08T00:00:00Z",
     )
@@ -115,10 +106,8 @@ def test_template_renders_without_error() -> None:
 
     # Empty-findings case
     rendered_empty = tmpl.render(
-        kit_name="CleanKit",
+        summary_stats={"kit_name": "CleanKit"},
         findings=[],
-        critical_high=[],
-        medium_low=[],
         run_id="test-run-456",
         completed_at="2026-05-08T00:00:00Z",
         files_scanned=97,
@@ -311,3 +300,30 @@ def test_dedup_different_lines_not_coalesced() -> None:
     ]
     result = _dedup_findings(raw)
     assert len(result) == 2
+
+
+def test_semgrep_target_batches_chunks_swift_files(tmp_path: Path) -> None:
+    from palace_mcp.extractors.crypto_domain_model.extractor import (
+        _semgrep_target_batches,
+    )
+
+    for index in range(5):
+        (tmp_path / f"File{index}.swift").write_text("// swift\n", encoding="utf-8")
+    (tmp_path / "README.md").write_text("ignored\n", encoding="utf-8")
+
+    batches = _semgrep_target_batches(tmp_path, batch_size=2)
+
+    assert [len(batch) for batch in batches] == [2, 2, 1]
+    assert all(path.suffix == ".swift" for batch in batches for path in batch)
+
+
+def test_semgrep_target_batches_falls_back_to_root_when_no_swift_files(
+    tmp_path: Path,
+) -> None:
+    from palace_mcp.extractors.crypto_domain_model.extractor import (
+        _semgrep_target_batches,
+    )
+
+    (tmp_path / "README.md").write_text("no swift here\n", encoding="utf-8")
+
+    assert _semgrep_target_batches(tmp_path, batch_size=4) == [[tmp_path]]

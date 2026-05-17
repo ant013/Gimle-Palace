@@ -1,9 +1,10 @@
+schemaVersion: 2
+
 project:
   key: uaudit
   display_name: UnstoppableAudit
   system_name: UnstoppableAudit
   issue_prefix: UNS
-  company_id: 8f55e80b-0264-4ab6-9d56-8b2652f18005
   integration_branch: develop
   specs_dir: docs/superpowers/specs
   plans_dir: docs/superpowers/plans
@@ -31,12 +32,6 @@ evidence:
   post_merge_stall_issue: UNS-bootstrap
 
 paths:
-  project_root: /Users/Shared/UnstoppableAudit
-  primary_repo_root: /Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios
-  primary_mcp_service_dir: /Users/Shared/UnstoppableAudit
-  production_checkout: /Users/Shared/UnstoppableAudit
-  codex_team_root: /Users/Shared/UnstoppableAudit/runs
-  operator_memory_dir: /Users/Shared/UnstoppableAudit
   overlay_root: paperclips/projects/uaudit/overlays
   project_rules_file: AGENTS.md
 
@@ -59,9 +54,11 @@ mcp:
       - neo4j
     by_role: {}
 
+# Phase F migration (2026-05-17): telegram_plugin_id moved to host-local
+# ~/.paperclip/projects/uaudit/plugins.yaml. Other fields (issue_prefix,
+# default_owner, ios_owner, android_owner) are safe in repo (routing metadata).
 report_delivery:
   issue_prefix: UNS
-  telegram_plugin_id: 60023916-4b6c-40f5-829f-bc8b98abc4ed
   default_owner: UWAInfraEngineer
   android_owner: UWAInfraEngineer
   ios_owner: UWIInfraEngineer
@@ -90,144 +87,127 @@ targets:
 
 compatibility:
   legacy_output_paths: false
-  claude_deploy_mapping: paperclips/projects/uaudit/compat/claude-deploy-mapping.empty.sh
-  codex_agent_ids_env: paperclips/projects/uaudit/compat/codex-agent-ids.env
-  workspace_update_script: paperclips/projects/uaudit/compat/workspace-paths.env
 
+# Phase F migration (2026-05-17): UUIDs + abs paths + workspace_cwd moved to
+# ~/.paperclip/projects/uaudit/{bindings.yaml,paths.yaml}. Builder reads via
+# resolve_bindings dual-read (Phase D). reportsTo added for topological hire.
+# uaudit is codex-only (no claude agents); 17 agents total.
 agents:
-  - target: codex
-    agent_name: AUCEO
-    agent_id: c430529b-f064-4c5b-8b5b-302c594890b7
+  - agent_name: AUCEO
     role_source: paperclips/roles-codex/cx-cto.md
-    output_path: paperclips/dist/uaudit/codex/AUCEO.md
-    workspace_cwd: /Users/Shared/UnstoppableAudit/runs/AUCEO/workspace
+    profile: cto
+    target: codex
     platform: all
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
-  - target: codex
-    agent_name: UWICTO
-    agent_id: 9f0f6fc5-e9ef-4664-ac54-15ffc64069bc
+  - agent_name: UWICTO
     role_source: paperclips/roles-codex/cx-cto.md
-    output_path: paperclips/dist/uaudit/codex/UWICTO.md
-    workspace_cwd: /Users/Shared/UnstoppableAudit/runs/UWICTO/workspace
+    profile: cto
+    target: codex
+    reportsTo: AUCEO
     platform: ios
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
-  - target: codex
-    agent_name: UWACTO
-    agent_id: e63b7f27-cc4f-41f4-8883-b5b9677984d9
+  - agent_name: UWACTO
     role_source: paperclips/roles-codex/cx-cto.md
-    output_path: paperclips/dist/uaudit/codex/UWACTO.md
-    workspace_cwd: /Users/Shared/UnstoppableAudit/runs/UWACTO/workspace
+    profile: cto
+    target: codex
+    reportsTo: AUCEO
     platform: android
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
-  - target: codex
-    agent_name: UWISwiftAuditor
-    agent_id: a6e2aec6-08d9-43ab-8496-d24ce99ac0de
+  - agent_name: UWISwiftAuditor
     role_source: paperclips/roles-codex/cx-code-reviewer.md
-    output_path: paperclips/dist/uaudit/codex/UWISwiftAuditor.md
-    workspace_cwd: /Users/Shared/UnstoppableAudit/runs/UWISwiftAuditor/workspace
+    profile: reviewer
+    target: codex
+    reportsTo: UWICTO
     platform: ios
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
-  - target: codex
-    agent_name: UWAKotlinAuditor
-    agent_id: 18f0ee3e-0fd9-40e7-a3b4-99a4ad3ab400
+  - agent_name: UWAKotlinAuditor
     role_source: paperclips/roles-codex/cx-code-reviewer.md
-    output_path: paperclips/dist/uaudit/codex/UWAKotlinAuditor.md
-    workspace_cwd: /Users/Shared/UnstoppableAudit/runs/UWAKotlinAuditor/workspace
+    profile: reviewer
+    target: codex
+    reportsTo: UWACTO
     platform: android
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
-  - target: codex
-    agent_name: UWICryptoAuditor
-    agent_id: f9f115e8-2ffb-4efb-8fb1-d8b443a3b829
+  - agent_name: UWICryptoAuditor
     role_source: paperclips/roles-codex/cx-blockchain-engineer.md
-    output_path: paperclips/dist/uaudit/codex/UWICryptoAuditor.md
-    workspace_cwd: /Users/Shared/UnstoppableAudit/runs/UWICryptoAuditor/workspace
+    profile: implementer
+    target: codex
+    reportsTo: UWICTO
     platform: ios
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
-  - target: codex
-    agent_name: UWACryptoAuditor
-    agent_id: 83e44735-7f4f-4673-b5a7-c3667747d21b
+  - agent_name: UWACryptoAuditor
     role_source: paperclips/roles-codex/cx-blockchain-engineer.md
-    output_path: paperclips/dist/uaudit/codex/UWACryptoAuditor.md
-    workspace_cwd: /Users/Shared/UnstoppableAudit/runs/UWACryptoAuditor/workspace
+    profile: implementer
+    target: codex
+    reportsTo: UWACTO
     platform: android
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
-  - target: codex
-    agent_name: UWISecurityAuditor
-    agent_id: 5dd3e733-82c7-472c-8474-8605b916ead2
+  - agent_name: UWISecurityAuditor
     role_source: paperclips/roles-codex/cx-security-auditor.md
-    output_path: paperclips/dist/uaudit/codex/UWISecurityAuditor.md
-    workspace_cwd: /Users/Shared/UnstoppableAudit/runs/UWISecurityAuditor/workspace
+    profile: reviewer
+    target: codex
+    reportsTo: UWICTO
     platform: ios
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
-  - target: codex
-    agent_name: UWASecurityAuditor
-    agent_id: fc30ec70-13a4-440f-b13e-e03e17cb63f4
+  - agent_name: UWASecurityAuditor
     role_source: paperclips/roles-codex/cx-security-auditor.md
-    output_path: paperclips/dist/uaudit/codex/UWASecurityAuditor.md
-    workspace_cwd: /Users/Shared/UnstoppableAudit/runs/UWASecurityAuditor/workspace
+    profile: reviewer
+    target: codex
+    reportsTo: UWACTO
     platform: android
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
-  - target: codex
-    agent_name: UWIQAEngineer
-    agent_id: d928e408-ab63-4699-8ec2-c6ac7558c268
+  - agent_name: UWIQAEngineer
     role_source: paperclips/roles-codex/cx-qa-engineer.md
-    output_path: paperclips/dist/uaudit/codex/UWIQAEngineer.md
-    workspace_cwd: /Users/Shared/UnstoppableAudit/runs/UWIQAEngineer/workspace
+    profile: qa
+    target: codex
+    reportsTo: UWICTO
     platform: ios
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
-  - target: codex
-    agent_name: UWAQAEngineer
-    agent_id: 8089992b-8a51-4386-b180-9368b67bbc51
+  - agent_name: UWAQAEngineer
     role_source: paperclips/roles-codex/cx-qa-engineer.md
-    output_path: paperclips/dist/uaudit/codex/UWAQAEngineer.md
-    workspace_cwd: /Users/Shared/UnstoppableAudit/runs/UWAQAEngineer/workspace
+    profile: qa
+    target: codex
+    reportsTo: UWACTO
     platform: android
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
-  - target: codex
-    agent_name: UWIInfraEngineer
-    agent_id: 339e9d3f-48c0-4348-a8da-5337e6f29491
+  - agent_name: UWIInfraEngineer
     role_source: paperclips/roles-codex/cx-infra-engineer.md
-    output_path: paperclips/dist/uaudit/codex/UWIInfraEngineer.md
-    workspace_cwd: /Users/Shared/UnstoppableAudit/runs/UWIInfraEngineer/workspace
+    profile: implementer
+    target: codex
+    reportsTo: UWICTO
     platform: ios
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
-  - target: codex
-    agent_name: UWAInfraEngineer
-    agent_id: 5f0709f8-0b05-43e7-8711-6df618b95f69
+  - agent_name: UWAInfraEngineer
     role_source: paperclips/roles-codex/cx-infra-engineer.md
-    output_path: paperclips/dist/uaudit/codex/UWAInfraEngineer.md
-    workspace_cwd: /Users/Shared/UnstoppableAudit/runs/UWAInfraEngineer/workspace
+    profile: implementer
+    target: codex
+    reportsTo: UWACTO
     platform: android
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
-  - target: codex
-    agent_name: UWIResearchAgent
-    agent_id: 0be9b9c5-de38-45ce-8b33-25bb39434d50
+  - agent_name: UWIResearchAgent
     role_source: paperclips/roles-codex/cx-research-agent.md
-    output_path: paperclips/dist/uaudit/codex/UWIResearchAgent.md
-    workspace_cwd: /Users/Shared/UnstoppableAudit/runs/UWIResearchAgent/workspace
+    profile: research
+    target: codex
+    reportsTo: UWICTO
     platform: ios
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
-  - target: codex
-    agent_name: UWAResearchAgent
-    agent_id: 3891e41b-028e-4348-b4d0-10d57251f600
+  - agent_name: UWAResearchAgent
     role_source: paperclips/roles-codex/cx-research-agent.md
-    output_path: paperclips/dist/uaudit/codex/UWAResearchAgent.md
-    workspace_cwd: /Users/Shared/UnstoppableAudit/runs/UWAResearchAgent/workspace
+    profile: research
+    target: codex
+    reportsTo: UWACTO
     platform: android
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
-  - target: codex
-    agent_name: UWITechnicalWriter
-    agent_id: a881b5bd-f1ef-4023-bdd7-5d9b567642d0
+  - agent_name: UWITechnicalWriter
     role_source: paperclips/roles-codex/cx-technical-writer.md
-    output_path: paperclips/dist/uaudit/codex/UWITechnicalWriter.md
-    workspace_cwd: /Users/Shared/UnstoppableAudit/runs/UWITechnicalWriter/workspace
+    profile: writer
+    target: codex
+    reportsTo: UWICTO
     platform: ios
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
-  - target: codex
-    agent_name: UWATechnicalWriter
-    agent_id: ae159ee7-05e2-48af-abf9-5bbeef4017c4
+  - agent_name: UWATechnicalWriter
     role_source: paperclips/roles-codex/cx-technical-writer.md
-    output_path: paperclips/dist/uaudit/codex/UWATechnicalWriter.md
-    workspace_cwd: /Users/Shared/UnstoppableAudit/runs/UWATechnicalWriter/workspace
+    profile: writer
+    target: codex
+    reportsTo: UWACTO
     platform: android
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android

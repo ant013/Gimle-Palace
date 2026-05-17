@@ -12,6 +12,19 @@ from pathlib import Path
 
 import generate_assembly_inventory
 import validate_instructions
+from compose_agent_prompt import compose as _compose_agent_prompt
+from resolve_bindings import (
+    BindingsConflictWarning,
+    resolve_all as _resolve_bindings_all,
+)
+from resolve_template_sources import (
+    UnresolvedTemplateError,
+    resolve as _resolve_template,
+)
+from validate_manifest import (
+    ManifestValidationError,
+    validate_manifest as _validate_manifest,
+)
 
 
 SUPPORTED_TARGETS = ("claude", "codex")
@@ -189,14 +202,63 @@ def load_codex_agent_ids(env_file: Path) -> dict[str, str]:
     return ids
 
 
+def _merge_canonical_bindings_into_ids(
+    ids: dict[str, str],
+    repo_root: Path,
+    manifest_values: dict[str, str],
+) -> dict[str, str]:
+    """D-fix C-1 + E-fix C2: merge dual-read bindings.yaml canonical-name keys
+    into the legacy-style ids dict. Works for both claude and codex targets.
+    Caller's kebab-form entries from legacy file take precedence over bindings.
+    """
+    from os.path import expanduser
+
+    project_key = manifest_values.get("project.key", "")
+    if not project_key:
+        return ids
+    bindings_path = Path(expanduser(f"~/.paperclip/projects/{project_key}/bindings.yaml"))
+    legacy_path = (
+        repo_root / "paperclips" / "codex-agent-ids.env"
+        if project_key == "gimle"
+        else None
+    )
+    try:
+        merged = _resolve_bindings_all(
+            legacy_env_path=legacy_path,
+            bindings_yaml_path=bindings_path,
+        )
+    except FileNotFoundError:
+        return ids
+    for canonical_name, uuid in merged.get("agents", {}).items():
+        if uuid and canonical_name not in ids:
+            ids[canonical_name] = uuid
+    return ids
+
+
 def compatibility_agent_ids(repo_root: Path, manifest_values: dict[str, str], target: str) -> dict[str, str]:
+    """Return {agent_name_or_kebab: uuid} for downstream resolved-assembly entries.
+
+    Sources merged (later does NOT overwrite earlier):
+      1. Legacy file specified by compatibility.{claude_deploy_mapping|codex_agent_ids_env}
+         (kebab-form keys; pre-Phase-E vocab; opt-in via explicit manifest field).
+      2. Canonical-name keys from ~/.paperclip/projects/<key>/bindings.yaml via
+         dual-read resolver (Phase D+E vocab).
+
+    E-fix C2: legacy lookup is EXPLICIT-only — no cross-project default. A v2
+    manifest with empty compatibility.X gets only source #2.
+    """
+    ids: dict[str, str] = {}
     if target == "claude":
-        mapping = manifest_values.get("compatibility.claude_deploy_mapping", "paperclips/deploy-agents.sh")
-        return load_claude_agent_ids(repo_root / mapping)
-    if target == "codex":
-        env_file = manifest_values.get("compatibility.codex_agent_ids_env", "paperclips/codex-agent-ids.env")
-        return load_codex_agent_ids(repo_root / env_file)
-    return {}
+        mapping = manifest_values.get("compatibility.claude_deploy_mapping", "")
+        if mapping:
+            ids = load_claude_agent_ids(repo_root / mapping)
+    elif target == "codex":
+        env_file = manifest_values.get("compatibility.codex_agent_ids_env", "")
+        if env_file:
+            ids = load_codex_agent_ids(repo_root / env_file)
+    else:
+        return {}
+    return _merge_canonical_bindings_into_ids(ids, repo_root, manifest_values)
 
 
 def manifest_entries(manifest_text: str) -> list[tuple[int, str, str, str]]:
@@ -402,6 +464,117 @@ def apply_overlay(
     return text
 
 
+def _load_host_local_sources(project_key: str, repo_root: Path | None = None) -> dict:
+    """Load ~/.paperclip/projects/<key>/{bindings,paths,plugins}.yaml if present.
+
+    Returns nested dict for resolve_template_sources.resolve():
+      {"bindings": {...}, "paths": {...}, "plugins": {...}}
+
+    Returns empty dict if no host-local files exist (pre-migration state).
+
+    Phase D: bindings.yaml is resolved via resolve_bindings.resolve_all so
+    legacy paperclips/codex-agent-ids.env still contributes UUIDs alongside
+    the new bindings.yaml (with bindings winning on conflict, plus a
+    BindingsConflictWarning to surface drift).
+    """
+    import os
+    home = Path(os.path.expanduser("~/.paperclip/projects")) / project_key
+    sources: dict = {}
+
+    # --- bindings: dual-read via resolver + CI fallback ----------------------
+    # Operator's ~/.paperclip/projects/<key>/bindings.yaml takes precedence;
+    # paperclips/projects/<key>/bindings.local-example.yaml is a CI/dev fallback
+    # (committed, sanitized UUIDs). Lets CI builds resolve {{bindings.X}} +
+    # {{project.company_id}} for v2 projects without operator-only host-local.
+    bindings_yaml = home / "bindings.yaml"
+    if not bindings_yaml.is_file() and repo_root is not None:
+        fallback_bindings = repo_root / "paperclips" / "projects" / project_key / "bindings.local-example.yaml"
+        if fallback_bindings.is_file():
+            bindings_yaml = fallback_bindings
+    legacy_env = (
+        repo_root / "paperclips" / "codex-agent-ids.env"
+        if (repo_root is not None and project_key == "gimle")
+        else None
+    )
+    try:
+        merged = _resolve_bindings_all(
+            legacy_env_path=legacy_env,
+            bindings_yaml_path=bindings_yaml,
+        )
+        sources["bindings"] = {
+            "company_id": merged.get("company_id"),
+            "agents": merged.get("agents", {}),
+        }
+    except FileNotFoundError:
+        pass  # pre-migration: no host-local + no legacy → silently skip
+
+    # --- paths/plugins: direct read (no legacy equivalent) -------------------
+    # Phase E: operator's ~/.paperclip/projects/<key>/<file>.yaml takes precedence;
+    # paperclips/projects/<key>/<file>.local-example.yaml is a CI/dev fallback
+    # (committed, sanitized values; lets CI builds resolve {{paths.X}} templates
+    # without operator-only host-local files).
+    try:
+        import yaml
+    except ImportError:
+        return sources  # pyyaml missing — silently skip remaining host-local
+    fallback_dir = (
+        repo_root / "paperclips" / "projects" / project_key
+        if repo_root is not None else None
+    )
+    for fname in ("paths.yaml", "plugins.yaml"):
+        chosen: Path | None = None
+        if home.is_dir() and (home / fname).is_file():
+            chosen = home / fname
+        elif fallback_dir is not None:
+            fallback = fallback_dir / fname.replace(".yaml", ".local-example.yaml")
+            if fallback.is_file():
+                chosen = fallback
+        if chosen is None:
+            continue
+        # E-fix C3: narrow except + log. Bare `except Exception` silently swallowed
+        # YAML parse errors on a COMMITTED file (paths.local-example.yaml), making
+        # corrupt-fallback regressions invisible. Now narrowed and logged.
+        try:
+            raw = yaml.safe_load(chosen.read_text()) or {}
+        except (yaml.YAMLError, OSError) as exc:
+            print(
+                f"warning: failed to load host-local file {chosen} ({exc}); "
+                f"continuing with empty {fname.replace('.yaml', '')} source",
+                file=sys.stderr,
+            )
+            continue
+        if isinstance(raw, dict):
+            key = fname.replace(".yaml", "")
+            sources[key] = raw
+    return sources
+
+
+def _collect_overlay_blocks(
+    repo_root: Path,
+    manifest_values: dict[str, str],
+    target: str,
+    role_name: str,
+    agent_name: str,
+) -> list[str]:
+    """Return overlay file contents per spec §6.7 (Phase B compose path).
+
+    Same lookup logic as apply_overlay, but returns blocks separately instead of
+    concatenating into role text — so compose() can place them last.
+    """
+    overlay_root = manifest_values.get("paths.overlay_root")
+    if not overlay_root:
+        return []
+    blocks: list[str] = []
+    overlay_names = ["_common.md", role_name]
+    if agent_name:
+        overlay_names.append(f"{agent_name}.md")
+    for overlay_name in overlay_names:
+        overlay_path = repo_root / overlay_root / target / overlay_name
+        if overlay_path.is_file():
+            blocks.append(overlay_path.read_text())
+    return blocks
+
+
 def render_role(
     repo_root: Path,
     target: str,
@@ -413,14 +586,109 @@ def render_role(
     if agent_values:
         values.update({f"agent.{key}": value for key, value in agent_values.items()})
     text = strip_front_matter(role_file.read_text())
-    text = expand_includes(repo_root, target, text, values)
-    text = apply_overlay(repo_root, values, target, role_file.name, text)
+
+    # UAA Phase B: detect slim crafts (no <!-- @include --> directives) and route
+    # to compose_agent_prompt() instead of legacy expand_includes.
+    if "<!-- @include fragments/" not in text:
+        # Compose path: profile-driven composition per spec §3, §5.2.1.
+        # Profile lookup order:
+        # 1. agent_values["profile"] (explicit per-agent manifest entry)
+        # 2. role file frontmatter profiles[0] (single-profile contract per Phase A)
+        # 3. fallback "minimal"
+        # rev4 fix B-2: agent_values is flat dict; key is 'profile', NOT 'agent.profile'.
+        profile_name = (agent_values or {}).get("profile")
+        if not profile_name:
+            # rev2 Architect C-2: narrow except — don't swallow KeyboardInterrupt,
+            # MemoryError, etc. Only legitimate "frontmatter unreadable" cases.
+            try:
+                meta = validate_instructions.load_role_front_matter(role_file)
+                if meta.profiles:
+                    profile_name = meta.profiles[0]
+            except (FileNotFoundError, ValueError, KeyError) as exc:
+                print(
+                    f"  WARN: frontmatter unreadable for {role_file.name} "
+                    f"({type(exc).__name__}: {exc}); falling back to profile lookup chain",
+                    file=sys.stderr,
+                )
+        if not profile_name:
+            profile_name = "minimal"
+        profiles_dir = repo_root / "paperclips" / "fragments" / "profiles"
+        fragments_dir = repo_root / "paperclips" / "fragments" / "shared" / "fragments"
+        custom_includes = (agent_values or {}).get("custom_includes", [])
+        if isinstance(custom_includes, str):
+            custom_includes = []  # back-compat / defensive
+        # rev2 Security C-3: validate custom_includes shape + reject traversal.
+        if not isinstance(custom_includes, list):
+            raise ValueError(
+                f"custom_includes must be list, got {type(custom_includes).__name__} "
+                f"for agent {(agent_values or {}).get('agent_name', '<unknown>')}",
+            )
+        for inc in custom_includes:
+            if not isinstance(inc, str):
+                raise ValueError(f"custom_includes entry must be string, got {type(inc).__name__}")
+            if inc.startswith("/") or any(p in ("..", "") for p in inc.split("/")):
+                raise ValueError(f"custom_includes entry contains traversal: {inc!r}")
+        # rev4 fix B-2: same key-naming fix — flat 'agent_name', not 'agent.agent_name'.
+        agent_name = (agent_values or {}).get("agent_name", "")
+        overlay_blocks = _collect_overlay_blocks(
+            repo_root, values, target, role_file.name, agent_name,
+        )
+        text = _compose_agent_prompt(
+            profile_name=profile_name,
+            profiles_dir=profiles_dir,
+            fragments_dir=fragments_dir,
+            role_source_text=text,
+            custom_includes=custom_includes,
+            overlay_blocks=overlay_blocks,
+        )
+    else:
+        # Legacy path: existing @include expansion + overlay merge (unchanged).
+        text = expand_includes(repo_root, target, text, values)
+        text = apply_overlay(repo_root, values, target, role_file.name, text)
+
     text = substitute_variables(text, values)
+
+    # UAA Phase B rev2: host-local resolver per spec §6.5. If
+    # ~/.paperclip/projects/<key>/{bindings,paths,plugins}.yaml exist,
+    # resolve any remaining {{bindings.X}}/{{paths.X}}/{{plugins.X}} refs.
+    # Phase D/E/F/G migrations populate these files; pre-migration they're
+    # absent and host_sources is {} — refs stay unresolved and the
+    # UNRESOLVED_VARIABLE_RE check below catches them as build error.
+    project_key = manifest_values.get("project.key", "")
+    if project_key:
+        host_sources = _load_host_local_sources(project_key, repo_root=repo_root)
+        if host_sources:
+            # Build nested sources dict expected by resolve():
+            #   {"manifest": {project: {...}, domain: {...}, mcp: {...}},
+            #    "bindings": {...}, "paths": {...}, "plugins": {...}, "agent": {...}}
+            manifest_nested: dict = {"project": {}, "domain": {}, "mcp": {}}
+            for k, v in manifest_values.items():
+                for top in ("project", "domain", "mcp"):
+                    if k.startswith(f"{top}."):
+                        manifest_nested[top][k[len(top) + 1:]] = v
+            # Phase F: v2 overlays use {{bindings.company_id}} directly
+            # (uaudit InfraEngineer overlays). No back-bridge needed — host-local
+            # bindings.yaml feeds host_sources["bindings"]["company_id"] which
+            # resolves the canonical {{bindings.X}} template. Removed the
+            # over-engineered {{project.company_id}} preservation bridge per
+            # architect's Phase F C2.
+            full_sources = {
+                "manifest": manifest_nested,
+                "agent": agent_values or {},
+                **host_sources,  # bindings / paths / plugins
+            }
+            try:
+                text = _resolve_template(text, full_sources)
+            except UnresolvedTemplateError as exc:
+                raise ValueError(
+                    f"unresolved host-local variable in {role_file.relative_to(repo_root)}: {exc}",
+                ) from exc
+
     unresolved = UNRESOLVED_VARIABLE_RE.search(text)
     if unresolved:
         raise ValueError(
             f"unresolved variable in {role_file.relative_to(repo_root)}: "
-            f"{unresolved.group(0)}"
+            f"{unresolved.group(0)}",
         )
     return text
 
@@ -436,8 +704,25 @@ def render_target(
         for agent in explicit_agents:
             role_source = agent.get("role_source", "")
             output_path = agent.get("output_path", "")
-            if not role_source or not output_path:
-                raise ValueError(f"manifest agent missing role_source/output_path for target {target}: {agent}")
+            agent_name = agent.get("agent_name", "")
+            if not role_source:
+                raise ValueError(
+                    f"manifest agent missing role_source for target {target}: {agent}",
+                )
+            # UAA Phase B (rev4 fix B-1): derive output_path from
+            # (project.key, target, agent_name) when manifest omits it.
+            # Post-migration manifests are path-free per spec §6.1.
+            if not output_path:
+                if not agent_name:
+                    raise ValueError(
+                        f"manifest agent missing agent_name AND output_path for target {target}: {agent}",
+                    )
+                project_key = manifest_values.get("project.key", "")
+                if not project_key:
+                    raise ValueError(
+                        f"manifest missing project.key; cannot derive output_path for {agent_name}",
+                    )
+                output_path = f"paperclips/dist/{project_key}/{target}/{agent_name}.md"
             role_file = repo_root / role_source
             if not role_file.is_file():
                 raise FileNotFoundError(f"agent role source missing: {role_source}")
@@ -490,11 +775,27 @@ def agent_output_entry(
     target: str,
     agent: dict[str, str],
     ids: dict[str, str],
+    manifest_values: dict[str, str] | None = None,
 ) -> dict[str, object]:
     role_source = agent.get("role_source", "")
     output = agent.get("output_path", "")
-    if not role_source or not output:
-        raise ValueError(f"manifest agent missing role_source/output_path for target {target}: {agent}")
+    agent_name = agent.get("agent_name", "")
+    if not role_source:
+        raise ValueError(
+            f"manifest agent missing role_source for target {target}: {agent}",
+        )
+    # UAA Phase B (rev4 fix B-1): same derivation as render_target.
+    if not output:
+        if not agent_name:
+            raise ValueError(
+                f"manifest agent missing agent_name AND output_path for target {target}: {agent}",
+            )
+        project_key = (manifest_values or {}).get("project.key", "")
+        if not project_key:
+            raise ValueError(
+                f"manifest missing project.key; cannot derive output_path for {agent_name}",
+            )
+        output = f"paperclips/dist/{project_key}/{target}/{agent_name}.md"
     role_file = repo_root / role_source
     out_file = repo_root / output
     meta = validate_instructions.load_role_front_matter(role_file)
@@ -528,7 +829,7 @@ def target_output_entry(
         return {
             **target_manifest_data(manifest_values, target),
             "roles": [
-                agent_output_entry(repo_root, target, agent, ids)
+                agent_output_entry(repo_root, target, agent, ids, manifest_values)
                 for agent in explicit_agents
             ],
         }
@@ -550,6 +851,39 @@ def compatibility_input_entry(repo_root: Path, relative_path: str) -> dict[str, 
     }
 
 
+def _build_compatibility_block(
+    repo_root: Path, manifest_values: dict[str, str]
+) -> dict[str, object]:
+    """Build the resolved-assembly compatibility block.
+
+    Phase E E-fix C1: omit the legacy inputs entries when the underlying
+    compatibility.X paths are empty (v2 manifests have moved those into
+    host-local files). The pre-Phase-E code emitted entries with
+    path="" + sha256="" which is garbage downstream.
+    """
+    legacy_output_paths = manifest_values.get("compatibility.legacy_output_paths", "")
+    claude_deploy = manifest_values.get("compatibility.claude_deploy_mapping", "")
+    codex_env = manifest_values.get("compatibility.codex_agent_ids_env", "")
+    workspace = manifest_values.get("compatibility.workspace_update_script", "")
+
+    block: dict[str, object] = {
+        "legacyOutputPaths": legacy_output_paths,
+        "claudeDeployMapping": claude_deploy,
+        "codexAgentIdsEnv": codex_env,
+        "workspaceUpdateScript": workspace,
+    }
+    inputs: dict[str, dict[str, str]] = {}
+    if claude_deploy:
+        inputs["claudeDeployMapping"] = compatibility_input_entry(repo_root, claude_deploy)
+    if codex_env:
+        inputs["codexAgentIdsEnv"] = compatibility_input_entry(repo_root, codex_env)
+    if workspace:
+        inputs["workspaceUpdateScript"] = compatibility_input_entry(repo_root, workspace)
+    if inputs:
+        block["inputs"] = inputs
+    return block
+
+
 def resolved_assembly(
     repo_root: Path,
     project: str,
@@ -558,6 +892,23 @@ def resolved_assembly(
     manifest_values: dict[str, str],
     targets: list[str],
 ) -> dict[str, object]:
+    # F-fix C1: v2 manifests strip company_id + paths.* (moved to host-local).
+    # Bridge values from host-local so the resolved-assembly.json doesn't ship
+    # empty strings that downstream consumers (bootstrap-project, audit, smoke
+    # tests) would mistrust or post into paperclip API. Same fix class as
+    # Phase E CRIT-1 (compatibility.inputs), generalized to parameters block.
+    project_key = manifest_values.get("project.key", "")
+    host_sources = _load_host_local_sources(project_key, repo_root=repo_root) if project_key else {}
+    host_bindings = host_sources.get("bindings") or {}
+    host_paths = host_sources.get("paths") or {}
+
+    def _hl(values_key: str, host_dict: dict, host_key: str) -> str:
+        v = manifest_values.get(values_key, "")
+        if v:
+            return v
+        hv = host_dict.get(host_key) if isinstance(host_dict, dict) else None
+        return hv if isinstance(hv, str) and hv else ""
+
     return {
         "schemaVersion": 1,
         "project": project,
@@ -569,16 +920,16 @@ def resolved_assembly(
                 "displayName": manifest_values.get("project.display_name", ""),
                 "systemName": manifest_values.get("project.system_name", ""),
                 "issuePrefix": manifest_values.get("project.issue_prefix", ""),
-                "companyId": manifest_values.get("project.company_id", ""),
+                "companyId": _hl("project.company_id", host_bindings, "company_id"),
                 "integrationBranch": manifest_values.get("project.integration_branch", ""),
             },
             "paths": {
-                "projectRoot": manifest_values.get("paths.project_root", ""),
-                "primaryRepoRoot": manifest_values.get("paths.primary_repo_root", ""),
-                "primaryMcpServiceDir": manifest_values.get("paths.primary_mcp_service_dir", ""),
-                "productionCheckout": manifest_values.get("paths.production_checkout", ""),
-                "codexTeamRoot": manifest_values.get("paths.codex_team_root", ""),
-                "operatorMemoryDir": manifest_values.get("paths.operator_memory_dir", ""),
+                "projectRoot": _hl("paths.project_root", host_paths, "project_root"),
+                "primaryRepoRoot": _hl("paths.primary_repo_root", host_paths, "primary_repo_root"),
+                "primaryMcpServiceDir": _hl("paths.primary_mcp_service_dir", host_paths, "primary_mcp_service_dir"),
+                "productionCheckout": _hl("paths.production_checkout", host_paths, "production_checkout"),
+                "codexTeamRoot": _hl("paths.codex_team_root", host_paths, "team_workspace_root"),
+                "operatorMemoryDir": _hl("paths.operator_memory_dir", host_paths, "operator_memory_dir"),
                 "overlayRoot": manifest_values.get("paths.overlay_root", ""),
                 "projectRulesFile": manifest_values.get("paths.project_rules_file", ""),
             },
@@ -610,26 +961,7 @@ def resolved_assembly(
                 },
             },
         },
-        "compatibility": {
-            "legacyOutputPaths": manifest_values.get("compatibility.legacy_output_paths", ""),
-            "claudeDeployMapping": manifest_values.get("compatibility.claude_deploy_mapping", ""),
-            "codexAgentIdsEnv": manifest_values.get("compatibility.codex_agent_ids_env", ""),
-            "workspaceUpdateScript": manifest_values.get("compatibility.workspace_update_script", ""),
-            "inputs": {
-                "claudeDeployMapping": compatibility_input_entry(
-                    repo_root,
-                    manifest_values.get("compatibility.claude_deploy_mapping", ""),
-                ),
-                "codexAgentIdsEnv": compatibility_input_entry(
-                    repo_root,
-                    manifest_values.get("compatibility.codex_agent_ids_env", ""),
-                ),
-                "workspaceUpdateScript": compatibility_input_entry(
-                    repo_root,
-                    manifest_values.get("compatibility.workspace_update_script", ""),
-                ),
-            },
-        },
+        "compatibility": _build_compatibility_block(repo_root, manifest_values),
         "targets": {
             target: target_output_entry(repo_root, target, manifest_values, manifest_text)
             for target in targets
@@ -686,11 +1018,25 @@ def main() -> int:
     parser.add_argument("--project", default="gimle")
     parser.add_argument("--target", choices=[*SUPPORTED_TARGETS, "all"], default="all")
     parser.add_argument("--inventory", choices=["check", "update", "skip"], default="check")
+    parser.add_argument(
+        "--validate-strict",
+        action="store_true",
+        help="reject manifest with literal UUIDs / abs paths / forbidden host-local keys (UAA §6.2)",
+    )
     args = parser.parse_args()
 
     repo_root = args.repo_root.resolve()
     try:
         manifest = check_project_manifest(repo_root, args.project)
+        # UAA Phase B rev2: --validate-strict enforces spec §6.2 (path-free + UUID-free
+        # committed manifests). Trading/uaudit/gimle pre-Phase-D/E/F/G still have UUIDs +
+        # abs paths inline; --validate-strict is opt-in until those migrations land.
+        if args.validate_strict:
+            try:
+                _validate_manifest(manifest)
+            except ManifestValidationError as exc:
+                print(f"ERROR: manifest validation (strict) failed: {exc}", file=sys.stderr)
+                return 1
         manifest_text = manifest.read_text()
         manifest_values = flatten_manifest_scalars(manifest_text)
         targets = declared_targets(manifest_text)
@@ -704,6 +1050,11 @@ def main() -> int:
         run_inventory(repo_root, args.inventory)
     except (FileNotFoundError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    except Exception as exc:
+        # rev2 DevOps #9: catch yaml.YAMLError + any other unanticipated parse error
+        # with clean diagnostic instead of raw Python traceback.
+        print(f"ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 1
 
     print(f"Paperclip project build OK: {args.project} ({', '.join(targets)})")
