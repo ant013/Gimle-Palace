@@ -82,7 +82,7 @@
         {
           "agentId": "",
           "agentName": "AUCEO",
-          "bytes": 18803,
+          "bytes": 18816,
           "family": "cto",
           "lines": 445,
           "output": "paperclips/dist/uaudit/codex/AUCEO.md",
@@ -91,14 +91,14 @@
             "cto"
           ],
           "roleId": "codex:cx-cto",
-          "sha256": "17e207b33d24439cbc938ebf73e8280558a5433021c40accce33822b72cf0b2e",
+          "sha256": "6856d8a52ed0aff11928382ba240ee80438b50089f85bf6b069bca374c79d1df",
           "source": "paperclips/roles-codex/cx-cto.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "UWICTO",
-          "bytes": 19486,
+          "bytes": 19499,
           "family": "cto",
           "lines": 470,
           "output": "paperclips/dist/uaudit/codex/UWICTO.md",
@@ -107,14 +107,14 @@
             "cto"
           ],
           "roleId": "codex:cx-cto",
-          "sha256": "d259d7fc2382df365981e12f04abb7babcb95a1453a3c373a59d76e6bbe2a0d3",
+          "sha256": "f0be05fd73164f414ee7deed269b80d814f0a57e66983fe3c85abb58dd3aaaca",
           "source": "paperclips/roles-codex/cx-cto.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "UWACTO",
-          "bytes": 19516,
+          "bytes": 19529,
           "family": "cto",
           "lines": 470,
           "output": "paperclips/dist/uaudit/codex/UWACTO.md",
@@ -123,14 +123,14 @@
             "cto"
           ],
           "roleId": "codex:cx-cto",
-          "sha256": "307ef6abef03a6f5de95155999991f73f62082c6c34d50c66e26832e81c4bee3",
+          "sha256": "0d944d477dd50f7662a87815cbabcd1b8404c0e2609b030e1deb9dbe7078095d",
           "source": "paperclips/roles-codex/cx-cto.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "UWISwiftAuditor",
-          "bytes": 21705,
+          "bytes": 21718,
           "family": "reviewer",
           "lines": 565,
           "output": "paperclips/dist/uaudit/codex/UWISwiftAuditor.md",
@@ -139,14 +139,14 @@
             "reviewer"
           ],
           "roleId": "codex:cx-code-reviewer",
-          "sha256": "db450811376f04487b5fa7e8ca3c84b2109b35683491ca87e10c1377acad0538",
+          "sha256": "71c74ebf555ee095ee81d100a03d92b1f890822a7157dd0317bbff81c8f4bc90",
           "source": "paperclips/roles-codex/cx-code-reviewer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "UWAKotlinAuditor",
-          "bytes": 21835,
+          "bytes": 21848,
           "family": "reviewer",
           "lines": 567,
           "output": "paperclips/dist/uaudit/codex/UWAKotlinAuditor.md",
@@ -155,14 +155,14 @@
             "reviewer"
           ],
           "roleId": "codex:cx-code-reviewer",
-          "sha256": "783a3b89a56bd072f478425873b52651a8492ab778aa349ec153b6ce964e3b86",
+          "sha256": "073fe8778ce34337687b1f7fb1d5b49edc1e172b47c0d1913dbc2b452b0c4dc2",
           "source": "paperclips/roles-codex/cx-code-reviewer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "UWICryptoAuditor",
-          "bytes": 14383,
+          "bytes": 14396,
           "family": "implementer",
           "lines": 349,
           "output": "paperclips/dist/uaudit/codex/UWICryptoAuditor.md",
@@ -171,14 +171,14 @@
             "implementer"
           ],
           "roleId": "codex:cx-blockchain-engineer",
-          "sha256": "5ee493200475d2d65aafeaefbe0d74e6bcbeaf711ff8600dfd58e60f5e83f969",
+          "sha256": "e94eb546dfe1ce6c27930f3336e4879f573d41e482445ae164b5d31e5f2a3b9f",
           "source": "paperclips/roles-codex/cx-blockchain-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "UWACryptoAuditor",
-          "bytes": 14395,
+          "bytes": 14408,
           "family": "implementer",
           "lines": 349,
           "output": "paperclips/dist/uaudit/codex/UWACryptoAuditor.md",
@@ -187,14 +187,14 @@
             "implementer"
           ],
           "roleId": "codex:cx-blockchain-engineer",
-          "sha256": "5c171fb972bc2db074c2614d549e7565facaffe3c79cb339e84bbefbb82f68ef",
+          "sha256": "aefb85fd215e73ea185b595d18f9fd5cdc32ad5fd08e0ee68edc51cdc8bc8a78",
           "source": "paperclips/roles-codex/cx-blockchain-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "UWISecurityAuditor",
-          "bytes": 14504,
+          "bytes": 14517,
           "family": "reviewer",
           "lines": 349,
           "output": "paperclips/dist/uaudit/codex/UWISecurityAuditor.md",
@@ -203,14 +203,14 @@
             "reviewer"
           ],
           "roleId": "codex:cx-security-auditor",
-          "sha256": "cb056232afa5b16baf01ca05fb46ee08e62a5d1f6a02e61e868687cccf0abf7f",
+          "sha256": "e931f2928a1ac5a7ea79cef87c1773ae7dd769ad6650174206b488f8ff6d3be2",
           "source": "paperclips/roles-codex/cx-security-auditor.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "UWASecurityAuditor",
-          "bytes": 14516,
+          "bytes": 14529,
           "family": "reviewer",
           "lines": 349,
           "output": "paperclips/dist/uaudit/codex/UWASecurityAuditor.md",
@@ -219,14 +219,14 @@
             "reviewer"
           ],
           "roleId": "codex:cx-security-auditor",
-          "sha256": "4007b26881fc42019ce834d771b4501b2e6d181a68cb23b008f20db153258bd3",
+          "sha256": "85bc4e2bdc3ad901ab810fce50341908f50ec77f47b9b76ee684279f549a21a2",
           "source": "paperclips/roles-codex/cx-security-auditor.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "UWIQAEngineer",
-          "bytes": 16794,
+          "bytes": 16807,
           "family": "qa",
           "lines": 405,
           "output": "paperclips/dist/uaudit/codex/UWIQAEngineer.md",
@@ -235,14 +235,14 @@
             "qa"
           ],
           "roleId": "codex:cx-qa-engineer",
-          "sha256": "3f82551d3568694d007cc5f84aff0efb4af0eb7ac33915853c567f7fb428bf47",
+          "sha256": "e53f637b3ffefb078004439b30ec937325e3792cc22924488be132cad2d28aee",
           "source": "paperclips/roles-codex/cx-qa-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "UWAQAEngineer",
-          "bytes": 16806,
+          "bytes": 16819,
           "family": "qa",
           "lines": 405,
           "output": "paperclips/dist/uaudit/codex/UWAQAEngineer.md",
@@ -251,14 +251,14 @@
             "qa"
           ],
           "roleId": "codex:cx-qa-engineer",
-          "sha256": "f391b4f8999b8c34b98ef108d95097cff781a0fb9696b4712fa410f0d08fe163",
+          "sha256": "d3bc6e5b2b3582c14859100b1ed41174bc778e0d080909e2155b75b6ca9bae79",
           "source": "paperclips/roles-codex/cx-qa-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "UWIInfraEngineer",
-          "bytes": 22080,
+          "bytes": 22093,
           "family": "implementer",
           "lines": 576,
           "output": "paperclips/dist/uaudit/codex/UWIInfraEngineer.md",
@@ -267,14 +267,14 @@
             "implementer"
           ],
           "roleId": "codex:cx-infra-engineer",
-          "sha256": "54482843784c9e0a6ba1da889260348f1c8774e52cafe09959f8f898abddf174",
+          "sha256": "4fa487ad1d87ba894e16113941b58829e1399b9d6a3a4f1ab5a2075a7d8621c4",
           "source": "paperclips/roles-codex/cx-infra-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "UWAInfraEngineer",
-          "bytes": 22155,
+          "bytes": 22168,
           "family": "implementer",
           "lines": 576,
           "output": "paperclips/dist/uaudit/codex/UWAInfraEngineer.md",
@@ -283,14 +283,14 @@
             "implementer"
           ],
           "roleId": "codex:cx-infra-engineer",
-          "sha256": "a26d5a9283852dc426408ee0e7aca616f29303d289e6ee418330ed20b6ff40e6",
+          "sha256": "12165a747c7177b4db4b8bd0e6e07e055b5809a2fbc7ca273502312d30cccb15",
           "source": "paperclips/roles-codex/cx-infra-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "UWIResearchAgent",
-          "bytes": 10616,
+          "bytes": 10629,
           "family": "research",
           "lines": 264,
           "output": "paperclips/dist/uaudit/codex/UWIResearchAgent.md",
@@ -299,14 +299,14 @@
             "research"
           ],
           "roleId": "codex:cx-research-agent",
-          "sha256": "93578b37c4470f093956fa9ac3b235a74dadf4b9689b2bcb51bc09c19b79574d",
+          "sha256": "864ce3f8be13fed102ddea581c9714e729a2ddb6bfd529538b8f418774d96ae4",
           "source": "paperclips/roles-codex/cx-research-agent.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "UWAResearchAgent",
-          "bytes": 10628,
+          "bytes": 10641,
           "family": "research",
           "lines": 264,
           "output": "paperclips/dist/uaudit/codex/UWAResearchAgent.md",
@@ -315,14 +315,14 @@
             "research"
           ],
           "roleId": "codex:cx-research-agent",
-          "sha256": "13d327f6c1efdee44db5ffd04b6d5f33cbe2f18fdba9b0ab77e6d5aad14fe6cc",
+          "sha256": "353c3aa5238c52e6aaa1aa731399b032a9deb0e2f27bf65071d77ecf8989de26",
           "source": "paperclips/roles-codex/cx-research-agent.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "UWITechnicalWriter",
-          "bytes": 9955,
+          "bytes": 9968,
           "family": "writer",
           "lines": 250,
           "output": "paperclips/dist/uaudit/codex/UWITechnicalWriter.md",
@@ -331,14 +331,14 @@
             "writer"
           ],
           "roleId": "codex:cx-technical-writer",
-          "sha256": "14bf3f95736d8dd8058364ea4f0cdb690492bf94cf8a388e3cc37594b54bf0d2",
+          "sha256": "dc1f7a8a367c6e25c1b3f684be68e0ff2c32b137d8aadaf6676e0d1ecc1430de",
           "source": "paperclips/roles-codex/cx-technical-writer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "",
           "agentName": "UWATechnicalWriter",
-          "bytes": 9967,
+          "bytes": 9980,
           "family": "writer",
           "lines": 250,
           "output": "paperclips/dist/uaudit/codex/UWATechnicalWriter.md",
@@ -347,7 +347,7 @@
             "writer"
           ],
           "roleId": "codex:cx-technical-writer",
-          "sha256": "07a5c8d2b5e6b2105fbd57973e19f8d2e0fae0fe01a4f65bf2a4a0062f525fa1",
+          "sha256": "804bed13ee06852859ae50ceda39025963f595bdb31e78aa2d79291da571815b",
           "source": "paperclips/roles-codex/cx-technical-writer.md",
           "workspaceCwd": ""
         }

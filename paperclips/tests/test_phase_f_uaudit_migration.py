@@ -194,6 +194,13 @@ def test_phase_f_render_delta_expected_substitutions_only(agent_md):
         if "8f55e80b-0264-4ab6-9d56-8b2652f18005" in old and \
            "00000000-0000-0000-0000-000000000001" in new:
             continue
+        # Phase H1b: prose cross-refs in shared fragments updated to new layout.
+        if "heartbeat-discipline.md" in old and "wake-and-handoff-basics.md" in new:
+            continue
+        if "compliance-enforcement.md" in old and ("code-review/approve.md" in new or "code-review/adversarial.md" in new):
+            continue
+        if "worktree-discipline.md" in old and "worktree/active.md" in new:
+            continue
         pytest.fail(
             f"unexpected delta in {agent_md}:\n  baseline: {old!r}\n  current:  {new!r}"
         )

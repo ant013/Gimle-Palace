@@ -1032,7 +1032,7 @@ def test_runbook_profile_requires_inline_rule(tmp_path: Path) -> None:
         + "    fragments:\n"
         + "      - paperclips/fragments/shared/fragments/language.md\n"
         + "    runbooks:\n"
-        + "      - paperclips/fragments/shared/fragments/phase-handoff.md\n"
+        + "      - paperclips/fragments/shared/fragments/handoff/phase-orchestration.md\n"
     )
 
     errors = validate_instructions.validate(repo)

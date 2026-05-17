@@ -123,7 +123,7 @@ If you cannot progress on an issue, do not improvise, pivot, or create preparato
 - Dependency, tool, or access missing.
 - Required agent unavailable or unresponsive.
 - Obstacle outside your responsibility.
-- Execution lock conflict + lock-holder unresponsive (see §HTTP 409 in `heartbeat-discipline.md`).
+- Execution lock conflict + lock-holder unresponsive (see §HTTP 409 in `universal/wake-and-handoff-basics.md`).
 - Done/success criteria unclear.
 
 ### Escalation steps

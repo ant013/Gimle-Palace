@@ -252,6 +252,14 @@ def test_phase_e_render_delta_only_workspace_cwd_line(subpath):
         # back in; CI uses sanitized /opt/example/trading/... values.
         if "/Users/Shared/Trading" in old and "/opt/example/trading" in new:
             continue
+        # Expected delta 3 (Phase H1b): prose cross-refs in shared fragments
+        # were updated to point at the new Phase-A layout.
+        if "heartbeat-discipline.md" in old and "wake-and-handoff-basics.md" in new:
+            continue
+        if "compliance-enforcement.md" in old and ("code-review/approve.md" in new or "code-review/adversarial.md" in new):
+            continue
+        if "worktree-discipline.md" in old and "worktree/active.md" in new:
+            continue
         pytest.fail(
             f"unexpected post-Phase-E delta in {subpath}:\n"
             f"  baseline: {old!r}\n"
