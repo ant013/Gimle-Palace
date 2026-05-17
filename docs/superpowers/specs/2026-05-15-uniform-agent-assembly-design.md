@@ -38,6 +38,36 @@ Pinned grounding: this spec is grounded in the repo state at `main@568888a` (202
 - 1 architect false-positive parked: claim that `companyId=""` ships to paperclip API — actually downstream consumers (`bootstrap-project.sh`) re-read host-local separately; the bug was data-quality in JSON, not API-leak. Fix still applies.
 - Sweep: 348 paperclip tests, 12 skipped, 0 failed.
 
+**Phase H1c CLAUDE.md decompose (2026-05-17, PR #206 merged):**
+- Phase G Task 5 leftover — root `CLAUDE.md` was 719 lines mixing branch-flow rules + palace-mcp deploy + extractor catalog + paperclip team workflow. Decomposed into:
+  - `docs/contributing/branch-flow.md` (iron rules + release-cut)
+  - `docs/contributing/docs-layout.md` (specs/plans/postmortems/runbooks conventions + pinning)
+  - `docs/contributing/paperclip-team-workflow.md` (phase choreography 1.1 → 4.2 + operator auto-memory)
+  - `docs/palace-mcp/extractors.md` (extractor catalog + per-extractor workflows + ADR v2 + foundation + env vars + Bundles GIM-182)
+  - `services/palace-mcp/README.md` (appended: Production deploy on iMac, AGENTS.md deploy, Docker Compose, Environment, Mounting project repos)
+- Root `CLAUDE.md` now 29-line index pointing at the 5 destinations.
+- New `paperclips/tests/test_phase_h_claude_decompose.py` (5 tests): slim-pointer-cap (≤40 lines), all extracted destinations exist, palace-mcp README carries appended sections, root references all destinations, no surviving citations to H1-deleted fragments.
+- Mergeable with H1b/PR #204 via rebase: H1b's 3-line edits in original CLAUDE.md became moot when whole-file replaced; resolved by taking decompose's version.
+
+**Phase H2 deploy-wrapper rewrite (2026-05-17, PR #207 — after 4-voltAgent deep-review):**
+- Rewrote `paperclips/scripts/imac-agents-deploy.sh` from 280 lines → ~195 lines (thinner wrapper around `bootstrap-project.sh --reuse-bindings`, per spec §9.2 13-step lifecycle).
+- Preserved legacy safety envelope: PATH augmentation, worktree from `origin/main` (release-cut), `--target-sha` rollback flag, PHASE-A-ONLY sentinel guard, EXPECTED_CWD + EXPECTED_BRANCH preflight, cleanup trap on EXIT, deploy log append (GIM-244 watchdog dep).
+- New `--from-develop` flag for pre-release-cut smoke tests (explicit opt-in deviation from `origin/main`).
+- Security CRIT — `validate_project_key` invoked on PROJECT_KEY before any path interpolation; prevents traversal (`../etc`) + log-injection into DEPLOY_LOG.
+- New `paperclips/tests/test_phase_h2_active_scripts.py` (9 tests + 1 post-deploy skip): structural safety-marker test (regex-based, brittle-quoting-safe), behavioral tests for bindings-absent, wrong-cwd, PHASE-A-sentinel scan-before-bootstrap ordering, path-traversal rejection, uppercase rejection.
+- 4-voltAgent verdict: architect 3 CRITICAL → fixed via safety envelope restoration; code-rev 1 IMPORTANT → regex marker; security 1 CRITICAL → validate_project_key; qa 3 CRITICAL → 3 behavioral tests added.
+- 5 legacy script deletions + dual-read code path removal + manifest compat field flip explicitly DEFERRED to Phase H3 (have surviving consumers requiring coordinated cross-subsystem removal).
+- Operator runbook `docs/runbooks/uaa-live-deploy.md` documents the dependency: bootstrap-project.sh MUST be run once per project before `imac-agents-deploy.sh` (which now requires populated `~/.paperclip/projects/<key>/bindings.yaml`).
+
+**Phase H3 plan (deferred to operator post-live-deploys):**
+- Delete 5 legacy scripts: `paperclips/{codex-agent-ids.env,deploy-agents.sh,deploy-codex-agents.sh,update-agent-workspaces.sh,hire-codex-agents.sh}`.
+- Remove `legacy_env_path` parameter from `resolve_bindings.py::resolve_all()`.
+- Remove `_legacy_load_uuids()` fallback from `services/watchdog/src/gimle_watchdog/detection_semantic.py`.
+- Flip manifest compat fields for gimle: remove `compatibility.{legacy_output_paths,claude_deploy_mapping,codex_agent_ids_env,workspace_update_script}`. Same for `_template/`.
+- Rewrite `paperclips/scripts/bundle_breakdown.py` to use new `_compose_agent_prompt` path (legacy `expand_includes` fails on slim crafts).
+- Delete `paperclips/fragments/shared/templates/` (dead legacy expand_includes path).
+- Pre-requisites: (1) all 3 projects live-deployed via bootstrap-project.sh; (2) 7-day stability metric per spec §10.1; (3) `docs/uaa-cleanup-gate-evidence.md` operator signoff committed.
+
 **Phase H1b followup (2026-05-17, in-PR — 8 verified CRITICAL from 4-voltAgent deep-review):**
 - Architect verified CRIT-1: per-target codex vendored copies still present at `paperclips/fragments/targets/codex/shared/fragments/{git-workflow,heartbeat-discipline,phase-handoff,plan-first-producer}.md`. The architect's audit-method-scope-flaw critique was correct: my initial `git grep -l <pattern> | grep -v docs/` checked only the upstream submodule, missing 3 distinct vendored override paths the builder layers on top.
 - Architect+code-rev verified CRIT-2: per-project trading vendored copies at `paperclips/projects/trading/fragments/shared/fragments/{compliance-enforcement,phase-handoff,worktree-discipline}.md`.
