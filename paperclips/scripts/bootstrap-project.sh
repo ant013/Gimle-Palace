@@ -102,7 +102,11 @@ fi
 # Step 5: company create-or-reuse
 log info "[5/13] company create-or-reuse"
 if [ -n "$REUSE_BINDINGS" ]; then
-  cp "$REUSE_BINDINGS" "$bindings"
+  if [ "$REUSE_BINDINGS" != "$bindings" ]; then
+    cp "$REUSE_BINDINGS" "$bindings"
+  else
+    log info "bindings already at canonical location, skip cp"
+  fi
   log info "imported bindings from $REUSE_BINDINGS"
 fi
 

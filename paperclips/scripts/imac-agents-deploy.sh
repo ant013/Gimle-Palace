@@ -171,9 +171,18 @@ log ok "No PHASE-A-ONLY sentinels in dist"
 
 # ---- Hand off to bootstrap-project.sh ----
 log info "--- bootstrap-project.sh ${PROJECT_KEY} --reuse-bindings ${bindings} ---"
-bash "$WORKTREE_PATH/paperclips/scripts/bootstrap-project.sh" \
-  "$PROJECT_KEY" --reuse-bindings "$bindings" \
-  || die "bootstrap-project.sh failed"
+# Phase H2-followup-3: skip --reuse-bindings when bindings already at
+# canonical location (avoids "cp: source and dest identical" error on
+# idempotent re-deploy).
+canonical="${HOME}/.paperclip/projects/${PROJECT_KEY}/bindings.yaml"
+if [ "$bindings" = "$canonical" ]; then
+  bash "$WORKTREE_PATH/paperclips/scripts/bootstrap-project.sh" "$PROJECT_KEY" \
+    || die "bootstrap-project.sh failed"
+else
+  bash "$WORKTREE_PATH/paperclips/scripts/bootstrap-project.sh" \
+    "$PROJECT_KEY" --reuse-bindings "$bindings" \
+    || die "bootstrap-project.sh failed"
+fi
 
 # ---- Append deploy log (GIM-244 watchdog reads this) ----
 echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] deploy=${PROJECT_KEY} sha=${SHA} ok run_log=${RUN_LOG}" >> "$DEPLOY_LOG"

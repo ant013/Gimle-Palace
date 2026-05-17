@@ -31,7 +31,7 @@ DEPRECATED_NAMES = [
 ]
 
 # Lower-bound submodule pointer: bump this when Phase H2/H3 land further submodule changes.
-POST_H1_SUBMODULE_SHA = "2c9b515"
+POST_H1_SUBMODULE_SHA = "8df0471"
 
 
 def test_legacy_role_dirs_removed():
