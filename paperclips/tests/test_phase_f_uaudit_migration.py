@@ -228,3 +228,142 @@ def test_uaudit_plugins_yaml_exists_post_live_migration():
     data = yaml.safe_load(p.read_text())
     assert "telegram" in data
     assert UUID_RE.match(data["telegram"]["plugin_id"])
+
+
+# ---------------------------------------------------------------------------
+# F-fix IMP batch — tests for findings from 4-voltAgent deep-review.
+# ---------------------------------------------------------------------------
+
+
+def test_bindings_local_example_matches_manifest_agent_set():
+    """F-fix code-rev I4: bindings.local-example.yaml agents{} must mirror
+    manifest's agents[] keys, otherwise CI builds fail confusingly when
+    operator adds an agent without updating the fallback.
+    """
+    fb = yaml.safe_load(
+        (REPO / "paperclips" / "projects" / "uaudit" / "bindings.local-example.yaml").read_text()
+    )
+    mf = yaml.safe_load(UAUDIT_MANIFEST.read_text())
+    fb_names = set(fb["agents"].keys())
+    mf_names = {a["agent_name"] for a in mf["agents"]}
+    missing_in_fallback = mf_names - fb_names
+    extra_in_fallback = fb_names - mf_names
+    assert not missing_in_fallback, (
+        f"bindings.local-example.yaml missing agents from manifest: {missing_in_fallback}"
+    )
+    assert not extra_in_fallback, (
+        f"bindings.local-example.yaml has agents not in manifest: {extra_in_fallback}"
+    )
+
+
+def test_uaudit_overlay_has_no_hardcoded_abs_paths():
+    """F-fix security I-1 + architect I-3: overlays must use {{paths.X}}
+    templates, not hardcoded /Users/Shared/UnstoppableAudit/... shell snippets.
+    """
+    overlays = REPO / "paperclips" / "projects" / "uaudit" / "overlays"
+    bad = []
+    for md in overlays.rglob("*.md"):
+        text = md.read_text()
+        if re.search(r"/Users/Shared/UnstoppableAudit", text):
+            bad.append(str(md.relative_to(REPO)))
+    assert not bad, f"uaudit overlays have hardcoded abs paths: {bad}"
+
+
+# Expected profile per agent — snapshot of Phase F design decisions.
+_EXPECTED_PROFILES = {
+    "AUCEO": "cto",
+    "UWICTO": "cto",
+    "UWACTO": "cto",
+    "UWISwiftAuditor": "reviewer",
+    "UWAKotlinAuditor": "reviewer",
+    "UWICryptoAuditor": "implementer",  # preserved from v1 (cx-blockchain-engineer default)
+    "UWACryptoAuditor": "implementer",  # preserved from v1
+    "UWISecurityAuditor": "reviewer",
+    "UWASecurityAuditor": "reviewer",
+    "UWIQAEngineer": "qa",
+    "UWAQAEngineer": "qa",
+    "UWIInfraEngineer": "implementer",
+    "UWAInfraEngineer": "implementer",
+    "UWIResearchAgent": "research",
+    "UWAResearchAgent": "research",
+    "UWITechnicalWriter": "writer",
+    "UWATechnicalWriter": "writer",
+}
+
+
+def test_uaudit_per_agent_profile_snapshot():
+    """F-fix QA gap 4 + code-rev W2: enforce per-agent profile mapping (was
+    only checked at "is one of 8 valid strings" level — wouldn't catch drift)."""
+    data = yaml.safe_load(UAUDIT_MANIFEST.read_text())
+    actual = {a["agent_name"]: a["profile"] for a in data["agents"]}
+    assert actual == _EXPECTED_PROFILES, (
+        f"profile mapping drift:\n"
+        f"  unexpected: {set(actual.items()) - set(_EXPECTED_PROFILES.items())}\n"
+        f"  missing:    {set(_EXPECTED_PROFILES.items()) - set(actual.items())}"
+    )
+
+
+def test_company_id_bridge_via_bindings_local_example():
+    """F-fix QA C2: company_id from bindings.local-example.yaml must surface
+    into resolved-assembly.json parameters.project.companyId for v2 manifests
+    (was empty string pre-F-fix-C1). Isolates the bridge code path."""
+    import json
+    resolved = json.loads(
+        (REPO / "paperclips" / "dist" / "uaudit.resolved-assembly.json").read_text()
+    )
+    expected = "00000000-0000-0000-0000-000000000001"  # from bindings.local-example.yaml
+    actual = resolved["parameters"]["project"]["companyId"]
+    assert actual == expected, (
+        f"companyId bridge regression: expected {expected!r}, got {actual!r}. "
+        f"Phase F resolved_assembly must read from host-local bindings when "
+        f"manifest has stripped project.company_id."
+    )
+
+
+def test_baseline_dist_dir_present():
+    """F-fix QA C3: render-delta test parametrize silently skips if baseline
+    dir absent (test gets [__skip__] case → green CI). Explicit guard fails
+    test collection loud if baseline gets accidentally deleted."""
+    assert BASELINE_DIST.is_dir(), (
+        f"Phase F baseline dir missing at {BASELINE_DIST.relative_to(REPO)}. "
+        f"render-delta parametrize would silently skip → green CI without "
+        f"actually testing render-delta. Restore from git or re-run Task 1."
+    )
+    files = list((BASELINE_DIST / "codex").glob("*.md"))
+    assert len(files) == 17, f"baseline dist should have 17 agent files, got {len(files)}"
+
+
+def test_host_local_bindings_takes_precedence_over_ci_fallback(tmp_path, monkeypatch):
+    """F-fix QA C1: when operator's ~/.paperclip/projects/uaudit/bindings.yaml
+    exists, it must override paperclips/projects/uaudit/bindings.local-example.yaml.
+    Without this test, an inverted precedence would still pass CI (no host-local
+    in CI → always fallback path used)."""
+    import sys
+    sys.path.insert(0, str(REPO / "paperclips" / "scripts"))
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    # Plant operator host-local with DISTINCT UUIDs (not in CI fallback).
+    operator_company = "deadbeef-cafe-babe-feed-0123456789ab"
+    operator_uuid = "11111111-2222-3333-4444-555555555555"
+    proj = tmp_path / ".paperclip" / "projects" / "uaudit"
+    proj.mkdir(parents=True)
+    (proj / "bindings.yaml").write_text(
+        f"schemaVersion: 2\n"
+        f'company_id: "{operator_company}"\n'
+        f"agents:\n"
+        f'  AUCEO: "{operator_uuid}"\n'
+    )
+
+    # Force module reimport so resolve_bindings picks up monkeypatched HOME.
+    for mod in ("build_project_compat", "resolve_bindings"):
+        sys.modules.pop(mod, None)
+    import importlib
+    bpc = importlib.import_module("build_project_compat")
+    sources = bpc._load_host_local_sources("uaudit", repo_root=REPO)
+
+    assert sources.get("bindings", {}).get("company_id") == operator_company, (
+        f"host-local bindings.yaml didn't override CI fallback: "
+        f"got {sources.get('bindings', {}).get('company_id')!r}, "
+        f"expected {operator_company!r}"
+    )
+    assert sources["bindings"]["agents"].get("AUCEO") == operator_uuid

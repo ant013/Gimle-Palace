@@ -369,10 +369,10 @@ Do not hand off to `UWISwiftAuditor`.
 
 ```bash
 N=<issueNumber of this Paperclip issue>
-RUN=/Users/Shared/UnstoppableAudit/runs/UNS-$N-audit
-REPO=/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios
+RUN=/opt/uaa-example/uaudit/runs/UNS-$N-audit
+REPO=/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios
 BRANCH=version/0.49
-CURSOR=/Users/Shared/UnstoppableAudit/state/ios-version-audit.json
+CURSOR=/opt/uaa-example/uaudit/state/ios-version-audit.json
 CODEBASE_MEMORY_PROJECT=Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
 ```
 
@@ -544,7 +544,7 @@ mark the issue `done`.
 
 When UWICTO or another UAudit role PATCHes assignee onto you for a UNS-N
 PR-audit issue without the daily-delta marker, a prepared `audit.md` may be
-waiting at `/Users/Shared/UnstoppableAudit/runs/UNS-<N>-audit/audit.md`. You do
+waiting at `/opt/uaa-example/uaudit/runs/UNS-<N>-audit/audit.md`. You do
 not modify it. Compute its SHA-256, send it through the Telegram plugin using
 `issueIdentifier="UNS-$N"`, comment filename + `messageId` + SHA-256 digest,
 then mark the issue `done`.
@@ -556,7 +556,7 @@ daily delta audit. Read:
 
 ```bash
 N=<issueNumber of this Paperclip issue>
-RUN=/Users/Shared/UnstoppableAudit/runs/UNS-$N-audit
+RUN=/opt/uaa-example/uaudit/runs/UNS-$N-audit
 SUMMARY=$RUN/smoke/summary.json
 ```
 

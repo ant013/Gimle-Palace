@@ -411,8 +411,8 @@ Bind state on every wake:
 
 ```bash
 N=<issueNumber of this Paperclip issue>
-RUN=/Users/Shared/UnstoppableAudit/runs/UNS-$N-audit
-REPO=/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android
+RUN=/opt/uaa-example/uaudit/runs/UNS-$N-audit
+REPO=/opt/uaa-example/uaudit/repos/android/unstoppable-wallet-android
 ```
 
 Use this layout:

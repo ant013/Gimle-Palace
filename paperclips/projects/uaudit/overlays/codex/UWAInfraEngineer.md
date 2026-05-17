@@ -1,7 +1,7 @@
 ## Telegram Report Delivery (UAudit)
 
 Send Markdown reports with `POST /api/plugins/{{plugins.telegram.plugin_id}}/actions/send_to_telegram`
-and body `{"params":{"companyId":"{{project.company_id}}","agentId":"$PAPERCLIP_AGENT_ID","issueIdentifier","markdownFileName","markdownContent"}}`.
+and body `{"params":{"companyId":"{{bindings.company_id}}","agentId":"$PAPERCLIP_AGENT_ID","issueIdentifier","markdownFileName","markdownContent"}}`.
 Use `PAPERCLIP_API_KEY` and `PAPERCLIP_API_URL` from your runtime environment
 for this delivery call; do not read `.env` files.
 `issueIdentifier` MUST be the current `{{report_delivery.issue_prefix}}-*`;
@@ -20,10 +20,10 @@ issue. Do not hand off to `UWAKotlinAuditor`.
 
 ```bash
 N=<issueNumber of this Paperclip issue>
-RUN=/Users/Shared/UnstoppableAudit/runs/UNS-$N-audit
-REPO=/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android
+RUN={{paths.team_workspace_root}}/UNS-$N-audit
+REPO={{paths.project_root}}/repos/android/unstoppable-wallet-android
 BRANCH=version/0.49
-CURSOR=/Users/Shared/UnstoppableAudit/state/android-version-audit.json
+CURSOR={{paths.project_root}}/state/android-version-audit.json
 CODEBASE_MEMORY_PROJECT=Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
 ```
 
@@ -195,7 +195,7 @@ mark the issue `done`.
 
 When UWACTO or another UAudit role PATCHes assignee onto you for a UNS-N
 PR-audit issue without the daily-delta marker, a prepared `audit.md` may be
-waiting at `/Users/Shared/UnstoppableAudit/runs/UNS-<N>-audit/audit.md`. You do
+waiting at `{{paths.team_workspace_root}}/UNS-<N>-audit/audit.md`. You do
 not modify it. Compute its SHA-256, send it through the Telegram plugin using
 `issueIdentifier="UNS-$N"`, comment filename + `messageId` + SHA-256 digest,
 then mark the issue `done`.
@@ -207,7 +207,7 @@ daily delta audit. Read:
 
 ```bash
 N=<issueNumber of this Paperclip issue>
-RUN=/Users/Shared/UnstoppableAudit/runs/UNS-$N-audit
+RUN={{paths.team_workspace_root}}/UNS-$N-audit
 SUMMARY=$RUN/smoke/summary.json
 ```
 

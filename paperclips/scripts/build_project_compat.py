@@ -666,15 +666,12 @@ def render_role(
                 for top in ("project", "domain", "mcp"):
                     if k.startswith(f"{top}."):
                         manifest_nested[top][k[len(top) + 1:]] = v
-            # Phase F bridge: when a v2 manifest has stripped project.company_id
-            # (moved to host-local bindings.yaml), surface bindings.company_id
-            # back into manifest_nested["project"]["company_id"] so role templates
-            # using the legacy `{{project.company_id}}` placeholder still resolve
-            # without modifying every shared role file.
-            bindings_block = host_sources.get("bindings") or {}
-            bindings_company_id = bindings_block.get("company_id") if isinstance(bindings_block, dict) else None
-            if bindings_company_id and not manifest_nested["project"].get("company_id"):
-                manifest_nested["project"]["company_id"] = bindings_company_id
+            # Phase F: v2 overlays use {{bindings.company_id}} directly
+            # (uaudit InfraEngineer overlays). No back-bridge needed — host-local
+            # bindings.yaml feeds host_sources["bindings"]["company_id"] which
+            # resolves the canonical {{bindings.X}} template. Removed the
+            # over-engineered {{project.company_id}} preservation bridge per
+            # architect's Phase F C2.
             full_sources = {
                 "manifest": manifest_nested,
                 "agent": agent_values or {},
@@ -895,6 +892,23 @@ def resolved_assembly(
     manifest_values: dict[str, str],
     targets: list[str],
 ) -> dict[str, object]:
+    # F-fix C1: v2 manifests strip company_id + paths.* (moved to host-local).
+    # Bridge values from host-local so the resolved-assembly.json doesn't ship
+    # empty strings that downstream consumers (bootstrap-project, audit, smoke
+    # tests) would mistrust or post into paperclip API. Same fix class as
+    # Phase E CRIT-1 (compatibility.inputs), generalized to parameters block.
+    project_key = manifest_values.get("project.key", "")
+    host_sources = _load_host_local_sources(project_key, repo_root=repo_root) if project_key else {}
+    host_bindings = host_sources.get("bindings") or {}
+    host_paths = host_sources.get("paths") or {}
+
+    def _hl(values_key: str, host_dict: dict, host_key: str) -> str:
+        v = manifest_values.get(values_key, "")
+        if v:
+            return v
+        hv = host_dict.get(host_key) if isinstance(host_dict, dict) else None
+        return hv if isinstance(hv, str) and hv else ""
+
     return {
         "schemaVersion": 1,
         "project": project,
@@ -906,16 +920,16 @@ def resolved_assembly(
                 "displayName": manifest_values.get("project.display_name", ""),
                 "systemName": manifest_values.get("project.system_name", ""),
                 "issuePrefix": manifest_values.get("project.issue_prefix", ""),
-                "companyId": manifest_values.get("project.company_id", ""),
+                "companyId": _hl("project.company_id", host_bindings, "company_id"),
                 "integrationBranch": manifest_values.get("project.integration_branch", ""),
             },
             "paths": {
-                "projectRoot": manifest_values.get("paths.project_root", ""),
-                "primaryRepoRoot": manifest_values.get("paths.primary_repo_root", ""),
-                "primaryMcpServiceDir": manifest_values.get("paths.primary_mcp_service_dir", ""),
-                "productionCheckout": manifest_values.get("paths.production_checkout", ""),
-                "codexTeamRoot": manifest_values.get("paths.codex_team_root", ""),
-                "operatorMemoryDir": manifest_values.get("paths.operator_memory_dir", ""),
+                "projectRoot": _hl("paths.project_root", host_paths, "project_root"),
+                "primaryRepoRoot": _hl("paths.primary_repo_root", host_paths, "primary_repo_root"),
+                "primaryMcpServiceDir": _hl("paths.primary_mcp_service_dir", host_paths, "primary_mcp_service_dir"),
+                "productionCheckout": _hl("paths.production_checkout", host_paths, "production_checkout"),
+                "codexTeamRoot": _hl("paths.codex_team_root", host_paths, "team_workspace_root"),
+                "operatorMemoryDir": _hl("paths.operator_memory_dir", host_paths, "operator_memory_dir"),
                 "overlayRoot": manifest_values.get("paths.overlay_root", ""),
                 "projectRulesFile": manifest_values.get("paths.project_rules_file", ""),
             },
