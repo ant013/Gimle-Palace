@@ -63,6 +63,28 @@ validate_agent_name() {
   fi
 }
 
+# Phase H2-followup CRIT-2: guard against path-traversal / absolute paths in
+# manifest-supplied `output_path` fields (or similar repo-relative paths).
+# A malicious manifest with `output_path: /etc/passwd` or `../../../etc/shadow`
+# would otherwise let `cp ${REPO_ROOT}/${output_path}` resolve outside the repo.
+validate_safe_repo_path() {
+  local p="$1"
+  # Reject empty.
+  [ -n "$p" ] || die "invalid path: empty"
+  # Reject absolute paths.
+  case "$p" in
+    /*) die "invalid path: must be repo-relative, got absolute: '$p'" ;;
+  esac
+  # Reject any `..` segment.
+  case "$p" in
+    *..*) die "invalid path: contains '..' (traversal): '$p'" ;;
+  esac
+  # Reject shell-special chars that could break later interpolation.
+  if [[ "$p" =~ [\$\`\"\'\\] ]]; then
+    die "invalid path: contains shell-special chars: '$p'"
+  fi
+}
+
 # journal_id is a filename basename — no path separators, no .., no absolute.
 validate_journal_id() {
   local jid="$1"
