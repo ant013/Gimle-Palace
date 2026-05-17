@@ -34,6 +34,15 @@ RETURN module_count,
        head(collect(r.rule_source)) AS rule_source
 """.strip()
 
+# Supplemental query for hotspot: counts all fresh File nodes so the template
+# can report how many files were actually processed even when all scores are 0
+# (exhausted churn window → findings=[] but N files were still analysed).
+_HOTSPOT_SUPPLEMENT = """
+MATCH (f:File {project_id: $project_id})
+WHERE coalesce(f.complexity_status, 'stale') = 'fresh'
+RETURN count(f) AS total_scanned_files
+""".strip()
+
 
 async def fetch_audit_data(
     driver: Any,
@@ -90,6 +99,17 @@ async def fetch_audit_data(
             except Exception:
                 log.warning(
                     "arch_layer supplemental query failed for project %r",
+                    run_info.project,
+                    exc_info=True,
+                )
+
+        if extractor_name == "hotspot":
+            try:
+                supplement = await _fetch_hotspot_supplement(driver, run_info)
+                summary_stats.update(supplement)
+            except Exception:
+                log.warning(
+                    "hotspot supplemental query failed for project %r",
                     run_info.project,
                     exc_info=True,
                 )
@@ -216,3 +236,16 @@ async def _fetch_arch_layer_supplement(
         "rules_declared": bool(record["rules_declared"]),
         "rule_source": record["rule_source"],
     }
+
+
+async def _fetch_hotspot_supplement(
+    driver: Any, run_info: RunInfo
+) -> dict[str, Any]:
+    """Run supplemental Cypher for hotspot to get the real count of processed files."""
+    async with driver.session() as session:
+        result = await session.run(
+            _HOTSPOT_SUPPLEMENT,
+            project_id=f"project/{run_info.project}",
+        )
+        record = await result.single()
+    return {"total_scanned_files": record["total_scanned_files"] if record else 0}
