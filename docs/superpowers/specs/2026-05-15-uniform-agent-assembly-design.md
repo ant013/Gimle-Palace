@@ -10,6 +10,19 @@
 
 Pinned grounding: this spec is grounded in the repo state at `main@568888a` (2026-05-14 docs/BUGS.md merge). All later commits should be cross-checked when implementing.
 
+**Phase F partial (2026-05-17, code-side — Tasks 1-5 of 7):**
+- uaudit manifest migrated to v2 schema (17 agents, codex-only): `schemaVersion: 2`, all `agent_id` + `workspace_cwd` + `paths.*` host-local fields + `report_delivery.telegram_plugin_id` removed; per-agent `profile` + `reportsTo` added.
+- New CI-fallback files: `paperclips/projects/uaudit/{bindings,paths,plugins}.local-example.yaml` (sanitized UUIDs `00000000-...-001x`, sanitized paths `/opt/uaa-example/uaudit/...`, sentinel plugin_id `00000000-...-0000`). Operator's `~/.paperclip/projects/uaudit/{bindings,paths,plugins}.yaml` overrides at deploy.
+- `_load_host_local_sources` extended for bindings fallback (mirroring paths/plugins from Phase E).
+- Builder bridge: when bindings.yaml has `company_id` AND committed manifest doesn't, surface bindings value into `manifest_nested["project"]["company_id"]` so role templates using legacy `{{project.company_id}}` placeholder still resolve under v2 (no shared-role changes needed).
+- Overlay rename: `{{agent.workspace_cwd}}` → `runs/{{agent.agent_name}}/workspace`; `{{report_delivery.telegram_plugin_id}}` → `{{plugins.telegram.plugin_id}}` (2 InfraEngineer overlay files); `/Users/Shared/UnstoppableAudit/repos/...` → `{{paths.primary_repo_root}}` + `{{paths.project_root}}` in `_common.md`.
+- Profile mapping per agent: AUCEO/UWICTO/UWACTO = cto; SwiftAuditor/KotlinAuditor/SecurityAuditor = reviewer; CryptoAuditor = **implementer** (cx-blockchain-engineer.md role's v1 implicit default — preserved to keep render byte-identical); QAEngineer = qa; InfraEngineer = implementer; ResearchAgent = research; TechnicalWriter = writer. reportsTo chains: regional CTOs → AUCEO; auditors/QA/Infra/Research/Writer → regional CTO.
+- Phase C test `test_unmigrated_v1_manifest_rejected` updated to only check gimle (uaudit now v2-clean); new `test_v2_uaudit_manifest_accepted`.
+- New `paperclips/tests/test_phase_f_uaudit_migration.py` (30 tests): pre-migration backup smoke (17 UUIDs extracted) + manifest-shape validators + per-agent render-delta diff (workspace_cwd + CI-fallback path/plugin/company_id substitutions allowed).
+- Pre-migration backup at `paperclips/tests/baseline/phase_f/{uaudit-manifest-pre.yaml,uaudit-dist-pre/}`.
+- **DEFERRED to operator** (Task 6 = live deploy): pause uaudit agents → `migrate-bindings.sh uaudit` → operator-supplied paths.yaml + plugins.yaml from live API → `bootstrap-project.sh uaudit --canary` → smoke (incl. telegram delivery stage 6) → unpause. Per spec §10.3.
+- Sweep: 342 paperclip tests, 12 skipped, 0 failed.
+
 **Phase E followup (2026-05-17, in-PR — 6 CRITICAL from 4-voltAgent deep-review):**
 - CRIT-C1 (architect) — `resolved_assembly` now omits empty `compatibility.inputs` entries via new `_build_compatibility_block` helper. Previously v2 manifests shipped `inputs.{claudeDeployMapping,codexAgentIdsEnv,workspaceUpdateScript}: {path:"", sha256:""}` — meaningless data downstream consumers would mistrust. Gimle/uaudit v1 retain populated inputs.
 - CRIT-C2 (architect) — `compatibility_agent_ids` no longer defaults `compatibility.claude_deploy_mapping`/`codex_agent_ids_env` to gimle's files. Trading + future v2 projects with empty fields get only the dual-read resolver merge; cross-project leak eliminated. New `_merge_canonical_bindings_into_ids` helper centralizes the resolver step for both targets.

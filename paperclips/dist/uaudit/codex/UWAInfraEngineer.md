@@ -222,7 +222,7 @@ Switching branches inside an agent worktree drags uncommitted changes across bra
 
 ### Operator vs production checkout
 
-The `production_checkout` path (e.g. `/Users/Shared/UnstoppableAudit`) is the iMac deploy target. Stay on `develop` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in UNS-48: feature checkout in production_checkout caused QA to test stale code.
+The `production_checkout` path (e.g. `/opt/uaa-example/uaudit`) is the iMac deploy target. Stay on `develop` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in UNS-48: feature checkout in production_checkout caused QA to test stale code.
 
 
 ## Pre-work: codebase-memory first
@@ -327,10 +327,10 @@ Write tools as appropriate per profile (see AGENTS.md for capability boundaries)
 - Paperclip company: UnstoppableAudit (`UNS`).
 - Runtime agent: `UWAInfraEngineer`.
 - Platform scope: `android`.
-- Workspace cwd: `/Users/Shared/UnstoppableAudit/runs/UWAInfraEngineer/workspace`.
+- Workspace cwd: `runs/UWAInfraEngineer/workspace` (resolved at deploy time relative to operator's project root in host-local paths.yaml).
 - Primary codebase-memory project: `Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android`.
-- iOS repo: `/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios`.
-- Android repo: `/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android`.
+- iOS repo: `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
+- Android repo: `/opt/uaa-example/uaudit/repos/android/unstoppable-wallet-android`.
 - Required base MCP: `codebase-memory`, `context7`, `serena`, `github`, `sequential-thinking`.
 - UAudit project MCP addition: `neo4j`.
 
@@ -349,8 +349,8 @@ notification actions; lifecycle notifications are automatic.
 
 ## Telegram Report Delivery (UAudit)
 
-Send Markdown reports with `POST /api/plugins/60023916-4b6c-40f5-829f-bc8b98abc4ed/actions/send_to_telegram`
-and body `{"params":{"companyId":"8f55e80b-0264-4ab6-9d56-8b2652f18005","agentId":"$PAPERCLIP_AGENT_ID","issueIdentifier","markdownFileName","markdownContent"}}`.
+Send Markdown reports with `POST /api/plugins/00000000-0000-0000-0000-000000000000/actions/send_to_telegram`
+and body `{"params":{"companyId":"00000000-0000-0000-0000-000000000001","agentId":"$PAPERCLIP_AGENT_ID","issueIdentifier","markdownFileName","markdownContent"}}`.
 Use `PAPERCLIP_API_KEY` and `PAPERCLIP_API_URL` from your runtime environment
 for this delivery call; do not read `.env` files.
 `issueIdentifier` MUST be the current `UNS-*`;

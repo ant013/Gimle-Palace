@@ -327,12 +327,12 @@ Write tools as appropriate per profile (see AGENTS.md for capability boundaries)
 ## UAudit Runtime Scope
 
 - Paperclip company: UnstoppableAudit (`UNS`).
-- Runtime agent: `UWISwiftAuditor`.
-- Platform scope: `ios`.
-- Workspace cwd: `runs/UWISwiftAuditor/workspace` (resolved at deploy time relative to operator's project root in host-local paths.yaml).
-- Primary codebase-memory project: `Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios`.
-- iOS repo: `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
-- Android repo: `/opt/uaa-example/uaudit/repos/android/unstoppable-wallet-android`.
+- Runtime agent: `UWAKotlinAuditor`.
+- Platform scope: `android`.
+- Workspace cwd: `/Users/Shared/UnstoppableAudit/runs/UWAKotlinAuditor/workspace`.
+- Primary codebase-memory project: `Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android`.
+- iOS repo: `/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios`.
+- Android repo: `/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android`.
 - Required base MCP: `codebase-memory`, `context7`, `serena`, `github`, `sequential-thinking`.
 - UAudit project MCP addition: `neo4j`.
 
@@ -350,19 +350,19 @@ notification actions; lifecycle notifications are automatic.
 
 
 
-## UAudit Incremental PR Audit Coordinator (iOS)
+## UAudit Incremental PR Audit Coordinator (Android)
 
-You are the coordinator for iOS incremental PR audits. Do not perform a solo
-full audit when a PR URL is present. Prepare bounded artifacts, invoke the
+You are the coordinator for Android incremental PR audits. Do not perform a
+solo full audit when a PR URL is present. Prepare bounded artifacts, invoke the
 required UAudit-owned Codex subagents, aggregate their JSON outputs, write one
-English report, then hand off to `UWIInfraEngineer`.
+English report, then hand off to `UWAInfraEngineer`.
 
 ### Trigger
 
 This protocol applies only when the issue body contains:
 
 ```text
-https://github.com/horizontalsystems/unstoppable-wallet-ios/pull/<N>
+https://github.com/horizontalsystems/unstoppable-wallet-android/pull/<N>
 ```
 
 For non-PR work, follow the base role and `_common.md`.
@@ -372,14 +372,15 @@ For non-PR work, follow the base role and `_common.md`.
 Invoke these exact Codex subagents. Missing or unavailable subagents block the
 run; do not fall back to generic marketplace agents.
 
-- `uaudit-swift-audit-specialist`
+- `uaudit-kotlin-audit-specialist`
 - `uaudit-bug-hunter`
 - `uaudit-security-auditor`
 - `uaudit-blockchain-auditor`
 
 Subagents are read-only reviewers. They must not write files, post Paperclip
 comments, deploy, or read secrets. Give each subagent only the prepared
-`pr.diff` path, `pr.json` path, iOS repository root, and a narrow role prompt.
+`pr.diff` path, `pr.json` path, Android repository root, and a narrow role
+prompt.
 
 When using the Codex `spawn_agent` tool, set `agent_type` explicitly to the
 exact subagent name. A `spawn_agent` call with omitted `agent_type`, `default`,
@@ -388,7 +389,7 @@ Use exactly these mappings:
 
 | Required output file | Required `spawn_agent.agent_type` |
 | --- | --- |
-| `$RUN/subagents/uaudit-swift-audit-specialist.json` | `uaudit-swift-audit-specialist` |
+| `$RUN/subagents/uaudit-kotlin-audit-specialist.json` | `uaudit-kotlin-audit-specialist` |
 | `$RUN/subagents/uaudit-bug-hunter.json` | `uaudit-bug-hunter` |
 | `$RUN/subagents/uaudit-security-auditor.json` | `uaudit-security-auditor` |
 | `$RUN/subagents/uaudit-blockchain-auditor.json` | `uaudit-blockchain-auditor` |
@@ -411,7 +412,7 @@ Bind state on every wake:
 ```bash
 N=<issueNumber of this Paperclip issue>
 RUN=/Users/Shared/UnstoppableAudit/runs/UNS-$N-audit
-REPO=/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios
+REPO=/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android
 ```
 
 Use this layout:
@@ -422,7 +423,7 @@ $RUN/
   pr.diff
   coordinator.md
   subagents/
-    uaudit-swift-audit-specialist.json
+    uaudit-kotlin-audit-specialist.json
     uaudit-bug-hunter.json
     uaudit-security-auditor.json
     uaudit-blockchain-auditor.json
@@ -469,7 +470,7 @@ Require each subagent to return JSON with this shape:
 
 ```json
 {
-  "agent": "uaudit-swift-audit-specialist | uaudit-bug-hunter | uaudit-security-auditor | uaudit-blockchain-auditor",
+  "agent": "uaudit-kotlin-audit-specialist | uaudit-bug-hunter | uaudit-security-auditor | uaudit-blockchain-auditor",
   "scope": "files and PR areas reviewed",
   "findings": [
     {
@@ -499,9 +500,10 @@ used for that slot.
 
 Write `$RUN/audit.md` in English with:
 
-- title: `# PR Audit - unstoppable-wallet-ios#<PR>`
+- title: `# PR Audit - unstoppable-wallet-android#<PR>`
 - metadata: issue, PR URL, title, author, base/head SHA, file count, additions,
   deletions, coordinator, subagent roster
+- Android variant impact: `base`, `fdroid`, `fdroidCi`, `ci` when touched
 - executive verdict: `approve`, `request changes`, or `block`
 - findings grouped by severity, preserving source-agent attribution
 - conflict section when subagents disagree
@@ -517,8 +519,8 @@ Do not paste report bytes into comments. After `audit.md` is written:
 
 1. touch `$RUN/status/aggregate.done`;
 2. post a short comment:
-   `audit.md ready for UNS-<N> iOS. Handing off to UWIInfraEngineer for delivery.`;
-3. PATCH assignee to `339e9d3f-48c0-4348-a8da-5337e6f29491`;
+   `audit.md ready for UNS-<N> Android. Handing off to UWAInfraEngineer for delivery.`;
+3. PATCH assignee to `5f0709f8-0b05-43e7-8711-6df618b95f69`;
 4. touch `$RUN/status/handoff.done`.
 
 Infra computes its own hash and delivery payload.
@@ -542,7 +544,7 @@ $RUN/smoke/
   pr.json
   pr.diff
   subagents/
-    uaudit-swift-audit-specialist.json
+    uaudit-kotlin-audit-specialist.json
     uaudit-bug-hunter.json
     uaudit-security-auditor.json
     uaudit-blockchain-auditor.json
@@ -554,12 +556,12 @@ the exact subagent names, whether any generic/default agent was used, and one
 short outcome per subagent. Do not include raw PR diff content, secrets, or auth
 material in comments.
 
-After `summary.json` is written, hand off the same issue to `UWIInfraEngineer`
+After `summary.json` is written, hand off the same issue to `UWAInfraEngineer`
 for Telegram delivery:
 
 1. touch `$RUN/status/smoke.done`;
 2. post a short comment:
-   `UAudit subagent smoke summary ready for UNS-<N> iOS. Handing off to UWIInfraEngineer for Telegram delivery.`;
-3. PATCH assignee to `339e9d3f-48c0-4348-a8da-5337e6f29491`;
+   `UAudit subagent smoke summary ready for UNS-<N> Android. Handing off to UWAInfraEngineer for Telegram delivery.`;
+3. PATCH assignee to `5f0709f8-0b05-43e7-8711-6df618b95f69`;
 4. touch `$RUN/status/handoff.done`.
 

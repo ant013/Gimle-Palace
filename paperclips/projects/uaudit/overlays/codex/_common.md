@@ -4,10 +4,10 @@
 - Paperclip company: UnstoppableAudit (`UNS`).
 - Runtime agent: `{{agent.agent_name}}`.
 - Platform scope: `{{agent.platform}}`.
-- Workspace cwd: `{{agent.workspace_cwd}}`.
+- Workspace cwd: `runs/{{agent.agent_name}}/workspace` (resolved at deploy time relative to operator's project root in host-local paths.yaml).
 - Primary codebase-memory project: `{{agent.primary_codebase_memory_project}}`.
-- iOS repo: `/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios`.
-- Android repo: `/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android`.
+- iOS repo: `{{paths.primary_repo_root}}` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
+- Android repo: `{{paths.project_root}}/repos/android/unstoppable-wallet-android`.
 - Required base MCP: `codebase-memory`, `context7`, `serena`, `github`, `sequential-thinking`.
 - UAudit project MCP addition: `neo4j`.
 

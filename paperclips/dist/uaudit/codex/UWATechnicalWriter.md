@@ -229,10 +229,10 @@ Write tools as appropriate per profile (see AGENTS.md for capability boundaries)
 - Paperclip company: UnstoppableAudit (`UNS`).
 - Runtime agent: `UWATechnicalWriter`.
 - Platform scope: `android`.
-- Workspace cwd: `/Users/Shared/UnstoppableAudit/runs/UWATechnicalWriter/workspace`.
+- Workspace cwd: `runs/UWATechnicalWriter/workspace` (resolved at deploy time relative to operator's project root in host-local paths.yaml).
 - Primary codebase-memory project: `Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android`.
-- iOS repo: `/Users/Shared/UnstoppableAudit/repos/ios/unstoppable-wallet-ios`.
-- Android repo: `/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android`.
+- iOS repo: `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
+- Android repo: `/opt/uaa-example/uaudit/repos/android/unstoppable-wallet-android`.
 - Required base MCP: `codebase-memory`, `context7`, `serena`, `github`, `sequential-thinking`.
 - UAudit project MCP addition: `neo4j`.
 

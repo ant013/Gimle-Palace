@@ -1,6 +1,6 @@
 ## Telegram Report Delivery (UAudit)
 
-Send Markdown reports with `POST /api/plugins/{{report_delivery.telegram_plugin_id}}/actions/send_to_telegram`
+Send Markdown reports with `POST /api/plugins/{{plugins.telegram.plugin_id}}/actions/send_to_telegram`
 and body `{"params":{"companyId":"{{project.company_id}}","agentId":"$PAPERCLIP_AGENT_ID","issueIdentifier","markdownFileName","markdownContent"}}`.
 Use `PAPERCLIP_API_KEY` and `PAPERCLIP_API_URL` from your runtime environment
 for this delivery call; do not read `.env` files.

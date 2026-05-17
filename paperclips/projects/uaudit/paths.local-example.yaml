@@ -1,0 +1,17 @@
+# Phase F CI fallback — overridden by operator's ~/.paperclip/projects/uaudit/paths.yaml.
+#
+# Committed sanitized example values let CI build uaudit without operator's
+# host-local files. Operator copies this to ~/.paperclip/projects/uaudit/paths.yaml
+# and replaces with their real local paths.
+#
+# Builder precedence: ~/.paperclip/projects/uaudit/paths.yaml (operator) →
+# paperclips/projects/uaudit/paths.local-example.yaml (this file, CI fallback).
+schemaVersion: 2
+project_root: /opt/uaa-example/uaudit
+primary_repo_root: /opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios
+primary_mcp_service_dir: /opt/uaa-example/uaudit
+production_checkout: /opt/uaa-example/uaudit
+team_workspace_root: /opt/uaa-example/uaudit/runs
+operator_memory_dir: ~/.claude/projects/-opt-uaa-example-uaudit/memory
+overlay_root: paperclips/projects/uaudit/overlays
+project_rules_file: AGENTS.md

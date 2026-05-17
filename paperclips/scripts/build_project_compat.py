@@ -481,8 +481,16 @@ def _load_host_local_sources(project_key: str, repo_root: Path | None = None) ->
     home = Path(os.path.expanduser("~/.paperclip/projects")) / project_key
     sources: dict = {}
 
-    # --- bindings: dual-read via resolver -------------------------------------
+    # --- bindings: dual-read via resolver + CI fallback ----------------------
+    # Operator's ~/.paperclip/projects/<key>/bindings.yaml takes precedence;
+    # paperclips/projects/<key>/bindings.local-example.yaml is a CI/dev fallback
+    # (committed, sanitized UUIDs). Lets CI builds resolve {{bindings.X}} +
+    # {{project.company_id}} for v2 projects without operator-only host-local.
     bindings_yaml = home / "bindings.yaml"
+    if not bindings_yaml.is_file() and repo_root is not None:
+        fallback_bindings = repo_root / "paperclips" / "projects" / project_key / "bindings.local-example.yaml"
+        if fallback_bindings.is_file():
+            bindings_yaml = fallback_bindings
     legacy_env = (
         repo_root / "paperclips" / "codex-agent-ids.env"
         if (repo_root is not None and project_key == "gimle")
@@ -658,6 +666,15 @@ def render_role(
                 for top in ("project", "domain", "mcp"):
                     if k.startswith(f"{top}."):
                         manifest_nested[top][k[len(top) + 1:]] = v
+            # Phase F bridge: when a v2 manifest has stripped project.company_id
+            # (moved to host-local bindings.yaml), surface bindings.company_id
+            # back into manifest_nested["project"]["company_id"] so role templates
+            # using the legacy `{{project.company_id}}` placeholder still resolve
+            # without modifying every shared role file.
+            bindings_block = host_sources.get("bindings") or {}
+            bindings_company_id = bindings_block.get("company_id") if isinstance(bindings_block, dict) else None
+            if bindings_company_id and not manifest_nested["project"].get("company_id"):
+                manifest_nested["project"]["company_id"] = bindings_company_id
             full_sources = {
                 "manifest": manifest_nested,
                 "agent": agent_values or {},
