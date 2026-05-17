@@ -391,6 +391,63 @@ class TestAuditFetcher:
         assert "STANDALONE_SIGNAL" in rendered
 
 
+@pytest.mark.integration
+@pytest.mark.skipif(
+    not _HAS_NEO4J_RUNTIME,
+    reason="requires Docker socket or COMPOSE_NEO4J_URI for Neo4j integration",
+)
+class TestHotspotSupplement:
+    async def test_zero_score_files_report_real_scanned_count(
+        self, driver: AsyncDriver
+    ) -> None:
+        from palace_mcp.audit.fetcher import fetch_audit_data
+        from palace_mcp.extractors.hotspot.extractor import HotspotExtractor
+
+        async with driver.session() as session:
+            for i in range(3):
+                await session.run(
+                    """
+                    CREATE (:File {
+                        project_id: 'project/test-proj',
+                        path: $path,
+                        hotspot_score: 0.0,
+                        complexity_status: 'fresh',
+                        ccn_total: 5,
+                        churn_count: 0,
+                        complexity_window_days: 90
+                    })
+                    """,
+                    path=f"src/file{i}.py",
+                )
+
+        run_info = RunInfo(
+            run_id="run-hotspot-supplement",
+            extractor_name="hotspot",
+            project="test-proj",
+            completed_at=None,
+        )
+        extractor = HotspotExtractor()
+        result = await fetch_audit_data(
+            driver,
+            {"hotspot": run_info},
+            {"hotspot": extractor},
+        )
+
+        assert "hotspot" in result
+        section = result["hotspot"]
+        assert section.findings == []
+        assert section.summary_stats["total_scanned_files"] == 3
+
+        rendered = render_section(
+            section,
+            extractor.audit_contract().severity_column,
+            100,
+            severity_mapper=extractor.audit_contract().severity_mapper,
+        )
+        assert "scanned 3 files" in rendered
+        assert "scanned 0 files" not in rendered
+
+
 async def _seed_fake_nodes(driver: AsyncDriver, *, project: str) -> None:
     async with driver.session() as session:
         await session.run(_SEED_FAKE_NODE, project=project, name="node-a", sev="high")
