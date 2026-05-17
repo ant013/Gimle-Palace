@@ -1062,3 +1062,62 @@ The following extractors have not run for project `tron-kit` and are excluded fr
 | `cross_repo_version_skew` run ID | `3dcffdd5-f262-4e25-a365-6557f7bc6e95` |
 
 
+
+
+---
+
+## Known Limitations — Suspicious Zeros (GIM-333 diagnostic, 2026-05-17)
+
+Three "zero findings" sections in this report are NOT indicators of a clean codebase.
+They are CONFIG_GAP or VALID_EMPTY results diagnosed by [GIM-333](/GIM/issues/GIM-333).
+Full diagnostic: `docs/runbooks/suspicious-zero-diagnostic-2026-05-17.md`.
+
+### `hotspot` — "scanned 0 files, found 0 issues"
+
+**True cause:** VALID_EMPTY + TEMPLATE_BUG (RAN_SUCCESS_ZERO)
+
+The hotspot extractor ran correctly and wrote 1,613 nodes (86 File nodes + functions).
+All `hotspot_score = 0.0` because every commit predates the 90-day churn window
+(TronKit's last commit was 2025-08-13; run date 2026-05-14; cutoff 2026-02-14).
+With zero churn, `score = log(ccn+1) × log(0+1) = 0` for all files.
+
+The template text "scanned 0 files" is misleading — 86 source files were processed.
+See bug issue (child of [GIM-333](/GIM/issues/GIM-333)).
+
+**Operator note:** To see hotspot results, either extend `PALACE_HOTSPOT_CHURN_WINDOW_DAYS`
+to ≥280 (covering last 9 months) or re-run after TronKit receives new commits.
+
+### `dead_symbol_binary_surface` — "found 0 dead symbol candidates"
+
+**True cause:** CONFIG_GAP + SILENT_ZERO_BUG (RAN_SUCCESS_ZERO)
+
+The extractor ran successfully but wrote 0 nodes because `periphery/periphery-3.7.4-swiftpm.json`
+and `periphery/contract.json` are absent from the TronKit repo. Without these Periphery
+fixture files, dead symbol detection is impossible. The extractor returns `success=True`
+silently without surfacing `MISSING_INPUT`.
+
+**Operator action:** Run `periphery scan` on TronKit and commit the JSON fixture to
+`periphery/` before re-running this extractor.
+
+### `cross_repo_version_skew` — "found 0 version skew instances"
+
+**True cause:** CONFIG_GAP + VALID_EMPTY (RAN_SUCCESS_ZERO)
+
+The extractor ran correctly but `Package.resolved` is absent from TronKit, so all
+9 SPM dependencies have `resolved_version=NULL`. The skew query filters for
+`size(versions) > 1`, but `collect(distinct NULL)=[]`, so no skew is found.
+
+Additionally, TronKit is a single-module SPM library — even with a lockfile, it
+cannot have intra-project version skew. This extractor targets bundle/multi-project comparisons.
+
+**Operator action:** None required for correctness. For resolved version tracking,
+commit `Package.resolved` to TronKit (run `swift package resolve`).
+
+### `public_api_surface` and `cross_module_contract` — BLIND SPOTS (not zeros)
+
+**Note:** These two appear as blind spots in this report (correctly). The
+[GIM-333](/GIM/issues/GIM-333) issue description incorrectly characterized them
+as "0 symbols" and "0 deltas" — they were never run for this project.
+
+- `public_api_surface` (CONFIG_GAP): requires `.palace/public-api/swift/*.swiftinterface`
+- `cross_module_contract` (CASCADING_EMPTY): depends on `public_api_surface` first
