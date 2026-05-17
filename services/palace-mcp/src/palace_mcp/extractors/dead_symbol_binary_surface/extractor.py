@@ -148,6 +148,14 @@ LIMIT 100
 
         try:
             rows = await self._run_pipeline(driver=driver, settings=settings, ctx=ctx)
+        except ExtractorError as e:
+            await finalize_ingest_run(
+                driver,
+                run_id=ctx.run_id,
+                success=False,
+                error_code=e.error_code.value,
+            )
+            raise
         except Exception:
             await finalize_ingest_run(
                 driver,
@@ -163,6 +171,17 @@ LIMIT 100
     async def _run_pipeline(
         self, *, driver: AsyncDriver, settings: Settings, ctx: ExtractorRunContext
     ) -> ExtractorStats:
+        report_path = _dead_symbol_periphery_report_path(settings, repo_path=ctx.repo_path)
+        contract_path = _dead_symbol_periphery_contract_path(settings, repo_path=ctx.repo_path)
+        if not report_path.exists() or not contract_path.exists():
+            missing = report_path if not report_path.exists() else contract_path
+            raise ExtractorError(
+                error_code=ExtractorErrorCode.PERIPHERY_FIXTURES_MISSING,
+                message=f"periphery fixture not found: {missing}",
+                recoverable=False,
+                action="manual_cleanup",
+            )
+
         commit_sha = _read_head_sha(ctx.repo_path)
         skip_rules = _load_dead_symbol_skiplist(
             _dead_symbol_skiplist_path(settings, repo_path=ctx.repo_path)
@@ -260,8 +279,6 @@ LIMIT 100
         contract_path = _dead_symbol_periphery_contract_path(
             settings, repo_path=repo_path
         )
-        if not report_path.exists() or not contract_path.exists():
-            return ()
         result = parse_periphery_fixture(
             report_path=report_path,
             contract_path=contract_path,

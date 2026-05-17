@@ -282,7 +282,9 @@ async def test_extractor_periphery_only_happy_path(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_extractor_missing_periphery_file_returns_warning(tmp_path: Path) -> None:
+async def test_extractor_missing_periphery_file_raises_error(tmp_path: Path) -> None:
+    from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErrorCode
+
     fake_driver = MagicMock()
     fake_settings = _settings(tmp_path)
 
@@ -302,28 +304,19 @@ async def test_extractor_missing_periphery_file_returns_warning(tmp_path: Path) 
             new=AsyncMock(),
         ),
         patch(
-            "palace_mcp.extractors.dead_symbol_binary_surface.extractor.write_checkpoint",
-            new=AsyncMock(),
-        ),
-        patch(
-            "palace_mcp.extractors.dead_symbol_binary_surface.extractor.write_dead_symbol_graph",
-            new=AsyncMock(return_value=DeadSymbolWriteSummary()),
-        ),
-        patch(
             "palace_mcp.extractors.dead_symbol_binary_surface.extractor._get_previous_error_code",
             new=AsyncMock(return_value=None),
         ),
         patch(
             "palace_mcp.extractors.dead_symbol_binary_surface.extractor.check_resume_budget"
         ),
-        patch(
-            "palace_mcp.extractors.dead_symbol_binary_surface.extractor.check_phase_budget"
-        ),
     ):
-        extractor = DeadSymbolBinarySurfaceExtractor()
-        stats = await extractor.run(graphiti=MagicMock(), ctx=_make_ctx(tmp_path))
+        with pytest.raises(ExtractorError) as exc_info:
+            await DeadSymbolBinarySurfaceExtractor().run(
+                graphiti=MagicMock(), ctx=_make_ctx(tmp_path)
+            )
 
-    assert stats == ExtractorStats()
+    assert exc_info.value.error_code == ExtractorErrorCode.PERIPHERY_FIXTURES_MISSING
 
 
 @pytest.mark.asyncio
@@ -819,6 +812,188 @@ async def test_extractor_respects_check_resume_budget(tmp_path: Path) -> None:
         )
 
     resume_budget.assert_called_once_with(previous_error_code="budget_exceeded")
+
+
+@pytest.mark.asyncio
+async def test_run_pipeline_raises_when_report_missing(tmp_path: Path) -> None:
+    """_run_pipeline raises ExtractorError(PERIPHERY_FIXTURES_MISSING) when report absent."""
+    from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErrorCode
+
+    contract_dir = tmp_path / "periphery"
+    contract_dir.mkdir(parents=True)
+    (contract_dir / "contract.json").write_text("{}", encoding="utf-8")
+    # report file deliberately absent
+
+    fake_driver = MagicMock()
+    fake_settings = _settings(tmp_path)
+
+    with (
+        patch("palace_mcp.mcp_server.get_driver", return_value=fake_driver),
+        patch("palace_mcp.mcp_server.get_settings", return_value=fake_settings),
+        patch(
+            "palace_mcp.extractors.dead_symbol_binary_surface.extractor.ensure_custom_schema",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.dead_symbol_binary_surface.extractor.create_ingest_run",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.dead_symbol_binary_surface.extractor.finalize_ingest_run",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.dead_symbol_binary_surface.extractor._get_previous_error_code",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "palace_mcp.extractors.dead_symbol_binary_surface.extractor.check_resume_budget"
+        ),
+    ):
+        with pytest.raises(ExtractorError) as exc_info:
+            await DeadSymbolBinarySurfaceExtractor().run(
+                graphiti=MagicMock(), ctx=_make_ctx(tmp_path)
+            )
+
+    assert exc_info.value.error_code == ExtractorErrorCode.PERIPHERY_FIXTURES_MISSING
+
+
+@pytest.mark.asyncio
+async def test_run_pipeline_raises_when_contract_missing(tmp_path: Path) -> None:
+    """_run_pipeline raises ExtractorError(PERIPHERY_FIXTURES_MISSING) when contract absent."""
+    from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErrorCode
+
+    report_dir = tmp_path / "periphery"
+    report_dir.mkdir(parents=True)
+    (report_dir / "periphery-3.7.4-swiftpm.json").write_text("[]", encoding="utf-8")
+    # contract file deliberately absent
+
+    fake_driver = MagicMock()
+    fake_settings = _settings(tmp_path)
+
+    with (
+        patch("palace_mcp.mcp_server.get_driver", return_value=fake_driver),
+        patch("palace_mcp.mcp_server.get_settings", return_value=fake_settings),
+        patch(
+            "palace_mcp.extractors.dead_symbol_binary_surface.extractor.ensure_custom_schema",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.dead_symbol_binary_surface.extractor.create_ingest_run",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.dead_symbol_binary_surface.extractor.finalize_ingest_run",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.dead_symbol_binary_surface.extractor._get_previous_error_code",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "palace_mcp.extractors.dead_symbol_binary_surface.extractor.check_resume_budget"
+        ),
+    ):
+        with pytest.raises(ExtractorError) as exc_info:
+            await DeadSymbolBinarySurfaceExtractor().run(
+                graphiti=MagicMock(), ctx=_make_ctx(tmp_path)
+            )
+
+    assert exc_info.value.error_code == ExtractorErrorCode.PERIPHERY_FIXTURES_MISSING
+
+
+@pytest.mark.asyncio
+async def test_run_pipeline_raises_when_both_missing(tmp_path: Path) -> None:
+    """_run_pipeline raises ExtractorError(PERIPHERY_FIXTURES_MISSING) when both absent."""
+    from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErrorCode
+
+    # neither periphery file exists (tmp_path is empty)
+    fake_driver = MagicMock()
+    fake_settings = _settings(tmp_path)
+
+    with (
+        patch("palace_mcp.mcp_server.get_driver", return_value=fake_driver),
+        patch("palace_mcp.mcp_server.get_settings", return_value=fake_settings),
+        patch(
+            "palace_mcp.extractors.dead_symbol_binary_surface.extractor.ensure_custom_schema",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.dead_symbol_binary_surface.extractor.create_ingest_run",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.dead_symbol_binary_surface.extractor.finalize_ingest_run",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.dead_symbol_binary_surface.extractor._get_previous_error_code",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "palace_mcp.extractors.dead_symbol_binary_surface.extractor.check_resume_budget"
+        ),
+    ):
+        with pytest.raises(ExtractorError) as exc_info:
+            await DeadSymbolBinarySurfaceExtractor().run(
+                graphiti=MagicMock(), ctx=_make_ctx(tmp_path)
+            )
+
+    assert exc_info.value.error_code == ExtractorErrorCode.PERIPHERY_FIXTURES_MISSING
+
+
+@pytest.mark.asyncio
+async def test_run_error_handler_propagates_extractor_error_code(tmp_path: Path) -> None:
+    """finalize_ingest_run receives the error_code from ExtractorError, not the hardcoded fallback."""
+    from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErrorCode
+
+    fake_driver = MagicMock()
+    fake_settings = _settings(tmp_path)
+    finalize_mock = AsyncMock()
+
+    with (
+        patch("palace_mcp.mcp_server.get_driver", return_value=fake_driver),
+        patch("palace_mcp.mcp_server.get_settings", return_value=fake_settings),
+        patch(
+            "palace_mcp.extractors.dead_symbol_binary_surface.extractor.ensure_custom_schema",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.dead_symbol_binary_surface.extractor.create_ingest_run",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.dead_symbol_binary_surface.extractor.finalize_ingest_run",
+            finalize_mock,
+        ),
+        patch.object(
+            DeadSymbolBinarySurfaceExtractor,
+            "_run_pipeline",
+            new=AsyncMock(
+                side_effect=ExtractorError(
+                    error_code=ExtractorErrorCode.PERIPHERY_FIXTURES_MISSING,
+                    message="periphery fixture not found: /repo/periphery/periphery-3.7.4-swiftpm.json",
+                    recoverable=False,
+                    action="manual_cleanup",
+                )
+            ),
+        ),
+        patch(
+            "palace_mcp.extractors.dead_symbol_binary_surface.extractor._get_previous_error_code",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "palace_mcp.extractors.dead_symbol_binary_surface.extractor.check_resume_budget"
+        ),
+    ):
+        with pytest.raises(ExtractorError):
+            await DeadSymbolBinarySurfaceExtractor().run(
+                graphiti=MagicMock(), ctx=_make_ctx(tmp_path)
+            )
+
+    finalize_call_kwargs = finalize_mock.call_args_list[-1].kwargs
+    assert finalize_call_kwargs["success"] is False
+    assert finalize_call_kwargs["error_code"] == "periphery_fixtures_missing"
 
 
 @pytest.mark.asyncio
