@@ -21,6 +21,7 @@ from tests.extractors.unit.test_real_scip_fixtures import (
 )
 
 _RUN_ID = "swift-integration-run-001"
+_RERUN_ID = "swift-integration-run-002"
 _SELECT_QNAME = "UwMiniCore s%3A10UwMiniCore11WalletStoreC6select8walletIDySi_tF"
 FIXTURE_SCIP = (
     Path(__file__).parent.parent
@@ -152,27 +153,52 @@ class TestSymbolIndexSwiftIntegration:
         settings.palace_max_occurrences_per_symbol = 5_000
         settings.palace_recency_decay_days = 30.0
 
-        stale_counter = BoundedInDegreeCounter()
-        stale_counter.increment("stale.symbol")
         counter_path = tantivy_dir / "in_degree_counter.json"
-        stale_counter.to_disk(counter_path, run_id="swift-integration-run-old")
 
         with (
             patch("palace_mcp.mcp_server.get_driver", return_value=driver),
             patch("palace_mcp.mcp_server.get_settings", return_value=settings),
             patch("palace_mcp.extractors.runner.REPOS_ROOT", _project_and_repo),
-            patch("palace_mcp.extractors.runner.uuid4", return_value=_RUN_ID),
+            patch(
+                "palace_mcp.extractors.runner.uuid4",
+                side_effect=[_RUN_ID, _RERUN_ID],
+            ),
         ):
-            res = await run_extractor(
+            first_run = await run_extractor(
+                name="symbol_index_swift",
+                project="uw-ios-mini",
+                driver=driver,
+                graphiti=graphiti_mock,
+            )
+            initial_counter = BoundedInDegreeCounter()
+            assert initial_counter.from_disk(counter_path, expected_run_id=_RUN_ID) is True
+            async with driver.session() as session:
+                await session.run("MATCH (n) DETACH DELETE n")
+                await session.run(
+                    """
+                    MERGE (p:Project {slug: $slug})
+                    SET p.group_id = 'project/' + $slug,
+                        p.name = $name,
+                        p.tags = []
+                    """,
+                    slug="uw-ios-mini",
+                    name="UwIosMini",
+                )
+            second_run = await run_extractor(
                 name="symbol_index_swift",
                 project="uw-ios-mini",
                 driver=driver,
                 graphiti=graphiti_mock,
             )
 
-        assert res["ok"] is True
-        assert res["success"] is True
+        assert first_run["ok"] is True
+        assert first_run["success"] is True
 
-        reloaded = BoundedInDegreeCounter()
-        assert reloaded.from_disk(counter_path, expected_run_id=_RUN_ID) is True
-        assert reloaded.estimate("stale.symbol") == 0
+        assert second_run["ok"] is True
+        assert second_run["success"] is True
+
+        rerun_counter = BoundedInDegreeCounter()
+        assert rerun_counter.from_disk(counter_path, expected_run_id=_RERUN_ID) is True
+
+        stale_counter = BoundedInDegreeCounter()
+        assert stale_counter.from_disk(counter_path, expected_run_id=_RUN_ID) is False
