@@ -18,6 +18,7 @@ from palace_mcp.extractors.base import (
     ExtractorRunContext,
     ExtractorStats,
 )
+from palace_mcp.extractors.foundation.walk import walk_repo
 
 if TYPE_CHECKING:
     from palace_mcp.audit.contracts import AuditContract, Severity
@@ -184,7 +185,7 @@ def _semgrep_target_batches(target: Path, *, batch_size: int) -> list[list[Path]
     if target.is_file():
         return [[target]]
 
-    swift_files = sorted(path for path in target.rglob("*.swift") if path.is_file())
+    swift_files = sorted(walk_repo(target, suffixes=frozenset({".swift"})))
     if not swift_files:
         return [[target]]
 
