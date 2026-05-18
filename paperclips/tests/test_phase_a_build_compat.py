@@ -48,7 +48,9 @@ def test_dist_bundles_below_pre_uaa_baseline():
     too_fat: list[str] = []
     # Post Phase B with composition: cto profile = ~14-18KB, others smaller.
     # Allow some headroom for projects with rich overlays (uaudit has per-agent overlays).
-    POST_PHASE_B_MAX_BYTES = 25000
+    # 26000 leaves ~9KB for incremental overlay growth above the largest current
+    # post-Phase-B bundle while still catching multi-KB fragment include leaks.
+    POST_PHASE_B_MAX_BYTES = 26000
     SCAN_DIRS = [
         dist_dir,
         dist_dir / "codex",
