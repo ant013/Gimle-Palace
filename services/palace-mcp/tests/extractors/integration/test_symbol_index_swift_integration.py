@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from neo4j import AsyncDriver
 
+from palace_mcp.extractors.foundation.importance import BoundedInDegreeCounter
 from palace_mcp.extractors.foundation.identifiers import symbol_id_for
 from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
 from palace_mcp.extractors.runner import run_extractor
@@ -129,3 +130,49 @@ class TestSymbolIndexSwiftIntegration:
         assert "Sources/UwMiniCore/State/WalletStore.swift" in paths
         assert "Sources/UwMiniApp/ContentView.swift" in paths
         assert "Pods/Foo/Foo.swift" in paths
+
+    @pytest.mark.asyncio
+    async def test_run_extractor_recovers_from_stale_counter_after_domain_reset(
+        self,
+        driver: AsyncDriver,
+        graphiti_mock: MagicMock,
+        _project_and_repo: Path,
+        tmp_path: Path,
+    ) -> None:
+        await ensure_extractors_schema(driver)
+        settings = MagicMock()
+        settings.palace_scip_index_paths = {"uw-ios-mini": str(FIXTURE_SCIP)}
+        tantivy_dir = tmp_path / "tantivy"
+        tantivy_dir.mkdir()
+        settings.palace_tantivy_index_path = str(tantivy_dir)
+        settings.palace_tantivy_heap_mb = 50
+        settings.palace_max_occurrences_total = 50_000_000
+        settings.palace_max_occurrences_per_project = 10_000_000
+        settings.palace_importance_threshold_use = 0.0
+        settings.palace_max_occurrences_per_symbol = 5_000
+        settings.palace_recency_decay_days = 30.0
+
+        stale_counter = BoundedInDegreeCounter()
+        stale_counter.increment("stale.symbol")
+        counter_path = tantivy_dir / "in_degree_counter.json"
+        stale_counter.to_disk(counter_path, run_id="swift-integration-run-old")
+
+        with (
+            patch("palace_mcp.mcp_server.get_driver", return_value=driver),
+            patch("palace_mcp.mcp_server.get_settings", return_value=settings),
+            patch("palace_mcp.extractors.runner.REPOS_ROOT", _project_and_repo),
+            patch("palace_mcp.extractors.runner.uuid4", return_value=_RUN_ID),
+        ):
+            res = await run_extractor(
+                name="symbol_index_swift",
+                project="uw-ios-mini",
+                driver=driver,
+                graphiti=graphiti_mock,
+            )
+
+        assert res["ok"] is True
+        assert res["success"] is True
+
+        reloaded = BoundedInDegreeCounter()
+        assert reloaded.from_disk(counter_path, expected_run_id=_RUN_ID) is True
+        assert reloaded.estimate("stale.symbol") == 0
