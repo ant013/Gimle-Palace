@@ -40,6 +40,7 @@ from palace_mcp.extractors.code_ownership.schema_extension import (
 )
 from palace_mcp.extractors.code_ownership.scorer import score_file
 from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErrorCode
+from palace_mcp.extractors.foundation.walk import should_skip_path
 
 logger = logging.getLogger(__name__)
 
@@ -365,6 +366,8 @@ LIMIT 100
                     f"{prefix}{entry.name}" if not prefix else f"{prefix}/{entry.name}"
                 )
                 if entry.type_str == "tree":
+                    if should_skip_path(full.split("/")):
+                        continue
                     visit(cast(pygit2.Tree, repo[entry.id]), full)
                 else:
                     out.add(full)

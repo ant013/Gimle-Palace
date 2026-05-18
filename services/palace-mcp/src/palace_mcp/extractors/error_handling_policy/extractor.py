@@ -22,6 +22,7 @@ from palace_mcp.extractors.base import (
     ExtractorRunContext,
     ExtractorStats,
 )
+from palace_mcp.extractors.foundation.walk import walk_repo
 
 if TYPE_CHECKING:
     from palace_mcp.audit.contracts import AuditContract, Severity
@@ -479,7 +480,9 @@ def _has_suppression_marker(*, repo_root: Path, finding: ErrorFinding) -> bool:
 
 def _collect_catch_sites(repo_root: Path) -> list[CatchSite]:
     sites: list[CatchSite] = []
-    for path in sorted(repo_root.rglob(_SWIFT_GLOB)):
+    for path in sorted(walk_repo(repo_root, suffixes=frozenset({".swift"}))):
+        if not path.is_file():
+            continue
         rel_path = path.relative_to(repo_root).as_posix()
         text = path.read_text(encoding="utf-8")
         module = _infer_module(rel_path)
