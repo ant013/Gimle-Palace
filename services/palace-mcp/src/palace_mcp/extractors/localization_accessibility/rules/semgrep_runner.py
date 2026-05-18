@@ -137,5 +137,3 @@ def _relative_path(repo_root: Path, path_str: str) -> str:
         except ValueError:
             return raw.as_posix()
     return raw.as_posix()
-
-

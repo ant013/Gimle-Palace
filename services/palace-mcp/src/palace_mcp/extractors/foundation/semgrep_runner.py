@@ -70,11 +70,14 @@ async def run_semgrep(
     if target.is_file():
         file_targets = [target]
     else:
-        parts = test_path_parts if test_path_parts is not None else _DEFAULT_TEST_PATH_PARTS
+        parts = (
+            test_path_parts if test_path_parts is not None else _DEFAULT_TEST_PATH_PARTS
+        )
         file_targets = sorted(
             p
             for p in walk_repo(target, suffixes=suffixes, extra_excludes=extra_excludes)
-            if not skip_test_paths or not _is_test_path(p, relative_to=target, test_parts=parts)
+            if not skip_test_paths
+            or not _is_test_path(p, relative_to=target, test_parts=parts)
         )
 
     if not file_targets:
@@ -119,11 +122,15 @@ async def _run_batch(
         stderr=asyncio.subprocess.PIPE,
     )
     try:
-        stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)
+        stdout_b, stderr_b = await asyncio.wait_for(
+            proc.communicate(), timeout=timeout_s
+        )
     except TimeoutError:
         proc.kill()
         await proc.wait()
-        raise SemgrepInternalError(f"semgrep timed out after {timeout_s}s on {targets[0]}")
+        raise SemgrepInternalError(
+            f"semgrep timed out after {timeout_s}s on {targets[0]}"
+        )
 
     assert proc.returncode is not None
     if proc.returncode not in (0, 1):
@@ -154,17 +161,30 @@ def _is_test_path(path: Path, *, relative_to: Path, test_parts: frozenset[str]) 
     return any(part in test_parts for part in rel_parts)
 
 
-def _classify_failure(returncode: int, stdout_text: str, stderr_text: str) -> ExtractorConfigError:
+def _classify_failure(
+    returncode: int, stdout_text: str, stderr_text: str
+) -> ExtractorConfigError:
     detail = _failure_detail(stdout_text, stderr_text)
     lowered = detail.lower()
     if any(
         m in lowered
-        for m in ("invalid scanning root", "invalid configuration", "invalid rule", "parse error")
+        for m in (
+            "invalid scanning root",
+            "invalid configuration",
+            "invalid rule",
+            "parse error",
+        )
     ):
         cls: type[ExtractorConfigError] = SemgrepConfigInvalidError
     elif any(
         m in lowered
-        for m in ("no such file", "not found", "permission denied", "unreadable", "unable to read")
+        for m in (
+            "no such file",
+            "not found",
+            "permission denied",
+            "unreadable",
+            "unable to read",
+        )
     ):
         cls = SemgrepTargetError
     else:
