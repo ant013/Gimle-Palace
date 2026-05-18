@@ -210,6 +210,8 @@ LIMIT 100
                 if status == "D" and delta.old_file.path:
                     deleted.add(delta.old_file.path)
 
+        dirty = {p for p in dirty if not should_skip_path(p.split("/"))}
+
         max_files: int = settings.ownership_max_files_per_run  # type: ignore[attr-defined]
         if len(dirty) > max_files:
             raise ExtractorError(

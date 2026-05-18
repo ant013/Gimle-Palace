@@ -3,6 +3,7 @@ import pytest
 
 from palace_mcp.extractors.code_ownership.blame_walker import walk_blame
 from palace_mcp.extractors.code_ownership.mailmap import MailmapResolver
+from palace_mcp.extractors.foundation.walk import should_skip_path
 
 
 @pytest.fixture
@@ -85,3 +86,49 @@ def test_walk_blame_excludes_bots(mini_repo):
     by_author = {b.canonical_id: b.lines for b in blame_dict["a.py"].values()}
     assert "a2@example.com" not in by_author
     assert by_author["a1@example.com"] == 2  # only the lines author1 still owns
+
+
+@pytest.fixture
+def vendor_repo(tmp_path) -> pygit2.Repository:
+    """Repo with a vendor path (.build/checkouts/dep.swift) and a first-party path (Sources/main.swift).
+
+    Used to verify that should_skip_path filters out the vendor file before blame.
+    """
+    repo_path = tmp_path / "vendor"
+    repo_path.mkdir()
+    repo = pygit2.init_repository(str(repo_path))
+    sig = pygit2.Signature("Dev", "dev@example.com", 1_700_000_000, 0)
+
+    (repo_path / ".build").mkdir()
+    (repo_path / ".build" / "checkouts").mkdir()
+    (repo_path / ".build" / "checkouts" / "dep.swift").write_bytes(b"let x = 1\n")
+    (repo_path / "Sources").mkdir()
+    (repo_path / "Sources" / "main.swift").write_bytes(b"print(\"hello\")\n")
+
+    repo.index.add(".build/checkouts/dep.swift")
+    repo.index.add("Sources/main.swift")
+    repo.index.write()
+    tree = repo.index.write_tree()
+    repo.create_commit("HEAD", sig, sig, "init", tree, [])
+    return repo
+
+
+def test_vendor_paths_filtered_before_blame(vendor_repo):
+    """should_skip_path removes .build/checkouts/dep.swift; only Sources/main.swift reaches walk_blame."""
+    resolver = MailmapResolver.from_repo(vendor_repo, max_bytes=1_048_576)
+    all_paths = {".build/checkouts/dep.swift", "Sources/main.swift"}
+
+    # Reproduce the filter applied in extractor._run before walk_blame
+    filtered = {p for p in all_paths if not should_skip_path(p.split("/"))}
+
+    assert filtered == {"Sources/main.swift"}, "vendor path must be excluded by should_skip_path"
+
+    blame_dict, binary_paths = walk_blame(
+        vendor_repo,
+        paths=filtered,
+        mailmap=resolver,
+        bot_keys=set(),
+    )
+    assert "Sources/main.swift" in blame_dict
+    assert ".build/checkouts/dep.swift" not in blame_dict
+    assert ".build/checkouts/dep.swift" not in binary_paths
