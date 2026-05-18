@@ -1,3 +1,9 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pygit2
 import pytest
 
@@ -164,3 +170,112 @@ def test_filter_dirty_excludes_vendor_incremental():
     assert "Sources/main.swift" in filtered
     assert ".build/checkouts/dep.swift" not in filtered
     assert "Pods/Lib/foo.m" not in filtered
+
+
+@pytest.fixture
+def incremental_vendor_repo(tmp_path: Path):
+    """Two-commit repo: commit-1 adds Sources/main.swift; commit-2 also adds .build/checkouts/dep.swift.
+
+    Returns (repo, sha1_string, repo_path) so the test can supply sha1 as the
+    checkpoint prev_head_sha, triggering the incremental diff path in _run.
+    """
+    repo_path = tmp_path / "incremental"
+    repo_path.mkdir()
+    repo = pygit2.init_repository(str(repo_path))
+    sig = pygit2.Signature("Dev", "dev@example.com", 1_700_000_000, 0)
+
+    (repo_path / "Sources").mkdir()
+    (repo_path / "Sources" / "main.swift").write_bytes(b'print("v1")\n')
+    repo.index.add("Sources/main.swift")
+    repo.index.write()
+    tree1 = repo.index.write_tree()
+    sha1_oid = repo.create_commit("HEAD", sig, sig, "init", tree1, [])
+    sha1 = str(sha1_oid)
+
+    (repo_path / ".build").mkdir()
+    (repo_path / ".build" / "checkouts").mkdir()
+    (repo_path / ".build" / "checkouts" / "dep.swift").write_bytes(b"let dep = 1\n")
+    (repo_path / "Sources" / "main.swift").write_bytes(b'print("v2")\n')
+    repo.index.add(".build/checkouts/dep.swift")
+    repo.index.add("Sources/main.swift")
+    repo.index.write()
+    tree2 = repo.index.write_tree()
+    repo.create_commit("HEAD", sig, sig, "add vendor", tree2, [sha1_oid])
+
+    return repo, sha1, repo_path
+
+
+async def test_run_incremental_filters_vendor_before_walk_blame(
+    incremental_vendor_repo: tuple,
+) -> None:
+    """_run incremental path must drop .build/checkouts/dep.swift before calling walk_blame.
+
+    Deleting line 213 of extractor.py (_filter_dirty call) would cause dep.swift
+    to appear in captured_paths — this test detects that regression.
+    The deleted-paths set is left unfiltered (it goes to write_batch, not blame).
+    """
+    from palace_mcp.extractors.code_ownership.extractor import CodeOwnershipExtractor
+    from palace_mcp.extractors.code_ownership.models import OwnershipCheckpoint
+
+    repo, sha1, repo_path = incremental_vendor_repo
+
+    checkpoint = OwnershipCheckpoint(
+        project_id="proj",
+        last_head_sha=sha1,
+        last_completed_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        run_id="run-prev",
+        updated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+
+    fake_settings = MagicMock()
+    fake_settings.ownership_blame_weight = 0.7
+    fake_settings.mailmap_max_bytes = 1_048_576
+    fake_settings.ownership_max_files_per_run = 10_000
+    fake_settings.ownership_write_batch_size = 500
+    fake_settings.palace_recency_decay_days = 90
+
+    captured_paths: set[str] = set()
+
+    def _fake_walk_blame(repo_arg: object, *, paths: set[str], **_kw: object) -> tuple:
+        captured_paths.update(paths)
+        return {}, set()
+
+    _MODULE = "palace_mcp.extractors.code_ownership.extractor"
+
+    with (
+        patch(f"{_MODULE}.ensure_ownership_schema", new=AsyncMock()),
+        patch(f"{_MODULE}.load_checkpoint", new=AsyncMock(return_value=checkpoint)),
+        patch(f"{_MODULE}.update_checkpoint", new=AsyncMock()),
+        patch(f"{_MODULE}.aggregate_churn", new=AsyncMock(return_value={})),
+        patch(f"{_MODULE}.write_batch", new=AsyncMock()),
+        patch.object(
+            CodeOwnershipExtractor,
+            "_fetch_bot_identity_keys",
+            new=AsyncMock(return_value=set()),
+        ),
+        patch.object(
+            CodeOwnershipExtractor,
+            "_fetch_known_author_ids",
+            new=AsyncMock(return_value=set()),
+        ),
+        patch.object(
+            CodeOwnershipExtractor,
+            "_has_any_commits",
+            new=AsyncMock(return_value=True),
+        ),
+        patch(f"{_MODULE}.walk_blame", side_effect=_fake_walk_blame),
+    ):
+        await CodeOwnershipExtractor()._run(
+            driver=MagicMock(),
+            project_id="proj",
+            repo_path=repo_path,
+            run_id="run-new",
+            settings=fake_settings,
+        )
+
+    assert "Sources/main.swift" in captured_paths, (
+        "first-party file must reach walk_blame"
+    )
+    assert ".build/checkouts/dep.swift" not in captured_paths, (
+        "vendor path must be filtered by _filter_dirty before walk_blame"
+    )
