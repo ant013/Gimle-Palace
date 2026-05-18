@@ -1,7 +1,7 @@
 """palace.code.* MCP tool router — pass-through to codebase-memory-mcp subprocess.
 
-Registers 7 enabled tools (forwarded to CM via MCP SDK stdio transport) and
-1 disabled tool (manage_adr — returns directive error).
+Registers 7 enabled tools (forwarded to CM via MCP SDK stdio transport).
+palace.code.manage_adr is registered separately via adr/router.py (GIM-274).
 """
 
 from __future__ import annotations
@@ -149,10 +149,7 @@ _ENABLED_CM_TOOLS: dict[str, str] = {
 }
 
 _DISABLED_CM_TOOLS: dict[str, str] = {
-    "manage_adr": (
-        "Decision is authoritative in palace.memory; CM ADR store is not used. "
-        "Use palace.memory.lookup Decision {...} to read."
-    ),
+    # manage_adr removed: now registered as native @mcp.tool via adr/router.py (GIM-274)
 }
 
 

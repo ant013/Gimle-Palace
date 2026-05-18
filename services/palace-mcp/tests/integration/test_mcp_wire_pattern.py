@@ -50,15 +50,40 @@ class _TestServer:
         )
         self._server = uvicorn.Server(config)
         self._thread: threading.Thread | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     def start(self) -> None:
-        self._thread = threading.Thread(target=self._server.run, daemon=True)
+        def _run() -> None:
+            loop = asyncio.new_event_loop()
+            self._loop = loop
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(self._server.serve())
+            finally:
+                asyncio.set_event_loop(None)
+                pending = [task for task in asyncio.all_tasks(loop) if not task.done()]
+                for task in pending:
+                    task.cancel()
+                if pending:
+                    loop.run_until_complete(
+                        asyncio.gather(*pending, return_exceptions=True)
+                    )
+                loop.run_until_complete(loop.shutdown_asyncgens())
+                loop.close()
+
+        self._thread = threading.Thread(target=_run, daemon=True)
         self._thread.start()
         deadline = time.monotonic() + 5.0
         while not self._server.started:
             if time.monotonic() > deadline:
                 raise RuntimeError("Test MCP server did not start within 5 s")
             time.sleep(0.05)
+
+    def run_coro(self, coro: object) -> object:
+        if self._loop is None:
+            raise RuntimeError("Test MCP server loop is not available")
+        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        return future.result(timeout=5)
 
     def stop(self) -> None:
         self._server.should_exit = True
@@ -110,13 +135,8 @@ def mcp_url(neo4j_uri: str, neo4j_auth: tuple[str, str]) -> Iterator[str]:
 
     yield f"http://127.0.0.1:{port}/"
 
+    srv.run_coro(drv.close())
     srv.stop()
-    # Close driver on a fresh loop to avoid interfering with test event loop.
-    _cleanup = asyncio.new_event_loop()
-    try:
-        _cleanup.run_until_complete(drv.close())
-    finally:
-        _cleanup.close()
     _ms._driver = None  # type: ignore[attr-defined]
 
 
@@ -227,3 +247,42 @@ async def test_search_graph_call_flat_args_no_type_error(mcp_url: str) -> None:
             f"Got TypeError in tool result — GIM-89 regression detected. "
             f"Error: {error_text}"
         )
+
+
+@pytest.mark.integration
+async def test_cli_call_tool_round_trips_over_streamable_http(mcp_url: str) -> None:
+    """palace_mcp.cli._call_tool must use the real streamable HTTP transport."""
+    from palace_mcp.cli import _call_tool
+
+    result = await _call_tool(
+        url=mcp_url,
+        tool_name="palace.memory.health",
+        arguments={},
+    )
+
+    assert isinstance(result, dict)
+    assert "neo4j_reachable" in result
+
+
+@pytest.mark.integration
+async def test_register_project_parent_mount_round_trips_over_wire(
+    mcp_url: str,
+) -> None:
+    """palace.memory.register_project accepts parent_mount/relative_path on the wire."""
+    from palace_mcp.cli import _call_tool
+
+    slug = "wire-parent-mount-kit"
+    result = await _call_tool(
+        url=mcp_url,
+        tool_name="palace.memory.register_project",
+        arguments={
+            "slug": slug,
+            "name": slug,
+            "parent_mount": "hs",
+            "relative_path": "TronKit.Swift",
+        },
+    )
+
+    assert result["slug"] == slug
+    assert result["parent_mount"] == "hs"
+    assert result["relative_path"] == "TronKit.Swift"

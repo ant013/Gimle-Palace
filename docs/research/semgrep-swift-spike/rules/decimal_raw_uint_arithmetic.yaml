@@ -1,0 +1,32 @@
+rules:
+  - id: decimal_raw_uint_arithmetic_div
+    languages: [swift]
+    severity: WARNING
+    message: >
+      Raw integer division on a variable named 'amount', 'balance', or 'value'
+      that likely represents a token amount. Use Decimal or BigUInt to avoid
+      precision loss.
+    metadata:
+      category: crypto-correctness
+      kind: decimal_raw_uint_arithmetic
+    patterns:
+      - pattern: $AMOUNT / $DIVISOR
+      - metavariable-regex:
+          metavariable: $AMOUNT
+          regex: ^(amount|balance|value|satoshis?|wei|sun|lamport|gwei|tokenAmount)$
+
+  - id: decimal_raw_uint_arithmetic_mul
+    languages: [swift]
+    severity: WARNING
+    message: >
+      Raw integer multiplication on a variable named 'amount', 'balance', or
+      'value' that likely represents a token amount. Use BigUInt to avoid
+      integer overflow.
+    metadata:
+      category: crypto-correctness
+      kind: decimal_raw_uint_arithmetic
+    patterns:
+      - pattern: $AMOUNT * $MULTIPLIER
+      - metavariable-regex:
+          metavariable: $AMOUNT
+          regex: ^(amount|balance|value|satoshis?|wei|sun|lamport|gwei|tokenAmount)$

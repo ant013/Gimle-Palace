@@ -1,0 +1,29 @@
+{
+  "aquery": {
+    "actions": [
+      {
+        "commandline_redacted": true,
+        "inputs_sample": [
+          "app/Main.swift",
+          "lib/Core.swift"
+        ],
+        "mnemonic": "SwiftCompile",
+        "outputs_sample": [
+          "bazel-out/darwin-fastbuild/bin/app/wallet"
+        ],
+        "target_label": "//app:wallet"
+      }
+    ]
+  },
+  "capture_mode": "committed_sample_no_local_bazel",
+  "query": {
+    "labels": [
+      "//app:wallet",
+      "//lib:core"
+    ]
+  },
+  "schema_version": "bazel-query-aquery-v1",
+  "tool_name": "bazel",
+  "tool_version": "unavailable-local",
+  "workspace_root": "<ABSOLUTE_PATH>"
+}

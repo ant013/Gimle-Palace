@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 
 from palace_mcp.git.tools import (
     LOG_CAP_N,
@@ -20,36 +21,29 @@ from palace_mcp.git.tools import (
 # ---------------------------------------------------------------------------
 
 
-async def test_log_cap_enforced(large_repo: tuple[Path, Path]) -> None:
+async def test_log_cap_enforced(
+    large_repo: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """log must not return more than LOG_CAP_N entries regardless of n."""
-    repo, repos = large_repo
+    _repo, repos = large_repo
+    monkeypatch.setattr("palace_mcp.git.path_resolver.REPOS_ROOT", repos)
 
-    import palace_mcp.git.path_resolver as pr_mod
-
-    orig = pr_mod.REPOS_ROOT
-    pr_mod.REPOS_ROOT = repos
-    try:
-        result = await palace_git_log("bigproj", n=LOG_CAP_N + 9999)
-    finally:
-        pr_mod.REPOS_ROOT = orig
+    result = await palace_git_log("bigproj", n=LOG_CAP_N + 9999)
 
     assert result["ok"] is True
     assert len(result["entries"]) <= LOG_CAP_N
 
 
-async def test_log_truncated_flag_set(large_repo: tuple[Path, Path]) -> None:
+async def test_log_truncated_flag_set(
+    large_repo: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """When the repo has more commits than n, truncated=True."""
-    repo, repos = large_repo
-
-    import palace_mcp.git.path_resolver as pr_mod
-
-    orig = pr_mod.REPOS_ROOT
-    pr_mod.REPOS_ROOT = repos
-    try:
-        # Request exactly 10 from 250-commit repo — should give 10 non-truncated.
-        result = await palace_git_log("bigproj", n=10)
-    finally:
-        pr_mod.REPOS_ROOT = orig
+    _repo, repos = large_repo
+    monkeypatch.setattr("palace_mcp.git.path_resolver.REPOS_ROOT", repos)
+    # Request exactly 10 from 250-commit repo — should give 10 non-truncated.
+    result = await palace_git_log("bigproj", n=10)
 
     assert result["ok"] is True
     assert len(result["entries"]) == 10

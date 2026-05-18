@@ -41,7 +41,7 @@ class Action:
 
 
 class _IssueLister(Protocol):
-    async def list_in_progress_issues(self, company_id: str) -> list[Issue]: ...
+    async def list_active_issues(self, company_id: str) -> list[Issue]: ...
 
 
 # --- ps field parsers ----------------------------------------------------------
@@ -217,14 +217,48 @@ async def scan_died_mid_work(
     """Find issues stuck in assignee-set + no-run + stale-updatedAt state."""
     now = _dt.datetime.now(_dt.timezone.utc)
     threshold_dt = now - _dt.timedelta(minutes=company.thresholds.died_min)
-    issues = await client.list_in_progress_issues(company.id)
+    # GIM-NN (2026-05-06): cap on max age — don't wake long-abandoned issues.
+    # After in_review scope landed (#106), 3-week-old archive issues started
+    # getting woken because they technically met the (assignee + no-run + stale)
+    # gates. Recovery is only meaningful for *recent* lost handoffs.
+    max_age_dt = now - _dt.timedelta(minutes=company.thresholds.recover_max_age_min)
+    # GIM-216 (2026-05-06): scan in_review too — handoff PATCH may land but
+    # wake-event may be lost (e.g. when source PATCH was authored by a
+    # SIGTERM'd run). list_active_issues also feeds infra-block tier scans, so
+    # recovery must explicitly skip blocked issues below.
+    issues = await client.list_active_issues(company.id)
+
+    # Build parent_id -> set of live-child IDs. A parent assignee that's
+    # idle while a child is still in_progress / in_review / todo is
+    # legitimately waiting on the child to close, not stranded. Skipping
+    # these avoids the wake → CTO-exits-idle → wake loop on parent issues
+    # (e.g. GIM-283 waiting on GIM-289).
+    _LIVE_STATUSES = {"in_progress", "in_review", "todo"}
+    live_children_by_parent: dict[str, list[str]] = {}
+    for c in issues:
+        if c.parent_id and c.status in _LIVE_STATUSES:
+            live_children_by_parent.setdefault(c.parent_id, []).append(c.id)
+
     actions: list[Action] = []
     for issue in issues:
+        if issue.status == "blocked":
+            continue
         if issue.assignee_agent_id is None:
             continue
         if issue.execution_run_id is not None:
             continue
+        if issue.id in live_children_by_parent:
+            log.info(
+                "skip issue=%s reason=parent_waits_children children=%d",
+                issue.id,
+                len(live_children_by_parent[issue.id]),
+            )
+            continue
         if issue.updated_at > threshold_dt:
+            continue
+        if issue.updated_at < max_age_dt:
+            # Issue hasn't been touched in too long — treat as abandoned, not
+            # a lost-handoff. Operator can manually wake if recovery is needed.
             continue
 
         if state.is_escalated(issue.id):

@@ -1,0 +1,14 @@
+rules:
+  - id: loc_hardcoded_uikit
+    languages: [swift]
+    severity: WARNING
+    message: >
+      Hard-coded string literal assigned to UILabel.text or passed to setTitle(:for:).
+      Use NSLocalizedString or String(localized:) instead.
+    metadata:
+      category: localization
+      kind: hardcoded_string
+      context: uikit_label
+    # Matches: .text = "literal" or .setTitle("literal",
+    # Does NOT match: .text = NSLocalizedString(...) or .text = String(localized:...)
+    pattern-regex: '(?:\.text\s*=\s*"(?:[^"\\]|\\.)+"|setTitle\("(?:[^"\\]|\\.)+",)'

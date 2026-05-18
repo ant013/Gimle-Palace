@@ -1,0 +1,11 @@
+rules:
+  - id: error_as_string
+    languages: [swift]
+    severity: INFO
+    message: >
+      String-based error payload detected. Prefer a typed Error or Result
+      failure with a concrete domain error.
+    metadata:
+      category: error-handling
+      kind: error_as_string
+    pattern-regex: '(throw\s+"[^"]+"|Result\.failure\(".*?"\))'

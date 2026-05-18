@@ -61,10 +61,29 @@ def test_hotspot_registered() -> None:
     assert extractor.name == "hotspot"
 
 
+def test_hot_path_profiler_registered() -> None:
+    extractor = registry.get("hot_path_profiler")
+    assert extractor is not None
+    assert extractor.name == "hot_path_profiler"
+
+
+def test_code_ownership_registered() -> None:
+    """GIM-216: code_ownership extractor must be present in EXTRACTORS."""
+    extractor = registry.get("code_ownership")
+    assert extractor is not None
+    assert extractor.name == "code_ownership"
+
+
 def test_symbol_index_swift_registered() -> None:
     extractor = registry.get("symbol_index_swift")
     assert extractor is not None
     assert extractor.name == "symbol_index_swift"
+
+
+def test_reactive_dependency_tracer_registered() -> None:
+    extractor = registry.get("reactive_dependency_tracer")
+    assert extractor is not None
+    assert extractor.name == "reactive_dependency_tracer"
 
 
 def test_register_and_get() -> None:
@@ -112,3 +131,26 @@ def test_list_all_preserves_insertion_order() -> None:
     a_idx = all_names.index("__test_a")
     b_idx = all_names.index("__test_b")
     assert a_idx < b_idx
+
+
+def test_cross_repo_version_skew_registered():
+    from palace_mcp.extractors.registry import EXTRACTORS
+
+    assert "cross_repo_version_skew" in EXTRACTORS
+    cls_or_inst = EXTRACTORS["cross_repo_version_skew"]
+    name = cls_or_inst.name if hasattr(cls_or_inst, "name") else cls_or_inst.__name__
+    assert name == "cross_repo_version_skew" or name == "CrossRepoVersionSkewExtractor"
+
+
+def test_arch_layer_registered() -> None:
+    """GIM-243: arch_layer must be present in EXTRACTORS."""
+    extractor = registry.get("arch_layer")
+    assert extractor is not None
+    assert extractor.name == "arch_layer"
+
+
+def test_error_handling_policy_registered() -> None:
+    """GIM-257: error_handling_policy must be present in EXTRACTORS."""
+    extractor = registry.get("error_handling_policy")
+    assert extractor is not None
+    assert extractor.name == "error_handling_policy"

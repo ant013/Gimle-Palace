@@ -1,0 +1,23 @@
+rules:
+  - id: address_no_checksum_validation
+    languages: [swift]
+    severity: WARNING
+    message: >
+      Raw hex address string literal used without checksum validation (EIP-55).
+      Store addresses as validated types or call a checksum function before use.
+    metadata:
+      category: crypto-correctness
+      kind: address_no_checksum_validation
+    pattern-either:
+      # Hex address literal assigned directly to a variable
+      - pattern: |
+          let $VAR = "0x$ADDR"
+      - pattern: |
+          var $VAR = "0x$ADDR"
+      # Passed to address-like init without validation
+      - pattern: |
+          Address("0x$ADDR")
+      - pattern: |
+          TronAddress("0x$ADDR")
+      - pattern: |
+          EthAddress("0x$ADDR")

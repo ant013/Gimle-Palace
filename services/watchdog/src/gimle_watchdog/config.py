@@ -6,6 +6,7 @@ import logging
 import os
 import re
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 
 import yaml
@@ -35,6 +36,10 @@ class Thresholds:
     hang_cpu_max_s: int | None  # deprecated; None when new fields are used
     idle_cpu_ratio_max: float  # CPU time / elapsed time ratio below which proc is idle
     hang_stream_idle_max_s: int  # seconds since last stream-json event before proc is stalled
+    # Skip recovery for issues whose updatedAt is older than this many minutes — avoids
+    # waking long-abandoned in_review issues from the archive (GIM-NN, 2026-05-06: after
+    # broader scope landed in 6b2419f, watchdog woke 3 weeks-old GIM-44 / 20 / 28 etc.).
+    recover_max_age_min: int = field(default=180, kw_only=True)
 
 
 @dataclass(frozen=True)
@@ -47,6 +52,12 @@ class CompanyConfig:
 @dataclass(frozen=True)
 class DaemonConfig:
     poll_interval_seconds: int
+    recovery_enabled: bool = False
+    recovery_first_run_baseline_only: bool = True
+    recovery_dry_run: bool = (
+        False  # persistent scan+log mode; never acts; ignores baseline_completed
+    )
+    max_actions_per_tick: int = 1
 
 
 @dataclass(frozen=True)
@@ -79,6 +90,57 @@ _HANDOFF_KNOWN_KEYS = frozenset(
         "handoff_comments_per_issue",
         "handoff_max_issues_per_tick",
         "handoff_alert_cooldown_min",
+        "handoff_recent_window_min",
+        "handoff_alert_soft_budget_per_tick",
+        "handoff_alert_hard_budget_per_tick",
+        # GIM-244 — 3-tier detector keys
+        "handoff_cross_team_enabled",
+        "handoff_ownerless_enabled",
+        "handoff_infra_block_enabled",
+        "handoff_stale_bundle_enabled",
+        "handoff_auto_repair_enabled",
+        "handoff_escalation_delay_min",
+        "handoff_repair_delay_min",
+        "handoff_stale_bundle_threshold_hours",
+        "handoff_ownerless_comment_limit",
+    }
+)
+
+
+class EffectiveMode(str, Enum):
+    """Operational mode summarising recovery + alert + auto-repair posture."""
+
+    OBSERVE_ONLY = "observe-only"
+    ALERT_ONLY = "alert-only"
+    RECOVERY_ONLY = "recovery-only"
+    FULL_WATCHDOG = "full-watchdog"
+    UNSAFE_AUTO_REPAIR = "unsafe-auto-repair"
+
+
+ALERT_FLAG_NAMES: frozenset[str] = frozenset(
+    {
+        "handoff_alert_enabled",
+        "handoff_cross_team_enabled",
+        "handoff_ownerless_enabled",
+        "handoff_infra_block_enabled",
+        "handoff_stale_bundle_enabled",
+    }
+)
+
+AUTO_REPAIR_FLAG_NAME: str = "handoff_auto_repair_enabled"
+
+# Every code path that calls PaperclipClient.post_issue_comment MUST be
+# enumerated here as "<module_stem>:<enclosing_function>". The AST-based
+# registry test fails closed when a new caller lands without updating this set.
+POST_COMMENT_PATHS: frozenset[str] = frozenset(
+    {
+        "actions:post_handoff_alert",
+        "actions:post_stale_bundle_alert",
+        "actions:post_tier_escalation",
+        "actions:repair_cross_team_handoff",
+        "actions:repair_ownerless_completion",
+        "daemon:_post_tier_one_alert",
+        "daemon:_run_recovery_pass",
     }
 )
 
@@ -92,6 +154,19 @@ class HandoffConfig:
     handoff_comments_per_issue: int = 5
     handoff_max_issues_per_tick: int = 30
     handoff_alert_cooldown_min: int = 30
+    handoff_recent_window_min: int = 180
+    handoff_alert_soft_budget_per_tick: int = 5
+    handoff_alert_hard_budget_per_tick: int = 20
+    # GIM-244 — 3-tier detector fields (all disabled by default)
+    handoff_cross_team_enabled: bool = False
+    handoff_ownerless_enabled: bool = False
+    handoff_infra_block_enabled: bool = False
+    handoff_stale_bundle_enabled: bool = False
+    handoff_auto_repair_enabled: bool = False
+    handoff_escalation_delay_min: int = 90
+    handoff_repair_delay_min: int = 60
+    handoff_stale_bundle_threshold_hours: int = 24
+    handoff_ownerless_comment_limit: int = 50
 
 
 @dataclass(frozen=True)
@@ -104,6 +179,38 @@ class Config:
     logging: LoggingConfig
     escalation: EscalationConfig
     handoff: HandoffConfig = field(default_factory=HandoffConfig)
+
+
+def describe_effective_mode(cfg: Config) -> EffectiveMode:
+    """Classify the watchdog operational posture.
+
+    Total function over (recovery_enabled, any_alert_path_on, auto_repair_enabled).
+    Raises ConfigError if a handoff_*_enabled field exists outside the registered
+    alert and auto-repair flag sets.
+    """
+
+    handoff = cfg.handoff
+    known_flags = ALERT_FLAG_NAMES | {AUTO_REPAIR_FLAG_NAME}
+    for attr in vars(handoff):
+        if attr.startswith("handoff_") and attr.endswith("_enabled") and attr not in known_flags:
+            raise ConfigError(
+                f"unknown handoff_*_enabled flag {attr!r}; add to "
+                "ALERT_FLAG_NAMES or AUTO_REPAIR_FLAG_NAME"
+            )
+
+    if getattr(handoff, AUTO_REPAIR_FLAG_NAME):
+        return EffectiveMode.UNSAFE_AUTO_REPAIR
+
+    any_alert_path_on = any(getattr(handoff, flag) for flag in ALERT_FLAG_NAMES)
+    recovery_on = cfg.daemon.recovery_enabled
+
+    if not recovery_on and not any_alert_path_on:
+        return EffectiveMode.OBSERVE_ONLY
+    if not recovery_on and any_alert_path_on:
+        return EffectiveMode.ALERT_ONLY
+    if recovery_on and not any_alert_path_on:
+        return EffectiveMode.RECOVERY_ONLY
+    return EffectiveMode.FULL_WATCHDOG
 
 
 def _resolve_api_key(source: str) -> str | None:
@@ -158,6 +265,12 @@ def _parse_thresholds(raw: dict[str, object]) -> Thresholds:
     if not (0.0 < ratio < 1.0):
         raise ConfigError(f"thresholds.idle_cpu_ratio_max must be in (0.0, 1.0), got {ratio!r}")
 
+    # GIM-NN: optional with safe default (3 hours). Older yaml configs work unchanged.
+    recover_max_age_min_raw = raw.get("recover_max_age_min", 180)
+    recover_max_age_min = _require_positive_int(
+        recover_max_age_min_raw, "thresholds.recover_max_age_min"
+    )
+
     return Thresholds(
         died_min=_require_positive_int(raw.get("died_min"), "thresholds.died_min"),
         hang_etime_min=_require_positive_int(
@@ -168,6 +281,7 @@ def _parse_thresholds(raw: dict[str, object]) -> Thresholds:
         hang_stream_idle_max_s=_require_positive_int(
             raw.get("hang_stream_idle_max_s"), "thresholds.hang_stream_idle_max_s"
         ),
+        recover_max_age_min=recover_max_age_min,
     )
 
 
@@ -213,6 +327,15 @@ def load_config(path: Path) -> Config:
     daemon = DaemonConfig(
         poll_interval_seconds=_require_positive_int(
             daemon_raw.get("poll_interval_seconds"), "daemon.poll_interval_seconds"
+        ),
+        recovery_enabled=bool(daemon_raw.get("recovery_enabled", False)),
+        recovery_first_run_baseline_only=bool(
+            daemon_raw.get("recovery_first_run_baseline_only", True)
+        ),
+        recovery_dry_run=bool(daemon_raw.get("recovery_dry_run", False)),
+        max_actions_per_tick=_require_positive_int(
+            daemon_raw.get("max_actions_per_tick", 1),
+            "daemon.max_actions_per_tick",
         ),
     )
 
@@ -260,12 +383,63 @@ def load_config(path: Path) -> Config:
         raise ConfigError(f"handoff section has unknown keys: {sorted(unknown)}")
     handoff = HandoffConfig(
         handoff_alert_enabled=bool(handoff_raw.get("handoff_alert_enabled", False)),
-        handoff_comment_lookback_min=int(handoff_raw.get("handoff_comment_lookback_min", 5)),
-        handoff_wrong_assignee_min=int(handoff_raw.get("handoff_wrong_assignee_min", 3)),
-        handoff_review_owner_min=int(handoff_raw.get("handoff_review_owner_min", 5)),
-        handoff_comments_per_issue=int(handoff_raw.get("handoff_comments_per_issue", 5)),
-        handoff_max_issues_per_tick=int(handoff_raw.get("handoff_max_issues_per_tick", 30)),
-        handoff_alert_cooldown_min=int(handoff_raw.get("handoff_alert_cooldown_min", 30)),
+        handoff_comment_lookback_min=_require_positive_int(
+            handoff_raw.get("handoff_comment_lookback_min", 5),
+            "handoff.handoff_comment_lookback_min",
+        ),
+        handoff_wrong_assignee_min=_require_positive_int(
+            handoff_raw.get("handoff_wrong_assignee_min", 3),
+            "handoff.handoff_wrong_assignee_min",
+        ),
+        handoff_review_owner_min=_require_positive_int(
+            handoff_raw.get("handoff_review_owner_min", 5),
+            "handoff.handoff_review_owner_min",
+        ),
+        handoff_comments_per_issue=_require_positive_int(
+            handoff_raw.get("handoff_comments_per_issue", 5),
+            "handoff.handoff_comments_per_issue",
+        ),
+        handoff_max_issues_per_tick=_require_positive_int(
+            handoff_raw.get("handoff_max_issues_per_tick", 30),
+            "handoff.handoff_max_issues_per_tick",
+        ),
+        handoff_alert_cooldown_min=_require_positive_int(
+            handoff_raw.get("handoff_alert_cooldown_min", 30),
+            "handoff.handoff_alert_cooldown_min",
+        ),
+        handoff_recent_window_min=_require_positive_int(
+            handoff_raw.get("handoff_recent_window_min", 180),
+            "handoff.handoff_recent_window_min",
+        ),
+        handoff_alert_soft_budget_per_tick=_require_positive_int(
+            handoff_raw.get("handoff_alert_soft_budget_per_tick", 5),
+            "handoff.handoff_alert_soft_budget_per_tick",
+        ),
+        handoff_alert_hard_budget_per_tick=_require_positive_int(
+            handoff_raw.get("handoff_alert_hard_budget_per_tick", 20),
+            "handoff.handoff_alert_hard_budget_per_tick",
+        ),
+        handoff_cross_team_enabled=bool(handoff_raw.get("handoff_cross_team_enabled", False)),
+        handoff_ownerless_enabled=bool(handoff_raw.get("handoff_ownerless_enabled", False)),
+        handoff_infra_block_enabled=bool(handoff_raw.get("handoff_infra_block_enabled", False)),
+        handoff_stale_bundle_enabled=bool(handoff_raw.get("handoff_stale_bundle_enabled", False)),
+        handoff_auto_repair_enabled=bool(handoff_raw.get("handoff_auto_repair_enabled", False)),
+        handoff_escalation_delay_min=_require_positive_int(
+            handoff_raw.get("handoff_escalation_delay_min", 90),
+            "handoff.handoff_escalation_delay_min",
+        ),
+        handoff_repair_delay_min=_require_positive_int(
+            handoff_raw.get("handoff_repair_delay_min", 60),
+            "handoff.handoff_repair_delay_min",
+        ),
+        handoff_stale_bundle_threshold_hours=_require_positive_int(
+            handoff_raw.get("handoff_stale_bundle_threshold_hours", 24),
+            "handoff.handoff_stale_bundle_threshold_hours",
+        ),
+        handoff_ownerless_comment_limit=_require_positive_int(
+            handoff_raw.get("handoff_ownerless_comment_limit", 50),
+            "handoff.handoff_ownerless_comment_limit",
+        ),
     )
 
     return Config(

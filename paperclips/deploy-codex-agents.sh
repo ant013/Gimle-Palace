@@ -16,10 +16,12 @@ if [ -f "$ID_FILE" ]; then
   . "$ID_FILE"
 fi
 
-CODEX_AGENT_NAMES="cx-code-reviewer cx-cto codex-architect-reviewer cx-python-engineer cx-infra-engineer cx-mcp-engineer cx-qa-engineer cx-research-agent cx-technical-writer"
+CODEX_AGENT_NAMES="cx-auditor cx-blockchain-engineer cx-code-reviewer cx-cto codex-architect-reviewer cx-python-engineer cx-infra-engineer cx-mcp-engineer cx-qa-engineer cx-research-agent cx-security-auditor cx-technical-writer"
 
 agent_id() {
   case "$1" in
+    cx-auditor) echo "${CX_AUDITOR_AGENT_ID:-}" ;;
+    cx-blockchain-engineer) echo "${CX_BLOCKCHAIN_ENGINEER_AGENT_ID:-}" ;;
     cx-code-reviewer) echo "${CX_CODE_REVIEWER_AGENT_ID:-}" ;;
     cx-cto) echo "${CX_CTO_AGENT_ID:-}" ;;
     codex-architect-reviewer) echo "${CODEX_ARCHITECT_REVIEWER_AGENT_ID:-}" ;;
@@ -28,6 +30,7 @@ agent_id() {
     cx-mcp-engineer) echo "${CX_MCP_ENGINEER_AGENT_ID:-}" ;;
     cx-qa-engineer) echo "${CX_QA_ENGINEER_AGENT_ID:-}" ;;
     cx-research-agent) echo "${CX_RESEARCH_AGENT_AGENT_ID:-}" ;;
+    cx-security-auditor) echo "${CX_SECURITY_AUDITOR_AGENT_ID:-}" ;;
     cx-technical-writer) echo "${CX_TECHNICAL_WRITER_AGENT_ID:-}" ;;
     *) echo "" ;;
   esac
@@ -42,7 +45,9 @@ Usage:
 Environment:
   PAPERCLIP_API_KEY              required for --api and live adapter preflight
   PAPERCLIP_CODEX_AGENT_IDS_FILE optional env file with CODEX_*_AGENT_ID values
-  CX_CODE_REVIEWER_AGENT_ID         Codex code reviewer id after hire approval
+  CX_AUDITOR_AGENT_ID              Codex Audit-V1 domain sub-report agent id
+  CX_BLOCKCHAIN_ENGINEER_AGENT_ID   Codex blockchain engineer id (E6 hire)
+  CX_CODE_REVIEWER_AGENT_ID         Codex code reviewer id
   CX_CTO_AGENT_ID                   Codex CTO id
   CODEX_ARCHITECT_REVIEWER_AGENT_ID Codex architectural reviewer id
   CX_PYTHON_ENGINEER_AGENT_ID       Codex Python engineer id
@@ -50,6 +55,7 @@ Environment:
   CX_MCP_ENGINEER_AGENT_ID          Codex MCP engineer id
   CX_QA_ENGINEER_AGENT_ID           Codex QA engineer id
   CX_RESEARCH_AGENT_AGENT_ID        Codex research agent id
+  CX_SECURITY_AUDITOR_AGENT_ID      Codex security auditor id (E6 hire)
   CX_TECHNICAL_WRITER_AGENT_ID      Codex technical writer id
 
 This script intentionally has no --local mode for the first Codex pilot slice.

@@ -1,0 +1,10 @@
+{
+  "source": "track-a",
+  "capture_tool": "xctrace export",
+  "capture_kind": "time-profiler",
+  "normalization": "table export converted to committed JSON fixture",
+  "notes": [
+    "Track A is the merge gate fixture for GIM-276.",
+    "Track B live capture remains optional follow-up evidence."
+  ]
+}

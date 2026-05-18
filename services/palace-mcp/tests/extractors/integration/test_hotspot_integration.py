@@ -56,6 +56,16 @@ def _ctx(
     )
 
 
+async def _seed_git_history_run(driver: AsyncDriver, project_slug: str) -> None:
+    """Seed a successful git_history IngestRun so the prerequisite guard passes."""
+    async with driver.session() as session:
+        await session.run(
+            "MERGE (r:IngestRun {project: $project, extractor_name: 'git_history'}) "
+            "SET r.success = true",
+            project=project_slug,
+        )
+
+
 async def _seed_churn(
     driver: AsyncDriver, project_id: str, churn_map: dict[str, int]
 ) -> None:
@@ -85,6 +95,7 @@ async def test_hotspot_full_pipeline(
 ) -> None:
     repo = _build_repo(tmp_path)
     project_id = "project/hs-integ"
+    await _seed_git_history_run(driver, "hs-integ")
     await _seed_churn(
         driver,
         project_id,
@@ -134,6 +145,7 @@ async def test_hotspot_idempotent_via_consume_counters(
 ) -> None:
     repo = _build_repo(tmp_path)
     project_id = "project/hs-integ"
+    await _seed_git_history_run(driver, "hs-integ")
     await _seed_churn(
         driver,
         project_id,
@@ -169,6 +181,7 @@ async def test_hotspot_eviction_removes_dead_functions(
 ) -> None:
     repo = _build_repo(tmp_path)
     project_id = "project/hs-integ"
+    await _seed_git_history_run(driver, "hs-integ")
     await _seed_churn(
         driver,
         project_id,

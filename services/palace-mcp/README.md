@@ -228,3 +228,115 @@ palace.memory.lookup(entity_type="Decision", filters={"slice_ref": "GIM-96"})
 | `decision_kind` | Optional free-form string, ≤ 80 chars |
 
 Validation errors return `{"ok": false, "error_code": "validation_error", "message": "..."}` (not FastMCP `isError`). Infrastructure errors (Neo4j/embedder down) raise via `handle_tool_error` → FastMCP `isError=true`.
+
+---
+
+## Production deploy on iMac
+
+> Extracted from former root `CLAUDE.md` during UAA Phase H1 CLAUDE.md
+> decompose (2026-05-17).
+
+After a PR squash-merges to `develop`, rebuild and restart `palace-mcp` with:
+
+```bash
+bash paperclips/scripts/imac-deploy.sh
+```
+
+The script must run **on the iMac** (SSH in first, then invoke locally).
+
+- Pinned deploy: `bash paperclips/scripts/imac-deploy.sh --target <sha>`
+- Assert extractor: `bash paperclips/scripts/imac-deploy.sh --expect-extractor symbol_index_typescript`
+- Rollback: see `paperclips/scripts/imac-deploy.README.md` — tag `prev_image`
+  from `imac-deploy.log` and `docker compose up -d --no-build palace-mcp`
+
+Prerequisites and all five deploy gotchas are documented in
+`paperclips/scripts/imac-deploy.README.md`.
+
+## AGENTS.md deploy on iMac
+
+After a release-cut merges to `main`, update live agent role files with:
+
+```bash
+bash paperclips/scripts/imac-agents-deploy.sh
+```
+
+The script must run **on the iMac** (SSH in first, then invoke locally).
+
+- Pinned deploy: `bash paperclips/scripts/imac-agents-deploy.sh --target-sha <sha>`
+- Rollback: see `paperclips/scripts/imac-agents-deploy.README.md`
+
+No Docker needed — the script copies rendered AGENTS.md files from a
+temporary `origin/main` worktree to live agent bundle directories.
+Paperclip reads AGENTS.md fresh on each agent run, so no restart is required.
+
+## Docker Compose Profiles
+
+Services use explicit profile opt-in:
+
+```bash
+docker compose --profile review up -d    # palace-mcp + neo4j
+docker compose --profile analyze up -d   # analyze mode
+docker compose --profile full up -d      # full mode
+```
+
+No profile → no services start (intentional — forces explicit opt-in).
+
+## Environment
+
+Copy `.env.example` to `.env` and fill real values before starting
+compose. Required at minimum: `NEO4J_PASSWORD`.
+
+`PALACE_DEFAULT_GROUP_ID` (default `project/gimle`) namespaces all
+Issue/Comment/Agent/IngestRun nodes. Do **not** change casually — it
+determines which rows ingest writes against and GC scopes on.
+
+## Mounting project repos for palace.git.*
+
+`palace-mcp` exposes 5 read-only git tools (`palace.git.log`, `.show`,
+`.blame`, `.diff`, `.ls_tree`). Each tool takes a `project` slug that
+must correspond to a directory bind-mounted at `/repos/<slug>` inside
+the container.
+
+**Currently mounted projects (docker-compose.yml):**
+
+| Slug         | Host path                                                                           | Mount                    |
+|--------------|-------------------------------------------------------------------------------------|--------------------------|
+| `gimle`      | `/Users/Shared/Ios/Gimle-Palace`                                                    | `/repos/gimle:ro`        |
+| `oz-v5-mini` | `services/palace-mcp/tests/extractors/fixtures/oz-v5-mini-project` (repo-relative) | `/repos/oz-v5-mini:ro`   |
+| `uw-android` | `/Users/Shared/Android/unstoppable-wallet-android`                                  | `/repos/uw-android:ro`   |
+| `uw-ios-mini`| `services/palace-mcp/tests/extractors/fixtures/uw-ios-mini-project` (repo-relative) | `/repos/uw-ios-mini:ro` |
+| `uw-ios`     | `/Users/Shared/Ios/unstoppable-wallet-ios`                                          | `/repos/uw-ios:ro`       |
+| HS Kits (parent) | `/Users/Shared/Ios/HorizontalSystems` (41 repos; GIM-182 `uw-ios` bundle)   | `/repos-hs:ro`           |
+
+### Non-iMac contributors
+
+Real-project bind-mounts (`gimle`, `uw-android`, `uw-ios`) use absolute Mac paths
+(`/Users/Shared/...`) for operator-iMac convention. Non-iMac contributors
+should:
+
+- Create `docker-compose.override.yml` redirecting these paths to local clones, OR
+- Run `docker compose --profile review up` excluding affected services and use only
+  fixture-based mounts (paths under `./services/palace-mcp/tests/extractors/fixtures/`)
+  which work cross-platform.
+
+The HS parent mount (`/repos-hs`) serves all 41 UW-iOS bundle members via
+`parent_mount="hs"` + `relative_path` parameters in `register_project`. Each Kit
+resolves to `/repos-hs/<relative_path>` inside the container. Non-iMac contributors
+should override the host path in `docker-compose.override.yml`.
+
+**To add a new project:**
+1. Add a bind-mount entry to `docker-compose.yml` under `palace-mcp.volumes`:
+   ```yaml
+   - /path/to/your/repo:/repos/your-slug:ro
+   ```
+2. Restart the `palace-mcp` container (`docker compose --profile review up -d --force-recreate palace-mcp`).
+3. Optionally register the project in Neo4j via `palace.memory.register_project` so
+   it appears in `palace.memory.health` without the `git_repos_unregistered` warning.
+
+**Security notes:**
+- All bind-mounts are read-only (`:ro`).
+- `git` commands run with a sanitized environment (`GIT_CONFIG_NOSYSTEM=1`,
+  `PATH=/usr/bin:/bin`, no `HOME` git config) — the container cannot write
+  to or exfiltrate credentials from mounted repos.
+- Only whitelisted git verbs (`log`, `show`, `blame`, `diff`, `ls-tree`,
+  `cat-file`) are executed; write verbs are blocked at the subprocess layer.

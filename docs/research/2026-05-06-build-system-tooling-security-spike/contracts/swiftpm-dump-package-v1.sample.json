@@ -1,0 +1,83 @@
+{
+  "capture_mode": "sandbox_exec_xcrun_platform_lookup_failed",
+  "package": {
+    "name": "WalletKit",
+    "products": [
+      {
+        "name": "WalletCore",
+        "targets": [
+          "WalletCore"
+        ],
+        "type": {
+          "library": [
+            "automatic"
+          ]
+        }
+      },
+      {
+        "name": "WalletCLI",
+        "targets": [
+          "WalletCLI"
+        ],
+        "type": {
+          "executable": null
+        }
+      }
+    ],
+    "targets": [
+      {
+        "dependencies": [],
+        "name": "WalletCore",
+        "resources": [
+          {
+            "path": "Resources",
+            "rule": "copy"
+          }
+        ],
+        "settings": [],
+        "type": "regular"
+      },
+      {
+        "dependencies": [
+          {
+            "byName": [
+              "WalletCore",
+              null
+            ]
+          }
+        ],
+        "name": "WalletCLI",
+        "resources": [],
+        "settings": [
+          {
+            "name": "define",
+            "tool": "swift",
+            "value": "CLI_MODE"
+          }
+        ],
+        "type": "executable"
+      },
+      {
+        "dependencies": [
+          {
+            "byName": [
+              "WalletCore",
+              null
+            ]
+          }
+        ],
+        "name": "WalletCoreTests",
+        "resources": [],
+        "settings": [],
+        "type": "test"
+      }
+    ],
+    "toolsVersion": {
+      "_version": "5.8.0"
+    }
+  },
+  "package_root": "<ABSOLUTE_PATH>",
+  "schema_version": "swiftpm-dump-package-v1",
+  "tool_name": "swift",
+  "tool_version": "Apple Swift version 5.8.1"
+}

@@ -21,10 +21,11 @@ PAPERCLIP_DATA="${PAPERCLIP_DATA_DIR:-$HOME/.paperclip/instances/default}"
 AGENTS_BASE="$PAPERCLIP_DATA/companies/$COMPANY_ID/agents"
 
 # Gimle agents (CEO excluded — no role file; if added, map here)
-AGENT_NAMES="code-reviewer cto infra-engineer python-engineer qa-engineer technical-writer mcp-engineer research-agent blockchain-engineer security-auditor opus-architect-reviewer"
+AGENT_NAMES="auditor code-reviewer cto infra-engineer python-engineer qa-engineer technical-writer mcp-engineer research-agent blockchain-engineer security-auditor opus-architect-reviewer"
 
 agent_id() {
   case "$1" in
+    auditor)                 echo "60a3c10d-76bd-4247-83c9-4ba2ddcd3c21" ;;
     code-reviewer)            echo "bd2d7e20-7ed8-474c-91fc-353d610f4c52" ;;
     cto)                      echo "7fb0fdbb-e17f-4487-a4da-16993a907bec" ;;
     infra-engineer)           echo "89f8f76b-844b-4d1f-b614-edbe72a91d4b" ;;

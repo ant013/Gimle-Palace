@@ -1,0 +1,11 @@
+rules:
+  - id: catch_only_logs
+    languages: [swift]
+    severity: WARNING
+    message: >
+      Catch block only logs or prints the error and then swallows it. Consider
+      rethrowing or returning an explicit failure to callers.
+    metadata:
+      category: error-handling
+      kind: catch_only_logs
+    pattern-regex: 'catch(?:\s+[^{}]+)?\s*\{\s*(?:logger\.(?:error|warning|info)\([^)]*\)|print\([^)]*\))\s*\}'

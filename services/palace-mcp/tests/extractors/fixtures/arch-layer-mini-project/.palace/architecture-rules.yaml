@@ -1,0 +1,17 @@
+layers:
+  - name: core
+    module_globs: ["Core", "*Core*", "WalletCore"]
+  - name: ui
+    module_globs: ["UI", "*UI*", "WalletUI"]
+
+rules:
+  - id: core_no_ui_import
+    kind: forbidden_dependency
+    severity: high
+    from_layers: ["core"]
+    to_layers: ["ui"]
+    message: "Core module must not depend on UI module"
+
+  - id: no_cycles
+    kind: no_circular_module_deps
+    severity: high

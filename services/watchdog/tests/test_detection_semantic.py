@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import subprocess
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from unittest.mock import patch
 
 from freezegun import freeze_time
@@ -11,8 +13,12 @@ from gimle_watchdog import detection_semantic as ds
 from gimle_watchdog.models import (
     CommentOnlyHandoffFinding,
     Comment,
+    CrossTeamHandoffFinding,
     FindingType,
+    InfraBlockFinding,
+    OwnerlessCompletionFinding,
     ReviewOwnedByImplementerFinding,
+    StaleBundleFinding,
     WrongAssigneeFinding,
 )
 from gimle_watchdog.paperclip import Issue
@@ -43,6 +49,8 @@ def _issue(
     assignee_id: str | None = PE_ID,
     updated_at: datetime = NOW,
     issue_number: int = 1,
+    origin_kind: str | None = None,
+    parent_id: str | None = None,
 ) -> Issue:
     return Issue(
         id=id,
@@ -51,6 +59,8 @@ def _issue(
         status=status,
         updated_at=updated_at,
         issue_number=issue_number,
+        origin_kind=origin_kind,
+        parent_id=parent_id,
     )
 
 
@@ -73,6 +83,7 @@ def _cfg(**kwargs: object) -> ds.HandoffDetectionConfig:
         handoff_comments_per_issue=5,
         handoff_max_issues_per_tick=30,
         handoff_alert_cooldown_min=30,
+        handoff_recent_window_min=180,
     )
     defaults.update(kwargs)
     return ds.HandoffDetectionConfig(**defaults)  # type: ignore[arg-type]
@@ -167,6 +178,23 @@ def test_comment_only_status_done_no_finding():
     assert ds._detect_comment_only_handoff(issue, comments, lookback_min=5) is None
 
 
+def test_comment_only_stale_issue_no_finding():
+    issue = _issue(updated_at=NOW - timedelta(hours=4))
+    comments = [
+        _comment(body=_CO_BODY, author_id=PE_ID, created_at=NOW - timedelta(hours=4, minutes=5))
+    ]
+    assert (
+        ds._detect_comment_only_handoff(
+            issue,
+            comments,
+            lookback_min=5,
+            now_server=NOW,
+            recent_window_min=180,
+        )
+        is None
+    )
+
+
 def test_comment_only_no_mentions_in_window_no_finding():
     issue = _issue()
     comments = [_comment(body="no mentions here", author_id=PE_ID)]
@@ -225,6 +253,24 @@ def test_wrong_assignee_status_not_eligible_no_finding():
     assert ds._detect_wrong_assignee(issue, HIRED_IDS, NOW, min_age_min=3) is None
 
 
+def test_wrong_assignee_skip_origin_no_finding():
+    issue = _issue(
+        assignee_id=BOGUS_ID,
+        updated_at=NOW - timedelta(minutes=5),
+        origin_kind="stranded_issue_recovery",
+    )
+    assert (
+        ds._detect_wrong_assignee(
+            issue,
+            HIRED_IDS,
+            NOW,
+            min_age_min=3,
+            recent_window_min=180,
+        )
+        is None
+    )
+
+
 # ---------------------------------------------------------------------------
 # review_owned_by_implementer detector
 # ---------------------------------------------------------------------------
@@ -278,6 +324,21 @@ def test_review_owned_issue_too_young_no_finding():
     issue = _issue(status="in_review", assignee_id=PE_ID, updated_at=NOW - timedelta(minutes=2))
     assert (
         ds._detect_review_owned_by_implementer(issue, HIRED_IDS, NAME_BY_ID, NOW, min_age_min=5)
+        is None
+    )
+
+
+def test_review_owned_stale_issue_no_finding():
+    issue = _issue(status="in_review", assignee_id=PE_ID, updated_at=NOW - timedelta(hours=4))
+    assert (
+        ds._detect_review_owned_by_implementer(
+            issue,
+            HIRED_IDS,
+            NAME_BY_ID,
+            NOW,
+            min_age_min=5,
+            recent_window_min=180,
+        )
         is None
     )
 
@@ -406,10 +467,16 @@ async def test_scan_continues_when_wrong_assignee_detector_raises_for_one_issue(
         for n in range(4)
     ]
 
-    def raising_detect(issue, hired_ids, now_server, min_age_min):
+    def raising_detect(issue, hired_ids, now_server, min_age_min, recent_window_min=180):
         if issue.id == "i0":
             raise RuntimeError("injected")
-        return real_detect(issue, hired_ids, now_server, min_age_min)
+        return real_detect(
+            issue,
+            hired_ids,
+            now_server,
+            min_age_min,
+            recent_window_min=recent_window_min,
+        )
 
     with patch.object(ds, "_detect_wrong_assignee", side_effect=raising_detect):
         findings = await ds.scan_handoff_inconsistencies(
@@ -457,10 +524,24 @@ async def test_scan_continues_when_review_owned_detector_raises_for_one_issue():
         for n in range(4)
     ]
 
-    def raising_ro(issue, hired_ids, name_by_id, now_server, min_age_min):
+    def raising_ro(
+        issue,
+        hired_ids,
+        name_by_id,
+        now_server,
+        min_age_min,
+        recent_window_min=180,
+    ):
         if issue.id == "i0":
             raise RuntimeError("injected")
-        return real_ro(issue, hired_ids, name_by_id, now_server, min_age_min)
+        return real_ro(
+            issue,
+            hired_ids,
+            name_by_id,
+            now_server,
+            min_age_min,
+            recent_window_min=recent_window_min,
+        )
 
     with patch.object(ds, "_detect_review_owned_by_implementer", side_effect=raising_ro):
         findings = await ds.scan_handoff_inconsistencies(
@@ -488,3 +569,278 @@ async def test_max_issues_cap_limits_evaluation():
         issues, _fetch_none, HIRED_IDS, NAME_BY_ID, cfg, NOW
     )
     assert len(findings) == 30
+
+
+# ---------------------------------------------------------------------------
+# Cross-team handoff detector
+# ---------------------------------------------------------------------------
+
+_CLAUDE_UUID = "58b68640-1e83-4d5d-978b-51a5ca9080e0"  # Claude QA
+_CODEX_UUID = "99d5f8f8-822f-4ddb-baaa-0bdaec6f9399"  # Codex QA (stub)
+_TEAM_UUIDS: dict[str, set[str]] = {
+    "claude": {PE_ID, CR_ID, CTO_ID, _CLAUDE_UUID},
+    "codex": {_CODEX_UUID},
+}
+
+
+def test_cross_team_fires_when_codex_assigned_to_claude_issue():
+    issue = _issue(assignee_id=_CODEX_UUID, status="in_progress")
+    result = ds._detect_cross_team_handoff(issue, [], _TEAM_UUIDS, company_team="claude")
+    assert isinstance(result, CrossTeamHandoffFinding)
+    assert result.assignee_team == "codex"
+    assert result.company_team == "claude"
+
+
+def test_cross_team_no_finding_for_same_team():
+    issue = _issue(assignee_id=PE_ID, status="in_progress")
+    result = ds._detect_cross_team_handoff(issue, [], _TEAM_UUIDS, company_team="claude")
+    assert result is None
+
+
+def test_cross_team_no_finding_for_unassigned():
+    issue = _issue(assignee_id=None, status="in_progress")
+    result = ds._detect_cross_team_handoff(issue, [], _TEAM_UUIDS, company_team="claude")
+    assert result is None
+
+
+def test_cross_team_suppressed_by_infra_block_marker():
+    issue = _issue(assignee_id=_CODEX_UUID, status="in_progress")
+    comments = [_comment(body="operator override: infra-block approved cross-team")]
+    result = ds._detect_cross_team_handoff(issue, comments, _TEAM_UUIDS, company_team="claude")
+    assert result is None
+
+
+def test_cross_team_no_finding_for_stale_issue():
+    issue = _issue(
+        assignee_id=_CODEX_UUID,
+        status="in_progress",
+        updated_at=NOW - timedelta(hours=4),
+    )
+    result = ds._detect_cross_team_handoff(
+        issue,
+        [],
+        _TEAM_UUIDS,
+        company_team="claude",
+        now_server=NOW,
+        recent_window_min=180,
+    )
+    assert result is None
+
+
+def test_cross_team_no_finding_for_unknown_uuid():
+    issue = _issue(assignee_id=BOGUS_ID, status="in_progress")
+    result = ds._detect_cross_team_handoff(issue, [], _TEAM_UUIDS, company_team="claude")
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Ownerless completion detector
+# ---------------------------------------------------------------------------
+
+_CLAUDE_QA_ID = ds._CLAUDE_QA_UUID
+_CODEX_QA_ID = ds._CODEX_QA_UUID
+
+
+def _qa_comment(body: str, author_id: str = _CLAUDE_QA_ID) -> Comment:
+    return _comment(body=body, author_id=author_id)
+
+
+def test_ownerless_fires_when_done_without_qa_evidence():
+    issue = _issue(status="done")
+    result = ds._detect_ownerless_completion(issue, [])
+    assert isinstance(result, OwnerlessCompletionFinding)
+    assert result.issue_id == issue.id
+
+
+def test_ownerless_suppressed_by_phase_41_qa_pass_from_claude_qa():
+    issue = _issue(status="done")
+    body = "## Phase 4.1 — QA PASS ✅\nEvidence: commit SHA abc123"
+    comments = [_qa_comment(body, author_id=_CLAUDE_QA_ID)]
+    result = ds._detect_ownerless_completion(issue, comments)
+    assert result is None
+
+
+def test_ownerless_suppressed_by_phase_41_qa_pass_from_codex_qa():
+    issue = _issue(status="done")
+    body = "Phase 4.1 QA Pass — all green"
+    comments = [_qa_comment(body, author_id=_CODEX_QA_ID)]
+    result = ds._detect_ownerless_completion(issue, comments)
+    assert result is None
+
+
+def test_ownerless_not_suppressed_by_qa_comment_without_pass():
+    issue = _issue(status="done")
+    body = "## Phase 4.1 — QA FAIL ❌"
+    comments = [_qa_comment(body)]
+    result = ds._detect_ownerless_completion(issue, comments)
+    assert isinstance(result, OwnerlessCompletionFinding)
+
+
+def test_ownerless_not_suppressed_by_non_qa_author():
+    issue = _issue(status="done")
+    body = "## Phase 4.1 — QA PASS ✅"
+    comments = [_comment(body=body, author_id=PE_ID)]  # wrong author
+    result = ds._detect_ownerless_completion(issue, comments)
+    assert isinstance(result, OwnerlessCompletionFinding)
+
+
+def test_ownerless_no_finding_when_not_done():
+    for status in ("todo", "in_progress", "in_review"):
+        issue = _issue(status=status)
+        result = ds._detect_ownerless_completion(issue, [])
+        assert result is None, f"should not fire for status={status}"
+
+
+def test_ownerless_follow_up_child_issue_no_finding():
+    issue = _issue(status="done", parent_id="issue-parent-1")
+    result = ds._detect_ownerless_completion(issue, [])
+    assert result is None
+
+
+def test_ownerless_skip_origin_no_finding():
+    issue = _issue(status="done", origin_kind="stranded_issue_recovery")
+    result = ds._detect_ownerless_completion(
+        issue,
+        [],
+        now_server=NOW,
+        recent_window_min=180,
+    )
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Infra-block detector
+# ---------------------------------------------------------------------------
+
+
+def test_infra_block_fires_on_cloudflare_1010():
+    issue = _issue()
+    c = _comment(body="Error 1010 from Cloudflare", created_at=NOW - timedelta(minutes=10))
+    result = ds._detect_infra_block(issue, [c], lookback_min=60, now=NOW)
+    assert isinstance(result, InfraBlockFinding)
+    assert result.error_kind == "cloudflare_1010"
+    assert result.actionable is False
+
+
+def test_infra_block_fires_on_429():
+    issue = _issue()
+    c = _comment(body="HTTP 429 Too Many Requests", created_at=NOW - timedelta(minutes=5))
+    result = ds._detect_infra_block(issue, [c], lookback_min=60, now=NOW)
+    assert isinstance(result, InfraBlockFinding)
+    assert result.error_kind == "rate_limit_429"
+
+
+def test_infra_block_fires_on_502():
+    issue = _issue()
+    c = _comment(body="Got a 502 Bad Gateway", created_at=NOW - timedelta(minutes=5))
+    result = ds._detect_infra_block(issue, [c], lookback_min=60, now=NOW)
+    assert isinstance(result, InfraBlockFinding)
+    assert result.error_kind == "service_unavailable"
+
+
+def test_infra_block_fires_on_cloudflare_generic():
+    issue = _issue()
+    c = _comment(body="Cloudflare is blocking the request", created_at=NOW - timedelta(minutes=5))
+    result = ds._detect_infra_block(issue, [c], lookback_min=60, now=NOW)
+    assert isinstance(result, InfraBlockFinding)
+    assert result.error_kind == "cloudflare_generic"
+
+
+def test_infra_block_no_finding_outside_lookback():
+    issue = _issue()
+    c = _comment(body="Error 1010", created_at=NOW - timedelta(minutes=90))
+    result = ds._detect_infra_block(issue, [c], lookback_min=60, now=NOW)
+    assert result is None
+
+
+def test_infra_block_no_finding_for_done_status():
+    issue = _issue(status="done")
+    c = _comment(body="HTTP 429 Too Many Requests", created_at=NOW - timedelta(minutes=5))
+    result = ds._detect_infra_block(issue, [c], lookback_min=60, now=NOW, recent_window_min=180)
+    assert result is None
+
+
+def test_infra_block_no_finding_for_clean_comment():
+    issue = _issue()
+    c = _comment(body="All good, proceeding normally", created_at=NOW - timedelta(minutes=5))
+    result = ds._detect_infra_block(issue, [c], lookback_min=60, now=NOW)
+    assert result is None
+
+
+def test_infra_block_no_finding_for_empty_comments():
+    issue = _issue()
+    result = ds._detect_infra_block(issue, [], lookback_min=60, now=NOW)
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Stale-bundle detector
+# ---------------------------------------------------------------------------
+
+_SHA_OLD = "aaa1111111111111111111111111111111111111"
+_SHA_NEW = "bbb2222222222222222222222222222222222222"
+
+
+def _write_deploy_log(path: Path, sha: str, ts: datetime) -> None:
+    path.write_text(f"{ts.isoformat()}\tmain_sha={sha}\n")
+
+
+def test_stale_bundle_fires_when_sha_differs_and_old(tmp_path: Path):
+    log = tmp_path / "imac-agents-deploy.log"
+    deployed_at = NOW - timedelta(hours=25)
+    _write_deploy_log(log, _SHA_OLD, deployed_at)
+    with patch.object(
+        ds.subprocess,
+        "run",
+        return_value=subprocess.CompletedProcess([], 0, stdout=_SHA_NEW + "\n", stderr=""),
+    ):
+        result = ds.detect_stale_bundle(log, tmp_path, threshold_hours=24, now=NOW)
+    assert isinstance(result, StaleBundleFinding)
+    assert result.deployed_sha == _SHA_OLD
+    assert result.current_sha == _SHA_NEW
+    assert result.stale_hours > 24.0
+
+
+def test_stale_bundle_no_finding_when_sha_matches(tmp_path: Path):
+    log = tmp_path / "imac-agents-deploy.log"
+    deployed_at = NOW - timedelta(hours=25)
+    _write_deploy_log(log, _SHA_OLD, deployed_at)
+    with patch.object(
+        ds.subprocess,
+        "run",
+        return_value=subprocess.CompletedProcess([], 0, stdout=_SHA_OLD + "\n", stderr=""),
+    ):
+        result = ds.detect_stale_bundle(log, tmp_path, threshold_hours=24, now=NOW)
+    assert result is None
+
+
+def test_stale_bundle_no_finding_within_threshold(tmp_path: Path):
+    log = tmp_path / "imac-agents-deploy.log"
+    deployed_at = NOW - timedelta(hours=10)
+    _write_deploy_log(log, _SHA_OLD, deployed_at)
+    with patch.object(
+        ds.subprocess,
+        "run",
+        return_value=subprocess.CompletedProcess([], 0, stdout=_SHA_NEW + "\n", stderr=""),
+    ):
+        result = ds.detect_stale_bundle(log, tmp_path, threshold_hours=24, now=NOW)
+    assert result is None
+
+
+def test_stale_bundle_no_finding_when_log_missing(tmp_path: Path):
+    log = tmp_path / "nonexistent.log"
+    result = ds.detect_stale_bundle(log, tmp_path, threshold_hours=24, now=NOW)
+    assert result is None
+
+
+def test_stale_bundle_no_finding_when_git_fails(tmp_path: Path):
+    log = tmp_path / "imac-agents-deploy.log"
+    deployed_at = NOW - timedelta(hours=25)
+    _write_deploy_log(log, _SHA_OLD, deployed_at)
+    with patch.object(
+        ds.subprocess,
+        "run",
+        return_value=subprocess.CompletedProcess([], 1, stdout="", stderr="fatal: not a repo"),
+    ):
+        result = ds.detect_stale_bundle(log, tmp_path, threshold_hours=24, now=NOW)
+    assert result is None

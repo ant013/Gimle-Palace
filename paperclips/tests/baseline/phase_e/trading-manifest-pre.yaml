@@ -1,0 +1,122 @@
+project:
+  key: trading
+  display_name: Trading
+  system_name: Trading
+  issue_prefix: TRD
+  company_id: 09edf17a-31d5-46cb-9812-6f07623b1c45
+  integration_branch: main
+  specs_dir: docs/specs
+  plans_dir: docs/plans
+
+domain:
+  wallet_target_short: Trading
+  wallet_target_name: Trading Platform
+  wallet_target_slug: trading-agents
+
+evidence:
+  merge_without_smoke_issue: TRD-bootstrap
+  graphiti_mock_issue: TRD-bootstrap
+  release_reset_issue: TRD-bootstrap
+  asyncmock_driver_issue: TRD-bootstrap
+  worktree_discipline_issue_pair: TRD-bootstrap
+  qa_worktree_discipline_issue: TRD-bootstrap
+  mcp_wire_contract_issue: TRD-bootstrap
+  qa_deploy_checklist_issue: TRD-bootstrap
+  review_scope_drift_issue: TRD-bootstrap
+  qa_to_cto_stall_issue: TRD-bootstrap
+  handoff_flake_issue: TRD-bootstrap
+  pre_slim_baseline_issue: TRD-bootstrap
+  cr_to_pe_stall_issue: TRD-bootstrap
+  handoff_misclassified_issue: TRD-bootstrap
+  post_merge_stall_issue: TRD-bootstrap
+
+paths:
+  project_root: /Users/Shared/Trading
+  primary_repo_root: /Users/Shared/Trading/repo
+  primary_mcp_service_dir: /Users/Shared/Trading
+  production_checkout: /Users/Shared/Trading
+  codex_team_root: /Users/Shared/Trading/runs
+  operator_memory_dir: ~/.claude/projects/-Users-Shared-Trading/memory
+  overlay_root: paperclips/projects/trading/overlays
+  project_rules_file: AGENTS.md
+
+mcp:
+  service_name: trading
+  package_name: trading_agents
+  tool_namespace: trading
+  base_required:
+    - codebase-memory
+    - context7
+    - serena
+    - github
+    - sequential-thinking
+  codebase_memory_projects:
+    primary: trading-agents
+  additions:
+    project: []
+    by_role: {}
+
+skills:
+  additions:
+    project: []
+    by_role: {}
+
+subagents:
+  additions:
+    project: []
+    by_role: {}
+
+targets:
+  claude:
+    instruction_entry_file: AGENTS.md
+    adapter_type: claude_local
+    deploy_mode: api
+    instructions_bundle_mode: managed
+  codex:
+    instruction_entry_file: AGENTS.md
+    adapter_type: codex_local
+    deploy_mode: api
+    instructions_bundle_mode: managed
+
+compatibility:
+  legacy_output_paths: false
+  claude_deploy_mapping: paperclips/deploy-agents.sh
+  codex_agent_ids_env: paperclips/codex-agent-ids.env
+  workspace_update_script: paperclips/update-agent-workspaces.sh
+
+agents:
+  - target: codex
+    agent_name: CEO
+    agent_id: 3649a8df-94ed-4025-a998-fb8be40975af
+    role_source: paperclips/roles-codex/cx-cto.md
+    output_path: paperclips/dist/trading/codex/CEO.md
+    workspace_cwd: /Users/Shared/Trading/runs/CEO/workspace
+    primary_codebase_memory_project: trading-agents
+  - target: claude
+    agent_name: CTO
+    agent_id: 4289e2d6-990b-4c53-b879-2a1dc90fe72b
+    role_source: paperclips/roles/cto.md
+    output_path: paperclips/dist/trading/claude/CTO.md
+    workspace_cwd: /Users/Shared/Trading/runs/CTO/workspace
+    primary_codebase_memory_project: trading-agents
+  - target: codex
+    agent_name: CodeReviewer
+    agent_id: 8eeda1b1-704f-4b97-839f-e050f9f765d2
+    role_source: paperclips/roles-codex/cx-code-reviewer.md
+    output_path: paperclips/dist/trading/codex/CodeReviewer.md
+    workspace_cwd: /Users/Shared/Trading/runs/CodeReviewer/workspace
+    primary_codebase_memory_project: trading-agents
+  - target: codex
+    agent_name: PythonEngineer
+    agent_id: 2705af9c-7dda-464c-9f6c-8d0deb38816a
+    role_source: paperclips/roles-codex/cx-python-engineer.md
+    output_path: paperclips/dist/trading/codex/PythonEngineer.md
+    workspace_cwd: /Users/Shared/Trading/runs/PythonEngineer/workspace
+    primary_codebase_memory_project: trading-agents
+  - target: codex
+    agent_name: QAEngineer
+    agent_id: fbd3d0e4-6abb-4797-83d2-e4dc99dbed44
+    role_source: paperclips/roles-codex/cx-qa-engineer.md
+    output_path: paperclips/dist/trading/codex/QAEngineer.md
+    workspace_cwd: /Users/Shared/Trading/runs/QAEngineer/workspace
+    primary_codebase_memory_project: trading-agents

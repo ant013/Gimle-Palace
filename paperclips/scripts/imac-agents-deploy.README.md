@@ -15,6 +15,8 @@ session on the iMac). It does not initiate any SSH connection itself.
 ## Prerequisites
 
 - Git available (`git --version` must succeed) — no Docker needed
+- Python 3.12+ with `pyyaml>=6.0,<7.0` (UAA Phase B builder dependency — script
+  auto-installs via `pip install --user` if missing)
 - Repo checked out at `/Users/Shared/Ios/Gimle-Palace` on branch `develop`
 - SSH key that can read `git@github.com:…/paperclip-shared-fragments.git`
   (needed for submodule fetch in the worktree — see Gotcha #1)

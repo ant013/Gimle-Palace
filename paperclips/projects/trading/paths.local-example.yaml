@@ -1,0 +1,18 @@
+# Phase E CI fallback — overridden by operator's ~/.paperclip/projects/trading/paths.yaml.
+#
+# Committed sanitized example values let CI build trading without operator's
+# host-local files. Operator copies this to ~/.paperclip/projects/trading/paths.yaml
+# (or generates via migrate-bindings / manual step) and replaces the values
+# with their real local paths.
+#
+# Builder precedence: ~/.paperclip/projects/trading/paths.yaml (operator) →
+# paperclips/projects/trading/paths.local-example.yaml (this file, CI fallback).
+schemaVersion: 2
+project_root: /opt/example/trading
+primary_repo_root: /opt/example/trading/repo
+primary_mcp_service_dir: /opt/example/trading
+production_checkout: /opt/example/trading
+team_workspace_root: /opt/example/trading/runs
+operator_memory_dir: ~/.claude/projects/-opt-example-trading/memory
+overlay_root: paperclips/projects/trading/overlays
+project_rules_file: AGENTS.md

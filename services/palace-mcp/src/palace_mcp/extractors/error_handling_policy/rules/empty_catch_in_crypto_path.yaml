@@ -1,0 +1,22 @@
+rules:
+  - id: empty_catch_in_crypto_path
+    languages: [swift]
+    severity: CRITICAL
+    message: >
+      Empty catch in a crypto-critical path. Silent error swallowing here can
+      hide failed signing, key, wallet, or balance operations.
+    metadata:
+      category: error-handling
+      kind: empty_catch_in_crypto_path
+    paths:
+      include:
+        - "*Sign*.swift"
+        - "*Crypto*.swift"
+        - "*Key*.swift"
+        - "*Wallet*.swift"
+        - "*Balance*.swift"
+        - "*Mnemonic*.swift"
+        - "*Seed*.swift"
+        - "*Private*.swift"
+        - "*Secret*.swift"
+    pattern-regex: 'catch(?:\s+[^{}]+)?\s*\{\s*(?:return\b|break\b|continue\b)?\s*\}'

@@ -270,6 +270,7 @@ def _issue(
     assignee: str | None = "agent-1",
     run_id: str | None = None,
     updated_at: _dt.datetime | None = None,
+    status: str = "in_progress",
 ) -> Issue:
     if updated_at is None:
         updated_at = _dt.datetime(2026, 4, 21, 10, 0, tzinfo=_dt.timezone.utc)
@@ -277,7 +278,7 @@ def _issue(
         id=id,
         assignee_agent_id=assignee,
         execution_run_id=run_id,
-        status="in_progress",
+        status=status,
         updated_at=updated_at,
     )
 
@@ -286,7 +287,7 @@ class _FakeClient:
     def __init__(self, issues: list[Issue]):
         self._issues = issues
 
-    async def list_in_progress_issues(self, company_id: str) -> list[Issue]:
+    async def list_active_issues(self, company_id: str) -> list[Issue]:
         return list(self._issues)
 
 
@@ -399,6 +400,128 @@ async def test_scan_died_auto_unescalates_on_touch(tmp_path: Path):
     # Should clear escalation AND produce wake action
     assert not st.is_escalated("issue-1")
     assert any(a.kind == "wake" for a in actions)
+
+
+@pytest.mark.asyncio
+@freeze_time("2026-04-21T13:30:00Z")  # 3.5 h after issue updatedAt
+async def test_scan_died_skips_issue_older_than_recover_max_age(tmp_path: Path):
+    """GIM-NN: issues whose updatedAt is older than recover_max_age_min (default 180)
+    are treated as abandoned, not lost-handoff. Avoids waking the archive."""
+    cfg = _make_config()  # default recover_max_age_min=180
+    st = State.load(tmp_path / "s.json")
+    # updatedAt=10:00, now=13:30 → 210 minutes old > 180 cap → skip
+    old_issue = _issue(updated_at=_dt.datetime(2026, 4, 21, 10, 0, tzinfo=_dt.timezone.utc))
+    client = _FakeClient([old_issue])
+    actions = await det.scan_died_mid_work(cfg.companies[0], client, st, cfg)
+    assert actions == []
+
+
+@pytest.mark.asyncio
+@freeze_time("2026-04-21T10:30:00Z")  # 30 min after issue updatedAt → within cap
+async def test_scan_died_wakes_issue_within_recover_max_age(tmp_path: Path):
+    """Issues whose updatedAt is within recover_max_age_min still get woken."""
+    cfg = _make_config()  # default 180 min
+    st = State.load(tmp_path / "s.json")
+    issue = _issue(updated_at=_dt.datetime(2026, 4, 21, 10, 0, tzinfo=_dt.timezone.utc))
+    client = _FakeClient([issue])
+    actions = await det.scan_died_mid_work(cfg.companies[0], client, st, cfg)
+    assert len(actions) == 1
+    assert actions[0].kind == "wake"
+
+
+@pytest.mark.asyncio
+@freeze_time("2026-04-21T10:30:00Z")
+async def test_scan_died_skips_blocked_issue(tmp_path: Path):
+    cfg = _make_config()
+    st = State.load(tmp_path / "s.json")
+    blocked_issue = _issue(
+        status="blocked",
+        updated_at=_dt.datetime(2026, 4, 21, 10, 0, tzinfo=_dt.timezone.utc),
+    )
+    client = _FakeClient([blocked_issue])
+    actions = await det.scan_died_mid_work(cfg.companies[0], client, st, cfg)
+    assert actions == []
+
+
+@pytest.mark.asyncio
+@freeze_time("2026-04-21T10:30:00Z")
+async def test_scan_died_skips_parent_with_live_children(tmp_path: Path):
+    """Parent assignee idle while a child is still in_progress / in_review /
+    todo is legitimately waiting on the child to close, not stranded. Skip wake."""
+    cfg = _make_config()
+    st = State.load(tmp_path / "s.json")
+    stale = _dt.datetime(2026, 4, 21, 10, 0, tzinfo=_dt.timezone.utc)
+    parent = Issue(
+        id="parent-1",
+        assignee_agent_id="cto-1",
+        execution_run_id=None,
+        status="in_progress",
+        updated_at=stale,
+    )
+    live_child = Issue(
+        id="child-1",
+        assignee_agent_id="pe-1",
+        execution_run_id=None,
+        status="in_progress",
+        updated_at=stale,
+        parent_id="parent-1",
+    )
+    client = _FakeClient([parent, live_child])
+    actions = await det.scan_died_mid_work(cfg.companies[0], client, st, cfg)
+    parent_actions = [a for a in actions if a.issue.id == "parent-1"]
+    child_actions = [a for a in actions if a.issue.id == "child-1"]
+    assert parent_actions == []  # parent skipped
+    assert len(child_actions) == 1  # child still wakeable
+    assert child_actions[0].kind == "wake"
+
+
+@pytest.mark.asyncio
+@freeze_time("2026-04-21T10:30:00Z")
+async def test_scan_died_wakes_parent_when_children_done(tmp_path: Path):
+    """All children done — parent must wake (CTO should mark done or spawn next)."""
+    cfg = _make_config()
+    st = State.load(tmp_path / "s.json")
+    stale = _dt.datetime(2026, 4, 21, 10, 0, tzinfo=_dt.timezone.utc)
+    parent = Issue(
+        id="parent-2",
+        assignee_agent_id="cto-1",
+        execution_run_id=None,
+        status="in_progress",
+        updated_at=stale,
+    )
+    done_child = Issue(
+        id="child-2",
+        assignee_agent_id=None,
+        execution_run_id=None,
+        status="done",
+        updated_at=stale,
+        parent_id="parent-2",
+    )
+    client = _FakeClient([parent, done_child])
+    actions = await det.scan_died_mid_work(cfg.companies[0], client, st, cfg)
+    parent_wakes = [a for a in actions if a.issue.id == "parent-2" and a.kind == "wake"]
+    assert len(parent_wakes) == 1
+
+
+@pytest.mark.asyncio
+@freeze_time("2026-04-21T10:05:00Z")
+async def test_scan_died_wakes_in_review_issue(tmp_path: Path):
+    """GIM-216: in_review handoffs whose wake-event was lost must be picked up."""
+    cfg = _make_config()
+    st = State.load(tmp_path / "s.json")
+    in_review_issue = Issue(
+        id="issue-216",
+        assignee_agent_id="cr-1",
+        execution_run_id=None,
+        status="in_review",
+        updated_at=_dt.datetime(2026, 4, 21, 10, 0, tzinfo=_dt.timezone.utc),
+    )
+    client = _FakeClient([in_review_issue])
+    actions = await det.scan_died_mid_work(cfg.companies[0], client, st, cfg)
+    assert len(actions) == 1
+    assert actions[0].kind == "wake"
+    assert actions[0].issue.status == "in_review"
+    assert actions[0].agent_id == "cr-1"
 
 
 @pytest.mark.asyncio

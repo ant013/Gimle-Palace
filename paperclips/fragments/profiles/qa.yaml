@@ -1,0 +1,9 @@
+schemaVersion: 2
+name: qa
+inheritsUniversal: true
+extends: implementer
+includes:
+  - qa/smoke-and-evidence.md
+description: |
+  QA profile. Inherits implementer (qa commits test fixtures). Adds smoke
+  checklist + evidence format + iMac restore-checkout.
