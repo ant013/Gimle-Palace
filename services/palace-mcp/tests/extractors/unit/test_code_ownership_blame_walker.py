@@ -103,7 +103,7 @@ def vendor_repo(tmp_path) -> pygit2.Repository:
     (repo_path / ".build" / "checkouts").mkdir()
     (repo_path / ".build" / "checkouts" / "dep.swift").write_bytes(b"let x = 1\n")
     (repo_path / "Sources").mkdir()
-    (repo_path / "Sources" / "main.swift").write_bytes(b"print(\"hello\")\n")
+    (repo_path / "Sources" / "main.swift").write_bytes(b'print("hello")\n')
 
     repo.index.add(".build/checkouts/dep.swift")
     repo.index.add("Sources/main.swift")
@@ -121,7 +121,9 @@ def test_vendor_paths_filtered_before_blame(vendor_repo):
     # Reproduce the filter applied in extractor._run before walk_blame
     filtered = {p for p in all_paths if not should_skip_path(p.split("/"))}
 
-    assert filtered == {"Sources/main.swift"}, "vendor path must be excluded by should_skip_path"
+    assert filtered == {"Sources/main.swift"}, (
+        "vendor path must be excluded by should_skip_path"
+    )
 
     blame_dict, binary_paths = walk_blame(
         vendor_repo,
@@ -132,3 +134,16 @@ def test_vendor_paths_filtered_before_blame(vendor_repo):
     assert "Sources/main.swift" in blame_dict
     assert ".build/checkouts/dep.swift" not in blame_dict
     assert ".build/checkouts/dep.swift" not in binary_paths
+
+
+def test_all_files_in_head_excludes_vendor(vendor_repo):
+    """_all_files_in_head must exclude .build/checkouts/ paths via its internal should_skip_path guard.
+
+    This exercises the production code path: if the should_skip_path check inside
+    CodeOwnershipExtractor._all_files_in_head were removed, this test fails.
+    """
+    from palace_mcp.extractors.code_ownership.extractor import CodeOwnershipExtractor
+
+    files = CodeOwnershipExtractor._all_files_in_head(vendor_repo)
+    assert ".build/checkouts/dep.swift" not in files
+    assert "Sources/main.swift" in files
