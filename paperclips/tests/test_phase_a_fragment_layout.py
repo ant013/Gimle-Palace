@@ -154,7 +154,7 @@ def test_plan_review_exists():
 
 
 EXPECTED_HIERARCHY = {
-    "universal": {"karpathy.md", "wake-and-handoff-basics.md", "escalation-board.md"},
+    "universal": {"karpathy.md", "wake-and-handoff-basics.md", "escalation-board.md", "cto-merge-authority.md"},
     "git": {"commit-and-push.md", "merge-readiness.md", "merge-state-decoder.md", "release-cut.md"},
     "worktree": {"active.md"},
     "handoff": {"basics.md", "phase-orchestration.md"},

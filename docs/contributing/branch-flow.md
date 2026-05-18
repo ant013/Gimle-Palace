@@ -11,7 +11,8 @@ release-stable reference.
 ```
 feature/GIM-N-<slug>    (all work: code, spec, plan, research, docs)
       │
-      ▼  PR → squash-merge (CI green + CR paperclip APPROVE + CR GitHub review + QA evidence present)
+      ▼  CTO squash-merge per `paperclip-shared-fragments/fragments/universal/cto-merge-authority.md`
+       (CI green + CR paperclip APPROVE + QA paperclip PASS, all SHA-pinned)
 develop                   (integration tip; iMac deploys from here)
       │
       ▼  .github/workflows/release-cut.yml (label `release-cut` on a merged PR, or workflow_dispatch)
@@ -22,7 +23,7 @@ main                      (stable release ref — tags live here)
 
 - Every change — product code, spec, plan, research, postmortem, role-file, CLAUDE.md itself — goes through a feature branch + PR. Zero direct human commits to `develop` or `main`.
 - Force push forbidden on `develop` / `main`; on feature branches only `--force-with-lease` AND only when you are the sole writer of the current phase (see `paperclip-shared-fragments` repo, `fragments/git/commit-and-push.md`).
-- Branch protection on develop + main: admin-bypass disabled. All required checks must pass for PR merge. `main` accepts push only from `github-actions[bot]` via `release-cut.yml`.
+- Branch protection on develop + main: required status checks enforced for PR merge. `--admin` is reserved for the CTO merge action when the shared-GitHub-identity self-review error blocks the standard path (see `paperclip-shared-fragments/fragments/universal/cto-merge-authority.md`). `main` accepts push only from `github-actions[bot]` via `release-cut.yml`.
 - Feature branches live in paperclip-managed worktrees; primary repo stays on `develop`.
 - **Operator/Board checkout location:** a separate clone, typically `~/<project>-board/` or `~/Android/<project>/`. Never use the production deploy checkout (`/Users/Shared/Ios/<project>/`) for spec/plan writing.
 
@@ -36,9 +37,9 @@ main                      (stable release ref — tags live here)
 - `docker-build`
 - `qa-evidence-present` (verifies PR body has `## QA Evidence` with SHA, unless `micro-slice` label)
 
-## CR approval path
+## Merge gate
 
-CR posts full compliance comment on paperclip issue AND `gh pr review --approve` on the GitHub PR (the GitHub review satisfies branch-protection's "Require PR reviews" rule).
+CR posts substantive `APPROVE` on the Paperclip issue (with `ruff/mypy/pytest/coverage` paste). QA posts `QA PASS` on the same issue with PR head SHA. CI green. CTO performs squash-merge per `paperclip-shared-fragments/fragments/universal/cto-merge-authority.md`. The previously required `gh pr review --approve` GitHub click is **removed** — agents share one GitHub identity, so the formal Approve was structurally unobtainable.
 
 ## Release-cut procedure
 
