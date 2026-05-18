@@ -138,6 +138,7 @@ Review the implementation PR for minimal scope, correct tests, and merge readine
 - PR review only.
 
 **Verification:**
+- GitHub PR `#216` opened against `develop`.
 - GitHub PR review approval plus Paperclip compliance checklist.
 
 ---
