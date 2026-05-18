@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from palace_mcp.extractors.foundation.walk import (
     DEFAULT_STOP_DIRS,
     DEFAULT_STOP_PREFIXES,
