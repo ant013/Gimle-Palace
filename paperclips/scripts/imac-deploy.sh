@@ -179,10 +179,10 @@ wait_healthy() {
     local service="$1"
     local fallback_name="$2"
     local poll=0
-    local container_ref
-    container_ref="$(resolve_container_ref "$service" "$fallback_name")"
+    local container_ref="$fallback_name"
     while [[ $poll -lt $HEALTH_POLL_MAX ]]; do
         local status
+        container_ref="$(resolve_container_ref "$service" "$fallback_name")"
         status="$(docker inspect --format='{{.State.Health.Status}}' "$container_ref" 2>/dev/null || echo "missing")"
         if [[ "$status" == "healthy" ]]; then
             log "$service ($container_ref): healthy"
