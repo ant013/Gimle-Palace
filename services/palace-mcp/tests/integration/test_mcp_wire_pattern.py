@@ -28,6 +28,8 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 from neo4j import AsyncGraphDatabase
 
+from tests.integration.neo4j_runtime_support import ensure_reachable_neo4j_uri
+
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -97,7 +99,7 @@ class _TestServer:
 @pytest.fixture(scope="module")
 def neo4j_uri() -> str:
     if reuse := os.environ.get("COMPOSE_NEO4J_URI"):
-        return reuse
+        return ensure_reachable_neo4j_uri(reuse)
     pytest.skip(
         "COMPOSE_NEO4J_URI not set — skipping MCP wire-contract tests. "
         "Set COMPOSE_NEO4J_URI=bolt://localhost:7687 to run these tests."
