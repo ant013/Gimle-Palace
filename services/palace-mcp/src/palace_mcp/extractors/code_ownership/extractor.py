@@ -210,7 +210,7 @@ LIMIT 100
                 if status == "D" and delta.old_file.path:
                     deleted.add(delta.old_file.path)
 
-        dirty = {p for p in dirty if not should_skip_path(p.split("/"))}
+        dirty = CodeOwnershipExtractor._filter_dirty(dirty)
 
         max_files: int = settings.ownership_max_files_per_run  # type: ignore[attr-defined]
         if len(dirty) > max_files:
@@ -356,6 +356,10 @@ LIMIT 100
             duration_ms=0,
             alpha_used=alpha,
         )
+
+    @staticmethod
+    def _filter_dirty(paths: set[str]) -> set[str]:
+        return {p for p in paths if not should_skip_path(p.split("/"))}
 
     @staticmethod
     def _all_files_in_head(repo: pygit2.Repository) -> set[str]:

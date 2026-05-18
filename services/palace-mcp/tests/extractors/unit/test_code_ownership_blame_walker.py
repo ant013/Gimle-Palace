@@ -147,3 +147,20 @@ def test_all_files_in_head_excludes_vendor(vendor_repo):
     files = CodeOwnershipExtractor._all_files_in_head(vendor_repo)
     assert ".build/checkouts/dep.swift" not in files
     assert "Sources/main.swift" in files
+
+
+def test_filter_dirty_excludes_vendor_incremental():
+    """_filter_dirty is the production helper called in _run for the incremental dirty-set.
+
+    This test fails if _filter_dirty is removed or made a no-op, protecting the line
+    ``dirty = CodeOwnershipExtractor._filter_dirty(dirty)`` in the _run incremental path.
+    Deleted paths (passed as separate set) are intentionally NOT filtered — only dirty is.
+    """
+    from palace_mcp.extractors.code_ownership.extractor import CodeOwnershipExtractor
+
+    raw_dirty = {".build/checkouts/dep.swift", "Sources/main.swift", "Pods/Lib/foo.m"}
+    filtered = CodeOwnershipExtractor._filter_dirty(raw_dirty)
+
+    assert "Sources/main.swift" in filtered
+    assert ".build/checkouts/dep.swift" not in filtered
+    assert "Pods/Lib/foo.m" not in filtered
