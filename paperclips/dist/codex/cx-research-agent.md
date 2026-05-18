@@ -143,6 +143,7 @@ If you cannot progress on an issue, do not improvise, pivot, or create preparato
 - Do another role's work (CTO blocked on engineer ≠ writes code; engineer blocked on review ≠ self-reviews).
 - Pivot to another issue without Board approval — old one stays in limbo.
 - Close as "not actionable" without Board visibility.
+- Treat a GitHub PR-author-cannot-self-approve block as a CR blocker — CR's substantive review is on Paperclip; merge action is CTO's per `universal/cto-merge-authority.md`.
 
 ### Comment format
 

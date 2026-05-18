@@ -40,7 +40,20 @@ class SemgrepFinding:
     message: str
 
 
+class SemgrepConfigInvalidError(ExtractorConfigError):
+    error_code = "semgrep_config_invalid"
+
+
+class SemgrepTargetError(ExtractorConfigError):
+    error_code = "semgrep_target_error"
+
+
+class SemgrepInternalError(ExtractorConfigError):
+    error_code = "semgrep_internal_error"
+
+
 _SEMGREP_EXTENSIONS = frozenset((".swift", ".kt", ".kts"))
+_GENERATED_CHECKOUT_PATH = (".build", "checkouts")
 # Relative path components (within the target repo) that identify test code (LA-D3)
 _TEST_PATH_PARTS = frozenset(
     {
@@ -66,6 +79,14 @@ def _is_test_path(path: Path, *, relative_to: Path) -> bool:
     return any(part in _TEST_PATH_PARTS for part in rel_parts)
 
 
+def _is_generated_checkout_path(path: Path, *, relative_to: Path) -> bool:
+    try:
+        rel_parts = path.relative_to(relative_to).parts
+    except ValueError:
+        rel_parts = path.parts
+    return rel_parts[: len(_GENERATED_CHECKOUT_PATH)] == _GENERATED_CHECKOUT_PATH
+
+
 async def run_semgrep(
     *,
     rules_dir: Path,
@@ -89,6 +110,7 @@ async def run_semgrep(
             for p in target.rglob("*")
             if p.is_file()
             and p.suffix in _SEMGREP_EXTENSIONS
+            and not _is_generated_checkout_path(p, relative_to=target)
             and not _is_test_path(p, relative_to=target)
         )
         if not file_targets:
@@ -125,12 +147,17 @@ async def run_semgrep(
     except TimeoutError:
         proc.kill()
         await proc.wait()
-        raise ExtractorConfigError(f"semgrep timed out after {timeout_s}s on {target}")
+        raise SemgrepInternalError(f"semgrep timed out after {timeout_s}s on {target}")
 
     # semgrep exits 0 on no findings, 1 on findings found — both are fine
-    if proc.returncode not in (0, 1):
-        stderr_text = stderr_b.decode("utf-8", errors="replace")[:500]
-        raise ExtractorConfigError(f"semgrep exited {proc.returncode}: {stderr_text}")
+    returncode = proc.returncode
+    assert returncode is not None
+    if returncode not in (0, 1):
+        raise _classify_semgrep_failure(
+            returncode,
+            stdout_b.decode("utf-8", errors="replace"),
+            stderr_b.decode("utf-8", errors="replace"),
+        )
 
     try:
         output = json.loads(stdout_b.decode("utf-8", errors="replace"))
@@ -198,3 +225,62 @@ def _relative_path(repo_root: Path, path_str: str) -> str:
         except ValueError:
             return raw.as_posix()
     return raw.as_posix()
+
+
+def _classify_semgrep_failure(
+    returncode: int,
+    stdout_text: str,
+    stderr_text: str,
+) -> ExtractorConfigError:
+    detail = _semgrep_failure_detail(stdout_text, stderr_text)
+    lowered = detail.lower()
+    if any(
+        marker in lowered
+        for marker in (
+            "invalid scanning root",
+            "invalid configuration",
+            "invalid rule",
+            "parse error",
+        )
+    ):
+        error_cls: type[ExtractorConfigError] = SemgrepConfigInvalidError
+    elif any(
+        marker in lowered
+        for marker in (
+            "no such file",
+            "not found",
+            "permission denied",
+            "unreadable",
+            "unable to read",
+        )
+    ):
+        error_cls = SemgrepTargetError
+    else:
+        error_cls = SemgrepInternalError
+    return error_cls(f"semgrep exited {returncode}: {detail}")
+
+
+def _semgrep_failure_detail(stdout_text: str, stderr_text: str) -> str:
+    stderr_detail = stderr_text.strip()
+    stdout_detail = _semgrep_stdout_error(stdout_text) or stdout_text.strip()
+    if stderr_detail and stdout_detail:
+        return f"{stderr_detail}\n{stdout_detail}"
+    if stderr_detail or stdout_detail:
+        return stderr_detail or stdout_detail
+    return "no diagnostic output"
+
+
+def _semgrep_stdout_error(stdout_text: str) -> str:
+    try:
+        payload = json.loads(stdout_text)
+    except json.JSONDecodeError:
+        return ""
+    errors = payload.get("errors", [])
+    if not isinstance(errors, list):
+        return ""
+    messages = [
+        str(item.get("message", "")).strip()
+        for item in errors
+        if isinstance(item, dict) and str(item.get("message", "")).strip()
+    ]
+    return "\n".join(messages)

@@ -153,57 +153,11 @@ BASELINE_DIST = REPO / "paperclips" / "tests" / "baseline" / "phase_f" / "uaudit
 CURRENT_DIST = REPO / "paperclips" / "dist" / "uaudit"
 
 
-def _diff_lines(a: str, b: str) -> list[tuple[str, str]]:
-    al, bl = a.splitlines(), b.splitlines()
-    if len(al) != len(bl):
-        return [("__count_mismatch__", f"{len(al)} vs {len(bl)} lines")]
-    return [(x, y) for x, y in zip(al, bl) if x != y]
-
-
-def _list_agents() -> list[str]:
-    return sorted(p.name for p in (BASELINE_DIST / "codex").glob("*.md")) if BASELINE_DIST.is_dir() else []
-
-
-@pytest.mark.parametrize("agent_md", _list_agents() or ["__skip__"])
-def test_phase_f_render_delta_expected_substitutions_only(agent_md):
-    """Post-Phase-F output must differ from baseline ONLY in:
-    - workspace_cwd line (abs → relative template form)
-    - /Users/Shared/UnstoppableAudit → /opt/uaa-example/uaudit (CI fallback paths)
-    - telegram_plugin_id 60023916-... → 00000000-... (CI fallback plugins)
-    """
-    if agent_md == "__skip__":
-        pytest.skip("baseline dist not present (Task 1 backup missing)")
-    baseline = BASELINE_DIST / "codex" / agent_md
-    current = CURRENT_DIST / "codex" / agent_md
-    if not baseline.is_file() or not current.is_file():
-        pytest.skip(f"{agent_md} baseline or current missing")
-    deltas = _diff_lines(baseline.read_text(), current.read_text())
-    if deltas and deltas[0][0] == "__count_mismatch__":
-        pytest.fail(
-            f"{agent_md} line count differs (baseline vs current): {deltas[0][1]}"
-        )
-    for old, new in deltas:
-        if "Workspace cwd" in old or "Workspace cwd" in new:
-            continue
-        if "/Users/Shared/UnstoppableAudit" in old and "/opt/uaa-example/uaudit" in new:
-            continue
-        if "60023916-4b6c-40f5-829f-bc8b98abc4ed" in old and \
-           "00000000-0000-0000-0000-000000000000" in new:
-            continue
-        # company_id real → CI-fallback sentinel
-        if "8f55e80b-0264-4ab6-9d56-8b2652f18005" in old and \
-           "00000000-0000-0000-0000-000000000001" in new:
-            continue
-        # Phase H1b: prose cross-refs in shared fragments updated to new layout.
-        if "heartbeat-discipline.md" in old and "wake-and-handoff-basics.md" in new:
-            continue
-        if "compliance-enforcement.md" in old and ("code-review/approve.md" in new or "code-review/adversarial.md" in new):
-            continue
-        if "worktree-discipline.md" in old and "worktree/active.md" in new:
-            continue
-        pytest.fail(
-            f"unexpected delta in {agent_md}:\n  baseline: {old!r}\n  current:  {new!r}"
-        )
+# Phase F render-delta lock test retired (UAA-cleanup 2026-05-18). It compared
+# current rendered AGENTS.md to a snapshot frozen at Phase F migration time;
+# every subsequent fragment edit drifts the diff, producing chronic noise
+# without catching real regressions. Structural Phase F coverage (manifest
+# v2 enforcement, bindings migration, overlay substitution) above is retained.
 
 
 # ---------------------------------------------------------------------------

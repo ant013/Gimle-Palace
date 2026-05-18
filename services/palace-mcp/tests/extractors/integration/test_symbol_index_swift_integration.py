@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from neo4j import AsyncDriver
 
+from palace_mcp.extractors.foundation.importance import BoundedInDegreeCounter
 from palace_mcp.extractors.foundation.identifiers import symbol_id_for
 from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
 from palace_mcp.extractors.runner import run_extractor
@@ -20,6 +21,7 @@ from tests.extractors.unit.test_real_scip_fixtures import (
 )
 
 _RUN_ID = "swift-integration-run-001"
+_RERUN_ID = "swift-integration-run-002"
 _SELECT_QNAME = "UwMiniCore s%3A10UwMiniCore11WalletStoreC6select8walletIDySi_tF"
 FIXTURE_SCIP = (
     Path(__file__).parent.parent
@@ -129,3 +131,76 @@ class TestSymbolIndexSwiftIntegration:
         assert "Sources/UwMiniCore/State/WalletStore.swift" in paths
         assert "Sources/UwMiniApp/ContentView.swift" in paths
         assert "Pods/Foo/Foo.swift" in paths
+
+    @pytest.mark.asyncio
+    async def test_run_extractor_recovers_from_stale_counter_after_domain_reset(
+        self,
+        driver: AsyncDriver,
+        graphiti_mock: MagicMock,
+        _project_and_repo: Path,
+        tmp_path: Path,
+    ) -> None:
+        await ensure_extractors_schema(driver)
+        settings = MagicMock()
+        settings.palace_scip_index_paths = {"uw-ios-mini": str(FIXTURE_SCIP)}
+        tantivy_dir = tmp_path / "tantivy"
+        tantivy_dir.mkdir()
+        settings.palace_tantivy_index_path = str(tantivy_dir)
+        settings.palace_tantivy_heap_mb = 50
+        settings.palace_max_occurrences_total = 50_000_000
+        settings.palace_max_occurrences_per_project = 10_000_000
+        settings.palace_importance_threshold_use = 0.0
+        settings.palace_max_occurrences_per_symbol = 5_000
+        settings.palace_recency_decay_days = 30.0
+
+        counter_path = tantivy_dir / "in_degree_counter.json"
+
+        with (
+            patch("palace_mcp.mcp_server.get_driver", return_value=driver),
+            patch("palace_mcp.mcp_server.get_settings", return_value=settings),
+            patch("palace_mcp.extractors.runner.REPOS_ROOT", _project_and_repo),
+            patch(
+                "palace_mcp.extractors.runner.uuid4",
+                side_effect=[_RUN_ID, _RERUN_ID],
+            ),
+        ):
+            first_run = await run_extractor(
+                name="symbol_index_swift",
+                project="uw-ios-mini",
+                driver=driver,
+                graphiti=graphiti_mock,
+            )
+            initial_counter = BoundedInDegreeCounter()
+            assert (
+                initial_counter.from_disk(counter_path, expected_run_id=_RUN_ID) is True
+            )
+            async with driver.session() as session:
+                await session.run("MATCH (n) DETACH DELETE n")
+                await session.run(
+                    """
+                    MERGE (p:Project {slug: $slug})
+                    SET p.group_id = 'project/' + $slug,
+                        p.name = $name,
+                        p.tags = []
+                    """,
+                    slug="uw-ios-mini",
+                    name="UwIosMini",
+                )
+            second_run = await run_extractor(
+                name="symbol_index_swift",
+                project="uw-ios-mini",
+                driver=driver,
+                graphiti=graphiti_mock,
+            )
+
+        assert first_run["ok"] is True
+        assert first_run["success"] is True
+
+        assert second_run["ok"] is True
+        assert second_run["success"] is True
+
+        rerun_counter = BoundedInDegreeCounter()
+        assert rerun_counter.from_disk(counter_path, expected_run_id=_RERUN_ID) is True
+
+        stale_counter = BoundedInDegreeCounter()
+        assert stale_counter.from_disk(counter_path, expected_run_id=_RUN_ID) is False

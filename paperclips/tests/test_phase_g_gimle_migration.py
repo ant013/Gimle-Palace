@@ -171,83 +171,11 @@ def test_gimle_overlay_has_no_hardcoded_abs_paths():
     assert not bad, f"gimle overlays have hardcoded abs paths: {bad}"
 
 
-# ---------------------------------------------------------------------------
-# Render-delta — post-Phase-G output vs pre-Phase-G baseline.
-# ---------------------------------------------------------------------------
-
-
-def _diff_lines(a: str, b: str) -> list[tuple[str, str]]:
-    al, bl = a.splitlines(), b.splitlines()
-    if len(al) != len(bl):
-        return [("__count_mismatch__", f"{len(al)} vs {len(bl)} lines")]
-    return [(x, y) for x, y in zip(al, bl) if x != y]
-
-
-def _list_agents_for(target: str) -> list[str]:
-    d = BASELINE_DIST / target
-    return sorted(p.name for p in d.glob("*.md")) if d.is_dir() else []
-
-
-def test_baseline_dist_dir_present():
-    assert BASELINE_DIST.is_dir(), (
-        f"Phase G baseline dir missing at {BASELINE_DIST.relative_to(REPO)}. "
-        f"Restore from git or re-run Task 1 snapshot."
-    )
-    assert (BASELINE_DIST / "claude").is_dir() and (BASELINE_DIST / "codex").is_dir()
-    assert len(list((BASELINE_DIST / "claude").glob("*.md"))) == 12
-    assert len(list((BASELINE_DIST / "codex").glob("*.md"))) == 12
-
-
-@pytest.mark.parametrize("agent_md", _list_agents_for("claude") or ["__skip__"])
-def test_phase_g_render_delta_claude(agent_md):
-    if agent_md == "__skip__":
-        pytest.fail("claude baseline missing")
-    baseline = BASELINE_DIST / "claude" / agent_md
-    current = CURRENT_DIST_CLAUDE / agent_md
-    if not current.is_file():
-        pytest.fail(f"current build missing for claude/{agent_md}")
-    deltas = _diff_lines(baseline.read_text(), current.read_text())
-    if deltas and deltas[0][0] == "__count_mismatch__":
-        pytest.fail(f"claude/{agent_md} line count differs: {deltas[0][1]}")
-    for old, new in deltas:
-        if "/Users/Shared/Ios/Gimle-Palace" in old and "/opt/uaa-example/gimle" in new:
-            continue
-        # Phase H1b: prose cross-refs in shared fragments updated to new layout.
-        if "heartbeat-discipline.md" in old and "wake-and-handoff-basics.md" in new:
-            continue
-        if "compliance-enforcement.md" in old and ("code-review/approve.md" in new or "code-review/adversarial.md" in new):
-            continue
-        if "worktree-discipline.md" in old and "worktree/active.md" in new:
-            continue
-        pytest.fail(
-            f"unexpected delta in claude/{agent_md}:\n  baseline: {old!r}\n  current:  {new!r}"
-        )
-
-
-@pytest.mark.parametrize("agent_md", _list_agents_for("codex") or ["__skip__"])
-def test_phase_g_render_delta_codex(agent_md):
-    if agent_md == "__skip__":
-        pytest.fail("codex baseline missing")
-    baseline = BASELINE_DIST / "codex" / agent_md
-    current = CURRENT_DIST_CODEX / agent_md
-    if not current.is_file():
-        pytest.fail(f"current build missing for codex/{agent_md}")
-    deltas = _diff_lines(baseline.read_text(), current.read_text())
-    if deltas and deltas[0][0] == "__count_mismatch__":
-        pytest.fail(f"codex/{agent_md} line count differs: {deltas[0][1]}")
-    for old, new in deltas:
-        if "/Users/Shared/Ios/Gimle-Palace" in old and "/opt/uaa-example/gimle" in new:
-            continue
-        # Phase H1b: prose cross-refs in shared fragments updated to new layout.
-        if "heartbeat-discipline.md" in old and "wake-and-handoff-basics.md" in new:
-            continue
-        if "compliance-enforcement.md" in old and ("code-review/approve.md" in new or "code-review/adversarial.md" in new):
-            continue
-        if "worktree-discipline.md" in old and "worktree/active.md" in new:
-            continue
-        pytest.fail(
-            f"unexpected delta in codex/{agent_md}:\n  baseline: {old!r}\n  current:  {new!r}"
-        )
+# Phase G render-delta lock tests retired (UAA-cleanup 2026-05-18). They compared
+# current rendered AGENTS.md to a snapshot frozen at Phase G migration time;
+# every subsequent fragment edit drifts the diff, producing chronic noise
+# without catching real regressions. Structural Phase G coverage (manifest
+# validation, builder bridge, overlay path checks) above is retained.
 
 
 # ---------------------------------------------------------------------------

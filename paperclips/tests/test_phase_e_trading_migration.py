@@ -208,60 +208,8 @@ BASELINE_DIST = REPO / "paperclips" / "tests" / "baseline" / "phase_e" / "tradin
 CURRENT_DIST = REPO / "paperclips" / "dist" / "trading"
 
 
-def _diff_lines(a: str, b: str) -> list[tuple[str, str]]:
-    """Pair lines that differ between two texts (assumes same line count)."""
-    al, bl = a.splitlines(), b.splitlines()
-    if len(al) != len(bl):
-        return [("__count_mismatch__", f"{len(al)} vs {len(bl)} lines")]
-    return [(x, y) for x, y in zip(al, bl) if x != y]
-
-
-@pytest.mark.parametrize("subpath", [
-    "claude/CTO.md",
-    "codex/CEO.md",
-    "codex/CodeReviewer.md",
-    "codex/PythonEngineer.md",
-    "codex/QAEngineer.md",
-])
-def test_phase_e_render_delta_only_workspace_cwd_line(subpath):
-    """The only change in built artifacts post-Phase-E must be the
-    'Workspace cwd:' line. Everything else (handoff fragments, role text,
-    overlay substitutions for non-host-local fields) must be byte-identical
-    to the pre-migration baseline.
-    """
-    baseline = BASELINE_DIST / subpath
-    current = CURRENT_DIST / subpath
-    if not baseline.is_file():
-        pytest.skip(f"baseline {subpath} not present (Task 1 baseline missing)")
-    deltas = _diff_lines(baseline.read_text(), current.read_text())
-    # E-fix C6: explicit count-mismatch guard before the per-line loop.
-    # Previously the sentinel `__count_mismatch__` reached `pytest.fail` with
-    # an opaque "baseline: '__count_mismatch__'" message — undebuggable.
-    if deltas and deltas[0][0] == "__count_mismatch__":
-        pytest.fail(
-            f"{subpath} line count differs (baseline vs current): {deltas[0][1]} — "
-            f"a shared fragment likely added/removed a line. Refresh the baseline "
-            f"after verifying the change is intentional."
-        )
-    for old, new in deltas:
-        # Expected delta 1: workspace_cwd line (template form replaced inline path)
-        if "Workspace cwd" in old or "Workspace cwd" in new:
-            continue
-        # Expected delta 2: CI-fallback paths from paths.local-example.yaml.
-        # Operator's host-local paths.yaml will substitute /Users/Shared/Trading/...
-        # back in; CI uses sanitized /opt/example/trading/... values.
-        if "/Users/Shared/Trading" in old and "/opt/example/trading" in new:
-            continue
-        # Expected delta 3 (Phase H1b): prose cross-refs in shared fragments
-        # were updated to point at the new Phase-A layout.
-        if "heartbeat-discipline.md" in old and "wake-and-handoff-basics.md" in new:
-            continue
-        if "compliance-enforcement.md" in old and ("code-review/approve.md" in new or "code-review/adversarial.md" in new):
-            continue
-        if "worktree-discipline.md" in old and "worktree/active.md" in new:
-            continue
-        pytest.fail(
-            f"unexpected post-Phase-E delta in {subpath}:\n"
-            f"  baseline: {old!r}\n"
-            f"  current:  {new!r}"
-        )
+# Phase E render-delta lock test retired (UAA-cleanup 2026-05-18). It compared
+# current rendered AGENTS.md to a snapshot frozen at Phase E migration time;
+# every subsequent fragment edit drifts the diff, producing chronic noise
+# without catching real regressions. Structural Phase E coverage (manifest
+# cleanup, bindings migration, overlay paths) above is retained.

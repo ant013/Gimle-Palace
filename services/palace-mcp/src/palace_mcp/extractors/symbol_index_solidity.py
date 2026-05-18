@@ -14,7 +14,6 @@ IngestRun lifecycle, circuit breaker.
 from __future__ import annotations
 
 import logging
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import ClassVar
@@ -39,6 +38,7 @@ from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErr
 from palace_mcp.extractors.foundation.importance import (
     BoundedInDegreeCounter,
     importance_score,
+    load_or_reset_in_degree_counter,
 )
 from palace_mcp.extractors.foundation.models import (
     Language,
@@ -270,23 +270,7 @@ async def _ingest_batch(
 
 
 def _load_or_reset_counter(tantivy_path: Path, run_id: str) -> BoundedInDegreeCounter:
-    counter = BoundedInDegreeCounter()
-    counter_path = tantivy_path / "in_degree_counter.json"
-    if not counter_path.exists():
-        return counter
-    if not counter.from_disk(counter_path, expected_run_id=run_id):
-        if os.environ.get("PALACE_COUNTER_RESET") != "1":
-            raise ExtractorError(
-                error_code=ExtractorErrorCode.COUNTER_STATE_CORRUPT,
-                message=(
-                    f"Counter state corrupt or run_id mismatch at {counter_path}. "
-                    "Set PALACE_COUNTER_RESET=1 to reset, or rebuild the index."
-                ),
-                recoverable=False,
-                action="manual_cleanup",
-            )
-        return BoundedInDegreeCounter()
-    return counter
+    return load_or_reset_in_degree_counter(tantivy_path, run_id, logger=logger)
 
 
 def _with_importance(

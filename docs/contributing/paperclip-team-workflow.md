@@ -25,8 +25,8 @@ inline. Canonical phase sequence:
 - **4.1 Live smoke** (QAEngineer) — on iMac; real MCP tool call + CLI
   + direct Cypher invariant. Evidence comment authored by
   QAEngineer.
-- **4.2 Merge** — squash-merge to develop after CI green. No admin
-  override.
+- **4.2 Merge** (CTO) — squash-merge to develop per
+  `paperclip-shared-fragments/fragments/universal/cto-merge-authority.md`.
 
 Phase-handoff discipline is encoded in the shared-fragments
 `handoff/basics.md` + `handoff/phase-orchestration.md` (submodule
