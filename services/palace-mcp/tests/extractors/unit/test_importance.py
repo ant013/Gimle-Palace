@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from palace_mcp.extractors.foundation.importance import (
     BoundedInDegreeCounter,
     KIND_WEIGHT,
     importance_score,
+    load_or_reset_in_degree_counter,
     recency_decay,
     tier_weight,
 )
@@ -112,6 +114,75 @@ class TestBoundedInDegreeCounter:
         )
         c = BoundedInDegreeCounter()
         assert c.from_disk(path, expected_run_id="r1") is False
+
+    def test_load_or_reset_counter_reset_flag_deletes_existing_file(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        tantivy_dir = tmp_path / "tantivy"
+        tantivy_dir.mkdir()
+        counter_path = tantivy_dir / "in_degree_counter.json"
+        stale = BoundedInDegreeCounter()
+        stale.increment("stale.symbol")
+        stale.to_disk(counter_path, run_id="old-run")
+        monkeypatch.setenv("PALACE_COUNTER_RESET", "1")
+
+        with caplog.at_level(logging.WARNING):
+            counter = load_or_reset_in_degree_counter(
+                tantivy_dir,
+                run_id="new-run",
+                logger=logging.getLogger("test.counter"),
+            )
+
+        assert len(counter) == 0
+        assert not counter_path.exists()
+        assert "PALACE_COUNTER_RESET=1" in caplog.text
+
+    def test_load_or_reset_counter_corrupt_file_self_heals(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        tantivy_dir = tmp_path / "tantivy"
+        tantivy_dir.mkdir()
+        counter_path = tantivy_dir / "in_degree_counter.json"
+        counter_path.write_text("not-json{{{", encoding="utf-8")
+
+        with caplog.at_level(logging.WARNING):
+            counter = load_or_reset_in_degree_counter(
+                tantivy_dir,
+                run_id="run-1",
+                logger=logging.getLogger("test.counter"),
+            )
+
+        assert len(counter) == 0
+        assert not counter_path.exists()
+        assert "Recovered stale or corrupt in-degree counter" in caplog.text
+
+    def test_load_or_reset_counter_stale_run_id_self_heals(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        tantivy_dir = tmp_path / "tantivy"
+        tantivy_dir.mkdir()
+        counter_path = tantivy_dir / "in_degree_counter.json"
+        stale = BoundedInDegreeCounter()
+        stale.increment("stale.symbol")
+        stale.to_disk(counter_path, run_id="old-run")
+
+        with caplog.at_level(logging.WARNING):
+            counter = load_or_reset_in_degree_counter(
+                tantivy_dir,
+                run_id="new-run",
+                logger=logging.getLogger("test.counter"),
+            )
+
+        assert len(counter) == 0
+        assert not counter_path.exists()
+        assert "Recovered stale or corrupt in-degree counter" in caplog.text
 
 
 # ---------------------------------------------------------------------------

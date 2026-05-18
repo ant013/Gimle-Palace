@@ -154,7 +154,7 @@ def test_plan_review_exists():
 
 
 EXPECTED_HIERARCHY = {
-    "universal": {"karpathy.md", "wake-and-handoff-basics.md", "escalation-board.md"},
+    "universal": {"karpathy.md", "wake-and-handoff-basics.md", "escalation-board.md", "cto-merge-authority.md"},
     "git": {"commit-and-push.md", "merge-readiness.md", "merge-state-decoder.md", "release-cut.md"},
     "worktree": {"active.md"},
     "handoff": {"basics.md", "phase-orchestration.md"},
@@ -177,20 +177,6 @@ def test_no_orphan_files_in_subdirs():
         actual = {p.name for p in (SUBMODULE / subdir).glob("*.md")}
         unexpected = actual - expected_files
         assert not unexpected, f"{subdir}/ has unexpected: {unexpected}"
-
-
-def test_deprecated_files_have_banner():
-    deprecated = [
-        "karpathy-discipline.md", "heartbeat-discipline.md", "escalation-blocked.md",
-        "git-workflow.md", "worktree-discipline.md", "phase-handoff.md",
-        "compliance-enforcement.md", "test-design-discipline.md", "pre-work-discovery.md",
-        "plan-first-producer.md", "plan-first-review.md",
-    ]
-    for fname in deprecated:
-        p = SUBMODULE / fname
-        text = p.read_text()
-        assert "DEPRECATED" in text, f"{fname} missing deprecation banner"
-        assert "UAA Phase A" in text, f"{fname} banner doesn't reference UAA Phase A"
 
 
 def test_unchanged_files_preserved():

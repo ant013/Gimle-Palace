@@ -75,7 +75,7 @@ paperclip_get_agent_instructions() {
     -o - -w '\n%{http_code}' \
     -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
     -H "User-Agent: uaa-bootstrap/1.0" \
-    "${PAPERCLIP_API_URL%/}/api/agents/${agent_id}/instructions-bundle/file" 2>/dev/null) || return 1
+    "${PAPERCLIP_API_URL%/}/api/agents/${agent_id}/instructions-bundle/file?path=AGENTS.md" 2>/dev/null) || return 1
   http=$(printf '%s' "$response" | tail -1)
   body=$(printf '%s' "$response" | sed '$d')
   case "$http" in

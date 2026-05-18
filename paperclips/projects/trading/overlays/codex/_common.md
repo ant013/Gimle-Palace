@@ -5,9 +5,9 @@ This bundle inherits the proven Gimle/CX role text above. The base text was auth
 
 - **Paperclip company**: Trading (`TRD`).
 - **Runtime agent**: `{{agent.agent_name}}`.
-- **Workspace cwd**: `{{agent.workspace_cwd}}`.
+- **Workspace cwd**: `runs/{{agent.agent_name}}/workspace` (resolved at deploy time relative to operator's project root in host-local paths.yaml).
 - **Primary codebase-memory project**: `{{agent.primary_codebase_memory_project}}`.
-- **Source repo**: `https://github.com/ant013/trading-agents` (private), mirrored read/write at `/Users/Shared/Trading/repo`.
+- **Source repo**: `https://github.com/ant013/trading-agents` (private), mirrored read/write at `{{paths.primary_repo_root}}`.
 - **Project domain**: trading platform — data ingestion (news, OHLC candles, exchange feeds) → strategy synthesis → AI-agent execution.
 - **Issue prefix**: `TRD-N` (paperclip-assigned). Branch names use operator's **phase-id** scheme, not the paperclip number.
 - **Mainline**: `main`. No `develop`. Feature branches cut from `main`, squash-merge back via PR.
@@ -24,7 +24,7 @@ This bundle inherits the proven Gimle/CX role text above. The base text was auth
 | `services/palace-mcp/` or `palace.*` MCP namespace | No MCP service in Trading v1. Use base MCPs. |
 | Graphiti / Neo4j extractor work | Not applicable — skip. |
 | Unstoppable Wallet (UW) / `unstoppable-wallet-*` as test target | `trading-agents` repo. |
-| `/Users/Shared/Ios/Gimle-Palace` production checkout | `/Users/Shared/Trading/repo`. |
+| `/Users/Shared/Ios/Gimle-Palace` production checkout | `{{paths.primary_repo_root}}`. |
 | `docs/superpowers/specs/plans` in Gimle-Palace | `docs/specs` + `docs/plans` IN `trading-agents`. |
 | `paperclips/fragments/shared/...` Gimle submodule | Not used by Trading v1. |
 | `develop` integration branch | `main` (Trading has no `develop`). |
@@ -52,7 +52,7 @@ Agents do NOT call Telegram actions manually for lifecycle events.
 
 ### Report delivery
 
-Trading v1 has no Infra-equivalent agent. Final markdown reports go to `/Users/Shared/Trading/artifacts/{{agent.agent_name}}/`. Operator handles delivery until a delivery owner is designated.
+Trading v1 has no Infra-equivalent agent. Final markdown reports go to `{{paths.project_root}}/artifacts/{{agent.agent_name}}/`. Operator handles delivery until a delivery owner is designated.
 
 ### Operator memory location
 

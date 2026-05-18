@@ -165,6 +165,69 @@ def test_cli_rejects_uppercase_project_key():
     assert "invalid project_key" in (out.stdout + out.stderr).lower()
 
 
+def test_kebab_bindings_vs_canonical_legacy_conflict_detected():
+    """G-fix architect C1: when bindings uses kebab vocab (gimle style) and
+    legacy env produces canonical (CXCTO), conflict detection MUST fire
+    even though string keys differ. Pre-fix: zero conflicts (false negative)."""
+    from paperclips.scripts.resolve_bindings import (
+        resolve_all,
+        BindingsConflictWarning,
+    )
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        out = resolve_all(
+            legacy_env_path=FIX / "codex-agent-ids.env",
+            bindings_yaml_path=FIX / "bindings_kebab_conflicting.yaml",
+        )
+    # bindings values win (per existing precedence rule).
+    assert out["agents"]["cx-cto"] == "DIFFERENT-uuid-from-legacy"
+    assert out["agents"]["CXCTO"] == "da97dbd9-6627-48d0-b421-66af0750eacf"  # legacy preserved
+    # Cross-form conflict surfaced (both cx-cto and cx-python-engineer).
+    cross = [c for c in out["conflicts"] if c.get("bindings_key", "").startswith("cx-")]
+    assert len(cross) == 2, f"expected 2 cross-form conflicts, got {out['conflicts']}"
+    by_agent = {c["agent"]: c for c in cross}
+    assert by_agent["CXCTO"]["legacy_key"] == "CXCTO"
+    assert by_agent["CXCTO"]["bindings_key"] == "cx-cto"
+    assert by_agent["CXCTO"]["legacy"] == "da97dbd9-6627-48d0-b421-66af0750eacf"
+    assert by_agent["CXCTO"]["bindings"] == "DIFFERENT-uuid-from-legacy"
+    conflict_warnings = [w for w in caught if issubclass(w.category, BindingsConflictWarning)]
+    assert len(conflict_warnings) == 2
+
+
+def test_kebab_bindings_vs_canonical_legacy_matching_no_conflict():
+    """Kebab bindings + legacy env with MATCHING UUIDs across forms → no conflict."""
+    from paperclips.scripts.resolve_bindings import resolve_all
+    out = resolve_all(
+        legacy_env_path=FIX / "codex-agent-ids.env",
+        bindings_yaml_path=FIX / "bindings_kebab_matching.yaml",
+    )
+    assert out["conflicts"] == []
+    # Both forms coexist in merged dict (downstream lookups work via either).
+    assert out["agents"]["cx-cto"] == "da97dbd9-6627-48d0-b421-66af0750eacf"
+    assert out["agents"]["CXCTO"] == "da97dbd9-6627-48d0-b421-66af0750eacf"
+
+
+def test_kebab_to_canonical_helper_matches_legacy_normalizer():
+    """G-fix architect C1: _kebab_to_canonical(kebab) MUST equal
+    _normalize_legacy_name(env_var) for every gimle agent_name."""
+    from paperclips.scripts.resolve_bindings import (
+        _kebab_to_canonical,
+        _normalize_legacy_name,
+    )
+    pairs = [
+        ("cx-cto", "CX_CTO_AGENT_ID"),
+        ("cx-python-engineer", "CX_PYTHON_ENGINEER_AGENT_ID"),
+        ("cx-qa-engineer", "CX_QA_ENGINEER_AGENT_ID"),
+        ("cx-mcp-engineer", "CX_MCP_ENGINEER_AGENT_ID"),
+        ("cx-code-reviewer", "CX_CODE_REVIEWER_AGENT_ID"),
+        ("cx-blockchain-engineer", "CX_BLOCKCHAIN_ENGINEER_AGENT_ID"),
+        ("codex-architect-reviewer", "CODEX_ARCHITECT_REVIEWER_AGENT_ID"),
+    ]
+    for kebab, env_var in pairs:
+        assert _kebab_to_canonical(kebab) == _normalize_legacy_name(env_var), \
+            f"namespace drift: kebab {kebab!r} != legacy {env_var!r}"
+
+
 def test_cli_accepts_canonical_project_key():
     """D-fix IMP-D1: lowercase-alphanumeric passes validation."""
     import subprocess

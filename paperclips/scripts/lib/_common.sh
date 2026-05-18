@@ -52,11 +52,36 @@ validate_project_key() {
   fi
 }
 
-# IMP-E fix: agent_name reaches yq path expressions; restrict to yq-safe chars.
+# IMP-E fix: agent_name reaches yq path expressions; restrict to safe charset.
+# Phase H2-followup: kebab `-` added — gimle Phase G manifest uses kebab agent_names
+# (e.g., `cto`, `cx-cto`). Bracket-syntax in yq paths (`.agents["${name}"]`) makes
+# `-` safe (yq would otherwise treat it as subtraction in dot-path).
 validate_agent_name() {
   local name="$1"
-  if [[ ! "$name" =~ ^[A-Za-z][A-Za-z0-9_]*$ ]]; then
-    die "invalid agent_name: '$name' (must match [A-Za-z][A-Za-z0-9_]*)"
+  if [[ ! "$name" =~ ^[A-Za-z][A-Za-z0-9_-]*$ ]]; then
+    die "invalid agent_name: '$name' (must match [A-Za-z][A-Za-z0-9_-]*)"
+  fi
+}
+
+# Phase H2-followup CRIT-2: guard against path-traversal / absolute paths in
+# manifest-supplied `output_path` fields (or similar repo-relative paths).
+# A malicious manifest with `output_path: /etc/passwd` or `../../../etc/shadow`
+# would otherwise let `cp ${REPO_ROOT}/${output_path}` resolve outside the repo.
+validate_safe_repo_path() {
+  local p="$1"
+  # Reject empty.
+  [ -n "$p" ] || die "invalid path: empty"
+  # Reject absolute paths.
+  case "$p" in
+    /*) die "invalid path: must be repo-relative, got absolute: '$p'" ;;
+  esac
+  # Reject any `..` segment.
+  case "$p" in
+    *..*) die "invalid path: contains '..' (traversal): '$p'" ;;
+  esac
+  # Reject shell-special chars that could break later interpolation.
+  if [[ "$p" =~ [\$\`\"\'\\] ]]; then
+    die "invalid path: contains shell-special chars: '$p'"
   fi
 }
 

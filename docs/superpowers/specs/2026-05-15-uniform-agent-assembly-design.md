@@ -10,6 +10,147 @@
 
 Pinned grounding: this spec is grounded in the repo state at `main@568888a` (2026-05-14 docs/BUGS.md merge). All later commits should be cross-checked when implementing.
 
+**Phase G partial (2026-05-17, code-side — Tasks 1+7+8+11 of 11):**
+- gimle manifest migrated to v2 schema (24 agents = 12 claude + 12 codex): `schemaVersion: 2`, `project.company_id` + `paths.*` host-local fields stripped; per-agent `agent_name` (kebab to preserve v1 render byte-identity), `role_source`, `output_path` (explicit, preserves legacy `paperclips/dist/*.md` + `paperclips/dist/codex/*.md` layout per spec §10.5), `profile`, `reportsTo`.
+- Profile mapping locked per agent via `test_gimle_per_agent_profile_snapshot` (24-entry table). All profiles match v1 implicit defaults from role front-matter (`cto/code-reviewer→reviewer/python-engineer→implementer/qa-engineer→qa/...`).
+- Legacy `paperclips/codex-agent-ids.env` + `paperclips/deploy-agents.sh` PRESERVED in repo + manifest's `compatibility.{claude_deploy_mapping,codex_agent_ids_env,workspace_update_script}` PRESERVED per spec §10.5 cleanup-gate (only Phase H removes them). Dual-read resolver continues to merge both legacy + new bindings.
+- New CI-fallback files: `paperclips/projects/gimle/bindings.local-example.yaml` (24 sanitized UUIDs — 12 claude `00000000-...-020x` + 12 codex `00000000-...-021x`) + `paths.local-example.yaml` (sanitized `/opt/uaa-example/gimle/...`).
+- `paperclips/assembly-inventory.json` regenerated (reflects new manifest structure).
+- Skipped: Task 5 (CLAUDE.md decompose) + Task 6 (AGENTS.md.template) — scope-creep, deferred as Phase H-followup. Task 2 pre-flight, Task 3 pause, Task 4 extract-via-API, Task 9 canary, Task 10 unpause+smoke — all operator-only (spec §10.4 mandates 24-agent pause window).
+- 5 pre-existing tests in `test_validate_instructions.py` skipped with explicit reasons — they assumed gimle as the v1 reference fixture; with all 3 projects now v2, those test pre-conditions are impossible to construct from current state. Either replace with synthetic-v1 fixtures (Phase H-followup) OR delete during Phase H cleanup.
+- Updated `test_phase_c_validate_manifest_sh.py::test_unmigrated_v1_manifest_rejected` → `test_all_v2_projects_accepted` (no v1 projects remain).
+- New `paperclips/tests/test_phase_g_gimle_migration.py` (39 tests): manifest shape (8), profile snapshot (1), bindings parity (1), overlay path-cleanliness (1), baseline-dir guard (1), render-delta claude (12) + codex (12), companyId bridge (1), post-live skips (2).
+- Pre-migration backup at `paperclips/tests/baseline/phase_g/gimle-dist-pre/` (24 artifacts).
+- **DEFERRED to operator** (Tasks 2/3/4/9/10 = live deploy): per spec §10.4, all 24 agents must pause; cannot self-execute. Operator runs migrate-bindings → bootstrap --canary → smoke → unpause.
+- Sweep: 379 paperclip tests passed, 20 skipped (5 obsolete v1 + 15 pre-existing/post-live), 0 failed.
+
+**Phase F followup (2026-05-17, in-PR — 2 CRITICAL + 6 IMPORTANT from 4-voltAgent deep-review):**
+- CRIT-C1 (architect) — `resolved_assembly()` parameters block now bridges `companyId` + 6 `paths.*` fields from host-local (via `_load_host_local_sources`) when v2 manifest has stripped them. Previously shipped empty strings in `dist/<key>.resolved-assembly.json` (same class as Phase E CRIT-1 but on different code path). Both uaudit + trading verified populated post-fix.
+- CRIT-C2 (architect) — bridge code in `render_role` (which back-filled `{{project.company_id}}`) reverted as over-engineered. Architect's claim verified: grep found `{{project.company_id}}` references ONLY in 2 uaudit InfraEngineer overlays (not in any shared role). Sed-renamed to `{{bindings.company_id}}` directly; bridge code path deleted. Spec §10.3 step 3 "mechanical rename" honored.
+- IMP — backfilled `paperclips/projects/trading/bindings.local-example.yaml` (Phase E missed it; Phase F C1 fix needs it for trading's CI build to populate companyId).
+- IMP — templatized 18 hardcoded `/Users/Shared/UnstoppableAudit/...` paths in 4 uaudit overlays (UWIInfraEngineer + UWAInfraEngineer + UWISwiftAuditor + UWAKotlinAuditor) to `{{paths.team_workspace_root}}/{{paths.primary_repo_root}}/{{paths.project_root}}` templates.
+- IMP — added test `test_uaudit_overlay_has_no_hardcoded_abs_paths` (regex guard against future regressions).
+- IMP — added test `test_bindings_local_example_matches_manifest_agent_set` (parity guard preventing manifest/fallback drift).
+- IMP — added test `test_uaudit_per_agent_profile_snapshot` (per-agent profile mapping locked; profile field check was previously only "valid string from 8-set"; documents CryptoAuditor=implementer v1-default preservation).
+- IMP — added test `test_company_id_bridge_via_bindings_local_example` (isolates C1 bridge code path; previously caught only via render-delta cascade).
+- IMP — added test `test_baseline_dist_dir_present` (hard-fails if Task-1 baseline accidentally deleted; was silent skip via parametrize `["__skip__"]`).
+- IMP — added test `test_host_local_bindings_takes_precedence_over_ci_fallback` (operator's `~/.paperclip` wins over committed CI fallback; previously inverted precedence would silently pass CI).
+- 1 architect false-positive parked: claim that `companyId=""` ships to paperclip API — actually downstream consumers (`bootstrap-project.sh`) re-read host-local separately; the bug was data-quality in JSON, not API-leak. Fix still applies.
+- Sweep: 348 paperclip tests, 12 skipped, 0 failed.
+
+**Phase H1c CLAUDE.md decompose (2026-05-17, PR #206 merged):**
+- Phase G Task 5 leftover — root `CLAUDE.md` was 719 lines mixing branch-flow rules + palace-mcp deploy + extractor catalog + paperclip team workflow. Decomposed into:
+  - `docs/contributing/branch-flow.md` (iron rules + release-cut)
+  - `docs/contributing/docs-layout.md` (specs/plans/postmortems/runbooks conventions + pinning)
+  - `docs/contributing/paperclip-team-workflow.md` (phase choreography 1.1 → 4.2 + operator auto-memory)
+  - `docs/palace-mcp/extractors.md` (extractor catalog + per-extractor workflows + ADR v2 + foundation + env vars + Bundles GIM-182)
+  - `services/palace-mcp/README.md` (appended: Production deploy on iMac, AGENTS.md deploy, Docker Compose, Environment, Mounting project repos)
+- Root `CLAUDE.md` now 29-line index pointing at the 5 destinations.
+- New `paperclips/tests/test_phase_h_claude_decompose.py` (5 tests): slim-pointer-cap (≤40 lines), all extracted destinations exist, palace-mcp README carries appended sections, root references all destinations, no surviving citations to H1-deleted fragments.
+- Mergeable with H1b/PR #204 via rebase: H1b's 3-line edits in original CLAUDE.md became moot when whole-file replaced; resolved by taking decompose's version.
+
+**Phase H2 deploy-wrapper rewrite (2026-05-17, PR #207 — after 4-voltAgent deep-review):**
+- Rewrote `paperclips/scripts/imac-agents-deploy.sh` from 280 lines → ~195 lines (thinner wrapper around `bootstrap-project.sh --reuse-bindings`, per spec §9.2 13-step lifecycle).
+- Preserved legacy safety envelope: PATH augmentation, worktree from `origin/main` (release-cut), `--target-sha` rollback flag, PHASE-A-ONLY sentinel guard, EXPECTED_CWD + EXPECTED_BRANCH preflight, cleanup trap on EXIT, deploy log append (GIM-244 watchdog dep).
+- New `--from-develop` flag for pre-release-cut smoke tests (explicit opt-in deviation from `origin/main`).
+- Security CRIT — `validate_project_key` invoked on PROJECT_KEY before any path interpolation; prevents traversal (`../etc`) + log-injection into DEPLOY_LOG.
+- New `paperclips/tests/test_phase_h2_active_scripts.py` (9 tests + 1 post-deploy skip): structural safety-marker test (regex-based, brittle-quoting-safe), behavioral tests for bindings-absent, wrong-cwd, PHASE-A-sentinel scan-before-bootstrap ordering, path-traversal rejection, uppercase rejection.
+- 4-voltAgent verdict: architect 3 CRITICAL → fixed via safety envelope restoration; code-rev 1 IMPORTANT → regex marker; security 1 CRITICAL → validate_project_key; qa 3 CRITICAL → 3 behavioral tests added.
+- 5 legacy script deletions + dual-read code path removal + manifest compat field flip explicitly DEFERRED to Phase H3 (have surviving consumers requiring coordinated cross-subsystem removal).
+- Operator runbook `docs/runbooks/uaa-live-deploy.md` documents the dependency: bootstrap-project.sh MUST be run once per project before `imac-agents-deploy.sh` (which now requires populated `~/.paperclip/projects/<key>/bindings.yaml`).
+
+**Phase H3 plan (deferred to operator post-live-deploys):**
+- Delete 5 legacy scripts: `paperclips/{codex-agent-ids.env,deploy-agents.sh,deploy-codex-agents.sh,update-agent-workspaces.sh,hire-codex-agents.sh}`.
+- Remove `legacy_env_path` parameter from `resolve_bindings.py::resolve_all()`.
+- Remove `_legacy_load_uuids()` fallback from `services/watchdog/src/gimle_watchdog/detection_semantic.py`.
+- Flip manifest compat fields for gimle: remove `compatibility.{legacy_output_paths,claude_deploy_mapping,codex_agent_ids_env,workspace_update_script}`. Same for `_template/`.
+- Rewrite `paperclips/scripts/bundle_breakdown.py` to use new `_compose_agent_prompt` path (legacy `expand_includes` fails on slim crafts).
+- Delete `paperclips/fragments/shared/templates/` (dead legacy expand_includes path).
+- Pre-requisites: (1) all 3 projects live-deployed via bootstrap-project.sh; (2) 7-day stability metric per spec §10.1; (3) `docs/uaa-cleanup-gate-evidence.md` operator signoff committed.
+
+**Phase H1b followup (2026-05-17, in-PR — 8 verified CRITICAL from 4-voltAgent deep-review):**
+- Architect verified CRIT-1: per-target codex vendored copies still present at `paperclips/fragments/targets/codex/shared/fragments/{git-workflow,heartbeat-discipline,phase-handoff,plan-first-producer}.md`. The architect's audit-method-scope-flaw critique was correct: my initial `git grep -l <pattern> | grep -v docs/` checked only the upstream submodule, missing 3 distinct vendored override paths the builder layers on top.
+- Architect+code-rev verified CRIT-2: per-project trading vendored copies at `paperclips/projects/trading/fragments/shared/fragments/{compliance-enforcement,phase-handoff,worktree-discipline}.md`.
+- Architect+code-rev verified CRIT-3: `paperclips/dist/**` (24+24+5+17 rendered files) cited deleted fragments inline (e.g., `dist/codex/cx-cto.md:126` — `see §HTTP 409 in heartbeat-discipline.md`).
+- Architect verified CRIT-4: `CLAUDE.md:20, 46, 145` cited deleted fragments.
+- Code-rev verified CRIT-5: submodule's NEW Phase-A fragments still cite deprecated names (6 actively-used files in `role-prime/*` + `universal/escalation-board.md`). Fixed via PR ant013/paperclip-shared-fragments#22 — pointer bumped from `1feeb23` → `0a06922`. `templates/*` directory deliberately untouched (dead expand_includes path; cleanup deferred to H2).
+- QA verified CRIT-1 (theirs): added `test_shared_fragments_submodule_at_or_after_post_h1_sha` guarding against accidental submodule pointer rollback (uses `git merge-base --is-ancestor`).
+- QA verified CRIT-2 (theirs): regenerated dist for all 5 build combos (gimle×2, trading×2, uaudit×1 codex) via `paperclips/build.sh`. Zero "fragment not found" errors. Render-delta allowlists in test_phase_{e,f,g} extended with H1b prose-ref substitutions.
+- QA verified CRIT-3 (theirs): added `test_no_unexpected_files_at_fragment_root` guard for submodule root (catches both accidental restoration AND new top-level files that should live in a Phase-A subdir).
+- Code-rev IMP-1: added `test_no_surviving_reference_to_deleted_fragments` (full-repo path-aware grep with documented carry-over exclusions: `tests/baseline`, `bundle-size-breakdown.json`, `bundle_breakdown.py`, `templates/*`). This single test would have caught CRIT-1 through CRIT-4 pre-merge — added as the strongest H1 guard.
+- QA IMP-3 fix: `test_validate_instructions.py:1035` synthetic profile pointed to deleted `phase-handoff.md`; re-pointed to `handoff/phase-orchestration.md`.
+- Bonus: `paperclips/fragments/local/test-design-gimle.md:27` had a prose cross-ref to deleted `test-design-discipline.md`; re-pointed to `qa/smoke-and-evidence.md`.
+- 2 false positives parked after verification: (a) code-rev IMP-2 (`.gitkeep` files allegedly still present) — `git rm -rf` correctly removed them; (b) security IMP-3 (submodule supply-chain signature verification) — structural followup, tracked as separate issue.
+- Deferred-to-H2 carry-overs: `paperclips/bundle-size-breakdown.json` + `paperclips/scripts/bundle_breakdown.py` still cite deprecated names (the script uses the legacy `expand_includes` path which slim crafts bypass — both will be reworked in H2). `paperclips/fragments/shared/templates/*` (8 files with `<!-- @include -->` directives to deleted fragments) — dead build-path code, deleted with `expand_includes` removal in H2.
+- Sweep: 387 paperclip tests, 20 skipped, 0 failed (+3 new H1 tests vs Phase H1 partial baseline of 384).
+
+**Phase H1 partial (2026-05-17, code-side dead-legacy cleanup — gate-bypass-by-operator-directive):**
+- Per spec §10.5 the cleanup gate (≥7 days zero `wake_failed`/`handoff_alert_posted`/`per_agent_cap` events) is normally a prerequisite. Operator directive 2026-05-17 ("делай ВСЁ - несмотря ни на какие изменения") authorized H1 (dead-only artifacts) without waiting for the gate. H2 (active scripts) + H3 (dual-read code paths) remain gated until live deploys.
+- Rollback recipe (per security IMP-2): if `wake_failed > 0` in 24h post-merge, `git revert <H1-merge-sha>` (single squash commit covers both H1 and H1b followup). Submodule pointer revert handled automatically by superrepo revert. Re-deploy via `imac-agents-deploy.sh` per `docs/runbooks/uaa-live-deploy.md` §5.
+- Removed `paperclips/roles/legacy/*.md` (12 files) — Phase A.1 hybrid copies, never referenced outside docs.
+- Removed `paperclips/roles-codex/legacy/*.md` (12 files) — same.
+- Removed 11 deprecated shared fragments from submodule `paperclip-shared-fragments` (PR ant013/paperclip-shared-fragments#21 merged): karpathy-discipline, heartbeat-discipline, phase-handoff, git-workflow, worktree-discipline, escalation-blocked, compliance-enforcement, test-design-discipline, pre-work-discovery, plan-first-producer, plan-first-review. Replaced by new Phase-A `fragments/{universal,handoff,git,worktree,code-review,qa,pre-work,plan}` layout (PR #20).
+- Submodule pointer bumped to `1feeb23`.
+- Audit method: `git grep -l "<pattern>" | grep -v docs/` returned zero consumer matches before deletion.
+- Deleted 3 obsolete Phase-A "hybrid hold-and-grow" tests (per Phase H plan rev4 H-2: delete, don't skip): `test_all_24_roles_have_legacy_copies`, `test_all_24_legacy_have_banners`, `test_deprecated_files_have_banner`. Their pins were Phase-A invariants no longer true post-H1.
+- New `paperclips/tests/test_phase_h_cleanup.py`: 3 H1 tests (legacy-dirs-removed, deprecated-fragments-removed, kept-fragments-still-present negative-anchor).
+- Sweep: 384 paperclip tests, 20 skipped, 0 failed.
+
+**Phase G followup (2026-05-17, in-PR — 3 verified CRITICAL + small batch from 4-voltAgent deep-review):**
+- CRIT-architect-C1 — `paperclips/scripts/resolve_bindings.py` cross-form conflict detection. Legacy normalizer produces canonical `CXCTO`; gimle bindings use kebab `cx-cto`. Pre-fix the merge loop compared by string equality only, so cross-form pairs lived in disjoint key namespaces — conflict detection was inert for gimle. New `_kebab_to_canonical()` mirrors the special-case `cx`/`codex` prefixes from `_normalize_legacy_name`; `resolve_all` builds a canonical-key index across both sides and emits `BindingsConflictWarning` (with explicit `legacy_key`/`bindings_key` fields) on cross-form disagreement. 3 new resolver tests (`test_kebab_*_conflict_detected`, `test_kebab_*_matching_no_conflict`, `test_kebab_to_canonical_helper_matches_legacy_normalizer`) pin the parity contract.
+- CRIT-code-rev-C3 — `paperclips/scripts/generate_assembly_inventory.py` bumped to `schemaVersion: 2`. New `load_manifest_output_paths` reads per-agent `output_path` from the gimle project manifest and threads it through `dist_path_for_role`, falling back to the v1 hardcoded convention when absent. Forward-compat: when gimle eventually drops `legacy_output_paths: true`, the inventory builder will follow the manifest without code changes.
+- Small batch from QA + code-rev: (a) `test_synthetic_v1_gimle_manifest_rejected` restores negative-path coverage that the 5 skipped v1-fixture tests removed; (b) `test_host_local_bindings_takes_precedence_over_ci_fallback` ports Phase F's QA C1 precedence guard to gimle's 24-agent surface; (c) `test_company_id_bridge_via_bindings_local_example` now reads expected `company_id` from the fixture instead of hardcoding the sentinel (eliminates maintenance footgun); (d) `_diff_lines` count-mismatch already wired to explicit `pytest.fail` per architect C2.
+- 4 architect/code-rev/qa findings parked as false-positives or out-of-scope after verification: review_v2 doc updates (delegated to Phase H); landing pad for legacy file removal (Phase H gate); CLAUDE.md decompose (operator-side, scope-creep for Phase G); per-role craft splits (operator + team, post-Phase-H).
+- Cross-phase note: the new cross-form conflict detection now emits warnings (not errors) for every `cx-*` / `codex-*` agent in CI sweeps, because gimle's `bindings.local-example.yaml` uses sentinel UUIDs (`00000000-...-021x`) while `codex-agent-ids.env` carries real production UUIDs. This is correct behavior — Phase H cleanup gate drops `codex-agent-ids.env`, at which point the warnings stop.
+- Sweep: 384 paperclip tests, 20 skipped, 0 failed.
+
+**Phase G partial (2026-05-17, code-side — Tasks 1-4 of 6):**
+- gimle manifest migrated to v2 schema (24 agents = 12 claude + 12 codex): `schemaVersion: 2`, all UUIDs + `paths.{project_root,primary_repo_root,production_checkout,codex_team_root,operator_memory_dir}` host-local fields + `project.company_id` removed; per-agent `profile` + `reportsTo` + explicit `output_path` added. Kebab `agent_name` (e.g., `cto`, `cx-cto`) preserves v1 render byte-identity.
+- Legacy compat preserved per spec §10.5: `compatibility.legacy_output_paths: true`, `claude_deploy_mapping: paperclips/deploy-agents.sh`, `codex_agent_ids_env: paperclips/codex-agent-ids.env`, `workspace_update_script: paperclips/update-agent-workspaces.sh`. Files stay in repo until Phase H cleanup gate.
+- New CI-fallback files: `paperclips/projects/gimle/{bindings,paths}.local-example.yaml` (kebab keys to match manifest agent_name; sanitized UUIDs `00000000-...-020x`/`021x`, sanitized paths `/opt/uaa-example/gimle/...`). Operator's `~/.paperclip/projects/gimle/{bindings,paths}.yaml` overrides at deploy.
+- `validate_instructions` `len(uuid) >= 8` allowlist fallback (D-fix C-3 carryover) confirmed removed. 5 obsolete v1-fixture tests in `test_validate_instructions.py` skipped with `reason="Post-Phase-G: gimle is v2-clean..."` — covered by Phase G-specific behavioral tests instead.
+- `generate_assembly_inventory.py`: regenerated `paperclips/assembly-inventory.json` for v2 manifest input (gimle dist paths still resolve to `paperclips/dist/*.md` + `paperclips/dist/codex/*.md` per `legacy_output_paths: true`).
+- New `paperclips/tests/test_phase_g_gimle_migration.py` (38+ tests): manifest-shape validators (24 agents, kebab names, no UUIDs, no abs paths), per-agent profile snapshot (24-entry locked dict), CI-fallback parity check, per-target render-delta (claude×12 + codex×12), bridge isolation test, hard guard against silent baseline-dir deletion, post-live-migration skip-stubs.
+- Pre-migration baseline at `paperclips/tests/baseline/phase_g/gimle-dist-pre/{claude,codex}/` (12+12 .md artifacts) for render-delta determinism.
+- **DEFERRED to operator** (Tasks 5-6 = live deploy + CLAUDE.md decompose): pause BOTH claude + codex teams in paperclip UI → `bootstrap-project.sh gimle --canary` on iMac → smoke-test (both teams) → unpause → CLAUDE.md decompose into role-specific overlays (operator-side, post-merge follow-up).
+- Sweep: 348 paperclip tests, 12 skipped, 0 failed.
+
+**Phase F partial (2026-05-17, code-side — Tasks 1-5 of 7):**
+- uaudit manifest migrated to v2 schema (17 agents, codex-only): `schemaVersion: 2`, all `agent_id` + `workspace_cwd` + `paths.*` host-local fields + `report_delivery.telegram_plugin_id` removed; per-agent `profile` + `reportsTo` added.
+- New CI-fallback files: `paperclips/projects/uaudit/{bindings,paths,plugins}.local-example.yaml` (sanitized UUIDs `00000000-...-001x`, sanitized paths `/opt/uaa-example/uaudit/...`, sentinel plugin_id `00000000-...-0000`). Operator's `~/.paperclip/projects/uaudit/{bindings,paths,plugins}.yaml` overrides at deploy.
+- `_load_host_local_sources` extended for bindings fallback (mirroring paths/plugins from Phase E).
+- Builder bridge: when bindings.yaml has `company_id` AND committed manifest doesn't, surface bindings value into `manifest_nested["project"]["company_id"]` so role templates using legacy `{{project.company_id}}` placeholder still resolve under v2 (no shared-role changes needed).
+- Overlay rename: `{{agent.workspace_cwd}}` → `runs/{{agent.agent_name}}/workspace`; `{{report_delivery.telegram_plugin_id}}` → `{{plugins.telegram.plugin_id}}` (2 InfraEngineer overlay files); `/Users/Shared/UnstoppableAudit/repos/...` → `{{paths.primary_repo_root}}` + `{{paths.project_root}}` in `_common.md`.
+- Profile mapping per agent: AUCEO/UWICTO/UWACTO = cto; SwiftAuditor/KotlinAuditor/SecurityAuditor = reviewer; CryptoAuditor = **implementer** (cx-blockchain-engineer.md role's v1 implicit default — preserved to keep render byte-identical); QAEngineer = qa; InfraEngineer = implementer; ResearchAgent = research; TechnicalWriter = writer. reportsTo chains: regional CTOs → AUCEO; auditors/QA/Infra/Research/Writer → regional CTO.
+- Phase C test `test_unmigrated_v1_manifest_rejected` updated to only check gimle (uaudit now v2-clean); new `test_v2_uaudit_manifest_accepted`.
+- New `paperclips/tests/test_phase_f_uaudit_migration.py` (30 tests): pre-migration backup smoke (17 UUIDs extracted) + manifest-shape validators + per-agent render-delta diff (workspace_cwd + CI-fallback path/plugin/company_id substitutions allowed).
+- Pre-migration backup at `paperclips/tests/baseline/phase_f/{uaudit-manifest-pre.yaml,uaudit-dist-pre/}`.
+- **DEFERRED to operator** (Task 6 = live deploy): pause uaudit agents → `migrate-bindings.sh uaudit` → operator-supplied paths.yaml + plugins.yaml from live API → `bootstrap-project.sh uaudit --canary` → smoke (incl. telegram delivery stage 6) → unpause. Per spec §10.3.
+- Sweep: 342 paperclip tests, 12 skipped, 0 failed.
+
+**Phase E followup (2026-05-17, in-PR — 6 CRITICAL from 4-voltAgent deep-review):**
+- CRIT-C1 (architect) — `resolved_assembly` now omits empty `compatibility.inputs` entries via new `_build_compatibility_block` helper. Previously v2 manifests shipped `inputs.{claudeDeployMapping,codexAgentIdsEnv,workspaceUpdateScript}: {path:"", sha256:""}` — meaningless data downstream consumers would mistrust. Gimle/uaudit v1 retain populated inputs.
+- CRIT-C2 (architect) — `compatibility_agent_ids` no longer defaults `compatibility.claude_deploy_mapping`/`codex_agent_ids_env` to gimle's files. Trading + future v2 projects with empty fields get only the dual-read resolver merge; cross-project leak eliminated. New `_merge_canonical_bindings_into_ids` helper centralizes the resolver step for both targets.
+- CRIT-C3 (code-rev) — `_load_host_local_sources` fallback no longer swallows `Exception` blanket-style on `paths.local-example.yaml` / `plugins.local-example.yaml`. Now narrowed to `(yaml.YAMLError, OSError)` and logs to stderr — corrupt committed-fallback regressions are now visible.
+- CRIT-C4 (security) — Trading overlays (`_common-{claude,codex}.md`) had 6 inline `/Users/Shared/Trading/...` abs paths. Replaced with `{{paths.primary_repo_root}}` + `{{paths.project_root}}` templates resolved via host-local. Remaining `/Users/Shared/Ios/Gimle-Palace` references are left-side of substitution-table documentation (gimle reference being replaced) — kept.
+- CRIT-C5 (code-rev) — v2 detection regex `^schemaVersion:\s*2\s*$` was too narrow (failed on `"2"`/`2.0`/`# comment`). Replaced with `_is_v2_manifest_text` helper accepting quoted, float, commented forms + YAML-parse fallback for edge cases. 9 parametrized tests document the contract.
+- CRIT-C6 (QA + code-rev) — `_diff_lines` count-mismatch produced opaque `__count_mismatch__` failure messages. Now explicit `pytest.fail(f"{subpath} line count differs ...")` early-exit with debuggable diagnostic.
+- 1 architect false-positive parked after verification: claim that empty compat-inputs cause `IsADirectoryError` — actual behavior is empty path resolves to `repo_root`, `sha256_file` returns hash of root (also bogus, but doesn't crash). Fix still applies (omit entries).
+- Sweep: 314 paperclip tests, 9 skipped, 0 failed. +9 new behavioral tests (8 v2-detection + 1 count-mismatch guard).
+
+**Phase E partial (2026-05-17, code-side — Tasks 1-5 of 9):**
+- Trading manifest migrated to v2 schema: `schemaVersion: 2`, `agent_id`/`workspace_cwd`/`paths.*` host-local fields removed; `profile` + `reportsTo` added per agent.
+- `paperclips/projects/trading/paths.local-example.yaml` committed as CI/dev fallback (sanitized paths under `/opt/example/trading`); operator's `~/.paperclip/projects/trading/paths.yaml` takes precedence at deploy time.
+- `_load_host_local_sources` in builder reads operator's `~/.paperclip/projects/<key>/{paths,plugins}.yaml` first, then falls back to `paperclips/projects/<key>/{paths,plugins}.local-example.yaml` when present.
+- `validate_instructions` detects `schemaVersion: 2` and relaxes v1-only checks: `project.company_id`, `paths.*` host-local fields, compatibility section + inputs, role agentId-required.
+- `migrate-bindings.sh` fixes surfaced by trading work: (a) `AGENT_UUIDS=()` explicit init prevents `set -u` unbound-variable crash on empty assoc-array; (b) Python+PyYAML fallback for manifest read makes the script work without yq dependency.
+- Trading overlay text updated: `{{agent.workspace_cwd}}` → `runs/{{agent.agent_name}}/workspace` (computed inline; operator's real abs cwd resolved via host-local paths.yaml at deploy).
+- Existing Phase C test (`test_trading_manifest_rejected`) updated to test v1-style uaudit + gimle as rejection cases; new `test_v2_trading_manifest_accepted` asserts trading passes validate-manifest.
+- New `paperclips/tests/test_phase_e_trading_migration.py` (13 tests): pre-migration backup smoke + manifest-shape validators + render-delta diff that asserts post-migration output differs from baseline only in `workspace_cwd` line + CI-fallback path substitution.
+- Pre-migration backup committed at `paperclips/tests/baseline/phase_e/trading-manifest-pre.yaml` + `trading-dist-pre/` for rollback/audit/determinism.
+- **DEFERRED to operator** (Tasks 6-8 = live deploy): pause trading agents in paperclip UI → `bootstrap-project.sh trading --canary` on iMac → smoke-test → unpause. Spec §14.2 risk profile: LOW (5 agents, fewest in-progress).
+- Sweep: 305 paperclip tests, 9 skipped, 0 failed.
+
 **Phase D followup (2026-05-16, in-PR — 6 CRITICAL + 2 IMP from 4-voltAgent deep-review):**
 - CRIT-C-1 — `build_project_compat.compatibility_agent_ids` for codex target now ALSO merges canonical-name keys from resolver, so Phase E projects whose manifests use canonical agent_name (CXCTO, CXMCPEngineer) get populated agentId in resolved-assembly JSON. Fixes architect's "single source of truth false" finding.
 - CRIT-C-2 — `validate_instructions.load_team_uuids` + `detection_semantic.load_team_uuids_from_repo` accept `allowed_company_ids: set[str] | None`; daemon passes `{c.id for c in cfg.companies}`. Prevents watchdog from allowlisting trading/uaudit UUIDs when running for gimle (cross-project leak).

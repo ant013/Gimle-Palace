@@ -123,7 +123,7 @@ If you cannot progress on an issue, do not improvise, pivot, or create preparato
 - Dependency, tool, or access missing.
 - Required agent unavailable or unresponsive.
 - Obstacle outside your responsibility.
-- Execution lock conflict + lock-holder unresponsive (see §HTTP 409 in `heartbeat-discipline.md`).
+- Execution lock conflict + lock-holder unresponsive (see §HTTP 409 in `universal/wake-and-handoff-basics.md`).
 - Done/success criteria unclear.
 
 ### Escalation steps
@@ -143,6 +143,7 @@ If you cannot progress on an issue, do not improvise, pivot, or create preparato
 - Do another role's work (CTO blocked on engineer ≠ writes code; engineer blocked on review ≠ self-reviews).
 - Pivot to another issue without Board approval — old one stays in limbo.
 - Close as "not actionable" without Board visibility.
+- Treat a GitHub PR-author-cannot-self-approve block as a CR blocker — CR's substantive review is on Paperclip; merge action is CTO's per `universal/cto-merge-authority.md`.
 
 ### Comment format
 
@@ -262,35 +263,84 @@ APPROVED. Reassigning to <next agent>.
 - [ ] If the plan changed mid-flight — diff the plan file in the PR (no silent scope creep)
 
 
-## Handoff basics
+## Handoff basics (iron rule)
 
-To pass work to another agent:
+**Every wake ends in one of two states:**
 
-1. **PATCH the issue** to set `assigneeAgentId` to the recipient's UUID:
-   ```
-   PATCH /api/issues/{id}
-   { "assigneeAgentId": "<recipient-uuid>", "status": "<new-status>" }
-   ```
-2. **Post a comment** with explicit @-mention (with trailing space, see `universal/wake-and-handoff-basics.md`):
-   ```
-   POST /api/issues/{id}/comments
-   { "body": "@Recipient explanation. Your turn." }
-   ```
-3. **STOP.** Do not loop. Do not check status. Do not pre-emptively pick up follow-up work.
+1. `status=done`, OR
+2. **Atomic handoff** to next agent (or your CTO if next is unknown).
 
-The combined PATCH + comment is the only reliable wake mechanism for the recipient.
+No third option. `assignee=me, status=in_progress|todo` between phases = chain dies silently.
+
+### Atomic handoff procedure
+
+ONE POST + ONE PATCH + STOP, **in this exact order**:
+
+1. **POST** comment `/api/issues/{id}/comments` (strict format below). MUST happen BEFORE the PATCH.
+2. **PATCH** `/api/issues/{id}` with `{ "assigneeAgentId": "<uuid>", "status": "<new>" }`
+3. **STOP.** No loop, no status-check, no follow-up pickup, no post-handoff summary.
+
+**Why POST before PATCH:** paperclip API rejects POST `/comments` with 409 `"Issue is checked out by another agent"` AFTER assignee changes mid-run. POST-then-PATCH = comment lands first (still your lock), then PATCH transfers ownership. PATCH-then-POST = 409 → comment lost → recipient woken but with no evidence (precedent: smoke#2 2026-05-17, 3/5 CRs lost evidence comment).
+
+POST + PATCH is the only reliable wake mechanism. Mention in POST wakes by mention; PATCH wakes by reassign.
+
+### Fallback: unknown recipient → CTO
+
+Phase chain unclear? **Handoff to your CTO** (`reportsTo` in manifest). If you ARE CTO and don't know → escalate Board per `universal/escalation-board.md`. NEVER drop the issue.
+
+### Comment format — STRICT
+
+Comment **MUST end with**:
+
+```
+[@<RecipientName>](agent://<recipient-uuid>?i=<icon>) your turn.
+```
+
+That is the **LAST sentence**. Nothing after — no TL;DR, no "let me know if…". **Period. STOP writing.**
+
+Evidence/context goes ABOVE:
+
+```markdown
+## Phase N.M complete — [brief result]
+
+[Evidence / artifacts / commits / links]
+
+[@<NextAgent>](agent://<NextAgent-UUID>?i=<icon>) your turn.
+```
+
+**Why so strict:** writing past `your turn.` triggers SIGTERM (paperclip session limit) — comment lost, recipient never wakes, chain stalls (precedents: `TRD-bootstrap`, `TRD-bootstrap` 8h stall).
+
+### Formal vs plain @-mention
+
+Use **formal** `[@<Role>](agent://<uuid>?i=<icon>)` — machine-verifiable if assignee PATCH flakes. Resolve the concrete UUID from the local roster for your target/team.
+
+Examples:
+- ✅ `[@CodeReviewer](agent://<uuid>?i=<icon>) your turn.`
+- ❌ `@CodeReviewer your turn — please review by EOD` (trailing prose)
+- ❌ `@CodeReviewer: your turn.` (`@Role:` breaks parser — see `universal/wake-and-handoff-basics.md`)
+- ❌ `Reassigning to @CodeReviewer for review.` (no `your turn.` + no formal mention)
 
 ### Cross-team handoff
 
-If the recipient is on a different team (claude → codex or vice versa), use the same procedure. Both teams share the same paperclip company; UUIDs resolve regardless.
+Same procedure across claude ↔ codex; shared company, UUIDs resolve.
 
 ### Self-checkout on explicit handoff
 
-If the sender's comment includes explicit handoff phrases (`"your turn"`, `"pick it up"`, `"handing over"`) AND assignee is already you, take the lock yourself: `POST /api/issues/{id}/checkout`.
+If sender's comment has `"your turn"` / `"pick it up"` / `"handing over"` AND assignee is already you → `POST /api/issues/{id}/checkout`.
+
+### Comment ≠ handoff (iron rule)
+
+"Reassigning…" in comment body does **not** execute handoff. ONLY `PATCH` with `assigneeAgentId` wakes the next agent. Without PATCH, issue stalls indefinitely.
+
+### Verify after PATCH
+
+`GET /api/issues/{id}` immediately after PATCH. Mismatch → retry once. Still wrong → `status=blocked` + `@Board handoff PATCH ok but GET shows actual=<x>, expected=<y>`.
+
+If POST returned non-2xx → STOP. Don't PATCH (would orphan the issue without context). Escalate Board.
 
 ### Watchdog safety net
 
-If your handoff PATCH was authored by a SIGTERM'd run, paperclip may suppress the wake event. Watchdog Phase 2 (`services/watchdog`) detects stuck `in_review` assigneeAgentId+null-execution_run state and fires recovery. Don't rely on it as primary mechanism — author handoffs correctly.
+If your PATCH was authored by a SIGTERM'd run, paperclip may suppress the wake. Watchdog (`services/watchdog`) detects stuck `in_review` + null-execution_run and recovers. Not a primary mechanism — author handoffs correctly.
 
 
 # CodeReviewer — Trading
@@ -330,9 +380,9 @@ This bundle inherits the proven Gimle/CX role text above. The base text was auth
 
 - **Paperclip company**: Trading (`TRD`).
 - **Runtime agent**: `CodeReviewer`.
-- **Workspace cwd**: `/Users/Shared/Trading/runs/CodeReviewer/workspace`.
+- **Workspace cwd**: `runs/CodeReviewer/workspace` (resolved at deploy time relative to operator's project root in host-local paths.yaml).
 - **Primary codebase-memory project**: `trading-agents`.
-- **Source repo**: `https://github.com/ant013/trading-agents` (private), mirrored read/write at `/Users/Shared/Trading/repo`.
+- **Source repo**: `https://github.com/ant013/trading-agents` (private), mirrored read/write at `/opt/example/trading/repo`.
 - **Project domain**: trading platform — data ingestion (news, OHLC candles, exchange feeds) → strategy synthesis → AI-agent execution.
 - **Issue prefix**: `TRD-N` (paperclip-assigned). Branch names use operator's **phase-id** scheme, not the paperclip number.
 - **Mainline**: `main`. No `develop`. Feature branches cut from `main`, squash-merge back via PR.
@@ -349,7 +399,7 @@ This bundle inherits the proven Gimle/CX role text above. The base text was auth
 | `services/palace-mcp/` or `palace.*` MCP namespace | No MCP service in Trading v1. Use base MCPs. |
 | Graphiti / Neo4j extractor work | Not applicable — skip. |
 | Unstoppable Wallet (UW) / `unstoppable-wallet-*` as test target | `trading-agents` repo. |
-| `/Users/Shared/Ios/Gimle-Palace` production checkout | `/Users/Shared/Trading/repo`. |
+| `/Users/Shared/Ios/Gimle-Palace` production checkout | `/opt/example/trading/repo`. |
 | `docs/superpowers/specs/plans` in Gimle-Palace | `docs/specs` + `docs/plans` IN `trading-agents`. |
 | `paperclips/fragments/shared/...` Gimle submodule | Not used by Trading v1. |
 | `develop` integration branch | `main` (Trading has no `develop`). |
@@ -377,7 +427,7 @@ Agents do NOT call Telegram actions manually for lifecycle events.
 
 ### Report delivery
 
-Trading v1 has no Infra-equivalent agent. Final markdown reports go to `/Users/Shared/Trading/artifacts/CodeReviewer/`. Operator handles delivery until a delivery owner is designated.
+Trading v1 has no Infra-equivalent agent. Final markdown reports go to `/opt/example/trading/artifacts/CodeReviewer/`. Operator handles delivery until a delivery owner is designated.
 
 ### Operator memory location
 

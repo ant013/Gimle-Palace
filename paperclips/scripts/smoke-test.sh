@@ -55,7 +55,7 @@ stage_2_company_and_agents() {
   log info "[2/7] company exists; agents present"
   paperclip_get "/api/companies/${company_id}" >/dev/null || die "company $company_id not found"
   for agent_name in $(yq -r '.agents | keys | .[]' "$bindings"); do
-    uuid=$(yq -r ".agents.${agent_name}" "$bindings")
+    uuid=$(yq -r ".agents[\"${agent_name}\"]" "$bindings")
     paperclip_get_agent_config "$uuid" >/dev/null || die "agent $agent_name ($uuid) not in API"
   done
   log ok "  all agents present"
@@ -101,7 +101,7 @@ stage_5_per_agent_mcp() {
   failed=0
   for profile in "${!picked[@]}"; do
     name="${picked[$profile]}"
-    uuid=$(yq -r ".agents.${name}" "$bindings")
+    uuid=$(yq -r ".agents[\"${name}\"]" "$bindings")
     log info "  probing $name (profile=$profile, uuid=$uuid)"
     probe_agent_for_profile "$company_id" "$uuid" "$name" "$profile" || failed=$((failed + 1))
   done
@@ -132,11 +132,11 @@ stage_7_e2e_handoff() {
   source "${SCRIPT_DIR}/lib/_smoke_probes.sh"
 
   cto_name=$(yq -r '.agents[] | select(.profile == "cto") | .agent_name' "$manifest" | head -1)
-  cto_uuid=$(yq -r ".agents.${cto_name}" "$bindings")
+  cto_uuid=$(yq -r ".agents[\"${cto_name}\"]" "$bindings")
   [ -n "$cto_uuid" ] && [ "$cto_uuid" != "null" ] || die "no cto agent in $project_key"
 
   next_name=$(yq -r '.agents[] | select(.profile == "implementer" or .profile == "reviewer" or .profile == "qa") | .agent_name' "$manifest" | head -1)
-  next_uuid=$(yq -r ".agents.${next_name}" "$bindings")
+  next_uuid=$(yq -r ".agents[\"${next_name}\"]" "$bindings")
   [ -n "$next_uuid" ] && [ "$next_uuid" != "null" ] || die "no implementer/reviewer/qa agent in $project_key"
 
   cto_target=$(yq -r ".agents[] | select(.agent_name == \"${cto_name}\") | .target" "$manifest")

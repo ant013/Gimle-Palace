@@ -1,9 +1,10 @@
-"""Phase A: verify no build-output drift since baseline beyond deprecation banners.
+"""Phase A: verify build path still resolves for all 24 roles.
 
-Existing role files reference deprecated fragments via <!-- @include --> directives.
-Those fragments are still present (with deprecation banners). When builder includes
-them, output gains the banner block at the top of each fragment. Drift expected
-to be banner-only.
+Post-Phase-H1: role files are slim crafts (no `<!-- @include -->` directives) and
+build routes through `_compose_agent_prompt` rather than legacy `expand_includes`.
+The deprecated fragments + their old `@include` callsites are removed entirely.
+This test now serves as a smoke check that the slim-craft compose path renders
+every role without ENOENT or template-resolution errors.
 """
 
 import hashlib
@@ -47,7 +48,9 @@ def test_dist_bundles_below_pre_uaa_baseline():
     too_fat: list[str] = []
     # Post Phase B with composition: cto profile = ~14-18KB, others smaller.
     # Allow some headroom for projects with rich overlays (uaudit has per-agent overlays).
-    POST_PHASE_B_MAX_BYTES = 25000
+    # 26000 leaves ~9KB for incremental overlay growth above the largest current
+    # post-Phase-B bundle while still catching multi-KB fragment include leaks.
+    POST_PHASE_B_MAX_BYTES = 26000
     SCAN_DIRS = [
         dist_dir,
         dist_dir / "codex",

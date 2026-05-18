@@ -2,3 +2,5 @@
 .index-store/
 .build/
 scip/*.tmp
+# Placeholder .git dir created for GIM-332 audit Docker precheck workaround
+.git/

@@ -23,19 +23,6 @@ CODEX_ROLES = [
 SIZE_LIMIT_PER_ROLE = 100  # lines
 
 
-def test_all_24_roles_have_legacy_copies():
-    for r in CLAUDE_ROLES:
-        assert (ROLES / "legacy" / r).is_file(), f"missing legacy: {r}"
-    for r in CODEX_ROLES:
-        assert (ROLES_CODEX / "legacy" / r).is_file(), f"missing legacy: {r}"
-
-
-def test_all_24_legacy_have_banners():
-    for r in CLAUDE_ROLES + CODEX_ROLES:
-        legacy = (ROLES if r in CLAUDE_ROLES else ROLES_CODEX) / "legacy" / r
-        assert "UAA Phase A" in legacy.read_text(), f"banner missing: {legacy}"
-
-
 def test_all_24_new_roles_are_slim():
     for r in CLAUDE_ROLES + CODEX_ROLES:
         new = (ROLES if r in CLAUDE_ROLES else ROLES_CODEX) / r
@@ -67,11 +54,11 @@ def test_fragment_hierarchy_complete():
 
 
 def test_total_new_fragment_count():
-    """Per spec §4.1 (rev3): 3+4+1+2+2+1+3+2 = 18 fragment files across 8 subdirs."""
+    """Phase A spec §4.1 (rev3) baseline = 18 fragments. +1 for universal/cto-merge-authority.md (UAA CTO merge authority spec)."""
     new_files: list[Path] = []
     for d in ["universal", "git", "worktree", "handoff", "code-review", "qa", "pre-work", "plan"]:
         new_files.extend((SUBMODULE / d).glob("*.md"))
-    assert len(new_files) == 18, (
-        f"expected 18 new fragment files, got {len(new_files)}: "
+    assert len(new_files) == 19, (
+        f"expected 19 new fragment files, got {len(new_files)}: "
         f"{[f.name for f in new_files]}"
     )

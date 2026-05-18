@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import subprocess
 import sys
@@ -330,6 +331,161 @@ def _run_semgrep_on_rule(rule_file: Path, target: Path) -> list[dict[str, Any]]:
 
 def _check_ids(findings: list[dict[str, Any]]) -> set[str]:
     return {str(f.get("check_id", "")).split(".")[-1] for f in findings}
+
+
+class _FakeSemgrepProcess:
+    def __init__(self, *, returncode: int, stdout: str = "", stderr: str = "") -> None:
+        self.returncode = returncode
+        self._stdout = stdout.encode("utf-8")
+        self._stderr = stderr.encode("utf-8")
+
+    async def communicate(self) -> tuple[bytes, bytes]:
+        return self._stdout, self._stderr
+
+    def kill(self) -> None:
+        return None
+
+    async def wait(self) -> int:
+        return self.returncode
+
+
+@pytest.mark.asyncio
+async def test_run_semgrep_uses_stdout_json_error_when_stderr_empty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from palace_mcp.extractors.localization_accessibility.rules.semgrep_runner import (
+        run_semgrep,
+    )
+
+    source = tmp_path / "Sources" / "View.swift"
+    source.parent.mkdir(parents=True)
+    source.write_text('Text("Bitcoin")\n')
+    rules_dir = tmp_path / "rules"
+    rules_dir.mkdir()
+
+    proc = _FakeSemgrepProcess(
+        returncode=2,
+        stdout=json.dumps(
+            {
+                "errors": [
+                    {
+                        "message": "Invalid scanning root: /repo/.build/checkouts/"
+                        "RxSwift/Sources/RxTextViewDelegateProxy.swift is a symbolic"
+                        " link."
+                    }
+                ]
+            }
+        ),
+    )
+
+    async def fake_create_subprocess_exec(*_args: object, **_kwargs: object) -> object:
+        return proc
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+
+    with pytest.raises(Exception) as exc_info:
+        await run_semgrep(rules_dir=rules_dir, target=source)
+
+    assert getattr(exc_info.value, "error_code", "") == "semgrep_config_invalid"
+    assert "Invalid scanning root" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_run_semgrep_classifies_missing_target_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from palace_mcp.extractors.localization_accessibility.rules.semgrep_runner import (
+        run_semgrep,
+    )
+
+    source = tmp_path / "Sources" / "View.swift"
+    source.parent.mkdir(parents=True)
+    source.write_text('Text("Bitcoin")\n')
+    rules_dir = tmp_path / "rules"
+    rules_dir.mkdir()
+
+    proc = _FakeSemgrepProcess(
+        returncode=2,
+        stderr="No such file or directory: MissingView.swift",
+    )
+
+    async def fake_create_subprocess_exec(*_args: object, **_kwargs: object) -> object:
+        return proc
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+
+    with pytest.raises(Exception) as exc_info:
+        await run_semgrep(rules_dir=rules_dir, target=source)
+
+    assert getattr(exc_info.value, "error_code", "") == "semgrep_target_error"
+    assert "No such file or directory" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_run_semgrep_classifies_unstructured_failures_as_internal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from palace_mcp.extractors.localization_accessibility.rules.semgrep_runner import (
+        run_semgrep,
+    )
+
+    source = tmp_path / "Sources" / "View.swift"
+    source.parent.mkdir(parents=True)
+    source.write_text('Text("Bitcoin")\n')
+    rules_dir = tmp_path / "rules"
+    rules_dir.mkdir()
+
+    proc = _FakeSemgrepProcess(returncode=3, stderr="panic: unexpected crash")
+
+    async def fake_create_subprocess_exec(*_args: object, **_kwargs: object) -> object:
+        return proc
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+
+    with pytest.raises(Exception) as exc_info:
+        await run_semgrep(rules_dir=rules_dir, target=source)
+
+    assert getattr(exc_info.value, "error_code", "") == "semgrep_internal_error"
+    assert "unexpected crash" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_run_semgrep_skips_build_checkouts_targets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from palace_mcp.extractors.localization_accessibility.rules.semgrep_runner import (
+        run_semgrep,
+    )
+
+    app_file = tmp_path / "Sources" / "App" / "View.swift"
+    app_file.parent.mkdir(parents=True)
+    app_file.write_text('Text("Bitcoin")\n')
+    checkout_file = (
+        tmp_path / ".build" / "checkouts" / "RxSwift" / "Sources" / "Bad.swift"
+    )
+    checkout_file.parent.mkdir(parents=True)
+    checkout_file.write_text('Text("Vendor")\n')
+    test_file = tmp_path / "Tests" / "AppTests.swift"
+    test_file.parent.mkdir(parents=True)
+    test_file.write_text('Text("Ignored in tests")\n')
+    rules_dir = tmp_path / "rules"
+    rules_dir.mkdir()
+
+    seen_cmd: list[str] = []
+    proc = _FakeSemgrepProcess(returncode=0, stdout='{"results": []}')
+
+    async def fake_create_subprocess_exec(*args: object, **_kwargs: object) -> object:
+        seen_cmd.extend(str(arg) for arg in args)
+        return proc
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+
+    result = await run_semgrep(rules_dir=rules_dir, target=tmp_path)
+
+    assert result == []
+    assert str(app_file) in seen_cmd
+    assert str(checkout_file) not in seen_cmd
+    assert str(test_file) not in seen_cmd
 
 
 # ---------------------------------------------------------------------------

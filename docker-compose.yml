@@ -14,7 +14,7 @@ services:
     networks:
       - paperclip-agent-net
     healthcheck:
-      test: ["CMD-SHELL", "cypher-shell -u neo4j -p $${NEO4J_AUTH#*/} 'RETURN 1'"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:7474 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -55,8 +55,11 @@ services:
       # Non-iMac contributors should override these in docker-compose.override.yml.
       # Fixture-based mounts (relative paths under ./services/...) work cross-platform.
       - /Users/Shared/Ios/Gimle-Palace:/repos/gimle:ro
+      # GIM-332: explicit .git mounts work around Docker Desktop VirtioFS stale dir cache
+      - /Users/Shared/Ios/Gimle-Palace/.git:/repos/gimle/.git:ro
       - /Users/Shared/Android/unstoppable-wallet-android:/repos/uw-android:ro
       - ./services/palace-mcp/tests/extractors/fixtures/uw-ios-mini-project:/repos/uw-ios-mini:ro
+      - ./services/palace-mcp/tests/extractors/fixtures/uw-ios-mini-project/.git:/repos/uw-ios-mini/.git:ro
       - /Users/Shared/Ios/unstoppable-wallet-ios:/repos/uw-ios:ro
       - ./services/palace-mcp/tests/extractors/fixtures/oz-v5-mini-project:/repos/oz-v5-mini:ro
       # GIM-182: HorizontalSystems parent mount for uw-ios bundle (41 Swift Kits).
