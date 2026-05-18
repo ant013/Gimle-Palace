@@ -171,7 +171,9 @@ class TestSymbolIndexSwiftIntegration:
                 graphiti=graphiti_mock,
             )
             initial_counter = BoundedInDegreeCounter()
-            assert initial_counter.from_disk(counter_path, expected_run_id=_RUN_ID) is True
+            assert (
+                initial_counter.from_disk(counter_path, expected_run_id=_RUN_ID) is True
+            )
             async with driver.session() as session:
                 await session.run("MATCH (n) DETACH DELETE n")
                 await session.run(
