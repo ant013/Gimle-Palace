@@ -7,6 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 _RULES_DIR = (
     Path(__file__).parent.parent.parent.parent
     / "src"
@@ -302,28 +304,73 @@ def test_dedup_different_lines_not_coalesced() -> None:
     assert len(result) == 2
 
 
-def test_semgrep_target_batches_chunks_swift_files(tmp_path: Path) -> None:
-    from palace_mcp.extractors.crypto_domain_model.extractor import (
-        _semgrep_target_batches,
-    )
-
-    for index in range(5):
-        (tmp_path / f"File{index}.swift").write_text("// swift\n", encoding="utf-8")
-    (tmp_path / "README.md").write_text("ignored\n", encoding="utf-8")
-
-    batches = _semgrep_target_batches(tmp_path, batch_size=2)
-
-    assert [len(batch) for batch in batches] == [2, 2, 1]
-    assert all(path.suffix == ".swift" for batch in batches for path in batch)
-
-
-def test_semgrep_target_batches_falls_back_to_root_when_no_swift_files(
-    tmp_path: Path,
+@pytest.mark.asyncio
+async def test_run_semgrep_excludes_build_checkouts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from palace_mcp.extractors.crypto_domain_model.extractor import (
-        _semgrep_target_batches,
+    """GIM-355: .build/checkouts/ files must NOT be passed as semgrep targets."""
+    import asyncio
+
+    from palace_mcp.extractors.foundation.semgrep_runner import run_semgrep
+
+    src_file = tmp_path / "Sources" / "Crypto.swift"
+    src_file.parent.mkdir(parents=True)
+    src_file.write_text("// real source\n", encoding="utf-8")
+
+    dep_file = tmp_path / ".build" / "checkouts" / "Dep" / "Crypto.swift"
+    dep_file.parent.mkdir(parents=True)
+    dep_file.write_text("// vendor\n", encoding="utf-8")
+
+    rules_dir = tmp_path / "rules"
+    rules_dir.mkdir()
+
+    seen_cmd: list[str] = []
+
+    class _FakeProc:
+        returncode = 0
+
+        async def communicate(self) -> tuple[bytes, bytes]:
+            return b'{"results": []}', b""
+
+    async def fake_exec(*args: object, **_kw: object) -> object:
+        seen_cmd.extend(str(a) for a in args)
+        return _FakeProc()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+
+    result = await run_semgrep(
+        rules_dir=rules_dir, target=tmp_path, suffixes=frozenset({".swift"})
     )
 
-    (tmp_path / "README.md").write_text("no swift here\n", encoding="utf-8")
+    assert result == []
+    assert str(src_file) in seen_cmd
+    assert str(dep_file) not in seen_cmd
 
-    assert _semgrep_target_batches(tmp_path, batch_size=4) == [[tmp_path]]
+
+@pytest.mark.asyncio
+async def test_run_semgrep_empty_dir_returns_no_subprocess(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """GIM-355: no swift files → empty result, semgrep never spawned."""
+    import asyncio
+
+    from palace_mcp.extractors.foundation.semgrep_runner import run_semgrep
+
+    (tmp_path / "README.md").write_text("no swift\n", encoding="utf-8")
+    rules_dir = tmp_path / "rules"
+    rules_dir.mkdir()
+
+    spawned: list[object] = []
+
+    async def fake_exec(*args: object, **_kw: object) -> object:
+        spawned.append(args)
+        raise AssertionError("semgrep should not be spawned for empty target set")
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+
+    result = await run_semgrep(
+        rules_dir=rules_dir, target=tmp_path, suffixes=frozenset({".swift"})
+    )
+
+    assert result == []
+    assert spawned == []
