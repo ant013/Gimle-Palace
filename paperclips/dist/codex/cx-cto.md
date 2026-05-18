@@ -143,6 +143,7 @@ If you cannot progress on an issue, do not improvise, pivot, or create preparato
 - Do another role's work (CTO blocked on engineer ≠ writes code; engineer blocked on review ≠ self-reviews).
 - Pivot to another issue without Board approval — old one stays in limbo.
 - Close as "not actionable" without Board visibility.
+- Treat a GitHub PR-author-cannot-self-approve block as a CR blocker — CR's substantive review is on Paperclip; merge action is CTO's per `universal/cto-merge-authority.md`.
 
 ### Comment format
 
@@ -405,7 +406,7 @@ Handoff (QA → CTO): `@CTO QA evidence posted, ready to merge`.
 
 ### Phase 4.2 — Merge (CTO)
 
-CTO merges via squash on green CI + APPROVED CR review + QA evidence. No admin override.
+CTO merge gate + action: see [universal/cto-merge-authority.md](../universal/cto-merge-authority.md).
 
 Post-merge handoff: `@CTO release-cut planned for <date>` (CTO of self) or no handoff (slice complete).
 
