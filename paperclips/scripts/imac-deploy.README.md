@@ -109,19 +109,6 @@ checking out a different branch would leave the deploy on the wrong SHA.
 does a simple `git pull --ff-only origin develop`. Worktree-from-origin/main
 is reserved for `deploy-agents.sh` (AGENTS.md update workflow only).
 
-### Gotcha #6 — Resolve live compose container IDs for health waits and verify steps
-
-Container names can drift from the historical `gimle-palace-*-1` pattern
-while the compose service is still healthy. Waiting on or exec-ing a hard-coded
-name can therefore report `missing` or fail verification even though
-`docker compose ps` shows the service as healthy.
-
-**Solution:** the script resolves the current container reference with:
-```bash
-docker compose --profile review ps -q <service>
-```
-and falls back to the legacy name only when compose has no live container yet.
-
 ---
 
 ## Log files
