@@ -150,9 +150,11 @@ async def run_semgrep(
         raise SemgrepInternalError(f"semgrep timed out after {timeout_s}s on {target}")
 
     # semgrep exits 0 on no findings, 1 on findings found — both are fine
-    if proc.returncode not in (0, 1):
+    returncode = proc.returncode
+    assert returncode is not None
+    if returncode not in (0, 1):
         raise _classify_semgrep_failure(
-            proc.returncode,
+            returncode,
             stdout_b.decode("utf-8", errors="replace"),
             stderr_b.decode("utf-8", errors="replace"),
         )
@@ -241,7 +243,7 @@ def _classify_semgrep_failure(
             "parse error",
         )
     ):
-        error_cls = SemgrepConfigInvalidError
+        error_cls: type[ExtractorConfigError] = SemgrepConfigInvalidError
     elif any(
         marker in lowered
         for marker in (
