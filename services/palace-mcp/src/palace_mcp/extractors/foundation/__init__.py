@@ -20,8 +20,16 @@ from palace_mcp.extractors.foundation.models import (
     SymbolOccurrence,
     SymbolOccurrenceShadow,
 )
+from palace_mcp.extractors.foundation.walk import (
+    DEFAULT_STOP_DIRS,
+    DEFAULT_STOP_PREFIXES,
+    should_skip_path,
+    walk_repo,
+)
 
 __all__ = [
+    "DEFAULT_STOP_DIRS",
+    "DEFAULT_STOP_PREFIXES",
     "Ecosystem",
     "EvictionRecord",
     "ExtractorError",
@@ -34,8 +42,10 @@ __all__ = [
     "PublicApiSymbol",
     "PublicApiSymbolKind",
     "PublicApiVisibility",
+    "should_skip_path",
     "SourceType",
     "SymbolKind",
     "SymbolOccurrence",
     "SymbolOccurrenceShadow",
+    "walk_repo",
 ]

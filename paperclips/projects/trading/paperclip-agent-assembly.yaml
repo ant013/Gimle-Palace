@@ -1,9 +1,10 @@
+schemaVersion: 2
+
 project:
   key: trading
   display_name: Trading
   system_name: Trading
   issue_prefix: TRD
-  company_id: 09edf17a-31d5-46cb-9812-6f07623b1c45
   integration_branch: main
   specs_dir: docs/specs
   plans_dir: docs/plans
@@ -31,12 +32,6 @@ evidence:
   post_merge_stall_issue: TRD-bootstrap
 
 paths:
-  project_root: /Users/Shared/Trading
-  primary_repo_root: /Users/Shared/Trading/repo
-  primary_mcp_service_dir: /Users/Shared/Trading
-  production_checkout: /Users/Shared/Trading
-  codex_team_root: /Users/Shared/Trading/runs
-  operator_memory_dir: ~/.claude/projects/-Users-Shared-Trading/memory
   overlay_root: paperclips/projects/trading/overlays
   project_rules_file: AGENTS.md
 
@@ -80,43 +75,37 @@ targets:
 
 compatibility:
   legacy_output_paths: false
-  claude_deploy_mapping: paperclips/deploy-agents.sh
-  codex_agent_ids_env: paperclips/codex-agent-ids.env
-  workspace_update_script: paperclips/update-agent-workspaces.sh
 
+# Phase E migration (2026-05-16): UUIDs + absolute paths + workspace_cwd moved to
+# ~/.paperclip/projects/trading/{bindings.yaml,paths.yaml}. Builder reads via
+# resolve_bindings dual-read (Phase D). reportsTo added for topological hire.
 agents:
-  - target: codex
-    agent_name: CEO
-    agent_id: 3649a8df-94ed-4025-a998-fb8be40975af
+  - agent_name: CEO
     role_source: paperclips/roles-codex/cx-cto.md
-    output_path: paperclips/dist/trading/codex/CEO.md
-    workspace_cwd: /Users/Shared/Trading/runs/CEO/workspace
+    profile: cto
+    target: codex
     primary_codebase_memory_project: trading-agents
-  - target: claude
-    agent_name: CTO
-    agent_id: 4289e2d6-990b-4c53-b879-2a1dc90fe72b
+  - agent_name: CTO
     role_source: paperclips/roles/cto.md
-    output_path: paperclips/dist/trading/claude/CTO.md
-    workspace_cwd: /Users/Shared/Trading/runs/CTO/workspace
+    profile: cto
+    target: claude
+    reportsTo: CEO
     primary_codebase_memory_project: trading-agents
-  - target: codex
-    agent_name: CodeReviewer
-    agent_id: 8eeda1b1-704f-4b97-839f-e050f9f765d2
+  - agent_name: CodeReviewer
     role_source: paperclips/roles-codex/cx-code-reviewer.md
-    output_path: paperclips/dist/trading/codex/CodeReviewer.md
-    workspace_cwd: /Users/Shared/Trading/runs/CodeReviewer/workspace
+    profile: reviewer
+    target: codex
+    reportsTo: CTO
     primary_codebase_memory_project: trading-agents
-  - target: codex
-    agent_name: PythonEngineer
-    agent_id: 2705af9c-7dda-464c-9f6c-8d0deb38816a
+  - agent_name: PythonEngineer
     role_source: paperclips/roles-codex/cx-python-engineer.md
-    output_path: paperclips/dist/trading/codex/PythonEngineer.md
-    workspace_cwd: /Users/Shared/Trading/runs/PythonEngineer/workspace
+    profile: implementer
+    target: codex
+    reportsTo: CTO
     primary_codebase_memory_project: trading-agents
-  - target: codex
-    agent_name: QAEngineer
-    agent_id: fbd3d0e4-6abb-4797-83d2-e4dc99dbed44
+  - agent_name: QAEngineer
     role_source: paperclips/roles-codex/cx-qa-engineer.md
-    output_path: paperclips/dist/trading/codex/QAEngineer.md
-    workspace_cwd: /Users/Shared/Trading/runs/QAEngineer/workspace
+    profile: qa
+    target: codex
+    reportsTo: CTO
     primary_codebase_memory_project: trading-agents

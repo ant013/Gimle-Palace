@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from palace_mcp.extractors.base import ExtractorRunContext
+from palace_mcp.extractors.base import ExtractorOutcome, ExtractorRunContext
 from palace_mcp.extractors.cross_repo_version_skew.extractor import (
     CrossRepoVersionSkewExtractor,
 )
@@ -55,14 +55,17 @@ async def test_acceptance_19_bundle_has_no_members(driver):  # type: ignore[no-u
 async def test_acceptance_19_bundle_not_registered_falls_to_project(driver):  # type: ignore[no-untyped-def]
     """Non-existent slug is neither Bundle nor Project; auto-detect picks project mode.
     Project slug 'ghost-bundle' has no :Project node either, so _collect_target_status
-    returns not_registered → DEPENDENCY_SURFACE_NOT_INDEXED (all targets lack data)."""
+    returns not_registered → optional missing-input outcome."""
     async with driver.session() as session:
         await session.run("MATCH (n) DETACH DELETE n")
     ext = CrossRepoVersionSkewExtractor()
     with _patch_mcp(driver):
-        with pytest.raises(ExtractorError) as exc_info:
-            await ext.run(graphiti=MagicMock(), ctx=_ctx(project_slug="ghost-bundle"))
-    assert exc_info.value.error_code.value == "dependency_surface_not_indexed"
+        stats = await ext.run(
+            graphiti=MagicMock(), ctx=_ctx(project_slug="ghost-bundle")
+        )
+    assert stats.outcome == ExtractorOutcome.MISSING_INPUT
+    assert stats.message is not None
+    assert "lack :DEPENDS_ON data" in stats.message
 
 
 @pytest.mark.asyncio
@@ -133,12 +136,15 @@ async def test_acceptance_24_member_not_registered_warning(driver):  # type: ign
 
 @pytest.mark.asyncio
 async def test_dependency_surface_not_indexed_all_targets(driver):  # type: ignore[no-untyped-def]
-    """Project exists but has no :DEPENDS_ON -> fail."""
+    """Project exists but has no :DEPENDS_ON -> non-failing missing-input outcome."""
     async with driver.session() as session:
         await session.run("MATCH (n) DETACH DELETE n")
         await session.run("MERGE (p:Project {slug: 'no-deps-proj'})")
     ext = CrossRepoVersionSkewExtractor()
     with _patch_mcp(driver):
-        with pytest.raises(ExtractorError) as exc_info:
-            await ext.run(graphiti=MagicMock(), ctx=_ctx(project_slug="no-deps-proj"))
-    assert exc_info.value.error_code.value == "dependency_surface_not_indexed"
+        stats = await ext.run(
+            graphiti=MagicMock(), ctx=_ctx(project_slug="no-deps-proj")
+        )
+    assert stats.outcome == ExtractorOutcome.MISSING_INPUT
+    assert stats.message is not None
+    assert "lack :DEPENDS_ON data" in stats.message

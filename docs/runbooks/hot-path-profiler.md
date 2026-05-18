@@ -86,7 +86,9 @@ ORDER BY s.cpu_samples DESC
 
 - Если extractor пишет `repo_not_mounted`, проверьте bind-mount проекта в
   `docker-compose.yml`.
-- Если `profiles/` отсутствует, создайте каталог в корне смонтированного repo.
+- Если `profiles/` отсутствует или в нём нет trace files, base smoke помечает
+  extractor как `MISSING_INPUT`, а не как hard failure. Создавайте каталог и
+  коммитьте traces только если нужен `hot_path_profiler` coverage.
 - Если растет `:HotPathSampleUnresolved`, проверьте совпадение trace symbol
   names с `qualified_name`/`display_name` на `:Function`.
 - Если Perfetto parser падает на импорте, выполните `uv sync` в

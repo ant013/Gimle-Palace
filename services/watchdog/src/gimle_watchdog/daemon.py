@@ -293,7 +293,12 @@ async def _run_tier_pass(
 
     team_uuids: dict[str, set[str]] = {}
     if h.handoff_cross_team_enabled:
-        team_uuids = detection_semantic.load_team_uuids_from_repo(repo_root)
+        # D-fix C-2: scope allowlist to this watchdog's configured companies so
+        # gimle does not allowlist trading/uaudit UUIDs (or vice versa).
+        allowed_company_ids = {company.id for company in cfg.companies}
+        team_uuids = detection_semantic.load_team_uuids_from_repo(
+            repo_root, allowed_company_ids=allowed_company_ids
+        )
 
     post_budget = budget or AlertPostBudget(
         soft_limit=h.handoff_alert_soft_budget_per_tick,

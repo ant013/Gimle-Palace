@@ -3,24 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 
-_STOP_DIRS: frozenset[str] = frozenset(
-    {
-        ".git",
-        ".venv",
-        ".gradle",
-        ".kotlin",
-        ".idea",
-        "node_modules",
-        "build",
-        "dist",
-        "target",
-        "__pycache__",
-        ".pytest_cache",
-        ".mypy_cache",
-        ".tantivy",
-        "__MACOSX",
-    }
-)
+from palace_mcp.extractors.foundation.walk import walk_repo
 
 _FIXTURE_STOP_PARTS: tuple[str, ...] = ("tests", "extractors", "fixtures")
 
@@ -58,14 +41,8 @@ def _has_subseq(parts: tuple[str, ...], subseq: tuple[str, ...]) -> bool:
 
 
 def _walk(root: Path) -> Iterator[Path]:
-    for p in root.rglob("*"):
-        if not p.is_file():
-            continue
-        if p.suffix not in _LIZARD_EXTENSIONS:
-            continue
+    for p in walk_repo(root, suffixes=_LIZARD_EXTENSIONS):
         rel_parts = p.relative_to(root).parts
-        if any(part in _STOP_DIRS for part in rel_parts):
-            continue
         if _has_subseq(rel_parts, _FIXTURE_STOP_PARTS):
             continue
         yield p

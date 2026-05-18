@@ -124,10 +124,15 @@ As of `feature/GIM-283-2-audit-coverage-gaps`, `DEFAULT_EXTRACTORS` contains all
 | `testability_di` | audit |
 | `hot_path_profiler` | audit |
 
-Extractors that require a pre-generated helper file (`reactive_dependency_tracer`
-needs `reactive_facts.json`) will produce a `RUN_FAILED` status with an
-informational diagnostic when the file is absent — this is expected for kits
-that haven't run the Swift helper.
+Extractors that require optional helper inputs or artifacts can now finish with
+non-failing diagnostics:
+
+- `public_api_surface` without `.palace/public-api/...` → `MISSING_INPUT`
+- `cross_module_contract` without `public_api_surface` facts → `SKIPPED`
+- `hot_path_profiler` without `profiles/` traces → `MISSING_INPUT`
+- `cross_repo_version_skew` without usable `:DEPENDS_ON` graph → `MISSING_INPUT`
+- `reactive_dependency_tracer` without `reactive_facts.json` keeps its
+  informational diagnostic path
 
 Custom extractors:
 

@@ -19,6 +19,7 @@ from pydantic import BaseModel
 
 from palace_mcp.extractors.base import (
     BaseExtractor,
+    ExtractorOutcome,
     ExtractorRunContext,
     ExtractorStats,
 )
@@ -227,14 +228,16 @@ LIMIT 100
 
         current_surfaces = surfaces_by_commit[commit_sha]
         if not current_surfaces:
-            raise ExtractorError(
-                error_code=ExtractorErrorCode.PUBLIC_API_ARTIFACTS_REQUIRED,
+            return ExtractorStats(
+                outcome=ExtractorOutcome.SKIPPED,
                 message=(
                     "No PublicApiSurface/PublicApiSymbol rows found for the current "
-                    f"commit '{commit_sha}'. Run public_api_surface first."
+                    f"commit '{commit_sha}'."
                 ),
-                recoverable=False,
-                action="manual_cleanup",
+                next_action=(
+                    "Provide public API artifacts and rerun public_api_surface if "
+                    "cross_module_contract coverage is required for this project."
+                ),
             )
 
         from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge

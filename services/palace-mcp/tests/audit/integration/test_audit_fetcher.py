@@ -8,6 +8,7 @@ per extractor via direct Cypher (no MCP round-trips).
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -18,6 +19,11 @@ from palace_mcp.audit.contracts import AuditContract, AuditSectionData, RunInfo
 from palace_mcp.audit.renderer import render_section
 from palace_mcp.extractors.base import BaseExtractor, ExtractorStats
 from palace_mcp.extractors.testability_di import TestabilityDiExtractor
+from tests.integration.neo4j_runtime_support import ensure_reachable_neo4j_uri
+
+_HAS_NEO4J_RUNTIME = (
+    bool(os.environ.get("COMPOSE_NEO4J_URI")) or Path("/var/run/docker.sock").exists()
+)
 
 
 # ---------------------------------------------------------------------------
@@ -28,12 +34,21 @@ from palace_mcp.extractors.testability_di import TestabilityDiExtractor
 @pytest.fixture(scope="session")
 def neo4j_uri() -> Iterator[str]:
     if reuse := os.environ.get("COMPOSE_NEO4J_URI"):
-        yield reuse
+        yield ensure_reachable_neo4j_uri(reuse)
         return
+
+    if not Path("/var/run/docker.sock").exists():
+        pytest.skip("requires Docker socket or COMPOSE_NEO4J_URI for Neo4j integration")
+
     from testcontainers.neo4j import Neo4jContainer  # type: ignore[import]
 
-    with Neo4jContainer("neo4j:5.26.0") as container:
-        yield container.get_connection_url()
+    try:
+        with Neo4jContainer("neo4j:5.26.0") as container:
+            yield container.get_connection_url()
+    except Exception as exc:
+        pytest.skip(
+            f"Could not start Neo4j testcontainer — skipping integration tests: {exc}"
+        )
 
 
 @pytest.fixture(scope="session")
@@ -92,6 +107,10 @@ RETURN n.name AS name, n.sev AS sev
 
 
 @pytest.mark.integration
+@pytest.mark.skipif(
+    not _HAS_NEO4J_RUNTIME,
+    reason="requires Docker socket or COMPOSE_NEO4J_URI for Neo4j integration",
+)
 class TestAuditFetcher:
     async def test_fetches_one_section_per_extractor(self, driver: AsyncDriver) -> None:
         from palace_mcp.audit.fetcher import fetch_audit_data
@@ -370,6 +389,63 @@ class TestAuditFetcher:
         )
         assert "ServiceLocator.shared" in rendered
         assert "STANDALONE_SIGNAL" in rendered
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    not _HAS_NEO4J_RUNTIME,
+    reason="requires Docker socket or COMPOSE_NEO4J_URI for Neo4j integration",
+)
+class TestHotspotSupplement:
+    async def test_zero_score_files_report_real_scanned_count(
+        self, driver: AsyncDriver
+    ) -> None:
+        from palace_mcp.audit.fetcher import fetch_audit_data
+        from palace_mcp.extractors.hotspot.extractor import HotspotExtractor
+
+        async with driver.session() as session:
+            for i in range(3):
+                await session.run(
+                    """
+                    CREATE (:File {
+                        project_id: 'project/test-proj',
+                        path: $path,
+                        hotspot_score: 0.0,
+                        complexity_status: 'fresh',
+                        ccn_total: 5,
+                        churn_count: 0,
+                        complexity_window_days: 90
+                    })
+                    """,
+                    path=f"src/file{i}.py",
+                )
+
+        run_info = RunInfo(
+            run_id="run-hotspot-supplement",
+            extractor_name="hotspot",
+            project="test-proj",
+            completed_at=None,
+        )
+        extractor = HotspotExtractor()
+        result = await fetch_audit_data(
+            driver,
+            {"hotspot": run_info},
+            {"hotspot": extractor},
+        )
+
+        assert "hotspot" in result
+        section = result["hotspot"]
+        assert section.findings == []
+        assert section.summary_stats["total_scanned_files"] == 3
+
+        rendered = render_section(
+            section,
+            extractor.audit_contract().severity_column,
+            100,
+            severity_mapper=extractor.audit_contract().severity_mapper,
+        )
+        assert "scanned 3 files" in rendered
+        assert "scanned 0 files" not in rendered
 
 
 async def _seed_fake_nodes(driver: AsyncDriver, *, project: str) -> None:

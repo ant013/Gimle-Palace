@@ -16,6 +16,7 @@ from neo4j import AsyncDriver, AsyncSession
 
 from palace_mcp.extractors.base import (
     BaseExtractor,
+    ExtractorOutcome,
     ExtractorRunContext,
     ExtractorStats,
 )
@@ -171,14 +172,17 @@ LIMIT 100
 
         artifacts = discover_public_api_artifacts(ctx.repo_path)
         if not artifacts:
-            raise ExtractorError(
-                error_code=ExtractorErrorCode.PUBLIC_API_ARTIFACTS_REQUIRED,
+            return ExtractorStats(
+                outcome=ExtractorOutcome.MISSING_INPUT,
                 message=(
-                    "No public API artifacts found. Expected committed files under "
-                    "'.palace/public-api/kotlin/*.api' or '.palace/public-api/swift/*.swiftinterface'."
+                    "No public API artifacts found under "
+                    "'.palace/public-api/kotlin/*.api' or "
+                    "'.palace/public-api/swift/*.swiftinterface'."
                 ),
-                recoverable=False,
-                action="manual_cleanup",
+                next_action=(
+                    "Commit public API snapshots under .palace/public-api/ if "
+                    "public_api_surface coverage is required for this project."
+                ),
             )
 
         commit_sha = _read_head_sha(ctx.repo_path)

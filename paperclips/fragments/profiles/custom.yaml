@@ -1,0 +1,7 @@
+schemaVersion: 2
+name: custom
+inheritsUniversal: false
+includes: []
+description: |
+  Opts out of universal layer. Caller composes via custom_includes in
+  manifest. Total freedom; no safety floor.

@@ -14,6 +14,7 @@ from palace_mcp.extractors import registry
 from palace_mcp.extractors.base import (
     BaseExtractor,
     ExtractorConfigError,
+    ExtractorOutcome,
     ExtractorRunContext,
     ExtractorStats,
 )
@@ -78,6 +79,20 @@ class _Slow(BaseExtractor):
     ) -> ExtractorStats:
         await asyncio.sleep(10.0)
         return ExtractorStats()
+
+
+class _Skipped(BaseExtractor):
+    name = "__test_skipped"
+    description = "returns a successful skipped outcome"
+
+    async def run(
+        self, *, graphiti: Graphiti, ctx: ExtractorRunContext
+    ) -> ExtractorStats:
+        return ExtractorStats(
+            outcome=ExtractorOutcome.SKIPPED,
+            message="missing prerequisite fixture",
+            next_action="Provide the fixture and rerun the extractor.",
+        )
 
 
 @pytest.fixture(autouse=True)
@@ -229,6 +244,27 @@ async def test_happy_path_success(
     assert res["project"] == "testproj"
     assert "run_id" in res
     assert res["duration_ms"] >= 0
+    assert res["outcome"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_success_response_preserves_skipped_outcome_metadata(
+    mock_driver: MagicMock, tmp_path: Path, mock_graphiti: MagicMock
+) -> None:
+    registry.register(_Skipped())
+    with patch("palace_mcp.extractors.runner.REPOS_ROOT", tmp_path / "repos"):
+        res = await run_extractor(
+            name="__test_skipped",
+            project="testproj",
+            driver=mock_driver,
+            graphiti=mock_graphiti,
+        )
+
+    assert res["ok"] is True
+    assert res["success"] is True
+    assert res["outcome"] == "skipped"
+    assert res["message"] == "missing prerequisite fixture"
+    assert res["next_action"] == "Provide the fixture and rerun the extractor."
 
 
 @pytest.mark.asyncio

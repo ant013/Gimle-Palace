@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -64,12 +65,23 @@ class ExtractorRunContext:
     logger: logging.Logger
 
 
+class ExtractorOutcome(StrEnum):
+    """Successful extractor outcomes exposed to higher-level orchestration."""
+
+    OK = "ok"
+    SKIPPED = "skipped"
+    MISSING_INPUT = "missing_input"
+
+
 @dataclass(frozen=True)
 class ExtractorStats:
     """What run() returns. Merged into :IngestRun for observability."""
 
     nodes_written: int = 0
     edges_written: int = 0
+    outcome: ExtractorOutcome = ExtractorOutcome.OK
+    message: str | None = None
+    next_action: str | None = None
 
 
 class ExtractorError(Exception):

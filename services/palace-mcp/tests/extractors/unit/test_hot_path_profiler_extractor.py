@@ -8,7 +8,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from palace_mcp.extractors.base import ExtractorConfigError, ExtractorRunContext
+from palace_mcp.extractors.base import (
+    ExtractorOutcome,
+    ExtractorRunContext,
+)
 from palace_mcp.extractors.hot_path_profiler.extractor import HotPathProfilerExtractor
 from palace_mcp.extractors.hot_path_profiler.models import HotPathSample, HotPathSummary
 
@@ -29,8 +32,27 @@ async def test_run_requires_profiles_directory(tmp_path: Path) -> None:
     graphiti = MagicMock()
     graphiti.driver = MagicMock()
 
-    with pytest.raises(ExtractorConfigError, match="profiles directory"):
-        await HotPathProfilerExtractor().run(graphiti=graphiti, ctx=_ctx(tmp_path))
+    stats = await HotPathProfilerExtractor().run(graphiti=graphiti, ctx=_ctx(tmp_path))
+
+    assert stats.outcome == ExtractorOutcome.MISSING_INPUT
+    assert stats.message is not None
+    assert "profiles directory" in stats.message
+    assert stats.next_action is not None
+
+
+@pytest.mark.asyncio
+async def test_run_reports_missing_input_when_profiles_dir_has_no_traces(
+    tmp_path: Path,
+) -> None:
+    graphiti = MagicMock()
+    graphiti.driver = MagicMock()
+    (tmp_path / "profiles").mkdir()
+
+    stats = await HotPathProfilerExtractor().run(graphiti=graphiti, ctx=_ctx(tmp_path))
+
+    assert stats.outcome == ExtractorOutcome.MISSING_INPUT
+    assert stats.message is not None
+    assert "no trace files found" in stats.message
 
 
 @pytest.mark.asyncio

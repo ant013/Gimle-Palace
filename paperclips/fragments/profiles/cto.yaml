@@ -1,0 +1,11 @@
+schemaVersion: 2
+name: cto
+inheritsUniversal: true
+extends: reviewer
+includes:
+  - git/release-cut.md
+  - handoff/phase-orchestration.md
+  - plan/producer.md
+description: |
+  CTO profile. Inherits reviewer (CTO also reviews). Adds release-cut
+  (CTO orchestrates main releases). Phase orchestration. Plan producer.

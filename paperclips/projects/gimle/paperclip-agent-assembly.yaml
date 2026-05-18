@@ -1,9 +1,10 @@
+schemaVersion: 2
+
 project:
   key: gimle
   display_name: Gimle
   system_name: Gimle-Palace
   issue_prefix: GIM
-  company_id: 9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64
   integration_branch: develop
   specs_dir: docs/superpowers/specs
   plans_dir: docs/superpowers/plans
@@ -31,12 +32,7 @@ evidence:
   post_merge_stall_issue: GIM-229
 
 paths:
-  project_root: .
-  primary_repo_root: .
   primary_mcp_service_dir: services/palace-mcp
-  production_checkout: /Users/Shared/Ios/Gimle-Palace
-  codex_team_root: /Users/Shared/Ios/worktrees/cx/Gimle-Palace
-  operator_memory_dir: ~/.claude/projects/-Users-ant013-Android-Gimle-Palace/memory
   overlay_root: paperclips/projects/gimle/overlays
   project_rules_file: AGENTS.md
 
@@ -78,10 +74,161 @@ targets:
     deploy_mode: api
     instructions_bundle_mode: managed
 
+# Phase G v2: legacy compat files (deploy-agents.sh + codex-agent-ids.env) STAY
+# in repo until §10.5 cleanup gate (Phase H). Dual-read resolver reads them as
+# secondary source alongside ~/.paperclip/projects/gimle/bindings.yaml.
 compatibility:
   legacy_output_paths: true
   claude_deploy_mapping: paperclips/deploy-agents.sh
   codex_agent_ids_env: paperclips/codex-agent-ids.env
   workspace_update_script: paperclips/update-agent-workspaces.sh
 
-agents: []
+# Phase G migration (2026-05-17): UUIDs + project_root/primary_repo_root/
+# production_checkout/codex_team_root/operator_memory_dir moved to host-local
+# ~/.paperclip/projects/gimle/{bindings,paths}.yaml. company_id moved to
+# bindings.yaml. 24 agents (12 claude + 12 codex) with explicit profile+reportsTo.
+# agent_name uses kebab form to preserve v1 render byte-identity.
+agents:
+  # --- Claude team (12) ---
+  - agent_name: cto
+    role_source: paperclips/roles/cto.md
+    output_path: paperclips/dist/cto.md
+    profile: cto
+    target: claude
+  - agent_name: code-reviewer
+    role_source: paperclips/roles/code-reviewer.md
+    output_path: paperclips/dist/code-reviewer.md
+    profile: reviewer
+    target: claude
+    reportsTo: cto
+  - agent_name: python-engineer
+    role_source: paperclips/roles/python-engineer.md
+    output_path: paperclips/dist/python-engineer.md
+    profile: implementer
+    target: claude
+    reportsTo: cto
+  - agent_name: qa-engineer
+    role_source: paperclips/roles/qa-engineer.md
+    output_path: paperclips/dist/qa-engineer.md
+    profile: qa
+    target: claude
+    reportsTo: cto
+  - agent_name: technical-writer
+    role_source: paperclips/roles/technical-writer.md
+    output_path: paperclips/dist/technical-writer.md
+    profile: writer
+    target: claude
+    reportsTo: cto
+  - agent_name: infra-engineer
+    role_source: paperclips/roles/infra-engineer.md
+    output_path: paperclips/dist/infra-engineer.md
+    profile: implementer
+    target: claude
+    reportsTo: cto
+  - agent_name: mcp-engineer
+    role_source: paperclips/roles/mcp-engineer.md
+    output_path: paperclips/dist/mcp-engineer.md
+    profile: implementer
+    target: claude
+    reportsTo: cto
+  - agent_name: research-agent
+    role_source: paperclips/roles/research-agent.md
+    output_path: paperclips/dist/research-agent.md
+    profile: research
+    target: claude
+    reportsTo: cto
+  - agent_name: blockchain-engineer
+    role_source: paperclips/roles/blockchain-engineer.md
+    output_path: paperclips/dist/blockchain-engineer.md
+    profile: implementer
+    target: claude
+    reportsTo: cto
+  - agent_name: security-auditor
+    role_source: paperclips/roles/security-auditor.md
+    output_path: paperclips/dist/security-auditor.md
+    profile: reviewer
+    target: claude
+    reportsTo: cto
+  - agent_name: auditor
+    role_source: paperclips/roles/auditor.md
+    output_path: paperclips/dist/auditor.md
+    profile: reviewer
+    target: claude
+    reportsTo: cto
+  - agent_name: opus-architect-reviewer
+    role_source: paperclips/roles/opus-architect-reviewer.md
+    output_path: paperclips/dist/opus-architect-reviewer.md
+    profile: reviewer
+    target: claude
+
+  # --- Codex team (12) ---
+  - agent_name: cx-cto
+    role_source: paperclips/roles-codex/cx-cto.md
+    output_path: paperclips/dist/codex/cx-cto.md
+    profile: cto
+    target: codex
+  - agent_name: cx-code-reviewer
+    role_source: paperclips/roles-codex/cx-code-reviewer.md
+    output_path: paperclips/dist/codex/cx-code-reviewer.md
+    profile: reviewer
+    target: codex
+    reportsTo: cx-cto
+  - agent_name: cx-python-engineer
+    role_source: paperclips/roles-codex/cx-python-engineer.md
+    output_path: paperclips/dist/codex/cx-python-engineer.md
+    profile: implementer
+    target: codex
+    reportsTo: cx-cto
+  - agent_name: cx-qa-engineer
+    role_source: paperclips/roles-codex/cx-qa-engineer.md
+    output_path: paperclips/dist/codex/cx-qa-engineer.md
+    profile: qa
+    target: codex
+    reportsTo: cx-cto
+  - agent_name: cx-technical-writer
+    role_source: paperclips/roles-codex/cx-technical-writer.md
+    output_path: paperclips/dist/codex/cx-technical-writer.md
+    profile: writer
+    target: codex
+    reportsTo: cx-cto
+  - agent_name: cx-infra-engineer
+    role_source: paperclips/roles-codex/cx-infra-engineer.md
+    output_path: paperclips/dist/codex/cx-infra-engineer.md
+    profile: implementer
+    target: codex
+    reportsTo: cx-cto
+  - agent_name: cx-mcp-engineer
+    role_source: paperclips/roles-codex/cx-mcp-engineer.md
+    output_path: paperclips/dist/codex/cx-mcp-engineer.md
+    profile: implementer
+    target: codex
+    reportsTo: cx-cto
+  - agent_name: cx-research-agent
+    role_source: paperclips/roles-codex/cx-research-agent.md
+    output_path: paperclips/dist/codex/cx-research-agent.md
+    profile: research
+    target: codex
+    reportsTo: cx-cto
+  - agent_name: cx-blockchain-engineer
+    role_source: paperclips/roles-codex/cx-blockchain-engineer.md
+    output_path: paperclips/dist/codex/cx-blockchain-engineer.md
+    profile: implementer
+    target: codex
+    reportsTo: cx-cto
+  - agent_name: cx-security-auditor
+    role_source: paperclips/roles-codex/cx-security-auditor.md
+    output_path: paperclips/dist/codex/cx-security-auditor.md
+    profile: reviewer
+    target: codex
+    reportsTo: cx-cto
+  - agent_name: cx-auditor
+    role_source: paperclips/roles-codex/cx-auditor.md
+    output_path: paperclips/dist/codex/cx-auditor.md
+    profile: reviewer
+    target: codex
+    reportsTo: cx-cto
+  - agent_name: codex-architect-reviewer
+    role_source: paperclips/roles-codex/codex-architect-reviewer.md
+    output_path: paperclips/dist/codex/codex-architect-reviewer.md
+    profile: reviewer
+    target: codex

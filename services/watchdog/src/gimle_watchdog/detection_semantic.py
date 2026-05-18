@@ -393,12 +393,20 @@ def detect_stale_bundle(
     )
 
 
-def load_team_uuids_from_repo(repo_root: Path) -> dict[str, set[str]]:
+def load_team_uuids_from_repo(
+    repo_root: Path,
+    allowed_company_ids: "set[str] | None" = None,
+) -> dict[str, set[str]]:
     """Load team UUIDs by delegating to validate_instructions.load_team_uuids.
 
     Uses importlib to load the script by absolute path — avoids adding
     paperclips/ to the watchdog package's sys.path.  Falls back to empty
     sets if the script is missing.
+
+    D-fix C-2: ``allowed_company_ids`` (when set) scopes the allowlist to UUIDs
+    from bindings whose company_id matches — prevents cross-project allowlist
+    leaks when multiple companies share a host. Caller passes the cfg-derived
+    set; pre-Phase-E legacy-only paths are unaffected (no company_id present).
     """
     script = repo_root / "paperclips" / "scripts" / "validate_instructions.py"
     if not script.is_file():
@@ -414,7 +422,9 @@ def load_team_uuids_from_repo(repo_root: Path) -> dict[str, set[str]]:
     try:
         loader = spec.loader
         loader.exec_module(mod)
-        result: dict[str, set[str]] = mod.load_team_uuids(repo_root)
+        result: dict[str, set[str]] = mod.load_team_uuids(
+            repo_root, allowed_company_ids=allowed_company_ids
+        )
         return result
     except Exception as exc:
         log.warning("team_uuids_load_failed error=%s", exc)

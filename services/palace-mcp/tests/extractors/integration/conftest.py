@@ -13,18 +13,29 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from neo4j import AsyncDriver, AsyncGraphDatabase
 
+from tests.integration.neo4j_runtime_support import ensure_reachable_neo4j_uri
+
 
 @pytest.fixture(scope="session")
 def neo4j_uri() -> Iterator[str]:
     if reuse := os.environ.get("COMPOSE_NEO4J_URI"):
-        yield reuse
+        yield ensure_reachable_neo4j_uri(reuse)
         return
 
-    # Fallback: boot a throwaway Neo4j container.
-    from testcontainers.neo4j import Neo4jContainer  # type: ignore[import]
+    try:
+        from testcontainers.neo4j import Neo4jContainer  # type: ignore[import]
+    except Exception as exc:
+        pytest.skip(
+            f"testcontainers.neo4j unavailable — skipping extractor integration tests: {exc}"
+        )
 
-    with Neo4jContainer("neo4j:5.26.0") as container:
-        yield container.get_connection_url()
+    try:
+        with Neo4jContainer("neo4j:5.26.0") as container:
+            yield container.get_connection_url()
+    except Exception as exc:
+        pytest.skip(
+            f"Could not start Neo4j testcontainer — skipping extractor integration tests: {exc}"
+        )
 
 
 @pytest.fixture(scope="session")

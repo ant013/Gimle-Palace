@@ -13,6 +13,7 @@ class ExtractorErrorCode(str, Enum):
     # Config
     INVALID_PROJECT = "invalid_project"
     SCIP_PATH_REQUIRED = "scip_path_required"  # 101b only
+    PERIPHERY_FIXTURES_MISSING = "periphery_fixtures_missing"
     PUBLIC_API_ARTIFACTS_REQUIRED = "public_api_artifacts_required"
     PUBLIC_API_PARSE_FAILED = "public_api_parse_failed"
 

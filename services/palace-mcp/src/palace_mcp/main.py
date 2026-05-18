@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import time
 from collections.abc import AsyncGenerator, Coroutine
 from contextlib import asynccontextmanager
 from importlib.metadata import version
@@ -52,6 +53,26 @@ def _fire_and_forget(coro: Coroutine[None, None, None]) -> None:
     task.add_done_callback(_on_done)
 
 
+async def wait_for_neo4j_connectivity(
+    driver: AsyncDriver,
+    *,
+    timeout_seconds: int = 60,
+    interval_seconds: float = 2.0,
+) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    last_error = "timeout"
+    while time.monotonic() < deadline:
+        try:
+            await driver.verify_connectivity()
+            return
+        except Exception as exc:
+            last_error = str(exc)
+            await asyncio.sleep(interval_seconds)
+    raise RuntimeError(
+        f"neo4j did not become reachable within {timeout_seconds}s: {last_error}"
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     configure_json_logging()
@@ -69,6 +90,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     set_default_group_id(settings.palace_default_group_id)
     if settings.codebase_memory_mcp_binary:
         await start_cm_subprocess(settings.codebase_memory_mcp_binary)
+    await wait_for_neo4j_connectivity(driver)
     _fire_and_forget(
         ensure_schema(driver, default_group_id=settings.palace_default_group_id)
     )

@@ -24,4 +24,4 @@
   `tests/test_startup_hardening.py` after lifespan added
   `ensure_extractors_schema`. Scoped `pytest tests/extractors/` missed it.
 
-See `fragments/shared/fragments/test-design-discipline.md` for generic rule + CR checklist.
+See `fragments/shared/fragments/qa/smoke-and-evidence.md` for generic rule + CR checklist.
