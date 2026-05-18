@@ -20,6 +20,12 @@ from palace_mcp.extractors.foundation.models import (
     SymbolOccurrence,
     SymbolOccurrenceShadow,
 )
+from palace_mcp.extractors.foundation.semgrep_runner import (
+    SemgrepConfigInvalidError,
+    SemgrepInternalError,
+    SemgrepTargetError,
+    run_semgrep,
+)
 from palace_mcp.extractors.foundation.walk import (
     DEFAULT_STOP_DIRS,
     DEFAULT_STOP_PREFIXES,
@@ -42,6 +48,10 @@ __all__ = [
     "PublicApiSymbol",
     "PublicApiSymbolKind",
     "PublicApiVisibility",
+    "run_semgrep",
+    "SemgrepConfigInvalidError",
+    "SemgrepInternalError",
+    "SemgrepTargetError",
     "should_skip_path",
     "SourceType",
     "SymbolKind",

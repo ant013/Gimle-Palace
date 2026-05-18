@@ -6,8 +6,6 @@ Scans Swift source files with semgrep custom rules and writes
 
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -18,7 +16,7 @@ from palace_mcp.extractors.base import (
     ExtractorRunContext,
     ExtractorStats,
 )
-from palace_mcp.extractors.foundation.walk import walk_repo
+from palace_mcp.extractors.foundation.semgrep_runner import run_semgrep
 
 if TYPE_CHECKING:
     from palace_mcp.audit.contracts import AuditContract, Severity
@@ -131,9 +129,11 @@ class CryptoDomainModelExtractor(BaseExtractor):
             },
         )
 
-        findings = await _run_semgrep(
+        findings = await run_semgrep(
             rules_dir=_RULES_DIR,
             target=ctx.repo_path,
+            suffixes=frozenset({".swift"}),
+            batch_size=_SEMGREP_BATCH_SIZE,
             timeout_s=timeout_s,
         )
 
@@ -160,80 +160,6 @@ class CryptoDomainModelExtractor(BaseExtractor):
             },
         )
         return ExtractorStats(nodes_written=nodes_written, edges_written=0)
-
-
-async def _run_semgrep(
-    *,
-    rules_dir: Path,
-    target: Path,
-    timeout_s: int,
-) -> list[dict[str, Any]]:
-    """Invoke semgrep across bounded target batches; return merged raw results."""
-    results: list[dict[str, Any]] = []
-    for batch in _semgrep_target_batches(target, batch_size=_SEMGREP_BATCH_SIZE):
-        results.extend(
-            await _run_semgrep_batch(
-                rules_dir=rules_dir,
-                targets=batch,
-                timeout_s=timeout_s,
-            )
-        )
-    return results
-
-
-def _semgrep_target_batches(target: Path, *, batch_size: int) -> list[list[Path]]:
-    if target.is_file():
-        return [[target]]
-
-    swift_files = sorted(walk_repo(target, suffixes=frozenset({".swift"})))
-    if not swift_files:
-        return [[target]]
-
-    return [
-        swift_files[index : index + batch_size]
-        for index in range(0, len(swift_files), batch_size)
-    ]
-
-
-async def _run_semgrep_batch(
-    *,
-    rules_dir: Path,
-    targets: list[Path],
-    timeout_s: int,
-) -> list[dict[str, Any]]:
-    """Invoke semgrep as async subprocess for one bounded target batch."""
-    proc = await asyncio.create_subprocess_exec(
-        "semgrep",
-        "--config",
-        str(rules_dir),
-        "--json",
-        "--quiet",
-        *(str(target) for target in targets),
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    try:
-        stdout_b, stderr_b = await asyncio.wait_for(
-            proc.communicate(), timeout=timeout_s
-        )
-    except TimeoutError:
-        proc.kill()
-        await proc.wait()
-        raise ExtractorConfigError(
-            f"semgrep timed out after {timeout_s}s on {targets[0]}"
-        )
-
-    if proc.returncode not in (0, 1):
-        stderr_text = stderr_b.decode("utf-8", errors="replace")[:500]
-        raise ExtractorConfigError(f"semgrep exited {proc.returncode}: {stderr_text}")
-
-    try:
-        output = json.loads(stdout_b.decode("utf-8", errors="replace"))
-    except json.JSONDecodeError as exc:
-        raise ExtractorConfigError(f"semgrep output not valid JSON: {exc}") from exc
-
-    results: list[dict[str, Any]] = output.get("results", [])
-    return results
 
 
 _SEMGREP_SEVERITY_MAP: dict[str, str] = {
