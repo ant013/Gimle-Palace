@@ -1,0 +1,28 @@
+version: 1
+paperclip:
+  base_url: "{{ host.paperclip.base_url }}"
+  api_key_source: "{{ host.paperclip.api_key_source }}"
+companies: []
+daemon:
+  poll_interval_seconds: 120
+  recovery_enabled: true
+  recovery_first_run_baseline_only: false
+  max_actions_per_tick: 3
+cooldowns:
+  per_issue_seconds: 300
+  per_agent_cap: 3
+  per_agent_window_seconds: 900
+logging:
+  path: ~/.paperclip/watchdog.log
+  level: INFO
+  rotate_max_bytes: 10485760
+  rotate_backup_count: 5
+escalation:
+  post_comment_on_issue: true
+  comment_marker: "<!-- watchdog-escalation -->"
+handoff:
+  handoff_alert_enabled: true
+  handoff_alert_cooldown_min: 30
+  handoff_recent_window_min: 240
+  handoff_alert_soft_budget_per_tick: 7
+  handoff_alert_hard_budget_per_tick: 11

@@ -6,13 +6,17 @@ import hashlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
+
+if TYPE_CHECKING:
+    from palace_mcp.audit.contracts import AuditContract
 
 from graphiti_core import Graphiti
 from neo4j import AsyncDriver, AsyncSession
 
 from palace_mcp.extractors.base import (
     BaseExtractor,
+    ExtractorOutcome,
     ExtractorRunContext,
     ExtractorStats,
 )
@@ -127,6 +131,30 @@ class PublicApiSurfaceExtractor(BaseExtractor):
         "FOR (n:PublicApiSymbol) ON (n.project, n.module_name, n.language, n.commit_sha, n.visibility)",
     ]
 
+    def audit_contract(self) -> "AuditContract":
+        from palace_mcp.audit.contracts import AuditContract, Severity
+
+        return AuditContract(
+            extractor_name="public_api_surface",
+            template_name="public_api_surface.md",
+            query="""
+MATCH (surface:PublicApiSurface {project: $project})
+      -[:EXPORTS]->(sym:PublicApiSymbol {project: $project})
+RETURN surface.module_name AS module_name,
+       sym.fqn AS fqn,
+       sym.display_name AS display_name,
+       sym.kind AS kind,
+       sym.visibility AS visibility,
+       sym.commit_sha AS commit_sha,
+       sym.language AS language
+ORDER BY surface.module_name, sym.fqn
+LIMIT 100
+""".strip(),
+            severity_column="kind",
+            # Public API surface is a catalogue — severity is informational by design
+            severity_mapper=lambda v: Severity.INFORMATIONAL,
+        )
+
     async def run(
         self, *, graphiti: Graphiti, ctx: ExtractorRunContext
     ) -> ExtractorStats:
@@ -144,14 +172,17 @@ class PublicApiSurfaceExtractor(BaseExtractor):
 
         artifacts = discover_public_api_artifacts(ctx.repo_path)
         if not artifacts:
-            raise ExtractorError(
-                error_code=ExtractorErrorCode.PUBLIC_API_ARTIFACTS_REQUIRED,
+            return ExtractorStats(
+                outcome=ExtractorOutcome.MISSING_INPUT,
                 message=(
-                    "No public API artifacts found. Expected committed files under "
-                    "'.palace/public-api/kotlin/*.api' or '.palace/public-api/swift/*.swiftinterface'."
+                    "No public API artifacts found under "
+                    "'.palace/public-api/kotlin/*.api' or "
+                    "'.palace/public-api/swift/*.swiftinterface'."
                 ),
-                recoverable=False,
-                action="manual_cleanup",
+                next_action=(
+                    "Commit public API snapshots under .palace/public-api/ if "
+                    "public_api_surface coverage is required for this project."
+                ),
             )
 
         commit_sha = _read_head_sha(ctx.repo_path)

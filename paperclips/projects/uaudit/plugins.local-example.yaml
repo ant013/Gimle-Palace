@@ -1,0 +1,12 @@
+# Phase F CI fallback — overridden by operator's ~/.paperclip/projects/uaudit/plugins.yaml.
+#
+# Committed sanitized example values let CI build uaudit without operator's
+# host-local files. Operator's real plugin_id (currently 60023916-...) lives
+# at ~/.paperclip/projects/uaudit/plugins.yaml.
+#
+# Builder precedence: ~/.paperclip/projects/uaudit/plugins.yaml (operator) →
+# paperclips/projects/uaudit/plugins.local-example.yaml (this file, CI fallback).
+schemaVersion: 2
+telegram:
+  plugin_id: "00000000-0000-0000-0000-000000000000"
+  # chat_id is populated by operator via paperclip UI; not stored here.

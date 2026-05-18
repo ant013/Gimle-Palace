@@ -8,7 +8,10 @@ import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
+
+if TYPE_CHECKING:
+    from palace_mcp.audit.contracts import AuditContract
 
 from graphiti_core import Graphiti
 from neo4j import AsyncDriver, AsyncSession
@@ -16,6 +19,7 @@ from pydantic import BaseModel
 
 from palace_mcp.extractors.base import (
     BaseExtractor,
+    ExtractorOutcome,
     ExtractorRunContext,
     ExtractorStats,
 )
@@ -143,6 +147,38 @@ class CrossModuleContractExtractor(BaseExtractor):
         "FOR (n:ModuleContractDelta) ON (n.project, n.consumer_module_name, n.producer_module_name, n.language, n.from_commit_sha, n.to_commit_sha)",
     ]
 
+    def audit_contract(self) -> "AuditContract":
+        from palace_mcp.audit.contracts import AuditContract, Severity
+
+        return AuditContract(
+            extractor_name="cross_module_contract",
+            template_name="cross_module_contract.md",
+            query="""
+MATCH (d:ModuleContractDelta {project: $project})
+RETURN d.consumer_module_name AS consumer_module,
+       d.producer_module_name AS producer_module,
+       d.language AS language,
+       d.from_commit_sha AS from_commit,
+       d.to_commit_sha AS to_commit,
+       coalesce(d.removed_consumed_symbol_count, 0) AS removed_count,
+       coalesce(d.added_consumed_symbol_count, 0) AS added_count,
+       coalesce(d.signature_changed_consumed_symbol_count, 0) AS signature_changed_count,
+       coalesce(d.affected_use_count, 0) AS affected_use_count
+ORDER BY d.to_commit_sha DESC, d.consumer_module_name
+LIMIT 100
+""".strip(),
+            severity_column="removed_count",
+            severity_mapper=lambda v: (
+                Severity.HIGH
+                if v is not None and int(v) > 10
+                else Severity.MEDIUM
+                if v is not None and int(v) > 3
+                else Severity.LOW
+                if v is not None and int(v) > 0
+                else Severity.INFORMATIONAL
+            ),
+        )
+
     def __init__(
         self,
         *,
@@ -192,14 +228,16 @@ class CrossModuleContractExtractor(BaseExtractor):
 
         current_surfaces = surfaces_by_commit[commit_sha]
         if not current_surfaces:
-            raise ExtractorError(
-                error_code=ExtractorErrorCode.PUBLIC_API_ARTIFACTS_REQUIRED,
+            return ExtractorStats(
+                outcome=ExtractorOutcome.SKIPPED,
                 message=(
                     "No PublicApiSurface/PublicApiSymbol rows found for the current "
-                    f"commit '{commit_sha}'. Run public_api_surface first."
+                    f"commit '{commit_sha}'."
                 ),
-                recoverable=False,
-                action="manual_cleanup",
+                next_action=(
+                    "Provide public API artifacts and rerun public_api_surface if "
+                    "cross_module_contract coverage is required for this project."
+                ),
             )
 
         from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge

@@ -51,17 +51,19 @@ class TestToolRegistration:
         for name in EXPECTED_ENABLED_TOOLS:
             assert name in tool_names, f"Missing tool: {name}"
 
-    def test_registers_manage_adr_as_disabled(self) -> None:
-        """palace.code.manage_adr is registered and returns directive error."""
+    def test_manage_adr_not_in_cm_router(self) -> None:
+        """palace.code.manage_adr is NOT registered via code_router (GIM-274: native tool)."""
         stub_tool, mcp, _ = self._make_stub_tool()
         from palace_mcp.code_router import register_code_tools
 
         register_code_tools(stub_tool, mcp)
         tool_names = [t.name for t in mcp._tool_manager.list_tools()]
-        assert "palace.code.manage_adr" in tool_names
+        assert "palace.code.manage_adr" not in tool_names, (
+            "manage_adr must be registered via adr/router.py, not code_router"
+        )
 
-    def test_total_tool_count_is_eight(self) -> None:
-        """Exactly 8 palace.code.* tools registered (7 enabled + 1 disabled)."""
+    def test_total_tool_count_is_seven(self) -> None:
+        """Exactly 7 palace.code.* tools registered via code_router (all CM pass-throughs)."""
         stub_tool, mcp, _ = self._make_stub_tool()
         from palace_mcp.code_router import register_code_tools
 
@@ -71,7 +73,7 @@ class TestToolRegistration:
             for t in mcp._tool_manager.list_tools()
             if t.name.startswith("palace.code.")
         ]
-        assert len(code_tools) == 8
+        assert len(code_tools) == 7
 
     def test_each_tool_dispatches_to_distinct_cm_name(self) -> None:
         """Verify each registered tool forwards to its own CM tool name (closure binding correctness).
@@ -86,21 +88,21 @@ class TestToolRegistration:
         tools = [
             t
             for t in mcp._tool_manager.list_tools()
-            if t.name.startswith("palace.code.") and t.name != "palace.code.manage_adr"
+            if t.name.startswith("palace.code.")
         ]
         names = {t.name for t in tools}
         assert len(names) == 7, (
             f"Expected 7 distinct tool names, got {len(names)}: {names}"
         )
 
-    def test_decorator_receives_all_names(self) -> None:
-        """Stub decorator tracks all 8 tool names — proves Pattern #21 integration point works."""
+    def test_decorator_receives_seven_names(self) -> None:
+        """Stub decorator tracks all 7 CM tool names — proves Pattern #21 integration point works."""
         stub_tool, mcp, tracked = self._make_stub_tool()
         from palace_mcp.code_router import register_code_tools
 
         register_code_tools(stub_tool, mcp)
         code_names = [n for n in tracked if n.startswith("palace.code.")]
-        assert len(code_names) == 8, f"Expected 8, got {len(code_names)}: {code_names}"
+        assert len(code_names) == 7, f"Expected 7, got {len(code_names)}: {code_names}"
 
     def test_open_schema_on_enabled_tools(self) -> None:
         """After patching, all enabled tools expose additionalProperties: true schema."""
@@ -113,54 +115,6 @@ class TestToolRegistration:
             assert tool.parameters.get("additionalProperties") is True, (
                 f"{name} schema missing additionalProperties: true"
             )
-
-    def test_open_schema_on_disabled_tool(self) -> None:
-        """manage_adr also gets the open schema after patching."""
-        stub_tool, mcp, _ = self._make_stub_tool()
-        from palace_mcp.code_router import register_code_tools
-
-        register_code_tools(stub_tool, mcp)
-        tool = mcp._tool_manager.get_tool("palace.code.manage_adr")
-        assert tool.parameters.get("additionalProperties") is True
-
-
-class TestDisabledTool:
-    @pytest.mark.asyncio
-    async def test_manage_adr_returns_directive_error(self) -> None:
-        """Calling palace.code.manage_adr returns error + hint, no forwarding."""
-        from palace_mcp.code_router import register_code_tools
-
-        mcp = FastMCP("test")
-        stub_tool = lambda name, desc: mcp.tool(name=name, description=desc)  # noqa: E731
-        register_code_tools(stub_tool, mcp)
-
-        result = await mcp.call_tool("palace.code.manage_adr", {})
-        # call_tool returns (content, structured) tuple or content list; unwrap
-        structured = result[1] if isinstance(result, tuple) else None
-        if structured is not None:
-            assert "error" in structured
-            assert "palace.memory" in structured["error"]
-        else:
-            # Unstructured path: check text content
-            import json as _json
-
-            text = result[0][0].text if result else ""
-            parsed = _json.loads(text)
-            assert "error" in parsed
-            assert "palace.memory" in parsed["error"]
-
-    @pytest.mark.asyncio
-    async def test_manage_adr_accepts_arbitrary_args(self) -> None:
-        """manage_adr does not raise 'unexpected argument' for any args (GIM-89 fix)."""
-        from palace_mcp.code_router import register_code_tools
-
-        mcp = FastMCP("test")
-        stub_tool = lambda name, desc: mcp.tool(name=name, description=desc)  # noqa: E731
-        register_code_tools(stub_tool, mcp)
-
-        # Should not raise — before fix this would raise ValidationError
-        result = await mcp.call_tool("palace.code.manage_adr", {"any_arg": "any_val"})
-        assert result is not None
 
 
 class TestPassthroughSerialization:

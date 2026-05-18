@@ -1,0 +1,18 @@
+# Phase G CI fallback — overridden by operator's ~/.paperclip/projects/gimle/paths.yaml.
+#
+# Committed sanitized example values let CI build gimle without operator's
+# host-local files. Operator copies this to ~/.paperclip/projects/gimle/paths.yaml
+# and replaces with their real local paths.
+#
+# Builder precedence: ~/.paperclip/projects/gimle/paths.yaml (operator) →
+# paperclips/projects/gimle/paths.local-example.yaml (this file, CI fallback).
+schemaVersion: 2
+project_root: /opt/uaa-example/gimle
+primary_repo_root: /opt/uaa-example/gimle
+primary_mcp_service_dir: services/palace-mcp
+production_checkout: /opt/uaa-example/gimle
+team_workspace_root: /opt/uaa-example/gimle/runs
+codex_team_root: /opt/uaa-example/gimle-cx
+operator_memory_dir: ~/.claude/projects/-opt-uaa-example-gimle/memory
+overlay_root: paperclips/projects/gimle/overlays
+project_rules_file: AGENTS.md

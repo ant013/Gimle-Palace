@@ -6,12 +6,15 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import subprocess
 import sys
+from importlib.metadata import version
 from pathlib import Path
+from typing import Any
 
 from gimle_watchdog import daemon, detection, logger, service
-from gimle_watchdog.config import ConfigError, load_config
+from gimle_watchdog.config import ConfigError, EffectiveMode, describe_effective_mode, load_config
 from gimle_watchdog.paperclip import PaperclipClient
 from gimle_watchdog.state import State
 
@@ -22,6 +25,26 @@ DEFAULT_CONFIG_PATH = Path("~/.paperclip/watchdog-config.yaml").expanduser()
 _DEFAULT_STATE_PATH = str(Path("~/.paperclip/watchdog-state.json").expanduser())
 PLIST_PATH = Path("~/Library/LaunchAgents/work.ant013.gimle-watchdog.plist").expanduser()
 SYSTEMD_UNIT_PATH = Path("~/.config/systemd/user/gimle-watchdog.service").expanduser()
+
+
+def _watchdog_version() -> str:
+    try:
+        return version("gimle-watchdog")
+    except Exception:
+        return "unknown"
+
+
+def _extract_config_path(argv: list[str]) -> str | None:
+    for index, token in enumerate(argv):
+        if token == "--config" and index + 1 < len(argv):
+            return argv[index + 1]
+        if token.startswith("--config="):
+            return token.split("=", 1)[1]
+    return None
+
+
+def _sanitize_argv(argv: list[str]) -> list[str]:
+    return list(argv)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -55,7 +78,12 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="scan once, print proc table, exit — no kill, no daemon loop",
     )
-    sub.add_parser("status", parents=[config_parent], help="service + filter health")
+    p_status = sub.add_parser("status", parents=[config_parent], help="service + filter health")
+    p_status.add_argument(
+        "--allow-degraded",
+        action="store_true",
+        help="exit 0 even if Paperclip API is unreachable",
+    )
     p_tail = sub.add_parser("tail", parents=[config_parent], help="tail log")
     p_tail.add_argument("-n", type=int, default=50)
     p_esc = sub.add_parser(
@@ -203,6 +231,36 @@ def _cmd_status(args: argparse.Namespace) -> int:
     cfg = load_config(args.config)
     state_path = Path(_DEFAULT_STATE_PATH)
     state = State.load(state_path)
+
+    mode = describe_effective_mode(cfg)
+    if mode == EffectiveMode.UNSAFE_AUTO_REPAIR:
+        print("!!! UNSAFE AUTO-REPAIR ENABLED - Board has not approved !!!")
+    print(f"Effective mode: {mode.value}")
+    print(f"Recovery enabled: {str(cfg.daemon.recovery_enabled).lower()}")
+    print(f"Recovery dry-run: {str(cfg.daemon.recovery_dry_run).lower()}")
+    baseline_status = (
+        "disabled"
+        if not cfg.daemon.recovery_first_run_baseline_only
+        else ("completed" if state.recovery_baseline_completed else "pending")
+    )
+    print(f"First-run baseline: {baseline_status}")
+    print(f"Max actions per tick: {cfg.daemon.max_actions_per_tick}")
+    print(f"Handoff recent window min: {cfg.handoff.handoff_recent_window_min}")
+    print(f"Handoff alerts: {'enabled' if cfg.handoff.handoff_alert_enabled else 'disabled'}")
+    print(
+        "Tier detectors: "
+        f"cross_team={str(cfg.handoff.handoff_cross_team_enabled).lower()} "
+        f"ownerless={str(cfg.handoff.handoff_ownerless_enabled).lower()} "
+        f"infra_block={str(cfg.handoff.handoff_infra_block_enabled).lower()} "
+        f"stale_bundle={str(cfg.handoff.handoff_stale_bundle_enabled).lower()}"
+    )
+    print(f"Auto repair: {'enabled' if cfg.handoff.handoff_auto_repair_enabled else 'disabled'}")
+    print(
+        "Alert budget: "
+        f"soft={cfg.handoff.handoff_alert_soft_budget_per_tick} "
+        f"hard={cfg.handoff.handoff_alert_hard_budget_per_tick}"
+    )
+
     try:
         result = subprocess.run(
             ["ps", "-ao", "pid,command"], capture_output=True, text=True, check=True
@@ -215,13 +273,59 @@ def _cmd_status(args: argparse.Namespace) -> int:
     except Exception:
         matches = -1
 
-    print(f"Companies configured: {len(cfg.companies)}")
+    print(f"Configured companies: {len(cfg.companies)}")
+    for company in cfg.companies:
+        print(
+            f"  - {company.name} ({company.id}) "
+            f"recover_max_age_min={company.thresholds.recover_max_age_min}"
+        )
+    api_reachable, reconciliation_msg = _reconcile_for_status(cfg)
+    if reconciliation_msg:
+        print(reconciliation_msg)
+    if not api_reachable and not args.allow_degraded:
+        return 2
     print(f"paperclip-skills procs matching filter now: {matches}")
     print(f"Active cooldowns: {len(state.issue_cooldowns)}")
     print(f"Active escalations: {len(state.escalated_issues)}")
     perm_count = sum(1 for e in state.escalated_issues.values() if e.get("permanent"))
     print(f"Permanent escalations: {perm_count}")
+    warnings: list[str] = []
+    if not cfg.daemon.recovery_enabled and cfg.companies:
+        warnings.append("recovery disabled while active companies are configured")
+    if warnings:
+        print("Warnings:")
+        for warning in warnings:
+            print(f"  - {warning}")
     return 0
+
+
+def _reconcile_for_status(cfg: Any) -> tuple[bool, str]:
+    async def _run() -> list[dict[str, object]]:
+        client = PaperclipClient(
+            base_url=cfg.paperclip.base_url,
+            api_key=cfg.paperclip.api_key or "",
+        )
+        try:
+            return await client.list_companies()
+        finally:
+            await client.aclose()
+
+    try:
+        live = asyncio.run(_run())
+    except Exception as exc:
+        return False, f"company_inventory=unreachable reason={exc!r}"
+
+    live_by_id = {str(company["id"]): company for company in live}
+    configured_ids = {company.id for company in cfg.companies}
+    missing = sorted(configured_ids - set(live_by_id))
+    extra = sorted(set(live_by_id) - configured_ids)
+    lines: list[str] = []
+    for company_id in missing:
+        lines.append(f"configured_but_missing={company_id}")
+    for company_id in extra:
+        name = live_by_id[company_id].get("name", "?")
+        lines.append(f"live_but_unconfigured={company_id} name={name}")
+    return True, "\n".join(lines)
 
 
 def _cmd_tail(args: argparse.Namespace) -> int:
@@ -274,6 +378,17 @@ _DISPATCH = {
 
 def main(argv: list[str] | None = None) -> int:
     argv = argv if argv is not None else sys.argv
+
+    starting_payload = {
+        "event": "watchdog_starting",
+        "pid": os.getpid(),
+        "version": _watchdog_version(),
+        "config_path": _extract_config_path(argv),
+        "argv": _sanitize_argv(argv),
+    }
+    print(json.dumps(starting_payload), file=sys.stderr, flush=True)
+    log.info("watchdog_starting", extra=starting_payload)
+
     parser = _build_parser()
     if len(argv) <= 1:
         parser.print_help(sys.stderr)
@@ -285,7 +400,7 @@ def main(argv: list[str] | None = None) -> int:
     handler = _DISPATCH[args.command]
     try:
         return handler(args)
-    except ConfigError as e:
+    except (ConfigError, OSError) as e:
         print(f"config error: {e}", file=sys.stderr)
         return 2
 

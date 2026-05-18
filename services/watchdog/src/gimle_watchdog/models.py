@@ -12,6 +12,11 @@ class FindingType(StrEnum):
     COMMENT_ONLY_HANDOFF = "comment_only_handoff"
     WRONG_ASSIGNEE = "wrong_assignee"
     REVIEW_OWNED_BY_IMPLEMENTER = "review_owned_by_implementer"
+    # GIM-244 — 3-tier detectors
+    CROSS_TEAM_HANDOFF = "cross_team_handoff"
+    OWNERLESS_COMPLETION = "ownerless_completion"
+    INFRA_BLOCK = "infra_block"
+    STALE_BUNDLE = "stale_bundle"
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,7 +53,51 @@ class ReviewOwnedByImplementerFinding:
     age_seconds: int
 
 
-Finding = CommentOnlyHandoffFinding | WrongAssigneeFinding | ReviewOwnedByImplementerFinding
+@dataclass(frozen=True, slots=True)
+class CrossTeamHandoffFinding:
+    type: Literal[FindingType.CROSS_TEAM_HANDOFF]
+    issue_id: str
+    issue_number: int
+    assignee_id: str
+    assignee_team: str  # "codex" | "claude"
+    company_team: str  # the expected / owning team
+    issue_status: str
+
+
+@dataclass(frozen=True, slots=True)
+class OwnerlessCompletionFinding:
+    type: Literal[FindingType.OWNERLESS_COMPLETION]
+    issue_id: str
+    issue_number: int
+
+
+@dataclass(frozen=True, slots=True)
+class InfraBlockFinding:
+    type: Literal[FindingType.INFRA_BLOCK]
+    issue_id: str
+    issue_number: int
+    error_kind: str  # e.g. "cloudflare_1010", "rate_limit_429"
+    actionable: bool = False  # infra blocks auto-resolve; no repair attempted
+
+
+@dataclass(frozen=True, slots=True)
+class StaleBundleFinding:
+    """Global (not per-issue) — bundle SHA in deploy log differs from origin/main."""
+
+    type: Literal[FindingType.STALE_BUNDLE]
+    deployed_sha: str
+    current_sha: str
+    stale_hours: float
+
+
+Finding = (
+    CommentOnlyHandoffFinding
+    | WrongAssigneeFinding
+    | ReviewOwnedByImplementerFinding
+    | CrossTeamHandoffFinding
+    | OwnerlessCompletionFinding
+    | InfraBlockFinding
+)
 
 
 @dataclass(frozen=True, slots=True)

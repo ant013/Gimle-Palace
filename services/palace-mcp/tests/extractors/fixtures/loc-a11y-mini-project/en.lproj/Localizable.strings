@@ -1,0 +1,6 @@
+/* English base locale — 5 keys */
+"welcome" = "Welcome";
+"continue_btn" = "Continue";
+"cancel_btn" = "Cancel";
+"settings" = "Settings";
+"profile" = "Profile";

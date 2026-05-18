@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
+
+if TYPE_CHECKING:
+    from palace_mcp.audit.contracts import AuditContract
 
 from graphiti_core import Graphiti
 from neo4j import AsyncDriver
@@ -76,6 +79,38 @@ class DeadSymbolBinarySurfaceExtractor(BaseExtractor):
         "pre-generated Periphery fixtures with Reaper no-op handling."
     )
 
+    def audit_contract(self) -> "AuditContract":
+        from palace_mcp.audit.contracts import AuditContract, Severity
+
+        return AuditContract(
+            extractor_name="dead_symbol_binary_surface",
+            template_name="dead_symbol_binary_surface.md",
+            query="""
+MATCH (c:DeadSymbolCandidate {project: $project})
+RETURN c.id AS id,
+       c.display_name AS display_name,
+       c.kind AS kind,
+       c.module_name AS module_name,
+       c.language AS language,
+       c.candidate_state AS candidate_state,
+       c.confidence AS confidence,
+       c.source_file AS source_file,
+       c.source_line AS source_line,
+       c.commit_sha AS commit_sha,
+       c.evidence_source AS evidence_source
+ORDER BY c.module_name, c.display_name
+LIMIT 100
+""".strip(),
+            severity_column="candidate_state",
+            severity_mapper=lambda v: (
+                Severity.HIGH
+                if v == "CONFIRMED_DEAD"
+                else Severity.MEDIUM
+                if v == "UNUSED_CANDIDATE"
+                else Severity.INFORMATIONAL
+            ),
+        )
+
     async def run(
         self, *, graphiti: Graphiti, ctx: ExtractorRunContext
     ) -> ExtractorStats:
@@ -113,6 +148,14 @@ class DeadSymbolBinarySurfaceExtractor(BaseExtractor):
 
         try:
             rows = await self._run_pipeline(driver=driver, settings=settings, ctx=ctx)
+        except ExtractorError as e:
+            await finalize_ingest_run(
+                driver,
+                run_id=ctx.run_id,
+                success=False,
+                error_code=e.error_code.value,
+            )
+            raise
         except Exception:
             await finalize_ingest_run(
                 driver,
@@ -128,6 +171,21 @@ class DeadSymbolBinarySurfaceExtractor(BaseExtractor):
     async def _run_pipeline(
         self, *, driver: AsyncDriver, settings: Settings, ctx: ExtractorRunContext
     ) -> ExtractorStats:
+        report_path = _dead_symbol_periphery_report_path(
+            settings, repo_path=ctx.repo_path
+        )
+        contract_path = _dead_symbol_periphery_contract_path(
+            settings, repo_path=ctx.repo_path
+        )
+        if not report_path.exists() or not contract_path.exists():
+            missing = report_path if not report_path.exists() else contract_path
+            raise ExtractorError(
+                error_code=ExtractorErrorCode.PERIPHERY_FIXTURES_MISSING,
+                message=f"periphery fixture not found: {missing}",
+                recoverable=False,
+                action="manual_cleanup",
+            )
+
         commit_sha = _read_head_sha(ctx.repo_path)
         skip_rules = _load_dead_symbol_skiplist(
             _dead_symbol_skiplist_path(settings, repo_path=ctx.repo_path)
@@ -225,8 +283,6 @@ class DeadSymbolBinarySurfaceExtractor(BaseExtractor):
         contract_path = _dead_symbol_periphery_contract_path(
             settings, repo_path=repo_path
         )
-        if not report_path.exists() or not contract_path.exists():
-            return ()
         result = parse_periphery_fixture(
             report_path=report_path,
             contract_path=contract_path,

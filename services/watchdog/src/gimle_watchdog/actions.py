@@ -14,9 +14,12 @@ from gimle_watchdog.detection import HangedProc, PS_FILTER_TOKENS
 from gimle_watchdog.models import (
     AlertResult,
     CommentOnlyHandoffFinding,
+    CrossTeamHandoffFinding,
     Finding,
     FindingType,
+    OwnerlessCompletionFinding,
     ReviewOwnedByImplementerFinding,
+    StaleBundleFinding,
     WrongAssigneeFinding,
 )
 from gimle_watchdog.paperclip import Issue, PaperclipClient, PaperclipError
@@ -194,6 +197,133 @@ def render_handoff_alert_comment(
         "This alert is informational; no automatic repair will be performed.",
     ]
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# GIM-244 — tier-based repair + escalation actions
+# ---------------------------------------------------------------------------
+
+# Claude CTO UUID — target for cross-team auto-repair
+_CLAUDE_CTO_UUID = "7fb0fdbb-e17f-4487-a4da-16993a907bec"
+_CODEX_CTO_UUID = "da97dbd9-6627-48d0-b421-66af0750eacf"
+
+_TEAM_CTO: dict[str, str] = {
+    "claude": _CLAUDE_CTO_UUID,
+    "codex": _CODEX_CTO_UUID,
+}
+
+_CLAUDE_QA_UUID = "58b68640-1e83-4d5d-978b-51a5ca9080e0"
+
+
+async def repair_cross_team_handoff(
+    client: PaperclipClient,
+    finding: CrossTeamHandoffFinding,
+) -> bool:
+    """Reassign to same-team CTO + post comment. Returns True on success."""
+    cto_uuid = _TEAM_CTO.get(finding.company_team)
+    if not cto_uuid:
+        log.warning("repair_cross_team_no_cto company_team=%s", finding.company_team)
+        return False
+    try:
+        await client.patch_issue(finding.issue_id, {"assigneeAgentId": cto_uuid})
+        body = (
+            f"## Watchdog auto-repair — cross_team_handoff\n\n"
+            f"Issue was assigned to `{finding.assignee_id}` ({finding.assignee_team} team) "
+            f"but belongs to the {finding.company_team} team.\n\n"
+            f"Reassigned to {finding.company_team} CTO (`{cto_uuid}`).\n\n"
+            f"<!-- watchdog-autorepair cross_team -->"
+        )
+        await client.post_issue_comment(finding.issue_id, body)
+        log.info(
+            "cross_team_repair_ok issue=%s assignee_was=%s",
+            finding.issue_id,
+            finding.assignee_id,
+        )
+        return True
+    except Exception as exc:
+        log.warning("cross_team_repair_failed issue=%s error=%s", finding.issue_id, exc)
+        return False
+
+
+async def repair_ownerless_completion(
+    client: PaperclipClient,
+    finding: OwnerlessCompletionFinding,
+) -> bool:
+    """Re-open as blocked + post QA-evidence-required comment. Returns True on success."""
+    try:
+        await client.patch_issue(finding.issue_id, {"status": "blocked"})
+        body = (
+            f"## Watchdog auto-repair — ownerless_completion\n\n"
+            f"Issue was closed (`status=done`) without Phase 4.1 QA PASS evidence "
+            f"from QAEngineer (`{_CLAUDE_QA_UUID}`).\n\n"
+            f"Returned to `status=blocked`. QAEngineer must post a "
+            f"**Phase 4.1 — QA PASS** comment before closing.\n\n"
+            f"<!-- watchdog-autorepair ownerless -->"
+        )
+        await client.post_issue_comment(finding.issue_id, body)
+        log.info("ownerless_repair_ok issue=%s", finding.issue_id)
+        return True
+    except Exception as exc:
+        log.warning("ownerless_repair_failed issue=%s error=%s", finding.issue_id, exc)
+        return False
+
+
+async def post_stale_bundle_alert(
+    client: PaperclipClient,
+    finding: StaleBundleFinding,
+    board_issue_id: str,
+    version: str,
+    ts: datetime,
+    severity: str = "info",
+) -> bool:
+    """Post a Board comment about stale bundle. Returns True on success."""
+    ts_iso = ts.isoformat().replace("+00:00", "Z")
+    body = (
+        f"## Watchdog stale_bundle alert (severity={severity})\n\n"
+        f"Bundle on iMac is **{finding.stale_hours:.1f}h** out of date.\n\n"
+        f"- Deployed SHA: `{finding.deployed_sha[:12]}`\n"
+        f"- Current origin/main: `{finding.current_sha[:12]}`\n\n"
+        f"Run: `bash paperclips/scripts/imac-agents-deploy.sh`\n\n"
+        f"Detector: gimle-watchdog v{version}, tick {ts_iso}.\n"
+        f"<!-- watchdog-stale-bundle -->"
+    )
+    try:
+        await client.post_issue_comment(board_issue_id, body)
+        log.info(
+            "stale_bundle_alert_posted board=%s deployed=%s current=%s",
+            board_issue_id,
+            finding.deployed_sha[:8],
+            finding.current_sha[:8],
+        )
+        return True
+    except Exception as exc:
+        log.warning("stale_bundle_alert_failed error=%s", exc)
+        return False
+
+
+async def post_tier_escalation(
+    client: PaperclipClient,
+    issue_id: str,
+    ftype: FindingType,
+    version: str,
+    ts: datetime,
+) -> bool:
+    """Post critical escalation comment on issue. Returns True on success."""
+    ts_iso = ts.isoformat().replace("+00:00", "Z")
+    body = (
+        f"## Watchdog escalation — {ftype} (severity=critical)\n\n"
+        f"Auto-repair did not resolve this issue within the repair window.\n\n"
+        f"**@Board** operator intervention required.\n\n"
+        f"Detector: gimle-watchdog v{version}, tick {ts_iso}.\n"
+        f"<!-- watchdog-escalation {ftype} -->"
+    )
+    try:
+        await client.post_issue_comment(issue_id, body)
+        log.warning("tier_escalation_posted issue=%s ftype=%s", issue_id, ftype.value)
+        return True
+    except Exception as exc:
+        log.warning("tier_escalation_failed issue=%s ftype=%s error=%s", issue_id, ftype, exc)
+        return False
 
 
 async def post_handoff_alert(

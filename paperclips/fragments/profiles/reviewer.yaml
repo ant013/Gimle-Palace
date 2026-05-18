@@ -1,0 +1,14 @@
+schemaVersion: 2
+name: reviewer
+inheritsUniversal: true
+includes:
+  - pre-work/codebase-memory-first.md
+  - pre-work/sequential-thinking.md
+  - git/merge-readiness.md
+  - git/merge-state-decoder.md
+  - code-review/approve.md
+  - plan/review.md
+  - handoff/basics.md
+description: |
+  Review profile. Merge-readiness check. APPROVE format. Plan review.
+  NO commit-and-push (reviewer doesn't write code). NO release-cut.

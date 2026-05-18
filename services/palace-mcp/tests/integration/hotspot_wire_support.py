@@ -11,6 +11,8 @@ from contextlib import suppress
 import pytest
 from neo4j import AsyncGraphDatabase
 
+from tests.integration.neo4j_runtime_support import ensure_reachable_neo4j_uri
+
 
 def _free_port() -> int:
     with socket.socket() as s:
@@ -47,7 +49,7 @@ class _TestServer:
 @pytest.fixture(scope="session")
 def neo4j_uri() -> Iterator[str]:
     if reuse := os.environ.get("COMPOSE_NEO4J_URI"):
-        yield reuse
+        yield ensure_reachable_neo4j_uri(reuse)
         return
 
     try:

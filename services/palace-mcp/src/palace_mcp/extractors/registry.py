@@ -7,8 +7,19 @@ no thread-safety needed.
 
 from __future__ import annotations
 
+from palace_mcp.extractors.arch_layer.extractor import ArchLayerExtractor
 from palace_mcp.extractors.base import BaseExtractor
+from palace_mcp.extractors.code_ownership.extractor import CodeOwnershipExtractor
+from palace_mcp.extractors.crypto_domain_model.extractor import (
+    CryptoDomainModelExtractor,
+)
 from palace_mcp.extractors.codebase_memory_bridge import CodebaseMemoryBridgeExtractor
+from palace_mcp.extractors.coding_convention.extractor import (
+    CodingConventionExtractor,
+)
+from palace_mcp.extractors.cross_repo_version_skew.extractor import (
+    CrossRepoVersionSkewExtractor,
+)
 from palace_mcp.extractors.cross_module_contract import CrossModuleContractExtractor
 from palace_mcp.extractors.dead_symbol_binary_surface.extractor import (
     DeadSymbolBinarySurfaceExtractor,
@@ -16,20 +27,35 @@ from palace_mcp.extractors.dead_symbol_binary_surface.extractor import (
 from palace_mcp.extractors.dependency_surface.extractor import (
     DependencySurfaceExtractor,
 )
+from palace_mcp.extractors.error_handling_policy import (
+    ErrorHandlingPolicyExtractor,
+)
 from palace_mcp.extractors.git_history.extractor import GitHistoryExtractor
 from palace_mcp.extractors.heartbeat import HeartbeatExtractor
+from palace_mcp.extractors.hot_path_profiler import HotPathProfilerExtractor
 from palace_mcp.extractors.hotspot.extractor import HotspotExtractor
+from palace_mcp.extractors.localization_accessibility.extractor import (
+    LocalizationAccessibilityExtractor,
+)
 from palace_mcp.extractors.public_api_surface import PublicApiSurfaceExtractor
+from palace_mcp.extractors.reactive_dependency_tracer.extractor import (
+    ReactiveDependencyTracerExtractor,
+)
 from palace_mcp.extractors.symbol_index_clang import SymbolIndexClang
 from palace_mcp.extractors.symbol_index_java import SymbolIndexJava
 from palace_mcp.extractors.symbol_index_python import SymbolIndexPython
 from palace_mcp.extractors.symbol_index_solidity import SymbolIndexSolidity
 from palace_mcp.extractors.symbol_index_swift import SymbolIndexSwift
+from palace_mcp.extractors.testability_di.extractor import TestabilityDiExtractor
 from palace_mcp.extractors.symbol_index_typescript import SymbolIndexTypeScript
 
 EXTRACTORS: dict[str, BaseExtractor] = {
+    "arch_layer": ArchLayerExtractor(),
     "heartbeat": HeartbeatExtractor(),
+    "code_ownership": CodeOwnershipExtractor(),
+    "crypto_domain_model": CryptoDomainModelExtractor(),
     "codebase_memory_bridge": CodebaseMemoryBridgeExtractor(),
+    "coding_convention": CodingConventionExtractor(),
     "cross_module_contract": CrossModuleContractExtractor(),
     "dead_symbol_binary_surface": DeadSymbolBinarySurfaceExtractor(),
     "public_api_surface": PublicApiSurfaceExtractor(),
@@ -40,8 +66,14 @@ EXTRACTORS: dict[str, BaseExtractor] = {
     "symbol_index_swift": SymbolIndexSwift(),
     "symbol_index_clang": SymbolIndexClang(),
     "dependency_surface": DependencySurfaceExtractor(),
+    "error_handling_policy": ErrorHandlingPolicyExtractor(),
+    "reactive_dependency_tracer": ReactiveDependencyTracerExtractor(),
+    "testability_di": TestabilityDiExtractor(),
     "git_history": GitHistoryExtractor(),
     "hotspot": HotspotExtractor(),
+    "hot_path_profiler": HotPathProfilerExtractor(),
+    "cross_repo_version_skew": CrossRepoVersionSkewExtractor(),
+    "localization_accessibility": LocalizationAccessibilityExtractor(),
 }
 
 

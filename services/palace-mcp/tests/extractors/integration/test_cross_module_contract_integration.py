@@ -357,6 +357,45 @@ async def test_cross_module_contract_run_writes_snapshot_and_symbol_edges(
     assert package_row is not None and package_row["count"] == 0
 
 
+@pytest.mark.asyncio
+async def test_cross_module_contract_skips_when_public_api_surface_is_missing(
+    driver: AsyncDriver,
+    graphiti_mock: MagicMock,
+    _project_and_repo: Path,
+    tmp_path: Path,
+) -> None:
+    await ensure_extractors_schema(driver)
+    tantivy_dir = tmp_path / "tantivy-empty"
+    tantivy_dir.mkdir()
+    settings = Settings(
+        neo4j_password="password",
+        openai_api_key="test-key",
+        palace_tantivy_index_path=str(tantivy_dir),
+        palace_tantivy_heap_mb=50,
+    )
+
+    with (
+        patch("palace_mcp.extractors.runner.REPOS_ROOT", _project_and_repo),
+        patch("palace_mcp.mcp_server.get_driver", return_value=driver),
+        patch("palace_mcp.mcp_server.get_settings", return_value=settings),
+        patch.dict(
+            registry.EXTRACTORS,
+            {"cross_module_contract": CrossModuleContractExtractor()},
+        ),
+    ):
+        result = await run_extractor(
+            name="cross_module_contract",
+            project="contract-mini",
+            driver=driver,
+            graphiti=graphiti_mock,
+        )
+
+    assert result["ok"] is True
+    assert result["success"] is True
+    assert result["outcome"] == "skipped"
+    assert "PublicApiSurface/PublicApiSymbol" in (result.get("message") or "")
+
+
 async def _seed_occurrences(tantivy_dir: Path) -> None:
     fixture_path = (
         FIXTURE_ROOT / ".palace" / "cross-module-contract" / "occurrences.json"

@@ -1,0 +1,12 @@
+schemaVersion: 2
+project:
+  key: synth
+  display_name: Synthetic Test
+  issue_prefix: SYN
+  integration_branch: main
+  specs_dir: docs/specs
+  plans_dir: docs/plans
+mcp: {service_name: synth-mcp, tool_namespace: synth, base_required: [codebase-memory]}
+report_delivery:
+  telegram_plugin_id: 60023916-4b6c-40f5-829f-bc8b98abc4ed
+agents: []

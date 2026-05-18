@@ -1,0 +1,11 @@
+rules:
+  - id: generic_catch_all
+    languages: [swift]
+    severity: INFO
+    message: >
+      Generic catch-all without typed error binding. Prefer typed catches where
+      the failure mode matters.
+    metadata:
+      category: error-handling
+      kind: generic_catch_all
+    pattern-regex: 'catch\s*\{'

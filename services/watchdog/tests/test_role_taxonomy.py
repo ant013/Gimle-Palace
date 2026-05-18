@@ -29,6 +29,8 @@ _ALL_KNOWN_AGENTS = [
     ("CXPythonEngineer", "implementer"),
     ("CXMCPEngineer", "implementer"),
     ("CXInfraEngineer", "implementer"),
+    ("CXBlockchainEngineer", "implementer"),
+    ("CXSecurityAuditor", "reviewer"),
     ("CXQAEngineer", "qa"),
     ("CXResearchAgent", "research"),
     ("CXTechnicalWriter", "writer"),

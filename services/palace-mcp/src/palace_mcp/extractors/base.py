@@ -10,10 +10,14 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from graphiti_core import Graphiti
+
+if TYPE_CHECKING:
+    from palace_mcp.audit.contracts import AuditContract
 
 
 class BaseExtractor(ABC):
@@ -39,6 +43,15 @@ class BaseExtractor(ABC):
         """
         raise NotImplementedError
 
+    def audit_contract(self) -> "AuditContract | None":
+        """Return audit contract for this extractor, or None to opt out.
+
+        Default: None. Override in extractors that participate in palace.audit.run.
+        The returned AuditContract tells the fetcher which Cypher query to run
+        and which Jinja2 template to render results with.
+        """
+        return None
+
 
 @dataclass(frozen=True)
 class ExtractorRunContext:
@@ -52,12 +65,23 @@ class ExtractorRunContext:
     logger: logging.Logger
 
 
+class ExtractorOutcome(StrEnum):
+    """Successful extractor outcomes exposed to higher-level orchestration."""
+
+    OK = "ok"
+    SKIPPED = "skipped"
+    MISSING_INPUT = "missing_input"
+
+
 @dataclass(frozen=True)
 class ExtractorStats:
     """What run() returns. Merged into :IngestRun for observability."""
 
     nodes_written: int = 0
     edges_written: int = 0
+    outcome: ExtractorOutcome = ExtractorOutcome.OK
+    message: str | None = None
+    next_action: str | None = None
 
 
 class ExtractorError(Exception):

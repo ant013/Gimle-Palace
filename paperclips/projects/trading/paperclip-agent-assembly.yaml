@@ -1,0 +1,111 @@
+schemaVersion: 2
+
+project:
+  key: trading
+  display_name: Trading
+  system_name: Trading
+  issue_prefix: TRD
+  integration_branch: main
+  specs_dir: docs/specs
+  plans_dir: docs/plans
+
+domain:
+  wallet_target_short: Trading
+  wallet_target_name: Trading Platform
+  wallet_target_slug: trading-agents
+
+evidence:
+  merge_without_smoke_issue: TRD-bootstrap
+  graphiti_mock_issue: TRD-bootstrap
+  release_reset_issue: TRD-bootstrap
+  asyncmock_driver_issue: TRD-bootstrap
+  worktree_discipline_issue_pair: TRD-bootstrap
+  qa_worktree_discipline_issue: TRD-bootstrap
+  mcp_wire_contract_issue: TRD-bootstrap
+  qa_deploy_checklist_issue: TRD-bootstrap
+  review_scope_drift_issue: TRD-bootstrap
+  qa_to_cto_stall_issue: TRD-bootstrap
+  handoff_flake_issue: TRD-bootstrap
+  pre_slim_baseline_issue: TRD-bootstrap
+  cr_to_pe_stall_issue: TRD-bootstrap
+  handoff_misclassified_issue: TRD-bootstrap
+  post_merge_stall_issue: TRD-bootstrap
+
+paths:
+  overlay_root: paperclips/projects/trading/overlays
+  project_rules_file: AGENTS.md
+
+mcp:
+  service_name: trading
+  package_name: trading_agents
+  tool_namespace: trading
+  base_required:
+    - codebase-memory
+    - context7
+    - serena
+    - github
+    - sequential-thinking
+  codebase_memory_projects:
+    primary: trading-agents
+  additions:
+    project: []
+    by_role: {}
+
+skills:
+  additions:
+    project: []
+    by_role: {}
+
+subagents:
+  additions:
+    project: []
+    by_role: {}
+
+targets:
+  claude:
+    instruction_entry_file: AGENTS.md
+    adapter_type: claude_local
+    deploy_mode: api
+    instructions_bundle_mode: managed
+  codex:
+    instruction_entry_file: AGENTS.md
+    adapter_type: codex_local
+    deploy_mode: api
+    instructions_bundle_mode: managed
+
+compatibility:
+  legacy_output_paths: false
+
+# Phase E migration (2026-05-16): UUIDs + absolute paths + workspace_cwd moved to
+# ~/.paperclip/projects/trading/{bindings.yaml,paths.yaml}. Builder reads via
+# resolve_bindings dual-read (Phase D). reportsTo added for topological hire.
+agents:
+  - agent_name: CEO
+    role_source: paperclips/roles-codex/cx-cto.md
+    profile: cto
+    target: codex
+    primary_codebase_memory_project: trading-agents
+  - agent_name: CTO
+    role_source: paperclips/roles/cto.md
+    profile: cto
+    target: claude
+    reportsTo: CEO
+    primary_codebase_memory_project: trading-agents
+  - agent_name: CodeReviewer
+    role_source: paperclips/roles-codex/cx-code-reviewer.md
+    profile: reviewer
+    target: codex
+    reportsTo: CTO
+    primary_codebase_memory_project: trading-agents
+  - agent_name: PythonEngineer
+    role_source: paperclips/roles-codex/cx-python-engineer.md
+    profile: implementer
+    target: codex
+    reportsTo: CTO
+    primary_codebase_memory_project: trading-agents
+  - agent_name: QAEngineer
+    role_source: paperclips/roles-codex/cx-qa-engineer.md
+    profile: qa
+    target: codex
+    reportsTo: CTO
+    primary_codebase_memory_project: trading-agents

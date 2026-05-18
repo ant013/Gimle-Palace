@@ -1,0 +1,87 @@
+project:
+  key: <project-key>
+  display_name: <Project Display Name>
+  system_name: <Project System Name>
+  issue_prefix: <ISSUE>
+  company_id: <paperclip-company-id>
+  integration_branch: develop
+  specs_dir: docs/superpowers/specs
+  plans_dir: docs/superpowers/plans
+
+domain:
+  wallet_target_short: <wallet-target-short-name>
+  wallet_target_name: <wallet-target-display-name>
+  wallet_target_slug: <wallet-target-slug>
+
+evidence:
+  merge_without_smoke_issue: <project-issue-ref-or-neutral-label>
+  graphiti_mock_issue: <project-issue-ref-or-neutral-label>
+  release_reset_issue: <project-issue-ref-or-neutral-label>
+  asyncmock_driver_issue: <project-issue-ref-or-neutral-label>
+  worktree_discipline_issue_pair: <project-issue-ref-or-neutral-label>
+  qa_worktree_discipline_issue: <project-issue-ref-or-neutral-label>
+  mcp_wire_contract_issue: <project-issue-ref-or-neutral-label>
+  qa_deploy_checklist_issue: <project-issue-ref-or-neutral-label>
+  review_scope_drift_issue: <project-issue-ref-or-neutral-label>
+  qa_to_cto_stall_issue: <project-issue-ref-or-neutral-label>
+  handoff_flake_issue: <project-issue-ref-or-neutral-label>
+  pre_slim_baseline_issue: <project-issue-ref-or-neutral-label>
+  cr_to_pe_stall_issue: <project-issue-ref-or-neutral-label>
+  handoff_misclassified_issue: <project-issue-ref-or-neutral-label>
+  post_merge_stall_issue: <project-issue-ref-or-neutral-label>
+
+paths:
+  project_root: <absolute-or-repo-relative-project-root>
+  primary_repo_root: <absolute-or-repo-relative-primary-repo-root>
+  primary_mcp_service_dir: <repo-relative-primary-mcp-service-dir>
+  production_checkout: <absolute-production-checkout-root>
+  codex_team_root: <absolute-codex-team-worktree-root>
+  operator_memory_dir: <absolute-or-home-relative-operator-memory-dir>
+  overlay_root: paperclips/projects/<project-key>/overlays
+  project_rules_file: AGENTS.md
+
+mcp:
+  service_name: <mcp-service-name>
+  package_name: <mcp-python-package-name>
+  tool_namespace: <mcp-tool-namespace>
+  base_required:
+    - codebase-memory
+    - context7
+    - serena
+    - github
+    - sequential-thinking
+  codebase_memory_projects:
+    primary: <codebase-memory-project-name>
+  additions:
+    project: []
+    by_role: {}
+
+skills:
+  additions:
+    project: []
+    by_role: {}
+
+subagents:
+  additions:
+    project: []
+    by_role: {}
+
+targets:
+  claude:
+    instruction_entry_file: AGENTS.md
+    adapter_type: claude_local
+    deploy_mode: local-or-api
+    instructions_bundle_mode: external-or-managed
+  codex:
+    instruction_entry_file: AGENTS.md
+    adapter_type: codex_local
+    deploy_mode: api
+    instructions_bundle_mode: managed
+
+compatibility:
+  legacy_output_paths: true
+  claude_deploy_mapping: paperclips/deploy-agents.sh
+  codex_agent_ids_env: paperclips/codex-agent-ids.env
+  workspace_update_script: paperclips/update-agent-workspaces.sh
+
+agents: []

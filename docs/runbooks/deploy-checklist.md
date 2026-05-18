@@ -45,6 +45,12 @@ Run before and after every `docker compose up` on the iMac deploy host.
    # Assert response contains "action": "noop" and no 401 error
    ```
 
+6. **Infra delivery env**: after deploying project agents, verify every
+   Telegram-delivery infra agent has `PAPERCLIP_API_KEY` and
+   `PAPERCLIP_API_URL` in live `adapterConfig.env`. Host `.env` is not enough
+   for Paperclip issue runs. If Telegram returns `Board access required`, follow
+   `docs/paperclip-operations/telegram-report-delivery.md#infra-agent-runtime-env-repair`.
+
 ## Post-deploy verification
 
 - `docker compose --profile review ps` — all containers healthy.

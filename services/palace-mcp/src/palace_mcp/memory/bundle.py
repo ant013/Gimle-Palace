@@ -297,6 +297,7 @@ def compute_bundle_health(
     members: tuple[ProjectRef, ...],
     last_runs: dict[str, IngestRunResult],
     query_time_failures: list[str],
+    as_of: datetime | None = None,
 ) -> BundleStatus:
     """Compute BundleStatus from member list + last ingest run results.
 
@@ -306,7 +307,7 @@ def compute_bundle_health(
     - ingest_failed (ok=False — last run did not succeed)
     - never_ingested (absent from last_runs)
     """
-    now_utc = datetime.now(timezone.utc)
+    now_utc = as_of or datetime.now(timezone.utc)
     stale_slugs: list[str] = []
     ingest_failed_slugs: list[str] = []
     never_ingested_slugs: list[str] = []

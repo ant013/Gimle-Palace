@@ -4,18 +4,21 @@ Fixes applied in rev3a:
 - F-C: eviction removes EXACTLY evict_n entries via most_common[-N:] slice.
 - F-D: JSON persistence (not pickle); RCE-safe.
 - F-E: run_id validation on load; mismatch → discard, not silent stale load.
-- F-3 (Silent-failure): hard-fail on corrupt JSON; no fallback to empty counter.
+- GIM-349: stale/corrupt persisted counter state self-heals on load.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import math
+import os
 import re
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
+from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErrorCode
 from palace_mcp.extractors.foundation.models import Language, SymbolKind
 
 # ---------------------------------------------------------------------------
@@ -133,8 +136,7 @@ class BoundedInDegreeCounter:
       regardless of ties. Under uniform load the old threshold-share approach
       wiped the entire counter.
     - F-D: JSON persistence (not pickle).
-    - F-E: run_id validation; stale or corrupt state → return False (caller
-      must hard-fail unless PALACE_COUNTER_RESET=1).
+    - F-E: run_id validation; stale or corrupt state → return False.
     """
 
     def __init__(self, max_entries: int = 1_000_000) -> None:
@@ -182,9 +184,7 @@ class BoundedInDegreeCounter:
         - JSON is corrupt or unexpected shape
         - run_id does not match expected_run_id
 
-        Caller MUST treat False as a hard failure if importance scoring
-        is required for correct ingest semantics. Never silently fall back
-        to an empty counter (F-3 / Silent-failure F3 fix).
+        Callers decide whether False should hard-fail or trigger a reset.
         """
         if not path.exists():
             return False
@@ -209,3 +209,57 @@ class BoundedInDegreeCounter:
             return False
 
         return True
+
+
+def load_or_reset_in_degree_counter(
+    tantivy_path: Path,
+    run_id: str,
+    *,
+    logger: logging.Logger,
+) -> BoundedInDegreeCounter:
+    """Load the persisted counter, recovering stale/corrupt state when needed."""
+    counter = BoundedInDegreeCounter()
+    counter_path = tantivy_path / "in_degree_counter.json"
+    reset_requested = os.environ.get("PALACE_COUNTER_RESET") == "1"
+
+    if reset_requested and counter_path.exists():
+        _delete_counter_file(
+            counter_path,
+            reason="PALACE_COUNTER_RESET=1 requested a fresh counter",
+        )
+        logger.warning(
+            "Reset persisted in-degree counter at %s because PALACE_COUNTER_RESET=1",
+            counter_path,
+        )
+        return counter
+
+    if not counter_path.exists():
+        return counter
+
+    if counter.from_disk(counter_path, expected_run_id=run_id):
+        return counter
+
+    _delete_counter_file(
+        counter_path,
+        reason="stale or corrupt counter state was detected",
+    )
+    logger.warning(
+        "Recovered stale or corrupt in-degree counter at %s; starting fresh",
+        counter_path,
+    )
+    return BoundedInDegreeCounter()
+
+
+def _delete_counter_file(counter_path: Path, *, reason: str) -> None:
+    try:
+        counter_path.unlink()
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        raise ExtractorError(
+            error_code=ExtractorErrorCode.COUNTER_STATE_CORRUPT,
+            message=f"Failed to remove counter state at {counter_path}: {reason}.",
+            recoverable=False,
+            action="manual_cleanup",
+            context={"path": str(counter_path), "reason": reason, "error": str(exc)},
+        ) from exc

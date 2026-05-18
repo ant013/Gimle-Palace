@@ -13,6 +13,8 @@ CREATE (r:IngestRun {
   id: $id,
   source: $source,
   group_id: $group_id,
+  extractor_name: $extractor_name,
+  project: $project,
   started_at: $started_at,
   finished_at: null,
   duration_ms: null,

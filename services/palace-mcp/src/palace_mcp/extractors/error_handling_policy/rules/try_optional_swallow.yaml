@@ -1,0 +1,11 @@
+rules:
+  - id: try_optional_swallow
+    languages: [swift]
+    severity: WARNING
+    message: >
+      try? discards the underlying error. Prefer do/catch, Result, or explicit
+      fallback logic that records why the failure is acceptable.
+    metadata:
+      category: error-handling
+      kind: try_optional_swallow
+    pattern-regex: 'try\?\s*[^\n;]+'

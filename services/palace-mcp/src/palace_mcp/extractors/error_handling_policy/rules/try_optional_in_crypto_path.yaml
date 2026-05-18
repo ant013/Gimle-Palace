@@ -1,0 +1,22 @@
+rules:
+  - id: try_optional_in_crypto_path
+    languages: [swift]
+    severity: ERROR
+    message: >
+      try? in a crypto-critical path discards failure context for signing,
+      wallet, or key-management flows.
+    metadata:
+      category: error-handling
+      kind: try_optional_in_crypto_path
+    paths:
+      include:
+        - "*Sign*.swift"
+        - "*Crypto*.swift"
+        - "*Key*.swift"
+        - "*Wallet*.swift"
+        - "*Balance*.swift"
+        - "*Mnemonic*.swift"
+        - "*Seed*.swift"
+        - "*Private*.swift"
+        - "*Secret*.swift"
+    pattern-regex: 'try\?\s*[^\n;]+'

@@ -1,0 +1,35 @@
+{
+  "trace_id": "track-a-launch",
+  "source_format": "instruments",
+  "threshold_cpu_share": 0.05,
+  "summary": {
+    "total_cpu_samples": 1200,
+    "total_wall_ms": 760
+  },
+  "samples": [
+    {
+      "symbol_name": "WalletApp.AppDelegate.bootstrap()",
+      "cpu_samples": 420,
+      "wall_ms": 260,
+      "thread_name": "com.apple.main-thread"
+    },
+    {
+      "symbol_name": "WalletApp.HomeViewModel.loadDashboard()",
+      "cpu_samples": 300,
+      "wall_ms": 210,
+      "thread_name": "com.apple.main-thread"
+    },
+    {
+      "symbol_name": "WalletApp.MarketDataPrefetcher.prefetch()",
+      "cpu_samples": 160,
+      "wall_ms": 120,
+      "thread_name": "com.apple.main-thread"
+    },
+    {
+      "symbol_name": "ThirdParty.LegacyCryptoSigner.sign()",
+      "cpu_samples": 80,
+      "wall_ms": 70,
+      "thread_name": "com.apple.main-thread"
+    }
+  ]
+}

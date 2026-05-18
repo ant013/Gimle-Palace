@@ -1,0 +1,1352 @@
+# Uniform Agent Assembly — Design Spec
+
+| | |
+|---|---|
+| **Date** | 2026-05-15 (rev4 — post third deep-review of plans + multi-target/runtime-probe additions) |
+| **Status** | Draft (pending operator review) |
+| **Author** | brainstorm with operator |
+| **Scope** | Replace current per-project ad-hoc agent assembly (gimle legacy + trading + uaudit) with a uniform manifest+profile model; reduce per-agent prompt size by 60–80%; make paperclip+agents bring-up reproducible from a clean machine. |
+| **Non-goals** | Rewriting paperclipai or telegram plugin; replacing watchdog; changing claude/codex CLI internals; adding new agent capabilities. |
+
+Pinned grounding: this spec is grounded in the repo state at `main@568888a` (2026-05-14 docs/BUGS.md merge). All later commits should be cross-checked when implementing.
+
+**Phase G partial (2026-05-17, code-side — Tasks 1+7+8+11 of 11):**
+- gimle manifest migrated to v2 schema (24 agents = 12 claude + 12 codex): `schemaVersion: 2`, `project.company_id` + `paths.*` host-local fields stripped; per-agent `agent_name` (kebab to preserve v1 render byte-identity), `role_source`, `output_path` (explicit, preserves legacy `paperclips/dist/*.md` + `paperclips/dist/codex/*.md` layout per spec §10.5), `profile`, `reportsTo`.
+- Profile mapping locked per agent via `test_gimle_per_agent_profile_snapshot` (24-entry table). All profiles match v1 implicit defaults from role front-matter (`cto/code-reviewer→reviewer/python-engineer→implementer/qa-engineer→qa/...`).
+- Legacy `paperclips/codex-agent-ids.env` + `paperclips/deploy-agents.sh` PRESERVED in repo + manifest's `compatibility.{claude_deploy_mapping,codex_agent_ids_env,workspace_update_script}` PRESERVED per spec §10.5 cleanup-gate (only Phase H removes them). Dual-read resolver continues to merge both legacy + new bindings.
+- New CI-fallback files: `paperclips/projects/gimle/bindings.local-example.yaml` (24 sanitized UUIDs — 12 claude `00000000-...-020x` + 12 codex `00000000-...-021x`) + `paths.local-example.yaml` (sanitized `/opt/uaa-example/gimle/...`).
+- `paperclips/assembly-inventory.json` regenerated (reflects new manifest structure).
+- Skipped: Task 5 (CLAUDE.md decompose) + Task 6 (AGENTS.md.template) — scope-creep, deferred as Phase H-followup. Task 2 pre-flight, Task 3 pause, Task 4 extract-via-API, Task 9 canary, Task 10 unpause+smoke — all operator-only (spec §10.4 mandates 24-agent pause window).
+- 5 pre-existing tests in `test_validate_instructions.py` skipped with explicit reasons — they assumed gimle as the v1 reference fixture; with all 3 projects now v2, those test pre-conditions are impossible to construct from current state. Either replace with synthetic-v1 fixtures (Phase H-followup) OR delete during Phase H cleanup.
+- Updated `test_phase_c_validate_manifest_sh.py::test_unmigrated_v1_manifest_rejected` → `test_all_v2_projects_accepted` (no v1 projects remain).
+- New `paperclips/tests/test_phase_g_gimle_migration.py` (39 tests): manifest shape (8), profile snapshot (1), bindings parity (1), overlay path-cleanliness (1), baseline-dir guard (1), render-delta claude (12) + codex (12), companyId bridge (1), post-live skips (2).
+- Pre-migration backup at `paperclips/tests/baseline/phase_g/gimle-dist-pre/` (24 artifacts).
+- **DEFERRED to operator** (Tasks 2/3/4/9/10 = live deploy): per spec §10.4, all 24 agents must pause; cannot self-execute. Operator runs migrate-bindings → bootstrap --canary → smoke → unpause.
+- Sweep: 379 paperclip tests passed, 20 skipped (5 obsolete v1 + 15 pre-existing/post-live), 0 failed.
+
+**Phase F followup (2026-05-17, in-PR — 2 CRITICAL + 6 IMPORTANT from 4-voltAgent deep-review):**
+- CRIT-C1 (architect) — `resolved_assembly()` parameters block now bridges `companyId` + 6 `paths.*` fields from host-local (via `_load_host_local_sources`) when v2 manifest has stripped them. Previously shipped empty strings in `dist/<key>.resolved-assembly.json` (same class as Phase E CRIT-1 but on different code path). Both uaudit + trading verified populated post-fix.
+- CRIT-C2 (architect) — bridge code in `render_role` (which back-filled `{{project.company_id}}`) reverted as over-engineered. Architect's claim verified: grep found `{{project.company_id}}` references ONLY in 2 uaudit InfraEngineer overlays (not in any shared role). Sed-renamed to `{{bindings.company_id}}` directly; bridge code path deleted. Spec §10.3 step 3 "mechanical rename" honored.
+- IMP — backfilled `paperclips/projects/trading/bindings.local-example.yaml` (Phase E missed it; Phase F C1 fix needs it for trading's CI build to populate companyId).
+- IMP — templatized 18 hardcoded `/Users/Shared/UnstoppableAudit/...` paths in 4 uaudit overlays (UWIInfraEngineer + UWAInfraEngineer + UWISwiftAuditor + UWAKotlinAuditor) to `{{paths.team_workspace_root}}/{{paths.primary_repo_root}}/{{paths.project_root}}` templates.
+- IMP — added test `test_uaudit_overlay_has_no_hardcoded_abs_paths` (regex guard against future regressions).
+- IMP — added test `test_bindings_local_example_matches_manifest_agent_set` (parity guard preventing manifest/fallback drift).
+- IMP — added test `test_uaudit_per_agent_profile_snapshot` (per-agent profile mapping locked; profile field check was previously only "valid string from 8-set"; documents CryptoAuditor=implementer v1-default preservation).
+- IMP — added test `test_company_id_bridge_via_bindings_local_example` (isolates C1 bridge code path; previously caught only via render-delta cascade).
+- IMP — added test `test_baseline_dist_dir_present` (hard-fails if Task-1 baseline accidentally deleted; was silent skip via parametrize `["__skip__"]`).
+- IMP — added test `test_host_local_bindings_takes_precedence_over_ci_fallback` (operator's `~/.paperclip` wins over committed CI fallback; previously inverted precedence would silently pass CI).
+- 1 architect false-positive parked: claim that `companyId=""` ships to paperclip API — actually downstream consumers (`bootstrap-project.sh`) re-read host-local separately; the bug was data-quality in JSON, not API-leak. Fix still applies.
+- Sweep: 348 paperclip tests, 12 skipped, 0 failed.
+
+**Phase H1c CLAUDE.md decompose (2026-05-17, PR #206 merged):**
+- Phase G Task 5 leftover — root `CLAUDE.md` was 719 lines mixing branch-flow rules + palace-mcp deploy + extractor catalog + paperclip team workflow. Decomposed into:
+  - `docs/contributing/branch-flow.md` (iron rules + release-cut)
+  - `docs/contributing/docs-layout.md` (specs/plans/postmortems/runbooks conventions + pinning)
+  - `docs/contributing/paperclip-team-workflow.md` (phase choreography 1.1 → 4.2 + operator auto-memory)
+  - `docs/palace-mcp/extractors.md` (extractor catalog + per-extractor workflows + ADR v2 + foundation + env vars + Bundles GIM-182)
+  - `services/palace-mcp/README.md` (appended: Production deploy on iMac, AGENTS.md deploy, Docker Compose, Environment, Mounting project repos)
+- Root `CLAUDE.md` now 29-line index pointing at the 5 destinations.
+- New `paperclips/tests/test_phase_h_claude_decompose.py` (5 tests): slim-pointer-cap (≤40 lines), all extracted destinations exist, palace-mcp README carries appended sections, root references all destinations, no surviving citations to H1-deleted fragments.
+- Mergeable with H1b/PR #204 via rebase: H1b's 3-line edits in original CLAUDE.md became moot when whole-file replaced; resolved by taking decompose's version.
+
+**Phase H2 deploy-wrapper rewrite (2026-05-17, PR #207 — after 4-voltAgent deep-review):**
+- Rewrote `paperclips/scripts/imac-agents-deploy.sh` from 280 lines → ~195 lines (thinner wrapper around `bootstrap-project.sh --reuse-bindings`, per spec §9.2 13-step lifecycle).
+- Preserved legacy safety envelope: PATH augmentation, worktree from `origin/main` (release-cut), `--target-sha` rollback flag, PHASE-A-ONLY sentinel guard, EXPECTED_CWD + EXPECTED_BRANCH preflight, cleanup trap on EXIT, deploy log append (GIM-244 watchdog dep).
+- New `--from-develop` flag for pre-release-cut smoke tests (explicit opt-in deviation from `origin/main`).
+- Security CRIT — `validate_project_key` invoked on PROJECT_KEY before any path interpolation; prevents traversal (`../etc`) + log-injection into DEPLOY_LOG.
+- New `paperclips/tests/test_phase_h2_active_scripts.py` (9 tests + 1 post-deploy skip): structural safety-marker test (regex-based, brittle-quoting-safe), behavioral tests for bindings-absent, wrong-cwd, PHASE-A-sentinel scan-before-bootstrap ordering, path-traversal rejection, uppercase rejection.
+- 4-voltAgent verdict: architect 3 CRITICAL → fixed via safety envelope restoration; code-rev 1 IMPORTANT → regex marker; security 1 CRITICAL → validate_project_key; qa 3 CRITICAL → 3 behavioral tests added.
+- 5 legacy script deletions + dual-read code path removal + manifest compat field flip explicitly DEFERRED to Phase H3 (have surviving consumers requiring coordinated cross-subsystem removal).
+- Operator runbook `docs/runbooks/uaa-live-deploy.md` documents the dependency: bootstrap-project.sh MUST be run once per project before `imac-agents-deploy.sh` (which now requires populated `~/.paperclip/projects/<key>/bindings.yaml`).
+
+**Phase H3 plan (deferred to operator post-live-deploys):**
+- Delete 5 legacy scripts: `paperclips/{codex-agent-ids.env,deploy-agents.sh,deploy-codex-agents.sh,update-agent-workspaces.sh,hire-codex-agents.sh}`.
+- Remove `legacy_env_path` parameter from `resolve_bindings.py::resolve_all()`.
+- Remove `_legacy_load_uuids()` fallback from `services/watchdog/src/gimle_watchdog/detection_semantic.py`.
+- Flip manifest compat fields for gimle: remove `compatibility.{legacy_output_paths,claude_deploy_mapping,codex_agent_ids_env,workspace_update_script}`. Same for `_template/`.
+- Rewrite `paperclips/scripts/bundle_breakdown.py` to use new `_compose_agent_prompt` path (legacy `expand_includes` fails on slim crafts).
+- Delete `paperclips/fragments/shared/templates/` (dead legacy expand_includes path).
+- Pre-requisites: (1) all 3 projects live-deployed via bootstrap-project.sh; (2) 7-day stability metric per spec §10.1; (3) `docs/uaa-cleanup-gate-evidence.md` operator signoff committed.
+
+**Phase H1b followup (2026-05-17, in-PR — 8 verified CRITICAL from 4-voltAgent deep-review):**
+- Architect verified CRIT-1: per-target codex vendored copies still present at `paperclips/fragments/targets/codex/shared/fragments/{git-workflow,heartbeat-discipline,phase-handoff,plan-first-producer}.md`. The architect's audit-method-scope-flaw critique was correct: my initial `git grep -l <pattern> | grep -v docs/` checked only the upstream submodule, missing 3 distinct vendored override paths the builder layers on top.
+- Architect+code-rev verified CRIT-2: per-project trading vendored copies at `paperclips/projects/trading/fragments/shared/fragments/{compliance-enforcement,phase-handoff,worktree-discipline}.md`.
+- Architect+code-rev verified CRIT-3: `paperclips/dist/**` (24+24+5+17 rendered files) cited deleted fragments inline (e.g., `dist/codex/cx-cto.md:126` — `see §HTTP 409 in heartbeat-discipline.md`).
+- Architect verified CRIT-4: `CLAUDE.md:20, 46, 145` cited deleted fragments.
+- Code-rev verified CRIT-5: submodule's NEW Phase-A fragments still cite deprecated names (6 actively-used files in `role-prime/*` + `universal/escalation-board.md`). Fixed via PR ant013/paperclip-shared-fragments#22 — pointer bumped from `1feeb23` → `0a06922`. `templates/*` directory deliberately untouched (dead expand_includes path; cleanup deferred to H2).
+- QA verified CRIT-1 (theirs): added `test_shared_fragments_submodule_at_or_after_post_h1_sha` guarding against accidental submodule pointer rollback (uses `git merge-base --is-ancestor`).
+- QA verified CRIT-2 (theirs): regenerated dist for all 5 build combos (gimle×2, trading×2, uaudit×1 codex) via `paperclips/build.sh`. Zero "fragment not found" errors. Render-delta allowlists in test_phase_{e,f,g} extended with H1b prose-ref substitutions.
+- QA verified CRIT-3 (theirs): added `test_no_unexpected_files_at_fragment_root` guard for submodule root (catches both accidental restoration AND new top-level files that should live in a Phase-A subdir).
+- Code-rev IMP-1: added `test_no_surviving_reference_to_deleted_fragments` (full-repo path-aware grep with documented carry-over exclusions: `tests/baseline`, `bundle-size-breakdown.json`, `bundle_breakdown.py`, `templates/*`). This single test would have caught CRIT-1 through CRIT-4 pre-merge — added as the strongest H1 guard.
+- QA IMP-3 fix: `test_validate_instructions.py:1035` synthetic profile pointed to deleted `phase-handoff.md`; re-pointed to `handoff/phase-orchestration.md`.
+- Bonus: `paperclips/fragments/local/test-design-gimle.md:27` had a prose cross-ref to deleted `test-design-discipline.md`; re-pointed to `qa/smoke-and-evidence.md`.
+- 2 false positives parked after verification: (a) code-rev IMP-2 (`.gitkeep` files allegedly still present) — `git rm -rf` correctly removed them; (b) security IMP-3 (submodule supply-chain signature verification) — structural followup, tracked as separate issue.
+- Deferred-to-H2 carry-overs: `paperclips/bundle-size-breakdown.json` + `paperclips/scripts/bundle_breakdown.py` still cite deprecated names (the script uses the legacy `expand_includes` path which slim crafts bypass — both will be reworked in H2). `paperclips/fragments/shared/templates/*` (8 files with `<!-- @include -->` directives to deleted fragments) — dead build-path code, deleted with `expand_includes` removal in H2.
+- Sweep: 387 paperclip tests, 20 skipped, 0 failed (+3 new H1 tests vs Phase H1 partial baseline of 384).
+
+**Phase H1 partial (2026-05-17, code-side dead-legacy cleanup — gate-bypass-by-operator-directive):**
+- Per spec §10.5 the cleanup gate (≥7 days zero `wake_failed`/`handoff_alert_posted`/`per_agent_cap` events) is normally a prerequisite. Operator directive 2026-05-17 ("делай ВСЁ - несмотря ни на какие изменения") authorized H1 (dead-only artifacts) without waiting for the gate. H2 (active scripts) + H3 (dual-read code paths) remain gated until live deploys.
+- Rollback recipe (per security IMP-2): if `wake_failed > 0` in 24h post-merge, `git revert <H1-merge-sha>` (single squash commit covers both H1 and H1b followup). Submodule pointer revert handled automatically by superrepo revert. Re-deploy via `imac-agents-deploy.sh` per `docs/runbooks/uaa-live-deploy.md` §5.
+- Removed `paperclips/roles/legacy/*.md` (12 files) — Phase A.1 hybrid copies, never referenced outside docs.
+- Removed `paperclips/roles-codex/legacy/*.md` (12 files) — same.
+- Removed 11 deprecated shared fragments from submodule `paperclip-shared-fragments` (PR ant013/paperclip-shared-fragments#21 merged): karpathy-discipline, heartbeat-discipline, phase-handoff, git-workflow, worktree-discipline, escalation-blocked, compliance-enforcement, test-design-discipline, pre-work-discovery, plan-first-producer, plan-first-review. Replaced by new Phase-A `fragments/{universal,handoff,git,worktree,code-review,qa,pre-work,plan}` layout (PR #20).
+- Submodule pointer bumped to `1feeb23`.
+- Audit method: `git grep -l "<pattern>" | grep -v docs/` returned zero consumer matches before deletion.
+- Deleted 3 obsolete Phase-A "hybrid hold-and-grow" tests (per Phase H plan rev4 H-2: delete, don't skip): `test_all_24_roles_have_legacy_copies`, `test_all_24_legacy_have_banners`, `test_deprecated_files_have_banner`. Their pins were Phase-A invariants no longer true post-H1.
+- New `paperclips/tests/test_phase_h_cleanup.py`: 3 H1 tests (legacy-dirs-removed, deprecated-fragments-removed, kept-fragments-still-present negative-anchor).
+- Sweep: 384 paperclip tests, 20 skipped, 0 failed.
+
+**Phase G followup (2026-05-17, in-PR — 3 verified CRITICAL + small batch from 4-voltAgent deep-review):**
+- CRIT-architect-C1 — `paperclips/scripts/resolve_bindings.py` cross-form conflict detection. Legacy normalizer produces canonical `CXCTO`; gimle bindings use kebab `cx-cto`. Pre-fix the merge loop compared by string equality only, so cross-form pairs lived in disjoint key namespaces — conflict detection was inert for gimle. New `_kebab_to_canonical()` mirrors the special-case `cx`/`codex` prefixes from `_normalize_legacy_name`; `resolve_all` builds a canonical-key index across both sides and emits `BindingsConflictWarning` (with explicit `legacy_key`/`bindings_key` fields) on cross-form disagreement. 3 new resolver tests (`test_kebab_*_conflict_detected`, `test_kebab_*_matching_no_conflict`, `test_kebab_to_canonical_helper_matches_legacy_normalizer`) pin the parity contract.
+- CRIT-code-rev-C3 — `paperclips/scripts/generate_assembly_inventory.py` bumped to `schemaVersion: 2`. New `load_manifest_output_paths` reads per-agent `output_path` from the gimle project manifest and threads it through `dist_path_for_role`, falling back to the v1 hardcoded convention when absent. Forward-compat: when gimle eventually drops `legacy_output_paths: true`, the inventory builder will follow the manifest without code changes.
+- Small batch from QA + code-rev: (a) `test_synthetic_v1_gimle_manifest_rejected` restores negative-path coverage that the 5 skipped v1-fixture tests removed; (b) `test_host_local_bindings_takes_precedence_over_ci_fallback` ports Phase F's QA C1 precedence guard to gimle's 24-agent surface; (c) `test_company_id_bridge_via_bindings_local_example` now reads expected `company_id` from the fixture instead of hardcoding the sentinel (eliminates maintenance footgun); (d) `_diff_lines` count-mismatch already wired to explicit `pytest.fail` per architect C2.
+- 4 architect/code-rev/qa findings parked as false-positives or out-of-scope after verification: review_v2 doc updates (delegated to Phase H); landing pad for legacy file removal (Phase H gate); CLAUDE.md decompose (operator-side, scope-creep for Phase G); per-role craft splits (operator + team, post-Phase-H).
+- Cross-phase note: the new cross-form conflict detection now emits warnings (not errors) for every `cx-*` / `codex-*` agent in CI sweeps, because gimle's `bindings.local-example.yaml` uses sentinel UUIDs (`00000000-...-021x`) while `codex-agent-ids.env` carries real production UUIDs. This is correct behavior — Phase H cleanup gate drops `codex-agent-ids.env`, at which point the warnings stop.
+- Sweep: 384 paperclip tests, 20 skipped, 0 failed.
+
+**Phase G partial (2026-05-17, code-side — Tasks 1-4 of 6):**
+- gimle manifest migrated to v2 schema (24 agents = 12 claude + 12 codex): `schemaVersion: 2`, all UUIDs + `paths.{project_root,primary_repo_root,production_checkout,codex_team_root,operator_memory_dir}` host-local fields + `project.company_id` removed; per-agent `profile` + `reportsTo` + explicit `output_path` added. Kebab `agent_name` (e.g., `cto`, `cx-cto`) preserves v1 render byte-identity.
+- Legacy compat preserved per spec §10.5: `compatibility.legacy_output_paths: true`, `claude_deploy_mapping: paperclips/deploy-agents.sh`, `codex_agent_ids_env: paperclips/codex-agent-ids.env`, `workspace_update_script: paperclips/update-agent-workspaces.sh`. Files stay in repo until Phase H cleanup gate.
+- New CI-fallback files: `paperclips/projects/gimle/{bindings,paths}.local-example.yaml` (kebab keys to match manifest agent_name; sanitized UUIDs `00000000-...-020x`/`021x`, sanitized paths `/opt/uaa-example/gimle/...`). Operator's `~/.paperclip/projects/gimle/{bindings,paths}.yaml` overrides at deploy.
+- `validate_instructions` `len(uuid) >= 8` allowlist fallback (D-fix C-3 carryover) confirmed removed. 5 obsolete v1-fixture tests in `test_validate_instructions.py` skipped with `reason="Post-Phase-G: gimle is v2-clean..."` — covered by Phase G-specific behavioral tests instead.
+- `generate_assembly_inventory.py`: regenerated `paperclips/assembly-inventory.json` for v2 manifest input (gimle dist paths still resolve to `paperclips/dist/*.md` + `paperclips/dist/codex/*.md` per `legacy_output_paths: true`).
+- New `paperclips/tests/test_phase_g_gimle_migration.py` (38+ tests): manifest-shape validators (24 agents, kebab names, no UUIDs, no abs paths), per-agent profile snapshot (24-entry locked dict), CI-fallback parity check, per-target render-delta (claude×12 + codex×12), bridge isolation test, hard guard against silent baseline-dir deletion, post-live-migration skip-stubs.
+- Pre-migration baseline at `paperclips/tests/baseline/phase_g/gimle-dist-pre/{claude,codex}/` (12+12 .md artifacts) for render-delta determinism.
+- **DEFERRED to operator** (Tasks 5-6 = live deploy + CLAUDE.md decompose): pause BOTH claude + codex teams in paperclip UI → `bootstrap-project.sh gimle --canary` on iMac → smoke-test (both teams) → unpause → CLAUDE.md decompose into role-specific overlays (operator-side, post-merge follow-up).
+- Sweep: 348 paperclip tests, 12 skipped, 0 failed.
+
+**Phase F partial (2026-05-17, code-side — Tasks 1-5 of 7):**
+- uaudit manifest migrated to v2 schema (17 agents, codex-only): `schemaVersion: 2`, all `agent_id` + `workspace_cwd` + `paths.*` host-local fields + `report_delivery.telegram_plugin_id` removed; per-agent `profile` + `reportsTo` added.
+- New CI-fallback files: `paperclips/projects/uaudit/{bindings,paths,plugins}.local-example.yaml` (sanitized UUIDs `00000000-...-001x`, sanitized paths `/opt/uaa-example/uaudit/...`, sentinel plugin_id `00000000-...-0000`). Operator's `~/.paperclip/projects/uaudit/{bindings,paths,plugins}.yaml` overrides at deploy.
+- `_load_host_local_sources` extended for bindings fallback (mirroring paths/plugins from Phase E).
+- Builder bridge: when bindings.yaml has `company_id` AND committed manifest doesn't, surface bindings value into `manifest_nested["project"]["company_id"]` so role templates using legacy `{{project.company_id}}` placeholder still resolve under v2 (no shared-role changes needed).
+- Overlay rename: `{{agent.workspace_cwd}}` → `runs/{{agent.agent_name}}/workspace`; `{{report_delivery.telegram_plugin_id}}` → `{{plugins.telegram.plugin_id}}` (2 InfraEngineer overlay files); `/Users/Shared/UnstoppableAudit/repos/...` → `{{paths.primary_repo_root}}` + `{{paths.project_root}}` in `_common.md`.
+- Profile mapping per agent: AUCEO/UWICTO/UWACTO = cto; SwiftAuditor/KotlinAuditor/SecurityAuditor = reviewer; CryptoAuditor = **implementer** (cx-blockchain-engineer.md role's v1 implicit default — preserved to keep render byte-identical); QAEngineer = qa; InfraEngineer = implementer; ResearchAgent = research; TechnicalWriter = writer. reportsTo chains: regional CTOs → AUCEO; auditors/QA/Infra/Research/Writer → regional CTO.
+- Phase C test `test_unmigrated_v1_manifest_rejected` updated to only check gimle (uaudit now v2-clean); new `test_v2_uaudit_manifest_accepted`.
+- New `paperclips/tests/test_phase_f_uaudit_migration.py` (30 tests): pre-migration backup smoke (17 UUIDs extracted) + manifest-shape validators + per-agent render-delta diff (workspace_cwd + CI-fallback path/plugin/company_id substitutions allowed).
+- Pre-migration backup at `paperclips/tests/baseline/phase_f/{uaudit-manifest-pre.yaml,uaudit-dist-pre/}`.
+- **DEFERRED to operator** (Task 6 = live deploy): pause uaudit agents → `migrate-bindings.sh uaudit` → operator-supplied paths.yaml + plugins.yaml from live API → `bootstrap-project.sh uaudit --canary` → smoke (incl. telegram delivery stage 6) → unpause. Per spec §10.3.
+- Sweep: 342 paperclip tests, 12 skipped, 0 failed.
+
+**Phase E followup (2026-05-17, in-PR — 6 CRITICAL from 4-voltAgent deep-review):**
+- CRIT-C1 (architect) — `resolved_assembly` now omits empty `compatibility.inputs` entries via new `_build_compatibility_block` helper. Previously v2 manifests shipped `inputs.{claudeDeployMapping,codexAgentIdsEnv,workspaceUpdateScript}: {path:"", sha256:""}` — meaningless data downstream consumers would mistrust. Gimle/uaudit v1 retain populated inputs.
+- CRIT-C2 (architect) — `compatibility_agent_ids` no longer defaults `compatibility.claude_deploy_mapping`/`codex_agent_ids_env` to gimle's files. Trading + future v2 projects with empty fields get only the dual-read resolver merge; cross-project leak eliminated. New `_merge_canonical_bindings_into_ids` helper centralizes the resolver step for both targets.
+- CRIT-C3 (code-rev) — `_load_host_local_sources` fallback no longer swallows `Exception` blanket-style on `paths.local-example.yaml` / `plugins.local-example.yaml`. Now narrowed to `(yaml.YAMLError, OSError)` and logs to stderr — corrupt committed-fallback regressions are now visible.
+- CRIT-C4 (security) — Trading overlays (`_common-{claude,codex}.md`) had 6 inline `/Users/Shared/Trading/...` abs paths. Replaced with `{{paths.primary_repo_root}}` + `{{paths.project_root}}` templates resolved via host-local. Remaining `/Users/Shared/Ios/Gimle-Palace` references are left-side of substitution-table documentation (gimle reference being replaced) — kept.
+- CRIT-C5 (code-rev) — v2 detection regex `^schemaVersion:\s*2\s*$` was too narrow (failed on `"2"`/`2.0`/`# comment`). Replaced with `_is_v2_manifest_text` helper accepting quoted, float, commented forms + YAML-parse fallback for edge cases. 9 parametrized tests document the contract.
+- CRIT-C6 (QA + code-rev) — `_diff_lines` count-mismatch produced opaque `__count_mismatch__` failure messages. Now explicit `pytest.fail(f"{subpath} line count differs ...")` early-exit with debuggable diagnostic.
+- 1 architect false-positive parked after verification: claim that empty compat-inputs cause `IsADirectoryError` — actual behavior is empty path resolves to `repo_root`, `sha256_file` returns hash of root (also bogus, but doesn't crash). Fix still applies (omit entries).
+- Sweep: 314 paperclip tests, 9 skipped, 0 failed. +9 new behavioral tests (8 v2-detection + 1 count-mismatch guard).
+
+**Phase E partial (2026-05-17, code-side — Tasks 1-5 of 9):**
+- Trading manifest migrated to v2 schema: `schemaVersion: 2`, `agent_id`/`workspace_cwd`/`paths.*` host-local fields removed; `profile` + `reportsTo` added per agent.
+- `paperclips/projects/trading/paths.local-example.yaml` committed as CI/dev fallback (sanitized paths under `/opt/example/trading`); operator's `~/.paperclip/projects/trading/paths.yaml` takes precedence at deploy time.
+- `_load_host_local_sources` in builder reads operator's `~/.paperclip/projects/<key>/{paths,plugins}.yaml` first, then falls back to `paperclips/projects/<key>/{paths,plugins}.local-example.yaml` when present.
+- `validate_instructions` detects `schemaVersion: 2` and relaxes v1-only checks: `project.company_id`, `paths.*` host-local fields, compatibility section + inputs, role agentId-required.
+- `migrate-bindings.sh` fixes surfaced by trading work: (a) `AGENT_UUIDS=()` explicit init prevents `set -u` unbound-variable crash on empty assoc-array; (b) Python+PyYAML fallback for manifest read makes the script work without yq dependency.
+- Trading overlay text updated: `{{agent.workspace_cwd}}` → `runs/{{agent.agent_name}}/workspace` (computed inline; operator's real abs cwd resolved via host-local paths.yaml at deploy).
+- Existing Phase C test (`test_trading_manifest_rejected`) updated to test v1-style uaudit + gimle as rejection cases; new `test_v2_trading_manifest_accepted` asserts trading passes validate-manifest.
+- New `paperclips/tests/test_phase_e_trading_migration.py` (13 tests): pre-migration backup smoke + manifest-shape validators + render-delta diff that asserts post-migration output differs from baseline only in `workspace_cwd` line + CI-fallback path substitution.
+- Pre-migration backup committed at `paperclips/tests/baseline/phase_e/trading-manifest-pre.yaml` + `trading-dist-pre/` for rollback/audit/determinism.
+- **DEFERRED to operator** (Tasks 6-8 = live deploy): pause trading agents in paperclip UI → `bootstrap-project.sh trading --canary` on iMac → smoke-test → unpause. Spec §14.2 risk profile: LOW (5 agents, fewest in-progress).
+- Sweep: 305 paperclip tests, 9 skipped, 0 failed.
+
+**Phase D followup (2026-05-16, in-PR — 6 CRITICAL + 2 IMP from 4-voltAgent deep-review):**
+- CRIT-C-1 — `build_project_compat.compatibility_agent_ids` for codex target now ALSO merges canonical-name keys from resolver, so Phase E projects whose manifests use canonical agent_name (CXCTO, CXMCPEngineer) get populated agentId in resolved-assembly JSON. Fixes architect's "single source of truth false" finding.
+- CRIT-C-2 — `validate_instructions.load_team_uuids` + `detection_semantic.load_team_uuids_from_repo` accept `allowed_company_ids: set[str] | None`; daemon passes `{c.id for c in cfg.companies}`. Prevents watchdog from allowlisting trading/uaudit UUIDs when running for gimle (cross-project leak).
+- CRIT-C-3 — removed `len(uuid) >= 8` allowlist fallback in validate_instructions; enforces `_UUID_RE.fullmatch`. Test fixtures updated to real UUID format. Closes architect+code-reviewer's security-relevant allowlist gap.
+- CRIT-C-4 — `paperclips/scripts/lib/canonical_acronyms.txt` is the single source of truth for both Python `_PRESERVED_ACRONYMS` (loaded via `_load_acronyms`) and bash `ACRONYMS` (loaded via `grep -vE`). New test asserts the two stay in sync.
+- CRIT-C-5 — `migrate-bindings.sh --check-conflicts` on no-sources exits 0 with "skipped" log (was exit 2 → CI cron false-failure). New test for pre-bootstrap path.
+- CRIT-C-6 — `test_migrate_check_conflicts_detects_disagreement` tightened: `assert returncode != 0 AND "conflict" in output` (was `or` → passed on unrelated errors).
+- IMP-D1 — `resolve_bindings.py main()` validates `project_key` against `^[a-z0-9][a-z0-9_-]{0,39}$` (parity with shell `validate_project_key`).
+- IMP-I7 — `validate_instructions` loads resolver via importlib with `sys.modules` cache check (prevents duplicate `BindingsConflictWarning` class under multi-tick watchdog runs).
+- 1 architect false-positive parked (no spec change): "watchdog conflict-warning absorbed" — `BindingsConflictWarning` is structured in `conflicts` field of resolver return; surfaces in logs via warnings module. Spec §10.5 warn-on-conflict contract met.
+- Sweep: 291 paperclip + 352 watchdog tests, 7 skipped, 0 failed.
+
+**Phase D complete (2026-05-16):**
+- `paperclips/scripts/resolve_bindings.py` provides dual-read with precedence (new `bindings.yaml` wins over legacy `paperclips/codex-agent-ids.env`) and emits `BindingsConflictWarning` on disagreement. `_normalize_legacy_name` preserves canonical acronyms (CTO/QA/MCP) so output matches `services/watchdog/src/gimle_watchdog/role_taxonomy.py` entries.
+- Builder (`build_project_compat._load_host_local_sources`) routes bindings through the resolver; paths.yaml/plugins.yaml stay direct-read (no legacy equivalent).
+- Watchdog's `paperclips/scripts/validate_instructions.load_team_uuids` (loaded by `detection_semantic.load_team_uuids_from_repo`) iterates every `~/.paperclip/projects/<key>/bindings.yaml` and merges with legacy env via resolver. Defensive fallback if `resolve_bindings.py` is missing preserves pre-Phase-D behavior.
+- `migrate-bindings.sh --check-conflicts` runs resolver against existing bindings + legacy env; exits 1 with `CONFLICT: <agent> legacy=X bindings=Y` lines on disagreement, exits 0 with `no conflicts (N agents merged from sources=[...])` on agreement.
+- Legacy `paperclips/codex-agent-ids.env` + `paperclips/deploy-agents.sh` remain in repo until §10.5 cleanup gate. One pre-existing test (`test_project_compat_unresolved_variable_fails`) relaxed to accept new resolver-path error message; behavior identical.
+- New tests: `test_phase_d_resolver.py` (9), `test_phase_d_integration.py` (3), `test_phase_d_migrate_conflict.py` (3), `test_phase_d_acceptance.py` (8), `services/watchdog/tests/test_phase_d_resolver_integration.py` (4). Full sweep: 285 paperclip tests + 350 watchdog tests, 7 skipped, 0 failed.
+
+**Phase C followup complete (2026-05-16):**
+- 6 CRITICAL findings from 4-voltAgent deep-review addressed:
+  - CRIT-1 — bootstrap-project + rollback now use matching journal kinds (`agent_instructions_snapshot` + new `agent_hire`); old AGENTS.md content captured before PUT via new `paperclip_get_agent_instructions`.
+  - CRIT-2 — plugin step 8 journals `plugin_config_snapshot` with `old_config` before POST so rollback can restore.
+  - CRIT-3 — BSD-incompatible `sed '\u&'` (bootstrap-project.sh:85) replaced with bash `${var^}` parameter expansion.
+  - CRIT-4 — migrate-bindings preserves acronyms (`CXCTO`/`CXMCPEngineer`/`CXQAEngineer`) per uaudit manifest convention; fixes 3 of 12 gimle codex names that previously rendered as `CXCto`/`CXMcpEngineer`/`CXQaEngineer`.
+  - CRIT-5 — `validate_project_key` + `validate_journal_id` in `lib/_common.sh` reject path traversal in 5 entry-point scripts.
+  - CRIT-6 — `bootstrap-watchdog.sh` rewritten to use python3+PyYAML for all YAML manipulation (no yq dependency); previous yq merge had wrong v4 syntax and the literal-append fallback produced invalid YAML.
+- 5 high-signal IMPORTANT addressed: curl `--max-time 30 --connect-timeout 10` on all wrappers (IMP-A); `paperclip_plugin_get_config_safe` distinguishes 404-first-config from 401/403/5xx auth errors (IMP-B); `umask 0077` + chmod 600/700 on journal + bindings files (IMP-C); dynamic shell evaluation in `_smoke_probes.sh` replaced with bash indirect expansion `${!var}` (IMP-D); `validate_agent_name` in `lib/_common.sh` prevents yq path injection (IMP-E).
+- 18 new behavioral tests in `paperclips/tests/test_phase_c_followup.py` (runtime assertions on actual script behavior, not source-string-greps).
+- One architect false-positive rejected after verification: `watchdog-config.yaml.template` does NOT contain a `---` separator (confirmed via direct file read).
+- Parked: ~15 tautological tests across earlier Phase C test files (test-quality refactor); 7 stale `test_validate_instructions.py` skips (Phase A→B reconciliation); flock for concurrent bootstrap (design decision); `update-versions.sh` snapshot scope expansion (documented as known limitation).
+- Full repo sweep: 262 passed, 7 skipped, 0 failed.
+
+**Phase C complete (2026-05-16):**
+- 8 operator scripts in `paperclips/scripts/`: install-paperclip, bootstrap-project, smoke-test, bootstrap-watchdog, update-versions, validate-manifest, rollback, migrate-bindings — all with `--help`, journal-on-mutation, and topological hire ordering where relevant.
+- Shared bash helpers in `paperclips/scripts/lib/`: `_common.sh` (log/die/require_command), `_paperclip_api.sh` (REST + agent + plugin helpers), `_journal.sh` (open/record/finalize), `_prompts.sh` (interactive), `_smoke_probes.sh` (per-profile runtime probes per spec §12.C).
+- Templates in `paperclips/templates/`: `watchdog-config.yaml.template` + `watchdog-company-block.yaml.template`.
+- `bootstrap-project.sh` supports `--canary` 2-stage deploy (writer/research/qa → cto → fan-out) and `--reuse-bindings`; chains to `bootstrap-watchdog.sh` at step 13.
+- `rollback.sh` replays inverse mutations (LIFO) for agent_instructions_snapshot, plugin_config_snapshot, version_bump_snapshot.
+- `migrate-bindings.sh` extracts UUIDs from `paperclips/codex-agent-ids.env` + manifest inline + GET /api/companies/<id>/agents into `~/.paperclip/projects/<key>/bindings.yaml`.
+- `versions.env` pins every dependency (paperclipai 2026.508.0-canary.0, telegram-plugin fork `c0423e45`, pnpm 9.15.0); `update-versions.sh` re-runs install with pre-bump journal.
+- 103 Phase C tests + 12 acceptance tests; full sweep 244 passed, 7 skipped.
+- Merged: PR #191 (C1 foundation) + PR #193 (C2 lifecycle) + this PR (C3 utilities).
+
+**Phase B complete (2026-05-16):**
+- 8 profile YAMLs in `paperclips/fragments/profiles/` per spec §5.2 (custom/minimal/research/writer/implementer/qa/reviewer/cto).
+- `paperclips/scripts/compose_agent_prompt.py` composes universal + profile chain (extends + dedup) + role + custom_includes + overlays per §3.2, §5.2.1.
+- `paperclips/scripts/validate_manifest.py` rejects UUIDs/abs-paths/forbidden-keys per §6.2.
+- `paperclips/scripts/resolve_template_sources.py` resolves `{{a.b.c}}` per §6.5.
+- `paperclips/scripts/profile_schema.py` validates 8-profile YAML with extends-chain + cycle detection.
+- Builder (`build_project_compat.py`) wires compose path for slim crafts (no @include); legacy expand_includes preserved for un-migrated; output_path derived from (project.key, target, agent_name) per rev4 B-1.
+- Profile boundaries verified at runtime: cto has Phase 1.1+release-cut+APPROVE; reviewer has APPROVE no release-cut; implementer has commit/push no merge; writer has Karpathy+handoff only.
+- 141 tests passing (32 new Phase B + 38 Phase A + 86 validator + 7 skip).
+
+**Rev4 changelog (third deep-review of plans + 2 operator strategic questions applied):**
+- §3.4 NEW — Target extensibility (`paperclips/roles-<target>/` convention; mixed-team support explicit; cross-target handoff first-class).
+- §12.C extended — concrete runtime probe-questions per profile-family (mcp_list / git_capability / handoff_procedure / phase_orchestration) with expected/forbidden markers; replaces vague "operator-live" placeholder.
+- Plan rev4 — 25 fixes (PR retarget to develop; CI failure mitigation; Phase B builder contract for output_path generation + agent.profile key fix; Phase C placeholder removal + per-agent role mapping + remove `\|\| true`; Phase D normalize fixed (CXCTO/CXMCPEngineer/CXQAEngineer per actual taxonomy) + heuristic replaced with manifest-target read; Phase F mandatory plugin GET-then-POST; Phase G watchdog-taxonomy gap as pre-flight blocker, 12 not 11; Phase H gate snippet sources _common.sh; smoke-test runtime probes per SM-1..5; multi-target docs per MA-1..3).
+
+**Rev3 changelog (second deep-review feedback applied):**
+- §14 added execution-ownership constraint: phases tagged `operator` / `team` / `operator + team` because Phases A–D are self-modifying (gimle team would edit its own runtime contract).
+- §1.2 fixed role-file size range (67–167, was 76–114).
+- §3.2 reworded to clarify v1 keeps EXISTING inlining cost (not new cost).
+- §4.1 fixed library-size comparison (current 441 lines, redesigned ~530 = +20%; real saving is from per-agent selective composition, not library size).
+- §5.2 added normative deduplication rule for `inheritsUniversal` + `extends:` chains.
+- §6.4 closed open question on override + custom_includes interaction (override applies — they're orthogonal).
+- §6.7 NEW — Overlays formalized as third composition mechanism (append-mode), not merged with fragment-override.
+- §8.6 / §9.2 canary changed to 2-stage (canary-1 = read-only profile, canary-2 = cto, then fan-out).
+- §9.2 added topological hire ordering by `reportsTo` dependency graph.
+- §9.4 watchdog config template expanded (full schema, not just thresholds).
+- §10 added explicit role-split phase (hybrid: new craft files alongside legacy, deprecation banner on legacy).
+- §10.1 cleanup gate metric concretized (zero handoff_alert + zero recovery wake_failed for 7 days from watchdog log).
+- §10.4 fixed gimle agent count (24 = 12 claude + 12 codex, not 12).
+- §11 platform: clarified — passed to template_values, not consumed by current fragments; opaque-passthrough preserved.
+- §13 rebalanced (open Q #5 closed; new open Q on role-split mechanics).
+- §14 engineer-day estimates marked as ranges (19–25 days realistic, was 15 optimistic).
+
+**Rev2 changelog (first deep-review feedback applied):**
+- §3 Runtime instruction contract clarified — v1 = single AGENTS.md per agent (no split).
+- §6.4 Project override seam formalized — keeps existing 4-level builder fallback as first-class.
+- §6.5 Allowed template sources — explicit list of host-local sources for `{{vars}}`.
+- §6.6 Committed vs generated AGENTS.md — committed is path-free template, generated is gitignored.
+- §7 Versioning — all floating versions pinned (no `latest`, no `9.x`).
+- §8 API contract section added — exact endpoints + payload shapes from existing scripts.
+- §8.5 Mutation safety / rollback journal added.
+- §9.4 New script: `bootstrap-watchdog.sh` (config-first install).
+- §10 Migration: dual-read period + cleanup gate (no 24h timer).
+- §12 Acceptance split into 12A offline-CI / 12B mock-integration / 12C operator-live-smoke.
+- §13 Open questions: AGENTS.md split moved to v2 future direction.
+
+---
+
+## 1. Context
+
+### 1.1 Current state — three projects, three layouts
+
+The repo hosts assembly machinery for three sibling projects under one `paperclips/` infrastructure:
+
+| | gimle | trading | uaudit |
+|---|---|---|---|
+| `agents:` in manifest | empty (legacy mapping) | 5 agents declared | 17 agents declared with `platform` tags |
+| `legacy_output_paths` | `true` (flat `dist/<role>.md`) | `false` | `false` |
+| dist layout | `dist/<role>.md` + `dist/codex/cx-<role>.md` | `dist/trading/{claude,codex}/<Agent>.md` | `dist/uaudit/codex/<Agent>.md` |
+| Agent UUIDs | `paperclips/codex-agent-ids.env` (legacy) + paperclip company storage | inline in manifest YAML | inline in manifest YAML |
+| Hardcoded paths | absolute `/Users/Shared/...` in manifest | absolute in manifest | absolute in manifest |
+| Telegram plugin | not used | not used | `telegram_plugin_id` inline in manifest |
+| Targets | claude + codex | claude + codex | codex-only |
+
+### 1.2 Pain points (operator-confirmed)
+
+1. **Assembled agents are huge.** Source role `.md` files are 67–167 lines (smallest `cx-auditor.md` 67; largest `code-reviewer.md` 167); assembled output is 463–867 lines (4–10× inflation from inlined fragments). Median ~600–700 lines per agent. Top end (`UWIInfraEngineer`) at 867 lines. Note: existing role files mix craft + capability + anti-patterns in one file — see §10 role-split migration step.
+2. **Rigid workflow choreography baked into every agent.** Phase orchestration (`1.1 → 1.2 → 2 → 3.1 → 3.2 → 4.1 → 4.2`), formal `[@Role](agent://uuid)` mention rituals, APPROVE comment formats — inlined in every role even for agents that never orchestrate phases.
+3. **Hardcoded paths and UUIDs in committed YAML.** Cannot reproduce on another machine without surgically editing manifests.
+4. **Three different layouts.** No single way to add a new project; copy-paste leads to drift.
+
+### 1.3 Adjacent reality (constraints)
+
+- **Paperclip heartbeat is disabled** (operator policy). Agent wake is event-driven only (assignee PATCH, @mention, posted comment).
+- **Watchdog (`services/watchdog/`, 3416 LOC)** is the safety net for missed wake events: kills idle hangs, respawns died-mid-work, alerts on handoff inconsistencies. Implements 6-class role taxonomy (`role_taxonomy.py`): `cto / reviewer / implementer / qa / research / writer`.
+- **Watchdog config is non-empty mandatory.** `load_config` rejects empty `companies` list. Watchdog `install` cannot run before at least one project is bootstrapped (verified — see §9.4).
+- **Fragment `heartbeat-discipline.md` is misnamed** — its content is wake-discipline + handoff-hygiene. Significant overlap with `phase-handoff.md`.
+- **Telegram integration is via fork** `ant013/paperclip-plugin-telegram` (fork of `mvanhorn/paperclip-plugin-telegram`), not upstream npm. Pinned to `c0423e45` (2026-05-15 main HEAD).
+- **Existing builder (`paperclips/scripts/build_project_compat.py`) implements 4-level fragment override fallback**: `projects/<key>/fragments/targets/<target>/X` → `projects/<key>/fragments/X` → `fragments/targets/<target>/X` → `fragments/X`. Trading and uaudit use this. Verified `build_project_compat.py:62-99`.
+- **Existing deploy uses `PUT /api/agents/<id>/instructions-bundle/file`** with body `{path: "AGENTS.md", content: "<full markdown>"}` — single AGENTS.md artifact per agent. Verified `deploy_project_agents.py:208`.
+- **Existing hire uses `POST /api/companies/<id>/agent-hires`** with full payload including `adapterType`, `adapterConfig{cwd, model, instructionsFilePath, instructionsBundleMode, maxTurnsPerRun, dangerouslyBypassApprovalsAndSandbox, env}`, `runtimeConfig{heartbeat: {enabled: false, ...}}`. Verified `hire-codex-agents.sh:31-90`.
+- **paperclipai pinned to `2026.508.0-canary.0`** (2026-05-08T00:21Z, last canary before PR #5429 broke plugin secret-refs).
+
+---
+
+## 2. Design overview
+
+### 2.1 Three perpendicular axes
+
+```
+ROLE-FILE     — what craft the agent knows (Swift / Python / MCP / Kotlin / generic)
+PROFILE       — what capability-pack the agent gets (implementer / reviewer / qa / cto / ...)
+PROJECT       — where the agent works (paths, UUIDs, MCP namespace, integrations)
+```
+
+Currently all three are smashed into one `.md` file per agent. The redesign splits them into independent layers, composed by the builder.
+
+### 2.2 Architecture diagram
+
+```
+              ┌─────────────────────┐
+              │  PROFILE LIBRARY    │   paperclips/fragments/profiles/*.yaml
+              │  (capability-packs) │   { custom, minimal, research, writer,
+              │                     │     implementer, qa, reviewer, cto }
+              └──────────┬──────────┘
+                         │ each profile composes:
+                         ▼
+              ┌─────────────────────┐
+              │  FRAGMENT LIBRARY   │   paperclips/fragments/shared/fragments/*.md
+              │  (sliced by         │   universal/  git/  worktree/  handoff/
+              │   selectivity)      │   code-review/  qa/  pre-work/  plan/
+              └──────────┬──────────┘
+                         │
+       ┌─────────────────┼─────────────────┐
+       ▼                 ▼                 ▼
+┌────────────┐   ┌────────────┐   ┌─────────────────────────┐
+│ ROLE-FILES │   │ ASSEMBLY   │   │ PROJECT METADATA        │
+│ (craft)    │   │ MANIFEST   │   │ (paths, MCP, branch...) │
+│            │   │ per agent: │   │                         │
+│ swift.md   │   │  agent_name│   │ paperclips/projects/    │
+│ python.md  │   │  role_src  │   │   <key>/                │
+│ kotlin.md  │   │  profile   │   │   paperclip-agent-      │
+│ mcp.md ... │   │  cust._inc │   │   assembly.yaml         │
+└─────┬──────┘   └────┬───────┘   └────────────┬────────────┘
+      │               │                        │
+      └───────────────┼────────────────────────┘
+                      ▼
+              ┌──────────────────┐
+              │  build.sh        │
+              │  --project <key> │
+              │  --target ...    │
+              └────────┬─────────┘
+                       ▼
+        ONE AGENTS.md per agent (universal + profile + role + custom_includes)
+        — output is gitignored under paperclips/dist/
+        — deployed via PUT /api/agents/<id>/instructions-bundle/file
+```
+
+### 2.3 Predicted size reduction
+
+| profile | per-agent AGENTS.md | currently | reduction |
+|---|---:|---:|---:|
+| `writer` | 145 (universal) + 50 (D-role) = 195 | 481 | 2.5× |
+| `research` | 145 + 65 = 210 | 479 | 2.3× |
+| `implementer` | 145 + 230 = 375 | 757 | 2.0× |
+| `qa` | 145 + 260 = 405 | 656 | 1.6× |
+| `reviewer` | 145 + 200 = 345 | 682 | 2.0× |
+| `cto` | 145 + 280 = 425 | 524 | 1.2× |
+
+**Note:** Earlier rev1 estimates assumed universal layer was external (workspace AGENTS.md auto-loaded). Per §3 below, v1 keeps universal inlined per agent. Real reduction is from selective profile composition + fragment de-duplication, not from layer separation. Future v2 (§13) revisits the AGENTS.md split.
+
+---
+
+## 3. Runtime instruction contract (v1)
+
+This section is normative. The v1 runtime contract follows what paperclip + the existing deploy tooling can do today, not aspirational architecture.
+
+### 3.1 Single artifact per agent
+
+For each hired agent, **exactly one** rendered AGENTS.md is deployed via `PUT /api/agents/<id>/instructions-bundle/file`. The content is the concatenation of:
+
+```
+[Universal layer]               # ~95 lines: karpathy, wake-and-handoff-basics, escalation-board
+[Project metadata block]        # ~50 lines: paths, branch, MCP, evidence refs
+[Profile composition]           # 0–280 lines: profile.includes resolved + concatenated
+[Role craft]                    # 50–100 lines: role_source content
+[Custom includes]               # any per-agent custom_includes
+```
+
+This is the only artifact paperclip stores. Workspace `AGENTS.md` and root `CLAUDE.md` are operator-convenience local files; they are NOT what claude/codex agents see at runtime — they see the API-deployed bundle.
+
+### 3.2 Universal layer is inlined per agent (v1)
+
+Universal-layer fragments (`karpathy.md`, `wake-and-handoff-basics.md`, `escalation-board.md`) are **inlined into every per-agent AGENTS.md**. They are not externalized to a workspace-loaded AGENTS.md in v1.
+
+**Why v1 keeps it inlined:** paperclip serves one bundle to the agent. There is no native paperclip mechanism for "common project preamble + per-agent body". Splitting would require either (a) operator manually merging two files in workspace, or (b) duplicating universal content in per-workspace AGENTS.md outside paperclip's contract. Both options are fragile.
+
+**Cost:** v1 keeps the EXISTING inlining cost — current `paperclips/fragments/shared/fragments/karpathy-discipline.md`, `heartbeat-discipline.md`, `phase-handoff.md` already inline into every agent today. The redesign does NOT introduce new duplication; it merely preserves what's there. v2 (§13) revisits if/when paperclip API supports multi-bundle delivery.
+
+### 3.4 Multi-target teams + target extensibility (rev4)
+
+Manifest declares `target: <string>` per agent. The string is **opaque** at the schema level; supported values come from filesystem convention: a value `<X>` requires `paperclips/roles-<X>/` to exist with target-appropriate craft files, and paperclip-server must support `<X>_local` adapter type.
+
+| target | role-files dir | adapter type | currently supported |
+|---|---|---|---|
+| `claude` | `paperclips/roles/` | `claude_local` | yes (default) |
+| `codex` | `paperclips/roles-codex/` | `codex_local` | yes |
+| `<future>` | `paperclips/roles-<future>/` | `<future>_local` | requires (a) new craft files, (b) paperclip adapter, (c) bootstrap-script update if hire payload differs |
+
+**Mixed teams within one project are explicitly supported.** trading uses `target: claude` for CTO + `target: codex` for the rest; gimle runs 12-claude + 12-codex teams in parallel under the same company; uaudit is codex-only. Future projects (e.g. ios-wallet) may declare `target: codex` for SwiftEngineer × N + `target: claude` for OpusReviewer.
+
+**Cross-target handoff is a first-class scenario** — when CTO[claude] reassigns to PythonEngineer[codex], the hire payload differences (model id, sandbox flags) are configured at hire time, not at handoff time; paperclip routes events identically regardless of target. Phase C smoke-test §12.C explicitly validates one cross-target handoff per mixed-team project.
+
+**What stays target-agnostic:**
+- Profile library (`paperclips/fragments/profiles/*.yaml`).
+- Fragment library (`paperclips/fragments/shared/fragments/`).
+- Project manifests (only `target: <string>` field touches it).
+- bootstrap-project.sh / smoke-test.sh / watchdog (read `target` from manifest, branch on it locally).
+
+Adding a new target is **additive, not breaking** — existing projects unaffected.
+
+### 3.3 Workspace and root AGENTS.md / CLAUDE.md (operator convenience only)
+
+- `paperclips/projects/<key>/AGENTS.md.template` — committed, path-free template; rendered into a host-local `~/.paperclip/projects/<key>/AGENTS.md` for operator's own claude/codex sessions running in that workspace. **Not deployed to paperclip agents.**
+- `paperclips/projects/<key>/CLAUDE.md` — symlink to template (or removed). Same scope: operator convenience.
+
+These files exist to give the operator (running claude CLI manually in the project workspace) the same project context that paperclip-deployed agents have via API. They are NOT what the runtime agents read.
+
+---
+
+## 4. Fragment library (granularity = selectivity)
+
+**Principle:** A fragment is a unit of inclusion. If two pieces are always loaded together OR never loaded apart, they're one fragment. Granularity follows selectivity boundaries, not arbitrary "smaller is better".
+
+### 4.1 Layout
+
+```
+paperclips/fragments/shared/fragments/
+├── universal/                                     # inlined into every agent AGENTS.md
+│   ├── karpathy.md                       (~25)   # think/minimum/surgical/verify
+│   ├── wake-and-handoff-basics.md        (~40)   # wake-check + cross-session-memory + @mention hygiene + 409
+│   └── escalation-board.md               (~20)
+├── git/                                            # selective by capability
+│   ├── commit-and-push.md                (~50)   # implementer, qa
+│   ├── merge-readiness.md                (~20)   # cto, reviewer
+│   ├── merge-state-decoder.md            (~20)   # cto, reviewer
+│   └── release-cut.md                    (~15)   # cto only
+├── worktree/
+│   └── active.md                         (~25)   # implementer, reviewer, qa
+├── handoff/
+│   ├── basics.md                         (~15)   # all profiles except minimal/custom
+│   └── phase-orchestration.md            (~50)   # cto only
+├── code-review/
+│   ├── approve.md                        (~25)   # reviewer
+│   └── adversarial.md                    (~30)   # OpusArchitectReviewer (custom_includes)
+├── qa/
+│   └── smoke-and-evidence.md             (~30)   # qa
+├── pre-work/
+│   ├── codebase-memory-first.md          (~15)   # all who read code
+│   ├── sequential-thinking.md            (~10)   # implementer, reviewer, qa
+│   └── existing-field-semantics.md       (~12)   # implementer
+└── plan/
+    ├── producer.md                       (~25)   # cto
+    └── review.md                         (~20)   # reviewer
+```
+
+**Total: 18 files, ~530 lines.** (rev4 errata — previously said "16 files"; actual count is 3+4+1+2+2+1+3+2 = 18 per the enumerated tree above.) Current `paperclips/fragments/shared/fragments/` is **441 lines across 13 files** (verified `wc -l`). The redesign is **~20% larger** in absolute library size (530 vs 441) — but the win is per-agent: today every agent inlines essentially the entire library; in the redesign each agent inlines only its profile-selected subset. Net per-agent saving comes from selective composition, not from a smaller library.
+
+### 4.2 Naming consolidation
+
+- Current `heartbeat-discipline.md` is renamed and re-scoped → `universal/wake-and-handoff-basics.md`. Heartbeat content is removed (paperclip heartbeat is off).
+- Current `phase-handoff.md` is split:
+  - basics (PATCH+@mention+STOP, 409 procedure) → `universal/wake-and-handoff-basics.md`
+  - explicit handoff comment template → `handoff/basics.md`
+  - phase choreography → `handoff/phase-orchestration.md` (cto only)
+
+---
+
+## 5. Profile library
+
+### 5.1 Eight profiles
+
+```
+custom         — empty; full freedom (only role_source + custom_includes)
+minimal        — universal layer only (no capability fragments)
+research       — read-only + research-first
+writer         — read-only docs
+implementer    — read + commit + push (NO merge)
+qa             — implementer + smoke + evidence
+reviewer       — read + approve + merge-readiness (NO commit, NO release-cut)
+cto            — reviewer + phase orchestration + release-cut + plan-producer
+```
+
+### 5.2 Concrete profile YAMLs
+
+Universal-layer fragments are NOT listed in profile YAMLs — they are unconditionally inlined by the builder (§3.2). The profile YAML lists capability-layer fragments only.
+
+`paperclips/fragments/profiles/custom.yaml`:
+```yaml
+schemaVersion: 2
+name: custom
+inheritsUniversal: false   # ONLY profile that opts out — operator opts in by listing universal/* in custom_includes
+includes: []
+```
+
+`paperclips/fragments/profiles/minimal.yaml`:
+```yaml
+schemaVersion: 2
+name: minimal
+inheritsUniversal: true
+includes: []
+```
+
+`paperclips/fragments/profiles/research.yaml`:
+```yaml
+schemaVersion: 2
+name: research
+inheritsUniversal: true
+includes:
+  - pre-work/codebase-memory-first.md
+  - handoff/basics.md
+```
+
+`paperclips/fragments/profiles/writer.yaml`:
+```yaml
+schemaVersion: 2
+name: writer
+inheritsUniversal: true
+includes:
+  - handoff/basics.md
+```
+
+`paperclips/fragments/profiles/implementer.yaml`:
+```yaml
+schemaVersion: 2
+name: implementer
+inheritsUniversal: true
+includes:
+  - git/commit-and-push.md
+  - worktree/active.md
+  - pre-work/codebase-memory-first.md
+  - pre-work/sequential-thinking.md
+  - pre-work/existing-field-semantics.md
+  - handoff/basics.md
+```
+
+`paperclips/fragments/profiles/qa.yaml`:
+```yaml
+schemaVersion: 2
+name: qa
+inheritsUniversal: true
+extends: implementer
+includes:
+  - qa/smoke-and-evidence.md
+```
+
+`paperclips/fragments/profiles/reviewer.yaml`:
+```yaml
+schemaVersion: 2
+name: reviewer
+inheritsUniversal: true
+includes:
+  - pre-work/codebase-memory-first.md
+  - pre-work/sequential-thinking.md
+  - git/merge-readiness.md
+  - git/merge-state-decoder.md
+  - code-review/approve.md
+  - plan/review.md
+  - handoff/basics.md
+```
+
+`paperclips/fragments/profiles/cto.yaml`:
+```yaml
+schemaVersion: 2
+name: cto
+inheritsUniversal: true
+extends: reviewer
+includes:
+  - git/release-cut.md
+  - handoff/phase-orchestration.md
+  - plan/producer.md
+```
+
+### 5.2.1 Composition resolution (normative)
+
+When the builder composes a per-agent AGENTS.md, it processes layers in this fixed order:
+
+1. **Universal layer** — appended exactly once. Re-declarations of `inheritsUniversal: true` in `extends:` chain are deduplicated. If `extends: implementer` and both declare `inheritsUniversal: true`, the universal block is emitted ONCE at the start, not twice.
+2. **`extends:` resolution** — recursive, breadth-first. `qa extends implementer extends none` → builder collects `implementer.includes ∪ qa.includes`, deduplicating by fragment path (preserves first occurrence order).
+3. **Per-agent `custom_includes`** — appended after profile composition.
+4. **Role craft** — `role_source` content appended.
+5. **Project overlays** (per §6.7) — appended last.
+
+A given fragment path appears at most once in the rendered output; duplicates from inheritance/custom_includes are silently deduplicated. The builder logs `dedup applied: <fragment> from <source-A> + <source-B>` to stderr when this happens — operator can then choose to remove the redundant declaration.
+
+### 5.3 Escape hatch — `custom_includes`
+
+Any profile can be augmented per-agent in the assembly YAML:
+
+```yaml
+agents:
+  - agent_name: OpusArchitectReviewer
+    role_source: roles/opus-architect.md
+    profile: reviewer
+    custom_includes:
+      - code-review/adversarial.md   # added on top of reviewer profile
+```
+
+`profile: custom` with `custom_includes: [...]` gives total control. `profile: minimal` is the recommended floor — universal layer still loads.
+
+### 5.4 Edge case demonstration
+
+Same role-file (`roles/swift.md`), three capabilities, zero duplication:
+- `iOSCTO` in ios-wallet project: `role_source: roles/swift.md, profile: cto`
+- `SwiftEngineer` in ios-wallet project: `role_source: roles/swift.md, profile: implementer`
+- `UWISwiftAuditor` in uaudit project: `role_source: roles/swift.md, profile: reviewer`
+
+---
+
+## 6. Assembly YAML schema (committed vs host-local split)
+
+### 6.1 Committed manifest — only team description, no host-data
+
+```yaml
+# paperclips/projects/ios-wallet/paperclip-agent-assembly.yaml
+schemaVersion: 2
+
+project:
+  key: ios-wallet
+  display_name: iOS Wallet
+  issue_prefix: IOS
+  integration_branch: develop
+  specs_dir: docs/specs
+  plans_dir: docs/plans
+  domain:
+    target_name: Unstoppable iOS Wallet
+
+mcp:
+  service_name: ios-wallet-mcp
+  tool_namespace: ios
+  base_required:
+    - codebase-memory
+    - context7
+    - serena
+    - github
+    - sequential-thinking
+
+agents:
+  - agent_name: iOSCTO
+    role_source: roles/cto.md
+    profile: cto
+    target: codex
+  - agent_name: SwiftEngineer1
+    role_source: roles/swift.md
+    profile: implementer
+    target: codex
+  - agent_name: SwiftEngineer2
+    role_source: roles/swift.md
+    profile: implementer
+    target: codex
+  - agent_name: iOSReviewer
+    role_source: roles/code-reviewer.md
+    profile: reviewer
+    target: codex
+  - agent_name: iOSQA
+    role_source: roles/qa-engineer.md
+    profile: qa
+    target: codex
+```
+
+### 6.2 What is forbidden in committed manifest
+
+- Literal UUIDs (regex: `[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
+- Absolute paths starting with `/Users/`, `/home/`, `/private/`, `/var/`, `/opt/`
+- `company_id`, `agent_id` keys (any case)
+- `telegram_plugin_id`, `bot_token`, `chat_id` keys
+
+Enforced by `validate-manifest.sh` (acceptance test §12A).
+
+**What IS allowed:** `{{template.references}}` to host-local sources (per §6.5). E.g. uaudit overlays may use `{{bindings.company_id}}` and `{{plugins.telegram.plugin_id}}` — at build time these resolve from host-local files.
+
+### 6.3 Host-local files (gitignored)
+
+```
+~/.paperclip/
+  auth.json                         # paperclip JWT (from `paperclip login`)
+  config.yaml                       # API base + prefs (one per machine)
+  watchdog-config.yaml              # generated by bootstrap-watchdog.sh
+  host-plugins.yaml                 # plugin_id mapping (host-wide registry)
+  instances/<name>/                 # paperclip-server data (untouched)
+  projects/<key>/
+    bindings.yaml                   # company_id + agents{name → uuid}
+    paths.yaml                      # absolute local paths
+    plugins.yaml                    # references to host-plugins.yaml entries
+    watchdog-thresholds.yaml        # optional per-project threshold overrides
+    AGENTS.md                       # rendered for operator's own CLI sessions (operator convenience)
+```
+
+Examples:
+
+```yaml
+# ~/.paperclip/projects/ios-wallet/bindings.yaml
+# generated by bootstrap-project.sh, idempotent
+schemaVersion: 2
+company_id: 7f3a...
+agents:
+  iOSCTO: a2c1...
+  SwiftEngineer1: b4d3...
+  SwiftEngineer2: c8e2...
+  iOSReviewer: d9f4...
+  iOSQA: e0a1...
+```
+
+```yaml
+# ~/.paperclip/projects/ios-wallet/paths.yaml
+# bootstrap prompts initial values; editable
+schemaVersion: 2
+project_root: /Users/me/Code/ios-wallet
+primary_repo_root: /Users/me/Code/ios-wallet
+production_checkout: /Users/Shared/iOS/ios-wallet
+team_workspace_root: /Users/Shared/iOS/runs
+operator_memory_dir: ~/.claude/projects/-Users-me-Code-ios-wallet/memory
+```
+
+```yaml
+# ~/.paperclip/projects/ios-wallet/plugins.yaml  (optional)
+schemaVersion: 2
+telegram:
+  plugin_ref: telegram                # key in ~/.paperclip/host-plugins.yaml
+  chat_id: -1001234567890
+```
+
+### 6.4 Project override seam (preserves existing builder behavior)
+
+The existing builder (`build_project_compat.py:62-99`) implements 4-level fragment fallback. **This is preserved as a first-class v2 feature** — trading and uaudit use it, removing it would break working code.
+
+**Fragment resolution order (highest priority first):**
+1. `paperclips/projects/<key>/fragments/targets/<target>/<fragment>` — project + target-specific
+2. `paperclips/projects/<key>/fragments/<fragment>` — project-level override
+3. `paperclips/fragments/targets/<target>/<fragment>` — shared + target-specific
+4. `paperclips/fragments/shared/fragments/<fragment>` — shared default
+
+When an override applies, builder logs `override applied: <path> (was: <default>)` to stderr (existing behavior preserved).
+
+**`custom_includes` is for per-agent additions; project overrides are for project-wide replacements.** Both coexist; they are not interchangeable.
+
+**Interaction (closes rev2 open Q #5):** when an agent has `custom_includes: [git/commit-and-push.md]` AND the project has `paperclips/projects/<key>/fragments/git/commit-and-push.md` override — the override APPLIES. Reasoning: `custom_includes` declares WHAT to include (the path); fragment override resolves WHERE to read the content from (4-level fallback). They are orthogonal — inclusion list vs. resolution layer. This means project overrides reach per-agent custom includes too, which is the intuitive behavior (project owns its fragment content regardless of who includes it).
+
+### 6.5 Allowed template sources for `{{vars}}` resolution
+
+Builder resolves `{{a.b.c}}` placeholders against this fixed set of sources, in this priority order:
+
+| source | scope | example |
+|---|---|---|
+| `manifest.project.*`, `manifest.domain.*`, `manifest.mcp.*` | committed manifest | `{{project.key}}`, `{{domain.target_name}}` |
+| `bindings.company_id`, `bindings.agents.<name>` | host-local | `{{bindings.company_id}}` |
+| `paths.*` | host-local | `{{paths.project_root}}` |
+| `plugins.<service>.*` | host-local | `{{plugins.telegram.plugin_id}}` |
+
+If a placeholder doesn't resolve to any source, build fails with `unresolved placeholder: {{...}} at <file>:<line>`. No silent fall-through.
+
+This means uaudit's existing `{{project.company_id}}` and `{{report_delivery.telegram_plugin_id}}` references are renamed to `{{bindings.company_id}}` and `{{plugins.telegram.plugin_id}}` during migration. Mechanical rename + grep-verifiable.
+
+### 6.6 Committed AGENTS.md → template; rendered output is gitignored
+
+
+
+- `paperclips/projects/<key>/AGENTS.md.template` — **committed**, contains `{{template.references}}`, no literal paths or UUIDs.
+- `paperclips/dist/<key>/<target>/<AgentName>.md` — **gitignored** (added to `.gitignore`), contains rendered output for the deploy step.
+- `~/.paperclip/projects/<key>/AGENTS.md` — **gitignored**, rendered for operator's own CLI sessions in the project workspace.
+
+`paperclips/projects/<key>/CLAUDE.md` symlink is to the template file (renderable for human reading) OR is removed entirely. Operator-convenience workspace AGENTS.md is generated by `bootstrap-project.sh` step.
+
+### 6.7 Overlays — append-mode third composition mechanism
+
+Verified existing builder behavior (`build_project_compat.py:382-401`, function `apply_overlay`): overlays are **appended to the end** of rendered content (after universal + profile + role + custom_includes), not substituted as fragments. They live at:
+
+```
+paperclips/projects/<key>/overlays/<target>/_common.md       # added to every agent of <target>
+paperclips/projects/<key>/overlays/<target>/<role>.md        # added when role matches (e.g., cto.md)
+paperclips/projects/<key>/overlays/<target>/<agent_name>.md  # added when agent name matches (e.g., UWICTO.md)
+```
+
+Currently used by trading (`overlays/{claude,codex}/_common.md`) and uaudit (`overlays/codex/_common.md` + 6 agent-name overlays for UWICTO/UWACTO/UWISwiftAuditor/UWAKotlinAuditor/UWIInfraEngineer/UWAInfraEngineer).
+
+**Rev3 decision: keep overlays as a first-class mechanism, separate from fragment-override.** They are different operations:
+
+| | Fragment override (§6.4) | Overlay (§6.7) |
+|---|---|---|
+| Operation | Replace | Append |
+| Granularity | Single fragment file | Per-target / per-role / per-agent block |
+| Use case | "We want our project's git-workflow rules instead of shared" | "Add this project-specific anti-pattern at the end of every CTO's bundle" |
+| Resolution | At `<!-- @include -->` expansion time | After all includes resolved |
+
+**`{{template.references}}` apply to overlays too** — `_common.md` etc. can use `{{paths.production_checkout}}`, `{{bindings.company_id}}` per §6.5.
+
+**Migration impact:** trading/uaudit existing overlays are PRESERVED as-is during migration. Their existing `{{project.company_id}}` references rename to `{{bindings.company_id}}` (mechanical sed) per §10.
+
+---
+
+## 7. Versioning (`paperclips/scripts/versions.env`)
+
+Single committed file pinning all toolchain versions. **No floating versions.**
+
+```bash
+# Paperclipai — last canary BEFORE PR #5429 (broke plugin secret-refs).
+# 2026.508.0-canary.0 published 2026-05-08T00:21Z; includes PR #5428
+# (Guard assigned backlog liveness); excludes PR #5429.
+PAPERCLIPAI_VERSION="2026.508.0-canary.0"
+
+# Telegram plugin — fork (not upstream npm), pinned by SHA.
+TELEGRAM_PLUGIN_REPO="https://github.com/ant013/paperclip-plugin-telegram.git"
+TELEGRAM_PLUGIN_REF="c0423e45"
+TELEGRAM_PLUGIN_BUILD_CMD="pnpm install --frozen-lockfile --ignore-scripts && pnpm build"
+
+# pnpm — managed via corepack (built into Node 20+). Pinned exact version.
+PNPM_PROVIDER="corepack"
+PNPM_VERSION="9.15.0"
+
+# Watchdog — built locally from this repo; tracked by repo SHA.
+WATCHDOG_PATH="services/watchdog"
+
+# MCP servers — all pinned exact versions.
+CODEBASE_MEMORY_MCP_VERSION="0.3.1"
+SERENA_VERSION="0.2.5"
+CONTEXT7_MCP_VERSION="0.4.2"               # was: latest
+SEQUENTIAL_THINKING_MCP_VERSION="2026.04.0" # was: latest
+```
+
+**Bumping versions:** edit `versions.env` → run `./paperclips/scripts/update-versions.sh` → re-installs/rebuilds all components in-place. Snapshot of pre-update state goes to `~/.paperclip/journal/<timestamp>-version-bump.json` (per §8.5).
+
+---
+
+## 8. API contract (paperclip endpoints used by scripts)
+
+This section pins exact endpoints and payload shapes against the existing working scripts. Implementation MUST use these; deviations require new spec amendment.
+
+### 8.1 Hire an agent
+
+`POST /api/companies/<company_id>/agent-hires`
+
+Required body fields (verified against `hire-codex-agents.sh`):
+```json
+{
+  "name": "<agent_name>",
+  "role": "<role>",
+  "title": "<title>",
+  "icon": "<emoji or alias>",
+  "reportsTo": "<uuid of supervisor>",
+  "capabilities": "<comma-separated string>",
+  "adapterType": "codex_local | claude_local",
+  "adapterConfig": {
+    "cwd": "<absolute path to workspace_cwd>",
+    "model": "<model id>",
+    "modelReasoningEffort": "<low|medium|high>",
+    "instructionsFilePath": "AGENTS.md",
+    "instructionsEntryFile": "AGENTS.md",
+    "instructionsBundleMode": "managed",
+    "maxTurnsPerRun": 200,
+    "timeoutSec": 0,
+    "graceSec": 15,
+    "dangerouslyBypassApprovalsAndSandbox": true,
+    "env": {
+      "CODEX_HOME": "<codex_home_path>",
+      "PATH": "<augmented PATH>"
+    }
+  },
+  "runtimeConfig": {
+    "heartbeat": {
+      "enabled": false,
+      "intervalSec": 14400,
+      "wakeOnDemand": true,
+      "maxConcurrentRuns": 1,
+      "cooldownSec": 10
+    }
+  },
+  "budgetMonthlyCents": 0,
+  "sourceIssueId": "<bootstrap source issue uuid>"
+}
+```
+
+Response: `{agent: {id, ...}}` — id saved to `~/.paperclip/projects/<key>/bindings.yaml`.
+
+### 8.2 Deploy instruction bundle
+
+`PUT /api/agents/<agent_id>/instructions-bundle/file`
+
+Body:
+```json
+{
+  "path": "AGENTS.md",
+  "content": "<full markdown of rendered AGENTS.md>"
+}
+```
+
+Headers:
+```
+Authorization: Bearer <api_key>
+Content-Type: application/json
+```
+
+Returns HTTP 200 on success. Verified against `deploy_project_agents.py:208-225`.
+
+### 8.3 Probe agent configuration
+
+`GET /api/agents/<agent_id>/configuration`
+
+Used by `bootstrap-project.sh` to verify agent exists and read `adapterType` for routing decisions. Verified against `deploy_project_agents.py:195-208`.
+
+### 8.4 Plugin configuration
+
+`POST /api/plugins/<plugin_id>/config`
+
+Body: full config object (replace mode — no PATCH semantics; reading current config first via `GET /api/plugins/<plugin_id>` is required to avoid clobbering).
+
+Per memory `reference_paperclip_plugin_config_endpoint`: probe POST without prior GET wiped live config in 2026-05-12 incident.
+
+Bootstrap implementation:
+```
+config = GET /api/plugins/<id>
+config.merge_in(new_chat_id, new_routes)
+POST /api/plugins/<id>/config with merged
+```
+
+### 8.5 Mutation safety / rollback journal
+
+Before any operation that mutates paperclip state across multiple agents (deploy, plugin reconfig, version bump), the script:
+
+1. Snapshots current state to `~/.paperclip/journal/<timestamp>-<op>.json`:
+   - For deploy: `GET /api/agents/<id>/configuration` for each agent + current AGENTS.md content (via `GET /api/agents/<id>/instructions-bundle/file` if available, or local `paperclips/dist/<key>/<target>/<Agent>.md` if previously deployed)
+   - For plugin reconfig: `GET /api/plugins/<id>`
+   - For version bump: `paperclip --version`, plugin git SHA, `npm ls -g`
+2. Performs mutation.
+3. On any non-2xx or schema-validation failure, prints rollback hint: `rollback.sh <journal-id>`.
+
+`rollback.sh <journal-id>` reads journal, replays inverse mutations:
+- Re-PUTs old AGENTS.md content for each agent
+- POSTs old plugin config
+- For version bump: documents the steps but does NOT auto-rollback npm/git state (operator decision).
+
+### 8.6 Canary deploy mode (optional, 2-stage)
+
+`bootstrap-project.sh <key> --canary` deploys in two stages before fan-out, addressing the rev2 review concern that a CTO-only canary self-blocks (a broken CTO can't echo, can't handoff — false-negative or timeout-with-unclear-cause).
+
+**Stage 1 — read-only canary** (proves: AGENTS.md loads, agent wakes, MCP servers visible):
+- Deploy to first `writer` or `research` agent in manifest. If neither exists, deploy to first `qa` agent (still safer than CTO — qa is a leaf, can't break orchestration).
+- Run `smoke-test.sh <key> --canary-stage=1`: posts a "list available tools" issue to that agent, expects MCP namespace list reply within 90s.
+- On failure: stop, journal-rollback, surface error.
+
+**Stage 2 — orchestration canary** (proves: handoff works):
+- Deploy to first `cto` agent.
+- Run `smoke-test.sh <key> --canary-stage=2`: end-to-end handoff test (CTO echoes + reassigns to first implementer; implementer echoes back).
+- On failure: stop, journal-rollback (now 2 agents already deployed; journal restores both).
+
+**Stage 3 — fan-out:** deploy remaining agents in topological order (per §9.2 step 4). Failure here doesn't auto-rollback (most agents already on new prompt); operator decides.
+
+Default mode (no `--canary`) is fan-out only — CI/sandbox use, where rollback cost is low.
+
+---
+
+## 9. Operator scripts
+
+### 9.1 `install-paperclip.sh` — host-wide setup, **once per machine**
+
+Idempotent. Steps:
+
+0. **Pre-flight:** Node 20+, gh CLI, python 3.12+, uv, git. `corepack enable && corepack prepare pnpm@$PNPM_VERSION --activate`.
+1. **Auth checks:** `gh auth status` (prompt `gh auth login` if missing); `~/.codex/auth.json` (prompt `codex auth`); `~/.claude/auth.json` or `ANTHROPIC_API_KEY`; SSH key for palace.ops (optional).
+2. **Install paperclipai pinned:** `npm install -g paperclipai@$PAPERCLIPAI_VERSION`. Skip if already at version.
+3. **First-run paperclip:** `paperclip login` (interactive) → `~/.paperclip/auth.json`.
+4. **Disable heartbeat:** patch `~/.paperclip/instances/default/config.json` → `heartbeat.enabled = false`. Verify by inspecting effective config.
+5. **Telegram plugin (fork, pinned):**
+   - `git clone $TELEGRAM_PLUGIN_REPO $HOME/.paperclip/plugins-src/paperclip-plugin-telegram` (skip if exists)
+   - `git fetch && git checkout $TELEGRAM_PLUGIN_REF`
+   - `pnpm install --frozen-lockfile --ignore-scripts && pnpm build`
+   - Idempotent register: `GET /api/plugins` → if `paperclip-plugin-telegram` not present, `POST /api/plugins/install {path: "<plugin-src>"}` → save `plugin_id` to `~/.paperclip/host-plugins.yaml`
+6. **Core MCP servers:** `npm install -g` for `codebase-memory-mcp@$CODEBASE_MEMORY_MCP_VERSION`, `serena@$SERENA_VERSION`, `context7@$CONTEXT7_MCP_VERSION`, `sequential-thinking@$SEQUENTIAL_THINKING_MCP_VERSION`.
+7. **MCP registration in claude/codex configs:** merge minimal stanzas into `~/.codex/config.toml` and `~/.claude/settings.json` (jq/yq merge, no overwrite of operator's existing entries).
+8. **Watchdog code preparation only (NO service install yet):**
+   ```bash
+   cd services/watchdog
+   uv sync --all-extras
+   # Verify CLI works
+   uv run python -m gimle_watchdog --help
+   ```
+   **Service install (launchd plist) is deferred** — happens via `bootstrap-watchdog.sh` AFTER first project bootstrap, because `gimle_watchdog install` requires non-empty `companies` in config (verified — see §1.3 constraint).
+9. **Verification:** `curl /api/agents/me` returns 200 with operator email.
+
+Output: «Ready. Run `bootstrap-project.sh <project-key>`. Watchdog will be installed after first project bootstrap.»
+
+**Security notes:**
+- pnpm runs with `--ignore-scripts` to prevent install-script execution from telegram plugin dependencies. If the plugin needs native rebuilds (rare for pure-TS plugins), operator runs `pnpm rebuild <pkg>` explicitly.
+- Trust boundary: operator owns the fork (`ant013/paperclip-plugin-telegram`); supply chain risk = operator merging malicious code into own fork. No additional sandboxing in v1; revisit if community-contributed plugins are added.
+
+### 9.2 `bootstrap-project.sh <project-key>` — per-project, **interactive by default**
+
+```bash
+./paperclips/scripts/bootstrap-project.sh ios-wallet
+./paperclips/scripts/bootstrap-project.sh ios-wallet --config bootstrap-input.yaml
+./paperclips/scripts/bootstrap-project.sh gimle --reuse-bindings <existing-uuids.yaml>
+./paperclips/scripts/bootstrap-project.sh ios-wallet --canary
+```
+
+**Interactive prompts** (with sensible defaults shown):
+- Repo URL
+- Local clone path (default: `/Users/Shared/iOS/<key>` on macOS)
+- Team workspace root (default: `/Users/Shared/iOS/runs`)
+- Integration branch (default from manifest)
+- Telegram enabled? Y/N → if Y, chat_id
+- Plugin to use (auto-detect if only one telegram-plugin instance)
+
+**Steps (all idempotent, journal-snapshotted):**
+1. Read committed manifest at `paperclips/projects/<key>/paperclip-agent-assembly.yaml`. Validate via `validate-manifest.sh`.
+2. **Snapshot pre-state** to `~/.paperclip/journal/<timestamp>-bootstrap-<key>.json`.
+3. If `~/.paperclip/projects/<key>/bindings.yaml` exists with company_id → reuse; else `POST /api/companies` → save company_id.
+4. **Topological hire ordering.** Build a dependency graph from `reportsTo` (each agent's `reportsTo` field, if present, must reference another agent in the same manifest by `agent_name`). Hire in topological order: roots (no `reportsTo`, typically CTO/CEO) first; subordinates after their supervisors are hired and have UUIDs in bindings. Cycle detection: if cycle found, fail with `reportsTo cycle: a → b → ... → a`. For each agent in topological order:
+   - if uuid already in bindings → reuse; verify via `GET /api/agents/<id>/configuration` (404 → re-hire)
+   - else `POST /api/companies/<id>/agent-hires` with full payload (per §8.1):
+     - `adapterConfig.cwd` = `<paths.team_workspace_root>/<agent_name>/workspace` (computed from paths.yaml)
+     - `reportsTo` = uuid resolved from bindings (just-hired or pre-existing)
+     - `runtimeConfig.heartbeat.enabled` = `false` (matches `install-paperclip.sh` step 4)
+     - `sourceIssueId` from manifest or auto-generated bootstrap issue
+   - save uuid to bindings.yaml IMMEDIATELY (so subordinates can resolve `reportsTo`)
+   - removed agents (in bindings, not in manifest) trigger warning; operator runs `--prune` to delete.
+5. Configure telegram plugin (if enabled): `GET /api/plugins/<id>` → merge new chat routes → `POST /api/plugins/<id>/config` (per §8.4).
+6. Write/update `~/.paperclip/projects/<key>/{bindings,paths,plugins}.yaml`.
+7. Build: `./paperclips/build.sh --project <key> --target <each>`.
+8. Deploy per-agent AGENTS.md: `PUT /api/agents/<id>/instructions-bundle/file` per agent (per §8.2). If `--canary`, deploy first agent only, run `smoke-test.sh <key> --quick`, then proceed.
+9. Set up workspaces: `mkdir -p $team_workspace_root/<AgentName>/workspace && cp <rendered AGENTS.md> → workspace/AGENTS.md`.
+10. Render operator-convenience `~/.paperclip/projects/<key>/AGENTS.md` from template.
+11. Trigger MCP indexing for project's `codebase_memory_projects.primary` (via `mcp__codebase-memory__index_repository`). Wait for completion (or timeout with warning).
+12. Deploy codex subagents (if any in `paperclips/projects/<key>/codex-agents/*.toml`) → `~/.codex/projects/<key>/agents/`.
+13. Call `bootstrap-watchdog.sh <key>` (per §9.4).
+
+### 9.3 `smoke-test.sh <project-key>` — verify alive
+
+7-stage check:
+1. Paperclip API reachable + JWT valid.
+2. Company exists; all manifest agents present in API; each agent's deployed AGENTS.md SHA matches local build SHA.
+3. Workspaces exist + AGENTS.md deployed (SHA matches).
+4. Watchdog sees this company (recent tick in `watchdog.log`).
+5. **Per-agent MCP availability:** post test issue per agent ("list available tools"); verify reply within 90s; verify expected MCP namespaces present.
+6. **Telegram plugin** (if enabled): `POST /api/plugins/<id>/action {action: "send_message", text: "smoke-test <key>"}` → verify delivery via Telegram API or message_id return.
+7. **End-to-end handoff:** create test issue assigned to first CTO; expect echo response + handoff to first implementer; cleanup.
+
+`--quick` flag skips heavy stages 5 + 7 (used by canary deploy in §8.6).
+
+Failure mode: stops at first failure with diagnostic + suggestion.
+
+### 9.4 `bootstrap-watchdog.sh <project-key>` — config-first watchdog install
+
+**Why separate from `install-paperclip.sh`:** `gimle_watchdog install` calls `load_config(~/.paperclip/watchdog-config.yaml)` which requires non-empty `companies` list (verified `config.py:227` + tests). On a clean machine, watchdog cannot be installed before any project exists.
+
+**Behavior (idempotent, called from `bootstrap-project.sh` step 13):**
+
+```
+bootstrap-watchdog.sh <project-key>
+  │
+  ├─ Read ~/.paperclip/projects/<key>/bindings.yaml → company_id
+  ├─ Read paperclips/projects/<key>/paperclip-agent-assembly.yaml → project.display_name
+  ├─ Read ~/.paperclip/config.yaml → paperclip base_url, api_key_source
+  ├─ Read optional ~/.paperclip/projects/<key>/watchdog-thresholds.yaml for per-project tunables
+  │
+  ├─ IF ~/.paperclip/watchdog-config.yaml does NOT exist:
+  │    Create from paperclips/templates/watchdog-config.yaml.template:
+  │      - version: 1
+  │      - paperclip block from ~/.paperclip/config.yaml
+  │      - companies: [<this project as first entry>]
+  │      - daemon, cooldowns, logging, escalation, handoff: defaults from template
+  │
+  ├─ IF file exists AND company_id NOT in companies[*].id:
+  │    Append company block (with thresholds from watchdog-thresholds.yaml if present, else defaults)
+  │
+  ├─ IF file exists AND company_id IS in companies[*].id:
+  │    No-op (idempotent reuse)
+  │
+  ├─ IF launchd plist (~/Library/LaunchAgents/work.ant013.gimle-watchdog.plist) does NOT exist:
+  │    cd services/watchdog
+  │    uv run python -m gimle_watchdog install
+  │    (load_config now passes — companies is non-empty)
+  │
+  └─ IF launchd already installed:
+       launchctl kickstart gid/<uid>/work.ant013.gimle-watchdog
+       (re-reads new config without restart loop)
+```
+
+**Templates committed in `paperclips/templates/`:**
+- `watchdog-config.yaml.template` — full default config with `companies: []` placeholder
+- `watchdog-company-block.yaml.template` — single company block with threshold defaults
+
+**Full template structure** (matches `services/watchdog/src/gimle_watchdog/config.py` schema, verified via `load_config` + `tests/test_config.py`):
+
+```yaml
+version: 1
+paperclip:
+  base_url: "{{ host.paperclip.base_url }}"
+  api_key_source: "{{ host.paperclip.api_key_source }}"   # e.g. "env:PAPERCLIP_API_KEY" or "inline:..."
+companies: []   # populated by bootstrap-watchdog.sh; each entry = {id, name, thresholds}
+daemon:
+  poll_interval_seconds: 120
+  recovery_enabled: true
+  recovery_first_run_baseline_only: false   # set true on very first run to avoid waking long-stale issues
+  max_actions_per_tick: 3
+cooldowns:
+  per_issue_seconds: 300
+  per_agent_cap: 3
+  per_agent_window_seconds: 900
+logging:
+  path: ~/.paperclip/watchdog.log
+  level: INFO
+  rotate_max_bytes: 10485760
+  rotate_backup_count: 5
+escalation:
+  post_comment_on_issue: true
+  comment_marker: "<!-- watchdog-escalation -->"
+handoff:
+  handoff_alert_enabled: true
+  handoff_alert_cooldown_min: 30
+  handoff_recent_window_min: 240
+  handoff_alert_soft_budget_per_tick: 7
+  handoff_alert_hard_budget_per_tick: 11
+```
+
+Per-company appended block:
+```yaml
+- id: "{{ bindings.company_id }}"
+  name: "{{ project.display_name }}"
+  thresholds:
+    died_min: 3
+    hang_etime_min: 60
+    hang_cpu_max_s: null
+    idle_cpu_ratio_max: 0.005
+    hang_stream_idle_max_s: 300
+    recover_max_age_min: 180
+```
+
+**Per-project threshold overrides (`~/.paperclip/projects/<key>/watchdog-thresholds.yaml`, optional):**
+```yaml
+schemaVersion: 2
+died_min: 5
+hang_etime_min: 90
+idle_cpu_ratio_max: 0.005
+hang_stream_idle_max_s: 300
+recover_max_age_min: 180
+```
+
+**Removal:** `bootstrap-watchdog.sh <key> --remove` removes the project's company block. If `companies:` becomes empty, leaves config in invalid state (next watchdog tick will log error); operator decides whether to `gimle_watchdog uninstall` or add another project.
+
+### 9.5 Other scripts
+
+- `update-versions.sh` — re-runs install-paperclip.sh steps that depend on `versions.env`, journals pre/post state.
+- `validate-manifest.sh <key>` — runs §6.2 forbidden-content checks + schema validation. CI gate (§12A).
+- `rollback.sh <journal-id>` — replays inverse mutations from journal (§8.5).
+- `migrate-bindings.sh <key>` — extracts UUIDs from legacy sources (`codex-agent-ids.env`, paperclip company storage) → writes new `bindings.yaml`. Used in §10 migration.
+
+---
+
+## 10. Migration plan (dual-read period, no timer)
+
+### 10.1 Dual-read principle
+
+For each migration phase, both legacy and new state sources are read simultaneously. Cleanup happens only when **all** of these conditions are met (the cleanup gate):
+
+- All projects (gimle, trading, uaudit) successfully migrated to new schema.
+- All deploy scripts updated to read from `~/.paperclip/projects/<key>/bindings.yaml` (not legacy `codex-agent-ids.env`).
+- Watchdog detection confirmed reading from new bindings (verify via tick log).
+- **Stability metric (concrete, watchdog-log-derivable):** for 7 consecutive days across all migrated companies:
+  - Zero `handoff_alert_posted` events in `~/.paperclip/watchdog.log`
+  - Zero `wake_failed` events in recovery pass
+  - Zero `escalation` events of `reason=per_agent_cap`
+  - Zero non-2xx responses logged from `PUT /api/agents/<id>/instructions-bundle/file` re-deploys
+  Verifier: `gimle-watchdog tail -n 50000 | jq -c 'select(.event | IN(...))' | wc -l == 0` per day, 7 days running.
+- Operator (QA) signoff documented in BUGS.md or migration log.
+
+No 24h timer; gate is condition-based.
+
+### 10.1.1 Role-split (Phase A.1 — hybrid hold-and-grow)
+
+Existing `paperclips/roles/*.md` and `paperclips/roles-codex/cx-*.md` files mix three things in one file: craft (Python tooling, MCP knowledge, Swift conventions, ...), capability (phase-orchestration in cto.md, APPROVE-format in code-reviewer.md, ...), and project anti-patterns. They cannot be plugged into the new profile system as-is — including `roles/cto.md` already gives an agent phase-orchestration regardless of which profile is selected.
+
+**Hybrid decomposition (rev3 chosen approach):**
+
+1. **Create new craft files alongside existing ones:**
+   - `paperclips/roles/cto.md` (174 lines, mixed) → `paperclips/roles/legacy/cto.md` (deprecated, kept temporarily) + new `paperclips/roles/cto.md` (slim ~50 lines, craft only — identity, area, MCP, anti-patterns)
+   - Same pattern for `code-reviewer.md` (167 lines), `python-engineer.md`, etc.
+   - Capability content moved into `paperclips/fragments/shared/fragments/<category>/*.md` per §4.1.
+2. **Old role files get a deprecation banner:**
+   ```
+   > DEPRECATED — replaced by new craft `paperclips/roles/cto.md` + `profile: cto`.
+   > Will be removed at cleanup gate (§10.5). Do not include in new manifests.
+   ```
+3. **Migration order is opt-in per project:**
+   - New projects (e.g., ios-wallet) use new craft files from day 1.
+   - trading + uaudit migrate to new craft files in their respective phases (§10.2, §10.3).
+   - gimle migrates last (§10.4) — biggest blast radius.
+4. **Validator gate:** during dual-read period, `validate-manifest.sh` warns (not errors) if `role_source: roles/legacy/...`. After cleanup gate, becomes error.
+
+**Rationale:** Mechanical auto-split is risky (could split capability under wrong profile heading); per-project manual split spreads risk across phases; new projects pay zero migration cost.
+
+### 10.2 trading migration (smallest, first)
+
+1. `migrate-bindings.sh trading` — extracts 5 agent_ids from current manifest → `~/.paperclip/projects/trading/bindings.yaml`.
+2. Move `/Users/Shared/Trading/...` paths from manifest → `~/.paperclip/projects/trading/paths.yaml`.
+3. Strip UUIDs and absolute paths from manifest; replace with `{{template.references}}` per §6.5.
+4. Re-render with new fragment slots: `./paperclips/build.sh --project trading --target claude --target codex`.
+5. **Snapshot + canary deploy:** `bootstrap-project.sh trading --reuse-bindings ~/.paperclip/projects/trading/bindings.yaml --canary` — deploys CTO first, smoke-tests, then fans out.
+6. Smoke: `smoke-test.sh trading`.
+7. Document migration outcome.
+
+### 10.3 uaudit migration (codex-only, plugins)
+
+1. `migrate-bindings.sh uaudit` — 17 agent_ids + telegram_plugin_id from current manifest → `bindings.yaml` + `plugins.yaml`.
+2. Move host paths → `paths.yaml`.
+3. Rename overlay placeholders: `{{project.company_id}}` → `{{bindings.company_id}}`; `{{report_delivery.telegram_plugin_id}}` → `{{plugins.telegram.plugin_id}}` (mechanical sed).
+4. Strip UUIDs/paths from manifest.
+5. Codex subagents deploy step: copy `paperclips/projects/uaudit/codex-agents/*.toml` → `~/.codex/projects/uaudit/agents/`.
+6. Re-render + canary deploy + smoke.
+
+### 10.4 gimle migration (largest, soft-migrate)
+
+Pre-flight: pause all 24 gimle agents (12 claude team + 12 codex team — both teams share company `9d8f432c-...`). Pause via paperclip UI or scripted PATCH each. 5–15 min downtime expected (longer than 12-agent estimate due to dual-team coordination).
+
+1. `migrate-bindings.sh gimle` — reads `paperclips/codex-agent-ids.env` (12 codex UUIDs) + paperclip company storage (12 claude UUIDs via `GET /api/companies/9d8f432c-.../agents`) → `~/.paperclip/projects/gimle/bindings.yaml`. **No API recreate.** Source UUIDs preserved.
+2. Move host paths from manifest → `~/.paperclip/projects/gimle/paths.yaml`.
+3. Fill `agents:` list in manifest (24 entries: 12 claude + 12 codex) per new schema. Remove `legacy_output_paths: true`. Remove all hardcoded paths.
+4. Decompose root `CLAUDE.md`:
+   - Project rules (branch flow, deploy procedures) → `paperclips/projects/gimle/AGENTS.md.template`.
+   - palace-mcp/extractor docs → `services/palace-mcp/README.md` + `docs/palace-mcp/extractors.md`.
+   - Iron rules → standard fragments + `docs/contributing/branch-flow.md` for human readers.
+5. Re-render: `./paperclips/build.sh --project gimle --target claude --target codex`.
+6. **Canary deploy + smoke** per agent: `bootstrap-project.sh gimle --reuse-bindings ... --canary`.
+7. Refresh workspace AGENTS.md: handled by bootstrap step 9.
+8. Unpause + final smoke.
+9. Wait for cleanup gate (§10.1).
+
+### 10.5 Cleanup (gated)
+
+Only after the cleanup gate passes:
+- Remove `paperclips/codex-agent-ids.env`, `paperclips/deploy-agents.sh`, `paperclips/deploy-codex-agents.sh`, `paperclips/update-agent-workspaces.sh`, `paperclips/hire-codex-agents.sh`.
+- Rewrite `paperclips/scripts/imac-agents-deploy.sh` as thin wrapper around new `bootstrap-project.sh ... --reuse-bindings`.
+- Delete dual-read code paths from builder + scripts.
+
+---
+
+## 11. Out-of-scope (future work)
+
+- **AGENTS.md split (v2):** universal layer externalized to workspace AGENTS.md auto-loaded by claude/codex; per-agent prompt deployed separately. Requires either paperclip API addition (multi-bundle) or workspace-merge mechanism. Promising direction but requires upstream cooperation.
+- **Unifying `paperclips/roles/` and `paperclips/roles-codex/`** into one set with `target:` declared at composition time. Currently kept separate for safety; mechanical follow-up.
+- **Per-platform agent variants** (uaudit's `platform: ios|android|all`) — verified existing builder behavior (`build_project_compat.py:512`): the `platform` field is passed into `template_values` as `agent.platform` and is available as `{{agent.platform}}` to fragments and overlays. No fragment in current shared library actually consumes it; uaudit overlays may. **v1 preserves this opaque-passthrough**: `platform` continues to flow into template_values, builder does not validate values, no profile-level semantics. Future v2 may introduce platform-conditional includes if a real consumer emerges.
+- **Watchdog reading manifest directly** for role taxonomy (currently hardcoded in `role_taxonomy.py`). Cross-reference once both are stable.
+- **GitHub MCP server** as a first-class MCP (currently agents use `gh CLI` keyring). Bootstrap handles registration when this lands.
+- **Multi-instance paperclip on one machine** (operator runs separate instances per company). Out of scope; current design assumes one paperclip-instance per machine.
+- **Community plugin sandboxing** — once plugins beyond own-fork are introduced, revisit pnpm sandbox / Docker-based plugin builds.
+- **schemaVersion bump tooling** — automatic migrator from schema v1 to v2 manifests. Manual rename in v2 (small file count); automate when v3+ comes.
+
+---
+
+## 12. Acceptance criteria
+
+Split by execution context.
+
+### 12.A Offline CI (no external services)
+
+Each is a CI-runnable check in this repo's test suite.
+
+- [ ] `wc -l paperclips/dist/<key>/<target>/*.md` for all projects → median ≤ 350 lines, max ≤ 450 lines (revised from rev1 numbers per §3.2 inlining cost).
+- [ ] `git grep -lE "/Users/Shared|/Users/ant013|/Users/anton|/home/|/private/|/var/|/opt/" paperclips/projects/` → empty.
+- [ ] `git grep -lE "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}" paperclips/projects/` → empty.
+- [ ] `git grep -lE "company_id|agent_id|telegram_plugin_id|bot_token|chat_id" paperclips/projects/` → only matches inside `{{template.references}}` (not as bare keys).
+- [ ] `validate-manifest.sh <key>` passes for all projects.
+- [ ] **Build determinism:** `build.sh --project trading --target codex` run twice with same inputs → byte-identical SHA for all rendered outputs.
+- [ ] **Unresolved placeholders rejected:** synthetic broken manifest with `{{nonexistent.var}}` → builder exits non-zero with clear error.
+- [ ] **Profile boundary tests:**
+  - `assert "release-cut" not in built[implementer]` — implementer never sees release-cut content.
+  - `assert "phase-orchestration" not in built[reviewer]` — reviewer doesn't see phase choreography.
+  - `assert "git/commit-and-push" not in built[research]` — research never sees commit instructions.
+  - `assert universal in built[all_profiles_except_custom]` — universal layer present per §3.2.
+- [ ] **Override precedence test:** synthetic project with `paperclips/projects/test/fragments/git/commit-and-push.md` → builder uses project version, logs `override applied`.
+
+### 12.B Mock integration (synthetic paperclip API)
+
+Run against a stub paperclip server in CI (httpx mock or similar).
+
+- [ ] `bootstrap-project.sh test-fixture` against mock API completes without error; produces expected bindings.yaml/paths.yaml.
+- [ ] Idempotent re-run of `bootstrap-project.sh test-fixture` → no duplicate API calls; existing UUIDs reused.
+- [ ] `--canary` path: deploys 1 agent, runs (mocked) smoke, then fans out.
+- [ ] Mutation journal: every multi-agent operation produces journal file with snapshot.
+- [ ] `rollback.sh <journal-id>` replays inverse mutations.
+
+### 12.C Operator live smoke (requires real paperclip + macOS host)
+
+**Runtime probe-questions per profile-family.** Smoke-test posts these questions as test issues to one agent per profile in each migrated project; agent reply must contain expected markers. This validates the profile boundaries actually work at runtime, not just at deploy time.
+
+| Probe | Asked to | Expected markers in reply | Forbidden in reply |
+|---|---|---|---|
+| `mcp_list` — "List MCP namespaces you can call. Reply with comma-separated names." | every profile | `codebase-memory`, `serena`, `context7`, `github`, `sequential-thinking` (+ project-specific from manifest's `mcp.base_required` and `palace.*` for gimle) | (none) |
+| `git_capability` — "What git operations CAN you do? CANNOT? Be precise." | implementer | CAN: `commit`, `push`, `fetch`, `--force-with-lease` | `merge`, `release-cut` |
+| `git_capability` | reviewer | CAN: read, `gh pr review --approve`, mergeStateStatus decode | `commit`, `push`, `release-cut` |
+| `git_capability` | cto | CAN: all reviewer + `release-cut`, merge to integration_branch | (none) |
+| `git_capability` | writer / research | CANNOT: commit, push, merge | `commit`, `push`, `merge` |
+| `handoff_procedure` — "Describe step-by-step your handoff to next agent." | every profile except custom | `PATCH /api/issues/<id>` with `assigneeAgentId`; `POST /api/issues/<id>/comments` with `@mention` (trailing space); STOP | (none) |
+| `phase_orchestration` — "List phase numbers you orchestrate, comma-separated." | cto | `1.1`, `1.2`, `2`, `3.1`, `3.2`, `4.1`, `4.2` | (none) |
+| `phase_orchestration` | every non-cto | "I do not orchestrate phases" or empty | any phase number |
+
+**Cross-target handoff** (mixed-team projects only): smoke posts test issue to `target: claude` CTO with body "Reassign to first `target: codex` agent in your team and ask them to echo 'cross-target ack' back". Successful round-trip in <120s required.
+
+Probe-question library + expected-marker matchers are committed in `paperclips/scripts/lib/_smoke_probes.sh`. Smoke-test invokes them via stage 5 (mcp/skills/git/handoff probes per profile) and stage 7 (e2e handoff incl. cross-target).
+
+**Original §12.C deployment-side checks remain (below).**
+
+
+Run by operator on real iMac/Mac with full toolchain.
+
+- [ ] On a clean macOS (no paperclip, no `~/.paperclip/`), running `install-paperclip.sh` + `bootstrap-project.sh trading` produces a green smoke-test in <15 min.
+- [ ] Adding a new project (`bootstrap-project.sh ios-wallet` from clean state) → green smoke in <5 min.
+- [ ] **gimle migration safety:** `migrate-bindings.sh gimle` preserves all 24 UUIDs (verified by `diff before.json after.json` → no removed keys); all in-progress issues remain visible after migration.
+- [ ] Watchdog tick in `~/.paperclip/watchdog.log` includes all migrated companies after `bootstrap-watchdog.sh` runs.
+- [ ] Handoff alert detection (Phase 3) still fires on simulated `comment_only_handoff`.
+- [ ] Telegram plugin: `smoke-test.sh <key>` step 6 delivers a real message to operator's Board chat.
+
+---
+
+## 13. Open questions
+
+1. **AGENTS.md split (v2 direction):** when is the right time to revisit? Triggers: paperclip API gains multi-bundle support, OR universal layer grows to >150 lines (when inlining cost becomes painful).
+2. **paperclipai version drift:** when paperclipai upstream fixes PAP-2394 (plugin secret-refs), do we bump `PAPERCLIPAI_VERSION` automatically or require explicit operator approval? Current design: explicit (versions.env edit + `update-versions.sh`).
+3. **Watchdog role-taxonomy sync:** should `services/watchdog/src/gimle_watchdog/role_taxonomy.py` read from project manifests directly, or stay hardcoded with manual sync? Current design: stay hardcoded; agree boundaries via convention.
+4. **Multi-machine team:** if two operators each run paperclip-instance for the same project, agents from machine A don't see agents from machine B. Out of scope; design optimizes for solo-operator-multi-project.
+5. ~~Override scope expansion~~ — **closed in §6.4** (rev3): override applies on resolution layer, custom_includes operates on inclusion list; they're orthogonal and project overrides reach per-agent custom includes too.
+6. **MCP indexing prereqs:** `bootstrap-project.sh` step 11 triggers indexing but doesn't fail bootstrap on indexing timeout. Should it block, or warn-and-continue? Current design: warn-and-continue with explicit operator notice; smoke test stage 5 will fail if indexing didn't complete.
+7. **Role-split mechanics (rev3 new):** §10.1.1 chose hybrid approach (new craft files alongside legacy with deprecation banner). Open: does the operator want a *helper* for splitting (e.g., a script that scans `roles/cto.md`, finds phase-orchestration content via heuristics, suggests split lines) — or is fully manual rewrite preferred? Trade-off: helper saves time but may suggest wrong cut lines on subtle content. Current design: manual rewrite per role, one PR per role-family.
+
+---
+
+## 14. Implementation phasing (rough sketch — finalized in `writing-plans`)
+
+**Note (rev3):** Day estimates are RANGES, not commitments. They illustrate relative phase weight, not project plan precision. Real timing is finalized in TDD task breakdown via `writing-plans`. Per rev2 deep-review feedback, prior 15-day total was optimistic.
+
+### 14.1 Execution-ownership constraint (rev3)
+
+This work is partially **self-modifying** — Phases A–D edit the prompts, builder, fragments, and runtime contract that the gimle paperclip team itself runs on. Self-execution by gimle agents creates structural problems:
+
+- **Circularity**: a CodeReviewer reviewing the PR that splits its own role file uses pre-split instructions to evaluate post-split content; deployment lands between waves; same agent's reviews drift mid-PR.
+- **Self-rescue impossibility**: §10.4 requires pausing all 24 gimle agents during the gimle migration — agents cannot pause themselves to migrate themselves.
+- **Known team failure modes** (per operator memory): silent scope reduction in PE deliverables; evidence fabrication on self-modified tooling; subagent best-practice rules without product context. These risks compound when the tooling under change IS the team's own.
+- **Watchdog dependency**: `services/watchdog/src/gimle_watchdog/role_taxonomy.py` hardcodes 22 agent names. Mid-flight role taxonomy drift can suppress recovery alerts on the very migration in progress.
+
+Each phase below carries an **Owner** tag.
+
+| Owner tag | Means |
+|---|---|
+| `operator` | Operator drives execution, possibly via a fresh Claude session. No gimle team runs work, no gimle team review. |
+| `team` | gimle paperclip team executes via standard CTO → CR → PE → QA flow. |
+| `operator + team` | Operator owns critical decisions and final review; team executes mechanical sub-tasks. |
+
+### 14.2 Phases (with owners)
+
+1. **Phase A: fragment library refactor + role-split (Phase A.1).** Rename heartbeat → wake-and-handoff-basics; split git-workflow into 4; split worktree; classify into universal/git/worktree/handoff/code-review/qa/pre-work/plan dirs. Hybrid role-split per §10.1.1. (**3–4 days**, owner: `operator`) — Self-touching: edits shared/fragments + role files that agents read on next wake.
+2. **Phase B: profile library + builder updates.** 8 profile YAMLs; extend builder for `inheritsUniversal`, `extends:`, deduplication (§5.2.1), allowed template sources (§6.5), forbidden-content rejection; preserve existing override precedence (§6.4) and overlay mechanism (§6.7). (**4–5 days**, owner: `operator`) — Builder bug → wrong prompts deployed for ALL agents next deploy.
+3. **Phase C: scripts.** install-paperclip.sh; bootstrap-project.sh (interactive + file-mode + reuse-bindings + 2-stage --canary + topological hire); smoke-test.sh (with `--canary-stage` flags); bootstrap-watchdog.sh; update-versions.sh; validate-manifest.sh; rollback.sh; migrate-bindings.sh. (**6–8 days**, owner: `operator + team`) — Tooling, not directly self-touching. Team may write scripts; operator reviews final cut. Scripts MUST be tested against trading/uaudit (not gimle) during this phase.
+4. **Phase D: dual-read seam in builder + watchdog + scripts.** Read both legacy `codex-agent-ids.env` and new `bindings.yaml`; warn on conflict; preserve legacy `deploy-agents.sh` callsites until cleanup gate. (**2 days**, owner: `operator`) — Affects state resolution for ALL agents during transition.
+5. **Phase E: trading migration** (smallest, fewest in-progress). 2-stage canary deploy. Smoke-test. Overlay placeholder rename. (**1 day**, owner: `team`) — Mechanical, low blast radius if it fails (trading breaks, gimle continues).
+6. **Phase F: uaudit migration** (codex-only, plugins). Includes overlay placeholder rename + codex-agents .toml deploy. (**1–2 days**, owner: `team`) — Same risk profile as Phase E; comes after Phase E proves the mechanics work end-to-end.
+7. **Phase G: gimle migration** (largest, soft-migrate). Pause/unpause window for both teams (24 agents). Decompose root CLAUDE.md. Per-role craft split where not yet done. (**2–3 days**, owner: `operator`, team paused) — Cannot be self-executed: spec requires pausing all 24 agents; only an external actor can drive without the team racing itself.
+8. **Phase H: cleanup gate evaluation + legacy removal.** After cleanup gate (§10.1) — at minimum 7 days stable per metric + operator signoff. (**1 day**, owner: `operator + team`) — Watchdog log analysis (operator) + legacy file removal PR (team can produce, operator approves merge).
+
+### 14.3 Effort distribution
+
+**Total: 19–25 working days**, broken down by owner:
+- `operator` solo: ~13–17 days (Phases A, B, D, G)
+- `team` solo: ~3–5 days (Phases E, F)
+- `operator + team` hybrid: ~6–9 days (Phases C, H)
+
+Operator-only days dominate because the riskiest, most context-heavy work is exactly the self-modifying part. Future similar refactors (post v2) will have less self-modification load and can shift more to team execution.

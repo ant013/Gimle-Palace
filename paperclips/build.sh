@@ -1,16 +1,26 @@
 #!/usr/bin/env bash
-# Expands `<!-- @include fragments/X.md -->` markers in roles/*.md into dist/*.md
+# Build Paperclip agent bundles through the project manifest compatibility renderer.
 # Outputs are committed — visible in PR diffs.
-# Note: named `dist/` (not `build/`) because the project root .gitignore excludes `build/`.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FRAG_DIR="$SCRIPT_DIR/fragments"
-
+PROJECT="gimle"
 TARGET="claude"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    --project)
+      if [ "$#" -lt 2 ]; then
+        echo "ERROR: --project requires a project key" >&2
+        exit 1
+      fi
+      PROJECT="$2"
+      shift 2
+      ;;
+    --project=*)
+      PROJECT="${1#--project=}"
+      shift
+      ;;
     --target)
       if [ "$#" -lt 2 ]; then
         echo "ERROR: --target requires claude or codex" >&2
@@ -29,6 +39,7 @@ Usage:
   ./paperclips/build.sh
   ./paperclips/build.sh --target claude
   ./paperclips/build.sh --target codex
+  ./paperclips/build.sh --project gimle --target codex
 
 Targets:
   claude  Builds paperclips/roles/*.md into paperclips/dist/*.md.
@@ -43,82 +54,7 @@ USAGE
   esac
 done
 
-case "$TARGET" in
-  claude)
-    ROLES_DIR="$SCRIPT_DIR/roles"
-    OUT_DIR="$SCRIPT_DIR/dist"
-    ;;
-  codex)
-    ROLES_DIR="$SCRIPT_DIR/roles-codex"
-    OUT_DIR="$SCRIPT_DIR/dist/codex"
-    ;;
-  *)
-    echo "ERROR: unknown target: $TARGET" >&2
-    exit 1
-    ;;
-esac
-
-if [ ! -d "$ROLES_DIR" ]; then
-  echo "ERROR: roles directory not found for target '$TARGET': $ROLES_DIR" >&2
-  exit 1
-fi
-
-mkdir -p "$OUT_DIR"
-if [ "$TARGET" = "codex" ]; then
-  rm -f "$OUT_DIR"/*.md
-fi
-
-found=0
-for role_file in "$ROLES_DIR"/*.md; do
-  [ -e "$role_file" ] || continue
-  found=1
-  role_name=$(basename "$role_file")
-  out_file="$OUT_DIR/$role_name"
-  awk -v frag_dir="$FRAG_DIR" -v target="$TARGET" '
-    NR == 1 && $0 == "---" {
-      in_front_matter = 1
-      next
-    }
-    in_front_matter {
-      if ($0 == "---") {
-        in_front_matter = 0
-        skip_front_matter_gap = 1
-      }
-      next
-    }
-    skip_front_matter_gap && $0 == "" {
-      skip_front_matter_gap = 0
-      next
-    }
-    {
-      skip_front_matter_gap = 0
-    }
-    /<!-- @include fragments\/.*\.md -->/ {
-      match($0, /fragments\/[^ ]+\.md/)
-      frag = substr($0, RSTART + 10, RLENGTH - 10)
-      path = frag_dir "/" frag
-      target_path = frag_dir "/targets/" target "/" frag
-      if (system("test -f " target_path) == 0) {
-        path = target_path
-      }
-      read_status = getline line < path
-      if (read_status < 0) {
-        print "ERROR: include fragment not readable: " path > "/dev/stderr"
-        close(path)
-        exit 2
-      }
-      if (read_status > 0) print line
-      while ((getline line < path) > 0) print line
-      close(path)
-      next
-    }
-    { print }
-  ' "$role_file" > "$out_file"
-
-  echo "built $out_file"
-done
-
-if [ "$found" -eq 0 ]; then
-  echo "ERROR: no role files found for target '$TARGET' in $ROLES_DIR" >&2
-  exit 1
-fi
+python3 "$SCRIPT_DIR/scripts/build_project_compat.py" \
+  --project "$PROJECT" \
+  --target "$TARGET" \
+  --inventory skip

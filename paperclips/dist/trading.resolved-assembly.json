@@ -1,0 +1,139 @@
+{
+  "capabilities": {
+    "mcp": {
+      "additions": {
+        "byRole": {},
+        "project": []
+      },
+      "baseRequired": [
+        "codebase-memory",
+        "context7",
+        "serena",
+        "github",
+        "sequential-thinking"
+      ],
+      "codebaseMemoryProjects": {
+        "primary": "trading-agents"
+      },
+      "packageName": "trading_agents",
+      "serviceName": "trading",
+      "toolNamespace": "trading"
+    },
+    "skills": {
+      "additions": {
+        "byRole": {},
+        "project": []
+      }
+    },
+    "subagents": {
+      "additions": {
+        "byRole": {},
+        "project": []
+      }
+    }
+  },
+  "compatibility": {
+    "claudeDeployMapping": "",
+    "codexAgentIdsEnv": "",
+    "legacyOutputPaths": "false",
+    "workspaceUpdateScript": ""
+  },
+  "parameters": {
+    "paths": {
+      "codexTeamRoot": "/opt/example/trading/runs",
+      "operatorMemoryDir": "~/.claude/projects/-opt-example-trading/memory",
+      "overlayRoot": "paperclips/projects/trading/overlays",
+      "primaryMcpServiceDir": "/opt/example/trading",
+      "primaryRepoRoot": "/opt/example/trading/repo",
+      "productionCheckout": "/opt/example/trading",
+      "projectRoot": "/opt/example/trading",
+      "projectRulesFile": "AGENTS.md"
+    },
+    "project": {
+      "companyId": "00000000-0000-0000-0000-000000000002",
+      "displayName": "Trading",
+      "integrationBranch": "main",
+      "issuePrefix": "TRD",
+      "key": "trading",
+      "systemName": "Trading"
+    }
+  },
+  "project": "trading",
+  "schemaVersion": 1,
+  "sourceManifest": "paperclips/projects/trading/paperclip-agent-assembly.yaml",
+  "sourceManifestSha256": "b70e4f6427dca1b6e084bb10767884877db8c4acea29f9792d88d290bb4357bf",
+  "targets": {
+    "codex": {
+      "adapterType": "codex_local",
+      "deployMode": "api",
+      "instructionEntryFile": "AGENTS.md",
+      "instructionsBundleMode": "managed",
+      "roles": [
+        {
+          "agentId": "",
+          "agentName": "CEO",
+          "bytes": 24142,
+          "family": "cto",
+          "lines": 530,
+          "output": "paperclips/dist/trading/codex/CEO.md",
+          "platform": "",
+          "profiles": [
+            "cto"
+          ],
+          "roleId": "codex:cx-cto",
+          "sha256": "def476ae536f7f9a70890ba7df624ef6d8c4026872d9a3c1c95264b3e1087243",
+          "source": "paperclips/roles-codex/cx-cto.md",
+          "workspaceCwd": ""
+        },
+        {
+          "agentId": "",
+          "agentName": "CodeReviewer",
+          "bytes": 19927,
+          "family": "reviewer",
+          "lines": 435,
+          "output": "paperclips/dist/trading/codex/CodeReviewer.md",
+          "platform": "",
+          "profiles": [
+            "reviewer"
+          ],
+          "roleId": "codex:cx-code-reviewer",
+          "sha256": "f7442bc52a943577d9d046dfae57692dbdeba3aa0be081dec5515e481335045a",
+          "source": "paperclips/roles-codex/cx-code-reviewer.md",
+          "workspaceCwd": ""
+        },
+        {
+          "agentId": "",
+          "agentName": "PythonEngineer",
+          "bytes": 19730,
+          "family": "implementer",
+          "lines": 434,
+          "output": "paperclips/dist/trading/codex/PythonEngineer.md",
+          "platform": "",
+          "profiles": [
+            "implementer"
+          ],
+          "roleId": "codex:cx-python-engineer",
+          "sha256": "340024fe2b8ed4cb4f940bc15a33cc1e9c487df0d29563cddb490bcd9267bb7e",
+          "source": "paperclips/roles-codex/cx-python-engineer.md",
+          "workspaceCwd": ""
+        },
+        {
+          "agentId": "",
+          "agentName": "QAEngineer",
+          "bytes": 22192,
+          "family": "qa",
+          "lines": 490,
+          "output": "paperclips/dist/trading/codex/QAEngineer.md",
+          "platform": "",
+          "profiles": [
+            "qa"
+          ],
+          "roleId": "codex:cx-qa-engineer",
+          "sha256": "66ce95d3aacd39cc1ee293d0fc66928e374710c2172a4d0951b22217c489808d",
+          "source": "paperclips/roles-codex/cx-qa-engineer.md",
+          "workspaceCwd": ""
+        }
+      ]
+    }
+  }
+}

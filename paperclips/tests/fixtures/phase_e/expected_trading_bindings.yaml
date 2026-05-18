@@ -1,0 +1,8 @@
+schemaVersion: 2
+company_id: "09edf17a-31d5-46cb-9812-6f07623b1c45"
+agents:
+  CEO: "3649a8df-94ed-4025-a998-fb8be40975af"
+  CTO: "4289e2d6-990b-4c53-b879-2a1dc90fe72b"
+  CodeReviewer: "8eeda1b1-704f-4b97-839f-e050f9f765d2"
+  PythonEngineer: "2705af9c-7dda-464c-9f6c-8d0deb38816a"
+  QAEngineer: "fbd3d0e4-6abb-4797-83d2-e4dc99dbed44"

@@ -35,7 +35,7 @@ Codex hire payload shape:
   "capabilities": "Reviews implementation changes using Codex runtime, repository context MCP, and Paperclip issue workflow.",
   "adapterType": "codex_local",
   "adapterConfig": {
-    "cwd": "/Users/Shared/Ios/worktrees/cx/Gimle-Palace",
+    "cwd": "{{paths.codex_team_root}}",
     "model": "gpt-5.5",
     "modelReasoningEffort": "high",
     "instructionsFilePath": "AGENTS.md",

@@ -1,28 +1,18 @@
 ## Handoff discipline
 
-When your phase is done, explicitly transfer ownership. Never leave an issue as
-"someone will pick it up".
+When your phase is done, **explicitly transfer ownership**. Never leave an issue as "someone will pick it up". See `handoff/basics.md` for full procedure.
 
-Handoff:
+**Iron rule, restated:**
+- ONE PATCH + ONE comment + STOP.
+- Comment LAST sentence MUST end with `[@<Recipient>](agent://<uuid>?i=<icon>) your turn.` — **period. Nothing after.**
+- If you don't know who's next → **handoff to your CTO** (`reportsTo` in manifest). Never drop the issue.
 
-- ALWAYS hand off by PATCHing `status + assigneeAgentId + comment` in one API call, then GET-verify the assignee; on mismatch retry once with the same payload, then mark `status=blocked` and escalate to Board with `assigneeAgentId.actual` != `expected`. @mention-only handoff is invalid.
-- push the feature branch before handoff;
-- set the next-phase assignee explicitly;
-- @mention the next agent **in formal markdown form** `[@<Role>](agent://<uuid>?i=<icon>)`, not plain `@<Role>` — see `fragments/local/agent-roster.md` for UUIDs;
-- include branch, commit SHA, evidence, and the exact next requested action;
-- never leave `status=todo` between phases;
-- never mark `done` unless required QA / merge evidence already exists.
+**Pre-handoff checklist (implementer side):**
+- Feature branch pushed BEFORE the PATCH (`git push origin <branch>`)
+- Evidence in comment body: commit SHA + branch link + concrete test/CI output
+- `status=todo` between phases FORBIDDEN
+- `status=done` without QA evidence comment FORBIDDEN
 
-Handoff comment format:
-
-```markdown
-## Phase N.M complete — [brief result]
-
-[Evidence / artifacts / commits / links]
-
-[@<NextAgent>](agent://<NextAgent-UUID>?i=<icon>) your turn — Phase <N.M+1>: [what to do]
-```
-
-Why formal mention: plain `@Role` can wake ordinary comments, but phase handoff needs a machine-verifiable recovery wake if the assignee PATCH path flakes. GIM-182 8h stall evidence.
+**Why so strict:** agents that keep writing past `your turn.` get SIGTERM'd mid-write (paperclip session limit), comment lost or partially saved, chain stalls. Multiple incidents codified this ({{evidence.handoff_flake_issue}} 8h stall).
 
 Background lesson: `paperclips/fragments/lessons/phase-handoff.md`.
