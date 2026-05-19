@@ -386,6 +386,79 @@ async def test_tick_recovery_dry_run_scans_without_acting_persistently(tmp_path:
 
 
 @pytest.mark.asyncio
+async def test_recovery_dry_run_emits_shadow_visibility_logs(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+):
+    """recovery_dry_run=True must emit per-company scan summary AND per-candidate
+    shadow_recover_candidate logs so operator can see what watchdog *would* do
+    without enabling production actions. Original implementation only
+    incremented an internal counter — leaving operators blind."""
+    import logging
+
+    from freezegun import freeze_time
+
+    from gimle_watchdog import detection
+
+    cfg = _cfg(tmp_path)
+    cfg = Config(
+        version=cfg.version,
+        paperclip=cfg.paperclip,
+        companies=cfg.companies,
+        daemon=DaemonConfig(
+            poll_interval_seconds=cfg.daemon.poll_interval_seconds,
+            recovery_enabled=False,
+            recovery_first_run_baseline_only=False,
+            recovery_dry_run=True,
+            max_actions_per_tick=10,
+        ),
+        cooldowns=cfg.cooldowns,
+        logging=cfg.logging,
+        escalation=cfg.escalation,
+        handoff=cfg.handoff,
+    )
+    state = State.load(tmp_path / "state.json")
+    client = MagicMock()
+    client.last_response_date = None
+    client.list_active_issues = AsyncMock(return_value=[_stuck_issue()])
+    client.list_companies = AsyncMock(return_value=[])
+    # Build a predefined Action list returned by scan_died_mid_work so the
+    # test is independent of the detection internals.
+    stuck = _stuck_issue()
+    action = detection.Action(
+        kind="wake", issue=stuck, agent_id="agent-1", reason="stale_updatedAt"
+    )
+
+    caplog.set_level(logging.INFO)
+    with patch(
+        "gimle_watchdog.daemon.detection.scan_died_mid_work",
+        new=AsyncMock(return_value=[action]),
+    ):
+        with patch("gimle_watchdog.daemon.detection.scan_idle_hangs", return_value=[]):
+            with patch("gimle_watchdog.daemon._sleep", new=AsyncMock()):
+                with patch("gimle_watchdog.actions._sleep", new=AsyncMock()):
+                    with freeze_time("2026-04-21T09:30:00Z"):
+                        await daemon._tick(cfg, state, client)
+
+    scan_events = [r for r in caplog.records if getattr(r, "event", None) == "recovery_scan_result"]
+    assert scan_events, (
+        "recovery_scan_result event missing — caplog had "
+        f"events={[getattr(r, 'event', None) for r in caplog.records]}"
+    )
+    assert scan_events[0].candidate_count == 1
+    assert scan_events[0].mode == "baseline"
+
+    candidate_events = [
+        r for r in caplog.records if getattr(r, "event", None) == "shadow_recover_candidate"
+    ]
+    assert candidate_events, (
+        "shadow_recover_candidate event missing — operator would be blind in dry_run"
+    )
+    assert candidate_events[0].issue_id == "issue-1"
+    assert candidate_events[0].action_kind == "wake"
+    assert candidate_events[0].mode == "dry_run"
+
+
+@pytest.mark.asyncio
 async def test_tick_recovery_respects_max_actions_per_tick(tmp_path: Path):
     from freezegun import freeze_time
 

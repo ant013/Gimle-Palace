@@ -51,12 +51,15 @@ def test_build_graphiti_returns_graphiti_instance() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_settings_openai_api_key_required() -> None:
+def test_settings_openai_api_key_required(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Settings() raises ValidationError when openai_api_key is absent."""
     from pydantic import ValidationError
 
     from palace_mcp.config import Settings
 
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     with pytest.raises(ValidationError):
         Settings(neo4j_password="pw")  # type: ignore[arg-type]
 
@@ -276,12 +279,15 @@ def test_paperclip_extractor_modules_removed() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_build_graphiti_missing_openai_key_fails_early() -> None:
+def test_build_graphiti_missing_openai_key_fails_early(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Settings() requires openai_api_key — build_graphiti never runs without it."""
     from pydantic import ValidationError
 
     from palace_mcp.config import Settings
 
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     with pytest.raises(ValidationError):
         Settings(neo4j_password="pw")  # type: ignore[arg-type]
 
