@@ -288,7 +288,9 @@ def _delete_counter_file(counter_path: Path, *, reason: str) -> None:
         ) from exc
 
 
-def _delete_stale_tantivy_writer_lock(tantivy_path: Path, *, reason: str) -> Path | None:
+def _delete_stale_tantivy_writer_lock(
+    tantivy_path: Path, *, reason: str
+) -> Path | None:
     stale_locks: list[Path] = []
     try:
         with ExitStack() as stack:

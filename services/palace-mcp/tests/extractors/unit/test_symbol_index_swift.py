@@ -228,7 +228,9 @@ class TestSymbolIndexSwiftHappyPath:
     ) -> None:
         tantivy_dir = tmp_path / "tantivy"
         tantivy_dir.mkdir()
-        (tantivy_dir / "in_degree_counter.json").write_text("not-json{{{", encoding="utf-8")
+        (tantivy_dir / "in_degree_counter.json").write_text(
+            "not-json{{{", encoding="utf-8"
+        )
         writer_lock_path = tantivy_dir / ".tantivy-writer.lock"
         writer_lock_path.write_bytes(b"")
         settings = MagicMock()
