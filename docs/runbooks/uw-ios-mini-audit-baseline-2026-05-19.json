@@ -1,0 +1,225 @@
+{
+  "schema_version": 1,
+  "baseline_date": "2026-05-19",
+  "project": "uw-ios-mini",
+  "language_profile": "swift_kit",
+  "generated_at": "2026-05-19T12:11:35.423479+00:00",
+  "milestone": "GIM-375 M1.1 — UW iOS mini pre-flight regression baseline",
+  "fixture_path": "services/palace-mcp/tests/extractors/fixtures/uw-ios-mini-project",
+  "palace_mcp_git_sha": "unknown",
+  "summary": {
+    "ok": 12,
+    "run_failed": 2,
+    "not_attempted": 1,
+    "fetch_failed": 0,
+    "not_applicable": 0,
+    "total": 15,
+    "acceptance_threshold": 10,
+    "acceptance_met": true
+  },
+  "extractors": [
+    {
+      "name": "arch_layer",
+      "audit_status": "OK",
+      "outcome": "ok",
+      "run_id": "e883908b-df02-4557-a4fe-c13209b95c99",
+      "nodes_written": 0,
+      "edges_written": 0,
+      "notes": "No .palace/architecture-rules.yaml found; module DAG written, rule evaluation skipped."
+    },
+    {
+      "name": "code_ownership",
+      "audit_status": "NOT_ATTEMPTED",
+      "outcome": null,
+      "run_id": null,
+      "nodes_written": null,
+      "edges_written": null,
+      "notes": "git_history RUN_FAILED; code_ownership was not attempted as a result."
+    },
+    {
+      "name": "coding_convention",
+      "audit_status": "OK",
+      "outcome": "ok",
+      "run_id": "65a276a1-14e9-469f-b34f-2183fe9ebad2",
+      "nodes_written": 0,
+      "edges_written": 0,
+      "notes": "Mini fixture has no dominant convention patterns yet."
+    },
+    {
+      "name": "crypto_domain_model",
+      "audit_status": "OK",
+      "outcome": "ok",
+      "run_id": "3354c969-ccfd-4735-8a5c-58bf1b6eae8f",
+      "nodes_written": 1,
+      "edges_written": 0,
+      "notes": "1 node written; MEDIUM wei_eth_unit_mix finding in WalletRepository.swift:33."
+    },
+    {
+      "name": "cross_module_contract",
+      "audit_status": "OK",
+      "outcome": "skipped",
+      "run_id": "4f19029a-c090-4f0f-a11b-cab81b2c293f",
+      "nodes_written": 0,
+      "edges_written": 0,
+      "notes": "No PublicApiSurface rows for current commit 'unknown'; skipped gracefully."
+    },
+    {
+      "name": "cross_repo_version_skew",
+      "audit_status": "OK",
+      "outcome": "missing_input",
+      "run_id": "b89d12c6-8575-439c-9a8a-19f504e6dc09",
+      "nodes_written": 0,
+      "edges_written": 0,
+      "notes": "dependency_surface found 0 deps; no DEPENDS_ON data to evaluate skew."
+    },
+    {
+      "name": "dead_symbol_binary_surface",
+      "audit_status": "RUN_FAILED",
+      "outcome": "periphery_fixtures_missing",
+      "run_id": "42fe45ee-9207-49dc-a31d-005d54144c82",
+      "nodes_written": null,
+      "edges_written": null,
+      "notes": "periphery/periphery-3.7.4-swiftpm.json not in fixture. Expected — mini fixture has no periphery output."
+    },
+    {
+      "name": "dependency_surface",
+      "audit_status": "OK",
+      "outcome": "ok",
+      "run_id": "0900db00-73e5-4abd-af17-cef028b374ef",
+      "nodes_written": 0,
+      "edges_written": 0,
+      "notes": "project.yml-only fixture; no Package.swift/Resolved to parse."
+    },
+    {
+      "name": "error_handling_policy",
+      "audit_status": "OK",
+      "outcome": "ok",
+      "run_id": "59493381-5688-4efe-a1d5-2b1c9a701168",
+      "nodes_written": 0,
+      "edges_written": 0,
+      "notes": "0 catch sites found in mini fixture."
+    },
+    {
+      "name": "hot_path_profiler",
+      "audit_status": "OK",
+      "outcome": "missing_input",
+      "run_id": "7aa8a436-a570-42e9-a2f1-2e5363e7bbde",
+      "nodes_written": 0,
+      "edges_written": 0,
+      "notes": "No profiles/ directory in fixture; OK with missing_input as expected."
+    },
+    {
+      "name": "hotspot",
+      "audit_status": "RUN_FAILED",
+      "outcome": "prerequisite_missing",
+      "run_id": "d2e2c99b-7d30-45bd-bb9c-ed30cf298f70",
+      "nodes_written": null,
+      "edges_written": null,
+      "notes": "git_history must run before hotspot; blocked by git_history RUN_FAILED."
+    },
+    {
+      "name": "localization_accessibility",
+      "audit_status": "OK",
+      "outcome": "ok",
+      "run_id": "9aee0f8f-b951-4877-85d5-16fea3513ff4",
+      "nodes_written": 0,
+      "edges_written": 0,
+      "notes": "Ran successfully; fixture has minimal localization data."
+    },
+    {
+      "name": "public_api_surface",
+      "audit_status": "OK",
+      "outcome": "missing_input",
+      "run_id": "29a410d0-e838-4f22-8acb-46864c0e5ab2",
+      "nodes_written": 0,
+      "edges_written": 0,
+      "notes": "No .palace/public-api/swift/*.swiftinterface artifacts in fixture."
+    },
+    {
+      "name": "reactive_dependency_tracer",
+      "audit_status": "OK",
+      "outcome": "ok",
+      "run_id": "8b04bc16-efee-4333-a5b8-eff668e521fd",
+      "nodes_written": 2,
+      "edges_written": 0,
+      "notes": "2 diagnostics: swift_helper_unavailable (MEDIUM), swift_generated_or_vendor_skipped (INFO)."
+    },
+    {
+      "name": "testability_di",
+      "audit_status": "OK",
+      "outcome": "ok",
+      "run_id": "0d808109-f532-493c-a811-fc0005572bc1",
+      "nodes_written": 3,
+      "edges_written": 0,
+      "notes": "HIGH: direct_clock via Date() in WalletRepository.swift:26. LOW: UwMiniApp has 1 DI pattern sample."
+    }
+  ],
+  "infrastructure_extractors": [
+    {
+      "name": "symbol_index_swift",
+      "outcome": "ok",
+      "run_id": "cd222a6e-23a3-4162-ad0e-06ce6d50396f",
+      "nodes_written": 398,
+      "edges_written": 0,
+      "notes": "7 documents, 421 occurrences from pre-built SCIP fixture."
+    },
+    {
+      "name": "git_history",
+      "outcome": "error",
+      "run_id": "1ae6e228-8d92-42b9-b78a-9a067780d9c2",
+      "nodes_written": null,
+      "edges_written": null,
+      "notes": "GitError: Repository not found at /repos/uw-ios-mini. Fixture lacks a real git repo; .git mount is symlink-only."
+    }
+  ],
+  "known_gaps": [
+    "dead_symbol_binary_surface: periphery fixture not included in uw-ios-mini-project fixture.",
+    "hotspot: blocked by git_history failure.",
+    "code_ownership: not attempted because git_history failed.",
+    "git_history: /repos/uw-ios-mini has no valid git repository (fixture directory, not a real repo)."
+  ],
+  "audit_response": {
+    "ok": true,
+    "fetched_extractors": [
+      "arch_layer",
+      "crypto_domain_model",
+      "coding_convention",
+      "cross_module_contract",
+      "public_api_surface",
+      "dependency_surface",
+      "error_handling_policy",
+      "reactive_dependency_tracer",
+      "testability_di",
+      "hot_path_profiler",
+      "cross_repo_version_skew",
+      "localization_accessibility"
+    ],
+    "blind_spots": [
+      "code_ownership"
+    ],
+    "status_counts": {
+      "OK": 12,
+      "NOT_ATTEMPTED": 1,
+      "RUN_FAILED": 2
+    },
+    "provenance": {
+      "project": "uw-ios-mini",
+      "generated_at": "2026-05-19T12:11:35.423479+00:00",
+      "depth": "full",
+      "run_ids": {
+        "arch_layer": "e883908b-df02-4557-a4fe-c13209b95c99",
+        "crypto_domain_model": "3354c969-ccfd-4735-8a5c-58bf1b6eae8f",
+        "coding_convention": "65a276a1-14e9-469f-b34f-2183fe9ebad2",
+        "cross_module_contract": "4f19029a-c090-4f0f-a11b-cab81b2c293f",
+        "public_api_surface": "29a410d0-e838-4f22-8acb-46864c0e5ab2",
+        "dependency_surface": "0900db00-73e5-4abd-af17-cef028b374ef",
+        "error_handling_policy": "59493381-5688-4efe-a1d5-2b1c9a701168",
+        "reactive_dependency_tracer": "8b04bc16-efee-4333-a5b8-eff668e521fd",
+        "testability_di": "0d808109-f532-493c-a811-fc0005572bc1",
+        "hot_path_profiler": "7aa8a436-a570-42e9-a2f1-2e5363e7bbde",
+        "cross_repo_version_skew": "b89d12c6-8575-439c-9a8a-19f504e6dc09",
+        "localization_accessibility": "9aee0f8f-b951-4877-85d5-16fea3513ff4"
+      }
+    }
+  }
+}
