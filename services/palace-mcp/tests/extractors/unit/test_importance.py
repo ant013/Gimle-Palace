@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
 import logging
 from datetime import datetime, timedelta, timezone
@@ -9,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErrorCode
 from palace_mcp.extractors.foundation.importance import (
     BoundedInDegreeCounter,
     KIND_WEIGHT,
@@ -124,9 +126,11 @@ class TestBoundedInDegreeCounter:
         tantivy_dir = tmp_path / "tantivy"
         tantivy_dir.mkdir()
         counter_path = tantivy_dir / "in_degree_counter.json"
+        writer_lock_path = tantivy_dir / ".tantivy-writer.lock"
         stale = BoundedInDegreeCounter()
         stale.increment("stale.symbol")
         stale.to_disk(counter_path, run_id="old-run")
+        writer_lock_path.write_bytes(b"")
         monkeypatch.setenv("PALACE_COUNTER_RESET", "1")
 
         with caplog.at_level(logging.WARNING):
@@ -138,7 +142,9 @@ class TestBoundedInDegreeCounter:
 
         assert len(counter) == 0
         assert not counter_path.exists()
+        assert not writer_lock_path.exists()
         assert "PALACE_COUNTER_RESET=1" in caplog.text
+        assert "Removed stale Tantivy writer lock" in caplog.text
 
     def test_load_or_reset_counter_corrupt_file_self_heals(
         self,
@@ -160,6 +166,38 @@ class TestBoundedInDegreeCounter:
         assert len(counter) == 0
         assert not counter_path.exists()
         assert "Recovered stale or corrupt in-degree counter" in caplog.text
+
+    def test_load_or_reset_counter_stale_writer_lock_self_heals(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        tantivy_dir = tmp_path / "tantivy"
+        tantivy_dir.mkdir()
+        counter_path = tantivy_dir / "in_degree_counter.json"
+        writer_lock_path = tantivy_dir / ".tantivy-writer.lock"
+        meta_lock_path = tantivy_dir / ".tantivy-meta.lock"
+        meta_path = tantivy_dir / "meta.json"
+        stale = BoundedInDegreeCounter()
+        stale.increment("stale.symbol")
+        stale.to_disk(counter_path, run_id="old-run")
+        writer_lock_path.write_bytes(b"")
+        meta_lock_path.write_bytes(b"")
+        meta_path.write_text("{}", encoding="utf-8")
+
+        with caplog.at_level(logging.WARNING):
+            counter = load_or_reset_in_degree_counter(
+                tantivy_dir,
+                run_id="new-run",
+                logger=logging.getLogger("test.counter"),
+            )
+
+        assert len(counter) == 0
+        assert not counter_path.exists()
+        assert not writer_lock_path.exists()
+        assert meta_lock_path.exists()
+        assert meta_path.exists()
+        assert "Removed stale Tantivy writer lock" in caplog.text
 
     def test_load_or_reset_counter_stale_run_id_self_heals(
         self,
@@ -183,6 +221,33 @@ class TestBoundedInDegreeCounter:
         assert len(counter) == 0
         assert not counter_path.exists()
         assert "Recovered stale or corrupt in-degree counter" in caplog.text
+
+    def test_load_or_reset_counter_live_writer_lock_raises(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        tantivy_dir = tmp_path / "tantivy"
+        tantivy_dir.mkdir()
+        counter_path = tantivy_dir / "in_degree_counter.json"
+        writer_lock_path = tantivy_dir / ".tantivy-writer.lock"
+        stale = BoundedInDegreeCounter()
+        stale.increment("stale.symbol")
+        stale.to_disk(counter_path, run_id="old-run")
+        writer_lock_path.write_bytes(b"")
+
+        with writer_lock_path.open("a+b") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with pytest.raises(ExtractorError) as exc_info:
+                load_or_reset_in_degree_counter(
+                    tantivy_dir,
+                    run_id="new-run",
+                    logger=logging.getLogger("test.counter"),
+                )
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+        assert exc_info.value.error_code == ExtractorErrorCode.TANTIVY_LOCK_HELD
+        assert writer_lock_path.exists()
+        assert "refusing to delete a live lock" in exc_info.value.message
 
 
 # ---------------------------------------------------------------------------
