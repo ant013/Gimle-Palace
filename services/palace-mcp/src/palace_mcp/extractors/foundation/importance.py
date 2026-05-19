@@ -9,12 +9,15 @@ Fixes applied in rev3a:
 
 from __future__ import annotations
 
+import errno
+import fcntl
 import json
 import logging
 import math
 import os
 import re
 from collections import Counter
+from contextlib import ExitStack
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -51,6 +54,7 @@ _VENDOR_PATTERNS: list[tuple[re.Pattern[str], float]] = [
 
 _FIRST_PARTY_WEIGHT: float = 1.0
 _THIRD_PARTY_DEFAULT_WEIGHT: float = 0.2
+_TANTIVY_LOCK_NAMES = (".tantivy-writer.lock", ".tantivy-meta.lock")
 
 
 def tier_weight(file_path: str) -> float:
@@ -222,15 +226,25 @@ def load_or_reset_in_degree_counter(
     counter_path = tantivy_path / "in_degree_counter.json"
     reset_requested = os.environ.get("PALACE_COUNTER_RESET") == "1"
 
-    if reset_requested and counter_path.exists():
-        _delete_counter_file(
-            counter_path,
+    if reset_requested:
+        if counter_path.exists():
+            _delete_counter_file(
+                counter_path,
+                reason="PALACE_COUNTER_RESET=1 requested a fresh counter",
+            )
+            logger.warning(
+                "Reset persisted in-degree counter at %s because PALACE_COUNTER_RESET=1",
+                counter_path,
+            )
+        stale_lock = _delete_stale_tantivy_writer_lock(
+            tantivy_path,
             reason="PALACE_COUNTER_RESET=1 requested a fresh counter",
         )
-        logger.warning(
-            "Reset persisted in-degree counter at %s because PALACE_COUNTER_RESET=1",
-            counter_path,
-        )
+        if stale_lock is not None:
+            logger.warning(
+                "Removed stale Tantivy lock at %s during PALACE_COUNTER_RESET=1 recovery",
+                stale_lock,
+            )
         return counter
 
     if not counter_path.exists():
@@ -243,10 +257,19 @@ def load_or_reset_in_degree_counter(
         counter_path,
         reason="stale or corrupt counter state was detected",
     )
+    stale_lock = _delete_stale_tantivy_writer_lock(
+        tantivy_path,
+        reason="stale or corrupt counter state was detected",
+    )
     logger.warning(
         "Recovered stale or corrupt in-degree counter at %s; starting fresh",
         counter_path,
     )
+    if stale_lock is not None:
+        logger.warning(
+            "Removed stale Tantivy lock at %s during counter recovery",
+            stale_lock,
+        )
     return BoundedInDegreeCounter()
 
 
@@ -263,3 +286,58 @@ def _delete_counter_file(counter_path: Path, *, reason: str) -> None:
             action="manual_cleanup",
             context={"path": str(counter_path), "reason": reason, "error": str(exc)},
         ) from exc
+
+
+def _delete_stale_tantivy_writer_lock(
+    tantivy_path: Path, *, reason: str
+) -> Path | None:
+    stale_locks: list[Path] = []
+    try:
+        with ExitStack() as stack:
+            for lock_name in _TANTIVY_LOCK_NAMES:
+                lock_path = tantivy_path / lock_name
+                if not lock_path.exists():
+                    continue
+
+                try:
+                    lock_file = stack.enter_context(lock_path.open("a+b"))
+                except FileNotFoundError:
+                    continue
+
+                try:
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except OSError as exc:
+                    if exc.errno in (errno.EACCES, errno.EAGAIN):
+                        raise ExtractorError(
+                            error_code=ExtractorErrorCode.TANTIVY_LOCK_HELD,
+                            message=(
+                                f"Tantivy lock is still held at {lock_path}; "
+                                f"refusing to delete a live lock during {reason}."
+                            ),
+                            recoverable=True,
+                            action="retry",
+                            context={"path": str(lock_path), "reason": reason},
+                        ) from exc
+                    raise
+
+                stale_locks.append(lock_path)
+                stack.callback(fcntl.flock, lock_file.fileno(), fcntl.LOCK_UN)
+
+            for lock_path in stale_locks:
+                try:
+                    lock_path.unlink()
+                except FileNotFoundError:
+                    continue
+    except ExtractorError:
+        raise
+    except OSError as exc:
+        raise ExtractorError(
+            error_code=ExtractorErrorCode.TANTIVY_DELETE_FAILED,
+            message=f"Failed to remove Tantivy lock at {tantivy_path}: {reason}.",
+            recoverable=False,
+            action="manual_cleanup",
+            context={"path": str(tantivy_path), "reason": reason, "error": str(exc)},
+        ) from exc
+    if not stale_locks:
+        return None
+    return stale_locks[0]
