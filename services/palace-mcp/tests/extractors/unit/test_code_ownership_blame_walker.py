@@ -135,8 +135,22 @@ def mailmap_repo(tmp_path) -> pygit2.Repository:
     return repo
 
 
+@pytest.fixture
+def non_utf8_repo(tmp_path) -> pygit2.Repository:
+    repo_path = tmp_path / "non-utf8"
+    repo_path.mkdir()
+    repo = pygit2.init_repository(str(repo_path))
+    sig = pygit2.Signature("Author", "author@example.com", 1_700_003_000, 0)
+    (repo_path / "latin.py").write_bytes(b"# comment \xff\nprint(1)\n")
+    repo.index.add("latin.py")
+    repo.index.write()
+    tree = repo.index.write_tree()
+    repo.create_commit("HEAD", sig, sig, "non-utf8 fixture", tree, [])
+    return repo
+
+
 def test_parse_line_porcelain_extracts_author_metadata():
-    raw = """\
+    raw = b"""\
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 1 1 1
 author Author One
 author-mail <a1@example.com>
@@ -159,6 +173,20 @@ filename a.py
         ("Author One", "a1@example.com", 1_700_000_000),
         ("Author Two", "a2@example.com", 1_700_001_000),
     ]
+
+
+def test_walk_blame_handles_non_utf8_text_file(non_utf8_repo):
+    resolver = MailmapResolver.from_repo(non_utf8_repo, max_bytes=1_048_576)
+    blame_dict, binary_paths = walk_blame(
+        non_utf8_repo,
+        paths={"latin.py"},
+        mailmap=resolver,
+        bot_keys=set(),
+    )
+
+    assert binary_paths == set()
+    assert set(blame_dict["latin.py"]) == {"author@example.com"}
+    assert blame_dict["latin.py"]["author@example.com"].lines == 2
 
 
 def test_walk_blame_attributes_lines_to_two_authors(mini_repo):

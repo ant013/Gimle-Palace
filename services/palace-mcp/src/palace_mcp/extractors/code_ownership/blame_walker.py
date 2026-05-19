@@ -20,15 +20,15 @@ from palace_mcp.extractors.code_ownership.models import BlameAttribution
 logger = logging.getLogger(__name__)
 
 
-def _parse_line_porcelain(raw: str) -> Iterator[tuple[str, str, int]]:
-    current_name: str | None = None
-    current_email: str | None = None
+def _parse_line_porcelain(raw: bytes) -> Iterator[tuple[str, str, int]]:
+    current_name: bytes | None = None
+    current_email: bytes | None = None
     current_time: int | None = None
     in_record = False
 
     for line in raw.splitlines():
-        header = line.split(" ", 1)[0]
-        if len(header) == 40 and all(ch in "0123456789abcdef" for ch in header.lower()):
+        header = line.split(b" ", 1)[0]
+        if len(header) == 40 and all(ch in b"0123456789abcdef" for ch in header.lower()):
             current_name = None
             current_email = None
             current_time = None
@@ -36,21 +36,25 @@ def _parse_line_porcelain(raw: str) -> Iterator[tuple[str, str, int]]:
             continue
         if not in_record:
             continue
-        if line.startswith("\t"):
+        if line.startswith(b"\t"):
             if current_name is None or current_email is None or current_time is None:
                 raise ValueError("blame porcelain missing author metadata")
-            yield current_name, current_email, current_time
+            yield (
+                current_name.decode("utf-8", errors="replace"),
+                current_email.decode("utf-8", errors="replace"),
+                current_time,
+            )
             in_record = False
             continue
 
-        key, sep, value = line.partition(" ")
+        key, sep, value = line.partition(b" ")
         if not sep:
             continue
-        if key == "author":
+        if key == b"author":
             current_name = value
-        elif key == "author-mail":
-            current_email = value.removeprefix("<").removesuffix(">")
-        elif key == "author-time":
+        elif key == b"author-mail":
+            current_email = value.removeprefix(b"<").removesuffix(b">")
+        elif key == b"author-time":
             current_time = int(value)
 
 
@@ -85,7 +89,6 @@ def walk_blame(
             ["git", "-C", workdir, "blame", "--line-porcelain", "HEAD", "--", path],
             check=False,
             capture_output=True,
-            text=True,
             shell=False,
         )
         if completed.returncode != 0:
