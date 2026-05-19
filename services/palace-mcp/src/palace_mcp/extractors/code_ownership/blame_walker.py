@@ -89,7 +89,9 @@ def walk_blame(
             shell=False,
         )
         if completed.returncode != 0:
-            logger.info("blame_failed: skipping path %s (exit %d)", path, completed.returncode)
+            logger.info(
+                "blame_failed: skipping path %s (exit %d)", path, completed.returncode
+            )
             binary_paths.add(path)
             continue
 
@@ -118,7 +120,9 @@ def walk_blame(
                     canonical_name=cn,
                     canonical_email=ce,
                     lines=existing.lines + 1,
-                    last_commit_at=max(existing.last_commit_at or commit_time, commit_time),
+                    last_commit_at=max(
+                        existing.last_commit_at or commit_time, commit_time
+                    ),
                 )
         except ValueError as exc:
             logger.info("blame_failed: skipping path %s (%s)", path, type(exc).__name__)

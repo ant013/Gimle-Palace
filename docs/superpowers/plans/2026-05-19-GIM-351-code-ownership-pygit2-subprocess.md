@@ -4,7 +4,7 @@
 **Branch:** `feature/GIM-351-code-ownership-pygit2-subprocess`
 **Base:** `origin/develop@d259c50c` (GIM-356 merged)
 **Issue:** GIM-351
-**Status:** Phase 1.1 formalized; pending CXCodeReviewer plan-first review.
+**Status:** PR #232 is open; CXCodeReviewer completed mechanical review and requested follow-up fixes before re-review.
 
 ## Goal
 
@@ -60,10 +60,10 @@ Minimum-code direction:
 **Dependencies:** Phase 1.1 formalization complete.
 **Affected files:** this plan and the spec.
 
-- [ ] Verify every acceptance criterion maps to a task below.
-- [ ] Verify the dependency decision is explicit: no PyPI dependency.
-- [ ] Verify `.mailmap` parity is required before implementation is accepted.
-- [ ] Verify out-of-scope items are not silently bundled.
+- [x] Verify every acceptance criterion maps to a task below.
+- [x] Verify the dependency decision is explicit: no PyPI dependency.
+- [x] Verify `.mailmap` parity is required before implementation is accepted.
+- [x] Verify out-of-scope items are not silently bundled.
 
 **Acceptance criteria:**
 
@@ -88,13 +88,13 @@ rg -n "mailmap|git blame --line-porcelain|No new runtime dependency|Out of scope
 
 - `services/palace-mcp/tests/extractors/unit/test_code_ownership_blame_walker.py`
 
-- [ ] Add parser-level test for representative `git blame --line-porcelain`
+- [x] Add parser-level test for representative `git blame --line-porcelain`
   output with two authors.
-- [ ] Add `.mailmap` parity test: an alias commit identity must resolve to the
+- [x] Add `.mailmap` parity test: an alias commit identity must resolve to the
   canonical identity through existing `MailmapResolver`.
-- [ ] Add pygit2 parity test on the synthetic repo: native and pygit2-backed
+- [x] Add pygit2 parity test on the synthetic repo: native and pygit2-backed
   attribution shares match within +/-2 percent.
-- [ ] Keep existing binary, bot, and vendor/build filtering tests.
+- [x] Keep existing binary, bot, and vendor/build filtering tests.
 
 **Acceptance criteria:**
 
@@ -117,17 +117,17 @@ uv run pytest tests/extractors/unit/test_code_ownership_blame_walker.py -q
 
 - `services/palace-mcp/src/palace_mcp/extractors/code_ownership/blame_walker.py`
 
-- [ ] Add a private subprocess helper that runs:
+- [x] Add a private subprocess helper that runs:
 
   ```bash
   git -C <repo.workdir> blame --line-porcelain HEAD -- <path>
   ```
 
-- [ ] Use `subprocess.run(..., shell=False, text=True, capture_output=True)`.
-- [ ] Parse author metadata from porcelain records.
-- [ ] Aggregate into existing `BlameAttribution` objects.
-- [ ] Preserve current skip behavior for binary/unblamable paths.
-- [ ] Keep pygit2 for repository opening and mailmap only; remove
+- [x] Use `subprocess.run(..., shell=False, text=True, capture_output=True)`.
+- [x] Parse author metadata from porcelain records.
+- [x] Aggregate into existing `BlameAttribution` objects.
+- [x] Preserve current skip behavior for binary/unblamable paths.
+- [x] Keep pygit2 for repository opening and mailmap only; remove
   `repo.blame(...)` from the hot path.
 
 **Acceptance criteria:**
@@ -159,10 +159,10 @@ Expected: no `repo.blame` call remains under `code_ownership`; no new
 - Optional: existing fixture files under
   `services/palace-mcp/tests/extractors/fixtures/code-ownership-mini-project/`
 
-- [ ] Add or update an integration assertion that owner-share output stays
+- [x] Add or update an integration assertion that owner-share output stays
   within +/-2 percent of current pygit2 behavior on the existing fixture.
-- [ ] Confirm scenario 5 mailmap dedup still passes.
-- [ ] Confirm GIM-356 vendor/build filtering test still passes.
+- [x] Confirm scenario 5 mailmap dedup still passes.
+- [x] Confirm GIM-356 vendor/build filtering test still passes.
 
 **Acceptance criteria:**
 
@@ -184,11 +184,11 @@ uv run pytest tests/extractors/integration/test_code_ownership_integration.py -q
 **Dependencies:** Task 4.
 **Affected files:** PR to `develop`.
 
-- [ ] Run focused lint/test gate.
-- [ ] Open PR to `develop` from the feature branch.
-- [ ] PR body references this plan and the spec, includes command output, and
+- [x] Run focused lint/test gate.
+- [x] Open PR to `develop` from the feature branch.
+- [x] PR body references this plan and the spec, includes command output, and
   includes a `## QA Evidence` placeholder.
-- [ ] Hand off to CXCodeReviewer for mechanical review.
+- [x] Hand off to CXCodeReviewer for mechanical review.
 
 **Acceptance criteria:**
 
@@ -214,11 +214,11 @@ gh pr view --json baseRefName,headRefName,title,url
 **Dependencies:** Task 5.
 **Affected files:** PR diff and issue thread.
 
-- [ ] Run the project review gate required by current Gimle instructions.
-- [ ] Confirm no new dependency.
-- [ ] Confirm no scoring/schema changes.
-- [ ] Confirm `.mailmap` parity and pygit2 parity are tested.
-- [ ] Confirm PR body includes QA evidence placeholder and plan/spec links.
+- [x] Run the project review gate required by current Gimle instructions.
+- [x] Confirm no new dependency.
+- [x] Confirm no scoring/schema changes.
+- [x] Confirm `.mailmap` parity and pygit2 parity are tested.
+- [x] Confirm PR body includes QA evidence placeholder and plan/spec links.
 - [ ] Approve only with full compliance checklist and command evidence.
 
 **Acceptance criteria:**
