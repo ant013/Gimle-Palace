@@ -28,7 +28,9 @@ def _parse_line_porcelain(raw: bytes) -> Iterator[tuple[str, str, int]]:
 
     for line in raw.splitlines():
         header = line.split(b" ", 1)[0]
-        if len(header) == 40 and all(ch in b"0123456789abcdef" for ch in header.lower()):
+        if len(header) == 40 and all(
+            ch in b"0123456789abcdef" for ch in header.lower()
+        ):
             current_name = None
             current_email = None
             current_time = None
