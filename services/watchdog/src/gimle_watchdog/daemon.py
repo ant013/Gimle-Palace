@@ -569,8 +569,42 @@ async def _run_recovery_pass(cfg: Config, state: State, client: PaperclipClient)
 
     for company in cfg.companies:
         died = await detection.scan_died_mid_work(company, client, state, cfg)
+        # Per-company detection visibility — emit regardless of mode so operator
+        # can see scan results in shadow / baseline / production runs alike.
+        # Without this, recovery_dry_run=true would silently consume detections.
+        log.info(
+            "recovery_scan_result company=%s candidates=%d mode=%s",
+            company.id,
+            len(died),
+            "baseline" if baseline_mode else "production",
+            extra={
+                "event": "recovery_scan_result",
+                "company_id": company.id,
+                "candidate_count": len(died),
+                "mode": "baseline" if baseline_mode else "production",
+            },
+        )
         if baseline_mode:
             for action in died:
+                # Shadow visibility: log every candidate the watchdog would have
+                # acted on if production mode were enabled. Prefix matches the
+                # production wake/escalate/skip log keys so operators can grep
+                # the same way.
+                log.info(
+                    "shadow_recover_candidate issue=%s kind=%s assignee=%s reason=%s",
+                    action.issue.id,
+                    action.kind,
+                    (action.agent_id or "-")[:8],
+                    getattr(action, "reason", "-"),
+                    extra={
+                        "event": "shadow_recover_candidate",
+                        "issue_id": action.issue.id,
+                        "action_kind": action.kind,
+                        "assignee_id": action.agent_id,
+                        "reason": getattr(action, "reason", None),
+                        "mode": "dry_run" if dry_run else "baseline_first_run",
+                    },
+                )
                 state.record_issue_cooldown(action.issue.id)
                 baseline_candidates += 1
             continue
