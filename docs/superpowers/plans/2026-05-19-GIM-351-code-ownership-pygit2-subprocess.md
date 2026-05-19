@@ -10,7 +10,7 @@
 
 Replace the `code_ownership` extractor's slow per-file `pygit2.blame` hot path
 with native `git blame --line-porcelain`, preserving current ownership behavior
-and completing the BitcoinCore reference smoke inside 90s.
+and completing the BitcoinCore reference smoke in <60s.
 
 ## Assumptions
 
@@ -271,7 +271,7 @@ gh pr diff <PR>
 
 **Acceptance criteria:**
 
-- `code_ownership` completes within 90s on BitcoinCore.
+- `code_ownership` completes in <60s on BitcoinCore.
 - Smoke produces real first-party ownership rows.
 - No `.build/checkouts/` ownership rows are present.
 

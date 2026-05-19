@@ -124,7 +124,7 @@ Out of scope:
 
 ## Acceptance Criteria
 
-- `code_ownership` completes within 90s on the BitcoinCore reference repo.
+- `code_ownership` completes in <60s on the BitcoinCore reference repo.
 - Existing smaller-repo integration coverage still passes.
 - Pygit2 vs native blame attribution is within +/-2 percent owner-share parity
   on the existing code ownership integration fixture.
