@@ -34,11 +34,14 @@ DEFAULT_EXTRACTORS=(
 usage() {
     cat <<'EOF'
 Usage: ingest_swift_kit.sh <kit-slug> [options]
+       ingest_swift_kit.sh --bundle-all [options]
 
 Register a single Swift kit, update PALACE_SCIP_INDEX_PATHS, and run the
 configured extractor cascade.
 
 Options:
+  --bundle-all              Ingest all members listed in the manifest as one
+                            bundle; exits 0 if ≥35 members succeed
   --bundle <name>           Optional bundle to add the project to
   --extractors <csv>        Override extractor list
   --mcp-url <url>           palace-mcp MCP URL
@@ -323,6 +326,7 @@ RELATIVE_PATH=""
 MANIFEST_PATH="$DEFAULT_MANIFEST"
 ENV_FILE="$DEFAULT_ENV_FILE"
 DRY_RUN="false"
+BUNDLE_ALL="false"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -407,6 +411,10 @@ while [[ $# -gt 0 ]]; do
             ENV_FILE="$2"
             shift 2
             ;;
+        --bundle-all)
+            BUNDLE_ALL="true"
+            shift
+            ;;
         --dry-run)
             DRY_RUN="true"
             shift
@@ -428,6 +436,70 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+if [[ "$BUNDLE_ALL" == "true" ]]; then
+    require_command jq
+    require_command python3
+    [[ -f "$MANIFEST_PATH" ]] || die "manifest not found: $MANIFEST_PATH"
+
+    _BUNDLE_NAME="$(jq -r '.bundle_name // empty' "$MANIFEST_PATH")"
+    [[ -n "$_BUNDLE_NAME" ]] || die "manifest missing bundle_name: $MANIFEST_PATH"
+
+    _ALL_SLUGS=()
+    while IFS= read -r _s; do
+        _ALL_SLUGS+=("$_s")
+    done < <(jq -r '.members[].slug' "$MANIFEST_PATH")
+
+    _total="${#_ALL_SLUGS[@]}"
+    _pass=0
+    _fail=0
+    _pass_slugs=()
+    _fail_slugs=()
+
+    _self="${BASH_SOURCE[0]}"
+    _passthrough=()
+    [[ -n "$EXTRACTORS_CSV" ]] && _passthrough+=(--extractors "$EXTRACTORS_CSV")
+    [[ "$DRY_RUN" == "true" ]] && _passthrough+=(--dry-run)
+
+    for _slug in "${_ALL_SLUGS[@]}"; do
+        log "bundle-all: [$(((_pass + _fail + 1)))/$_total] ingesting $_slug"
+        set +e
+        "$_self" "$_slug" \
+            --bundle "$_BUNDLE_NAME" \
+            --manifest "$MANIFEST_PATH" \
+            --mcp-url "$MCP_URL" \
+            --repo-base "$REPO_BASE" \
+            --host-repo-base "$HOST_REPO_BASE" \
+            --env-file "$ENV_FILE" \
+            ${_passthrough[@]+"${_passthrough[@]}"}
+        _rc=$?
+        set -e
+        if [[ $_rc -eq 0 ]]; then
+            _pass_slugs+=("$_slug")
+            _pass=$((_pass + 1))
+        else
+            _fail_slugs+=("$_slug")
+            _fail=$((_fail + 1))
+            log "bundle-all: FAILED $_slug (exit $_rc)"
+        fi
+    done
+
+    log "bundle-all: $_pass/$_total passed, $_fail failed"
+    if [[ ${#_pass_slugs[@]} -gt 0 ]]; then
+        for _slug in "${_pass_slugs[@]}"; do printf '  ok     %s\n' "$_slug"; done
+    fi
+    if [[ ${#_fail_slugs[@]} -gt 0 ]]; then
+        for _slug in "${_fail_slugs[@]}"; do printf '  failed %s\n' "$_slug"; done
+    fi
+
+    if [[ $_pass -ge 35 ]]; then
+        log "bundle-all: SUCCESS — $_pass/$_total ≥ 35 threshold"
+        exit 0
+    else
+        log "bundle-all: FAILURE — $_pass/$_total < 35 threshold"
+        exit 1
+    fi
+fi
 
 [[ -n "$SLUG" ]] || {
     usage >&2
