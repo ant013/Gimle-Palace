@@ -7,8 +7,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pygit2
 import pytest
 
-from palace_mcp.extractors.code_ownership.blame_walker import walk_blame
+from palace_mcp.extractors.code_ownership.blame_walker import (
+    _parse_line_porcelain,
+    walk_blame,
+)
 from palace_mcp.extractors.code_ownership.mailmap import MailmapResolver
+from palace_mcp.extractors.code_ownership.models import BlameAttribution
 from palace_mcp.extractors.foundation.walk import should_skip_path
 
 
@@ -52,6 +56,111 @@ def mini_repo(tmp_path) -> pygit2.Repository:
     return repo
 
 
+def _walk_blame_with_pygit2(
+    repo: pygit2.Repository,
+    *,
+    paths: set[str],
+    mailmap: MailmapResolver,
+    bot_keys: set[str],
+) -> tuple[dict[str, dict[str, BlameAttribution]], set[str]]:
+    result: dict[str, dict[str, BlameAttribution]] = {}
+    binary_paths: set[str] = set()
+    head_oid = repo.head.target
+    head_commit = repo[head_oid]
+    for path in paths:
+        try:
+            blob = repo[head_commit.tree[path].id]
+            if isinstance(blob, pygit2.Blob) and blob.is_binary:
+                binary_paths.add(path)
+                continue
+        except (KeyError, AttributeError):
+            pass
+
+        blame = repo.blame(path, newest_commit=head_oid)
+        per_author: dict[str, BlameAttribution] = {}
+        for hunk in blame:
+            commit = repo[hunk.final_commit_id]
+            cn, ce = mailmap.canonicalize(commit.author.name, commit.author.email)
+            if ce in bot_keys:
+                continue
+            commit_time = datetime.fromtimestamp(commit.author.time, tz=timezone.utc)
+            existing = per_author.get(ce)
+            if existing is None:
+                per_author[ce] = BlameAttribution(
+                    canonical_id=ce,
+                    canonical_name=cn,
+                    canonical_email=ce,
+                    lines=int(hunk.lines_in_hunk),
+                    last_commit_at=commit_time,
+                )
+                continue
+            per_author[ce] = BlameAttribution(
+                canonical_id=ce,
+                canonical_name=cn,
+                canonical_email=ce,
+                lines=existing.lines + int(hunk.lines_in_hunk),
+                last_commit_at=max(existing.last_commit_at or commit_time, commit_time),
+            )
+        result[path] = per_author
+    return result, binary_paths
+
+
+def _shares(
+    blame_dict: dict[str, dict[str, BlameAttribution]], path: str
+) -> dict[str, float]:
+    per_author = blame_dict[path]
+    total_lines = sum(item.lines for item in per_author.values())
+    return {
+        canonical_id: item.lines / total_lines
+        for canonical_id, item in per_author.items()
+    }
+
+
+@pytest.fixture
+def mailmap_repo(tmp_path) -> pygit2.Repository:
+    repo_path = tmp_path / "mailmap"
+    repo_path.mkdir()
+    repo = pygit2.init_repository(str(repo_path))
+    sig = pygit2.Signature("Alias Author", "alias@example.com", 1_700_002_000, 0)
+    (repo_path / ".mailmap").write_text(
+        "Canonical Author <canonical@example.com> Alias Author <alias@example.com>\n",
+        encoding="utf-8",
+    )
+    (repo_path / "a.py").write_text("print('mailmap')\n", encoding="utf-8")
+    repo.index.add(".mailmap")
+    repo.index.add("a.py")
+    repo.index.write()
+    tree = repo.index.write_tree()
+    repo.create_commit("HEAD", sig, sig, "mailmap fixture", tree, [])
+    return repo
+
+
+def test_parse_line_porcelain_extracts_author_metadata():
+    raw = """\
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 1 1 1
+author Author One
+author-mail <a1@example.com>
+author-time 1700000000
+author-tz +0000
+summary init
+filename a.py
+\tline1
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb 2 2 1
+author Author Two
+author-mail <a2@example.com>
+author-time 1700001000
+author-tz +0000
+summary edit
+filename a.py
+\tline2
+"""
+
+    assert list(_parse_line_porcelain(raw)) == [
+        ("Author One", "a1@example.com", 1_700_000_000),
+        ("Author Two", "a2@example.com", 1_700_001_000),
+    ]
+
+
 def test_walk_blame_attributes_lines_to_two_authors(mini_repo):
     resolver = MailmapResolver.from_repo(mini_repo, max_bytes=1_048_576)
     blame_dict, binary_paths = walk_blame(
@@ -66,6 +175,22 @@ def test_walk_blame_attributes_lines_to_two_authors(mini_repo):
     assert by_author["a1@example.com"] == 2
     assert by_author["a2@example.com"] == 2
     assert "a.py" not in binary_paths
+
+
+def test_walk_blame_applies_mailmap_alias(mailmap_repo):
+    resolver = MailmapResolver.from_repo(mailmap_repo, max_bytes=1_048_576)
+    blame_dict, _ = walk_blame(
+        mailmap_repo,
+        paths={"a.py"},
+        mailmap=resolver,
+        bot_keys=set(),
+    )
+
+    assert resolver.path.value == "pygit2"
+    assert set(blame_dict["a.py"]) == {"canonical@example.com"}
+    attribution = blame_dict["a.py"]["canonical@example.com"]
+    assert attribution.canonical_name == "Canonical Author"
+    assert attribution.lines == 1
 
 
 def test_walk_blame_skips_binary(mini_repo):
@@ -92,6 +217,30 @@ def test_walk_blame_excludes_bots(mini_repo):
     by_author = {b.canonical_id: b.lines for b in blame_dict["a.py"].values()}
     assert "a2@example.com" not in by_author
     assert by_author["a1@example.com"] == 2  # only the lines author1 still owns
+
+
+def test_walk_blame_matches_pygit2_owner_share(mini_repo):
+    resolver = MailmapResolver.from_repo(mini_repo, max_bytes=1_048_576)
+
+    actual, _ = walk_blame(
+        mini_repo,
+        paths={"a.py"},
+        mailmap=resolver,
+        bot_keys=set(),
+    )
+    expected, _ = _walk_blame_with_pygit2(
+        mini_repo,
+        paths={"a.py"},
+        mailmap=resolver,
+        bot_keys=set(),
+    )
+
+    actual_shares = _shares(actual, "a.py")
+    expected_shares = _shares(expected, "a.py")
+
+    assert actual_shares.keys() == expected_shares.keys()
+    for canonical_id, expected_share in expected_shares.items():
+        assert actual_shares[canonical_id] == pytest.approx(expected_share, abs=0.02)
 
 
 @pytest.fixture

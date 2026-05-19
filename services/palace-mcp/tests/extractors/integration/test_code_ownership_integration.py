@@ -15,6 +15,7 @@ import uuid
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pygit2
 import pytest
 from neo4j import AsyncDriver
 
@@ -22,6 +23,7 @@ import palace_mcp.extractors.code_ownership.extractor as _ownership_extractor_mo
 from palace_mcp.config import Settings
 from palace_mcp.extractors.base import ExtractorRunContext
 from palace_mcp.extractors.code_ownership.extractor import CodeOwnershipExtractor
+from palace_mcp.extractors.code_ownership.mailmap import MailmapResolver
 from palace_mcp.extractors.code_ownership.schema_extension import (
     ensure_ownership_schema,
 )
@@ -174,6 +176,50 @@ def _graphiti(driver: AsyncDriver) -> MagicMock:
     g = MagicMock()
     g.driver = driver
     return g
+
+
+def _expected_blame_shares(repo_path: Path) -> dict[str, dict[str, float]]:
+    repo = pygit2.Repository(str(repo_path))
+    resolver = MailmapResolver.from_repo(repo, max_bytes=1_048_576)
+    bot_keys = {"bot@example.com"}
+    head_oid = repo.head.target
+    head_commit = repo[head_oid]
+    expected: dict[str, dict[str, float]] = {}
+
+    for path in CodeOwnershipExtractor._all_files_in_head(repo):
+        try:
+            blob = repo[head_commit.tree[path].id]
+            if isinstance(blob, pygit2.Blob) and blob.is_binary:
+                continue
+        except (KeyError, AttributeError):
+            pass
+
+        try:
+            blame = repo.blame(path, newest_commit=head_oid)
+        except (pygit2.GitError, KeyError, ValueError):
+            continue
+
+        per_author: dict[str, int] = {}
+        for hunk in blame:
+            commit = repo[hunk.final_commit_id]
+            _, canonical_email = resolver.canonicalize(
+                commit.author.name, commit.author.email
+            )
+            if canonical_email in bot_keys:
+                continue
+            per_author[canonical_email] = per_author.get(canonical_email, 0) + int(
+                hunk.lines_in_hunk
+            )
+
+        total_lines = sum(per_author.values())
+        if total_lines == 0:
+            continue
+        expected[path] = {
+            canonical_email: lines / total_lines
+            for canonical_email, lines in per_author.items()
+        }
+
+    return expected
 
 
 @pytest.mark.integration
@@ -525,7 +571,44 @@ async def test_scenario_10_alpha_used_provenance(driver: AsyncDriver) -> None:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_scenario_11_per_batch_atomicity(driver: AsyncDriver) -> None:
+async def test_scenario_11_blame_share_matches_pygit2_baseline(
+    driver: AsyncDriver,
+) -> None:
+    repo_path = _rebuild_fixture()
+    await ensure_ownership_schema(driver)
+    await _seed_git_history(driver, repo_path)
+    expected = _expected_blame_shares(repo_path)
+
+    with patch("palace_mcp.mcp_server.get_settings", return_value=_make_settings()):
+        await CodeOwnershipExtractor().run(
+            graphiti=_graphiti(driver), ctx=_ctx(repo_path)
+        )
+
+    async with driver.session() as session:
+        result = await session.run(
+            """
+            MATCH (f:File {project_id: $proj})
+                  -[r:OWNED_BY {source: 'extractor.code_ownership'}]->(a:Author)
+            RETURN f.path AS path, a.identity_key AS email, r.blame_share AS blame_share
+            """,
+            proj=PROJECT_ID,
+        )
+        rows = await result.data()
+
+    actual: dict[str, dict[str, float]] = {}
+    for row in rows:
+        actual.setdefault(row["path"], {})[row["email"]] = row["blame_share"]
+
+    for path, expected_shares in expected.items():
+        assert path in actual, f"missing OWNED_BY blame shares for {path}"
+        assert actual[path].keys() == expected_shares.keys()
+        for email, expected_share in expected_shares.items():
+            assert actual[path][email] == pytest.approx(expected_share, abs=0.02)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_scenario_12_per_batch_atomicity(driver: AsyncDriver) -> None:
     """With batch_size=1, a Phase 4 crash on the 2nd batch commits batch 1 but
     leaves checkpoint unwritten — subsequent re-run processes all files (AC15)."""
     repo_path = _rebuild_fixture()
