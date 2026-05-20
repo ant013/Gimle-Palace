@@ -31,7 +31,9 @@ def seeded_contracts_bundle(
 ) -> Iterator[dict[str, object]]:
     from neo4j import GraphDatabase
 
-    payload = cast(dict[str, object], json.loads(_FIXTURE_PATH.read_text(encoding="utf-8")))
+    payload = cast(
+        dict[str, object], json.loads(_FIXTURE_PATH.read_text(encoding="utf-8"))
+    )
     bundle = cast(str, payload["bundle"])
     projects = cast(list[dict[str, object]], payload["projects"])
     excluded_projects = cast(
@@ -172,9 +174,7 @@ async def test_find_cross_module_contracts_bundle_fixture_matches_golden(
     mcp_url: str,
     seeded_contracts_bundle: dict[str, object],
 ) -> None:
-    golden = cast(
-        dict[str, Any], json.loads(_GOLDEN_PATH.read_text(encoding="utf-8"))
-    )
+    golden = cast(dict[str, Any], json.loads(_GOLDEN_PATH.read_text(encoding="utf-8")))
     async with streamablehttp_client(mcp_url) as (read, write, _):
         async with ClientSession(read, write) as session:
             await session.initialize()

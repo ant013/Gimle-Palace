@@ -97,7 +97,9 @@ async def test_find_cross_module_contracts_missing_target() -> None:
 
 
 @pytest.mark.asyncio
-async def test_find_cross_module_contracts_bundle_and_project_are_mutually_exclusive() -> None:
+async def test_find_cross_module_contracts_bundle_and_project_are_mutually_exclusive() -> (
+    None
+):
     from palace_mcp.code.find_cross_module_contracts import find_cross_module_contracts
 
     result = await find_cross_module_contracts(
@@ -121,9 +123,7 @@ async def test_find_cross_module_contracts_bundle_payload_without_neo4j(
             member_slugs=["contracts-bundle-alpha", "contracts-bundle-beta"],
         )
 
-    async def _fake_bundle_status(
-        _driver: object, *, bundle: str
-    ) -> _BundleHealth:
+    async def _fake_bundle_status(_driver: object, *, bundle: str) -> _BundleHealth:
         assert bundle == "bundle-one"
         return _BundleHealth()
 
@@ -158,7 +158,9 @@ async def test_find_cross_module_contracts_bundle_payload_without_neo4j(
         ]
     )
 
-    result = await module.find_cross_module_contracts(driver=driver, bundle="bundle-one")
+    result = await module.find_cross_module_contracts(
+        driver=driver, bundle="bundle-one"
+    )
 
     assert result == {
         "ok": True,
