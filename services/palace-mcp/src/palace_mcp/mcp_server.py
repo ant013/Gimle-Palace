@@ -1239,9 +1239,11 @@ register_version_skew_tools(
     ),
 )
 async def palace_code_find_hotspots(
-    project: str,
+    project: str | None = None,
+    bundle: str | None = None,
     top_n: int = 20,
     min_score: float = 0.0,
+    path_prefix: str | None = None,
 ) -> dict[str, Any]:
     """Find hotspot files ranked by complexity × churn score."""
     driver = _driver
@@ -1252,7 +1254,12 @@ async def palace_code_find_hotspots(
             "message": "Neo4j driver not initialised",
         }
     return await _find_hotspots_impl(
-        driver=driver, project=project, top_n=top_n, min_score=min_score
+        driver=driver,
+        project=project,
+        bundle=bundle,
+        top_n=top_n,
+        min_score=min_score,
+        path_prefix=path_prefix,
     )
 
 

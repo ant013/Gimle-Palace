@@ -95,10 +95,14 @@ def _validate_bundle_name(name: str) -> None:
         raise ValueError(f"invalid bundle name: {name!r}")
 
 
-def _parse_dt(value: str | None) -> datetime | None:
+def _parse_dt(value: Any | None) -> datetime | None:
     if value is None:
         return None
-    dt = datetime.fromisoformat(value)
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        raw_value = value.iso_format() if hasattr(value, "iso_format") else value
+        dt = datetime.fromisoformat(raw_value)
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
