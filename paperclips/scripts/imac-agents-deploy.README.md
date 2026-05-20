@@ -29,25 +29,26 @@ session on the iMac). It does not initiate any SSH connection itself.
 ## Usage
 
 ```bash
-# Deploy from origin/main tip
-bash paperclips/scripts/imac-agents-deploy.sh
+# Deploy from origin/main tip (release-cut content) for a given project
+bash paperclips/scripts/imac-agents-deploy.sh <project-key>
 
 # Deploy specific main SHA (rollback or pinned deploy)
-bash paperclips/scripts/imac-agents-deploy.sh --target-sha abc1234
+bash paperclips/scripts/imac-agents-deploy.sh <project-key> --target-sha abc1234
 
-# Custom verification marker (if default "Phase 4.2" is stale)
-bash paperclips/scripts/imac-agents-deploy.sh --verify-marker "Phase 4.2 — Merge-readiness"
+# Pre-release-cut smoke test: deploy from origin/develop instead of main
+bash paperclips/scripts/imac-agents-deploy.sh <project-key> --from-develop
 ```
+
+`<project-key>` is required. Examples: `gimle`, `trading`, `uaudit`. The script
+lists available keys (under `~/.paperclip/projects/`) in its own `--help`.
 
 ### Idempotency
 
 Running the script twice when `origin/main` is unchanged is safe:
 
 - Stale worktree at `/tmp/gimle-agents-deploy` is removed before creating a new one
-- `build.sh` overwrites dist files (idempotent by design)
-- `deploy-agents.sh --local` overwrites AGENTS.md files (file copy)
+- `bootstrap-project.sh --reuse-bindings` rebuilds dist + redeploys (idempotent)
 - A new baseline log line is appended either way
-- Verify passes again (same content)
 
 ---
 

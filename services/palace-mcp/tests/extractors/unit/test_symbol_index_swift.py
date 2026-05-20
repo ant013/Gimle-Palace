@@ -219,6 +219,72 @@ class TestSymbolIndexSwiftHappyPath:
         assert stats.nodes_written >= 3
 
     @pytest.mark.asyncio
+    async def test_run_clears_stale_tantivy_writer_lock_during_counter_recovery(
+        self,
+        extractor: SymbolIndexSwift,
+        run_ctx: ExtractorRunContext,
+        scip_fixture: Path,
+        tmp_path: Path,
+    ) -> None:
+        tantivy_dir = tmp_path / "tantivy"
+        tantivy_dir.mkdir()
+        (tantivy_dir / "in_degree_counter.json").write_text(
+            "not-json{{{", encoding="utf-8"
+        )
+        writer_lock_path = tantivy_dir / ".tantivy-writer.lock"
+        writer_lock_path.write_bytes(b"")
+        settings = MagicMock()
+        settings.palace_scip_index_paths = {"uw-ios-mini": str(scip_fixture)}
+        settings.palace_tantivy_index_path = str(tantivy_dir)
+        settings.palace_tantivy_heap_mb = 100
+        settings.palace_max_occurrences_total = 50_000_000
+        settings.palace_max_occurrences_per_project = 10_000_000
+        settings.palace_importance_threshold_use = 0.0
+        settings.palace_max_occurrences_per_symbol = 5_000
+        settings.palace_recency_decay_days = 30.0
+
+        bridge_mock = AsyncMock()
+        bridge_mock.__aenter__ = AsyncMock(return_value=bridge_mock)
+        bridge_mock.__aexit__ = AsyncMock(return_value=False)
+        bridge_mock.add_or_replace_async = AsyncMock()
+        bridge_mock.commit_async = AsyncMock()
+
+        with (
+            patch("palace_mcp.mcp_server.get_driver", return_value=_make_driver()),
+            patch("palace_mcp.mcp_server.get_settings", return_value=settings),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift.TantivyBridge",
+                return_value=bridge_mock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift.ensure_custom_schema",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._get_previous_error_code",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift.create_ingest_run",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift.write_checkpoint",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift.finalize_ingest_run",
+                new_callable=AsyncMock,
+            ),
+        ):
+            stats = await extractor.run(graphiti=MagicMock(), ctx=run_ctx)
+
+        assert stats.nodes_written >= 3
+        assert not writer_lock_path.exists()
+        assert bridge_mock.add_or_replace_async.await_count > 0
+
+    @pytest.mark.asyncio
     async def test_runner_path_executes_registered_swift_extractor(
         self,
         scip_fixture: Path,
