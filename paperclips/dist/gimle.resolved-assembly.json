@@ -54,17 +54,17 @@
   },
   "parameters": {
     "paths": {
-      "codexTeamRoot": "/Users/Shared/Ios/Gimle-Palace/runs",
-      "operatorMemoryDir": "",
+      "codexTeamRoot": "/opt/uaa-example/gimle/runs",
+      "operatorMemoryDir": "~/.claude/projects/-opt-uaa-example-gimle/memory",
       "overlayRoot": "paperclips/projects/gimle/overlays",
       "primaryMcpServiceDir": "services/palace-mcp",
-      "primaryRepoRoot": "/Users/Shared/Ios/Gimle-Palace",
-      "productionCheckout": "/Users/Shared/Ios/Gimle-Palace",
-      "projectRoot": "/Users/Shared/Ios/Gimle-Palace",
+      "primaryRepoRoot": "/opt/uaa-example/gimle",
+      "productionCheckout": "/opt/uaa-example/gimle",
+      "projectRoot": "/opt/uaa-example/gimle",
       "projectRulesFile": "AGENTS.md"
     },
     "project": {
-      "companyId": "9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64",
+      "companyId": "00000000-0000-0000-0000-000000000003",
       "displayName": "Gimle",
       "integrationBranch": "develop",
       "issuePrefix": "GIM",
@@ -118,7 +118,7 @@
         {
           "agentId": "127068ee-b564-4b37-9370-616c81c63f35",
           "agentName": "python-engineer",
-          "bytes": 15783,
+          "bytes": 15775,
           "family": "implementer",
           "lines": 374,
           "output": "paperclips/dist/python-engineer.md",
@@ -127,14 +127,14 @@
             "implementer"
           ],
           "roleId": "claude:python-engineer",
-          "sha256": "a12826ba9fef059ab5d1613a0c3d6800e898df41cb01f7130abdd34e8624fa38",
+          "sha256": "7f9be444b09eb222ad10abfa77b59626cecd4996bd1dcfb7c558ae1c4dad879f",
           "source": "paperclips/roles/python-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "58b68640-1e83-4d5d-978b-51a5ca9080e0",
           "agentName": "qa-engineer",
-          "bytes": 18162,
+          "bytes": 18138,
           "family": "qa",
           "lines": 431,
           "output": "paperclips/dist/qa-engineer.md",
@@ -143,7 +143,7 @@
             "qa"
           ],
           "roleId": "claude:qa-engineer",
-          "sha256": "37aef5c0bd03c137d8896f77e85988927498b8e67288875b8517fb0af79ac0ab",
+          "sha256": "5c44d0a9ef6efe8fc8dcc720a5afa8851a64a34fbf48a5a2ddfa41c1b44cac56",
           "source": "paperclips/roles/qa-engineer.md",
           "workspaceCwd": ""
         },
@@ -166,7 +166,7 @@
         {
           "agentId": "89f8f76b-844b-4d1f-b614-edbe72a91d4b",
           "agentName": "infra-engineer",
-          "bytes": 15791,
+          "bytes": 15783,
           "family": "implementer",
           "lines": 375,
           "output": "paperclips/dist/infra-engineer.md",
@@ -175,14 +175,14 @@
             "implementer"
           ],
           "roleId": "claude:infra-engineer",
-          "sha256": "acb5056695182c6c04dd4f066b5d45fad5851350df3ed32b19791f5fff7369ba",
+          "sha256": "2aa476c15a6744b99a2e1ce1f8568de3744cfc23d93edda710d7fd1ad3afb724",
           "source": "paperclips/roles/infra-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "274a0b0c-ebe8-4613-ad0e-3e745c817a97",
           "agentName": "mcp-engineer",
-          "bytes": 15856,
+          "bytes": 15848,
           "family": "implementer",
           "lines": 375,
           "output": "paperclips/dist/mcp-engineer.md",
@@ -191,7 +191,7 @@
             "implementer"
           ],
           "roleId": "claude:mcp-engineer",
-          "sha256": "85c81834f897aace4ff401703571eba3abbd76bddb4f998e31b0d5950d411d31",
+          "sha256": "8a602838549ef0d7ede0eebb810b6c134d24afd8261e7fa0cbe52cd1c0e4f548",
           "source": "paperclips/roles/mcp-engineer.md",
           "workspaceCwd": ""
         },
@@ -214,7 +214,7 @@
         {
           "agentId": "9874ad7a-dfbc-49b0-b3ed-d0efda6453bb",
           "agentName": "blockchain-engineer",
-          "bytes": 15773,
+          "bytes": 15765,
           "family": "implementer",
           "lines": 374,
           "output": "paperclips/dist/blockchain-engineer.md",
@@ -223,7 +223,7 @@
             "implementer"
           ],
           "roleId": "claude:blockchain-engineer",
-          "sha256": "55028f8b3b8903e32c60c9f933ac95f9c1e9d6a3e199cb2f8f05945ebf991851",
+          "sha256": "eaabc95222a6028a9c209ab44fa707bc73181cfdcd94580a8da9d31770ba144c",
           "source": "paperclips/roles/blockchain-engineer.md",
           "workspaceCwd": ""
         },
@@ -318,7 +318,7 @@
         {
           "agentId": "e010d305-22f7-4f5c-9462-e6526b195b19",
           "agentName": "cx-python-engineer",
-          "bytes": 15383,
+          "bytes": 15375,
           "family": "implementer",
           "lines": 373,
           "output": "paperclips/dist/codex/cx-python-engineer.md",
@@ -327,14 +327,14 @@
             "implementer"
           ],
           "roleId": "codex:cx-python-engineer",
-          "sha256": "8165651e16e48e17b39179149d7fbaa6bc3b7eaf5c2c0b9cb2f917eb3364b958",
+          "sha256": "0e03f4c5865ada137c4728c87781fabe5227caf889675135807f7cb25d8e14b4",
           "source": "paperclips/roles-codex/cx-python-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "99d5f8f8-822f-4ddb-baaa-0bdaec6f9399",
           "agentName": "cx-qa-engineer",
-          "bytes": 17889,
+          "bytes": 17865,
           "family": "qa",
           "lines": 429,
           "output": "paperclips/dist/codex/cx-qa-engineer.md",
@@ -343,7 +343,7 @@
             "qa"
           ],
           "roleId": "codex:cx-qa-engineer",
-          "sha256": "52fdbfbca135636d58836ad2b1e49afd2e0d0d0de7565c1f6e162803e9b237b0",
+          "sha256": "c6c094717b7a17764529ac49f32bb972225821c17efb027555f7fd59316611af",
           "source": "paperclips/roles-codex/cx-qa-engineer.md",
           "workspaceCwd": ""
         },
@@ -366,7 +366,7 @@
         {
           "agentId": "21981be0-8c51-4e57-8a0a-ca8f95f4b8d9",
           "agentName": "cx-infra-engineer",
-          "bytes": 15417,
+          "bytes": 15409,
           "family": "implementer",
           "lines": 372,
           "output": "paperclips/dist/codex/cx-infra-engineer.md",
@@ -375,14 +375,14 @@
             "implementer"
           ],
           "roleId": "codex:cx-infra-engineer",
-          "sha256": "538d2d29f0bf017a09980fc8df2c55d91b6582ccf2c1ae43dec2144c784f2c33",
+          "sha256": "cad96214777b1ed5b5b734ddf5ad8b40568c112b887a6b4149b762af5493244f",
           "source": "paperclips/roles-codex/cx-infra-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "9a5d7bef-9b6a-4e74-be1d-e01999820804",
           "agentName": "cx-mcp-engineer",
-          "bytes": 15486,
+          "bytes": 15478,
           "family": "implementer",
           "lines": 373,
           "output": "paperclips/dist/codex/cx-mcp-engineer.md",
@@ -391,7 +391,7 @@
             "implementer"
           ],
           "roleId": "codex:cx-mcp-engineer",
-          "sha256": "620eeb15a7aedb9ead28099c7198108feefceec035c32c23de660d4e96bf249a",
+          "sha256": "e3cafc5ce911dd4ba5f2660a04d2090d0848d74df5c00d7cf3ca9609f702e877",
           "source": "paperclips/roles-codex/cx-mcp-engineer.md",
           "workspaceCwd": ""
         },
@@ -414,7 +414,7 @@
         {
           "agentId": "4e348572-1890-4122-b831-2185d9d50609",
           "agentName": "cx-blockchain-engineer",
-          "bytes": 15450,
+          "bytes": 15442,
           "family": "implementer",
           "lines": 373,
           "output": "paperclips/dist/codex/cx-blockchain-engineer.md",
@@ -423,7 +423,7 @@
             "implementer"
           ],
           "roleId": "codex:cx-blockchain-engineer",
-          "sha256": "d2fef8d0c0819110222867608f5fa321e11f971e9f1354bb207cd9be75c30e28",
+          "sha256": "f8efc0c400610c98eb5b58afc34c9e41f70ec132a644d255668623f7a4d00840",
           "source": "paperclips/roles-codex/cx-blockchain-engineer.md",
           "workspaceCwd": ""
         },
