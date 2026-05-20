@@ -1,0 +1,43 @@
+{
+  "ok": true,
+  "mode": "bundle",
+  "target_slug": "find-contracts-wire-bundle",
+  "bundle_health": {
+    "name": "find-contracts-wire-bundle",
+    "members_total": 2,
+    "members_fresh_within_7d": 2,
+    "members_stale": 0,
+    "query_failed_slugs": [],
+    "ingest_failed_slugs": [],
+    "never_ingested_slugs": [],
+    "stale_slugs": [],
+    "oldest_member_ingest_at": "2026-05-18T00:00:00Z",
+    "newest_member_ingest_at": "2026-05-19T00:00:00Z"
+  },
+  "result": [
+    {
+      "consumer_module": "WalletUI",
+      "producer_module": "CoreKit",
+      "language": "swift",
+      "from_commit": "e0e0e0",
+      "to_commit": "f0f0f0",
+      "removed_count": 2,
+      "added_count": 1,
+      "signature_changed_count": 0,
+      "affected_use_count": 5,
+      "member_project": "contracts-bundle-alpha"
+    },
+    {
+      "consumer_module": "SettingsUI",
+      "producer_module": "SyncKit",
+      "language": "kotlin",
+      "from_commit": "909090",
+      "to_commit": "a0a0a0",
+      "removed_count": 0,
+      "added_count": 3,
+      "signature_changed_count": 1,
+      "affected_use_count": 4,
+      "member_project": "contracts-bundle-beta"
+    }
+  ]
+}
