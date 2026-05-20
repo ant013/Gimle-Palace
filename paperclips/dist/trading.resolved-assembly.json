@@ -40,17 +40,17 @@
   },
   "parameters": {
     "paths": {
-      "codexTeamRoot": "/opt/example/trading/runs",
-      "operatorMemoryDir": "~/.claude/projects/-opt-example-trading/memory",
+      "codexTeamRoot": "/Users/Shared/Trading/runs",
+      "operatorMemoryDir": "",
       "overlayRoot": "paperclips/projects/trading/overlays",
-      "primaryMcpServiceDir": "/opt/example/trading",
-      "primaryRepoRoot": "/opt/example/trading/repo",
-      "productionCheckout": "/opt/example/trading",
-      "projectRoot": "/opt/example/trading",
+      "primaryMcpServiceDir": "/Users/Shared/Trading",
+      "primaryRepoRoot": "/Users/Shared/Trading/repo",
+      "productionCheckout": "/Users/Shared/Trading",
+      "projectRoot": "/Users/Shared/Trading",
       "projectRulesFile": "AGENTS.md"
     },
     "project": {
-      "companyId": "00000000-0000-0000-0000-000000000002",
+      "companyId": "09edf17a-31d5-46cb-9812-6f07623b1c45",
       "displayName": "Trading",
       "integrationBranch": "main",
       "issuePrefix": "TRD",
@@ -70,41 +70,41 @@
       "instructionsBundleMode": "managed",
       "roles": [
         {
-          "agentId": "",
+          "agentId": "3649a8df-94ed-4025-a998-fb8be40975af",
           "agentName": "CEO",
-          "bytes": 24142,
+          "bytes": 24304,
           "family": "cto",
-          "lines": 530,
+          "lines": 539,
           "output": "paperclips/dist/trading/codex/CEO.md",
           "platform": "",
           "profiles": [
             "cto"
           ],
           "roleId": "codex:cx-cto",
-          "sha256": "def476ae536f7f9a70890ba7df624ef6d8c4026872d9a3c1c95264b3e1087243",
+          "sha256": "5869e7e295644449fb2b431e0ecd4016f5bbd3988bdba7e231f745af69c5c489",
           "source": "paperclips/roles-codex/cx-cto.md",
           "workspaceCwd": ""
         },
         {
-          "agentId": "",
+          "agentId": "8eeda1b1-704f-4b97-839f-e050f9f765d2",
           "agentName": "CodeReviewer",
-          "bytes": 19927,
+          "bytes": 19653,
           "family": "reviewer",
-          "lines": 435,
+          "lines": 432,
           "output": "paperclips/dist/trading/codex/CodeReviewer.md",
           "platform": "",
           "profiles": [
             "reviewer"
           ],
           "roleId": "codex:cx-code-reviewer",
-          "sha256": "f7442bc52a943577d9d046dfae57692dbdeba3aa0be081dec5515e481335045a",
+          "sha256": "64e9b5f9b537712d2856ac4172439b233ad02f1470ba5aec9b62fbc552c6ff80",
           "source": "paperclips/roles-codex/cx-code-reviewer.md",
           "workspaceCwd": ""
         },
         {
-          "agentId": "",
+          "agentId": "2705af9c-7dda-464c-9f6c-8d0deb38816a",
           "agentName": "PythonEngineer",
-          "bytes": 19730,
+          "bytes": 19734,
           "family": "implementer",
           "lines": 434,
           "output": "paperclips/dist/trading/codex/PythonEngineer.md",
@@ -113,14 +113,14 @@
             "implementer"
           ],
           "roleId": "codex:cx-python-engineer",
-          "sha256": "340024fe2b8ed4cb4f940bc15a33cc1e9c487df0d29563cddb490bcd9267bb7e",
+          "sha256": "56e9c3c68cbf3008ac92e6b37453ede5a02418b62154c824020f09b79b01ca6a",
           "source": "paperclips/roles-codex/cx-python-engineer.md",
           "workspaceCwd": ""
         },
         {
-          "agentId": "",
+          "agentId": "fbd3d0e4-6abb-4797-83d2-e4dc99dbed44",
           "agentName": "QAEngineer",
-          "bytes": 22192,
+          "bytes": 22198,
           "family": "qa",
           "lines": 490,
           "output": "paperclips/dist/trading/codex/QAEngineer.md",
@@ -129,7 +129,7 @@
             "qa"
           ],
           "roleId": "codex:cx-qa-engineer",
-          "sha256": "66ce95d3aacd39cc1ee293d0fc66928e374710c2172a4d0951b22217c489808d",
+          "sha256": "844b7935e1aed545adcffadaca08bcbaad6984766ecbeeb44ea24f3333d2f804",
           "source": "paperclips/roles-codex/cx-qa-engineer.md",
           "workspaceCwd": ""
         }

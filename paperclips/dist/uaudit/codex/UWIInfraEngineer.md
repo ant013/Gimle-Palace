@@ -223,7 +223,7 @@ Switching branches inside an agent worktree drags uncommitted changes across bra
 
 ### Operator vs production checkout
 
-The `production_checkout` path (e.g. `/opt/uaa-example/uaudit`) is the iMac deploy target. Stay on `develop` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in UNS-48: feature checkout in production_checkout caused QA to test stale code.
+The `production_checkout` path (e.g. `/Users/Shared/UnstoppableAudit`) is the iMac deploy target. Stay on `develop` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in UNS-48: feature checkout in production_checkout caused QA to test stale code.
 
 
 ## Pre-work: codebase-memory first
@@ -379,8 +379,8 @@ Write tools as appropriate per profile (see AGENTS.md for capability boundaries)
 - Platform scope: `ios`.
 - Workspace cwd: `runs/UWIInfraEngineer/workspace` (resolved at deploy time relative to operator's project root in host-local paths.yaml).
 - Primary codebase-memory project: `Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios`.
-- iOS repo: `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
-- Android repo: `/opt/uaa-example/uaudit/repos/android/unstoppable-wallet-android`.
+- iOS repo: `/Users/Shared/UnstoppableAudit/repos` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
+- Android repo: `/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android`.
 - Required base MCP: `codebase-memory`, `context7`, `serena`, `github`, `sequential-thinking`.
 - UAudit project MCP addition: `neo4j`.
 
@@ -410,8 +410,8 @@ test -n "$PAPERCLIP_DELIVERY_TOKEN"
 ```
 
 Send with `Authorization: Bearer $PAPERCLIP_DELIVERY_TOKEN`:
-`POST $PAPERCLIP_DELIVERY_API_URL/api/plugins/00000000-0000-0000-0000-000000000000/actions/send_to_telegram`
-body `{"params":{"companyId":"00000000-0000-0000-0000-000000000001","agentId":"$PAPERCLIP_AGENT_ID","issueIdentifier","markdownFileName","markdownContent"}}`.
+`POST $PAPERCLIP_DELIVERY_API_URL/api/plugins/60023916-4b6c-40f5-829f-bc8b98abc4ed/actions/send_to_telegram`
+body `{"params":{"companyId":"8f55e80b-0264-4ab6-9d56-8b2652f18005","agentId":"$PAPERCLIP_AGENT_ID","issueIdentifier","markdownFileName","markdownContent"}}`.
 `issueIdentifier` MUST be `UNS-*`; never pass
 `chatId`. Inline Markdown only — no `filePath`, URLs, binaries, bot tokens, or
 direct `api.telegram.org`. If `PAPERCLIP_DELIVERY_TOKEN` is empty or the plugin
@@ -429,10 +429,10 @@ Do not hand off to `UWISwiftAuditor`.
 
 ```bash
 N=<issueNumber of this Paperclip issue>
-RUN=/opt/uaa-example/uaudit/runs/UNS-$N-audit
-REPO=/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios
+RUN=/Users/Shared/UnstoppableAudit/runs/UNS-$N-audit
+REPO=/Users/Shared/UnstoppableAudit/repos
 BRANCH=version/0.49
-CURSOR=/opt/uaa-example/uaudit/state/ios-version-audit.json
+CURSOR=/Users/Shared/UnstoppableAudit/state/ios-version-audit.json
 CODEBASE_MEMORY_PROJECT=Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
 ```
 
@@ -604,7 +604,7 @@ mark the issue `done`.
 
 When UWICTO or another UAudit role PATCHes assignee onto you for a UNS-N
 PR-audit issue without the daily-delta marker, a prepared `audit.md` may be
-waiting at `/opt/uaa-example/uaudit/runs/UNS-<N>-audit/audit.md`. You do
+waiting at `/Users/Shared/UnstoppableAudit/runs/UNS-<N>-audit/audit.md`. You do
 not modify it. Compute its SHA-256, send it through the Telegram plugin using
 `issueIdentifier="UNS-$N"`, comment filename + `messageId` + SHA-256 digest,
 then mark the issue `done`.
@@ -616,7 +616,7 @@ daily delta audit. Read:
 
 ```bash
 N=<issueNumber of this Paperclip issue>
-RUN=/opt/uaa-example/uaudit/runs/UNS-$N-audit
+RUN=/Users/Shared/UnstoppableAudit/runs/UNS-$N-audit
 SUMMARY=$RUN/smoke/summary.json
 ```
 

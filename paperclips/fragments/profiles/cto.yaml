@@ -3,6 +3,7 @@ name: cto
 inheritsUniversal: true
 extends: reviewer
 includes:
+  - universal/cto-merge-authority.md
   - git/release-cut.md
   - handoff/phase-orchestration.md
   - plan/producer.md
