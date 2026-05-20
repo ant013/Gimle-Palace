@@ -768,7 +768,9 @@ def register_code_composite_tools(
         session = code_router.get_cm_session()
         if session is None:
             handle_tool_error(
-                RuntimeError("CM subprocess not started — set CODEBASE_MEMORY_MCP_BINARY")
+                RuntimeError(
+                    "CM subprocess not started — set CODEBASE_MEMORY_MCP_BINARY"
+                )
             )
             raise  # unreachable
 

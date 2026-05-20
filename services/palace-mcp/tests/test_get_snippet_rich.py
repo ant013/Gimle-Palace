@@ -61,7 +61,9 @@ _SNIPPET_RESPONSE = {
 
 _OWNERS_RESPONSE = {
     "ok": True,
-    "owners": [{"author_email": "alice@example.com", "author_name": "Alice", "weight": 0.8}],
+    "owners": [
+        {"author_email": "alice@example.com", "author_name": "Alice", "weight": 0.8}
+    ],
 }
 
 _COMMITS_RESPONSE = {
@@ -109,17 +111,27 @@ class TestGetSnippetRichHappyPath:
     @pytest.mark.asyncio
     async def test_full_response(self, monkeypatch: pytest.MonkeyPatch) -> None:
         fake_session = _fake_session(_SEARCH_GRAPH_HIT, _SNIPPET_RESPONSE)
-        monkeypatch.setattr("palace_mcp.code_router.get_cm_session", lambda: fake_session)
+        monkeypatch.setattr(
+            "palace_mcp.code_router.get_cm_session", lambda: fake_session
+        )
 
         mock_settings = MagicMock()
         mock_settings.palace_tantivy_index_path = "/tmp/tantivy"
         mock_settings.palace_tantivy_heap_mb = 50
 
         mock_bridge = AsyncMock()
-        mock_bridge.search_by_symbol_id_async = AsyncMock(return_value=[
-            {"file_path": "src/mod/sub.py", "line": 42, "col_start": 4, "col_end": 9,
-             "kind": "call", "symbol_qualified_name": "mod.sub.my_fn"}
-        ])
+        mock_bridge.search_by_symbol_id_async = AsyncMock(
+            return_value=[
+                {
+                    "file_path": "src/mod/sub.py",
+                    "line": 42,
+                    "col_start": 4,
+                    "col_end": 9,
+                    "kind": "call",
+                    "symbol_qualified_name": "mod.sub.my_fn",
+                }
+            ]
+        )
         mock_bridge.__aenter__ = AsyncMock(return_value=mock_bridge)
         mock_bridge.__aexit__ = AsyncMock(return_value=False)
 
@@ -137,7 +149,8 @@ class TestGetSnippetRichHappyPath:
             patch("palace_mcp.code_composite.TantivyBridge", return_value=mock_bridge),
             patch(
                 "palace_mcp.code_composite.palace_code_get_snippet_rich.__wrapped__"
-                if False else "palace_mcp.mcp_server.get_driver",
+                if False
+                else "palace_mcp.mcp_server.get_driver",
                 return_value=mock_driver,
             ),
             patch("palace_mcp.mcp_server.get_settings", return_value=mock_settings),
@@ -172,10 +185,10 @@ class TestGetSnippetRichHappyPath:
 class TestGetSnippetRichSymbolNotFound:
     @pytest.mark.asyncio
     async def test_symbol_not_found(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        fake_session = _fake_session(
-            {"total": 0, "results": [], "has_more": False}
+        fake_session = _fake_session({"total": 0, "results": [], "has_more": False})
+        monkeypatch.setattr(
+            "palace_mcp.code_router.get_cm_session", lambda: fake_session
         )
-        monkeypatch.setattr("palace_mcp.code_router.get_cm_session", lambda: fake_session)
 
         mock_driver = AsyncMock()
         mock_settings = MagicMock()
@@ -203,7 +216,9 @@ class TestGetSnippetRichOwnersFailure:
     @pytest.mark.asyncio
     async def test_owners_fail_graceful(self, monkeypatch: pytest.MonkeyPatch) -> None:
         fake_session = _fake_session(_SEARCH_GRAPH_HIT, _SNIPPET_RESPONSE)
-        monkeypatch.setattr("palace_mcp.code_router.get_cm_session", lambda: fake_session)
+        monkeypatch.setattr(
+            "palace_mcp.code_router.get_cm_session", lambda: fake_session
+        )
 
         mock_settings = MagicMock()
         mock_settings.palace_tantivy_index_path = "/tmp/tantivy"
@@ -254,7 +269,9 @@ class TestGetSnippetRichHotspotFailure:
     @pytest.mark.asyncio
     async def test_hotspot_fail_graceful(self, monkeypatch: pytest.MonkeyPatch) -> None:
         fake_session = _fake_session(_SEARCH_GRAPH_HIT, _SNIPPET_RESPONSE)
-        monkeypatch.setattr("palace_mcp.code_router.get_cm_session", lambda: fake_session)
+        monkeypatch.setattr(
+            "palace_mcp.code_router.get_cm_session", lambda: fake_session
+        )
 
         mock_settings = MagicMock()
         mock_settings.palace_tantivy_index_path = "/tmp/tantivy"
@@ -267,7 +284,9 @@ class TestGetSnippetRichHotspotFailure:
 
         mock_driver = AsyncMock()
         mock_neo4j_session = AsyncMock()
-        mock_neo4j_session.run = AsyncMock(side_effect=RuntimeError("Neo4j unavailable"))
+        mock_neo4j_session.run = AsyncMock(
+            side_effect=RuntimeError("Neo4j unavailable")
+        )
         mock_neo4j_session.__aenter__ = AsyncMock(return_value=mock_neo4j_session)
         mock_neo4j_session.__aexit__ = AsyncMock(return_value=False)
         mock_driver.session = MagicMock(return_value=mock_neo4j_session)
@@ -303,7 +322,9 @@ class TestGetSnippetRichGitFailure:
     @pytest.mark.asyncio
     async def test_git_fail_graceful(self, monkeypatch: pytest.MonkeyPatch) -> None:
         fake_session = _fake_session(_SEARCH_GRAPH_HIT, _SNIPPET_RESPONSE)
-        monkeypatch.setattr("palace_mcp.code_router.get_cm_session", lambda: fake_session)
+        monkeypatch.setattr(
+            "palace_mcp.code_router.get_cm_session", lambda: fake_session
+        )
 
         mock_settings = MagicMock()
         mock_settings.palace_tantivy_index_path = "/tmp/tantivy"
@@ -354,7 +375,9 @@ class TestGetSnippetRichTantivyFailure:
     @pytest.mark.asyncio
     async def test_tantivy_fail_graceful(self, monkeypatch: pytest.MonkeyPatch) -> None:
         fake_session = _fake_session(_SEARCH_GRAPH_HIT, _SNIPPET_RESPONSE)
-        monkeypatch.setattr("palace_mcp.code_router.get_cm_session", lambda: fake_session)
+        monkeypatch.setattr(
+            "palace_mcp.code_router.get_cm_session", lambda: fake_session
+        )
 
         mock_settings = MagicMock()
         mock_settings.palace_tantivy_index_path = "/tmp/tantivy"
@@ -435,7 +458,9 @@ class TestGetSnippetRichValidation:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         fake_session = AsyncMock()
-        monkeypatch.setattr("palace_mcp.code_router.get_cm_session", lambda: fake_session)
+        monkeypatch.setattr(
+            "palace_mcp.code_router.get_cm_session", lambda: fake_session
+        )
 
         mock_driver = AsyncMock()
         mock_settings = MagicMock()
@@ -456,7 +481,9 @@ class TestGetSnippetRichValidation:
     async def test_no_conventions_field(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """I3 fix: conventions must not appear in the response."""
         fake_session = _fake_session(_SEARCH_GRAPH_HIT, _SNIPPET_RESPONSE)
-        monkeypatch.setattr("palace_mcp.code_router.get_cm_session", lambda: fake_session)
+        monkeypatch.setattr(
+            "palace_mcp.code_router.get_cm_session", lambda: fake_session
+        )
 
         mock_settings = MagicMock()
         mock_settings.palace_tantivy_index_path = "/tmp/tantivy"
