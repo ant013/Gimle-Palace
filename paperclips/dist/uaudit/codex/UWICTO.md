@@ -194,12 +194,9 @@ Skip for trivial mechanical edits (rename, format, single-line fix). Use for: ne
 Before approving or merging a PR, verify:
 
 1. **CI green:** `gh pr checks <PR>` — all required checks pass (`lint`, `typecheck`, `test`, `docker-build`, `qa-evidence-present` per project rules in AGENTS.md).
-2. **PR approved by CR:** GitHub PR review state = `APPROVED`.
-3. **Branch up-to-date with target:** `mergeStateStatus` = `CLEAN` (see `merge-state-decoder.md`).
-4. **No conflict markers in diff:** `gh pr diff <PR> | grep -E '^(<<<<<<<|=======|>>>>>>>)'` → empty.
-5. **Spec/plan references valid:** if PR references `docs/superpowers/plans/...`, that file exists on the branch.
-
-Self-approval forbidden — you cannot approve your own PR even if you are the only reviewer hired.
+2. **CR APPROVE on Paperclip.**
+3. **No conflict markers in diff:** `gh pr diff <PR> | grep -E '^(<<<<<<<|=======|>>>>>>>)'` → empty.
+4. **Spec/plan references valid:** if PR references `docs/superpowers/plans/...`, that file exists on the branch.
 
 
 ## Git: mergeStateStatus decoder (cto / reviewer)
@@ -211,12 +208,12 @@ Self-approval forbidden — you cannot approve your own PR even if you are the o
 | `CLEAN` | Up-to-date, all checks green, ready to merge | Proceed with merge |
 | `BEHIND` | Branch lags target — needs rebase/merge from target | Rebase or `gh pr update-branch` |
 | `DIRTY` | Merge conflicts exist | Resolve in feature branch |
-| `BLOCKED` | Required checks failing OR review missing OR branch protection veto | `gh pr checks` to see which check; if review missing, request it |
+| `BLOCKED` | Required checks failing OR review missing OR branch protection veto | `gh pr checks` to identify failing check |
 | `UNSTABLE` | Non-required checks failing (informational only) | Usually safe to merge; document why |
 | `HAS_HOOKS` | Pre-merge hooks pending | Wait, then re-check |
 | `BEHIND` + `BLOCKED` simultaneously | Multi-cause | Address whichever is fixable; recheck |
 
-Never merge while status is `DIRTY`, `BLOCKED`, or `BEHIND`. `UNSTABLE` is judgment call — document the override in PR comment.
+Never merge while `DIRTY` or `BEHIND`. `UNSTABLE` is judgment call — document the override in PR comment.
 
 
 ## Code review: APPROVE format (reviewer)
@@ -343,6 +340,20 @@ If POST returned non-2xx → STOP. Don't PATCH (would orphan the issue without c
 If your PATCH was authored by a SIGTERM'd run, paperclip may suppress the wake. Watchdog (`services/watchdog`) detects stuck `in_review` + null-execution_run and recovers. Not a primary mechanism — author handoffs correctly.
 
 
+## CTO merge
+
+MUST merge PR head `X` when ALL true on the PR's Paperclip issue:
+- CR's latest comment is `APPROVE` citing `X`.
+- QA's latest comment is `QA PASS` citing `X`.
+- `gh pr checks <N>` exits 0 with no PENDING required.
+
+Run: `gh pr merge <N> --squash --admin --match-head-commit=X`.
+
+Commit body MUST list: `X`; CR + QA comment URLs; required check names+conclusions; Paperclip issue ID.
+
+MUST NOT: await non-author GitHub review; await Board approval; force-push; push to protected branches; pass `--admin` if any gate fails.
+
+
 ## Git: release-cut procedure (cto only)
 
 Release cut: integration branch (`develop`) → release branch (`main` for most projects, or whatever the project's release model designates). Two trigger modes:
@@ -405,8 +416,6 @@ On iMac (or production target). Real MCP tool call + CLI + direct invariant. Evi
 Handoff (QA → CTO): `@CTO QA evidence posted, ready to merge`.
 
 ### Phase 4.2 — Merge (CTO)
-
-CTO merge gate + action: see [universal/cto-merge-authority.md](../universal/cto-merge-authority.md).
 
 Post-merge handoff: `@CTO release-cut planned for <date>` (CTO of self) or no handoff (slice complete).
 
@@ -476,8 +485,8 @@ Write tools as appropriate per profile (see AGENTS.md for capability boundaries)
 - Platform scope: `ios`.
 - Workspace cwd: `runs/UWICTO/workspace` (resolved at deploy time relative to operator's project root in host-local paths.yaml).
 - Primary codebase-memory project: `Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios`.
-- iOS repo: `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
-- Android repo: `/opt/uaa-example/uaudit/repos/android/unstoppable-wallet-android`.
+- iOS repo: `/Users/Shared/UnstoppableAudit/repos` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
+- Android repo: `/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android`.
 - Required base MCP: `codebase-memory`, `context7`, `serena`, `github`, `sequential-thinking`.
 - UAudit project MCP addition: `neo4j`.
 
