@@ -11,6 +11,7 @@ owned by us; closed schema is correct for v1.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from collections.abc import Callable
@@ -137,21 +138,25 @@ _DESC = (
 
 
 async def _resolve_qn(
-    session: ClientSession, qualified_name: str, project: str
+    session: ClientSession,
+    qualified_name: str,
+    project: str,
+    *,
+    label: str | None = "Function",
 ) -> tuple[str, str] | dict[str, Any]:
     """Disambiguate qualified_name → (short_name, resolved_qn).
 
     Returns error envelope dict for symbol_not_found / ambiguous_qualified_name.
+    Pass label=None to search all symbol types (Functions, Classes, Methods).
     """
-    raw = await session.call_tool(
-        "search_graph",
-        arguments={
-            "project": project,
-            "qn_pattern": f".*{re.escape(qualified_name)}$",
-            "label": "Function",
-            "limit": 10,
-        },
-    )
+    _sg_args: dict[str, Any] = {
+        "project": project,
+        "qn_pattern": f".*{re.escape(qualified_name)}$",
+        "limit": 10,
+    }
+    if label is not None:
+        _sg_args["label"] = label
+    raw = await session.call_tool("search_graph", arguments=_sg_args)
     if raw.isError:
         cm_msg = code_router.parse_cm_result(raw).get("_raw", "")
         return {
@@ -305,6 +310,31 @@ class FindReferencesRequest(BaseModel):
     max_results: int = Field(100, ge=1, le=500)
 
 
+class GetSnippetRichRequest(BaseModel):
+    """Input model for palace.code.get_snippet_rich."""
+
+    qualified_name: str = Field(..., min_length=1, max_length=500)
+    project: str | None = None
+    max_recent_commits: int = Field(10, ge=1, le=50)
+    max_usages: int = Field(20, ge=1, le=200)
+    max_owners: int = Field(5, ge=1, le=20)
+
+    @field_validator("qualified_name")
+    @classmethod
+    def _qn_charset(cls, v: str) -> str:
+        if not _QN_RE.match(v):
+            raise ValueError(
+                "qualified_name must be a dotted Python identifier "
+                "(components match [A-Za-z_][A-Za-z0-9_-]*; allows slug-style hyphens)"
+            )
+        return v
+
+
+_QUERY_HOTSPOT_SCORE = """
+MATCH (f:File {project_id: $project_id, path: $path})
+RETURN f.hotspot_score AS hotspot_score
+"""
+
 _QUERY_INGEST_RUN = """
 MATCH (r:IngestRun {project: $project, extractor_name: $extractor_name})
 WHERE r.success = true
@@ -445,6 +475,14 @@ def _decode_tantivy_occurrence(
         "kind": str(kind),
         "qualified_name": str(qualified_name),
     }
+
+
+_DESC_SNIPPET_RICH = (
+    "Rich context card for a symbol: source snippet, definition location, "
+    "usages, code owners, hotspot score, and recent commits. "
+    "Single call replaces get_code_snippet + find_references + find_owners + "
+    "find_hotspots + git.log."
+)
 
 
 def register_code_composite_tools(
@@ -712,3 +750,189 @@ def register_code_composite_tools(
             )
 
         return response
+
+    @tool_decorator("palace.code.get_snippet_rich", _DESC_SNIPPET_RICH)
+    async def palace_code_get_snippet_rich(
+        qualified_name: str,
+        project: str | None = None,
+        max_recent_commits: int = 10,
+        max_usages: int = 20,
+        max_owners: int = 5,
+    ) -> dict[str, Any]:
+        from pathlib import Path
+
+        from palace_mcp.code.find_owners import find_owners as _find_owners
+        from palace_mcp.git.tools import palace_git_log as _git_log
+        from palace_mcp.mcp_server import get_driver, get_settings
+
+        session = code_router.get_cm_session()
+        if session is None:
+            handle_tool_error(
+                RuntimeError("CM subprocess not started — set CODEBASE_MEMORY_MCP_BINARY")
+            )
+            raise  # unreachable
+
+        driver = get_driver()
+        if driver is None:
+            handle_tool_error(RuntimeError("Neo4j driver not initialised"))
+            raise  # unreachable
+
+        settings = get_settings()
+        if settings is None:
+            handle_tool_error(RuntimeError("Settings not initialised"))
+            raise  # unreachable
+
+        try:
+            req = GetSnippetRichRequest(
+                qualified_name=qualified_name,
+                project=project,
+                max_recent_commits=max_recent_commits,
+                max_usages=max_usages,
+                max_owners=max_owners,
+            )
+        except ValidationError as e:
+            return {
+                "ok": False,
+                "error_code": "validation_error",
+                "requested_qualified_name": qualified_name,
+                "message": str(e),
+            }
+
+        # CM uses repos-<slug>; Neo4j IngestRun.project and find_owners use plain slug
+        cm_project = _slug_to_cm_project(req.project or default_project)
+        neo4j_slug = _cm_project_to_slug(req.project or default_project)
+
+        # Step 1: Resolve qualified_name — all symbol types (F1 fix: label=None)
+        try:
+            disambig = await _resolve_qn(
+                session, req.qualified_name, cm_project, label=None
+            )
+        except Exception as e:
+            handle_tool_error(e)
+            raise  # unreachable
+
+        if isinstance(disambig, dict):
+            return disambig
+        _short_name, resolved_qn = disambig
+
+        # Step 2: Get snippet — must succeed for the tool to return ok=true
+        raw_snippet = await session.call_tool(
+            "get_code_snippet",
+            arguments={"qualified_name": resolved_qn, "project": cm_project},
+        )
+        if raw_snippet.isError:
+            cm_msg = code_router.parse_cm_result(raw_snippet).get("_raw", "")
+            return {
+                "ok": False,
+                "error_code": "cm_error",
+                "requested_qualified_name": req.qualified_name,
+                "message": f"CM error from get_code_snippet: {cm_msg}",
+            }
+        snippet_data = code_router.parse_cm_result(raw_snippet)
+        file_path = snippet_data.get("file_path", "")
+        start_line = snippet_data.get("start_line")
+        end_line = snippet_data.get("end_line")
+        snippet = {
+            "source": snippet_data.get("source", ""),
+            "language": snippet_data.get("language", ""),
+            "file_path": file_path,
+            "start_line": start_line,
+            "end_line": end_line,
+        }
+        definition_location = {
+            "file_path": file_path,
+            "start_line": start_line,
+            "end_line": end_line,
+        }
+
+        # Step 3: Fan-out — usages, owners, hotspot, commits in parallel
+        async def _get_usages() -> list[dict[str, Any]]:
+            sym_id = symbol_id_for(resolved_qn)
+            tantivy_path = Path(settings.palace_tantivy_index_path)
+            async with TantivyBridge(
+                tantivy_path, heap_size_mb=settings.palace_tantivy_heap_mb
+            ) as bridge:
+                raw = await bridge.search_by_symbol_id_async(
+                    sym_id, limit=req.max_usages + 1
+                )
+            return [
+                _decode_tantivy_occurrence(r, fallback_qualified_name=resolved_qn)
+                for r in raw[: req.max_usages]
+            ]
+
+        async def _get_owners() -> list[dict[str, Any]]:
+            result = await _find_owners(
+                driver, file_path=file_path, project=neo4j_slug, top_n=req.max_owners
+            )
+            owners: list[dict[str, Any]] = result.get("owners", [])
+            return owners
+
+        async def _get_hotspot() -> float | None:
+            project_id = f"project/{neo4j_slug}"
+            async with driver.session() as neo4j_session:
+                r = await neo4j_session.run(
+                    _QUERY_HOTSPOT_SCORE, project_id=project_id, path=file_path
+                )
+                record = await r.single()
+            if record is None:
+                return None
+            score: float | None = record["hotspot_score"]
+            return score
+
+        async def _get_recent_commits() -> list[dict[str, Any]]:
+            result = await _git_log(
+                neo4j_slug, path=file_path, n=req.max_recent_commits
+            )
+            return [
+                {
+                    "sha": e["sha"],
+                    "short": e["short"],
+                    "author_name": e["author_name"],
+                    "date": e["date"],
+                    "subject": e["subject"],
+                }
+                for e in result.get("entries", [])
+            ]
+
+        usages_r, owners_r, hotspot_r, commits_r = await asyncio.gather(
+            _get_usages(),
+            _get_owners(),
+            _get_hotspot(),
+            _get_recent_commits(),
+            return_exceptions=True,
+        )
+
+        rich: dict[str, Any] = {
+            "ok": True,
+            "requested_qualified_name": req.qualified_name,
+            "qualified_name": resolved_qn,
+            "project": neo4j_slug,
+            "snippet": snippet,
+            "definition_location": definition_location,
+        }
+
+        if isinstance(usages_r, BaseException):
+            rich["usages"] = []
+            rich["usages_error"] = str(usages_r)
+        else:
+            rich["usages"] = usages_r
+
+        if isinstance(owners_r, BaseException):
+            rich["owners"] = []
+            rich["owners_error"] = str(owners_r)
+        else:
+            rich["owners"] = owners_r
+
+        if isinstance(hotspot_r, BaseException):
+            rich["hotspot_score"] = None
+            rich["hotspot_error"] = str(hotspot_r)
+        else:
+            rich["hotspot_score"] = hotspot_r
+
+        if isinstance(commits_r, BaseException):
+            rich["recent_commits"] = []
+            rich["recent_commits_error"] = str(commits_r)
+        else:
+            rich["recent_commits"] = commits_r
+
+        return rich
