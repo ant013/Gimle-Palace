@@ -68,9 +68,9 @@
   "requiredProjectMcp": [
     "codebase-memory",
     "context7",
-    "serena",
     "github",
-    "sequential-thinking"
+    "sequential-thinking",
+    "serena"
   ],
   "schemaVersion": 2,
   "sourceFiles": {
