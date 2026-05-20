@@ -427,3 +427,11 @@ done
 
 DURATION_SECONDS="$(( $(date +%s) - START_TS ))"
 emit_summary
+
+ok_count="$(printf '%s' "$EXTRACTOR_RESULTS_JSON" | jq '[.[] | select(.status == "OK")] | length')"
+run_failed_count="$(printf '%s' "$EXTRACTOR_RESULTS_JSON" | jq '[.[] | select(.status == "RUN_FAILED")] | length')"
+not_registered_count="$(printf '%s' "$EXTRACTOR_RESULTS_JSON" | jq '[.[] | select(.status == "NOT_REGISTERED")] | length')"
+
+if [[ "$ok_count" -lt 10 || "$run_failed_count" -gt 0 || "$not_registered_count" -gt 0 ]]; then
+    die "extractor acceptance failed: OK=$ok_count RUN_FAILED=$run_failed_count NOT_REGISTERED=$not_registered_count (require OK>=10 and zero failures/unregistered)"
+fi
