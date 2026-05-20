@@ -386,6 +386,67 @@ async def _query_eviction_record(
         return eviction_data
 
 
+def _tantivy_doc_first_value(doc: dict[str, Any], field: str) -> Any | None:
+    value = doc.get(field)
+    if isinstance(value, list):
+        return value[0] if value else None
+    return value
+
+
+def _parse_occurrence_doc_key(doc_key: str) -> tuple[str, int, int]:
+    parts = doc_key.rsplit(":", 3)
+    if len(parts) == 4 and parts[1].isdigit() and parts[2].isdigit():
+        head, line_text, col_start_text, _commit_sha = parts
+    else:
+        head, line_text, col_start_text = doc_key.rsplit(":", 2)
+    _symbol_id, file_path = head.split(":", 1)
+    return file_path, int(line_text), int(col_start_text)
+
+
+def _decode_tantivy_occurrence(
+    raw_doc: dict[str, Any],
+    *,
+    fallback_qualified_name: str,
+) -> dict[str, Any]:
+    doc_key_value = _tantivy_doc_first_value(raw_doc, "doc_key")
+    file_path = _tantivy_doc_first_value(raw_doc, "file_path")
+    line = _tantivy_doc_first_value(raw_doc, "line")
+    col_start = _tantivy_doc_first_value(raw_doc, "col_start")
+
+    if doc_key_value:
+        parsed_file_path, parsed_line, parsed_col_start = _parse_occurrence_doc_key(
+            str(doc_key_value)
+        )
+        if not file_path:
+            file_path = parsed_file_path
+        if line is None:
+            line = parsed_line
+        if col_start is None:
+            col_start = parsed_col_start
+
+    if not file_path or line is None or col_start is None:
+        raise KeyError("tantivy occurrence missing location fields")
+
+    col_end = _tantivy_doc_first_value(raw_doc, "col_end")
+    if col_end is None:
+        col_end = col_start
+
+    qualified_name = (
+        _tantivy_doc_first_value(raw_doc, "symbol_qualified_name")
+        or fallback_qualified_name
+    )
+    kind = _tantivy_doc_first_value(raw_doc, "kind") or "unknown"
+
+    return {
+        "file_path": str(file_path),
+        "line": int(line),
+        "col_start": int(col_start),
+        "col_end": int(col_end),
+        "kind": str(kind),
+        "qualified_name": str(qualified_name),
+    }
+
+
 def register_code_composite_tools(
     tool_decorator: _ToolDecorator,
     default_project: str,
@@ -536,16 +597,10 @@ def register_code_composite_tools(
                     )
                 for r in raw[: req.max_results]:
                     occurrences_bundle.append(
-                        {
-                            "file_path": r["file_path"],
-                            "line": r["line"],
-                            "col_start": r["col_start"],
-                            "col_end": r["col_end"],
-                            "kind": r["kind"],
-                            "qualified_name": r.get(
-                                "symbol_qualified_name", req.qualified_name
-                            ),
-                        }
+                        _decode_tantivy_occurrence(
+                            r,
+                            fallback_qualified_name=req.qualified_name,
+                        )
                     )
             except Exception:
                 logger.warning(
@@ -623,14 +678,10 @@ def register_code_composite_tools(
         raw_results = raw_results[: req.max_results]
 
         occurrences: list[dict[str, Any]] = [
-            {
-                "file_path": r["file_path"],
-                "line": r["line"],
-                "col_start": r["col_start"],
-                "col_end": r["col_end"],
-                "kind": r["kind"],
-                "qualified_name": r.get("symbol_qualified_name", resolved_qn),
-            }
+            _decode_tantivy_occurrence(
+                r,
+                fallback_qualified_name=resolved_qn,
+            )
             for r in raw_results
         ]
 

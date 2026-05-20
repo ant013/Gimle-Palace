@@ -1,0 +1,71 @@
+{
+  "bundle": "uw-ios",
+  "captured_at": "2026-05-19T16:19:15.035671Z",
+  "oracle_status": "baseline_limit_no_positive_hits",
+  "expected_rule": "Each listed symbol should return >=1 ref via palace.code.find_references(project=\"uw-ios\")",
+  "baseline_member": {
+    "slug": "bitcoin-core",
+    "state": "fresh_or_queryable",
+    "scip_path": "/Users/Shared/Ios/HorizontalSystems/BitcoinCore.Swift/scip/index.scip",
+    "note": "This was the only fresh/queryable bundle member during capture."
+  },
+  "method": {
+    "audit_command": "uv run python -m palace_mcp.cli audit run --bundle uw-ios --depth full --url http://localhost:8080/mcp/",
+    "query_tool": "palace.code.find_references",
+    "query_project_arg": "uw-ios",
+    "scip_parser": "palace_mcp.extractors.scip_parser.iter_scip_occurrences"
+  },
+  "results": [
+    {
+      "qualified_name": "BitcoinCore s%3A11BitcoinCore5BlockC",
+      "scip_occurrence_count": 169,
+      "bundle_total_found": 0
+    },
+    {
+      "qualified_name": "BitcoinCore s%3A11BitcoinCore9PublicKeyC",
+      "scip_occurrence_count": 167,
+      "bundle_total_found": 0
+    },
+    {
+      "qualified_name": "BitcoinCore s%3A11BitcoinCore11TransactionC",
+      "scip_occurrence_count": 132,
+      "bundle_total_found": 0
+    },
+    {
+      "qualified_name": "BitcoinCore s%3A11BitcoinCore6OutputC",
+      "scip_occurrence_count": 119,
+      "bundle_total_found": 0
+    },
+    {
+      "qualified_name": "BitcoinCore s%3A11BitcoinCore15FullTransactionC",
+      "scip_occurrence_count": 107,
+      "bundle_total_found": 0
+    },
+    {
+      "qualified_name": "BitcoinCore s%3A11BitcoinCore5InputC",
+      "scip_occurrence_count": 74,
+      "bundle_total_found": 0
+    },
+    {
+      "qualified_name": "BitcoinCore s%3A11BitcoinCore10ScriptTypeO",
+      "scip_occurrence_count": 67,
+      "bundle_total_found": 0
+    },
+    {
+      "qualified_name": "BitcoinCore s%3A11BitcoinCore9BlockHashC",
+      "scip_occurrence_count": 59,
+      "bundle_total_found": 0
+    },
+    {
+      "qualified_name": "BitcoinCore s%3A11BitcoinCore13UnspentOutputV",
+      "scip_occurrence_count": 57,
+      "bundle_total_found": 0
+    },
+    {
+      "qualified_name": "BitcoinCore s%3A11BitcoinCore18MutableTransactionC",
+      "scip_occurrence_count": 38,
+      "bundle_total_found": 0
+    }
+  ],
+  "conclusion": "The current baseline provides 10 specific UW iOS symbols, but none return hits through the live uw-ios bundle query path. This file documents the limitation instead of asserting a false positive oracle."
+}

@@ -16,6 +16,8 @@ from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from palace_mcp.extractors.foundation.models import build_symbol_occurrence_doc_key
+
 # Patch targets: get_driver / get_settings are lazy-imported inside
 # palace_code_find_references from palace_mcp.mcp_server, so we patch
 # at the source module rather than at code_composite.
@@ -150,6 +152,30 @@ def _make_bridge_mock(raw_results: list[dict[str, Any]]) -> MagicMock:
     return bridge
 
 
+def _tantivy_doc(
+    *,
+    symbol_id: int,
+    file_path: str,
+    line: int,
+    col_start: int,
+    commit_sha: str = "a" * 40,
+) -> dict[str, Any]:
+    return {
+        "doc_key": [
+            build_symbol_occurrence_doc_key(
+                symbol_id=symbol_id,
+                file_path=file_path,
+                line=line,
+                col_start=col_start,
+                commit_sha=commit_sha,
+            )
+        ],
+        "file_path": [file_path],
+        "commit_sha": [commit_sha],
+        "ingest_run_id": ["run-1"],
+    }
+
+
 # ---------------------------------------------------------------------------
 # palace_code_find_references — bundle path
 # ---------------------------------------------------------------------------
@@ -175,14 +201,12 @@ class TestFindReferencesBundlePath:
         find_refs = self._get_fn()
         fake_health = _make_fake_bundle_status("uw-ios")
 
-        raw_occ = {
-            "file_path": "/repos/evm-kit/Sources/Core.swift",
-            "line": 10,
-            "col_start": 4,
-            "col_end": 15,
-            "kind": "definition",
-            "symbol_qualified_name": "EvmKit.Address",
-        }
+        raw_occ = _tantivy_doc(
+            symbol_id=42,
+            file_path="/repos/evm-kit/Sources/Core.swift",
+            line=10,
+            col_start=4,
+        )
 
         with (
             patch(_PATCH_GET_DRIVER, return_value=MagicMock()),
@@ -210,6 +234,17 @@ class TestFindReferencesBundlePath:
         assert result["ok"] is True
         assert "bundle_health" in result
         assert "occurrences" in result
+        assert result["total_found"] == 1
+        assert result["occurrences"] == [
+            {
+                "file_path": "/repos/evm-kit/Sources/Core.swift",
+                "line": 10,
+                "col_start": 4,
+                "col_end": 4,
+                "kind": "unknown",
+                "qualified_name": "EvmKit.Address",
+            }
+        ]
 
     async def test_bundle_path_no_ingest_run_check_for_bundle_slug(self) -> None:
         """For bundle slug, _query_any_ingest_run_for_project is NOT called."""
@@ -343,6 +378,12 @@ class TestFindReferencesProjectPath:
 
         find_refs = self._get_fn()
         ingest_run_row = {"run_id": "abc", "success": True, "extractor_name": "sym_py"}
+        raw_occ = _tantivy_doc(
+            symbol_id=1,
+            file_path="Sources/App/Feature.swift",
+            line=7,
+            col_start=3,
+        )
 
         with (
             patch(_PATCH_GET_DRIVER, return_value=MagicMock()),
@@ -361,7 +402,7 @@ class TestFindReferencesProjectPath:
             ),
             patch(
                 "palace_mcp.code_composite.TantivyBridge",
-                return_value=_make_bridge_mock([]),
+                return_value=_make_bridge_mock([raw_occ]),
             ),
             patch("palace_mcp.code_composite.symbol_id_for", return_value=1),
             patch("palace_mcp.code_router.get_cm_session", return_value=None),
@@ -370,6 +411,16 @@ class TestFindReferencesProjectPath:
 
         assert result["ok"] is True
         assert "bundle_health" not in result
+        assert result["occurrences"] == [
+            {
+                "file_path": "Sources/App/Feature.swift",
+                "line": 7,
+                "col_start": 3,
+                "col_end": 3,
+                "kind": "unknown",
+                "qualified_name": "MyModule.func",
+            }
+        ]
 
 
 # ---------------------------------------------------------------------------
