@@ -8,6 +8,7 @@ DEFAULT_MCP_URL="${PALACE_MCP_URL:-http://localhost:8080/mcp}"
 DEFAULT_HOST_REPO_PATH="${PALACE_KOTLIN_REPO_PATH:-/Users/Shared/Android/unstoppable-wallet-android}"
 DEFAULT_CONTAINER_REPO_PATH="${PALACE_KOTLIN_CONTAINER_REPO_PATH:-/repos/uw-android}"
 DEFAULT_COMPOSE_PROJECT_NAME="${PALACE_COMPOSE_PROJECT_NAME:-gimle-palace}"
+DEFAULT_COMPOSE_FILE="${PALACE_COMPOSE_FILE:-$REPO_ROOT/docker-compose.yml}"
 DEFAULT_SCIP_JAVA="${SCIP_JAVA:-$HOME/Library/Application Support/Coursier/bin/scip-java}"
 DEFAULT_GRADLE_BIN="./gradlew"
 DEFAULT_GRADLE_TASK="compileDebugKotlin"
@@ -44,6 +45,7 @@ Options:
   --env-file <path>             Env file to update atomically (default: repo .env)
   --mcp-url <url>               palace-mcp MCP URL
   --compose-project-name <name> Docker compose project name (default: gimle-palace)
+  --compose-file <path>         Docker compose file used for palace-mcp recreation
   --scip-java <path>            scip-java binary path
   --gradle-bin <path>           Gradle executable relative to repo or absolute
   --gradle-task <name>          Gradle task to run (default: compileDebugKotlin)
@@ -135,7 +137,7 @@ call_mcp() {
 docker_compose() {
     (
         cd "$REPO_ROOT"
-        docker compose -p "$COMPOSE_PROJECT_NAME" --env-file "$ENV_FILE" -f "$REPO_ROOT/docker-compose.yml" "$@"
+        docker compose -p "$COMPOSE_PROJECT_NAME" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
     )
 }
 
@@ -230,6 +232,7 @@ EXTRACTORS_CSV=""
 ENV_FILE="$DEFAULT_ENV_FILE"
 MCP_URL="$DEFAULT_MCP_URL"
 COMPOSE_PROJECT_NAME="$DEFAULT_COMPOSE_PROJECT_NAME"
+COMPOSE_FILE="$DEFAULT_COMPOSE_FILE"
 SCIP_JAVA_BIN="$DEFAULT_SCIP_JAVA"
 GRADLE_BIN="$DEFAULT_GRADLE_BIN"
 GRADLE_TASK="$DEFAULT_GRADLE_TASK"
@@ -250,6 +253,8 @@ while [[ $# -gt 0 ]]; do
         --mcp-url=*) MCP_URL="${1#*=}"; shift ;;
         --compose-project-name) COMPOSE_PROJECT_NAME="$2"; shift 2 ;;
         --compose-project-name=*) COMPOSE_PROJECT_NAME="${1#*=}"; shift ;;
+        --compose-file) COMPOSE_FILE="$2"; shift 2 ;;
+        --compose-file=*) COMPOSE_FILE="${1#*=}"; shift ;;
         --scip-java) SCIP_JAVA_BIN="$2"; shift 2 ;;
         --scip-java=*) SCIP_JAVA_BIN="${1#*=}"; shift ;;
         --gradle-bin) GRADLE_BIN="$2"; shift 2 ;;
@@ -272,6 +277,7 @@ require_command git
 [[ -f "$ENV_FILE" ]] || die "env file not found: $ENV_FILE"
 [[ -d "$HOST_REPO_PATH" ]] || die "repo path not found: $HOST_REPO_PATH"
 [[ -f "$HOST_REPO_PATH/gradlew" ]] || die "gradlew not found in $HOST_REPO_PATH"
+[[ -f "$COMPOSE_FILE" ]] || die "compose file not found: $COMPOSE_FILE"
 
 ACTUAL_SHA="$(git -C "$HOST_REPO_PATH" rev-parse HEAD)"
 [[ "$ACTUAL_SHA" == "$PINNED_SHA" ]] || \

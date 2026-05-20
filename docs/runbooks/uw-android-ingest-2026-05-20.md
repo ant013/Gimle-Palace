@@ -17,17 +17,20 @@ validated without relying on the shared `:8080` operator stack.
 ## Commands
 
 ```bash
+cd /Users/Shared/Ios/worktrees/cx/Gimle-Palace-GIM-379
+
 # One-off isolated verification stack
 sed 's/"8080:8000"/"18080:8000"/' docker-compose.yml > docker-compose.gim379.yml
 docker compose -p gimle-palace-gim379 \
-  --env-file /Users/Shared/Ios/worktrees/cx/Gimle-Palace/.env \
+  --env-file .env \
   -f docker-compose.gim379.yml \
   up -d neo4j palace-mcp
 
 # Live ingest
 paperclips/scripts/ingest_kotlin_module.sh \
-  --env-file /Users/Shared/Ios/worktrees/cx/Gimle-Palace/.env \
+  --env-file .env \
   --compose-project-name gimle-palace-gim379 \
+  --compose-file ./docker-compose.gim379.yml \
   --mcp-url http://localhost:18080/mcp
 
 # Audit verification
