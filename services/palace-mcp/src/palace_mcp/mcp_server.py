@@ -1272,8 +1272,9 @@ async def palace_code_find_hotspots(
     ),
 )
 async def palace_code_list_functions(
-    project: str,
     path: str,
+    project: str | None = None,
+    bundle: str | None = None,
     min_ccn: int = 0,
 ) -> dict[str, Any]:
     """List functions for a specific file recorded by the hotspot extractor."""
@@ -1285,7 +1286,7 @@ async def palace_code_list_functions(
             "message": "Neo4j driver not initialised",
         }
     return await _list_functions_impl(
-        driver=driver, project=project, path=path, min_ccn=min_ccn
+        driver=driver, project=project, bundle=bundle, path=path, min_ccn=min_ccn
     )
 
 

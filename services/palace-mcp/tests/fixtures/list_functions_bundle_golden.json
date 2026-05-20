@@ -1,0 +1,49 @@
+{
+  "ok": true,
+  "mode": "bundle",
+  "target_slug": "list-functions-wire-bundle",
+  "bundle_health": {
+    "name": "list-functions-wire-bundle",
+    "members_total": 2,
+    "members_fresh_within_7d": 2,
+    "members_stale": 0,
+    "query_failed_slugs": [],
+    "ingest_failed_slugs": [],
+    "never_ingested_slugs": [],
+    "stale_slugs": [],
+    "oldest_member_ingest_at": "2026-05-18T00:00:00Z",
+    "newest_member_ingest_at": "2026-05-19T00:00:00Z"
+  },
+  "result": [
+    {
+      "project_id": "list-functions-alpha",
+      "name": "sendHighPriority",
+      "start_line": 10,
+      "end_line": 28,
+      "ccn": 9,
+      "parameter_count": 2,
+      "nloc": 19,
+      "language": "swift"
+    },
+    {
+      "project_id": "list-functions-beta",
+      "name": "sendFallback",
+      "start_line": 5,
+      "end_line": 21,
+      "ccn": 7,
+      "parameter_count": 1,
+      "nloc": 17,
+      "language": "swift"
+    },
+    {
+      "project_id": "list-functions-beta",
+      "name": "sendTieBreaker",
+      "start_line": 40,
+      "end_line": 48,
+      "ccn": 7,
+      "parameter_count": 1,
+      "nloc": 9,
+      "language": "swift"
+    }
+  ]
+}
