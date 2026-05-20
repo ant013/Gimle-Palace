@@ -62,6 +62,7 @@ from palace_mcp.code.find_public_api import find_public_api as _find_public_api_
 from palace_mcp.code.list_functions import list_functions as _list_functions_impl
 from palace_mcp.adr.router import register_adr_tools
 from palace_mcp.code_composite import register_code_composite_tools
+from palace_mcp.code_idiom import register_code_idiom_tools
 from palace_mcp.extractors.cross_repo_version_skew.find_version_skew import (
     register_version_skew_tools,
 )
@@ -1224,6 +1225,10 @@ register_code_composite_tools(
     default_project=os.environ.get("PALACE_CM_DEFAULT_PROJECT", "repos-gimle"),
 )
 register_version_skew_tools(
+    _tool,
+    default_project=os.environ.get("PALACE_CM_DEFAULT_PROJECT", "repos-gimle"),
+)
+register_code_idiom_tools(
     _tool,
     default_project=os.environ.get("PALACE_CM_DEFAULT_PROJECT", "repos-gimle"),
 )
