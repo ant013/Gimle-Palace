@@ -15,13 +15,18 @@ only `project: str`. After M3.A, each will accept mutually exclusive
 
 ## Shared conventions
 
-All 6 tools follow the same structural pattern established by
-`find_version_skew` (GIM-218):
+All 6 tools follow the same structural pattern, using
+`code_composite.py._resolve_slug()` as the canonical bundle resolver:
 
 1. **Mutual exclusion:** `project` XOR `bundle` required. Both → error
    `mutually_exclusive_args`. Neither → error `missing_target`.
-2. **Bundle resolution:** Cypher lookup on `(:Bundle {name})-[:CONTAINS]->(:Project)`.
+2. **Bundle resolution:** via `_resolve_slug()` in `code_composite.py`,
+   which uses the canonical `:CONTAINS` edge:
+   `MATCH (b:Bundle {name})-[:CONTAINS]->(p:Project)`.
    Zero members → error `bundle_has_no_members`.
+   **Note:** `find_version_skew` uses `:HAS_MEMBER` — this is a legacy
+   inconsistency (GIM-218 predates the canonical DDL). The 6 new tools
+   MUST use `:CONTAINS` per `memory/bundle.py` and `memory/cypher.py`.
 3. **Invalid member slugs:** excluded with warning (not silent drop), per
    `find_version_skew` W11 precedent.
 4. **Response envelope:** bundle-mode responses include `"mode": "bundle"`,
@@ -29,6 +34,19 @@ All 6 tools follow the same structural pattern established by
    `palace.memory.bundle_status()`.
 5. **Limit semantics:** `top_n` / `limit` caps apply to the merged result
    set (post-aggregation), not per-member. Per-tool detail below.
+
+### `project_id` format split
+
+The 6 tools use two different node-property conventions for project scoping.
+Implementers must use the correct format per tool:
+
+| Property format | Tools | Bundle Cypher variable |
+|---|---|---|
+| `project_id = "project/<slug>"` | `find_hotspots`, `list_functions`, `find_owners` | `$project_ids` — built as `[f"project/{s}" for s in member_slugs]` |
+| `project = "<slug>"` (bare) | `find_dead_symbols`, `find_public_api`, `find_cross_module_contracts` | `$projects` — bare `member_slugs` list |
+
+This split reflects the extractor that writes each node type. Do not
+normalize — the bundle layer adapts to the existing property format.
 
 ## Tool-by-tool design
 
@@ -133,13 +151,33 @@ Implementation: fan-out Cypher using `IN $project_ids` on the
 `:OwnershipFileState` are per-project, so the query naturally scopes to the
 correct member.
 
+**Checkpoint validation change for bundle mode:** in project mode,
+`find_owners` checks for an `:OwnershipCheckpoint` before querying and
+returns `ownership_not_indexed_yet` if missing. In bundle mode, the
+checkpoint check must be **deferred to after the file is located** — first
+find which member contains the file via the `:File` query, then check the
+checkpoint for that specific member. Do NOT require all 41 members to have
+checkpoints; only the member that owns the file matters. If the file is
+found but its member lacks a checkpoint, return `ownership_not_indexed_yet`
+with `member_project` identifying which member needs the extractor run.
+
 ```cypher
 MATCH (f:File {path: $path})
 WHERE f.project_id IN $project_ids
-OPTIONAL MATCH (st:OwnershipFileState {path: $path})
-  WHERE st.project_id = f.project_id
+OPTIONAL MATCH (cp:OwnershipCheckpoint {project_id: f.project_id})
+OPTIONAL MATCH (st:OwnershipFileState {path: $path, project_id: f.project_id})
 OPTIONAL MATCH (f)-[r:OWNED_BY {source: 'extractor.code_ownership'}]->(a:Author)
-...
+WITH f, cp, st, r, a
+ORDER BY r.weight DESC
+WITH f, cp, st, collect({r: r, a: a}) AS pairs
+RETURN f.project_id AS project_id,
+       cp IS NOT NULL AS has_checkpoint,
+       cp.last_head_sha AS head_sha,
+       cp.last_completed_at AS completed_at,
+       st.status AS status,
+       st.no_owners_reason AS reason,
+       st.last_run_id AS last_run_id,
+       pairs
 ```
 
 **Merge rule:** ownership weights are per-project (blame + churn within
@@ -174,9 +212,30 @@ depends on:
 This is not feasible in a single M3.A.4 slice without building a new
 cross-project reachability resolver.
 
-**v1 design (per-project union):** collect `DeadSymbolCandidate` from all
-bundle members, tag each with its `member_project` slug, apply `limit` to
-the merged set. This is equivalent to "what does each project think is dead,
+**v1 design (per-project union):** single Cypher with `IN $projects`
+predicate, collecting `DeadSymbolCandidate` from all bundle members. Each
+row is tagged with `member_project`. The `limit` applies to the merged set.
+
+```cypher
+MATCH (c:DeadSymbolCandidate)
+WHERE c.project IN $projects
+RETURN c.project AS member_project,
+       c.id AS id,
+       c.display_name AS display_name,
+       c.kind AS kind,
+       c.module_name AS module_name,
+       c.language AS language,
+       c.candidate_state AS candidate_state,
+       c.confidence AS confidence,
+       c.source_file AS source_file,
+       c.source_line AS source_line,
+       c.commit_sha AS commit_sha,
+       c.evidence_source AS evidence_source
+ORDER BY c.project, c.module_name, c.display_name
+LIMIT $limit
+```
+
+This is equivalent to "what does each project think is dead,
 shown together." The response includes a caveat field:
 
 ```json
@@ -284,30 +343,40 @@ imports with Kit B's `find_public_api` change history. Separate issue.
 
 ## Summary table
 
-| Tool | Bundle merge strategy | `top_n`/`limit` scope | Key design choice | v2 follow-up needed? |
-|---|---|---|---|---|
-| `find_hotspots` | Single Cypher, `IN $project_ids` | Global post-merge | Global ranking, no per-Kit quota | No |
-| `list_functions` | Single Cypher, `IN $project_ids` | No limit (same as project mode) | Path resolves to whichever member has it | No |
-| `find_owners` | Single Cypher, `IN $project_ids` | `top_n` per-file (file lives in one member) | No cross-project ownership merge | No |
-| `find_dead_symbols` | Per-project union | Global `limit` post-merge | v1 union only; no cross-Kit reachability | **Yes** — cross-Kit filter |
-| `find_public_api` | Single Cypher, `IN $projects` | Global `limit` post-merge | All members (app + Kits), not app-only | No |
-| `find_cross_module_contracts` | Per-project union | Global `limit` post-merge | v1 intra-project contracts only | **Yes** — cross-Kit contracts |
+| Tool | Bundle merge strategy | Cypher variable | `top_n`/`limit` scope | Key design choice | v2 follow-up? |
+|---|---|---|---|---|---|
+| `find_hotspots` | Single Cypher `IN` | `$project_ids` (`"project/…"`) | Global post-merge | Global ranking, no per-Kit quota | No |
+| `list_functions` | Single Cypher `IN` | `$project_ids` (`"project/…"`) | No limit (same as project) | Path resolves to whichever member has it | No |
+| `find_owners` | Single Cypher `IN` | `$project_ids` (`"project/…"`) | `top_n` per-file (one member) | Checkpoint check deferred to post-file-match | No |
+| `find_dead_symbols` | Single Cypher `IN` | `$projects` (bare slug) | Global `limit` post-merge | v1 union only; no cross-Kit reachability | **Yes** |
+| `find_public_api` | Single Cypher `IN` | `$projects` (bare slug) | Global `limit` post-merge | All members (app + Kits), not app-only | No |
+| `find_cross_module_contracts` | Single Cypher `IN` | `$projects` (bare slug) | Global `limit` post-merge | v1 intra-project contracts only | **Yes** |
 
 ## Implementation pattern reference
 
-All 6 tools should follow the `find_version_skew` structural pattern:
+**Canonical resolver:** `code_composite.py._resolve_slug()` — uses
+`:CONTAINS` edge (correct). Do NOT copy `find_version_skew`'s
+`_bundle_members()` which uses the legacy `:HAS_MEMBER` edge type.
+
+All 6 tools should follow this structural pattern:
 
 1. Validate `project` XOR `bundle` mutual exclusion
-2. Resolve bundle → member slugs via `(:Bundle)-[:CONTAINS]->(:Project)`
-3. Build `project_ids = [f"project/{s}" for s in member_slugs]` (or `projects = member_slugs` depending on the node property used)
-4. Execute single Cypher with `IN $project_ids` predicate
-5. Return with `mode`, `target_slug`, `bundle_health`, per-row `member_project`
+2. Resolve bundle → member slugs via `_resolve_slug()` or equivalent
+   Cypher: `MATCH (b:Bundle {name: $slug})-[:CONTAINS]->(p:Project)`
+3. Build the appropriate variable per the `project_id` format split table:
+   - `project_ids = [f"project/{s}" for s in member_slugs]` for tools
+     using `project_id` property (`find_hotspots`, `list_functions`,
+     `find_owners`)
+   - `projects = member_slugs` for tools using bare `project` property
+     (`find_dead_symbols`, `find_public_api`,
+     `find_cross_module_contracts`)
+4. Execute single Cypher with `IN` predicate
+5. Return with `mode`, `target_slug`, `bundle_health`, per-row
+   `member_project`
 
-The `_resolve_slug()` helper in `code_composite.py` and the member-
-iteration pattern in `find_version_skew` are both valid references. For
-these 6 tools the single-Cypher `IN` approach is preferred over per-member
-fan-out because:
-- All backing data is in Neo4j (no Tantivy search needed unlike `find_references`)
+Single-Cypher `IN` is preferred over per-member fan-out because:
+- All backing data is in Neo4j (no Tantivy search needed unlike
+  `find_references`)
 - Single query is simpler and avoids N+1 round-trips for 41-member bundles
 - Neo4j handles `IN` predicates efficiently on indexed properties
 
