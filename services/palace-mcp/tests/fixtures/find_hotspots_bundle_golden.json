@@ -1,0 +1,37 @@
+{
+  "ok": true,
+  "mode": "bundle",
+  "target_slug": "hotspot-wire-bundle",
+  "bundle_health": {
+    "name": "hotspot-wire-bundle",
+    "members_total": 2,
+    "members_fresh_within_7d": 2,
+    "members_stale": 0,
+    "query_failed_slugs": [],
+    "ingest_failed_slugs": [],
+    "never_ingested_slugs": [],
+    "stale_slugs": [],
+    "oldest_member_ingest_at": "2026-05-18T00:00:00Z",
+    "newest_member_ingest_at": "2026-05-19T00:00:00Z"
+  },
+  "result": [
+    {
+      "project_id": "hotspot-wire-alpha",
+      "path": "Modules/Send/High.swift",
+      "ccn_total": 12,
+      "churn_count": 9,
+      "hotspot_score": 9.0,
+      "computed_at": "2026-05-19T00:00:00Z",
+      "window_days": 90
+    },
+    {
+      "project_id": "hotspot-wire-beta",
+      "path": "Modules/Send/Medium.swift",
+      "ccn_total": 9,
+      "churn_count": 6,
+      "hotspot_score": 7.0,
+      "computed_at": "2026-05-18T00:00:00Z",
+      "window_days": 90
+    }
+  ]
+}
