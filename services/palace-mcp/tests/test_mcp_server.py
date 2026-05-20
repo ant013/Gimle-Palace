@@ -69,6 +69,7 @@ class TestCodeToolRegistration:
             "palace.code.find_version_skew",
             "palace.code.get_architecture",
             "palace.code.get_code_snippet",
+            "palace.code.get_snippet_rich",
             "palace.code.list_functions",
             "palace.code.manage_adr",
             "palace.code.query_graph",
