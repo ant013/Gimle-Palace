@@ -17,8 +17,12 @@ from mcp.client.streamable_http import streamablehttp_client
 
 pytest_plugins = ("tests.integration.hotspot_wire_support",)
 
-_FIXTURE_PATH = Path(__file__).parents[1] / "fixtures" / "find_hotspots_bundle_fixture.json"
-_GOLDEN_PATH = Path(__file__).parents[1] / "fixtures" / "find_hotspots_bundle_golden.json"
+_FIXTURE_PATH = (
+    Path(__file__).parents[1] / "fixtures" / "find_hotspots_bundle_fixture.json"
+)
+_GOLDEN_PATH = (
+    Path(__file__).parents[1] / "fixtures" / "find_hotspots_bundle_golden.json"
+)
 
 
 @pytest.fixture(scope="module")
@@ -105,8 +109,7 @@ def seeded_hotspot_bundle(
             finished_at = project["last_run_finished_at"]
             project_id = f"project/{slug}"
             sess.run(
-                "MERGE (p:Project {slug: $slug}) "
-                "SET p.group_id = $project_id",
+                "MERGE (p:Project {slug: $slug}) SET p.group_id = $project_id",
                 slug=slug,
                 project_id=project_id,
             )

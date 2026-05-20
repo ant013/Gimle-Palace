@@ -101,6 +101,14 @@ def _single_session_driver(*result_sets: list[dict[str, Any]]) -> _FakeDriver:
     return _FakeDriver([_FakeSession(list(result_sets))])
 
 
+class _FakeNeo4jDateTime:
+    def __init__(self, value: str) -> None:
+        self._value = value
+
+    def iso_format(self) -> str:
+        return self._value
+
+
 # ---------------------------------------------------------------------------
 # Pydantic v2 model tests
 # ---------------------------------------------------------------------------
@@ -320,6 +328,27 @@ async def test_bundle_status_has_as_of_timestamp() -> None:
 
     assert status.as_of is not None
     assert status.as_of.tzinfo is not None  # must be tz-aware
+
+
+async def test_bundle_status_accepts_neo4j_temporal_values() -> None:
+    driver = _single_session_driver(
+        [{"b_name": "uw-ios"}],
+        [
+            {
+                "slug": "evm-kit",
+                "tier": "first-party",
+                "added_at": _FakeNeo4jDateTime(_NOW.isoformat()),
+                "last_run_completed_at": _FakeNeo4jDateTime(
+                    (_NOW - timedelta(days=3)).isoformat()
+                ),
+                "last_run_ok": True,
+            }
+        ],
+    )
+
+    status = await bundle_status(driver, bundle="uw-ios")
+
+    assert status.newest_member_ingest_at == _NOW - timedelta(days=3)
 
 
 async def test_bundle_status_distinguishes_failure_types() -> None:

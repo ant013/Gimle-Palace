@@ -8,8 +8,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-_FIXTURE_PATH = Path(__file__).parents[1] / "fixtures" / "find_hotspots_bundle_fixture.json"
-_GOLDEN_PATH = Path(__file__).parents[1] / "fixtures" / "find_hotspots_bundle_golden.json"
+_FIXTURE_PATH = (
+    Path(__file__).parents[1] / "fixtures" / "find_hotspots_bundle_fixture.json"
+)
+_GOLDEN_PATH = (
+    Path(__file__).parents[1] / "fixtures" / "find_hotspots_bundle_golden.json"
+)
 
 
 class _FakeRecord:
