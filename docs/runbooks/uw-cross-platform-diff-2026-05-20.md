@@ -13,7 +13,7 @@ before M3 UW Discovery work begins.
 | Data source | `docs/runbooks/uw-ios-mini-audit-baseline-2026-05-19.json` | `docs/runbooks/uw-android-ingest-2026-05-20.md` |
 | Run type | Fixture (GIM-375 M1.1) | Real repo, pin `c0489d5a` (GIM-379) |
 | Language profile | `swift_kit` | `android_kit` |
-| Unique extractors run | 15 functional + 2 infra | 12 functional + 1 infra |
+| Unique extractors run | 15 functional + 2 infra | 10 functional + 2 infra |
 | Status OK | 12 | 12 |
 | Status RUN_FAILED | 2 | 0 |
 | Status NOT_ATTEMPTED | 1 | 0 |
