@@ -21,7 +21,7 @@
       "ccn_total": 12,
       "churn_count": 9,
       "hotspot_score": 9.0,
-      "computed_at": "2026-05-19T00:00:00+00:00",
+      "computed_at": "2026-05-19T00:00:00.000000000+00:00",
       "window_days": 90
     },
     {
@@ -30,7 +30,7 @@
       "ccn_total": 9,
       "churn_count": 6,
       "hotspot_score": 7.0,
-      "computed_at": "2026-05-18T00:00:00+00:00",
+      "computed_at": "2026-05-18T00:00:00.000000000+00:00",
       "window_days": 90
     }
   ]

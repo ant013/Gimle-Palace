@@ -121,7 +121,7 @@ async def test_find_hotspots_bundle_uses_project_ids_and_path_prefix() -> None:
     from palace_mcp.code_composite import SlugResolution
 
     computed_at = MagicMock()
-    computed_at.iso_format.return_value = "2026-05-19T00:00:00+00:00"
+    computed_at.iso_format.return_value = "2026-05-19T00:00:00.000000000+00:00"
     driver, session = _driver_for_rows(
         [
             {
@@ -174,7 +174,7 @@ async def test_find_hotspots_bundle_uses_project_ids_and_path_prefix() -> None:
             "ccn_total": 11,
             "churn_count": 7,
             "hotspot_score": 9.2,
-            "computed_at": "2026-05-19T00:00:00+00:00",
+            "computed_at": "2026-05-19T00:00:00.000000000+00:00",
             "window_days": 90,
         }
     ]
