@@ -223,7 +223,7 @@ Switching branches inside an agent worktree drags uncommitted changes across bra
 
 ### Operator vs production checkout
 
-The `production_checkout` path (e.g. `/opt/example/trading`) is the iMac deploy target. Stay on `main` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in TRD-48: feature checkout in production_checkout caused QA to test stale code.
+The `production_checkout` path (e.g. `/Users/Shared/Trading`) is the iMac deploy target. Stay on `main` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in TRD-48: feature checkout in production_checkout caused QA to test stale code.
 
 
 ## Pre-work: codebase-memory first
@@ -351,7 +351,7 @@ On the production target (iMac for gimle, dev Mac for codex-only uaudit):
 
 1. **Restore production checkout to `main`** before any test:
    ```
-   cd /opt/example/trading && git fetch && git checkout main && git pull --ff-only
+   cd /Users/Shared/Trading && git fetch && git checkout main && git pull --ff-only
    ```
    Codified after TRD-48: feature-branch checkout in production_checkout caused stale-code QA pass.
 2. **Run real MCP tool against real trading/trading** (not testcontainers):
@@ -396,7 +396,7 @@ $ trading.ingest.run_extractor(name="my_extractor", project="nonexistent")
 
 ### Restore checkout post-smoke
 
-After smoke completes, restore `/opt/example/trading` to `main` (not the feature branch you tested) before handoff to CTO. Otherwise next session starts on stale feature branch.
+After smoke completes, restore `/Users/Shared/Trading` to `main` (not the feature branch you tested) before handoff to CTO. Otherwise next session starts on stale feature branch.
 
 
 # QAEngineer — Trading
@@ -437,7 +437,7 @@ This bundle inherits the proven Gimle/CX role text above. The base text was auth
 - **Runtime agent**: `QAEngineer`.
 - **Workspace cwd**: `runs/QAEngineer/workspace` (resolved at deploy time relative to operator's project root in host-local paths.yaml).
 - **Primary codebase-memory project**: `trading-agents`.
-- **Source repo**: `https://github.com/ant013/trading-agents` (private), mirrored read/write at `/opt/example/trading/repo`.
+- **Source repo**: `https://github.com/ant013/trading-agents` (private), mirrored read/write at `/Users/Shared/Trading/repo`.
 - **Project domain**: trading platform — data ingestion (news, OHLC candles, exchange feeds) → strategy synthesis → AI-agent execution.
 - **Issue prefix**: `TRD-N` (paperclip-assigned). Branch names use operator's **phase-id** scheme, not the paperclip number.
 - **Mainline**: `main`. No `develop`. Feature branches cut from `main`, squash-merge back via PR.
@@ -454,7 +454,7 @@ This bundle inherits the proven Gimle/CX role text above. The base text was auth
 | `services/palace-mcp/` or `palace.*` MCP namespace | No MCP service in Trading v1. Use base MCPs. |
 | Graphiti / Neo4j extractor work | Not applicable — skip. |
 | Unstoppable Wallet (UW) / `unstoppable-wallet-*` as test target | `trading-agents` repo. |
-| `/Users/Shared/Ios/Gimle-Palace` production checkout | `/opt/example/trading/repo`. |
+| `/Users/Shared/Ios/Gimle-Palace` production checkout | `/Users/Shared/Trading/repo`. |
 | `docs/superpowers/specs/plans` in Gimle-Palace | `docs/specs` + `docs/plans` IN `trading-agents`. |
 | `paperclips/fragments/shared/...` Gimle submodule | Not used by Trading v1. |
 | `develop` integration branch | `main` (Trading has no `develop`). |
@@ -482,7 +482,7 @@ Agents do NOT call Telegram actions manually for lifecycle events.
 
 ### Report delivery
 
-Trading v1 has no Infra-equivalent agent. Final markdown reports go to `/opt/example/trading/artifacts/QAEngineer/`. Operator handles delivery until a delivery owner is designated.
+Trading v1 has no Infra-equivalent agent. Final markdown reports go to `/Users/Shared/Trading/artifacts/QAEngineer/`. Operator handles delivery until a delivery owner is designated.
 
 ### Operator memory location
 
