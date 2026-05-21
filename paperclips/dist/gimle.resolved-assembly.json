@@ -86,7 +86,7 @@
         {
           "agentId": "da97dbd9-6627-48d0-b421-66af0750eacf",
           "agentName": "cx-cto",
-          "bytes": 20203,
+          "bytes": 20287,
           "family": "cto",
           "lines": 475,
           "output": "paperclips/dist/codex/cx-cto.md",
@@ -95,14 +95,14 @@
             "cto"
           ],
           "roleId": "codex:cx-cto",
-          "sha256": "d991d7c91a986961a398af29f774820160527d7b4e87598ee35b6d800f24e344",
+          "sha256": "4071b15c630e89b6280a3349bd94620bbd59392b4794677fd2396766198c9ce5",
           "source": "paperclips/roles-codex/cx-cto.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "45e3b24d-a444-49aa-83bc-69db865a1897",
           "agentName": "cx-code-reviewer",
-          "bytes": 15501,
+          "bytes": 15585,
           "family": "reviewer",
           "lines": 368,
           "output": "paperclips/dist/codex/cx-code-reviewer.md",
@@ -111,14 +111,14 @@
             "reviewer"
           ],
           "roleId": "codex:cx-code-reviewer",
-          "sha256": "6707a4654bbd26c58129fc36b8040f0814703c6f9ec987a6f0b09dceec62222b",
+          "sha256": "348d810c8697cd6d2c2434bf25443e4e3457dc4bba04000af3a25bba6aab72cb",
           "source": "paperclips/roles-codex/cx-code-reviewer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "e010d305-22f7-4f5c-9462-e6526b195b19",
           "agentName": "cx-python-engineer",
-          "bytes": 15591,
+          "bytes": 15675,
           "family": "implementer",
           "lines": 370,
           "output": "paperclips/dist/codex/cx-python-engineer.md",
@@ -127,14 +127,14 @@
             "implementer"
           ],
           "roleId": "codex:cx-python-engineer",
-          "sha256": "9624488320c1bffe695874c35a7fd1b3419f2f7af88a3669c522a0ffaa34e4d3",
+          "sha256": "e1177b643c76d69cf77b8006775421ec9f54dc85207ff029f299d15affb17df7",
           "source": "paperclips/roles-codex/cx-python-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "99d5f8f8-822f-4ddb-baaa-0bdaec6f9399",
           "agentName": "cx-qa-engineer",
-          "bytes": 18097,
+          "bytes": 18181,
           "family": "qa",
           "lines": 426,
           "output": "paperclips/dist/codex/cx-qa-engineer.md",
@@ -143,14 +143,14 @@
             "qa"
           ],
           "roleId": "codex:cx-qa-engineer",
-          "sha256": "a4252c84eb77037a136db985a6941c7358ea2bde0c4c88499164cf99313695a2",
+          "sha256": "751cb602b320337fc360cd26b0709ea2929fb5ce5d8d98af13cbd4453a370b37",
           "source": "paperclips/roles-codex/cx-qa-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "1b9fc009-4b02-4560-b7f5-2b241b5897d9",
           "agentName": "cx-technical-writer",
-          "bytes": 11157,
+          "bytes": 11241,
           "family": "writer",
           "lines": 271,
           "output": "paperclips/dist/codex/cx-technical-writer.md",
@@ -159,14 +159,14 @@
             "writer"
           ],
           "roleId": "codex:cx-technical-writer",
-          "sha256": "c2285aadb329982929c2283b5247e62f31b3f36394fb0367c9183a1fc3cfb7af",
+          "sha256": "237a9fe04337f02d0d9c3439ed63a219af95db02f2e829bc780d3f55aa61a481",
           "source": "paperclips/roles-codex/cx-technical-writer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "21981be0-8c51-4e57-8a0a-ca8f95f4b8d9",
           "agentName": "cx-infra-engineer",
-          "bytes": 15625,
+          "bytes": 15709,
           "family": "implementer",
           "lines": 369,
           "output": "paperclips/dist/codex/cx-infra-engineer.md",
@@ -175,14 +175,14 @@
             "implementer"
           ],
           "roleId": "codex:cx-infra-engineer",
-          "sha256": "8f6b06ac9ade948b3c44ab9e75eec99e3bd9663b8d1eec859469d55f9da458b9",
+          "sha256": "1235095947b1619862c63a31508c43228b78b9cc062d0409cb589d1d57f521b8",
           "source": "paperclips/roles-codex/cx-infra-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "9a5d7bef-9b6a-4e74-be1d-e01999820804",
           "agentName": "cx-mcp-engineer",
-          "bytes": 15694,
+          "bytes": 15778,
           "family": "implementer",
           "lines": 370,
           "output": "paperclips/dist/codex/cx-mcp-engineer.md",
@@ -191,14 +191,14 @@
             "implementer"
           ],
           "roleId": "codex:cx-mcp-engineer",
-          "sha256": "c377a9d89fd1f3a097460bb3cfe8b054382ebed692af88fb5cc22e8f2f67a21d",
+          "sha256": "ab9ee469739cced20875908d936aa001026aea0696ca513d4aa2ff2fa462f8b4",
           "source": "paperclips/roles-codex/cx-mcp-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "a2f7d4d2-ee96-43c3-83d8-d3af02d6674c",
           "agentName": "cx-research-agent",
-          "bytes": 11822,
+          "bytes": 11906,
           "family": "research",
           "lines": 285,
           "output": "paperclips/dist/codex/cx-research-agent.md",
@@ -207,14 +207,14 @@
             "research"
           ],
           "roleId": "codex:cx-research-agent",
-          "sha256": "792c2967d9c6afcf26896fe30281eb08b1005131697ece6f4fd1b03804317d7e",
+          "sha256": "4dd9bf8f0d82cdeeab1b5e5002cb6e3ce3365a66422edbd45aa84af0f82c636d",
           "source": "paperclips/roles-codex/cx-research-agent.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "4e348572-1890-4122-b831-2185d9d50609",
           "agentName": "cx-blockchain-engineer",
-          "bytes": 15658,
+          "bytes": 15742,
           "family": "implementer",
           "lines": 370,
           "output": "paperclips/dist/codex/cx-blockchain-engineer.md",
@@ -223,14 +223,14 @@
             "implementer"
           ],
           "roleId": "codex:cx-blockchain-engineer",
-          "sha256": "1cd7fbe536140bb5749c01451f0570f2ed89e346e5795fadafe1773e88e99960",
+          "sha256": "4065921b23a2d013ea2a1d46b1055ebc20ddbf92cb4e580d33682ec78bdce22a",
           "source": "paperclips/roles-codex/cx-blockchain-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "f67918f9-662d-47c0-b6f7-5d66870d2702",
           "agentName": "cx-security-auditor",
-          "bytes": 15429,
+          "bytes": 15513,
           "family": "reviewer",
           "lines": 367,
           "output": "paperclips/dist/codex/cx-security-auditor.md",
@@ -239,14 +239,14 @@
             "reviewer"
           ],
           "roleId": "codex:cx-security-auditor",
-          "sha256": "9ff7d469aa4ac8c2525616997b762886ab78b0a63dcb9b6db37bee625e028622",
+          "sha256": "93e2148feb92a6a929d79e68a30cca4934a53ef2a1fe97062bf9d7f4a36b359c",
           "source": "paperclips/roles-codex/cx-security-auditor.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "1fe87c1c-d349-481a-b55a-3c3eec2e3c07",
           "agentName": "cx-auditor",
-          "bytes": 15364,
+          "bytes": 15448,
           "family": "reviewer",
           "lines": 367,
           "output": "paperclips/dist/codex/cx-auditor.md",
@@ -255,14 +255,14 @@
             "reviewer"
           ],
           "roleId": "codex:cx-auditor",
-          "sha256": "79e77553533031935b2ab3f95e57c7c5a4382f72458d0e7230f12effae83e520",
+          "sha256": "07567ee3b2c792167621b073e81537d68ac30272d4894ff052d8ac7132d018d3",
           "source": "paperclips/roles-codex/cx-auditor.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "fec71dea-7dba-4947-ad1f-668920a02cb6",
           "agentName": "codex-architect-reviewer",
-          "bytes": 15630,
+          "bytes": 15714,
           "family": "reviewer",
           "lines": 367,
           "output": "paperclips/dist/codex/codex-architect-reviewer.md",
@@ -271,7 +271,7 @@
             "reviewer"
           ],
           "roleId": "codex:codex-architect-reviewer",
-          "sha256": "e392705053a4a6958a0364d779484428618dc4bc1d69400611c571d8039c2e3a",
+          "sha256": "600d3c99357049ccc7694a4a5f274d2790c36d05ad4b04406842d105dc5e514b",
           "source": "paperclips/roles-codex/codex-architect-reviewer.md",
           "workspaceCwd": ""
         }

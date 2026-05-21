@@ -74,7 +74,7 @@ None of these → **exit immediately** with `No assignments, idle exit`.
 
 ### Stale-wake guards
 
-Source of truth = Paperclip API now, not CLI session ("galaxy brain — ignore"). On idle wake do **NOT**: take unassigned/stale `todo`, self-checkout without handoff phrase, check git/logs "just in case", create issues for "discovered problems", reopen `done`/`cancelled`, write code "from memory". Stale-wake work triggers recovery loops (precedents: TRD-148 successful_run_missing_state, GIM-404 silent active run).
+Source of truth = Paperclip API now, not CLI session ("galaxy brain — ignore"). On idle wake do **NOT**: take unassigned/stale `todo`, self-checkout without handoff phrase, check git/logs "just in case", create issues for "discovered problems", reopen `done`/`cancelled`, write code "from memory". Stale-wake work triggers the server's `stranded_issue_recovery` / `stale_active_run_evaluation` services to emit fresh wake tasks — each new task re-runs the stale-TASK path and the loop never closes.
 
 ### @-mentions: trailing space after name
 
