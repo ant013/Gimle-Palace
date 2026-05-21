@@ -187,6 +187,132 @@ val legacyLabel by lazy { "legacy" }
     return repo
 
 
+def _build_async_cancel_repo(root: Path) -> Path:
+    repo = root / "repo"
+
+    for idx in range(1, 6):
+        _write(
+            repo / "Sources" / "StructuredFlow" / f"Worker{idx}.swift",
+            f"""
+func structuredWorker{idx}() async throws {{
+    try await withTaskCancellationHandler {{
+        try await Task.sleep(nanoseconds: 10)
+    }} onCancel: {{
+        return
+    }}
+}}
+""".strip()
+            + "\n",
+        )
+        _write(
+            repo / "Sources" / "PollingFlow" / f"Worker{idx}.swift",
+            f"""
+func pollingWorker{idx}() async {{
+    if Task.isCancelled {{
+        return
+    }}
+    await Task.yield()
+}}
+""".strip()
+            + "\n",
+        )
+        _write(
+            repo / "Sources" / "ManualFlow" / f"Worker{idx}.swift",
+            f"""
+final class ManualFlowWorker{idx} {{
+    private var refreshTask: Task<Void, Never>?
+
+    func start() {{
+        refreshTask = Task {{
+            await Task.yield()
+        }}
+    }}
+
+    func stop() {{
+        refreshTask?.cancel()
+    }}
+}}
+""".strip()
+            + "\n",
+        )
+        _write(
+            repo / "Sources" / "UnclearFlow" / f"Worker{idx}.swift",
+            f"""
+func unclearWorker{idx}() async {{
+    await Task.yield()
+}}
+""".strip()
+            + "\n",
+        )
+
+    return repo
+
+
+def _build_async_cancel_real_data_layout_repo(root: Path) -> Path:
+    repo = root / "repo"
+
+    for idx in range(1, 6):
+        _write(
+            repo
+            / "UnstoppableWallet"
+            / "Modules"
+            / "SendAddress"
+            / f"SendAddressWorker{idx}.swift",
+            f"""
+func sendAddressWorker{idx}() async throws {{
+    try await withTaskCancellationHandler {{
+        try await Task.sleep(nanoseconds: 10)
+    }} onCancel: {{
+        return
+    }}
+}}
+""".strip()
+            + "\n",
+        )
+        _write(
+            repo
+            / "UnstoppableWallet"
+            / "Modules"
+            / "MetricChart"
+            / f"MetricChartWorker{idx}.swift",
+            f"""
+func metricChartWorker{idx}() async {{
+    if Task.isCancelled {{
+        return
+    }}
+    await Task.yield()
+}}
+""".strip()
+            + "\n",
+        )
+        _write(
+            repo
+            / "UnstoppableWallet"
+            / "UserInterface"
+            / "HUD"
+            / "Modules"
+            / f"HUDWorker{idx}.swift",
+            f"""
+final class HUDWorker{idx} {{
+    private var refreshTask: Task<Void, Never>?
+
+    func start() {{
+        refreshTask = Task {{
+            await Task.yield()
+        }}
+    }}
+
+    func stop() {{
+        refreshTask?.cancel()
+    }}
+}}
+""".strip()
+            + "\n",
+        )
+
+    return repo
+
+
 def _make_ctx(repo_path: Path) -> ExtractorRunContext:
     return ExtractorRunContext(
         project_slug="coding-mini",
@@ -393,6 +519,70 @@ def test_collect_conventions_skips_groups_below_min_sample_count(
 
     assert summary.findings == []
     assert summary.violations == []
+
+
+def test_collect_conventions_detects_async_cancel_dominant_choices(
+    tmp_path: Path,
+) -> None:
+    repo = _build_async_cancel_repo(tmp_path)
+
+    summary = collect_conventions(
+        project_id="coding-mini",
+        repo_path=repo,
+        run_id="run-async-cancel",
+    )
+    convention_by_kind = {
+        (finding.module, finding.kind): finding for finding in summary.findings
+    }
+
+    structured = convention_by_kind[("StructuredFlow", "async_cancel")]
+    assert structured.dominant_choice == "structured_propagation"
+    assert structured.sample_count == 5
+    assert structured.outliers == 0
+
+    polling = convention_by_kind[("PollingFlow", "async_cancel")]
+    assert polling.dominant_choice == "cooperative_polling"
+    assert polling.sample_count == 5
+    assert polling.outliers == 0
+
+    manual = convention_by_kind[("ManualFlow", "async_cancel")]
+    assert manual.dominant_choice == "manual_task_handle"
+    assert manual.sample_count == 5
+    assert manual.outliers == 0
+
+    unclear = convention_by_kind[("UnclearFlow", "async_cancel")]
+    assert unclear.dominant_choice == "missing_or_unclear"
+    assert unclear.sample_count == 5
+    assert unclear.outliers == 0
+
+    assert summary.violations == []
+
+
+def test_collect_conventions_splits_real_data_module_layouts(
+    tmp_path: Path,
+) -> None:
+    repo = _build_async_cancel_real_data_layout_repo(tmp_path)
+
+    summary = collect_conventions(
+        project_id="uw-ios",
+        repo_path=repo,
+        run_id="run-async-cancel-real-layout",
+    )
+    convention_by_kind = {
+        (finding.module, finding.kind): finding for finding in summary.findings
+    }
+
+    send_address = convention_by_kind[("SendAddress", "async_cancel")]
+    assert send_address.dominant_choice == "structured_propagation"
+    assert send_address.sample_count == 5
+
+    metric_chart = convention_by_kind[("MetricChart", "async_cancel")]
+    assert metric_chart.dominant_choice == "cooperative_polling"
+    assert metric_chart.sample_count == 5
+
+    hud = convention_by_kind[("HUD", "async_cancel")]
+    assert hud.dominant_choice == "manual_task_handle"
+    assert hud.sample_count == 5
 
 
 @pytest.mark.asyncio
