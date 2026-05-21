@@ -1368,15 +1368,16 @@ async def palace_code_find_public_api(
 @_tool(
     name="palace.code.find_cross_module_contracts",
     description=(
-        "List cross-module contract drift records for a project as recorded by "
-        "the cross_module_contract extractor. Returns ModuleContractDelta rows "
-        "showing which consumer→producer pairs have added, removed, or "
-        "signature-changed symbols between commits. "
+        "List cross-module contract drift records for a project or bundle as "
+        "recorded by the cross_module_contract extractor. Returns "
+        "ModuleContractDelta rows showing which consumer→producer pairs have "
+        "added, removed, or signature-changed symbols between commits. "
         "Accepts optional limit (default 200)."
     ),
 )
 async def palace_code_find_cross_module_contracts(
-    project: str,
+    project: str | None = None,
+    bundle: str | None = None,
     limit: int = 200,
 ) -> dict[str, Any]:
     """List cross-module contract drift records ordered by commit and consumer."""
@@ -1388,7 +1389,10 @@ async def palace_code_find_cross_module_contracts(
             "message": "Neo4j driver not initialised",
         }
     return await _find_cross_module_contracts_impl(
-        driver=driver, project=project, limit=limit
+        driver=driver,
+        project=project,
+        bundle=bundle,
+        limit=limit,
     )
 
 
