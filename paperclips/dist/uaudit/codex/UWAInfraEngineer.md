@@ -65,19 +65,16 @@ discipline.
 
 ### On every wake
 
-1. **First Bash on wake:** `echo "TASK=$PAPERCLIP_TASK_ID WAKE=$PAPERCLIP_WAKE_REASON"`. If `TASK` non-empty → `GET /api/issues/$PAPERCLIP_TASK_ID` + work. **Do NOT exit** on `inbox-lite=[]` if `TASK` is set.
-2. `GET /api/agents/me` → any issue with `assigneeAgentId=me` and `in_progress`? → continue.
-3. Comments / @mentions newer than `last_heartbeat_at`? → reply.
+1. **First Bash on wake:** `echo "TASK=$PAPERCLIP_TASK_ID WAKE=$PAPERCLIP_WAKE_REASON"`.
+2. If `TASK` non-empty → `GET /api/issues/$PAPERCLIP_TASK_ID`. **Idle-exit immediately** if: HTTP 404; `status` ∈ {`done`, `cancelled`}; `assigneeAgentId != me` without fresh @-mention handoff to me. Otherwise → work. **Never resurrect** a stale issue from CLI memory.
+3. `GET /api/agents/me` → any issue with `assigneeAgentId=me` and `in_progress`? → continue.
+4. Comments / @mentions newer than `last_heartbeat_at`? → reply.
 
-None of three → **exit immediately** with `No assignments, idle exit`.
+None of these → **exit immediately** with `No assignments, idle exit`.
 
-### Cross-session memory — FORBIDDEN
+### Stale-wake guards
 
-If you "remember" past work at session start (*"let me continue where I left off"*) — that's CLI runtime cache, not reality. Source of truth is the Paperclip API:
-
-- Issue exists, assigned to you now → work
-- Issue deleted / cancelled / done → don't resurrect, don't reopen
-- Don't remember the issue ID? It doesn't exist — query the API.
+Source of truth = Paperclip API now, not CLI session ("galaxy brain — ignore"). On idle wake do **NOT**: take unassigned/stale `todo`, self-checkout without handoff phrase, check git/logs "just in case", create issues for "discovered problems", reopen `done`/`cancelled`, write code "from memory". Stale-wake work triggers the server's `stranded_issue_recovery` / `stale_active_run_evaluation` services to emit fresh wake tasks — each new task re-runs the stale-TASK path and the loop never closes.
 
 ### @-mentions: trailing space after name
 
@@ -410,8 +407,8 @@ test -n "$PAPERCLIP_DELIVERY_TOKEN"
 ```
 
 Send with `Authorization: Bearer $PAPERCLIP_DELIVERY_TOKEN`:
-`POST $PAPERCLIP_DELIVERY_API_URL/api/plugins/00000000-0000-0000-0000-000000000000/actions/send_to_telegram`
-body `{"params":{"companyId":"00000000-0000-0000-0000-000000000001","agentId":"$PAPERCLIP_AGENT_ID","issueIdentifier","markdownFileName","markdownContent"}}`.
+`POST $PAPERCLIP_DELIVERY_API_URL/api/plugins/60023916-4b6c-40f5-829f-bc8b98abc4ed/actions/send_to_telegram`
+body `{"params":{"companyId":"8f55e80b-0264-4ab6-9d56-8b2652f18005","agentId":"$PAPERCLIP_AGENT_ID","issueIdentifier","markdownFileName","markdownContent"}}`.
 `issueIdentifier` MUST be `UNS-*`; never pass
 `chatId`. Inline Markdown only — no `filePath`, URLs, binaries, bot tokens, or
 direct `api.telegram.org`. If `PAPERCLIP_DELIVERY_TOKEN` is empty or the plugin
