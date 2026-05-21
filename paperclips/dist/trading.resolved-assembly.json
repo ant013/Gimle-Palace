@@ -40,17 +40,17 @@
   },
   "parameters": {
     "paths": {
-      "codexTeamRoot": "/opt/example/trading/runs",
-      "operatorMemoryDir": "~/.claude/projects/-opt-example-trading/memory",
+      "codexTeamRoot": "/Users/Shared/Trading/runs",
+      "operatorMemoryDir": "",
       "overlayRoot": "paperclips/projects/trading/overlays",
-      "primaryMcpServiceDir": "/opt/example/trading",
-      "primaryRepoRoot": "/opt/example/trading/repo",
-      "productionCheckout": "/opt/example/trading",
-      "projectRoot": "/opt/example/trading",
+      "primaryMcpServiceDir": "/Users/Shared/Trading",
+      "primaryRepoRoot": "/Users/Shared/Trading/repo",
+      "productionCheckout": "/Users/Shared/Trading",
+      "projectRoot": "/Users/Shared/Trading",
       "projectRulesFile": "AGENTS.md"
     },
     "project": {
-      "companyId": "00000000-0000-0000-0000-000000000002",
+      "companyId": "09edf17a-31d5-46cb-9812-6f07623b1c45",
       "displayName": "Trading",
       "integrationBranch": "main",
       "issuePrefix": "TRD",
@@ -70,66 +70,66 @@
       "instructionsBundleMode": "managed",
       "roles": [
         {
-          "agentId": "",
+          "agentId": "3649a8df-94ed-4025-a998-fb8be40975af",
           "agentName": "CEO",
-          "bytes": 24301,
+          "bytes": 24512,
           "family": "cto",
-          "lines": 539,
+          "lines": 536,
           "output": "paperclips/dist/trading/codex/CEO.md",
           "platform": "",
           "profiles": [
             "cto"
           ],
           "roleId": "codex:cx-cto",
-          "sha256": "eed9f3afe4799a1dbe7faa2f7e9c023ece2fb6c758f8e105204556b19f0e56c1",
+          "sha256": "2ccf4f1d9590161c14fc03f82dc24e1f8076b924d319f09828245ce3b6e14d54",
           "source": "paperclips/roles-codex/cx-cto.md",
           "workspaceCwd": ""
         },
         {
-          "agentId": "",
+          "agentId": "8eeda1b1-704f-4b97-839f-e050f9f765d2",
           "agentName": "CodeReviewer",
-          "bytes": 19650,
+          "bytes": 19861,
           "family": "reviewer",
-          "lines": 432,
+          "lines": 429,
           "output": "paperclips/dist/trading/codex/CodeReviewer.md",
           "platform": "",
           "profiles": [
             "reviewer"
           ],
           "roleId": "codex:cx-code-reviewer",
-          "sha256": "3de7622f8c5584d9e936d1cd9a4c01cf29d8240747b51d6ff98a12b2edf8282b",
+          "sha256": "163a9645cc9a2f8909601ebacc31f200df0bde00171d918b555306d5dbe42a6b",
           "source": "paperclips/roles-codex/cx-code-reviewer.md",
           "workspaceCwd": ""
         },
         {
-          "agentId": "",
+          "agentId": "2705af9c-7dda-464c-9f6c-8d0deb38816a",
           "agentName": "PythonEngineer",
-          "bytes": 19730,
+          "bytes": 19942,
           "family": "implementer",
-          "lines": 434,
+          "lines": 431,
           "output": "paperclips/dist/trading/codex/PythonEngineer.md",
           "platform": "",
           "profiles": [
             "implementer"
           ],
           "roleId": "codex:cx-python-engineer",
-          "sha256": "340024fe2b8ed4cb4f940bc15a33cc1e9c487df0d29563cddb490bcd9267bb7e",
+          "sha256": "0c5c3c6b8b44bccaed671b88e635b533038d0ca1f28a6df4d8e8d76c7e92bc44",
           "source": "paperclips/roles-codex/cx-python-engineer.md",
           "workspaceCwd": ""
         },
         {
-          "agentId": "",
+          "agentId": "fbd3d0e4-6abb-4797-83d2-e4dc99dbed44",
           "agentName": "QAEngineer",
-          "bytes": 22192,
+          "bytes": 22406,
           "family": "qa",
-          "lines": 490,
+          "lines": 487,
           "output": "paperclips/dist/trading/codex/QAEngineer.md",
           "platform": "",
           "profiles": [
             "qa"
           ],
           "roleId": "codex:cx-qa-engineer",
-          "sha256": "66ce95d3aacd39cc1ee293d0fc66928e374710c2172a4d0951b22217c489808d",
+          "sha256": "a6379e62bc7b2d99a79e167246468ae37dac3c95f44ef0255ff43e9cfa33332d",
           "source": "paperclips/roles-codex/cx-qa-engineer.md",
           "workspaceCwd": ""
         }

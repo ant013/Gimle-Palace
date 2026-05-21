@@ -65,19 +65,16 @@ discipline.
 
 ### On every wake
 
-1. **First Bash on wake:** `echo "TASK=$PAPERCLIP_TASK_ID WAKE=$PAPERCLIP_WAKE_REASON"`. If `TASK` non-empty → `GET /api/issues/$PAPERCLIP_TASK_ID` + work. **Do NOT exit** on `inbox-lite=[]` if `TASK` is set.
-2. `GET /api/agents/me` → any issue with `assigneeAgentId=me` and `in_progress`? → continue.
-3. Comments / @mentions newer than `last_heartbeat_at`? → reply.
+1. **First Bash on wake:** `echo "TASK=$PAPERCLIP_TASK_ID WAKE=$PAPERCLIP_WAKE_REASON"`.
+2. If `TASK` non-empty → `GET /api/issues/$PAPERCLIP_TASK_ID`. **Idle-exit immediately** if: HTTP 404; `status` ∈ {`done`, `cancelled`}; `assigneeAgentId != me` without fresh @-mention handoff to me. Otherwise → work. **Never resurrect** a stale issue from CLI memory.
+3. `GET /api/agents/me` → any issue with `assigneeAgentId=me` and `in_progress`? → continue.
+4. Comments / @mentions newer than `last_heartbeat_at`? → reply.
 
-None of three → **exit immediately** with `No assignments, idle exit`.
+None of these → **exit immediately** with `No assignments, idle exit`.
 
-### Cross-session memory — FORBIDDEN
+### Stale-wake guards
 
-If you "remember" past work at session start (*"let me continue where I left off"*) — that's CLI runtime cache, not reality. Source of truth is the Paperclip API:
-
-- Issue exists, assigned to you now → work
-- Issue deleted / cancelled / done → don't resurrect, don't reopen
-- Don't remember the issue ID? It doesn't exist — query the API.
+Source of truth = Paperclip API now, not CLI session ("galaxy brain — ignore"). On idle wake do **NOT**: take unassigned/stale `todo`, self-checkout without handoff phrase, check git/logs "just in case", create issues for "discovered problems", reopen `done`/`cancelled`, write code "from memory". Stale-wake work triggers recovery loops (precedents: TRD-148 successful_run_missing_state, GIM-404 silent active run).
 
 ### @-mentions: trailing space after name
 
@@ -223,7 +220,7 @@ Switching branches inside an agent worktree drags uncommitted changes across bra
 
 ### Operator vs production checkout
 
-The `production_checkout` path (e.g. `/opt/uaa-example/gimle`) is the iMac deploy target. Stay on `develop` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in GIM-48: feature checkout in production_checkout caused QA to test stale code.
+The `production_checkout` path (e.g. `/Users/Shared/Ios/Gimle-Palace`) is the iMac deploy target. Stay on `develop` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in GIM-48: feature checkout in production_checkout caused QA to test stale code.
 
 
 ## Pre-work: codebase-memory first
@@ -351,7 +348,7 @@ On the production target (iMac for gimle, dev Mac for codex-only uaudit):
 
 1. **Restore production checkout to `develop`** before any test:
    ```
-   cd /opt/uaa-example/gimle && git fetch && git checkout develop && git pull --ff-only
+   cd /Users/Shared/Ios/Gimle-Palace && git fetch && git checkout develop && git pull --ff-only
    ```
    Codified after GIM-48: feature-branch checkout in production_checkout caused stale-code QA pass.
 2. **Run real MCP tool against real palace-mcp/palace-mcp** (not testcontainers):
@@ -396,7 +393,7 @@ $ palace.ingest.run_extractor(name="my_extractor", project="nonexistent")
 
 ### Restore checkout post-smoke
 
-After smoke completes, restore `/opt/uaa-example/gimle` to `develop` (not the feature branch you tested) before handoff to CTO. Otherwise next session starts on stale feature branch.
+After smoke completes, restore `/Users/Shared/Ios/Gimle-Palace` to `develop` (not the feature branch you tested) before handoff to CTO. Otherwise next session starts on stale feature branch.
 
 
 # QAEngineer — Gimle

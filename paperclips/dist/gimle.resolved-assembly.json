@@ -54,17 +54,17 @@
   },
   "parameters": {
     "paths": {
-      "codexTeamRoot": "/opt/uaa-example/gimle/runs",
-      "operatorMemoryDir": "~/.claude/projects/-opt-uaa-example-gimle/memory",
+      "codexTeamRoot": "/Users/Shared/Ios/Gimle-Palace/runs",
+      "operatorMemoryDir": "",
       "overlayRoot": "paperclips/projects/gimle/overlays",
       "primaryMcpServiceDir": "services/palace-mcp",
-      "primaryRepoRoot": "/opt/uaa-example/gimle",
-      "productionCheckout": "/opt/uaa-example/gimle",
-      "projectRoot": "/opt/uaa-example/gimle",
+      "primaryRepoRoot": "/Users/Shared/Ios/Gimle-Palace",
+      "productionCheckout": "/Users/Shared/Ios/Gimle-Palace",
+      "projectRoot": "/Users/Shared/Ios/Gimle-Palace",
       "projectRulesFile": "AGENTS.md"
     },
     "project": {
-      "companyId": "00000000-0000-0000-0000-000000000003",
+      "companyId": "9d8f432c-ff7d-4e3a-bbe3-3cd355f73b64",
       "displayName": "Gimle",
       "integrationBranch": "develop",
       "issuePrefix": "GIM",
@@ -77,206 +77,6 @@
   "sourceManifest": "paperclips/projects/gimle/paperclip-agent-assembly.yaml",
   "sourceManifestSha256": "03e7fdf185e7f4edfafeafe2179a0c0a082e6384211b9aa5980cd204e2ede926",
   "targets": {
-    "claude": {
-      "adapterType": "claude_local",
-      "deployMode": "local-or-api",
-      "instructionEntryFile": "AGENTS.md",
-      "instructionsBundleMode": "external-or-managed",
-      "roles": [
-        {
-          "agentId": "7fb0fdbb-e17f-4487-a4da-16993a907bec",
-          "agentName": "cto",
-          "bytes": 20323,
-          "family": "cto",
-          "lines": 479,
-          "output": "paperclips/dist/cto.md",
-          "platform": "",
-          "profiles": [
-            "cto"
-          ],
-          "roleId": "claude:cto",
-          "sha256": "6ca87318285ad186d15f8180b95a54665ff11139d51c2eedeb5ae92a10369968",
-          "source": "paperclips/roles/cto.md",
-          "workspaceCwd": ""
-        },
-        {
-          "agentId": "bd2d7e20-7ed8-474c-91fc-353d610f4c52",
-          "agentName": "code-reviewer",
-          "bytes": 15735,
-          "family": "reviewer",
-          "lines": 372,
-          "output": "paperclips/dist/code-reviewer.md",
-          "platform": "",
-          "profiles": [
-            "reviewer"
-          ],
-          "roleId": "claude:code-reviewer",
-          "sha256": "2e9f4a6ab392720daa7a47e03ada995b9d4121e9417accac6bfdac844d2b1d02",
-          "source": "paperclips/roles/code-reviewer.md",
-          "workspaceCwd": ""
-        },
-        {
-          "agentId": "127068ee-b564-4b37-9370-616c81c63f35",
-          "agentName": "python-engineer",
-          "bytes": 15775,
-          "family": "implementer",
-          "lines": 374,
-          "output": "paperclips/dist/python-engineer.md",
-          "platform": "",
-          "profiles": [
-            "implementer"
-          ],
-          "roleId": "claude:python-engineer",
-          "sha256": "7f9be444b09eb222ad10abfa77b59626cecd4996bd1dcfb7c558ae1c4dad879f",
-          "source": "paperclips/roles/python-engineer.md",
-          "workspaceCwd": ""
-        },
-        {
-          "agentId": "58b68640-1e83-4d5d-978b-51a5ca9080e0",
-          "agentName": "qa-engineer",
-          "bytes": 18138,
-          "family": "qa",
-          "lines": 431,
-          "output": "paperclips/dist/qa-engineer.md",
-          "platform": "",
-          "profiles": [
-            "qa"
-          ],
-          "roleId": "claude:qa-engineer",
-          "sha256": "5c44d0a9ef6efe8fc8dcc720a5afa8851a64a34fbf48a5a2ddfa41c1b44cac56",
-          "source": "paperclips/roles/qa-engineer.md",
-          "workspaceCwd": ""
-        },
-        {
-          "agentId": "0e8222fd-88b9-4593-98f6-847a448b0aab",
-          "agentName": "technical-writer",
-          "bytes": 11144,
-          "family": "writer",
-          "lines": 274,
-          "output": "paperclips/dist/technical-writer.md",
-          "platform": "",
-          "profiles": [
-            "writer"
-          ],
-          "roleId": "claude:technical-writer",
-          "sha256": "588e1d98c2781a0eb3bd0e029a7a61d55e7918e8207c7186836d471323592552",
-          "source": "paperclips/roles/technical-writer.md",
-          "workspaceCwd": ""
-        },
-        {
-          "agentId": "89f8f76b-844b-4d1f-b614-edbe72a91d4b",
-          "agentName": "infra-engineer",
-          "bytes": 15783,
-          "family": "implementer",
-          "lines": 375,
-          "output": "paperclips/dist/infra-engineer.md",
-          "platform": "",
-          "profiles": [
-            "implementer"
-          ],
-          "roleId": "claude:infra-engineer",
-          "sha256": "2aa476c15a6744b99a2e1ce1f8568de3744cfc23d93edda710d7fd1ad3afb724",
-          "source": "paperclips/roles/infra-engineer.md",
-          "workspaceCwd": ""
-        },
-        {
-          "agentId": "274a0b0c-ebe8-4613-ad0e-3e745c817a97",
-          "agentName": "mcp-engineer",
-          "bytes": 15848,
-          "family": "implementer",
-          "lines": 375,
-          "output": "paperclips/dist/mcp-engineer.md",
-          "platform": "",
-          "profiles": [
-            "implementer"
-          ],
-          "roleId": "claude:mcp-engineer",
-          "sha256": "8a602838549ef0d7ede0eebb810b6c134d24afd8261e7fa0cbe52cd1c0e4f548",
-          "source": "paperclips/roles/mcp-engineer.md",
-          "workspaceCwd": ""
-        },
-        {
-          "agentId": "bbcef02c-b755-4624-bba6-84f01e5d49c8",
-          "agentName": "research-agent",
-          "bytes": 11877,
-          "family": "research",
-          "lines": 288,
-          "output": "paperclips/dist/research-agent.md",
-          "platform": "",
-          "profiles": [
-            "research"
-          ],
-          "roleId": "claude:research-agent",
-          "sha256": "e1a1c5439629aa08535b6b39aaf355a807bee2e0b4480d56481c152416ab78b6",
-          "source": "paperclips/roles/research-agent.md",
-          "workspaceCwd": ""
-        },
-        {
-          "agentId": "9874ad7a-dfbc-49b0-b3ed-d0efda6453bb",
-          "agentName": "blockchain-engineer",
-          "bytes": 15765,
-          "family": "implementer",
-          "lines": 374,
-          "output": "paperclips/dist/blockchain-engineer.md",
-          "platform": "",
-          "profiles": [
-            "implementer"
-          ],
-          "roleId": "claude:blockchain-engineer",
-          "sha256": "eaabc95222a6028a9c209ab44fa707bc73181cfdcd94580a8da9d31770ba144c",
-          "source": "paperclips/roles/blockchain-engineer.md",
-          "workspaceCwd": ""
-        },
-        {
-          "agentId": "a56f9e4a-ef9c-46d4-a736-1db5e19bbde4",
-          "agentName": "security-auditor",
-          "bytes": 15660,
-          "family": "reviewer",
-          "lines": 372,
-          "output": "paperclips/dist/security-auditor.md",
-          "platform": "",
-          "profiles": [
-            "reviewer"
-          ],
-          "roleId": "claude:security-auditor",
-          "sha256": "91dd891e083b7439585f8c619ba143f70e9327a9c0541a09940822d6e77a4622",
-          "source": "paperclips/roles/security-auditor.md",
-          "workspaceCwd": ""
-        },
-        {
-          "agentId": "60a3c10d-76bd-4247-83c9-4ba2ddcd3c21",
-          "agentName": "auditor",
-          "bytes": 15506,
-          "family": "reviewer",
-          "lines": 371,
-          "output": "paperclips/dist/auditor.md",
-          "platform": "",
-          "profiles": [
-            "reviewer"
-          ],
-          "roleId": "claude:auditor",
-          "sha256": "76b05f79fd5a7f7c57b83826def5c93a836fab636440bffb797f916acdb15d02",
-          "source": "paperclips/roles/auditor.md",
-          "workspaceCwd": ""
-        },
-        {
-          "agentId": "8d6649e2-2df6-412a-a6bc-2d94bab3b73f",
-          "agentName": "opus-architect-reviewer",
-          "bytes": 15531,
-          "family": "reviewer",
-          "lines": 370,
-          "output": "paperclips/dist/opus-architect-reviewer.md",
-          "platform": "",
-          "profiles": [
-            "reviewer"
-          ],
-          "roleId": "claude:opus-architect-reviewer",
-          "sha256": "8a9a2d9cc72e40668d715429777e0288ce00de1840c2d5378fd2c796d6ab1ef3",
-          "source": "paperclips/roles/opus-architect-reviewer.md",
-          "workspaceCwd": ""
-        }
-      ]
-    },
     "codex": {
       "adapterType": "codex_local",
       "deployMode": "api",
@@ -286,192 +86,192 @@
         {
           "agentId": "da97dbd9-6627-48d0-b421-66af0750eacf",
           "agentName": "cx-cto",
-          "bytes": 19995,
+          "bytes": 20203,
           "family": "cto",
-          "lines": 478,
+          "lines": 475,
           "output": "paperclips/dist/codex/cx-cto.md",
           "platform": "",
           "profiles": [
             "cto"
           ],
           "roleId": "codex:cx-cto",
-          "sha256": "dac12b838a63493aefa49f534b82f39d54ad3793b09e1c74aebeff36cfdc38b3",
+          "sha256": "d991d7c91a986961a398af29f774820160527d7b4e87598ee35b6d800f24e344",
           "source": "paperclips/roles-codex/cx-cto.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "45e3b24d-a444-49aa-83bc-69db865a1897",
           "agentName": "cx-code-reviewer",
-          "bytes": 15293,
+          "bytes": 15501,
           "family": "reviewer",
-          "lines": 371,
+          "lines": 368,
           "output": "paperclips/dist/codex/cx-code-reviewer.md",
           "platform": "",
           "profiles": [
             "reviewer"
           ],
           "roleId": "codex:cx-code-reviewer",
-          "sha256": "c246b58c06fb5349f9ab4bca5e3839e0e908cb388413dca78d212a2194186521",
+          "sha256": "6707a4654bbd26c58129fc36b8040f0814703c6f9ec987a6f0b09dceec62222b",
           "source": "paperclips/roles-codex/cx-code-reviewer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "e010d305-22f7-4f5c-9462-e6526b195b19",
           "agentName": "cx-python-engineer",
-          "bytes": 15375,
+          "bytes": 15591,
           "family": "implementer",
-          "lines": 373,
+          "lines": 370,
           "output": "paperclips/dist/codex/cx-python-engineer.md",
           "platform": "",
           "profiles": [
             "implementer"
           ],
           "roleId": "codex:cx-python-engineer",
-          "sha256": "0e03f4c5865ada137c4728c87781fabe5227caf889675135807f7cb25d8e14b4",
+          "sha256": "9624488320c1bffe695874c35a7fd1b3419f2f7af88a3669c522a0ffaa34e4d3",
           "source": "paperclips/roles-codex/cx-python-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "99d5f8f8-822f-4ddb-baaa-0bdaec6f9399",
           "agentName": "cx-qa-engineer",
-          "bytes": 17865,
+          "bytes": 18097,
           "family": "qa",
-          "lines": 429,
+          "lines": 426,
           "output": "paperclips/dist/codex/cx-qa-engineer.md",
           "platform": "",
           "profiles": [
             "qa"
           ],
           "roleId": "codex:cx-qa-engineer",
-          "sha256": "c6c094717b7a17764529ac49f32bb972225821c17efb027555f7fd59316611af",
+          "sha256": "a4252c84eb77037a136db985a6941c7358ea2bde0c4c88499164cf99313695a2",
           "source": "paperclips/roles-codex/cx-qa-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "1b9fc009-4b02-4560-b7f5-2b241b5897d9",
           "agentName": "cx-technical-writer",
-          "bytes": 10949,
+          "bytes": 11157,
           "family": "writer",
-          "lines": 274,
+          "lines": 271,
           "output": "paperclips/dist/codex/cx-technical-writer.md",
           "platform": "",
           "profiles": [
             "writer"
           ],
           "roleId": "codex:cx-technical-writer",
-          "sha256": "a9162a278cc25eb5e64207c899782da6a2f643fa22779e7150cfecfea76348ef",
+          "sha256": "c2285aadb329982929c2283b5247e62f31b3f36394fb0367c9183a1fc3cfb7af",
           "source": "paperclips/roles-codex/cx-technical-writer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "21981be0-8c51-4e57-8a0a-ca8f95f4b8d9",
           "agentName": "cx-infra-engineer",
-          "bytes": 15409,
+          "bytes": 15625,
           "family": "implementer",
-          "lines": 372,
+          "lines": 369,
           "output": "paperclips/dist/codex/cx-infra-engineer.md",
           "platform": "",
           "profiles": [
             "implementer"
           ],
           "roleId": "codex:cx-infra-engineer",
-          "sha256": "cad96214777b1ed5b5b734ddf5ad8b40568c112b887a6b4149b762af5493244f",
+          "sha256": "8f6b06ac9ade948b3c44ab9e75eec99e3bd9663b8d1eec859469d55f9da458b9",
           "source": "paperclips/roles-codex/cx-infra-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "9a5d7bef-9b6a-4e74-be1d-e01999820804",
           "agentName": "cx-mcp-engineer",
-          "bytes": 15478,
+          "bytes": 15694,
           "family": "implementer",
-          "lines": 373,
+          "lines": 370,
           "output": "paperclips/dist/codex/cx-mcp-engineer.md",
           "platform": "",
           "profiles": [
             "implementer"
           ],
           "roleId": "codex:cx-mcp-engineer",
-          "sha256": "e3cafc5ce911dd4ba5f2660a04d2090d0848d74df5c00d7cf3ca9609f702e877",
+          "sha256": "c377a9d89fd1f3a097460bb3cfe8b054382ebed692af88fb5cc22e8f2f67a21d",
           "source": "paperclips/roles-codex/cx-mcp-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "a2f7d4d2-ee96-43c3-83d8-d3af02d6674c",
           "agentName": "cx-research-agent",
-          "bytes": 11614,
+          "bytes": 11822,
           "family": "research",
-          "lines": 288,
+          "lines": 285,
           "output": "paperclips/dist/codex/cx-research-agent.md",
           "platform": "",
           "profiles": [
             "research"
           ],
           "roleId": "codex:cx-research-agent",
-          "sha256": "23e118352020915d7bae06168bb73ec281aa7a4c4f684c9a2f048a9b005b8fa6",
+          "sha256": "792c2967d9c6afcf26896fe30281eb08b1005131697ece6f4fd1b03804317d7e",
           "source": "paperclips/roles-codex/cx-research-agent.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "4e348572-1890-4122-b831-2185d9d50609",
           "agentName": "cx-blockchain-engineer",
-          "bytes": 15442,
+          "bytes": 15658,
           "family": "implementer",
-          "lines": 373,
+          "lines": 370,
           "output": "paperclips/dist/codex/cx-blockchain-engineer.md",
           "platform": "",
           "profiles": [
             "implementer"
           ],
           "roleId": "codex:cx-blockchain-engineer",
-          "sha256": "f8efc0c400610c98eb5b58afc34c9e41f70ec132a644d255668623f7a4d00840",
+          "sha256": "1cd7fbe536140bb5749c01451f0570f2ed89e346e5795fadafe1773e88e99960",
           "source": "paperclips/roles-codex/cx-blockchain-engineer.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "f67918f9-662d-47c0-b6f7-5d66870d2702",
           "agentName": "cx-security-auditor",
-          "bytes": 15221,
+          "bytes": 15429,
           "family": "reviewer",
-          "lines": 370,
+          "lines": 367,
           "output": "paperclips/dist/codex/cx-security-auditor.md",
           "platform": "",
           "profiles": [
             "reviewer"
           ],
           "roleId": "codex:cx-security-auditor",
-          "sha256": "4a46147d7cc48bcdfe2982bf4a021d4c482e44e33a0724afc8fd866e3f26b20c",
+          "sha256": "9ff7d469aa4ac8c2525616997b762886ab78b0a63dcb9b6db37bee625e028622",
           "source": "paperclips/roles-codex/cx-security-auditor.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "1fe87c1c-d349-481a-b55a-3c3eec2e3c07",
           "agentName": "cx-auditor",
-          "bytes": 15156,
+          "bytes": 15364,
           "family": "reviewer",
-          "lines": 370,
+          "lines": 367,
           "output": "paperclips/dist/codex/cx-auditor.md",
           "platform": "",
           "profiles": [
             "reviewer"
           ],
           "roleId": "codex:cx-auditor",
-          "sha256": "2a75942d327773d3712b3a4814d617d038f7b89a02fad6f8598542efbafbd10b",
+          "sha256": "79e77553533031935b2ab3f95e57c7c5a4382f72458d0e7230f12effae83e520",
           "source": "paperclips/roles-codex/cx-auditor.md",
           "workspaceCwd": ""
         },
         {
           "agentId": "fec71dea-7dba-4947-ad1f-668920a02cb6",
           "agentName": "codex-architect-reviewer",
-          "bytes": 15422,
+          "bytes": 15630,
           "family": "reviewer",
-          "lines": 370,
+          "lines": 367,
           "output": "paperclips/dist/codex/codex-architect-reviewer.md",
           "platform": "",
           "profiles": [
             "reviewer"
           ],
           "roleId": "codex:codex-architect-reviewer",
-          "sha256": "32d06e224c2418b0fc0f180c18095e96abebb0919a430f49154d37db3d94242b",
+          "sha256": "e392705053a4a6958a0364d779484428618dc4bc1d69400611c571d8039c2e3a",
           "source": "paperclips/roles-codex/codex-architect-reviewer.md",
           "workspaceCwd": ""
         }
