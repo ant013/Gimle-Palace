@@ -220,7 +220,7 @@ Switching branches inside an agent worktree drags uncommitted changes across bra
 
 ### Operator vs production checkout
 
-The `production_checkout` path (e.g. `/opt/uaa-example/uaudit`) is the iMac deploy target. Stay on `develop` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in UNS-48: feature checkout in production_checkout caused QA to test stale code.
+The `production_checkout` path (e.g. `/Users/Shared/UnstoppableAudit`) is the iMac deploy target. Stay on `develop` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in UNS-48: feature checkout in production_checkout caused QA to test stale code.
 
 
 ## Pre-work: codebase-memory first
@@ -377,8 +377,8 @@ Write tools as appropriate per profile (see AGENTS.md for capability boundaries)
 - Platform scope: `android`.
 - Workspace cwd: `runs/UWACryptoAuditor/workspace` (resolved at deploy time relative to operator's project root in host-local paths.yaml).
 - Primary codebase-memory project: `Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android`.
-- iOS repo: `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
-- Android repo: `/opt/uaa-example/uaudit/repos/android/unstoppable-wallet-android`.
+- iOS repo: `/Users/Shared/UnstoppableAudit/repos` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
+- Android repo: `/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android`.
 - Required base MCP: `codebase-memory`, `context7`, `serena`, `github`, `sequential-thinking`.
 - UAudit project MCP addition: `neo4j`.
 
