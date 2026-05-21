@@ -2,7 +2,7 @@
 
 Verifies:
 1. audit_contract query returns source_context column (W1)
-   W3: code_ownership uses f.path, so classify(finding["path"]) must be used
+   W3: code_ownership returns the path field via file_path/path dual-read
 """
 
 from __future__ import annotations
@@ -20,14 +20,13 @@ def test_code_ownership_query_includes_source_context() -> None:
     )
 
 
-def test_code_ownership_query_uses_path_not_file() -> None:
-    """code_ownership audit query must use f.path AS path (not f.file). W3."""
+def test_code_ownership_query_dual_reads_file_path() -> None:
+    """code_ownership audit query must dual-read file_path/path for migration."""
     from palace_mcp.extractors.code_ownership.extractor import CodeOwnershipExtractor
 
     extractor = CodeOwnershipExtractor()
     contract = extractor.audit_contract()
     assert contract is not None
-    # W3: the key field is 'path', not 'file'
-    assert "f.path AS path" in contract.query, (
-        "W3: code_ownership query must return f.path AS path"
+    assert "coalesce(f.file_path, f.path) AS path" in contract.query, (
+        "code_ownership audit query must dual-read file_path/path"
     )

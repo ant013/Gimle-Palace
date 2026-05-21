@@ -19,7 +19,8 @@ Usage:
 
 Notes:
   - Step 1 copies legacy `path` into `file_path` for :Symbol|:File|:Function|:Module.
-  - Step 3 removes legacy `path` after callers dual-read via coalesce(n.file_path, n.path).
+  - Step 3 removes legacy `path` from :Symbol only after callers dual-read via coalesce(n.file_path, n.path).
+    Identity-bearing :File|:Function|:Module nodes still keep `path` in this slice.
   - Live execution uses cypher-shell for step 1/3 and neo4j-admin for rollback.
 EOF
 }
@@ -77,7 +78,7 @@ step3_cypher() {
   cat <<'EOF'
 CALL apoc.periodic.iterate(
   'MATCH (n)
-   WHERE (n:Symbol OR n:File OR n:Function OR n:Module)
+   WHERE n:Symbol
      AND n.path IS NOT NULL
      AND n.file_path IS NOT NULL
    RETURN n',
@@ -105,6 +106,9 @@ print_plan() {
   cat <<'EOF'
 Dual-read expectation during migration:
   coalesce(n.file_path, n.path)
+
+Current removal scope:
+  Step 3 removes `path` from :Symbol only.
 
 Available actions:
   --apply-step-1

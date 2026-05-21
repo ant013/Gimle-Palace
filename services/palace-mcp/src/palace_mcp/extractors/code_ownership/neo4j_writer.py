@@ -21,10 +21,8 @@ OWNERSHIP_SOURCE = "extractor.code_ownership"
 
 _DELETE_BY_PATH_CYPHER = """
 UNWIND $paths AS p
-MATCH (f:File {project_id: $proj})
+MATCH (f:File {project_id: $proj})-[r:OWNED_BY {source: $source}]->()
 WHERE coalesce(f.file_path, f.path) = p
-      -[r:OWNED_BY {source: $source}]
-      ->()
 DELETE r
 """
 

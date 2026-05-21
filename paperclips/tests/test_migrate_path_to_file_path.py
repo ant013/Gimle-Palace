@@ -12,7 +12,9 @@ def test_script_exists() -> None:
 
 
 def test_help_lists_expected_flags() -> None:
-    out = subprocess.run(["bash", str(SCRIPT), "--help"], capture_output=True, text=True)
+    out = subprocess.run(
+        ["bash", str(SCRIPT), "--help"], capture_output=True, text=True
+    )
     assert out.returncode == 0
     assert "--apply-step-1" in out.stdout
     assert "--apply-step-3" in out.stdout
@@ -52,6 +54,8 @@ def test_step3_dry_run_renders_path_removal() -> None:
         text=True,
     )
     assert out.returncode == 0
+    assert "WHERE n:Symbol" in out.stdout
+    assert "n:File OR n:Function OR n:Module" not in out.stdout
     assert "REMOVE n.path" in out.stdout
 
 

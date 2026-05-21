@@ -25,7 +25,7 @@ _CHURN_CYPHER = """
 UNWIND $paths AS p
 MATCH (f:File {project_id: $project_id})<-[:TOUCHED]-(c:Commit)
 WHERE coalesce(f.file_path, f.path) = p
-WHERE NOT c.is_merge
+  AND NOT c.is_merge
 MATCH (c)-[:AUTHORED_BY]->(a:Author)
 WHERE NOT a.is_bot
 WITH p, a.identity_key AS raw_id, a.name AS raw_name,

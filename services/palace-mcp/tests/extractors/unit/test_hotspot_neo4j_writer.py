@@ -73,12 +73,16 @@ def test_phase3_cypher_sets_complexity_status_fresh():
 
 def test_phase5_cypher_sets_complexity_status_stale():
     assert "complexity_status = 'stale'" in PHASE_5_DEAD_CYPHER
-    assert "NOT coalesce(f.file_path, f.path) IN $preserved_paths" in PHASE_5_DEAD_CYPHER
+    assert (
+        "NOT coalesce(f.file_path, f.path) IN $preserved_paths" in PHASE_5_DEAD_CYPHER
+    )
 
 
 def test_phase4_cypher_uses_last_run_at_cutoff():
     assert "fn.last_run_at < datetime($run_started_at)" in PHASE_4_EVICT_CYPHER
-    assert "NOT coalesce(f.file_path, f.path) IN $preserved_paths" in PHASE_4_EVICT_CYPHER
+    assert (
+        "NOT coalesce(f.file_path, f.path) IN $preserved_paths" in PHASE_4_EVICT_CYPHER
+    )
     assert "DETACH DELETE fn" in PHASE_4_EVICT_CYPHER
 
 
