@@ -331,7 +331,8 @@ class GetSnippetRichRequest(BaseModel):
 
 
 _QUERY_HOTSPOT_SCORE = """
-MATCH (f:File {project_id: $project_id, path: $path})
+MATCH (f:File {project_id: $project_id})
+WHERE coalesce(f.file_path, f.path) = $path
 RETURN f.hotspot_score AS hotspot_score
 """
 

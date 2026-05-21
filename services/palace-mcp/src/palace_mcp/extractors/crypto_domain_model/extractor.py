@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 _RULES_DIR = Path(__file__).parent / "rules"
 _SEMGREP_BATCH_SIZE = 64
+# scope-tagging-exempt: MERGE identity must stay stable; group_id is set inline.
 
 _QUERY = """
 MATCH (f:CryptoFinding {project_id: $project_id})
@@ -237,9 +238,11 @@ MERGE (f:CryptoFinding {
 SET f.severity = $severity,
     f.message = $message,
     f.source_context = $source_context,
-    f.run_id = $run_id
+    f.run_id = $run_id,
+    f.group_id = coalesce(f.group_id, $group_id)
 """,
             project_id=project_id,
+            group_id=project_id,
             kind=finding["kind"],
             file=finding["path"],
             start_line=finding["start_line"],

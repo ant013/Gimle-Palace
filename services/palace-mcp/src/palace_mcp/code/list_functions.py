@@ -8,7 +8,8 @@ from palace_mcp.memory.bundle import bundle_status
 _QUERY = """
 MATCH (f:File)-[:CONTAINS]->(fn:Function)
 WHERE f.project_id IN $project_ids
-  AND f.path = $path
+  AND coalesce(f.file_path, f.path) = $path
+  AND coalesce(fn.file_path, fn.path) = $path
   AND fn.ccn >= $min_ccn
 RETURN f.project_id AS project_id,
        fn.name AS name,

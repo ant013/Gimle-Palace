@@ -10,9 +10,12 @@ MATCH (f:File)
 WHERE coalesce(f.hotspot_score, 0.0) >= $min_score
   AND f.project_id IN $project_ids
   AND coalesce(f.complexity_status, 'stale') = 'fresh'
-  AND ($path_prefix IS NULL OR f.path STARTS WITH $path_prefix)
+  AND (
+    $path_prefix IS NULL
+    OR coalesce(f.file_path, f.path) STARTS WITH $path_prefix
+  )
 RETURN f.project_id AS project_id,
-       f.path AS path,
+       coalesce(f.file_path, f.path) AS path,
        f.ccn_total AS ccn_total,
        f.churn_count AS churn_count,
        f.hotspot_score AS hotspot_score,

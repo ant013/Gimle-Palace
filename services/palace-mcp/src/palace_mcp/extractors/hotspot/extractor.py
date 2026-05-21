@@ -190,7 +190,7 @@ class HotspotExtractor(BaseExtractor):
 MATCH (f:File {project_id: $project_id})
 WHERE coalesce(f.hotspot_score, 0.0) > 0
   AND coalesce(f.complexity_status, 'stale') = 'fresh'
-RETURN f.path AS path,
+RETURN coalesce(f.file_path, f.path) AS path,
        f.ccn_total AS ccn_total,
        f.churn_count AS churn_count,
        f.hotspot_score AS hotspot_score,

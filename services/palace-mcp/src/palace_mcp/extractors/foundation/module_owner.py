@@ -121,8 +121,10 @@ async def _resolve_from_graph(
     async with driver.session() as session:
         result = await session.run(
             """
-            MATCH (module:Module {group_id: $group_id})-[:CONTAINS]->
-                  (file:File {group_id: $group_id, path: $file_path})
+            MATCH (module:Module {group_id: $group_id})-[:CONTAINS]->(file:File {
+              group_id: $group_id
+            })
+            WHERE coalesce(file.file_path, file.path) = $file_path
             RETURN collect(DISTINCT module.name) AS module_names
             """,
             group_id=group_id,

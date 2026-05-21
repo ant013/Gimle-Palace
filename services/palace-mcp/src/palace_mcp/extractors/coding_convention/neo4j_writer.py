@@ -8,6 +8,7 @@ from palace_mcp.extractors.coding_convention.models import (
     ConventionFinding,
     ConventionViolation,
 )
+from palace_mcp.extractors.foundation.scope_tagging import ScopeTaggedWriter
 
 _DELETE_EXISTING = """
 MATCH (n)
@@ -65,8 +66,9 @@ async def _write_snapshot(
     findings: list[ConventionFinding],
     violations: list[ConventionViolation],
 ) -> None:
+    writer = ScopeTaggedWriter(default_group_id=project_id)
     await tx.run(_DELETE_EXISTING, project_id=project_id)
     for finding in findings:
-        await tx.run(_WRITE_CONVENTION, **finding.model_dump())
+        await writer.write_node(tx, "Convention", finding.model_dump())
     for violation in violations:
-        await tx.run(_WRITE_VIOLATION, **violation.model_dump())
+        await writer.write_node(tx, "ConventionViolation", violation.model_dump())

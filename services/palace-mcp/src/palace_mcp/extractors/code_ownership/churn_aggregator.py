@@ -23,8 +23,9 @@ from palace_mcp.extractors.code_ownership.models import ChurnShare
 # identity_key returns timestamps + count instead of N rows.
 _CHURN_CYPHER = """
 UNWIND $paths AS p
-MATCH (f:File {project_id: $project_id, path: p})<-[:TOUCHED]-(c:Commit)
-WHERE NOT c.is_merge
+MATCH (f:File {project_id: $project_id})<-[:TOUCHED]-(c:Commit)
+WHERE coalesce(f.file_path, f.path) = p
+  AND NOT c.is_merge
 MATCH (c)-[:AUTHORED_BY]->(a:Author)
 WHERE NOT a.is_bot
 WITH p, a.identity_key AS raw_id, a.name AS raw_name,
