@@ -101,7 +101,7 @@
           "tokenEstimate": 3950
         },
         {
-          "bytes": 16065,
+          "bytes": 16057,
           "dist": "paperclips/dist/blockchain-engineer.md",
           "family": "implementer",
           "handoffMarkers": {
@@ -115,9 +115,9 @@
             "implementer"
           ],
           "roleId": "claude:blockchain-engineer",
-          "sha256": "7d0a8398978d4b441b90ac51a4ec9fd06399bdda3e14d050e6db796864519036",
+          "sha256": "4f4dc53e1da7bf20a000fd63583c64f22022cd01a37511abbb7142672225cd55",
           "source": "paperclips/roles/blockchain-engineer.md",
-          "tokenEstimate": 4017
+          "tokenEstimate": 4015
         },
         {
           "bytes": 16027,
@@ -158,7 +158,7 @@
           "tokenEstimate": 5154
         },
         {
-          "bytes": 16083,
+          "bytes": 16075,
           "dist": "paperclips/dist/infra-engineer.md",
           "family": "implementer",
           "handoffMarkers": {
@@ -172,12 +172,12 @@
             "implementer"
           ],
           "roleId": "claude:infra-engineer",
-          "sha256": "cbb9fb05fa72fa681031f761dc3de59bce3f15e88eaf75c51d8c9d53a3570d36",
+          "sha256": "a2dc354fc53ffc3bb503a1e62030fb60dbf1f7323c92172870cdd394b365fcf8",
           "source": "paperclips/roles/infra-engineer.md",
-          "tokenEstimate": 4021
+          "tokenEstimate": 4019
         },
         {
-          "bytes": 16148,
+          "bytes": 16140,
           "dist": "paperclips/dist/mcp-engineer.md",
           "family": "implementer",
           "handoffMarkers": {
@@ -191,9 +191,9 @@
             "implementer"
           ],
           "roleId": "claude:mcp-engineer",
-          "sha256": "e181ab751d1b96ae523e33bc06b0c7ca6b387677dfbbc25556b7bf7c8aa93b16",
+          "sha256": "817ab36942551137bc538e1c245949444edbe99adaf79b1dd17bd8bec69c1fd9",
           "source": "paperclips/roles/mcp-engineer.md",
-          "tokenEstimate": 4037
+          "tokenEstimate": 4035
         },
         {
           "bytes": 15823,
@@ -215,7 +215,7 @@
           "tokenEstimate": 3956
         },
         {
-          "bytes": 16075,
+          "bytes": 16067,
           "dist": "paperclips/dist/python-engineer.md",
           "family": "implementer",
           "handoffMarkers": {
@@ -229,12 +229,12 @@
             "implementer"
           ],
           "roleId": "claude:python-engineer",
-          "sha256": "ddefaa316bd867731f1949bf661b78a82717b54e7da94faaad062fb0bc11c2b2",
+          "sha256": "9af6c5503dbcde4ba7294114f35195c2dff67f64bb0ce5c0e54e23bc0770552c",
           "source": "paperclips/roles/python-engineer.md",
-          "tokenEstimate": 4019
+          "tokenEstimate": 4017
         },
         {
-          "bytes": 18454,
+          "bytes": 18430,
           "dist": "paperclips/dist/qa-engineer.md",
           "family": "qa",
           "handoffMarkers": {
@@ -248,9 +248,9 @@
             "qa"
           ],
           "roleId": "claude:qa-engineer",
-          "sha256": "3dde00ca839ec1ab2ca2726d475a2d8ca92d3263a4ac7de6da805ea4274aa2e8",
+          "sha256": "a47b325109c5bfea2cdc3312bdadd833840d9938a17cd57f880cd4dc59f2dd23",
           "source": "paperclips/roles/qa-engineer.md",
-          "tokenEstimate": 4614
+          "tokenEstimate": 4608
         },
         {
           "bytes": 12169,
@@ -310,7 +310,7 @@
           "tokenEstimate": 2859
         }
       ],
-      "totalBytes": 190645
+      "totalBytes": 190589
     },
     "codex": {
       "roles": [
@@ -353,7 +353,7 @@
           "tokenEstimate": 3862
         },
         {
-          "bytes": 15742,
+          "bytes": 15734,
           "dist": "paperclips/dist/codex/cx-blockchain-engineer.md",
           "family": "implementer",
           "handoffMarkers": {
@@ -367,9 +367,9 @@
             "implementer"
           ],
           "roleId": "codex:cx-blockchain-engineer",
-          "sha256": "4065921b23a2d013ea2a1d46b1055ebc20ddbf92cb4e580d33682ec78bdce22a",
+          "sha256": "eed690e80a6439902be22074b2a80851fba7d7e76cd9ff4333b1d128472a6c9f",
           "source": "paperclips/roles-codex/cx-blockchain-engineer.md",
-          "tokenEstimate": 3936
+          "tokenEstimate": 3934
         },
         {
           "bytes": 15585,
@@ -410,7 +410,7 @@
           "tokenEstimate": 5072
         },
         {
-          "bytes": 15709,
+          "bytes": 15701,
           "dist": "paperclips/dist/codex/cx-infra-engineer.md",
           "family": "implementer",
           "handoffMarkers": {
@@ -424,12 +424,12 @@
             "implementer"
           ],
           "roleId": "codex:cx-infra-engineer",
-          "sha256": "1235095947b1619862c63a31508c43228b78b9cc062d0409cb589d1d57f521b8",
+          "sha256": "2abf0bdf37931764b849e8cfb1106a3711d5feb96035a8cf8667f19a99eee837",
           "source": "paperclips/roles-codex/cx-infra-engineer.md",
-          "tokenEstimate": 3928
+          "tokenEstimate": 3926
         },
         {
-          "bytes": 15778,
+          "bytes": 15770,
           "dist": "paperclips/dist/codex/cx-mcp-engineer.md",
           "family": "implementer",
           "handoffMarkers": {
@@ -443,12 +443,12 @@
             "implementer"
           ],
           "roleId": "codex:cx-mcp-engineer",
-          "sha256": "ab9ee469739cced20875908d936aa001026aea0696ca513d4aa2ff2fa462f8b4",
+          "sha256": "cee84ec574d68d24b3b9122370eb46884db9bff295e90e11c5a90e744e4a7171",
           "source": "paperclips/roles-codex/cx-mcp-engineer.md",
-          "tokenEstimate": 3945
+          "tokenEstimate": 3943
         },
         {
-          "bytes": 15675,
+          "bytes": 15667,
           "dist": "paperclips/dist/codex/cx-python-engineer.md",
           "family": "implementer",
           "handoffMarkers": {
@@ -462,12 +462,12 @@
             "implementer"
           ],
           "roleId": "codex:cx-python-engineer",
-          "sha256": "e1177b643c76d69cf77b8006775421ec9f54dc85207ff029f299d15affb17df7",
+          "sha256": "4ac2e7473c9f8e82e470dd78f8b121a184390bda3b6f20cef0ca355a7d975325",
           "source": "paperclips/roles-codex/cx-python-engineer.md",
-          "tokenEstimate": 3919
+          "tokenEstimate": 3917
         },
         {
-          "bytes": 18181,
+          "bytes": 18157,
           "dist": "paperclips/dist/codex/cx-qa-engineer.md",
           "family": "qa",
           "handoffMarkers": {
@@ -481,9 +481,9 @@
             "qa"
           ],
           "roleId": "codex:cx-qa-engineer",
-          "sha256": "751cb602b320337fc360cd26b0709ea2929fb5ce5d8d98af13cbd4453a370b37",
+          "sha256": "8dfcd850914d5b9c6364ce2632932fdedde831fb96a2d77f86daa077e4cf46d4",
           "source": "paperclips/roles-codex/cx-qa-engineer.md",
-          "tokenEstimate": 4546
+          "tokenEstimate": 4540
         },
         {
           "bytes": 11906,
@@ -543,7 +543,7 @@
           "tokenEstimate": 2811
         }
       ],
-      "totalBytes": 186779
+      "totalBytes": 186723
     }
   }
 }
