@@ -51,9 +51,7 @@ def _mock_driver_with_data(
     viol_result.data = AsyncMock(return_value=viol_records)
 
     # session.run returns in order: conventions, count, violations
-    session.run = AsyncMock(
-        side_effect=[conv_result, count_result, viol_result]
-    )
+    session.run = AsyncMock(side_effect=[conv_result, count_result, viol_result])
     session.__aenter__ = AsyncMock(return_value=session)
     session.__aexit__ = AsyncMock(return_value=False)
     driver.session = MagicMock(return_value=session)
@@ -209,9 +207,7 @@ class TestFindIdiomModuleFilter:
 
         with patch("palace_mcp.mcp_server.get_driver", return_value=driver):
             mcp = _make_mcp_and_register()
-            payload = await _call(
-                mcp, kind="idiom.collection_init", module="GimleApp"
-            )
+            payload = await _call(mcp, kind="idiom.collection_init", module="GimleApp")
 
         assert payload["ok"] is True
         # Verify module param was passed (driver.session.run was called with module="GimleApp")
