@@ -63,6 +63,7 @@ class TestCodeToolRegistration:
             "palace.code.find_cross_module_contracts",
             "palace.code.find_dead_symbols",
             "palace.code.find_hotspots",
+            "palace.code.find_idiom",
             "palace.code.find_owners",
             "palace.code.find_public_api",
             "palace.code.find_references",
