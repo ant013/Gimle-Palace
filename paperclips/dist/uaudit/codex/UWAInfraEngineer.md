@@ -220,7 +220,7 @@ Switching branches inside an agent worktree drags uncommitted changes across bra
 
 ### Operator vs production checkout
 
-The `production_checkout` path (e.g. `/opt/uaa-example/uaudit`) is the iMac deploy target. Stay on `develop` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in UNS-48: feature checkout in production_checkout caused QA to test stale code.
+The `production_checkout` path (e.g. `/Users/Shared/UnstoppableAudit`) is the iMac deploy target. Stay on `develop` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in UNS-48: feature checkout in production_checkout caused QA to test stale code.
 
 
 ## Pre-work: codebase-memory first
@@ -376,8 +376,8 @@ Write tools as appropriate per profile (see AGENTS.md for capability boundaries)
 - Platform scope: `android`.
 - Workspace cwd: `runs/UWAInfraEngineer/workspace` (resolved at deploy time relative to operator's project root in host-local paths.yaml).
 - Primary codebase-memory project: `Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android`.
-- iOS repo: `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
-- Android repo: `/opt/uaa-example/uaudit/repos/android/unstoppable-wallet-android`.
+- iOS repo: `/Users/Shared/UnstoppableAudit/repos` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
+- Android repo: `/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android`.
 - Required base MCP: `codebase-memory`, `context7`, `serena`, `github`, `sequential-thinking`.
 - UAudit project MCP addition: `neo4j`.
 
@@ -426,10 +426,10 @@ issue. Do not hand off to `UWAKotlinAuditor`.
 
 ```bash
 N=<issueNumber of this Paperclip issue>
-RUN=/opt/uaa-example/uaudit/runs/UNS-$N-audit
-REPO=/opt/uaa-example/uaudit/repos/android/unstoppable-wallet-android
+RUN=/Users/Shared/UnstoppableAudit/runs/UNS-$N-audit
+REPO=/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android
 BRANCH=version/0.49
-CURSOR=/opt/uaa-example/uaudit/state/android-version-audit.json
+CURSOR=/Users/Shared/UnstoppableAudit/state/android-version-audit.json
 CODEBASE_MEMORY_PROJECT=Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
 ```
 
@@ -601,7 +601,7 @@ mark the issue `done`.
 
 When UWACTO or another UAudit role PATCHes assignee onto you for a UNS-N
 PR-audit issue without the daily-delta marker, a prepared `audit.md` may be
-waiting at `/opt/uaa-example/uaudit/runs/UNS-<N>-audit/audit.md`. You do
+waiting at `/Users/Shared/UnstoppableAudit/runs/UNS-<N>-audit/audit.md`. You do
 not modify it. Compute its SHA-256, send it through the Telegram plugin using
 `issueIdentifier="UNS-$N"`, comment filename + `messageId` + SHA-256 digest,
 then mark the issue `done`.
@@ -613,7 +613,7 @@ daily delta audit. Read:
 
 ```bash
 N=<issueNumber of this Paperclip issue>
-RUN=/opt/uaa-example/uaudit/runs/UNS-$N-audit
+RUN=/Users/Shared/UnstoppableAudit/runs/UNS-$N-audit
 SUMMARY=$RUN/smoke/summary.json
 ```
 
