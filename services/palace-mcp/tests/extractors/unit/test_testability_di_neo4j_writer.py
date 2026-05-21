@@ -14,10 +14,10 @@ from palace_mcp.extractors.testability_di.neo4j_writer import replace_project_sn
 
 class _FakeTx:
     def __init__(self) -> None:
-        self.queries: list[str] = []
+        self.calls: list[tuple[str, dict[str, object]]] = []
 
-    async def run(self, query: str, **_: object) -> None:
-        self.queries.append(query)
+    async def run(self, query: str, **kwargs: object) -> None:
+        self.calls.append((query, dict(kwargs)))
 
 
 class _FakeSession:
@@ -102,11 +102,15 @@ async def test_replace_project_snapshot_writes_only_testability_labels() -> None
     )
 
     assert session.execute_write_calls == 1
-    assert "DiPattern" in tx.queries[0]
-    assert "TestDouble" in tx.queries[0]
-    assert "UntestableSite" in tx.queries[0]
-    assert "Convention" not in tx.queries[0]
-    assert any("CREATE (d:DiPattern)" in query for query in tx.queries)
-    assert any("CREATE (d:TestDouble)" in query for query in tx.queries)
-    assert any("CREATE (u:UntestableSite)" in query for query in tx.queries)
-    assert any("MATCH (run:IngestRun {id: $run_id})" in query for query in tx.queries)
+    queries = [query for query, _ in tx.calls]
+    assert "DiPattern" in queries[0]
+    assert "TestDouble" in queries[0]
+    assert "UntestableSite" in queries[0]
+    assert "Convention" not in queries[0]
+    assert "CREATE (n:DiPattern) SET n += $props" in queries
+    assert "CREATE (n:TestDouble) SET n += $props" in queries
+    assert "CREATE (n:UntestableSite) SET n += $props" in queries
+    assert any("MATCH (run:IngestRun {id: $run_id})" in query for query in queries)
+    assert tx.calls[1][1]["props"]["group_id"] == "project/wallet"
+    assert tx.calls[2][1]["props"]["group_id"] == "project/wallet"
+    assert tx.calls[3][1]["props"]["group_id"] == "project/wallet"

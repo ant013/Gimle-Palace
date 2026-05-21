@@ -11,8 +11,10 @@ from neo4j import AsyncDriver
 _SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
 
 _QUERY_CYPHER = """
-MATCH (f:File {project_id: $proj, path: $path})
-OPTIONAL MATCH (st:OwnershipFileState {project_id: $proj, path: $path})
+MATCH (f:File {project_id: $proj})
+WHERE coalesce(f.file_path, f.path) = $path
+OPTIONAL MATCH (st:OwnershipFileState {project_id: $proj})
+WHERE coalesce(st.file_path, st.path) = $path
 OPTIONAL MATCH (f)-[r:OWNED_BY {source: 'extractor.code_ownership'}]->(a:Author)
 WITH f, st, r, a
 ORDER BY r.weight DESC

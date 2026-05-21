@@ -3,9 +3,12 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+# scope-tagging-exempt: MERGE identity must stay stable; group_id/file_path are set inline.
 PHASE_1_CYPHER = """
 MERGE (f:File {project_id: $project_id, path: $path})
-SET f.ccn_total = $ccn_total,
+SET f.group_id = coalesce(f.group_id, $project_id),
+    f.file_path = $path,
+    f.ccn_total = $ccn_total,
     f.complexity_status = 'fresh',
     f.last_complexity_run_at = datetime($run_started_at)
 WITH f
@@ -16,7 +19,9 @@ MERGE (fn:Function {
   name: fn_in.name,
   start_line: fn_in.start_line
 })
-SET fn.end_line = fn_in.end_line,
+SET fn.group_id = coalesce(fn.group_id, $project_id),
+    fn.file_path = $path,
+    fn.end_line = fn_in.end_line,
     fn.ccn = fn_in.ccn,
     fn.parameter_count = fn_in.parameter_count,
     fn.nloc = fn_in.nloc,
@@ -27,7 +32,9 @@ MERGE (f)-[:CONTAINS]->(fn)
 
 PHASE_3_CYPHER = """
 MERGE (f:File {project_id: $project_id, path: $path})
-SET f.churn_count = $churn,
+SET f.group_id = coalesce(f.group_id, $project_id),
+    f.file_path = $path,
+    f.churn_count = $churn,
     f.complexity_window_days = $window_days,
     f.hotspot_score = $score,
     f.complexity_status = 'fresh',
@@ -36,14 +43,14 @@ SET f.churn_count = $churn,
 
 PHASE_4_EVICT_CYPHER = """
 MATCH (f:File {project_id: $project_id})-[:CONTAINS]->(fn:Function)
-WHERE NOT f.path IN $preserved_paths
+WHERE NOT coalesce(f.file_path, f.path) IN $preserved_paths
   AND fn.last_run_at < datetime($run_started_at)
 DETACH DELETE fn
 """.strip()
 
 PHASE_5_DEAD_CYPHER = """
 MATCH (f:File {project_id: $project_id})
-WHERE NOT f.path IN $preserved_paths
+WHERE NOT coalesce(f.file_path, f.path) IN $preserved_paths
   AND coalesce(f.ccn_total, 0) > 0
 SET f.ccn_total = 0,
     f.churn_count = 0,

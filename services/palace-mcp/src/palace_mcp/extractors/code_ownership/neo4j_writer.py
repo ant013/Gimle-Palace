@@ -17,10 +17,12 @@ from neo4j import AsyncDriver
 from palace_mcp.extractors.code_ownership.models import OwnershipEdge
 
 OWNERSHIP_SOURCE = "extractor.code_ownership"
+# scope-tagging-exempt: MATCH/MERGE identity must stay stable; group_id/file_path are set inline.
 
 _DELETE_BY_PATH_CYPHER = """
 UNWIND $paths AS p
-MATCH (f:File {project_id: $proj, path: p})
+MATCH (f:File {project_id: $proj})
+WHERE coalesce(f.file_path, f.path) = p
       -[r:OWNED_BY {source: $source}]
       ->()
 DELETE r
@@ -28,13 +30,16 @@ DELETE r
 
 _WRITE_EDGES_CYPHER = """
 UNWIND $edges AS e
-MATCH (f:File {project_id: $proj, path: e.path})
+MATCH (f:File {project_id: $proj})
+WHERE coalesce(f.file_path, f.path) = e.path
 MERGE (a:Author {provider: 'git', identity_key: e.canonical_id})
   ON CREATE SET a.email = e.canonical_email,
                 a.name = e.canonical_name,
                 a.is_bot = false,
                 a.first_seen_at = e.last_touched_at,
-                a.last_seen_at = e.last_touched_at
+                a.last_seen_at = e.last_touched_at,
+                a.group_id = $proj
+SET a.group_id = coalesce(a.group_id, $proj)
 MERGE (f)-[r:OWNED_BY {source: $source}]->(a)
 SET r.weight = e.weight,
     r.blame_share = e.blame_share,
@@ -50,7 +55,9 @@ SET r.weight = e.weight,
 _WRITE_FILE_STATE_CYPHER = """
 UNWIND $states AS s
 MERGE (st:OwnershipFileState {project_id: $proj, path: s.path})
-SET st.status = s.status,
+SET st.group_id = coalesce(st.group_id, $proj),
+    st.file_path = s.path,
+    st.status = s.status,
     st.no_owners_reason = s.no_owners_reason,
     st.last_run_id = $run_id,
     st.updated_at = $now
@@ -58,7 +65,8 @@ SET st.status = s.status,
 
 _WRITE_FILE_SOURCE_CONTEXT_CYPHER = """
 UNWIND $paths AS p
-MATCH (f:File {project_id: $proj, path: p.path})
+MATCH (f:File {project_id: $proj})
+WHERE coalesce(f.file_path, f.path) = p.path
 SET f.source_context = p.source_context
 """
 

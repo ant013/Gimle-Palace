@@ -9,6 +9,7 @@ from palace_mcp.extractors.testability_di.models import (
     TestDouble,
     UntestableSite,
 )
+from palace_mcp.extractors.foundation.scope_tagging import ScopeTaggedWriter
 
 _DELETE_EXISTING = """
 MATCH (n)
@@ -91,13 +92,14 @@ async def _write_snapshot(
     test_doubles: list[TestDouble],
     untestable_sites: list[UntestableSite],
 ) -> None:
+    writer = ScopeTaggedWriter(default_group_id=project_id)
     await tx.run(_DELETE_EXISTING, project_id=project_id)
     for di_pattern in di_patterns:
-        await tx.run(_WRITE_DI_PATTERN, **di_pattern.model_dump())
+        await writer.write_node(tx, "DiPattern", di_pattern.model_dump())
     for test_double in test_doubles:
-        await tx.run(_WRITE_TEST_DOUBLE, **test_double.model_dump())
+        await writer.write_node(tx, "TestDouble", test_double.model_dump())
     for untestable_site in untestable_sites:
-        await tx.run(_WRITE_UNTESTABLE_SITE, **untestable_site.model_dump())
+        await writer.write_node(tx, "UntestableSite", untestable_site.model_dump())
     await tx.run(
         _UPDATE_RUN,
         run_id=run_id,
