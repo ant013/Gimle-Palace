@@ -190,6 +190,60 @@ val legacyLabel by lazy { "legacy" }
 """.strip()
         + "\n",
     )
+    for idx in range(1, 6):
+        _write(
+            repo / "Sources" / "StructuredFlow" / f"Worker{idx}.swift",
+            f"""
+func structuredWorker{idx}() async throws {{
+    try await withTaskCancellationHandler {{
+        try await Task.sleep(nanoseconds: 10)
+    }} onCancel: {{
+        return
+    }}
+}}
+""".strip()
+            + "\n",
+        )
+        _write(
+            repo / "Sources" / "PollingFlow" / f"Worker{idx}.swift",
+            f"""
+func pollingWorker{idx}() async {{
+    if Task.isCancelled {{
+        return
+    }}
+    await Task.yield()
+}}
+""".strip()
+            + "\n",
+        )
+        _write(
+            repo / "Sources" / "ManualFlow" / f"Worker{idx}.swift",
+            f"""
+final class ManualFlowWorker{idx} {{
+    private var refreshTask: Task<Void, Never>?
+
+    func start() {{
+        refreshTask = Task {{
+            await Task.yield()
+        }}
+    }}
+
+    func stop() {{
+        refreshTask?.cancel()
+    }}
+}}
+""".strip()
+            + "\n",
+        )
+        _write(
+            repo / "Sources" / "UnclearFlow" / f"Worker{idx}.swift",
+            f"""
+func unclearWorker{idx}() async {{
+    await Task.yield()
+}}
+""".strip()
+            + "\n",
+        )
     return repo
 
 
@@ -269,6 +323,7 @@ async def test_coding_convention_runner_path_writes_single_ingest_run_snapshot(
         ingest_by_run_id_row = await ingest_by_run_id_result.single()
 
     expected_kinds = {
+        "async_cancel",
         "naming.type_class",
         "naming.test_class",
         "naming.module_protocol",

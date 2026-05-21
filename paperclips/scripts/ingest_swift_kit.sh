@@ -53,12 +53,16 @@ Options:
   --manifest <path>         Manifest used for slug -> relative_path lookup
   --env-file <path>         Env file to update atomically (default: repo .env)
   --dry-run                 Print intended actions without changing state
+  --skip-artefact-check     Skip Periphery/swiftinterface presence validation
   --help, -h                Show this message
 
 Notes:
   - When a manifest contains the slug, its relative_path and tier are reused.
   - Dry-run still validates slug, manifest resolution, repo mount, and SCIP
     existence, but it skips docker and MCP mutations.
+  - Artefact gate checks periphery/contract.json (with valid
+    tool_output_schema_version) and .palace/public-api/swift/*.swiftinterface.
+    Run prepare_swift_kit_artifacts.sh first if these are missing.
 EOF
 }
 
@@ -73,6 +77,42 @@ die() {
 
 require_command() {
     command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
+}
+
+validate_artefacts() {
+    local repo_path="$1"
+    local periphery_report="$repo_path/periphery/periphery-3.7.4-swiftpm.json"
+    local contract="$repo_path/periphery/contract.json"
+    local swift_iface_dir="$repo_path/.palace/public-api/swift"
+
+    if [[ ! -f "$periphery_report" ]]; then
+        die "artefact missing: $periphery_report
+Run: bash paperclips/scripts/prepare_swift_kit_artifacts.sh --repo-path $repo_path"
+    fi
+    if [[ ! -f "$contract" ]]; then
+        die "artefact missing: $contract
+Run: bash paperclips/scripts/prepare_swift_kit_artifacts.sh --repo-path $repo_path"
+    fi
+
+    local schema_version
+    schema_version="$(jq -r '.tool_output_schema_version // empty' "$contract" 2>/dev/null || true)"
+    if [[ -z "$schema_version" ]]; then
+        die "contract.json missing tool_output_schema_version: $contract"
+    fi
+    if [[ ! "$schema_version" =~ ^periphery-json-[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        die "contract.json tool_output_schema_version '$schema_version' is not valid (expected 'periphery-json-X.Y.Z')"
+    fi
+
+    local iface_count=0
+    if [[ -d "$swift_iface_dir" ]]; then
+        iface_count="$(find "$swift_iface_dir" -name "*.swiftinterface" -maxdepth 1 | wc -l | tr -d ' ')"
+    fi
+    if [[ "$iface_count" -eq 0 ]]; then
+        die "no .swiftinterface files found in $swift_iface_dir
+Run: bash paperclips/scripts/prepare_swift_kit_artifacts.sh --repo-path $repo_path"
+    fi
+
+    log "artefact gate passed: periphery report ok, schema_version=$schema_version, $iface_count .swiftinterface file(s)"
 }
 
 validate_slug() {
@@ -327,6 +367,7 @@ MANIFEST_PATH="$DEFAULT_MANIFEST"
 ENV_FILE="$DEFAULT_ENV_FILE"
 DRY_RUN="false"
 BUNDLE_ALL="false"
+SKIP_ARTEFACT_CHECK="false"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -419,6 +460,10 @@ while [[ $# -gt 0 ]]; do
             DRY_RUN="true"
             shift
             ;;
+        --skip-artefact-check)
+            SKIP_ARTEFACT_CHECK="true"
+            shift
+            ;;
         --help|-h)
             usage
             exit 0
@@ -460,6 +505,7 @@ if [[ "$BUNDLE_ALL" == "true" ]]; then
     _passthrough=()
     [[ -n "$EXTRACTORS_CSV" ]] && _passthrough+=(--extractors "$EXTRACTORS_CSV")
     [[ "$DRY_RUN" == "true" ]] && _passthrough+=(--dry-run)
+    [[ "$SKIP_ARTEFACT_CHECK" == "true" ]] && _passthrough+=(--skip-artefact-check)
 
     for _slug in "${_ALL_SLUGS[@]}"; do
         log "bundle-all: [$(((_pass + _fail + 1)))/$_total] ingesting $_slug"
@@ -548,6 +594,12 @@ PALACE_RESTARTED="false"
 [[ -f "$ENV_FILE" ]] || die "env file not found: $ENV_FILE"
 [[ -d "$HOST_REPO_PATH" ]] || die "repo mount not found: $HOST_REPO_PATH"
 [[ -f "$HOST_SCIP_PATH" ]] || die "SCIP index not found: $HOST_SCIP_PATH"
+
+if [[ "$SKIP_ARTEFACT_CHECK" == "true" ]]; then
+    log "artefact gate skipped (--skip-artefact-check)"
+else
+    validate_artefacts "$HOST_REPO_PATH"
+fi
 
 if [[ "$DRY_RUN" == "false" ]]; then
     require_command docker

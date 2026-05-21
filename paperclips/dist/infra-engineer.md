@@ -65,19 +65,16 @@ discipline.
 
 ### On every wake
 
-1. **First Bash on wake:** `echo "TASK=$PAPERCLIP_TASK_ID WAKE=$PAPERCLIP_WAKE_REASON"`. If `TASK` non-empty → `GET /api/issues/$PAPERCLIP_TASK_ID` + work. **Do NOT exit** on `inbox-lite=[]` if `TASK` is set.
-2. `GET /api/agents/me` → any issue with `assigneeAgentId=me` and `in_progress`? → continue.
-3. Comments / @mentions newer than `last_heartbeat_at`? → reply.
+1. **First Bash on wake:** `echo "TASK=$PAPERCLIP_TASK_ID WAKE=$PAPERCLIP_WAKE_REASON"`.
+2. If `TASK` non-empty → `GET /api/issues/$PAPERCLIP_TASK_ID`. **Idle-exit immediately** if: HTTP 404; `status` ∈ {`done`, `cancelled`}; `assigneeAgentId != me` without fresh @-mention handoff to me. Otherwise → work. **Never resurrect** a stale issue from CLI memory.
+3. `GET /api/agents/me` → any issue with `assigneeAgentId=me` and `in_progress`? → continue.
+4. Comments / @mentions newer than `last_heartbeat_at`? → reply.
 
-None of three → **exit immediately** with `No assignments, idle exit`.
+None of these → **exit immediately** with `No assignments, idle exit`.
 
-### Cross-session memory — FORBIDDEN
+### Stale-wake guards
 
-If you "remember" past work at session start (*"let me continue where I left off"*) — that's CLI runtime cache, not reality. Source of truth is the Paperclip API:
-
-- Issue exists, assigned to you now → work
-- Issue deleted / cancelled / done → don't resurrect, don't reopen
-- Don't remember the issue ID? It doesn't exist — query the API.
+Source of truth = Paperclip API now, not CLI session ("galaxy brain — ignore"). On idle wake do **NOT**: take unassigned/stale `todo`, self-checkout without handoff phrase, check git/logs "just in case", create issues for "discovered problems", reopen `done`/`cancelled`, write code "from memory". Stale-wake work triggers the server's `stranded_issue_recovery` / `stale_active_run_evaluation` services to emit fresh wake tasks — each new task re-runs the stale-TASK path and the loop never closes.
 
 ### @-mentions: trailing space after name
 
