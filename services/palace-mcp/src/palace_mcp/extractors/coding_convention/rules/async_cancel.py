@@ -40,7 +40,9 @@ class AsyncCancelRule(ConventionRule):
         if not rel_path.endswith(".swift"):
             return []
 
-        structured = self._structured_signal(module=module, rel_path=rel_path, text=text)
+        structured = self._structured_signal(
+            module=module, rel_path=rel_path, text=text
+        )
         if structured is not None:
             return [structured]
 
