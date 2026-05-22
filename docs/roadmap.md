@@ -195,6 +195,87 @@ OPUS-CRITICAL-2).
 
 ---
 
+## Phase 2 — Project-Specialist Agent (post Audit-V1)
+
+**Goal**: Make Gimle's 7 capabilities (6 named + new semantic search) **enforced by middleware** so agents reliably consult the graph before writing code. **Productization-grade design from day one** — sellable to any team beyond ourselves. iOS pilot first (UW HS Kits substrate ready), language-agnostic infrastructure supports Kotlin / Solidity / JS / Python recipes from G4 onwards.
+
+**Why this is a separate phase**: A 2026-05-21 capability audit revealed Phase 1 closed at code-merge level but **operationally fragmented** — extractors merged but (a) live ingest only partially run, (b) 11/14 extractors write nodes without `group_id` linking so per-project queries return empty, (c) 4 extractors silently skip on missing input artefacts that no upstream pipeline produces, (d) dead-code detection was shallow single-symbol Periphery wrap (operator's UW iOS has 5-15-class dead clusters needing transitive analysis), (e) productization decision (G-D3) requires multi-tenant + security work not present today. Phase 2 G0 closes substrate gaps; G0f closes security gap for external pilot.
+
+**Driver**: when `project-specialist` agent is asked to add a new module to ANY project, the resulting PR cites existing patterns, follows conventions, avoids dead clusters, introduces no duplicates, merges with ≤1 review round. Measurable via gaming-resistant metrics (G3).
+
+**Wall-time**:
+
+| Path | Optimistic | Conservative |
+|---|---|---|
+| **Internal** (G0 → G0.5 → G1 → G2 → G2.5 → G4; G3 ‖) | 9 weeks | 13 weeks |
+| **External pilot** (+ G0f 2 weeks, can run ‖ G4) | 11 weeks | 15 weeks |
+
+### Sprint sequence (rev3.2)
+
+| ID | Sprint | Detail file | Wall-time | Depends on | Team | Status |
+|----|--------|-------------|-----------|------------|------|--------|
+| **G0** | Substrate readiness — 5 sub-sprints (G0a-e: ingest activation + schema linking fix + missing artefacts pipeline + **deep dead-code extractor** + verification matrix) | [`G-project-specialist-agent.md` §G0](superpowers/sprints/G-project-specialist-agent.md) | ~2-3 weeks | nothing | Board + Infra + Claude PE | 🚧 G0a partial (3/5 kits ingested 2026-05-21; bitcoin-kit + uw-ios-app pending) |
+| **G0.5** | Semantic embeddings layer (Neo4j vector + **Qodo-Embed-1-1.5B self-hosted**) | [§G0.5](superpowers/sprints/G-project-specialist-agent.md) | ~5-6 days | G0 | Claude PE | 📋 |
+| **G1** | Capability audit + **4-column** comparative baseline (Gimle / SymDex / **Sourcegraph Amp** / grep) | [§G1](superpowers/sprints/G-project-specialist-agent.md) | ~1 week | G0.5 | Board + Claude | 📋 |
+| **G2** | Recipe pilot — **Phase 1 synthetic + Phase 2 real PR corpus**, 3-arm A/B with N≥20 paired runs | [§G2](superpowers/sprints/G-project-specialist-agent.md) | ~2-3 weeks | G1 | Board + Claude | 📋 |
+| **G2.5** | Domain-preflight middleware enforcement (AgentSpec-style runtime gate) | [§G2.5](superpowers/sprints/G-project-specialist-agent.md) | ~1-2 weeks | G2 | Claude PE | 📋 |
+| **G3** | Measurement loop — gaming-resistant metrics, language-agnostic | [§G3](superpowers/sprints/G-project-specialist-agent.md) | ~1 week | G1 | Claude PE (‖ G2/G2.5) | 📋 |
+| **G4** | Roll-out to 4 more recipe types (each includes `find_dead_code` pre-check) | [§G4](superpowers/sprints/G-project-specialist-agent.md) | ~2-3 weeks | G2.5 + G3 | Claude + CX | 📋 |
+| **G0f** | **Security foundation** — multi-tenant auth + isolation + secret scrubbing + build sandbox + audit log (**gates external pilots only**, not internal use) | [§G0f](superpowers/sprints/G-project-specialist-agent.md) | ~2 weeks | G3 (can run ‖ G4) | Claude PE + security review | 📋 |
+| **G5** | Optional extractors — scaffolding, test pattern, diagram, route discovery | [§G5](superpowers/sprints/G-project-specialist-agent.md) | ~2-3 weeks | G4 (on metric trigger) | per slice | 📦 |
+
+**Parallelisation**: G3 ‖ G2/G2.5 (independent metrics infra vs recipe + middleware). G0f can run ‖ G4 if external pilot timing demands. G0 is critical-path mega-sprint; G0.5+ depend on it.
+
+**Gating**:
+- G0.5 starts only when G0e verification matrix passes: ≥13/15 testable extractors return reasonable project-linked node counts, AND both input-conditional extractors emit no errors when input absent
+- G2 starts only if G1 audit shows ≥4/7 capabilities scoring `acceptable`
+- **External pilot starts only after G0f closes** (internal use does not wait)
+
+### G0 mega-sprint detail (= internal product readiness gate)
+
+| Sub-sprint | What | Wall-time | Owner |
+|---|---|---|---|
+| G0a | Activate ingest for remaining HS Kits + uw-ios-app (bitcoin-core ✅ done 2026-05-21; evm-kit ✅; dash-kit ✅; bitcoin-kit + uw-ios-app pending) | 1 day | Board |
+| G0b | Schema linking fix — **defense-in-depth**: Python `ScopeTaggedWriter` (Layer 1) + Neo4j APOC trigger (Layer 2) + `path → file_path` migration script (apoc.periodic.iterate batched) | 7-8 days | Claude PE |
+| G0c | Missing artefacts pipeline — `prepare_swift_kit_artifacts.sh` runs Periphery + swiftinterface gen | 3-5 days | Claude PE |
+| G0d | **Deep dead-code extractor** — transitive cluster + extension chain + SCC analysis + **dynamic-dispatch root set extractor** (Step 1b for @objc / NSManaged / IBOutlet / SwiftUI wrappers / Codable / macros / NSClassFromString) + fixture tests for false-positive guards | 7-9 days | Claude PE |
+| G0e | Verification matrix — per-extractor sample queries (15 testable + 2 input-conditional) + cross-extractor coherence Cypher + multi-tenant isolation test | 2-3 days | Board + Claude |
+
+**G0d is a genuine moat**: ranks dead findings by severity (critical = dead module / high = dead SCC ≥3 classes / medium = dead extension chain / low = single dead symbol), enriched with git_history-based safe_to_delete_score. No commercial competitor (Cursor / Sourcegraph / Cody / SymDex) does SCC-level dead detection at graph level for Swift today. Research-analyst confirmed gap vs Periphery / Reaper / SwiftCodeSan / SonarQube / DeepSource. Closest published analogue: Meta SCARF (FSE 2023, internal-only).
+
+### G0 starts immediately (does not wait for Audit-V1 close)
+
+G0 is independent of Audit-V1 — it fixes infrastructure already merged. G0a executes today via Board. G0.5 onwards waits for Audit-V1 to free Claude PE capacity (~July 2026 at S2.3 close).
+
+### Decisions captured 2026-05-21 (rev3.2: 13 decisions, all closed)
+
+| ID | Decision | Operator answer |
+|---|---|---|
+| G-D1 | Recipe hard-coded per role or dynamic? | hard-coded for v1 |
+| G-D2 | Pilot task fake or real? | Phase 1 synthetic + Phase 2 real PR corpus |
+| G-D3 | Productization explicit goal? | YES — generic from day one |
+| G-D4 | Middleware enforcement? | YES — G2.5 strict gate |
+| G-D5 | Full breadth or narrow to 3 moats? | FULL BREADTH |
+| G-D6 | SymDex companion or build own semantic? | BUILD OWN |
+| G-D7 | G0 size — single sprint or full substrate? | FULL SUBSTRATE (5 sub-sprints) |
+| G-D8 | Deep dead-code algorithm | TRANSITIVE + extension chain + SCC + dynamic-dispatch root set |
+| G-D9 | **Embedding model** | **Qodo-Embed-1-1.5B self-hosted (Apache 2.0)** |
+| G-D10 | **GDS licensing for productization** | **Use GDS Community now; swap to own Johnson's SCC before first paying client** |
+| G-D11 | **G0d split for non-Xcode clients** | **No split — Periphery mandatory** (Swift project ⇒ macOS guaranteed) |
+| G-D12 | **G0b enforcement layer** | **Defense-in-depth: Python wrapper + Neo4j APOC trigger** |
+| G-D13 | **Security timing** | **G0f gates external pilots only; internal use unblocked** |
+
+### Industry references (selected — full list in sprint detail)
+
+- Recipe enforcement: [AgentSpec — arxiv 2503.18666](https://arxiv.org/abs/2503.18666); [Cursor rules](https://cursor.com/docs/rules)
+- Symbol-precise retrieval: [Sourcegraph Cody](https://sourcegraph.com/blog/anatomy-of-a-coding-assistant); [Aider repo-map](https://aider.chat/docs/repomap.html)
+- Code embedding: [Qodo-Embed-1-1.5B (Apache 2.0)](https://huggingface.co/Qodo/Qodo-Embed-1-1.5B); [Neo4j vector search](https://neo4j.com/developer/genai-ecosystem/vector-search/)
+- Dead-code baseline: [Periphery](https://github.com/peripheryapp/periphery); [Neo4j GDS — SCC](https://neo4j.com/docs/graph-data-science/current/algorithms/strongly-connected-components/); [Meta SCARF — FSE 2023](https://dl.acm.org/doi/10.1145/3611643.3613871)
+- Comparable product: [SymDex](https://github.com/husnainpk/SymDex) — patterns adopted + anti-patterns avoided; [Sourcegraph Amp](https://amplifilabs.com/post/sourcegraph-amp-agent-accelerating-code-intelligence-for-ai-driven-development) — closest productized comparable
+- Structured navigation: [SWE-agent NeurIPS 2024](https://proceedings.neurips.cc/paper_files/paper/2024/file/5a7c947568c1b1328ccc5230172e1e7c-Paper-Conference.pdf)
+
+---
+
 ### Archived Phase 2-6 backlog
 
 Moved to [`docs/roadmap-archive.md`](roadmap-archive.md) in rev2

@@ -17,6 +17,10 @@ Usage: scip_emit_swift_kit.sh <kit-slug> [options]
 Emit a single HorizontalSystems Swift Kit SCIP index on a dev Mac, then copy it
 to the iMac repo mount.
 
+Build tool: xcodebuild against the SwiftPM-Xcode bridge workspace with
+'generic/platform=iOS Simulator' destination. This avoids macOS deployment-target
+conflicts that block 'swift build' on iOS-only HS Kits (GIM-394).
+
 Options:
   --repo-root <path>          Parent dir containing kit repos (default: $PWD)
   --repo-path <path>          Explicit local repo path; bypass manifest lookup
@@ -26,6 +30,12 @@ Options:
   --remote-relative-path <p>  Override remote repo-relative path
   --emitter-dir <path>        palace-swift-scip-emit package dir
   --emitter-bin <path>        Explicit emitter binary path
+  --scheme <name>             xcodebuild scheme (default: derived from
+                              relative_path stripped of '.Swift' suffix)
+  --derived-data <path>       Explicit DerivedData root (default:
+                              <repo>/.palace-scip-derived-data)
+  --legacy-swiftpm            Use 'swift build' instead of xcodebuild (broken
+                              for iOS-only kits; kept only for macOS targets)
   --dry-run                   Print intended actions without changing state
   --help, -h                  Show this message
 
@@ -33,7 +43,8 @@ Notes:
   - Slug validation matches Palace project slugs.
   - When a manifest contains the slug, its relative_path is used so kit slugs
     like tron-kit resolve to repo dirs like TronKit.Swift.
-  - This script currently targets SwiftPM-style kit repos with Package.swift.
+  - This script targets SwiftPM-style kit repos with Package.swift.
+  - xcodebuild requires full Xcode (Command Line Tools alone are insufficient).
 EOF
 }
 
@@ -94,6 +105,9 @@ REMOTE_BASE="$DEFAULT_REMOTE_BASE"
 REMOTE_RELATIVE_PATH=""
 EMITTER_DIR="$DEFAULT_EMITTER_DIR"
 EMITTER_BIN=""
+SCHEME_NAME=""
+DERIVED_DATA_ARG=""
+LEGACY_SWIFTPM="false"
 DRY_RUN="false"
 
 while [[ $# -gt 0 ]]; do
@@ -170,6 +184,28 @@ while [[ $# -gt 0 ]]; do
             EMITTER_BIN="$2"
             shift 2
             ;;
+        --scheme=*)
+            SCHEME_NAME="${1#*=}"
+            shift
+            ;;
+        --scheme)
+            [[ $# -ge 2 ]] || die "--scheme requires a value"
+            SCHEME_NAME="$2"
+            shift 2
+            ;;
+        --derived-data=*)
+            DERIVED_DATA_ARG="${1#*=}"
+            shift
+            ;;
+        --derived-data)
+            [[ $# -ge 2 ]] || die "--derived-data requires a value"
+            DERIVED_DATA_ARG="$2"
+            shift 2
+            ;;
+        --legacy-swiftpm)
+            LEGACY_SWIFTPM="true"
+            shift
+            ;;
         --dry-run)
             DRY_RUN="true"
             shift
@@ -224,7 +260,7 @@ fi
 
 SCRATCH_PATH="$LOCAL_REPO_PATH/.palace-scip-build"
 INDEX_STORE="$LOCAL_REPO_PATH/.palace-scip-index-store"
-DERIVED_DATA="$LOCAL_REPO_PATH/.palace-scip-derived-data"
+DERIVED_DATA="${DERIVED_DATA_ARG:-$LOCAL_REPO_PATH/.palace-scip-derived-data}"
 OUTPUT_PATH="$LOCAL_REPO_PATH/scip/index.scip"
 META_PATH="$LOCAL_REPO_PATH/scip/index.scip.meta.json"
 REMOTE_DEST_DIR="$REMOTE_BASE/$RELATIVE_PATH/scip"
@@ -248,15 +284,38 @@ else
     printf 'DRY-RUN: mkdir -p %q %q\n' "$DERIVED_DATA/Index.noindex" "$(dirname "$OUTPUT_PATH")"
 fi
 
-log "building Swift package with index-store emission"
-run_cmd xcrun swift build \
-    --package-path "$LOCAL_REPO_PATH" \
-    --scratch-path "$SCRATCH_PATH" \
-    -Xswiftc -index-store-path \
-    -Xswiftc "$INDEX_STORE"
-
-log "copying index store into DerivedData layout"
-run_cmd cp -R "$INDEX_STORE" "$DERIVED_DATA/Index.noindex/DataStore"
+if [[ "$LEGACY_SWIFTPM" == "true" ]]; then
+    log "building Swift package with index-store emission (legacy swiftpm path)"
+    run_cmd xcrun swift build \
+        --package-path "$LOCAL_REPO_PATH" \
+        --scratch-path "$SCRATCH_PATH" \
+        -Xswiftc -index-store-path \
+        -Xswiftc "$INDEX_STORE"
+    log "copying index store into DerivedData layout"
+    run_cmd cp -R "$INDEX_STORE" "$DERIVED_DATA/Index.noindex/DataStore"
+else
+    if [[ -z "$SCHEME_NAME" ]]; then
+        SCHEME_NAME="${RELATIVE_PATH%.Swift}"
+        [[ "$SCHEME_NAME" != "$RELATIVE_PATH" ]] || \
+            log "scheme derivation: relative_path '$RELATIVE_PATH' has no .Swift suffix, using as-is"
+    fi
+    SWIFTPM_WORKSPACE="$LOCAL_REPO_PATH/.swiftpm/xcode/package.xcworkspace"
+    if [[ "$DRY_RUN" == "false" && ! -d "$SWIFTPM_WORKSPACE" ]]; then
+        log "generating SwiftPM-Xcode workspace via xcodebuild -list"
+        xcrun xcodebuild -list -package-path "$LOCAL_REPO_PATH" >/dev/null 2>&1 || true
+    fi
+    log "building via xcodebuild iOS Simulator (scheme=$SCHEME_NAME)"
+    run_cmd xcrun xcodebuild \
+        -workspace "$SWIFTPM_WORKSPACE" \
+        -scheme "$SCHEME_NAME" \
+        -destination 'generic/platform=iOS Simulator' \
+        -derivedDataPath "$DERIVED_DATA" \
+        -IDEIndexDisable=NO \
+        -IDEBuildLocationStyle=Custom \
+        CODE_SIGNING_ALLOWED=NO \
+        CODE_SIGNING_REQUIRED=NO \
+        build
+fi
 
 log "emitting SCIP"
 run_cmd "$EMITTER_BIN" \

@@ -23,7 +23,13 @@ def test_universal_wake_and_handoff_exists():
     # Wake-discipline checks (was in heartbeat-discipline.md)
     assert "PAPERCLIP_TASK_ID" in text
     assert "/api/agents/me" in text
-    assert "Cross-session memory" in text or "cross-session memory" in text
+    # PR #252: "Cross-session memory — FORBIDDEN" subsumed by "Stale-wake guards"
+    # section name; either heading satisfies the don't-resurrect-from-memory rule.
+    assert (
+        "Cross-session memory" in text
+        or "cross-session memory" in text
+        or "Stale-wake guards" in text
+    )
     # Handoff basics (was in phase-handoff.md)
     assert "@mention" in text or "@-mention" in text
     assert "trailing space" in text

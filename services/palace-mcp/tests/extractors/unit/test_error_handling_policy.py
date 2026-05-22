@@ -21,10 +21,9 @@ from palace_mcp.extractors.error_handling_policy.extractor import (
     _dedup_findings,
     _ehp_severity,
     _DELETE_EXISTING_SNAPSHOT,
-    _WRITE_CATCH_SITE,
-    _WRITE_ERROR_FINDING,
     _write_snapshot,
 )
+from palace_mcp.extractors.foundation.scope_tagging import _create_query
 
 _RULES_DIR = (
     Path(__file__).parent.parent.parent.parent
@@ -398,6 +397,6 @@ async def test_write_snapshot_uses_single_execute_write_and_delete_then_create()
     assert session.execute_write_calls == 1
     assert tx.queries == [
         _DELETE_EXISTING_SNAPSHOT,
-        _WRITE_CATCH_SITE,
-        _WRITE_ERROR_FINDING,
+        _create_query("CatchSite"),
+        _create_query("ErrorFinding"),
     ]

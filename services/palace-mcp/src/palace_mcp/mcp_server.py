@@ -62,6 +62,7 @@ from palace_mcp.code.find_public_api import find_public_api as _find_public_api_
 from palace_mcp.code.list_functions import list_functions as _list_functions_impl
 from palace_mcp.adr.router import register_adr_tools
 from palace_mcp.code_composite import register_code_composite_tools
+from palace_mcp.code_idiom import register_code_idiom_tools
 from palace_mcp.extractors.cross_repo_version_skew.find_version_skew import (
     register_version_skew_tools,
 )
@@ -1227,6 +1228,10 @@ register_version_skew_tools(
     _tool,
     default_project=os.environ.get("PALACE_CM_DEFAULT_PROJECT", "repos-gimle"),
 )
+register_code_idiom_tools(
+    _tool,
+    default_project=os.environ.get("PALACE_CM_DEFAULT_PROJECT", "repos-gimle"),
+)
 
 
 @_tool(
@@ -1239,9 +1244,11 @@ register_version_skew_tools(
     ),
 )
 async def palace_code_find_hotspots(
-    project: str,
+    project: str | None = None,
+    bundle: str | None = None,
     top_n: int = 20,
     min_score: float = 0.0,
+    path_prefix: str | None = None,
 ) -> dict[str, Any]:
     """Find hotspot files ranked by complexity × churn score."""
     driver = _driver
@@ -1252,7 +1259,12 @@ async def palace_code_find_hotspots(
             "message": "Neo4j driver not initialised",
         }
     return await _find_hotspots_impl(
-        driver=driver, project=project, top_n=top_n, min_score=min_score
+        driver=driver,
+        project=project,
+        bundle=bundle,
+        top_n=top_n,
+        min_score=min_score,
+        path_prefix=path_prefix,
     )
 
 
@@ -1265,8 +1277,9 @@ async def palace_code_find_hotspots(
     ),
 )
 async def palace_code_list_functions(
-    project: str,
     path: str,
+    project: str | None = None,
+    bundle: str | None = None,
     min_ccn: int = 0,
 ) -> dict[str, Any]:
     """List functions for a specific file recorded by the hotspot extractor."""
@@ -1278,7 +1291,7 @@ async def palace_code_list_functions(
             "message": "Neo4j driver not initialised",
         }
     return await _list_functions_impl(
-        driver=driver, project=project, path=path, min_ccn=min_ccn
+        driver=driver, project=project, bundle=bundle, path=path, min_ccn=min_ccn
     )
 
 
@@ -1360,15 +1373,16 @@ async def palace_code_find_public_api(
 @_tool(
     name="palace.code.find_cross_module_contracts",
     description=(
-        "List cross-module contract drift records for a project as recorded by "
-        "the cross_module_contract extractor. Returns ModuleContractDelta rows "
-        "showing which consumer→producer pairs have added, removed, or "
-        "signature-changed symbols between commits. "
+        "List cross-module contract drift records for a project or bundle as "
+        "recorded by the cross_module_contract extractor. Returns "
+        "ModuleContractDelta rows showing which consumer→producer pairs have "
+        "added, removed, or signature-changed symbols between commits. "
         "Accepts optional limit (default 200)."
     ),
 )
 async def palace_code_find_cross_module_contracts(
-    project: str,
+    project: str | None = None,
+    bundle: str | None = None,
     limit: int = 200,
 ) -> dict[str, Any]:
     """List cross-module contract drift records ordered by commit and consumer."""
@@ -1380,7 +1394,10 @@ async def palace_code_find_cross_module_contracts(
             "message": "Neo4j driver not initialised",
         }
     return await _find_cross_module_contracts_impl(
-        driver=driver, project=project, limit=limit
+        driver=driver,
+        project=project,
+        bundle=bundle,
+        limit=limit,
     )
 
 

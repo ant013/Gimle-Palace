@@ -12,6 +12,8 @@ from neo4j import AsyncDriver
 
 from palace_mcp.extractors.dependency_surface.models import ParsedDep
 
+# scope-tagging-exempt: MERGE identity must stay stable; group_id is set inline.
+
 _UPSERT_EXT_DEP = """
 MERGE (d:ExternalDependency {purl: $purl})
 ON CREATE SET d.ecosystem = $ecosystem,

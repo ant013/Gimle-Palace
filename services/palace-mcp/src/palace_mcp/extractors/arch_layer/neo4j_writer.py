@@ -19,6 +19,7 @@ from palace_mcp.extractors.arch_layer.models import (
     Module,
     ModuleEdge,
 )
+from palace_mcp.extractors.foundation.scope_tagging import ScopeTaggedWriter
 
 # ---------------------------------------------------------------------------
 # Delete existing snapshot for this project_id
@@ -160,22 +161,23 @@ async def _write_snapshot(  # noqa: PLR0912, PLR0913
     nodes: list[int],
     edges_count: list[int],
 ) -> None:
+    writer = ScopeTaggedWriter(default_group_id=project_id)
     await tx.run(_DELETE_ARCH_NODES, project_id=project_id)
 
     for m in modules:
-        await tx.run(_WRITE_MODULE, **m.model_dump())
+        await writer.write_node(tx, "Module", m.model_dump())
         nodes[0] += 1
 
     for la in layers:
-        await tx.run(_WRITE_LAYER, **la.model_dump())
+        await writer.write_node(tx, "Layer", la.model_dump())
         nodes[0] += 1
 
     for r in rules:
-        await tx.run(_WRITE_ARCH_RULE, **r.model_dump())
+        await writer.write_node(tx, "ArchRule", r.model_dump())
         nodes[0] += 1
 
     for v in violations:
-        await tx.run(_WRITE_ARCH_VIOLATION, **v.model_dump())
+        await writer.write_node(tx, "ArchViolation", v.model_dump())
         nodes[0] += 1
 
     # Edges: IN_LAYER

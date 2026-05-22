@@ -15,10 +15,10 @@ from palace_mcp.extractors.coding_convention.neo4j_writer import (
 
 class _FakeTx:
     def __init__(self) -> None:
-        self.queries: list[str] = []
+        self.calls: list[tuple[str, dict[str, object]]] = []
 
-    async def run(self, query: str, **_: object) -> None:
-        self.queries.append(query)
+    async def run(self, query: str, **kwargs: object) -> None:
+        self.calls.append((query, dict(kwargs)))
 
 
 class _FakeSession:
@@ -86,35 +86,14 @@ async def test_replace_project_snapshot_uses_single_execute_write() -> None:
     )
 
     assert session.execute_write_calls == 1
-    assert tx.queries == [
+    assert [query for query, _ in tx.calls] == [
         """
 MATCH (n)
 WHERE (n:Convention OR n:ConventionViolation) AND n.project_id = $project_id
 DETACH DELETE n
 """,
-        """
-CREATE (c:Convention)
-SET c.project_id = $project_id,
-    c.module = $module,
-    c.kind = $kind,
-    c.dominant_choice = $dominant_choice,
-    c.confidence = $confidence,
-    c.sample_count = $sample_count,
-    c.outliers = $outliers,
-    c.source_context = $source_context,
-    c.run_id = $run_id
-""",
-        """
-CREATE (v:ConventionViolation)
-SET v.project_id = $project_id,
-    v.module = $module,
-    v.kind = $kind,
-    v.file = $file,
-    v.start_line = $start_line,
-    v.end_line = $end_line,
-    v.message = $message,
-    v.severity = $severity,
-    v.source_context = $source_context,
-    v.run_id = $run_id
-""",
+        "CREATE (n:Convention) SET n += $props",
+        "CREATE (n:ConventionViolation) SET n += $props",
     ]
+    assert tx.calls[1][1]["props"]["group_id"] == "coding-mini"
+    assert tx.calls[2][1]["props"]["group_id"] == "coding-mini"

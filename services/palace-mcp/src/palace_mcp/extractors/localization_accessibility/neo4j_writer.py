@@ -10,6 +10,7 @@ from palace_mcp.extractors.localization_accessibility.parsers.coverage import (
 from palace_mcp.extractors.localization_accessibility.rules.semgrep_runner import (
     SemgrepFinding,
 )
+from palace_mcp.extractors.foundation.scope_tagging import ScopeTaggedWriter
 
 _DELETE_EXISTING = """
 MATCH (n)
@@ -90,53 +91,60 @@ async def _write_snapshot_tx(
     await cursor.consume()
 
     nodes = 0
+    writer = ScopeTaggedWriter(default_group_id=project_id)
 
     for lr in locale_coverages:
-        c = await tx.run(
-            _WRITE_LOCALE_RESOURCE,
-            project_id=project_id,
-            run_id=run_id,
-            locale=lr.locale,
-            source=lr.source,
-            key_count=lr.key_count,
-            coverage_pct=lr.coverage_pct,
-            surface=lr.surface,
+        await writer.write_node(
+            tx,
+            "LocaleResource",
+            {
+                "project_id": project_id,
+                "run_id": run_id,
+                "locale": lr.locale,
+                "source": lr.source,
+                "key_count": lr.key_count,
+                "coverage_pct": lr.coverage_pct,
+                "surface": lr.surface,
+            },
         )
-        await c.consume()
         nodes += 1
 
     for h in hardcoded:
-        c = await tx.run(
-            _WRITE_HARDCODED_STRING,
-            project_id=project_id,
-            run_id=run_id,
-            file=h.file,
-            start_line=h.start_line,
-            end_line=h.end_line,
-            literal=h.literal,
-            context=h.context,
-            severity=h.severity,
-            message=h.message,
+        await writer.write_node(
+            tx,
+            "HardcodedString",
+            {
+                "project_id": project_id,
+                "run_id": run_id,
+                "file": h.file,
+                "start_line": h.start_line,
+                "end_line": h.end_line,
+                "literal": h.literal,
+                "context": h.context,
+                "severity": h.severity,
+                "message": h.message,
+            },
         )
-        await c.consume()
         nodes += 1
 
     for a in a11y_missing:
         surface = _infer_surface(a.rule_id)
         control_kind = _infer_control_kind(a.context)
-        c = await tx.run(
-            _WRITE_A11Y_MISSING,
-            project_id=project_id,
-            run_id=run_id,
-            file=a.file,
-            start_line=a.start_line,
-            end_line=a.end_line,
-            control_kind=control_kind,
-            surface=surface,
-            severity=a.severity,
-            message=a.message,
+        await writer.write_node(
+            tx,
+            "A11yMissing",
+            {
+                "project_id": project_id,
+                "run_id": run_id,
+                "file": a.file,
+                "start_line": a.start_line,
+                "end_line": a.end_line,
+                "control_kind": control_kind,
+                "surface": surface,
+                "severity": a.severity,
+                "message": a.message,
+            },
         )
-        await c.consume()
         nodes += 1
 
     return nodes, 0

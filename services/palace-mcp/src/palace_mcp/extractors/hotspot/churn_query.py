@@ -5,7 +5,8 @@ from typing import Any
 
 CHURN_CYPHER = """
 UNWIND $paths AS path
-MATCH (f:File {project_id: $project_id, path: path})
+MATCH (f:File {project_id: $project_id})
+WHERE coalesce(f.file_path, f.path) = path
 OPTIONAL MATCH (c:Commit)-[:TOUCHED]->(f)
 WHERE c.committed_at >= datetime($cutoff)
 RETURN path, count(c) AS churn

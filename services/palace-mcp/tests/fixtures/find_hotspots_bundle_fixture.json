@@ -1,0 +1,67 @@
+{
+  "bundle": "hotspot-wire-bundle",
+  "path_prefix": "Modules/Send",
+  "top_n": 2,
+  "min_score": 4.0,
+  "projects": [
+    {
+      "slug": "hotspot-wire-alpha",
+      "tier": "user",
+      "last_run_finished_at": "2026-05-19T00:00:00Z",
+      "files": [
+        {
+          "path": "Modules/Send/High.swift",
+          "ccn_total": 12,
+          "churn_count": 9,
+          "hotspot_score": 9.0,
+          "complexity_status": "fresh",
+          "complexity_window_days": 90,
+          "last_complexity_run_at": "2026-05-19T00:00:00Z"
+        },
+        {
+          "path": "Modules/Other/Ignored.swift",
+          "ccn_total": 10,
+          "churn_count": 8,
+          "hotspot_score": 8.0,
+          "complexity_status": "fresh",
+          "complexity_window_days": 90,
+          "last_complexity_run_at": "2026-05-19T00:00:00Z"
+        }
+      ]
+    },
+    {
+      "slug": "hotspot-wire-beta",
+      "tier": "first-party",
+      "last_run_finished_at": "2026-05-18T00:00:00Z",
+      "files": [
+        {
+          "path": "Modules/Send/Medium.swift",
+          "ccn_total": 9,
+          "churn_count": 6,
+          "hotspot_score": 7.0,
+          "complexity_status": "fresh",
+          "complexity_window_days": 90,
+          "last_complexity_run_at": "2026-05-18T00:00:00Z"
+        },
+        {
+          "path": "Modules/Send/Low.swift",
+          "ccn_total": 5,
+          "churn_count": 4,
+          "hotspot_score": 4.5,
+          "complexity_status": "fresh",
+          "complexity_window_days": 90,
+          "last_complexity_run_at": "2026-05-18T00:00:00Z"
+        },
+        {
+          "path": "Modules/Send/Stale.swift",
+          "ccn_total": 20,
+          "churn_count": 20,
+          "hotspot_score": 10.0,
+          "complexity_status": "stale",
+          "complexity_window_days": 90,
+          "last_complexity_run_at": "2026-05-18T00:00:00Z"
+        }
+      ]
+    }
+  ]
+}

@@ -22,6 +22,7 @@ from palace_mcp.extractors.base import (
     ExtractorRunContext,
     ExtractorStats,
 )
+from palace_mcp.extractors.foundation.scope_tagging import ScopeTaggedWriter
 from palace_mcp.extractors.foundation.walk import walk_repo
 
 if TYPE_CHECKING:
@@ -629,33 +630,38 @@ async def _replace_snapshot_tx(
 ) -> None:
     delete_cursor = await tx.run(_DELETE_EXISTING_SNAPSHOT, project_id=project_id)
     await delete_cursor.consume()
+    writer = ScopeTaggedWriter(default_group_id=project_id)
 
     for site in catch_sites:
-        cursor = await tx.run(
-            _WRITE_CATCH_SITE,
-            project_id=project_id,
-            file=site.file,
-            start_line=site.start_line,
-            end_line=site.end_line,
-            kind=site.kind,
-            swallowed=site.swallowed,
-            rethrows=site.rethrows,
-            module=site.module,
-            run_id=run_id,
+        await writer.write_node(
+            tx,
+            "CatchSite",
+            {
+                "project_id": project_id,
+                "file": site.file,
+                "start_line": site.start_line,
+                "end_line": site.end_line,
+                "kind": site.kind,
+                "swallowed": site.swallowed,
+                "rethrows": site.rethrows,
+                "module": site.module,
+                "run_id": run_id,
+            },
         )
-        await cursor.consume()
 
     for finding in findings:
-        cursor = await tx.run(
-            _WRITE_ERROR_FINDING,
-            project_id=project_id,
-            kind=finding.kind,
-            file=finding.file,
-            start_line=finding.start_line,
-            end_line=finding.end_line,
-            severity=finding.severity,
-            message=finding.message,
-            source_context=finding.source_context,
-            run_id=run_id,
+        await writer.write_node(
+            tx,
+            "ErrorFinding",
+            {
+                "project_id": project_id,
+                "kind": finding.kind,
+                "file": finding.file,
+                "start_line": finding.start_line,
+                "end_line": finding.end_line,
+                "severity": finding.severity,
+                "message": finding.message,
+                "source_context": finding.source_context,
+                "run_id": run_id,
+            },
         )
-        await cursor.consume()
