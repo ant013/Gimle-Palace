@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Generator
+from collections.abc import Awaitable, Generator
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -79,6 +79,17 @@ class _Slow(BaseExtractor):
     ) -> ExtractorStats:
         await asyncio.sleep(10.0)
         return ExtractorStats()
+
+
+class _LongTimeout(BaseExtractor):
+    name = "__test_long_timeout"
+    description = "uses extractor-specific timeout"
+    timeout_s = 12.5
+
+    async def run(
+        self, *, graphiti: Graphiti, ctx: ExtractorRunContext
+    ) -> ExtractorStats:
+        return ExtractorStats(nodes_written=1)
 
 
 class _Skipped(BaseExtractor):
@@ -333,3 +344,31 @@ async def test_timeout_returns_runtime_error(
     assert res["ok"] is False
     assert res["error_code"] == "extractor_runtime_error"
     assert "timeout" in res["message"].lower()
+
+
+@pytest.mark.asyncio
+async def test_extractor_timeout_overrides_runner_default(
+    mock_driver: MagicMock, tmp_path: Path, mock_graphiti: MagicMock
+) -> None:
+    registry.register(_LongTimeout())
+    seen_timeout: float | None = None
+
+    async def fake_wait_for(coro: Awaitable[object], timeout: float) -> object:
+        nonlocal seen_timeout
+        seen_timeout = timeout
+        return await coro
+
+    with (
+        patch("palace_mcp.extractors.runner.REPOS_ROOT", tmp_path / "repos"),
+        patch("palace_mcp.extractors.runner.asyncio.wait_for", fake_wait_for),
+    ):
+        res = await run_extractor(
+            name="__test_long_timeout",
+            project="testproj",
+            driver=mock_driver,
+            graphiti=mock_graphiti,
+            timeout_s=0.05,
+        )
+
+    assert res["ok"] is True
+    assert seen_timeout == 12.5

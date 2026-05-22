@@ -56,6 +56,7 @@ logger = logging.getLogger(__name__)
 
 class SymbolIndexSwift(BaseExtractor):
     name: ClassVar[str] = "symbol_index_swift"
+    timeout_s: ClassVar[float] = 1800.0
     description: ClassVar[str] = (
         "Ingest Swift symbols + occurrences from pre-generated SCIP file "
         "(palace-swift-scip-emit) into Tantivy (full-text) and Neo4j "
@@ -233,12 +234,20 @@ class SymbolIndexSwift(BaseExtractor):
 
 
 async def _ingest_batch(
-    bridge: TantivyBridge, occurrences: list[SymbolOccurrence], phase: str
+    bridge: TantivyBridge,
+    occurrences: list[SymbolOccurrence],
+    phase: str,
+    *,
+    progress_interval: int = 10_000,
 ) -> int:
     written = 0
+    total = len(occurrences)
     for occ in occurrences:
         await bridge.add_or_replace_async(occ, phase)
         written += 1
+        if written % progress_interval == 0:
+            await bridge.commit_async()
+            logger.info("%s progress: %d/%d written", phase, written, total)
     return written
 
 

@@ -330,7 +330,10 @@ async def run_extractor(
         logger=logger,
     )
     exec_result = await _execute(
-        extractor=pre.extractor, graphiti=graphiti, ctx=ctx, timeout_s=timeout_s
+        extractor=pre.extractor,
+        graphiti=graphiti,
+        ctx=ctx,
+        timeout_s=pre.extractor.timeout_s or timeout_s,
     )
     duration_ms = int((time.monotonic() - start_mono) * 1000)
     finished_at = datetime.now(timezone.utc).isoformat()

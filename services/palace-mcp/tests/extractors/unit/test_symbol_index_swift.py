@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -9,9 +10,17 @@ import pytest
 
 from palace_mcp.extractors.base import ExtractorRunContext
 from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErrorCode
-from palace_mcp.extractors.foundation.models import Language
+from palace_mcp.extractors.foundation.models import (
+    Language,
+    SymbolKind,
+    SymbolOccurrence,
+)
 from palace_mcp.extractors.runner import run_extractor
-from palace_mcp.extractors.symbol_index_swift import SymbolIndexSwift, _is_vendor
+from palace_mcp.extractors.symbol_index_swift import (
+    SymbolIndexSwift,
+    _ingest_batch,
+    _is_vendor,
+)
 from tests.extractors.fixtures.scip_factory import (
     build_swift_scip_index,
     write_scip_fixture,
@@ -159,6 +168,42 @@ class TestSymbolIndexSwiftErrorHandling:
 
 
 class TestSymbolIndexSwiftHappyPath:
+    @pytest.mark.asyncio
+    async def test_ingest_batch_commits_and_logs_progress(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        occurrences = [
+            SymbolOccurrence(
+                doc_key=f"{idx}:Sources/App/File.swift:{idx}:0:abc123",
+                symbol_id=idx,
+                symbol_qualified_name=f"App.Symbol{idx}",
+                kind=SymbolKind.USE,
+                language=Language.SWIFT,
+                file_path="Sources/App/File.swift",
+                line=idx,
+                col_start=0,
+                col_end=1,
+                importance=1.0,
+                commit_sha="abc123",
+                ingest_run_id="run-1",
+            )
+            for idx in range(5)
+        ]
+        bridge = AsyncMock()
+        caplog.set_level(
+            logging.INFO, logger="palace_mcp.extractors.symbol_index_swift"
+        )
+
+        written = await _ingest_batch(
+            bridge, occurrences, "phase2_user_uses", progress_interval=2
+        )
+
+        assert written == 5
+        assert bridge.add_or_replace_async.await_count == 5
+        assert bridge.commit_async.await_count == 2
+        assert "phase2_user_uses progress: 2/5 written" in caplog.text
+        assert "phase2_user_uses progress: 4/5 written" in caplog.text
+
     @pytest.mark.asyncio
     async def test_run_reads_scip_path_from_settings(
         self,
