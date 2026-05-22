@@ -10,6 +10,7 @@ This tool returns :DeadFinding nodes written by the dead_code extractor (G0d alg
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 _SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
@@ -95,7 +96,7 @@ async def find_dead_code(
                     "size": rec["size"],
                     "safe_to_delete_score": rec["safe_to_delete_score"],
                     "git_last_external_ref": rec["git_last_external_ref"],
-                    "members": rec["members_json"] or [],
+                    "members": json.loads(rec["members_json"]) if rec["members_json"] else [],
                     "module_coverage_ratio": rec["module_coverage_ratio"],
                     "target_dead_type": rec["target_dead_type"],
                     "created_at": rec["created_at"],
