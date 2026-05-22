@@ -111,11 +111,11 @@ validate_artefacts() {
 
     if [[ ! -f "$periphery_report" ]]; then
         die "artefact missing: $periphery_report
-Run: bash paperclips/scripts/prepare_xcode_app_artifacts.sh --repo-path $repo_path --scheme <scheme>"
+Run: bash paperclips/scripts/prepare_swift_kit_artifacts.sh --repo-path $repo_path --scheme <scheme>"
     fi
     if [[ ! -f "$contract" ]]; then
         die "artefact missing: $contract
-Run: bash paperclips/scripts/prepare_xcode_app_artifacts.sh --repo-path $repo_path --scheme <scheme>"
+Run: bash paperclips/scripts/prepare_swift_kit_artifacts.sh --repo-path $repo_path --scheme <scheme>"
     fi
 
     local schema_version
@@ -133,7 +133,7 @@ Run: bash paperclips/scripts/prepare_xcode_app_artifacts.sh --repo-path $repo_pa
     fi
     if [[ "$iface_count" -eq 0 ]]; then
         die "no .swiftinterface files found in $swift_iface_dir
-Run: bash paperclips/scripts/prepare_xcode_app_artifacts.sh --repo-path $repo_path --scheme <scheme>"
+Run: bash paperclips/scripts/prepare_swift_kit_artifacts.sh --repo-path $repo_path --scheme <scheme>"
     fi
 
     log "artefact gate passed: periphery report ok, schema_version=$schema_version, $iface_count .swiftinterface file(s)"
