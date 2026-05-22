@@ -287,7 +287,7 @@ MISSING_ART_RC=$?
 set -e
 [[ "$MISSING_ART_RC" -ne 0 ]] || fail "artefact gate: expected non-zero exit when artefacts missing"
 assert_contains "$MISSING_ART_OUT" "artefact missing"
-assert_contains "$MISSING_ART_OUT" "prepare_xcode_app_artifacts.sh"
+assert_contains "$MISSING_ART_OUT" "prepare_swift_kit_artifacts.sh"
 printf 'PASS: artefact gate rejects missing prepare run\n'
 
 # ─── test: artefact gate — stale Periphery artefact rejected ─────────────────
