@@ -78,6 +78,7 @@ class CryptoDomainModelExtractor(BaseExtractor):
         "Roadmap #40 — Crypto Domain Model. "
         "Runs semgrep custom rules on Swift source and writes :CryptoFinding nodes."
     )
+    timeout_s: ClassVar[float] = 1800.0
     constraints: ClassVar[list[str]] = [
         "CREATE CONSTRAINT crypto_finding_unique IF NOT EXISTS "
         "FOR (f:CryptoFinding) REQUIRE "
