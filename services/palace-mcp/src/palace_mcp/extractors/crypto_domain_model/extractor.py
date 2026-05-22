@@ -226,9 +226,8 @@ async def _write_finding(
     run_id: str,
     finding: dict[str, Any],
 ) -> None:
-    async with driver.session() as session:
-        await session.run(
-            """
+    await driver.execute_query(
+        """
 MERGE (f:CryptoFinding {
     project_id: $project_id,
     kind: $kind,
@@ -242,14 +241,14 @@ SET f.severity = $severity,
     f.run_id = $run_id,
     f.group_id = coalesce(f.group_id, $group_id)
 """,
-            project_id=project_id,
-            group_id=project_id,
-            kind=finding["kind"],
-            file=finding["path"],
-            start_line=finding["start_line"],
-            end_line=finding["end_line"],
-            severity=finding["severity"],
-            message=finding["message"],
-            source_context=finding["source_context"],
-            run_id=run_id,
-        )
+        project_id=project_id,
+        group_id=project_id,
+        kind=finding["kind"],
+        file=finding["path"],
+        start_line=finding["start_line"],
+        end_line=finding["end_line"],
+        severity=finding["severity"],
+        message=finding["message"],
+        source_context=finding["source_context"],
+        run_id=run_id,
+    )
