@@ -14,56 +14,66 @@ def compute_sccs(
     graph: SymbolGraph,
     candidates: frozenset[str],
 ) -> list[frozenset[str]]:
-    """Tarjan's SCC on the dead-candidate subgraph.
+    """Iterative Tarjan's SCC on the dead-candidate subgraph.
 
+    Explicit-stack implementation — handles 10k+ node graphs without RecursionError.
     Returns SCCs with size >= 2. Caller applies the ≥3 threshold for
     "dead cluster" and ≥50% module coverage for "dead module".
     """
-    # Build adjacency restricted to dead candidates
     adj: dict[str, list[str]] = {}
     for qn in candidates:
-        neighbors = [n for n in graph.adj(qn) if n in candidates]
-        adj[qn] = neighbors
+        adj[qn] = [n for n in graph.adj(qn) if n in candidates]
 
     index_counter = [0]
-    stack: list[str] = []
+    tarjan_stack: list[str] = []
     lowlink: dict[str, int] = {}
     index: dict[str, int] = {}
     on_stack: dict[str, bool] = {}
     sccs: list[frozenset[str]] = []
 
-    def strongconnect(v: str) -> None:
-        index[v] = index_counter[0]
-        lowlink[v] = index_counter[0]
+    for start in candidates:
+        if start in index:
+            continue
+
+        index[start] = index_counter[0]
+        lowlink[start] = index_counter[0]
         index_counter[0] += 1
-        stack.append(v)
-        on_stack[v] = True
+        tarjan_stack.append(start)
+        on_stack[start] = True
+        # call_stack entries: (node, next-neighbor-index)
+        call_stack: list[tuple[str, int]] = [(start, 0)]
 
-        for w in adj.get(v, []):
-            if w not in index:
-                strongconnect(w)
-                lowlink[v] = min(lowlink[v], lowlink[w])
-            elif on_stack.get(w):
-                lowlink[v] = min(lowlink[v], index[w])
+        while call_stack:
+            v, i = call_stack[-1]
+            neighbors = adj.get(v, [])
 
-        if lowlink[v] == index[v]:
-            scc: set[str] = set()
-            while True:
-                w = stack.pop()
-                on_stack[w] = False
-                scc.add(w)
-                if w == v:
-                    break
-            if len(scc) >= 2:
-                sccs.append(frozenset(scc))
-
-    import sys
-
-    # Iterative Tarjan to avoid Python recursion limits on large graphs
-    sys.setrecursionlimit(max(sys.getrecursionlimit(), len(candidates) + 1000))
-    for v in candidates:
-        if v not in index:
-            strongconnect(v)
+            if i < len(neighbors):
+                w = neighbors[i]
+                call_stack[-1] = (v, i + 1)
+                if w not in index:
+                    index[w] = index_counter[0]
+                    lowlink[w] = index_counter[0]
+                    index_counter[0] += 1
+                    tarjan_stack.append(w)
+                    on_stack[w] = True
+                    call_stack.append((w, 0))
+                elif on_stack.get(w):
+                    lowlink[v] = min(lowlink[v], index[w])
+            else:
+                call_stack.pop()
+                if call_stack:
+                    parent = call_stack[-1][0]
+                    lowlink[parent] = min(lowlink[parent], lowlink[v])
+                if lowlink[v] == index[v]:
+                    scc: set[str] = set()
+                    while True:
+                        w = tarjan_stack.pop()
+                        on_stack[w] = False
+                        scc.add(w)
+                        if w == v:
+                            break
+                    if len(scc) >= 2:
+                        sccs.append(frozenset(scc))
 
     return sccs
 
