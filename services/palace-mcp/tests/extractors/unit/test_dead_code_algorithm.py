@@ -1,11 +1,12 @@
 """Mandatory fixture tests for the dead_code extractor (G0d spec §Tests).
 
-Five mandatory tests from spec §G0d rev3.2:
+Six mandatory tests from spec §G0d rev3.2:
 1. @objc dynamic method never called → safe_to_delete_score ≤ 0.3, severity low
 2. NSManagedObject subclass with zero callers → excluded from dead-candidate set
 3. Class used only via Mirror(reflecting:) → safe_to_delete_score ≤ 0.5
 4. Extension adding protocol conformance to existential-used protocol → ALIVE
 5. SwiftUI @AppStorage wrapper type → excluded from dead-candidate set
+6. SCC cluster (mutually-dead cycle) → DEAD_SCC_CLUSTER finding, severity HIGH
 """
 
 from __future__ import annotations
@@ -274,3 +275,50 @@ def test_app_storage_type_excluded_from_dead_candidates() -> None:
     reachable = compute_reachable_set(graph, seeds)
     dead = compute_dead_candidates(graph, reachable)
     assert app_storage_type.qualified_name not in dead
+
+
+# ---------------------------------------------------------------------------
+# Test 6: SCC cluster — mutually-dead cycle → DEAD_SCC_CLUSTER, severity HIGH
+# ---------------------------------------------------------------------------
+
+
+def test_dead_scc_cluster_cycle_produces_high_severity_finding() -> None:
+    """3-node call cycle unreachable from seeds → DEAD_SCC_CLUSTER finding, severity HIGH."""
+    foo = SymbolNode(qualified_name="A.foo()", kind="function", module_name="A")
+    bar = SymbolNode(qualified_name="A.bar()", kind="function", module_name="A")
+    baz = SymbolNode(qualified_name="A.baz()", kind="function", module_name="A")
+    public_seed = SymbolNode(
+        qualified_name="MyModule.AppDelegate",
+        kind="class",
+        module_name="MyModule",
+        is_public=True,
+        is_main_entry=True,
+    )
+    graph = _make_graph(
+        foo,
+        bar,
+        baz,
+        public_seed,
+        edges=[
+            GraphEdge(source="A.foo()", target="A.bar()", kind="CALLS"),
+            GraphEdge(source="A.bar()", target="A.baz()", kind="CALLS"),
+            GraphEdge(source="A.baz()", target="A.foo()", kind="CALLS"),
+        ],
+    )
+    seeds = compute_all_seeds(graph)
+    reachable = compute_reachable_set(graph, seeds)
+    dead = compute_dead_candidates(graph, reachable)
+
+    cycle_names = {foo.qualified_name, bar.qualified_name, baz.qualified_name}
+    assert cycle_names <= dead, f"Expected all cycle members in dead set, got {dead}"
+
+    findings = build_findings(graph, dead, project="test")
+    scc_findings = [f for f in findings if f.kind == FindingKind.DEAD_SCC_CLUSTER]
+    assert scc_findings, "Expected a DEAD_SCC_CLUSTER finding"
+
+    scc_finding = scc_findings[0]
+    assert scc_finding.severity == Severity.HIGH
+    member_names = {m.qualified_name for m in scc_finding.members}
+    assert cycle_names <= member_names, (
+        f"Expected all cycle members in finding, got {member_names}"
+    )
