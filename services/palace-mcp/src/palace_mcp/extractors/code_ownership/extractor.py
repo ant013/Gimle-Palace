@@ -52,6 +52,7 @@ class CodeOwnershipExtractor(BaseExtractor):
     description: ClassVar[str] = (
         "File-level ownership: blame_share + recency-weighted churn"
     )
+    timeout_s: ClassVar[float] = 1800.0
     constraints: ClassVar[list[str]] = []
     indexes: ClassVar[list[str]] = []
 
