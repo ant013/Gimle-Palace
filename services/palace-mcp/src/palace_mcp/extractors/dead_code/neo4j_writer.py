@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any
 
@@ -106,12 +107,15 @@ async def _write_finding(
     )
 
 
-def _members_json(finding: DeadFinding) -> list[dict[str, Any]]:
-    return [
-        {
-            "qualified_name": m.qualified_name,
-            "kind": m.kind,
-            "file_path": m.file_path,
-        }
-        for m in finding.members
-    ]
+def _members_json(finding: DeadFinding) -> str:
+    return json.dumps(
+        [
+            {
+                "qualified_name": m.qualified_name,
+                "kind": m.kind,
+                "file_path": m.file_path,
+            }
+            for m in finding.members
+        ],
+        sort_keys=True,
+    )
