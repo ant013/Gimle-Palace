@@ -61,6 +61,7 @@ class TestCodeToolRegistration:
         assert {tool.name for tool in code_tools} == {
             "palace.code.detect_changes",
             "palace.code.find_cross_module_contracts",
+            "palace.code.find_dead_code",
             "palace.code.find_dead_symbols",
             "palace.code.find_hotspots",
             "palace.code.find_idiom",

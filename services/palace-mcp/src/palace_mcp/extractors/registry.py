@@ -21,6 +21,7 @@ from palace_mcp.extractors.cross_repo_version_skew.extractor import (
     CrossRepoVersionSkewExtractor,
 )
 from palace_mcp.extractors.cross_module_contract import CrossModuleContractExtractor
+from palace_mcp.extractors.dead_code.extractor import DeadCodeExtractor
 from palace_mcp.extractors.dead_symbol_binary_surface.extractor import (
     DeadSymbolBinarySurfaceExtractor,
 )
@@ -57,6 +58,7 @@ EXTRACTORS: dict[str, BaseExtractor] = {
     "codebase_memory_bridge": CodebaseMemoryBridgeExtractor(),
     "coding_convention": CodingConventionExtractor(),
     "cross_module_contract": CrossModuleContractExtractor(),
+    "dead_code": DeadCodeExtractor(),
     "dead_symbol_binary_surface": DeadSymbolBinarySurfaceExtractor(),
     "public_api_surface": PublicApiSurfaceExtractor(),
     "symbol_index_python": SymbolIndexPython(),
