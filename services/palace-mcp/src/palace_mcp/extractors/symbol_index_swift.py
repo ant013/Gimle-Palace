@@ -44,10 +44,12 @@ from palace_mcp.extractors.foundation.models import (
 )
 from palace_mcp.extractors.foundation.schema import ensure_custom_schema
 from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
+from palace_mcp.extractors.foundation.symbol_node_writer import write_symbol_nodes
 from palace_mcp.extractors.scip_parser import (
     FindScipPath,
     ScipPathRequiredError,
     iter_scip_occurrences,
+    iter_scip_symbol_infos,
     parse_scip_file,
 )
 
@@ -203,6 +205,18 @@ class SymbolIndexSwift(BaseExtractor):
 
             counter_path = tantivy_path / "in_degree_counter.json"
             counter.to_disk(counter_path, run_id=ctx.run_id)
+
+            # Write :Symbol nodes so dead_code can load the call graph.
+            # Build file_path lookup from the first DEF/DECL occurrence of each symbol.
+            def_file_paths: dict[str, str] = {}
+            for occ in all_occs:
+                if occ.kind in (SymbolKind.DEF, SymbolKind.DECL):
+                    def_file_paths.setdefault(occ.symbol_qualified_name, occ.file_path)
+            symbol_infos = list(iter_scip_symbol_infos(scip_index))
+            sym_nodes = await write_symbol_nodes(
+                driver, symbol_infos, def_file_paths, ctx.group_id
+            )
+            logger.info("Symbol nodes written to Neo4j: %d", sym_nodes)
 
             await finalize_ingest_run(driver, run_id=ctx.run_id, success=True)
             return ExtractorStats(nodes_written=total_written, edges_written=0)
