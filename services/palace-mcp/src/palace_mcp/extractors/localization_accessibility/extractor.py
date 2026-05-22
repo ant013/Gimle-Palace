@@ -79,6 +79,7 @@ class LocalizationAccessibilityExtractor(BaseExtractor):
         "rules for hard-coded strings and missing a11y labels. "
         "Writes :LocaleResource, :HardcodedString, :A11yMissing nodes."
     )
+    timeout_s: ClassVar[float] = 1800.0
     constraints: ClassVar[list[str]] = []
     indexes: ClassVar[list[str]] = [
         "CREATE INDEX locale_resource_project IF NOT EXISTS "
