@@ -11,6 +11,7 @@ Five mandatory tests from spec §G0d rev3.2:
 from __future__ import annotations
 
 from palace_mcp.extractors.dead_code.finding_builder import build_findings
+from palace_mcp.extractors.dead_code.scc_analyzer import compute_sccs
 from palace_mcp.extractors.dead_code.git_enrichment import (
     compute_safe_to_delete_score,
     enrich_findings_with_git,
@@ -232,6 +233,22 @@ def test_extension_alive_when_protocol_used_via_existential() -> None:
 # ---------------------------------------------------------------------------
 # Test 5: SwiftUI @AppStorage type → excluded from dead-candidate set
 # ---------------------------------------------------------------------------
+
+
+def test_tarjan_10k_node_graph_no_recursion_error() -> None:
+    """Iterative Tarjan must handle a 10k-node cycle without RecursionError."""
+    n = 10_000
+    qns = [f"S.node{i}" for i in range(n)]
+    g = SymbolGraph()
+    for qn in qns:
+        g.symbols[qn] = SymbolNode(qualified_name=qn, kind="function", module_name="S")
+    # Ring: node0→node1→...→node9999→node0 — one giant SCC
+    g.edges = [GraphEdge(source=qns[i], target=qns[(i + 1) % n], kind="CALLS") for i in range(n)]
+    g.build_indexes()
+
+    sccs = compute_sccs(g, frozenset(qns))
+    assert len(sccs) == 1
+    assert len(sccs[0]) == n
 
 
 def test_app_storage_type_excluded_from_dead_candidates() -> None:

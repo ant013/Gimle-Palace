@@ -100,7 +100,7 @@ def build_findings(
             project=project,
             members=[member],
             size=1,
-            evidence_query=f"MATCH (f:DeadFinding {{finding_id: '?'}})-[:DEAD_SYMBOL]->(s) WHERE s.qualified_name = '{qn}' RETURN s",
+            evidence_query=f"MATCH (f:DeadFinding {{finding_id: '?'}})-[:DEAD_SYMBOL]->(s) WHERE s.qualified_name = '{_cypher_str(qn)}' RETURN s",
         )
         findings.append(f)
 
@@ -121,10 +121,16 @@ def _build_members(graph: SymbolGraph, qns: list[str]) -> list[MemberEntry]:
     return members
 
 
+def _cypher_str(s: str) -> str:
+    """Escape a value for embedding in a Cypher single-quoted string literal."""
+    return s.replace("\\", "\\\\").replace("'", "\\'")
+
+
 def _evidence_query(existing: list[DeadFinding], members: list[MemberEntry]) -> str:
     if not members:
         return ""
+    names = ", ".join(f"'{_cypher_str(m.qualified_name)}'" for m in members[:3])
     return (
         f"MATCH (f:DeadFinding)-[:DEAD_SYMBOL]->(s:Symbol) "
-        f"WHERE s.qualified_name IN {[m.qualified_name for m in members[:3]]!r} RETURN f, s"
+        f"WHERE s.qualified_name IN [{names}] RETURN f, s"
     )

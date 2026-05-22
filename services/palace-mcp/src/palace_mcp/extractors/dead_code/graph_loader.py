@@ -108,6 +108,7 @@ async def load_git_history(
     """
     if not qualified_names:
         return {}
+    # TODO(GIM-787): wire to git_history extractor output
     # Joining qualified_name → File node requires Symbol.file_path → File path match.
     # Deferred to a future slice; return empty so caller uses score defaults.
     return {}
