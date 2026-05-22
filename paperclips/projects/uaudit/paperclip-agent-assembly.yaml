@@ -100,15 +100,15 @@ agents:
     platform: all
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
   - agent_name: UWICTO
-    role_source: paperclips/roles-codex/cx-cto.md
-    profile: cto
+    role_source: paperclips/projects/uaudit/roles-codex/uwi-platform-dispatcher.md
+    profile: custom
     target: codex
     reportsTo: AUCEO
     platform: ios
     primary_codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
   - agent_name: UWACTO
-    role_source: paperclips/roles-codex/cx-cto.md
-    profile: cto
+    role_source: paperclips/projects/uaudit/roles-codex/uwa-platform-dispatcher.md
+    profile: custom
     target: codex
     reportsTo: AUCEO
     platform: android

@@ -1,3 +1,5 @@
+> SUPERSEDED for daily-intake ownership by `docs/superpowers/specs/2026-05-22-uaudit-cto-dispatcher-daily-audit-routing.md`. Historical infra execution details remain useful only where they do not conflict with platform CTO dispatcher ownership.
+
 # UAudit Daily Version-Branch Delta Audit
 
 ## Goal

@@ -233,8 +233,8 @@ def test_uaudit_overlay_has_no_hardcoded_abs_paths():
 # Expected profile per agent — snapshot of Phase F design decisions.
 _EXPECTED_PROFILES = {
     "AUCEO": "cto",
-    "UWICTO": "cto",
-    "UWACTO": "cto",
+    "UWICTO": "custom",
+    "UWACTO": "custom",
     "UWISwiftAuditor": "reviewer",
     "UWAKotlinAuditor": "reviewer",
     "UWICryptoAuditor": "implementer",  # preserved from v1 (cx-blockchain-engineer default)
