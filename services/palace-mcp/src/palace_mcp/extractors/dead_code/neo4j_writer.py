@@ -62,6 +62,7 @@ async def _write_finding(
     props_set = 0
 
     props: dict[str, Any] = {
+        "group_id": group_id,
         "kind": finding.kind.value,
         "severity": finding.severity.value,
         "project": finding.project,
