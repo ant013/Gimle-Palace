@@ -411,7 +411,7 @@ while [[ $# -gt 0 ]]; do
             [[ $# -ge 2 ]] || die "--env-file requires a value"
             ENV_FILE="$2"
             shift 2
-        ;;
+            ;;
         --dry-run)
             DRY_RUN="true"
             shift
