@@ -9,6 +9,7 @@ Swift DEF/USE occurrences through the standard 3-phase bootstrap:
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Sized
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -56,6 +57,7 @@ logger = logging.getLogger(__name__)
 
 class SymbolIndexSwift(BaseExtractor):
     name: ClassVar[str] = "symbol_index_swift"
+    timeout_s: ClassVar[float] = 1800.0
     description: ClassVar[str] = (
         "Ingest Swift symbols + occurrences from pre-generated SCIP file "
         "(palace-swift-scip-emit) into Tantivy (full-text) and Neo4j "
@@ -102,17 +104,17 @@ class SymbolIndexSwift(BaseExtractor):
             scip_path = FindScipPath.resolve(ctx.project_slug, settings)
             scip_index = parse_scip_file(scip_path)
             commit_sha = _read_head_sha(ctx.repo_path)
-            all_occs = list(
-                iter_scip_occurrences(
+
+            def _iter_occurrences() -> Iterable[SymbolOccurrence]:
+                return iter_scip_occurrences(
                     scip_index,
                     commit_sha=commit_sha,
                     ingest_run_id=ctx.run_id,
                 )
-            )
 
             tantivy_path = Path(settings.palace_tantivy_index_path)
             counter = _load_or_reset_counter(tantivy_path, ctx.run_id)
-            for occ in all_occs:
+            for occ in _iter_occurrences():
                 if occ.kind == SymbolKind.USE:
                     counter.increment(occ.symbol_qualified_name)
 
@@ -126,10 +128,15 @@ class SymbolIndexSwift(BaseExtractor):
                     max_occurrences_total=settings.palace_max_occurrences_total,
                     phase="phase1_defs",
                 )
-                phase1 = [
-                    o for o in all_occs if o.kind in (SymbolKind.DEF, SymbolKind.DECL)
-                ]
-                p1 = await _ingest_batch(bridge, phase1, "phase1_defs")
+                p1 = await _ingest_batch(
+                    bridge,
+                    (
+                        occ
+                        for occ in _iter_occurrences()
+                        if occ.kind in (SymbolKind.DEF, SymbolKind.DECL)
+                    ),
+                    "phase1_defs",
+                )
                 await bridge.commit_async()
                 await write_checkpoint(
                     driver,
@@ -151,17 +158,15 @@ class SymbolIndexSwift(BaseExtractor):
                         max_occurrences_total=settings.palace_max_occurrences_total,
                         phase="phase2_user_uses",
                     )
-                    phase2 = [
-                        _with_importance(o, counter, settings)
-                        for o in all_occs
-                        if o.kind == SymbolKind.USE and not _is_vendor(o.file_path)
-                    ]
-                    phase2 = [
-                        o
-                        for o in phase2
-                        if o.importance >= settings.palace_importance_threshold_use
-                    ]
-                    p2 = await _ingest_batch(bridge, phase2, "phase2_user_uses")
+                    p2 = await _ingest_batch(
+                        bridge,
+                        _iter_phase2_occurrences(
+                            occurrences=_iter_occurrences(),
+                            counter=counter,
+                            settings=settings,
+                        ),
+                        "phase2_user_uses",
+                    )
                     await bridge.commit_async()
                     await write_checkpoint(
                         driver,
@@ -183,12 +188,15 @@ class SymbolIndexSwift(BaseExtractor):
                         max_occurrences_total=settings.palace_max_occurrences_total,
                         phase="phase3_vendor_uses",
                     )
-                    phase3 = [
-                        _with_importance(o, counter, settings)
-                        for o in all_occs
-                        if o.kind == SymbolKind.USE and _is_vendor(o.file_path)
-                    ]
-                    p3 = await _ingest_batch(bridge, phase3, "phase3_vendor_uses")
+                    p3 = await _ingest_batch(
+                        bridge,
+                        (
+                            _with_importance(occ, counter, settings)
+                            for occ in _iter_occurrences()
+                            if occ.kind == SymbolKind.USE and _is_vendor(occ.file_path)
+                        ),
+                        "phase3_vendor_uses",
+                    )
                     if p3 > 0:
                         await bridge.commit_async()
                         await write_checkpoint(
@@ -233,12 +241,23 @@ class SymbolIndexSwift(BaseExtractor):
 
 
 async def _ingest_batch(
-    bridge: TantivyBridge, occurrences: list[SymbolOccurrence], phase: str
+    bridge: TantivyBridge,
+    occurrences: Iterable[SymbolOccurrence],
+    phase: str,
+    *,
+    progress_interval: int = 10_000,
 ) -> int:
     written = 0
+    total = len(occurrences) if isinstance(occurrences, Sized) else None
     for occ in occurrences:
         await bridge.add_or_replace_async(occ, phase)
         written += 1
+        if written % progress_interval == 0:
+            await bridge.commit_async()
+            if total is None:
+                logger.info("%s progress: %d written", phase, written)
+            else:
+                logger.info("%s progress: %d/%d written", phase, written, total)
     return written
 
 
@@ -274,6 +293,21 @@ def _with_importance(
         commit_sha=occ.commit_sha,
         ingest_run_id=occ.ingest_run_id,
     )
+
+
+def _iter_phase2_occurrences(
+    *,
+    occurrences: Iterable[SymbolOccurrence],
+    counter: BoundedInDegreeCounter,
+    settings: object,
+) -> Iterable[SymbolOccurrence]:
+    threshold = getattr(settings, "palace_importance_threshold_use")
+    for occ in occurrences:
+        if occ.kind != SymbolKind.USE or _is_vendor(occ.file_path):
+            continue
+        occ = _with_importance(occ, counter, settings)
+        if occ.importance >= threshold:
+            yield occ
 
 
 def _is_vendor(file_path: str) -> bool:
