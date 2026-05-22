@@ -1,15 +1,13 @@
-# UW iOS app SCIP emit — Track B runbook
+# Xcode app SCIP emit — runbook
 
-## Scope (GIM-392)
+## Scope
 
-The wallet app under `unstoppable-wallet-ios` is an Xcode app target, not a
-SwiftPM kit, so `paperclips/scripts/scip_emit_swift_kit.sh` is the wrong
-helper for it. This runbook documents the dedicated helper
-`paperclips/scripts/scip_emit_uw_ios_app.sh`, which builds the app workspace
-via `xcodebuild` on a Mac with full Xcode and emits SCIP from the resulting
-DerivedData.
+Xcode app targets cannot run through `paperclips/scripts/scip_emit_swift_kit.sh`
+(that helper is for SwiftPM kits). This runbook documents the dedicated helper
+`paperclips/scripts/scip_emit_xcode_app.sh`, which builds an app workspace via
+`xcodebuild` on a Mac with full Xcode and emits SCIP from the resulting DerivedData.
 
-## Host requirements (Track B only)
+## Host requirements
 
 - macOS Mac with full Xcode installed and selected
   (`xcode-select -p` must point at `/Applications/Xcode.app/...`,
@@ -21,11 +19,29 @@ The iMac itself cannot satisfy this; full Xcode is not installable on
 Intel macOS 13 (Apple dropped the Xcode 14+ upgrade path). See
 `reference_imac_toolchain_limits` in operator memory.
 
-## Default invocation
+## Generic invocation
+
+All of `--scheme`, `--slug`, and `--relative-path` are required. `--workspace`
+is optional; if omitted the script auto-detects the first `*.xcworkspace` in
+`--repo-path`.
 
 ```bash
-bash paperclips/scripts/scip_emit_uw_ios_app.sh \
-  --repo-path /Users/ant013/Ios/HorizontalSystems/unstoppable-wallet-ios
+bash paperclips/scripts/scip_emit_xcode_app.sh \
+  --repo-path   <path-to-repo> \
+  --scheme      <xcodebuild-scheme> \
+  --slug        <palace-project-slug> \
+  --relative-path <remote-relative-path>
+```
+
+## UW iOS app invocation
+
+```bash
+bash paperclips/scripts/scip_emit_xcode_app.sh \
+  --repo-path    /Users/ant013/Ios/HorizontalSystems/unstoppable-wallet-ios \
+  --workspace    Wallet.xcworkspace \
+  --scheme       Development \
+  --slug         uw-ios-app \
+  --relative-path unstoppable-wallet-ios
 ```
 
 This builds `Wallet.xcworkspace` with scheme `Development`, destination
@@ -34,16 +50,20 @@ This builds `Wallet.xcworkspace` with scheme `Development`, destination
 `<repo>/scip/index.scip`, and copies it to
 `imac-ssh.ant013.work:/Users/Shared/Ios/HorizontalSystems/unstoppable-wallet-ios/scip/index.scip`.
 
-## Live runtime evidence (2026-05-21, dev Macbook)
+## Live runtime evidence (2026-05-21, dev Macbook, GIM-392)
 
 Operator dev Macbook, Xcode 26.3, iPhoneSimulator26.2.sdk, Swift 6.2.4,
 `-destination 'generic/platform=iOS Simulator'`.
 
 ```bash
-bash paperclips/scripts/scip_emit_uw_ios_app.sh \
-  --repo-path /Users/ant013/Ios/HorizontalSystems/unstoppable-wallet-ios \
-  --derived-data /tmp/uw-app-xcdd-gim392 \
-  --output /tmp/gim392-scip/uw-ios-app.scip \
+bash paperclips/scripts/scip_emit_xcode_app.sh \
+  --repo-path     /Users/ant013/Ios/HorizontalSystems/unstoppable-wallet-ios \
+  --workspace     Wallet.xcworkspace \
+  --scheme        Development \
+  --slug          uw-ios-app \
+  --relative-path unstoppable-wallet-ios \
+  --derived-data  /tmp/uw-app-xcdd-gim392 \
+  --output        /tmp/gim392-scip/uw-ios-app.scip \
   --no-remote-copy
 ```
 
@@ -96,9 +116,9 @@ In the 2026-05-21 evidence run the per-kit emit returned empty SCIP
 edge case in `palace-swift-scip-emit-cli` and is tracked as a separate
 follow-up, not blocking the app-level acceptance.
 
-## Production mirror
+## Production mirror (UW iOS app)
 
-After a successful Track B run, the production iMac mirror at
+After a successful run, the production iMac mirror at
 `/Users/Shared/Ios/HorizontalSystems/unstoppable-wallet-ios/scip/index.scip`
 is updated and is available to palace-mcp for `uw-ios-app` bundle ingest.
 

@@ -3,7 +3,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-DEFAULT_MANIFEST="$REPO_ROOT/services/palace-mcp/scripts/uw-ios-bundle-manifest.json"
 DEFAULT_EMIT_SCRIPT="$REPO_ROOT/paperclips/scripts/scip_emit_swift_kit.sh"
 DEFAULT_LOCAL_REPO_BASE="${HS_REPO_ROOT:-/Users/Shared/Ios/HorizontalSystems}"
 DEFAULT_REMOTE_HOST="${IMAC_HOST:-imac-ssh.ant013.work}"
@@ -20,16 +19,18 @@ SMOKE_MEMBERS=(
 
 usage() {
     cat <<'EOF'
-Usage: scip_emit_uw_ios_bundle.sh [options]
+Usage: scip_emit_xcode_bundle.sh --manifest <path> [options]
 
-Emit SCIP for every uw-ios bundle member by reusing scip_emit_swift_kit.sh.
+Emit SCIP for every bundle member by reusing scip_emit_swift_kit.sh.
 The script keeps going across member failures and prints a final JSON summary.
+
+Required:
+  --manifest <path>       Bundle manifest to iterate
 
 Options:
   --scope <full|smoke>     Member scope to process (default: full)
-  --repo-root <path>      Local base dir for HorizontalSystems repos
+  --repo-root <path>      Local base dir for repos
                           (default: /Users/Shared/Ios/HorizontalSystems)
-  --manifest <path>       Bundle manifest to iterate
   --emit-script <path>    Per-member helper script to invoke
   --remote-host <host>    SSH host for the iMac
   --remote-base <path>    Remote base dir that contains bundle repos
@@ -199,7 +200,7 @@ PY
 }
 
 LOCAL_REPO_BASE="$DEFAULT_LOCAL_REPO_BASE"
-MANIFEST_PATH="$DEFAULT_MANIFEST"
+MANIFEST_PATH=""
 EMIT_SCRIPT="$DEFAULT_EMIT_SCRIPT"
 REMOTE_HOST="$DEFAULT_REMOTE_HOST"
 REMOTE_BASE="$DEFAULT_REMOTE_BASE"
@@ -302,6 +303,7 @@ done
 require_command bash
 require_command python3
 validate_scope "$SCOPE"
+[[ -n "$MANIFEST_PATH" ]] || { usage >&2; die "--manifest is required"; }
 [[ -f "$MANIFEST_PATH" ]] || die "manifest not found: $MANIFEST_PATH"
 [[ -f "$EMIT_SCRIPT" ]] || die "emit helper not found: $EMIT_SCRIPT"
 
@@ -315,8 +317,8 @@ fi
 MEMBERS_TOTAL="$(printf '%s\n' "$MEMBERS_TSV" | sed '/^$/d' | wc -l | tr -d ' ')"
 [[ "$MEMBERS_TOTAL" -gt 0 ]] || die "manifest has no members: $MANIFEST_PATH"
 
-RESULTS_FILE="$(mktemp "${TMPDIR:-/tmp}/uw-ios-scip-emit-results.XXXXXX")"
-RUN_LOG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/uw-ios-scip-emit-logs.XXXXXX")"
+RESULTS_FILE="$(mktemp "${TMPDIR:-/tmp}/xcode-scip-emit-results.XXXXXX")"
+RUN_LOG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/xcode-scip-emit-logs.XXXXXX")"
 START_EPOCH="$(date +%s)"
 
 index=0

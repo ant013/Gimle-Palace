@@ -8,38 +8,33 @@ DEFAULT_REMOTE_HOST="${IMAC_HOST:-imac-ssh.ant013.work}"
 DEFAULT_REMOTE_BASE="${IMAC_HS_PATH:-/Users/Shared/Ios/HorizontalSystems}"
 EMITTER_NAME="palace-swift-scip-emit-cli"
 EMITTER_VERSION="2026-05-15"
-DEFAULT_SLUG="uw-ios-app"
-DEFAULT_RELATIVE_PATH="unstoppable-wallet-ios"
-DEFAULT_SCHEME="Development"
 DEFAULT_DESTINATION="generic/platform=iOS Simulator"
 
 usage() {
     cat <<'EOF'
-Usage: scip_emit_uw_ios_app.sh --repo-path <unstoppable-wallet-ios> [options]
+Usage: scip_emit_xcode_app.sh --repo-path <path> --scheme <name> --slug <name> --relative-path <name> [options]
 
-Emit the unstoppable-wallet-ios app SCIP index from an Xcode workspace build
-on a dev Mac with full Xcode, then copy it to the iMac repo mirror.
+Emit a SCIP index for an Xcode app from a workspace build on a dev Mac with
+full Xcode, then copy it to the iMac repo mirror.
 
 Required:
-  --repo-path <path>          Local path to unstoppable-wallet-ios checkout
+  --repo-path <path>          Local path to the Xcode app checkout
                               (must contain the .xcworkspace / .xcodeproj)
+  --scheme <name>             xcodebuild scheme
+  --slug <name>               Palace project slug
+  --relative-path <name>      Remote-side relative path under remote-base
 
 Options:
   --workspace <relpath>       Workspace path relative to --repo-path
-                              (default: Wallet.xcworkspace)
+                              (default: auto-detected first *.xcworkspace)
   --project <relpath>         Use -project instead of -workspace
                               (mutually exclusive with --workspace)
-  --scheme <name>             xcodebuild scheme (default: Development)
   --destination <spec>        xcodebuild destination
                               (default: 'generic/platform=iOS Simulator')
   --derived-data <path>       Explicit DerivedData root
                               (default: <repo>/.palace-scip-derived-data-app)
   --output <path>             SCIP output path
                               (default: <repo>/scip/index.scip)
-  --slug <name>               Palace project slug
-                              (default: uw-ios-app)
-  --relative-path <name>      Remote-side relative path under remote-base
-                              (default: unstoppable-wallet-ios)
   --remote-host <host>        SSH host for the iMac mirror
   --remote-base <path>        Remote base dir for repo mirrors
   --emitter-dir <path>        palace-swift-scip-emit package dir
@@ -50,7 +45,7 @@ Options:
 
 Notes:
   - xcodebuild requires full Xcode (Command Line Tools alone are insufficient).
-  - Workspace build pulls SwiftPM dependencies (HS Kits) into DerivedData.
+  - Workspace build pulls SwiftPM dependencies into DerivedData.
     Additional per-kit SCIP can be emitted from the same DerivedData by
     re-invoking palace-swift-scip-emit-cli with a different --project-root.
 EOF
@@ -90,14 +85,14 @@ run_cmd() {
 }
 
 REPO_PATH=""
-WORKSPACE_REL="Wallet.xcworkspace"
+WORKSPACE_REL=""
 PROJECT_REL=""
-SCHEME_NAME="$DEFAULT_SCHEME"
+SCHEME_NAME=""
 DESTINATION="$DEFAULT_DESTINATION"
 DERIVED_DATA_ARG=""
 OUTPUT_ARG=""
-SLUG="$DEFAULT_SLUG"
-RELATIVE_PATH="$DEFAULT_RELATIVE_PATH"
+SLUG=""
+RELATIVE_PATH=""
 REMOTE_HOST="$DEFAULT_REMOTE_HOST"
 REMOTE_BASE="$DEFAULT_REMOTE_BASE"
 EMITTER_DIR="$DEFAULT_EMITTER_DIR"
@@ -141,8 +136,11 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-[[ -n "$REPO_PATH" ]] || { usage >&2; die "--repo-path is required"; }
-[[ -d "$REPO_PATH" ]] || die "repo path not found: $REPO_PATH"
+[[ -n "$REPO_PATH" ]]     || { usage >&2; die "--repo-path is required"; }
+[[ -n "$SCHEME_NAME" ]]   || { usage >&2; die "--scheme is required"; }
+[[ -n "$SLUG" ]]          || { usage >&2; die "--slug is required"; }
+[[ -n "$RELATIVE_PATH" ]] || { usage >&2; die "--relative-path is required"; }
+[[ -d "$REPO_PATH" ]]     || die "repo path not found: $REPO_PATH"
 
 require_command python3
 require_command xcrun
@@ -154,11 +152,19 @@ if [[ -n "$WORKSPACE_REL" ]]; then
     BUILD_ARTIFACT="$REPO_PATH/$WORKSPACE_REL"
     BUILD_FLAG="-workspace"
     [[ -d "$BUILD_ARTIFACT" ]] || die "workspace not found: $BUILD_ARTIFACT"
-else
+elif [[ -n "$PROJECT_REL" ]]; then
     BUILD_ARTIFACT="$REPO_PATH/$PROJECT_REL"
     BUILD_FLAG="-project"
     [[ -d "$BUILD_ARTIFACT" ]] || die "project not found: $BUILD_ARTIFACT"
     [[ -f "$BUILD_ARTIFACT/project.pbxproj" ]] || die "project.pbxproj missing inside $BUILD_ARTIFACT"
+else
+    shopt -s nullglob
+    ws_candidates=("$REPO_PATH"/*.xcworkspace)
+    shopt -u nullglob
+    [[ ${#ws_candidates[@]} -gt 0 ]] || die "no *.xcworkspace found in $REPO_PATH; use --workspace or --project"
+    BUILD_ARTIFACT="${ws_candidates[0]}"
+    BUILD_FLAG="-workspace"
+    log "auto-detected workspace: $(basename "$BUILD_ARTIFACT")"
 fi
 
 [[ -d "$EMITTER_DIR" ]] || die "emitter package dir not found: $EMITTER_DIR"
@@ -212,7 +218,7 @@ run_cmd "$EMITTER_BIN" \
 if [[ "$DRY_RUN" == "false" ]]; then
     [[ -s "$OUTPUT_PATH" ]] || die "generated SCIP file is missing or empty: $OUTPUT_PATH"
     HEAD_SHA="$(git -C "$REPO_PATH" rev-parse HEAD 2>/dev/null || echo unknown)"
-    python3 - "$META_PATH" "$SLUG" "$REPO_PATH" "$REMOTE_BASE/$RELATIVE_PATH" "$HEAD_SHA" "$EMITTER_NAME" "$EMITTER_VERSION" "$SCHEME_NAME" <<'PY'
+    python3 - "$META_PATH" "$SLUG" "$REPO_PATH" "$REMOTE_BASE/$RELATIVE_PATH" "$HEAD_SHA" "$EMITTER_NAME" "$EMITTER_VERSION" "$SCHEME_NAME" "$(basename "$BUILD_ARTIFACT")" <<'PY'
 import json
 import socket
 import sys
@@ -227,7 +233,7 @@ payload = {
     "emitter_version": sys.argv[7],
     "artifact_origin": "remote_copy",
     "generated_at": datetime.now(timezone.utc).isoformat(),
-    "package_path": "Wallet.xcworkspace",
+    "package_path": sys.argv[9],
     "scheme": sys.argv[8],
     "generator_host": socket.gethostname(),
     "source_repo_path": str(Path(sys.argv[3]).resolve()),
