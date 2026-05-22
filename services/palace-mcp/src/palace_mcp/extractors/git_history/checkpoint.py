@@ -11,7 +11,8 @@ from palace_mcp.extractors.git_history.models import GitHistoryCheckpoint
 
 _MERGE_CHECKPOINT_CYPHER = """
 MERGE (c:GitHistoryCheckpoint {project_id: $project_id})
-SET c.last_commit_sha = $last_commit_sha,
+SET c.group_id = $project_id,
+    c.last_commit_sha = $last_commit_sha,
     c.last_pr_updated_at = $last_pr_updated_at,
     c.last_phase_completed = $last_phase_completed,
     c.updated_at = datetime()
