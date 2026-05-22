@@ -71,7 +71,7 @@ Breakdown: G0 (2-3w) + G0.5 (1w) + G1 (1w) + G2 (2-3w) + G2.5 (1-2w) + G4 (2-3w)
 - `evm-kit` ✅ done (14409 symbol nodes, partial_failure only on missing artefacts)
 - `dash-kit` ✅ done (6301 symbol nodes)
 - `bitcoin-kit` ⚠ silent (need diagnose — possible mid-flight kill)
-- `uw-ios-app` 📋 pending (needs `/private/tmp` path quirk per [GIM-392 runbook](../runbooks/uw-ios-app-scip-emit.md))
+- `uw-ios-app` 📋 pending (needs `/private/tmp` path quirk per [GIM-392 runbook](../runbooks/xcode-app-scip-emit.md))
 
 **Remaining tasks**: diagnose bitcoin-kit; run uw-ios-app; snapshot via `snapshot_neo4j_uw_ios.sh`.
 
