@@ -42,7 +42,7 @@ intake decisions.
 
 ## Acceptance Criteria
 
-- `UWACTO` and `UWICTO` use `profile: minimal` and slim UAudit platform
+- `UWACTO` and `UWICTO` use `profile: custom` and slim UAudit platform
   dispatcher role craft, not `paperclips/roles-codex/cx-cto.md`.
 - Generated `UWACTO` and `UWICTO` bundles are each at or below 100 lines and
   4 KiB, unless the PR explicitly pins a reviewed higher ceiling caused by
@@ -135,7 +135,7 @@ intake decisions.
     - `paperclips/projects/uaudit/overlays/codex/UWACTO.md`
     - `paperclips/projects/uaudit/overlays/codex/UWICTO.md`
   - Details:
-    - Switch `UWACTO` and `UWICTO` to `profile: minimal`.
+    - Switch `UWACTO` and `UWICTO` to `profile: custom` because `minimal` still composes the universal layer and exceeds the bundle ceiling.
     - Point them at slim UAudit dispatcher role sources, not `cx-cto.md`.
     - Preserve PR-audit routing and add daily-audit intake routing.
     - Include anomaly matrix behavior and AUCEO blocked-assignment mechanics.

@@ -133,3 +133,33 @@ manual cleanup. Useful for postmortem if a deploy fails.
 | 2 | Worktree failure | `git fetch`, `git worktree add`, or `git submodule update` failed |
 | 3 | Build or deploy failure | `paperclips/build.sh` or `paperclips/deploy-agents.sh --local` failed |
 | 4 | Verify failure | Marker not found in deployed CTO AGENTS.md, or file missing |
+---
+
+## UAudit Dispatcher Deploy And Routine Reconciliation
+
+UAudit prompt deploy uses the same wrapper:
+
+```bash
+# Pre-release smoke from develop
+bash paperclips/scripts/imac-agents-deploy.sh uaudit --from-develop
+
+# Production deploy after release-cut to main
+bash paperclips/scripts/imac-agents-deploy.sh uaudit
+
+# Rollback to a previous known-good SHA
+bash paperclips/scripts/imac-agents-deploy.sh uaudit --target-sha <previous-good-sha>
+```
+
+For the CTO dispatcher split, deploy order is:
+
+1. Deploy UAudit prompts.
+2. Verify generated `UWACTO`/`UWICTO` bundles match authoritative Paperclip-managed instructions.
+3. Run one synthetic no-op daily issue assigned to the platform CTO.
+4. Only after smoke passes, reconcile Paperclip routine assignees with:
+
+```bash
+python3 paperclips/scripts/reconcile_uaudit_routines.py --project-key uaudit
+python3 paperclips/scripts/reconcile_uaudit_routines.py --project-key uaudit --apply
+```
+
+The reconciliation config is `paperclips/projects/uaudit/daily-version-branch-routines.yaml`. It refers to agents by name only; the script resolves UUIDs through existing UAA bindings. Missing routines fail by default and are not created implicitly.

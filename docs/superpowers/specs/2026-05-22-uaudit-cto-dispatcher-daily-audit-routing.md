@@ -55,9 +55,9 @@ separate the decision gate from the runtime execution path.
 ### Role And Manifest Updates
 
 - Change `UWACTO` and `UWICTO` away from the full `cto` profile.
-- Use `profile: minimal` for `UWACTO` and `UWICTO`.
+- Use `profile: custom` for `UWACTO` and `UWICTO` so the generated dispatcher bundles do not inherit the universal CTO/reviewer/release fragments. The role craft must carry the necessary routing safety text explicitly.
 - Do not keep `role_source: paperclips/roles-codex/cx-cto.md` for `UWACTO`
-  or `UWICTO`. `profile: minimal` alone is insufficient because the role craft
+  or `UWICTO`. `profile: custom` alone is insufficient because the role craft
   still says the agent owns plan-first review, merge gates, and release-cut.
 - Add slim UAudit platform-dispatcher role craft in the UAudit project layer,
   for example:
@@ -420,7 +420,7 @@ Expected files or areas:
 
 ## Decisions
 
-- Use `profile: minimal` for `UWACTO` and `UWICTO`; keep dispatcher behavior in
+- Use `profile: custom` for `UWACTO` and `UWICTO`; keep dispatcher behavior in
   UAudit project-layer role craft and overlays.
 - Do not reuse `cx-cto.md` for platform dispatcher role sources.
 - Daily no-op issues create no files and no artifacts. Paperclip comment plus

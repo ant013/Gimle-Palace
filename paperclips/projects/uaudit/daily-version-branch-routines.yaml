@@ -1,0 +1,43 @@
+schemaVersion: 1
+project: uaudit
+marker: UAudit daily version-branch delta audit
+
+limits:
+  max_commits: 30
+  max_files: 300
+  max_diff_lines: 3000
+
+routines:
+  - id: daily-android-version-0.49
+    platform: android
+    branch: version/0.49
+    repo_url: https://github.com/horizontalsystems/unstoppable-wallet-android
+    repo_local_path_template: "{{paths.project_root}}/repos/android/unstoppable-wallet-android"
+    cursor_path_template: "{{paths.project_root}}/state/android-version-audit.json"
+    dispatcher: UWACTO
+    infra_executor: UWAInfraEngineer
+    pr_audit_coordinator: UWAKotlinAuditor
+    initialization_allowed: false
+    codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
+    required_subagents:
+      - uaudit-kotlin-audit-specialist
+      - uaudit-bug-hunter
+      - uaudit-security-auditor
+      - uaudit-blockchain-auditor
+
+  - id: daily-ios-version-0.49
+    platform: ios
+    branch: version/0.49
+    repo_url: https://github.com/horizontalsystems/unstoppable-wallet-ios
+    repo_local_path_template: "{{paths.primary_repo_root}}"
+    cursor_path_template: "{{paths.project_root}}/state/ios-version-audit.json"
+    dispatcher: UWICTO
+    infra_executor: UWIInfraEngineer
+    pr_audit_coordinator: UWISwiftAuditor
+    initialization_allowed: false
+    codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
+    required_subagents:
+      - uaudit-swift-audit-specialist
+      - uaudit-bug-hunter
+      - uaudit-security-auditor
+      - uaudit-blockchain-auditor
