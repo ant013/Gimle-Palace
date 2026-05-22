@@ -34,6 +34,11 @@ mkdir -p "$REPO_PATH/scip"
 touch "$REPO_PATH/.git"
 mkdir -p "$REPO_PATH/Wallet.xcworkspace"
 printf 'fixture-scip\n' > "$REPO_PATH/scip/index.scip"
+mkdir -p "$REPO_PATH/periphery"
+printf '[]' > "$REPO_PATH/periphery/periphery-3.7.4-swiftpm.json"
+printf '{"tool_output_schema_version":"periphery-json-3.7.4"}' > "$REPO_PATH/periphery/contract.json"
+mkdir -p "$REPO_PATH/.palace/public-api/swift"
+printf '// swift-interface-format-version: 1.0\n' > "$REPO_PATH/.palace/public-api/swift/Wallet.swiftinterface"
 
 cat > "$TMP_DIR/.env" <<'EOF'
 PALACE_SCIP_INDEX_PATHS={"existing":"/repos/existing/scip/index.scip"}
@@ -261,5 +266,92 @@ bash "$INGEST_SCRIPT" \
 RESTART_COUNT2="$(grep -c 'up -d --force-recreate palace-mcp' "$MOCK_DOCKER_LOG" || true)"
 [[ "$RESTART_COUNT2" -eq "$RESTART_COUNT" ]] || \
     fail "second run triggered unexpected palace-mcp restart"
+
+# ─── test: artefact gate — missing prepare run fails fast ────────────────────
+
+GATE_DIR="$TMP_DIR/gate-repo"
+mkdir -p "$GATE_DIR/scip"
+touch "$GATE_DIR/.git"
+mkdir -p "$GATE_DIR/Wallet.xcworkspace"
+printf 'fixture-scip\n' > "$GATE_DIR/scip/index.scip"
+
+MISSING_ART_OUT="$TMP_DIR/missing-art.out"
+set +e
+bash "$INGEST_SCRIPT" \
+    --repo-path "$GATE_DIR" \
+    --slug "uw-ios-gate" \
+    --workspace "Wallet.xcworkspace" \
+    --dry-run \
+    --env-file "$TMP_DIR/.env" >"$MISSING_ART_OUT" 2>&1
+MISSING_ART_RC=$?
+set -e
+[[ "$MISSING_ART_RC" -ne 0 ]] || fail "artefact gate: expected non-zero exit when artefacts missing"
+assert_contains "$MISSING_ART_OUT" "artefact missing"
+assert_contains "$MISSING_ART_OUT" "prepare_swift_kit_artifacts.sh"
+printf 'PASS: artefact gate rejects missing prepare run\n'
+
+# ─── test: artefact gate — stale Periphery artefact rejected ─────────────────
+
+STALE_DIR="$TMP_DIR/stale-repo"
+mkdir -p "$STALE_DIR/scip"
+touch "$STALE_DIR/.git"
+mkdir -p "$STALE_DIR/Wallet.xcworkspace"
+printf 'fixture-scip\n' > "$STALE_DIR/scip/index.scip"
+mkdir -p "$STALE_DIR/periphery"
+printf '[]' > "$STALE_DIR/periphery/periphery-3.7.4-swiftpm.json"
+printf '{"tool_output_schema_version":"1.0"}' > "$STALE_DIR/periphery/contract.json"
+mkdir -p "$STALE_DIR/.palace/public-api/swift"
+printf '// swift-interface-format-version: 1.0\n' > "$STALE_DIR/.palace/public-api/swift/Wallet.swiftinterface"
+
+STALE_ART_OUT="$TMP_DIR/stale-art.out"
+set +e
+bash "$INGEST_SCRIPT" \
+    --repo-path "$STALE_DIR" \
+    --slug "uw-ios-stale" \
+    --workspace "Wallet.xcworkspace" \
+    --dry-run \
+    --env-file "$TMP_DIR/.env" >"$STALE_ART_OUT" 2>&1
+STALE_ART_RC=$?
+set -e
+[[ "$STALE_ART_RC" -ne 0 ]] || fail "artefact gate: expected non-zero exit on stale schema_version"
+assert_contains "$STALE_ART_OUT" "not valid"
+printf 'PASS: artefact gate rejects stale Periphery artefact\n'
+
+# ─── test: artefact gate — happy path: valid artefacts pass ──────────────────
+
+HAPPY_DIR="$TMP_DIR/happy-repo"
+mkdir -p "$HAPPY_DIR/scip"
+touch "$HAPPY_DIR/.git"
+mkdir -p "$HAPPY_DIR/Wallet.xcworkspace"
+printf 'fixture-scip\n' > "$HAPPY_DIR/scip/index.scip"
+mkdir -p "$HAPPY_DIR/periphery"
+printf '[]' > "$HAPPY_DIR/periphery/periphery-3.7.4-swiftpm.json"
+printf '{"tool_output_schema_version":"periphery-json-3.7.4"}' > "$HAPPY_DIR/periphery/contract.json"
+mkdir -p "$HAPPY_DIR/.palace/public-api/swift"
+printf '// swift-interface-format-version: 1.0\n' > "$HAPPY_DIR/.palace/public-api/swift/Wallet.swiftinterface"
+
+HAPPY_ART_OUT="$TMP_DIR/happy-art.out"
+bash "$INGEST_SCRIPT" \
+    --repo-path "$HAPPY_DIR" \
+    --slug "uw-ios-happy" \
+    --workspace "Wallet.xcworkspace" \
+    --dry-run \
+    --env-file "$TMP_DIR/.env" >"$HAPPY_ART_OUT" 2>&1
+assert_contains "$HAPPY_ART_OUT" "artefact gate passed"
+assert_contains "$HAPPY_ART_OUT" '"status":"planned"'
+printf 'PASS: artefact gate passes with valid artefacts (happy path)\n'
+
+# ─── test: --skip-artefact-check bypasses gate ───────────────────────────────
+
+SKIP_ART_OUT="$TMP_DIR/skip-art.out"
+bash "$INGEST_SCRIPT" \
+    --repo-path "$GATE_DIR" \
+    --slug "uw-ios-skip" \
+    --workspace "Wallet.xcworkspace" \
+    --dry-run \
+    --skip-artefact-check \
+    --env-file "$TMP_DIR/.env" >"$SKIP_ART_OUT" 2>&1
+assert_contains "$SKIP_ART_OUT" '"status":"planned"'
+printf 'PASS: --skip-artefact-check bypasses gate\n'
 
 printf 'PASS: ingest_xcode_app test suite\n'
