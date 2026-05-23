@@ -6,7 +6,11 @@ from hashlib import sha256
 from typing import TYPE_CHECKING, TypedDict, cast
 
 from palace_mcp.embeddings import EmbeddingBackend, QodoEmbeddingBackend
-from palace_mcp.extractors.base import BaseExtractor, ExtractorRunContext, ExtractorStats
+from palace_mcp.extractors.base import (
+    BaseExtractor,
+    ExtractorRunContext,
+    ExtractorStats,
+)
 
 if TYPE_CHECKING:
     from neo4j import AsyncDriver

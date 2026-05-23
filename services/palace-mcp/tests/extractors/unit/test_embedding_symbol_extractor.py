@@ -47,7 +47,9 @@ def _make_ctx() -> ExtractorRunContext:
     )
 
 
-def _make_graphiti(rows: list[dict[str, object]]) -> tuple[MagicMock, AsyncMock, list[dict[str, object]]]:
+def _make_graphiti(
+    rows: list[dict[str, object]],
+) -> tuple[MagicMock, AsyncMock, list[dict[str, object]]]:
     writes: list[dict[str, object]] = []
 
     async def run_side_effect(query: str, **kwargs: object) -> _FakeResult:
