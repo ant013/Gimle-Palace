@@ -50,6 +50,7 @@ class DeadCodeExtractor(BaseExtractor):
     """
 
     name: ClassVar[str] = "dead_code"
+    timeout_s: ClassVar[float] = 3600.0
     description: ClassVar[str] = (
         "Graph-reachability dead-code analysis using SCIP symbol graph. "
         "Identifies unreachable symbols, SCC clusters, dead extension chains, "
