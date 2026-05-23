@@ -22,6 +22,10 @@ from palace_mcp.extractors.foundation.errors import (
     ExtractorError as FoundationExtractorError,
     ExtractorErrorCode,
 )
+from palace_mcp.extractors.embedding_symbol import (
+    EmbeddingSymbolExtractor,
+    _embedding_text,
+)
 from palace_mcp.extractors.runner import run_extractor
 
 
@@ -104,6 +108,18 @@ class _Skipped(BaseExtractor):
             message="missing prerequisite fixture",
             next_action="Provide the fixture and rerun the extractor.",
         )
+
+
+class _EmbeddingBackend:
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+
+    def embed_text(self, text: str) -> list[float]:
+        return self.embed_batch([text])[0]
+
+    def embed_batch(self, texts: list[str]) -> list[list[float]]:
+        self.calls.append(list(texts))
+        return [[0.25] for _ in texts]
 
 
 @pytest.fixture(autouse=True)
@@ -372,3 +388,47 @@ async def test_extractor_timeout_overrides_runner_default(
 
     assert res["ok"] is True
     assert seen_timeout == 12.5
+
+
+@pytest.mark.asyncio
+async def test_embedding_symbol_run_extractor_wiring(
+    mock_driver: MagicMock, tmp_path: Path, mock_graphiti: MagicMock
+) -> None:
+    backend = _EmbeddingBackend()
+    registry.EXTRACTORS["embedding_symbol"] = EmbeddingSymbolExtractor(backend=backend)
+    mock_graphiti.driver = mock_driver
+    load_rows = [
+        {
+            "qualified_name": "demo.symbol",
+            "kind": "function",
+            "file_path": "src/demo.py",
+            "module_name": "demo",
+            "embedding_input_hash": None,
+            "has_embedding": False,
+        }
+    ]
+
+    with (
+        patch("palace_mcp.extractors.runner.REPOS_ROOT", tmp_path / "repos"),
+        patch(
+            "palace_mcp.extractors.embedding_symbol._load_symbol_rows",
+            new=AsyncMock(return_value=load_rows),
+        ),
+        patch(
+            "palace_mcp.extractors.embedding_symbol._write_embeddings",
+            new=AsyncMock(),
+        ) as write_embeddings,
+    ):
+        res = await run_extractor(
+            name="embedding_symbol",
+            project="testproj",
+            driver=mock_driver,
+            graphiti=mock_graphiti,
+        )
+
+    assert res["ok"] is True
+    assert res["success"] is True
+    assert res["extractor"] == "embedding_symbol"
+    assert res["nodes_written"] == 1
+    assert backend.calls == [[_embedding_text(load_rows[0])]]
+    write_embeddings.assert_awaited_once()
