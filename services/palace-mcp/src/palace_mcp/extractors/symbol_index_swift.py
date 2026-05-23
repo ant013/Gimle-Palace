@@ -49,6 +49,7 @@ from palace_mcp.extractors.foundation.symbol_node_writer import write_symbol_nod
 from palace_mcp.extractors.scip_parser import (
     FindScipPath,
     ScipPathRequiredError,
+    ScipSymbolInfo,
     iter_scip_occurrences,
     iter_scip_symbol_infos,
     parse_scip_file,
@@ -221,7 +222,7 @@ class SymbolIndexSwift(BaseExtractor):
                 if occ.kind in (SymbolKind.DEF, SymbolKind.DECL):
                     def_file_paths.setdefault(occ.symbol_qualified_name, occ.file_path)
             sym_nodes = 0
-            sym_batch: list = []
+            sym_batch: list[ScipSymbolInfo] = []
             sym_batch_size = 5000
             for sym_info in iter_scip_symbol_infos(scip_index):
                 sym_batch.append(sym_info)
