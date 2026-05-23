@@ -31,7 +31,9 @@ from palace_mcp.extractors.dead_code.reachability import (
 from palace_mcp.extractors.dead_code.seeds import compute_all_seeds
 
 
-def _make_graph(*symbols: SymbolNode, edges: list[GraphEdge] | None = None) -> SymbolGraph:
+def _make_graph(
+    *symbols: SymbolNode, edges: list[GraphEdge] | None = None
+) -> SymbolGraph:
     g = SymbolGraph()
     for sym in symbols:
         g.symbols[sym.qualified_name] = sym
@@ -81,16 +83,26 @@ def test_objc_dynamic_method_finding_severity_is_low() -> None:
 
     assert sym.qualified_name in dead
     findings = build_findings(graph, dead, project="test")
-    sym_findings = [f for f in findings if any(m.qualified_name == sym.qualified_name for m in f.members)]
+    sym_findings = [
+        f
+        for f in findings
+        if any(m.qualified_name == sym.qualified_name for m in f.members)
+    ]
     assert sym_findings, "expected a finding for the @objc dynamic method"
     f = sym_findings[0]
     assert f.severity == Severity.LOW
     assert f.kind == FindingKind.DEAD_SYMBOL
 
     enriched = enrich_findings_with_git(
-        findings, {sym.qualified_name: {"days_ago": 400, "churn_count": 0}}, graph.symbols
+        findings,
+        {sym.qualified_name: {"days_ago": 400, "churn_count": 0}},
+        graph.symbols,
     )
-    sym_enriched = [e for e in enriched if any(m.qualified_name == sym.qualified_name for m in e.members)]
+    sym_enriched = [
+        e
+        for e in enriched
+        if any(m.qualified_name == sym.qualified_name for m in e.members)
+    ]
     assert sym_enriched[0].safe_to_delete_score <= 0.3
 
 
@@ -167,7 +179,11 @@ def test_mirror_reflecting_finding_score_capped() -> None:
         {sym.qualified_name: {"days_ago": 400, "churn_count": 0}},
         graph.symbols,
     )
-    sym_enriched = [e for e in enriched if any(m.qualified_name == sym.qualified_name for m in e.members)]
+    sym_enriched = [
+        e
+        for e in enriched
+        if any(m.qualified_name == sym.qualified_name for m in e.members)
+    ]
     assert sym_enriched
     assert sym_enriched[0].safe_to_delete_score <= 0.5
 
@@ -244,7 +260,10 @@ def test_tarjan_10k_node_graph_no_recursion_error() -> None:
     for qn in qns:
         g.symbols[qn] = SymbolNode(qualified_name=qn, kind="function", module_name="S")
     # Ring: node0→node1→...→node9999→node0 — one giant SCC
-    g.edges = [GraphEdge(source=qns[i], target=qns[(i + 1) % n], kind="CALLS") for i in range(n)]
+    g.edges = [
+        GraphEdge(source=qns[i], target=qns[(i + 1) % n], kind="CALLS")
+        for i in range(n)
+    ]
     g.build_indexes()
 
     sccs = compute_sccs(g, frozenset(qns))

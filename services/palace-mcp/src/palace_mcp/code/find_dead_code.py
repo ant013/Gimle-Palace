@@ -96,7 +96,9 @@ async def find_dead_code(
                     "size": rec["size"],
                     "safe_to_delete_score": rec["safe_to_delete_score"],
                     "git_last_external_ref": rec["git_last_external_ref"],
-                    "members": json.loads(rec["members_json"]) if rec["members_json"] else [],
+                    "members": json.loads(rec["members_json"])
+                    if rec["members_json"]
+                    else [],
                     "module_coverage_ratio": rec["module_coverage_ratio"],
                     "target_dead_type": rec["target_dead_type"],
                     "created_at": rec["created_at"],

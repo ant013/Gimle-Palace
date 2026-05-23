@@ -207,9 +207,7 @@ def build_swift_scip_index_with_symbol_infos() -> Any:
     doc1 = index.documents.add()
     doc1.relative_path = "Sources/UwMiniCore/State/WalletStore.swift"
     doc1.language = "swift"
-    for i, (sym, role) in enumerate(
-        [(_SYM_STORE, 1), (_SYM_SELECT, 1)], start=1
-    ):
+    for i, (sym, role) in enumerate([(_SYM_STORE, 1), (_SYM_SELECT, 1)], start=1):
         occ = doc1.occurrences.add()
         occ.range.extend([i, 0, 10])
         occ.symbol = sym

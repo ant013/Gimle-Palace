@@ -14,7 +14,10 @@ from palace_mcp.extractors.base import (
 )
 from palace_mcp.extractors.dead_code.finding_builder import build_findings
 from palace_mcp.extractors.dead_code.git_enrichment import enrich_findings_with_git
-from palace_mcp.extractors.dead_code.graph_loader import load_git_history, load_symbol_graph
+from palace_mcp.extractors.dead_code.graph_loader import (
+    load_git_history,
+    load_symbol_graph,
+)
 from palace_mcp.extractors.dead_code.neo4j_writer import write_dead_findings
 from palace_mcp.extractors.dead_code.reachability import (
     compute_dead_candidates,

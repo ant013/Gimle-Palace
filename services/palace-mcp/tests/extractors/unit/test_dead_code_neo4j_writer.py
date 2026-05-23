@@ -55,7 +55,11 @@ def test_members_json_round_trips() -> None:
     )
     parsed = json.loads(_members_json(finding))
     assert parsed == [
-        {"file_path": "Sources/Foo.swift", "kind": "function", "qualified_name": "Foo/bar()"},
+        {
+            "file_path": "Sources/Foo.swift",
+            "kind": "function",
+            "qualified_name": "Foo/bar()",
+        },
         {"file_path": None, "kind": "function", "qualified_name": "Baz/init()"},
     ]
 

@@ -21,7 +21,9 @@ from palace_mcp.extractors.dead_code.reachability import (
 from palace_mcp.extractors.dead_code.seeds import compute_all_seeds
 from palace_mcp.extractors.foundation.symbol_node_writer import build_symbol_node_rows
 from palace_mcp.extractors.scip_parser import iter_scip_symbol_infos
-from tests.extractors.fixtures.scip_factory import build_swift_scip_index_with_symbol_infos
+from tests.extractors.fixtures.scip_factory import (
+    build_swift_scip_index_with_symbol_infos,
+)
 
 
 def _build_graph_from_scip(group_id: str) -> SymbolGraph:
@@ -127,9 +129,7 @@ class TestDeadCodeSwiftContract:
 
         # DeadHelper specifically must be dead (no callers, no public/dynamic flags)
         dead_qnames = {qn for qn in dead}
-        dead_helper_qn = next(
-            (qn for qn in dead_qnames if "DeadHelper" in qn), None
-        )
+        dead_helper_qn = next((qn for qn in dead_qnames if "DeadHelper" in qn), None)
         assert dead_helper_qn is not None, (
             f"DeadHelper not found in dead candidates; dead={dead_qnames}"
         )

@@ -12,7 +12,10 @@ from palace_mcp.extractors.dead_code.models import (
     MemberEntry,
     SymbolGraph,
 )
-from palace_mcp.extractors.dead_code.scc_analyzer import classify_scc_findings, compute_sccs
+from palace_mcp.extractors.dead_code.scc_analyzer import (
+    classify_scc_findings,
+    compute_sccs,
+)
 from palace_mcp.extractors.dead_code.severity import rank_severity
 
 
@@ -55,9 +58,7 @@ def build_findings(
         )
 
     # Step 4: SCC on remaining dead candidates
-    ext_chain_members = frozenset(
-        m.qualified_name for f in findings for m in f.members
-    )
+    ext_chain_members = frozenset(m.qualified_name for f in findings for m in f.members)
     scc_candidates = frozenset(qn for qn in remaining if qn not in ext_chain_members)
     sccs = compute_sccs(graph, scc_candidates)
     scc_finding_data = classify_scc_findings(sccs, graph)
@@ -80,9 +81,7 @@ def build_findings(
 
     # Step 5: single-symbol findings for remaining dead candidates
     single_candidates = frozenset(
-        qn
-        for qn in remaining
-        if qn not in ext_chain_members and qn not in scc_covered
+        qn for qn in remaining if qn not in ext_chain_members and qn not in scc_covered
     )
     for qn in sorted(single_candidates):
         sym = graph.symbols.get(qn)

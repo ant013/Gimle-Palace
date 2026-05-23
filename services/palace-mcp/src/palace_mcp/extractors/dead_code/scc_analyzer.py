@@ -93,7 +93,11 @@ def classify_scc_findings(
         if len(scc) < 3:
             continue
         coverage = _compute_module_coverage(scc, graph)
-        kind = "dead_module" if coverage is not None and coverage >= 0.5 else "dead_scc_cluster"
+        kind = (
+            "dead_module"
+            if coverage is not None and coverage >= 0.5
+            else "dead_scc_cluster"
+        )
         results.append((kind, scc, coverage))
     return results
 
