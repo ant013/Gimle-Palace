@@ -85,3 +85,69 @@ def test_symbol_graph_extensions_of() -> None:
     g.edges = [GraphEdge(source="Ext", target="Type", kind="EXTENSION_OF")]
     g.build_indexes()
     assert g.extensions_of("Type") == ["Ext"]
+
+
+def test_finding_id_deterministic_across_runs():
+    """Regression: GIM-785 CXCR found DeadFinding writes are append-only
+    across reruns because finding_id was random UUID per run. Now it's a
+    deterministic hash of (project, kind, sorted member qnames) — re-runs
+    produce identical finding_id, MERGE updates same node, no inflation."""
+    from palace_mcp.extractors.dead_code.models import (
+        DeadFinding,
+        FindingKind,
+        MemberEntry,
+        Severity,
+    )
+
+    m1 = MemberEntry(qualified_name="Mod.Foo", kind="struct")
+    m2 = MemberEntry(qualified_name="Mod.Bar", kind="class")
+
+    f1 = DeadFinding(
+        kind=FindingKind.DEAD_SCC_CLUSTER,
+        severity=Severity.MEDIUM,
+        project="myproj",
+        members=[m1, m2],
+        size=2,
+    )
+    # Order-independent: members list reversed produces same id
+    f2 = DeadFinding(
+        kind=FindingKind.DEAD_SCC_CLUSTER,
+        severity=Severity.MEDIUM,
+        project="myproj",
+        members=[m2, m1],
+        size=2,
+    )
+    assert f1.finding_id == f2.finding_id
+    assert f1.finding_id.startswith("fd_")
+    assert len(f1.finding_id) == 19  # fd_ + 16 hex chars
+
+    # Different project → different id
+    f3 = DeadFinding(
+        kind=FindingKind.DEAD_SCC_CLUSTER,
+        severity=Severity.MEDIUM,
+        project="otherproj",
+        members=[m1, m2],
+        size=2,
+    )
+    assert f3.finding_id != f1.finding_id
+
+    # Different kind → different id
+    f4 = DeadFinding(
+        kind=FindingKind.DEAD_MODULE,
+        severity=Severity.MEDIUM,
+        project="myproj",
+        members=[m1, m2],
+        size=2,
+    )
+    assert f4.finding_id != f1.finding_id
+
+    # Explicit finding_id overrides auto-derive
+    f5 = DeadFinding(
+        finding_id="fd_custom",
+        kind=FindingKind.DEAD_SYMBOL,
+        severity=Severity.LOW,
+        project="myproj",
+        members=[m1],
+        size=1,
+    )
+    assert f5.finding_id == "fd_custom"
