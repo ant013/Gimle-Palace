@@ -99,17 +99,17 @@ EXPECTED_SCHEMA = SchemaDefinition(
             properties=("id",),
         ),
         ConstraintSpec(
-            name="symbol_qname_group_unique",
-            label="Symbol",
-            properties=("qualified_name", "group_id"),
-        ),
-        ConstraintSpec(
             name="binary_surface_record_id_unique",
             label="BinarySurfaceRecord",
             properties=("id",),
         ),
     ],
     indexes=[
+        IndexSpec(
+            name="symbol_qname_group_lookup",
+            label="Symbol",
+            properties=("qualified_name", "group_id"),
+        ),
         IndexSpec(
             name="shadow_evict_r1",
             label="SymbolOccurrenceShadow",
