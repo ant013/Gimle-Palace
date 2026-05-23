@@ -27,6 +27,9 @@ class IndexSpec:
     name: str
     label: str
     properties: tuple[str, ...]
+    type: str = "BTREE"
+    vector_dimensions: int | None = None
+    vector_similarity_function: str | None = None
 
 
 @dataclass(frozen=True)
@@ -157,6 +160,14 @@ EXPECTED_SCHEMA = SchemaDefinition(
                 "surface_kind",
             ),
         ),
+        IndexSpec(
+            name="symbol_embedding_idx",
+            label="Symbol",
+            properties=("embedding",),
+            type="VECTOR",
+            vector_dimensions=1536,
+            vector_similarity_function="cosine",
+        ),
     ],
     fulltext_indexes=[
         FulltextSpec(
@@ -179,6 +190,12 @@ _CONSTRAINT_TEMPLATES: dict[str, str] = {
 }
 
 _INDEX_TEMPLATE = "CREATE INDEX {name} IF NOT EXISTS FOR (n:{label}) ON ({props})"
+_VECTOR_INDEX_TEMPLATE = (
+    "CREATE VECTOR INDEX {name} IF NOT EXISTS "
+    "FOR (n:{label}) ON ({props}) "
+    "OPTIONS {{indexConfig: {{`vector.dimensions`: {dimensions}, "
+    "`vector.similarity_function`: '{similarity_function}'}}}}"
+)
 
 _FULLTEXT_TEMPLATE = (
     "CREATE FULLTEXT INDEX {name} IF NOT EXISTS FOR (n:{label}) ON EACH [{props}]"
@@ -192,6 +209,14 @@ def _constraint_cypher(c: ConstraintSpec) -> str:
 
 def _index_cypher(i: IndexSpec) -> str:
     props = ", ".join(f"n.{p}" for p in i.properties)
+    if i.type == "VECTOR":
+        return _VECTOR_INDEX_TEMPLATE.format(
+            name=i.name,
+            label=i.label,
+            props=props,
+            dimensions=i.vector_dimensions,
+            similarity_function=i.vector_similarity_function,
+        )
     return _INDEX_TEMPLATE.format(name=i.name, label=i.label, props=props)
 
 
