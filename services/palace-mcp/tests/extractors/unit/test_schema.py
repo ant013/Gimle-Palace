@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import AsyncIterator
+from collections.abc import AsyncIterator, Mapping, Sequence
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -22,24 +22,24 @@ class TestSchemaDefinition:
         # 3 original + 6 git_history + 2 dead_symbol_binary_surface
         assert len(EXPECTED_SCHEMA.constraints) == 11
 
-    def test_has_five_indexes(self) -> None:
-        assert len(EXPECTED_SCHEMA.indexes) == 7
+    def test_has_eight_indexes(self) -> None:
+        assert len(EXPECTED_SCHEMA.indexes) == 8
 
     def test_has_one_fulltext(self) -> None:
         assert len(EXPECTED_SCHEMA.fulltext_indexes) == 1
 
-    def test_total_fifteen_objects(self) -> None:
-        # 11 constraints + 7 indexes + 1 fulltext
+    def test_total_twenty_objects(self) -> None:
+        # 11 constraints + 8 indexes + 1 fulltext
         total = (
             len(EXPECTED_SCHEMA.constraints)
             + len(EXPECTED_SCHEMA.indexes)
             + len(EXPECTED_SCHEMA.fulltext_indexes)
         )
-        assert total == 19
+        assert total == 20
 
     def test_all_names_unique(self) -> None:
         names = EXPECTED_SCHEMA.all_names()
-        assert len(names) == 19
+        assert len(names) == 20
 
     def test_expected_names_present(self) -> None:
         names = EXPECTED_SCHEMA.all_names()
@@ -52,6 +52,7 @@ class TestSchemaDefinition:
         assert "shadow_count_by_group" in names
         assert "dead_symbol_candidate_lookup" in names
         assert "binary_surface_record_lookup" in names
+        assert "symbol_embedding_idx" in names
         assert "symbol_qn_fulltext" in names
 
 
@@ -70,6 +71,18 @@ class TestCypherGeneration:
         assert i.name in stmt
         assert "IF NOT EXISTS" in stmt
 
+    def test_vector_index_cypher(self) -> None:
+        i = next(
+            index
+            for index in EXPECTED_SCHEMA.indexes
+            if index.name == "symbol_embedding_idx"
+        )
+        stmt = _index_cypher(i)
+        assert "CREATE VECTOR INDEX" in stmt
+        assert "FOR (n:Symbol) ON (n.embedding)" in stmt
+        assert "`vector.dimensions`: 1536" in stmt
+        assert "`vector.similarity_function`: 'cosine'" in stmt
+
     def test_fulltext_cypher(self) -> None:
         f = EXPECTED_SCHEMA.fulltext_indexes[0]
         stmt = _fulltext_cypher(f)
@@ -79,8 +92,8 @@ class TestCypherGeneration:
 
 
 async def _async_records(
-    records: list[dict[str, object]],
-) -> AsyncIterator[dict[str, object]]:
+    records: Sequence[Mapping[str, object]],
+) -> AsyncIterator[Mapping[str, object]]:
     for r in records:
         yield r
 
@@ -88,8 +101,8 @@ async def _async_records(
 class TestEnsureCustomSchema:
     def _make_driver(
         self,
-        constraint_records: list[dict[str, object]] | None = None,
-        index_records: list[dict[str, object]] | None = None,
+        constraint_records: Sequence[Mapping[str, object]] | None = None,
+        index_records: Sequence[Mapping[str, object]] | None = None,
     ) -> MagicMock:
         """Build a mocked AsyncDriver whose session runs queries cleanly."""
         if constraint_records is None:
@@ -119,10 +132,29 @@ class TestEnsureCustomSchema:
     async def test_cold_neo4j_runs_all_statements(self) -> None:
         driver = self._make_driver()
         await ensure_custom_schema(driver)
-        # One SHOW CONSTRAINTS + one SHOW INDEXES + 9 CREATE statements = 11 calls
+        expected_calls = (
+            2
+            + len(EXPECTED_SCHEMA.constraints)
+            + len(EXPECTED_SCHEMA.indexes)
+            + len(EXPECTED_SCHEMA.fulltext_indexes)
+        )
         call_count = driver.session.return_value.run.call_count
-        # At minimum 9 CREATE calls
-        assert call_count >= 9
+        assert call_count == expected_calls
+
+    @pytest.mark.asyncio
+    async def test_cold_neo4j_creates_vector_index(self) -> None:
+        driver = self._make_driver()
+        await ensure_custom_schema(driver)
+        queries = [
+            call.args[0] for call in driver.session.return_value.run.await_args_list
+        ]
+        assert any(
+            "CREATE VECTOR INDEX symbol_embedding_idx IF NOT EXISTS" in query
+            and "FOR (n:Symbol) ON (n.embedding)" in query
+            and "`vector.dimensions`: 1536" in query
+            and "`vector.similarity_function`: 'cosine'" in query
+            for query in queries
+        )
 
     @pytest.mark.asyncio
     async def test_idempotent_second_call_no_error(self) -> None:
@@ -136,12 +168,10 @@ class TestEnsureCustomSchema:
 
         async def run_side_effect(
             query: str, *args: object, **kwargs: object
-        ) -> AsyncMock:
+        ) -> object:
             if "SHOW" in query:
                 raise Exception("SHOW not supported")
-            result = AsyncMock()
-            result.__aiter__ = lambda self: iter([]).__aiter__()
-            return result
+            return _async_records([])
 
         session = AsyncMock()
         session.run = AsyncMock(side_effect=run_side_effect)
