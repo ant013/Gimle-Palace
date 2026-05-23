@@ -384,6 +384,69 @@ Each finding has stable `finding_id` (UUID) for downstream PR-comment linking an
 
 **Productization risk-tag**: SCC via Neo4j GDS Community has Commons Clause licensing limitation for commercial product. Before first paying client, swap to **own Johnson's SCC implementation** (Python, ~2-3 days work, no licensing entanglement). This is a **gate** before commercial GTM, not a blocker for internal use.
 
+#### Future enhancements — G0d.v2 symbol-level refactoring analyzer (post-G0d, ~5-7 weeks)
+
+Operator design 2026-05-23. Not in current G0d scope; tracked for sprint after G0d ships and produces evidence of false-positive rate on UW iOS app.
+
+**Motivation.** Periphery and reach-from-roots SCIP analysis are both **coarse-grained**: they answer "is this symbol referenced anywhere?" with a single yes/no. They cannot distinguish meaningful use-classes that matter for refactoring decisions:
+
+- `let vc = OldViewController(...)` — class used as actual screen
+- `let route: OldViewController.Route = .send` — class used only as namespace for a nested type
+- `func handle(_ obj: as? OldViewController)` — class used as cast target only
+- `class Sub: OldViewController { }` — class used as superclass only
+- `OldViewController.shared.foo()` — class used for singleton/static access only
+
+Each pattern implies a different refactoring action. A merge-blocking deletion candidate is different from a "extract nested types, then delete container" candidate.
+
+**Proposed architecture.**
+
+1. **Ref-kind classifier** (new pre-processor, ~1-2 weeks). For each SCIP occurrence, parse the surrounding AST via SwiftSyntax (Apple's official parser) and annotate the reference with a kind label:
+   - `:USED_AS_CONSTRUCTOR` (FunctionCallExpr where callee is the type)
+   - `:USED_AS_NAMESPACE` (MemberAccessExpr.base where the resolved member is a nested type/static)
+   - `:USED_AS_CAST` (`as?` / `as!` / `as`)
+   - `:USED_AS_INHERITANCE` (InheritanceClause)
+   - `:USED_AS_PROTOCOL_CONSTRAINT` (generic where-clause or `: Proto`)
+   - `:USED_AS_TYPE_ANNOTATION` (let/var/param type)
+   - `:USED_AS_KEYPATH` (`\Type.member` literal)
+
+   These become typed Neo4j edges instead of the current single `:REFERENCES` collapse.
+
+2. **Dynamic-root extractor** (~3-5 days). Parse non-source roots that SCIP doesn't see:
+   - `*.storyboard` / `*.xib` — XML, `customClass=` attributes feed root set
+   - `Info.plist` Principal class, scene delegates
+   - `*.entitlements` background modes referencing classes
+   - DI container registrations (project-specific: Swinject `container.register`, etc.)
+   - Combine / KVO subscription targets via grep + AST (best-effort)
+
+3. **Container-vs-children classifier** (~1 week). New `:DeadFinding` confidence state:
+
+   ```
+   DEAD_CONTAINER_LIVE_CHILDREN
+   ├── container_symbol: OldViewController (qname)
+   ├── live_nested_symbols: [OldVC.Route, OldVC.State]
+   ├── live_nested_consumers: [AppCoordinator, FeatureX]
+   ├── suggested_action: "extract nested types, then re-run reachability"
+   └── deletion_safe: false
+   ```
+
+   Distinct from `DEAD_DELETION_SAFE` (no refs at all of any kind) and `DEAD_RUNTIME_GATED` (only dynamic-root refs).
+
+4. **Refactoring-candidate MCP tool** (~3-5 days). New `palace.code.list_refactoring_candidates` tool that returns the container-with-live-children findings grouped by suggested action.
+
+5. **False-positive audit on UW** (~1 week). Compare classifier output vs operator manual review on ~50 sampled symbols. Calibrate confidence thresholds. Anti-pattern allowlist via inline annotation: `// dead-code:retain reason="<reason>"`.
+
+**Risks not in plain G0d.**
+
+- **Mirror / KeyPath / @dynamicMemberLookup / Combine subscribers** create runtime references invisible to both SCIP and SwiftSyntax. Mitigate via explicit retention annotations + Combine/Mirror pattern detection (heuristic, best-effort, high false-negative tolerance).
+- **scip-swift** does not currently emit ref-kind info — our annotator runs **on top of** SCIP, not via SCIP itself. If scip-swift gains symbol-role richness upstream, our annotator becomes thinner.
+- Implementation cost is ~5-7 weeks qualified, **not** a 2-day extension to G0d. Schedule accordingly.
+
+**Trade with current G0d shape.**
+
+G0d v1 (current spec) ships first — gives baseline DeadFinding set + dynamic-dispatch root suppression. G0d.v2 layers on top: same `:DeadFinding` nodes get reclassified into refined confidence states + new typed edges. No throw-away work in v1.
+
+**Owner candidates.** Claude PE + Claude Research Agent (SwiftSyntax integration is non-trivial; research-first plan recommended before implementation).
+
 ### G0e — Verification matrix (product readiness gate)
 
 #### Per-extractor verification
