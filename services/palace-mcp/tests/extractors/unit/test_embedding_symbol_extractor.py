@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from palace_mcp.extractors.base import ExtractorRunContext
+from palace_mcp.extractors import embedding_symbol as embedding_symbol_module
 from palace_mcp.extractors.embedding_symbol import (
     _LOAD_SYMBOL_ROWS,
     _WRITE_EMBEDDINGS,
@@ -138,3 +139,42 @@ async def test_run_skips_symbols_with_matching_hash() -> None:
     assert len(writes[0]["rows"]) == 1
     assert writes[0]["rows"][0]["qualified_name"] == "demo.symbol.stale"
     assert stats.nodes_written == 1
+
+
+@pytest.mark.asyncio
+async def test_run_with_all_unchanged_symbols_skips_backend_resolution() -> None:
+    unchanged_row = {
+        "qualified_name": "demo.symbol.unchanged",
+        "kind": "function",
+        "file_path": "src/unchanged.py",
+        "module_name": "demo",
+        "embedding_input_hash": None,
+        "has_embedding": True,
+    }
+    unchanged_row["embedding_input_hash"] = _embedding_text_hash(
+        _embedding_text(unchanged_row)
+    )
+    graphiti, run_mock, writes = _make_graphiti([unchanged_row])
+
+    class _UnexpectedBackend:
+        def __init__(self) -> None:
+            raise AssertionError("backend should not be resolved")
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(
+        embedding_symbol_module,
+        "QodoEmbeddingBackend",
+        _UnexpectedBackend,
+    )
+    try:
+        stats = await EmbeddingSymbolExtractor().run(
+            graphiti=graphiti,
+            ctx=_make_ctx(),
+        )
+    finally:
+        monkeypatch.undo()
+
+    assert stats.nodes_written == 0
+    assert stats.edges_written == 0
+    assert writes == []
+    assert run_mock.await_count == 1

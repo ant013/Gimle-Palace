@@ -126,6 +126,9 @@ class EmbeddingSymbolExtractor(BaseExtractor):
                 }
             )
 
+        if not pending_rows:
+            return ExtractorStats(nodes_written=0, edges_written=0)
+
         backend = self._resolve_backend()
         nodes_written = 0
         for index in range(0, len(pending_rows), _BATCH_SIZE):
