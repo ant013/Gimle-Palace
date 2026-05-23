@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import uuid
+import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class FindingKind(str, Enum):
@@ -33,10 +33,27 @@ class MemberEntry(BaseModel):
     file_path: str | None = None
 
 
+_AUTO_ID_SENTINEL = "_auto"
+
+
+def _derive_finding_id(
+    project: str, kind: FindingKind, members: list[MemberEntry]
+) -> str:
+    """Deterministic ID from (project, kind, sorted member qnames).
+
+    Stable across re-runs → MERGE in Neo4j updates existing node instead of
+    creating a duplicate, eliminating append-only count inflation observed
+    by CXCR on G0d v1 (GIM-785 review).
+    """
+    sorted_qnames = sorted(m.qualified_name for m in members)
+    content = f"{project}|{kind.value}|{','.join(sorted_qnames)}"
+    return f"fd_{hashlib.sha256(content.encode()).hexdigest()[:16]}"
+
+
 class DeadFinding(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    finding_id: str = Field(default_factory=lambda: f"fd_{uuid.uuid4().hex[:8]}")
+    finding_id: str = _AUTO_ID_SENTINEL
     kind: FindingKind
     severity: Severity
     project: str
@@ -55,6 +72,16 @@ class DeadFinding(BaseModel):
     # dead_extension_chain only
     target_dead_type: str | None = None
     protocol_conformance_checks: list[dict[str, Any]] | None = None
+
+    @model_validator(mode="after")
+    def _populate_deterministic_finding_id(self) -> "DeadFinding":
+        if self.finding_id == _AUTO_ID_SENTINEL:
+            object.__setattr__(
+                self,
+                "finding_id",
+                _derive_finding_id(self.project, self.kind, self.members),
+            )
+        return self
 
 
 @dataclass(frozen=True)
