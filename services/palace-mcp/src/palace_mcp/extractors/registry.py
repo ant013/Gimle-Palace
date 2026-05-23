@@ -31,6 +31,7 @@ from palace_mcp.extractors.dependency_surface.extractor import (
 from palace_mcp.extractors.error_handling_policy import (
     ErrorHandlingPolicyExtractor,
 )
+from palace_mcp.extractors.embedding_symbol import EmbeddingSymbolExtractor
 from palace_mcp.extractors.git_history.extractor import GitHistoryExtractor
 from palace_mcp.extractors.heartbeat import HeartbeatExtractor
 from palace_mcp.extractors.hot_path_profiler import HotPathProfilerExtractor
@@ -69,6 +70,7 @@ EXTRACTORS: dict[str, BaseExtractor] = {
     "symbol_index_clang": SymbolIndexClang(),
     "dependency_surface": DependencySurfaceExtractor(),
     "error_handling_policy": ErrorHandlingPolicyExtractor(),
+    "embedding_symbol": EmbeddingSymbolExtractor(),
     "reactive_dependency_tracer": ReactiveDependencyTracerExtractor(),
     "testability_di": TestabilityDiExtractor(),
     "git_history": GitHistoryExtractor(),
