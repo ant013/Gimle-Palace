@@ -35,7 +35,8 @@ async def _count_findings(driver: AsyncDriver) -> int:
             gid=GROUP_ID,
         )
         row = await result.single()
-        return row["n"]
+        assert row is not None
+        return int(row["n"])
 
 
 @pytest.mark.asyncio
