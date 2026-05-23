@@ -2,15 +2,15 @@ services:
   neo4j:
     image: neo4j:5.26.0@sha256:5a015e53de1895e7eee1574ae0325cf8c4b89587222778108c594bdd45a474b5
     restart: unless-stopped
-    mem_limit: 12g
-    cpus: "4.0"
+    mem_limit: 5g
+    cpus: "3.0"
     profiles: [review, analyze, full, code-graph]
     environment:
       NEO4J_AUTH: "neo4j/${NEO4J_PASSWORD}"
       NEO4J_PLUGINS: '["apoc"]'
-      NEO4J_server_memory_heap_initial__size: "2G"
-      NEO4J_server_memory_heap_max__size: "6G"
-      NEO4J_server_memory_pagecache_size: "3G"
+      NEO4J_server_memory_heap_initial__size: "1G"
+      NEO4J_server_memory_heap_max__size: "3G"
+      NEO4J_server_memory_pagecache_size: "1G"
       NEO4J_apoc_trigger_enabled: "true"
       NEO4J_apoc_trigger_refresh: "1000"
       NEO4J_dbms_security_procedures_unrestricted: "apoc.*"
