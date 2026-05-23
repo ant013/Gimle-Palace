@@ -217,13 +217,23 @@ class SymbolIndexSwift(BaseExtractor):
             # Write :Symbol nodes so dead_code can load the call graph.
             # Build file_path lookup from the first DEF/DECL occurrence of each symbol.
             def_file_paths: dict[str, str] = {}
-            for occ in all_occs:
+            for occ in _iter_occurrences():
                 if occ.kind in (SymbolKind.DEF, SymbolKind.DECL):
                     def_file_paths.setdefault(occ.symbol_qualified_name, occ.file_path)
-            symbol_infos = list(iter_scip_symbol_infos(scip_index))
-            sym_nodes = await write_symbol_nodes(
-                driver, symbol_infos, def_file_paths, ctx.group_id
-            )
+            sym_nodes = 0
+            sym_batch: list = []
+            sym_batch_size = 5000
+            for sym_info in iter_scip_symbol_infos(scip_index):
+                sym_batch.append(sym_info)
+                if len(sym_batch) >= sym_batch_size:
+                    sym_nodes += await write_symbol_nodes(
+                        driver, sym_batch, def_file_paths, ctx.group_id
+                    )
+                    sym_batch = []
+            if sym_batch:
+                sym_nodes += await write_symbol_nodes(
+                    driver, sym_batch, def_file_paths, ctx.group_id
+                )
             logger.info("Symbol nodes written to Neo4j: %d", sym_nodes)
 
             await finalize_ingest_run(driver, run_id=ctx.run_id, success=True)
