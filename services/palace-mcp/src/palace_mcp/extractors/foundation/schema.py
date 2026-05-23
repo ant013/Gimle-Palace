@@ -99,6 +99,11 @@ EXPECTED_SCHEMA = SchemaDefinition(
             properties=("id",),
         ),
         ConstraintSpec(
+            name="symbol_qname_group_unique",
+            label="Symbol",
+            properties=("qualified_name", "group_id"),
+        ),
+        ConstraintSpec(
             name="binary_surface_record_id_unique",
             label="BinarySurfaceRecord",
             properties=("id",),

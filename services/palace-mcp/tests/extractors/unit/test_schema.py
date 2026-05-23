@@ -20,7 +20,7 @@ from palace_mcp.extractors.foundation.schema import (
 class TestSchemaDefinition:
     def test_has_nine_constraints(self) -> None:
         # 3 original + 6 git_history + 2 dead_symbol_binary_surface
-        assert len(EXPECTED_SCHEMA.constraints) == 11
+        assert len(EXPECTED_SCHEMA.constraints) == 12
 
     def test_has_five_indexes(self) -> None:
         assert len(EXPECTED_SCHEMA.indexes) == 7
@@ -35,11 +35,11 @@ class TestSchemaDefinition:
             + len(EXPECTED_SCHEMA.indexes)
             + len(EXPECTED_SCHEMA.fulltext_indexes)
         )
-        assert total == 19
+        assert total == 20
 
     def test_all_names_unique(self) -> None:
         names = EXPECTED_SCHEMA.all_names()
-        assert len(names) == 19
+        assert len(names) == 20
 
     def test_expected_names_present(self) -> None:
         names = EXPECTED_SCHEMA.all_names()
