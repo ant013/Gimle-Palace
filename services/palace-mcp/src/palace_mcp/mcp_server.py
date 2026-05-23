@@ -53,6 +53,7 @@ from palace_mcp.audit.run import run_audit as _run_audit
 from palace_mcp.code.find_cross_module_contracts import (
     find_cross_module_contracts as _find_cross_module_contracts_impl,
 )
+from palace_mcp.code.find_dead_code import find_dead_code as _find_dead_code_impl
 from palace_mcp.code.find_dead_symbols import (
     find_dead_symbols as _find_dead_symbols_impl,
 )
@@ -1344,6 +1345,40 @@ async def palace_code_find_dead_symbols(
             "message": "Neo4j driver not initialised",
         }
     return await _find_dead_symbols_impl(driver=driver, project=project, limit=limit)
+
+
+@_tool(
+    name="palace.code.find_dead_code",
+    description=(
+        "Graph-reachability dead-code analysis for a project (G0d algorithm). "
+        "Returns :DeadFinding nodes: dead_symbol (single), dead_scc_cluster (≥3 symbols), "
+        "dead_module (≥50% of module), dead_extension_chain (no existential conformance). "
+        "Distinct from palace.code.find_dead_symbols which uses Periphery/binary-surface. "
+        "Accepts min_severity (default 'medium'), include_test_only (default False), "
+        "and limit (default 200)."
+    ),
+)
+async def palace_code_find_dead_code(
+    project: str,
+    min_severity: str = "medium",
+    include_test_only: bool = False,
+    limit: int = 200,
+) -> dict[str, Any]:
+    """Graph-reachability dead-code findings ranked by severity and safe_to_delete_score."""
+    driver = _driver
+    if driver is None:
+        return {
+            "ok": False,
+            "error_code": "driver_unavailable",
+            "message": "Neo4j driver not initialised",
+        }
+    return await _find_dead_code_impl(
+        driver=driver,
+        project=project,
+        min_severity=min_severity,
+        include_test_only=include_test_only,
+        limit=limit,
+    )
 
 
 @_tool(

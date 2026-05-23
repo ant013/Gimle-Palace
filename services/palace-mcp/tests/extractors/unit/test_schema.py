@@ -23,7 +23,7 @@ class TestSchemaDefinition:
         assert len(EXPECTED_SCHEMA.constraints) == 11
 
     def test_has_five_indexes(self) -> None:
-        assert len(EXPECTED_SCHEMA.indexes) == 7
+        assert len(EXPECTED_SCHEMA.indexes) == 9
 
     def test_has_one_fulltext(self) -> None:
         assert len(EXPECTED_SCHEMA.fulltext_indexes) == 1
@@ -35,11 +35,11 @@ class TestSchemaDefinition:
             + len(EXPECTED_SCHEMA.indexes)
             + len(EXPECTED_SCHEMA.fulltext_indexes)
         )
-        assert total == 19
+        assert total == 21
 
     def test_all_names_unique(self) -> None:
         names = EXPECTED_SCHEMA.all_names()
-        assert len(names) == 19
+        assert len(names) == 21
 
     def test_expected_names_present(self) -> None:
         names = EXPECTED_SCHEMA.all_names()

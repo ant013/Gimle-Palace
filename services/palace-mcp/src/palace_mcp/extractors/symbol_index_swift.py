@@ -45,10 +45,13 @@ from palace_mcp.extractors.foundation.models import (
 )
 from palace_mcp.extractors.foundation.schema import ensure_custom_schema
 from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
+from palace_mcp.extractors.foundation.symbol_node_writer import write_symbol_nodes
 from palace_mcp.extractors.scip_parser import (
     FindScipPath,
     ScipPathRequiredError,
+    ScipSymbolInfo,
     iter_scip_occurrences,
+    iter_scip_symbol_infos,
     parse_scip_file,
 )
 
@@ -57,7 +60,7 @@ logger = logging.getLogger(__name__)
 
 class SymbolIndexSwift(BaseExtractor):
     name: ClassVar[str] = "symbol_index_swift"
-    timeout_s: ClassVar[float] = 1800.0
+    timeout_s: ClassVar[float] = 3600.0
     description: ClassVar[str] = (
         "Ingest Swift symbols + occurrences from pre-generated SCIP file "
         "(palace-swift-scip-emit) into Tantivy (full-text) and Neo4j "
@@ -211,6 +214,28 @@ class SymbolIndexSwift(BaseExtractor):
 
             counter_path = tantivy_path / "in_degree_counter.json"
             counter.to_disk(counter_path, run_id=ctx.run_id)
+
+            # Write :Symbol nodes so dead_code can load the call graph.
+            # Build file_path lookup from the first DEF/DECL occurrence of each symbol.
+            def_file_paths: dict[str, str] = {}
+            for occ in _iter_occurrences():
+                if occ.kind in (SymbolKind.DEF, SymbolKind.DECL):
+                    def_file_paths.setdefault(occ.symbol_qualified_name, occ.file_path)
+            sym_nodes = 0
+            sym_batch: list[ScipSymbolInfo] = []
+            sym_batch_size = 5000
+            for sym_info in iter_scip_symbol_infos(scip_index):
+                sym_batch.append(sym_info)
+                if len(sym_batch) >= sym_batch_size:
+                    sym_nodes += await write_symbol_nodes(
+                        driver, sym_batch, def_file_paths, ctx.group_id
+                    )
+                    sym_batch = []
+            if sym_batch:
+                sym_nodes += await write_symbol_nodes(
+                    driver, sym_batch, def_file_paths, ctx.group_id
+                )
+            logger.info("Symbol nodes written to Neo4j: %d", sym_nodes)
 
             await finalize_ingest_run(driver, run_id=ctx.run_id, success=True)
             return ExtractorStats(nodes_written=total_written, edges_written=0)

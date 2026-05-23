@@ -241,6 +241,73 @@ def _language_from_path(relative_path: str) -> Language:
     return Language.UNKNOWN
 
 
+@dataclass(frozen=True)
+class ScipSymbolInfo:
+    """Symbol metadata extracted from SCIP SymbolInformation (doc.symbols).
+
+    Used by symbol_index_swift to write :Symbol nodes for dead_code.
+    """
+
+    qualified_name: str
+    module_name: str
+    scip_kind_name: str  # e.g. "Class", "Struct", "Function"
+    relationships: tuple[tuple[str, str], ...]  # ((target_qname, neo4j_rel_type), ...)
+
+
+def iter_scip_symbol_infos(index: Any) -> Iterator[ScipSymbolInfo]:
+    """Yield ScipSymbolInfo from SCIP Index.documents[].symbols.
+
+    Deduplicates by qualified_name across all documents.
+    Maps enclosing_symbol + Extension kind to EXTENSION_OF relationships.
+    """
+    seen: set[str] = set()
+    kind_field = scip_pb2.SymbolInformation.DESCRIPTOR.fields_by_name["kind"]  # type: ignore[attr-defined]
+    kind_enum = kind_field.enum_type
+
+    for doc in index.documents:
+        for sym_info in doc.symbols:
+            raw_symbol = sym_info.symbol
+            if not raw_symbol or raw_symbol.startswith("local "):
+                continue
+            qname = _extract_qualified_name(raw_symbol)
+            if not qname or qname in seen:
+                continue
+            seen.add(qname)
+
+            parts = _split_scip_top_level(raw_symbol.strip())
+            module_name = parts[2] if len(parts) >= 3 else ""
+
+            kind_value = sym_info.kind
+            kind_entry = kind_enum.values_by_number.get(kind_value)
+            scip_kind_name = kind_entry.name if kind_entry else "UnspecifiedKind"
+
+            rels: list[tuple[str, str]] = []
+            for rel in sym_info.relationships:
+                if not rel.symbol or rel.symbol.startswith("local "):
+                    continue
+                t_qname = _extract_qualified_name(rel.symbol)
+                if not t_qname:
+                    continue
+                if rel.is_reference:
+                    rels.append((t_qname, "REFERENCES"))
+                if rel.is_implementation:
+                    rels.append((t_qname, "CONFORMS_TO"))
+                if rel.is_type_definition:
+                    rels.append((t_qname, "EXTENDS"))
+
+            if scip_kind_name == "Extension" and sym_info.enclosing_symbol:
+                enc_qname = _extract_qualified_name(sym_info.enclosing_symbol)
+                if enc_qname:
+                    rels.append((enc_qname, "EXTENSION_OF"))
+
+            yield ScipSymbolInfo(
+                qualified_name=qname,
+                module_name=module_name,
+                scip_kind_name=scip_kind_name,
+                relationships=tuple(rels),
+            )
+
+
 def iter_scip_occurrences(
     index: Any,  # scip_pb2.Index — no stub for generated protobuf
     *,

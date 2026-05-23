@@ -1,3 +1,5 @@
+> SUPERSEDED for daily-intake ownership by `docs/superpowers/specs/2026-05-22-uaudit-cto-dispatcher-daily-audit-routing.md`. Infra remains the Telegram delivery executor after platform CTO dispatch.
+
 # UAudit Report Delivery Owner
 
 ## Assumptions

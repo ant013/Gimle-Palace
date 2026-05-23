@@ -214,8 +214,8 @@ OPUS-CRITICAL-2).
 
 | ID | Sprint | Detail file | Wall-time | Depends on | Team | Status |
 |----|--------|-------------|-----------|------------|------|--------|
-| **G0** | Substrate readiness — 5 sub-sprints (G0a-e: ingest activation + schema linking fix + missing artefacts pipeline + **deep dead-code extractor** + verification matrix) | [`G-project-specialist-agent.md` §G0](superpowers/sprints/G-project-specialist-agent.md) | ~2-3 weeks | nothing | Board + Infra + Claude PE | 🚧 G0a partial (3/5 kits ingested 2026-05-21; bitcoin-kit + uw-ios-app pending) |
-| **G0.5** | Semantic embeddings layer (Neo4j vector + **Qodo-Embed-1-1.5B self-hosted**) | [§G0.5](superpowers/sprints/G-project-specialist-agent.md) | ~5-6 days | G0 | Claude PE | 📋 |
+| **G0** | Substrate readiness — 5 sub-sprints (G0a-e: ingest activation + schema linking fix + missing artefacts pipeline + **deep dead-code extractor** + verification matrix) | [`G-project-specialist-agent.md` §G0](superpowers/sprints/G-project-specialist-agent.md) | ~2-3 weeks | nothing | Board + Infra + Claude PE | ✅ G0b/c/d/e closed 2026-05-23 (UW iOS app 17/17 verified). G0a re-cascade for 4 kits deferred — bundled with G0.5 final validation cascade. |
+| **G0.5** | Semantic embeddings layer (Neo4j vector + **Qodo-Embed-1-1.5B self-hosted**) — broken into 7 sequential slices, see [§G0.5 slice list](#g05-mega-sprint-detail--codex-team) | [`G-project-specialist-agent.md` §G0.5](superpowers/sprints/G-project-specialist-agent.md) | ~5-6 days | G0b/c/d/e ✅ | **Codex team** (CX CTO drives walker, CX PE implements, CX QA validates) | 🚧 Walker ready 2026-05-23 |
 | **G1** | Capability audit + **4-column** comparative baseline (Gimle / SymDex / **Sourcegraph Amp** / grep) | [§G1](superpowers/sprints/G-project-specialist-agent.md) | ~1 week | G0.5 | Board + Claude | 📋 |
 | **G2** | Recipe pilot — **Phase 1 synthetic + Phase 2 real PR corpus**, 3-arm A/B with N≥20 paired runs | [§G2](superpowers/sprints/G-project-specialist-agent.md) | ~2-3 weeks | G1 | Board + Claude | 📋 |
 | **G2.5** | Domain-preflight middleware enforcement (AgentSpec-style runtime gate) | [§G2.5](superpowers/sprints/G-project-specialist-agent.md) | ~1-2 weeks | G2 | Claude PE | 📋 |
@@ -233,15 +233,46 @@ OPUS-CRITICAL-2).
 
 ### G0 mega-sprint detail (= internal product readiness gate)
 
-| Sub-sprint | What | Wall-time | Owner |
-|---|---|---|---|
-| G0a | Activate ingest for remaining HS Kits + uw-ios-app (bitcoin-core ✅ done 2026-05-21; evm-kit ✅; dash-kit ✅; bitcoin-kit + uw-ios-app pending) | 1 day | Board |
-| G0b | Schema linking fix — **defense-in-depth**: Python `ScopeTaggedWriter` (Layer 1) + Neo4j APOC trigger (Layer 2) + `path → file_path` migration script (apoc.periodic.iterate batched) | 7-8 days | Claude PE |
-| G0c | Missing artefacts pipeline — `prepare_swift_kit_artifacts.sh` runs Periphery + swiftinterface gen | 3-5 days | Claude PE |
-| G0d | **Deep dead-code extractor** — transitive cluster + extension chain + SCC analysis + **dynamic-dispatch root set extractor** (Step 1b for @objc / NSManaged / IBOutlet / SwiftUI wrappers / Codable / macros / NSClassFromString) + fixture tests for false-positive guards | 7-9 days | Claude PE |
-| G0e | Verification matrix — per-extractor sample queries (15 testable + 2 input-conditional) + cross-extractor coherence Cypher + multi-tenant isolation test | 2-3 days | Board + Claude |
+| Sub-sprint | What | Wall-time | Owner | Status |
+|---|---|---|---|---|
+| G0a | Activate ingest for remaining HS Kits + uw-ios-app | 1 day | Board | ⏸ deferred — re-cascade all 4 kits bundled with G0.5.6 final validation (uw-ios-app done 2026-05-23, 17/17 verified) |
+| G0b | Schema linking fix — defense-in-depth: Python `ScopeTaggedWriter` (Layer 1) + Neo4j APOC trigger (Layer 2) | 7-8 days | Claude PE | ✅ done 2026-05-22 (PR #271 APOC + earlier ScopeTaggedWriter) |
+| G0c | Missing artefacts pipeline — `prepare_swift_kit_artifacts.sh` runs Periphery + swiftinterface gen | 3-5 days | Claude PE | ✅ done 2026-05-22 (PR #294/#295 prepare scripts + iMac smoke 2026-05-23 with Periphery 2282 findings + 5 swiftinterface) |
+| G0d | Deep dead-code extractor — transitive cluster + extension chain + SCC analysis + dynamic-dispatch root set extractor + fixture tests | 7-9 days | Claude PE | ✅ done 2026-05-23 (PR #286 G0d code + #287 idempotent finding_id + #288/#289 Symbol INDEX + #290/#291/#292 Neo4j 16g + #293 timeout 3600; UW dead_code = 5926 findings, 5926 edges) |
+| G0e | Verification matrix — per-extractor sample queries (15 testable + 2 input-conditional) + cross-extractor coherence + multi-tenant isolation test | 2-3 days | Board + Claude | ✅ done 2026-05-23 (UW iOS app honest 17/17: all extractors return success=true with ok/missing_input outcome; see [[project_extractor_baseline_2026-05-22]]) |
 
-**G0d is a genuine moat**: ranks dead findings by severity (critical = dead module / high = dead SCC ≥3 classes / medium = dead extension chain / low = single dead symbol), enriched with git_history-based safe_to_delete_score. No commercial competitor (Cursor / Sourcegraph / Cody / SymDex) does SCC-level dead detection at graph level for Swift today. Research-analyst confirmed gap vs Periphery / Reaper / SwiftCodeSan / SonarQube / DeepSource. Closest published analogue: Meta SCARF (FSE 2023, internal-only).
+**G0d is a genuine moat**: ranks dead findings by severity (critical = dead module / high = dead SCC ≥3 classes / medium = dead extension chain / low = single dead symbol), enriched with git_history-based safe_to_delete_score. No commercial competitor (Cursor / Sourcegraph / Cody / SymDex) does SCC-level dead detection at graph level for Swift today.
+
+### G0 closed 2026-05-23
+
+G0b/c/d/e closed. G0a deferred (bundled with G0.5 final cascade). All G0d future enhancements (symbol-level refactoring analyzer) captured in spec §G0d "Future enhancements" — separate post-G0d sprint.
+
+### G0.5 mega-sprint detail — codex team
+
+**Owner**: Codex team (CX CTO walker drives, CX PE implements, CX QA validates). Walker pattern per [[feedback_walker_sprint_protocol]] — one walker reads roadmap, spawns ONE child slice at a time via `parentId`, advances when child closes.
+
+**Walker prompt**: scan §G0.5 slice list below top-to-bottom for first `Status: 📋`. Spawn child issue with `parentId = walker.id`, assignee CX CTO. Wait. On child close → mark slice `✅` in this roadmap + advance to next.
+
+#### G0.5 slice list (sequential)
+
+| Slice | What | Wall-time | Status | Acceptance |
+|---|---|---|---|---|
+| G0.5.1 | `EmbeddingBackend` abstraction — Python protocol class + dispatcher | 0.5 day | ✅ (2026-05-23) | `services/palace-mcp/src/palace_mcp/embeddings/backend.py` exports `EmbeddingBackend` Protocol with `embed_text(text: str) -> list[float]` + `embed_batch(texts) -> list[list[float]]`. Pluggable for Qodo/OpenAI/etc. Unit test for protocol contract. |
+| G0.5.2 | Qodo-Embed-1-1.5B self-hosted runner | 1 day | ✅ (2026-05-23) | New service or in-process worker that loads HF model `Qodo/Qodo-Embed-1-1.5B` (1.5B params, Apache 2.0). HTTP endpoint OR direct Python embed. Latency budget ≤500ms per 200-token batch on M-series Mac. Implements `EmbeddingBackend`. |
+| G0.5.3 | Neo4j vector index schema + UNIQUE setup | 0.5 day | ✅ (2026-05-23) | `CREATE VECTOR INDEX symbol_embedding_idx FOR (s:Symbol) ON (s.embedding) OPTIONS {indexConfig: {`vector.dimensions`: 1536, `vector.similarity_function`: 'cosine'}}`. Added to `extractors/foundation/schema.py` ConstraintSpec/IndexSpec. Tests assert index created. |
+| G0.5.4 | Embedding population extractor — new `:Symbol` embedding writer | 1.5 day | 📋 | New extractor `embedding_symbol` reads all `:Symbol` nodes for a project, batches by 64, calls `EmbeddingBackend.embed_batch`, writes vector to `s.embedding`. Idempotent (skip if hash matches). Registered in `extractors/registry.py`. `palace.ingest.run_extractor(name='embedding_symbol', project=...)` works. |
+| G0.5.5 | MCP tool `palace.code.semantic_search` | 1 day | 📋 | New MCP tool `palace.code.semantic_search(query: str, project: str, limit: int = 10)`. Generates query embedding → Neo4j `CALL db.index.vector.queryNodes('symbol_embedding_idx', limit, $query_vec)` → returns top-N symbols with cosine score + qname + file_path. Schema in `code/find_semantic.py` mirrors find_references pattern. |
+| G0.5.6 | G0a closure: cascade all 5 projects with embedding_symbol | 0.5 day | 📋 | Re-run ingest on bitcoin-core, evm-kit, bitcoin-kit, dash-kit, uw-ios-app. Each gets symbol_index_swift + dead_code + embedding_symbol. Verify `MATCH (s:Symbol {group_id:"project/<slug>"}) WHERE s.embedding IS NOT NULL RETURN count(s)` > 100 per project (small kits may be 10-100, app 100K+). |
+| G0.5.7 | Validation matrix + acceptance criteria | 1 day | 📋 | `palace.code.semantic_search(query="signature verification", project="uw-ios-app")` returns relevant symbols (manual top-3 review by operator). `semantic_search` returns < 1s on populated index. Doc in `docs/runbooks/semantic-search.md`. Final matrix posted in walker. |
+
+**Walker advance protocol**: when child issue X closes (status=done):
+1. Walker is woken via paperclip's parent-id mechanism (child has `parentId = walker.id`)
+2. Walker edits this roadmap section: changes child's slice row Status `📋` → `✅` with merge commit ref
+3. Walker scans next `📋` row → spawns new child with `parentId = walker.id`
+4. Walker waits again
+5. When all 7 slices `✅` → walker marks itself done + closes
+
+Total wall-time per slice estimate: 5-6 days (matches sprint envelope).
 
 ### G0 starts immediately (does not wait for Audit-V1 close)
 

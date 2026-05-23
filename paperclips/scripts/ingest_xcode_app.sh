@@ -51,6 +51,7 @@ Options:
   --parent-mount <name>     Explicit register_project parent_mount (auto-derived if omitted)
   --env-file <path>         Env file to update atomically (default: repo .env)
   --dry-run                 Print intended actions without changing state
+  --skip-artefact-check     Skip Periphery/swiftinterface presence validation
   --help, -h                Show this message
 
 Notes:
@@ -100,6 +101,42 @@ json_or_null() {
     else
         printf 'null'
     fi
+}
+
+validate_artefacts() {
+    local repo_path="$1"
+    local periphery_report="$repo_path/periphery/periphery-3.7.4-swiftpm.json"
+    local contract="$repo_path/periphery/contract.json"
+    local swift_iface_dir="$repo_path/.palace/public-api/swift"
+
+    if [[ ! -f "$periphery_report" ]]; then
+        die "artefact missing: $periphery_report
+Run: bash paperclips/scripts/prepare_swift_kit_artifacts.sh --repo-path $repo_path --scheme <scheme>"
+    fi
+    if [[ ! -f "$contract" ]]; then
+        die "artefact missing: $contract
+Run: bash paperclips/scripts/prepare_swift_kit_artifacts.sh --repo-path $repo_path --scheme <scheme>"
+    fi
+
+    local schema_version
+    schema_version="$(jq -r '.tool_output_schema_version // empty' "$contract" 2>/dev/null || true)"
+    if [[ -z "$schema_version" ]]; then
+        die "contract.json missing tool_output_schema_version: $contract"
+    fi
+    if [[ ! "$schema_version" =~ ^periphery-json-[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        die "contract.json tool_output_schema_version '$schema_version' is not valid (expected 'periphery-json-X.Y.Z')"
+    fi
+
+    local iface_count=0
+    if [[ -d "$swift_iface_dir" ]]; then
+        iface_count="$(find "$swift_iface_dir" -name "*.swiftinterface" -maxdepth 1 | wc -l | tr -d ' ')"
+    fi
+    if [[ "$iface_count" -eq 0 ]]; then
+        die "no .swiftinterface files found in $swift_iface_dir
+Run: bash paperclips/scripts/prepare_swift_kit_artifacts.sh --repo-path $repo_path --scheme <scheme>"
+    fi
+
+    log "artefact gate passed: periphery report ok, schema_version=$schema_version, $iface_count .swiftinterface file(s)"
 }
 
 derive_parent_mount() {
@@ -319,6 +356,7 @@ MCP_URL="$DEFAULT_MCP_URL"
 PARENT_MOUNT=""
 ENV_FILE="$DEFAULT_ENV_FILE"
 DRY_RUN="false"
+SKIP_ARTEFACT_CHECK="false"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -416,6 +454,10 @@ while [[ $# -gt 0 ]]; do
             DRY_RUN="true"
             shift
             ;;
+        --skip-artefact-check)
+            SKIP_ARTEFACT_CHECK="true"
+            shift
+            ;;
         --help|-h)
             usage
             exit 0
@@ -496,6 +538,12 @@ fi
 HOST_SCIP_PATH="${SCIP_PATH_OVERRIDE:-$REPO_PATH/scip/index.scip}"
 [[ -f "$HOST_SCIP_PATH" ]] || die "SCIP index not found: $HOST_SCIP_PATH"
 [[ -s "$HOST_SCIP_PATH" ]] || die "SCIP index is empty: $HOST_SCIP_PATH"
+
+if [[ "$SKIP_ARTEFACT_CHECK" == "true" ]]; then
+    log "artefact gate skipped (--skip-artefact-check)"
+else
+    validate_artefacts "$REPO_PATH"
+fi
 
 RELATIVE_PATH="$(basename "$REPO_PATH")"
 HOST_REPO_BASE="$(dirname "$REPO_PATH")"
