@@ -322,7 +322,9 @@ async def test_success_filters_scope_and_skips_context_when_disabled() -> None:
 
 
 @pytest.mark.asyncio
-async def test_vector_query_uses_candidate_limit_to_overfetch_before_scope_filter() -> None:
+async def test_vector_query_uses_candidate_limit_to_overfetch_before_scope_filter() -> (
+    None
+):
     from palace_mcp.code.find_semantic import semantic_search
 
     backend = _FakeBackend()
@@ -372,7 +374,9 @@ async def test_vector_query_uses_candidate_limit_to_overfetch_before_scope_filte
 
 
 @pytest.mark.asyncio
-async def test_context_warning_is_attached_per_hit_when_snippet_provider_unavailable() -> None:
+async def test_context_warning_is_attached_per_hit_when_snippet_provider_unavailable() -> (
+    None
+):
     from palace_mcp.code.find_semantic import semantic_search
 
     backend = _FakeBackend()
