@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import time
 import uuid
 from collections.abc import Iterator
 
@@ -14,6 +16,7 @@ from palace_mcp.embeddings import (
     EmbeddingBackendDispatcher,
     set_embedding_dispatcher_factory,
 )
+from palace_mcp.extractors.foundation.schema import ensure_custom_schema
 
 pytest_plugins = ("tests.integration.hotspot_wire_support",)
 
@@ -24,6 +27,37 @@ class _FakeBackend:
 
     def embed_batch(self, texts: list[str]) -> list[list[float]]:
         return [[0.01] * 1536 for _ in texts]
+
+
+def _ensure_vector_schema_ready(
+    neo4j_uri: str, neo4j_auth: tuple[str, str], *, timeout_seconds: float = 10.0
+) -> None:
+    from neo4j import AsyncGraphDatabase
+
+    async def _bootstrap() -> None:
+        driver = AsyncGraphDatabase.driver(neo4j_uri, auth=neo4j_auth)
+        try:
+            await ensure_custom_schema(driver)
+            deadline = time.monotonic() + timeout_seconds
+            while True:
+                async with driver.session() as session:
+                    result = await session.run(
+                        """
+                        SHOW INDEXES YIELD name, type, state
+                        WHERE name = 'symbol_embedding_idx'
+                        RETURN type, state
+                        """
+                    )
+                    row = await result.single()
+                if row is not None and row["type"] == "VECTOR" and row["state"] == "ONLINE":
+                    return
+                if time.monotonic() >= deadline:
+                    raise RuntimeError("symbol_embedding_idx did not reach ONLINE state")
+                await asyncio.sleep(0.1)
+        finally:
+            await driver.close()
+
+    asyncio.run(_bootstrap())
 
 
 @pytest.fixture(autouse=True)
@@ -38,6 +72,8 @@ def semantic_seeded_project(
     neo4j_uri: str, neo4j_auth: tuple[str, str]
 ) -> Iterator[str]:
     from neo4j import GraphDatabase
+
+    _ensure_vector_schema_ready(neo4j_uri, neo4j_auth)
 
     slug = f"semantic-{uuid.uuid4().hex[:8]}"
     gid = f"project/{slug}"
