@@ -24,11 +24,14 @@ class EmbeddingBackendDispatcher:
         self._backends = dict(backends)
         self._default_backend = default_backend
 
-    def backend(self, backend_name: str | None = None) -> EmbeddingBackend:
+    def resolve_backend_name(self, backend_name: str | None = None) -> str:
         name = backend_name or self._default_backend
         if name not in self._backends:
             raise ValueError(f"Unknown embedding backend: {name}")
-        return self._backends[name]
+        return name
+
+    def backend(self, backend_name: str | None = None) -> EmbeddingBackend:
+        return self._backends[self.resolve_backend_name(backend_name)]
 
     def embed_text(self, text: str, *, backend_name: str | None = None) -> list[float]:
         return self.backend(backend_name).embed_text(text)
