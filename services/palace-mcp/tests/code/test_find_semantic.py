@@ -105,6 +105,36 @@ async def test_invalid_query_returns_error() -> None:
 
 
 @pytest.mark.asyncio
+async def test_invalid_limit_returns_error() -> None:
+    from palace_mcp.code.find_semantic import semantic_search
+
+    driver = _FakeDriver(lambda _query, _params: _FakeResult())
+    result = await semantic_search(driver=driver, query="wallet", limit=0)
+    assert result == {
+        "ok": False,
+        "error_code": "invalid_limit",
+        "message": "limit must be between 1 and 50",
+    }
+
+
+@pytest.mark.asyncio
+async def test_invalid_context_limit_returns_error() -> None:
+    from palace_mcp.code.find_semantic import semantic_search
+
+    driver = _FakeDriver(lambda _query, _params: _FakeResult())
+    result = await semantic_search(
+        driver=driver,
+        query="wallet",
+        context_limit=11,
+    )
+    assert result == {
+        "ok": False,
+        "error_code": "invalid_context_limit",
+        "message": "context_limit must be between 0 and 10",
+    }
+
+
+@pytest.mark.asyncio
 async def test_invalid_scope_returns_error() -> None:
     from palace_mcp.code.find_semantic import semantic_search
 
@@ -232,7 +262,7 @@ async def test_success_filters_scope_and_skips_context_when_disabled() -> None:
         if "embedded_symbol_count" in query:
             return _FakeResult(single_value={"embedded_symbol_count": 3})
         if "queryNodes('symbol_embedding_idx'" in query:
-            assert params["query_k"] == 3
+            assert params["query_k"] == 50
             assert params["limit"] == 2
             return _FakeResult(
                 data_value=[
@@ -292,7 +322,7 @@ async def test_success_filters_scope_and_skips_context_when_disabled() -> None:
 
 
 @pytest.mark.asyncio
-async def test_vector_query_k_is_bounded_by_embedded_symbol_count() -> None:
+async def test_vector_query_uses_candidate_limit_to_overfetch_before_scope_filter() -> None:
     from palace_mcp.code.find_semantic import semantic_search
 
     backend = _FakeBackend()
@@ -304,7 +334,7 @@ async def test_vector_query_k_is_bounded_by_embedded_symbol_count() -> None:
         if "embedded_symbol_count" in query:
             return _FakeResult(single_value={"embedded_symbol_count": 1})
         if "queryNodes('symbol_embedding_idx'" in query:
-            assert params["query_k"] == 1
+            assert params["query_k"] == 50
             return _FakeResult(
                 data_value=[
                     {
@@ -339,6 +369,58 @@ async def test_vector_query_k_is_bounded_by_embedded_symbol_count() -> None:
     assert result["embedded_symbol_count"] == 1
     assert result["returned_count"] == 1
     assert result["warnings"] == []
+
+
+@pytest.mark.asyncio
+async def test_context_warning_is_attached_per_hit_when_snippet_provider_unavailable() -> None:
+    from palace_mcp.code.find_semantic import semantic_search
+
+    backend = _FakeBackend()
+    dispatcher = EmbeddingBackendDispatcher({"qodo": backend}, default_backend="qodo")
+
+    def run_fn(query: str, _params: dict[str, Any]) -> _FakeResult:
+        if "collect(p.slug)" in query:
+            return _FakeResult(single_value={"found_projects": ["wallet-core"]})
+        if "embedded_symbol_count" in query:
+            return _FakeResult(single_value={"embedded_symbol_count": 1})
+        if "queryNodes('symbol_embedding_idx'" in query:
+            return _FakeResult(
+                data_value=[
+                    {
+                        "group_id": "project/wallet-core",
+                        "qualified_name": "Crypto.verify",
+                        "kind": "function",
+                        "file_path": "Sources/A.swift",
+                        "module_name": "WalletCore",
+                        "embedding_input_hash": "hash-a",
+                        "commit_sha": None,
+                        "score": 0.91,
+                    }
+                ]
+            )
+        raise AssertionError(f"unexpected query: {query}")
+
+    driver = _FakeDriver(run_fn)
+    with (
+        patch(
+            "palace_mcp.code.find_semantic.get_embedding_dispatcher",
+            return_value=dispatcher,
+        ),
+        patch(
+            "palace_mcp.code.find_semantic.code_router.get_cm_session",
+            return_value=None,
+        ),
+    ):
+        result = await semantic_search(
+            driver=driver,
+            query="signature verification",
+            project="wallet-core",
+        )
+
+    context = result["result"][0]["context"]
+    assert context["available"] is False
+    assert context["warning_code"] == "snippet_provider_unavailable"
+    assert context["warning"] == "snippet provider unavailable"
 
 
 @pytest.mark.asyncio

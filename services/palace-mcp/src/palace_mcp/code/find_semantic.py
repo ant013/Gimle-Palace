@@ -362,13 +362,12 @@ async def semantic_search(
         }
 
     candidate_limit = _candidate_limit(limit, len(scope_projects))
-    query_k = min(candidate_limit, embedded_symbol_count)
     rows = await _vector_search(
         driver,
         embedding=query_embedding,
         group_ids=group_ids,
         limit=limit,
-        query_k=query_k,
+        query_k=candidate_limit,
     )
 
     result_rows: list[dict[str, Any]] = []

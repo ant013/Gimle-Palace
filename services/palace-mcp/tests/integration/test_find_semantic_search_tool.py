@@ -124,6 +124,46 @@ async def test_semantic_search_in_tools_list(mcp_url: str) -> None:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_semantic_search_invalid_limit_returns_error_code(mcp_url: str) -> None:
+    async with streamablehttp_client(mcp_url) as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.call_tool(
+                "palace.code.semantic_search",
+                {
+                    "query": "signature verification",
+                    "limit": 0,
+                },
+            )
+
+    payload = json.loads(result.content[0].text)
+    assert payload["ok"] is False
+    assert payload["error_code"] == "invalid_limit"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_semantic_search_invalid_context_limit_returns_error_code(
+    mcp_url: str,
+) -> None:
+    async with streamablehttp_client(mcp_url) as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.call_tool(
+                "palace.code.semantic_search",
+                {
+                    "query": "signature verification",
+                    "context_limit": 11,
+                },
+            )
+
+    payload = json.loads(result.content[0].text)
+    assert payload["ok"] is False
+    assert payload["error_code"] == "invalid_context_limit"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_semantic_search_call_tool_seeded(
     mcp_url: str, semantic_seeded_project: str
 ) -> None:
