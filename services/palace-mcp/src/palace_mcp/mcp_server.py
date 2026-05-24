@@ -60,6 +60,7 @@ from palace_mcp.code.find_dead_symbols import (
 from palace_mcp.code.find_hotspots import find_hotspots as _find_hotspots_impl
 from palace_mcp.code.find_owners import find_owners as _find_owners_impl
 from palace_mcp.code.find_public_api import find_public_api as _find_public_api_impl
+from palace_mcp.code.find_semantic import semantic_search as _semantic_search_impl
 from palace_mcp.code.list_functions import list_functions as _list_functions_impl
 from palace_mcp.adr.router import register_adr_tools
 from palace_mcp.code_composite import register_code_composite_tools
@@ -1403,6 +1404,44 @@ async def palace_code_find_public_api(
             "message": "Neo4j driver not initialised",
         }
     return await _find_public_api_impl(driver=driver, project=project, limit=limit)
+
+
+@_tool(
+    name="palace.code.semantic_search",
+    description=(
+        "Semantic symbol search over embedded :Symbol nodes for one project "
+        "or an explicit projects list. Returns ranked hits with best-effort "
+        "snippet and usage-preview context."
+    ),
+)
+async def palace_code_semantic_search(
+    query: str,
+    project: str | None = None,
+    projects: list[str] | None = None,
+    limit: int = 10,
+    backend: str | None = None,
+    include_context: bool = True,
+    context_limit: int = 3,
+) -> dict[str, Any]:
+    """Run semantic symbol search over Neo4j vector embeddings."""
+    driver = _driver
+    if driver is None:
+        return {
+            "ok": False,
+            "error_code": "driver_unavailable",
+            "message": "Neo4j driver not initialised",
+        }
+    return await _semantic_search_impl(
+        driver=driver,
+        settings=get_settings(),
+        query=query,
+        project=project,
+        projects=projects,
+        limit=limit,
+        backend=backend,
+        include_context=include_context,
+        context_limit=context_limit,
+    )
 
 
 @_tool(
