@@ -7,6 +7,8 @@ existing Qodo embedding backend, `:Symbol.embedding`, and Neo4j vector index.
 The tool should let an agent ask natural-language questions such as
 `"signature verification"` for one registered project and get ranked matching
 symbols with enough metadata to decide which symbols to inspect next.
+v1 also returns best-effort snippet/context for each hit when the local code
+context providers can resolve the symbol.
 
 ## Assumptions
 
@@ -18,10 +20,13 @@ symbols with enough metadata to decide which symbols to inspect next.
   - `embedding_symbol` extractor writing `s.embedding`.
 - Project scoping is mandatory. The v1 tool accepts a `project` slug and
   queries only `:Symbol {group_id: "project/<slug>"}`.
-- v1 returns metadata only, not code snippets. Callers can follow up with
-  `palace.code.get_snippet_rich` or `palace.code.get_code_snippet`.
+- v1 includes best-effort snippet/context. Search results remain valid even
+  when snippet hydration is unavailable, because `:Symbol` nodes do not carry a
+  source range by themselves.
 - The implementation uses the existing synchronous embedding interface
   (`embed_text` / `embed_batch`) and does not introduce a new worker process.
+- The default embedding backend remains Qodo, but callers can explicitly select
+  any dispatcher-registered backend by name.
 
 ## Scope
 
@@ -38,10 +43,16 @@ In scope:
   - `ok`
   - `project`
   - `query`
+  - `backend`
+  - `include_context`
   - `limit`
   - `total`
   - `result[]` with `qualified_name`, `kind`, `file_path`, `module_name`,
-    `score`, and optional `embedding_input_hash`.
+    `score`, optional `embedding_input_hash`, and optional `context`.
+- Add best-effort context hydration:
+  - definition location from Tantivy/occurrence data when available;
+  - snippet from the existing code-context/snippet path when available;
+  - usage preview capped by `context_limit`.
 - Add focused unit tests for query shaping, project validation, result mapping,
   and backend injection.
 - Add MCP registration/wire-shape coverage so the tool appears exactly once.
@@ -51,11 +62,11 @@ Out of scope:
 - G0.5.6 cascade re-ingest across bitcoin-core, evm-kit, bitcoin-kit,
   dash-kit, and uw-ios-app.
 - G0.5.7 manual top-3 semantic validation and latency matrix.
-- Context-pack/snippet expansion.
 - Multi-project search or cross-repo aggregation.
 - Changing embedding text format or re-embedding existing symbols.
 - New vector index schema changes unless the current index name/dimensions are
   proven wrong.
+- Making snippet/context mandatory for a successful semantic result.
 
 ## Affected areas
 
@@ -76,6 +87,9 @@ async def palace_code_semantic_search(
     query: str,
     project: str,
     limit: int = 10,
+    backend: str | None = None,
+    include_context: bool = True,
+    context_limit: int = 3,
 ) -> dict[str, Any]:
     ...
 ```
@@ -84,18 +98,24 @@ Validation:
 
 - `query.strip()` must be non-empty.
 - `project.strip()` must be non-empty.
+- `backend`, when provided, must resolve through the existing
+  `EmbeddingBackendDispatcher`.
 - `limit` is clamped or rejected outside a small range. Proposed v1:
   reject `limit < 1` or `limit > 50` with `ok=false`,
   `error_code="invalid_limit"`.
+- `context_limit` is rejected outside `0..10` with
+  `error_code="invalid_context_limit"`.
 - If Neo4j driver is unavailable, return the existing code-tool style
   `driver_unavailable` envelope.
 - If the project is not registered, return `project_not_registered`.
+- If the requested backend is not registered, return `unknown_embedding_backend`.
 
 ### Query flow
 
 1. Resolve `group_id = f"project/{project}"`.
 2. Verify `(:Project {slug: project})` exists.
-3. Resolve embedding backend. Default is Qodo.
+3. Resolve embedding backend. `backend=None` uses the default dispatcher backend,
+   currently Qodo.
 4. Compute `query_embedding = backend.embed_text(query)`.
 5. Query Neo4j:
 
@@ -119,6 +139,22 @@ LIMIT $limit
 drop all cross-project hits before the final limit. Proposed v1:
 `candidate_limit = min(max(limit * 5, 25), 250)`.
 
+### Context hydration
+
+For each returned symbol, if `include_context=true`:
+
+1. Resolve the symbol id from `qualified_name`.
+2. Ask the existing occurrence index for definition/declaration and usage
+   occurrences.
+3. Hydrate a snippet through the existing code-context path when possible.
+4. Attach a `context` object. Missing context does not turn the whole response
+   into an error; it sets `context.available=false` and includes
+   `context.warning`.
+
+The context object is intentionally best-effort because vector search runs over
+Neo4j symbols, while exact source slices are owned by the code-context and
+occurrence indexes.
+
 ### Response shape
 
 Success:
@@ -128,6 +164,8 @@ Success:
   "ok": true,
   "project": "uw-ios-app",
   "query": "signature verification",
+  "backend": "qodo",
+  "include_context": true,
   "limit": 10,
   "total": 2,
   "result": [
@@ -137,9 +175,47 @@ Success:
       "file_path": "Sources/Module/File.swift",
       "module_name": "Module",
       "embedding_input_hash": "abc123",
-      "score": 0.82
+      "score": 0.82,
+      "context": {
+        "available": true,
+        "definition_location": {
+          "file_path": "Sources/Module/File.swift",
+          "line": 42,
+          "col_start": 8
+        },
+        "snippet": {
+          "language": "swift",
+          "start_line": 42,
+          "end_line": 58,
+          "source": "func verifySignature(...) { ... }"
+        },
+        "usages_preview": [
+          {
+            "file_path": "Sources/Module/Caller.swift",
+            "line": 77,
+            "col_start": 16,
+            "role": "reference"
+          }
+        ]
+      }
     }
   ]
+}
+```
+
+If context cannot be hydrated for a hit:
+
+```json
+{
+  "qualified_name": "Module.Type.method()",
+  "kind": "function",
+  "file_path": "Sources/Module/File.swift",
+  "module_name": "Module",
+  "score": 0.82,
+  "context": {
+    "available": false,
+    "warning": "definition occurrence or snippet provider unavailable"
+  }
 }
 ```
 
@@ -160,14 +236,23 @@ Error:
 2. Empty query returns `ok=false`, `error_code="invalid_query"`.
 3. Unknown project returns `ok=false`, `error_code="project_not_registered"`.
 4. Invalid limit returns `ok=false`, `error_code="invalid_limit"`.
-5. Successful path calls the embedding backend once with the raw query text.
-6. Successful path calls `db.index.vector.queryNodes('symbol_embedding_idx', ...)`.
-7. Successful path filters results to `group_id = "project/<slug>"`.
-8. Successful response preserves descending score order and includes
+5. Invalid context limit returns `ok=false`,
+   `error_code="invalid_context_limit"`.
+6. Unknown backend returns `ok=false`,
+   `error_code="unknown_embedding_backend"`.
+7. Successful path calls the selected embedding backend once with the raw query
+   text.
+8. Successful path calls `db.index.vector.queryNodes('symbol_embedding_idx', ...)`.
+9. Successful path filters results to `group_id = "project/<slug>"`.
+10. Successful response preserves descending score order and includes
    `qualified_name`, `kind`, `file_path`, `module_name`, and `score`.
-9. Tests do not download or load the real Qodo model; they use an injected fake
+11. When `include_context=true`, response entries include a `context` object.
+12. Context hydration failures are per-hit best-effort warnings, not
+   top-level failures.
+13. When `include_context=false`, response entries omit `context`.
+14. Tests do not download or load the real Qodo model; they use an injected fake
    embedding backend.
-10. Existing code-tool registration tests pass after adding the new tool name.
+15. Existing code-tool registration tests pass after adding the new tool name.
 
 ## Verification plan
 
@@ -194,7 +279,10 @@ Then call:
 {
   "query": "signature verification",
   "project": "uw-ios-app",
-  "limit": 10
+  "limit": 10,
+  "backend": "qodo",
+  "include_context": true,
+  "context_limit": 3
 }
 ```
 
@@ -206,6 +294,9 @@ Expected: `ok=true`, non-empty `result`, and manually sensible top hits.
   over-fetch with `candidate_limit`.
 - Qodo backend construction is heavyweight. Mitigation: keep injection seam for
   tests and lazy default construction in production path.
+- Snippet hydration depends on code-context/occurrence indexes and may be
+  unavailable for some hits. Mitigation: make context per-hit best-effort and
+  keep the ranked semantic hit list usable.
 - Existing `EmbeddingBackend` lacks an explicit dimension property. This slice
   does not need dimension checks because G0.5.3 owns index schema and G0.5.4
   already writes vectors.
@@ -216,7 +307,5 @@ Expected: `ok=true`, non-empty `result`, and manually sensible top hits.
 
 - Is `GIM-837` the intended Paperclip issue number for G0.5.5, or should the
   branch/spec be renamed before implementation?
-- Should v1 include a short snippet/context field, or keep metadata-only and
-  require follow-up `get_snippet_rich`?
-- Should backend selection be configurable in the tool call, or fixed to the
-  current default Qodo backend for v1?
+- Confirm final public parameter names: `backend`, `include_context`, and
+  `context_limit`.
