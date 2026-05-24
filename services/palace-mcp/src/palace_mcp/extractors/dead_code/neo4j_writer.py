@@ -21,12 +21,19 @@ MERGE (s:Symbol {qualified_name: $qualified_name, group_id: $group_id})
 MERGE (f)-[:DEAD_SYMBOL]->(s)
 """
 
+_EVICT_STALE_FINDINGS = """
+MATCH (f:DeadFinding {group_id: $group_id})
+WHERE NOT f.finding_id IN $kept_ids
+DETACH DELETE f
+"""
+
 
 @dataclass(frozen=True)
 class DeadFindingWriteSummary:
     nodes_created: int = 0
     relationships_created: int = 0
     properties_set: int = 0
+    nodes_deleted: int = 0
 
 
 async def write_dead_findings(
@@ -35,10 +42,12 @@ async def write_dead_findings(
     findings: list[DeadFinding],
     group_id: str,
 ) -> DeadFindingWriteSummary:
-    """Write :DeadFinding nodes in one transaction per finding."""
+    """Write :DeadFinding nodes then evict stale ones by group_id."""
     total_nodes = 0
     total_rels = 0
     total_props = 0
+
+    kept_ids = [f.finding_id for f in findings]
 
     async with driver.session() as session:
         for finding in findings:
@@ -47,10 +56,15 @@ async def write_dead_findings(
             total_rels += summary.relationships_created
             total_props += summary.properties_set
 
+        evict_summary = await session.execute_write(
+            _evict_stale_findings, group_id, kept_ids
+        )
+
     return DeadFindingWriteSummary(
         nodes_created=total_nodes,
         relationships_created=total_rels,
         properties_set=total_props,
+        nodes_deleted=evict_summary.nodes_deleted,
     )
 
 
@@ -106,6 +120,18 @@ async def _write_finding(
         relationships_created=rels_created,
         properties_set=props_set,
     )
+
+
+async def _evict_stale_findings(
+    tx: Any, group_id: str, kept_ids: list[str]
+) -> DeadFindingWriteSummary:
+    result = await tx.run(
+        _EVICT_STALE_FINDINGS,
+        group_id=group_id,
+        kept_ids=kept_ids,
+    )
+    s = await result.consume()
+    return DeadFindingWriteSummary(nodes_deleted=s.counters.nodes_deleted)
 
 
 def _members_json(finding: DeadFinding) -> str:
