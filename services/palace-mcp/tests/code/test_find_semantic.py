@@ -109,7 +109,9 @@ async def test_invalid_scope_returns_error() -> None:
     from palace_mcp.code.find_semantic import semantic_search
 
     driver = _FakeDriver(lambda _query, _params: _FakeResult())
-    result = await semantic_search(driver=driver, query="wallet", project="a", projects=["b"])
+    result = await semantic_search(
+        driver=driver, query="wallet", project="a", projects=["b"]
+    )
     assert result["ok"] is False
     assert result["error_code"] == "invalid_scope"
 
@@ -145,7 +147,10 @@ async def test_unknown_backend_returns_error() -> None:
         return _FakeResult(single_value={"found_projects": ["wallet-core"]})
 
     driver = _FakeDriver(run_fn)
-    with patch("palace_mcp.code.find_semantic.get_embedding_dispatcher", return_value=dispatcher):
+    with patch(
+        "palace_mcp.code.find_semantic.get_embedding_dispatcher",
+        return_value=dispatcher,
+    ):
         result = await semantic_search(
             driver=driver,
             query="signature verification",
@@ -167,7 +172,10 @@ async def test_embedding_backend_failed_returns_error() -> None:
         return _FakeResult(single_value={"found_projects": ["wallet-core"]})
 
     driver = _FakeDriver(run_fn)
-    with patch("palace_mcp.code.find_semantic.get_embedding_dispatcher", return_value=dispatcher):
+    with patch(
+        "palace_mcp.code.find_semantic.get_embedding_dispatcher",
+        return_value=dispatcher,
+    ):
         result = await semantic_search(
             driver=driver,
             query="signature verification",
@@ -192,7 +200,10 @@ async def test_embeddings_not_ready_returns_warning_without_vector_query() -> No
         raise AssertionError(f"unexpected query: {query}")
 
     driver = _FakeDriver(run_fn)
-    with patch("palace_mcp.code.find_semantic.get_embedding_dispatcher", return_value=dispatcher):
+    with patch(
+        "palace_mcp.code.find_semantic.get_embedding_dispatcher",
+        return_value=dispatcher,
+    ):
         result = await semantic_search(
             driver=driver,
             query="signature verification",
@@ -215,7 +226,9 @@ async def test_success_filters_scope_and_skips_context_when_disabled() -> None:
 
     def run_fn(query: str, params: dict[str, Any]) -> _FakeResult:
         if "collect(p.slug)" in query:
-            return _FakeResult(single_value={"found_projects": ["wallet-a", "wallet-b"]})
+            return _FakeResult(
+                single_value={"found_projects": ["wallet-a", "wallet-b"]}
+            )
         if "embedded_symbol_count" in query:
             return _FakeResult(single_value={"embedded_symbol_count": 3})
         if "queryNodes('symbol_embedding_idx'" in query:
@@ -250,8 +263,14 @@ async def test_success_filters_scope_and_skips_context_when_disabled() -> None:
     driver = _FakeDriver(run_fn)
     cm_session_getter = MagicMock()
     with (
-        patch("palace_mcp.code.find_semantic.get_embedding_dispatcher", return_value=dispatcher),
-        patch("palace_mcp.code.find_semantic.code_router.get_cm_session", cm_session_getter),
+        patch(
+            "palace_mcp.code.find_semantic.get_embedding_dispatcher",
+            return_value=dispatcher,
+        ),
+        patch(
+            "palace_mcp.code.find_semantic.code_router.get_cm_session",
+            cm_session_getter,
+        ),
     ):
         result = await semantic_search(
             driver=driver,
@@ -314,8 +333,14 @@ async def test_context_limit_zero_returns_empty_usage_preview() -> None:
     )
 
     with (
-        patch("palace_mcp.code.find_semantic.get_embedding_dispatcher", return_value=dispatcher),
-        patch("palace_mcp.code.find_semantic.code_router.get_cm_session", return_value=fake_session),
+        patch(
+            "palace_mcp.code.find_semantic.get_embedding_dispatcher",
+            return_value=dispatcher,
+        ),
+        patch(
+            "palace_mcp.code.find_semantic.code_router.get_cm_session",
+            return_value=fake_session,
+        ),
         patch("palace_mcp.code.find_semantic.TantivyBridge") as tantivy_bridge,
     ):
         result = await semantic_search(

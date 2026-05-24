@@ -208,7 +208,11 @@ async def _load_usage_preview(
     if context_limit == 0:
         return [], None, None
     if settings is None or not commit_sha:
-        return [], "usage_preview_unavailable", "commit-scoped usage preview unavailable"
+        return (
+            [],
+            "usage_preview_unavailable",
+            "commit-scoped usage preview unavailable",
+        )
 
     symbol_id = symbol_id_for(qualified_name)
     try:

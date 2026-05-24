@@ -33,6 +33,7 @@ def set_embedding_dispatcher_factory(
     _dispatcher_factory = factory
     _dispatcher_cache = None
 
+
 __all__ = [
     "EmbeddingBackend",
     "EmbeddingBackendDispatcher",
