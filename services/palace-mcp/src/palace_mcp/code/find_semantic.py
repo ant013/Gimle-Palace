@@ -34,7 +34,7 @@ RETURN count(s) AS embedded_symbol_count
 """.strip()
 
 _VECTOR_QUERY = """
-CALL db.index.vector.queryNodes('symbol_embedding_idx', $candidate_limit, $embedding)
+CALL db.index.vector.queryNodes('symbol_embedding_idx', $query_k, $embedding)
 YIELD node, score
 WITH node AS s, score
 WHERE s:Symbol AND s.group_id IN $group_ids
@@ -147,7 +147,7 @@ async def _vector_search(
     embedding: list[float],
     group_ids: list[str],
     limit: int,
-    candidate_limit: int,
+    query_k: int,
 ) -> list[dict[str, Any]]:
     async with driver.session() as session:
         result = await session.run(
@@ -155,7 +155,7 @@ async def _vector_search(
             embedding=embedding,
             group_ids=group_ids,
             limit=limit,
-            candidate_limit=candidate_limit,
+            query_k=query_k,
         )
         return cast(list[dict[str, Any]], await result.data())
 
@@ -362,12 +362,13 @@ async def semantic_search(
         }
 
     candidate_limit = _candidate_limit(limit, len(scope_projects))
+    query_k = min(candidate_limit, embedded_symbol_count)
     rows = await _vector_search(
         driver,
         embedding=query_embedding,
         group_ids=group_ids,
         limit=limit,
-        candidate_limit=candidate_limit,
+        query_k=query_k,
     )
 
     result_rows: list[dict[str, Any]] = []

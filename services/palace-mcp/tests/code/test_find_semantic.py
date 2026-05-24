@@ -232,7 +232,7 @@ async def test_success_filters_scope_and_skips_context_when_disabled() -> None:
         if "embedded_symbol_count" in query:
             return _FakeResult(single_value={"embedded_symbol_count": 3})
         if "queryNodes('symbol_embedding_idx'" in query:
-            assert params["candidate_limit"] == 50
+            assert params["query_k"] == 3
             assert params["limit"] == 2
             return _FakeResult(
                 data_value=[
@@ -283,11 +283,62 @@ async def test_success_filters_scope_and_skips_context_when_disabled() -> None:
     assert backend.calls == ["signature verification"]
     assert result["ok"] is True
     assert result["returned_count"] == 2
+    assert result["candidate_limit"] == 50
     assert result["result"][0]["project"] == "wallet-a"
     assert result["result"][1]["project"] == "wallet-b"
     assert "context" not in result["result"][0]
     assert result["warnings"] == []
     cm_session_getter.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_vector_query_k_is_bounded_by_embedded_symbol_count() -> None:
+    from palace_mcp.code.find_semantic import semantic_search
+
+    backend = _FakeBackend()
+    dispatcher = EmbeddingBackendDispatcher({"qodo": backend}, default_backend="qodo")
+
+    def run_fn(query: str, params: dict[str, Any]) -> _FakeResult:
+        if "collect(p.slug)" in query:
+            return _FakeResult(single_value={"found_projects": ["wallet-core"]})
+        if "embedded_symbol_count" in query:
+            return _FakeResult(single_value={"embedded_symbol_count": 1})
+        if "queryNodes('symbol_embedding_idx'" in query:
+            assert params["query_k"] == 1
+            return _FakeResult(
+                data_value=[
+                    {
+                        "group_id": "project/wallet-core",
+                        "qualified_name": "Crypto.verify",
+                        "kind": "function",
+                        "file_path": "Sources/A.swift",
+                        "module_name": "WalletCore",
+                        "embedding_input_hash": "hash-a",
+                        "commit_sha": None,
+                        "score": 0.91,
+                    }
+                ]
+            )
+        raise AssertionError(f"unexpected query: {query}")
+
+    driver = _FakeDriver(run_fn)
+    with patch(
+        "palace_mcp.code.find_semantic.get_embedding_dispatcher",
+        return_value=dispatcher,
+    ):
+        result = await semantic_search(
+            driver=driver,
+            query="signature verification",
+            project="wallet-core",
+            include_context=False,
+            limit=1,
+        )
+
+    assert result["ok"] is True
+    assert result["candidate_limit"] == 50
+    assert result["embedded_symbol_count"] == 1
+    assert result["returned_count"] == 1
+    assert result["warnings"] == []
 
 
 @pytest.mark.asyncio
