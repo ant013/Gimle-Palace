@@ -53,9 +53,9 @@ In scope:
   - `limit`
   - `returned_count`
   - `warnings[]`
-  - `result[]` with `project`, `group_id`, `symbol_id`, `qualified_name`,
-    `kind`, `file_path`, `module_name`, `score`, optional
-    `embedding_input_hash`, and optional `context`.
+  - `result[]` with `project`, `group_id`, `qualified_name`,
+    `occurrence_symbol_id`, `kind`, `file_path`, `module_name`, `score`,
+    optional `embedding_input_hash`, and optional `context`.
 - Add best-effort context hydration:
   - snippet from the existing code-context/snippet path when available;
   - usage preview from Tantivy when available, capped by `context_limit`.
@@ -83,8 +83,8 @@ Out of scope:
 - `services/palace-mcp/tests/test_mcp_server.py`
 - `services/palace-mcp/tests/code/test_find_semantic.py` or equivalent focused
   test module
-- Potentially `services/palace-mcp/src/palace_mcp/embeddings/__init__.py` only
-  if a small factory/helper is needed to avoid duplicating backend construction.
+- `services/palace-mcp/src/palace_mcp/embeddings/__init__.py` or equivalent
+  process-scoped factory for a lazy MCP embedding dispatcher/backend cache.
 
 ## Design
 
@@ -128,17 +128,31 @@ Validation:
 - If a registered scope has no embedded symbols, return `ok=true`,
   `returned_count=0`, `result=[]`, and a warning code
   `embeddings_not_ready`.
+- Project validation must use `MATCH (p:Project {slug: $slug})` or equivalent
+  direct `p.slug` matching. Do not use helper paths that alias `p.name AS slug`.
 
 ### Query flow
 
 1. Resolve scope slugs from `project` or `projects`.
 2. Resolve `group_ids = [f"project/{slug}" for slug in scope]`.
-3. Verify every requested `(:Project {slug})` exists.
+3. Verify every requested `(:Project {slug})` exists by direct `p.slug` lookup.
 4. Resolve embedding backend. `backend=None` uses the default dispatcher backend,
    currently Qodo.
 5. Compute `query_embedding = backend.embed_text(query)` through
    `asyncio.to_thread` or an equivalent executor-backed boundary.
-6. Query Neo4j:
+6. Preflight scoped embedding readiness:
+
+```cypher
+MATCH (s:Symbol)
+WHERE s.group_id IN $group_ids AND s.embedding IS NOT NULL
+RETURN count(s) AS embedded_symbol_count
+```
+
+If `embedded_symbol_count == 0`, return `ok=true`, `returned_count=0`,
+`result=[]`, and `warnings[] = [{"code": "embeddings_not_ready", ...}]`
+without running vector search.
+
+7. Query Neo4j:
 
 ```cypher
 CALL db.index.vector.queryNodes('symbol_embedding_idx', $candidate_limit, $embedding)
@@ -165,21 +179,32 @@ over-fetch and report that behavior:
 - The response includes `candidate_limit`.
 - `returned_count` is the number of returned rows, not the total number of
   possible semantic matches.
+- The response includes `embedded_symbol_count` for the requested scope.
 - If fewer than `limit` rows are returned, the response may include
   `warnings[] = [{"code": "scope_filter_underfilled", ...}]`.
+- v1 has no hard relevance threshold; a scoped result set with embeddings but
+  zero returned hits should be treated as candidate starvation/filter
+  underfill, not proof that no semantic match exists.
 
 ### Context hydration
 
 For each returned symbol, if `include_context=true`:
 
-1. Use the hit's `project`, `group_id`, and `symbol_id` as the context lookup
-   scope. Do not hydrate context from `qualified_name` alone.
+1. Use the hit's `project`, `group_id`, and `qualified_name` as the context
+   lookup scope. Do not hydrate context from `qualified_name` without the hit's
+   source project.
 2. Translate the public project slug to the code-context project name when
    calling code-context providers.
-3. Hydrate a snippet through the existing code-context path when possible.
-4. Ask the occurrence index for a usage preview only when it can be constrained
-   to the hit's project/commit scope.
-5. Attach a `context` object. Missing context does not turn the whole response
+3. Hydrate a snippet through the existing code-context path by calling CM with
+   `qualified_name` and the translated project name when possible.
+4. Compute `occurrence_symbol_id = symbol_id_for(qualified_name)` for
+   occurrence lookups. This is a signed i64 Tantivy join key, not the primary
+   public hit identity.
+5. Ask the occurrence index for a usage preview only when a project/commit scope
+   can be resolved for the hit and the commit-scoped occurrence API can be used.
+   If not, omit `usages_preview` and attach a per-hit warning code such as
+   `usage_preview_unavailable`.
+6. Attach a `context` object. Missing context does not turn the whole response
    into an error; it sets `context.available=false` and includes
    `context.warning_code` plus optional `context.warning`.
 
@@ -204,14 +229,15 @@ Success:
   "include_context": true,
   "limit": 10,
   "candidate_limit": 200,
+  "embedded_symbol_count": 18421,
   "returned_count": 2,
   "warnings": [],
   "result": [
     {
       "project": "uw-ios-app",
       "group_id": "project/uw-ios-app",
-      "symbol_id": "Module.Type.method()",
       "qualified_name": "Module.Type.method()",
+      "occurrence_symbol_id": -8070450532247928833,
       "kind": "function",
       "file_path": "Sources/Module/File.swift",
       "module_name": "Module",
@@ -245,8 +271,8 @@ If context cannot be hydrated for a hit:
 {
   "project": "uw-ios-app",
   "group_id": "project/uw-ios-app",
-  "symbol_id": "Module.Type.method()",
   "qualified_name": "Module.Type.method()",
+  "occurrence_symbol_id": -8070450532247928833,
   "kind": "function",
   "file_path": "Sources/Module/File.swift",
   "module_name": "Module",
@@ -285,17 +311,19 @@ Error:
    backend error envelope.
 9. Successful path calls the selected embedding backend once with the raw query
    text through an off-event-loop boundary.
-10. The MCP server does not construct a new Qodo model per request.
+10. The MCP server obtains embedding backends through a process-scoped lazy
+   dispatcher/backend cache and does not construct a new Qodo model per request.
 11. Successful path calls
    `db.index.vector.queryNodes('symbol_embedding_idx', ...)`.
 12. Successful path filters results to the requested `group_ids`.
 13. Cross-project success returns each hit with its source `project` and
    `group_id`.
 14. Registered scope with no embedded symbols returns `ok=true`,
-   `returned_count=0`, and `result=[]`.
+   `returned_count=0`, `result=[]`, `embedded_symbol_count=0`, and
+   `warnings[].code="embeddings_not_ready"`.
 15. Successful response preserves descending score order and includes
-   `project`, `group_id`, `symbol_id`, `qualified_name`, `kind`, `file_path`,
-   `module_name`, and `score`.
+   `project`, `group_id`, `qualified_name`, `occurrence_symbol_id`, `kind`,
+   `file_path`, `module_name`, and `score`.
 16. When `include_context=true`, response entries include a `context` object.
 17. Context hydration failures are per-hit best-effort warnings, not
    top-level failures.
@@ -304,8 +332,14 @@ Error:
 19. `context_limit=0` returns an empty `usages_preview`.
 20. Tests do not download or load the real Qodo model; they use an injected fake
    embedding backend.
-21. Existing code-tool registration tests pass after adding the new tool name.
-22. Streamable HTTP integration coverage verifies `tools/list` and a seeded
+21. Two semantic-search tool invocations reuse the same injected backend or
+   dispatcher instance in tests.
+22. Project validation tests cover `p.slug != p.name` and prove validation uses
+   `p.slug`.
+23. A cross-project test covers two projects with the same `qualified_name` and
+   proves each hit keeps the correct source `project/group_id`.
+24. Existing code-tool registration tests pass after adding the new tool name.
+25. Streamable HTTP integration coverage verifies `tools/list` and a seeded
    `call_tool` path with a fake backend.
 
 ## Verification plan
@@ -357,7 +391,8 @@ and manually sensible top hits.
   keep the ranked semantic hit list usable.
 - Cross-project context can become ambiguous if hydrated from
   `qualified_name` alone. Mitigation: carry `project`, `group_id`, and
-  `symbol_id` on each hit and scope context providers to the hit's project.
+  `qualified_name` on each hit and scope context providers to the hit's project;
+  use `occurrence_symbol_id` only as the Tantivy join key.
 - Existing `EmbeddingBackend` lacks an explicit dimension property. This slice
   does not need dimension checks because G0.5.3 owns index schema and G0.5.4
   already writes vectors.
