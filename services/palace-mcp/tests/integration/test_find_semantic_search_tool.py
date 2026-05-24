@@ -49,10 +49,16 @@ def _ensure_vector_schema_ready(
                         """
                     )
                     row = await result.single()
-                if row is not None and row["type"] == "VECTOR" and row["state"] == "ONLINE":
+                if (
+                    row is not None
+                    and row["type"] == "VECTOR"
+                    and row["state"] == "ONLINE"
+                ):
                     return
                 if time.monotonic() >= deadline:
-                    raise RuntimeError("symbol_embedding_idx did not reach ONLINE state")
+                    raise RuntimeError(
+                        "symbol_embedding_idx did not reach ONLINE state"
+                    )
                 await asyncio.sleep(0.1)
         finally:
             await driver.close()
