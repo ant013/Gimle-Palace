@@ -1,5 +1,10 @@
 """Productized runtime smoke contracts (GIM-839 D0)."""
 
+from palace_mcp.smoke.preflight import (
+    PreflightCheck,
+    PreflightReport,
+    run_preflight,
+)
 from palace_mcp.smoke.recipe import BuildConfig, EnsureConfigFromTemplate, Recipe
 from palace_mcp.smoke.runner import (
     SMOKE_STAGES,
@@ -24,6 +29,8 @@ from palace_mcp.smoke.xcode_workspace import (
 __all__ = [
     "BuildConfig",
     "EnsureConfigFromTemplate",
+    "PreflightCheck",
+    "PreflightReport",
     "Recipe",
     "RunReport",
     "RuntimeBinding",
@@ -37,5 +44,6 @@ __all__ = [
     "build_swift_package_invocation",
     "build_xcode_workspace_invocation",
     "resolve_simulator_arch",
+    "run_preflight",
     "write_report_json",
 ]

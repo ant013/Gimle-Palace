@@ -8,6 +8,7 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 from palace_mcp.smoke.mcp_caller import ExtractorResult, McpCallError
+from palace_mcp.smoke.preflight import PreflightCheck, PreflightReport
 from palace_mcp.smoke.recipe import Recipe
 from palace_mcp.smoke.runner import (
     SMOKE_STAGES,
@@ -18,6 +19,13 @@ from palace_mcp.smoke.runner import (
     write_report_json,
 )
 from palace_mcp.smoke.runtime_binding import RuntimeBinding
+
+
+def _passing_preflight_report() -> PreflightReport:
+    return PreflightReport(
+        checks=[PreflightCheck(name="stub", passed=True)],
+        passed=True,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -83,8 +91,11 @@ def _failed_extractor(name: str, message: str = "boom") -> ExtractorResult:
 # ---------------------------------------------------------------------------
 
 
+@patch(
+    "palace_mcp.smoke.runner.run_preflight", return_value=_passing_preflight_report()
+)
 class TestStageOrder:
-    def test_smoke_stages_constant_is_deterministic(self) -> None:
+    def test_smoke_stages_constant_is_deterministic(self, _pf: Any) -> None:
         assert SMOKE_STAGES == (
             "preflight",
             "prepare",
@@ -94,7 +105,7 @@ class TestStageOrder:
             "report",
         )
 
-    async def test_stages_execute_in_order(self, tmp_path: Path) -> None:
+    async def test_stages_execute_in_order(self, _pf: Any, tmp_path: Path) -> None:
         recipe = _make_recipe()
         binding = _make_binding(tmp_path)
         runner = SmokeRunner(recipe, binding, dry_run=True)
@@ -103,14 +114,14 @@ class TestStageOrder:
         stage_names = [s.stage for s in report.stages]
         assert stage_names == list(SMOKE_STAGES)
 
-    async def test_mode_is_smoke(self, tmp_path: Path) -> None:
+    async def test_mode_is_smoke(self, _pf: Any, tmp_path: Path) -> None:
         recipe = _make_recipe()
         binding = _make_binding(tmp_path)
         runner = SmokeRunner(recipe, binding, dry_run=True)
         report = await runner.run_smoke()
         assert report.mode == "smoke"
 
-    async def test_mode_is_semantic_probe(self, tmp_path: Path) -> None:
+    async def test_mode_is_semantic_probe(self, _pf: Any, tmp_path: Path) -> None:
         recipe = _make_recipe()
         binding = _make_binding(tmp_path)
         runner = SmokeRunner(recipe, binding, dry_run=True)
@@ -123,8 +134,11 @@ class TestStageOrder:
 # ---------------------------------------------------------------------------
 
 
+@patch(
+    "palace_mcp.smoke.runner.run_preflight", return_value=_passing_preflight_report()
+)
 class TestDryRun:
-    async def test_skips_mutating_stages(self, tmp_path: Path) -> None:
+    async def test_skips_mutating_stages(self, _pf: Any, tmp_path: Path) -> None:
         recipe = _make_recipe()
         binding = _make_binding(tmp_path)
         runner = SmokeRunner(recipe, binding, dry_run=True)
@@ -137,7 +151,7 @@ class TestDryRun:
                     f"{stage.stage} should be SKIPPED in dry-run"
                 )
 
-    async def test_preflight_still_runs(self, tmp_path: Path) -> None:
+    async def test_preflight_still_runs(self, _pf: Any, tmp_path: Path) -> None:
         recipe = _make_recipe()
         binding = _make_binding(tmp_path)
         runner = SmokeRunner(recipe, binding, dry_run=True)
@@ -146,7 +160,7 @@ class TestDryRun:
         preflight = next(s for s in report.stages if s.stage == "preflight")
         assert preflight.status == StageStatus.PASSED
 
-    async def test_prepare_still_runs(self, tmp_path: Path) -> None:
+    async def test_prepare_still_runs(self, _pf: Any, tmp_path: Path) -> None:
         recipe = _make_recipe()
         binding = _make_binding(tmp_path)
         runner = SmokeRunner(recipe, binding, dry_run=True)
@@ -155,14 +169,14 @@ class TestDryRun:
         prepare = next(s for s in report.stages if s.stage == "prepare")
         assert prepare.status == StageStatus.PASSED
 
-    async def test_dry_run_flag_in_report(self, tmp_path: Path) -> None:
+    async def test_dry_run_flag_in_report(self, _pf: Any, tmp_path: Path) -> None:
         recipe = _make_recipe()
         binding = _make_binding(tmp_path)
         runner = SmokeRunner(recipe, binding, dry_run=True)
         report = await runner.run_smoke()
         assert report.dry_run is True
 
-    async def test_dry_run_passes_overall(self, tmp_path: Path) -> None:
+    async def test_dry_run_passes_overall(self, _pf: Any, tmp_path: Path) -> None:
         recipe = _make_recipe()
         binding = _make_binding(tmp_path)
         runner = SmokeRunner(recipe, binding, dry_run=True)
@@ -175,8 +189,23 @@ class TestDryRun:
 # ---------------------------------------------------------------------------
 
 
+def _failing_preflight_report() -> PreflightReport:
+    return PreflightReport(
+        checks=[
+            PreflightCheck(name="repo_path", passed=False, message="repo not found")
+        ],
+        passed=False,
+        actionable_failures=["repo not found"],
+    )
+
+
+@patch(
+    "palace_mcp.smoke.runner.run_preflight", return_value=_failing_preflight_report()
+)
 class TestFailurePropagation:
-    async def test_preflight_failure_skips_subsequent(self, tmp_path: Path) -> None:
+    async def test_preflight_failure_skips_subsequent(
+        self, _pf: Any, tmp_path: Path
+    ) -> None:
         recipe = _make_recipe()
         binding = RuntimeBinding(
             repo_path=tmp_path / "repos" / "nonexistent",
@@ -202,7 +231,9 @@ class TestFailurePropagation:
                     f"{stage.stage} should be SKIPPED after preflight failure"
                 )
 
-    async def test_report_always_runs_after_failure(self, tmp_path: Path) -> None:
+    async def test_report_always_runs_after_failure(
+        self, _pf: Any, tmp_path: Path
+    ) -> None:
         recipe = _make_recipe()
         binding = RuntimeBinding(
             repo_path=tmp_path / "repos" / "nonexistent",
@@ -217,7 +248,7 @@ class TestFailurePropagation:
         report_stage = next(s for s in report.stages if s.stage == "report")
         assert report_stage.status == StageStatus.PASSED
 
-    async def test_failed_run_is_not_passed(self, tmp_path: Path) -> None:
+    async def test_failed_run_is_not_passed(self, _pf: Any, tmp_path: Path) -> None:
         recipe = _make_recipe()
         binding = RuntimeBinding(
             repo_path=tmp_path / "repos" / "nonexistent",
@@ -236,11 +267,14 @@ class TestFailurePropagation:
 # ---------------------------------------------------------------------------
 
 
+@patch(
+    "palace_mcp.smoke.runner.run_preflight", return_value=_passing_preflight_report()
+)
 class TestExtractorPartialFailure:
     @patch("palace_mcp.smoke.runner.mcp_caller")
     @patch("palace_mcp.smoke.runner.asyncio.create_subprocess_exec")
     async def test_partial_failure_continues(
-        self, mock_subprocess: AsyncMock, mock_mcp: AsyncMock, tmp_path: Path
+        self, mock_subprocess: AsyncMock, mock_mcp: AsyncMock, _pf: Any, tmp_path: Path
     ) -> None:
         recipe = _make_recipe(
             extractors=["symbol_index_swift", "dead_code", "embedding_symbol"]
@@ -284,7 +318,7 @@ class TestExtractorPartialFailure:
     @patch("palace_mcp.smoke.runner.mcp_caller")
     @patch("palace_mcp.smoke.runner.asyncio.create_subprocess_exec")
     async def test_extractor_call_error_captured(
-        self, mock_subprocess: AsyncMock, mock_mcp: AsyncMock, tmp_path: Path
+        self, mock_subprocess: AsyncMock, mock_mcp: AsyncMock, _pf: Any, tmp_path: Path
     ) -> None:
         recipe = _make_recipe(extractors=["symbol_index_swift"])
         binding = _make_binding(tmp_path)
@@ -323,11 +357,14 @@ class TestExtractorPartialFailure:
 # ---------------------------------------------------------------------------
 
 
+@patch(
+    "palace_mcp.smoke.runner.run_preflight", return_value=_passing_preflight_report()
+)
 class TestSuccessfulRun:
     @patch("palace_mcp.smoke.runner.mcp_caller")
     @patch("palace_mcp.smoke.runner.asyncio.create_subprocess_exec")
     async def test_all_stages_pass(
-        self, mock_subprocess: AsyncMock, mock_mcp: AsyncMock, tmp_path: Path
+        self, mock_subprocess: AsyncMock, mock_mcp: AsyncMock, _pf: Any, tmp_path: Path
     ) -> None:
         recipe = _make_recipe()
         binding = _make_binding(tmp_path)
@@ -366,7 +403,7 @@ class TestSuccessfulRun:
     @patch("palace_mcp.smoke.runner.mcp_caller")
     @patch("palace_mcp.smoke.runner.asyncio.create_subprocess_exec")
     async def test_report_has_timing(
-        self, mock_subprocess: AsyncMock, mock_mcp: AsyncMock, tmp_path: Path
+        self, mock_subprocess: AsyncMock, mock_mcp: AsyncMock, _pf: Any, tmp_path: Path
     ) -> None:
         recipe = _make_recipe()
         binding = _make_binding(tmp_path)
@@ -402,8 +439,11 @@ class TestSuccessfulRun:
 # ---------------------------------------------------------------------------
 
 
+@patch(
+    "palace_mcp.smoke.runner.run_preflight", return_value=_passing_preflight_report()
+)
 class TestReportWriter:
-    async def test_write_report_json(self, tmp_path: Path) -> None:
+    async def test_write_report_json(self, _pf: Any, tmp_path: Path) -> None:
         recipe = _make_recipe()
         binding = _make_binding(tmp_path)
         runner = SmokeRunner(recipe, binding, dry_run=True)
@@ -425,8 +465,13 @@ class TestReportWriter:
 # ---------------------------------------------------------------------------
 
 
+@patch(
+    "palace_mcp.smoke.runner.run_preflight", return_value=_passing_preflight_report()
+)
 class TestReportStageContent:
-    async def test_report_stage_contains_stage_summaries(self, tmp_path: Path) -> None:
+    async def test_report_stage_contains_stage_summaries(
+        self, _pf: Any, tmp_path: Path
+    ) -> None:
         recipe = _make_recipe()
         binding = _make_binding(tmp_path)
         runner = SmokeRunner(recipe, binding, dry_run=True)
