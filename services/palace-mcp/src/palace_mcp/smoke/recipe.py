@@ -6,9 +6,12 @@ checkout paths live exclusively in RuntimeBinding (see runtime_binding.py).
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Annotated, Literal, Union
 
+import yaml
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -46,31 +49,49 @@ class BuildConfig(BaseModel, frozen=True):
 
 
 # ---------------------------------------------------------------------------
-# Absolute-path detector
+# Path safety checks
 # ---------------------------------------------------------------------------
+
+_TRAVERSAL_RE = re.compile(r"(^|/)\.\.(/|$)")
 
 
 def _looks_absolute(value: str) -> bool:
     return value.startswith("/")
 
 
-def _check_no_absolute_paths(values: Mapping[str, object]) -> None:
-    """Raise ValueError if any string field contains an absolute path."""
+def _has_traversal(value: str) -> bool:
+    return bool(_TRAVERSAL_RE.search(value))
+
+
+def _check_path_safety(values: Mapping[str, object]) -> None:
+    """Raise ValueError for absolute paths or path traversal."""
     for field_name, value in values.items():
         if field_name in ("type",):
             continue
-        if isinstance(value, str) and _looks_absolute(value):
-            raise ValueError(
-                f"absolute path in versioned recipe field '{field_name}': "
-                f"'{value}' — use RuntimeBinding for machine-local paths"
-            )
+        if isinstance(value, str):
+            if _looks_absolute(value):
+                raise ValueError(
+                    f"absolute path in versioned recipe field '{field_name}': "
+                    f"'{value}' — use RuntimeBinding for machine-local paths"
+                )
+            if _has_traversal(value):
+                raise ValueError(
+                    f"path traversal in versioned recipe field '{field_name}': "
+                    f"'{value}'"
+                )
         if isinstance(value, list):
             for i, item in enumerate(value):
-                if isinstance(item, str) and _looks_absolute(item):
-                    raise ValueError(
-                        f"absolute path in versioned recipe field "
-                        f"'{field_name}[{i}]': '{item}'"
-                    )
+                if isinstance(item, str):
+                    if _looks_absolute(item):
+                        raise ValueError(
+                            f"absolute path in versioned recipe field "
+                            f"'{field_name}[{i}]': '{item}'"
+                        )
+                    if _has_traversal(item):
+                        raise ValueError(
+                            f"path traversal in versioned recipe field "
+                            f"'{field_name}[{i}]': '{item}'"
+                        )
 
 
 # ---------------------------------------------------------------------------
@@ -86,7 +107,7 @@ class Recipe(BaseModel, frozen=True, extra="forbid"):
     language: Literal["swift"]
     build_system: Literal["xcode_workspace", "xcode_project", "swift_package"]
 
-    source_roots: list[str]
+    source_roots: list[str] = Field(min_length=1)
     workspace_package_roots: list[str] = []
     dependency_roots: list[str] = []
     generated_roots: list[str] = []
@@ -95,10 +116,15 @@ class Recipe(BaseModel, frozen=True, extra="forbid"):
     scip_path: str
     prepare_steps: list[PrepareStep] = []
     build: BuildConfig
-    extractors: list[str]
+    extractors: list[str] = Field(min_length=1)
 
     @model_validator(mode="after")
-    def _reject_absolute_paths(self) -> Recipe:
+    def _validate_recipe(self) -> Recipe:
+        self._reject_unsafe_paths()
+        self._validate_build_target()
+        return self
+
+    def _reject_unsafe_paths(self) -> None:
         path_fields = {
             "scip_path": self.scip_path,
             "source_roots": self.source_roots,
@@ -107,17 +133,34 @@ class Recipe(BaseModel, frozen=True, extra="forbid"):
             "generated_roots": self.generated_roots,
             "derived_roots": self.derived_roots,
         }
-        _check_no_absolute_paths(path_fields)
+        _check_path_safety(path_fields)
 
-        if self.build.workspace and _looks_absolute(self.build.workspace):
-            raise ValueError(
-                f"absolute path in build.workspace: '{self.build.workspace}'"
-            )
-        if self.build.project and _looks_absolute(self.build.project):
-            raise ValueError(f"absolute path in build.project: '{self.build.project}'")
+        if self.build.workspace:
+            if _looks_absolute(self.build.workspace):
+                raise ValueError(
+                    f"absolute path in build.workspace: '{self.build.workspace}'"
+                )
+            if _has_traversal(self.build.workspace):
+                raise ValueError(
+                    f"path traversal in build.workspace: '{self.build.workspace}'"
+                )
+        if self.build.project:
+            if _looks_absolute(self.build.project):
+                raise ValueError(
+                    f"absolute path in build.project: '{self.build.project}'"
+                )
+            if _has_traversal(self.build.project):
+                raise ValueError(
+                    f"path traversal in build.project: '{self.build.project}'"
+                )
         if _looks_absolute(self.build.derived_data_path):
             raise ValueError(
                 f"absolute path in build.derived_data_path: "
+                f"'{self.build.derived_data_path}'"
+            )
+        if _has_traversal(self.build.derived_data_path):
+            raise ValueError(
+                f"path traversal in build.derived_data_path: "
                 f"'{self.build.derived_data_path}'"
             )
 
@@ -127,6 +170,17 @@ class Recipe(BaseModel, frozen=True, extra="forbid"):
                     "prepare_steps.template": step.template,
                     "prepare_steps.destination": step.destination,
                 }
-                _check_no_absolute_paths(step_fields)
+                _check_path_safety(step_fields)
 
-        return self
+    def _validate_build_target(self) -> None:
+        if self.build_system == "xcode_workspace" and not self.build.workspace:
+            raise ValueError("build_system 'xcode_workspace' requires build.workspace")
+        if self.build_system == "xcode_project" and not self.build.project:
+            raise ValueError("build_system 'xcode_project' requires build.project")
+
+
+def load_recipe_yaml(path: Path) -> Recipe:
+    """Load a Recipe from a YAML file."""
+    with open(path) as f:
+        data = yaml.safe_load(f)
+    return Recipe.model_validate(data)

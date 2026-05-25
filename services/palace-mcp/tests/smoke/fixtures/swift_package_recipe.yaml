@@ -1,0 +1,15 @@
+slug: bitcoin-kit
+name: bitcoin-kit-ios
+language: swift
+build_system: swift_package
+source_roots:
+  - Sources
+dependency_roots:
+  - .build
+scip_path: scip/index.scip
+build:
+  scheme: BitcoinKit
+  package_resolution: locked
+extractors:
+  - symbol_index_swift
+  - dead_code
