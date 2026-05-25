@@ -250,9 +250,7 @@ class SmokeRunner:
             }
 
         if self._recipe.build_system == "swift_package":
-            spm_invocation = build_swift_package_invocation(
-                self._recipe, self._binding
-            )
+            spm_invocation = build_swift_package_invocation(self._recipe, self._binding)
             if spm_invocation.scip_reused:
                 scip_path = self._binding.repo_path / self._recipe.scip_path
                 return {
