@@ -56,7 +56,7 @@ _TRAVERSAL_RE = re.compile(r"(^|/)\.\.(/|$)")
 
 
 def _looks_absolute(value: str) -> bool:
-    return value.startswith("/")
+    return value.startswith(("/", "absolute:"))
 
 
 def _has_traversal(value: str) -> bool:
