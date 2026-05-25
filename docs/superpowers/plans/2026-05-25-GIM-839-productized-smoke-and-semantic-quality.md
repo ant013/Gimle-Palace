@@ -6,28 +6,38 @@
 - Target branch: `develop`
 - Spec:
   `docs/superpowers/specs/2026-05-25-GIM-839-productized-smoke-and-semantic-quality_spec.md`
-- Status: rev3 spec-only branch; wait for review before implementation changes.
+- Status: rev4 spec-only branch; wait for review before implementation changes.
 
 ## Objective
 
 Split the GIM-839 follow-up into tasks that can be assigned to Claude and
-Codex/CX in parallel where safe. Rev2/rev3 adds explicit contract tasks before
+Codex/CX in parallel where safe. Rev2-rev4 adds explicit contract tasks before
 parallel work so agents do not implement incompatible recipe, metadata, or
 snippet boundaries.
 
-## Suggested Issue Structure
+## Plan Type
 
-If Paperclip supports child issues, keep one parent and four children:
+This is an orchestration and routing plan, not a per-slice TDD implementation
+plan. Each child issue created by the CEO/walker must still produce its own
+Paperclip phase plan with failing-test -> implementation -> verification steps
+before code changes. This file is the dependency, ownership, and scheduling
+contract for those child plans.
 
-- Parent: `GIM-839` follow-up: Productized runtime smoke and semantic quality.
-- Child A: `GIM-839A` Productized runtime smoke recipes and runner.
-- Child B: `GIM-839B` Semantic search source scoping, ranking, and snippets.
-- Child C: `GIM-839C` MacBook runtime evidence and golden query validation.
-- Child D: `GIM-839D` metadata/API contract lock, if the team wants a
-  separate short gate before implementation.
+## Canonical Decomposition
 
-If issue ids must be unique top-level tickets, create separate tickets with the
-same titles and link them back to GIM-839.
+The canonical unit of work is a slice row in the DAG table below. Do not create
+track-sized children such as "all Track A" or "all Track B"; those are too broad
+for review and make QA evidence ambiguous.
+
+Paperclip may assign real issue numbers. The stable slice ids are:
+
+- `D0`: contract lock, includes A0 and B0.
+- `A1` through `A7`: runtime smoke productization.
+- `B1` through `B6`: semantic search quality.
+- `C1` through `C3`: runtime and product evidence.
+
+Titles should include the slice id, for example
+`GIM-839 A5: Xcode workspace adapter and UW recipe`.
 
 ## CEO Walker Execution Protocol
 
@@ -48,104 +58,154 @@ bounded child issue creation. The CEO/walker is a dispatcher, not an implementer
   - at most one active child per available CTO for non-blocking work;
   - updated slice status comments when children close.
 
+The parent issue status comment is the single source of truth for slice state.
+Use this structured block and update it in place:
+
+```markdown
+<!-- GIM-839-WALKER-STATUS -->
+| Slice | State | Owner | Issue | Branch | Merged SHA | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| D0 | pending | Claude CTO | - | - | - | contract lock |
+| A1 | pending | Claude CTO | - | - | - | blocked by D0 |
+| A2 | pending | Claude CTO | - | - | - | can run after spec approval |
+| A3 | pending | Claude CTO | - | - | - | blocked by D0,A2 |
+| A4 | pending | Claude CTO | - | - | - | blocked by D0,A1 |
+| A5 | pending | Codex/CX CTO | - | - | - | blocked by D0,A1 |
+| A6 | pending | Claude CTO | - | - | - | blocked by D0 |
+| A7 | pending | Claude CTO | - | - | - | blocked by A3,A5,A6 |
+| B1 | pending | Claude CTO | - | - | - | blocked by D0 |
+| B2 | pending | Claude CTO | - | - | - | blocked by D0 |
+| B3 | pending | Claude CTO | - | - | - | blocked by D0,B1 |
+| B4 | pending | Claude CTO | - | - | - | blocked by D0,B3 |
+| B5 | pending | Claude CTO | - | - | - | blocked by D0 |
+| B6 | pending | Claude CTO | - | - | - | blocked by B3,B4,B5 |
+| C1 | pending | Operator/Codex QA | - | - | - | blocked by A3,A4,A5,A6 |
+| C2 | pending | Codex/CX QA | - | - | - | blocked by A3,A4,A5,A6,B1,B2 |
+| C3 | pending | Claude QA | - | - | - | blocked by B3,B4,B5,B6,C2 |
+<!-- /GIM-839-WALKER-STATUS -->
+```
+
+Allowed states: `pending`, `active`, `blocked`, `merged`, `skipped`.
+Only `merged` counts as done for dependency checks.
+
 ### Pick Rule
 
 1. Read this plan top-to-bottom.
 2. Skip slices already marked done in the parent issue status comment.
 3. Find the first not-done slice whose dependencies are satisfied.
-4. If the slice is blocking, create one child issue for the required CTO and
-   block the CEO parent until the child closes.
+4. If the slice is blocking, create one child issue for the required CTO and do
+   not create work that depends on it until it closes. The CEO may still create
+   independent ready slices whose dependencies are already satisfied, such as
+   A2 while D0 is active.
 5. If the slice is non-blocking, assign it to the correct free CTO, then scan
    forward for one compatible non-blocking slice for the second free CTO.
 6. Do not create child issues for a CTO that already has an active child.
 7. Do not create downstream validation children until their dependency slices
    are closed.
-8. If the dependency graph or ownership is ambiguous, comment on the CEO parent
+8. If the preferred CTO is unavailable for two consecutive pick cycles and the
+   slice declares a fallback owner, assign the fallback owner instead of waiting
+   indefinitely.
+9. If the dependency graph or ownership is ambiguous, comment on the CEO parent,
+   PATCH the issue assignee/status so Paperclip wakes the operator-facing agent,
    and wait for operator input instead of guessing.
+
+A CTO is "free" only when there is no `active` child assigned to that CTO in the
+structured status block and no known active Paperclip run for that CTO on this
+GIM-839 parent. A child is active from creation until it reaches `merged`,
+`skipped`, or a reopened failure state.
 
 ### Completion Rule
 
 When a child closes:
 
 1. CEO/walker reads the child close summary and merged branch/commit/PR.
-2. CEO/walker marks the matching slice done in the parent issue status comment.
-3. CEO/walker records any follow-up blockers reported by the child.
-4. CEO/walker re-runs the pick rule.
-5. When all slices are done, CEO/walker posts the final rollup and closes the
+2. CEO/walker verifies the child landed on `develop` with a merge/squash SHA.
+3. If no merged-to-`develop` SHA exists, CEO/walker does not mark the slice
+   done. It reopens, respawns, or escalates the child based on the close reason.
+4. CEO/walker marks the matching slice `merged` in the parent status block only
+   after the merge SHA is known.
+5. CEO/walker records any follow-up blockers reported by the child.
+6. CEO/walker re-runs the pick rule.
+7. When all slices are done, CEO/walker posts the final rollup and closes the
    parent.
 
 ### Branching Strategy
 
-Create a small contract-lock branch first. Do not start broad implementation
-branches until it lands.
+Use one PR per slice, branched from current `develop`, squash-merged back to
+`develop`. Do not aggregate multiple slices into one walker PR. This keeps CI,
+code review, and QA evidence attached to the slice boundary.
 
-- Contract lock branch:
-  `feature/GIM-839-contract-lock`
-- Claude runtime branch after contract lock:
-  `feature/GIM-839A-runtime-smoke-walker`
-- Claude semantic branch after contract lock:
-  `feature/GIM-839B-semantic-quality-walker`
-- Codex/CX native validation branch if split from runtime:
-  `feature/GIM-839C-xcode-scip-validation`
+Branch names:
 
-If the team chooses one PR per slice, each child may create a short-lived branch
-from the relevant walker branch and merge back into that walker branch before
-the walker branch merges to `develop`. If the team chooses one PR per walker,
-each child commits directly to its walker branch. Do not mix runtime and
-semantic edits in one child unless the spec dependency explicitly requires it.
+- `feature/GIM-839-D0-contract-lock`
+- `feature/GIM-839-A1-recipe-fixtures`
+- `feature/GIM-839-A2-mcp-caller`
+- `feature/GIM-839-A3-runtime-runner`
+- `feature/GIM-839-A4-swiftpm-adapter`
+- `feature/GIM-839-A5-xcode-uw-recipe`
+- `feature/GIM-839-A6-runtime-preflight`
+- `feature/GIM-839-A7-runtime-runbook`
+- `feature/GIM-839-B1-source-scope`
+- `feature/GIM-839-B2-embedding-policy`
+- `feature/GIM-839-B3-semantic-filters`
+- `feature/GIM-839-B4-hybrid-ranking`
+- `feature/GIM-839-B5-snippet-provider`
+- `feature/GIM-839-B6-golden-matrix`
+- `feature/GIM-839-C1-macbook-prep`
+- `feature/GIM-839-C2-runtime-evidence`
+- `feature/GIM-839-C3-semantic-evidence`
 
-### Blocking Slices
+Each branch has one writer. If ownership changes, the current child must push,
+stop, and hand off explicitly in the issue before another agent writes to that
+branch.
 
-Blocking slices stop the CEO from launching dependent work:
+### Normative DAG
 
-- Contract lock: A0 and B0. No A1/A3/A4/A5 or B1-B6 can start before this is
-  closed.
-- Runtime runner readiness: A3 must close before C1/C2 runtime evidence can
-  start.
-- Native build readiness: A5 and A6 must close before C2 app runtime evidence.
-- Semantic metadata readiness: B1 and B2 must close before C2 evidence can claim
-  `source_scope` and bounded coverage.
-- Semantic product readiness: B3, B4, B5, and B6 must close before C3.
+This table is the only normative dependency and scheduling source. If text in
+the per-slice sections below conflicts with this table, fix the per-slice text
+instead of overriding this table.
 
-### Non-Blocking Parallel Slices
+| Slice | Depends on | Owner | Fallback | Blocking? | File scope | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| D0 | spec approval | Claude CTO | none | yes | docs, tests/fixtures for contracts | Combines A0+B0 contract lock. |
+| A1 | D0 | Claude CTO | none | no | runtime recipe fixtures/tests | Recipe fixtures. |
+| A2 | spec approval | Claude CTO | none | no | MCP caller helper/tests | May run in parallel with D0. |
+| A3 | D0, A2 | Claude CTO | none | yes for C1/C2 | runtime runner/tests | Runner skeleton. |
+| A4 | D0, A1 | Claude CTO | Codex/CX CTO review | yes for C2 | SwiftPM adapter/tests | Kit path. |
+| A5 | D0, A1 | Codex/CX CTO | Claude CTO | yes for A7/C2 | Xcode adapter/UW recipe/tests | Native path. |
+| A6 | D0 | Claude CTO | Codex/CX CTO review | yes for A7/C2 | preflight/tests | Docker/Neo4j/Qodo/Xcode. |
+| A7 | A3, A5, A6 | Claude CTO | none | no | runtime runbook | Operator docs. |
+| B1 | D0 | Claude CTO | none | yes for B3/C2 | symbol extraction metadata/tests | `source_scope`. |
+| B2 | D0 | Claude CTO | none | yes for C2 | embedding policy/tests | Bounded coverage. |
+| B3 | D0, B1 | Claude CTO | none | yes for B4/C3 | semantic search filters/tests | Search defaults. |
+| B4 | D0, B3 | Claude CTO | none | yes for B6/C3 | ranking/tests | Hybrid scoring. |
+| B5 | D0 | Claude CTO | none | yes for B6/C3 | snippet provider/tests | Path safety. |
+| B6 | B3, B4, B5 | Claude CTO | none | yes for C3 | golden matrix/runner/tests | Product eval. |
+| C1 | A3, A4, A5, A6 | Operator/Codex QA | Claude QA | no | MacBook binding/evidence | Prep only. |
+| C2 | A3, A4, A5, A6, B1, B2 | Codex/CX QA | Claude QA | yes for C3 | runtime evidence | App+kit cascade. |
+| C3 | B3, B4, B5, B6, C2 | Claude QA | Operator support | yes | semantic evidence | Final product gate. |
 
-After contract lock closes, CEO may run these in parallel when CTOs are free:
+### File-Overlap Matrix
 
-- Runtime side:
-  - A1 recipe fixtures;
-  - A2 MCP caller;
-  - A6 preflight;
-  - A5 Xcode workspace adapter, preferably Codex/CX.
-- Semantic side:
-  - B1 source scope classification;
-  - B2 embedding candidate policy;
-  - B5 snippet provider.
+CEO uses this matrix to decide whether two ready non-blocking slices are
+compatible for parallel assignment. Compatible means expected write scopes are
+disjoint or one slice is docs/evidence-only.
 
-CEO should prefer assigning Codex/CX to native/Xcode/SCIP slices and Claude to
-Python/MCP/search/test slices. If Codex/CX is not free, CEO assigns only Claude
-work and does not create a second child just to fill the queue.
+| Slice group | Expected write scope | Parallel-safe with | Not parallel-safe with |
+| --- | --- | --- | --- |
+| A1 recipes | recipe fixtures and recipe validation tests | A2, A6, B1/B2/B5 after D0 | A3/A4/A5 until schema stabilizes |
+| A2 MCP caller | MCP caller helper and tests | D0, A1, A6, B-slices | A3 if both edit runner-call boundary simultaneously |
+| A3 runner | runtime runner and script tests | B1/B2/B5 if contract stable | A2 until caller interface is settled |
+| A4 SwiftPM adapter | SwiftPM adapter and tests | B-slices | A1 if recipe fixture schema still moving |
+| A5 Xcode adapter | Xcode adapter, UW recipe, native tests | B-slices | A1 if recipe fixture schema still moving |
+| A6 preflight | preflight checks and tests | A1, A2, B-slices | A3 if report schema is moving |
+| B1/B2/B3/B4/B5 | semantic extraction/search/ranking/snippet code and tests | runtime A-slices after D0 | each other unless explicitly bundled under same Claude child |
+| B6 | golden matrix and runner | A7/C1 docs/evidence | B3/B4/B5 until APIs settle |
+| C1/C2/C3 | evidence reports and runtime logs | docs-only work | implementation slices they validate |
 
-### Initial CEO Schedule
-
-1. Spawn child `GIM-839D Contract lock: recipe/binding + symbol/search API`.
-   - Owner: Claude CTO.
-   - Includes A0 and B0.
-   - Blocking: yes.
-2. After contract lock closes, if both CTOs are free:
-   - spawn runtime child for A1/A2/A6 to Claude CTO;
-   - spawn native child for A5 to Codex/CX CTO.
-3. When A1/A2/A6 close, spawn A3 runtime runner skeleton to Claude CTO.
-4. When A0/A1 close and Codex/CX is free, spawn A4 Swift Package adapter or keep
-   it with Claude if Codex/CX is occupied.
-5. In parallel on the semantic side after B0:
-   - spawn B1/B2 to Claude CTO;
-   - after B1 closes, spawn B3;
-   - after B3 closes, spawn B4;
-   - after B0 closes and metadata contract is stable, spawn B5.
-6. After B3/B4/B5 close, spawn B6 golden matrix runner.
-7. After A3/A4/A5/A6 and B1/B2 close, spawn C2 runtime evidence.
-8. After B3/B4/B5/B6 and C2 close, spawn C3 semantic evidence and final
-   closure recommendation.
+Because most B-slices touch adjacent semantic surfaces, CEO should keep B1-B6
+on the same Claude CTO lane unless a later child plan proves disjoint files.
+Do not assign B1 to one CTO and B2/B3/B4/B5 to another by default.
 
 ### Child Issue Template
 
@@ -162,7 +222,8 @@ Each CEO-created child issue should include:
 - exact dependencies that must already be closed;
 - acceptance criteria copied from the slice;
 - verification commands or runtime evidence expected;
-- close requirement: post commit/PR, tests run, and any unresolved blocker.
+- close requirement: post merged-to-`develop` commit/PR, tests run, and any
+  unresolved blocker.
 
 ## Track A: Productized Runtime Smoke
 
@@ -464,47 +525,13 @@ Each CEO-created child issue should include:
   - at least four of five rows pass, including at least one non-app row;
   - any remaining row has a linked follow-up with evidence.
 
-## Parallel Execution Plan
+## Scheduling Source Of Truth
 
-Contract phase after spec approval:
-
-- Claude: A0 and B0.
-- Codex/CX: review Xcode/SCIP constraints and provide A5 notes.
-
-Safe parallel start after A0/B0:
-
-- Claude: A1, A2, A6, B1, B2, B5.
-- Codex/CX: A5 implementation or review.
-
-Next wave:
-
-- Claude: A3 after A0/A2; B3 after B0/B1.
-- Claude or Codex/CX: A4 after A0/A1.
-
-Final wave:
-
-- Claude: B4 after B3, B6 after B3/B4/B5.
-- Operator/Codex/CX: C1 after A3/A4/A5/A6; C2 after A3/A4/A5/A6 and B1/B2.
-- Claude + operator: C3 after B3/B4/B5/B6/C2.
-
-Sequential fallback if only Claude is available:
-
-1. A0 recipe/runtime binding contract.
-2. B0 symbol metadata/search API contract.
-3. A2 MCP caller.
-4. A6 preflight.
-5. A1 recipe fixtures.
-6. A3 runner skeleton.
-7. A4 Swift Package adapter.
-8. A5 Xcode workspace adapter and UW recipe.
-9. B1 source scope.
-10. B2 embedding candidate policy.
-11. B3 semantic filters.
-12. B5 snippet provider.
-13. B4 hybrid ranking.
-14. A7 runbook.
-15. B6 golden query matrix.
-16. C1-C3 runtime evidence on the MacBook host.
+The Normative DAG is the scheduling source of truth. The per-slice sections
+above provide detail and acceptance criteria; they do not override the DAG. CEO
+must not use a separate hard-coded schedule. If only Claude is available, CEO
+still follows the same DAG and simply assigns every ready slice with a Claude
+fallback to the Claude lane.
 
 ## Assignment Summary
 
@@ -520,10 +547,11 @@ Sequential fallback if only Claude is available:
   - provides MacBook host access, model/image availability, and final smoke
     execution approval.
 
-## Review Checklist Before Implementation
+## Closed Routing Decisions
 
-- Confirm whether tasks remain under GIM-839 or become new issue ids.
-- Confirm four-of-five golden matrix pass, including one non-app row, is
-  sufficient for v1 closure.
-- Confirm full unbounded embeddings move to a separate post-smoke validation
-  issue.
+- Keep GIM-839 as the parent. Paperclip may assign real child issue numbers,
+  but child titles must include stable slice ids such as `D0`, `A5`, or `B4`.
+- Four-of-five golden matrix pass, including one non-app row, is sufficient for
+  v1 closure.
+- Full unbounded embeddings are a separate post-smoke validation issue, not a
+  blocker for this bounded productized smoke.

@@ -158,7 +158,7 @@ In scope:
   `source_scopes`, `include_dependencies`, `include_generated`, and
   `include_sdk`.
 - Preserve explicit cross-project search:
-  `projects=["uw-ios-app", "bitcoin-kit", "evm-kit", ...]` is valid, but result
+  `projects=["uw-ios-app", "bitcoin-kit", "evm-kit"]` is valid, but result
   identity must include `project`, `group_id`, file path, and source scope.
 - Improve ranking with a fixed v1 hybrid formula:
   vector score, lexical/name/path match, source scope score, module/path boosts,
@@ -186,6 +186,7 @@ Out of scope:
 Expected implementation areas:
 
 - `paperclips/scripts/` for a recipe-driven runtime smoke runner and tests.
+  The target script path is `paperclips/scripts/palace_runtime_smoke.py`.
 - `docs/runbooks/` for productized runtime smoke and semantic-search validation
   runbooks.
 - `services/palace-mcp/src/palace_mcp/code/find_semantic.py`
@@ -195,8 +196,7 @@ Expected implementation areas:
   for persisted symbol metadata.
 - `services/palace-mcp/src/palace_mcp/git/path_resolver.py`
 - Focused tests under `services/palace-mcp/tests/`.
-- `docs/superpowers/fixtures/gim839_semantic_golden_matrix.json` or an
-  equivalent machine-readable golden matrix location chosen by implementation.
+- `docs/superpowers/fixtures/gim839_semantic_golden_matrix.json`
 
 Reference areas:
 
@@ -488,10 +488,10 @@ Desired response:
   "context": {
     "available": true,
     "source": "local_file",
-    "file_path": "Unstoppable/...",
+    "file_path": "Unstoppable/Services/Balance/BalanceService.swift",
     "line_start": 120,
     "line_end": 148,
-    "snippet": "..."
+    "snippet": "func refreshBalance() { balanceService.refresh() }"
   }
 }
 ```
@@ -502,8 +502,7 @@ that identifies which provider failed and why.
 ### 7.9 Golden Query Matrix
 
 The implementation must create and maintain a machine-readable golden matrix at
-`docs/superpowers/fixtures/gim839_semantic_golden_matrix.json` unless it chooses
-an equivalent path and updates this spec before implementation. The matrix must
+`docs/superpowers/fixtures/gim839_semantic_golden_matrix.json`. The matrix must
 be consumed by a runner that prints per-row pass/fail and top-5 evidence.
 
 Matrix row schema:
@@ -605,8 +604,7 @@ uv run pytest paperclips/scripts/tests
 Script verification:
 
 ```bash
-bash -n paperclips/scripts/<runtime-smoke-script>
-bash paperclips/scripts/<runtime-smoke-script> --help
+uv run python paperclips/scripts/palace_runtime_smoke.py --help
 ```
 
 Required negative tests:
@@ -630,14 +628,13 @@ Required negative tests:
 Runtime verification on the MacBook smoke host:
 
 ```bash
-# exact command names to be finalized by implementation
-paperclips/scripts/<runtime-smoke-script> preflight --recipe uw-ios-app --binding local.yml
-paperclips/scripts/<runtime-smoke-script> run --recipe uw-ios-app --binding local.yml --bounded-embeddings=128
-paperclips/scripts/<runtime-smoke-script> report --recipe uw-ios-app --binding local.yml
+uv run python paperclips/scripts/palace_runtime_smoke.py preflight --recipe uw-ios-app --binding local.yml
+uv run python paperclips/scripts/palace_runtime_smoke.py run --recipe uw-ios-app --binding local.yml --bounded-embeddings=128
+uv run python paperclips/scripts/palace_runtime_smoke.py report --recipe uw-ios-app --binding local.yml
 
-paperclips/scripts/<runtime-smoke-script> preflight --recipe bitcoin-kit --binding local.yml
-paperclips/scripts/<runtime-smoke-script> run --recipe bitcoin-kit --binding local.yml --bounded-embeddings=256
-paperclips/scripts/<runtime-smoke-script> report --recipe bitcoin-kit --binding local.yml
+uv run python paperclips/scripts/palace_runtime_smoke.py preflight --recipe bitcoin-kit --binding local.yml
+uv run python paperclips/scripts/palace_runtime_smoke.py run --recipe bitcoin-kit --binding local.yml --bounded-embeddings=256
+uv run python paperclips/scripts/palace_runtime_smoke.py report --recipe bitcoin-kit --binding local.yml
 ```
 
 Neo4j evidence:
@@ -714,12 +711,11 @@ If Codex/CX is not available, Claude can execute the full implementation
 sequentially. The only non-negotiable external dependency is access to a host
 that can run the real Xcode/Docker/Qodo smoke.
 
-## 11. Remaining Open Questions
+## 11. Closed Decisions
 
-1. Should this follow-up stay under GIM-839 as subtasks, or should runtime
-   productization, semantic quality, and golden validation become separate
-   issue ids?
-2. Is four-of-five golden matrix pass enough for v1 closure, or should closure
-   require five-of-five before broader rollout?
-3. Should full unbounded embeddings be a separate long-running validation issue
-   after bounded product smoke is stable?
+1. GIM-839 remains the parent. Paperclip may assign real child issue numbers,
+   but child titles must include stable slice ids from the plan.
+2. Four-of-five golden matrix pass is sufficient for v1 closure only when the
+   passing set includes at least one non-app row.
+3. Full unbounded embeddings are a separate post-smoke validation issue after
+   bounded product smoke is stable.
