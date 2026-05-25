@@ -6,7 +6,7 @@
 - Target branch: `develop`
 - Spec:
   `docs/superpowers/specs/2026-05-25-GIM-839-productized-smoke-and-semantic-quality_spec.md`
-- Status: rev4 spec-only branch; wait for review before implementation changes.
+- Status: rev4 routing-ready branch; ready for CEO walker assignment.
 
 ## Objective
 
