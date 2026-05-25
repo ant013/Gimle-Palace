@@ -107,7 +107,9 @@ def _parse_json(tool_name: str, text: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-async def list_tools(mcp_url: str, *, _session: ClientSession | None = None) -> list[str]:
+async def list_tools(
+    mcp_url: str, *, _session: ClientSession | None = None
+) -> list[str]:
     """Return tool names available on the MCP server."""
     if _session is not None:
         result = await _session.list_tools()

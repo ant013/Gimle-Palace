@@ -36,9 +36,7 @@ def _mock_session(
 ) -> AsyncMock:
     session = AsyncMock()
     if tools is not None:
-        tool_objects = [
-            Tool(name=t, inputSchema={"type": "object"}) for t in tools
-        ]
+        tool_objects = [Tool(name=t, inputSchema={"type": "object"}) for t in tools]
         session.list_tools.return_value = ListToolsResult(tools=tool_objects)
     if call_result is not None:
         session.call_tool.return_value = _text_result(call_result)
@@ -199,7 +197,9 @@ class TestRegisterProject:
 
     async def test_error_preserves_mcp_body(self) -> None:
         session = AsyncMock()
-        error_body = '{"ok": false, "error_code": "invalid_slug", "message": "bad slug"}'
+        error_body = (
+            '{"ok": false, "error_code": "invalid_slug", "message": "bad slug"}'
+        )
         session.call_tool.return_value = CallToolResult(
             content=[TextContent(type="text", text=error_body)]
         )
