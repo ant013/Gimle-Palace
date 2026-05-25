@@ -1,7 +1,7 @@
 # GIM-839 Follow-up: Productized Runtime Smoke And Semantic Search Quality
 
 **Document date:** 2026-05-25
-**Status:** Rev2 draft for review
+**Status:** Rev3 draft for review
 **Issue:** GIM-839 follow-up
 **Branch:** `docs/GIM-839-productized-smoke-semantic-quality`
 **Companion plan:** `docs/superpowers/plans/2026-05-25-GIM-839-productized-smoke-and-semantic-quality.md`
@@ -19,10 +19,10 @@ extractor cascade, and receive a structured evidence report. It should also let
 an agent ask semantic questions such as "find timers in the app" and get
 source-scoped, ranked, snippet-backed results instead of dependency or SDK noise.
 
-## 2. Rev2 Decisions
+## 2. Rev2/Rev3 Decisions
 
-Rev1 found several places where implementation would otherwise fork into
-incompatible contracts. Rev2 fixes those decisions:
+Rev1 and rev2 review found several places where implementation would otherwise
+fork into incompatible contracts. Rev2/rev3 fixes those decisions:
 
 - Versioned project recipes must not contain machine-local absolute paths.
   Local checkout paths live in a runtime binding supplied by CLI, environment,
@@ -40,6 +40,12 @@ incompatible contracts. Rev2 fixes those decisions:
   evidence. Stale or mismatched source returns an explicit warning.
 - Xcode smoke must be host-aware: simulator architecture is `auto` by default,
   SwiftPM resolution is opt-in, and Xcode host preflight is mandatory.
+- Existing GIM-837 callers are signature-compatible, not behavior-identical:
+  default result scope changes to first-party symbols. The implementation must
+  document this migration and test the new default.
+- Legacy symbols without `source_scope` must be classified from recipe roots
+  when recipe metadata is available. They are treated as dependency-like only
+  when no reliable recipe/root evidence exists.
 
 ## 3. Background
 
@@ -96,8 +102,8 @@ In scope:
   `derived_roots`, `scip_path`, typed `prepare_steps`, typed `build`, and
   extractor cascade.
 - Define a local runtime binding contract for machine-local data:
-  `repo_path`, optional `parent_mount`, optional package cache path, Docker
-  compose override path, Qodo cache path, and MCP URL.
+  `repo_path`, `parent_mount`, optional package cache path, optional Docker
+  compose override path, Qodo cache path for embedding smoke, and MCP URL.
 - Add Swift adapters for:
   - Swift Package repositories;
   - Xcode workspace repositories;
@@ -155,8 +161,9 @@ In scope:
   `projects=["uw-ios-app", "bitcoin-kit", "evm-kit", ...]` is valid, but result
   identity must include `project`, `group_id`, file path, and source scope.
 - Improve ranking with a fixed v1 hybrid formula:
-  vector score, lexical/name/path match, module/path boosts, symbol kind boosts,
-  and penalties for accessors, generated files, SDK paths, and dependency scopes.
+  vector score, lexical/name/path match, source scope score, module/path boosts,
+  symbol kind boosts, and penalties for symbol traits such as accessors and
+  synthetic symbols.
 - Improve embedding candidate selection so bounded runs index useful first-party
   definitions before dependency or generated symbols.
 - Make `include_context=true` return local source snippets for resolvable local
@@ -188,6 +195,8 @@ Expected implementation areas:
   for persisted symbol metadata.
 - `services/palace-mcp/src/palace_mcp/git/path_resolver.py`
 - Focused tests under `services/palace-mcp/tests/`.
+- `docs/superpowers/fixtures/gim839_semantic_golden_matrix.json` or an
+  equivalent machine-readable golden matrix location chosen by implementation.
 
 Reference areas:
 
@@ -243,13 +252,31 @@ extractors:
 Example local runtime binding:
 
 ```yaml
-repo_path: /Users/ant013/Android/Gimle-Palace-Test/HorizontalSystems/unstoppable-wallet-ios
-parent_mount: /Users/ant013/Android/Gimle-Palace-Test/HorizontalSystems
+repo_path: /ABS/PATH/HorizontalSystems/unstoppable-wallet-ios
+parent_mount: /ABS/PATH/HorizontalSystems
 mcp_url: http://localhost:8000/mcp
-qodo_cache_path: /Users/ant013/Android/Gimle-Palace-Test/hf-cache/huggingface
-swiftpm_cache_path: /Users/ant013/Library/Caches/org.swift.swiftpm
+qodo_cache_path: /ABS/PATH/hf-cache/huggingface
+swiftpm_cache_path: /ABS/PATH/swiftpm-cache
 docker_compose_override: docker-compose.macbook-smoke.yml
 ```
+
+Runtime binding fields:
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `repo_path` | yes | Absolute checkout path for this recipe on the current host. |
+| `parent_mount` | yes | Absolute mounted root that contains `repo_path`. |
+| `mcp_url` | yes | Streamable HTTP MCP endpoint. |
+| `qodo_cache_path` | required for embedding smoke | Host-local Hugging Face/Qodo cache. |
+| `swiftpm_cache_path` | optional | Host-local SwiftPM cache used by Xcode/SwiftPM adapters. |
+| `docker_compose_override` | optional | Path relative to the Palace checkout unless absolute. |
+
+Invariants:
+
+- `repo_path` must resolve inside `parent_mount`.
+- local binding files must be ignored by git unless they are sanitized fixtures;
+- reports may include resolved host settings, but must not include config file
+  contents or secret-like values.
 
 The implementation may choose JSON, YAML, or Python dataclasses, but the
 operator contract must remain inspectable and testable.
@@ -295,6 +322,8 @@ Preflight must check at least:
 - whether `Config.xcconfig` exists or can be created from template.
 
 Preflight must fail before downloads or build steps in locked/offline mode.
+SwiftPM build plugins and package scripts are accepted only for trusted
+first-party repositories; locked mode remains the default smoke path.
 
 ### 7.4 Semantic Source Scoping
 
@@ -302,7 +331,9 @@ v1 persists `source_scope` on `:Symbol` during extraction. Query-time
 classification is a legacy fallback only when an existing node lacks
 `source_scope`.
 
-Classification precedence:
+Classification precedence uses first match in the order below after normalizing
+paths relative to the project root. If multiple roots in the same category
+match, the longest matching root wins.
 
 1. `derived` for DerivedData and `.palace-scip-derived-data` paths.
 2. `generated` for recipe `generated_roots` and generated-file heuristics.
@@ -313,12 +344,20 @@ Classification precedence:
 7. `dependency` for unknown external package paths.
 
 Every semantic result must return `source_scope`. Unknown scope is not a normal
-value; it should produce a warning and be treated as dependency-like for default
-filtering.
+value. For legacy symbols without persisted `source_scope`, query-time fallback
+must classify from recipe roots when recipe metadata is available. Only symbols
+that cannot be classified from recipe/root evidence should produce a warning and
+be treated as dependency-like for default filtering. Runtime closure requires
+re-extracting the projects used in the MacBook evidence path so the primary
+path exercises persisted `source_scope`.
 
 ### 7.5 Semantic Search Request Contract
 
-`palace.code.semantic_search` remains backward compatible with GIM-837:
+`palace.code.semantic_search` remains signature-compatible with GIM-837, but the
+default behavior intentionally changes from "all embedded symbols in scope" to
+"first-party symbols in scope". The implementation must include a migration note
+for existing agents/scripts and a regression test that proves dependency/SDK
+results are excluded by default and included only by explicit scope controls.
 
 - exactly one of `project` or `projects` is required;
 - `project` is a convenience alias for a one-item `projects` list;
@@ -329,6 +368,8 @@ filtering.
   - `include_dependencies=true` adds `dependency`;
   - `include_generated=true` adds `generated` and `derived`;
   - `include_sdk=true` adds `sdk`;
+- there is no separate `include_derived` in v1; `derived` is controlled by
+  `include_generated` or explicit `source_scopes`;
 - `source_scopes=[]` is invalid;
 - every hit returns `project`, `group_id`, `qualified_name`, `file_path`,
   `source_scope`, `score`, and `score_components`;
@@ -378,7 +419,7 @@ v1 ranking uses hardcoded weights. The final score is clamped to `0..1`:
 score =
   0.70 * vector_score_normalized +
   0.15 * lexical_match +
-  0.07 * source_scope_boost +
+  0.07 * source_scope_score +
   0.05 * symbol_kind_boost +
   0.03 * module_path_boost -
   penalty
@@ -389,12 +430,18 @@ Component rules:
 - `vector_score_normalized` is the Neo4j vector score normalized to `0..1`.
 - `lexical_match` is computed from query token overlap with qualified name,
   symbol name, module name, and file path.
-- `source_scope_boost`: `project=1.0`, `workspace_package=0.8`,
+- `source_scope_score`: `project=1.0`, `workspace_package=0.8`,
   `dependency=0.2`, `generated=0.0`, `derived=0.0`, `sdk=0.0`.
 - `symbol_kind_boost` prefers functions, methods, classes, structs, protocols,
   and enums over variables/accessors.
 - `module_path_boost` rewards recipe source roots and expected module families.
-- `penalty` includes accessor/synthetic/generated/SDK/dependency penalties.
+- `penalty` is additive, capped at `0.20`, and does not include source-scope
+  penalties because scope already affects `source_scope_score`:
+  - accessor or compiler-synthesized accessor: `0.10`;
+  - synthetic/compiler-generated symbol name: `0.10`;
+  - no source line metadata when equivalent candidates have line metadata:
+    `0.03`;
+  - stale embedding coverage warning for the hit's source scope: `0.05`.
 
 Tie-breakers:
 
@@ -420,8 +467,13 @@ Snippet provider order:
 
 For local file snippets:
 
-- reject path traversal;
-- reject files outside the registered root or parent mount;
+- treat persisted `file_path` as untrusted input;
+- reject absolute persisted file paths and any path containing `..`;
+- resolve the path against the registered project root, then apply
+  `realpath`/symlink resolution;
+- require the resolved file to remain inside the resolved project root.
+  `parent_mount` may be used to locate project roots, but it is not a broad
+  read boundary for snippets;
 - compare current checkout commit to the indexed `commit_sha` when available;
 - return `context.available=false` and warning code `stale_source` when the
   checkout no longer matches indexed evidence;
@@ -449,8 +501,37 @@ that identifies which provider failed and why.
 
 ### 7.9 Golden Query Matrix
 
-The implementation must create and maintain a machine-readable golden matrix.
-Minimum rows:
+The implementation must create and maintain a machine-readable golden matrix at
+`docs/superpowers/fixtures/gim839_semantic_golden_matrix.json` unless it chooses
+an equivalent path and updates this spec before implementation. The matrix must
+be consumed by a runner that prints per-row pass/fail and top-5 evidence.
+
+Matrix row schema:
+
+```json
+{
+  "query_id": "timer",
+  "query": "timer scheduler refresh balance",
+  "projects": ["uw-ios-app"],
+  "source_scopes": ["project", "workspace_package"],
+  "expected_patterns": {
+    "qualified_name_regex": ["(?i)(timer|scheduler|refresh)"],
+    "file_globs": ["Unstoppable/**"],
+    "module_regex": ["(?i)(balance|refresh|sync|timer)"]
+  },
+  "disallowed_patterns": {
+    "qualified_name_regex": ["CoreFoundation", "CGFloat"],
+    "source_scopes": ["sdk", "generated", "derived"]
+  },
+  "min_relevant_top5": 3,
+  "min_snippets": 2,
+  "mandatory": true
+}
+```
+
+A hit is relevant only if it matches at least one expected qualified-name,
+file-glob, or module pattern and does not match disallowed patterns. Minimum
+rows:
 
 | Query id | Query text | Scope | Expected result families | Disallowed top-5 noise | Pass |
 | --- | --- | --- | --- | --- | --- |
@@ -458,11 +539,17 @@ Minimum rows:
 | balance | `balance refresh wallet balance sync` | `uw-ios-app` | balance service/interactor/view-model refresh paths | generated accessors, SDK symbols | >=3 of top 5 relevant, >=2 snippets |
 | wc-signing | `wallet connect sign request transaction` | `uw-ios-app` | WalletConnect signing request flow | unrelated QR/UI layout helpers | >=3 of top 5 relevant, >=2 snippets |
 | btc-signing | `bitcoin transaction signer input script` | `bitcoin-kit` or app+kit projects | bitcoin transaction/signing classes | app-only unrelated UI | >=3 of top 5 relevant, >=1 non-app snippet |
-| data-hex | `Data bytes hex string conversion` | app+toolkit+kit projects | HsToolKit/kits/app byte or hex helpers | SDK NSData-only hits unless explicit SDK scope | >=2 of top 5 relevant, provenance preserved |
+| data-hex | `Data bytes hex string conversion` | app+HsToolKit+kit projects | HsToolKit/kits/app byte or hex helpers | SDK NSData-only hits unless explicit SDK scope | >=2 of top 5 relevant, provenance preserved |
+
+The `data-hex` row requires a registered HsToolKit recipe/binding. The example
+slug is `hs-toolkit`; if implementation chooses a different slug, the matrix and
+cross-project probe must use that exact recipe slug.
 
 Closure requires the golden matrix to pass at least four of five rows. The
-remaining row, if any, must have a linked follow-up issue with evidence. If fewer
-than four rows pass, this issue is not complete.
+passing set must include at least one non-app row (`btc-signing` or `data-hex`).
+The remaining row, if any, must have a linked follow-up issue with evidence. If
+fewer than four rows pass, or if no non-app row passes, this issue is not
+complete.
 
 ## 8. Acceptance Criteria
 
@@ -498,7 +585,8 @@ than four rows pass, this issue is not complete.
 14. `include_context=true` returns snippets for local first-party hits according
     to the snippet contract, including at least one non-app first-party hit in
     the golden matrix.
-15. Golden query closure requires at least four of five matrix rows passing.
+15. Golden query closure requires at least four of five matrix rows passing,
+    including at least one non-app row.
 16. Tests use fake embeddings and fixtures; they do not require Qodo downloads,
     Docker, Xcode builds, or network access.
 17. A MacBook runtime evidence report is attached to the issue before closure.
@@ -525,11 +613,18 @@ Required negative tests:
 
 - invalid recipe slug rejected before path construction;
 - versioned recipe with absolute `repo_path` rejected;
+- `repo_path` outside `parent_mount` rejected;
 - runtime binding path traversal rejected;
 - MCP caller sends `palace.memory.register_project` with both `name` and `slug`;
 - no-download preflight fails fast when packages are unresolved;
 - unexpected workspace `absolute:` reference is rejected unless mapped;
+- persisted snippet `file_path` that is absolute, contains `..`, points outside
+  project root, or escapes through a symlink is rejected;
 - stale source checkout returns `stale_source` snippet warning;
+- fixture semantic ranking proves first-party project results outrank dependency
+  results when vector scores tie;
+- fixture snippet provider returns a local snippet for an in-root symbol and
+  rejects outside-root persisted paths;
 - bounded embedding response includes coverage metadata.
 
 Runtime verification on the MacBook smoke host:
@@ -548,13 +643,14 @@ paperclips/scripts/<runtime-smoke-script> report --recipe bitcoin-kit --binding 
 Neo4j evidence:
 
 ```cypher
-MATCH (p:Project)<-[:IN_PROJECT]-(s:Symbol)
+MATCH (s:Symbol)
+WHERE s.group_id STARTS WITH 'project/'
 RETURN
-  p.slug,
+  s.group_id AS group_id,
   count(s) AS symbols,
   count(s.embedding) AS embeddings,
   collect(DISTINCT s.source_scope) AS source_scopes
-ORDER BY p.slug
+ORDER BY group_id
 ```
 
 Single-project semantic probe:
@@ -578,7 +674,7 @@ Cross-project semantic probe:
   "tool": "palace.code.semantic_search",
   "arguments": {
     "query": "Data bytes hex string conversion",
-    "projects": ["uw-ios-app", "bitcoin-kit", "evm-kit"],
+    "projects": ["uw-ios-app", "hs-toolkit", "bitcoin-kit", "evm-kit"],
     "source_scopes": ["project", "workspace_package", "dependency"],
     "include_context": true,
     "limit": 5
@@ -592,16 +688,17 @@ Required semantic assertions:
   `source_scope`, `score`, and `score_components`;
 - no default query returns SDK/generated/derived hits in top 5;
 - cross-project hits preserve project provenance;
-- golden matrix passes at least four of five rows.
+- golden matrix passes at least four of five rows and includes one passing
+  non-app row.
 
 Merge vs closure gates:
 
-- Merge gate: CI-required verification, script verification, and unit negative
-  tests pass.
+- Merge gate: CI-required verification, script verification, unit negative
+  tests, and fixture-based ranking/snippet tests pass.
 - Runtime closure gate: MacBook app+kit runtime evidence and Neo4j counts are
   attached.
 - Product closure gate: semantic golden matrix passes at least four of five
-  rows, with snippets as required.
+  rows including one non-app row, with snippets as required.
 
 ## 10. Task Routing
 

@@ -6,12 +6,12 @@
 - Target branch: `develop`
 - Spec:
   `docs/superpowers/specs/2026-05-25-GIM-839-productized-smoke-and-semantic-quality_spec.md`
-- Status: rev2 spec-only branch; wait for review before implementation changes.
+- Status: rev3 spec-only branch; wait for review before implementation changes.
 
 ## Objective
 
 Split the GIM-839 follow-up into tasks that can be assigned to Claude and
-Codex/CX in parallel where safe. Rev2 adds explicit contract tasks before
+Codex/CX in parallel where safe. Rev2/rev3 adds explicit contract tasks before
 parallel work so agents do not implement incompatible recipe, metadata, or
 snippet boundaries.
 
@@ -23,7 +23,7 @@ If Paperclip supports child issues, keep one parent and four children:
 - Child A: `GIM-839A` Productized runtime smoke recipes and runner.
 - Child B: `GIM-839B` Semantic search source scoping, ranking, and snippets.
 - Child C: `GIM-839C` MacBook runtime evidence and golden query validation.
-- Child D: `GIM-839D` Rev2 metadata/API contract lock, if the team wants a
+- Child D: `GIM-839D` metadata/API contract lock, if the team wants a
   separate short gate before implementation.
 
 If issue ids must be unique top-level tickets, create separate tickets with the
@@ -34,15 +34,19 @@ same titles and link them back to GIM-839.
 ### A0. Lock Recipe And Runtime Binding Contract
 
 - Owner: Claude
-- Parallelizable: no; this gates A1/A2/A3/A4
+- Parallelizable: no; this gates A1, A3, A4, and A5. A2 can start after spec
+  approval because it only depends on the current MCP contract.
 - Dependencies: spec approval
 - Deliverables:
   - versioned recipe schema without machine-local absolute paths;
   - local runtime binding schema for `repo_path`, mount, caches, compose
     override, and MCP URL;
+  - required/optional runtime binding field table;
+  - invariant that `repo_path` resolves inside `parent_mount`;
   - typed adapter contract; raw shell command recipes explicitly out of scope.
 - Acceptance:
   - tests reject `repo_path` inside versioned recipes;
+  - tests reject `repo_path` outside `parent_mount`;
   - tests accept repo path only through runtime binding;
   - `unstoppable-wallet-ios` can be represented without hardcoding a home
     directory.
@@ -167,11 +171,15 @@ same titles and link them back to GIM-839.
   - exact `semantic_search` request precedence:
     `source_scopes` overrides `include_dependencies`, `include_generated`, and
     `include_sdk`;
+  - migration note that GIM-837 compatibility is signature-compatible, not
+    behavior-identical;
   - cross-project tie-break and no-dedup behavior.
 - Acceptance:
   - unit tests can construct fixture symbols with all required metadata;
-  - legacy symbols without `source_scope` are treated as fallback/warning, not
-    normal first-party results.
+  - legacy symbols without `source_scope` are classified from recipe roots when
+    recipe metadata exists;
+  - unclassifiable legacy symbols are treated as fallback/warning, not normal
+    first-party results.
 
 ### B1. Source Scope Classification
 
@@ -228,6 +236,8 @@ same titles and link them back to GIM-839.
   - fixed v1 ranking formula;
   - vector, lexical, source scope, symbol kind, path/module, and penalty
     components;
+  - explicit penalty table and cap;
+  - source scope affects continuous score in one place only;
   - deterministic tie-breakers.
 - Acceptance:
   - ranking weights are hardcoded for v1 and documented;
@@ -241,7 +251,8 @@ same titles and link them back to GIM-839.
 - Dependencies: B0
 - Deliverables:
   - local file snippet hydration for resolvable source hits;
-  - safe path resolution through registered project root and parent mount;
+  - safe path resolution through registered project root; `parent_mount` is only
+    used to locate roots, not as a broad snippet read boundary;
   - commit/revision mismatch warning;
   - snippet window and truncation contract;
   - codebase-memory fallback.
@@ -250,6 +261,8 @@ same titles and link them back to GIM-839.
     hit in a fixture test;
   - at least one non-app first-party hit is covered in golden validation;
   - path traversal is rejected;
+  - persisted absolute paths, `..` paths, outside-root paths, and symlink
+    escapes are rejected;
   - stale checkout returns `stale_source`.
 
 ### B6. Golden Query Matrix
@@ -259,13 +272,15 @@ same titles and link them back to GIM-839.
 - Dependencies: B3, B4, B5, runtime indexed data
 - Deliverables:
   - machine-readable golden matrix with exact query text;
-  - expected project/module families;
-  - disallowed top-5 noise;
+  - path and schema for the matrix file;
+  - expected qualified-name/file/module patterns;
+  - disallowed top-5 patterns;
+  - runner that prints per-row pass/fail and top-5 evidence;
   - pass/fail evidence from live MacBook smoke.
 - Acceptance:
   - timer/scheduler, balance refresh, WalletConnect signing, bitcoin signing,
     and Data/bytes-to-hex rows have recorded top-5 results;
-  - at least four of five rows pass;
+  - at least four of five rows pass, including at least one non-app row;
   - failures include linked follow-up evidence and do not silently close the
     parent when fewer than four rows pass.
 
@@ -287,8 +302,8 @@ same titles and link them back to GIM-839.
 ### C2. Run App And Kit Cascade
 
 - Owner: Codex/CX QA preferred, Claude fallback with operator access
-- Parallelizable: after A3/A4/A5/A6
-- Dependencies: A3, A4, A5, A6
+- Parallelizable: after A3/A4/A5/A6 and B1/B2
+- Dependencies: A3, A4, A5, A6, B1, B2
 - Deliverables:
   - runtime report for `uw-ios-app`;
   - runtime report for at least one Swift kit;
@@ -302,8 +317,8 @@ same titles and link them back to GIM-839.
 ### C3. Run Semantic Probe And Analyze Results
 
 - Owner: Claude + operator
-- Parallelizable: after B3/B4/B5 and C2
-- Dependencies: B3, B4, B5, C2
+- Parallelizable: after B3/B4/B5/B6 and C2
+- Dependencies: B3, B4, B5, B6, C2
 - Deliverables:
   - golden query result report;
   - single-project and cross-project semantic probe evidence;
@@ -311,7 +326,7 @@ same titles and link them back to GIM-839.
   - final closure recommendation.
 - Acceptance:
   - top-5 results and required snippets are recorded for each golden query;
-  - at least four of five rows pass;
+  - at least four of five rows pass, including at least one non-app row;
   - any remaining row has a linked follow-up with evidence.
 
 ## Parallel Execution Plan
@@ -334,8 +349,8 @@ Next wave:
 Final wave:
 
 - Claude: B4 after B3, B6 after B3/B4/B5.
-- Operator/Codex/CX: C1 and C2 after A3/A4/A5/A6.
-- Claude + operator: C3 after B3/B4/B5/C2.
+- Operator/Codex/CX: C1 after A3/A4/A5/A6; C2 after A3/A4/A5/A6 and B1/B2.
+- Claude + operator: C3 after B3/B4/B5/B6/C2.
 
 Sequential fallback if only Claude is available:
 
@@ -373,6 +388,7 @@ Sequential fallback if only Claude is available:
 ## Review Checklist Before Implementation
 
 - Confirm whether tasks remain under GIM-839 or become new issue ids.
-- Confirm four-of-five golden matrix pass is sufficient for v1 closure.
+- Confirm four-of-five golden matrix pass, including one non-app row, is
+  sufficient for v1 closure.
 - Confirm full unbounded embeddings move to a separate post-smoke validation
   issue.
