@@ -7,7 +7,7 @@
     {
       "slug": "hotspot-wire-alpha",
       "tier": "user",
-      "last_run_finished_at": "2026-05-19T00:00:00Z",
+      "last_run_finished_at": "2026-05-25T00:00:00Z",
       "files": [
         {
           "path": "Modules/Send/High.swift",
@@ -16,7 +16,7 @@
           "hotspot_score": 9.0,
           "complexity_status": "fresh",
           "complexity_window_days": 90,
-          "last_complexity_run_at": "2026-05-19T00:00:00Z"
+          "last_complexity_run_at": "2026-05-25T00:00:00Z"
         },
         {
           "path": "Modules/Other/Ignored.swift",
@@ -25,14 +25,14 @@
           "hotspot_score": 8.0,
           "complexity_status": "fresh",
           "complexity_window_days": 90,
-          "last_complexity_run_at": "2026-05-19T00:00:00Z"
+          "last_complexity_run_at": "2026-05-25T00:00:00Z"
         }
       ]
     },
     {
       "slug": "hotspot-wire-beta",
       "tier": "first-party",
-      "last_run_finished_at": "2026-05-18T00:00:00Z",
+      "last_run_finished_at": "2026-05-24T00:00:00Z",
       "files": [
         {
           "path": "Modules/Send/Medium.swift",
@@ -41,7 +41,7 @@
           "hotspot_score": 7.0,
           "complexity_status": "fresh",
           "complexity_window_days": 90,
-          "last_complexity_run_at": "2026-05-18T00:00:00Z"
+          "last_complexity_run_at": "2026-05-24T00:00:00Z"
         },
         {
           "path": "Modules/Send/Low.swift",
@@ -50,7 +50,7 @@
           "hotspot_score": 4.5,
           "complexity_status": "fresh",
           "complexity_window_days": 90,
-          "last_complexity_run_at": "2026-05-18T00:00:00Z"
+          "last_complexity_run_at": "2026-05-24T00:00:00Z"
         },
         {
           "path": "Modules/Send/Stale.swift",
@@ -59,7 +59,7 @@
           "hotspot_score": 10.0,
           "complexity_status": "stale",
           "complexity_window_days": 90,
-          "last_complexity_run_at": "2026-05-18T00:00:00Z"
+          "last_complexity_run_at": "2026-05-24T00:00:00Z"
         }
       ]
     }
