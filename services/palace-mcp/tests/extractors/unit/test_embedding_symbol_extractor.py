@@ -76,6 +76,13 @@ def _make_graphiti(
     return graphiti, session.run, writes
 
 
+def test_load_symbol_rows_prioritizes_project_sources() -> None:
+    assert "AS embedding_priority" in _LOAD_SYMBOL_ROWS
+    assert '".palace-scip-derived-data/"' in _LOAD_SYMBOL_ROWS
+    assert '"/.palace-scip-derived-data/"' in _LOAD_SYMBOL_ROWS
+    assert 'ORDER BY embedding_priority, s.qualified_name' in _LOAD_SYMBOL_ROWS
+
+
 @pytest.mark.asyncio
 async def test_run_batches_symbols_and_writes_embeddings() -> None:
     rows = [
@@ -103,6 +110,61 @@ async def test_run_batches_symbols_and_writes_embeddings() -> None:
     assert run_mock.await_count == 3
     assert stats.nodes_written == 65
     assert stats.edges_written == 0
+
+
+@pytest.mark.asyncio
+async def test_run_honors_batch_size_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PALACE_EMBEDDING_BATCH_SIZE", "2")
+    rows = [
+        {
+            "qualified_name": f"demo.symbol.{index}",
+            "kind": "function",
+            "file_path": f"src/module_{index}.py",
+            "module_name": "demo",
+            "embedding_input_hash": None,
+            "has_embedding": False,
+        }
+        for index in range(5)
+    ]
+    graphiti, _, writes = _make_graphiti(rows)
+    backend = _FakeBackend()
+
+    stats = await EmbeddingSymbolExtractor(backend=backend).run(
+        graphiti=graphiti,
+        ctx=_make_ctx(),
+    )
+
+    assert [len(call) for call in backend.calls] == [2, 2, 1]
+    assert [len(call["rows"]) for call in writes] == [2, 2, 1]
+    assert stats.nodes_written == 5
+
+
+@pytest.mark.asyncio
+async def test_run_honors_max_symbols_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PALACE_EMBEDDING_MAX_SYMBOLS", "3")
+    rows = [
+        {
+            "qualified_name": f"demo.symbol.{index}",
+            "kind": "function",
+            "file_path": f"src/module_{index}.py",
+            "module_name": "demo",
+            "embedding_input_hash": None,
+            "has_embedding": False,
+        }
+        for index in range(5)
+    ]
+    graphiti, _, writes = _make_graphiti(rows)
+    backend = _FakeBackend()
+
+    stats = await EmbeddingSymbolExtractor(backend=backend).run(
+        graphiti=graphiti,
+        ctx=_make_ctx(),
+    )
+
+    assert [len(call) for call in backend.calls] == [3]
+    assert len(writes) == 1
+    assert len(writes[0]["rows"]) == 3
+    assert stats.nodes_written == 3
 
 
 @pytest.mark.asyncio

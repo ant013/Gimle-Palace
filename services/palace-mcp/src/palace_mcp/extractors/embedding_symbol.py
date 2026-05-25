@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from hashlib import sha256
+import os
 from typing import TYPE_CHECKING, TypedDict, cast
 
 from palace_mcp.embeddings import EmbeddingBackend, QodoEmbeddingBackend
@@ -26,9 +27,43 @@ RETURN
   s.file_path AS file_path,
   s.module_name AS module_name,
   s.embedding_input_hash AS embedding_input_hash,
-  s.embedding IS NOT NULL AS has_embedding
-ORDER BY s.qualified_name
+  s.embedding IS NOT NULL AS has_embedding,
+  CASE
+    WHEN s.file_path STARTS WITH ".palace-scip-derived-data/" THEN 1
+    WHEN s.file_path CONTAINS "/.palace-scip-derived-data/" THEN 1
+    WHEN s.file_path STARTS WITH ".build/" THEN 1
+    WHEN s.file_path CONTAINS "/.build/" THEN 1
+    ELSE 0
+  END AS embedding_priority
+ORDER BY embedding_priority, s.qualified_name
 """
+
+
+def _env_bool(name: str, *, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_positive_int(name: str, *, default: int) -> int:
+    value = os.environ.get(name)
+    if value is None or value.strip() == "":
+        return default
+    parsed = int(value)
+    if parsed < 1:
+        raise ValueError(f"{name} must be >= 1")
+    return parsed
+
+
+def _env_optional_non_negative_int(name: str) -> int | None:
+    value = os.environ.get(name)
+    if value is None or value.strip() == "":
+        return None
+    parsed = int(value)
+    if parsed < 0:
+        raise ValueError(f"{name} must be >= 0")
+    return parsed
 
 _WRITE_EMBEDDINGS = """
 UNWIND $rows AS row
@@ -102,7 +137,9 @@ class EmbeddingSymbolExtractor(BaseExtractor):
 
     def _resolve_backend(self) -> EmbeddingBackend:
         if self._backend is None:
-            self._backend = QodoEmbeddingBackend()
+            self._backend = QodoEmbeddingBackend(
+                local_files_only=_env_bool("PALACE_QODO_LOCAL_FILES_ONLY")
+            )
         return self._backend
 
     async def run(
@@ -113,6 +150,7 @@ class EmbeddingSymbolExtractor(BaseExtractor):
     ) -> ExtractorStats:
         driver = graphiti.driver  # type: ignore[attr-defined]
         pending_rows: list[_PendingSymbolRow] = []
+        max_symbols = _env_optional_non_negative_int("PALACE_EMBEDDING_MAX_SYMBOLS")
         for row in await _load_symbol_rows(driver, ctx.group_id):
             text = _embedding_text(row)
             text_hash = _embedding_text_hash(text)
@@ -125,14 +163,17 @@ class EmbeddingSymbolExtractor(BaseExtractor):
                     "embedding_input_hash": text_hash,
                 }
             )
+            if max_symbols is not None and len(pending_rows) >= max_symbols:
+                break
 
         if not pending_rows:
             return ExtractorStats(nodes_written=0, edges_written=0)
 
         backend = self._resolve_backend()
+        batch_size = _env_positive_int("PALACE_EMBEDDING_BATCH_SIZE", default=_BATCH_SIZE)
         nodes_written = 0
-        for index in range(0, len(pending_rows), _BATCH_SIZE):
-            batch = pending_rows[index : index + _BATCH_SIZE]
+        for index in range(0, len(pending_rows), batch_size):
+            batch = pending_rows[index : index + batch_size]
             embeddings = backend.embed_batch([row["embedding_text"] for row in batch])
             write_rows: list[_WriteRow] = [
                 {

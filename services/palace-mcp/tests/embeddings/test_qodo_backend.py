@@ -8,7 +8,11 @@ from typing import Any
 import pytest
 
 from palace_mcp.embeddings import EmbeddingBackend, EmbeddingBackendDispatcher
-from palace_mcp.embeddings.qodo import QODO_EMBED_MODEL_NAME, QodoEmbeddingBackend
+from palace_mcp.embeddings.qodo import (
+    QODO_EMBED_MODEL_NAME,
+    QodoEmbeddingBackend,
+    _install_qodo_transformers_compat,
+)
 
 
 class _FakeArray:
@@ -114,10 +118,10 @@ class TestQodoEmbeddingBackend:
                 captured["show_progress_bar"] = show_progress_bar
                 return _FakeArray([[7.0, 8.0] for _ in sentences])
 
-        def _fake_import_module(name: str) -> object:
+        def _fake_import_module(name: str, package: str | None = None) -> object:
             if name == "sentence_transformers":
                 return SimpleNamespace(SentenceTransformer=_FakeSentenceTransformer)
-            return original_import_module(name)
+            return original_import_module(name, package)
 
         monkeypatch.setattr(importlib, "import_module", _fake_import_module)
 
@@ -139,15 +143,58 @@ class TestQodoEmbeddingBackend:
     ) -> None:
         original_import_module = importlib.import_module
 
-        def _fake_import_module(name: str) -> object:
+        def _fake_import_module(name: str, package: str | None = None) -> object:
             if name == "sentence_transformers":
                 raise ModuleNotFoundError(name)
-            return original_import_module(name)
+            return original_import_module(name, package)
 
         monkeypatch.setattr(importlib, "import_module", _fake_import_module)
 
         with pytest.raises(RuntimeError, match="sentence-transformers"):
             QodoEmbeddingBackend()
+
+    def test_compat_installs_qwen2_rope_theta_property(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        class _FakeQwen2Config:
+            def __init__(self) -> None:
+                self.rope_parameters = {"rope_theta": 123.0}
+
+        class _FakeDynamicCache:
+            def __init__(self) -> None:
+                self.key_cache = ["k"]
+                self.value_cache = ["v"]
+
+            def get_seq_length(self, layer_idx: int = 0) -> int:
+                return layer_idx + 7
+
+            def update(
+                self, key_states: object, value_states: object, layer_idx: int
+            ) -> None:
+                self.key_cache.append((layer_idx, key_states))
+                self.value_cache.append((layer_idx, value_states))
+
+        original_import_module = importlib.import_module
+
+        def _fake_import_module(name: str, package: str | None = None) -> object:
+            if name == "transformers.models.qwen2.configuration_qwen2":
+                return SimpleNamespace(Qwen2Config=_FakeQwen2Config)
+            if name == "transformers.cache_utils":
+                return SimpleNamespace(DynamicCache=_FakeDynamicCache)
+            if name == "transformers.models.qwen2.tokenization_qwen2":
+                return SimpleNamespace(Qwen2Tokenizer=object)
+            return original_import_module(name, package)
+
+        monkeypatch.setattr(importlib, "import_module", _fake_import_module)
+
+        _install_qodo_transformers_compat()
+
+        config = _FakeQwen2Config()
+        cache = _FakeDynamicCache()
+        assert config.rope_theta == 123.0
+        assert cache.get_usable_length(3, 4) == 11
+        assert cache.to_legacy_cache() == (("k", "v"),)
+        assert _FakeDynamicCache.from_legacy_cache((("a", "b"),)) is not None
 
 
 class TestQodoEmbeddingBackendDispatcher:
