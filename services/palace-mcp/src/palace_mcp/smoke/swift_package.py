@@ -24,9 +24,7 @@ def build_swift_package_invocation(
     package_resolution: Literal["locked", "automatic"] | None = None,
 ) -> SwiftPackageInvocation:
     if recipe.build_system != "swift_package":
-        raise ValueError(
-            "swift package invocation requires build_system=swift_package"
-        )
+        raise ValueError("swift package invocation requires build_system=swift_package")
 
     scip_path = binding.repo_path / recipe.scip_path
     if scip_path.exists() and scip_path.stat().st_size > 0:
@@ -46,6 +44,4 @@ def build_swift_package_invocation(
     index_store_path = f"{recipe.build.derived_data_path}/Index.noindex/DataStore"
     command.extend(["-Xswiftc", "-index-store-path", "-Xswiftc", index_store_path])
 
-    return SwiftPackageInvocation(
-        cwd=binding.repo_path, command=tuple(command)
-    )
+    return SwiftPackageInvocation(cwd=binding.repo_path, command=tuple(command))
