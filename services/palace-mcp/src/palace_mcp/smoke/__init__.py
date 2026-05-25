@@ -10,6 +10,10 @@ from palace_mcp.smoke.runner import (
     write_report_json,
 )
 from palace_mcp.smoke.runtime_binding import RuntimeBinding
+from palace_mcp.smoke.swift_package import (
+    SwiftPackageInvocation,
+    build_swift_package_invocation,
+)
 from palace_mcp.smoke.xcode_workspace import (
     XcodeWorkspaceInvocation,
     apply_prepare_steps,
@@ -27,8 +31,10 @@ __all__ = [
     "SmokeRunner",
     "StageResult",
     "StageStatus",
+    "SwiftPackageInvocation",
     "XcodeWorkspaceInvocation",
     "apply_prepare_steps",
+    "build_swift_package_invocation",
     "build_xcode_workspace_invocation",
     "resolve_simulator_arch",
     "write_report_json",

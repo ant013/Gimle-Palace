@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from palace_mcp.smoke import mcp_caller
 from palace_mcp.smoke.recipe import Recipe
 from palace_mcp.smoke.runtime_binding import RuntimeBinding
+from palace_mcp.smoke.swift_package import build_swift_package_invocation
 from palace_mcp.smoke.xcode_workspace import (
     apply_prepare_steps,
     build_xcode_workspace_invocation,
@@ -245,6 +246,35 @@ class SmokeRunner:
             scip_size = scip_path.stat().st_size if scip_path.exists() else 0
             return {
                 "build_system": self._recipe.build_system,
+                "scip_size_bytes": scip_size,
+            }
+
+        if self._recipe.build_system == "swift_package":
+            spm_invocation = build_swift_package_invocation(
+                self._recipe, self._binding
+            )
+            if spm_invocation.scip_reused:
+                scip_path = self._binding.repo_path / self._recipe.scip_path
+                return {
+                    "build_system": self._recipe.build_system,
+                    "scip_reused": True,
+                    "scip_size_bytes": scip_path.stat().st_size,
+                }
+            proc = await asyncio.create_subprocess_exec(
+                *spm_invocation.command,
+                cwd=spm_invocation.cwd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            stdout_bytes, _ = await proc.communicate()
+            if proc.returncode != 0:
+                tail = (stdout_bytes or b"").decode(errors="replace")[-2000:]
+                raise RuntimeError(f"swift build exited {proc.returncode}\n{tail}")
+            scip_path = self._binding.repo_path / self._recipe.scip_path
+            scip_size = scip_path.stat().st_size if scip_path.exists() else 0
+            return {
+                "build_system": self._recipe.build_system,
+                "scip_reused": False,
                 "scip_size_bytes": scip_size,
             }
 
