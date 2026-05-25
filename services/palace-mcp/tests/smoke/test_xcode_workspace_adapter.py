@@ -26,8 +26,7 @@ def _binding(repo_path: Path) -> RuntimeBinding:
     )
 
 
-def test_build_invocation_uses_workspace_and_locked_package_flags(
-) -> None:
+def test_build_invocation_uses_workspace_and_locked_package_flags() -> None:
     repo_path = FIXTURES_DIR
     recipe = load_recipe_yaml(FIXTURES_DIR / "uw_ios_recipe.yaml")
 
@@ -79,9 +78,7 @@ def test_build_invocation_automatic_resolution_omits_locked_flags() -> None:
 def test_explicit_simulator_arch_wins_over_host_machine() -> None:
     recipe = load_recipe_yaml(FIXTURES_DIR / "uw_ios_recipe.yaml")
     recipe = recipe.model_copy(
-        update={
-            "build": recipe.build.model_copy(update={"simulator_arch": "x86_64"})
-        }
+        update={"build": recipe.build.model_copy(update={"simulator_arch": "x86_64"})}
     )
 
     assert resolve_simulator_arch(recipe, host_machine="arm64") == "x86_64"

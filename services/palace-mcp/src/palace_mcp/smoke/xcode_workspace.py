@@ -37,7 +37,9 @@ def build_xcode_workspace_invocation(
     package_resolution: Literal["locked", "automatic"] | None = None,
 ) -> XcodeWorkspaceInvocation:
     if recipe.build_system != "xcode_workspace" or recipe.build.workspace is None:
-        raise ValueError("xcode workspace invocation requires build_system=xcode_workspace")
+        raise ValueError(
+            "xcode workspace invocation requires build_system=xcode_workspace"
+        )
 
     resolved_package_resolution = package_resolution or recipe.build.package_resolution
     command: list[str] = [
