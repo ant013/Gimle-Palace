@@ -19,6 +19,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from palace_mcp.smoke import mcp_caller
+from palace_mcp.smoke.preflight import run_preflight
 from palace_mcp.smoke.recipe import Recipe
 from palace_mcp.smoke.runtime_binding import RuntimeBinding
 from palace_mcp.smoke.swift_package import build_swift_package_invocation
@@ -202,28 +203,24 @@ class SmokeRunner:
     # -- stage implementations ---------------------------------------------
 
     async def _stage_preflight(self) -> dict[str, Any]:
-        details: dict[str, Any] = {}
-
-        if not self._binding.repo_path.is_dir():
-            raise RuntimeError(f"repo_path does not exist: {self._binding.repo_path}")
-        details["repo_path_exists"] = True
+        report = await run_preflight(self._recipe, self._binding)
+        if not report.passed:
+            raise _StageFailure(
+                "; ".join(report.actionable_failures[:5]),
+                {
+                    "checks": [c.model_dump() for c in report.checks],
+                    "actionable_failures": report.actionable_failures,
+                },
+            )
 
         scip_parent = (self._binding.repo_path / self._recipe.scip_path).parent
         if not scip_parent.is_dir():
             scip_parent.mkdir(parents=True, exist_ok=True)
-            details["scip_parent_created"] = True
 
-        if not self._dry_run:
-            try:
-                tools = await mcp_caller.list_tools(self._binding.mcp_url)
-                details["mcp_tools_count"] = len(tools)
-                details["mcp_reachable"] = True
-            except Exception as exc:
-                raise RuntimeError(
-                    f"MCP unreachable at {self._binding.mcp_url}: {exc}"
-                ) from exc
-
-        return details
+        return {
+            "checks": [c.model_dump() for c in report.checks],
+            "all_passed": True,
+        }
 
     async def _stage_prepare(self) -> dict[str, Any]:
         apply_prepare_steps(self._recipe, self._binding)
