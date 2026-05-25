@@ -26,9 +26,7 @@ class RuntimeBinding(BaseModel, frozen=True):
     @model_validator(mode="after")
     def _validate_paths(self) -> RuntimeBinding:
         if not self.repo_path.is_absolute():
-            raise ValueError(
-                f"repo_path must be absolute, got: '{self.repo_path}'"
-            )
+            raise ValueError(f"repo_path must be absolute, got: '{self.repo_path}'")
         if not self.parent_mount.is_absolute():
             raise ValueError(
                 f"parent_mount must be absolute, got: '{self.parent_mount}'"
@@ -38,9 +36,7 @@ class RuntimeBinding(BaseModel, frozen=True):
             resolved_repo = self.repo_path.resolve()
             resolved_mount = self.parent_mount.resolve()
         except (OSError, RuntimeError) as exc:
-            raise ValueError(
-                f"cannot resolve paths: {exc}"
-            ) from exc
+            raise ValueError(f"cannot resolve paths: {exc}") from exc
 
         if not _is_inside(resolved_repo, resolved_mount):
             raise ValueError(

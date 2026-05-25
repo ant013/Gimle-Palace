@@ -6,7 +6,6 @@ checkout paths live exclusively in RuntimeBinding (see runtime_binding.py).
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping
 from typing import Annotated, Literal, Union
 
@@ -49,8 +48,6 @@ class BuildConfig(BaseModel, frozen=True):
 # ---------------------------------------------------------------------------
 # Absolute-path detector
 # ---------------------------------------------------------------------------
-
-_ABS_PATH_RE = re.compile(r"(?:^|/)(?:/[A-Za-z]|/Users|/home|/tmp|/var|/opt|/ABS)")
 
 
 def _looks_absolute(value: str) -> bool:
@@ -117,9 +114,7 @@ class Recipe(BaseModel, frozen=True, extra="forbid"):
                 f"absolute path in build.workspace: '{self.build.workspace}'"
             )
         if self.build.project and _looks_absolute(self.build.project):
-            raise ValueError(
-                f"absolute path in build.project: '{self.build.project}'"
-            )
+            raise ValueError(f"absolute path in build.project: '{self.build.project}'")
         if _looks_absolute(self.build.derived_data_path):
             raise ValueError(
                 f"absolute path in build.derived_data_path: "

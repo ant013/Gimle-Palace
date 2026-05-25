@@ -45,9 +45,7 @@ class SemanticSearchRequest(BaseModel, frozen=True):
     @model_validator(mode="after")
     def _validate_scope(self) -> SemanticSearchRequest:
         if (self.project is None) == (self.projects is None):
-            raise ValueError(
-                "specify exactly one of 'project' or 'projects'"
-            )
+            raise ValueError("specify exactly one of 'project' or 'projects'")
 
         if self.projects is not None:
             if len(self.projects) == 0:
