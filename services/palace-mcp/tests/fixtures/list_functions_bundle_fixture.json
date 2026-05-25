@@ -6,7 +6,7 @@
     {
       "slug": "list-functions-alpha",
       "tier": "user",
-      "last_run_finished_at": "2026-05-19T00:00:00Z",
+      "last_run_finished_at": "2026-05-25T00:00:00Z",
       "files": [
         {
           "path": "Modules/Send/Shared.swift",
@@ -36,7 +36,7 @@
     {
       "slug": "list-functions-beta",
       "tier": "first-party",
-      "last_run_finished_at": "2026-05-18T00:00:00Z",
+      "last_run_finished_at": "2026-05-24T00:00:00Z",
       "files": [
         {
           "path": "Modules/Send/Shared.swift",

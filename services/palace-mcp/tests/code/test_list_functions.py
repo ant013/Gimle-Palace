@@ -305,8 +305,8 @@ async def test_list_functions_bundle_fixture_matches_golden_snapshot() -> None:
     driver, _session = _driver_for_rows(rows)
     health = _bundle_health(fixture["bundle"]).model_copy(
         update={
-            "oldest_member_ingest_at": datetime(2026, 5, 18, tzinfo=timezone.utc),
-            "newest_member_ingest_at": datetime(2026, 5, 19, tzinfo=timezone.utc),
+            "oldest_member_ingest_at": datetime(2026, 5, 24, tzinfo=timezone.utc),
+            "newest_member_ingest_at": datetime(2026, 5, 25, tzinfo=timezone.utc),
         }
     )
 
