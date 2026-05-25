@@ -155,7 +155,9 @@ class TestRejectAbsolutePaths:
             )
 
     def test_reject_absolute_derived_data_path(self) -> None:
-        with pytest.raises(ValidationError, match="absolute path.*build.derived_data_path"):
+        with pytest.raises(
+            ValidationError, match="absolute path.*build.derived_data_path"
+        ):
             Recipe(
                 slug="bad-recipe",
                 name="bad",

@@ -87,9 +87,7 @@ class TestEffectiveScopes:
     def test_default_scopes_are_first_party(self) -> None:
         req = SemanticSearchRequest(query="timer", project="uw-ios-app")
         scopes = req.effective_scopes()
-        assert scopes == frozenset(
-            {SourceScope.PROJECT, SourceScope.WORKSPACE_PACKAGE}
-        )
+        assert scopes == frozenset({SourceScope.PROJECT, SourceScope.WORKSPACE_PACKAGE})
 
     def test_include_dependencies_adds_dependency(self) -> None:
         req = SemanticSearchRequest(
