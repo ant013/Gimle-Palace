@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
@@ -20,8 +19,6 @@ from palace_mcp.smoke.recipe import Recipe
 from palace_mcp.smoke.runtime_binding import RuntimeBinding
 
 logger = logging.getLogger(__name__)
-
-_ABSOLUTE_REF_RE = re.compile(r"absolute:")
 
 
 class PreflightCheck(BaseModel, frozen=True):
@@ -199,8 +196,6 @@ async def check_neo4j_reachable(binding: RuntimeBinding) -> PreflightCheck:
 
 
 def _derive_neo4j_url(mcp_url: str) -> str:
-    if "localhost" in mcp_url or "127.0.0.1" in mcp_url:
-        return "http://localhost:7474"
     return "http://localhost:7474"
 
 
