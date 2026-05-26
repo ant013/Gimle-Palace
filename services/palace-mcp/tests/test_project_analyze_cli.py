@@ -316,7 +316,10 @@ def test_build_macbook_fallback_command_uses_uw_ios_app_helper() -> None:
 
     assert "scip_emit_uw_ios_app.sh" in command
     assert "scip_emit_swift_kit.sh" not in command
-    assert "--repo-path /Users/ant013/Ios/HorizontalSystems/unstoppable-wallet-ios" in command
+    assert (
+        "--repo-path /Users/ant013/Ios/HorizontalSystems/unstoppable-wallet-ios"
+        in command
+    )
 
 
 def test_project_analyze_writes_summary_and_report(
@@ -472,8 +475,9 @@ def test_project_analyze_uw_ios_app_routes_through_uw_emitter(
     monkeypatch.setattr(
         cli,
         "ensure_project_analyze_runtime",
-        lambda **kwargs: runtime_calls.append(kwargs["recreate_palace"])
-        or kwargs["mcp_url"],
+        lambda **kwargs: (
+            runtime_calls.append(kwargs["recreate_palace"]) or kwargs["mcp_url"]
+        ),
     )
     monkeypatch.setattr(cli, "_git_head_sha", lambda _path: "abc123")
     monkeypatch.setattr(cli, "_host_path_requires_staging", lambda _path: False)
