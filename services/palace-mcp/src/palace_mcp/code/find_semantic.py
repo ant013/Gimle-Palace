@@ -44,6 +44,7 @@ RETURN
   s.kind AS kind,
   s.file_path AS file_path,
   s.module_name AS module_name,
+  s.source_scope AS source_scope,
   s.embedding_input_hash AS embedding_input_hash,
   s.commit_sha AS commit_sha,
   score AS score
@@ -382,6 +383,7 @@ async def semantic_search(
             "kind": row.get("kind"),
             "file_path": row.get("file_path"),
             "module_name": row.get("module_name"),
+            "source_scope": row.get("source_scope"),
             "score": float(row["score"]),
         }
         embedding_input_hash = row.get("embedding_input_hash")
