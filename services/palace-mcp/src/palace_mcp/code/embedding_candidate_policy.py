@@ -27,27 +27,31 @@ class CandidateRow(TypedDict):
     source_scope: str | None
 
 
-_DEFINITION_KINDS = frozenset({
-    "class",
-    "struct",
-    "enum",
-    "protocol",
-    "interface",
-    "type_alias",
-    "typedef",
-    "trait",
-    "namespace",
-    "module",
-    "extension",
-    "object",
-    "record",
-})
+_DEFINITION_KINDS = frozenset(
+    {
+        "class",
+        "struct",
+        "enum",
+        "protocol",
+        "interface",
+        "type_alias",
+        "typedef",
+        "trait",
+        "namespace",
+        "module",
+        "extension",
+        "object",
+        "record",
+    }
+)
 
-_ACCESSOR_KINDS = frozenset({
-    "accessor",
-    "getter",
-    "setter",
-})
+_ACCESSOR_KINDS = frozenset(
+    {
+        "accessor",
+        "getter",
+        "setter",
+    }
+)
 
 
 def _is_accessor(row: CandidateRow) -> bool:

@@ -220,7 +220,9 @@ class TestApplyPolicy:
         rows = [
             _row(qualified_name="P.cls", source_scope="project", kind="class"),
             _row(qualified_name="P.fn", source_scope="project", kind="function"),
-            _row(qualified_name="W.fn", source_scope="workspace_package", kind="function"),
+            _row(
+                qualified_name="W.fn", source_scope="workspace_package", kind="function"
+            ),
             _row(
                 qualified_name="S.fn",
                 source_scope="sdk",

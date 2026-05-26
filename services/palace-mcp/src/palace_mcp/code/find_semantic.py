@@ -160,9 +160,7 @@ def _read_max_symbols() -> int | None:
         return None
 
 
-async def _load_coverage(
-    driver: Any, group_ids: list[str]
-) -> dict[str, Any]:
+async def _load_coverage(driver: Any, group_ids: list[str]) -> dict[str, Any]:
     async with driver.session() as session:
         result = await session.run(_COVERAGE_QUERY, group_ids=group_ids)
         rows = cast(list[dict[str, Any]], await result.data())
