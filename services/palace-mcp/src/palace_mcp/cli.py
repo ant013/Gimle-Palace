@@ -792,9 +792,9 @@ def _parse_emit_helper_output(stdout: str) -> dict[str, Any]:
             continue
         parsed[key] = value.strip()
     for key in ("size_bytes", "scip_size_bytes"):
-        value = parsed.get(key)
-        if isinstance(value, str) and value.isdigit():
-            parsed[key] = int(value)
+        parsed_value = parsed.get(key)
+        if isinstance(parsed_value, str) and parsed_value.isdigit():
+            parsed[key] = int(parsed_value)
     return parsed
 
 
