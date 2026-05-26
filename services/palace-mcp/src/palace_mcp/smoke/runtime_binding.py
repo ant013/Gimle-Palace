@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
+
+_MOUNT_NAME_RE = r"^[a-z][a-z0-9-]{0,15}$"
 
 
 class RuntimeBinding(BaseModel, frozen=True):
@@ -17,6 +19,7 @@ class RuntimeBinding(BaseModel, frozen=True):
 
     repo_path: Path
     parent_mount: Path
+    mount_name: str = Field(pattern=_MOUNT_NAME_RE)
     mcp_url: str
 
     qodo_cache_path: Path | None = None

@@ -17,8 +17,8 @@ derived_roots:
 scip_path: scip/index.scip
 prepare_steps:
   - type: ensure_config_from_template
-    template: Config.template.xcconfig
-    destination: Config.xcconfig
+    template: Unstoppable/Unstoppable/Configuration/Config.template.xcconfig
+    destination: Unstoppable/Unstoppable/Configuration/Config.xcconfig
 build:
   workspace: Wallet.xcworkspace
   scheme: Development

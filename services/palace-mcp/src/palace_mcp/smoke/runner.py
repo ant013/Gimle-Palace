@@ -39,6 +39,14 @@ class _StageFailure(Exception):
         self.details = details
 
 
+class _StageSkipped(Exception):
+    """Internal: a stage intentionally skipped itself (e.g. skip_build_reason)."""
+
+    def __init__(self, reason: str, details: dict[str, Any]) -> None:
+        super().__init__(reason)
+        self.details = details
+
+
 # ---------------------------------------------------------------------------
 # Stage models
 # ---------------------------------------------------------------------------
@@ -178,6 +186,15 @@ class SmokeRunner:
                 duration_ms=duration_ms,
                 details=details or {},
             )
+        except _StageSkipped as exc:
+            duration_ms = int((time.monotonic() - t0) * 1000)
+            logger.info("[%s] SKIPPED (%dms): %s", name, duration_ms, str(exc))
+            return StageResult(
+                stage=name,
+                status=StageStatus.SKIPPED,
+                duration_ms=duration_ms,
+                details=exc.details,
+            )
         except _StageFailure as exc:
             duration_ms = int((time.monotonic() - t0) * 1000)
             error_msg = str(exc)
@@ -227,6 +244,13 @@ class SmokeRunner:
         return {"steps_applied": len(self._recipe.prepare_steps)}
 
     async def _stage_build_scip(self) -> dict[str, Any]:
+        # Bug 4: honour skip_build_reason before attempting any build
+        if self._recipe.build.skip_build_reason is not None:
+            raise _StageSkipped(
+                self._recipe.build.skip_build_reason,
+                {"skip_reason": self._recipe.build.skip_build_reason},
+            )
+
         if self._recipe.build_system == "xcode_workspace":
             invocation = build_xcode_workspace_invocation(self._recipe, self._binding)
             proc = await asyncio.create_subprocess_exec(
@@ -241,6 +265,15 @@ class SmokeRunner:
                 raise RuntimeError(f"xcodebuild exited {proc.returncode}\n{tail}")
             scip_path = self._binding.repo_path / self._recipe.scip_path
             scip_size = scip_path.stat().st_size if scip_path.exists() else 0
+            # Bug 3: fail explicitly when SCIP is missing or empty
+            if scip_size == 0:
+                raise _StageFailure(
+                    "SCIP file missing or empty after xcodebuild",
+                    {
+                        "build_system": self._recipe.build_system,
+                        "scip_path": str(scip_path),
+                    },
+                )
             return {
                 "build_system": self._recipe.build_system,
                 "scip_size_bytes": scip_size,
@@ -267,6 +300,15 @@ class SmokeRunner:
                 raise RuntimeError(f"swift build exited {proc.returncode}\n{tail}")
             scip_path = self._binding.repo_path / self._recipe.scip_path
             scip_size = scip_path.stat().st_size if scip_path.exists() else 0
+            # Bug 3: fail explicitly when SCIP is missing or empty
+            if scip_size == 0:
+                raise _StageFailure(
+                    "SCIP file missing or empty after swift build",
+                    {
+                        "build_system": self._recipe.build_system,
+                        "scip_path": str(scip_path),
+                    },
+                )
             return {
                 "build_system": self._recipe.build_system,
                 "scip_reused": False,
@@ -281,11 +323,20 @@ class SmokeRunner:
             slug=self._recipe.slug,
             name=self._recipe.name,
             language=self._recipe.language,
-            parent_mount=str(self._binding.parent_mount),
+            parent_mount=self._binding.mount_name,  # Bug 2a: use mount_name not path
             relative_path=str(
                 self._binding.repo_path.relative_to(self._binding.parent_mount)
             ),
         )
+        # Bug 2b: treat explicit ok=false as a hard failure
+        if result.get("ok") is False:
+            raise _StageFailure(
+                result.get("message", "register_project returned ok=false"),
+                {
+                    "error_code": result.get("error_code"),
+                    "message": result.get("message"),
+                },
+            )
         return {"register_response": result}
 
     async def _stage_run_extractors(self) -> dict[str, Any]:
