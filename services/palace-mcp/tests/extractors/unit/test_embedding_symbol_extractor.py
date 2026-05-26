@@ -14,6 +14,7 @@ from palace_mcp.extractors.embedding_symbol import (
     EmbeddingSymbolExtractor,
     _embedding_text,
     _embedding_text_hash,
+    _read_max_symbols,
 )
 
 
@@ -84,6 +85,7 @@ async def test_run_batches_symbols_and_writes_embeddings() -> None:
             "kind": "function",
             "file_path": f"src/module_{index}.py",
             "module_name": "demo",
+            "source_scope": "project",
             "embedding_input_hash": None,
             "has_embedding": False,
         }
@@ -112,6 +114,7 @@ async def test_run_skips_symbols_with_matching_hash() -> None:
         "kind": "function",
         "file_path": "src/unchanged.py",
         "module_name": "demo",
+        "source_scope": "project",
         "embedding_input_hash": None,
         "has_embedding": True,
     }
@@ -123,6 +126,7 @@ async def test_run_skips_symbols_with_matching_hash() -> None:
         "kind": "class",
         "file_path": "src/stale.py",
         "module_name": "demo",
+        "source_scope": "project",
         "embedding_input_hash": "stale-hash",
         "has_embedding": True,
     }
@@ -148,6 +152,7 @@ async def test_run_with_all_unchanged_symbols_skips_backend_resolution() -> None
         "kind": "function",
         "file_path": "src/unchanged.py",
         "module_name": "demo",
+        "source_scope": "project",
         "embedding_input_hash": None,
         "has_embedding": True,
     }
@@ -178,3 +183,106 @@ async def test_run_with_all_unchanged_symbols_skips_backend_resolution() -> None
     assert stats.edges_written == 0
     assert writes == []
     assert run_mock.await_count == 1
+
+
+# ---------------------------------------------------------------------------
+# _read_max_symbols
+# ---------------------------------------------------------------------------
+
+
+def test_read_max_symbols_missing_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("PALACE_EMBEDDING_MAX_SYMBOLS", raising=False)
+    assert _read_max_symbols() is None
+
+
+def test_read_max_symbols_valid(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PALACE_EMBEDDING_MAX_SYMBOLS", "128")
+    assert _read_max_symbols() == 128
+
+
+def test_read_max_symbols_invalid_is_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PALACE_EMBEDDING_MAX_SYMBOLS", "not-a-number")
+    assert _read_max_symbols() is None
+
+
+# ---------------------------------------------------------------------------
+# Bounded policy applied in run()
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_run_respects_max_symbols_and_prefers_project_over_sdk(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PALACE_EMBEDDING_MAX_SYMBOLS", "1")
+
+    rows = [
+        {
+            "qualified_name": "SDK.NSObject",
+            "kind": "class",
+            "file_path": "Developer/Platforms/MacOSX.sdk/NSObject.h",
+            "module_name": None,
+            "source_scope": "sdk",
+            "embedding_input_hash": None,
+            "has_embedding": False,
+        },
+        {
+            "qualified_name": "MyApp.Wallet",
+            "kind": "class",
+            "file_path": "src/Wallet.swift",
+            "module_name": "MyApp",
+            "source_scope": "project",
+            "embedding_input_hash": None,
+            "has_embedding": False,
+        },
+    ]
+    graphiti, _, writes = _make_graphiti(rows)
+    backend = _FakeBackend()
+
+    stats = await EmbeddingSymbolExtractor(backend=backend).run(
+        graphiti=graphiti,
+        ctx=_make_ctx(),
+    )
+
+    assert stats.nodes_written == 1
+    assert len(writes) == 1
+    # The project symbol should be selected, not the SDK symbol
+    written_names = [r["qualified_name"] for r in writes[0]["rows"]]
+    assert written_names == ["MyApp.Wallet"]
+
+
+@pytest.mark.asyncio
+async def test_run_without_max_symbols_embeds_all_pending(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("PALACE_EMBEDDING_MAX_SYMBOLS", raising=False)
+
+    rows = [
+        {
+            "qualified_name": "SDK.NSObject",
+            "kind": "class",
+            "file_path": "Developer/Platforms/MacOSX.sdk/NSObject.h",
+            "module_name": None,
+            "source_scope": "sdk",
+            "embedding_input_hash": None,
+            "has_embedding": False,
+        },
+        {
+            "qualified_name": "MyApp.Wallet",
+            "kind": "class",
+            "file_path": "src/Wallet.swift",
+            "module_name": "MyApp",
+            "source_scope": "project",
+            "embedding_input_hash": None,
+            "has_embedding": False,
+        },
+    ]
+    graphiti, _, writes = _make_graphiti(rows)
+    backend = _FakeBackend()
+
+    stats = await EmbeddingSymbolExtractor(backend=backend).run(
+        graphiti=graphiti,
+        ctx=_make_ctx(),
+    )
+
+    assert stats.nodes_written == 2

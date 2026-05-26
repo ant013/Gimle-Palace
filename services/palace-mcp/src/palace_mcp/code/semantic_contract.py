@@ -115,6 +115,16 @@ class SemanticSearchHit(BaseModel, frozen=True):
     score_components: ScoreComponents = Field(default_factory=ScoreComponents)
 
 
+class EmbeddingCoverage(BaseModel, frozen=True):
+    """Embedding index coverage metadata (spec §7.6)."""
+
+    bounded: bool
+    max_symbols: int | None = None
+    embedded_symbols: int
+    eligible_symbols: int
+    source_scope_counts: dict[str, int] = Field(default_factory=dict)
+
+
 class SymbolSourceMetadata(BaseModel, frozen=True):
     """Contract for source metadata persisted on :Symbol nodes.
 

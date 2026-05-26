@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from typing import cast
@@ -31,6 +32,13 @@ _COUNT_EMBEDDED_SYMBOLS_QUERY = """
 MATCH (s:Symbol)
 WHERE s.group_id IN $group_ids AND s.embedding IS NOT NULL
 RETURN count(s) AS embedded_symbol_count
+""".strip()
+
+_COVERAGE_QUERY = """
+MATCH (s:Symbol)
+WHERE s.group_id IN $group_ids
+WITH s.source_scope AS source_scope, s.embedding IS NOT NULL AS has_embed
+RETURN source_scope, count(*) AS total, sum(CASE WHEN has_embed THEN 1 ELSE 0 END) AS embedded_cnt
 """.strip()
 
 _VECTOR_QUERY = """
@@ -140,6 +148,43 @@ async def _count_embedded_symbols(driver: Any, group_ids: list[str]) -> int:
         result = await session.run(_COUNT_EMBEDDED_SYMBOLS_QUERY, group_ids=group_ids)
         record = await result.single()
     return int(record["embedded_symbol_count"] if record is not None else 0)
+
+
+def _read_max_symbols() -> int | None:
+    raw = os.environ.get("PALACE_EMBEDDING_MAX_SYMBOLS", "").strip()
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
+async def _load_coverage(driver: Any, group_ids: list[str]) -> dict[str, Any]:
+    async with driver.session() as session:
+        result = await session.run(_COVERAGE_QUERY, group_ids=group_ids)
+        rows = cast(list[dict[str, Any]], await result.data())
+
+    total_symbols = 0
+    embedded_symbols = 0
+    scope_counts: dict[str, int] = {}
+    for row in rows:
+        scope = str(row.get("source_scope") or "unknown")
+        total = int(row.get("total") or 0)
+        embedded = int(row.get("embedded_cnt") or 0)
+        total_symbols += total
+        embedded_symbols += embedded
+        if embedded > 0:
+            scope_counts[scope] = embedded
+
+    max_symbols = _read_max_symbols()
+    return {
+        "bounded": max_symbols is not None,
+        "max_symbols": max_symbols,
+        "embedded_symbols": embedded_symbols,
+        "eligible_symbols": total_symbols,
+        "source_scope_counts": scope_counts,
+    }
 
 
 async def _vector_search(
@@ -339,7 +384,8 @@ async def semantic_search(
     except Exception as exc:
         return _error("embedding_backend_failed", str(exc))
 
-    embedded_symbol_count = await _count_embedded_symbols(driver, group_ids)
+    coverage = await _load_coverage(driver, group_ids)
+    embedded_symbol_count = coverage["embedded_symbols"]
     warnings: list[dict[str, Any]] = []
     if embedded_symbol_count == 0:
         warnings.append(
@@ -359,6 +405,7 @@ async def semantic_search(
             "embedded_symbol_count": 0,
             "returned_count": 0,
             "warnings": warnings,
+            "embedding_coverage": coverage,
             "result": [],
         }
 
@@ -421,5 +468,6 @@ async def semantic_search(
         "embedded_symbol_count": embedded_symbol_count,
         "returned_count": len(result_rows),
         "warnings": warnings,
+        "embedding_coverage": coverage,
         "result": result_rows,
     }
