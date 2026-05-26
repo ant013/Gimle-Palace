@@ -405,12 +405,12 @@ async def test_extractor_timeout_overrides_runner_default(
 
 
 @pytest.mark.asyncio
-async def test_run_extractor_passes_scip_path_into_context(
+async def test_run_extractor_resolves_relative_scip_path_inside_repo(
     mock_driver: MagicMock, tmp_path: Path, mock_graphiti: MagicMock
 ) -> None:
     extractor = _ScipPathEcho()
     registry.register(extractor)
-    scip_path = tmp_path / "scip" / "index.scip"
+    repo_path = tmp_path / "repos" / "testproj"
 
     with patch("palace_mcp.extractors.runner.REPOS_ROOT", tmp_path / "repos"):
         res = await run_extractor(
@@ -418,11 +418,11 @@ async def test_run_extractor_passes_scip_path_into_context(
             project="testproj",
             driver=mock_driver,
             graphiti=mock_graphiti,
-            scip_path=str(scip_path),
+            scip_path="scip/index.scip",
         )
 
     assert res["ok"] is True
-    assert extractor.seen_scip_path == scip_path
+    assert extractor.seen_scip_path == repo_path / "scip" / "index.scip"
 
 
 @pytest.mark.asyncio
@@ -454,6 +454,44 @@ async def test_run_extractor_resolves_relative_scip_path_inside_mounted_repo(
 
     assert res["ok"] is True
     assert extractor.seen_scip_path == mounted_repo / "scip" / "index.scip"
+
+
+@pytest.mark.asyncio
+async def test_run_extractor_rejects_absolute_scip_path(
+    mock_driver: MagicMock, tmp_path: Path, mock_graphiti: MagicMock
+) -> None:
+    registry.register(_ScipPathEcho())
+
+    with patch("palace_mcp.extractors.runner.REPOS_ROOT", tmp_path / "repos"):
+        res = await run_extractor(
+            name="__test_scip_path_echo",
+            project="testproj",
+            driver=mock_driver,
+            graphiti=mock_graphiti,
+            scip_path="/tmp/uw-ios-app/scip/index.scip",
+        )
+
+    assert res["ok"] is False
+    assert res["error_code"] == "invalid_scip_path"
+
+
+@pytest.mark.asyncio
+async def test_run_extractor_rejects_traversal_scip_path(
+    mock_driver: MagicMock, tmp_path: Path, mock_graphiti: MagicMock
+) -> None:
+    registry.register(_ScipPathEcho())
+
+    with patch("palace_mcp.extractors.runner.REPOS_ROOT", tmp_path / "repos"):
+        res = await run_extractor(
+            name="__test_scip_path_echo",
+            project="testproj",
+            driver=mock_driver,
+            graphiti=mock_graphiti,
+            scip_path="../outside/index.scip",
+        )
+
+    assert res["ok"] is False
+    assert res["error_code"] == "invalid_scip_path"
 
 
 @pytest.mark.asyncio
