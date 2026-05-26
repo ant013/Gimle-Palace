@@ -60,6 +60,8 @@ def _make_binding(tmp_path: Path) -> RuntimeBinding:
     return RuntimeBinding(
         repo_path=repo,
         parent_mount=tmp_path / "repos",
+        mount_name="test",
+        mcp_mount_name="test",
         mcp_url=_MCP_URL,
     )
 
@@ -207,12 +209,14 @@ class TestFailurePropagation:
         self, _pf: Any, tmp_path: Path
     ) -> None:
         recipe = _make_recipe()
+        (tmp_path / "repos").mkdir(parents=True, exist_ok=True)
         binding = RuntimeBinding(
             repo_path=tmp_path / "repos" / "nonexistent",
             parent_mount=tmp_path / "repos",
+            mount_name="test",
+            mcp_mount_name="test",
             mcp_url=_MCP_URL,
         )
-        (tmp_path / "repos").mkdir(parents=True, exist_ok=True)
 
         runner = SmokeRunner(recipe, binding)
         report = await runner.run_smoke()
@@ -235,12 +239,14 @@ class TestFailurePropagation:
         self, _pf: Any, tmp_path: Path
     ) -> None:
         recipe = _make_recipe()
+        (tmp_path / "repos").mkdir(parents=True, exist_ok=True)
         binding = RuntimeBinding(
             repo_path=tmp_path / "repos" / "nonexistent",
             parent_mount=tmp_path / "repos",
+            mount_name="test",
+            mcp_mount_name="test",
             mcp_url=_MCP_URL,
         )
-        (tmp_path / "repos").mkdir(parents=True, exist_ok=True)
 
         runner = SmokeRunner(recipe, binding)
         report = await runner.run_smoke()
@@ -250,12 +256,14 @@ class TestFailurePropagation:
 
     async def test_failed_run_is_not_passed(self, _pf: Any, tmp_path: Path) -> None:
         recipe = _make_recipe()
+        (tmp_path / "repos").mkdir(parents=True, exist_ok=True)
         binding = RuntimeBinding(
             repo_path=tmp_path / "repos" / "nonexistent",
             parent_mount=tmp_path / "repos",
+            mount_name="test",
+            mcp_mount_name="test",
             mcp_url=_MCP_URL,
         )
-        (tmp_path / "repos").mkdir(parents=True, exist_ok=True)
 
         runner = SmokeRunner(recipe, binding)
         report = await runner.run_smoke()
@@ -514,3 +522,181 @@ class TestModels:
         d = r.model_dump()
         assert d["mode"] == "smoke"
         assert d["passed"] is True
+
+
+# ---------------------------------------------------------------------------
+# mcp_mount_name passed to register_project (GIM-852)
+# ---------------------------------------------------------------------------
+
+
+@patch(
+    "palace_mcp.smoke.runner.run_preflight", return_value=_passing_preflight_report()
+)
+class TestMcpMountNamePassedToRegister:
+    @patch("palace_mcp.smoke.runner.mcp_caller")
+    @patch("palace_mcp.smoke.runner.asyncio.create_subprocess_exec")
+    async def test_register_project_uses_mcp_mount_name(
+        self, mock_subprocess: AsyncMock, mock_mcp: AsyncMock, _pf: Any, tmp_path: Path
+    ) -> None:
+        recipe = _make_recipe()
+        binding = _make_binding(tmp_path)
+
+        captured: dict[str, Any] = {}
+
+        async def _capture_register(url: str, **kwargs: Any) -> dict[str, Any]:
+            captured["parent_mount"] = kwargs.get("parent_mount", "")
+            return {"slug": recipe.slug}
+
+        proc_mock = AsyncMock()
+        proc_mock.communicate.return_value = (b"ok", None)
+        proc_mock.returncode = 0
+        mock_subprocess.return_value = proc_mock
+
+        scip_file = binding.repo_path / recipe.scip_path
+        scip_file.parent.mkdir(parents=True, exist_ok=True)
+        scip_file.write_bytes(b"scip-data")
+
+        mock_mcp.register_project = _capture_register
+        mock_mcp.run_extractor = AsyncMock(
+            side_effect=[
+                _ok_extractor("symbol_index_swift"),
+                _ok_extractor("dead_code"),
+            ]
+        )
+
+        runner = SmokeRunner(recipe, binding)
+        await runner.run_smoke()
+
+        assert captured["parent_mount"] == binding.mcp_mount_name
+
+
+# ---------------------------------------------------------------------------
+# ok=false from register_project causes stage failure + run_extractors skip
+# ---------------------------------------------------------------------------
+
+
+@patch(
+    "palace_mcp.smoke.runner.run_preflight", return_value=_passing_preflight_report()
+)
+class TestRegisterProjectOkFalse:
+    @patch("palace_mcp.smoke.runner.mcp_caller")
+    @patch("palace_mcp.smoke.runner.asyncio.create_subprocess_exec")
+    async def test_ok_false_fails_stage_and_skips_extractors(
+        self, mock_subprocess: AsyncMock, mock_mcp: AsyncMock, _pf: Any, tmp_path: Path
+    ) -> None:
+        recipe = _make_recipe()
+        binding = _make_binding(tmp_path)
+
+        proc_mock = AsyncMock()
+        proc_mock.communicate.return_value = (b"ok", None)
+        proc_mock.returncode = 0
+        mock_subprocess.return_value = proc_mock
+
+        scip_file = binding.repo_path / recipe.scip_path
+        scip_file.parent.mkdir(parents=True, exist_ok=True)
+        scip_file.write_bytes(b"scip-data")
+
+        mock_mcp.register_project = AsyncMock(
+            return_value={
+                "ok": False,
+                "error_code": "invalid_request",
+                "message": "bad mount",
+            }
+        )
+
+        runner = SmokeRunner(recipe, binding)
+        report = await runner.run_smoke()
+
+        reg_stage = next(s for s in report.stages if s.stage == "register_project")
+        assert reg_stage.status == StageStatus.FAILED
+        assert reg_stage.error is not None
+
+        ext_stage = next(s for s in report.stages if s.stage == "run_extractors")
+        assert ext_stage.status == StageStatus.SKIPPED
+
+
+# ---------------------------------------------------------------------------
+# Bug 3: SCIP missing or empty → stage failure
+# ---------------------------------------------------------------------------
+
+
+@patch(
+    "palace_mcp.smoke.runner.run_preflight", return_value=_passing_preflight_report()
+)
+class TestBuildScipEmptyFile:
+    @patch("palace_mcp.smoke.runner.asyncio.create_subprocess_exec")
+    async def test_scip_absent_fails_stage(
+        self, mock_subprocess: AsyncMock, _pf: Any, tmp_path: Path
+    ) -> None:
+        recipe = _make_recipe()
+        binding = _make_binding(tmp_path)
+
+        proc_mock = AsyncMock()
+        proc_mock.communicate.return_value = (b"ok", None)
+        proc_mock.returncode = 0
+        mock_subprocess.return_value = proc_mock
+
+        # SCIP file does NOT exist
+        scip_parent = binding.repo_path / "scip"
+        scip_parent.mkdir(parents=True, exist_ok=True)
+
+        runner = SmokeRunner(recipe, binding)
+        report = await runner.run_smoke()
+
+        build_stage = next(s for s in report.stages if s.stage == "build_scip")
+        assert build_stage.status == StageStatus.FAILED
+        assert "missing or empty" in (build_stage.error or "")
+
+    @patch("palace_mcp.smoke.runner.asyncio.create_subprocess_exec")
+    async def test_scip_empty_fails_stage(
+        self, mock_subprocess: AsyncMock, _pf: Any, tmp_path: Path
+    ) -> None:
+        recipe = _make_recipe()
+        binding = _make_binding(tmp_path)
+
+        proc_mock = AsyncMock()
+        proc_mock.communicate.return_value = (b"ok", None)
+        proc_mock.returncode = 0
+        mock_subprocess.return_value = proc_mock
+
+        # SCIP file exists but is empty
+        scip_file = binding.repo_path / recipe.scip_path
+        scip_file.parent.mkdir(parents=True, exist_ok=True)
+        scip_file.write_bytes(b"")
+
+        runner = SmokeRunner(recipe, binding)
+        report = await runner.run_smoke()
+
+        build_stage = next(s for s in report.stages if s.stage == "build_scip")
+        assert build_stage.status == StageStatus.FAILED
+        assert "missing or empty" in (build_stage.error or "")
+
+
+# ---------------------------------------------------------------------------
+# Bug 4: skip_build_reason skips build_scip with details
+# ---------------------------------------------------------------------------
+
+
+@patch(
+    "palace_mcp.smoke.runner.run_preflight", return_value=_passing_preflight_report()
+)
+class TestSkipBuildReason:
+    async def test_stage_skipped_when_reason_set(
+        self, _pf: Any, tmp_path: Path
+    ) -> None:
+        recipe = _make_recipe(
+            build={
+                "workspace": "Test.xcworkspace",
+                "scheme": "TestScheme",
+                "skip_build_reason": "Xcode 26 platform mismatch",
+            }
+        )
+        binding = _make_binding(tmp_path)
+
+        # dry_run=False so build_scip actually runs and hits skip_build_reason check
+        runner = SmokeRunner(recipe, binding, dry_run=False)
+        report = await runner.run_smoke()
+
+        build_stage = next(s for s in report.stages if s.stage == "build_scip")
+        assert build_stage.status == StageStatus.SKIPPED
+        assert build_stage.details.get("skip_reason") == "Xcode 26 platform mismatch"

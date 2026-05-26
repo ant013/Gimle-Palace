@@ -17,6 +17,8 @@ def _binding(repo_path: Path) -> RuntimeBinding:
     return RuntimeBinding(
         repo_path=repo_path,
         parent_mount=repo_path.parent,
+        mount_name="test",
+        mcp_mount_name="test",
         mcp_url="http://localhost:8000/mcp",
     )
 

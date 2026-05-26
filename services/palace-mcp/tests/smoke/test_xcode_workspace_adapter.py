@@ -17,11 +17,16 @@ from palace_mcp.smoke.recipe import load_recipe_yaml
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
+_TEMPLATE_REL = "Unstoppable/Unstoppable/Configuration/Config.template.xcconfig"
+_DEST_REL = "Unstoppable/Unstoppable/Configuration/Config.xcconfig"
+
 
 def _binding(repo_path: Path) -> RuntimeBinding:
     return RuntimeBinding(
         repo_path=repo_path,
         parent_mount=repo_path.parent,
+        mount_name="test",
+        mcp_mount_name="test",
         mcp_url="http://localhost:8000/mcp",
     )
 
@@ -86,22 +91,24 @@ def test_explicit_simulator_arch_wins_over_host_machine() -> None:
 
 def test_apply_prepare_steps_copies_template_when_missing(tmp_path: Path) -> None:
     repo_path = tmp_path / "unstoppable-wallet-ios"
-    repo_path.mkdir()
-    (repo_path / "Config.template.xcconfig").write_text("FROM_TEMPLATE=1\n")
+    template_path = repo_path / _TEMPLATE_REL
+    template_path.parent.mkdir(parents=True)
+    template_path.write_text("FROM_TEMPLATE=1\n")
     recipe = load_recipe_yaml(FIXTURES_DIR / "uw_ios_recipe.yaml")
 
     apply_prepare_steps(recipe, _binding(repo_path))
 
-    assert (repo_path / "Config.xcconfig").read_text() == "FROM_TEMPLATE=1\n"
+    assert (repo_path / _DEST_REL).read_text() == "FROM_TEMPLATE=1\n"
 
 
 def test_apply_prepare_steps_does_not_overwrite_existing_destination(
     tmp_path: Path,
 ) -> None:
     repo_path = tmp_path / "unstoppable-wallet-ios"
-    repo_path.mkdir()
-    (repo_path / "Config.template.xcconfig").write_text("FROM_TEMPLATE=1\n")
-    destination = repo_path / "Config.xcconfig"
+    template_path = repo_path / _TEMPLATE_REL
+    template_path.parent.mkdir(parents=True)
+    template_path.write_text("FROM_TEMPLATE=1\n")
+    destination = repo_path / _DEST_REL
     destination.write_text("KEEP_ME=1\n")
     recipe = load_recipe_yaml(FIXTURES_DIR / "uw_ios_recipe.yaml")
 

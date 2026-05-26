@@ -10,6 +10,7 @@ scip_path: scip/index.scip
 build:
   scheme: BitcoinKit
   package_resolution: locked
+  skip_build_reason: "Xcode 26 platform mismatch — upstream fix needed"
 extractors:
   - symbol_index_swift
   - dead_code

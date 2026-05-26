@@ -26,6 +26,8 @@ class TestValidBinding:
         binding = RuntimeBinding(
             repo_path=Path("/ABS/PATH/HorizontalSystems/unstoppable-wallet-ios"),
             parent_mount=Path("/ABS/PATH/HorizontalSystems"),
+            mount_name="hs",
+            mcp_mount_name="hs",
             mcp_url="http://localhost:8000/mcp",
             qodo_cache_path=Path("/ABS/PATH/hf-cache/huggingface"),
             swiftpm_cache_path=Path("/ABS/PATH/swiftpm-cache"),
@@ -35,11 +37,15 @@ class TestValidBinding:
             "/ABS/PATH/HorizontalSystems/unstoppable-wallet-ios"
         )
         assert binding.mcp_url == "http://localhost:8000/mcp"
+        assert binding.mount_name == "hs"
+        assert binding.mcp_mount_name == "hs"
 
     def test_minimal_binding(self) -> None:
         binding = RuntimeBinding(
             repo_path=Path("/repos/bitcoin-kit-ios"),
             parent_mount=Path("/repos"),
+            mount_name="repos",
+            mcp_mount_name="repos",
             mcp_url="http://localhost:8000/mcp",
         )
         assert binding.qodo_cache_path is None
@@ -50,9 +56,136 @@ class TestValidBinding:
         binding = RuntimeBinding(
             repo_path=Path("/mount/repo"),
             parent_mount=Path("/mount"),
+            mount_name="mount",
+            mcp_mount_name="mount",
             mcp_url="http://localhost:8000/mcp",
         )
         assert binding.repo_path.name == "repo"
+
+    def test_mcp_mount_name_can_differ_from_mount_name(self) -> None:
+        binding = RuntimeBinding(
+            repo_path=Path("/host/ios/repo"),
+            parent_mount=Path("/host/ios"),
+            mount_name="ios",
+            mcp_mount_name="hs",
+            mcp_url="http://localhost:8000/mcp",
+        )
+        assert binding.mount_name == "ios"
+        assert binding.mcp_mount_name == "hs"
+
+
+# ---------------------------------------------------------------------------
+# mount_name validation
+# ---------------------------------------------------------------------------
+
+
+class TestMountNameValidation:
+    def test_valid_short_name(self) -> None:
+        binding = RuntimeBinding(
+            repo_path=Path("/hs/repo"),
+            parent_mount=Path("/hs"),
+            mount_name="hs",
+            mcp_mount_name="hs",
+            mcp_url="http://localhost:8000/mcp",
+        )
+        assert binding.mount_name == "hs"
+
+    def test_valid_name_with_digits_and_dashes(self) -> None:
+        binding = RuntimeBinding(
+            repo_path=Path("/mount123/repo"),
+            parent_mount=Path("/mount123"),
+            mount_name="mount-123",
+            mcp_mount_name="mount-123",
+            mcp_url="http://localhost:8000/mcp",
+        )
+        assert binding.mount_name == "mount-123"
+
+    def test_reject_uppercase(self) -> None:
+        with pytest.raises(ValidationError):
+            RuntimeBinding(
+                repo_path=Path("/mount/repo"),
+                parent_mount=Path("/mount"),
+                mount_name="HS",
+                mcp_mount_name="hs",
+                mcp_url="http://localhost:8000/mcp",
+            )
+
+    def test_reject_starts_with_digit(self) -> None:
+        with pytest.raises(ValidationError):
+            RuntimeBinding(
+                repo_path=Path("/mount/repo"),
+                parent_mount=Path("/mount"),
+                mount_name="1mount",
+                mcp_mount_name="mount",
+                mcp_url="http://localhost:8000/mcp",
+            )
+
+    def test_reject_too_long(self) -> None:
+        with pytest.raises(ValidationError):
+            RuntimeBinding(
+                repo_path=Path("/mount/repo"),
+                parent_mount=Path("/mount"),
+                mount_name="a" * 17,
+                mcp_mount_name="ok",
+                mcp_url="http://localhost:8000/mcp",
+            )
+
+
+# ---------------------------------------------------------------------------
+# mcp_mount_name validation (GIM-852)
+# ---------------------------------------------------------------------------
+
+
+class TestMcpMountNameValidation:
+    def test_valid_mcp_mount_name(self) -> None:
+        binding = RuntimeBinding(
+            repo_path=Path("/ios/repo"),
+            parent_mount=Path("/ios"),
+            mount_name="ios",
+            mcp_mount_name="ios",
+            mcp_url="http://localhost:8000/mcp",
+        )
+        assert binding.mcp_mount_name == "ios"
+
+    def test_reject_absolute_path_as_mcp_mount_name(self) -> None:
+        with pytest.raises(ValidationError):
+            RuntimeBinding(
+                repo_path=Path("/ios/repo"),
+                parent_mount=Path("/ios"),
+                mount_name="ios",
+                mcp_mount_name="/Users/Shared/Ios",
+                mcp_url="http://localhost:8000/mcp",
+            )
+
+    def test_reject_mcp_mount_name_with_uppercase(self) -> None:
+        with pytest.raises(ValidationError):
+            RuntimeBinding(
+                repo_path=Path("/ios/repo"),
+                parent_mount=Path("/ios"),
+                mount_name="ios",
+                mcp_mount_name="IOS",
+                mcp_url="http://localhost:8000/mcp",
+            )
+
+    def test_reject_mcp_mount_name_too_long(self) -> None:
+        with pytest.raises(ValidationError):
+            RuntimeBinding(
+                repo_path=Path("/ios/repo"),
+                parent_mount=Path("/ios"),
+                mount_name="ios",
+                mcp_mount_name="a" * 17,
+                mcp_url="http://localhost:8000/mcp",
+            )
+
+    def test_reject_mcp_mount_name_with_slashes(self) -> None:
+        with pytest.raises(ValidationError):
+            RuntimeBinding(
+                repo_path=Path("/ios/repo"),
+                parent_mount=Path("/ios"),
+                mount_name="ios",
+                mcp_mount_name="ios/hs",
+                mcp_url="http://localhost:8000/mcp",
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -68,6 +201,8 @@ class TestRepoPathInsideMount:
             RuntimeBinding(
                 repo_path=Path("/elsewhere/repo"),
                 parent_mount=Path("/mount"),
+                mount_name="mount",
+                mcp_mount_name="mount",
                 mcp_url="http://localhost:8000/mcp",
             )
 
@@ -78,6 +213,8 @@ class TestRepoPathInsideMount:
             RuntimeBinding(
                 repo_path=Path("/mount-extra/repo"),
                 parent_mount=Path("/mount"),
+                mount_name="mount",
+                mcp_mount_name="mount",
                 mcp_url="http://localhost:8000/mcp",
             )
 
@@ -93,6 +230,8 @@ class TestRejectRelativePaths:
             RuntimeBinding(
                 repo_path=Path("relative/repo"),
                 parent_mount=Path("/mount"),
+                mount_name="mount",
+                mcp_mount_name="mount",
                 mcp_url="http://localhost:8000/mcp",
             )
 
@@ -101,5 +240,7 @@ class TestRejectRelativePaths:
             RuntimeBinding(
                 repo_path=Path("/mount/repo"),
                 parent_mount=Path("relative/mount"),
+                mount_name="mount",
+                mcp_mount_name="mount",
                 mcp_url="http://localhost:8000/mcp",
             )
