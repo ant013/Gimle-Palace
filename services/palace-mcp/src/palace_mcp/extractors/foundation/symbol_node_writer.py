@@ -8,10 +8,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from palace_mcp.code.source_scope import classify_source_scope
+
 if TYPE_CHECKING:
     from neo4j import AsyncDriver
 
     from palace_mcp.extractors.scip_parser import ScipSymbolInfo
+    from palace_mcp.smoke.recipe import Recipe
 
 _SCIP_KIND_TO_STR: dict[str, str] = {
     "Class": "class",
@@ -54,6 +57,7 @@ MERGE (s:Symbol {qualified_name: r.qualified_name, group_id: r.group_id})
 SET s.kind            = r.kind,
     s.file_path       = r.file_path,
     s.module_name     = r.module_name,
+    s.source_scope    = r.source_scope,
     s.access_modifier = '',
     s.is_objc                = false,
     s.is_dynamic             = false,
@@ -109,21 +113,31 @@ def build_symbol_node_rows(
     symbol_infos: list["ScipSymbolInfo"],
     def_file_paths: dict[str, str],
     group_id: str,
+    *,
+    recipe: "Recipe | None" = None,
 ) -> list[dict[str, Any]]:
     """Build the UNWIND row dicts for :Symbol MERGE from ScipSymbolInfo list.
 
     Exported so tests can inspect the exact payload without a live Neo4j.
     """
-    return [
-        {
-            "qualified_name": si.qualified_name,
-            "group_id": group_id,
-            "kind": _SCIP_KIND_TO_STR.get(si.scip_kind_name, "unknown"),
-            "file_path": def_file_paths.get(si.qualified_name),
-            "module_name": si.module_name or None,
-        }
-        for si in symbol_infos
-    ]
+    rows: list[dict[str, Any]] = []
+    for si in symbol_infos:
+        file_path = def_file_paths.get(si.qualified_name)
+        source_scope: str | None = None
+        if file_path is not None:
+            result = classify_source_scope(file_path, recipe=recipe)
+            source_scope = result.scope.value
+        rows.append(
+            {
+                "qualified_name": si.qualified_name,
+                "group_id": group_id,
+                "kind": _SCIP_KIND_TO_STR.get(si.scip_kind_name, "unknown"),
+                "file_path": file_path,
+                "module_name": si.module_name or None,
+                "source_scope": source_scope,
+            }
+        )
+    return rows
 
 
 async def write_symbol_nodes(
@@ -131,6 +145,8 @@ async def write_symbol_nodes(
     symbol_infos: list["ScipSymbolInfo"],
     def_file_paths: dict[str, str],
     group_id: str,
+    *,
+    recipe: "Recipe | None" = None,
 ) -> int:
     """Write :Symbol nodes and edges to Neo4j in UNWIND batches.
 
@@ -140,7 +156,9 @@ async def write_symbol_nodes(
     if not symbol_infos:
         return 0
 
-    node_rows = build_symbol_node_rows(symbol_infos, def_file_paths, group_id)
+    node_rows = build_symbol_node_rows(
+        symbol_infos, def_file_paths, group_id, recipe=recipe
+    )
 
     async with driver.session() as session:
         for i in range(0, len(node_rows), _BATCH_SIZE):
