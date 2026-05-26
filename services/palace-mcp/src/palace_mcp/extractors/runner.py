@@ -279,6 +279,7 @@ async def run_extractor(
     driver: AsyncDriver,
     graphiti: Graphiti,
     timeout_s: float = EXTRACTOR_TIMEOUT_S,
+    scip_path: str | None = None,
 ) -> dict[str, Any]:
     """Full lifecycle: precheck → create :IngestRun → execute → finalize."""
     # 1. Precheck (driver used for :Project lookup)
@@ -328,6 +329,7 @@ async def run_extractor(
         run_id=run_id,
         duration_ms=0,  # placeholder; extractor may use ctx.duration_ms for metadata
         logger=logger,
+        scip_path=Path(scip_path) if scip_path is not None else None,
     )
     exec_result = await _execute(
         extractor=pre.extractor,

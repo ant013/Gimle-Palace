@@ -827,6 +827,7 @@ async def _palace_ingest_run_extractor(
     name: str,
     project: str | None = None,
     bundle: str | None = None,
+    scip_path: str | None = None,
 ) -> dict[str, Any]:
     driver = _driver
     if driver is None:
@@ -852,7 +853,11 @@ async def _palace_ingest_run_extractor(
             "message": "either project or bundle is required",
         }
     return await _run_extractor(
-        name=name, project=project, driver=driver, graphiti=graphiti
+        name=name,
+        project=project,
+        driver=driver,
+        graphiti=graphiti,
+        scip_path=scip_path,
     )
 
 

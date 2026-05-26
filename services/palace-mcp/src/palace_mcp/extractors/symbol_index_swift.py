@@ -104,7 +104,9 @@ class SymbolIndexSwift(BaseExtractor):
         )
 
         try:
-            scip_path = FindScipPath.resolve(ctx.project_slug, settings)
+            scip_path = ctx.scip_path or FindScipPath.resolve(
+                ctx.project_slug, settings
+            )
             scip_index = parse_scip_file(scip_path)
             commit_sha = _read_head_sha(ctx.repo_path)
 

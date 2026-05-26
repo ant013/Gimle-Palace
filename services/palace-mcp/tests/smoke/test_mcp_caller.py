@@ -257,6 +257,22 @@ class TestRunExtractor:
         assert call_args[0][0] == "palace.ingest.run_extractor"
         assert call_args[0][1] == {"name": "dead_code", "project": "uw-ios-app"}
 
+    async def test_includes_scip_path_override_when_provided(self) -> None:
+        session = _mock_session(call_result={"ok": True, "run_id": "r1"})
+        await run_extractor(
+            "http://localhost:8000/mcp",
+            extractor_name="symbol_index_swift",
+            project="uw-ios-app",
+            scip_path="/tmp/uw-ios-app/scip/index.scip",
+            _session=session,
+        )
+        call_args = session.call_tool.call_args
+        assert call_args[0][1] == {
+            "name": "symbol_index_swift",
+            "project": "uw-ios-app",
+            "scip_path": "/tmp/uw-ios-app/scip/index.scip",
+        }
+
     async def test_error_result_structured(self) -> None:
         session = _mock_session(
             call_result={

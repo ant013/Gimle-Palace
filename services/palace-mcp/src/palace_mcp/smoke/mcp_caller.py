@@ -190,13 +190,17 @@ async def run_extractor(
     *,
     extractor_name: str,
     project: str,
+    scip_path: str | None = None,
     _session: ClientSession | None = None,
 ) -> ExtractorResult:
     """Run an extractor and return structured status."""
+    arguments: dict[str, Any] = {"name": extractor_name, "project": project}
+    if scip_path is not None:
+        arguments["scip_path"] = scip_path
     payload = await call_tool(
         mcp_url,
         "palace.ingest.run_extractor",
-        {"name": extractor_name, "project": project},
+        arguments,
         _session=_session,
     )
     return ExtractorResult(

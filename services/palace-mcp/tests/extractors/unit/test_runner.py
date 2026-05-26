@@ -96,6 +96,20 @@ class _LongTimeout(BaseExtractor):
         return ExtractorStats(nodes_written=1)
 
 
+class _ScipPathEcho(BaseExtractor):
+    name = "__test_scip_path_echo"
+    description = "captures scip path override"
+
+    def __init__(self) -> None:
+        self.seen_scip_path: Path | None = None
+
+    async def run(
+        self, *, graphiti: Graphiti, ctx: ExtractorRunContext
+    ) -> ExtractorStats:
+        self.seen_scip_path = ctx.scip_path
+        return ExtractorStats(nodes_written=1)
+
+
 class _Skipped(BaseExtractor):
     name = "__test_skipped"
     description = "returns a successful skipped outcome"
@@ -388,6 +402,27 @@ async def test_extractor_timeout_overrides_runner_default(
 
     assert res["ok"] is True
     assert seen_timeout == 12.5
+
+
+@pytest.mark.asyncio
+async def test_run_extractor_passes_scip_path_into_context(
+    mock_driver: MagicMock, tmp_path: Path, mock_graphiti: MagicMock
+) -> None:
+    extractor = _ScipPathEcho()
+    registry.register(extractor)
+    scip_path = tmp_path / "scip" / "index.scip"
+
+    with patch("palace_mcp.extractors.runner.REPOS_ROOT", tmp_path / "repos"):
+        res = await run_extractor(
+            name="__test_scip_path_echo",
+            project="testproj",
+            driver=mock_driver,
+            graphiti=mock_graphiti,
+            scip_path=str(scip_path),
+        )
+
+    assert res["ok"] is True
+    assert extractor.seen_scip_path == scip_path
 
 
 @pytest.mark.asyncio

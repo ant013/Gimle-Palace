@@ -30,6 +30,10 @@ from palace_mcp.smoke.xcode_workspace import (
 
 logger = logging.getLogger(__name__)
 
+_REPO_ROOT = Path(__file__).resolve().parents[5]
+_SWIFT_SCIP_EMITTER_NAME = "palace-swift-scip-emit-cli"
+_DEFAULT_SWIFT_EMITTER_DIR = _REPO_ROOT / "services" / "palace-mcp" / "scip_emit_swift"
+
 
 class _StageFailure(Exception):
     """Internal: a stage failed but produced partial details to preserve."""
@@ -264,6 +268,14 @@ class SmokeRunner:
                 tail = (stdout_bytes or b"").decode(errors="replace")[-2000:]
                 raise RuntimeError(f"xcodebuild exited {proc.returncode}\n{tail}")
             scip_path = self._binding.repo_path / self._recipe.scip_path
+            build_details: dict[str, Any] = {}
+            if self._recipe.slug == "uw-ios-app":
+                build_details = await _emit_uw_ios_app_scip(
+                    repo_path=self._binding.repo_path,
+                    derived_data_path=self._binding.repo_path
+                    / self._recipe.build.derived_data_path,
+                    output_path=scip_path,
+                )
             scip_size = scip_path.stat().st_size if scip_path.exists() else 0
             # Bug 3: fail explicitly when SCIP is missing or empty
             if scip_size == 0:
@@ -277,6 +289,7 @@ class SmokeRunner:
             return {
                 "build_system": self._recipe.build_system,
                 "scip_size_bytes": scip_size,
+                **build_details,
             }
 
         if self._recipe.build_system == "swift_package":
@@ -342,14 +355,20 @@ class SmokeRunner:
     async def _stage_run_extractors(self) -> dict[str, Any]:
         extractor_results: list[dict[str, Any]] = []
         any_failed = False
+        scip_path = self._binding.repo_path / self._recipe.scip_path
 
         for ext_name in self._recipe.extractors:
             logger.info("[run_extractors] running %s", ext_name)
             try:
+                run_kwargs: dict[str, Any] = {
+                    "extractor_name": ext_name,
+                    "project": self._recipe.slug,
+                }
+                if ext_name == "symbol_index_swift":
+                    run_kwargs["scip_path"] = str(scip_path)
                 result = await mcp_caller.run_extractor(
                     self._binding.mcp_url,
-                    extractor_name=ext_name,
-                    project=self._recipe.slug,
+                    **run_kwargs,
                 )
                 extractor_results.append(result.model_dump())
                 if not result.ok:
@@ -419,3 +438,54 @@ def write_report_json(report: RunReport, path: Path) -> None:
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+async def _emit_uw_ios_app_scip(
+    *,
+    repo_path: Path,
+    derived_data_path: Path,
+    output_path: Path,
+) -> dict[str, Any]:
+    emitter_dir = _DEFAULT_SWIFT_EMITTER_DIR
+    if not emitter_dir.exists():
+        raise RuntimeError(f"swift SCIP emitter package dir not found: {emitter_dir}")
+
+    emitter_bin = emitter_dir / ".build" / "release" / _SWIFT_SCIP_EMITTER_NAME
+    if not emitter_bin.exists():
+        proc = await asyncio.create_subprocess_exec(
+            "xcrun",
+            "swift",
+            "build",
+            "-c",
+            "release",
+            "--package-path",
+            str(emitter_dir),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        stdout_bytes, _ = await proc.communicate()
+        if proc.returncode != 0:
+            tail = (stdout_bytes or b"").decode(errors="replace")[-2000:]
+            raise RuntimeError(
+                f"swift SCIP emitter build exited {proc.returncode}\n{tail}"
+            )
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    proc = await asyncio.create_subprocess_exec(
+        str(emitter_bin),
+        "--derived-data",
+        str(derived_data_path),
+        "--project-root",
+        str(repo_path),
+        "--output",
+        str(output_path),
+        "--verbose",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+    )
+    stdout_bytes, _ = await proc.communicate()
+    if proc.returncode != 0:
+        tail = (stdout_bytes or b"").decode(errors="replace")[-2000:]
+        raise RuntimeError(f"swift SCIP emit exited {proc.returncode}\n{tail}")
+
+    return {"scip_emitter": _SWIFT_SCIP_EMITTER_NAME}
