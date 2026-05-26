@@ -64,7 +64,12 @@ class TestSourceScopeWithRecipe:
 
     def test_app_source_classified_as_project(self) -> None:
         rows = self._rows_with_recipe()
-        store_rows = [r for r in rows if "WalletStore" in r["qualified_name"] and "select" not in r["qualified_name"]]
+        store_rows = [
+            r
+            for r in rows
+            if "WalletStore" in r["qualified_name"]
+            and "select" not in r["qualified_name"]
+        ]
         assert store_rows
         assert store_rows[0]["source_scope"] == "project"
 
@@ -81,7 +86,9 @@ class TestSourceScopeWithRecipe:
         scip_index = build_swift_scip_index_with_symbol_infos()
         symbol_infos = list(iter_scip_symbol_infos(scip_index))
 
-        def_file_paths = {si.qualified_name: "Pods/Foo/Foo.swift" for si in symbol_infos}
+        def_file_paths = {
+            si.qualified_name: "Pods/Foo/Foo.swift" for si in symbol_infos
+        }
         rows = build_symbol_node_rows(
             symbol_infos, def_file_paths, "project/test", recipe=_uw_recipe()
         )
@@ -92,7 +99,9 @@ class TestSourceScopeWithRecipe:
         scip_index = build_swift_scip_index_with_symbol_infos()
         symbol_infos = list(iter_scip_symbol_infos(scip_index))
 
-        def_file_paths = {si.qualified_name: "Sources/Generated/Strings.swift" for si in symbol_infos}
+        def_file_paths = {
+            si.qualified_name: "Sources/Generated/Strings.swift" for si in symbol_infos
+        }
         rows = build_symbol_node_rows(
             symbol_infos, def_file_paths, "project/test", recipe=_uw_recipe()
         )
@@ -218,8 +227,7 @@ class TestSourceScopeLegacyFallback:
         symbol_infos = list(iter_scip_symbol_infos(scip_index))
 
         def_file_paths = {
-            si.qualified_name: "Sources/MyApp/Main.swift"
-            for si in symbol_infos
+            si.qualified_name: "Sources/MyApp/Main.swift" for si in symbol_infos
         }
         rows = build_symbol_node_rows(symbol_infos, def_file_paths, "project/test")
         for row in rows:
@@ -236,7 +244,9 @@ class TestSourceScopeNullFilePath:
         scip_index = build_swift_scip_index_with_symbol_infos()
         symbol_infos = list(iter_scip_symbol_infos(scip_index))
 
-        rows = build_symbol_node_rows(symbol_infos, {}, "project/test", recipe=_uw_recipe())
+        rows = build_symbol_node_rows(
+            symbol_infos, {}, "project/test", recipe=_uw_recipe()
+        )
         for row in rows:
             assert row["file_path"] is None
             assert row["source_scope"] is None

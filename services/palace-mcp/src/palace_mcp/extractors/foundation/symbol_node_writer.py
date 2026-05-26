@@ -156,7 +156,9 @@ async def write_symbol_nodes(
     if not symbol_infos:
         return 0
 
-    node_rows = build_symbol_node_rows(symbol_infos, def_file_paths, group_id, recipe=recipe)
+    node_rows = build_symbol_node_rows(
+        symbol_infos, def_file_paths, group_id, recipe=recipe
+    )
 
     async with driver.session() as session:
         for i in range(0, len(node_rows), _BATCH_SIZE):
