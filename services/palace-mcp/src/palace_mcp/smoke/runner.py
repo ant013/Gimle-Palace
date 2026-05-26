@@ -355,8 +355,6 @@ class SmokeRunner:
     async def _stage_run_extractors(self) -> dict[str, Any]:
         extractor_results: list[dict[str, Any]] = []
         any_failed = False
-        scip_path = self._binding.repo_path / self._recipe.scip_path
-
         for ext_name in self._recipe.extractors:
             logger.info("[run_extractors] running %s", ext_name)
             try:
@@ -365,7 +363,7 @@ class SmokeRunner:
                     "project": self._recipe.slug,
                 }
                 if ext_name == "symbol_index_swift":
-                    run_kwargs["scip_path"] = str(scip_path)
+                    run_kwargs["scip_path"] = self._recipe.scip_path
                 result = await mcp_caller.run_extractor(
                     self._binding.mcp_url,
                     **run_kwargs,

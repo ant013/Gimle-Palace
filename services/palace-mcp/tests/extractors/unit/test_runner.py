@@ -426,6 +426,37 @@ async def test_run_extractor_passes_scip_path_into_context(
 
 
 @pytest.mark.asyncio
+async def test_run_extractor_resolves_relative_scip_path_inside_mounted_repo(
+    tmp_path: Path, mock_graphiti: MagicMock
+) -> None:
+    extractor = _ScipPathEcho()
+    registry.register(extractor)
+    mounted_repo = tmp_path / "repos-macbook" / "repos" / "testproj"
+    mounted_repo.mkdir(parents=True)
+    driver, _ = _make_session_mock(
+        {
+            "p": {
+                "name": "testproj",
+                "parent_mount": "macbook",
+                "relative_path": "repos/testproj",
+            }
+        }
+    )
+
+    with patch("palace_mcp.extractors.runner.REPOS_ROOT", tmp_path / "repos"):
+        res = await run_extractor(
+            name="__test_scip_path_echo",
+            project="testproj",
+            driver=driver,
+            graphiti=mock_graphiti,
+            scip_path="scip/index.scip",
+        )
+
+    assert res["ok"] is True
+    assert extractor.seen_scip_path == mounted_repo / "scip" / "index.scip"
+
+
+@pytest.mark.asyncio
 async def test_embedding_symbol_run_extractor_wiring(
     mock_driver: MagicMock, tmp_path: Path, mock_graphiti: MagicMock
 ) -> None:

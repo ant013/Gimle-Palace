@@ -322,6 +322,12 @@ async def run_extractor(
         },
     )
     start_mono = time.monotonic()
+    scip_path_override = None
+    if scip_path is not None:
+        scip_path_override = Path(scip_path)
+        if not scip_path_override.is_absolute():
+            scip_path_override = pre.repo_path / scip_path_override
+
     ctx = ExtractorRunContext(
         project_slug=project,
         group_id=pre.group_id,
@@ -329,7 +335,7 @@ async def run_extractor(
         run_id=run_id,
         duration_ms=0,  # placeholder; extractor may use ctx.duration_ms for metadata
         logger=logger,
-        scip_path=Path(scip_path) if scip_path is not None else None,
+        scip_path=scip_path_override,
     )
     exec_result = await _execute(
         extractor=pre.extractor,

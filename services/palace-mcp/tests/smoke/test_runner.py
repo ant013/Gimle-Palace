@@ -472,7 +472,7 @@ class TestSuccessfulRun:
         assert first_extractor_call.kwargs == {
             "extractor_name": "symbol_index_swift",
             "project": "uw-ios-app",
-            "scip_path": str(binding.repo_path / recipe.scip_path),
+            "scip_path": recipe.scip_path,
         }
         second_extractor_call = mock_mcp.run_extractor.await_args_list[1]
         assert second_extractor_call.kwargs == {
@@ -640,6 +640,43 @@ class TestMcpMountNamePassedToRegister:
         await runner.run_smoke()
 
         assert captured["parent_mount"] == binding.mcp_mount_name
+
+    @patch("palace_mcp.smoke.runner.mcp_caller")
+    @patch("palace_mcp.smoke.runner.asyncio.create_subprocess_exec")
+    async def test_symbol_index_swift_uses_repo_relative_scip_override(
+        self, mock_subprocess: AsyncMock, mock_mcp: AsyncMock, _pf: Any, tmp_path: Path
+    ) -> None:
+        recipe = _make_recipe(extractors=["symbol_index_swift"])
+        repo_path = tmp_path / "host-repos" / "nested" / "test-project"
+        repo_path.mkdir(parents=True)
+        binding = RuntimeBinding(
+            repo_path=repo_path,
+            parent_mount=tmp_path / "host-repos",
+            mount_name="host",
+            mcp_mount_name="macbook",
+            mcp_url=_MCP_URL,
+        )
+
+        proc_mock = AsyncMock()
+        proc_mock.communicate.return_value = (b"ok", None)
+        proc_mock.returncode = 0
+        mock_subprocess.return_value = proc_mock
+
+        scip_file = binding.repo_path / recipe.scip_path
+        scip_file.parent.mkdir(parents=True, exist_ok=True)
+        scip_file.write_bytes(b"scip-data")
+
+        mock_mcp.register_project = AsyncMock(return_value={"slug": recipe.slug})
+        mock_mcp.run_extractor = AsyncMock(return_value=_ok_extractor("symbol_index_swift"))
+
+        runner = SmokeRunner(recipe, binding)
+        await runner.run_smoke()
+
+        assert mock_mcp.run_extractor.await_args.kwargs == {
+            "extractor_name": "symbol_index_swift",
+            "project": recipe.slug,
+            "scip_path": recipe.scip_path,
+        }
 
 
 # ---------------------------------------------------------------------------
