@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from palace_mcp.code.embedding_candidate_policy import (
     CandidateRow,
     _bucket,
