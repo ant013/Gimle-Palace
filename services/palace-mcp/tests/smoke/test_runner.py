@@ -667,7 +667,9 @@ class TestMcpMountNamePassedToRegister:
         scip_file.write_bytes(b"scip-data")
 
         mock_mcp.register_project = AsyncMock(return_value={"slug": recipe.slug})
-        mock_mcp.run_extractor = AsyncMock(return_value=_ok_extractor("symbol_index_swift"))
+        mock_mcp.run_extractor = AsyncMock(
+            return_value=_ok_extractor("symbol_index_swift")
+        )
 
         runner = SmokeRunner(recipe, binding)
         await runner.run_smoke()
