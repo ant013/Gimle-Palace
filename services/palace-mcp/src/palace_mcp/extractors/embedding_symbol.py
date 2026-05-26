@@ -150,9 +150,10 @@ class EmbeddingSymbolExtractor(BaseExtractor):
 
         max_symbols = _read_max_symbols()
         if max_symbols is not None:
-            pending_rows, _ = apply_policy(
+            selected, _ = apply_policy(
                 cast(list[CandidateRow], pending_rows), max_symbols
             )
+            pending_rows = cast(list[_PendingSymbolRow], selected)
 
         backend = self._resolve_backend()
         nodes_written = 0
