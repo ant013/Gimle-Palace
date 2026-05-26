@@ -323,7 +323,7 @@ class SmokeRunner:
             slug=self._recipe.slug,
             name=self._recipe.name,
             language=self._recipe.language,
-            parent_mount=self._binding.mount_name,  # Bug 2a: use mount_name not path
+            parent_mount=self._binding.mcp_mount_name,
             relative_path=str(
                 self._binding.repo_path.relative_to(self._binding.parent_mount)
             ),

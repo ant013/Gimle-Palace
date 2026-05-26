@@ -64,6 +64,7 @@ def _make_binding(tmp_path: Path, **overrides: Any) -> RuntimeBinding:
         "repo_path": repo,
         "parent_mount": tmp_path / "repos",
         "mount_name": "test",
+        "mcp_mount_name": "test",
         "mcp_url": _MCP_URL,
     }
     defaults.update(overrides)
@@ -97,6 +98,7 @@ class TestCheckRepoPath:
             repo_path=tmp_path / "repos" / "nonexistent",
             parent_mount=tmp_path / "repos",
             mount_name="test",
+            mcp_mount_name="test",
             mcp_url=_MCP_URL,
         )
         result = check_repo_path(binding)
@@ -230,6 +232,7 @@ class TestCheckNeo4jReachable:
                 repo_path=Path("/tmp/x/y"),
                 parent_mount=Path("/tmp/x"),
                 mount_name="test",
+                mcp_mount_name="test",
                 mcp_url="http://localhost:8000/mcp",
             )
         )
@@ -243,6 +246,7 @@ class TestCheckNeo4jReachable:
                 repo_path=Path("/tmp/x/y"),
                 parent_mount=Path("/tmp/x"),
                 mount_name="test",
+                mcp_mount_name="test",
                 mcp_url="http://localhost:8000/mcp",
             )
         )
@@ -255,6 +259,7 @@ class TestCheckNeo4jReachable:
                 repo_path=Path("/tmp/x/y"),
                 parent_mount=Path("/tmp/x"),
                 mount_name="test",
+                mcp_mount_name="test",
                 mcp_url="http://localhost:8000/mcp",
             )
         )
@@ -282,6 +287,7 @@ class TestCheckMcpToolsList:
             repo_path=Path("/tmp/x/y"),
             parent_mount=Path("/tmp/x"),
             mount_name="test",
+            mcp_mount_name="test",
             mcp_url="http://localhost:8000/mcp",
         )
         result = await check_mcp_tools_list(binding)
@@ -295,6 +301,7 @@ class TestCheckMcpToolsList:
             repo_path=Path("/tmp/x/y"),
             parent_mount=Path("/tmp/x"),
             mount_name="test",
+            mcp_mount_name="test",
             mcp_url="http://localhost:8000/mcp",
         )
         result = await check_mcp_tools_list(binding)

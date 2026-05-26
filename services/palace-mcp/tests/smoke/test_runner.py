@@ -61,6 +61,7 @@ def _make_binding(tmp_path: Path) -> RuntimeBinding:
         repo_path=repo,
         parent_mount=tmp_path / "repos",
         mount_name="test",
+        mcp_mount_name="test",
         mcp_url=_MCP_URL,
     )
 
@@ -213,6 +214,7 @@ class TestFailurePropagation:
             repo_path=tmp_path / "repos" / "nonexistent",
             parent_mount=tmp_path / "repos",
             mount_name="test",
+            mcp_mount_name="test",
             mcp_url=_MCP_URL,
         )
 
@@ -242,6 +244,7 @@ class TestFailurePropagation:
             repo_path=tmp_path / "repos" / "nonexistent",
             parent_mount=tmp_path / "repos",
             mount_name="test",
+            mcp_mount_name="test",
             mcp_url=_MCP_URL,
         )
 
@@ -258,6 +261,7 @@ class TestFailurePropagation:
             repo_path=tmp_path / "repos" / "nonexistent",
             parent_mount=tmp_path / "repos",
             mount_name="test",
+            mcp_mount_name="test",
             mcp_url=_MCP_URL,
         )
 
@@ -521,17 +525,17 @@ class TestModels:
 
 
 # ---------------------------------------------------------------------------
-# Bug 2a: mount_name passed to register_project
+# mcp_mount_name passed to register_project (GIM-852)
 # ---------------------------------------------------------------------------
 
 
 @patch(
     "palace_mcp.smoke.runner.run_preflight", return_value=_passing_preflight_report()
 )
-class TestMountNamePassedToRegister:
+class TestMcpMountNamePassedToRegister:
     @patch("palace_mcp.smoke.runner.mcp_caller")
     @patch("palace_mcp.smoke.runner.asyncio.create_subprocess_exec")
-    async def test_register_project_uses_mount_name(
+    async def test_register_project_uses_mcp_mount_name(
         self, mock_subprocess: AsyncMock, mock_mcp: AsyncMock, _pf: Any, tmp_path: Path
     ) -> None:
         recipe = _make_recipe()
@@ -563,11 +567,11 @@ class TestMountNamePassedToRegister:
         runner = SmokeRunner(recipe, binding)
         await runner.run_smoke()
 
-        assert captured["parent_mount"] == "test"
+        assert captured["parent_mount"] == binding.mcp_mount_name
 
 
 # ---------------------------------------------------------------------------
-# Bug 2b: ok=false from register_project causes stage failure
+# ok=false from register_project causes stage failure + run_extractors skip
 # ---------------------------------------------------------------------------
 
 
@@ -577,7 +581,7 @@ class TestMountNamePassedToRegister:
 class TestRegisterProjectOkFalse:
     @patch("palace_mcp.smoke.runner.mcp_caller")
     @patch("palace_mcp.smoke.runner.asyncio.create_subprocess_exec")
-    async def test_ok_false_fails_stage(
+    async def test_ok_false_fails_stage_and_skips_extractors(
         self, mock_subprocess: AsyncMock, mock_mcp: AsyncMock, _pf: Any, tmp_path: Path
     ) -> None:
         recipe = _make_recipe()
@@ -606,6 +610,9 @@ class TestRegisterProjectOkFalse:
         reg_stage = next(s for s in report.stages if s.stage == "register_project")
         assert reg_stage.status == StageStatus.FAILED
         assert reg_stage.error is not None
+
+        ext_stage = next(s for s in report.stages if s.stage == "run_extractors")
+        assert ext_stage.status == StageStatus.SKIPPED
 
 
 # ---------------------------------------------------------------------------

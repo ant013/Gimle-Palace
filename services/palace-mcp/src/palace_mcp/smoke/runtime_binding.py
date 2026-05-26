@@ -20,6 +20,7 @@ class RuntimeBinding(BaseModel, frozen=True):
     repo_path: Path
     parent_mount: Path
     mount_name: str = Field(pattern=_MOUNT_NAME_RE)
+    mcp_mount_name: str = Field(pattern=_MOUNT_NAME_RE)
     mcp_url: str
 
     qodo_cache_path: Path | None = None
