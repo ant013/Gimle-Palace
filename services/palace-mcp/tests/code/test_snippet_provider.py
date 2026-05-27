@@ -233,9 +233,7 @@ def test_byte_count_capped(tmp_path: Path) -> None:
     _run(["git", "config", "user.email", "t@t"], cwd=r)
     _run(["git", "config", "user.name", "T"], cwd=r)
     # Each line ~100 bytes; 200 lines = 20 000 bytes > 16 384.
-    (r / "wide.py").write_text(
-        "\n".join("a" * 99 for _ in range(200)) + "\n"
-    )
+    (r / "wide.py").write_text("\n".join("a" * 99 for _ in range(200)) + "\n")
     _run(["git", "add", "."], cwd=r)
     _run(["git", "commit", "-m", "init", "-q"], cwd=r)
 

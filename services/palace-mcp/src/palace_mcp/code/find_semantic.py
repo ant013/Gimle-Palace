@@ -706,8 +706,6 @@ async def semantic_search(
                     total_line_count += lc
                     total_byte_count += bc
                     snippets_with_size += 1
-        else:
-            hit.pop("_commit_sha", None)
 
     if len(result_rows) < limit:
         warnings.append(
