@@ -17,6 +17,16 @@ def _run(args: list[str], cwd: Path) -> None:
     subprocess.run(args, cwd=cwd, check=True, capture_output=True)
 
 
+def _run_text(args: list[str], cwd: Path) -> str:
+    return subprocess.run(
+        args,
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+
 @pytest.fixture
 def tmp_repo(tmp_path: Path) -> Path:
     """Create a real git repo at `<tmp>/repos/testproj` with 2 commits."""
@@ -52,11 +62,11 @@ def large_repo(tmp_path: Path) -> tuple[Path, Path]:
     (repo / "f.py").write_text("0\n")
     _run(["git", "add", "."], cwd=repo)
     _run(["git", "commit", "-m", "init", "-q"], cwd=repo)
+    tree = _run_text(["git", "write-tree"], cwd=repo)
+    parent = _run_text(["git", "rev-parse", "HEAD"], cwd=repo)
     for i in range(1, 250):
-        subprocess.run(
-            ["git", "commit", "--allow-empty", "-m", f"c{i}", "-q"],
-            cwd=repo,
-            check=True,
-            capture_output=True,
+        parent = _run_text(
+            ["git", "commit-tree", tree, "-p", parent, "-m", f"c{i}"], cwd=repo
         )
+        _run(["git", "update-ref", "refs/heads/main", parent], cwd=repo)
     return repo, repos
