@@ -167,8 +167,8 @@ class TestComputeScoreComponents:
             kind="new_kind",
             qualified_name="Something.bar",
         )
-        assert comps.source_scope_score == pytest.approx(0.50)
-        assert comps.symbol_kind_boost == pytest.approx(0.50)
+        assert comps.source_scope_score == pytest.approx(0.10)
+        assert comps.symbol_kind_boost == pytest.approx(0.30)
 
 
 # ---------------------------------------------------------------------------

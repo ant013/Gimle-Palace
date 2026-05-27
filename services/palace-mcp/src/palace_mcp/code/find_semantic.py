@@ -58,7 +58,6 @@ RETURN
   s.commit_sha AS commit_sha,
   score AS score
 ORDER BY score DESC
-LIMIT $limit
 """.strip()
 
 # ---------------------------------------------------------------------------
@@ -80,7 +79,9 @@ LIMIT $limit
 #   4. project slug ASC           (alphabetical)
 #   5. qualified_name ASC         (alphabetical)
 #
-# Tolerance: two scores within _SCORE_TOLERANCE are treated as equal.
+# Tolerance: scores are quantized to _SCORE_TOLERANCE bins in the sort key
+# so that near-equal final scores fall into the same bucket and tie-breakers
+# resolve the ordering deterministically.
 # ---------------------------------------------------------------------------
 
 _W_VECTOR: float = 0.75
@@ -201,8 +202,8 @@ def _compute_score_components(
 
     Returns (final_score, ScoreComponents).
     """
-    scope_s = _SCOPE_SCORE.get(source_scope or "", 0.50)
-    kind_s = _KIND_SCORE.get(kind or "", 0.50)
+    scope_s = _SCOPE_SCORE.get(source_scope or "", 0.10)
+    kind_s = _KIND_SCORE.get(kind or "", 0.30)
     lexical = _lexical_score(query, qualified_name)
     pen = _accessor_penalty(kind, qualified_name)
 
@@ -222,14 +223,10 @@ def _compute_score_components(
     )
 
 
-def _rank_key(hit: dict[str, Any]) -> tuple[float, int, int, str, str]:
-    """Total-ordering sort key (negated score → DESC, rest ASC).
-
-    Expects hit["score"] to already be the final ranking score (set by
-    _compute_score_components before sorting).
-    """
+def _rank_key(hit: dict[str, Any]) -> tuple[int, int, int, str, str]:
+    """Quantized sort key — scores within _SCORE_TOLERANCE share a bucket."""
     return (
-        -hit["score"],
+        -round(hit["score"] / _SCORE_TOLERANCE),
         _SCOPE_PRIORITY.get(hit.get("source_scope") or "", 99),
         _KIND_PRIORITY.get(hit.get("kind") or "", 99),
         hit.get("project") or "",
@@ -390,7 +387,6 @@ async def _vector_search(
     *,
     embedding: list[float],
     group_ids: list[str],
-    limit: int,
     query_k: int,
 ) -> list[dict[str, Any]]:
     async with driver.session() as session:
@@ -398,7 +394,6 @@ async def _vector_search(
             _VECTOR_QUERY,
             embedding=embedding,
             group_ids=group_ids,
-            limit=limit,
             query_k=query_k,
         )
         return cast(list[dict[str, Any]], await result.data())
@@ -612,53 +607,44 @@ async def semantic_search(
         driver,
         embedding=query_embedding,
         group_ids=group_ids,
-        limit=limit,
         query_k=candidate_limit,
     )
 
-    result_rows: list[dict[str, Any]] = []
+    candidate_rows: list[dict[str, Any]] = []
     for row in rows:
         group_id = str(row["group_id"])
         qualified_name = str(row["qualified_name"])
-        vector_score = float(row["score"])
-        source_scope = row.get("source_scope")
-        kind = row.get("kind")
-
-        final_score, score_components = _compute_score_components(
-            vector_score=vector_score,
-            query=normalized_query,
-            source_scope=source_scope,
-            kind=kind,
-            qualified_name=qualified_name,
-        )
 
         hit: dict[str, Any] = {
             "project": _project_from_group_id(group_id),
             "group_id": group_id,
             "qualified_name": qualified_name,
             "occurrence_symbol_id": symbol_id_for(qualified_name),
-            "kind": kind,
+            "kind": row.get("kind"),
             "file_path": row.get("file_path"),
             "module_name": row.get("module_name"),
-            "source_scope": source_scope,
-            "score": final_score,
-            "score_components": score_components.model_dump(),
+            "source_scope": row.get("source_scope"),
+            "score": float(row["score"]),
+            "_commit_sha": row.get("commit_sha"),
         }
         embedding_input_hash = row.get("embedding_input_hash")
         if embedding_input_hash is not None:
             hit["embedding_input_hash"] = embedding_input_hash
+        candidate_rows.append(hit)
+
+    _apply_ranking(normalized_query, candidate_rows)
+    result_rows = candidate_rows[:limit]
+
+    for hit in result_rows:
+        commit_sha = hit.pop("_commit_sha", None)
         if include_context:
             hit["context"] = await _hydrate_context(
                 settings=settings,
                 project=hit["project"],
-                qualified_name=qualified_name,
-                commit_sha=row.get("commit_sha"),
+                qualified_name=hit["qualified_name"],
+                commit_sha=commit_sha,
                 context_limit=context_limit,
             )
-        result_rows.append(hit)
-
-    # Explicit deterministic sort — see ranking formula above.
-    result_rows.sort(key=_rank_key)
 
     if len(result_rows) < limit:
         warnings.append(
