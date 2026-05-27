@@ -30,13 +30,35 @@ COPY --from=ghcr.io/astral-sh/uv:0.11.7@sha256:240fb85ab0f263ef12f492d8476aa3a2e
 
 WORKDIR /app
 
-# Install dependencies first (cached layer) without installing the project itself
-COPY pyproject.toml uv.lock ./
-RUN uv sync --no-dev --no-install-project
+# ML heavy packages in an isolated layer.
+# Docker layer cache: invalidated only when constraints/ml-packages.txt changes.
+# A non-ML dep change in pyproject.toml will NOT trigger this layer.
+# uv cache mount: packages survive layer cache miss — no PyPI re-download.
+# torch ~430MB (arm64) / ~530MB (x86_64): first build on a clean host takes 5-15 min.
+# Scratch rebuild: docker buildx build --no-cache --build-arg GIT_SHA=$(git rev-parse HEAD) .
+COPY constraints/ml-packages.txt ./constraints/ml-packages.txt
+RUN --mount=type=cache,target=/root/.cache/uv \
+    echo "[BUILD ml-deps] Installing ML stack (torch, sentence-transformers) — first build may take 5-15 min" && \
+    uv venv /app/.venv && \
+    uv pip install --python /app/.venv -r constraints/ml-packages.txt && \
+    echo "[BUILD ml-deps] done"
 
-# Now copy source and install the project package
+# All production dependencies (frozen lockfile).
+# Layer cache: invalidated only when pyproject.toml or uv.lock changes.
+# uv sync --frozen enforces the committed lockfile exactly; any drift is a build error.
+COPY pyproject.toml uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    echo "[BUILD deps] Syncing all deps from frozen lockfile..." && \
+    uv sync --frozen --no-dev --no-install-project && \
+    echo "[BUILD deps] done"
+
+# Install the project package (source layer).
+# Layer cache: invalidated only when src/ changes.
 COPY src/ src/
-RUN uv sync --no-dev
+RUN --mount=type=cache,target=/root/.cache/uv \
+    echo "[BUILD project] Installing palace-mcp from source..." && \
+    uv sync --frozen --no-dev && \
+    echo "[BUILD project] done"
 
 # --- runtime stage -------------------------------------------------------
 FROM python:3.12-slim@sha256:804ddf3251a60bbf9c92e73b7566c40428d54d0e79d3428194edf40da6521286 AS runtime
@@ -67,6 +89,9 @@ COPY --from=cm-fetch /tmp/codebase-memory-mcp /usr/local/bin/codebase-memory-mcp
 # Entrypoint checks Tantivy volume ownership before starting (GIM-101a T10 — Architect F19)
 COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# Image smoke check script — run after build to verify pins and local-only mode
+COPY scripts/smoke_image.py /app/scripts/smoke_image.py
 
 USER appuser
 
