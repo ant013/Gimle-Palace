@@ -100,6 +100,105 @@ def test_wait_for_mcp_ready_falls_back_to_loopback(monkeypatch) -> None:
     ]
 
 
+def test_ensure_project_analyze_runtime_skips_compose_when_already_ready(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Fast path: if MCP already reachable and recreate_palace=False, skip compose."""
+    compose_called: list[bool] = []
+
+    def fake_probe(url: str) -> None:
+        pass  # always succeeds
+
+    def fake_run_command(cmd: list[str], **kwargs: object) -> None:
+        compose_called.append(True)
+
+    monkeypatch.setattr(cli, "_probe_mcp_url_once", fake_probe)
+    monkeypatch.setattr(cli, "_run_command", fake_run_command)
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("")
+    override = tmp_path / "override.yml"
+    override.write_text("")
+
+    spec = cli.ProjectRuntimeSpec(
+        repo_path=tmp_path,
+        slug="test-slug",
+        language_profile="python_service",
+        bundle=None,
+        parent_mount="/tmp",
+        relative_path="test-slug",
+        container_repo_path="/repos/test-slug",
+        container_scip_path="/repos/test-slug/scip/index.scip",
+        env_file=env_file,
+        compose_override_path=override,
+        report_out=tmp_path / "report.md",
+        summary_out=tmp_path / "summary.json",
+        host_mount_path=None,
+        container_mount_path=None,
+    )
+
+    result = cli.ensure_project_analyze_runtime(
+        spec=spec,
+        mcp_url="http://localhost:8080/mcp",
+        recreate_palace=False,
+    )
+
+    assert result == "http://localhost:8080/mcp"
+    assert not compose_called, "docker compose must not run when MCP is already ready"
+
+
+def test_ensure_project_analyze_runtime_runs_compose_when_recreate_required(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """When recreate_palace=True, always run docker compose regardless of MCP state."""
+    probe_called: list[str] = []
+    compose_called: list[bool] = []
+
+    def fake_probe(url: str) -> None:
+        probe_called.append(url)
+
+    def fake_run_command(cmd: list[str], **kwargs: object) -> None:
+        compose_called.append(True)
+
+    def fake_wait(url: str, *, timeout_seconds: int = 60) -> str:
+        return url
+
+    monkeypatch.setattr(cli, "_probe_mcp_url_once", fake_probe)
+    monkeypatch.setattr(cli, "_run_command", fake_run_command)
+    monkeypatch.setattr(cli, "wait_for_mcp_ready", fake_wait)
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("")
+    override = tmp_path / "override.yml"
+    override.write_text("")
+
+    spec = cli.ProjectRuntimeSpec(
+        repo_path=tmp_path,
+        slug="test-slug",
+        language_profile="python_service",
+        bundle=None,
+        parent_mount="/tmp",
+        relative_path="test-slug",
+        container_repo_path="/repos/test-slug",
+        container_scip_path="/repos/test-slug/scip/index.scip",
+        env_file=env_file,
+        compose_override_path=override,
+        report_out=tmp_path / "report.md",
+        summary_out=tmp_path / "summary.json",
+        host_mount_path=None,
+        container_mount_path=None,
+    )
+
+    cli.ensure_project_analyze_runtime(
+        spec=spec,
+        mcp_url="http://localhost:8080/mcp",
+        recreate_palace=True,
+    )
+
+    assert compose_called, "docker compose must run when recreate_palace=True"
+    assert not probe_called, "fast-path probe must be skipped when recreate_palace=True"
+
+
 def test_merge_scip_index_env_mapping_preserves_existing_entries(
     tmp_path: Path,
 ) -> None:
@@ -1584,3 +1683,182 @@ def test_project_analyze_hs_swift_kit_emit_failure_stops_before_extractor_cascad
     assert summary["error_code"] == "SCIP_EMIT_TOOLCHAIN_UNSUPPORTED"
     assert "generic SwiftPM build is unsupported" in summary["message"]
     assert "scip_emit_swift_kit.sh bitcoin-kit" in summary["fallback_command"]
+
+
+def test_ensure_swift_scip_artifact_auto_falls_back_when_stale_artifact_exists(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo_path = tmp_path / "TronKit.Swift"
+    scip_dir = repo_path / "scip"
+    scip_dir.mkdir(parents=True)
+    scip_file = scip_dir / "index.scip"
+    scip_file.write_bytes(b"\x00" * 16)
+
+    spec = cli.ProjectRuntimeSpec(
+        repo_path=repo_path,
+        slug="tron-kit",
+        language_profile="swift_kit",
+        bundle=None,
+        parent_mount="hs",
+        relative_path="TronKit.Swift",
+        container_repo_path="/repos-hs/TronKit.Swift",
+        container_scip_path="/repos-hs/TronKit.Swift/scip/index.scip",
+        env_file=tmp_path / ".env",
+        compose_override_path=tmp_path / "docker-compose.project-analyze.yml",
+        report_out=tmp_path / "report.md",
+        summary_out=tmp_path / "summary.json",
+        host_mount_path=None,
+        container_mount_path=None,
+    )
+
+    monkeypatch.setattr(cli, "_git_head_sha", lambda _: "abc123")
+    monkeypatch.setattr(
+        cli,
+        "_emit_swift_scip",
+        lambda **_: (_ for _ in ()).throw(
+            cli.ScipEmitToolchainUnsupported(
+                message="missing Swift toolchain command(s): xcrun",
+                fallback_command="bash paperclips/scripts/scip_emit_swift_kit.sh tron-kit",
+            )
+        ),
+    )
+
+    result = cli.ensure_swift_scip_artifact(spec=spec, emit_scip="auto")
+
+    assert result["emitted"] is False
+    assert "toolchain unavailable" in result["reason"]
+    assert result["host_scip_path"] == str(scip_file)
+
+
+def test_ensure_swift_scip_artifact_auto_reraises_when_no_artifact_on_disk(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo_path = tmp_path / "TronKit.Swift"
+    repo_path.mkdir()
+
+    spec = cli.ProjectRuntimeSpec(
+        repo_path=repo_path,
+        slug="tron-kit",
+        language_profile="swift_kit",
+        bundle=None,
+        parent_mount="hs",
+        relative_path="TronKit.Swift",
+        container_repo_path="/repos-hs/TronKit.Swift",
+        container_scip_path="/repos-hs/TronKit.Swift/scip/index.scip",
+        env_file=tmp_path / ".env",
+        compose_override_path=tmp_path / "docker-compose.project-analyze.yml",
+        report_out=tmp_path / "report.md",
+        summary_out=tmp_path / "summary.json",
+        host_mount_path=None,
+        container_mount_path=None,
+    )
+
+    monkeypatch.setattr(cli, "_git_head_sha", lambda _: "abc123")
+    monkeypatch.setattr(
+        cli,
+        "_emit_swift_scip",
+        lambda **_: (_ for _ in ()).throw(
+            cli.ScipEmitToolchainUnsupported(
+                message="missing Swift toolchain command(s): xcrun",
+                fallback_command="bash paperclips/scripts/scip_emit_swift_kit.sh tron-kit",
+            )
+        ),
+    )
+
+    with pytest.raises(cli.ScipEmitToolchainUnsupported):
+        cli.ensure_swift_scip_artifact(spec=spec, emit_scip="auto")
+
+
+def _make_scip_spec(tmp_path: Path) -> cli.ProjectRuntimeSpec:
+    repo_path = tmp_path / "TronKit.Swift"
+    repo_path.mkdir(exist_ok=True)
+    return cli.ProjectRuntimeSpec(
+        repo_path=repo_path,
+        slug="tron-kit",
+        language_profile="swift_kit",
+        bundle=None,
+        parent_mount="hs",
+        relative_path="TronKit.Swift",
+        container_repo_path="/repos-hs/TronKit.Swift",
+        container_scip_path="/repos-hs/TronKit.Swift/scip/index.scip",
+        env_file=tmp_path / ".env",
+        compose_override_path=tmp_path / "docker-compose.project-analyze.yml",
+        report_out=tmp_path / "report.md",
+        summary_out=tmp_path / "summary.json",
+        host_mount_path=None,
+        container_mount_path=None,
+    )
+
+
+def test_ensure_swift_scip_artifact_never_succeeds_with_missing_metadata(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    spec = _make_scip_spec(tmp_path)
+    scip_dir = spec.repo_path / "scip"
+    scip_dir.mkdir(parents=True)
+    (scip_dir / "index.scip").write_bytes(b"\x00" * 16)
+
+    monkeypatch.setattr(cli, "_git_head_sha", lambda _: "abc123")
+    monkeypatch.setattr(cli, "_load_scip_metadata", lambda _path: None)
+
+    result = cli.ensure_swift_scip_artifact(spec=spec, emit_scip="never")
+
+    assert result["emitted"] is False
+    assert result["stale"] is True
+    assert result["host_scip_path"] == str(scip_dir / "index.scip")
+
+
+def test_ensure_swift_scip_artifact_never_succeeds_with_stale_sha(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    spec = _make_scip_spec(tmp_path)
+    scip_dir = spec.repo_path / "scip"
+    scip_dir.mkdir(parents=True)
+    (scip_dir / "index.scip").write_bytes(b"\x00" * 16)
+
+    stale_metadata = {"repo_head_sha": "deadbeef"}
+    monkeypatch.setattr(cli, "_git_head_sha", lambda _: "abc123")
+    monkeypatch.setattr(cli, "_load_scip_metadata", lambda _path: stale_metadata)
+
+    result = cli.ensure_swift_scip_artifact(spec=spec, emit_scip="never")
+
+    assert result["emitted"] is False
+    assert result["stale"] is True
+    assert result["host_scip_path"] == str(scip_dir / "index.scip")
+
+
+def test_ensure_swift_scip_artifact_never_fails_with_no_index(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    spec = _make_scip_spec(tmp_path)
+
+    monkeypatch.setattr(cli, "_git_head_sha", lambda _: "abc123")
+    monkeypatch.setattr(cli, "_load_scip_metadata", lambda _path: None)
+
+    with pytest.raises(cli.ProjectAnalyzeCliError) as exc_info:
+        cli.ensure_swift_scip_artifact(spec=spec, emit_scip="never")
+
+    assert exc_info.value.error_code == "missing_required_scip_artifact"
+
+
+def test_ensure_swift_scip_artifact_never_fails_with_empty_index(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    spec = _make_scip_spec(tmp_path)
+    scip_dir = spec.repo_path / "scip"
+    scip_dir.mkdir(parents=True)
+    (scip_dir / "index.scip").write_bytes(b"")
+
+    monkeypatch.setattr(cli, "_git_head_sha", lambda _: "abc123")
+    monkeypatch.setattr(cli, "_load_scip_metadata", lambda _path: None)
+
+    with pytest.raises(cli.ProjectAnalyzeCliError) as exc_info:
+        cli.ensure_swift_scip_artifact(spec=spec, emit_scip="never")
+
+    assert exc_info.value.error_code == "missing_required_scip_artifact"
