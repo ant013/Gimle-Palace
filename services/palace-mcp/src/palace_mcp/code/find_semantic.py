@@ -690,7 +690,9 @@ async def semantic_search(
     effective_scopes = _resolve_effective_scopes(
         source_scopes, include_dependencies, include_generated, include_sdk
     )
-    candidate_rows, scope_excluded_count = _filter_by_scope(candidate_rows, effective_scopes)
+    candidate_rows, scope_excluded_count = _filter_by_scope(
+        candidate_rows, effective_scopes
+    )
 
     _apply_ranking(normalized_query, candidate_rows)
     result_rows = candidate_rows[:limit]

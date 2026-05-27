@@ -69,9 +69,7 @@ class _FakeBackend:
 
 
 def _dispatcher() -> EmbeddingBackendDispatcher:
-    return EmbeddingBackendDispatcher(
-        {"qodo": _FakeBackend()}, default_backend="qodo"
-    )
+    return EmbeddingBackendDispatcher({"qodo": _FakeBackend()}, default_backend="qodo")
 
 
 def _make_run_fn(rows: list[dict[str, Any]]) -> Any:
@@ -82,9 +80,7 @@ def _make_run_fn(rows: list[dict[str, Any]]) -> Any:
             return _FakeResult(single_value={"found_projects": ["wallet-core"]})
         if "embedded_cnt" in query:
             return _FakeResult(
-                data_value=[
-                    {"source_scope": "project", "total": 10, "embedded_cnt": 5}
-                ]
+                data_value=[{"source_scope": "project", "total": 10, "embedded_cnt": 5}]
             )
         if "queryNodes('symbol_embedding_idx'" in query:
             return _FakeResult(data_value=rows)
@@ -431,7 +427,9 @@ async def test_cross_project_search_with_scope_filter() -> None:
             )
         if "embedded_cnt" in query:
             return _FakeResult(
-                data_value=[{"source_scope": "project", "total": 30, "embedded_cnt": 10}]
+                data_value=[
+                    {"source_scope": "project", "total": 30, "embedded_cnt": 10}
+                ]
             )
         if "queryNodes('symbol_embedding_idx'" in query:
             return _FakeResult(
