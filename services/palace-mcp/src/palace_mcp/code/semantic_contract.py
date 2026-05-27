@@ -99,7 +99,6 @@ class ScoreComponents(BaseModel, frozen=True):
     lexical_match: float = 0.0
     source_scope_score: float = 0.0
     symbol_kind_boost: float = 0.0
-    module_path_boost: float = 0.0
     penalty: float = 0.0
 
 

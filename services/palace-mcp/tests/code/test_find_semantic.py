@@ -265,7 +265,6 @@ async def test_success_filters_scope_and_skips_context_when_disabled() -> None:
             )
         if "queryNodes('symbol_embedding_idx'" in query:
             assert params["query_k"] == 50
-            assert params["limit"] == 2
             return _FakeResult(
                 data_value=[
                     {
@@ -274,6 +273,7 @@ async def test_success_filters_scope_and_skips_context_when_disabled() -> None:
                         "kind": "function",
                         "file_path": "Sources/A.swift",
                         "module_name": "WalletA",
+                        "source_scope": "project",
                         "embedding_input_hash": "hash-a",
                         "commit_sha": "sha-a",
                         "score": 0.91,
@@ -284,6 +284,7 @@ async def test_success_filters_scope_and_skips_context_when_disabled() -> None:
                         "kind": "function",
                         "file_path": "Sources/B.swift",
                         "module_name": "WalletB",
+                        "source_scope": "project",
                         "embedding_input_hash": "hash-b",
                         "commit_sha": "sha-b",
                         "score": 0.87,
@@ -349,6 +350,7 @@ async def test_vector_query_uses_candidate_limit_to_overfetch_before_scope_filte
                         "kind": "function",
                         "file_path": "Sources/A.swift",
                         "module_name": "WalletCore",
+                        "source_scope": "project",
                         "embedding_input_hash": "hash-a",
                         "commit_sha": None,
                         "score": 0.91,
@@ -378,9 +380,8 @@ async def test_vector_query_uses_candidate_limit_to_overfetch_before_scope_filte
 
 
 @pytest.mark.asyncio
-async def test_context_warning_is_attached_per_hit_when_snippet_provider_unavailable() -> (
-    None
-):
+async def test_context_warning_is_attached_per_hit_when_project_not_mounted() -> None:
+    """When project is not mounted locally and CM session is absent, per-hit warning."""
     from palace_mcp.code.find_semantic import semantic_search
 
     backend = _FakeBackend()
@@ -402,6 +403,7 @@ async def test_context_warning_is_attached_per_hit_when_snippet_provider_unavail
                         "kind": "function",
                         "file_path": "Sources/A.swift",
                         "module_name": "WalletCore",
+                        "source_scope": "project",
                         "embedding_input_hash": "hash-a",
                         "commit_sha": None,
                         "score": 0.91,
@@ -429,8 +431,9 @@ async def test_context_warning_is_attached_per_hit_when_snippet_provider_unavail
 
     context = result["result"][0]["context"]
     assert context["available"] is False
-    assert context["warning_code"] == "snippet_provider_unavailable"
-    assert context["warning"] == "snippet provider unavailable"
+    # Local provider returns project_not_mounted when /repos/<project> absent;
+    # CM fallback is skipped because it is the project_not_mounted path.
+    assert context["warning_code"] == "project_not_mounted"
 
 
 @pytest.mark.asyncio
@@ -456,6 +459,7 @@ async def test_context_limit_zero_returns_empty_usage_preview() -> None:
                         "kind": "function",
                         "file_path": "Sources/A.swift",
                         "module_name": "WalletCore",
+                        "source_scope": "project",
                         "embedding_input_hash": "hash-a",
                         "commit_sha": "sha-a",
                         "score": 0.91,
@@ -531,6 +535,7 @@ async def test_embedding_dispatcher_factory_is_reused_across_calls() -> None:
                         "kind": "function",
                         "file_path": "Sources/A.swift",
                         "module_name": "WalletCore",
+                        "source_scope": "project",
                         "embedding_input_hash": "hash-a",
                         "commit_sha": None,
                         "score": 0.91,
@@ -595,6 +600,7 @@ async def test_embedding_coverage_included_in_success_response(
                         "kind": "function",
                         "file_path": "Sources/A.swift",
                         "module_name": "WalletCore",
+                        "source_scope": "project",
                         "embedding_input_hash": "hash-a",
                         "commit_sha": None,
                         "score": 0.91,

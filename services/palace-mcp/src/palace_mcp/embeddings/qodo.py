@@ -6,6 +6,8 @@ import importlib
 import os
 from typing import Any, Protocol, cast
 
+from palace_mcp.embeddings.cache_preflight import preflight_or_fail
+
 QODO_EMBED_MODEL_NAME = "Qodo/Qodo-Embed-1-1.5B"
 
 
@@ -42,14 +44,27 @@ def _load_sentence_transformer(
         ) from exc
 
     sentence_transformer = getattr(module, "SentenceTransformer")
-    return cast(
-        _SentenceEncoder,
-        sentence_transformer(
-            model_name,
-            trust_remote_code=trust_remote_code,
-            local_files_only=local_files_only,
-        ),
-    )
+    try:
+        return cast(
+            _SentenceEncoder,
+            sentence_transformer(
+                model_name,
+                trust_remote_code=trust_remote_code,
+                local_files_only=local_files_only,
+            ),
+        )
+    except OSError as exc:
+        if local_files_only:
+            raise RuntimeError(
+                f"Model '{model_name}' not found in local cache "
+                f"(PALACE_EMBEDDING_LOCAL_ONLY=true). "
+                f"Download: huggingface-cli download {model_name} "
+                f"(cache: ~/.cache/huggingface/hub/). "
+                f"Or set PALACE_EMBEDDING_LOCAL_ONLY=false to allow network access."
+            ) from exc
+        raise RuntimeError(
+            f"Failed to load sentence transformer '{model_name}': {exc}"
+        ) from exc
 
 
 class QodoEmbeddingBackend:
@@ -64,6 +79,8 @@ class QodoEmbeddingBackend:
     ) -> None:
         if local_files_only is None:
             local_files_only = _local_files_only_from_env()
+        if encoder is None:
+            preflight_or_fail(model_name, local_only=local_files_only)
         self._encoder = encoder or _load_sentence_transformer(
             model_name,
             trust_remote_code=trust_remote_code,
