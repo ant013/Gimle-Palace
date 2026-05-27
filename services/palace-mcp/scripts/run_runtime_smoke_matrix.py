@@ -35,14 +35,11 @@ from tests.runtime_smoke_matrix.evaluator import (  # noqa: E402
 
 def _git_head_sha(repo_root: Path) -> str:
     try:
-        return (
-            subprocess.check_output(
-                ["git", "rev-parse", "HEAD"],
-                cwd=repo_root,
-                text=True,
-            )
-            .strip()
-        )
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo_root,
+            text=True,
+        ).strip()
     except Exception:
         return "unknown"
 

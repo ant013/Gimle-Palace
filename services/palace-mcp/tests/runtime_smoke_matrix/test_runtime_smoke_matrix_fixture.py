@@ -63,11 +63,11 @@ def test_build_failure_is_distinguished_from_extractor_failure(
                 {
                     "stage": "build_scip",
                     "status": "failed",
-                    "error_code": "toolchain_unsupported"
+                    "error_code": "toolchain_unsupported",
                 }
             ],
             "product_probe": {"status": "failed"},
-            "graph_invariant": {"status": "failed", "counts": {}}
+            "graph_invariant": {"status": "failed", "counts": {}},
         },
     )
     extractor_failure = evaluate_row(
@@ -76,12 +76,19 @@ def test_build_failure_is_distinguished_from_extractor_failure(
             "artifacts": row.expected_artifacts,
             "stage_results": [
                 {"stage": "build_scip", "status": "passed"},
-                {"stage": "symbol_index_swift", "status": "failed", "error_code": "extractor_runtime_error"},
+                {
+                    "stage": "symbol_index_swift",
+                    "status": "failed",
+                    "error_code": "extractor_runtime_error",
+                },
                 {"stage": "dead_symbol_binary_surface", "status": "passed"},
-                {"stage": "embedding_symbol", "status": "passed"}
+                {"stage": "embedding_symbol", "status": "passed"},
             ],
             "product_probe": {"status": "passed"},
-            "graph_invariant": {"status": "passed", "counts": {"nodes": 1000, "edges": 1000}}
+            "graph_invariant": {
+                "status": "passed",
+                "counts": {"nodes": 1000, "edges": 1000},
+            },
         },
     )
 
@@ -117,18 +124,28 @@ def test_required_stage_skip_still_fails_even_with_allowed_code(
         {
             "artifacts": row.expected_artifacts,
             "stage_results": [
-                {"stage": "build_scip", "status": "skipped", "error_code": "toolchain_unsupported"},
+                {
+                    "stage": "build_scip",
+                    "status": "skipped",
+                    "error_code": "toolchain_unsupported",
+                },
                 {"stage": "symbol_index_swift", "status": "passed"},
                 {"stage": "dead_symbol_binary_surface", "status": "passed"},
-                {"stage": "embedding_symbol", "status": "passed"}
+                {"stage": "embedding_symbol", "status": "passed"},
             ],
             "product_probe": {"status": "passed"},
-            "graph_invariant": {"status": "passed", "counts": {"nodes": 1000, "edges": 1000}}
+            "graph_invariant": {
+                "status": "passed",
+                "counts": {"nodes": 1000, "edges": 1000},
+            },
         },
     )
 
     assert not result.passed
-    assert any("required stages cannot be skipped" in reason for reason in result.failure_reasons)
+    assert any(
+        "required stages cannot be skipped" in reason
+        for reason in result.failure_reasons
+    )
 
 
 def test_bounded_embedding_row_is_rendered_as_partial_coverage(
@@ -166,7 +183,8 @@ def test_json_summary_includes_repo_refs_and_schema_version(
 
     assert payload["matrix_schema_version"] == schema_version
     assert payload["repo_refs"]["uw-ios-app-full"] == "pr7/GIM-914-runtime-smoke-matrix"
-    bounded_row = next(item for item in payload["rows"] if item["id"] == "uw-ios-app-embedding-bounded")
+    bounded_row = next(
+        item for item in payload["rows"] if item["id"] == "uw-ios-app-embedding-bounded"
+    )
     assert bounded_row["embedding_limit"] == 200
     assert bounded_row["coverage_label"] == "bounded"
-

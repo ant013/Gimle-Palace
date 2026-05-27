@@ -103,7 +103,9 @@ def _collect_stage_results(response: dict[str, Any]) -> list[StageEvidence]:
                 stage=str(raw["stage"]),
                 status=str(raw["status"]),
                 error_code=(
-                    str(raw["error_code"]) if raw.get("error_code") is not None else None
+                    str(raw["error_code"])
+                    if raw.get("error_code") is not None
+                    else None
                 ),
                 evidence=str(raw.get("evidence", "")),
                 artifacts=[str(item) for item in raw.get("artifacts", [])],
@@ -177,15 +179,16 @@ def evaluate_row(row: RuntimeMatrixRow, response: dict[str, Any]) -> RuntimeRowR
 
     actual_embedding_limit = response.get("embedding_limit")
     coverage_label = "bounded" if row.embedding_limit is not None else "full"
-    if row.embedding_limit is not None and actual_embedding_limit != row.embedding_limit:
+    if (
+        row.embedding_limit is not None
+        and actual_embedding_limit != row.embedding_limit
+    ):
         failure_reasons.append(
             f"embedding_limit={actual_embedding_limit} != required {row.embedding_limit}"
         )
 
     if first_failure_index is not None:
-        failure_phase = (
-            "build_or_emit" if first_failure_index == 0 else "extractor"
-        )
+        failure_phase = "build_or_emit" if first_failure_index == 0 else "extractor"
     elif not product_probe_ok or not invariant_ok:
         failure_phase = "probe"
 
@@ -241,8 +244,12 @@ def build_json_summary(
                 "embedding_limit": rows_by_id[result.row_id].embedding_limit,
                 "coverage_label": result.coverage_label,
                 "product_probe": rows_by_id[result.row_id].product_probe,
-                "graph_invariant_query": rows_by_id[result.row_id].graph_invariant_query,
-                "required_stage_sequence": rows_by_id[result.row_id].required_stage_sequence,
+                "graph_invariant_query": rows_by_id[
+                    result.row_id
+                ].graph_invariant_query,
+                "required_stage_sequence": rows_by_id[
+                    result.row_id
+                ].required_stage_sequence,
                 "expected_artifacts": rows_by_id[result.row_id].expected_artifacts,
             }
             for result in report.results
@@ -296,9 +303,8 @@ def render_markdown_report(
         lines.append(
             f"- graph_invariant_query: `{row.graph_invariant_query['tool']}` -> {row.graph_invariant_query['success_hint']}"
         )
-        lines.append(f"- command: `{ ' '.join(row.command) }`")
+        lines.append(f"- command: `{' '.join(row.command)}`")
         if result.failure_reasons:
             lines.append(f"- failure_reasons: `{'; '.join(result.failure_reasons)}`")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
-
