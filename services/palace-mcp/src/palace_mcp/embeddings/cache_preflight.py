@@ -12,8 +12,6 @@ import os
 import stat
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
-
 
 class CacheStatus(enum.Enum):
     absent = "absent"
@@ -40,7 +38,7 @@ class CacheProvenance:
     revision: str
     cache_root: str
     recorded_at: str = ""
-    integrity_marker: str = ""
+    version_marker: str = ""
 
     def to_dict(self) -> dict[str, str]:
         return {
@@ -49,7 +47,7 @@ class CacheProvenance:
             "revision": self.revision,
             "cache_root": self.cache_root,
             "recorded_at": self.recorded_at,
-            "integrity_marker": self.integrity_marker,
+            "version_marker": self.version_marker,
         }
 
 
@@ -70,9 +68,9 @@ def _dir_size(path: Path) -> int:
     total = 0
     try:
         for entry in path.rglob("*"):
-            if entry.is_file():
+            if entry.is_file(follow_symlinks=False):
                 try:
-                    total += entry.stat().st_size
+                    total += entry.stat(follow_symlinks=False).st_size
                 except OSError:
                     pass
     except OSError:
@@ -217,7 +215,7 @@ def record_cache_provenance(
         revision=revision,
         cache_root=str(root),
         recorded_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        integrity_marker=f"{model_id}@{revision}",
+        version_marker=f"{model_id}@{revision}",
     )
 
     provenance_path = root / _PROVENANCE_FILENAME
@@ -237,6 +235,13 @@ def preflight_or_fail(
     """
     result = check_model_cache(model_id, cache_root=cache_root)
     _print_cache_status(result)
+
+    if not result.owner_ok:
+        raise RuntimeError(
+            f"Model cache at {result.cache_root} has unsafe ownership: "
+            f"{result.detail}. "
+            f"Fix cache directory ownership or permissions, then retry."
+        )
 
     if local_only and result.status in (CacheStatus.absent, CacheStatus.stale):
         root = result.cache_root
@@ -273,10 +278,3 @@ def _print_cache_status(result: CacheCheckResult) -> None:
     )
 
 
-def summarise_caches(
-    model_ids: Sequence[str],
-    *,
-    hf_cache_root: str | Path | None = None,
-) -> list[CacheCheckResult]:
-    """Check all specified model caches and return results."""
-    return [check_model_cache(mid, cache_root=hf_cache_root) for mid in model_ids]

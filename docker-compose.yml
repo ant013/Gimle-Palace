@@ -54,8 +54,8 @@ services:
       # mounted cache volume so Qodo-Embed-1-1.5B is not re-downloaded on restart.
       # Override PALACE_HF_CACHE_DIR in docker-compose.override.yml to use a
       # host bind-mount instead of the default named volume.
-      HF_HOME: "/data/hf-cache"
-      TRANSFORMERS_CACHE: "/data/hf-cache"
+      HF_HOME: "${PALACE_HF_CACHE_DIR:-/data/hf-cache}"
+      TRANSFORMERS_CACHE: "${PALACE_HF_CACHE_DIR:-/data/hf-cache}"
       PALACE_HF_CACHE_DIR: "${PALACE_HF_CACHE_DIR:-/data/hf-cache}"
       PALACE_EMBEDDING_LOCAL_ONLY: "${PALACE_EMBEDDING_LOCAL_ONLY:-0}"
     # Non-root user for security hardening (GIM-101a, T10 — Architect F19)

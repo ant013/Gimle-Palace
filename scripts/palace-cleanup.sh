@@ -68,7 +68,9 @@ esac
 _guard_path() {
     local p
     p="$(realpath "$1" 2>/dev/null || echo "")"
-    if [[ -z "$p" ]]; then return 0; fi  # path doesn't exist, skip guard
+    if [[ -z "$p" ]]; then
+        echo "ERROR: path '$1' does not exist or cannot be resolved" >&2; exit 1
+    fi
 
     local home_real
     home_real="$(realpath "$HOME")"
@@ -83,7 +85,7 @@ _guard_path() {
     local allowed=("$REPO_ROOT" "/tmp" "/var" "/data")
     local ok=false
     for a in "${allowed[@]}"; do
-        if [[ "$p" == "$a"* ]]; then ok=true; break; fi
+        if [[ "$p" == "$a" || "$p" == "$a/"* ]]; then ok=true; break; fi
     done
     if ! $ok; then
         echo "ERROR: path $p is outside allowed dirs (${allowed[*]})" >&2; exit 1

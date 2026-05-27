@@ -146,6 +146,19 @@ def test_preflight_does_not_raise_when_absent_and_not_local_only(
     assert result.status == CacheStatus.absent
 
 
+@pytest.mark.skipif(os.getuid() == 0, reason="root bypasses world-writable checks")
+def test_preflight_raises_on_world_writable_regardless_of_local_only(
+    tmp_path: Path,
+) -> None:
+    _make_model_dir(tmp_path, MODEL_ID)
+    tmp_path.chmod(0o777)
+    try:
+        with pytest.raises(RuntimeError, match="unsafe ownership"):
+            preflight_or_fail(MODEL_ID, cache_root=tmp_path, local_only=False)
+    finally:
+        tmp_path.chmod(0o755)
+
+
 # ── provenance ────────────────────────────────────────────────────────────────
 
 
@@ -164,12 +177,12 @@ def test_record_cache_provenance_no_secrets(tmp_path: Path) -> None:
     assert "secret" not in data
 
 
-def test_record_cache_provenance_integrity_marker(tmp_path: Path) -> None:
+def test_record_cache_provenance_version_marker(tmp_path: Path) -> None:
     record_cache_provenance(
         MODEL_ID, source="huggingface", revision="abc123", cache_root=tmp_path
     )
     data = json.loads((tmp_path / "palace_cache_provenance.json").read_text())
-    assert data["integrity_marker"] == f"{MODEL_ID}@abc123"
+    assert data["version_marker"] == f"{MODEL_ID}@abc123"
 
 
 # ── env-var default ───────────────────────────────────────────────────────────
