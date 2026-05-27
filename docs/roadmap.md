@@ -300,7 +300,7 @@ repeatable product path:
 | Slice | What | Status | Depends On | Notes |
 |---|---|---|---|---|
 | PR0 | Product readiness contract lock | 📋 | none | Create Paperclip child DAG and close only by merged-to-`develop` SHA. |
-| PR0a | Semantic-search architecture lock | 📋 | PR0 | Lock current `find_semantic.py` / `semantic_contract.py` boundary and prevent a second semantic-search stack. |
+| PR0a | Semantic-search architecture lock | 🚧 | PR0 | GIM-915. Lock current `find_semantic.py` / `semantic_contract.py` boundary; arch note at `docs/superpowers/specs/2026-05-27-GIM-915-semantic-search-arch-lock.md`. |
 | PR1 | Clean Docker image reproducibility | 📋 | GIM-856, PR0 | Digest/pinned build, frozen deps, fresh-host scratch rebuild, no manual runtime patching. |
 | PR2 | Persistent ML dependency and model cache strategy | 📋 | PR1 | Qodo/HF/uv/Neo4j cache env contract, local-only fail-fast, cleanup retention levels. |
 | PR3a | Semantic candidate backend decision | 📋 | PR0a | Dense vs sparse vs hybrid candidate retrieval decision with dev-matrix evidence. |
