@@ -21,7 +21,6 @@ import pytest
 from tests.golden_matrix.evaluator import (
     MatrixRow,
     MatchCriterion,
-    RowResult,
     evaluate_row,
     load_matrix,
     run_matrix,
@@ -352,7 +351,6 @@ def test_run_matrix_reports_mandatory_failures(
     empty_responses: dict[str, dict] = {}
     report = run_matrix(matrix_rows, empty_responses)
     # All mandatory rows should fail (no results for any of them)
-    mandatory_ids = {r.id for r in matrix_rows if r.class_ == "mandatory"}
     failed_ids = set(report.mandatory_failures)
     # Every mandatory row with min_hits > 0 should fail
     min_hit_mandatory = {r.id for r in matrix_rows if r.class_ == "mandatory" and r.min_hits > 0}

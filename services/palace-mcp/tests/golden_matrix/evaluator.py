@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import fnmatch
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -72,6 +72,7 @@ class RowResult:
     ndcg: float
     scope_leak_count: int  # hits with unexpected source_scope
     context_present_count: int
+    determinism_hash_count: int  # hits with non-null embedding_input_hash
 
 
 @dataclass
@@ -244,12 +245,19 @@ def evaluate_row(row: MatrixRow, response: dict[str, Any]) -> RowResult:
                 f"must_match_all not satisfied in top-{n}: none of {criterion.patterns[:3]}…"
             )
 
-    for criterion in row.must_match_any_in_top_n:
-        n = criterion.n if criterion.n is not None else row.top_k
-        window = hits_raw[:n]
-        if not any(_hit_matches_any_pattern(h, criterion.patterns) for h in window):
+    # must_match_any: at least ONE criterion group must have a match (OR semantics)
+    if row.must_match_any_in_top_n:
+        any_group_matched = any(
+            any(
+                _hit_matches_any_pattern(h, criterion.patterns)
+                for h in hits_raw[: criterion.n if criterion.n is not None else row.top_k]
+            )
+            for criterion in row.must_match_any_in_top_n
+        )
+        if not any_group_matched:
+            all_patterns = [p for c in row.must_match_any_in_top_n for p in c.patterns]
             failure_reasons.append(
-                f"must_match_any not satisfied in top-{n}: none of {criterion.patterns[:3]}…"
+                f"must_match_any not satisfied: none of {all_patterns[:3]}…"
             )
 
     for criterion in row.must_not_match_in_top_n:
@@ -311,6 +319,7 @@ def evaluate_row(row: MatrixRow, response: dict[str, Any]) -> RowResult:
         1 for h in evidence if h.source_scope and h.source_scope not in allowed_scopes
     )
     context_present_count = sum(1 for e in evidence if e.context_status == "present")
+    determinism_hash_count = sum(1 for e in evidence if e.embedding_input_hash is not None)
 
     return RowResult(
         row_id=row.id,
@@ -327,6 +336,7 @@ def evaluate_row(row: MatrixRow, response: dict[str, Any]) -> RowResult:
         ndcg=ndcg,
         scope_leak_count=scope_leak_count,
         context_present_count=context_present_count,
+        determinism_hash_count=determinism_hash_count,
     )
 
 
@@ -365,6 +375,11 @@ def _aggregate(results: list[RowResult]) -> dict[str, float]:
         ),
         "context_availability_rate": (
             sum(r.context_present_count for r in executed) / total_hits
+            if total_hits > 0
+            else 0.0
+        ),
+        "determinism_hash_match_rate": (
+            sum(r.determinism_hash_count for r in executed) / total_hits
             if total_hits > 0
             else 0.0
         ),
