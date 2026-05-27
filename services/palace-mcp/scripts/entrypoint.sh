@@ -35,14 +35,14 @@ if [ -n "$NEO4J_URI" ]; then
         exit 1
     fi
 
-    if [ "$NEO4J_PASSWORD" = "changeme" ]; then
-        echo "ERROR: NEO4J_PASSWORD is the default placeholder 'changeme'." >&2
+    if [ "$NEO4J_PASSWORD" = "changeme" ] || [ "$NEO4J_PASSWORD" = "neo4j" ]; then
+        echo "ERROR: NEO4J_PASSWORD is a well-known default ('changeme' or 'neo4j')." >&2
         echo "       Replace it with a strong unique password in .env." >&2
         echo "       Generate: openssl rand -base64 32" >&2
         exit 1
     fi
 
-    echo "[preflight] neo4j-uri=$NEO4J_URI auth=configured bolt-host-exposed=no"
+    echo "[preflight] neo4j-uri=$NEO4J_URI auth=configured"
 fi
 
 # ── 3. Model cache status (informational) ─────────────────────────────────────

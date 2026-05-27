@@ -86,6 +86,7 @@ services:
     depends_on:
       neo4j:
         condition: service_healthy
+        required: false
     ports:
       - "${PALACE_MCP_HOST:-127.0.0.1}:${PALACE_MCP_PORT:-8080}:8000"
     volumes:
