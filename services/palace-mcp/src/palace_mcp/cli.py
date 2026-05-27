@@ -945,7 +945,18 @@ def ensure_swift_scip_artifact(
         }
 
     if not usable_index or stale:
-        return _emit_swift_scip(spec=spec, repo_head_sha=repo_head_sha)
+        try:
+            return _emit_swift_scip(spec=spec, repo_head_sha=repo_head_sha)
+        except ScipEmitToolchainUnsupported:
+            if not usable_index:
+                raise
+            return {
+                "emitted": False,
+                "host_scip_path": str(output_path),
+                "meta_path": str(meta_path),
+                "metadata": metadata,
+                "reason": "toolchain unavailable; existing artifact reused (stale)",
+            }
 
     return {
         "emitted": False,
@@ -1033,6 +1044,25 @@ def ensure_project_analyze_runtime(
     mcp_url: str,
     recreate_palace: bool,
 ) -> str:
+    # Fast path: if palace-mcp is already reachable and no config change
+    # requires a container restart, skip the docker compose build entirely.
+    # This avoids the ML-layer Docker rebuild (5-15 min cold) when running
+    # from a directory whose compose project name differs from the running
+    # container's project (e.g. /tmp/gim-926-readiness vs gimle-palace).
+    if not recreate_palace:
+        candidates = _candidate_mcp_urls(mcp_url)
+        for candidate in candidates:
+            try:
+                _probe_mcp_url_once(candidate)
+                return candidate
+            except (
+                ProjectAnalyzeCliError,
+                urllib.error.URLError,
+                ValueError,
+                OSError,
+            ):
+                pass
+
     cmd = [
         "docker",
         "compose",

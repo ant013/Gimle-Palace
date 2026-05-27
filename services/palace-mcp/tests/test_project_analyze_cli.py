@@ -1584,3 +1584,89 @@ def test_project_analyze_hs_swift_kit_emit_failure_stops_before_extractor_cascad
     assert summary["error_code"] == "SCIP_EMIT_TOOLCHAIN_UNSUPPORTED"
     assert "generic SwiftPM build is unsupported" in summary["message"]
     assert "scip_emit_swift_kit.sh bitcoin-kit" in summary["fallback_command"]
+
+
+def test_ensure_swift_scip_artifact_auto_falls_back_when_stale_artifact_exists(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo_path = tmp_path / "TronKit.Swift"
+    scip_dir = repo_path / "scip"
+    scip_dir.mkdir(parents=True)
+    scip_file = scip_dir / "index.scip"
+    scip_file.write_bytes(b"\x00" * 16)
+
+    spec = cli.ProjectRuntimeSpec(
+        repo_path=repo_path,
+        slug="tron-kit",
+        language_profile="swift_kit",
+        bundle=None,
+        parent_mount="hs",
+        relative_path="TronKit.Swift",
+        container_repo_path="/repos-hs/TronKit.Swift",
+        container_scip_path="/repos-hs/TronKit.Swift/scip/index.scip",
+        env_file=tmp_path / ".env",
+        compose_override_path=tmp_path / "docker-compose.project-analyze.yml",
+        report_out=tmp_path / "report.md",
+        summary_out=tmp_path / "summary.json",
+        host_mount_path=None,
+        container_mount_path=None,
+    )
+
+    monkeypatch.setattr(cli, "_git_head_sha", lambda _: "abc123")
+    monkeypatch.setattr(
+        cli,
+        "_emit_swift_scip",
+        lambda **_: (_ for _ in ()).throw(
+            cli.ScipEmitToolchainUnsupported(
+                message="missing Swift toolchain command(s): xcrun",
+                fallback_command="bash paperclips/scripts/scip_emit_swift_kit.sh tron-kit",
+            )
+        ),
+    )
+
+    result = cli.ensure_swift_scip_artifact(spec=spec, emit_scip="auto")
+
+    assert result["emitted"] is False
+    assert "toolchain unavailable" in result["reason"]
+    assert result["host_scip_path"] == str(scip_file)
+
+
+def test_ensure_swift_scip_artifact_auto_reraises_when_no_artifact_on_disk(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo_path = tmp_path / "TronKit.Swift"
+    repo_path.mkdir()
+
+    spec = cli.ProjectRuntimeSpec(
+        repo_path=repo_path,
+        slug="tron-kit",
+        language_profile="swift_kit",
+        bundle=None,
+        parent_mount="hs",
+        relative_path="TronKit.Swift",
+        container_repo_path="/repos-hs/TronKit.Swift",
+        container_scip_path="/repos-hs/TronKit.Swift/scip/index.scip",
+        env_file=tmp_path / ".env",
+        compose_override_path=tmp_path / "docker-compose.project-analyze.yml",
+        report_out=tmp_path / "report.md",
+        summary_out=tmp_path / "summary.json",
+        host_mount_path=None,
+        container_mount_path=None,
+    )
+
+    monkeypatch.setattr(cli, "_git_head_sha", lambda _: "abc123")
+    monkeypatch.setattr(
+        cli,
+        "_emit_swift_scip",
+        lambda **_: (_ for _ in ()).throw(
+            cli.ScipEmitToolchainUnsupported(
+                message="missing Swift toolchain command(s): xcrun",
+                fallback_command="bash paperclips/scripts/scip_emit_swift_kit.sh tron-kit",
+            )
+        ),
+    )
+
+    with pytest.raises(cli.ScipEmitToolchainUnsupported):
+        cli.ensure_swift_scip_artifact(spec=spec, emit_scip="auto")
