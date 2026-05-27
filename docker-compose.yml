@@ -4,7 +4,7 @@ services:
     restart: unless-stopped
     mem_limit: 16g
     cpus: "4.0"
-    profiles: [review, analyze, full, code-graph]
+    profiles: [review, analyze, full, code-graph, server, macbook, ci]
     environment:
       NEO4J_AUTH: "neo4j/${NEO4J_PASSWORD}"
       NEO4J_PLUGINS: '["apoc"]'
@@ -35,7 +35,7 @@ services:
     restart: unless-stopped
     mem_limit: 2g
     cpus: "1.0"
-    profiles: [review, analyze, full, code-graph]
+    profiles: [review, analyze, full, code-graph, server, macbook, smoke, ci]
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -63,12 +63,15 @@ services:
     depends_on:
       neo4j:
         condition: service_healthy
+        required: false
     ports:
       - "8080:8000"
     volumes:
-      # NOTE: real-project bind-mounts use absolute Mac paths (operator-iMac convention).
-      # Non-iMac contributors should override these in docker-compose.override.yml.
+      # NOTE: real-project bind-mounts below use absolute Mac/iMac paths.
+      # Server operators: use docker-compose.server.yml instead (env-var driven mounts).
+      # Non-iMac contributors: override these in docker-compose.override.yml.
       # Fixture-based mounts (relative paths under ./services/...) work cross-platform.
+      # SECURITY: no /var/run/docker.sock, no $HOME, no broad secret-bearing dirs.
       - /Users/Shared/Ios/Gimle-Palace:/repos/gimle:ro
       # GIM-332: explicit .git mounts work around Docker Desktop VirtioFS stale dir cache
       - /Users/Shared/Ios/Gimle-Palace/.git:/repos/gimle/.git:ro
@@ -102,6 +105,28 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+
+  cache-warm:
+    build:
+      context: services/palace-mcp
+      args:
+        GIT_SHA: "${PALACE_GIT_SHA:-unknown}"
+    profiles: [cache-warm]
+    user: "1000:1000"
+    environment:
+      HF_HOME: "${PALACE_HF_CACHE_DIR:-/data/hf-cache}"
+      TRANSFORMERS_CACHE: "${PALACE_HF_CACHE_DIR:-/data/hf-cache}"
+      PALACE_HF_CACHE_DIR: "${PALACE_HF_CACHE_DIR:-/data/hf-cache}"
+      PALACE_EMBEDDING_LOCAL_ONLY: "0"
+    command: >
+      python -c "
+      from palace_mcp.embeddings.cache_preflight import preflight_or_fail;
+      from palace_mcp.embeddings.qodo import QODO_EMBED_MODEL_NAME;
+      preflight_or_fail(QODO_EMBED_MODEL_NAME, local_only=False);
+      print('cache-warm: model cache ready')
+      "
+    volumes:
+      - palace-hf-cache:${PALACE_HF_CACHE_DIR:-/data/hf-cache}
 
 networks:
   paperclip-agent-net:
