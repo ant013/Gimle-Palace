@@ -133,7 +133,7 @@ try:
     result = check_model_cache(QODO_EMBED_MODEL_NAME)
     print(
         f"  [INFO] model={result.model_id} status={result.status.value} "
-        f"cache_root={result.cache_root} size={result.size_bytes/(1024*1024):.1f}MB "
+        f"cache_root={result.cache_root} size={result.size_bytes / (1024 * 1024):.1f}MB "
         f"owner_ok={result.owner_ok} writeable={result.writeable}",
         flush=True,
     )
@@ -141,7 +141,9 @@ try:
         check(
             "cache status is present (local-only mode)",
             result.status == CacheStatus.present,
-            f"status={result.status.value}" if result.status != CacheStatus.present else "",
+            f"status={result.status.value}"
+            if result.status != CacheStatus.present
+            else "",
         )
     else:
         check(

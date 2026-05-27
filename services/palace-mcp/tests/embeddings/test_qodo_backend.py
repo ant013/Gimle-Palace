@@ -86,8 +86,14 @@ class TestQodoEmbeddingBackend:
     def test_loader_uses_sentence_transformer_with_qodo_defaults(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _present = CacheCheckResult(status=CacheStatus.present, cache_root="/fake", model_id=QODO_EMBED_MODEL_NAME)
-        monkeypatch.setattr("palace_mcp.embeddings.qodo.preflight_or_fail", lambda *a, **kw: _present)
+        _present = CacheCheckResult(
+            status=CacheStatus.present,
+            cache_root="/fake",
+            model_id=QODO_EMBED_MODEL_NAME,
+        )
+        monkeypatch.setattr(
+            "palace_mcp.embeddings.qodo.preflight_or_fail", lambda *a, **kw: _present
+        )
         captured: dict[str, Any] = {}
         original_import_module = importlib.import_module
 
@@ -140,8 +146,14 @@ class TestQodoEmbeddingBackend:
     def test_loader_reads_local_only_default_from_env(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _present = CacheCheckResult(status=CacheStatus.present, cache_root="/fake", model_id=QODO_EMBED_MODEL_NAME)
-        monkeypatch.setattr("palace_mcp.embeddings.qodo.preflight_or_fail", lambda *a, **kw: _present)
+        _present = CacheCheckResult(
+            status=CacheStatus.present,
+            cache_root="/fake",
+            model_id=QODO_EMBED_MODEL_NAME,
+        )
+        monkeypatch.setattr(
+            "palace_mcp.embeddings.qodo.preflight_or_fail", lambda *a, **kw: _present
+        )
         captured: dict[str, Any] = {}
         original_import_module = importlib.import_module
 

@@ -105,7 +105,10 @@ def _owner_ok(path: Path) -> tuple[bool, str]:
                     f"root owned by {root_uid}"
                 )
             if entry.is_dir() and (entry_stat.st_mode & stat.S_IWOTH):
-                return False, f"{entry} is world-writable (mode {oct(entry_stat.st_mode)})"
+                return (
+                    False,
+                    f"{entry} is world-writable (mode {oct(entry_stat.st_mode)})",
+                )
 
     except OSError as exc:
         return False, str(exc)
@@ -166,7 +169,9 @@ def check_model_cache(
 
     if not snapshot_dirs:
         result.status = CacheStatus.stale
-        result.detail = "model dir exists but no snapshot subdirectories found (partial download?)"
+        result.detail = (
+            "model dir exists but no snapshot subdirectories found (partial download?)"
+        )
         result.size_bytes = _dir_size(model_dir)
         return result
 
