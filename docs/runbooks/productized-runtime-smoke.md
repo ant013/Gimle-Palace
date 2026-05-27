@@ -68,13 +68,18 @@ Bindings supply absolute paths and service URLs:
 | Field | Required | Purpose |
 |---|---|---|
 | `repo_path` | yes | Absolute path to the checked-out repo |
-| `parent_mount` | yes | Parent directory containing all repos |
+| `parent_mount` | yes | Host-level parent directory containing all repos (absolute path) |
+| `mount_name` | yes | Short identifier for the mount point (e.g. `ios`) |
+| `mcp_mount_name` | yes | Short mount name MCP uses inside the container (e.g. `ios`); must match `^[a-z][a-z0-9-]{0,15}$` |
 | `mcp_url` | yes | Palace MCP Streamable HTTP endpoint |
 | `qodo_cache_path` | no | Path to local Qodo model cache |
 | `swiftpm_cache_path` | no | Path to shared SwiftPM cache |
 | `docker_compose_override` | no | Path to a Docker Compose override file |
 
 Invariant: `repo_path` must resolve inside `parent_mount`.
+
+> **Note:** `parent_mount` is the host-level absolute path used to compute `relative_path`.
+> `mcp_mount_name` is the short name that MCP validates against `^[a-z][a-z0-9-]{0,15}$` — it is what Docker maps as a volume mount name inside the container. These are distinct fields and can differ if the host directory name does not conform to the short-name pattern.
 
 ## 3. Recipe examples
 
@@ -147,7 +152,9 @@ from palace_mcp.smoke.runtime_binding import RuntimeBinding
 
 binding = RuntimeBinding(
     repo_path=Path("/Users/Shared/Ios/unstoppable-wallet-ios"),
-    parent_mount=Path("/Users/Shared/Ios"),
+    parent_mount=Path("/Users/Shared/Ios"),  # host-level absolute path
+    mount_name="ios",
+    mcp_mount_name="ios",  # short name MCP expects (^[a-z][a-z0-9-]{0,15}$)
     mcp_url="http://localhost:8731/mcp",
     qodo_cache_path=Path("/Users/Shared/models/qodo"),
 )
@@ -451,7 +458,9 @@ recipe = load_recipe_yaml(
 )
 binding = RuntimeBinding(
     repo_path=Path('/Users/Shared/Ios/bitcoin-kit-ios'),
-    parent_mount=Path('/Users/Shared/Ios'),
+    parent_mount=Path('/Users/Shared/Ios'),  # host-level absolute path
+    mount_name='ios',
+    mcp_mount_name='ios',  # short name MCP expects (^[a-z][a-z0-9-]{0,15}$)
     mcp_url='http://localhost:8731/mcp',
 )
 

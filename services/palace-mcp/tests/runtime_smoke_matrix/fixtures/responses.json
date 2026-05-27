@@ -1,0 +1,156 @@
+{
+  "uw-ios-app-full": {
+    "artifacts": [
+      "scip/index.scip",
+      "artifacts/runtime-smoke/uw-ios-app-full.summary.json",
+      "artifacts/runtime-smoke/uw-ios-app-full.report.md"
+    ],
+    "stage_results": [
+      {
+        "stage": "build_scip",
+        "status": "passed",
+        "evidence": "xcode workspace emit completed",
+        "artifacts": ["scip/index.scip"]
+      },
+      {
+        "stage": "symbol_index_swift",
+        "status": "passed",
+        "evidence": "run_id=symbol-uw-1"
+      },
+      {
+        "stage": "dead_symbol_binary_surface",
+        "status": "passed",
+        "evidence": "0 confirmed dead symbols"
+      },
+      {
+        "stage": "embedding_symbol",
+        "status": "passed",
+        "evidence": "embedded_symbols=1200"
+      }
+    ],
+    "product_probe": {
+      "status": "passed",
+      "evidence": "occurrences_count=12 for EvmKit.Address"
+    },
+    "graph_invariant": {
+      "status": "passed",
+      "counts": {
+        "nodes": 5400,
+        "edges": 8900
+      },
+      "evidence": "project overview nodes=5400 edges=8900"
+    }
+  },
+  "bitcoin-kit-ios-full": {
+    "artifacts": [
+      "scip/index.scip",
+      "artifacts/runtime-smoke/bitcoin-kit-ios-full.summary.json",
+      "artifacts/runtime-smoke/bitcoin-kit-ios-full.report.md"
+    ],
+    "stage_results": [
+      {
+        "stage": "build_scip",
+        "status": "passed",
+        "evidence": "paperclips/scripts/scip_emit_swift_kit.sh completed"
+      },
+      {
+        "stage": "symbol_index_swift",
+        "status": "passed",
+        "evidence": "run_id=symbol-btc-1"
+      },
+      {
+        "stage": "git_history",
+        "status": "passed",
+        "evidence": "git history extractor completed"
+      },
+      {
+        "stage": "embedding_symbol",
+        "status": "passed",
+        "evidence": "embedded_symbols=640"
+      }
+    ],
+    "product_probe": {
+      "status": "passed",
+      "evidence": "overview confirms bitcoin-kit registration"
+    },
+    "graph_invariant": {
+      "status": "passed",
+      "counts": {
+        "nodes": 1800,
+        "edges": 2600
+      },
+      "evidence": "project overview nodes=1800 edges=2600"
+    }
+  },
+  "palace-mcp-server-full": {
+    "artifacts": [
+      "artifacts/runtime-smoke/palace-mcp-server-full.summary.json",
+      "artifacts/runtime-smoke/palace-mcp-server-full.report.md"
+    ],
+    "stage_results": [
+      {
+        "stage": "runtime_boot",
+        "status": "passed",
+        "evidence": "docker compose --profile code-graph up -d"
+      },
+      {
+        "stage": "git_history",
+        "status": "passed",
+        "evidence": "git history extractor completed"
+      },
+      {
+        "stage": "code_ownership",
+        "status": "passed",
+        "evidence": "code ownership extractor completed"
+      }
+    ],
+    "product_probe": {
+      "status": "passed",
+      "evidence": "project overview read for palace-mcp"
+    },
+    "graph_invariant": {
+      "status": "passed",
+      "counts": {
+        "nodes": 900,
+        "edges": 1400
+      },
+      "evidence": "project overview nodes=900 edges=1400"
+    }
+  },
+  "uw-ios-app-embedding-bounded": {
+    "artifacts": [
+      "artifacts/runtime-smoke/uw-ios-app-embedding-bounded.summary.json",
+      "artifacts/runtime-smoke/uw-ios-app-embedding-bounded.report.md"
+    ],
+    "embedding_limit": 200,
+    "stage_results": [
+      {
+        "stage": "reuse_scip",
+        "status": "passed",
+        "evidence": "existing scip artifact reused"
+      },
+      {
+        "stage": "symbol_index_swift",
+        "status": "passed",
+        "evidence": "run_id=symbol-uw-bounded-1"
+      },
+      {
+        "stage": "embedding_symbol",
+        "status": "passed",
+        "evidence": "embedded_symbols=200 limit=200"
+      }
+    ],
+    "product_probe": {
+      "status": "passed",
+      "evidence": "occurrences_count=6 for EvmKit.Address"
+    },
+    "graph_invariant": {
+      "status": "passed",
+      "counts": {
+        "nodes": 5100,
+        "edges": 8300
+      },
+      "evidence": "project overview nodes=5100 edges=8300"
+    }
+  }
+}

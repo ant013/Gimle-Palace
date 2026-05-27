@@ -166,6 +166,75 @@ class TestSymbolIndexSwiftErrorHandling:
             with pytest.raises(FileNotFoundError):
                 await extractor.run(graphiti=MagicMock(), ctx=run_ctx)
 
+    @pytest.mark.asyncio
+    async def test_ctx_scip_path_override_bypasses_settings_lookup(
+        self,
+        extractor: SymbolIndexSwift,
+        run_ctx: ExtractorRunContext,
+        scip_fixture: Path,
+        tmp_path: Path,
+    ) -> None:
+        tantivy_dir = tmp_path / "tantivy"
+        tantivy_dir.mkdir()
+        settings = MagicMock()
+        settings.palace_scip_index_paths = {}
+        settings.palace_tantivy_index_path = str(tantivy_dir)
+        settings.palace_tantivy_heap_mb = 50
+        settings.palace_max_occurrences_total = 50_000_000
+        settings.palace_max_occurrences_per_project = 10_000_000
+        settings.palace_importance_threshold_use = 0.0
+        settings.palace_max_occurrences_per_symbol = 5_000
+        settings.palace_recency_decay_days = 30.0
+
+        override_ctx = ExtractorRunContext(
+            project_slug=run_ctx.project_slug,
+            group_id=run_ctx.group_id,
+            repo_path=run_ctx.repo_path,
+            run_id=run_ctx.run_id,
+            duration_ms=run_ctx.duration_ms,
+            logger=run_ctx.logger,
+            scip_path=scip_fixture,
+        )
+
+        bridge_mock = AsyncMock()
+        bridge_mock.__aenter__ = AsyncMock(return_value=bridge_mock)
+        bridge_mock.__aexit__ = AsyncMock(return_value=False)
+        bridge_mock.add_or_replace_async = AsyncMock()
+        bridge_mock.commit_async = AsyncMock()
+
+        with (
+            patch("palace_mcp.mcp_server.get_driver", return_value=_make_driver()),
+            patch("palace_mcp.mcp_server.get_settings", return_value=settings),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift.TantivyBridge",
+                return_value=bridge_mock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift.ensure_custom_schema",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._get_previous_error_code",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift.create_ingest_run",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift.write_checkpoint",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift.finalize_ingest_run",
+                new_callable=AsyncMock,
+            ),
+        ):
+            stats = await extractor.run(graphiti=MagicMock(), ctx=override_ctx)
+
+        assert stats.nodes_written >= 3
+
 
 class TestSymbolIndexSwiftHappyPath:
     @pytest.mark.asyncio

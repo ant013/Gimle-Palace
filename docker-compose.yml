@@ -4,7 +4,7 @@ services:
     restart: unless-stopped
     mem_limit: 16g
     cpus: "4.0"
-    profiles: [review, analyze, full, code-graph]
+    profiles: [review, analyze, full, code-graph, server, macbook, ci]
     environment:
       NEO4J_AUTH: "neo4j/${NEO4J_PASSWORD}"
       NEO4J_PLUGINS: '["apoc"]'
@@ -35,7 +35,7 @@ services:
     restart: unless-stopped
     mem_limit: 2g
     cpus: "1.0"
-    profiles: [review, analyze, full, code-graph]
+    profiles: [review, analyze, full, code-graph, server, macbook, smoke, ci]
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -50,17 +50,28 @@ services:
       PAPERCLIP_API_KEY: "${PAPERCLIP_API_KEY:-}"
       PALACE_SCIP_INDEX_PATHS: "${PALACE_SCIP_INDEX_PATHS:-}"
       PALACE_ADR_BASE_DIR: "${PALACE_ADR_BASE_DIR:-/var/lib/palace/adr}"
+      # ML model cache — HF_HOME and TRANSFORMERS_CACHE both point to the
+      # mounted cache volume so Qodo-Embed-1-1.5B is not re-downloaded on restart.
+      # Override PALACE_HF_CACHE_DIR in docker-compose.override.yml to use a
+      # host bind-mount instead of the default named volume.
+      HF_HOME: "${PALACE_HF_CACHE_DIR:-/data/hf-cache}"
+      TRANSFORMERS_CACHE: "${PALACE_HF_CACHE_DIR:-/data/hf-cache}"
+      PALACE_HF_CACHE_DIR: "${PALACE_HF_CACHE_DIR:-/data/hf-cache}"
+      PALACE_EMBEDDING_LOCAL_ONLY: "${PALACE_EMBEDDING_LOCAL_ONLY:-0}"
     # Non-root user for security hardening (GIM-101a, T10 — Architect F19)
     user: "1000:1000"
     depends_on:
       neo4j:
         condition: service_healthy
+        required: false
     ports:
       - "8080:8000"
     volumes:
-      # NOTE: real-project bind-mounts use absolute Mac paths (operator-iMac convention).
-      # Non-iMac contributors should override these in docker-compose.override.yml.
+      # NOTE: real-project bind-mounts below use absolute Mac/iMac paths.
+      # Server operators: use docker-compose.server.yml instead (env-var driven mounts).
+      # Non-iMac contributors: override these in docker-compose.override.yml.
       # Fixture-based mounts (relative paths under ./services/...) work cross-platform.
+      # SECURITY: no /var/run/docker.sock, no $HOME, no broad secret-bearing dirs.
       - /Users/Shared/Ios/Gimle-Palace:/repos/gimle:ro
       # GIM-332: explicit .git mounts work around Docker Desktop VirtioFS stale dir cache
       - /Users/Shared/Ios/Gimle-Palace/.git:/repos/gimle/.git:ro
@@ -80,6 +91,12 @@ services:
       - "${HOME}/.ssh/known_hosts:/home/appuser/.ssh/known_hosts:ro"
       - "${HOME}/.ssh/config:/home/appuser/.ssh/config:ro"
       - palace-tantivy-data:/var/lib/palace/tantivy
+      # HF/Qodo model cache — persisted across container restarts and rebuilds.
+      # Default: named volume (palace-hf-cache). Override with a host path in
+      # docker-compose.override.yml to share cache between projects, e.g.:
+      #   volumes:
+      #     - /data/palace-model-cache:${PALACE_HF_CACHE_DIR:-/data/hf-cache}
+      - palace-hf-cache:${PALACE_HF_CACHE_DIR:-/data/hf-cache}
     networks:
       - paperclip-agent-net
     healthcheck:
@@ -88,6 +105,28 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+
+  cache-warm:
+    build:
+      context: services/palace-mcp
+      args:
+        GIT_SHA: "${PALACE_GIT_SHA:-unknown}"
+    profiles: [cache-warm]
+    user: "1000:1000"
+    environment:
+      HF_HOME: "${PALACE_HF_CACHE_DIR:-/data/hf-cache}"
+      TRANSFORMERS_CACHE: "${PALACE_HF_CACHE_DIR:-/data/hf-cache}"
+      PALACE_HF_CACHE_DIR: "${PALACE_HF_CACHE_DIR:-/data/hf-cache}"
+      PALACE_EMBEDDING_LOCAL_ONLY: "0"
+    command: >
+      python -c "
+      from palace_mcp.embeddings.cache_preflight import preflight_or_fail;
+      from palace_mcp.embeddings.qodo import QODO_EMBED_MODEL_NAME;
+      preflight_or_fail(QODO_EMBED_MODEL_NAME, local_only=False);
+      print('cache-warm: model cache ready')
+      "
+    volumes:
+      - palace-hf-cache:${PALACE_HF_CACHE_DIR:-/data/hf-cache}
 
 networks:
   paperclip-agent-net:
@@ -98,3 +137,7 @@ volumes:
   neo4j_logs:
   codebase-memory-cache:
   palace-tantivy-data:
+  # ML model cache (HuggingFace/Qodo-Embed-1-1.5B).
+  # Never removed by `docker volume prune` (because it is referenced).
+  # Cleanup requires explicit: scripts/palace-cleanup.sh --level=destructive
+  palace-hf-cache:

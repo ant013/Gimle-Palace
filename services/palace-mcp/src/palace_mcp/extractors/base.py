@@ -64,6 +64,7 @@ class ExtractorRunContext:
     run_id: str
     duration_ms: int
     logger: logging.Logger
+    scip_path: Path | None = None
 
 
 class ExtractorOutcome(StrEnum):

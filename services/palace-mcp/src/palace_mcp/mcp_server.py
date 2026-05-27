@@ -827,6 +827,7 @@ async def _palace_ingest_run_extractor(
     name: str,
     project: str | None = None,
     bundle: str | None = None,
+    scip_path: str | None = None,
 ) -> dict[str, Any]:
     driver = _driver
     if driver is None:
@@ -852,7 +853,11 @@ async def _palace_ingest_run_extractor(
             "message": "either project or bundle is required",
         }
     return await _run_extractor(
-        name=name, project=project, driver=driver, graphiti=graphiti
+        name=name,
+        project=project,
+        driver=driver,
+        graphiti=graphiti,
+        scip_path=scip_path,
     )
 
 
@@ -1418,6 +1423,10 @@ async def palace_code_semantic_search(
     query: str,
     project: str | None = None,
     projects: list[str] | None = None,
+    source_scopes: list[str] | None = None,
+    include_dependencies: bool = False,
+    include_generated: bool = False,
+    include_sdk: bool = False,
     limit: int = 10,
     backend: str | None = None,
     include_context: bool = True,
@@ -1437,6 +1446,10 @@ async def palace_code_semantic_search(
         query=query,
         project=project,
         projects=projects,
+        source_scopes=source_scopes,
+        include_dependencies=include_dependencies,
+        include_generated=include_generated,
+        include_sdk=include_sdk,
         limit=limit,
         backend=backend,
         include_context=include_context,

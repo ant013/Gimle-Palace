@@ -63,6 +63,19 @@ the agent name.
 Before implementation handoff, push the feature branch and include concrete
 commit SHA(s), test output, and PR/branch link in the Paperclip comment.
 
+Do not push a formatting/lint/test fix until the narrow local equivalent has
+passed. This prevents burning full GitHub Actions minutes on avoidable red CI.
+Minimum local pre-push checks:
+
+- Python changes in `services/palace-mcp`: run `uv run ruff check` and
+  `uv run ruff format --check` in `services/palace-mcp`, plus targeted pytest
+  for the touched path.
+- Watchdog changes: run `uv run ruff check src/ tests/`,
+  `uv run ruff format --check src/ tests/`, and targeted pytest in
+  `services/watchdog`.
+- Paperclip bundle changes: run the touched script/test locally, or explain why
+  the check cannot run before pushing.
+
 Expected local checks for `services/palace-mcp` changes unless the task defines
 a narrower equivalent:
 

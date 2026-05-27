@@ -46,6 +46,7 @@ class BuildConfig(BaseModel, frozen=True):
     derived_data_path: str = ".palace-scip-derived-data"
     code_signing_allowed: bool = False
     package_resolution: Literal["locked", "automatic"] = "locked"
+    skip_build_reason: str | None = None
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,169 @@
+matrix_schema_version: "1"
+runner_version: "2026-05-27"
+
+rows:
+  - id: "uw-ios-app-full"
+    host_class: "macbook_xcode"
+    repo: "unstoppable-wallet-ios"
+    ref: "pr7/GIM-914-runtime-smoke-matrix"
+    compose_profile: "review"
+    required_stage_sequence:
+      - "build_scip"
+      - "symbol_index_swift"
+      - "dead_symbol_binary_surface"
+      - "embedding_symbol"
+    expected_artifacts:
+      - "scip/index.scip"
+      - "artifacts/runtime-smoke/uw-ios-app-full.summary.json"
+      - "artifacts/runtime-smoke/uw-ios-app-full.report.md"
+    min_graph_counts:
+      nodes: 1000
+      edges: 1000
+    embedding_limit: null
+    allowed_skip_codes: []
+    row_pass_rule: "all_required_stages_and_probes"
+    command:
+      - "uv"
+      - "run"
+      - "python"
+      - "-m"
+      - "palace_mcp.cli"
+      - "project"
+      - "analyze"
+      - "--repo-path"
+      - "/Users/Shared/Ios/HorizontalSystems/unstoppable-wallet-ios"
+      - "--slug"
+      - "uw-ios-app"
+      - "--language-profile"
+      - "swift_kit"
+      - "--bundle"
+      - "uw-ios"
+    product_probe:
+      tool: "palace.code.find_references"
+      success_hint: "occurrences_count > 0 for EvmKit.Address in bundle uw-ios"
+    graph_invariant_query:
+      tool: "palace.memory.get_project_overview"
+      success_hint: "nodes >= 1000 and edges >= 1000 for uw-ios-app"
+    description: "Full UW iOS app smoke: SCIP emit, symbol index, dead code, and embeddings."
+
+  - id: "bitcoin-kit-ios-full"
+    host_class: "macbook_xcode"
+    repo: "BitcoinKit.Swift"
+    ref: "pr7/GIM-914-runtime-smoke-matrix"
+    compose_profile: "review"
+    required_stage_sequence:
+      - "build_scip"
+      - "symbol_index_swift"
+      - "git_history"
+      - "embedding_symbol"
+    expected_artifacts:
+      - "scip/index.scip"
+      - "artifacts/runtime-smoke/bitcoin-kit-ios-full.summary.json"
+      - "artifacts/runtime-smoke/bitcoin-kit-ios-full.report.md"
+    min_graph_counts:
+      nodes: 500
+      edges: 250
+    embedding_limit: null
+    allowed_skip_codes: []
+    row_pass_rule: "all_required_stages_and_probes"
+    command:
+      - "bash"
+      - "paperclips/scripts/scip_emit_swift_kit.sh"
+      - "bitcoin-kit"
+      - "--repo-path"
+      - "/Users/Shared/Ios/HorizontalSystems/BitcoinKit.Swift"
+      - "--no-remote-copy"
+    product_probe:
+      tool: "palace.memory.get_project_overview"
+      success_hint: "overview confirms bitcoin-kit is registered after iOS-oriented emit helper"
+    graph_invariant_query:
+      tool: "palace.memory.get_project_overview"
+      success_hint: "nodes >= 500 and edges >= 250 for bitcoin-kit"
+    description: "Swift kit row proves the iOS-oriented helper path, not generic macOS swift build."
+
+  - id: "palace-mcp-server-full"
+    host_class: "server_docker"
+    repo: "services/palace-mcp"
+    ref: "pr7/GIM-914-runtime-smoke-matrix"
+    compose_profile: "code-graph"
+    required_stage_sequence:
+      - "runtime_boot"
+      - "git_history"
+      - "code_ownership"
+    expected_artifacts:
+      - "artifacts/runtime-smoke/palace-mcp-server-full.summary.json"
+      - "artifacts/runtime-smoke/palace-mcp-server-full.report.md"
+    min_graph_counts:
+      nodes: 200
+      edges: 100
+    embedding_limit: null
+    allowed_skip_codes: []
+    row_pass_rule: "all_required_stages_and_probes"
+    command:
+      - "uv"
+      - "run"
+      - "python"
+      - "-m"
+      - "palace_mcp.cli"
+      - "project"
+      - "analyze"
+      - "--repo-path"
+      - "services/palace-mcp"
+      - "--slug"
+      - "palace-mcp"
+      - "--language-profile"
+      - "python_service"
+      - "--extractors"
+      - "git_history,code_ownership"
+    product_probe:
+      tool: "palace.memory.get_project_overview"
+      success_hint: "project overview is readable for palace-mcp after runtime boot"
+    graph_invariant_query:
+      tool: "palace.memory.get_project_overview"
+      success_hint: "nodes >= 200 and edges >= 100 for palace-mcp"
+    description: "Server-safe row for a non-Xcode repo using the python_service profile."
+
+  - id: "uw-ios-app-embedding-bounded"
+    host_class: "macbook_xcode"
+    repo: "unstoppable-wallet-ios"
+    ref: "pr7/GIM-914-runtime-smoke-matrix"
+    compose_profile: "review"
+    required_stage_sequence:
+      - "reuse_scip"
+      - "symbol_index_swift"
+      - "embedding_symbol"
+    expected_artifacts:
+      - "artifacts/runtime-smoke/uw-ios-app-embedding-bounded.summary.json"
+      - "artifacts/runtime-smoke/uw-ios-app-embedding-bounded.report.md"
+    min_graph_counts:
+      nodes: 1000
+      edges: 1000
+    embedding_limit: 200
+    allowed_skip_codes: []
+    row_pass_rule: "bounded_embeddings_partial_coverage"
+    command:
+      - "uv"
+      - "run"
+      - "python"
+      - "-m"
+      - "palace_mcp.cli"
+      - "project"
+      - "analyze"
+      - "--repo-path"
+      - "/Users/Shared/Ios/HorizontalSystems/unstoppable-wallet-ios"
+      - "--slug"
+      - "uw-ios-app"
+      - "--language-profile"
+      - "swift_kit"
+      - "--bundle"
+      - "uw-ios"
+      - "--extractors"
+      - "symbol_index_swift,embedding_symbol"
+    product_probe:
+      tool: "palace.code.find_references"
+      success_hint: "occurrences_count > 0 while the report discloses bounded embedding coverage"
+    graph_invariant_query:
+      tool: "palace.memory.get_project_overview"
+      success_hint: "nodes >= 1000 and edges >= 1000 before the bounded embedding cap is applied"
+    description: "Bounded embedding rerun; must disclose the limit and never present itself as full coverage."
+

@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from typing import cast
 
 from palace_mcp import code_router
+from palace_mcp.code.semantic_contract import ScoreComponents
+from palace_mcp.code.snippet_provider import resolve_snippet
 from palace_mcp.embeddings import get_embedding_dispatcher
 from palace_mcp.extractors.foundation.identifiers import symbol_id_for
 from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
@@ -33,6 +36,13 @@ WHERE s.group_id IN $group_ids AND s.embedding IS NOT NULL
 RETURN count(s) AS embedded_symbol_count
 """.strip()
 
+_COVERAGE_QUERY = """
+MATCH (s:Symbol)
+WHERE s.group_id IN $group_ids
+WITH s.source_scope AS source_scope, s.embedding IS NOT NULL AS has_embed
+RETURN source_scope, count(*) AS total, sum(CASE WHEN has_embed THEN 1 ELSE 0 END) AS embedded_cnt
+""".strip()
+
 _VECTOR_QUERY = """
 CALL db.index.vector.queryNodes('symbol_embedding_idx', $query_k, $embedding)
 YIELD node, score
@@ -43,13 +53,261 @@ RETURN
   s.qualified_name AS qualified_name,
   s.kind AS kind,
   s.file_path AS file_path,
+  s.line_start AS line_start,
+  s.line_end AS line_end,
   s.module_name AS module_name,
+  s.source_scope AS source_scope,
   s.embedding_input_hash AS embedding_input_hash,
   s.commit_sha AS commit_sha,
   score AS score
 ORDER BY score DESC
-LIMIT $limit
 """.strip()
+
+# ---------------------------------------------------------------------------
+# Ranking formula (v1 — dense-only, GIM-919)
+#
+# final_score = W_VECTOR  * vector_score
+#             + W_SCOPE   * scope_score(source_scope)
+#             + W_KIND    * kind_score(symbol_kind)
+#             + W_LEXICAL * lexical_score(query, qualified_name)
+#             - penalty(symbol_kind, qualified_name)
+#
+# Weights are chosen so that scope preference can override up to 0.20 of
+# vector score gap (W_SCOPE=0.15 × Δscope_max=1.0 / W_VECTOR=0.75 ≈ 0.20).
+#
+# Tie-breaking order (produces total ordering):
+#   1. final_score DESC
+#   2. source_scope priority ASC  (project < workspace_package < … < sdk)
+#   3. symbol kind priority ASC   (function < class < variable < accessor)
+#   4. project slug ASC           (alphabetical)
+#   5. qualified_name ASC         (alphabetical)
+#
+# Tolerance: scores are quantized to _SCORE_TOLERANCE bins in the sort key
+# so that near-equal final scores fall into the same bucket and tie-breakers
+# resolve the ordering deterministically.
+# ---------------------------------------------------------------------------
+
+_W_VECTOR: float = 0.75
+_W_SCOPE: float = 0.15
+_W_KIND: float = 0.05
+_W_LEXICAL: float = 0.05
+_ACCESSOR_PENALTY: float = 0.15
+_SCORE_TOLERANCE: float = 0.001
+
+# source_scope → component score (higher = preferred)
+_SCOPE_SCORE: dict[str, float] = {
+    "project": 1.00,
+    "workspace_package": 0.85,
+    "dependency": 0.50,
+    "generated": 0.30,
+    "derived": 0.20,
+    "sdk": 0.10,
+}
+
+# source_scope → ascending tie-break priority (lower = ranked first)
+_SCOPE_PRIORITY: dict[str, int] = {
+    "project": 0,
+    "workspace_package": 1,
+    "dependency": 2,
+    "generated": 3,
+    "derived": 4,
+    "sdk": 5,
+}
+
+# symbol kind → component score (higher = preferred)
+_KIND_SCORE: dict[str, float] = {
+    "function": 1.00,
+    "method": 1.00,
+    "initializer": 1.00,
+    "deinitializer": 1.00,
+    "constructor": 1.00,
+    "destructor": 1.00,
+    "class": 0.90,
+    "struct": 0.90,
+    "protocol": 0.90,
+    "interface": 0.90,
+    "actor": 0.90,
+    "extension": 0.80,
+    "enum": 0.80,
+    "enumCase": 0.75,
+    "enum_case": 0.75,
+    "variable": 0.70,
+    "constant": 0.70,
+    "property": 0.70,
+    "field": 0.70,
+    "macro": 0.65,
+    "typealias": 0.60,
+    "typeAlias": 0.60,
+    "associatedtype": 0.60,
+    "accessor": 0.30,
+}
+
+# symbol kind → ascending tie-break priority (lower = ranked first)
+_KIND_PRIORITY: dict[str, int] = {
+    "function": 0,
+    "method": 0,
+    "initializer": 1,
+    "deinitializer": 1,
+    "constructor": 1,
+    "destructor": 1,
+    "class": 2,
+    "struct": 2,
+    "protocol": 2,
+    "interface": 2,
+    "actor": 2,
+    "extension": 3,
+    "enum": 3,
+    "enumCase": 4,
+    "enum_case": 4,
+    "variable": 5,
+    "constant": 5,
+    "property": 5,
+    "field": 5,
+    "macro": 6,
+    "typealias": 7,
+    "typeAlias": 7,
+    "associatedtype": 7,
+    "accessor": 10,
+}
+
+_ACCESSOR_SUFFIXES: tuple[str, ...] = (".getter", ".setter")
+
+
+def _lexical_score(query: str, qualified_name: str) -> float:
+    """1.0 if any query word (length ≥ 3) appears as a substring in qualified_name."""
+    qn_lower = qualified_name.lower()
+    for word in query.lower().split():
+        if len(word) >= 3 and word in qn_lower:
+            return 1.0
+    return 0.0
+
+
+def _accessor_penalty(kind: str | None, qualified_name: str) -> float:
+    """Return _ACCESSOR_PENALTY for generated accessor symbols, else 0.0."""
+    if kind == "accessor":
+        return _ACCESSOR_PENALTY
+    qn_lower = qualified_name.lower()
+    for suffix in _ACCESSOR_SUFFIXES:
+        if qn_lower.endswith(suffix):
+            return _ACCESSOR_PENALTY
+    return 0.0
+
+
+def _compute_score_components(
+    *,
+    vector_score: float,
+    query: str,
+    source_scope: str | None,
+    kind: str | None,
+    qualified_name: str,
+) -> tuple[float, ScoreComponents]:
+    """Compute final ranking score and its component breakdown.
+
+    Returns (final_score, ScoreComponents).
+    """
+    scope_s = _SCOPE_SCORE.get(source_scope or "", 0.10)
+    kind_s = _KIND_SCORE.get(kind or "", 0.30)
+    lexical = _lexical_score(query, qualified_name)
+    pen = _accessor_penalty(kind, qualified_name)
+
+    final = (
+        _W_VECTOR * vector_score
+        + _W_SCOPE * scope_s
+        + _W_KIND * kind_s
+        + _W_LEXICAL * lexical
+        - pen
+    )
+    return final, ScoreComponents(
+        vector_score_normalized=vector_score,
+        source_scope_score=scope_s,
+        symbol_kind_boost=kind_s,
+        lexical_match=lexical,
+        penalty=pen,
+    )
+
+
+def _rank_key(hit: dict[str, Any]) -> tuple[int, int, int, str, str]:
+    """Quantized sort key — scores within _SCORE_TOLERANCE share a bucket."""
+    return (
+        -round(hit["score"] / _SCORE_TOLERANCE),
+        _SCOPE_PRIORITY.get(hit.get("source_scope") or "", 99),
+        _KIND_PRIORITY.get(hit.get("kind") or "", 99),
+        hit.get("project") or "",
+        hit.get("qualified_name") or "",
+    )
+
+
+def _apply_ranking(query: str, hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Compute final scores in-place and sort hits by the ranking formula.
+
+    Each hit must have: score (raw vector cosine), qualified_name,
+    source_scope, kind.  After this call hit["score"] is the final score
+    and hit["score_components"] contains the breakdown.
+    Returns the same list (sorted in-place) for convenience.
+    """
+    for hit in hits:
+        final, components = _compute_score_components(
+            vector_score=float(hit["score"]),
+            query=query,
+            source_scope=hit.get("source_scope"),
+            kind=hit.get("kind"),
+            qualified_name=str(hit.get("qualified_name") or ""),
+        )
+        hit["score"] = final
+        hit["score_components"] = components.model_dump()
+    hits.sort(key=_rank_key)
+    return hits
+
+
+# Default source scopes returned without explicit overrides (first-party only).
+_DEFAULT_SCOPES: frozenset[str] = frozenset({"project", "workspace_package"})
+
+
+def _resolve_effective_scopes(
+    source_scopes: list[str] | None,
+    include_dependencies: bool,
+    include_generated: bool,
+    include_sdk: bool,
+) -> frozenset[str]:
+    """Return the set of source_scope values that should pass the filter.
+
+    Precedence: explicit ``source_scopes`` list overrides all flags.
+    Otherwise: start from the first-party default and add per-flag scopes.
+    """
+    if source_scopes is not None:
+        return frozenset(source_scopes)
+    scopes: set[str] = set(_DEFAULT_SCOPES)
+    if include_dependencies:
+        scopes.add("dependency")
+    if include_generated:
+        scopes.add("generated")
+        scopes.add("derived")
+    if include_sdk:
+        scopes.add("sdk")
+    return frozenset(scopes)
+
+
+def _filter_by_scope(
+    rows: list[dict[str, Any]],
+    effective_scopes: frozenset[str],
+) -> tuple[list[dict[str, Any]], int]:
+    """Keep rows whose source_scope is in effective_scopes.
+
+    Null source_scope (legacy symbols without the field) is treated as
+    "dependency" so they are excluded from first-party-only defaults and
+    included when dependency scopes are requested.
+
+    Returns (kept_rows, excluded_count).
+    """
+    kept: list[dict[str, Any]] = []
+    excluded = 0
+    for row in rows:
+        scope = row.get("source_scope") or "dependency"
+        if scope in effective_scopes:
+            kept.append(row)
+        else:
+            excluded += 1
+    return kept, excluded
 
 
 def _error(code: str, message: str, **extra: Any) -> dict[str, Any]:
@@ -141,12 +399,48 @@ async def _count_embedded_symbols(driver: Any, group_ids: list[str]) -> int:
     return int(record["embedded_symbol_count"] if record is not None else 0)
 
 
+def _read_max_symbols() -> int | None:
+    raw = os.environ.get("PALACE_EMBEDDING_MAX_SYMBOLS", "").strip()
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
+async def _load_coverage(driver: Any, group_ids: list[str]) -> dict[str, Any]:
+    async with driver.session() as session:
+        result = await session.run(_COVERAGE_QUERY, group_ids=group_ids)
+        rows = cast(list[dict[str, Any]], await result.data())
+
+    total_symbols = 0
+    embedded_symbols = 0
+    scope_counts: dict[str, int] = {}
+    for row in rows:
+        scope = str(row.get("source_scope") or "unknown")
+        total = int(row.get("total") or 0)
+        embedded = int(row.get("embedded_cnt") or 0)
+        total_symbols += total
+        embedded_symbols += embedded
+        if embedded > 0:
+            scope_counts[scope] = embedded
+
+    max_symbols = _read_max_symbols()
+    return {
+        "bounded": max_symbols is not None,
+        "max_symbols": max_symbols,
+        "embedded_symbols": embedded_symbols,
+        "eligible_symbols": total_symbols,
+        "source_scope_counts": scope_counts,
+    }
+
+
 async def _vector_search(
     driver: Any,
     *,
     embedding: list[float],
     group_ids: list[str],
-    limit: int,
     query_k: int,
 ) -> list[dict[str, Any]]:
     async with driver.session() as session:
@@ -154,7 +448,6 @@ async def _vector_search(
             _VECTOR_QUERY,
             embedding=embedding,
             group_ids=group_ids,
-            limit=limit,
             query_k=query_k,
         )
         return cast(list[dict[str, Any]], await result.data())
@@ -162,40 +455,64 @@ async def _vector_search(
 
 async def _load_snippet_context(
     *,
-    qualified_name: str,
     project: str,
+    file_path: str | None,
+    line_start: int | None,
+    line_end: int | None,
+    commit_sha: str | None,
+    qualified_name: str,
 ) -> tuple[dict[str, Any] | None, str | None, str | None]:
-    session = code_router.get_cm_session()
-    if session is None:
-        return None, "snippet_provider_unavailable", "snippet provider unavailable"
-
-    try:
-        raw = await session.call_tool(
-            "get_code_snippet",
-            arguments={
-                "qualified_name": qualified_name,
-                "project": _translate_cm_project(project),
-            },
-        )
-    except Exception as exc:
-        return None, "snippet_provider_unavailable", str(exc)
-
-    if raw.isError:
-        parsed = code_router.parse_cm_result(raw)
-        message = str(parsed.get("_raw", "snippet provider unavailable"))
-        return None, "snippet_provider_unavailable", message
-
-    parsed = code_router.parse_cm_result(raw)
-    return (
-        {
-            "language": parsed.get("language", ""),
-            "start_line": parsed.get("start_line"),
-            "end_line": parsed.get("end_line"),
-            "source": parsed.get("source", ""),
-        },
-        None,
-        None,
+    # Primary: read directly from the mounted repo using path_resolver.
+    # This validates file_path containment and enforces line/byte bounds.
+    snippet, local_code, local_message = await asyncio.to_thread(
+        resolve_snippet,
+        project=project,
+        file_path=file_path,
+        line_start=line_start,
+        line_end=line_end,
+        commit_sha=commit_sha,
     )
+    if snippet is not None:
+        result: dict[str, Any] = {
+            "language": snippet.language,
+            "start_line": snippet.start_line,
+            "end_line": snippet.end_line,
+            "source": snippet.source,
+        }
+        if snippet.stale:
+            result["status"] = "stale_source"
+        return result, None, None
+
+    # Fallback: codebase-memory MCP session (e.g. when project not mounted).
+    if local_code in ("project_not_mounted", "missing_file_path"):
+        session = code_router.get_cm_session()
+        if session is not None:
+            try:
+                raw = await session.call_tool(
+                    "get_code_snippet",
+                    arguments={
+                        "qualified_name": qualified_name,
+                        "project": _translate_cm_project(project),
+                    },
+                )
+            except Exception as exc:
+                return None, "snippet_provider_unavailable", str(exc)
+
+            if not raw.isError:
+                parsed = code_router.parse_cm_result(raw)
+                return (
+                    {
+                        "language": parsed.get("language", ""),
+                        "start_line": parsed.get("start_line"),
+                        "end_line": parsed.get("end_line"),
+                        "source": parsed.get("source", ""),
+                    },
+                    None,
+                    None,
+                )
+
+    # Local read failed (path rejected, missing file, etc.) — surface warning.
+    return None, local_code, local_message
 
 
 async def _load_usage_preview(
@@ -249,12 +566,19 @@ async def _hydrate_context(
     settings: Settings | None,
     project: str,
     qualified_name: str,
+    file_path: str | None,
+    line_start: int | None,
+    line_end: int | None,
     commit_sha: str | None,
     context_limit: int,
 ) -> dict[str, Any]:
     snippet, snippet_code, snippet_message = await _load_snippet_context(
-        qualified_name=qualified_name,
         project=project,
+        file_path=file_path,
+        line_start=line_start,
+        line_end=line_end,
+        commit_sha=commit_sha,
+        qualified_name=qualified_name,
     )
     usages_preview, usage_code, usage_message = await _load_usage_preview(
         settings=settings,
@@ -285,6 +609,10 @@ async def semantic_search(
     query: str,
     project: str | None = None,
     projects: list[str] | None = None,
+    source_scopes: list[str] | None = None,
+    include_dependencies: bool = False,
+    include_generated: bool = False,
+    include_sdk: bool = False,
     limit: int = 10,
     backend: str | None = None,
     include_context: bool = True,
@@ -338,7 +666,8 @@ async def semantic_search(
     except Exception as exc:
         return _error("embedding_backend_failed", str(exc))
 
-    embedded_symbol_count = await _count_embedded_symbols(driver, group_ids)
+    coverage = await _load_coverage(driver, group_ids)
+    embedded_symbol_count = coverage["embedded_symbols"]
     warnings: list[dict[str, Any]] = []
     if embedded_symbol_count == 0:
         warnings.append(
@@ -358,6 +687,7 @@ async def semantic_search(
             "embedded_symbol_count": 0,
             "returned_count": 0,
             "warnings": warnings,
+            "embedding_coverage": coverage,
             "result": [],
         }
 
@@ -366,14 +696,14 @@ async def semantic_search(
         driver,
         embedding=query_embedding,
         group_ids=group_ids,
-        limit=limit,
         query_k=candidate_limit,
     )
 
-    result_rows: list[dict[str, Any]] = []
+    candidate_rows: list[dict[str, Any]] = []
     for row in rows:
         group_id = str(row["group_id"])
         qualified_name = str(row["qualified_name"])
+
         hit: dict[str, Any] = {
             "project": _project_from_group_id(group_id),
             "group_id": group_id,
@@ -382,20 +712,62 @@ async def semantic_search(
             "kind": row.get("kind"),
             "file_path": row.get("file_path"),
             "module_name": row.get("module_name"),
+            "source_scope": row.get("source_scope"),
             "score": float(row["score"]),
+            "_commit_sha": row.get("commit_sha"),
+            "_line_start": row.get("line_start"),
+            "_line_end": row.get("line_end"),
         }
         embedding_input_hash = row.get("embedding_input_hash")
         if embedding_input_hash is not None:
             hit["embedding_input_hash"] = embedding_input_hash
+        candidate_rows.append(hit)
+
+    effective_scopes = _resolve_effective_scopes(
+        source_scopes, include_dependencies, include_generated, include_sdk
+    )
+    candidate_rows, scope_excluded_count = _filter_by_scope(
+        candidate_rows, effective_scopes
+    )
+
+    _apply_ranking(normalized_query, candidate_rows)
+    result_rows = candidate_rows[:limit]
+
+    context_available_count = 0
+    warning_code_counts: dict[str, int] = {}
+    total_line_count = 0
+    total_byte_count = 0
+    snippets_with_size = 0
+
+    for hit in result_rows:
+        commit_sha = hit.pop("_commit_sha", None)
+        line_start = hit.pop("_line_start", None)
+        line_end = hit.pop("_line_end", None)
         if include_context:
             hit["context"] = await _hydrate_context(
                 settings=settings,
                 project=hit["project"],
-                qualified_name=qualified_name,
-                commit_sha=row.get("commit_sha"),
+                qualified_name=hit["qualified_name"],
+                file_path=hit.get("file_path"),
+                line_start=line_start,
+                line_end=line_end,
+                commit_sha=commit_sha,
                 context_limit=context_limit,
             )
-        result_rows.append(hit)
+            ctx = hit["context"]
+            if ctx.get("available"):
+                context_available_count += 1
+            wc = ctx.get("warning_code")
+            if wc:
+                warning_code_counts[wc] = warning_code_counts.get(wc, 0) + 1
+            snippet = ctx.get("snippet")
+            if snippet:
+                lc = snippet.get("end_line", 0) - snippet.get("start_line", 0) + 1
+                bc = len((snippet.get("source") or "").encode("utf-8"))
+                if lc > 0:
+                    total_line_count += lc
+                    total_byte_count += bc
+                    snippets_with_size += 1
 
     if len(result_rows) < limit:
         warnings.append(
@@ -408,6 +780,20 @@ async def semantic_search(
             )
         )
 
+    context_metrics: dict[str, Any] = {}
+    if include_context and result_rows:
+        n = len(result_rows)
+        context_metrics = {
+            "context_available_rate": context_available_count / n,
+            "warning_code_counts": warning_code_counts,
+            "avg_snippet_line_count": total_line_count / snippets_with_size
+            if snippets_with_size
+            else None,
+            "avg_snippet_byte_count": total_byte_count / snippets_with_size
+            if snippets_with_size
+            else None,
+        }
+
     return {
         "ok": True,
         "scope": scope_payload,
@@ -418,6 +804,10 @@ async def semantic_search(
         "candidate_limit": candidate_limit,
         "embedded_symbol_count": embedded_symbol_count,
         "returned_count": len(result_rows),
+        "scope_excluded_count": scope_excluded_count,
         "warnings": warnings,
+        "embedding_coverage": coverage,
+        "ranking_spec_version": "1",
+        "context_metrics": context_metrics,
         "result": result_rows,
     }

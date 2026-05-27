@@ -225,8 +225,8 @@ async def test_embeddings_not_ready_returns_warning_without_vector_query() -> No
     def run_fn(query: str, _params: dict[str, Any]) -> _FakeResult:
         if "collect(p.slug)" in query:
             return _FakeResult(single_value={"found_projects": ["wallet-core"]})
-        if "embedded_symbol_count" in query:
-            return _FakeResult(single_value={"embedded_symbol_count": 0})
+        if "embedded_cnt" in query:
+            return _FakeResult(data_value=[])  # no embedded symbols
         raise AssertionError(f"unexpected query: {query}")
 
     driver = _FakeDriver(run_fn)
@@ -259,11 +259,12 @@ async def test_success_filters_scope_and_skips_context_when_disabled() -> None:
             return _FakeResult(
                 single_value={"found_projects": ["wallet-a", "wallet-b"]}
             )
-        if "embedded_symbol_count" in query:
-            return _FakeResult(single_value={"embedded_symbol_count": 3})
+        if "embedded_cnt" in query:
+            return _FakeResult(
+                data_value=[{"source_scope": "project", "total": 10, "embedded_cnt": 3}]
+            )
         if "queryNodes('symbol_embedding_idx'" in query:
             assert params["query_k"] == 50
-            assert params["limit"] == 2
             return _FakeResult(
                 data_value=[
                     {
@@ -272,6 +273,7 @@ async def test_success_filters_scope_and_skips_context_when_disabled() -> None:
                         "kind": "function",
                         "file_path": "Sources/A.swift",
                         "module_name": "WalletA",
+                        "source_scope": "project",
                         "embedding_input_hash": "hash-a",
                         "commit_sha": "sha-a",
                         "score": 0.91,
@@ -282,6 +284,7 @@ async def test_success_filters_scope_and_skips_context_when_disabled() -> None:
                         "kind": "function",
                         "file_path": "Sources/B.swift",
                         "module_name": "WalletB",
+                        "source_scope": "project",
                         "embedding_input_hash": "hash-b",
                         "commit_sha": "sha-b",
                         "score": 0.87,
@@ -333,8 +336,10 @@ async def test_vector_query_uses_candidate_limit_to_overfetch_before_scope_filte
     def run_fn(query: str, params: dict[str, Any]) -> _FakeResult:
         if "collect(p.slug)" in query:
             return _FakeResult(single_value={"found_projects": ["wallet-core"]})
-        if "embedded_symbol_count" in query:
-            return _FakeResult(single_value={"embedded_symbol_count": 1})
+        if "embedded_cnt" in query:
+            return _FakeResult(
+                data_value=[{"source_scope": "project", "total": 5, "embedded_cnt": 1}]
+            )
         if "queryNodes('symbol_embedding_idx'" in query:
             assert params["query_k"] == 50
             return _FakeResult(
@@ -345,6 +350,7 @@ async def test_vector_query_uses_candidate_limit_to_overfetch_before_scope_filte
                         "kind": "function",
                         "file_path": "Sources/A.swift",
                         "module_name": "WalletCore",
+                        "source_scope": "project",
                         "embedding_input_hash": "hash-a",
                         "commit_sha": None,
                         "score": 0.91,
@@ -374,9 +380,8 @@ async def test_vector_query_uses_candidate_limit_to_overfetch_before_scope_filte
 
 
 @pytest.mark.asyncio
-async def test_context_warning_is_attached_per_hit_when_snippet_provider_unavailable() -> (
-    None
-):
+async def test_context_warning_is_attached_per_hit_when_project_not_mounted() -> None:
+    """When project is not mounted locally and CM session is absent, per-hit warning."""
     from palace_mcp.code.find_semantic import semantic_search
 
     backend = _FakeBackend()
@@ -385,8 +390,10 @@ async def test_context_warning_is_attached_per_hit_when_snippet_provider_unavail
     def run_fn(query: str, _params: dict[str, Any]) -> _FakeResult:
         if "collect(p.slug)" in query:
             return _FakeResult(single_value={"found_projects": ["wallet-core"]})
-        if "embedded_symbol_count" in query:
-            return _FakeResult(single_value={"embedded_symbol_count": 1})
+        if "embedded_cnt" in query:
+            return _FakeResult(
+                data_value=[{"source_scope": "project", "total": 5, "embedded_cnt": 1}]
+            )
         if "queryNodes('symbol_embedding_idx'" in query:
             return _FakeResult(
                 data_value=[
@@ -396,6 +403,7 @@ async def test_context_warning_is_attached_per_hit_when_snippet_provider_unavail
                         "kind": "function",
                         "file_path": "Sources/A.swift",
                         "module_name": "WalletCore",
+                        "source_scope": "project",
                         "embedding_input_hash": "hash-a",
                         "commit_sha": None,
                         "score": 0.91,
@@ -423,8 +431,9 @@ async def test_context_warning_is_attached_per_hit_when_snippet_provider_unavail
 
     context = result["result"][0]["context"]
     assert context["available"] is False
-    assert context["warning_code"] == "snippet_provider_unavailable"
-    assert context["warning"] == "snippet provider unavailable"
+    # Local provider returns project_not_mounted when /repos/<project> absent;
+    # CM fallback is skipped because it is the project_not_mounted path.
+    assert context["warning_code"] == "project_not_mounted"
 
 
 @pytest.mark.asyncio
@@ -437,8 +446,10 @@ async def test_context_limit_zero_returns_empty_usage_preview() -> None:
     def run_fn(query: str, _params: dict[str, Any]) -> _FakeResult:
         if "collect(p.slug)" in query:
             return _FakeResult(single_value={"found_projects": ["wallet-core"]})
-        if "embedded_symbol_count" in query:
-            return _FakeResult(single_value={"embedded_symbol_count": 1})
+        if "embedded_cnt" in query:
+            return _FakeResult(
+                data_value=[{"source_scope": "project", "total": 5, "embedded_cnt": 1}]
+            )
         if "queryNodes('symbol_embedding_idx'" in query:
             return _FakeResult(
                 data_value=[
@@ -448,6 +459,7 @@ async def test_context_limit_zero_returns_empty_usage_preview() -> None:
                         "kind": "function",
                         "file_path": "Sources/A.swift",
                         "module_name": "WalletCore",
+                        "source_scope": "project",
                         "embedding_input_hash": "hash-a",
                         "commit_sha": "sha-a",
                         "score": 0.91,
@@ -510,8 +522,10 @@ async def test_embedding_dispatcher_factory_is_reused_across_calls() -> None:
     def run_fn(query: str, _params: dict[str, Any]) -> _FakeResult:
         if "collect(p.slug)" in query:
             return _FakeResult(single_value={"found_projects": ["wallet-core"]})
-        if "embedded_symbol_count" in query:
-            return _FakeResult(single_value={"embedded_symbol_count": 1})
+        if "embedded_cnt" in query:
+            return _FakeResult(
+                data_value=[{"source_scope": "project", "total": 5, "embedded_cnt": 1}]
+            )
         if "queryNodes('symbol_embedding_idx'" in query:
             return _FakeResult(
                 data_value=[
@@ -521,6 +535,7 @@ async def test_embedding_dispatcher_factory_is_reused_across_calls() -> None:
                         "kind": "function",
                         "file_path": "Sources/A.swift",
                         "module_name": "WalletCore",
+                        "source_scope": "project",
                         "embedding_input_hash": "hash-a",
                         "commit_sha": None,
                         "score": 0.91,
@@ -548,3 +563,102 @@ async def test_embedding_dispatcher_factory_is_reused_across_calls() -> None:
     assert second["ok"] is True
     assert factory_calls == 1
     assert backend.calls == ["first query", "second query"]
+
+
+@pytest.mark.asyncio
+async def test_embedding_coverage_included_in_success_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from palace_mcp.code.find_semantic import semantic_search
+
+    monkeypatch.setenv("PALACE_EMBEDDING_MAX_SYMBOLS", "128")
+
+    backend = _FakeBackend()
+    dispatcher = EmbeddingBackendDispatcher({"qodo": backend}, default_backend="qodo")
+
+    def run_fn(query: str, _params: dict[str, Any]) -> _FakeResult:
+        if "collect(p.slug)" in query:
+            return _FakeResult(single_value={"found_projects": ["wallet-core"]})
+        if "embedded_cnt" in query:
+            return _FakeResult(
+                data_value=[
+                    {"source_scope": "project", "total": 1000, "embedded_cnt": 120},
+                    {
+                        "source_scope": "workspace_package",
+                        "total": 500,
+                        "embedded_cnt": 8,
+                    },
+                    {"source_scope": "sdk", "total": 251218, "embedded_cnt": 0},
+                ]
+            )
+        if "queryNodes('symbol_embedding_idx'" in query:
+            return _FakeResult(
+                data_value=[
+                    {
+                        "group_id": "project/wallet-core",
+                        "qualified_name": "Crypto.verify",
+                        "kind": "function",
+                        "file_path": "Sources/A.swift",
+                        "module_name": "WalletCore",
+                        "source_scope": "project",
+                        "embedding_input_hash": "hash-a",
+                        "commit_sha": None,
+                        "score": 0.91,
+                    }
+                ]
+            )
+        raise AssertionError(f"unexpected query: {query}")
+
+    driver = _FakeDriver(run_fn)
+    with patch(
+        "palace_mcp.code.find_semantic.get_embedding_dispatcher",
+        return_value=dispatcher,
+    ):
+        result = await semantic_search(
+            driver=driver,
+            query="crypto verify",
+            project="wallet-core",
+            include_context=False,
+        )
+
+    assert result["ok"] is True
+    cov = result["embedding_coverage"]
+    assert cov["bounded"] is True
+    assert cov["max_symbols"] == 128
+    assert cov["embedded_symbols"] == 128  # 120 + 8
+    assert cov["eligible_symbols"] == 252718  # 1000 + 500 + 251218
+    assert cov["source_scope_counts"] == {"project": 120, "workspace_package": 8}
+
+
+@pytest.mark.asyncio
+async def test_embedding_coverage_included_in_no_embeddings_response() -> None:
+    from palace_mcp.code.find_semantic import semantic_search
+
+    backend = _FakeBackend()
+    dispatcher = EmbeddingBackendDispatcher({"qodo": backend}, default_backend="qodo")
+
+    def run_fn(query: str, _params: dict[str, Any]) -> _FakeResult:
+        if "collect(p.slug)" in query:
+            return _FakeResult(single_value={"found_projects": ["wallet-core"]})
+        if "embedded_cnt" in query:
+            return _FakeResult(data_value=[])
+        raise AssertionError(f"unexpected query: {query}")
+
+    driver = _FakeDriver(run_fn)
+    with patch(
+        "palace_mcp.code.find_semantic.get_embedding_dispatcher",
+        return_value=dispatcher,
+    ):
+        result = await semantic_search(
+            driver=driver,
+            query="signature verification",
+            project="wallet-core",
+        )
+
+    assert result["ok"] is True
+    assert result["returned_count"] == 0
+    cov = result["embedding_coverage"]
+    assert cov["bounded"] is False
+    assert cov["embedded_symbols"] == 0
+    assert cov["eligible_symbols"] == 0
+    assert cov["source_scope_counts"] == {}

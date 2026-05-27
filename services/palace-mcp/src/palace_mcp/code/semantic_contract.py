@@ -99,7 +99,6 @@ class ScoreComponents(BaseModel, frozen=True):
     lexical_match: float = 0.0
     source_scope_score: float = 0.0
     symbol_kind_boost: float = 0.0
-    module_path_boost: float = 0.0
     penalty: float = 0.0
 
 
@@ -113,6 +112,16 @@ class SemanticSearchHit(BaseModel, frozen=True):
     source_scope: SourceScope
     score: float
     score_components: ScoreComponents = Field(default_factory=ScoreComponents)
+
+
+class EmbeddingCoverage(BaseModel, frozen=True):
+    """Embedding index coverage metadata (spec §7.6)."""
+
+    bounded: bool
+    max_symbols: int | None = None
+    embedded_symbols: int
+    eligible_symbols: int
+    source_scope_counts: dict[str, int] = Field(default_factory=dict)
 
 
 class SymbolSourceMetadata(BaseModel, frozen=True):

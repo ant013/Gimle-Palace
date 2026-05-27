@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 from palace_mcp.embeddings import EmbeddingBackend, EmbeddingBackendDispatcher
+from palace_mcp.embeddings.cache_preflight import CacheCheckResult, CacheStatus
 from palace_mcp.embeddings.qodo import QODO_EMBED_MODEL_NAME, QodoEmbeddingBackend
 
 
@@ -85,6 +86,14 @@ class TestQodoEmbeddingBackend:
     def test_loader_uses_sentence_transformer_with_qodo_defaults(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        _present = CacheCheckResult(
+            status=CacheStatus.present,
+            cache_root="/fake",
+            model_id=QODO_EMBED_MODEL_NAME,
+        )
+        monkeypatch.setattr(
+            "palace_mcp.embeddings.qodo.preflight_or_fail", lambda *a, **kw: _present
+        )
         captured: dict[str, Any] = {}
         original_import_module = importlib.import_module
 
@@ -133,6 +142,57 @@ class TestQodoEmbeddingBackend:
             "normalize_embeddings": True,
             "show_progress_bar": False,
         }
+
+    def test_loader_reads_local_only_default_from_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _present = CacheCheckResult(
+            status=CacheStatus.present,
+            cache_root="/fake",
+            model_id=QODO_EMBED_MODEL_NAME,
+        )
+        monkeypatch.setattr(
+            "palace_mcp.embeddings.qodo.preflight_or_fail", lambda *a, **kw: _present
+        )
+        captured: dict[str, Any] = {}
+        original_import_module = importlib.import_module
+
+        class _FakeSentenceTransformer:
+            def __init__(
+                self,
+                model_name: str,
+                *,
+                trust_remote_code: bool,
+                local_files_only: bool,
+            ) -> None:
+                captured["model_name"] = model_name
+                captured["trust_remote_code"] = trust_remote_code
+                captured["local_files_only"] = local_files_only
+
+            def encode(
+                self,
+                sentences: list[str],
+                *,
+                convert_to_numpy: bool,
+                normalize_embeddings: bool,
+                show_progress_bar: bool,
+            ) -> _FakeArray:
+                return _FakeArray([[7.0, 8.0] for _ in sentences])
+
+        def _fake_import_module(name: str) -> object:
+            if name == "sentence_transformers":
+                return SimpleNamespace(SentenceTransformer=_FakeSentenceTransformer)
+            return original_import_module(name)
+
+        monkeypatch.setattr(importlib, "import_module", _fake_import_module)
+        monkeypatch.setenv("PALACE_EMBEDDING_LOCAL_ONLY", "true")
+
+        backend = QodoEmbeddingBackend()
+
+        assert backend.embed_text("alpha") == [7.0, 8.0]
+        assert captured["model_name"] == QODO_EMBED_MODEL_NAME
+        assert captured["trust_remote_code"] is True
+        assert captured["local_files_only"] is True
 
     def test_loader_raises_helpful_error_when_dependency_is_missing(
         self, monkeypatch: pytest.MonkeyPatch
