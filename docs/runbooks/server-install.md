@@ -15,7 +15,7 @@
 | Disk | 50 GB SSD | 200 GB NVMe (Neo4j + model cache + repos) |
 | Linux kernel | 5.4 (Docker 20.10+) | 5.15+ |
 | Docker Engine | 20.10+ | 24+ |
-| Docker Compose | v2.5+ | v2.20+ |
+| Docker Compose | v2.20+ | v2.24+ |
 | Internet (first run) | Required for model download | — |
 
 **GPU:** Not required. Qodo-Embed-1-1.5B runs on CPU. A GPU (CUDA 12+) speeds up embedding ~10×; add `runtime: nvidia` to palace-mcp in a compose override if a GPU is present.
@@ -309,11 +309,11 @@ The `entrypoint.sh` runs before the MCP server starts and exits non-zero on:
 | Check | Fail condition |
 |---|---|
 | Tantivy dir | Not mounted or not writable by UID 1000 |
-| NEO4J_PASSWORD | Empty or equals "changeme" |
+| NEO4J_PASSWORD | Empty, equals "changeme", or equals "neo4j" |
 | HF cache | Directory absent AND `PALACE_EMBEDDING_LOCAL_ONLY=1` |
 
 It prints (without revealing secret values):
-- `[preflight] neo4j-uri=<uri> auth=configured bolt-host-exposed=no`
+- `[preflight] neo4j-uri=<uri> auth=configured`
 - `[preflight] hf-cache=<path> local-only=<0|1>`
 - `[preflight] repo=<path> status=mounted|absent`
 
