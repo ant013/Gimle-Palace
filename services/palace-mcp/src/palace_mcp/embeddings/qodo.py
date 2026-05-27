@@ -42,14 +42,27 @@ def _load_sentence_transformer(
         ) from exc
 
     sentence_transformer = getattr(module, "SentenceTransformer")
-    return cast(
-        _SentenceEncoder,
-        sentence_transformer(
-            model_name,
-            trust_remote_code=trust_remote_code,
-            local_files_only=local_files_only,
-        ),
-    )
+    try:
+        return cast(
+            _SentenceEncoder,
+            sentence_transformer(
+                model_name,
+                trust_remote_code=trust_remote_code,
+                local_files_only=local_files_only,
+            ),
+        )
+    except OSError as exc:
+        if local_files_only:
+            raise RuntimeError(
+                f"Model '{model_name}' not found in local cache "
+                f"(PALACE_EMBEDDING_LOCAL_ONLY=true). "
+                f"Download: huggingface-cli download {model_name} "
+                f"(cache: ~/.cache/huggingface/hub/). "
+                f"Or set PALACE_EMBEDDING_LOCAL_ONLY=false to allow network access."
+            ) from exc
+        raise RuntimeError(
+            f"Failed to load sentence transformer '{model_name}': {exc}"
+        ) from exc
 
 
 class QodoEmbeddingBackend:
