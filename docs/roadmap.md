@@ -57,9 +57,9 @@ When all rows below are ✅, palace-mcp can index the entire UW production ecosy
 | C3 | Watchdog handoff detector — Opus nudge follow-up | ✅ | GIM-183 | `services/watchdog/*` | 3 follow-ups merged `365c9c4` (PR #81): server-Date anchoring, 4 missing JSONL events emitted, e2e lifecycle test. |
 | C4 | Git History Harvester (Extractor #22) — Phase 2 prereq | ✅ | GIM-186 | `services/palace-mcp/src/palace_mcp/extractors/git_history/`, `services/palace-mcp/tests/extractors/{unit,integration,fixtures}/`, runbook | Merged `b0dd44d`. Foundation for 6 historical extractors (#11/#12/#26/#32/#43/#44) — all now unblocked. |
 | C5 | iMac post-merge auto-deploy | 📋 | TBD | `paperclips/scripts/imac-deploy-listener.{sh,plist}`, webhook handler | Removes manual `imac-deploy.sh` step after every merge |
-| C6 | `palace.code.semantic_search` | 📋 | TBD | `services/palace-mcp/src/palace_mcp/code/semantic_search.py` | Deferred Slice 5 of original USE-BUILT; vector or hybrid search composite |
+| C6 | `palace.code.semantic_search` | ✅ | GIM-837 / G0.5.5 | `services/palace-mcp/src/palace_mcp/code/find_semantic.py`, `services/palace-mcp/src/palace_mcp/code/semantic_contract.py` | Superseded by G0.5.5. Product-quality ranking/filtering/snippet/matrix hardening continues in G0.6 PR3-PR6. |
 
-C2 (GIM-182) and C4 (GIM-186) are now ✅. C3/C5/C6 are independent and not launch-blocking.
+C2 (GIM-182), C4 (GIM-186), and C6 are now ✅. C3/C5 are independent and not launch-blocking.
 
 ### Already merged (Phase 1 foundation)
 
@@ -273,6 +273,50 @@ G0b/c/d/e closed. G0a deferred (bundled with G0.5 final cascade). All G0d future
 5. When all 7 slices `✅` → walker marks itself done + closes
 
 Total wall-time per slice estimate: 5-6 days (matches sprint envelope).
+
+### G0.6 product readiness hardening — clean runtime, semantic quality, server install
+
+**Spec**:
+`docs/superpowers/specs/2026-05-27-GIM-product-readiness-roadmap_spec.md`
+
+**Owner model**: CEO/walker dispatches one slice per child issue. Each child
+uses the normal Paperclip plan-first flow before implementation. The umbrella
+spec is the routing contract; per-slice TDD/implementation plans are authored
+inside child issues.
+
+**Goal**: turn current GIM runtime smoke and semantic search into an installable,
+repeatable product path:
+
+- clean Docker/image reproducibility with no runtime source copy or manual pip
+  patching;
+- persistent Qodo/HF/uv/Neo4j cache strategy with safe cleanup defaults;
+- semantic search quality: backend decision, deterministic ranking, filtering,
+  snippet/context provider, and executable golden matrix;
+- runtime golden smoke matrix across MacBook/Xcode and server-safe rows;
+- powerful-server install/config profile and copy-paste-safe runbook.
+
+#### G0.6 slice list
+
+| Slice | What | Status | Depends On | Notes |
+|---|---|---|---|---|
+| PR0 | Product readiness contract lock | 📋 | none | Create Paperclip child DAG and close only by merged-to-`develop` SHA. |
+| PR0a | Semantic-search architecture lock | 📋 | PR0 | Lock current `find_semantic.py` / `semantic_contract.py` boundary and prevent a second semantic-search stack. |
+| PR1 | Clean Docker image reproducibility | 📋 | GIM-856, PR0 | Digest/pinned build, frozen deps, fresh-host scratch rebuild, no manual runtime patching. |
+| PR2 | Persistent ML dependency and model cache strategy | 📋 | PR1 | Qodo/HF/uv/Neo4j cache env contract, local-only fail-fast, cleanup retention levels. |
+| PR3a | Semantic candidate backend decision | 📋 | PR0a | Dense vs sparse vs hybrid candidate retrieval decision with dev-matrix evidence. |
+| PR3 | Semantic ranking contract | 📋 | PR3a | Deterministic score formula, metrics, rank explanations, stable ordering tests. |
+| PR4 | Semantic filtering contract | 📋 | PR3 | Default first-party filtering plus explicit expert cross-project/scope search. |
+| PR5 | Snippet/context provider hardening | 📋 | PR0a, PR3 | Commit-scoped bounded snippets using safe path resolution. |
+| PR6 | Machine-readable golden matrix | 📋 | PR0a, PR3, PR4, PR5 | Mandatory/advisory/no-answer rows, metrics, holdout split, nonzero exit on failures. |
+| PR7 | Runtime golden smoke matrix | 📋 | GIM-856, PR1, PR2 | UW app + Swift kit + bounded embedding rows with JSON/markdown evidence. |
+| PR8 | Server install/config profile | 📋 | PR1, PR2 | Linux/Docker/Neo4j/cache/repo-mount profiles, secure defaults, no broad secret mounts. |
+| PR9 | Stable operator runbook | 📋 | PR6, PR7, PR8 | Install/start/cache/repo/smoke/semantic/debug/cleanup path without chat history. |
+| PR10 | End-to-end product readiness gate | 📋 | PR6, PR7, PR8, PR9 | Redacted final evidence bundle and go/no-go report. |
+
+**Parallelism rule**: runtime image/config slices PR1/PR2/PR8 share files and
+need one writer at a time. Semantic behavior slices PR0a/PR3a/PR3/PR4/PR5 share
+`find_semantic.py`/contracts and stay on one Python owner lane. PR6, PR7, and
+PR9 can run when their dependencies are closed.
 
 ### G0 starts immediately (does not wait for Audit-V1 close)
 
