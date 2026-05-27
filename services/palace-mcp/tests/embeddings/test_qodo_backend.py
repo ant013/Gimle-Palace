@@ -134,6 +134,49 @@ class TestQodoEmbeddingBackend:
             "show_progress_bar": False,
         }
 
+    def test_loader_reads_local_only_default_from_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: dict[str, Any] = {}
+        original_import_module = importlib.import_module
+
+        class _FakeSentenceTransformer:
+            def __init__(
+                self,
+                model_name: str,
+                *,
+                trust_remote_code: bool,
+                local_files_only: bool,
+            ) -> None:
+                captured["model_name"] = model_name
+                captured["trust_remote_code"] = trust_remote_code
+                captured["local_files_only"] = local_files_only
+
+            def encode(
+                self,
+                sentences: list[str],
+                *,
+                convert_to_numpy: bool,
+                normalize_embeddings: bool,
+                show_progress_bar: bool,
+            ) -> _FakeArray:
+                return _FakeArray([[7.0, 8.0] for _ in sentences])
+
+        def _fake_import_module(name: str) -> object:
+            if name == "sentence_transformers":
+                return SimpleNamespace(SentenceTransformer=_FakeSentenceTransformer)
+            return original_import_module(name)
+
+        monkeypatch.setattr(importlib, "import_module", _fake_import_module)
+        monkeypatch.setenv("PALACE_EMBEDDING_LOCAL_ONLY", "true")
+
+        backend = QodoEmbeddingBackend()
+
+        assert backend.embed_text("alpha") == [7.0, 8.0]
+        assert captured["model_name"] == QODO_EMBED_MODEL_NAME
+        assert captured["trust_remote_code"] is True
+        assert captured["local_files_only"] is True
+
     def test_loader_raises_helpful_error_when_dependency_is_missing(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

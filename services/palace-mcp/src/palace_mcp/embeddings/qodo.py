@@ -3,9 +3,18 @@
 from __future__ import annotations
 
 import importlib
+import os
 from typing import Any, Protocol, cast
 
 QODO_EMBED_MODEL_NAME = "Qodo/Qodo-Embed-1-1.5B"
+
+
+def _local_files_only_from_env() -> bool:
+    return os.environ.get("PALACE_EMBEDDING_LOCAL_ONLY", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
 
 
 class _SentenceEncoder(Protocol):
@@ -51,8 +60,10 @@ class QodoEmbeddingBackend:
         model_name: str = QODO_EMBED_MODEL_NAME,
         normalize_embeddings: bool = True,
         trust_remote_code: bool = True,
-        local_files_only: bool = False,
+        local_files_only: bool | None = None,
     ) -> None:
+        if local_files_only is None:
+            local_files_only = _local_files_only_from_env()
         self._encoder = encoder or _load_sentence_transformer(
             model_name,
             trust_remote_code=trust_remote_code,

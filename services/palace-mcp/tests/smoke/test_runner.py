@@ -410,6 +410,78 @@ class TestSuccessfulRun:
 
     @patch("palace_mcp.smoke.runner.mcp_caller")
     @patch("palace_mcp.smoke.runner.asyncio.create_subprocess_exec")
+    async def test_uw_ios_app_emits_scip_after_xcodebuild(
+        self,
+        mock_subprocess: AsyncMock,
+        mock_mcp: AsyncMock,
+        _pf: Any,
+        tmp_path: Path,
+        monkeypatch: Any,
+    ) -> None:
+        recipe = _make_recipe(slug="uw-ios-app", name="unstoppable-wallet-ios")
+        binding = _make_binding(tmp_path)
+        emitter_dir = tmp_path / "scip_emit_swift"
+        emitter_bin = emitter_dir / ".build" / "release" / "palace-swift-scip-emit-cli"
+        emitter_bin.parent.mkdir(parents=True, exist_ok=True)
+        emitter_bin.write_text("#!/bin/sh\n")
+        monkeypatch.setattr(
+            "palace_mcp.smoke.runner._DEFAULT_SWIFT_EMITTER_DIR",
+            emitter_dir,
+        )
+
+        mock_mcp.list_tools = AsyncMock(return_value=["palace.memory.register_project"])
+        mock_mcp.register_project = AsyncMock(
+            return_value={"slug": "uw-ios-app", "name": "unstoppable-wallet-ios"}
+        )
+        mock_mcp.run_extractor = AsyncMock(
+            side_effect=[
+                _ok_extractor("symbol_index_swift"),
+                _ok_extractor("dead_code"),
+            ]
+        )
+
+        async def _fake_subprocess(*cmd: str, **_: Any) -> AsyncMock:
+            proc = AsyncMock()
+            proc.returncode = 0
+            if cmd[0] == "xcrun":
+                proc.communicate.return_value = (b"BUILD SUCCEEDED", None)
+            else:
+                scip_file = binding.repo_path / recipe.scip_path
+                scip_file.parent.mkdir(parents=True, exist_ok=True)
+                scip_file.write_bytes(b"0123456789")
+                proc.communicate.return_value = (b"emit ok", None)
+            return proc
+
+        mock_subprocess.side_effect = _fake_subprocess
+
+        runner = SmokeRunner(recipe, binding)
+        report = await runner.run_smoke()
+
+        assert report.passed is True
+        build_stage = next(s for s in report.stages if s.stage == "build_scip")
+        assert build_stage.status == StageStatus.PASSED
+        assert build_stage.details["scip_emitter"] == "palace-swift-scip-emit-cli"
+        assert build_stage.details["scip_size_bytes"] == 10
+
+        first_call = mock_subprocess.await_args_list[0].args
+        second_call = mock_subprocess.await_args_list[1].args
+        assert first_call[:2] == ("xcrun", "xcodebuild")
+        assert second_call[0] == str(emitter_bin)
+        first_extractor_call = mock_mcp.run_extractor.await_args_list[0]
+        assert first_extractor_call.args == (_MCP_URL,)
+        assert first_extractor_call.kwargs == {
+            "extractor_name": "symbol_index_swift",
+            "project": "uw-ios-app",
+            "scip_path": recipe.scip_path,
+        }
+        second_extractor_call = mock_mcp.run_extractor.await_args_list[1]
+        assert second_extractor_call.kwargs == {
+            "extractor_name": "dead_code",
+            "project": "uw-ios-app",
+        }
+
+    @patch("palace_mcp.smoke.runner.mcp_caller")
+    @patch("palace_mcp.smoke.runner.asyncio.create_subprocess_exec")
     async def test_report_has_timing(
         self, mock_subprocess: AsyncMock, mock_mcp: AsyncMock, _pf: Any, tmp_path: Path
     ) -> None:
@@ -568,6 +640,45 @@ class TestMcpMountNamePassedToRegister:
         await runner.run_smoke()
 
         assert captured["parent_mount"] == binding.mcp_mount_name
+
+    @patch("palace_mcp.smoke.runner.mcp_caller")
+    @patch("palace_mcp.smoke.runner.asyncio.create_subprocess_exec")
+    async def test_symbol_index_swift_uses_repo_relative_scip_override(
+        self, mock_subprocess: AsyncMock, mock_mcp: AsyncMock, _pf: Any, tmp_path: Path
+    ) -> None:
+        recipe = _make_recipe(extractors=["symbol_index_swift"])
+        repo_path = tmp_path / "host-repos" / "nested" / "test-project"
+        repo_path.mkdir(parents=True)
+        binding = RuntimeBinding(
+            repo_path=repo_path,
+            parent_mount=tmp_path / "host-repos",
+            mount_name="host",
+            mcp_mount_name="macbook",
+            mcp_url=_MCP_URL,
+        )
+
+        proc_mock = AsyncMock()
+        proc_mock.communicate.return_value = (b"ok", None)
+        proc_mock.returncode = 0
+        mock_subprocess.return_value = proc_mock
+
+        scip_file = binding.repo_path / recipe.scip_path
+        scip_file.parent.mkdir(parents=True, exist_ok=True)
+        scip_file.write_bytes(b"scip-data")
+
+        mock_mcp.register_project = AsyncMock(return_value={"slug": recipe.slug})
+        mock_mcp.run_extractor = AsyncMock(
+            return_value=_ok_extractor("symbol_index_swift")
+        )
+
+        runner = SmokeRunner(recipe, binding)
+        await runner.run_smoke()
+
+        assert mock_mcp.run_extractor.await_args.kwargs == {
+            "extractor_name": "symbol_index_swift",
+            "project": recipe.slug,
+            "scip_path": recipe.scip_path,
+        }
 
 
 # ---------------------------------------------------------------------------
