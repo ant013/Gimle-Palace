@@ -1,5 +1,8 @@
 # Deploy checklist
 
+> See also: [Palace Operator Guide](operator-guide.md) for first-time
+> setup, model cache, repo mounts, and cleanup policy.
+
 Run before and after every `docker compose up` on the iMac deploy host.
 
 ## Pre-flight

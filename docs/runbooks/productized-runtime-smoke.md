@@ -1,5 +1,8 @@
 # Productized Runtime Smoke — Operator Runbook
 
+> See also: [Palace Operator Guide](operator-guide.md) for prerequisites,
+> first-time setup, and common troubleshooting.
+
 Repeat the Palace runtime smoke on a clean MacBook (or any macOS developer
 machine) without reading chat history. This runbook covers environment setup,
 recipe authoring, binding configuration, and the full smoke pipeline.
