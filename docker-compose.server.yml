@@ -1,0 +1,147 @@
+# docker-compose.server.yml — Linux server deployment (no Mac-specific paths)
+#
+# Usage:
+#   cp .env.server.example .env
+#   # Edit .env: set NEO4J_PASSWORD, OPENAI_API_KEY, PALACE_REPO_PARENT, etc.
+#   docker compose -f docker-compose.server.yml --profile server up -d
+#
+# Profiles:
+#   server      — Neo4j + palace-mcp (production indexing/runtime)
+#   smoke       — palace-mcp only, for MCP smoke tests without Neo4j
+#   cache-warm  — one-shot model cache warm-up (exits after download)
+#   ci          — palace-mcp + Neo4j with fixture repos only (no host bind mounts)
+#
+# Security boundaries:
+#   - No /var/run/docker.sock mount
+#   - No $HOME or ~/.ssh broad mounts
+#   - Neo4j bolt port not exposed to host (internal bridge only)
+#   - Neo4j HTTP admin port not exposed (internal bridge only)
+#   - Repos mounted read-only
+#   - palace-mcp runs as UID/GID 1000:1000 (appuser)
+#
+# UID/GID expectations:
+#   - Repo dirs: readable by UID 1000 (r-x for group or world, or chown to 1000)
+#   - Cache dirs (/data/palace-model-cache, /data/palace-tantivy): owned by UID 1000
+
+services:
+  neo4j:
+    image: neo4j:5.26.0@sha256:5a015e53de1895e7eee1574ae0325cf8c4b89587222778108c594bdd45a474b5
+    restart: unless-stopped
+    mem_limit: "${NEO4J_MEM_LIMIT:-16g}"
+    cpus: "${NEO4J_CPUS:-4.0}"
+    profiles: [server, ci]
+    environment:
+      NEO4J_AUTH: "neo4j/${NEO4J_PASSWORD}"
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_server_memory_heap_initial__size: "${NEO4J_HEAP_INITIAL:-4G}"
+      NEO4J_server_memory_heap_max__size: "${NEO4J_HEAP_MAX:-8G}"
+      NEO4J_server_memory_pagecache_size: "${NEO4J_PAGECACHE:-4G}"
+      NEO4J_apoc_trigger_enabled: "true"
+      NEO4J_apoc_trigger_refresh: "1000"
+      NEO4J_dbms_security_procedures_unrestricted: "apoc.*"
+      NEO4J_dbms_security_procedures_allowlist: "apoc.*"
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    networks:
+      - palace-net
+    # Bolt and HTTP ports are NOT exposed to host — internal bridge only.
+    # To allow admin access from localhost only, add to docker-compose.override.yml:
+    #   ports:
+    #     - "127.0.0.1:7474:7474"  # HTTP admin (loopback-only)
+    #     - "127.0.0.1:7687:7687"  # Bolt (loopback-only)
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:7474 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  palace-mcp:
+    build:
+      context: services/palace-mcp
+      args:
+        GIT_SHA: "${PALACE_GIT_SHA:-unknown}"
+    restart: unless-stopped
+    mem_limit: "${PALACE_MEM_LIMIT:-4g}"
+    cpus: "${PALACE_CPUS:-2.0}"
+    profiles: [server, smoke, ci]
+    environment:
+      NEO4J_URI: "bolt://neo4j:7687"
+      NEO4J_PASSWORD: "${NEO4J_PASSWORD}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY}"
+      CODEBASE_MEMORY_MCP_BINARY: "${CODEBASE_MEMORY_MCP_BINARY:-}"
+      PALACE_OPS_HOST: "${PALACE_OPS_HOST:-local}"
+      PALACE_OPS_SSH_USER: "${PALACE_OPS_SSH_USER:-}"
+      PALACE_OPS_SSH_KEY: "${PALACE_OPS_SSH_KEY:-}"
+      PAPERCLIP_API_URL: "${PALACE_PAPERCLIP_API_URL:-}"
+      PAPERCLIP_API_KEY: "${PAPERCLIP_API_KEY:-}"
+      PALACE_SCIP_INDEX_PATHS: "${PALACE_SCIP_INDEX_PATHS:-}"
+      PALACE_ADR_BASE_DIR: "${PALACE_ADR_BASE_DIR:-/var/lib/palace/adr}"
+      HF_HOME: "${PALACE_HF_CACHE_DIR:-/data/hf-cache}"
+      TRANSFORMERS_CACHE: "${PALACE_HF_CACHE_DIR:-/data/hf-cache}"
+      PALACE_HF_CACHE_DIR: "${PALACE_HF_CACHE_DIR:-/data/hf-cache}"
+      PALACE_EMBEDDING_LOCAL_ONLY: "${PALACE_EMBEDDING_LOCAL_ONLY:-1}"
+    user: "1000:1000"
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    ports:
+      - "${PALACE_MCP_HOST:-127.0.0.1}:${PALACE_MCP_PORT:-8080}:8000"
+    volumes:
+      # Repos — parent-mount pattern: all repos live under PALACE_REPO_PARENT on host.
+      # Set PALACE_REPO_PARENT in .env, then place each repo in a subdir:
+      #   /srv/repos/gimle/     → /repos/gimle   inside container
+      #   /srv/repos/uw-ios/    → /repos/uw-ios   inside container
+      # Ownership: dirs must be readable by UID 1000 (chmod o+rX or chown 1000).
+      - "${PALACE_REPO_PARENT:-/srv/repos}/gimle:/repos/gimle:ro"
+      - "${PALACE_REPO_PARENT:-/srv/repos}/uw-ios:/repos/uw-ios:ro"
+      - "${PALACE_REPO_PARENT:-/srv/repos}/uw-android:/repos/uw-android:ro"
+      - ./services/palace-mcp/tests/extractors/fixtures/uw-ios-mini-project:/repos/uw-ios-mini:ro
+      - ./services/palace-mcp/tests/extractors/fixtures/uw-ios-mini-project/.git:/repos/uw-ios-mini/.git:ro
+      - ./services/palace-mcp/tests/extractors/fixtures/oz-v5-mini-project:/repos/oz-v5-mini:ro
+      - codebase-memory-cache:/home/appuser/.cache/codebase-memory-mcp
+      - palace-tantivy-data:/var/lib/palace/tantivy
+      - palace-hf-cache:${PALACE_HF_CACHE_DIR:-/data/hf-cache}
+      # No SSH key mounts on server. Use PALACE_OPS_HOST=local for local ops.
+    networks:
+      - palace-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  cache-warm:
+    build:
+      context: services/palace-mcp
+      args:
+        GIT_SHA: "${PALACE_GIT_SHA:-unknown}"
+    profiles: [cache-warm]
+    user: "1000:1000"
+    environment:
+      HF_HOME: "${PALACE_HF_CACHE_DIR:-/data/hf-cache}"
+      TRANSFORMERS_CACHE: "${PALACE_HF_CACHE_DIR:-/data/hf-cache}"
+      PALACE_HF_CACHE_DIR: "${PALACE_HF_CACHE_DIR:-/data/hf-cache}"
+      PALACE_EMBEDDING_LOCAL_ONLY: "0"
+    command: >
+      python -c "
+      from palace_mcp.embeddings.cache_preflight import preflight_or_fail;
+      from palace_mcp.embeddings.qodo import QODO_EMBED_MODEL_NAME;
+      preflight_or_fail(QODO_EMBED_MODEL_NAME, local_only=False);
+      print('cache-warm: model cache ready')
+      "
+    volumes:
+      - palace-hf-cache:${PALACE_HF_CACHE_DIR:-/data/hf-cache}
+
+networks:
+  palace-net:
+    driver: bridge
+
+volumes:
+  neo4j_data:
+  neo4j_logs:
+  codebase-memory-cache:
+  palace-tantivy-data:
+  palace-hf-cache:
