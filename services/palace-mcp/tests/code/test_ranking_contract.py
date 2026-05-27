@@ -55,7 +55,9 @@ def _hit(
     }
 
 
-def _rank(hits: list[dict[str, Any]], *, query: str = "unrelated-query-xyz") -> list[dict[str, Any]]:
+def _rank(
+    hits: list[dict[str, Any]], *, query: str = "unrelated-query-xyz"
+) -> list[dict[str, Any]]:
     """Apply ranking formula and sort.  Uses a neutral query by default."""
     return _apply_ranking(query, [dict(h) for h in hits])
 
@@ -297,12 +299,8 @@ class TestLexicalBoost:
 class TestTieBreakers:
     def test_kind_priority_breaks_equal_score(self) -> None:
         """function ranked before variable at equal final score."""
-        var_hit = _hit(
-            qualified_name="App.counter", vector_score=0.85, kind="variable"
-        )
-        fn_hit = _hit(
-            qualified_name="App.process", vector_score=0.85, kind="function"
-        )
+        var_hit = _hit(qualified_name="App.counter", vector_score=0.85, kind="variable")
+        fn_hit = _hit(qualified_name="App.process", vector_score=0.85, kind="function")
         ranked = _rank([var_hit, fn_hit])
         assert ranked[0]["qualified_name"] == "App.process"
 
@@ -424,15 +422,13 @@ class TestDeterminism:
         import itertools
 
         hits = [
+            _hit(qualified_name="C.fn", vector_score=0.90, source_scope="project"),
             _hit(
-                qualified_name="C.fn", vector_score=0.90, source_scope="project"
+                qualified_name="B.fn",
+                vector_score=0.90,
+                source_scope="workspace_package",
             ),
-            _hit(
-                qualified_name="B.fn", vector_score=0.90, source_scope="workspace_package"
-            ),
-            _hit(
-                qualified_name="A.fn", vector_score=0.90, source_scope="dependency"
-            ),
+            _hit(qualified_name="A.fn", vector_score=0.90, source_scope="dependency"),
         ]
 
         expected = _rank(list(hits))
@@ -476,7 +472,9 @@ class TestScoreComponentsInResponse:
                     return _FakeResult(single={"found_projects": ["wallet-core"]})
                 if "embedded_cnt" in query:
                     return _FakeResult(
-                        data=[{"source_scope": "project", "total": 5, "embedded_cnt": 2}]
+                        data=[
+                            {"source_scope": "project", "total": 5, "embedded_cnt": 2}
+                        ]
                     )
                 if "queryNodes" in query:
                     return _FakeResult(
@@ -514,12 +512,15 @@ class TestScoreComponentsInResponse:
             {"qodo": _FakeBackend()}, default_backend="qodo"
         )
 
-        with patch(
-            "palace_mcp.code.find_semantic.get_embedding_dispatcher",
-            return_value=dispatcher,
-        ), patch(
-            "palace_mcp.code.find_semantic.code_router.get_cm_session",
-            return_value=None,
+        with (
+            patch(
+                "palace_mcp.code.find_semantic.get_embedding_dispatcher",
+                return_value=dispatcher,
+            ),
+            patch(
+                "palace_mcp.code.find_semantic.code_router.get_cm_session",
+                return_value=None,
+            ),
         ):
             result = await semantic_search(
                 driver=_FakeDriver(),
