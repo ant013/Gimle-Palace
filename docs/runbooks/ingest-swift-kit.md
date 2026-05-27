@@ -1,5 +1,8 @@
 # Runbook: Per-kit Swift ingestion
 
+> See also: [Palace Operator Guide](operator-guide.md) for prerequisites,
+> first-time setup, and common troubleshooting.
+
 This runbook covers Audit-V1 S3 single-kit ingestion for one HorizontalSystems
 Swift kit. It splits the flow into:
 

@@ -1,5 +1,8 @@
 # Runbook: Xcode app ingestion
 
+> See also: [Palace Operator Guide](operator-guide.md) for prerequisites,
+> first-time setup, and common troubleshooting.
+
 This runbook covers ingestion of an Xcode application repo (not a SwiftPM kit)
 into palace-mcp. The canonical example is `uw-ios-app`
 (`unstoppable-wallet-ios`).
