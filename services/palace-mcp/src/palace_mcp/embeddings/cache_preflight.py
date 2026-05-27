@@ -8,10 +8,13 @@ from __future__ import annotations
 
 import enum
 import json
+import logging
 import os
 import stat
 from dataclasses import dataclass
 from pathlib import Path
+
+_logger = logging.getLogger(__name__)
 
 class CacheStatus(enum.Enum):
     absent = "absent"
@@ -266,15 +269,16 @@ def preflight_or_fail(
 
 def _print_cache_status(result: CacheCheckResult) -> None:
     size_mb = result.size_bytes / (1024 * 1024)
-    print(
-        f"[cache-preflight] model={result.model_id} "
-        f"status={result.status.value} "
-        f"cache_root={result.cache_root} "
-        f"size={size_mb:.1f}MB "
-        f"owner_ok={result.owner_ok} "
-        f"writeable={result.writeable}"
-        + (f" detail={result.detail!r}" if result.detail else ""),
-        flush=True,
+    _logger.info(
+        "[cache-preflight] model=%s status=%s cache_root=%s size=%.1fMB "
+        "owner_ok=%s writeable=%s%s",
+        result.model_id,
+        result.status.value,
+        result.cache_root,
+        size_mb,
+        result.owner_ok,
+        result.writeable,
+        f" detail={result.detail!r}" if result.detail else "",
     )
 
 

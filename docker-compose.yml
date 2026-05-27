@@ -92,8 +92,8 @@ services:
       # Default: named volume (palace-hf-cache). Override with a host path in
       # docker-compose.override.yml to share cache between projects, e.g.:
       #   volumes:
-      #     - /data/palace-model-cache:/data/hf-cache
-      - palace-hf-cache:/data/hf-cache
+      #     - /data/palace-model-cache:${PALACE_HF_CACHE_DIR:-/data/hf-cache}
+      - palace-hf-cache:${PALACE_HF_CACHE_DIR:-/data/hf-cache}
     networks:
       - paperclip-agent-net
     healthcheck:

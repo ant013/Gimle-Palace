@@ -94,7 +94,7 @@ Contents (no secrets):
   "revision": "main",
   "cache_root": "/data/hf-cache",
   "recorded_at": "2026-01-01T00:00:00Z",
-  "integrity_marker": "Qodo/Qodo-Embed-1-1.5B@main"
+  "version_marker": "Qodo/Qodo-Embed-1-1.5B@main"
 }
 ```
 

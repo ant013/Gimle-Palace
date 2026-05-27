@@ -99,8 +99,8 @@ cleanup_safe() {
     run docker builder prune --keep-storage 1GB --force
     # Temp workdir cleanup inside repo.
     local tmp_dir="$REPO_ROOT/.tmp"
-    _guard_path "$tmp_dir"
     if [[ -d "$tmp_dir" ]]; then
+        _guard_path "$tmp_dir"
         run rm -rf "$tmp_dir"
     else
         log "No .tmp dir found — skipping"
