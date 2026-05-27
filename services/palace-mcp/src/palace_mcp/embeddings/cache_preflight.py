@@ -16,6 +16,7 @@ from pathlib import Path
 
 _logger = logging.getLogger(__name__)
 
+
 class CacheStatus(enum.Enum):
     absent = "absent"
     present = "present"
@@ -276,5 +277,3 @@ def _print_cache_status(result: CacheCheckResult) -> None:
         result.writeable,
         f" detail={result.detail!r}" if result.detail else "",
     )
-
-
