@@ -50,6 +50,14 @@ services:
       PAPERCLIP_API_KEY: "${PAPERCLIP_API_KEY:-}"
       PALACE_SCIP_INDEX_PATHS: "${PALACE_SCIP_INDEX_PATHS:-}"
       PALACE_ADR_BASE_DIR: "${PALACE_ADR_BASE_DIR:-/var/lib/palace/adr}"
+      # ML model cache — HF_HOME and TRANSFORMERS_CACHE both point to the
+      # mounted cache volume so Qodo-Embed-1-1.5B is not re-downloaded on restart.
+      # Override PALACE_HF_CACHE_DIR in docker-compose.override.yml to use a
+      # host bind-mount instead of the default named volume.
+      HF_HOME: "${PALACE_HF_CACHE_DIR:-/data/hf-cache}"
+      TRANSFORMERS_CACHE: "${PALACE_HF_CACHE_DIR:-/data/hf-cache}"
+      PALACE_HF_CACHE_DIR: "${PALACE_HF_CACHE_DIR:-/data/hf-cache}"
+      PALACE_EMBEDDING_LOCAL_ONLY: "${PALACE_EMBEDDING_LOCAL_ONLY:-0}"
     # Non-root user for security hardening (GIM-101a, T10 — Architect F19)
     user: "1000:1000"
     depends_on:
@@ -80,6 +88,12 @@ services:
       - "${HOME}/.ssh/known_hosts:/home/appuser/.ssh/known_hosts:ro"
       - "${HOME}/.ssh/config:/home/appuser/.ssh/config:ro"
       - palace-tantivy-data:/var/lib/palace/tantivy
+      # HF/Qodo model cache — persisted across container restarts and rebuilds.
+      # Default: named volume (palace-hf-cache). Override with a host path in
+      # docker-compose.override.yml to share cache between projects, e.g.:
+      #   volumes:
+      #     - /data/palace-model-cache:${PALACE_HF_CACHE_DIR:-/data/hf-cache}
+      - palace-hf-cache:${PALACE_HF_CACHE_DIR:-/data/hf-cache}
     networks:
       - paperclip-agent-net
     healthcheck:
@@ -98,3 +112,7 @@ volumes:
   neo4j_logs:
   codebase-memory-cache:
   palace-tantivy-data:
+  # ML model cache (HuggingFace/Qodo-Embed-1-1.5B).
+  # Never removed by `docker volume prune` (because it is referenced).
+  # Cleanup requires explicit: scripts/palace-cleanup.sh --level=destructive
+  palace-hf-cache:

@@ -7,6 +7,7 @@ Verifies inside the built image:
 - PALACE_EMBEDDING_LOCAL_ONLY is honoured (model load raises actionable error, not silent hang)
 - QodoEmbeddingBackend raises an actionable RuntimeError when model cache is absent
   in local-only mode (not an implicit network download or opaque OSError)
+- Cache preflight status is printed without secrets
 
 Usage:
     # From host after `docker compose up -d palace-mcp`:
@@ -119,6 +120,39 @@ else:
         True,
         "re-run with PALACE_EMBEDDING_LOCAL_ONLY=1 for full check",
     )
+
+# ── 4. Cache preflight status ───────────────────────────────────────────────
+print("[4] Cache preflight status", flush=True)
+try:
+    from palace_mcp.embeddings.cache_preflight import (
+        CacheStatus,
+        check_model_cache,
+    )
+    from palace_mcp.embeddings.qodo import QODO_EMBED_MODEL_NAME
+
+    result = check_model_cache(QODO_EMBED_MODEL_NAME)
+    print(
+        f"  [INFO] model={result.model_id} status={result.status.value} "
+        f"cache_root={result.cache_root} size={result.size_bytes / (1024 * 1024):.1f}MB "
+        f"owner_ok={result.owner_ok} writeable={result.writeable}",
+        flush=True,
+    )
+    if is_local_only:
+        check(
+            "cache status is present (local-only mode)",
+            result.status == CacheStatus.present,
+            f"status={result.status.value}"
+            if result.status != CacheStatus.present
+            else "",
+        )
+    else:
+        check(
+            "cache preflight module importable",
+            True,
+            f"status={result.status.value} (not enforced when local-only=false)",
+        )
+except Exception as exc:
+    check("cache preflight importable", False, str(exc))
 
 # ── Result ──────────────────────────────────────────────────────────────────
 print("", flush=True)
