@@ -71,11 +71,12 @@ def _dir_size(path: Path) -> int:
     total = 0
     try:
         for entry in path.rglob("*"):
-            if entry.is_file(follow_symlinks=False):
-                try:
-                    total += entry.stat(follow_symlinks=False).st_size
-                except OSError:
-                    pass
+            try:
+                st = entry.stat(follow_symlinks=False)
+                if stat.S_ISREG(st.st_mode):
+                    total += st.st_size
+            except OSError:
+                pass
     except OSError:
         pass
     return total

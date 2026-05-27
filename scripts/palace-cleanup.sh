@@ -5,7 +5,7 @@
 #   safe        — Docker builder cache + temp workdirs. Safe to run anytime.
 #   reclaim     — Stopped containers + dangling images. Does NOT touch volumes.
 #   destructive — Named volumes (neo4j_data, palace-hf-cache, palace-tantivy-data).
-#                 Requires --destructive flag AND interactive confirmation.
+#                 Requires --level=destructive --execute AND interactive confirmation.
 #                 MODEL CACHES WILL BE LOST. Only run with explicit operator approval.
 #
 # Usage:

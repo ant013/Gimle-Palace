@@ -65,7 +65,7 @@ The preflight module reports one of four statuses for each model:
 | `present` | Cache root exists, model snapshot dirs found, provenance file present | Proceed normally |
 | `stale` | Cache root exists but snapshot dir or provenance file is missing (partial download) | **Fail fast** — fix or re-download |
 | `absent` | Cache root does not exist | **Fail fast** — first-time download needed |
-| `readonly` | Cache root exists but not writeable, world-writable, or mixed-owner | **Fail fast** — fix permissions |
+| `readonly` | Cache root has unsafe ownership (world-writable or mixed-owner) | **Fail fast** — fix permissions |
 
 ### Local-only mode
 
