@@ -100,6 +100,105 @@ def test_wait_for_mcp_ready_falls_back_to_loopback(monkeypatch) -> None:
     ]
 
 
+def test_ensure_project_analyze_runtime_skips_compose_when_already_ready(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Fast path: if MCP already reachable and recreate_palace=False, skip compose."""
+    compose_called: list[bool] = []
+
+    def fake_probe(url: str) -> None:
+        pass  # always succeeds
+
+    def fake_run_command(cmd: list[str], **kwargs: object) -> None:
+        compose_called.append(True)
+
+    monkeypatch.setattr(cli, "_probe_mcp_url_once", fake_probe)
+    monkeypatch.setattr(cli, "_run_command", fake_run_command)
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("")
+    override = tmp_path / "override.yml"
+    override.write_text("")
+
+    spec = cli.ProjectRuntimeSpec(
+        repo_path=tmp_path,
+        slug="test-slug",
+        language_profile="python_service",
+        bundle=None,
+        parent_mount="/tmp",
+        relative_path="test-slug",
+        container_repo_path="/repos/test-slug",
+        container_scip_path="/repos/test-slug/scip/index.scip",
+        env_file=env_file,
+        compose_override_path=override,
+        report_out=tmp_path / "report.md",
+        summary_out=tmp_path / "summary.json",
+        host_mount_path=None,
+        container_mount_path=None,
+    )
+
+    result = cli.ensure_project_analyze_runtime(
+        spec=spec,
+        mcp_url="http://localhost:8080/mcp",
+        recreate_palace=False,
+    )
+
+    assert result == "http://localhost:8080/mcp"
+    assert not compose_called, "docker compose must not run when MCP is already ready"
+
+
+def test_ensure_project_analyze_runtime_runs_compose_when_recreate_required(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """When recreate_palace=True, always run docker compose regardless of MCP state."""
+    probe_called: list[str] = []
+    compose_called: list[bool] = []
+
+    def fake_probe(url: str) -> None:
+        probe_called.append(url)
+
+    def fake_run_command(cmd: list[str], **kwargs: object) -> None:
+        compose_called.append(True)
+
+    def fake_wait(url: str, *, timeout_seconds: int = 60) -> str:
+        return url
+
+    monkeypatch.setattr(cli, "_probe_mcp_url_once", fake_probe)
+    monkeypatch.setattr(cli, "_run_command", fake_run_command)
+    monkeypatch.setattr(cli, "wait_for_mcp_ready", fake_wait)
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("")
+    override = tmp_path / "override.yml"
+    override.write_text("")
+
+    spec = cli.ProjectRuntimeSpec(
+        repo_path=tmp_path,
+        slug="test-slug",
+        language_profile="python_service",
+        bundle=None,
+        parent_mount="/tmp",
+        relative_path="test-slug",
+        container_repo_path="/repos/test-slug",
+        container_scip_path="/repos/test-slug/scip/index.scip",
+        env_file=env_file,
+        compose_override_path=override,
+        report_out=tmp_path / "report.md",
+        summary_out=tmp_path / "summary.json",
+        host_mount_path=None,
+        container_mount_path=None,
+    )
+
+    cli.ensure_project_analyze_runtime(
+        spec=spec,
+        mcp_url="http://localhost:8080/mcp",
+        recreate_palace=True,
+    )
+
+    assert compose_called, "docker compose must run when recreate_palace=True"
+    assert not probe_called, "fast-path probe must be skipped when recreate_palace=True"
+
+
 def test_merge_scip_index_env_mapping_preserves_existing_entries(
     tmp_path: Path,
 ) -> None:
