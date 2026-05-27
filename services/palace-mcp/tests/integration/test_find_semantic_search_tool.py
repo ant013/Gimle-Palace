@@ -94,6 +94,7 @@ def semantic_seeded_project(
                 kind: 'function',
                 file_path: 'Sources/Wallet.swift',
                 module_name: 'WalletCore',
+                source_scope: 'project',
                 embedding_input_hash: 'seed-hash',
                 commit_sha: 'seed-commit',
                 embedding: $embedding
