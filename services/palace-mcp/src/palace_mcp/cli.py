@@ -931,7 +931,7 @@ def ensure_swift_scip_artifact(
         return _emit_swift_scip(spec=spec, repo_head_sha=repo_head_sha)
 
     if emit_scip == "never":
-        if not usable_index or stale:
+        if not usable_index:
             raise ProjectAnalyzeCliError(
                 "usable SCIP artifact required for --emit-scip=never",
                 error_code="missing_required_scip_artifact",
@@ -942,6 +942,8 @@ def ensure_swift_scip_artifact(
             "meta_path": str(meta_path),
             "metadata": metadata,
             "reason": "existing artifact reused",
+            "stale": stale,
+            "stale_reason": reason,
         }
 
     if not usable_index or stale:
