@@ -10,6 +10,7 @@ from typing import cast
 
 from palace_mcp import code_router
 from palace_mcp.code.semantic_contract import ScoreComponents
+from palace_mcp.code.snippet_provider import resolve_snippet
 from palace_mcp.embeddings import get_embedding_dispatcher
 from palace_mcp.extractors.foundation.identifiers import symbol_id_for
 from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
@@ -52,6 +53,8 @@ RETURN
   s.qualified_name AS qualified_name,
   s.kind AS kind,
   s.file_path AS file_path,
+  s.line_start AS line_start,
+  s.line_end AS line_end,
   s.module_name AS module_name,
   s.source_scope AS source_scope,
   s.embedding_input_hash AS embedding_input_hash,
@@ -452,40 +455,64 @@ async def _vector_search(
 
 async def _load_snippet_context(
     *,
-    qualified_name: str,
     project: str,
+    file_path: str | None,
+    line_start: int | None,
+    line_end: int | None,
+    commit_sha: str | None,
+    qualified_name: str,
 ) -> tuple[dict[str, Any] | None, str | None, str | None]:
-    session = code_router.get_cm_session()
-    if session is None:
-        return None, "snippet_provider_unavailable", "snippet provider unavailable"
-
-    try:
-        raw = await session.call_tool(
-            "get_code_snippet",
-            arguments={
-                "qualified_name": qualified_name,
-                "project": _translate_cm_project(project),
-            },
-        )
-    except Exception as exc:
-        return None, "snippet_provider_unavailable", str(exc)
-
-    if raw.isError:
-        parsed = code_router.parse_cm_result(raw)
-        message = str(parsed.get("_raw", "snippet provider unavailable"))
-        return None, "snippet_provider_unavailable", message
-
-    parsed = code_router.parse_cm_result(raw)
-    return (
-        {
-            "language": parsed.get("language", ""),
-            "start_line": parsed.get("start_line"),
-            "end_line": parsed.get("end_line"),
-            "source": parsed.get("source", ""),
-        },
-        None,
-        None,
+    # Primary: read directly from the mounted repo using path_resolver.
+    # This validates file_path containment and enforces line/byte bounds.
+    snippet, local_code, local_message = await asyncio.to_thread(
+        resolve_snippet,
+        project=project,
+        file_path=file_path,
+        line_start=line_start,
+        line_end=line_end,
+        commit_sha=commit_sha,
     )
+    if snippet is not None:
+        result: dict[str, Any] = {
+            "language": snippet.language,
+            "start_line": snippet.start_line,
+            "end_line": snippet.end_line,
+            "source": snippet.source,
+        }
+        if snippet.stale:
+            result["status"] = "stale_source"
+        return result, None, None
+
+    # Fallback: codebase-memory MCP session (e.g. when project not mounted).
+    if local_code in ("project_not_mounted", "missing_file_path"):
+        session = code_router.get_cm_session()
+        if session is not None:
+            try:
+                raw = await session.call_tool(
+                    "get_code_snippet",
+                    arguments={
+                        "qualified_name": qualified_name,
+                        "project": _translate_cm_project(project),
+                    },
+                )
+            except Exception as exc:
+                return None, "snippet_provider_unavailable", str(exc)
+
+            if not raw.isError:
+                parsed = code_router.parse_cm_result(raw)
+                return (
+                    {
+                        "language": parsed.get("language", ""),
+                        "start_line": parsed.get("start_line"),
+                        "end_line": parsed.get("end_line"),
+                        "source": parsed.get("source", ""),
+                    },
+                    None,
+                    None,
+                )
+
+    # Local read failed (path rejected, missing file, etc.) — surface warning.
+    return None, local_code, local_message
 
 
 async def _load_usage_preview(
@@ -539,12 +566,19 @@ async def _hydrate_context(
     settings: Settings | None,
     project: str,
     qualified_name: str,
+    file_path: str | None,
+    line_start: int | None,
+    line_end: int | None,
     commit_sha: str | None,
     context_limit: int,
 ) -> dict[str, Any]:
     snippet, snippet_code, snippet_message = await _load_snippet_context(
-        qualified_name=qualified_name,
         project=project,
+        file_path=file_path,
+        line_start=line_start,
+        line_end=line_end,
+        commit_sha=commit_sha,
+        qualified_name=qualified_name,
     )
     usages_preview, usage_code, usage_message = await _load_usage_preview(
         settings=settings,
@@ -681,6 +715,8 @@ async def semantic_search(
             "source_scope": row.get("source_scope"),
             "score": float(row["score"]),
             "_commit_sha": row.get("commit_sha"),
+            "_line_start": row.get("line_start"),
+            "_line_end": row.get("line_end"),
         }
         embedding_input_hash = row.get("embedding_input_hash")
         if embedding_input_hash is not None:
@@ -697,16 +733,41 @@ async def semantic_search(
     _apply_ranking(normalized_query, candidate_rows)
     result_rows = candidate_rows[:limit]
 
+    context_available_count = 0
+    warning_code_counts: dict[str, int] = {}
+    total_line_count = 0
+    total_byte_count = 0
+    snippets_with_size = 0
+
     for hit in result_rows:
         commit_sha = hit.pop("_commit_sha", None)
+        line_start = hit.pop("_line_start", None)
+        line_end = hit.pop("_line_end", None)
         if include_context:
             hit["context"] = await _hydrate_context(
                 settings=settings,
                 project=hit["project"],
                 qualified_name=hit["qualified_name"],
+                file_path=hit.get("file_path"),
+                line_start=line_start,
+                line_end=line_end,
                 commit_sha=commit_sha,
                 context_limit=context_limit,
             )
+            ctx = hit["context"]
+            if ctx.get("available"):
+                context_available_count += 1
+            wc = ctx.get("warning_code")
+            if wc:
+                warning_code_counts[wc] = warning_code_counts.get(wc, 0) + 1
+            snippet = ctx.get("snippet")
+            if snippet:
+                lc = snippet.get("end_line", 0) - snippet.get("start_line", 0) + 1
+                bc = len((snippet.get("source") or "").encode("utf-8"))
+                if lc > 0:
+                    total_line_count += lc
+                    total_byte_count += bc
+                    snippets_with_size += 1
 
     if len(result_rows) < limit:
         warnings.append(
@@ -718,6 +779,20 @@ async def semantic_search(
                 candidate_limit=candidate_limit,
             )
         )
+
+    context_metrics: dict[str, Any] = {}
+    if include_context and result_rows:
+        n = len(result_rows)
+        context_metrics = {
+            "context_available_rate": context_available_count / n,
+            "warning_code_counts": warning_code_counts,
+            "avg_snippet_line_count": total_line_count / snippets_with_size
+            if snippets_with_size
+            else None,
+            "avg_snippet_byte_count": total_byte_count / snippets_with_size
+            if snippets_with_size
+            else None,
+        }
 
     return {
         "ok": True,
@@ -733,5 +808,6 @@ async def semantic_search(
         "warnings": warnings,
         "embedding_coverage": coverage,
         "ranking_spec_version": "1",
+        "context_metrics": context_metrics,
         "result": result_rows,
     }
