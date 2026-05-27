@@ -1,0 +1,715 @@
+{
+  "dev-core-timers-schedulers": {
+    "ok": true,
+    "query": "timer scheduler repeating task",
+    "returned_count": 4,
+    "result": [
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "PaymentScheduler/scheduleRecurringPayment",
+        "file_path": "Sources/Payments/PaymentScheduler.swift",
+        "source_scope": "project",
+        "score": 0.91,
+        "kind": "function",
+        "embedding_input_hash": "abc123",
+        "context": [{"snippet": "func scheduleRecurringPayment(interval: TimeInterval)"}]
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "RefreshTimer/start",
+        "file_path": "Sources/Core/RefreshTimer.swift",
+        "source_scope": "project",
+        "score": 0.87,
+        "kind": "function",
+        "embedding_input_hash": "def456",
+        "context": [{"snippet": "func start(interval: TimeInterval, repeating: Bool)"}]
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "BackgroundSyncScheduler/scheduleSync",
+        "file_path": "Sources/Sync/BackgroundSyncScheduler.swift",
+        "source_scope": "project",
+        "score": 0.83,
+        "kind": "function",
+        "embedding_input_hash": "ghi789",
+        "context": []
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "PollingTimer/invalidate",
+        "file_path": "Sources/Core/PollingTimer.swift",
+        "source_scope": "project",
+        "score": 0.79,
+        "kind": "function",
+        "embedding_input_hash": "jkl012",
+        "context": null
+      }
+    ]
+  },
+
+  "dev-core-transaction-signing": {
+    "ok": true,
+    "query": "transaction signing sign send crypto",
+    "returned_count": 5,
+    "result": [
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "TransactionSigner/signTransaction",
+        "file_path": "Sources/Crypto/TransactionSigner.swift",
+        "source_scope": "project",
+        "score": 0.94,
+        "kind": "function",
+        "embedding_input_hash": "sign001",
+        "context": [{"snippet": "func signTransaction(_ tx: RawTransaction) throws -> SignedTransaction"}]
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "WalletCore/signMessage",
+        "file_path": "Sources/Wallet/WalletCore.swift",
+        "source_scope": "project",
+        "score": 0.88,
+        "kind": "function",
+        "embedding_input_hash": "sign002",
+        "context": [{"snippet": "func signMessage(_ message: Data, privateKey: PrivateKey) -> Signature"}]
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "SendViewController/signAndSend",
+        "file_path": "Sources/Send/SendViewController.swift",
+        "source_scope": "project",
+        "score": 0.82,
+        "kind": "function",
+        "embedding_input_hash": "sign003",
+        "context": []
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "TransactionBuilder/buildSignedTransaction",
+        "file_path": "Sources/Crypto/TransactionBuilder.swift",
+        "source_scope": "project",
+        "score": 0.78,
+        "kind": "function",
+        "embedding_input_hash": "sign004",
+        "context": null
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "KeychainSigningKey/sign",
+        "file_path": "Sources/Keychain/KeychainSigningKey.swift",
+        "source_scope": "project",
+        "score": 0.74,
+        "kind": "function",
+        "embedding_input_hash": "sign005",
+        "context": null
+      }
+    ]
+  },
+
+  "dev-core-address-validation": {
+    "ok": true,
+    "query": "validate wallet address input format check",
+    "returned_count": 5,
+    "result": [
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "AddressValidator/validateAddress",
+        "file_path": "Sources/Wallet/AddressValidator.swift",
+        "source_scope": "project",
+        "score": 0.95,
+        "kind": "function",
+        "embedding_input_hash": "addr001",
+        "context": [{"snippet": "func validateAddress(_ address: String) -> ValidationResult"}]
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "AddressInputView/isValidAddress",
+        "file_path": "Sources/UI/AddressInputView.swift",
+        "source_scope": "project",
+        "score": 0.89,
+        "kind": "function",
+        "embedding_input_hash": "addr002",
+        "context": [{"snippet": "var isValidAddress: Bool { AddressValidator.validateAddress(text) == .valid }"}]
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "EthereumAddressFormat/validate",
+        "file_path": "Sources/Crypto/EthereumAddressFormat.swift",
+        "source_scope": "project",
+        "score": 0.84,
+        "kind": "function",
+        "embedding_input_hash": "addr003",
+        "context": []
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "AddressChecksum/isValidChecksum",
+        "file_path": "Sources/Crypto/AddressChecksum.swift",
+        "source_scope": "project",
+        "score": 0.81,
+        "kind": "function",
+        "embedding_input_hash": "addr004",
+        "context": null
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "RecipientFormValidator/validateRecipientAddress",
+        "file_path": "Sources/Send/RecipientFormValidator.swift",
+        "source_scope": "project",
+        "score": 0.76,
+        "kind": "function",
+        "embedding_input_hash": "addr005",
+        "context": null
+      }
+    ]
+  },
+
+  "dev-core-balance-refresh": {
+    "ok": true,
+    "query": "refresh balance fetch account balance update",
+    "returned_count": 5,
+    "result": [
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "BalanceRefresher/refreshBalance",
+        "file_path": "Sources/Account/BalanceRefresher.swift",
+        "source_scope": "project",
+        "score": 0.93,
+        "kind": "function",
+        "embedding_input_hash": "bal001",
+        "context": [{"snippet": "func refreshBalance(for account: Account) async throws -> Balance"}]
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "WalletViewModel/fetchBalance",
+        "file_path": "Sources/ViewModel/WalletViewModel.swift",
+        "source_scope": "project",
+        "score": 0.88,
+        "kind": "function",
+        "embedding_input_hash": "bal002",
+        "context": [{"snippet": "@MainActor func fetchBalance() async"}]
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "AccountService/updateBalance",
+        "file_path": "Sources/Services/AccountService.swift",
+        "source_scope": "project",
+        "score": 0.83,
+        "kind": "function",
+        "embedding_input_hash": "bal003",
+        "context": []
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "BalancePoller/poll",
+        "file_path": "Sources/Account/BalancePoller.swift",
+        "source_scope": "project",
+        "score": 0.79,
+        "kind": "function",
+        "embedding_input_hash": "bal004",
+        "context": null
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "DashboardViewController/refreshBalance",
+        "file_path": "Sources/Dashboard/DashboardViewController.swift",
+        "source_scope": "project",
+        "score": 0.75,
+        "kind": "function",
+        "embedding_input_hash": "bal005",
+        "context": null
+      }
+    ]
+  },
+
+  "dev-core-hex-conversion": {
+    "ok": true,
+    "query": "hex data conversion encode decode bytes",
+    "returned_count": 4,
+    "result": [
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "HexEncoder/encode",
+        "file_path": "Sources/Utilities/HexEncoder.swift",
+        "source_scope": "project",
+        "score": 0.92,
+        "kind": "function",
+        "embedding_input_hash": "hex001",
+        "context": [{"snippet": "static func encode(_ data: Data) -> String"}]
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "HexDecoder/decode",
+        "file_path": "Sources/Utilities/HexDecoder.swift",
+        "source_scope": "project",
+        "score": 0.89,
+        "kind": "function",
+        "embedding_input_hash": "hex002",
+        "context": [{"snippet": "static func decode(_ hex: String) throws -> Data"}]
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "DataConversion/hexToBytes",
+        "file_path": "Sources/Utilities/DataConversion.swift",
+        "source_scope": "project",
+        "score": 0.85,
+        "kind": "function",
+        "embedding_input_hash": "hex003",
+        "context": []
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "ByteUtils/bytesToHexString",
+        "file_path": "Sources/Utilities/ByteUtils.swift",
+        "source_scope": "project",
+        "score": 0.81,
+        "kind": "function",
+        "embedding_input_hash": "hex004",
+        "context": null
+      }
+    ]
+  },
+
+  "dev-core-dead-code-cluster": {
+    "ok": true,
+    "query": "dead code unreferenced unused symbol cluster",
+    "returned_count": 3,
+    "result": [
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "DeadCodeDetector/findUnreferencedSymbols",
+        "file_path": "Sources/Analysis/DeadCodeDetector.swift",
+        "source_scope": "project",
+        "score": 0.90,
+        "kind": "function",
+        "embedding_input_hash": "dead001",
+        "context": [{"snippet": "func findUnreferencedSymbols(in graph: SymbolGraph) -> [Symbol]"}]
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "UnusedSymbolReporter/report",
+        "file_path": "Sources/Analysis/UnusedSymbolReporter.swift",
+        "source_scope": "project",
+        "score": 0.85,
+        "kind": "function",
+        "embedding_input_hash": "dead002",
+        "context": []
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "OrphanedTypeCluster/findOrphans",
+        "file_path": "Sources/Analysis/OrphanedTypeCluster.swift",
+        "source_scope": "project",
+        "score": 0.80,
+        "kind": "function",
+        "embedding_input_hash": "dead003",
+        "context": null
+      }
+    ]
+  },
+
+  "dev-noisy-typo-transacion": {
+    "ok": true,
+    "query": "transacion signing send",
+    "returned_count": 3,
+    "result": [
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "TransactionSigner/signTransaction",
+        "file_path": "Sources/Crypto/TransactionSigner.swift",
+        "source_scope": "project",
+        "score": 0.76,
+        "kind": "function",
+        "embedding_input_hash": "typo001",
+        "context": [{"snippet": "func signTransaction(_ tx: RawTransaction) throws -> SignedTransaction"}]
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "SendViewController/signAndSend",
+        "file_path": "Sources/Send/SendViewController.swift",
+        "source_scope": "project",
+        "score": 0.71,
+        "kind": "function",
+        "embedding_input_hash": "typo002",
+        "context": []
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "WalletCore/broadcastTransaction",
+        "file_path": "Sources/Wallet/WalletCore.swift",
+        "source_scope": "project",
+        "score": 0.66,
+        "kind": "function",
+        "embedding_input_hash": "typo003",
+        "context": null
+      }
+    ]
+  },
+
+  "dev-symbol-ish": {
+    "ok": true,
+    "query": "WalletViewController",
+    "returned_count": 4,
+    "result": [
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "WalletViewController",
+        "file_path": "Sources/Wallet/WalletViewController.swift",
+        "source_scope": "project",
+        "score": 0.97,
+        "kind": "class",
+        "embedding_input_hash": "sym001",
+        "context": [{"snippet": "final class WalletViewController: UIViewController"}]
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "WalletViewController/viewDidLoad",
+        "file_path": "Sources/Wallet/WalletViewController.swift",
+        "source_scope": "project",
+        "score": 0.91,
+        "kind": "function",
+        "embedding_input_hash": "sym002",
+        "context": []
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "WalletCoordinator/presentWalletViewController",
+        "file_path": "Sources/Navigation/WalletCoordinator.swift",
+        "source_scope": "project",
+        "score": 0.84,
+        "kind": "function",
+        "embedding_input_hash": "sym003",
+        "context": null
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "WalletViewControllerFactory/make",
+        "file_path": "Sources/Navigation/WalletViewControllerFactory.swift",
+        "source_scope": "project",
+        "score": 0.79,
+        "kind": "function",
+        "embedding_input_hash": "sym004",
+        "context": null
+      }
+    ]
+  },
+
+  "dev-paraphrase-timer": {
+    "ok": true,
+    "query": "periodic background task with interval",
+    "returned_count": 3,
+    "result": [
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "BackgroundSyncScheduler/scheduleSync",
+        "file_path": "Sources/Sync/BackgroundSyncScheduler.swift",
+        "source_scope": "project",
+        "score": 0.83,
+        "kind": "function",
+        "embedding_input_hash": "para001",
+        "context": [{"snippet": "func scheduleSync(interval: TimeInterval, isBackground: Bool)"}]
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "PollingTimer/schedule",
+        "file_path": "Sources/Core/PollingTimer.swift",
+        "source_scope": "project",
+        "score": 0.78,
+        "kind": "function",
+        "embedding_input_hash": "para002",
+        "context": []
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "BackgroundTaskManager/registerPeriodicTask",
+        "file_path": "Sources/Background/BackgroundTaskManager.swift",
+        "source_scope": "project",
+        "score": 0.73,
+        "kind": "function",
+        "embedding_input_hash": "para003",
+        "context": null
+      }
+    ]
+  },
+
+  "dev-no-answer-ml": {
+    "ok": true,
+    "query": "machine learning gradient descent neural network backpropagation",
+    "returned_count": 1,
+    "result": [
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "RiskScoreCalculator/calculateScore",
+        "file_path": "Sources/Risk/RiskScoreCalculator.swift",
+        "source_scope": "project",
+        "score": 0.32,
+        "kind": "function",
+        "embedding_input_hash": "ml001",
+        "context": null
+      }
+    ]
+  },
+
+  "holdout-acronym-btc-address": {
+    "ok": true,
+    "query": "BTC ETH address checksum format validation",
+    "returned_count": 4,
+    "result": [
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "AddressValidator/validateAddress",
+        "file_path": "Sources/Wallet/AddressValidator.swift",
+        "source_scope": "project",
+        "score": 0.88,
+        "kind": "function",
+        "embedding_input_hash": "hold001",
+        "context": [{"snippet": "func validateAddress(_ address: String) -> ValidationResult"}]
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "AddressChecksum/isValidChecksum",
+        "file_path": "Sources/Crypto/AddressChecksum.swift",
+        "source_scope": "project",
+        "score": 0.84,
+        "kind": "function",
+        "embedding_input_hash": "hold002",
+        "context": []
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "EthereumAddressFormat/validate",
+        "file_path": "Sources/Crypto/EthereumAddressFormat.swift",
+        "source_scope": "project",
+        "score": 0.81,
+        "kind": "function",
+        "embedding_input_hash": "hold003",
+        "context": null
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "BitcoinAddressValidator/isValidBech32",
+        "file_path": "Sources/Crypto/BitcoinAddressValidator.swift",
+        "source_scope": "project",
+        "score": 0.77,
+        "kind": "function",
+        "embedding_input_hash": "hold004",
+        "context": null
+      }
+    ]
+  },
+
+  "holdout-generated-dep-collision": {
+    "ok": true,
+    "query": "generated protobuf serialization message encode",
+    "returned_count": 3,
+    "result": [
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "MessageSerializer/serializeToData",
+        "file_path": "Sources/Proto/MessageSerializer.swift",
+        "source_scope": "project",
+        "score": 0.79,
+        "kind": "function",
+        "embedding_input_hash": "gen001",
+        "context": [{"snippet": "func serializeToData<T: Message>(_ message: T) throws -> Data"}]
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "PayloadEncoder/encode",
+        "file_path": "Sources/Network/PayloadEncoder.swift",
+        "source_scope": "project",
+        "score": 0.73,
+        "kind": "function",
+        "embedding_input_hash": "gen002",
+        "context": []
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "ProtoAdapter/encodeMessage",
+        "file_path": "Sources/Proto/ProtoAdapter.swift",
+        "source_scope": "project",
+        "score": 0.68,
+        "kind": "function",
+        "embedding_input_hash": "gen003",
+        "context": null
+      }
+    ]
+  },
+
+  "holdout-cross-project-ambiguous": {
+    "ok": true,
+    "query": "delegate protocol callback event handler",
+    "returned_count": 5,
+    "result": [
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "WalletDelegate",
+        "file_path": "Sources/Wallet/WalletDelegate.swift",
+        "source_scope": "project",
+        "score": 0.88,
+        "kind": "protocol",
+        "embedding_input_hash": "cross001",
+        "context": [{"snippet": "protocol WalletDelegate: AnyObject"}]
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "SendFlowCoordinator/handleCallback",
+        "file_path": "Sources/Navigation/SendFlowCoordinator.swift",
+        "source_scope": "project",
+        "score": 0.82,
+        "kind": "function",
+        "embedding_input_hash": "cross002",
+        "context": []
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "TransactionEventHandler/handleEvent",
+        "file_path": "Sources/Events/TransactionEventHandler.swift",
+        "source_scope": "project",
+        "score": 0.78,
+        "kind": "function",
+        "embedding_input_hash": "cross003",
+        "context": null
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "AuthDelegate",
+        "file_path": "Sources/Auth/AuthDelegate.swift",
+        "source_scope": "project",
+        "score": 0.75,
+        "kind": "protocol",
+        "embedding_input_hash": "cross004",
+        "context": null
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "NavigationHandler/handleDeepLink",
+        "file_path": "Sources/Navigation/NavigationHandler.swift",
+        "source_scope": "project",
+        "score": 0.71,
+        "kind": "function",
+        "embedding_input_hash": "cross005",
+        "context": null
+      }
+    ]
+  },
+
+  "probe-dependency-network": {
+    "ok": true,
+    "query": "URLSession network HTTP request response",
+    "returned_count": 4,
+    "result": [
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "NetworkClient/request",
+        "file_path": "Sources/Network/NetworkClient.swift",
+        "source_scope": "project",
+        "score": 0.87,
+        "kind": "function",
+        "embedding_input_hash": "net001",
+        "context": [{"snippet": "func request<T: Decodable>(_ endpoint: Endpoint) async throws -> T"}]
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "HTTPRequestBuilder/build",
+        "file_path": "Sources/Network/HTTPRequestBuilder.swift",
+        "source_scope": "project",
+        "score": 0.82,
+        "kind": "function",
+        "embedding_input_hash": "net002",
+        "context": []
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "SessionManager/fetch",
+        "file_path": "Sources/Network/SessionManager.swift",
+        "source_scope": "project",
+        "score": 0.77,
+        "kind": "function",
+        "embedding_input_hash": "net003",
+        "context": null
+      },
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "APIResponseDecoder/decode",
+        "file_path": "Sources/Network/APIResponseDecoder.swift",
+        "source_scope": "project",
+        "score": 0.73,
+        "kind": "function",
+        "embedding_input_hash": "net004",
+        "context": null
+      }
+    ]
+  },
+
+  "probe-no-answer-sql": {
+    "ok": true,
+    "query": "SQL query SELECT FROM WHERE JOIN relational database",
+    "returned_count": 1,
+    "result": [
+      {
+        "project": "gimle",
+        "group_id": "project/gimle",
+        "qualified_name": "UserPreferences/persist",
+        "file_path": "Sources/Storage/UserPreferences.swift",
+        "source_scope": "project",
+        "score": 0.28,
+        "kind": "function",
+        "embedding_input_hash": "sql001",
+        "context": null
+      }
+    ]
+  }
+}
