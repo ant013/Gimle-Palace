@@ -119,8 +119,12 @@ def test_every_hit_has_required_evidence_fields(
     for row_result in all_results:
         for hit in row_result.hits:
             assert hit.project, f"Missing project in row {row_result.row_id}"
-            assert hit.qualified_name, f"Missing qualified_name in row {row_result.row_id}"
-            assert isinstance(hit.score, float), f"score must be float in row {row_result.row_id}"
+            assert hit.qualified_name, (
+                f"Missing qualified_name in row {row_result.row_id}"
+            )
+            assert isinstance(hit.score, float), (
+                f"score must be float in row {row_result.row_id}"
+            )
             assert hit.context_status in ("present", "absent"), (
                 f"context_status must be 'present'|'absent' in row {row_result.row_id}"
             )
@@ -141,6 +145,7 @@ def test_dev_metrics_populated(
     assert "ndcg_mean" in m
     assert "scope_leak_rate" in m
     assert "context_availability_rate" in m
+    assert "determinism_hash_match_rate" in m
     assert "rows_total" in m
     assert "rows_executed" in m
 
@@ -150,7 +155,11 @@ def test_metrics_in_valid_range(
     fixture_responses: dict[str, dict],
 ) -> None:
     report = run_matrix(matrix_rows, fixture_responses)
-    for metrics in (report.dev_metrics, report.holdout_metrics, report.live_probe_metrics):
+    for metrics in (
+        report.dev_metrics,
+        report.holdout_metrics,
+        report.live_probe_metrics,
+    ):
         if not metrics:
             continue
         assert 0.0 <= metrics["precision_at_k_mean"] <= 1.0
@@ -159,6 +168,7 @@ def test_metrics_in_valid_range(
         assert 0.0 <= metrics["ndcg_mean"] <= 1.0
         assert 0.0 <= metrics["scope_leak_rate"] <= 1.0
         assert 0.0 <= metrics["context_availability_rate"] <= 1.0
+        assert 0.0 <= metrics["determinism_hash_match_rate"] <= 1.0
 
 
 # ── Failure detection ─────────────────────────────────────────────────────────
@@ -172,9 +182,7 @@ def test_mandatory_failure_detected() -> None:
         query="find timer",
         projects=["__fixture__"],
         top_k=3,
-        must_match_any_in_top_n=[
-            MatchCriterion(patterns=["*Timer*", "*timer*"], n=3)
-        ],
+        must_match_any_in_top_n=[MatchCriterion(patterns=["*Timer*", "*timer*"], n=3)],
         must_match_all_in_top_n=[],
         must_not_match_in_top_n=[],
         min_hits=1,
@@ -213,9 +221,7 @@ def test_must_not_match_violation_detected() -> None:
         top_k=3,
         must_match_any_in_top_n=[],
         must_match_all_in_top_n=[],
-        must_not_match_in_top_n=[
-            MatchCriterion(patterns=["*/DerivedData/*"], n=3)
-        ],
+        must_not_match_in_top_n=[MatchCriterion(patterns=["*/DerivedData/*"], n=3)],
         min_hits=0,
         max_noise_hits=None,
         source_scopes=None,
@@ -353,7 +359,9 @@ def test_run_matrix_reports_mandatory_failures(
     # All mandatory rows should fail (no results for any of them)
     failed_ids = set(report.mandatory_failures)
     # Every mandatory row with min_hits > 0 should fail
-    min_hit_mandatory = {r.id for r in matrix_rows if r.class_ == "mandatory" and r.min_hits > 0}
+    min_hit_mandatory = {
+        r.id for r in matrix_rows if r.class_ == "mandatory" and r.min_hits > 0
+    }
     assert min_hit_mandatory.issubset(failed_ids), (
         f"Expected mandatory rows to fail with empty responses: "
         f"{min_hit_mandatory - failed_ids}"
@@ -372,7 +380,9 @@ def test_matrix_all_splits_present(matrix_rows: list[MatrixRow]) -> None:
 
 def test_matrix_has_mandatory_rows(matrix_rows: list[MatrixRow]) -> None:
     mandatory = [r for r in matrix_rows if r.class_ == "mandatory"]
-    assert len(mandatory) >= 6, "Matrix must have at least 6 mandatory rows (core product queries)"
+    assert len(mandatory) >= 6, (
+        "Matrix must have at least 6 mandatory rows (core product queries)"
+    )
 
 
 def test_matrix_has_no_answer_rows(matrix_rows: list[MatrixRow]) -> None:
@@ -382,7 +392,9 @@ def test_matrix_has_no_answer_rows(matrix_rows: list[MatrixRow]) -> None:
 
 def test_all_row_ids_unique(matrix_rows: list[MatrixRow]) -> None:
     ids = [r.id for r in matrix_rows]
-    assert len(ids) == len(set(ids)), f"Duplicate row ids: {[x for x in ids if ids.count(x) > 1]}"
+    assert len(ids) == len(set(ids)), (
+        f"Duplicate row ids: {[x for x in ids if ids.count(x) > 1]}"
+    )
 
 
 def test_fixture_has_entry_for_every_row(

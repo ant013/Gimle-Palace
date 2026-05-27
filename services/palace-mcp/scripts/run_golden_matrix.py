@@ -32,7 +32,9 @@ import sys
 from pathlib import Path
 
 _SERVICE_ROOT = Path(__file__).resolve().parent.parent  # services/palace-mcp/
-_DEFAULT_MATRIX = _SERVICE_ROOT / "tests" / "golden_matrix" / "semantic_search_matrix.yaml"
+_DEFAULT_MATRIX = (
+    _SERVICE_ROOT / "tests" / "golden_matrix" / "semantic_search_matrix.yaml"
+)
 _DEFAULT_FIXTURE_DIR = _SERVICE_ROOT / "tests" / "golden_matrix" / "fixtures"
 
 sys.path.insert(0, str(_SERVICE_ROOT / "src"))
@@ -118,11 +120,14 @@ def _print_metrics(label: str, metrics: dict[str, float]) -> None:
     print(
         f"    scope_leak={metrics['scope_leak_rate']:.3f}"
         f"  context_avail={metrics['context_availability_rate']:.3f}"
+        f"  det_hash_match={metrics['determinism_hash_match_rate']:.3f}"
     )
 
 
 def _print_report(report: MatrixReport, rows_by_id: dict[str, MatrixRow]) -> None:
-    all_results = report.dev_results + report.holdout_results + report.live_probe_results
+    all_results = (
+        report.dev_results + report.holdout_results + report.live_probe_results
+    )
 
     print(f"\n{'━' * 70}")
     print(_c(_BOLD, "GOLDEN MATRIX RESULTS"))
@@ -154,15 +159,26 @@ def _print_report(report: MatrixReport, rows_by_id: dict[str, MatrixRow]) -> Non
     passed = sum(1 for r in all_results if r.passed)
     if report.mandatory_failures:
         print(
-            _c(_RED, f"FAIL — {len(report.mandatory_failures)} mandatory row(s) failed:"
-               f" {report.mandatory_failures}")
+            _c(
+                _RED,
+                f"FAIL — {len(report.mandatory_failures)} mandatory row(s) failed:"
+                f" {report.mandatory_failures}",
+            )
         )
     else:
-        print(_c(_GREEN, f"PASS — all mandatory rows passed ({passed}/{total} total passed)"))
+        print(
+            _c(
+                _GREEN,
+                f"PASS — all mandatory rows passed ({passed}/{total} total passed)",
+            )
+        )
     if report.advisory_failures:
         print(
-            _c(_YELLOW, f"WARN — {len(report.advisory_failures)} advisory row(s) failed:"
-               f" {report.advisory_failures}")
+            _c(
+                _YELLOW,
+                f"WARN — {len(report.advisory_failures)} advisory row(s) failed:"
+                f" {report.advisory_failures}",
+            )
         )
     print()
 
@@ -170,7 +186,9 @@ def _print_report(report: MatrixReport, rows_by_id: dict[str, MatrixRow]) -> Non
 # ── Fixture mode ──────────────────────────────────────────────────────────────
 
 
-def _load_fixture_responses(fixture_dir: Path, rows: list[MatrixRow]) -> dict[str, dict]:
+def _load_fixture_responses(
+    fixture_dir: Path, rows: list[MatrixRow]
+) -> dict[str, dict]:
     responses_path = fixture_dir / "responses.json"
     if not responses_path.exists():
         print(f"ERROR: fixture file not found: {responses_path}", file=sys.stderr)
@@ -207,7 +225,9 @@ async def _run_live(
                     else [p for p in row.projects if p != "__fixture__"]
                 )
                 if not projects:
-                    print(f"  SKIP {row.id} — no live project configured", file=sys.stderr)
+                    print(
+                        f"  SKIP {row.id} — no live project configured", file=sys.stderr
+                    )
                     responses[row.id] = {"ok": True, "result": [], "returned_count": 0}
                     continue
 
@@ -224,7 +244,9 @@ async def _run_live(
 
                 print(f"  → {row.id}", end="", flush=True)
                 try:
-                    result = await session.call_tool("palace.code.semantic_search", params)
+                    result = await session.call_tool(
+                        "palace.code.semantic_search", params
+                    )
                     text = result.content[0].text if result.content else "{}"
                     payload = json.loads(text)
                 except Exception as exc:
@@ -236,7 +258,9 @@ async def _run_live(
                         "result": [],
                     }
                 else:
-                    count = payload.get("returned_count", len(payload.get("result", [])))
+                    count = payload.get(
+                        "returned_count", len(payload.get("result", []))
+                    )
                     print(f" {count} hits")
                 responses[row.id] = payload
 
@@ -251,19 +275,27 @@ def _parse_args() -> argparse.Namespace:
         description="Run the semantic search golden matrix and report results."
     )
     mode = p.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--fixture", action="store_true", help="Run in fixture mode (no server)")
+    mode.add_argument(
+        "--fixture", action="store_true", help="Run in fixture mode (no server)"
+    )
     mode.add_argument("--live", action="store_true", help="Run against live palace-mcp")
 
-    p.add_argument("--matrix", type=Path, default=_DEFAULT_MATRIX, help="Path to matrix YAML")
+    p.add_argument(
+        "--matrix", type=Path, default=_DEFAULT_MATRIX, help="Path to matrix YAML"
+    )
     p.add_argument("--fixture-dir", type=Path, default=_DEFAULT_FIXTURE_DIR)
     p.add_argument("--mcp-url", default="http://localhost:8000/mcp")
-    p.add_argument("--project", default=None, help="Override project slug for live mode")
+    p.add_argument(
+        "--project", default=None, help="Override project slug for live mode"
+    )
     p.add_argument(
         "--splits",
         default="dev,holdout,live_probe",
         help="Comma-separated splits to run (default: all)",
     )
-    p.add_argument("--json-report", type=Path, default=None, help="Write JSON report to file")
+    p.add_argument(
+        "--json-report", type=Path, default=None, help="Write JSON report to file"
+    )
     return p.parse_args()
 
 
@@ -280,7 +312,10 @@ def main() -> None:
 
     # Zero-row guard
     if not rows:
-        print("ERROR: no rows to execute — check --splits filter and matrix file", file=sys.stderr)
+        print(
+            "ERROR: no rows to execute — check --splits filter and matrix file",
+            file=sys.stderr,
+        )
         sys.exit(2)
 
     rows_by_id = {r.id: r for r in rows}

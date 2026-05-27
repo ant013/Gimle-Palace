@@ -250,7 +250,9 @@ def evaluate_row(row: MatrixRow, response: dict[str, Any]) -> RowResult:
         any_group_matched = any(
             any(
                 _hit_matches_any_pattern(h, criterion.patterns)
-                for h in hits_raw[: criterion.n if criterion.n is not None else row.top_k]
+                for h in hits_raw[
+                    : criterion.n if criterion.n is not None else row.top_k
+                ]
             )
             for criterion in row.must_match_any_in_top_n
         )
@@ -314,12 +316,18 @@ def evaluate_row(row: MatrixRow, response: dict[str, Any]) -> RowResult:
     ndcg = _ndcg(hits_raw, k, row)
 
     # Scope leak: hits with source_scope not in the requested scopes
-    allowed_scopes = set(row.source_scopes) if row.source_scopes else {"project", "workspace_package"}
+    allowed_scopes = (
+        set(row.source_scopes)
+        if row.source_scopes
+        else {"project", "workspace_package"}
+    )
     scope_leak_count = sum(
         1 for h in evidence if h.source_scope and h.source_scope not in allowed_scopes
     )
     context_present_count = sum(1 for e in evidence if e.context_status == "present")
-    determinism_hash_count = sum(1 for e in evidence if e.embedding_input_hash is not None)
+    determinism_hash_count = sum(
+        1 for e in evidence if e.embedding_input_hash is not None
+    )
 
     return RowResult(
         row_id=row.id,
@@ -362,12 +370,8 @@ def _aggregate(results: list[RowResult]) -> dict[str, float]:
         "recall_at_k_mean": (
             sum(r.recall_at_k for r in executed) / n_exec if n_exec else 0.0
         ),
-        "mrr_mean": (
-            sum(r.mrr for r in executed) / n_exec if n_exec else 0.0
-        ),
-        "ndcg_mean": (
-            sum(r.ndcg for r in executed) / n_exec if n_exec else 0.0
-        ),
+        "mrr_mean": (sum(r.mrr for r in executed) / n_exec if n_exec else 0.0),
+        "ndcg_mean": (sum(r.ndcg for r in executed) / n_exec if n_exec else 0.0),
         "scope_leak_rate": (
             sum(r.scope_leak_count for r in executed) / total_hits
             if total_hits > 0
@@ -400,7 +404,9 @@ def run_matrix(
     """
     all_results: list[RowResult] = []
     for row in rows:
-        response = responses.get(row.id, {"ok": True, "result": [], "returned_count": 0})
+        response = responses.get(
+            row.id, {"ok": True, "result": [], "returned_count": 0}
+        )
         result = evaluate_row(row, response)
         all_results.append(result)
 
