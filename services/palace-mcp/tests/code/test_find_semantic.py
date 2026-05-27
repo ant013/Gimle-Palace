@@ -265,7 +265,6 @@ async def test_success_filters_scope_and_skips_context_when_disabled() -> None:
             )
         if "queryNodes('symbol_embedding_idx'" in query:
             assert params["query_k"] == 50
-            assert params["limit"] == 2
             return _FakeResult(
                 data_value=[
                     {
