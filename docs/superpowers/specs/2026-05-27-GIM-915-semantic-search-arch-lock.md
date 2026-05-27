@@ -126,6 +126,7 @@ Child issues implementing PR3a, PR3, PR4, PR5, PR6 **must** stay within:
 | `services/palace-mcp/src/palace_mcp/code/find_semantic.py` | Core implementation — primary edit target |
 | `services/palace-mcp/src/palace_mcp/code/semantic_contract.py` | Types — extend here, do not duplicate in new modules |
 | `services/palace-mcp/tests/code/test_find_semantic.py` | Unit tests |
+| `services/palace-mcp/tests/code/test_semantic_search_contract.py` | Contract type tests |
 | `services/palace-mcp/tests/integration/test_find_semantic_search_tool.py` | Integration/MCP wire tests |
 
 **Forbidden**: creating a parallel `semantic_search.py`, `search_semantic.py`,
