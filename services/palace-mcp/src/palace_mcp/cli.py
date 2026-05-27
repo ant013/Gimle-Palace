@@ -683,6 +683,8 @@ def _emit_swift_scip(
 ) -> dict[str, Any]:
     if spec.slug == "uw-ios-app":
         return _emit_uw_ios_app_scip(spec=spec, repo_head_sha=repo_head_sha)
+    if spec.parent_mount == "hs":
+        return _emit_swift_kit_scip(spec=spec, repo_head_sha=repo_head_sha)
 
     fallback_command = _build_macbook_fallback_command(spec)
     missing = [
@@ -792,10 +794,67 @@ def _parse_emit_helper_output(stdout: str) -> dict[str, Any]:
             continue
         parsed[key] = value.strip()
     for key in ("size_bytes", "scip_size_bytes"):
-        parsed_value = parsed.get(key)
-        if isinstance(parsed_value, str) and parsed_value.isdigit():
-            parsed[key] = int(parsed_value)
+        value = parsed.get(key)
+        if isinstance(value, str) and value.isdigit():
+            parsed[key] = int(value)
     return parsed
+
+
+def _emit_swift_kit_scip(
+    *,
+    spec: ProjectRuntimeSpec,
+    repo_head_sha: str,
+) -> dict[str, Any]:
+    del repo_head_sha
+    fallback_command = _build_macbook_fallback_command(spec)
+    output_path = spec.repo_path / "scip" / "index.scip"
+    meta_path = spec.repo_path / "scip" / "index.scip.meta.json"
+    cmd = [
+        "bash",
+        str(_DEFAULT_SWIFT_KIT_SCIP_SCRIPT),
+        spec.slug,
+        "--repo-path",
+        str(spec.repo_path),
+        "--remote-relative-path",
+        spec.relative_path,
+        "--no-remote-copy",
+    ]
+
+    try:
+        result = _run_command(cmd, capture_output=True)
+    except FileNotFoundError as exc:
+        raise ScipEmitToolchainUnsupported(
+            message=f"HorizontalSystems swift_kit SCIP emit failed: {exc}",
+            fallback_command=fallback_command,
+        ) from exc
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or str(exc)).strip()
+        raise ScipEmitToolchainUnsupported(
+            message=f"HorizontalSystems swift_kit SCIP emit failed: {detail}",
+            fallback_command=fallback_command,
+        ) from exc
+
+    if not output_path.exists() or output_path.stat().st_size == 0:
+        raise ScipEmitToolchainUnsupported(
+            message=f"generated SCIP file missing or empty: {output_path}",
+            fallback_command=fallback_command,
+        )
+
+    metadata = _load_scip_metadata(meta_path)
+    if metadata is None:
+        raise ProjectAnalyzeCliError(
+            f"swift_kit emitter did not write metadata: {meta_path}",
+            error_code="missing_scip_metadata",
+        )
+
+    return {
+        "emitted": True,
+        "helper": "swift_kit",
+        "helper_output": _parse_emit_helper_output(result.stdout),
+        "host_scip_path": str(output_path),
+        "meta_path": str(meta_path),
+        "metadata": metadata,
+    }
 
 
 def _emit_uw_ios_app_scip(
@@ -1523,6 +1582,9 @@ def _cmd_project_analyze(args: argparse.Namespace) -> int:
             "slug": args.slug,
             "repo_path": str(Path(args.repo_path).expanduser()),
             "fallback_command": exc.fallback_command,
+            "next_step": (
+                "run the fallback command, then rerun analyze with --emit-scip=never"
+            ),
             "summary_out": str(summary_out),
         }
         _write_json(summary_out, summary)
