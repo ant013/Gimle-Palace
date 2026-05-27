@@ -29,6 +29,7 @@ DEFAULT_EXTRACTORS=(
     public_api_surface
     reactive_dependency_tracer
     testability_di
+    embedding_symbol
 )
 
 usage() {
