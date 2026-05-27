@@ -6,6 +6,8 @@ import importlib
 import os
 from typing import Any, Protocol, cast
 
+from palace_mcp.embeddings.cache_preflight import preflight_or_fail
+
 QODO_EMBED_MODEL_NAME = "Qodo/Qodo-Embed-1-1.5B"
 
 
@@ -77,6 +79,8 @@ class QodoEmbeddingBackend:
     ) -> None:
         if local_files_only is None:
             local_files_only = _local_files_only_from_env()
+        if encoder is None:
+            preflight_or_fail(model_name, local_only=local_files_only)
         self._encoder = encoder or _load_sentence_transformer(
             model_name,
             trust_remote_code=trust_remote_code,
