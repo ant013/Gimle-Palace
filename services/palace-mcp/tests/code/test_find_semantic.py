@@ -377,9 +377,8 @@ async def test_vector_query_uses_candidate_limit_to_overfetch_before_scope_filte
 
 
 @pytest.mark.asyncio
-async def test_context_warning_is_attached_per_hit_when_snippet_provider_unavailable() -> (
-    None
-):
+async def test_context_warning_is_attached_per_hit_when_project_not_mounted() -> None:
+    """When project is not mounted locally and CM session is absent, per-hit warning."""
     from palace_mcp.code.find_semantic import semantic_search
 
     backend = _FakeBackend()
@@ -428,8 +427,9 @@ async def test_context_warning_is_attached_per_hit_when_snippet_provider_unavail
 
     context = result["result"][0]["context"]
     assert context["available"] is False
-    assert context["warning_code"] == "snippet_provider_unavailable"
-    assert context["warning"] == "snippet provider unavailable"
+    # Local provider returns project_not_mounted when /repos/<project> absent;
+    # CM fallback is skipped because it is the project_not_mounted path.
+    assert context["warning_code"] == "project_not_mounted"
 
 
 @pytest.mark.asyncio
