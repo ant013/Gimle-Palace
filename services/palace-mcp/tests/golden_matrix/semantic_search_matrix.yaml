@@ -1,0 +1,452 @@
+# Semantic search golden matrix — GIM-922
+#
+# Row schema:
+#   id:                     unique string key
+#   split:                  dev | holdout | live_probe
+#   class:                  mandatory | advisory | no_answer
+#   query:                  natural-language search string
+#   projects:               list of project slugs (or ["__fixture__"] for fixture mode)
+#   source_scopes:          null = defaults (project + workspace_package), or list of scope strings
+#   top_k:                  number of results to retrieve and evaluate
+#   must_match_all_in_top_n: every pattern group must have at least one hit in the top-n window
+#   must_match_any_in_top_n: at least one pattern group must have at least one hit in the top-n window
+#   must_not_match_in_top_n: no hit in the top-n window may match any listed pattern
+#   min_hits:               minimum returned_count for the row to be considered executed
+#   max_noise_hits:         max hits that match no relevant pattern (null = unlimited)
+#   required_context_status: null | "present" | "absent"
+#   row_pass_rule:          "all" = all constraint groups must pass
+#   description:            human-readable purpose
+#   tags:                   list of strings for grouping in reports
+#
+# Pattern matching: fnmatch-style against qualified_name and file_path fields.
+# Each criterion item: {patterns: [...], n: <window size, defaults to top_k>}
+# Patterns are OR-d within a criterion, AND-d across criteria.
+
+version: "1"
+
+rows:
+
+  # ── DEV ROWS ────────────────────────────────────────────────────────────────
+
+  - id: "dev-core-timers-schedulers"
+    split: "dev"
+    class: "mandatory"
+    query: "timer scheduler repeating task"
+    projects: ["__fixture__"]
+    source_scopes: null
+    top_k: 5
+    must_match_any_in_top_n:
+      - patterns:
+          - "*Timer*"
+          - "*Scheduler*"
+          - "*schedule*"
+          - "*timer*"
+          - "*repeating*"
+          - "*periodic*"
+        n: 5
+    must_not_match_in_top_n:
+      - patterns:
+          - "*/DerivedData/*"
+          - "*/.palace-scip-derived-data/*"
+        n: 5
+    min_hits: 1
+    max_noise_hits: null
+    required_context_status: null
+    row_pass_rule: "all"
+    description: "Core iOS timer/scheduler pattern lookup"
+    tags: ["core_product", "ios"]
+
+  - id: "dev-core-transaction-signing"
+    split: "dev"
+    class: "mandatory"
+    query: "transaction signing sign send crypto"
+    projects: ["__fixture__"]
+    source_scopes: null
+    top_k: 5
+    must_match_any_in_top_n:
+      - patterns:
+          - "*sign*"
+          - "*Sign*"
+          - "*transaction*"
+          - "*Transaction*"
+          - "*signing*"
+          - "*Signing*"
+        n: 5
+    must_not_match_in_top_n:
+      - patterns:
+          - "*/DerivedData/*"
+          - "*generated*"
+          - "*/Platforms/*"
+        n: 5
+    min_hits: 1
+    max_noise_hits: null
+    required_context_status: null
+    row_pass_rule: "all"
+    description: "Core crypto transaction signing lookup"
+    tags: ["core_product", "security"]
+
+  - id: "dev-core-address-validation"
+    split: "dev"
+    class: "mandatory"
+    query: "validate wallet address input format check"
+    projects: ["__fixture__"]
+    source_scopes: null
+    top_k: 5
+    must_match_any_in_top_n:
+      - patterns:
+          - "*validat*"
+          - "*Validat*"
+          - "*address*"
+          - "*Address*"
+          - "*checkAddress*"
+          - "*isValid*"
+        n: 5
+    must_not_match_in_top_n:
+      - patterns:
+          - "*/DerivedData/*"
+          - "*/Platforms/*"
+        n: 5
+    min_hits: 1
+    max_noise_hits: null
+    required_context_status: null
+    row_pass_rule: "all"
+    description: "Wallet address validation logic lookup"
+    tags: ["core_product", "input_validation"]
+
+  - id: "dev-core-balance-refresh"
+    split: "dev"
+    class: "mandatory"
+    query: "refresh balance fetch account balance update"
+    projects: ["__fixture__"]
+    source_scopes: null
+    top_k: 5
+    must_match_any_in_top_n:
+      - patterns:
+          - "*balance*"
+          - "*Balance*"
+          - "*refresh*"
+          - "*Refresh*"
+          - "*fetchBalance*"
+          - "*updateBalance*"
+        n: 5
+    must_not_match_in_top_n:
+      - patterns:
+          - "*/DerivedData/*"
+          - "*/Platforms/*"
+        n: 5
+    min_hits: 1
+    max_noise_hits: null
+    required_context_status: null
+    row_pass_rule: "all"
+    description: "Account balance refresh/fetch lookup"
+    tags: ["core_product", "networking"]
+
+  - id: "dev-core-hex-conversion"
+    split: "dev"
+    class: "mandatory"
+    query: "hex data conversion encode decode bytes"
+    projects: ["__fixture__"]
+    source_scopes: null
+    top_k: 5
+    must_match_any_in_top_n:
+      - patterns:
+          - "*hex*"
+          - "*Hex*"
+          - "*encode*"
+          - "*Encode*"
+          - "*decode*"
+          - "*Decode*"
+          - "*bytes*"
+          - "*Bytes*"
+          - "*Data*conversion*"
+        n: 5
+    must_not_match_in_top_n:
+      - patterns:
+          - "*/DerivedData/*"
+          - "*/Platforms/*"
+        n: 5
+    min_hits: 1
+    max_noise_hits: null
+    required_context_status: null
+    row_pass_rule: "all"
+    description: "Hex/byte encoding and decoding utilities"
+    tags: ["core_product", "utilities"]
+
+  - id: "dev-core-dead-code-cluster"
+    split: "dev"
+    class: "mandatory"
+    query: "dead code unreferenced unused symbol cluster"
+    projects: ["__fixture__"]
+    source_scopes: null
+    top_k: 5
+    must_match_any_in_top_n:
+      - patterns:
+          - "*dead*"
+          - "*Dead*"
+          - "*unused*"
+          - "*Unused*"
+          - "*unreferenced*"
+          - "*Unreferenced*"
+          - "*orphan*"
+          - "*Orphan*"
+        n: 5
+    must_not_match_in_top_n:
+      - patterns:
+          - "*/DerivedData/*"
+          - "*/Platforms/*"
+        n: 5
+    min_hits: 1
+    max_noise_hits: null
+    required_context_status: null
+    row_pass_rule: "all"
+    description: "Dead code cluster detection lookup"
+    tags: ["core_product", "static_analysis"]
+
+  - id: "dev-noisy-typo-transacion"
+    split: "dev"
+    class: "advisory"
+    query: "transacion signing send"
+    projects: ["__fixture__"]
+    source_scopes: null
+    top_k: 5
+    must_match_any_in_top_n:
+      - patterns:
+          - "*sign*"
+          - "*Sign*"
+          - "*transaction*"
+          - "*Transaction*"
+          - "*transact*"
+        n: 5
+    must_not_match_in_top_n: []
+    min_hits: 0
+    max_noise_hits: null
+    required_context_status: null
+    row_pass_rule: "all"
+    description: "Typo 'transacion' — model should still surface transaction-signing symbols"
+    tags: ["typo", "robustness"]
+
+  - id: "dev-symbol-ish"
+    split: "dev"
+    class: "advisory"
+    query: "WalletViewController"
+    projects: ["__fixture__"]
+    source_scopes: null
+    top_k: 5
+    must_match_any_in_top_n:
+      - patterns:
+          - "*Wallet*"
+          - "*wallet*"
+          - "*ViewController*"
+          - "*viewController*"
+        n: 5
+    must_not_match_in_top_n: []
+    min_hits: 1
+    max_noise_hits: null
+    required_context_status: null
+    row_pass_rule: "all"
+    description: "Symbol-ish query — bare class name should find the symbol or close relatives"
+    tags: ["symbol_ish", "robustness"]
+
+  - id: "dev-paraphrase-timer"
+    split: "dev"
+    class: "advisory"
+    query: "periodic background task with interval"
+    projects: ["__fixture__"]
+    source_scopes: null
+    top_k: 5
+    must_match_any_in_top_n:
+      - patterns:
+          - "*Timer*"
+          - "*timer*"
+          - "*Scheduler*"
+          - "*schedule*"
+          - "*periodic*"
+          - "*background*"
+          - "*BackgroundTask*"
+        n: 5
+    must_not_match_in_top_n: []
+    min_hits: 0
+    max_noise_hits: null
+    required_context_status: null
+    row_pass_rule: "all"
+    description: "Paraphrase of timer/scheduler query — semantic model should generalize"
+    tags: ["paraphrase", "robustness"]
+
+  - id: "dev-no-answer-ml"
+    split: "dev"
+    class: "no_answer"
+    query: "machine learning gradient descent neural network backpropagation"
+    projects: ["__fixture__"]
+    source_scopes: null
+    top_k: 5
+    must_match_all_in_top_n: []
+    must_match_any_in_top_n: []
+    must_not_match_in_top_n:
+      - patterns:
+          - "*gradient*"
+          - "*Gradient*"
+          - "*neural*"
+          - "*Neural*"
+          - "*backprop*"
+          - "*Backprop*"
+          - "*MLModel*"
+          - "*CoreML*"
+        n: 5
+    min_hits: 0
+    max_noise_hits: 3
+    required_context_status: null
+    row_pass_rule: "all"
+    description: "No-answer row — iOS wallet app has no ML training code"
+    tags: ["no_answer", "hallucination_guard"]
+
+  # ── HOLDOUT ROWS ────────────────────────────────────────────────────────────
+
+  - id: "holdout-acronym-btc-address"
+    split: "holdout"
+    class: "mandatory"
+    query: "BTC ETH address checksum format validation"
+    projects: ["__fixture__"]
+    source_scopes: null
+    top_k: 5
+    must_match_any_in_top_n:
+      - patterns:
+          - "*address*"
+          - "*Address*"
+          - "*checksum*"
+          - "*Checksum*"
+          - "*validat*"
+          - "*Validat*"
+          - "*format*"
+          - "*Format*"
+        n: 5
+    must_not_match_in_top_n:
+      - patterns:
+          - "*/DerivedData/*"
+          - "*/Platforms/*"
+        n: 5
+    min_hits: 1
+    max_noise_hits: null
+    required_context_status: null
+    row_pass_rule: "all"
+    description: "Acronym/alias query — BTC/ETH should resolve to address validation code"
+    tags: ["holdout", "acronym", "alias"]
+
+  - id: "holdout-generated-dep-collision"
+    split: "holdout"
+    class: "advisory"
+    query: "generated protobuf serialization message encode"
+    projects: ["__fixture__"]
+    source_scopes: ["project", "workspace_package"]
+    top_k: 5
+    must_match_all_in_top_n: []
+    must_match_any_in_top_n:
+      - patterns:
+          - "*serializ*"
+          - "*Serializ*"
+          - "*encode*"
+          - "*Encode*"
+          - "*message*"
+          - "*Message*"
+          - "*proto*"
+          - "*Proto*"
+        n: 5
+    must_not_match_in_top_n:
+      - patterns:
+          - "*/DerivedData/*"
+          - "*/Platforms/*"
+          - "*generated*Protobuf*"
+          - "*.pb.swift"
+        n: 5
+    min_hits: 0
+    max_noise_hits: null
+    required_context_status: null
+    row_pass_rule: "all"
+    description: "Generated/dependency collision — scoped to project only, must not surface auto-generated .pb.swift"
+    tags: ["holdout", "generated_collision", "scope_filter"]
+
+  - id: "holdout-cross-project-ambiguous"
+    split: "holdout"
+    class: "advisory"
+    query: "delegate protocol callback event handler"
+    projects: ["__fixture__"]
+    source_scopes: null
+    top_k: 5
+    must_match_any_in_top_n:
+      - patterns:
+          - "*delegate*"
+          - "*Delegate*"
+          - "*protocol*"
+          - "*Protocol*"
+          - "*callback*"
+          - "*Callback*"
+          - "*handler*"
+          - "*Handler*"
+        n: 5
+    must_not_match_in_top_n:
+      - patterns:
+          - "*/DerivedData/*"
+          - "*/Platforms/*"
+        n: 5
+    min_hits: 1
+    max_noise_hits: null
+    required_context_status: null
+    row_pass_rule: "all"
+    description: "Cross-project ambiguous — UIKit delegate pattern is ubiquitous; result should be project-scoped"
+    tags: ["holdout", "cross_project", "ambiguous"]
+
+  # ── LIVE PROBE ROWS ─────────────────────────────────────────────────────────
+
+  - id: "probe-dependency-network"
+    split: "live_probe"
+    class: "advisory"
+    query: "URLSession network HTTP request response"
+    projects: ["__fixture__"]
+    source_scopes: ["project", "workspace_package"]
+    top_k: 5
+    must_match_all_in_top_n: []
+    must_match_any_in_top_n:
+      - patterns:
+          - "*network*"
+          - "*Network*"
+          - "*request*"
+          - "*Request*"
+          - "*HTTP*"
+          - "*URLSession*"
+          - "*fetch*"
+          - "*Fetch*"
+        n: 5
+    must_not_match_in_top_n:
+      - patterns:
+          - "*/Platforms/*"
+          - "*/DerivedData/*"
+        n: 5
+    min_hits: 0
+    max_noise_hits: null
+    required_context_status: null
+    row_pass_rule: "all"
+    description: "Live probe — URLSession usage in project/workspace scope"
+    tags: ["live_probe", "dependency_boundary"]
+
+  - id: "probe-no-answer-sql"
+    split: "live_probe"
+    class: "no_answer"
+    query: "SQL query SELECT FROM WHERE JOIN relational database"
+    projects: ["__fixture__"]
+    source_scopes: null
+    top_k: 5
+    must_match_all_in_top_n: []
+    must_match_any_in_top_n: []
+    must_not_match_in_top_n:
+      - patterns:
+          - "*SELECT*"
+          - "*\\.sql"
+          - "*SQLite*"
+          - "*CoreData*"
+          - "*/Pods/*SQLite*"
+        n: 5
+    min_hits: 0
+    max_noise_hits: 3
+    required_context_status: null
+    row_pass_rule: "all"
+    description: "Live no-answer probe — iOS wallet app should not have raw SQL"
+    tags: ["live_probe", "no_answer"]
