@@ -143,17 +143,19 @@ def check_model_cache(
         result.detail = f"cache_root {root} does not exist"
         return result
 
-    # Check writeability.
-    result.writeable = os.access(root, os.W_OK)
-
-    # Check ownership safety.
+    # Check ownership safety — unsafe ownership (world-writable/mixed-owner) is an
+    # immediate hard stop regardless of model presence.
     ok, reason = _owner_ok(root)
     result.owner_ok = ok
-
-    if not result.writeable or not ok:
+    if not ok:
         result.status = CacheStatus.readonly
-        result.detail = reason if not ok else f"cache_root {root} is not writeable"
+        result.detail = reason
         return result
+
+    # Record writeability but do NOT early-return: a non-writeable (immutable) bind-mount
+    # is a valid secure pattern. Model presence checks continue so local-only mode can
+    # use a read-only cache without triggering a spurious readonly status.
+    result.writeable = os.access(root, os.W_OK)
 
     # Check for HF snapshot directory.
     model_dir = _hf_model_dir(root, model_id)
@@ -255,13 +257,6 @@ def preflight_or_fail(
             f"To download: huggingface-cli download {model_id} "
             f"--cache-dir {root}. "
             f"Or set PALACE_EMBEDDING_LOCAL_ONLY=false to allow network access."
-        )
-
-    if local_only and result.status == CacheStatus.readonly:
-        raise RuntimeError(
-            f"Model cache at {result.cache_root} is {result.status.value}: "
-            f"{result.detail}. "
-            f"Fix cache directory ownership or permissions, then retry."
         )
 
     return result

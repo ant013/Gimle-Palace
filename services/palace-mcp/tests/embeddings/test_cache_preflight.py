@@ -87,7 +87,11 @@ def test_present_size_bytes_nonzero(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(os.getuid() == 0, reason="root bypasses permission checks")
-def test_readonly_when_cache_root_not_writeable(tmp_path: Path) -> None:
+def test_present_when_cache_root_not_writeable(tmp_path: Path) -> None:
+    """Non-writeable (immutable) bind-mount with model present → present status.
+
+    Secure read-only mounts must not be misreported as readonly (unsafe).
+    """
     _make_model_dir(tmp_path, MODEL_ID)
     record_cache_provenance(
         MODEL_ID, source="huggingface", revision="main", cache_root=tmp_path
@@ -95,8 +99,9 @@ def test_readonly_when_cache_root_not_writeable(tmp_path: Path) -> None:
     tmp_path.chmod(0o555)
     try:
         result = check_model_cache(MODEL_ID, cache_root=tmp_path)
-        assert result.status == CacheStatus.readonly
+        assert result.status == CacheStatus.present
         assert not result.writeable
+        assert result.owner_ok
     finally:
         tmp_path.chmod(0o755)
 
@@ -123,6 +128,22 @@ def test_preflight_passes_when_present(tmp_path: Path) -> None:
     )
     result = preflight_or_fail(MODEL_ID, cache_root=tmp_path, local_only=True)
     assert result.status == CacheStatus.present
+
+
+@pytest.mark.skipif(os.getuid() == 0, reason="root bypasses permission checks")
+def test_preflight_passes_on_readonly_mount_with_present_model(tmp_path: Path) -> None:
+    """Immutable (non-writeable) bind-mount passes local-only preflight when model present."""
+    _make_model_dir(tmp_path, MODEL_ID)
+    record_cache_provenance(
+        MODEL_ID, source="huggingface", revision="main", cache_root=tmp_path
+    )
+    tmp_path.chmod(0o555)
+    try:
+        result = preflight_or_fail(MODEL_ID, cache_root=tmp_path, local_only=True)
+        assert result.status == CacheStatus.present
+        assert not result.writeable
+    finally:
+        tmp_path.chmod(0o755)
 
 
 def test_preflight_raises_on_absent_in_local_only(tmp_path: Path) -> None:
