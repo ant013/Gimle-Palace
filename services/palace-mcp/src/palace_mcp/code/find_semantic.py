@@ -259,6 +259,57 @@ def _apply_ranking(query: str, hits: list[dict[str, Any]]) -> list[dict[str, Any
     return hits
 
 
+# Default source scopes returned without explicit overrides (first-party only).
+_DEFAULT_SCOPES: frozenset[str] = frozenset({"project", "workspace_package"})
+
+
+def _resolve_effective_scopes(
+    source_scopes: list[str] | None,
+    include_dependencies: bool,
+    include_generated: bool,
+    include_sdk: bool,
+) -> frozenset[str]:
+    """Return the set of source_scope values that should pass the filter.
+
+    Precedence: explicit ``source_scopes`` list overrides all flags.
+    Otherwise: start from the first-party default and add per-flag scopes.
+    """
+    if source_scopes is not None:
+        return frozenset(source_scopes)
+    scopes: set[str] = set(_DEFAULT_SCOPES)
+    if include_dependencies:
+        scopes.add("dependency")
+    if include_generated:
+        scopes.add("generated")
+        scopes.add("derived")
+    if include_sdk:
+        scopes.add("sdk")
+    return frozenset(scopes)
+
+
+def _filter_by_scope(
+    rows: list[dict[str, Any]],
+    effective_scopes: frozenset[str],
+) -> tuple[list[dict[str, Any]], int]:
+    """Keep rows whose source_scope is in effective_scopes.
+
+    Null source_scope (legacy symbols without the field) is treated as
+    "dependency" so they are excluded from first-party-only defaults and
+    included when dependency scopes are requested.
+
+    Returns (kept_rows, excluded_count).
+    """
+    kept: list[dict[str, Any]] = []
+    excluded = 0
+    for row in rows:
+        scope = row.get("source_scope") or "dependency"
+        if scope in effective_scopes:
+            kept.append(row)
+        else:
+            excluded += 1
+    return kept, excluded
+
+
 def _error(code: str, message: str, **extra: Any) -> dict[str, Any]:
     payload: dict[str, Any] = {"ok": False, "error_code": code, "message": message}
     payload.update(extra)
@@ -558,6 +609,10 @@ async def semantic_search(
     query: str,
     project: str | None = None,
     projects: list[str] | None = None,
+    source_scopes: list[str] | None = None,
+    include_dependencies: bool = False,
+    include_generated: bool = False,
+    include_sdk: bool = False,
     limit: int = 10,
     backend: str | None = None,
     include_context: bool = True,
@@ -668,6 +723,13 @@ async def semantic_search(
             hit["embedding_input_hash"] = embedding_input_hash
         candidate_rows.append(hit)
 
+    effective_scopes = _resolve_effective_scopes(
+        source_scopes, include_dependencies, include_generated, include_sdk
+    )
+    candidate_rows, scope_excluded_count = _filter_by_scope(
+        candidate_rows, effective_scopes
+    )
+
     _apply_ranking(normalized_query, candidate_rows)
     result_rows = candidate_rows[:limit]
 
@@ -742,6 +804,7 @@ async def semantic_search(
         "candidate_limit": candidate_limit,
         "embedded_symbol_count": embedded_symbol_count,
         "returned_count": len(result_rows),
+        "scope_excluded_count": scope_excluded_count,
         "warnings": warnings,
         "embedding_coverage": coverage,
         "ranking_spec_version": "1",
