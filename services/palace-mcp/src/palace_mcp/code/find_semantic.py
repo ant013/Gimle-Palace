@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from typing import cast
 
 from palace_mcp import code_router
+from palace_mcp.code.semantic_contract import ScoreComponents
 from palace_mcp.embeddings import get_embedding_dispatcher
 from palace_mcp.extractors.foundation.identifiers import symbol_id_for
 from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
@@ -57,8 +58,202 @@ RETURN
   s.commit_sha AS commit_sha,
   score AS score
 ORDER BY score DESC
-LIMIT $limit
 """.strip()
+
+# ---------------------------------------------------------------------------
+# Ranking formula (v1 — dense-only, GIM-919)
+#
+# final_score = W_VECTOR  * vector_score
+#             + W_SCOPE   * scope_score(source_scope)
+#             + W_KIND    * kind_score(symbol_kind)
+#             + W_LEXICAL * lexical_score(query, qualified_name)
+#             - penalty(symbol_kind, qualified_name)
+#
+# Weights are chosen so that scope preference can override up to 0.20 of
+# vector score gap (W_SCOPE=0.15 × Δscope_max=1.0 / W_VECTOR=0.75 ≈ 0.20).
+#
+# Tie-breaking order (produces total ordering):
+#   1. final_score DESC
+#   2. source_scope priority ASC  (project < workspace_package < … < sdk)
+#   3. symbol kind priority ASC   (function < class < variable < accessor)
+#   4. project slug ASC           (alphabetical)
+#   5. qualified_name ASC         (alphabetical)
+#
+# Tolerance: scores are quantized to _SCORE_TOLERANCE bins in the sort key
+# so that near-equal final scores fall into the same bucket and tie-breakers
+# resolve the ordering deterministically.
+# ---------------------------------------------------------------------------
+
+_W_VECTOR: float = 0.75
+_W_SCOPE: float = 0.15
+_W_KIND: float = 0.05
+_W_LEXICAL: float = 0.05
+_ACCESSOR_PENALTY: float = 0.15
+_SCORE_TOLERANCE: float = 0.001
+
+# source_scope → component score (higher = preferred)
+_SCOPE_SCORE: dict[str, float] = {
+    "project": 1.00,
+    "workspace_package": 0.85,
+    "dependency": 0.50,
+    "generated": 0.30,
+    "derived": 0.20,
+    "sdk": 0.10,
+}
+
+# source_scope → ascending tie-break priority (lower = ranked first)
+_SCOPE_PRIORITY: dict[str, int] = {
+    "project": 0,
+    "workspace_package": 1,
+    "dependency": 2,
+    "generated": 3,
+    "derived": 4,
+    "sdk": 5,
+}
+
+# symbol kind → component score (higher = preferred)
+_KIND_SCORE: dict[str, float] = {
+    "function": 1.00,
+    "method": 1.00,
+    "initializer": 1.00,
+    "deinitializer": 1.00,
+    "constructor": 1.00,
+    "destructor": 1.00,
+    "class": 0.90,
+    "struct": 0.90,
+    "protocol": 0.90,
+    "interface": 0.90,
+    "actor": 0.90,
+    "extension": 0.80,
+    "enum": 0.80,
+    "enumCase": 0.75,
+    "enum_case": 0.75,
+    "variable": 0.70,
+    "constant": 0.70,
+    "property": 0.70,
+    "field": 0.70,
+    "macro": 0.65,
+    "typealias": 0.60,
+    "typeAlias": 0.60,
+    "associatedtype": 0.60,
+    "accessor": 0.30,
+}
+
+# symbol kind → ascending tie-break priority (lower = ranked first)
+_KIND_PRIORITY: dict[str, int] = {
+    "function": 0,
+    "method": 0,
+    "initializer": 1,
+    "deinitializer": 1,
+    "constructor": 1,
+    "destructor": 1,
+    "class": 2,
+    "struct": 2,
+    "protocol": 2,
+    "interface": 2,
+    "actor": 2,
+    "extension": 3,
+    "enum": 3,
+    "enumCase": 4,
+    "enum_case": 4,
+    "variable": 5,
+    "constant": 5,
+    "property": 5,
+    "field": 5,
+    "macro": 6,
+    "typealias": 7,
+    "typeAlias": 7,
+    "associatedtype": 7,
+    "accessor": 10,
+}
+
+_ACCESSOR_SUFFIXES: tuple[str, ...] = (".getter", ".setter")
+
+
+def _lexical_score(query: str, qualified_name: str) -> float:
+    """1.0 if any query word (length ≥ 3) appears as a substring in qualified_name."""
+    qn_lower = qualified_name.lower()
+    for word in query.lower().split():
+        if len(word) >= 3 and word in qn_lower:
+            return 1.0
+    return 0.0
+
+
+def _accessor_penalty(kind: str | None, qualified_name: str) -> float:
+    """Return _ACCESSOR_PENALTY for generated accessor symbols, else 0.0."""
+    if kind == "accessor":
+        return _ACCESSOR_PENALTY
+    qn_lower = qualified_name.lower()
+    for suffix in _ACCESSOR_SUFFIXES:
+        if qn_lower.endswith(suffix):
+            return _ACCESSOR_PENALTY
+    return 0.0
+
+
+def _compute_score_components(
+    *,
+    vector_score: float,
+    query: str,
+    source_scope: str | None,
+    kind: str | None,
+    qualified_name: str,
+) -> tuple[float, ScoreComponents]:
+    """Compute final ranking score and its component breakdown.
+
+    Returns (final_score, ScoreComponents).
+    """
+    scope_s = _SCOPE_SCORE.get(source_scope or "", 0.10)
+    kind_s = _KIND_SCORE.get(kind or "", 0.30)
+    lexical = _lexical_score(query, qualified_name)
+    pen = _accessor_penalty(kind, qualified_name)
+
+    final = (
+        _W_VECTOR * vector_score
+        + _W_SCOPE * scope_s
+        + _W_KIND * kind_s
+        + _W_LEXICAL * lexical
+        - pen
+    )
+    return final, ScoreComponents(
+        vector_score_normalized=vector_score,
+        source_scope_score=scope_s,
+        symbol_kind_boost=kind_s,
+        lexical_match=lexical,
+        penalty=pen,
+    )
+
+
+def _rank_key(hit: dict[str, Any]) -> tuple[int, int, int, str, str]:
+    """Quantized sort key — scores within _SCORE_TOLERANCE share a bucket."""
+    return (
+        -round(hit["score"] / _SCORE_TOLERANCE),
+        _SCOPE_PRIORITY.get(hit.get("source_scope") or "", 99),
+        _KIND_PRIORITY.get(hit.get("kind") or "", 99),
+        hit.get("project") or "",
+        hit.get("qualified_name") or "",
+    )
+
+
+def _apply_ranking(query: str, hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Compute final scores in-place and sort hits by the ranking formula.
+
+    Each hit must have: score (raw vector cosine), qualified_name,
+    source_scope, kind.  After this call hit["score"] is the final score
+    and hit["score_components"] contains the breakdown.
+    Returns the same list (sorted in-place) for convenience.
+    """
+    for hit in hits:
+        final, components = _compute_score_components(
+            vector_score=float(hit["score"]),
+            query=query,
+            source_scope=hit.get("source_scope"),
+            kind=hit.get("kind"),
+            qualified_name=str(hit.get("qualified_name") or ""),
+        )
+        hit["score"] = final
+        hit["score_components"] = components.model_dump()
+    hits.sort(key=_rank_key)
+    return hits
 
 
 def _error(code: str, message: str, **extra: Any) -> dict[str, Any]:
@@ -192,7 +387,6 @@ async def _vector_search(
     *,
     embedding: list[float],
     group_ids: list[str],
-    limit: int,
     query_k: int,
 ) -> list[dict[str, Any]]:
     async with driver.session() as session:
@@ -200,7 +394,6 @@ async def _vector_search(
             _VECTOR_QUERY,
             embedding=embedding,
             group_ids=group_ids,
-            limit=limit,
             query_k=query_k,
         )
         return cast(list[dict[str, Any]], await result.data())
@@ -414,14 +607,14 @@ async def semantic_search(
         driver,
         embedding=query_embedding,
         group_ids=group_ids,
-        limit=limit,
         query_k=candidate_limit,
     )
 
-    result_rows: list[dict[str, Any]] = []
+    candidate_rows: list[dict[str, Any]] = []
     for row in rows:
         group_id = str(row["group_id"])
         qualified_name = str(row["qualified_name"])
+
         hit: dict[str, Any] = {
             "project": _project_from_group_id(group_id),
             "group_id": group_id,
@@ -432,19 +625,26 @@ async def semantic_search(
             "module_name": row.get("module_name"),
             "source_scope": row.get("source_scope"),
             "score": float(row["score"]),
+            "_commit_sha": row.get("commit_sha"),
         }
         embedding_input_hash = row.get("embedding_input_hash")
         if embedding_input_hash is not None:
             hit["embedding_input_hash"] = embedding_input_hash
+        candidate_rows.append(hit)
+
+    _apply_ranking(normalized_query, candidate_rows)
+    result_rows = candidate_rows[:limit]
+
+    for hit in result_rows:
+        commit_sha = hit.pop("_commit_sha", None)
         if include_context:
             hit["context"] = await _hydrate_context(
                 settings=settings,
                 project=hit["project"],
-                qualified_name=qualified_name,
-                commit_sha=row.get("commit_sha"),
+                qualified_name=hit["qualified_name"],
+                commit_sha=commit_sha,
                 context_limit=context_limit,
             )
-        result_rows.append(hit)
 
     if len(result_rows) < limit:
         warnings.append(
@@ -469,5 +669,6 @@ async def semantic_search(
         "returned_count": len(result_rows),
         "warnings": warnings,
         "embedding_coverage": coverage,
+        "ranking_spec_version": "1",
         "result": result_rows,
     }
