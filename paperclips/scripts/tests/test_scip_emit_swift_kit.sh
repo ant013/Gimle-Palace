@@ -83,6 +83,14 @@ if [[ "${1:-}" == "-version" ]]; then
     printf 'Xcode 26.3\nBuild version 17E300\n'
     exit 0
 fi
+for arg in "$@"; do
+    if [[ "$arg" == "-package-path" ]]; then
+        printf 'unexpected xcodebuild invocation:'
+        printf ' %q' "$@"
+        printf '\n' >&2
+        exit 1
+    fi
+done
 printf '%s\n' "$*" > "$XCODEBUILD_ARGS_LOG"
 exit 0
 EOF
@@ -120,11 +128,10 @@ bash "$SCIP_EMIT_SCRIPT" \
     --emitter-bin "$TMP_DIR/emitter/mock-emitter" \
     --no-remote-copy >"$OUT"
 
-assert_contains "$XCODEBUILD_ARGS_LOG" "-package-path $TMP_DIR/repos/BitcoinKit.Swift"
 assert_contains "$XCODEBUILD_ARGS_LOG" "-scheme BitcoinKit"
 assert_not_contains "$XCODEBUILD_ARGS_LOG" "package.xcworkspace"
 assert_contains "$OUT" "destination=$TMP_DIR/repos/BitcoinKit.Swift/scip/index.scip"
 assert_contains "$OUT" "remote_copy=false"
 assert_contains "$TMP_DIR/repos/BitcoinKit.Swift/scip/index.scip.meta.json" '"artifact_origin": "local"'
 
-printf 'PASS: swift kit SCIP emit uses xcodebuild package-path flow\n'
+printf 'PASS: swift kit SCIP emit builds from the package root without xcodebuild package-path\n'

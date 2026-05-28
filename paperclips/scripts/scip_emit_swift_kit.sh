@@ -286,7 +286,6 @@ log "building Swift package with xcodebuild"
 (
     cd "$LOCAL_REPO_PATH"
     run_cmd xcodebuild \
-        -package-path "$LOCAL_REPO_PATH" \
         -scheme "$SCHEME_NAME" \
         -configuration Debug \
         -sdk iphonesimulator \
