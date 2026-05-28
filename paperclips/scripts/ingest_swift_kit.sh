@@ -80,6 +80,12 @@ require_command() {
     command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
 }
 
+resolve_repo_url() {
+    local repo_path="$1"
+    command -v git >/dev/null 2>&1 || return 0
+    git -C "$repo_path" remote get-url origin 2>/dev/null || true
+}
+
 validate_artefacts() {
     local repo_path="$1"
     local periphery_report="$repo_path/periphery/periphery-3.7.4-swiftpm.json"
@@ -691,10 +697,14 @@ fi
 project_payload="$(jq -nc \
     --arg slug "$SLUG" \
     --arg name "$SLUG" \
+    --arg language "swift" \
+    --arg repo_url "$(resolve_repo_url "$HOST_REPO_PATH")" \
     --arg parent_mount "$PARENT_MOUNT" \
     --arg relative_path "$RELATIVE_PATH" \
-    '{slug: $slug, name: $name}
-     + (if $parent_mount != "" then {parent_mount: $parent_mount, relative_path: $relative_path} else {} end)')"
+    '{slug: $slug, name: $name, language: $language}
+     + (if $repo_url != "" then {repo_url: $repo_url} else {} end)
+     + (if $parent_mount != "" then {parent_mount: $parent_mount} else {} end)
+     + (if $relative_path != "" then {relative_path: $relative_path} else {} end)')"
 PROJECT_REGISTRATION_JSON="$(call_mcp "palace.memory.register_project" "$project_payload")" || {
     emit_summary "register_project" "failed" "memory.register_project failed"
     exit 1
