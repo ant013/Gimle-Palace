@@ -303,8 +303,9 @@ class TestQodoEmbeddingBackend:
         _ensure_qwen2_rope_theta_compat()
 
         config = _FakeQwen2Config()
+        config.rope_theta = 84.0
 
-        assert config.rope_theta == 42.0
+        assert config.rope_theta == 84.0
 
 
 class TestQodoEmbeddingBackendDispatcher:
