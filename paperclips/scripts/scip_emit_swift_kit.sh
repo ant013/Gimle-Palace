@@ -309,6 +309,14 @@ fi
 log "building Swift package with xcodebuild"
 (
     cd "$LOCAL_REPO_PATH"
+    # Build only the host architecture. `generic/platform=iOS Simulator`
+    # otherwise compiles arm64 + x86_64; on Apple Silicon the x86_64
+    # pass fails on packages that ship arm64-only prebuilt binaries
+    # (e.g. secp256k1 -> SchnorrHelper.swift) or GRDB Swift files that
+    # don't survive Rosetta. Restricting ARCHS to `uname -m` keeps
+    # SCIP-emit-only builds host-native and skips those paths cleanly.
+    # SCIP output is arch-agnostic so coverage is unaffected.
+    BUILD_ARCH="$(uname -m)"
     run_cmd xcodebuild \
         -scheme "$SCHEME_NAME" \
         -configuration Debug \
@@ -316,6 +324,8 @@ log "building Swift package with xcodebuild"
         -destination "generic/platform=iOS Simulator" \
         -derivedDataPath "$DERIVED_DATA" \
         SYMROOT="$SCRATCH_PATH" \
+        ARCHS="$BUILD_ARCH" \
+        ONLY_ACTIVE_ARCH=YES \
         CODE_SIGNING_ALLOWED=NO \
         CODE_SIGNING_REQUIRED=NO \
         build
