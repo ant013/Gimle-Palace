@@ -123,10 +123,12 @@ class TestQodoEmbeddingBackend:
                 captured["show_progress_bar"] = show_progress_bar
                 return _FakeArray([[7.0, 8.0] for _ in sentences])
 
-        def _fake_import_module(name: str) -> object:
+        def _fake_import_module(name: str, package: str | None = None) -> object:
             if name == "sentence_transformers":
                 return SimpleNamespace(SentenceTransformer=_FakeSentenceTransformer)
-            return original_import_module(name)
+            if package is None:
+                return original_import_module(name)
+            return original_import_module(name, package)
 
         monkeypatch.setattr(importlib, "import_module", _fake_import_module)
 
@@ -179,10 +181,12 @@ class TestQodoEmbeddingBackend:
             ) -> _FakeArray:
                 return _FakeArray([[7.0, 8.0] for _ in sentences])
 
-        def _fake_import_module(name: str) -> object:
+        def _fake_import_module(name: str, package: str | None = None) -> object:
             if name == "sentence_transformers":
                 return SimpleNamespace(SentenceTransformer=_FakeSentenceTransformer)
-            return original_import_module(name)
+            if package is None:
+                return original_import_module(name)
+            return original_import_module(name, package)
 
         monkeypatch.setattr(importlib, "import_module", _fake_import_module)
         monkeypatch.setenv("PALACE_EMBEDDING_LOCAL_ONLY", "true")
