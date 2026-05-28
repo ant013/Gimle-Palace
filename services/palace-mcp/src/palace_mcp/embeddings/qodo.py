@@ -43,6 +43,7 @@ def _load_sentence_transformer(
             "sentence-transformers is required to use QodoEmbeddingBackend"
         ) from exc
 
+    _ensure_qwen2_rope_theta_compat()
     sentence_transformer = getattr(module, "SentenceTransformer")
     try:
         return cast(
@@ -65,6 +66,25 @@ def _load_sentence_transformer(
         raise RuntimeError(
             f"Failed to load sentence transformer '{model_name}': {exc}"
         ) from exc
+
+
+def _ensure_qwen2_rope_theta_compat() -> None:
+    try:
+        module = importlib.import_module("transformers")
+    except ModuleNotFoundError:
+        return
+
+    qwen2_config = getattr(module, "Qwen2Config", None)
+    if qwen2_config is None or hasattr(qwen2_config, "rope_theta"):
+        return
+
+    def _rope_theta(self: Any) -> Any:
+        rope_parameters = getattr(self, "rope_parameters", None)
+        if isinstance(rope_parameters, dict):
+            return rope_parameters.get("rope_theta")
+        return getattr(rope_parameters, "rope_theta", None)
+
+    setattr(qwen2_config, "rope_theta", property(_rope_theta))
 
 
 class QodoEmbeddingBackend:
