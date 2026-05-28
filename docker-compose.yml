@@ -33,7 +33,7 @@ services:
       args:
         GIT_SHA: "${PALACE_GIT_SHA:-unknown}"
     restart: unless-stopped
-    mem_limit: 2g
+    mem_limit: 8g
     cpus: "1.0"
     profiles: [review, analyze, full, code-graph, server, macbook, smoke, ci]
     extra_hosts:
