@@ -80,7 +80,15 @@ RUN adduser --disabled-password --gecos "" --uid 1000 appuser && \
     mkdir -p /home/appuser/.cache/codebase-memory-mcp && \
     chown -R appuser:appuser /home/appuser/.cache && \
     mkdir -p /var/lib/palace/tantivy && \
-    chown -R appuser:appuser /var/lib/palace
+    chown -R appuser:appuser /var/lib/palace && \
+    mkdir -p /data/hf-cache && \
+    chown -R appuser:appuser /data
+# Pre-create /data/hf-cache owned by appuser so a fresh `palace-hf-cache`
+# named volume inherits 1000:1000 instead of being created as root and
+# blocking Qodo model downloads (GIM-945). Docker copies the image's
+# mount-point ownership into a fresh anonymous/named volume on first
+# attach; existing volumes still need a one-off `chown -R appuser:appuser
+# /data/hf-cache` (see services/palace-mcp/README.md).
 
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/src /app/src
