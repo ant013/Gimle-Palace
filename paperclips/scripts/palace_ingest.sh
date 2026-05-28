@@ -3,8 +3,11 @@
 # Orchestrates: prepare_repo (iMac) -> SCIP gen (local Xcode) -> scp+ingest (iMac).
 #
 # Usage:
-#   palace_ingest.sh --github <clone-url> [--extractors <csv>] [--skip-embedding]
-#   palace_ingest.sh --slug   <slug>       [--extractors <csv>] [--skip-embedding]
+#   palace_ingest.sh --github <clone-url> [--extractors <csv>] [--skip-embedding] [--scheme <name>]
+#   palace_ingest.sh --slug   <slug>       [--extractors <csv>] [--skip-embedding] [--scheme <name>]
+#
+# --scheme overrides the SCIP-step Xcode scheme; required for kits whose real
+# scheme name differs from `basename(repo) - ".Swift"`. Workaround for GIM-984.
 #
 # Env overrides:
 #   PALACE_IMAC_HOST           ssh alias for the iMac (default: imac-ssh.ant013.work)
@@ -23,6 +26,7 @@ LOCAL_BASE="${PALACE_LOCAL_REPO_BASE:-/Users/ant013/Ios/HorizontalSystems}"
 EXTRACTORS="symbol_index_swift,dead_code,embedding_symbol"
 GITHUB_URL=""
 INPUT_SLUG=""
+SCHEME=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -30,6 +34,7 @@ while [[ $# -gt 0 ]]; do
         --slug)   INPUT_SLUG="$2"; shift 2 ;;
         --extractors) EXTRACTORS="$2"; shift 2 ;;
         --skip-embedding) EXTRACTORS="symbol_index_swift,dead_code"; shift ;;
+        --scheme) SCHEME="$2"; shift 2 ;;
         --help|-h)
             sed -n '2,18p' "$0"
             exit 0 ;;
@@ -81,7 +86,11 @@ log "local repo: $LOCAL_REPO"
 
 # Step 3: SCIP gen on macbook (uses Xcode), pushes SCIP to iMac via scp_emit's --remote-host default.
 log "step 3/4: SCIP gen on macbook"
-bash "$SCIP_SCRIPT" "$SLUG" --repo-path "$LOCAL_REPO"
+SCIP_ARGS=("$SLUG" "--repo-path" "$LOCAL_REPO")
+if [[ -n "$SCHEME" ]]; then
+    SCIP_ARGS+=("--scheme" "$SCHEME")
+fi
+bash "$SCIP_SCRIPT" "${SCIP_ARGS[@]}"
 
 # Step 4: ingest_swift_kit.sh on iMac (auto-registers :Project per GIM-949).
 log "step 4/4: ingest_swift_kit.sh $SLUG on $IMAC_HOST (extractors=$EXTRACTORS)"
