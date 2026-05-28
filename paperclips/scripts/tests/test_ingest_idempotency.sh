@@ -22,6 +22,18 @@ assert_contains() {
 
 mkdir -p "$TMP_DIR/bin" "$TMP_DIR/repos-hs/TronKit.Swift/scip"
 printf 'fixture-scip\n' > "$TMP_DIR/repos-hs/TronKit.Swift/scip/index.scip"
+mkdir -p \
+    "$TMP_DIR/repos-hs/TronKit.Swift/periphery" \
+    "$TMP_DIR/repos-hs/TronKit.Swift/.palace/public-api/swift"
+cat > "$TMP_DIR/repos-hs/TronKit.Swift/periphery/periphery-3.7.4-swiftpm.json" <<'EOF'
+{"unused":[]}
+EOF
+cat > "$TMP_DIR/repos-hs/TronKit.Swift/periphery/contract.json" <<'EOF'
+{"tool_output_schema_version":"periphery-json-3.7.4"}
+EOF
+cat > "$TMP_DIR/repos-hs/TronKit.Swift/.palace/public-api/swift/TronKit.swiftinterface" <<'EOF'
+// fixture
+EOF
 cat > "$TMP_DIR/.env" <<'EOF'
 PALACE_SCIP_INDEX_PATHS={"existing":"/repos/existing/scip/index.scip"}
 OTHER_VAR=1
@@ -113,6 +125,23 @@ exit 0
 EOF
 chmod +x "$TMP_DIR/bin/curl"
 
+cat > "$TMP_DIR/bin/git" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "$#" -ge 5 && "$1" == "-C" && "$3" == "remote" && "$4" == "get-url" && "$5" == "origin" ]]; then
+  case "$2" in
+    */TronKit.Swift)
+      printf '%s\n' 'https://github.com/example/TronKit.Swift.git'
+      exit 0
+      ;;
+  esac
+fi
+
+exit 1
+EOF
+chmod +x "$TMP_DIR/bin/git"
+
 PATH="$TMP_DIR/bin:$PATH"
 export PALACE_MCP_CLI_BIN="$TMP_DIR/bin/mock-mcp-cli"
 export MOCK_MCP_LOG="$TMP_DIR/mcp.log"
@@ -176,6 +205,35 @@ bash "$INGEST_SCRIPT" "tron-kit" \
     --env-file="$TMP_DIR/.env" >"$RUN1_OUT"
 assert_contains "$RUN1_OUT" '"status":"ok"'
 assert_contains "$RUN1_OUT" '"reason":"not_registered"'
+python3 - "$MOCK_MCP_LOG" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+entries = []
+for line in Path(sys.argv[1]).read_text().splitlines():
+    tool, payload = line.split("\t", 1)
+    entries.append((tool, json.loads(payload)))
+
+register_index = next(
+    index for index, (tool, _) in enumerate(entries)
+    if tool == "palace.memory.register_project"
+)
+extractor_index = next(
+    index for index, (tool, _) in enumerate(entries)
+    if tool == "palace.ingest.run_extractor"
+)
+if register_index >= extractor_index:
+    raise SystemExit("register_project did not happen before run_extractor")
+
+payload = entries[register_index][1]
+assert payload["slug"] == "tron-kit"
+assert payload["name"] == "tron-kit"
+assert payload["language"] == "swift"
+assert payload["parent_mount"] == "hs"
+assert payload["relative_path"] == "TronKit.Swift"
+assert payload["repo_url"] == "https://github.com/example/TronKit.Swift.git"
+PY
 ENV_AFTER_RUN1="$(cat "$TMP_DIR/.env")"
 PATH_JSON="$(grep '^PALACE_SCIP_INDEX_PATHS=' "$TMP_DIR/.env" | cut -d= -f2-)"
 printf '%s' "$PATH_JSON" | jq -e '.existing == "/repos/existing/scip/index.scip"' >/dev/null || \
