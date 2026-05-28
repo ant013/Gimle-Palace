@@ -61,7 +61,9 @@ class TestSchemaDefinition:
         assert "symbol_embedding_idx" in names
 
     def test_symbol_embedding_idx_config(self) -> None:
-        idx = next(i for i in EXPECTED_SCHEMA.indexes if i.name == "symbol_embedding_idx")
+        idx = next(
+            i for i in EXPECTED_SCHEMA.indexes if i.name == "symbol_embedding_idx"
+        )
         assert idx.label == "Symbol"
         assert idx.properties == ("embedding",)
         assert idx.type == "VECTOR"
@@ -94,7 +96,9 @@ class TestCypherGeneration:
         assert "CREATE VECTOR INDEX" in stmt
 
     def test_vector_index_cypher_symbol_embedding(self) -> None:
-        idx = next(i for i in EXPECTED_SCHEMA.indexes if i.name == "symbol_embedding_idx")
+        idx = next(
+            i for i in EXPECTED_SCHEMA.indexes if i.name == "symbol_embedding_idx"
+        )
         stmt = _index_cypher(idx)
         assert "CREATE VECTOR INDEX symbol_embedding_idx IF NOT EXISTS" in stmt
         assert "FOR (n:Symbol) ON (n.embedding)" in stmt
