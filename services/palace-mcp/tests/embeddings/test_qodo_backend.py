@@ -9,7 +9,11 @@ import pytest
 
 from palace_mcp.embeddings import EmbeddingBackend, EmbeddingBackendDispatcher
 from palace_mcp.embeddings.cache_preflight import CacheCheckResult, CacheStatus
-from palace_mcp.embeddings.qodo import QODO_EMBED_MODEL_NAME, QodoEmbeddingBackend
+from palace_mcp.embeddings.qodo import (
+    QODO_EMBED_MODEL_NAME,
+    QodoEmbeddingBackend,
+    _ensure_qwen2_rope_theta_compat,
+)
 
 
 class _FakeArray:
@@ -228,6 +232,8 @@ class TestQodoEmbeddingBackend:
         original_import_module = importlib.import_module
 
         class _FakeQwen2Config:
+            rope_theta: float
+
             def __init__(self) -> None:
                 self.rope_parameters = {"rope_theta": 1_000_000.0}
 
@@ -274,6 +280,32 @@ class TestQodoEmbeddingBackend:
             "has_rope_theta": True,
             "rope_theta": 1_000_000.0,
         }
+
+    def test_qwen2_rope_theta_compat_preserves_instance_assignment(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        original_import_module = importlib.import_module
+
+        class _FakeQwen2Config:
+            rope_theta: float
+
+            def __init__(self) -> None:
+                self.rope_theta = 42.0
+                self.rope_parameters = {"rope_theta": 1_000_000.0}
+
+        def _fake_import_module(name: str) -> object:
+            if name == "transformers":
+                return SimpleNamespace(Qwen2Config=_FakeQwen2Config)
+            return original_import_module(name)
+
+        monkeypatch.setattr(importlib, "import_module", _fake_import_module)
+
+        _ensure_qwen2_rope_theta_compat()
+
+        config = _FakeQwen2Config()
+        config.rope_theta = 84.0
+
+        assert config.rope_theta == 84.0
 
 
 class TestQodoEmbeddingBackendDispatcher:
