@@ -250,7 +250,31 @@ fi
 
 if [[ -z "$SCHEME_NAME" ]]; then
     SCHEME_NAME="$(basename "$LOCAL_REPO_PATH")"
-    SCHEME_NAME="${SCHEME_NAME%.Swift}"
+    # Case-insensitive strip of .Swift / .swift suffix.
+    shopt -s nocasematch
+    [[ "$SCHEME_NAME" =~ \.swift$ ]] && SCHEME_NAME="${SCHEME_NAME%.*}"
+    shopt -u nocasematch
+    # If the guess does not match an actual Xcode scheme, fall back to
+    # the first scheme whose name (case-insensitive) starts with the
+    # guess — covers kits like HsCryptoKit.Swift whose real scheme is
+    # `HsCryptoKit.Swift` (suffix retained) and case-mismatched kits
+    # like HDWalletKit.Swift whose real scheme is `HdWalletKit`. (GIM-984)
+    if command -v xcodebuild >/dev/null 2>&1 && [[ -d "$LOCAL_REPO_PATH" ]]; then
+        AVAILABLE_SCHEMES="$(cd "$LOCAL_REPO_PATH" && xcodebuild -list -json 2>/dev/null \
+            | python3 -c 'import sys,json
+try:
+    d=json.load(sys.stdin)
+    print("\n".join((d.get("workspace") or d.get("project") or {}).get("schemes") or []))
+except Exception:
+    pass' 2>/dev/null)"
+        if [[ -n "$AVAILABLE_SCHEMES" ]] && ! grep -qFx "$SCHEME_NAME" <<<"$AVAILABLE_SCHEMES"; then
+            MATCH="$(grep -i -E "^${SCHEME_NAME}(\\.swift)?\$" <<<"$AVAILABLE_SCHEMES" | head -1)"
+            if [[ -n "$MATCH" ]]; then
+                log "scheme '$SCHEME_NAME' not found in xcodebuild -list; using '$MATCH'"
+                SCHEME_NAME="$MATCH"
+            fi
+        fi
+    fi
 fi
 
 if [[ -z "$EMITTER_BIN" ]]; then
