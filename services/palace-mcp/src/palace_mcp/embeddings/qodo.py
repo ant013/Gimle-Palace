@@ -79,12 +79,18 @@ def _ensure_qwen2_rope_theta_compat() -> None:
         return
 
     def _rope_theta(self: Any) -> Any:
+        compat_rope_theta = getattr(self, "_qodo_compat_rope_theta", None)
+        if compat_rope_theta is not None:
+            return compat_rope_theta
         rope_parameters = getattr(self, "rope_parameters", None)
         if isinstance(rope_parameters, dict):
             return rope_parameters.get("rope_theta")
         return getattr(rope_parameters, "rope_theta", None)
 
-    setattr(qwen2_config, "rope_theta", property(_rope_theta))
+    def _set_rope_theta(self: Any, value: Any) -> None:
+        setattr(self, "_qodo_compat_rope_theta", value)
+
+    setattr(qwen2_config, "rope_theta", property(_rope_theta, _set_rope_theta))
 
 
 class QodoEmbeddingBackend:
