@@ -123,10 +123,12 @@ class TestQodoEmbeddingBackend:
                 captured["show_progress_bar"] = show_progress_bar
                 return _FakeArray([[7.0, 8.0] for _ in sentences])
 
-        def _fake_import_module(name: str) -> object:
+        def _fake_import_module(name: str, package: str | None = None) -> object:
             if name == "sentence_transformers":
                 return SimpleNamespace(SentenceTransformer=_FakeSentenceTransformer)
-            return original_import_module(name)
+            if package is None:
+                return original_import_module(name)
+            return original_import_module(name, package)
 
         monkeypatch.setattr(importlib, "import_module", _fake_import_module)
 
@@ -179,10 +181,12 @@ class TestQodoEmbeddingBackend:
             ) -> _FakeArray:
                 return _FakeArray([[7.0, 8.0] for _ in sentences])
 
-        def _fake_import_module(name: str) -> object:
+        def _fake_import_module(name: str, package: str | None = None) -> object:
             if name == "sentence_transformers":
                 return SimpleNamespace(SentenceTransformer=_FakeSentenceTransformer)
-            return original_import_module(name)
+            if package is None:
+                return original_import_module(name)
+            return original_import_module(name, package)
 
         monkeypatch.setattr(importlib, "import_module", _fake_import_module)
         monkeypatch.setenv("PALACE_EMBEDDING_LOCAL_ONLY", "true")
@@ -208,6 +212,68 @@ class TestQodoEmbeddingBackend:
 
         with pytest.raises(RuntimeError, match="sentence-transformers"):
             QodoEmbeddingBackend()
+
+    def test_loader_patches_qwen2_rope_theta_compat(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _present = CacheCheckResult(
+            status=CacheStatus.present,
+            cache_root="/fake",
+            model_id=QODO_EMBED_MODEL_NAME,
+        )
+        monkeypatch.setattr(
+            "palace_mcp.embeddings.qodo.preflight_or_fail", lambda *a, **kw: _present
+        )
+        captured: dict[str, Any] = {}
+        original_import_module = importlib.import_module
+
+        class _FakeQwen2Config:
+            def __init__(self) -> None:
+                self.rope_parameters = {"rope_theta": 1_000_000.0}
+
+        class _FakeSentenceTransformer:
+            def __init__(
+                self,
+                model_name: str,
+                *,
+                trust_remote_code: bool,
+                local_files_only: bool,
+            ) -> None:
+                config = _FakeQwen2Config()
+                captured["model_name"] = model_name
+                captured["trust_remote_code"] = trust_remote_code
+                captured["local_files_only"] = local_files_only
+                captured["has_rope_theta"] = hasattr(config, "rope_theta")
+                captured["rope_theta"] = config.rope_theta
+
+            def encode(
+                self,
+                sentences: list[str],
+                *,
+                convert_to_numpy: bool,
+                normalize_embeddings: bool,
+                show_progress_bar: bool,
+            ) -> _FakeArray:
+                return _FakeArray([[7.0, 8.0] for _ in sentences])
+
+        def _fake_import_module(name: str) -> object:
+            if name == "sentence_transformers":
+                return SimpleNamespace(SentenceTransformer=_FakeSentenceTransformer)
+            if name == "transformers":
+                return SimpleNamespace(Qwen2Config=_FakeQwen2Config)
+            return original_import_module(name)
+
+        monkeypatch.setattr(importlib, "import_module", _fake_import_module)
+
+        QodoEmbeddingBackend(local_files_only=True)
+
+        assert captured == {
+            "model_name": QODO_EMBED_MODEL_NAME,
+            "trust_remote_code": True,
+            "local_files_only": True,
+            "has_rope_theta": True,
+            "rope_theta": 1_000_000.0,
+        }
 
 
 class TestQodoEmbeddingBackendDispatcher:
