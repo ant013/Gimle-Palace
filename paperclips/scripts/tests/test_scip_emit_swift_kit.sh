@@ -29,8 +29,12 @@ assert_not_contains() {
 
 mkdir -p \
     "$TMP_DIR/bin" \
+    "$TMP_DIR/dev/Toolchains/swift-5.8.0-RELEASE.xctoolchain" \
+    "$TMP_DIR/dev/Toolchains/swift-5.8.1-RELEASE.xctoolchain" \
     "$TMP_DIR/emitter" \
-    "$TMP_DIR/repos/BitcoinKit.Swift"
+    "$TMP_DIR/repos/BitcoinKit.Swift" \
+    "$TMP_DIR/repos/MissingToolchainKit.Swift" \
+    "$TMP_DIR/repos/TronKit.Swift"
 
 cat > "$TMP_DIR/repos/BitcoinKit.Swift/Package.swift" <<'EOF'
 // swift-tools-version: 5.9
@@ -42,6 +46,32 @@ let package = Package(
     targets: []
 )
 EOF
+
+cat > "$TMP_DIR/repos/MissingToolchainKit.Swift/Package.swift" <<'EOF'
+// swift-tools-version: 5.9
+import PackageDescription
+
+let package = Package(
+    name: "MissingToolchainKit",
+    products: [],
+    targets: []
+)
+EOF
+
+cat > "$TMP_DIR/repos/TronKit.Swift/Package.swift" <<'EOF'
+// swift-tools-version: 5.9
+import PackageDescription
+
+let package = Package(
+    name: "TronKit",
+    products: [],
+    targets: []
+)
+EOF
+
+printf '5.8\n' > "$TMP_DIR/tron.swift-version"
+ln -s "$TMP_DIR/tron.swift-version" "$TMP_DIR/repos/TronKit.Swift/.swift-version"
+printf '5.7.1\n' > "$TMP_DIR/repos/MissingToolchainKit.Swift/.swift-version"
 
 git -C "$TMP_DIR/repos/BitcoinKit.Swift" init >/dev/null
 git -C "$TMP_DIR/repos/BitcoinKit.Swift" config user.name "Test User"
@@ -83,6 +113,10 @@ if [[ "${1:-}" == "-version" ]]; then
     printf 'Xcode 26.3\nBuild version 17E300\n'
     exit 0
 fi
+if [[ "$*" == *"-list -json"* && "$PWD" == *"/TronKit.Swift" ]]; then
+    printf 'xcodebuild: error: scheme probe failed\n' >&2
+    exit 1
+fi
 for arg in "$@"; do
     if [[ "$arg" == "-package-path" ]]; then
         printf 'unexpected xcodebuild invocation:'
@@ -119,6 +153,39 @@ chmod +x "$TMP_DIR/emitter/mock-emitter"
 export XCODEBUILD_ARGS_LOG="$TMP_DIR/xcodebuild-args.log"
 PATH="$TMP_DIR/bin:$PATH"
 export PATH
+
+TRON_SCHEME_ONLY_OUT="$TMP_DIR/tron-scheme-only.out"
+DEVELOPER_DIR="$TMP_DIR/dev" bash "$SCIP_EMIT_SCRIPT" \
+    tron-kit \
+    --scheme-only-check \
+    --repo-path "$TMP_DIR/repos/TronKit.Swift" \
+    --remote-relative-path TronKit.Swift \
+    --emitter-dir "$TMP_DIR/emitter" >"$TRON_SCHEME_ONLY_OUT"
+assert_contains "$TRON_SCHEME_ONLY_OUT" "slug=tron-kit"
+assert_contains "$TRON_SCHEME_ONLY_OUT" "scheme=TronKit"
+assert_contains "$TRON_SCHEME_ONLY_OUT" "toolchain=swift-5.8.1-RELEASE"
+
+TRON_SCHEME_EXPLICIT_OUT="$TMP_DIR/tron-scheme-explicit.out"
+DEVELOPER_DIR="$TMP_DIR/dev" bash "$SCIP_EMIT_SCRIPT" \
+    tron-kit \
+    --scheme TronKit \
+    --scheme-only-check \
+    --repo-path "$TMP_DIR/repos/TronKit.Swift" \
+    --remote-relative-path TronKit.Swift \
+    --emitter-dir "$TMP_DIR/emitter" >"$TRON_SCHEME_EXPLICIT_OUT"
+assert_contains "$TRON_SCHEME_EXPLICIT_OUT" "scheme=TronKit"
+assert_contains "$TRON_SCHEME_EXPLICIT_OUT" "toolchain=swift-5.8.1-RELEASE"
+
+MISSING_TOOLCHAIN_OUT="$TMP_DIR/missing-toolchain.out"
+if DEVELOPER_DIR="$TMP_DIR/dev" bash "$SCIP_EMIT_SCRIPT" \
+    missing-toolchain-kit \
+    --scheme-only-check \
+    --repo-path "$TMP_DIR/repos/MissingToolchainKit.Swift" \
+    --remote-relative-path MissingToolchainKit.Swift \
+    --emitter-dir "$TMP_DIR/emitter" >"$MISSING_TOOLCHAIN_OUT" 2>&1; then
+    fail "missing toolchain unexpectedly succeeded"
+fi
+assert_contains "$MISSING_TOOLCHAIN_OUT" "ERROR: toolchain not installed: swift-5.7.1-RELEASE"
 
 OUT="$TMP_DIR/script.out"
 bash "$SCIP_EMIT_SCRIPT" \

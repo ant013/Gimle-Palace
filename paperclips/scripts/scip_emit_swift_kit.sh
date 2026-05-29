@@ -352,18 +352,19 @@ if [[ -z "$SCHEME_NAME" ]]; then
     # `HsCryptoKit.Swift` (suffix retained) and case-mismatched kits
     # like HDWalletKit.Swift whose real scheme is `HdWalletKit`. (GIM-984)
     if command -v xcodebuild >/dev/null 2>&1 && [[ -d "$LOCAL_REPO_PATH" ]]; then
-        AVAILABLE_SCHEMES="$(cd "$LOCAL_REPO_PATH" && xcodebuild -list -json 2>/dev/null \
+        if AVAILABLE_SCHEMES="$(cd "$LOCAL_REPO_PATH" && xcodebuild -list -json 2>/dev/null \
             | python3 -c 'import sys,json
 try:
     d=json.load(sys.stdin)
     print("\n".join((d.get("workspace") or d.get("project") or {}).get("schemes") or []))
 except Exception:
-    pass' 2>/dev/null)"
-        if [[ -n "$AVAILABLE_SCHEMES" ]] && ! grep -qFx "$SCHEME_NAME" <<<"$AVAILABLE_SCHEMES"; then
-            MATCH="$(grep -i -E "^${SCHEME_NAME}(\\.swift)?\$" <<<"$AVAILABLE_SCHEMES" | head -1)"
-            if [[ -n "$MATCH" ]]; then
-                log "scheme '$SCHEME_NAME' not found in xcodebuild -list; using '$MATCH'"
-                SCHEME_NAME="$MATCH"
+    pass' 2>/dev/null)"; then
+            if [[ -n "$AVAILABLE_SCHEMES" ]] && ! grep -qFx "$SCHEME_NAME" <<<"$AVAILABLE_SCHEMES"; then
+                MATCH="$(grep -i -E "^${SCHEME_NAME}(\\.swift)?\$" <<<"$AVAILABLE_SCHEMES" | head -1)"
+                if [[ -n "$MATCH" ]]; then
+                    log "scheme '$SCHEME_NAME' not found in xcodebuild -list; using '$MATCH'"
+                    SCHEME_NAME="$MATCH"
+                fi
             fi
         fi
     fi
@@ -375,9 +376,9 @@ fi
 
 RESOLVED_TOOLCHAIN="$(resolve_swift_toolchain "$LOCAL_REPO_PATH")"
 TOOLCHAIN_DESC="${RESOLVED_TOOLCHAIN:-default}"
-TOOLCHAIN_ARGS=()
+XCODEBUILD_CMD=(xcodebuild -scheme "$SCHEME_NAME")
 if [[ -n "$RESOLVED_TOOLCHAIN" ]]; then
-    TOOLCHAIN_ARGS=(-toolchain "$RESOLVED_TOOLCHAIN")
+    XCODEBUILD_CMD+=(-toolchain "$RESOLVED_TOOLCHAIN")
 fi
 
 if [[ "$SCHEME_ONLY_CHECK" == "true" ]]; then
@@ -427,9 +428,7 @@ log "building Swift package with xcodebuild"
     # SCIP-emit-only builds host-native and skips those paths cleanly.
     # SCIP output is arch-agnostic so coverage is unaffected.
     BUILD_ARCH="$(uname -m)"
-    run_cmd xcodebuild \
-        -scheme "$SCHEME_NAME" \
-        "${TOOLCHAIN_ARGS[@]}" \
+    run_cmd "${XCODEBUILD_CMD[@]}" \
         -configuration Debug \
         -sdk iphonesimulator \
         -destination "generic/platform=iOS Simulator" \
