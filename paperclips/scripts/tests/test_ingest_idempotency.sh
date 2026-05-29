@@ -20,11 +20,81 @@ assert_contains() {
     grep -Fq -- "$needle" "$file" || fail "expected '$needle' in $file"
 }
 
-mkdir -p "$TMP_DIR/bin" "$TMP_DIR/repos-hs/TronKit.Swift/scip"
+assert_not_contains() {
+    local file="$1"
+    local needle="$2"
+    if grep -Fq -- "$needle" "$file"; then
+        fail "did not expect '$needle' in $file"
+    fi
+}
+
+mkdir -p \
+    "$TMP_DIR/bin" \
+    "$TMP_DIR/dev/Toolchains/swift-5.8.0-RELEASE.xctoolchain" \
+    "$TMP_DIR/dev/Toolchains/swift-5.8.1-RELEASE.xctoolchain" \
+    "$TMP_DIR/dev/Toolchains/swift-5.9.0-RELEASE.xctoolchain" \
+    "$TMP_DIR/emitter" \
+    "$TMP_DIR/repos-hs/HDWalletKit.Swift/.swiftpm/xcode/package.xcworkspace" \
+    "$TMP_DIR/repos-hs/HsExtensions/scip" \
+    "$TMP_DIR/repos-hs/HsExtensions.Swift/scip" \
+    "$TMP_DIR/repos-hs/HsCryptoKit.Swift/.swiftpm/xcode/package.xcworkspace/xcshareddata/xcschemes" \
+    "$TMP_DIR/repos-hs/MarketKit.Swift/iOS Example/iOS Example.xcodeproj/xcshareddata/xcschemes" \
+    "$TMP_DIR/repos-hs/MarketKit.Swift/iOS Example/iOS Example.xcworkspace" \
+    "$TMP_DIR/repos-hs/MissingToolchainKit.Swift/scip" \
+    "$TMP_DIR/repos-hs/TronKit.Swift/scip" \
+    "$TMP_DIR/repos-hs/BitcoinKit.Swift/scip"
+printf 'fixture-scip\n' > "$TMP_DIR/repos-hs/HsExtensions/scip/index.scip"
+printf 'fixture-scip\n' > "$TMP_DIR/repos-hs/HsExtensions.Swift/scip/index.scip"
 printf 'fixture-scip\n' > "$TMP_DIR/repos-hs/TronKit.Swift/scip/index.scip"
+printf 'fixture-scip\n' > "$TMP_DIR/repos-hs/BitcoinKit.Swift/scip/index.scip"
+cat > "$TMP_DIR/repos-hs/HsExtensions.Swift/Package.swift" <<'EOF'
+// fixture
+EOF
+cat > "$TMP_DIR/repos-hs/TronKit.Swift/Package.swift" <<'EOF'
+// fixture
+EOF
+printf '5.8\n' > "$TMP_DIR/tron.swift-version"
+ln -s "$TMP_DIR/tron.swift-version" "$TMP_DIR/repos-hs/TronKit.Swift/.swift-version"
+cat > "$TMP_DIR/repos-hs/BitcoinKit.Swift/Package.swift" <<'EOF'
+// fixture
+EOF
+cat > "$TMP_DIR/repos-hs/MissingToolchainKit.Swift/Package.swift" <<'EOF'
+// fixture
+EOF
+printf '5.7.1\n' > "$TMP_DIR/repos-hs/MissingToolchainKit.Swift/.swift-version"
+cat > "$TMP_DIR/repos-hs/HsCryptoKit.Swift/Package.swift" <<'EOF'
+// fixture
+EOF
+cat > "$TMP_DIR/repos-hs/HDWalletKit.Swift/Package.swift" <<'EOF'
+// fixture
+EOF
+cat > "$TMP_DIR/repos-hs/MarketKit.Swift/Package.swift" <<'EOF'
+// fixture
+EOF
+cat > "$TMP_DIR/repos-hs/MarketKit.Swift/iOS Example/iOS Example.xcodeproj/xcshareddata/xcschemes/iOS Example.xcscheme" <<'EOF'
+<Scheme/>
+EOF
+cat > "$TMP_DIR/repos-hs/HsCryptoKit.Swift/.swiftpm/xcode/package.xcworkspace/xcshareddata/xcschemes/HsCryptoKit.Swift.xcscheme" <<'EOF'
+<Scheme/>
+EOF
+cat > "$TMP_DIR/repos-hs/HsCryptoKit.Swift/.swiftpm/xcode/package.xcworkspace/xcshareddata/xcschemes/HsCryptoKitTests.xcscheme" <<'EOF'
+<Scheme/>
+EOF
+ln -s HsCryptoKit.Swift "$TMP_DIR/repos-hs/hs-crypto-kit"
+ln -s HDWalletKit.Swift "$TMP_DIR/repos-hs/hd-wallet-kit"
 cat > "$TMP_DIR/.env" <<'EOF'
 PALACE_SCIP_INDEX_PATHS={"existing":"/repos/existing/scip/index.scip"}
 OTHER_VAR=1
+EOF
+cat > "$TMP_DIR/hs-extensions-manifest.json" <<'EOF'
+{
+  "members": [
+    {
+      "slug": "hs-extensions",
+      "relative_path": "HsExtensions"
+    }
+  ]
+}
 EOF
 
 cat > "$TMP_DIR/bin/mock-mcp-cli" <<'EOF'
@@ -113,6 +183,58 @@ exit 0
 EOF
 chmod +x "$TMP_DIR/bin/curl"
 
+cat > "$TMP_DIR/bin/git" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "$#" -ge 5 && "$1" == "-C" && "$3" == "remote" && "$4" == "get-url" && "$5" == "origin" ]]; then
+    case "$2" in
+        */TronKit.Swift)
+            printf '%s\n' 'https://github.com/example/TronKit.Swift.git'
+            exit 0
+            ;;
+        */BitcoinKit.Swift)
+            printf '%s\n' 'https://github.com/example/BitcoinKit.Swift.git'
+            exit 0
+            ;;
+    esac
+fi
+
+exit 1
+EOF
+chmod +x "$TMP_DIR/bin/git"
+
+for cmd in scp ssh swift xcrun; do
+    cat > "$TMP_DIR/bin/$cmd" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+    chmod +x "$TMP_DIR/bin/$cmd"
+done
+cat > "$TMP_DIR/bin/xcodebuild" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "$1" == "-version" ]]; then
+    printf 'Xcode 16.0\nBuild version 16A242d\n'
+    exit 0
+fi
+
+if [[ "$*" == *"-list -json"* && "$*" == *"HDWalletKit.Swift"* ]]; then
+    cat <<'JSON'
+{"workspace":{"schemes":["HdWalletKit"]}}
+JSON
+    exit 0
+fi
+
+if [[ "$*" == *"-list -json"* && "$*" == *"TronKit.Swift"* ]]; then
+    printf 'xcodebuild: error: scheme discovery failed\n' >&2
+    exit 1
+fi
+EOF
+chmod +x "$TMP_DIR/bin/xcodebuild"
+
 PATH="$TMP_DIR/bin:$PATH"
 export PALACE_MCP_CLI_BIN="$TMP_DIR/bin/mock-mcp-cli"
 export MOCK_MCP_LOG="$TMP_DIR/mcp.log"
@@ -124,11 +246,99 @@ if bash "$INGEST_SCRIPT" "INVALID SLUG" --dry-run --env-file "$TMP_DIR/.env" >"$
 fi
 assert_contains "$INVALID_OUT" "invalid slug"
 
+HELP_OUT="$TMP_DIR/help.out"
+bash "$INGEST_SCRIPT" --help >"$HELP_OUT"
+assert_contains "$HELP_OUT" "--auto-resolve-by-convention"
+
 SCIP_INVALID_OUT="$TMP_DIR/scip-invalid.out"
 if bash "$SCIP_EMIT_SCRIPT" --repo-root="$TMP_DIR" "INVALID SLUG" >"$SCIP_INVALID_OUT" 2>&1; then
     fail "scip_emit invalid slug unexpectedly succeeded"
 fi
 assert_contains "$SCIP_INVALID_OUT" "invalid slug"
+
+SCIP_DRY_RUN_OUT="$TMP_DIR/scip-dry-run.out"
+DEVELOPER_DIR="$TMP_DIR/dev" bash "$SCIP_EMIT_SCRIPT" "tron-kit" \
+    --dry-run \
+    --repo-path "$TMP_DIR/repos-hs/TronKit.Swift" \
+    --remote-relative-path "TronKit.Swift" \
+    --emitter-dir "$TMP_DIR/emitter" >"$SCIP_DRY_RUN_OUT"
+assert_contains "$SCIP_DRY_RUN_OUT" "DRY-RUN: xcodebuild"
+assert_contains "$SCIP_DRY_RUN_OUT" "-scheme"
+assert_contains "$SCIP_DRY_RUN_OUT" "TronKit"
+assert_contains "$SCIP_DRY_RUN_OUT" "-toolchain"
+assert_contains "$SCIP_DRY_RUN_OUT" "swift-5.8.1-RELEASE"
+assert_contains "$SCIP_DRY_RUN_OUT" "-derivedDataPath"
+assert_contains "$SCIP_DRY_RUN_OUT" "generic/platform=iOS\\ Simulator"
+assert_contains "$SCIP_DRY_RUN_OUT" "--derived-data"
+assert_not_contains "$SCIP_DRY_RUN_OUT" "xcrun swift build --package-path"
+[[ ! -e "$TMP_DIR/repos-hs/TronKit.Swift/.palace-scip-build" ]] || fail "dry-run created scratch path"
+[[ ! -e "$TMP_DIR/repos-hs/TronKit.Swift/.palace-scip-derived-data" ]] || fail "dry-run created derived data"
+
+SCIP_SCHEME_ONLY_OUT="$TMP_DIR/scip-scheme-only.out"
+DEVELOPER_DIR="$TMP_DIR/dev" bash "$SCIP_EMIT_SCRIPT" "tron-kit" \
+    --scheme-only-check \
+    --repo-path "$TMP_DIR/repos-hs/TronKit.Swift" \
+    --remote-relative-path "TronKit.Swift" \
+    --emitter-dir "$TMP_DIR/emitter" >"$SCIP_SCHEME_ONLY_OUT"
+assert_contains "$SCIP_SCHEME_ONLY_OUT" "scheme=TronKit"
+assert_contains "$SCIP_SCHEME_ONLY_OUT" "slug=tron-kit"
+assert_contains "$SCIP_SCHEME_ONLY_OUT" "toolchain=swift-5.8.1-RELEASE"
+assert_not_contains "$SCIP_SCHEME_ONLY_OUT" "DRY-RUN: xcodebuild"
+[[ ! -e "$TMP_DIR/repos-hs/TronKit.Swift/.palace-scip-build" ]] || fail "scheme-only-check created scratch path"
+[[ ! -e "$TMP_DIR/repos-hs/TronKit.Swift/.palace-scip-derived-data" ]] || fail "scheme-only-check created derived data"
+
+SCIP_BITCOIN_KIT_OUT="$TMP_DIR/scip-bitcoin-kit.out"
+bash "$SCIP_EMIT_SCRIPT" "bitcoin-kit" \
+    --dry-run \
+    --repo-path "$TMP_DIR/repos-hs/BitcoinKit.Swift" \
+    --remote-relative-path "BitcoinKit.Swift" \
+    --emitter-dir "$TMP_DIR/emitter" >"$SCIP_BITCOIN_KIT_OUT"
+assert_contains "$SCIP_BITCOIN_KIT_OUT" "slug=bitcoin-kit"
+assert_contains "$SCIP_BITCOIN_KIT_OUT" "destination=imac-ssh.ant013.work:/Users/Shared/Ios/HorizontalSystems/BitcoinKit.Swift/scip/index.scip"
+assert_contains "$SCIP_BITCOIN_KIT_OUT" "BitcoinKit"
+assert_not_contains "$SCIP_BITCOIN_KIT_OUT" "-toolchain"
+
+MISSING_TOOLCHAIN_OUT="$TMP_DIR/scip-missing-toolchain.out"
+if DEVELOPER_DIR="$TMP_DIR/dev" bash "$SCIP_EMIT_SCRIPT" "missing-toolchain-kit" \
+    --dry-run \
+    --repo-path "$TMP_DIR/repos-hs/MissingToolchainKit.Swift" \
+    --remote-relative-path "MissingToolchainKit.Swift" \
+    --emitter-dir "$TMP_DIR/emitter" >"$MISSING_TOOLCHAIN_OUT" 2>&1; then
+    fail "missing toolchain unexpectedly succeeded"
+fi
+assert_contains "$MISSING_TOOLCHAIN_OUT" "toolchain not installed: swift-5.7.1-RELEASE"
+
+SCIP_MARKET_KIT_OUT="$TMP_DIR/scip-market-kit.out"
+bash "$SCIP_EMIT_SCRIPT" "market-kit" \
+    --dry-run \
+    --repo-path "$TMP_DIR/repos-hs/MarketKit.Swift" \
+    --remote-relative-path "MarketKit.Swift" \
+    --emitter-dir "$TMP_DIR/emitter" >"$SCIP_MARKET_KIT_OUT"
+assert_contains "$SCIP_MARKET_KIT_OUT" "scheme=iOS Example"
+assert_contains "$SCIP_MARKET_KIT_OUT" "build_target=workspace=iOS Example/iOS Example.xcworkspace"
+assert_contains "$SCIP_MARKET_KIT_OUT" "DRY-RUN: xcodebuild"
+assert_contains "$SCIP_MARKET_KIT_OUT" "iOS\\ Example/iOS\\ Example.xcworkspace"
+assert_contains "$SCIP_MARKET_KIT_OUT" "iOS\\ Example"
+
+SCIP_HS_CRYPTO_KIT_OUT="$TMP_DIR/scip-hs-crypto-kit.out"
+bash "$SCIP_EMIT_SCRIPT" "hs-crypto-kit" \
+    --dry-run \
+    --repo-root "$TMP_DIR/repos-hs" \
+    --emitter-dir "$TMP_DIR/emitter" >"$SCIP_HS_CRYPTO_KIT_OUT"
+assert_contains "$SCIP_HS_CRYPTO_KIT_OUT" "scheme=HsCryptoKit.Swift"
+assert_contains "$SCIP_HS_CRYPTO_KIT_OUT" "build_target=workspace=.swiftpm/xcode/package.xcworkspace"
+assert_contains "$SCIP_HS_CRYPTO_KIT_OUT" "local_repo="
+assert_contains "$SCIP_HS_CRYPTO_KIT_OUT" "HsCryptoKit.Swift"
+assert_contains "$SCIP_HS_CRYPTO_KIT_OUT" ".swiftpm/xcode/package.xcworkspace"
+
+SCIP_HD_WALLET_KIT_OUT="$TMP_DIR/scip-hd-wallet-kit.out"
+bash "$SCIP_EMIT_SCRIPT" "hd-wallet-kit" \
+    --dry-run \
+    --repo-root "$TMP_DIR/repos-hs" \
+    --emitter-dir "$TMP_DIR/emitter" >"$SCIP_HD_WALLET_KIT_OUT"
+assert_contains "$SCIP_HD_WALLET_KIT_OUT" "scheme=HdWalletKit"
+assert_contains "$SCIP_HD_WALLET_KIT_OUT" "build_target=workspace=.swiftpm/xcode/package.xcworkspace"
+assert_not_contains "$SCIP_HD_WALLET_KIT_OUT" "scheme=HDWalletKit"
 
 MISSING_REPO_OUT="$TMP_DIR/missing-repo.out"
 if bash "$INGEST_SCRIPT" "tron-kit" \
@@ -140,6 +350,42 @@ if bash "$INGEST_SCRIPT" "tron-kit" \
     fail "missing repo unexpectedly succeeded"
 fi
 assert_contains "$MISSING_REPO_OUT" "repo mount not found"
+
+CONVENTION_DRY_RUN_OUT="$TMP_DIR/convention-dry-run.out"
+bash "$INGEST_SCRIPT" "bitcoin-kit" \
+    --auto-resolve-by-convention \
+    --dry-run \
+    --repo-base=/repos-hs \
+    --host-repo-base="$TMP_DIR/repos-hs" \
+    --parent-mount=hs \
+    --manifest="$TMP_DIR/missing-manifest.json" \
+    --env-file="$TMP_DIR/.env" >"$CONVENTION_DRY_RUN_OUT"
+assert_contains "$CONVENTION_DRY_RUN_OUT" '"relative_path":"BitcoinKit.Swift"'
+assert_contains "$CONVENTION_DRY_RUN_OUT" '"/repos-hs/BitcoinKit.Swift/scip/index.scip"'
+
+CONVENTION_MISSING_OUT="$TMP_DIR/convention-missing.out"
+if bash "$INGEST_SCRIPT" "fake-kit" \
+    --auto-resolve-by-convention \
+    --dry-run \
+    --repo-base=/repos-hs \
+    --host-repo-base="$TMP_DIR/repos-hs" \
+    --parent-mount=hs \
+    --manifest="$TMP_DIR/missing-manifest.json" \
+    --env-file="$TMP_DIR/.env" >"$CONVENTION_MISSING_OUT" 2>&1; then
+    fail "missing convention repo unexpectedly succeeded"
+fi
+assert_contains "$CONVENTION_MISSING_OUT" "convention resolved to FakeKit.Swift but no such directory at $TMP_DIR/repos-hs/FakeKit.Swift"
+
+ALIAS_MANIFEST_OUT="$TMP_DIR/alias-manifest.out"
+bash "$INGEST_SCRIPT" "hs-extensions" \
+    --dry-run \
+    --repo-base=/repos-hs \
+    --host-repo-base="$TMP_DIR/repos-hs" \
+    --manifest="$TMP_DIR/hs-extensions-manifest.json" \
+    --env-file="$TMP_DIR/.env" >"$ALIAS_MANIFEST_OUT"
+assert_contains "$ALIAS_MANIFEST_OUT" '"relative_path":"HsExtensions.Swift"'
+assert_contains "$ALIAS_MANIFEST_OUT" '"/repos-hs/HsExtensions.Swift/scip/index.scip"'
+assert_not_contains "$ALIAS_MANIFEST_OUT" '"/repos-hs/HsExtensions/scip/index.scip"'
 
 rm -f "$TMP_DIR/repos-hs/TronKit.Swift/scip/index.scip"
 MISSING_SCIP_OUT="$TMP_DIR/missing-scip.out"
@@ -176,6 +422,35 @@ bash "$INGEST_SCRIPT" "tron-kit" \
     --env-file="$TMP_DIR/.env" >"$RUN1_OUT"
 assert_contains "$RUN1_OUT" '"status":"ok"'
 assert_contains "$RUN1_OUT" '"reason":"not_registered"'
+python3 - "$MOCK_MCP_LOG" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+entries = []
+for line in Path(sys.argv[1]).read_text().splitlines():
+    tool, payload = line.split("\t", 1)
+    entries.append((tool, json.loads(payload)))
+
+register_index = next(
+    index for index, (tool, _) in enumerate(entries)
+    if tool == "palace.memory.register_project"
+)
+extractor_index = next(
+    index for index, (tool, _) in enumerate(entries)
+    if tool == "palace.ingest.run_extractor"
+)
+if register_index >= extractor_index:
+    raise SystemExit("register_project did not happen before run_extractor")
+
+payload = entries[register_index][1]
+assert payload["slug"] == "tron-kit"
+assert payload["name"] == "tron-kit"
+assert payload["language"] == "swift"
+assert payload["parent_mount"] == "hs"
+assert payload["relative_path"] == "TronKit.Swift"
+assert payload["repo_url"] == "https://github.com/example/TronKit.Swift.git"
+PY
 ENV_AFTER_RUN1="$(cat "$TMP_DIR/.env")"
 PATH_JSON="$(grep '^PALACE_SCIP_INDEX_PATHS=' "$TMP_DIR/.env" | cut -d= -f2-)"
 printf '%s' "$PATH_JSON" | jq -e '.existing == "/repos/existing/scip/index.scip"' >/dev/null || \
