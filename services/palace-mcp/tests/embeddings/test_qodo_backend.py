@@ -12,6 +12,7 @@ from palace_mcp.embeddings.cache_preflight import CacheCheckResult, CacheStatus
 from palace_mcp.embeddings.qodo import (
     QODO_EMBED_MODEL_NAME,
     QodoEmbeddingBackend,
+    _ensure_dynamic_cache_legacy_compat,
     _ensure_qwen2_rope_theta_compat,
 )
 
@@ -306,6 +307,189 @@ class TestQodoEmbeddingBackend:
         config.rope_theta = 84.0
 
         assert config.rope_theta == 84.0
+
+
+class TestDynamicCacheLegacyCompat:
+    def test_from_legacy_cache_with_none_returns_empty_cache(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        original_import_module = importlib.import_module
+
+        class _FakeDynamicCache:
+            def __init__(self) -> None:
+                self._layers: list[tuple[Any, Any]] = []
+
+            def update(
+                self, key_states: Any, value_states: Any, layer_idx: int
+            ) -> tuple[Any, Any]:
+                while len(self._layers) <= layer_idx:
+                    self._layers.append((None, None))
+                self._layers[layer_idx] = (key_states, value_states)
+                return key_states, value_states
+
+        def _fake_import_module(name: str) -> object:
+            if name == "transformers":
+                return SimpleNamespace(DynamicCache=_FakeDynamicCache)
+            return original_import_module(name)
+
+        monkeypatch.setattr(importlib, "import_module", _fake_import_module)
+        _ensure_dynamic_cache_legacy_compat()
+
+        result = _FakeDynamicCache.from_legacy_cache(None)
+        assert isinstance(result, _FakeDynamicCache)
+        assert result._layers == []
+
+    def test_from_legacy_cache_with_past_kv_calls_update(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        original_import_module = importlib.import_module
+
+        class _FakeDynamicCache:
+            def __init__(self) -> None:
+                self._layers: list[tuple[Any, Any]] = []
+
+            def update(
+                self, key_states: Any, value_states: Any, layer_idx: int
+            ) -> tuple[Any, Any]:
+                while len(self._layers) <= layer_idx:
+                    self._layers.append((None, None))
+                self._layers[layer_idx] = (key_states, value_states)
+                return key_states, value_states
+
+        def _fake_import_module(name: str) -> object:
+            if name == "transformers":
+                return SimpleNamespace(DynamicCache=_FakeDynamicCache)
+            return original_import_module(name)
+
+        monkeypatch.setattr(importlib, "import_module", _fake_import_module)
+        _ensure_dynamic_cache_legacy_compat()
+
+        past_kv = [("k0", "v0"), ("k1", "v1")]
+        result = _FakeDynamicCache.from_legacy_cache(past_kv)
+        assert result._layers[0] == ("k0", "v0")
+        assert result._layers[1] == ("k1", "v1")
+
+    def test_to_legacy_cache_returns_layer_key_value_tuples(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        original_import_module = importlib.import_module
+
+        class _FakeLayer:
+            def __init__(self, k: Any, v: Any) -> None:
+                self.keys = k
+                self.values = v
+
+        class _FakeDynamicCache:
+            def __init__(self) -> None:
+                self.layers: list[Any] = [
+                    _FakeLayer("k0", "v0"),
+                    _FakeLayer("k1", "v1"),
+                ]
+
+        def _fake_import_module(name: str) -> object:
+            if name == "transformers":
+                return SimpleNamespace(DynamicCache=_FakeDynamicCache)
+            return original_import_module(name)
+
+        monkeypatch.setattr(importlib, "import_module", _fake_import_module)
+        _ensure_dynamic_cache_legacy_compat()
+
+        cache = _FakeDynamicCache()
+        result = cache.to_legacy_cache()
+        assert result == (("k0", "v0"), ("k1", "v1"))
+
+    def test_get_usable_length_delegates_to_get_seq_length(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        original_import_module = importlib.import_module
+
+        class _FakeDynamicCache:
+            def get_seq_length(self, layer_idx: int = 0) -> int:
+                return 7
+
+        def _fake_import_module(name: str) -> object:
+            if name == "transformers":
+                return SimpleNamespace(DynamicCache=_FakeDynamicCache)
+            return original_import_module(name)
+
+        monkeypatch.setattr(importlib, "import_module", _fake_import_module)
+        _ensure_dynamic_cache_legacy_compat()
+
+        cache = _FakeDynamicCache()
+        assert cache.get_usable_length(10) == 7
+        assert cache.get_usable_length(10, layer_idx=2) == 7
+
+    def test_get_max_length_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        original_import_module = importlib.import_module
+
+        class _FakeDynamicCache:
+            pass
+
+        def _fake_import_module(name: str) -> object:
+            if name == "transformers":
+                return SimpleNamespace(DynamicCache=_FakeDynamicCache)
+            return original_import_module(name)
+
+        monkeypatch.setattr(importlib, "import_module", _fake_import_module)
+        _ensure_dynamic_cache_legacy_compat()
+
+        assert _FakeDynamicCache().get_max_length() is None
+
+    def test_seen_tokens_delegates_to_get_seq_length(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        original_import_module = importlib.import_module
+
+        class _FakeDynamicCache:
+            def get_seq_length(self, layer_idx: int = 0) -> int:
+                return 42
+
+        def _fake_import_module(name: str) -> object:
+            if name == "transformers":
+                return SimpleNamespace(DynamicCache=_FakeDynamicCache)
+            return original_import_module(name)
+
+        monkeypatch.setattr(importlib, "import_module", _fake_import_module)
+        _ensure_dynamic_cache_legacy_compat()
+
+        assert _FakeDynamicCache().seen_tokens == 42
+
+    def test_skips_patching_if_methods_already_exist(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        original_import_module = importlib.import_module
+        sentinel: object = object()
+
+        class _FakeDynamicCache:
+            @classmethod
+            def from_legacy_cache(cls, past_key_values: Any = None) -> Any:
+                return sentinel
+
+            def to_legacy_cache(self) -> tuple[Any, ...]:
+                return ()
+
+            def get_usable_length(self, new_seq_length: int, layer_idx: int = 0) -> int:
+                return 99
+
+            def get_max_length(self) -> int | None:
+                return 128
+
+            @property
+            def seen_tokens(self) -> int:
+                return 5
+
+        def _fake_import_module(name: str) -> object:
+            if name == "transformers":
+                return SimpleNamespace(DynamicCache=_FakeDynamicCache)
+            return original_import_module(name)
+
+        monkeypatch.setattr(importlib, "import_module", _fake_import_module)
+        _ensure_dynamic_cache_legacy_compat()
+
+        assert _FakeDynamicCache.from_legacy_cache() is sentinel
+        assert _FakeDynamicCache().get_usable_length(10) == 99
+        assert _FakeDynamicCache().get_max_length() == 128
+        assert _FakeDynamicCache().seen_tokens == 5
 
 
 class TestQodoEmbeddingBackendDispatcher:
