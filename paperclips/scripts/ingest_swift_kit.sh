@@ -196,6 +196,25 @@ update_env_json_key() {
     mv "$tmp_file" "$env_file"
 }
 
+merge_env_json_key() {
+    local env_file="$1"
+    local key="$2"
+    local merged='{}'
+    local raw_value
+
+    while IFS= read -r raw_value; do
+        [[ -n "$raw_value" ]] || continue
+        merged="$(
+            jq -nc \
+                --argjson current "$merged" \
+                --argjson next "$raw_value" \
+                '($current + $next) | to_entries | sort_by(.key) | from_entries'
+        )" || return 1
+    done < <(grep "^${key}=" "$env_file" | cut -d= -f2- || true)
+
+    printf '%s' "$merged"
+}
+
 call_mcp() {
     local tool_name="$1"
     local payload="$2"
@@ -635,18 +654,14 @@ else
     EXTRACTORS=("${DEFAULT_EXTRACTORS[@]}")
 fi
 
-current_scip_json="$(grep '^PALACE_SCIP_INDEX_PATHS=' "$ENV_FILE" | tail -n 1 | cut -d= -f2- || true)"
-if [[ -z "$current_scip_json" ]]; then
-    current_scip_json='{}'
-fi
-printf '%s' "$current_scip_json" | jq -e . >/dev/null || \
-    die "PALACE_SCIP_INDEX_PATHS is not valid JSON in $ENV_FILE"
+current_scip_json="$(merge_env_json_key "$ENV_FILE" "PALACE_SCIP_INDEX_PATHS")" || \
+    die "PALACE_SCIP_INDEX_PATHS must be JSON objects in $ENV_FILE"
 
 merged_scip_json="$(jq -nc \
     --argjson current "$current_scip_json" \
     --arg slug "$SLUG" \
     --arg path "$SCIP_PATH" \
-    '$current + {($slug): $path}')"
+    '($current + {($slug): $path}) | to_entries | sort_by(.key) | from_entries')"
 
 if [[ "$merged_scip_json" != "$current_scip_json" ]]; then
     log "updating PALACE_SCIP_INDEX_PATHS in $ENV_FILE"
