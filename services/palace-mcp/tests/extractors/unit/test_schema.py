@@ -19,17 +19,18 @@ from palace_mcp.extractors.foundation.schema import (
 
 class TestSchemaDefinition:
     def test_has_nine_constraints(self) -> None:
-        # 3 original + 6 git_history + 2 dead_symbol_binary_surface
-        assert len(EXPECTED_SCHEMA.constraints) == 11
+        # 3 original + 6 git_history + 2 dead_symbol_binary_surface + 1 symbol_unique
+        assert len(EXPECTED_SCHEMA.constraints) == 12
 
     def test_has_nine_indexes(self) -> None:
-        assert len(EXPECTED_SCHEMA.indexes) == 9
+        # symbol_qname_group_lookup dropped (superseded by symbol_unique constraint)
+        assert len(EXPECTED_SCHEMA.indexes) == 8
 
     def test_has_one_fulltext(self) -> None:
         assert len(EXPECTED_SCHEMA.fulltext_indexes) == 1
 
     def test_total_twenty_one_objects(self) -> None:
-        # 11 constraints + 9 indexes + 1 fulltext
+        # 12 constraints + 8 indexes + 1 fulltext
         total = (
             len(EXPECTED_SCHEMA.constraints)
             + len(EXPECTED_SCHEMA.indexes)
@@ -133,7 +134,8 @@ class TestEnsureCustomSchema:
         driver = self._make_driver()
         await ensure_custom_schema(driver)
         expected_calls = (
-            2
+            2  # SHOW CONSTRAINTS + SHOW INDEXES (drift detection)
+            + 1  # DROP INDEX symbol_qname_group_lookup IF EXISTS
             + len(EXPECTED_SCHEMA.constraints)
             + len(EXPECTED_SCHEMA.indexes)
             + len(EXPECTED_SCHEMA.fulltext_indexes)
