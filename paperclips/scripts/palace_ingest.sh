@@ -3,8 +3,8 @@
 # Orchestrates: prepare_repo (iMac) -> SCIP gen (local Xcode) -> scp+ingest (iMac).
 #
 # Usage:
-#   palace_ingest.sh --github <clone-url> [--extractors <csv>] [--skip-embedding] [--scheme <name>]
-#   palace_ingest.sh --slug   <slug>       [--extractors <csv>] [--skip-embedding] [--scheme <name>]
+#   palace_ingest.sh --github <clone-url> [--extractors <csv>] [--skip-embedding] [--scheme <name>] [--keep-build]
+#   palace_ingest.sh --slug   <slug>       [--extractors <csv>] [--skip-embedding] [--scheme <name>] [--keep-build]
 #
 # --scheme overrides the SCIP-step Xcode scheme; required for kits whose real
 # scheme name differs from `basename(repo) - ".Swift"`. Workaround for GIM-984.
@@ -27,6 +27,7 @@ EXTRACTORS="symbol_index_swift,dead_code,embedding_symbol"
 GITHUB_URL=""
 INPUT_SLUG=""
 SCHEME=""
+KEEP_BUILD="false"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -35,6 +36,7 @@ while [[ $# -gt 0 ]]; do
         --extractors) EXTRACTORS="$2"; shift 2 ;;
         --skip-embedding) EXTRACTORS="symbol_index_swift,dead_code"; shift ;;
         --scheme) SCHEME="$2"; shift 2 ;;
+        --keep-build) KEEP_BUILD="true"; shift ;;
         --help|-h)
             sed -n '2,18p' "$0"
             exit 0 ;;
@@ -96,5 +98,12 @@ bash "$SCIP_SCRIPT" "${SCIP_ARGS[@]}"
 log "step 4/4: ingest_swift_kit.sh $SLUG on $IMAC_HOST (extractors=$EXTRACTORS)"
 ssh -o BatchMode=yes -o ConnectTimeout=20 "$IMAC_HOST" \
     "cd $IMAC_REPO && bash paperclips/scripts/ingest_swift_kit.sh $SLUG --extractors $EXTRACTORS --skip-artefact-check"
+
+if [[ "$KEEP_BUILD" == "false" ]]; then
+    log "cleaning local build artifacts in $LOCAL_REPO"
+    rm -rf "$LOCAL_REPO/.palace-scip-build" "$LOCAL_REPO/.palace-scip-derived-data"
+else
+    log "keeping local build artifacts in $LOCAL_REPO"
+fi
 
 log "done: $SLUG ingested. Verify via Cypher: MATCH (s:Symbol {group_id:'project/$SLUG'}) RETURN count(s)"
