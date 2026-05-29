@@ -662,3 +662,125 @@ async def test_embedding_coverage_included_in_no_embeddings_response() -> None:
     assert cov["embedded_symbols"] == 0
     assert cov["eligible_symbols"] == 0
     assert cov["source_scope_counts"] == {}
+
+
+@pytest.mark.asyncio
+async def test_runtime_path_fails_closed_on_coverage_count_mismatch() -> None:
+    from palace_mcp.code.find_semantic import semantic_search
+
+    backend = _FakeBackend()
+    dispatcher = EmbeddingBackendDispatcher({"qodo": backend}, default_backend="qodo")
+    settings = MagicMock(neo4j_uri="bolt://neo4j:7687")
+
+    def run_fn(query: str, _params: dict[str, Any]) -> _FakeResult:
+        if "collect(p.slug)" in query:
+            return _FakeResult(single_value={"found_projects": ["uw-ios-app"]})
+        if "embedded_cnt" in query:
+            return _FakeResult(
+                data_value=[
+                    {"source_scope": "dependency", "total": 1024, "embedded_cnt": 512}
+                ]
+            )
+        if "embedded_symbol_count" in query:
+            return _FakeResult(single_value={"embedded_symbol_count": 2186})
+        raise AssertionError(f"unexpected query: {query}")
+
+    driver = _FakeDriver(run_fn)
+    with patch(
+        "palace_mcp.code.find_semantic.get_embedding_dispatcher",
+        return_value=dispatcher,
+    ):
+        result = await semantic_search(
+            driver=driver,
+            query="monero",
+            project="uw-ios-app",
+            include_context=False,
+            settings=settings,
+        )
+
+    assert result["ok"] is False
+    assert result["error_code"] == "semantic_search_backend_inconsistent"
+    assert result["inconsistency_kind"] == "coverage_count_mismatch"
+    assert result["embedded_symbol_count"] == 512
+    assert result["live_embedded_symbol_count"] == 2186
+    assert result["runtime"] == {
+        "git_sha": "unknown",
+        "neo4j_uri": "bolt://neo4j:7687",
+    }
+
+
+@pytest.mark.asyncio
+async def test_runtime_path_fails_closed_on_missing_vector_hits() -> None:
+    from palace_mcp.code.find_semantic import semantic_search
+
+    backend = _FakeBackend()
+    dispatcher = EmbeddingBackendDispatcher({"qodo": backend}, default_backend="qodo")
+    settings = MagicMock(neo4j_uri="bolt://neo4j:7687")
+
+    def run_fn(query: str, params: dict[str, Any]) -> _FakeResult:
+        if "collect(p.slug)" in query:
+            return _FakeResult(single_value={"found_projects": ["uw-ios-app"]})
+        if "embedded_cnt" in query:
+            return _FakeResult(
+                data_value=[
+                    {"source_scope": "project", "total": 69231, "embedded_cnt": 2186}
+                ]
+            )
+        if "embedded_symbol_count" in query:
+            return _FakeResult(single_value={"embedded_symbol_count": 2186})
+        if "queryNodes('symbol_embedding_idx'" in query:
+            return _FakeResult(
+                data_value=[
+                    {
+                        "group_id": "project/uw-ios-app",
+                        "qualified_name": "Unstoppable.ImageResource.nftAmount32",
+                        "kind": "enum",
+                        "file_path": "GeneratedAssetSymbols.swift",
+                        "module_name": "Unstoppable",
+                        "source_scope": "dependency",
+                        "embedding_input_hash": "stale-hash",
+                        "commit_sha": None,
+                        "score": 0.99,
+                    }
+                ]
+            )
+        if "OPTIONAL MATCH (s:Symbol {group_id: hit.group_id, qualified_name: hit.qualified_name})" in query:
+            assert params["hits"] == [
+                {
+                    "group_id": "project/uw-ios-app",
+                    "qualified_name": "Unstoppable.ImageResource.nftAmount32",
+                }
+            ]
+            return _FakeResult(
+                data_value=[
+                    {
+                        "group_id": "project/uw-ios-app",
+                        "qualified_name": "Unstoppable.ImageResource.nftAmount32",
+                    }
+                ]
+            )
+        raise AssertionError(f"unexpected query: {query}")
+
+    driver = _FakeDriver(run_fn)
+    with patch(
+        "palace_mcp.code.find_semantic.get_embedding_dispatcher",
+        return_value=dispatcher,
+    ):
+        result = await semantic_search(
+            driver=driver,
+            query="monero",
+            project="uw-ios-app",
+            include_context=False,
+            settings=settings,
+        )
+
+    assert result["ok"] is False
+    assert result["error_code"] == "semantic_search_backend_inconsistent"
+    assert result["inconsistency_kind"] == "missing_vector_hits"
+    assert result["missing_hit_count"] == 1
+    assert result["missing_hits"] == [
+        {
+            "group_id": "project/uw-ios-app",
+            "qualified_name": "Unstoppable.ImageResource.nftAmount32",
+        }
+    ]
