@@ -381,7 +381,10 @@ class TestDynamicCacheLegacyCompat:
 
         class _FakeDynamicCache:
             def __init__(self) -> None:
-                self.layers: list[Any] = [_FakeLayer("k0", "v0"), _FakeLayer("k1", "v1")]
+                self.layers: list[Any] = [
+                    _FakeLayer("k0", "v0"),
+                    _FakeLayer("k1", "v1"),
+                ]
 
         def _fake_import_module(name: str) -> object:
             if name == "transformers":
@@ -416,9 +419,7 @@ class TestDynamicCacheLegacyCompat:
         assert cache.get_usable_length(10) == 7
         assert cache.get_usable_length(10, layer_idx=2) == 7
 
-    def test_get_max_length_returns_none(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_get_max_length_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
         original_import_module = importlib.import_module
 
         class _FakeDynamicCache:

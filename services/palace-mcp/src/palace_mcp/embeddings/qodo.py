@@ -134,8 +134,10 @@ def _ensure_dynamic_cache_legacy_compat() -> None:
 
     if not hasattr(dynamic_cache, "get_usable_length"):
 
-        def get_usable_length(self: Any, new_seq_length: int, layer_idx: int = 0) -> int:
-            return self.get_seq_length(layer_idx)
+        def get_usable_length(
+            self: Any, new_seq_length: int, layer_idx: int = 0
+        ) -> int:
+            return int(self.get_seq_length(layer_idx))
 
         setattr(dynamic_cache, "get_usable_length", get_usable_length)
 
