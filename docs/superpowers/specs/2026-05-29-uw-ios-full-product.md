@@ -1,6 +1,27 @@
-# UW iOS Full Gimle Product — Spec
+# UW iOS Full Gimle Product — Spec (rev1, SUPERSEDED)
 
-> Status: draft, awaiting GIM-987 meta-issue acceptance
+> ⚠️ **SUPERSEDED** by [rev2](2026-05-29-uw-ios-full-product-rev2.md) — 2026-05-29.
+> Kept verbatim for audit. Five-voltAgent review surfaced four blocking
+> issues:
+>
+> 1. A3 misformulated against actual `palace_mcp` code — `:Symbol` is
+>    already MERGE'd; `:SymbolOccurrenceShadow` already has 3-round
+>    eviction. Rev2 narrows A3 scope to the real gap.
+> 2. Block F mixed extractors (write-side) with MCP tools (read-side),
+>    invoked three non-existent tool names (`palace.code.get_architecture`,
+>    `palace.code.trace_call_path`, `palace.code.get_code_snippet`),
+>    and used tautological "run-status ok" assertions that repeat the
+>    GIM-182 mistake.
+> 3. D4 cloudflared without auth exposes WRITE tools
+>    (`palace.ingest.run_extractor` etc.) to the public internet — trivial
+>    DoS surface. Rev2 makes a Service Token + bearer middleware on
+>    write tools a hard gate before D4 enable.
+> 4. "Drift accepted" (Q6) had no contract — agents on iMac vs MacBook
+>    could get different answers with no freshness signal.
+>
+> See rev2 `## 15. Diff against rev1` for the full delta.
+
+> Status: rev1 — superseded, see rev2.
 > Date: 2026-05-29
 > Grounded in: `develop @ 5e05bbd9` (PR #345 merged, post smooth-onboarding-sprint
 > 2026-05-28 — 10 PRs landed #336-#345, 8 Swift projects in Palace).
