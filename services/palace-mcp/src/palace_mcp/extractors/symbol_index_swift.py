@@ -45,7 +45,10 @@ from palace_mcp.extractors.foundation.models import (
 )
 from palace_mcp.extractors.foundation.schema import ensure_custom_schema
 from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
-from palace_mcp.extractors.foundation.symbol_node_writer import write_symbol_nodes
+from palace_mcp.extractors.foundation.symbol_node_writer import (
+    soft_delete_symbols,
+    write_symbol_nodes,
+)
 from palace_mcp.extractors.scip_parser import (
     FindScipPath,
     ScipPathRequiredError,
@@ -224,9 +227,11 @@ class SymbolIndexSwift(BaseExtractor):
                 if occ.kind in (SymbolKind.DEF, SymbolKind.DECL):
                     def_file_paths.setdefault(occ.symbol_qualified_name, occ.file_path)
             sym_nodes = 0
+            seen_qnames: set[str] = set()
             sym_batch: list[ScipSymbolInfo] = []
             sym_batch_size = 5000
             for sym_info in iter_scip_symbol_infos(scip_index):
+                seen_qnames.add(sym_info.qualified_name)
                 sym_batch.append(sym_info)
                 if len(sym_batch) >= sym_batch_size:
                     sym_nodes += await write_symbol_nodes(
@@ -238,6 +243,12 @@ class SymbolIndexSwift(BaseExtractor):
                     driver, sym_batch, def_file_paths, ctx.group_id
                 )
             logger.info("Symbol nodes written to Neo4j: %d", sym_nodes)
+
+            if seen_qnames:
+                deleted_count = await soft_delete_symbols(
+                    driver, ctx.group_id, seen_qnames, datetime.now(tz=timezone.utc)
+                )
+                logger.info("Soft-deleted %d absent :Symbol nodes", deleted_count)
 
             await finalize_ingest_run(driver, run_id=ctx.run_id, success=True)
             return ExtractorStats(nodes_written=total_written, edges_written=0)

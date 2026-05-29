@@ -106,13 +106,14 @@ EXPECTED_SCHEMA = SchemaDefinition(
             label="BinarySurfaceRecord",
             properties=("id",),
         ),
-    ],
-    indexes=[
-        IndexSpec(
-            name="symbol_qname_group_lookup",
+        ConstraintSpec(
+            name="symbol_unique",
             label="Symbol",
             properties=("qualified_name", "group_id"),
+            type="UNIQUE",
         ),
+    ],
+    indexes=[
         IndexSpec(
             name="shadow_evict_r1",
             label="SymbolOccurrenceShadow",
@@ -293,6 +294,8 @@ async def _detect_drift(session: AsyncSession) -> None:
 
 
 async def _create_schema(session: AsyncSession) -> None:
+    # Drop legacy BTREE index superseded by symbol_unique constraint.
+    await session.run("DROP INDEX symbol_qname_group_lookup IF EXISTS")
     for c in EXPECTED_SCHEMA.constraints:
         await session.run(_constraint_cypher(c))
     for i in EXPECTED_SCHEMA.indexes:

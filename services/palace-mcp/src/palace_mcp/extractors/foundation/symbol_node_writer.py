@@ -6,6 +6,7 @@ the call/reference graph needed by dead_code.graph_loader.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from palace_mcp.code.source_scope import classify_source_scope
@@ -70,7 +71,14 @@ SET s.kind            = r.kind,
     s.is_swift_app_storage   = false,
     s.is_env_key             = false,
     s.is_main_entry          = false,
-    s.referenced_via_mirror  = false
+    s.referenced_via_mirror  = false,
+    s.deleted_at             = null
+"""
+
+_SOFT_DELETE_ABSENT = """
+MATCH (s:Symbol {group_id: $group_id})
+WHERE NOT s.qualified_name IN $qnames
+SET s.deleted_at = $now
 """
 
 _MERGE_REFERENCES = """
@@ -183,3 +191,28 @@ async def write_symbol_nodes(
                 await session.run(cypher, rows=edge_rows[i : i + _BATCH_SIZE])
 
     return len(node_rows)
+
+
+async def soft_delete_symbols(
+    driver: "AsyncDriver",
+    group_id: str,
+    seen_qnames: set[str],
+    now: datetime,
+) -> int:
+    """Mark :Symbol nodes absent from the new SCIP as soft-deleted.
+
+    Nodes whose qualified_name appears in seen_qnames have already had
+    deleted_at cleared by the MERGE in write_symbol_nodes. This function
+    stamps deleted_at on the remainder.
+
+    Returns the count of nodes newly stamped.
+    """
+    async with driver.session() as session:
+        result = await session.run(
+            _SOFT_DELETE_ABSENT,
+            group_id=group_id,
+            qnames=list(seen_qnames),
+            now=now,
+        )
+        summary = await result.consume()
+        return summary.counters.properties_set
