@@ -44,6 +44,7 @@ def _load_sentence_transformer(
         ) from exc
 
     _ensure_qwen2_rope_theta_compat()
+    _ensure_dynamic_cache_legacy_compat()
     sentence_transformer = getattr(module, "SentenceTransformer")
     try:
         return cast(
@@ -91,6 +92,66 @@ def _ensure_qwen2_rope_theta_compat() -> None:
         setattr(self, "_qodo_compat_rope_theta", value)
 
     setattr(qwen2_config, "rope_theta", property(_rope_theta, _set_rope_theta))
+
+
+def _ensure_dynamic_cache_legacy_compat() -> None:
+    """Restore DynamicCache APIs removed in transformers 5.x.
+
+    Patches the class with these removed methods:
+    - from_legacy_cache: classmethod, removed in 5.x
+    - to_legacy_cache: instance method, removed in 5.x (layers use .keys/.values)
+    - get_usable_length: renamed to get_seq_length in 5.x
+    - get_max_length: removed in 5.x (DynamicCache is unbounded)
+    - seen_tokens property: removed in 5.x
+    """
+    try:
+        module = importlib.import_module("transformers")
+    except ModuleNotFoundError:
+        return
+
+    dynamic_cache = getattr(module, "DynamicCache", None)
+    if dynamic_cache is None:
+        return
+
+    if not hasattr(dynamic_cache, "from_legacy_cache"):
+
+        @classmethod  # type: ignore[misc]
+        def from_legacy_cache(cls: Any, past_key_values: Any = None) -> Any:
+            cache = cls()
+            if past_key_values is not None:
+                for layer_idx, (key_states, value_states) in enumerate(past_key_values):
+                    cache.update(key_states, value_states, layer_idx)
+            return cache
+
+        setattr(dynamic_cache, "from_legacy_cache", from_legacy_cache)
+
+    if not hasattr(dynamic_cache, "to_legacy_cache"):
+
+        def to_legacy_cache(self: Any) -> tuple[Any, ...]:
+            return tuple((layer.keys, layer.values) for layer in self.layers)
+
+        setattr(dynamic_cache, "to_legacy_cache", to_legacy_cache)
+
+    if not hasattr(dynamic_cache, "get_usable_length"):
+
+        def get_usable_length(self: Any, new_seq_length: int, layer_idx: int = 0) -> int:
+            return self.get_seq_length(layer_idx)
+
+        setattr(dynamic_cache, "get_usable_length", get_usable_length)
+
+    if not hasattr(dynamic_cache, "get_max_length"):
+
+        def get_max_length(self: Any) -> int | None:
+            return None
+
+        setattr(dynamic_cache, "get_max_length", get_max_length)
+
+    if not hasattr(dynamic_cache, "seen_tokens"):
+        setattr(
+            dynamic_cache,
+            "seen_tokens",
+            property(lambda self: self.get_seq_length()),
+        )
 
 
 class QodoEmbeddingBackend:
