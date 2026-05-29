@@ -27,6 +27,7 @@ Options:
   --remote-relative-path <p>  Override remote repo-relative path
   --emitter-dir <path>        palace-swift-scip-emit package dir
   --emitter-bin <path>        Explicit emitter binary path
+  --scheme-only-check         Print resolved scheme/toolchain and exit 0
   --no-remote-copy            Generate local SCIP only; skip SSH/SCP copy
   --dry-run                   Print intended actions without changing state
   --help, -h                  Show this message
@@ -87,10 +88,96 @@ run_cmd() {
     "$@"
 }
 
+resolve_swift_toolchain() {
+    python3 - "$1" <<'PY'
+import os
+import re
+import sys
+from pathlib import Path
+
+repo_path = Path(sys.argv[1]).resolve()
+version_file = repo_path / ".swift-version"
+if not version_file.exists():
+    raise SystemExit(0)
+
+lines = version_file.resolve().read_text(encoding="utf-8").splitlines()
+raw = next((line.strip() for line in lines if line.strip()), "")
+if not raw:
+    raise SystemExit(0)
+
+full_name_re = re.compile(r"^(swift-(\d+)\.(\d+)\.(\d+)-RELEASE)(?:\.xctoolchain)?$")
+full_version_re = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
+partial_name_re = re.compile(r"^swift-(\d+)\.(\d+)(?:-RELEASE)?$")
+partial_version_re = re.compile(r"^(\d+)\.(\d+)$")
+
+roots = []
+developer_dir = os.environ.get("DEVELOPER_DIR")
+if developer_dir:
+    roots.append(Path(developer_dir) / "Toolchains")
+roots.extend(
+    [
+        Path("/Library/Developer/Toolchains"),
+        Path.home() / "Library/Developer/Toolchains",
+    ]
+)
+
+installed = {}
+for root in roots:
+    if not root.exists():
+        continue
+    for child in root.iterdir():
+        if child.suffix != ".xctoolchain":
+            continue
+        match = full_name_re.match(child.name)
+        if not match:
+            continue
+        installed[match.group(1)] = tuple(int(part) for part in match.groups()[1:4])
+
+def fail(name: str) -> None:
+    print(f"ERROR: toolchain not installed: {name}", file=sys.stderr)
+    raise SystemExit(1)
+
+match = full_name_re.match(raw)
+if match:
+    resolved = match.group(1)
+    if resolved not in installed:
+        fail(resolved)
+    print(resolved)
+    raise SystemExit(0)
+
+match = full_version_re.match(raw)
+if match:
+    resolved = f"swift-{raw}-RELEASE"
+    if resolved not in installed:
+        fail(resolved)
+    print(resolved)
+    raise SystemExit(0)
+
+match = partial_name_re.match(raw) or partial_version_re.match(raw)
+if match:
+    major = int(match.group(1))
+    minor = int(match.group(2))
+    matches = [
+        (version, name)
+        for name, version in installed.items()
+        if version[:2] == (major, minor)
+    ]
+    if not matches:
+        fail(f"swift-{major}.{minor}.*-RELEASE")
+    matches.sort()
+    print(matches[-1][1])
+    raise SystemExit(0)
+
+print(f"ERROR: invalid .swift-version value: {raw}", file=sys.stderr)
+raise SystemExit(1)
+PY
+}
+
 SLUG=""
 REPO_ROOT_ARG="${HS_REPO_ROOT:-$PWD}"
 REPO_PATH_ARG=""
 SCHEME_NAME=""
+SCHEME_ONLY_CHECK="false"
 MANIFEST_PATH="$DEFAULT_MANIFEST"
 REMOTE_HOST="$DEFAULT_REMOTE_HOST"
 REMOTE_BASE="$DEFAULT_REMOTE_BASE"
@@ -183,6 +270,10 @@ while [[ $# -gt 0 ]]; do
             EMITTER_BIN="$2"
             shift 2
             ;;
+        --scheme-only-check)
+            SCHEME_ONLY_CHECK="true"
+            shift
+            ;;
         --no-remote-copy)
             NO_REMOTE_COPY="true"
             shift
@@ -223,15 +314,17 @@ if [[ -z "${DEVELOPER_DIR:-}" && "$ACTIVE_DEVELOPER_DIR" == "/Library/Developer/
 fi
 
 require_command python3
-require_command xcrun
-require_command swift
-if [[ "$NO_REMOTE_COPY" == "false" ]]; then
-    require_command ssh
-    require_command scp
-fi
-if [[ "$DRY_RUN" == "false" ]]; then
-    require_command xcodebuild
-    xcodebuild -version >/dev/null 2>&1 || die "xcodebuild requires full Xcode; install Xcode or set DEVELOPER_DIR"
+if [[ "$SCHEME_ONLY_CHECK" == "false" ]]; then
+    require_command xcrun
+    require_command swift
+    if [[ "$NO_REMOTE_COPY" == "false" ]]; then
+        require_command ssh
+        require_command scp
+    fi
+    if [[ "$DRY_RUN" == "false" ]]; then
+        require_command xcodebuild
+        xcodebuild -version >/dev/null 2>&1 || die "xcodebuild requires full Xcode; install Xcode or set DEVELOPER_DIR"
+    fi
 fi
 
 MANIFEST_RELATIVE_PATH="$(resolve_manifest_relative_path "$MANIFEST_PATH" "$SLUG" || true)"
@@ -246,7 +339,6 @@ fi
 [[ -d "$LOCAL_REPO_PATH" ]] || die "repo path not found: $LOCAL_REPO_PATH"
 [[ -f "$LOCAL_REPO_PATH/Package.swift" ]] || \
     die "Package.swift not found in $LOCAL_REPO_PATH (expected SwiftPM kit repo)"
-[[ -d "$EMITTER_DIR" ]] || die "emitter package dir not found: $EMITTER_DIR"
 
 if [[ -z "$SCHEME_NAME" ]]; then
     SCHEME_NAME="$(basename "$LOCAL_REPO_PATH")"
@@ -260,18 +352,19 @@ if [[ -z "$SCHEME_NAME" ]]; then
     # `HsCryptoKit.Swift` (suffix retained) and case-mismatched kits
     # like HDWalletKit.Swift whose real scheme is `HdWalletKit`. (GIM-984)
     if command -v xcodebuild >/dev/null 2>&1 && [[ -d "$LOCAL_REPO_PATH" ]]; then
-        AVAILABLE_SCHEMES="$(cd "$LOCAL_REPO_PATH" && xcodebuild -list -json 2>/dev/null \
+        if AVAILABLE_SCHEMES="$(cd "$LOCAL_REPO_PATH" && xcodebuild -list -json 2>/dev/null \
             | python3 -c 'import sys,json
 try:
     d=json.load(sys.stdin)
     print("\n".join((d.get("workspace") or d.get("project") or {}).get("schemes") or []))
 except Exception:
-    pass' 2>/dev/null)"
-        if [[ -n "$AVAILABLE_SCHEMES" ]] && ! grep -qFx "$SCHEME_NAME" <<<"$AVAILABLE_SCHEMES"; then
-            MATCH="$(grep -i -E "^${SCHEME_NAME}(\\.swift)?\$" <<<"$AVAILABLE_SCHEMES" | head -1)"
-            if [[ -n "$MATCH" ]]; then
-                log "scheme '$SCHEME_NAME' not found in xcodebuild -list; using '$MATCH'"
-                SCHEME_NAME="$MATCH"
+    pass' 2>/dev/null)"; then
+            if [[ -n "$AVAILABLE_SCHEMES" ]] && ! grep -qFx "$SCHEME_NAME" <<<"$AVAILABLE_SCHEMES"; then
+                MATCH="$(grep -i -E "^${SCHEME_NAME}(\\.swift)?\$" <<<"$AVAILABLE_SCHEMES" | head -1)"
+                if [[ -n "$MATCH" ]]; then
+                    log "scheme '$SCHEME_NAME' not found in xcodebuild -list; using '$MATCH'"
+                    SCHEME_NAME="$MATCH"
+                fi
             fi
         fi
     fi
@@ -281,6 +374,24 @@ if [[ -z "$EMITTER_BIN" ]]; then
     EMITTER_BIN="$EMITTER_DIR/.build/release/palace-swift-scip-emit-cli"
 fi
 
+RESOLVED_TOOLCHAIN="$(resolve_swift_toolchain "$LOCAL_REPO_PATH")"
+TOOLCHAIN_DESC="${RESOLVED_TOOLCHAIN:-default}"
+XCODEBUILD_CMD=(xcodebuild -scheme "$SCHEME_NAME")
+if [[ -n "$RESOLVED_TOOLCHAIN" ]]; then
+    XCODEBUILD_CMD+=(-toolchain "$RESOLVED_TOOLCHAIN")
+fi
+
+if [[ "$SCHEME_ONLY_CHECK" == "true" ]]; then
+    cat <<EOF
+slug=$SLUG
+scheme=$SCHEME_NAME
+toolchain=$TOOLCHAIN_DESC
+EOF
+    exit 0
+fi
+
+[[ -d "$EMITTER_DIR" ]] || die "emitter package dir not found: $EMITTER_DIR"
+
 SCRATCH_PATH="$LOCAL_REPO_PATH/.palace-scip-build"
 DERIVED_DATA="$LOCAL_REPO_PATH/.palace-scip-derived-data"
 OUTPUT_PATH="$LOCAL_REPO_PATH/scip/index.scip"
@@ -289,7 +400,7 @@ REMOTE_DEST_DIR="$REMOTE_BASE/$RELATIVE_PATH/scip"
 REMOTE_DEST_PATH="$REMOTE_DEST_DIR/index.scip"
 REMOTE_META_PATH="$REMOTE_DEST_DIR/index.scip.meta.json"
 
-log "slug=$SLUG scheme=$SCHEME_NAME local_repo=$LOCAL_REPO_PATH remote_path=$REMOTE_DEST_PATH"
+log "slug=$SLUG scheme=$SCHEME_NAME toolchain=$TOOLCHAIN_DESC local_repo=$LOCAL_REPO_PATH remote_path=$REMOTE_DEST_PATH"
 
 if [[ ! -x "$EMITTER_BIN" ]]; then
     log "building palace-swift-scip-emit"
@@ -317,8 +428,7 @@ log "building Swift package with xcodebuild"
     # SCIP-emit-only builds host-native and skips those paths cleanly.
     # SCIP output is arch-agnostic so coverage is unaffected.
     BUILD_ARCH="$(uname -m)"
-    run_cmd xcodebuild \
-        -scheme "$SCHEME_NAME" \
+    run_cmd "${XCODEBUILD_CMD[@]}" \
         -configuration Debug \
         -sdk iphonesimulator \
         -destination "generic/platform=iOS Simulator" \
