@@ -1,0 +1,48 @@
+# G0c baseline slot summary
+# Generated 2026-05-29 from Neo4j IngestRun history before the A6a discovery sweep artifacts were committed.
+# slot_state values: has_success, history_no_success, no_history
+
+[bitcoin-core]
+symbol_index_swift: slot_state=has_success; total_runs=30; success_runs=20; latest_success=false; latest_error_code=-; latest_started_at=2026-05-29T16:44:58.185534+00:00
+dead_code: slot_state=has_success; total_runs=14; success_runs=12; latest_success=true; latest_error_code=-; latest_started_at=2026-05-24T13:10:40.267823+00:00
+embedding_symbol: slot_state=history_no_success; total_runs=14; success_runs=0; latest_success=-; latest_error_code=-; latest_started_at=2026-05-24T14:42:01.831466+00:00
+
+[bitcoin-kit]
+symbol_index_swift: slot_state=has_success; total_runs=12; success_runs=10; latest_success=false; latest_error_code=-; latest_started_at=2026-05-29T16:48:16.269366+00:00
+dead_code: slot_state=has_success; total_runs=8; success_runs=8; latest_success=true; latest_error_code=-; latest_started_at=2026-05-28T09:06:33.300491+00:00
+embedding_symbol: slot_state=history_no_success; total_runs=4; success_runs=0; latest_success=false; latest_error_code=-; latest_started_at=2026-05-28T08:32:30.246040+00:00
+
+[dash-kit]
+symbol_index_swift: slot_state=has_success; total_runs=10; success_runs=6; latest_success=false; latest_error_code=-; latest_started_at=2026-05-29T16:49:13.183345+00:00
+dead_code: slot_state=has_success; total_runs=2; success_runs=2; latest_success=true; latest_error_code=-; latest_started_at=2026-05-28T10:14:41.108198+00:00
+embedding_symbol: slot_state=no_history; total_runs=0; success_runs=0; latest_success=-; latest_error_code=-; latest_started_at=-
+
+[evm-kit]
+symbol_index_swift: slot_state=has_success; total_runs=15; success_runs=12; latest_success=false; latest_error_code=-; latest_started_at=2026-05-29T16:51:04.714720+00:00
+dead_code: slot_state=has_success; total_runs=10; success_runs=10; latest_success=true; latest_error_code=-; latest_started_at=2026-05-28T09:42:50.501581+00:00
+embedding_symbol: slot_state=no_history; total_runs=0; success_runs=0; latest_success=-; latest_error_code=-; latest_started_at=-
+
+[hd-wallet-kit]
+symbol_index_swift: slot_state=has_success; total_runs=6; success_runs=2; latest_success=false; latest_error_code=-; latest_started_at=2026-05-29T16:53:24.228287+00:00
+dead_code: slot_state=has_success; total_runs=2; success_runs=2; latest_success=true; latest_error_code=-; latest_started_at=2026-05-28T15:25:24.208618+00:00
+embedding_symbol: slot_state=no_history; total_runs=0; success_runs=0; latest_success=-; latest_error_code=-; latest_started_at=-
+
+[hs-crypto-kit]
+symbol_index_swift: slot_state=has_success; total_runs=3; success_runs=2; latest_success=false; latest_error_code=-; latest_started_at=2026-05-29T16:54:26.867184+00:00
+dead_code: slot_state=has_success; total_runs=2; success_runs=2; latest_success=true; latest_error_code=-; latest_started_at=2026-05-28T14:45:27.232799+00:00
+embedding_symbol: slot_state=has_success; total_runs=9; success_runs=1; latest_success=true; latest_error_code=-; latest_started_at=2026-05-29T10:35:14.445411+00:00
+
+[hstoolkit]
+symbol_index_swift: slot_state=has_success; total_runs=3; success_runs=2; latest_success=false; latest_error_code=-; latest_started_at=2026-05-29T16:55:24.201737+00:00
+dead_code: slot_state=has_success; total_runs=2; success_runs=2; latest_success=true; latest_error_code=-; latest_started_at=2026-05-28T11:21:19.213097+00:00
+embedding_symbol: slot_state=no_history; total_runs=0; success_runs=0; latest_success=-; latest_error_code=-; latest_started_at=-
+
+[litecoin-kit]
+symbol_index_swift: slot_state=has_success; total_runs=5; success_runs=2; latest_success=false; latest_error_code=-; latest_started_at=2026-05-29T16:56:19.996998+00:00
+dead_code: slot_state=has_success; total_runs=2; success_runs=2; latest_success=true; latest_error_code=-; latest_started_at=2026-05-28T15:38:39.394317+00:00
+embedding_symbol: slot_state=no_history; total_runs=0; success_runs=0; latest_success=-; latest_error_code=-; latest_started_at=-
+
+[uw-ios-app]
+symbol_index_swift: slot_state=has_success; total_runs=23; success_runs=10; latest_success=false; latest_error_code=-; latest_started_at=2026-05-29T16:57:17.664715+00:00
+dead_code: slot_state=has_success; total_runs=30; success_runs=8; latest_success=true; latest_error_code=-; latest_started_at=2026-05-24T06:22:53.544676+00:00
+embedding_symbol: slot_state=history_no_success; total_runs=11; success_runs=0; latest_success=-; latest_error_code=-; latest_started_at=2026-05-29T16:03:26.954735+00:00
