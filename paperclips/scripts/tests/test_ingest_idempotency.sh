@@ -36,6 +36,7 @@ cat > "$TMP_DIR/repos-hs/TronKit.Swift/.palace/public-api/swift/TronKit.swiftint
 EOF
 cat > "$TMP_DIR/.env" <<'EOF'
 PALACE_SCIP_INDEX_PATHS={"existing":"/repos/existing/scip/index.scip"}
+PALACE_SCIP_INDEX_PATHS={"legacy":"/repos/legacy/scip/index.scip"}
 OTHER_VAR=1
 EOF
 
@@ -236,8 +237,12 @@ assert payload["repo_url"] == "https://github.com/example/TronKit.Swift.git"
 PY
 ENV_AFTER_RUN1="$(cat "$TMP_DIR/.env")"
 PATH_JSON="$(grep '^PALACE_SCIP_INDEX_PATHS=' "$TMP_DIR/.env" | cut -d= -f2-)"
+[[ "$(grep -c '^PALACE_SCIP_INDEX_PATHS=' "$TMP_DIR/.env")" -eq 1 ]] || \
+    fail "expected PALACE_SCIP_INDEX_PATHS to be deduped to one env entry"
 printf '%s' "$PATH_JSON" | jq -e '.existing == "/repos/existing/scip/index.scip"' >/dev/null || \
     fail "existing PALACE_SCIP_INDEX_PATHS entry was not preserved"
+printf '%s' "$PATH_JSON" | jq -e '.legacy == "/repos/legacy/scip/index.scip"' >/dev/null || \
+    fail "legacy PALACE_SCIP_INDEX_PATHS entry was not preserved"
 printf '%s' "$PATH_JSON" | jq -e '."tron-kit" == "/repos-hs/TronKit.Swift/scip/index.scip"' >/dev/null || \
     fail "tron-kit PALACE_SCIP_INDEX_PATHS entry missing"
 
