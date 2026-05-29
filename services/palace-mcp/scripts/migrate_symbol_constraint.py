@@ -54,7 +54,9 @@ async def main() -> None:
                 record = await result.single()
                 batch_deleted = int(record["deleted"]) if record else 0
                 total_deleted += batch_deleted
-                logger.info("Dedup batch: removed %d duplicate Symbol nodes", batch_deleted)
+                logger.info(
+                    "Dedup batch: removed %d duplicate Symbol nodes", batch_deleted
+                )
                 if batch_deleted == 0:
                     break
 

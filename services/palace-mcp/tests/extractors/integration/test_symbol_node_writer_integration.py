@@ -124,7 +124,9 @@ class TestSymbolSoftDelete:
         assert gamma_deleted_at is not None
 
     @pytest.mark.asyncio
-    async def test_symbol_undeleted_when_it_reappears(self, driver: AsyncDriver) -> None:
+    async def test_symbol_undeleted_when_it_reappears(
+        self, driver: AsyncDriver
+    ) -> None:
         """A symbol soft-deleted in one run is cleared when it reappears in the next."""
         await ensure_custom_schema(driver)
 
