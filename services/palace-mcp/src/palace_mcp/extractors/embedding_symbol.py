@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from hashlib import sha256
-from typing import TYPE_CHECKING, TypedDict, cast
+from typing import TYPE_CHECKING, ClassVar, TypedDict, cast
 
 from palace_mcp.code.embedding_candidate_policy import CandidateRow, apply_policy
 from palace_mcp.embeddings import EmbeddingBackend, QodoEmbeddingBackend
@@ -112,6 +112,7 @@ async def _write_embeddings(
 class EmbeddingSymbolExtractor(BaseExtractor):
     name = "embedding_symbol"
     description = "Populate :Symbol.embedding vectors for a single project."
+    timeout_s: ClassVar[float] = 3600.0
 
     def __init__(self, backend: EmbeddingBackend | None = None) -> None:
         self._backend = backend
