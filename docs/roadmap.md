@@ -195,6 +195,83 @@ OPUS-CRITICAL-2).
 
 ---
 
+## UW iOS Dev-Mirror Product (GIM-987 — rev2 spec)
+
+**Goal**: 13 UW iOS kits (8 already in graph + 5 to add) with every
+language-applicable extractor green, MacBook docker-compose on port
+8765 + cloudflared `gimle.ant013.work`, WRITE tools bearer-gated.
+**Dev-mirror for agent coding assistance**, not a production-audit
+substrate ([[project_gimle_palace_not_production_ready]] still
+applies). Spec:
+[`docs/superpowers/specs/2026-05-29-uw-ios-full-product-rev2.md`](superpowers/specs/2026-05-29-uw-ios-full-product-rev2.md).
+Walker plan:
+[`docs/superpowers/plans/2026-05-29-GIM-987-uw-ios-dev-mirror-product.md`](superpowers/plans/2026-05-29-GIM-987-uw-ios-dev-mirror-product.md).
+
+**Wall-time**: 17–23 working days focused / 5–7 calendar weeks.
+**Phase**: parallel to Audit-V1 and Phase 2 — different track
+(agent-assist), different file footprint, no overlap with Audit-V1
+agent orchestration or Phase 2 middleware.
+
+### CX queue (most of the slice work — 66% split)
+
+Issue numbers `GIM-987-cN` are placeholders; CEO assigns real issue
+numbers when spawning per the walker plan's phased dispatch.
+
+| Order | Slice | Status | Walker child | Files | Notes |
+|-------|-------|--------|--------------|-------|-------|
+| 1 | A1 Toolchain auto-detect from `.swift-version` | 📋 | GIM-987-c1 | `paperclips/scripts/scip_emit_swift_kit.sh` | Hard-fail on missing toolchain. Unblocks B-series. |
+| 2 | A2 Per-kit cleanup in `palace_ingest.sh` | 📋 | GIM-987-c2 | `paperclips/scripts/palace_ingest.sh` | Removes `.palace-scip-{build,derived-data}` post-success. |
+| 3 | A5 iMac palace-mcp rebuild | 📋 | GIM-987-c5 | iMac ops | Applies PR #341 hf-cache fix permanently. Hard-gate before D3. |
+| 4 | C2 `PALACE_SCIP_INDEX_PATHS` dedup | 📋 | GIM-987-c6 | `paperclips/scripts/ingest_swift_kit.sh` | Bounded env var growth. |
+| 5 | A6a Extractor coverage discovery sweep | 📋 | GIM-987-c7 | new `paperclips/scripts/palace_extractor_coverage_2026-05-29.csv` + baseline list | Depends on A1. |
+| 6 | B1 hs-extensions verify | 📋 | GIM-987-c8 | n/a (ingest only) | Closes #345 E2E. Depends on A1. |
+| 7 | B2 MarketKit ingest | 📋 | GIM-987-c9 | `Package.swift` override if needed | Depends on A1; fallback GRDB pin. |
+| 8 | B3 BitcoinCashKit ingest | 📋 | GIM-987-c10 | `Package.swift` override if needed | Depends on A1; fallback HsCryptoKit pin. |
+| 9 | C1 `palace_cleanup.sh` | 📋 | GIM-987-c11 | new `paperclips/scripts/palace_cleanup.sh` | dual-host scan, 90 s ceiling. |
+| 10 | C4 Graph orphan cleanup | 📋 | GIM-987-c12 | extends c11 | Soft-delete stale `:Project`. |
+| 11 | B4a Cocoapods spike | 📋 | GIM-987-c13 | new `docs/research/2026-05-29-cocoapods-scip-spike.md` | 0.5 day. Depends on B2 (so SwiftPM path proven first). |
+| 12 | B4b Cocoapods pipeline | 📋 | GIM-987-c14 | new `paperclips/scripts/scip_emit_cocoapods_kit.sh` + edits to `palace_ingest.sh` | Depends on B4a. |
+| 13 | B5 component-kit ingest | 📋 | GIM-987-c15 | n/a | Depends on B4b. |
+| 14 | B6 hd-wallet-kit-ios ingest | 📋 | GIM-987-c16 | n/a | Depends on B4b. Distinct from SwiftPM `hd-wallet-kit`. |
+| 15 | D1 `docker-compose.dev-mac.yml` | 📋 | GIM-987-c17 | new `docker-compose.dev-mac.yml` | Port 8765, own neo4j volume, no `cpus` cap. |
+| 16 | D2 macbook bootstrap runbook | 📋 | GIM-987-c18 | new `docs/runbooks/macbook-gimle-bootstrap.md` | 30–60 min walkthrough. |
+| 17 | D4c GDPR email-hash env | 📋 | GIM-987-c20 | edit `docker-compose.dev-mac.yml` + `code_ownership` extractor | `PALACE_OWNERS_HASH_EMAILS=1`. |
+| 18 | D4b Cloudflared tunnel | 📋 | GIM-987-c21 | new `services/cloudflared/dev-mac/` | Hard-gate after D4a (Claude queue). |
+| 19 | D3 Fresh ingest of 13 kits on macbook | 📋 | GIM-987-c22 | n/a | Hard-gate after A5; depends on A1+A2+A3+D1. |
+| 20 | F-A Smoke A per-extractor | 📋 | GIM-987-c23 | new `paperclips/scripts/palace_extractor_smoke.sh` | Per-language extractor coverage. |
+| 21 | F-B Smoke B per-tool with seed oracle | 📋 | GIM-987-c24 | new `paperclips/scripts/palace_tool_smoke.sh` + `palace_smoke_seeds.json` | Real assertions, no tautology. |
+
+### Claude queue (Python in palace-mcp + design — 33% split)
+
+| Order | Slice | Status | Walker child | Files | Notes |
+|-------|-------|--------|--------------|-------|-------|
+| C1 | A3 `:Symbol` soft-delete + unique constraint + dedup migration | 📋 | GIM-987-c3 | `services/palace-mcp/src/palace_mcp/extractors/foundation/symbol_node_writer.py` + new `services/palace-mcp/scripts/migrate_symbol_constraint.py` | Coexists with existing `eviction.py` on `:SymbolOccurrenceShadow`. |
+| C2 | A4 GIM-950 kit embedding `repo_not_mounted` fix | 📋 | GIM-987-c4 | `services/palace-mcp/src/palace_mcp/extractors/embedding_symbol.py` + any mount-path resolver | Hard cap 3 days. |
+| C3 | D4a Bearer middleware on WRITE tools | 📋 | GIM-987-c19 | new `services/palace-mcp/src/palace_mcp/auth.py` + edits to `mcp_server.py` | `PALACE_WRITE_TOKEN` env. Hard-gate before D4b. |
+| C4 | E1 Scheduled-updates design doc | 📋 | GIM-987-c25 | new `docs/superpowers/specs/2026-05-29-palace-scheduled-updates.md` | Design only this milestone. |
+
+### Walker dispatch phases
+
+Per the walker plan, CEO opens children in phased batches — does NOT
+bulk-POST all 25 upfront. Phased dispatch:
+
+1. **Phase 1** (parallel-safe, no deps): c1, c2, c3, c4, c5, c6.
+2. **Phase 2** (after c1 closes): c7, c8.
+3. **Phase 3** (after c7+c8 close): c9, c10, c11, c12.
+4. **Phase 4** (after c9 closes): c13, c14, c15, c16.
+5. **Phase 5** (after c1+c2+c3+c5 close, can overlap Phase 4): c17, c18, c19, c20, c21, c22.
+6. **Phase 6** (after all prior close): c23, c24, c25.
+
+### Acceptance — walker DONE when
+
+- 13 `:Project {language: "swift"}` in graph; coverage CSV documents extractor status per (kit, ext).
+- F-A and F-B smokes green on all 13 kits + `uw-ios-app` from both iMac and MacBook MCP.
+- `curl https://gimle.ant013.work/mcp/` returns 406 from any network; write call without bearer returns 401.
+- `:Author` nodes carry `email_hash` not raw `email`.
+- Re-ingesting any kit does not double `count(:Symbol {group_id})`.
+
+---
+
 ## Phase 2 — Project-Specialist Agent (post Audit-V1)
 
 **Goal**: Make Gimle's 7 capabilities (6 named + new semantic search) **enforced by middleware** so agents reliably consult the graph before writing code. **Productization-grade design from day one** — sellable to any team beyond ourselves. iOS pilot first (UW HS Kits substrate ready), language-agnostic infrastructure supports Kotlin / Solidity / JS / Python recipes from G4 onwards.
