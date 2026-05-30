@@ -58,7 +58,7 @@ services:
       TRANSFORMERS_CACHE: "${PALACE_HF_CACHE_DIR:-/data/hf-cache}"
       PALACE_HF_CACHE_DIR: "${PALACE_HF_CACHE_DIR:-/data/hf-cache}"
       PALACE_EMBEDDING_LOCAL_ONLY: "${PALACE_EMBEDDING_LOCAL_ONLY:-0}"
-      PALACE_EMBEDDING_MAX_SYMBOLS: "${PALACE_EMBEDDING_MAX_SYMBOLS:-50000}"
+      PALACE_EMBEDDING_MAX_SYMBOLS: "${PALACE_EMBEDDING_MAX_SYMBOLS:-100000}"
     # Non-root user for security hardening (GIM-101a, T10 — Architect F19)
     user: "1000:1000"
     depends_on:
