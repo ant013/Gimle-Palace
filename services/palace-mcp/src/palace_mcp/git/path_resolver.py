@@ -11,12 +11,13 @@ parent_mount="hs", relative_path="EvmKit.Swift" resolve to
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
 from palace_mcp.memory.projects import validate_slug
 
-REPOS_ROOT = Path("/repos")
+REPOS_ROOT = Path(os.environ.get("PALACE_REPOS_ROOT", "/repos"))
 
 # §6.5 regexes — validated at boundary, before any filesystem access
 _PARENT_MOUNT_RE = re.compile(r"^[a-z][a-z0-9-]{0,15}$")
