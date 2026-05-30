@@ -46,6 +46,22 @@ SCOPE_PRECEDENCE: list[SourceScope] = [
 
 _BUILTIN_DERIVED_ROOTS = ("DerivedData", ".palace-scip-derived-data")
 
+# Vendor-package path markers used by the no-recipe heuristic.
+# These are directory names that only appear under vendor/dependency roots in
+# iOS/macOS Xcode projects (SPM, CocoaPods, Carthage, local SPM build cache).
+_BUILTIN_SWIFT_DEPENDENCY_MARKERS = (
+    "SourcePackages/",
+    "Pods/",
+    "Carthage/",
+    ".build/",
+    ".swiftpm/",
+)
+
+# Generated-source markers used by the no-recipe heuristic.
+# DerivedSources is Xcode's directory for auto-generated Swift/ObjC sources
+# (e.g. interface stubs, generated enums from asset catalogs).
+_BUILTIN_GENERATED_MARKERS = ("DerivedSources/",)
+
 _SDK_PATH_PREFIXES = (
     "Platforms/",
     "usr/lib/",
@@ -110,11 +126,19 @@ def classify_source_scope(
         if normalized.startswith(root + "/") or normalized == root:
             return ClassificationResult(SourceScope.DERIVED)
 
+    for marker in _BUILTIN_SWIFT_DEPENDENCY_MARKERS:
+        if marker in file_path:
+            return ClassificationResult(SourceScope.DEPENDENCY)
+
+    for marker in _BUILTIN_GENERATED_MARKERS:
+        if marker in file_path:
+            return ClassificationResult(SourceScope.GENERATED)
+
     return ClassificationResult(
-        SourceScope.DEPENDENCY,
+        SourceScope.PROJECT,
         warning=(
             f"no recipe available to classify '{file_path}' — "
-            "treated as dependency (legacy fallback)"
+            "treated as project (no-recipe heuristic)"
         ),
     )
 

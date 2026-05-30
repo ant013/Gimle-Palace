@@ -16,13 +16,15 @@ from palace_mcp.extractors.foundation.models import (
     SymbolOccurrence,
 )
 from palace_mcp.extractors.runner import run_extractor
+from palace_mcp.extractors.foundation.symbol_node_writer import build_symbol_node_rows
+from palace_mcp.extractors.scip_parser import ScipSymbolInfo
 from palace_mcp.extractors.symbol_index_swift import (
     SymbolIndexSwift,
     _ingest_batch,
     _is_vendor,
 )
 from tests.extractors.fixtures.scip_factory import (
-    build_swift_scip_index,
+    build_swift_scip_index_with_symbol_infos,
     write_scip_fixture,
 )
 
@@ -34,7 +36,9 @@ def extractor() -> SymbolIndexSwift:
 
 @pytest.fixture
 def scip_fixture(tmp_path: Path) -> Path:
-    index = build_swift_scip_index()
+    # Use the fixture with SymbolInformation so write_symbol_nodes is exercised
+    # and nodes_written reflects actual Neo4j :Symbol count (3 symbols).
+    index = build_swift_scip_index_with_symbol_infos()
     return write_scip_fixture(index, tmp_path / "test.scip")
 
 
@@ -484,7 +488,8 @@ class TestSymbolIndexSwiftHappyPath:
         ):
             stats = await extractor.run(graphiti=MagicMock(), ctx=run_ctx)
 
-        assert stats.nodes_written == 3
+        # nodes_written = Neo4j :Symbol count; mock SCIP has no SymbolInformation
+        assert stats.nodes_written == 0
         assert ingest_batch_mock.await_count == 3
 
     @pytest.mark.asyncio
@@ -629,3 +634,51 @@ class TestSymbolIndexSwiftHappyPath:
         assert res["project"] == "uw-ios-mini"
         assert res["success"] is True
         assert res["nodes_written"] >= 3
+
+
+class TestSymbolIndexSwiftSourceScope:
+    """Verify source_scope tagging of :Symbol nodes written by write_symbol_nodes.
+
+    GIM-1074: without a recipe, app source paths must be tagged 'project',
+    not 'dependency'. Uses build_symbol_node_rows directly (no Neo4j needed).
+    """
+
+    _GROUP = "project/uw-ios-app"
+
+    def _sym(self, qname: str) -> ScipSymbolInfo:
+        return ScipSymbolInfo(
+            qualified_name=qname,
+            module_name="UwIosApp",
+            scip_kind_name="Class",
+            relationships=(),
+        )
+
+    @pytest.mark.parametrize(
+        ("file_path", "expected_scope"),
+        [
+            # App source — should be project
+            ("Unstoppable/Services/BalanceService.swift", "project"),
+            ("MoneroAdapter/Sources/MoneroAdapter/MoneroKit.swift", "project"),
+            ("Sources/UwMiniCore/State/WalletStore.swift", "project"),
+            # External dependencies — should be dependency
+            ("SourcePackages/checkouts/SomeLib/Sources/Foo.swift", "dependency"),
+            ("Pods/Alamofire/Source/Alamofire.swift", "dependency"),
+            ("Carthage/Checkouts/Nimble/Sources/Nimble.swift", "dependency"),
+            (".build/checkouts/swift-collections/Sources/Deque.swift", "dependency"),
+            # Generated sources — should be generated
+            ("DerivedSources/R.generated.swift", "generated"),
+        ],
+    )
+    def test_source_scope_no_recipe(
+        self, file_path: str, expected_scope: str
+    ) -> None:
+        sym = self._sym("App.Symbol")
+        rows = build_symbol_node_rows(
+            [sym],
+            {sym.qualified_name: file_path},
+            self._GROUP,
+            recipe=None,
+        )
+        assert rows[0]["source_scope"] == expected_scope, (
+            f"{file_path!r} got {rows[0]['source_scope']!r}, expected {expected_scope!r}"
+        )

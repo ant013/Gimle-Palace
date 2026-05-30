@@ -192,17 +192,59 @@ class TestLegacyFallback:
         assert result.scope == SourceScope.DERIVED
         assert result.warning is None
 
-    def test_no_recipe_unknown_path_fallback_with_warning(self) -> None:
+    def test_no_recipe_unknown_path_treated_as_project(self) -> None:
         result = classify_source_scope(
             "Sources/MyApp/Main.swift",
         )
-        assert result.scope == SourceScope.DEPENDENCY
+        assert result.scope == SourceScope.PROJECT
         assert result.warning is not None
-        assert "legacy fallback" in result.warning
+        assert "no-recipe heuristic" in result.warning
 
     def test_no_recipe_warning_is_not_none(self) -> None:
         result = classify_source_scope("Unknown/Path.swift")
         assert result.warning is not None
+
+    def test_no_recipe_source_packages_is_dependency(self) -> None:
+        result = classify_source_scope(
+            "SourcePackages/checkouts/SomeLib/Sources/SomeLib.swift",
+        )
+        assert result.scope == SourceScope.DEPENDENCY
+        assert result.warning is None
+
+    def test_no_recipe_pods_is_dependency(self) -> None:
+        result = classify_source_scope("Pods/Alamofire/Source/Alamofire.swift")
+        assert result.scope == SourceScope.DEPENDENCY
+        assert result.warning is None
+
+    def test_no_recipe_carthage_is_dependency(self) -> None:
+        result = classify_source_scope(
+            "Carthage/Checkouts/Nimble/Sources/Nimble.swift"
+        )
+        assert result.scope == SourceScope.DEPENDENCY
+        assert result.warning is None
+
+    def test_no_recipe_build_checkouts_is_dependency(self) -> None:
+        result = classify_source_scope(
+            ".build/checkouts/swift-collections/Sources/Deque.swift"
+        )
+        assert result.scope == SourceScope.DEPENDENCY
+        assert result.warning is None
+
+    def test_no_recipe_derived_sources_is_generated(self) -> None:
+        result = classify_source_scope("DerivedSources/R.generated.swift")
+        assert result.scope == SourceScope.GENERATED
+        assert result.warning is None
+
+    def test_no_recipe_app_dir_is_project(self) -> None:
+        result = classify_source_scope("Unstoppable/Services/BalanceService.swift")
+        assert result.scope == SourceScope.PROJECT
+        assert result.warning is not None
+
+    def test_no_recipe_monero_adapter_is_project(self) -> None:
+        result = classify_source_scope(
+            "MoneroAdapter/Sources/MoneroAdapter/MoneroKit.swift"
+        )
+        assert result.scope == SourceScope.PROJECT
 
 
 # ---------------------------------------------------------------------------

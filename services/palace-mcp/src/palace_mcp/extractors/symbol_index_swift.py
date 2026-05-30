@@ -242,7 +242,11 @@ class SymbolIndexSwift(BaseExtractor):
                 sym_nodes += await write_symbol_nodes(
                     driver, sym_batch, def_file_paths, ctx.group_id
                 )
-            logger.info("Symbol nodes written to Neo4j: %d", sym_nodes)
+            logger.info(
+                "Symbol nodes written to Neo4j: %d; Tantivy occurrences: %d",
+                sym_nodes,
+                total_written,
+            )
 
             if seen_qnames:
                 deleted_count = await soft_delete_symbols(
@@ -251,7 +255,9 @@ class SymbolIndexSwift(BaseExtractor):
                 logger.info("Soft-deleted %d absent :Symbol nodes", deleted_count)
 
             await finalize_ingest_run(driver, run_id=ctx.run_id, success=True)
-            return ExtractorStats(nodes_written=total_written, edges_written=0)
+            # nodes_written reflects Neo4j :Symbol nodes (graph-layer count).
+            # Tantivy occurrence count is logged above for observability.
+            return ExtractorStats(nodes_written=sym_nodes, edges_written=0)
 
         except ScipPathRequiredError as e:
             await finalize_ingest_run(
