@@ -669,9 +669,7 @@ class TestSymbolIndexSwiftSourceScope:
             ("DerivedSources/R.generated.swift", "generated"),
         ],
     )
-    def test_source_scope_no_recipe(
-        self, file_path: str, expected_scope: str
-    ) -> None:
+    def test_source_scope_no_recipe(self, file_path: str, expected_scope: str) -> None:
         sym = self._sym("App.Symbol")
         rows = build_symbol_node_rows(
             [sym],

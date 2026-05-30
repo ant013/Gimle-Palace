@@ -217,9 +217,7 @@ class TestLegacyFallback:
         assert result.warning is None
 
     def test_no_recipe_carthage_is_dependency(self) -> None:
-        result = classify_source_scope(
-            "Carthage/Checkouts/Nimble/Sources/Nimble.swift"
-        )
+        result = classify_source_scope("Carthage/Checkouts/Nimble/Sources/Nimble.swift")
         assert result.scope == SourceScope.DEPENDENCY
         assert result.warning is None
 
