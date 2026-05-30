@@ -222,7 +222,8 @@ class TestSourceScopeLegacyFallback:
         for row in rows:
             assert row["source_scope"] == "derived"
 
-    def test_no_recipe_unknown_path_fallback(self) -> None:
+    def test_no_recipe_app_source_treated_as_project(self) -> None:
+        # GIM-1074: unknown paths without a recipe are project code, not dependency.
         scip_index = build_swift_scip_index_with_symbol_infos()
         symbol_infos = list(iter_scip_symbol_infos(scip_index))
 
@@ -231,7 +232,7 @@ class TestSourceScopeLegacyFallback:
         }
         rows = build_symbol_node_rows(symbol_infos, def_file_paths, "project/test")
         for row in rows:
-            assert row["source_scope"] == "dependency"
+            assert row["source_scope"] == "project"
 
 
 # ---------------------------------------------------------------------------
