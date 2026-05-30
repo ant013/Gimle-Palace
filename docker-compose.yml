@@ -58,12 +58,12 @@ services:
       TRANSFORMERS_CACHE: "${PALACE_HF_CACHE_DIR:-/data/hf-cache}"
       PALACE_HF_CACHE_DIR: "${PALACE_HF_CACHE_DIR:-/data/hf-cache}"
       PALACE_EMBEDDING_LOCAL_ONLY: "${PALACE_EMBEDDING_LOCAL_ONLY:-0}"
+      PALACE_EMBEDDING_MAX_SYMBOLS: "${PALACE_EMBEDDING_MAX_SYMBOLS:-100000}"
     # Non-root user for security hardening (GIM-101a, T10 — Architect F19)
     user: "1000:1000"
     depends_on:
       neo4j:
         condition: service_healthy
-        required: false
     ports:
       - "8080:8000"
     volumes:
@@ -78,12 +78,12 @@ services:
       - /Users/Shared/Android/unstoppable-wallet-android:/repos/uw-android:ro
       - ./services/palace-mcp/tests/extractors/fixtures/uw-ios-mini-project:/repos/uw-ios-mini:ro
       - ./services/palace-mcp/tests/extractors/fixtures/uw-ios-mini-project/.git:/repos/uw-ios-mini/.git:ro
-      - /Users/Shared/Ios/unstoppable-wallet-ios:/repos/uw-ios:ro
-      - /Users/Shared/Ios/HorizontalSystems/unstoppable-wallet-ios:/repos/uw-ios-app:ro
+      - /Users/ant013/Ios/HorizontalSystems/unstoppable-wallet-ios:/repos/uw-ios:ro
+      - /Users/ant013/Ios/HorizontalSystems/unstoppable-wallet-ios:/repos/uw-ios-app:ro
       - ./services/palace-mcp/tests/extractors/fixtures/oz-v5-mini-project:/repos/oz-v5-mini:ro
       # GIM-182: HorizontalSystems parent mount for uw-ios bundle (41 Swift Kits).
       # Non-iMac contributors: override in docker-compose.override.yml.
-      - /Users/Shared/Ios/HorizontalSystems:/repos-hs:ro
+      - /Users/ant013/Ios/HorizontalSystems:/repos-hs:ro
       - codebase-memory-cache:/home/appuser/.cache/codebase-memory-mcp
       - "${HOME}/.ssh/id_ed25519:/home/appuser/.ssh/id_ed25519:ro"
       - "${HOME}/.ssh/palace_ops_id_ed25519:/home/appuser/.ssh/palace_ops_id_ed25519:ro"
