@@ -2,12 +2,17 @@
 
 When PALACE_EMBEDDING_MAX_SYMBOLS is set, candidates are sorted into 7 buckets:
   0  project definitions/declarations
-  1  workspace_package definitions/declarations
-  2  project non-accessor methods/functions
+  1  project non-accessor methods/functions/properties
+  2  workspace_package definitions/declarations
   3  workspace_package non-accessor methods/functions
   4  dependency public API
   5  generated / derived
   6  sdk
+
+Bucket 1 intentionally precedes bucket 2 so project methods and properties are
+selected before workspace_package definitions when the cap is hit. Large repos
+(e.g. uw-ios-app) can have thousands of workspace_package definitions that would
+otherwise exhaust the cap before any project method is reached.
 
 Within each bucket rows are ordered by (file_path, qualified_name).
 Accessor and synthetic symbols are skipped unless no better candidates remain.
@@ -75,12 +80,12 @@ def _bucket(row: CandidateRow) -> int | None:
     if scope == "project":
         if accessor:
             return None
-        return 0 if _is_definition(row) else 2
+        return 0 if _is_definition(row) else 1
 
     if scope == "workspace_package":
         if accessor:
             return None
-        return 1 if _is_definition(row) else 3
+        return 2 if _is_definition(row) else 3
 
     if scope == "dependency":
         return None if accessor else 4

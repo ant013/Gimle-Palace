@@ -85,11 +85,14 @@ class TestBucket:
     def test_project_definition_is_bucket_0(self) -> None:
         assert _bucket(_row(source_scope="project", kind="class")) == 0
 
-    def test_workspace_package_definition_is_bucket_1(self) -> None:
-        assert _bucket(_row(source_scope="workspace_package", kind="struct")) == 1
+    def test_project_function_is_bucket_1(self) -> None:
+        assert _bucket(_row(source_scope="project", kind="function")) == 1
 
-    def test_project_function_is_bucket_2(self) -> None:
-        assert _bucket(_row(source_scope="project", kind="function")) == 2
+    def test_project_property_is_bucket_1(self) -> None:
+        assert _bucket(_row(source_scope="project", kind="property")) == 1
+
+    def test_workspace_package_definition_is_bucket_2(self) -> None:
+        assert _bucket(_row(source_scope="workspace_package", kind="struct")) == 2
 
     def test_workspace_package_function_is_bucket_3(self) -> None:
         assert _bucket(_row(source_scope="workspace_package", kind="function")) == 3
@@ -197,6 +200,27 @@ class TestApplyPolicy:
         assert names.index("Proj.fn") < names.index("Wp.fn")
         assert names.index("Wp.fn") < names.index("Dep.fn")
 
+    def test_project_methods_before_workspace_definitions_under_cap(self) -> None:
+        # Regression: project methods must be selected before workspace_package
+        # definitions when the cap is hit. Large repos can have thousands of
+        # workspace definitions (bucket 2) that would otherwise exhaust the cap
+        # before any project method (bucket 1) is reached.
+        rows = [
+            _row(
+                qualified_name="Wp.cls",
+                source_scope="workspace_package",
+                kind="class",
+            ),
+            _row(
+                qualified_name="Proj.fn",
+                source_scope="project",
+                kind="function",
+            ),
+        ]
+        selected, _ = apply_policy(rows, max_symbols=1)
+        assert len(selected) == 1
+        assert selected[0]["qualified_name"] == "Proj.fn"
+
     def test_definitions_before_functions_within_same_scope(self) -> None:
         rows = [
             _row(
@@ -232,7 +256,7 @@ class TestApplyPolicy:
         ]
         selected, coverage = apply_policy(rows, max_symbols=2)
         assert coverage.embedded_symbols == 2
-        # Bucket 0 (project class) and bucket 2 (project function) are selected
+        # Bucket 0 (project class) and bucket 1 (project function) are selected
         assert coverage.source_scope_counts.get("project") == 2
         assert coverage.source_scope_counts.get("workspace_package") is None
 
