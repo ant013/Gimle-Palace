@@ -112,7 +112,7 @@ async def _write_embeddings(
 class EmbeddingSymbolExtractor(BaseExtractor):
     name = "embedding_symbol"
     description = "Populate :Symbol.embedding vectors for a single project."
-    timeout_s: ClassVar[float] = 3600.0
+    timeout_s: ClassVar[float] = 7200.0
 
     def __init__(self, backend: EmbeddingBackend | None = None) -> None:
         self._backend = backend

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 import time
 from collections.abc import Coroutine
@@ -47,7 +48,7 @@ from palace_mcp.memory.bundle import bundle_members
 from palace_mcp.memory.models import IngestRunResult, ProjectRef
 from palace_mcp.memory.projects import InvalidSlug, validate_slug
 
-REPOS_ROOT = Path("/repos")
+REPOS_ROOT = Path(os.environ.get("PALACE_REPOS_ROOT", "/repos"))
 EXTRACTOR_TIMEOUT_S = 300.0
 _PARENT_MOUNT_RE = re.compile(r"^[a-z][a-z0-9-]{0,15}$")
 _RELATIVE_PATH_RE = re.compile(r"^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$")
