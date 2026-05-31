@@ -744,7 +744,10 @@ async def test_runtime_path_fails_closed_on_missing_vector_hits() -> None:
                     }
                 ]
             )
-        if "OPTIONAL MATCH (s:Symbol {group_id: hit.group_id, qualified_name: hit.qualified_name})" in query:
+        if (
+            "OPTIONAL MATCH (s:Symbol {group_id: hit.group_id, qualified_name: hit.qualified_name})"
+            in query
+        ):
             assert params["hits"] == [
                 {
                     "group_id": "project/uw-ios-app",
