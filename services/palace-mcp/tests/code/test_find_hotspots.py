@@ -277,5 +277,14 @@ async def test_find_hotspots_bundle_fixture_matches_golden_snapshot() -> None:
             path_prefix=fixture["path_prefix"],
         )
 
-    result["bundle_health"].pop("as_of", None)
+    # GIM-1078: strip wall-clock-dependent fields before golden comparison
+    for k in (
+        "as_of",
+        "members_fresh_within_7d",
+        "members_stale",
+        "stale_slugs",
+        "oldest_member_ingest_at",
+        "newest_member_ingest_at",
+    ):
+        result["bundle_health"].pop(k, None)
     assert result == golden
