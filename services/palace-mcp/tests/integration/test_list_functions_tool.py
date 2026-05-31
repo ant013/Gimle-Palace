@@ -171,10 +171,19 @@ def seeded_functions_bundle(
 
 
 def _normalize_bundle_payload(payload: dict[str, object]) -> dict[str, object]:
+    """Strip wall-clock-dependent fields (GIM-1078)."""
     data = cast(dict[str, object], json.loads(json.dumps(payload)))
     bundle_health = data.get("bundle_health")
     if isinstance(bundle_health, dict):
-        bundle_health.pop("as_of", None)
+        for k in (
+            "as_of",
+            "members_fresh_within_7d",
+            "members_stale",
+            "stale_slugs",
+            "oldest_member_ingest_at",
+            "newest_member_ingest_at",
+        ):
+            bundle_health.pop(k, None)
     return data
 
 

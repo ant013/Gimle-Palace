@@ -5,14 +5,9 @@
   "bundle_health": {
     "name": "list-functions-wire-bundle",
     "members_total": 2,
-    "members_fresh_within_7d": 2,
-    "members_stale": 0,
     "query_failed_slugs": [],
     "ingest_failed_slugs": [],
-    "never_ingested_slugs": [],
-    "stale_slugs": [],
-    "oldest_member_ingest_at": "2026-05-24T00:00:00Z",
-    "newest_member_ingest_at": "2026-05-25T00:00:00Z"
+    "never_ingested_slugs": []
   },
   "result": [
     {
