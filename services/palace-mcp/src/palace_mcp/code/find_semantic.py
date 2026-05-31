@@ -63,6 +63,16 @@ RETURN
 ORDER BY score DESC
 """.strip()
 
+_MISSING_HITS_QUERY = """
+UNWIND $hits AS hit
+OPTIONAL MATCH (s:Symbol {group_id: hit.group_id, qualified_name: hit.qualified_name})
+WITH hit, count(s) AS match_count
+WHERE match_count = 0
+RETURN
+  hit.group_id AS group_id,
+  hit.qualified_name AS qualified_name
+""".strip()
+
 # ---------------------------------------------------------------------------
 # Ranking formula (v1 — dense-only, GIM-919)
 #
@@ -453,6 +463,38 @@ async def _vector_search(
         return cast(list[dict[str, Any]], await result.data())
 
 
+def _runtime_metadata(settings: Settings | None) -> dict[str, Any]:
+    return {
+        "git_sha": os.environ.get("PALACE_GIT_SHA", "unknown"),
+        "neo4j_uri": settings.neo4j_uri if settings is not None else None,
+    }
+
+
+async def _find_missing_hits(
+    driver: Any,
+    rows: list[dict[str, Any]],
+) -> list[dict[str, str]]:
+    if not rows:
+        return []
+    hits = [
+        {
+            "group_id": str(row["group_id"]),
+            "qualified_name": str(row["qualified_name"]),
+        }
+        for row in rows
+    ]
+    async with driver.session() as session:
+        result = await session.run(_MISSING_HITS_QUERY, hits=hits)
+        missing = cast(list[dict[str, Any]], await result.data())
+    return [
+        {
+            "group_id": str(row["group_id"]),
+            "qualified_name": str(row["qualified_name"]),
+        }
+        for row in missing
+    ]
+
+
 async def _load_snippet_context(
     *,
     project: str,
@@ -668,6 +710,18 @@ async def semantic_search(
 
     coverage = await _load_coverage(driver, group_ids)
     embedded_symbol_count = coverage["embedded_symbols"]
+    if settings is not None:
+        live_embedded_symbol_count = await _count_embedded_symbols(driver, group_ids)
+        if live_embedded_symbol_count != embedded_symbol_count:
+            return _error(
+                "semantic_search_backend_inconsistent",
+                "embedding coverage disagrees with the live Neo4j embedded symbol count",
+                inconsistency_kind="coverage_count_mismatch",
+                embedded_symbol_count=embedded_symbol_count,
+                live_embedded_symbol_count=live_embedded_symbol_count,
+                embedding_coverage=coverage,
+                runtime=_runtime_metadata(settings),
+            )
     warnings: list[dict[str, Any]] = []
     if embedded_symbol_count == 0:
         warnings.append(
@@ -698,6 +752,19 @@ async def semantic_search(
         group_ids=group_ids,
         query_k=candidate_limit,
     )
+    if settings is not None:
+        missing_hits = await _find_missing_hits(driver, rows)
+        if missing_hits:
+            return _error(
+                "semantic_search_backend_inconsistent",
+                "vector search returned symbols that do not exist in live Neo4j",
+                inconsistency_kind="missing_vector_hits",
+                missing_hits=missing_hits[:10],
+                missing_hit_count=len(missing_hits),
+                candidate_limit=candidate_limit,
+                embedding_coverage=coverage,
+                runtime=_runtime_metadata(settings),
+            )
 
     candidate_rows: list[dict[str, Any]] = []
     for row in rows:

@@ -252,6 +252,55 @@ async def test_run_respects_max_symbols_and_prefers_project_over_sdk(
 
 
 @pytest.mark.asyncio
+async def test_run_respects_max_symbols_and_prefers_project_over_generated_and_derived(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PALACE_EMBEDDING_MAX_SYMBOLS", "1")
+
+    rows = [
+        {
+            "qualified_name": "Assets.walletIcon",
+            "kind": "enum",
+            "file_path": "Build/GeneratedAssetSymbols.swift",
+            "module_name": "MyApp",
+            "source_scope": "generated",
+            "embedding_input_hash": None,
+            "has_embedding": False,
+        },
+        {
+            "qualified_name": "Derived.assetName",
+            "kind": "enum",
+            "file_path": "Build/Intermediates.noindex/DerivedAssetSymbols.swift",
+            "module_name": "MyApp",
+            "source_scope": "derived",
+            "embedding_input_hash": None,
+            "has_embedding": False,
+        },
+        {
+            "qualified_name": "MyApp.MoneroAdapter",
+            "kind": "class",
+            "file_path": "Sources/Monero/MoneroAdapter.swift",
+            "module_name": "MyApp",
+            "source_scope": "project",
+            "embedding_input_hash": None,
+            "has_embedding": False,
+        },
+    ]
+    graphiti, _, writes = _make_graphiti(rows)
+    backend = _FakeBackend()
+
+    stats = await EmbeddingSymbolExtractor(backend=backend).run(
+        graphiti=graphiti,
+        ctx=_make_ctx(),
+    )
+
+    assert stats.nodes_written == 1
+    assert len(writes) == 1
+    written_names = [r["qualified_name"] for r in writes[0]["rows"]]
+    assert written_names == ["MyApp.MoneroAdapter"]
+
+
+@pytest.mark.asyncio
 async def test_run_without_max_symbols_embeds_all_pending(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
