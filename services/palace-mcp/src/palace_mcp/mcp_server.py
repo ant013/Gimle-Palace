@@ -36,12 +36,15 @@ Tools registered:
 """
 
 import asyncio
+import functools
+import json
 import logging
 import os
 import time
 from collections.abc import Callable
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal, TypeVar
+from typing import IO, Any, Literal, TypeVar
 
 from graphiti_core import Graphiti
 from mcp.server.fastmcp import FastMCP
@@ -142,6 +145,9 @@ _graphiti: Graphiti | None = None
 
 # Module-level Settings — set by FastAPI lifespan before any request.
 _settings: Settings | None = None
+
+# Module-level JSONL audit sink — set by FastAPI lifespan when configured.
+_audit_sink: IO[str] | None = None
 
 # Default group_id for lookup scoping — set by lifespan from Settings.
 _default_group_id: str = "project/gimle"
@@ -256,6 +262,36 @@ def get_driver() -> AsyncDriver | None:
 def get_settings() -> Settings | None:
     """Public getter for Settings. Returns None before set_settings() call."""
     return _settings
+
+
+def set_audit_sink(sink: IO[str] | None) -> None:
+    """Called from FastAPI lifespan to set the open JSONL audit sink file handle."""
+    global _audit_sink  # noqa: PLW0603
+    _audit_sink = sink
+
+
+def _write_audit_line(
+    tool_name: str,
+    request_args: dict[str, Any],
+    response_summary: str | None,
+    latency_ms: int,
+    error: str | None,
+) -> None:
+    if _audit_sink is None:
+        return
+    line = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "tool_name": tool_name,
+        "request_args": {k: str(v)[:500] for k, v in request_args.items()},
+        "response_summary": response_summary,
+        "latency_ms": latency_ms,
+        "error": error,
+    }
+    try:
+        _audit_sink.write(json.dumps(line) + "\n")
+        _audit_sink.flush()
+    except OSError as exc:
+        logger.warning("audit sink write failed: %s", exc)
 
 
 def _build_project_analysis_service() -> ProjectAnalysisService:
@@ -408,9 +444,36 @@ _F = TypeVar("_F", bound=Callable[..., Any])
 
 
 def _tool(name: str, description: str) -> Callable[[_F], _F]:
-    """Wrapper around @_mcp.tool that tracks names for Pattern #21 dedup check."""
+    """Wrapper around @_mcp.tool that tracks names and injects telemetry."""
     _registered_tool_names.append(name)
-    return _mcp.tool(name=name, description=description)  # type: ignore[return-value]
+    mcp_decorator = _mcp.tool(name=name, description=description)
+
+    def decorator(fn: _F) -> _F:
+        @functools.wraps(fn)
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+            if _audit_sink is None or _settings is None or not _settings.palace_telemetry_enabled:
+                return await fn(*args, **kwargs)
+            t0 = time.monotonic()
+            error_str: str | None = None
+            result: Any = None
+            try:
+                result = await fn(*args, **kwargs)
+                return result
+            except Exception as exc:
+                error_str = f"{type(exc).__name__}: {exc}"
+                raise
+            finally:
+                _write_audit_line(
+                    name,
+                    kwargs,
+                    None if error_str else str(result)[:500],
+                    int((time.monotonic() - t0) * 1000),
+                    error_str,
+                )
+
+        return mcp_decorator(wrapper)  # type: ignore[return-value]
+
+    return decorator
 
 
 @_tool(

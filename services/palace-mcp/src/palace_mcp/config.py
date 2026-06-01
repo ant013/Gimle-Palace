@@ -186,3 +186,43 @@ class Settings(BaseSettings):
         alias="PALACE_MAILMAP_MAX_BYTES",
         description="Upper bound for .mailmap file size; oversized → identity passthrough",
     )
+
+    # -----------------------------------------------------------------------
+    # S0: Anchor symbols (GIM-1097)
+    # -----------------------------------------------------------------------
+
+    palace_anchor_symbols: Annotated[dict[str, list[str]], NoDecode] = Field(
+        default_factory=dict,
+        description=(
+            "JSON-encoded dict mapping group_id → list of anchor qualified names. "
+            'Example: PALACE_ANCHOR_SYMBOLS=\'{"project/uw-ios-app":["WalletKit.BalanceData"]}\''
+        ),
+    )
+
+    @field_validator("palace_anchor_symbols", mode="before")
+    @classmethod
+    def parse_anchor_symbols(cls, value: object) -> dict[str, list[str]] | object:
+        if value is None:
+            return {}
+        if isinstance(value, str):
+            if value.strip() == "":
+                return {}
+            return cast(object, json.loads(value))
+        return value
+
+    # -----------------------------------------------------------------------
+    # F4.0: Telemetry + JSONL audit sink (GIM-1097)
+    # -----------------------------------------------------------------------
+
+    palace_audit_sink_path: str | None = Field(
+        default=None,
+        description=(
+            "Filesystem path for the JSONL audit sink file. Each MCP tool call appends "
+            "one JSON line: {timestamp, tool_name, request_args, response_summary, "
+            "latency_ms, error}. Disabled when None."
+        ),
+    )
+    palace_telemetry_enabled: bool = Field(
+        default=True,
+        description="Master switch for MCP tool call telemetry. Set False to suppress audit lines.",
+    )
