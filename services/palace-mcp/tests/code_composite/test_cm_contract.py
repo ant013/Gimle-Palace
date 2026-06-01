@@ -196,6 +196,60 @@ class TestSearchGraphContract:
         assert len(result["matches"]) == 2
 
     @pytest.mark.asyncio
+    async def test_short_name_fallback_matches_scip_qualified_name(self) -> None:
+        session = _session(
+            {"results": [], "total": 0, "has_more": False},
+            {
+                "rows": [
+                    [
+                        "",
+                        "Unstoppable s%3A11Unstoppable18BitcoinBaseAdapterC0B11BalanceDataV",
+                        "Adapters.swift",
+                        "",
+                    ]
+                ]
+            },
+        )
+
+        result = await code_composite._resolve_qn(session, "BalanceData", "proj")
+
+        assert result == (
+            "BalanceData",
+            "Unstoppable s%3A11Unstoppable18BitcoinBaseAdapterC0B11BalanceDataV",
+        )
+
+    @pytest.mark.asyncio
+    async def test_search_graph_error_falls_back_to_short_name_query(self) -> None:
+        session = AsyncMock()
+        session.call_tool = AsyncMock(
+            side_effect=[
+                CallToolResult(
+                    content=[TextContent(type="text", text="project not registered")],
+                    isError=True,
+                ),
+                _result(
+                    {
+                        "rows": [
+                            [
+                                "",
+                                "Unstoppable s%3A11Unstoppable18BitcoinBaseAdapterC0B11BalanceDataV",
+                                "Adapters.swift",
+                                "",
+                            ]
+                        ]
+                    }
+                ),
+            ]
+        )
+
+        result = await code_composite._resolve_qn(session, "BalanceData", "proj")
+
+        assert result == (
+            "BalanceData",
+            "Unstoppable s%3A11Unstoppable18BitcoinBaseAdapterC0B11BalanceDataV",
+        )
+
+    @pytest.mark.asyncio
     async def test_search_graph_cm_error_returns_cm_error_envelope(self) -> None:
         """_resolve_qn returns cm_error envelope when CM search_graph fails."""
         session = _error_session("project not registered in CM")
