@@ -246,6 +246,51 @@ class TestFindReferencesBundlePath:
             }
         ]
 
+    async def test_bundle_path_dedups_same_file_and_line(self) -> None:
+        from palace_mcp.code_composite import SlugResolution
+
+        find_refs = self._get_fn()
+        fake_health = _make_fake_bundle_status("uw-ios")
+
+        raw_occ_1 = _tantivy_doc(
+            symbol_id=42,
+            file_path="/repos/evm-kit/Sources/Core.swift",
+            line=10,
+            col_start=4,
+        )
+        raw_occ_2 = _tantivy_doc(
+            symbol_id=42,
+            file_path="/repos/evm-kit/Sources/Core.swift",
+            line=10,
+            col_start=8,
+        )
+
+        with (
+            patch(_PATCH_GET_DRIVER, return_value=MagicMock()),
+            patch(_PATCH_GET_SETTINGS, return_value=self._settings()),
+            patch(
+                "palace_mcp.code_composite._resolve_slug",
+                new=AsyncMock(
+                    return_value=SlugResolution(
+                        kind="bundle", member_slugs=["evm-kit", "uwb-kit"]
+                    )
+                ),
+            ),
+            patch(
+                "palace_mcp.code_composite.bundle_status",
+                new=AsyncMock(return_value=fake_health),
+            ),
+            patch(
+                "palace_mcp.code_composite.TantivyBridge",
+                return_value=_make_bridge_mock([raw_occ_1, raw_occ_2]),
+            ),
+            patch("palace_mcp.code_composite.symbol_id_for", return_value=42),
+        ):
+            result = await find_refs("EvmKit.Address", "uw-ios", 100)
+
+        assert result["total_found"] == 1
+        assert len(result["occurrences"]) == 1
+
     async def test_bundle_path_no_ingest_run_check_for_bundle_slug(self) -> None:
         """For bundle slug, _query_any_ingest_run_for_project is NOT called."""
         from palace_mcp.code_composite import SlugResolution
@@ -421,6 +466,51 @@ class TestFindReferencesProjectPath:
                 "qualified_name": "MyModule.func",
             }
         ]
+
+    async def test_project_path_dedups_same_file_and_line(self) -> None:
+        from palace_mcp.code_composite import SlugResolution
+
+        find_refs = self._get_fn()
+        ingest_run_row = {"run_id": "abc", "success": True, "extractor_name": "sym_py"}
+        raw_occ_1 = _tantivy_doc(
+            symbol_id=1,
+            file_path="Sources/App/Feature.swift",
+            line=7,
+            col_start=3,
+        )
+        raw_occ_2 = _tantivy_doc(
+            symbol_id=1,
+            file_path="Sources/App/Feature.swift",
+            line=7,
+            col_start=11,
+        )
+
+        with (
+            patch(_PATCH_GET_DRIVER, return_value=MagicMock()),
+            patch(_PATCH_GET_SETTINGS, return_value=self._settings()),
+            patch(
+                "palace_mcp.code_composite._resolve_slug",
+                new=AsyncMock(return_value=SlugResolution(kind="project")),
+            ),
+            patch(
+                "palace_mcp.code_composite._query_any_ingest_run_for_project",
+                new=AsyncMock(return_value=ingest_run_row),
+            ),
+            patch(
+                "palace_mcp.code_composite._query_eviction_record",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "palace_mcp.code_composite.TantivyBridge",
+                return_value=_make_bridge_mock([raw_occ_1, raw_occ_2]),
+            ),
+            patch("palace_mcp.code_composite.symbol_id_for", return_value=1),
+            patch("palace_mcp.code_router.get_cm_session", return_value=None),
+        ):
+            result = await find_refs("MyModule.func", "gimle", 100)
+
+        assert result["total_found"] == 1
+        assert len(result["occurrences"]) == 1
 
 
 # ---------------------------------------------------------------------------

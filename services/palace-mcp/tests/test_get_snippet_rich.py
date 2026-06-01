@@ -176,6 +176,71 @@ class TestGetSnippetRichHappyPath:
         assert payload["definition_location"]["start_line"] == 10
         assert "conventions" not in payload
 
+    @pytest.mark.asyncio
+    async def test_usages_are_deduped_by_file_and_line(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        fake_session = _fake_session(_SEARCH_GRAPH_HIT, _SNIPPET_RESPONSE)
+        monkeypatch.setattr(
+            "palace_mcp.code_router.get_cm_session", lambda: fake_session
+        )
+
+        mock_settings = MagicMock()
+        mock_settings.palace_tantivy_index_path = "/tmp/tantivy"
+        mock_settings.palace_tantivy_heap_mb = 50
+
+        mock_bridge = AsyncMock()
+        mock_bridge.search_by_symbol_id_async = AsyncMock(
+            return_value=[
+                {
+                    "file_path": "src/mod/sub.py",
+                    "line": 42,
+                    "col_start": 4,
+                    "col_end": 9,
+                    "kind": "call",
+                    "symbol_qualified_name": "mod.sub.my_fn",
+                },
+                {
+                    "file_path": "src/mod/sub.py",
+                    "line": 42,
+                    "col_start": 12,
+                    "col_end": 17,
+                    "kind": "call",
+                    "symbol_qualified_name": "mod.sub.my_fn",
+                },
+            ]
+        )
+        mock_bridge.__aenter__ = AsyncMock(return_value=mock_bridge)
+        mock_bridge.__aexit__ = AsyncMock(return_value=False)
+
+        mock_driver = AsyncMock()
+        mock_neo4j_session = AsyncMock()
+        mock_result = AsyncMock()
+        mock_result.single = AsyncMock(return_value={"hotspot_score": 0.42})
+        mock_neo4j_session.run = AsyncMock(return_value=mock_result)
+        mock_neo4j_session.__aenter__ = AsyncMock(return_value=mock_neo4j_session)
+        mock_neo4j_session.__aexit__ = AsyncMock(return_value=False)
+        mock_driver.session = MagicMock(return_value=mock_neo4j_session)
+
+        with (
+            patch("palace_mcp.code_composite.TantivyBridge", return_value=mock_bridge),
+            patch("palace_mcp.mcp_server.get_driver", return_value=mock_driver),
+            patch("palace_mcp.mcp_server.get_settings", return_value=mock_settings),
+            patch(
+                "palace_mcp.code.find_owners.find_owners",
+                new=AsyncMock(return_value=_OWNERS_RESPONSE),
+            ),
+            patch(
+                "palace_mcp.git.tools.palace_git_log",
+                new=AsyncMock(return_value=_COMMITS_RESPONSE),
+            ),
+        ):
+            mcp = _make_mcp_and_register()
+            payload = await _call(mcp, qualified_name="my_fn")
+
+        assert len(payload["usages"]) == 1
+        assert payload["usages"][0]["line"] == 42
+
 
 # ---------------------------------------------------------------------------
 # Test 2: Symbol not found
@@ -185,7 +250,10 @@ class TestGetSnippetRichHappyPath:
 class TestGetSnippetRichSymbolNotFound:
     @pytest.mark.asyncio
     async def test_symbol_not_found(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        fake_session = _fake_session({"total": 0, "results": [], "has_more": False})
+        fake_session = _fake_session(
+            {"total": 0, "results": [], "has_more": False},
+            {"rows": []},
+        )
         monkeypatch.setattr(
             "palace_mcp.code_router.get_cm_session", lambda: fake_session
         )
