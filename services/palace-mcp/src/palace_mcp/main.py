@@ -21,7 +21,9 @@ from palace_mcp.graphiti_runtime import (
     close_graphiti,
     ensure_graphiti_schema,
 )
+from palace_mcp.embeddings import prewarm_dispatcher
 from palace_mcp.mcp_server import (
+    _write_audit_line,
     build_mcp_asgi_app,
     set_audit_sink,
     set_default_group_id,
@@ -75,6 +77,18 @@ async def wait_for_neo4j_connectivity(
     )
 
 
+async def _run_qodo_prewarm() -> None:
+    """Run Qodo pre-warm in a thread; log + record counter on failure but never raise."""
+    t0 = time.monotonic()
+    try:
+        await asyncio.to_thread(prewarm_dispatcher)
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+        logger.info("palace.startup.qodo_prewarm_ok elapsed_ms=%d", elapsed_ms)
+    except Exception as exc:
+        logger.error("palace.startup.qodo_prewarm_failed", exc_info=exc)
+        _write_audit_line("palace.startup.qodo_prewarm_failures", {}, None, 0, str(exc))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     configure_json_logging()
@@ -96,6 +110,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         audit_path.parent.mkdir(parents=True, exist_ok=True)
         audit_file = audit_path.open("a", encoding="utf-8")
         set_audit_sink(audit_file)
+    if settings.palace_qodo_prewarm:
+        await _run_qodo_prewarm()
     if settings.codebase_memory_mcp_binary:
         await start_cm_subprocess(settings.codebase_memory_mcp_binary)
     await wait_for_neo4j_connectivity(driver)

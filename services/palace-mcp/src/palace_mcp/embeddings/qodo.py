@@ -10,6 +10,9 @@ from palace_mcp.embeddings.cache_preflight import preflight_or_fail
 
 QODO_EMBED_MODEL_NAME = "Qodo/Qodo-Embed-1-1.5B"
 
+# Realistic Swift idiom — exercises tokenizer + embed over realistic syntax.
+_PREWARM_SENTENCE = "public func balance() async throws -> Decimal { return 0 }"
+
 
 def _local_files_only_from_env() -> bool:
     return os.environ.get("PALACE_EMBEDDING_LOCAL_ONLY", "").lower() in (
@@ -191,3 +194,14 @@ class QodoEmbeddingBackend:
             show_progress_bar=False,
         )
         return [list(map(float, row)) for row in embeddings.tolist()]
+
+
+def warmup() -> QodoEmbeddingBackend:
+    """Force model load + MPS device allocation + Metal kernel compile.
+
+    Returns the warmed backend so callers can wire it into the dispatcher
+    cache rather than discarding it.
+    """
+    backend = QodoEmbeddingBackend()
+    backend.embed_batch([_PREWARM_SENTENCE])
+    return backend
