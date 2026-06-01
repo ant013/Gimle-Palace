@@ -29,6 +29,7 @@ import argparse
 import asyncio
 import json
 import sys
+import time
 from pathlib import Path
 
 _SERVICE_ROOT = Path(__file__).resolve().parent.parent  # services/palace-mcp/
@@ -214,6 +215,7 @@ async def _run_live(
     rows: list[MatrixRow],
     mcp_url: str,
     project_override: str | None,
+    timing: bool = False,
 ) -> dict[str, dict]:
     """Call palace.code.semantic_search via MCP for each row."""
     try:
@@ -253,6 +255,7 @@ async def _run_live(
                     params["source_scopes"] = row.source_scopes
 
                 print(f"  → {row.id}", end="", flush=True)
+                t0 = time.monotonic() if timing else 0.0
                 try:
                     result = await session.call_tool(
                         "palace.code.semantic_search", params
@@ -272,6 +275,8 @@ async def _run_live(
                         "returned_count", len(payload.get("result", []))
                     )
                     print(f" {count} hits")
+                if timing:
+                    payload["_latency_ms"] = (time.monotonic() - t0) * 1000.0
                 responses[row.id] = payload
 
     return responses
@@ -311,6 +316,11 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument(
         "--json-report", type=Path, default=None, help="Write JSON report to file"
     )
+    p.add_argument(
+        "--timing",
+        action="store_true",
+        help="Capture wall-clock latency per row in live mode (stored in RowResult.latency_ms)",
+    )
     return p.parse_args()
 
 
@@ -342,7 +352,7 @@ def main() -> None:
         responses = _load_fixture_responses(args.fixture_dir, rows)
     else:
         print(f"Running live mode against {args.mcp_url}…")
-        responses = asyncio.run(_run_live(rows, args.mcp_url, args.project))
+        responses = asyncio.run(_run_live(rows, args.mcp_url, args.project, args.timing))
 
     report = run_matrix(rows, responses)
     _print_report(report, rows_by_id)
