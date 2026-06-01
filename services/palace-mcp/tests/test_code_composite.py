@@ -371,6 +371,70 @@ class TestDefaultPath:
         assert payload["qualified_name"] == "mod.decide"
 
     @pytest.mark.asyncio
+    async def test_short_name_fallback_normalizes_cm_project_for_neo4j(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from mcp.server.fastmcp import FastMCP
+
+        from palace_mcp.code_composite import register_code_composite_tools
+
+        fake_session = _fake_session({"total": 0, "results": [], "has_more": False})
+        monkeypatch.setattr(
+            "palace_mcp.code_router.get_cm_session", lambda: fake_session
+        )
+
+        query_mock = AsyncMock(
+            return_value=[
+                {
+                    "name": "BalanceData",
+                    "short_name": "BalanceData",
+                    "qualified_name": "WalletKit.BalanceData",
+                    "file_path": "WalletKit.swift",
+                    "symbol": "",
+                }
+            ]
+        )
+        monkeypatch.setattr("palace_mcp.code_composite._query_symbol_candidates", query_mock)
+        monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: object())
+        tests_edge = AsyncMock(
+            return_value={
+                "ok": True,
+                "method": "tests_edge",
+                "requested_qualified_name": "BalanceData",
+                "qualified_name": "WalletKit.BalanceData",
+                "tests": [],
+                "total_found": 0,
+                "truncated": False,
+            }
+        )
+        monkeypatch.setattr("palace_mcp.code_composite._test_impact_tests_edge", tests_edge)
+
+        mcp = FastMCP("test")
+        register_code_composite_tools(
+            lambda name, desc: mcp.tool(name=name, description=desc),
+            default_project="repos-gimle",
+        )
+        result = await mcp.call_tool(
+            "palace.code.test_impact",
+            {
+                "qualified_name": "BalanceData",
+                "project": "uw-ios-app",
+            },
+        )
+
+        payload = json.loads(result[0][0].text)  # type: ignore[index]
+        assert payload["ok"] is True
+        assert payload["qualified_name"] == "WalletKit.BalanceData"
+        assert query_mock.await_args_list[0].kwargs["group_id"] == "project/uw-ios-app"
+        tests_edge.assert_awaited_once_with(
+            fake_session,
+            requested_qn="BalanceData",
+            resolved_qn="WalletKit.BalanceData",
+            project="repos-uw-ios-app",
+            max_results=50,
+        )
+
+    @pytest.mark.asyncio
     async def test_truncation_tests_edge(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from palace_mcp.code_composite import register_code_composite_tools
         from mcp.server.fastmcp import FastMCP

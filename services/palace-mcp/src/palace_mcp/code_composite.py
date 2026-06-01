@@ -451,7 +451,7 @@ async def _resolve_short_name(
     project: str,
     max_candidates: int,
 ) -> list[dict[str, Any]] | dict[str, Any]:
-    group_id = f"project/{project}"
+    group_id = f"project/{_cm_project_to_slug(project)}"
     query_limit = max_candidates + 1
     queries = (
         (
