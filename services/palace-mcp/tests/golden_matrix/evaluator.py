@@ -73,6 +73,7 @@ class RowResult:
     scope_leak_count: int  # hits with unexpected source_scope
     context_present_count: int
     determinism_hash_count: int  # hits with non-null embedding_input_hash
+    latency_ms: float | None = None  # wall-clock latency; populated by --timing flag
 
 
 @dataclass
@@ -347,6 +348,7 @@ def evaluate_row(row: MatrixRow, response: dict[str, Any]) -> RowResult:
         scope_leak_count=scope_leak_count,
         context_present_count=context_present_count,
         determinism_hash_count=determinism_hash_count,
+        latency_ms=response.get("_latency_ms"),
     )
 
 
