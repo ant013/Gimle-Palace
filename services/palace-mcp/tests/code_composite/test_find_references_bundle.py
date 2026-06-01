@@ -512,6 +512,64 @@ class TestFindReferencesProjectPath:
         assert result["total_found"] == 1
         assert len(result["occurrences"]) == 1
 
+    async def test_project_path_keeps_later_unique_after_dedup_window(self) -> None:
+        from palace_mcp.code_composite import SlugResolution
+
+        find_refs = self._get_fn()
+        ingest_run_row = {"run_id": "abc", "success": True, "extractor_name": "sym_py"}
+        raw_results = [
+            _tantivy_doc(
+                symbol_id=1,
+                file_path="Sources/App/Feature.swift",
+                line=7,
+                col_start=3,
+            ),
+            _tantivy_doc(
+                symbol_id=1,
+                file_path="Sources/App/Feature.swift",
+                line=7,
+                col_start=11,
+            ),
+            _tantivy_doc(
+                symbol_id=1,
+                file_path="Sources/App/OtherFeature.swift",
+                line=9,
+                col_start=2,
+            ),
+        ]
+        bridge = MagicMock()
+        bridge.__aenter__ = AsyncMock(return_value=bridge)
+        bridge.__aexit__ = AsyncMock(return_value=None)
+        bridge.search_by_symbol_id_async = AsyncMock(
+            side_effect=lambda _symbol_id, limit: raw_results[:limit]
+        )
+
+        with (
+            patch(_PATCH_GET_DRIVER, return_value=MagicMock()),
+            patch(_PATCH_GET_SETTINGS, return_value=self._settings()),
+            patch(
+                "palace_mcp.code_composite._resolve_slug",
+                new=AsyncMock(return_value=SlugResolution(kind="project")),
+            ),
+            patch(
+                "palace_mcp.code_composite._query_any_ingest_run_for_project",
+                new=AsyncMock(return_value=ingest_run_row),
+            ),
+            patch(
+                "palace_mcp.code_composite._query_eviction_record",
+                new=AsyncMock(return_value=None),
+            ),
+            patch("palace_mcp.code_composite.TantivyBridge", return_value=bridge),
+            patch("palace_mcp.code_composite.symbol_id_for", return_value=1),
+            patch("palace_mcp.code_router.get_cm_session", return_value=None),
+        ):
+            result = await find_refs("MyModule.func", "gimle", 1)
+
+        assert len(result["occurrences"]) == 1
+        assert result["occurrences"][0]["file_path"] == "Sources/App/Feature.swift"
+        assert result["total_found"] == 2
+        assert result["truncated"] is True
+
 
 # ---------------------------------------------------------------------------
 # palace_code_find_references — none path (unknown slug)
