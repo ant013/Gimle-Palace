@@ -614,19 +614,24 @@ async def _hydrate_context(
     commit_sha: str | None,
     context_limit: int,
 ) -> dict[str, Any]:
-    snippet, snippet_code, snippet_message = await _load_snippet_context(
-        project=project,
-        file_path=file_path,
-        line_start=line_start,
-        line_end=line_end,
-        commit_sha=commit_sha,
-        qualified_name=qualified_name,
-    )
-    usages_preview, usage_code, usage_message = await _load_usage_preview(
-        settings=settings,
-        qualified_name=qualified_name,
-        commit_sha=commit_sha,
-        context_limit=context_limit,
+    (
+        (snippet, snippet_code, snippet_message),
+        (usages_preview, usage_code, usage_message),
+    ) = await asyncio.gather(
+        _load_snippet_context(
+            project=project,
+            file_path=file_path,
+            line_start=line_start,
+            line_end=line_end,
+            commit_sha=commit_sha,
+            qualified_name=qualified_name,
+        ),
+        _load_usage_preview(
+            settings=settings,
+            qualified_name=qualified_name,
+            commit_sha=commit_sha,
+            context_limit=context_limit,
+        ),
     )
 
     context: dict[str, Any] = {"available": bool(snippet or usages_preview)}
@@ -806,22 +811,26 @@ async def semantic_search(
     total_byte_count = 0
     snippets_with_size = 0
 
-    for hit in result_rows:
-        commit_sha = hit.pop("_commit_sha", None)
-        line_start = hit.pop("_line_start", None)
-        line_end = hit.pop("_line_end", None)
-        if include_context:
-            hit["context"] = await _hydrate_context(
+    _hit_meta = [
+        (hit.pop("_commit_sha", None), hit.pop("_line_start", None), hit.pop("_line_end", None))
+        for hit in result_rows
+    ]
+    if include_context:
+        contexts = await asyncio.gather(*[
+            _hydrate_context(
                 settings=settings,
                 project=hit["project"],
                 qualified_name=hit["qualified_name"],
                 file_path=hit.get("file_path"),
-                line_start=line_start,
-                line_end=line_end,
-                commit_sha=commit_sha,
+                line_start=ls,
+                line_end=le,
+                commit_sha=cs,
                 context_limit=context_limit,
             )
-            ctx = hit["context"]
+            for hit, (cs, ls, le) in zip(result_rows, _hit_meta)
+        ])
+        for hit, ctx in zip(result_rows, contexts):
+            hit["context"] = ctx
             if ctx.get("available"):
                 context_available_count += 1
             wc = ctx.get("warning_code")

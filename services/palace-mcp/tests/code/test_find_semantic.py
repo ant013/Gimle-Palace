@@ -787,3 +787,118 @@ async def test_runtime_path_fails_closed_on_missing_vector_hits() -> None:
             "qualified_name": "Unstoppable.ImageResource.nftAmount32",
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_hydrate_context_runs_loads_concurrently() -> None:
+    """_hydrate_context issues both load calls concurrently via asyncio.gather."""
+    import asyncio
+
+    from palace_mcp.code.find_semantic import _hydrate_context
+
+    call_order: list[str] = []
+
+    async def fake_snippet(**_: Any) -> tuple[Any, Any, Any]:
+        call_order.append("snippet_start")
+        await asyncio.sleep(0)
+        call_order.append("snippet_end")
+        return None, None, None
+
+    async def fake_usage(**_: Any) -> tuple[Any, Any, Any]:
+        call_order.append("usage_start")
+        await asyncio.sleep(0)
+        call_order.append("usage_end")
+        return [], None, None
+
+    with (
+        patch("palace_mcp.code.find_semantic._load_snippet_context", fake_snippet),
+        patch("palace_mcp.code.find_semantic._load_usage_preview", fake_usage),
+    ):
+        await _hydrate_context(
+            settings=None,
+            project="proj",
+            qualified_name="Foo.bar",
+            file_path="src/Foo.swift",
+            line_start=1,
+            line_end=5,
+            commit_sha="abc123",
+            context_limit=3,
+        )
+
+    # Both loads start before either finishes — confirms gather, not sequential.
+    assert call_order.index("usage_start") < call_order.index("snippet_end")
+
+
+@pytest.mark.asyncio
+async def test_semantic_search_hydrates_hits_concurrently() -> None:
+    """semantic_search calls _hydrate_context for all hits concurrently via asyncio.gather."""
+    import asyncio
+
+    from palace_mcp.code.find_semantic import semantic_search
+
+    backend = _FakeBackend()
+    dispatcher = EmbeddingBackendDispatcher({"qodo": backend}, default_backend="qodo")
+
+    def run_fn(query: str, _params: dict[str, Any]) -> _FakeResult:
+        if "collect(p.slug)" in query:
+            return _FakeResult(single_value={"found_projects": ["wallet-core"]})
+        if "embedded_cnt" in query:
+            return _FakeResult(
+                data_value=[{"source_scope": "project", "total": 10, "embedded_cnt": 5}]
+            )
+        if "queryNodes('symbol_embedding_idx'" in query:
+            return _FakeResult(
+                data_value=[
+                    {
+                        "group_id": "project/wallet-core",
+                        "qualified_name": "Crypto.verify",
+                        "kind": "function",
+                        "file_path": "Sources/A.swift",
+                        "module_name": "WalletCore",
+                        "source_scope": "project",
+                        "score": 0.91,
+                    },
+                    {
+                        "group_id": "project/wallet-core",
+                        "qualified_name": "Crypto.sign",
+                        "kind": "function",
+                        "file_path": "Sources/B.swift",
+                        "module_name": "WalletCore",
+                        "source_scope": "project",
+                        "score": 0.85,
+                    },
+                ]
+            )
+        raise AssertionError(f"unexpected query: {query}")
+
+    call_order: list[str] = []
+
+    async def fake_hydrate(*, qualified_name: str, **_: Any) -> dict[str, Any]:
+        call_order.append(f"{qualified_name}_start")
+        await asyncio.sleep(0)
+        call_order.append(f"{qualified_name}_end")
+        return {"available": False}
+
+    driver = _FakeDriver(run_fn)
+    with (
+        patch(
+            "palace_mcp.code.find_semantic.get_embedding_dispatcher",
+            return_value=dispatcher,
+        ),
+        patch(
+            "palace_mcp.code.find_semantic._hydrate_context",
+            new=fake_hydrate,
+        ),
+    ):
+        result = await semantic_search(
+            driver=driver,
+            query="signature verification",
+            project="wallet-core",
+            limit=2,
+        )
+
+    assert result["ok"] is True
+    assert result["returned_count"] == 2
+    # Both hydrations start before either finishes — confirms gather, not sequential.
+    assert call_order.index("Crypto.verify_start") < call_order.index("Crypto.sign_end")
+    assert call_order.index("Crypto.sign_start") < call_order.index("Crypto.verify_end")
