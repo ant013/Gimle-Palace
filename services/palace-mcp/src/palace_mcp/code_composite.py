@@ -556,6 +556,33 @@ def _decode_unique_occurrences(
     return occurrences
 
 
+async def _search_unique_occurrences(
+    bridge: TantivyBridge,
+    *,
+    symbol_id: int,
+    fallback_qualified_name: str,
+    max_results: int,
+) -> tuple[list[dict[str, Any]], bool]:
+    target_unique = max_results + 1
+    limit = target_unique
+    max_limit = target_unique * 8
+
+    while True:
+        raw_docs = await bridge.search_by_symbol_id_async(symbol_id, limit=limit)
+        occurrences = _decode_unique_occurrences(
+            raw_docs,
+            fallback_qualified_name=fallback_qualified_name,
+            symbol_id=symbol_id,
+        )
+        if len(occurrences) > max_results:
+            return occurrences[:max_results], True
+        if len(raw_docs) < limit:
+            return occurrences, False
+        if limit >= max_limit:
+            return occurrences, True
+        limit = min(limit * 2, max_limit)
+
+
 _DESC_SNIPPET_RICH = (
     "Rich context card for a symbol: source snippet, definition location, "
     "usages, code owners, hotspot score, and recent commits. "
@@ -705,18 +732,17 @@ def register_code_composite_tools(
             tantivy_path = Path(settings.palace_tantivy_index_path)
             query_time_failures: list[str] = []
             occurrences_bundle: list[dict[str, Any]] = []
+            truncated = False
             try:
                 async with TantivyBridge(
                     tantivy_path, heap_size_mb=settings.palace_tantivy_heap_mb
                 ) as bridge:
-                    raw = await bridge.search_by_symbol_id_async(
-                        sym_id, limit=req.max_results + 1
+                    occurrences_bundle, truncated = await _search_unique_occurrences(
+                        bridge,
+                        symbol_id=sym_id,
+                        fallback_qualified_name=req.qualified_name,
+                        max_results=req.max_results,
                     )
-                occurrences_bundle = _decode_unique_occurrences(
-                    raw,
-                    fallback_qualified_name=req.qualified_name,
-                    symbol_id=sym_id,
-                )[: req.max_results]
             except Exception:
                 logger.warning(
                     "bundle_tantivy_query_failed bundle=%s qn=%s",
@@ -737,7 +763,8 @@ def register_code_composite_tools(
                 "requested_qualified_name": req.qualified_name,
                 "bundle": resolved_project,
                 "occurrences": occurrences_bundle,
-                "total_found": len(occurrences_bundle),
+                "total_found": len(occurrences_bundle) + (1 if truncated else 0),
+                "truncated": truncated,
                 "bundle_health": health.model_dump(mode="json"),
             }
 
@@ -786,16 +813,12 @@ def register_code_composite_tools(
         async with TantivyBridge(
             tantivy_path, heap_size_mb=settings.palace_tantivy_heap_mb
         ) as bridge:
-            raw_results = await bridge.search_by_symbol_id_async(
-                sym_id, limit=req.max_results + 1
+            occurrences, truncated = await _search_unique_occurrences(
+                bridge,
+                symbol_id=sym_id,
+                fallback_qualified_name=resolved_qn,
+                max_results=req.max_results,
             )
-        occurrences = _decode_unique_occurrences(
-            raw_results,
-            fallback_qualified_name=resolved_qn,
-            symbol_id=sym_id,
-        )
-        truncated = len(occurrences) > req.max_results
-        occurrences = occurrences[: req.max_results]
 
         # State C: evicted — attach partial_index warning
         eviction_info = await _query_eviction_record(
