@@ -420,7 +420,7 @@ async def test_cross_project_search_with_scope_filter() -> None:
     """Explicit projects list + include_dependencies covers cross-project expert search."""
     from palace_mcp.code.find_semantic import semantic_search
 
-    def run_fn(query: str, _params: dict[str, Any]) -> _FakeResult:
+    def run_fn(query: str, params: dict[str, Any]) -> _FakeResult:
         if "collect(p.slug)" in query:
             return _FakeResult(
                 single_value={"found_projects": ["app", "kit-a", "toolkit"]}
@@ -432,42 +432,44 @@ async def test_cross_project_search_with_scope_filter() -> None:
                 ]
             )
         if "queryNodes('symbol_embedding_idx'" in query:
+            all_rows = [
+                {
+                    "group_id": "project/app",
+                    "qualified_name": "App.boot",
+                    "kind": "function",
+                    "file_path": "App/Boot.swift",
+                    "module_name": "App",
+                    "source_scope": "project",
+                    "embedding_input_hash": "h1",
+                    "commit_sha": None,
+                    "score": 0.95,
+                },
+                {
+                    "group_id": "project/kit-a",
+                    "qualified_name": "Kit.init",
+                    "kind": "function",
+                    "file_path": "Kit/Init.swift",
+                    "module_name": "KitA",
+                    "source_scope": "workspace_package",
+                    "embedding_input_hash": "h2",
+                    "commit_sha": None,
+                    "score": 0.85,
+                },
+                {
+                    "group_id": "project/toolkit",
+                    "qualified_name": "Util.parse",
+                    "kind": "function",
+                    "file_path": "Toolkit/Parser.swift",
+                    "module_name": "Toolkit",
+                    "source_scope": "dependency",
+                    "embedding_input_hash": "h3",
+                    "commit_sha": None,
+                    "score": 0.80,
+                },
+            ]
+            gids = set(params.get("group_ids", []))
             return _FakeResult(
-                data_value=[
-                    {
-                        "group_id": "project/app",
-                        "qualified_name": "App.boot",
-                        "kind": "function",
-                        "file_path": "App/Boot.swift",
-                        "module_name": "App",
-                        "source_scope": "project",
-                        "embedding_input_hash": "h1",
-                        "commit_sha": None,
-                        "score": 0.95,
-                    },
-                    {
-                        "group_id": "project/kit-a",
-                        "qualified_name": "Kit.init",
-                        "kind": "function",
-                        "file_path": "Kit/Init.swift",
-                        "module_name": "KitA",
-                        "source_scope": "workspace_package",
-                        "embedding_input_hash": "h2",
-                        "commit_sha": None,
-                        "score": 0.85,
-                    },
-                    {
-                        "group_id": "project/toolkit",
-                        "qualified_name": "Util.parse",
-                        "kind": "function",
-                        "file_path": "Toolkit/Parser.swift",
-                        "module_name": "Toolkit",
-                        "source_scope": "dependency",
-                        "embedding_input_hash": "h3",
-                        "commit_sha": None,
-                        "score": 0.80,
-                    },
-                ]
+                data_value=[r for r in all_rows if r["group_id"] in gids]
             )
         raise AssertionError(f"unexpected query: {query}")
 

@@ -783,7 +783,9 @@ async def semantic_search(
                 for gid in group_ids
             ]
         )
-        rows = _merge_per_project_results(list(per_project_results), final_limit=candidate_limit)
+        rows = _merge_per_project_results(
+            list(per_project_results), final_limit=candidate_limit
+        )
     if settings is not None:
         missing_hits = await _find_missing_hits(driver, rows)
         if missing_hits:

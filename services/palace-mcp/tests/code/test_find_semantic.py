@@ -290,7 +290,9 @@ async def test_success_filters_scope_and_skips_context_when_disabled() -> None:
                 },
             ]
             gids = set(params.get("group_ids", []))
-            return _FakeResult(data_value=[r for r in all_rows if r["group_id"] in gids])
+            return _FakeResult(
+                data_value=[r for r in all_rows if r["group_id"] in gids]
+            )
         raise AssertionError(f"unexpected query: {query}")
 
     driver = _FakeDriver(run_fn)
