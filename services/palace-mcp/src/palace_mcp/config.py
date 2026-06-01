@@ -226,3 +226,15 @@ class Settings(BaseSettings):
         default=True,
         description="Master switch for MCP tool call telemetry. Set False to suppress audit lines.",
     )
+
+    # -----------------------------------------------------------------------
+    # F4.1: Qodo pre-warm (GIM-1100)
+    # -----------------------------------------------------------------------
+
+    palace_qodo_prewarm: bool = Field(
+        default=True,
+        description=(
+            "Pre-warm Qodo embedding model on startup to eliminate ~9s cold-start latency. "
+            "Set PALACE_QODO_PREWARM=0 to skip on memory-constrained hosts."
+        ),
+    )

@@ -31,9 +31,13 @@ def _mock_graphiti_runtime() -> None:
 def _stub_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Settings requires NEO4J_PASSWORD + OPENAI_API_KEY. Tests that
     exercise ``lifespan`` must have both present in env.
+    Disable prewarm (Qodo model ~9s) and cm subprocess so lifespan
+    tests complete within their 2s timeout.
     """
     monkeypatch.setenv("NEO4J_PASSWORD", "test-pw")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("PALACE_QODO_PREWARM", "0")
+    monkeypatch.setenv("CODEBASE_MEMORY_MCP_BINARY", "")
 
 
 class TestFireAndForgetConstraints:
