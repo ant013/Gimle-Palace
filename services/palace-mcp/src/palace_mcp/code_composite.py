@@ -1034,7 +1034,12 @@ def register_code_composite_tools(
         if isinstance(disambig, dict):
             return disambig
         short_name, resolved_qn = disambig
-        assert session is not None
+        if session is None:
+            handle_tool_error(
+                RuntimeError(
+                    "CM subprocess not started — set CODEBASE_MEMORY_MCP_BINARY"
+                )
+            )
 
         try:
             if req.include_indirect:

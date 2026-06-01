@@ -936,6 +936,46 @@ class TestOptInPath:
         with pytest.raises(Exception):
             await mcp.call_tool("palace.code.test_impact", {"qualified_name": "pkg.fn"})
 
+    @pytest.mark.asyncio
+    async def test_short_name_resolution_still_fails_cleanly_without_cm_session(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Short-name fallback must still surface the CM-not-started tool error."""
+        from palace_mcp.code_composite import register_code_composite_tools
+        from mcp.server.fastmcp import FastMCP
+
+        async def fake_query_symbol_candidates(
+            driver: Any, query: str, **params: Any
+        ) -> list[dict[str, Any]]:
+            return [
+                {
+                    "name": "BalanceData",
+                    "short_name": "BalanceData",
+                    "symbol": "",
+                    "qualified_name": "WalletKit.BalanceData",
+                    "file_path": "WalletKit.swift",
+                }
+            ]
+
+        monkeypatch.setattr("palace_mcp.code_router.get_cm_session", lambda: None)
+        monkeypatch.setattr(
+            "palace_mcp.code_composite._query_symbol_candidates",
+            fake_query_symbol_candidates,
+        )
+        monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: object())
+
+        mcp = FastMCP("test")
+        register_code_composite_tools(
+            lambda name, desc: mcp.tool(name=name, description=desc),
+            default_project="repos-gimle",
+        )
+        with pytest.raises(Exception) as excinfo:
+            await mcp.call_tool(
+                "palace.code.test_impact",
+                {"qualified_name": "BalanceData", "project": "uw-ios-app"},
+            )
+        assert excinfo.type is not AssertionError
+
 
 # ---------------------------------------------------------------------------
 # Step 4 — registration wiring + config
