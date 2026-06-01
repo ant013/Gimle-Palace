@@ -397,7 +397,9 @@ class TestDefaultPath:
                 }
             ]
         )
-        monkeypatch.setattr("palace_mcp.code_composite._query_symbol_candidates", query_mock)
+        monkeypatch.setattr(
+            "palace_mcp.code_composite._query_symbol_candidates", query_mock
+        )
         monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: object())
         tests_edge = AsyncMock(
             return_value={
@@ -410,7 +412,9 @@ class TestDefaultPath:
                 "truncated": False,
             }
         )
-        monkeypatch.setattr("palace_mcp.code_composite._test_impact_tests_edge", tests_edge)
+        monkeypatch.setattr(
+            "palace_mcp.code_composite._test_impact_tests_edge", tests_edge
+        )
 
         mcp = FastMCP("test")
         register_code_composite_tools(

@@ -425,7 +425,9 @@ class TestQueryGraphContract:
 
 class TestShortNameQueryContract:
     def test_fold_query_checks_symbol_and_terminal_segment(self) -> None:
-        assert "coalesce(s.symbol, '')" in code_composite._QUERY_SYMBOL_BY_SHORT_NAME_FOLD
+        assert (
+            "coalesce(s.symbol, '')" in code_composite._QUERY_SYMBOL_BY_SHORT_NAME_FOLD
+        )
         assert "last(split(coalesce(s.qualified_name, ''), '.'))" in (
             code_composite._QUERY_SYMBOL_BY_SHORT_NAME_FOLD
         )
@@ -436,7 +438,9 @@ class TestShortNameQueryContract:
         )
 
     def test_scip_query_uses_qualified_name_regex(self) -> None:
-        assert "resolved_qn =~ $pattern" in code_composite._QUERY_SYMBOL_BY_SCIP_SHORT_NAME
+        assert (
+            "resolved_qn =~ $pattern" in code_composite._QUERY_SYMBOL_BY_SCIP_SHORT_NAME
+        )
 
     def test_function_projection_query_uses_qualified_name_regex(self) -> None:
         assert (
@@ -459,8 +463,7 @@ class TestShortNameQueryContract:
             "short_name": "",
             "symbol": "",
             "qualified_name": (
-                "Unstoppable "
-                "s%3A11Unstoppable18BitcoinBaseAdapterC0B11BalanceDataV"
+                "Unstoppable s%3A11Unstoppable18BitcoinBaseAdapterC0B11BalanceDataV"
             ),
             "file_path": "Adapters.swift",
         }
@@ -493,17 +496,14 @@ class TestShortNameQueryContract:
         session = _session({"results": [], "total": 0, "has_more": False})
         function_row = {
             "name": (
-                "Unstoppable "
-                "s%3A11Unstoppable18BitcoinBaseAdapterC0B11BalanceDataV"
+                "Unstoppable s%3A11Unstoppable18BitcoinBaseAdapterC0B11BalanceDataV"
             ),
             "short_name": "",
             "symbol": (
-                "Unstoppable "
-                "s%3A11Unstoppable18BitcoinBaseAdapterC0B11BalanceDataV"
+                "Unstoppable s%3A11Unstoppable18BitcoinBaseAdapterC0B11BalanceDataV"
             ),
             "qualified_name": (
-                "Unstoppable "
-                "s%3A11Unstoppable18BitcoinBaseAdapterC0B11BalanceDataV"
+                "Unstoppable s%3A11Unstoppable18BitcoinBaseAdapterC0B11BalanceDataV"
             ),
             "file_path": "Sources/App/BalanceData.swift",
         }

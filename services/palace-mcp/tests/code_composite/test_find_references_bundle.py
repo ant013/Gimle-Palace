@@ -631,7 +631,9 @@ class TestFindReferencesProjectPath:
                 "palace_mcp.code_composite.TantivyBridge",
                 return_value=_make_bridge_mock([raw_occ]),
             ),
-            patch("palace_mcp.code_composite.symbol_id_for", return_value=12) as symbol_id,
+            patch(
+                "palace_mcp.code_composite.symbol_id_for", return_value=12
+            ) as symbol_id,
             patch("palace_mcp.code_router.get_cm_session", return_value=None),
         ):
             result = await find_refs("BalanceData", "gimle", 100)

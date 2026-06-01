@@ -205,7 +205,9 @@ class TestGetSnippetRichHappyPath:
                 }
             ]
         )
-        monkeypatch.setattr("palace_mcp.code_composite._query_symbol_candidates", query_mock)
+        monkeypatch.setattr(
+            "palace_mcp.code_composite._query_symbol_candidates", query_mock
+        )
 
         mock_settings = MagicMock()
         mock_settings.palace_tantivy_index_path = "/tmp/tantivy"

@@ -12,6 +12,7 @@ owned by us; closed schema is correct for v1.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import re
 from collections.abc import Callable, Hashable
@@ -78,7 +79,11 @@ _QN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*(\.[A-Za-z_][A-Za-z0-9_-]*)*$")
 
 
 def _needs_human_resolution(qualified_name: str) -> bool:
-    return qualified_name.startswith("scip-") or "%3" in qualified_name or "." not in qualified_name
+    return (
+        qualified_name.startswith("scip-")
+        or "%3" in qualified_name
+        or "." not in qualified_name
+    )
 
 
 def _slug_to_cm_project(value: str) -> str:
@@ -159,9 +164,24 @@ async def _resolve_qn(
     Pass label=None to search all symbol types (Functions, Classes, Methods).
     """
     short_name = _decode_scip_short_name(qualified_name)
-    can_try_short_name = (
-        driver is not None and _needs_human_resolution(qualified_name) and bool(short_name)
-    )
+    can_try_short_name = _needs_human_resolution(qualified_name) and bool(short_name)
+
+    async def _fallback_rows() -> list[dict[str, Any]] | dict[str, Any]:
+        if driver is not None:
+            return await _resolve_short_name(
+                driver,
+                requested_qualified_name=qualified_name,
+                short_name=short_name,
+                project=project,
+                max_candidates=max_candidates,
+            )
+        assert session is not None
+        return await _resolve_short_name_via_query_graph(
+            session,
+            short_name=short_name,
+            project=project,
+            max_candidates=max_candidates,
+        )
 
     if session is None:
         if not can_try_short_name:
@@ -171,13 +191,7 @@ async def _resolve_qn(
                 "requested_qualified_name": qualified_name,
                 "message": "CM session not available for exact qualified_name resolution",
             }
-        fallback = await _resolve_short_name(
-            driver,
-            requested_qualified_name=qualified_name,
-            short_name=short_name,
-            project=project,
-            max_candidates=max_candidates,
-        )
+        fallback = await _fallback_rows()
         if isinstance(fallback, dict):
             return fallback
         results = fallback
@@ -195,13 +209,7 @@ async def _resolve_qn(
         raw = await session.call_tool("search_graph", arguments=_sg_args)
         if raw.isError:
             if can_try_short_name:
-                fallback = await _resolve_short_name(
-                    driver,
-                    requested_qualified_name=qualified_name,
-                    short_name=short_name,
-                    project=project,
-                    max_candidates=max_candidates,
-                )
+                fallback = await _fallback_rows()
                 if isinstance(fallback, dict):
                     return fallback
                 results = fallback
@@ -224,13 +232,7 @@ async def _resolve_qn(
             match_source = "qn_pattern"
 
     if not results and can_try_short_name and session is not None:
-        fallback = await _resolve_short_name(
-            driver,
-            requested_qualified_name=qualified_name,
-            short_name=short_name,
-            project=project,
-            max_candidates=max_candidates,
-        )
+        fallback = await _fallback_rows()
         if isinstance(fallback, dict):
             return fallback
         if fallback:
@@ -402,7 +404,10 @@ async def _query_symbol_candidates(
     query: str,
     **params: Any,
 ) -> list[dict[str, Any]]:
-    async with driver.session() as session:
+    session_ctx = driver.session()
+    if inspect.isawaitable(session_ctx):
+        session_ctx = await session_ctx
+    async with session_ctx as session:
         result = await session.run(query, **params)
         rows = [dict(row) async for row in result]
     return _dedup_items(
@@ -441,6 +446,57 @@ def _filter_short_name_rows(
         )
 
     return _dedup_items(matches, key=lambda row: row["qualified_name"])
+
+
+async def _resolve_short_name_via_query_graph(
+    session: ClientSession,
+    *,
+    short_name: str,
+    project: str,
+    max_candidates: int,
+) -> list[dict[str, Any]] | dict[str, Any]:
+    escaped_short_name = _escape_cypher_string(short_name)
+    query = f"""
+MATCH (s:Symbol {{group_id: 'project/{_cm_project_to_slug(project)}'}})
+WITH s, last(split(coalesce(s.qualified_name, ''), '.')) AS terminal_name
+WHERE any(candidate IN [
+          coalesce(s.short_name, ''),
+          coalesce(s.name, ''),
+          coalesce(s.symbol, ''),
+          terminal_name
+      ] WHERE toLower(candidate) = toLower('{escaped_short_name}'))
+RETURN coalesce(s.name, '') AS name,
+       coalesce(s.qualified_name, '') AS qualified_name,
+       coalesce(s.file_path, '') AS file_path,
+       coalesce(s.symbol, '') AS symbol
+ORDER BY qualified_name
+LIMIT {max_candidates + 1}
+"""
+    raw = await session.call_tool(
+        "query_graph",
+        arguments={"project": project, "query": query},
+    )
+    if raw.isError:
+        cm_msg = code_router.parse_cm_result(raw).get("_raw", "")
+        return {
+            "ok": False,
+            "error_code": "cm_error",
+            "requested_qualified_name": short_name,
+            "message": f"CM error from query_graph: {cm_msg}",
+        }
+    data = code_router.parse_cm_result(raw)
+    rows = [
+        {
+            "name": row[0] if len(row) > 0 else "",
+            "qualified_name": row[1] if len(row) > 1 else "",
+            "file_path": row[2] if len(row) > 2 else "",
+            "symbol": row[3] if len(row) > 3 else "",
+            "short_name": row[0] if len(row) > 0 else "",
+        }
+        for row in data.get("rows", [])
+        if len(row) > 1 and row[1]
+    ]
+    return _filter_short_name_rows(rows, short_name)
 
 
 async def _resolve_short_name(
@@ -978,6 +1034,7 @@ def register_code_composite_tools(
         if isinstance(disambig, dict):
             return disambig
         short_name, resolved_qn = disambig
+        assert session is not None
 
         try:
             if req.include_indirect:
