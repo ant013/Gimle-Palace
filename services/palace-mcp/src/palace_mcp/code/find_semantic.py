@@ -463,6 +463,17 @@ async def _vector_search(
         return cast(list[dict[str, Any]], await result.data())
 
 
+def _merge_per_project_results(
+    per_project: list[list[dict[str, Any]]],
+    final_limit: int,
+) -> list[dict[str, Any]]:
+    merged: list[dict[str, Any]] = []
+    for rows in per_project:
+        merged.extend(rows)
+    merged.sort(key=lambda r: float(r["score"]), reverse=True)
+    return merged[:final_limit]
+
+
 def _runtime_metadata(settings: Settings | None) -> dict[str, Any]:
     return {
         "git_sha": os.environ.get("PALACE_GIT_SHA", "unknown"),
@@ -751,12 +762,28 @@ async def semantic_search(
         }
 
     candidate_limit = _candidate_limit(limit, len(scope_projects))
-    rows = await _vector_search(
-        driver,
-        embedding=query_embedding,
-        group_ids=group_ids,
-        query_k=candidate_limit,
-    )
+    if len(group_ids) == 1:
+        per_project_k: int | None = None
+        rows = await _vector_search(
+            driver,
+            embedding=query_embedding,
+            group_ids=group_ids,
+            query_k=candidate_limit,
+        )
+    else:
+        per_project_k = _candidate_limit(limit, 1)
+        per_project_results = await asyncio.gather(
+            *[
+                _vector_search(
+                    driver,
+                    embedding=query_embedding,
+                    group_ids=[gid],
+                    query_k=per_project_k,
+                )
+                for gid in group_ids
+            ]
+        )
+        rows = _merge_per_project_results(list(per_project_results), final_limit=candidate_limit)
     if settings is not None:
         missing_hits = await _find_missing_hits(driver, rows)
         if missing_hits:
@@ -884,6 +911,7 @@ async def semantic_search(
         "include_context": include_context,
         "limit": limit,
         "candidate_limit": candidate_limit,
+        "per_project_k": per_project_k,
         "embedded_symbol_count": embedded_symbol_count,
         "returned_count": len(result_rows),
         "scope_excluded_count": scope_excluded_count,
