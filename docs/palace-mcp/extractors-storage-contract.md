@@ -11,9 +11,9 @@ used for.
 - **Granularity**: one document per file:line occurrence (DEF, DECL, USE).
 - **Location**: `PALACE_TANTIVY_INDEX_PATH` (docker volume `palace-tantivy-data`
   at `/var/lib/palace/tantivy`).
-- **Schema fields**: `doc_key`, `symbol_id`, `file_path`, `line`, `col_start`,
-  `col_end`, `role`, `language`, `commit_sha`, `importance`, `ingest_run_id`,
-  `phase`.
+- **Schema fields**: `doc_key`, `symbol_id`, `repo_id`, `file_path`, `line`,
+  `col_start`, `col_end`, `role`, `language`, `commit_sha`, `importance`,
+  `ingest_run_id`, `phase`.
 - **Primary key**: `doc_key` (delete-then-add for idempotency).
 - **Consumers**: `palace.code.find_references`, `semantic_search` usage preview.
 
@@ -22,9 +22,14 @@ used for.
 - **Granularity**: one node per unique `qualified_name` within a `group_id`.
 - **Key**: `(qualified_name, group_id)` — unique constraint.
 - **Properties**: `kind`, `file_path`, `module_name`, `source_scope`,
-  `access_modifier`, boolean attribute flags (`is_objc`, `is_dynamic`, etc.),
-  `embedding`, `embedding_input_hash`, `deleted_at`.
-- **Relationships**: `REFERENCES`, `CONFORMS_TO`, `EXTENDS`, `EXTENSION_OF`.
+  `extends_protocol`, `access_modifier`, boolean attribute flags (`is_objc`,
+  `is_dynamic`, etc.), `embedding`, `embedding_input_hash`, `deleted_at`.
+- **Relationships written by `symbol_index_*`**: `REFERENCES`, `CONFORMS_TO`,
+  `EXTENDS`, `EXTENSION_OF`.
+- **Relationships read by `dead_code`**: `CALLS`, `REFERENCES`, `EXTENDS`,
+  `CONFORMS_TO`, `EXTENSION_OF`, `EXISTENTIAL_USE` (the graph loader query
+  includes `CALLS` and `EXISTENTIAL_USE` for forward-compatibility; they are
+  not currently produced by the SCIP-based extractors).
 - **Consumers**: `dead_code` (graph reachability), `embedding_symbol` (vector
   population), `semantic_search` (vector query), `dead_symbol_binary_surface`.
 
@@ -38,7 +43,7 @@ used for.
 | `symbol_index_java` | occurrences (3-phase) | `:Symbol` + edges | `:IngestRun`, checkpoints | Neo4j `:Symbol` count |
 | `symbol_index_solidity` | occurrences (3-phase) | `:Symbol` + edges | `:IngestRun`, checkpoints | Neo4j `:Symbol` count |
 | `symbol_index_clang` | occurrences (3-phase) | `:Symbol` + edges | `:IngestRun`, checkpoints | Neo4j `:Symbol` count |
-| `dead_code` | — | reads `:Symbol` | `:DeadFinding`, `:IngestRun` | `:DeadFinding` node count |
+| `dead_code` | — | MERGE (upsert) `:Symbol` via `DEAD_SYMBOL` edge; reads `:Symbol` graph | `:DeadFinding`, `:IngestRun` | `:DeadFinding` node count |
 | `embedding_symbol` | — | writes `.embedding` on `:Symbol` | — | symbols embedded count |
 | `dead_symbol_binary_surface` | — | reads `:Symbol` | extractor-specific nodes | extractor node count |
 | `dependency_surface` | — | — | `:ExternalDependency`, `:DEPENDS_ON` | dep node count |
