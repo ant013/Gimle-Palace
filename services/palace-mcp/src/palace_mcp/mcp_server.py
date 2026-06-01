@@ -451,7 +451,11 @@ def _tool(name: str, description: str) -> Callable[[_F], _F]:
     def decorator(fn: _F) -> _F:
         @functools.wraps(fn)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            if _audit_sink is None or _settings is None or not _settings.palace_telemetry_enabled:
+            if (
+                _audit_sink is None
+                or _settings is None
+                or not _settings.palace_telemetry_enabled
+            ):
                 return await fn(*args, **kwargs)
             t0 = time.monotonic()
             error_str: str | None = None

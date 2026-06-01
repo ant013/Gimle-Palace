@@ -52,7 +52,13 @@ def test_write_audit_line_format() -> None:
 def test_write_audit_line_with_error() -> None:
     buf = io.StringIO()
     set_audit_sink(buf)
-    _write_audit_line("palace.memory.lookup", {"entity_type": "Symbol"}, None, 5, "ValueError: bad input")
+    _write_audit_line(
+        "palace.memory.lookup",
+        {"entity_type": "Symbol"},
+        None,
+        5,
+        "ValueError: bad input",
+    )
     line = json.loads(buf.getvalue().strip())
     assert line["error"] == "ValueError: bad input"
     assert line["response_summary"] is None
@@ -97,7 +103,9 @@ def test_settings_audit_sink_path_default_none(monkeypatch: pytest.MonkeyPatch) 
     assert s.palace_audit_sink_path is None
 
 
-def test_settings_telemetry_enabled_default_true(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_settings_telemetry_enabled_default_true(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.delenv("PALACE_TELEMETRY_ENABLED", raising=False)
     from palace_mcp.config import Settings
 

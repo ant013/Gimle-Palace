@@ -54,7 +54,9 @@ def test_make_symbol_anchor_and_extra_coexist() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_settings_anchor_symbols_empty_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_settings_anchor_symbols_empty_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.delenv("PALACE_ANCHOR_SYMBOLS", raising=False)
     from palace_mcp.config import Settings
 
@@ -63,7 +65,9 @@ def test_settings_anchor_symbols_empty_by_default(monkeypatch: pytest.MonkeyPatc
 
 
 def test_settings_anchor_symbols_parses_json(monkeypatch: pytest.MonkeyPatch) -> None:
-    payload = json.dumps({"project/uw-ios-app": ["WalletKit.BalanceData", "WalletKit.Transaction"]})
+    payload = json.dumps(
+        {"project/uw-ios-app": ["WalletKit.BalanceData", "WalletKit.Transaction"]}
+    )
     monkeypatch.setenv("PALACE_ANCHOR_SYMBOLS", payload)
     from importlib import reload
     import palace_mcp.config as cfg_module
