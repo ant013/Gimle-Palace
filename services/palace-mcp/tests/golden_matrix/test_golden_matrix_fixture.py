@@ -67,7 +67,9 @@ def test_all_mandatory_rows_pass_with_fixture(
     matrix_rows: list[MatrixRow],
     fixture_responses: dict[str, dict],
 ) -> None:
-    report = run_matrix(matrix_rows, fixture_responses)
+    # Gate rows run against live Neo4j; exclude them from fixture-mode checks.
+    fixture_rows = [r for r in matrix_rows if r.split != "gate"]
+    report = run_matrix(fixture_rows, fixture_responses)
     assert report.mandatory_failures == [], (
         f"Mandatory rows failed: {report.mandatory_failures}"
     )
@@ -401,5 +403,7 @@ def test_fixture_has_entry_for_every_row(
     matrix_rows: list[MatrixRow],
     fixture_responses: dict[str, dict],
 ) -> None:
-    missing = [r.id for r in matrix_rows if r.id not in fixture_responses]
+    # Gate rows run against live Neo4j only — no fixture responses expected.
+    fixture_rows = [r for r in matrix_rows if r.split != "gate"]
+    missing = [r.id for r in fixture_rows if r.id not in fixture_responses]
     assert missing == [], f"Missing fixture responses for rows: {missing}"

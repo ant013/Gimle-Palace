@@ -126,7 +126,10 @@ def _print_metrics(label: str, metrics: dict[str, float]) -> None:
 
 def _print_report(report: MatrixReport, rows_by_id: dict[str, MatrixRow]) -> None:
     all_results = (
-        report.dev_results + report.holdout_results + report.live_probe_results
+        report.dev_results
+        + report.holdout_results
+        + report.live_probe_results
+        + report.gate_results
     )
 
     print(f"\n{'━' * 70}")
@@ -148,11 +151,18 @@ def _print_report(report: MatrixReport, rows_by_id: dict[str, MatrixRow]) -> Non
         for result in report.live_probe_results:
             _print_row(result, rows_by_id[result.row_id])
 
+    if report.gate_results:
+        print(f"\n{_c(_BOLD, '── GATE ROWS')}")
+        for result in report.gate_results:
+            _print_row(result, rows_by_id[result.row_id])
+
     print(f"\n{'━' * 70}")
     print(_c(_BOLD, "AGGREGATE METRICS"))
     _print_metrics("DEV", report.dev_metrics)
     _print_metrics("HOLDOUT", report.holdout_metrics)
     _print_metrics("LIVE PROBE", report.live_probe_metrics)
+    if report.gate_metrics:
+        _print_metrics("GATE", report.gate_metrics)
 
     print(f"\n{'━' * 70}")
     total = len(all_results)
@@ -294,6 +304,11 @@ def _parse_args() -> argparse.Namespace:
         help="Comma-separated splits to run (default: all)",
     )
     p.add_argument(
+        "--gate-only",
+        action="store_true",
+        help="Run only gate-split rows (overrides --splits); for Gate 1 verdict runs",
+    )
+    p.add_argument(
         "--json-report", type=Path, default=None, help="Write JSON report to file"
     )
     return p.parse_args()
@@ -307,7 +322,9 @@ def main() -> None:
         sys.exit(2)
     rows = load_matrix(args.matrix)
 
-    allowed_splits = {s.strip() for s in args.splits.split(",")}
+    allowed_splits = (
+        {"gate"} if args.gate_only else {s.strip() for s in args.splits.split(",")}
+    )
     rows = [r for r in rows if r.split in allowed_splits]
 
     # Zero-row guard

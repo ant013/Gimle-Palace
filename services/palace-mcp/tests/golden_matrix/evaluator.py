@@ -27,7 +27,7 @@ class MatchCriterion:
 @dataclass
 class MatrixRow:
     id: str
-    split: str  # dev | holdout | live_probe
+    split: str  # dev | holdout | live_probe | gate
     class_: str  # mandatory | advisory | no_answer
     query: str
     projects: list[str]
@@ -80,10 +80,12 @@ class MatrixReport:
     dev_results: list[RowResult]
     holdout_results: list[RowResult]
     live_probe_results: list[RowResult]
+    gate_results: list[RowResult]
     # Aggregate metrics per split
     dev_metrics: dict[str, float]
     holdout_metrics: dict[str, float]
     live_probe_metrics: dict[str, float]
+    gate_metrics: dict[str, float]
     mandatory_failures: list[str]  # row ids
     advisory_failures: list[str]
 
@@ -413,6 +415,7 @@ def run_matrix(
     dev = [r for r in all_results if r.split == "dev"]
     holdout = [r for r in all_results if r.split == "holdout"]
     live = [r for r in all_results if r.split == "live_probe"]
+    gate = [r for r in all_results if r.split == "gate"]
 
     mandatory_failures = [
         r.row_id for r in all_results if r.class_ == "mandatory" and not r.passed
@@ -425,9 +428,11 @@ def run_matrix(
         dev_results=dev,
         holdout_results=holdout,
         live_probe_results=live,
+        gate_results=gate,
         dev_metrics=_aggregate(dev),
         holdout_metrics=_aggregate(holdout),
         live_probe_metrics=_aggregate(live),
+        gate_metrics=_aggregate(gate),
         mandatory_failures=mandatory_failures,
         advisory_failures=advisory_failures,
     )
