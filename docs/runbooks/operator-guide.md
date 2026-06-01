@@ -663,6 +663,79 @@ curl -sf -X POST -H 'Content-Type: application/json' \
 
 ---
 
+## 11. Phase 1 Features (shipped 2026-06)
+
+The following features shipped in Phase 1 (PRs #361-#367). They are active on
+`develop` as of 2026-06-01. No action is required unless you need to configure
+non-default behaviour.
+
+### S0 — Anchor symbols
+
+Anchor symbols are high-priority qualified names pinned per project. They are
+always included in semantic search candidates regardless of embedding score.
+
+Configure via `.env`:
+
+```
+PALACE_ANCHOR_SYMBOLS='{"project/gimle":["MyModule.BalanceData","WalletKit.Transaction"]}'
+```
+
+The value is a JSON object: keys are `group_id` strings (same format as the
+`project` field in MCP tool calls), values are lists of fully-qualified symbol
+names. Defaults to `{}` (no anchors).
+
+### F4.0 — Telemetry + JSONL audit sink
+
+Every MCP tool call appends a structured record to the audit sink (if configured)
+and to the service structured log. Each record includes: `timestamp`,
+`tool_name`, `request_args`, `response_summary`, `latency_ms`, `error`.
+
+Relevant `.env` keys:
+
+| Key | Default | Notes |
+|---|---|---|
+| `PALACE_TELEMETRY_ENABLED` | `true` | Set `false` to suppress all audit records |
+| `PALACE_AUDIT_SINK_PATH` | _(disabled)_ | Absolute path for the JSONL file; directory must exist and be writable by the container |
+
+To write to a host path, bind-mount it or use a directory already mounted
+(e.g. `/var/lib/palace/`). See [deploy-checklist.md](deploy-checklist.md) §Post-deploy
+for the verification step.
+
+### F4.1 — Qodo embedding pre-warm
+
+Palace-mcp pre-warms the Qodo embedding model during the FastAPI lifespan startup,
+eliminating the ~9 s cold-start on the first `semantic_search` call.
+
+Relevant `.env` key:
+
+| Key | Default | Notes |
+|---|---|---|
+| `PALACE_QODO_PREWARM` | `true` | Set `0` to skip pre-warm on memory-constrained hosts |
+
+If pre-warm fails (e.g. model cache missing), startup completes with a warning
+rather than crashing — the first live call incurs the cold-start penalty instead.
+See [deploy-checklist.md](deploy-checklist.md) §F4.1 for the verification step.
+
+### F4.3 — Hydration parallelization
+
+Snippet and usage-context hydration for each `semantic_search` result hit now
+runs concurrently via `asyncio.gather`. This reduces wall-clock latency for
+`semantic_search` calls with `include_context=true` when there are multiple hits.
+No configuration required.
+
+### F4.4 — HNSW per-project query budget
+
+For `semantic_search` calls that span multiple projects (multi-project `scope`),
+each project now gets its own HNSW query with an individual result budget
+(`per_project_k = candidate_limit(limit, 1)`). Results from all projects are
+merged and re-ranked by score before the final limit is applied.
+
+This prevents high-symbol-count projects from crowding out results from smaller
+projects in multi-project scopes. No configuration required. The `per_project_k`
+value is visible in telemetry logs for debugging.
+
+---
+
 ## Related Runbooks
 
 These runbooks cover specific workflows in detail. The guide above covers
