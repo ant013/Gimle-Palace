@@ -17,6 +17,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
+from urllib.parse import unquote
 
 from mcp import ClientSession
 from pydantic import BaseModel, Field, ValidationError, field_validator
@@ -30,7 +31,7 @@ from palace_mcp.memory.bundle import bundle_status
 
 logger = logging.getLogger(__name__)
 
-_SHORT_NAME_LABELS = ("Function", "Method", "Class")
+_SHORT_NAME_LABELS = ("Function", "Method", "Class", "Symbol")
 
 
 # ---------------------------------------------------------------------------
@@ -160,18 +161,28 @@ async def _resolve_qn(
         _sg_args["label"] = label
     raw = await session.call_tool("search_graph", arguments=_sg_args)
     if raw.isError:
-        cm_msg = code_router.parse_cm_result(raw).get("_raw", "")
-        return {
-            "ok": False,
-            "error_code": "cm_error",
-            "requested_qualified_name": qualified_name,
-            "message": f"CM error from search_graph: {cm_msg}",
-        }
-    data = code_router.parse_cm_result(raw)
-    results = data.get("results", [])
-    total = data.get("total", len(results))
-    has_more = data.get("has_more", False)
-    match_source = "qn_pattern"
+        fallback = await _resolve_short_name(session, qualified_name, project)
+        if isinstance(fallback, dict):
+            return fallback
+        if fallback:
+            results = fallback
+            total = len(results)
+            has_more = False
+            match_source = "short-name search"
+        else:
+            cm_msg = code_router.parse_cm_result(raw).get("_raw", "")
+            return {
+                "ok": False,
+                "error_code": "cm_error",
+                "requested_qualified_name": qualified_name,
+                "message": f"CM error from search_graph: {cm_msg}",
+            }
+    else:
+        data = code_router.parse_cm_result(raw)
+        results = data.get("results", [])
+        total = data.get("total", len(results))
+        has_more = data.get("has_more", False)
+        match_source = "qn_pattern"
 
     if not results:
         fallback = await _resolve_short_name(session, qualified_name, project)
@@ -219,20 +230,152 @@ def _escape_cypher_string(value: str) -> str:
     return value.replace("\\", "\\\\").replace("'", "\\'")
 
 
+def _length_prefixed_identifiers(symbol: str) -> list[tuple[str, str]]:
+    identifiers: list[tuple[str, str]] = []
+    i = 0
+    n = len(symbol)
+    while i < n:
+        if not symbol[i].isdigit():
+            i += 1
+            continue
+        j = i
+        while j < n and symbol[j].isdigit():
+            j += 1
+        length = int(symbol[i:j])
+        if length <= 0 or j + length > n:
+            i = j
+            continue
+        end = j + length
+        next_char = symbol[end] if end < n else ""
+        identifiers.append((symbol[j:end], next_char))
+        i = end
+    return identifiers
+
+
+def _split_scip_top_level(symbol: str) -> list[str]:
+    parts: list[str] = []
+    cur: list[str] = []
+    in_escape = False
+    i = 0
+    n = len(symbol)
+    while i < n:
+        c = symbol[i]
+        if c == "`":
+            if in_escape and i + 1 < n and symbol[i + 1] == "`":
+                cur.append("``")
+                i += 2
+                continue
+            cur.append(c)
+            in_escape = not in_escape
+            i += 1
+            continue
+        if c == " " and not in_escape:
+            parts.append("".join(cur))
+            cur = []
+            i += 1
+            continue
+        cur.append(c)
+        i += 1
+    if cur:
+        parts.append("".join(cur))
+    return parts
+
+
+def _decode_scip_short_name(symbol: str) -> str:
+    raw = symbol.strip()
+    if not raw:
+        return ""
+
+    parts = _split_scip_top_level(raw)
+    candidate = parts[-1] if parts else raw
+    decoded = unquote(candidate)
+    identifiers = _length_prefixed_identifiers(decoded)
+    if identifiers:
+        type_marker_indexes = [
+            idx
+            for idx, (_name, next_char) in enumerate(identifiers)
+            if next_char in "CPOVAE"
+        ]
+        if type_marker_indexes:
+            boundary = type_marker_indexes[-1]
+            if boundary + 1 < len(identifiers):
+                return identifiers[boundary + 1][0]
+            return identifiers[boundary][0]
+        return identifiers[0][0]
+
+    if "." in decoded:
+        return decoded.rsplit(".", 1)[-1]
+    if "/" in decoded:
+        return decoded.rsplit("/", 1)[-1]
+    return decoded.rstrip("#().:")
+
+
+def _filter_short_name_rows(
+    rows: list[dict[str, str]],
+    short_name: str,
+) -> list[dict[str, str]]:
+    folded_short_name = short_name.lower()
+    matches: list[dict[str, str]] = []
+    seen_qns: set[str] = set()
+
+    for row in rows:
+        qualified_name = row.get("qualified_name", "")
+        terminal_name = qualified_name.rsplit(".", 1)[-1] if "." in qualified_name else ""
+        candidates = (
+            row.get("name", ""),
+            row.get("symbol", ""),
+            terminal_name,
+            _decode_scip_short_name(qualified_name),
+        )
+        resolved_name = next(
+            (
+                candidate
+                for candidate in candidates
+                if candidate and candidate.lower() == folded_short_name
+            ),
+            "",
+        )
+        if not resolved_name or not qualified_name or qualified_name in seen_qns:
+            continue
+        seen_qns.add(qualified_name)
+        matches.append(
+            {
+                "name": row.get("name", "") or row.get("symbol", "") or resolved_name,
+                "qualified_name": qualified_name,
+                "file_path": row.get("file_path", ""),
+                "symbol": row.get("symbol", ""),
+            }
+        )
+
+    return matches
+
+
 async def _resolve_short_name(
     session: ClientSession,
     qualified_name: str,
     project: str,
 ) -> list[dict[str, Any]] | dict[str, Any]:
     safe_name = _escape_cypher_string(qualified_name)
+    safe_scip_pattern = _escape_cypher_string(
+        rf"(?i).*[0-9]+{re.escape(qualified_name)}[VCPOAES].*"
+    )
     label_filter = " OR ".join(f"s:{label}" for label in _SHORT_NAME_LABELS)
     cypher = (
         "MATCH (s) "
+        "WITH s, coalesce(s.qualified_name, '') AS resolved_qn, "
+        "last(split(coalesce(s.qualified_name, ''), '.')) AS terminal_name "
         f"WHERE ({label_filter}) "
-        f"AND toLower(s.name) = toLower('{safe_name}') "
-        "RETURN s.name AS name, s.qualified_name AS qualified_name, "
-        "coalesce(s.file_path, '') AS file_path "
-        "ORDER BY s.qualified_name "
+        "AND ("
+        f"toLower(coalesce(s.name, '')) = toLower('{safe_name}') "
+        f"OR toLower(coalesce(s.symbol, '')) = toLower('{safe_name}') "
+        f"OR toLower(terminal_name) = toLower('{safe_name}') "
+        f"OR resolved_qn =~ '{safe_scip_pattern}'"
+        ") "
+        "RETURN coalesce(s.name, '') AS name, "
+        "resolved_qn AS qualified_name, "
+        "coalesce(s.file_path, '') AS file_path, "
+        "coalesce(s.symbol, '') AS symbol "
+        "ORDER BY qualified_name "
         "LIMIT 10"
     )
     raw = await session.call_tool(
@@ -249,15 +392,19 @@ async def _resolve_short_name(
         }
     data = code_router.parse_cm_result(raw)
     rows = data.get("rows", [])
-    return [
-        {
-            "name": row[0],
-            "qualified_name": row[1],
-            "file_path": row[2] if len(row) > 2 else "",
-        }
-        for row in rows
-        if len(row) >= 2
-    ]
+    return _filter_short_name_rows(
+        [
+            {
+                "name": row[0],
+                "qualified_name": row[1],
+                "file_path": row[2] if len(row) > 2 else "",
+                "symbol": row[3] if len(row) > 3 else "",
+            }
+            for row in rows
+            if len(row) >= 2
+        ],
+        qualified_name,
+    )
 
 
 async def _test_impact_tests_edge(

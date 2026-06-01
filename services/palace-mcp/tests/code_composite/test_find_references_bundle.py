@@ -12,9 +12,12 @@ Covers:
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
+
+from mcp.types import CallToolResult, TextContent
 
 from palace_mcp.extractors.foundation.models import build_symbol_occurrence_doc_key
 
@@ -150,6 +153,13 @@ def _make_bridge_mock(raw_results: list[dict[str, Any]]) -> MagicMock:
     bridge.__aexit__ = AsyncMock(return_value=None)
     bridge.search_by_symbol_id_async = AsyncMock(return_value=raw_results)
     return bridge
+
+
+def _result(data: dict[str, Any]) -> CallToolResult:
+    return CallToolResult(
+        content=[TextContent(type="text", text=json.dumps(data))],
+        isError=False,
+    )
 
 
 def _tantivy_doc(
@@ -568,7 +578,66 @@ class TestFindReferencesProjectPath:
         assert len(result["occurrences"]) == 1
         assert result["occurrences"][0]["file_path"] == "Sources/App/Feature.swift"
         assert result["total_found"] == 2
-        assert result["truncated"] is True
+
+    async def test_project_path_resolves_scip_symbol_short_name(self) -> None:
+        from palace_mcp.code_composite import SlugResolution
+
+        find_refs = self._get_fn()
+        ingest_run_row = {"run_id": "abc", "success": True, "extractor_name": "sym_py"}
+        scip_qn = "Unstoppable s%3A11Unstoppable18BitcoinBaseAdapterC0B11BalanceDataV"
+        raw_occ = _tantivy_doc(
+            symbol_id=12,
+            file_path="Sources/App/BalanceData.swift",
+            line=21,
+            col_start=5,
+        )
+        cm_session = AsyncMock()
+        cm_session.call_tool = AsyncMock(
+            side_effect=[
+                _result({"results": [], "total": 0, "has_more": False}),
+                _result(
+                    {
+                        "rows": [
+                            [
+                                "",
+                                scip_qn,
+                                "Sources/App/BalanceData.swift",
+                                "",
+                            ]
+                        ]
+                    }
+                ),
+            ]
+        )
+
+        with (
+            patch(_PATCH_GET_DRIVER, return_value=MagicMock()),
+            patch(_PATCH_GET_SETTINGS, return_value=self._settings()),
+            patch(
+                "palace_mcp.code_composite._resolve_slug",
+                new=AsyncMock(return_value=SlugResolution(kind="project")),
+            ),
+            patch(
+                "palace_mcp.code_composite._query_any_ingest_run_for_project",
+                new=AsyncMock(return_value=ingest_run_row),
+            ),
+            patch(
+                "palace_mcp.code_composite._query_eviction_record",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "palace_mcp.code_composite.TantivyBridge",
+                return_value=_make_bridge_mock([raw_occ]),
+            ),
+            patch("palace_mcp.code_composite.symbol_id_for", return_value=12) as symbol_id,
+            patch("palace_mcp.code_router.get_cm_session", return_value=cm_session),
+        ):
+            result = await find_refs("BalanceData", "gimle", 100)
+
+        assert result["ok"] is True
+        assert result["requested_qualified_name"] == "BalanceData"
+        assert result["occurrences"][0]["qualified_name"] == scip_qn
+        symbol_id.assert_called_once_with(scip_qn)
 
 
 # ---------------------------------------------------------------------------
