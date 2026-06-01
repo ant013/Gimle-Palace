@@ -450,3 +450,57 @@ rows:
     row_pass_rule: "all"
     description: "Live no-answer probe — iOS wallet app should not have raw SQL"
     tags: ["live_probe", "no_answer"]
+
+  # ── GATE ROWS (Gate 1) ───────────────────────────────────────────────────────
+
+  - id: "gate-q1-evm-chain-adapters"
+    split: "gate"
+    class: "mandatory"
+    query: "EVM chain adapters"
+    projects: ["uw-ios-app"]
+    source_scopes: null
+    top_k: 20
+    must_match_any_in_top_n:
+      - patterns:
+          - "*EvmAdapter*"
+          - "*Evm*Adapter*"
+          - "*EthereumAdapter*"
+          - "*evm*adapter*"
+          - "*EvmBlockchain*"
+          - "*EvmKit*"
+        n: 20
+    must_not_match_in_top_n:
+      - patterns:
+          - "*/DerivedData/*"
+          - "*/Platforms/*"
+        n: 20
+    min_hits: 5
+    max_noise_hits: null
+    required_context_status: null
+    row_pass_rule: "all"
+    description: "Gate 1 Q1 — EVM chain adapter recall at top-20; EVM adapter symbols must appear in results"
+    tags: ["gate-1", "q1"]
+
+  - id: "gate-q2-balance-data-refs"
+    split: "gate"
+    class: "mandatory"
+    query: "BalanceData references"
+    projects: ["uw-ios-app"]
+    source_scopes: null
+    top_k: 40
+    must_match_any_in_top_n:
+      - patterns:
+          - "*BalanceData*"
+          - "*balanceData*"
+        n: 40
+    must_not_match_in_top_n:
+      - patterns:
+          - "*/DerivedData/*"
+          - "*/Platforms/*"
+        n: 40
+    min_hits: 30
+    max_noise_hits: null
+    required_context_status: null
+    row_pass_rule: "all"
+    description: "Gate 1 Q2 — BalanceData reference recall: must return ≥30 of 31 known BalanceData references"
+    tags: ["gate-1", "q2"]
