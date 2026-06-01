@@ -812,23 +812,29 @@ async def semantic_search(
     snippets_with_size = 0
 
     _hit_meta = [
-        (hit.pop("_commit_sha", None), hit.pop("_line_start", None), hit.pop("_line_end", None))
+        (
+            hit.pop("_commit_sha", None),
+            hit.pop("_line_start", None),
+            hit.pop("_line_end", None),
+        )
         for hit in result_rows
     ]
     if include_context:
-        contexts = await asyncio.gather(*[
-            _hydrate_context(
-                settings=settings,
-                project=hit["project"],
-                qualified_name=hit["qualified_name"],
-                file_path=hit.get("file_path"),
-                line_start=ls,
-                line_end=le,
-                commit_sha=cs,
-                context_limit=context_limit,
-            )
-            for hit, (cs, ls, le) in zip(result_rows, _hit_meta)
-        ])
+        contexts = await asyncio.gather(
+            *[
+                _hydrate_context(
+                    settings=settings,
+                    project=hit["project"],
+                    qualified_name=hit["qualified_name"],
+                    file_path=hit.get("file_path"),
+                    line_start=ls,
+                    line_end=le,
+                    commit_sha=cs,
+                    context_limit=context_limit,
+                )
+                for hit, (cs, ls, le) in zip(result_rows, _hit_meta)
+            ]
+        )
         for hit, ctx in zip(result_rows, contexts):
             hit["context"] = ctx
             if ctx.get("available"):
