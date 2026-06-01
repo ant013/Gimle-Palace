@@ -265,31 +265,33 @@ async def test_success_filters_scope_and_skips_context_when_disabled() -> None:
             )
         if "queryNodes('symbol_embedding_idx'" in query:
             assert params["query_k"] == 50
+            all_rows = [
+                {
+                    "group_id": "project/wallet-a",
+                    "qualified_name": "Crypto.verify",
+                    "kind": "function",
+                    "file_path": "Sources/A.swift",
+                    "module_name": "WalletA",
+                    "source_scope": "project",
+                    "embedding_input_hash": "hash-a",
+                    "commit_sha": "sha-a",
+                    "score": 0.91,
+                },
+                {
+                    "group_id": "project/wallet-b",
+                    "qualified_name": "Crypto.verify",
+                    "kind": "function",
+                    "file_path": "Sources/B.swift",
+                    "module_name": "WalletB",
+                    "source_scope": "project",
+                    "embedding_input_hash": "hash-b",
+                    "commit_sha": "sha-b",
+                    "score": 0.87,
+                },
+            ]
+            gids = set(params.get("group_ids", []))
             return _FakeResult(
-                data_value=[
-                    {
-                        "group_id": "project/wallet-a",
-                        "qualified_name": "Crypto.verify",
-                        "kind": "function",
-                        "file_path": "Sources/A.swift",
-                        "module_name": "WalletA",
-                        "source_scope": "project",
-                        "embedding_input_hash": "hash-a",
-                        "commit_sha": "sha-a",
-                        "score": 0.91,
-                    },
-                    {
-                        "group_id": "project/wallet-b",
-                        "qualified_name": "Crypto.verify",
-                        "kind": "function",
-                        "file_path": "Sources/B.swift",
-                        "module_name": "WalletB",
-                        "source_scope": "project",
-                        "embedding_input_hash": "hash-b",
-                        "commit_sha": "sha-b",
-                        "score": 0.87,
-                    },
-                ]
+                data_value=[r for r in all_rows if r["group_id"] in gids]
             )
         raise AssertionError(f"unexpected query: {query}")
 
@@ -902,3 +904,104 @@ async def test_semantic_search_hydrates_hits_concurrently() -> None:
     # Both hydrations start before either finishes — confirms gather, not sequential.
     assert call_order.index("Crypto.verify_start") < call_order.index("Crypto.sign_end")
     assert call_order.index("Crypto.sign_start") < call_order.index("Crypto.verify_end")
+
+
+@pytest.mark.asyncio
+async def test_multi_project_issues_per_project_hnsw_queries() -> None:
+    """Multi-project search fans out one HNSW query per project with per_project_k budget."""
+    from palace_mcp.code.find_semantic import semantic_search
+
+    backend = _FakeBackend()
+    dispatcher = EmbeddingBackendDispatcher({"qodo": backend}, default_backend="qodo")
+
+    project_rows: dict[str, list[dict[str, Any]]] = {
+        "project/alpha": [
+            {
+                "group_id": "project/alpha",
+                "qualified_name": "Alpha.verify",
+                "kind": "function",
+                "file_path": "Alpha.swift",
+                "module_name": "Alpha",
+                "source_scope": "project",
+                "embedding_input_hash": None,
+                "commit_sha": None,
+                "score": 0.95,
+            }
+        ],
+        "project/beta": [
+            {
+                "group_id": "project/beta",
+                "qualified_name": "Beta.verify",
+                "kind": "function",
+                "file_path": "Beta.swift",
+                "module_name": "Beta",
+                "source_scope": "project",
+                "embedding_input_hash": None,
+                "commit_sha": None,
+                "score": 0.60,
+            }
+        ],
+        "project/gamma": [
+            {
+                "group_id": "project/gamma",
+                "qualified_name": "Gamma.verify",
+                "kind": "function",
+                "file_path": "Gamma.swift",
+                "module_name": "Gamma",
+                "source_scope": "project",
+                "embedding_input_hash": None,
+                "commit_sha": None,
+                "score": 0.55,
+            }
+        ],
+    }
+
+    def run_fn(query: str, params: dict[str, Any]) -> _FakeResult:
+        if "collect(p.slug)" in query:
+            return _FakeResult(
+                single_value={"found_projects": ["alpha", "beta", "gamma"]}
+            )
+        if "embedded_cnt" in query:
+            return _FakeResult(
+                data_value=[{"source_scope": "project", "total": 30, "embedded_cnt": 9}]
+            )
+        if "queryNodes('symbol_embedding_idx'" in query:
+            gids = params.get("group_ids", [])
+            rows = [r for gid in gids for r in project_rows.get(gid, [])]
+            return _FakeResult(data_value=rows)
+        raise AssertionError(f"unexpected query: {query}")
+
+    driver = _FakeDriver(run_fn)
+    with patch(
+        "palace_mcp.code.find_semantic.get_embedding_dispatcher",
+        return_value=dispatcher,
+    ):
+        result = await semantic_search(
+            driver=driver,
+            query="shared func",
+            projects=["alpha", "beta", "gamma"],
+            limit=3,
+            include_context=False,
+        )
+
+    assert result["ok"] is True
+    assert result["returned_count"] == 3
+    # _candidate_limit(3, 3) = min(max(90, 50), 500) = 90
+    assert result["candidate_limit"] == 90
+    # _candidate_limit(3, 1) = min(max(30, 50), 500) = 50
+    assert result["per_project_k"] == 50
+
+    # One HNSW query per project, each scoped to a single group_id
+    vector_calls = [
+        (q, p)
+        for q, p in driver._session.calls
+        if "queryNodes('symbol_embedding_idx'" in q
+    ]
+    assert len(vector_calls) == 3
+    queried_groups = {p["group_ids"][0] for _, p in vector_calls}
+    assert queried_groups == {"project/alpha", "project/beta", "project/gamma"}
+    assert all(p["query_k"] == result["per_project_k"] for _, p in vector_calls)
+
+    # All three projects represented — per-project budget ensures fairness
+    result_projects = {r["project"] for r in result["result"]}
+    assert result_projects == {"alpha", "beta", "gamma"}
