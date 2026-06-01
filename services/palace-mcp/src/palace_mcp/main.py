@@ -5,7 +5,8 @@ import time
 from collections.abc import AsyncGenerator, Coroutine
 from contextlib import asynccontextmanager
 from importlib.metadata import version
-from typing import Annotated, cast
+from pathlib import Path
+from typing import IO, Annotated, cast
 
 from fastapi import Depends, FastAPI, Request, Response
 from neo4j import AsyncDriver, AsyncGraphDatabase
@@ -22,6 +23,7 @@ from palace_mcp.graphiti_runtime import (
 )
 from palace_mcp.mcp_server import (
     build_mcp_asgi_app,
+    set_audit_sink,
     set_default_group_id,
     set_driver,
     set_graphiti,
@@ -88,6 +90,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     set_graphiti(graphiti)
     set_settings(settings)
     set_default_group_id(settings.palace_default_group_id)
+    audit_file: IO[str] | None = None
+    if settings.palace_audit_sink_path:
+        audit_path = Path(settings.palace_audit_sink_path)
+        audit_path.parent.mkdir(parents=True, exist_ok=True)
+        audit_file = audit_path.open("a", encoding="utf-8")
+        set_audit_sink(audit_file)
     if settings.codebase_memory_mcp_binary:
         await start_cm_subprocess(settings.codebase_memory_mcp_binary)
     await wait_for_neo4j_connectivity(driver)
@@ -103,6 +111,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await stop_cm_subprocess()
     await close_graphiti(graphiti)
     await driver.close()
+    if audit_file is not None:
+        audit_file.close()
+        set_audit_sink(None)
 
 
 async def get_neo4j(request: Request) -> AsyncDriver:

@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING
 
 from neo4j import AsyncManagedTransaction
 
 from palace_mcp.memory.cypher import LIST_PROJECT_SLUGS
+
+if TYPE_CHECKING:
+    from palace_mcp.config import Settings
 
 
 _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{0,62}$")
@@ -65,3 +69,16 @@ async def resolve_group_ids(
         return [f"project/{s}" for s in project]
 
     raise TypeError(f"project must be str, list, or None; got {type(project).__name__}")
+
+
+def get_anchor_qnames(group_ids: list[str], settings: Settings) -> list[str]:
+    """Return anchor qualified names from config for the given group IDs.
+
+    Reads palace_anchor_symbols — a group_id-keyed dict — and returns the
+    combined list for all requested group IDs.  No DB access; pure config
+    look-up suitable for ingest-time anchor marking.
+    """
+    result: list[str] = []
+    for gid in group_ids:
+        result.extend(settings.palace_anchor_symbols.get(gid, []))
+    return result
