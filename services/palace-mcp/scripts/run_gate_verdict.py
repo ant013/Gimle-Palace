@@ -155,9 +155,7 @@ async def _run_gate_rows(
                 latencies: list[float] = []
                 last_result: RowResult | None = None
                 for run_n in range(1, _WARM_RUNS + 1):
-                    print(
-                        f"  → {row.id}  run {run_n}/{_WARM_RUNS}", end="", flush=True
-                    )
+                    print(f"  → {row.id}  run {run_n}/{_WARM_RUNS}", end="", flush=True)
                     payload, latency_ms = await _call_row(
                         session, row, project_override
                     )
@@ -266,7 +264,9 @@ def _parse_args() -> argparse.Namespace:
         description="Gate 1 verdict runner — outputs structured JSON gate verdict."
     )
     p.add_argument("--mcp-url", default="http://localhost:8000/mcp")
-    p.add_argument("--project", default=None, help="Override project slug for live mode")
+    p.add_argument(
+        "--project", default=None, help="Override project slug for live mode"
+    )
     p.add_argument("--matrix", type=Path, default=_DEFAULT_MATRIX)
     p.add_argument("--manifest", type=Path, default=_DEFAULT_MANIFEST)
     p.add_argument(

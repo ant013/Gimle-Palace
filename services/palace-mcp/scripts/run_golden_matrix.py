@@ -352,7 +352,9 @@ def main() -> None:
         responses = _load_fixture_responses(args.fixture_dir, rows)
     else:
         print(f"Running live mode against {args.mcp_url}…")
-        responses = asyncio.run(_run_live(rows, args.mcp_url, args.project, args.timing))
+        responses = asyncio.run(
+            _run_live(rows, args.mcp_url, args.project, args.timing)
+        )
 
     report = run_matrix(rows, responses)
     _print_report(report, rows_by_id)

@@ -60,7 +60,9 @@ def _make_result(row_id: str, hits: list[HitEvidence], returned: int) -> RowResu
 
 def _q2_row(balance_hits: int, total_returned: int = 40) -> RowResult:
     hits = [_make_hit(f"Wallet/BalanceData_{i}") for i in range(balance_hits)]
-    hits += [_make_hit(f"Other/Symbol_{i}") for i in range(total_returned - balance_hits)]
+    hits += [
+        _make_hit(f"Other/Symbol_{i}") for i in range(total_returned - balance_hits)
+    ]
     return _make_result(_Q2_ID, hits, total_returned)
 
 
@@ -132,7 +134,10 @@ def test_q1_informational_does_not_gate() -> None:
     """Q1 failing must not fail overall — it's informational."""
     row_data = {
         _Q2_ID: (_q2_row(30), _DEFAULT_LATENCIES),
-        _Q1_ID: (_q1_row(5, total_returned=20), _DEFAULT_LATENCIES),  # 5/20 = 0.25 < 0.80
+        _Q1_ID: (
+            _q1_row(5, total_returned=20),
+            _DEFAULT_LATENCIES,
+        ),  # 5/20 = 0.25 < 0.80
     }
     v = build_verdict(_MANIFEST, row_data)
     assert v["q1"]["status"] == "FAIL"
@@ -215,7 +220,16 @@ def test_verdict_has_required_keys() -> None:
         _Q1_ID: (_q1_row(17), _DEFAULT_LATENCIES),
     }
     v = build_verdict(_MANIFEST, row_data)
-    for key in ("gate", "timestamp", "manifest_sha", "q2", "q1", "warm_slo", "overall", "gate_adjustment_applied"):
+    for key in (
+        "gate",
+        "timestamp",
+        "manifest_sha",
+        "q2",
+        "q1",
+        "warm_slo",
+        "overall",
+        "gate_adjustment_applied",
+    ):
         assert key in v, f"Missing key: {key}"
 
 
