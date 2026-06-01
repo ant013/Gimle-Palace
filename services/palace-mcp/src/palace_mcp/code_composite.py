@@ -14,7 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Hashable
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 from urllib.parse import unquote
@@ -75,6 +75,10 @@ async def _resolve_slug(driver: Any, slug: str) -> SlugResolution:
 
 
 _QN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*(\.[A-Za-z_][A-Za-z0-9_-]*)*$")
+
+
+def _needs_human_resolution(qualified_name: str) -> bool:
+    return qualified_name.startswith("scip-") or "%3" in qualified_name or "." not in qualified_name
 
 
 def _slug_to_cm_project(value: str) -> str:
@@ -141,27 +145,92 @@ _DESC = (
 
 
 async def _resolve_qn(
-    session: ClientSession,
+    session: ClientSession | None,
     qualified_name: str,
     project: str,
     *,
     label: str | None = "Function",
+    driver: Any | None = None,
+    max_candidates: int = 15,
 ) -> tuple[str, str] | dict[str, Any]:
     """Disambiguate qualified_name → (short_name, resolved_qn).
 
     Returns error envelope dict for symbol_not_found / ambiguous_qualified_name.
     Pass label=None to search all symbol types (Functions, Classes, Methods).
     """
-    _sg_args: dict[str, Any] = {
-        "project": project,
-        "qn_pattern": f".*{re.escape(qualified_name)}$",
-        "limit": 10,
-    }
-    if label is not None:
-        _sg_args["label"] = label
-    raw = await session.call_tool("search_graph", arguments=_sg_args)
-    if raw.isError:
-        fallback = await _resolve_short_name(session, qualified_name, project)
+    short_name = _decode_scip_short_name(qualified_name)
+    can_try_short_name = (
+        driver is not None and _needs_human_resolution(qualified_name) and bool(short_name)
+    )
+
+    if session is None:
+        if not can_try_short_name:
+            return {
+                "ok": False,
+                "error_code": "cm_error",
+                "requested_qualified_name": qualified_name,
+                "message": "CM session not available for exact qualified_name resolution",
+            }
+        fallback = await _resolve_short_name(
+            driver,
+            requested_qualified_name=qualified_name,
+            short_name=short_name,
+            project=project,
+            max_candidates=max_candidates,
+        )
+        if isinstance(fallback, dict):
+            return fallback
+        results = fallback
+        total = len(results)
+        has_more = False
+        match_source = "short-name search"
+    else:
+        _sg_args: dict[str, Any] = {
+            "project": project,
+            "qn_pattern": f".*{re.escape(qualified_name)}$",
+            "limit": 10,
+        }
+        if label is not None:
+            _sg_args["label"] = label
+        raw = await session.call_tool("search_graph", arguments=_sg_args)
+        if raw.isError:
+            if can_try_short_name:
+                fallback = await _resolve_short_name(
+                    driver,
+                    requested_qualified_name=qualified_name,
+                    short_name=short_name,
+                    project=project,
+                    max_candidates=max_candidates,
+                )
+                if isinstance(fallback, dict):
+                    return fallback
+                results = fallback
+                total = len(results)
+                has_more = False
+                match_source = "short-name search"
+            else:
+                cm_msg = code_router.parse_cm_result(raw).get("_raw", "")
+                return {
+                    "ok": False,
+                    "error_code": "cm_error",
+                    "requested_qualified_name": qualified_name,
+                    "message": f"CM error from search_graph: {cm_msg}",
+                }
+        else:
+            data = code_router.parse_cm_result(raw)
+            results = data.get("results", [])
+            total = data.get("total", len(results))
+            has_more = data.get("has_more", False)
+            match_source = "qn_pattern"
+
+    if not results and can_try_short_name and session is not None:
+        fallback = await _resolve_short_name(
+            driver,
+            requested_qualified_name=qualified_name,
+            short_name=short_name,
+            project=project,
+            max_candidates=max_candidates,
+        )
         if isinstance(fallback, dict):
             return fallback
         if fallback:
@@ -169,40 +238,19 @@ async def _resolve_qn(
             total = len(results)
             has_more = False
             match_source = "short-name search"
-        else:
-            cm_msg = code_router.parse_cm_result(raw).get("_raw", "")
-            return {
-                "ok": False,
-                "error_code": "cm_error",
-                "requested_qualified_name": qualified_name,
-                "message": f"CM error from search_graph: {cm_msg}",
-            }
-    else:
-        data = code_router.parse_cm_result(raw)
-        results = data.get("results", [])
-        total = data.get("total", len(results))
-        has_more = data.get("has_more", False)
-        match_source = "qn_pattern"
 
     if not results:
-        fallback = await _resolve_short_name(session, qualified_name, project)
-        if isinstance(fallback, dict):
-            return fallback
-        if not fallback:
-            suffix_label = label or "symbol"
-            return {
-                "ok": False,
-                "error_code": "symbol_not_found",
-                "requested_qualified_name": qualified_name,
-                "message": (
-                    f"qualified_name '{qualified_name}' not found in project "
-                    f"'{project}' (no {suffix_label} suffix or short-name match)"
-                ),
-            }
-        results = fallback
-        total = len(results)
-        has_more = False
-        match_source = "short-name search"
+        suffix_label = label or "symbol"
+        return {
+            "ok": False,
+            "error_code": "symbol_not_found",
+            "requested_qualified_name": qualified_name,
+            "message": (
+                f"qualified_name '{qualified_name}' not found in project "
+                f"'{project}' (no {suffix_label} suffix or short-name match)"
+            ),
+        }
+
     if len(results) > 1:
         count_phrase = f"at least {len(results)}" if has_more else f"{total}"
         return {
@@ -228,6 +276,235 @@ async def _resolve_qn(
 
 def _escape_cypher_string(value: str) -> str:
     return value.replace("\\", "\\\\").replace("'", "\\'")
+
+
+def _dedup_items(
+    items: list[Any],
+    *,
+    key: Callable[[Any], Hashable],
+) -> list[Any]:
+    seen: set[Hashable] = set()
+    deduped: list[Any] = []
+    for item in items:
+        item_key = key(item)
+        if item_key in seen:
+            continue
+        seen.add(item_key)
+        deduped.append(item)
+    return deduped
+
+
+def _short_name_candidates(row: dict[str, Any]) -> tuple[str, ...]:
+    qualified_name = str(row.get("qualified_name") or "")
+    terminal_name = qualified_name.rsplit(".", 1)[-1] if "." in qualified_name else ""
+    return (
+        str(row.get("short_name") or ""),
+        str(row.get("name") or ""),
+        str(row.get("symbol") or ""),
+        terminal_name,
+        _decode_scip_short_name(qualified_name),
+    )
+
+
+_QUERY_SYMBOL_BY_SHORT_NAME = """
+MATCH (s:Symbol {group_id: $group_id, short_name: $short_name})
+RETURN s.name AS name,
+       s.short_name AS short_name,
+       coalesce(s.symbol, '') AS symbol,
+       s.qualified_name AS qualified_name,
+       coalesce(s.file_path, '') AS file_path
+ORDER BY s.qualified_name
+LIMIT $limit
+"""
+
+_QUERY_SYMBOL_BY_SHORT_NAME_FOLD = """
+MATCH (s:Symbol {group_id: $group_id})
+WITH s, last(split(coalesce(s.qualified_name, ''), '.')) AS terminal_name
+WHERE any(candidate IN [
+          coalesce(s.short_name, ''),
+          coalesce(s.name, ''),
+          coalesce(s.symbol, ''),
+          terminal_name
+      ] WHERE toLower(candidate) = toLower($short_name))
+WITH s, terminal_name, coalesce(s.qualified_name, s.name, s.symbol, '') AS resolved_qn
+WHERE resolved_qn <> ''
+RETURN coalesce(s.name, s.symbol, terminal_name) AS name,
+       coalesce(s.short_name, s.name, s.symbol, terminal_name) AS short_name,
+       coalesce(s.symbol, '') AS symbol,
+       resolved_qn AS qualified_name,
+       coalesce(s.file_path, '') AS file_path
+ORDER BY qualified_name
+LIMIT $limit
+"""
+
+_QUERY_SYMBOL_BY_SHORT_NAME_REGEX = """
+MATCH (s:Symbol {group_id: $group_id})
+WITH s, last(split(coalesce(s.qualified_name, ''), '.')) AS terminal_name
+WHERE any(candidate IN [
+          coalesce(s.short_name, ''),
+          coalesce(s.name, ''),
+          coalesce(s.symbol, ''),
+          terminal_name
+      ] WHERE candidate <> '' AND candidate =~ $pattern)
+WITH s, terminal_name, coalesce(s.qualified_name, s.name, s.symbol, '') AS resolved_qn
+WHERE resolved_qn <> ''
+RETURN coalesce(s.name, s.symbol, terminal_name) AS name,
+       coalesce(s.short_name, s.name, s.symbol, terminal_name) AS short_name,
+       coalesce(s.symbol, '') AS symbol,
+       resolved_qn AS qualified_name,
+       coalesce(s.file_path, '') AS file_path
+ORDER BY qualified_name
+LIMIT $limit
+"""
+
+_QUERY_SYMBOL_BY_SCIP_SHORT_NAME = """
+MATCH (s:Symbol {group_id: $group_id})
+WITH s, coalesce(s.qualified_name, '') AS resolved_qn
+WHERE resolved_qn =~ $pattern
+RETURN coalesce(s.name, s.symbol, '') AS name,
+       coalesce(s.short_name, s.name, s.symbol, '') AS short_name,
+       coalesce(s.symbol, '') AS symbol,
+       resolved_qn AS qualified_name,
+       coalesce(s.file_path, '') AS file_path
+ORDER BY qualified_name
+LIMIT $limit
+"""
+
+_QUERY_FUNCTION_BY_SHORT_NAME_REGEX = """
+MATCH (fn:Function {group_id: $group_id})
+WITH fn, coalesce(fn.qualified_name, fn.symbol_qualified_name, '') AS resolved_qn
+WHERE resolved_qn =~ $pattern
+RETURN coalesce(fn.display_name, fn.name, '') AS name,
+       '' AS short_name,
+       coalesce(fn.symbol_qualified_name, '') AS symbol,
+       resolved_qn AS qualified_name,
+       coalesce(fn.path, fn.file_path, '') AS file_path
+ORDER BY qualified_name
+LIMIT $limit
+"""
+
+_QUERY_SHADOW_BY_SHORT_NAME_REGEX = """
+MATCH (shadow:SymbolOccurrenceShadow {group_id: $group_id})
+WITH shadow, coalesce(shadow.symbol_qualified_name, '') AS resolved_qn
+WHERE resolved_qn =~ $pattern
+RETURN '' AS name,
+       '' AS short_name,
+       '' AS symbol,
+       resolved_qn AS qualified_name,
+       '' AS file_path
+ORDER BY qualified_name
+LIMIT $limit
+"""
+
+
+async def _query_symbol_candidates(
+    driver: Any,
+    query: str,
+    **params: Any,
+) -> list[dict[str, Any]]:
+    async with driver.session() as session:
+        result = await session.run(query, **params)
+        rows = [dict(row) async for row in result]
+    return _dedup_items(
+        [row for row in rows if row.get("qualified_name")],
+        key=lambda row: row["qualified_name"],
+    )
+
+
+def _filter_short_name_rows(
+    rows: list[dict[str, Any]],
+    short_name: str,
+) -> list[dict[str, Any]]:
+    folded_short_name = short_name.lower()
+    matches: list[dict[str, Any]] = []
+
+    for row in rows:
+        qualified_name = str(row.get("qualified_name") or "")
+        resolved_name = next(
+            (
+                candidate
+                for candidate in _short_name_candidates(row)
+                if candidate and candidate.lower() == folded_short_name
+            ),
+            "",
+        )
+        if not resolved_name or not qualified_name:
+            continue
+        matches.append(
+            {
+                "name": row.get("short_name", "") or resolved_name,
+                "qualified_name": qualified_name,
+                "file_path": row.get("file_path", ""),
+                "symbol": row.get("symbol", ""),
+                "short_name": row.get("short_name", "") or resolved_name,
+            }
+        )
+
+    return _dedup_items(matches, key=lambda row: row["qualified_name"])
+
+
+async def _resolve_short_name(
+    driver: Any,
+    *,
+    requested_qualified_name: str,
+    short_name: str,
+    project: str,
+    max_candidates: int,
+) -> list[dict[str, Any]] | dict[str, Any]:
+    group_id = f"project/{project}"
+    query_limit = max_candidates + 1
+    queries = (
+        (
+            _QUERY_SYMBOL_BY_SHORT_NAME,
+            {"group_id": group_id, "short_name": short_name, "limit": query_limit},
+        ),
+        (
+            _QUERY_SYMBOL_BY_SHORT_NAME_FOLD,
+            {"group_id": group_id, "short_name": short_name, "limit": query_limit},
+        ),
+        (
+            _QUERY_SYMBOL_BY_SHORT_NAME_REGEX,
+            {
+                "group_id": group_id,
+                "pattern": rf"(?i){re.escape(short_name)}.*",
+                "limit": query_limit,
+            },
+        ),
+        (
+            _QUERY_SYMBOL_BY_SCIP_SHORT_NAME,
+            {
+                "group_id": group_id,
+                "pattern": rf"(?i).*[0-9]+{re.escape(short_name)}[VCPOAES].*",
+                "limit": query_limit,
+            },
+        ),
+        (
+            _QUERY_FUNCTION_BY_SHORT_NAME_REGEX,
+            {
+                "group_id": group_id,
+                "pattern": rf"(?i).*{re.escape(short_name)}.*",
+                "limit": query_limit,
+            },
+        ),
+        (
+            _QUERY_SHADOW_BY_SHORT_NAME_REGEX,
+            {
+                "group_id": group_id,
+                "pattern": rf"(?i).*{re.escape(short_name)}.*",
+                "limit": query_limit,
+            },
+        ),
+    )
+
+    for query, params in queries:
+        rows = _filter_short_name_rows(
+            await _query_symbol_candidates(driver, query, **params),
+            short_name,
+        )
+        if rows:
+            return rows
+
+    return []
 
 
 def _length_prefixed_identifiers(symbol: str) -> list[tuple[str, str]]:
@@ -310,103 +587,6 @@ def _decode_scip_short_name(symbol: str) -> str:
     return decoded.rstrip("#().:")
 
 
-def _filter_short_name_rows(
-    rows: list[dict[str, str]],
-    short_name: str,
-) -> list[dict[str, str]]:
-    folded_short_name = short_name.lower()
-    matches: list[dict[str, str]] = []
-    seen_qns: set[str] = set()
-
-    for row in rows:
-        qualified_name = row.get("qualified_name", "")
-        terminal_name = qualified_name.rsplit(".", 1)[-1] if "." in qualified_name else ""
-        candidates = (
-            row.get("name", ""),
-            row.get("symbol", ""),
-            terminal_name,
-            _decode_scip_short_name(qualified_name),
-        )
-        resolved_name = next(
-            (
-                candidate
-                for candidate in candidates
-                if candidate and candidate.lower() == folded_short_name
-            ),
-            "",
-        )
-        if not resolved_name or not qualified_name or qualified_name in seen_qns:
-            continue
-        seen_qns.add(qualified_name)
-        matches.append(
-            {
-                "name": row.get("name", "") or row.get("symbol", "") or resolved_name,
-                "qualified_name": qualified_name,
-                "file_path": row.get("file_path", ""),
-                "symbol": row.get("symbol", ""),
-            }
-        )
-
-    return matches
-
-
-async def _resolve_short_name(
-    session: ClientSession,
-    qualified_name: str,
-    project: str,
-) -> list[dict[str, Any]] | dict[str, Any]:
-    safe_name = _escape_cypher_string(qualified_name)
-    safe_scip_pattern = _escape_cypher_string(
-        rf"(?i).*[0-9]+{re.escape(qualified_name)}[VCPOAES].*"
-    )
-    label_filter = " OR ".join(f"s:{label}" for label in _SHORT_NAME_LABELS)
-    cypher = (
-        "MATCH (s) "
-        "WITH s, coalesce(s.qualified_name, '') AS resolved_qn, "
-        "last(split(coalesce(s.qualified_name, ''), '.')) AS terminal_name "
-        f"WHERE ({label_filter}) "
-        "AND ("
-        f"toLower(coalesce(s.name, '')) = toLower('{safe_name}') "
-        f"OR toLower(coalesce(s.symbol, '')) = toLower('{safe_name}') "
-        f"OR toLower(terminal_name) = toLower('{safe_name}') "
-        f"OR resolved_qn =~ '{safe_scip_pattern}'"
-        ") "
-        "RETURN coalesce(s.name, '') AS name, "
-        "resolved_qn AS qualified_name, "
-        "coalesce(s.file_path, '') AS file_path, "
-        "coalesce(s.symbol, '') AS symbol "
-        "ORDER BY qualified_name "
-        "LIMIT 10"
-    )
-    raw = await session.call_tool(
-        "query_graph",
-        arguments={"project": project, "query": cypher},
-    )
-    if raw.isError:
-        cm_msg = code_router.parse_cm_result(raw).get("_raw", "")
-        return {
-            "ok": False,
-            "error_code": "cm_error",
-            "requested_qualified_name": qualified_name,
-            "message": f"CM error from query_graph: {cm_msg}",
-        }
-    data = code_router.parse_cm_result(raw)
-    rows = data.get("rows", [])
-    return _filter_short_name_rows(
-        [
-            {
-                "name": row[0],
-                "qualified_name": row[1],
-                "file_path": row[2] if len(row) > 2 else "",
-                "symbol": row[3] if len(row) > 3 else "",
-            }
-            for row in rows
-            if len(row) >= 2
-        ],
-        qualified_name,
-    )
-
-
 async def _test_impact_tests_edge(
     session: ClientSession,
     requested_qn: str,
@@ -437,6 +617,7 @@ async def _test_impact_tests_edge(
         }
     data = code_router.parse_cm_result(raw)
     rows = data.get("rows", [])
+    rows = _dedup_items(rows, key=lambda row: (row[0], row[1]))
     truncated = len(rows) > max_results
     rows = rows[:max_results]
     tests = [{"name": r[0], "qualified_name": r[1], "hop": 1} for r in rows]
@@ -485,8 +666,9 @@ async def _test_impact_trace(
     data = code_router.parse_cm_result(raw)
     callers = data.get("callers", [])
     tests = [c for c in callers if c.get("is_test")]
-    total_found = len(tests)
     tests.sort(key=lambda c: c["hop"])  # KeyError on contract drift = fail loud
+    tests = _dedup_items(tests, key=lambda caller: caller["qualified_name"])
+    total_found = len(tests)
     truncated = total_found > max_results
     tests = tests[:max_results]
     return {
@@ -754,7 +936,7 @@ def register_code_composite_tools(
     ) -> dict[str, Any]:
         # Capture session once into local — TOCTOU-immune (D17)
         session = code_router.get_cm_session()
-        if session is None:
+        if session is None and not _needs_human_resolution(qualified_name):
             handle_tool_error(
                 RuntimeError(
                     "CM subprocess not started — set CODEBASE_MEMORY_MCP_BINARY"
@@ -778,9 +960,17 @@ def register_code_composite_tools(
             }
 
         resolved_project = _slug_to_cm_project(req.project or default_project)
+        from palace_mcp.mcp_server import get_driver
+
+        driver = get_driver()
 
         try:
-            disambig = await _resolve_qn(session, req.qualified_name, resolved_project)
+            disambig = await _resolve_qn(
+                session,
+                req.qualified_name,
+                resolved_project,
+                driver=driver,
+            )
         except Exception as e:
             handle_tool_error(e)
             raise  # unreachable; satisfies ruff RET503
@@ -933,10 +1123,13 @@ def register_code_composite_tools(
         # Optional: resolve via CM session for suffix-match disambiguation
         resolved_qn = req.qualified_name
         cm_session = code_router.get_cm_session()
-        if cm_session is not None:
+        if cm_session is not None or _needs_human_resolution(req.qualified_name):
             try:
                 disambig = await _resolve_qn(
-                    cm_session, req.qualified_name, resolved_project
+                    cm_session,
+                    req.qualified_name,
+                    resolved_project,
+                    driver=driver,
                 )
                 if isinstance(disambig, dict):
                     if disambig.get("error_code") == "cm_error":
@@ -1051,7 +1244,11 @@ def register_code_composite_tools(
         # Step 1: Resolve qualified_name — all symbol types (F1 fix: label=None)
         try:
             disambig = await _resolve_qn(
-                session, req.qualified_name, cm_project, label=None
+                session,
+                req.qualified_name,
+                cm_project,
+                label=None,
+                driver=driver,
             )
         except Exception as e:
             handle_tool_error(e)

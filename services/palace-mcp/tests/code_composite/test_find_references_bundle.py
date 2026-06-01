@@ -591,24 +591,6 @@ class TestFindReferencesProjectPath:
             line=21,
             col_start=5,
         )
-        cm_session = AsyncMock()
-        cm_session.call_tool = AsyncMock(
-            side_effect=[
-                _result({"results": [], "total": 0, "has_more": False}),
-                _result(
-                    {
-                        "rows": [
-                            [
-                                "",
-                                scip_qn,
-                                "Sources/App/BalanceData.swift",
-                                "",
-                            ]
-                        ]
-                    }
-                ),
-            ]
-        )
 
         with (
             patch(_PATCH_GET_DRIVER, return_value=MagicMock()),
@@ -626,11 +608,31 @@ class TestFindReferencesProjectPath:
                 new=AsyncMock(return_value=None),
             ),
             patch(
+                "palace_mcp.code_composite._query_symbol_candidates",
+                new=AsyncMock(
+                    side_effect=[
+                        [],
+                        [],
+                        [],
+                        [],
+                        [
+                            {
+                                "name": scip_qn,
+                                "short_name": "",
+                                "symbol": scip_qn,
+                                "qualified_name": scip_qn,
+                                "file_path": "Sources/App/BalanceData.swift",
+                            }
+                        ],
+                    ]
+                ),
+            ),
+            patch(
                 "palace_mcp.code_composite.TantivyBridge",
                 return_value=_make_bridge_mock([raw_occ]),
             ),
             patch("palace_mcp.code_composite.symbol_id_for", return_value=12) as symbol_id,
-            patch("palace_mcp.code_router.get_cm_session", return_value=cm_session),
+            patch("palace_mcp.code_router.get_cm_session", return_value=None),
         ):
             result = await find_refs("BalanceData", "gimle", 100)
 
