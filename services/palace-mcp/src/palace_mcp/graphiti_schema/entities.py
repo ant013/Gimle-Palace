@@ -330,6 +330,7 @@ def make_symbol(
     extractor: str,
     extractor_version: str,
     observed_at: str | None = None,
+    is_anchor: bool = False,
     extra: dict[str, Any] | None = None,
 ) -> EntityNode:
     """Factory for :Symbol nodes. kind must be one of the declared enum values."""
@@ -348,6 +349,7 @@ def make_symbol(
         "extractor_version": extractor_version,
         "evidence_ref": [],
         "observed_at": observed_at,
+        "is_anchor": is_anchor,
         **(extra or {}),
     }
     _validate_envelope(attrs)
