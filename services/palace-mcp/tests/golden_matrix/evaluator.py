@@ -27,7 +27,7 @@ class MatchCriterion:
 @dataclass
 class MatrixRow:
     id: str
-    split: str  # dev | holdout | live_probe
+    split: str  # dev | holdout | live_probe | gate
     class_: str  # mandatory | advisory | no_answer
     query: str
     projects: list[str]

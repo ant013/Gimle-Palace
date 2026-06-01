@@ -12,7 +12,6 @@
 #   - NEO4J_URI / NEO4J_USER / NEO4J_PASSWORD env vars (or defaults below)
 #   - cypher-shell in PATH, or CYPHER_SHELL_CMD override
 #   - sha256sum in PATH (Linux) or shasum (macOS)
-#   - jq in PATH
 
 set -euo pipefail
 
@@ -63,7 +62,7 @@ if [[ -f "$UW_IOS_REPO/.git/HEAD" ]]; then
     if [[ "$head_ref" == ref:* ]]; then
         ref_file="$UW_IOS_REPO/.git/${head_ref#ref: }"
         if [[ -f "$ref_file" ]]; then
-            uw_ios_sha="\"$(cat "$ref_file" | tr -d '[:space]')\""
+            uw_ios_sha="\"$(cat "$ref_file" | tr -d '[:space:]')\""
         fi
     else
         uw_ios_sha="\"$(echo "$head_ref" | tr -d '[:space:]')\""
