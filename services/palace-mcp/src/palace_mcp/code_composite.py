@@ -30,6 +30,8 @@ from palace_mcp.memory.bundle import bundle_status
 
 logger = logging.getLogger(__name__)
 
+_SHORT_NAME_LABELS = ("Function", "Method", "Class")
+
 
 # ---------------------------------------------------------------------------
 # Bundle-aware slug resolution (GIM-182 §5.2)
@@ -169,17 +171,27 @@ async def _resolve_qn(
     results = data.get("results", [])
     total = data.get("total", len(results))
     has_more = data.get("has_more", False)
+    match_source = "qn_pattern"
 
     if not results:
-        return {
-            "ok": False,
-            "error_code": "symbol_not_found",
-            "requested_qualified_name": qualified_name,
-            "message": (
-                f"qualified_name '{qualified_name}' not found in project "
-                f"'{project}' (no Function node matches suffix)"
-            ),
-        }
+        fallback = await _resolve_short_name(session, qualified_name, project)
+        if isinstance(fallback, dict):
+            return fallback
+        if not fallback:
+            suffix_label = label or "symbol"
+            return {
+                "ok": False,
+                "error_code": "symbol_not_found",
+                "requested_qualified_name": qualified_name,
+                "message": (
+                    f"qualified_name '{qualified_name}' not found in project "
+                    f"'{project}' (no {suffix_label} suffix or short-name match)"
+                ),
+            }
+        results = fallback
+        total = len(results)
+        has_more = False
+        match_source = "short-name search"
     if len(results) > 1:
         count_phrase = f"at least {len(results)}" if has_more else f"{total}"
         return {
@@ -187,7 +199,7 @@ async def _resolve_qn(
             "error_code": "ambiguous_qualified_name",
             "requested_qualified_name": qualified_name,
             "message": (
-                f"qn_pattern matched {count_phrase} symbols in project "
+                f"{match_source} matched {count_phrase} symbols in project "
                 f"'{project}' — refine to uniquely identify"
             ),
             "matches": [
@@ -201,6 +213,51 @@ async def _resolve_qn(
 
     target = results[0]
     return target["name"], target["qualified_name"]
+
+
+def _escape_cypher_string(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("'", "\\'")
+
+
+async def _resolve_short_name(
+    session: ClientSession,
+    qualified_name: str,
+    project: str,
+) -> list[dict[str, Any]] | dict[str, Any]:
+    safe_name = _escape_cypher_string(qualified_name)
+    label_filter = " OR ".join(f"s:{label}" for label in _SHORT_NAME_LABELS)
+    cypher = (
+        "MATCH (s) "
+        f"WHERE ({label_filter}) "
+        f"AND toLower(s.name) = toLower('{safe_name}') "
+        "RETURN s.name AS name, s.qualified_name AS qualified_name, "
+        "coalesce(s.file_path, '') AS file_path "
+        "ORDER BY s.qualified_name "
+        "LIMIT 10"
+    )
+    raw = await session.call_tool(
+        "query_graph",
+        arguments={"project": project, "query": cypher},
+    )
+    if raw.isError:
+        cm_msg = code_router.parse_cm_result(raw).get("_raw", "")
+        return {
+            "ok": False,
+            "error_code": "cm_error",
+            "requested_qualified_name": qualified_name,
+            "message": f"CM error from query_graph: {cm_msg}",
+        }
+    data = code_router.parse_cm_result(raw)
+    rows = data.get("rows", [])
+    return [
+        {
+            "name": row[0],
+            "qualified_name": row[1],
+            "file_path": row[2] if len(row) > 2 else "",
+        }
+        for row in rows
+        if len(row) >= 2
+    ]
 
 
 async def _test_impact_tests_edge(
@@ -478,6 +535,27 @@ def _decode_tantivy_occurrence(
     }
 
 
+def _decode_unique_occurrences(
+    raw_docs: list[dict[str, Any]],
+    *,
+    fallback_qualified_name: str,
+    symbol_id: int,
+) -> list[dict[str, Any]]:
+    occurrences: list[dict[str, Any]] = []
+    seen: set[tuple[str, int, int]] = set()
+    for raw_doc in raw_docs:
+        occurrence = _decode_tantivy_occurrence(
+            raw_doc,
+            fallback_qualified_name=fallback_qualified_name,
+        )
+        key = (occurrence["file_path"], occurrence["line"], symbol_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        occurrences.append(occurrence)
+    return occurrences
+
+
 _DESC_SNIPPET_RICH = (
     "Rich context card for a symbol: source snippet, definition location, "
     "usages, code owners, hotspot score, and recent commits. "
@@ -634,13 +712,11 @@ def register_code_composite_tools(
                     raw = await bridge.search_by_symbol_id_async(
                         sym_id, limit=req.max_results + 1
                     )
-                for r in raw[: req.max_results]:
-                    occurrences_bundle.append(
-                        _decode_tantivy_occurrence(
-                            r,
-                            fallback_qualified_name=req.qualified_name,
-                        )
-                    )
+                occurrences_bundle = _decode_unique_occurrences(
+                    raw,
+                    fallback_qualified_name=req.qualified_name,
+                    symbol_id=sym_id,
+                )[: req.max_results]
             except Exception:
                 logger.warning(
                     "bundle_tantivy_query_failed bundle=%s qn=%s",
@@ -713,16 +789,13 @@ def register_code_composite_tools(
             raw_results = await bridge.search_by_symbol_id_async(
                 sym_id, limit=req.max_results + 1
             )
-        truncated = len(raw_results) > req.max_results
-        raw_results = raw_results[: req.max_results]
-
-        occurrences: list[dict[str, Any]] = [
-            _decode_tantivy_occurrence(
-                r,
-                fallback_qualified_name=resolved_qn,
-            )
-            for r in raw_results
-        ]
+        occurrences = _decode_unique_occurrences(
+            raw_results,
+            fallback_qualified_name=resolved_qn,
+            symbol_id=sym_id,
+        )
+        truncated = len(occurrences) > req.max_results
+        occurrences = occurrences[: req.max_results]
 
         # State C: evicted — attach partial_index warning
         eviction_info = await _query_eviction_record(
@@ -858,10 +931,11 @@ def register_code_composite_tools(
                 raw = await bridge.search_by_symbol_id_async(
                     sym_id, limit=req.max_usages + 1
                 )
-            return [
-                _decode_tantivy_occurrence(r, fallback_qualified_name=resolved_qn)
-                for r in raw[: req.max_usages]
-            ]
+            return _decode_unique_occurrences(
+                raw,
+                fallback_qualified_name=resolved_qn,
+                symbol_id=sym_id,
+            )[: req.max_usages]
 
         async def _get_owners() -> list[dict[str, Any]]:
             result = await _find_owners(
