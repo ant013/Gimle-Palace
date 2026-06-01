@@ -42,7 +42,7 @@ def test_make_symbol_is_anchor_true() -> None:
     assert node.attributes["is_anchor"] is True
 
 
-def test_make_symbol_is_anchor_not_overridden_by_extra() -> None:
+def test_make_symbol_anchor_and_extra_coexist() -> None:
     # extra dict should not silently shadow is_anchor kwarg
     node = _sym(is_anchor=True, extra={"qualified_name": "WalletKit.BalanceData"})
     assert node.attributes["is_anchor"] is True

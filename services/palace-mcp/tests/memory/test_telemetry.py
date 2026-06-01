@@ -78,7 +78,7 @@ def test_write_audit_line_appends_multiple_lines() -> None:
     set_audit_sink(buf)
     _write_audit_line("t1", {}, "r1", 1, None)
     _write_audit_line("t2", {}, "r2", 2, None)
-    lines = [json.loads(l) for l in buf.getvalue().strip().splitlines()]
+    lines = [json.loads(line) for line in buf.getvalue().strip().splitlines()]
     assert len(lines) == 2
     assert lines[0]["tool_name"] == "t1"
     assert lines[1]["tool_name"] == "t2"
