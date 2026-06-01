@@ -259,7 +259,10 @@ class TestResolvQn:
     async def test_symbol_not_found(self) -> None:
         from palace_mcp.code_composite import _resolve_qn
 
-        session = _fake_session({"total": 0, "results": [], "has_more": False})
+        session = _fake_session(
+            {"total": 0, "results": [], "has_more": False},
+            {"rows": []},
+        )
         result = await _resolve_qn(session, "nonexistent_fn", "repos-gimle")
         assert isinstance(result, dict)
         assert result["ok"] is False
@@ -599,7 +602,10 @@ class TestDefaultPath:
 
         fake_session = AsyncMock()
         fake_session.call_tool = AsyncMock(
-            return_value=_make_result({"total": 0, "results": [], "has_more": False})
+            side_effect=[
+                _make_result({"total": 0, "results": [], "has_more": False}),
+                _make_result({"rows": []}),
+            ]
         )
         monkeypatch.setattr(
             "palace_mcp.code_router.get_cm_session", lambda: fake_session
