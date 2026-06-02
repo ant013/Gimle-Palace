@@ -12,9 +12,12 @@ Covers:
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
+
+from mcp.types import CallToolResult, TextContent
 
 from palace_mcp.extractors.foundation.models import build_symbol_occurrence_doc_key
 
@@ -152,6 +155,13 @@ def _make_bridge_mock(raw_results: list[dict[str, Any]]) -> MagicMock:
     return bridge
 
 
+def _result(data: dict[str, Any]) -> CallToolResult:
+    return CallToolResult(
+        content=[TextContent(type="text", text=json.dumps(data))],
+        isError=False,
+    )
+
+
 def _tantivy_doc(
     *,
     symbol_id: int,
@@ -245,6 +255,51 @@ class TestFindReferencesBundlePath:
                 "qualified_name": "EvmKit.Address",
             }
         ]
+
+    async def test_bundle_path_dedups_same_file_and_line(self) -> None:
+        from palace_mcp.code_composite import SlugResolution
+
+        find_refs = self._get_fn()
+        fake_health = _make_fake_bundle_status("uw-ios")
+
+        raw_occ_1 = _tantivy_doc(
+            symbol_id=42,
+            file_path="/repos/evm-kit/Sources/Core.swift",
+            line=10,
+            col_start=4,
+        )
+        raw_occ_2 = _tantivy_doc(
+            symbol_id=42,
+            file_path="/repos/evm-kit/Sources/Core.swift",
+            line=10,
+            col_start=8,
+        )
+
+        with (
+            patch(_PATCH_GET_DRIVER, return_value=MagicMock()),
+            patch(_PATCH_GET_SETTINGS, return_value=self._settings()),
+            patch(
+                "palace_mcp.code_composite._resolve_slug",
+                new=AsyncMock(
+                    return_value=SlugResolution(
+                        kind="bundle", member_slugs=["evm-kit", "uwb-kit"]
+                    )
+                ),
+            ),
+            patch(
+                "palace_mcp.code_composite.bundle_status",
+                new=AsyncMock(return_value=fake_health),
+            ),
+            patch(
+                "palace_mcp.code_composite.TantivyBridge",
+                return_value=_make_bridge_mock([raw_occ_1, raw_occ_2]),
+            ),
+            patch("palace_mcp.code_composite.symbol_id_for", return_value=42),
+        ):
+            result = await find_refs("EvmKit.Address", "uw-ios", 100)
+
+        assert result["total_found"] == 1
+        assert len(result["occurrences"]) == 1
 
     async def test_bundle_path_no_ingest_run_check_for_bundle_slug(self) -> None:
         """For bundle slug, _query_any_ingest_run_for_project is NOT called."""
@@ -421,6 +476,172 @@ class TestFindReferencesProjectPath:
                 "qualified_name": "MyModule.func",
             }
         ]
+
+    async def test_project_path_dedups_same_file_and_line(self) -> None:
+        from palace_mcp.code_composite import SlugResolution
+
+        find_refs = self._get_fn()
+        ingest_run_row = {"run_id": "abc", "success": True, "extractor_name": "sym_py"}
+        raw_occ_1 = _tantivy_doc(
+            symbol_id=1,
+            file_path="Sources/App/Feature.swift",
+            line=7,
+            col_start=3,
+        )
+        raw_occ_2 = _tantivy_doc(
+            symbol_id=1,
+            file_path="Sources/App/Feature.swift",
+            line=7,
+            col_start=11,
+        )
+
+        with (
+            patch(_PATCH_GET_DRIVER, return_value=MagicMock()),
+            patch(_PATCH_GET_SETTINGS, return_value=self._settings()),
+            patch(
+                "palace_mcp.code_composite._resolve_slug",
+                new=AsyncMock(return_value=SlugResolution(kind="project")),
+            ),
+            patch(
+                "palace_mcp.code_composite._query_any_ingest_run_for_project",
+                new=AsyncMock(return_value=ingest_run_row),
+            ),
+            patch(
+                "palace_mcp.code_composite._query_eviction_record",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "palace_mcp.code_composite.TantivyBridge",
+                return_value=_make_bridge_mock([raw_occ_1, raw_occ_2]),
+            ),
+            patch("palace_mcp.code_composite.symbol_id_for", return_value=1),
+            patch("palace_mcp.code_router.get_cm_session", return_value=None),
+        ):
+            result = await find_refs("MyModule.func", "gimle", 100)
+
+        assert result["total_found"] == 1
+        assert len(result["occurrences"]) == 1
+
+    async def test_project_path_keeps_later_unique_after_dedup_window(self) -> None:
+        from palace_mcp.code_composite import SlugResolution
+
+        find_refs = self._get_fn()
+        ingest_run_row = {"run_id": "abc", "success": True, "extractor_name": "sym_py"}
+        raw_results = [
+            _tantivy_doc(
+                symbol_id=1,
+                file_path="Sources/App/Feature.swift",
+                line=7,
+                col_start=3,
+            ),
+            _tantivy_doc(
+                symbol_id=1,
+                file_path="Sources/App/Feature.swift",
+                line=7,
+                col_start=11,
+            ),
+            _tantivy_doc(
+                symbol_id=1,
+                file_path="Sources/App/OtherFeature.swift",
+                line=9,
+                col_start=2,
+            ),
+        ]
+        bridge = MagicMock()
+        bridge.__aenter__ = AsyncMock(return_value=bridge)
+        bridge.__aexit__ = AsyncMock(return_value=None)
+        bridge.search_by_symbol_id_async = AsyncMock(
+            side_effect=lambda _symbol_id, limit: raw_results[:limit]
+        )
+
+        with (
+            patch(_PATCH_GET_DRIVER, return_value=MagicMock()),
+            patch(_PATCH_GET_SETTINGS, return_value=self._settings()),
+            patch(
+                "palace_mcp.code_composite._resolve_slug",
+                new=AsyncMock(return_value=SlugResolution(kind="project")),
+            ),
+            patch(
+                "palace_mcp.code_composite._query_any_ingest_run_for_project",
+                new=AsyncMock(return_value=ingest_run_row),
+            ),
+            patch(
+                "palace_mcp.code_composite._query_eviction_record",
+                new=AsyncMock(return_value=None),
+            ),
+            patch("palace_mcp.code_composite.TantivyBridge", return_value=bridge),
+            patch("palace_mcp.code_composite.symbol_id_for", return_value=1),
+            patch("palace_mcp.code_router.get_cm_session", return_value=None),
+        ):
+            result = await find_refs("MyModule.func", "gimle", 1)
+
+        assert len(result["occurrences"]) == 1
+        assert result["occurrences"][0]["file_path"] == "Sources/App/Feature.swift"
+        assert result["total_found"] == 2
+
+    async def test_project_path_resolves_scip_symbol_short_name(self) -> None:
+        from palace_mcp.code_composite import SlugResolution
+
+        find_refs = self._get_fn()
+        ingest_run_row = {"run_id": "abc", "success": True, "extractor_name": "sym_py"}
+        scip_qn = "Unstoppable s%3A11Unstoppable18BitcoinBaseAdapterC0B11BalanceDataV"
+        raw_occ = _tantivy_doc(
+            symbol_id=12,
+            file_path="Sources/App/BalanceData.swift",
+            line=21,
+            col_start=5,
+        )
+
+        with (
+            patch(_PATCH_GET_DRIVER, return_value=MagicMock()),
+            patch(_PATCH_GET_SETTINGS, return_value=self._settings()),
+            patch(
+                "palace_mcp.code_composite._resolve_slug",
+                new=AsyncMock(return_value=SlugResolution(kind="project")),
+            ),
+            patch(
+                "palace_mcp.code_composite._query_any_ingest_run_for_project",
+                new=AsyncMock(return_value=ingest_run_row),
+            ),
+            patch(
+                "palace_mcp.code_composite._query_eviction_record",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "palace_mcp.code_composite._query_symbol_candidates",
+                new=AsyncMock(
+                    side_effect=[
+                        [],
+                        [],
+                        [],
+                        [],
+                        [
+                            {
+                                "name": scip_qn,
+                                "short_name": "",
+                                "symbol": scip_qn,
+                                "qualified_name": scip_qn,
+                                "file_path": "Sources/App/BalanceData.swift",
+                            }
+                        ],
+                    ]
+                ),
+            ),
+            patch(
+                "palace_mcp.code_composite.TantivyBridge",
+                return_value=_make_bridge_mock([raw_occ]),
+            ),
+            patch(
+                "palace_mcp.code_composite.symbol_id_for", return_value=12
+            ) as symbol_id,
+            patch("palace_mcp.code_router.get_cm_session", return_value=None),
+        ):
+            result = await find_refs("BalanceData", "gimle", 100)
+
+        assert result["ok"] is True
+        assert result["requested_qualified_name"] == "BalanceData"
+        assert result["occurrences"][0]["qualified_name"] == scip_qn
+        symbol_id.assert_called_once_with(scip_qn)
 
 
 # ---------------------------------------------------------------------------

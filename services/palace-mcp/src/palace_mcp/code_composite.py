@@ -12,11 +12,13 @@ owned by us; closed schema is correct for v1.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Hashable
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
+from urllib.parse import unquote
 
 from mcp import ClientSession
 from pydantic import BaseModel, Field, ValidationError, field_validator
@@ -29,6 +31,8 @@ from palace_mcp.memory.bundle import bundle_status
 
 
 logger = logging.getLogger(__name__)
+
+_SHORT_NAME_LABELS = ("Function", "Method", "Class", "Symbol")
 
 
 # ---------------------------------------------------------------------------
@@ -72,6 +76,14 @@ async def _resolve_slug(driver: Any, slug: str) -> SlugResolution:
 
 
 _QN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*(\.[A-Za-z_][A-Za-z0-9_-]*)*$")
+
+
+def _needs_human_resolution(qualified_name: str) -> bool:
+    return (
+        qualified_name.startswith("scip-")
+        or "%3" in qualified_name
+        or "." not in qualified_name
+    )
 
 
 def _slug_to_cm_project(value: str) -> str:
@@ -138,48 +150,109 @@ _DESC = (
 
 
 async def _resolve_qn(
-    session: ClientSession,
+    session: ClientSession | None,
     qualified_name: str,
     project: str,
     *,
     label: str | None = "Function",
+    driver: Any | None = None,
+    max_candidates: int = 15,
 ) -> tuple[str, str] | dict[str, Any]:
     """Disambiguate qualified_name → (short_name, resolved_qn).
 
     Returns error envelope dict for symbol_not_found / ambiguous_qualified_name.
     Pass label=None to search all symbol types (Functions, Classes, Methods).
     """
-    _sg_args: dict[str, Any] = {
-        "project": project,
-        "qn_pattern": f".*{re.escape(qualified_name)}$",
-        "limit": 10,
-    }
-    if label is not None:
-        _sg_args["label"] = label
-    raw = await session.call_tool("search_graph", arguments=_sg_args)
-    if raw.isError:
-        cm_msg = code_router.parse_cm_result(raw).get("_raw", "")
-        return {
-            "ok": False,
-            "error_code": "cm_error",
-            "requested_qualified_name": qualified_name,
-            "message": f"CM error from search_graph: {cm_msg}",
+    short_name = _decode_scip_short_name(qualified_name)
+    can_try_short_name = _needs_human_resolution(qualified_name) and bool(short_name)
+
+    async def _fallback_rows() -> list[dict[str, Any]] | dict[str, Any]:
+        if driver is not None:
+            return await _resolve_short_name(
+                driver,
+                requested_qualified_name=qualified_name,
+                short_name=short_name,
+                project=project,
+                max_candidates=max_candidates,
+            )
+        assert session is not None
+        return await _resolve_short_name_via_query_graph(
+            session,
+            short_name=short_name,
+            project=project,
+            max_candidates=max_candidates,
+        )
+
+    if session is None:
+        if not can_try_short_name:
+            return {
+                "ok": False,
+                "error_code": "cm_error",
+                "requested_qualified_name": qualified_name,
+                "message": "CM session not available for exact qualified_name resolution",
+            }
+        fallback = await _fallback_rows()
+        if isinstance(fallback, dict):
+            return fallback
+        results = fallback
+        total = len(results)
+        has_more = False
+        match_source = "short-name search"
+    else:
+        _sg_args: dict[str, Any] = {
+            "project": project,
+            "qn_pattern": f".*{re.escape(qualified_name)}$",
+            "limit": 10,
         }
-    data = code_router.parse_cm_result(raw)
-    results = data.get("results", [])
-    total = data.get("total", len(results))
-    has_more = data.get("has_more", False)
+        if label is not None:
+            _sg_args["label"] = label
+        raw = await session.call_tool("search_graph", arguments=_sg_args)
+        if raw.isError:
+            if can_try_short_name:
+                fallback = await _fallback_rows()
+                if isinstance(fallback, dict):
+                    return fallback
+                results = fallback
+                total = len(results)
+                has_more = False
+                match_source = "short-name search"
+            else:
+                cm_msg = code_router.parse_cm_result(raw).get("_raw", "")
+                return {
+                    "ok": False,
+                    "error_code": "cm_error",
+                    "requested_qualified_name": qualified_name,
+                    "message": f"CM error from search_graph: {cm_msg}",
+                }
+        else:
+            data = code_router.parse_cm_result(raw)
+            results = data.get("results", [])
+            total = data.get("total", len(results))
+            has_more = data.get("has_more", False)
+            match_source = "qn_pattern"
+
+    if not results and can_try_short_name and session is not None:
+        fallback = await _fallback_rows()
+        if isinstance(fallback, dict):
+            return fallback
+        if fallback:
+            results = fallback
+            total = len(results)
+            has_more = False
+            match_source = "short-name search"
 
     if not results:
+        suffix_label = label or "symbol"
         return {
             "ok": False,
             "error_code": "symbol_not_found",
             "requested_qualified_name": qualified_name,
             "message": (
                 f"qualified_name '{qualified_name}' not found in project "
-                f"'{project}' (no Function node matches suffix)"
+                f"'{project}' (no {suffix_label} suffix or short-name match)"
             ),
         }
+
     if len(results) > 1:
         count_phrase = f"at least {len(results)}" if has_more else f"{total}"
         return {
@@ -187,7 +260,7 @@ async def _resolve_qn(
             "error_code": "ambiguous_qualified_name",
             "requested_qualified_name": qualified_name,
             "message": (
-                f"qn_pattern matched {count_phrase} symbols in project "
+                f"{match_source} matched {count_phrase} symbols in project "
                 f"'{project}' — refine to uniquely identify"
             ),
             "matches": [
@@ -201,6 +274,373 @@ async def _resolve_qn(
 
     target = results[0]
     return target["name"], target["qualified_name"]
+
+
+def _escape_cypher_string(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("'", "\\'")
+
+
+def _dedup_items(
+    items: list[Any],
+    *,
+    key: Callable[[Any], Hashable],
+) -> list[Any]:
+    seen: set[Hashable] = set()
+    deduped: list[Any] = []
+    for item in items:
+        item_key = key(item)
+        if item_key in seen:
+            continue
+        seen.add(item_key)
+        deduped.append(item)
+    return deduped
+
+
+def _short_name_candidates(row: dict[str, Any]) -> tuple[str, ...]:
+    qualified_name = str(row.get("qualified_name") or "")
+    terminal_name = qualified_name.rsplit(".", 1)[-1] if "." in qualified_name else ""
+    return (
+        str(row.get("short_name") or ""),
+        str(row.get("name") or ""),
+        str(row.get("symbol") or ""),
+        terminal_name,
+        _decode_scip_short_name(qualified_name),
+    )
+
+
+_QUERY_SYMBOL_BY_SHORT_NAME = """
+MATCH (s:Symbol {group_id: $group_id, short_name: $short_name})
+RETURN s.name AS name,
+       s.short_name AS short_name,
+       coalesce(s.symbol, '') AS symbol,
+       s.qualified_name AS qualified_name,
+       coalesce(s.file_path, '') AS file_path
+ORDER BY s.qualified_name
+LIMIT $limit
+"""
+
+_QUERY_SYMBOL_BY_SHORT_NAME_FOLD = """
+MATCH (s:Symbol {group_id: $group_id})
+WITH s, last(split(coalesce(s.qualified_name, ''), '.')) AS terminal_name
+WHERE any(candidate IN [
+          coalesce(s.short_name, ''),
+          coalesce(s.name, ''),
+          coalesce(s.symbol, ''),
+          terminal_name
+      ] WHERE toLower(candidate) = toLower($short_name))
+WITH s, terminal_name, coalesce(s.qualified_name, s.name, s.symbol, '') AS resolved_qn
+WHERE resolved_qn <> ''
+RETURN coalesce(s.name, s.symbol, terminal_name) AS name,
+       coalesce(s.short_name, s.name, s.symbol, terminal_name) AS short_name,
+       coalesce(s.symbol, '') AS symbol,
+       resolved_qn AS qualified_name,
+       coalesce(s.file_path, '') AS file_path
+ORDER BY qualified_name
+LIMIT $limit
+"""
+
+_QUERY_SYMBOL_BY_SHORT_NAME_REGEX = """
+MATCH (s:Symbol {group_id: $group_id})
+WITH s, last(split(coalesce(s.qualified_name, ''), '.')) AS terminal_name
+WHERE any(candidate IN [
+          coalesce(s.short_name, ''),
+          coalesce(s.name, ''),
+          coalesce(s.symbol, ''),
+          terminal_name
+      ] WHERE candidate <> '' AND candidate =~ $pattern)
+WITH s, terminal_name, coalesce(s.qualified_name, s.name, s.symbol, '') AS resolved_qn
+WHERE resolved_qn <> ''
+RETURN coalesce(s.name, s.symbol, terminal_name) AS name,
+       coalesce(s.short_name, s.name, s.symbol, terminal_name) AS short_name,
+       coalesce(s.symbol, '') AS symbol,
+       resolved_qn AS qualified_name,
+       coalesce(s.file_path, '') AS file_path
+ORDER BY qualified_name
+LIMIT $limit
+"""
+
+_QUERY_SYMBOL_BY_SCIP_SHORT_NAME = """
+MATCH (s:Symbol {group_id: $group_id})
+WITH s, coalesce(s.qualified_name, '') AS resolved_qn
+WHERE resolved_qn =~ $pattern
+RETURN coalesce(s.name, s.symbol, '') AS name,
+       coalesce(s.short_name, s.name, s.symbol, '') AS short_name,
+       coalesce(s.symbol, '') AS symbol,
+       resolved_qn AS qualified_name,
+       coalesce(s.file_path, '') AS file_path
+ORDER BY qualified_name
+LIMIT $limit
+"""
+
+_QUERY_FUNCTION_BY_SHORT_NAME_REGEX = """
+MATCH (fn:Function {group_id: $group_id})
+WITH fn, coalesce(fn.qualified_name, fn.symbol_qualified_name, '') AS resolved_qn
+WHERE resolved_qn =~ $pattern
+RETURN coalesce(fn.display_name, fn.name, '') AS name,
+       '' AS short_name,
+       coalesce(fn.symbol_qualified_name, '') AS symbol,
+       resolved_qn AS qualified_name,
+       coalesce(fn.path, fn.file_path, '') AS file_path
+ORDER BY qualified_name
+LIMIT $limit
+"""
+
+_QUERY_SHADOW_BY_SHORT_NAME_REGEX = """
+MATCH (shadow:SymbolOccurrenceShadow {group_id: $group_id})
+WITH shadow, coalesce(shadow.symbol_qualified_name, '') AS resolved_qn
+WHERE resolved_qn =~ $pattern
+RETURN '' AS name,
+       '' AS short_name,
+       '' AS symbol,
+       resolved_qn AS qualified_name,
+       '' AS file_path
+ORDER BY qualified_name
+LIMIT $limit
+"""
+
+
+async def _query_symbol_candidates(
+    driver: Any,
+    query: str,
+    **params: Any,
+) -> list[dict[str, Any]]:
+    session_ctx = driver.session()
+    if inspect.isawaitable(session_ctx):
+        session_ctx = await session_ctx
+    async with session_ctx as session:
+        result = await session.run(query, **params)
+        rows = [dict(row) async for row in result]
+    return _dedup_items(
+        [row for row in rows if row.get("qualified_name")],
+        key=lambda row: row["qualified_name"],
+    )
+
+
+def _filter_short_name_rows(
+    rows: list[dict[str, Any]],
+    short_name: str,
+) -> list[dict[str, Any]]:
+    folded_short_name = short_name.lower()
+    matches: list[dict[str, Any]] = []
+
+    for row in rows:
+        qualified_name = str(row.get("qualified_name") or "")
+        resolved_name = next(
+            (
+                candidate
+                for candidate in _short_name_candidates(row)
+                if candidate and candidate.lower() == folded_short_name
+            ),
+            "",
+        )
+        if not resolved_name or not qualified_name:
+            continue
+        matches.append(
+            {
+                "name": row.get("short_name", "") or resolved_name,
+                "qualified_name": qualified_name,
+                "file_path": row.get("file_path", ""),
+                "symbol": row.get("symbol", ""),
+                "short_name": row.get("short_name", "") or resolved_name,
+            }
+        )
+
+    return _dedup_items(matches, key=lambda row: row["qualified_name"])
+
+
+async def _resolve_short_name_via_query_graph(
+    session: ClientSession,
+    *,
+    short_name: str,
+    project: str,
+    max_candidates: int,
+) -> list[dict[str, Any]] | dict[str, Any]:
+    escaped_short_name = _escape_cypher_string(short_name)
+    query = f"""
+MATCH (s:Symbol {{group_id: 'project/{_cm_project_to_slug(project)}'}})
+WITH s, last(split(coalesce(s.qualified_name, ''), '.')) AS terminal_name
+WHERE any(candidate IN [
+          coalesce(s.short_name, ''),
+          coalesce(s.name, ''),
+          coalesce(s.symbol, ''),
+          terminal_name
+      ] WHERE toLower(candidate) = toLower('{escaped_short_name}'))
+RETURN coalesce(s.name, '') AS name,
+       coalesce(s.qualified_name, '') AS qualified_name,
+       coalesce(s.file_path, '') AS file_path,
+       coalesce(s.symbol, '') AS symbol
+ORDER BY qualified_name
+LIMIT {max_candidates + 1}
+"""
+    raw = await session.call_tool(
+        "query_graph",
+        arguments={"project": project, "query": query},
+    )
+    if raw.isError:
+        cm_msg = code_router.parse_cm_result(raw).get("_raw", "")
+        return {
+            "ok": False,
+            "error_code": "cm_error",
+            "requested_qualified_name": short_name,
+            "message": f"CM error from query_graph: {cm_msg}",
+        }
+    data = code_router.parse_cm_result(raw)
+    rows = [
+        {
+            "name": row[0] if len(row) > 0 else "",
+            "qualified_name": row[1] if len(row) > 1 else "",
+            "file_path": row[2] if len(row) > 2 else "",
+            "symbol": row[3] if len(row) > 3 else "",
+            "short_name": row[0] if len(row) > 0 else "",
+        }
+        for row in data.get("rows", [])
+        if len(row) > 1 and row[1]
+    ]
+    return _filter_short_name_rows(rows, short_name)
+
+
+async def _resolve_short_name(
+    driver: Any,
+    *,
+    requested_qualified_name: str,
+    short_name: str,
+    project: str,
+    max_candidates: int,
+) -> list[dict[str, Any]] | dict[str, Any]:
+    group_id = f"project/{_cm_project_to_slug(project)}"
+    query_limit = max_candidates + 1
+    queries = (
+        (
+            _QUERY_SYMBOL_BY_SHORT_NAME,
+            {"group_id": group_id, "short_name": short_name, "limit": query_limit},
+        ),
+        (
+            _QUERY_SYMBOL_BY_SHORT_NAME_FOLD,
+            {"group_id": group_id, "short_name": short_name, "limit": query_limit},
+        ),
+        (
+            _QUERY_SYMBOL_BY_SHORT_NAME_REGEX,
+            {
+                "group_id": group_id,
+                "pattern": rf"(?i){re.escape(short_name)}.*",
+                "limit": query_limit,
+            },
+        ),
+        (
+            _QUERY_SYMBOL_BY_SCIP_SHORT_NAME,
+            {
+                "group_id": group_id,
+                "pattern": rf"(?i).*[0-9]+{re.escape(short_name)}[VCPOAES].*",
+                "limit": query_limit,
+            },
+        ),
+        (
+            _QUERY_FUNCTION_BY_SHORT_NAME_REGEX,
+            {
+                "group_id": group_id,
+                "pattern": rf"(?i).*{re.escape(short_name)}.*",
+                "limit": query_limit,
+            },
+        ),
+        (
+            _QUERY_SHADOW_BY_SHORT_NAME_REGEX,
+            {
+                "group_id": group_id,
+                "pattern": rf"(?i).*{re.escape(short_name)}.*",
+                "limit": query_limit,
+            },
+        ),
+    )
+
+    for query, params in queries:
+        rows = _filter_short_name_rows(
+            await _query_symbol_candidates(driver, query, **params),
+            short_name,
+        )
+        if rows:
+            return rows
+
+    return []
+
+
+def _length_prefixed_identifiers(symbol: str) -> list[tuple[str, str]]:
+    identifiers: list[tuple[str, str]] = []
+    i = 0
+    n = len(symbol)
+    while i < n:
+        if not symbol[i].isdigit():
+            i += 1
+            continue
+        j = i
+        while j < n and symbol[j].isdigit():
+            j += 1
+        length = int(symbol[i:j])
+        if length <= 0 or j + length > n:
+            i = j
+            continue
+        end = j + length
+        next_char = symbol[end] if end < n else ""
+        identifiers.append((symbol[j:end], next_char))
+        i = end
+    return identifiers
+
+
+def _split_scip_top_level(symbol: str) -> list[str]:
+    parts: list[str] = []
+    cur: list[str] = []
+    in_escape = False
+    i = 0
+    n = len(symbol)
+    while i < n:
+        c = symbol[i]
+        if c == "`":
+            if in_escape and i + 1 < n and symbol[i + 1] == "`":
+                cur.append("``")
+                i += 2
+                continue
+            cur.append(c)
+            in_escape = not in_escape
+            i += 1
+            continue
+        if c == " " and not in_escape:
+            parts.append("".join(cur))
+            cur = []
+            i += 1
+            continue
+        cur.append(c)
+        i += 1
+    if cur:
+        parts.append("".join(cur))
+    return parts
+
+
+def _decode_scip_short_name(symbol: str) -> str:
+    raw = symbol.strip()
+    if not raw:
+        return ""
+
+    parts = _split_scip_top_level(raw)
+    candidate = parts[-1] if parts else raw
+    decoded = unquote(candidate)
+    identifiers = _length_prefixed_identifiers(decoded)
+    if identifiers:
+        type_marker_indexes = [
+            idx
+            for idx, (_name, next_char) in enumerate(identifiers)
+            if next_char in "CPOVAE"
+        ]
+        if type_marker_indexes:
+            boundary = type_marker_indexes[-1]
+            if boundary + 1 < len(identifiers):
+                return identifiers[boundary + 1][0]
+            return identifiers[boundary][0]
+        return identifiers[0][0]
+
+    if "." in decoded:
+        return decoded.rsplit(".", 1)[-1]
+    if "/" in decoded:
+        return decoded.rsplit("/", 1)[-1]
+    return decoded.rstrip("#().:")
 
 
 async def _test_impact_tests_edge(
@@ -233,6 +673,7 @@ async def _test_impact_tests_edge(
         }
     data = code_router.parse_cm_result(raw)
     rows = data.get("rows", [])
+    rows = _dedup_items(rows, key=lambda row: (row[0], row[1]))
     truncated = len(rows) > max_results
     rows = rows[:max_results]
     tests = [{"name": r[0], "qualified_name": r[1], "hop": 1} for r in rows]
@@ -281,8 +722,9 @@ async def _test_impact_trace(
     data = code_router.parse_cm_result(raw)
     callers = data.get("callers", [])
     tests = [c for c in callers if c.get("is_test")]
-    total_found = len(tests)
     tests.sort(key=lambda c: c["hop"])  # KeyError on contract drift = fail loud
+    tests = _dedup_items(tests, key=lambda caller: caller["qualified_name"])
+    total_found = len(tests)
     truncated = total_found > max_results
     tests = tests[:max_results]
     return {
@@ -478,6 +920,54 @@ def _decode_tantivy_occurrence(
     }
 
 
+def _decode_unique_occurrences(
+    raw_docs: list[dict[str, Any]],
+    *,
+    fallback_qualified_name: str,
+    symbol_id: int,
+) -> list[dict[str, Any]]:
+    occurrences: list[dict[str, Any]] = []
+    seen: set[tuple[str, int, int]] = set()
+    for raw_doc in raw_docs:
+        occurrence = _decode_tantivy_occurrence(
+            raw_doc,
+            fallback_qualified_name=fallback_qualified_name,
+        )
+        key = (occurrence["file_path"], occurrence["line"], symbol_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        occurrences.append(occurrence)
+    return occurrences
+
+
+async def _search_unique_occurrences(
+    bridge: TantivyBridge,
+    *,
+    symbol_id: int,
+    fallback_qualified_name: str,
+    max_results: int,
+) -> tuple[list[dict[str, Any]], bool]:
+    target_unique = max_results + 1
+    limit = target_unique
+    max_limit = target_unique * 8
+
+    while True:
+        raw_docs = await bridge.search_by_symbol_id_async(symbol_id, limit=limit)
+        occurrences = _decode_unique_occurrences(
+            raw_docs,
+            fallback_qualified_name=fallback_qualified_name,
+            symbol_id=symbol_id,
+        )
+        if len(occurrences) > max_results:
+            return occurrences[:max_results], True
+        if len(raw_docs) < limit:
+            return occurrences, False
+        if limit >= max_limit:
+            return occurrences, True
+        limit = min(limit * 2, max_limit)
+
+
 _DESC_SNIPPET_RICH = (
     "Rich context card for a symbol: source snippet, definition location, "
     "usages, code owners, hotspot score, and recent commits. "
@@ -502,7 +992,7 @@ def register_code_composite_tools(
     ) -> dict[str, Any]:
         # Capture session once into local — TOCTOU-immune (D17)
         session = code_router.get_cm_session()
-        if session is None:
+        if session is None and not _needs_human_resolution(qualified_name):
             handle_tool_error(
                 RuntimeError(
                     "CM subprocess not started — set CODEBASE_MEMORY_MCP_BINARY"
@@ -526,9 +1016,17 @@ def register_code_composite_tools(
             }
 
         resolved_project = _slug_to_cm_project(req.project or default_project)
+        from palace_mcp.mcp_server import get_driver
+
+        driver = get_driver()
 
         try:
-            disambig = await _resolve_qn(session, req.qualified_name, resolved_project)
+            disambig = await _resolve_qn(
+                session,
+                req.qualified_name,
+                resolved_project,
+                driver=driver,
+            )
         except Exception as e:
             handle_tool_error(e)
             raise  # unreachable; satisfies ruff RET503
@@ -536,6 +1034,12 @@ def register_code_composite_tools(
         if isinstance(disambig, dict):
             return disambig
         short_name, resolved_qn = disambig
+        if session is None:
+            handle_tool_error(
+                RuntimeError(
+                    "CM subprocess not started — set CODEBASE_MEMORY_MCP_BINARY"
+                )
+            )
 
         try:
             if req.include_indirect:
@@ -627,19 +1131,16 @@ def register_code_composite_tools(
             tantivy_path = Path(settings.palace_tantivy_index_path)
             query_time_failures: list[str] = []
             occurrences_bundle: list[dict[str, Any]] = []
+            truncated = False
             try:
                 async with TantivyBridge(
                     tantivy_path, heap_size_mb=settings.palace_tantivy_heap_mb
                 ) as bridge:
-                    raw = await bridge.search_by_symbol_id_async(
-                        sym_id, limit=req.max_results + 1
-                    )
-                for r in raw[: req.max_results]:
-                    occurrences_bundle.append(
-                        _decode_tantivy_occurrence(
-                            r,
-                            fallback_qualified_name=req.qualified_name,
-                        )
+                    occurrences_bundle, truncated = await _search_unique_occurrences(
+                        bridge,
+                        symbol_id=sym_id,
+                        fallback_qualified_name=req.qualified_name,
+                        max_results=req.max_results,
                     )
             except Exception:
                 logger.warning(
@@ -661,7 +1162,8 @@ def register_code_composite_tools(
                 "requested_qualified_name": req.qualified_name,
                 "bundle": resolved_project,
                 "occurrences": occurrences_bundle,
-                "total_found": len(occurrences_bundle),
+                "total_found": len(occurrences_bundle) + (1 if truncated else 0),
+                "truncated": truncated,
                 "bundle_health": health.model_dump(mode="json"),
             }
 
@@ -683,10 +1185,13 @@ def register_code_composite_tools(
         # Optional: resolve via CM session for suffix-match disambiguation
         resolved_qn = req.qualified_name
         cm_session = code_router.get_cm_session()
-        if cm_session is not None:
+        if cm_session is not None or _needs_human_resolution(req.qualified_name):
             try:
                 disambig = await _resolve_qn(
-                    cm_session, req.qualified_name, resolved_project
+                    cm_session,
+                    req.qualified_name,
+                    resolved_project,
+                    driver=driver,
                 )
                 if isinstance(disambig, dict):
                     if disambig.get("error_code") == "cm_error":
@@ -710,19 +1215,12 @@ def register_code_composite_tools(
         async with TantivyBridge(
             tantivy_path, heap_size_mb=settings.palace_tantivy_heap_mb
         ) as bridge:
-            raw_results = await bridge.search_by_symbol_id_async(
-                sym_id, limit=req.max_results + 1
-            )
-        truncated = len(raw_results) > req.max_results
-        raw_results = raw_results[: req.max_results]
-
-        occurrences: list[dict[str, Any]] = [
-            _decode_tantivy_occurrence(
-                r,
+            occurrences, truncated = await _search_unique_occurrences(
+                bridge,
+                symbol_id=sym_id,
                 fallback_qualified_name=resolved_qn,
+                max_results=req.max_results,
             )
-            for r in raw_results
-        ]
 
         # State C: evicted — attach partial_index warning
         eviction_info = await _query_eviction_record(
@@ -808,7 +1306,11 @@ def register_code_composite_tools(
         # Step 1: Resolve qualified_name — all symbol types (F1 fix: label=None)
         try:
             disambig = await _resolve_qn(
-                session, req.qualified_name, cm_project, label=None
+                session,
+                req.qualified_name,
+                cm_project,
+                label=None,
+                driver=driver,
             )
         except Exception as e:
             handle_tool_error(e)
@@ -858,10 +1360,11 @@ def register_code_composite_tools(
                 raw = await bridge.search_by_symbol_id_async(
                     sym_id, limit=req.max_usages + 1
                 )
-            return [
-                _decode_tantivy_occurrence(r, fallback_qualified_name=resolved_qn)
-                for r in raw[: req.max_usages]
-            ]
+            return _decode_unique_occurrences(
+                raw,
+                fallback_qualified_name=resolved_qn,
+                symbol_id=sym_id,
+            )[: req.max_usages]
 
         async def _get_owners() -> list[dict[str, Any]]:
             result = await _find_owners(
