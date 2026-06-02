@@ -28,6 +28,7 @@ from tests.extractors.fixtures.scip_factory import (
 
 _RUN_ID = "swift-integration-run-001"
 _RERUN_ID = "swift-integration-run-002"
+_STORE_QNAME = "UwMiniCore s%3A10UwMiniCore11WalletStoreC"
 _SELECT_QNAME = "UwMiniCore s%3A10UwMiniCore11WalletStoreC6select8walletIDySi_tF"
 FIXTURE_SCIP = (
     Path(__file__).parent.parent
@@ -208,6 +209,25 @@ class TestSymbolIndexSwiftIntegration:
         assert "Sources/UwMiniCore/State/WalletStore.swift" in paths
         assert "Sources/UwMiniApp/ContentView.swift" in paths
         assert "Pods/Foo/Foo.swift" in paths
+
+        async with driver.session() as session:
+            result = await session.run(
+                """
+                MATCH (:Symbol {
+                    qualified_name: $qname,
+                    group_id: $group_id
+                })-[:BACKED_BY_SYMBOL]->(shadow:SymbolOccurrenceShadow)
+                RETURN count(shadow) AS count,
+                       collect(DISTINCT shadow.file_path) AS paths
+                """,
+                qname=_STORE_QNAME,
+                group_id="project/uw-ios-mini",
+            )
+            record = await result.single()
+
+        assert record is not None
+        assert record["count"] >= 1
+        assert "Sources/UwMiniCore/State/WalletStore.swift" in record["paths"]
 
     @pytest.mark.asyncio
     async def test_run_extractor_recovers_from_stale_counter_after_domain_reset(

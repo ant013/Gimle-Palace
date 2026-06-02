@@ -762,5 +762,11 @@ class TestSymbolIndexSwiftShadowRows:
                 "tier_weight": 1.0,
                 "last_seen_at": seen_at.isoformat(),
                 "schema_version": 1,
+                "doc_key": "101:Sources/UwMiniCore/Models/BalanceData.swift:1:0:abc123",
+                "file_path": "Sources/UwMiniCore/Models/BalanceData.swift",
+                "line": 1,
+                "col_start": 0,
+                "col_end": 11,
+                "ingest_run_id": "run-1",
             }
         ]

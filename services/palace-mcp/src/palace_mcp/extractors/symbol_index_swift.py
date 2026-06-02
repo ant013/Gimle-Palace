@@ -37,6 +37,7 @@ from palace_mcp.extractors.foundation.importance import (
     BoundedInDegreeCounter,
     importance_score,
     load_or_reset_in_degree_counter,
+    tier_weight,
 )
 from palace_mcp.extractors.foundation.models import (
     Language,
@@ -87,7 +88,13 @@ SET shadow.language = row.language,
     shadow.kind = row.kind,
     shadow.tier_weight = row.tier_weight,
     shadow.last_seen_at = row.last_seen_at,
-    shadow.schema_version = row.schema_version
+    shadow.schema_version = row.schema_version,
+    shadow.doc_key = row.doc_key,
+    shadow.file_path = row.file_path,
+    shadow.line = row.line,
+    shadow.col_start = row.col_start,
+    shadow.col_end = row.col_end,
+    shadow.ingest_run_id = row.ingest_run_id
 """
 
 _GRAPH_BATCH_SIZE = 500
@@ -379,9 +386,15 @@ def _build_shadow_rows(
                 "language": occ.language.value,
                 "importance": 1.0,
                 "kind": occ.kind.value,
-                "tier_weight": 1.0,
+                "tier_weight": tier_weight(occ.file_path),
                 "last_seen_at": seen_at.isoformat(),
                 "schema_version": SCHEMA_VERSION_CURRENT,
+                "doc_key": occ.doc_key,
+                "file_path": occ.file_path,
+                "line": occ.line,
+                "col_start": occ.col_start,
+                "col_end": occ.col_end,
+                "ingest_run_id": occ.ingest_run_id,
             },
         )
     return list(rows_by_qname.values())
