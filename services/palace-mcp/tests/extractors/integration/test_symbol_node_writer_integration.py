@@ -35,6 +35,12 @@ _SYM_C = ScipSymbolInfo(
     module_name="App",
     relationships=(),
 )
+_SYM_BALANCE = ScipSymbolInfo(
+    qualified_name="App.BalanceData",
+    scip_kind_name="Struct",
+    module_name="App",
+    relationships=(),
+)
 
 
 async def _count_active(driver: AsyncDriver, group_id: str) -> int:
@@ -72,6 +78,53 @@ async def _get_deleted_at(driver: AsyncDriver, group_id: str, qname: str) -> obj
 
 @pytest.mark.integration
 class TestSymbolSoftDelete:
+    @pytest.mark.asyncio
+    async def test_non_callable_symbol_connects_to_shadow(
+        self, driver: AsyncDriver
+    ) -> None:
+        await ensure_custom_schema(driver)
+
+        async with driver.session() as session:
+            await session.run(
+                """
+                MERGE (shadow:SymbolOccurrenceShadow {
+                    symbol_id: $symbol_id,
+                    symbol_qualified_name: $qualified_name,
+                    group_id: $group_id
+                })
+                SET shadow.importance = 1.0,
+                    shadow.kind = 'def',
+                    shadow.tier_weight = 1.0,
+                    shadow.last_seen_at = datetime("2026-01-01T00:00:00Z"),
+                    shadow.schema_version = 1
+                """,
+                symbol_id=101,
+                qualified_name=_SYM_BALANCE.qualified_name,
+                group_id=_GROUP,
+            )
+
+        await write_symbol_nodes(driver, [_SYM_BALANCE], {}, _GROUP)
+
+        async with driver.session() as session:
+            result = await session.run(
+                """
+                MATCH (:Symbol {
+                    qualified_name: $qualified_name,
+                    group_id: $group_id
+                })-[:BACKED_BY_SYMBOL]->(:SymbolOccurrenceShadow {
+                    symbol_qualified_name: $qualified_name,
+                    group_id: $group_id
+                })
+                RETURN count(*) AS n
+                """,
+                qualified_name=_SYM_BALANCE.qualified_name,
+                group_id=_GROUP,
+            )
+            record = await result.single()
+
+        assert record is not None
+        assert record["n"] == 1
+
     @pytest.mark.asyncio
     async def test_reingest_same_scip_does_not_increase_active_count(
         self, driver: AsyncDriver

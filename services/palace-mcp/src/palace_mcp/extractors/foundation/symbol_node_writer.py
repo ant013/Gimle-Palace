@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from palace_mcp.smoke.recipe import Recipe
 
 _SCIP_KIND_TO_STR: dict[str, str] = {
+    "Type": "type",
     "Class": "class",
     "Struct": "struct",
     "Enum": "enum",
@@ -47,6 +48,20 @@ _SCIP_KIND_TO_STR: dict[str, str] = {
     "TypeAlias": "typealias",
     "AssociatedType": "typealias",
 }
+
+_SCIP_KINDS_WITH_SHADOW_BACKING = frozenset(
+    {
+        "Variable",
+        "Field",
+        "Property",
+        "Type",
+        "Struct",
+        "Class",
+        "Enum",
+        "Protocol",
+        "TypeAlias",
+    }
+)
 
 _BATCH_SIZE = 500
 
@@ -109,6 +124,16 @@ MATCH (b:Symbol {qualified_name: r.target, group_id: r.group_id})
 MERGE (a)-[:EXTENSION_OF]->(b)
 """
 
+_MERGE_BACKED_BY_SYMBOL_SHADOWS = """
+UNWIND $rows AS r
+MATCH (symbol:Symbol {qualified_name: r.qualified_name, group_id: r.group_id})
+MATCH (shadow:SymbolOccurrenceShadow {
+    symbol_qualified_name: r.qualified_name,
+    group_id: r.group_id
+})
+MERGE (symbol)-[:BACKED_BY_SYMBOL]->(shadow)
+"""
+
 _EDGE_QUERIES: dict[str, str] = {
     "REFERENCES": _MERGE_REFERENCES,
     "CONFORMS_TO": _MERGE_CONFORMS_TO,
@@ -148,6 +173,28 @@ def build_symbol_node_rows(
     return rows
 
 
+def build_symbol_shadow_rows(
+    symbol_infos: list["ScipSymbolInfo"],
+    group_id: str,
+) -> list[dict[str, str]]:
+    """Build Symbol→shadow link rows for non-callable SCIP kinds."""
+    rows: list[dict[str, str]] = []
+    seen_qnames: set[str] = set()
+    for si in symbol_infos:
+        if si.scip_kind_name not in _SCIP_KINDS_WITH_SHADOW_BACKING:
+            continue
+        if si.qualified_name in seen_qnames:
+            continue
+        seen_qnames.add(si.qualified_name)
+        rows.append(
+            {
+                "qualified_name": si.qualified_name,
+                "group_id": group_id,
+            }
+        )
+    return rows
+
+
 async def write_symbol_nodes(
     driver: "AsyncDriver",
     symbol_infos: list["ScipSymbolInfo"],
@@ -171,6 +218,14 @@ async def write_symbol_nodes(
     async with driver.session() as session:
         for i in range(0, len(node_rows), _BATCH_SIZE):
             await session.run(_MERGE_SYMBOLS, rows=node_rows[i : i + _BATCH_SIZE])
+
+    shadow_rows = build_symbol_shadow_rows(symbol_infos, group_id)
+    async with driver.session() as session:
+        for i in range(0, len(shadow_rows), _BATCH_SIZE):
+            await session.run(
+                _MERGE_BACKED_BY_SYMBOL_SHADOWS,
+                rows=shadow_rows[i : i + _BATCH_SIZE],
+            )
 
     edges_by_type: dict[str, list[dict[str, str]]] = {k: [] for k in _EDGE_QUERIES}
     for si in symbol_infos:
