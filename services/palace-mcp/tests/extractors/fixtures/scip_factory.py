@@ -242,6 +242,53 @@ def build_swift_scip_index_with_symbol_infos() -> Any:
     return index
 
 
+def build_swift_struct_scip_index_with_symbol_infos() -> Any:
+    """Build a Swift SCIP fixture with a struct definition and one use site."""
+    index = scip_pb2.Index()  # type: ignore[attr-defined]
+    metadata = scip_pb2.Metadata()  # type: ignore[attr-defined]
+    metadata.version = scip_pb2.ProtocolVersion.UnspecifiedProtocolVersion  # type: ignore[attr-defined]
+    metadata.tool_info.name = "palace-swift-scip-emit"
+    metadata.tool_info.version = "0.1.0"
+    metadata.project_root = "file:///test"
+    index.metadata.CopyFrom(metadata)
+
+    _SYM_BALANCE = "scip-swift apple UwMiniCore . BalanceData"
+    _SYM_RENDER = "scip-swift apple UwMiniApp . renderBalanceData"
+
+    doc1 = index.documents.add()
+    doc1.relative_path = "Sources/UwMiniCore/Models/BalanceData.swift"
+    doc1.language = "swift"
+    occ1 = doc1.occurrences.add()
+    occ1.range.extend([1, 0, 11])
+    occ1.symbol = _SYM_BALANCE
+    occ1.symbol_roles = 1
+
+    si_balance = doc1.symbols.add()
+    si_balance.symbol = _SYM_BALANCE
+    si_balance.kind = _SCIP_KIND_STRUCT
+
+    doc2 = index.documents.add()
+    doc2.relative_path = "Sources/UwMiniApp/ContentView.swift"
+    doc2.language = "swift"
+    occ2 = doc2.occurrences.add()
+    occ2.range.extend([1, 0, 11])
+    occ2.symbol = _SYM_RENDER
+    occ2.symbol_roles = 1
+    occ3 = doc2.occurrences.add()
+    occ3.range.extend([2, 4, 15])
+    occ3.symbol = _SYM_BALANCE
+    occ3.symbol_roles = 0
+
+    si_render = doc2.symbols.add()
+    si_render.symbol = _SYM_RENDER
+    si_render.kind = _SCIP_KIND_FUNCTION
+    rel = si_render.relationships.add()
+    rel.symbol = _SYM_BALANCE
+    rel.is_reference = True
+
+    return index
+
+
 def write_scip_fixture(index: Any, path: Path) -> Path:
     """Serialize SCIP Index to a file."""
     path.write_bytes(index.SerializeToString())

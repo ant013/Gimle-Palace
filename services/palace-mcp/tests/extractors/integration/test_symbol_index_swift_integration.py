@@ -11,6 +11,8 @@ from neo4j import AsyncDriver
 from palace_mcp.extractors.foundation.importance import BoundedInDegreeCounter
 from palace_mcp.extractors.foundation.identifiers import symbol_id_for
 from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
+from palace_mcp.extractors.base import ExtractorRunContext
+from palace_mcp.extractors.symbol_index_swift import SymbolIndexSwift
 from palace_mcp.extractors.runner import run_extractor
 from palace_mcp.extractors.schema import ensure_extractors_schema
 from palace_mcp.extractors.scip_parser import parse_scip_file
@@ -18,6 +20,10 @@ from tests.extractors.unit.test_real_scip_fixtures import (
     _UW_IOS_N_DOCUMENTS,
     _UW_IOS_TOOL_NAME,
     requires_scip_uw_ios,
+)
+from tests.extractors.fixtures.scip_factory import (
+    build_swift_struct_scip_index_with_symbol_infos,
+    write_scip_fixture,
 )
 
 _RUN_ID = "swift-integration-run-001"
@@ -50,6 +56,77 @@ async def _project_and_repo(driver: AsyncDriver, tmp_path: Path) -> Path:
     (repo / ".git").mkdir()
     (repo / ".git" / "HEAD").write_text("0123456789abcdef0123456789abcdef01234567\n")
     return tmp_path / "repos"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_run_writes_shadow_backing_for_struct_symbol(
+    driver: AsyncDriver,
+    graphiti_mock: MagicMock,
+    tmp_path: Path,
+) -> None:
+    await ensure_extractors_schema(driver)
+
+    scip_path = write_scip_fixture(
+        build_swift_struct_scip_index_with_symbol_infos(),
+        tmp_path / "balance-data.scip",
+    )
+    repo = tmp_path / "repos" / "swift-shadow-mini"
+    repo.mkdir(parents=True)
+    (repo / ".git").mkdir()
+    (repo / ".git" / "HEAD").write_text(
+        "0123456789abcdef0123456789abcdef01234567\n",
+        encoding="utf-8",
+    )
+
+    settings = MagicMock()
+    tantivy_dir = tmp_path / "tantivy"
+    tantivy_dir.mkdir()
+    settings.palace_tantivy_index_path = str(tantivy_dir)
+    settings.palace_tantivy_heap_mb = 50
+    settings.palace_max_occurrences_total = 50_000_000
+    settings.palace_max_occurrences_per_project = 10_000_000
+    settings.palace_importance_threshold_use = 0.0
+    settings.palace_max_occurrences_per_symbol = 5_000
+    settings.palace_recency_decay_days = 30.0
+
+    ctx = ExtractorRunContext(
+        project_slug="swift-shadow-mini",
+        group_id="project/swift-shadow-mini",
+        repo_path=repo,
+        run_id="swift-shadow-mini-run-001",
+        duration_ms=0,
+        logger=MagicMock(),
+        scip_path=scip_path,
+    )
+
+    with (
+        patch("palace_mcp.mcp_server.get_driver", return_value=driver),
+        patch("palace_mcp.mcp_server.get_settings", return_value=settings),
+    ):
+        stats = await SymbolIndexSwift().run(graphiti=graphiti_mock, ctx=ctx)
+
+    assert stats.nodes_written >= 2
+
+    async with driver.session() as session:
+        result = await session.run(
+            """
+            MATCH (symbol:Symbol {
+                qualified_name: $qualified_name,
+                group_id: $group_id
+            })-[:BACKED_BY_SYMBOL]->(shadow:SymbolOccurrenceShadow {
+                symbol_qualified_name: $qualified_name,
+                group_id: $group_id
+            })
+            RETURN count(shadow) AS n
+            """,
+            qualified_name="UwMiniCore BalanceData",
+            group_id="project/swift-shadow-mini",
+        )
+        record = await result.single()
+
+    assert record is not None
+    assert record["n"] >= 1
 
 
 @pytest.mark.integration

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -20,6 +21,7 @@ from palace_mcp.extractors.foundation.symbol_node_writer import build_symbol_nod
 from palace_mcp.extractors.scip_parser import ScipSymbolInfo
 from palace_mcp.extractors.symbol_index_swift import (
     SymbolIndexSwift,
+    _build_shadow_rows,
     _ingest_batch,
     _is_vendor,
 )
@@ -680,3 +682,85 @@ class TestSymbolIndexSwiftSourceScope:
         assert rows[0]["source_scope"] == expected_scope, (
             f"{file_path!r} got {rows[0]['source_scope']!r}, expected {expected_scope!r}"
         )
+
+
+class TestSymbolIndexSwiftShadowRows:
+    def test_build_shadow_rows_emits_non_callable_definitions(self) -> None:
+        seen_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+        rows = _build_shadow_rows(
+            occurrences=[
+                SymbolOccurrence(
+                    doc_key="101:Sources/UwMiniCore/Models/BalanceData.swift:1:0:abc123",
+                    symbol_id=101,
+                    symbol_qualified_name="UwMiniCore BalanceData",
+                    kind=SymbolKind.DEF,
+                    language=Language.SWIFT,
+                    file_path="Sources/UwMiniCore/Models/BalanceData.swift",
+                    line=1,
+                    col_start=0,
+                    col_end=11,
+                    importance=0.0,
+                    commit_sha="abc123",
+                    ingest_run_id="run-1",
+                ),
+                SymbolOccurrence(
+                    doc_key="101:Sources/UwMiniApp/ContentView.swift:2:4:abc123",
+                    symbol_id=101,
+                    symbol_qualified_name="UwMiniCore BalanceData",
+                    kind=SymbolKind.USE,
+                    language=Language.SWIFT,
+                    file_path="Sources/UwMiniApp/ContentView.swift",
+                    line=2,
+                    col_start=4,
+                    col_end=15,
+                    importance=0.3,
+                    commit_sha="abc123",
+                    ingest_run_id="run-1",
+                ),
+                SymbolOccurrence(
+                    doc_key="103:Sources/UwMiniApp/ContentView.swift:1:0:abc123",
+                    symbol_id=103,
+                    symbol_qualified_name="UwMiniApp renderBalanceData",
+                    kind=SymbolKind.DEF,
+                    language=Language.SWIFT,
+                    file_path="Sources/UwMiniApp/ContentView.swift",
+                    line=1,
+                    col_start=0,
+                    col_end=10,
+                    importance=0.0,
+                    commit_sha="abc123",
+                    ingest_run_id="run-1",
+                ),
+            ],
+            symbol_infos=[
+                ScipSymbolInfo(
+                    qualified_name="UwMiniCore BalanceData",
+                    scip_kind_name="Struct",
+                    module_name="UwMiniCore",
+                    relationships=(),
+                ),
+                ScipSymbolInfo(
+                    qualified_name="UwMiniApp renderBalanceData",
+                    scip_kind_name="Function",
+                    module_name="UwMiniApp",
+                    relationships=(("UwMiniCore BalanceData", "REFERENCES"),),
+                ),
+            ],
+            group_id="project/uw-ios-mini",
+            seen_at=seen_at,
+        )
+
+        assert rows == [
+            {
+                "symbol_id": 101,
+                "symbol_qualified_name": "UwMiniCore BalanceData",
+                "group_id": "project/uw-ios-mini",
+                "language": "swift",
+                "importance": 1.0,
+                "kind": "def",
+                "tier_weight": 1.0,
+                "last_seen_at": seen_at.isoformat(),
+                "schema_version": 1,
+            }
+        ]
