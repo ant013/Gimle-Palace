@@ -37,9 +37,11 @@ from palace_mcp.extractors.foundation.importance import (
     BoundedInDegreeCounter,
     importance_score,
     load_or_reset_in_degree_counter,
+    tier_weight,
 )
 from palace_mcp.extractors.foundation.models import (
     Language,
+    SCHEMA_VERSION_CURRENT,
     SymbolKind,
     SymbolOccurrence,
 )
@@ -59,6 +61,43 @@ from palace_mcp.extractors.scip_parser import (
 )
 
 logger = logging.getLogger(__name__)
+
+_SCIP_KINDS_WITH_SHADOWS = frozenset(
+    {
+        "Variable",
+        "Field",
+        "Property",
+        "Type",
+        "Struct",
+        "Class",
+        "Enum",
+        "Protocol",
+        "TypeAlias",
+    }
+)
+
+_MERGE_SYMBOL_OCCURRENCE_SHADOWS = """
+UNWIND $rows AS row
+MERGE (shadow:SymbolOccurrenceShadow {
+    symbol_id: row.symbol_id,
+    symbol_qualified_name: row.symbol_qualified_name,
+    group_id: row.group_id
+})
+SET shadow.language = row.language,
+    shadow.importance = row.importance,
+    shadow.kind = row.kind,
+    shadow.tier_weight = row.tier_weight,
+    shadow.last_seen_at = row.last_seen_at,
+    shadow.schema_version = row.schema_version,
+    shadow.doc_key = row.doc_key,
+    shadow.file_path = row.file_path,
+    shadow.line = row.line,
+    shadow.col_start = row.col_start,
+    shadow.col_end = row.col_end,
+    shadow.ingest_run_id = row.ingest_run_id
+"""
+
+_GRAPH_BATCH_SIZE = 500
 
 
 class SymbolIndexSwift(BaseExtractor):
@@ -226,6 +265,13 @@ class SymbolIndexSwift(BaseExtractor):
             for occ in _iter_occurrences():
                 if occ.kind in (SymbolKind.DEF, SymbolKind.DECL):
                     def_file_paths.setdefault(occ.symbol_qualified_name, occ.file_path)
+            shadow_rows = _build_shadow_rows(
+                occurrences=_iter_occurrences(),
+                symbol_infos=iter_scip_symbol_infos(scip_index),
+                group_id=ctx.group_id,
+                seen_at=datetime.now(tz=timezone.utc),
+            )
+            shadow_count = await _write_shadow_rows(driver, shadow_rows)
             sym_nodes = 0
             seen_qnames: set[str] = set()
             sym_batch: list[ScipSymbolInfo] = []
@@ -243,8 +289,9 @@ class SymbolIndexSwift(BaseExtractor):
                     driver, sym_batch, def_file_paths, ctx.group_id
                 )
             logger.info(
-                "Symbol nodes written to Neo4j: %d; Tantivy occurrences: %d",
+                "Symbol nodes written to Neo4j: %d; shadow rows: %d; Tantivy occurrences: %d",
                 sym_nodes,
+                shadow_count,
                 total_written,
             )
 
@@ -307,6 +354,65 @@ async def _ingest_batch(
 
 def _load_or_reset_counter(tantivy_path: Path, run_id: str) -> BoundedInDegreeCounter:
     return load_or_reset_in_degree_counter(tantivy_path, run_id, logger=logger)
+
+
+def _build_shadow_rows(
+    *,
+    occurrences: Iterable[SymbolOccurrence],
+    symbol_infos: Iterable[ScipSymbolInfo],
+    group_id: str,
+    seen_at: datetime,
+) -> list[dict[str, object]]:
+    target_qnames = {
+        si.qualified_name
+        for si in symbol_infos
+        if si.scip_kind_name in _SCIP_KINDS_WITH_SHADOWS
+    }
+    if not target_qnames:
+        return []
+
+    rows_by_qname: dict[str, dict[str, object]] = {}
+    for occ in occurrences:
+        if occ.kind not in (SymbolKind.DEF, SymbolKind.DECL):
+            continue
+        if occ.symbol_qualified_name not in target_qnames:
+            continue
+        rows_by_qname.setdefault(
+            occ.symbol_qualified_name,
+            {
+                "symbol_id": occ.symbol_id,
+                "symbol_qualified_name": occ.symbol_qualified_name,
+                "group_id": group_id,
+                "language": occ.language.value,
+                "importance": 1.0,
+                "kind": occ.kind.value,
+                "tier_weight": tier_weight(occ.file_path),
+                "last_seen_at": seen_at.isoformat(),
+                "schema_version": SCHEMA_VERSION_CURRENT,
+                "doc_key": occ.doc_key,
+                "file_path": occ.file_path,
+                "line": occ.line,
+                "col_start": occ.col_start,
+                "col_end": occ.col_end,
+                "ingest_run_id": occ.ingest_run_id,
+            },
+        )
+    return list(rows_by_qname.values())
+
+
+async def _write_shadow_rows(
+    driver: AsyncDriver,
+    rows: list[dict[str, object]],
+) -> int:
+    if not rows:
+        return 0
+    async with driver.session() as session:
+        for i in range(0, len(rows), _GRAPH_BATCH_SIZE):
+            await session.run(
+                _MERGE_SYMBOL_OCCURRENCE_SHADOWS,
+                rows=rows[i : i + _GRAPH_BATCH_SIZE],
+            )
+    return len(rows)
 
 
 def _with_importance(
