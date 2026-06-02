@@ -37,6 +37,7 @@ from palace_mcp.extractors.foundation.importance import (
     BoundedInDegreeCounter,
     importance_score,
     load_or_reset_in_degree_counter,
+    tier_weight,
 )
 from palace_mcp.extractors.foundation.models import (
     Language,
@@ -59,6 +60,47 @@ from palace_mcp.extractors.scip_parser import (
 )
 
 logger = logging.getLogger(__name__)
+
+_NON_CALLABLE_SHADOW_SCIP_KINDS: frozenset[str] = frozenset(
+    {
+        "Variable",
+        "Field",
+        "Property",
+        "Type",
+        "Struct",
+        "Class",
+        "Enum",
+        "Protocol",
+        "TypeAlias",
+    }
+)
+
+_MERGE_SYMBOL_OCCURRENCE_SHADOWS = """
+UNWIND $rows AS r
+MERGE (shadow:SymbolOccurrenceShadow {
+    symbol_id: r.symbol_id,
+    group_id: r.group_id,
+    file_path: r.file_path,
+    line: r.line,
+    col_start: r.col_start
+})
+SET shadow.symbol_qualified_name = r.symbol_qualified_name,
+    shadow.language = r.language,
+    shadow.kind = r.kind,
+    shadow.importance = r.importance,
+    shadow.tier_weight = r.tier_weight,
+    shadow.last_seen_at = r.last_seen_at,
+    shadow.schema_version = r.schema_version,
+    shadow.doc_key = r.doc_key,
+    shadow.col_end = r.col_end,
+    shadow.ingest_run_id = r.ingest_run_id
+WITH shadow, r
+MATCH (symbol:Symbol {
+    qualified_name: r.symbol_qualified_name,
+    group_id: r.group_id
+})
+MERGE (symbol)-[:BACKED_BY_SYMBOL]->(shadow)
+"""
 
 
 class SymbolIndexSwift(BaseExtractor):
@@ -248,6 +290,27 @@ class SymbolIndexSwift(BaseExtractor):
                 total_written,
             )
 
+            non_callable_qnames = _non_callable_symbol_qnames(scip_index)
+            shadow_rows = _build_non_callable_symbol_shadow_rows(
+                _iter_graph_shadow_occurrences(
+                    scip_index=scip_index,
+                    commit_sha=commit_sha,
+                    run_id=ctx.run_id,
+                    counter=counter,
+                    settings=settings,
+                    include_phase2=p2 > 0,
+                    include_phase3=p3 > 0,
+                ),
+                non_callable_qnames=non_callable_qnames,
+                group_id=ctx.group_id,
+                now=datetime.now(tz=timezone.utc),
+            )
+            shadow_count = await _write_symbol_occurrence_shadows(driver, shadow_rows)
+            logger.info(
+                "Non-callable symbol occurrence shadows written to Neo4j: %d",
+                shadow_count,
+            )
+
             if seen_qnames:
                 deleted_count = await soft_delete_symbols(
                     driver, ctx.group_id, seen_qnames, datetime.now(tz=timezone.utc)
@@ -303,6 +366,104 @@ async def _ingest_batch(
             else:
                 logger.info("%s progress: %d/%d written", phase, written, total)
     return written
+
+
+def _non_callable_symbol_qnames(scip_index: object) -> set[str]:
+    return {
+        sym_info.qualified_name
+        for sym_info in iter_scip_symbol_infos(scip_index)
+        if sym_info.scip_kind_name in _NON_CALLABLE_SHADOW_SCIP_KINDS
+    }
+
+
+def _iter_graph_shadow_occurrences(
+    *,
+    scip_index: object,
+    commit_sha: str,
+    run_id: str,
+    counter: BoundedInDegreeCounter,
+    settings: object,
+    include_phase2: bool,
+    include_phase3: bool,
+) -> Iterable[SymbolOccurrence]:
+    def _iter_occurrences() -> Iterable[SymbolOccurrence]:
+        return iter_scip_occurrences(
+            scip_index,
+            commit_sha=commit_sha,
+            ingest_run_id=run_id,
+        )
+
+    for occ in _iter_occurrences():
+        if occ.kind in (SymbolKind.DEF, SymbolKind.DECL):
+            yield _with_importance(occ, counter, settings)
+
+    if include_phase2:
+        yield from _iter_phase2_occurrences(
+            occurrences=_iter_occurrences(),
+            counter=counter,
+            settings=settings,
+        )
+
+    if include_phase3:
+        for occ in _iter_occurrences():
+            if occ.kind == SymbolKind.USE and _is_vendor(occ.file_path):
+                yield _with_importance(occ, counter, settings)
+
+
+def _build_non_callable_symbol_shadow_rows(
+    occurrences: Iterable[SymbolOccurrence],
+    *,
+    non_callable_qnames: set[str],
+    group_id: str,
+    now: datetime,
+) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    seen: set[tuple[int, str, int, int]] = set()
+    for occ in occurrences:
+        if occ.symbol_qualified_name not in non_callable_qnames:
+            continue
+        key = (occ.symbol_id, occ.file_path, occ.line, occ.col_start)
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append(
+            {
+                "doc_key": occ.doc_key,
+                "symbol_id": occ.symbol_id,
+                "symbol_qualified_name": occ.symbol_qualified_name,
+                "language": occ.language.value,
+                "kind": occ.kind.value,
+                "importance": occ.importance,
+                "tier_weight": tier_weight(occ.file_path),
+                "last_seen_at": now,
+                "group_id": group_id,
+                "schema_version": occ.schema_version,
+                "file_path": occ.file_path,
+                "line": occ.line,
+                "col_start": occ.col_start,
+                "col_end": occ.col_end,
+                "ingest_run_id": occ.ingest_run_id,
+            }
+        )
+    return rows
+
+
+async def _write_symbol_occurrence_shadows(
+    driver: AsyncDriver,
+    rows: list[dict[str, object]],
+    *,
+    batch_size: int = 500,
+) -> int:
+    if not rows:
+        return 0
+
+    async with driver.session() as session:
+        for i in range(0, len(rows), batch_size):
+            await session.run(
+                _MERGE_SYMBOL_OCCURRENCE_SHADOWS,
+                rows=rows[i : i + batch_size],
+            )
+    return len(rows)
 
 
 def _load_or_reset_counter(tantivy_path: Path, run_id: str) -> BoundedInDegreeCounter:

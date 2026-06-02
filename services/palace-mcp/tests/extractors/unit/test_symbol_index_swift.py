@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import logging
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -20,8 +21,11 @@ from palace_mcp.extractors.foundation.symbol_node_writer import build_symbol_nod
 from palace_mcp.extractors.scip_parser import ScipSymbolInfo
 from palace_mcp.extractors.symbol_index_swift import (
     SymbolIndexSwift,
+    _build_non_callable_symbol_shadow_rows,
     _ingest_batch,
+    _iter_graph_shadow_occurrences,
     _is_vendor,
+    _non_callable_symbol_qnames,
 )
 from tests.extractors.fixtures.scip_factory import (
     build_swift_scip_index_with_symbol_infos,
@@ -276,6 +280,40 @@ class TestSymbolIndexSwiftHappyPath:
         assert bridge.commit_async.await_count == 2
         assert "phase2_user_uses progress: 2/5 written" in caplog.text
         assert "phase2_user_uses progress: 4/5 written" in caplog.text
+
+    def test_non_callable_symbol_shadow_rows_skip_callable_symbols(self) -> None:
+        index = build_swift_scip_index_with_symbol_infos()
+        settings = MagicMock()
+        settings.palace_recency_decay_days = 30.0
+        counter = MagicMock()
+        counter.estimate.return_value = 0
+
+        non_callable_qnames = _non_callable_symbol_qnames(index)
+        rows = _build_non_callable_symbol_shadow_rows(
+            _iter_graph_shadow_occurrences(
+                scip_index=index,
+                commit_sha="abc123",
+                run_id="run-1",
+                counter=counter,
+                settings=settings,
+                include_phase2=True,
+                include_phase3=False,
+            ),
+            non_callable_qnames=non_callable_qnames,
+            group_id="project/uw-ios-mini",
+            now=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+
+        qnames = {str(row["symbol_qualified_name"]) for row in rows}
+        assert "UwMiniCore s%3A10UwMiniCore11WalletStoreC" in qnames
+        assert "UwMiniCore s%3A10UwMiniCore11DeadHelperC" in qnames
+        assert (
+            "UwMiniCore s%3A10UwMiniCore11WalletStoreC6select8walletIDySi_tF"
+            not in qnames
+        )
+        assert all(row["group_id"] == "project/uw-ios-mini" for row in rows)
+        assert all(row["language"] == "swift" for row in rows)
+        assert all(row["tier_weight"] == 1.0 for row in rows)
 
     @pytest.mark.asyncio
     async def test_run_reads_scip_path_from_settings(
