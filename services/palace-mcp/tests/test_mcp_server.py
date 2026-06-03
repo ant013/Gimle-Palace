@@ -80,4 +80,5 @@ class TestCodeToolRegistration:
             "palace.code.search_graph",
             "palace.code.test_impact",
             "palace.code.trace_call_path",
+            "palace.code.call_hierarchy",
         }

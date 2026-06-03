@@ -33,6 +33,7 @@ Tools registered:
 - palace.project.analyze_status
 - palace.project.analyze_resume
 - palace.audit.run
+- palace.code.call_hierarchy  (Phase 2 spike — sourcekit-lsp proxy)
 """
 
 import asyncio
@@ -132,6 +133,7 @@ from palace_mcp.config import Settings
 from palace_mcp.memory.schema import HealthResponse as MemoryHealthResponse
 from palace_mcp.memory.schema import LookupRequest, LookupResponse, ProjectInfo
 from palace_mcp.ops.unstick import unstick_issue as _unstick_issue
+from palace_mcp.lsp.tool import call_hierarchy_tool as _call_hierarchy_tool
 
 logger = logging.getLogger(__name__)
 
@@ -1552,6 +1554,41 @@ async def palace_code_find_cross_module_contracts(
         project=project,
         bundle=bundle,
         limit=limit,
+    )
+
+
+# ---------------------------------------------------------------------------
+# palace.code.call_hierarchy — Phase 2 LSP-backed call hierarchy (GIM-1166)
+# ---------------------------------------------------------------------------
+
+
+@_tool(
+    name="palace.code.call_hierarchy",
+    description=(
+        "Resolve call hierarchy for a Swift symbol via sourcekit-lsp (Phase 2 spike). "
+        "Returns incoming callers determined by exact LSP call-graph navigation, "
+        "bypassing HNSW vector ranking. "
+        "Requires PALACE_SOURCEKIT_WORKSPACE_ROOTS configured for the target project. "
+        "Accepts any qualified symbol name (e.g. 'BalanceData', 'WalletKit.BalanceData')."
+    ),
+)
+async def palace_code_call_hierarchy(
+    qualified_name: str,
+    project: str | None = None,
+    max_results: int = 200,
+) -> dict[str, Any]:
+    """LSP-backed incoming call hierarchy for a named Swift symbol."""
+    driver = get_driver()
+    if driver is None:
+        return {"ok": False, "error_code": "driver_unavailable", "message": "Neo4j driver not initialised"}
+    if _settings is None:
+        return {"ok": False, "error_code": "settings_unavailable", "message": "Settings not initialised"}
+    return await _call_hierarchy_tool(
+        qualified_name=qualified_name,
+        project=project,
+        max_results=max_results,
+        driver=driver,
+        settings=_settings,
     )
 
 

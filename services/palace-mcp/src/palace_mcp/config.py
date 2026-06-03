@@ -238,3 +238,49 @@ class Settings(BaseSettings):
             "Set PALACE_QODO_PREWARM=0 to skip on memory-constrained hosts."
         ),
     )
+
+    # -----------------------------------------------------------------------
+    # F1B: sourcekit-lsp proxy (GIM-1166 Phase 2 spike)
+    # -----------------------------------------------------------------------
+
+    palace_sourcekit_lsp_binary: str = Field(
+        default="/usr/bin/sourcekit-lsp",
+        description="Absolute path to the sourcekit-lsp binary.",
+    )
+    palace_sourcekit_workspace_roots: Annotated[dict[str, str], NoDecode] = Field(
+        default_factory=dict,
+        description=(
+            "JSON-encoded dict mapping project slug → absolute workspace root directory. "
+            'Example: PALACE_SOURCEKIT_WORKSPACE_ROOTS=\'{"uw-ios-app":"/repos/uw-ios/UnstoppableWallet"}\''
+        ),
+    )
+    palace_sourcekit_scratch_path: str | None = Field(
+        default=None,
+        description=(
+            "Optional --scratch-path for sourcekit-lsp build cache. "
+            "Defaults to system temp if unset."
+        ),
+    )
+    palace_sourcekit_index_store_path: str | None = Field(
+        default=None,
+        description=(
+            "Optional -index-store-path passed to sourcekit-lsp. "
+            "Use when the project index was pre-built via Xcode or "
+            "'swiftc -index-store-path'. If set, sourcekit-lsp will use this "
+            "index rather than attempting a background build. "
+            "Example: /Users/.../DerivedData/.../Index.noindex/DataStore"
+        ),
+    )
+
+    @field_validator("palace_sourcekit_workspace_roots", mode="before")
+    @classmethod
+    def parse_sourcekit_workspace_roots(
+        cls, value: object
+    ) -> dict[str, str] | object:
+        if value is None:
+            return {}
+        if isinstance(value, str):
+            if value.strip() == "":
+                return {}
+            return cast(object, json.loads(value))
+        return value
