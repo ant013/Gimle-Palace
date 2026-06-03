@@ -186,3 +186,52 @@ class Settings(BaseSettings):
         alias="PALACE_MAILMAP_MAX_BYTES",
         description="Upper bound for .mailmap file size; oversized → identity passthrough",
     )
+
+    palace_cache_ttl_s: float = Field(
+        default=300.0,
+        gt=0.0,
+        description=(
+            "TTL in seconds for hydration cache entries (e.g. call_hierarchy results). "
+            "Entries expire on read after this duration. Default: 300 (5 min)."
+        ),
+    )
+    palace_cache_max_size: int = Field(
+        default=1000,
+        ge=1,
+        description=(
+            "Maximum number of entries in the hydration LRU cache. "
+            "Oldest entry is evicted when the limit is exceeded."
+        ),
+    )
+    palace_hydration_sem_limit: int = Field(
+        default=4,
+        ge=1,
+        description=(
+            "Max concurrent expensive hydration operations (IndexStoreDB reads, "
+            "embedding calls). Requests above this limit queue and wait. Default: 4."
+        ),
+    )
+    palace_periodic_reingest_ignore_globs: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        description=(
+            "JSON or comma-separated glob patterns excluded from periodic "
+            "re-ingest stale-file checks."
+        ),
+    )
+
+    @field_validator("palace_periodic_reingest_ignore_globs", mode="before")
+    @classmethod
+    def parse_periodic_reingest_ignore_globs(
+        cls, value: object
+    ) -> list[str] | object:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            if value.strip() == "":
+                return []
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError:
+                return [part.strip() for part in value.split(",") if part.strip()]
+            return cast(object, parsed)
+        return value
