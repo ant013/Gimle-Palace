@@ -9,6 +9,7 @@ Swift DEF/USE occurrences through the standard 3-phase bootstrap:
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Iterable, Sized
 import logging
 from datetime import datetime, timezone
@@ -20,6 +21,7 @@ from neo4j import AsyncDriver
 
 from palace_mcp.extractors.base import (
     BaseExtractor,
+    ExtractorOutcome,
     ExtractorRunContext,
     ExtractorStats,
 )
@@ -97,6 +99,22 @@ SET shadow.language = row.language,
     shadow.ingest_run_id = row.ingest_run_id
 """
 
+_UPSERT_FILE_HASHES_CYPHER = """
+UNWIND $rows AS row
+MERGE (f:File {project_id: $project_id, path: row.path})
+SET f.group_id = $project_id,
+    f.language = 'swift',
+    f.body_hash = row.body_hash,
+    f.last_symbol_index_run_id = $run_id,
+    f.last_symbol_index_run_at = datetime($observed_at)
+"""
+
+_READ_FILE_HASHES_CYPHER = """
+MATCH (f:File {project_id: $project_id})
+WHERE f.body_hash IS NOT NULL
+RETURN f.path AS path, f.body_hash AS body_hash
+"""
+
 _GRAPH_BATCH_SIZE = 500
 
 
@@ -157,6 +175,47 @@ class SymbolIndexSwift(BaseExtractor):
                     scip_index,
                     commit_sha=commit_sha,
                     ingest_run_id=ctx.run_id,
+                )
+
+            current_body_hashes = _build_file_body_hashes(
+                ctx.repo_path, _iter_occurrences()
+            )
+            previous_body_hashes = await _read_existing_file_body_hashes(
+                driver, project_id=ctx.group_id
+            )
+            if previous_body_hashes and previous_body_hashes == current_body_hashes:
+                logger.info(
+                    "symbol_index_swift.freshness.skip",
+                    extra={
+                        "extractor": self.name,
+                        "project": ctx.project_slug,
+                        "run_id": ctx.run_id,
+                        "freshness_decision": "skip",
+                        "freshness_reason": "body_hash_match",
+                        "file_count": len(current_body_hashes),
+                    },
+                )
+                await finalize_ingest_run(driver, run_id=ctx.run_id, success=True)
+                return ExtractorStats(
+                    outcome=ExtractorOutcome.SKIPPED,
+                    message="Skipped re-ingest: file body_hash values matched existing :File nodes.",
+                    next_action="Modify source content before rerunning symbol_index_swift.",
+                )
+            if previous_body_hashes:
+                logger.info(
+                    "symbol_index_swift.freshness.reingest",
+                    extra={
+                        "extractor": self.name,
+                        "project": ctx.project_slug,
+                        "run_id": ctx.run_id,
+                        "freshness_decision": "reingest",
+                        "freshness_reason": "body_hash_mismatch",
+                        "changed_files": [
+                            path
+                            for path, body_hash in sorted(current_body_hashes.items())
+                            if previous_body_hashes.get(path) != body_hash
+                        ][:10],
+                    },
                 )
 
             tantivy_path = Path(settings.palace_tantivy_index_path)
@@ -301,6 +360,13 @@ class SymbolIndexSwift(BaseExtractor):
                 )
                 logger.info("Soft-deleted %d absent :Symbol nodes", deleted_count)
 
+            await _write_file_body_hashes(
+                driver,
+                project_id=ctx.group_id,
+                run_id=ctx.run_id,
+                file_body_hashes=current_body_hashes,
+            )
+
             await finalize_ingest_run(driver, run_id=ctx.run_id, success=True)
             # nodes_written reflects Neo4j :Symbol nodes (graph-layer count).
             # Tantivy occurrence count is logged above for observability.
@@ -354,6 +420,57 @@ async def _ingest_batch(
 
 def _load_or_reset_counter(tantivy_path: Path, run_id: str) -> BoundedInDegreeCounter:
     return load_or_reset_in_degree_counter(tantivy_path, run_id, logger=logger)
+
+
+def _build_file_body_hashes(
+    repo_path: Path, occurrences: Iterable[SymbolOccurrence]
+) -> dict[str, str]:
+    hashes: dict[str, str] = {}
+    for file_path in sorted({occ.file_path for occ in occurrences}):
+        hashes[file_path] = hashlib.sha256(
+            (repo_path / file_path).read_bytes()
+        ).hexdigest()
+    return hashes
+
+
+async def _read_existing_file_body_hashes(
+    driver: AsyncDriver, *, project_id: str
+) -> dict[str, str]:
+    async with driver.session() as session:
+        result = await session.run(_READ_FILE_HASHES_CYPHER, project_id=project_id)
+        rows = await result.data()
+    return {
+        str(row["path"]): str(row.get("body_hash") or "")
+        for row in rows
+        if row.get("path")
+    }
+
+
+async def _write_file_body_hashes(
+    driver: AsyncDriver,
+    *,
+    project_id: str,
+    run_id: str,
+    file_body_hashes: dict[str, str],
+) -> int:
+    if not file_body_hashes:
+        return 0
+    rows = [
+        {"path": path, "body_hash": body_hash}
+        for path, body_hash in sorted(file_body_hashes.items())
+    ]
+    observed_at = datetime.now(timezone.utc).isoformat()
+    async with driver.session() as session:
+        for i in range(0, len(rows), _GRAPH_BATCH_SIZE):
+            result = await session.run(
+                _UPSERT_FILE_HASHES_CYPHER,
+                rows=rows[i : i + _GRAPH_BATCH_SIZE],
+                project_id=project_id,
+                run_id=run_id,
+                observed_at=observed_at,
+            )
+            await result.consume()
+    return len(rows)
 
 
 def _build_shadow_rows(
