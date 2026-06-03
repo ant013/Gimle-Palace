@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shutil
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -37,6 +38,20 @@ FIXTURE_SCIP = (
     / "scip"
     / "index.scip"
 )
+FIXTURE_REPO = (
+    Path(__file__).parent.parent / "fixtures" / "uw-ios-mini-project" / "UwMiniCore"
+)
+
+
+def _copy_fixture_repo(repo: Path) -> None:
+    for relative_path in ("Package.swift", "Sources", "Pods"):
+        source = FIXTURE_REPO / relative_path
+        destination = repo / relative_path
+        if source.is_dir():
+            shutil.copytree(source, destination, dirs_exist_ok=True)
+        else:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, destination)
 
 
 @pytest.fixture
@@ -54,6 +69,7 @@ async def _project_and_repo(driver: AsyncDriver, tmp_path: Path) -> Path:
         )
     repo = tmp_path / "repos" / "uw-ios-mini"
     repo.mkdir(parents=True)
+    _copy_fixture_repo(repo)
     (repo / ".git").mkdir()
     (repo / ".git" / "HEAD").write_text("0123456789abcdef0123456789abcdef01234567\n")
     return tmp_path / "repos"
@@ -74,6 +90,16 @@ async def test_run_writes_shadow_backing_for_struct_symbol(
     )
     repo = tmp_path / "repos" / "swift-shadow-mini"
     repo.mkdir(parents=True)
+    (repo / "Sources" / "UwMiniCore" / "Models").mkdir(parents=True)
+    (repo / "Sources" / "UwMiniCore" / "Models" / "BalanceData.swift").write_text(
+        "struct BalanceData {}\n",
+        encoding="utf-8",
+    )
+    (repo / "Sources" / "UwMiniApp").mkdir(parents=True)
+    (repo / "Sources" / "UwMiniApp" / "ContentView.swift").write_text(
+        "func renderBalanceData() {}\n",
+        encoding="utf-8",
+    )
     (repo / ".git").mkdir()
     (repo / ".git" / "HEAD").write_text(
         "0123456789abcdef0123456789abcdef01234567\n",
