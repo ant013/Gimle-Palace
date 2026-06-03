@@ -38,11 +38,11 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _ROLE_DECLARATION = 1 << 0  # 1
-_ROLE_DEFINITION  = 1 << 1  # 2
-_ROLE_REFERENCE   = 1 << 2  # 4
-_ROLE_READ        = 1 << 3  # 8
-_ROLE_WRITE       = 1 << 4  # 16
-_ROLE_CALL        = 1 << 5  # 32
+_ROLE_DEFINITION = 1 << 1  # 2
+_ROLE_REFERENCE = 1 << 2  # 4
+_ROLE_READ = 1 << 3  # 8
+_ROLE_WRITE = 1 << 4  # 16
+_ROLE_CALL = 1 << 5  # 32
 
 _UNIT_DEP_RECORD = 2  # indexstore_unit_dependency_kind_t::RECORD
 
@@ -55,18 +55,19 @@ _UNIT_DEP_RECORD = 2  # indexstore_unit_dependency_kind_t::RECORD
 class CallerRecord:
     """A single caller-site occurrence of a symbol in the IndexStore."""
 
-    source_file: str   # absolute path to the Swift/ObjC file (empty if unknown)
-    record_name: str   # IndexStore record hash
-    symbol_name: str   # short name as stored (e.g. "BalanceData")
-    symbol_usr: str    # Unified Symbol Resolution identifier
-    line: int          # 1-based line number
-    col: int           # 1-based column number
-    roles: int         # bitmask from indexstore_symbol_role_t
+    source_file: str  # absolute path to the Swift/ObjC file (empty if unknown)
+    record_name: str  # IndexStore record hash
+    symbol_name: str  # short name as stored (e.g. "BalanceData")
+    symbol_usr: str  # Unified Symbol Resolution identifier
+    line: int  # 1-based line number
+    col: int  # 1-based column number
+    roles: int  # bitmask from indexstore_symbol_role_t
 
 
 # ---------------------------------------------------------------------------
 # libIndexStore path resolution
 # ---------------------------------------------------------------------------
+
 
 def _find_lib_path() -> str:
     env_override = os.environ.get("PALACE_INDEXSTORE_LIB_PATH")
@@ -78,8 +79,7 @@ def _find_lib_path() -> str:
         / "IndexStore.framework/Versions/A/IndexStore",
         Path("/Applications/Xcode-beta.app/Contents/SharedFrameworks")
         / "IndexStore.framework/Versions/A/IndexStore",
-        Path.home()
-        / ".swiftly/toolchains/swift-latest/usr/lib/libIndexStore.dylib",
+        Path.home() / ".swiftly/toolchains/swift-latest/usr/lib/libIndexStore.dylib",
     ]
     for p in candidates:
         if p.exists():
@@ -135,6 +135,7 @@ class _StringRef(ctypes.Structure):
 # Library singleton with bound symbols
 # ---------------------------------------------------------------------------
 
+
 class _BoundLib:
     """Loaded + symbol-bound libIndexStore."""
 
@@ -149,7 +150,7 @@ class _BoundLib:
         # store
         lib.indexstore_store_create.restype = vp
         lib.indexstore_store_create.argtypes = [cp, vp]
-        lib.indexstore_store_dispose.restype = None          # dispose, not destroy
+        lib.indexstore_store_dispose.restype = None  # dispose, not destroy
         lib.indexstore_store_dispose.argtypes = [vp]
 
         self.UnitApplierF = ctypes.CFUNCTYPE(b, vp, cp)
@@ -164,7 +165,11 @@ class _BoundLib:
 
         self.DepApplierF = ctypes.CFUNCTYPE(b, vp, vp)
         lib.indexstore_unit_reader_dependencies_apply_f.restype = b
-        lib.indexstore_unit_reader_dependencies_apply_f.argtypes = [vp, vp, self.DepApplierF]
+        lib.indexstore_unit_reader_dependencies_apply_f.argtypes = [
+            vp,
+            vp,
+            self.DepApplierF,
+        ]
 
         # unit dependency
         lib.indexstore_unit_dependency_get_kind.restype = ctypes.c_int
@@ -184,7 +189,11 @@ class _BoundLib:
         # Note: occurrences_in_symbol_name_apply_f absent in CommandLineTools version;
         # use occurrences_apply_f and filter by name in the applier callback.
         lib.indexstore_record_reader_occurrences_apply_f.restype = b
-        lib.indexstore_record_reader_occurrences_apply_f.argtypes = [vp, vp, self.OccApplierF]
+        lib.indexstore_record_reader_occurrences_apply_f.argtypes = [
+            vp,
+            vp,
+            self.OccApplierF,
+        ]
 
         # occurrence
         lib.indexstore_occurrence_get_symbol.restype = vp
@@ -193,7 +202,9 @@ class _BoundLib:
         lib.indexstore_occurrence_get_roles.argtypes = [vp]
         lib.indexstore_occurrence_get_line_col.restype = None
         lib.indexstore_occurrence_get_line_col.argtypes = [
-            vp, ctypes.POINTER(u32), ctypes.POINTER(u32)
+            vp,
+            ctypes.POINTER(u32),
+            ctypes.POINTER(u32),
         ]
 
         # symbol
@@ -374,7 +385,9 @@ def _query(
             continue
         seen_records.add(rec_name)
 
-        _ctx_state["file"] = file_path  # update shared state BEFORE each synchronous call
+        _ctx_state["file"] = (
+            file_path  # update shared state BEFORE each synchronous call
+        )
         _ctx_state["rec"] = rec_name
 
         rec_reader = lb.indexstore_record_reader_create(store, rec_name.encode(), None)

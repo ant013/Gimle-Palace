@@ -194,11 +194,15 @@ def test_per_project_path_resolved_and_used() -> None:
     """Verify per-project path is passed to find_callers."""
     captured: list[str] = []
 
-    def _mock_find_callers(name: str, path: str, **kwargs: object) -> list[CallerRecord]:
+    def _mock_find_callers(
+        name: str, path: str, **kwargs: object
+    ) -> list[CallerRecord]:
         captured.append(path)
         return []
 
-    with patch("palace_mcp.code.indexstore.find_callers", side_effect=_mock_find_callers):
+    with patch(
+        "palace_mcp.code.indexstore.find_callers", side_effect=_mock_find_callers
+    ):
         result = call_hierarchy_tool(
             qualified_name="BalanceData",
             project="uw-ios-app",
@@ -216,11 +220,15 @@ def test_per_project_path_resolved_and_used() -> None:
 def test_qualified_name_splits_to_short_name() -> None:
     captured: list[str] = []
 
-    def _mock_find_callers(name: str, path: str, **kwargs: object) -> list[CallerRecord]:
+    def _mock_find_callers(
+        name: str, path: str, **kwargs: object
+    ) -> list[CallerRecord]:
         captured.append(name)
         return []
 
-    with patch("palace_mcp.code.indexstore.find_callers", side_effect=_mock_find_callers):
+    with patch(
+        "palace_mcp.code.indexstore.find_callers", side_effect=_mock_find_callers
+    ):
         call_hierarchy_tool(
             qualified_name="WalletKit.BalanceData",
             project=None,

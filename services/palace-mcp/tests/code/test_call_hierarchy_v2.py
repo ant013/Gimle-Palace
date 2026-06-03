@@ -92,11 +92,15 @@ def test_qualified_name_splits_to_short_name() -> None:
     """short_name extraction: 'WalletKit.BalanceData' → 'BalanceData'."""
     captured: list[str] = []
 
-    def _mock_find_callers(name: str, path: str, **kwargs: object) -> list[CallerRecord]:
+    def _mock_find_callers(
+        name: str, path: str, **kwargs: object
+    ) -> list[CallerRecord]:
         captured.append(name)
         return []
 
-    with patch("palace_mcp.code.indexstore.find_callers", side_effect=_mock_find_callers):
+    with patch(
+        "palace_mcp.code.indexstore.find_callers", side_effect=_mock_find_callers
+    ):
         call_hierarchy_v2_tool(
             qualified_name="WalletKit.BalanceData",
             project=None,

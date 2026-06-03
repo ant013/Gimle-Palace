@@ -76,7 +76,9 @@ def main() -> None:
         elapsed = time.perf_counter() - t0
         all_times.append(elapsed)
         label = "cold" if run_idx == 0 else "warm"
-        print(f"  Run {run_idx + 1} ({label}): {elapsed:.3f}s  → {len(results)} occurrences")
+        print(
+            f"  Run {run_idx + 1} ({label}): {elapsed:.3f}s  → {len(results)} occurrences"
+        )
 
     print()
     print(f"caller_count : {len(results)}")
@@ -97,7 +99,9 @@ def main() -> None:
         print("--- Sample callers (first 10) ---")
         for r in results[:10]:
             short_file = Path(r.source_file).name if r.source_file else r.record_name
-            print(f"  {short_file}:{r.line}:{r.col}  roles={r.roles:#010x}  usr={r.symbol_usr[:40]}")
+            print(
+                f"  {short_file}:{r.line}:{r.col}  roles={r.roles:#010x}  usr={r.symbol_usr[:40]}"
+            )
 
     print()
     summary = {
