@@ -384,7 +384,7 @@ class TestSymbolIndexSwiftHappyPath:
         repo = tmp_path / "repo"
         file_path = repo / "Sources" / "App" / "File.swift"
         file_path.parent.mkdir(parents=True)
-        file_path.write_text("print(\"hello\")\n")
+        file_path.write_text('print("hello")\n')
         occurrence = SymbolOccurrence(
             doc_key="1:Sources/App/File.swift:1:0:abc123",
             symbol_id=1,
@@ -403,9 +403,7 @@ class TestSymbolIndexSwiftHappyPath:
         result = _build_file_body_hashes(repo, [occurrence])
 
         assert result == {
-            "Sources/App/File.swift": hashlib.sha256(
-                b'print("hello")\n'
-            ).hexdigest()
+            "Sources/App/File.swift": hashlib.sha256(b'print("hello")\n').hexdigest()
         }
 
     @pytest.mark.asyncio

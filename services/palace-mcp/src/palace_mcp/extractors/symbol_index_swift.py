@@ -177,7 +177,9 @@ class SymbolIndexSwift(BaseExtractor):
                     ingest_run_id=ctx.run_id,
                 )
 
-            current_body_hashes = _build_file_body_hashes(ctx.repo_path, _iter_occurrences())
+            current_body_hashes = _build_file_body_hashes(
+                ctx.repo_path, _iter_occurrences()
+            )
             previous_body_hashes = await _read_existing_file_body_hashes(
                 driver, project_id=ctx.group_id
             )
@@ -425,7 +427,9 @@ def _build_file_body_hashes(
 ) -> dict[str, str]:
     hashes: dict[str, str] = {}
     for file_path in sorted({occ.file_path for occ in occurrences}):
-        hashes[file_path] = hashlib.sha256((repo_path / file_path).read_bytes()).hexdigest()
+        hashes[file_path] = hashlib.sha256(
+            (repo_path / file_path).read_bytes()
+        ).hexdigest()
     return hashes
 
 
