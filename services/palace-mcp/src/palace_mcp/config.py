@@ -211,6 +211,19 @@ class Settings(BaseSettings):
         return value
 
     # -----------------------------------------------------------------------
+    # F1B: IndexStoreDB direct-read (GIM-1167)
+    # -----------------------------------------------------------------------
+
+    palace_sourcekit_index_store_path: str | None = Field(
+        default=None,
+        description=(
+            "Path to the Xcode DerivedData IndexStoreDB DataStore directory used by "
+            "palace.code.call_hierarchy_v2 for direct-read caller queries (no LSP). "
+            "Example: ~/Library/Developer/Xcode/DerivedData/<App>/Index.noindex/DataStore"
+        ),
+    )
+
+    # -----------------------------------------------------------------------
     # F4.0: Telemetry + JSONL audit sink (GIM-1097)
     # -----------------------------------------------------------------------
 
