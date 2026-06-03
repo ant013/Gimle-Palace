@@ -1025,3 +1025,205 @@ class TestRegistrationWiring:
         importlib.reload(cfg_module)
         settings = cfg_module.Settings()  # type: ignore[call-arg]
         assert settings.palace_cm_default_project == "repos-gimle"
+
+
+# ---------------------------------------------------------------------------
+# Step 5 — palace.code.call_hierarchy MCP tool registration (GIM-1175)
+# ---------------------------------------------------------------------------
+
+
+class _FakeSettings:
+    palace_indexstore_paths: dict[str, str] = {"uw-ios-app": "/path/to/DataStore"}
+    palace_sourcekit_index_store_path: str | None = None
+    palace_call_hierarchy_timeout_s: float = 30.0
+
+
+_FAKE_CALLER = {
+    "source_file": "BalanceView.swift",
+    "record_name": "BalanceView",
+    "symbol_name": "updateBalance",
+    "symbol_usr": "s:9WalletKit11BalanceViewC13updateBalanceyyF",
+    "line": 42,
+    "col": 5,
+    "roles": ["call"],
+}
+
+_FAKE_CALL_HIERARCHY_OK = {
+    "ok": True,
+    "qualified_name": "BalanceData",
+    "short_name": "BalanceData",
+    "project": "uw-ios-app",
+    "index_store_path": "/path/to/DataStore",
+    "caller_count": 1,
+    "callers": [_FAKE_CALLER],
+    "latency_s": 0.123,
+    "approach": "indexstore_direct",
+}
+
+
+class TestCallHierarchyRegistration:
+    def test_call_hierarchy_registered(self) -> None:
+        from palace_mcp.code_composite import register_code_composite_tools
+        from mcp.server.fastmcp import FastMCP
+
+        tracked: list[str] = []
+
+        def spy_tool(name: str, description: str) -> Any:
+            tracked.append(name)
+            return FastMCP("inner").tool(name=name, description=description)
+
+        register_code_composite_tools(spy_tool, default_project="repos-gimle")
+        assert "palace.code.call_hierarchy" in tracked
+        assert tracked.count("palace.code.call_hierarchy") == 1
+
+
+class TestCallHierarchyTool:
+    @pytest.mark.asyncio
+    async def test_happy_path_returns_callers(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from palace_mcp.code_composite import register_code_composite_tools
+        from mcp.server.fastmcp import FastMCP
+
+        monkeypatch.setattr(
+            "palace_mcp.code.call_hierarchy.call_hierarchy_tool",
+            lambda **kwargs: _FAKE_CALL_HIERARCHY_OK,
+        )
+        monkeypatch.setattr(
+            "palace_mcp.mcp_server.get_settings", lambda: _FakeSettings()
+        )
+
+        mcp = FastMCP("test")
+        register_code_composite_tools(
+            lambda name, desc: mcp.tool(name=name, description=desc),
+            default_project="repos-gimle",
+        )
+        result = await mcp.call_tool(
+            "palace.code.call_hierarchy",
+            {"qualified_name": "BalanceData", "project": "uw-ios-app"},
+        )
+        payload = json.loads(result[0][0].text)  # type: ignore[index]
+        assert payload["ok"] is True
+        assert payload["caller_count"] == 1
+        assert len(payload["callers"]) == 1
+        assert payload["callers"][0]["source_file"] == "BalanceView.swift"
+
+    @pytest.mark.asyncio
+    async def test_passes_settings_paths_to_tool(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from palace_mcp.code_composite import register_code_composite_tools
+        from mcp.server.fastmcp import FastMCP
+
+        received: dict[str, Any] = {}
+
+        def capture(**kwargs: Any) -> dict[str, Any]:
+            received.update(kwargs)
+            return _FAKE_CALL_HIERARCHY_OK
+
+        monkeypatch.setattr(
+            "palace_mcp.code.call_hierarchy.call_hierarchy_tool", capture
+        )
+        monkeypatch.setattr(
+            "palace_mcp.mcp_server.get_settings", lambda: _FakeSettings()
+        )
+
+        mcp = FastMCP("test")
+        register_code_composite_tools(
+            lambda name, desc: mcp.tool(name=name, description=desc),
+            default_project="repos-gimle",
+        )
+        await mcp.call_tool(
+            "palace.code.call_hierarchy",
+            {"qualified_name": "BalanceData", "project": "uw-ios-app"},
+        )
+        assert received["indexstore_paths"] == {"uw-ios-app": "/path/to/DataStore"}
+        assert received["default_store_path"] is None
+        assert received["timeout_s"] == 30.0
+        assert received["project"] == "uw-ios-app"
+
+    @pytest.mark.asyncio
+    async def test_validation_error_returns_error_envelope(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from palace_mcp.code_composite import register_code_composite_tools
+        from mcp.server.fastmcp import FastMCP
+
+        monkeypatch.setattr(
+            "palace_mcp.mcp_server.get_settings", lambda: _FakeSettings()
+        )
+
+        mcp = FastMCP("test")
+        register_code_composite_tools(
+            lambda name, desc: mcp.tool(name=name, description=desc),
+            default_project="repos-gimle",
+        )
+        # 501-char string exceeds max_length=500
+        result = await mcp.call_tool(
+            "palace.code.call_hierarchy",
+            {"qualified_name": "a" * 501},
+        )
+        payload = json.loads(result[0][0].text)  # type: ignore[index]
+        assert payload["ok"] is False
+        assert payload["error_code"] == "validation_error"
+        assert payload["requested_qualified_name"] == "a" * 501
+
+    @pytest.mark.asyncio
+    async def test_settings_none_raises(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from palace_mcp.code_composite import register_code_composite_tools
+        from mcp.server.fastmcp import FastMCP
+
+        monkeypatch.setattr("palace_mcp.mcp_server.get_settings", lambda: None)
+
+        mcp = FastMCP("test")
+        register_code_composite_tools(
+            lambda name, desc: mcp.tool(name=name, description=desc),
+            default_project="repos-gimle",
+        )
+        with pytest.raises(Exception):
+            await mcp.call_tool(
+                "palace.code.call_hierarchy",
+                {"qualified_name": "BalanceData"},
+            )
+
+    @pytest.mark.asyncio
+    async def test_index_store_error_forwarded(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from palace_mcp.code_composite import register_code_composite_tools
+        from mcp.server.fastmcp import FastMCP
+
+        error_result = {
+            "ok": False,
+            "error_code": "index_store_not_configured",
+            "qualified_name": "BalanceData",
+            "project": None,
+            "message": "No IndexStore path found.",
+        }
+        monkeypatch.setattr(
+            "palace_mcp.code.call_hierarchy.call_hierarchy_tool",
+            lambda **kwargs: error_result,
+        )
+
+        class EmptySettings(_FakeSettings):
+            palace_indexstore_paths: dict[str, str] = {}
+            palace_sourcekit_index_store_path: str | None = None
+
+        monkeypatch.setattr(
+            "palace_mcp.mcp_server.get_settings", lambda: EmptySettings()
+        )
+
+        mcp = FastMCP("test")
+        register_code_composite_tools(
+            lambda name, desc: mcp.tool(name=name, description=desc),
+            default_project="repos-gimle",
+        )
+        result = await mcp.call_tool(
+            "palace.code.call_hierarchy",
+            {"qualified_name": "BalanceData"},
+        )
+        payload = json.loads(result[0][0].text)  # type: ignore[index]
+        assert payload["ok"] is False
+        assert payload["error_code"] == "index_store_not_configured"

@@ -26,6 +26,9 @@ Run before and after every `docker compose up` on the iMac deploy host.
    | `PALACE_TELEMETRY_ENABLED` | `true` | Master switch for MCP call telemetry (F4.0). Set `false` to suppress. |
    | `PALACE_QODO_PREWARM` | `true` | Pre-warm Qodo embedding model on startup (F4.1). Set `0` on memory-constrained hosts to skip. |
    | `PALACE_ANCHOR_SYMBOLS` | `{}` | JSON dict mapping `group_id → [qualified_names]` for S0 anchors. Example: `'{"project/gimle":["MyClass.method"]}'` |
+   | `PALACE_INDEXSTORE_PATHS` | `{}` | JSON dict mapping project slug → IndexStoreDB DataStore path for `palace.code.call_hierarchy` (F1B). Example: `'{"uw-ios-app":"/path/to/DerivedData/Index.noindex/DataStore"}'` |
+   | `PALACE_SOURCEKIT_INDEX_STORE_PATH` | _(unset)_ | Single-project fallback IndexStoreDB DataStore path for `palace.code.call_hierarchy` (F1B) when no per-project entry in `PALACE_INDEXSTORE_PATHS`. |
+   | `PALACE_CALL_HIERARCHY_TIMEOUT_S` | `30` | Per-call timeout in seconds for `palace.code.call_hierarchy` IndexStoreDB reads. Returns `error_code=timeout` when exceeded. |
 
    These do not block startup when absent — defaults are safe for production.
 
