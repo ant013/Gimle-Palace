@@ -211,6 +211,40 @@ class Settings(BaseSettings):
         return value
 
     # -----------------------------------------------------------------------
+    # F1B: IndexStoreDB direct-read (GIM-1167 spike, GIM-1168 production)
+    # -----------------------------------------------------------------------
+
+    palace_indexstore_paths: Annotated[dict[str, str], NoDecode] = Field(
+        default_factory=dict,
+        description=(
+            "JSON-encoded dict mapping project slug → IndexStoreDB DataStore path. "
+            "Used by palace.code.call_hierarchy for per-project caller queries. "
+            'Example: PALACE_INDEXSTORE_PATHS=\'{"uw-ios-app":"/path/to/DataStore"}\''
+        ),
+    )
+
+    @field_validator("palace_indexstore_paths", mode="before")
+    @classmethod
+    def parse_indexstore_paths(cls, value: object) -> dict[str, str] | object:
+        if value is None:
+            return {}
+        if isinstance(value, str):
+            if value.strip() == "":
+                return {}
+            return cast(object, json.loads(value))
+        return value
+
+    palace_sourcekit_index_store_path: str | None = Field(
+        default=None,
+        description=(
+            "Single-project fallback IndexStoreDB DataStore path for "
+            "palace.code.call_hierarchy when no per-project entry exists in "
+            "palace_indexstore_paths. "
+            "Example: ~/Library/Developer/Xcode/DerivedData/<App>/Index.noindex/DataStore"
+        ),
+    )
+
+    # -----------------------------------------------------------------------
     # F4.0: Telemetry + JSONL audit sink (GIM-1097)
     # -----------------------------------------------------------------------
 

@@ -33,6 +33,8 @@ Tools registered:
 - palace.project.analyze_status
 - palace.project.analyze_resume
 - palace.audit.run
+- palace.code.call_hierarchy      (F1B production — IndexStore direct-read, GIM-1168)
+- palace.code.call_hierarchy_v2  (F1B-SPIKE-V2 — kept for backwards compat, GIM-1167)
 """
 
 import asyncio
@@ -1552,6 +1554,84 @@ async def palace_code_find_cross_module_contracts(
         project=project,
         bundle=bundle,
         limit=limit,
+    )
+
+
+# ---------------------------------------------------------------------------
+# palace.code.call_hierarchy — production IndexStore direct-read (GIM-1168)
+# ---------------------------------------------------------------------------
+
+
+@_tool(
+    name="palace.code.call_hierarchy",
+    description=(
+        "Resolve callers of a Swift symbol by reading the DerivedData IndexStoreDB directly, "
+        "bypassing sourcekit-lsp. Supports multi-project setups via PALACE_INDEXSTORE_PATHS "
+        "(JSON dict: project slug → DataStore path). Falls back to "
+        "PALACE_SOURCEKIT_INDEX_STORE_PATH for single-project installs. "
+        "Returns caller occurrences with source_file, line, col, and symbol_usr. "
+        "Latency: <5s warm on a 3000-unit store."
+    ),
+)
+async def palace_code_call_hierarchy(
+    qualified_name: str,
+    project: str | None = None,
+    max_results: int = 200,
+    index_store_path: str | None = None,
+) -> dict[str, Any]:
+    """Query IndexStoreDB directly for callers of qualified_name."""
+    from palace_mcp.code.call_hierarchy import call_hierarchy_tool
+
+    indexstore_paths = _settings.palace_indexstore_paths if _settings else {}
+    default_store_path = (
+        _settings.palace_sourcekit_index_store_path if _settings else None
+    )
+    return await asyncio.to_thread(
+        call_hierarchy_tool,
+        qualified_name=qualified_name,
+        project=project,
+        max_results=max_results,
+        index_store_path=index_store_path,
+        indexstore_paths=indexstore_paths,
+        default_store_path=default_store_path,
+    )
+
+
+# ---------------------------------------------------------------------------
+# palace.code.call_hierarchy_v2 — IndexStore direct-read (GIM-1167)
+# ---------------------------------------------------------------------------
+
+
+@_tool(
+    name="palace.code.call_hierarchy_v2",
+    description=(
+        "Resolve callers of a Swift symbol by reading the DerivedData IndexStoreDB directly, "
+        "bypassing sourcekit-lsp. Requires PALACE_SOURCEKIT_INDEX_STORE_PATH to point to the "
+        "Xcode DerivedData DataStore directory (e.g. "
+        "~/Library/Developer/Xcode/DerivedData/<App>/Index.noindex/DataStore). "
+        "Returns caller occurrences with source_file, line, col, and symbol_usr. "
+        "Latency: <5s warm on a 3000-unit store. Spike: GIM-1167 F1B-SPIKE-V2."
+    ),
+)
+async def palace_code_call_hierarchy_v2(
+    qualified_name: str,
+    project: str | None = None,
+    max_results: int = 200,
+    index_store_path: str | None = None,
+) -> dict[str, Any]:
+    """Query IndexStoreDB directly for callers of qualified_name."""
+    from palace_mcp.code.call_hierarchy_v2 import call_hierarchy_v2_tool
+
+    store_path = index_store_path or (
+        _settings.palace_sourcekit_index_store_path if _settings else None
+    )
+    # ctypes calls are blocking; offload to thread pool to avoid blocking the event loop
+    return await asyncio.to_thread(
+        call_hierarchy_v2_tool,
+        qualified_name=qualified_name,
+        project=project,
+        max_results=max_results,
+        index_store_path=store_path,
     )
 
 
