@@ -1,7 +1,7 @@
-"""Gate 1 verdict runner — GIM-1108.
+"""Gate 1 / Gate 2 verdict runner — GIM-1108, GIM-1170.
 
-Loads the frozen GOLD corpus manifest, runs Gate 1 gate rows 3× each
-(warm SLO), applies Q1/Q2 thresholds, and outputs a structured JSON verdict.
+Loads the frozen GOLD corpus manifest, runs Gate 1/2 gate rows 3× each
+(warm SLO), applies Q1/Q2/Q3 thresholds, and outputs a structured JSON verdict.
 
 Usage:
     uv run python services/palace-mcp/scripts/run_gate_verdict.py \\
@@ -13,7 +13,7 @@ Exit codes:
     1  Q2 fails (archive signal)
     2  Config / environment error
 
-GIM-1108
+GIM-1108, GIM-1170
 """
 
 from __future__ import annotations
@@ -48,10 +48,11 @@ from tests.golden_matrix.evaluator import (  # noqa: E402
     load_matrix,
 )
 
-# ── Gate 1 thresholds ─────────────────────────────────────────────────────────
+# ── Gate 1 / Gate 2 thresholds ────────────────────────────────────────────────
 
 _Q2_ROW_ID = "gate-q2-balance-data-refs"
 _Q1_ROW_ID = "gate-q1-evm-chain-adapters"
+_Q3_ROW_ID = "gate-q3-call-hierarchy"
 
 # Q2: must find ≥30 of 31 known BalanceData refs in top-40
 _Q2_GROUND_TRUTH = 31
@@ -69,6 +70,11 @@ _Q1_PATTERNS = [
     "*EvmBlockchain*",
     "*EvmKit*",
 ]
+
+# Q3 (Gate 2): call_hierarchy must return ≥30 callers for BalanceData (informational)
+_Q3_SYMBOL = "BalanceData"
+_Q3_THRESHOLD = 30  # minimum caller_count
+_Q3_MAX_RESULTS = 200
 
 _SLO_THRESHOLD_MS = 8000.0
 _WARM_RUNS = 3
@@ -133,12 +139,49 @@ async def _call_row(
     return payload, latency_ms
 
 
+async def _call_q3_row(
+    session: object,
+    project_override: str | None,
+    row: MatrixRow,
+) -> tuple[dict, float]:
+    """Call palace.code.call_hierarchy for the Q3 gate row."""
+    project = project_override or (
+        next((p for p in row.projects if p != "__fixture__"), None)
+    )
+    params: dict = {
+        "qualified_name": _Q3_SYMBOL,
+        "max_results": _Q3_MAX_RESULTS,
+    }
+    if project:
+        params["project"] = project
+
+    t0 = time.monotonic()
+    try:
+        result = await session.call_tool("palace.code.call_hierarchy", params)  # type: ignore[attr-defined]
+        text = result.content[0].text if result.content else "{}"
+        payload = json.loads(text)
+    except Exception as exc:
+        payload = {
+            "ok": False,
+            "error_code": "mcp_call_failed",
+            "message": str(exc),
+            "caller_count": 0,
+        }
+    latency_ms = (time.monotonic() - t0) * 1000.0
+    payload["_latency_ms"] = latency_ms
+    return payload, latency_ms
+
+
 async def _run_gate_rows(
     rows: list[MatrixRow],
     mcp_url: str,
     project_override: str | None,
 ) -> dict[str, tuple[RowResult, list[float]]]:
-    """Run each gate row _WARM_RUNS times. Returns (last RowResult, latencies)."""
+    """Run each gate row _WARM_RUNS times. Returns (last RowResult, latencies).
+
+    Q3 rows (gate-q3-call-hierarchy) call palace.code.call_hierarchy directly;
+    all other gate rows call palace.code.semantic_search.
+    """
     try:
         from mcp import ClientSession
         from mcp.client.streamable_http import streamablehttp_client
@@ -156,12 +199,34 @@ async def _run_gate_rows(
                 last_result: RowResult | None = None
                 for run_n in range(1, _WARM_RUNS + 1):
                     print(f"  → {row.id}  run {run_n}/{_WARM_RUNS}", end="", flush=True)
-                    payload, latency_ms = await _call_row(
-                        session, row, project_override
-                    )
-                    last_result = evaluate_row(row, payload)
+                    if row.id == _Q3_ROW_ID:
+                        payload, latency_ms = await _call_q3_row(
+                            session, project_override, row
+                        )
+                        # Adapt call_hierarchy response for evaluate_row:
+                        # wrap callers as result list so min_hits check works
+                        adapted: dict = {
+                            "ok": payload.get("ok", False),
+                            "error_code": payload.get("error_code"),
+                            "result": [
+                                {
+                                    "qualified_name": c.get("symbol_name", ""),
+                                    "file_path": c.get("source_file", ""),
+                                    "score": 1.0,
+                                }
+                                for c in payload.get("callers", [])
+                            ],
+                            "returned_count": payload.get("caller_count", 0),
+                            "_latency_ms": payload.get("_latency_ms"),
+                        }
+                    else:
+                        adapted, latency_ms = await _call_row(
+                            session, row, project_override
+                        )
+                    last_result = evaluate_row(row, adapted)
                     latencies.append(latency_ms)
-                    print(f"  {latency_ms:.0f}ms  hits={last_result.returned_count}")
+                    count = adapted.get("returned_count", last_result.returned_count)
+                    print(f"  {latency_ms:.0f}ms  hits={count}")
                 assert last_result is not None
                 row_data[row.id] = (last_result, latencies)
 
@@ -179,7 +244,7 @@ def build_verdict(
     manifest: dict,
     row_data: dict[str, tuple[RowResult, list[float]]],
 ) -> dict:
-    """Build structured Gate 1 JSON verdict from row results and latencies."""
+    """Build structured Gate 1 / Gate 2 JSON verdict from row results and latencies."""
     # Q2: count BalanceData hits / 31 known refs
     q2_result, q2_latencies = row_data.get(_Q2_ROW_ID, (None, []))
     if q2_result is not None:
@@ -199,12 +264,17 @@ def build_verdict(
     q1_recall = q1_match / q1_total
     q1_pass = q1_recall >= _Q1_THRESHOLD
 
+    # Q3 (Gate 2): call_hierarchy must return ≥30 callers for BalanceData (informational)
+    q3_result, q3_latencies = row_data.get(_Q3_ROW_ID, (None, []))
+    q3_caller_count = q3_result.returned_count if q3_result is not None else 0
+    q3_pass = q3_caller_count >= _Q3_THRESHOLD
+
     # Warm SLO: p50 across all gate row runs
-    all_latencies = q2_latencies + q1_latencies
+    all_latencies = q2_latencies + q1_latencies + q3_latencies
     p50_ms = statistics.median(all_latencies) if all_latencies else float("inf")
     slo_pass = p50_ms < _SLO_THRESHOLD_MS
 
-    # Overall: Q2 determines gate outcome; Q1 and SLO are informational
+    # Overall: Q2 determines gate outcome; Q1, Q3, and SLO are informational
     overall_pass = q2_pass
 
     return {
@@ -221,6 +291,12 @@ def build_verdict(
             "status": _verdict_status(q1_pass),
             "recall": round(q1_recall, 4),
             "threshold": _Q1_THRESHOLD,
+        },
+        "q3": {
+            "status": _verdict_status(q3_pass),
+            "caller_count": q3_caller_count,
+            "threshold": _Q3_THRESHOLD,
+            "detail": f"{q3_caller_count} callers found for {_Q3_SYMBOL}",
         },
         "warm_slo": {
             "status": _verdict_status(slo_pass),
@@ -261,7 +337,7 @@ def _load_manifest(path: Path, strict: bool, matrix_path: Path) -> dict:
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="Gate 1 verdict runner — outputs structured JSON gate verdict."
+        description="Gate 1/2 verdict runner — outputs structured JSON gate verdict."
     )
     p.add_argument("--mcp-url", default="http://localhost:8000/mcp")
     p.add_argument(
@@ -296,7 +372,7 @@ def main() -> None:
         sys.exit(2)
 
     print(
-        f"Running Gate 1 verdict — {len(gate_rows)} gate row(s),"
+        f"Running Gate 1/2 verdict — {len(gate_rows)} gate row(s),"
         f" {_WARM_RUNS} warm runs each…"
     )
     row_data = asyncio.run(_run_gate_rows(gate_rows, args.mcp_url, args.project))

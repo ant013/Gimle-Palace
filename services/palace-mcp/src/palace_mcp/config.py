@@ -244,6 +244,15 @@ class Settings(BaseSettings):
         ),
     )
 
+    palace_call_hierarchy_timeout_s: float = Field(
+        default=30.0,
+        description=(
+            "Per-call timeout in seconds for palace.code.call_hierarchy IndexStoreDB reads. "
+            "Prevents runaway queries on corrupt or unusually large indexes. "
+            "Returns error_code=timeout when exceeded. Default: 30."
+        ),
+    )
+
     # -----------------------------------------------------------------------
     # F4.0: Telemetry + JSONL audit sink (GIM-1097)
     # -----------------------------------------------------------------------
