@@ -1169,9 +1169,7 @@ class TestCallHierarchyTool:
         assert payload["requested_qualified_name"] == "a" * 501
 
     @pytest.mark.asyncio
-    async def test_settings_none_raises(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_settings_none_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from palace_mcp.code_composite import register_code_composite_tools
         from mcp.server.fastmcp import FastMCP
 
