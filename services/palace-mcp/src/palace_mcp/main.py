@@ -13,6 +13,7 @@ from neo4j import AsyncDriver, AsyncGraphDatabase
 from starlette.applications import Starlette
 
 from palace_mcp.adr.schema import ensure_adr_schema
+from palace_mcp.cache import init_cache, init_semaphore
 from palace_mcp.code_router import start_cm_subprocess, stop_cm_subprocess
 from palace_mcp.config import Settings
 from palace_mcp.extractors.schema import ensure_extractors_schema
@@ -104,6 +105,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     set_graphiti(graphiti)
     set_settings(settings)
     set_default_group_id(settings.palace_default_group_id)
+    init_cache(settings.palace_cache_max_size, settings.palace_cache_ttl_s)
+    init_semaphore(settings.palace_hydration_sem_limit)
     audit_file: IO[str] | None = None
     if settings.palace_audit_sink_path:
         audit_path = Path(settings.palace_audit_sink_path)

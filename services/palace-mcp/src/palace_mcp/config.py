@@ -281,3 +281,32 @@ class Settings(BaseSettings):
             "Set PALACE_QODO_PREWARM=0 to skip on memory-constrained hosts."
         ),
     )
+
+    # -----------------------------------------------------------------------
+    # F4.2: Hydration cache + asyncio.Semaphore (GIM-1181)
+    # -----------------------------------------------------------------------
+
+    palace_cache_ttl_s: float = Field(
+        default=300.0,
+        gt=0.0,
+        description=(
+            "TTL in seconds for hydration cache entries (e.g. call_hierarchy results). "
+            "Entries expire on read after this duration. Default: 300 (5 min)."
+        ),
+    )
+    palace_cache_max_size: int = Field(
+        default=1000,
+        ge=1,
+        description=(
+            "Maximum number of entries in the hydration LRU cache. "
+            "Oldest entry is evicted when the limit is exceeded."
+        ),
+    )
+    palace_hydration_sem_limit: int = Field(
+        default=4,
+        ge=1,
+        description=(
+            "Max concurrent expensive hydration operations (IndexStoreDB reads, "
+            "embedding calls). Requests above this limit queue and wait. Default: 4."
+        ),
+    )
