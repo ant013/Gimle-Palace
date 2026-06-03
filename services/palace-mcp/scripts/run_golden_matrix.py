@@ -217,7 +217,7 @@ async def _run_live(
     project_override: str | None,
     timing: bool = False,
 ) -> dict[str, dict]:
-    """Call palace.code.semantic_search via MCP for each row."""
+    """Call each row's configured MCP tool."""
     try:
         from mcp import ClientSession
         from mcp.client.streamable_http import streamablehttp_client
@@ -243,23 +243,31 @@ async def _run_live(
                     responses[row.id] = {"ok": True, "result": [], "returned_count": 0}
                     continue
 
-                params: dict = {
-                    "query": row.query,
-                    "limit": row.top_k,
-                }
-                if len(projects) == 1:
-                    params["project"] = projects[0]
+                if row.tool == "call_hierarchy":
+                    tool_name = "palace.code.call_hierarchy"
+                    params = {
+                        "qualified_name": row.query,
+                        "max_results": row.top_k,
+                    }
+                    if projects:
+                        params["project"] = projects[0]
                 else:
-                    params["projects"] = projects
-                if row.source_scopes:
-                    params["source_scopes"] = row.source_scopes
+                    tool_name = "palace.code.semantic_search"
+                    params = {
+                        "query": row.query,
+                        "limit": row.top_k,
+                    }
+                    if len(projects) == 1:
+                        params["project"] = projects[0]
+                    else:
+                        params["projects"] = projects
+                    if row.source_scopes:
+                        params["source_scopes"] = row.source_scopes
 
                 print(f"  → {row.id}", end="", flush=True)
                 t0 = time.monotonic() if timing else 0.0
                 try:
-                    result = await session.call_tool(
-                        "palace.code.semantic_search", params
-                    )
+                    result = await session.call_tool(tool_name, params)
                     text = result.content[0].text if result.content else "{}"
                     payload = json.loads(text)
                 except Exception as exc:
@@ -271,9 +279,15 @@ async def _run_live(
                         "result": [],
                     }
                 else:
-                    count = payload.get(
-                        "returned_count", len(payload.get("result", []))
-                    )
+                    if row.tool == "call_hierarchy":
+                        count = payload.get(
+                            "caller_count",
+                            len(payload.get("incoming_calls", payload.get("callers", []))),
+                        )
+                    else:
+                        count = payload.get(
+                            "returned_count", len(payload.get("result", []))
+                        )
                     print(f" {count} hits")
                 if timing:
                     payload["_latency_ms"] = (time.monotonic() - t0) * 1000.0

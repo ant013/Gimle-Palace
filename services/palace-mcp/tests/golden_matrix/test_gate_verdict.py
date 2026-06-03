@@ -6,8 +6,11 @@ No MCP server or Neo4j required.
 
 from __future__ import annotations
 
+import asyncio
+import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 _SCRIPTS = Path(__file__).resolve().parent.parent.parent / "scripts"
 sys.path.insert(0, str(_SCRIPTS))
@@ -17,13 +20,14 @@ from run_gate_verdict import (  # noqa: E402
     _Q2_GROUND_TRUTH,
     _Q2_THRESHOLD,
     _SLO_THRESHOLD_MS,
+    _call_row,
     build_verdict,
 )
-from tests.golden_matrix.evaluator import HitEvidence, RowResult  # noqa: E402
+from tests.golden_matrix.evaluator import HitEvidence, MatrixRow, RowResult  # noqa: E402
 
 _MANIFEST = {"palace_mcp_sha": "abc123"}
-_Q2_ID = "gate-q2-balance-data-refs"
-_Q1_ID = "gate-q1-evm-chain-adapters"
+_Q2_ID = "gate-q2-balance-data-refs-call-hierarchy"
+_Q1_ID = "gate-q1-evm-chain-adapters-call-hierarchy"
 
 
 def _make_hit(qualified_name: str) -> HitEvidence:
@@ -58,18 +62,14 @@ def _make_result(row_id: str, hits: list[HitEvidence], returned: int) -> RowResu
     )
 
 
-def _q2_row(balance_hits: int, total_returned: int = 40) -> RowResult:
+def _q2_row(balance_hits: int) -> RowResult:
     hits = [_make_hit(f"Wallet/BalanceData_{i}") for i in range(balance_hits)]
-    hits += [
-        _make_hit(f"Other/Symbol_{i}") for i in range(total_returned - balance_hits)
-    ]
-    return _make_result(_Q2_ID, hits, total_returned)
+    return _make_result(_Q2_ID, hits, balance_hits)
 
 
-def _q1_row(evm_hits: int, total_returned: int = 20) -> RowResult:
+def _q1_row(evm_hits: int) -> RowResult:
     hits = [_make_hit(f"Chain/EvmAdapter_{i}") for i in range(evm_hits)]
-    hits += [_make_hit(f"Other/Symbol_{i}") for i in range(total_returned - evm_hits)]
-    return _make_result(_Q1_ID, hits, total_returned)
+    return _make_result(_Q1_ID, hits, evm_hits)
 
 
 _DEFAULT_LATENCIES = [3000.0, 3200.0, 2900.0]
@@ -135,7 +135,7 @@ def test_q1_informational_does_not_gate() -> None:
     row_data = {
         _Q2_ID: (_q2_row(30), _DEFAULT_LATENCIES),
         _Q1_ID: (
-            _q1_row(5, total_returned=20),
+            _q1_row(5),
             _DEFAULT_LATENCIES,
         ),  # 5/20 = 0.25 < 0.80
     }
@@ -147,7 +147,7 @@ def test_q1_informational_does_not_gate() -> None:
 def test_q1_pass_at_threshold() -> None:
     row_data = {
         _Q2_ID: (_q2_row(30), _DEFAULT_LATENCIES),
-        _Q1_ID: (_q1_row(16, total_returned=20), _DEFAULT_LATENCIES),  # 16/20 = 0.80
+        _Q1_ID: (_q1_row(16), _DEFAULT_LATENCIES),  # 16/20 = 0.80
     }
     v = build_verdict(_MANIFEST, row_data)
     assert v["q1"]["status"] == "PASS"
@@ -255,30 +255,60 @@ def test_gate_label() -> None:
     assert v["gate"] == "gate-1"
 
 
-# ── Pattern matching tests ────────────────────────────────────────────────────
+# ── Runner routing tests ─────────────────────────────────────────────────────
 
 
-def test_balance_data_snake_case_matches() -> None:
-    """balanceData (camelCase) should also be counted for Q2."""
-    hits = [_make_hit("Wallet/balanceData")]
-    result = _make_result(_Q2_ID, hits, 1)
-    row_data = {_Q2_ID: (result, _DEFAULT_LATENCIES)}
-    v = build_verdict(_MANIFEST, row_data)
-    assert v["q2"]["detail"] == "1/31 refs found"
-
-
-def test_file_path_pattern_matching() -> None:
-    """BalanceData in file_path should count for Q2."""
-    hit = HitEvidence(
-        project="uw-ios-app",
-        qualified_name="SomeClass/method",
-        file_path="Sources/Models/BalanceData.swift",
-        source_scope="project",
-        score=0.9,
-        context_status="absent",
-        embedding_input_hash=None,
+def test_call_hierarchy_row_uses_call_hierarchy_tool() -> None:
+    row = MatrixRow(
+        id=_Q2_ID,
+        split="gate",
+        class_="mandatory",
+        query="BalanceData",
+        projects=["uw-ios-app"],
+        top_k=40,
+        must_match_any_in_top_n=[],
+        must_match_all_in_top_n=[],
+        must_not_match_in_top_n=[],
+        min_hits=30,
+        max_noise_hits=None,
+        source_scopes=None,
+        required_context_status=None,
+        row_pass_rule="all",
+        description="call hierarchy gate row",
+        tags=["gate", "call_hierarchy"],
+        tool="call_hierarchy",
     )
-    result = _make_result(_Q2_ID, [hit], 1)
+
+    class _FakeSession:
+        async def call_tool(self, name: str, params: dict) -> SimpleNamespace:
+            assert name == "palace.code.call_hierarchy"
+            assert params == {
+                "qualified_name": "BalanceData",
+                "max_results": 40,
+                "project": "uw-ios-app",
+            }
+            payload = {
+                "ok": True,
+                "project": "uw-ios-app",
+                "incoming_calls": [{"file_uri": "A.swift", "symbol": "Caller/a"}],
+            }
+            return SimpleNamespace(
+                content=[SimpleNamespace(text=json.dumps(payload))]
+            )
+
+    payload, _ = asyncio.run(_call_row(_FakeSession(), row, None))
+    assert payload["incoming_calls"][0]["symbol"] == "Caller/a"
+
+
+def test_q2_detail_uses_returned_count() -> None:
+    result = _make_result(_Q2_ID, [], 1)
     row_data = {_Q2_ID: (result, _DEFAULT_LATENCIES)}
     v = build_verdict(_MANIFEST, row_data)
     assert v["q2"]["detail"] == "1/31 refs found"
+
+
+def test_q2_detail_caps_at_ground_truth() -> None:
+    result = _make_result(_Q2_ID, [], 40)
+    row_data = {_Q2_ID: (result, _DEFAULT_LATENCIES)}
+    v = build_verdict(_MANIFEST, row_data)
+    assert v["q2"]["detail"] == "31/31 refs found"

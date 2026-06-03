@@ -42,6 +42,7 @@ class MatrixRow:
     row_pass_rule: str
     description: str
     tags: list[str]
+    tool: str = "semantic_search"
 
 
 @dataclass
@@ -105,6 +106,7 @@ def load_matrix(path: Path) -> list[MatrixRow]:
                 id=raw["id"],
                 split=raw["split"],
                 class_=raw["class"],
+                tool=raw.get("tool", "semantic_search"),
                 query=raw["query"],
                 projects=raw["projects"],
                 top_k=raw["top_k"],
@@ -224,8 +226,38 @@ def _context_status(hit: dict[str, Any]) -> str:
     return "present"
 
 
+def _normalize_call_hierarchy_hit(
+    response: dict[str, Any], incoming_call: dict[str, Any]
+) -> dict[str, Any]:
+    return {
+        "project": response.get("project", ""),
+        "qualified_name": str(
+            incoming_call.get("symbol", incoming_call.get("symbol_name", ""))
+        ),
+        "file_path": incoming_call.get(
+            "file_uri", incoming_call.get("source_file", None)
+        ),
+        "source_scope": "project",
+        "score": 1.0,
+        "context": None,
+        "embedding_input_hash": None,
+    }
+
+
+def _response_hits(row: MatrixRow, response: dict[str, Any]) -> list[dict[str, Any]]:
+    if row.tool != "call_hierarchy":
+        return response.get("result", [])
+    incoming_calls = response.get("incoming_calls")
+    if incoming_calls is None:
+        incoming_calls = response.get("callers", [])
+    return [
+        _normalize_call_hierarchy_hit(response, incoming_call)
+        for incoming_call in incoming_calls
+    ]
+
+
 def evaluate_row(row: MatrixRow, response: dict[str, Any]) -> RowResult:
-    hits_raw: list[dict[str, Any]] = response.get("result", [])
+    hits_raw = _response_hits(row, response)
     failure_reasons: list[str] = []
 
     # Check ok flag

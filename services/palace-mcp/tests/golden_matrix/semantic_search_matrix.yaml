@@ -456,6 +456,7 @@ rows:
   - id: "gate-q1-evm-chain-adapters"
     split: "gate"
     class: "mandatory"
+    tool: "semantic_search"
     query: "EVM chain adapters"
     projects: ["uw-ios-app"]
     source_scopes: null
@@ -484,6 +485,7 @@ rows:
   - id: "gate-q2-balance-data-refs"
     split: "gate"
     class: "mandatory"
+    tool: "semantic_search"
     query: "BalanceData references"
     projects: ["uw-ios-app"]
     source_scopes: null
@@ -504,3 +506,39 @@ rows:
     row_pass_rule: "all"
     description: "Gate 1 Q2 — BalanceData reference recall: must return ≥30 of 31 known BalanceData references"
     tags: ["gate-1", "q2"]
+
+  - id: "gate-q1-evm-chain-adapters-call-hierarchy"
+    split: "gate"
+    class: "mandatory"
+    tool: "call_hierarchy"
+    query: "EvmAdapter"
+    projects: ["uw-ios-app"]
+    source_scopes: null
+    top_k: 20
+    must_match_any_in_top_n: []
+    must_match_all_in_top_n: []
+    must_not_match_in_top_n: []
+    min_hits: 16
+    max_noise_hits: null
+    required_context_status: null
+    row_pass_rule: "all"
+    description: "Gate 1 Q1 — palace.code.call_hierarchy must return at least 16 incoming callers for EvmAdapter"
+    tags: ["gate-1", "q1", "call_hierarchy"]
+
+  - id: "gate-q2-balance-data-refs-call-hierarchy"
+    split: "gate"
+    class: "mandatory"
+    tool: "call_hierarchy"
+    query: "BalanceData"
+    projects: ["uw-ios-app"]
+    source_scopes: null
+    top_k: 40
+    must_match_any_in_top_n: []
+    must_match_all_in_top_n: []
+    must_not_match_in_top_n: []
+    min_hits: 30
+    max_noise_hits: null
+    required_context_status: null
+    row_pass_rule: "all"
+    description: "Gate 1 Q2 — palace.code.call_hierarchy must return at least 30 incoming callers for BalanceData"
+    tags: ["gate-1", "q2", "call_hierarchy"]

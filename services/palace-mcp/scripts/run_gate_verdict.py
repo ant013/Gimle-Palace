@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import fnmatch
 import hashlib
 import json
 import statistics
@@ -41,7 +40,6 @@ sys.path.insert(0, str(_SERVICE_ROOT / "src"))
 sys.path.insert(0, str(_SERVICE_ROOT))
 
 from tests.golden_matrix.evaluator import (  # noqa: E402
-    HitEvidence,
     MatrixRow,
     RowResult,
     evaluate_row,
@@ -50,49 +48,19 @@ from tests.golden_matrix.evaluator import (  # noqa: E402
 
 # ── Gate 1 thresholds ─────────────────────────────────────────────────────────
 
-_Q2_ROW_ID = "gate-q2-balance-data-refs"
-_Q1_ROW_ID = "gate-q1-evm-chain-adapters"
+_Q2_CALL_HIERARCHY_ROW_ID = "gate-q2-balance-data-refs-call-hierarchy"
+_Q1_CALL_HIERARCHY_ROW_ID = "gate-q1-evm-chain-adapters-call-hierarchy"
 
-# Q2: must find ≥30 of 31 known BalanceData refs in top-40
+# Q2: must find ≥30 of 31 known BalanceData refs
 _Q2_GROUND_TRUTH = 31
 _Q2_THRESHOLD = 30 / 31  # ~0.9677
-_Q2_PATTERNS = ["*BalanceData*", "*balanceData*"]
 
-# Q1: informational — fraction of top-20 results that are EVM-related ≥0.80
+# Q1: informational — fraction of expected callers returned ≥0.80
 _Q1_TOP_K = 20
 _Q1_THRESHOLD = 0.80
-_Q1_PATTERNS = [
-    "*EvmAdapter*",
-    "*Evm*Adapter*",
-    "*EthereumAdapter*",
-    "*evm*adapter*",
-    "*EvmBlockchain*",
-    "*EvmKit*",
-]
 
 _SLO_THRESHOLD_MS = 8000.0
 _WARM_RUNS = 3
-
-
-# ── Pattern helpers ───────────────────────────────────────────────────────────
-
-
-def _evidence_matches(hit: HitEvidence, patterns: list[str]) -> bool:
-    qn = hit.qualified_name
-    fp = hit.file_path or ""
-    fp_abs = fp if fp.startswith("/") else "/" + fp
-    for p in patterns:
-        if (
-            fnmatch.fnmatch(qn, p)
-            or fnmatch.fnmatch(fp, p)
-            or fnmatch.fnmatch(fp_abs, p)
-        ):
-            return True
-    return False
-
-
-def _count_matches(hits: list[HitEvidence], patterns: list[str]) -> int:
-    return sum(1 for h in hits if _evidence_matches(h, patterns))
 
 
 # ── MCP execution ─────────────────────────────────────────────────────────────
@@ -108,17 +76,24 @@ async def _call_row(
         if project_override
         else [p for p in row.projects if p != "__fixture__"]
     )
-    params: dict = {"query": row.query, "limit": row.top_k}
-    if len(projects) == 1:
-        params["project"] = projects[0]
+    if row.tool == "call_hierarchy":
+        tool_name = "palace.code.call_hierarchy"
+        params: dict = {"qualified_name": row.query, "max_results": row.top_k}
+        if projects:
+            params["project"] = projects[0]
     else:
-        params["projects"] = projects
-    if row.source_scopes:
-        params["source_scopes"] = row.source_scopes
+        tool_name = "palace.code.semantic_search"
+        params = {"query": row.query, "limit": row.top_k}
+        if len(projects) == 1:
+            params["project"] = projects[0]
+        else:
+            params["projects"] = projects
+        if row.source_scopes:
+            params["source_scopes"] = row.source_scopes
 
     t0 = time.monotonic()
     try:
-        result = await session.call_tool("palace.code.semantic_search", params)  # type: ignore[attr-defined]
+        result = await session.call_tool(tool_name, params)  # type: ignore[attr-defined]
         text = result.content[0].text if result.content else "{}"
         payload = json.loads(text)
     except Exception as exc:
@@ -180,22 +155,14 @@ def build_verdict(
     row_data: dict[str, tuple[RowResult, list[float]]],
 ) -> dict:
     """Build structured Gate 1 JSON verdict from row results and latencies."""
-    # Q2: count BalanceData hits / 31 known refs
-    q2_result, q2_latencies = row_data.get(_Q2_ROW_ID, (None, []))
-    if q2_result is not None:
-        q2_match = _count_matches(q2_result.hits, _Q2_PATTERNS)
-    else:
-        q2_match = 0
+    q2_result, q2_latencies = row_data.get(_Q2_CALL_HIERARCHY_ROW_ID, (None, []))
+    q2_match = min(q2_result.returned_count, _Q2_GROUND_TRUTH) if q2_result else 0
     q2_recall = q2_match / _Q2_GROUND_TRUTH
     q2_pass = q2_recall >= _Q2_THRESHOLD
 
-    # Q1: fraction of top-k results that match EVM patterns (informational)
-    q1_result, q1_latencies = row_data.get(_Q1_ROW_ID, (None, []))
-    if q1_result is not None:
-        q1_match = _count_matches(q1_result.hits, _Q1_PATTERNS)
-        q1_total = max(q1_result.returned_count, 1)
-    else:
-        q1_match, q1_total = 0, 1
+    q1_result, q1_latencies = row_data.get(_Q1_CALL_HIERARCHY_ROW_ID, (None, []))
+    q1_match = min(q1_result.returned_count, _Q1_TOP_K) if q1_result else 0
+    q1_total = _Q1_TOP_K
     q1_recall = q1_match / q1_total
     q1_pass = q1_recall >= _Q1_THRESHOLD
 

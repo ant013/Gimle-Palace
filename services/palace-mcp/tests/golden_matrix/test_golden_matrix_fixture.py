@@ -274,6 +274,47 @@ def test_min_hits_failure_detected() -> None:
     assert any("min_hits" in r for r in result.failure_reasons)
 
 
+def test_call_hierarchy_payload_uses_incoming_calls() -> None:
+    row = MatrixRow(
+        id="test-call-hierarchy",
+        split="gate",
+        class_="mandatory",
+        query="BalanceData",
+        projects=["uw-ios-app"],
+        top_k=5,
+        must_match_any_in_top_n=[],
+        must_match_all_in_top_n=[],
+        must_not_match_in_top_n=[],
+        min_hits=2,
+        max_noise_hits=None,
+        source_scopes=None,
+        required_context_status=None,
+        row_pass_rule="all",
+        description="call hierarchy row",
+        tags=["gate", "call_hierarchy"],
+        tool="call_hierarchy",
+    )
+    response = {
+        "ok": True,
+        "project": "uw-ios-app",
+        "incoming_calls": [
+            {
+                "file_uri": "Sources/Wallet/BalanceService.swift",
+                "symbol": "Wallet/BalanceService/loadBalance",
+            },
+            {
+                "file_uri": "Sources/Wallet/PortfolioViewModel.swift",
+                "symbol": "Wallet/PortfolioViewModel/render",
+            },
+        ],
+    }
+    result = evaluate_row(row, response)
+    assert result.passed, result.failure_reasons
+    assert result.returned_count == 2
+    assert result.hits[0].qualified_name == "Wallet/BalanceService/loadBalance"
+    assert result.hits[0].file_path == "Sources/Wallet/BalanceService.swift"
+
+
 def test_no_answer_row_passes_when_disallowed_patterns_absent() -> None:
     row = MatrixRow(
         id="test-no-answer",
@@ -407,3 +448,13 @@ def test_fixture_has_entry_for_every_row(
     fixture_rows = [r for r in matrix_rows if r.split != "gate"]
     missing = [r.id for r in fixture_rows if r.id not in fixture_responses]
     assert missing == [], f"Missing fixture responses for rows: {missing}"
+
+
+def test_matrix_has_exactly_two_call_hierarchy_gate_rows(
+    matrix_rows: list[MatrixRow],
+) -> None:
+    call_hierarchy_rows = [r for r in matrix_rows if r.tool == "call_hierarchy"]
+    assert [r.id for r in call_hierarchy_rows] == [
+        "gate-q1-evm-chain-adapters-call-hierarchy",
+        "gate-q2-balance-data-refs-call-hierarchy",
+    ]
