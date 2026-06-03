@@ -59,6 +59,7 @@ class TestCodeToolRegistration:
             if t.name.startswith("palace.code.")
         ]
         assert {tool.name for tool in code_tools} == {
+            "palace.code.call_hierarchy",
             "palace.code.call_hierarchy_v2",
             "palace.code.detect_changes",
             "palace.code.find_cross_module_contracts",
