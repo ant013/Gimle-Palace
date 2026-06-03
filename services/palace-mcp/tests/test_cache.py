@@ -72,8 +72,8 @@ class TestHydrationCache:
         cache.put("a", 1)
         cache.put("b", 2)
         cache.put("c", 3)
-        cache.get("a")       # "a" now most-recently-used
-        cache.put("d", 4)    # evicts "b" (now oldest)
+        cache.get("a")  # "a" now most-recently-used
+        cache.put("d", 4)  # evicts "b" (now oldest)
         _, hit_a = cache.get("a")
         _, hit_b = cache.get("b")
         assert hit_a
@@ -167,7 +167,9 @@ async def test_semaphore_limits_concurrency() -> None:
 
 
 @pytest.mark.asyncio
-async def test_semaphore_queued_and_released_logged(caplog: pytest.LogCaptureFixture) -> None:
+async def test_semaphore_queued_and_released_logged(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """hydration_semaphore emits queued/acquired/released log events."""
     import logging
 
@@ -263,7 +265,9 @@ async def test_cache_hit_avoids_second_computation() -> None:
 async def test_call_hierarchy_does_not_cache_errors() -> None:
     """ok=False results are not stored in cache."""
     init_cache(100, 300.0)
-    key = cache_key(qualified_name="Missing", project="gimle", max_results=50, index_store_path="")
+    key = cache_key(
+        qualified_name="Missing", project="gimle", max_results=50, index_store_path=""
+    )
     cache = get_cache()
     assert cache is not None
 
