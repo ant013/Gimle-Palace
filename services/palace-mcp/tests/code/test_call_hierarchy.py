@@ -202,6 +202,7 @@ def test_timeout_returns_error_code(tmp_path: Path) -> None:
 
     def _slow_find(*args: object, **kwargs: object) -> list:
         import time
+
         time.sleep(10)
         return []
 

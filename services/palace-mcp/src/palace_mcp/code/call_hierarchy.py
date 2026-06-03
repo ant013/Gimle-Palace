@@ -141,7 +141,9 @@ def call_hierarchy_tool(
                 callers = future.result(timeout=timeout_s)
             except concurrent.futures.TimeoutError:
                 logger.warning(
-                    "call_hierarchy timeout after %.1fs for %s", timeout_s, qualified_name
+                    "call_hierarchy timeout after %.1fs for %s",
+                    timeout_s,
+                    qualified_name,
                 )
                 return {
                     "ok": False,
