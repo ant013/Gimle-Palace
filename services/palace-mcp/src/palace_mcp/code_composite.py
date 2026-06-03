@@ -752,6 +752,15 @@ class FindReferencesRequest(BaseModel):
     max_results: int = Field(100, ge=1, le=500)
 
 
+class CallHierarchyRequest(BaseModel):
+    """Input model for palace.code.call_hierarchy."""
+
+    qualified_name: str = Field(..., min_length=1, max_length=500)
+    project: str | None = None
+    max_results: int = Field(50, ge=1, le=500)
+    index_store_path: str | None = None
+
+
 class GetSnippetRichRequest(BaseModel):
     """Input model for palace.code.get_snippet_rich."""
 
@@ -973,6 +982,14 @@ _DESC_SNIPPET_RICH = (
     "usages, code owners, hotspot score, and recent commits. "
     "Single call replaces get_code_snippet + find_references + find_owners + "
     "find_hotspots + git.log."
+)
+
+_DESC_CALL_HIERARCHY = (
+    "Return callers of a Swift symbol by reading DerivedData IndexStoreDB directly, "
+    "bypassing sourcekit-lsp. Configure PALACE_INDEXSTORE_PATHS (JSON dict: project "
+    "slug → DataStore path) or PALACE_SOURCEKIT_INDEX_STORE_PATH for single-project "
+    "setups. Returns ok=False with error_code=index_store_not_configured when no path "
+    "is available."
 )
 
 
@@ -1442,3 +1459,44 @@ def register_code_composite_tools(
             rich["recent_commits"] = commits_r
 
         return rich
+
+    @tool_decorator("palace.code.call_hierarchy", _DESC_CALL_HIERARCHY)
+    async def palace_code_call_hierarchy(
+        qualified_name: str,
+        project: str | None = None,
+        max_results: int = 50,
+        index_store_path: str | None = None,
+    ) -> dict[str, Any]:
+        from palace_mcp.code.call_hierarchy import call_hierarchy_tool
+        from palace_mcp.mcp_server import get_settings
+
+        settings = get_settings()
+        if settings is None:
+            handle_tool_error(RuntimeError("Settings not initialised"))
+            raise  # unreachable
+
+        try:
+            req = CallHierarchyRequest(
+                qualified_name=qualified_name,
+                project=project,
+                max_results=max_results,
+                index_store_path=index_store_path,
+            )
+        except ValidationError as e:
+            return {
+                "ok": False,
+                "error_code": "validation_error",
+                "requested_qualified_name": qualified_name,
+                "message": str(e),
+            }
+
+        return await asyncio.to_thread(
+            call_hierarchy_tool,
+            qualified_name=req.qualified_name,
+            project=req.project,
+            max_results=req.max_results,
+            index_store_path=req.index_store_path,
+            indexstore_paths=settings.palace_indexstore_paths,
+            default_store_path=settings.palace_sourcekit_index_store_path,
+            timeout_s=settings.palace_call_hierarchy_timeout_s,
+        )
