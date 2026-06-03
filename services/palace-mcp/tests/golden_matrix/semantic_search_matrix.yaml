@@ -504,3 +504,21 @@ rows:
     row_pass_rule: "all"
     description: "Gate 1 Q2 — BalanceData reference recall: must return ≥30 of 31 known BalanceData references"
     tags: ["gate-1", "q2"]
+
+  # Q3: call_hierarchy structured query — evaluated separately by run_gate_verdict.py
+  # (not a semantic_search row; the gate runner calls palace.code.call_hierarchy directly)
+  - id: "gate-q3-call-hierarchy"
+    split: "gate"
+    class: "mandatory"
+    query: "call_hierarchy(BalanceData)"
+    projects: ["uw-ios-app"]
+    source_scopes: null
+    top_k: 50
+    must_match_any_in_top_n: []
+    must_not_match_in_top_n: []
+    min_hits: 30
+    max_noise_hits: null
+    required_context_status: null
+    row_pass_rule: "all"
+    description: "Gate 2 Q3 — palace.code.call_hierarchy must return ≥30 incoming callers for BalanceData"
+    tags: ["gate-2", "q3", "call_hierarchy"]

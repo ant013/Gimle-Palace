@@ -13,9 +13,11 @@ Multi-project path resolution order:
 
 from __future__ import annotations
 
+import concurrent.futures
 import logging
 import os
 import time
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -38,6 +40,24 @@ def _resolve_store_path(
     return os.environ.get("PALACE_SOURCEKIT_INDEX_STORE_PATH")
 
 
+def _detect_store_format(store_path: str) -> str | None:
+    """Return 'v5' if this looks like an IndexStoreDB v5 DataStore, else None.
+
+    Returns None when the path is missing or has no recognisable layout.
+    Returns 'unidb' when the path appears to be a Xcode 16+ UniDB store
+    (no v5/ subdirectory but a .db file exists at the root).
+    """
+    p = Path(store_path)
+    if not p.exists():
+        return None
+    if (p / "v5").is_dir():
+        return "v5"
+    # Xcode 16+ UniDB: flat .db file instead of v5/ tree
+    if any(p.glob("*.db")):
+        return "unidb"
+    return None
+
+
 def call_hierarchy_tool(
     *,
     qualified_name: str,
@@ -46,6 +66,7 @@ def call_hierarchy_tool(
     index_store_path: str | None,
     indexstore_paths: dict[str, str] | None,
     default_store_path: str | None,
+    timeout_s: float = 30.0,
 ) -> dict[str, Any]:
     """Implementation of palace.code.call_hierarchy MCP tool.
 
@@ -56,6 +77,8 @@ def call_hierarchy_tool(
         index_store_path:  Explicit override for IndexStoreDB DataStore path.
         indexstore_paths:  Dict of project slug → IndexStore path (from settings).
         default_store_path: Single-project fallback path (from settings).
+        timeout_s:         Per-call timeout in seconds (default 30). Prevents runaway
+                           on corrupt or oversized indexes.
 
     Returns:
         Dict with ``ok: True`` + caller list, or ``ok: False`` + error_code.
@@ -78,11 +101,60 @@ def call_hierarchy_tool(
             ),
         }
 
+    fmt = _detect_store_format(store_path)
+    if fmt is None:
+        return {
+            "ok": False,
+            "error_code": "index_store_not_found",
+            "qualified_name": qualified_name,
+            "project": project,
+            "index_store_path": store_path,
+            "message": (
+                f"IndexStore path does not exist or is empty: {store_path}. "
+                "Run symbol_index_swift (or equivalent) to build the index first."
+            ),
+        }
+    if fmt == "unidb":
+        return {
+            "ok": False,
+            "error_code": "index_store_format_unsupported",
+            "qualified_name": qualified_name,
+            "project": project,
+            "index_store_path": store_path,
+            "message": (
+                f"IndexStore at {store_path} appears to be a Xcode 16+ UniDB format "
+                "(flat .db file, no v5/ tree). palace.code.call_hierarchy requires "
+                "IndexStoreDB v5 format. Re-index with an older Xcode or use the "
+                "ZcashLightClientSample proxy project as a workaround."
+            ),
+        }
+
     short_name = qualified_name.split(".")[-1]
 
     t0 = time.perf_counter()
     try:
-        callers = find_callers(short_name, store_path, max_results=max_results)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(
+                find_callers, short_name, store_path, max_results=max_results
+            )
+            try:
+                callers = future.result(timeout=timeout_s)
+            except concurrent.futures.TimeoutError:
+                logger.warning(
+                    "call_hierarchy timeout after %.1fs for %s", timeout_s, qualified_name
+                )
+                return {
+                    "ok": False,
+                    "error_code": "timeout",
+                    "qualified_name": qualified_name,
+                    "project": project,
+                    "timeout_s": timeout_s,
+                    "message": (
+                        f"IndexStore query timed out after {timeout_s:.0f}s. "
+                        "The index may be corrupt or unusually large. "
+                        "Try re-running symbol_index_swift to rebuild the index."
+                    ),
+                }
     except RuntimeError as exc:
         logger.exception("call_hierarchy IndexStore error for %s", qualified_name)
         return {
@@ -114,7 +186,7 @@ def call_hierarchy_tool(
         for c in callers
     ]
 
-    return {
+    result: dict[str, Any] = {
         "ok": True,
         "qualified_name": qualified_name,
         "short_name": short_name,
@@ -125,3 +197,10 @@ def call_hierarchy_tool(
         "latency_s": round(latency_s, 3),
         "approach": "indexstore_direct",
     }
+    if not caller_list:
+        result["message"] = (
+            f"No callers found for '{short_name}'. "
+            "The symbol may not exist in the index, may be spelled differently, "
+            "or the index may be stale — re-run symbol_index_swift to refresh."
+        )
+    return result

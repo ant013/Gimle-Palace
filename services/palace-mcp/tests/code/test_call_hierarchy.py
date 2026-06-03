@@ -1,5 +1,5 @@
 """
-Tests for palace.code.call_hierarchy (GIM-1168 F1B production).
+Tests for palace.code.call_hierarchy (GIM-1168 F1B production, GIM-1170 hardening).
 
 Wire-contract tests: every error path asserts error_code.
 Unit tests use mocked find_callers; no libIndexStore.dylib required.
@@ -10,11 +10,16 @@ PALACE_SOURCEKIT_INDEX_STORE_PATH is not set.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from palace_mcp.code.call_hierarchy import _resolve_store_path, call_hierarchy_tool
+from palace_mcp.code.call_hierarchy import (
+    _detect_store_format,
+    _resolve_store_path,
+    call_hierarchy_tool,
+)
 from palace_mcp.code.indexstore import CallerRecord
 
 
@@ -86,6 +91,29 @@ def test_returns_none_when_nothing_configured(monkeypatch: pytest.MonkeyPatch) -
 
 
 # ---------------------------------------------------------------------------
+# _detect_store_format
+# ---------------------------------------------------------------------------
+
+
+def test_detect_format_v5(tmp_path: Path) -> None:
+    (tmp_path / "v5").mkdir()
+    assert _detect_store_format(str(tmp_path)) == "v5"
+
+
+def test_detect_format_unidb(tmp_path: Path) -> None:
+    (tmp_path / "index.db").write_bytes(b"")
+    assert _detect_store_format(str(tmp_path)) == "unidb"
+
+
+def test_detect_format_missing_path() -> None:
+    assert _detect_store_format("/nonexistent/path/xyz") is None
+
+
+def test_detect_format_empty_dir(tmp_path: Path) -> None:
+    assert _detect_store_format(str(tmp_path)) is None
+
+
+# ---------------------------------------------------------------------------
 # call_hierarchy_tool — error paths
 # ---------------------------------------------------------------------------
 
@@ -121,7 +149,37 @@ def test_missing_store_path_includes_project_in_response(
     assert result["project"] == "uw-ios-app"
 
 
-def test_indexstore_error_returns_error_code() -> None:
+def test_nonexistent_store_path_returns_error_code() -> None:
+    result = call_hierarchy_tool(
+        qualified_name="BalanceData",
+        project=None,
+        max_results=10,
+        index_store_path="/nonexistent/store/path",
+        indexstore_paths={},
+        default_store_path=None,
+    )
+    assert result["ok"] is False
+    assert result["error_code"] == "index_store_not_found"
+    assert "symbol_index_swift" in result["message"]
+
+
+def test_unidb_format_returns_format_error(tmp_path: Path) -> None:
+    (tmp_path / "index.db").write_bytes(b"")
+    result = call_hierarchy_tool(
+        qualified_name="BalanceData",
+        project=None,
+        max_results=10,
+        index_store_path=str(tmp_path),
+        indexstore_paths={},
+        default_store_path=None,
+    )
+    assert result["ok"] is False
+    assert result["error_code"] == "index_store_format_unsupported"
+    assert "UniDB" in result["message"] or "unidb" in result["message"].lower()
+
+
+def test_indexstore_error_returns_error_code(tmp_path: Path) -> None:
+    (tmp_path / "v5").mkdir()
     with patch(
         "palace_mcp.code.indexstore.find_callers",
         side_effect=RuntimeError("libIndexStore not found"),
@@ -130,13 +188,37 @@ def test_indexstore_error_returns_error_code() -> None:
             qualified_name="BalanceData",
             project=None,
             max_results=10,
-            index_store_path="/fake/store",
+            index_store_path=str(tmp_path),
             indexstore_paths={},
             default_store_path=None,
         )
     assert result["ok"] is False
     assert result["error_code"] == "indexstore_error"
     assert "libIndexStore" in result["message"]
+
+
+def test_timeout_returns_error_code(tmp_path: Path) -> None:
+    (tmp_path / "v5").mkdir()
+
+    def _slow_find(*args: object, **kwargs: object) -> list:
+        import time
+        time.sleep(10)
+        return []
+
+    with patch("palace_mcp.code.indexstore.find_callers", side_effect=_slow_find):
+        result = call_hierarchy_tool(
+            qualified_name="BalanceData",
+            project=None,
+            max_results=10,
+            index_store_path=str(tmp_path),
+            indexstore_paths={},
+            default_store_path=None,
+            timeout_s=0.05,  # 50ms — triggers timeout immediately
+        )
+    assert result["ok"] is False
+    assert result["error_code"] == "timeout"
+    assert "timeout_s" in result
+    assert "symbol_index_swift" in result["message"]
 
 
 # ---------------------------------------------------------------------------
@@ -166,13 +248,14 @@ _FAKE_CALLERS = [
 ]
 
 
-def test_successful_query_returns_callers() -> None:
+def test_successful_query_returns_callers(tmp_path: Path) -> None:
+    (tmp_path / "v5").mkdir()
     with patch("palace_mcp.code.indexstore.find_callers", return_value=_FAKE_CALLERS):
         result = call_hierarchy_tool(
             qualified_name="WalletKit.BalanceData",
             project="uw-ios-app",
             max_results=100,
-            index_store_path="/fake/store",
+            index_store_path=str(tmp_path),
             indexstore_paths={},
             default_store_path=None,
         )
@@ -183,6 +266,7 @@ def test_successful_query_returns_callers() -> None:
     assert result["project"] == "uw-ios-app"
     assert result["approach"] == "indexstore_direct"
     assert "latency_s" in result
+    assert "message" not in result  # non-empty result has no guidance message
 
     callers = result["callers"]
     assert callers[0]["source_file"] == "/repo/BalanceService.swift"
@@ -190,8 +274,26 @@ def test_successful_query_returns_callers() -> None:
     assert callers[1]["roles"] == 32
 
 
-def test_per_project_path_resolved_and_used() -> None:
+def test_no_callers_includes_guidance_message(tmp_path: Path) -> None:
+    (tmp_path / "v5").mkdir()
+    with patch("palace_mcp.code.indexstore.find_callers", return_value=[]):
+        result = call_hierarchy_tool(
+            qualified_name="UnknownSymbol",
+            project="uw-ios-app",
+            max_results=10,
+            index_store_path=str(tmp_path),
+            indexstore_paths={},
+            default_store_path=None,
+        )
+    assert result["ok"] is True
+    assert result["caller_count"] == 0
+    assert "message" in result
+    assert "symbol_index_swift" in result["message"]
+
+
+def test_per_project_path_resolved_and_used(tmp_path: Path) -> None:
     """Verify per-project path is passed to find_callers."""
+    (tmp_path / "v5").mkdir()
     captured: list[str] = []
 
     def _mock_find_callers(
@@ -208,16 +310,17 @@ def test_per_project_path_resolved_and_used() -> None:
             project="uw-ios-app",
             max_results=10,
             index_store_path=None,
-            indexstore_paths={"uw-ios-app": "/per-project/DataStore"},
+            indexstore_paths={"uw-ios-app": str(tmp_path)},
             default_store_path="/default/DataStore",
         )
 
     assert result["ok"] is True
-    assert captured == ["/per-project/DataStore"]
-    assert result["index_store_path"] == "/per-project/DataStore"
+    assert captured == [str(tmp_path)]
+    assert result["index_store_path"] == str(tmp_path)
 
 
-def test_qualified_name_splits_to_short_name() -> None:
+def test_qualified_name_splits_to_short_name(tmp_path: Path) -> None:
+    (tmp_path / "v5").mkdir()
     captured: list[str] = []
 
     def _mock_find_callers(
@@ -233,7 +336,7 @@ def test_qualified_name_splits_to_short_name() -> None:
             qualified_name="WalletKit.BalanceData",
             project=None,
             max_results=10,
-            index_store_path="/fake",
+            index_store_path=str(tmp_path),
             indexstore_paths={},
             default_store_path=None,
         )

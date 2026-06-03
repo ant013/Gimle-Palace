@@ -1,4 +1,4 @@
-"""Unit tests for Gate 1 verdict logic — GIM-1108.
+"""Unit tests for Gate 1 / Gate 2 verdict logic — GIM-1108, GIM-1170.
 
 Tests the build_verdict() function in isolation using mock RowResults.
 No MCP server or Neo4j required.
@@ -16,6 +16,8 @@ from run_gate_verdict import (  # noqa: E402
     _Q1_THRESHOLD,
     _Q2_GROUND_TRUTH,
     _Q2_THRESHOLD,
+    _Q3_ROW_ID,
+    _Q3_THRESHOLD,
     _SLO_THRESHOLD_MS,
     build_verdict,
 )
@@ -24,6 +26,7 @@ from tests.golden_matrix.evaluator import HitEvidence, RowResult  # noqa: E402
 _MANIFEST = {"palace_mcp_sha": "abc123"}
 _Q2_ID = "gate-q2-balance-data-refs"
 _Q1_ID = "gate-q1-evm-chain-adapters"
+_Q3_ID = _Q3_ROW_ID
 
 
 def _make_hit(qualified_name: str) -> HitEvidence:
@@ -70,6 +73,11 @@ def _q1_row(evm_hits: int, total_returned: int = 20) -> RowResult:
     hits = [_make_hit(f"Chain/EvmAdapter_{i}") for i in range(evm_hits)]
     hits += [_make_hit(f"Other/Symbol_{i}") for i in range(total_returned - evm_hits)]
     return _make_result(_Q1_ID, hits, total_returned)
+
+
+def _q3_row(caller_count: int) -> RowResult:
+    hits = [_make_hit(f"BalanceData_caller_{i}") for i in range(caller_count)]
+    return _make_result(_Q3_ID, hits, caller_count)
 
 
 _DEFAULT_LATENCIES = [3000.0, 3200.0, 2900.0]
@@ -282,3 +290,72 @@ def test_file_path_pattern_matching() -> None:
     row_data = {_Q2_ID: (result, _DEFAULT_LATENCIES)}
     v = build_verdict(_MANIFEST, row_data)
     assert v["q2"]["detail"] == "1/31 refs found"
+
+
+# ── Q3 (Gate 2) tests ─────────────────────────────────────────────────────────
+
+
+def test_q3_present_in_verdict() -> None:
+    row_data = {
+        _Q2_ID: (_q2_row(30), _DEFAULT_LATENCIES),
+        _Q3_ID: (_q3_row(35), _DEFAULT_LATENCIES),
+    }
+    v = build_verdict(_MANIFEST, row_data)
+    assert "q3" in v
+
+
+def test_q3_pass_at_threshold() -> None:
+    row_data = {
+        _Q2_ID: (_q2_row(30), _DEFAULT_LATENCIES),
+        _Q3_ID: (_q3_row(30), _DEFAULT_LATENCIES),
+    }
+    v = build_verdict(_MANIFEST, row_data)
+    assert v["q3"]["status"] == "PASS"
+    assert v["q3"]["caller_count"] == 30
+
+
+def test_q3_fail_below_threshold() -> None:
+    row_data = {
+        _Q2_ID: (_q2_row(30), _DEFAULT_LATENCIES),
+        _Q3_ID: (_q3_row(29), _DEFAULT_LATENCIES),
+    }
+    v = build_verdict(_MANIFEST, row_data)
+    assert v["q3"]["status"] == "FAIL"
+
+
+def test_q3_informational_does_not_gate() -> None:
+    """Q3 failing must not fail overall — it's informational."""
+    row_data = {
+        _Q2_ID: (_q2_row(30), _DEFAULT_LATENCIES),
+        _Q3_ID: (_q3_row(0), _DEFAULT_LATENCIES),
+    }
+    v = build_verdict(_MANIFEST, row_data)
+    assert v["q3"]["status"] == "FAIL"
+    assert v["overall"] == "PASS"
+
+
+def test_q3_absent_verdict_has_zero_callers() -> None:
+    """When Q3 row is not in row_data, caller_count should be 0."""
+    row_data = {_Q2_ID: (_q2_row(30), _DEFAULT_LATENCIES)}
+    v = build_verdict(_MANIFEST, row_data)
+    assert v["q3"]["caller_count"] == 0
+    assert v["q3"]["status"] == "FAIL"
+
+
+def test_q3_threshold_value_in_verdict() -> None:
+    row_data = {
+        _Q2_ID: (_q2_row(30), _DEFAULT_LATENCIES),
+        _Q3_ID: (_q3_row(35), _DEFAULT_LATENCIES),
+    }
+    v = build_verdict(_MANIFEST, row_data)
+    assert v["q3"]["threshold"] == _Q3_THRESHOLD
+
+
+def test_q3_detail_message_includes_symbol() -> None:
+    row_data = {
+        _Q2_ID: (_q2_row(30), _DEFAULT_LATENCIES),
+        _Q3_ID: (_q3_row(42), _DEFAULT_LATENCIES),
+    }
+    v = build_verdict(_MANIFEST, row_data)
+    assert "42" in v["q3"]["detail"]
+    assert "BalanceData" in v["q3"]["detail"]

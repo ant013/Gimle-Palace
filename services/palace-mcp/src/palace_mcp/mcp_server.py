@@ -1586,6 +1586,9 @@ async def palace_code_call_hierarchy(
     default_store_path = (
         _settings.palace_sourcekit_index_store_path if _settings else None
     )
+    timeout_s = (
+        _settings.palace_call_hierarchy_timeout_s if _settings else 30.0
+    )
     return await asyncio.to_thread(
         call_hierarchy_tool,
         qualified_name=qualified_name,
@@ -1594,6 +1597,7 @@ async def palace_code_call_hierarchy(
         index_store_path=index_store_path,
         indexstore_paths=indexstore_paths,
         default_store_path=default_store_path,
+        timeout_s=timeout_s,
     )
 
 

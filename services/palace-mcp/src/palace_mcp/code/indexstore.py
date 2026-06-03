@@ -27,6 +27,7 @@ import ctypes
 import logging
 import os
 import subprocess
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -220,12 +221,15 @@ class _BoundLib:
 
 
 _bound: _BoundLib | None = None
+_bound_lock = threading.Lock()
 
 
 def _get_lib() -> _BoundLib:
-    global _bound
+    global _bound  # noqa: PLW0603
     if _bound is None:
-        _bound = _BoundLib(_find_lib_path())
+        with _bound_lock:
+            if _bound is None:
+                _bound = _BoundLib(_find_lib_path())
     return _bound
 
 
