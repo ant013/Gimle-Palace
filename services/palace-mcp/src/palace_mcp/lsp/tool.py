@@ -66,7 +66,7 @@ async def call_hierarchy_tool(
     settings: "Settings",
 ) -> dict[str, Any]:
     """Implementation of palace.code.call_hierarchy MCP tool."""
-    from palace_mcp.lsp.call_hierarchy import resolve_call_hierarchy
+    from palace_mcp.lsp.call_hierarchy import detect_sourcekit_lsp_binary, resolve_call_hierarchy
 
     # 1. Resolve workspace root for the project
     workspace_roots = settings.palace_sourcekit_workspace_roots
@@ -141,7 +141,7 @@ async def call_hierarchy_tool(
             file_path=file_path,
             line_start=line_start,
             workspace_root=workspace_root,
-            binary=settings.palace_sourcekit_lsp_binary,
+            binary=settings.palace_sourcekit_lsp_binary or detect_sourcekit_lsp_binary(),
             scratch_path=settings.palace_sourcekit_scratch_path,
             index_store_path=settings.palace_sourcekit_index_store_path,
             max_results=max_results,

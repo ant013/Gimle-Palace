@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shutil
+import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -18,6 +20,46 @@ from palace_mcp.lsp.client import LspClient, LspError, _path_to_uri
 logger = logging.getLogger(__name__)
 
 _DEFAULT_BINARY = "/usr/bin/sourcekit-lsp"
+
+# Candidate binary paths tried in order when auto-detecting.
+# The macOS SDK stub at /usr/bin/sourcekit-lsp lacks -index-store-path support
+# (Xcode 26+). Prefer swiftly-managed or xcrun-resolved binaries.
+_BINARY_SEARCH_ORDER = [
+    Path.home() / ".swiftly" / "bin" / "sourcekit-lsp",
+    Path("/usr/local/bin/sourcekit-lsp"),
+]
+
+
+def detect_sourcekit_lsp_binary() -> str:
+    """Return the best available sourcekit-lsp binary path.
+
+    Preference order:
+    1. ~/.swiftly/bin/sourcekit-lsp (swiftly-managed, supports -index-store-path)
+    2. xcrun --find sourcekit-lsp if it is NOT the /usr/bin stub
+    3. /usr/bin/sourcekit-lsp (fallback; may lack flag support)
+
+    Caller should override via PALACE_SOURCEKIT_LSP_BINARY env/config when
+    this auto-detection doesn't find the right binary.
+    """
+    for candidate in _BINARY_SEARCH_ORDER:
+        if candidate.exists():
+            return str(candidate)
+
+    # Try xcrun — prefer it if it resolves to something other than the CLT stub
+    xcrun_result = shutil.which("xcrun")
+    if xcrun_result:
+        try:
+            path = subprocess.check_output(
+                ["xcrun", "--find", "sourcekit-lsp"],
+                text=True,
+                stderr=subprocess.DEVNULL,
+            ).strip()
+            if path and path != "/usr/bin/sourcekit-lsp":
+                return path
+        except subprocess.SubprocessError:
+            pass
+
+    return _DEFAULT_BINARY
 _DEFAULT_TIMEOUT = 60.0
 _POLL_INTERVAL = 1.0
 _POLL_MAX_ATTEMPTS = 30  # 30s total polling for index warming
@@ -70,7 +112,7 @@ async def resolve_call_hierarchy(
     file_path: str,
     line_start: int,
     workspace_root: str,
-    binary: str = _DEFAULT_BINARY,
+    binary: str | None = None,
     scratch_path: str | None = None,
     index_store_path: str | None = None,
     index_db_path: str | None = None,
@@ -103,10 +145,11 @@ async def resolve_call_hierarchy(
     # We read the line to find the exact column.
     lsp_char = _find_symbol_column(file_path, lsp_line, symbol_name)
 
+    resolved_binary = binary or detect_sourcekit_lsp_binary()
     file_content = Path(file_path).read_text(encoding="utf-8")
 
     async with LspClient(
-        binary=binary,
+        binary=resolved_binary,
         workspace_root=workspace_root,
         scratch_path=scratch_path,
         index_store_path=index_store_path,

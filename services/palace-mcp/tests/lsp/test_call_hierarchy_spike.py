@@ -40,9 +40,14 @@ _BALANCE_DATA_FILE = str(
     Path(_UW_IOS_PATH)
     / "UnstoppableWallet/UnstoppableWallet/Models/BalanceData.swift"
 )
-_SOURCEKIT_LSP_BINARY = os.environ.get(
-    "SOURCEKIT_LSP_BINARY", "/usr/bin/sourcekit-lsp"
-)
+def _resolve_binary() -> str:
+    """Return SOURCEKIT_LSP_BINARY env var, or auto-detect best available binary."""
+    from palace_mcp.lsp.call_hierarchy import detect_sourcekit_lsp_binary
+
+    return os.environ.get("SOURCEKIT_LSP_BINARY") or detect_sourcekit_lsp_binary()
+
+
+_SOURCEKIT_LSP_BINARY = _resolve_binary()
 _SOURCEKIT_INDEX_STORE_PATH = os.environ.get("SOURCEKIT_INDEX_STORE_PATH", "")
 
 # Synthetic fixture paths (CLT-only machines without Xcode)
@@ -54,7 +59,10 @@ _SYNTHETIC_WORKSPACE = f"{_SYNTHETIC_PKG}/Sources/BalanceSpike"
 
 def _skip_if_no_workspace() -> None:
     if not Path(_BALANCE_DATA_FILE).exists():
-        pytest.skip(f"UW iOS source not found at {_BALANCE_DATA_FILE}")
+        pytest.skip(
+            f"UW iOS source not found at {_BALANCE_DATA_FILE}. "
+            "Set UW_IOS_PATH to the project root (e.g. ~/Ios/unstoppable-wallet-ios)."
+        )
     if not Path(_SOURCEKIT_LSP_BINARY).exists():
         pytest.skip(f"sourcekit-lsp not found at {_SOURCEKIT_LSP_BINARY}")
 
