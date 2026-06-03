@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,6 +22,7 @@ from palace_mcp.extractors.foundation.symbol_node_writer import build_symbol_nod
 from palace_mcp.extractors.scip_parser import ScipSymbolInfo
 from palace_mcp.extractors.symbol_index_swift import (
     SymbolIndexSwift,
+    _build_file_body_hashes,
     _build_shadow_rows,
     _ingest_batch,
     _is_vendor,
@@ -60,6 +62,8 @@ def _make_driver() -> MagicMock:
     inner_session = AsyncMock()
     result_mock = AsyncMock()
     result_mock.single = AsyncMock(return_value=None)
+    result_mock.consume = AsyncMock()
+    result_mock.data = AsyncMock(return_value=[])
     inner_session.run = AsyncMock(return_value=result_mock)
     session_cm = MagicMock()
     session_cm.__aenter__ = AsyncMock(return_value=inner_session)
@@ -131,6 +135,15 @@ class TestSymbolIndexSwiftErrorHandling:
                 "palace_mcp.extractors.symbol_index_swift.finalize_ingest_run",
                 AsyncMock(),
             ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._build_file_body_hashes",
+                return_value={"Sources/App/File.swift": "hash-1"},
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._read_existing_file_body_hashes",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
         ):
             with pytest.raises(ExtractorError) as exc_info:
                 await extractor.run(graphiti=MagicMock(), ctx=run_ctx)
@@ -167,6 +180,15 @@ class TestSymbolIndexSwiftErrorHandling:
             patch(
                 "palace_mcp.extractors.symbol_index_swift.finalize_ingest_run",
                 AsyncMock(),
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._build_file_body_hashes",
+                return_value={"Sources/App/File.swift": "hash-1"},
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._read_existing_file_body_hashes",
+                new_callable=AsyncMock,
+                return_value={},
             ),
         ):
             with pytest.raises(FileNotFoundError):
@@ -235,6 +257,15 @@ class TestSymbolIndexSwiftErrorHandling:
             patch(
                 "palace_mcp.extractors.symbol_index_swift.finalize_ingest_run",
                 new_callable=AsyncMock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._build_file_body_hashes",
+                return_value={"Sources/App/File.swift": "hash-1"},
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._read_existing_file_body_hashes",
+                new_callable=AsyncMock,
+                return_value={},
             ),
         ):
             stats = await extractor.run(graphiti=MagicMock(), ctx=override_ctx)
@@ -333,10 +364,203 @@ class TestSymbolIndexSwiftHappyPath:
                 "palace_mcp.extractors.symbol_index_swift.finalize_ingest_run",
                 new_callable=AsyncMock,
             ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._build_file_body_hashes",
+                return_value={"Sources/UwMiniCore/State/WalletStore.swift": "hash-1"},
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._read_existing_file_body_hashes",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
         ):
             stats = await extractor.run(graphiti=MagicMock(), ctx=run_ctx)
 
         assert stats.nodes_written >= 3
+
+    def test_build_file_body_hashes_uses_sha256_of_file_content(
+        self, tmp_path: Path
+    ) -> None:
+        repo = tmp_path / "repo"
+        file_path = repo / "Sources" / "App" / "File.swift"
+        file_path.parent.mkdir(parents=True)
+        file_path.write_text("print(\"hello\")\n")
+        occurrence = SymbolOccurrence(
+            doc_key="1:Sources/App/File.swift:1:0:abc123",
+            symbol_id=1,
+            symbol_qualified_name="App.hello",
+            kind=SymbolKind.DEF,
+            language=Language.SWIFT,
+            file_path="Sources/App/File.swift",
+            line=1,
+            col_start=0,
+            col_end=5,
+            importance=1.0,
+            commit_sha="abc123",
+            ingest_run_id="run-1",
+        )
+
+        result = _build_file_body_hashes(repo, [occurrence])
+
+        assert result == {
+            "Sources/App/File.swift": hashlib.sha256(
+                b'print("hello")\n'
+            ).hexdigest()
+        }
+
+    @pytest.mark.asyncio
+    async def test_run_skips_reingest_when_file_body_hashes_match(
+        self,
+        extractor: SymbolIndexSwift,
+        run_ctx: ExtractorRunContext,
+        scip_fixture: Path,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        tantivy_dir = tmp_path / "tantivy"
+        tantivy_dir.mkdir()
+        settings = MagicMock()
+        settings.palace_scip_index_paths = {"uw-ios-mini": str(scip_fixture)}
+        settings.palace_tantivy_index_path = str(tantivy_dir)
+        settings.palace_tantivy_heap_mb = 100
+        settings.palace_max_occurrences_total = 50_000_000
+        settings.palace_max_occurrences_per_project = 10_000_000
+        settings.palace_importance_threshold_use = 0.0
+        settings.palace_max_occurrences_per_symbol = 5_000
+        settings.palace_recency_decay_days = 30.0
+
+        bridge_mock = AsyncMock()
+        bridge_mock.__aenter__ = AsyncMock(return_value=bridge_mock)
+        bridge_mock.__aexit__ = AsyncMock(return_value=False)
+        bridge_mock.add_or_replace_async = AsyncMock()
+        bridge_mock.commit_async = AsyncMock()
+        finalize_mock = AsyncMock()
+
+        caplog.set_level(
+            logging.INFO, logger="palace_mcp.extractors.symbol_index_swift"
+        )
+
+        with (
+            patch("palace_mcp.mcp_server.get_driver", return_value=_make_driver()),
+            patch("palace_mcp.mcp_server.get_settings", return_value=settings),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift.TantivyBridge",
+                return_value=bridge_mock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift.ensure_custom_schema",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._get_previous_error_code",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift.create_ingest_run",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift.write_checkpoint",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift.finalize_ingest_run",
+                finalize_mock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._build_file_body_hashes",
+                return_value={"Sources/App/File.swift": "stable-hash"},
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._read_existing_file_body_hashes",
+                new_callable=AsyncMock,
+                return_value={"Sources/App/File.swift": "stable-hash"},
+            ),
+        ):
+            stats = await extractor.run(graphiti=MagicMock(), ctx=run_ctx)
+
+        assert stats.outcome.value == "skipped"
+        assert stats.nodes_written == 0
+        assert stats.edges_written == 0
+        assert "symbol_index_swift.freshness.skip" in caplog.text
+        bridge_mock.add_or_replace_async.assert_not_called()
+        finalize_mock.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_run_logs_hash_mismatch_and_reingests(
+        self,
+        extractor: SymbolIndexSwift,
+        run_ctx: ExtractorRunContext,
+        scip_fixture: Path,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        tantivy_dir = tmp_path / "tantivy"
+        tantivy_dir.mkdir()
+        settings = MagicMock()
+        settings.palace_scip_index_paths = {"uw-ios-mini": str(scip_fixture)}
+        settings.palace_tantivy_index_path = str(tantivy_dir)
+        settings.palace_tantivy_heap_mb = 100
+        settings.palace_max_occurrences_total = 50_000_000
+        settings.palace_max_occurrences_per_project = 10_000_000
+        settings.palace_importance_threshold_use = 0.0
+        settings.palace_max_occurrences_per_symbol = 5_000
+        settings.palace_recency_decay_days = 30.0
+
+        bridge_mock = AsyncMock()
+        bridge_mock.__aenter__ = AsyncMock(return_value=bridge_mock)
+        bridge_mock.__aexit__ = AsyncMock(return_value=False)
+        bridge_mock.add_or_replace_async = AsyncMock()
+        bridge_mock.commit_async = AsyncMock()
+
+        caplog.set_level(
+            logging.INFO, logger="palace_mcp.extractors.symbol_index_swift"
+        )
+
+        with (
+            patch("palace_mcp.mcp_server.get_driver", return_value=_make_driver()),
+            patch("palace_mcp.mcp_server.get_settings", return_value=settings),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift.TantivyBridge",
+                return_value=bridge_mock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift.ensure_custom_schema",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._get_previous_error_code",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift.create_ingest_run",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift.write_checkpoint",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift.finalize_ingest_run",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._build_file_body_hashes",
+                return_value={"Sources/App/File.swift": "new-hash"},
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._read_existing_file_body_hashes",
+                new_callable=AsyncMock,
+                return_value={"Sources/App/File.swift": "old-hash"},
+            ),
+        ):
+            stats = await extractor.run(graphiti=MagicMock(), ctx=run_ctx)
+
+        assert stats.nodes_written >= 3
+        assert "symbol_index_swift.freshness.reingest" in caplog.text
+        assert bridge_mock.add_or_replace_async.await_count > 0
 
     @pytest.mark.asyncio
     async def test_run_streams_occurrences_without_materializing_lists(
@@ -448,6 +672,15 @@ class TestSymbolIndexSwiftHappyPath:
                 new_callable=AsyncMock,
             ),
             patch(
+                "palace_mcp.extractors.symbol_index_swift._build_file_body_hashes",
+                return_value={"Sources/App/File.swift": "hash-1"},
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._read_existing_file_body_hashes",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch(
                 "palace_mcp.extractors.symbol_index_swift.parse_scip_file",
                 return_value=MagicMock(),
             ),
@@ -553,6 +786,15 @@ class TestSymbolIndexSwiftHappyPath:
                 "palace_mcp.extractors.symbol_index_swift.finalize_ingest_run",
                 new_callable=AsyncMock,
             ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._build_file_body_hashes",
+                return_value={"Sources/UwMiniCore/State/WalletStore.swift": "hash-1"},
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._read_existing_file_body_hashes",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
         ):
             stats = await extractor.run(graphiti=MagicMock(), ctx=run_ctx)
 
@@ -622,6 +864,15 @@ class TestSymbolIndexSwiftHappyPath:
             patch(
                 "palace_mcp.extractors.symbol_index_swift.finalize_ingest_run",
                 new_callable=AsyncMock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._build_file_body_hashes",
+                return_value={"Sources/UwMiniCore/State/WalletStore.swift": "hash-1"},
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._read_existing_file_body_hashes",
+                new_callable=AsyncMock,
+                return_value={},
             ),
         ):
             res = await run_extractor(
