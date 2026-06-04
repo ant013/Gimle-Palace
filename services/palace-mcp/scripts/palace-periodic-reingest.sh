@@ -16,10 +16,17 @@ if [[ -n "${PALACE_PERIODIC_REINGEST_PROJECTS:-}" ]]; then
     done
 fi
 
-DETECT_JSON="$(
-    uv run --directory "$PALACE_MCP_SERVICE_DIR" \
-        python -m palace_mcp.ops.detect_stale_files "${DETECT_ARGS[@]}"
-)"
+if [[ "${#DETECT_ARGS[@]}" -gt 0 ]]; then
+    DETECT_JSON="$(
+        uv run --directory "$PALACE_MCP_SERVICE_DIR" \
+            python -m palace_mcp.ops.detect_stale_files "${DETECT_ARGS[@]}"
+    )"
+else
+    DETECT_JSON="$(
+        uv run --directory "$PALACE_MCP_SERVICE_DIR" \
+            python -m palace_mcp.ops.detect_stale_files
+    )"
+fi
 
 STATUS=0
 
@@ -41,12 +48,14 @@ while IFS=$'\t' read -r kind slug repo_path language_profile; do
 
     lock_file="$LOCK_DIR/$slug.lock"
     printf '[periodic-reingest] project=%s repo=%s\n' "$slug" "$repo_path"
-    if ! flock -n -E 75 "$lock_file" \
+    if flock -n -E 75 "$lock_file" \
         uv run --directory "$PALACE_MCP_SERVICE_DIR" \
             python -m palace_mcp.cli project analyze \
             --repo-path "$repo_path" \
             --slug "$slug" \
             --language-profile "$language_profile"; then
+        :
+    else
         rc=$?
         if [[ "$rc" -eq 75 ]]; then
             printf '[periodic-reingest] skip lock busy for %s\n' "$slug" >&2

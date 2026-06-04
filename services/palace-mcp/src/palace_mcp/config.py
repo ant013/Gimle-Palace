@@ -285,6 +285,7 @@ class Settings(BaseSettings):
     # -----------------------------------------------------------------------
     # F4.2: Hydration cache + asyncio.Semaphore (GIM-1181)
     # -----------------------------------------------------------------------
+
     palace_cache_ttl_s: float = Field(
         default=300.0,
         gt=0.0,
