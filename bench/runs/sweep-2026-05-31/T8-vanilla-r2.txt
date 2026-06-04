@@ -1,0 +1,90 @@
+## Silent-failure spot
+
+**File:** `/Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Modules/Send/Fee/SendFeeViewModel.swift`, `sync(state:)`, the `.failed` case (lines 41-46 before patch).
+
+### Trace of the silent path (insufficient UTXOs)
+
+When the user enters an amount that — together with the network fee — exceeds the sum of selectable UTXOs (or has hand-picked a UTXO subset via Output Selector that cannot cover `amount + fee`):
+
+1. `SendBitcoinAdapterService.update(...)` (`Modules/Send/Platforms/Bitcoin/SendBitcoinAdapterService.swift:166-198`) builds `SendParameters` with `unspentOutputs: customOutputs` and calls `adapter.sendInfo(params:)`.
+2. BitcoinCore throws `BitcoinCoreErrors.SendValueErrors.notEnough`. Caught → `sendInfoState = .failed(error)` (line 183).
+3. `feeState = sendInfoState.map(\.fee)` propagates the failure (line 72).
+4. `SendFeeService.sync(feeState:)` (`Modules/Send/Fee/SendFeeService.swift:50-57`) sets `state = .failed(error)`.
+5. **`SendFeeViewModel.sync(state:)` `.failed` case discards the error entirely** and shows only `.error(text: "n/a".localized)` in the tiny fee row.
+
+The user sees a red `"n/a"` next to "Fee", the Send button is disabled, and no caution banner explains why. `SendAmountCautionService` is wired to `availableBalanceService` only (and only against the bare amount), so a UTXO-subset that covers the amount but not amount+fee never triggers `insufficientBalance` there either.
+
+The newer `SendNew` module (`Modules/SendNew/UtxoSendHelper.swift` + `BitcoinSendHandler.swift`) does handle this — but the legacy `Modules/Send/` Bitcoin pipeline (`SendBitcoinViewController` + `SendFeeViewModel`) is still wired in `SendModule.swift:111` and is the silent one.
+
+## Patch (working-tree diff)
+
+```diff
+diff --git a/Unstoppable/Unstoppable/Modules/Send/Fee/SendFeeViewModel.swift b/Unstoppable/Unstoppable/Modules/Send/Fee/SendFeeViewModel.swift
+index 6a7b5f17f..e594a39d6 100644
+--- a/Unstoppable/Unstoppable/Modules/Send/Fee/SendFeeViewModel.swift
++++ b/Unstoppable/Unstoppable/Modules/Send/Fee/SendFeeViewModel.swift
+@@ -38,12 +38,16 @@ class SendFeeViewModel: ObservableObject {
+
+             spinnerVisibleRelay.accept(false)
+             spinnerVisible = false
+-        case .failed:
++        case let .failed(error):
+             spinnerVisibleRelay.accept(false)
+             spinnerVisible = false
+
+-            valueRelay.accept(.error(text: "n/a".localized))
+-            value = .error(text: "n/a".localized)
++            // Surface the underlying error (e.g. BitcoinCoreErrors.SendValueErrors.notEnough
++            // when selected UTXOs cannot cover amount + fee) instead of a silent "n/a"
++            // that gives the user no clue why send is blocked.
++            let text = error.convertedError.smartDescription
++            valueRelay.accept(.error(text: text))
++            value = .error(text: text)
+         case let .completed(state):
+             spinnerVisibleRelay.accept(false)
+             spinnerVisible = false
+```
+
+### Why this is the smallest correct patch
+
+- Touches one file, one switch case, ~5 effective lines.
+- Re-uses the project's existing error-surfacing pattern (`error.convertedError.smartDescription`) — same idiom already used in `MoneroSendHelper`, `StellarSendHelper`, `TronSendHelper`, `TonSendHelper`, `ZanoSendHelper`, `SendEip1155ViewModel`, `SendTronViewModel`.
+- `BitcoinCoreErrors.SendValueErrors` is itself an `Error`; if no `ConvertibleError` extension matches, `convertedError` falls through to `self` (per `Models/ConvertedError.swift:18-25`), and `smartDescription` formats it.
+- The error now appears in red in the fee row instead of `n/a`, so the user has a concrete diagnostic (e.g. localized "not enough") in the place they were already looking for the fee.
+
+### Optional follow-up (NOT applied; out of "smallest-patch" scope)
+
+A more polished UX would also pipe `sendInfoState` into `SendAmountCautionService` and emit a proper `.insufficientBalance(...)` banner — but that requires adding a property + setter + subscription in `SendAmountCautionService` and a new wiring line in `SendModule.swift`, and is not necessary to fix the silent-failure complaint.
+
+### Status
+
+- Working tree contains exactly this one-file diff.
+- NOT committed, NOT pushed (per instructions).
+
+--SELF-REPORTED--
+[
+  {
+    "item": "Identified silent-failure location for insufficient-UTXO Bitcoin send",
+    "covered": true
+  },
+  {
+    "item": "Patch is minimal (one file, one case)",
+    "covered": true
+  },
+  {
+    "item": "Patch surfaces a user-visible error in place of silent 'n/a'",
+    "covered": true
+  },
+  {
+    "item": "No commit, no push",
+    "covered": true
+  },
+  {
+    "item": "Re-used existing project idiom (convertedError.smartDescription)",
+    "covered": true
+  },
+  {
+    "item": "Operated only within /Users/ant013/Ios/bench-vanilla",
+    "covered": true
+  }
+]

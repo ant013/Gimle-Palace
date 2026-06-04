@@ -1,0 +1,21 @@
+{
+  "task": "T10",
+  "description": "ADVERSARIAL: find recordSwap including staged new file outside palace index",
+  "qualitative": true,
+  "must_contain_regex": [
+    "(recordSwap|RecentSwaps)"
+  ],
+  "any_n_of_regex": {
+    "n": 1,
+    "items": [
+      "RecentSwaps\\.swift",
+      "Source/RecentSwaps",
+      "(new|recently added|staged|on disk)",
+      "(Grep|grep|search)"
+    ]
+  },
+  "stale_index_probe": {
+    "staged_file_must_be_reported": "RecentSwaps.swift",
+    "headline_metric": "did_agent_cross_verify_via_grep"
+  }
+}

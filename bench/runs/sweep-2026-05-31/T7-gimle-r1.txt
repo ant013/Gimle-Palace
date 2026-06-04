@@ -1,0 +1,42 @@
+EUR fiat currency is ALREADY SUPPORTED in the unstoppable-wallet-ios codebase. No code changes needed; working-tree diff is empty.
+
+Evidence:
+
+1. /Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Core/Managers/CurrencyManager.swift:14
+   `Currency(code: "EUR", symbol: "€", decimal: 2),`
+   — present in the `supportedCurrencies` static array (which is the canonical list the app exposes; MarketKit.Swift v3.6.11 is an external SPM package that supplies the `Currency` type itself — there is no in-tree MarketKit module to edit).
+
+2. /Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Modules/Settings/BaseCurrency/BaseCurrencySettingsViewModel.swift:5
+   `private static let popularCurrencyCodes = ["USD", "EUR", "GBP", "JPY"]`
+   — EUR is featured in the user-facing currency picker's "popular" section. The picker pulls from `currencyManager.currencies`, which is initialized from `CurrencyManager.supportedCurrencies`.
+
+3. The symbol "€" matches the task's required symbol exactly.
+
+Working-tree diff (`git diff` in /Users/ant013/Ios/bench-gimle):
+(empty — no changes)
+
+Pre-flight note: palace-mcp was unreachable (`Unable to connect`), so discovery used serena/grep substrate per skill's [DEGRADED-PALACE] fallback. Brainstorming gate skipped per benchmark-mode override.
+
+--SELF-REPORTED--
+[
+  {
+    "item": "EUR currency present in MarketKit-backed supported list with symbol \"\u20ac\"",
+    "covered": true
+  },
+  {
+    "item": "EUR appears in user-facing currency picker UI",
+    "covered": true
+  },
+  {
+    "item": "Working-tree diff produced (empty \u2014 feature already exists)",
+    "covered": true
+  },
+  {
+    "item": "No commit / no push performed",
+    "covered": true
+  },
+  {
+    "item": "Operated only inside /Users/ant013/Ios/bench-gimle",
+    "covered": true
+  }
+]

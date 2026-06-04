@@ -1,0 +1,5 @@
+Find the class in the unstoppable-wallet-ios codebase that adapts the Monero
+blockchain to the app's wallet interface, and list its public API (public
+methods and properties).
+
+Report the file path and the list of public symbols.

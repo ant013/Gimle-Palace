@@ -1,0 +1,117 @@
+## Finding
+
+USDC on Ethereum mainnet is **already in the iOS app's pre-approved ERC-20 list**. No code patch is required.
+
+The only ERC-20 "whitelist" of pre-approved tokens in unstoppable-wallet-ios is `StablecoinRegistry` at:
+
+`/Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Core/Abstraction/Config/StablecoinRegistry.swift`
+
+Line 26 already contains:
+
+```swift
+Entry(blockchainType: .ethereum, address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"), // USDC
+```
+
+This is the same contract address requested (`0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48`), stored lowercased — `StablecoinRegistry.supports(...)` compares with `caseInsensitiveCompare`, so EIP-55-checksummed input matches.
+
+### Where the whitelist is consumed (so removing/breaking the entry has user-visible impact)
+- `Unstoppable/Unstoppable/Modules/ManageWallets/ManageWalletsTokenFetcher.swift:17` — passkey-owned (smart) accounts source their featured tokens from `StablecoinRegistry.v1TokenQueries`. Without this entry the Manage Wallets screen would not surface USDC by default.
+- `Unstoppable/Unstoppable/Modules/CreateSmartAccount/CreateSmartAccountService.swift:156` — `v1TokenQueries` is used to auto-enable the wallet at smart-account creation / restore.
+- `Unstoppable/Unstoppable/Models/AccountType+Extensions.swift:115` and `Unstoppable/Unstoppable/Core/Abstraction/Managers/SmartAccountManager.swift:273` — `supports(blockchainType:tokenAddress:)` is the gate that decides whether a token is allowed on a smart account.
+
+(Non-smart accounts do not have an ERC-20 whitelist at all — `BlockchainType.defaultTokenQuery` only returns natives. So `StablecoinRegistry` is the codebase's sole "pre-approved ERC-20" concept.)
+
+### Existing coverage
+`Unstoppable/Tests/Models/AccountTypePasskeyOwnedTests.swift:18` already asserts that a USDC@Ethereum token is supported, which exercises the registry end-to-end via `AccountType.passkeyOwned.supports(token:)`.
+
+### Hypothetical patch (no-op against the current tree)
+If USDC@Ethereum were missing, the one-line change would be:
+
+```diff
+--- a/Unstoppable/Unstoppable/Core/Abstraction/Config/StablecoinRegistry.swift
++++ b/Unstoppable/Unstoppable/Core/Abstraction/Config/StablecoinRegistry.swift
+@@
+     private static let entries: [Entry] = [
+         Entry(blockchainType: .ethereum, address: "0xdac17f958d2ee523a2206206994597c13d831ec7"), // USDT
++        Entry(blockchainType: .ethereum, address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"), // USDC
+         Entry(blockchainType: .ethereum, address: "0x6b175474e89094c44da98b954eedeac495271d0f"), // DAI
+```
+
+Note: the address must be stored lowercased to match the canonical-form convention documented on line 19-20 of the registry file.
+
+### New regression test (added to the working tree, not committed)
+
+Path: `/Users/ant013/Ios/bench-vanilla/Unstoppable/Tests/Abstraction/Models/StablecoinRegistryTests.swift`
+
+```diff
+diff --git a/Unstoppable/Tests/Abstraction/Models/StablecoinRegistryTests.swift b/Unstoppable/Tests/Abstraction/Models/StablecoinRegistryTests.swift
+new file mode 100644
+--- /dev/null
++++ b/Unstoppable/Tests/Abstraction/Models/StablecoinRegistryTests.swift
+@@ -0,0 +1,39 @@
++import MarketKit
++import Testing
++@testable import Unstoppable
++
++struct StablecoinRegistryTests {
++    // Regression guard: USDC on Ethereum mainnet must always be in the
++    // pre-approved ERC-20 list. Removing it would silently drop the token
++    // from the Manage Wallets screen for passkey-owned (smart) accounts and
++    // from CreateSmartAccountService's wallet bootstrap.
++    @Test func includesUsdcOnEthereumMainnet() {
++        let usdcEthereum = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
++
++        #expect(StablecoinRegistry.supports(blockchainType: .ethereum, tokenAddress: usdcEthereum))
++        #expect(StablecoinRegistry.supports(blockchainType: .ethereum, tokenAddress: usdcEthereum.lowercased()))
++    }
++
++    @Test func v1TokenQueriesContainUsdcEthereum() {
++        let usdcEthereumLower = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
++
++        let hasUsdcEthereum = StablecoinRegistry.v1TokenQueries.contains { query in
++            guard query.blockchainType == .ethereum else { return false }
++            guard case let .eip20(address) = query.tokenType else { return false }
++            return address.caseInsensitiveCompare(usdcEthereumLower) == .orderedSame
++        }
++
++        #expect(hasUsdcEthereum)
++    }
++
++    @Test func doesNotSupportUsdcAddressOnWrongChain() {
++        let usdcEthereum = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
++
++        #expect(StablecoinRegistry.supports(blockchainType: .binanceSmartChain, tokenAddress: usdcEthereum) == false)
++        #expect(StablecoinRegistry.supports(blockchainType: .polygon, tokenAddress: usdcEthereum) == false)
++    }
++}
+```
+
+The new test file is staged in the working tree but not committed, per the task's "do not commit, do not push" rule.
+
+--SELF-REPORTED--
+[
+  {
+    "item": "Located the ERC-20 token whitelist (StablecoinRegistry.swift)",
+    "covered": true
+  },
+  {
+    "item": "Confirmed USDC@Ethereum 0xA0b86991... already present at line 26",
+    "covered": true
+  },
+  {
+    "item": "Identified consumers: ManageWalletsTokenFetcher, CreateSmartAccountService, AccountType+Extensions, SmartAccountManager",
+    "covered": true
+  },
+  {
+    "item": "Provided patch (no-op vs current tree; shows the one-line add if missing)",
+    "covered": true
+  },
+  {
+    "item": "Added a regression test file (StablecoinRegistryTests.swift) without committing",
+    "covered": true
+  },
+  {
+    "item": "Did not commit or push",
+    "covered": true
+  }
+]

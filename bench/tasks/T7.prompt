@@ -1,0 +1,6 @@
+In the unstoppable-wallet-ios codebase, add support for the "EUR" fiat
+currency (if it isn't already supported) in `MarketKit`. The currency
+should appear in the user-facing currency picker UI and have correct
+symbol "€".
+
+Show the patch (working-tree diff). Do NOT commit or push.

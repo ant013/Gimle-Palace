@@ -1,0 +1,42 @@
+EUR fiat currency is already fully supported in the unstoppable-wallet-ios codebase. No code changes are needed; working-tree diff is empty.
+
+Evidence:
+
+1. `/Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Core/Managers/CurrencyManager.swift` (line 14) — EUR is in `supportedCurrencies` with the correct symbol "€" and `decimal: 2`:
+   `Currency(code: "EUR", symbol: "€", decimal: 2),`
+
+2. `/Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Modules/Settings/BaseCurrency/BaseCurrencySettingsViewModel.swift` (line 5) — EUR is in the user-facing picker's "popular" list:
+   `private static let popularCurrencyCodes = ["USD", "EUR", "GBP", "JPY"]`
+   This view-model feeds `BaseCurrencySettingsView.swift`, the currency picker shown in Settings.
+
+3. `Currency` type itself is defined in `WalletCore` package (`/Users/ant013/Ios/bench-vanilla/packages/WalletCore/Sources/WalletCore/Models/Currency.swift`), not in `MarketKit`. `MarketKit` is an external Swift package imported throughout the app but does not own the fiat currency list — `CurrencyManager` is the canonical registry. The task wording "in MarketKit" appears to conflate the two; the actual user-facing currency list lives in `CurrencyManager.supportedCurrencies`.
+
+Verification:
+- `git status` → clean working tree on branch `bench/sandbox-ab-vanilla`.
+- `git diff` → empty.
+
+No commit, no push performed.
+
+--SELF-REPORTED--
+[
+  {
+    "item": "EUR currency exists in CurrencyManager.supportedCurrencies with symbol \u20ac",
+    "covered": true
+  },
+  {
+    "item": "EUR appears in user-facing picker via popularCurrencyCodes in BaseCurrencySettingsViewModel",
+    "covered": true
+  },
+  {
+    "item": "Currency type lives in WalletCore, not MarketKit; CurrencyManager is the canonical registry",
+    "covered": true
+  },
+  {
+    "item": "Working-tree diff is empty (no changes needed)",
+    "covered": true
+  },
+  {
+    "item": "No commit or push performed",
+    "covered": true
+  }
+]

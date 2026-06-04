@@ -1,0 +1,6 @@
+In the unstoppable-wallet-ios codebase, describe the components used to
+perform a cross-chain swap via 1Inch (e.g. swap a token on Ethereum for a
+token on BNB Smart Chain). Diagram or list the components involved and how
+they relate (which one quotes, which one signs, which one builds the route).
+
+Reference actual class names.

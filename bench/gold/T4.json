@@ -1,0 +1,20 @@
+{
+  "task": "T4",
+  "description": "Find MoneroAdapter DI / construction site",
+  "any_n_of_regex": {
+    "n": 3,
+    "items": [
+      "AdapterFactory",
+      "AppCoordinator",
+      "walletManager",
+      "AdapterManager",
+      "(init\\s*\\(|init\\s+wallet)",
+      "(MoneroAdapter\\s*\\()",
+      "(Wallet[A-Z]?[a-z]+)Manager",
+      "MoneroKit"
+    ]
+  },
+  "must_contain_regex": [
+    "MoneroAdapter"
+  ]
+}

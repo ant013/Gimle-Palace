@@ -1,0 +1,21 @@
+No changes needed. EUR ("€", decimal: 2) is already supported.\n\nEvidence:\n- /Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Core/Managers/CurrencyManager.swift:14 — `Currency(code: \"EUR\", symbol: \"€\", decimal: 2)` in `supportedCurrencies`.\n- /Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Modules/Settings/BaseCurrency/BaseCurrencySettingsViewModel.swift:5 — \"EUR\" listed in `popularCurrencyCodes`, so it surfaces at the top of the picker.\n- The `Currency` model used by the picker is defined in the in-tree `WalletCore` package at /Users/ant013/Ios/bench-vanilla/packages/WalletCore/Sources/WalletCore/Models/Currency.swift. `MarketKit` is consumed as an external Swift module (imported via `import MarketKit`); the app's fiat list is owned by `CurrencyManager`, not by MarketKit sources in this repo.\n\nWorking-tree diff (empty):\n```\n$ git -C /Users/ant013/Ios/bench-vanilla status\nOn branch bench/sandbox-ab-vanilla\nnothing to commit, working tree clean\n$ git -C /Users/ant013/Ios/bench-vanilla diff\n(no output)\n```
+
+--SELF-REPORTED--
+[
+  {
+    "item": "EUR present in CurrencyManager.supportedCurrencies with symbol \"\u20ac\" and decimal 2",
+    "covered": true
+  },
+  {
+    "item": "EUR appears in user-facing currency picker (popularCurrencyCodes in BaseCurrencySettingsViewModel)",
+    "covered": true
+  },
+  {
+    "item": "MarketKit is an external imported module; in-tree currency list lives in CurrencyManager + WalletCore.Currency",
+    "covered": true
+  },
+  {
+    "item": "No edits or commits were made; working tree clean, diff empty",
+    "covered": true
+  }
+]

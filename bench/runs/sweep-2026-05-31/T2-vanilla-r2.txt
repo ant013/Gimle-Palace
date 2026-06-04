@@ -1,0 +1,82 @@
+Found 770 Swift files in unstoppable-wallet-ios (at /Users/ant013/Ios/bench-vanilla) that import Foundation but do NOT import UIKit.
+
+Methodology:
+- Total .swift files in tree: 1883
+- Files with line-anchored `import Foundation`: 828 (regex: `^[[:space:]]*import[[:space:]]+Foundation\b`)
+- Files with line-anchored `import UIKit`: 475 (regex: `^[[:space:]]*import[[:space:]]+UIKit\b`)
+- Foundation MINUS UIKit (set difference via sort+comm): 770
+
+Cross-check: a looser `grep -l "import UIKit"` returned 478 files; the 3 extras (AddTokenViewController.swift, PromoCodeBottomSheetViewModel.swift, RestoreCloudViewController.swift) all have `// import UIKit` commented out, so the line-anchored count of 475 is correct.
+
+Full list (770 paths, relative to repo root) saved to /tmp/result.txt on the working host. Paths span four roots:
+- Unstoppable/Tests/...                            (20 test files)
+- Unstoppable/Unstoppable/App|Core|Models|Modules|Extensions|UserInterface/...   (majority)
+- Unstoppable/Widget/...                           (11 widget files)
+- packages/WalletCore/Sources/WalletCore/...       (44 package files)
+
+Sample first 10 entries:
+  Unstoppable/Tests/Abstraction/Fixtures/GasFreeFixtures.swift
+  Unstoppable/Tests/Abstraction/Managers/PasskeyAttestationDecoderTests.swift
+  Unstoppable/Tests/Abstraction/Managers/PasskeyCborReaderTests.swift
+  Unstoppable/Tests/Abstraction/Managers/SmartAccountManagerTests.swift
+  Unstoppable/Tests/Abstraction/Managers/SmartAccountPasskeyManagerTests.swift
+  Unstoppable/Tests/Abstraction/Managers/SmartAccountProfileMappingTests.swift
+  Unstoppable/Tests/Abstraction/Managers/SmartAccountTestSupport.swift
+  Unstoppable/Tests/Abstraction/Send/GasFreeTip712SignerTests.swift
+  Unstoppable/Tests/Abstraction/Storage/AaStorageMigratorTests.swift
+  Unstoppable/Tests/Abstraction/Storage/AaStorageTestSupport.swift
+
+Sample last 10 entries:
+  packages/WalletCore/Sources/WalletCore/Core/Storage/UserDefaultsStorage.swift
+  packages/WalletCore/Sources/WalletCore/Models/AppValue/AppValue.swift
+  packages/WalletCore/Sources/WalletCore/Models/AppValue/Eip20TokenAppValue.swift
+  packages/WalletCore/Sources/WalletCore/Models/AppValue/IAppValue.swift
+  packages/WalletCore/Sources/WalletCore/Models/AppValue/RawAppValue.swift
+  packages/WalletCore/Sources/WalletCore/Models/AppValue/TokenAppValue.swift
+  packages/WalletCore/Sources/WalletCore/Models/CurrencyValue.swift
+  packages/WalletCore/Sources/WalletCore/Models/FeePriceScale.swift
+  packages/WalletCore/Sources/WalletCore/UserInterface/ValueFormatter.swift
+
+(Full 770-line list is in this agent's transcript via Read /tmp/result.txt offset=1 and offset=537; or reproducible from the repo with:
+  grep -rlE '^[[:space:]]*import[[:space:]]+Foundation\b' --include='*.swift' . | sort > a
+  grep -rlE '^[[:space:]]*import[[:space:]]+UIKit\b'     --include='*.swift' . | sort > b
+  comm -23 a b
+)
+
+No code changes were made (task said none needed).
+
+--SELF-REPORTED--
+[
+  {
+    "item": "Enumerated all .swift files with `import Foundation` and without `import UIKit` in unstoppable-wallet-ios",
+    "covered": true
+  },
+  {
+    "item": "Used line-anchored regex to avoid matching commented-out imports",
+    "covered": true
+  },
+  {
+    "item": "Cross-validated count by comparing strict vs loose UIKit grep (caught 3 commented-out cases)",
+    "covered": true
+  },
+  {
+    "item": "Reported total count (770) and source roots",
+    "covered": true
+  },
+  {
+    "item": "Made no code changes (task: 'No code changes needed')",
+    "covered": true
+  },
+  {
+    "item": "Operated only inside /Users/ant013/Ios/bench-vanilla",
+    "covered": true
+  },
+  {
+    "item": "Did not call any palace.* tools or analog-driven-development skill",
+    "covered": true
+  },
+  {
+    "item": "Did not commit or push",
+    "covered": true
+  }
+]

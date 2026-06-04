@@ -1,0 +1,7 @@
+In the unstoppable-wallet-ios codebase, find where ERC-20 tokens are
+whitelisted (the list of pre-approved tokens shown by default in the
+wallet). Add `USDC` on Ethereum mainnet with contract address
+`0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48` to the whitelist.
+
+Output the patch and any new test you'd add to cover this change. Do NOT
+commit or push — just show the diff.

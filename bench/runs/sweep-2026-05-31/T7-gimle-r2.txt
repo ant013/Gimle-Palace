@@ -1,0 +1,41 @@
+Task T7: Add EUR fiat currency support in MarketKit if not already supported; ensure it appears in user-facing picker UI with symbol "€".
+
+Result: NO-OP — EUR is already fully supported. Working-tree diff is empty.
+
+Evidence:
+- /Users/ant013/Ios/bench-gimle/packages/WalletCore/Sources/WalletCore/Models/Currency.swift defines the Currency struct used by the wallet (this repo's local equivalent of MarketKit's Currency; MarketKit itself is a remote SPM dep, not vendored locally).
+- /Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Core/Managers/CurrencyManager.swift line 14: Currency(code: "EUR", symbol: "€", decimal: 2) is present in supportedCurrencies and exposed via currencyManager.currencies.
+- /Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Modules/Settings/BaseCurrency/BaseCurrencySettingsViewModel.swift line 5: popularCurrencyCodes = ["USD", "EUR", "GBP", "JPY"] — EUR is promoted to the popular section of the picker; the rest of the file (lines 30-34) hoists matching codes from supportedCurrencies into popularCurrencies for the view.
+- git diff: empty. git status: clean (no modifications).
+
+Conclusion: Task prompt's conditional "if it isn't already supported" branch fires. No edits required. EUR will render in the BaseCurrencySettings picker (popular section, symbol "€", 2 decimals).
+
+Diagnostics: [DEGRADED-PALACE] — palace MCP unreachable; discovery via serena/Bash grep over the local worktree.
+
+--SELF-REPORTED--
+[
+  {
+    "item": "EUR present in supportedCurrencies with symbol '\u20ac' and decimal 2",
+    "covered": true
+  },
+  {
+    "item": "EUR exposed in picker UI (popular section via popularCurrencyCodes)",
+    "covered": true
+  },
+  {
+    "item": "Working-tree diff shown (empty)",
+    "covered": true
+  },
+  {
+    "item": "No commit or push performed",
+    "covered": true
+  },
+  {
+    "item": "Operated only in /Users/ant013/Ios/bench-gimle",
+    "covered": true
+  },
+  {
+    "item": "Palace tools attempted (degraded - server unreachable)",
+    "covered": true
+  }
+]
