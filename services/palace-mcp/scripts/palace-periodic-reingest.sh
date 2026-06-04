@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eu
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PALACE_MCP_SERVICE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 LOCK_DIR="${PALACE_PERIODIC_REINGEST_LOCK_DIR:-/tmp/palace-periodic-reingest}"
 
@@ -41,12 +41,14 @@ while IFS=$'\t' read -r kind slug repo_path language_profile; do
 
     lock_file="$LOCK_DIR/$slug.lock"
     printf '[periodic-reingest] project=%s repo=%s\n' "$slug" "$repo_path"
-    if ! flock -n -E 75 "$lock_file" \
+    if flock -n -E 75 "$lock_file" \
         uv run --directory "$PALACE_MCP_SERVICE_DIR" \
             python -m palace_mcp.cli project analyze \
             --repo-path "$repo_path" \
             --slug "$slug" \
             --language-profile "$language_profile"; then
+        :
+    else
         rc=$?
         if [[ "$rc" -eq 75 ]]; then
             printf '[periodic-reingest] skip lock busy for %s\n' "$slug" >&2
