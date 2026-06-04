@@ -1,0 +1,32 @@
+Found exactly 1 occurrence of `recordSwap` in the unstoppable-wallet-ios worktree at /Users/ant013/Ios/bench-gimle.
+
+| # | File path | Line | Enclosing class | Signature |
+|---|---|---|---|---|
+| 1 | /Users/ant013/Ios/bench-gimle/Source/RecentSwaps.swift | 20 | `RecentSwaps` (final class) | `func recordSwap(txHash: String, from: String, to: String)` |
+
+Method context: the file is a staged T10 benchmark fixture (note its top-of-file comment explicitly says it is NOT in the palace Neo4j index — designed to be missed by index-only lookups).
+
+Discovery substrate notes:
+- Palace MCP (`palace_health_status`, `palace_memory_list_projects`) returned "Unable to connect" — palace tier unavailable for this session, so I escalated to tier 6 (Bash rg/grep) after confirming pwd is inside the intended worktree (`/Users/ant013/Ios/bench-gimle`). Tag: [DEGRADED-PALACE].
+- Searched both `--include=*.swift` (1 def hit) and unrestricted `grep -rn "recordSwap"` across the whole tree (2 hits total — line 6 is the doc comment in the same file, line 20 is the only method definition). No other `func recordSwap` anywhere.
+- No call sites exist in the working tree (the method is defined but never invoked).
+
+--SELF-REPORTED--
+[
+  {
+    "item": "Found Source/RecentSwaps.swift:20 recordSwap in class RecentSwaps",
+    "covered": true
+  },
+  {
+    "item": "Searched entire worktree (not only *.swift) to catch any newly added file",
+    "covered": true
+  },
+  {
+    "item": "Palace MCP unreachable -> degraded to grep substrate, surfaced as [DEGRADED-PALACE]",
+    "covered": true
+  },
+  {
+    "item": "Verified enclosing class via Read of file",
+    "covered": true
+  }
+]

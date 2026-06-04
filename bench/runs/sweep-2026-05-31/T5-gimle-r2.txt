@@ -1,0 +1,150 @@
+## Critical correction to task premise
+
+In `unstoppable-wallet-ios` (bench-gimle worktree), **1Inch does NOT perform cross-chain swaps**. `OneInchMultiSwapProvider.supports(tokenIn:tokenOut:)` (`Unstoppable/Unstoppable/Modules/MultiSwap/Providers/OneInchMultiSwapProvider.swift:34-43`) explicitly returns `false` whenever `tokenIn.blockchainType != tokenOut.blockchainType`. The bundled `OneInchKit.Swift` package (`/Users/ant013/Ios/HorizontalSystems/OneInchKit.Swift/Sources/OneInchKit/Kit.swift`) only exposes single-chain `quote(chain:...)` and `swap(chain:...)` — there is no Fusion+ / cross-chain SDK call anywhere under `Sources/OneInchKit/` or in the `WalletCore/BackCompatibility/OneInchKit.swift` shim.
+
+Therefore an "Ethereum → BSC" swap in this app cannot be routed through 1Inch. It is routed through cross-chain providers (ThorChain, Maya, AllBridge), which are registered alongside 1Inch in `MultiSwapProviderManager` but selected by the `supports()` filter at quote time.
+
+I describe BOTH below: (A) the 1Inch same-chain pipeline (what 1Inch actually does in this codebase, e.g. ETH→USDC on Ethereum, or BNB→CAKE on BSC), and (B) the cross-chain pipeline that handles the Ethereum↔BSC case the task references.
+
+---
+
+## A. 1Inch (same-chain only) component map
+
+```
+                                  +-----------------------------+
+                                  | SwapProviderFactory         |
+                                  |  .provider(id:"ONEINCH")    |
+                                  +--------------+--------------+
+                                                 |
+                                                 v
++----------------------+      registered in      +-----------------------------+
+| MultiSwapProvider-   |<------------------------+ OneInchMultiSwapProvider    |
+| Manager (selector)   |                         |   : BaseEvmMultiSwapProvider|
++----------+-----------+                         |   : IMultiSwapProvider      |
+           |                                     |   wraps OneInchKit.Kit      |
+           | provider chosen for UI              +--------------+--------------+
+           v                                                    |
++----------------------+                                        | .quote(...)   -> Quote
+| MultiSwapViewModel   |   shows quote / route                  | .swap(...)    -> Swap
+| (Combine, ObservObj) |   to user                              v
++----------+-----------+                         +-----------------------------+
+           | user confirms                       | OneInchKit.Kit (package)    |
+           v                                     |   -> OneInchProvider        |
++----------------------+                         |   -> 1inch.io REST API      |
+| MultiSwapSendHandler |   sendData() / send()   |   .routerAddress(chain:)    |
+|  : ISendHandler      |                         +-----------------------------+
++----------+-----------+
+           | EvmSwapFinalQuote in hand
+           v
++----------------------+    signs + broadcasts   +-----------------------------+
+| EvmKitWrapper.send() +------------------------>+ Signer (EvmKit)             |
+| (privateSend? via    |                         |   .signature(rawTx)         |
+|  MerkleTransaction-  |                         +-----------------------------+
+|  Adapter for MEV)    |                         + EvmKit.Kit.send(rawTx,sig)  |
++----------------------+                         +-----------------------------+
+```
+
+### Who does what (with file:line anchors)
+
+| Role | Class | Where |
+|---|---|---|
+| **Provider catalog / id list** | `MultiSwapProviderManager` | `Modules/MultiSwap/MultiSwapProviderManager.swift:7,27` (seeds `OneInchMultiSwapProvider.id` etc.) |
+| **Instantiation / wiring** | `SwapProviderFactory.provider(id:)` | `Core/Factories/SwapProviderFactory.swift:5-8` — builds `OneInchMultiSwapProvider(kit: OneInchKit.Kit.instance(apiKey:))` |
+| **Provider contract** | `IMultiSwapProvider` | `Modules/MultiSwap/IMultiSwapProvider.swift:6-21` — `quote`, `confirmationQuote`, `supports`, `track`, `preSwapView` |
+| **EVM base (allowance + spender + MEV)** | `BaseEvmMultiSwapProvider` | `Modules/MultiSwap/Providers/BaseEvmMultiSwapProvider.swift:7` |
+| **1Inch concrete provider (quotes + route builder)** | `OneInchMultiSwapProvider` | `Modules/MultiSwap/Providers/OneInchMultiSwapProvider.swift:10` |
+| **Chain support filter** | `OneInchMultiSwapProvider.supports` | same file, lines 34–43 — **same-chain only** |
+| **Quote (price discovery)** | `OneInchMultiSwapProvider.quote()` -> `OneInchKit.Kit.quote(networkManager:chain:fromToken:toToken:amount:fee:)` | OneInchProvider file lines 45–70; `OneInchKit/Kit.swift:14-32` |
+| **Route build (the tx the user will sign)** | `OneInchMultiSwapProvider.confirmationQuote()` -> `OneInchKit.Kit.swap(...)` | lines 72–130; `OneInchKit/Kit.swift:34-57` — returns `OneInchKit.Swap` with `transaction.to / .value / .data / .gasLimit / .gasPrice` |
+| **Spender (router) address for allowance** | `OneInchMultiSwapProvider.spenderAddress(chain:)` -> `OneInchKit.Kit.routerAddress(chain:)` | line 150–152; `OneInchKit/Kit.swift:70-76` (`0x1111111254EEB25477B68fb85Ed929f73A960582` for Eth/BSC/etc.) |
+| **Allowance check / approve sheet** | `MultiSwapAllowanceHelper` | `Modules/MultiSwap/Providers/MultiSwapAllowanceHelper.swift` (called via `BaseEvmMultiSwapProvider.allowanceState`) |
+| **Fee estimation** | `EvmFeeEstimator.estimateFee(...)` | invoked from `confirmationQuote()` lines 111–116 |
+| **MEV / private-tx side path** | `MerkleTransactionAdapter` (held by `EvmKitWrapper`) | `Core/Managers/EvmKitManager.swift:173,224-226`; gating via `MevProtectionHelper`, `BaseEvmMultiSwapProvider.mevProtectionAllowed` lines 22–24 |
+| **UI / orchestration** | `MultiSwapViewModel`, `MultiSwapView`, `RegularMultiSwapView`, `MultiSwapQuotesView`, `SwapOptionsView` | `Modules/MultiSwap/*` |
+| **Send orchestration (confirm screen)** | `MultiSwapSendHandler : ISendHandler` | `Modules/MultiSwap/MultiSwapSendHandler.swift:11,93,108` |
+| **Final quote envelope (typed payload to signer)** | `EvmSwapFinalQuote` | `Modules/MultiSwap/Providers/EvmSwapFinalQuote.swift`; produced at OneInchProvider lines 118–129 |
+| **Sign + broadcast** | `EvmKitWrapper.send(transactionData:gasPrice:gasLimit:privateSend:nonce:)` -> `Signer.signature(rawTransaction:)` -> `EvmKit.Kit.send(rawTransaction:signature:)` (or `MerkleTransactionAdapter.send` when MEV-protected) | `Core/Managers/EvmKitManager.swift:216-229` |
+| **Persist history + telemetry** | `swapHistoryManager.save(swap:)` and `OneInchMultiSwapProvider.track()` (POSTs to backend via `USwapMultiSwapProvider.track`) | `MultiSwapSendHandler.swift:233-255`; OneInchProvider lines 132–148 |
+
+### Quote → Sign → Build responsibility breakdown
+
+- **Quotes** are produced by `OneInchMultiSwapProvider.quote()`, which delegates to `OneInchKit.Kit.quote()` (HTTP call to 1inch.io). Returned as `EvmMultiSwapQuote` (file `Modules/MultiSwap/Providers/EvmMultiSwapQuote.swift`).
+- **Builds the route / unsigned transaction** when the user reaches the confirmation screen: `OneInchMultiSwapProvider.confirmationQuote()` -> `OneInchKit.Kit.swap()` returns `OneInchKit.Swap` whose `transaction` carries `to`, `value`, `data` (the encoded 1Inch router call), `gasPrice`, `gasLimit`. Wrapped into a `TransactionData` (extension at OneInchProvider lines 179–183) and packed into `EvmSwapFinalQuote`.
+- **Signs** the raw transaction: `EvmKitWrapper.send(...)` calls `Signer.signature(rawTransaction:)` then broadcasts via `EvmKit.Kit.send(rawTransaction:signature:)`. If MEV protection is enabled it broadcasts through `MerkleTransactionAdapter` instead. The user's private key/mnemonic is held by `Signer`, not by `OneInchMultiSwapProvider`.
+
+---
+
+## B. Real Ethereum → BSC cross-chain pipeline (what 1Inch doesn't do here)
+
+Same outer shell (`MultiSwapViewModel` → `MultiSwapSendHandler` → `EvmKitWrapper`) — only the provider implementation differs. The candidate cross-chain providers actually selected:
+
+| Provider class | File |
+|---|---|
+| `ThorChainMultiSwapProvider : BaseThorChainMultiSwapProvider` | `Modules/MultiSwap/Providers/ThorChain/ThorChainMultiSwapProvider.swift`, base at `BaseThorChainMultiSwapProvider.swift` |
+| `MayaMultiSwapProvider : BaseThorChainMultiSwapProvider` | `Modules/MultiSwap/Providers/ThorChain/MayaMultiSwapProvider.swift` |
+| `AllBridgeMultiSwapProvider` | `Modules/MultiSwap/Providers/AllBridgeProvider/AllBridgeMultiSwapProvider.swift` |
+
+How the cross-chain providers behave differently from 1Inch:
+
+- `supports()` consults a remotely-fetched asset map (`assetMap` synced from `/pools` endpoint, e.g. ThorChain) — pairs only show as supported if BOTH ends exist in the pool list (`BaseThorChainMultiSwapProvider.swift:55-57`).
+- `quote()` calls the provider's REST API (`networkManager.fetch(url: "\(baseUrl)/quote/swap", parameters:)`, lines 227–264). The response (`SwapQuote`) carries `inboundAddress`, `router`, `memo`, `expectedAmountOut`, etc.
+- `confirmationQuote()` builds the EVM tx that sends source-chain funds INTO ThorChain's inbound address:
+  - **native asset path** (`tokenIn.type == .native`): plain `TransactionData(to: inboundAddress, value: amount, input: memoBytes)` — lines 96–100.
+  - **ERC20 path**: encodes a call to `DepositWithExpiryMethod(inboundAddress, asset, amount, memo, expiry)` against the ThorChain `router` contract — lines 102–113, 425–447.
+- The destination payout on BSC (or any other chain) is performed off-chain by ThorChain's network and arrives at `toAddress` (resolved by `DestinationHelper.resolveDestination`, lines 266–272), which defaults to the wallet's own BSC receive address but can be a recipient override.
+- Signing path is **identical to the 1Inch case**: `MultiSwapSendHandler.send()` (line 108) sees an `EvmSwapFinalQuote`, calls `EvmKitWrapper.send(...)` against the **source-chain** EvmKit (Ethereum). The BSC chain is never signed against by the user — ThorChain bridge nodes mint/release the output.
+
+So in this codebase the actor map for Ethereum→BSC is:
+
+- **Quotes** = `ThorChainMultiSwapProvider` (or Maya / AllBridge), hitting THORChain Midgard / AllBridge API.
+- **Builds the route (the source-chain tx)** = same provider's `confirmationQuote()` — either a raw `TransactionData` for native ETH, or a `depositWithExpiry(...)` call to the THORChain router for ERC20s. The "destination route" itself lives off-chain in the cross-chain network.
+- **Signs** = the user's Ethereum `Signer` inside `EvmKitWrapper.send()` (`Core/Managers/EvmKitManager.swift:216-229`).
+- **Broadcasts** = `EvmKit.Kit.send` (or `MerkleTransactionAdapter.send` for MEV-protected).
+- **Tracks** = `BaseThorChainMultiSwapProvider.track()` (lines 209–225) -> `USwapMultiSwapProvider.track(swap:parameters:networkManager:)`.
+
+---
+
+## Diagnostics
+
+- `[DEGRADED-PALACE]` — palace-mcp `palace_memory_health` and `palace_memory_list_projects` returned "Unable to connect"; fell back to serena + Bash grep / Read substrate. Worktree (`/Users/ant013/Ios/bench-gimle`) verified to contain the UW source tree before any rg/grep was run, so tier-6 reads are from the correct source of truth.
+- Skill phases beyond discovery (D – H, brainstorming gate, adversary, PR) are not applicable: T5 is a description task, not an implementation task; benchmark prompt explicitly skips the operator-approval gate and forbids commits/pushes.
+
+--SELF-REPORTED--
+[
+  {
+    "item": "Identified OneInchMultiSwapProvider as 1Inch entry point in MultiSwap module",
+    "covered": true
+  },
+  {
+    "item": "Documented that 1Inch is intentionally same-chain only (supports() filter)",
+    "covered": true
+  },
+  {
+    "item": "Mapped quote responsibility to OneInchKit.Kit.quote via provider.quote()",
+    "covered": true
+  },
+  {
+    "item": "Mapped route-build to OneInchKit.Kit.swap returning OneInchKit.Swap.transaction packaged into EvmSwapFinalQuote",
+    "covered": true
+  },
+  {
+    "item": "Mapped signing to EvmKitWrapper.send -> Signer.signature -> EvmKit.Kit.send (or MerkleTransactionAdapter for MEV)",
+    "covered": true
+  },
+  {
+    "item": "Identified MultiSwapSendHandler as the orchestrator between provider quote and EvmKitWrapper signer",
+    "covered": true
+  },
+  {
+    "item": "Listed actual cross-chain providers used for Eth->BSC (ThorChain/Maya/AllBridge) and their BaseThorChainMultiSwapProvider mechanics",
+    "covered": true
+  },
+  {
+    "item": "Provided file:line anchors for every named component",
+    "covered": true
+  },
+  {
+    "item": "Surfaced [DEGRADED-PALACE] diagnostic and explained skill-phase scope reduction for a description task",
+    "covered": true
+  }
+]

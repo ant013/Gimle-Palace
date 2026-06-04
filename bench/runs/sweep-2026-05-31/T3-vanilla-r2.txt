@@ -1,0 +1,202 @@
+
+# How tapping "Send" on an Ethereum send screen produces a signed transaction
+
+The currently wired Ethereum send flow lives under `Unstoppable/Unstoppable/Modules/SendNew/` (the older `Modules/SendEvm/` + `Modules/SendEvmTransaction/` files have no external callers and are dead code). The chain has three logical phases:
+
+1. UI tap → SwiftUI button action  
+2. App-layer handler resolves the typed `SendData.evm` case → calls `EvmKitWrapper.send(...)`  
+3. `EvmKit` (SPM dependency, `horizontalsystems/EvmKit.Swift`) builds the `RawTransaction`, signs it via `Signer` / `TransactionSigner`, RLP-encodes it, and broadcasts via `eth_sendRawTransaction`.
+
+The user-visible "Send" control on the EVM confirmation screen is actually the **slide-to-send** button. The plain "Next" button on the preceding amount screen only navigates; the real send happens after slide.
+
+---
+
+## 1. UI layer — the slide-to-send button
+
+File: `Unstoppable/Unstoppable/Modules/SendNew/RegularSendView.swift` (lines 28–35)
+
+`RegularSendView` is the SwiftUI screen pushed from `PreSendView` (see `PreSendView.buttonView()` at lines 184–227 of `PreSendView.swift`, which appends a `ConfirmationData(sendData:address:)` to the navigation `path`, and `.navigationDestination(for: ConfirmationData.self)` at lines 75–81 builds `RegularSendView`). It owns a `@StateObject SendViewModel`. Its bottom content is a `SlideButton`:
+
+```swift
+SlideButton(
+    styling: .text(start: sendData.customSendButtonTitle ?? "send.confirmation.slide_to_send".localized, end: "", success: ""),
+    action: { try await sendViewModel.send() },
+    completion: { onSuccess() }
+)
+```
+
+When the user completes the slide gesture, the `action` closure invokes `SendViewModel.send()`.
+
+The body of the confirmation list itself is rendered by `SendView` in `Unstoppable/Unstoppable/Modules/SendNew/SendView.swift`, which observes the same `SendViewModel` and shows the decoded fields, fee data and cautions while `sendViewModel.state == .success`.
+
+## 2. ViewModel — `SendViewModel.send()`
+
+File: `Unstoppable/Unstoppable/Modules/SendNew/SendViewModel.swift` (lines 188–210)
+
+```swift
+func send() async throws {
+    guard let handler else { throw SendError.noHandler }
+    guard let sendData else { throw SendError.noSendData }
+    await set(sending: true)
+    _ = try await handler.send(data: sendData)
+    if let address { try? recentAddressStorage.save(address: address, blockchainUid: handler.baseToken.blockchain.uid) }
+    ...
+}
+```
+
+Key state on the VM:
+- `handler: ISendHandler?` — produced in `init` by `SendHandlerFactory.handler(sendData:)`.
+- `sendData: ISendData?` — populated by the periodic `sync()` call (lines 150–186) which calls `handler.sendData(transactionSettings:)` after `transactionService?.sync()`.
+- `transactionService: ITransactionService?` — produced by `TransactionServiceFactory.transactionService(baseToken:initialTransactionSettings:)`. For EVM tokens this is `EvmTransactionService` (`Modules/SendNew/EvmTransactionService.swift`), which on `sync()` fetches the recommended gas price (`EIP1559GasPriceProvider.gasPrice` or `LegacyGasPriceProvider.gasPrice`) and the current/pending nonces (`evmKit.nonce(defaultBlockParameter: .latest|.pending)`).
+
+So before the user can slide, `EvmTransactionService.sync()` has already loaded `recommendedGasPrice` and `nextNonce`, and `EvmSendHandler.sendData(transactionSettings:)` has used those to estimate the gas limit and build the final `EvmSendData`. `sendData.canSend` (= `evmFeeData != nil && transactionError == nil`) gates the slide button being visible at all.
+
+## 3. SendHandlerFactory — picks `EvmSendHandler`
+
+File: `Unstoppable/Unstoppable/Modules/SendNew/SendHandlerFactory.swift` (lines 5–12)
+
+`SendData` is an enum; the EVM case is built earlier in `EvmPreSendHandler.sendData(amount:address:memo:)` (file `EvmPreSendHandler.swift`, lines 55–67):
+
+```swift
+let transactionData = adapter.transactionData(amount: evmAmount, address: evmAddress)
+return .valid(sendData: .evm(blockchainType: token.blockchainType, transactionData: transactionData, token: token))
+```
+
+`adapter` is an `ISendEthereumAdapter` — for native ETH this is `EvmAdapter` (`Core/Adapters/Evm/EvmAdapter.swift`, lines 60–64), whose `transactionData(amount:address:)` just calls `evmKit.transferTransactionData(to:value:)`. For ERC-20 tokens it is `Eip20Adapter` (uses `Eip20Kit` to encode the `transfer` calldata). The result is an `EvmKit.TransactionData` (to / value / input).
+
+Back in the factory, for a normal account it returns `EvmSendHandler.instance(blockchainType:transactionData:)`, which resolves the base token + the `EvmKitWrapper` from `Core.shared.evmBlockchainManager.evmKitManager(blockchainType:)` and constructs an `EvmSendHandler`. (Passkey-owned accounts route to `AaSendHandler` for ERC-4337; the regular flow does not.)
+
+## 4. App-layer handler — `EvmSendHandler.send(data:)`
+
+File: `Unstoppable/Unstoppable/Modules/SendNew/EvmSendHandler.swift` (lines 75–99)
+
+```swift
+func send(data: ISendData) async throws {
+    guard let data = data as? EvmSendData else { throw SendError.invalidData }
+    guard let transactionData = data.transactionData else { throw SendError.noTransactionData }
+    guard let gasPrice = data.gasPrice else { throw SendError.noGasPrice }
+    guard let gasLimit = data.evmFeeData?.surchargedGasLimit else { throw SendError.noGasLimit }
+
+    _ = try await evmKitWrapper.send(
+        transactionData: transactionData,
+        gasPrice: gasPrice,
+        gasLimit: gasLimit,
+        privateSend: false,
+        nonce: data.nonce
+    )
+}
+```
+
+The `EvmSendData` it consumes (defined in `Modules/SendNew/EvmSendData.swift`) is what `EvmSendHandler.sendData(transactionSettings:)` built during sync:
+- `transactionData`: original or fee-adjusted (in the "send entire balance" branch the value is reduced by `EvmFeeEstimator.totalFee`).
+- `gasPrice`: `transactionSettings?.gasPriceData?.userDefined` from `EvmTransactionService`.
+- `evmFeeData.surchargedGasLimit`: produced by `EvmFeeEstimator.estimateFee(...)` (`Modules/SendNew/EvmFeeEstimator.swift`), which calls `evmKit.fetchEstimateGas(transactionData:gasPrice:)` and adds a 10 % surcharge (`Self.surchargePercent`) when there's extra balance to cover it.
+- `nonce`: comes from `EvmTransactionService.transactionSettings.nonce` (i.e. the user override; otherwise `EvmKit` resolves a pending nonce inside `fetchRawTransaction`).
+
+## 5. `EvmKitWrapper.send(...)` — fetch raw, sign, broadcast
+
+File: `Unstoppable/Unstoppable/Core/Managers/EvmKitManager.swift` (lines 216–229)
+
+```swift
+func send(transactionData: TransactionData, gasPrice: GasPrice, gasLimit: Int, privateSend: Bool, nonce: Int? = nil) async throws -> FullTransaction {
+    guard let signer else { throw SignerError.signerNotSupported }
+    let rawTransaction = try await evmKit.fetchRawTransaction(transactionData: transactionData, gasPrice: gasPrice, gasLimit: gasLimit, nonce: nonce)
+    let signature = try signer.signature(rawTransaction: rawTransaction)
+    if privateSend, let merkleTransactionAdapter {
+        return try await merkleTransactionAdapter.send(rawTransaction: rawTransaction, signature: signature)
+    }
+    return try await evmKit.send(rawTransaction: rawTransaction, signature: signature)
+}
+```
+
+Three substeps, all inside the `EvmKit.Swift` SPM package (checked out at `~/Library/Developer/Xcode/DerivedData/.../SourcePackages/checkouts/EvmKit.Swift/`):
+
+**5a. Build `RawTransaction` — `EvmKit.Kit.fetchRawTransaction(transactionData:gasPrice:gasLimit:nonce:)`** (`Sources/EvmKit/Core/Kit.swift`, lines 148–162). If `nonce` is nil it calls `nonceProvider.nonce(defaultBlockParameter: .pending)` (an `eth_getTransactionCount` RPC). Returns a `RawTransaction(gasPrice, gasLimit, to, value, data, nonce)`.
+
+**5b. Sign — `Signer.signature(rawTransaction:)`** (`Sources/EvmKit/Core/Signer/Signer.swift`, line 18) delegates to `TransactionSigner.signature(rawTransaction:)` (`Sources/EvmKit/Core/Signer/TransactionSigner.swift`):
+
+  - `TransactionSigner.sign(rawTransaction:)` (line 14) picks `signEip155` (legacy) or `signEip1559` based on `rawTransaction.gasPrice`.
+  - `signEip1559` (line 43) RLP-encodes `[chainId, nonce, maxPriorityFeePerGas, maxFeePerGas, gasLimit, to, value, data, accessList=[]]`, prepends the `0x02` type byte, hashes with `Crypto.sha3`, and calls `Crypto.ellipticSign(hash, privateKey:)`.
+  - `signEip155` (line 23) does the legacy RLP `[nonce, gasPrice, gasLimit, to, value, data, chainId, 0, 0]` with the EIP-155 trailer, again hashed with `Crypto.sha3` and signed with `Crypto.ellipticSign`.
+  - `signatureLegacy` / `signatureEip1559` (lines 73 / 81) wrap the raw 65-byte ECDSA output into a `Signature(v, r, s)` with the correct `v` (legacy: `27` or `35 + 2*chainId`; EIP-1559: raw recovery id 0/1).
+  
+  The `Signer` was constructed in `Signer.instance(seed:chain:)` (line 38) → `Signer.privateKey(seed:chain:)` (line 73), which derives the EVM private key with `HDWallet(seed:, coinType: chain.coinType, ...).privateKey(account: 0, index: 0, chain: .external).raw`.
+
+**5c. Broadcast — `EvmKit.Kit.send(rawTransaction:signature:)`** (`Sources/EvmKit/Core/Kit.swift`, line 172) calls `RpcBlockchain.send(rawTransaction:signature:)` (`Sources/EvmKit/Api/Core/RpcBlockchain.swift`, line 136):
+  ```swift
+  let encoded = transactionBuilder.encode(rawTransaction: rawTransaction, signature: signature)
+  _ = try await syncer.fetch(rpc: SendRawTransactionJsonRpc(signedTransaction: encoded))
+  return transactionBuilder.transaction(rawTransaction: rawTransaction, signature: signature)
+  ```
+
+`TransactionBuilder.encode(rawTransaction:signature:)` produces the final RLP-encoded, signed transaction bytes (with the `0x02` type prefix for EIP-1559), and `SendRawTransactionJsonRpc` ships them to the configured `rpcSource` as an `eth_sendRawTransaction` JSON-RPC call.
+
+The resulting `Transaction` is wrapped into a `FullTransaction` by `TransactionManager.handle(transactions:)` and returned up the stack. `EvmSendHandler` discards it; `SendViewModel.send()` returns to the SlideButton, which then runs its `completion: onSuccess` closure (defined in `RegularSendView` / `RegularSendViewWrapper`) — that closure dismisses the confirmation, shows a `HudHelper.instance.show(banner: .sent)` toast and clears the navigation back to the wallet screen.
+
+---
+
+## Summary of the call chain (top-to-bottom)
+
+1. `RegularSendView` body — `SlideButton.action` (`Modules/SendNew/RegularSendView.swift:30-31`)
+2. `SendViewModel.send()` (`Modules/SendNew/SendViewModel.swift:188`)
+3. `EvmSendHandler.send(data:)` (`Modules/SendNew/EvmSendHandler.swift:75`)
+4. `EvmKitWrapper.send(transactionData:gasPrice:gasLimit:privateSend:nonce:)` (`Core/Managers/EvmKitManager.swift:216`)
+5. `EvmKit.Kit.fetchRawTransaction(transactionData:gasPrice:gasLimit:nonce:)` → resolves nonce via `nonceProvider.nonce(.pending)` → returns `RawTransaction`.
+6. `Signer.signature(rawTransaction:)` → `TransactionSigner.signature(rawTransaction:)` → `sign(rawTransaction:)` → `signEip1559` / `signEip155` → `RLP.encode` + `Crypto.sha3` + `Crypto.ellipticSign(_:privateKey:)` → `Signature(v,r,s)`.
+7. `EvmKit.Kit.send(rawTransaction:signature:)` → `RpcBlockchain.send(rawTransaction:signature:)` → `TransactionBuilder.encode(rawTransaction:signature:)` produces the signed bytes → `SendRawTransactionJsonRpc` broadcasts via `syncer.fetch`.
+
+Inputs prepared earlier by `SendViewModel.sync()`:
+- gas price: `EvmTransactionService.sync()` → `EIP1559GasPriceProvider.gasPrice` / `LegacyGasPriceProvider.gasPrice`.
+- nonce: `evmKit.nonce(defaultBlockParameter: .latest|.pending)`, optionally overridden via `TransactionNonceView`/`TransactionNonceViewModel`.
+- gas limit + L1 fee: `EvmFeeEstimator.estimateFee(...)` → `evmKit.fetchEstimateGas(...)` (+ optional `L1FeeProvider.l1Fee` for rollups), then `surchargedGasLimit` ≈ `gasLimit + 10 %` (`Modules/SendNew/EvmFeeEstimator.swift:43-49`).
+- transaction data: `EvmAdapter.transactionData(amount:address:)` → `evmKit.transferTransactionData(to:value:)` (native ETH) or `Eip20Adapter` (ERC-20 `transfer` calldata).
+
+Notes:
+- For passkey-owned accounts `SendHandlerFactory` routes to `AaSendHandler` (ERC-4337 user-op flow), not `EvmSendHandler`.
+- If `privateSend == true` and a `MerkleTransactionAdapter` is configured, broadcast goes through the Merkle MEV-protection adapter instead of the public RPC — the regular slide-to-send sets `privateSend: false` in `EvmSendHandler.send`, so the public path is the default.
+- The older `SendEvmViewController` / `SendEvmTransactionService` / `SendEvmTransactionViewController` under `Modules/SendEvm/` and `Modules/SendEvmTransaction/` are no longer referenced from anywhere outside their own folders and are not part of the live "tap Send → signed tx" path.
+
+
+--SELF-REPORTED--
+[
+  {
+    "item": "Identified the actual Send control: SlideButton in RegularSendView (Modules/SendNew/RegularSendView.swift, action: try await sendViewModel.send())",
+    "covered": true
+  },
+  {
+    "item": "Traced SendViewModel.send() (Modules/SendNew/SendViewModel.swift:188) calling handler.send(data:)",
+    "covered": true
+  },
+  {
+    "item": "Identified EvmSendHandler as the ISendHandler for .evm SendData via SendHandlerFactory.handler(sendData:)",
+    "covered": true
+  },
+  {
+    "item": "Explained EvmSendHandler.send(data:) unpacking EvmSendData and calling EvmKitWrapper.send(transactionData:gasPrice:gasLimit:privateSend:nonce:)",
+    "covered": true
+  },
+  {
+    "item": "Explained EvmKitWrapper.send in Core/Managers/EvmKitManager.swift: fetchRawTransaction -> Signer.signature -> evmKit.send",
+    "covered": true
+  },
+  {
+    "item": "Described EvmKit.Kit.fetchRawTransaction producing RawTransaction with pending-nonce resolution via nonceProvider",
+    "covered": true
+  },
+  {
+    "item": "Described Signer.signature -> TransactionSigner.sign (signEip155 / signEip1559) with RLP encoding, sha3 hash, ellipticSign",
+    "covered": true
+  },
+  {
+    "item": "Described EvmKit.Kit.send -> RpcBlockchain.send -> TransactionBuilder.encode + SendRawTransactionJsonRpc broadcast (eth_sendRawTransaction)",
+    "covered": true
+  },
+  {
+    "item": "Showed where inputs (gas price, nonce, gas limit, transaction data) are prepared: EvmTransactionService.sync, EvmFeeEstimator.estimateFee, EvmAdapter.transactionData / evmKit.transferTransactionData",
+    "covered": true
+  },
+  {
+    "item": "Noted the dead Modules/SendEvm + Modules/SendEvmTransaction path and the AaSendHandler branch for passkey accounts plus MerkleTransactionAdapter privateSend branch",
+    "covered": true
+  }
+]

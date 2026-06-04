@@ -1,0 +1,89 @@
+There is exactly one construction site for `MoneroAdapter` in the codebase.
+
+# Construction site
+
+`/Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Core/Factories/AdapterFactory.swift:216`
+
+```swift
+case (.native, .monero):
+    let restoreSettings = restoreSettingsManager.settings(accountId: wallet.account.id, blockchainType: .monero)
+    let moneroNode = moneroNodeManager.node(blockchainType: .monero)
+    return try? MoneroAdapter(wallet: wallet, restoreSettings: restoreSettings, node: moneroNode.node)
+```
+
+This sits inside `AdapterFactory.adapter(wallet:)` (the big `switch` on `(wallet.token.type, wallet.token.blockchain.type)` that picks the right adapter per blockchain).
+
+# How `MoneroAdapter` gets its dependencies
+
+`MoneroAdapter` itself uses plain **constructor injection** via its throwing initializer (`MoneroAdapter.swift:35`):
+
+```swift
+init(wallet: Wallet, restoreSettings: RestoreSettings, node: Node) throws
+```
+
+Each of the three parameters comes from a different source, assembled by `AdapterFactory` at the call site:
+
+1. `wallet: Wallet` — passed through from the caller of `AdapterFactory.adapter(wallet:)`.
+2. `restoreSettings: RestoreSettings` — pulled from `RestoreSettingsManager` (`restoreSettingsManager.settings(accountId:blockchainType:)`), one of the dependencies injected into `AdapterFactory` in its own constructor.
+3. `node: Node` — obtained from `MoneroNodeManager` via `moneroNodeManager.node(blockchainType: .monero).node`, also an `AdapterFactory` constructor-injected dependency.
+
+So the pattern is **Factory + constructor injection**, not a DI container:
+
+- `MoneroAdapter` is built by the `AdapterFactory` factory class (conforming to `IAdapterFactory`).
+- `AdapterFactory` itself receives all its collaborators (including `MoneroNodeManager` and `RestoreSettingsManager`) via its own initializer — see `AdapterFactory.swift:24-42`.
+- That `AdapterFactory` is itself manually instantiated and wired in the composition root `Core` (`/Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Core/Core.swift:318`), which `new`s the managers and hands them in by hand:
+
+```swift
+let adapterFactory = AdapterFactory(
+    evmBlockchainManager: evmBlockchainManager,
+    ...
+    moneroNodeManager: moneroNodeManager,
+    ...
+    restoreSettingsManager: restoreSettingsManager,
+    ...
+)
+let adapterEngine = AdapterManager(adapterFactory: adapterFactory, walletManager: walletManager)
+adapterManager = AppAdapterManager(engine: adapterEngine, ...)
+```
+
+The runtime call chain that actually triggers a `MoneroAdapter` instance is roughly:
+`AppAdapterManager` -> `AdapterManager` (engine, `adapterFactory: IAdapterFactory`) -> `AdapterFactory.adapter(wallet:)` -> `MoneroAdapter.init(wallet:restoreSettings:node:)`.
+
+There is no DI container (no Swinject/Resolver/etc.) involved — wiring is hand-rolled in `Core` and dependencies are passed down explicitly through initializers, with `AdapterFactory` acting as the factory that knows how to construct each per-blockchain `IAdapter` (including `MoneroAdapter`).
+
+Other `MoneroAdapter` references found in the tree are not constructions but usages:
+- `KitCleaner.swift:25` calls the static `MoneroAdapter.clear(except:)`.
+- `AppAdapterManager.swift:133` downcasts an existing adapter via `engine.adapter(for: wallet) as? MoneroAdapter` to call `restart()`.
+- The remaining files reference the type for casts, send/receive handlers, view models, etc., but never call `MoneroAdapter(...)`.
+
+--SELF-REPORTED--
+[
+  {
+    "item": "Identified single MoneroAdapter construction site in AdapterFactory.adapter(wallet:) at AdapterFactory.swift:216",
+    "covered": true
+  },
+  {
+    "item": "Described MoneroAdapter's init signature (wallet, restoreSettings, node) - constructor injection",
+    "covered": true
+  },
+  {
+    "item": "Explained that AdapterFactory is the factory class (conforming to IAdapterFactory) producing the adapter",
+    "covered": true
+  },
+  {
+    "item": "Traced where restoreSettings and moneroNode come from (RestoreSettingsManager and MoneroNodeManager, AdapterFactory ctor-injected)",
+    "covered": true
+  },
+  {
+    "item": "Traced AdapterFactory's own construction in Core.swift:318 composition root (manual wiring, no DI container)",
+    "covered": true
+  },
+  {
+    "item": "Named runtime call chain AppAdapterManager -> AdapterManager -> AdapterFactory -> MoneroAdapter.init",
+    "covered": true
+  },
+  {
+    "item": "Distinguished non-construction references (KitCleaner static clear, AppAdapterManager cast, send/receive modules)",
+    "covered": true
+  }
+]

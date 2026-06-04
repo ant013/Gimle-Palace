@@ -1,0 +1,85 @@
+**Where `MoneroAdapter` is constructed**
+
+There is exactly one `init` call site for `MoneroAdapter` in the iOS app:
+
+- `/Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Core/Factories/AdapterFactory.swift:216`
+
+```swift
+case (.native, .monero):
+    let restoreSettings = restoreSettingsManager.settings(accountId: wallet.account.id, blockchainType: .monero)
+    let moneroNode = moneroNodeManager.node(blockchainType: .monero)
+    return try? MoneroAdapter(wallet: wallet, restoreSettings: restoreSettings, node: moneroNode.node)
+```
+
+This sits inside `AdapterFactory.adapter(wallet:) -> IAdapter?`, a big switch over `(wallet.token.type, wallet.token.blockchain.type)` that hands back the appropriate adapter implementation for each blockchain (Bitcoin, EVM, Tron, TON, Zcash, Zano, Monero, etc.).
+
+Two other files reference `MoneroAdapter` but do NOT construct one:
+- `Core/Managers/KitCleaner.swift:25` calls the static `MoneroAdapter.clear(except:)`.
+- `Core/Managers/AppAdapterManager.swift:133` only downcasts an already-built adapter (`engine.adapter(for: wallet) as? MoneroAdapter`).
+
+**How it gets its dependencies — pure constructor injection through a hand-wired factory (no DI container)**
+
+`MoneroAdapter.init(wallet:restoreSettings:node:)` (declared at `Core/Adapters/MoneroAdapter.swift:35`) takes its three dependencies directly as init parameters; inside it constructs `MoneroKit.Kit` and pulls a couple of process-wide singletons off `Core.shared` (`Core.shared.logger`, `Core.shared.reachabilityManager`).
+
+The dependencies passed at the call site are sourced from two collaborators that `AdapterFactory` itself receives via constructor injection (see `AdapterFactory.swift:9-42`):
+
+- `restoreSettingsManager: RestoreSettingsManager` → provides `RestoreSettings` (birthday height).
+- `moneroNodeManager: MoneroNodeManager` → provides the `Node` (RPC endpoint).
+- `wallet: Wallet` → flows in as the per-call argument.
+
+`AdapterFactory` itself is wired up exactly once as a plain Swift object inside the app's composition root, the `Core` class:
+
+- `/Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Core/Core.swift:318-332`
+
+```swift
+let adapterFactory = AdapterFactory(
+    evmBlockchainManager: evmBlockchainManager,
+    ...
+    moneroNodeManager: moneroNodeManager,
+    ...
+    restoreSettingsManager: restoreSettingsManager,
+    ...
+)
+let adapterEngine = AdapterManager(adapterFactory: adapterFactory, walletManager: walletManager)
+adapterManager = AppAdapterManager(engine: adapterEngine, ...)
+```
+
+`AdapterFactory` conforms to the `IAdapterFactory` protocol (`packages/WalletCore/Sources/WalletCore/Core/Factories/IAdapterFactory.swift:4`), which is then injected into `AdapterManager` and `TransactionAdapterManager` (both in `packages/WalletCore/.../Managers/`) — again plain constructor injection.
+
+**Summary of the pattern**
+
+- No DI container / property wrapper / service locator is used.
+- `Core` is the composition root: it news up all managers and the factory, hand-wiring everything via initializers.
+- `AdapterFactory` is the abstract-factory pattern (returns `IAdapter`), receives all blockchain-specific managers via its initializer, and per-call assembles the deps `MoneroAdapter` needs (`RestoreSettings` from `RestoreSettingsManager`, `Node` from `MoneroNodeManager`) before calling `MoneroAdapter.init` with constructor injection.
+- The only non-injected dependencies inside `MoneroAdapter.init` are the two globals fetched from the `Core.shared` singleton (logger + reachability manager).
+
+**Key files**
+- `/Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Core/Adapters/MoneroAdapter.swift` (init at line 35)
+- `/Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Core/Factories/AdapterFactory.swift` (call site at line 216; factory init at lines 9–42)
+- `/Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Core/Core.swift` (composition root, lines 318–352)
+- `/Users/ant013/Ios/bench-vanilla/packages/WalletCore/Sources/WalletCore/Core/Factories/IAdapterFactory.swift` (protocol)
+- `/Users/ant013/Ios/bench-vanilla/packages/WalletCore/Sources/WalletCore/Core/Managers/AdapterManager.swift` and `TransactionAdapterManager.swift` (consumers of `IAdapterFactory`)
+
+--SELF-REPORTED--
+[
+  {
+    "item": "Located all MoneroAdapter `init` call sites",
+    "covered": true
+  },
+  {
+    "item": "Named the constructing type (AdapterFactory) and its method (adapter(wallet:))",
+    "covered": true
+  },
+  {
+    "item": "Identified DI mechanism (constructor injection via hand-wired factory, no DI container)",
+    "covered": true
+  },
+  {
+    "item": "Named collaborators supplying MoneroAdapter's deps (RestoreSettingsManager, MoneroNodeManager) plus Core.shared globals",
+    "covered": true
+  },
+  {
+    "item": "Identified composition root (Core.swift) and IAdapterFactory protocol",
+    "covered": true
+  }
+]

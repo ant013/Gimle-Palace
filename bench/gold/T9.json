@@ -1,0 +1,23 @@
+{
+  "task": "T9",
+  "description": "Extract address-formatting helper from MoneroAdapter into MoneroAddressFormatter",
+  "must_contain_regex": [
+    "MoneroAddressFormatter",
+    "MoneroAdapter"
+  ],
+  "any_n_of_regex": {
+    "n": 2,
+    "items": [
+      "(class|struct)\\s+MoneroAddressFormatter",
+      "MoneroAddressFormatter\\(",
+      "(format|formatted|address)",
+      "new file mode",
+      "\\.swift"
+    ]
+  },
+  "must_not_contain_regex": [
+    "git\\s+commit\\s",
+    "git\\s+push\\s",
+    "Tests?/.*\\.swift"
+  ]
+}

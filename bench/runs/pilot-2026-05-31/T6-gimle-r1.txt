@@ -1,0 +1,196 @@
+## Finding
+
+The "ERC-20 token whitelist" (pre-approved list of EVM tokens with hardcoded contract addresses) in unstoppable-wallet-ios lives in:
+
+`/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Core/Abstraction/Config/StablecoinRegistry.swift`
+
+This `enum StablecoinRegistry` is the single source of truth for v1 stablecoin tokens consumed by:
+- `CreateSmartAccountService` (via `v1TokenQueries`) — enables wallets at AA creation/restore.
+- `AccountType.passkeyOwned.supports(token:)` (via `supports(blockchainType:tokenAddress:)`) — admission gate.
+- `ManageWalletsTokenFetcher.tokenQueries(account:)` — featured tokens shown by default in the Manage Wallets screen for passkey-owned accounts.
+
+There is no other registry, JSON file, or coin manager in the repo that hardcodes ERC-20 contract addresses as a pre-approved whitelist (verified by grep + filesystem scan). All other token discovery flows go through `MarketKit` (search / featured / by-address).
+
+## Key observation: USDC mainnet is already whitelisted
+
+`StablecoinRegistry.swift` line 26 already contains:
+
+```swift
+Entry(blockchainType: .ethereum, address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"), // USDC
+```
+
+This is the same contract address requested in the task (`0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48`), stored in the canonical lowercased hex form mandated by the file-level comment (line 19-20):
+
+> Stored in canonical form: lowercased hex for EVM, mixed-case Base58 for Tron. `supports(...)` compares case-insensitively so EVM EIP-55 input still matches.
+
+So the change requested by the task is a **no-op on the source** — the entry already exists and the lookup is case-insensitive, so the EIP-55 mixed-case address in the task prompt resolves correctly. Re-adding it would either be a duplicate row (corrupting the idempotency assumed by `v1TokenQueries`) or a style violation.
+
+The patch therefore consists solely of a **new test file** that locks in the existing whitelist behavior for USDC mainnet — pinning the convention so a future regression (e.g., somebody removes the line or changes the comparison to case-sensitive) is caught.
+
+## Patch (diff)
+
+```diff
+diff --git a/Unstoppable/Tests/Abstraction/Config/StablecoinRegistryTests.swift b/Unstoppable/Tests/Abstraction/Config/StablecoinRegistryTests.swift
+new file mode 100644
+index 000000000..23d8022f0
+--- /dev/null
++++ b/Unstoppable/Tests/Abstraction/Config/StablecoinRegistryTests.swift
+@@ -0,0 +1,74 @@
++import Foundation
++import MarketKit
++import Testing
++@testable import Unstoppable
++
++// Covers StablecoinRegistry — the pre-approved (whitelist) ERC-20 / TRC-20
++// token registry consumed by CreateSmartAccountService and
++// AccountType.passkeyOwned.supports(token:).
++//
++// In particular, exercises USDC on Ethereum mainnet
++// (0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48) — the entry stored in
++// canonical lowercased hex per the file-level convention; lookup must
++// match both the stored lowercase form and any EIP-55 mixed-case input.
++struct StablecoinRegistryTests {
++    private static let usdcEthereumEip55 = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
++    private static let usdcEthereumLowercase = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
++
++    @Test
++    func supportsUsdcOnEthereumMainnetWithEip55Address() {
++        #expect(
++            StablecoinRegistry.supports(
++                blockchainType: .ethereum,
++                tokenAddress: Self.usdcEthereumEip55
++            )
++        )
++    }
++
++    @Test
++    func supportsUsdcOnEthereumMainnetWithLowercaseAddress() {
++        #expect(
++            StablecoinRegistry.supports(
++                blockchainType: .ethereum,
++                tokenAddress: Self.usdcEthereumLowercase
++            )
++        )
++    }
++
++    @Test
++    func v1TokenQueriesContainsUsdcOnEthereumMainnetExactlyOnce() {
++        let matches = StablecoinRegistry.v1TokenQueries.filter { query in
++            guard query.blockchainType == .ethereum else { return false }
++            guard case let .eip20(address) = query.tokenType else { return false }
++            return address.caseInsensitiveCompare(Self.usdcEthereumEip55) == .orderedSame
++        }
++
++        #expect(matches.count == 1, "USDC mainnet must be whitelisted exactly once (idempotency)")
++    }
++
++    @Test
++    func doesNotSupportUsdcAddressOnWrongChain() {
++        // Ethereum USDC contract address must NOT resolve as whitelisted on a
++        // chain where the actual USDC contract address differs (Base USDC
++        // lives at 0x833589fcd6edb6e08f4c7c32d4f71b54bda02913).
++        #expect(
++            StablecoinRegistry.supports(
++                blockchainType: .base,
++                tokenAddress: Self.usdcEthereumEip55
++            ) == false
++        )
++    }
++
++    @Test
++    func rejectsUnknownErc20OnEthereumMainnet() {
++        // WETH is a popular ERC-20 but is NOT on the v1 stablecoin whitelist.
++        let weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
++
++        #expect(
++            StablecoinRegistry.supports(
++                blockchainType: .ethereum,
++                tokenAddress: weth
++            ) == false
++        )
++    }
++}
+```
+
+## Test rationale (each test ties to a real risk)
+
+- `supportsUsdcOnEthereumMainnetWithEip55Address` — proves EIP-55 mixed-case input matches the lowercased-stored entry; this is the contract the file comment promises and the only safe-to-rely-on guarantee for callers passing addresses straight from user input or third-party SDKs.
+- `supportsUsdcOnEthereumMainnetWithLowercaseAddress` — locks in the canonical-form lookup.
+- `v1TokenQueriesContainsUsdcOnEthereumMainnetExactlyOnce` — catches the *exact* failure mode of the naïve "add USDC" fix (a duplicate `Entry(... USDC)` row), which would silently double-enroll the wallet in `CreateSmartAccountService`.
+- `doesNotSupportUsdcAddressOnWrongChain` — defensive: the contract address `0xA0b8...` only exists on Ethereum mainnet; matching it on Base/BSC would be a serious cross-chain confusion bug.
+- `rejectsUnknownErc20OnEthereumMainnet` — negative control proving the whitelist is exhaustive, not permissive.
+
+## If the task truly wanted a new entry (not just whitelist verification)
+
+If the operator meant USDC on a chain where it is *currently absent* (e.g., USDC on `binanceSmartChain`, `polygon`, `optimism`, `arbitrumOne`, `avalanche`, `gnosis`, `fantom`, `zkSync` — all blockchains present in `BlockchainType.supported` but not in the registry), the patch would be a one-line append to `StablecoinRegistry.entries` matching the surrounding style, e.g.:
+
+```swift
+Entry(blockchainType: .polygon, address: "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359"), // USDC
+```
+
+…but for **Ethereum mainnet specifically — the address in the task** — no source change is needed; that entry already exists at line 26.
+
+## Diagnostics
+- `[DEGRADED-PALACE]` — palace-memory MCP unreachable at task start (`palace.memory.health` and `palace.memory.list_projects` both returned "Unable to connect"). Fell back to serena/grep substrate; no impact on output quality for this scoped task.
+- No commit / no push made. New file is staged in working tree only:
+  - `/Users/ant013/Ios/bench-gimle/Unstoppable/Tests/Abstraction/Config/StablecoinRegistryTests.swift`
+
+--SELF-REPORTED--
+[
+  {
+    "item": "Identified ERC-20 whitelist location (StablecoinRegistry.swift)",
+    "covered": true
+  },
+  {
+    "item": "Located USDC entry for Ethereum mainnet",
+    "covered": true
+  },
+  {
+    "item": "Verified contract address matches task (0xA0b86991...eB48)",
+    "covered": true
+  },
+  {
+    "item": "Noted whitelist already contains USDC mainnet (idempotency)",
+    "covered": true
+  },
+  {
+    "item": "Followed canonical lowercased-EVM convention from file comment",
+    "covered": true
+  },
+  {
+    "item": "Added test covering EIP-55 mixed-case lookup",
+    "covered": true
+  },
+  {
+    "item": "Added test covering lowercased lookup",
+    "covered": true
+  },
+  {
+    "item": "Added test asserting exactly-one entry (catches duplicate-add bug)",
+    "covered": true
+  },
+  {
+    "item": "Added test for wrong-chain negative case",
+    "covered": true
+  },
+  {
+    "item": "Added test for unknown-token negative case",
+    "covered": true
+  },
+  {
+    "item": "Used Swift Testing framework matching nearest analog (AccountTypePasskeyOwnedTests)",
+    "covered": true
+  },
+  {
+    "item": "Mirrored test directory structure (Tests/Abstraction/Config mirrors Core/Abstraction/Config)",
+    "covered": true
+  },
+  {
+    "item": "Produced unified diff",
+    "covered": true
+  },
+  {
+    "item": "Did not commit or push",
+    "covered": true
+  }
+]

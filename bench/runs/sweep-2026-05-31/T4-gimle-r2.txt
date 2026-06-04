@@ -1,0 +1,97 @@
+## Where `MoneroAdapter` is constructed
+
+There is exactly **one** `MoneroAdapter(...)` construction site in the codebase:
+
+- **File:** `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Core/Factories/AdapterFactory.swift`
+- **Lines:** 213-216 (inside `AdapterFactory.adapter(wallet:)`)
+
+```swift
+case (.native, .monero):
+    let restoreSettings = restoreSettingsManager.settings(accountId: wallet.account.id, blockchainType: .monero)
+    let moneroNode = moneroNodeManager.node(blockchainType: .monero)
+    return try? MoneroAdapter(wallet: wallet, restoreSettings: restoreSettings, node: moneroNode.node)
+```
+
+The adapter's initializer (defined at `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Core/Adapters/MoneroAdapter.swift:35`) is:
+
+```swift
+init(wallet: Wallet, restoreSettings: RestoreSettings, node: Node) throws
+```
+
+So `MoneroAdapter` takes three direct args: `Wallet`, `RestoreSettings`, and a Monero `Node`. Construction can fail (`try?` swallows the error and the factory returns `nil`).
+
+## How its dependencies are provided
+
+It's a **hybrid pattern: factory + constructor injection + a single global service-locator (`Core.shared`)**. There is no third-party DI container (no Swinject/Resolver/etc.).
+
+1. **`AdapterFactory` (constructor injection).** `AdapterFactory` is a plain Swift class conforming to `IAdapterFactory`. All its collaborators — including the two managers that supply Monero deps — are passed via `init(...)`:
+   - `MoneroNodeManager` -> produces the `Node` value (`moneroNodeManager.node(blockchainType: .monero)`).
+   - `RestoreSettingsManager` -> produces the per-account `RestoreSettings` (e.g. birthday height).
+   - `CoinManager`, `EvmBlockchainManager`, etc. for sibling chains.
+
+   See `AdapterFactory.swift:9-42` for the stored properties and 13-arg `init`.
+
+2. **`Core` composition root (`Core.swift`).** `AdapterFactory` is itself instantiated exactly once inside `Core.init()` at `Core.swift:318-332`, wiring all dependencies that were created earlier in the same init. `MoneroNodeManager` is created at `Core.swift:231-232`:
+
+   ```swift
+   let moneroNodeStorage = MoneroNodeStorage(dbPool: dbPool)
+   moneroNodeManager = MoneroNodeManager(blockchainSettingsStorage: blockchainSettingsStorage,
+                                         moneroNodeStorage: moneroNodeStorage)
+   ```
+   `Core` exposes itself as a singleton via `Core.shared` / `Core.instance` (set in `Core.initApp()` at `Core.swift:11-18`). This singleton is the de-facto "container."
+
+3. **Wallet-side runtime selection.** Callers don't construct a `MoneroAdapter` directly. They go through `Core.shared.adapterManager.adapter(for: token/wallet) as? MoneroAdapter` (e.g. `MoneroHashBroadcaster.swift:15`, `MoneroSendHandler.swift:183`, `TransactionServiceFactory.swift:24`, `USwapMultiSwapProvider.swift:910`, `SendHandlerFactory.swift:77`). The `AppAdapterManager` -> `AdapterManager` (wrapping `AdapterFactory`) calls `AdapterFactory.adapter(wallet:)` on demand for each active wallet — i.e. it's lazy/per-wallet, not eagerly registered.
+
+4. **Service-locator leak inside the adapter.** `MoneroAdapter.init` also reaches into the global singleton for two ambient services (`MoneroAdapter.swift:36, 47, 59`):
+   - `Core.shared.logger.scoped(with: "MoneroKit")`
+   - `Core.shared.reachabilityManager`
+
+   So the adapter is *not* purely constructor-injected — `logger` and `reachabilityManager` come from `Core.shared` rather than through `init` parameters. This matches the pattern used by other chains in this codebase (a `Core` singleton acting as ambient context).
+
+## Summary in one sentence
+
+`MoneroAdapter` is built in exactly one place — `AdapterFactory.adapter(wallet:)` at `AdapterFactory.swift:215` — which receives `MoneroNodeManager` and `RestoreSettingsManager` via constructor injection from the `Core` composition root (`Core.swift:318`), while the adapter itself additionally pulls `logger` and `reachabilityManager` from the `Core.shared` singleton (service locator). No DI framework is used; `Core` is a manually-wired composition root + singleton.
+
+## Diagnostics
+
+- `[DEGRADED-PALACE]` — `palace.memory.health()` and `palace.memory.list_projects` both returned "Unable to connect"; fell back to serena `search_for_pattern` + Read. No palace tools were used for discovery. Task is read-only investigation, so HARD-GATE / spec writing / write-back skipped per benchmark autonomy.
+
+--SELF-REPORTED--
+[
+  {
+    "item": "Located the single MoneroAdapter construction site",
+    "covered": true
+  },
+  {
+    "item": "Identified the file and line for the construction",
+    "covered": true
+  },
+  {
+    "item": "Named the constructor's parameters (Wallet, RestoreSettings, Node)",
+    "covered": true
+  },
+  {
+    "item": "Explained dependency provisioning mechanism (constructor injection via AdapterFactory)",
+    "covered": true
+  },
+  {
+    "item": "Identified the composition root (Core / Core.shared singleton)",
+    "covered": true
+  },
+  {
+    "item": "Noted absence of third-party DI container",
+    "covered": true
+  },
+  {
+    "item": "Surfaced service-locator leak (Core.shared.logger / reachabilityManager inside init)",
+    "covered": true
+  },
+  {
+    "item": "Referenced concrete class names (MoneroAdapter, AdapterFactory, IAdapterFactory, MoneroNodeManager, RestoreSettingsManager, Core, AdapterManager, AppAdapterManager)",
+    "covered": true
+  },
+  {
+    "item": "Showed runtime access path used by callers (Core.shared.adapterManager.adapter(for:) as? MoneroAdapter)",
+    "covered": true
+  }
+]

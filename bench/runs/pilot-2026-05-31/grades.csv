@@ -1,0 +1,9 @@
+task,arm,run,pass_score,must_score,must_not_score,any_n_score,any_n_hits_count,subagent_tokens,duration_ms,tool_uses,qualitative
+T1,gimle,1,0.917,1.0,1.0,0.75,6,,,,False
+T1,gimle,2,0.958,1.0,1.0,0.875,7,,,,False
+T1,vanilla,1,0.917,1.0,1.0,0.75,6,,,,False
+T1,vanilla,2,0.917,1.0,1.0,0.75,6,,,,False
+T6,gimle,1,1.0,1.0,1.0,1.0,4,,,,False
+T6,gimle,2,1.0,1.0,1.0,1.0,4,,,,False
+T6,vanilla,1,1.0,1.0,1.0,1.0,4,,,,False
+T6,vanilla,2,1.0,1.0,1.0,1.0,3,,,,False

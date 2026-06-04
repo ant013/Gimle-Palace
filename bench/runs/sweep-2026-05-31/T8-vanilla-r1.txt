@@ -1,0 +1,142 @@
+
+Silent failure location
+=======================
+File: /Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Modules/Send/Platforms/Bitcoin/SendBitcoinAdapterService.swift (lines 177-184)
+
+```swift
+do {
+    if let adapter = self?.adapter {
+        let sendInfo = try adapter.sendInfo(params: params)
+        self?.sendInfoState = .completed(sendInfo)
+    }
+} catch {
+    self?.sendInfoState = .failed(error)  // <-- error captured but never surfaced
+}
+```
+
+When `adapter.sendInfo` throws `BitcoinCoreErrors.SendValueErrors.notEnough` (selected UTXOs cannot cover amount + fee), `sendInfoState` becomes `.failed(error)`. Downstream:
+- `feeState = sendInfoState.map(\.fee)` becomes `.failed(error)`.
+- `SendFeeViewModel.sync(state:)` (Modules/Send/Fee/SendFeeViewModel.swift:41) renders the fee cell as the bare string "n/a" — no `caution`, no title, no error text.
+- `SendBitcoinService.syncState()` (Modules/Send/Platforms/Bitcoin/SendBitcoinService.swift:65) never inspects `sendInfoState`, so `state` stays `.ready` whenever `amount <= availableBalance` and the address/fee-rate are valid. The proceed button stays enabled.
+
+Net effect: the user enters an amount that almost equals their balance (or selects custom UTXOs that don't cover the fee), sees fee = "n/a", gets no explanation, but the proceed button looks active. (Note: the SendNew path in `Modules/SendNew/BitcoinSendHandler.swift` already surfaces this error via `UtxoSendHelper.caution` — only the legacy SendBitcoin* path is silent.)
+
+Smallest patch
+==============
+Bridge the existing `ISendInfoValueService.sendInfoStateObservable` into the existing `SendAmountCautionService`, so a failed `sendInfo` with `SendValueErrors.notEnough` produces the same `.insufficientBalance` caution that the amount-vs-balance check already produces. That caution is already rendered by `SendAmountCautionViewModel` ("send.amount_error.balance") and already gates the proceed button via `SendBitcoinService.syncState`.
+
+Working-tree diff
+=================
+
+```diff
+diff --git a/Unstoppable/Unstoppable/Modules/Send/AmountCaution/SendAmountCautionService.swift b/Unstoppable/Unstoppable/Modules/Send/AmountCaution/SendAmountCautionService.swift
+index e3994ae7f..444d47635 100644
+--- a/Unstoppable/Unstoppable/Modules/Send/AmountCaution/SendAmountCautionService.swift
++++ b/Unstoppable/Unstoppable/Modules/Send/AmountCaution/SendAmountCautionService.swift
+@@ -1,3 +1,4 @@
++import BitcoinCore
+ import Foundation
+ import RxCocoa
+ import RxRelay
+@@ -6,6 +7,7 @@ import RxSwift
+ class SendAmountCautionService {
+     private let disposeBag = DisposeBag()
+     private var availableBalanceDisposeBag = DisposeBag()
++    private var sendInfoDisposeBag = DisposeBag()
+ 
+     private let amountInputService: IAmountInputService
+     weak var availableBalanceService: IAvailableBalanceService? {
+@@ -16,6 +18,12 @@ class SendAmountCautionService {
+ 
+     weak var sendAmountBoundsService: ISendXSendAmountBoundsService?
+ 
++    weak var sendInfoService: ISendInfoValueService? {
++        didSet {
++            setSendInfoService()
++        }
++    }
++
+     private let amountCautionRelay = BehaviorRelay<Caution?>(value: nil)
+     private(set) var amountCaution: Caution? {
+         didSet {
+@@ -38,6 +46,15 @@ class SendAmountCautionService {
+         }
+     }
+ 
++    private func setSendInfoService() {
++        sendInfoDisposeBag = DisposeBag()
++        if let sendInfoService {
++            subscribe(sendInfoDisposeBag, sendInfoService.sendInfoStateObservable) { [weak self] _ in
++                self?.sync()
++            }
++        }
++    }
++
+     private func sync() {
+         let amount = amountInputService.amount
+         guard !amount.isZero else {
+@@ -62,6 +79,16 @@ class SendAmountCautionService {
+             amountCaution = .tooFewAmount(minimumAmount: minimumAmount)
+             return
+         }
++        // Selected UTXOs cannot cover amount + fee: surface explicit insufficient-balance caution
++        // instead of silently rendering the fee field as "n/a".
++        if case let .failed(error) = sendInfoService?.sendInfoState,
++           let valueError = error as? BitcoinCoreErrors.SendValueErrors,
++           case .notEnough = valueError
++        {
++            let availableBalance = availableBalanceService?.availableBalance.data ?? 0
++            amountCaution = .insufficientBalance(availableBalance: availableBalance)
++            return
++        }
+ 
+         amountCaution = nil
+     }
+diff --git a/Unstoppable/Unstoppable/Modules/Send/Platforms/SendModule.swift b/Unstoppable/Unstoppable/Modules/Send/Platforms/SendModule.swift
+index c040ae77e..4e896541d 100644
+--- a/Unstoppable/Unstoppable/Modules/Send/Platforms/SendModule.swift
++++ b/Unstoppable/Unstoppable/Modules/Send/Platforms/SendModule.swift
+@@ -101,6 +101,7 @@ enum SendModule {
+         amountInputService.availableBalanceService = bitcoinAdapterService
+         amountCautionService.availableBalanceService = bitcoinAdapterService
+         amountCautionService.sendAmountBoundsService = bitcoinAdapterService
++        amountCautionService.sendInfoService = bitcoinAdapterService
+ 
+         addressService.customErrorService = timeLockErrorService
+```
+
+Files touched
+=============
+- /Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Modules/Send/AmountCaution/SendAmountCautionService.swift
+- /Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Modules/Send/Platforms/SendModule.swift
+
+(No commit, no push.)
+
+
+--SELF-REPORTED--
+[
+  {
+    "item": "Located the silent-failure spot for Bitcoin send with insufficient UTXOs",
+    "covered": true
+  },
+  {
+    "item": "Identified the spot is in legacy SendBitcoinAdapterService.update() at lines 177-184 where SendValueErrors.notEnough is captured into sendInfoState=.failed but only renders fee as 'n/a' with no caution and no proceed-button gating",
+    "covered": true
+  },
+  {
+    "item": "Noted that the SendNew/BitcoinSendHandler path already surfaces this error via UtxoSendHelper.caution, so only the legacy SendBitcoin* path needs fixing",
+    "covered": true
+  },
+  {
+    "item": "Proposed and applied the smallest patch: extend SendAmountCautionService with optional sendInfoService that subscribes to sendInfoStateObservable and produces .insufficientBalance caution on .failed(.notEnough); wire it in SendModule.swift",
+    "covered": true
+  },
+  {
+    "item": "Patch reuses existing localized string send.amount_error.balance via SendAmountCautionViewModel and existing proceed-button gating via SendBitcoinService.syncState() (which already checks amountCautionService.amountCaution == nil)",
+    "covered": true
+  },
+  {
+    "item": "Diff shown; no commit, no push",
+    "covered": true
+  }
+]

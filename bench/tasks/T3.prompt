@@ -1,0 +1,6 @@
+In the unstoppable-wallet-ios codebase, explain in detail how tapping the
+"Send" button on an Ethereum send screen eventually produces a signed
+Ethereum transaction ready to broadcast.
+
+Walk through the components and methods involved in order, from UI layer
+to signing. Reference the actual class and method names.
