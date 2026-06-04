@@ -319,9 +319,7 @@ class Settings(BaseSettings):
 
     @field_validator("palace_periodic_reingest_ignore_globs", mode="before")
     @classmethod
-    def parse_periodic_reingest_ignore_globs(
-        cls, value: object
-    ) -> list[str] | object:
+    def parse_periodic_reingest_ignore_globs(cls, value: object) -> list[str] | object:
         if value is None:
             return []
         if isinstance(value, str):

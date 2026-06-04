@@ -224,9 +224,13 @@ async def detect_project_stale_files(
             await session.run(_READ_PROJECT_FILES, project=project.slug)
         ).data()
 
-    run_id = str(run_row["run_id"]) if run_row and run_row["run_id"] is not None else None
+    run_id = (
+        str(run_row["run_id"]) if run_row and run_row["run_id"] is not None else None
+    )
     finished_at = (
-        str(run_row["finished_at"]) if run_row and run_row["finished_at"] is not None else None
+        str(run_row["finished_at"])
+        if run_row and run_row["finished_at"] is not None
+        else None
     )
     project_reason: str | None = None
     if run_row is None:
@@ -268,7 +272,8 @@ async def detect_project_stale_files(
         language_profile=project.language_profile,
         run_id=run_id,
         finished_at=finished_at,
-        requires_reingest=bool(stale) or project_reason in {"ingest_run_missing", "ingest_run_unfinished"},
+        requires_reingest=bool(stale)
+        or project_reason in {"ingest_run_missing", "ingest_run_unfinished"},
         project_reason=project_reason,
         stale_files=stale,
         metadata_only_files=metadata_only,
