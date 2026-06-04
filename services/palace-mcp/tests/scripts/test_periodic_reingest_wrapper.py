@@ -6,7 +6,9 @@ import subprocess
 from pathlib import Path
 
 
-_SCRIPT_PATH = Path(__file__).parent.parent.parent / "scripts" / "palace-periodic-reingest.sh"
+_SCRIPT_PATH = (
+    Path(__file__).parent.parent.parent / "scripts" / "palace-periodic-reingest.sh"
+)
 
 
 def _write_executable(path: Path, body: str) -> None:
@@ -47,8 +49,10 @@ exit 64
     )
 
     assert result.returncode == 0
-    assert marker.read_text(encoding="utf-8").strip().endswith(
-        "python -m palace_mcp.ops.detect_stale_files"
+    assert (
+        marker.read_text(encoding="utf-8")
+        .strip()
+        .endswith("python -m palace_mcp.ops.detect_stale_files")
     )
 
 
