@@ -1078,6 +1078,17 @@ class TestCallHierarchyRegistration:
 
 
 class TestCallHierarchyTool:
+    @pytest.fixture(autouse=True)
+    def _reset_cache(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Disable the module-level hydration cache for every test in this class.
+
+        GIM-1181 added a cache layer to palace.code.call_hierarchy. Without
+        this fixture, an ok=True result from one test populates the global
+        cache and later tests in the same run get a cache hit — bypassing the
+        monkeypatched call_hierarchy_tool and breaking assertions on kwargs.
+        """
+        monkeypatch.setattr("palace_mcp.cache._cache", None)
+
     @pytest.mark.asyncio
     async def test_happy_path_returns_callers(
         self, monkeypatch: pytest.MonkeyPatch

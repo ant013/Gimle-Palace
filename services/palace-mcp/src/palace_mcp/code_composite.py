@@ -1467,6 +1467,7 @@ def register_code_composite_tools(
         max_results: int = 50,
         index_store_path: str | None = None,
     ) -> dict[str, Any]:
+        from palace_mcp.cache import cache_key, get_cache, hydration_semaphore
         from palace_mcp.code.call_hierarchy import call_hierarchy_tool
         from palace_mcp.mcp_server import get_settings
 
@@ -1490,13 +1491,40 @@ def register_code_composite_tools(
                 "message": str(e),
             }
 
-        return await asyncio.to_thread(
-            call_hierarchy_tool,
+        key = cache_key(
             qualified_name=req.qualified_name,
-            project=req.project,
+            project=req.project or "",
             max_results=req.max_results,
-            index_store_path=req.index_store_path,
-            indexstore_paths=settings.palace_indexstore_paths,
-            default_store_path=settings.palace_sourcekit_index_store_path,
-            timeout_s=settings.palace_call_hierarchy_timeout_s,
+            index_store_path=req.index_store_path or "",
         )
+        cache = get_cache()
+        if cache is not None:
+            cached_value, hit = cache.get(key)
+            if hit:
+                logger.info(
+                    "palace.cache.hit tool=palace.code.call_hierarchy qn=%s",
+                    req.qualified_name,
+                )
+                return cached_value  # type: ignore[no-any-return]
+
+        logger.info(
+            "palace.cache.miss tool=palace.code.call_hierarchy qn=%s",
+            req.qualified_name,
+        )
+
+        async with hydration_semaphore("palace.code.call_hierarchy"):
+            result: dict[str, Any] = await asyncio.to_thread(
+                call_hierarchy_tool,
+                qualified_name=req.qualified_name,
+                project=req.project,
+                max_results=req.max_results,
+                index_store_path=req.index_store_path,
+                indexstore_paths=settings.palace_indexstore_paths,
+                default_store_path=settings.palace_sourcekit_index_store_path,
+                timeout_s=settings.palace_call_hierarchy_timeout_s,
+            )
+
+        if cache is not None and result.get("ok"):
+            cache.put(key, result)
+
+        return result

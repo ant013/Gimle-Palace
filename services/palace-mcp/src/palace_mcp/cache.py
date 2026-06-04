@@ -38,7 +38,12 @@ _DEFAULT_SEM_LIMIT = 4
 
 
 class HydrationCache:
-    """LRU-TTL in-memory cache for hydration results."""
+    """LRU-TTL in-memory cache for hydration results.
+
+    Args:
+        maxsize: Maximum number of entries. Oldest entry is evicted when exceeded.
+        ttl_s: Seconds before an entry expires on read. 0 = never expire.
+    """
 
     def __init__(self, maxsize: int, ttl_s: float) -> None:
         self._maxsize = maxsize
@@ -80,6 +85,10 @@ class HydrationCache:
     def size(self) -> int:
         return len(self._store)
 
+
+# ---------------------------------------------------------------------------
+# Module-level singletons — set from lifespan via init_cache / init_semaphore.
+# ---------------------------------------------------------------------------
 
 _cache: HydrationCache | None = None
 _semaphore: asyncio.Semaphore | None = None
@@ -130,7 +139,12 @@ def cache_key(**kwargs: Any) -> str:
 
 
 def invalidate_by_body_hash(body_hash: str) -> None:
-    """Invalidate all cache entries when a body_hash change is detected."""
+    """Invalidate all cache entries when a body_hash change is detected.
+
+    Stub for F5a integration — F5a will call this when symbol body_hash changes.
+    Currently clears the entire cache (conservative); F5a may narrow to
+    per-symbol keys once the mapping from body_hash → cache key is established.
+    """
     cache = _cache
     if cache is None:
         return
