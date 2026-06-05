@@ -6,15 +6,19 @@ import os
 import subprocess
 from pathlib import Path
 
-_DEFAULT_ROOTS = (
+_HOST_DEFAULT_ROOTS = (
     "/Users/ant013/Ios",
     "/Users/Shared/Ios",
     "/Users/anton/Ios",
 )
 
 
+def _default_roots() -> tuple[str, ...]:
+    return (*_HOST_DEFAULT_ROOTS, os.environ.get("PALACE_REPOS_ROOT", "/repos"))
+
+
 def _allowed_roots() -> tuple[Path, ...]:
-    raw = os.environ.get("PALACE_ALLOWED_REPO_ROOTS", ":".join(_DEFAULT_ROOTS))
+    raw = os.environ.get("PALACE_ALLOWED_REPO_ROOTS", ":".join(_default_roots()))
     return tuple(Path(root).resolve() for root in raw.split(":") if root)
 
 
