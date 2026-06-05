@@ -25,14 +25,29 @@ class SchemaIntegrityError(RuntimeError):
     pass
 
 
+PRUNE_SWIFT_SYMBOLS_CONSTRAINTS = [
+    "CREATE CONSTRAINT deprecation_event_id IF NOT EXISTS "
+    "FOR (e:DeprecationEvent) REQUIRE e.event_id IS UNIQUE",
+]
+
+PRUNE_SWIFT_SYMBOLS_INDEXES = [
+    "CREATE INDEX symbol_last_seen_in_run IF NOT EXISTS "
+    "FOR (s:Symbol) ON (s.project_id, s.last_seen_in_run_id)",
+    "CREATE INDEX file_last_seen_in_run IF NOT EXISTS "
+    "FOR (f:File) ON (f.project_id, f.last_seen_in_run_id)",
+    "CREATE INDEX deprecation_event_project_time IF NOT EXISTS "
+    "FOR (e:DeprecationEvent) ON (e.project_id, e.occurred_at)",
+]
+
+
 async def ensure_schema(driver: AsyncDriver, *, default_group_id: str) -> None:
     default_slug = default_group_id.removeprefix("project/")
     now = datetime.now(timezone.utc).isoformat()
 
     async with driver.session() as session:
-        for stmt in CREATE_CONSTRAINTS:
+        for stmt in [*CREATE_CONSTRAINTS, *PRUNE_SWIFT_SYMBOLS_CONSTRAINTS]:
             await session.run(stmt)
-        for stmt in CREATE_INDEXES:
+        for stmt in [*CREATE_INDEXES, *PRUNE_SWIFT_SYMBOLS_INDEXES]:
             await session.run(stmt)
         await session.run(
             BOOTSTRAP_PROJECT,

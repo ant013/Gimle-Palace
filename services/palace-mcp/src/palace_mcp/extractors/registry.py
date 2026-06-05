@@ -40,6 +40,7 @@ from palace_mcp.extractors.localization_accessibility.extractor import (
     LocalizationAccessibilityExtractor,
 )
 from palace_mcp.extractors.public_api_surface import PublicApiSurfaceExtractor
+from palace_mcp.extractors.prune_swift_symbols import PruneSwiftSymbols
 from palace_mcp.extractors.reactive_dependency_tracer.extractor import (
     ReactiveDependencyTracerExtractor,
 )
@@ -67,6 +68,7 @@ EXTRACTORS: dict[str, BaseExtractor] = {
     "symbol_index_java": SymbolIndexJava(),
     "symbol_index_solidity": SymbolIndexSolidity(),
     "symbol_index_swift": SymbolIndexSwift(),
+    "prune_swift_symbols": PruneSwiftSymbols(),
     "symbol_index_clang": SymbolIndexClang(),
     "dependency_surface": DependencySurfaceExtractor(),
     "error_handling_policy": ErrorHandlingPolicyExtractor(),
