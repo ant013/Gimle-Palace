@@ -13,7 +13,10 @@ from palace_mcp.extractors.prune_swift_symbols.subprocess_helpers import (
 )
 
 
-def test_repo_path_outside_allowlist_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_repo_path_outside_allowlist_rejected(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("PALACE_ALLOWED_REPO_ROOTS", str(tmp_path / "allowed"))
 
     with pytest.raises(ValueError, match="not under allowed roots"):
