@@ -70,11 +70,15 @@ _BATCH_SIZE = 500
 _MERGE_SYMBOLS = """
 UNWIND $rows AS r
 MERGE (s:Symbol {qualified_name: r.qualified_name, group_id: r.group_id})
-SET s.kind            = r.kind,
-    s.file_path       = r.file_path,
-    s.module_name     = r.module_name,
-    s.source_scope    = r.source_scope,
-    s.access_modifier = '',
+SET s.project_id             = $project_id,
+    s.kind                   = r.kind,
+    s.file_path              = r.file_path,
+    s.module_name            = r.module_name,
+    s.source_scope           = r.source_scope,
+    s.last_seen_in_run_id    = $run_id,
+    s.last_seen_at           = datetime($seen_at),
+    s.last_seen_in_commit    = $commit_sha,
+    s.access_modifier        = '',
     s.is_objc                = false,
     s.is_dynamic             = false,
     s.is_objc_members        = false,
@@ -88,6 +92,14 @@ SET s.kind            = r.kind,
     s.is_main_entry          = false,
     s.referenced_via_mirror  = false,
     s.deleted_at             = null
+REMOVE s:Deprecated
+REMOVE s.deprecated_at, s.deprecated_in_commit
+WITH s
+OPTIONAL MATCH (s)-[old:LAST_SEEN_IN]->()
+DELETE old
+WITH s
+MATCH (run:IngestRun {run_id: $run_id})
+MERGE (s)-[:LAST_SEEN_IN]->(run)
 """
 
 _SOFT_DELETE_ABSENT = """
@@ -201,6 +213,10 @@ async def write_symbol_nodes(
     def_file_paths: dict[str, str],
     group_id: str,
     *,
+    project_id: str,
+    run_id: str,
+    seen_at: datetime,
+    commit_sha: str,
     recipe: "Recipe | None" = None,
 ) -> int:
     """Write :Symbol nodes and edges to Neo4j in UNWIND batches.
@@ -217,7 +233,14 @@ async def write_symbol_nodes(
 
     async with driver.session() as session:
         for i in range(0, len(node_rows), _BATCH_SIZE):
-            await session.run(_MERGE_SYMBOLS, rows=node_rows[i : i + _BATCH_SIZE])
+            await session.run(
+                _MERGE_SYMBOLS,
+                rows=node_rows[i : i + _BATCH_SIZE],
+                project_id=project_id,
+                run_id=run_id,
+                seen_at=seen_at.isoformat(),
+                commit_sha=commit_sha,
+            )
 
     shadow_rows = build_symbol_shadow_rows(symbol_infos, group_id)
     async with driver.session() as session:
