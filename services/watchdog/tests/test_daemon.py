@@ -459,6 +459,75 @@ async def test_recovery_dry_run_emits_shadow_visibility_logs(
 
 
 @pytest.mark.asyncio
+async def test_tick_recovery_continues_after_respawn_exception(tmp_path: Path):
+    from freezegun import freeze_time
+
+    from gimle_watchdog import detection
+
+    cfg = _cfg(tmp_path)
+    state = State.load(tmp_path / "state.json")
+    client = MagicMock()
+    client.list_active_issues = AsyncMock(return_value=[])
+    client.list_companies = AsyncMock(return_value=[])
+    client.last_response_date = None
+
+    actions = [
+        detection.Action(
+            kind="wake",
+            issue=Issue(
+                id="issue-1",
+                assignee_agent_id="agent-1",
+                execution_run_id=None,
+                status="in_progress",
+                updated_at=datetime(2026, 4, 21, 9, 0, tzinfo=timezone.utc),
+            ),
+            agent_id="agent-1",
+            reason="stale_updatedAt",
+        ),
+        detection.Action(
+            kind="wake",
+            issue=Issue(
+                id="issue-2",
+                assignee_agent_id="agent-2",
+                execution_run_id=None,
+                status="in_progress",
+                updated_at=datetime(2026, 4, 21, 9, 0, tzinfo=timezone.utc),
+            ),
+            agent_id="agent-2",
+            reason="stale_updatedAt",
+        ),
+    ]
+
+    with patch(
+        "gimle_watchdog.daemon.detection.scan_died_mid_work",
+        new=AsyncMock(return_value=actions),
+    ):
+        with patch(
+            "gimle_watchdog.daemon.detection.scan_idle_hangs",
+            return_value=[],
+        ):
+            with patch(
+                "gimle_watchdog.daemon.actions.trigger_respawn",
+                new=AsyncMock(
+                    side_effect=[
+                        RuntimeError("temporary API error"),
+                        RespawnResult(via="patch", success=True, run_id="run-2"),
+                    ]
+                ),
+            ):
+                with patch("gimle_watchdog.daemon._run_handoff_pass", new=AsyncMock()) as mock_handoff:
+                    with patch("gimle_watchdog.daemon._run_tier_pass", new=AsyncMock()) as mock_tier:
+                        with patch("gimle_watchdog.daemon._sleep", new=AsyncMock()):
+                            with patch("gimle_watchdog.actions._sleep", new=AsyncMock()):
+                                with freeze_time("2026-04-21T09:30:00Z"):
+                                    await daemon._tick(cfg, state, client)
+
+    assert mock_handoff.await_count == 1
+    assert mock_tier.await_count == 1
+    assert "issue-2" in state.issue_cooldowns
+
+
+@pytest.mark.asyncio
 async def test_tick_recovery_respects_max_actions_per_tick(tmp_path: Path):
     from freezegun import freeze_time
 

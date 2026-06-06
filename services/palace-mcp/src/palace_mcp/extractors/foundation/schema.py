@@ -129,9 +129,24 @@ EXPECTED_SCHEMA = SchemaDefinition(
             properties=("qn_suffix",),
         ),
         IndexSpec(
+            name="symbol_short_name_idx",
+            label="Symbol",
+            properties=("group_id", "short_name"),
+        ),
+        IndexSpec(
             name="ingest_run_lookup",
             label="IngestRun",
             properties=("project", "extractor_name", "success"),
+        ),
+        IndexSpec(
+            name="ingest_run_run_id_lookup",
+            label="IngestRun",
+            properties=("run_id",),
+        ),
+        IndexSpec(
+            name="ingest_run_source_lookup",
+            label="IngestRun",
+            properties=("source", "group_id"),
         ),
         IndexSpec(
             name="dead_symbol_candidate_lookup",

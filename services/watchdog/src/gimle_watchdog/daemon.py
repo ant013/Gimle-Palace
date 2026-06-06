@@ -623,18 +623,26 @@ async def _run_recovery_pass(cfg: Config, state: State, client: PaperclipClient)
                 continue
 
             if action.kind == "wake":
-                result = await actions.trigger_respawn(client, action.issue, action.agent_id)
-                state.record_wake(action.issue.id, action.agent_id)
-                log.info(
-                    "wake_result issue=%s via=%s success=%s",
-                    action.issue.id,
-                    result.via,
-                    result.success,
-                )
-                if not result.success:
-                    log.error(
-                        "wake_failed issue=%s — will retry next tick unless cap hit",
+                try:
+                    result = await actions.trigger_respawn(client, action.issue, action.agent_id)
+                    state.record_wake(action.issue.id, action.agent_id)
+                    log.info(
+                        "wake_result issue=%s via=%s success=%s",
                         action.issue.id,
+                        result.via,
+                        result.success,
+                    )
+                    if not result.success:
+                        log.error(
+                            "wake_failed issue=%s — will retry next tick unless cap hit",
+                            action.issue.id,
+                        )
+                except Exception as exc:
+                    log.error(
+                        "wake_exception issue=%s error=%s",
+                        action.issue.id,
+                        exc,
+                        exc_info=True,
                     )
                 effectful_actions += 1
             elif action.kind == "escalate":

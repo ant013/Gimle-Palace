@@ -84,6 +84,7 @@ ln -s HsCryptoKit.Swift "$TMP_DIR/repos-hs/hs-crypto-kit"
 ln -s HDWalletKit.Swift "$TMP_DIR/repos-hs/hd-wallet-kit"
 cat > "$TMP_DIR/.env" <<'EOF'
 PALACE_SCIP_INDEX_PATHS={"existing":"/repos/existing/scip/index.scip"}
+PALACE_SCIP_INDEX_PATHS={"legacy":"/repos/legacy/scip/index.scip"}
 OTHER_VAR=1
 EOF
 cat > "$TMP_DIR/hs-extensions-manifest.json" <<'EOF'
@@ -153,9 +154,8 @@ JSON
     printf '{"ok":true,"run_id":"run-%s","extractor":"%s","project":"tron-kit","started_at":"now","finished_at":"later","duration_ms":1,"nodes_written":1,"edges_written":0,"success":true}\n' "$name" "$name"
     ;;
   palace.memory.get_project_overview)
-    cat <<'JSON'
-{"slug":"tron-kit","name":"tron-kit","tags":[],"entity_counts":{"IngestRun":1},"last_ingest_started_at":"now","last_ingest_finished_at":"later"}
-JSON
+    symbol_count="${MOCK_SYMBOL_COUNT:-1}"
+    printf '{"slug":"tron-kit","name":"tron-kit","tags":[],"entity_counts":{"IngestRun":1,"Symbol":%s},"last_ingest_started_at":"now","last_ingest_finished_at":"later"}\n' "$symbol_count"
     ;;
   *)
     echo '{"ok":false,"error_code":"unexpected_tool","message":"unexpected tool"}'
@@ -412,6 +412,21 @@ bash "$INGEST_SCRIPT" "tron-kit" \
 cmp -s "$TMP_DIR/.env.before-dry-run" "$TMP_DIR/.env" || fail "dry-run mutated env file"
 assert_contains "$DRY_RUN_OUT" '"status":"planned"'
 
+cp "$TMP_DIR/.env" "$TMP_DIR/zero-symbol.env"
+ZERO_SYMBOL_OUT="$TMP_DIR/zero-symbol.out"
+if MOCK_SYMBOL_COUNT=0 MOCK_DOCKER_LOG="$TMP_DIR/zero-symbol-docker.log" bash "$INGEST_SCRIPT" "tron-kit" \
+    --bundle=uw-ios \
+    --repo-base=/repos-hs \
+    --host-repo-base="$TMP_DIR/repos-hs" \
+    --parent-mount=hs \
+    --relative-path="TronKit.Swift" \
+    --env-file="$TMP_DIR/zero-symbol.env" >"$ZERO_SYMBOL_OUT" 2>&1; then
+    fail "zero-symbol ingest unexpectedly succeeded"
+fi
+assert_contains "$ZERO_SYMBOL_OUT" '"stage":"graph_validation"'
+assert_contains "$ZERO_SYMBOL_OUT" '"status":"failed"'
+assert_contains "$ZERO_SYMBOL_OUT" 'zero Symbol nodes after ingest'
+
 RUN1_OUT="$TMP_DIR/run1.out"
 bash "$INGEST_SCRIPT" "tron-kit" \
     --bundle=uw-ios \
@@ -453,8 +468,12 @@ assert payload["repo_url"] == "https://github.com/example/TronKit.Swift.git"
 PY
 ENV_AFTER_RUN1="$(cat "$TMP_DIR/.env")"
 PATH_JSON="$(grep '^PALACE_SCIP_INDEX_PATHS=' "$TMP_DIR/.env" | cut -d= -f2-)"
+[[ "$(grep -c '^PALACE_SCIP_INDEX_PATHS=' "$TMP_DIR/.env")" -eq 1 ]] || \
+    fail "expected PALACE_SCIP_INDEX_PATHS to be deduped to one env entry"
 printf '%s' "$PATH_JSON" | jq -e '.existing == "/repos/existing/scip/index.scip"' >/dev/null || \
     fail "existing PALACE_SCIP_INDEX_PATHS entry was not preserved"
+printf '%s' "$PATH_JSON" | jq -e '.legacy == "/repos/legacy/scip/index.scip"' >/dev/null || \
+    fail "legacy PALACE_SCIP_INDEX_PATHS entry was not preserved"
 printf '%s' "$PATH_JSON" | jq -e '."tron-kit" == "/repos-hs/TronKit.Swift/scip/index.scip"' >/dev/null || \
     fail "tron-kit PALACE_SCIP_INDEX_PATHS entry missing"
 

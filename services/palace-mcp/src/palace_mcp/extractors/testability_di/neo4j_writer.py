@@ -56,7 +56,7 @@ SET u.project_id = $project_id,
 """
 
 _UPDATE_RUN = """
-MATCH (run:IngestRun {id: $run_id})
+MATCH (run:IngestRun {run_id: $run_id})
 SET run.testability_di_patterns = $di_patterns,
     run.testability_di_test_doubles = $test_doubles,
     run.testability_di_untestable_sites = $untestable_sites

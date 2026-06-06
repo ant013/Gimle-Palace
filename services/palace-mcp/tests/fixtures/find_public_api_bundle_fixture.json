@@ -1,0 +1,73 @@
+{
+  "bundle": "find-public-api-wire-bundle",
+  "limit": 10,
+  "projects": [
+    {
+      "slug": "public-api-bundle-alpha",
+      "tier": "user",
+      "last_run_finished_at": "2026-05-19T00:00:00Z",
+      "symbols": [
+        {
+          "surface_id": "public-api-alpha-surface",
+          "symbol_id": "public-api-alpha-symbol",
+          "module_name": "AlphaKit",
+          "language": "swift",
+          "commit_sha": "alpha111",
+          "artifact_path": "AlphaKit.swiftinterface",
+          "artifact_kind": "swiftinterface",
+          "fqn": "AlphaKit.ProfileAPI",
+          "display_name": "ProfileAPI",
+          "kind": "class",
+          "visibility": "public",
+          "signature": "public class ProfileAPI",
+          "signature_hash": "alpha-hash-1"
+        }
+      ]
+    },
+    {
+      "slug": "public-api-bundle-beta",
+      "tier": "first-party",
+      "last_run_finished_at": "2026-05-18T00:00:00Z",
+      "symbols": [
+        {
+          "surface_id": "public-api-beta-surface",
+          "symbol_id": "public-api-beta-symbol",
+          "module_name": "BetaKit",
+          "language": "kotlin",
+          "commit_sha": "beta222",
+          "artifact_path": "api/current.txt",
+          "artifact_kind": "bcv",
+          "fqn": "BetaKit.SettingsAPI",
+          "display_name": "SettingsAPI",
+          "kind": "class",
+          "visibility": "public",
+          "signature": "public final class SettingsAPI",
+          "signature_hash": "beta-hash-1"
+        }
+      ]
+    }
+  ],
+  "excluded_projects": [
+    {
+      "slug": "public-api-bundle-outsider",
+      "last_run_finished_at": "2026-05-17T00:00:00Z",
+      "symbols": [
+        {
+          "surface_id": "public-api-outsider-surface",
+          "symbol_id": "public-api-outsider-symbol",
+          "module_name": "OutsideKit",
+          "language": "swift",
+          "commit_sha": "out333",
+          "artifact_path": "OutsideKit.swiftinterface",
+          "artifact_kind": "swiftinterface",
+          "fqn": "OutsideKit.ShouldNotAppear",
+          "display_name": "ShouldNotAppear",
+          "kind": "class",
+          "visibility": "public",
+          "signature": "public class ShouldNotAppear",
+          "signature_hash": "out-hash-1"
+        }
+      ]
+    }
+  ]
+}

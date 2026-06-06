@@ -352,7 +352,7 @@ def make_symbol(
     }
     _validate_envelope(attrs)
     stable_qname = (extra or {}).get("qualified_name", name)
-    node_uuid = str(uuid5(NAMESPACE_OID, f"{group_id}:Symbol:{stable_qname}:{kind}"))
+    node_uuid = str(uuid5(NAMESPACE_OID, f"{group_id}:Symbol:{stable_qname}"))
     return EntityNode(
         uuid=node_uuid,
         name=name,

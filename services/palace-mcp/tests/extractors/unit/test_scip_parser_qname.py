@@ -5,6 +5,7 @@ from __future__ import annotations
 from palace_mcp.extractors.scip_parser import (
     _extract_qualified_name,
     _split_scip_top_level,
+    decode_scip_short_name,
 )
 
 
@@ -94,3 +95,16 @@ class TestSplitScipTopLevel:
         qn = _extract_qualified_name(sym)
         # parts[2]='.', parts[4:]=['`operator T()`#'] -> '. `operator T()`#'
         assert qn == ". `operator T()`#"
+
+
+class TestDecodeScipShortName:
+    def test_swift_class_name(self) -> None:
+        sym = "s%3A11Unstoppable13MoneroAdapterC"
+        assert decode_scip_short_name(sym) == "MoneroAdapter"
+
+    def test_swift_method_name(self) -> None:
+        sym = "UwMiniCore s%3A10UwMiniCore11WalletStoreC6select8walletIDySi_tF"
+        assert decode_scip_short_name(sym) == "select"
+
+    def test_plain_dotted_name(self) -> None:
+        assert decode_scip_short_name("pkg.module.BalanceData") == "BalanceData"

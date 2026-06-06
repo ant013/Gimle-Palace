@@ -144,8 +144,7 @@ async def get_project_overview(
         counts: dict[str, int] = {}
         async for count_row in counts_result:
             for lbl in count_row["labels"]:
-                if lbl in ("Issue", "Comment", "Agent", "IngestRun"):
-                    counts[lbl] = counts.get(lbl, 0) + int(count_row["c"])
+                counts[lbl] = counts.get(lbl, 0) + int(count_row["c"])
 
         last_ingest: dict[str, Any] | None = None
         try:

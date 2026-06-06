@@ -907,10 +907,19 @@ class ProjectAnalysisService:
             # force_new only matters once previous runs are terminal; the lock
             # transaction still rejects concurrent active runs.
             run = run.model_copy(update={"idempotency_key": str(uuid4())})
-        return await self._with_neo4j_retry(
+        started = await self._with_neo4j_retry(
             action="start_run",
             operation=lambda: self._store.start_run(run),
         )
+        if (
+            started.active_run_reused
+            and started.run.status == AnalysisRunStatus.RUNNING
+            and _lease_is_expired(started.run, self._clock())
+        ):
+            started = started.model_copy(
+                update={"run": await self.mark_run_resumable(started.run.run_id)}
+            )
+        return started
 
     async def get_status(self, run_id: str) -> AnalysisRun:
         return await self._with_neo4j_retry(
@@ -953,6 +962,7 @@ class ProjectAnalysisService:
             "message": message,
             "run_id": run_id,
         }
+        checkpoint_next_actions = _checkpoint_next_actions(run.checkpoints)
         failed_run = run.model_copy(
             update={
                 "status": AnalysisRunStatus.FAILED,
@@ -973,7 +983,8 @@ class ProjectAnalysisService:
                 overview=overview,
                 audit=audit_payload,
                 report_markdown=report_markdown,
-                next_actions=[
+                next_actions=checkpoint_next_actions
+                or [
                     "Inspect palace-mcp runtime failure, then start a fresh project analyze run."
                 ],
                 error_code=error_code,

@@ -27,6 +27,10 @@ WHERE r.extractor_name IS NULL
 CALL {
   WITH r
   SET r.extractor_name = substring(r.source, 10),
+      r.run_id = CASE
+        WHEN r.run_id IS NULL THEN r.id
+        ELSE r.run_id
+      END,
       r.project = CASE
         WHEN r.group_id STARTS WITH 'project/'
         THEN substring(r.group_id, 8)

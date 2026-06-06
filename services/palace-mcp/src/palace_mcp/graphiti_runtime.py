@@ -16,6 +16,8 @@ Public API (consumed by HeartbeatExtractor, GIM-77 bridge extractor, etc.):
 from __future__ import annotations
 
 import asyncio
+import logging
+from typing import Any
 
 from graphiti_core import Graphiti
 from graphiti_core.edges import EntityEdge
@@ -26,9 +28,32 @@ from graphiti_core.nodes import EntityNode
 
 from palace_mcp.config import Settings
 
+logger = logging.getLogger(__name__)
+
 # OpenAI embeddings API accepts up to 2048 inputs per request; use 512 to
 # stay within token-count limits on long node names.
 _EMBED_BATCH_SIZE = 512
+
+_DEDUPLICATE_SYMBOLS_QUERY = """
+MATCH (s:Symbol)
+WHERE s.group_id IS NOT NULL AND s.qualified_name IS NOT NULL
+WITH s
+ORDER BY coalesce(s.created_at, ''), s.uuid
+WITH s.group_id AS group_id, s.qualified_name AS qualified_name, collect(s) AS nodes
+WHERE size(nodes) > 1
+CALL apoc.refactor.mergeNodes(
+    nodes,
+    {
+        properties: 'discard',
+        mergeRels: true,
+        produceSelfRef: false,
+        preserveExistingSelfRels: false,
+        avoidDuplicates: true,
+        relationshipSelectionStrategy: 'merge'
+    }
+) YIELD node
+RETURN count(*) AS merged_groups
+"""
 
 
 def build_graphiti(settings: Settings) -> Graphiti:
@@ -61,7 +86,22 @@ def build_graphiti(settings: Settings) -> Graphiti:
 
 async def ensure_graphiti_schema(g: Graphiti) -> None:
     """Idempotent bootstrap — safe to call on every startup."""
+    merged_groups = await _dedupe_symbol_nodes(g.driver)
+    if merged_groups:
+        logger.warning(
+            "Merged duplicate Symbol groups before Graphiti schema bootstrap: %s",
+            merged_groups,
+        )
     await g.build_indices_and_constraints(delete_existing=False)
+
+
+async def _dedupe_symbol_nodes(driver: Any) -> int:
+    async with driver.session() as session:
+        result = await session.run(_DEDUPLICATE_SYMBOLS_QUERY)
+        row = await result.single()
+    if row is None:
+        return 0
+    return int(row["merged_groups"] or 0)
 
 
 async def save_entity_node(g: Graphiti, node: EntityNode) -> None:

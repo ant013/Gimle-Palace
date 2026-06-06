@@ -6,8 +6,8 @@ the OpenAI API. All 14 cases are enumerated in the plan.
 
 from __future__ import annotations
 
-from typing import get_args
-from unittest.mock import patch
+from typing import Any, get_args
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -44,6 +44,35 @@ def test_build_graphiti_returns_graphiti_instance() -> None:
         call_kwargs = patched.call_args
         assert call_kwargs.kwargs.get("uri") == "bolt://test:7687"
         assert result is mock_graphiti
+
+
+@pytest.mark.asyncio
+async def test_ensure_graphiti_schema_dedupes_symbols_before_build() -> None:
+    from palace_mcp.graphiti_runtime import ensure_graphiti_schema
+
+    result = AsyncMock()
+    result.single = AsyncMock(return_value={"merged_groups": 2})
+
+    session = AsyncMock()
+    session.__aenter__.return_value = session
+    session.run = AsyncMock(return_value=result)
+
+    driver = MagicMock()
+    driver.session.return_value = session
+
+    graphiti = MagicMock()
+    graphiti.driver = driver
+    graphiti.build_indices_and_constraints = AsyncMock()
+
+    await ensure_graphiti_schema(graphiti)
+
+    session.run.assert_awaited_once()
+    query = session.run.await_args.args[0]
+    assert "apoc.refactor.mergeNodes" in query
+    assert "qualified_name" in query
+    graphiti.build_indices_and_constraints.assert_awaited_once_with(
+        delete_existing=False
+    )
 
 
 # ---------------------------------------------------------------------------

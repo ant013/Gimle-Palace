@@ -28,6 +28,7 @@ SUPPORTED_VERSION = 1
 BRANCH_RE = re.compile(r"^feature/GIM-(\d+)-")
 GITHUB_API_BASE = "https://api.github.com"
 ACTIVE_RUN_RECHECK_DELAY_SECONDS = 30
+ACTIVE_RUN_RECHECK_ROUNDS = 2
 RETRY_DELAYS_SECONDS = (10, 30)
 RETRY_STATUS_CODES = {409, 500, 502, 503, 504}
 
@@ -40,6 +41,10 @@ class ConfigError(Exception):
 
 class PaperclipError(Exception):
     """Raised for paperclip API failures (network, 4xx, 5xx after retries)."""
+    
+
+class UnsupportedTargetError(PaperclipError):
+    """Raised when a configured wake target is not yet implemented."""
 
 
 # ---------------------------------------------------------------------------
@@ -401,11 +406,16 @@ def resolve_target_issue_assignee(
     issue = client.get_issue_by_number(issue_number)
     if issue.assignee_id is None:
         return ResolveResult(status="no_assignee", issue=issue)
-    if issue.execution_run_id is not None:
+    # A short bounded recheck handles brief eventual consistency windows where
+    # executionRunId is still in-flight on the first read but already resolved
+    # by the time of the signal.
+    for _ in range(ACTIVE_RUN_RECHECK_ROUNDS):
+        if issue.execution_run_id is None:
+            break
         _sleep(ACTIVE_RUN_RECHECK_DELAY_SECONDS)
         issue = client.get_issue_by_number(issue_number)
-        if issue.execution_run_id is not None:
-            return ResolveResult(status="deferred", issue=issue)
+    if issue.execution_run_id is not None:
+        return ResolveResult(status="deferred", issue=issue)
     return ResolveResult(status="proceed", issue=issue)
 
 
@@ -516,7 +526,7 @@ def _resolve_target(
     if rule.target == "issue_assignee":
         return resolve_target_issue_assignee(client, issue_number)
     if ROLE_TARGET_RE.match(rule.target):
-        raise NotImplementedError(
+        raise UnsupportedTargetError(
             f"Target {rule.target!r} is an extension-point placeholder; "
             f"implementation is scheduled for a followup slice."
         )
@@ -563,41 +573,47 @@ def main(
     )
     try:
         for rule in matching_rules:
-            result = _resolve_target(rule, client, issue_number)
-
-            if result.status == "no_assignee":
-                body = build_no_assignee_comment(trigger=event.trigger, sha=event.sha)
-                github_post_pr_comment(repo, event.pr_number, body, github_token)
-                log.warning(
-                    "Issue %s has no assignee; posted warning.", result.issue.id
-                )
-                continue
-
-            if result.status == "deferred":
-                body = build_deferred_comment(
-                    trigger=event.trigger,
-                    sha=event.sha,
-                    execution_run_id=result.issue.execution_run_id or "",
-                )
-                github_post_pr_comment(repo, event.pr_number, body, github_token)
-                log.info(
-                    "Signal deferred for issue %s (executionRunId=%s).",
-                    result.issue.id,
-                    result.issue.execution_run_id,
-                )
-                continue
-
-            # result.status == "proceed"
-            existing = github_get_pr_comments(repo, event.pr_number, github_token)
-            if pr_has_signal_marker(existing, event.trigger, event.sha):
-                log.info(
-                    "Signal %s at %s already posted; dedup skip.",
-                    event.trigger,
-                    event.sha,
-                )
-                continue
-
+            issue_id: str = ""
             try:
+                result = _resolve_target(rule, client, issue_number)
+                issue_id = result.issue.id
+
+                if result.status == "no_assignee":
+                    body = build_no_assignee_comment(
+                        trigger=event.trigger,
+                        sha=event.sha,
+                    )
+                    github_post_pr_comment(repo, event.pr_number, body, github_token)
+                    log.warning(
+                        "Issue %s has no assignee; posted warning.",
+                        result.issue.id,
+                    )
+                    continue
+
+                if result.status == "deferred":
+                    body = build_deferred_comment(
+                        trigger=event.trigger,
+                        sha=event.sha,
+                        execution_run_id=result.issue.execution_run_id or "",
+                    )
+                    github_post_pr_comment(repo, event.pr_number, body, github_token)
+                    log.info(
+                        "Signal deferred for issue %s (executionRunId=%s).",
+                        result.issue.id,
+                        result.issue.execution_run_id,
+                    )
+                    continue
+
+                # result.status == "proceed"
+                existing = github_get_pr_comments(repo, event.pr_number, github_token)
+                if pr_has_signal_marker(existing, event.trigger, event.sha):
+                    log.info(
+                        "Signal %s at %s already posted; dedup skip.",
+                        event.trigger,
+                        event.sha,
+                    )
+                    continue
+
                 release_and_reassign_with_retry(
                     client=client,
                     issue_id=result.issue.id,
@@ -615,14 +631,22 @@ def main(
                     event.trigger,
                     event.sha,
                 )
-            except PaperclipError as exc:
+            except (PaperclipError, httpx.HTTPStatusError, httpx.RequestError) as exc:
                 body = build_failed_comment(
                     trigger=event.trigger,
                     sha=event.sha,
                     error_message=str(exc),
                 )
-                github_post_pr_comment(repo, event.pr_number, body, github_token)
+                try:
+                    github_post_pr_comment(repo, event.pr_number, body, github_token)
+                except (httpx.HTTPStatusError, httpx.RequestError) as marker_exc:
+                    log.error(
+                        "Failed to post signal failure marker for issue %s: %s",
+                        issue_id or "<unknown>",
+                        marker_exc,
+                    )
                 log.error("Paperclip signal failed: %s", exc)
+                log.debug("Failure path issue_id=%s", issue_id)
                 return 1
     finally:
         client.close()

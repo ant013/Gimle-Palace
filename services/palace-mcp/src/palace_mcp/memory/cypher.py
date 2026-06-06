@@ -214,7 +214,7 @@ DELETE b
 # --- IngestRun meta-node (read by palace.memory.health) ---
 CREATE_INGEST_RUN = """
 CREATE (r:IngestRun {
-    id: $id,
+    run_id: $run_id,
     group_id: $group_id,
     source: $source,
     started_at: $started_at,
@@ -225,7 +225,7 @@ CREATE (r:IngestRun {
 """
 
 FINALIZE_INGEST_RUN = """
-MATCH (r:IngestRun {id: $id})
+MATCH (r:IngestRun {run_id: $run_id})
 SET r.finished_at = $finished_at,
     r.duration_ms = $duration_ms,
     r.errors      = $errors

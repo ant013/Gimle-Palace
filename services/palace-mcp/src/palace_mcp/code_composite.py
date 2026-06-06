@@ -13,17 +13,19 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Hashable
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 
 from mcp import ClientSession
+from mcp.server.fastmcp import Context
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from palace_mcp import code_router
 from palace_mcp.errors import handle_tool_error
 from palace_mcp.extractors.foundation.identifiers import symbol_id_for
 from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
+from palace_mcp.extractors.scip_parser import decode_scip_short_name
 from palace_mcp.memory.bundle import bundle_status
 
 
@@ -73,6 +75,14 @@ async def _resolve_slug(driver: Any, slug: str) -> SlugResolution:
 _QN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*(\.[A-Za-z_][A-Za-z0-9_-]*)*$")
 
 
+def _needs_human_resolution(qualified_name: str) -> bool:
+    return (
+        qualified_name.startswith("scip-")
+        or "%3" in qualified_name
+        or "." not in qualified_name
+    )
+
+
 def _slug_to_cm_project(value: str) -> str:
     """Translate operator-facing project slug to CM-internal project name.
 
@@ -115,10 +125,11 @@ class TestImpactRequest(BaseModel):
     @field_validator("qualified_name")
     @classmethod
     def _qn_charset(cls, v: str) -> str:
+        if _QN_RE.match(v) or v.startswith("scip-") or "%3" in v:
+            return v
         if not _QN_RE.match(v):
             raise ValueError(
-                "qualified_name must be a dotted Python identifier "
-                "(components match [A-Za-z_][A-Za-z0-9_-]*; allows slug-style hyphens)"
+                "qualified_name must be a dotted identifier, short name, or SCIP symbol"
             )
         return v
 
@@ -137,12 +148,40 @@ _DESC = (
 
 
 async def _resolve_qn(
-    session: ClientSession, qualified_name: str, project: str
+    session: ClientSession | None,
+    qualified_name: str,
+    project: str,
+    *,
+    driver: Any | None = None,
+    max_candidates: int = 15,
 ) -> tuple[str, str] | dict[str, Any]:
     """Disambiguate qualified_name → (short_name, resolved_qn).
 
     Returns error envelope dict for symbol_not_found / ambiguous_qualified_name.
     """
+    short_name = decode_scip_short_name(qualified_name)
+    can_try_short_name = (
+        driver is not None
+        and _needs_human_resolution(qualified_name)
+        and bool(short_name)
+    )
+
+    if session is None:
+        if can_try_short_name:
+            return await _resolve_short_name(
+                driver,
+                requested_qualified_name=qualified_name,
+                short_name=short_name,
+                project=project,
+                max_candidates=max_candidates,
+            )
+        return {
+            "ok": False,
+            "error_code": "cm_error",
+            "requested_qualified_name": qualified_name,
+            "message": "CM session not available for exact qualified_name resolution",
+        }
+
     raw = await session.call_tool(
         "search_graph",
         arguments={
@@ -153,6 +192,14 @@ async def _resolve_qn(
         },
     )
     if raw.isError:
+        if can_try_short_name:
+            return await _resolve_short_name(
+                driver,
+                requested_qualified_name=qualified_name,
+                short_name=short_name,
+                project=project,
+                max_candidates=max_candidates,
+            )
         cm_msg = code_router.parse_cm_result(raw).get("_raw", "")
         return {
             "ok": False,
@@ -166,6 +213,14 @@ async def _resolve_qn(
     has_more = data.get("has_more", False)
 
     if not results:
+        if can_try_short_name:
+            return await _resolve_short_name(
+                driver,
+                requested_qualified_name=qualified_name,
+                short_name=short_name,
+                project=project,
+                max_candidates=max_candidates,
+            )
         return {
             "ok": False,
             "error_code": "symbol_not_found",
@@ -181,6 +236,7 @@ async def _resolve_qn(
             "ok": False,
             "error_code": "ambiguous_qualified_name",
             "requested_qualified_name": qualified_name,
+            "terminal": True,
             "message": (
                 f"qn_pattern matched {count_phrase} symbols in project "
                 f"'{project}' — refine to uniquely identify"
@@ -228,6 +284,7 @@ async def _test_impact_tests_edge(
         }
     data = code_router.parse_cm_result(raw)
     rows = data.get("rows", [])
+    rows = _dedup_items(rows, key=lambda row: (row[0], row[1]))
     truncated = len(rows) > max_results
     rows = rows[:max_results]
     tests = [{"name": r[0], "qualified_name": r[1], "hop": 1} for r in rows]
@@ -276,8 +333,9 @@ async def _test_impact_trace(
     data = code_router.parse_cm_result(raw)
     callers = data.get("callers", [])
     tests = [c for c in callers if c.get("is_test")]
-    total_found = len(tests)
     tests.sort(key=lambda c: c["hop"])  # KeyError on contract drift = fail loud
+    tests = _dedup_items(tests, key=lambda caller: caller["qualified_name"])
+    total_found = len(tests)
     truncated = total_found > max_results
     tests = tests[:max_results]
     return {
@@ -303,6 +361,7 @@ class FindReferencesRequest(BaseModel):
     qualified_name: str = Field(..., min_length=1, max_length=500)
     project: str | None = None
     max_results: int = Field(100, ge=1, le=500)
+    max_candidates: int = Field(15, ge=1, le=50)
 
 
 _QUERY_INGEST_RUN = """
@@ -333,6 +392,96 @@ _COUNT_EVICTED_FOR_SYMBOL = """
 MATCH (e:EvictionRecord {project: $project})
 WHERE e.symbol_qualified_name STARTS WITH $qn_prefix
 RETURN count(e) AS total_evicted
+"""
+
+_QUERY_SYMBOL_BY_SHORT_NAME = """
+MATCH (s:Symbol {group_id: $group_id, short_name: $short_name})
+RETURN s.name AS name,
+       s.short_name AS short_name,
+       coalesce(s.symbol, '') AS symbol,
+       s.qualified_name AS qualified_name,
+       coalesce(s.file_path, '') AS file_path
+ORDER BY s.qualified_name
+LIMIT $limit
+"""
+
+_QUERY_SYMBOL_BY_SHORT_NAME_FOLD = """
+MATCH (s:Symbol {group_id: $group_id})
+WITH s, last(split(coalesce(s.qualified_name, ''), '.')) AS terminal_name
+WHERE any(candidate IN [
+          coalesce(s.short_name, ''),
+          coalesce(s.name, ''),
+          coalesce(s.symbol, ''),
+          terminal_name
+      ] WHERE toLower(candidate) = toLower($short_name))
+WITH s, terminal_name, coalesce(s.qualified_name, s.name, s.symbol, '') AS resolved_qn
+WHERE resolved_qn <> ''
+RETURN coalesce(s.name, s.symbol, terminal_name) AS name,
+       coalesce(s.short_name, s.name, s.symbol, terminal_name) AS short_name,
+       coalesce(s.symbol, '') AS symbol,
+       resolved_qn AS qualified_name,
+       coalesce(s.file_path, '') AS file_path
+ORDER BY qualified_name
+LIMIT $limit
+"""
+
+_QUERY_SYMBOL_BY_SHORT_NAME_REGEX = """
+MATCH (s:Symbol {group_id: $group_id})
+WITH s, last(split(coalesce(s.qualified_name, ''), '.')) AS terminal_name
+WHERE any(candidate IN [
+          coalesce(s.short_name, ''),
+          coalesce(s.name, ''),
+          coalesce(s.symbol, ''),
+          terminal_name
+      ] WHERE candidate <> '' AND candidate =~ $pattern)
+WITH s, terminal_name, coalesce(s.qualified_name, s.name, s.symbol, '') AS resolved_qn
+WHERE resolved_qn <> ''
+RETURN coalesce(s.name, s.symbol, terminal_name) AS name,
+       coalesce(s.short_name, s.name, s.symbol, terminal_name) AS short_name,
+       coalesce(s.symbol, '') AS symbol,
+       resolved_qn AS qualified_name,
+       coalesce(s.file_path, '') AS file_path
+ORDER BY qualified_name
+LIMIT $limit
+"""
+
+_QUERY_SYMBOL_BY_SCIP_SHORT_NAME = """
+MATCH (s:Symbol {group_id: $group_id})
+WITH s, coalesce(s.qualified_name, '') AS resolved_qn
+WHERE resolved_qn =~ $pattern
+RETURN coalesce(s.name, s.symbol, '') AS name,
+       coalesce(s.short_name, s.name, s.symbol, '') AS short_name,
+       coalesce(s.symbol, '') AS symbol,
+       resolved_qn AS qualified_name,
+       coalesce(s.file_path, '') AS file_path
+ORDER BY qualified_name
+LIMIT $limit
+"""
+
+_QUERY_FUNCTION_BY_SHORT_NAME_REGEX = """
+MATCH (fn:Function {group_id: $group_id})
+WITH fn, coalesce(fn.qualified_name, fn.symbol_qualified_name, '') AS resolved_qn
+WHERE resolved_qn =~ $pattern
+RETURN coalesce(fn.display_name, fn.name, '') AS name,
+       '' AS short_name,
+       coalesce(fn.symbol_qualified_name, '') AS symbol,
+       resolved_qn AS qualified_name,
+       coalesce(fn.path, fn.file_path, '') AS file_path
+ORDER BY qualified_name
+LIMIT $limit
+"""
+
+_QUERY_SHADOW_BY_SHORT_NAME_REGEX = """
+MATCH (shadow:SymbolOccurrenceShadow {group_id: $group_id})
+WITH shadow, coalesce(shadow.symbol_qualified_name, '') AS resolved_qn
+WHERE resolved_qn =~ $pattern
+RETURN '' AS name,
+       '' AS short_name,
+       '' AS symbol,
+       resolved_qn AS qualified_name,
+       '' AS file_path
+ORDER BY qualified_name
+LIMIT $limit
 """
 
 
@@ -384,6 +533,240 @@ async def _query_eviction_record(
             count_record.get("total_evicted", 0) if count_record else 0
         )
         return eviction_data
+
+
+async def _query_symbol_candidates(
+    driver: Any,
+    query: str,
+    **params: Any,
+) -> list[dict[str, Any]]:
+    async with driver.session() as session:
+        result = await session.run(query, **params)
+        rows = [dict(row) async for row in result]
+    return _dedup_items(
+        [row for row in rows if row.get("qualified_name")],
+        key=lambda row: row["qualified_name"],
+    )
+
+
+def _dedup_items(
+    items: list[Any],
+    *,
+    key: Callable[[Any], Hashable],
+) -> list[Any]:
+    seen: set[Hashable] = set()
+    deduped: list[Any] = []
+    for item in items:
+        item_key = key(item)
+        if item_key in seen:
+            continue
+        seen.add(item_key)
+        deduped.append(item)
+    return deduped
+
+
+def _short_name_candidates(row: dict[str, Any]) -> list[str]:
+    qualified_name = str(row.get("qualified_name") or "")
+    terminal_name = qualified_name.rsplit(".", 1)[-1] if "." in qualified_name else ""
+    return [
+        str(row.get("short_name") or ""),
+        str(row.get("name") or ""),
+        str(row.get("symbol") or ""),
+        terminal_name,
+        decode_scip_short_name(qualified_name),
+    ]
+
+
+def _filter_short_name_rows(
+    rows: list[dict[str, Any]],
+    short_name: str,
+) -> list[dict[str, Any]]:
+    folded_short_name = short_name.lower()
+    matched: list[dict[str, Any]] = []
+    for row in rows:
+        candidates = [
+            candidate for candidate in _short_name_candidates(row) if candidate
+        ]
+        resolved_short_name = next(
+            (
+                candidate
+                for candidate in candidates
+                if candidate.lower() == folded_short_name
+            ),
+            "",
+        )
+        if not resolved_short_name:
+            continue
+        matched.append(
+            {
+                **row,
+                "name": row.get("name") or row.get("symbol") or resolved_short_name,
+                "short_name": row.get("short_name") or resolved_short_name,
+            }
+        )
+    return _dedup_items(matched, key=lambda row: row["qualified_name"])
+
+
+def _ambiguous_name_envelope(
+    *,
+    requested_qualified_name: str,
+    requested_short_name: str,
+    project: str,
+    rows: list[dict[str, Any]],
+    max_candidates: int,
+) -> dict[str, Any]:
+    truncated = len(rows) > max_candidates
+    matches = rows[:max_candidates]
+    count_phrase = f"at least {max_candidates + 1}" if truncated else f"{len(matches)}"
+    return {
+        "ok": False,
+        "error_code": "ambiguous_name",
+        "requested_qualified_name": requested_qualified_name,
+        "requested_short_name": requested_short_name,
+        "terminal": True,
+        "message": (
+            f"short name '{requested_short_name}' matched {count_phrase} symbols "
+            f"in project '{project}' — refine to uniquely identify"
+        ),
+        "matches": [
+            {
+                "qualified_name": row.get("qualified_name", ""),
+                "file_path": row.get("file_path", ""),
+            }
+            for row in matches
+        ],
+    }
+
+
+async def _resolve_short_name(
+    driver: Any,
+    *,
+    requested_qualified_name: str,
+    short_name: str,
+    project: str,
+    max_candidates: int,
+) -> tuple[str, str] | dict[str, Any]:
+    group_id = f"project/{project}"
+    query_limit = max_candidates + 1
+    queries = (
+        (
+            _QUERY_SYMBOL_BY_SHORT_NAME,
+            {"group_id": group_id, "short_name": short_name, "limit": query_limit},
+        ),
+        (
+            _QUERY_SYMBOL_BY_SHORT_NAME_FOLD,
+            {"group_id": group_id, "short_name": short_name, "limit": query_limit},
+        ),
+        (
+            _QUERY_SYMBOL_BY_SHORT_NAME_REGEX,
+            {
+                "group_id": group_id,
+                "pattern": rf"(?i){re.escape(short_name)}.*",
+                "limit": query_limit,
+            },
+        ),
+        (
+            _QUERY_SYMBOL_BY_SCIP_SHORT_NAME,
+            {
+                "group_id": group_id,
+                "pattern": rf"(?i).*[0-9]+{re.escape(short_name)}[VCPOAES].*",
+                "limit": query_limit,
+            },
+        ),
+        (
+            _QUERY_FUNCTION_BY_SHORT_NAME_REGEX,
+            {
+                "group_id": group_id,
+                "pattern": rf"(?i).*{re.escape(short_name)}.*",
+                "limit": query_limit,
+            },
+        ),
+        (
+            _QUERY_SHADOW_BY_SHORT_NAME_REGEX,
+            {
+                "group_id": group_id,
+                "pattern": rf"(?i).*{re.escape(short_name)}.*",
+                "limit": query_limit,
+            },
+        ),
+    )
+
+    for query, params in queries:
+        rows = _filter_short_name_rows(
+            await _query_symbol_candidates(driver, query, **params),
+            short_name,
+        )
+        if not rows:
+            continue
+        if len(rows) > 1:
+            return _ambiguous_name_envelope(
+                requested_qualified_name=requested_qualified_name,
+                requested_short_name=short_name,
+                project=project,
+                rows=rows,
+                max_candidates=max_candidates,
+            )
+        row = rows[0]
+        return row.get("short_name", short_name) or short_name, row["qualified_name"]
+
+    return {
+        "ok": False,
+        "error_code": "symbol_not_found",
+        "requested_qualified_name": requested_qualified_name,
+        "message": f"short name '{short_name}' not found in project '{project}'",
+    }
+
+
+def _disambiguation_session_key(ctx: Context[Any, Any, Any] | None) -> str:
+    if ctx is None:
+        return "session:unknown"
+    try:
+        client_id = ctx.client_id
+    except ValueError:
+        client_id = None
+    if client_id:
+        return f"client:{client_id}"
+    try:
+        return f"session:{id(ctx.session)}"
+    except ValueError:
+        return "session:unknown"
+
+
+def _apply_disambiguation_guard(
+    disambig: dict[str, Any],
+    *,
+    ctx: Context[Any, Any, Any] | None,
+    project: str,
+) -> dict[str, Any]:
+    from palace_mcp.mcp_server import (
+        record_ambiguous_name_attempt,
+        reset_ambiguous_name_attempts,
+    )
+
+    session_key = _disambiguation_session_key(ctx)
+    if disambig.get("error_code") != "ambiguous_name":
+        reset_ambiguous_name_attempts(session_key, project)
+        return disambig
+    if record_ambiguous_name_attempt(session_key, project):
+        return {
+            "ok": False,
+            "error_code": "disambiguation_loop_detected",
+            "requested_qualified_name": disambig.get("requested_qualified_name", ""),
+            "terminal": True,
+            "message": (
+                f"Repeated ambiguous short-name lookups in project '{project}' "
+                "detected. Retry with a full qualified_name."
+            ),
+        }
+    return disambig
+
+
+def _reset_disambiguation_guard(
+    ctx: Context[Any, Any, Any] | None, project: str
+) -> None:
+    from palace_mcp.mcp_server import reset_ambiguous_name_attempts
+
+    reset_ambiguous_name_attempts(_disambiguation_session_key(ctx), project)
 
 
 def _tantivy_doc_first_value(doc: dict[str, Any], field: str) -> Any | None:
@@ -460,10 +843,11 @@ def register_code_composite_tools(
         include_indirect: bool = False,
         max_hops: int = 3,
         max_results: int = 50,
+        ctx: Context[Any, Any, Any] | None = None,
     ) -> dict[str, Any]:
         # Capture session once into local — TOCTOU-immune (D17)
         session = code_router.get_cm_session()
-        if session is None:
+        if session is None and not _needs_human_resolution(qualified_name):
             handle_tool_error(
                 RuntimeError(
                     "CM subprocess not started — set CODEBASE_MEMORY_MCP_BINARY"
@@ -487,16 +871,33 @@ def register_code_composite_tools(
             }
 
         resolved_project = _slug_to_cm_project(req.project or default_project)
+        from palace_mcp.mcp_server import get_driver
+
+        driver = get_driver()
 
         try:
-            disambig = await _resolve_qn(session, req.qualified_name, resolved_project)
+            disambig = await _resolve_qn(
+                session,
+                req.qualified_name,
+                resolved_project,
+                driver=driver,
+            )
         except Exception as e:
             handle_tool_error(e)
             raise  # unreachable; satisfies ruff RET503
 
         if isinstance(disambig, dict):
-            return disambig
+            return _apply_disambiguation_guard(
+                disambig, ctx=ctx, project=_cm_project_to_slug(resolved_project)
+            )
         short_name, resolved_qn = disambig
+        _reset_disambiguation_guard(ctx, _cm_project_to_slug(resolved_project))
+        if session is None:
+            handle_tool_error(
+                RuntimeError(
+                    "CM subprocess not started — set CODEBASE_MEMORY_MCP_BINARY"
+                )
+            )
 
         try:
             if req.include_indirect:
@@ -532,6 +933,8 @@ def register_code_composite_tools(
         qualified_name: str,
         project: str | None = None,
         max_results: int = 100,
+        max_candidates: int = 15,
+        ctx: Context[Any, Any, Any] | None = None,
     ) -> dict[str, Any]:
         from pathlib import Path
 
@@ -552,6 +955,7 @@ def register_code_composite_tools(
                 qualified_name=qualified_name,
                 project=project,
                 max_results=max_results,
+                max_candidates=max_candidates,
             )
         except ValidationError as e:
             return {
@@ -595,13 +999,23 @@ def register_code_composite_tools(
                     raw = await bridge.search_by_symbol_id_async(
                         sym_id, limit=req.max_results + 1
                     )
-                for r in raw[: req.max_results]:
-                    occurrences_bundle.append(
+                occurrences_bundle = _dedup_items(
+                    [
                         _decode_tantivy_occurrence(
                             r,
                             fallback_qualified_name=req.qualified_name,
                         )
-                    )
+                        for r in raw
+                    ],
+                    key=lambda occurrence: (
+                        occurrence["qualified_name"],
+                        occurrence["file_path"],
+                        occurrence["line"],
+                        occurrence["col_start"],
+                        occurrence["col_end"],
+                    ),
+                )
+                occurrences_bundle = occurrences_bundle[: req.max_results]
             except Exception:
                 logger.warning(
                     "bundle_tantivy_query_failed bundle=%s qn=%s",
@@ -644,10 +1058,14 @@ def register_code_composite_tools(
         # Optional: resolve via CM session for suffix-match disambiguation
         resolved_qn = req.qualified_name
         cm_session = code_router.get_cm_session()
-        if cm_session is not None:
+        if cm_session is not None or _needs_human_resolution(req.qualified_name):
             try:
                 disambig = await _resolve_qn(
-                    cm_session, req.qualified_name, resolved_project
+                    cm_session,
+                    req.qualified_name,
+                    resolved_project,
+                    driver=driver,
+                    max_candidates=req.max_candidates,
                 )
                 if isinstance(disambig, dict):
                     if disambig.get("error_code") == "cm_error":
@@ -655,8 +1073,12 @@ def register_code_composite_tools(
                         # Fall back to literal QN instead of surfacing a CM infrastructure error.
                         resolved_qn = req.qualified_name
                     else:
-                        return disambig  # symbol_not_found or ambiguous_qualified_name
-                _short_name, resolved_qn = disambig
+                        return _apply_disambiguation_guard(
+                            disambig, ctx=ctx, project=resolved_project
+                        )
+                else:
+                    _short_name, resolved_qn = disambig
+                _reset_disambiguation_guard(ctx, resolved_project)
             except Exception:
                 logger.debug(
                     "CM symbol resolution failed for %s, using literal",
@@ -664,6 +1086,7 @@ def register_code_composite_tools(
                     exc_info=True,
                 )
                 resolved_qn = req.qualified_name  # fall back to literal
+                _reset_disambiguation_guard(ctx, resolved_project)
 
         # Query Tantivy for occurrences
         sym_id = symbol_id_for(resolved_qn)
@@ -674,9 +1097,6 @@ def register_code_composite_tools(
             raw_results = await bridge.search_by_symbol_id_async(
                 sym_id, limit=req.max_results + 1
             )
-        truncated = len(raw_results) > req.max_results
-        raw_results = raw_results[: req.max_results]
-
         occurrences: list[dict[str, Any]] = [
             _decode_tantivy_occurrence(
                 r,
@@ -684,6 +1104,18 @@ def register_code_composite_tools(
             )
             for r in raw_results
         ]
+        occurrences = _dedup_items(
+            occurrences,
+            key=lambda occurrence: (
+                occurrence["qualified_name"],
+                occurrence["file_path"],
+                occurrence["line"],
+                occurrence["col_start"],
+                occurrence["col_end"],
+            ),
+        )
+        truncated = len(occurrences) > req.max_results
+        occurrences = occurrences[: req.max_results]
 
         # State C: evicted — attach partial_index warning
         eviction_info = await _query_eviction_record(

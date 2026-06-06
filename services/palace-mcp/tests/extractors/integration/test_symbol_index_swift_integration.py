@@ -107,10 +107,27 @@ class TestSymbolIndexSwiftIntegration:
                 rid=_RUN_ID,
             )
             rows = await result.data()
+            graph_counts = await (
+                await session.run(
+                    """
+                    MATCH (f:File {group_id: $group_id})
+                    OPTIONAL MATCH (f)-[:CONTAINS]->(fn:Function {group_id: $group_id})
+                    OPTIONAL MATCH (shadow:SymbolOccurrenceShadow {group_id: $group_id})
+                    RETURN count(DISTINCT f) AS file_count,
+                           count(DISTINCT fn) AS function_count,
+                           count(DISTINCT shadow) AS shadow_count
+                    """,
+                    group_id="project/uw-ios-mini",
+                )
+            ).single()
         counts = {row["phase"]: row["count"] for row in rows}
         assert counts["phase1_defs"] > 0
         assert counts["phase2_user_uses"] > counts["phase1_defs"]
         assert counts["phase3_vendor_uses"] > counts["phase2_user_uses"]
+        assert graph_counts is not None
+        assert graph_counts["file_count"] > 0
+        assert graph_counts["function_count"] > 0
+        assert graph_counts["shadow_count"] > 0
 
         async with TantivyBridge(
             tantivy_dir, heap_size_mb=settings.palace_tantivy_heap_mb

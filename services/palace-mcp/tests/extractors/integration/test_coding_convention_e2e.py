@@ -252,7 +252,7 @@ async def test_coding_convention_runner_path_writes_single_ingest_run_snapshot(
 
         ingest_by_id_result = await session.run(
             """
-            MATCH (r:IngestRun {id: $id})
+            MATCH (r:IngestRun {run_id: $id})
             RETURN count(r) AS count,
                    head(collect(r.project)) AS project,
                    head(collect(r.extractor_name)) AS extractor_name,
@@ -300,4 +300,4 @@ async def test_coding_convention_runner_path_writes_single_ingest_run_snapshot(
     assert ingest_by_id_row["success"] is True
 
     assert ingest_by_run_id_row is not None
-    assert ingest_by_run_id_row["count"] == 0
+    assert ingest_by_run_id_row["count"] == 1

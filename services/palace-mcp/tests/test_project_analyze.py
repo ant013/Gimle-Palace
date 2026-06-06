@@ -366,9 +366,40 @@ async def test_start_rejects_different_active_run_for_same_slug_and_profile() ->
 
 
 @pytest.mark.asyncio
+async def test_start_reuses_expired_active_run_as_resumable() -> None:
+    store = InMemoryAnalysisRunStore()
+    current_time = [_utc()]
+
+    def _clock() -> datetime:
+        return current_time[0]
+
+    service = _build_service(store=store, clock=_clock, lease_seconds=1)
+    started = await service.start_run(
+        slug="tron-kit",
+        parent_mount="hs",
+        relative_path="TronKit.Swift",
+        language_profile="swift_kit",
+        idempotency_key="lease-key",
+    )
+
+    current_time[0] = current_time[0] + timedelta(seconds=2)
+    retried = await _build_service(store=store, clock=_clock, lease_seconds=1).start_run(
+        slug="tron-kit",
+        parent_mount="hs",
+        relative_path="TronKit.Swift",
+        language_profile="swift_kit",
+        idempotency_key="lease-key",
+    )
+
+    assert started.active_run_reused is False
+    assert retried.active_run_reused is True
+    assert retried.run.status == AnalysisRunStatus.RESUMABLE
+
+
+@pytest.mark.asyncio
 async def test_status_turns_expired_running_lease_into_resumable_after_restart() -> (
     None
-):
+): 
     store = InMemoryAnalysisRunStore()
     current_time = [_utc()]
 

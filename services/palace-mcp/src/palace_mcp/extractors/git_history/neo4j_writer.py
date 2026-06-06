@@ -12,7 +12,7 @@ MERGE (a:Author {provider: $provider, identity_key: $identity_key})
 ON CREATE SET
   a.email = $email, a.name = $name, a.is_bot = $is_bot,
   a.first_seen_at = $ts, a.last_seen_at = $ts,
-  a.project_id = $project_id
+  a.project_id = $project_id, a.group_id = $project_id
 ON MATCH SET
   a.last_seen_at = CASE
     WHEN $ts > coalesce(a.last_seen_at, datetime('1970-01-01T00:00:00Z'))
@@ -23,13 +23,15 @@ ON MATCH SET
     THEN $ts ELSE a.first_seen_at
   END,
   a.email = coalesce(a.email, $email),
-  a.is_bot = $is_bot
+  a.is_bot = $is_bot,
+  a.group_id = coalesce(a.group_id, $project_id)
 """
 
 _MERGE_COMMIT_CYPHER = """
 MERGE (c:Commit {sha: $sha})
 ON CREATE SET
   c.project_id = $project_id,
+  c.group_id = $project_id,
   c.author_provider = $author_provider,
   c.author_identity_key = $author_identity_key,
   c.committer_provider = $committer_provider,
@@ -38,6 +40,8 @@ ON CREATE SET
   c.message_full_truncated = $message_full_truncated,
   c.committed_at = $committed_at,
   c.parents = $parents
+ON MATCH SET
+  c.group_id = coalesce(c.group_id, $project_id)
 WITH c
 MATCH (a:Author {provider: $author_provider, identity_key: $author_identity_key})
 MERGE (c)-[:AUTHORED_BY]->(a)
@@ -49,6 +53,10 @@ MERGE (c)-[:COMMITTED_BY]->(cm)
 _MERGE_TOUCHED_CYPHER = """
 UNWIND $files AS path
 MERGE (f:File {project_id: $project_id, path: path})
+ON CREATE SET
+  f.group_id = $project_id
+ON MATCH SET
+  f.group_id = coalesce(f.group_id, $project_id)
 WITH f
 MATCH (c:Commit {sha: $sha})
 MERGE (c)-[:TOUCHED]->(f)
@@ -61,7 +69,10 @@ ON CREATE SET
   p.state = $state, p.author_provider = $author_provider,
   p.author_identity_key = $author_identity_key,
   p.created_at = $created_at, p.merged_at = $merged_at,
-  p.head_sha = $head_sha, p.base_branch = $base_branch
+  p.head_sha = $head_sha, p.base_branch = $base_branch,
+  p.group_id = $project_id
+ON MATCH SET
+  p.group_id = coalesce(p.group_id, $project_id)
 WITH p
 MATCH (a:Author {provider: $author_provider, identity_key: $author_identity_key})
 MERGE (p)-[:AUTHORED_BY]->(a)
@@ -74,7 +85,10 @@ ON CREATE SET
   c.body_truncated = $body_truncated,
   c.author_provider = $author_provider,
   c.author_identity_key = $author_identity_key,
-  c.created_at = $created_at
+  c.created_at = $created_at,
+  c.group_id = $project_id
+ON MATCH SET
+  c.group_id = coalesce(c.group_id, $project_id)
 WITH c
 MATCH (p:PR {project_id: $project_id, number: $pr_number})
 MERGE (c)-[:COMMENTS_ON]->(p)

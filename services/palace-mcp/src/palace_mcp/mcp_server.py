@@ -39,6 +39,7 @@ import asyncio
 import logging
 import os
 import time
+from collections import deque
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal, TypeVar
@@ -160,6 +161,9 @@ _registered_tool_names: list[str] = []
 # scheduling for idempotent retries within the current process.
 _project_analysis_tasks: dict[str, asyncio.Task[None]] = {}
 _PROJECT_ANALYZE_POLL_SECONDS = 2
+_DISAMBIGUATION_WINDOW_SECONDS = 60.0
+_DISAMBIGUATION_MAX_AMBIGUOUS = 3
+_ambiguous_name_attempts: dict[tuple[str, str], deque[float]] = {}
 
 
 def assert_unique_tool_names(names: list[str]) -> None:
@@ -253,6 +257,27 @@ def get_driver() -> AsyncDriver | None:
 def get_settings() -> Settings | None:
     """Public getter for Settings. Returns None before set_settings() call."""
     return _settings
+
+
+def record_ambiguous_name_attempt(
+    session_key: str,
+    project: str,
+    *,
+    now: float | None = None,
+) -> bool:
+    """Track ambiguous human-name resolutions; return True at loop threshold."""
+    ts = time.monotonic() if now is None else now
+    bucket_key = (session_key, project)
+    bucket = _ambiguous_name_attempts.setdefault(bucket_key, deque())
+    cutoff = ts - _DISAMBIGUATION_WINDOW_SECONDS
+    while bucket and bucket[0] < cutoff:
+        bucket.popleft()
+    bucket.append(ts)
+    return len(bucket) >= _DISAMBIGUATION_MAX_AMBIGUOUS
+
+
+def reset_ambiguous_name_attempts(session_key: str, project: str) -> None:
+    _ambiguous_name_attempts.pop((session_key, project), None)
 
 
 def _build_project_analysis_service() -> ProjectAnalysisService:
@@ -1293,7 +1318,8 @@ async def palace_code_list_functions(
 )
 async def palace_code_find_owners(
     file_path: str,
-    project: str,
+    project: str | None = None,
+    bundle: str | None = None,
     top_n: int = 5,
 ) -> dict[str, Any]:
     """Find top-N owners of a file by blame share + recency-weighted churn."""
@@ -1305,7 +1331,7 @@ async def palace_code_find_owners(
             "message": "Neo4j driver not initialised",
         }
     return await _find_owners_impl(
-        driver=driver, file_path=file_path, project=project, top_n=top_n
+        driver=driver, file_path=file_path, project=project, bundle=bundle, top_n=top_n
     )
 
 
@@ -1336,14 +1362,16 @@ async def palace_code_find_dead_symbols(
 @_tool(
     name="palace.code.find_public_api",
     description=(
-        "List public API symbols for a project as recorded by the "
+        "List public API symbols for a project or bundle as recorded by the "
         "public_api_surface extractor. Returns symbols exported from "
         "Swift .swiftinterface or Kotlin BCV .api artifacts. "
-        "Accepts optional limit (default 500)."
+        "Accepts exactly one of project= or bundle= and optional limit "
+        "(default 500)."
     ),
 )
 async def palace_code_find_public_api(
-    project: str,
+    project: str | None = None,
+    bundle: str | None = None,
     limit: int = 500,
 ) -> dict[str, Any]:
     """List public API symbols recorded by the public_api_surface extractor."""
@@ -1354,21 +1382,28 @@ async def palace_code_find_public_api(
             "error_code": "driver_unavailable",
             "message": "Neo4j driver not initialised",
         }
-    return await _find_public_api_impl(driver=driver, project=project, limit=limit)
+    return await _find_public_api_impl(
+        driver=driver,
+        project=project,
+        bundle=bundle,
+        limit=limit,
+    )
 
 
 @_tool(
     name="palace.code.find_cross_module_contracts",
     description=(
-        "List cross-module contract drift records for a project as recorded by "
-        "the cross_module_contract extractor. Returns ModuleContractDelta rows "
-        "showing which consumer→producer pairs have added, removed, or "
-        "signature-changed symbols between commits. "
-        "Accepts optional limit (default 200)."
+        "List cross-module contract drift records for a project or bundle as "
+        "recorded by the cross_module_contract extractor. Returns "
+        "ModuleContractDelta rows showing which consumer→producer pairs have "
+        "added, removed, or signature-changed symbols between commits. "
+        "Accepts exactly one of project= or bundle= and optional limit "
+        "(default 200)."
     ),
 )
 async def palace_code_find_cross_module_contracts(
-    project: str,
+    project: str | None = None,
+    bundle: str | None = None,
     limit: int = 200,
 ) -> dict[str, Any]:
     """List cross-module contract drift records ordered by commit and consumer."""
@@ -1380,7 +1415,10 @@ async def palace_code_find_cross_module_contracts(
             "message": "Neo4j driver not initialised",
         }
     return await _find_cross_module_contracts_impl(
-        driver=driver, project=project, limit=limit
+        driver=driver,
+        project=project,
+        bundle=bundle,
+        limit=limit,
     )
 
 

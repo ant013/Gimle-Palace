@@ -95,7 +95,10 @@ async def test_failing_extractor_finalizes_as_errored(
     assert res["run_id"] is not None
 
     async with driver.session() as s:
-        r = await s.run("MATCH (r:IngestRun {id: $id}) RETURN r", id=res["run_id"])
+        r = await s.run(
+            "MATCH (r:IngestRun {run_id: $run_id}) RETURN r",
+            run_id=res["run_id"],
+        )
         row = await r.single()
     assert row is not None
     ir = dict(row["r"])

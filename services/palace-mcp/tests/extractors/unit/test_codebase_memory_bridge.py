@@ -137,6 +137,30 @@ def test_make_project_deterministic_uuid() -> None:
     assert n1.uuid == expected
 
 
+def test_make_symbol_deterministic_uuid_ignores_kind() -> None:
+    from palace_mcp.graphiti_schema.entities import make_symbol
+
+    function_symbol = make_symbol(
+        group_id="project/test",
+        name="foo",
+        kind="function",
+        extractor="bridge@0.1",
+        extractor_version="0.1",
+        extra={"qualified_name": "proj.foo"},
+    )
+    method_symbol = make_symbol(
+        group_id="project/test",
+        name="foo",
+        kind="method",
+        extractor="bridge@0.1",
+        extractor_version="0.1",
+        extra={"qualified_name": "proj.foo"},
+    )
+    assert function_symbol.uuid == method_symbol.uuid
+    expected = str(uuid5(NAMESPACE_OID, "project/test:Symbol:proj.foo"))
+    assert function_symbol.uuid == expected
+
+
 def test_metadata_envelope_keys_defined() -> None:
     assert _METADATA_ENVELOPE_KEYS == {
         "confidence",
@@ -360,6 +384,66 @@ async def test_qualified_name_populated_on_symbol_file_module(tmp_path: Path) ->
         qn = node.attributes.get("qualified_name", "")
         assert qn, f"Node {node.name!r} has empty qualified_name"
         assert "test-proj" in qn, f"qualified_name {qn!r} doesn't contain project slug"
+    symbol_nodes = [n for n in saved_nodes if "Symbol" in n.labels]
+    assert symbol_nodes[0].attributes["short_name"] == "helper"
+
+
+@pytest.mark.asyncio
+async def test_duplicate_symbol_qualified_name_maps_to_one_node(tmp_path: Path) -> None:
+    ex = CodebaseMemoryBridgeExtractor()
+    ex._state_path = tmp_path / "state.json"
+    ctx = _ctx(tmp_path)
+    g = _graphiti_mock()
+    saved_nodes: list[Any] = []
+
+    async def fake_batch_save_nodes(graphiti: Any, nodes_list: list[Any]) -> None:
+        saved_nodes.extend(nodes_list)
+
+    function_symbol = _make_cm_node(
+        "fn-1",
+        "helper",
+        {"qualified_name": "test-proj.utils.helper", "file_path": "utils.py"},
+    )
+    method_symbol = _make_cm_node(
+        "method-1",
+        "helper",
+        {"qualified_name": "test-proj.utils.helper", "file_path": "utils.py"},
+    )
+
+    async def fake_call_cm(
+        tool: str, arguments: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        args = arguments or {}
+        if tool == "get_architecture":
+            return {"clusters": [], "hotspots": []}
+        label = args.get("label", "")
+        if tool == "search_graph":
+            if label == "Function":
+                return _cm_response([function_symbol])
+            if label == "Method":
+                return _cm_response([method_symbol])
+            return {"nodes": []}
+        if tool == "query_graph":
+            return _cm_edges_response([])
+        return {}
+
+    with (
+        patch("palace_mcp.extractors.codebase_memory_bridge._call_cm", fake_call_cm),
+        patch(
+            "palace_mcp.extractors.codebase_memory_bridge.batch_save_entity_nodes",
+            fake_batch_save_nodes,
+        ),
+        patch(
+            "palace_mcp.extractors.codebase_memory_bridge.batch_save_entity_edges",
+            AsyncMock(),
+        ),
+    ):
+        stats = await ex.run(graphiti=g, ctx=ctx)
+
+    symbol_nodes = [node for node in saved_nodes if "Symbol" in node.labels]
+    assert stats.nodes_written == 1
+    assert len(symbol_nodes) == 1
+    assert symbol_nodes[0].attributes["qualified_name"] == "test-proj.utils.helper"
 
 
 # ---------------------------------------------------------------------------

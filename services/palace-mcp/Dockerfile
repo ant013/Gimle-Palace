@@ -58,7 +58,9 @@ RUN adduser --disabled-password --gecos "" --uid 1000 appuser && \
     mkdir -p /home/appuser/.cache/codebase-memory-mcp && \
     chown -R appuser:appuser /home/appuser/.cache && \
     mkdir -p /var/lib/palace/tantivy && \
-    chown -R appuser:appuser /var/lib/palace
+    chown -R appuser:appuser /var/lib/palace && \
+    mkdir -p /data/hf-cache && \
+    chown -R appuser:appuser /data/hf-cache
 
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/src /app/src

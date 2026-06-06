@@ -245,7 +245,9 @@ async def scan_died_mid_work(
             continue
         if issue.assignee_agent_id is None:
             continue
-        if issue.execution_run_id is not None:
+        # If execution run is fresh, assume it's legitimately alive and skip.
+        # If stale, allow watchdog to recover via normal stale-updatedAt gate.
+        if issue.execution_run_id is not None and issue.updated_at > threshold_dt:
             continue
         if issue.id in live_children_by_parent:
             log.info(

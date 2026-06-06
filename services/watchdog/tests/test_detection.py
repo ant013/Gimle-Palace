@@ -309,18 +309,39 @@ async def test_scan_died_skips_null_assignee(tmp_path: Path):
 
 @pytest.mark.asyncio
 @freeze_time("2026-04-21T10:05:00Z")
-async def test_scan_died_skips_active_run(tmp_path: Path):
+async def test_scan_died_skips_fresh_active_run(tmp_path: Path):
     cfg = _make_config()
     st = State.load(tmp_path / "s.json")
     client = _FakeClient(
         [
             _issue(
-                run_id="run-1", updated_at=_dt.datetime(2026, 4, 21, 10, 0, tzinfo=_dt.timezone.utc)
+                run_id="run-1",
+                updated_at=_dt.datetime(2026, 4, 21, 10, 4, 0, tzinfo=_dt.timezone.utc),
             )
         ]
     )
     actions = await det.scan_died_mid_work(cfg.companies[0], client, st, cfg)
     assert actions == []
+
+
+@pytest.mark.asyncio
+@freeze_time("2026-04-21T10:05:00Z")
+async def test_scan_died_recovers_stale_active_run(tmp_path: Path):
+    cfg = _make_config()
+    st = State.load(tmp_path / "s.json")
+    client = _FakeClient(
+        [
+            _issue(
+                run_id="run-1",
+                updated_at=_dt.datetime(2026, 4, 21, 10, 0, tzinfo=_dt.timezone.utc),
+            )
+        ]
+    )
+    actions = await det.scan_died_mid_work(cfg.companies[0], client, st, cfg)
+    assert len(actions) == 1
+    assert actions[0].kind == "wake"
+    assert actions[0].issue.id == "issue-1"
+    assert actions[0].agent_id == "agent-1"
 
 
 @pytest.mark.asyncio

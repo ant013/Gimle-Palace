@@ -177,7 +177,7 @@ async def test_bridge_symbol_node_written_to_neo4j(
 
     async with driver.session() as s:
         result = await s.run(
-            "MATCH (n:Symbol {group_id: $gid}) RETURN n.name AS name, n.cm_id AS cm_id, n.kind AS kind",
+            "MATCH (n:Symbol {group_id: $gid}) RETURN n.name AS name, n.cm_id AS cm_id, n.kind AS kind, n.short_name AS short_name",
             gid="project/integ-proj",
         )
         rows = [r async for r in result]
@@ -186,6 +186,51 @@ async def test_bridge_symbol_node_written_to_neo4j(
     assert rows[0]["name"] == "my_func"
     assert rows[0]["cm_id"] == "integ-proj:fn-uuid"
     assert rows[0]["kind"] == "function"
+    assert rows[0]["short_name"] == "my_func"
+
+
+@pytest.mark.asyncio
+async def test_bridge_duplicate_symbol_qualified_name_writes_one_node(
+    driver: AsyncDriver, graphiti_mock: MagicMock, tmp_path: Path
+) -> None:
+    ex = CodebaseMemoryBridgeExtractor()
+    ex._state_path = tmp_path / "bridge-state.json"
+
+    fake_call = _fake_cm(
+        nodes=[
+            {
+                "uuid": "fn-uuid",
+                "name": "my_func",
+                "labels": ["Function"],
+                "qualified_name": "integ_proj.my_func",
+                "path": "src/main.py",
+            },
+            {
+                "uuid": "method-uuid",
+                "name": "my_func",
+                "labels": ["Method"],
+                "qualified_name": "integ_proj.my_func",
+                "path": "src/main.py",
+            },
+        ],
+    )
+
+    with patch("palace_mcp.extractors.codebase_memory_bridge._call_cm", fake_call):
+        stats = await ex.run(graphiti=graphiti_mock, ctx=_ctx(tmp_path))
+
+    assert stats.nodes_written == 1
+
+    async with driver.session() as s:
+        result = await s.run(
+            "MATCH (n:Symbol {group_id: $gid}) "
+            "RETURN count(n) AS count, collect(n.uuid) AS uuids",
+            gid="project/integ-proj",
+        )
+        row = await result.single()
+
+    assert row is not None
+    assert row["count"] == 1
+    assert len(row["uuids"]) == 1
 
 
 @pytest.mark.asyncio

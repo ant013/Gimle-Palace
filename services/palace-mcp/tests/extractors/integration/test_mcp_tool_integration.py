@@ -68,8 +68,8 @@ async def test_run_extractor_end_to_end(
 
     async with driver.session() as s:
         result = await s.run(
-            "MATCH (r:IngestRun {id: $id}) RETURN r",
-            id=res["run_id"],
+            "MATCH (r:IngestRun {run_id: $run_id}) RETURN r",
+            run_id=res["run_id"],
         )
         row = await result.single()
     assert row is not None

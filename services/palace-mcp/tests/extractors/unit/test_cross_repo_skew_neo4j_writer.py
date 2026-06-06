@@ -17,15 +17,15 @@ from palace_mcp.extractors.cross_repo_version_skew.neo4j_writer import (
 )
 
 
-def test_write_extras_cypher_matches_on_id_not_run_id() -> None:
-    """_WRITE_EXTRAS_CYPHER must use {id: $run_id} — the key runner.py creates."""
-    assert "IngestRun {id: $run_id}" in _WRITE_EXTRAS_CYPHER
-    assert "IngestRun {run_id:" not in _WRITE_EXTRAS_CYPHER
+def test_write_extras_cypher_matches_on_run_id() -> None:
+    """_WRITE_EXTRAS_CYPHER must use canonical {run_id: $run_id}."""
+    assert "IngestRun {run_id: $run_id}" in _WRITE_EXTRAS_CYPHER
+    assert "IngestRun {id:" not in _WRITE_EXTRAS_CYPHER
 
 
 @pytest.mark.asyncio
 async def test_write_run_extras_passes_run_id_as_id_key() -> None:
-    """_write_run_extras must pass run_id to the {id: ...} MATCH — not {run_id: ...}."""
+    """_write_run_extras must pass run_id to the {run_id: ...} MATCH."""
     driver = MagicMock()
     session = MagicMock()
     session.run = AsyncMock()

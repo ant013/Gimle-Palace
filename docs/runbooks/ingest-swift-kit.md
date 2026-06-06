@@ -49,7 +49,8 @@ bash paperclips/scripts/scip_emit_swift_kit.sh tron-kit \
 What it does:
 
 - resolves `tron-kit` to `TronKit.Swift` via the manifest when available;
-- builds the SwiftPM package with an explicit index-store path;
+- builds the kit with `xcodebuild` using `-sdk iphonesimulator` and
+  `-destination "generic/platform=iOS Simulator"`;
 - builds `palace-swift-scip-emit` if needed;
 - writes `scip/index.scip` inside the repo;
 - copies that file to the remote repo's `scip/` directory.
@@ -60,6 +61,14 @@ Dry-run:
 bash paperclips/scripts/scip_emit_swift_kit.sh tron-kit \
   --repo-root ~/HorizontalSystems \
   --dry-run
+```
+
+Repo-path bypass for `bitcoin-kit`:
+
+```bash
+bash paperclips/scripts/scip_emit_swift_kit.sh bitcoin-kit \
+  --repo-path ~/HorizontalSystems/BitcoinKit.Swift \
+  --remote-relative-path BitcoinKit.Swift
 ```
 
 ## iMac: register and ingest

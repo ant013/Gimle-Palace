@@ -530,6 +530,7 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
 
         # --- :Symbol (Function/Method/Class/Interface/Enum/Type) ---
         symbol_nodes: dict[str, EntityNode] = {}
+        symbol_nodes_by_qname: dict[str, EntityNode] = {}
         for cm_label, sym_kind in _SYMBOL_KINDS.items():
             sym_res = await _call_cm(
                 "search_graph", {"label": cm_label, "project": cm_project}
@@ -538,26 +539,30 @@ class CodebaseMemoryBridgeExtractor(BaseExtractor):
                 cm_id = _get_id(nd)
                 nm = nd.get("name", cm_id)
                 qualified_name = nd.get("qualified_name", f"{slug}.{nm}")
-                node = make_symbol(
-                    group_id=ctx.group_id,
-                    name=nm,
-                    kind=sym_kind,
-                    extractor=tag,
-                    extractor_version=ver,
-                    observed_at=now,
-                    extra={
-                        **self._envelope(
-                            cm_id=cm_id, confidence=1.0, provenance="asserted"
-                        ),
-                        "cm_id": f"{slug}:{cm_id}",
-                        "qualified_name": qualified_name,
-                        "file_path": nd.get("file_path", ""),
-                        "signature": nd.get("signature", ""),
-                    },
-                )
-                pending_nodes.append(node)
+                node = symbol_nodes_by_qname.get(qualified_name)
+                if node is None:
+                    node = make_symbol(
+                        group_id=ctx.group_id,
+                        name=nm,
+                        kind=sym_kind,
+                        extractor=tag,
+                        extractor_version=ver,
+                        observed_at=now,
+                        extra={
+                            **self._envelope(
+                                cm_id=cm_id, confidence=1.0, provenance="asserted"
+                            ),
+                            "cm_id": f"{slug}:{cm_id}",
+                            "short_name": nm,
+                            "qualified_name": qualified_name,
+                            "file_path": nd.get("file_path", ""),
+                            "signature": nd.get("signature", ""),
+                        },
+                    )
+                    pending_nodes.append(node)
+                    symbol_nodes_by_qname[qualified_name] = node
+                    inc_n("Symbol")
                 symbol_nodes[cm_id] = node
-                inc_n("Symbol")
 
         # --- :APIEndpoint (Route) ---
         route_res = await _call_cm(

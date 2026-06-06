@@ -47,6 +47,8 @@ Options:
                             (default: /Users/Shared/Ios/HorizontalSystems)
   --parent-mount <name>     Explicit register_project parent_mount
   --relative-path <path>    Explicit repo-relative path under repo-base
+  --auto-resolve-by-convention
+                            If manifest lookup fails, resolve slug by convention
   --manifest <path>         Manifest used for slug -> relative_path lookup
   --env-file <path>         Env file to update atomically (default: repo .env)
   --dry-run                 Print intended actions without changing state
@@ -92,6 +94,76 @@ json_or_null() {
         printf '%s' "$value"
     else
         printf 'null'
+    fi
+}
+
+project_symbol_count() {
+    local overview_json="${1:-null}"
+    printf '%s' "$overview_json" | jq -r '
+        if type == "object" then
+            (.entity_counts.Symbol // 0)
+        else
+            0
+        end
+    ' 2>/dev/null || printf '0'
+}
+
+resolve_repo_url() {
+    local repo_path="$1"
+    command -v git >/dev/null 2>&1 || return 0
+    git -C "$repo_path" remote get-url origin 2>/dev/null || true
+}
+
+pascal_case_slug() {
+    local slug="$1"
+    local part
+    local first
+    local result=""
+    IFS='-' read -r -a parts <<<"$slug"
+    for part in "${parts[@]}"; do
+        first="$(printf '%s' "${part:0:1}" | tr '[:lower:]' '[:upper:]')"
+        result+="${first}${part:1}"
+    done
+    printf '%s' "$result"
+}
+
+resolve_relative_path_by_convention() {
+    local slug="$1"
+    local base="$slug"
+    if [[ "$slug" == *-kit ]]; then
+        base="${slug%-kit}"
+        printf '%sKit.Swift' "$(pascal_case_slug "$base")"
+    else
+        printf '%s.Swift' "$(pascal_case_slug "$base")"
+    fi
+}
+
+repo_path_has_checkout_markers() {
+    local repo_path="$1"
+    [[ -f "$repo_path/Package.swift" || -d "$repo_path/.git" ]]
+}
+
+resolve_existing_relative_path() {
+    local host_repo_base="$1"
+    shift
+    local candidate
+    local candidate_path
+    local first_existing=""
+
+    for candidate in "$@"; do
+        [[ -n "$candidate" ]] || continue
+        candidate_path="$host_repo_base/$candidate"
+        if repo_path_has_checkout_markers "$candidate_path"; then
+            printf '%s' "$candidate"
+            return 0
+        fi
+        if [[ -z "$first_existing" && -d "$candidate_path" ]]; then
+            first_existing="$candidate"
+        fi
+    done
+
+    if [[ -n "$first_existing" ]]; then
+        printf '%s' "$first_existing"
     fi
 }
 
@@ -144,6 +216,25 @@ update_env_json_key() {
     fi
 
     mv "$tmp_file" "$env_file"
+}
+
+merge_env_json_key() {
+    local env_file="$1"
+    local key="$2"
+    local merged='{}'
+    local raw_value
+
+    while IFS= read -r raw_value; do
+        [[ -n "$raw_value" ]] || continue
+        merged="$(
+            jq -nc \
+                --argjson current "$merged" \
+                --argjson next "$raw_value" \
+                '($current + $next) | to_entries | sort_by(.key) | from_entries'
+        )" || return 1
+    done < <(grep "^${key}=" "$env_file" | cut -d= -f2- || true)
+
+    printf '%s' "$merged"
 }
 
 call_mcp() {
@@ -237,7 +328,10 @@ runtime_repo_visible_in_container() {
 
     docker exec "$container_id" sh -lc "
         test -e '$CONTAINER_REPO_PATH/.git' &&
-        test -f '$CONTAINER_REPO_PATH/Package.swift' &&
+        (
+            test -f '$CONTAINER_REPO_PATH/Package.swift' ||
+            test -f '$CONTAINER_REPO_PATH/Example/Podfile'
+        ) &&
         test -f '$SCIP_PATH'
     " >/dev/null 2>&1
 }
@@ -320,9 +414,11 @@ REPO_BASE="$DEFAULT_REPO_BASE"
 HOST_REPO_BASE="$DEFAULT_HOST_REPO_BASE"
 PARENT_MOUNT=""
 RELATIVE_PATH=""
+RELATIVE_PATH_EXPLICIT="false"
 MANIFEST_PATH="$DEFAULT_MANIFEST"
 ENV_FILE="$DEFAULT_ENV_FILE"
 DRY_RUN="false"
+AUTO_RESOLVE_BY_CONVENTION="false"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -382,12 +478,18 @@ while [[ $# -gt 0 ]]; do
             ;;
         --relative-path=*)
             RELATIVE_PATH="${1#*=}"
+            RELATIVE_PATH_EXPLICIT="true"
             shift
             ;;
         --relative-path)
             [[ $# -ge 2 ]] || die "--relative-path requires a value"
             RELATIVE_PATH="$2"
+            RELATIVE_PATH_EXPLICIT="true"
             shift 2
+            ;;
+        --auto-resolve-by-convention)
+            AUTO_RESOLVE_BY_CONVENTION="true"
+            shift
             ;;
         --manifest=*)
             MANIFEST_PATH="${1#*=}"
@@ -443,8 +545,15 @@ MANIFEST_JSON="${MANIFEST_JSON:-}"
 if [[ -z "$MANIFEST_JSON" ]]; then
     MANIFEST_JSON='{}'
 fi
+CONVENTION_RESOLVED="false"
+MANIFEST_RELATIVE_PATH="$(printf '%s' "$MANIFEST_JSON" | jq -r '.relative_path // empty')"
+CONVENTION_RELATIVE_PATH="$(resolve_relative_path_by_convention "$SLUG")"
 if [[ -z "$RELATIVE_PATH" ]]; then
-    RELATIVE_PATH="$(printf '%s' "$MANIFEST_JSON" | jq -r '.relative_path // empty')"
+    RELATIVE_PATH="$MANIFEST_RELATIVE_PATH"
+fi
+if [[ -z "$RELATIVE_PATH" && "$AUTO_RESOLVE_BY_CONVENTION" == "true" ]]; then
+    RELATIVE_PATH="$CONVENTION_RELATIVE_PATH"
+    CONVENTION_RESOLVED="true"
 fi
 if [[ -z "$RELATIVE_PATH" ]]; then
     RELATIVE_PATH="$SLUG"
@@ -454,6 +563,21 @@ if [[ -z "$PARENT_MOUNT" ]]; then
 fi
 if [[ -z "$PARENT_MOUNT" && "$REPO_BASE" == /repos-* ]]; then
     PARENT_MOUNT="${REPO_BASE#/repos-}"
+fi
+if [[ "$RELATIVE_PATH_EXPLICIT" == "false" ]] && ! repo_path_has_checkout_markers "$HOST_REPO_BASE/$RELATIVE_PATH"; then
+    RESOLVED_RELATIVE_PATH="$(
+        resolve_existing_relative_path \
+            "$HOST_REPO_BASE" \
+            "$MANIFEST_RELATIVE_PATH" \
+            "$CONVENTION_RELATIVE_PATH" \
+            "$SLUG"
+    )"
+    if [[ -n "$RESOLVED_RELATIVE_PATH" ]]; then
+        RELATIVE_PATH="$RESOLVED_RELATIVE_PATH"
+        if [[ "$RELATIVE_PATH" == "$CONVENTION_RELATIVE_PATH" ]]; then
+            CONVENTION_RESOLVED="true"
+        fi
+    fi
 fi
 
 HOST_REPO_PATH="$HOST_REPO_BASE/$RELATIVE_PATH"
@@ -474,6 +598,9 @@ ENV_CHANGED="false"
 PALACE_RESTARTED="false"
 
 [[ -f "$ENV_FILE" ]] || die "env file not found: $ENV_FILE"
+if [[ "$CONVENTION_RESOLVED" == "true" && ! -d "$HOST_REPO_PATH" ]]; then
+    die "convention resolved to $RELATIVE_PATH but no such directory at $HOST_REPO_PATH"
+fi
 [[ -d "$HOST_REPO_PATH" ]] || die "repo mount not found: $HOST_REPO_PATH"
 [[ -f "$HOST_SCIP_PATH" ]] || die "SCIP index not found: $HOST_SCIP_PATH"
 
@@ -504,18 +631,14 @@ else
     EXTRACTORS=("${DEFAULT_EXTRACTORS[@]}")
 fi
 
-current_scip_json="$(grep '^PALACE_SCIP_INDEX_PATHS=' "$ENV_FILE" | tail -n 1 | cut -d= -f2- || true)"
-if [[ -z "$current_scip_json" ]]; then
-    current_scip_json='{}'
-fi
-printf '%s' "$current_scip_json" | jq -e . >/dev/null || \
-    die "PALACE_SCIP_INDEX_PATHS is not valid JSON in $ENV_FILE"
+current_scip_json="$(merge_env_json_key "$ENV_FILE" "PALACE_SCIP_INDEX_PATHS")" || \
+    die "PALACE_SCIP_INDEX_PATHS must be JSON objects in $ENV_FILE"
 
 merged_scip_json="$(jq -nc \
     --argjson current "$current_scip_json" \
     --arg slug "$SLUG" \
     --arg path "$SCIP_PATH" \
-    '$current + {($slug): $path}')"
+    '($current + {($slug): $path}) | to_entries | sort_by(.key) | from_entries')"
 
 if [[ "$merged_scip_json" != "$current_scip_json" ]]; then
     log "updating PALACE_SCIP_INDEX_PATHS in $ENV_FILE"
@@ -549,7 +672,7 @@ if [[ "$DRY_RUN" == "true" ]]; then
 fi
 
 if ! runtime_repo_visible_in_container; then
-    die "palace-mcp runtime cannot see repo content at $CONTAINER_REPO_PATH (expected .git, Package.swift, and scip/index.scip). If docker context is colima, ensure the repo is staged under \$HOME or share $HOST_REPO_BASE into the VM."
+    die "palace-mcp runtime cannot see repo content at $CONTAINER_REPO_PATH (expected .git, Package.swift or Example/Podfile, and scip/index.scip). If docker context is colima, ensure the repo is staged under \$HOME or share $HOST_REPO_BASE into the VM."
 fi
 if ! wait_for_mcp_health; then
     die "palace-mcp did not become healthy at ${MCP_URL%/mcp}/healthz"
@@ -566,10 +689,14 @@ fi
 project_payload="$(jq -nc \
     --arg slug "$SLUG" \
     --arg name "$SLUG" \
+    --arg language "swift" \
+    --arg repo_url "$(resolve_repo_url "$HOST_REPO_PATH")" \
     --arg parent_mount "$PARENT_MOUNT" \
     --arg relative_path "$RELATIVE_PATH" \
-    '{slug: $slug, name: $name}
-     + (if $parent_mount != "" then {parent_mount: $parent_mount, relative_path: $relative_path} else {} end)')"
+    '{slug: $slug, name: $name, language: $language}
+     + (if $repo_url != "" then {repo_url: $repo_url} else {} end)
+     + (if $parent_mount != "" then {parent_mount: $parent_mount} else {} end)
+     + (if $relative_path != "" then {relative_path: $relative_path} else {} end)')"
 PROJECT_REGISTRATION_JSON="$(call_mcp "palace.memory.register_project" "$project_payload")" || {
     emit_summary "register_project" "failed" "memory.register_project failed"
     exit 1
@@ -620,6 +747,17 @@ for extractor in "${EXTRACTORS[@]}"; do
 
     if [[ $rc -eq 0 ]] && printf '%s' "$extractor_json" | jq -e '.ok == true' >/dev/null 2>&1; then
         item="$(printf '%s' "$extractor_json" | jq -c '. + {status: "ok"}')"
+        if [[ "$extractor" == "symbol_index_swift" ]]; then
+            nodes_written="$(printf '%s' "$extractor_json" | jq -r '.nodes_written // 0' 2>/dev/null || printf '0')"
+            if [[ "$nodes_written" -le 0 ]]; then
+                item="$(jq -nc \
+                    --arg name "$extractor" \
+                    --arg status "failed" \
+                    --arg error_code "zero_nodes_written" \
+                    --arg message "symbol_index_swift reported zero nodes_written" \
+                    '{name: $name, status: $status, error_code: $error_code, message: $message}')"
+            fi
+        fi
     else
         error_code="$(printf '%s' "$extractor_json" | jq -r '.error_code // "unknown_error"' 2>/dev/null || printf 'unknown_error')"
         message="$(printf '%s' "$extractor_json" | jq -r '.message // "extractor invocation failed"' 2>/dev/null || printf 'extractor invocation failed')"
@@ -638,6 +776,17 @@ done
 failed_count="$(printf '%s' "$EXTRACTOR_RESULTS_JSON" | jq '[.[] | select(.status == "failed")] | length')"
 if [[ "$failed_count" -gt 0 ]]; then
     emit_summary "extractors" "partial_failure" "one or more extractors failed"
+    exit 1
+fi
+
+health_payload="$(jq -nc --arg slug "$SLUG" '{slug: $slug}')"
+LAST_HEALTH_JSON="$(call_mcp "palace.memory.get_project_overview" "$health_payload")" || {
+    emit_summary "graph_validation" "failed" "memory.get_project_overview failed during final symbol validation"
+    exit 1
+}
+symbol_count="$(project_symbol_count "$LAST_HEALTH_JSON")"
+if [[ "$symbol_count" -le 0 ]]; then
+    emit_summary "graph_validation" "failed" "project overview reports zero Symbol nodes after ingest"
     exit 1
 fi
 

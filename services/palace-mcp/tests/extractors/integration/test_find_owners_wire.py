@@ -29,10 +29,61 @@ async def test_top_n_out_of_range_error(driver: AsyncDriver) -> None:
 
 
 @pytest.mark.asyncio
+async def test_mutually_exclusive_args_error(driver: AsyncDriver) -> None:
+    result = await find_owners(
+        driver, file_path="x.py", project="gimle", bundle="bundle", top_n=5
+    )
+    assert result["ok"] is False
+    assert result["error_code"] == "mutually_exclusive_args"
+
+
+@pytest.mark.asyncio
+async def test_missing_target_error(driver: AsyncDriver) -> None:
+    result = await find_owners(driver, file_path="x.py", top_n=5)
+    assert result["ok"] is False
+    assert result["error_code"] == "missing_target"
+
+
+@pytest.mark.asyncio
 async def test_project_not_registered_error(driver: AsyncDriver) -> None:
     result = await find_owners(driver, file_path="x.py", project="ghost", top_n=5)
     assert result["ok"] is False
     assert result["error_code"] == "project_not_registered"
+
+
+@pytest.mark.asyncio
+async def test_bundle_not_registered_error(driver: AsyncDriver) -> None:
+    result = await find_owners(driver, file_path="x.py", bundle="ghost-bundle", top_n=5)
+    assert result["ok"] is False
+    assert result["error_code"] == "bundle_not_registered"
+
+
+@pytest.mark.asyncio
+async def test_bundle_member_without_checkpoint_returns_indexing_error(
+    driver: AsyncDriver,
+) -> None:
+    await ensure_ownership_schema(driver)
+    async with driver.session() as session:
+        await session.run(
+            """
+            MERGE (b:Bundle {name: 'owners-no-checkpoint-bundle'})
+            MERGE (p:Project {slug: 'owners-no-checkpoint-member'})
+            MERGE (b)-[:CONTAINS {tier: 'user'}]->(p)
+            MERGE (f:File {
+                project_id: 'project/owners-no-checkpoint-member',
+                path: 'x.py'
+            })
+            """
+        )
+    result = await find_owners(
+        driver,
+        file_path="x.py",
+        bundle="owners-no-checkpoint-bundle",
+        top_n=5,
+    )
+    assert result["ok"] is False
+    assert result["error_code"] == "ownership_not_indexed_yet"
+    assert result["member_project"] == "owners-no-checkpoint-member"
 
 
 @pytest.mark.asyncio

@@ -423,7 +423,7 @@ LIMIT 100
         async with driver.session() as session:  # type: ignore[attr-defined]
             await session.run(
                 """
-                MATCH (r:IngestRun {id: $run_id})
+                MATCH (r:IngestRun {run_id: $run_id})
                 SET r.head_sha = $head_sha,
                     r.prev_head_sha = $prev_head_sha,
                     r.dirty_files_count = $dirty,

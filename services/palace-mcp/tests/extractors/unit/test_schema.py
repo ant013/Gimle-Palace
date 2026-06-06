@@ -22,24 +22,24 @@ class TestSchemaDefinition:
         # 3 original + 6 git_history + 2 dead_symbol_binary_surface
         assert len(EXPECTED_SCHEMA.constraints) == 11
 
-    def test_has_eight_indexes(self) -> None:
-        assert len(EXPECTED_SCHEMA.indexes) == 8
+    def test_has_eleven_indexes(self) -> None:
+        assert len(EXPECTED_SCHEMA.indexes) == 11
 
     def test_has_one_fulltext(self) -> None:
         assert len(EXPECTED_SCHEMA.fulltext_indexes) == 1
 
-    def test_total_twenty_objects(self) -> None:
-        # 11 constraints + 8 indexes + 1 fulltext
+    def test_total_twenty_three_objects(self) -> None:
+        # 11 constraints + 11 indexes + 1 fulltext
         total = (
             len(EXPECTED_SCHEMA.constraints)
             + len(EXPECTED_SCHEMA.indexes)
             + len(EXPECTED_SCHEMA.fulltext_indexes)
         )
-        assert total == 20
+        assert total == 23
 
     def test_all_names_unique(self) -> None:
         names = EXPECTED_SCHEMA.all_names()
-        assert len(names) == 20
+        assert len(names) == 23
 
     def test_expected_names_present(self) -> None:
         names = EXPECTED_SCHEMA.all_names()
@@ -50,8 +50,11 @@ class TestSchemaDefinition:
         assert "binary_surface_record_id_unique" in names
         assert "shadow_evict_r1" in names
         assert "shadow_count_by_group" in names
+        assert "symbol_short_name_idx" in names
         assert "dead_symbol_candidate_lookup" in names
         assert "binary_surface_record_lookup" in names
+        assert "ingest_run_run_id_lookup" in names
+        assert "ingest_run_source_lookup" in names
         assert "symbol_embedding_idx" in names
         assert "symbol_qn_fulltext" in names
 

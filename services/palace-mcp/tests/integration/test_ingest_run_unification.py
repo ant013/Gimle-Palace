@@ -140,8 +140,8 @@ async def test_migration_idempotent(
                     (ids[2], "extractor.code_ownership", "bundle/uw-ios"),
                 ]:
                     row = sess.run(
-                        "MATCH (r:IngestRun {id: $id}) RETURN r.extractor_name AS en, r.project AS p",
-                        id=run_id,
+                        "MATCH (r:IngestRun {run_id: $run_id}) RETURN r.extractor_name AS en, r.project AS p, r.id AS id",
+                        run_id=run_id,
                     ).single()
                     assert row is not None
                     expected_name = source.removeprefix("extractor.")
@@ -156,6 +156,7 @@ async def test_migration_idempotent(
                     assert row["p"] == expected_project, (
                         f"project mismatch for {run_id}"
                     )
+                    assert row["id"] == run_id
 
             # Idempotency: re-run should affect 0 rows
             migrated_again = await run_migration(async_drv)

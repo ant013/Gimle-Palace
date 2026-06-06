@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import subprocess
 import sys
 from pathlib import Path
@@ -29,6 +30,13 @@ def test_crypto_domain_model_registered() -> None:
     extractor = EXTRACTORS.get("crypto_domain_model")
     assert extractor is not None
     assert extractor.name == "crypto_domain_model"
+
+
+def test_crypto_domain_model_timeout_override() -> None:
+    from palace_mcp.extractors.registry import EXTRACTORS
+
+    extractor = EXTRACTORS["crypto_domain_model"]
+    assert extractor.timeout_s == 1800.0
 
 
 def test_audit_contract_returns_valid_contract() -> None:
@@ -244,6 +252,71 @@ def test_dedup_keeps_highest_severity() -> None:
     result = _dedup_findings(raw)
     assert len(result) == 1
     assert result[0]["severity"] == "high"
+
+
+@pytest.mark.asyncio
+async def test_write_findings_logs_progress(caplog: pytest.LogCaptureFixture) -> None:
+    from palace_mcp.extractors.crypto_domain_model.extractor import _write_findings
+
+    findings = [
+        {
+            "kind": "private_key_string_storage",
+            "path": "Sources/Crypto.swift",
+            "start_line": 10,
+            "end_line": 10,
+            "severity": "high",
+            "message": "first",
+            "source_context": "library",
+        },
+        {
+            "kind": "address_no_checksum_validation",
+            "path": "Sources/Crypto.swift",
+            "start_line": 20,
+            "end_line": 20,
+            "severity": "medium",
+            "message": "second",
+            "source_context": "library",
+        },
+    ]
+    writes: list[dict[str, object]] = []
+
+    class _FakeSession:
+        async def __aenter__(self) -> _FakeSession:
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+        async def run(self, _query: str, **params: object) -> None:
+            writes.append(params)
+
+    class _FakeDriver:
+        def session(self) -> _FakeSession:
+            return _FakeSession()
+
+    with caplog.at_level(
+        logging.INFO, logger="palace_mcp.extractors.crypto_domain_model.extractor"
+    ):
+        written = await _write_findings(
+            _FakeDriver(),
+            project="uw-ios-app",
+            project_id="group-1",
+            run_id="run-1",
+            findings=findings,
+            progress_interval=1,
+        )
+
+    assert written == 2
+    assert len(writes) == 2
+    progress_records = [
+        record
+        for record in caplog.records
+        if record.message == "crypto_domain_model: write progress"
+    ]
+    assert len(progress_records) == 2
+    assert progress_records[-1].project == "uw-ios-app"
+    assert progress_records[-1].written == 2
+    assert progress_records[-1].total == 2
 
 
 # ── C.4 address_no_checksum_validation ──────────────────────────────────────

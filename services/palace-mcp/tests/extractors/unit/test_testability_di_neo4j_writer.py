@@ -109,4 +109,4 @@ async def test_replace_project_snapshot_writes_only_testability_labels() -> None
     assert any("CREATE (d:DiPattern)" in query for query in tx.queries)
     assert any("CREATE (d:TestDouble)" in query for query in tx.queries)
     assert any("CREATE (u:UntestableSite)" in query for query in tx.queries)
-    assert any("MATCH (run:IngestRun {id: $run_id})" in query for query in tx.queries)
+    assert any("MATCH (run:IngestRun {run_id: $run_id})" in query for query in tx.queries)

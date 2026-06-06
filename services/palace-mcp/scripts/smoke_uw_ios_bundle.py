@@ -66,8 +66,8 @@ def verify_sha256_all_kits() -> None:
             print(f"  {m}", file=sys.stderr)
 
 
-def assess_smoke_gate(status: dict, query: dict) -> int:
-    """Return 0 (GREEN) or 1 (RED) per spec §9.4.4."""
+def build_smoke_gate_verdict(status: dict, query: dict) -> dict[str, object]:
+    """Return machine-readable smoke-gate evidence per spec §9.4.4."""
     errors = []
 
     # Ingest gate
@@ -98,6 +98,12 @@ def assess_smoke_gate(status: dict, query: dict) -> int:
         if "uw-ios-app" in (health.get(key) or []):
             errors.append(f"uw-ios-app in {key}")
 
+    return {"ok": not errors, "errors": errors}
+
+
+def assess_smoke_gate(verdict: dict[str, object]) -> int:
+    """Return 0 (GREEN) or 1 (RED) from a smoke-gate verdict."""
+    errors = verdict["errors"]
     if errors:
         print("SMOKE RED:", file=sys.stderr)
         for e in errors:
@@ -157,17 +163,19 @@ async def main() -> int:
     )
 
     # 6. Print evidence
+    verdict = build_smoke_gate_verdict(status, query)
     evidence = {
         "ingest_summary": status,
         "query_summary": {
             "occurrences_count": len(query.get("occurrences", [])),
             "bundle_health": query.get("bundle_health"),
         },
+        "gate_verdict": verdict,
     }
     print(json.dumps(evidence, indent=2, default=str))
 
     # 7. Gate
-    return assess_smoke_gate(status, query)
+    return assess_smoke_gate(verdict)
 
 
 if __name__ == "__main__":

@@ -424,6 +424,64 @@ class TestDefaultPath:
         assert payload["total_found"] == max_results + 1
 
     @pytest.mark.asyncio
+    async def test_duplicate_tests_edge_rows_are_collapsed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from palace_mcp.code_composite import register_code_composite_tools
+        from mcp.server.fastmcp import FastMCP
+
+        fake_session = AsyncMock()
+        fake_session.call_tool = AsyncMock(
+            side_effect=[
+                _make_result(
+                    {
+                        "total": 1,
+                        "has_more": False,
+                        "results": [
+                            {
+                                "name": "fn",
+                                "qualified_name": "mod.fn",
+                                "file_path": "f.py",
+                            }
+                        ],
+                    }
+                ),
+                _make_result(
+                    {
+                        "columns": ["name", "qualified_name"],
+                        "rows": [
+                            ["test_a", "mod.test_a"],
+                            ["test_a", "mod.test_a"],
+                            ["test_b", "mod.test_b"],
+                        ],
+                        "total": 3,
+                    }
+                ),
+            ]
+        )
+        monkeypatch.setattr(
+            "palace_mcp.code_router.get_cm_session", lambda: fake_session
+        )
+
+        mcp = FastMCP("test")
+        register_code_composite_tools(
+            lambda name, desc: mcp.tool(name=name, description=desc),
+            default_project="repos-gimle",
+        )
+        result = await mcp.call_tool(
+            "palace.code.test_impact",
+            {
+                "qualified_name": "fn",
+            },
+        )
+        payload = json.loads(result[0][0].text)  # type: ignore[index]
+        assert [test["qualified_name"] for test in payload["tests"]] == [
+            "mod.test_a",
+            "mod.test_b",
+        ]
+        assert payload["total_found"] == 2
+
+    @pytest.mark.asyncio
     async def test_empty_result_tests_edge(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -725,10 +783,72 @@ class TestOptInPath:
         assert payload["total_found"] == 7  # exact, before truncation
 
     @pytest.mark.asyncio
+    async def test_duplicate_trace_callers_are_collapsed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from palace_mcp.code_composite import register_code_composite_tools
+        from mcp.server.fastmcp import FastMCP
+
+        fake_session = AsyncMock()
+        fake_session.call_tool = AsyncMock(
+            side_effect=[
+                _make_result(_make_search_one("fn", "mod.fn")),
+                _make_result(
+                    {
+                        "function": "fn",
+                        "direction": "inbound",
+                        "callers": [
+                            {
+                                "name": "test_dup_far",
+                                "qualified_name": "t.test_dup",
+                                "hop": 3,
+                                "is_test": True,
+                            },
+                            {
+                                "name": "test_dup_near",
+                                "qualified_name": "t.test_dup",
+                                "hop": 1,
+                                "is_test": True,
+                            },
+                            {
+                                "name": "test_other",
+                                "qualified_name": "t.test_other",
+                                "hop": 2,
+                                "is_test": True,
+                            },
+                        ],
+                    }
+                ),
+            ]
+        )
+        monkeypatch.setattr(
+            "palace_mcp.code_router.get_cm_session", lambda: fake_session
+        )
+
+        mcp = FastMCP("test")
+        register_code_composite_tools(
+            lambda name, desc: mcp.tool(name=name, description=desc),
+            default_project="repos-gimle",
+        )
+        result = await mcp.call_tool(
+            "palace.code.test_impact",
+            {
+                "qualified_name": "fn",
+                "include_indirect": True,
+            },
+        )
+        payload = json.loads(result[0][0].text)  # type: ignore[index]
+        assert [(test["qualified_name"], test["hop"]) for test in payload["tests"]] == [
+            ("t.test_dup", 1),
+            ("t.test_other", 2),
+        ]
+        assert payload["total_found"] == 2
+
+    @pytest.mark.asyncio
     async def test_infrastructure_failure_when_session_none(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """When CM session is None, handle_tool_error raises (FastMCP isError=True)."""
+        """When CM session is None for exact-only lookups, handle_tool_error raises."""
         from palace_mcp.code_composite import register_code_composite_tools
         from mcp.server.fastmcp import FastMCP
 
@@ -740,7 +860,47 @@ class TestOptInPath:
             default_project="repos-gimle",
         )
         with pytest.raises(Exception):
-            await mcp.call_tool("palace.code.test_impact", {"qualified_name": "fn"})
+            await mcp.call_tool("palace.code.test_impact", {"qualified_name": "pkg.fn"})
+
+    @pytest.mark.asyncio
+    async def test_short_name_resolution_still_fails_cleanly_without_cm_session(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Short-name fallback must still surface the CM-not-started tool error."""
+        from palace_mcp.code_composite import register_code_composite_tools
+        from mcp.server.fastmcp import FastMCP
+
+        async def fake_query_symbol_candidates(
+            driver: Any, query: str, **params: Any
+        ) -> list[dict[str, Any]]:
+            return [
+                {
+                    "name": "BalanceData",
+                    "short_name": "BalanceData",
+                    "symbol": "",
+                    "qualified_name": "WalletKit.BalanceData",
+                    "file_path": "WalletKit.swift",
+                }
+            ]
+
+        monkeypatch.setattr("palace_mcp.code_router.get_cm_session", lambda: None)
+        monkeypatch.setattr(
+            "palace_mcp.code_composite._query_symbol_candidates",
+            fake_query_symbol_candidates,
+        )
+        monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: object())
+
+        mcp = FastMCP("test")
+        register_code_composite_tools(
+            lambda name, desc: mcp.tool(name=name, description=desc),
+            default_project="repos-gimle",
+        )
+        with pytest.raises(Exception) as excinfo:
+            await mcp.call_tool(
+                "palace.code.test_impact",
+                {"qualified_name": "BalanceData", "project": "uw-ios-app"},
+            )
+        assert excinfo.type is not AssertionError
 
 
 # ---------------------------------------------------------------------------

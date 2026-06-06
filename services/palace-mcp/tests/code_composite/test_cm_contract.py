@@ -134,6 +134,32 @@ class TestSearchGraphContract:
         assert result["error_code"] == "symbol_not_found"
 
     @pytest.mark.asyncio
+    async def test_short_name_falls_back_after_empty_exact_search(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        session = _session({"results": [], "total": 0, "has_more": False})
+        driver = object()
+        short_name_result = ("BalanceData", "WalletKit.BalanceData")
+        fallback = AsyncMock(return_value=short_name_result)
+        monkeypatch.setattr(code_composite, "_resolve_short_name", fallback)
+
+        result = await code_composite._resolve_qn(
+            session,
+            "BalanceData",
+            "uw-ios-app",
+            driver=driver,
+        )
+
+        assert result == short_name_result
+        fallback.assert_awaited_once_with(
+            driver,
+            requested_qualified_name="BalanceData",
+            short_name="BalanceData",
+            project="uw-ios-app",
+            max_candidates=15,
+        )
+
+    @pytest.mark.asyncio
     async def test_search_graph_multiple_results_error_envelope(self) -> None:
         """_resolve_qn returns ambiguous_qualified_name when >1 results."""
         session = _session(
@@ -168,6 +194,26 @@ class TestSearchGraphContract:
         result = await code_composite._resolve_qn(session, "fn", "proj")
         assert isinstance(result, dict)
         assert result["error_code"] == "cm_error"
+
+    @pytest.mark.asyncio
+    async def test_short_name_falls_back_after_search_graph_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        session = _error_session("project alias miss")
+        driver = object()
+        short_name_result = ("BalanceData", "WalletKit.BalanceData")
+        fallback = AsyncMock(return_value=short_name_result)
+        monkeypatch.setattr(code_composite, "_resolve_short_name", fallback)
+
+        result = await code_composite._resolve_qn(
+            session,
+            "BalanceData",
+            "uw-ios-app",
+            driver=driver,
+        )
+
+        assert result == short_name_result
+        fallback.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_search_graph_is_error_returns_cm_error_envelope(self) -> None:
@@ -271,6 +317,116 @@ class TestQueryGraphContract:
         )
         assert result["truncated"] is True
         assert len(result["tests"]) == 5
+
+
+class TestShortNameQueryContract:
+    def test_fold_query_checks_symbol_and_terminal_segment(self) -> None:
+        assert (
+            "coalesce(s.symbol, '')" in code_composite._QUERY_SYMBOL_BY_SHORT_NAME_FOLD
+        )
+        assert "last(split(coalesce(s.qualified_name, ''), '.'))" in (
+            code_composite._QUERY_SYMBOL_BY_SHORT_NAME_FOLD
+        )
+
+    def test_regex_query_uses_prefix_match(self) -> None:
+        assert "candidate <> '' AND candidate =~ $pattern" in (
+            code_composite._QUERY_SYMBOL_BY_SHORT_NAME_REGEX
+        )
+
+    def test_scip_query_uses_qualified_name_regex(self) -> None:
+        assert (
+            "resolved_qn =~ $pattern" in code_composite._QUERY_SYMBOL_BY_SCIP_SHORT_NAME
+        )
+
+    def test_function_projection_query_uses_qualified_name_regex(self) -> None:
+        assert (
+            "coalesce(fn.qualified_name, fn.symbol_qualified_name, '') AS resolved_qn"
+            in code_composite._QUERY_FUNCTION_BY_SHORT_NAME_REGEX
+        )
+
+    def test_shadow_projection_query_uses_symbol_qualified_name_regex(self) -> None:
+        assert (
+            "coalesce(shadow.symbol_qualified_name, '') AS resolved_qn"
+            in code_composite._QUERY_SHADOW_BY_SHORT_NAME_REGEX
+        )
+
+    @pytest.mark.asyncio
+    async def test_resolve_short_name_matches_scip_qualified_name(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        scip_row = {
+            "name": "",
+            "short_name": "",
+            "symbol": "",
+            "qualified_name": (
+                "Unstoppable s%3A11Unstoppable18BitcoinBaseAdapterC0B11BalanceDataV"
+            ),
+            "file_path": "Adapters.swift",
+        }
+        query_mock = AsyncMock(side_effect=[[], [], [], [scip_row]])
+        monkeypatch.setattr(code_composite, "_query_symbol_candidates", query_mock)
+
+        result = await code_composite._resolve_short_name(
+            object(),
+            requested_qualified_name="BalanceData",
+            short_name="BalanceData",
+            project="uw-ios-app",
+            max_candidates=15,
+        )
+
+        assert result == ("BalanceData", scip_row["qualified_name"])
+        assert query_mock.await_count == 4
+
+    @pytest.mark.asyncio
+    async def test_resolve_qn_falls_back_to_function_projection(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        session = _session({"results": [], "total": 0, "has_more": False})
+        function_row = {
+            "name": (
+                "Unstoppable s%3A11Unstoppable18BitcoinBaseAdapterC0B11BalanceDataV"
+            ),
+            "short_name": "",
+            "symbol": (
+                "Unstoppable s%3A11Unstoppable18BitcoinBaseAdapterC0B11BalanceDataV"
+            ),
+            "qualified_name": (
+                "Unstoppable s%3A11Unstoppable18BitcoinBaseAdapterC0B11BalanceDataV"
+            ),
+            "file_path": "Sources/App/BalanceData.swift",
+        }
+        query_mock = AsyncMock(side_effect=[[], [], [], [], [function_row]])
+        monkeypatch.setattr(code_composite, "_query_symbol_candidates", query_mock)
+
+        result = await code_composite._resolve_qn(
+            session,
+            "BalanceData",
+            "uw-ios-app",
+            driver=object(),
+        )
+
+        assert result == ("BalanceData", function_row["qualified_name"])
+        assert query_mock.await_count == 5
+
+    @pytest.mark.asyncio
+    async def test_resolve_qn_preserves_symbol_not_found_for_negative_probe(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        session = _session({"results": [], "total": 0, "has_more": False})
+        query_mock = AsyncMock(side_effect=[[], [], [], [], [], []])
+        monkeypatch.setattr(code_composite, "_query_symbol_candidates", query_mock)
+
+        result = await code_composite._resolve_qn(
+            session,
+            "NoSuchSymbol_xyz_123",
+            "uw-ios-app",
+            driver=object(),
+        )
+
+        assert isinstance(result, dict)
+        assert result["error_code"] == "symbol_not_found"
+        assert result["requested_qualified_name"] == "NoSuchSymbol_xyz_123"
+        assert query_mock.await_count == 6
 
 
 # ---------------------------------------------------------------------------

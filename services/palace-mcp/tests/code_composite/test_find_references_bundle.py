@@ -152,6 +152,12 @@ def _make_bridge_mock(raw_results: list[dict[str, Any]]) -> MagicMock:
     return bridge
 
 
+class _FakeCtx:
+    def __init__(self, client_id: str) -> None:
+        self.client_id = client_id
+        self.session = object()
+
+
 def _tantivy_doc(
     *,
     symbol_id: int,
@@ -421,6 +427,262 @@ class TestFindReferencesProjectPath:
                 "qualified_name": "MyModule.func",
             }
         ]
+
+    async def test_short_name_resolves_via_symbol_index(self) -> None:
+        """Human short name resolves through the new Symbol.short_name path."""
+        from palace_mcp.code_composite import SlugResolution
+
+        find_refs = self._get_fn()
+        raw_occ = _tantivy_doc(
+            symbol_id=9,
+            file_path="Sources/App/MoneroAdapter.swift",
+            line=12,
+            col_start=2,
+        )
+
+        with (
+            patch(_PATCH_GET_DRIVER, return_value=MagicMock()),
+            patch(_PATCH_GET_SETTINGS, return_value=self._settings()),
+            patch(
+                "palace_mcp.code_composite._resolve_slug",
+                new=AsyncMock(return_value=SlugResolution(kind="project")),
+            ),
+            patch(
+                "palace_mcp.code_composite._query_any_ingest_run_for_project",
+                new=AsyncMock(return_value={"run_id": "abc", "success": True}),
+            ),
+            patch(
+                "palace_mcp.code_composite._query_eviction_record",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "palace_mcp.code_composite._query_symbol_candidates",
+                new=AsyncMock(
+                    return_value=[
+                        {
+                            "short_name": "MoneroAdapter",
+                            "qualified_name": "UwKit.MoneroAdapter",
+                            "file_path": "Sources/App/MoneroAdapter.swift",
+                        }
+                    ]
+                ),
+            ),
+            patch(
+                "palace_mcp.code_composite.TantivyBridge",
+                return_value=_make_bridge_mock([raw_occ]),
+            ),
+            patch("palace_mcp.code_composite.symbol_id_for", return_value=9),
+            patch("palace_mcp.code_router.get_cm_session", return_value=None),
+        ):
+            result = await find_refs("MoneroAdapter", "gimle", 100)
+
+        assert result["ok"] is True
+        assert result["requested_qualified_name"] == "MoneroAdapter"
+        assert result["occurrences"][0]["qualified_name"] == "UwKit.MoneroAdapter"
+
+    async def test_cm_error_resolution_falls_back_to_literal_qn(self) -> None:
+        """CM alias miss must not abort the Tantivy lookup."""
+        from palace_mcp.code_composite import SlugResolution
+
+        find_refs = self._get_fn()
+        raw_occ = _tantivy_doc(
+            symbol_id=11,
+            file_path="Sources/App/BalanceData.swift",
+            line=18,
+            col_start=1,
+        )
+
+        with (
+            patch(_PATCH_GET_DRIVER, return_value=MagicMock()),
+            patch(_PATCH_GET_SETTINGS, return_value=self._settings()),
+            patch(
+                "palace_mcp.code_composite._resolve_slug",
+                new=AsyncMock(return_value=SlugResolution(kind="project")),
+            ),
+            patch(
+                "palace_mcp.code_composite._query_any_ingest_run_for_project",
+                new=AsyncMock(return_value={"run_id": "abc", "success": True}),
+            ),
+            patch(
+                "palace_mcp.code_composite._query_eviction_record",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "palace_mcp.code_composite._resolve_qn",
+                new=AsyncMock(
+                    return_value={
+                        "ok": False,
+                        "error_code": "cm_error",
+                        "requested_qualified_name": "BalanceData",
+                    }
+                ),
+            ),
+            patch(
+                "palace_mcp.code_composite.TantivyBridge",
+                return_value=_make_bridge_mock([raw_occ]),
+            ),
+            patch(
+                "palace_mcp.code_composite.symbol_id_for", return_value=11
+            ) as symbol_id,
+            patch("palace_mcp.code_router.get_cm_session", return_value=AsyncMock()),
+        ):
+            result = await find_refs("BalanceData", "gimle", 100)
+
+        assert result["ok"] is True
+        assert result["occurrences"][0]["qualified_name"] == "BalanceData"
+        symbol_id.assert_called_once_with("BalanceData")
+
+    async def test_scip_symbol_short_name_resolves_via_qualified_name(self) -> None:
+        from palace_mcp.code_composite import SlugResolution
+
+        find_refs = self._get_fn()
+        scip_qn = "Unstoppable s%3A11Unstoppable18BitcoinBaseAdapterC0B11BalanceDataV"
+        raw_occ = _tantivy_doc(
+            symbol_id=12,
+            file_path="Sources/App/BalanceData.swift",
+            line=21,
+            col_start=5,
+        )
+
+        with (
+            patch(_PATCH_GET_DRIVER, return_value=MagicMock()),
+            patch(_PATCH_GET_SETTINGS, return_value=self._settings()),
+            patch(
+                "palace_mcp.code_composite._resolve_slug",
+                new=AsyncMock(return_value=SlugResolution(kind="project")),
+            ),
+            patch(
+                "palace_mcp.code_composite._query_any_ingest_run_for_project",
+                new=AsyncMock(return_value={"run_id": "abc", "success": True}),
+            ),
+            patch(
+                "palace_mcp.code_composite._query_eviction_record",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "palace_mcp.code_composite._query_symbol_candidates",
+                new=AsyncMock(
+                    side_effect=[
+                        [],
+                        [],
+                        [],
+                        [
+                            {
+                                "name": "",
+                                "short_name": "",
+                                "symbol": "",
+                                "qualified_name": scip_qn,
+                                "file_path": "Sources/App/BalanceData.swift",
+                            }
+                        ],
+                    ]
+                ),
+            ),
+            patch(
+                "palace_mcp.code_composite.TantivyBridge",
+                return_value=_make_bridge_mock([raw_occ]),
+            ),
+            patch(
+                "palace_mcp.code_composite.symbol_id_for", return_value=12
+            ) as symbol_id,
+            patch("palace_mcp.code_router.get_cm_session", return_value=None),
+        ):
+            result = await find_refs("BalanceData", "gimle", 100)
+
+        assert result["ok"] is True
+        assert result["requested_qualified_name"] == "BalanceData"
+        assert result["occurrences"][0]["qualified_name"] == scip_qn
+        symbol_id.assert_called_once_with(scip_qn)
+
+    async def test_duplicate_occurrences_are_collapsed(self) -> None:
+        from palace_mcp.code_composite import SlugResolution
+
+        find_refs = self._get_fn()
+        raw_occ = _tantivy_doc(
+            symbol_id=1,
+            file_path="Sources/App/Feature.swift",
+            line=7,
+            col_start=3,
+        )
+
+        with (
+            patch(_PATCH_GET_DRIVER, return_value=MagicMock()),
+            patch(_PATCH_GET_SETTINGS, return_value=self._settings()),
+            patch(
+                "palace_mcp.code_composite._resolve_slug",
+                new=AsyncMock(return_value=SlugResolution(kind="project")),
+            ),
+            patch(
+                "palace_mcp.code_composite._query_any_ingest_run_for_project",
+                new=AsyncMock(return_value={"run_id": "abc", "success": True}),
+            ),
+            patch(
+                "palace_mcp.code_composite._query_eviction_record",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "palace_mcp.code_composite.TantivyBridge",
+                return_value=_make_bridge_mock([raw_occ, raw_occ]),
+            ),
+            patch("palace_mcp.code_composite.symbol_id_for", return_value=1),
+            patch("palace_mcp.code_router.get_cm_session", return_value=None),
+        ):
+            result = await find_refs("MyModule.func", "gimle", 100)
+
+        assert result["ok"] is True
+        assert len(result["occurrences"]) == 1
+        assert result["total_found"] == 1
+
+    async def test_ambiguous_short_name_rate_limits_after_three_tries(self) -> None:
+        """Three ambiguous short-name requests in one session trip the loop guard."""
+        from palace_mcp.code_composite import SlugResolution
+
+        find_refs = self._get_fn()
+        ctx = _FakeCtx("tester-1")
+        ambiguous_rows = [
+            {
+                "short_name": "Adapter",
+                "qualified_name": "Pkg.AlphaAdapter",
+                "file_path": "a.swift",
+            },
+            {
+                "short_name": "Adapter",
+                "qualified_name": "Pkg.BetaAdapter",
+                "file_path": "b.swift",
+            },
+            {
+                "short_name": "Adapter",
+                "qualified_name": "Pkg.GammaAdapter",
+                "file_path": "c.swift",
+            },
+        ]
+
+        with (
+            patch(_PATCH_GET_DRIVER, return_value=MagicMock()),
+            patch(_PATCH_GET_SETTINGS, return_value=self._settings()),
+            patch(
+                "palace_mcp.code_composite._resolve_slug",
+                new=AsyncMock(return_value=SlugResolution(kind="project")),
+            ),
+            patch(
+                "palace_mcp.code_composite._query_any_ingest_run_for_project",
+                new=AsyncMock(return_value={"run_id": "abc", "success": True}),
+            ),
+            patch(
+                "palace_mcp.code_composite._query_symbol_candidates",
+                new=AsyncMock(return_value=ambiguous_rows),
+            ),
+            patch("palace_mcp.code_router.get_cm_session", return_value=None),
+        ):
+            first = await find_refs("Adapter", "gimle", 100, 15, ctx)
+            second = await find_refs("Adapter", "gimle", 100, 15, ctx)
+            third = await find_refs("Adapter", "gimle", 100, 15, ctx)
+
+        assert first["error_code"] == "ambiguous_name"
+        assert first["terminal"] is True
+        assert len(first["matches"]) == 3
+        assert second["error_code"] == "ambiguous_name"
+        assert third["error_code"] == "disambiguation_loop_detected"
 
 
 # ---------------------------------------------------------------------------

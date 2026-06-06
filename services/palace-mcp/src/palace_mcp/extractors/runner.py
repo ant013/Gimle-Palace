@@ -258,7 +258,7 @@ async def _finalize(
     async with driver.session() as session:
         await session.run(
             FINALIZE_INGEST_RUN,
-            id=run_id,
+            run_id=run_id,
             finished_at=finished_at,
             duration_ms=duration_ms,
             nodes_written=nodes,
@@ -301,7 +301,7 @@ async def run_extractor(
     async with driver.session() as session:
         await session.run(
             CREATE_INGEST_RUN,
-            id=run_id,
+            run_id=run_id,
             source=source,
             group_id=pre.group_id,
             extractor_name=name,

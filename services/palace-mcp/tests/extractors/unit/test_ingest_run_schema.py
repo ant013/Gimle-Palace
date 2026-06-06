@@ -42,6 +42,14 @@ class TestPathACanonicalFields:
             "Add `extractor_name: $extractor_name` to cypher.py."
         )
 
+    def test_cypher_declares_run_id(self) -> None:
+        """CREATE_INGEST_RUN Cypher must use run_id as node key."""
+        assert "{run_id:" in CREATE_INGEST_RUN
+
+    def test_cypher_declares_source(self) -> None:
+        """CREATE_INGEST_RUN Cypher must declare source property."""
+        assert "source = $source" in CREATE_INGEST_RUN
+
     def test_cypher_declares_project(self) -> None:
         """CREATE_INGEST_RUN Cypher must declare project property."""
         assert "project" in CREATE_INGEST_RUN, (

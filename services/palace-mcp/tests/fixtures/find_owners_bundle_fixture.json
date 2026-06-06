@@ -1,0 +1,118 @@
+{
+  "bundle": "find-owners-wire-bundle",
+  "file_path": "Modules/Send/Shared.swift",
+  "top_n": 1,
+  "projects": [
+    {
+      "slug": "owners-bundle-alpha",
+      "tier": "user",
+      "head_sha": "aaa111",
+      "last_run_finished_at": "2026-05-19T00:00:00Z",
+      "alpha_used": 0.4,
+      "files": [
+        {
+          "path": "Modules/Send/Shared.swift",
+          "status": "processed",
+          "no_owners_reason": null,
+          "owners": [
+            {
+              "identity_key": "alice+owners-alpha@example.com",
+              "email": "alice+owners-alpha@example.com",
+              "name": "Alice Alpha",
+              "weight": 0.8,
+              "blame_share": 0.7,
+              "recency_churn_share": 0.9,
+              "last_touched_at": "2026-05-19T12:00:00Z",
+              "lines_attributed": 80,
+              "commit_count": 8
+            },
+            {
+              "identity_key": "bob+owners-alpha@example.com",
+              "email": "bob+owners-alpha@example.com",
+              "name": "Bob Alpha",
+              "weight": 0.2,
+              "blame_share": 0.3,
+              "recency_churn_share": 0.1,
+              "last_touched_at": "2026-05-18T12:00:00Z",
+              "lines_attributed": 20,
+              "commit_count": 2
+            }
+          ]
+        },
+        {
+          "path": "Modules/Send/Other.swift",
+          "status": "processed",
+          "no_owners_reason": null,
+          "owners": [
+            {
+              "identity_key": "ignored+owners-alpha@example.com",
+              "email": "ignored+owners-alpha@example.com",
+              "name": "Ignored Alpha",
+              "weight": 1.0,
+              "blame_share": 1.0,
+              "recency_churn_share": 1.0,
+              "last_touched_at": "2026-05-17T12:00:00Z",
+              "lines_attributed": 40,
+              "commit_count": 4
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "owners-bundle-beta",
+      "tier": "first-party",
+      "head_sha": "bbb222",
+      "last_run_finished_at": "2026-05-18T00:00:00Z",
+      "alpha_used": 0.7,
+      "files": [
+        {
+          "path": "Modules/Send/Shared.swift",
+          "status": "processed",
+          "no_owners_reason": null,
+          "owners": [
+            {
+              "identity_key": "carol+owners-beta@example.com",
+              "email": "carol+owners-beta@example.com",
+              "name": "Carol Beta",
+              "weight": 1.0,
+              "blame_share": 1.0,
+              "recency_churn_share": 1.0,
+              "last_touched_at": "2026-05-18T08:30:00Z",
+              "lines_attributed": 55,
+              "commit_count": 5
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "excluded_projects": [
+    {
+      "slug": "owners-bundle-outsider",
+      "head_sha": "ccc333",
+      "last_run_finished_at": "2026-05-17T00:00:00Z",
+      "alpha_used": 0.9,
+      "files": [
+        {
+          "path": "Modules/Send/Shared.swift",
+          "status": "processed",
+          "no_owners_reason": null,
+          "owners": [
+            {
+              "identity_key": "mallory+owners-outsider@example.com",
+              "email": "mallory+owners-outsider@example.com",
+              "name": "Mallory Outsider",
+              "weight": 1.0,
+              "blame_share": 1.0,
+              "recency_churn_share": 1.0,
+              "last_touched_at": "2026-05-17T11:00:00Z",
+              "lines_attributed": 99,
+              "commit_count": 9
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

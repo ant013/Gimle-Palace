@@ -6,7 +6,9 @@ and a reachable Neo4j instance — skipped otherwise.
 
 from __future__ import annotations
 
+import asyncio
 import os
+from time import monotonic
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -92,6 +94,61 @@ async def test_ensure_schema_bootstrap_idempotent(live_driver: Any) -> None:
     assert row1["t"] == row2["t"], "source_created_at must be preserved"
 
 
+async def _wait_for_group_id_trigger(live_driver: Any) -> None:
+    deadline = monotonic() + 10.0
+    while monotonic() < deadline:
+        async with live_driver.session(database="system") as s:
+            try:
+                result = await s.run(
+                    "CALL apoc.trigger.show('neo4j') "
+                    "YIELD name, paused "
+                    "RETURN name AS name, paused AS paused"
+                )
+                row = next(
+                    (
+                        dict(record)
+                        async for record in result
+                        if record["name"] == "require_group_id"
+                    ),
+                    None,
+                )
+            except Exception as exc:
+                pytest.skip(f"APOC trigger support unavailable: {exc}")
+        if row is not None and row["paused"] is False:
+            return
+        await asyncio.sleep(0.2)
+    pytest.fail("require_group_id trigger did not become active within 10s")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_ensure_schema_enforces_group_id_trigger(live_driver: Any) -> None:
+    from neo4j.exceptions import Neo4jError
+
+    await ensure_schema(live_driver, default_group_id="project/test-trigger-enforcement")
+    await _wait_for_group_id_trigger(live_driver)
+
+    async with live_driver.session() as s:
+        await (await s.run("MATCH (n:Bundle {slug: 'trigger-allowed'}) DETACH DELETE n")).consume()
+        await (
+            await s.run("MATCH (n:Function {cm_id: 'trigger-rejected'}) DETACH DELETE n")
+        ).consume()
+
+    try:
+        async with live_driver.session() as s:
+            await (await s.run("CREATE (:Bundle {slug: 'trigger-allowed'})")).consume()
+            with pytest.raises(Neo4jError, match="missing required group_id"):
+                await (
+                    await s.run("CREATE (:Function {cm_id: 'trigger-rejected'})")
+                ).consume()
+    finally:
+        async with live_driver.session() as s:
+            await (await s.run("MATCH (n:Bundle {slug: 'trigger-allowed'}) DETACH DELETE n")).consume()
+            await (
+                await s.run("MATCH (n:Function {cm_id: 'trigger-rejected'}) DETACH DELETE n")
+            ).consume()
+
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_ensure_schema_preserves_registered_project_metadata(
@@ -166,10 +223,14 @@ async def test_ensure_schema_bootstrap_upsert_supplies_optional_project_fields()
 
     empty_result = AsyncMock()
     empty_result.single.return_value = {"unregistered": []}
+    missing_trigger_result = AsyncMock()
+    missing_trigger_result.single.return_value = None
 
     async def run_side_effect(query: str, **kwargs: Any) -> Any:
         if query == BOOTSTRAP_PROJECT:
             return None
+        if "CALL apoc.trigger.show" in query:
+            return missing_trigger_result
         if "RETURN collect(g) AS unregistered" in query:
             return empty_result
         return None
@@ -186,3 +247,78 @@ async def test_ensure_schema_bootstrap_upsert_supplies_optional_project_fields()
     assert upsert_call.kwargs["parent_mount"] is None
     assert upsert_call.kwargs["relative_path"] is None
     assert upsert_call.kwargs["language_profile"] is None
+
+
+@pytest.mark.asyncio
+async def test_ensure_schema_installs_group_id_trigger_when_missing() -> None:
+    from palace_mcp.memory.constraints import GROUP_ID_TRIGGER_QUERY
+
+    driver = AsyncMock()
+    default_session = AsyncMock()
+    default_session.__aenter__.return_value = default_session
+    default_session.__aexit__.return_value = None
+    system_session = AsyncMock()
+    system_session.__aenter__.return_value = system_session
+    system_session.__aexit__.return_value = None
+    driver.session = MagicMock(side_effect=[default_session, system_session, default_session])
+
+    empty_result = AsyncMock()
+    empty_result.single.return_value = {"unregistered": []}
+    missing_trigger_result = AsyncMock()
+    missing_trigger_result.single.return_value = None
+
+    async def default_run_side_effect(query: str, **kwargs: Any) -> Any:
+        if "RETURN collect(g) AS unregistered" in query:
+            return empty_result
+        return None
+
+    default_session.run.side_effect = default_run_side_effect
+    system_session.run.side_effect = [missing_trigger_result, None]
+
+    await ensure_schema(driver, default_group_id="project/test-trigger")
+
+    install_call = system_session.run.await_args_list[1]
+    assert "CALL apoc.trigger.install" in install_call.args[0]
+    assert install_call.kwargs["trigger_query"] == GROUP_ID_TRIGGER_QUERY
+    assert install_call.kwargs["selector"] == {"phase": "before"}
+    driver.session.assert_any_call(database="system")
+
+
+@pytest.mark.asyncio
+async def test_ensure_schema_leaves_matching_group_id_trigger_unchanged() -> None:
+    from palace_mcp.memory.constraints import (
+        GROUP_ID_TRIGGER_QUERY,
+        GROUP_ID_TRIGGER_SELECTOR,
+    )
+
+    driver = AsyncMock()
+    default_session = AsyncMock()
+    default_session.__aenter__.return_value = default_session
+    default_session.__aexit__.return_value = None
+    system_session = AsyncMock()
+    system_session.__aenter__.return_value = system_session
+    system_session.__aexit__.return_value = None
+    driver.session = MagicMock(side_effect=[default_session, system_session, default_session])
+
+    empty_result = AsyncMock()
+    empty_result.single.return_value = {"unregistered": []}
+    existing_trigger_result = AsyncMock()
+    existing_trigger_result.__aiter__.return_value = [{
+        "name": "require_group_id",
+        "query": GROUP_ID_TRIGGER_QUERY,
+        "selector": GROUP_ID_TRIGGER_SELECTOR,
+        "params": {},
+        "paused": False,
+    }]
+
+    async def default_run_side_effect(query: str, **kwargs: Any) -> Any:
+        if "RETURN collect(g) AS unregistered" in query:
+            return empty_result
+        return None
+
+    default_session.run.side_effect = default_run_side_effect
+    system_session.run.return_value = existing_trigger_result
+
+    await ensure_schema(driver, default_group_id="project/test-trigger")
+
+    assert system_session.run.await_count == 1

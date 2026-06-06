@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 _RULES_DIR = Path(__file__).parent / "rules"
 _SEMGREP_BATCH_SIZE = 64
+_WRITE_PROGRESS_INTERVAL = 10_000
 
 _QUERY = """
 MATCH (f:CryptoFinding {project_id: $project_id})
@@ -73,6 +74,7 @@ def _crypto_severity(raw: Any) -> "Severity":
 
 class CryptoDomainModelExtractor(BaseExtractor):
     name: ClassVar[str] = "crypto_domain_model"
+    timeout_s: ClassVar[float] = 1800.0
     description: ClassVar[str] = (
         "Roadmap #40 — Crypto Domain Model. "
         "Runs semgrep custom rules on Swift source and writes :CryptoFinding nodes."
@@ -141,15 +143,13 @@ class CryptoDomainModelExtractor(BaseExtractor):
         # highest severity (D5 decision).
         deduped = _dedup_findings(findings)
 
-        nodes_written = 0
-        for finding in deduped:
-            await _write_finding(
-                driver,
-                project_id=ctx.group_id,
-                run_id=ctx.run_id,
-                finding=finding,
-            )
-            nodes_written += 1
+        nodes_written = await _write_findings(
+            driver,
+            project=ctx.project_slug,
+            project_id=ctx.group_id,
+            run_id=ctx.run_id,
+            findings=deduped,
+        )
 
         logger.info(
             "crypto_domain_model: complete",
@@ -249,3 +249,30 @@ SET f.severity = $severity,
             source_context=finding["source_context"],
             run_id=run_id,
         )
+
+
+async def _write_findings(
+    driver: Any,
+    *,
+    project: str,
+    project_id: str,
+    run_id: str,
+    findings: list[dict[str, Any]],
+    progress_interval: int = _WRITE_PROGRESS_INTERVAL,
+) -> int:
+    written = 0
+    total = len(findings)
+    for finding in findings:
+        await _write_finding(
+            driver,
+            project_id=project_id,
+            run_id=run_id,
+            finding=finding,
+        )
+        written += 1
+        if written % progress_interval == 0:
+            logger.info(
+                "crypto_domain_model: write progress",
+                extra={"project": project, "written": written, "total": total},
+            )
+    return written

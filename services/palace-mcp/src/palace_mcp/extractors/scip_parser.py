@@ -11,6 +11,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 
 from google.protobuf.message import DecodeError
 
@@ -156,6 +157,59 @@ def _extract_qualified_name(scip_symbol: str) -> str:
     package_name = parts[2]
     descriptor_chain = " ".join(p for p in parts[4:] if p)
     return f"{package_name} {descriptor_chain}"
+
+
+def _length_prefixed_identifiers(symbol: str) -> list[tuple[str, str]]:
+    """Decode Swift-style length-prefixed identifiers from a descriptor token."""
+    identifiers: list[tuple[str, str]] = []
+    i = 0
+    n = len(symbol)
+    while i < n:
+        if not symbol[i].isdigit():
+            i += 1
+            continue
+        j = i
+        while j < n and symbol[j].isdigit():
+            j += 1
+        length = int(symbol[i:j])
+        if length <= 0 or j + length > n:
+            i = j
+            continue
+        end = j + length
+        next_char = symbol[end] if end < n else ""
+        identifiers.append((symbol[j:end], next_char))
+        i = end
+    return identifiers
+
+
+def decode_scip_short_name(symbol: str) -> str:
+    """Best-effort human short-name extraction for SCIP or stored qn strings."""
+    raw = symbol.strip()
+    if not raw:
+        return ""
+
+    parts = _split_scip_top_level(raw)
+    candidate = parts[-1] if parts else raw
+    decoded = unquote(candidate)
+    identifiers = _length_prefixed_identifiers(decoded)
+    if identifiers:
+        type_marker_indexes = [
+            idx
+            for idx, (_name, next_char) in enumerate(identifiers)
+            if next_char in "CPOVAE"
+        ]
+        if type_marker_indexes:
+            boundary = type_marker_indexes[-1]
+            if boundary + 1 < len(identifiers):
+                return identifiers[boundary + 1][0]
+            return identifiers[boundary][0]
+        return identifiers[0][0]
+
+    if "." in decoded:
+        return decoded.rsplit(".", 1)[-1]
+    if "/" in decoded:
+        return decoded.rsplit("/", 1)[-1]
+    return decoded.rstrip("#().:")
 
 
 def _split_scip_top_level(symbol: str) -> list[str]:

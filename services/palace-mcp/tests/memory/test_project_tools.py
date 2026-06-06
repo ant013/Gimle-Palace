@@ -223,13 +223,13 @@ def _make_mock_driver_for_overview(
 
 
 @pytest.mark.asyncio
-async def test_get_project_overview_returns_entity_counts() -> None:
+async def test_get_project_overview_returns_graph_entity_counts() -> None:
     project_row = _make_project_row("gimle", "Gimle", ["infra"])
     count_rows = [
-        {"labels": ["Issue"], "c": 10},
-        {"labels": ["Comment"], "c": 5},
+        {"labels": ["Symbol"], "c": 10},
+        {"labels": ["File", "Module"], "c": 5},
     ]
     driver = _make_mock_driver_for_overview(project_row, count_rows)
     info = await get_project_overview(driver, slug="gimle")
     assert info.slug == "gimle"
-    assert info.entity_counts == {"Issue": 10, "Comment": 5}
+    assert info.entity_counts == {"Symbol": 10, "File": 5, "Module": 5}

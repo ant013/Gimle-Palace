@@ -109,7 +109,7 @@ bot_authors: []
 
 
 def test_config_parse_role_target_parses(tmp_path: Path):
-    """role(Name) target parses successfully; runtime raises NotImplementedError later."""
+    """role(Name) target parses successfully; runtime raises UnsupportedTargetError later."""
     cfg = tmp_path / "signals.yml"
     cfg.write_text(
         """
@@ -512,6 +512,56 @@ def test_resolve_target_issue_assignee_active_run_clears(httpx_mock: HTTPXMock):
     client.close()
 
 
+def test_resolve_target_issue_assignee_active_run_clears_after_multiple_rechecks(
+    httpx_mock: HTTPXMock,
+):
+    """executionRunId clearing after two retries still allows proceed."""
+    httpx_mock.add_response(
+        method="GET",
+        url="https://paperclip.example.com/api/issues?issueNumber=62&companyId=C1",
+        json=[
+            {
+                "id": "uuid",
+                "issueNumber": 62,
+                "assigneeAgentId": "agent-uuid",
+                "assigneeName": "MCPEngineer",
+                "executionRunId": "run-active-1",
+            }
+        ],
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://paperclip.example.com/api/issues?issueNumber=62&companyId=C1",
+        json=[
+            {
+                "id": "uuid",
+                "issueNumber": 62,
+                "assigneeAgentId": "agent-uuid",
+                "assigneeName": "MCPEngineer",
+                "executionRunId": "run-active-1",
+            }
+        ],
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://paperclip.example.com/api/issues?issueNumber=62&companyId=C1",
+        json=[
+            {
+                "id": "uuid",
+                "issueNumber": 62,
+                "assigneeAgentId": "agent-uuid",
+                "assigneeName": "MCPEngineer",
+                "executionRunId": None,
+            }
+        ],
+    )
+    client = ps.PaperclipClient("https://paperclip.example.com", "k", "C1")
+    with patch.object(ps, "_sleep", lambda s: None):
+        result = ps.resolve_target_issue_assignee(client, issue_number=62)
+    assert result.status == "proceed"
+    client.close()
+
+
 def test_resolve_target_issue_assignee_null_assignee(httpx_mock: HTTPXMock):
     """Assignee is null on issue → status=no_assignee."""
     httpx_mock.add_response(
@@ -738,6 +788,97 @@ def test_main_happy_path_ci_success(
     assert rc == 0
 
 
+def test_main_success_comment_failure_posts_failed_and_exits_1(
+    httpx_mock: HTTPXMock, load_fixture, minimal_config: Path
+):
+    """If success comment fails, handler posts failed comment and exits 1."""
+    payload = load_fixture("workflow_run_success")
+    payload["sender"] = {"login": "operator", "type": "User"}
+
+    httpx_mock.add_response(
+        method="GET",
+        url="https://paperclip.example.com/api/issues?issueNumber=62&companyId=C1",
+        json=[
+            {
+                "id": "issue-uuid",
+                "issueNumber": 62,
+                "assigneeAgentId": "agent-uuid",
+                "assigneeName": "MCPEngineer",
+                "executionRunId": None,
+            }
+        ],
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://api.github.com/repos/ant013/Gimle-Palace/issues/77/comments?per_page=100",
+        json=[],
+    )
+    httpx_mock.add_response(
+        method="POST",
+        url="https://paperclip.example.com/api/issues/issue-uuid/release",
+        json={"ok": True},
+    )
+    httpx_mock.add_response(
+        method="PATCH",
+        url="https://paperclip.example.com/api/issues/issue-uuid",
+        json={"ok": True},
+    )
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.github.com/repos/ant013/Gimle-Palace/issues/77/comments",
+        status_code=500,
+        json={"message": "rate limited"},
+    )
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.github.com/repos/ant013/Gimle-Palace/issues/77/comments",
+        json={"id": 99},
+    )
+
+    with patch.object(ps, "_sleep", lambda s: None):
+        rc = ps.main(
+            event_name="workflow_run",
+            event_payload=payload,
+            config_path=minimal_config,
+            paperclip_base_url="https://paperclip.example.com",
+            paperclip_api_key="k",
+            github_token="ght",
+            repo="ant013/Gimle-Palace",
+        )
+    assert rc == 1
+
+
+def test_main_issue_lookup_fail_posts_failed_and_exits_1(
+    httpx_mock: HTTPXMock, load_fixture, minimal_config: Path
+):
+    """If issue fetch fails, handler posts failed comment and exits 1."""
+    payload = load_fixture("workflow_run_success")
+    payload["sender"] = {"login": "operator", "type": "User"}
+
+    httpx_mock.add_response(
+        method="GET",
+        url="https://paperclip.example.com/api/issues?issueNumber=62&companyId=C1",
+        status_code=500,
+        json={"error": "paperclip unavailable"},
+    )
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.github.com/repos/ant013/Gimle-Palace/issues/77/comments",
+        json={"id": 99},
+    )
+
+    rc = ps.main(
+        event_name="workflow_run",
+        event_payload=payload,
+        config_path=minimal_config,
+        paperclip_base_url="https://paperclip.example.com",
+        paperclip_api_key="k",
+        github_token="ght",
+        repo="ant013/Gimle-Palace",
+    )
+    assert rc == 1
+
+
 def test_main_bot_sender_exits_early(
     httpx_mock: HTTPXMock, load_fixture, minimal_config: Path
 ):
@@ -851,8 +992,8 @@ def test_main_deferred_posts_deferred_comment_exits_0(
     assert rc == 0
 
 
-def test_main_role_target_raises(load_fixture, tmp_path: Path):
-    """role(<Name>) target triggers NotImplementedError."""
+def test_main_role_target_raises(httpx_mock: HTTPXMock, load_fixture, tmp_path: Path):
+    """role(<Name>) target triggers unsupported-target failure path."""
     cfg = tmp_path / "signals.yml"
     cfg.write_text(
         """
@@ -866,16 +1007,21 @@ bot_authors: []
     )
     payload = load_fixture("workflow_run_success")
     payload["sender"] = {"login": "operator", "type": "User"}
-    with pytest.raises(NotImplementedError):
-        ps.main(
-            event_name="workflow_run",
-            event_payload=payload,
-            config_path=cfg,
-            paperclip_base_url="https://paperclip.example.com",
-            paperclip_api_key="k",
-            github_token="ght",
-            repo="ant013/Gimle-Palace",
-        )
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.github.com/repos/ant013/Gimle-Palace/issues/77/comments",
+        json={"id": 42},
+    )
+    rc = ps.main(
+        event_name="workflow_run",
+        event_payload=payload,
+        config_path=cfg,
+        paperclip_base_url="https://paperclip.example.com",
+        paperclip_api_key="k",
+        github_token="ght",
+        repo="ant013/Gimle-Palace",
+    )
+    assert rc == 1
 
 
 def test_main_paperclip_down_posts_failed_exits_1(

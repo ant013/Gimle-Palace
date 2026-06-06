@@ -1,0 +1,41 @@
+{
+  "ok": true,
+  "mode": "bundle",
+  "target_slug": "find-public-api-wire-bundle",
+  "bundle_health": {
+    "name": "find-public-api-wire-bundle",
+    "members_total": 2,
+    "members_fresh_within_7d": 2,
+    "members_stale": 0,
+    "query_failed_slugs": [],
+    "ingest_failed_slugs": [],
+    "never_ingested_slugs": [],
+    "stale_slugs": [],
+    "oldest_member_ingest_at": "2026-05-18T00:00:00Z",
+    "newest_member_ingest_at": "2026-05-19T00:00:00Z"
+  },
+  "result": [
+    {
+      "module_name": "AlphaKit",
+      "fqn": "AlphaKit.ProfileAPI",
+      "display_name": "ProfileAPI",
+      "kind": "class",
+      "visibility": "public",
+      "language": "swift",
+      "commit_sha": "alpha111",
+      "signature": "public class ProfileAPI",
+      "member_project": "public-api-bundle-alpha"
+    },
+    {
+      "module_name": "BetaKit",
+      "fqn": "BetaKit.SettingsAPI",
+      "display_name": "SettingsAPI",
+      "kind": "class",
+      "visibility": "public",
+      "language": "kotlin",
+      "commit_sha": "beta222",
+      "signature": "public final class SettingsAPI",
+      "member_project": "public-api-bundle-beta"
+    }
+  ]
+}
