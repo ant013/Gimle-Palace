@@ -105,6 +105,9 @@ class _OpenArgs(ArgModelBase):
 
 
 _OPEN_SCHEMA: dict[str, Any] = {"type": "object", "additionalProperties": True}
+_READ_FILTER_DEFAULT_TOOLS = frozenset(
+    {"search_graph", "query_graph", "get_code_snippet"}
+)
 
 
 def _make_open_fn_metadata(fn: Any) -> FuncMetadata:
@@ -118,8 +121,23 @@ def _make_open_fn_metadata(fn: Any) -> FuncMetadata:
     )
 
 
+def _open_schema_for_tool(cm_tool_name: str) -> dict[str, Any]:
+    if cm_tool_name not in _READ_FILTER_DEFAULT_TOOLS:
+        return _OPEN_SCHEMA
+    return {
+        "type": "object",
+        "properties": {
+            "include_deprecated": {
+                "type": "boolean",
+                "default": True,
+            }
+        },
+        "additionalProperties": True,
+    }
+
+
 def _patch_tool_open_schema(
-    mcp_instance: Any, name: str, fn_meta: FuncMetadata
+    mcp_instance: Any, name: str, fn_meta: FuncMetadata, schema: dict[str, Any]
 ) -> None:
     """Replace a registered FastMCP tool with an open-schema variant."""
     original = mcp_instance._tool_manager._tools[name]
@@ -128,7 +146,7 @@ def _patch_tool_open_schema(
         name=original.name,
         title=original.title,
         description=original.description,
-        parameters=_OPEN_SCHEMA,
+        parameters=schema,
         fn_metadata=fn_meta,
         is_async=original.is_async,
         context_kwarg=original.context_kwarg,
@@ -185,8 +203,11 @@ def _register_passthrough(
         assert _cm_session is not None, (
             "CM subprocess not started; set CODEBASE_MEMORY_MCP_BINARY"
         )
+        arguments = dict(kwargs)
+        if cm_tool_name in _READ_FILTER_DEFAULT_TOOLS:
+            arguments.setdefault("include_deprecated", True)
         result: CallToolResult = await _cm_session.call_tool(
-            cm_tool_name, arguments=kwargs
+            cm_tool_name, arguments=arguments
         )
         if result.isError:
             return {"error": [str(block) for block in result.content]}
@@ -194,7 +215,10 @@ def _register_passthrough(
 
     if mcp_instance is not None:
         _patch_tool_open_schema(
-            mcp_instance, palace_name, _make_open_fn_metadata(_forward)
+            mcp_instance,
+            palace_name,
+            _make_open_fn_metadata(_forward),
+            _open_schema_for_tool(cm_tool_name),
         )
 
 
@@ -215,5 +239,8 @@ def _register_disabled_tool(
 
     if mcp_instance is not None:
         _patch_tool_open_schema(
-            mcp_instance, palace_name, _make_open_fn_metadata(_blocked)
+            mcp_instance,
+            palace_name,
+            _make_open_fn_metadata(_blocked),
+            _OPEN_SCHEMA,
         )

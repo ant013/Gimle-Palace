@@ -1496,6 +1496,7 @@ async def palace_code_semantic_search(
     include_dependencies: bool = False,
     include_generated: bool = False,
     include_sdk: bool = False,
+    include_deprecated: bool = True,
     limit: int = 10,
     backend: str | None = None,
     include_context: bool = True,
