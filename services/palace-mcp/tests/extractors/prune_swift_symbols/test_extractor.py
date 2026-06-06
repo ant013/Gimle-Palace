@@ -15,7 +15,10 @@ from palace_mcp.extractors.prune_swift_symbols.cypher import (
     CREATE_DEPRECATION_EVENT,
     APPLY_DEPRECATION_BATCH,
 )
-from palace_mcp.extractors.prune_swift_symbols.extractor import _apply_deprecation
+from palace_mcp.extractors.prune_swift_symbols.extractor import (
+    APPLY_BATCH_SIZE,
+    _apply_deprecation,
+)
 
 
 def _ctx(repo_path: Path, *, companion_run_id: str | None) -> ExtractorRunContext:
@@ -81,12 +84,17 @@ async def test_apply_deprecation_accumulates_batches_and_records_event() -> None
     driver = MagicMock()
     batch_results = [
         SimpleNamespace(
-            records=[{"batch_count": 100, "batch_files": 24, "batch_symbols": 76}]
+            records=[
+                {
+                    "batch_count": APPLY_BATCH_SIZE,
+                    "batch_files": APPLY_BATCH_SIZE // 2,
+                    "batch_symbols": APPLY_BATCH_SIZE // 2,
+                }
+            ]
         ),
         SimpleNamespace(
             records=[{"batch_count": 4, "batch_files": 1, "batch_symbols": 3}]
         ),
-        SimpleNamespace(records=[{"batch_count": 0}]),
     ]
     event_result = SimpleNamespace(records=[{"event_id": "event-123"}])
 
@@ -110,8 +118,8 @@ async def test_apply_deprecation_accumulates_batches_and_records_event() -> None
         threshold_ratio_effective=0.6,
     )
 
-    assert result.deprecated_count == 104
-    assert result.deprecated_files == 25
-    assert result.deprecated_symbols == 79
+    assert result.deprecated_count == APPLY_BATCH_SIZE + 4
+    assert result.deprecated_files == (APPLY_BATCH_SIZE // 2) + 1
+    assert result.deprecated_symbols == (APPLY_BATCH_SIZE // 2) + 3
     assert result.event_id == "event-123"
     assert not batch_results
