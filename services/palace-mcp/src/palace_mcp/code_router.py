@@ -105,9 +105,7 @@ class _OpenArgs(ArgModelBase):
 
 
 _OPEN_SCHEMA: dict[str, Any] = {"type": "object", "additionalProperties": True}
-_READ_FILTER_DEFAULT_TOOLS = frozenset(
-    {"search_graph", "query_graph", "get_code_snippet"}
-)
+_READ_FILTER_DEFAULT_TOOLS = frozenset({"search_graph", "get_code_snippet"})
 
 
 def _make_open_fn_metadata(fn: Any) -> FuncMetadata:
@@ -159,7 +157,7 @@ def _patch_tool_open_schema(
 _ENABLED_CM_TOOLS: dict[str, str] = {
     "search_graph": "Search code graph nodes by name pattern, label, or file pattern.",
     "trace_call_path": "Trace function call chains (inbound/outbound/both).",
-    "query_graph": "Run a Cypher-like query against the code graph.",
+    "query_graph": "Pass through a caller-supplied Cypher-like query against the code graph.",
     "detect_changes": "Detect uncommitted changes mapped to symbols.",
     "get_architecture": "Get project architecture: languages, packages, entry points, routes.",
     "get_code_snippet": "Get source code for a qualified symbol name.",

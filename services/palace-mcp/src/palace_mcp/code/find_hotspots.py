@@ -10,6 +10,7 @@ MATCH (f:File)
 WHERE coalesce(f.hotspot_score, 0.0) >= $min_score
   AND f.project_id IN $project_ids
   AND coalesce(f.complexity_status, 'stale') = 'fresh'
+  AND ($include_deprecated OR NOT f:Deprecated)
   AND (
     $path_prefix IS NULL
     OR coalesce(f.file_path, f.path) STARTS WITH $path_prefix
@@ -49,6 +50,7 @@ async def find_hotspots(
     top_n: int = 20,
     min_score: float = 0.0,
     path_prefix: str | None = None,
+    include_deprecated: bool = True,
 ) -> dict[str, Any]:
     if project and bundle:
         return _error(
@@ -99,6 +101,7 @@ async def find_hotspots(
                 "top_n": int(top_n),
                 "min_score": float(min_score),
                 "path_prefix": path_prefix,
+                "include_deprecated": include_deprecated,
             },
         )
         async for rec in result:

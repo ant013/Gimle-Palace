@@ -22,7 +22,6 @@ EXPECTED_ENABLED_TOOLS = [
 ]
 EXPECTED_INCLUDE_DEPRECATED_TOOLS = [
     "palace.code.search_graph",
-    "palace.code.query_graph",
     "palace.code.get_code_snippet",
 ]
 
@@ -234,18 +233,18 @@ class TestPassthroughSerialization:
         register_code_tools(stub_tool, mcp)
 
         await mcp.call_tool(
-            "palace.code.query_graph",
+            "palace.code.search_graph",
             {
                 "project": "repos-gimle",
-                "query": "RETURN 1",
+                "name_pattern": "register_code_tools",
                 "include_deprecated": False,
             },
         )
 
-        assert captured["name"] == "query_graph"
+        assert captured["name"] == "search_graph"
         assert captured["arguments"] == {
             "project": "repos-gimle",
-            "query": "RETURN 1",
+            "name_pattern": "register_code_tools",
             "include_deprecated": False,
         }
 

@@ -13,6 +13,7 @@ _SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
 _QUERY_CYPHER = """
 MATCH (f:File {project_id: $proj})
 WHERE coalesce(f.file_path, f.path) = $path
+  AND ($include_deprecated OR NOT f:Deprecated)
 OPTIONAL MATCH (st:OwnershipFileState {project_id: $proj})
 WHERE coalesce(st.file_path, st.path) = $path
 OPTIONAL MATCH (f)-[r:OWNED_BY {source: 'extractor.code_ownership'}]->(a:Author)
@@ -52,6 +53,7 @@ async def find_owners(
     file_path: str,
     project: str,
     top_n: int = 5,
+    include_deprecated: bool = True,
 ) -> dict[str, Any]:
     if not _SLUG_RE.match(project):
         return _err("slug_invalid", f"invalid slug: {project!r}")
@@ -81,7 +83,12 @@ async def find_owners(
     last_run_at_cp = cp_row["completed_at"]
 
     async with driver.session() as session:
-        result = await session.run(_QUERY_CYPHER, proj=project_id, path=file_path)
+        result = await session.run(
+            _QUERY_CYPHER,
+            proj=project_id,
+            path=file_path,
+            include_deprecated=include_deprecated,
+        )
         row = await result.single()
     if row is None:
         return _err("unknown_file", f"no :File at {file_path!r} in {project!r}")

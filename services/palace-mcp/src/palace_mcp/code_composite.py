@@ -157,6 +157,7 @@ async def _resolve_qn(
     label: str | None = "Function",
     driver: Any | None = None,
     max_candidates: int = 15,
+    include_deprecated: bool = True,
 ) -> tuple[str, str] | dict[str, Any]:
     """Disambiguate qualified_name → (short_name, resolved_qn).
 
@@ -174,6 +175,7 @@ async def _resolve_qn(
                 short_name=short_name,
                 project=project,
                 max_candidates=max_candidates,
+                include_deprecated=include_deprecated,
             )
         assert session is not None
         return await _resolve_short_name_via_query_graph(
@@ -181,6 +183,7 @@ async def _resolve_qn(
             short_name=short_name,
             project=project,
             max_candidates=max_candidates,
+            include_deprecated=include_deprecated,
         )
 
     if session is None:
@@ -203,6 +206,7 @@ async def _resolve_qn(
             "project": project,
             "qn_pattern": f".*{re.escape(qualified_name)}$",
             "limit": 10,
+            "include_deprecated": include_deprecated,
         }
         if label is not None:
             _sg_args["label"] = label
@@ -310,6 +314,7 @@ def _short_name_candidates(row: dict[str, Any]) -> tuple[str, ...]:
 
 _QUERY_SYMBOL_BY_SHORT_NAME = """
 MATCH (s:Symbol {group_id: $group_id, short_name: $short_name})
+WHERE $include_deprecated OR NOT s:Deprecated
 RETURN s.name AS name,
        s.short_name AS short_name,
        coalesce(s.symbol, '') AS symbol,
@@ -328,6 +333,7 @@ WHERE any(candidate IN [
           coalesce(s.symbol, ''),
           terminal_name
       ] WHERE toLower(candidate) = toLower($short_name))
+  AND ($include_deprecated OR NOT s:Deprecated)
 WITH s, terminal_name, coalesce(s.qualified_name, s.name, s.symbol, '') AS resolved_qn
 WHERE resolved_qn <> ''
 RETURN coalesce(s.name, s.symbol, terminal_name) AS name,
@@ -348,6 +354,7 @@ WHERE any(candidate IN [
           coalesce(s.symbol, ''),
           terminal_name
       ] WHERE candidate <> '' AND candidate =~ $pattern)
+  AND ($include_deprecated OR NOT s:Deprecated)
 WITH s, terminal_name, coalesce(s.qualified_name, s.name, s.symbol, '') AS resolved_qn
 WHERE resolved_qn <> ''
 RETURN coalesce(s.name, s.symbol, terminal_name) AS name,
@@ -363,6 +370,7 @@ _QUERY_SYMBOL_BY_SCIP_SHORT_NAME = """
 MATCH (s:Symbol {group_id: $group_id})
 WITH s, coalesce(s.qualified_name, '') AS resolved_qn
 WHERE resolved_qn =~ $pattern
+  AND ($include_deprecated OR NOT s:Deprecated)
 RETURN coalesce(s.name, s.symbol, '') AS name,
        coalesce(s.short_name, s.name, s.symbol, '') AS short_name,
        coalesce(s.symbol, '') AS symbol,
@@ -454,8 +462,10 @@ async def _resolve_short_name_via_query_graph(
     short_name: str,
     project: str,
     max_candidates: int,
+    include_deprecated: bool,
 ) -> list[dict[str, Any]] | dict[str, Any]:
     escaped_short_name = _escape_cypher_string(short_name)
+    deprecated_clause = "" if include_deprecated else "AND NOT s:Deprecated"
     query = f"""
 MATCH (s:Symbol {{group_id: 'project/{_cm_project_to_slug(project)}'}})
 WITH s, last(split(coalesce(s.qualified_name, ''), '.')) AS terminal_name
@@ -465,6 +475,7 @@ WHERE any(candidate IN [
           coalesce(s.symbol, ''),
           terminal_name
       ] WHERE toLower(candidate) = toLower('{escaped_short_name}'))
+{deprecated_clause}
 RETURN coalesce(s.name, '') AS name,
        coalesce(s.qualified_name, '') AS qualified_name,
        coalesce(s.file_path, '') AS file_path,
@@ -506,17 +517,28 @@ async def _resolve_short_name(
     short_name: str,
     project: str,
     max_candidates: int,
+    include_deprecated: bool,
 ) -> list[dict[str, Any]] | dict[str, Any]:
     group_id = f"project/{_cm_project_to_slug(project)}"
     query_limit = max_candidates + 1
     queries = (
         (
             _QUERY_SYMBOL_BY_SHORT_NAME,
-            {"group_id": group_id, "short_name": short_name, "limit": query_limit},
+            {
+                "group_id": group_id,
+                "short_name": short_name,
+                "limit": query_limit,
+                "include_deprecated": include_deprecated,
+            },
         ),
         (
             _QUERY_SYMBOL_BY_SHORT_NAME_FOLD,
-            {"group_id": group_id, "short_name": short_name, "limit": query_limit},
+            {
+                "group_id": group_id,
+                "short_name": short_name,
+                "limit": query_limit,
+                "include_deprecated": include_deprecated,
+            },
         ),
         (
             _QUERY_SYMBOL_BY_SHORT_NAME_REGEX,
@@ -524,6 +546,7 @@ async def _resolve_short_name(
                 "group_id": group_id,
                 "pattern": rf"(?i){re.escape(short_name)}.*",
                 "limit": query_limit,
+                "include_deprecated": include_deprecated,
             },
         ),
         (
@@ -532,6 +555,7 @@ async def _resolve_short_name(
                 "group_id": group_id,
                 "pattern": rf"(?i).*[0-9]+{re.escape(short_name)}[VCPOAES].*",
                 "limit": query_limit,
+                "include_deprecated": include_deprecated,
             },
         ),
         (
@@ -1210,6 +1234,7 @@ def register_code_composite_tools(
                     req.qualified_name,
                     resolved_project,
                     driver=driver,
+                    include_deprecated=include_deprecated,
                 )
                 if isinstance(disambig, dict):
                     if disambig.get("error_code") == "cm_error":

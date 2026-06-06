@@ -90,10 +90,12 @@ class TestCodeToolRegistration:
 
         build_mcp_asgi_app()
         expected_tools = {
+            "palace.code.find_hotspots",
             "palace.code.find_idiom",
+            "palace.code.find_owners",
             "palace.code.find_references",
             "palace.code.get_code_snippet",
-            "palace.code.query_graph",
+            "palace.code.list_functions",
             "palace.code.search_graph",
             "palace.code.semantic_search",
         }

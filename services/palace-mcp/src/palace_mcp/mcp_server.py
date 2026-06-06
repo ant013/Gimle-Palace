@@ -1325,6 +1325,7 @@ async def palace_code_find_hotspots(
     top_n: int = 20,
     min_score: float = 0.0,
     path_prefix: str | None = None,
+    include_deprecated: bool = True,
 ) -> dict[str, Any]:
     """Find hotspot files ranked by complexity × churn score."""
     driver = _driver
@@ -1341,6 +1342,7 @@ async def palace_code_find_hotspots(
         top_n=top_n,
         min_score=min_score,
         path_prefix=path_prefix,
+        include_deprecated=include_deprecated,
     )
 
 
@@ -1357,6 +1359,7 @@ async def palace_code_list_functions(
     project: str | None = None,
     bundle: str | None = None,
     min_ccn: int = 0,
+    include_deprecated: bool = True,
 ) -> dict[str, Any]:
     """List functions for a specific file recorded by the hotspot extractor."""
     driver = _driver
@@ -1367,7 +1370,12 @@ async def palace_code_list_functions(
             "message": "Neo4j driver not initialised",
         }
     return await _list_functions_impl(
-        driver=driver, project=project, bundle=bundle, path=path, min_ccn=min_ccn
+        driver=driver,
+        project=project,
+        bundle=bundle,
+        path=path,
+        min_ccn=min_ccn,
+        include_deprecated=include_deprecated,
     )
 
 
@@ -1384,6 +1392,7 @@ async def palace_code_find_owners(
     file_path: str,
     project: str,
     top_n: int = 5,
+    include_deprecated: bool = True,
 ) -> dict[str, Any]:
     """Find top-N owners of a file by blame share + recency-weighted churn."""
     driver = _driver
@@ -1394,7 +1403,11 @@ async def palace_code_find_owners(
             "message": "Neo4j driver not initialised",
         }
     return await _find_owners_impl(
-        driver=driver, file_path=file_path, project=project, top_n=top_n
+        driver=driver,
+        file_path=file_path,
+        project=project,
+        top_n=top_n,
+        include_deprecated=include_deprecated,
     )
 
 
@@ -1520,6 +1533,7 @@ async def palace_code_semantic_search(
         include_dependencies=include_dependencies,
         include_generated=include_generated,
         include_sdk=include_sdk,
+        include_deprecated=include_deprecated,
         limit=limit,
         backend=backend,
         include_context=include_context,
