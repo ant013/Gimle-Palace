@@ -105,8 +105,19 @@ MERGE (f:File {project_id: $project_id, path: row.path})
 SET f.group_id = $project_id,
     f.language = 'swift',
     f.body_hash = row.body_hash,
+    f.last_seen_in_run_id = $run_id,
+    f.last_seen_at = datetime($observed_at),
+    f.last_seen_in_commit = $commit_sha,
     f.last_symbol_index_run_id = $run_id,
     f.last_symbol_index_run_at = datetime($observed_at)
+REMOVE f:Deprecated
+REMOVE f.deprecated_at, f.deprecated_in_commit
+WITH f
+OPTIONAL MATCH (f)-[old:LAST_SEEN_IN]->()
+DELETE old
+WITH f
+MATCH (run:IngestRun {run_id: $run_id})
+MERGE (f)-[:LAST_SEEN_IN]->(run)
 """
 
 _READ_FILE_HASHES_CYPHER = """
@@ -324,11 +335,12 @@ class SymbolIndexSwift(BaseExtractor):
             for occ in _iter_occurrences():
                 if occ.kind in (SymbolKind.DEF, SymbolKind.DECL):
                     def_file_paths.setdefault(occ.symbol_qualified_name, occ.file_path)
+            graph_seen_at = datetime.now(tz=timezone.utc)
             shadow_rows = _build_shadow_rows(
                 occurrences=_iter_occurrences(),
                 symbol_infos=iter_scip_symbol_infos(scip_index),
                 group_id=ctx.group_id,
-                seen_at=datetime.now(tz=timezone.utc),
+                seen_at=graph_seen_at,
             )
             shadow_count = await _write_shadow_rows(driver, shadow_rows)
             sym_nodes = 0
@@ -340,12 +352,26 @@ class SymbolIndexSwift(BaseExtractor):
                 sym_batch.append(sym_info)
                 if len(sym_batch) >= sym_batch_size:
                     sym_nodes += await write_symbol_nodes(
-                        driver, sym_batch, def_file_paths, ctx.group_id
+                        driver,
+                        sym_batch,
+                        def_file_paths,
+                        ctx.group_id,
+                        project_id=ctx.group_id,
+                        run_id=ctx.run_id,
+                        seen_at=graph_seen_at,
+                        commit_sha=commit_sha,
                     )
                     sym_batch = []
             if sym_batch:
                 sym_nodes += await write_symbol_nodes(
-                    driver, sym_batch, def_file_paths, ctx.group_id
+                    driver,
+                    sym_batch,
+                    def_file_paths,
+                    ctx.group_id,
+                    project_id=ctx.group_id,
+                    run_id=ctx.run_id,
+                    seen_at=graph_seen_at,
+                    commit_sha=commit_sha,
                 )
             logger.info(
                 "Symbol nodes written to Neo4j: %d; shadow rows: %d; Tantivy occurrences: %d",
@@ -365,6 +391,8 @@ class SymbolIndexSwift(BaseExtractor):
                 project_id=ctx.group_id,
                 run_id=ctx.run_id,
                 file_body_hashes=current_body_hashes,
+                observed_at=graph_seen_at,
+                commit_sha=commit_sha,
             )
 
             await finalize_ingest_run(driver, run_id=ctx.run_id, success=True)
@@ -452,6 +480,8 @@ async def _write_file_body_hashes(
     project_id: str,
     run_id: str,
     file_body_hashes: dict[str, str],
+    observed_at: datetime,
+    commit_sha: str,
 ) -> int:
     if not file_body_hashes:
         return 0
@@ -459,7 +489,7 @@ async def _write_file_body_hashes(
         {"path": path, "body_hash": body_hash}
         for path, body_hash in sorted(file_body_hashes.items())
     ]
-    observed_at = datetime.now(timezone.utc).isoformat()
+    observed_at_str = observed_at.isoformat()
     async with driver.session() as session:
         for i in range(0, len(rows), _GRAPH_BATCH_SIZE):
             result = await session.run(
@@ -467,7 +497,8 @@ async def _write_file_body_hashes(
                 rows=rows[i : i + _GRAPH_BATCH_SIZE],
                 project_id=project_id,
                 run_id=run_id,
-                observed_at=observed_at,
+                observed_at=observed_at_str,
+                commit_sha=commit_sha,
             )
             await result.consume()
     return len(rows)

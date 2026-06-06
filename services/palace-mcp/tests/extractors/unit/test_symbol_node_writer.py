@@ -21,6 +21,18 @@ class TestMergeQueryClearsDeletedAt:
         assert "deleted_at" in _MERGE_SYMBOLS
         assert "null" in _MERGE_SYMBOLS
 
+    def test_merge_symbols_sets_last_seen_and_clears_deprecation(self) -> None:
+        assert "last_seen_in_run_id" in _MERGE_SYMBOLS
+        assert "last_seen_at" in _MERGE_SYMBOLS
+        assert "last_seen_in_commit" in _MERGE_SYMBOLS
+        assert "REMOVE s:Deprecated" in _MERGE_SYMBOLS
+        assert "REMOVE s.deprecated_at, s.deprecated_in_commit" in _MERGE_SYMBOLS
+
+    def test_merge_symbols_replaces_last_seen_in_edge(self) -> None:
+        assert "OPTIONAL MATCH (s)-[old:LAST_SEEN_IN]->()" in _MERGE_SYMBOLS
+        assert "DELETE old" in _MERGE_SYMBOLS
+        assert "MERGE (s)-[:LAST_SEEN_IN]->(run)" in _MERGE_SYMBOLS
+
     def test_soft_delete_query_uses_group_id_and_qnames(self) -> None:
         assert "$group_id" in _SOFT_DELETE_ABSENT
         assert "$qnames" in _SOFT_DELETE_ABSENT
