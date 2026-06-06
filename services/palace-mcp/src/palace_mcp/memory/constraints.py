@@ -41,6 +41,8 @@ PRUNE_SWIFT_SYMBOLS_INDEXES = [
 
 
 async def ensure_schema(driver: AsyncDriver, *, default_group_id: str) -> None:
+    from palace_mcp.memory.projects import derive_cm_project_name
+
     default_slug = default_group_id.removeprefix("project/")
     now = datetime.now(timezone.utc).isoformat()
 
@@ -52,6 +54,7 @@ async def ensure_schema(driver: AsyncDriver, *, default_group_id: str) -> None:
         await session.run(
             BOOTSTRAP_PROJECT,
             slug=default_slug,
+            cm_project_name=derive_cm_project_name(slug=default_slug),
             name=_bootstrap_name_for(default_slug),
             tags=["bootstrap"],
             language=None,
