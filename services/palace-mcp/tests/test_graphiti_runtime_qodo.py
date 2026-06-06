@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from palace_mcp.config import Settings
 from palace_mcp.embeddings import EmbeddingBackendDispatcher
 from palace_mcp.graphiti_runtime import QodoGraphitiEmbedder, _NoopEmbedder
@@ -43,15 +45,18 @@ def test_qodo_graphiti_embedder_create_batch_delegates_to_backend() -> None:
     assert backend.batches == [["alpha", "beta"]]
 
 
-def test_settings_memory_embedder_defaults_to_qodo() -> None:
-    settings = Settings(neo4j_password="pw", openai_api_key="sk-test")  # type: ignore[arg-type]
+def test_settings_memory_embedder_defaults_to_qodo(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    settings = Settings(neo4j_password="pw")  # type: ignore[arg-type]
     assert settings.palace_memory_embedder == "qodo"
+    assert settings.openai_api_key is None
 
 
 def test_settings_memory_embedder_can_select_noop() -> None:
     settings = Settings(  # type: ignore[arg-type]
         neo4j_password="pw",
-        openai_api_key="sk-test",
         palace_memory_embedder="noop",
     )
     assert settings.palace_memory_embedder == "noop"
@@ -65,7 +70,6 @@ def test_build_graphiti_defaults_to_qodo_embedder() -> None:
     settings = Settings(  # type: ignore[arg-type]
         neo4j_uri="bolt://test:7687",
         neo4j_password="pw",
-        openai_api_key="sk-test",
     )
     graphiti = MagicMock()
 
@@ -111,13 +115,31 @@ def test_build_graphiti_can_select_openai_embedder() -> None:
     assert patched.call_args.kwargs["embedder"] is openai_embedder
 
 
+def test_build_graphiti_openai_selector_requires_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from palace_mcp.graphiti_runtime import build_graphiti
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    settings = Settings(  # type: ignore[arg-type]
+        neo4j_uri="bolt://test:7687",
+        neo4j_password="pw",
+        palace_memory_embedder="openai",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="OPENAI_API_KEY is required when PALACE_MEMORY_EMBEDDER=openai",
+    ):
+        build_graphiti(settings)
+
+
 def test_build_graphiti_can_select_noop_embedder() -> None:
     from palace_mcp.graphiti_runtime import build_graphiti
 
     settings = Settings(  # type: ignore[arg-type]
         neo4j_uri="bolt://test:7687",
         neo4j_password="pw",
-        openai_api_key="sk-test",
         palace_memory_embedder="noop",
     )
 

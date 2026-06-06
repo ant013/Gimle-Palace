@@ -76,19 +76,25 @@ def build_graphiti(settings: Settings) -> Graphiti:
     """Construct Graphiti wired to the existing palace-mcp Neo4j container.
 
     graphiti-core 0.28.2 trap: llm_client=None at constructor still spawns
-    a default OpenAI client, which raises if OPENAI_API_KEY is absent. We
-    pass an explicit OpenAIClient stub; writes go through add_triplet which
-    does not invoke LLM, so the stub is never called on the hot path.
-
-    Embedder must be called explicitly via generate_name_embedding() before save() — real key required.
+    a default OpenAI client. We pass an explicit OpenAIClient stub so the
+    default qodo/noop memory paths work without OPENAI_API_KEY; writes go
+    through add_triplet which does not invoke LLM on the hot path.
     """
-    api_key = settings.openai_api_key.get_secret_value()
-    llm_stub = OpenAIClient(config=LLMConfig(api_key=api_key))
+    api_key = (
+        settings.openai_api_key.get_secret_value()
+        if settings.openai_api_key is not None
+        else None
+    )
+    llm_stub = OpenAIClient(config=LLMConfig(api_key=api_key), client=object())
     if settings.palace_memory_embedder == "qodo":
         embedder: EmbedderClient = QodoGraphitiEmbedder()
     elif settings.palace_memory_embedder == "noop":
         embedder = _NoopEmbedder()
     else:
+        if api_key is None:
+            raise ValueError(
+                "OPENAI_API_KEY is required when PALACE_MEMORY_EMBEDDER=openai"
+            )
         embedder = OpenAIEmbedder(
             config=OpenAIEmbedderConfig(
                 api_key=api_key,

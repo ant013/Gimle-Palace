@@ -1295,8 +1295,8 @@ register_adr_tools(
 )
 register_code_composite_tools(
     _tool,
-    # Module-level init runs before set_settings(); Settings() would fail here
-    # because required fields (e.g. openai_api_key) are absent at import time.
+    # Module-level init runs before set_settings(); avoid constructing
+    # Settings() at import time because required deployment secrets may be absent.
     # os.environ.get mirrors the same default declared in Settings.palace_cm_default_project.
     default_project=os.environ.get("PALACE_CM_DEFAULT_PROJECT", "repos-gimle"),
 )
