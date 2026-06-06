@@ -1,6 +1,6 @@
 # GIM-1500 Plan: palace-mcp Project Namespace Unification
 
-Grounded in `origin/develop` at `1b7611839e8aa44e0dda388f45e0667a6e5753fb` and spec PR [#388](https://github.com/ant013/Gimle-Palace/pull/388) at `bf7d6f89cfffb86be617c592d421bf0291831ccd`.
+Grounded in `origin/develop` at `87ec642d5a7d1faa169eb5ad58f917cac778ccaf`, which includes merged spec PR [#388](https://github.com/ant013/Gimle-Palace/pull/388) from head `bf7d6f89cfffb86be617c592d421bf0291831ccd`.
 
 ## Goal
 
@@ -8,7 +8,7 @@ Unify palace-mcp project namespace handling so passthrough `palace.code.*` tools
 
 ## Assumptions
 
-- Spec PR #388 is authoritative for behavior until it is merged into `develop`.
+- Merged spec PR #388 is the authoritative behavior source on `develop`.
 - Implementation happens as separate PRs to `develop`, with no code changes on this planning PR.
 - `palace.code.*` passthrough arguments may omit `project` or pass `project=None`; the wrapper must leave that unchanged and normalize only string `project` values and list-valued `projects`.
 - The referenced `bench/ingest-fresh-replay.sh` is not present on `origin/develop`; infra prep is required unless the implementer finds an equivalent slug-aware ingest command accepted by the runbook.
@@ -75,6 +75,6 @@ Unify palace-mcp project namespace handling so passthrough `palace.code.*` tools
 
 ## Risks
 
-- Spec PR #388 is still open. If it changes, update this plan before creating implementation children.
+- Any follow-up spec change after merged PR #388 must update this plan before creating implementation children.
 - Live `:Project` rows may contain derivable `cm_project_name` collisions. The migration must fail before writes and surface exact rows to Board/operator.
 - Operator ingest is a manual gate. If access or live MCP substrate is unavailable, mark the operator slice blocked rather than substituting mocked evidence.
