@@ -32,13 +32,16 @@ RETURN collect(p.slug) AS found_projects
 
 _COUNT_EMBEDDED_SYMBOLS_QUERY = """
 MATCH (s:Symbol)
-WHERE s.group_id IN $group_ids AND s.embedding IS NOT NULL
+WHERE s.group_id IN $group_ids
+  AND s.embedding IS NOT NULL
+  AND ($include_deprecated OR NOT s:Deprecated)
 RETURN count(s) AS embedded_symbol_count
 """.strip()
 
 _COVERAGE_QUERY = """
 MATCH (s:Symbol)
 WHERE s.group_id IN $group_ids
+  AND ($include_deprecated OR NOT s:Deprecated)
 WITH s.source_scope AS source_scope, s.embedding IS NOT NULL AS has_embed
 RETURN source_scope, count(*) AS total, sum(CASE WHEN has_embed THEN 1 ELSE 0 END) AS embedded_cnt
 """.strip()
@@ -47,7 +50,9 @@ _VECTOR_QUERY = """
 CALL db.index.vector.queryNodes('symbol_embedding_idx', $query_k, $embedding)
 YIELD node, score
 WITH node AS s, score
-WHERE s:Symbol AND s.group_id IN $group_ids
+WHERE s:Symbol
+  AND s.group_id IN $group_ids
+  AND ($include_deprecated OR NOT s:Deprecated)
 RETURN
   s.group_id AS group_id,
   s.qualified_name AS qualified_name,
@@ -402,9 +407,15 @@ async def _validate_projects(driver: Any, projects: list[str]) -> list[str]:
     return [slug for slug in projects if slug not in found]
 
 
-async def _count_embedded_symbols(driver: Any, group_ids: list[str]) -> int:
+async def _count_embedded_symbols(
+    driver: Any, group_ids: list[str], *, include_deprecated: bool
+) -> int:
     async with driver.session() as session:
-        result = await session.run(_COUNT_EMBEDDED_SYMBOLS_QUERY, group_ids=group_ids)
+        result = await session.run(
+            _COUNT_EMBEDDED_SYMBOLS_QUERY,
+            group_ids=group_ids,
+            include_deprecated=include_deprecated,
+        )
         record = await result.single()
     return int(record["embedded_symbol_count"] if record is not None else 0)
 
@@ -419,9 +430,15 @@ def _read_max_symbols() -> int | None:
         return None
 
 
-async def _load_coverage(driver: Any, group_ids: list[str]) -> dict[str, Any]:
+async def _load_coverage(
+    driver: Any, group_ids: list[str], *, include_deprecated: bool
+) -> dict[str, Any]:
     async with driver.session() as session:
-        result = await session.run(_COVERAGE_QUERY, group_ids=group_ids)
+        result = await session.run(
+            _COVERAGE_QUERY,
+            group_ids=group_ids,
+            include_deprecated=include_deprecated,
+        )
         rows = cast(list[dict[str, Any]], await result.data())
 
     total_symbols = 0
@@ -452,6 +469,7 @@ async def _vector_search(
     embedding: list[float],
     group_ids: list[str],
     query_k: int,
+    include_deprecated: bool,
 ) -> list[dict[str, Any]]:
     async with driver.session() as session:
         result = await session.run(
@@ -459,6 +477,7 @@ async def _vector_search(
             embedding=embedding,
             group_ids=group_ids,
             query_k=query_k,
+            include_deprecated=include_deprecated,
         )
         return cast(list[dict[str, Any]], await result.data())
 
@@ -671,6 +690,7 @@ async def semantic_search(
     include_dependencies: bool = False,
     include_generated: bool = False,
     include_sdk: bool = False,
+    include_deprecated: bool = True,
     limit: int = 10,
     backend: str | None = None,
     include_context: bool = True,
@@ -724,10 +744,14 @@ async def semantic_search(
     except Exception as exc:
         return _error("embedding_backend_failed", str(exc))
 
-    coverage = await _load_coverage(driver, group_ids)
+    coverage = await _load_coverage(
+        driver, group_ids, include_deprecated=include_deprecated
+    )
     embedded_symbol_count = coverage["embedded_symbols"]
     if settings is not None:
-        live_embedded_symbol_count = await _count_embedded_symbols(driver, group_ids)
+        live_embedded_symbol_count = await _count_embedded_symbols(
+            driver, group_ids, include_deprecated=include_deprecated
+        )
         if live_embedded_symbol_count != embedded_symbol_count:
             return _error(
                 "semantic_search_backend_inconsistent",
@@ -769,6 +793,7 @@ async def semantic_search(
             embedding=query_embedding,
             group_ids=group_ids,
             query_k=candidate_limit,
+            include_deprecated=include_deprecated,
         )
     else:
         per_project_k = _candidate_limit(limit, 1)
@@ -779,6 +804,7 @@ async def semantic_search(
                     embedding=query_embedding,
                     group_ids=[gid],
                     query_k=per_project_k,
+                    include_deprecated=include_deprecated,
                 )
                 for gid in group_ids
             ]

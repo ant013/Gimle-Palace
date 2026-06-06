@@ -23,6 +23,8 @@ from mcp.server.fastmcp.utilities.func_metadata import (
 from mcp.types import CallToolResult, TextContent
 from pydantic import ConfigDict
 
+from palace_mcp.code.namespace import resolve as resolve_namespace
+
 logger = logging.getLogger(__name__)
 
 _cm_session: ClientSession | None = None
@@ -105,6 +107,8 @@ class _OpenArgs(ArgModelBase):
 
 
 _OPEN_SCHEMA: dict[str, Any] = {"type": "object", "additionalProperties": True}
+_READ_FILTER_DEFAULT_TOOLS = frozenset({"search_graph", "get_code_snippet"})
+_MAX_PROJECTS = 64
 
 
 def _make_open_fn_metadata(fn: Any) -> FuncMetadata:
@@ -118,8 +122,23 @@ def _make_open_fn_metadata(fn: Any) -> FuncMetadata:
     )
 
 
+def _open_schema_for_tool(cm_tool_name: str) -> dict[str, Any]:
+    if cm_tool_name not in _READ_FILTER_DEFAULT_TOOLS:
+        return _OPEN_SCHEMA
+    return {
+        "type": "object",
+        "properties": {
+            "include_deprecated": {
+                "type": "boolean",
+                "default": True,
+            }
+        },
+        "additionalProperties": True,
+    }
+
+
 def _patch_tool_open_schema(
-    mcp_instance: Any, name: str, fn_meta: FuncMetadata
+    mcp_instance: Any, name: str, fn_meta: FuncMetadata, schema: dict[str, Any]
 ) -> None:
     """Replace a registered FastMCP tool with an open-schema variant."""
     original = mcp_instance._tool_manager._tools[name]
@@ -128,7 +147,7 @@ def _patch_tool_open_schema(
         name=original.name,
         title=original.title,
         description=original.description,
-        parameters=_OPEN_SCHEMA,
+        parameters=schema,
         fn_metadata=fn_meta,
         is_async=original.is_async,
         context_kwarg=original.context_kwarg,
@@ -138,10 +157,63 @@ def _patch_tool_open_schema(
     )
 
 
+def _project_not_found(message: str) -> dict[str, Any]:
+    return {
+        "isError": False,
+        "error_code": "project_not_found",
+        "message": message,
+        "available_via": "palace.memory.list_projects",
+    }
+
+
+async def _normalize_project_args(arguments: dict[str, Any]) -> dict[str, Any]:
+    has_project = isinstance(arguments.get("project"), str)
+    projects = arguments.get("projects")
+    has_projects = isinstance(projects, list) and all(
+        isinstance(value, str) for value in projects
+    )
+    if not has_project and not has_projects:
+        return arguments
+
+    from palace_mcp.mcp_server import get_driver
+
+    driver = get_driver()
+    if driver is None:
+        return _project_not_found(
+            "project resolution unavailable: Neo4j driver not initialised"
+        )
+
+    normalized = dict(arguments)
+    if has_project:
+        try:
+            resolution = await resolve_namespace(driver, arguments["project"])
+        except Exception as exc:
+            return _project_not_found(str(exc))
+        normalized["project"] = resolution.cm_project_name
+
+    if has_projects:
+        assert isinstance(projects, list)
+        if len(projects) > _MAX_PROJECTS:
+            return _project_not_found(
+                f"projects accepts at most {_MAX_PROJECTS} entries"
+            )
+        normalized_projects: list[str] = []
+        for value in projects:
+            assert isinstance(value, str)
+            try:
+                resolution = await resolve_namespace(driver, value)
+            except Exception as exc:
+                return _project_not_found(str(exc))
+            normalized_projects.append(resolution.cm_project_name)
+        normalized["projects"] = normalized_projects
+
+    return normalized
+
+
 _ENABLED_CM_TOOLS: dict[str, str] = {
     "search_graph": "Search code graph nodes by name pattern, label, or file pattern.",
     "trace_call_path": "Trace function call chains (inbound/outbound/both).",
-    "query_graph": "Run a Cypher-like query against the code graph.",
+    "query_graph": "Pass through a caller-supplied Cypher-like query against the code graph.",
     "detect_changes": "Detect uncommitted changes mapped to symbols.",
     "get_architecture": "Get project architecture: languages, packages, entry points, routes.",
     "get_code_snippet": "Get source code for a qualified symbol name.",
@@ -185,8 +257,14 @@ def _register_passthrough(
         assert _cm_session is not None, (
             "CM subprocess not started; set CODEBASE_MEMORY_MCP_BINARY"
         )
+        arguments = dict(kwargs)
+        if cm_tool_name in _READ_FILTER_DEFAULT_TOOLS:
+            arguments.setdefault("include_deprecated", True)
+        normalized = await _normalize_project_args(arguments)
+        if "error_code" in normalized:
+            return normalized
         result: CallToolResult = await _cm_session.call_tool(
-            cm_tool_name, arguments=kwargs
+            cm_tool_name, arguments=normalized
         )
         if result.isError:
             return {"error": [str(block) for block in result.content]}
@@ -194,7 +272,10 @@ def _register_passthrough(
 
     if mcp_instance is not None:
         _patch_tool_open_schema(
-            mcp_instance, palace_name, _make_open_fn_metadata(_forward)
+            mcp_instance,
+            palace_name,
+            _make_open_fn_metadata(_forward),
+            _open_schema_for_tool(cm_tool_name),
         )
 
 
@@ -215,5 +296,8 @@ def _register_disabled_tool(
 
     if mcp_instance is not None:
         _patch_tool_open_schema(
-            mcp_instance, palace_name, _make_open_fn_metadata(_blocked)
+            mcp_instance,
+            palace_name,
+            _make_open_fn_metadata(_blocked),
+            _OPEN_SCHEMA,
         )

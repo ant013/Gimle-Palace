@@ -10,6 +10,7 @@ MATCH (f:File)-[:CONTAINS]->(fn:Function)
 WHERE f.project_id IN $project_ids
   AND coalesce(f.file_path, f.path) = $path
   AND coalesce(fn.file_path, fn.path) = $path
+  AND ($include_deprecated OR NOT f:Deprecated)
   AND fn.ccn >= $min_ccn
 RETURN f.project_id AS project_id,
        fn.name AS name,
@@ -45,6 +46,7 @@ async def list_functions(
     project: str | None = None,
     bundle: str | None = None,
     min_ccn: int = 0,
+    include_deprecated: bool = True,
 ) -> dict[str, Any]:
     if project and bundle:
         return _error(
@@ -90,7 +92,12 @@ async def list_functions(
     async with driver.session() as session:
         result = await session.run(
             _QUERY,
-            {"project_ids": project_ids, "path": path, "min_ccn": int(min_ccn)},
+            {
+                "project_ids": project_ids,
+                "path": path,
+                "min_ccn": int(min_ccn),
+                "include_deprecated": include_deprecated,
+            },
         )
         async for rec in result:
             rows.append(

@@ -3,63 +3,26 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
 from mcp.types import CallToolResult, TextContent
 
-from palace_mcp.code_composite import _cm_project_to_slug, _slug_to_cm_project
 
+@pytest.fixture(autouse=True)
+def _patch_namespace_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _fake_resolve_namespace(_driver: object, value: str) -> SimpleNamespace:
+        slug = value.removeprefix("repos-") if value.startswith("repos-") else value
+        cm_project_name = value if value.startswith("repos-") else f"repos-{value}"
+        return SimpleNamespace(slug=slug, cm_project_name=cm_project_name)
 
-# ---------------------------------------------------------------------------
-# Slug ↔ CM project name translation (GIM-122)
-# ---------------------------------------------------------------------------
-
-
-class TestSlugToCmProject:
-    """Boundary translation: operator-facing slug → CM-internal project name.
-
-    palace-mcp public API uses slugs ('gimle'); codebase-memory-mcp keys
-    projects by mount-path-derived names ('/repos/gimle' → 'repos-gimle').
-    Without this translation `palace.code.test_impact project='gimle'`
-    returns cm_error because CM doesn't know 'gimle'.
-    """
-
-    def test_operator_slug_gets_repos_prefix(self) -> None:
-        assert _slug_to_cm_project("gimle") == "repos-gimle"
-
-    def test_already_cm_name_passthrough(self) -> None:
-        # Idempotent on already-translated names so the config default
-        # (palace_cm_default_project='repos-gimle') round-trips safely.
-        assert _slug_to_cm_project("repos-gimle") == "repos-gimle"
-
-    def test_non_repos_prefix_still_translates(self) -> None:
-        # Non-`repos-` slugs get the prefix even though the convention
-        # currently only has /repos/* mounts. Keep behaviour predictable
-        # rather than try to detect "looks already-mapped" heuristically.
-        assert _slug_to_cm_project("medic") == "repos-medic"
-
-
-class TestCmProjectToSlug:
-    """Inverse of _slug_to_cm_project — strips the 'repos-' prefix.
-
-    Ensures Neo4j-side queries (IngestRun.project, etc.) see the operator
-    slug regardless of whether the default came from CM-form config or the
-    user passed an already-translated CM name by mistake (GIM-123).
-    """
-
-    def test_repos_prefix_stripped(self) -> None:
-        assert _cm_project_to_slug("repos-gimle") == "gimle"
-
-    def test_plain_slug_passthrough(self) -> None:
-        # Idempotent — operator slug unchanged.
-        assert _cm_project_to_slug("gimle") == "gimle"
-
-    def test_round_trip(self) -> None:
-        # _cm_project_to_slug ∘ _slug_to_cm_project = identity on slugs.
-        assert _cm_project_to_slug(_slug_to_cm_project("gimle")) == "gimle"
-        assert _cm_project_to_slug(_slug_to_cm_project("medic")) == "medic"
+    monkeypatch.setattr(
+        "palace_mcp.code_composite.resolve_project_namespace",
+        _fake_resolve_namespace,
+    )
+    monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: object())
 
 
 # ---------------------------------------------------------------------------
@@ -352,6 +315,10 @@ class TestDefaultPath:
         monkeypatch.setattr(
             "palace_mcp.code_router.get_cm_session", lambda: fake_session
         )
+        monkeypatch.setattr(
+            "palace_mcp.code_composite._query_symbol_candidates",
+            AsyncMock(return_value=[]),
+        )
 
         mcp = FastMCP("test")
         register_code_composite_tools(
@@ -400,6 +367,19 @@ class TestDefaultPath:
         monkeypatch.setattr(
             "palace_mcp.code_composite._query_symbol_candidates", query_mock
         )
+
+        async def _fake_resolve_namespace(
+            _driver: object, value: str
+        ) -> SimpleNamespace:
+            assert value == "repos-hs-EvmKit.Swift"
+            return SimpleNamespace(
+                slug="evm-kit", cm_project_name="repos-hs-EvmKit.Swift"
+            )
+
+        monkeypatch.setattr(
+            "palace_mcp.code_composite.resolve_project_namespace",
+            _fake_resolve_namespace,
+        )
         monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: object())
         tests_edge = AsyncMock(
             return_value={
@@ -425,19 +405,19 @@ class TestDefaultPath:
             "palace.code.test_impact",
             {
                 "qualified_name": "BalanceData",
-                "project": "uw-ios-app",
+                "project": "repos-hs-EvmKit.Swift",
             },
         )
 
         payload = json.loads(result[0][0].text)  # type: ignore[index]
         assert payload["ok"] is True
         assert payload["qualified_name"] == "WalletKit.BalanceData"
-        assert query_mock.await_args_list[0].kwargs["group_id"] == "project/uw-ios-app"
+        assert query_mock.await_args_list[0].kwargs["group_id"] == "project/evm-kit"
         tests_edge.assert_awaited_once_with(
             fake_session,
             requested_qn="BalanceData",
             resolved_qn="WalletKit.BalanceData",
-            project="repos-uw-ios-app",
+            project="repos-hs-EvmKit.Swift",
             max_results=50,
         )
 
@@ -475,6 +455,10 @@ class TestDefaultPath:
         )
         monkeypatch.setattr(
             "palace_mcp.code_router.get_cm_session", lambda: fake_session
+        )
+        monkeypatch.setattr(
+            "palace_mcp.code_composite._query_symbol_candidates",
+            AsyncMock(return_value=[]),
         )
 
         mcp = FastMCP("test")
@@ -532,6 +516,10 @@ class TestDefaultPath:
         )
         monkeypatch.setattr(
             "palace_mcp.code_router.get_cm_session", lambda: fake_session
+        )
+        monkeypatch.setattr(
+            "palace_mcp.code_composite._query_symbol_candidates",
+            AsyncMock(return_value=[]),
         )
 
         mcp = FastMCP("test")
@@ -613,6 +601,10 @@ class TestDefaultPath:
         )
         monkeypatch.setattr(
             "palace_mcp.code_router.get_cm_session", lambda: fake_session
+        )
+        monkeypatch.setattr(
+            "palace_mcp.code_composite._query_symbol_candidates",
+            AsyncMock(return_value=[]),
         )
 
         mcp = FastMCP("test")

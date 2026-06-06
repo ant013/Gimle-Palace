@@ -14,18 +14,36 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
+import pytest
 from mcp.types import CallToolResult, TextContent
 
 from palace_mcp.extractors.foundation.models import build_symbol_occurrence_doc_key
+from palace_mcp.memory.projects import UnknownProjectError
 
 # Patch targets: get_driver / get_settings are lazy-imported inside
 # palace_code_find_references from palace_mcp.mcp_server, so we patch
 # at the source module rather than at code_composite.
 _PATCH_GET_DRIVER = "palace_mcp.mcp_server.get_driver"
 _PATCH_GET_SETTINGS = "palace_mcp.mcp_server.get_settings"
+
+
+@pytest.fixture(autouse=True)
+def _patch_namespace_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _fake_resolve_namespace(_driver: object, value: str) -> SimpleNamespace:
+        if value in {"uw-ios", "empty-bundle", "does-not-exist", "ghost-project"}:
+            raise UnknownProjectError(value)
+        slug = value.removeprefix("repos-") if value.startswith("repos-") else value
+        cm_project_name = value if value.startswith("repos-") else f"repos-{value}"
+        return SimpleNamespace(slug=slug, cm_project_name=cm_project_name)
+
+    monkeypatch.setattr(
+        "palace_mcp.code_composite.resolve_project_namespace",
+        _fake_resolve_namespace,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -476,6 +494,51 @@ class TestFindReferencesProjectPath:
                 "qualified_name": "MyModule.func",
             }
         ]
+
+    async def test_cm_project_name_resolves_to_canonical_slug(self) -> None:
+        find_refs = self._get_fn()
+        ingest_run_row = {"run_id": "abc", "success": True, "extractor_name": "sym_py"}
+        raw_occ = _tantivy_doc(
+            symbol_id=1,
+            file_path="Sources/App/Feature.swift",
+            line=7,
+            col_start=3,
+        )
+        ingest_lookup = AsyncMock(return_value=ingest_run_row)
+
+        async def _resolve_namespace(_driver: object, value: str) -> SimpleNamespace:
+            assert value == "repos-hs-EvmKit.Swift"
+            return SimpleNamespace(
+                slug="evm-kit", cm_project_name="repos-hs-EvmKit.Swift"
+            )
+
+        with (
+            patch(_PATCH_GET_DRIVER, return_value=MagicMock()),
+            patch(_PATCH_GET_SETTINGS, return_value=self._settings()),
+            patch(
+                "palace_mcp.code_composite.resolve_project_namespace",
+                new=_resolve_namespace,
+            ),
+            patch(
+                "palace_mcp.code_composite._query_any_ingest_run_for_project",
+                new=ingest_lookup,
+            ),
+            patch(
+                "palace_mcp.code_composite._query_eviction_record",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "palace_mcp.code_composite.TantivyBridge",
+                return_value=_make_bridge_mock([raw_occ]),
+            ),
+            patch("palace_mcp.code_composite.symbol_id_for", return_value=1),
+            patch("palace_mcp.code_router.get_cm_session", return_value=None),
+        ):
+            result = await find_refs("MyModule.func", "repos-hs-EvmKit.Swift", 100)
+
+        assert result["ok"] is True
+        assert result["project"] == "evm-kit"
+        ingest_lookup.assert_awaited_once_with(ANY, "evm-kit")
 
     async def test_project_path_dedups_same_file_and_line(self) -> None:
         from palace_mcp.code_composite import SlugResolution

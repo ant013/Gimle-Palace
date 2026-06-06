@@ -3,11 +3,25 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from mcp.types import CallToolResult, TextContent
+
+
+@pytest.fixture(autouse=True)
+def _patch_namespace_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _fake_resolve_namespace(_driver: object, value: str) -> SimpleNamespace:
+        slug = value.removeprefix("repos-") if value.startswith("repos-") else value
+        cm_project_name = value if value.startswith("repos-") else f"repos-{value}"
+        return SimpleNamespace(slug=slug, cm_project_name=cm_project_name)
+
+    monkeypatch.setattr(
+        "palace_mcp.code_composite.resolve_project_namespace",
+        _fake_resolve_namespace,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -209,6 +223,19 @@ class TestGetSnippetRichHappyPath:
             "palace_mcp.code_composite._query_symbol_candidates", query_mock
         )
 
+        async def _fake_resolve_namespace(
+            _driver: object, value: str
+        ) -> SimpleNamespace:
+            assert value == "repos-hs-EvmKit.Swift"
+            return SimpleNamespace(
+                slug="evm-kit", cm_project_name="repos-hs-EvmKit.Swift"
+            )
+
+        monkeypatch.setattr(
+            "palace_mcp.code_composite.resolve_project_namespace",
+            _fake_resolve_namespace,
+        )
+
         mock_settings = MagicMock()
         mock_settings.palace_tantivy_index_path = "/tmp/tantivy"
         mock_settings.palace_tantivy_heap_mb = 50
@@ -244,13 +271,13 @@ class TestGetSnippetRichHappyPath:
             payload = await _call(
                 mcp,
                 qualified_name="BalanceData",
-                project="uw-ios-app",
+                project="repos-hs-EvmKit.Swift",
             )
 
         assert payload["ok"] is True
         assert payload["qualified_name"] == "WalletKit.BalanceData"
-        assert payload["project"] == "uw-ios-app"
-        assert query_mock.await_args_list[0].kwargs["group_id"] == "project/uw-ios-app"
+        assert payload["project"] == "evm-kit"
+        assert query_mock.await_args_list[0].kwargs["group_id"] == "project/evm-kit"
 
     @pytest.mark.asyncio
     async def test_usages_are_deduped_by_file_and_line(
