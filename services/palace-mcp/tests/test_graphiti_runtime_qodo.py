@@ -7,7 +7,11 @@ import pytest
 
 from palace_mcp.config import Settings
 from palace_mcp.embeddings import EmbeddingBackendDispatcher
-from palace_mcp.graphiti_runtime import QodoGraphitiEmbedder, _NoopEmbedder
+from palace_mcp.graphiti_runtime import (
+    QodoGraphitiEmbedder,
+    _NoopCrossEncoder,
+    _NoopEmbedder,
+)
 
 
 class _FakeBackend:
@@ -84,7 +88,9 @@ def test_build_graphiti_defaults_to_qodo_embedder() -> None:
         result = build_graphiti(settings)
 
     embedder = patched.call_args.kwargs["embedder"]
+    cross_encoder = patched.call_args.kwargs["cross_encoder"]
     assert isinstance(embedder, QodoGraphitiEmbedder)
+    assert isinstance(cross_encoder, _NoopCrossEncoder)
     assert asyncio.run(embedder.create(["decision title"])) == [0.5] * 1024
     assert result is graphiti
 

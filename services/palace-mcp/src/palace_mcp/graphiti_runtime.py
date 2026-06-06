@@ -20,6 +20,7 @@ from collections.abc import Iterable
 from typing import cast
 
 from graphiti_core import Graphiti
+from graphiti_core.cross_encoder.client import CrossEncoderClient
 from graphiti_core.edges import EntityEdge
 from graphiti_core.embedder.client import EmbedderClient
 from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
@@ -72,6 +73,12 @@ class _NoopEmbedder(EmbedderClient):
         return [[0.0] * self._embedding_dim for _ in input_data_list]
 
 
+class _NoopCrossEncoder(CrossEncoderClient):
+    async def rank(self, query: str, passages: list[str]) -> list[tuple[str, float]]:
+        del query
+        return [(passage, 0.0) for passage in passages]
+
+
 def build_graphiti(settings: Settings) -> Graphiti:
     """Construct Graphiti wired to the existing palace-mcp Neo4j container.
 
@@ -107,7 +114,7 @@ def build_graphiti(settings: Settings) -> Graphiti:
         password=settings.neo4j_password.get_secret_value(),
         llm_client=llm_stub,
         embedder=embedder,
-        cross_encoder=None,  # use search(), not search_()
+        cross_encoder=_NoopCrossEncoder(),
     )
 
 
