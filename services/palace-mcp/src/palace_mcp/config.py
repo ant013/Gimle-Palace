@@ -281,6 +281,14 @@ class Settings(BaseSettings):
             "Set PALACE_QODO_PREWARM=0 to skip on memory-constrained hosts."
         ),
     )
+    palace_memory_embedder: Literal["qodo", "openai", "noop"] = Field(
+        default="qodo",
+        description=(
+            "Embedder used for Graphiti memory writes. "
+            "Use qodo for the local model, openai for the legacy API path, or noop "
+            "to disable semantic memory embeddings in dev."
+        ),
+    )
 
     # -----------------------------------------------------------------------
     # F4.2: Hydration cache + asyncio.Semaphore (GIM-1181)

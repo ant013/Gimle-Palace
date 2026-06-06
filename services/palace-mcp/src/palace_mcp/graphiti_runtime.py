@@ -16,19 +16,60 @@ Public API (consumed by HeartbeatExtractor, GIM-77 bridge extractor, etc.):
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterable
+from typing import cast
 
 from graphiti_core import Graphiti
 from graphiti_core.edges import EntityEdge
+from graphiti_core.embedder.client import EmbedderClient
 from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
 from graphiti_core.llm_client.config import LLMConfig
 from graphiti_core.llm_client.openai_client import OpenAIClient
 from graphiti_core.nodes import EntityNode
 
 from palace_mcp.config import Settings
+from palace_mcp.embeddings import EmbeddingBackend, get_embedding_dispatcher
 
-# OpenAI embeddings API accepts up to 2048 inputs per request; use 512 to
-# stay within token-count limits on long node names.
+# Keep Graphiti memory embedding writes in moderate chunks. This remains small
+# enough for the OpenAI fallback and avoids oversized batch payloads.
 _EMBED_BATCH_SIZE = 512
+_DEFAULT_EMBEDDING_DIM = 1024
+
+
+def _coerce_text(
+    input_data: str | list[str] | Iterable[int] | Iterable[Iterable[int]],
+) -> str:
+    if isinstance(input_data, str):
+        return input_data
+    return next(iter(cast(Iterable[str], input_data)))
+
+
+class QodoGraphitiEmbedder(EmbedderClient):
+    def __init__(self, backend: EmbeddingBackend | None = None) -> None:
+        self._backend = backend or get_embedding_dispatcher().backend("qodo")
+
+    async def create(
+        self,
+        input_data: str | list[str] | Iterable[int] | Iterable[Iterable[int]],
+    ) -> list[float]:
+        return self._backend.embed_text(_coerce_text(input_data))
+
+    async def create_batch(self, input_data_list: list[str]) -> list[list[float]]:
+        return self._backend.embed_batch(input_data_list)
+
+
+class _NoopEmbedder(EmbedderClient):
+    def __init__(self, embedding_dim: int = _DEFAULT_EMBEDDING_DIM) -> None:
+        self._embedding_dim = embedding_dim
+
+    async def create(
+        self,
+        input_data: str | list[str] | Iterable[int] | Iterable[Iterable[int]],
+    ) -> list[float]:
+        return [0.0] * self._embedding_dim
+
+    async def create_batch(self, input_data_list: list[str]) -> list[list[float]]:
+        return [[0.0] * self._embedding_dim for _ in input_data_list]
 
 
 def build_graphiti(settings: Settings) -> Graphiti:
@@ -43,12 +84,17 @@ def build_graphiti(settings: Settings) -> Graphiti:
     """
     api_key = settings.openai_api_key.get_secret_value()
     llm_stub = OpenAIClient(config=LLMConfig(api_key=api_key))
-    embedder = OpenAIEmbedder(
-        config=OpenAIEmbedderConfig(
-            api_key=api_key,
-            embedding_model="text-embedding-3-small",
+    if settings.palace_memory_embedder == "qodo":
+        embedder: EmbedderClient = QodoGraphitiEmbedder()
+    elif settings.palace_memory_embedder == "noop":
+        embedder = _NoopEmbedder()
+    else:
+        embedder = OpenAIEmbedder(
+            config=OpenAIEmbedderConfig(
+                api_key=api_key,
+                embedding_model="text-embedding-3-small",
+            )
         )
-    )
     return Graphiti(
         uri=settings.neo4j_uri,
         user=settings.neo4j_user,
