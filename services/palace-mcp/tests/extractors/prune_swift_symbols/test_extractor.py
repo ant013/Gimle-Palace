@@ -11,6 +11,14 @@ import pytest
 
 from palace_mcp.extractors.base import ExtractorOutcome, ExtractorRunContext
 from palace_mcp.extractors.prune_swift_symbols import PruneSwiftSymbols
+from palace_mcp.extractors.prune_swift_symbols.cypher import (
+    CREATE_DEPRECATION_EVENT,
+    APPLY_DEPRECATION_BATCH,
+)
+from palace_mcp.extractors.prune_swift_symbols.extractor import (
+    APPLY_BATCH_SIZE,
+    _apply_deprecation,
+)
 
 
 def _ctx(repo_path: Path, *, companion_run_id: str | None) -> ExtractorRunContext:
@@ -69,3 +77,49 @@ async def test_threshold_aborts_before_apply(tmp_path: Path) -> None:
     assert stats.outcome == ExtractorOutcome.SKIPPED
     assert stats.message is not None
     assert "would deprecate" in stats.message
+
+
+@pytest.mark.asyncio
+async def test_apply_deprecation_accumulates_batches_and_records_event() -> None:
+    driver = MagicMock()
+    batch_results = [
+        SimpleNamespace(
+            records=[
+                {
+                    "batch_count": APPLY_BATCH_SIZE,
+                    "batch_files": APPLY_BATCH_SIZE // 2,
+                    "batch_symbols": APPLY_BATCH_SIZE // 2,
+                }
+            ]
+        ),
+        SimpleNamespace(
+            records=[{"batch_count": 4, "batch_files": 1, "batch_symbols": 3}]
+        ),
+    ]
+    event_result = SimpleNamespace(records=[{"event_id": "event-123"}])
+
+    async def execute_query_side_effect(
+        query: str, **kwargs: object
+    ) -> SimpleNamespace:
+        if query == APPLY_DEPRECATION_BATCH:
+            return batch_results.pop(0)
+        if query == CREATE_DEPRECATION_EVENT:
+            return event_result
+        raise AssertionError(f"unexpected query: {query}")
+
+    driver.execute_query = AsyncMock(side_effect=execute_query_side_effect)
+
+    result = await _apply_deprecation(
+        driver,
+        project_id="project/testproj",
+        companion_run_id="symbol-run-123",
+        head_sha="abc123",
+        run_id="run-1",
+        threshold_ratio_effective=0.6,
+    )
+
+    assert result.deprecated_count == APPLY_BATCH_SIZE + 4
+    assert result.deprecated_files == (APPLY_BATCH_SIZE // 2) + 1
+    assert result.deprecated_symbols == (APPLY_BATCH_SIZE // 2) + 3
+    assert result.event_id == "event-123"
+    assert not batch_results

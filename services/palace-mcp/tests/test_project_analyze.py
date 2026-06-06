@@ -321,6 +321,112 @@ def test_resolve_default_extractors_matches_swift_kit_contract() -> None:
 
 
 @pytest.mark.asyncio
+async def test_default_executor_passes_symbol_index_run_id_to_prune(
+    monkeypatch,
+) -> None:
+    store = InMemoryAnalysisRunStore()
+    service = _build_service(store=store)
+    started = await service.start_run(
+        slug="tron-kit",
+        parent_mount="hs",
+        relative_path="TronKit.Swift",
+        language_profile="swift_kit",
+        extractors=["symbol_index_swift", "prune_swift_symbols"],
+        idempotency_key="prune-companion-run",
+    )
+    symbol_checkpoint = started.run.checkpoints[0].model_copy(
+        update={
+            "status": AnalysisCheckpointStatus.OK,
+            "ingest_run_id": "symbol-run-123",
+        }
+    )
+    run = started.run.model_copy(
+        update={"checkpoints": [symbol_checkpoint, started.run.checkpoints[1]]}
+    )
+    recorded: dict[str, object] = {}
+
+    async def _fake_run_extractor(**kwargs: object) -> dict[str, object]:
+        recorded.update(kwargs)
+        return {
+            "ok": True,
+            "run_id": "prune-run-456",
+            "outcome": "ok",
+        }
+
+    monkeypatch.setattr("palace_mcp.project_analyze.run_extractor", _fake_run_extractor)
+
+    executor = service._default_executor(graphiti=object())
+    attempt = await executor("prune_swift_symbols", run)
+
+    assert attempt.status == AnalysisCheckpointStatus.OK
+    assert attempt.ingest_run_id == "prune-run-456"
+    assert recorded["companion_run_id"] == "symbol-run-123"
+
+
+@pytest.mark.asyncio
+async def test_default_executor_skips_prune_without_successful_symbol_index() -> None:
+    store = InMemoryAnalysisRunStore()
+    service = _build_service(store=store)
+    started = await service.start_run(
+        slug="tron-kit",
+        parent_mount="hs",
+        relative_path="TronKit.Swift",
+        language_profile="swift_kit",
+        extractors=["symbol_index_swift", "prune_swift_symbols"],
+        idempotency_key="prune-gated",
+    )
+    symbol_checkpoint = started.run.checkpoints[0].model_copy(
+        update={
+            "status": AnalysisCheckpointStatus.SKIPPED,
+            "ingest_run_id": "symbol-run-123",
+        }
+    )
+    run = started.run.model_copy(
+        update={"checkpoints": [symbol_checkpoint, started.run.checkpoints[1]]}
+    )
+
+    executor = service._default_executor(graphiti=object())
+    attempt = await executor("prune_swift_symbols", run)
+
+    assert attempt.status == AnalysisCheckpointStatus.SKIPPED
+    assert attempt.ingest_run_id is None
+    assert attempt.message is not None
+    assert "symbol_index_swift" in attempt.message
+
+
+@pytest.mark.asyncio
+async def test_default_executor_skips_prune_when_symbol_index_has_error_code() -> None:
+    store = InMemoryAnalysisRunStore()
+    service = _build_service(store=store)
+    started = await service.start_run(
+        slug="tron-kit",
+        parent_mount="hs",
+        relative_path="TronKit.Swift",
+        language_profile="swift_kit",
+        extractors=["symbol_index_swift", "prune_swift_symbols"],
+        idempotency_key="prune-gated-error",
+    )
+    symbol_checkpoint = started.run.checkpoints[0].model_copy(
+        update={
+            "status": AnalysisCheckpointStatus.OK,
+            "ingest_run_id": "symbol-run-123",
+            "error_code": "fatal_index_error",
+        }
+    )
+    run = started.run.model_copy(
+        update={"checkpoints": [symbol_checkpoint, started.run.checkpoints[1]]}
+    )
+
+    executor = service._default_executor(graphiti=object())
+    attempt = await executor("prune_swift_symbols", run)
+
+    assert attempt.status == AnalysisCheckpointStatus.SKIPPED
+    assert attempt.ingest_run_id is None
+    assert attempt.message is not None
+    assert "did not complete successfully" in attempt.message
+
+
+@pytest.mark.asyncio
 async def test_concurrent_start_reuses_same_active_run_for_same_idempotency_key() -> (
     None
 ):

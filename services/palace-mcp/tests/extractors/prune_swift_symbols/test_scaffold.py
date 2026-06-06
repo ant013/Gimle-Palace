@@ -12,7 +12,10 @@ def test_prune_swift_symbols_registered() -> None:
     assert extractor.description
 
 
-def test_prune_swift_symbols_not_in_swift_kit_default_order() -> None:
+def test_prune_swift_symbols_in_swift_kit_default_order_after_symbol_index() -> None:
     from palace_mcp.extractors.foundation.profiles import SWIFT_KIT_EXTRACTOR_ORDER
 
-    assert "prune_swift_symbols" not in SWIFT_KIT_EXTRACTOR_ORDER
+    assert "prune_swift_symbols" in SWIFT_KIT_EXTRACTOR_ORDER
+    assert SWIFT_KIT_EXTRACTOR_ORDER.index("prune_swift_symbols") == (
+        SWIFT_KIT_EXTRACTOR_ORDER.index("symbol_index_swift") + 1
+    )

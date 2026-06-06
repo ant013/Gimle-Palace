@@ -77,6 +77,10 @@ def _make_graphiti(
     return graphiti, session.run, writes
 
 
+def test_load_symbol_rows_filters_out_deprecated_symbols() -> None:
+    assert "NOT s:Deprecated" in _LOAD_SYMBOL_ROWS
+
+
 @pytest.mark.asyncio
 async def test_run_batches_symbols_and_writes_embeddings() -> None:
     rows = [

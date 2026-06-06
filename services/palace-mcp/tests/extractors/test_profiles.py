@@ -189,7 +189,7 @@ def test_swift_kit_order_matches_contract() -> None:
     ordered = get_ordered_extractors("swift_kit")
 
     assert ordered == SWIFT_KIT_EXTRACTOR_ORDER
-    assert len(ordered) == 18
+    assert len(ordered) == 19
     assert all(name in registry.EXTRACTORS for name in ordered)
 
 

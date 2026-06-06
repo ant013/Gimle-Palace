@@ -37,6 +37,7 @@ class LanguageProfile:
 
 SWIFT_KIT_EXTRACTOR_ORDER: tuple[str, ...] = (
     "symbol_index_swift",
+    "prune_swift_symbols",
     "arch_layer",
     "git_history",
     "code_ownership",
