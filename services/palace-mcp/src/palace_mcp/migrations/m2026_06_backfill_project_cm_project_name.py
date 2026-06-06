@@ -60,7 +60,7 @@ async def run_migration(driver: AsyncDriver) -> int:
     async with driver.session() as session:
         for row in rows:
             cm_project_name = derived_by_slug.get(row["slug"])
-            if cm_project_name is None or row.get("cm_project_name") == cm_project_name:
+            if cm_project_name is None or row.get("cm_project_name") is not None:
                 continue
             result = await session.run(
                 _SET_PROJECT_CM_NAME,

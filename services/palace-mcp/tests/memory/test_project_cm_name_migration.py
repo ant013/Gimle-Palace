@@ -88,6 +88,33 @@ async def test_run_migration_backfills_derivable_cm_project_names() -> None:
 
 
 @pytest.mark.asyncio
+async def test_run_migration_preserves_existing_cm_project_names() -> None:
+    writes: list[dict[str, str]] = []
+    driver = _driver_for_projects(
+        [
+            {
+                "slug": "test-preserve",
+                "parent_mount": "hs",
+                "relative_path": "TronKit.Swift",
+                "cm_project_name": "repos-existing-preserve",
+            },
+            {
+                "slug": "gimle",
+                "parent_mount": None,
+                "relative_path": None,
+                "cm_project_name": None,
+            },
+        ],
+        writes,
+    )
+
+    migrated = await run_migration(driver)
+
+    assert migrated == 1
+    assert writes == [{"slug": "gimle", "cm_project_name": "repos-gimle"}]
+
+
+@pytest.mark.asyncio
 async def test_run_migration_raises_on_collision_preflight() -> None:
     writes: list[dict[str, str]] = []
     driver = _driver_for_projects(
