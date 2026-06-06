@@ -23,6 +23,8 @@ from mcp.server.fastmcp.utilities.func_metadata import (
 from mcp.types import CallToolResult, TextContent
 from pydantic import ConfigDict
 
+from palace_mcp.code.namespace import resolve as resolve_namespace
+
 logger = logging.getLogger(__name__)
 
 _cm_session: ClientSession | None = None
@@ -106,6 +108,7 @@ class _OpenArgs(ArgModelBase):
 
 _OPEN_SCHEMA: dict[str, Any] = {"type": "object", "additionalProperties": True}
 _READ_FILTER_DEFAULT_TOOLS = frozenset({"search_graph", "get_code_snippet"})
+_MAX_PROJECTS = 64
 
 
 def _make_open_fn_metadata(fn: Any) -> FuncMetadata:
@@ -152,6 +155,59 @@ def _patch_tool_open_schema(
         icons=original.icons,
         meta=original.meta,
     )
+
+
+def _project_not_found(message: str) -> dict[str, Any]:
+    return {
+        "isError": False,
+        "error_code": "project_not_found",
+        "message": message,
+        "available_via": "palace.memory.list_projects",
+    }
+
+
+async def _normalize_project_args(arguments: dict[str, Any]) -> dict[str, Any]:
+    has_project = isinstance(arguments.get("project"), str)
+    projects = arguments.get("projects")
+    has_projects = isinstance(projects, list) and all(
+        isinstance(value, str) for value in projects
+    )
+    if not has_project and not has_projects:
+        return arguments
+
+    from palace_mcp.mcp_server import get_driver
+
+    driver = get_driver()
+    if driver is None:
+        return _project_not_found(
+            "project resolution unavailable: Neo4j driver not initialised"
+        )
+
+    normalized = dict(arguments)
+    if has_project:
+        try:
+            resolution = await resolve_namespace(driver, arguments["project"])
+        except Exception as exc:
+            return _project_not_found(str(exc))
+        normalized["project"] = resolution.cm_project_name
+
+    if has_projects:
+        assert isinstance(projects, list)
+        if len(projects) > _MAX_PROJECTS:
+            return _project_not_found(
+                f"projects accepts at most {_MAX_PROJECTS} entries"
+            )
+        normalized_projects: list[str] = []
+        for value in projects:
+            assert isinstance(value, str)
+            try:
+                resolution = await resolve_namespace(driver, value)
+            except Exception as exc:
+                return _project_not_found(str(exc))
+            normalized_projects.append(resolution.cm_project_name)
+        normalized["projects"] = normalized_projects
+
+    return normalized
 
 
 _ENABLED_CM_TOOLS: dict[str, str] = {
@@ -204,8 +260,11 @@ def _register_passthrough(
         arguments = dict(kwargs)
         if cm_tool_name in _READ_FILTER_DEFAULT_TOOLS:
             arguments.setdefault("include_deprecated", True)
+        normalized = await _normalize_project_args(arguments)
+        if "error_code" in normalized:
+            return normalized
         result: CallToolResult = await _cm_session.call_tool(
-            cm_tool_name, arguments=arguments
+            cm_tool_name, arguments=normalized
         )
         if result.isError:
             return {"error": [str(block) for block in result.content]}

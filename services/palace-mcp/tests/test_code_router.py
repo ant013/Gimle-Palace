@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -24,6 +25,19 @@ EXPECTED_INCLUDE_DEPRECATED_TOOLS = [
     "palace.code.search_graph",
     "palace.code.get_code_snippet",
 ]
+
+
+@pytest.fixture(autouse=True)
+def _patch_namespace_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _fake_resolve_namespace(_driver: object, value: str) -> SimpleNamespace:
+        slug = value.removeprefix("repos-") if value.startswith("repos-") else value
+        cm_project_name = value if value.startswith("repos-") else f"repos-{value}"
+        return SimpleNamespace(slug=slug, cm_project_name=cm_project_name)
+
+    monkeypatch.setattr(
+        "palace_mcp.code_router.resolve_namespace", _fake_resolve_namespace
+    )
+    monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: object())
 
 
 class TestToolRegistration:
@@ -247,6 +261,113 @@ class TestPassthroughSerialization:
             "name_pattern": "register_code_tools",
             "include_deprecated": False,
         }
+
+        _set_cm_session(None)
+
+    @pytest.mark.asyncio
+    async def test_projects_list_is_normalized(self) -> None:
+        from mcp.types import CallToolResult
+
+        from palace_mcp.code_router import _set_cm_session, register_code_tools
+
+        captured: dict[str, object] = {}
+
+        async def _fake_call_tool(name: str, arguments: dict) -> CallToolResult:  # type: ignore[type-arg]
+            captured["name"] = name
+            captured["arguments"] = arguments
+            return CallToolResult(
+                content=[TextContent(type="text", text='{"rows":[]}')],
+                isError=False,
+            )
+
+        mock_session = AsyncMock(spec=ClientSession)
+        mock_session.call_tool = AsyncMock(side_effect=_fake_call_tool)
+        _set_cm_session(mock_session)
+
+        mcp = FastMCP("test")
+        stub_tool = lambda name, desc: mcp.tool(name=name, description=desc)  # noqa: E731
+        register_code_tools(stub_tool, mcp)
+
+        await mcp.call_tool(
+            "palace.code.search_graph",
+            {"projects": ["gimle", "repos-evm-kit"], "name_pattern": "main"},
+        )
+
+        assert captured["name"] == "search_graph"
+        assert captured["arguments"] == {
+            "projects": ["repos-gimle", "repos-evm-kit"],
+            "name_pattern": "main",
+            "include_deprecated": True,
+        }
+
+        _set_cm_session(None)
+
+    @pytest.mark.asyncio
+    async def test_query_graph_normalizes_project_without_rewriting_query(self) -> None:
+        from mcp.types import CallToolResult
+
+        from palace_mcp.code_router import _set_cm_session, register_code_tools
+
+        captured: dict[str, object] = {}
+        query = "MATCH (n:Symbol {group_id: 'project/gimle'}) RETURN n LIMIT 1"
+
+        async def _fake_call_tool(name: str, arguments: dict) -> CallToolResult:  # type: ignore[type-arg]
+            captured["name"] = name
+            captured["arguments"] = arguments
+            return CallToolResult(
+                content=[TextContent(type="text", text='{"rows":[]}')],
+                isError=False,
+            )
+
+        mock_session = AsyncMock(spec=ClientSession)
+        mock_session.call_tool = AsyncMock(side_effect=_fake_call_tool)
+        _set_cm_session(mock_session)
+
+        mcp = FastMCP("test")
+        stub_tool = lambda name, desc: mcp.tool(name=name, description=desc)  # noqa: E731
+        register_code_tools(stub_tool, mcp)
+
+        await mcp.call_tool(
+            "palace.code.query_graph",
+            {"project": "gimle", "query": query},
+        )
+
+        assert captured["name"] == "query_graph"
+        assert captured["arguments"] == {
+            "project": "repos-gimle",
+            "query": query,
+        }
+
+        _set_cm_session(None)
+
+    @pytest.mark.asyncio
+    async def test_projects_over_cap_returns_structured_error(self) -> None:
+        from palace_mcp.code_router import _set_cm_session, register_code_tools
+
+        mock_session = AsyncMock(spec=ClientSession)
+        mock_session.call_tool = AsyncMock()
+        _set_cm_session(mock_session)
+
+        mcp = FastMCP("test")
+        stub_tool = lambda name, desc: mcp.tool(name=name, description=desc)  # noqa: E731
+        register_code_tools(stub_tool, mcp)
+
+        result = await mcp.call_tool(
+            "palace.code.search_graph",
+            {"projects": [f"proj-{i}" for i in range(65)]},
+        )
+
+        payload = result[1] if isinstance(result, tuple) else None
+        if payload is not None:
+            assert payload["error_code"] == "project_not_found"
+            assert "at most 64 entries" in payload["message"]
+        else:
+            import json as _json
+
+            parsed = _json.loads(result[0].text)
+            assert parsed["error_code"] == "project_not_found"
+            assert "at most 64 entries" in parsed["message"]
+        mock_session.call_tool.assert_not_called()
 
         _set_cm_session(None)
 

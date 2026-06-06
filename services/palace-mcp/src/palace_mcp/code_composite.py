@@ -24,10 +24,12 @@ from mcp import ClientSession
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from palace_mcp import code_router
+from palace_mcp.code.namespace import resolve as resolve_project_namespace
 from palace_mcp.errors import handle_tool_error
 from palace_mcp.extractors.foundation.identifiers import symbol_id_for
 from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
 from palace_mcp.memory.bundle import bundle_status
+from palace_mcp.memory.projects import UnknownProjectError
 
 
 logger = logging.getLogger(__name__)
@@ -86,36 +88,6 @@ def _needs_human_resolution(qualified_name: str) -> bool:
     )
 
 
-def _slug_to_cm_project(value: str) -> str:
-    """Translate operator-facing project slug to CM-internal project name.
-
-    palace-mcp public API uses operator slugs (e.g. ``gimle``). The codebase-
-    memory-mcp sidecar derives project names from mount paths
-    (``/repos/gimle`` → ``repos-gimle``) and refuses calls keyed on the
-    operator slug. Translate at the boundary before any CM call.
-
-    Idempotent on already-translated names: ``repos-gimle`` passes through
-    unchanged. Assumes the standard ``/repos/<slug>`` mount convention from
-    docker-compose.yml.
-    """
-    if value.startswith("repos-"):
-        return value
-    return f"repos-{value}"
-
-
-def _cm_project_to_slug(value: str) -> str:
-    """Inverse of :func:`_slug_to_cm_project`. Strip the ``repos-`` prefix.
-
-    The current default ``palace_cm_default_project='repos-gimle'`` is in
-    CM-form, but Neo4j-side queries (e.g. ``IngestRun.project``) store the
-    operator slug. Apply this before any Neo4j read in code_composite so
-    explicit-slug and default-fallback paths agree.
-
-    Idempotent on plain slugs.
-    """
-    return value.removeprefix("repos-")
-
-
 class TestImpactRequest(BaseModel):
     """Input model for palace.code.test_impact."""
 
@@ -154,6 +126,7 @@ async def _resolve_qn(
     qualified_name: str,
     project: str,
     *,
+    project_slug: str | None = None,
     label: str | None = "Function",
     driver: Any | None = None,
     max_candidates: int = 15,
@@ -169,6 +142,8 @@ async def _resolve_qn(
 
     async def _fallback_rows() -> list[dict[str, Any]] | dict[str, Any]:
         fallback_kwargs: dict[str, Any] = {}
+        if project_slug is not None:
+            fallback_kwargs["project_slug"] = project_slug
         if not include_deprecated:
             fallback_kwargs["include_deprecated"] = False
         if driver is not None:
@@ -464,13 +439,15 @@ async def _resolve_short_name_via_query_graph(
     *,
     short_name: str,
     project: str,
-    max_candidates: int,
+    project_slug: str | None = None,
+    max_candidates: int = 15,
     include_deprecated: bool = True,
 ) -> list[dict[str, Any]] | dict[str, Any]:
     escaped_short_name = _escape_cypher_string(short_name)
     deprecated_clause = "" if include_deprecated else "AND NOT s:Deprecated"
+    group_slug = project_slug or project.removeprefix("repos-")
     query = f"""
-MATCH (s:Symbol {{group_id: 'project/{_cm_project_to_slug(project)}'}})
+MATCH (s:Symbol {{group_id: 'project/{group_slug}'}})
 WITH s, last(split(coalesce(s.qualified_name, ''), '.')) AS terminal_name
 WHERE any(candidate IN [
           coalesce(s.short_name, ''),
@@ -519,10 +496,11 @@ async def _resolve_short_name(
     requested_qualified_name: str,
     short_name: str,
     project: str,
-    max_candidates: int,
+    project_slug: str | None = None,
+    max_candidates: int = 15,
     include_deprecated: bool = True,
 ) -> list[dict[str, Any]] | dict[str, Any]:
-    group_id = f"project/{_cm_project_to_slug(project)}"
+    group_id = f"project/{project_slug or project.removeprefix('repos-')}"
     query_limit = max_candidates + 1
     queries = (
         (
@@ -1059,10 +1037,16 @@ def register_code_composite_tools(
                 "message": str(e),
             }
 
-        resolved_project = _slug_to_cm_project(req.project or default_project)
         from palace_mcp.mcp_server import get_driver
 
         driver = get_driver()
+        if driver is None:
+            handle_tool_error(RuntimeError("Neo4j driver not initialised"))
+            raise  # unreachable
+        namespace = await resolve_project_namespace(
+            driver, req.project or default_project
+        )
+        resolved_project = namespace.cm_project_name
 
         try:
             disambig = await _resolve_qn(
@@ -1070,6 +1054,7 @@ def register_code_composite_tools(
                 req.qualified_name,
                 resolved_project,
                 driver=driver,
+                project_slug=namespace.slug,
             )
         except Exception as e:
             handle_tool_error(e)
@@ -1149,13 +1134,18 @@ def register_code_composite_tools(
                 "message": str(e),
             }
 
-        # default_project is in CM-form ('repos-gimle'); Neo4j IngestRun.project
-        # stores the operator slug ('gimle'). Reverse-translate so the default-
-        # fallback path matches what palace.ingest.run_extractor wrote.
-        resolved_project = _cm_project_to_slug(req.project or default_project)
-
-        # §5.2: resolve slug kind FIRST — bundle vs project vs none
-        resolution = await _resolve_slug(driver, resolved_project)
+        requested_project = req.project or default_project
+        project_namespace = None
+        try:
+            project_namespace = await resolve_project_namespace(
+                driver, requested_project
+            )
+        except UnknownProjectError:
+            resolved_project = requested_project
+            resolution = await _resolve_slug(driver, resolved_project)
+        else:
+            resolved_project = project_namespace.slug
+            resolution = SlugResolution(kind="project")
 
         if resolution.kind == "none":
             return {
@@ -1231,12 +1221,21 @@ def register_code_composite_tools(
         resolved_qn = req.qualified_name
         cm_session = code_router.get_cm_session()
         if cm_session is not None or _needs_human_resolution(req.qualified_name):
+            cm_project = (
+                project_namespace.cm_project_name
+                if project_namespace is not None
+                else resolved_project
+            )
+            project_slug = (
+                project_namespace.slug if project_namespace is not None else None
+            )
             try:
                 disambig = await _resolve_qn(
                     cm_session,
                     req.qualified_name,
-                    resolved_project,
+                    cm_project,
                     driver=driver,
+                    project_slug=project_slug,
                     include_deprecated=include_deprecated,
                 )
                 if isinstance(disambig, dict):
@@ -1246,7 +1245,8 @@ def register_code_composite_tools(
                         resolved_qn = req.qualified_name
                     else:
                         return disambig  # symbol_not_found or ambiguous_qualified_name
-                _short_name, resolved_qn = disambig
+                else:
+                    _short_name, resolved_qn = disambig
             except Exception:
                 logger.debug(
                     "CM symbol resolution failed for %s, using literal",
@@ -1345,9 +1345,11 @@ def register_code_composite_tools(
                 "message": str(e),
             }
 
-        # CM uses repos-<slug>; Neo4j IngestRun.project and find_owners use plain slug
-        cm_project = _slug_to_cm_project(req.project or default_project)
-        neo4j_slug = _cm_project_to_slug(req.project or default_project)
+        namespace = await resolve_project_namespace(
+            driver, req.project or default_project
+        )
+        cm_project = namespace.cm_project_name
+        neo4j_slug = namespace.slug
 
         # Step 1: Resolve qualified_name — all symbol types (F1 fix: label=None)
         try:
@@ -1355,6 +1357,7 @@ def register_code_composite_tools(
                 session,
                 req.qualified_name,
                 cm_project,
+                project_slug=neo4j_slug,
                 label=None,
                 driver=driver,
             )
