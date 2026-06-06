@@ -27,7 +27,7 @@ def test_build_graphiti_returns_graphiti_instance() -> None:
     settings = Settings(
         neo4j_uri="bolt://test:7687",
         neo4j_password="test-pw",  # type: ignore[arg-type]
-        openai_api_key="sk-test",  # type: ignore[arg-type]
+        palace_memory_embedder="noop",
     )
 
     with (
@@ -47,21 +47,17 @@ def test_build_graphiti_returns_graphiti_instance() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 2. Settings — openai_api_key is required
+# 2. Settings — openai_api_key is optional on the default path
 # ---------------------------------------------------------------------------
 
 
-def test_settings_openai_api_key_required(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Settings() raises ValidationError when openai_api_key is absent."""
-    from pydantic import ValidationError
-
+def test_settings_openai_api_key_optional(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Settings() allows OPENAI_API_KEY to be absent on the default Qodo path."""
     from palace_mcp.config import Settings
 
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    with pytest.raises(ValidationError):
-        Settings(neo4j_password="pw")  # type: ignore[arg-type]
+    settings = Settings(neo4j_password="pw")  # type: ignore[arg-type]
+    assert settings.openai_api_key is None
 
 
 # ---------------------------------------------------------------------------
@@ -275,21 +271,27 @@ def test_paperclip_extractor_modules_removed() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 13. build_graphiti fails early when OPENAI_API_KEY is empty
+# 13. build_graphiti fails early only for the explicit OpenAI selector
 # ---------------------------------------------------------------------------
 
 
-def test_build_graphiti_missing_openai_key_fails_early(
+def test_build_graphiti_openai_selector_missing_key_fails_early(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Settings() requires openai_api_key — build_graphiti never runs without it."""
-    from pydantic import ValidationError
-
+    """OpenAI selector requires OPENAI_API_KEY even though the default path does not."""
     from palace_mcp.config import Settings
+    from palace_mcp.graphiti_runtime import build_graphiti
 
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    with pytest.raises(ValidationError):
-        Settings(neo4j_password="pw")  # type: ignore[arg-type]
+    settings = Settings(  # type: ignore[arg-type]
+        neo4j_password="pw",
+        palace_memory_embedder="openai",
+    )
+    with pytest.raises(
+        ValueError,
+        match="OPENAI_API_KEY is required when PALACE_MEMORY_EMBEDDER=openai",
+    ):
+        build_graphiti(settings)
 
 
 # ---------------------------------------------------------------------------
