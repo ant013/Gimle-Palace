@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from palace_mcp.graphiti_runtime import QodoGraphitiEmbedder
 from palace_mcp.memory.decide import decide
 from palace_mcp.memory.decide_models import DecideRequest
 
@@ -143,6 +144,34 @@ async def test_defaults_tags_evidence_ref_provenance_attestation(
     assert attrs["evidence_ref"] == []
     assert attrs["provenance"] == "asserted"
     assert attrs["attestation"] == "none"
+
+
+@pytest.mark.asyncio
+async def test_decide_generates_embedding_via_local_qodo_adapter() -> None:
+    class _FakeLocalBackend:
+        def __init__(self) -> None:
+            self.texts: list[str] = []
+
+        def embed_text(self, text: str) -> list[float]:
+            self.texts.append(text)
+            return [0.1] * 1024
+
+        def embed_batch(self, texts: list[str]) -> list[list[float]]:
+            return [[0.1] * 1024 for _ in texts]
+
+    backend = _FakeLocalBackend()
+    g = MagicMock()
+    g.driver = object()
+    g.embedder = QodoGraphitiEmbedder(backend)
+
+    with patch(
+        "graphiti_core.nodes.EntityNode.save", new_callable=AsyncMock
+    ) as mock_save:
+        result = await decide(_REQ, g=g, group_id="project/gimle")
+
+    assert result["name_embedding_dim"] == 1024
+    assert backend.texts == [_REQ.title]
+    mock_save.assert_awaited_once()
 
 
 async def _set_fake_embedding(g, node) -> None:  # type: ignore[no-untyped-def]
