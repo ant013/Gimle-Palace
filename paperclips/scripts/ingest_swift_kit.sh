@@ -13,6 +13,7 @@ PALACE_MCP_SERVICE_DIR="$REPO_ROOT/services/palace-mcp"
 
 DEFAULT_EXTRACTORS=(
     symbol_index_swift
+    prune_swift_symbols
     arch_layer
     git_history
     code_ownership
