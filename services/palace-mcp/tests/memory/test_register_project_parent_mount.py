@@ -45,19 +45,19 @@ def _project_row(
     }
 
 
-def _driver_for(returned_row: dict[str, Any]) -> MagicMock:
-    """Fake driver returning returned_row on second run() call (after UPSERT)."""
-    calls: list[int] = [0]
+def _driver_for_sequence(*results: dict[str, Any] | None) -> MagicMock:
+    """Fake driver returning the provided single() payloads in order."""
+    queue = list(results)
 
     async def _run(query: str, **params: Any) -> Any:
-        calls[0] += 1
         result = MagicMock()
-        if calls[0] == 1:
+        payload = queue.pop(0)
+        if payload is None:
             result.single = AsyncMock(return_value=None)
-        else:
-            row = MagicMock()
-            row.__getitem__ = lambda _self, key: returned_row[key]
-            result.single = AsyncMock(return_value=row)
+            return result
+        row = MagicMock()
+        row.__getitem__ = lambda _self, key: payload[key]
+        result.single = AsyncMock(return_value=row)
         return result
 
     session = MagicMock()
@@ -68,6 +68,11 @@ def _driver_for(returned_row: dict[str, Any]) -> MagicMock:
     driver = MagicMock()
     driver.session = MagicMock(return_value=session)
     return driver
+
+
+def _driver_for(returned_row: dict[str, Any]) -> MagicMock:
+    """Fake driver returning returned_row on fourth run() call (after UPSERT)."""
+    return _driver_for_sequence(None, None, None, returned_row)
 
 
 # ---------------------------------------------------------------------------
@@ -213,5 +218,39 @@ async def test_register_project_bundle_slug_collision_rejected() -> None:
             driver,
             slug="uw-ios",
             name="UW iOS",
+            tags=[],
+        )
+
+
+async def test_register_project_rejects_existing_cm_project_name_collision() -> None:
+    driver = _driver_for_sequence(
+        None,
+        {"slug": "beta", "cm_project_name": "repos-hs-Shared.swift"},
+    )
+
+    with pytest.raises(ValueError, match="project namespace conflict"):
+        await register_project(
+            driver,
+            slug="alpha",
+            name="Alpha",
+            tags=[],
+            parent_mount="hs",
+            relative_path="Shared.swift",
+        )
+
+
+async def test_register_project_rejects_slug_matching_existing_cm_project_name() -> (
+    None
+):
+    driver = _driver_for_sequence(
+        None,
+        {"slug": "gimle", "cm_project_name": "repos-gimle"},
+    )
+
+    with pytest.raises(ValueError, match="project namespace conflict"):
+        await register_project(
+            driver,
+            slug="repos-gimle",
+            name="Repos Gimle",
             tags=[],
         )

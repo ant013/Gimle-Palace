@@ -50,8 +50,8 @@ def _make_mock_driver_for_register(
     async def _run(query: str, **params: Any) -> Any:
         call_count[0] += 1
         result = MagicMock()
-        if call_count[0] == 1:
-            # UPSERT_PROJECT — result unused
+        if call_count[0] in (1, 2, 3):
+            # bundle check, namespace check, UPSERT_PROJECT — result unused
             result.single = AsyncMock(return_value=None)
             return result
         else:

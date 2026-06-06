@@ -101,6 +101,22 @@ async def test_invalidate_clears_namespace_cache() -> None:
 
 
 @pytest.mark.asyncio
+async def test_resolve_cache_does_not_cross_contaminate_slug_and_cm_names() -> None:
+    invalidate()
+    driver = _driver_for_rows(
+        {"p": {"slug": "gimle", "cm_project_name": "repos-gimle"}},
+        {"p": {"slug": "repos-gimle", "cm_project_name": "repos-repos-gimle"}},
+    )
+
+    first = await resolve(driver, "gimle")
+    second = await resolve(driver, "repos-gimle")
+
+    assert first.slug == "gimle"
+    assert second.slug == "repos-gimle"
+    assert driver.session.return_value.run.await_count == 2
+
+
+@pytest.mark.asyncio
 async def test_resolve_logs_redacted_cm_name(caplog: pytest.LogCaptureFixture) -> None:
     invalidate()
     driver = _driver_for_rows(

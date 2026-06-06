@@ -10,6 +10,7 @@ from neo4j import AsyncDriver
 
 from palace_mcp.memory.cypher import (
     CHECK_BUNDLE_NAME_EXISTS,
+    CHECK_PROJECT_NAMESPACE_CONFLICT,
     GET_PROJECT,
     LIST_PROJECTS,
     PROJECT_ENTITY_COUNTS,
@@ -84,6 +85,20 @@ async def register_project(
         b_row = await b_result.single()
         if b_row is not None:
             raise ProjectSlugConflictsWithBundle(slug)
+
+        conflict_result = await session.run(
+            CHECK_PROJECT_NAMESPACE_CONFLICT,
+            slug=slug,
+            cm_project_name=cm_project_name,
+        )
+        conflict_row = await conflict_result.single()
+        if conflict_row is not None:
+            raise ValueError(
+                "project namespace conflict: "
+                f"slug={slug!r}, cm_project_name={cm_project_name!r}, "
+                f"existing_slug={conflict_row['slug']!r}, "
+                f"existing_cm_project_name={conflict_row['cm_project_name']!r}"
+            )
 
         await session.run(
             UPSERT_PROJECT,

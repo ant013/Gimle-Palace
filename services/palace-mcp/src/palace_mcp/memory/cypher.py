@@ -8,6 +8,7 @@ named parameters only.
 # Only palace-mcp-specific node types need DDL here.
 CREATE_CONSTRAINTS = [
     "CREATE CONSTRAINT project_slug IF NOT EXISTS FOR (p:Project) REQUIRE p.slug IS UNIQUE",
+    "CREATE CONSTRAINT project_cm_project_name IF NOT EXISTS FOR (p:Project) REQUIRE p.cm_project_name IS UNIQUE",
     # GIM-182: bundle name uniqueness
     "CREATE CONSTRAINT bundle_name IF NOT EXISTS FOR (b:Bundle) REQUIRE b.name IS UNIQUE",
     "CREATE CONSTRAINT analysis_lock_key IF NOT EXISTS FOR (l:AnalysisLock) REQUIRE l.key IS UNIQUE",
@@ -150,6 +151,18 @@ LIMIT 1
 CHECK_BUNDLE_NAME_EXISTS = """
 MATCH (b:Bundle {name: $name})
 RETURN b.name AS b_name
+LIMIT 1
+"""
+
+CHECK_PROJECT_NAMESPACE_CONFLICT = """
+MATCH (p:Project)
+WHERE p.slug <> $slug
+  AND (
+      p.cm_project_name = $slug
+      OR ($cm_project_name IS NOT NULL AND p.slug = $cm_project_name)
+      OR ($cm_project_name IS NOT NULL AND p.cm_project_name = $cm_project_name)
+  )
+RETURN p.slug AS slug, p.cm_project_name AS cm_project_name
 LIMIT 1
 """
 

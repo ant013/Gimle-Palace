@@ -139,3 +139,30 @@ async def test_run_migration_raises_on_collision_preflight() -> None:
         await run_migration(driver)
 
     assert writes == []
+
+
+@pytest.mark.asyncio
+async def test_run_migration_raises_when_cm_project_name_matches_another_slug() -> None:
+    writes: list[dict[str, str]] = []
+    driver = _driver_for_projects(
+        [
+            {
+                "slug": "gimle",
+                "parent_mount": None,
+                "relative_path": None,
+                "cm_project_name": None,
+            },
+            {
+                "slug": "repos-gimle",
+                "parent_mount": None,
+                "relative_path": None,
+                "cm_project_name": "repos-repos-gimle",
+            },
+        ],
+        writes,
+    )
+
+    with pytest.raises(ValueError, match="collision pre-flight failed"):
+        await run_migration(driver)
+
+    assert writes == []

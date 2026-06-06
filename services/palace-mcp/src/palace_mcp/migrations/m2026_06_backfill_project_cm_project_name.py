@@ -34,27 +34,48 @@ async def run_migration(driver: AsyncDriver) -> int:
         rows = [dict(row) async for row in result]
 
     derived_by_slug: dict[str, str] = {}
+    final_cm_by_slug: dict[str, str] = {}
     owners_by_cm_name: dict[str, list[str]] = {}
+    known_slugs = {row["slug"] for row in rows}
     for row in rows:
-        cm_project_name = derive_cm_project_name(
+        cm_project_name = row.get("cm_project_name") or derive_cm_project_name(
             slug=row["slug"],
             parent_mount=row["parent_mount"],
             relative_path=row["relative_path"],
         )
         if cm_project_name is None:
             continue
-        derived_by_slug[row["slug"]] = cm_project_name
+        final_cm_by_slug[row["slug"]] = cm_project_name
         owners_by_cm_name.setdefault(cm_project_name, []).append(row["slug"])
+        if row.get("cm_project_name") is None:
+            derived_by_slug[row["slug"]] = cm_project_name
 
     collisions = {
         cm_name: slugs for cm_name, slugs in owners_by_cm_name.items() if len(slugs) > 1
     }
-    if collisions:
-        details = ", ".join(
-            f"{cm_name}: {', '.join(sorted(slugs))}"
-            for cm_name, slugs in sorted(collisions.items())
-        )
-        raise ValueError(f"cm_project_name collision pre-flight failed: {details}")
+    namespace_collisions = {
+        slug: cm_name
+        for slug, cm_name in final_cm_by_slug.items()
+        if cm_name in known_slugs and cm_name != slug
+    }
+    if collisions or namespace_collisions:
+        details: list[str] = []
+        if collisions:
+            details.append(
+                ", ".join(
+                    f"{cm_name}: {', '.join(sorted(slugs))}"
+                    for cm_name, slugs in sorted(collisions.items())
+                )
+            )
+        if namespace_collisions:
+            details.append(
+                ", ".join(
+                    f"{slug} -> {cm_name}"
+                    for slug, cm_name in sorted(namespace_collisions.items())
+                )
+            )
+        detail_text = "; ".join(details)
+        raise ValueError(f"cm_project_name collision pre-flight failed: {detail_text}")
 
     migrated = 0
     async with driver.session() as session:

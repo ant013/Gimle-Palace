@@ -74,8 +74,6 @@ async def resolve(driver: AsyncDriver, value: str) -> NamespaceResolution:
 
     resolution = NamespaceResolution(slug=slug, cm_project_name=cm_project_name)
     _CACHE[value] = resolution
-    _CACHE[slug] = resolution
-    _CACHE[cm_project_name] = resolution
     logger.debug(
         "namespace.resolve requested=%s slug=%s cm_project_name=<redacted>",
         _requested_log_value(value, resolution),
