@@ -168,6 +168,9 @@ async def _resolve_qn(
     can_try_short_name = _needs_human_resolution(qualified_name) and bool(short_name)
 
     async def _fallback_rows() -> list[dict[str, Any]] | dict[str, Any]:
+        fallback_kwargs: dict[str, Any] = {}
+        if not include_deprecated:
+            fallback_kwargs["include_deprecated"] = False
         if driver is not None:
             return await _resolve_short_name(
                 driver,
@@ -175,7 +178,7 @@ async def _resolve_qn(
                 short_name=short_name,
                 project=project,
                 max_candidates=max_candidates,
-                include_deprecated=include_deprecated,
+                **fallback_kwargs,
             )
         assert session is not None
         return await _resolve_short_name_via_query_graph(
@@ -183,7 +186,7 @@ async def _resolve_qn(
             short_name=short_name,
             project=project,
             max_candidates=max_candidates,
-            include_deprecated=include_deprecated,
+            **fallback_kwargs,
         )
 
     if session is None:
@@ -462,7 +465,7 @@ async def _resolve_short_name_via_query_graph(
     short_name: str,
     project: str,
     max_candidates: int,
-    include_deprecated: bool,
+    include_deprecated: bool = True,
 ) -> list[dict[str, Any]] | dict[str, Any]:
     escaped_short_name = _escape_cypher_string(short_name)
     deprecated_clause = "" if include_deprecated else "AND NOT s:Deprecated"
@@ -517,7 +520,7 @@ async def _resolve_short_name(
     short_name: str,
     project: str,
     max_candidates: int,
-    include_deprecated: bool,
+    include_deprecated: bool = True,
 ) -> list[dict[str, Any]] | dict[str, Any]:
     group_id = f"project/{_cm_project_to_slug(project)}"
     query_limit = max_candidates + 1
