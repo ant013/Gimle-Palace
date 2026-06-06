@@ -258,7 +258,8 @@ chmod 600 ~/.paperclip/auth.json
 echo "ghp_<…>" > ~/.paperclip/secrets/github-token
 chmod 600 ~/.paperclip/secrets/github-token
 
-# 5.3 OpenAI / Qodo if used (palace-mcp embeddings)
+# 5.3 Optional legacy OpenAI key
+# Only needed if you intentionally switch PALACE_MEMORY_EMBEDDER=openai.
 echo "sk-proj-<…>" > ~/.paperclip/secrets/openai-api-key
 chmod 600 ~/.paperclip/secrets/openai-api-key
 ```
@@ -270,9 +271,7 @@ cat > ~/Android/Gimle-Palace/.env <<ENV
 NEO4J_URI=bolt://localhost:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=$(cat ~/.paperclip/secrets/neo4j-password)
-OPENAI_API_KEY=$(cat ~/.paperclip/secrets/openai-api-key)
-EMBEDDING_BASE_URL=https://api.openai.com/v1
-EMBEDDING_API_KEY=$(cat ~/.paperclip/secrets/openai-api-key)
+PALACE_MEMORY_EMBEDDER=qodo
 PALACE_HF_CACHE_DIR=$HOME/.cache/palace-hf-cache
 PALACE_EMBEDDING_LOCAL_ONLY=0
 PALACE_EMBEDDING_MAX_SYMBOLS=100000
@@ -285,6 +284,15 @@ CODEBASE_MEMORY_MCP_BINARY=$HOME/.local/bin/codebase-memory-mcp
 PAPERCLIP_API_KEY=$(cat ~/.paperclip/auth.json | python3 -c "import json,sys; print(json.load(sys.stdin)['credentials'][list(json.load(open('/dev/stdin'))['credentials'])[0]]['token'])")
 ENV
 chmod 600 ~/Android/Gimle-Palace/.env
+```
+
+If you explicitly need the legacy OpenAI Graphiti embedder, append:
+
+```bash
+cat >> ~/Android/Gimle-Palace/.env <<ENV
+PALACE_MEMORY_EMBEDDER=openai
+OPENAI_API_KEY=$(cat ~/.paperclip/secrets/openai-api-key)
+ENV
 ```
 
 ---

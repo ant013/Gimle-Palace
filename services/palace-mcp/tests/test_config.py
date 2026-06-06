@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from pydantic import SecretStr
 
-_BASE_ENV = {"NEO4J_PASSWORD": "test-pw", "OPENAI_API_KEY": "sk-test"}
+_BASE_ENV = {"NEO4J_PASSWORD": "test-pw"}
 
 
 class TestSettings:
@@ -41,8 +41,16 @@ class TestSettings:
         assert "hunter2" not in repr(s)
         assert s.neo4j_password.get_secret_value() == "hunter2"
 
-    def test_openai_api_key_is_secret_str(self) -> None:
-        """openai_api_key is SecretStr — repr masks the value."""
+    def test_openai_api_key_defaults_to_none(self) -> None:
+        """openai_api_key defaults to None on the local Qodo path."""
+        with patch.dict(os.environ, _BASE_ENV, clear=True):
+            from palace_mcp.config import Settings
+
+            s = Settings()
+        assert s.openai_api_key is None
+
+    def test_openai_api_key_is_secret_str_when_set(self) -> None:
+        """openai_api_key stays masked when the legacy OpenAI path is configured."""
         env = {**_BASE_ENV, "OPENAI_API_KEY": "sk-my-secret"}
         with patch.dict(os.environ, env, clear=True):
             from palace_mcp.config import Settings

@@ -23,7 +23,14 @@ class Settings(BaseSettings):
     neo4j_uri: str = "bolt://neo4j:7687"
     neo4j_user: str = "neo4j"
     neo4j_password: SecretStr
-    openai_api_key: SecretStr
+    openai_api_key: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Optional legacy OpenAI API key for Graphiti's explicit openai "
+            "embedder path. The default qodo and noop memory paths do not "
+            "require it."
+        ),
+    )
     palace_default_group_id: str = "project/gimle"
     codebase_memory_mcp_binary: str = ""
     palace_ops_host: str = "host.docker.internal"
@@ -279,6 +286,14 @@ class Settings(BaseSettings):
         description=(
             "Pre-warm Qodo embedding model on startup to eliminate ~9s cold-start latency. "
             "Set PALACE_QODO_PREWARM=0 to skip on memory-constrained hosts."
+        ),
+    )
+    palace_memory_embedder: Literal["qodo", "openai", "noop"] = Field(
+        default="qodo",
+        description=(
+            "Embedder used for Graphiti memory writes. "
+            "Use qodo for the local model, openai for the legacy API path, or noop "
+            "to disable semantic memory embeddings in dev."
         ),
     )
 
