@@ -1202,6 +1202,7 @@ class ProjectAnalysisService:
                 if (
                     symbol_index_checkpoint is None
                     or symbol_index_checkpoint.status != AnalysisCheckpointStatus.OK
+                    or symbol_index_checkpoint.error_code is not None
                     or symbol_index_checkpoint.ingest_run_id is None
                 ):
                     logger.warning(
@@ -1216,13 +1217,18 @@ class ProjectAnalysisService:
                                 if symbol_index_checkpoint is None
                                 else symbol_index_checkpoint.status.value
                             ),
+                            "checkpoint_error_code": (
+                                symbol_index_checkpoint.error_code
+                                if symbol_index_checkpoint is not None
+                                else None
+                            ),
                         },
                     )
                     return ExtractorAttemptResult(
                         status=AnalysisCheckpointStatus.SKIPPED,
                         message=(
                             "Skipped prune_swift_symbols because symbol_index_swift "
-                            "did not complete with status OK in this run."
+                            "did not complete successfully in this run."
                         ),
                         next_action=(
                             "Rerun symbol_index_swift successfully before prune_swift_symbols."

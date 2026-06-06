@@ -22,6 +22,7 @@ _BATCH_SIZE = 64
 
 _LOAD_SYMBOL_ROWS = """
 MATCH (s:Symbol {group_id: $group_id})
+WHERE NOT s:Deprecated
 RETURN
   s.qualified_name AS qualified_name,
   s.kind AS kind,
