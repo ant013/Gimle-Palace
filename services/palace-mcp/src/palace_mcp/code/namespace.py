@@ -43,12 +43,18 @@ def invalidate() -> None:
     _CACHE.clear()
 
 
+def _requested_log_value(value: str, resolution: NamespaceResolution) -> str:
+    if value == resolution.cm_project_name:
+        return "<cm_project_name>"
+    return value
+
+
 async def resolve(driver: AsyncDriver, value: str) -> NamespaceResolution:
     cached = _CACHE.get(value)
     if cached is not None:
         logger.debug(
             "namespace.resolve requested=%s slug=%s cm_project_name=<redacted>",
-            value,
+            _requested_log_value(value, cached),
             cached.slug,
         )
         return cached
@@ -72,7 +78,7 @@ async def resolve(driver: AsyncDriver, value: str) -> NamespaceResolution:
     _CACHE[cm_project_name] = resolution
     logger.debug(
         "namespace.resolve requested=%s slug=%s cm_project_name=<redacted>",
-        value,
+        _requested_log_value(value, resolution),
         slug,
     )
     return resolution

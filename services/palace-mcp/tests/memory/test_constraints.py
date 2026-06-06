@@ -102,6 +102,7 @@ async def test_ensure_schema_preserves_registered_project_metadata(
             """
             MERGE (p:Project {slug: 'test-preserve'})
             SET p.group_id = 'project/test-preserve',
+                p.cm_project_name = 'repos-existing-preserve',
                 p.name = 'Real Name',
                 p.parent_mount = 'hs-stage',
                 p.relative_path = 'TronKit.Swift',
@@ -115,13 +116,15 @@ async def test_ensure_schema_preserves_registered_project_metadata(
         row = await (
             await s.run(
                 "MATCH (p:Project {slug: 'test-preserve'}) "
-                "RETURN p.name AS name, p.parent_mount AS parent_mount, "
+                "RETURN p.cm_project_name AS cm_project_name, "
+                "p.name AS name, p.parent_mount AS parent_mount, "
                 "p.relative_path AS relative_path, "
                 "p.language_profile AS language_profile"
             )
         ).single()
 
     assert row is not None
+    assert row["cm_project_name"] == "repos-existing-preserve"
     assert row["name"] == "Real Name"
     assert row["parent_mount"] == "hs-stage"
     assert row["relative_path"] == "TronKit.Swift"

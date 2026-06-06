@@ -104,14 +104,22 @@ async def test_invalidate_clears_namespace_cache() -> None:
 async def test_resolve_logs_redacted_cm_name(caplog: pytest.LogCaptureFixture) -> None:
     invalidate()
     driver = _driver_for_rows(
-        {"p": {"slug": "gimle", "cm_project_name": "repos-gimle"}}
+        {"p": {"slug": "gimle", "cm_project_name": "repos-gimle"}},
+        {"p": {"slug": "evm-kit", "cm_project_name": "repos-hs-EvmKit.Swift"}},
     )
 
     with caplog.at_level(logging.DEBUG, logger="palace_mcp.code.namespace"):
         await resolve(driver, "gimle")
+        await resolve(driver, "repos-hs-EvmKit.Swift")
+        await resolve(driver, "repos-hs-EvmKit.Swift")
 
     assert (
         "namespace.resolve requested=gimle slug=gimle cm_project_name=<redacted>"
         in caplog.text
     )
+    assert (
+        "namespace.resolve requested=<cm_project_name> slug=evm-kit "
+        "cm_project_name=<redacted>" in caplog.text
+    )
     assert "repos-gimle" not in caplog.text
+    assert "repos-hs-EvmKit.Swift" not in caplog.text

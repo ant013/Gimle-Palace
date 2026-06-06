@@ -282,7 +282,7 @@ ON CREATE SET
     p.source_created_at = $now
 ON MATCH SET
     p.group_id          = coalesce(p.group_id, 'project/' + $slug),
-    p.cm_project_name   = coalesce($cm_project_name, p.cm_project_name),
+    p.cm_project_name   = coalesce(p.cm_project_name, $cm_project_name),
     p.source            = coalesce(p.source, 'paperclip')
 SET p.source_updated_at = $now
 RETURN p
