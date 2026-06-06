@@ -11,13 +11,32 @@ This runbook records the real first-ingest command for the already-registered
 - Registry values: `parent_mount=baseline`, `relative_path=uw-baseline-871c0e8`
 - MCP URL assumption: `http://localhost:8080/mcp`
 
+## One-time container mount setup
+
+Ensure the `palace-mcp` container can see the baseline mirror at the fixed
+container path `/repos-baseline`. On the iMac, add this override if it does not
+already exist:
+
+```yaml
+services:
+  palace-mcp:
+    volumes:
+      - /Users/Shared/Ios/baseline:/repos-baseline:ro
+```
+
+If your host-side baseline root differs, keep the container path
+`/repos-baseline` and change only the left-hand host path. Recreate the
+`palace-mcp` container after updating the override so the new bind-mount is
+present before ingest.
+
 ## Required assumptions
 
 - Run from the Gimle Palace repo root on the iMac with the repo `.env` file in place.
 - `palace-mcp` is reachable at `http://localhost:8080/mcp`.
 - The baseline mirror is bind-mounted into the container as `/repos-baseline:ro`.
 - The host-side baseline repo exists at
-  `<host-base>/uw-baseline-871c0e8` and already contains `scip/index.scip`.
+  `<host-base>/uw-baseline-871c0e8` and already contains `.git`,
+  `Package.swift`, and `scip/index.scip`.
 
 If the host bind source is not `/Users/Shared/Ios/baseline`, keep the same
 container path `/repos-baseline` and change only `HOST_BASE` below.
