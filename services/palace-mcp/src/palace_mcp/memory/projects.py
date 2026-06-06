@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
 from neo4j import AsyncManagedTransaction
@@ -14,6 +15,8 @@ if TYPE_CHECKING:
 
 
 _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{0,62}$")
+_PARENT_MOUNT_RE = re.compile(r"^[a-z][a-z0-9-]{0,15}$")
+_RELATIVE_PATH_RE = re.compile(r"^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$")
 
 
 class InvalidSlug(ValueError):
@@ -32,6 +35,40 @@ def validate_slug(slug: str) -> None:
     """Validate a project slug. Raise InvalidSlug if invalid."""
     if not isinstance(slug, str) or not _SLUG_RE.match(slug):
         raise InvalidSlug(slug)
+
+
+def validate_parent_mount(value: str) -> None:
+    if not _PARENT_MOUNT_RE.match(value):
+        raise ValueError(
+            f"invalid parent_mount name: {value!r} (must match ^[a-z][a-z0-9-]{{0,15}}$)"
+        )
+
+
+def validate_relative_path(value: str) -> None:
+    if not _RELATIVE_PATH_RE.match(value):
+        raise ValueError(
+            f"invalid relative_path: {value!r} "
+            r"(must match ^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$)"
+        )
+    for part in value.split("/"):
+        if part == "..":
+            raise ValueError(f"invalid relative_path: {value!r} (contains '..')")
+
+
+def derive_cm_project_name(
+    *,
+    slug: str,
+    parent_mount: str | None = None,
+    relative_path: str | None = None,
+) -> str | None:
+    if parent_mount is None and relative_path is None:
+        return "-".join(PurePosixPath("/repos", slug).parts[1:])
+    if parent_mount is None or relative_path is None:
+        return None
+
+    validate_parent_mount(parent_mount)
+    validate_relative_path(relative_path)
+    return "-".join(PurePosixPath(f"/repos-{parent_mount}", relative_path).parts[1:])
 
 
 class UnknownProjectError(ValueError):

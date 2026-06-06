@@ -186,3 +186,4 @@ async def test_ensure_schema_bootstrap_upsert_supplies_optional_project_fields()
     assert upsert_call.kwargs["parent_mount"] is None
     assert upsert_call.kwargs["relative_path"] is None
     assert upsert_call.kwargs["language_profile"] is None
+    assert upsert_call.kwargs["cm_project_name"] == "repos-test-bootstrap"

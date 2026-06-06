@@ -22,6 +22,7 @@ def _make_project_row(
     name: str,
     tags: list[str],
     *,
+    cm_project_name: str | None = None,
     language: str | None = None,
     framework: str | None = None,
     repo_url: str | None = None,
@@ -29,6 +30,7 @@ def _make_project_row(
     return {
         "p": {
             "slug": slug,
+            "cm_project_name": cm_project_name,
             "name": name,
             "tags": tags,
             "language": language,
@@ -94,6 +96,7 @@ async def test_register_project_optional_fields() -> None:
         "alpha",
         "Alpha",
         [],
+        cm_project_name="repos-alpha",
         language="Kotlin",
         framework="KMP",
         repo_url="https://gh/alpha",
@@ -111,6 +114,25 @@ async def test_register_project_optional_fields() -> None:
     assert info.language == "Kotlin"
     assert info.framework == "KMP"
     assert info.repo_url == "https://gh/alpha"
+    assert info.cm_project_name == "repos-alpha"
+
+
+@pytest.mark.asyncio
+async def test_register_project_invalidates_namespace_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    row = _make_project_row("gimle", "Gimle", [], cm_project_name="repos-gimle")
+    driver = _make_mock_driver_for_register(row)
+    invalidations: list[str] = []
+
+    monkeypatch.setattr(
+        "palace_mcp.code.namespace.invalidate",
+        lambda: invalidations.append("cleared"),
+    )
+
+    await register_project(driver, slug="gimle", name="Gimle", tags=[])
+
+    assert invalidations == ["cleared"]
 
 
 # ---------------------------------------------------------------------------

@@ -23,9 +23,15 @@ _NOW = "2026-05-03T12:00:00+00:00"
 def _project_row(
     slug: str, *, parent_mount: str | None = None, relative_path: str | None = None
 ) -> dict[str, Any]:
+    cm_project_name = None
+    if parent_mount is None and relative_path is None:
+        cm_project_name = f"repos-{slug}"
+    elif parent_mount == "hs" and relative_path == "EvmKit.Swift":
+        cm_project_name = "repos-hs-EvmKit.Swift"
     return {
         "p": {
             "slug": slug,
+            "cm_project_name": cm_project_name,
             "name": slug.replace("-", " ").title(),
             "tags": [],
             "language": None,
@@ -84,6 +90,7 @@ async def test_register_project_with_parent_mount_stores_fields() -> None:
     )
 
     assert info.slug == "evm-kit"
+    assert info.cm_project_name == "repos-hs-EvmKit.Swift"
     assert info.parent_mount == "hs"
     assert info.relative_path == "EvmKit.Swift"
 
@@ -106,6 +113,7 @@ async def test_register_project_legacy_no_parent_mount() -> None:
     )
 
     assert info.slug == "gimle"
+    assert info.cm_project_name == "repos-gimle"
     assert info.parent_mount is None
     assert info.relative_path is None
 
