@@ -18,11 +18,20 @@ def _patch_namespace_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
         cm_project_name = value if value.startswith("repos-") else f"repos-{value}"
         return SimpleNamespace(slug=slug, cm_project_name=cm_project_name)
 
+    driver = AsyncMock()
+    session = AsyncMock()
+    result = AsyncMock()
+    result.data = AsyncMock(return_value=[])
+    result.single = AsyncMock(return_value=None)
+    session.run = AsyncMock(return_value=result)
+    session.__aenter__ = AsyncMock(return_value=session)
+    session.__aexit__ = AsyncMock(return_value=False)
+    driver.session.return_value = session
     monkeypatch.setattr(
         "palace_mcp.code_composite.resolve_project_namespace",
         _fake_resolve_namespace,
     )
-    monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: object())
+    monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: driver)
 
 
 # ---------------------------------------------------------------------------
@@ -380,7 +389,6 @@ class TestDefaultPath:
             "palace_mcp.code_composite.resolve_project_namespace",
             _fake_resolve_namespace,
         )
-        monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: object())
         tests_edge = AsyncMock(
             return_value={
                 "ok": True,
