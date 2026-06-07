@@ -1104,7 +1104,7 @@ def register_code_composite_tools(
         qualified_name: str,
         project: str | None = None,
         max_results: int = 100,
-        include_deprecated: bool = True,
+        include_deprecated: bool = False,
     ) -> dict[str, Any]:
         from pathlib import Path
 

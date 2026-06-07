@@ -85,7 +85,7 @@ class TestCodeToolRegistration:
         }
 
     def test_phase_4a_read_tools_expose_include_deprecated_default(self) -> None:
-        """Phase 4a read tools must advertise include_deprecated=true in MCP."""
+        """Phase 4b read tools must advertise include_deprecated=false in MCP."""
         from palace_mcp.mcp_server import build_mcp_asgi_app, _mcp
 
         build_mcp_asgi_app()
@@ -110,4 +110,4 @@ class TestCodeToolRegistration:
         for tool in code_tools.values():
             include_deprecated = tool.parameters["properties"]["include_deprecated"]
             assert include_deprecated["type"] == "boolean"
-            assert include_deprecated["default"] is True
+            assert include_deprecated["default"] is False

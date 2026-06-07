@@ -76,7 +76,7 @@ def register_code_idiom_tools(
         project: str | None = None,
         module: str | None = None,
         max_outliers: int = 20,
-        include_deprecated: bool = True,
+        include_deprecated: bool = False,
     ) -> dict[str, Any]:
         from palace_mcp.mcp_server import get_driver
 

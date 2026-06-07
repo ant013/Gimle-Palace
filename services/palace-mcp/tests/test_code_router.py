@@ -137,7 +137,7 @@ class TestToolRegistration:
             )
 
     def test_read_tools_expose_include_deprecated_default(self) -> None:
-        """Phase 4a CM-backed read tools advertise include_deprecated=true."""
+        """Phase 4b CM-backed read tools advertise include_deprecated=false."""
         stub_tool, mcp, _ = self._make_stub_tool()
         from palace_mcp.code_router import register_code_tools
 
@@ -146,7 +146,7 @@ class TestToolRegistration:
             tool = mcp._tool_manager.get_tool(name)
             include_deprecated = tool.parameters["properties"]["include_deprecated"]
             assert include_deprecated["type"] == "boolean"
-            assert include_deprecated["default"] is True
+            assert include_deprecated["default"] is False
 
 
 class TestPassthroughSerialization:
@@ -174,7 +174,7 @@ class TestPassthroughSerialization:
 
         mock_session.call_tool.assert_called_once_with(
             "search_graph",
-            arguments={"name_pattern": "main", "include_deprecated": True},
+            arguments={"name_pattern": "main", "include_deprecated": False},
         )
 
         _set_cm_session(None)
@@ -218,7 +218,7 @@ class TestPassthroughSerialization:
         assert captured["arguments"] == {
             "name_pattern": "register_code_tools",
             "project": "repos-gimle",
-            "include_deprecated": True,
+            "include_deprecated": False,
         }
 
         _set_cm_session(None)
@@ -256,7 +256,7 @@ class TestPassthroughSerialization:
         assert captured["arguments"] == {
             "name_pattern": "register_code_tools",
             "project": None,
-            "include_deprecated": True,
+            "include_deprecated": False,
         }
 
         _set_cm_session(None)
@@ -305,6 +305,49 @@ class TestPassthroughSerialization:
         _set_cm_session(None)
 
     @pytest.mark.asyncio
+    async def test_explicit_include_deprecated_true_is_forwarded(self) -> None:
+        """Explicit include_deprecated=true must survive pass-through unchanged."""
+        from mcp.types import CallToolResult
+
+        from palace_mcp.code_router import _set_cm_session, register_code_tools
+
+        captured: dict[str, object] = {}
+
+        async def _fake_call_tool(name: str, arguments: dict) -> CallToolResult:  # type: ignore[type-arg]
+            captured["name"] = name
+            captured["arguments"] = arguments
+            return CallToolResult(
+                content=[TextContent(type="text", text='{"total":1}')],
+                isError=False,
+            )
+
+        mock_session = AsyncMock(spec=ClientSession)
+        mock_session.call_tool = AsyncMock(side_effect=_fake_call_tool)
+        _set_cm_session(mock_session)
+
+        mcp = FastMCP("test")
+        stub_tool = lambda name, desc: mcp.tool(name=name, description=desc)  # noqa: E731
+        register_code_tools(stub_tool, mcp)
+
+        await mcp.call_tool(
+            "palace.code.search_graph",
+            {
+                "project": "repos-gimle",
+                "name_pattern": "register_code_tools",
+                "include_deprecated": True,
+            },
+        )
+
+        assert captured["name"] == "search_graph"
+        assert captured["arguments"] == {
+            "project": "repos-gimle",
+            "name_pattern": "register_code_tools",
+            "include_deprecated": True,
+        }
+
+        _set_cm_session(None)
+
+    @pytest.mark.asyncio
     async def test_projects_list_is_normalized(self) -> None:
         from mcp.types import CallToolResult
 
@@ -337,7 +380,7 @@ class TestPassthroughSerialization:
         assert captured["arguments"] == {
             "projects": ["repos-gimle", "repos-evm-kit"],
             "name_pattern": "main",
-            "include_deprecated": True,
+            "include_deprecated": False,
         }
 
         _set_cm_session(None)

@@ -382,6 +382,65 @@ async def test_vector_query_uses_candidate_limit_to_overfetch_before_scope_filte
 
 
 @pytest.mark.asyncio
+async def test_include_deprecated_true_returns_seeded_row() -> None:
+    from palace_mcp.code.find_semantic import semantic_search
+
+    backend = _FakeBackend()
+    dispatcher = EmbeddingBackendDispatcher({"qodo": backend}, default_backend="qodo")
+
+    def run_fn(query: str, params: dict[str, Any]) -> _FakeResult:
+        if "collect(p.slug)" in query:
+            return _FakeResult(single_value={"found_projects": ["wallet-core"]})
+        if "embedded_cnt" in query:
+            assert params["include_deprecated"] is True
+            return _FakeResult(
+                data_value=[{"source_scope": "project", "total": 1, "embedded_cnt": 1}]
+            )
+        if "queryNodes('symbol_embedding_idx'" in query:
+            assert params["include_deprecated"] is True
+            return _FakeResult(
+                data_value=[
+                    {
+                        "group_id": "project/wallet-core",
+                        "qualified_name": "Crypto.legacyVerify",
+                        "kind": "function",
+                        "file_path": "Sources/Legacy.swift",
+                        "module_name": "WalletCore",
+                        "source_scope": "project",
+                        "embedding_input_hash": "deprecated-hash",
+                        "commit_sha": "deprecated-sha",
+                        "score": 0.91,
+                    }
+                ]
+            )
+        raise AssertionError(f"unexpected query: {query}")
+
+    driver = _FakeDriver(run_fn)
+    with (
+        patch(
+            "palace_mcp.code.find_semantic.get_embedding_dispatcher",
+            return_value=dispatcher,
+        ),
+        patch(
+            "palace_mcp.code.find_semantic.code_router.get_cm_session",
+            return_value=None,
+        ),
+    ):
+        result = await semantic_search(
+            driver=driver,
+            query="legacy signature verification",
+            project="wallet-core",
+            include_deprecated=True,
+            include_context=False,
+            limit=1,
+        )
+
+    assert result["ok"] is True
+    assert result["returned_count"] == 1
+    assert result["result"][0]["qualified_name"] == "Crypto.legacyVerify"
+
+
+@pytest.mark.asyncio
 async def test_context_warning_is_attached_per_hit_when_project_not_mounted() -> None:
     """When project is not mounted locally and CM session is absent, per-hit warning."""
     from palace_mcp.code.find_semantic import semantic_search

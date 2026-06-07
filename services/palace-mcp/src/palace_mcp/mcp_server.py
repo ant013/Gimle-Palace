@@ -1325,7 +1325,7 @@ async def palace_code_find_hotspots(
     top_n: int = 20,
     min_score: float = 0.0,
     path_prefix: str | None = None,
-    include_deprecated: bool = True,
+    include_deprecated: bool = False,
 ) -> dict[str, Any]:
     """Find hotspot files ranked by complexity × churn score."""
     driver = _driver
@@ -1359,7 +1359,7 @@ async def palace_code_list_functions(
     project: str | None = None,
     bundle: str | None = None,
     min_ccn: int = 0,
-    include_deprecated: bool = True,
+    include_deprecated: bool = False,
 ) -> dict[str, Any]:
     """List functions for a specific file recorded by the hotspot extractor."""
     driver = _driver
@@ -1392,7 +1392,7 @@ async def palace_code_find_owners(
     file_path: str,
     project: str,
     top_n: int = 5,
-    include_deprecated: bool = True,
+    include_deprecated: bool = False,
 ) -> dict[str, Any]:
     """Find top-N owners of a file by blame share + recency-weighted churn."""
     driver = _driver
@@ -1509,7 +1509,7 @@ async def palace_code_semantic_search(
     include_dependencies: bool = False,
     include_generated: bool = False,
     include_sdk: bool = False,
-    include_deprecated: bool = True,
+    include_deprecated: bool = False,
     limit: int = 10,
     backend: str | None = None,
     include_context: bool = True,
