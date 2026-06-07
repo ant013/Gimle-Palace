@@ -53,7 +53,7 @@ async def find_owners(
     file_path: str,
     project: str,
     top_n: int = 5,
-    include_deprecated: bool = True,
+    include_deprecated: bool = False,
 ) -> dict[str, Any]:
     if not _SLUG_RE.match(project):
         return _err("slug_invalid", f"invalid slug: {project!r}")

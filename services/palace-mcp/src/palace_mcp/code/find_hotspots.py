@@ -50,7 +50,7 @@ async def find_hotspots(
     top_n: int = 20,
     min_score: float = 0.0,
     path_prefix: str | None = None,
-    include_deprecated: bool = True,
+    include_deprecated: bool = False,
 ) -> dict[str, Any]:
     if project and bundle:
         return _error(

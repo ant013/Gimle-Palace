@@ -46,7 +46,7 @@ async def list_functions(
     project: str | None = None,
     bundle: str | None = None,
     min_ccn: int = 0,
-    include_deprecated: bool = True,
+    include_deprecated: bool = False,
 ) -> dict[str, Any]:
     if project and bundle:
         return _error(
