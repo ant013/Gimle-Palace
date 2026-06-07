@@ -31,6 +31,7 @@ from graphiti_core import Graphiti
 from graphiti_core.edges import EntityEdge
 from graphiti_core.nodes import EntityNode
 
+from palace_mcp.code.edges import KNOWN_NON_CALL_EDGES
 from palace_mcp import code_router
 from palace_mcp.extractors.base import (
     BaseExtractor,
@@ -100,20 +101,7 @@ _SYMBOL_KINDS: dict[str, str] = {
 
 # CM edge types that must NOT be projected into Graphiti
 _SKIPPED_CM_EDGES: frozenset[str] = frozenset(
-    {
-        "THROWS",
-        "READS",
-        "WRITES",
-        "HTTP_CALLS",
-        "ASYNC_CALLS",
-        "USES_TYPE",
-        "IMPLEMENTS",
-        "INHERITS",
-        "USAGE",
-        "TESTS",
-        "FILE_CHANGES_WITH",
-        "DEFINES_METHOD",
-    }
+    KNOWN_NON_CALL_EDGES - {"CONTAINS", "DEFINES", "HANDLES", "IMPORTS"}
 )
 
 # Projection rules table — consumed by unit tests for coverage checks
