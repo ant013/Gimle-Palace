@@ -1,0 +1,22 @@
+{
+  "results": [
+    {
+      "node": "Sources/Wallet/HDWallet.swift",
+      "qualified_name": "BitcoinCore.HDWallet",
+      "label": "File",
+      "file": "Sources/Wallet/HDWallet.swift",
+      "start_line": 1,
+      "end_line": 42,
+      "match_lines": [
+        12
+      ]
+    }
+  ],
+  "raw_matches": [],
+  "directories": {
+    "Sources/Wallet/": 1
+  },
+  "total_grep_matches": 1,
+  "total_results": 1,
+  "raw_match_count": 0
+}

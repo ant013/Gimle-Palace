@@ -52,6 +52,7 @@ dev-dependencies = [
 asyncio_mode = "auto"
 markers = [
     "integration: tests requiring external services (Neo4j, running MCP server)",
+    "live_namespace: tests targeting live namespace resolution substrates",
     "slow: tests >30s (excluded from CI; run nightly or manually on iMac)",
     "wire: MCP wire-contract tests requiring running palace-mcp transport",
     "requires_scip_typescript: tests requiring ts-mini-project/index.scip fixture",
