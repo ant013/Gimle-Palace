@@ -62,7 +62,7 @@ Acceptance criteria:
 - Native `fallback_to_cm` sentinel invokes CM exactly once when CM is available.
 - Native terminal errors do not fall through to CM.
 - CM unavailable returns `cm_fallback_unavailable` for CM-only/unserved calls.
-- `search_code` native is not implemented in this slice.
+- Spec AC-6: `palace.code.search_code(project="uw-ios-baseline", pattern="HD")` returns `{ok: false, error_code: "phase2_required"}` when no CM substrate can serve it; native `search_code` is not implemented in this slice.
 - `detect_changes.since` accepts ISO/approxidate examples and rejects malformed values.
 - Edge registry test fails for unclassified relationship types.
 - `passthrough.dispatch` is asserted by `caplog`.
@@ -72,6 +72,7 @@ Verification:
 - `cd services/palace-mcp && uv run ruff format --check`
 - `cd services/palace-mcp && uv run mypy src/`
 - `cd services/palace-mcp && uv run pytest tests/code/test_passthrough_dispatch.py tests/code/test_native_detect_changes.py tests/code/test_edges_registry.py`
+  - Includes AC-6 coverage for the `search_code` `phase2_required` response on `uw-ios-baseline` when CM is unavailable.
 - `cd services/palace-mcp && uv run pytest`
 
 ## Phase 1.1+1.2: `query_graph` and `get_code_snippet`
@@ -97,6 +98,7 @@ Acceptance criteria:
 - `query_graph` accepts scoped read queries and returns rows/columns/truncation metadata.
 - Write/admin queries are rejected before driver execution where possible.
 - Scope-less and partially scoped multi-MATCH queries return `scope_predicate_required`.
+- Spec AC-19: string-literal write words such as `"CREATE"` are not rejected by the write/admin deny-list and run as reads.
 - Byte and row caps return `truncated_reason`.
 - `cypher_error` redacts stack/schema/path details.
 - `get_code_snippet` returns `approximate_function_match`, `approximate_window`, or `file_head` as appropriate.
@@ -108,6 +110,7 @@ Verification:
 - `cd services/palace-mcp && uv run ruff format --check`
 - `cd services/palace-mcp && uv run mypy src/`
 - `cd services/palace-mcp && uv run pytest tests/code/test_native_query_graph.py tests/code/test_native_get_code_snippet.py`
+  - Includes AC-19 coverage for read queries containing `"CREATE"` inside a string literal.
 - `cd services/palace-mcp && uv run pytest`
 
 ## Phase 1.4: `trace_call_path`
@@ -275,4 +278,3 @@ After plan-first review approval, create these child issues:
 7. GIM-1519 Phase 1.8 - Runbook/list_passthrough_projects, assigned to CXInfraEngineer, blocked by item 1 for implementation and by items 2-6 for final text.
 
 Do not create child issues before CodeReviewer approves this plan. Comments are events; the plan file is the source of truth for slice scope.
-
