@@ -154,6 +154,39 @@ class DeadCodeExtractor(BaseExtractor):
                 outcome=ExtractorOutcome.MISSING_INPUT,
                 message=f"no Symbol nodes for group_id={ctx.group_id}",
             )
+        # Pre-flight: dead_code BFS needs Symbol→Symbol call edges
+        # (CALLS, REFERENCES, EXTENDS, CONFORMS_TO, EXTENSION_OF, EXISTENTIAL_USE).
+        # These are populated by codebase_memory_bridge. If a project has many
+        # Symbol nodes but zero edges, the algorithm degenerates: every symbol
+        # is unreachable from every seed, so all N symbols are classified dead.
+        # build_findings then iterates over N entries. On native-only ingest of
+        # uw-ios-baseline this hit the 3600 s extractor timeout with N=250 595
+        # and edges=0. Skip early with a clear message instead of stalling.
+        if not graph.edges:
+            await write_checkpoint(
+                driver,
+                run_id=ctx.run_id,
+                project=ctx.project_slug,
+                phase="phase1_defs",
+                expected_doc_count=len(graph.symbols),
+            )
+            ctx.logger.warning(
+                "dead_code: %d Symbol nodes but 0 call/reference edges for "
+                "group_id=%s — run codebase_memory_bridge first to materialize "
+                "CALLS/REFERENCES/EXTENDS/CONFORMS_TO/EXTENSION_OF/EXISTENTIAL_USE "
+                "edges; dead_code BFS is meaningless without them",
+                len(graph.symbols),
+                ctx.group_id,
+            )
+            return ExtractorStats(
+                outcome=ExtractorOutcome.MISSING_INPUT,
+                message=(
+                    f"{len(graph.symbols)} Symbol nodes but 0 call/reference "
+                    f"edges for group_id={ctx.group_id} — run "
+                    "codebase_memory_bridge first to materialize the SCIP "
+                    "call graph; dead_code BFS is meaningless without edges"
+                ),
+            )
         await write_checkpoint(
             driver,
             run_id=ctx.run_id,
