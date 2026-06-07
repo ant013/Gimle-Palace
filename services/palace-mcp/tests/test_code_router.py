@@ -137,7 +137,7 @@ class TestToolRegistration:
             )
 
     def test_read_tools_expose_include_deprecated_default(self) -> None:
-        """Phase 4a CM-backed read tools advertise include_deprecated=true."""
+        """Phase 4b CM-backed read tools advertise include_deprecated=false."""
         stub_tool, mcp, _ = self._make_stub_tool()
         from palace_mcp.code_router import register_code_tools
 
@@ -146,7 +146,7 @@ class TestToolRegistration:
             tool = mcp._tool_manager.get_tool(name)
             include_deprecated = tool.parameters["properties"]["include_deprecated"]
             assert include_deprecated["type"] == "boolean"
-            assert include_deprecated["default"] is True
+            assert include_deprecated["default"] is False
 
 
 class TestPassthroughSerialization:
@@ -174,7 +174,7 @@ class TestPassthroughSerialization:
 
         mock_session.call_tool.assert_called_once_with(
             "search_graph",
-            arguments={"name_pattern": "main", "include_deprecated": True},
+            arguments={"name_pattern": "main", "include_deprecated": False},
         )
 
         _set_cm_session(None)
@@ -218,7 +218,7 @@ class TestPassthroughSerialization:
         assert captured["arguments"] == {
             "name_pattern": "register_code_tools",
             "project": "repos-gimle",
-            "include_deprecated": True,
+            "include_deprecated": False,
         }
 
         _set_cm_session(None)
@@ -256,7 +256,7 @@ class TestPassthroughSerialization:
         assert captured["arguments"] == {
             "name_pattern": "register_code_tools",
             "project": None,
-            "include_deprecated": True,
+            "include_deprecated": False,
         }
 
         _set_cm_session(None)
@@ -337,7 +337,7 @@ class TestPassthroughSerialization:
         assert captured["arguments"] == {
             "projects": ["repos-gimle", "repos-evm-kit"],
             "name_pattern": "main",
-            "include_deprecated": True,
+            "include_deprecated": False,
         }
 
         _set_cm_session(None)

@@ -130,7 +130,7 @@ def _open_schema_for_tool(cm_tool_name: str) -> dict[str, Any]:
         "properties": {
             "include_deprecated": {
                 "type": "boolean",
-                "default": True,
+                "default": False,
             }
         },
         "additionalProperties": True,
@@ -259,7 +259,7 @@ def _register_passthrough(
         )
         arguments = dict(kwargs)
         if cm_tool_name in _READ_FILTER_DEFAULT_TOOLS:
-            arguments.setdefault("include_deprecated", True)
+            arguments.setdefault("include_deprecated", False)
         normalized = await _normalize_project_args(arguments)
         if "error_code" in normalized:
             return normalized
