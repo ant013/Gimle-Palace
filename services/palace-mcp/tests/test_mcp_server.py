@@ -76,6 +76,7 @@ class TestCodeToolRegistration:
             "palace.code.get_code_snippet",
             "palace.code.get_snippet_rich",
             "palace.code.list_functions",
+            "palace.code.list_passthrough_projects",
             "palace.code.manage_adr",
             "palace.code.query_graph",
             "palace.code.search_code",
