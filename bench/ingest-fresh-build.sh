@@ -59,7 +59,7 @@ resolve_scheme() {
 
     if [[ "$scheme" == "AUTO_UW_IOS" ]]; then
         resolve_uw_ios_scheme "$repo_dir"
-        return 0
+        return $?
     fi
 
     printf '%s\n' "$scheme"

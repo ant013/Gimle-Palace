@@ -31,6 +31,21 @@ assert_scheme() {
     fi
 }
 
+assert_resolution_failure() {
+    local list_file=$1
+    local actual=""
+
+    export MOCK_XCODEBUILD_LIST="$list_file"
+    if actual=$(resolve_scheme "AUTO_UW_IOS" "$tmpdir/repo" 2>"$tmpdir/error.txt"); then
+        echo "expected resolver failure, got '$actual'" >&2
+        return 1
+    fi
+    if ! grep -q "unable to resolve unstoppable-wallet-ios scheme" "$tmpdir/error.txt"; then
+        echo "expected resolver error output" >&2
+        return 1
+    fi
+}
+
 cat >"$tmpdir/production.txt" <<'EOF'
 Information about workspace "Wallet":
     Schemes:
@@ -50,8 +65,15 @@ Information about workspace "Wallet":
         UnstoppableWallet
 EOF
 
+cat >"$tmpdir/unknown.txt" <<'EOF'
+Information about workspace "Wallet":
+    Schemes:
+        SomeOtherScheme
+EOF
+
 assert_scheme "Production" "$tmpdir/production.txt"
 assert_scheme "Development" "$tmpdir/development.txt"
 assert_scheme "UnstoppableWallet" "$tmpdir/legacy.txt"
+assert_resolution_failure "$tmpdir/unknown.txt"
 
 echo "ok"
