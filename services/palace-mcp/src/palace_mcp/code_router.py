@@ -26,6 +26,8 @@ from mcp.types import CallToolResult, TextContent
 from pydantic import ConfigDict
 
 from palace_mcp.code.native_detect_changes import FALLBACK_TO_CM, native_detect_changes
+from palace_mcp.code.native_get_code_snippet import native_get_code_snippet
+from palace_mcp.code.native_query_graph import native_query_graph
 from palace_mcp.code.namespace import resolve as resolve_namespace
 
 logger = logging.getLogger(__name__)
@@ -228,7 +230,8 @@ _PASSTHROUGH_TOOLS: dict[str, PassthroughEntry] = {
         "Trace function call chains (inbound/outbound/both)."
     ),
     "query_graph": PassthroughEntry(
-        "Pass through a caller-supplied Cypher-like query against the code graph."
+        "Pass through a caller-supplied Cypher-like query against the code graph.",
+        native_handler=native_query_graph,
     ),
     "detect_changes": PassthroughEntry(
         "Detect uncommitted changes mapped to symbols.",
@@ -238,7 +241,8 @@ _PASSTHROUGH_TOOLS: dict[str, PassthroughEntry] = {
         "Get project architecture: languages, packages, entry points, routes."
     ),
     "get_code_snippet": PassthroughEntry(
-        "Get source code for a qualified symbol name."
+        "Get source code for a qualified symbol name.",
+        native_handler=native_get_code_snippet,
     ),
     "search_code": PassthroughEntry(
         "Grep-like code search across indexed repositories.",
