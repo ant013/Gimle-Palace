@@ -26,6 +26,7 @@ from mcp.types import CallToolResult, TextContent
 from pydantic import ConfigDict
 
 from palace_mcp.code.native_detect_changes import FALLBACK_TO_CM, native_detect_changes
+from palace_mcp.code.native_get_architecture import native_get_architecture
 from palace_mcp.code.native_get_code_snippet import native_get_code_snippet
 from palace_mcp.code.native_query_graph import native_query_graph
 from palace_mcp.code.namespace import resolve as resolve_namespace
@@ -238,7 +239,8 @@ _PASSTHROUGH_TOOLS: dict[str, PassthroughEntry] = {
         native_handler=native_detect_changes,
     ),
     "get_architecture": PassthroughEntry(
-        "Get project architecture: languages, packages, entry points, routes."
+        "Get project architecture: languages, packages, entry points, routes.",
+        native_handler=native_get_architecture,
     ),
     "get_code_snippet": PassthroughEntry(
         "Get source code for a qualified symbol name.",
