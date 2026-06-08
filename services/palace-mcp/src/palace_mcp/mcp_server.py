@@ -163,6 +163,9 @@ def set_default_group_id(group_id: str) -> None:
 
 # Server start time for uptime_seconds calculation.
 _start_time: float = time.monotonic()
+_code_loaded_at: str = (
+    datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+)
 
 # Pattern #21: track registered tool names for startup uniqueness assertion.
 _registered_tool_names: list[str] = []
@@ -192,6 +195,7 @@ def assert_unique_tool_names(names: list[str]) -> None:
 class HealthStatusResponse(BaseModel):
     neo4j: Literal["reachable", "unreachable"]
     git_sha: str
+    code_loaded_at: str
     uptime_seconds: int
 
 
@@ -484,10 +488,10 @@ def _tool(name: str, description: str) -> Callable[[_F], _F]:
 
 @_tool(
     name="palace.health.status",
-    description="Return Neo4j reachability, git SHA, and server uptime.",
+    description="Return Neo4j reachability, git SHA, code load time, and server uptime.",
 )
 async def palace_health_status() -> HealthStatusResponse:
-    """Check Palace service health: Neo4j connectivity, git revision, uptime."""
+    """Check Palace service health: Neo4j connectivity, git revision, code load time, uptime."""
     neo4j_status: Literal["reachable", "unreachable"] = "unreachable"
     if _driver is not None:
         try:
@@ -500,6 +504,7 @@ async def palace_health_status() -> HealthStatusResponse:
     return HealthStatusResponse(
         neo4j=neo4j_status,
         git_sha=os.environ.get("PALACE_GIT_SHA", "unknown"),
+        code_loaded_at=_code_loaded_at,
         uptime_seconds=int(time.monotonic() - _start_time),
     )
 
