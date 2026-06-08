@@ -1,0 +1,5 @@
+In the unstoppable-wallet-ios codebase, find where instances of
+`MoneroAdapter` are constructed (where it is `init`-ed) and explain what
+gives it its dependencies (constructor injection? factory? DI container?).
+
+Reference the actual class names involved.

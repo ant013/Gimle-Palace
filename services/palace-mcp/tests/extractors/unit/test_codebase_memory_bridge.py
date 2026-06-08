@@ -874,3 +874,58 @@ def test_health_bridge_staleness_warning() -> None:
     assert info.staleness_warning is True
     assert info.cm_index_freshness_sec is not None
     assert info.cm_index_freshness_sec > _BRIDGE_STALENESS_THRESHOLD_S
+
+
+# ---------------------------------------------------------------------------
+# Slug-regex acceptance (regression for "Unsafe project slug for Cypher")
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "cm_name",
+    [
+        # Container-path form (lowercase, all the original chars).
+        "repos-gimle",
+        "repos-baseline-uw-baseline-871c0e8",
+        # Host-path form (mixed case + dots in component names) — the wild
+        # CM names recorded in production. The original regex
+        # `^[a-z0-9_\\-/]+$` rejected these, breaking `codebase_memory_bridge`
+        # on native dev-Mac ingest of uw-ios-baseline.
+        "Users-ant013-Ios-HorizontalSystems-EvmKit.Swift",
+        "Users-ant013-Ios-uw-baseline-871c0e8",
+        "Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios",
+        # Tantivy sandbox / private-tmp variants.
+        "private-tmp-gimle-gim313-pr185-services-palace-mcp-tests-fixtures-sandbox-repo",
+    ],
+)
+def test_assert_safe_slug_accepts_wild_cm_project_names(cm_name: str) -> None:
+    """The CM-name regex must accept every CM project name that the sidecar
+    actually uses (mixed case host paths + dots in component names)."""
+    from palace_mcp.extractors.codebase_memory_bridge import _assert_safe_slug
+
+    # Should not raise.
+    _assert_safe_slug(cm_name)
+
+
+@pytest.mark.parametrize(
+    "bad_slug",
+    [
+        "name with space",  # space — could close string literal
+        "name'with'quote",  # single quote — closes Cypher string
+        'name"with"quote',  # double quote — closes Cypher string
+        "name;with;semi",  # semicolon — separates statements
+        "name\nwith\nnewline",  # newline — terminates Cypher
+        "name\twith\ttab",  # tab — whitespace
+        "",  # empty
+        "name with $param",  # $ — Cypher param marker
+        "name`backtick",  # backtick — label/identifier escape
+    ],
+)
+def test_assert_safe_slug_rejects_cypher_unsafe_chars(bad_slug: str) -> None:
+    """Defense-in-depth: characters that could escape a Cypher string literal
+    or otherwise smuggle syntax must still be rejected after the regex widening."""
+    from palace_mcp.extractors.base import ExtractorConfigError
+    from palace_mcp.extractors.codebase_memory_bridge import _assert_safe_slug
+
+    with pytest.raises(ExtractorConfigError):
+        _assert_safe_slug(bad_slug)

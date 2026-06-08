@@ -10,7 +10,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
 
-from palace_mcp.code_composite import _cm_project_to_slug
 from palace_mcp.errors import handle_tool_error
 
 
@@ -77,6 +76,7 @@ def register_code_idiom_tools(
         project: str | None = None,
         module: str | None = None,
         max_outliers: int = 20,
+        include_deprecated: bool = False,
     ) -> dict[str, Any]:
         from palace_mcp.mcp_server import get_driver
 
@@ -100,7 +100,7 @@ def register_code_idiom_tools(
                 "message": str(e),
             }
 
-        resolved_project = _cm_project_to_slug(req.project or default_project)
+        resolved_project = (req.project or default_project).removeprefix("repos-")
         project_id = f"project/{resolved_project}"
         module_param = req.module  # None passes through to Cypher as NULL
 

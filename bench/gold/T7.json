@@ -1,0 +1,22 @@
+{
+  "task": "T7",
+  "description": "Add EUR fiat currency to MarketKit",
+  "must_contain_regex": [
+    "(EUR|euro|Euro)",
+    "€"
+  ],
+  "any_n_of_regex": {
+    "n": 2,
+    "items": [
+      "MarketKit",
+      "(currencies|Currency)",
+      "(CurrencyManager|FiatCurrency)",
+      "(picker|Picker|currencies\\.json)",
+      "Localizable"
+    ]
+  },
+  "must_not_contain_regex": [
+    "git\\s+commit\\s",
+    "git\\s+push\\s"
+  ]
+}

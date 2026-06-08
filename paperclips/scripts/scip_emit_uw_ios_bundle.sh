@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 DEFAULT_MANIFEST="$REPO_ROOT/services/palace-mcp/scripts/uw-ios-bundle-manifest.json"
 DEFAULT_EMIT_SCRIPT="$REPO_ROOT/paperclips/scripts/scip_emit_swift_kit.sh"
+DEFAULT_APP_EMIT_SCRIPT="$REPO_ROOT/paperclips/scripts/scip_emit_uw_ios_app.sh"
 DEFAULT_LOCAL_REPO_BASE="${HS_REPO_ROOT:-/Users/Shared/Ios/HorizontalSystems}"
 DEFAULT_REMOTE_HOST="${IMAC_HOST:-imac-ssh.ant013.work}"
 DEFAULT_REMOTE_BASE="${IMAC_HS_PATH:-/Users/Shared/Ios/HorizontalSystems}"
@@ -31,6 +32,7 @@ Options:
                           (default: /Users/Shared/Ios/HorizontalSystems)
   --manifest <path>       Bundle manifest to iterate
   --emit-script <path>    Per-member helper script to invoke
+  --app-emit-script <p>   Helper for uw-ios-app workspace emission
   --remote-host <host>    SSH host for the iMac
   --remote-base <path>    Remote base dir that contains bundle repos
   --emitter-dir <path>    Forwarded to scip_emit_swift_kit.sh
@@ -201,6 +203,7 @@ PY
 LOCAL_REPO_BASE="$DEFAULT_LOCAL_REPO_BASE"
 MANIFEST_PATH="$DEFAULT_MANIFEST"
 EMIT_SCRIPT="$DEFAULT_EMIT_SCRIPT"
+APP_EMIT_SCRIPT="$DEFAULT_APP_EMIT_SCRIPT"
 REMOTE_HOST="$DEFAULT_REMOTE_HOST"
 REMOTE_BASE="$DEFAULT_REMOTE_BASE"
 SCOPE="$DEFAULT_SCOPE"
@@ -244,6 +247,15 @@ while [[ $# -gt 0 ]]; do
         --emit-script)
             [[ $# -ge 2 ]] || die "--emit-script requires a value"
             EMIT_SCRIPT="$2"
+            shift 2
+            ;;
+        --app-emit-script=*)
+            APP_EMIT_SCRIPT="${1#*=}"
+            shift
+            ;;
+        --app-emit-script)
+            [[ $# -ge 2 ]] || die "--app-emit-script requires a value"
+            APP_EMIT_SCRIPT="$2"
             shift 2
             ;;
         --remote-host=*)
@@ -304,6 +316,7 @@ require_command python3
 validate_scope "$SCOPE"
 [[ -f "$MANIFEST_PATH" ]] || die "manifest not found: $MANIFEST_PATH"
 [[ -f "$EMIT_SCRIPT" ]] || die "emit helper not found: $EMIT_SCRIPT"
+[[ -f "$APP_EMIT_SCRIPT" ]] || die "app emit helper not found: $APP_EMIT_SCRIPT"
 
 if [[ "$SCOPE" == "smoke" ]]; then
     MEMBERS_TSV="$(scope_members "$MANIFEST_PATH" "$SCOPE" "${SMOKE_MEMBERS[@]}")"
@@ -337,14 +350,25 @@ while IFS=$'\t' read -r slug relative_path manifest_match; do
     member_log_file="$RUN_LOG_DIR/${slug}.log"
 
     if local_repo_path="$(resolve_local_repo_path "$LOCAL_REPO_BASE" "$relative_path")"; then
-        cmd=(
-            bash "$EMIT_SCRIPT" "$slug"
-            --repo-path "$local_repo_path"
-            --remote-relative-path "$relative_path"
-            --manifest "$MANIFEST_PATH"
-            --remote-host "$REMOTE_HOST"
-            --remote-base "$REMOTE_BASE"
-        )
+        if [[ "$slug" == "uw-ios-app" ]]; then
+            cmd=(
+                bash "$APP_EMIT_SCRIPT"
+                --repo-path "$local_repo_path"
+                --slug "$slug"
+                --relative-path "$relative_path"
+                --remote-host "$REMOTE_HOST"
+                --remote-base "$REMOTE_BASE"
+            )
+        else
+            cmd=(
+                bash "$EMIT_SCRIPT" "$slug"
+                --repo-path "$local_repo_path"
+                --remote-relative-path "$relative_path"
+                --manifest "$MANIFEST_PATH"
+                --remote-host "$REMOTE_HOST"
+                --remote-base "$REMOTE_BASE"
+            )
+        fi
         if [[ -n "$EMITTER_DIR" ]]; then
             cmd+=(--emitter-dir "$EMITTER_DIR")
         fi

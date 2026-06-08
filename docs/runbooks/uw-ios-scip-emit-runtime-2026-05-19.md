@@ -21,7 +21,7 @@ option A: keep M1.2 kit-only and open a follow-up issue for an
 
 On iMac, acceptance evidence for M1.2 is:
 
-1. `paperclips/scripts/scip_emit_uw_ios_bundle.sh --dry-run --scope=smoke`
+1. `paperclips/scripts/scip_emit_xcode_bundle.sh --manifest services/palace-mcp/scripts/uw-ios-bundle-manifest.json --dry-run --scope=smoke`
    runs cleanly across the 4 approved SwiftPM kits.
 2. The wrapper emits aggregate JSON with per-kit status.
 3. Real wall-clock runtime for actual SCIP generation is **deferred to the
@@ -32,14 +32,18 @@ On iMac, acceptance evidence for M1.2 is:
 
 ```bash
 bash -n paperclips/scripts/scip_emit_swift_kit.sh
-bash -n paperclips/scripts/scip_emit_uw_ios_bundle.sh
-bash paperclips/scripts/scip_emit_uw_ios_bundle.sh --dry-run --scope=smoke
+bash -n paperclips/scripts/scip_emit_xcode_bundle.sh
+bash paperclips/scripts/scip_emit_xcode_bundle.sh \
+  --manifest services/palace-mcp/scripts/uw-ios-bundle-manifest.json \
+  --dry-run --scope=smoke
 ```
 
 ## iMac Smoke Command
 
 ```bash
-bash paperclips/scripts/scip_emit_uw_ios_bundle.sh --dry-run --scope=smoke
+bash paperclips/scripts/scip_emit_xcode_bundle.sh \
+  --manifest services/palace-mcp/scripts/uw-ios-bundle-manifest.json \
+  --dry-run --scope=smoke
 ```
 
 ## Measured iMac Smoke Result
@@ -98,7 +102,9 @@ Macbook. That is the correct host for real Swift/Xcode index generation.
 Operator command:
 
 ```bash
-bash paperclips/scripts/scip_emit_uw_ios_bundle.sh --scope=smoke
+bash paperclips/scripts/scip_emit_xcode_bundle.sh \
+  --manifest services/palace-mcp/scripts/uw-ios-bundle-manifest.json \
+  --scope=smoke
 ```
 
 Expected outcome:
@@ -112,7 +118,7 @@ wall-clock runtime and the final JSON payload to this runbook.
 
 ## Follow-Up Required
 
-- `uw-ios-app` requires a separate helper, e.g. `scip_emit_uw_ios_app.sh`,
+- `uw-ios-app` requires a separate helper (`scip_emit_xcode_app.sh`),
   built around the Xcode workspace at
   `/Users/Shared/Ios/unstoppable-wallet-ios/UnstoppableWallet/UnstoppableWallet.xcworkspace`.
 - Full-bundle inventory remains broader than this M1.2 smoke slice. The

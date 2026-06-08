@@ -30,6 +30,7 @@ class BaseExtractor(ABC):
     # Schema declaration — aggregated by ensure_extractors_schema
     constraints: ClassVar[list[str]] = []
     indexes: ClassVar[list[str]] = []
+    timeout_s: ClassVar[float | None] = None
 
     @abstractmethod
     async def run(
@@ -63,6 +64,8 @@ class ExtractorRunContext:
     run_id: str
     duration_ms: int
     logger: logging.Logger
+    scip_path: Path | None = None
+    companion_run_id: str | None = None
 
 
 class ExtractorOutcome(StrEnum):

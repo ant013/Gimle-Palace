@@ -1,0 +1,165 @@
+Note: Palace MCP was unreachable for the full session — operating in `[DEGRADED-PALACE]` mode using grep + Read on the on-disk worktree. The analog-discoverer/choice-adversary subagents and Phases D-H are not applicable: this is an explain/trace task, not an implementation. Findings below are anchored to file:line in /Users/ant013/Ios/bench-gimle.
+
+## End-to-end flow: tapping "Send" on an Ethereum send screen
+
+The user actually performs two distinct "send" gestures. The first is a button tap on the pre-send composition screen; the second is the slide gesture on the confirmation screen. The signed transaction is produced after the second gesture.
+
+### 1. Composition screen — `PreSendView` (yellow "Next/Send" button)
+
+File: `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Modules/SendNew/PreSendView.swift`
+
+- The yellow button is `buttonView()` at line 181. Its `Button(action:)` (line 184) reads `viewModel.sendData` and pushes a `ConfirmationData(sendData:address:)` onto the local `NavigationPath` (iOS 17+, line 189-192) or, on older iOS, calls `presentRegularSendView(...)` (line 194 / definition line 229) which presents a `RegularSendViewWrapper` modal.
+- The `sendData` on the view-model was built by `EvmPreSendHandler.sendData(amount:address:memo:)` at `Unstoppable/Modules/SendNew/EvmPreSendHandler.swift:55`. It calls `adapter.transactionData(amount:address:)` on the `ISendEthereumAdapter` to get an `EvmKit.TransactionData(to:value:input:)` and wraps it as `SendData.evm(blockchainType:transactionData:token:)`.
+
+So when the user leaves the pre-send screen, the work-product is a `SendData.evm` value carrying `to / value / data` (data is empty for a native ETH transfer, ABI-encoded `transfer(address,uint256)` calldata for ERC-20s).
+
+### 2. Confirmation screen — `RegularSendView` (SlideButton "Slide to Send")
+
+File: `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Modules/SendNew/RegularSendView.swift`
+
+- On construction (line 11), `SendViewModel(sendData:address:)` is instantiated; in its `init` at `SendViewModel.swift:51`, `SendHandlerFactory.handler(sendData:)` (`SendHandlerFactory.swift:5`) maps `.evm(...)` to `EvmSendHandler.instance(...)` (or `AaSendHandler.instance(...)` when the active account is `.passkeyOwned`). It also creates an `EvmTransactionService` via `TransactionServiceFactory.transactionService(baseToken:initialTransactionSettings:)`.
+- `SendViewModel.sync()` (line 150) runs an async pipeline: `transactionService.sync()` fetches the recommended `GasPrice` (EIP-1559 via `EIP1559GasPriceProvider` or `LegacyGasPriceProvider`, see `EvmTransactionService.swift:105-114`) and resolves nonces; then `handler.sendData(transactionSettings:)` is called.
+- `EvmSendHandler.sendData(transactionSettings:)` (`EvmSendHandler.swift:25`) calls `EvmFeeEstimator.estimateFee(...)` (`EvmFeeEstimator.swift:8`) which calls `EvmKit.Kit.fetchEstimateGas(...)`, applies a 10% surcharge (`surchargedGasLimit`), optionally adds rollup L1 fee via `L1FeeProvider`, and returns an `EvmFeeData`. The handler returns an `EvmSendData(decoration:transactionData:transactionError:gasPrice:evmFeeData:nonce:)`.
+- When `SendViewModel.state == .success` and `canSend == true`, the body in `RegularSendView` (line 28-36) shows `SlideButton(...)` whose `action: { try await sendViewModel.send() }` is the trigger.
+
+### 3. The slide gesture — `SlideButton.onEnded`
+
+File: `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/UserInterface/SwiftUI/SlideButton/SlideButton.swift`
+
+- The `DragGesture().onEnded` closure (line 99) decides the swipe completed (line 106-108), then spawns `Task { try await callback() }` (line 109-116). `callback` is the closure captured in `init` (line 17-19) — i.e. `sendViewModel.send()`.
+- On success: `swipeState = .success`, after a 0.4s delay the `completion` closure runs (line 155-156), which calls `onSuccess()` passed by `RegularSendView` — `HudHelper.instance.show(banner: .sent)` and `onDismiss()`.
+
+### 4. View-model orchestration — `SendViewModel.send()`
+
+File: `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Modules/SendNew/SendViewModel.swift:188`
+
+```
+func send() async throws {
+    ...
+    await set(sending: true)
+    _ = try await handler.send(data: sendData)
+    if let address { try? recentAddressStorage.save(...) }
+}
+```
+
+It delegates to `handler.send(data:)` on the `ISendHandler` protocol (`ISendHandler.swift:12`).
+
+### 5. Domain handler — `EvmSendHandler.send(data:)`
+
+File: `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Modules/SendNew/EvmSendHandler.swift:75`
+
+Down-casts `data` to `EvmSendData`, unwraps `transactionData`, `gasPrice`, `gasLimit` (= `evmFeeData.surchargedGasLimit`), then calls:
+
+```
+try await evmKitWrapper.send(
+    transactionData: transactionData,
+    gasPrice: gasPrice,
+    gasLimit: gasLimit,
+    privateSend: false,
+    nonce: data.nonce
+)
+```
+
+### 6. Wallet wiring — `EvmKitWrapper.send`
+
+File: `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Core/Managers/EvmKitManager.swift:216`
+
+```
+func send(...) async throws -> FullTransaction {
+    guard let signer else { throw SignerError.signerNotSupported }
+    let rawTransaction = try await evmKit.fetchRawTransaction(
+        transactionData: transactionData, gasPrice: gasPrice,
+        gasLimit: gasLimit, nonce: nonce)
+    let signature = try signer.signature(rawTransaction: rawTransaction)
+    if privateSend, let merkleTransactionAdapter {
+        return try await merkleTransactionAdapter.send(rawTransaction:..., signature:...)
+    }
+    return try await evmKit.send(rawTransaction: rawTransaction, signature: signature)
+}
+```
+
+The wrapper's `signer` is built in `EvmKitManager._evmKitWrapper(account:blockchainType:)` (`EvmKitManager.swift:51`). For `.mnemonic` accounts it derives an HD private key via `Signer.instance(seed:chain:)`; for `.evmPrivateKey(data)` it goes straight to `Signer.instance(privateKey:chain:)`. For `.evmAddress` / `.passkeyOwned`, no `signer` is created and the wrapper's send path throws `SignerError.signerNotSupported` — the passkey flow is handled by a separate `AaSendHandler` (selected at `SendHandlerFactory.swift:9-11`) using ERC-4337 account abstraction.
+
+### 7. RawTransaction assembly — `EvmKit.Kit.fetchRawTransaction`
+
+File: `/Users/ant013/Ios/HorizontalSystems/EvmKit.Swift/Sources/EvmKit/Core/Kit.swift:148-162`
+
+If no nonce was set in the UI, it resolves `nonceProvider.nonce(defaultBlockParameter: .pending)`, then returns `RawTransaction(gasPrice:gasLimit:to:value:data:nonce:)`. No signing yet.
+
+### 8. Signing — `Signer.signature` → `TransactionSigner`
+
+Files: `EvmKit.Swift/Sources/EvmKit/Core/Signer/Signer.swift` and `TransactionSigner.swift`
+
+- `Signer.signature(rawTransaction:)` (line 18) forwards to `TransactionSigner.signature(rawTransaction:)`.
+- `TransactionSigner.sign(rawTransaction:)` (`TransactionSigner.swift:14`) branches on the `GasPrice` enum:
+  - `.legacy(legacyGasPrice)` → `signEip155(...)`: RLP-encodes `[nonce, gasPrice, gasLimit, to, value, data, chainId, 0, 0]`, takes `Crypto.sha3(...)`, signs with `Crypto.ellipticSign(hash, privateKey:)` (secp256k1).
+  - `.eip1559(maxFee, maxPriorityFee)` → `signEip1559(...)`: RLP-encodes `[chainId, nonce, maxPriority, maxFee, gasLimit, to, value, data, []]` with a `0x02` type-byte prefix in the SHA-3 input.
+- The 65-byte raw signature is split into `v / r / s` by `signatureLegacy` (line 73, applies EIP-155 `v = recId + 35 + 2·chainId`) or `signatureEip1559` (line 81, raw recId 0/1). Result: a `Signature(v, r, s)` value.
+
+### 9. Broadcast — `EvmKit.Kit.send` → `RpcBlockchain.send`
+
+Files: `EvmKit/Core/Kit.swift:172` and `EvmKit/Api/Core/RpcBlockchain.swift:136-142`
+
+`evmKit.send(rawTransaction:signature:)` calls `blockchain.send(rawTransaction:signature:)`, which:
+
+1. Calls `TransactionBuilder.encode(rawTransaction:signature:)` (`TransactionBuilder.swift:39-79`). For legacy: RLP of `[nonce, gasPrice, gasLimit, to, value, data, v, r, s]`. For 1559: RLP of `[chainId, nonce, maxPriority, maxFee, gasLimit, to, value, data, [], v, r, s]` prefixed with `0x02`. This is the canonical signed-transaction byte string.
+2. Sends `SendRawTransactionJsonRpc(signedTransaction: encoded)` via `syncer.fetch(rpc:)` — this is the `eth_sendRawTransaction` JSON-RPC call against the node configured by `EvmSyncSourceManager`.
+3. Returns a synthesized `Transaction(hash: Crypto.sha3(encoded), ...)` built by `TransactionBuilder.transaction(rawTransaction:signature:)` (`TransactionBuilder.swift:13`).
+
+`Kit.send` then hands the result to `transactionManager.handle(transactions:)` to insert into the local transaction store and returns a `FullTransaction`, which bubbles back through `EvmKitWrapper.send` → `EvmSendHandler.send` → `SendViewModel.send` → `SlideButton`'s success path → `RegularSendView.onSuccess` → `HudHelper.show(banner:.sent)` + dismissal.
+
+### Linear summary (UI → signed bytes on the wire)
+
+1. `PreSendView.buttonView` tap (`PreSendView.swift:184`) navigates to `RegularSendView` carrying a `SendData.evm`.
+2. `SendViewModel.init` (`SendViewModel.swift:51`) builds the `EvmSendHandler` via `SendHandlerFactory.handler` and an `EvmTransactionService`; `sync()` populates gas price, nonce, fee estimate and `EvmSendData`.
+3. User swipes `SlideButton` in `RegularSendView` (`RegularSendView.swift:28`); `SlideButton.onEnded` (`SlideButton.swift:99-116`) runs `Task { try await sendViewModel.send() }`.
+4. `SendViewModel.send` (`SendViewModel.swift:188`) → `EvmSendHandler.send(data:)` (`EvmSendHandler.swift:75`) unwraps the EVM fields.
+5. `EvmKitWrapper.send` (`EvmKitManager.swift:216`) fetches the `RawTransaction` (`EvmKit/Kit.swift:148`) and asks `Signer.signature` (`Signer.swift:18`) for a signature.
+6. `TransactionSigner` (`TransactionSigner.swift:14`) RLP-encodes the unsigned tx (EIP-155 legacy or EIP-1559 typed), SHA-3 hashes it, and `Crypto.ellipticSign`s with the secp256k1 private key derived from the account's mnemonic/private key in `EvmKitManager._evmKitWrapper` (`EvmKitManager.swift:51-72`).
+7. `EvmKit.Kit.send` → `RpcBlockchain.send` (`RpcBlockchain.swift:136-142`) RLP-encodes `RawTransaction + Signature` via `TransactionBuilder.encode` — that byte string IS the signed Ethereum transaction ready to broadcast — and submits it as `eth_sendRawTransaction`.
+
+### Notable branches and side paths
+
+- Passkey-owned (ERC-4337) accounts skip steps 5-7 entirely; `SendHandlerFactory.handler` (`SendHandlerFactory.swift:9-11`) returns `AaSendHandler` which uses a UserOperation pipeline instead of `EvmKitWrapper.send`.
+- "MEV-protected" sends: when `privateSend=true` and `merkleTransactionAdapter != nil`, broadcast goes through `MerkleTransactionAdapter.send` rather than the public RPC (`EvmKitManager.swift:224-226`). The current `EvmSendHandler.send` hard-codes `privateSend: false` (`EvmSendHandler.swift:96`).
+- Legacy in-tree screens still exist (`Modules/SendEvm/*`, `Modules/SendEvmTransaction/*`) but the live entry point from the wallet/transactions UI is the SwiftUI `PreSendView` → `RegularSendView` flow described above. The legacy `SendEvmTransactionService` follows the same final hop (`evmKitWrapper.send`).
+
+--SELF-REPORTED--
+[
+  {
+    "item": "UI entry: SlideButton in RegularSendView triggers async SendViewModel.send()",
+    "covered": true
+  },
+  {
+    "item": "SendViewModel.send() calls handler.send(data:) on ISendHandler",
+    "covered": true
+  },
+  {
+    "item": "EvmSendHandler.send unwraps EvmSendData and calls EvmKitWrapper.send",
+    "covered": true
+  },
+  {
+    "item": "EvmKitWrapper.send fetches RawTransaction via EvmKit.Kit.fetchRawTransaction",
+    "covered": true
+  },
+  {
+    "item": "Signer.signature -> TransactionSigner produces EIP-155 or EIP-1559 signature",
+    "covered": true
+  },
+  {
+    "item": "evmKit.send(rawTransaction:signature:) -> RpcBlockchain encodes and broadcasts via eth_sendRawTransaction",
+    "covered": true
+  },
+  {
+    "item": "Pre-send PreSendView builds SendData.evm and pushes ConfirmationData -> RegularSendView",
+    "covered": true
+  },
+  {
+    "item": "SendHandlerFactory dispatches SendData.evm to EvmSendHandler (or AaSendHandler for passkey)",
+    "covered": true
+  },
+  {
+    "item": "Palace MCP unreachable, degraded to grep/Read substrate",
+    "covered": true
+  }
+]

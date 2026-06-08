@@ -1,0 +1,4 @@
+In the unstoppable-wallet-ios codebase, list every Swift file (relative
+path from repo root) that imports `Foundation` but does NOT import `UIKit`.
+
+Output the file list. No code changes needed.

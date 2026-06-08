@@ -1,0 +1,23 @@
+{
+  "task": "T5",
+  "description": "Architecture of multichain swap via 1Inch",
+  "any_n_of_regex": {
+    "n": 4,
+    "items": [
+      "OneInchKit",
+      "UniswapKit",
+      "SwapModule",
+      "Swap[A-Z][a-zA-Z]*",
+      "(Quote|Quoter|Quotation)",
+      "(Fee|GasPrice|FeeEstimator)",
+      "(Route|Routing|RouteFinder)",
+      "(Provider|RpcProvider|Web3)",
+      "OneInch[A-Z][a-zA-Z]*",
+      "(allowance|approve)"
+    ]
+  },
+  "must_contain_regex": [
+    "(1Inch|OneInch|1inch)",
+    "(swap|Swap)"
+  ]
+}

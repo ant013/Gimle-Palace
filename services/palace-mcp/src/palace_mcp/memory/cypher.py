@@ -8,6 +8,7 @@ named parameters only.
 # Only palace-mcp-specific node types need DDL here.
 CREATE_CONSTRAINTS = [
     "CREATE CONSTRAINT project_slug IF NOT EXISTS FOR (p:Project) REQUIRE p.slug IS UNIQUE",
+    "CREATE CONSTRAINT project_cm_project_name IF NOT EXISTS FOR (p:Project) REQUIRE p.cm_project_name IS UNIQUE",
     # GIM-182: bundle name uniqueness
     "CREATE CONSTRAINT bundle_name IF NOT EXISTS FOR (b:Bundle) REQUIRE b.name IS UNIQUE",
     "CREATE CONSTRAINT analysis_lock_key IF NOT EXISTS FOR (l:AnalysisLock) REQUIRE l.key IS UNIQUE",
@@ -153,6 +154,18 @@ RETURN b.name AS b_name
 LIMIT 1
 """
 
+CHECK_PROJECT_NAMESPACE_CONFLICT = """
+MATCH (p:Project)
+WHERE p.slug <> $slug
+  AND (
+      p.cm_project_name = $slug
+      OR ($cm_project_name IS NOT NULL AND p.slug = $cm_project_name)
+      OR ($cm_project_name IS NOT NULL AND p.cm_project_name = $cm_project_name)
+  )
+RETURN p.slug AS slug, p.cm_project_name AS cm_project_name
+LIMIT 1
+"""
+
 UPSERT_BUNDLE = """
 MERGE (b:Bundle {name: $name})
 ON CREATE SET
@@ -250,6 +263,7 @@ LIMIT 1
 UPSERT_PROJECT = """
 MERGE (p:Project {slug: $slug})
 SET p.group_id            = 'project/' + $slug,
+    p.cm_project_name     = coalesce($cm_project_name, p.cm_project_name),
     p.name                = $name,
     p.tags                = $tags,
     p.language            = $language,
@@ -268,6 +282,7 @@ BOOTSTRAP_PROJECT = """
 MERGE (p:Project {slug: $slug})
 ON CREATE SET
     p.group_id          = 'project/' + $slug,
+    p.cm_project_name   = $cm_project_name,
     p.name              = $name,
     p.tags              = $tags,
     p.language          = $language,
@@ -280,6 +295,7 @@ ON CREATE SET
     p.source_created_at = $now
 ON MATCH SET
     p.group_id          = coalesce(p.group_id, 'project/' + $slug),
+    p.cm_project_name   = coalesce(p.cm_project_name, $cm_project_name),
     p.source            = coalesce(p.source, 'paperclip')
 SET p.source_updated_at = $now
 RETURN p

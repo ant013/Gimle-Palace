@@ -5,13 +5,15 @@ import time
 from collections.abc import AsyncGenerator, Coroutine
 from contextlib import asynccontextmanager
 from importlib.metadata import version
-from typing import Annotated, cast
+from pathlib import Path
+from typing import IO, Annotated, cast
 
 from fastapi import Depends, FastAPI, Request, Response
 from neo4j import AsyncDriver, AsyncGraphDatabase
 from starlette.applications import Starlette
 
 from palace_mcp.adr.schema import ensure_adr_schema
+from palace_mcp.cache import init_cache, init_semaphore
 from palace_mcp.code_router import start_cm_subprocess, stop_cm_subprocess
 from palace_mcp.config import Settings
 from palace_mcp.extractors.schema import ensure_extractors_schema
@@ -20,8 +22,11 @@ from palace_mcp.graphiti_runtime import (
     close_graphiti,
     ensure_graphiti_schema,
 )
+from palace_mcp.embeddings import prewarm_dispatcher
 from palace_mcp.mcp_server import (
+    _write_audit_line,
     build_mcp_asgi_app,
+    set_audit_sink,
     set_default_group_id,
     set_driver,
     set_graphiti,
@@ -73,6 +78,18 @@ async def wait_for_neo4j_connectivity(
     )
 
 
+async def _run_qodo_prewarm() -> None:
+    """Run Qodo pre-warm in a thread; log + record counter on failure but never raise."""
+    t0 = time.monotonic()
+    try:
+        await asyncio.to_thread(prewarm_dispatcher)
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+        logger.info("palace.startup.qodo_prewarm_ok elapsed_ms=%d", elapsed_ms)
+    except Exception as exc:
+        logger.error("palace.startup.qodo_prewarm_failed", exc_info=exc)
+        _write_audit_line("palace.startup.qodo_prewarm_failures", {}, None, 0, str(exc))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     configure_json_logging()
@@ -88,6 +105,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     set_graphiti(graphiti)
     set_settings(settings)
     set_default_group_id(settings.palace_default_group_id)
+    init_cache(settings.palace_cache_max_size, settings.palace_cache_ttl_s)
+    init_semaphore(settings.palace_hydration_sem_limit)
+    audit_file: IO[str] | None = None
+    if settings.palace_audit_sink_path:
+        audit_path = Path(settings.palace_audit_sink_path)
+        audit_path.parent.mkdir(parents=True, exist_ok=True)
+        audit_file = audit_path.open("a", encoding="utf-8")
+        set_audit_sink(audit_file)
+    if settings.palace_qodo_prewarm:
+        await _run_qodo_prewarm()
     if settings.codebase_memory_mcp_binary:
         await start_cm_subprocess(settings.codebase_memory_mcp_binary)
     await wait_for_neo4j_connectivity(driver)
@@ -103,6 +130,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await stop_cm_subprocess()
     await close_graphiti(graphiti)
     await driver.close()
+    if audit_file is not None:
+        audit_file.close()
+        set_audit_sink(None)
 
 
 async def get_neo4j(request: Request) -> AsyncDriver:

@@ -71,6 +71,12 @@ _DEFAULT_MANIFEST_PATH = (
     _REPO_ROOT / "services" / "palace-mcp" / "scripts" / "uw-ios-bundle-manifest.json"
 )
 _DEFAULT_SWIFT_EMITTER_DIR = _REPO_ROOT / "services" / "palace-mcp" / "scip_emit_swift"
+_DEFAULT_SWIFT_KIT_SCIP_SCRIPT = (
+    _REPO_ROOT / "paperclips" / "scripts" / "scip_emit_swift_kit.sh"
+)
+_DEFAULT_UW_IOS_APP_SCIP_SCRIPT = (
+    _REPO_ROOT / "paperclips" / "scripts" / "scip_emit_uw_ios_app.sh"
+)
 
 # Domain agents that receive child audit issues (from AGENTS.md roster)
 _DOMAIN_AGENTS: list[dict[str, str]] = [
@@ -560,19 +566,37 @@ def _git_head_sha(repo_path: Path) -> str:
 
 def _build_macbook_fallback_command(spec: ProjectRuntimeSpec) -> str:
     macbook_repo_path = str(Path(_DEFAULT_MACBOOK_BASE) / spec.relative_path)
-    parts = [
-        "bash",
-        "paperclips/scripts/scip_emit_swift_kit.sh",
-        spec.slug,
-        "--repo-path",
-        macbook_repo_path,
-        "--remote-host",
-        _DEFAULT_REMOTE_HOST,
-        "--remote-base",
-        _DEFAULT_REMOTE_BASE,
-        "--remote-relative-path",
-        spec.relative_path,
-    ]
+    if spec.slug == "uw-ios-app":
+        parts = [
+            "bash",
+            "paperclips/scripts/scip_emit_uw_ios_app.sh",
+            "--repo-path",
+            macbook_repo_path,
+            "--slug",
+            spec.slug,
+            "--relative-path",
+            spec.relative_path,
+            "--container-scip-path",
+            spec.container_scip_path,
+            "--remote-host",
+            _DEFAULT_REMOTE_HOST,
+            "--remote-base",
+            _DEFAULT_REMOTE_BASE,
+        ]
+    else:
+        parts = [
+            "bash",
+            "paperclips/scripts/scip_emit_swift_kit.sh",
+            spec.slug,
+            "--repo-path",
+            macbook_repo_path,
+            "--remote-host",
+            _DEFAULT_REMOTE_HOST,
+            "--remote-base",
+            _DEFAULT_REMOTE_BASE,
+            "--remote-relative-path",
+            spec.relative_path,
+        ]
     return " ".join(shlex.quote(part) for part in parts)
 
 
@@ -597,11 +621,16 @@ def swift_scip_metadata_needs_regeneration(
     if metadata is None:
         return True, "metadata missing or invalid"
     resolved_repo_path = str(repo_path.resolve())
+    expected_package_path = (
+        "Wallet.xcworkspace"
+        if metadata.get("slug") == "uw-ios-app"
+        else "Package.swift"
+    )
     required = {
         "repo_head_sha": repo_head_sha,
         "emitter_name": _SWIFT_SCIP_EMITTER_NAME,
         "emitter_version": _SWIFT_SCIP_EMITTER_VERSION,
-        "package_path": "Package.swift",
+        "package_path": expected_package_path,
         "destination_repo_path": resolved_repo_path,
     }
     for key, expected in required.items():
@@ -652,6 +681,11 @@ def _emit_swift_scip(
     spec: ProjectRuntimeSpec,
     repo_head_sha: str,
 ) -> dict[str, Any]:
+    if spec.slug == "uw-ios-app":
+        return _emit_uw_ios_app_scip(spec=spec, repo_head_sha=repo_head_sha)
+    if spec.parent_mount == "hs":
+        return _emit_swift_kit_scip(spec=spec, repo_head_sha=repo_head_sha)
+
     fallback_command = _build_macbook_fallback_command(spec)
     missing = [
         command for command in ("xcrun", "swift") if shutil.which(command) is None
@@ -749,6 +783,134 @@ def _emit_swift_scip(
     }
 
 
+def _parse_emit_helper_output(stdout: str) -> dict[str, Any]:
+    parsed: dict[str, Any] = {}
+    for line in stdout.splitlines():
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if not key:
+            continue
+        parsed[key] = value.strip()
+    for key in ("size_bytes", "scip_size_bytes"):
+        stored = parsed.get(key)
+        if isinstance(stored, str) and stored.isdigit():
+            parsed[key] = int(stored)
+    return parsed
+
+
+def _emit_swift_kit_scip(
+    *,
+    spec: ProjectRuntimeSpec,
+    repo_head_sha: str,
+) -> dict[str, Any]:
+    del repo_head_sha
+    fallback_command = _build_macbook_fallback_command(spec)
+    output_path = spec.repo_path / "scip" / "index.scip"
+    meta_path = spec.repo_path / "scip" / "index.scip.meta.json"
+    cmd = [
+        "bash",
+        str(_DEFAULT_SWIFT_KIT_SCIP_SCRIPT),
+        spec.slug,
+        "--repo-path",
+        str(spec.repo_path),
+        "--remote-relative-path",
+        spec.relative_path,
+        "--no-remote-copy",
+    ]
+
+    try:
+        result = _run_command(cmd, capture_output=True)
+    except FileNotFoundError as exc:
+        raise ScipEmitToolchainUnsupported(
+            message=f"HorizontalSystems swift_kit SCIP emit failed: {exc}",
+            fallback_command=fallback_command,
+        ) from exc
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or str(exc)).strip()
+        raise ScipEmitToolchainUnsupported(
+            message=f"HorizontalSystems swift_kit SCIP emit failed: {detail}",
+            fallback_command=fallback_command,
+        ) from exc
+
+    if not output_path.exists() or output_path.stat().st_size == 0:
+        raise ScipEmitToolchainUnsupported(
+            message=f"generated SCIP file missing or empty: {output_path}",
+            fallback_command=fallback_command,
+        )
+
+    metadata = _load_scip_metadata(meta_path)
+    if metadata is None:
+        raise ProjectAnalyzeCliError(
+            f"swift_kit emitter did not write metadata: {meta_path}",
+            error_code="missing_scip_metadata",
+        )
+
+    return {
+        "emitted": True,
+        "helper": "swift_kit",
+        "helper_output": _parse_emit_helper_output(result.stdout),
+        "host_scip_path": str(output_path),
+        "meta_path": str(meta_path),
+        "metadata": metadata,
+    }
+
+
+def _emit_uw_ios_app_scip(
+    *,
+    spec: ProjectRuntimeSpec,
+    repo_head_sha: str,
+) -> dict[str, Any]:
+    del repo_head_sha
+    fallback_command = _build_macbook_fallback_command(spec)
+    output_path = spec.repo_path / "scip" / "index.scip"
+    meta_path = spec.repo_path / "scip" / "index.scip.meta.json"
+    cmd = [
+        "bash",
+        str(_DEFAULT_UW_IOS_APP_SCIP_SCRIPT),
+        "--repo-path",
+        str(spec.repo_path),
+        "--slug",
+        spec.slug,
+        "--relative-path",
+        spec.relative_path,
+        "--container-scip-path",
+        spec.container_scip_path,
+        "--no-remote-copy",
+    ]
+
+    try:
+        result = _run_command(cmd, capture_output=True)
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        raise ScipEmitToolchainUnsupported(
+            message=f"uw-ios-app SCIP emit failed: {exc}",
+            fallback_command=fallback_command,
+        ) from exc
+
+    if not output_path.exists() or output_path.stat().st_size == 0:
+        raise ScipEmitToolchainUnsupported(
+            message=f"generated SCIP file missing or empty: {output_path}",
+            fallback_command=fallback_command,
+        )
+
+    metadata = _load_scip_metadata(meta_path)
+    if metadata is None:
+        raise ProjectAnalyzeCliError(
+            f"uw-ios-app emitter did not write metadata: {meta_path}",
+            error_code="missing_scip_metadata",
+        )
+
+    return {
+        "emitted": True,
+        "helper": "uw_ios_app",
+        "helper_output": _parse_emit_helper_output(result.stdout),
+        "host_scip_path": str(output_path),
+        "meta_path": str(meta_path),
+        "metadata": metadata,
+    }
+
+
 def ensure_swift_scip_artifact(
     *,
     spec: ProjectRuntimeSpec,
@@ -769,7 +931,7 @@ def ensure_swift_scip_artifact(
         return _emit_swift_scip(spec=spec, repo_head_sha=repo_head_sha)
 
     if emit_scip == "never":
-        if not usable_index or stale:
+        if not usable_index:
             raise ProjectAnalyzeCliError(
                 "usable SCIP artifact required for --emit-scip=never",
                 error_code="missing_required_scip_artifact",
@@ -780,10 +942,23 @@ def ensure_swift_scip_artifact(
             "meta_path": str(meta_path),
             "metadata": metadata,
             "reason": "existing artifact reused",
+            "stale": stale,
+            "stale_reason": reason,
         }
 
     if not usable_index or stale:
-        return _emit_swift_scip(spec=spec, repo_head_sha=repo_head_sha)
+        try:
+            return _emit_swift_scip(spec=spec, repo_head_sha=repo_head_sha)
+        except ScipEmitToolchainUnsupported:
+            if not usable_index:
+                raise
+            return {
+                "emitted": False,
+                "host_scip_path": str(output_path),
+                "meta_path": str(meta_path),
+                "metadata": metadata,
+                "reason": "toolchain unavailable; existing artifact reused (stale)",
+            }
 
     return {
         "emitted": False,
@@ -871,6 +1046,25 @@ def ensure_project_analyze_runtime(
     mcp_url: str,
     recreate_palace: bool,
 ) -> str:
+    # Fast path: if palace-mcp is already reachable and no config change
+    # requires a container restart, skip the docker compose build entirely.
+    # This avoids the ML-layer Docker rebuild (5-15 min cold) when running
+    # from a directory whose compose project name differs from the running
+    # container's project (e.g. /tmp/gim-926-readiness vs gimle-palace).
+    if not recreate_palace:
+        candidates = _candidate_mcp_urls(mcp_url)
+        for candidate in candidates:
+            try:
+                _probe_mcp_url_once(candidate)
+                return candidate
+            except (
+                ProjectAnalyzeCliError,
+                urllib.error.URLError,
+                ValueError,
+                OSError,
+            ):
+                pass
+
     cmd = [
         "docker",
         "compose",
@@ -1420,6 +1614,9 @@ def _cmd_project_analyze(args: argparse.Namespace) -> int:
             "slug": args.slug,
             "repo_path": str(Path(args.repo_path).expanduser()),
             "fallback_command": exc.fallback_command,
+            "next_step": (
+                "run the fallback command, then rerun analyze with --emit-scip=never"
+            ),
             "summary_out": str(summary_out),
         }
         _write_json(summary_out, summary)

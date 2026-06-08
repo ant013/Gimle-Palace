@@ -1,0 +1,114 @@
+## Class: `MoneroAdapter`
+
+**File path:** `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Core/Adapters/MoneroAdapter.swift`
+
+This is the class that adapts the Monero blockchain to Unstoppable Wallet's adapter interface. It conforms to `IAdapter`, `IBalanceAdapter`, `ITransactionsAdapter`, `IDepositAdapter`, and `MoneroKitDelegate`, wrapping `MoneroKit.Kit`.
+
+(Note: declared as `class MoneroAdapter` with default `internal` access; the listing below covers every non-`private`/non-`fileprivate` member — the externally-usable API surface, including members marked `public`.)
+
+### Static members
+- `static let networkType: MoneroKit.NetworkType`
+- `static let confirmationsThreshold: Int`
+- `static func clear(except excludedWalletIds: [String]) throws`
+- `static func key(accountType: AccountType, privateKey: Bool, spendKey: Bool) -> String`
+- `static func address(accountType: AccountType) -> String`
+
+### Stored / computed properties (on the class)
+- `var coinRate: Decimal`
+- `let transactionRecordsSubject: PublishSubject<[MoneroTransactionRecord]>`
+- `private(set) var balanceState: AdapterState`
+- `private(set) var syncing: Bool`
+- `let token: Token`
+- `public var explorerTitle: String`
+
+### Initializer / instance methods (on the class)
+- `init(wallet: Wallet, restoreSettings: RestoreSettings, node: Node) throws`
+- `func transactionRecord(fromTransaction transaction: TransactionInfo) -> MoneroTransactionRecord`
+- `public func explorerUrl(transactionHash: String) -> String?`
+- `public func explorerUrl(address _: String) -> String?`
+
+### `IAdapter` conformance
+- `var isMainNet: Bool`
+- `var debugInfo: String`
+- `func start()`
+- `func stop()`
+- `func refresh()`
+- `func restart()`
+- `var statusInfo: [(String, Any)]`
+
+### `MoneroKitDelegate` conformance
+- `func subAddressesUpdated(subaddresses _: [MoneroKit.SubAddress])`
+- `func balanceDidChange(balanceInfo: MoneroKit.BalanceInfo)`
+- `func walletStateDidChange(state _: MoneroKit.WalletState)`
+- `func transactionsUpdated(inserted: [TransactionInfo], updated: [TransactionInfo])`
+
+### `IBalanceAdapter` conformance
+- `var balanceStateUpdatedObservable: Observable<AdapterState>`
+- `var balanceData: BalanceData`
+- `var balanceDataUpdatedObservable: Observable<BalanceData>`
+
+### Monero-specific balance / send extension
+- `var moneroBalanceData: MoneroBalanceData`
+- `var moneroBalanceDataObservable: Observable<MoneroBalanceData>`
+- `var minimumSendAmount: Decimal`
+- `func estimateFee(amount: MoneroSendAmount, address: String, priority: MoneroKit.SendPriority) throws -> Decimal`
+- `@discardableResult func send(to address: String, amount: MoneroSendAmount, priority: MoneroKit.SendPriority, memo: String?) throws -> [String]`
+- `func convertToPiconero(amount: MoneroSendAmount) -> SendAmount`
+
+### `ITransactionsAdapter` conformance
+- `func rawTransaction(hash _: String) -> String?`
+- `var lastBlockInfo: LastBlockInfo?`
+- `var syncingObservable: Observable<Void>`
+- `var lastBlockUpdatedObservable: Observable<Void>`
+- `var additionalTokenQueries: [TokenQuery]`
+- `func transactionsObservable(token _: Token?, filter: TransactionTypeFilter, address _: String?) -> Observable<[TransactionRecord]>`
+- `func transactionsSingle(paginationData: String?, token _: Token?, filter: TransactionTypeFilter, address _: String?, limit: Int) -> Single<[TransactionRecord]>`
+- `func allTransactionsAfter(paginationData _: String?) -> Single<[TransactionRecord]>`
+
+### `IDepositAdapter` conformance
+- `var receiveAddress: DepositAddress`
+- `var receiveAddressPublisher: AnyPublisher<DataStatus<DepositAddress>, Never>`
+- `var usedAddresses: [UsedAddress]`
+
+### Nested type
+- `struct MoneroAdapter.MoneroBalanceData` with `let all: Decimal`, `let unlocked: Decimal`, `var balanceData: BalanceData`
+
+### Notes / diagnostics
+- `[DEGRADED-PALACE]`: palace-mcp was unreachable ("Unable to connect" on both `palace_code_semantic_search` and `palace_code_search_graph`); fell back to filesystem discovery (tier 6) — `pwd` confirmed inside the indexed worktree `/Users/ant013/Ios/bench-gimle`.
+- Members explicitly marked `public` in source: `explorerTitle`, both `explorerUrl(...)` methods. Everything else listed is `internal` by default (the class itself has no explicit access modifier).
+
+--SELF-REPORTED--
+[
+  {
+    "item": "Identified file path of Monero adapter class",
+    "covered": true
+  },
+  {
+    "item": "File path is absolute and correct (Unstoppable/Unstoppable/Core/Adapters/MoneroAdapter.swift)",
+    "covered": true
+  },
+  {
+    "item": "Class name MoneroAdapter identified",
+    "covered": true
+  },
+  {
+    "item": "Listed public methods (start/stop/refresh/restart/send/estimateFee/explorerUrl/transactionsObservable/transactionsSingle/etc.)",
+    "covered": true
+  },
+  {
+    "item": "Listed public properties (balanceState/balanceData/receiveAddress/token/coinRate/etc.)",
+    "covered": true
+  },
+  {
+    "item": "Covered all protocol conformances (IAdapter, IBalanceAdapter, ITransactionsAdapter, IDepositAdapter, MoneroKitDelegate)",
+    "covered": true
+  },
+  {
+    "item": "Listed static members (clear, key, address, networkType, confirmationsThreshold)",
+    "covered": true
+  },
+  {
+    "item": "Included initializer signature",
+    "covered": true
+  }
+]

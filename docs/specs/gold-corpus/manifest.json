@@ -1,0 +1,13 @@
+{
+  "schema_version": "1",
+  "frozen_at": "2026-06-01T00:00:00Z",
+  "palace_mcp_sha": "1f316088d45031b7e4118b41abec3be00e041924",
+  "uw_ios_sha": null,
+  "golden_matrix_sha": "b449dd9eedf170e5b70e1f4cc2ed6a34b0f36aee50f3a7ca09257468550b29d5",
+  "neo4j_snapshot": {
+    "node_counts": {},
+    "relationship_counts": {},
+    "ingest_runs": []
+  },
+  "_note": "uw_ios_sha and neo4j_snapshot are populated by running freeze.sh against a live environment. golden_matrix_sha is sha256 of semantic_search_matrix.yaml at freeze time."
+}

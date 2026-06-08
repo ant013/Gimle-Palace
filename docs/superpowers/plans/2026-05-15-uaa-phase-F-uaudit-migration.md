@@ -1,3 +1,5 @@
+> SUPERSEDED for current UAudit daily-dispatcher ownership by `docs/superpowers/specs/2026-05-22-uaudit-cto-dispatcher-daily-audit-routing.md` and `docs/superpowers/plans/2026-05-22-GIM-NN-uaudit-cto-dispatcher-daily-audit-routing.md`. This plan remains historical migration context.
+
 # UAA Phase F — UAudit Migration
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development.

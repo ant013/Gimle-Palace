@@ -23,7 +23,14 @@ class Settings(BaseSettings):
     neo4j_uri: str = "bolt://neo4j:7687"
     neo4j_user: str = "neo4j"
     neo4j_password: SecretStr
-    openai_api_key: SecretStr
+    openai_api_key: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Optional legacy OpenAI API key for Graphiti's explicit openai "
+            "embedder path. The default qodo and noop memory paths do not "
+            "require it."
+        ),
+    )
     palace_default_group_id: str = "project/gimle"
     codebase_memory_mcp_binary: str = ""
     palace_ops_host: str = "host.docker.internal"
@@ -186,3 +193,157 @@ class Settings(BaseSettings):
         alias="PALACE_MAILMAP_MAX_BYTES",
         description="Upper bound for .mailmap file size; oversized → identity passthrough",
     )
+
+    # -----------------------------------------------------------------------
+    # S0: Anchor symbols (GIM-1097)
+    # -----------------------------------------------------------------------
+
+    palace_anchor_symbols: Annotated[dict[str, list[str]], NoDecode] = Field(
+        default_factory=dict,
+        description=(
+            "JSON-encoded dict mapping group_id → list of anchor qualified names. "
+            'Example: PALACE_ANCHOR_SYMBOLS=\'{"project/uw-ios-app":["WalletKit.BalanceData"]}\''
+        ),
+    )
+
+    @field_validator("palace_anchor_symbols", mode="before")
+    @classmethod
+    def parse_anchor_symbols(cls, value: object) -> dict[str, list[str]] | object:
+        if value is None:
+            return {}
+        if isinstance(value, str):
+            if value.strip() == "":
+                return {}
+            return cast(object, json.loads(value))
+        return value
+
+    # -----------------------------------------------------------------------
+    # F1B: IndexStoreDB direct-read (GIM-1167 spike, GIM-1168 production)
+    # -----------------------------------------------------------------------
+
+    palace_indexstore_paths: Annotated[dict[str, str], NoDecode] = Field(
+        default_factory=dict,
+        description=(
+            "JSON-encoded dict mapping project slug → IndexStoreDB DataStore path. "
+            "Used by palace.code.call_hierarchy for per-project caller queries. "
+            'Example: PALACE_INDEXSTORE_PATHS=\'{"uw-ios-app":"/path/to/DataStore"}\''
+        ),
+    )
+
+    @field_validator("palace_indexstore_paths", mode="before")
+    @classmethod
+    def parse_indexstore_paths(cls, value: object) -> dict[str, str] | object:
+        if value is None:
+            return {}
+        if isinstance(value, str):
+            if value.strip() == "":
+                return {}
+            return cast(object, json.loads(value))
+        return value
+
+    palace_sourcekit_index_store_path: str | None = Field(
+        default=None,
+        description=(
+            "Single-project fallback IndexStoreDB DataStore path for "
+            "palace.code.call_hierarchy when no per-project entry exists in "
+            "palace_indexstore_paths. "
+            "Example: ~/Library/Developer/Xcode/DerivedData/<App>/Index.noindex/DataStore"
+        ),
+    )
+
+    palace_call_hierarchy_timeout_s: float = Field(
+        default=30.0,
+        description=(
+            "Per-call timeout in seconds for palace.code.call_hierarchy IndexStoreDB reads. "
+            "Prevents runaway queries on corrupt or unusually large indexes. "
+            "Returns error_code=timeout when exceeded. Default: 30."
+        ),
+    )
+
+    # -----------------------------------------------------------------------
+    # F4.0: Telemetry + JSONL audit sink (GIM-1097)
+    # -----------------------------------------------------------------------
+
+    palace_audit_sink_path: str | None = Field(
+        default=None,
+        description=(
+            "Filesystem path for the JSONL audit sink file. Each MCP tool call appends "
+            "one JSON line: {timestamp, tool_name, request_args, response_summary, "
+            "latency_ms, error}. Disabled when None."
+        ),
+    )
+    palace_telemetry_enabled: bool = Field(
+        default=True,
+        description="Master switch for MCP tool call telemetry. Set False to suppress audit lines.",
+    )
+
+    # -----------------------------------------------------------------------
+    # F4.1: Qodo pre-warm (GIM-1100)
+    # -----------------------------------------------------------------------
+
+    palace_qodo_prewarm: bool = Field(
+        default=True,
+        description=(
+            "Pre-warm Qodo embedding model on startup to eliminate ~9s cold-start latency. "
+            "Set PALACE_QODO_PREWARM=0 to skip on memory-constrained hosts."
+        ),
+    )
+    palace_memory_embedder: Literal["qodo", "openai", "noop"] = Field(
+        default="qodo",
+        description=(
+            "Embedder used for Graphiti memory writes. "
+            "Use qodo for the local model, openai for the legacy API path, or noop "
+            "to disable semantic memory embeddings in dev."
+        ),
+    )
+
+    # -----------------------------------------------------------------------
+    # F4.2: Hydration cache + asyncio.Semaphore (GIM-1181)
+    # -----------------------------------------------------------------------
+
+    palace_cache_ttl_s: float = Field(
+        default=300.0,
+        gt=0.0,
+        description=(
+            "TTL in seconds for hydration cache entries (e.g. call_hierarchy results). "
+            "Entries expire on read after this duration. Default: 300 (5 min)."
+        ),
+    )
+    palace_cache_max_size: int = Field(
+        default=1000,
+        ge=1,
+        description=(
+            "Maximum number of entries in the hydration LRU cache. "
+            "Oldest entry is evicted when the limit is exceeded."
+        ),
+    )
+    palace_hydration_sem_limit: int = Field(
+        default=4,
+        ge=1,
+        description=(
+            "Max concurrent expensive hydration operations (IndexStoreDB reads, "
+            "embedding calls). Requests above this limit queue and wait. Default: 4."
+        ),
+    )
+    palace_periodic_reingest_ignore_globs: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        description=(
+            "JSON or comma-separated glob patterns excluded from periodic "
+            "re-ingest stale-file checks."
+        ),
+    )
+
+    @field_validator("palace_periodic_reingest_ignore_globs", mode="before")
+    @classmethod
+    def parse_periodic_reingest_ignore_globs(cls, value: object) -> list[str] | object:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            if value.strip() == "":
+                return []
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError:
+                return [part.strip() for part in value.split(",") if part.strip()]
+            return cast(object, parsed)
+        return value

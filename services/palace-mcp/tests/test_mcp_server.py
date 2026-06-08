@@ -59,14 +59,18 @@ class TestCodeToolRegistration:
             if t.name.startswith("palace.code.")
         ]
         assert {tool.name for tool in code_tools} == {
+            "palace.code.call_hierarchy",
+            "palace.code.call_hierarchy_v2",
             "palace.code.detect_changes",
             "palace.code.find_cross_module_contracts",
+            "palace.code.find_dead_code",
             "palace.code.find_dead_symbols",
             "palace.code.find_hotspots",
             "palace.code.find_idiom",
             "palace.code.find_owners",
             "palace.code.find_public_api",
             "palace.code.find_references",
+            "palace.code.semantic_search",
             "palace.code.find_version_skew",
             "palace.code.get_architecture",
             "palace.code.get_code_snippet",
@@ -79,3 +83,31 @@ class TestCodeToolRegistration:
             "palace.code.test_impact",
             "palace.code.trace_call_path",
         }
+
+    def test_phase_4a_read_tools_expose_include_deprecated_default(self) -> None:
+        """Phase 4b read tools must advertise include_deprecated=false in MCP."""
+        from palace_mcp.mcp_server import build_mcp_asgi_app, _mcp
+
+        build_mcp_asgi_app()
+        expected_tools = {
+            "palace.code.find_hotspots",
+            "palace.code.find_idiom",
+            "palace.code.find_owners",
+            "palace.code.find_references",
+            "palace.code.get_code_snippet",
+            "palace.code.list_functions",
+            "palace.code.search_graph",
+            "palace.code.semantic_search",
+        }
+
+        code_tools = {
+            tool.name: tool
+            for tool in _mcp._tool_manager.list_tools()
+            if tool.name in expected_tools
+        }
+        assert set(code_tools) == expected_tools
+
+        for tool in code_tools.values():
+            include_deprecated = tool.parameters["properties"]["include_deprecated"]
+            assert include_deprecated["type"] == "boolean"
+            assert include_deprecated["default"] is False

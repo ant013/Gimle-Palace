@@ -1,0 +1,9 @@
+In the unstoppable-wallet-ios codebase, find the inline address-formatting
+helper inside `MoneroAdapter` (a small ~30-line function that formats
+Monero subaddresses). Extract it into a new top-level class called
+`MoneroAddressFormatter` in a new file, with the same logic.
+
+Update the call site inside `MoneroAdapter` to use the new class. Keep
+existing tests passing (do not modify any test files).
+
+Show the patch (working-tree diff). Do NOT commit or push.

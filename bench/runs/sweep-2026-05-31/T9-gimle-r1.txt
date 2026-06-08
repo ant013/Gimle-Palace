@@ -1,0 +1,52 @@
+## Task T9 — NOT EXECUTABLE (False premise)
+
+**Diagnostics:** `[DEGRADED-PALACE]` (palace-memory unreachable, fell back to grep/Read substrate).
+
+**Finding:** The task's premise is false. After a full read of `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Core/Adapters/MoneroAdapter.swift` (430 lines) and a project-wide grep for `subaddress`/`SubAddress`/`MoneroAddressFormatter`, **no inline ~30-line address-formatting helper exists in `MoneroAdapter`**.
+
+What `MoneroAdapter` actually does with addresses:
+- `receiveAddress` (line 324-326): one-line passthrough — `DepositAddress(kit.receiveAddress)`.
+- `usedAddresses` (line 332-336): 3-line map from `kit.usedAddresses` to `UsedAddress` (field copy, no formatting).
+- `static func address(accountType:)` (line 367-377): switch over account type that calls `MoneroKit.Kit.address(...)`; pure delegation, no formatting.
+- `subAddressesUpdated(subaddresses _:)` (line 189-191): delegate stub that only re-emits `receiveAddress`; ignores the array.
+
+All actual subaddress formatting lives inside the external `MoneroKit` package (imported on line 6), which is out-of-scope and not modifiable from this app target.
+
+**Decision:** Refused to extract / fabricate a helper that does not exist. Doing so would (a) violate the task's "same logic" constraint, (b) introduce a parallel pattern with no analog in the project (Phase D green-field would be ungrounded), and (c) silently change behavior since there is no original logic to mirror.
+
+**Patch:** None. Working tree is clean (`git status` confirms), as required by "do NOT commit or push".
+
+**Artifacts:** No files modified or created.
+
+**To make this task executable** the operator would need either:
+1. Point to the actual file/function intended (possibly inside `MoneroKit` package), or
+2. Confirm that the task expects creating a new formatter wrapping `MoneroKit.SubAddress` (a green-field design — different task), or
+3. Pin a different commit where such an inline helper existed.
+
+--SELF-REPORTED--
+[
+  {
+    "item": "Read MoneroAdapter.swift fully (430 lines)",
+    "covered": true
+  },
+  {
+    "item": "Searched for subaddress/SubAddress/MoneroAddressFormatter project-wide",
+    "covered": true
+  },
+  {
+    "item": "Confirmed no inline ~30-line formatting helper exists in MoneroAdapter",
+    "covered": true
+  },
+  {
+    "item": "Verified working tree clean (no commits, no pushes)",
+    "covered": true
+  },
+  {
+    "item": "Palace substrate health probed (unreachable, degraded to grep)",
+    "covered": true
+  },
+  {
+    "item": "Did NOT fabricate a non-existent helper",
+    "covered": true
+  }
+]

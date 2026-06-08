@@ -220,7 +220,7 @@ Switching branches inside an agent worktree drags uncommitted changes across bra
 
 ### Operator vs production checkout
 
-The `production_checkout` path (e.g. `/Users/Shared/UnstoppableAudit`) is the iMac deploy target. Stay on `develop` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in UNS-48: feature checkout in production_checkout caused QA to test stale code.
+The `production_checkout` path (e.g. `/opt/uaa-example/uaudit`) is the iMac deploy target. Stay on `develop` (typically `develop`) there — never check out feature branches in production_checkout. Discovered in UNS-48: feature checkout in production_checkout caused QA to test stale code.
 
 
 ## Pre-work: codebase-memory first
@@ -376,8 +376,8 @@ Write tools as appropriate per profile (see AGENTS.md for capability boundaries)
 - Platform scope: `ios`.
 - Workspace cwd: `runs/UWIInfraEngineer/workspace` (resolved at deploy time relative to operator's project root in host-local paths.yaml).
 - Primary codebase-memory project: `Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios`.
-- iOS repo: `/Users/Shared/UnstoppableAudit/repos` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
-- Android repo: `/Users/Shared/UnstoppableAudit/repos/android/unstoppable-wallet-android`.
+- iOS repo: `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios` (operator's host-local path; example `/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios`).
+- Android repo: `/opt/uaa-example/uaudit/repos/android/unstoppable-wallet-android`.
 - Required base MCP: `codebase-memory`, `context7`, `serena`, `github`, `sequential-thinking`.
 - UAudit project MCP addition: `neo4j`.
 
@@ -403,12 +403,12 @@ bot tokens, or other secrets:
 ```bash
 PAPERCLIP_DELIVERY_API_URL=http://localhost:3100
 PAPERCLIP_DELIVERY_TOKEN=$(jq -r '.credentials["http://localhost:3100"].token // .credentials["https://paperclip.ant013.work"].token // empty' /Users/anton/.paperclip/auth.json)
-test -n "$PAPERCLIP_DELIVERY_TOKEN"
+test -n "$$PAPERCLIP_DELIVERY_TOKEN"
 ```
 
-Send with `Authorization: Bearer $PAPERCLIP_DELIVERY_TOKEN`:
-`POST $PAPERCLIP_DELIVERY_API_URL/api/plugins/60023916-4b6c-40f5-829f-bc8b98abc4ed/actions/send_to_telegram`
-body `{"params":{"companyId":"8f55e80b-0264-4ab6-9d56-8b2652f18005","agentId":"$PAPERCLIP_AGENT_ID","issueIdentifier","markdownFileName","markdownContent"}}`.
+Send with `Authorization: Bearer $$PAPERCLIP_DELIVERY_TOKEN`:
+`POST $$PAPERCLIP_DELIVERY_API_URL/api/plugins/00000000-0000-0000-0000-000000000000/actions/send_to_telegram`
+body `{"params":{"companyId":"00000000-0000-0000-0000-000000000001","agentId":"$$PAPERCLIP_AGENT_ID","issueIdentifier","markdownFileName","markdownContent"}}`.
 `issueIdentifier` MUST be `UNS-*`; never pass
 `chatId`. Inline Markdown only — no `filePath`, URLs, binaries, bot tokens, or
 direct `api.telegram.org`. If `PAPERCLIP_DELIVERY_TOKEN` is empty or the plugin
@@ -416,218 +416,87 @@ still returns `Board access required`, save/comment the artifact path, mark
 delivery permission-blocked, and stop retrying. Lifecycle events are auto-routed
 via `opsRoutes`; do not emit them manually.
 
-## Daily Version-Branch Delta Audit (iOS)
+## Daily Version-Branch Delta Audit Executor (iOS)
 
-If the issue body contains `UAudit daily version-branch delta audit` and
-`platform: ios`, you own the full audit and delivery cycle in this same issue.
-Do not hand off to `UWISwiftAuditor`.
+Run this path only after `UWICTO` PATCHes this issue to you with a daily audit handoff. You execute the decision that `UWICTO` already made. Do not decide no-op, rollback, history rewrite, missing-cursor, or oversized-delta cases yourself.
 
 ### Constants
 
 ```bash
 N=<issueNumber of this Paperclip issue>
-RUN=/Users/Shared/UnstoppableAudit/runs/UNS-$N-audit
-REPO=/Users/Shared/UnstoppableAudit/repos
+RUN=/opt/uaa-example/uaudit/runs/UNS-$N-audit
+REPO=/opt/uaa-example/uaudit/repos/ios/unstoppable-wallet-ios
 BRANCH=version/0.49
-CURSOR=/Users/Shared/UnstoppableAudit/state/ios-version-audit.json
+CURSOR=/opt/uaa-example/uaudit/state/ios-version-audit.json
 CODEBASE_MEMORY_PROJECT=Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
 ```
 
-Required subagents, all mandatory:
+Required subagents for `mode=audit_delta`, all mandatory:
 
 - `uaudit-swift-audit-specialist`
 - `uaudit-bug-hunter`
 - `uaudit-security-auditor`
 - `uaudit-blockchain-auditor`
 
-Use `spawn_agent` with explicit `agent_type` equal to the exact required name.
-A call with omitted `agent_type`, `default`, or a generic role is a failed run.
-Do not substitute a missing subagent.
+Use `spawn_agent` with explicit `agent_type` equal to the exact required name. A call with omitted `agent_type`, `default`, or a generic role is a failed run. Do not substitute a missing subagent.
 
-### Cursor Rules
+### Accepted Handoff Modes
 
-`$CURSOR` is the source of truth:
+`mode=initialize_cursor`: write the exact upstream head SHA supplied by `UWICTO` to `$CURSOR`, comment the initialized SHA and routine id, mark done, and stop. Do not create `$RUN`, do not audit, and do not send Telegram.
 
-```json
-{
-  "platform": "ios",
-  "branch": "version/0.49",
-  "last_successfully_audited_sha": "<sha>",
-  "last_successful_issue": "UNS-<N>",
-  "last_successful_at": "<UTC ISO-8601>"
-}
-```
+`mode=audit_delta`: create `$RUN/{status,subagents}` and audit only the supplied FROM..TO range. Verify the handoff includes FROM, TO, routine id, required subagent roster, and limits. If any handoff value is missing or the roster differs from `paperclips/projects/uaudit/daily-version-branch-routines.yaml`, write `$RUN/status/blocked`, comment the mismatch, and leave the cursor unchanged.
 
-Never advance the cursor before successful Telegram delivery. If delivery,
-aggregation, subagents, checkout, or codebase-memory refresh fails, leave the
-cursor unchanged.
+### Delta Materialization
 
-If the cursor file is missing, create it with `last_successfully_audited_sha`
-set to `origin/$BRANCH` and mark the issue `done` with an initialization
-comment. Do not audit from repository root history on first run.
-
-### Delta Intake
-
-Create `$RUN/{status,subagents}`. Fetch remote branch data and resolve:
+Fetch remote branch data and verify the supplied TO matches authoritative upstream:
 
 ```bash
 git -C "$REPO" fetch https://github.com/horizontalsystems/unstoppable-wallet-ios.git "$BRANCH"
-TO=$(git -C "$REPO" rev-parse FETCH_HEAD)
-FROM=$(jq -r '.last_successfully_audited_sha' "$CURSOR")
+UPSTREAM_TO=$(git -C "$REPO" rev-parse FETCH_HEAD)
+test "$UPSTREAM_TO" = "<handoff TO>"
 ```
 
-If `FROM == TO`, write `$RUN/status/noop.done`, comment `No new commits for
-iOS $BRANCH`, and mark the issue `done`.
-
-For non-empty deltas, write:
+Write artifacts for the supplied range only:
 
 ```bash
-git -C "$REPO" log --format='%H%x09%an%x09%aI%x09%s' "$FROM..$TO" > "$RUN/commits.tsv.tmp"
-git -C "$REPO" diff --name-status "$FROM..$TO" > "$RUN/files.tsv.tmp"
-git -C "$REPO" diff "$FROM..$TO" > "$RUN/diff.patch.tmp"
+git -C "$REPO" log --format='%H%x09%an%x09%aI%x09%s' "<FROM>..<TO>" > "$RUN/commits.tsv.tmp"
+git -C "$REPO" diff --name-status "<FROM>..<TO>" > "$RUN/files.tsv.tmp"
+git -C "$REPO" diff "<FROM>..<TO>" > "$RUN/diff.patch.tmp"
 ```
 
-Convert TSV files to JSON if convenient, then atomically move final artifacts to:
-
-- `$RUN/commits.json`
-- `$RUN/files.json`
-- `$RUN/diff.patch`
-
-Block instead of auditing if the delta is too large:
-
-- more than 30 commits;
-- more than 3000 changed diff lines.
-
-For a blocked oversized delta, write `$RUN/status/blocked`, comment the exact
-commit and line counts, and leave the cursor unchanged.
+Atomically move final artifacts to `$RUN/commits.json`, `$RUN/files.json`, and `$RUN/diff.patch`. Block instead of auditing if the realized delta exceeds the handed-off limits: more than 30 commits, more than 300 files, or more than 3000 changed diff lines.
 
 ### Checkout And Memory Refresh
 
 Checkout the audited code before subagent fanout:
 
 ```bash
-git -C "$REPO" checkout --detach "$TO"
+git -C "$REPO" checkout --detach "<TO>"
 ```
 
-Refresh/enrich codebase-memory for `$REPO` after checkout and before spawning
-subagents. Use the `codebase-memory` MCP indexer for
-`$CODEBASE_MEMORY_PROJECT` when available; if the MCP/indexer is unavailable,
-write `$RUN/status/blocked` and stop. Do not audit stale branch context.
+Refresh/enrich codebase-memory for `$REPO` after checkout and before spawning subagents. Use the `codebase-memory` MCP indexer for `$CODEBASE_MEMORY_PROJECT` when available; if unavailable, write `$RUN/status/blocked` and stop. Do not audit stale branch context.
 
 ### Subagent Fanout
 
-Start the four required subagents in parallel immediately after memory refresh.
-Give each subagent only:
+Start the four required subagents in parallel immediately after memory refresh. Give each subagent only `$RUN/diff.patch`, `$RUN/commits.json`, `$RUN/files.json`, `$REPO`, and `$CODEBASE_MEMORY_PROJECT`.
 
-- `$RUN/diff.patch`
-- `$RUN/commits.json`
-- `$RUN/files.json`
-- `$REPO`
-- `$CODEBASE_MEMORY_PROJECT`
+Subagents are read-only reviewers. They must not write files, post comments, deploy, send Telegram, or read secrets. Require JSON with agent name, reviewed scope, findings, no-finding areas, and limitations. Wrong agent name, malformed JSON, timeout after one retry, or generic fallback blocks the run and leaves the cursor unchanged.
 
-Subagents are read-only reviewers. They must not write files, post comments,
-deploy, send Telegram, or read secrets. Require JSON with this shape:
-
-```json
-{
-  "agent": "required exact agent name",
-  "scope": "files and commit areas reviewed",
-  "findings": [
-    {
-      "severity": "Critical | Block | Important | Observation",
-      "confidence": "High | Medium | Low",
-      "file": "path",
-      "line": 123,
-      "title": "one sentence",
-      "evidence": "code-grounded evidence",
-      "impact": "wallet/user/security impact",
-      "recommendation": "minimal actionable fix",
-      "false_positive_risk": "Low | Medium | High",
-      "needs_runtime_verification": true
-    }
-  ],
-  "no_finding_areas": ["areas explicitly checked with no issue"],
-  "limitations": ["what static review could not verify"]
-}
-```
-
-Wait up to 180 seconds per slot; retry each exact missing agent once. Malformed
-JSON, wrong `"agent"`, missing required fields, timeout after retry, or generic
-fallback blocks the run and leaves the cursor unchanged.
-
-After validation, write the final JSON outputs under:
-
-```text
-$RUN/subagents/
-  uaudit-swift-audit-specialist.json
-  uaudit-bug-hunter.json
-  uaudit-security-auditor.json
-  uaudit-blockchain-auditor.json
-```
+Write validated JSON outputs under `$RUN/subagents/` using exact agent filenames.
 
 ### Aggregate, Deliver, And Commit Cursor
 
-Write `$RUN/audit.md` in English. Include:
+Write `$RUN/audit.md` in English with issue id, branch, FROM, TO, counts, roster, verdict, findings grouped by severity, disagreements, no-finding areas, limitations, and methodology.
 
-- title: `# Daily iOS Version Delta Audit - version/0.49`
-- issue identifier, branch, `FROM`, `TO`, commit count, file count;
-- subagent roster;
-- executive verdict: `approve`, `request changes`, or `block`;
-- findings grouped by severity with source-agent attribution;
-- conflicts/disagreements between subagents;
-- no-finding areas and limitations;
-- methodology: `git diff`, `codebase-memory`, `serena`, Codex subagents.
+Send `$RUN/audit.md` through Telegram as `markdownFileName="uaudit-ios-version-0.49-delta-UNS-$N.md"`. Verify `ok:true`, `routeSource:file_route`, `routeName:UAudit`, and `mode:document`.
 
-Send `$RUN/audit.md` through the Telegram plugin with
-`markdownFileName="uaudit-ios-version-0.49-delta-UNS-$N.md"`. Verify
-`ok:true`, `routeSource:file_route`, `routeName:UAudit`, and `mode:document`.
-
-Only after successful delivery, atomically update `$CURSOR`:
-
-```json
-{
-  "platform": "ios",
-  "branch": "version/0.49",
-  "last_successfully_audited_sha": "<TO>",
-  "last_successful_issue": "UNS-<N>",
-  "last_successful_at": "<UTC ISO-8601>"
-}
-```
-
-Then comment the report path, delivered filename, message id, `FROM..TO`, and
-mark the issue `done`.
+Never advance the cursor before successful Telegram delivery. Only after successful delivery, atomically update `$CURSOR` with `<TO>`, `UNS-$N`, and current UTC ISO-8601 timestamp. Then comment the report path, delivered filename, message id, FROM..TO, and mark done.
 
 ## Prepared Audit Delivery (Backward Compatibility)
 
-When UWICTO or another UAudit role PATCHes assignee onto you for a UNS-N
-PR-audit issue without the daily-delta marker, a prepared `audit.md` may be
-waiting at `/Users/Shared/UnstoppableAudit/runs/UNS-<N>-audit/audit.md`. You do
-not modify it. Compute its SHA-256, send it through the Telegram plugin using
-`issueIdentifier="UNS-$N"`, comment filename + `messageId` + SHA-256 digest,
-then mark the issue `done`.
+When a UAudit role PATCHes assignee onto you for a UNS-N PR-audit issue without the daily-delta marker, a prepared `audit.md` may be waiting at `/opt/uaa-example/uaudit/runs/UNS-<N>-audit/audit.md`. You do not modify it. Compute its SHA-256, send it through the Telegram plugin using `issueIdentifier="UNS-$N"`, comment filename + `messageId` + SHA-256 digest, then mark the issue `done`.
 
 ## UAudit Subagent Smoke Delivery
 
-If the current issue says `UAudit subagent smoke`, do not run deployment work or
-daily delta audit. Read:
-
-```bash
-N=<issueNumber of this Paperclip issue>
-RUN=/Users/Shared/UnstoppableAudit/runs/UNS-$N-audit
-SUMMARY=$RUN/smoke/summary.json
-```
-
-Create `$RUN/smoke/telegram-report.md` from the smoke summary and subagent JSON
-files. The Markdown must include:
-
-- issue identifier and platform (`iOS`);
-- `expected_subagent_count` and `completed_subagent_count`;
-- exact required subagent names;
-- one short response/result line for each subagent;
-- explicit PASS/FAIL verdict and blocker, if any.
-
-Send that Markdown through the Telegram plugin using
-`markdownFileName="uaudit-subagent-smoke-UNS-$N-ios.md"`. Then comment the
-artifact path and mark the issue `done`. If `summary.json` is missing, mark the
-issue blocked and state the missing path.
+If the current issue says `UAudit subagent smoke`, do not run deployment work or daily delta audit. Read `/opt/uaa-example/uaudit/runs/UNS-$N-audit/smoke/summary.json`, create a short Telegram report from the smoke summary and subagent JSON files, send it through Telegram, comment the artifact path, and mark done. If the summary is missing, mark blocked and state the missing path.
 

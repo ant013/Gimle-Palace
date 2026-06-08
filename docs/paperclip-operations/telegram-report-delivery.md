@@ -19,16 +19,30 @@ The Telegram chat is selected by plugin `fileRoutes`. Do not pass `chatId`.
 
 ## Daily UAudit Delta Delivery
 
-UAudit daily version-branch audits are owned end-to-end by infra agents:
+UAudit daily version-branch issues are routed first to platform CTO dispatchers:
+
+- iOS: `UWICTO`
+- Android: `UWACTO`
+
+The dispatcher owns the do/don't-audit decision. If the cursor already matches
+upstream, it closes the issue as a no-op without creating a run directory,
+status file, audit artifact, Telegram message, or cursor update. If a real delta
+must run, it PATCHes the issue to the platform infra executor with FROM, TO,
+routine id, limits, and the exact required subagent roster.
+
+Infra agents remain delivery executors:
 
 - iOS: `UWIInfraEngineer`
 - Android: `UWAInfraEngineer`
 
-Their scheduled issues contain `UAudit daily version-branch delta audit`.
-Infra fetches the version branch, compares the branch head with the platform
-cursor, refreshes codebase-memory, runs the UAudit subagents, writes
-`audit.md`, sends the report through this Telegram plugin, and only then
-advances the cursor.
+Infra materializes only CTO-approved deltas, refreshes codebase-memory, runs the
+UAudit subagents, writes `audit.md`, sends the report through this Telegram
+plugin, and only then advances the cursor.
+
+Routine ownership is declared in
+`paperclips/projects/uaudit/daily-version-branch-routines.yaml`. That config
+uses agent names only; UUIDs are resolved through UAA bindings at deploy or
+routine-reconciliation time.
 
 Cursor files:
 

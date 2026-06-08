@@ -1189,11 +1189,58 @@ class ProjectAnalysisService:
             extractor_name: str,
             run: AnalysisRun,
         ) -> ExtractorAttemptResult:
+            companion_run_id: str | None = None
+            if extractor_name == "prune_swift_symbols":
+                symbol_index_checkpoint = next(
+                    (
+                        checkpoint
+                        for checkpoint in run.checkpoints
+                        if checkpoint.extractor == "symbol_index_swift"
+                    ),
+                    None,
+                )
+                if (
+                    symbol_index_checkpoint is None
+                    or symbol_index_checkpoint.status != AnalysisCheckpointStatus.OK
+                    or symbol_index_checkpoint.error_code is not None
+                    or symbol_index_checkpoint.ingest_run_id is None
+                ):
+                    logger.warning(
+                        "project_analyze.prune_skipped",
+                        extra={
+                            "run_id": run.run_id,
+                            "project": run.slug,
+                            "extractor": extractor_name,
+                            "reason": "symbol_index_swift_not_ok",
+                            "checkpoint_status": (
+                                None
+                                if symbol_index_checkpoint is None
+                                else symbol_index_checkpoint.status.value
+                            ),
+                            "checkpoint_error_code": (
+                                symbol_index_checkpoint.error_code
+                                if symbol_index_checkpoint is not None
+                                else None
+                            ),
+                        },
+                    )
+                    return ExtractorAttemptResult(
+                        status=AnalysisCheckpointStatus.SKIPPED,
+                        message=(
+                            "Skipped prune_swift_symbols because symbol_index_swift "
+                            "did not complete successfully in this run."
+                        ),
+                        next_action=(
+                            "Rerun symbol_index_swift successfully before prune_swift_symbols."
+                        ),
+                    )
+                companion_run_id = symbol_index_checkpoint.ingest_run_id
             response = await run_extractor(
                 driver=driver,
                 graphiti=graphiti,
                 name=extractor_name,
                 project=run.slug,
+                companion_run_id=companion_run_id,
             )
             if response.get("ok") is True:
                 ingest_run_id = response.get("run_id")

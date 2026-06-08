@@ -1,5 +1,10 @@
 # Runbook: Per-kit Swift ingestion
 
+> See also: [Palace Operator Guide](operator-guide.md) for prerequisites,
+> first-time setup, and common troubleshooting.
+> For the registry-backed baseline first run, see
+> [uw-ios-baseline-first-ingest.md](uw-ios-baseline-first-ingest.md).
+
 This runbook covers Audit-V1 S3 single-kit ingestion for one HorizontalSystems
 Swift kit. It splits the flow into:
 

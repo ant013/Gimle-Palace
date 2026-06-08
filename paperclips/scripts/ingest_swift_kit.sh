@@ -13,6 +13,7 @@ PALACE_MCP_SERVICE_DIR="$REPO_ROOT/services/palace-mcp"
 
 DEFAULT_EXTRACTORS=(
     symbol_index_swift
+    prune_swift_symbols
     arch_layer
     git_history
     code_ownership
@@ -29,6 +30,7 @@ DEFAULT_EXTRACTORS=(
     public_api_surface
     reactive_dependency_tracer
     testability_di
+    embedding_symbol
 )
 
 usage() {
@@ -77,6 +79,12 @@ die() {
 
 require_command() {
     command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
+}
+
+resolve_repo_url() {
+    local repo_path="$1"
+    command -v git >/dev/null 2>&1 || return 0
+    git -C "$repo_path" remote get-url origin 2>/dev/null || true
 }
 
 validate_artefacts() {
@@ -187,6 +195,25 @@ update_env_json_key() {
     fi
 
     mv "$tmp_file" "$env_file"
+}
+
+merge_env_json_key() {
+    local env_file="$1"
+    local key="$2"
+    local merged='{}'
+    local raw_value
+
+    while IFS= read -r raw_value; do
+        [[ -n "$raw_value" ]] || continue
+        merged="$(
+            jq -nc \
+                --argjson current "$merged" \
+                --argjson next "$raw_value" \
+                '($current + $next) | to_entries | sort_by(.key) | from_entries'
+        )" || return 1
+    done < <(grep "^${key}=" "$env_file" | cut -d= -f2- || true)
+
+    printf '%s' "$merged"
 }
 
 call_mcp() {
@@ -628,18 +655,14 @@ else
     EXTRACTORS=("${DEFAULT_EXTRACTORS[@]}")
 fi
 
-current_scip_json="$(grep '^PALACE_SCIP_INDEX_PATHS=' "$ENV_FILE" | tail -n 1 | cut -d= -f2- || true)"
-if [[ -z "$current_scip_json" ]]; then
-    current_scip_json='{}'
-fi
-printf '%s' "$current_scip_json" | jq -e . >/dev/null || \
-    die "PALACE_SCIP_INDEX_PATHS is not valid JSON in $ENV_FILE"
+current_scip_json="$(merge_env_json_key "$ENV_FILE" "PALACE_SCIP_INDEX_PATHS")" || \
+    die "PALACE_SCIP_INDEX_PATHS must be JSON objects in $ENV_FILE"
 
 merged_scip_json="$(jq -nc \
     --argjson current "$current_scip_json" \
     --arg slug "$SLUG" \
     --arg path "$SCIP_PATH" \
-    '$current + {($slug): $path}')"
+    '($current + {($slug): $path}) | to_entries | sort_by(.key) | from_entries')"
 
 if [[ "$merged_scip_json" != "$current_scip_json" ]]; then
     log "updating PALACE_SCIP_INDEX_PATHS in $ENV_FILE"
@@ -690,10 +713,14 @@ fi
 project_payload="$(jq -nc \
     --arg slug "$SLUG" \
     --arg name "$SLUG" \
+    --arg language "swift" \
+    --arg repo_url "$(resolve_repo_url "$HOST_REPO_PATH")" \
     --arg parent_mount "$PARENT_MOUNT" \
     --arg relative_path "$RELATIVE_PATH" \
-    '{slug: $slug, name: $name}
-     + (if $parent_mount != "" then {parent_mount: $parent_mount, relative_path: $relative_path} else {} end)')"
+    '{slug: $slug, name: $name, language: $language}
+     + (if $repo_url != "" then {repo_url: $repo_url} else {} end)
+     + (if $parent_mount != "" then {parent_mount: $parent_mount} else {} end)
+     + (if $relative_path != "" then {relative_path: $relative_path} else {} end)')"
 PROJECT_REGISTRATION_JSON="$(call_mcp "palace.memory.register_project" "$project_payload")" || {
     emit_summary "register_project" "failed" "memory.register_project failed"
     exit 1

@@ -1,0 +1,21 @@
+{
+  "task": "T8",
+  "description": "Fix silent failure on Bitcoin insufficient UTXO",
+  "must_contain_regex": [
+    "(UTXO|utxo|UnspentOutput|unspentOutputs|sendInfo|BitcoinCore)"
+  ],
+  "any_n_of_regex": {
+    "n": 2,
+    "items": [
+      "(throw|catch|error)",
+      "(insufficient|notEnough|BalanceError)",
+      "(showError|errorAlert|HudHelper)",
+      "BitcoinAdapter",
+      "SendInteractor"
+    ]
+  },
+  "must_not_contain_regex": [
+    "git\\s+commit\\s",
+    "git\\s+push\\s"
+  ]
+}

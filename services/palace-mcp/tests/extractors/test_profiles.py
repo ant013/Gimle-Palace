@@ -189,7 +189,7 @@ def test_swift_kit_order_matches_contract() -> None:
     ordered = get_ordered_extractors("swift_kit")
 
     assert ordered == SWIFT_KIT_EXTRACTOR_ORDER
-    assert len(ordered) == 17
+    assert len(ordered) == 19
     assert all(name in registry.EXTRACTORS for name in ordered)
 
 
@@ -227,6 +227,7 @@ def test_python_service_order_runs_git_history_before_dependents() -> None:
         "code_ownership",
         "dependency_surface",
         "hotspot",
+        "embedding_symbol",
     )
 
 
@@ -248,6 +249,7 @@ def test_android_kit_order_runs_git_history_before_dependents() -> None:
         "code_ownership",
         "dependency_surface",
         "hotspot",
+        "embedding_symbol",
     )
 
 

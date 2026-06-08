@@ -1,0 +1,26 @@
+{
+  "task": "T3",
+  "description": "Trace UI Send button → signed Ethereum tx",
+  "any_n_of_regex": {
+    "n": 5,
+    "items": [
+      "Send[A-Z][a-zA-Z]*View",
+      "Send[A-Z][a-zA-Z]*ViewModel",
+      "Send[A-Z][a-zA-Z]*Service",
+      "Send[A-Z][a-zA-Z]*Handler",
+      "Send[A-Z][a-zA-Z]*Interactor",
+      "EvmKit",
+      "TransactionSigner",
+      "(Signer|signTransaction|sign\\()",
+      "(rawTransaction|buildTransaction)",
+      "(EthereumKit|RpcBlockchain|Web3)",
+      "TransactionData",
+      "EvmAdapter",
+      "WalletConnect"
+    ]
+  },
+  "must_contain_regex": [
+    "(Send|send)",
+    "(Ethereum|Evm|EVM)"
+  ]
+}

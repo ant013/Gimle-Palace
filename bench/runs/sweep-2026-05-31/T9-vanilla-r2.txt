@@ -1,0 +1,46 @@
+Task premise does not match the codebase. The task asks to extract a "small ~30-line inline address-formatting helper inside MoneroAdapter that formats Monero subaddresses" into a new top-level `MoneroAddressFormatter` class.
+
+I read the only `MoneroAdapter.swift` in the repo (/Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Core/Adapters/MoneroAdapter.swift, 430 lines) and grepped it exhaustively for address/format/subaddress-related code. No such helper exists. The address-touching code in the file is:
+
+- `var receiveAddress: DepositAddress { DepositAddress(kit.receiveAddress) }` (1-liner, just wraps `kit.receiveAddress`)
+- `var usedAddresses: [UsedAddress] { kit.usedAddresses.map { UsedAddress(index: $0.index, address: $0.address, explorerUrl: nil, transactionsCount: $0.transactionsCount) } }` (4 lines, trivial mapping — no formatting)
+- `static func address(accountType:) -> String` (~10 lines, just delegates to `Kit.address(wallet:account:index:)` — no formatting logic)
+- `func subAddressesUpdated(subaddresses _: [MoneroKit.SubAddress])` (delegate callback, body is one line: `depositAddressSubject.send(.completed(receiveAddress))`)
+
+There is no ~30-line inline subaddress-formatting function to extract. Subaddress formatting evidently lives inside `MoneroKit` (called via `kit.receiveAddress` / `kit.usedAddresses` / `Kit.address(...)`), not inside the Swift adapter.
+
+No file was created and no patch was produced — extracting a non-existent function would mean fabricating logic, which is not a refactor. Working tree is unchanged.
+
+Recommendation: re-check the task premise — the target may be a different repo/branch, a different adapter (e.g. ZcashAdapter, BitcoinAdapter address handling), or logic that lives inside `MoneroKit` itself rather than the wallet's `MoneroAdapter`.
+
+--SELF-REPORTED--
+[
+  {
+    "item": "Found MoneroAdapter.swift at /Users/ant013/Ios/bench-vanilla/Unstoppable/Unstoppable/Core/Adapters/MoneroAdapter.swift",
+    "covered": true
+  },
+  {
+    "item": "Located inline ~30-line subaddress-formatting helper inside MoneroAdapter",
+    "covered": false
+  },
+  {
+    "item": "Created new file with MoneroAddressFormatter class",
+    "covered": false
+  },
+  {
+    "item": "Updated MoneroAdapter call site to use MoneroAddressFormatter",
+    "covered": false
+  },
+  {
+    "item": "Produced working-tree diff",
+    "covered": false
+  },
+  {
+    "item": "Did not modify any test files",
+    "covered": true
+  },
+  {
+    "item": "Did not commit or push",
+    "covered": true
+  }
+]

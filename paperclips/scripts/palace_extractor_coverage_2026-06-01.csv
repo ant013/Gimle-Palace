@@ -1,0 +1,154 @@
+slug,extractor,status,nodes_written,message
+bitcoin-core,symbol_index_swift,ok,31649,
+bitcoin-core,arch_layer,ok,2,
+bitcoin-core,git_history,ok,0,
+bitcoin-core,code_ownership,ok,1,
+bitcoin-core,coding_convention,ok,144,
+bitcoin-core,crypto_domain_model,ok,4,
+bitcoin-core,cross_module_contract,ok,0,No PublicApiSurface/PublicApiSymbol rows found for the current commit 'a77a71674cb5eb6159291122f76f51e46f9c3dac'.
+bitcoin-core,cross_repo_version_skew,ok,1,
+bitcoin-core,dead_symbol_binary_surface,error,,periphery fixture not found: /repos-hs/BitcoinCore.Swift/periphery/contract.json
+bitcoin-core,dependency_surface,ok,0,
+bitcoin-core,error_handling_policy,ok,362,
+bitcoin-core,hot_path_profiler,ok,0,profiles directory not found under repo root: /repos-hs/BitcoinCore.Swift/profiles
+bitcoin-core,hotspot,ok,1181,
+bitcoin-core,localization_accessibility,ok,0,
+bitcoin-core,public_api_surface,ok,0,No public API artifacts found under '.palace/public-api/kotlin/*.api' or '.palace/public-api/swift/*.swiftinterface'.
+bitcoin-core,reactive_dependency_tracer,ok,3051,
+bitcoin-core,testability_di,ok,70,
+bitcoin-kit,symbol_index_swift,ok,228669,
+bitcoin-kit,arch_layer,ok,1,
+bitcoin-kit,git_history,ok,0,
+bitcoin-kit,code_ownership,ok,1,
+bitcoin-kit,coding_convention,ok,14,
+bitcoin-kit,crypto_domain_model,ok,1,
+bitcoin-kit,cross_module_contract,ok,0,No PublicApiSurface/PublicApiSymbol rows found for the current commit '96f5e595edd2cecc04d96c0090171adc607060d8'.
+bitcoin-kit,cross_repo_version_skew,ok,1,
+bitcoin-kit,dead_symbol_binary_surface,error,,periphery fixture not found: /repos-hs/BitcoinKit.Swift/periphery/periphery-3.7.
+bitcoin-kit,dependency_surface,ok,0,
+bitcoin-kit,error_handling_policy,ok,32,
+bitcoin-kit,hot_path_profiler,ok,0,profiles directory not found under repo root: /repos-hs/BitcoinKit.Swift/profiles
+bitcoin-kit,hotspot,ok,123,
+bitcoin-kit,localization_accessibility,ok,9,
+bitcoin-kit,public_api_surface,ok,0,No public API artifacts found under '.palace/public-api/kotlin/*.api' or '.palace/public-api/swift/*.swiftinterface'.
+bitcoin-kit,reactive_dependency_tracer,ok,1,
+bitcoin-kit,testability_di,ok,11,
+dash-kit,symbol_index_swift,ok,233863,
+dash-kit,arch_layer,ok,1,
+dash-kit,git_history,ok,0,
+dash-kit,code_ownership,ok,1,
+dash-kit,coding_convention,ok,50,
+dash-kit,crypto_domain_model,ok,2,
+dash-kit,cross_module_contract,ok,0,No PublicApiSurface/PublicApiSymbol rows found for the current commit 'b7ea31ee9ca2e0d790e1e2d46ef681efc03103ff'.
+dash-kit,cross_repo_version_skew,ok,1,
+dash-kit,dead_symbol_binary_surface,error,,periphery fixture not found: /repos-hs/DashKit.Swift/periphery/periphery-3.7.4-s
+dash-kit,dependency_surface,ok,0,
+dash-kit,error_handling_policy,ok,84,
+dash-kit,hot_path_profiler,ok,0,profiles directory not found under repo root: /repos-hs/DashKit.Swift/profiles
+dash-kit,hotspot,ok,385,
+dash-kit,localization_accessibility,ok,9,
+dash-kit,public_api_surface,ok,0,No public API artifacts found under '.palace/public-api/kotlin/*.api' or '.palace/public-api/swift/*.swiftinterface'.
+dash-kit,reactive_dependency_tracer,ok,2711,
+dash-kit,testability_di,ok,26,
+evm-kit,symbol_index_swift,ok,214142,
+evm-kit,arch_layer,ok,1,
+evm-kit,git_history,ok,0,
+evm-kit,code_ownership,ok,1,
+evm-kit,coding_convention,ok,86,
+evm-kit,crypto_domain_model,ok,4,
+evm-kit,cross_module_contract,ok,0,No PublicApiSurface/PublicApiSymbol rows found for the current commit '82dd196382b2e38f8e6385d1d300e8993a96aac7'.
+evm-kit,cross_repo_version_skew,ok,1,
+evm-kit,dead_symbol_binary_surface,error,,periphery fixture not found: /repos-hs/EvmKit.Swift/periphery/periphery-3.7.4-sw
+evm-kit,dependency_surface,ok,0,
+evm-kit,error_handling_policy,ok,128,
+evm-kit,hot_path_profiler,ok,0,profiles directory not found under repo root: /repos-hs/EvmKit.Swift/profiles
+evm-kit,hotspot,ok,611,
+evm-kit,localization_accessibility,ok,15,
+evm-kit,public_api_surface,ok,0,No public API artifacts found under '.palace/public-api/kotlin/*.api' or '.palace/public-api/swift/*.swiftinterface'.
+evm-kit,reactive_dependency_tracer,ok,1575,
+evm-kit,testability_di,ok,15,
+hd-wallet-kit,symbol_index_swift,ok,14433,
+hd-wallet-kit,arch_layer,ok,2,
+hd-wallet-kit,git_history,ok,33,
+hd-wallet-kit,code_ownership,ok,31,
+hd-wallet-kit,coding_convention,ok,9,
+hd-wallet-kit,crypto_domain_model,ok,0,
+hd-wallet-kit,cross_module_contract,ok,0,No PublicApiSurface/PublicApiSymbol rows found for the current commit '674f8771431baa00080b34363ab2dee6ad4d4fd0'.
+hd-wallet-kit,cross_repo_version_skew,ok,0,all targets lack :DEPENDS_ON data; run dependency_surface first
+hd-wallet-kit,dead_symbol_binary_surface,error,,periphery fixture not found: /repos-hs/HdWalletKit.Swift/periphery/periphery-3.7
+hd-wallet-kit,dependency_surface,ok,3,
+hd-wallet-kit,error_handling_policy,ok,8,
+hd-wallet-kit,hot_path_profiler,ok,0,profiles directory not found under repo root: /repos-hs/HdWalletKit.Swift/profiles
+hd-wallet-kit,hotspot,ok,78,
+hd-wallet-kit,localization_accessibility,ok,0,
+hd-wallet-kit,public_api_surface,ok,0,No public API artifacts found under '.palace/public-api/kotlin/*.api' or '.palace/public-api/swift/*.swiftinterface'.
+hd-wallet-kit,reactive_dependency_tracer,ok,137,
+hd-wallet-kit,testability_di,ok,1,
+hs-crypto-kit,symbol_index_swift,ok,12567,
+hs-crypto-kit,arch_layer,ok,2,
+hs-crypto-kit,git_history,ok,11,
+hs-crypto-kit,code_ownership,ok,14,
+hs-crypto-kit,coding_convention,ok,2,
+hs-crypto-kit,crypto_domain_model,ok,0,
+hs-crypto-kit,cross_module_contract,ok,0,No PublicApiSurface/PublicApiSymbol rows found for the current commit '12f302d699ad9855a37b4f67e9ca7480f37b6220'.
+hs-crypto-kit,cross_repo_version_skew,ok,0,all targets lack :DEPENDS_ON data; run dependency_surface first
+hs-crypto-kit,dead_symbol_binary_surface,error,,periphery fixture not found: /repos-hs/HsCryptoKit.Swift/periphery/periphery-3.7
+hs-crypto-kit,dependency_surface,ok,1,
+hs-crypto-kit,error_handling_policy,ok,0,
+hs-crypto-kit,hot_path_profiler,ok,0,profiles directory not found under repo root: /repos-hs/HsCryptoKit.Swift/profiles
+hs-crypto-kit,hotspot,ok,82,
+hs-crypto-kit,localization_accessibility,ok,0,
+hs-crypto-kit,public_api_surface,ok,0,No public API artifacts found under '.palace/public-api/kotlin/*.api' or '.palace/public-api/swift/*.swiftinterface'.
+hs-crypto-kit,reactive_dependency_tracer,ok,286,
+hs-crypto-kit,testability_di,ok,1,
+hstoolkit,symbol_index_swift,ok,131971,
+hstoolkit,arch_layer,ok,1,
+hstoolkit,git_history,ok,20,
+hstoolkit,code_ownership,ok,30,
+hstoolkit,coding_convention,ok,13,
+hstoolkit,crypto_domain_model,ok,0,
+hstoolkit,cross_module_contract,ok,0,No PublicApiSurface/PublicApiSymbol rows found for the current commit '8d56708a2186f809872f4d9e776cb91c8c8f39b5'.
+hstoolkit,cross_repo_version_skew,ok,0,all targets lack :DEPENDS_ON data; run dependency_surface first
+hstoolkit,dead_symbol_binary_surface,error,,periphery fixture not found: /repos-hs/HsToolKit.Swift/periphery/periphery-3.7.4
+hstoolkit,dependency_surface,ok,0,
+hstoolkit,error_handling_policy,ok,16,
+hstoolkit,hot_path_profiler,ok,0,profiles directory not found under repo root: /repos-hs/HsToolKit.Swift/profiles
+hstoolkit,hotspot,ok,108,
+hstoolkit,localization_accessibility,ok,0,
+hstoolkit,public_api_surface,ok,0,No public API artifacts found under '.palace/public-api/kotlin/*.api' or '.palace/public-api/swift/*.swiftinterface'.
+hstoolkit,reactive_dependency_tracer,ok,1,
+hstoolkit,testability_di,ok,6,
+litecoin-kit,symbol_index_swift,ok,0,LitecoinKit.Swift not mounted in palace-mcp container; SCIP file not generated; follow-up: mount repo
+litecoin-kit,arch_layer,ok,1,
+litecoin-kit,git_history,ok,1249,
+litecoin-kit,code_ownership,ok,64,
+litecoin-kit,coding_convention,ok,11,
+litecoin-kit,crypto_domain_model,ok,2,
+litecoin-kit,cross_module_contract,ok,0,No PublicApiSurface/PublicApiSymbol rows found for the current commit '5c68fa35f8c0ff373f585f0e41737c194392dbc5'.
+litecoin-kit,cross_repo_version_skew,ok,0,all targets lack :DEPENDS_ON data; run dependency_surface first
+litecoin-kit,dead_symbol_binary_surface,error,,periphery fixture not found: /repos-hs/LitecoinKit.Swift/periphery/periphery-3.7
+litecoin-kit,dependency_surface,ok,1,
+litecoin-kit,error_handling_policy,ok,31,
+litecoin-kit,hot_path_profiler,ok,0,profiles directory not found under repo root: /repos-hs/LitecoinKit.Swift/profiles
+litecoin-kit,hotspot,ok,127,
+litecoin-kit,localization_accessibility,ok,9,
+litecoin-kit,public_api_surface,ok,0,No public API artifacts found under '.palace/public-api/kotlin/*.api' or '.palace/public-api/swift/*.swiftinterface'.
+litecoin-kit,reactive_dependency_tracer,ok,1,
+litecoin-kit,testability_di,ok,11,
+uw-ios-app,symbol_index_swift,ok,387334,
+uw-ios-app,arch_layer,ok,0,
+uw-ios-app,git_history,ok,0,
+uw-ios-app,code_ownership,timeout,,[GIM-1072 medium] timed out after 70s
+uw-ios-app,coding_convention,ok,1168,
+uw-ios-app,crypto_domain_model,timeout,,[GIM-1072 medium] timed out after 70s
+uw-ios-app,cross_module_contract,ok,0,
+uw-ios-app,cross_repo_version_skew,ok,0,all targets lack :DEPENDS_ON data; run dependency_surface first
+uw-ios-app,dead_symbol_binary_surface,ok,0,
+uw-ios-app,dependency_surface,ok,0,
+uw-ios-app,error_handling_policy,ok,1627,
+uw-ios-app,hot_path_profiler,ok,0,profiles directory not found under repo root: /repos-hs/unstoppable-wallet-ios/profiles
+uw-ios-app,hotspot,timeout,,[GIM-1072 medium] timed out after 70s
+uw-ios-app,localization_accessibility,timeout,,[GIM-1072 medium] timed out after 70s
+uw-ios-app,public_api_surface,ok,167,
+uw-ios-app,reactive_dependency_tracer,ok,1,
+uw-ios-app,testability_di,ok,82,
