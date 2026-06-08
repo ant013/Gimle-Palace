@@ -61,8 +61,14 @@ from palace_mcp.graphiti_schema.entities import (
 _LOG = logging.getLogger(__name__)
 
 # CM project names are derived from mount-path components joined with "-".
-# Only allow characters that are safe to embed in a Cypher string literal.
-_SAFE_SLUG_RE = re.compile(r"^[a-z0-9_\-/]+$")
+# Examples seen in the wild:
+#   Users-ant013-Ios-HorizontalSystems-EvmKit.Swift   (host path, mixed case + dot)
+#   Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
+#   repos-gimle, repos-baseline-uw-baseline-871c0e8  (container path, lowercase)
+# Allow uppercase letters and dots in addition to the original
+# [a-z0-9_-/]; still Cypher-safe (no quotes, semicolons, spaces, or control
+# characters that could escape a string literal).
+_SAFE_SLUG_RE = re.compile(r"^[A-Za-z0-9_\-/.]+$")
 
 
 def _cm_project_name(repo_path: Path) -> str:

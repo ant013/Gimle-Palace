@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import sys
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
@@ -49,7 +50,15 @@ class LizardRunResult:
 
 
 async def _invoke_lizard(files: list[Path], *, timeout_s: int) -> str:
+    # Invoke as Python module so we don't depend on `lizard` being on $PATH.
+    # The palace-mcp uvicorn server inherits a PATH that does not include the
+    # venv `bin/` directory, so `asyncio.create_subprocess_exec("lizard", ...)`
+    # fails with [Errno 2] No such file or directory even when the package
+    # is installed in the active venv. Using `sys.executable -m lizard`
+    # locates the CLI through the running interpreter instead.
     proc = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-m",
         "lizard",
         "--xml",
         "--working_threads=1",

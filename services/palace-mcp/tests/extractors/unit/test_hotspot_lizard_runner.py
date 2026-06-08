@@ -126,3 +126,39 @@ async def test_run_batch_fail_run_on_timeout_raises(tmp_path: Path):
     ):
         with pytest.raises(LizardBatchTimeout):
             await run_batch(files, repo_root=tmp_path, timeout_s=1, behavior="fail_run")
+
+
+@pytest.mark.asyncio
+async def test_invoke_lizard_uses_python_module_not_path_lizard(tmp_path: Path):
+    """Regression: invoke lizard as `sys.executable -m lizard`, not as `lizard`
+    on PATH. The palace-mcp uvicorn server inherits a PATH that doesn't include
+    the venv `bin/` directory, so a plain `lizard` exec fails with
+    [Errno 2] No such file or directory even when the package is installed.
+    """
+    import sys
+
+    captured: dict[str, tuple] = {}
+
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        captured["args"] = args
+        proc = MagicMock()
+
+        async def communicate():
+            return (b"<?xml version='1.0'?><cppncss></cppncss>", b"")
+
+        proc.communicate = communicate
+        return proc
+
+    from palace_mcp.extractors.hotspot import lizard_runner as lr
+
+    with patch.object(
+        lr.asyncio, "create_subprocess_exec", fake_create_subprocess_exec
+    ):
+        await lr._invoke_lizard([tmp_path / "a.py"], timeout_s=5)
+
+    args = captured["args"]
+    assert args[0] == sys.executable, (
+        f"first arg must be sys.executable to avoid PATH dependency; got {args[0]!r}"
+    )
+    assert args[1] == "-m", f"second arg must be -m; got {args[1]!r}"
+    assert args[2] == "lizard", f"third arg must be lizard module name; got {args[2]!r}"
