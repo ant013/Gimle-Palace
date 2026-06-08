@@ -91,6 +91,9 @@ def test_infra_bundles_no_longer_own_daily_intake_decisions():
         assert "mode=audit_delta" in text
         assert "Never advance the cursor before successful Telegram delivery" in text
         assert "more than 300 files" in text
+        assert "Persist each completed subagent JSON immediately" in text
+        assert "$RUN/recovery.json" in text
+        assert "resume by spawning only missing reviewers" in text
 
 
 def test_reconcile_plan_is_dry_run_and_uses_dispatcher_assignments():
@@ -108,6 +111,50 @@ def test_reconcile_plan_is_dry_run_and_uses_dispatcher_assignments():
     assert by_id["daily-android-version-0.49"]["desired_assigneeAgentId"] == agents["UWACTO"]
     assert by_id["daily-android-version-0.49"]["needs_update"] is True
     assert by_id["daily-ios-version-0.49"]["needs_update"] is False
+
+
+def test_reconcile_plan_matches_live_uuid_routine_and_detects_cursor_drift():
+    config = load_config(CONFIG)
+    agents = resolve_agent_ids("uaudit", REPO / "paperclips/projects/uaudit/bindings.local-example.yaml")
+    current = normalize_current_routines({
+        "routines": [
+            {
+                "id": "6f14f50f-4834-4812-b9e0-aee857397c7c",
+                "title": "UAudit daily Android version delta audit",
+                "description": (
+                    "UAudit daily version-branch delta audit\n"
+                    "platform: android\n"
+                    "cursor: /Users/Shared/UnstoppableAudit/artifacts/UWAInfraEngineer/cursor.json\n"
+                ),
+                "assigneeAgentId": agents["UWACTO"],
+            },
+            {
+                "id": "12cf9f8d-0000-4000-9000-000000000000",
+                "title": "UAudit daily iOS version delta audit",
+                "description": (
+                    "UAudit daily version-branch delta audit\n"
+                    "platform: ios\n"
+                    "cursor: /Users/Shared/UnstoppableAudit/state/ios-version-audit.json\n"
+                ),
+                "assigneeAgentId": agents["UWICTO"],
+            },
+        ]
+    })
+    plan = build_plan(config, agents, current, {"project_root": "/Users/Shared/UnstoppableAudit"})
+    by_id = {item["routine_id"]: item for item in plan}
+
+    android = by_id["daily-android-version-0.49"]
+    assert android["current_routine_id"] == "6f14f50f-4834-4812-b9e0-aee857397c7c"
+    assert android["matched_by"] == "title"
+    assert android["needs_assignee_update"] is False
+    assert android["needs_cursor_update"] is True
+    assert android["desired_cursor_path"] == "/Users/Shared/UnstoppableAudit/state/android-version-audit.json"
+    assert android["desired_description"] is not None
+    assert "/Users/Shared/UnstoppableAudit/state/android-version-audit.json" in android["desired_description"]
+    assert "/artifacts/UWAInfraEngineer/cursor.json" not in android["desired_description"]
+
+    ios = by_id["daily-ios-version-0.49"]
+    assert ios["needs_update"] is False
 
 
 def test_validate_uaudit_docs_script_passes():

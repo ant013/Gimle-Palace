@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -21,10 +22,12 @@ if str(SCRIPT_DIR) not in sys.path:
 from resolve_bindings import resolve_all  # noqa: E402
 
 DEFAULT_CONFIG = REPO_ROOT / "paperclips/projects/uaudit/daily-version-branch-routines.yaml"
+DEFAULT_PATHS = REPO_ROOT / "paperclips/projects/uaudit/paths.local-example.yaml"
 DEFAULT_AUTH_PATHS = (
     Path.home() / ".paperclip/auth.json",
     Path("/Users/anton/.paperclip/auth.json"),
 )
+CURSOR_PATH_RE = re.compile(r"/[^\s`\"']+/(?:state/(?:android|ios)-version-audit\.json|artifacts/[^\s/]+/cursor\.json)")
 
 
 def load_config(path: Path = DEFAULT_CONFIG) -> dict[str, Any]:
@@ -53,6 +56,40 @@ def resolve_agent_ids(project_key: str, bindings_path: Path | None) -> dict[str,
     if not isinstance(agents, dict):
         raise ValueError("bindings source did not resolve agents mapping")
     return {str(k): str(v) for k, v in agents.items()}
+
+
+def load_project_paths(project_key: str, paths_path: Path | None) -> dict[str, str]:
+    fallback = REPO_ROOT / "paperclips" / "projects" / project_key / "paths.local-example.yaml"
+    chosen = paths_path or (Path.home() / ".paperclip" / "projects" / project_key / "paths.yaml")
+    if not chosen.is_file() and fallback.is_file():
+        chosen = fallback
+    if not chosen.is_file():
+        return {}
+    data = yaml.safe_load(chosen.read_text())
+    if not isinstance(data, dict):
+        raise ValueError(f"{chosen}: paths source must be mapping")
+    return {str(k): str(v) for k, v in data.items() if isinstance(v, str)}
+
+
+def render_path_template(template: str, paths: dict[str, str]) -> str:
+    def replace(match: re.Match[str]) -> str:
+        key = match.group(1)
+        if not key.startswith("paths."):
+            raise ValueError(f"unsupported path template reference: {key}")
+        path_key = key.split(".", 1)[1]
+        value = paths.get(path_key)
+        if not value:
+            raise ValueError(f"missing paths.{path_key} needed to render {template!r}")
+        return value
+
+    return re.sub(r"\{\{\s*([^}\s]+)\s*\}\}", replace, template)
+
+
+def routine_title(routine: dict[str, Any]) -> str:
+    platform = str(routine.get("platform", "")).strip()
+    if not platform:
+        return str(routine.get("id", ""))
+    return f"UAudit daily {platform.capitalize()} version delta audit"
 
 
 def required_agent_names(config: dict[str, Any]) -> set[str]:
@@ -90,23 +127,96 @@ def normalize_current_routines(payload: Any) -> dict[str, dict[str, Any]]:
     return result
 
 
-def build_plan(config: dict[str, Any], agent_ids: dict[str, str], current: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+def _routine_text(item: dict[str, Any]) -> str:
+    parts = []
+    for key in ("title", "name", "description", "body", "instructions"):
+        value = item.get(key)
+        if isinstance(value, str):
+            parts.append(value)
+    return "\n".join(parts)
+
+
+def _find_current_routine(
+    routine: dict[str, Any],
+    current: dict[str, dict[str, Any]],
+    marker: str,
+) -> tuple[str, dict[str, Any], str]:
+    rid = routine["id"]
+    direct = current.get(rid)
+    if direct is not None:
+        return rid, direct, "id"
+
+    expected_title = routine_title(routine)
+    for current_id, item in current.items():
+        if item.get("title") == expected_title or item.get("name") == expected_title:
+            return current_id, item, "title"
+
+    platform = str(routine.get("platform", ""))
+    for current_id, item in current.items():
+        text = _routine_text(item).lower()
+        if marker.lower() in text and platform.lower() in text:
+            return current_id, item, "marker_platform"
+
+    raise ValueError(f"routine {rid!r} not found; creation is not implicit")
+
+
+def _description_with_cursor(description: str, desired_cursor_path: str) -> str:
+    if desired_cursor_path in description:
+        return description
+    if CURSOR_PATH_RE.search(description):
+        return CURSOR_PATH_RE.sub(desired_cursor_path, description)
+    suffix = f"\ncursor: {desired_cursor_path}"
+    return description.rstrip() + suffix if description else suffix.lstrip()
+
+
+def _cursor_paths_in_item(item: dict[str, Any]) -> list[str]:
+    paths: list[str] = []
+    for key in ("description", "body", "instructions"):
+        value = item.get(key)
+        if isinstance(value, str):
+            paths.extend(CURSOR_PATH_RE.findall(value))
+    return sorted(set(paths))
+
+
+def build_plan(
+    config: dict[str, Any],
+    agent_ids: dict[str, str],
+    current: dict[str, dict[str, Any]],
+    paths: dict[str, str] | None = None,
+) -> list[dict[str, Any]]:
     plan: list[dict[str, Any]] = []
+    marker = str(config.get("marker", ""))
     for routine in config["routines"]:
         rid = routine["id"]
-        current_item = current.get(rid)
-        if current_item is None:
-            raise ValueError(f"routine {rid!r} not found; creation is not implicit")
+        current_id, current_item, matched_by = _find_current_routine(routine, current, marker)
         dispatcher = routine["dispatcher"]
         desired = agent_ids[dispatcher]
         current_assignee = current_item.get("assigneeAgentId") or current_item.get("assignee_agent_id")
+        desired_cursor_path = None
+        current_cursor_paths: list[str] = []
+        needs_cursor_update = False
+        desired_description = None
+        if paths is not None:
+            desired_cursor_path = render_path_template(routine["cursor_path_template"], paths)
+            current_cursor_paths = _cursor_paths_in_item(current_item)
+            needs_cursor_update = desired_cursor_path not in current_cursor_paths
+            description = current_item.get("description")
+            if needs_cursor_update and isinstance(description, str):
+                desired_description = _description_with_cursor(description, desired_cursor_path)
         plan.append({
             "routine_id": rid,
+            "current_routine_id": current_id,
+            "matched_by": matched_by,
             "platform": routine.get("platform"),
             "dispatcher": dispatcher,
             "desired_assigneeAgentId": desired,
             "current_assigneeAgentId": current_assignee,
-            "needs_update": current_assignee != desired,
+            "desired_cursor_path": desired_cursor_path,
+            "current_cursor_paths": current_cursor_paths,
+            "needs_assignee_update": current_assignee != desired,
+            "needs_cursor_update": needs_cursor_update,
+            "desired_description": desired_description,
+            "needs_update": current_assignee != desired or needs_cursor_update,
         })
     return plan
 
@@ -159,6 +269,7 @@ def main() -> int:
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--project-key", default="uaudit")
     parser.add_argument("--bindings", type=Path)
+    parser.add_argument("--paths", type=Path)
     parser.add_argument("--company-id")
     parser.add_argument("--api-url", default=os.environ.get("PAPERCLIP_API_URL", "http://localhost:3100"))
     parser.add_argument("--auth-json", type=Path)
@@ -172,6 +283,7 @@ def main() -> int:
             raise ValueError("--create is not implemented; missing routines require a separate reviewed change")
         config = load_config(args.config)
         agent_ids = resolve_agent_ids(args.project_key, args.bindings)
+        paths = load_project_paths(args.project_key, args.paths)
         validate_config_agents(config, agent_ids)
 
         company_id = args.company_id
@@ -188,7 +300,7 @@ def main() -> int:
             current_payload = request_json("GET", f"{args.api_url.rstrip('/')}/api/companies/{company_id}/routines", token)
 
         current = normalize_current_routines(current_payload)
-        plan = build_plan(config, agent_ids, current)
+        plan = build_plan(config, agent_ids, current, paths)
         result = {"mode": "apply" if args.apply else "dry-run", "company_id": company_id, "updates": plan}
 
         if args.apply:
@@ -198,8 +310,21 @@ def main() -> int:
                 token = resolve_token(args.api_url, args.auth_json)
             for item in plan:
                 if item["needs_update"]:
-                    body = {"assigneeAgentId": item["desired_assigneeAgentId"]}
-                    request_json("PATCH", f"{args.api_url.rstrip('/')}/api/companies/{company_id}/routines/{item['routine_id']}", token, body)
+                    body: dict[str, Any] = {}
+                    if item["needs_assignee_update"]:
+                        body["assigneeAgentId"] = item["desired_assigneeAgentId"]
+                    if item["needs_cursor_update"] and item["desired_description"] is not None:
+                        body["description"] = item["desired_description"]
+                    if not body:
+                        raise ValueError(
+                            f"routine {item['routine_id']} has cursor drift but no editable description field",
+                        )
+                    request_json(
+                        "PATCH",
+                        f"{args.api_url.rstrip('/')}/api/companies/{company_id}/routines/{item['current_routine_id']}",
+                        token,
+                        body,
+                    )
 
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
