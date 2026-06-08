@@ -186,7 +186,9 @@ class TestPassthroughSerialization:
         _set_cm_session(None)
 
     @pytest.mark.asyncio
-    async def test_fastmcp_signature_binding_flat_args(self) -> None:
+    async def test_fastmcp_signature_binding_flat_args(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """FastMCP schema binding propagates flat args to CM — no double-nesting.
 
         Exercises the full FastMCP call path (mcp.call_tool, not tool.run)
@@ -194,7 +196,25 @@ class TestPassthroughSerialization:
         """
         from mcp.types import CallToolResult
 
-        from palace_mcp.code_router import _set_cm_session, register_code_tools
+        from palace_mcp.code.native_detect_changes import FALLBACK_TO_CM
+        from palace_mcp.code_router import (
+            PassthroughEntry,
+            _PASSTHROUGH_TOOLS,
+            _set_cm_session,
+            register_code_tools,
+        )
+
+        async def _fallback(**_: object) -> object:
+            return FALLBACK_TO_CM
+
+        monkeypatch.setitem(
+            _PASSTHROUGH_TOOLS,
+            "search_graph",
+            PassthroughEntry(
+                "Search code graph nodes by name pattern, label, or file pattern.",
+                native_handler=_fallback,
+            ),
+        )
 
         captured: dict = {}
 
@@ -268,11 +288,31 @@ class TestPassthroughSerialization:
         _set_cm_session(None)
 
     @pytest.mark.asyncio
-    async def test_explicit_include_deprecated_false_is_forwarded(self) -> None:
+    async def test_explicit_include_deprecated_false_is_forwarded(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Explicit include_deprecated=false must survive pass-through unchanged."""
         from mcp.types import CallToolResult
 
-        from palace_mcp.code_router import _set_cm_session, register_code_tools
+        from palace_mcp.code.native_detect_changes import FALLBACK_TO_CM
+        from palace_mcp.code_router import (
+            PassthroughEntry,
+            _PASSTHROUGH_TOOLS,
+            _set_cm_session,
+            register_code_tools,
+        )
+
+        async def _fallback(**_: object) -> object:
+            return FALLBACK_TO_CM
+
+        monkeypatch.setitem(
+            _PASSTHROUGH_TOOLS,
+            "search_graph",
+            PassthroughEntry(
+                "Search code graph nodes by name pattern, label, or file pattern.",
+                native_handler=_fallback,
+            ),
+        )
 
         captured: dict[str, object] = {}
 
@@ -311,11 +351,31 @@ class TestPassthroughSerialization:
         _set_cm_session(None)
 
     @pytest.mark.asyncio
-    async def test_explicit_include_deprecated_true_is_forwarded(self) -> None:
+    async def test_explicit_include_deprecated_true_is_forwarded(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Explicit include_deprecated=true must survive pass-through unchanged."""
         from mcp.types import CallToolResult
 
-        from palace_mcp.code_router import _set_cm_session, register_code_tools
+        from palace_mcp.code.native_detect_changes import FALLBACK_TO_CM
+        from palace_mcp.code_router import (
+            PassthroughEntry,
+            _PASSTHROUGH_TOOLS,
+            _set_cm_session,
+            register_code_tools,
+        )
+
+        async def _fallback(**_: object) -> object:
+            return FALLBACK_TO_CM
+
+        monkeypatch.setitem(
+            _PASSTHROUGH_TOOLS,
+            "search_graph",
+            PassthroughEntry(
+                "Search code graph nodes by name pattern, label, or file pattern.",
+                native_handler=_fallback,
+            ),
+        )
 
         captured: dict[str, object] = {}
 

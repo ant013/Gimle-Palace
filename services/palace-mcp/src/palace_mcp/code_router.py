@@ -29,6 +29,7 @@ from palace_mcp.code.native_detect_changes import FALLBACK_TO_CM, native_detect_
 from palace_mcp.code.native_get_architecture import native_get_architecture
 from palace_mcp.code.native_get_code_snippet import native_get_code_snippet
 from palace_mcp.code.native_query_graph import native_query_graph
+from palace_mcp.code.native_search_graph import native_search_graph
 from palace_mcp.code.native_trace_call_path import native_trace_call_path
 from palace_mcp.code.namespace import resolve as resolve_namespace
 
@@ -226,7 +227,8 @@ async def _normalize_project_args(arguments: dict[str, Any]) -> dict[str, Any]:
 
 _PASSTHROUGH_TOOLS: dict[str, PassthroughEntry] = {
     "search_graph": PassthroughEntry(
-        "Search code graph nodes by name pattern, label, or file pattern."
+        "Search code graph nodes by name pattern, label, or file pattern.",
+        native_handler=native_search_graph,
     ),
     "trace_call_path": PassthroughEntry(
         "Trace function call chains (inbound/outbound/both).",
