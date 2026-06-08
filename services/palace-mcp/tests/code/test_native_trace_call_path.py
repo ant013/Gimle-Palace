@@ -271,6 +271,106 @@ async def test_trace_call_path_both_direction_collects_callers_and_callees(
 
 
 @pytest.mark.asyncio
+async def test_trace_call_path_excludes_test_paths_from_envelope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    driver = _mock_driver(
+        [
+            {
+                "hop": 1,
+                "path_nodes": [
+                    {
+                        "qualified_name": "pkg.root",
+                        "name": "root",
+                        "file_path": "src/root.py",
+                        "kind": "function",
+                        "is_test": False,
+                    },
+                    {
+                        "qualified_name": "tests.test_root",
+                        "name": "test_root",
+                        "file_path": "tests/test_root.py",
+                        "kind": "function",
+                        "is_test": False,
+                    },
+                ],
+                "path_edges": [
+                    {
+                        "source": "tests.test_root",
+                        "target": "pkg.root",
+                        "type": "CALLS",
+                    }
+                ],
+            }
+        ],
+        [
+            {
+                "hop": 1,
+                "path_nodes": [
+                    {
+                        "qualified_name": "pkg.root",
+                        "name": "root",
+                        "file_path": "src/root.py",
+                        "kind": "function",
+                        "is_test": False,
+                    },
+                    {
+                        "qualified_name": "pkg.child",
+                        "name": "child",
+                        "file_path": "src/child.py",
+                        "kind": "function",
+                        "is_test": False,
+                    },
+                ],
+                "path_edges": [
+                    {
+                        "source": "pkg.root",
+                        "target": "pkg.child",
+                        "type": "CALLS",
+                    }
+                ],
+            }
+        ],
+    )
+    monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: driver)
+
+    result = await native_trace_call_path(
+        project="gimle",
+        function_name="root",
+        direction="both",
+        depth=3,
+    )
+
+    assert result["callers"] == []
+    assert result["nodes"] == [
+        {
+            "qualified_name": "pkg.child",
+            "name": "child",
+            "file_path": "src/child.py",
+            "kind": "function",
+        },
+        {
+            "qualified_name": "pkg.root",
+            "name": "root",
+            "file_path": "src/root.py",
+            "kind": "function",
+        },
+    ]
+    assert result["edges"] == [
+        {"source": "pkg.root", "target": "pkg.child", "type": "CALLS"}
+    ]
+    assert result["callees"] == [
+        {
+            "qualified_name": "pkg.child",
+            "name": "child",
+            "file_path": "src/child.py",
+            "kind": "function",
+            "hop": 1,
+        }
+    ]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("depth", "expected_fragment", "expected_clamped_depth"),
     [(0, "*1..1", 1), (7, "*1..6", 6)],

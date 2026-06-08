@@ -210,6 +210,12 @@ async def native_trace_call_path(
                     path_nodes = cast(list[dict[str, Any]], row.get("path_nodes") or [])
                     path_edges = cast(list[dict[str, Any]], row.get("path_edges") or [])
                     normalized_nodes = [_node_payload(node) for node in path_nodes]
+                    if (
+                        normalized_nodes
+                        and normalized_nodes[-1].get("is_test")
+                        and not include_tests
+                    ):
+                        continue
                     for node in normalized_nodes:
                         qualified_name = str(node["qualified_name"])
                         if qualified_name and qualified_name not in node_index:
@@ -227,8 +233,6 @@ async def native_trace_call_path(
                     if not normalized_nodes:
                         continue
                     endpoint = dict(normalized_nodes[-1])
-                    if endpoint.get("is_test") and not include_tests:
-                        continue
                     endpoint["hop"] = hop
                     qualified_name = str(endpoint["qualified_name"])
                     if not qualified_name:
