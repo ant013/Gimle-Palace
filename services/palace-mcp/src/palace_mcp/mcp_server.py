@@ -164,7 +164,7 @@ def set_default_group_id(group_id: str) -> None:
 # Server start time for uptime_seconds calculation.
 _start_time: float = time.monotonic()
 _code_loaded_at: str = (
-    datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 )
 
 # Pattern #21: track registered tool names for startup uniqueness assertion.
