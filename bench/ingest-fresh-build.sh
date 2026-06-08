@@ -65,6 +65,25 @@ resolve_scheme() {
     printf '%s\n' "$scheme"
 }
 
+prepare_uw_ios_config() {
+    local repo_dir=$1
+    local config_dir="$repo_dir/Unstoppable/Unstoppable/Configuration"
+    local template="$config_dir/Config.template.xcconfig"
+    local config="$config_dir/Config.xcconfig"
+
+    if [[ -f "$config" ]]; then
+        return 0
+    fi
+    if [[ ! -f "$template" ]]; then
+        echo "missing unstoppable-wallet-ios config template: $template" >&2
+        echo "expected Config.template.xcconfig from the repo checkout; cannot prepare $config" >&2
+        return 1
+    fi
+
+    cp "$template" "$config"
+    echo "  [prepare] copied Unstoppable/Unstoppable/Configuration/Config.template.xcconfig -> Config.xcconfig"
+}
+
 main() {
     local force=0
     local picked=()
@@ -133,6 +152,10 @@ main() {
                 { echo "import Foundation"; cat "$sa"; } > "$sa.new" && mv "$sa.new" "$sa"
                 echo "  [patched GRDB StatementAuthorizer.swift]"
             fi
+        fi
+
+        if [[ "$dir" == "unstoppable-wallet-ios" ]]; then
+            prepare_uw_ios_config "$repo_dir" || return 1
         fi
 
         echo "  [build]"

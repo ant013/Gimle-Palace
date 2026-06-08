@@ -46,6 +46,60 @@ assert_resolution_failure() {
     fi
 }
 
+config_dir="$tmpdir/repo/Unstoppable/Unstoppable/Configuration"
+template_path="$config_dir/Config.template.xcconfig"
+config_path="$config_dir/Config.xcconfig"
+mkdir -p "$config_dir"
+
+assert_prepare_copies_template() {
+    rm -f "$config_path"
+    printf 'FROM_TEMPLATE=1\n' >"$template_path"
+
+    prepare_uw_ios_config "$tmpdir/repo" >"$tmpdir/prepare.out"
+
+    if [[ "$(cat "$config_path")" != "FROM_TEMPLATE=1" ]]; then
+        echo "expected Config.xcconfig to be copied from template" >&2
+        return 1
+    fi
+    if ! grep -q "\[prepare\] copied Unstoppable/Unstoppable/Configuration/Config.template.xcconfig -> Config.xcconfig" "$tmpdir/prepare.out"; then
+        echo "expected prepare log output" >&2
+        return 1
+    fi
+}
+
+assert_prepare_keeps_existing_config() {
+    printf 'FROM_TEMPLATE=2\n' >"$template_path"
+    printf 'KEEP_ME=1\n' >"$config_path"
+
+    prepare_uw_ios_config "$tmpdir/repo" >"$tmpdir/prepare.out"
+
+    if [[ "$(cat "$config_path")" != "KEEP_ME=1" ]]; then
+        echo "expected existing Config.xcconfig to be preserved" >&2
+        return 1
+    fi
+    if [[ -s "$tmpdir/prepare.out" ]]; then
+        echo "did not expect prepare log output when Config.xcconfig already exists" >&2
+        return 1
+    fi
+}
+
+assert_prepare_fails_without_template() {
+    rm -f "$template_path" "$config_path"
+
+    if prepare_uw_ios_config "$tmpdir/repo" >"$tmpdir/prepare.out" 2>"$tmpdir/prepare.err"; then
+        echo "expected prepare_uw_ios_config to fail without template" >&2
+        return 1
+    fi
+    if ! grep -q "missing unstoppable-wallet-ios config template" "$tmpdir/prepare.err"; then
+        echo "expected missing template error output" >&2
+        return 1
+    fi
+    if ! grep -q "Unstoppable/Unstoppable/Configuration/Config.template.xcconfig" "$tmpdir/prepare.err"; then
+        echo "expected missing template path in error output" >&2
+        return 1
+    fi
+}
+
 cat >"$tmpdir/production.txt" <<'EOF'
 Information about workspace "Wallet":
     Schemes:
@@ -75,5 +129,8 @@ assert_scheme "Production" "$tmpdir/production.txt"
 assert_scheme "Development" "$tmpdir/development.txt"
 assert_scheme "UnstoppableWallet" "$tmpdir/legacy.txt"
 assert_resolution_failure "$tmpdir/unknown.txt"
+assert_prepare_copies_template
+assert_prepare_keeps_existing_config
+assert_prepare_fails_without_template
 
 echo "ok"
