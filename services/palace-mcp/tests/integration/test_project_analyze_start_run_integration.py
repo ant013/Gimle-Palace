@@ -9,6 +9,7 @@ from collections.abc import AsyncIterator
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 import pytest_asyncio
@@ -17,6 +18,7 @@ from palace_mcp.extractors import registry
 from palace_mcp.project_analyze import (
     ACTIVE_ANALYSIS_RUN_STATUSES,
     ActiveAnalysisRunExistsError,
+    AnalysisCheckpointStatus,
     AnalysisRunStatus,
     ProjectAnalysisService,
 )
@@ -380,3 +382,63 @@ async def test_different_keys_allow_parallel_starts(
 
     assert row is not None
     assert row["run_count"] == 2
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_execute_run_allows_prune_after_skipped_symbol_index(
+    live_driver: Any,
+) -> None:
+    async def _fake_audit_runner(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        return {"ok": True, "report_markdown": "# audit\n"}
+
+    service = ProjectAnalysisService(
+        driver=live_driver,
+        extractor_registry=registry.EXTRACTORS,
+        audit_runner=_fake_audit_runner,
+        lease_owner="pytest",
+        lease_seconds=30,
+    )
+    started = await service.start_run(
+        slug="tron-kit",
+        parent_mount="hs",
+        relative_path="TronKit.Swift",
+        language_profile="swift_kit",
+        extractors=["symbol_index_swift", "prune_swift_symbols"],
+        idempotency_key="integration-skipped-then-prune",
+    )
+
+    calls: list[tuple[str, str | None]] = []
+
+    async def _fake_run_extractor(**kwargs: Any) -> dict[str, Any]:
+        calls.append((kwargs["name"], kwargs.get("companion_run_id")))
+        if kwargs["name"] == "symbol_index_swift":
+            return {
+                "ok": True,
+                "run_id": "symbol-run-skip",
+                "outcome": "skipped",
+            }
+        if kwargs["name"] == "prune_swift_symbols":
+            return {
+                "ok": True,
+                "run_id": "prune-run-ok",
+                "outcome": "ok",
+            }
+        raise AssertionError(f"unexpected extractor {kwargs['name']}")
+
+    with patch("palace_mcp.project_analyze.run_extractor", _fake_run_extractor):
+        finished = await service.execute_run(
+            started.run.run_id,
+            graphiti=object(),
+            reacquire_lease=False,
+        )
+
+    assert calls == [
+        ("symbol_index_swift", None),
+        ("prune_swift_symbols", "symbol-run-skip"),
+    ]
+    assert [checkpoint.status for checkpoint in finished.checkpoints] == [
+        AnalysisCheckpointStatus.SKIPPED,
+        AnalysisCheckpointStatus.OK,
+    ]
+    assert finished.status == AnalysisRunStatus.SUCCEEDED_WITH_SKIPS
