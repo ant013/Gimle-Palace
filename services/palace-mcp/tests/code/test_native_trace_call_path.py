@@ -398,6 +398,26 @@ async def test_trace_call_path_clamps_depth_in_query_and_response(
 
 
 @pytest.mark.asyncio
+async def test_trace_call_path_redacts_cypher_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    driver = _mock_driver(
+        error=RuntimeError("boom /Users/anton/secret db.labels() schema")
+    )
+    monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: driver)
+
+    result = await native_trace_call_path(
+        project="gimle",
+        function_name="root",
+        direction="outbound",
+    )
+
+    assert result["error_code"] == "cypher_error"
+    assert "/Users/anton" not in result["message"]
+    assert "db.labels()" not in result["message"]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("mode", ["data_flow", "cross_service"])
 async def test_trace_call_path_non_calls_modes_return_phase2_required(
     mode: str,
@@ -427,3 +447,12 @@ def test_path_query_uses_only_call_edges() -> None:
         assert edge_type in query
     for edge_type in KNOWN_NON_CALL_EDGES:
         assert edge_type not in query
+
+
+@pytest.mark.parametrize("direction", ["inbound", "outbound"])
+def test_path_query_scopes_every_node_in_the_path(direction: str) -> None:
+    query = _path_query(direction, 3)
+
+    assert "root.group_id = $group_id" in query
+    assert "target.group_id = $group_id" in query
+    assert "all(node IN nodes(path) WHERE node.group_id = $group_id)" in query

@@ -6,6 +6,7 @@ from typing import Any, cast
 
 from palace_mcp.code.edges import CALL_EDGES
 from palace_mcp.code.native_detect_changes import FALLBACK_TO_CM
+from palace_mcp.code.native_query_graph import _redact_error
 
 _MIN_DEPTH = 1
 _MAX_DEPTH = 6
@@ -57,6 +58,7 @@ def _path_query(direction: str, depth: int) -> str:
 MATCH path = {path_pattern}
 WHERE root.group_id = $group_id
   AND target.group_id = $group_id
+  AND all(node IN nodes(path) WHERE node.group_id = $group_id)
   AND ($include_deprecated OR all(node IN nodes(path) WHERE NOT node:Deprecated))
   AND (
     root.qualified_name = $function_name
@@ -244,7 +246,7 @@ async def native_trace_call_path(
     except Exception as exc:  # noqa: BLE001
         return _error(
             "cypher_error",
-            f"trace_call_path query failed: {exc}",
+            f"trace_call_path query failed: {_redact_error(str(exc))}",
             project=project,
             mode=mode,
         )
