@@ -12,7 +12,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import re
 import time
 from collections.abc import Coroutine
 from dataclasses import dataclass
@@ -44,14 +43,16 @@ from palace_mcp.extractors.schemas import (
     ExtractorErrorResponse,
     ExtractorRunResponse,
 )
+from palace_mcp.git.path_resolver import (
+    ProjectNotRegistered,
+    resolve_registered_project,
+)
 from palace_mcp.memory.bundle import bundle_members
 from palace_mcp.memory.models import IngestRunResult, ProjectRef
 from palace_mcp.memory.projects import InvalidSlug, validate_slug
 
 REPOS_ROOT = Path(os.environ.get("PALACE_REPOS_ROOT", "/repos"))
 EXTRACTOR_TIMEOUT_S = 300.0
-_PARENT_MOUNT_RE = re.compile(r"^[a-z][a-z0-9-]{0,15}$")
-_RELATIVE_PATH_RE = re.compile(r"^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$")
 
 _logger = logging.getLogger(__name__)
 
@@ -148,30 +149,15 @@ async def _precheck(
 def _resolve_repo_path(
     *, repos_root: Path, project: str, project_node: Any
 ) -> Path | None:
-    parent_mount = _node_value(project_node, "parent_mount")
-    relative_path = _node_value(project_node, "relative_path")
-    if parent_mount and relative_path:
-        if not _PARENT_MOUNT_RE.match(parent_mount):
-            return None
-        if not _RELATIVE_PATH_RE.match(relative_path):
-            return None
-        if any(part == ".." for part in relative_path.split("/")):
-            return None
-
-        mount_root = repos_root.parent / f"{repos_root.name}-{parent_mount}"
-        candidate = (mount_root / relative_path).resolve()
-        if not candidate.is_dir():
-            return None
-        try:
-            candidate.relative_to(mount_root.resolve())
-        except ValueError:
-            return None
-        return candidate
-
-    candidate = repos_root / project
-    if not candidate.is_dir() or not (candidate / ".git").exists():
+    try:
+        return resolve_registered_project(
+            project,
+            project_node=project_node,
+            repos_root=repos_root,
+            require_git=False,
+        )
+    except (ProjectNotRegistered, ValueError):
         return None
-    return candidate
 
 
 def _resolve_scip_path_override(repo_path: Path, scip_path: str) -> Path | None:
@@ -185,17 +171,6 @@ def _resolve_scip_path_override(repo_path: Path, scip_path: str) -> Path | None:
     except ValueError:
         return None
     return candidate
-
-
-def _node_value(project_node: Any, key: str) -> str | None:
-    if hasattr(project_node, "get"):
-        value = project_node.get(key)
-    else:
-        try:
-            value = project_node[key]
-        except (KeyError, TypeError):
-            value = None
-    return value if isinstance(value, str) and value else None
 
 
 # --- execute ---

@@ -60,6 +60,7 @@ class SnippetResult:
 def resolve_snippet(
     *,
     project: str,
+    repo_path: Path | None = None,
     file_path: str | None,
     line_start: int | None,
     line_end: int | None,
@@ -79,10 +80,16 @@ def resolve_snippet(
     if file_path.startswith("/"):
         return None, "path_traversal_rejected", f"absolute path rejected: {file_path!r}"
 
-    try:
-        repo_root = resolve_project(project, repos_root=repos_root)
-    except (ProjectNotRegistered, ValueError):
-        return None, "project_not_mounted", f"project {project!r} not mounted locally"
+    repo_root = repo_path
+    if repo_root is None:
+        try:
+            repo_root = resolve_project(project, repos_root=repos_root)
+        except (ProjectNotRegistered, ValueError):
+            return (
+                None,
+                "project_not_mounted",
+                f"project {project!r} not mounted locally",
+            )
 
     try:
         abs_path = validate_rel_path(file_path, repo_path=repo_root)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -35,6 +36,10 @@ def _mock_driver(*row_sets: list[dict[str, object]]) -> object:
     return driver
 
 
+async def _unresolved_repo_path(_: str) -> None:
+    return None
+
+
 @pytest.mark.asyncio
 async def test_get_code_snippet_uses_function_window_when_available(
     monkeypatch: pytest.MonkeyPatch,
@@ -59,6 +64,10 @@ async def test_get_code_snippet_uses_function_window_when_available(
         ],
     )
     monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: driver)
+    monkeypatch.setattr(
+        "palace_mcp.code.native_get_code_snippet._resolve_repo_path",
+        _unresolved_repo_path,
+    )
     monkeypatch.setattr(
         "palace_mcp.code.native_get_code_snippet.resolve_snippet",
         lambda **_: (
@@ -103,6 +112,10 @@ async def test_get_code_snippet_falls_back_to_symbol_window_without_function(
     )
     monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: driver)
     monkeypatch.setattr(
+        "palace_mcp.code.native_get_code_snippet._resolve_repo_path",
+        _unresolved_repo_path,
+    )
+    monkeypatch.setattr(
         "palace_mcp.code.native_get_code_snippet.resolve_snippet",
         lambda **kwargs: (
             SimpleNamespace(
@@ -145,6 +158,10 @@ async def test_get_code_snippet_uses_file_head_when_no_line_hints(
         [],
     )
     monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: driver)
+    monkeypatch.setattr(
+        "palace_mcp.code.native_get_code_snippet._resolve_repo_path",
+        _unresolved_repo_path,
+    )
     monkeypatch.setattr(
         "palace_mcp.code.native_get_code_snippet.resolve_snippet",
         lambda **kwargs: (
@@ -231,6 +248,10 @@ async def test_get_code_snippet_can_fallback_to_cm(
     )
     monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: driver)
     monkeypatch.setattr(
+        "palace_mcp.code.native_get_code_snippet._resolve_repo_path",
+        _unresolved_repo_path,
+    )
+    monkeypatch.setattr(
         "palace_mcp.code.native_get_code_snippet.resolve_snippet",
         lambda **_: (None, "missing_file_path", "missing"),
     )
@@ -241,3 +262,57 @@ async def test_get_code_snippet_can_fallback_to_cm(
     )
 
     assert result is FALLBACK_TO_CM
+
+
+@pytest.mark.asyncio
+async def test_get_code_snippet_passes_resolved_repo_path_to_snippet_provider(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    driver = _mock_driver(
+        [
+            {
+                "qualified_name": "WalletKit.BalanceData",
+                "file_path": "WalletKit.swift",
+                "commit_sha": "abc",
+                "line_start": None,
+                "line_end": None,
+            }
+        ],
+        [],
+    )
+    repo_path = tmp_path / "repos-hs" / "WalletKit.Swift"
+    seen: dict[str, object] = {}
+
+    monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: driver)
+
+    async def _resolve_repo_path(_: str) -> Path:
+        return repo_path
+
+    monkeypatch.setattr(
+        "palace_mcp.code.native_get_code_snippet._resolve_repo_path",
+        _resolve_repo_path,
+    )
+    monkeypatch.setattr(
+        "palace_mcp.code.native_get_code_snippet.resolve_snippet",
+        lambda **kwargs: (
+            seen.update(kwargs)
+            or SimpleNamespace(
+                source="body",
+                language="swift",
+                start_line=kwargs["line_start"],
+                end_line=kwargs["line_end"],
+                truncated=False,
+                stale=False,
+            ),
+            None,
+            None,
+        ),
+    )
+
+    result = await native_get_code_snippet(
+        qualified_name="WalletKit.BalanceData",
+        project="wallet-kit",
+    )
+
+    assert result["source"] == "body"
+    assert seen["repo_path"] == repo_path
