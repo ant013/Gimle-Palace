@@ -86,7 +86,8 @@ Start the four required subagents in parallel immediately after memory refresh. 
 
 Subagents are read-only reviewers. They must not write files, post comments, deploy, send Telegram, or read secrets. Require JSON with agent name, reviewed scope, findings, no-finding areas, and limitations. Wrong agent name, malformed JSON, timeout after one retry, or generic fallback blocks the run and leaves the cursor unchanged.
 
-Write validated JSON outputs under `$RUN/subagents/` using exact agent filenames.
+Persist each completed subagent JSON immediately; keep statuses in `$RUN/subagents/status.json`.
+On timeout, write `$RUN/recovery.json`; resume by spawning only missing reviewers.
 
 ### Aggregate, Deliver, And Commit Cursor
 
