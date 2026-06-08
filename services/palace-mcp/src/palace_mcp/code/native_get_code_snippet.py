@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Any
 
 from palace_mcp.code.native_detect_changes import FALLBACK_TO_CM
@@ -11,6 +12,7 @@ from palace_mcp.code.snippet_short_name import (
     snippet_short_name,
     snippet_short_name_candidates,
 )
+from palace_mcp.git.path_resolver import ProjectNotRegistered, resolve_registered_project
 
 _LOOKUP_SYMBOL = """
 MATCH (s:Symbol)
@@ -127,6 +129,27 @@ async def _collect_rows(result: Any) -> list[dict[str, Any]]:
     return rows
 
 
+async def _resolve_repo_path(project: str) -> Path | None:
+    from palace_mcp.mcp_server import get_driver
+    from palace_mcp.memory.cypher import GET_PROJECT
+
+    driver = get_driver()
+    if driver is None:
+        return None
+
+    async with driver.session() as session:
+        result = await session.run(GET_PROJECT, slug=project)
+        row = await result.single()
+
+    try:
+        return resolve_registered_project(
+            project,
+            project_node=row["p"] if row is not None else None,
+        )
+    except (ProjectNotRegistered, ValueError):
+        return None
+
+
 async def native_get_code_snippet(
     qualified_name: str,
     project: str | None = None,
@@ -210,9 +233,11 @@ async def native_get_code_snippet(
         line_start, line_end = bounds
         snippet_quality = "approximate_window"
 
+    repo_path = await _resolve_repo_path(project)
     snippet, warning_code, warning_message = await asyncio.to_thread(
         resolve_snippet,
         project=project,
+        repo_path=repo_path,
         file_path=file_path or None,
         line_start=line_start,
         line_end=line_end,

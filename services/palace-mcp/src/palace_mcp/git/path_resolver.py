@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import re
+from typing import Any
 from pathlib import Path
 
 from palace_mcp.memory.projects import validate_slug
@@ -57,6 +58,50 @@ def resolve_project(slug: str, *, repos_root: Path | None = None) -> Path:
     if not _is_within(candidate, repos_root.resolve()):
         raise ProjectNotRegistered(slug)
     return candidate
+
+
+def resolve_registered_project(
+    slug: str,
+    *,
+    project_node: Any | None = None,
+    repos_root: Path | None = None,
+) -> Path:
+    """Resolve a registered project's on-disk repo path.
+
+    Resolution order:
+    1. Explicit absolute repo_path persisted on the Project node.
+    2. parent_mount + relative_path sibling-mount layout.
+    3. Legacy /repos/<slug> layout.
+    """
+    if repos_root is None:
+        repos_root = REPOS_ROOT
+    validate_slug(slug)
+
+    repo_path = _node_value(project_node, "repo_path")
+    if repo_path:
+        candidate = Path(repo_path)
+        if candidate.is_absolute():
+            candidate = candidate.resolve()
+            if candidate.is_dir() and (candidate / ".git").exists():
+                return candidate
+
+    parent_mount = _node_value(project_node, "parent_mount")
+    relative_path = _node_value(project_node, "relative_path")
+    if parent_mount and relative_path:
+        if _PARENT_MOUNT_RE.match(parent_mount) and _RELATIVE_PATH_RE.match(
+            relative_path
+        ):
+            if all(part != ".." for part in relative_path.split("/")):
+                mount_root = repos_root.parent / f"{repos_root.name}-{parent_mount}"
+                candidate = (mount_root / relative_path).resolve()
+                if (
+                    candidate.is_dir()
+                    and (candidate / ".git").exists()
+                    and _is_within(candidate, mount_root.resolve())
+                ):
+                    return candidate
+
+    return resolve_project(slug, repos_root=repos_root)
 
 
 def validate_rel_path(user_path: str, *, repo_path: Path) -> Path:
@@ -134,3 +179,16 @@ def _is_within(candidate: Path, root: Path) -> bool:
         return True
     except ValueError:
         return False
+
+
+def _node_value(project_node: Any | None, key: str) -> str | None:
+    if project_node is None:
+        return None
+    if hasattr(project_node, "get"):
+        value = project_node.get(key)
+    else:
+        try:
+            value = project_node[key]
+        except (KeyError, TypeError):
+            value = None
+    return value if isinstance(value, str) and value else None

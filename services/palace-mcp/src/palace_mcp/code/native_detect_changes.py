@@ -15,7 +15,10 @@ from palace_mcp.git.command import (
     GitTimeout,
     run_git,
 )
-from palace_mcp.git.path_resolver import ProjectNotRegistered, resolve_project
+from palace_mcp.git.path_resolver import (
+    ProjectNotRegistered,
+    resolve_registered_project,
+)
 from palace_mcp.memory.projects import InvalidSlug
 
 logger = logging.getLogger(__name__)
@@ -67,6 +70,21 @@ async def _resolve_since_base(repo_path: Path, since: str) -> str:
     return result.stdout.strip() or _EMPTY_TREE
 
 
+async def _resolve_repo_path(project: str) -> Path:
+    from palace_mcp.mcp_server import get_driver
+    from palace_mcp.memory.cypher import GET_PROJECT
+
+    driver = get_driver()
+    project_node: Any | None = None
+    if driver is not None:
+        async with driver.session() as session:
+            result = await session.run(GET_PROJECT, slug=project)
+            row = await result.single()
+        if row is not None:
+            project_node = row["p"]
+    return resolve_registered_project(project, project_node=project_node)
+
+
 async def native_detect_changes(
     project: str | None = None,
     since: str | None = None,
@@ -78,13 +96,13 @@ async def native_detect_changes(
         return _error("invalid_since", f"invalid since value: {since!r}", project)
 
     try:
-        repo_path = resolve_project(project)
+        repo_path = await _resolve_repo_path(project)
     except InvalidSlug:
         return _error("invalid_slug", f"invalid slug: {project!r}", project)
     except ProjectNotRegistered:
         return _error(
             "project_not_registered",
-            f"no mounted repo at /repos/{project}",
+            f"no mounted repo path for project {project!r}",
             project,
         )
 
