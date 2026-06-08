@@ -85,7 +85,11 @@ def resolve_snippet(
         try:
             repo_root = resolve_project(project, repos_root=repos_root)
         except (ProjectNotRegistered, ValueError):
-            return None, "project_not_mounted", f"project {project!r} not mounted locally"
+            return (
+                None,
+                "project_not_mounted",
+                f"project {project!r} not mounted locally",
+            )
 
     try:
         abs_path = validate_rel_path(file_path, repo_path=repo_root)

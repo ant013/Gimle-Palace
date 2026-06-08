@@ -184,3 +184,21 @@ def test_resolve_registered_project_prefers_repo_path_when_present(
     )
 
     assert result == repo
+
+
+def test_resolve_registered_project_can_skip_git_check_for_mounted_paths(
+    tmp_path: Path,
+) -> None:
+    repos_root = tmp_path / "repos"
+    repos_root.mkdir()
+    repo = tmp_path / "repos-hs" / "EvmKit.Swift"
+    repo.mkdir(parents=True)
+
+    result = resolve_registered_project(
+        "evm-kit",
+        project_node={"parent_mount": "hs", "relative_path": "EvmKit.Swift"},
+        repos_root=repos_root,
+        require_git=False,
+    )
+
+    assert result == repo

@@ -12,7 +12,10 @@ from palace_mcp.code.snippet_short_name import (
     snippet_short_name,
     snippet_short_name_candidates,
 )
-from palace_mcp.git.path_resolver import ProjectNotRegistered, resolve_registered_project
+from palace_mcp.git.path_resolver import (
+    ProjectNotRegistered,
+    resolve_registered_project,
+)
 
 _LOOKUP_SYMBOL = """
 MATCH (s:Symbol)

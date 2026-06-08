@@ -43,7 +43,10 @@ from palace_mcp.extractors.schemas import (
     ExtractorErrorResponse,
     ExtractorRunResponse,
 )
-from palace_mcp.git.path_resolver import ProjectNotRegistered, resolve_registered_project
+from palace_mcp.git.path_resolver import (
+    ProjectNotRegistered,
+    resolve_registered_project,
+)
 from palace_mcp.memory.bundle import bundle_members
 from palace_mcp.memory.models import IngestRunResult, ProjectRef
 from palace_mcp.memory.projects import InvalidSlug, validate_slug
@@ -151,6 +154,7 @@ def _resolve_repo_path(
             project,
             project_node=project_node,
             repos_root=repos_root,
+            require_git=False,
         )
     except (ProjectNotRegistered, ValueError):
         return None
@@ -167,6 +171,7 @@ def _resolve_scip_path_override(repo_path: Path, scip_path: str) -> Path | None:
     except ValueError:
         return None
     return candidate
+
 
 # --- execute ---
 

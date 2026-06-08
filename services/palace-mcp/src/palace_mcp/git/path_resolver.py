@@ -46,13 +46,22 @@ class PathTraversalDetectedError(ValueError):
 
 def resolve_project(slug: str, *, repos_root: Path | None = None) -> Path:
     """Resolve slug → absolute repo path. Requires .git/ to exist."""
+    return _resolve_project_path(slug, repos_root=repos_root, require_git=True)
+
+
+def _resolve_project_path(
+    slug: str,
+    *,
+    repos_root: Path | None = None,
+    require_git: bool,
+) -> Path:
     if repos_root is None:
         repos_root = REPOS_ROOT
     validate_slug(slug)
     candidate = (repos_root / slug).resolve()
     if not candidate.is_dir():
         raise ProjectNotRegistered(slug)
-    if not (candidate / ".git").exists():
+    if require_git and not (candidate / ".git").exists():
         raise ProjectNotRegistered(slug)
     # Containment check — resilient to slug being "" or surprising.
     if not _is_within(candidate, repos_root.resolve()):
@@ -65,6 +74,7 @@ def resolve_registered_project(
     *,
     project_node: Any | None = None,
     repos_root: Path | None = None,
+    require_git: bool = True,
 ) -> Path:
     """Resolve a registered project's on-disk repo path.
 
@@ -82,7 +92,9 @@ def resolve_registered_project(
         candidate = Path(repo_path)
         if candidate.is_absolute():
             candidate = candidate.resolve()
-            if candidate.is_dir() and (candidate / ".git").exists():
+            if candidate.is_dir() and (
+                not require_git or (candidate / ".git").exists()
+            ):
                 return candidate
 
     parent_mount = _node_value(project_node, "parent_mount")
@@ -96,12 +108,12 @@ def resolve_registered_project(
                 candidate = (mount_root / relative_path).resolve()
                 if (
                     candidate.is_dir()
-                    and (candidate / ".git").exists()
+                    and (not require_git or (candidate / ".git").exists())
                     and _is_within(candidate, mount_root.resolve())
                 ):
                     return candidate
 
-    return resolve_project(slug, repos_root=repos_root)
+    return _resolve_project_path(slug, repos_root=repos_root, require_git=require_git)
 
 
 def validate_rel_path(user_path: str, *, repo_path: Path) -> Path:
