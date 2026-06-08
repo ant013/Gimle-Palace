@@ -148,6 +148,12 @@ class TestToolRegistration:
             assert include_deprecated["type"] == "boolean"
             assert include_deprecated["default"] is False
 
+    def test_query_and_snippet_tools_have_native_handlers(self) -> None:
+        from palace_mcp.code_router import _PASSTHROUGH_TOOLS
+
+        assert _PASSTHROUGH_TOOLS["query_graph"].native_handler is not None
+        assert _PASSTHROUGH_TOOLS["get_code_snippet"].native_handler is not None
+
 
 class TestPassthroughSerialization:
     @pytest.mark.asyncio
@@ -386,10 +392,17 @@ class TestPassthroughSerialization:
         _set_cm_session(None)
 
     @pytest.mark.asyncio
-    async def test_query_graph_normalizes_project_without_rewriting_query(self) -> None:
+    async def test_query_graph_normalizes_project_without_rewriting_query(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         from mcp.types import CallToolResult
 
-        from palace_mcp.code_router import _set_cm_session, register_code_tools
+        from palace_mcp.code_router import (
+            PassthroughEntry,
+            _PASSTHROUGH_TOOLS,
+            _set_cm_session,
+            register_code_tools,
+        )
 
         captured: dict[str, object] = {}
         query = "MATCH (n:Symbol {group_id: 'project/gimle'}) RETURN n LIMIT 1"
@@ -405,6 +418,13 @@ class TestPassthroughSerialization:
         mock_session = AsyncMock(spec=ClientSession)
         mock_session.call_tool = AsyncMock(side_effect=_fake_call_tool)
         _set_cm_session(mock_session)
+        monkeypatch.setitem(
+            _PASSTHROUGH_TOOLS,
+            "query_graph",
+            PassthroughEntry(
+                "Pass through a caller-supplied Cypher-like query against the code graph."
+            ),
+        )
 
         mcp = FastMCP("test")
         stub_tool = lambda name, desc: mcp.tool(name=name, description=desc)  # noqa: E731
