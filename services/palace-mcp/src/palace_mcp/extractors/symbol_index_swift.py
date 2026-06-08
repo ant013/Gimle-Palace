@@ -10,7 +10,7 @@ Swift DEF/USE occurrences through the standard 3-phase bootstrap:
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Iterable, Sized
+from collections.abc import Callable, Iterable, Sized
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -195,6 +195,15 @@ class SymbolIndexSwift(BaseExtractor):
                 driver, project_id=ctx.group_id
             )
             if previous_body_hashes and previous_body_hashes == current_body_hashes:
+                await _refresh_graph_state(
+                    driver,
+                    scip_index=scip_index,
+                    iter_occurrences=_iter_occurrences,
+                    project_id=ctx.group_id,
+                    run_id=ctx.run_id,
+                    commit_sha=commit_sha,
+                    file_body_hashes=current_body_hashes,
+                )
                 logger.info(
                     "symbol_index_swift.freshness.skip",
                     extra={
@@ -329,71 +338,22 @@ class SymbolIndexSwift(BaseExtractor):
             counter_path = tantivy_path / "in_degree_counter.json"
             counter.to_disk(counter_path, run_id=ctx.run_id)
 
-            # Write :Symbol nodes so dead_code can load the call graph.
-            # Build file_path lookup from the first DEF/DECL occurrence of each symbol.
-            def_file_paths: dict[str, str] = {}
-            for occ in _iter_occurrences():
-                if occ.kind in (SymbolKind.DEF, SymbolKind.DECL):
-                    def_file_paths.setdefault(occ.symbol_qualified_name, occ.file_path)
-            graph_seen_at = datetime.now(tz=timezone.utc)
-            shadow_rows = _build_shadow_rows(
-                occurrences=_iter_occurrences(),
-                symbol_infos=iter_scip_symbol_infos(scip_index),
-                group_id=ctx.group_id,
-                seen_at=graph_seen_at,
+            sym_nodes, shadow_count, deleted_count = await _refresh_graph_state(
+                driver,
+                scip_index=scip_index,
+                iter_occurrences=_iter_occurrences,
+                project_id=ctx.group_id,
+                run_id=ctx.run_id,
+                commit_sha=commit_sha,
+                file_body_hashes=current_body_hashes,
             )
-            shadow_count = await _write_shadow_rows(driver, shadow_rows)
-            sym_nodes = 0
-            seen_qnames: set[str] = set()
-            sym_batch: list[ScipSymbolInfo] = []
-            sym_batch_size = 5000
-            for sym_info in iter_scip_symbol_infos(scip_index):
-                seen_qnames.add(sym_info.qualified_name)
-                sym_batch.append(sym_info)
-                if len(sym_batch) >= sym_batch_size:
-                    sym_nodes += await write_symbol_nodes(
-                        driver,
-                        sym_batch,
-                        def_file_paths,
-                        ctx.group_id,
-                        project_id=ctx.group_id,
-                        run_id=ctx.run_id,
-                        seen_at=graph_seen_at,
-                        commit_sha=commit_sha,
-                    )
-                    sym_batch = []
-            if sym_batch:
-                sym_nodes += await write_symbol_nodes(
-                    driver,
-                    sym_batch,
-                    def_file_paths,
-                    ctx.group_id,
-                    project_id=ctx.group_id,
-                    run_id=ctx.run_id,
-                    seen_at=graph_seen_at,
-                    commit_sha=commit_sha,
-                )
             logger.info(
                 "Symbol nodes written to Neo4j: %d; shadow rows: %d; Tantivy occurrences: %d",
                 sym_nodes,
                 shadow_count,
                 total_written,
             )
-
-            if seen_qnames:
-                deleted_count = await soft_delete_symbols(
-                    driver, ctx.group_id, seen_qnames, datetime.now(tz=timezone.utc)
-                )
-                logger.info("Soft-deleted %d absent :Symbol nodes", deleted_count)
-
-            await _write_file_body_hashes(
-                driver,
-                project_id=ctx.group_id,
-                run_id=ctx.run_id,
-                file_body_hashes=current_body_hashes,
-                observed_at=graph_seen_at,
-                commit_sha=commit_sha,
-            )
+            logger.info("Soft-deleted %d absent :Symbol nodes", deleted_count)
 
             await finalize_ingest_run(driver, run_id=ctx.run_id, success=True)
             # nodes_written reflects Neo4j :Symbol nodes (graph-layer count).
@@ -502,6 +462,79 @@ async def _write_file_body_hashes(
             )
             await result.consume()
     return len(rows)
+
+
+async def _refresh_graph_state(
+    driver: AsyncDriver,
+    *,
+    scip_index: object,
+    iter_occurrences: Callable[[], Iterable[SymbolOccurrence]],
+    project_id: str,
+    run_id: str,
+    commit_sha: str,
+    file_body_hashes: dict[str, str],
+) -> tuple[int, int, int]:
+    # Keep graph-layer freshness aligned even when Tantivy ingest is skipped.
+    def_file_paths: dict[str, str] = {}
+    for occ in iter_occurrences():
+        if occ.kind in (SymbolKind.DEF, SymbolKind.DECL):
+            def_file_paths.setdefault(occ.symbol_qualified_name, occ.file_path)
+
+    graph_seen_at = datetime.now(tz=timezone.utc)
+    shadow_rows = _build_shadow_rows(
+        occurrences=iter_occurrences(),
+        symbol_infos=iter_scip_symbol_infos(scip_index),
+        group_id=project_id,
+        seen_at=graph_seen_at,
+    )
+    shadow_count = await _write_shadow_rows(driver, shadow_rows)
+
+    sym_nodes = 0
+    seen_qnames: set[str] = set()
+    sym_batch: list[ScipSymbolInfo] = []
+    sym_batch_size = 5000
+    for sym_info in iter_scip_symbol_infos(scip_index):
+        seen_qnames.add(sym_info.qualified_name)
+        sym_batch.append(sym_info)
+        if len(sym_batch) >= sym_batch_size:
+            sym_nodes += await write_symbol_nodes(
+                driver,
+                sym_batch,
+                def_file_paths,
+                project_id,
+                project_id=project_id,
+                run_id=run_id,
+                seen_at=graph_seen_at,
+                commit_sha=commit_sha,
+            )
+            sym_batch = []
+    if sym_batch:
+        sym_nodes += await write_symbol_nodes(
+            driver,
+            sym_batch,
+            def_file_paths,
+            project_id,
+            project_id=project_id,
+            run_id=run_id,
+            seen_at=graph_seen_at,
+            commit_sha=commit_sha,
+        )
+
+    deleted_count = 0
+    if seen_qnames:
+        deleted_count = await soft_delete_symbols(
+            driver, project_id, seen_qnames, datetime.now(tz=timezone.utc)
+        )
+
+    await _write_file_body_hashes(
+        driver,
+        project_id=project_id,
+        run_id=run_id,
+        file_body_hashes=file_body_hashes,
+        observed_at=graph_seen_at,
+        commit_sha=commit_sha,
+    )
+    return sym_nodes, shadow_count, deleted_count
 
 
 def _build_shadow_rows(

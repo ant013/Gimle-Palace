@@ -433,6 +433,10 @@ class TestSymbolIndexSwiftHappyPath:
         bridge_mock.add_or_replace_async = AsyncMock()
         bridge_mock.commit_async = AsyncMock()
         finalize_mock = AsyncMock()
+        write_symbol_nodes_mock = AsyncMock(return_value=3)
+        write_shadow_rows_mock = AsyncMock(return_value=1)
+        write_file_body_hashes_mock = AsyncMock(return_value=1)
+        soft_delete_symbols_mock = AsyncMock(return_value=0)
 
         caplog.set_level(
             logging.INFO, logger="palace_mcp.extractors.symbol_index_swift"
@@ -467,6 +471,22 @@ class TestSymbolIndexSwiftHappyPath:
                 finalize_mock,
             ),
             patch(
+                "palace_mcp.extractors.symbol_index_swift.write_symbol_nodes",
+                write_symbol_nodes_mock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._write_shadow_rows",
+                write_shadow_rows_mock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift._write_file_body_hashes",
+                write_file_body_hashes_mock,
+            ),
+            patch(
+                "palace_mcp.extractors.symbol_index_swift.soft_delete_symbols",
+                soft_delete_symbols_mock,
+            ),
+            patch(
                 "palace_mcp.extractors.symbol_index_swift._build_file_body_hashes",
                 return_value={"Sources/App/File.swift": "stable-hash"},
             ),
@@ -483,6 +503,13 @@ class TestSymbolIndexSwiftHappyPath:
         assert stats.edges_written == 0
         assert "symbol_index_swift.freshness.skip" in caplog.text
         bridge_mock.add_or_replace_async.assert_not_called()
+        write_shadow_rows_mock.assert_awaited_once()
+        assert write_symbol_nodes_mock.await_count > 0
+        write_file_body_hashes_mock.assert_awaited_once()
+        await_args = write_file_body_hashes_mock.await_args
+        assert await_args is not None
+        assert await_args.kwargs["run_id"] == run_ctx.run_id
+        soft_delete_symbols_mock.assert_awaited_once()
         finalize_mock.assert_awaited_once()
 
     @pytest.mark.asyncio
