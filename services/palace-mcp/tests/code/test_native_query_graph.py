@@ -126,6 +126,40 @@ async def test_query_graph_allows_write_words_inside_string_literals(
 
 
 @pytest.mark.asyncio
+async def test_query_graph_allows_write_words_inside_comments(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    driver = _mock_driver([{"name": "A"}])
+    monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: driver)
+
+    result = await native_query_graph(
+        project="gimle",
+        query=(
+            "MATCH (s:Symbol) WHERE s.group_id = $group_id // CREATE\n"
+            "RETURN s.name AS name"
+        ),
+    )
+
+    assert result["rows"] == [["A"]]
+
+
+@pytest.mark.asyncio
+async def test_query_graph_rejects_write_queries_before_driver_execution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    driver = _mock_driver()
+    monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: driver)
+
+    result = await native_query_graph(
+        project="gimle",
+        query="CREATE (s:Symbol {group_id: $group_id}) RETURN s",
+    )
+
+    assert result["error_code"] == "write_query_forbidden"
+    driver.session.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_query_graph_redacts_cypher_errors(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -162,3 +196,23 @@ async def test_query_graph_marks_row_cap_truncation(
     assert result["rows"] == [["A"]]
     assert result["total"] == 2
     assert result["truncated_reason"] == "row_cap"
+
+
+@pytest.mark.asyncio
+async def test_query_graph_marks_byte_budget_truncation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("palace_mcp.code.native_query_graph._MAX_BYTES", 10)
+    monkeypatch.setattr(
+        "palace_mcp.mcp_server.get_driver",
+        lambda: _mock_driver([{"name": "A"}, {"name": "BBBBBBBBBB"}]),
+    )
+
+    result = await native_query_graph(
+        project="gimle",
+        query="MATCH (s:Symbol) WHERE s.group_id = $group_id RETURN s.name AS name",
+    )
+
+    assert result["rows"] == [["A"]]
+    assert result["total"] == 2
+    assert result["truncated_reason"] == "byte_budget"
