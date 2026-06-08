@@ -1201,7 +1201,11 @@ class ProjectAnalysisService:
                 )
                 if (
                     symbol_index_checkpoint is None
-                    or symbol_index_checkpoint.status != AnalysisCheckpointStatus.OK
+                    or symbol_index_checkpoint.status
+                    not in {
+                        AnalysisCheckpointStatus.OK,
+                        AnalysisCheckpointStatus.SKIPPED,
+                    }
                     or symbol_index_checkpoint.error_code is not None
                     or symbol_index_checkpoint.ingest_run_id is None
                 ):
