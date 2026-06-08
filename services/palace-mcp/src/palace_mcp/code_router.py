@@ -29,6 +29,7 @@ from palace_mcp.code.native_detect_changes import FALLBACK_TO_CM, native_detect_
 from palace_mcp.code.native_get_architecture import native_get_architecture
 from palace_mcp.code.native_get_code_snippet import native_get_code_snippet
 from palace_mcp.code.native_query_graph import native_query_graph
+from palace_mcp.code.native_trace_call_path import native_trace_call_path
 from palace_mcp.code.namespace import resolve as resolve_namespace
 
 logger = logging.getLogger(__name__)
@@ -228,7 +229,8 @@ _PASSTHROUGH_TOOLS: dict[str, PassthroughEntry] = {
         "Search code graph nodes by name pattern, label, or file pattern."
     ),
     "trace_call_path": PassthroughEntry(
-        "Trace function call chains (inbound/outbound/both)."
+        "Trace function call chains (inbound/outbound/both).",
+        native_handler=native_trace_call_path,
     ),
     "query_graph": PassthroughEntry(
         "Pass through a caller-supplied Cypher-like query against the code graph.",
