@@ -28,6 +28,9 @@ from pydantic import ConfigDict
 from palace_mcp.code.native_detect_changes import FALLBACK_TO_CM, native_detect_changes
 from palace_mcp.code.native_get_architecture import native_get_architecture
 from palace_mcp.code.native_get_code_snippet import native_get_code_snippet
+from palace_mcp.code.list_passthrough_projects import (
+    build_passthrough_project_listing,
+)
 from palace_mcp.code.native_query_graph import native_query_graph
 from palace_mcp.code.native_search_graph import native_search_graph
 from palace_mcp.code.native_trace_call_path import native_trace_call_path
@@ -282,6 +285,7 @@ def register_code_tools(
             entry,
             mcp_instance,
         )
+    _register_list_passthrough_projects(tool_decorator)
     for disabled_name, message in _DISABLED_CM_TOOLS.items():
         _register_disabled_tool(tool_decorator, disabled_name, message, mcp_instance)
 
@@ -416,6 +420,17 @@ def _register_passthrough(
             _make_open_fn_metadata(_forward),
             _open_schema_for_tool(cm_tool_name),
         )
+
+
+def _register_list_passthrough_projects(
+    tool_decorator: Callable[[str, str], Callable[..., Any]],
+) -> None:
+    @tool_decorator(
+        "palace.code.list_passthrough_projects",
+        "List palace.code passthrough tools by native or CM-only routing.",
+    )
+    async def _list_passthrough_projects() -> dict[str, list[str]]:
+        return build_passthrough_project_listing(_PASSTHROUGH_TOOLS)
 
 
 def _register_disabled_tool(

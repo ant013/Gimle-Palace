@@ -12,7 +12,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.types import TextContent
 
 
-EXPECTED_ENABLED_TOOLS = [
+EXPECTED_PASSTHROUGH_TOOLS = [
     "palace.code.search_graph",
     "palace.code.trace_call_path",
     "palace.code.query_graph",
@@ -21,6 +21,19 @@ EXPECTED_ENABLED_TOOLS = [
     "palace.code.get_code_snippet",
     "palace.code.search_code",
 ]
+EXPECTED_ROUTER_TOOLS = [
+    *EXPECTED_PASSTHROUGH_TOOLS,
+    "palace.code.list_passthrough_projects",
+]
+EXPECTED_NATIVE_TOOLS = [
+    "palace.code.search_graph",
+    "palace.code.trace_call_path",
+    "palace.code.query_graph",
+    "palace.code.detect_changes",
+    "palace.code.get_architecture",
+    "palace.code.get_code_snippet",
+]
+EXPECTED_CM_ONLY_TOOLS = ["palace.code.search_code"]
 EXPECTED_INCLUDE_DEPRECATED_TOOLS = [
     "palace.code.search_graph",
     "palace.code.get_code_snippet",
@@ -61,14 +74,14 @@ class TestToolRegistration:
 
         return stub_tool, mcp, tracked_names
 
-    def test_registers_seven_enabled_tools(self) -> None:
-        """register_code_tools adds exactly 7 palace.code.* pass-through tools."""
+    def test_registers_eight_code_router_tools(self) -> None:
+        """register_code_tools adds 7 passthrough tools plus the listing tool."""
         stub_tool, mcp, _ = self._make_stub_tool()
         from palace_mcp.code_router import register_code_tools
 
         register_code_tools(stub_tool, mcp)
         tool_names = [t.name for t in mcp._tool_manager.list_tools()]
-        for name in EXPECTED_ENABLED_TOOLS:
+        for name in EXPECTED_ROUTER_TOOLS:
             assert name in tool_names, f"Missing tool: {name}"
 
     def test_manage_adr_not_in_cm_router(self) -> None:
@@ -82,8 +95,8 @@ class TestToolRegistration:
             "manage_adr must be registered via adr/router.py, not code_router"
         )
 
-    def test_total_tool_count_is_seven(self) -> None:
-        """Exactly 7 palace.code.* tools registered via code_router (all CM pass-throughs)."""
+    def test_total_tool_count_is_eight(self) -> None:
+        """Exactly 8 palace.code.* tools are registered via code_router."""
         stub_tool, mcp, _ = self._make_stub_tool()
         from palace_mcp.code_router import register_code_tools
 
@@ -93,7 +106,7 @@ class TestToolRegistration:
             for t in mcp._tool_manager.list_tools()
             if t.name.startswith("palace.code.")
         ]
-        assert len(code_tools) == 7
+        assert len(code_tools) == 8
 
     def test_each_tool_dispatches_to_distinct_cm_name(self) -> None:
         """Verify each registered tool forwards to its own CM tool name (closure binding correctness).
@@ -108,21 +121,21 @@ class TestToolRegistration:
         tools = [
             t
             for t in mcp._tool_manager.list_tools()
-            if t.name.startswith("palace.code.")
+            if t.name in EXPECTED_PASSTHROUGH_TOOLS
         ]
         names = {t.name for t in tools}
         assert len(names) == 7, (
-            f"Expected 7 distinct tool names, got {len(names)}: {names}"
+            f"Expected 7 distinct passthrough tool names, got {len(names)}: {names}"
         )
 
-    def test_decorator_receives_seven_names(self) -> None:
-        """Stub decorator tracks all 7 CM tool names — proves Pattern #21 integration point works."""
+    def test_decorator_receives_eight_names(self) -> None:
+        """Stub decorator tracks all 8 code-router tool names."""
         stub_tool, mcp, tracked = self._make_stub_tool()
         from palace_mcp.code_router import register_code_tools
 
         register_code_tools(stub_tool, mcp)
         code_names = [n for n in tracked if n.startswith("palace.code.")]
-        assert len(code_names) == 7, f"Expected 7, got {len(code_names)}: {code_names}"
+        assert len(code_names) == 8, f"Expected 8, got {len(code_names)}: {code_names}"
 
     def test_open_schema_on_enabled_tools(self) -> None:
         """After patching, all enabled tools expose additionalProperties: true schema."""
@@ -130,7 +143,7 @@ class TestToolRegistration:
         from palace_mcp.code_router import register_code_tools
 
         register_code_tools(stub_tool, mcp)
-        for name in EXPECTED_ENABLED_TOOLS:
+        for name in EXPECTED_PASSTHROUGH_TOOLS:
             tool = mcp._tool_manager.get_tool(name)
             assert tool.parameters.get("additionalProperties") is True, (
                 f"{name} schema missing additionalProperties: true"
@@ -153,6 +166,30 @@ class TestToolRegistration:
 
         assert _PASSTHROUGH_TOOLS["query_graph"].native_handler is not None
         assert _PASSTHROUGH_TOOLS["get_code_snippet"].native_handler is not None
+
+    @pytest.mark.asyncio
+    async def test_list_passthrough_projects_returns_current_split(self) -> None:
+        stub_tool, mcp, _ = self._make_stub_tool()
+        from palace_mcp.code_router import register_code_tools
+
+        register_code_tools(stub_tool, mcp)
+        result = await mcp.call_tool("palace.code.list_passthrough_projects", {})
+
+        payload = result[1] if isinstance(result, tuple) else None
+        if payload is not None:
+            assert payload == {
+                "native": EXPECTED_NATIVE_TOOLS,
+                "cm_only": EXPECTED_CM_ONLY_TOOLS,
+            }
+            return
+
+        import json as _json
+
+        parsed = _json.loads(result[0].text)
+        assert parsed == {
+            "native": EXPECTED_NATIVE_TOOLS,
+            "cm_only": EXPECTED_CM_ONLY_TOOLS,
+        }
 
 
 class TestPassthroughSerialization:
