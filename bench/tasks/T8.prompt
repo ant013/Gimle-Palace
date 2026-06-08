@@ -1,0 +1,6 @@
+In the unstoppable-wallet-ios codebase, find where Bitcoin send fails due
+to insufficient UTXOs (unspent transaction outputs). Currently the failure
+is silent — the user sees no error message. Locate the silent-failure
+spot and propose the smallest patch that surfaces an error to the user.
+
+Show the patch (working-tree diff). Do NOT commit or push.

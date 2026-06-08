@@ -1,0 +1,33 @@
+slug: uw-ios-app
+name: unstoppable-wallet-ios
+language: swift
+build_system: xcode_workspace
+source_roots:
+  - Unstoppable
+workspace_package_roots:
+  - packages/WalletCore
+dependency_roots:
+  - Carthage
+  - Pods
+  - .build
+generated_roots:
+  - Unstoppable/Generated
+derived_roots:
+  - .palace-scip-derived-data
+scip_path: scip/index.scip
+prepare_steps:
+  - type: ensure_config_from_template
+    template: Unstoppable/Unstoppable/Configuration/Config.template.xcconfig
+    destination: Unstoppable/Unstoppable/Configuration/Config.xcconfig
+build:
+  workspace: Wallet.xcworkspace
+  scheme: Development
+  destination: "generic/platform=iOS Simulator"
+  simulator_arch: auto
+  derived_data_path: .palace-scip-derived-data
+  code_signing_allowed: false
+  package_resolution: locked
+extractors:
+  - symbol_index_swift
+  - dead_code
+  - embedding_symbol

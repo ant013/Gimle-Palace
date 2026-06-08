@@ -154,3 +154,9 @@ def test_error_handling_policy_registered() -> None:
     extractor = registry.get("error_handling_policy")
     assert extractor is not None
     assert extractor.name == "error_handling_policy"
+
+
+def test_embedding_symbol_registered() -> None:
+    extractor = registry.get("embedding_symbol")
+    assert extractor is not None
+    assert extractor.name == "embedding_symbol"

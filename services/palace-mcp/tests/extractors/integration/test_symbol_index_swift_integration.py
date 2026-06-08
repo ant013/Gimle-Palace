@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shutil
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -11,6 +12,8 @@ from neo4j import AsyncDriver
 from palace_mcp.extractors.foundation.importance import BoundedInDegreeCounter
 from palace_mcp.extractors.foundation.identifiers import symbol_id_for
 from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
+from palace_mcp.extractors.base import ExtractorRunContext
+from palace_mcp.extractors.symbol_index_swift import SymbolIndexSwift
 from palace_mcp.extractors.runner import run_extractor
 from palace_mcp.extractors.schema import ensure_extractors_schema
 from palace_mcp.extractors.scip_parser import parse_scip_file
@@ -19,9 +22,15 @@ from tests.extractors.unit.test_real_scip_fixtures import (
     _UW_IOS_TOOL_NAME,
     requires_scip_uw_ios,
 )
+from tests.extractors.fixtures.scip_factory import (
+    build_swift_struct_scip_index_with_symbol_infos,
+    write_scip_fixture,
+)
 
 _RUN_ID = "swift-integration-run-001"
 _RERUN_ID = "swift-integration-run-002"
+_HEAD_SHA = "0123456789abcdef0123456789abcdef01234567"
+_STORE_QNAME = "UwMiniCore s%3A10UwMiniCore11WalletStoreC"
 _SELECT_QNAME = "UwMiniCore s%3A10UwMiniCore11WalletStoreC6select8walletIDySi_tF"
 FIXTURE_SCIP = (
     Path(__file__).parent.parent
@@ -30,6 +39,20 @@ FIXTURE_SCIP = (
     / "scip"
     / "index.scip"
 )
+FIXTURE_REPO = (
+    Path(__file__).parent.parent / "fixtures" / "uw-ios-mini-project" / "UwMiniCore"
+)
+
+
+def _copy_fixture_repo(repo: Path) -> None:
+    for relative_path in ("Package.swift", "Sources", "Pods"):
+        source = FIXTURE_REPO / relative_path
+        destination = repo / relative_path
+        if source.is_dir():
+            shutil.copytree(source, destination, dirs_exist_ok=True)
+        else:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, destination)
 
 
 @pytest.fixture
@@ -47,9 +70,91 @@ async def _project_and_repo(driver: AsyncDriver, tmp_path: Path) -> Path:
         )
     repo = tmp_path / "repos" / "uw-ios-mini"
     repo.mkdir(parents=True)
+    _copy_fixture_repo(repo)
     (repo / ".git").mkdir()
-    (repo / ".git" / "HEAD").write_text("0123456789abcdef0123456789abcdef01234567\n")
+    (repo / ".git" / "HEAD").write_text(f"{_HEAD_SHA}\n")
     return tmp_path / "repos"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_run_writes_shadow_backing_for_struct_symbol(
+    driver: AsyncDriver,
+    graphiti_mock: MagicMock,
+    tmp_path: Path,
+) -> None:
+    await ensure_extractors_schema(driver)
+
+    scip_path = write_scip_fixture(
+        build_swift_struct_scip_index_with_symbol_infos(),
+        tmp_path / "balance-data.scip",
+    )
+    repo = tmp_path / "repos" / "swift-shadow-mini"
+    repo.mkdir(parents=True)
+    (repo / "Sources" / "UwMiniCore" / "Models").mkdir(parents=True)
+    (repo / "Sources" / "UwMiniCore" / "Models" / "BalanceData.swift").write_text(
+        "struct BalanceData {}\n",
+        encoding="utf-8",
+    )
+    (repo / "Sources" / "UwMiniApp").mkdir(parents=True)
+    (repo / "Sources" / "UwMiniApp" / "ContentView.swift").write_text(
+        "func renderBalanceData() {}\n",
+        encoding="utf-8",
+    )
+    (repo / ".git").mkdir()
+    (repo / ".git" / "HEAD").write_text(
+        "0123456789abcdef0123456789abcdef01234567\n",
+        encoding="utf-8",
+    )
+
+    settings = MagicMock()
+    tantivy_dir = tmp_path / "tantivy"
+    tantivy_dir.mkdir()
+    settings.palace_tantivy_index_path = str(tantivy_dir)
+    settings.palace_tantivy_heap_mb = 50
+    settings.palace_max_occurrences_total = 50_000_000
+    settings.palace_max_occurrences_per_project = 10_000_000
+    settings.palace_importance_threshold_use = 0.0
+    settings.palace_max_occurrences_per_symbol = 5_000
+    settings.palace_recency_decay_days = 30.0
+
+    ctx = ExtractorRunContext(
+        project_slug="swift-shadow-mini",
+        group_id="project/swift-shadow-mini",
+        repo_path=repo,
+        run_id="swift-shadow-mini-run-001",
+        duration_ms=0,
+        logger=MagicMock(),
+        scip_path=scip_path,
+    )
+
+    with (
+        patch("palace_mcp.mcp_server.get_driver", return_value=driver),
+        patch("palace_mcp.mcp_server.get_settings", return_value=settings),
+    ):
+        stats = await SymbolIndexSwift().run(graphiti=graphiti_mock, ctx=ctx)
+
+    assert stats.nodes_written >= 2
+
+    async with driver.session() as session:
+        result = await session.run(
+            """
+            MATCH (symbol:Symbol {
+                qualified_name: $qualified_name,
+                group_id: $group_id
+            })-[:BACKED_BY_SYMBOL]->(shadow:SymbolOccurrenceShadow {
+                symbol_qualified_name: $qualified_name,
+                group_id: $group_id
+            })
+            RETURN count(shadow) AS n
+            """,
+            qualified_name="UwMiniCore BalanceData",
+            group_id="project/swift-shadow-mini",
+        )
+        record = await result.single()
+
+    assert record is not None
+    assert record["n"] >= 1
 
 
 @pytest.mark.integration
@@ -132,6 +237,25 @@ class TestSymbolIndexSwiftIntegration:
         assert "Sources/UwMiniApp/ContentView.swift" in paths
         assert "Pods/Foo/Foo.swift" in paths
 
+        async with driver.session() as session:
+            result = await session.run(
+                """
+                MATCH (:Symbol {
+                    qualified_name: $qname,
+                    group_id: $group_id
+                })-[:BACKED_BY_SYMBOL]->(shadow:SymbolOccurrenceShadow)
+                RETURN count(shadow) AS count,
+                       collect(DISTINCT shadow.file_path) AS paths
+                """,
+                qname=_STORE_QNAME,
+                group_id="project/uw-ios-mini",
+            )
+            record = await result.single()
+
+        assert record is not None
+        assert record["count"] >= 1
+        assert "Sources/UwMiniCore/State/WalletStore.swift" in record["paths"]
+
     @pytest.mark.asyncio
     async def test_run_extractor_recovers_from_stale_counter_after_domain_reset(
         self,
@@ -204,3 +328,175 @@ class TestSymbolIndexSwiftIntegration:
 
         stale_counter = BoundedInDegreeCounter()
         assert stale_counter.from_disk(counter_path, expected_run_id=_RUN_ID) is False
+
+    @pytest.mark.asyncio
+    async def test_rerun_replaces_last_seen_edge_and_revives_deprecated_nodes(
+        self,
+        driver: AsyncDriver,
+        graphiti_mock: MagicMock,
+        _project_and_repo: Path,
+        tmp_path: Path,
+    ) -> None:
+        await ensure_extractors_schema(driver)
+        settings = MagicMock()
+        settings.palace_scip_index_paths = {"uw-ios-mini": str(FIXTURE_SCIP)}
+        tantivy_dir = tmp_path / "tantivy"
+        tantivy_dir.mkdir()
+        settings.palace_tantivy_index_path = str(tantivy_dir)
+        settings.palace_tantivy_heap_mb = 50
+        settings.palace_max_occurrences_total = 50_000_000
+        settings.palace_max_occurrences_per_project = 10_000_000
+        settings.palace_importance_threshold_use = 0.0
+        settings.palace_max_occurrences_per_symbol = 5_000
+        settings.palace_recency_decay_days = 30.0
+
+        with (
+            patch("palace_mcp.mcp_server.get_driver", return_value=driver),
+            patch("palace_mcp.mcp_server.get_settings", return_value=settings),
+            patch("palace_mcp.extractors.runner.REPOS_ROOT", _project_and_repo),
+            patch(
+                "palace_mcp.extractors.runner.uuid4",
+                side_effect=[_RUN_ID, _RERUN_ID],
+            ),
+        ):
+            first_run = await run_extractor(
+                name="symbol_index_swift",
+                project="uw-ios-mini",
+                driver=driver,
+                graphiti=graphiti_mock,
+            )
+
+            async with driver.session() as session:
+                await session.run(
+                    """
+                    MATCH (f:File {
+                        project_id: $project_id,
+                        path: $file_path
+                    })
+                    SET f:Deprecated,
+                        f.deprecated_at = datetime("2026-01-01T00:00:00Z"),
+                        f.deprecated_in_commit = "old-commit"
+                    WITH 1 AS _
+                    MATCH (s:Symbol {
+                        project_id: $project_id,
+                        qualified_name: $qualified_name
+                    })
+                    SET s:Deprecated,
+                        s.deprecated_at = datetime("2026-01-01T00:00:00Z"),
+                        s.deprecated_in_commit = "old-commit"
+                    """,
+                    project_id="project/uw-ios-mini",
+                    file_path="Sources/UwMiniCore/State/WalletStore.swift",
+                    qualified_name=_STORE_QNAME,
+                )
+
+            wallet_store = (
+                _project_and_repo
+                / "uw-ios-mini"
+                / "Sources"
+                / "UwMiniCore"
+                / "State"
+                / "WalletStore.swift"
+            )
+            wallet_store.write_text(
+                wallet_store.read_text(encoding="utf-8") + "\n// rerun\n",
+                encoding="utf-8",
+            )
+
+            second_run = await run_extractor(
+                name="symbol_index_swift",
+                project="uw-ios-mini",
+                driver=driver,
+                graphiti=graphiti_mock,
+            )
+
+        assert first_run["ok"] is True
+        assert first_run["success"] is True
+        assert second_run["ok"] is True
+        assert second_run["success"] is True
+
+        async with driver.session() as session:
+            stamp_result = await session.run(
+                """
+                MATCH (n {project_id: $project_id})
+                WHERE n:File OR n:Symbol
+                RETURN count(n) AS total,
+                       sum(
+                           CASE
+                               WHEN n.last_seen_in_run_id IS NOT NULL
+                                AND n.last_seen_at IS NOT NULL
+                                AND n.last_seen_in_commit IS NOT NULL
+                               THEN 1
+                               ELSE 0
+                           END
+                       ) AS stamped
+                """,
+                project_id="project/uw-ios-mini",
+            )
+            stamp_record = await stamp_result.single()
+
+            file_result = await session.run(
+                """
+                MATCH (f:File {
+                    project_id: $project_id,
+                    path: $file_path
+                })
+                OPTIONAL MATCH (f)-[:LAST_SEEN_IN]->(run:IngestRun)
+                RETURN f.last_seen_in_run_id AS run_id,
+                       f.last_seen_in_commit AS commit_sha,
+                       f.last_seen_at AS seen_at,
+                       f:Deprecated AS deprecated,
+                       f.deprecated_at AS deprecated_at,
+                       f.deprecated_in_commit AS deprecated_in_commit,
+                       count(run) AS rel_count,
+                       collect(run.run_id) AS rel_run_ids
+                """,
+                project_id="project/uw-ios-mini",
+                file_path="Sources/UwMiniCore/State/WalletStore.swift",
+            )
+            file_record = await file_result.single()
+
+            symbol_result = await session.run(
+                """
+                MATCH (s:Symbol {
+                    project_id: $project_id,
+                    qualified_name: $qualified_name
+                })
+                OPTIONAL MATCH (s)-[:LAST_SEEN_IN]->(run:IngestRun)
+                RETURN s.last_seen_in_run_id AS run_id,
+                       s.last_seen_in_commit AS commit_sha,
+                       s.last_seen_at AS seen_at,
+                       s:Deprecated AS deprecated,
+                       s.deprecated_at AS deprecated_at,
+                       s.deprecated_in_commit AS deprecated_in_commit,
+                       count(run) AS rel_count,
+                       collect(run.run_id) AS rel_run_ids
+                """,
+                project_id="project/uw-ios-mini",
+                qualified_name=_STORE_QNAME,
+            )
+            symbol_record = await symbol_result.single()
+
+        assert stamp_record is not None
+        assert stamp_record["total"] > 0
+        assert stamp_record["stamped"] == stamp_record["total"]
+
+        assert file_record is not None
+        assert file_record["run_id"] == _RERUN_ID
+        assert file_record["commit_sha"] == _HEAD_SHA
+        assert file_record["seen_at"] is not None
+        assert file_record["deprecated"] is False
+        assert file_record["deprecated_at"] is None
+        assert file_record["deprecated_in_commit"] is None
+        assert file_record["rel_count"] == 1
+        assert file_record["rel_run_ids"] == [_RERUN_ID]
+
+        assert symbol_record is not None
+        assert symbol_record["run_id"] == _RERUN_ID
+        assert symbol_record["commit_sha"] == _HEAD_SHA
+        assert symbol_record["seen_at"] is not None
+        assert symbol_record["deprecated"] is False
+        assert symbol_record["deprecated_at"] is None
+        assert symbol_record["deprecated_in_commit"] is None
+        assert symbol_record["rel_count"] == 1
+        assert symbol_record["rel_run_ids"] == [_RERUN_ID]

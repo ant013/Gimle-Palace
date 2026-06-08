@@ -1,0 +1,37 @@
+Found exactly 1 occurrence of `recordSwap` method in the unstoppable-wallet-ios working tree at /Users/ant013/Ios/bench-vanilla:
+
+| File | Line | Enclosing class |
+|------|------|-----------------|
+| /Users/ant013/Ios/bench-vanilla/Source/RecentSwaps.swift | 20 | `RecentSwaps` (final class) |
+
+Signature: `func recordSwap(txHash: String, from: String, to: String)`
+
+Search method: recursive `grep -rn "recordSwap" .` across the full working tree (no extension filter), confirmed by Swift-scoped grep and `func recordSwap` pattern grep. All three searches returned the same single match, so no other `recordSwap` methods exist in the working tree (including the newly added staged file).
+
+--SELF-REPORTED--
+[
+  {
+    "item": "Searched entire working tree for recordSwap (no file-type filter)",
+    "covered": true
+  },
+  {
+    "item": "Reported file path",
+    "covered": true
+  },
+  {
+    "item": "Reported line number",
+    "covered": true
+  },
+  {
+    "item": "Reported enclosing class",
+    "covered": true
+  },
+  {
+    "item": "Included newly added staged file (Source/RecentSwaps.swift)",
+    "covered": true
+  },
+  {
+    "item": "Verified no other occurrences via multiple grep patterns",
+    "covered": true
+  }
+]

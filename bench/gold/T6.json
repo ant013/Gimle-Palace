@@ -1,0 +1,21 @@
+{
+  "task": "T6",
+  "description": "Add USDC mainnet to ERC-20 whitelist + test",
+  "must_contain_regex": [
+    "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    "USDC"
+  ],
+  "any_n_of_regex": {
+    "n": 2,
+    "items": [
+      "(whitelist|Whitelist|allowlist|Allowlist|tokens?\\.json)",
+      "(@Test|func test|XCTest)",
+      "(EIP|erc[-_]?20)",
+      "(Provider|Configuration|Manager)"
+    ]
+  },
+  "must_not_contain_regex": [
+    "git\\s+commit\\s",
+    "git\\s+push\\s"
+  ]
+}

@@ -40,6 +40,10 @@ Options:
                               (default: uw-ios-app)
   --relative-path <name>      Remote-side relative path under remote-base
                               (default: unstoppable-wallet-ios)
+  --container-scip-path <p>   Container-visible SCIP path for extractor env
+                              (default: /repos-hs/<relative-path>/scip/index.scip)
+  --env-file <path>           Optional local env file to merge
+                              PALACE_SCIP_INDEX_PATHS[slug]
   --remote-host <host>        SSH host for the iMac mirror
   --remote-base <path>        Remote base dir for repo mirrors
   --emitter-dir <path>        palace-swift-scip-emit package dir
@@ -89,6 +93,125 @@ run_cmd() {
     "$@"
 }
 
+xcodebuild_emitted_index() {
+    [[ -d "$DERIVED_DATA/Index.noindex" ]] || return 1
+    find "$DERIVED_DATA/Index.noindex" -mindepth 1 -print -quit | grep -q .
+}
+
+prepare_config_xcconfig() {
+    local config_dir="$REPO_PATH/Unstoppable/Unstoppable/Configuration"
+    local template="$config_dir/Config.template.xcconfig"
+    local config="$config_dir/Config.xcconfig"
+
+    if [[ -f "$config" ]]; then
+        return 0
+    fi
+    if [[ ! -d "$config_dir" ]]; then
+        log "Config.xcconfig directory not present; skipping UW config prepare"
+        return 0
+    fi
+    [[ -f "$template" ]] || die "Config.xcconfig missing and template not found: $template"
+
+    log "preparing Config.xcconfig from $template"
+    run_cmd cp "$template" "$config"
+}
+
+run_xcodebuild_build() {
+    local status
+    if [[ "$DRY_RUN" == "true" ]]; then
+        run_cmd xcrun xcodebuild \
+            "$BUILD_FLAG" "$BUILD_ARTIFACT" \
+            -scheme "$SCHEME_NAME" \
+            -destination "$DESTINATION" \
+            -derivedDataPath "$DERIVED_DATA" \
+            -IDEIndexDisable=NO \
+            -IDEBuildLocationStyle=Custom \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+        return 0
+    fi
+
+    set +e
+    xcrun xcodebuild \
+        "$BUILD_FLAG" "$BUILD_ARTIFACT" \
+        -scheme "$SCHEME_NAME" \
+        -destination "$DESTINATION" \
+        -derivedDataPath "$DERIVED_DATA" \
+        -IDEIndexDisable=NO \
+        -IDEBuildLocationStyle=Custom \
+        CODE_SIGNING_ALLOWED=NO \
+        CODE_SIGNING_REQUIRED=NO \
+        build
+    status=$?
+    set -e
+
+    if [[ "$status" -eq 0 ]]; then
+        return 0
+    fi
+    if xcodebuild_emitted_index; then
+        log "xcodebuild exited $status after producing index data; continuing to SCIP emit"
+        return 0
+    fi
+    return "$status"
+}
+
+merge_scip_index_env_mapping() {
+    local env_file="$1"
+    local slug="$2"
+    local container_scip_path="$3"
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        printf 'DRY-RUN: merge %s PALACE_SCIP_INDEX_PATHS[%s]=%s\n' \
+            "$env_file" "$slug" "$container_scip_path"
+        return 0
+    fi
+
+    python3 - "$env_file" "$slug" "$container_scip_path" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+env_file = Path(sys.argv[1])
+slug = sys.argv[2]
+container_scip_path = sys.argv[3]
+env_file.parent.mkdir(parents=True, exist_ok=True)
+lines = env_file.read_text(encoding="utf-8").splitlines() if env_file.exists() else []
+
+merged = {}
+new_lines = []
+found = False
+for line in lines:
+    if not line.startswith("PALACE_SCIP_INDEX_PATHS="):
+        new_lines.append(line)
+        continue
+    if found:
+        continue
+    found = True
+    raw = line.split("=", 1)[1]
+    if raw.strip():
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise SystemExit(f"PALACE_SCIP_INDEX_PATHS is not valid JSON in {env_file}: {exc}")
+        if not isinstance(parsed, dict) or not all(
+            isinstance(k, str) and isinstance(v, str) for k, v in parsed.items()
+        ):
+            raise SystemExit("PALACE_SCIP_INDEX_PATHS must be a JSON object of string paths")
+        merged.update(parsed)
+    merged[slug] = container_scip_path
+    encoded = json.dumps(merged, sort_keys=True, separators=(",", ":"))
+    new_lines.append(f"PALACE_SCIP_INDEX_PATHS={encoded}")
+
+if not found:
+    merged[slug] = container_scip_path
+    encoded = json.dumps(merged, sort_keys=True, separators=(",", ":"))
+    new_lines.append(f"PALACE_SCIP_INDEX_PATHS={encoded}")
+
+env_file.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+PY
+}
+
 REPO_PATH=""
 WORKSPACE_REL="Wallet.xcworkspace"
 PROJECT_REL=""
@@ -98,6 +221,8 @@ DERIVED_DATA_ARG=""
 OUTPUT_ARG=""
 SLUG="$DEFAULT_SLUG"
 RELATIVE_PATH="$DEFAULT_RELATIVE_PATH"
+CONTAINER_SCIP_PATH_ARG=""
+ENV_FILE=""
 REMOTE_HOST="$DEFAULT_REMOTE_HOST"
 REMOTE_BASE="$DEFAULT_REMOTE_BASE"
 EMITTER_DIR="$DEFAULT_EMITTER_DIR"
@@ -125,6 +250,10 @@ while [[ $# -gt 0 ]]; do
         --slug)         [[ $# -ge 2 ]] || die "--slug requires a value"; SLUG="$2"; shift 2 ;;
         --relative-path=*) RELATIVE_PATH="${1#*=}"; shift ;;
         --relative-path) [[ $# -ge 2 ]] || die "--relative-path requires a value"; RELATIVE_PATH="$2"; shift 2 ;;
+        --container-scip-path=*) CONTAINER_SCIP_PATH_ARG="${1#*=}"; shift ;;
+        --container-scip-path) [[ $# -ge 2 ]] || die "--container-scip-path requires a value"; CONTAINER_SCIP_PATH_ARG="$2"; shift 2 ;;
+        --env-file=*)   ENV_FILE="${1#*=}"; shift ;;
+        --env-file)     [[ $# -ge 2 ]] || die "--env-file requires a value"; ENV_FILE="$2"; shift 2 ;;
         --remote-host=*) REMOTE_HOST="${1#*=}"; shift ;;
         --remote-host)  [[ $# -ge 2 ]] || die "--remote-host requires a value"; REMOTE_HOST="$2"; shift 2 ;;
         --remote-base=*) REMOTE_BASE="${1#*=}"; shift ;;
@@ -172,6 +301,7 @@ META_PATH="${OUTPUT_PATH}.meta.json"
 REMOTE_DEST_DIR="$REMOTE_BASE/$RELATIVE_PATH/scip"
 REMOTE_DEST_PATH="$REMOTE_DEST_DIR/index.scip"
 REMOTE_META_PATH="$REMOTE_DEST_DIR/index.scip.meta.json"
+CONTAINER_SCIP_PATH="${CONTAINER_SCIP_PATH_ARG:-/repos-hs/$RELATIVE_PATH/scip/index.scip}"
 
 log "slug=$SLUG repo=$REPO_PATH workspace=$BUILD_ARTIFACT scheme=$SCHEME_NAME"
 
@@ -184,23 +314,16 @@ fi
 log "preparing build directories"
 if [[ "$DRY_RUN" == "false" ]]; then
     rm -rf "$DERIVED_DATA"
-    mkdir -p "$DERIVED_DATA/Index.noindex" "$(dirname "$OUTPUT_PATH")"
+    mkdir -p "$DERIVED_DATA" "$(dirname "$OUTPUT_PATH")"
 else
     printf 'DRY-RUN: rm -rf %q\n' "$DERIVED_DATA"
-    printf 'DRY-RUN: mkdir -p %q %q\n' "$DERIVED_DATA/Index.noindex" "$(dirname "$OUTPUT_PATH")"
+    printf 'DRY-RUN: mkdir -p %q %q\n' "$DERIVED_DATA" "$(dirname "$OUTPUT_PATH")"
 fi
 
+prepare_config_xcconfig
+
 log "building app with xcodebuild (scheme=$SCHEME_NAME destination=$DESTINATION)"
-run_cmd xcrun xcodebuild \
-    "$BUILD_FLAG" "$BUILD_ARTIFACT" \
-    -scheme "$SCHEME_NAME" \
-    -destination "$DESTINATION" \
-    -derivedDataPath "$DERIVED_DATA" \
-    -IDEIndexDisable=NO \
-    -IDEBuildLocationStyle=Custom \
-    CODE_SIGNING_ALLOWED=NO \
-    CODE_SIGNING_REQUIRED=NO \
-    build
+run_xcodebuild_build
 
 log "emitting SCIP"
 run_cmd "$EMITTER_BIN" \
@@ -238,6 +361,11 @@ PY
     log "metadata written: $META_PATH"
 fi
 
+if [[ -n "$ENV_FILE" ]]; then
+    log "merging PALACE_SCIP_INDEX_PATHS for $SLUG into $ENV_FILE"
+    merge_scip_index_env_mapping "$ENV_FILE" "$SLUG" "$CONTAINER_SCIP_PATH"
+fi
+
 if [[ "$NO_REMOTE_COPY" == "true" ]]; then
     log "skipping remote copy (--no-remote-copy)"
 else
@@ -251,12 +379,16 @@ else
 fi
 
 if [[ "$DRY_RUN" == "false" ]]; then
+    size_bytes="$(stat -f%z "$OUTPUT_PATH" 2>/dev/null || stat -c%s "$OUTPUT_PATH" 2>/dev/null || echo 0)"
     cat <<EOF
 slug=$SLUG
 source=$OUTPUT_PATH
 destination=$REMOTE_HOST:$REMOTE_DEST_PATH
 metadata=$REMOTE_HOST:$REMOTE_META_PATH
-size_bytes=$(stat -f%z "$OUTPUT_PATH" 2>/dev/null || stat -c%s "$OUTPUT_PATH" 2>/dev/null || echo 0)
+container_scip_path=$CONTAINER_SCIP_PATH
+size_bytes=$size_bytes
+scip_size_bytes=$size_bytes
+dry_run=false
 EOF
 else
     cat <<EOF
@@ -264,7 +396,9 @@ slug=$SLUG
 source=$OUTPUT_PATH
 destination=$REMOTE_HOST:$REMOTE_DEST_PATH
 metadata=$REMOTE_HOST:$REMOTE_META_PATH
+container_scip_path=$CONTAINER_SCIP_PATH
 size_bytes=0
+scip_size_bytes=0
 dry_run=true
 EOF
 fi

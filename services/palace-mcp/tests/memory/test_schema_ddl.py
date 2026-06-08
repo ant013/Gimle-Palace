@@ -23,6 +23,16 @@ def test_project_slug_unique_constraint() -> None:
     )
 
 
+def test_project_cm_project_name_unique_constraint() -> None:
+    from palace_mcp.memory.cypher import CREATE_CONSTRAINTS
+
+    assert any(
+        "CONSTRAINT project_cm_project_name" in c
+        and "REQUIRE p.cm_project_name IS UNIQUE" in c
+        for c in CREATE_CONSTRAINTS
+    )
+
+
 def test_project_group_id_index() -> None:
     from palace_mcp.memory.cypher import CREATE_INDEXES
 

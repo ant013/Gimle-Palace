@@ -1,0 +1,25 @@
+{
+  "task": "T1",
+  "description": "Locate MoneroAdapter + list public API",
+  "must_contain_regex": [
+    "MoneroAdapter",
+    "(Adapters/MoneroAdapter\\.swift|Core/Adapters/MoneroAdapter)"
+  ],
+  "any_n_of_regex": {
+    "n": 8,
+    "items": [
+      "\\bsend\\b",
+      "\\bbalance\\b",
+      "\\breceive(Address)?\\b",
+      "\\btransactions?\\b",
+      "\\bavailableBalance\\b",
+      "\\bstart\\b",
+      "\\brefresh\\b",
+      "\\bvalidate(Address)?\\b",
+      "\\bfee\\b",
+      "\\bsyncState\\b",
+      "\\bbalanceState\\b"
+    ]
+  },
+  "must_not_contain_regex": []
+}

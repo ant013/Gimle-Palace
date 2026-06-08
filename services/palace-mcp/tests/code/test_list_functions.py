@@ -305,8 +305,8 @@ async def test_list_functions_bundle_fixture_matches_golden_snapshot() -> None:
     driver, _session = _driver_for_rows(rows)
     health = _bundle_health(fixture["bundle"]).model_copy(
         update={
-            "oldest_member_ingest_at": datetime(2026, 5, 18, tzinfo=timezone.utc),
-            "newest_member_ingest_at": datetime(2026, 5, 19, tzinfo=timezone.utc),
+            "oldest_member_ingest_at": datetime(2026, 5, 24, tzinfo=timezone.utc),
+            "newest_member_ingest_at": datetime(2026, 5, 25, tzinfo=timezone.utc),
         }
     )
 
@@ -332,5 +332,14 @@ async def test_list_functions_bundle_fixture_matches_golden_snapshot() -> None:
             min_ccn=fixture["min_ccn"],
         )
 
-    result["bundle_health"].pop("as_of", None)
+    # GIM-1078: strip wall-clock-dependent fields before golden comparison
+    for k in (
+        "as_of",
+        "members_fresh_within_7d",
+        "members_stale",
+        "stale_slugs",
+        "oldest_member_ingest_at",
+        "newest_member_ingest_at",
+    ):
+        result["bundle_health"].pop(k, None)
     assert result == golden

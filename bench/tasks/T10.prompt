@@ -1,0 +1,6 @@
+In the unstoppable-wallet-ios codebase, find every method named
+`recordSwap` (any class). For each occurrence, report file path, line
+number, and the enclosing class.
+
+Be thorough — list ALL of them in the working tree, including any newly
+added files.

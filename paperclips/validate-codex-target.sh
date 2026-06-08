@@ -13,6 +13,7 @@ if [ ! -d "$CODEX_DIST" ]; then
 fi
 
 python3 "$SCRIPT_DIR/scripts/validate_instructions.py"
+python3 "$SCRIPT_DIR/scripts/validate_uaudit_docs.py"
 python3 "$SCRIPT_DIR/scripts/validate_codex_target_runtime.py" \
   --codex-dist "$CODEX_DIST" \
   --runtime-map "$SCRIPT_DIR/fragments/shared/targets/codex/runtime-map.json"

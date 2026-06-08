@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 import time
 from collections.abc import Coroutine
@@ -47,7 +48,7 @@ from palace_mcp.memory.bundle import bundle_members
 from palace_mcp.memory.models import IngestRunResult, ProjectRef
 from palace_mcp.memory.projects import InvalidSlug, validate_slug
 
-REPOS_ROOT = Path("/repos")
+REPOS_ROOT = Path(os.environ.get("PALACE_REPOS_ROOT", "/repos"))
 EXTRACTOR_TIMEOUT_S = 300.0
 _PARENT_MOUNT_RE = re.compile(r"^[a-z][a-z0-9-]{0,15}$")
 _RELATIVE_PATH_RE = re.compile(r"^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$")
@@ -173,6 +174,19 @@ def _resolve_repo_path(
     return candidate
 
 
+def _resolve_scip_path_override(repo_path: Path, scip_path: str) -> Path | None:
+    override = Path(scip_path)
+    if override.is_absolute():
+        return None
+
+    candidate = (repo_path / override).resolve()
+    try:
+        candidate.relative_to(repo_path.resolve())
+    except ValueError:
+        return None
+    return candidate
+
+
 def _node_value(project_node: Any, key: str) -> str | None:
     if hasattr(project_node, "get"):
         value = project_node.get(key)
@@ -279,6 +293,8 @@ async def run_extractor(
     driver: AsyncDriver,
     graphiti: Graphiti,
     timeout_s: float = EXTRACTOR_TIMEOUT_S,
+    scip_path: str | None = None,
+    companion_run_id: str | None = None,
 ) -> dict[str, Any]:
     """Full lifecycle: precheck → create :IngestRun → execute → finalize."""
     # 1. Precheck (driver used for :Project lookup)
@@ -292,6 +308,17 @@ async def run_extractor(
             extractor=pre.extractor,
             project=project,
         ).model_dump()
+    if scip_path is not None:
+        scip_path_override = _resolve_scip_path_override(pre.repo_path, scip_path)
+        if scip_path_override is None:
+            return ExtractorErrorResponse(
+                error_code="invalid_scip_path",
+                message="scip_path must be repo-relative and stay within the mounted repo",
+                extractor=name,
+                project=project,
+            ).model_dump()
+    else:
+        scip_path_override = None
 
     # 2. Create :IngestRun (driver — ops-log, not Graphiti product layer)
     run_id = str(uuid4())
@@ -321,6 +348,7 @@ async def run_extractor(
         },
     )
     start_mono = time.monotonic()
+
     ctx = ExtractorRunContext(
         project_slug=project,
         group_id=pre.group_id,
@@ -328,9 +356,14 @@ async def run_extractor(
         run_id=run_id,
         duration_ms=0,  # placeholder; extractor may use ctx.duration_ms for metadata
         logger=logger,
+        scip_path=scip_path_override,
+        companion_run_id=companion_run_id,
     )
     exec_result = await _execute(
-        extractor=pre.extractor, graphiti=graphiti, ctx=ctx, timeout_s=timeout_s
+        extractor=pre.extractor,
+        graphiti=graphiti,
+        ctx=ctx,
+        timeout_s=pre.extractor.timeout_s or timeout_s,
     )
     duration_ms = int((time.monotonic() - start_mono) * 1000)
     finished_at = datetime.now(timezone.utc).isoformat()

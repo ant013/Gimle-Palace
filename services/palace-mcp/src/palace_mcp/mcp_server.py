@@ -33,15 +33,20 @@ Tools registered:
 - palace.project.analyze_status
 - palace.project.analyze_resume
 - palace.audit.run
+- palace.code.call_hierarchy      (F1B production — registered via code_composite.py, GIM-1175)
+- palace.code.call_hierarchy_v2  (F1B-SPIKE-V2 — kept for backwards compat, GIM-1167)
 """
 
 import asyncio
+import functools
+import json
 import logging
 import os
 import time
 from collections.abc import Callable
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal, TypeVar
+from typing import IO, Any, Literal, TypeVar
 
 from graphiti_core import Graphiti
 from mcp.server.fastmcp import FastMCP
@@ -53,12 +58,14 @@ from palace_mcp.audit.run import run_audit as _run_audit
 from palace_mcp.code.find_cross_module_contracts import (
     find_cross_module_contracts as _find_cross_module_contracts_impl,
 )
+from palace_mcp.code.find_dead_code import find_dead_code as _find_dead_code_impl
 from palace_mcp.code.find_dead_symbols import (
     find_dead_symbols as _find_dead_symbols_impl,
 )
 from palace_mcp.code.find_hotspots import find_hotspots as _find_hotspots_impl
 from palace_mcp.code.find_owners import find_owners as _find_owners_impl
 from palace_mcp.code.find_public_api import find_public_api as _find_public_api_impl
+from palace_mcp.code.find_semantic import semantic_search as _semantic_search_impl
 from palace_mcp.code.list_functions import list_functions as _list_functions_impl
 from palace_mcp.adr.router import register_adr_tools
 from palace_mcp.code_composite import register_code_composite_tools
@@ -140,6 +147,9 @@ _graphiti: Graphiti | None = None
 
 # Module-level Settings — set by FastAPI lifespan before any request.
 _settings: Settings | None = None
+
+# Module-level JSONL audit sink — set by FastAPI lifespan when configured.
+_audit_sink: IO[str] | None = None
 
 # Default group_id for lookup scoping — set by lifespan from Settings.
 _default_group_id: str = "project/gimle"
@@ -254,6 +264,36 @@ def get_driver() -> AsyncDriver | None:
 def get_settings() -> Settings | None:
     """Public getter for Settings. Returns None before set_settings() call."""
     return _settings
+
+
+def set_audit_sink(sink: IO[str] | None) -> None:
+    """Called from FastAPI lifespan to set the open JSONL audit sink file handle."""
+    global _audit_sink  # noqa: PLW0603
+    _audit_sink = sink
+
+
+def _write_audit_line(
+    tool_name: str,
+    request_args: dict[str, Any],
+    response_summary: str | None,
+    latency_ms: int,
+    error: str | None,
+) -> None:
+    if _audit_sink is None:
+        return
+    line = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "tool_name": tool_name,
+        "request_args": {k: str(v)[:500] for k, v in request_args.items()},
+        "response_summary": response_summary,
+        "latency_ms": latency_ms,
+        "error": error,
+    }
+    try:
+        _audit_sink.write(json.dumps(line) + "\n")
+        _audit_sink.flush()
+    except OSError as exc:
+        logger.warning("audit sink write failed: %s", exc)
 
 
 def _build_project_analysis_service() -> ProjectAnalysisService:
@@ -406,9 +446,40 @@ _F = TypeVar("_F", bound=Callable[..., Any])
 
 
 def _tool(name: str, description: str) -> Callable[[_F], _F]:
-    """Wrapper around @_mcp.tool that tracks names for Pattern #21 dedup check."""
+    """Wrapper around @_mcp.tool that tracks names and injects telemetry."""
     _registered_tool_names.append(name)
-    return _mcp.tool(name=name, description=description)  # type: ignore[return-value]
+    mcp_decorator = _mcp.tool(name=name, description=description)
+
+    def decorator(fn: _F) -> _F:
+        @functools.wraps(fn)
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+            if (
+                _audit_sink is None
+                or _settings is None
+                or not _settings.palace_telemetry_enabled
+            ):
+                return await fn(*args, **kwargs)
+            t0 = time.monotonic()
+            error_str: str | None = None
+            result: Any = None
+            try:
+                result = await fn(*args, **kwargs)
+                return result
+            except Exception as exc:
+                error_str = f"{type(exc).__name__}: {exc}"
+                raise
+            finally:
+                _write_audit_line(
+                    name,
+                    kwargs,
+                    None if error_str else str(result)[:500],
+                    int((time.monotonic() - t0) * 1000),
+                    error_str,
+                )
+
+        return mcp_decorator(wrapper)  # type: ignore[return-value]
+
+    return decorator
 
 
 @_tool(
@@ -825,6 +896,7 @@ async def _palace_ingest_run_extractor(
     name: str,
     project: str | None = None,
     bundle: str | None = None,
+    scip_path: str | None = None,
 ) -> dict[str, Any]:
     driver = _driver
     if driver is None:
@@ -850,7 +922,11 @@ async def _palace_ingest_run_extractor(
             "message": "either project or bundle is required",
         }
     return await _run_extractor(
-        name=name, project=project, driver=driver, graphiti=graphiti
+        name=name,
+        project=project,
+        driver=driver,
+        graphiti=graphiti,
+        scip_path=scip_path,
     )
 
 
@@ -1219,8 +1295,8 @@ register_adr_tools(
 )
 register_code_composite_tools(
     _tool,
-    # Module-level init runs before set_settings(); Settings() would fail here
-    # because required fields (e.g. openai_api_key) are absent at import time.
+    # Module-level init runs before set_settings(); avoid constructing
+    # Settings() at import time because required deployment secrets may be absent.
     # os.environ.get mirrors the same default declared in Settings.palace_cm_default_project.
     default_project=os.environ.get("PALACE_CM_DEFAULT_PROJECT", "repos-gimle"),
 )
@@ -1249,6 +1325,7 @@ async def palace_code_find_hotspots(
     top_n: int = 20,
     min_score: float = 0.0,
     path_prefix: str | None = None,
+    include_deprecated: bool = False,
 ) -> dict[str, Any]:
     """Find hotspot files ranked by complexity × churn score."""
     driver = _driver
@@ -1265,6 +1342,7 @@ async def palace_code_find_hotspots(
         top_n=top_n,
         min_score=min_score,
         path_prefix=path_prefix,
+        include_deprecated=include_deprecated,
     )
 
 
@@ -1281,6 +1359,7 @@ async def palace_code_list_functions(
     project: str | None = None,
     bundle: str | None = None,
     min_ccn: int = 0,
+    include_deprecated: bool = False,
 ) -> dict[str, Any]:
     """List functions for a specific file recorded by the hotspot extractor."""
     driver = _driver
@@ -1291,7 +1370,12 @@ async def palace_code_list_functions(
             "message": "Neo4j driver not initialised",
         }
     return await _list_functions_impl(
-        driver=driver, project=project, bundle=bundle, path=path, min_ccn=min_ccn
+        driver=driver,
+        project=project,
+        bundle=bundle,
+        path=path,
+        min_ccn=min_ccn,
+        include_deprecated=include_deprecated,
     )
 
 
@@ -1308,6 +1392,7 @@ async def palace_code_find_owners(
     file_path: str,
     project: str,
     top_n: int = 5,
+    include_deprecated: bool = False,
 ) -> dict[str, Any]:
     """Find top-N owners of a file by blame share + recency-weighted churn."""
     driver = _driver
@@ -1318,7 +1403,11 @@ async def palace_code_find_owners(
             "message": "Neo4j driver not initialised",
         }
     return await _find_owners_impl(
-        driver=driver, file_path=file_path, project=project, top_n=top_n
+        driver=driver,
+        file_path=file_path,
+        project=project,
+        top_n=top_n,
+        include_deprecated=include_deprecated,
     )
 
 
@@ -1347,6 +1436,40 @@ async def palace_code_find_dead_symbols(
 
 
 @_tool(
+    name="palace.code.find_dead_code",
+    description=(
+        "Graph-reachability dead-code analysis for a project (G0d algorithm). "
+        "Returns :DeadFinding nodes: dead_symbol (single), dead_scc_cluster (≥3 symbols), "
+        "dead_module (≥50% of module), dead_extension_chain (no existential conformance). "
+        "Distinct from palace.code.find_dead_symbols which uses Periphery/binary-surface. "
+        "Accepts min_severity (default 'medium'), include_test_only (default False), "
+        "and limit (default 200)."
+    ),
+)
+async def palace_code_find_dead_code(
+    project: str,
+    min_severity: str = "medium",
+    include_test_only: bool = False,
+    limit: int = 200,
+) -> dict[str, Any]:
+    """Graph-reachability dead-code findings ranked by severity and safe_to_delete_score."""
+    driver = _driver
+    if driver is None:
+        return {
+            "ok": False,
+            "error_code": "driver_unavailable",
+            "message": "Neo4j driver not initialised",
+        }
+    return await _find_dead_code_impl(
+        driver=driver,
+        project=project,
+        min_severity=min_severity,
+        include_test_only=include_test_only,
+        limit=limit,
+    )
+
+
+@_tool(
     name="palace.code.find_public_api",
     description=(
         "List public API symbols for a project as recorded by the "
@@ -1368,6 +1491,54 @@ async def palace_code_find_public_api(
             "message": "Neo4j driver not initialised",
         }
     return await _find_public_api_impl(driver=driver, project=project, limit=limit)
+
+
+@_tool(
+    name="palace.code.semantic_search",
+    description=(
+        "Semantic symbol search over embedded :Symbol nodes for one project "
+        "or an explicit projects list. Returns ranked hits with best-effort "
+        "snippet and usage-preview context."
+    ),
+)
+async def palace_code_semantic_search(
+    query: str,
+    project: str | None = None,
+    projects: list[str] | None = None,
+    source_scopes: list[str] | None = None,
+    include_dependencies: bool = False,
+    include_generated: bool = False,
+    include_sdk: bool = False,
+    include_deprecated: bool = False,
+    limit: int = 10,
+    backend: str | None = None,
+    include_context: bool = True,
+    context_limit: int = 3,
+) -> dict[str, Any]:
+    """Run semantic symbol search over Neo4j vector embeddings."""
+    driver = _driver
+    if driver is None:
+        return {
+            "ok": False,
+            "error_code": "driver_unavailable",
+            "message": "Neo4j driver not initialised",
+        }
+    return await _semantic_search_impl(
+        driver=driver,
+        settings=get_settings(),
+        query=query,
+        project=project,
+        projects=projects,
+        source_scopes=source_scopes,
+        include_dependencies=include_dependencies,
+        include_generated=include_generated,
+        include_sdk=include_sdk,
+        include_deprecated=include_deprecated,
+        limit=limit,
+        backend=backend,
+        include_context=include_context,
+        context_limit=context_limit,
+    )
 
 
 @_tool(
@@ -1398,6 +1569,44 @@ async def palace_code_find_cross_module_contracts(
         project=project,
         bundle=bundle,
         limit=limit,
+    )
+
+
+# ---------------------------------------------------------------------------
+# palace.code.call_hierarchy_v2 — IndexStore direct-read (GIM-1167)
+# ---------------------------------------------------------------------------
+
+
+@_tool(
+    name="palace.code.call_hierarchy_v2",
+    description=(
+        "Resolve callers of a Swift symbol by reading the DerivedData IndexStoreDB directly, "
+        "bypassing sourcekit-lsp. Requires PALACE_SOURCEKIT_INDEX_STORE_PATH to point to the "
+        "Xcode DerivedData DataStore directory (e.g. "
+        "~/Library/Developer/Xcode/DerivedData/<App>/Index.noindex/DataStore). "
+        "Returns caller occurrences with source_file, line, col, and symbol_usr. "
+        "Latency: <5s warm on a 3000-unit store. Spike: GIM-1167 F1B-SPIKE-V2."
+    ),
+)
+async def palace_code_call_hierarchy_v2(
+    qualified_name: str,
+    project: str | None = None,
+    max_results: int = 200,
+    index_store_path: str | None = None,
+) -> dict[str, Any]:
+    """Query IndexStoreDB directly for callers of qualified_name."""
+    from palace_mcp.code.call_hierarchy_v2 import call_hierarchy_v2_tool
+
+    store_path = index_store_path or (
+        _settings.palace_sourcekit_index_store_path if _settings else None
+    )
+    # ctypes calls are blocking; offload to thread pool to avoid blocking the event loop
+    return await asyncio.to_thread(
+        call_hierarchy_v2_tool,
+        qualified_name=qualified_name,
+        project=project,
+        max_results=max_results,
+        index_store_path=store_path,
     )
 
 

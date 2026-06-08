@@ -172,10 +172,25 @@ def seeded_hotspot_bundle(
 
 
 def _normalize_bundle_payload(payload: dict[str, object]) -> dict[str, object]:
+    """Strip time-sensitive fields so golden comparison survives wall-clock drift.
+
+    GIM-1078: fixture timestamps (last_run_finished_at: 2026-05-25) made
+    ``members_fresh_within_7d`` flip from 2 → 1 after one week elapsed.
+    Strip all fields whose value depends on ``datetime.utcnow()`` rather
+    than on the fixture content itself.
+    """
     data = json.loads(json.dumps(payload))
     bundle_health = data.get("bundle_health")
     if isinstance(bundle_health, dict):
-        bundle_health.pop("as_of", None)
+        for k in (
+            "as_of",
+            "members_fresh_within_7d",
+            "members_stale",
+            "stale_slugs",
+            "oldest_member_ingest_at",
+            "newest_member_ingest_at",
+        ):
+            bundle_health.pop(k, None)
     return data
 
 

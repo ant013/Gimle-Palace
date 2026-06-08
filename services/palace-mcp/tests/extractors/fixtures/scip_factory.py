@@ -171,6 +171,124 @@ def build_swift_scip_index(
     return index
 
 
+# SCIP SymbolInformation.Kind values used in test fixtures.
+# Values mirror the proto enum from scip_pb2.SymbolInformation.Kind.
+_SCIP_KIND_CLASS = 7
+_SCIP_KIND_FUNCTION = 17
+_SCIP_KIND_STRUCT = 49
+_SCIP_KIND_PROTOCOL = 42
+_SCIP_KIND_EXTENSION = 84
+
+
+def build_swift_scip_index_with_symbol_infos() -> Any:
+    """Build a SCIP Index that includes SymbolInformation (doc.symbols).
+
+    Contains:
+    - WalletStore (class, DEF in WalletStore.swift)
+    - WalletStore.select (function, DEF in WalletStore.swift, references WalletStore)
+    - DeadHelper (class, DEF in DeadHelper.swift, no callers → dead)
+
+    WalletStore.select has a REFERENCES relationship to WalletStore so the
+    graph_loader will create a :REFERENCES edge.
+    """
+    index = scip_pb2.Index()  # type: ignore[attr-defined]
+    metadata = scip_pb2.Metadata()  # type: ignore[attr-defined]
+    metadata.version = scip_pb2.ProtocolVersion.UnspecifiedProtocolVersion  # type: ignore[attr-defined]
+    metadata.tool_info.name = "palace-swift-scip-emit"
+    metadata.tool_info.version = "0.1.0"
+    metadata.project_root = "file:///test"
+    index.metadata.CopyFrom(metadata)
+
+    _SYM_STORE = "scip-swift apple UwMiniCore . s%3A10UwMiniCore11WalletStoreC"
+    _SYM_SELECT = "scip-swift apple UwMiniCore . s%3A10UwMiniCore11WalletStoreC6select8walletIDySi_tF"
+    _SYM_DEAD = "scip-swift apple UwMiniCore . s%3A10UwMiniCore11DeadHelperC"
+
+    # Document 1: WalletStore.swift — defines WalletStore class + select method
+    doc1 = index.documents.add()
+    doc1.relative_path = "Sources/UwMiniCore/State/WalletStore.swift"
+    doc1.language = "swift"
+    for i, (sym, role) in enumerate([(_SYM_STORE, 1), (_SYM_SELECT, 1)], start=1):
+        occ = doc1.occurrences.add()
+        occ.range.extend([i, 0, 10])
+        occ.symbol = sym
+        occ.symbol_roles = role
+
+    # SymbolInformation for WalletStore (class)
+    si_store = doc1.symbols.add()
+    si_store.symbol = _SYM_STORE
+    si_store.kind = _SCIP_KIND_CLASS
+
+    # SymbolInformation for select (function) — references WalletStore
+    si_select = doc1.symbols.add()
+    si_select.symbol = _SYM_SELECT
+    si_select.kind = _SCIP_KIND_FUNCTION
+    rel = si_select.relationships.add()
+    rel.symbol = _SYM_STORE
+    rel.is_reference = True
+
+    # Document 2: DeadHelper.swift — defines a class with no callers
+    doc2 = index.documents.add()
+    doc2.relative_path = "Sources/UwMiniCore/DeadHelper.swift"
+    doc2.language = "swift"
+    occ2 = doc2.occurrences.add()
+    occ2.range.extend([1, 0, 10])
+    occ2.symbol = _SYM_DEAD
+    occ2.symbol_roles = 1  # DEF
+
+    si_dead = doc2.symbols.add()
+    si_dead.symbol = _SYM_DEAD
+    si_dead.kind = _SCIP_KIND_CLASS
+
+    return index
+
+
+def build_swift_struct_scip_index_with_symbol_infos() -> Any:
+    """Build a Swift SCIP fixture with a struct definition and one use site."""
+    index = scip_pb2.Index()  # type: ignore[attr-defined]
+    metadata = scip_pb2.Metadata()  # type: ignore[attr-defined]
+    metadata.version = scip_pb2.ProtocolVersion.UnspecifiedProtocolVersion  # type: ignore[attr-defined]
+    metadata.tool_info.name = "palace-swift-scip-emit"
+    metadata.tool_info.version = "0.1.0"
+    metadata.project_root = "file:///test"
+    index.metadata.CopyFrom(metadata)
+
+    _SYM_BALANCE = "scip-swift apple UwMiniCore . BalanceData"
+    _SYM_RENDER = "scip-swift apple UwMiniApp . renderBalanceData"
+
+    doc1 = index.documents.add()
+    doc1.relative_path = "Sources/UwMiniCore/Models/BalanceData.swift"
+    doc1.language = "swift"
+    occ1 = doc1.occurrences.add()
+    occ1.range.extend([1, 0, 11])
+    occ1.symbol = _SYM_BALANCE
+    occ1.symbol_roles = 1
+
+    si_balance = doc1.symbols.add()
+    si_balance.symbol = _SYM_BALANCE
+    si_balance.kind = _SCIP_KIND_STRUCT
+
+    doc2 = index.documents.add()
+    doc2.relative_path = "Sources/UwMiniApp/ContentView.swift"
+    doc2.language = "swift"
+    occ2 = doc2.occurrences.add()
+    occ2.range.extend([1, 0, 11])
+    occ2.symbol = _SYM_RENDER
+    occ2.symbol_roles = 1
+    occ3 = doc2.occurrences.add()
+    occ3.range.extend([2, 4, 15])
+    occ3.symbol = _SYM_BALANCE
+    occ3.symbol_roles = 0
+
+    si_render = doc2.symbols.add()
+    si_render.symbol = _SYM_RENDER
+    si_render.kind = _SCIP_KIND_FUNCTION
+    rel = si_render.relationships.add()
+    rel.symbol = _SYM_BALANCE
+    rel.is_reference = True
+
+    return index
+
+
 def write_scip_fixture(index: Any, path: Path) -> Path:
     """Serialize SCIP Index to a file."""
     path.write_bytes(index.SerializeToString())

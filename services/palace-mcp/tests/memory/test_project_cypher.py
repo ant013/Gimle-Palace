@@ -11,6 +11,11 @@ def test_upsert_project_sets_group_id_from_slug() -> None:
     assert "'project/' + $slug" in UPSERT_PROJECT
 
 
+def test_upsert_project_sets_cm_project_name() -> None:
+    assert "p.cm_project_name" in UPSERT_PROJECT
+    assert "coalesce($cm_project_name, p.cm_project_name)" in UPSERT_PROJECT
+
+
 def test_upsert_project_preserves_source_created_at() -> None:
     assert "coalesce(p.source_created_at, $now)" in UPSERT_PROJECT
 
@@ -19,6 +24,7 @@ def test_project_info_has_required_fields() -> None:
     fields = ProjectInfo.model_fields
     for req in (
         "slug",
+        "cm_project_name",
         "name",
         "tags",
         "source_created_at",

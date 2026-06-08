@@ -37,6 +37,7 @@ class LanguageProfile:
 
 SWIFT_KIT_EXTRACTOR_ORDER: tuple[str, ...] = (
     "symbol_index_swift",
+    "prune_swift_symbols",
     "arch_layer",
     "git_history",
     "code_ownership",
@@ -53,6 +54,7 @@ SWIFT_KIT_EXTRACTOR_ORDER: tuple[str, ...] = (
     "public_api_surface",
     "reactive_dependency_tracer",
     "testability_di",
+    "embedding_symbol",
 )
 
 
@@ -69,6 +71,7 @@ PROFILES: dict[str, LanguageProfile] = {
                 "cross_repo_version_skew",
                 "dead_symbol_binary_surface",
                 "dependency_surface",
+                "embedding_symbol",
                 "error_handling_policy",
                 "hot_path_profiler",
                 "hotspot",
@@ -86,6 +89,7 @@ PROFILES: dict[str, LanguageProfile] = {
             {
                 "code_ownership",
                 "dependency_surface",
+                "embedding_symbol",
                 "hotspot",
             }
         ),
@@ -94,6 +98,7 @@ PROFILES: dict[str, LanguageProfile] = {
             "code_ownership",
             "dependency_surface",
             "hotspot",
+            "embedding_symbol",
         ),
     ),
     "android_kit": LanguageProfile(
@@ -103,6 +108,7 @@ PROFILES: dict[str, LanguageProfile] = {
                 "arch_layer",
                 "code_ownership",
                 "dependency_surface",
+                "embedding_symbol",
                 "hotspot",
             }
         ),
@@ -112,6 +118,7 @@ PROFILES: dict[str, LanguageProfile] = {
             "code_ownership",
             "dependency_surface",
             "hotspot",
+            "embedding_symbol",
         ),
     ),
 }

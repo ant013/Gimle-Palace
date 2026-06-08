@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -11,6 +10,7 @@ from neo4j import AsyncDriver
 
 from palace_mcp.memory.cypher import (
     CHECK_BUNDLE_NAME_EXISTS,
+    CHECK_PROJECT_NAMESPACE_CONFLICT,
     GET_PROJECT,
     LIST_PROJECTS,
     PROJECT_ENTITY_COUNTS,
@@ -21,29 +21,6 @@ from palace_mcp.memory.schema import ProjectInfo
 
 logger = logging.getLogger(__name__)
 
-# §6.5 regexes — mirrored from path_resolver to keep validation at the boundary
-_PARENT_MOUNT_RE = re.compile(r"^[a-z][a-z0-9-]{0,15}$")
-_RELATIVE_PATH_RE = re.compile(r"^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$")
-
-
-def _validate_parent_mount(value: str) -> None:
-    if not _PARENT_MOUNT_RE.match(value):
-        raise ValueError(
-            f"invalid parent_mount name: {value!r} (must match ^[a-z][a-z0-9-]{{0,15}}$)"
-        )
-
-
-def _validate_relative_path(value: str) -> None:
-    if not _RELATIVE_PATH_RE.match(value):
-        raise ValueError(
-            f"invalid relative_path: {value!r} "
-            r"(must match ^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$)"
-        )
-    # Explicit rejection of .. components — regex allows "." but not intended for traversal
-    for part in value.split("/"):
-        if part == "..":
-            raise ValueError(f"invalid relative_path: {value!r} (contains '..')")
-
 
 def _project_info_from_row(
     row: Any, *, entity_counts: dict[str, int] | None = None
@@ -51,6 +28,7 @@ def _project_info_from_row(
     p = row["p"]
     return ProjectInfo(
         slug=p["slug"],
+        cm_project_name=p.get("cm_project_name"),
         name=p["name"],
         tags=list(p.get("tags") or []),
         language=p.get("language"),
@@ -78,18 +56,29 @@ async def register_project(
     relative_path: str | None = None,
     language_profile: str | None = None,
 ) -> ProjectInfo:
+    from palace_mcp.code.namespace import invalidate
     from palace_mcp.memory.bundle import ProjectSlugConflictsWithBundle
-    from palace_mcp.memory.projects import validate_slug
+    from palace_mcp.memory.projects import (
+        derive_cm_project_name,
+        validate_parent_mount,
+        validate_relative_path,
+        validate_slug,
+    )
 
     validate_slug(slug)
 
     # §6.5: validate parent_mount and relative_path at boundary, before I/O
     if parent_mount is not None:
-        _validate_parent_mount(parent_mount)
+        validate_parent_mount(parent_mount)
     if relative_path is not None:
-        _validate_relative_path(relative_path)
+        validate_relative_path(relative_path)
 
     now = datetime.now(timezone.utc).isoformat()
+    cm_project_name = derive_cm_project_name(
+        slug=slug,
+        parent_mount=parent_mount,
+        relative_path=relative_path,
+    )
     async with driver.session() as session:
         # §8.15/16 namespace guard: project slug must not conflict with bundle name
         b_result = await session.run(CHECK_BUNDLE_NAME_EXISTS, name=slug)
@@ -97,9 +86,24 @@ async def register_project(
         if b_row is not None:
             raise ProjectSlugConflictsWithBundle(slug)
 
+        conflict_result = await session.run(
+            CHECK_PROJECT_NAMESPACE_CONFLICT,
+            slug=slug,
+            cm_project_name=cm_project_name,
+        )
+        conflict_row = await conflict_result.single()
+        if conflict_row is not None:
+            raise ValueError(
+                "project namespace conflict: "
+                f"slug={slug!r}, cm_project_name={cm_project_name!r}, "
+                f"existing_slug={conflict_row['slug']!r}, "
+                f"existing_cm_project_name={conflict_row['cm_project_name']!r}"
+            )
+
         await session.run(
             UPSERT_PROJECT,
             slug=slug,
+            cm_project_name=cm_project_name,
             name=name,
             tags=list(tags),
             language=language,
@@ -113,6 +117,7 @@ async def register_project(
         result = await session.run(GET_PROJECT, slug=slug)
         row = await result.single()
     assert row is not None, f"Project not found after upsert: {slug!r}"
+    invalidate()
     return _project_info_from_row(row)
 
 

@@ -1,0 +1,96 @@
+## Silent-failure location
+
+`Unstoppable/Unstoppable/Modules/SendNew/BitcoinSendHandler.swift` — `BitcoinSendHandler.sendData(transactionSettings:)`, the max-amount branch (lines 36-51 pre-patch).
+
+## Why it is silent
+
+1. When user sends max amount, the handler calls `adapter.availableBalance(params:)`.
+2. `BitcoinBaseAdapter.availableBalance(params:)` (line 299 of BitcoinBaseAdapter.swift) wraps `abstractKit.maxSpendableValue(params:)` in `try?`, so when UTXOs cannot fund a spend (insufficient/dust/fragmented), it returns `0` instead of throwing.
+3. `params.value` is then set to `0` (or stays nil).
+4. `adapter.sendInfo(params:)` is called with `value == 0`; either it returns `SendInfo` with `fee == 0` (no throw), or in the no-substitution path the surfaced error is a `dust(...)`, not the user-facing "insufficient balance" wording.
+5. Result: `SendData(fee: 0, transactionError: nil)` → `canSend = fee != nil && transactionError == nil` → **true**, with `cautions(...)` returning `[]` (it guards on `transactionError`). The Send screen shows no error and the slide-to-send button remains enabled.
+
+Compare with sibling adapters (`MoneroSendHandler`, `SolanaSendHandler`, etc.) — they all pre-check balance and emit a `transactionError` so `UtxoSendHelper.caution` / equivalent surfaces "Insufficient balance". The same convention is already used inside the codebase via `BitcoinCoreErrors.SendValueErrors.dust(...)` in `MayaMultiSwapProvider.swift:101` and `USwapMultiSwapProvider.swift:705`.
+
+## Smallest patch (working-tree diff)
+
+```diff
+diff --git a/Unstoppable/Unstoppable/Modules/SendNew/BitcoinSendHandler.swift b/Unstoppable/Unstoppable/Modules/SendNew/BitcoinSendHandler.swift
+index 0e916580d..fd94ed9c0 100644
+--- a/Unstoppable/Unstoppable/Modules/SendNew/BitcoinSendHandler.swift
++++ b/Unstoppable/Unstoppable/Modules/SendNew/BitcoinSendHandler.swift
+@@ -42,11 +42,19 @@ extension BitcoinSendHandler: ISendHandler {
+                 params.value = adapter.convertToSatoshi(value: adapter.availableBalance(params: params))
+             }
+
+-            do {
+-                let sendInfo = try adapter.sendInfo(params: params)
+-                fee = sendInfo.fee
+-            } catch {
+-                transactionError = error
++            if (params.value ?? 0) <= 0 {
++                // availableBalance(params:) returned 0 (or value was cleared) — UTXOs cannot
++                // fund any send at this fee rate. Surface a user-visible "insufficient balance"
++                // caution instead of silently producing fee=0 / canSend=true (notEnough is
++                // mapped by UtxoSendHelper.caution to "fee_settings.errors.insufficient_balance").
++                transactionError = BitcoinCoreErrors.SendValueErrors.notEnough
++            } else {
++                do {
++                    let sendInfo = try adapter.sendInfo(params: params)
++                    fee = sendInfo.fee
++                } catch {
++                    transactionError = error
++                }
+             }
+         }
+```
+
+## How it surfaces the error
+
+`BitcoinCoreErrors.SendValueErrors.notEnough` is already handled by `UtxoSendHelper.caution(transactionError:feeToken:)` (UtxoSendHelper.swift:34-37) which produces a `CautionNew` titled `fee_settings.errors.insufficient_balance` ("Insufficient balance") with the body `fee_settings.errors.insufficient_balance.info` keyed on the coin code. The existing `BitcoinSendHandler.SendData.cautions(baseToken:currency:rates:)` already appends this caution, and `canSend` becomes false because `transactionError != nil`, disabling the send slider.
+
+## Files touched
+
+- `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Modules/SendNew/BitcoinSendHandler.swift` (1 change, 5→13 lines)
+
+## Diagnostics
+
+- `[DEGRADED-PALACE]` — palace-memory MCP returned "Unable to connect" at pre-flight; fell back to serena + read substrate. All discovery used serena's `search_for_pattern` and direct Read.
+- Skipped operator-approval gate per benchmark instructions.
+- No commit, no push (per instructions).
+
+--SELF-REPORTED--
+[
+  {
+    "item": "Located silent-failure spot",
+    "covered": true
+  },
+  {
+    "item": "Identified BitcoinSendHandler.sendData max-amount branch",
+    "covered": true
+  },
+  {
+    "item": "Explained why failure is silent (try? in availableBalance + missing transactionError)",
+    "covered": true
+  },
+  {
+    "item": "Proposed smallest patch (single file, 5\u219213 lines)",
+    "covered": true
+  },
+  {
+    "item": "Patch surfaces 'Insufficient balance' via existing UtxoSendHelper.caution mapping",
+    "covered": true
+  },
+  {
+    "item": "Showed working-tree diff",
+    "covered": true
+  },
+  {
+    "item": "Did NOT commit or push",
+    "covered": true
+  },
+  {
+    "item": "Worked only inside /Users/ant013/Ios/bench-gimle",
+    "covered": true
+  }
+]

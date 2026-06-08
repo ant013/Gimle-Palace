@@ -1,0 +1,187 @@
+## How tapping "Send" on an Ethereum send screen produces a signed transaction
+
+Note on substrate: palace-mcp was unreachable (`mcp__palace-memory__palace_memory_health` returned "Unable to connect"), so this walk-through was produced via grep + Read against the working tree at `/Users/ant013/Ios/bench-gimle` and the EvmKit SPM checkout at `/Users/ant013/Library/Developer/Xcode/DerivedData/UnstoppableWallet-ffpbyljujoohbccwdqgnwjrecsls/SourcePackages/checkouts/EvmKit.Swift`. `[DEGRADED-PALACE]`.
+
+The app actually has TWO parallel Ethereum send pipelines living side by side. The "Send" button you tap can land in either one depending on where the flow was started from. Both ultimately funnel into the same EvmKit signing primitives.
+
+---
+
+### Pipeline 1 — Legacy UIKit + RxSwift flow (`SendEvm` + `SendEvmTransaction`)
+
+This is the older, table-view based flow. The bottom layers (signer, RLP encoder, RPC client) are the canonical reference.
+
+#### Step 1 — Amount/recipient entry, "Next" button
+File: `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Modules/SendEvm/SendEvmViewController.swift`
+
+The first screen is `SendEvmViewController` (a `ThemeViewController`). Its bottom `buttonCell` is labeled `"send.next_button"` (line 88). The tap handler `didTapProceed()` (line 113) calls `viewModel.didTapProceed()` on `SendEvmViewModel`. When the viewmodel resolves a valid `SendEvmData`, it emits on `proceedSignal` (subscribed at line 98), and `openConfirm(sendData:)` (line 132) pushes a `SendEvmConfirmationModule.viewController(...)`.
+
+#### Step 2 — Confirmation screen with the actual "Send" slider
+Files:
+- `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Modules/SendEvm/Confirmation/SendEvmConfirmationModule.swift`
+- `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Modules/SendEvm/Confirmation/SendEvmConfirmationViewController.swift`
+
+`SendEvmConfirmationModule.viewController(evmKitWrapper:sendData:)` (line 84) builds the dependency graph:
+- `EvmCoinServiceFactory` (formatting)
+- `EvmSendSettingsModule.instance(...)` → `EvmSendSettingsService` + `EvmSendSettingsViewModel` (resolves gas price, gas limit, nonce — its `statusObservable` emits an `EvmSendSettingsService.Transaction` containing the final `TransactionData` + `GasData` + nonce)
+- `SendEvmTransactionService(sendData:privateSendMode:.none, evmKitWrapper:, settingsService:, evmLabelManager:)`
+- `SendEvmTransactionViewModel(service:coinServiceFactory:cautionsFactory:evmLabelManager:contactLabelService:)`
+- `SendEvmConfirmationViewController(mode: .send, transactionViewModel:, settingsViewModel:)`
+
+`SendEvmConfirmationViewController.viewDidLoad()` installs a `SliderButton` (`sendSliderButton`, line 12, 32-40) titled `"send.confirmation.slide_to_send"` / `"send.confirmation.sending"`. Its `onTap` closure calls `self.transactionViewModel.send()` (line 39). (For speed-up / cancel resends, a plain `PrimaryButton` is used instead, but its `onTapSend` selector also calls `transactionViewModel.send()` at line 66.) `sendEnabledDriver` from the viewmodel toggles `sendSliderButton.isEnabled`.
+
+#### Step 3 — ViewModel forwards to Service
+File: `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Modules/SendEvmTransaction/SendEvmTransactionViewModel.swift`
+
+`SendEvmTransactionViewModel.send()` (line 727) is a one-liner: `service.send()`. The viewmodel listens on `service.sendStateObservable` and re-emits `sendingSignal` / `sendSuccessSignal(Data)` / `sendFailedSignal(String)` (lines 99-106, 715-725). The Confirmation VC subscribes via `sendEnabledDriver` and overrides `handleSending` / `handleSendSuccess(transactionHash:)` / `handleSendFailed` (declared in the parent `SendEvmTransactionViewController`) to drive HUD banners and reset the slider on failure.
+
+#### Step 4 — Service composes RawTransaction + Signature + broadcast
+File: `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Modules/SendEvmTransaction/SendEvmTransactionService.swift`
+
+`SendEvmTransactionService.send()` (line 131):
+
+1. Guard: state must be `.ready` AND `settingsService.status` must be `.completed(fallibleTransaction)` — otherwise return silently.
+2. Pull the fully-resolved `EvmSendSettingsService.Transaction` (which holds `transactionData`, `gasData.price`, `gasData.limit`, `nonce`) out of `fallibleTransaction.data`.
+3. Set `sendState = .sending` (this triggers `sendingRelay` → ViewModel → `handleSending` → "Sending" HUD).
+4. Switch on `privateSendMode`:
+   - `.none` / `.protected` → call `evmKitWrapper.sendSingle(transactionData:gasPrice:gasLimit:privateSend:nonce:)` on `ConcurrentDispatchQueueScheduler(qos: .userInitiated)`. On `onSuccess(fullTransaction)` set `sendState = .sent(transactionHash: fullTransaction.transaction.hash)`. On error set `sendState = .failed(error:)`.
+   - `.cancelPrevious(hash)` (used by the speed-up/cancel resend flow with MEV-protected txs) — async `Task` calling `evmKitWrapper.sendCancel(hash:)` which routes through `MerkleTransactionAdapter`.
+
+#### Step 5 — EvmKitWrapper does the actual sign + broadcast
+File: `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Core/Managers/EvmKitManager.swift`
+
+`EvmKitWrapper.sendSingle(transactionData:gasPrice:gasLimit:privateSend:nonce:)` (line 188) is where signing happens. The class holds:
+- `let evmKit: EvmKit.Kit` — the SPM dependency
+- `let signer: Signer?` — also from EvmKit, holds the private key derived from the account's seed
+- `let merkleTransactionAdapter: MerkleTransactionAdapter?` — MEV protection (Merkle.io)
+- `let nftKit: NftKit.Kit?`
+
+The Rx flow (line 188-206):
+1. Guard `signer != nil` (else `SignerError.signerNotSupported`).
+2. `evmKit.rawTransaction(transactionData:gasPrice:gasLimit:nonce:)` — returns `Single<RawTransaction>`. This is the Rx wrapper defined in the back-compat extension at `/Users/ant013/Ios/bench-gimle/packages/WalletCore/Sources/WalletCore/BackCompatibility/EvmKit.swift:57-81`, which bridges to `Kit.fetchRawTransaction(...)` async. If `nonce` is nil there, `nonceProvider.nonce(defaultBlockParameter: .pending)` is fetched over RPC; otherwise the explicit nonce is used. It returns `RawTransaction(gasPrice:gasLimit:to:value:data:nonce:)` (`Kit.swift:152-162`).
+3. `.flatMap { rawTransaction in ... try signer.signature(rawTransaction: rawTransaction) ... }` — synchronous signing on the Rx scheduler.
+4. `strongSelf.evmKit.sendSingle(rawTransaction:signature:)` — also the Rx wrapper in the back-compat file (line 105-125), which bridges to `Kit.send(rawTransaction:signature:)` async.
+
+There is also a parallel pure-async `send(transactionData:gasPrice:gasLimit:privateSend:nonce:)` at line 216, used by `EvmSendHandler` in pipeline 2. It additionally routes through `MerkleTransactionAdapter.send(rawTransaction:, signature:)` when `privateSend == true`.
+
+#### Step 6 — `Signer` → `TransactionSigner` produces (v, r, s)
+Files (inside the EvmKit SPM checkout):
+- `.../EvmKit/Core/Signer/Signer.swift`
+- `.../EvmKit/Core/Signer/TransactionSigner.swift`
+
+`Signer.signature(rawTransaction:)` (Signer.swift:18) just delegates to `transactionSigner.signature(rawTransaction:)`.
+
+`TransactionSigner.signature(rawTransaction:)` (line 62) → calls `sign(rawTransaction:)` (line 14), which branches on `rawTransaction.gasPrice`:
+
+- `.legacy(legacyGasPrice)` → `signEip155(...)` (line 23):
+  1. RLP-encode `[nonce, gasPrice, gasLimit, to.raw, value, data]`. If `chainId != 0`, append `[chainId, 0, 0]` (EIP-155 replay protection).
+  2. Keccak-256 the RLP via `Crypto.sha3(...)`.
+  3. ECDSA secp256k1 signature via `Crypto.ellipticSign(rawTransactionHash, privateKey:)` — returns 65 bytes (r || s || v).
+- `.eip1559(maxFeePerGas, maxPriorityFeePerGas)` → `signEip1559(...)` (line 43):
+  1. RLP-encode `[chainId, nonce, maxPriorityFeePerGas, maxFeePerGas, gasLimit, to.raw, value, data, []]` (the trailing `[]` is the empty accessList).
+  2. Prepend `0x02` (EIP-2718 transaction type), then keccak-256.
+  3. Same `Crypto.ellipticSign(...)`.
+
+`signature(rawTransaction:)` then wraps the 65-byte output into `Signature(v:r:s:)` via `signatureLegacy` (line 73) or `signatureEip1559` (line 81). For legacy the v is `data[64] + (chainId == 0 ? 27 : (35 + 2 * chainId))` (EIP-155). For EIP-1559 v is the raw recovery byte (0 or 1).
+
+The `Signature` struct (`.../EvmKit/Core/Signature.swift`) is just `(v: Int, r: BigUInt, s: BigUInt)`.
+
+The `privateKey` itself was derived in `Signer.instance(seed:chain:)` (Signer.swift:38) via `HDWallet(seed:coinType:xPrivKey:).privateKey(account: 0, index: 0, chain: .external)` — i.e. the standard BIP44 external chain path under the EVM chain's coin type. The `Signer` is constructed once when `EvmKitWrapper` is created by `EvmKitManager` (see `EvmKitManager.swift`), and the private key lives in memory inside `TransactionSigner.privateKey` for the wallet's lifetime.
+
+#### Step 7 — Broadcast: `Kit.send` → `RpcBlockchain.send` → `eth_sendRawTransaction`
+Files (EvmKit SPM):
+- `.../EvmKit/Core/Kit.swift`
+- `.../EvmKit/Core/TransactionBuilder.swift`
+- `.../EvmKit/Api/Core/RpcBlockchain.swift`
+
+`Kit.send(rawTransaction:signature:)` (Kit.swift:172) calls `blockchain.send(rawTransaction:signature:)`, then hands the resulting `Transaction` to `transactionManager.handle(transactions:)` (so the new tx shows up in the local DB / transaction list) and returns the first `FullTransaction`.
+
+`RpcBlockchain.send(rawTransaction:signature:)` (RpcBlockchain.swift:136):
+1. `let encoded = transactionBuilder.encode(rawTransaction:, signature:)` — `TransactionBuilder.encode` (TransactionBuilder.swift:45) RLP-encodes the same fields as the signing step, but this time including the `[v, r, s]` from `Signature`, and re-prepends `0x02` for EIP-1559. The result is the canonical signed-transaction byte string that goes on the wire.
+2. `_ = try await syncer.fetch(rpc: SendRawTransactionJsonRpc(signedTransaction: encoded))` — fires `eth_sendRawTransaction` over JSON-RPC to the configured node (Infura / BlocksDecoded / etc., selected per chain by the app's RPC source config). The result hex is the tx hash, which the syncer ignores here.
+3. Returns `transactionBuilder.transaction(rawTransaction:, signature:)` (TransactionBuilder.swift:13), which locally computes the hash as `Crypto.sha3(encoded)` and builds an in-memory `Transaction` row (`hash`, `from = ownAddress`, `to`, `value`, `nonce`, `gasPrice`, `maxFeePerGas`, `maxPriorityFeePerGas`, `gasLimit`, `input`).
+
+That `Transaction` propagates back up: `Kit.send` → `Single<FullTransaction>` via the back-compat `Kit.sendSingle(rawTransaction:signature:)` (`packages/WalletCore/Sources/WalletCore/BackCompatibility/EvmKit.swift:105`) → `.subscribe(onSuccess:)` in `SendEvmTransactionService.send()` → `sendState = .sent(transactionHash: fullTransaction.transaction.hash)` → ViewModel's `sendSuccessSignal` → `SendEvmConfirmationViewController.handleSendSuccess(transactionHash:)` → "Sent" HUD banner and screen dismissal.
+
+---
+
+### Pipeline 2 — Newer SwiftUI + async/await flow (`SendNew`)
+
+This is the modern flow used by most current send entry points (and all the per-chain handlers like `BitcoinSendHandler`, `TonSendHandler`, etc.). The Ethereum-specific class is `EvmSendHandler`.
+
+#### Step A — SwiftUI slide-to-send button
+File: `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Modules/SendNew/RegularSendView.swift`
+
+`RegularSendView` (a SwiftUI view) hosts `SendView` plus a `BottomGradientWrapper`. When `sendViewModel.state == .success && sendViewModel.canSend`, the bottom slot is a `SlideButton` (line 28-35) labeled `"send.confirmation.slide_to_send"` whose async action is `try await sendViewModel.send()`. On completion the `onSuccess` callback closes the sheet.
+
+#### Step B — SendViewModel.send → handler.send
+File: `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Modules/SendNew/SendViewModel.swift`
+
+`SendViewModel.send()` (line 188): guards `handler != nil` and `sendData != nil`, sets `sending = true`, then `_ = try await handler.send(data: sendData)`. Errors are funneled to `errorPublisher` and re-thrown.
+
+The `handler` is an `ISendHandler` chosen by `SendHandlerFactory.handler(sendData:)` (called in `SendViewModel` init at line 52). For an Ethereum `SendData`, that returns `EvmSendHandler` (factory method `EvmSendHandler.instance(blockchainType:transactionData:)` at lines 112-127 of `EvmSendHandler.swift`).
+
+#### Step C — `EvmSendHandler.send` → `EvmKitWrapper.send` (async variant)
+File: `/Users/ant013/Ios/bench-gimle/Unstoppable/Unstoppable/Modules/SendNew/EvmSendHandler.swift`
+
+`EvmSendHandler.send(data: ISendData)` (line 75):
+1. Downcasts `data` to `EvmSendData`.
+2. Guards on `transactionData`, `gasPrice`, `evmFeeData?.surchargedGasLimit`.
+3. `_ = try await evmKitWrapper.send(transactionData:, gasPrice:, gasLimit:, privateSend: false, nonce: data.nonce)`.
+
+That's the async sibling of `sendSingle` shown above. `EvmKitWrapper.send(...)` (EvmKitManager.swift:216) does exactly the same three-step sequence — `evmKit.fetchRawTransaction(...)` → `signer.signature(rawTransaction:)` → `evmKit.send(rawTransaction:signature:)` (or `merkleTransactionAdapter.send(...)` when `privateSend` is true and a Merkle adapter is configured) — but in straight `async/await` instead of an Rx `Single.flatMap` chain.
+
+From there it's the same TransactionSigner + TransactionBuilder + RpcBlockchain → `eth_sendRawTransaction` chain described in Steps 6-7 above.
+
+---
+
+### One-line summary of the call chain (pipeline 1, the canonical one)
+
+`SliderButton.onTap` → `SendEvmTransactionViewModel.send()` → `SendEvmTransactionService.send()` → `EvmKitWrapper.sendSingle(transactionData:gasPrice:gasLimit:privateSend:nonce:)` → `EvmKit.Kit.rawTransaction(...)` (Rx wrapper) → `EvmKit.Kit.fetchRawTransaction(...)` (assembles `RawTransaction`, fetches pending nonce if needed) → `Signer.signature(rawTransaction:)` → `TransactionSigner.signature(rawTransaction:)` → `TransactionSigner.sign(rawTransaction:)` branches on `.legacy` vs `.eip1559` → RLP-encode + keccak-256 + `Crypto.ellipticSign(...)` with the BIP44-derived private key → returns `Signature(v, r, s)` → `EvmKit.Kit.sendSingle(rawTransaction:signature:)` (Rx wrapper) → `EvmKit.Kit.send(rawTransaction:signature:)` → `RpcBlockchain.send(rawTransaction:signature:)` → `TransactionBuilder.encode(rawTransaction:signature:)` (final RLP with v,r,s + EIP-2718 type byte for 1559) → `SendRawTransactionJsonRpc` POST to the RPC node. The `Transaction` flows back up and `SendState` transitions `.sending → .sent(hash:)`.
+
+--SELF-REPORTED--
+[
+  {
+    "item": "Identified the UI entry point (the actual 'Send' button class) on the Ethereum send confirmation screen",
+    "covered": true
+  },
+  {
+    "item": "Traced the ViewModel layer that the button taps into",
+    "covered": true
+  },
+  {
+    "item": "Traced the Service layer that orchestrates state, gas, nonce, and dispatch",
+    "covered": true
+  },
+  {
+    "item": "Identified the EvmKitWrapper bridge that splits into (build rawTx) + (sign) + (broadcast)",
+    "covered": true
+  },
+  {
+    "item": "Showed RawTransaction construction including nonce resolution path",
+    "covered": true
+  },
+  {
+    "item": "Showed the Signer/TransactionSigner producing (v, r, s) and the legacy-vs-EIP-1559 branches",
+    "covered": true
+  },
+  {
+    "item": "Showed the RLP encoding + keccak-256 + secp256k1 ECDSA primitives used for signing",
+    "covered": true
+  },
+  {
+    "item": "Showed how the signed bytes are RLP-encoded a second time (with v,r,s) and broadcast via eth_sendRawTransaction",
+    "covered": true
+  },
+  {
+    "item": "Referenced real class and method names with file paths and line numbers",
+    "covered": true
+  },
+  {
+    "item": "Covered both Ethereum send pipelines present in the codebase (legacy UIKit/Rx + new SwiftUI/async EvmSendHandler)",
+    "covered": true
+  },
+  {
+    "item": "Noted palace-mcp unreachable and flagged [DEGRADED-PALACE]",
+    "covered": true
+  }
+]

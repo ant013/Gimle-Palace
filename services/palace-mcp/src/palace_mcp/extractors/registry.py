@@ -21,6 +21,7 @@ from palace_mcp.extractors.cross_repo_version_skew.extractor import (
     CrossRepoVersionSkewExtractor,
 )
 from palace_mcp.extractors.cross_module_contract import CrossModuleContractExtractor
+from palace_mcp.extractors.dead_code.extractor import DeadCodeExtractor
 from palace_mcp.extractors.dead_symbol_binary_surface.extractor import (
     DeadSymbolBinarySurfaceExtractor,
 )
@@ -30,6 +31,7 @@ from palace_mcp.extractors.dependency_surface.extractor import (
 from palace_mcp.extractors.error_handling_policy import (
     ErrorHandlingPolicyExtractor,
 )
+from palace_mcp.extractors.embedding_symbol import EmbeddingSymbolExtractor
 from palace_mcp.extractors.git_history.extractor import GitHistoryExtractor
 from palace_mcp.extractors.heartbeat import HeartbeatExtractor
 from palace_mcp.extractors.hot_path_profiler import HotPathProfilerExtractor
@@ -38,6 +40,7 @@ from palace_mcp.extractors.localization_accessibility.extractor import (
     LocalizationAccessibilityExtractor,
 )
 from palace_mcp.extractors.public_api_surface import PublicApiSurfaceExtractor
+from palace_mcp.extractors.prune_swift_symbols import PruneSwiftSymbols
 from palace_mcp.extractors.reactive_dependency_tracer.extractor import (
     ReactiveDependencyTracerExtractor,
 )
@@ -57,6 +60,7 @@ EXTRACTORS: dict[str, BaseExtractor] = {
     "codebase_memory_bridge": CodebaseMemoryBridgeExtractor(),
     "coding_convention": CodingConventionExtractor(),
     "cross_module_contract": CrossModuleContractExtractor(),
+    "dead_code": DeadCodeExtractor(),
     "dead_symbol_binary_surface": DeadSymbolBinarySurfaceExtractor(),
     "public_api_surface": PublicApiSurfaceExtractor(),
     "symbol_index_python": SymbolIndexPython(),
@@ -64,9 +68,11 @@ EXTRACTORS: dict[str, BaseExtractor] = {
     "symbol_index_java": SymbolIndexJava(),
     "symbol_index_solidity": SymbolIndexSolidity(),
     "symbol_index_swift": SymbolIndexSwift(),
+    "prune_swift_symbols": PruneSwiftSymbols(),
     "symbol_index_clang": SymbolIndexClang(),
     "dependency_surface": DependencySurfaceExtractor(),
     "error_handling_policy": ErrorHandlingPolicyExtractor(),
+    "embedding_symbol": EmbeddingSymbolExtractor(),
     "reactive_dependency_tracer": ReactiveDependencyTracerExtractor(),
     "testability_di": TestabilityDiExtractor(),
     "git_history": GitHistoryExtractor(),

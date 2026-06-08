@@ -20,7 +20,7 @@
     {"slug": "theme-kit",            "relative_path": "ThemeKit",                   "tier": "first-party"},
     {"slug": "component-kit",        "relative_path": "ComponentKit",               "tier": "first-party"},
     {"slug": "action-sheet",         "relative_path": "ActionSheet",                "tier": "first-party"},
-    {"slug": "hs-extensions",        "relative_path": "HsExtensions",              "tier": "first-party"},
+    {"slug": "hs-extensions",        "relative_path": "HsExtensions.Swift",        "tier": "first-party"},
     {"slug": "pin-kit",              "relative_path": "PinKit.Swift",               "tier": "first-party"},
     {"slug": "sections-kit",         "relative_path": "SectionsKit",               "tier": "first-party"},
     {"slug": "currency-kit",         "relative_path": "CurrencyKit",               "tier": "first-party"},

@@ -63,6 +63,7 @@ class GitHistoryExtractor(BaseExtractor):
     )
     constraints: ClassVar[list[str]] = []
     indexes: ClassVar[list[str]] = []
+    timeout_s: ClassVar[float] = 3600.0
 
     async def run(
         self,
@@ -134,6 +135,16 @@ class GitHistoryExtractor(BaseExtractor):
                     full_resync = True
                     commits_list = list(walker.walk_since(None))
 
+                total_commits = len(commits_list)
+                log.info(
+                    "git_history_phase1_walk_start",
+                    extra={
+                        "event": "git_history_phase1_walk_start",
+                        "project_id": ctx.group_id,
+                        "total_commits": total_commits,
+                        "full_resync": full_resync,
+                    },
+                )
                 tantivy_index_path = settings.git_history_tantivy_index_path
                 async with GitHistoryTantivyWriter(tantivy_index_path) as tw:
                     for commit in commits_list:
@@ -160,6 +171,16 @@ class GitHistoryExtractor(BaseExtractor):
                         )
                         commits_written += 1
                         edges_written += 2 + len(commit["touched_files"])
+                        if commits_written % 500 == 0:
+                            log.info(
+                                "git_history_phase1_progress",
+                                extra={
+                                    "event": "git_history_phase1_progress",
+                                    "project_id": ctx.group_id,
+                                    "commits_written": commits_written,
+                                    "total_commits": total_commits,
+                                },
+                            )
 
                 await write_git_history_checkpoint(
                     driver,

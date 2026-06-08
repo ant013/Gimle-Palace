@@ -23,6 +23,7 @@ async def test_write_checkpoint_phase1_only():
     )
     assert driver.execute_query.await_count == 1
     args = driver.execute_query.await_args
+    assert "c.group_id = $project_id" in args.args[0]
     assert args.kwargs["last_phase_completed"] == "phase1"
 
 

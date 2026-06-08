@@ -21,6 +21,10 @@ dependencies = [
     "pygit2>=1.15,<2.0",
     "lizard>=1.17.20,<2.0",
     "semgrep>=1.162.0",
+    "sentence-transformers>=3.0.0; (sys_platform == 'darwin' and platform_machine == 'arm64') or sys_platform == 'linux'",
+    "huggingface-hub==0.36.2 ; (platform_machine == 'arm64' and sys_platform == 'darwin') or sys_platform == 'linux'",
+    "tokenizers==0.21.4 ; (platform_machine == 'arm64' and sys_platform == 'darwin') or sys_platform == 'linux'",
+    "transformers==4.48.0 ; (platform_machine == 'arm64' and sys_platform == 'darwin') or sys_platform == 'linux'",
 ]
 
 [build-system]
@@ -48,6 +52,7 @@ dev-dependencies = [
 asyncio_mode = "auto"
 markers = [
     "integration: tests requiring external services (Neo4j, running MCP server)",
+    "live_namespace: tests targeting live namespace resolution substrates",
     "slow: tests >30s (excluded from CI; run nightly or manually on iMac)",
     "wire: MCP wire-contract tests requiring running palace-mcp transport",
     "requires_scip_typescript: tests requiring ts-mini-project/index.scip fixture",

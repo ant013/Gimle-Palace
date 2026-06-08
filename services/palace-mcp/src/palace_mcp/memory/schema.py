@@ -55,6 +55,7 @@ class ProjectInfo(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     slug: str
+    cm_project_name: str | None = None
     name: str
     tags: list[str]
     language: str | None = None

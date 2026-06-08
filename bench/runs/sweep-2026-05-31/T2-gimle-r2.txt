@@ -1,0 +1,77 @@
+Task T2 (GIMLE arm) — list every Swift file in unstoppable-wallet-ios that imports Foundation but not UIKit.
+
+Working tree: /Users/ant013/Ios/bench-gimle
+Result file (770 paths, one per line, relative to repo root, sorted):
+  /Users/ant013/Android/Gimle-Palace/bench/tasks/T2.gimle.result.txt
+
+Method:
+  set A = rg -l --type swift '^\s*import\s+Foundation\b'   → 828 files
+  set B = rg -l --type swift '^\s*import\s+UIKit\b'        → 475 files
+  A ∩ B = 58 files (import both)
+  A \ B = 770 files  ← answer
+Verified the regex anchors at line start with optional leading whitespace and uses \b after the module name, so it does not false-match `import FoundationExtra` or commented imports. Extending the pattern to also accept `@_exported import Foundation` did not change the counts (no such occurrences in either set). Submodule forms like `import Foundation.NSURL` would also be matched by \b, but none were observed.
+
+Palace was NOT used as discovery substrate for this enumeration: bench-gimle is a fresh worktree at an unknown SHA versus the indexed `uw-ios-app` snapshot, and the task explicitly targets the on-disk file set. Tier 6 (rg) is the correct substrate for an "enumerate files in this checkout" question; using palace's snapshot would risk staleness divergence from the actual working tree.
+
+No code changes made. No commits. No push. The 8-phase analog-driven workflow was not exercised (no design choice, no implementation, no new tests) — the task is a pure read-only set query with one unambiguous answer.
+
+Top 5 and bottom 5 of the result (full list in the file above):
+  Unstoppable/Tests/Abstraction/Fixtures/GasFreeFixtures.swift
+  Unstoppable/Tests/Abstraction/Managers/PasskeyAttestationDecoderTests.swift
+  Unstoppable/Tests/Abstraction/Managers/PasskeyCborReaderTests.swift
+  Unstoppable/Tests/Abstraction/Managers/SmartAccountManagerTests.swift
+  Unstoppable/Tests/Abstraction/Managers/SmartAccountPasskeyManagerTests.swift
+  ...
+  packages/WalletCore/Sources/WalletCore/Models/AppValue/RawAppValue.swift
+  packages/WalletCore/Sources/WalletCore/Models/AppValue/TokenAppValue.swift
+  packages/WalletCore/Sources/WalletCore/Models/CurrencyValue.swift
+  packages/WalletCore/Sources/WalletCore/Models/FeePriceScale.swift
+  packages/WalletCore/Sources/WalletCore/UserInterface/ValueFormatter.swift
+
+--SELF-REPORTED--
+[
+  {
+    "item": "Identified bench-gimle as the unstoppable-wallet-ios checkout with Unstoppable.xcodeproj and packages/WalletCore SwiftPM target",
+    "covered": true
+  },
+  {
+    "item": "Used ripgrep with anchored regex ^\\s*import\\s+Foundation\\b and ^\\s*import\\s+UIKit\\b on --type swift",
+    "covered": true
+  },
+  {
+    "item": "Computed set difference A \\ B via sort -u + comm -23",
+    "covered": true
+  },
+  {
+    "item": "Counted Foundation-importing files: 828",
+    "covered": true
+  },
+  {
+    "item": "Counted UIKit-importing files: 475",
+    "covered": true
+  },
+  {
+    "item": "Counted intersection (both Foundation and UIKit): 58",
+    "covered": true
+  },
+  {
+    "item": "Final answer size: 770 Swift files import Foundation but not UIKit",
+    "covered": true
+  },
+  {
+    "item": "Verified @_exported import Foundation variant yields identical counts",
+    "covered": true
+  },
+  {
+    "item": "Persisted full list to /Users/ant013/Android/Gimle-Palace/bench/tasks/T2.gimle.result.txt",
+    "covered": true
+  },
+  {
+    "item": "No code changes, no commits, no push \u2014 read-only task",
+    "covered": true
+  },
+  {
+    "item": "Did not exercise palace as substrate because the question targets on-disk working-tree files at bench-gimle's SHA, not the indexed snapshot",
+    "covered": true
+  }
+]

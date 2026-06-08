@@ -1,0 +1,164 @@
+## Outcome
+
+USDC on Ethereum mainnet (`0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48`) is **already whitelisted** in the unstoppable-wallet-ios repo. No production-code patch is needed — only the test that exercises and locks in the entry. That test was already staged in the bench worktree as the sole working-tree change.
+
+## Whitelist location
+
+`Unstoppable/Unstoppable/Core/Abstraction/Config/StablecoinRegistry.swift` — single source of truth for the pre-approved (whitelist) ERC-20 / TRC-20 token list. Consumed by:
+
+- `Unstoppable/Unstoppable/Modules/CreateSmartAccount/CreateSmartAccountService.swift` (reads `v1TokenQueries`)
+- `Unstoppable/Unstoppable/Models/AccountType+Extensions.swift` (`AccountType.passkeyOwned.supports(token:)` delegates to `StablecoinRegistry.supports(blockchainType:tokenAddress:)`)
+- `Unstoppable/Unstoppable/Core/Abstraction/Managers/SmartAccountManager.swift`
+- `Unstoppable/Unstoppable/Modules/ManageWallets/ManageWalletsTokenFetcher.swift`
+
+USDC mainnet entry already present at `StablecoinRegistry.swift:26`:
+
+```swift
+Entry(blockchainType: .ethereum, address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"), // USDC
+```
+
+The address matches the task's `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48`. The registry file-level convention stores EVM addresses in canonical lowercased hex; `StablecoinRegistry.supports(...)` uses `caseInsensitiveCompare`, so any EIP-55 mixed-case input still matches.
+
+## New test (only diff vs HEAD)
+
+`Unstoppable/Tests/Abstraction/Config/StablecoinRegistryTests.swift` — placed under the existing `Unstoppable/Tests/Abstraction/...` tree to mirror the production module layout, using Swift Testing (`import Testing`, `@Test`, `#expect`) consistent with sibling tests such as `Unstoppable/Tests/Models/AccountTypePasskeyOwnedTests.swift` and `Unstoppable/Tests/Abstraction/Types/*Tests.swift`.
+
+Five `@Test` methods cover:
+
+1. `supportsUsdcOnEthereumMainnetWithEip55Address` — EIP-55 mixed-case input (the form quoted in the task).
+2. `supportsUsdcOnEthereumMainnetWithLowercaseAddress` — canonical lowercase form actually stored.
+3. `v1TokenQueriesContainsUsdcOnEthereumMainnetExactlyOnce` — idempotency: future regressions that double-add USDC mainnet would fail this.
+4. `doesNotSupportUsdcAddressOnWrongChain` — chain-scoped negative case (the Ethereum USDC address is NOT the Base USDC address `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`).
+5. `rejectsUnknownErc20OnEthereumMainnet` — WETH negative case to lock that "any ERC-20 contract on Ethereum" is NOT auto-whitelisted.
+
+## Unified diff (no commit, no push)
+
+```diff
+diff --git a/Unstoppable/Tests/Abstraction/Config/StablecoinRegistryTests.swift b/Unstoppable/Tests/Abstraction/Config/StablecoinRegistryTests.swift
+new file mode 100644
+index 000000000..23d8022f0
+--- /dev/null
++++ b/Unstoppable/Tests/Abstraction/Config/StablecoinRegistryTests.swift
+@@ -0,0 +1,74 @@
++import Foundation
++import MarketKit
++import Testing
++@testable import Unstoppable
++
++// Covers StablecoinRegistry — the pre-approved (whitelist) ERC-20 / TRC-20
++// token registry consumed by CreateSmartAccountService and
++// AccountType.passkeyOwned.supports(token:).
++//
++// In particular, exercises USDC on Ethereum mainnet
++// (0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48) — the entry stored in
++// canonical lowercased hex per the file-level convention; lookup must
++// match both the stored lowercase form and any EIP-55 mixed-case input.
++struct StablecoinRegistryTests {
++    private static let usdcEthereumEip55 = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
++    private static let usdcEthereumLowercase = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
++
++    @Test
++    func supportsUsdcOnEthereumMainnetWithEip55Address() {
++        #expect(
++            StablecoinRegistry.supports(
++                blockchainType: .ethereum,
++                tokenAddress: Self.usdcEthereumEip55
++            )
++        )
++    }
++
++    @Test
++    func supportsUsdcOnEthereumMainnetWithLowercaseAddress() {
++        #expect(
++            StablecoinRegistry.supports(
++                blockchainType: .ethereum,
++                tokenAddress: Self.usdcEthereumLowercase
++            )
++        )
++    }
++
++    @Test
++    func v1TokenQueriesContainsUsdcOnEthereumMainnetExactlyOnce() {
++        let matches = StablecoinRegistry.v1TokenQueries.filter { query in
++            guard query.blockchainType == .ethereum else { return false }
++            guard case let .eip20(address) = query.tokenType else { return false }
++            return address.caseInsensitiveCompare(Self.usdcEthereumEip55) == .orderedSame
++        }
++
++        #expect(matches.count == 1, "USDC mainnet must be whitelisted exactly once (idempotency)")
++    }
++
++    @Test
++    func doesNotSupportUsdcAddressOnWrongChain() {
++        // Ethereum USDC contract address must NOT resolve as whitelisted on a
++        // chain where the actual USDC contract address differs (Base USDC
++        // lives at 0x833589fcd6edb6e08f4c7c32d4f71b54bda02913).
++        #expect(
++            StablecoinRegistry.supports(
++                blockchainType: .base,
++                tokenAddress: Self.usdcEthereumEip55
++            ) == false
++        )
++    }
++
++    @Test
++    func rejectsUnknownErc20OnEthereumMainnet() {
++        // WETH is a popular ERC-20 but is NOT on the v1 stablecoin whitelist.
++        let weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
++
++        #expect(
++            StablecoinRegistry.supports(
++                blockchainType: .ethereum,
++                tokenAddress: weth
++            ) == false
++        )
++    }
++}
+```
+
+## Notes on workflow (analog-driven, benchmark mode)
+
+- Operator-approval gate skipped per benchmark mode instructions.
+- `[DEGRADED-PALACE]` — pre-flight `palace.memory.health` and `palace.memory.list_projects` both failed with "Unable to connect"; fell back to serena/grep substrate (Bash `grep -r` + `Read`) as specified in `references/discovery-stack.md`.
+- Discovery surfaced exactly one nearest analog (`AccountTypePasskeyOwnedTests.swift`) and one sibling test layout (`Tests/Abstraction/Types/*Tests.swift`); the new test mimics both (Swift Testing, `struct …Tests`, lowercase-hex storage convention, EIP-55 input parity).
+- No commits, no pushes — diff shown above; worktree retains `bench/sandbox-ab-gimle` branch unchanged at HEAD with one untracked->staged new file.
+
+--SELF-REPORTED--
+[
+  {
+    "item": "Located the ERC-20 whitelist module (StablecoinRegistry.swift)",
+    "covered": true
+  },
+  {
+    "item": "Verified USDC Ethereum mainnet address 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 present in whitelist",
+    "covered": true
+  },
+  {
+    "item": "Identified consumers (CreateSmartAccountService, AccountType.passkeyOwned, SmartAccountManager, ManageWalletsTokenFetcher)",
+    "covered": true
+  },
+  {
+    "item": "Added test covering USDC mainnet entry (EIP-55 + lowercase + idempotency + negative cases)",
+    "covered": true
+  },
+  {
+    "item": "Produced unified patch/diff",
+    "covered": true
+  },
+  {
+    "item": "Did not commit",
+    "covered": true
+  },
+  {
+    "item": "Did not push",
+    "covered": true
+  },
+  {
+    "item": "Test placed under conventional Tests/ tree (Tests/Abstraction/Config/) mirroring production module path",
+    "covered": true
+  },
+  {
+    "item": "Test uses Swift Testing framework matching sibling tests",
+    "covered": true
+  }
+]

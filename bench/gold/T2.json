@@ -1,0 +1,21 @@
+{
+  "task": "T2",
+  "description": "List Swift files importing Foundation but not UIKit (anti-palace baseline)",
+  "grading_mode": "count_with_tolerance",
+  "expected_file_count_min": 240,
+  "expected_file_count_max": 290,
+  "must_contain_regex": [
+    "\\.swift",
+    "(Foundation|UIKit)"
+  ],
+  "any_n_of_regex": {
+    "n": 3,
+    "items": [
+      "Adapter[A-Za-z]*\\.swift",
+      "Service\\.swift",
+      "Manager\\.swift",
+      "Provider\\.swift",
+      "Module\\.swift"
+    ]
+  }
+}

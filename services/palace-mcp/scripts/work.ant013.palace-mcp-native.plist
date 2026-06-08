@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+launchd agent for native palace-mcp on macOS (no Docker, MPS-accelerated).
+
+Install (operator-only, not auto-loaded by repo):
+  cp services/palace-mcp/scripts/work.ant013.palace-mcp-native.plist \
+     ~/Library/LaunchAgents/
+  launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/work.ant013.palace-mcp-native.plist
+  launchctl kickstart -k gui/$(id -u)/work.ant013.palace-mcp-native
+
+Verify:
+  launchctl print gui/$(id -u)/work.ant013.palace-mcp-native | head -30
+  curl -s http://localhost:8765/healthz
+
+Unload:
+  launchctl bootout gui/$(id -u)/work.ant013.palace-mcp-native
+
+Logs:
+  tail -F ~/Library/Logs/palace-mcp-native/palace-mcp.log
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>work.ant013.palace-mcp-native</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/ant013/Android/Gimle-Palace/services/palace-mcp/scripts/launch_native_macos.sh</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/ant013/Android/Gimle-Palace/services/palace-mcp</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+    <key>NetworkState</key>
+    <true/>
+  </dict>
+
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+
+  <key>StandardOutPath</key>
+  <string>/Users/ant013/Library/Logs/palace-mcp-native/palace-mcp.out</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Users/ant013/Library/Logs/palace-mcp-native/palace-mcp.err</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+</dict>
+</plist>
