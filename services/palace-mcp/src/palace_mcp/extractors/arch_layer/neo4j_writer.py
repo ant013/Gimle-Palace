@@ -169,11 +169,19 @@ async def _write_snapshot(  # noqa: PLR0912, PLR0913
         nodes[0] += 1
 
     for la in layers:
-        await writer.write_node(tx, "Layer", la.model_dump())
+        await writer.write_node(
+            tx,
+            "Layer",
+            la.model_dump(exclude_unset=True, exclude_none=True),
+        )
         nodes[0] += 1
 
     for r in rules:
-        await writer.write_node(tx, "ArchRule", r.model_dump())
+        await writer.write_node(
+            tx,
+            "ArchRule",
+            r.model_dump(exclude_unset=True, exclude_none=True),
+        )
         nodes[0] += 1
 
     for v in violations:

@@ -60,6 +60,7 @@ ORDER BY s.qualified_name
 
 _LAYERS_QUERY = """
 MATCH (l:Layer {project_id: $project_id})
+WHERE coalesce(l.summary, false) = false
 RETURN
     l.name AS name,
     l.rule_source AS rule_source
