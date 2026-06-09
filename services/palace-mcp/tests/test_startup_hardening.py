@@ -189,6 +189,58 @@ class TestEnsureSchemaWiredInLifespan:
         assert calls[0][1] == "project/gimle"
 
 
+class TestQodoPrewarmOrdering:
+    @pytest.mark.asyncio
+    async def test_lifespan_prewarms_before_building_graphiti(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from collections.abc import AsyncGenerator
+        from contextlib import asynccontextmanager
+
+        from palace_mcp.main import lifespan
+
+        monkeypatch.setenv("PALACE_QODO_PREWARM", "1")
+
+        calls: list[str] = []
+        mock_driver = AsyncMock()
+        mock_driver.verify_connectivity = AsyncMock(return_value=None)
+        mock_driver.close = AsyncMock(return_value=None)
+        mock_app = MagicMock()
+        mock_app.state = MagicMock()
+
+        async def noop_constraints(_driver: object, *, default_group_id: str) -> None:
+            pass
+
+        async def fake_prewarm() -> None:
+            calls.append("prewarm")
+
+        def fake_build_graphiti(_settings: object) -> MagicMock:
+            calls.append("build_graphiti")
+            return MagicMock()
+
+        @asynccontextmanager
+        async def _noop_lifespan(app: object) -> AsyncGenerator[None, None]:
+            yield
+
+        with (
+            patch(
+                "palace_mcp.main.AsyncGraphDatabase.driver", return_value=mock_driver
+            ),
+            patch("palace_mcp.main._run_qodo_prewarm", side_effect=fake_prewarm),
+            patch("palace_mcp.main.build_graphiti", side_effect=fake_build_graphiti),
+            patch("palace_mcp.main.ensure_schema", side_effect=noop_constraints),
+            patch(
+                "palace_mcp.main._mcp_asgi_app.router.lifespan_context",
+                return_value=_noop_lifespan(None),
+            ),
+        ):
+            async with asyncio.timeout(2.0):
+                async with lifespan(mock_app):
+                    pass
+
+        assert calls[:2] == ["prewarm", "build_graphiti"]
+
+
 class TestNoBlockingExternalCallsAtStartup:
     """Pattern #5: startup must not block on external calls.
 
