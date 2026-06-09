@@ -370,10 +370,20 @@ done
 log info "[12/13] codex subagents (.toml deploy)"
 codex_agents_dir="${REPO_ROOT}/paperclips/projects/${project_key}/codex-agents"
 if [ -d "$codex_agents_dir" ]; then
-  target_dir="${HOME}/.codex/projects/${project_key}/agents"
-  mkdir -p "$target_dir"
-  cp "$codex_agents_dir"/*.toml "$target_dir/" 2>/dev/null || true
-  log ok "codex subagents deployed to $target_dir"
+  if [ "$project_key" = "uaudit" ]; then
+    backup_dir="${HOME}/.paperclip/projects/${project_key}/backups/uaudit-codex-agents"
+    python3 "${SCRIPT_DIR}/install_uaudit_codex_agents.py" \
+      --source-dir "$codex_agents_dir" \
+      --codex-home "${SHARED_CODEX_HOME:-${HOME}/.codex}" \
+      --backup-dir "$backup_dir" \
+      || die "UAudit codex subagent install failed"
+    log ok "uaudit codex subagents installed into runtime-visible Codex home"
+  else
+    target_dir="${HOME}/.codex/projects/${project_key}/agents"
+    mkdir -p "$target_dir"
+    cp "$codex_agents_dir"/*.toml "$target_dir/" 2>/dev/null || true
+    log ok "codex subagents deployed to $target_dir"
+  fi
 fi
 
 # Step 13: bootstrap watchdog
