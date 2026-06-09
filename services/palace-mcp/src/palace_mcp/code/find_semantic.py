@@ -525,6 +525,39 @@ async def _find_missing_hits(
     ]
 
 
+async def _resolve_registered_repo_path(project: str) -> Path | None:
+    """Look up :Project.repo_path so snippet provider can use it.
+
+    Same pattern as native_get_code_snippet — fetch the :Project node and
+    delegate to resolve_registered_project which honors the persisted
+    absolute path. Returns None if the project is not registered or has
+    no resolvable on-disk path; callers fall back to the legacy
+    REPOS_ROOT/<slug> layout via resolve_project.
+    """
+    from palace_mcp.git.path_resolver import (
+        ProjectNotRegistered,
+        resolve_registered_project,
+    )
+    from palace_mcp.mcp_server import get_driver
+    from palace_mcp.memory.cypher import GET_PROJECT
+
+    driver = get_driver()
+    if driver is None:
+        return None
+
+    async with driver.session() as session:
+        result = await session.run(GET_PROJECT, slug=project)
+        row = await result.single()
+
+    try:
+        return resolve_registered_project(
+            project,
+            project_node=row["p"] if row is not None else None,
+        )
+    except (ProjectNotRegistered, ValueError):
+        return None
+
+
 async def _load_snippet_context(
     *,
     project: str,
@@ -536,9 +569,13 @@ async def _load_snippet_context(
 ) -> tuple[dict[str, Any] | None, str | None, str | None]:
     # Primary: read directly from the mounted repo using path_resolver.
     # This validates file_path containment and enforces line/byte bounds.
+    # Resolve repo_path from :Project node first so we honor PR #418 (GIM-1569)
+    # repo_path field; fall back to REPOS_ROOT/<slug> layout if unset.
+    repo_path = await _resolve_registered_repo_path(project)
     snippet, local_code, local_message = await asyncio.to_thread(
         resolve_snippet,
         project=project,
+        repo_path=repo_path,
         file_path=file_path,
         line_start=line_start,
         line_end=line_end,
