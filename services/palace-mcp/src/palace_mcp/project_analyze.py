@@ -327,11 +327,46 @@ def _checkpoint_was_interrupted(checkpoint: AnalysisCheckpoint) -> bool:
     )
 
 
+def _checkpoint_has_progress(checkpoint: AnalysisCheckpoint) -> bool:
+    return (
+        checkpoint.status != AnalysisCheckpointStatus.NOT_ATTEMPTED
+        or checkpoint.started_at is not None
+        or checkpoint.finished_at is not None
+    )
+
+
+def _run_has_checkpoint_progress(run: AnalysisRun) -> bool:
+    return any(_checkpoint_has_progress(checkpoint) for checkpoint in run.checkpoints)
+
+
 def _lease_is_expired(run: AnalysisRun, now: datetime) -> bool:
     if run.lease_expires_at is None:
         return False
     expires_at = _parse_iso(run.lease_expires_at)
     return expires_at is not None and expires_at <= now
+
+
+def _run_has_live_lease(run: AnalysisRun, now: datetime) -> bool:
+    return (
+        run.lease_owner is not None
+        and run.lease_expires_at is not None
+        and not _lease_is_expired(run, now)
+    )
+
+
+def _run_is_stuck_before_first_checkpoint(run: AnalysisRun, now: datetime) -> bool:
+    return (
+        run.status == AnalysisRunStatus.RUNNING
+        and not _run_has_live_lease(run, now)
+        and not _run_has_checkpoint_progress(run)
+    )
+
+
+def _run_can_be_force_replaced(run: AnalysisRun, now: datetime) -> bool:
+    return (
+        run.status == AnalysisRunStatus.RESUMABLE
+        and not _run_has_checkpoint_progress(run)
+    ) or _run_is_stuck_before_first_checkpoint(run, now)
 
 
 def _node_to_dict(node: Any) -> dict[str, Any]:
@@ -517,7 +552,10 @@ class Neo4jAnalysisRunStore:
             if row["c"] is not None
         ]
         run = _run_from_node(run_node, checkpoints)
-        if run.status == AnalysisRunStatus.RUNNING and _lease_is_expired(run, now):
+        if run.status == AnalysisRunStatus.RUNNING and (
+            _lease_is_expired(run, now)
+            or _run_is_stuck_before_first_checkpoint(run, now)
+        ):
             resumable_result = await tx.run(
                 MARK_ANALYSIS_RUN_RESUMABLE,
                 run_id=run_id,
@@ -904,13 +942,24 @@ class ProjectAnalysisService:
             ],
         )
         if force_new:
-            # force_new only matters once previous runs are terminal; the lock
-            # transaction still rejects concurrent active runs.
             run = run.model_copy(update={"idempotency_key": str(uuid4())})
-        return await self._with_neo4j_retry(
-            action="start_run",
-            operation=lambda: self._store.start_run(run),
-        )
+        try:
+            return await self._with_neo4j_retry(
+                action="start_run",
+                operation=lambda: self._store.start_run(run),
+            )
+        except ActiveAnalysisRunExistsError as exc:
+            if not force_new:
+                raise
+            existing = await self.get_status(exc.run_id)
+            replacement_time = self._clock()
+            if not _run_can_be_force_replaced(existing, replacement_time):
+                raise
+            await self._cancel_run_for_force_new(existing)
+            return await self._with_neo4j_retry(
+                action="start_run.force_new_after_stuck_cancel",
+                operation=lambda: self._store.start_run(run),
+            )
 
     async def get_status(self, run_id: str) -> AnalysisRun:
         return await self._with_neo4j_retry(
@@ -933,6 +982,42 @@ class ProjectAnalysisService:
         return await self._with_neo4j_retry(
             action="mark_run_resumable",
             operation=lambda: self._store.mark_run_resumable(run_id, now=self._clock()),
+        )
+
+    async def _cancel_run_for_force_new(self, run: AnalysisRun) -> AnalysisRun:
+        audit_payload = {
+            "ok": False,
+            "error_code": "project_analyze_force_new_replaced_stuck_run",
+            "message": "force_new replaced a stuck project analyze run before first checkpoint",
+            "run_id": run.run_id,
+        }
+        canceled_run = run.model_copy(
+            update={
+                "status": AnalysisRunStatus.CANCELED,
+                "error_code": "project_analyze_force_new_replaced_stuck_run",
+                "message": audit_payload["message"],
+            }
+        )
+        report_markdown = self._render_checkpoint_report(
+            canceled_run,
+            audit_payload,
+            stale_external=False,
+        )
+        return await self._with_neo4j_retry(
+            action="force_new.cancel_stuck_run",
+            operation=lambda: self._store.finalize_run(
+                run.run_id,
+                status=AnalysisRunStatus.CANCELED,
+                overview=_checkpoint_counts(run.checkpoints),
+                audit=audit_payload,
+                report_markdown=report_markdown,
+                next_actions=[
+                    "force_new started a replacement project analyze run after stuck-run recovery."
+                ],
+                error_code="project_analyze_force_new_replaced_stuck_run",
+                message=str(audit_payload["message"]),
+                now=self._clock(),
+            ),
         )
 
     async def fail_run(

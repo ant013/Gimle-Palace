@@ -77,10 +77,18 @@ class InMemoryAnalysisRunStore:
     ) -> AnalysisRun:
         run = self._require(run_id)
         current = now or _utc()
-        if (
-            run.status == AnalysisRunStatus.RUNNING
-            and run.lease_expires_at is not None
+        lease_expired = (
+            run.lease_expires_at is not None
             and datetime.fromisoformat(run.lease_expires_at) <= current
+        )
+        null_lease_before_first_checkpoint = run.lease_expires_at is None and all(
+            checkpoint.status == AnalysisCheckpointStatus.NOT_ATTEMPTED
+            and checkpoint.started_at is None
+            and checkpoint.finished_at is None
+            for checkpoint in run.checkpoints
+        )
+        if run.status == AnalysisRunStatus.RUNNING and (
+            lease_expired or null_lease_before_first_checkpoint
         ):
             run = run.model_copy(
                 update={
@@ -543,6 +551,82 @@ async def test_status_turns_expired_running_lease_into_resumable_after_restart()
     assert run.status == AnalysisRunStatus.RESUMABLE
     assert run.lease_owner is None
     assert run.lease_expires_at is None
+
+
+@pytest.mark.asyncio
+async def test_status_turns_null_lease_unstarted_running_run_into_resumable() -> None:
+    store = InMemoryAnalysisRunStore()
+    service = _build_service(store=store)
+    started = await service.start_run(
+        slug="tron-kit",
+        parent_mount="hs",
+        relative_path="TronKit.Swift",
+        language_profile="swift_kit",
+        idempotency_key="null-lease-key",
+    )
+    store._runs[started.run.run_id] = started.run.model_copy(
+        update={"lease_owner": None, "lease_expires_at": None}
+    )
+
+    run = await service.get_status(started.run.run_id)
+
+    assert run.status == AnalysisRunStatus.RESUMABLE
+    assert run.lease_owner is None
+    assert run.lease_expires_at is None
+
+
+@pytest.mark.asyncio
+async def test_resume_reacquires_null_lease_unstarted_running_run() -> None:
+    store = InMemoryAnalysisRunStore()
+    service = _build_service(store=store)
+    started = await service.start_run(
+        slug="tron-kit",
+        parent_mount="hs",
+        relative_path="TronKit.Swift",
+        language_profile="swift_kit",
+        idempotency_key="resume-null-lease-key",
+    )
+    store._runs[started.run.run_id] = started.run.model_copy(
+        update={"lease_owner": None, "lease_expires_at": None}
+    )
+
+    run = await service.resume_run(started.run.run_id)
+
+    assert run.status == AnalysisRunStatus.RUNNING
+    assert run.lease_owner == "pytest"
+    assert run.lease_expires_at is not None
+
+
+@pytest.mark.asyncio
+async def test_force_new_cancels_stuck_active_run_and_starts_replacement() -> None:
+    store = InMemoryAnalysisRunStore()
+    service = _build_service(store=store)
+    started = await service.start_run(
+        slug="tron-kit",
+        parent_mount="hs",
+        relative_path="TronKit.Swift",
+        language_profile="swift_kit",
+        idempotency_key="stuck-active-key",
+    )
+    store._runs[started.run.run_id] = started.run.model_copy(
+        update={"lease_owner": None, "lease_expires_at": None}
+    )
+
+    replacement = await service.start_run(
+        slug="tron-kit",
+        parent_mount="hs",
+        relative_path="TronKit.Swift",
+        language_profile="swift_kit",
+        idempotency_key="replacement-key",
+        force_new=True,
+    )
+
+    old = await store.get_run(started.run.run_id)
+    assert old.status == AnalysisRunStatus.CANCELED
+    assert old.error_code == "project_analyze_force_new_replaced_stuck_run"
+    assert replacement.run.run_id != started.run.run_id
+    assert replacement.run.status == AnalysisRunStatus.RUNNING
+    assert replacement.active_run_reused is False
 
 
 @pytest.mark.asyncio
