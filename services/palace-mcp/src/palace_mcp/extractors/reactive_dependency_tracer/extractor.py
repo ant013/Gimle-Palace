@@ -11,6 +11,7 @@ from graphiti_core import Graphiti
 
 from palace_mcp.extractors.base import (
     BaseExtractor,
+    ExtractorOutcome,
     ExtractorRunContext,
     ExtractorStats,
 )
@@ -180,7 +181,23 @@ class ReactiveDependencyTracerExtractor(BaseExtractor):
                 )
             )
             summary = await write_reactive_graph(driver=driver, batches=tuple(batches))
+            # The contract expects a helper JSON next to source. Without it
+            # we only write a SWIFT_HELPER_UNAVAILABLE :ReactiveDiagnostic
+            # and zero :ReactiveComponent — surface this as MISSING_INPUT so
+            # operators don't read a misleading OK on the audit report
+            # (Board sweep 2026-06-09: all 12 kits showed 0 :ReactiveComponent
+            # despite outcome=OK).
             return ExtractorStats(
+                outcome=ExtractorOutcome.MISSING_INPUT,
+                message=(
+                    f"helper JSON not found at {_HELPER_JSON_FILENAME}; "
+                    "wrote SWIFT_HELPER_UNAVAILABLE diagnostic only"
+                ),
+                next_action=(
+                    f"Generate {_HELPER_JSON_FILENAME} via reactive helper tool "
+                    "and commit it under the repo root if reactive_dependency_tracer "
+                    "coverage is required for this project."
+                ),
                 nodes_written=summary.nodes_created,
                 edges_written=summary.relationships_created,
             )
