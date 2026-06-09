@@ -100,17 +100,23 @@ main() {
     mkdir -p "$FRESH"
     ln -sfn "$FRESH" "$SYMLINK"
 
-    echo "[1/3] clone any missing repos"
+    echo "[1/3] clone any missing repos (full history — git_history extractor needs it)"
     for entry in "${ALL_KITS[@]}"; do
         IFS='|' read -r repo scheme dir branch <<< "$entry"
         [[ -n "${picked[*]:-}" ]] && [[ ! " ${picked[*]} " =~ " $dir " ]] && continue
         if [[ ! -d "$FRESH/$dir/.git" ]]; then
             echo "  clone $repo @ $branch"
             rm -rf "$FRESH/$dir"
-            git clone --quiet --branch "$branch" --single-branch --depth 1 \
+            git clone --quiet --branch "$branch" --single-branch \
                 "https://github.com/horizontalsystems/$repo.git" "$FRESH/$dir"
+        elif [[ -f "$FRESH/$dir/.git/shallow" ]]; then
+            # Pre-existing shallow clone from older bench setup — unshallow
+            # so git_history extractor can walk the real commit DAG.
+            echo "  unshallow $dir (legacy shallow checkout)"
+            git -C "$FRESH/$dir" fetch --unshallow --quiet || \
+                git -C "$FRESH/$dir" fetch --depth=2147483647 --quiet
         else
-            echo "  skip $dir (cloned)"
+            echo "  skip $dir (cloned, full history)"
         fi
     done
 
