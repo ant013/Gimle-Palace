@@ -69,6 +69,10 @@ async def _write_snapshot(
     writer = ScopeTaggedWriter(default_group_id=project_id)
     await tx.run(_DELETE_EXISTING, project_id=project_id)
     for finding in findings:
-        await writer.write_node(tx, "Convention", finding.model_dump())
+        await writer.write_node(
+            tx,
+            "Convention",
+            finding.model_dump(exclude_unset=True, exclude_none=True),
+        )
     for violation in violations:
         await writer.write_node(tx, "ConventionViolation", violation.model_dump())
