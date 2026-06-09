@@ -287,6 +287,7 @@ async def test_coding_convention_runner_path_writes_single_ingest_run_snapshot(
         conventions_result = await session.run(
             """
             MATCH (c:Convention {project_id: $project, run_id: $run_id})
+            WHERE coalesce(c.summary, false) = false
             RETURN count(c) AS count, collect(DISTINCT c.kind) AS kinds
             """,
             project=project_slug,

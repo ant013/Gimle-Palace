@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -270,6 +271,9 @@ def test_collect_conventions_aggregates_dominant_choices_and_outliers(
     convention_by_kind = {
         (finding.module, finding.kind): finding for finding in summary.findings
     }
+    summary_finding = convention_by_kind[("__summary__", "summary")]
+    assert summary_finding.summary is True
+    assert summary_finding.scanned_files == 15
 
     test_class = convention_by_kind[("WalletCore", "naming.test_class")]
     assert test_class.dominant_choice == "suffix_tests"
@@ -411,8 +415,12 @@ def test_collect_conventions_reports_type_class_outlier_above_threshold(
         run_id="run-type-outlier",
     )
 
-    assert len(summary.findings) == 1
-    finding = summary.findings[0]
+    assert len(summary.findings) == 2
+    finding = next(
+        item
+        for item in summary.findings
+        if (item.module, item.kind) == ("Mini", "naming.type_class")
+    )
     assert finding.module == "Mini"
     assert finding.kind == "naming.type_class"
     assert finding.dominant_choice == "upper_camel"
@@ -452,7 +460,9 @@ def test_collect_conventions_skips_groups_below_min_sample_count(
         run_id="run-min-sample",
     )
 
-    assert summary.findings == []
+    assert len(summary.findings) == 1
+    assert summary.findings[0].summary is True
+    assert summary.findings[0].scanned_files == 3
     assert summary.violations == []
 
 
@@ -500,3 +510,37 @@ async def test_run_requires_registered_driver(tmp_path: Path) -> None:
 
     with pytest.raises(Exception):
         await CodingConventionExtractor().run(graphiti=object(), ctx=ctx)
+
+
+@pytest.mark.asyncio
+async def test_run_writes_summary_node_when_no_groups_meet_threshold(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    _write(repo / "Sources" / "Mini" / "A.swift", "struct WALLET_A {}\n")
+    _write(repo / "Sources" / "Mini" / "B.swift", "struct WalletB {}\n")
+    _write(repo / "Sources" / "Mini" / "C.swift", "struct WalletC {}\n")
+    ctx = _make_ctx(repo)
+    driver = object()
+    replace_snapshot = AsyncMock()
+
+    with (
+        patch("palace_mcp.mcp_server.get_driver", return_value=driver),
+        patch(
+            "palace_mcp.extractors.coding_convention.extractor.replace_project_snapshot",
+            new=replace_snapshot,
+        ),
+    ):
+        stats = await CodingConventionExtractor().run(graphiti=object(), ctx=ctx)
+
+    assert stats.nodes_written == 1
+    assert stats.edges_written == 0
+    replace_snapshot.assert_awaited_once()
+    call = replace_snapshot.await_args.kwargs
+    assert call["project_id"] == "coding-mini"
+    assert call["violations"] == []
+    assert len(call["findings"]) == 1
+    summary = call["findings"][0]
+    assert summary.summary is True
+    assert summary.run_id == "coding-run-001"
+    assert summary.scanned_files == 3

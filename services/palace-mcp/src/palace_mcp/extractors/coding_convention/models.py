@@ -30,6 +30,9 @@ class ConventionFinding(BaseModel):
     outliers: int
     run_id: str
     source_context: str = "other"
+    summary: bool = False
+    scanned_files: int | None = None
+    scanned_at: str | None = None
 
 
 class ConventionViolation(BaseModel):
