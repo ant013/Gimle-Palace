@@ -1,4 +1,11 @@
-"""pygit2 commit walker — see spec GIM-186 §5.1 Phase 1."""
+"""pygit2 commit walker — see spec GIM-186 §5.1 Phase 1.
+
+Walks the real commit DAG from the configured branch's tip backwards.
+The walker is faithful to whatever pygit2 sees: a shallow clone
+(`.git/shallow` present) yields only the commits reachable inside the
+depth window. The fresh-kit bench setup unshallows checkouts before
+ingest — see ``bench/ingest-fresh-build.sh``.
+"""
 
 from __future__ import annotations
 
