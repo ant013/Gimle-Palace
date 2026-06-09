@@ -48,6 +48,7 @@ subagents through `spawn_agent.agent_type`.
 ## Verification Plan
 
 - `python -m pytest paperclips/tests/test_uaudit_dispatcher_bundles.py`
+- `python -m pytest paperclips/tests/test_phase_f_uaudit_migration.py`
 - `python paperclips/scripts/validate_uaudit_docs.py`
 - `bash paperclips/build.sh --project uaudit --target codex`
 - iMac deploy for `uaudit`.

@@ -91,6 +91,10 @@ def test_infra_bundles_no_longer_own_daily_intake_decisions():
         assert "mode=audit_delta" in text
         assert "Never advance the cursor before successful Telegram delivery" in text
         assert "more than 300 files" in text
+        assert "Use `spawn_agent.agent_type` when available" in text
+        assert "spawnMode=profile-prompt" in text
+        assert "profileSha256" in text
+        assert "unverifiable fallback blocks the run" in text
 
 
 def test_reconcile_plan_is_dry_run_and_uses_dispatcher_assignments():

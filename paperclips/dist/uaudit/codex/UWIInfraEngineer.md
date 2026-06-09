@@ -438,7 +438,8 @@ Required subagents for `mode=audit_delta`, all mandatory:
 - `uaudit-security-auditor`
 - `uaudit-blockchain-auditor`
 
-Use `spawn_agent` with explicit `agent_type` equal to the exact required name. A call with omitted `agent_type`, `default`, or a generic role is a failed run. Do not substitute a missing subagent.
+Use `spawn_agent.agent_type` when available. If unavailable, paste the matching `uaudit-*.toml`, record `spawnMode=profile-prompt` plus `profileSha256`, and require both in JSON.
+Generic/default output without matching `"agent"` and `profileSha256` blocks the run.
 
 ### Accepted Handoff Modes
 
@@ -480,7 +481,7 @@ Refresh/enrich codebase-memory for `$REPO` after checkout and before spawning su
 
 Start the four required subagents in parallel immediately after memory refresh. Give each subagent only `$RUN/diff.patch`, `$RUN/commits.json`, `$RUN/files.json`, `$REPO`, and `$CODEBASE_MEMORY_PROJECT`.
 
-Subagents are read-only reviewers. They must not write files, post comments, deploy, send Telegram, or read secrets. Require JSON with agent name, reviewed scope, findings, no-finding areas, and limitations. Wrong agent name, malformed JSON, timeout after one retry, or generic fallback blocks the run and leaves the cursor unchanged.
+Subagents are read-only reviewers. They must not write files, post comments, deploy, send Telegram, or read secrets. Require JSON with agent name, reviewed scope, findings, no-finding areas, limitations, and fallback `profileSha256` when used. Wrong agent name, malformed JSON, timeout after one retry, or unverifiable fallback blocks the run and leaves the cursor unchanged.
 
 Write validated JSON outputs under `$RUN/subagents/` using exact agent filenames.
 
