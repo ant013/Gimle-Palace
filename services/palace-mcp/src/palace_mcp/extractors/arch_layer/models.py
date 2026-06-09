@@ -26,6 +26,9 @@ class Layer(BaseModel):
     name: str
     rule_source: str  # path to rule file that declared this layer
     run_id: str
+    summary: bool = False
+    scanned_modules: int | None = None
+    scanned_at: str | None = None
 
 
 class ArchRule(BaseModel):
@@ -37,6 +40,8 @@ class ArchRule(BaseModel):
     severity: str
     rule_source: str
     run_id: str
+    summary: bool = False
+    scanned_at: str | None = None
 
     @field_validator("severity")
     @classmethod

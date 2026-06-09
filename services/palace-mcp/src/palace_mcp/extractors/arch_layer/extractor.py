@@ -9,6 +9,7 @@ collisions when both manifest types exist in the same repo.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from palace_mcp.extractors.arch_layer.evaluator import evaluate
@@ -157,10 +158,44 @@ async def _run_extraction(*, ctx: ExtractorRunContext, driver: Any) -> Extractor
 
     if not all_modules:
         logger.warning(
-            "arch_layer: no modules found in %s — no Neo4j writes",
+            "arch_layer: no modules found in %s — writing summary sentinel only",
             repo_path,
         )
-        return ExtractorStats(nodes_written=0, edges_written=0)
+        sentinel_ts = datetime.now(timezone.utc).isoformat()
+        sentinel_source = ruleset.rule_source or "unconfigured"
+        nodes_written, edges_written = await replace_project_snapshot(
+            driver,
+            project_id=project_id,
+            modules=[],
+            layers=[
+                Layer(
+                    project_id=project_id,
+                    name="__summary__",
+                    rule_source=sentinel_source,
+                    run_id=run_id,
+                    summary=True,
+                    scanned_modules=0,
+                    scanned_at=sentinel_ts,
+                )
+            ],
+            rules=[
+                ArchRule(
+                    project_id=project_id,
+                    rule_id="__summary__",
+                    kind="summary",
+                    severity="informational",
+                    rule_source=sentinel_source,
+                    run_id=run_id,
+                    summary=True,
+                    scanned_at=sentinel_ts,
+                )
+            ],
+            violations=[],
+            edges=[],
+            module_layers={},
+            run_id=run_id,
+        )
+        return ExtractorStats(nodes_written=nodes_written, edges_written=edges_written)
 
     # Build module_source_roots for import scanner
     module_source_roots = {m.slug: m.source_root for m in all_modules if m.source_root}
@@ -203,6 +238,32 @@ async def _run_extraction(*, ctx: ExtractorRunContext, driver: Any) -> Extractor
         )
         for rd in ruleset.rules
     ]
+
+    sentinel_source = ruleset.rule_source or "unconfigured"
+    sentinel_ts = datetime.now(timezone.utc).isoformat()
+    layers.append(
+        Layer(
+            project_id=project_id,
+            name="__summary__",
+            rule_source=sentinel_source,
+            run_id=run_id,
+            summary=True,
+            scanned_modules=len(all_modules),
+            scanned_at=sentinel_ts,
+        )
+    )
+    arch_rules.append(
+        ArchRule(
+            project_id=project_id,
+            rule_id="__summary__",
+            kind="summary",
+            severity="informational",
+            rule_source=sentinel_source,
+            run_id=run_id,
+            summary=True,
+            scanned_at=sentinel_ts,
+        )
+    )
 
     violations: list[ArchViolation] = evaluate(
         project_id=project_id,
