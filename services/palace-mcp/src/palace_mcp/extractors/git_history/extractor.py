@@ -32,7 +32,10 @@ from palace_mcp.extractors.git_history.pygit2_walker import (
     Pygit2Walker,
     CommitNotFoundError,
 )
-from palace_mcp.extractors.git_history.tantivy_writer import GitHistoryTantivyWriter
+from palace_mcp.extractors.git_history.tantivy_writer import (
+    GitHistoryTantivyWriter,
+    project_index_path,
+)
 
 log = logging.getLogger("watchdog.daemon")
 
@@ -145,7 +148,10 @@ class GitHistoryExtractor(BaseExtractor):
                         "full_resync": full_resync,
                     },
                 )
-                tantivy_index_path = settings.git_history_tantivy_index_path
+                tantivy_index_path = project_index_path(
+                    settings.git_history_tantivy_index_path,
+                    ctx.group_id,
+                )
                 async with GitHistoryTantivyWriter(tantivy_index_path) as tw:
                     for commit in commits_list:
                         bot_flag = is_bot(commit["author_email"], commit["author_name"])
