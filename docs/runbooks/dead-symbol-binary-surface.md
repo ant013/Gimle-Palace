@@ -68,11 +68,10 @@ docs/research/2026-05-04-dead-symbol-tool-output-spike/README.md
 HOME=/private/tmp/gim193-home \
 CLANG_MODULE_CACHE_PATH=/private/tmp/gim193-clang-module-cache \
 /private/tmp/periphery-3.7.4-release/periphery scan \
-  --project-root . \
+  --quiet \
   --format json \
-  --relative-results \
   --disable-update-check \
-  --write-results /private/tmp/gim193-periphery-output/periphery-scan.json
+  > /private/tmp/gim193-periphery-output/periphery-scan.json
 ```
 
 Использованный fixture project root:

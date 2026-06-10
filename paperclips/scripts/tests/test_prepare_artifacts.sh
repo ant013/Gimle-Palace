@@ -59,6 +59,10 @@ make_full_artefacts() {
     make_swiftinterface "$1"
 }
 
+mtime() {
+    python3 -c 'import os, sys; print(int(os.stat(sys.argv[1]).st_mtime))' "$1"
+}
+
 # ── Mock periphery binary ─────────────────────────────────────────────────────
 
 mkdir -p "$TMP_DIR/bin"
@@ -69,14 +73,7 @@ case "${1:-}" in
         printf '3.9.0\n'
         ;;
     scan)
-        # Parse --write-results path and write empty JSON array
-        while [[ $# -gt 0 ]]; do
-            if [[ "$1" == "--write-results" ]]; then
-                printf '[]' > "$2"
-                break
-            fi
-            shift
-        done
+        printf '[]\n'
         ;;
 esac
 MOCK
@@ -109,6 +106,7 @@ HELP_OUT="$TMP_DIR/help.out"
 bash "$PREPARE_SCRIPT" --help > "$HELP_OUT"
 assert_contains "$HELP_OUT" "prepare_swift_kit_artifacts.sh"
 assert_contains "$HELP_OUT" "--dry-run"
+assert_contains "$HELP_OUT" "--periphery-only"
 assert_contains "$HELP_OUT" "periphery"
 printf 'PASS: --help\n'
 
@@ -156,16 +154,63 @@ iface_count="$(find "$REPO_FULL/.palace/public-api/swift" -name "*.swiftinterfac
 [[ "$iface_count" -gt 0 ]] || fail "no .swiftinterface files emitted"
 printf 'PASS: full run writes artefacts\n'
 
+# ── Test 4b: --periphery-only skips swiftinterface emission ──────────────────
+
+REPO_PERIPHERY_ONLY="$TMP_DIR/repo-periphery-only"
+make_repo "$REPO_PERIPHERY_ONLY"
+
+PERIPHERY_ONLY_OUT="$TMP_DIR/periphery-only.out"
+bash "$PREPARE_SCRIPT" --repo-path "$REPO_PERIPHERY_ONLY" --periphery-only > "$PERIPHERY_ONLY_OUT" 2>&1
+
+[[ -f "$REPO_PERIPHERY_ONLY/periphery/periphery-3.7.4-swiftpm.json" ]] || \
+    fail "periphery-only report not written"
+[[ -f "$REPO_PERIPHERY_ONLY/periphery/contract.json" ]] || \
+    fail "periphery-only contract not written"
+[[ ! -d "$REPO_PERIPHERY_ONLY/.palace/public-api/swift" ]] || \
+    fail "periphery-only must not emit swiftinterface files"
+assert_contains "$PERIPHERY_ONLY_OUT" "periphery-only complete"
+printf 'PASS: periphery-only skips swiftinterface\n'
+
+# ── Test 4c: failed periphery scan does not clobber existing report ──────────
+
+REPO_PRESERVE="$TMP_DIR/repo-preserve"
+make_repo "$REPO_PRESERVE"
+mkdir -p "$REPO_PRESERVE/periphery"
+printf 'KEEP_ME\n' > "$REPO_PRESERVE/periphery/periphery-3.7.4-swiftpm.json"
+mkdir -p "$TMP_DIR/fail-bin"
+cat > "$TMP_DIR/fail-bin/periphery" <<'MOCK'
+#!/usr/bin/env bash
+case "${1:-}" in
+    version|--version)
+        printf '3.9.0\n'
+        ;;
+    scan)
+        printf 'scan failed\n' >&2
+        exit 42
+        ;;
+esac
+MOCK
+chmod +x "$TMP_DIR/fail-bin/periphery"
+
+PRESERVE_OUT="$TMP_DIR/preserve.out"
+if PATH="$TMP_DIR/fail-bin:$PATH" bash "$PREPARE_SCRIPT" \
+    --repo-path "$REPO_PRESERVE" --periphery-only > "$PRESERVE_OUT" 2>&1; then
+    fail "expected failing periphery scan"
+fi
+[[ "$(cat "$REPO_PRESERVE/periphery/periphery-3.7.4-swiftpm.json")" == "KEEP_ME" ]] || \
+    fail "failed scan must not clobber existing report"
+printf 'PASS: failed periphery scan preserves existing report\n'
+
 # ── Test 5: idempotency — second run overwrites cleanly ───────────────────────
 
 REPO_IDEM="$TMP_DIR/repo-idem"
 make_repo "$REPO_IDEM"
 
 bash "$PREPARE_SCRIPT" --repo-path "$REPO_IDEM" > /dev/null 2>&1
-first_mtime="$(stat -f '%m' "$REPO_IDEM/periphery/contract.json" 2>/dev/null || stat -c '%Y' "$REPO_IDEM/periphery/contract.json")"
+first_mtime="$(mtime "$REPO_IDEM/periphery/contract.json")"
 sleep 1
 bash "$PREPARE_SCRIPT" --repo-path "$REPO_IDEM" > /dev/null 2>&1
-second_mtime="$(stat -f '%m' "$REPO_IDEM/periphery/contract.json" 2>/dev/null || stat -c '%Y' "$REPO_IDEM/periphery/contract.json")"
+second_mtime="$(mtime "$REPO_IDEM/periphery/contract.json")"
 [[ "$second_mtime" -ge "$first_mtime" ]] || fail "second run did not overwrite contract.json"
 printf 'PASS: idempotency\n'
 

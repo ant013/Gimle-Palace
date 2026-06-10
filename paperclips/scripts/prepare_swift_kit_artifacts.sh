@@ -29,6 +29,7 @@ Options:
                          (default: /Users/Shared/Ios/HorizontalSystems)
   --manifest <path>      Manifest for slug -> relative_path lookup
   --dry-run              Print actions without mutating state
+  --periphery-only       Refresh only Periphery report + contract.json
   --help, -h             Show this message
 
 Output artefacts:
@@ -95,6 +96,7 @@ REPO_PATH=""
 REPO_BASE="$DEFAULT_REPO_BASE"
 MANIFEST_PATH="$DEFAULT_MANIFEST"
 DRY_RUN="false"
+PERIPHERY_ONLY="false"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -107,6 +109,7 @@ while [[ $# -gt 0 ]]; do
         --manifest=*)   MANIFEST_PATH="${1#*=}"; shift ;;
         --manifest)     [[ $# -ge 2 ]] || die "--manifest requires a value"; MANIFEST_PATH="$2"; shift 2 ;;
         --dry-run)  DRY_RUN="true"; shift ;;
+        --periphery-only)  PERIPHERY_ONLY="true"; shift ;;
         --help|-h)  usage; exit 0 ;;
         --*)  die "unknown option: $1" ;;
         *)    die "unexpected positional argument: $1" ;;
@@ -159,21 +162,26 @@ log "report path: $report_path"
 
 if [[ "$DRY_RUN" == "true" ]]; then
     printf 'DRY-RUN: mkdir -p %q\n' "$periphery_dir"
-    printf 'DRY-RUN: periphery scan --project-root %q --format json --relative-results --disable-update-check --write-results %q\n' \
+    printf 'DRY-RUN: (cd %q && periphery scan --quiet --format json --disable-update-check > %q)\n' \
         "$REPO_PATH" "$report_path"
     printf 'DRY-RUN: write contract.json with tool_output_schema_version=%q\n' "$schema_version"
 else
     mkdir -p "$periphery_dir"
     log "running periphery scan"
-    (
+    tmp_report="$(mktemp "$periphery_dir/.${PERIPHERY_REPORT_NAME}.tmp.XXXXXX")"
+    if (
         cd "$REPO_PATH"
         "$periphery_bin" scan \
-            --project-root . \
+            --quiet \
             --format json \
-            --relative-results \
-            --disable-update-check \
-            --write-results "$report_path"
-    )
+            --disable-update-check > "$tmp_report"
+    ); then
+        mv "$tmp_report" "$report_path"
+    else
+        rc=$?
+        rm -f "$tmp_report"
+        exit "$rc"
+    fi
     log "writing contract.json"
     jq -nc \
         --arg tool_name "Periphery" \
@@ -190,6 +198,17 @@ else
             raw_output_file: $raw_output_file
         }' > "$contract_path"
     log "periphery artefacts written to $periphery_dir"
+fi
+
+if [[ "$PERIPHERY_ONLY" == "true" ]]; then
+    if [[ "$DRY_RUN" == "true" ]]; then
+        printf 'DRY-RUN: periphery-only complete (no .swiftinterface emission)\n'
+    else
+        log "periphery-only complete"
+        printf '  periphery report: %s\n' "$report_path"
+        printf '  periphery contract: %s\n' "$contract_path"
+    fi
+    exit 0
 fi
 
 # ── Step 2: Emit .swiftinterface ──────────────────────────────────────────────
