@@ -47,11 +47,13 @@ line2="$(sed -n '2p' "$tmpdir/args.txt")"
 line3="$(sed -n '3p' "$tmpdir/args.txt")"
 line4="$(sed -n '4p' "$tmpdir/args.txt")"
 line5="$(sed -n '5p' "$tmpdir/args.txt")"
+line6="$(sed -n '6p' "$tmpdir/args.txt")"
 [[ "$line1" == "--slug" ]] || fail "expected --slug passthrough"
 [[ "$line2" == "bitcoin-core" ]] || fail "expected bitcoin-core slug"
-[[ "$line3" == "--dry-run" ]] || fail "expected --dry-run passthrough"
-[[ "$line4" == "--repo-base" ]] || fail "expected --repo-base passthrough"
-[[ "$line5" == "/tmp/repos" ]] || fail "expected repo-base value passthrough"
+[[ "$line3" == "--periphery-only" ]] || fail "expected --periphery-only passthrough"
+[[ "$line4" == "--dry-run" ]] || fail "expected --dry-run passthrough"
+[[ "$line5" == "--repo-base" ]] || fail "expected --repo-base passthrough"
+[[ "$line6" == "/tmp/repos" ]] || fail "expected repo-base value passthrough"
 printf 'PASS: forwards slug and extra args\n'
 
 printf '\nPASS: test_regen_periphery.sh — all tests passed\n'

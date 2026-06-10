@@ -11,8 +11,8 @@ Usage: regen-periphery.sh <kit-slug> [prepare_swift_kit_artifacts.sh options]
 
 Refresh the Periphery fixture inputs required by dead_symbol_binary_surface for a
 single Swift kit. This is a thin wrapper over
-paperclips/scripts/prepare_swift_kit_artifacts.sh, so it also refreshes the
-paired .swiftinterface artefacts used by public_api_surface.
+paperclips/scripts/prepare_swift_kit_artifacts.sh --periphery-only, so it does
+not refresh the paired .swiftinterface artefacts used by public_api_surface.
 
 Examples:
   bash bench/regen-periphery.sh bitcoin-core
@@ -36,4 +36,4 @@ esac
 kit_slug="$1"
 shift
 
-exec bash "$PREPARE_SCRIPT" --slug "$kit_slug" "$@"
+exec bash "$PREPARE_SCRIPT" --slug "$kit_slug" --periphery-only "$@"
