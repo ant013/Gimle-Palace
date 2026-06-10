@@ -372,7 +372,7 @@
           "tokenEstimate": 3934
         },
         {
-          "bytes": 15585,
+          "bytes": 15864,
           "dist": "paperclips/dist/codex/cx-code-reviewer.md",
           "family": "reviewer",
           "handoffMarkers": {
@@ -381,14 +381,14 @@
             "paperclip:handoff-verify-status-assignee:v1": false,
             "paperclip:team-local-roster:v1": false
           },
-          "lines": 368,
+          "lines": 373,
           "profiles": [
             "reviewer"
           ],
           "roleId": "codex:cx-code-reviewer",
-          "sha256": "348d810c8697cd6d2c2434bf25443e4e3457dc4bba04000af3a25bba6aab72cb",
+          "sha256": "6ad385b1237952893ceaa0cec1bcf1193a78c2b8274ed02a0319253d07185042",
           "source": "paperclips/roles-codex/cx-code-reviewer.md",
-          "tokenEstimate": 3897
+          "tokenEstimate": 3966
         },
         {
           "bytes": 20287,
@@ -543,7 +543,7 @@
           "tokenEstimate": 2811
         }
       ],
-      "totalBytes": 186723
+      "totalBytes": 187002
     }
   }
 }
