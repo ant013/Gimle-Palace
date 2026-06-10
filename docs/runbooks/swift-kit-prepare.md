@@ -130,11 +130,10 @@ Full Periphery scan command (for manual diagnosis):
 ```bash
 cd /path/to/Kit.Swift
 periphery scan \
-  --project-root . \
+  --quiet \
   --format json \
-  --relative-results \
   --disable-update-check \
-  --write-results periphery/periphery-3.7.4-swiftpm.json
+  > periphery/periphery-3.7.4-swiftpm.json
 ```
 
 ### contract.json schema_version rejected

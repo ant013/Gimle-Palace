@@ -59,6 +59,10 @@ make_full_artefacts() {
     make_swiftinterface "$1"
 }
 
+mtime() {
+    python3 -c 'import os, sys; print(int(os.stat(sys.argv[1]).st_mtime))' "$1"
+}
+
 # ── Mock periphery binary ─────────────────────────────────────────────────────
 
 mkdir -p "$TMP_DIR/bin"
@@ -69,14 +73,7 @@ case "${1:-}" in
         printf '3.9.0\n'
         ;;
     scan)
-        # Parse --write-results path and write empty JSON array
-        while [[ $# -gt 0 ]]; do
-            if [[ "$1" == "--write-results" ]]; then
-                printf '[]' > "$2"
-                break
-            fi
-            shift
-        done
+        printf '[]\n'
         ;;
 esac
 MOCK
@@ -162,10 +159,10 @@ REPO_IDEM="$TMP_DIR/repo-idem"
 make_repo "$REPO_IDEM"
 
 bash "$PREPARE_SCRIPT" --repo-path "$REPO_IDEM" > /dev/null 2>&1
-first_mtime="$(stat -f '%m' "$REPO_IDEM/periphery/contract.json" 2>/dev/null || stat -c '%Y' "$REPO_IDEM/periphery/contract.json")"
+first_mtime="$(mtime "$REPO_IDEM/periphery/contract.json")"
 sleep 1
 bash "$PREPARE_SCRIPT" --repo-path "$REPO_IDEM" > /dev/null 2>&1
-second_mtime="$(stat -f '%m' "$REPO_IDEM/periphery/contract.json" 2>/dev/null || stat -c '%Y' "$REPO_IDEM/periphery/contract.json")"
+second_mtime="$(mtime "$REPO_IDEM/periphery/contract.json")"
 [[ "$second_mtime" -ge "$first_mtime" ]] || fail "second run did not overwrite contract.json"
 printf 'PASS: idempotency\n'
 

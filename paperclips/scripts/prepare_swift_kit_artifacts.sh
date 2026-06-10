@@ -159,7 +159,7 @@ log "report path: $report_path"
 
 if [[ "$DRY_RUN" == "true" ]]; then
     printf 'DRY-RUN: mkdir -p %q\n' "$periphery_dir"
-    printf 'DRY-RUN: periphery scan --project-root %q --format json --relative-results --disable-update-check --write-results %q\n' \
+    printf 'DRY-RUN: (cd %q && periphery scan --quiet --format json --disable-update-check > %q)\n' \
         "$REPO_PATH" "$report_path"
     printf 'DRY-RUN: write contract.json with tool_output_schema_version=%q\n' "$schema_version"
 else
@@ -168,11 +168,9 @@ else
     (
         cd "$REPO_PATH"
         "$periphery_bin" scan \
-            --project-root . \
+            --quiet \
             --format json \
-            --relative-results \
-            --disable-update-check \
-            --write-results "$report_path"
+            --disable-update-check > "$report_path"
     )
     log "writing contract.json"
     jq -nc \
