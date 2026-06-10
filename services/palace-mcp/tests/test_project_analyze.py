@@ -282,8 +282,11 @@ async def test_service_start_run_ensures_schema_before_project_registration_and_
         parent_mount: str,
         relative_path: str,
         language_profile: str,
+        expected_profile: bool,
     ) -> None:
-        events.append(f"register:{parent_mount}:{relative_path}:{language_profile}")
+        events.append(
+            f"register:{parent_mount}:{relative_path}:{language_profile}:{expected_profile}"
+        )
 
     service = ProjectAnalysisService(
         driver=object(),  # runtime-only dependency is stubbed in unit tests
@@ -313,9 +316,58 @@ async def test_service_start_run_ensures_schema_before_project_registration_and_
     assert result.run.lease_expires_at is not None
     assert events == [
         "schema",
-        "register:hs:TronKit.Swift:swift_kit",
+        "register:hs:TronKit.Swift:swift_kit:False",
         "store:hs:TronKit.Swift",
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("slug", "expected_profile"),
+    [("uw-ios-app", True), ("uw-ios-baseline", True), ("tron-kit", False)],
+)
+async def test_start_run_marks_projects_with_expected_profiles(
+    slug: str, expected_profile: bool
+) -> None:
+    captured: list[bool] = []
+
+    async def register_project(
+        driver: object,
+        *,
+        slug: str,
+        name: str,
+        tags: list[str],
+        parent_mount: str,
+        relative_path: str,
+        language_profile: str,
+        expected_profile: bool,
+    ) -> None:
+        captured.append(expected_profile)
+
+    service = ProjectAnalysisService(
+        driver=object(),
+        store=InMemoryAnalysisRunStore(),
+        extractor_registry=registry.EXTRACTORS,
+        register_project_func=register_project,
+        register_bundle_func=_register_noop,
+        add_to_bundle_func=_register_noop,
+        audit_runner=_default_audit_runner,
+        ensure_schema_func=_register_noop,
+        lease_seconds=10,
+        lease_owner="pytest",
+        clock=_utc,
+    )
+
+    await service.start_run(
+        slug=slug,
+        parent_mount="hs",
+        relative_path="Project.Swift",
+        language_profile="swift_kit",
+        extractors=["symbol_index_swift"],
+        idempotency_key=f"expected-profile-{slug}",
+    )
+
+    assert captured == [expected_profile]
 
 
 def test_resolve_default_extractors_matches_swift_kit_contract() -> None:
@@ -1334,6 +1386,7 @@ async def test_start_run_retries_transient_neo4j_failures_during_bootstrap() -> 
         parent_mount: str,
         relative_path: str,
         language_profile: str,
+        expected_profile: bool,
     ) -> None:
         attempts["register_project"] += 1
         events.append(f"register_project:{attempts['register_project']}")
@@ -1345,6 +1398,7 @@ async def test_start_run_retries_transient_neo4j_failures_during_bootstrap() -> 
         assert parent_mount == "hs-stage"
         assert relative_path == "TronKit.Swift"
         assert language_profile == "swift_kit"
+        assert expected_profile is False
 
     async def flaky_register_bundle(
         driver: object,

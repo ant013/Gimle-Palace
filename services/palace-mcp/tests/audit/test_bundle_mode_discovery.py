@@ -168,45 +168,6 @@ async def test_bundle_mode_aggregates_failed_across_members() -> None:
 
 
 @pytest.mark.asyncio
-async def test_bundle_mode_unknown_profile_keeps_hot_path_profiler_applicable() -> None:
-    """Unknown bundle member profile must not downgrade auditable extractors to NOT_APPLICABLE."""
-    from palace_mcp.audit.run import run_audit
-
-    drv = _make_empty_driver()
-    registry = {"hot_path_profiler": _make_extractor("hot_path_profiler")}
-    members = (_project_ref("tron-kit"),)
-
-    async def _fake_discover(
-        driver: Any, *, project: str, profile: Any, registry: Any
-    ) -> dict[str, ExtractorStatus]:
-        status = (
-            "NOT_ATTEMPTED"
-            if "hot_path_profiler" in profile.audit_extractors
-            else "NOT_APPLICABLE"
-        )
-        return {"hot_path_profiler": ExtractorStatus("hot_path_profiler", status)}
-
-    with (
-        patch(
-            "palace_mcp.memory.bundle.bundle_members",
-            new=AsyncMock(return_value=members),
-        ),
-        patch(
-            "palace_mcp.audit.run.resolve_profile",
-            new=AsyncMock(side_effect=ValueError("unknown_language_profile")),
-        ),
-        patch("palace_mcp.audit.run.discover_extractor_statuses", new=_fake_discover),
-    ):
-        result = await run_audit(drv, registry, bundle="uw-ios")
-
-    assert result["ok"] is True
-    assert result["blind_spots"] == ["tron-kit/hot_path_profiler"]
-    counts = result["status_counts"]
-    assert counts.get("NOT_ATTEMPTED") == 1, counts
-    assert counts.get("NOT_APPLICABLE", 0) == 0, counts
-
-
-@pytest.mark.asyncio
 async def test_single_project_mode_unchanged() -> None:
     """Single-project run_audit still returns flat status dict, no member keys."""
     from palace_mcp.audit.run import run_audit

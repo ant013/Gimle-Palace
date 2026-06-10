@@ -37,6 +37,7 @@ def _project_info_from_row(
         parent_mount=p.get("parent_mount"),
         relative_path=p.get("relative_path"),
         language_profile=p.get("language_profile"),
+        expected_profile=bool(p.get("expected_profile") or False),
         source_created_at=p["source_created_at"],
         source_updated_at=p["source_updated_at"],
         entity_counts=entity_counts or {},
@@ -55,6 +56,7 @@ async def register_project(
     parent_mount: str | None = None,
     relative_path: str | None = None,
     language_profile: str | None = None,
+    expected_profile: bool = False,
 ) -> ProjectInfo:
     from palace_mcp.code.namespace import invalidate
     from palace_mcp.memory.bundle import ProjectSlugConflictsWithBundle
@@ -112,6 +114,7 @@ async def register_project(
             parent_mount=parent_mount,
             relative_path=relative_path,
             language_profile=language_profile,
+            expected_profile=expected_profile,
             now=now,
         )
         result = await session.run(GET_PROJECT, slug=slug)

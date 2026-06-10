@@ -49,6 +49,7 @@ if TYPE_CHECKING:
 CFG = ConfigDict(extra="forbid")
 logger = logging.getLogger(__name__)
 _T = TypeVar("_T")
+_EXPECTED_PROFILE_SLUGS = frozenset({"uw-ios-app", "uw-ios-baseline"})
 
 
 class AnalysisRunStatus(StrEnum):
@@ -893,6 +894,7 @@ class ProjectAnalysisService:
                 parent_mount=parent_mount,
                 relative_path=relative_path,
                 language_profile=language_profile,
+                expected_profile=slug in _EXPECTED_PROFILE_SLUGS,
             ),
         )
         if bundle is not None:
@@ -1337,6 +1339,8 @@ class ProjectAnalysisService:
                     raise ValueError("extractor success response is missing run_id")
                 outcome = str(response.get("outcome") or "ok")
                 if outcome == "skipped":
+                    status = AnalysisCheckpointStatus.SKIPPED
+                elif outcome == "not_applicable":
                     status = AnalysisCheckpointStatus.SKIPPED
                 elif outcome == "missing_input":
                     status = AnalysisCheckpointStatus.MISSING_INPUT

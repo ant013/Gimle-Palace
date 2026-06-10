@@ -66,6 +66,7 @@ class ProjectInfo(BaseModel):
     relative_path: str | None = None
     # GIM-283-1: language profile for audit extractor scoping
     language_profile: str | None = None
+    expected_profile: bool = False
     source_created_at: str | None = None
     source_updated_at: str | None = None
     entity_counts: dict[str, int] = Field(default_factory=dict)

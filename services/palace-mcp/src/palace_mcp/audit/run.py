@@ -226,12 +226,7 @@ async def _run_bundle(
         except ValueError:
             from palace_mcp.extractors.foundation.profiles import LanguageProfile
 
-            auditable_names = frozenset(
-                name
-                for name, ext in extractor_registry.items()
-                if ext.audit_contract() is not None
-            )
-            profile = LanguageProfile("unknown", auditable_names)
+            profile = LanguageProfile("unknown", frozenset())
 
         member_statuses = await discover_extractor_statuses(
             driver, project=slug, profile=profile, registry=extractor_registry

@@ -272,6 +272,7 @@ SET p.group_id            = 'project/' + $slug,
     p.parent_mount        = $parent_mount,
     p.relative_path       = $relative_path,
     p.language_profile    = coalesce($language_profile, p.language_profile),
+    p.expected_profile    = $expected_profile,
     p.source              = 'paperclip',
     p.source_created_at   = coalesce(p.source_created_at, $now),
     p.source_updated_at   = $now
@@ -291,11 +292,13 @@ ON CREATE SET
     p.parent_mount      = $parent_mount,
     p.relative_path     = $relative_path,
     p.language_profile  = $language_profile,
+    p.expected_profile  = $expected_profile,
     p.source            = 'paperclip',
     p.source_created_at = $now
 ON MATCH SET
     p.group_id          = coalesce(p.group_id, 'project/' + $slug),
     p.cm_project_name   = coalesce(p.cm_project_name, $cm_project_name),
+    p.expected_profile  = coalesce(p.expected_profile, $expected_profile),
     p.source            = coalesce(p.source, 'paperclip')
 SET p.source_updated_at = $now
 RETURN p
