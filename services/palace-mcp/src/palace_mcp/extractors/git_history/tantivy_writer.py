@@ -10,6 +10,11 @@ import tantivy
 from palace_mcp.extractors.git_history.models import Commit, PR, PRComment
 
 
+def project_index_path(index_root: Path, project_id: str) -> Path:
+    """Return the per-project git_history index directory under a shared root."""
+    return index_root.joinpath(*[part for part in project_id.split("/") if part])
+
+
 class GitHistoryTantivyWriter:
     """Async-friendly writer for the dedicated git_history Tantivy index.
 

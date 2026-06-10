@@ -118,7 +118,7 @@ class Settings(BaseSettings):
     )
     git_history_tantivy_index_path: Path = Field(
         default=Path("/var/lib/palace/tantivy/git_history"),
-        description="Path for the dedicated git_history Tantivy index.",
+        description="Base path for per-project dedicated git_history Tantivy indices.",
     )
 
     # -----------------------------------------------------------------------
