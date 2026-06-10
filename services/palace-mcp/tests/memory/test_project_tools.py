@@ -26,6 +26,7 @@ def _make_project_row(
     language: str | None = None,
     framework: str | None = None,
     repo_url: str | None = None,
+    expected_profile: bool = False,
 ) -> dict[str, Any]:
     return {
         "p": {
@@ -36,6 +37,7 @@ def _make_project_row(
             "language": language,
             "framework": framework,
             "repo_url": repo_url,
+            "expected_profile": expected_profile,
             "source_created_at": _NOW,
             "source_updated_at": _NOW,
         }
@@ -100,6 +102,7 @@ async def test_register_project_optional_fields() -> None:
         language="Kotlin",
         framework="KMP",
         repo_url="https://gh/alpha",
+        expected_profile=True,
     )
     driver = _make_mock_driver_for_register(row)
     info = await register_project(
@@ -115,6 +118,7 @@ async def test_register_project_optional_fields() -> None:
     assert info.framework == "KMP"
     assert info.repo_url == "https://gh/alpha"
     assert info.cm_project_name == "repos-alpha"
+    assert info.expected_profile is True
 
 
 @pytest.mark.asyncio

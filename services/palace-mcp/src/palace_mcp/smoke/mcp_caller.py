@@ -155,6 +155,7 @@ async def register_project(
     parent_mount: str | None = None,
     relative_path: str | None = None,
     language_profile: str | None = None,
+    expected_profile: bool | None = None,
     _session: ClientSession | None = None,
 ) -> dict[str, Any]:
     """Register a project via ``palace.memory.register_project``.
@@ -176,6 +177,8 @@ async def register_project(
         arguments["relative_path"] = relative_path
     if language_profile is not None:
         arguments["language_profile"] = language_profile
+    if expected_profile is not None:
+        arguments["expected_profile"] = expected_profile
 
     return await call_tool(
         mcp_url,

@@ -16,10 +16,14 @@ from palace_mcp.extractors.hot_path_profiler.extractor import HotPathProfilerExt
 from palace_mcp.extractors.hot_path_profiler.models import HotPathSample, HotPathSummary
 
 
-def _ctx(repo_path: Path) -> ExtractorRunContext:
+def _ctx(
+    repo_path: Path,
+    *,
+    project_slug: str = "testproj",
+) -> ExtractorRunContext:
     return ExtractorRunContext(
-        project_slug="testproj",
-        group_id="project/testproj",
+        project_slug=project_slug,
+        group_id=f"project/{project_slug}",
         repo_path=repo_path,
         run_id="run-1",
         duration_ms=0,
@@ -27,12 +31,44 @@ def _ctx(repo_path: Path) -> ExtractorRunContext:
     )
 
 
-@pytest.mark.asyncio
-async def test_run_requires_profiles_directory(tmp_path: Path) -> None:
+def _graphiti(expected_profile: bool) -> MagicMock:
+    row = {"expected_profile": expected_profile}
+    result = MagicMock()
+    result.single = AsyncMock(return_value=row)
+    session = MagicMock()
+    session.run = AsyncMock(return_value=result)
+    session.__aenter__ = AsyncMock(return_value=session)
+    session.__aexit__ = AsyncMock(return_value=None)
+    driver = MagicMock()
+    driver.session.return_value = session
     graphiti = MagicMock()
-    graphiti.driver = MagicMock()
+    graphiti.driver = driver
+    return graphiti
 
-    stats = await HotPathProfilerExtractor().run(graphiti=graphiti, ctx=_ctx(tmp_path))
+
+@pytest.mark.asyncio
+async def test_run_marks_kits_without_profiles_directory_not_applicable(
+    tmp_path: Path,
+) -> None:
+    stats = await HotPathProfilerExtractor().run(
+        graphiti=_graphiti(False),
+        ctx=_ctx(tmp_path),
+    )
+
+    assert stats.outcome == ExtractorOutcome.NOT_APPLICABLE
+    assert stats.message is not None
+    assert "not expected" in stats.message
+    assert stats.next_action is None
+
+
+@pytest.mark.asyncio
+async def test_run_requires_profiles_directory_when_project_expects_profiles(
+    tmp_path: Path,
+) -> None:
+    stats = await HotPathProfilerExtractor().run(
+        graphiti=_graphiti(True),
+        ctx=_ctx(tmp_path, project_slug="uw-ios-app"),
+    )
 
     assert stats.outcome == ExtractorOutcome.MISSING_INPUT
     assert stats.message is not None

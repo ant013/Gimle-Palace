@@ -27,6 +27,11 @@ from palace_mcp.extractors.hot_path_profiler.parsers import (
     parse_simpleperf_trace,
 )
 
+_GET_EXPECTED_PROFILE = """
+MATCH (p:Project {slug: $slug})
+RETURN coalesce(p.expected_profile, false) AS expected_profile
+"""
+
 
 class HotPathProfilerExtractor(BaseExtractor):
     """Roadmap #17 runtime hot-path profiler extractor."""
@@ -53,8 +58,18 @@ class HotPathProfilerExtractor(BaseExtractor):
         graphiti: Any,
         ctx: ExtractorRunContext,
     ) -> ExtractorStats:
+        driver = graphiti.driver
         profiles_dir = ctx.repo_path / "profiles"
         if not profiles_dir.is_dir():
+            if not await self._expects_profiles(driver, slug=ctx.project_slug):
+                return ExtractorStats(
+                    outcome=ExtractorOutcome.NOT_APPLICABLE,
+                    message=(
+                        "profiles directory is not expected for this project; "
+                        "hot_path_profiler applies only to projects with "
+                        "expected_profile=true."
+                    ),
+                )
             return ExtractorStats(
                 outcome=ExtractorOutcome.MISSING_INPUT,
                 message=f"profiles directory not found under repo root: {profiles_dir}",
@@ -78,7 +93,6 @@ class HotPathProfilerExtractor(BaseExtractor):
                 ),
             )
 
-        driver = graphiti.driver
         total_nodes = 0
         total_edges = 0
 
@@ -112,6 +126,12 @@ class HotPathProfilerExtractor(BaseExtractor):
             total_edges += edges
 
         return ExtractorStats(nodes_written=total_nodes, edges_written=total_edges)
+
+    async def _expects_profiles(self, driver: Any, *, slug: str) -> bool:
+        async with driver.session() as session:
+            result = await session.run(_GET_EXPECTED_PROFILE, slug=slug)
+            row = await result.single()
+        return bool(row and row["expected_profile"])
 
     def audit_contract(self) -> "AuditContract":
         from palace_mcp.audit.contracts import AuditContract, Severity

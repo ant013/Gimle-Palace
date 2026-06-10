@@ -73,6 +73,7 @@ class ExtractorOutcome(StrEnum):
 
     OK = "ok"
     SKIPPED = "skipped"
+    NOT_APPLICABLE = "not_applicable"
     MISSING_INPUT = "missing_input"
 
 
