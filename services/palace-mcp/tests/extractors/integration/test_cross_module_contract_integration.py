@@ -358,6 +358,98 @@ async def test_cross_module_contract_run_writes_snapshot_and_symbol_edges(
 
 
 @pytest.mark.asyncio
+async def test_cross_module_contract_writes_baseline_when_no_consumers_match(
+    driver: AsyncDriver,
+    graphiti_mock: MagicMock,
+    _project_and_repo: Path,
+    tmp_path: Path,
+) -> None:
+    await ensure_extractors_schema(driver)
+    repo = _project_and_repo / "contract-mini"
+    (repo / ".palace" / "cross-module-contract" / "delta-requests.json").unlink()
+    tantivy_dir = tmp_path / "tantivy-empty-but-public-api-present"
+    tantivy_dir.mkdir()
+    settings = Settings(
+        neo4j_password="password",
+        openai_api_key="test-key",
+        palace_tantivy_index_path=str(tantivy_dir),
+        palace_tantivy_heap_mb=50,
+    )
+
+    with (
+        patch("palace_mcp.extractors.runner.REPOS_ROOT", _project_and_repo),
+        patch("palace_mcp.mcp_server.get_driver", return_value=driver),
+        patch("palace_mcp.mcp_server.get_settings", return_value=settings),
+    ):
+        public_api_result = await run_extractor(
+            name="public_api_surface",
+            project="contract-mini",
+            driver=driver,
+            graphiti=graphiti_mock,
+        )
+    assert public_api_result["ok"] is True
+
+    with (
+        patch("palace_mcp.extractors.runner.REPOS_ROOT", _project_and_repo),
+        patch("palace_mcp.mcp_server.get_driver", return_value=driver),
+        patch("palace_mcp.mcp_server.get_settings", return_value=settings),
+        patch.dict(
+            registry.EXTRACTORS,
+            {"cross_module_contract": CrossModuleContractExtractor()},
+        ),
+    ):
+        result = await run_extractor(
+            name="cross_module_contract",
+            project="contract-mini",
+            driver=driver,
+            graphiti=graphiti_mock,
+        )
+
+    assert result["ok"] is True
+    assert result["success"] is True
+    assert result["outcome"] == "ok"
+    assert result["nodes_written"] == 1
+    assert result["edges_written"] == 1
+
+    async with driver.session() as session:
+        snapshot_result = await session.run(
+            """
+            MATCH (snap:ModuleContractSnapshot {project: $project})
+            RETURN snap.consumer_module_name AS consumer_module_name,
+                   snap.producer_module_name AS producer_module_name,
+                   snap.symbol_count AS symbol_count,
+                   snap.use_count AS use_count,
+                   snap.file_count AS file_count,
+                   snap.skipped_symbol_count AS skipped_symbol_count
+            """,
+            project="contract-mini",
+        )
+        snapshots = await snapshot_result.data()
+
+        edge_result = await session.run(
+            """
+            MATCH (:ModuleContractSnapshot {project: $project})
+                  -[rel:CONSUMES_PUBLIC_SYMBOL]->(:PublicApiSymbol)
+            RETURN count(rel) AS count
+            """,
+            project="contract-mini",
+        )
+        edge_row = await edge_result.single()
+
+    assert snapshots == [
+        {
+            "consumer_module_name": "__no_cross_module_consumer__",
+            "producer_module_name": "ProducerKit",
+            "symbol_count": 0,
+            "use_count": 0,
+            "file_count": 0,
+            "skipped_symbol_count": 4,
+        }
+    ]
+    assert edge_row is not None and edge_row["count"] == 0
+
+
+@pytest.mark.asyncio
 async def test_cross_module_contract_skips_when_public_api_surface_is_missing(
     driver: AsyncDriver,
     graphiti_mock: MagicMock,

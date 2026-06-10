@@ -212,6 +212,43 @@ def test_plan_contract_snapshots_include_package_when_explicit() -> None:
     }
 
 
+def test_plan_contract_snapshots_writes_baseline_when_no_consumers_match() -> None:
+    surface = _surface()
+    symbols = [
+        _symbol(symbol_id="sym-balance", fqn="Wallet.balance()"),
+        _symbol(
+            symbol_id="sym-package",
+            fqn="packageHelper()",
+            visibility=PublicApiVisibility.PACKAGE,
+        ),
+        _symbol(
+            symbol_id="sym-missing",
+            fqn="missingQualifiedName()",
+            symbol_qualified_name=None,
+        ),
+    ]
+
+    planned = plan_contract_snapshots(
+        surface=surface,
+        symbols=symbols,
+        occurrences_by_symbol={},
+        resolve_owner=lambda _: ModuleOwnerResolution.unresolved(
+            "consumer_module_unresolved"
+        ),
+        include_package=False,
+    )
+
+    assert len(planned) == 1
+    snapshot = planned[0].snapshot
+    assert snapshot.consumer_module_name == "__no_cross_module_consumer__"
+    assert snapshot.producer_module_name == "ProducerKit"
+    assert snapshot.symbol_count == 0
+    assert snapshot.use_count == 0
+    assert snapshot.file_count == 0
+    assert snapshot.skipped_symbol_count == 3
+    assert planned[0].consumptions == []
+
+
 def test_build_contract_delta_counts_added_removed_and_signature_changed() -> None:
     from_snapshot = ModuleContractSnapshot(
         id="snap-from",

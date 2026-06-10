@@ -82,6 +82,7 @@ SET rel += $edge_props
 """
 
 _DELTA_REQUESTS_PATH = Path(".palace") / "cross-module-contract" / "delta-requests.json"
+_NO_CROSS_MODULE_CONSUMER = "__no_cross_module_consumer__"
 
 
 @dataclass(frozen=True)
@@ -529,6 +530,39 @@ def plan_contract_snapshots(
             continue
 
     planned: list[_PlannedContractSnapshot] = []
+    if not accumulators:
+        snapshot = ModuleContractSnapshot(
+            id=_stable_id(
+                surface.group_id,
+                surface.project,
+                _NO_CROSS_MODULE_CONSUMER,
+                surface.module_name,
+                surface.language.value,
+                surface.commit_sha,
+                str(include_package),
+                str(SCHEMA_VERSION_CURRENT),
+            ),
+            group_id=surface.group_id,
+            project=surface.project,
+            consumer_module_name=_NO_CROSS_MODULE_CONSUMER,
+            producer_module_name=surface.module_name,
+            language=surface.language,
+            commit_sha=surface.commit_sha,
+            include_package=include_package,
+            producer_surface_id=surface.id,
+            symbol_count=0,
+            use_count=0,
+            file_count=0,
+            skipped_symbol_count=skipped_symbol_count,
+        )
+        return [
+            _PlannedContractSnapshot(
+                snapshot=snapshot,
+                consumptions=[],
+                symbols_by_fqn={symbol.fqn: symbol for symbol in symbols},
+            )
+        ]
+
     for pair_key in sorted(accumulators):
         accumulator = accumulators[pair_key]
         consumptions = sorted(

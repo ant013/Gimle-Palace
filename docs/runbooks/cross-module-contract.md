@@ -8,6 +8,14 @@
 - `(:ModuleContractSnapshot)-[:CONSUMES_PUBLIC_SYMBOL]->(:PublicApiSymbol)`
 - опциональный `(:ModuleContractDelta)` для явно выбранных old/new commit pairs из `.palace/cross-module-contract/delta-requests.json`
 
+Если producer `PublicApiSurface` уже есть, но v1 не находит exact consumer
+occurrence matches, extractor пишет baseline snapshot с
+`consumer_module_name="__no_cross_module_consumer__"`, `symbol_count=0`,
+`use_count=0`, и без `CONSUMES_PUBLIC_SYMBOL` edges. Это фиксирует, что
+`cross_module_contract` больше не blocked by missing public API artifacts; real
+consumer edges появятся, когда source-facing `.swiftinterface` names будут
+сопоставлены с SCIP symbol names.
+
 v1 не создает `(:ContractSymbol)` и не добавляет public MCP/API surface.
 
 ## Предусловия
