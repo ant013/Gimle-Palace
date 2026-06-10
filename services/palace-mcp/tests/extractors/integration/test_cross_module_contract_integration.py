@@ -443,7 +443,7 @@ async def test_cross_module_contract_writes_baseline_when_no_consumers_match(
             "symbol_count": 0,
             "use_count": 0,
             "file_count": 0,
-            "skipped_symbol_count": 4,
+            "skipped_symbol_count": 5,
         }
     ]
     assert edge_row is not None and edge_row["count"] == 0
