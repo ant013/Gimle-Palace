@@ -91,6 +91,44 @@ bash paperclips/scripts/prepare_swift_kit_artifacts.sh \
   --dry-run
 ```
 
+### Refresh only public API snapshots
+
+Use the bench wrapper when only `public_api_surface` inputs need regeneration:
+
+```bash
+bash bench/regen-public-api.sh evm-kit
+```
+
+This calls `prepare_swift_kit_artifacts.sh --public-api-only`, so it skips
+Periphery and refreshes only:
+
+```text
+.palace/public-api/swift/*.swiftinterface
+```
+
+Dry-run a kit without mutating it:
+
+```bash
+bash bench/regen-public-api.sh evm-kit --dry-run
+```
+
+Use `bench/regen-periphery.sh` for the opposite focused path: refreshing only
+the Periphery report and contract without touching `.swiftinterface` files.
+
+For iOS-only Swift packages, the script first tries the SwiftPM build path and
+then falls back to an Xcode iOS Simulator build:
+
+```text
+xcodebuild -scheme <library> \
+  -destination "generic/platform=iOS Simulator" \
+  SWIFT_EMIT_MODULE_INTERFACE=YES \
+  ONLY_ACTIVE_ARCH=YES ARCHS=arm64
+```
+
+This fallback avoids macOS platform constraint failures from `swift build` and
+does not enable full `BUILD_LIBRARY_FOR_DISTRIBUTION`, which can fail inside
+third-party dependencies before the root kit emits its interface.
+
 ## Output artefacts
 
 After a successful run, the following files are written into the kit repo:
@@ -168,8 +206,15 @@ string.
    the script missed them, open an issue (the search uses `find` with `-name`).
 
 4. For iOS-only packages that fail to build on macOS without a simulator:
-   build with xcodebuild instead and copy the resulting `.swiftinterface`
-   files manually into `.palace/public-api/swift/`.
+   use `bench/regen-public-api.sh`. It falls back to an Xcode iOS Simulator
+   build and copies the root package `.swiftinterface` automatically.
+
+5. If the package scheme name differs from the library target name, override it:
+
+   ```bash
+   PALACE_SWIFT_KIT_XCODEBUILD_SCHEME=CustomScheme \
+     bash bench/regen-public-api.sh evm-kit
+   ```
 
 ### Artefacts exist but ingest gate still fails
 
@@ -204,6 +249,8 @@ the contract.json metadata.
 ## Related scripts
 
 - `paperclips/scripts/scip_emit_swift_kit.sh` — SCIP index emission (separate step)
+- `bench/regen-public-api.sh` — focused `.swiftinterface` regeneration
+- `bench/regen-periphery.sh` — focused Periphery artifact regeneration
 - `paperclips/scripts/ingest_swift_kit.sh` — full ingest (runs extractors)
 - `docs/runbooks/ingest-swift-kit.md` — end-to-end ingest runbook
 - `docs/runbooks/dead-symbol-binary-surface.md` — extractor internals
