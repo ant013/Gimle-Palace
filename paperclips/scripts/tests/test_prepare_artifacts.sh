@@ -81,6 +81,20 @@ chmod +x "$TMP_DIR/bin/periphery"
 
 cat > "$TMP_DIR/bin/xcrun" <<'MOCK'
 #!/usr/bin/env bash
+case "${1:-} ${2:-} ${3:-}" in
+    "swift package describe")
+        cat <<'JSON'
+{"name":"TestKit","products":[{"name":"TestKit","targets":["TestKit"],"type":{"library":["automatic"]}}],"targets":[{"name":"TestKit","type":"library"}]}
+JSON
+        exit 0
+        ;;
+    "swift build "*)
+        ;;
+    *)
+        printf 'unexpected xcrun invocation: %s\n' "$*" >&2
+        exit 64
+        ;;
+esac
 # Mock xcrun swift build — create a fake .swiftinterface in build path
 shift  # remove 'swift'
 shift  # remove 'build'
@@ -97,6 +111,21 @@ printf '// swift-interface-format-version: 1.0\n' \
 MOCK
 chmod +x "$TMP_DIR/bin/xcrun"
 
+cat > "$TMP_DIR/bin/xcodebuild" <<'MOCK'
+#!/usr/bin/env bash
+derived_data="${TMPDIR:-/tmp}/mock-derived-data"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -derivedDataPath) derived_data="$2"; shift 2 ;;
+        *) shift ;;
+    esac
+done
+mkdir -p "$derived_data/Build/Intermediates.noindex/TestKit.build/Release-iphonesimulator/TestKit.build/Objects-normal/arm64"
+printf '// swift-interface-format-version: 1.0\n' \
+    > "$derived_data/Build/Intermediates.noindex/TestKit.build/Release-iphonesimulator/TestKit.build/Objects-normal/arm64/TestKit.swiftinterface"
+MOCK
+chmod +x "$TMP_DIR/bin/xcodebuild"
+
 PATH="$TMP_DIR/bin:$PATH"
 export PATH
 
@@ -107,6 +136,7 @@ bash "$PREPARE_SCRIPT" --help > "$HELP_OUT"
 assert_contains "$HELP_OUT" "prepare_swift_kit_artifacts.sh"
 assert_contains "$HELP_OUT" "--dry-run"
 assert_contains "$HELP_OUT" "--periphery-only"
+assert_contains "$HELP_OUT" "--public-api-only"
 assert_contains "$HELP_OUT" "periphery"
 printf 'PASS: --help\n'
 
@@ -171,7 +201,71 @@ bash "$PREPARE_SCRIPT" --repo-path "$REPO_PERIPHERY_ONLY" --periphery-only > "$P
 assert_contains "$PERIPHERY_ONLY_OUT" "periphery-only complete"
 printf 'PASS: periphery-only skips swiftinterface\n'
 
-# ── Test 4c: failed periphery scan does not clobber existing report ──────────
+# ── Test 4c: --public-api-only skips Periphery refresh ───────────────────────
+
+REPO_PUBLIC_API_ONLY="$TMP_DIR/repo-public-api-only"
+make_repo "$REPO_PUBLIC_API_ONLY"
+
+PUBLIC_API_ONLY_OUT="$TMP_DIR/public-api-only.out"
+bash "$PREPARE_SCRIPT" --repo-path "$REPO_PUBLIC_API_ONLY" --public-api-only > "$PUBLIC_API_ONLY_OUT" 2>&1
+
+[[ ! -f "$REPO_PUBLIC_API_ONLY/periphery/periphery-3.7.4-swiftpm.json" ]] || \
+    fail "public-api-only must not write periphery report"
+[[ ! -f "$REPO_PUBLIC_API_ONLY/periphery/contract.json" ]] || \
+    fail "public-api-only must not write periphery contract"
+iface_count="$(find "$REPO_PUBLIC_API_ONLY/.palace/public-api/swift" -name "*.swiftinterface" -maxdepth 1 | wc -l | tr -d ' ')"
+[[ "$iface_count" -gt 0 ]] || fail "public-api-only emitted no .swiftinterface files"
+assert_contains "$PUBLIC_API_ONLY_OUT" "public-api-only complete"
+printf 'PASS: public-api-only skips periphery\n'
+
+# ── Test 4d: mutually exclusive focused modes ────────────────────────────────
+
+REPO_MODE_CONFLICT="$TMP_DIR/repo-mode-conflict"
+make_repo "$REPO_MODE_CONFLICT"
+
+MODE_CONFLICT_OUT="$TMP_DIR/mode-conflict.out"
+if bash "$PREPARE_SCRIPT" --repo-path "$REPO_MODE_CONFLICT" \
+    --periphery-only --public-api-only > "$MODE_CONFLICT_OUT" 2>&1; then
+    fail "expected focused-mode conflict to fail"
+fi
+assert_contains "$MODE_CONFLICT_OUT" "provide --periphery-only or --public-api-only, not both"
+printf 'PASS: focused mode conflict rejected\n'
+
+# ── Test 4e: xcodebuild fallback emits public interface ──────────────────────
+
+REPO_XCODEBUILD_FALLBACK="$TMP_DIR/repo-xcodebuild-fallback"
+make_repo "$REPO_XCODEBUILD_FALLBACK"
+
+mkdir -p "$TMP_DIR/no-interface-bin"
+cat > "$TMP_DIR/no-interface-bin/xcrun" <<'MOCK'
+#!/usr/bin/env bash
+case "${1:-} ${2:-} ${3:-}" in
+    "swift package describe")
+        cat <<'JSON'
+{"name":"TestKit","products":[{"name":"TestKit","targets":["TestKit"],"type":{"library":["automatic"]}}],"targets":[{"name":"TestKit","type":"library"}]}
+JSON
+        ;;
+    "swift build "*)
+        exit 1
+        ;;
+    *)
+        printf 'unexpected xcrun invocation: %s\n' "$*" >&2
+        exit 64
+        ;;
+esac
+MOCK
+chmod +x "$TMP_DIR/no-interface-bin/xcrun"
+
+XCODEBUILD_FALLBACK_OUT="$TMP_DIR/xcodebuild-fallback.out"
+PATH="$TMP_DIR/no-interface-bin:$PATH" bash "$PREPARE_SCRIPT" \
+    --repo-path "$REPO_XCODEBUILD_FALLBACK" --public-api-only > "$XCODEBUILD_FALLBACK_OUT" 2>&1
+
+[[ -f "$REPO_XCODEBUILD_FALLBACK/.palace/public-api/swift/TestKit.swiftinterface" ]] || \
+    fail "xcodebuild fallback did not copy TestKit.swiftinterface"
+assert_contains "$XCODEBUILD_FALLBACK_OUT" "trying xcodebuild scheme 'TestKit'"
+printf 'PASS: xcodebuild fallback emits public interface\n'
+
+# ── Test 4f: failed periphery scan does not clobber existing report ──────────
 
 REPO_PRESERVE="$TMP_DIR/repo-preserve"
 make_repo "$REPO_PRESERVE"
