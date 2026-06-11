@@ -112,6 +112,7 @@ class TestRunBundleIngestTask:
             "nodes_written": 10,
             "edges_written": 2,
             "duration_ms": 100,
+            "outcome": "ok",
         }
 
         captured_results: list[IngestRunResult] = []
@@ -140,6 +141,54 @@ class TestRunBundleIngestTask:
         assert len(captured_results) == 1
         assert captured_results[0].ok is True
         assert captured_results[0].slug == "evm-kit"
+        assert captured_results[0].outcome == "ok"
+
+    async def test_missing_input_member_preserves_outcome_metadata(self) -> None:
+        """Successful missing_input member keeps outcome/message/next_action."""
+        from palace_mcp.extractors.runner import _run_bundle_ingest_task
+
+        members = (_make_member("evm-kit"),)
+        state = {"run_id": "rb-test", "members_total": 1}
+
+        run_dict = {
+            "ok": True,
+            "run_id": "r-123",
+            "extractor": "symbol_index_swift",
+            "project": "evm-kit",
+            "duration_ms": 100,
+            "outcome": "missing_input",
+            "message": "fixture missing",
+            "next_action": "Provide fixture",
+        }
+
+        captured_results: list[IngestRunResult] = []
+
+        def fake_update(run_id: str, result: IngestRunResult) -> None:
+            captured_results.append(result)
+
+        with (
+            patch(
+                "palace_mcp.extractors.runner.run_extractor",
+                new=AsyncMock(return_value=run_dict),
+            ),
+            patch(
+                "palace_mcp.extractors.runner.update_state",
+                side_effect=fake_update,
+            ),
+            patch("palace_mcp.extractors.runner.finalize_state"),
+        ):
+            await _run_bundle_ingest_task(
+                name="symbol_index_swift",
+                bundle="uw-ios",
+                members=members,
+                state=state,
+            )
+
+        assert len(captured_results) == 1
+        assert captured_results[0].ok is True
+        assert captured_results[0].outcome == "missing_input"
+        assert captured_results[0].message == "fixture missing"
+        assert captured_results[0].next_action == "Provide fixture"
 
     async def test_failed_member_calls_update_state_with_ok_false(self) -> None:
         """run_extractor returning ok=False → update_state(result.ok=False) called."""
