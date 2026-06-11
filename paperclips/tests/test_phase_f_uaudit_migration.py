@@ -2,6 +2,7 @@
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -115,6 +116,54 @@ def test_uaudit_manifest_all_agents_codex_target():
     data = yaml.safe_load(UAUDIT_MANIFEST.read_text())
     for a in data["agents"]:
         assert a["target"] == "codex", f"{a['agent_name']}: target={a['target']!r} (expected codex)"
+
+def test_uaudit_codex_subagent_rosters_stay_consistent():
+    config = yaml.safe_load(
+        (REPO / "paperclips/projects/uaudit/daily-version-branch-routines.yaml").read_text()
+    )
+    manifest = yaml.safe_load(UAUDIT_MANIFEST.read_text())
+    toml_names = {
+        path.stem for path in (REPO / "paperclips/projects/uaudit/codex-agents").glob("uaudit-*.toml")
+    }
+    manifest_names = set(manifest["subagents"]["additions"]["project"])
+    sync_text = (REPO / "paperclips/sync-codex-runtime-home.sh").read_text()
+    match = re.search(r'^UAUDIT_REQUIRED_CODEX_AGENTS="([^"]+)"$', sync_text, re.M)
+    assert match, "sync-codex-runtime-home.sh must declare UAudit required agents"
+    sync_names = set(match.group(1).split())
+
+    assert all("required_subagents" not in routine for routine in config["routines"])
+    assert toml_names == manifest_names == sync_names
+
+
+def test_uaudit_codex_agent_installer_targets_runtime_visible_home(tmp_path):
+    codex_home = tmp_path / "codex-home"
+    backup_dir = tmp_path / "backups"
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "install_uaudit_codex_agents.py"),
+            "--codex-home",
+            str(codex_home),
+            "--backup-dir",
+            str(backup_dir),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    installed = {path.name for path in (codex_home / "agents").glob("uaudit-*.toml")}
+    assert installed == {
+        "uaudit-swift-audit-specialist.toml",
+        "uaudit-kotlin-audit-specialist.toml",
+        "uaudit-bug-hunter.toml",
+        "uaudit-security-auditor.toml",
+        "uaudit-blockchain-auditor.toml",
+    }
+    for path in (codex_home / "agents").glob("uaudit-*.toml"):
+        text = path.read_text()
+        assert f'name = "{path.stem}"' in text
+        assert 'sandbox_mode = "read-only"' in text
+    assert (backup_dir / "uaudit-codex-agents-install.json").is_file()
 
 
 def test_uaudit_manifest_uses_profile_field():

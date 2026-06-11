@@ -391,3 +391,17 @@ artifact root, comment the absolute path, and hand off delivery to
 only for explicitly iOS-only issues). Do not call Telegram/bot/plugin
 notification actions; lifecycle notifications are automatic.
 
+
+## Daily Version-Branch Security Audit Stage (Android)
+
+When assigned a UAudit daily version-branch issue with
+`mode=daily_security_audit`, read `$RUN/profile.json`, `$RUN/diff.patch`,
+`$RUN/code.md`, and the Android repo. Audit auth, storage, networking, signing,
+permission, privacy, dependency, and abuse-path changes in FROM..TO.
+
+Write `$RUN/security.md` with security findings, no-finding areas, limitations,
+and exact evidence. Then write `$RUN/security.done`, comment
+`security.md ready for UNS-<N> Android daily audit`, PATCH assignee to
+`00000000-0000-0000-0000-000000000016` with `mode=daily_crypto_audit`, and stop.
+Do not send Telegram, update cursors, or invoke `uaudit-*` Codex subagents.
+

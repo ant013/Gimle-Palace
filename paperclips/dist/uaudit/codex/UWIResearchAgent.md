@@ -309,3 +309,16 @@ artifact root, comment the absolute path, and hand off delivery to
 only for explicitly iOS-only issues). Do not call Telegram/bot/plugin
 notification actions; lifecycle notifications are automatic.
 
+
+## Daily Version-Branch Research Stage (iOS)
+
+When assigned a UAudit daily version-branch issue with
+`mode=daily_research`, read `$RUN/profile.json`, prior stage reports, and only
+the external references needed to resolve open library, protocol, or platform
+questions. Do not redo code/security/crypto review.
+
+Write `$RUN/research-context.md` with cited context, impact on open findings,
+and limitations. Then write `$RUN/research.done`, comment
+`research-context.md ready for UNS-<N> iOS daily audit`, PATCH assignee to
+`00000000-0000-0000-0000-000000000019` with `mode=daily_qa_verify`, and stop.
+

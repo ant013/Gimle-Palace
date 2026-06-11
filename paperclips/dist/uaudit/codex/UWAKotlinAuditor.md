@@ -394,6 +394,21 @@ notification actions; lifecycle notifications are automatic.
 
 
 
+## Daily Version-Branch Code Audit Stage (Android)
+
+When `UWACTO` assigns a UAudit daily version-branch issue with
+`mode=daily_code_audit`, do not run PR-audit subagents. Read only the prepared
+`$RUN/{profile.json,commits.tsv,files.tsv,diff.patch}` and the checked-out
+Android repo at `/opt/uaa-example/uaudit/repos/android/unstoppable-wallet-android`.
+
+Write `$RUN/code.md` with code-level findings, no-finding areas, limitations,
+Android variant impact, and exact file/line evidence for the supplied FROM..TO
+range. Then write `$RUN/code.done`, comment
+`code.md ready for UNS-<N> Android daily audit`, PATCH assignee to
+`00000000-0000-0000-0000-000000000018` with `mode=daily_security_audit`, and
+stop. Do not send Telegram, update cursors, or invoke `uaudit-*` Codex subagents
+on daily issues.
+
 ## UAudit Incremental PR Audit Coordinator (Android)
 
 You are the coordinator for Android incremental PR audits. Do not perform a

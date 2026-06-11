@@ -33,12 +33,28 @@ def load_manifest():
 def test_daily_routine_config_uses_names_not_uuids_and_resolves_agents():
     raw = CONFIG.read_text()
     assert not UUID_RE.search(raw)
+    assert "required_subagents" not in raw
+    assert "uaudit-" not in raw
     config = load_config(CONFIG)
     assert config["limits"] == {"max_commits": 30, "max_files": 300, "max_diff_lines": 3000}
     assert {r["platform"] for r in config["routines"]} == {"android", "ios"}
     agents = resolve_agent_ids("uaudit", REPO / "paperclips/projects/uaudit/bindings.local-example.yaml")
     validate_config_agents(config, agents)
-    assert {"AUCEO", "UWACTO", "UWICTO", "UWAInfraEngineer", "UWIInfraEngineer"} <= required_agent_names(config)
+    assert {
+        "AUCEO",
+        "UWACTO",
+        "UWICTO",
+        "UWAKotlinAuditor",
+        "UWISwiftAuditor",
+        "UWASecurityAuditor",
+        "UWISecurityAuditor",
+        "UWACryptoAuditor",
+        "UWICryptoAuditor",
+        "UWAInfraEngineer",
+        "UWIInfraEngineer",
+        "UWAQAEngineer",
+        "UWIQAEngineer",
+    } <= required_agent_names(config)
 
 
 def test_uaudit_platform_ctos_use_custom_project_dispatcher_roles():
@@ -51,7 +67,7 @@ def test_uaudit_platform_ctos_use_custom_project_dispatcher_roles():
     assert by_name["AUCEO"]["profile"] == "cto"
 
 
-def test_generated_dispatcher_bundles_are_slim_and_decision_only():
+def test_generated_dispatcher_bundles_start_staged_daily_chain():
     forbidden = [
         "CTO profile",
         "Merge gate",
@@ -59,38 +75,58 @@ def test_generated_dispatcher_bundles_are_slim_and_decision_only():
         "APPROVE",
         "git merge",
         "Direct push",
+        "mode=audit_delta",
+        "required subagent roster",
     ]
-    for name in ("UWACTO", "UWICTO"):
+    expected = {
+        "UWACTO": ("UWAKotlinAuditor", "UWASecurityAuditor", "UWACryptoAuditor", "UWAInfraEngineer"),
+        "UWICTO": ("UWISwiftAuditor", "UWISecurityAuditor", "UWICryptoAuditor", "UWIInfraEngineer"),
+    }
+    for name, chain_names in expected.items():
         path = REPO / f"paperclips/dist/uaudit/codex/{name}.md"
         assert path.is_file(), f"missing generated bundle {path}"
         text = path.read_text()
         assert text.count("\n") <= 100
-        assert len(text.encode()) <= 4096
+        assert len(text.encode()) <= 5200
         for phrase in forbidden:
             assert phrase not in text, f"{name} contains forbidden phrase {phrase!r}"
         assert "daily-version-branch-routines.yaml" in text
         assert "assigneeAgentId=00000000-0000-0000-0000-000000000010" in text
-        assert "Do not assign infra, create `$RUN`, write status files, send Telegram, or update the cursor." in text
+        assert "staged Paperclip-agent chain" in text
+        assert "mode=daily_code_audit" in text
+        assert "mode=daily_aggregate" in text
+        assert "audit-final.md" in text
+        assert "do not use `uaudit-*` subagents for daily real-delta audits" in text
+        for chain_name in chain_names:
+            assert chain_name in text
         assert "max_files=300" in text
 
 
-def test_infra_bundles_no_longer_own_daily_intake_decisions():
+def test_infra_bundles_use_staged_daily_delivery_not_subagent_fanout():
     forbidden = [
         "If the cursor file is missing, create it",
         "noop.done",
         "If `FROM == TO`",
         "No new commits for",
+        "Required subagents for `mode=audit_delta`",
+        "Subagent Fanout",
+        "spawnMode=profile-prompt",
+        "profileSha256",
+        "unverifiable fallback blocks the run",
     ]
     for name, cto in (("UWAInfraEngineer", "UWACTO"), ("UWIInfraEngineer", "UWICTO")):
         path = REPO / f"paperclips/dist/uaudit/codex/{name}.md"
         text = path.read_text()
+        collapsed = " ".join(text.split())
         for phrase in forbidden:
             assert phrase not in text, f"{name} still contains intake phrase {phrase!r}"
-        assert f"Run this path only after `{cto}` PATCHes this issue" in text
         assert "mode=initialize_cursor" in text
-        assert "mode=audit_delta" in text
+        assert "mode=daily_infra_audit" in text
+        assert "mode=daily_delivery" in text
+        assert "staged Paperclip-agent chain" in collapsed
+        assert "audit-final.md" in text
+        assert "existing blocker still stands" in text
         assert "Never advance the cursor before successful Telegram delivery" in text
-        assert "more than 300 files" in text
 
 
 def test_reconcile_plan_is_dry_run_and_uses_dispatcher_assignments():
