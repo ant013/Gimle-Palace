@@ -48,6 +48,7 @@ class ExtractorErrorResponse(BaseModel):
     extractor: str | None = None
     project: str | None = None
     run_id: str | None = None
+    next_action: str | None = None
 
 
 class ExtractorDescriptor(BaseModel):

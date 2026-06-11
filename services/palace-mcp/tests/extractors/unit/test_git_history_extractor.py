@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
+from palace_mcp.extractors.base import ExtractorOutcome
 from palace_mcp.extractors.git_history.extractor import GitHistoryExtractor
 from palace_mcp.extractors.base import ExtractorRunContext, ExtractorStats
 
@@ -104,13 +105,17 @@ async def test_run_skips_phase2_when_no_github_token(tmp_path: Path, caplog):
         caplog.at_level(logging.WARNING),
     ):
         extractor = GitHistoryExtractor()
-        await extractor.run(graphiti=MagicMock(), ctx=_make_ctx(Path(repo_path)))
+        stats = await extractor.run(
+            graphiti=MagicMock(), ctx=_make_ctx(Path(repo_path))
+        )
     skip_events = [
         r
         for r in caplog.records
         if getattr(r, "event", None) == "git_history_phase2_skipped_no_token"
     ]
     assert len(skip_events) == 1
+    assert stats.outcome == ExtractorOutcome.SKIPPED
+    assert "GitHub token" in (stats.message or "")
 
 
 @pytest.mark.asyncio

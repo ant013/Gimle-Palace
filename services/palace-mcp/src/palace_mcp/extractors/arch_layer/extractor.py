@@ -27,6 +27,7 @@ from palace_mcp.extractors.arch_layer.rules import load_rules
 from palace_mcp.extractors.base import (
     BaseExtractor,
     ExtractorConfigError,
+    ExtractorOutcome,
     ExtractorRunContext,
     ExtractorRuntimeError,
     ExtractorStats,
@@ -195,7 +196,19 @@ async def _run_extraction(*, ctx: ExtractorRunContext, driver: Any) -> Extractor
             module_layers={},
             run_id=run_id,
         )
-        return ExtractorStats(nodes_written=nodes_written, edges_written=edges_written)
+        return ExtractorStats(
+            nodes_written=nodes_written,
+            edges_written=edges_written,
+            outcome=ExtractorOutcome.MISSING_INPUT,
+            message=(
+                "No SwiftPM or Gradle modules were found; wrote only the summary "
+                "sentinel snapshot."
+            ),
+            next_action=(
+                "Provide supported project manifests or module metadata before "
+                "rerunning arch_layer if module coverage is required."
+            ),
+        )
 
     # Build module_source_roots for import scanner
     module_source_roots = {m.slug: m.source_root for m in all_modules if m.source_root}

@@ -277,6 +277,27 @@ LIMIT 100
             planned=planned,
             planned_deltas=planned_deltas,
         )
+        only_zero_consumer_snapshots = planned and all(
+            planned_snapshot.snapshot.consumer_module_name == _NO_CROSS_MODULE_CONSUMER
+            for planned_snapshot in planned
+        )
+        if only_zero_consumer_snapshots and all(
+            not planned_snapshot.consumptions for planned_snapshot in planned
+        ):
+            return ExtractorStats(
+                nodes_written=stats.nodes_written,
+                edges_written=stats.edges_written,
+                outcome=ExtractorOutcome.SKIPPED,
+                message=(
+                    "No cross-module consumers were correlated from the available "
+                    "occurrence data; wrote only zero-consumer baseline snapshots."
+                ),
+                next_action=(
+                    "Refresh the occurrence index and module ownership inputs "
+                    "before rerunning cross_module_contract if consumer edges are "
+                    "expected."
+                ),
+            )
         ctx.logger.info(
             "extractor.cross_module_contract.summary",
             extra={

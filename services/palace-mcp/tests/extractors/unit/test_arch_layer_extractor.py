@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
 from palace_mcp.extractors.arch_layer.extractor import (
     ArchLayerExtractor,
     _arch_severity,
+    _run_extraction,
 )
+from palace_mcp.extractors.base import ExtractorOutcome, ExtractorRunContext
 from palace_mcp.audit.contracts import Severity
 
 
@@ -55,3 +62,48 @@ class TestArchSeverityMapper:
         assert _arch_severity("unknown_severity") == Severity.INFORMATIONAL
         assert _arch_severity("") == Severity.INFORMATIONAL
         assert _arch_severity(None) == Severity.INFORMATIONAL
+
+
+@pytest.mark.asyncio
+async def test_run_extraction_reports_missing_input_when_no_modules_found() -> None:
+    ctx = ExtractorRunContext(
+        project_slug="testproj",
+        group_id="project/testproj",
+        repo_path=MagicMock(),
+        run_id="run-1",
+        duration_ms=0,
+        logger=MagicMock(),
+    )
+    ruleset = SimpleNamespace(
+        loader_warnings=[],
+        rule_source=None,
+        layers=[],
+        rules=[],
+        rules_declared=0,
+        layer_for_module=lambda _slug: None,
+    )
+
+    with (
+        patch(
+            "palace_mcp.extractors.arch_layer.extractor.load_rules",
+            return_value=ruleset,
+        ),
+        patch(
+            "palace_mcp.extractors.arch_layer.extractor.parse_spm",
+            return_value=SimpleNamespace(modules=[], edges=[], warnings=[]),
+        ),
+        patch(
+            "palace_mcp.extractors.arch_layer.extractor.parse_gradle",
+            return_value=SimpleNamespace(modules=[], edges=[], warnings=[]),
+        ),
+        patch(
+            "palace_mcp.extractors.arch_layer.neo4j_writer.replace_project_snapshot",
+            new=AsyncMock(return_value=(2, 1)),
+        ),
+    ):
+        stats = await _run_extraction(ctx=ctx, driver=MagicMock())
+
+    assert stats.nodes_written == 2
+    assert stats.edges_written == 1
+    assert stats.outcome == ExtractorOutcome.MISSING_INPUT
+    assert "No SwiftPM or Gradle modules" in (stats.message or "")
