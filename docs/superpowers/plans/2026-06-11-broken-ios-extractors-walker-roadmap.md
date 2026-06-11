@@ -34,9 +34,9 @@ evidence live here.
 | --- | --- |
 | Walker issue | `GIM-1611` / `c3af6f53-340b-4aa0-a080-83f6a2850b33` |
 | Walker assignee | `CXCTO` |
-| Current task | `fix-2` |
-| Active blocker issue | `GIM-1615` / `0f3c0311-58fe-4981-97c3-f7484f039007` |
-| Last completed task | `fix-1` |
+| Current task | `none` |
+| Active blocker issue | `none` |
+| Last completed task | `fix-2` |
 | Queue mode | strict sequential |
 | Allowed team | CX/Codex only |
 | Source spec | `docs/superpowers/specs/2026-06-11-broken-ios-extractors-repair.md` |
@@ -99,7 +99,7 @@ task starts.
 | Task | Status | Blocker issue | Owner | Scope | Acceptance criteria |
 | --- | --- | --- | --- | --- | --- |
 | fix-1 | done | GIM-1612 / 8a2e4437-53a5-4392-95d8-ded7f066f487 | CXCTO -> CX implementer | Persist extractor outcome contract across `extractors/cypher.py`, `memory/cypher.py`, runner `_finalize`, `IngestRunResult`, bundle state, and bundle counters. Decide and document `success=true` plus explicit `outcome` semantics for `MISSING_INPUT`/`NOT_APPLICABLE`. | Every `IngestRun` from both Cypher paths stores `outcome`, `message`, and `next_action`; bundle responses separate `members_ok`, `members_missing_input`, `members_not_applicable`, and `members_failed`; focused runner/bundle tests pass. |
-| fix-2 | selected | GIM-1615 / 0f3c0311-58fe-4981-97c3-f7484f039007 | CXCTO -> CX implementer | Harden cheap incorrect default-OK paths in extractors without doing deep graph repairs yet: `arch_layer`, `code_ownership`, `git_history`, and `cross_module_contract` diagnostics. | Skipped/no-input/no-baseline/correlation-failure paths return explicit `ExtractorOutcome`; persisted runs no longer show misleading green OK for missing input or skipped work; targeted unit tests assert outcomes. |
+| fix-2 | done | GIM-1615 / 0f3c0311-58fe-4981-97c3-f7484f039007 | CXCTO -> CX implementer | Harden cheap incorrect default-OK paths in extractors without doing deep graph repairs yet: `arch_layer`, `code_ownership`, `git_history`, and `cross_module_contract` diagnostics. | Skipped/no-input/no-baseline/correlation-failure paths return explicit `ExtractorOutcome`; persisted runs no longer show misleading green OK for missing input or skipped work; targeted unit tests assert outcomes. |
 | fix-3 | todo | none | CXCTO -> CX implementer | Verify and test already-fixed `reactive_dependency_tracer` and `hot_path_profiler`; do not rewrite their core logic unless verification finds a real regression. | Missing `reactive_facts.json` persists `MISSING_INPUT`; absent profile traces persist `NOT_APPLICABLE` or `MISSING_INPUT`; live `Project.expected_profile` values are checked for app projects; regression tests assert outcomes. |
 | fix-4 | todo | none | CXCTO -> CX implementer | Fix `git_history` commit identity from global `Commit(sha)` to project-scoped identity, with composite constraint migration and controlled purge for stale old groups. | Per-project commit counts are close to `git rev-list --count HEAD` for each iOS repo; shared SHAs can exist for multiple projects; old groups such as `project/uw-ios-baseline` no longer pollute counts; migration tests pass. |
 | fix-5 | todo | none | CXCTO -> CX implementer | Fix `code_ownership` clean rebaseline behavior: purge/invalidate project-scoped stale checkpoints and prevent `no_change` before baseline `OwnershipFileState` exists. | All seven iOS repos write `OwnershipFileState` on clean rebaseline; no repo returns `no_change` before a baseline exists; rebaseline orchestration explicitly handles `OwnershipCheckpoint`. |
@@ -114,6 +114,7 @@ task starts.
 | Task | Evidence |
 | --- | --- |
 | fix-1 | `GIM-1612` done. PR #437 merged to `develop` at merge commit `e6477a74cedcdc29bb066bc6d44eb5454e30b3b2` with exact head `44d1eb4caa85f075649ed325150a86d570b2c3a6`; Paperclip CR approval comment `3567bd33-8218-4b13-bfe5-a209d6ade336`; exact-head QA smoke comment `072940b8-3cea-459d-8dd6-945ccf7b29c4`; required checks `check`, `detect-changes`, `submodule-drift-check`, `lint`, `test`, `typecheck`, and `docker-build` passed. |
+| fix-2 | `GIM-1615` done. PR #439 merged to `develop` at merge commit `86cfaee8d521dc3f92f9b70cd2743e7cd1c73ae9` with exact head `c85d334a10699f39cde524e519f808419b43ae7b`; Paperclip CR approval comment `4e9c270c-03cd-4b89-a816-0ff20a5dee95`; QA PASS comment `fc3f4789-37ee-49f1-8d93-8e5da3aec483`; required checks `check`, `detect-changes`, `submodule-drift-check`, `lint`, `test`, `typecheck`, and `docker-build` passed. |
 
 ## Final acceptance for the walker
 
