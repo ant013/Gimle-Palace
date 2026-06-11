@@ -1,4 +1,4 @@
-# UNS-151 Blocked Wake Guard
+# UNS-151 Daily Audit Staged Routing Recovery
 
 **Status:** draft for operator review
 **Date:** 2026-06-11
@@ -19,9 +19,23 @@ changed audit precondition. `UWIInfraEngineer` correctly detected that no valid
 unblock existed, confirmed the cursor was unchanged, and patched the issue back to
 `blocked`.
 
-This is unsafe because a blocked daily audit can be re-run after a service/comment
-event. A re-run may waste agent budget, duplicate work, or accidentally advance the
-cursor if a future agent misses the blocked contract.
+This exposed the deeper root cause: iOS daily audit was routed through the stale
+direct-subagent model (`UWIInfraEngineer` -> `uaudit-*` local Codex subagents)
+instead of the staged Paperclip-agent chain that has actually completed Android
+daily audits.
+
+The working Android model uses real Paperclip agents:
+
+1. `UWACTO` performs Stage 1 intake/profiling.
+2. `UWAKotlinAuditor` writes `code.md`.
+3. `UWAInfraEngineer` writes `infra.md`.
+4. `UWAResearchAgent` writes `research-context.md` when needed.
+5. `UWAQAEngineer` writes `qa-verify.md` when needed.
+6. `UWACTO` aggregates `audit-final.md`.
+7. `UWAInfraEngineer` performs Telegram delivery and cursor advance.
+
+`UNS-151` instead sent all review work to `UWIInfraEngineer`, which attempted
+the local subagent fanout and blocked on missing/timed-out `uaudit-*` outputs.
 
 ## Assumptions
 
@@ -31,10 +45,11 @@ cursor if a future agent misses the blocked contract.
   changes the required reviewer roster, or authorizes a partial audit.
 - The daily audit cursor must not advance unless aggregation and Telegram delivery
   complete successfully.
-- Do not rely on watchdog/recovery for the primary fix. UAudit must stay safe
-  when watchdog is disabled, stale, misconfigured, or not covering the
-  UnstoppableAudit company.
-- Watchdog hardening is defense-in-depth only.
+- Do not rely on watchdog/recovery for the primary fix.
+- The daily iOS/Android audit path should use staged Paperclip agents, not local
+  `uaudit-*` subagents, for real-delta routine audits.
+- `UWIInfraEngineer`/`UWAInfraEngineer` remain responsible for infra-owned audit
+  stages and final delivery/cursor work, not for coordinating every reviewer.
 
 ## Evidence
 
@@ -50,28 +65,38 @@ cursor if a future agent misses the blocked contract.
 - `paperclips/projects/uaudit/overlays/codex/UWIInfraEngineer.md` defines the
   daily audit cursor contract, but lacks an explicit resume guard for blocked
   issues woken by service/escalation comments.
+- `paperclips/projects/uaudit/roles-codex/uwi-platform-dispatcher.md` dispatches
+  real deltas directly to `UWIInfraEngineer` with `mode=audit_delta` and a
+  `required_subagents` roster.
+- Successful Android examples (`UNS-62`, `UNS-65`) show a staged Paperclip-agent
+  flow with `code.md`, `infra.md`, optional `research-context.md`, optional
+  `qa-verify.md`, CTO aggregation, then infra delivery.
 - `services/watchdog/src/gimle_watchdog/detection.py` has recovery/escalation
   behavior that should not be the sole safety mechanism because watchdog is not
   a reliable enforcement substrate for this incident class.
 
 ## Scope
 
-Implement a fail-closed guard for blocked daily audit issues:
+Implement staged Paperclip-agent routing for daily delta audits and keep the
+blocked-resume guard:
 
-1. UAudit infra-agent instructions must tell `UWIInfraEngineer` and
-   `UWAInfraEngineer` to stop immediately on blocked daily audit resume unless
-   the latest Board-authored input explicitly changes the blocker.
-2. The daily audit routine must be fail-closed before repo checkout, subagent
-   dispatch, aggregation, Telegram delivery, or cursor writes.
-3. Watchdog recovery may be hardened, but the fix must remain correct if
+1. `UWICTO` must route iOS real-delta work through staged Paperclip agents:
+   `UWISwiftAuditor` -> `UWIInfraEngineer` -> optional `UWIResearchAgent` ->
+   optional `UWIQAEngineer` -> `UWICTO` aggregate -> `UWIInfraEngineer` deliver.
+2. `UWACTO`/Android docs should keep matching staged-chain semantics.
+3. `UWIInfraEngineer` and `UWAInfraEngineer` must not coordinate full
+   `uaudit-*` local subagent fanout for real-delta daily audits.
+4. UAudit infra-agent instructions must stop immediately on blocked daily audit
+   resume unless the latest Board-authored input explicitly changes the blocker.
+5. Watchdog recovery may be hardened, but the fix must remain correct if
    watchdog never runs.
-4. Tests must cover the exact regression class: escalation/comment update does
+6. Tests must cover the exact regression class: escalation/comment update does
    not restart blocked work; explicit Board unblock still can.
 
 ## Out Of Scope
 
 - Fixing the underlying subagent timeouts.
-- Changing the required four-reviewer daily audit contract.
+- Installing or debugging local Codex `uaudit-*` subagents.
 - Advancing or editing `UNS-151` cursor/runtime artifacts.
 - Reworking Paperclip server wake semantics globally.
 - Treating watchdog as the source of truth for blocked-state enforcement.
@@ -80,6 +105,9 @@ Implement a fail-closed guard for blocked daily audit issues:
 
 - `paperclips/projects/uaudit/overlays/codex/UWIInfraEngineer.md`
 - `paperclips/projects/uaudit/overlays/codex/UWAInfraEngineer.md`
+- `paperclips/projects/uaudit/roles-codex/uwi-platform-dispatcher.md`
+- `paperclips/projects/uaudit/roles-codex/uwa-platform-dispatcher.md`
+- `paperclips/projects/uaudit/daily-version-branch-routines.yaml`
 - Snapshot/generated UAudit bundles if the project build requires them.
 - Existing paperclip build/render tests for UAudit instructions.
 - Optional defense-in-depth follow-up:
@@ -88,7 +116,37 @@ Implement a fail-closed guard for blocked daily audit issues:
 
 ## Proposed Design
 
-### UAudit Infra Agents
+### Daily Audit Stages
+
+The daily real-delta route should mirror the working Android `UNS-65` pattern.
+
+Stage outputs:
+
+- Stage 1 intake/profiler: dispatcher/CTO writes `$RUN` intake artifacts and
+  `profile.json`.
+- Stage 2 code audit: platform code auditor writes `$RUN/code.md` and
+  `$RUN/code.done`.
+- Stage 2 infra audit: infra engineer writes `$RUN/infra.md` and
+  `$RUN/infra.done`.
+- Stage 3 research context: research agent writes `$RUN/research-context.md` and
+  `$RUN/research.done` when Critical/Block findings or profile require it.
+- Stage 4 QA: QA agent writes `$RUN/qa-verify.md` and `$RUN/qa.done` when
+  Critical/Block findings or profile require it.
+- Stage 5 aggregate: CTO writes `$RUN/audit-final.md`.
+- Stage 6 delivery: infra engineer sends Telegram and advances cursor only after
+  success.
+
+For iOS the concrete chain is:
+
+- `UWICTO`
+- `UWISwiftAuditor`
+- `UWIInfraEngineer`
+- `UWIResearchAgent`
+- `UWIQAEngineer`
+- `UWICTO`
+- `UWIInfraEngineer`
+
+### Infra Agents
 
 Add a daily-audit resume guard:
 
@@ -101,9 +159,13 @@ Add a daily-audit resume guard:
 
 This codifies what `UWIInfraEngineer` manually did on `UNS-151`.
 
-The guard must be placed before the existing daily-audit steps that read the
-cursor, materialize the delta, dispatch subagents, aggregate findings, deliver
-Telegram output, or write cursor state.
+The guard must be placed before repo/audit work, Telegram delivery, or cursor
+state writes.
+
+Remove or supersede the direct `Required subagents for mode=audit_delta` blocks
+from infra executor docs for real-delta daily audits. If retained for a separate
+smoke/fallback path, the text must explicitly say it is not the daily
+Paperclip-chain route.
 
 ### Explicit Unblock Contract
 
@@ -135,11 +197,15 @@ primary enforcement layer; the UAudit agent contract is.
   not start a new audit run.
 - The same behavior holds with watchdog disabled or not deployed for
   UnstoppableAudit.
+- iOS real-delta handoff from `UWICTO` assigns Stage 2 code work to
+  `UWISwiftAuditor`, not `UWIInfraEngineer` subagent fanout.
+- Infra executor docs no longer require `uaudit-swift-audit-specialist` or
+  `uaudit-blockchain-auditor` local subagent JSON for the daily real-delta route.
 - The cursor is never advanced on blocked resume without explicit unblock input.
 - UAudit generated/rendered instructions include the blocked resume guard for both
   iOS and Android infra engineers.
-- Tests or snapshot checks prove the guard appears before daily-audit execution
-  instructions.
+- Tests or snapshot checks prove dispatcher/infra instructions name the staged
+  Paperclip chain and do not require `uaudit-*` subagent fanout for daily deltas.
 - If watchdog is changed, watchdog tests prove escalation comments do not clear
   blocked recovery state.
 - `UNS-151` remains `blocked` unless Board explicitly unblocks it.
@@ -150,6 +216,11 @@ primary enforcement layer; the UAudit agent contract is.
   the repo's existing paperclip build/test command if present.
 - `bash paperclips/build.sh --project uaudit --target codex` if generated bundles
   are updated.
+- Targeted grep/snapshot assertions:
+  - `UWICTO` daily route mentions `UWISwiftAuditor`.
+  - `UWIInfraEngineer` daily route does not contain `Required subagents for
+    mode=audit_delta`.
+  - Android dispatcher/infra docs keep the staged-chain contract.
 - If watchdog is touched: `uv run pytest services/watchdog/tests/test_detection.py`.
 - Manual Paperclip API read of `UNS-151` after implementation to confirm status
   and cursor are unchanged.
