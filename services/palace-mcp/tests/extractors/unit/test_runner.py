@@ -310,7 +310,9 @@ async def test_success_response_preserves_skipped_outcome_metadata(
     finalize_kwargs = session.run.call_args_list[-1].kwargs
     assert finalize_kwargs["outcome"] == ExtractorOutcome.SKIPPED
     assert finalize_kwargs["message"] == "missing prerequisite fixture"
-    assert finalize_kwargs["next_action"] == "Provide the fixture and rerun the extractor."
+    assert (
+        finalize_kwargs["next_action"] == "Provide the fixture and rerun the extractor."
+    )
 
 
 @pytest.mark.asyncio
