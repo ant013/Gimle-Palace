@@ -31,9 +31,10 @@ cursor if a future agent misses the blocked contract.
   changes the required reviewer roster, or authorizes a partial audit.
 - The daily audit cursor must not advance unless aggregation and Telegram delivery
   complete successfully.
-- Existing watchdog recovery is allowed to wake stale live work, but must not treat
-  service-generated comments or escalation comments as a valid unblock for
-  `blocked` issues.
+- Do not rely on watchdog/recovery for the primary fix. UAudit must stay safe
+  when watchdog is disabled, stale, misconfigured, or not covering the
+  UnstoppableAudit company.
+- Watchdog hardening is defense-in-depth only.
 
 ## Evidence
 
@@ -46,23 +47,25 @@ cursor if a future agent misses the blocked contract.
 - Comment `493530a3-2613-443d-95c9-6c5a1f4e62cc` at
   `2026-06-11T11:20:56.935Z` recorded that the wake had no new Board decision,
   no unblock input, no audit delivery, and no cursor advance.
-- `services/watchdog/src/gimle_watchdog/detection.py` currently auto-clears
-  recovery escalation when `issue.updated_at > escalated_at`, without checking
-  whether the update is an actual unblock.
 - `paperclips/projects/uaudit/overlays/codex/UWIInfraEngineer.md` defines the
   daily audit cursor contract, but lacks an explicit resume guard for blocked
   issues woken by service/escalation comments.
+- `services/watchdog/src/gimle_watchdog/detection.py` has recovery/escalation
+  behavior that should not be the sole safety mechanism because watchdog is not
+  a reliable enforcement substrate for this incident class.
 
 ## Scope
 
 Implement a fail-closed guard for blocked daily audit issues:
 
-1. Watchdog recovery must not wake or auto-unescalate a blocked issue unless the
-   update is explicitly attributable to a real operator unblock.
-2. UAudit infra-agent instructions must tell `UWIInfraEngineer` and
+1. UAudit infra-agent instructions must tell `UWIInfraEngineer` and
    `UWAInfraEngineer` to stop immediately on blocked daily audit resume unless
    the latest Board-authored input explicitly changes the blocker.
-3. Tests must cover the exact regression class: escalation/comment update does
+2. The daily audit routine must be fail-closed before repo checkout, subagent
+   dispatch, aggregation, Telegram delivery, or cursor writes.
+3. Watchdog recovery may be hardened, but the fix must remain correct if
+   watchdog never runs.
+4. Tests must cover the exact regression class: escalation/comment update does
    not restart blocked work; explicit Board unblock still can.
 
 ## Out Of Scope
@@ -71,33 +74,19 @@ Implement a fail-closed guard for blocked daily audit issues:
 - Changing the required four-reviewer daily audit contract.
 - Advancing or editing `UNS-151` cursor/runtime artifacts.
 - Reworking Paperclip server wake semantics globally.
+- Treating watchdog as the source of truth for blocked-state enforcement.
 
 ## Affected Areas
 
-- `services/watchdog/src/gimle_watchdog/detection.py`
-- `services/watchdog/tests/test_detection.py`
 - `paperclips/projects/uaudit/overlays/codex/UWIInfraEngineer.md`
 - `paperclips/projects/uaudit/overlays/codex/UWAInfraEngineer.md`
 - Snapshot/generated UAudit bundles if the project build requires them.
+- Existing paperclip build/render tests for UAudit instructions.
+- Optional defense-in-depth follow-up:
+  `services/watchdog/src/gimle_watchdog/detection.py` and
+  `services/watchdog/tests/test_detection.py`.
 
 ## Proposed Design
-
-### Watchdog
-
-Keep the existing `blocked` skip as the primary recovery guard. Tighten escalation
-clearing so service-generated comments and watchdog/escalation comments cannot
-implicitly clear a blocked or escalated recovery state.
-
-The implementation should introduce a small predicate with tests, for example:
-
-- explicit unblock: Board/operator comment contains a recognized unblock phrase
-  such as `unblocked`, `resume approved`, `proceed`, or `partial audit approved`;
-- not explicit unblock: comments containing `@Board blocked`, `watchdog escalation`,
-  `blocked`, or service-generated escalation markers.
-
-If reliable comment context is not available in the recovery pass, the safer first
-slice is to remove the `issue.updated_at > escalated_at` auto-clear for blocked
-or escalation-marked issues and require manual `gimle-watchdog unescalate`.
 
 ### UAudit Infra Agents
 
@@ -112,31 +101,61 @@ Add a daily-audit resume guard:
 
 This codifies what `UWIInfraEngineer` manually did on `UNS-151`.
 
+The guard must be placed before the existing daily-audit steps that read the
+cursor, materialize the delta, dispatch subagents, aggregate findings, deliver
+Telegram output, or write cursor state.
+
+### Explicit Unblock Contract
+
+The agent should require one of these Board/operator phrases in the newest
+post-blocker input before resuming:
+
+- `unblocked`
+- `resume approved`
+- `proceed`
+- `partial audit approved`
+
+The following are explicitly not unblock inputs:
+
+- `@Board blocked`
+- `watchdog escalation`
+- `blocked`
+- prior blocker summaries
+- service comments that only reopen the issue into `in_progress`
+
+### Watchdog Defense-In-Depth
+
+If touched in this slice, watchdog must not auto-clear recovery/escalation state
+based only on `updatedAt`. It may log or skip such candidates. This is not the
+primary enforcement layer; the UAudit agent contract is.
+
 ## Acceptance Criteria
 
 - A blocked daily audit issue with only a blocker/escalation/comment update does
   not start a new audit run.
+- The same behavior holds with watchdog disabled or not deployed for
+  UnstoppableAudit.
 - The cursor is never advanced on blocked resume without explicit unblock input.
-- Watchdog tests prove escalation comments do not clear blocked recovery state.
 - UAudit generated/rendered instructions include the blocked resume guard for both
   iOS and Android infra engineers.
+- Tests or snapshot checks prove the guard appears before daily-audit execution
+  instructions.
+- If watchdog is changed, watchdog tests prove escalation comments do not clear
+  blocked recovery state.
 - `UNS-151` remains `blocked` unless Board explicitly unblocks it.
 
 ## Verification Plan
 
-- `uv run pytest services/watchdog/tests/test_detection.py`
 - UAudit bundle/render test covering the added infra-agent instruction text, using
   the repo's existing paperclip build/test command if present.
 - `bash paperclips/build.sh --project uaudit --target codex` if generated bundles
   are updated.
+- If watchdog is touched: `uv run pytest services/watchdog/tests/test_detection.py`.
 - Manual Paperclip API read of `UNS-151` after implementation to confirm status
   and cursor are unchanged.
 
 ## Open Questions
 
-- What exact Board/operator phrases should count as explicit unblock? Proposed
-  initial allowlist: `unblocked`, `resume approved`, `proceed`, and
-  `partial audit approved`.
-- Should this guard live only in watchdog + agent instructions, or should the
-  Paperclip server reject `blocked -> in_progress` transitions without an
-  explicit unblock marker?
+- Should Paperclip server later reject `blocked -> in_progress` transitions
+  without an explicit unblock marker? This is stronger, but not required for the
+  first fix because UAudit can be made fail-closed at the agent contract layer.
