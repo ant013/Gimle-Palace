@@ -29,14 +29,22 @@ def _make_summary(exit_reason: str) -> OwnershipRunSummary:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("exit_reason", "next_action_text"),
+    ("exit_reason", "expected_next_action"),
     [
-        ("no_change", "fresh baseline"),
-        ("no_dirty", "ownership output"),
+        (
+            "no_change",
+            "Commit source changes or reset the ownership checkpoint before "
+            "rerunning if a fresh baseline is required.",
+        ),
+        (
+            "no_dirty",
+            "Change tracked source files or reset the ownership checkpoint "
+            "before rerunning if ownership output is expected.",
+        ),
     ],
 )
 async def test_run_marks_non_work_exit_reasons_as_skipped(
-    exit_reason: str, next_action_text: str
+    exit_reason: str, expected_next_action: str
 ) -> None:
     ctx = ExtractorRunContext(
         project_slug="testproj",
@@ -66,4 +74,4 @@ async def test_run_marks_non_work_exit_reasons_as_skipped(
     assert stats.outcome == ExtractorOutcome.SKIPPED
     assert stats.edges_written == 0
     assert stats.message is not None
-    assert next_action_text in (stats.next_action or "")
+    assert stats.next_action == expected_next_action

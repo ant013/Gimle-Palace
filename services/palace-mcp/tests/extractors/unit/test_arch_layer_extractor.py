@@ -107,4 +107,8 @@ async def test_run_extraction_reports_missing_input_when_no_modules_found() -> N
     assert stats.edges_written == 1
     assert stats.outcome == ExtractorOutcome.MISSING_INPUT
     assert "No SwiftPM or Gradle modules" in (stats.message or "")
-    assert "module coverage" in (stats.next_action or "")
+    assert (
+        stats.next_action
+        == "Provide supported project manifests or module metadata before "
+        "rerunning arch_layer if module coverage is required."
+    )

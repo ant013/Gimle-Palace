@@ -116,7 +116,11 @@ async def test_run_skips_phase2_when_no_github_token(tmp_path: Path, caplog):
     assert len(skip_events) == 1
     assert stats.outcome == ExtractorOutcome.SKIPPED
     assert "GitHub token" in (stats.message or "")
-    assert "PALACE_GITHUB_TOKEN" in (stats.next_action or "")
+    assert (
+        stats.next_action
+        == "Set PALACE_GITHUB_TOKEN and rerun git_history if pull request "
+        "coverage is required."
+    )
 
 
 @pytest.mark.asyncio
