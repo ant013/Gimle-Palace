@@ -241,8 +241,14 @@ async def _finalize(
             [],
             True,
         )
+        outcome = result.stats.outcome
+        message = result.stats.message
+        next_action = result.stats.next_action
     else:
         nodes, edges, errors, success = 0, 0, result.errors, False
+        outcome = None
+        message = None
+        next_action = None
 
     async with driver.session() as session:
         await session.run(
@@ -253,6 +259,9 @@ async def _finalize(
             nodes_written=nodes,
             edges_written=edges,
             errors=errors,
+            outcome=outcome,
+            message=message,
+            next_action=next_action,
             success=success,
         )
     return nodes, edges, errors, success
@@ -443,9 +452,12 @@ async def _run_bundle_ingest_task(
                 member_result = IngestRunResult(
                     slug=member.slug,
                     ok=True,
+                    outcome=result_dict.get("outcome"),
                     run_id=result_dict.get("run_id"),
                     error_kind=None,
                     error=None,
+                    message=result_dict.get("message"),
+                    next_action=result_dict.get("next_action"),
                     duration_ms=int(result_dict.get("duration_ms", 0)),
                     completed_at=datetime.now(timezone.utc),
                 )
@@ -454,9 +466,12 @@ async def _run_bundle_ingest_task(
                 member_result = IngestRunResult(
                     slug=member.slug,
                     ok=False,
+                    outcome=None,
                     run_id=result_dict.get("run_id"),
                     error_kind=_error_code_to_kind(error_code),
                     error=result_dict.get("message", ""),
+                    message=result_dict.get("message"),
+                    next_action=result_dict.get("next_action"),
                     duration_ms=0,
                     completed_at=datetime.now(timezone.utc),
                 )
@@ -464,9 +479,12 @@ async def _run_bundle_ingest_task(
             member_result = IngestRunResult(
                 slug=member.slug,
                 ok=False,
+                outcome=None,
                 run_id=None,
                 error_kind="unknown",
                 error=f"{type(exc).__name__}: {str(exc)[:200]}",
+                message=f"{type(exc).__name__}: {str(exc)[:200]}",
+                next_action=None,
                 duration_ms=0,
                 completed_at=datetime.now(timezone.utc),
             )

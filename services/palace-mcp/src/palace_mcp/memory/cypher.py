@@ -233,6 +233,10 @@ CREATE (r:IngestRun {
     started_at: $started_at,
     finished_at: null,
     duration_ms: null,
+    success: null,
+    outcome: null,
+    message: null,
+    next_action: null,
     errors: []
 })
 """
@@ -241,6 +245,10 @@ FINALIZE_INGEST_RUN = """
 MATCH (r:IngestRun {id: $id})
 SET r.finished_at = $finished_at,
     r.duration_ms = $duration_ms,
+    r.success     = size($errors) = 0,
+    r.outcome     = $outcome,
+    r.message     = $message,
+    r.next_action = $next_action,
     r.errors      = $errors
 """
 
