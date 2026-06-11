@@ -32,6 +32,7 @@ HELP_OUT="$tmpdir/help.out"
 bash "$SCRIPT" --help >"$HELP_OUT"
 assert_contains "$HELP_OUT" "regen-public-api.sh <kit-slug>"
 assert_contains "$HELP_OUT" "evm-kit"
+assert_contains "$HELP_OUT" "/Users/Shared/Ios/Gimle-Repos/HorizontalSystems"
 printf 'PASS: --help\n'
 
 NO_ARG_OUT="$tmpdir/no-arg.out"

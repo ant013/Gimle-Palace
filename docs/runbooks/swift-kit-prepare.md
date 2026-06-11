@@ -73,14 +73,14 @@ bash paperclips/scripts/prepare_swift_kit_artifacts.sh \
 ```
 
 Resolves `bitcoin-core` → `BitcoinCore.Swift` via the manifest, then uses
-`PALACE_SWIFT_KIT_HOST_REPO_BASE` (default: `/Users/Shared/Ios/HorizontalSystems`)
-as the base.
+`PALACE_SWIFT_KIT_HOST_REPO_BASE`
+(default: `/Users/Shared/Ios/Gimle-Repos/HorizontalSystems`) as the base.
 
 ### By explicit path
 
 ```bash
 bash paperclips/scripts/prepare_swift_kit_artifacts.sh \
-  --repo-path /Users/Shared/Ios/HorizontalSystems/BitcoinCore.Swift
+  --repo-path /Users/Shared/Ios/Gimle-Repos/HorizontalSystems/BitcoinCore.Swift
 ```
 
 ### Dry-run (validate without mutating)
@@ -226,8 +226,8 @@ the prepare script wrote artefacts.
 
 ```bash
 # Verify paths match
-ls /Users/Shared/Ios/HorizontalSystems/BitcoinCore.Swift/periphery/
-ls /Users/Shared/Ios/HorizontalSystems/BitcoinCore.Swift/.palace/public-api/swift/
+ls /Users/Shared/Ios/Gimle-Repos/HorizontalSystems/BitcoinCore.Swift/periphery/
+ls /Users/Shared/Ios/Gimle-Repos/HorizontalSystems/BitcoinCore.Swift/.palace/public-api/swift/
 ```
 
 Use `--skip-artefact-check` as a temporary escape hatch while investigating:

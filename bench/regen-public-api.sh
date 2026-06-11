@@ -16,7 +16,7 @@ not refresh the paired Periphery artefacts used by dead_symbol_binary_surface.
 
 Examples:
   bash bench/regen-public-api.sh evm-kit
-  bash bench/regen-public-api.sh bitcoin-core --repo-base /Users/Shared/Ios/HorizontalSystems
+  bash bench/regen-public-api.sh bitcoin-core --repo-base /Users/Shared/Ios/Gimle-Repos/HorizontalSystems
   bash bench/regen-public-api.sh dash-kit --dry-run
 EOF
 }

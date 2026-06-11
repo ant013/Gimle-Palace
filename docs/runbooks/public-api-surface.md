@@ -77,6 +77,10 @@ bash bench/regen-public-api.sh evm-kit --dry-run
 fallback с `SWIFT_EMIT_MODULE_INTERFACE=YES`. Если scheme не совпадает с именем
 library target, задайте `PALACE_SWIFT_KIT_XCODEBUILD_SCHEME`.
 
+Для `fix-6` запускайте этот путь только на выделенных Gimle clone repos под
+`/Users/Shared/Ios/Gimle-Repos/HorizontalSystems`. Не используйте active
+developer clones под `/Users/Shared/Ios/HorizontalSystems`.
+
 ## Проверка локально
 
 Из `services/palace-mcp`:

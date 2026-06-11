@@ -138,6 +138,7 @@ assert_contains "$HELP_OUT" "--dry-run"
 assert_contains "$HELP_OUT" "--periphery-only"
 assert_contains "$HELP_OUT" "--public-api-only"
 assert_contains "$HELP_OUT" "periphery"
+assert_contains "$HELP_OUT" "/Users/Shared/Ios/Gimle-Repos/HorizontalSystems"
 printf 'PASS: --help\n'
 
 # ── Test 2: requires --slug or --repo-path ────────────────────────────────────
@@ -231,7 +232,29 @@ fi
 assert_contains "$MODE_CONFLICT_OUT" "provide --periphery-only or --public-api-only, not both"
 printf 'PASS: focused mode conflict rejected\n'
 
-# ── Test 4e: xcodebuild fallback emits public interface ──────────────────────
+# ── Test 4e: slug resolution uses repo-base + manifest relative path ─────────
+
+REPO_SLUG="$TMP_DIR/repo-slug-base/Fixtures/SlugKit.Swift"
+mkdir -p "$(dirname "$REPO_SLUG")"
+make_repo "$REPO_SLUG"
+
+MANIFEST="$TMP_DIR/manifest.json"
+cat > "$MANIFEST" <<'JSON'
+{"members":[{"slug":"slug-kit","relative_path":"Fixtures/SlugKit.Swift"}]}
+JSON
+
+SLUG_OUT="$TMP_DIR/slug.out"
+bash "$PREPARE_SCRIPT" \
+    --slug slug-kit \
+    --repo-base "$TMP_DIR/repo-slug-base" \
+    --manifest "$MANIFEST" \
+    --public-api-only > "$SLUG_OUT" 2>&1
+
+[[ -f "$REPO_SLUG/.palace/public-api/swift/TestKit.swiftinterface" ]] || \
+    fail "slug-based repo resolution did not emit TestKit.swiftinterface"
+printf 'PASS: slug resolution uses manifest path under repo-base\n'
+
+# ── Test 4f: xcodebuild fallback emits public interface ──────────────────────
 
 REPO_XCODEBUILD_FALLBACK="$TMP_DIR/repo-xcodebuild-fallback"
 make_repo "$REPO_XCODEBUILD_FALLBACK"
@@ -265,7 +288,7 @@ PATH="$TMP_DIR/no-interface-bin:$PATH" bash "$PREPARE_SCRIPT" \
 assert_contains "$XCODEBUILD_FALLBACK_OUT" "trying xcodebuild scheme 'TestKit'"
 printf 'PASS: xcodebuild fallback emits public interface\n'
 
-# ── Test 4f: failed periphery scan does not clobber existing report ──────────
+# ── Test 4g: failed periphery scan does not clobber existing report ──────────
 
 REPO_PRESERVE="$TMP_DIR/repo-preserve"
 make_repo "$REPO_PRESERVE"
