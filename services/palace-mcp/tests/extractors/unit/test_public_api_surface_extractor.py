@@ -27,7 +27,9 @@ def _ctx(repo_path: Path) -> ExtractorRunContext:
 async def test_run_reports_missing_input_when_public_api_artifacts_are_absent(
     tmp_path: Path,
 ) -> None:
-    (tmp_path / "Package.swift").write_text("// swift-tools-version: 5.9\n", encoding="utf-8")
+    (tmp_path / "Package.swift").write_text(
+        "// swift-tools-version: 5.9\n", encoding="utf-8"
+    )
 
     with patch("palace_mcp.mcp_server.get_driver", return_value=MagicMock()):
         stats = await PublicApiSurfaceExtractor().run(
