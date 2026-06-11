@@ -34,9 +34,9 @@ evidence live here.
 | --- | --- |
 | Walker issue | `GIM-1611` / `c3af6f53-340b-4aa0-a080-83f6a2850b33` |
 | Walker assignee | `CXCTO` |
-| Current task | `fix-1` |
-| Active blocker issue | `GIM-1612` / `8a2e4437-53a5-4392-95d8-ded7f066f487` |
-| Last completed task | `none` |
+| Current task | `none` |
+| Active blocker issue | `none` |
+| Last completed task | `fix-1` |
 | Queue mode | strict sequential |
 | Allowed team | CX/Codex only |
 | Source spec | `docs/superpowers/specs/2026-06-11-broken-ios-extractors-repair.md` |
@@ -98,7 +98,7 @@ task starts.
 
 | Task | Status | Blocker issue | Owner | Scope | Acceptance criteria |
 | --- | --- | --- | --- | --- | --- |
-| fix-1 | selected | GIM-1612 / 8a2e4437-53a5-4392-95d8-ded7f066f487 | CXCTO -> CX implementer | Persist extractor outcome contract across `extractors/cypher.py`, `memory/cypher.py`, runner `_finalize`, `IngestRunResult`, bundle state, and bundle counters. Decide and document `success=true` plus explicit `outcome` semantics for `MISSING_INPUT`/`NOT_APPLICABLE`. | Every `IngestRun` from both Cypher paths stores `outcome`, `message`, and `next_action`; bundle responses separate `members_ok`, `members_missing_input`, `members_not_applicable`, and `members_failed`; focused runner/bundle tests pass. |
+| fix-1 | done | GIM-1612 / 8a2e4437-53a5-4392-95d8-ded7f066f487 | CXCTO -> CX implementer | Persist extractor outcome contract across `extractors/cypher.py`, `memory/cypher.py`, runner `_finalize`, `IngestRunResult`, bundle state, and bundle counters. Decide and document `success=true` plus explicit `outcome` semantics for `MISSING_INPUT`/`NOT_APPLICABLE`. | Every `IngestRun` from both Cypher paths stores `outcome`, `message`, and `next_action`; bundle responses separate `members_ok`, `members_missing_input`, `members_not_applicable`, and `members_failed`; focused runner/bundle tests pass. |
 | fix-2 | todo | none | CXCTO -> CX implementer | Harden cheap incorrect default-OK paths in extractors without doing deep graph repairs yet: `arch_layer`, `code_ownership`, `git_history`, and `cross_module_contract` diagnostics. | Skipped/no-input/no-baseline/correlation-failure paths return explicit `ExtractorOutcome`; persisted runs no longer show misleading green OK for missing input or skipped work; targeted unit tests assert outcomes. |
 | fix-3 | todo | none | CXCTO -> CX implementer | Verify and test already-fixed `reactive_dependency_tracer` and `hot_path_profiler`; do not rewrite their core logic unless verification finds a real regression. | Missing `reactive_facts.json` persists `MISSING_INPUT`; absent profile traces persist `NOT_APPLICABLE` or `MISSING_INPUT`; live `Project.expected_profile` values are checked for app projects; regression tests assert outcomes. |
 | fix-4 | todo | none | CXCTO -> CX implementer | Fix `git_history` commit identity from global `Commit(sha)` to project-scoped identity, with composite constraint migration and controlled purge for stale old groups. | Per-project commit counts are close to `git rev-list --count HEAD` for each iOS repo; shared SHAs can exist for multiple projects; old groups such as `project/uw-ios-baseline` no longer pollute counts; migration tests pass. |
@@ -108,6 +108,12 @@ task starts.
 | fix-8 | todo | none | CXCTO -> CX implementer | Repair `cross_module_contract` Swift symbol correlation by bridging `.swiftinterface` FQNs to SCIP/Tantivy descriptor qualified names. | GIM-1603 baseline snapshots remain; real `CONSUMES_PUBLIC_SYMBOL` edges appear when consumers exist; zero consumer edges are distinguishable from correlation failure; tests include mismatched Swift name formats. |
 | fix-9 | todo | none | CXCTO -> CX implementer | Repair `cross_repo_version_skew`: read canonical bundle `:CONTAINS` relationships and add declared-constraint skew detection in addition to resolved-version skew. | Bundles created by canonical registration are processed; resolved-version and declared-constraint skew are reported; tests use real bundle CRUD shape, not only synthetic `:HAS_MEMBER`. |
 | fix-10 | todo | none | CXCTO -> CX implementer | Run full sequential clean rebaseline on the seven dedicated iOS repos and write the numeric completion report. | All extractor outcomes and per-project counts are recorded; broken/partial extractors show real numbers or explicit `MISSING_INPUT`/`NOT_APPLICABLE`; report includes native Neo4j evidence, benchmark timing, and sanity queries. |
+
+## Completion evidence
+
+| Task | Evidence |
+| --- | --- |
+| fix-1 | `GIM-1612` done. PR #437 merged to `develop` at merge commit `e6477a74cedcdc29bb066bc6d44eb5454e30b3b2` with exact head `44d1eb4caa85f075649ed325150a86d570b2c3a6`; Paperclip CR approval comment `3567bd33-8218-4b13-bfe5-a209d6ade336`; exact-head QA smoke comment `072940b8-3cea-459d-8dd6-945ccf7b29c4`; required checks `check`, `detect-changes`, `submodule-drift-check`, `lint`, `test`, `typecheck`, and `docker-build` passed. |
 
 ## Final acceptance for the walker
 
