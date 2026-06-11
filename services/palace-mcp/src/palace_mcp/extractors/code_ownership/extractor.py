@@ -153,9 +153,7 @@ LIMIT 100
         alpha: float = settings.ownership_blame_weight  # type: ignore[attr-defined]
         await ensure_ownership_schema(driver)  # type: ignore[arg-type]
         checkpoint_driver = cast(AsyncDriver, driver)
-        checkpoint = await load_checkpoint(
-            checkpoint_driver, project_id=project_id
-        )
+        checkpoint = await load_checkpoint(checkpoint_driver, project_id=project_id)
 
         try:
             repo = pygit2.Repository(str(repo_path))

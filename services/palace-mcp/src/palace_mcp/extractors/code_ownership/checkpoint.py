@@ -86,9 +86,7 @@ async def delete_checkpoint(driver: AsyncDriver, *, project_id: str) -> None:
         await session.run(_DELETE_CYPHER, project_id=project_id)
 
 
-async def has_file_state_baseline(
-    driver: AsyncDriver, *, project_id: str
-) -> bool:
+async def has_file_state_baseline(driver: AsyncDriver, *, project_id: str) -> bool:
     async with driver.session() as session:
         result = await session.run(
             _BASELINE_EXISTS_CYPHER,

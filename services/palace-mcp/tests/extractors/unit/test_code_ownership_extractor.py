@@ -30,9 +30,12 @@ def _make_summary(exit_reason: str) -> OwnershipRunSummary:
         alpha_used=0.5,
     )
 
+
 class _FakeRepo:
     def __init__(self, head_sha: str) -> None:
         self.head = SimpleNamespace(target=head_sha)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("exit_reason", "expected_next_action"),
@@ -84,7 +87,9 @@ async def test_run_marks_non_work_exit_reasons_as_skipped(
 
 
 @pytest.mark.asyncio
-async def test_run_invalidates_same_head_checkpoint_without_file_state_baseline() -> None:
+async def test_run_invalidates_same_head_checkpoint_without_file_state_baseline() -> (
+    None
+):
     checkpoint = OwnershipCheckpoint(
         project_id="project/testproj",
         last_head_sha="head-123",
@@ -135,9 +140,19 @@ async def test_run_invalidates_same_head_checkpoint_without_file_state_baseline(
             "palace_mcp.extractors.code_ownership.extractor.asyncio.to_thread",
             side_effect=_run_in_place,
         ),
-        patch.object(CodeOwnershipExtractor, "_fetch_bot_identity_keys", new=AsyncMock(return_value=set())),
-        patch.object(CodeOwnershipExtractor, "_fetch_known_author_ids", new=AsyncMock(return_value=set())),
-        patch.object(CodeOwnershipExtractor, "_has_any_commits", new=AsyncMock(return_value=True)),
+        patch.object(
+            CodeOwnershipExtractor,
+            "_fetch_bot_identity_keys",
+            new=AsyncMock(return_value=set()),
+        ),
+        patch.object(
+            CodeOwnershipExtractor,
+            "_fetch_known_author_ids",
+            new=AsyncMock(return_value=set()),
+        ),
+        patch.object(
+            CodeOwnershipExtractor, "_has_any_commits", new=AsyncMock(return_value=True)
+        ),
         patch.object(CodeOwnershipExtractor, "_all_files_in_head", return_value=set()),
     ):
         summary = await CodeOwnershipExtractor()._run(
@@ -198,9 +213,19 @@ async def test_run_keeps_same_head_checkpoint_when_file_state_baseline_exists() 
             "palace_mcp.extractors.code_ownership.extractor.MailmapResolver.from_repo",
             return_value=mailmap,
         ),
-        patch.object(CodeOwnershipExtractor, "_fetch_bot_identity_keys", new=AsyncMock(return_value=set())),
-        patch.object(CodeOwnershipExtractor, "_fetch_known_author_ids", new=AsyncMock(return_value=set())),
-        patch.object(CodeOwnershipExtractor, "_has_any_commits", new=AsyncMock(return_value=True)),
+        patch.object(
+            CodeOwnershipExtractor,
+            "_fetch_bot_identity_keys",
+            new=AsyncMock(return_value=set()),
+        ),
+        patch.object(
+            CodeOwnershipExtractor,
+            "_fetch_known_author_ids",
+            new=AsyncMock(return_value=set()),
+        ),
+        patch.object(
+            CodeOwnershipExtractor, "_has_any_commits", new=AsyncMock(return_value=True)
+        ),
     ):
         summary = await CodeOwnershipExtractor()._run(
             driver=MagicMock(),
