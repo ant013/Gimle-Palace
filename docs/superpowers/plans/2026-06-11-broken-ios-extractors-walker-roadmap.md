@@ -32,7 +32,7 @@ evidence live here.
 
 | Field | Value |
 | --- | --- |
-| Walker issue | `TBD` |
+| Walker issue | `GIM-1611` / `c3af6f53-340b-4aa0-a080-83f6a2850b33` |
 | Walker assignee | `CXCTO` |
 | Current task | `none` |
 | Active blocker issue | `none` |
