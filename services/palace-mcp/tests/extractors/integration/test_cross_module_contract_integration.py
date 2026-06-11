@@ -407,7 +407,13 @@ async def test_cross_module_contract_writes_baseline_when_no_consumers_match(
 
     assert result["ok"] is True
     assert result["success"] is True
-    assert result["outcome"] == "ok"
+    assert result["outcome"] == "skipped"
+    assert "No cross-module consumers" in (result.get("message") or "")
+    assert (
+        result["next_action"]
+        == "Refresh the occurrence index and module ownership inputs before "
+        "rerunning cross_module_contract if consumer edges are expected."
+    )
     assert result["nodes_written"] == 1
     assert result["edges_written"] == 1
 
@@ -486,6 +492,11 @@ async def test_cross_module_contract_skips_when_public_api_surface_is_missing(
     assert result["success"] is True
     assert result["outcome"] == "skipped"
     assert "PublicApiSurface/PublicApiSymbol" in (result.get("message") or "")
+    assert (
+        result["next_action"]
+        == "Provide public API artifacts and rerun public_api_surface if "
+        "cross_module_contract coverage is required for this project."
+    )
 
 
 async def _seed_occurrences(tantivy_dir: Path) -> None:

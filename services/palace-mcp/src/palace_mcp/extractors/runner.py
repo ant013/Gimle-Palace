@@ -185,6 +185,7 @@ class _ExecuteOk:
 class _ExecuteError:
     error_code: str
     errors: list[str]
+    next_action: str | None = None
 
 
 _ExecuteResult = Union[_ExecuteOk, _ExecuteError]
@@ -208,7 +209,17 @@ async def _execute(
         msg = f"timeout after {timeout_s}s"
         logger.error("extractor.execute.timeout", extra={"run_id": ctx.run_id})
         return _ExecuteError(error_code="extractor_runtime_error", errors=[msg])
-    except (ExtractorError, FoundationExtractorError) as e:
+    except FoundationExtractorError as e:
+        logger.error(
+            "extractor.execute.extractor_error",
+            extra={"run_id": ctx.run_id, "error_code": e.error_code},
+        )
+        return _ExecuteError(
+            error_code=e.error_code,
+            errors=[str(e)[:200]],
+            next_action=e.action,
+        )
+    except ExtractorError as e:
         logger.error(
             "extractor.execute.extractor_error",
             extra={"run_id": ctx.run_id, "error_code": e.error_code},
@@ -247,8 +258,8 @@ async def _finalize(
     else:
         nodes, edges, errors, success = 0, 0, result.errors, False
         outcome = None
-        message = None
-        next_action = None
+        message = errors[0] if errors else None
+        next_action = result.next_action
 
     async with driver.session() as session:
         await session.run(
@@ -408,6 +419,7 @@ async def run_extractor(
         extractor=name,
         project=project,
         run_id=run_id,
+        next_action=exec_result.next_action,
     ).model_dump()
 
 

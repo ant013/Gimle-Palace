@@ -9,6 +9,7 @@ from datetime import datetime
 
 from palace_mcp.extractors.base import (
     BaseExtractor,
+    ExtractorOutcome,
     ExtractorRunContext,
     ExtractorStats,
 )
@@ -239,6 +240,15 @@ class GitHistoryExtractor(BaseExtractor):
                 return ExtractorStats(
                     nodes_written=commits_written,
                     edges_written=edges_written,
+                    outcome=ExtractorOutcome.SKIPPED,
+                    message=(
+                        "GitHub token not configured; skipped pull request and "
+                        "comment ingestion after the commit walk."
+                    ),
+                    next_action=(
+                        "Set PALACE_GITHUB_TOKEN and rerun git_history if pull "
+                        "request coverage is required."
+                    ),
                 )
 
             # Phase 2 with token: fetch PRs via GraphQL

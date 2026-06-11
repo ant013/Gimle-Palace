@@ -23,6 +23,7 @@ import pygit2
 
 from palace_mcp.extractors.base import (
     BaseExtractor,
+    ExtractorOutcome,
     ExtractorRunContext,
     ExtractorStats,
 )
@@ -106,9 +107,35 @@ LIMIT 100
             settings=settings,
         )
         await self._write_run_extras(driver, ctx.run_id, summary)
+        outcome = ExtractorOutcome.OK
+        message: str | None = None
+        next_action: str | None = None
+        if summary.exit_reason == "no_change":
+            outcome = ExtractorOutcome.SKIPPED
+            message = (
+                "Ownership checkpoint already matches the current HEAD; no files "
+                "required reprocessing."
+            )
+            next_action = (
+                "Commit source changes or reset the ownership checkpoint before "
+                "rerunning if a fresh baseline is required."
+            )
+        elif summary.exit_reason == "no_dirty":
+            outcome = ExtractorOutcome.SKIPPED
+            message = (
+                "No non-skipped file changes required ownership recomputation for "
+                "this run."
+            )
+            next_action = (
+                "Change tracked source files or reset the ownership checkpoint "
+                "before rerunning if ownership output is expected."
+            )
         return ExtractorStats(
             nodes_written=summary.dirty_files_count + summary.deleted_files_count + 1,
             edges_written=summary.edges_written,
+            outcome=outcome,
+            message=message,
+            next_action=next_action,
         )
 
     async def _run(

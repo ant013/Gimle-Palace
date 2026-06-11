@@ -363,6 +363,7 @@ async def test_foundation_extractor_error_preserves_exact_code(
     assert res["ok"] is False
     assert res["error_code"] == "public_api_artifacts_required"
     assert res["message"] == "artifacts missing"
+    assert res["next_action"] == "manual_cleanup"
 
 
 @pytest.mark.asyncio
