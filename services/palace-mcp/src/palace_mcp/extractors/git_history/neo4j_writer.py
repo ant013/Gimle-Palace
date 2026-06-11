@@ -29,9 +29,8 @@ ON MATCH SET
 """
 
 _MERGE_COMMIT_CYPHER = """
-MERGE (c:Commit {sha: $sha})
+MERGE (c:Commit {project_id: $project_id, sha: $sha})
 ON CREATE SET
-  c.project_id = $project_id,
   c.author_provider = $author_provider,
   c.author_identity_key = $author_identity_key,
   c.committer_provider = $committer_provider,
@@ -56,7 +55,7 @@ MERGE (f:File {project_id: $project_id, path: path})
 SET f.group_id = coalesce(f.group_id, $project_id),
     f.file_path = path
 WITH f
-MATCH (c:Commit {sha: $sha})
+MATCH (c:Commit {project_id: $project_id, sha: $sha})
 MERGE (c)-[:TOUCHED]->(f)
 """
 

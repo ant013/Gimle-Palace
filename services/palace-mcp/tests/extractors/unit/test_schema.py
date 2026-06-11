@@ -248,6 +248,25 @@ class TestEnsureCustomSchema:
         await ensure_custom_schema(driver)  # must not raise
 
     @pytest.mark.asyncio
+    async def test_legacy_git_commit_constraint_is_migrated(self) -> None:
+        legacy = [
+            {
+                "name": "git_commit_sha",
+                "properties": ["sha"],
+                "labelsOrTypes": ["Commit"],
+            }
+        ]
+        driver = self._make_driver(constraint_records=legacy)
+
+        await ensure_custom_schema(driver)
+
+        queries = [
+            call.args[0] for call in driver.session.return_value.run.await_args_list
+        ]
+        assert "DROP CONSTRAINT git_commit_sha IF EXISTS" in queries
+        assert any("DETACH DELETE n" in query for query in queries)
+
+    @pytest.mark.asyncio
     async def test_unknown_constraint_name_ignored(self) -> None:
         """Constraint not in expected schema → no drift raised (not our schema object)."""
         unrelated = [

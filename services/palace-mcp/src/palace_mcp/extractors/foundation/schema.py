@@ -57,6 +57,20 @@ class SchemaDriftError(Exception):
     """Raised when existing Neo4j schema conflicts with expected definition."""
 
 
+_LEGACY_GIT_COMMIT_SHA_PROPS = frozenset({"sha"})
+
+_PURGE_STALE_GIT_HISTORY_GROUPS = """
+MATCH (p:Project)
+WITH collect(p.group_id) AS active_groups
+WHERE size(active_groups) > 0
+MATCH (n)
+WHERE (n:Commit OR n:File OR n:PR OR n:PRComment OR n:GitHistoryCheckpoint)
+  AND coalesce(n.group_id, n.project_id, "") STARTS WITH "project/"
+  AND NOT coalesce(n.group_id, n.project_id, "") IN active_groups
+DETACH DELETE n
+"""
+
+
 EXPECTED_SCHEMA = SchemaDefinition(
     constraints=[
         ConstraintSpec(
@@ -78,7 +92,11 @@ EXPECTED_SCHEMA = SchemaDefinition(
             type="UNIQUE",
         ),
         # GIM-186: git_history extractor constraints
-        ConstraintSpec(name="git_commit_sha", label="Commit", properties=("sha",)),
+        ConstraintSpec(
+            name="git_commit_sha",
+            label="Commit",
+            properties=("project_id", "sha"),
+        ),
         ConstraintSpec(
             name="git_author_pk",
             label="Author",
@@ -261,11 +279,18 @@ async def _detect_drift(session: AsyncSession) -> None:
         result = await session.run(
             "SHOW CONSTRAINTS YIELD name, properties, labelsOrTypes"
         )
-        async for record in result:
+        constraint_records = [record async for record in result]
+        for record in constraint_records:
             name = record["name"]
             if name not in expected_constraint_props:
                 continue
             existing_props = frozenset(record["properties"] or [])
+            if (
+                name == "git_commit_sha"
+                and existing_props == _LEGACY_GIT_COMMIT_SHA_PROPS
+            ):
+                await _migrate_legacy_git_commit_constraint(session)
+                continue
             if existing_props != expected_constraint_props[name]:
                 raise SchemaDriftError(
                     f"Constraint '{name}' exists with properties {set(existing_props)} "
@@ -291,6 +316,11 @@ async def _detect_drift(session: AsyncSession) -> None:
         # Older Neo4j versions may not support SHOW CONSTRAINTS YIELD ...
         # Skip drift detection — CREATE ... IF NOT EXISTS is still idempotent.
         return
+
+
+async def _migrate_legacy_git_commit_constraint(session: AsyncSession) -> None:
+    await session.run("DROP CONSTRAINT git_commit_sha IF EXISTS")
+    await session.run(_PURGE_STALE_GIT_HISTORY_GROUPS)
 
 
 async def _create_schema(session: AsyncSession) -> None:
