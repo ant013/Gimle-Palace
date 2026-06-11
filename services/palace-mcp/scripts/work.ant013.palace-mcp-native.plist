@@ -26,11 +26,11 @@ Logs:
 
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/ant013/Android/Gimle-Palace/services/palace-mcp/scripts/launch_native_macos.sh</string>
+    <string>/Users/Shared/Ios/Gimle-Palace/services/palace-mcp/scripts/launch_native_macos.sh</string>
   </array>
 
   <key>WorkingDirectory</key>
-  <string>/Users/ant013/Android/Gimle-Palace/services/palace-mcp</string>
+  <string>/Users/Shared/Ios/Gimle-Palace/services/palace-mcp</string>
 
   <key>RunAtLoad</key>
   <true/>
@@ -56,6 +56,10 @@ Logs:
   <dict>
     <key>PATH</key>
     <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>PALACE_MEMORY_EMBEDDER</key>
+    <string>noop</string>
+    <key>TOKENIZERS_PARALLELISM</key>
+    <string>false</string>
   </dict>
 </dict>
 </plist>

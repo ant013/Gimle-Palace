@@ -22,7 +22,8 @@
 set -euo pipefail
 
 NATIVE_ROOT="${PALACE_NATIVE_ROOT:-/Users/ant013/Android/Gimle-Palace-native}"
-SERVICE_ROOT="${PALACE_SERVICE_ROOT:-/Users/ant013/Android/Gimle-Palace/services/palace-mcp}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SERVICE_ROOT="${PALACE_SERVICE_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 PORT="${PALACE_NATIVE_PORT:-8765}"
 HOST="${PALACE_NATIVE_HOST:-0.0.0.0}"
 LOG_DIR="${PALACE_NATIVE_LOG_DIR:-$HOME/Library/Logs/palace-mcp-native}"

@@ -193,7 +193,18 @@ LIMIT 100
             try:
                 prev_commit = repo.get(prev_head_sha)
                 curr_commit = repo.get(current_head)
-                diff = prev_commit.tree.diff_to_tree(curr_commit.tree)  # type: ignore[union-attr]
+                if prev_commit is None or curr_commit is None:
+                    logger.warning(
+                        "Ownership checkpoint %s is not present in %s; "
+                        "falling back to full HEAD scan for %s",
+                        prev_head_sha,
+                        repo_path,
+                        project_id,
+                    )
+                    dirty = await asyncio.to_thread(self._all_files_in_head, repo)
+                    diff = None
+                else:
+                    diff = prev_commit.tree.diff_to_tree(curr_commit.tree)
             except Exception as exc:
                 raise ExtractorError(
                     error_code=ExtractorErrorCode.OWNERSHIP_DIFF_FAILED,
@@ -201,15 +212,17 @@ LIMIT 100
                     recoverable=False,
                     action="retry",
                 ) from exc
-            dirty = set()
-            for delta in diff.deltas:
-                status = delta.status_char()
-                if status in ("A", "M", "R") and delta.new_file.path:
-                    dirty.add(delta.new_file.path)
-                if status == "R" and delta.old_file.path:
-                    deleted.add(delta.old_file.path)
-                if status == "D" and delta.old_file.path:
-                    deleted.add(delta.old_file.path)
+            if diff is not None:
+                dirty = set()
+                deltas = getattr(diff, "deltas", diff)
+                for delta in deltas:
+                    status = delta.status_char()
+                    if status in ("A", "M", "R") and delta.new_file.path:
+                        dirty.add(delta.new_file.path)
+                    if status == "R" and delta.old_file.path:
+                        deleted.add(delta.old_file.path)
+                    if status == "D" and delta.old_file.path:
+                        deleted.add(delta.old_file.path)
 
         dirty = CodeOwnershipExtractor._filter_dirty(dirty)
 

@@ -1,0 +1,64 @@
+{
+  "profile_name": "native-ios-seven",
+  "description": "MacBook native Gimle iOS seven-repo rebaseline profile",
+  "repo_root": "/Users/Shared/Ios/Gimle-Repos/HorizontalSystems",
+  "parent_mount": "hs",
+  "projects": [
+    {
+      "slug": "bitcoin-core",
+      "name": "BitcoinCore.Swift",
+      "relative_path": "BitcoinCore.Swift",
+      "language": "swift",
+      "framework": "swiftpm",
+      "language_profile": "swift_kit"
+    },
+    {
+      "slug": "bitcoin-kit",
+      "name": "BitcoinKit.Swift",
+      "relative_path": "BitcoinKit.Swift",
+      "language": "swift",
+      "framework": "swiftpm",
+      "language_profile": "swift_kit"
+    },
+    {
+      "slug": "dash-kit",
+      "name": "DashKit.Swift",
+      "relative_path": "DashKit.Swift",
+      "language": "swift",
+      "framework": "swiftpm",
+      "language_profile": "swift_kit"
+    },
+    {
+      "slug": "evm-kit",
+      "name": "EvmKit.Swift",
+      "relative_path": "EvmKit.Swift",
+      "language": "swift",
+      "framework": "swiftpm",
+      "language_profile": "swift_kit"
+    },
+    {
+      "slug": "component-kit",
+      "name": "component-kit-ios",
+      "relative_path": "component-kit-ios",
+      "language": "swift",
+      "framework": "swiftpm",
+      "language_profile": "swift_kit"
+    },
+    {
+      "slug": "hd-wallet-kit",
+      "name": "hd-wallet-kit-ios",
+      "relative_path": "hd-wallet-kit-ios",
+      "language": "swift",
+      "framework": "swiftpm",
+      "language_profile": "swift_kit"
+    },
+    {
+      "slug": "uw-ios-app",
+      "name": "unstoppable-wallet-ios",
+      "relative_path": "unstoppable-wallet-ios",
+      "language": "swift",
+      "framework": "xcode",
+      "language_profile": "swift_kit"
+    }
+  ]
+}

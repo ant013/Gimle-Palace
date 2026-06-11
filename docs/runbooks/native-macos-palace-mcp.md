@@ -121,12 +121,56 @@ palace.ingest.run_extractor(name="embedding_symbol", project="uw-ios-app")
 
 ---
 
+## Gimle iOS seven-repo native rebaseline
+
+Use this path for the MacBook Gimle iOS rebaseline. It is native-only and does
+not call Docker compose.
+
+Canonical inputs:
+
+- Native MCP: `http://127.0.0.1:8765/mcp`
+- Native Neo4j: `bolt://localhost:7687`
+- Native env: `/Users/ant013/Android/Gimle-Palace-native/.env`
+- Dedicated clone root: `/Users/Shared/Ios/Gimle-Repos/HorizontalSystems`
+- Manifest:
+  `services/palace-mcp/scripts/native-ios-rebaseline-manifest.json`
+
+Preflight only:
+
+```bash
+cd /Users/Shared/Ios/Gimle-Palace/services/palace-mcp
+uv run python scripts/native_ios_rebaseline.py \
+  --report /tmp/native-ios-rebaseline-dry-run.json
+```
+
+Apply cleanup and ingest sequentially:
+
+```bash
+cd /Users/Shared/Ios/Gimle-Palace/services/palace-mcp
+uv run python scripts/native_ios_rebaseline.py \
+  --apply \
+  --report /tmp/native-ios-rebaseline-apply.json
+```
+
+The helper hard-fails before ingest if a target path resolves under
+`/Users/Shared/Ios/HorizontalSystems` or `/Users/ant013/Ios/uw-fresh-*`.
+It cleans only the seven target project group ids, then runs each extractor
+sequentially. The final JSON report includes clone state, SCIP state,
+cleanup before/after counts, per-extractor MCP responses, direct Neo4j
+`IngestRun` evidence, label counts, and Tantivy phase counts where applicable.
+
+---
+
 ## Known gaps / follow-ups
 
-- **PALACE_EMBEDDING_MAX_SYMBOLS=50000 cap** — bucket policy may starve project
-  methods when dependencies dominate; tracked as GIM-1075
-- **embedding_symbol timeout 7200s** — 50k on MPS ≈ 64min; extractor is
-  incremental + idempotent so retry is cheap
+- **PALACE_EMBEDDING_MAX_SYMBOLS=300000 for the seven iOS rebaseline** - this
+  covers the largest current iOS project (`uw-ios-app`, 254,764 symbols). Keep
+  this value above the largest expected project until the bucket policy work
+  tracked as GIM-1075 lands.
+- **embedding_symbol timeout 7200s** - large projects can still need multiple
+  incremental passes. `uw-ios-app` reached full coverage through idempotent
+  retries: 100,000 symbols, one timed-out pass that still persisted progress,
+  then 59,148 symbols in the final successful pass.
 - **launchd plist not auto-installed** — operator must run `launchctl bootstrap`
   per setup step 5 above
 - **Tunnel/remote access** — native palace-mcp binds 0.0.0.0:8765; expose via
@@ -135,15 +179,22 @@ palace.ingest.run_extractor(name="embedding_symbol", project="uw-ios-app")
 
 ---
 
-## Measured baseline (M1 dev-Mac, 2026-05-30)
+## Measured baseline (native MacBook, 2026-06-11)
 
 | Project | Symbols | scope_project | Embedded | symbol_index_swift | embedding_symbol |
 | --- | --- | --- | --- | --- | --- |
-| hs-extensions | 219 | 219 | 219 | 2.6s | 26.3s |
-| uw-ios-app | 253,365 | 70,697 | 50,000 (cap) | 201.7s | ≈3850s |
+| bitcoin-core | 48,166 | 7,154 | 48,166 | 101.1s | 4,690.2s |
+| bitcoin-kit | 48,490 | 219 | 48,490 | 117.4s | 3,627.5s |
+| dash-kit | 49,788 | 1,596 | 49,788 | 110.5s | 3,611.4s |
+| evm-kit | 44,661 | 3,181 | 44,661 | 98.6s | 3,134.6s |
+| component-kit | 11,836 | 0 | 11,836 | 19.5s | 758.5s |
+| hd-wallet-kit | 226 | 0 | 226 | 2.3s | 17.7s |
+| uw-ios-app | 254,764 | 69,987 | 254,764 | 2,746.3s | 7,086.8s + 4,922.4s final successful pass |
 
-Compared with iMac Docker CPU baseline (uw-ios-app): symbol_index_swift ≈ 200s
-(parity), embedding_symbol ≈ 12 hours (37× slower).
+Compared with the old Docker CPU baseline, the native path is the required
+MacBook path for this rebaseline and uses dedicated clones under
+`/Users/Shared/Ios/Gimle-Repos/HorizontalSystems`.
 
 Semantic search smoke (post-ingest): `query=MoneroAdapter project=uw-ios-app` →
-`Unstoppable/Core/Adapters/MoneroAdapter.swift`, score 0.935, lexical 1.0.
+`packages/WalletCore/Sources/WalletCore/Modules/Wallet/WalletAdapterService.swift`,
+backend `qodo`, `embedded_symbol_count=254764`, `eligible_symbols=254764`.

@@ -456,3 +456,79 @@ async def test_run_incremental_filters_vendor_before_walk_blame(
     assert ".build/checkouts/dep.swift" not in captured_paths, (
         "vendor path must be filtered by _filter_dirty before walk_blame"
     )
+
+
+async def test_run_stale_checkpoint_falls_back_to_full_head_scan(
+    incremental_vendor_repo: tuple,
+) -> None:
+    """A checkpoint SHA may be from an older clone and absent after rebaseline.
+
+    In that case code_ownership should not crash on prev_commit.tree; it should
+    rescan the current HEAD and let the checkpoint advance to the current commit.
+    """
+    from palace_mcp.extractors.code_ownership.extractor import CodeOwnershipExtractor
+    from palace_mcp.extractors.code_ownership.models import OwnershipCheckpoint
+
+    repo, _sha1, repo_path = incremental_vendor_repo
+    current_head = str(repo.head.target)
+    missing_sha = "0" * 40
+    checkpoint = OwnershipCheckpoint(
+        project_id="proj",
+        last_head_sha=missing_sha,
+        last_completed_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        run_id="run-prev",
+        updated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+
+    fake_settings = MagicMock()
+    fake_settings.ownership_blame_weight = 0.7
+    fake_settings.mailmap_max_bytes = 1_048_576
+    fake_settings.ownership_max_files_per_run = 10_000
+    fake_settings.ownership_write_batch_size = 500
+    fake_settings.palace_recency_decay_days = 90
+
+    captured_paths: set[str] = set()
+
+    def _fake_walk_blame(repo_arg: object, *, paths: set[str], **_kw: object) -> tuple:
+        captured_paths.update(paths)
+        return {}, set()
+
+    update_checkpoint_mock = AsyncMock()
+    _MODULE = "palace_mcp.extractors.code_ownership.extractor"
+
+    with (
+        patch(f"{_MODULE}.ensure_ownership_schema", new=AsyncMock()),
+        patch(f"{_MODULE}.load_checkpoint", new=AsyncMock(return_value=checkpoint)),
+        patch(f"{_MODULE}.update_checkpoint", new=update_checkpoint_mock),
+        patch(f"{_MODULE}.aggregate_churn", new=AsyncMock(return_value={})),
+        patch(f"{_MODULE}.write_batch", new=AsyncMock()),
+        patch.object(
+            CodeOwnershipExtractor,
+            "_fetch_bot_identity_keys",
+            new=AsyncMock(return_value=set()),
+        ),
+        patch.object(
+            CodeOwnershipExtractor,
+            "_fetch_known_author_ids",
+            new=AsyncMock(return_value=set()),
+        ),
+        patch.object(
+            CodeOwnershipExtractor,
+            "_has_any_commits",
+            new=AsyncMock(return_value=True),
+        ),
+        patch(f"{_MODULE}.walk_blame", side_effect=_fake_walk_blame),
+    ):
+        summary = await CodeOwnershipExtractor()._run(
+            driver=MagicMock(),
+            project_id="proj",
+            repo_path=repo_path,
+            run_id="run-new",
+            settings=fake_settings,
+        )
+
+    assert summary.head_sha == current_head
+    assert summary.prev_head_sha == missing_sha
+    assert "Sources/main.swift" in captured_paths
+    assert ".build/checkouts/dep.swift" not in captured_paths
+    update_checkpoint_mock.assert_awaited_once()
