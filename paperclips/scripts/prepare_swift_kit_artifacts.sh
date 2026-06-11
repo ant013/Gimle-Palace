@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 DEFAULT_MANIFEST="$REPO_ROOT/services/palace-mcp/scripts/uw-ios-bundle-manifest.json"
-DEFAULT_REPO_BASE="${PALACE_SWIFT_KIT_HOST_REPO_BASE:-/Users/Shared/Ios/HorizontalSystems}"
+DEFAULT_REPO_BASE="${PALACE_SWIFT_KIT_HOST_REPO_BASE:-/Users/Shared/Ios/Gimle-Repos/HorizontalSystems}"
 
 # Hardcoded to match extractor.py:355 — do NOT change without updating the extractor
 PERIPHERY_REPORT_NAME="periphery-3.7.4-swiftpm.json"
@@ -26,7 +26,7 @@ Required (one of):
 
 Options:
   --repo-base <path>     Base dir for slug resolution
-                         (default: /Users/Shared/Ios/HorizontalSystems)
+                         (default: /Users/Shared/Ios/Gimle-Repos/HorizontalSystems)
   --manifest <path>      Manifest for slug -> relative_path lookup
   --dry-run              Print actions without mutating state
   --periphery-only       Refresh only Periphery report + contract.json
