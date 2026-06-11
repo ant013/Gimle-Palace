@@ -78,10 +78,13 @@ Source of truth = Paperclip API now, not CLI session ("galaxy brain — ignore")
 
 ### @-mentions: trailing space after name
 
-Paperclip's parser captures trailing punctuation into the name (e.g. `@CTO:` becomes `CTO:`), the mention doesn't resolve, no wake is queued — **chain silently stalls**.
+Paperclip's parser captures trailing punctuation into the name (e.g. `@Role:`
+becomes `Role:`), the mention doesn't resolve, no wake is queued — **chain
+silently stalls**.
 
-**Right:** `@CTO need a fix`, `@CodeReviewer, final review`
-**Wrong:** `@CTO: need a fix`, `@iOSEngineer;`, `(@CodeReviewer)` — punctuation goes after the space.
+**Right:** target-local role mention followed by a space.
+**Wrong:** `@Role: need a fix`, `@Role;`, `(@Role)` — punctuation goes after
+the space.
 
 ### Handoff: PATCH + comment with @mention + STOP
 
@@ -101,7 +104,7 @@ Got an @-mention with explicit handoff phrase (`"your turn"`, `"pick it up"`, `"
 
 **Do:**
 1. `GET /api/issues/{id}` → read `executionAgentNameKey`.
-2. Comment to holder: `"@CTO release execution lock on [GIM-5], I'm ready to close"`.
+2. Comment to the target-local lock holder: `"release execution lock on [GIM-5], I'm ready to close"`.
 3. Alternative — if holder unavailable, `PATCH ... assigneeAgentId=<original-assignee>` → originator closes.
 4. Don't retry close with the same JWT — without release, 409 keeps coming.
 
@@ -262,7 +265,8 @@ APPROVED. Reassigning to <next agent>.
 **Every wake ends in one of two states:**
 
 1. `status=done`, OR
-2. **Atomic handoff** to next agent (or your CTO if next is unknown).
+2. **Atomic handoff** to next target-local agent (or your target-local CTO if
+   next is unknown).
 
 No third option. `assignee=me, status=in_progress|todo` between phases = chain dies silently.
 
@@ -278,9 +282,13 @@ ONE POST + ONE PATCH + STOP, **in this exact order**:
 
 POST + PATCH is the only reliable wake mechanism. Mention in POST wakes by mention; PATCH wakes by reassign.
 
-### Fallback: unknown recipient → CTO
+### Fallback: unknown recipient -> target-local CTO
 
-Phase chain unclear? **Handoff to your CTO** (`reportsTo` in manifest). If you ARE CTO and don't know → escalate Board per `universal/escalation-board.md`. NEVER drop the issue.
+Phase chain unclear? **Handoff to your target-local CTO** (`reportsTo` in
+manifest). If you ARE CTO and don't know -> escalate Board per
+`universal/escalation-board.md`. NEVER drop the issue. Do not cross from a
+Codex/CX lane to bare Claude-side roles, or from a Claude lane to CX-prefixed
+roles.
 
 ### Comment format — STRICT
 
@@ -306,17 +314,23 @@ Evidence/context goes ABOVE:
 
 ### Formal vs plain @-mention
 
-Use **formal** `[@<Role>](agent://<uuid>?i=<icon>)` — machine-verifiable if assignee PATCH flakes. Resolve the concrete UUID from the local roster for your target/team.
+Use **formal** `[@<Role>](agent://<uuid>?i=<icon>)` — machine-verifiable if
+assignee PATCH flakes. Resolve the concrete UUID from the local roster for your
+target/team.
 
 Examples:
-- ✅ `[@CodeReviewer](agent://<uuid>?i=<icon>) your turn.`
-- ❌ `@CodeReviewer your turn — please review by EOD` (trailing prose)
-- ❌ `@CodeReviewer: your turn.` (`@Role:` breaks parser — see `universal/wake-and-handoff-basics.md`)
-- ❌ `Reassigning to @CodeReviewer for review.` (no `your turn.` + no formal mention)
+- OK: `[@<TargetLocalReviewer>](agent://<uuid>?i=<icon>) your turn.`
+- Wrong: plain `@<Role> your turn` with trailing prose.
+- Wrong: `@<Role>:` because `@Role:` breaks parser — see
+  `universal/wake-and-handoff-basics.md`.
+- Wrong: `Reassigning to @<Role> for review.` because it has no `your turn.`
+  and no formal mention.
 
 ### Cross-team handoff
 
-Same procedure across claude ↔ codex; shared company, UUIDs resolve.
+Do not cross teams during normal phase handoff. A Codex/CX issue stays on
+CX/Codex roles; a Claude issue stays on Claude roles. Cross-team escalation
+requires explicit operator instruction.
 
 ### Self-checkout on explicit handoff
 
@@ -374,13 +388,16 @@ Workflow steps (you do NOT script these — they run in CI):
 
 ## Phase orchestration (cto only)
 
-CTO sequences a slice through these phases. Every phase ends with explicit handoff (per `handoff/basics.md`).
+CTO sequences a slice through these phases. Every phase ends with explicit
+handoff (per `handoff/basics.md`). Role names below are target-local roster
+slots, not literal cross-team aliases: in a Codex/CX lane use the CX/Codex
+roster names, and in a Claude lane use the Claude roster names.
 
 ### Phase 1.1 — Formalize (CTO)
 
-CTO verifies Board's spec+plan paths exist; swaps `GIM-NN` placeholder for the real issue number; reassigns to CodeReviewer.
+CTO verifies Board's spec+plan paths exist; swaps `GIM-NN` placeholder for the real issue number; reassigns to the target-local code reviewer.
 
-Handoff: `@CodeReviewer plan-first review of [GIM-N]`.
+Handoff: target-local code reviewer plan-first review of `[GIM-N]`.
 
 ### Phase 1.2 — Plan-first review (CodeReviewer)
 
@@ -392,29 +409,29 @@ Handoff (CR → implementer): `@<Implementer> plan APPROVED, begin implementatio
 
 TDD through plan tasks on `feature/GIM-N-<slug>`. Push frequently. When done, PR to `develop`.
 
-Handoff (implementer → CR): `@CodeReviewer mechanical review, PR <link>`.
+Handoff (implementer → CR): target-local code reviewer mechanical review, PR `<link>`.
 
 ### Phase 3.1 — Mechanical review (CodeReviewer)
 
 CR pastes `uv run ruff check && uv run mypy src/ && uv run pytest` output (or project equivalent) AND `gh pr checks <PR>` output. APPROVE only with green CI proof. No "LGTM" rubber-stamps.
 
-Handoff (CR → architect reviewer): `@ArchitectReviewer adversarial review, PR <link>` (project may hire a specific architect-reviewer agent per its target).
+Handoff (CR → architect reviewer): target-local architect reviewer adversarial review, PR `<link>` (project may hire a specific architect-reviewer agent per its target).
 
 ### Phase 3.2 — Adversarial review (architect reviewer)
 
 Find architectural problems, attack surfaces, missed edge cases. Findings addressed before Phase 4.
 
-Handoff (architect-reviewer → QA): `@QAEngineer live smoke, PR <link>`.
+Handoff (architect-reviewer → QA): target-local QA engineer live smoke, PR `<link>`.
 
 ### Phase 4.1 — Live smoke (QAEngineer)
 
 On iMac (or production target). Real MCP tool call + CLI + direct invariant. Evidence comment authored by QAEngineer with concrete output (not paraphrased).
 
-Handoff (QA → CTO): `@CTO QA evidence posted, ready to merge`.
+Handoff (QA → CTO): target-local CTO QA evidence posted, ready to merge.
 
 ### Phase 4.2 — Merge (CTO)
 
-Post-merge handoff: `@CTO release-cut planned for <date>` (CTO of self) or no handoff (slice complete).
+Post-merge handoff: target-local CTO release-cut planned for `<date>` (CTO of self) or no handoff (slice complete).
 
 ### Forbidden between phases
 
