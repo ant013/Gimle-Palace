@@ -1,0 +1,155 @@
+{
+  "capabilities": {
+    "mcp": {
+      "additions": {
+        "byRole": {},
+        "project": []
+      },
+      "baseRequired": [
+        "codebase-memory",
+        "context7",
+        "serena",
+        "github",
+        "sequential-thinking"
+      ],
+      "codebaseMemoryProjects": {
+        "primary": "Users-ant013-Data-AI-wallet-radar"
+      },
+      "packageName": "wallet_radar",
+      "serviceName": "wallet-radar",
+      "toolNamespace": "wallet_radar"
+    },
+    "skills": {
+      "additions": {
+        "byRole": {},
+        "project": []
+      }
+    },
+    "subagents": {
+      "additions": {
+        "byRole": {},
+        "project": []
+      }
+    }
+  },
+  "compatibility": {
+    "claudeDeployMapping": "",
+    "codexAgentIdsEnv": "",
+    "legacyOutputPaths": "false",
+    "workspaceUpdateScript": ""
+  },
+  "parameters": {
+    "paths": {
+      "codexTeamRoot": "/Users/Shared/WalletRadar",
+      "operatorMemoryDir": "~/.claude/projects/-Users-Shared-WalletRadar/memory",
+      "overlayRoot": "paperclips/projects/wallet-radar/overlays",
+      "primaryMcpServiceDir": "/Users/Shared/WalletRadar",
+      "primaryRepoRoot": "/Users/Shared/WalletRadar",
+      "productionCheckout": "/Users/Shared/WalletRadar",
+      "projectRoot": "/Users/Shared/WalletRadar",
+      "projectRulesFile": "AGENTS.md"
+    },
+    "project": {
+      "companyId": "8f55e80b-0264-4ab6-9d56-8b2652f18005",
+      "displayName": "Wallet Radar",
+      "integrationBranch": "main",
+      "issuePrefix": "UNS",
+      "key": "wallet-radar",
+      "systemName": "Wallet Radar"
+    }
+  },
+  "project": "wallet-radar",
+  "schemaVersion": 1,
+  "sourceManifest": "paperclips/projects/wallet-radar/paperclip-agent-assembly.yaml",
+  "sourceManifestSha256": "8a3329cb95714227fe074a698e55dc6d546fbe1723113f49a209c558d597cc4f",
+  "targets": {
+    "codex": {
+      "adapterType": "codex_local",
+      "deployMode": "api",
+      "instructionEntryFile": "AGENTS.md",
+      "instructionsBundleMode": "managed",
+      "roles": [
+        {
+          "agentId": "cd4fc073-77c0-48e8-8389-c1131f63697d",
+          "agentName": "WalletRadarCEO",
+          "bytes": 25051,
+          "family": "cto",
+          "lines": 580,
+          "output": "paperclips/dist/wallet-radar/codex/WalletRadarCEO.md",
+          "platform": "",
+          "profiles": [
+            "cto"
+          ],
+          "roleId": "codex:cx-cto",
+          "sha256": "289ac273eac76a24da17b30c657b847d8405c05a0f6b7d814caf7a7bd98ce588",
+          "source": "paperclips/roles-codex/cx-cto.md",
+          "workspaceCwd": ""
+        },
+        {
+          "agentId": "fc759b42-300d-4e18-8c4f-3d5220099a24",
+          "agentName": "WalletRadarCTO",
+          "bytes": 25051,
+          "family": "cto",
+          "lines": 580,
+          "output": "paperclips/dist/wallet-radar/codex/WalletRadarCTO.md",
+          "platform": "",
+          "profiles": [
+            "cto"
+          ],
+          "roleId": "codex:cx-cto",
+          "sha256": "bbfd30eedd610bc938208d1dbc8971a86bb7943740d7727e6ce646387d0ef59c",
+          "source": "paperclips/roles-codex/cx-cto.md",
+          "workspaceCwd": ""
+        },
+        {
+          "agentId": "2ab82ef1-a0cd-423b-9870-cc3189caa819",
+          "agentName": "WalletRadarCodeReviewer",
+          "bytes": 20063,
+          "family": "reviewer",
+          "lines": 469,
+          "output": "paperclips/dist/wallet-radar/codex/WalletRadarCodeReviewer.md",
+          "platform": "",
+          "profiles": [
+            "reviewer"
+          ],
+          "roleId": "codex:cx-code-reviewer",
+          "sha256": "d2fb32551930a50cf9a8f4d7779bf3d88930c3717860561788cab6810e8947c4",
+          "source": "paperclips/roles-codex/cx-code-reviewer.md",
+          "workspaceCwd": ""
+        },
+        {
+          "agentId": "d0f99729-71c8-472a-8559-0cfc57df039e",
+          "agentName": "WalletRadarPythonEngineer",
+          "bytes": 19865,
+          "family": "implementer",
+          "lines": 466,
+          "output": "paperclips/dist/wallet-radar/codex/WalletRadarPythonEngineer.md",
+          "platform": "",
+          "profiles": [
+            "implementer"
+          ],
+          "roleId": "codex:cx-python-engineer",
+          "sha256": "6635b343ec87fe980f8c05eb3bc0a3d16012b657e9658e8cd43a637afc2677e2",
+          "source": "paperclips/roles-codex/cx-python-engineer.md",
+          "workspaceCwd": ""
+        },
+        {
+          "agentId": "c9e2e6fc-9a1f-4698-99f8-7c66908db78d",
+          "agentName": "WalletRadarQAEngineer",
+          "bytes": 22590,
+          "family": "qa",
+          "lines": 526,
+          "output": "paperclips/dist/wallet-radar/codex/WalletRadarQAEngineer.md",
+          "platform": "",
+          "profiles": [
+            "qa"
+          ],
+          "roleId": "codex:cx-qa-engineer",
+          "sha256": "230dcc3101e2d41495a4861e9ae8b10dde6f3464be017058b91fdd20e5da4527",
+          "source": "paperclips/roles-codex/cx-qa-engineer.md",
+          "workspaceCwd": ""
+        }
+      ]
+    }
+  }
+}
