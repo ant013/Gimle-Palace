@@ -28,8 +28,16 @@ def _make_summary(exit_reason: str) -> OwnershipRunSummary:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("exit_reason", ["no_change", "no_dirty"])
-async def test_run_marks_non_work_exit_reasons_as_skipped(exit_reason: str) -> None:
+@pytest.mark.parametrize(
+    ("exit_reason", "next_action_text"),
+    [
+        ("no_change", "fresh baseline"),
+        ("no_dirty", "ownership output"),
+    ],
+)
+async def test_run_marks_non_work_exit_reasons_as_skipped(
+    exit_reason: str, next_action_text: str
+) -> None:
     ctx = ExtractorRunContext(
         project_slug="testproj",
         group_id="project/testproj",
@@ -58,3 +66,4 @@ async def test_run_marks_non_work_exit_reasons_as_skipped(exit_reason: str) -> N
     assert stats.outcome == ExtractorOutcome.SKIPPED
     assert stats.edges_written == 0
     assert stats.message is not None
+    assert next_action_text in (stats.next_action or "")

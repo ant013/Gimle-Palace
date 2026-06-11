@@ -409,6 +409,7 @@ async def test_cross_module_contract_writes_baseline_when_no_consumers_match(
     assert result["success"] is True
     assert result["outcome"] == "skipped"
     assert "No cross-module consumers" in (result.get("message") or "")
+    assert "occurrence index" in (result.get("next_action") or "")
     assert result["nodes_written"] == 1
     assert result["edges_written"] == 1
 
