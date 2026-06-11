@@ -207,6 +207,16 @@ def test_resolved_assembly_invalid_agent_id_fails(tmp_path: Path) -> None:
     assert any("resolved assembly manifest agentId invalid" in error for error in errors)
 
 
+def test_codex_active_bare_role_alias_fails(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    bundle = repo / "paperclips" / "dist" / "codex" / "codex-architect-reviewer.md"
+    bundle.write_text(bundle.read_text() + "\n## Live handoff\nHandoff: @QAEngineer live smoke.\n")
+
+    errors = validate_instructions.validate(repo)
+
+    assert any("codex bundle contains active cross-team role alias" in error for error in errors)
+
+
 @pytest.mark.skip(reason="Post-Phase-G: gimle v2 resolved-assembly may have empty agentId in CI (pre-deploy state); validator now relaxes this check for v2.")
 def test_resolved_assembly_missing_agent_id_fails(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
