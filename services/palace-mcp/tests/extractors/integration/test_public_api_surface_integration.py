@@ -168,3 +168,59 @@ async def test_public_api_surface_run_writes_surfaces_symbols_and_backing_edges(
     assert skie_absence_row is not None
     assert skie_absence_row["bridge_exports"] == 0
     assert skie_absence_row["bridge_sources"] == []
+
+
+@pytest.mark.asyncio
+async def test_public_api_surface_run_marks_xcode_app_repo_not_applicable(
+    driver: AsyncDriver,
+    graphiti_mock: MagicMock,
+    tmp_path: Path,
+) -> None:
+    await ensure_extractors_schema(driver)
+
+    async with driver.session() as session:
+        await session.run(
+            """
+            MERGE (p:Project {slug: $slug})
+            SET p.group_id = 'project/' + $slug,
+                p.name = $name,
+                p.tags = []
+            """,
+            slug="uw-ios-app",
+            name="UnstoppableWallet",
+        )
+
+    repo_root = tmp_path / "repos"
+    repo = repo_root / "uw-ios-app" / "UnstoppableWallet"
+    (repo / "UnstoppableWallet.xcodeproj").mkdir(parents=True)
+
+    with (
+        patch("palace_mcp.extractors.runner.REPOS_ROOT", repo_root),
+        patch("palace_mcp.mcp_server.get_driver", return_value=driver),
+    ):
+        result = await run_extractor(
+            name="public_api_surface",
+            project="uw-ios-app",
+            driver=driver,
+            graphiti=graphiti_mock,
+        )
+
+    assert result["ok"] is True
+    assert result["success"] is True
+    assert result["outcome"] == "not_applicable"
+    assert result["next_action"] is None
+
+    async with driver.session() as session:
+        run_result = await session.run(
+            """
+            MATCH (run:IngestRun {id: $run_id})
+            RETURN run.outcome AS outcome, run.message AS message, run.next_action AS next_action
+            """,
+            run_id=result["run_id"],
+        )
+        run_row = await run_result.single()
+
+    assert run_row is not None
+    assert run_row["outcome"] == "not_applicable"
+    assert "Xcode app project" in run_row["message"]
+    assert run_row["next_action"] is None
