@@ -126,16 +126,14 @@ def test_uaudit_codex_subagent_rosters_stay_consistent():
     toml_names = {
         path.stem for path in (REPO / "paperclips/projects/uaudit/codex-agents").glob("uaudit-*.toml")
     }
-    routine_names = {
-        name for routine in config["routines"] for name in routine["required_subagents"]
-    }
     manifest_names = set(manifest["subagents"]["additions"]["project"])
     sync_text = (REPO / "paperclips/sync-codex-runtime-home.sh").read_text()
     match = re.search(r'^UAUDIT_REQUIRED_CODEX_AGENTS="([^"]+)"$', sync_text, re.M)
     assert match, "sync-codex-runtime-home.sh must declare UAudit required agents"
     sync_names = set(match.group(1).split())
 
-    assert routine_names == toml_names == manifest_names == sync_names
+    assert all("required_subagents" not in routine for routine in config["routines"])
+    assert toml_names == manifest_names == sync_names
 
 
 def test_uaudit_codex_agent_installer_targets_runtime_visible_home(tmp_path):

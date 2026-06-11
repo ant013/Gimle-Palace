@@ -78,10 +78,13 @@ Source of truth = Paperclip API now, not CLI session ("galaxy brain — ignore")
 
 ### @-mentions: trailing space after name
 
-Paperclip's parser captures trailing punctuation into the name (e.g. `@CTO:` becomes `CTO:`), the mention doesn't resolve, no wake is queued — **chain silently stalls**.
+Paperclip's parser captures trailing punctuation into the name (e.g. `@Role:`
+becomes `Role:`), the mention doesn't resolve, no wake is queued — **chain
+silently stalls**.
 
-**Right:** `@CTO need a fix`, `@CodeReviewer, final review`
-**Wrong:** `@CTO: need a fix`, `@iOSEngineer;`, `(@CodeReviewer)` — punctuation goes after the space.
+**Right:** target-local role mention followed by a space.
+**Wrong:** `@Role: need a fix`, `@Role;`, `(@Role)` — punctuation goes after
+the space.
 
 ### Handoff: PATCH + comment with @mention + STOP
 
@@ -101,7 +104,7 @@ Got an @-mention with explicit handoff phrase (`"your turn"`, `"pick it up"`, `"
 
 **Do:**
 1. `GET /api/issues/{id}` → read `executionAgentNameKey`.
-2. Comment to holder: `"@CTO release execution lock on [UNS-5], I'm ready to close"`.
+2. Comment to the target-local lock holder: `"release execution lock on [UNS-5], I'm ready to close"`.
 3. Alternative — if holder unavailable, `PATCH ... assigneeAgentId=<original-assignee>` → originator closes.
 4. Don't retry close with the same JWT — without release, 409 keeps coming.
 
@@ -265,7 +268,8 @@ Renaming a field that's referenced in saved Neo4j data without migration loses t
 **Every wake ends in one of two states:**
 
 1. `status=done`, OR
-2. **Atomic handoff** to next agent (or your CTO if next is unknown).
+2. **Atomic handoff** to next target-local agent (or your target-local CTO if
+   next is unknown).
 
 No third option. `assignee=me, status=in_progress|todo` between phases = chain dies silently.
 
@@ -281,9 +285,13 @@ ONE POST + ONE PATCH + STOP, **in this exact order**:
 
 POST + PATCH is the only reliable wake mechanism. Mention in POST wakes by mention; PATCH wakes by reassign.
 
-### Fallback: unknown recipient → CTO
+### Fallback: unknown recipient -> target-local CTO
 
-Phase chain unclear? **Handoff to your CTO** (`reportsTo` in manifest). If you ARE CTO and don't know → escalate Board per `universal/escalation-board.md`. NEVER drop the issue.
+Phase chain unclear? **Handoff to your target-local CTO** (`reportsTo` in
+manifest). If you ARE CTO and don't know -> escalate Board per
+`universal/escalation-board.md`. NEVER drop the issue. Do not cross from a
+Codex/CX lane to bare Claude-side roles, or from a Claude lane to CX-prefixed
+roles.
 
 ### Comment format — STRICT
 
@@ -309,17 +317,23 @@ Evidence/context goes ABOVE:
 
 ### Formal vs plain @-mention
 
-Use **formal** `[@<Role>](agent://<uuid>?i=<icon>)` — machine-verifiable if assignee PATCH flakes. Resolve the concrete UUID from the local roster for your target/team.
+Use **formal** `[@<Role>](agent://<uuid>?i=<icon>)` — machine-verifiable if
+assignee PATCH flakes. Resolve the concrete UUID from the local roster for your
+target/team.
 
 Examples:
-- ✅ `[@CodeReviewer](agent://<uuid>?i=<icon>) your turn.`
-- ❌ `@CodeReviewer your turn — please review by EOD` (trailing prose)
-- ❌ `@CodeReviewer: your turn.` (`@Role:` breaks parser — see `universal/wake-and-handoff-basics.md`)
-- ❌ `Reassigning to @CodeReviewer for review.` (no `your turn.` + no formal mention)
+- OK: `[@<TargetLocalReviewer>](agent://<uuid>?i=<icon>) your turn.`
+- Wrong: plain `@<Role> your turn` with trailing prose.
+- Wrong: `@<Role>:` because `@Role:` breaks parser — see
+  `universal/wake-and-handoff-basics.md`.
+- Wrong: `Reassigning to @<Role> for review.` because it has no `your turn.`
+  and no formal mention.
 
 ### Cross-team handoff
 
-Same procedure across claude ↔ codex; shared company, UUIDs resolve.
+Do not cross teams during normal phase handoff. A Codex/CX issue stays on
+CX/Codex roles; a Claude issue stays on Claude roles. Cross-team escalation
+requires explicit operator instruction.
 
 ### Self-checkout on explicit handoff
 
@@ -416,9 +430,19 @@ still returns `Board access required`, save/comment the artifact path, mark
 delivery permission-blocked, and stop retrying. Lifecycle events are auto-routed
 via `opsRoutes`; do not emit them manually.
 
-## Daily Version-Branch Delta Audit Executor (Android)
+## Daily Version-Branch Staged Audit (Android)
 
-Run this path only after `UWACTO` PATCHes this issue to you with a daily audit handoff. You execute the decision that `UWACTO` already made. Do not decide no-op, rollback, history rewrite, missing-cursor, or oversized-delta cases yourself.
+Run this path only after a UAudit daily handoff. You execute the staged
+Paperclip-agent chain; never fan out to local `uaudit-*` Codex subagents for
+daily real-delta audits.
+
+Before repo work, delivery, or cursor writes, handle blocked resumes. If the
+issue was blocked or `$RUN/status/blocked` exists, read the latest comments and
+continue only when the newest Board/operator input explicitly says `unblocked`,
+`resume approved`, `proceed`, or `partial audit approved`. `@Board blocked`,
+watchdog escalation, or a repeated blocker summary is not unblock input. If no
+explicit unblock exists, comment that the existing blocker still stands, PATCH
+the issue back to `blocked`, leave the cursor unchanged, and stop.
 
 ### Constants
 
@@ -431,65 +455,13 @@ CURSOR=/opt/uaa-example/uaudit/state/android-version-audit.json
 CODEBASE_MEMORY_PROJECT=Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
 ```
 
-Required subagents for `mode=audit_delta`, all mandatory:
-
-- `uaudit-kotlin-audit-specialist`
-- `uaudit-bug-hunter`
-- `uaudit-security-auditor`
-- `uaudit-blockchain-auditor`
-
-Use `spawn_agent.agent_type` when available. If unavailable, paste the matching `uaudit-*.toml`, record `spawnMode=profile-prompt` plus `profileSha256`, and require both in JSON.
-Generic/default output without matching `"agent"` and `profileSha256` blocks the run.
-
 ### Accepted Handoff Modes
 
 `mode=initialize_cursor`: write the exact upstream head SHA supplied by `UWACTO` to `$CURSOR`, comment the initialized SHA and routine id, mark done, and stop. Do not create `$RUN`, do not audit, and do not send Telegram.
 
-`mode=audit_delta`: create `$RUN/{status,subagents}` and audit only the supplied FROM..TO range. Verify the handoff includes FROM, TO, routine id, required subagent roster, and limits. If any handoff value is missing or the roster differs from `paperclips/projects/uaudit/daily-version-branch-routines.yaml`, write `$RUN/status/blocked`, comment the mismatch, and leave the cursor unchanged.
+`mode=daily_infra_audit`: read `$RUN/{profile.json,commits.tsv,files.tsv,diff.patch,code.md,security.md,crypto.md}` for the supplied FROM..TO range. Write `$RUN/infra.md` with build, CI, dependency, delivery, repository, configuration, variant, and operational findings plus limitations. Then write `$RUN/infra.done`. If Critical/Block findings or unresolved external questions require research, PATCH assignee to `00000000-0000-0000-0000-00000000001e` with `mode=daily_research`; otherwise PATCH assignee to `00000000-0000-0000-0000-00000000001a` with `mode=daily_qa_verify`. Stop after handoff.
 
-### Delta Materialization
-
-Fetch remote branch data and verify the supplied TO matches authoritative upstream:
-
-```bash
-git -C "$REPO" fetch https://github.com/horizontalsystems/unstoppable-wallet-android.git "$BRANCH"
-UPSTREAM_TO=$(git -C "$REPO" rev-parse FETCH_HEAD)
-test "$UPSTREAM_TO" = "<handoff TO>"
-```
-
-Write artifacts for the supplied range only:
-
-```bash
-git -C "$REPO" log --format='%H%x09%an%x09%aI%x09%s' "<FROM>..<TO>" > "$RUN/commits.tsv.tmp"
-git -C "$REPO" diff --name-status "<FROM>..<TO>" > "$RUN/files.tsv.tmp"
-git -C "$REPO" diff "<FROM>..<TO>" > "$RUN/diff.patch.tmp"
-```
-
-Atomically move final artifacts to `$RUN/commits.json`, `$RUN/files.json`, and `$RUN/diff.patch`. Block instead of auditing if the realized delta exceeds the handed-off limits: more than 30 commits, more than 300 files, or more than 3000 changed diff lines.
-
-### Checkout And Memory Refresh
-
-Checkout the audited code before subagent fanout:
-
-```bash
-git -C "$REPO" checkout --detach "<TO>"
-```
-
-Refresh/enrich codebase-memory for `$REPO` after checkout and before spawning subagents. Use the `codebase-memory` MCP indexer for `$CODEBASE_MEMORY_PROJECT` when available; if unavailable, write `$RUN/status/blocked` and stop. Do not audit stale branch context.
-
-### Subagent Fanout
-
-Start the four required subagents in parallel immediately after memory refresh. Give each subagent only `$RUN/diff.patch`, `$RUN/commits.json`, `$RUN/files.json`, `$REPO`, and `$CODEBASE_MEMORY_PROJECT`.
-
-Subagents are read-only reviewers. They must not write files, post comments, deploy, send Telegram, or read secrets. Require JSON with agent name, reviewed scope, findings, no-finding areas, limitations, and fallback `profileSha256` when used. Wrong agent name, malformed JSON, timeout after one retry, or unverifiable fallback blocks the run and leaves the cursor unchanged.
-
-Write validated JSON outputs under `$RUN/subagents/` using exact agent filenames.
-
-### Aggregate, Deliver, And Commit Cursor
-
-Write `$RUN/audit.md` in English with issue id, branch, FROM, TO, counts, roster, verdict, findings grouped by severity, disagreements, no-finding areas, limitations, and methodology.
-
-Send `$RUN/audit.md` through Telegram as `markdownFileName="uaudit-android-version-0.49-delta-UNS-$N.md"`. Verify `ok:true`, `routeSource:file_route`, `routeName:UAudit`, and `mode:document`.
+`mode=daily_delivery`: read `$RUN/audit-final.md`, compute its SHA-256, and send it through Telegram as `markdownFileName="uaudit-android-version-0.49-delta-UNS-$N.md"`. Verify `ok:true`, `routeSource:file_route`, `routeName:UAudit`, and `mode:document`.
 
 Never advance the cursor before successful Telegram delivery. Only after successful delivery, atomically update `$CURSOR` with `<TO>`, `UNS-$N`, and current UTC ISO-8601 timestamp. Then comment the report path, delivered filename, message id, FROM..TO, and mark done.
 
