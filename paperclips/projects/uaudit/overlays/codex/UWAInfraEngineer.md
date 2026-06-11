@@ -20,9 +20,19 @@ still returns `Board access required`, save/comment the artifact path, mark
 delivery permission-blocked, and stop retrying. Lifecycle events are auto-routed
 via `opsRoutes`; do not emit them manually.
 
-## Daily Version-Branch Delta Audit Executor (Android)
+## Daily Version-Branch Staged Audit (Android)
 
-Run this path only after `UWACTO` PATCHes this issue to you with a daily audit handoff. You execute the decision that `UWACTO` already made. Do not decide no-op, rollback, history rewrite, missing-cursor, or oversized-delta cases yourself.
+Run this path only after a UAudit daily handoff. You execute the staged
+Paperclip-agent chain; never fan out to local `uaudit-*` Codex subagents for
+daily real-delta audits.
+
+Before repo work, delivery, or cursor writes, handle blocked resumes. If the
+issue was blocked or `$RUN/status/blocked` exists, read the latest comments and
+continue only when the newest Board/operator input explicitly says `unblocked`,
+`resume approved`, `proceed`, or `partial audit approved`. `@Board blocked`,
+watchdog escalation, or a repeated blocker summary is not unblock input. If no
+explicit unblock exists, comment that the existing blocker still stands, PATCH
+the issue back to `blocked`, leave the cursor unchanged, and stop.
 
 ### Constants
 
@@ -35,65 +45,13 @@ CURSOR={{paths.project_root}}/state/android-version-audit.json
 CODEBASE_MEMORY_PROJECT=Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
 ```
 
-Required subagents for `mode=audit_delta`, all mandatory:
-
-- `uaudit-kotlin-audit-specialist`
-- `uaudit-bug-hunter`
-- `uaudit-security-auditor`
-- `uaudit-blockchain-auditor`
-
-Use `spawn_agent.agent_type` when available. If unavailable, paste the matching `uaudit-*.toml`, record `spawnMode=profile-prompt` plus `profileSha256`, and require both in JSON.
-Generic/default output without matching `"agent"` and `profileSha256` blocks the run.
-
 ### Accepted Handoff Modes
 
 `mode=initialize_cursor`: write the exact upstream head SHA supplied by `UWACTO` to `$CURSOR`, comment the initialized SHA and routine id, mark done, and stop. Do not create `$RUN`, do not audit, and do not send Telegram.
 
-`mode=audit_delta`: create `$RUN/{status,subagents}` and audit only the supplied FROM..TO range. Verify the handoff includes FROM, TO, routine id, required subagent roster, and limits. If any handoff value is missing or the roster differs from `paperclips/projects/uaudit/daily-version-branch-routines.yaml`, write `$RUN/status/blocked`, comment the mismatch, and leave the cursor unchanged.
+`mode=daily_infra_audit`: read `$RUN/{profile.json,commits.tsv,files.tsv,diff.patch,code.md,security.md,crypto.md}` for the supplied FROM..TO range. Write `$RUN/infra.md` with build, CI, dependency, delivery, repository, configuration, variant, and operational findings plus limitations. Then write `$RUN/infra.done`. If Critical/Block findings or unresolved external questions require research, PATCH assignee to `{{bindings.agents.UWAResearchAgent}}` with `mode=daily_research`; otherwise PATCH assignee to `{{bindings.agents.UWAQAEngineer}}` with `mode=daily_qa_verify`. Stop after handoff.
 
-### Delta Materialization
-
-Fetch remote branch data and verify the supplied TO matches authoritative upstream:
-
-```bash
-git -C "$REPO" fetch https://github.com/horizontalsystems/unstoppable-wallet-android.git "$BRANCH"
-UPSTREAM_TO=$(git -C "$REPO" rev-parse FETCH_HEAD)
-test "$UPSTREAM_TO" = "<handoff TO>"
-```
-
-Write artifacts for the supplied range only:
-
-```bash
-git -C "$REPO" log --format='%H%x09%an%x09%aI%x09%s' "<FROM>..<TO>" > "$RUN/commits.tsv.tmp"
-git -C "$REPO" diff --name-status "<FROM>..<TO>" > "$RUN/files.tsv.tmp"
-git -C "$REPO" diff "<FROM>..<TO>" > "$RUN/diff.patch.tmp"
-```
-
-Atomically move final artifacts to `$RUN/commits.json`, `$RUN/files.json`, and `$RUN/diff.patch`. Block instead of auditing if the realized delta exceeds the handed-off limits: more than 30 commits, more than 300 files, or more than 3000 changed diff lines.
-
-### Checkout And Memory Refresh
-
-Checkout the audited code before subagent fanout:
-
-```bash
-git -C "$REPO" checkout --detach "<TO>"
-```
-
-Refresh/enrich codebase-memory for `$REPO` after checkout and before spawning subagents. Use the `codebase-memory` MCP indexer for `$CODEBASE_MEMORY_PROJECT` when available; if unavailable, write `$RUN/status/blocked` and stop. Do not audit stale branch context.
-
-### Subagent Fanout
-
-Start the four required subagents in parallel immediately after memory refresh. Give each subagent only `$RUN/diff.patch`, `$RUN/commits.json`, `$RUN/files.json`, `$REPO`, and `$CODEBASE_MEMORY_PROJECT`.
-
-Subagents are read-only reviewers. They must not write files, post comments, deploy, send Telegram, or read secrets. Require JSON with agent name, reviewed scope, findings, no-finding areas, limitations, and fallback `profileSha256` when used. Wrong agent name, malformed JSON, timeout after one retry, or unverifiable fallback blocks the run and leaves the cursor unchanged.
-
-Write validated JSON outputs under `$RUN/subagents/` using exact agent filenames.
-
-### Aggregate, Deliver, And Commit Cursor
-
-Write `$RUN/audit.md` in English with issue id, branch, FROM, TO, counts, roster, verdict, findings grouped by severity, disagreements, no-finding areas, limitations, and methodology.
-
-Send `$RUN/audit.md` through Telegram as `markdownFileName="uaudit-android-version-0.49-delta-UNS-$N.md"`. Verify `ok:true`, `routeSource:file_route`, `routeName:UAudit`, and `mode:document`.
+`mode=daily_delivery`: read `$RUN/audit-final.md`, compute its SHA-256, and send it through Telegram as `markdownFileName="uaudit-android-version-0.49-delta-UNS-$N.md"`. Verify `ok:true`, `routeSource:file_route`, `routeName:UAudit`, and `mode:document`.
 
 Never advance the cursor before successful Telegram delivery. Only after successful delivery, atomically update `$CURSOR` with `<TO>`, `UNS-$N`, and current UTC ISO-8601 timestamp. Then comment the report path, delivered filename, message id, FROM..TO, and mark done.
 

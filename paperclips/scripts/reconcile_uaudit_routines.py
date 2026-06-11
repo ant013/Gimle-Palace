@@ -25,6 +25,17 @@ DEFAULT_AUTH_PATHS = (
     Path.home() / ".paperclip/auth.json",
     Path("/Users/anton/.paperclip/auth.json"),
 )
+DAILY_CHAIN_KEYS = {
+    "intake",
+    "code_auditor",
+    "security_auditor",
+    "crypto_auditor",
+    "infra_auditor",
+    "research_agent",
+    "qa_agent",
+    "aggregator",
+    "delivery_agent",
+}
 
 
 def load_config(path: Path = DEFAULT_CONFIG) -> dict[str, Any]:
@@ -40,6 +51,20 @@ def load_config(path: Path = DEFAULT_CONFIG) -> dict[str, Any]:
     for key in ("max_commits", "max_files", "max_diff_lines"):
         if not isinstance(limits.get(key), int) or limits[key] <= 0:
             raise ValueError(f"{path}: limits.{key} must be positive integer")
+    for routine in routines:
+        if not isinstance(routine, dict):
+            raise ValueError(f"{path}: each routine must be a mapping")
+        if "required_subagents" in routine:
+            raise ValueError(f"{path}: daily routines must use daily_chain, not required_subagents")
+        chain = routine.get("daily_chain")
+        if not isinstance(chain, dict):
+            raise ValueError(f"{path}: routine {routine.get('id')!r} missing daily_chain mapping")
+        missing_chain = sorted(DAILY_CHAIN_KEYS - set(chain))
+        if missing_chain:
+            raise ValueError(f"{path}: routine {routine.get('id')!r} missing daily_chain keys: {', '.join(missing_chain)}")
+        non_string_chain = sorted(key for key in DAILY_CHAIN_KEYS if not isinstance(chain.get(key), str))
+        if non_string_chain:
+            raise ValueError(f"{path}: routine {routine.get('id')!r} daily_chain keys must be agent names: {', '.join(non_string_chain)}")
     return data
 
 
@@ -62,6 +87,11 @@ def required_agent_names(config: dict[str, Any]) -> set[str]:
             value = routine.get(key)
             if isinstance(value, str):
                 names.add(value)
+        chain = routine.get("daily_chain")
+        if isinstance(chain, dict):
+            for value in chain.values():
+                if isinstance(value, str):
+                    names.add(value)
     return names
 
 

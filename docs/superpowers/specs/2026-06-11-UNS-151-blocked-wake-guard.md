@@ -28,11 +28,13 @@ The working Android model uses real Paperclip agents:
 
 1. `UWACTO` performs Stage 1 intake/profiling.
 2. `UWAKotlinAuditor` writes `code.md`.
-3. `UWAInfraEngineer` writes `infra.md`.
-4. `UWAResearchAgent` writes `research-context.md` when needed.
-5. `UWAQAEngineer` writes `qa-verify.md` when needed.
-6. `UWACTO` aggregates `audit-final.md`.
-7. `UWAInfraEngineer` performs Telegram delivery and cursor advance.
+3. `UWASecurityAuditor` writes `security.md`.
+4. `UWACryptoAuditor` writes `crypto.md`.
+5. `UWAInfraEngineer` writes `infra.md`.
+6. `UWAResearchAgent` writes `research-context.md` when needed.
+7. `UWAQAEngineer` writes `qa-verify.md`.
+8. `UWACTO` aggregates `audit-final.md`.
+9. `UWAInfraEngineer` performs Telegram delivery and cursor advance.
 
 `UNS-151` instead sent all review work to `UWIInfraEngineer`, which attempted
 the local subagent fanout and blocked on missing/timed-out `uaudit-*` outputs.
@@ -81,8 +83,9 @@ Implement staged Paperclip-agent routing for daily delta audits and keep the
 blocked-resume guard:
 
 1. `UWICTO` must route iOS real-delta work through staged Paperclip agents:
-   `UWISwiftAuditor` -> `UWIInfraEngineer` -> optional `UWIResearchAgent` ->
-   optional `UWIQAEngineer` -> `UWICTO` aggregate -> `UWIInfraEngineer` deliver.
+   `UWISwiftAuditor` -> `UWISecurityAuditor` -> `UWICryptoAuditor` ->
+   `UWIInfraEngineer` -> optional `UWIResearchAgent` -> `UWIQAEngineer` ->
+   `UWICTO` aggregate -> `UWIInfraEngineer` deliver.
 2. `UWACTO`/Android docs should keep matching staged-chain semantics.
 3. `UWIInfraEngineer` and `UWAInfraEngineer` must not coordinate full
    `uaudit-*` local subagent fanout for real-delta daily audits.
@@ -126,12 +129,15 @@ Stage outputs:
   `profile.json`.
 - Stage 2 code audit: platform code auditor writes `$RUN/code.md` and
   `$RUN/code.done`.
+- Stage 2 security audit: platform security auditor writes `$RUN/security.md`
+  and `$RUN/security.done`.
+- Stage 2 crypto audit: platform crypto auditor writes `$RUN/crypto.md` and
+  `$RUN/crypto.done`.
 - Stage 2 infra audit: infra engineer writes `$RUN/infra.md` and
   `$RUN/infra.done`.
 - Stage 3 research context: research agent writes `$RUN/research-context.md` and
   `$RUN/research.done` when Critical/Block findings or profile require it.
-- Stage 4 QA: QA agent writes `$RUN/qa-verify.md` and `$RUN/qa.done` when
-  Critical/Block findings or profile require it.
+- Stage 4 QA: QA agent writes `$RUN/qa-verify.md` and `$RUN/qa.done`.
 - Stage 5 aggregate: CTO writes `$RUN/audit-final.md`.
 - Stage 6 delivery: infra engineer sends Telegram and advances cursor only after
   success.
@@ -140,6 +146,8 @@ For iOS the concrete chain is:
 
 - `UWICTO`
 - `UWISwiftAuditor`
+- `UWISecurityAuditor`
+- `UWICryptoAuditor`
 - `UWIInfraEngineer`
 - `UWIResearchAgent`
 - `UWIQAEngineer`

@@ -450,3 +450,17 @@ artifact root, comment the absolute path, and hand off delivery to
 only for explicitly iOS-only issues). Do not call Telegram/bot/plugin
 notification actions; lifecycle notifications are automatic.
 
+
+## Daily Version-Branch QA Verification Stage (iOS)
+
+When assigned a UAudit daily version-branch issue with `mode=daily_qa_verify`,
+read `$RUN/profile.json`, prior stage reports, and available project tests.
+Verify reproducibility or test coverage for high-risk findings when feasible;
+record commands that cannot be run and why.
+
+Write `$RUN/qa-verify.md` with verification results, residual risks, and exact
+commands/evidence. Then write `$RUN/qa.done`, comment
+`qa-verify.md ready for UNS-<N> iOS daily audit`, PATCH assignee to
+`00000000-0000-0000-0000-000000000011` with `mode=daily_aggregate`, and stop. Do not send
+Telegram or update cursors.
+
