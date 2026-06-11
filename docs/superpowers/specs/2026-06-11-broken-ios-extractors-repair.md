@@ -193,7 +193,10 @@ verify-only.
    `reactive_dependency_tracer` and `hot_path_profiler`.
 4. `git_history` project-scoped commit key, composite constraint migration, and
    old-group purge plan.
-5. `code_ownership` baseline guard and rebaseline checkpoint purge/invalidate.
+5. `code_ownership` baseline guard and rebaseline checkpoint purge/invalidate,
+   with focused tests for stale checkpoint purge/invalidation and the
+   no-baseline guard. The live seven-repo `OwnershipFileState` proof remains
+   part of step 10.
 6. `public_api_surface` `.swiftinterface` artifact generation on the dev Mac
    for interface-capable SwiftPM kits; app `NOT_APPLICABLE` handling.
 7. `arch_layer` iOS module graph from SCIP and/or Xcode targets.

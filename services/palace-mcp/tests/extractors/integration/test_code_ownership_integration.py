@@ -279,6 +279,48 @@ async def test_scenario_2_no_op_re_run(driver: AsyncDriver) -> None:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_scenario_2_same_head_without_file_state_rebuilds_baseline(
+    driver: AsyncDriver,
+) -> None:
+    repo_path = _rebuild_fixture()
+    await ensure_ownership_schema(driver)
+    await _seed_git_history(driver, repo_path)
+
+    with patch("palace_mcp.mcp_server.get_settings", return_value=_make_settings()):
+        ext = CodeOwnershipExtractor()
+        first = await ext.run(graphiti=_graphiti(driver), ctx=_ctx(repo_path))
+
+    assert first.edges_written > 0
+
+    async with driver.session() as session:
+        await session.run(
+            "MATCH (s:OwnershipFileState {project_id: $proj}) DELETE s",
+            proj=PROJECT_ID,
+        )
+
+    with patch("palace_mcp.mcp_server.get_settings", return_value=_make_settings()):
+        rebuilt = await CodeOwnershipExtractor().run(
+            graphiti=_graphiti(driver), ctx=_ctx(repo_path)
+        )
+
+    assert rebuilt.edges_written > 0
+
+    async with driver.session() as session:
+        result = await session.run(
+            """
+            MATCH (s:OwnershipFileState {project_id: $proj})
+            RETURN count(s) AS count
+            """,
+            proj=PROJECT_ID,
+        )
+        row = await result.single()
+
+    assert row is not None
+    assert row["count"] > 0
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_scenario_3_incremental_edit(driver: AsyncDriver, tmp_path: Path) -> None:
     """Append a commit → only that file reprocessed, checkpoint advances."""
     repo_path = Path(tmp_path / "repo")
