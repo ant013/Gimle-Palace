@@ -97,6 +97,10 @@ async def test_run_extraction_reports_missing_input_when_no_modules_found() -> N
             return_value=SimpleNamespace(modules=[], edges=[], warnings=[]),
         ),
         patch(
+            "palace_mcp.extractors.arch_layer.extractor.parse_xcodeproj",
+            return_value=SimpleNamespace(modules=[], edges=[], warnings=[]),
+        ),
+        patch(
             "palace_mcp.extractors.arch_layer.neo4j_writer.replace_project_snapshot",
             new=AsyncMock(return_value=(2, 1)),
         ),
@@ -106,9 +110,10 @@ async def test_run_extraction_reports_missing_input_when_no_modules_found() -> N
     assert stats.nodes_written == 2
     assert stats.edges_written == 1
     assert stats.outcome == ExtractorOutcome.MISSING_INPUT
-    assert "No SwiftPM or Gradle modules" in (stats.message or "")
+    assert "No SwiftPM, Xcode, or Gradle modules" in (stats.message or "")
     assert (
         stats.next_action
-        == "Provide supported project manifests or module metadata before "
-        "rerunning arch_layer if module coverage is required."
+        == "Provide supported project manifests or an Xcode project with "
+        "tracked source files before rerunning arch_layer if module "
+        "coverage is required."
     )
