@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from palace_mcp.audit.contracts import AuditContract
 
 import pygit2
+from neo4j import AsyncDriver
 
 from palace_mcp.extractors.base import (
     BaseExtractor,
@@ -29,6 +30,8 @@ from palace_mcp.extractors.base import (
 )
 from palace_mcp.extractors.code_ownership.blame_walker import walk_blame
 from palace_mcp.extractors.code_ownership.checkpoint import (
+    delete_checkpoint,
+    has_file_state_baseline,
     load_checkpoint,
     update_checkpoint,
 )
@@ -149,7 +152,8 @@ LIMIT 100
     ) -> OwnershipRunSummary:
         alpha: float = settings.ownership_blame_weight  # type: ignore[attr-defined]
         await ensure_ownership_schema(driver)  # type: ignore[arg-type]
-        checkpoint = await load_checkpoint(driver, project_id=project_id)  # type: ignore[arg-type]
+        checkpoint_driver = cast(AsyncDriver, driver)
+        checkpoint = await load_checkpoint(checkpoint_driver, project_id=project_id)
 
         try:
             repo = pygit2.Repository(str(repo_path))
@@ -189,6 +193,12 @@ LIMIT 100
                 action="manual_cleanup",
             )
 
+        if checkpoint is not None and not await has_file_state_baseline(
+            checkpoint_driver, project_id=project_id
+        ):
+            await delete_checkpoint(checkpoint_driver, project_id=project_id)
+            checkpoint = None
+
         # Phase 1 — DIRTY/DELETED computation
         dirty: set[str]
         deleted: set[str] = set()
@@ -197,7 +207,7 @@ LIMIT 100
             dirty = await asyncio.to_thread(self._all_files_in_head, repo)
         elif prev_head_sha == current_head:
             await update_checkpoint(
-                driver,  # type: ignore[arg-type]
+                checkpoint_driver,
                 project_id=project_id,
                 head_sha=current_head,
                 run_id=run_id,
@@ -251,7 +261,7 @@ LIMIT 100
 
         if not dirty and not deleted:
             await update_checkpoint(
-                driver,  # type: ignore[arg-type]
+                checkpoint_driver,
                 project_id=project_id,
                 head_sha=current_head,
                 run_id=run_id,
@@ -364,7 +374,7 @@ LIMIT 100
             )
 
         await update_checkpoint(
-            driver,  # type: ignore[arg-type]
+            checkpoint_driver,
             project_id=project_id,
             head_sha=current_head,
             run_id=run_id,

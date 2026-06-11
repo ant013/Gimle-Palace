@@ -25,6 +25,16 @@ SET c.last_head_sha     = $head_sha,
     c.updated_at        = $now
 """
 
+_DELETE_CYPHER = """
+MATCH (c:OwnershipCheckpoint {project_id: $project_id})
+DELETE c
+"""
+
+_BASELINE_EXISTS_CYPHER = """
+MATCH (s:OwnershipFileState {project_id: $project_id})
+RETURN count(s) > 0 AS has_baseline
+"""
+
 
 async def load_checkpoint(
     driver: AsyncDriver, *, project_id: str
@@ -69,3 +79,18 @@ async def update_checkpoint(
             run_id=run_id,
             now=now,
         )
+
+
+async def delete_checkpoint(driver: AsyncDriver, *, project_id: str) -> None:
+    async with driver.session() as session:
+        await session.run(_DELETE_CYPHER, project_id=project_id)
+
+
+async def has_file_state_baseline(driver: AsyncDriver, *, project_id: str) -> bool:
+    async with driver.session() as session:
+        result = await session.run(
+            _BASELINE_EXISTS_CYPHER,
+            project_id=project_id,
+        )
+        record = await result.single()
+    return bool(record and record["has_baseline"])
