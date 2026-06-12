@@ -35,7 +35,7 @@ evidence live here.
 | Walker issue | `GIM-1611` / `c3af6f53-340b-4aa0-a080-83f6a2850b33` |
 | Walker assignee | `CXCTO` |
 | Current task | `fix-10` |
-| Active blocker issue | `none` |
+| Active blocker issue | `GIM-1638` / `03de01ec-b9fc-436e-a79a-234cd455d59b` |
 | Last completed task | `fix-9` |
 | Queue mode | strict sequential |
 | Allowed team | CX/Codex only |
@@ -107,7 +107,7 @@ task starts.
 | fix-7 | done | GIM-1630 / a301b19a-8799-471b-800c-bc8d3c67c198 | CXCTO -> CX implementer | Repair `arch_layer` iOS module graph using SCIP and/or Xcode target inputs instead of relying only on root `Package.swift`/Gradle shape. | Every iOS repo has meaningful module/file graph data; `uw-ios-app` module count is materially greater than zero; module dependency and containment edges are explainable from SCIP or Xcode evidence. |
 | fix-8 | done | GIM-1635 / 8cc61845-b9d0-40bf-a6f9-6d277a32ee69 | CXCTO -> CX implementer | Repair `cross_module_contract` Swift symbol correlation by bridging `.swiftinterface` FQNs to SCIP/Tantivy descriptor qualified names. | GIM-1603 baseline snapshots remain; real `CONSUMES_PUBLIC_SYMBOL` edges appear when consumers exist; zero consumer edges are distinguishable from correlation failure; tests include mismatched Swift name formats. |
 | fix-9 | done | GIM-1636 / 0aade433-28db-45e6-a8e0-6c0bb129abde | CXCTO -> CX implementer | Repair `cross_repo_version_skew`: read canonical bundle `:CONTAINS` relationships and add declared-constraint skew detection in addition to resolved-version skew. | Bundles created by canonical registration are processed; resolved-version and declared-constraint skew are reported; tests use real bundle CRUD shape, not only synthetic `:HAS_MEMBER`. |
-| fix-10 | selected | none | CXCTO -> CX implementer | Run full sequential clean rebaseline on the seven dedicated iOS repos and write the numeric completion report. | All extractor outcomes and per-project counts are recorded; broken/partial extractors show real numbers or explicit `MISSING_INPUT`/`NOT_APPLICABLE`; report includes native Neo4j evidence, benchmark timing, and sanity queries. |
+| fix-10 | selected | GIM-1638 / 03de01ec-b9fc-436e-a79a-234cd455d59b | CXCTO -> CX implementer | Run full sequential clean rebaseline on the seven dedicated iOS repos and write the numeric completion report. | All extractor outcomes and per-project counts are recorded; broken/partial extractors show real numbers or explicit `MISSING_INPUT`/`NOT_APPLICABLE`; report includes native Neo4j evidence, benchmark timing, and sanity queries. |
 
 ## Completion evidence
 
