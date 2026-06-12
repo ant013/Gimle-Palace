@@ -26,6 +26,28 @@ class TestSpmParserFixture:
         for m in result.modules:
             assert m.manifest_path == "Package.swift"
 
+    def test_respects_target_path(self, tmp_path: Path) -> None:
+        (tmp_path / "Package.swift").write_text(
+            """
+// swift-tools-version:5.7
+import PackageDescription
+let package = Package(
+    name: "PathAware",
+    targets: [
+        .target(
+            name: "Core",
+            path: "Sources/CustomCore",
+            dependencies: []
+        ),
+    ]
+)
+""",
+            encoding="utf-8",
+        )
+        result = parse_spm(tmp_path, project_id="project/test", run_id="r1")
+        assert len(result.modules) == 1
+        assert result.modules[0].source_root == "Sources/CustomCore"
+
     def test_finds_internal_edge(self) -> None:
         result = parse_spm(_FIXTURE, project_id="project/test", run_id="r1")
         edges = {(e.src_slug, e.dst_slug) for e in result.edges}
