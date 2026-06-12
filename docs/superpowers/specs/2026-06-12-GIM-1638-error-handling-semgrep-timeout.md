@@ -39,6 +39,10 @@ timeout for the native service.
   the semgrep-backed extractors:
   - `palace_crypto_semgrep_timeout_s`
   - `palace_error_handling_semgrep_timeout_s`
+- Give `error_handling_policy` the same bounded class-level extractor runner
+  timeout shape already used by neighboring semgrep-backed extractors, so the
+  runner does not kill app-scale rebaseline runs at the generic 300-second
+  default.
 - Preserve existing extractor behavior by keeping the default at `120` seconds.
 - Add unit coverage proving defaults, env overrides, and invalid bounds.
 - Restart the native MacBook service with a larger
@@ -58,7 +62,9 @@ timeout for the native service.
 ## Affected Files And Areas
 
 - `services/palace-mcp/src/palace_mcp/config.py`
+- `services/palace-mcp/src/palace_mcp/extractors/error_handling_policy/extractor.py`
 - `services/palace-mcp/tests/unit/test_settings_foundation.py`
+- `services/palace-mcp/tests/extractors/unit/test_error_handling_policy.py`
 - Native operator env / launchd runtime only for the final one-project rerun.
 - GIM-1638 Paperclip issue comments for evidence handoff.
 
@@ -68,6 +74,8 @@ timeout for the native service.
 - `PALACE_CRYPTO_SEMGREP_TIMEOUT_S` and
   `PALACE_ERROR_HANDLING_SEMGREP_TIMEOUT_S` override their respective fields.
 - Invalid values below `1` are rejected by Pydantic validation.
+- `error_handling_policy` advertises a bounded class-level runner timeout of
+  `1800` seconds.
 - The targeted unit tests pass.
 - Native `palace-mcp` health remains `{"status":"ok","neo4j":"reachable"}`
   after restart.
@@ -86,6 +94,7 @@ timeout for the native service.
 
    ```bash
    uv run pytest tests/unit/test_settings_foundation.py
+   uv run pytest tests/extractors/unit/test_error_handling_policy.py
    uv run ruff check
    uv run ruff format --check
    ```
