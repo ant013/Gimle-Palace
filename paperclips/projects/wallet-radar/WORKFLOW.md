@@ -97,8 +97,13 @@ Before closing a child, WalletRadarCTO verifies:
 - PR includes the matching `ROADMAP.md` status line;
 - CodeReviewer approval or explicit non-code review evidence exists;
 - QA PASS or approved documentation-only QA evidence exists;
-- `gh pr checks <PR>` exits 0, or CTO records that no required checks exist;
+- `gh pr checks <PR>` exits 0, or CTO records that GitHub has no configured
+  checks/workflows for this repo;
 - PR head SHA is captured.
+
+For Wallet Radar bootstrap, CodeReviewer approval plus QA PASS with local
+command/live-smoke evidence is the merge gate when GitHub has no configured
+remote checks. Do not block waiting for remote CI that does not exist.
 
 Merge command:
 
