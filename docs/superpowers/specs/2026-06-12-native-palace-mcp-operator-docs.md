@@ -51,14 +51,22 @@ the default where the current live environment is native:
     prefer an env override such as `PALACE_MCP_URL` only if already consistent
     with nearby smoke helpers.
 
+- `services/palace-mcp/scripts/smoke_code_ownership.py`
+  - Apply the same native default / `PALACE_MCP_URL` override pattern so local
+    extractor smoke helpers do not imply Docker compose is required.
+
 - `docs/runbooks/native-macos-palace-mcp.md`
   - Add `PALACE_GITHUB_TOKEN=` to the sample native env block as optional.
   - Add a short note that env changes require launchd kickstart.
 
+- `AGENTS.md`, `CLAUDE.md`, and `services/palace-mcp/README.md`
+  - Make the current native macOS operator deploy path explicit.
+  - Keep Docker iMac/server deployment documented as a separate path.
+
 ## Out Of Scope
 
-- Rewriting Docker server install docs, iMac deploy scripts, CI checks, or
-  historical specs/plans.
+- Rewriting Docker server install docs, iMac deploy scripts, CI checks,
+  Docker compose profile docs, mount docs, or historical specs/plans.
 - Removing Docker compose support.
 - Changing extractor behavior or token handling in `palace_mcp.config`.
 - Rotating or printing any real token values.
@@ -95,9 +103,12 @@ the default where the current live environment is native:
 - No full test suite expected for documentation-only changes unless script
   behavior changes.
 
+## Decisions
+
+- `smoke_git_history.py` and `smoke_code_ownership.py` default to native
+  `localhost:8765` and accept `PALACE_MCP_URL` for non-native runtimes.
+
 ## Open Questions
 
-- Should `smoke_git_history.py` stay hardcoded to native `localhost:8765`, or
-  should it accept `PALACE_MCP_URL` so Docker and native paths both work?
 - Should `.env.example` remain Docker-specific, or should we add a separate
   `.env.native.example` for the launchd setup?

@@ -4,9 +4,13 @@ Usage (from repo root, while palace-mcp is running):
   uv run python services/palace-mcp/scripts/smoke_git_history.py
 
 Requires:
-  - palace-mcp running on localhost:8000 (docker compose --profile review up)
-  - PALACE_GITHUB_TOKEN in .env (optional for Phase 2)
-  - /repos/gimle mounted in container
+  - native palace-mcp running on localhost:8765
+    (launchctl kickstart -k gui/$(id -u)/work.ant013.palace-mcp-native)
+  - PALACE_GITHUB_TOKEN in /Users/ant013/Android/Gimle-Palace-native/.env
+    (optional for Phase 2)
+  - project "gimle" registered in palace-mcp
+
+Set PALACE_MCP_URL to target a non-native runtime.
 
 See docs/runbooks/git-history-harvester.md for full operator guide.
 """
@@ -15,12 +19,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
 
-MCP_URL = "http://localhost:8000/mcp"
+MCP_URL = os.environ.get("PALACE_MCP_URL", "http://localhost:8765/mcp")
 PROJECT = "gimle"
 
 

@@ -12,19 +12,25 @@
 
 ### 1. Переменные окружения
 
-Добавить в `.env` (опционально — только Phase 2):
+Для native macOS запуска добавить в
+`/Users/ant013/Android/Gimle-Palace-native/.env` (опционально — только
+Phase 2):
 
 ```bash
 PALACE_GITHUB_TOKEN=ghp_...    # PAT с правами repo:read
 PALACE_GIT_HISTORY_MAX_COMMITS_PER_RUN=50000
-PALACE_GIT_HISTORY_TANTIVY_INDEX_PATH=/var/lib/palace/tantivy/git_history
+PALACE_GIT_HISTORY_TANTIVY_INDEX_PATH=/Users/ant013/.cache/palace-tantivy/git_history
 ```
 
-Перезапустить `palace-mcp` после изменения `.env`:
+Перезапустить native `palace-mcp` после изменения `.env`:
 
 ```bash
-bash paperclips/scripts/imac-deploy.sh
+launchctl kickstart -k gui/$(id -u)/work.ant013.palace-mcp-native
+curl -s http://localhost:8765/healthz
 ```
+
+Для iMac/server Docker deploy используйте соответствующий deploy runbook; этот
+документ по умолчанию описывает текущий local native setup.
 
 ### 2. Проверка регистрации экстрактора
 
@@ -95,7 +101,8 @@ PALACE_GIT_HISTORY_BOT_PATTERNS_JSON='["my-bot@company.com", "deploy-bot"]'
 uv run python services/palace-mcp/scripts/smoke_git_history.py
 ```
 
-Требует работающий palace-mcp на `localhost:8000`.
+Требует работающий native palace-mcp на `http://localhost:8765/mcp`.
+Для другого runtime задайте `PALACE_MCP_URL`.
 
 ---
 
@@ -132,7 +139,7 @@ DETACH DELETE n
 Удалить Tantivy-индекс:
 
 ```bash
-docker exec palace-mcp rm -rf /var/lib/palace/tantivy/git_history
+rm -rf /Users/ant013/.cache/palace-tantivy/git_history
 ```
 
 ---

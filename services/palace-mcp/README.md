@@ -231,12 +231,30 @@ Validation errors return `{"ok": false, "error_code": "validation_error", "messa
 
 ---
 
-## Production deploy on iMac
+## Native macOS operator deploy
+
+Current Apple Silicon operator hosts run `palace-mcp` natively through launchd
+and use Homebrew Neo4j. After a PR squash-merges to `develop`, restart the
+native service with:
+
+```bash
+launchctl kickstart -k gui/$(id -u)/work.ant013.palace-mcp-native
+curl -s http://localhost:8765/healthz
+```
+
+The native service reads environment from
+`/Users/$USER/Android/Gimle-Palace-native/.env`; edit that file, not the repo
+`.env`, when changing native runtime variables.
+
+See `docs/runbooks/native-macos-palace-mcp.md` for setup and daily operations.
+
+## Docker iMac/server deploy
 
 > Extracted from former root `CLAUDE.md` during UAA Phase H1 CLAUDE.md
 > decompose (2026-05-17).
 
-After a PR squash-merges to `develop`, rebuild and restart `palace-mcp` with:
+For the Docker iMac/server deployment path, rebuild and restart `palace-mcp`
+with:
 
 ```bash
 bash paperclips/scripts/imac-deploy.sh

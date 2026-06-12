@@ -15,8 +15,9 @@ docs during UAA Phase H1 CLAUDE.md decompose (2026-05-17).
 ## palace-mcp
 
 - [palace-mcp README](services/palace-mcp/README.md) — service-level tools,
-  production deploy on iMac, AGENTS.md deploy, Docker compose profiles,
-  environment, mounting project repos for `palace.git.*`.
+  native macOS operator deploy, Docker iMac/server deploy, AGENTS.md deploy,
+  Docker compose profiles, environment, mounting project repos for
+  `palace.git.*`.
 - [Extractors + Bundles + ADR reference](docs/palace-mcp/extractors.md) —
   full extractor catalog, per-extractor operator workflows, ADR v2
   contract, foundation substrate + env vars.

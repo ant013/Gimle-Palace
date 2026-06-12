@@ -58,6 +58,8 @@ PALACE_ADR_BASE_DIR=/Users/ant013/.cache/palace-adr
 PALACE_EMBEDDING_LOCAL_ONLY=0
 PALACE_EMBEDDING_MAX_SYMBOLS=50000
 PALACE_GIT_SHA=native-dev
+# Optional: enables git_history Phase 2 PR/comment ingest.
+PALACE_GITHUB_TOKEN=
 EOF
 
 # 5. (Optional) launchd auto-start
@@ -87,6 +89,10 @@ curl -s http://localhost:8765/healthz   # expect 200
 # Logs
 tail -F ~/Library/Logs/palace-mcp-native/palace-mcp.log
 ```
+
+After editing `/Users/$USER/Android/Gimle-Palace-native/.env`, run the
+launchd restart command above so the running process picks up new environment
+variables.
 
 ---
 

@@ -4,9 +4,12 @@ Usage (from repo root, while palace-mcp is running):
   uv run python services/palace-mcp/scripts/smoke_code_ownership.py
 
 Requires:
-  - palace-mcp running on localhost:8000 (docker compose --profile review up)
+  - native palace-mcp running on localhost:8765
+    (launchctl kickstart -k gui/$(id -u)/work.ant013.palace-mcp-native)
   - git_history extractor already run for the target project
-  - /repos/<project> mounted in container
+  - target project registered in palace-mcp
+
+Set PALACE_MCP_URL to target a non-native runtime.
 
 GIM-216
 """
@@ -20,7 +23,7 @@ import os
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
-MCP_URL = "http://localhost:8000/mcp"
+MCP_URL = os.environ.get("PALACE_MCP_URL", "http://localhost:8765/mcp")
 PROJECT = os.environ.get("PALACE_OWNERSHIP_SMOKE_PROJECT", "gimle")
 PROBE_FILE = os.environ.get(
     "PALACE_OWNERSHIP_SMOKE_FILE",
