@@ -35,7 +35,7 @@ evidence live here.
 | Walker issue | `GIM-1611` / `c3af6f53-340b-4aa0-a080-83f6a2850b33` |
 | Walker assignee | `CXCTO` |
 | Current task | `fix-8` |
-| Active blocker issue | `none` |
+| Active blocker issue | `GIM-1635` / `8cc61845-b9d0-40bf-a6f9-6d277a32ee69` |
 | Last completed task | `fix-7` |
 | Queue mode | strict sequential |
 | Allowed team | CX/Codex only |
@@ -105,7 +105,7 @@ task starts.
 | fix-5 | done | GIM-1621 / 844118d9-8dda-47cd-9008-f5a37f44e559 | CXCTO -> CX implementer | Fix `code_ownership` clean rebaseline behavior: purge/invalidate project-scoped stale checkpoints and prevent `no_change` before baseline `OwnershipFileState` exists. | Focused tests cover stale checkpoint purge/invalidation and the no-baseline guard; no repo may return `no_change` before a baseline exists; rebaseline orchestration explicitly handles `OwnershipCheckpoint`; the live seven-repo `OwnershipFileState` proof runs in `fix-10`. |
 | fix-6 | done | GIM-1622 / 03e769ff-2180-4384-9e99-991841bd2d74 | CXCTO -> CX implementer | Complete `public_api_surface` artifact path for interface-capable SwiftPM kits on the dev Mac; keep app projects `NOT_APPLICABLE` unless a deliberate public API artifact exists. | SwiftPM kits with generated `.swiftinterface` write `PublicApiSurface`/`PublicApiSymbol`; missing artifacts persist `MISSING_INPUT` with `next_action`; `uw-ios-app` is explicitly `NOT_APPLICABLE` unless a real app API artifact is introduced. |
 | fix-7 | done | GIM-1630 / a301b19a-8799-471b-800c-bc8d3c67c198 | CXCTO -> CX implementer | Repair `arch_layer` iOS module graph using SCIP and/or Xcode target inputs instead of relying only on root `Package.swift`/Gradle shape. | Every iOS repo has meaningful module/file graph data; `uw-ios-app` module count is materially greater than zero; module dependency and containment edges are explainable from SCIP or Xcode evidence. |
-| fix-8 | selected | none | CXCTO -> CX implementer | Repair `cross_module_contract` Swift symbol correlation by bridging `.swiftinterface` FQNs to SCIP/Tantivy descriptor qualified names. | GIM-1603 baseline snapshots remain; real `CONSUMES_PUBLIC_SYMBOL` edges appear when consumers exist; zero consumer edges are distinguishable from correlation failure; tests include mismatched Swift name formats. |
+| fix-8 | selected | GIM-1635 / 8cc61845-b9d0-40bf-a6f9-6d277a32ee69 | CXCTO -> CX implementer | Repair `cross_module_contract` Swift symbol correlation by bridging `.swiftinterface` FQNs to SCIP/Tantivy descriptor qualified names. | GIM-1603 baseline snapshots remain; real `CONSUMES_PUBLIC_SYMBOL` edges appear when consumers exist; zero consumer edges are distinguishable from correlation failure; tests include mismatched Swift name formats. |
 | fix-9 | todo | none | CXCTO -> CX implementer | Repair `cross_repo_version_skew`: read canonical bundle `:CONTAINS` relationships and add declared-constraint skew detection in addition to resolved-version skew. | Bundles created by canonical registration are processed; resolved-version and declared-constraint skew are reported; tests use real bundle CRUD shape, not only synthetic `:HAS_MEMBER`. |
 | fix-10 | todo | none | CXCTO -> CX implementer | Run full sequential clean rebaseline on the seven dedicated iOS repos and write the numeric completion report. | All extractor outcomes and per-project counts are recorded; broken/partial extractors show real numbers or explicit `MISSING_INPUT`/`NOT_APPLICABLE`; report includes native Neo4j evidence, benchmark timing, and sanity queries. |
 
