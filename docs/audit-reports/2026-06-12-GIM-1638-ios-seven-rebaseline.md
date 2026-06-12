@@ -106,6 +106,41 @@ Evidence:
 - `/tmp/gim-1638-rebaseline/error-handling-uw-ios-targeted-rerun.json`
 - `/tmp/gim-1638-rebaseline/error-handling-uw-ios-post-sanity.json`
 
+## Sanity Queries
+
+This section inlines the native Neo4j sanity outcomes that were previously only
+referenced via `/tmp/gim-1638-rebaseline/final-sanity.json`.
+
+| Extractor | Sanity metric | Result |
+| --- | --- | --- |
+| `arch_layer` | module/layer graph footprint | `26` nodes, `5` edges, `7/7` projects `ok` |
+| `public_api_surface` | public API surface/symbol footprint | `1,194` nodes, `1,190` edges, `4` projects `ok`, `3` projects `NOT_APPLICABLE` |
+| `cross_module_contract` | consumer-correlation baseline | `4` nodes, `4` edges, `7/7` projects recorded as skipped zero-consumer baselines |
+| `cross_repo_version_skew` | bundle skew aggregation | bundle `ios-seven-rebaseline` `succeeded`; `7` members done, `6` `ok`, `1` `MISSING_INPUT` (`hd-wallet-kit`), `0` failed |
+| `code_ownership` | ownership state footprint | `4,422` nodes, `6,760` edges, `7/7` projects `ok` |
+| `reactive_dependency_tracer` | reactive graph / missing-input diagnostics | `3,723` nodes, `0` edges, `7/7` projects `MISSING_INPUT` because helper JSON was absent |
+| `hot_path_profiler` | profiler graph / missing-input diagnostics | `0` nodes, `0` edges, `7/7` projects `MISSING_INPUT` because profiles directories were absent |
+
+### `git_history` commit-count sanity
+
+The native sanity bundle verified `git_history` commit counts against local
+`git rev-list --count HEAD` for each dedicated iOS repo. The same counts are
+captured below and match the corpus used for the rebaseline.
+
+| Project | `git rev-list --count HEAD` |
+| --- | ---: |
+| `bitcoin-core` | 1330 |
+| `bitcoin-kit` | 1266 |
+| `component-kit` | 276 |
+| `dash-kit` | 1266 |
+| `evm-kit` | 608 |
+| `hd-wallet-kit` | 37 |
+| `uw-ios-app` | 7632 |
+
+Aggregate `git_history` write footprint from the successful commit-walk paths:
+`12,415` nodes and `199,481` edges. The final run outcome stayed `skipped`
+only for GitHub PR/comment enrichment because no GitHub token was configured.
+
 ## Evidence Files
 
 - `/tmp/gim-1638-rebaseline/clean-prep.json`
