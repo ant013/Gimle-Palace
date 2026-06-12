@@ -15,9 +15,23 @@ MERGE (f:DeadFinding {finding_id: $finding_id})
 SET f += $props
 """
 
+_MERGE_DEAD_FINDING_BATCH = """
+UNWIND $rows AS row
+MERGE (f:DeadFinding {finding_id: row.finding_id})
+SET f += row.props
+"""
+
 _MERGE_DEAD_SYMBOL_EDGE = """
 MATCH (f:DeadFinding {finding_id: $finding_id})
 MERGE (s:Symbol {qualified_name: $qualified_name, group_id: $group_id})
+MERGE (f)-[:DEAD_SYMBOL]->(s)
+"""
+
+_MERGE_DEAD_SYMBOL_EDGE_BATCH = """
+UNWIND $rows AS row
+MATCH (f:DeadFinding {finding_id: row.finding_id})
+UNWIND row.members AS member
+MERGE (s:Symbol {qualified_name: member.qualified_name, group_id: $group_id})
 MERGE (f)-[:DEAD_SYMBOL]->(s)
 """
 
@@ -26,6 +40,8 @@ MATCH (f:DeadFinding {group_id: $group_id})
 WHERE NOT f.finding_id IN $kept_ids
 DETACH DELETE f
 """
+
+_WRITE_BATCH_SIZE = 500
 
 
 @dataclass(frozen=True)
@@ -48,10 +64,11 @@ async def write_dead_findings(
     total_props = 0
 
     kept_ids = [f.finding_id for f in findings]
+    rows = [_finding_row(finding, group_id) for finding in findings]
 
     async with driver.session() as session:
-        for finding in findings:
-            summary = await session.execute_write(_write_finding, finding, group_id)
+        for batch in _chunks(rows, _WRITE_BATCH_SIZE):
+            summary = await session.execute_write(_write_finding_batch, batch, group_id)
             total_nodes += summary.nodes_created
             total_rels += summary.relationships_created
             total_props += summary.properties_set
@@ -65,6 +82,65 @@ async def write_dead_findings(
         relationships_created=total_rels,
         properties_set=total_props,
         nodes_deleted=evict_summary.nodes_deleted,
+    )
+
+
+def _finding_row(finding: DeadFinding, group_id: str) -> dict[str, Any]:
+    props: dict[str, Any] = {
+        "group_id": group_id,
+        "kind": finding.kind.value,
+        "severity": finding.severity.value,
+        "project": finding.project,
+        "created_at": finding.created_at,
+        "size": finding.size,
+        "reachable_from_public_surface": finding.reachable_from_public_surface,
+        "reachable_from_dynamic_dispatch": finding.reachable_from_dynamic_dispatch,
+        "safe_to_delete_score": finding.safe_to_delete_score,
+        "evidence_query": finding.evidence_query,
+        "members_json": _members_json(finding),
+    }
+    if finding.git_last_external_ref is not None:
+        props["git_last_external_ref"] = finding.git_last_external_ref
+    if finding.module_coverage_ratio is not None:
+        props["module_coverage_ratio"] = finding.module_coverage_ratio
+    if finding.target_dead_type is not None:
+        props["target_dead_type"] = finding.target_dead_type
+
+    return {
+        "finding_id": finding.finding_id,
+        "props": props,
+        "members": [
+            {"qualified_name": member.qualified_name} for member in finding.members
+        ],
+    }
+
+
+def _chunks(rows: list[dict[str, Any]], size: int) -> list[list[dict[str, Any]]]:
+    return [rows[i : i + size] for i in range(0, len(rows), size)]
+
+
+async def _write_finding_batch(
+    tx: Any, rows: list[dict[str, Any]], group_id: str
+) -> DeadFindingWriteSummary:
+    if not rows:
+        return DeadFindingWriteSummary()
+
+    result = await tx.run(_MERGE_DEAD_FINDING_BATCH, rows=rows)
+    node_summary = await result.consume()
+
+    result = await tx.run(
+        _MERGE_DEAD_SYMBOL_EDGE_BATCH,
+        rows=rows,
+        group_id=group_id,
+    )
+    edge_summary = await result.consume()
+
+    return DeadFindingWriteSummary(
+        nodes_created=(
+            node_summary.counters.nodes_created + edge_summary.counters.nodes_created
+        ),
+        relationships_created=edge_summary.counters.relationships_created,
+        properties_set=node_summary.counters.properties_set,
     )
 
 

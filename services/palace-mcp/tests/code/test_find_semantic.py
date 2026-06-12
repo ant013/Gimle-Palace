@@ -264,7 +264,7 @@ async def test_success_filters_scope_and_skips_context_when_disabled() -> None:
                 data_value=[{"source_scope": "project", "total": 10, "embedded_cnt": 3}]
             )
         if "queryNodes('symbol_embedding_idx'" in query:
-            assert params["query_k"] == 50
+            assert params["query_k"] == 500
             all_rows = [
                 {
                     "group_id": "project/wallet-a",
@@ -318,7 +318,7 @@ async def test_success_filters_scope_and_skips_context_when_disabled() -> None:
     assert backend.calls == ["signature verification"]
     assert result["ok"] is True
     assert result["returned_count"] == 2
-    assert result["candidate_limit"] == 50
+    assert result["candidate_limit"] == 500
     assert result["result"][0]["project"] == "wallet-a"
     assert result["result"][1]["project"] == "wallet-b"
     assert "context" not in result["result"][0]
@@ -343,7 +343,7 @@ async def test_vector_query_uses_candidate_limit_to_overfetch_before_scope_filte
                 data_value=[{"source_scope": "project", "total": 5, "embedded_cnt": 1}]
             )
         if "queryNodes('symbol_embedding_idx'" in query:
-            assert params["query_k"] == 50
+            assert params["query_k"] == 500
             return _FakeResult(
                 data_value=[
                     {
@@ -375,7 +375,7 @@ async def test_vector_query_uses_candidate_limit_to_overfetch_before_scope_filte
         )
 
     assert result["ok"] is True
-    assert result["candidate_limit"] == 50
+    assert result["candidate_limit"] == 500
     assert result["embedded_symbol_count"] == 1
     assert result["returned_count"] == 1
     assert result["warnings"] == []
@@ -1045,10 +1045,10 @@ async def test_multi_project_issues_per_project_hnsw_queries() -> None:
 
     assert result["ok"] is True
     assert result["returned_count"] == 3
-    # _candidate_limit(3, 3) = min(max(90, 50), 500) = 90
-    assert result["candidate_limit"] == 90
-    # _candidate_limit(3, 1) = min(max(30, 50), 500) = 50
-    assert result["per_project_k"] == 50
+    # _candidate_limit(3, 3) = min(max(900, 500), 5000) = 900
+    assert result["candidate_limit"] == 900
+    # _candidate_limit(3, 1) = min(max(300, 500), 5000) = 500
+    assert result["per_project_k"] == 500
 
     # One HNSW query per project, each scoped to a single group_id
     vector_calls = [

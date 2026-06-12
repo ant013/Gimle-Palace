@@ -165,6 +165,35 @@ async def _resolve_qn(
         )
 
     if session is None:
+        if driver is not None:
+            exact = await _resolve_exact_qualified_name(
+                driver,
+                qualified_name=qualified_name,
+                project=project,
+                project_slug=project_slug,
+                max_candidates=max_candidates,
+                include_deprecated=include_deprecated,
+            )
+            if exact:
+                if len(exact) == 1:
+                    target = exact[0]
+                    return target["name"], target["qualified_name"]
+                return {
+                    "ok": False,
+                    "error_code": "ambiguous_qualified_name",
+                    "requested_qualified_name": qualified_name,
+                    "message": (
+                        f"exact qualified_name matched {len(exact)} symbols in "
+                        f"project '{project}' — refine to uniquely identify"
+                    ),
+                    "matches": [
+                        {
+                            "qualified_name": r.get("qualified_name", ""),
+                            "file_path": r.get("file_path", ""),
+                        }
+                        for r in exact
+                    ],
+                }
         if not can_try_short_name:
             return {
                 "ok": False,
@@ -296,6 +325,18 @@ WHERE $include_deprecated OR NOT s:Deprecated
 RETURN s.name AS name,
        s.short_name AS short_name,
        coalesce(s.symbol, '') AS symbol,
+       s.qualified_name AS qualified_name,
+       coalesce(s.file_path, '') AS file_path
+ORDER BY s.qualified_name
+LIMIT $limit
+"""
+
+_QUERY_SYMBOL_BY_EXACT_QN = """
+MATCH (s:Symbol {group_id: $group_id, qualified_name: $qualified_name})
+WHERE $include_deprecated OR NOT s:Deprecated
+RETURN coalesce(s.name, s.qualified_name) AS name,
+       '' AS short_name,
+       '' AS symbol,
        s.qualified_name AS qualified_name,
        coalesce(s.file_path, '') AS file_path
 ORDER BY s.qualified_name
@@ -568,6 +609,41 @@ async def _resolve_short_name(
     return []
 
 
+async def _resolve_exact_qualified_name(
+    driver: Any,
+    *,
+    qualified_name: str,
+    project: str,
+    project_slug: str | None = None,
+    max_candidates: int = 15,
+    include_deprecated: bool = True,
+) -> list[dict[str, Any]]:
+    group_id = f"project/{project_slug or project.removeprefix('repos-')}"
+    rows = await _query_symbol_candidates(
+        driver,
+        _QUERY_SYMBOL_BY_EXACT_QN,
+        group_id=group_id,
+        qualified_name=qualified_name,
+        limit=max_candidates + 1,
+        include_deprecated=include_deprecated,
+    )
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        qn = str(row.get("qualified_name") or "")
+        if qn != qualified_name:
+            continue
+        result.append(
+            {
+                "name": row.get("name", "") or _decode_scip_short_name(qn) or qn,
+                "qualified_name": qn,
+                "file_path": row.get("file_path", ""),
+                "symbol": row.get("symbol", ""),
+                "short_name": row.get("short_name", "") or _decode_scip_short_name(qn),
+            }
+        )
+    return result
+
+
 def _length_prefixed_identifiers(symbol: str) -> list[tuple[str, str]]:
     identifiers: list[tuple[str, str]] = []
     i = 0
@@ -778,10 +854,11 @@ class GetSnippetRichRequest(BaseModel):
     @field_validator("qualified_name")
     @classmethod
     def _qn_charset(cls, v: str) -> str:
-        if not _QN_RE.match(v):
+        is_scip_qn = v.startswith("scip-") or "%3" in v
+        if not (_QN_RE.match(v) or is_scip_qn):
             raise ValueError(
-                "qualified_name must be a dotted Python identifier "
-                "(components match [A-Za-z_][A-Za-z0-9_-]*; allows slug-style hyphens)"
+                "qualified_name must be a dotted identifier or a SCIP symbol "
+                "qualified_name"
             )
         return v
 
@@ -939,6 +1016,7 @@ def _decode_unique_occurrences(
     *,
     fallback_qualified_name: str,
     symbol_id: int,
+    expected_qualified_name: str | None = None,
 ) -> list[dict[str, Any]]:
     occurrences: list[dict[str, Any]] = []
     seen: set[tuple[str, int, int]] = set()
@@ -947,6 +1025,11 @@ def _decode_unique_occurrences(
             raw_doc,
             fallback_qualified_name=fallback_qualified_name,
         )
+        if (
+            expected_qualified_name is not None
+            and occurrence.get("qualified_name") != expected_qualified_name
+        ):
+            continue
         key = (occurrence["file_path"], occurrence["line"], symbol_id)
         if key in seen:
             continue
@@ -961,6 +1044,7 @@ async def _search_unique_occurrences(
     symbol_id: int,
     fallback_qualified_name: str,
     max_results: int,
+    expected_qualified_name: str | None = None,
 ) -> tuple[list[dict[str, Any]], bool]:
     target_unique = max_results + 1
     limit = target_unique
@@ -972,6 +1056,7 @@ async def _search_unique_occurrences(
             raw_docs,
             fallback_qualified_name=fallback_qualified_name,
             symbol_id=symbol_id,
+            expected_qualified_name=expected_qualified_name,
         )
         if len(occurrences) > max_results:
             return occurrences[:max_results], True
@@ -1176,6 +1261,7 @@ def register_code_composite_tools(
                         symbol_id=sym_id,
                         fallback_qualified_name=req.qualified_name,
                         max_results=req.max_results,
+                        expected_qualified_name=req.qualified_name,
                     )
             except Exception:
                 logger.warning(
@@ -1266,6 +1352,7 @@ def register_code_composite_tools(
                 symbol_id=sym_id,
                 fallback_qualified_name=resolved_qn,
                 max_results=req.max_results,
+                expected_qualified_name=resolved_qn,
             )
 
         # State C: evicted — attach partial_index warning
@@ -1307,17 +1394,12 @@ def register_code_composite_tools(
         from pathlib import Path
 
         from palace_mcp.code.find_owners import find_owners as _find_owners
+        from palace_mcp.code.native_get_code_snippet import native_get_code_snippet
+        from palace_mcp.code.native_detect_changes import FALLBACK_TO_CM
         from palace_mcp.git.tools import palace_git_log as _git_log
         from palace_mcp.mcp_server import get_driver, get_settings
 
         session = code_router.get_cm_session()
-        if session is None:
-            handle_tool_error(
-                RuntimeError(
-                    "CM subprocess not started — set CODEBASE_MEMORY_MCP_BINARY"
-                )
-            )
-            raise  # unreachable
 
         driver = get_driver()
         if driver is None:
@@ -1351,38 +1433,65 @@ def register_code_composite_tools(
         cm_project = namespace.cm_project_name
         neo4j_slug = namespace.slug
 
-        # Step 1: Resolve qualified_name — all symbol types (F1 fix: label=None)
-        try:
-            disambig = await _resolve_qn(
-                session,
+        if session is None:
+            native_snippet = await native_get_code_snippet(
                 req.qualified_name,
-                cm_project,
-                project_slug=neo4j_slug,
-                label=None,
-                driver=driver,
+                project=neo4j_slug,
+                include_deprecated=True,
             )
-        except Exception as e:
-            handle_tool_error(e)
-            raise  # unreachable
+            if native_snippet is FALLBACK_TO_CM:
+                return {
+                    "ok": False,
+                    "error_code": "snippet_provider_unavailable",
+                    "requested_qualified_name": req.qualified_name,
+                    "message": "native snippet provider requested CM fallback but CM session is unavailable",
+                }
+            if not isinstance(native_snippet, dict):
+                return {
+                    "ok": False,
+                    "error_code": "snippet_provider_unavailable",
+                    "requested_qualified_name": req.qualified_name,
+                    "message": "native snippet provider returned an unsupported response",
+                }
+            if native_snippet.get("error_code"):
+                return native_snippet
+            resolved_qn = str(
+                native_snippet.get("qualified_name") or req.qualified_name
+            )
+            snippet_data = native_snippet
+        else:
+            # Step 1: Resolve qualified_name — all symbol types (F1 fix: label=None)
+            try:
+                disambig = await _resolve_qn(
+                    session,
+                    req.qualified_name,
+                    cm_project,
+                    project_slug=neo4j_slug,
+                    label=None,
+                    driver=driver,
+                )
+            except Exception as e:
+                handle_tool_error(e)
+                raise  # unreachable
 
-        if isinstance(disambig, dict):
-            return disambig
-        _short_name, resolved_qn = disambig
+            if isinstance(disambig, dict):
+                return disambig
+            _short_name, resolved_qn = disambig
 
-        # Step 2: Get snippet — must succeed for the tool to return ok=true
-        raw_snippet = await session.call_tool(
-            "get_code_snippet",
-            arguments={"qualified_name": resolved_qn, "project": cm_project},
-        )
-        if raw_snippet.isError:
-            cm_msg = code_router.parse_cm_result(raw_snippet).get("_raw", "")
-            return {
-                "ok": False,
-                "error_code": "cm_error",
-                "requested_qualified_name": req.qualified_name,
-                "message": f"CM error from get_code_snippet: {cm_msg}",
-            }
-        snippet_data = code_router.parse_cm_result(raw_snippet)
+            # Step 2: Get snippet — must succeed for the tool to return ok=true
+            raw_snippet = await session.call_tool(
+                "get_code_snippet",
+                arguments={"qualified_name": resolved_qn, "project": cm_project},
+            )
+            if raw_snippet.isError:
+                cm_msg = code_router.parse_cm_result(raw_snippet).get("_raw", "")
+                return {
+                    "ok": False,
+                    "error_code": "cm_error",
+                    "requested_qualified_name": req.qualified_name,
+                    "message": f"CM error from get_code_snippet: {cm_msg}",
+                }
+            snippet_data = code_router.parse_cm_result(raw_snippet)
         file_path = snippet_data.get("file_path", "")
         start_line = snippet_data.get("start_line")
         end_line = snippet_data.get("end_line")
@@ -1413,6 +1522,7 @@ def register_code_composite_tools(
                 raw,
                 fallback_qualified_name=resolved_qn,
                 symbol_id=sym_id,
+                expected_qualified_name=resolved_qn,
             )[: req.max_usages]
 
         async def _get_owners() -> list[dict[str, Any]]:

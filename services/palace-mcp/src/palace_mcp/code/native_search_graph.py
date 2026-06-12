@@ -12,13 +12,18 @@ _SUPPORTED_LABELS = frozenset(
         "Project",
         "File",
         "Module",
+        "Protocol",
+        "Property",
         "Function",
         "Method",
         "Class",
         "Interface",
         "Enum",
+        "Struct",
         "Type",
         "Route",
+        "Symbol",
+        "Variable",
     }
 )
 
@@ -41,10 +46,14 @@ WITH
                 WHEN 'function' THEN 'Function'
                 WHEN 'method' THEN 'Method'
                 WHEN 'class' THEN 'Class'
+                WHEN 'struct' THEN 'Struct'
+                WHEN 'protocol' THEN 'Protocol'
                 WHEN 'interface' THEN 'Interface'
                 WHEN 'enum' THEN 'Enum'
+                WHEN 'property' THEN 'Property'
                 WHEN 'type' THEN 'Type'
                 WHEN 'route' THEN 'Route'
+                WHEN 'variable' THEN 'Variable'
                 ELSE 'Symbol'
             END
         ELSE ''
@@ -79,9 +88,13 @@ WITH
     coalesce(n.file_path, n.path, '') AS result_file_path,
     size([(n)--() | 1]) AS degree
 WHERE result_label <> ''
-  AND result_label <> 'Symbol'
   AND ($label IS NULL OR result_label = $label)
-  AND ($name_pattern IS NULL OR result_name =~ $name_pattern)
+  AND (
+      $name_pattern IS NULL
+      OR result_name =~ $name_pattern
+      OR result_qn =~ $name_pattern
+      OR result_file_path =~ $name_pattern
+  )
   AND ($qn_pattern IS NULL OR result_qn =~ $qn_pattern)
   AND ($file_pattern IS NULL OR result_file_path =~ $file_pattern)
   AND ($min_degree IS NULL OR degree >= $min_degree)

@@ -599,23 +599,68 @@ class TestGetSnippetRichTantivyFailure:
 
 class TestGetSnippetRichCmSessionNone:
     @pytest.mark.asyncio
-    async def test_cm_session_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from mcp.server.fastmcp.exceptions import ToolError
-
+    async def test_cm_session_none_uses_native_snippet(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setattr("palace_mcp.code_router.get_cm_session", lambda: None)
 
-        mock_driver = AsyncMock()
+        mock_driver = MagicMock()
+        mock_neo4j_session = AsyncMock()
+        mock_result = AsyncMock()
+        mock_result.single = AsyncMock(return_value=None)
+        mock_neo4j_session.run = AsyncMock(return_value=mock_result)
+        mock_neo4j_session.__aenter__ = AsyncMock(return_value=mock_neo4j_session)
+        mock_neo4j_session.__aexit__ = AsyncMock(return_value=False)
+        mock_driver.session = MagicMock(return_value=mock_neo4j_session)
+
         mock_settings = MagicMock()
+        mock_settings.palace_tantivy_index_path = "/tmp/tantivy"
+        mock_settings.palace_tantivy_heap_mb = 50
+
+        mock_bridge = AsyncMock()
+        mock_bridge.search_by_symbol_id_async = AsyncMock(return_value=[])
+        mock_bridge.__aenter__ = AsyncMock(return_value=mock_bridge)
+        mock_bridge.__aexit__ = AsyncMock(return_value=False)
+
+        async def fake_native_get_code_snippet(*_args: Any, **_kwargs: Any) -> dict:
+            return {
+                "qualified_name": "EvmKit s%3A6EvmKit11TransactionC",
+                "requested_qualified_name": "EvmKit s%3A6EvmKit11TransactionC",
+                "project": "evm-kit",
+                "file_path": "Sources/EvmKit/Models/Transaction.swift",
+                "start_line": 10,
+                "end_line": 20,
+                "source": "final class Transaction {}",
+                "language": "swift",
+            }
 
         with (
+            patch("palace_mcp.code_composite.TantivyBridge", return_value=mock_bridge),
+            patch(
+                "palace_mcp.code.native_get_code_snippet.native_get_code_snippet",
+                new=fake_native_get_code_snippet,
+            ),
+            patch(
+                "palace_mcp.code.find_owners.find_owners",
+                new=AsyncMock(return_value={"ok": True, "owners": []}),
+            ),
+            patch(
+                "palace_mcp.git.tools.palace_git_log",
+                new=AsyncMock(return_value={"entries": []}),
+            ),
             patch("palace_mcp.mcp_server.get_driver", return_value=mock_driver),
             patch("palace_mcp.mcp_server.get_settings", return_value=mock_settings),
         ):
             mcp = _make_mcp_and_register()
-            with pytest.raises(ToolError):
-                await mcp.call_tool(
-                    "palace.code.get_snippet_rich", {"qualified_name": "my_fn"}
-                )
+            payload = await _call(
+                mcp,
+                qualified_name="EvmKit s%3A6EvmKit11TransactionC",
+                project="evm-kit",
+            )
+
+        assert payload["ok"] is True
+        assert payload["qualified_name"] == "EvmKit s%3A6EvmKit11TransactionC"
+        assert payload["snippet"]["source"] == "final class Transaction {}"
 
 
 # ---------------------------------------------------------------------------

@@ -22,6 +22,7 @@ from palace_mcp.extractors.dead_code.seeds import compute_all_seeds
 from palace_mcp.extractors.foundation.symbol_node_writer import build_symbol_node_rows
 from palace_mcp.extractors.scip_parser import iter_scip_symbol_infos
 from tests.extractors.fixtures.scip_factory import (
+    build_swift_scip_index_without_symbol_relationships,
     build_swift_scip_index_with_symbol_infos,
 )
 
@@ -52,6 +53,40 @@ def _build_graph_from_scip(group_id: str) -> SymbolGraph:
             graph.symbols[qn] = _row_to_symbol(row)
 
     # Edges from symbol_infos
+    from palace_mcp.extractors.dead_code.models import GraphEdge
+
+    for si in symbol_infos:
+        for target_qname, rel_type in si.relationships:
+            graph.edges.append(
+                GraphEdge(source=si.qualified_name, target=target_qname, kind=rel_type)
+            )
+
+    graph.build_indexes()
+    return graph
+
+
+def _build_graph_from_relationshipless_scip(group_id: str) -> SymbolGraph:
+    scip_index = build_swift_scip_index_without_symbol_relationships()
+
+    from palace_mcp.extractors.scip_parser import iter_scip_occurrences
+    from palace_mcp.extractors.foundation.models import SymbolKind
+
+    def_file_paths: dict[str, str] = {}
+    for occ in iter_scip_occurrences(scip_index, commit_sha="test"):
+        if occ.kind in (SymbolKind.DEF, SymbolKind.DECL):
+            def_file_paths.setdefault(occ.symbol_qualified_name, occ.file_path)
+
+    symbol_infos = list(
+        iter_scip_symbol_infos(scip_index, synthesize_occurrence_relationships=True)
+    )
+    node_rows = build_symbol_node_rows(symbol_infos, def_file_paths, group_id)
+
+    graph = SymbolGraph()
+    for row in node_rows:
+        qn = row.get("qualified_name")
+        if qn:
+            graph.symbols[qn] = _row_to_symbol(row)
+
     from palace_mcp.extractors.dead_code.models import GraphEdge
 
     for si in symbol_infos:
@@ -150,3 +185,39 @@ class TestDeadCodeSwiftContract:
         assert all(r["group_id"] == group_id for r in rows), (
             "Every :Symbol row must carry the project group_id"
         )
+
+    def test_relationshipless_swift_scip_synthesizes_references(self) -> None:
+        """Native Swift SCIP may omit SymbolInformation.relationships entirely.
+
+        symbol_index_swift must still produce a non-empty SymbolGraph edge set
+        so dead_code does not degrade to MISSING_INPUT for every native run.
+        """
+        scip_index = build_swift_scip_index_without_symbol_relationships()
+        plain_infos = list(iter_scip_symbol_infos(scip_index))
+        assert all(not si.relationships for si in plain_infos)
+
+        fallback_infos = list(
+            iter_scip_symbol_infos(scip_index, synthesize_occurrence_relationships=True)
+        )
+        edges = [
+            (si.qualified_name, target, rel_type)
+            for si in fallback_infos
+            for target, rel_type in si.relationships
+        ]
+
+        assert edges == [
+            ("UwMiniApp renderBalanceData", "UwMiniCore BalanceData", "REFERENCES")
+        ]
+
+    def test_dead_code_consumes_relationshipless_swift_scip_fallback(self) -> None:
+        graph = _build_graph_from_relationshipless_scip("project/uw-mini")
+
+        assert graph.symbols
+        assert graph.edges, "Fallback SCIP relationships must materialize graph edges"
+
+        seeds = compute_all_seeds(graph)
+        reachable = compute_reachable_set(graph, seeds)
+        dead = compute_dead_candidates(graph, reachable)
+
+        dead_qnames = {qn for qn in dead}
+        assert any("DeadHelper" in qn for qn in dead_qnames)

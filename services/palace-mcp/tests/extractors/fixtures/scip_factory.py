@@ -289,6 +289,59 @@ def build_swift_struct_scip_index_with_symbol_infos() -> Any:
     return index
 
 
+def build_swift_scip_index_without_symbol_relationships() -> Any:
+    """Build Swift SCIP with occurrences but empty SymbolInformation.relationships.
+
+    This mirrors current native scip-swift artifacts: definitions and use
+    occurrences are present, but SymbolInformation.relationships is empty.
+    """
+    index = scip_pb2.Index()  # type: ignore[attr-defined]
+    metadata = scip_pb2.Metadata()  # type: ignore[attr-defined]
+    metadata.version = scip_pb2.ProtocolVersion.UnspecifiedProtocolVersion  # type: ignore[attr-defined]
+    metadata.tool_info.name = "palace-swift-scip-emit"
+    metadata.tool_info.version = "0.1.0"
+    metadata.project_root = "file:///test"
+    index.metadata.CopyFrom(metadata)
+
+    _SYM_RENDER = "scip-swift apple UwMiniApp . renderBalanceData"
+    _SYM_BALANCE = "scip-swift apple UwMiniCore . BalanceData"
+    _SYM_DEAD = "scip-swift apple UwMiniCore . DeadHelper"
+
+    doc = index.documents.add()
+    doc.relative_path = "Sources/UwMiniApp/ContentView.swift"
+    doc.language = "swift"
+    for line, sym, role in (
+        (1, _SYM_RENDER, 1),
+        (2, _SYM_BALANCE, 0),
+    ):
+        occ = doc.occurrences.add()
+        occ.range.extend([line, 0, 12])
+        occ.symbol = sym
+        occ.symbol_roles = role
+
+    si_render = doc.symbols.add()
+    si_render.symbol = _SYM_RENDER
+    si_render.kind = _SCIP_KIND_FUNCTION
+
+    si_balance = doc.symbols.add()
+    si_balance.symbol = _SYM_BALANCE
+    si_balance.kind = _SCIP_KIND_STRUCT
+
+    doc_dead = index.documents.add()
+    doc_dead.relative_path = "Sources/UwMiniCore/DeadHelper.swift"
+    doc_dead.language = "swift"
+    occ_dead = doc_dead.occurrences.add()
+    occ_dead.range.extend([1, 0, 10])
+    occ_dead.symbol = _SYM_DEAD
+    occ_dead.symbol_roles = 1
+
+    si_dead = doc_dead.symbols.add()
+    si_dead.symbol = _SYM_DEAD
+    si_dead.kind = _SCIP_KIND_CLASS
+
+    return index
+
+
 def write_scip_fixture(index: Any, path: Path) -> Path:
     """Serialize SCIP Index to a file."""
     path.write_bytes(index.SerializeToString())

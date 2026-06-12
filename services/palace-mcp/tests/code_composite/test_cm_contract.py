@@ -490,6 +490,32 @@ class TestShortNameQueryContract:
         assert query_mock.await_count == 4
 
     @pytest.mark.asyncio
+    async def test_resolve_qn_prefers_exact_native_scip_qn_without_cm(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        exact_qn = "EvmKit s%3A6EvmKit11TransactionC5nonceSiSgvg"
+        exact_row = {
+            "name": exact_qn,
+            "short_name": "",
+            "symbol": "",
+            "qualified_name": exact_qn,
+            "file_path": "Sources/EvmKit/Models/Transaction.swift",
+        }
+        query_mock = AsyncMock(return_value=[exact_row])
+        monkeypatch.setattr(code_composite, "_query_symbol_candidates", query_mock)
+
+        result = await code_composite._resolve_qn(
+            None,
+            exact_qn,
+            "evm-kit",
+            driver=object(),
+        )
+
+        assert result == (exact_qn, exact_qn)
+        assert query_mock.await_count == 1
+        assert query_mock.await_args.args[1] == code_composite._QUERY_SYMBOL_BY_EXACT_QN
+
+    @pytest.mark.asyncio
     async def test_resolve_qn_falls_back_to_function_projection(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

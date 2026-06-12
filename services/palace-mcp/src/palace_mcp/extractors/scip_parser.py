@@ -254,13 +254,24 @@ class ScipSymbolInfo:
     relationships: tuple[tuple[str, str], ...]  # ((target_qname, neo4j_rel_type), ...)
 
 
-def iter_scip_symbol_infos(index: Any) -> Iterator[ScipSymbolInfo]:
+def iter_scip_symbol_infos(
+    index: Any,
+    *,
+    synthesize_occurrence_relationships: bool = False,
+) -> Iterator[ScipSymbolInfo]:
     """Yield ScipSymbolInfo from SCIP Index.documents[].symbols.
 
     Deduplicates by qualified_name across all documents.
     Maps enclosing_symbol + Extension kind to EXTENSION_OF relationships.
+    When synthesize_occurrence_relationships is true, adds a conservative
+    fallback REFERENCES graph from occurrence order for SCIP emitters that
+    omit SymbolInformation.relationships entirely.
     """
     seen: set[str] = set()
+    fallback_relationships: dict[str, tuple[tuple[str, str], ...]] = {}
+    if synthesize_occurrence_relationships:
+        fallback_relationships = _synthesize_relationships_from_occurrences(index)
+
     kind_field = scip_pb2.SymbolInformation.DESCRIPTOR.fields_by_name["kind"]  # type: ignore[attr-defined]
     kind_enum = kind_field.enum_type
 
@@ -299,6 +310,7 @@ def iter_scip_symbol_infos(index: Any) -> Iterator[ScipSymbolInfo]:
                 enc_qname = _extract_qualified_name(sym_info.enclosing_symbol)
                 if enc_qname:
                     rels.append((enc_qname, "EXTENSION_OF"))
+            rels.extend(fallback_relationships.get(qname, ()))
 
             yield ScipSymbolInfo(
                 qualified_name=qname,
@@ -306,6 +318,67 @@ def iter_scip_symbol_infos(index: Any) -> Iterator[ScipSymbolInfo]:
                 scip_kind_name=scip_kind_name,
                 relationships=tuple(rels),
             )
+
+
+def _synthesize_relationships_from_occurrences(
+    index: Any,
+) -> dict[str, tuple[tuple[str, str], ...]]:
+    """Build fallback REFERENCES edges from SCIP occurrences.
+
+    Some Swift SCIP emitters populate SymbolInformation and occurrence roles
+    but leave SymbolInformation.relationships/enclosing_symbol/enclosing_range
+    empty. For native dead_code, an edge-empty graph is worse than a conservative
+    approximation: it either times out or turns every isolated symbol into a
+    dead candidate.
+
+    Heuristic: within a source document, attach each non-definition occurrence
+    to the nearest preceding definition/forward-definition occurrence. This
+    mirrors source order well enough for Swift methods/properties while avoiding
+    cross-file guesses. Existing explicit relationships are still preferred and
+    are merged by iter_scip_symbol_infos.
+    """
+    defined_qnames = _symbol_info_qnames(index)
+    by_source: dict[str, set[tuple[str, str]]] = {}
+
+    for doc in index.documents:
+        current_source: str | None = None
+        for occ in sorted(
+            doc.occurrences,
+            key=lambda o: tuple(int(v) for v in list(o.range)),
+        ):
+            raw_symbol = occ.symbol
+            if not raw_symbol or raw_symbol.startswith("local "):
+                continue
+            qname = _extract_qualified_name(raw_symbol)
+            if not qname:
+                continue
+
+            role = _scip_role_to_kind(occ.symbol_roles)
+            if role in (SymbolKind.DEF, SymbolKind.DECL):
+                if qname in defined_qnames:
+                    current_source = qname
+                continue
+
+            if current_source is None or current_source == qname:
+                continue
+            if qname not in defined_qnames:
+                continue
+            by_source.setdefault(current_source, set()).add((qname, "REFERENCES"))
+
+    return {source: tuple(sorted(rels)) for source, rels in by_source.items()}
+
+
+def _symbol_info_qnames(index: Any) -> set[str]:
+    qnames: set[str] = set()
+    for doc in index.documents:
+        for sym_info in doc.symbols:
+            raw_symbol = sym_info.symbol
+            if not raw_symbol or raw_symbol.startswith("local "):
+                continue
+            qname = _extract_qualified_name(raw_symbol)
+            if qname:
+                qnames.add(qname)
+    return qnames
 
 
 def iter_scip_occurrences(

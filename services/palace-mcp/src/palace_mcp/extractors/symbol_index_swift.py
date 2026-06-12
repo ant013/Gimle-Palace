@@ -483,7 +483,9 @@ async def _refresh_graph_state(
     graph_seen_at = datetime.now(tz=timezone.utc)
     shadow_rows = _build_shadow_rows(
         occurrences=iter_occurrences(),
-        symbol_infos=iter_scip_symbol_infos(scip_index),
+        symbol_infos=iter_scip_symbol_infos(
+            scip_index, synthesize_occurrence_relationships=True
+        ),
         group_id=project_id,
         seen_at=graph_seen_at,
     )
@@ -493,7 +495,9 @@ async def _refresh_graph_state(
     seen_qnames: set[str] = set()
     sym_batch: list[ScipSymbolInfo] = []
     sym_batch_size = 5000
-    for sym_info in iter_scip_symbol_infos(scip_index):
+    for sym_info in iter_scip_symbol_infos(
+        scip_index, synthesize_occurrence_relationships=True
+    ):
         seen_qnames.add(sym_info.qualified_name)
         sym_batch.append(sym_info)
         if len(sym_batch) >= sym_batch_size:

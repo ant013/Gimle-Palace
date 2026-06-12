@@ -116,6 +116,42 @@ async def test_search_graph_pattern_mode_returns_results_and_pagination(
 
 
 @pytest.mark.asyncio
+async def test_search_graph_allows_symbol_label_and_matches_name_against_qn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    driver = _mock_driver(
+        [{"total": 1}],
+        [
+            {
+                "name": "EvmKit.Transaction",
+                "qualified_name": "EvmKit s%3A6EvmKit11TransactionC",
+                "label": "Symbol",
+                "file_path": "Sources/EvmKit/Models/Transaction.swift",
+            }
+        ],
+    )
+    monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: driver)
+
+    result = await native_search_graph(
+        project="evm-kit",
+        label="symbol",
+        name_pattern=".*Transaction.*",
+        limit=5,
+    )
+
+    assert result["total"] == 1
+    assert result["results"][0]["label"] == "Symbol"
+
+    count_query = driver.session.return_value.run.await_args_list[0].args[0]
+    assert "result_label <> 'Symbol'" not in count_query
+    assert "OR result_qn =~ $name_pattern" in count_query
+    assert "OR result_file_path =~ $name_pattern" in count_query
+    assert (
+        driver.session.return_value.run.await_args_list[0].kwargs["label"] == "Symbol"
+    )
+
+
+@pytest.mark.asyncio
 async def test_search_graph_rejects_invalid_regex_before_query(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

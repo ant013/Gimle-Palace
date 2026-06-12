@@ -22,6 +22,9 @@ if TYPE_CHECKING:
 _MAX_SCOPE_PROJECTS = 10
 _MAX_LIMIT = 50
 _MAX_CONTEXT_LIMIT = 10
+_MIN_CANDIDATE_LIMIT = 500
+_MAX_CANDIDATE_LIMIT = 5000
+_CANDIDATES_PER_REQUESTED_HIT = 100
 _USAGE_PREVIEW_PHASES = ("phase1_defs", "phase2_user_uses", "phase3_vendor_uses")
 
 _VALIDATE_PROJECTS_QUERY = """
@@ -384,7 +387,13 @@ def _normalize_scope(
 
 
 def _candidate_limit(limit: int, scope_size: int) -> int:
-    return min(max(limit * scope_size * 10, 50), 500)
+    return min(
+        max(
+            limit * max(scope_size, 1) * _CANDIDATES_PER_REQUESTED_HIT,
+            _MIN_CANDIDATE_LIMIT,
+        ),
+        _MAX_CANDIDATE_LIMIT,
+    )
 
 
 def _project_from_group_id(group_id: str) -> str:

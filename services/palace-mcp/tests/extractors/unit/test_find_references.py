@@ -8,6 +8,7 @@ import pytest
 
 from palace_mcp.code_composite import (
     FindReferencesRequest,
+    _decode_unique_occurrences,
     _query_any_ingest_run_for_project,
     _query_eviction_record,
     _query_ingest_run_for_project,
@@ -46,6 +47,42 @@ class TestFindReferencesRequest:
     def test_project_optional(self) -> None:
         req = FindReferencesRequest(qualified_name="x.y", project="gimle")
         assert req.project == "gimle"
+
+
+class TestDecodeUniqueOccurrences:
+    def test_filters_docs_with_unexpected_qualified_name(self) -> None:
+        occurrences = _decode_unique_occurrences(
+            [
+                {
+                    "file_path": ["Sources/Transaction.swift"],
+                    "line": [12],
+                    "col_start": [4],
+                    "col_end": [15],
+                    "symbol_qualified_name": ["CryptoKit Nonce"],
+                },
+                {
+                    "file_path": ["Sources/Transaction.swift"],
+                    "line": [20],
+                    "col_start": [8],
+                    "col_end": [19],
+                    "symbol_qualified_name": ["EvmKit Transaction"],
+                },
+            ],
+            fallback_qualified_name="EvmKit Transaction",
+            expected_qualified_name="EvmKit Transaction",
+            symbol_id=123,
+        )
+
+        assert occurrences == [
+            {
+                "file_path": "Sources/Transaction.swift",
+                "line": 20,
+                "col_start": 8,
+                "col_end": 19,
+                "kind": "unknown",
+                "qualified_name": "EvmKit Transaction",
+            }
+        ]
 
 
 class TestQueryIngestRun:
