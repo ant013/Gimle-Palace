@@ -34,9 +34,9 @@ evidence live here.
 | --- | --- |
 | Walker issue | `GIM-1611` / `c3af6f53-340b-4aa0-a080-83f6a2850b33` |
 | Walker assignee | `CXCTO` |
-| Current task | `fix-9` |
-| Active blocker issue | `GIM-1636` / `0aade433-28db-45e6-a8e0-6c0bb129abde` |
-| Last completed task | `fix-8` |
+| Current task | `fix-10` |
+| Active blocker issue | `none` |
+| Last completed task | `fix-9` |
 | Queue mode | strict sequential |
 | Allowed team | CX/Codex only |
 | Source spec | `docs/superpowers/specs/2026-06-11-broken-ios-extractors-repair.md` |
@@ -106,8 +106,8 @@ task starts.
 | fix-6 | done | GIM-1622 / 03e769ff-2180-4384-9e99-991841bd2d74 | CXCTO -> CX implementer | Complete `public_api_surface` artifact path for interface-capable SwiftPM kits on the dev Mac; keep app projects `NOT_APPLICABLE` unless a deliberate public API artifact exists. | SwiftPM kits with generated `.swiftinterface` write `PublicApiSurface`/`PublicApiSymbol`; missing artifacts persist `MISSING_INPUT` with `next_action`; `uw-ios-app` is explicitly `NOT_APPLICABLE` unless a real app API artifact is introduced. |
 | fix-7 | done | GIM-1630 / a301b19a-8799-471b-800c-bc8d3c67c198 | CXCTO -> CX implementer | Repair `arch_layer` iOS module graph using SCIP and/or Xcode target inputs instead of relying only on root `Package.swift`/Gradle shape. | Every iOS repo has meaningful module/file graph data; `uw-ios-app` module count is materially greater than zero; module dependency and containment edges are explainable from SCIP or Xcode evidence. |
 | fix-8 | done | GIM-1635 / 8cc61845-b9d0-40bf-a6f9-6d277a32ee69 | CXCTO -> CX implementer | Repair `cross_module_contract` Swift symbol correlation by bridging `.swiftinterface` FQNs to SCIP/Tantivy descriptor qualified names. | GIM-1603 baseline snapshots remain; real `CONSUMES_PUBLIC_SYMBOL` edges appear when consumers exist; zero consumer edges are distinguishable from correlation failure; tests include mismatched Swift name formats. |
-| fix-9 | selected | GIM-1636 / 0aade433-28db-45e6-a8e0-6c0bb129abde | CXCTO -> CX implementer | Repair `cross_repo_version_skew`: read canonical bundle `:CONTAINS` relationships and add declared-constraint skew detection in addition to resolved-version skew. | Bundles created by canonical registration are processed; resolved-version and declared-constraint skew are reported; tests use real bundle CRUD shape, not only synthetic `:HAS_MEMBER`. |
-| fix-10 | todo | none | CXCTO -> CX implementer | Run full sequential clean rebaseline on the seven dedicated iOS repos and write the numeric completion report. | All extractor outcomes and per-project counts are recorded; broken/partial extractors show real numbers or explicit `MISSING_INPUT`/`NOT_APPLICABLE`; report includes native Neo4j evidence, benchmark timing, and sanity queries. |
+| fix-9 | done | GIM-1636 / 0aade433-28db-45e6-a8e0-6c0bb129abde | CXCTO -> CX implementer | Repair `cross_repo_version_skew`: read canonical bundle `:CONTAINS` relationships and add declared-constraint skew detection in addition to resolved-version skew. | Bundles created by canonical registration are processed; resolved-version and declared-constraint skew are reported; tests use real bundle CRUD shape, not only synthetic `:HAS_MEMBER`. |
+| fix-10 | selected | none | CXCTO -> CX implementer | Run full sequential clean rebaseline on the seven dedicated iOS repos and write the numeric completion report. | All extractor outcomes and per-project counts are recorded; broken/partial extractors show real numbers or explicit `MISSING_INPUT`/`NOT_APPLICABLE`; report includes native Neo4j evidence, benchmark timing, and sanity queries. |
 
 ## Completion evidence
 
@@ -121,6 +121,7 @@ task starts.
 | fix-6 | `GIM-1622` done. PR #445 merged to `develop` at merge commit `33019c3cd3739e8aca412dba545978fa8a7d5077` with exact head `f08dc5f2d94050b8dc9094e39504cfde0ba0c2d2`; Paperclip completion comment `4923cf2f-dbc4-4877-a25b-3c36979d7aa5`; required checks `check`, `detect-changes`, `submodule-drift-check`, `lint`, `test`, `typecheck`, `docker-build`, and `paperclip-assembly` passed; PR body includes live public API artifact proof for six SwiftPM kits and documents app/non-SwiftPM `NOT_APPLICABLE` cases. |
 | fix-7 | `GIM-1630` done. PR #447 merged to `develop` at merge commit `2b0fa1b795d0b462a95ab2c1a8692639dd49952f` with exact head `00f6053b6a4bddb836b3b592a6fc8c1db4bacc81`; Paperclip completion comment `c72564e5-0020-4c3e-a952-e4eb0afabced`; required checks `check`, `detect-changes`, `submodule-drift-check`, `lint`, `typecheck`, `test`, and `docker-build` passed; local verification covered `ruff format --check`, `ruff check`, `mypy arch_layer`, and targeted `arch_layer` pytest; live parser proof on the dedicated `unstoppable-wallet-ios` clone reported 4 modules and 3 edges. |
 | fix-8 | `GIM-1635` done. PR #450 merged to `develop` at merge commit `d2077b93e9b05338ae3db8f79c3b40941db32cc2` with exact head `894c30d18bc50c9621cf916b40c8b7d675f11c6b`; Paperclip merge comment `40aa595b-303b-4d7f-a17e-231f0c70bf06`; CR approval comment `5009ef8b-bac1-4954-89df-2ba9701637ed`; QA PASS comment `7cc2f967-3ba5-4746-b95e-d122eab47a77`; required checks `check`, `docker-build`, `lint`, `test`, `typecheck`, `detect-changes`, and `submodule-drift-check` passed; native smoke on the allowed `BitcoinCore.Swift` clone recorded a valid preserved zero-consumer baseline with `ModuleContractSnapshot=1`, `CONTRACT_PRODUCER_SURFACE=1`, and `CONSUMES_PUBLIC_SYMBOL=0`. |
+| fix-9 | `GIM-1636` done. PR #451 merged to `develop` at merge commit `f9615bfc52874af93c197fd41a5a1b7e899be63d` with exact head `6510d8da4fcf55f063458393112b33076e8ae8c2`; Paperclip merge comment `999e9dd5-7ebd-436d-a0ce-8e9b8218dc45`; CR approval comment `bf3f6243-5679-4d05-b46f-2b72026bc00a`; architecture approval comment `08d84c78-f020-4992-908d-f383778163e8`; QA PASS comment `606b48f9-ef7f-4313-87cf-68b81164f93c`; required checks `check`, `docker-build`, `lint`, `test`, `typecheck`, `detect-changes`, and `submodule-drift-check` passed; native MacBook smoke verified canonical `:CONTAINS` bundle membership and `find_version_skew` success on a temporary bundle. |
 
 ## Final acceptance for the walker
 
