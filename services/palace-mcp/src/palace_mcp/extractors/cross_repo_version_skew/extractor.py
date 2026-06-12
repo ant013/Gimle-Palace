@@ -197,7 +197,7 @@ LIMIT 100
                         WarningEntry(
                             code="member_not_registered",
                             slug=slug,
-                            message=f"{slug} is in :HAS_MEMBER but no :Project node exists",
+                            message=f"{slug} is in :CONTAINS but no :Project node exists",
                         )
                     )
 
@@ -254,7 +254,7 @@ LIMIT 100
         async with driver.session(default_access_mode="READ") as session:
             result = await session.run(
                 """
-                MATCH (b:Bundle {name: $name})-[:HAS_MEMBER]->(p:Project)
+                MATCH (b:Bundle {name: $name})-[:CONTAINS]->(p:Project)
                 RETURN p.slug AS slug
                 """,
                 name=bundle,

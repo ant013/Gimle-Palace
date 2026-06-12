@@ -105,7 +105,7 @@ async def test_acceptance_20_malformed_purl_warning(driver):  # type: ignore[no-
 
 @pytest.mark.asyncio
 async def test_acceptance_24_member_not_registered_warning(driver):  # type: ignore[no-untyped-def]
-    """Stale :HAS_MEMBER pointing to non-existent :Project produces warning."""
+    """Stale :CONTAINS pointing to non-existent :Project produces warning."""
     async with driver.session() as session:
         await session.run("MATCH (n) DETACH DELETE n")
         await session.run("""
@@ -114,10 +114,10 @@ async def test_acceptance_24_member_not_registered_warning(driver):  # type: ign
             MERGE (good_dep:ExternalDependency {purl: 'pkg:pypi/dep@1.0.0'})
               SET good_dep.ecosystem = 'pypi', good_dep.resolved_version = '1.0.0'
             MERGE (good)-[:DEPENDS_ON {scope: 'main', declared_in: 'pyproject.toml', declared_version_constraint: '1.0.0'}]->(good_dep)
-            MERGE (b)-[:HAS_MEMBER]->(good)
+            MERGE (b)-[:CONTAINS]->(good)
             // Stale: bundle references a slug whose :Project was deleted
             MERGE (ghost_proj:Project {slug: 'ghost-member'})
-            MERGE (b)-[:HAS_MEMBER]->(ghost_proj)
+            MERGE (b)-[:CONTAINS]->(ghost_proj)
             DETACH DELETE ghost_proj
         """)
     run_id = "warn-ghost-001"
