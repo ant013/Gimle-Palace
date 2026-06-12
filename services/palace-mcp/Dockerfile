@@ -1,12 +1,12 @@
 # --- cm-fetch stage -------------------------------------------------------
-# Pinned to v0.6.0 with SHA-256 verification of the release tarball.
+# Pinned with SHA-256 verification of the release tarball.
 # Update CM_VERSION + CM_SHA256_* in lockstep when upgrading.
 FROM debian:bookworm-slim@sha256:f9c6a2fd2ddbc23e336b6257a5245e31f996953ef06cd13a59fa0a1df2d5c252 AS cm-fetch
 
-ARG CM_VERSION=v0.6.0
+ARG CM_VERSION=v0.8.1
 ARG TARGETARCH=amd64
-ARG CM_SHA256_AMD64=68dfebf041b37f4b64bd47a3b56373aeabf3f56f3cbba86de3564bfde9a1b3d5
-ARG CM_SHA256_ARM64=b60d567353e64c10f044e4dc408ab1398f56f9930ce394f31fa2ace12a11e1a6
+ARG CM_SHA256_AMD64=6ab87a6c05d049dde57700803ca0ab4199fcf25973a0606618af0fcee73f5abd
+ARG CM_SHA256_ARM64=13526acc2a6a0697dff3c763fb443a416589bc10ad8b12015b63d87e515dd72b
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends curl ca-certificates && \
