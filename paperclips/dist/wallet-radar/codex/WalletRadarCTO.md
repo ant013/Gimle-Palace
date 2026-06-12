@@ -588,6 +588,7 @@ WalletRadarCTO must merge the PR when all are true:
 - latest CodeReviewer comment approves the PR/head;
 - latest QAEngineer comment passes the same PR/head and records local CI/smoke
   evidence;
+- PR includes the matching `ROADMAP.md` status line for the phase;
 - PR is mergeable/clean and the conflict-marker scan is empty;
 - `gh pr checks <PR>` exits 0, or GitHub reports no configured checks/workflows
   for this repo.
