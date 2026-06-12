@@ -17,13 +17,18 @@ routines:
     dispatcher: UWACTO
     infra_executor: UWAInfraEngineer
     pr_audit_coordinator: UWAKotlinAuditor
+    daily_chain:
+      intake: UWACTO
+      code_auditor: UWAKotlinAuditor
+      security_auditor: UWASecurityAuditor
+      crypto_auditor: UWACryptoAuditor
+      infra_auditor: UWAInfraEngineer
+      research_agent: UWAResearchAgent
+      qa_agent: UWAQAEngineer
+      aggregator: UWACTO
+      delivery_agent: UWAInfraEngineer
     initialization_allowed: false
     codebase_memory_project: Users-Shared-UnstoppableAudit-repos-android-unstoppable-wallet-android
-    required_subagents:
-      - uaudit-kotlin-audit-specialist
-      - uaudit-bug-hunter
-      - uaudit-security-auditor
-      - uaudit-blockchain-auditor
 
   - id: daily-ios-version-0.49
     platform: ios
@@ -34,10 +39,15 @@ routines:
     dispatcher: UWICTO
     infra_executor: UWIInfraEngineer
     pr_audit_coordinator: UWISwiftAuditor
+    daily_chain:
+      intake: UWICTO
+      code_auditor: UWISwiftAuditor
+      security_auditor: UWISecurityAuditor
+      crypto_auditor: UWICryptoAuditor
+      infra_auditor: UWIInfraEngineer
+      research_agent: UWIResearchAgent
+      qa_agent: UWIQAEngineer
+      aggregator: UWICTO
+      delivery_agent: UWIInfraEngineer
     initialization_allowed: false
     codebase_memory_project: Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
-    required_subagents:
-      - uaudit-swift-audit-specialist
-      - uaudit-bug-hunter
-      - uaudit-security-auditor
-      - uaudit-blockchain-auditor

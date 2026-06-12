@@ -394,3 +394,18 @@ artifact root, comment the absolute path, and hand off delivery to
 only for explicitly iOS-only issues). Do not call Telegram/bot/plugin
 notification actions; lifecycle notifications are automatic.
 
+
+## Daily Version-Branch Crypto Audit Stage (iOS)
+
+When assigned a UAudit daily version-branch issue with
+`mode=daily_crypto_audit`, read `$RUN/profile.json`, `$RUN/diff.patch`,
+`$RUN/code.md`, `$RUN/security.md`, and the iOS repo. Audit wallet, chain,
+signing, transaction, key-management, address, fee, and balance semantics in
+FROM..TO.
+
+Write `$RUN/crypto.md` with crypto/blockchain findings, no-finding areas,
+limitations, and exact evidence. Then write `$RUN/crypto.done`, comment
+`crypto.md ready for UNS-<N> iOS daily audit`, PATCH assignee to
+`00000000-0000-0000-0000-00000000001b` with `mode=daily_infra_audit`, and stop.
+Do not send Telegram, update cursors, or invoke `uaudit-*` Codex subagents.
+
