@@ -19,8 +19,11 @@ from palace_mcp.extractors.arch_layer.models import (
     ParseResult,
     ParserWarning,
 )
+from palace_mcp.extractors.foundation.walk import walk_repo
 
 _OBJECT_START_RE = re.compile(r"^\s*([A-F0-9]{8,32}) /\*.*\*/ = \{")
+
+
 @dataclass(frozen=True)
 class _PbxObject:
     isa: str
@@ -28,7 +31,7 @@ class _PbxObject:
 
 
 def parse_xcodeproj(repo_path: Path, *, project_id: str, run_id: str) -> ParseResult:
-    pbxproj_paths = sorted(repo_path.glob("**/*.xcodeproj/project.pbxproj"))
+    pbxproj_paths = _find_pbxproj_paths(repo_path)
     if not pbxproj_paths:
         return ParseResult(
             modules=(),
@@ -77,6 +80,14 @@ def parse_xcodeproj(repo_path: Path, *, project_id: str, run_id: str) -> ParseRe
     )
 
 
+def _find_pbxproj_paths(repo_path: Path) -> list[Path]:
+    return sorted(
+        path
+        for path in walk_repo(repo_path, suffixes=frozenset({".pbxproj"}))
+        if path.name == "project.pbxproj" and path.parent.suffix == ".xcodeproj"
+    )
+
+
 def _parse_project_file(
     *,
     pbxproj_path: Path,
@@ -89,10 +100,17 @@ def _parse_project_file(
     manifest_path = str(pbxproj_path.relative_to(repo_path))
 
     groups = {oid: obj for oid, obj in objects.items() if obj.isa == "PBXGroup"}
+    synced_groups = {
+        oid: obj
+        for oid, obj in objects.items()
+        if obj.isa == "PBXFileSystemSynchronizedRootGroup"
+    }
     file_refs = {
         oid: obj for oid, obj in objects.items() if obj.isa == "PBXFileReference"
     }
-    build_files = {oid: obj for oid, obj in objects.items() if obj.isa == "PBXBuildFile"}
+    build_files = {
+        oid: obj for oid, obj in objects.items() if obj.isa == "PBXBuildFile"
+    }
     source_phases = {
         oid: obj for oid, obj in objects.items() if obj.isa == "PBXSourcesBuildPhase"
     }
@@ -116,12 +134,19 @@ def _parse_project_file(
     modules: list[Module] = []
     edges: list[ModuleEdge] = []
     warnings: list[ParserWarning] = []
+    project_root = _project_container_root(pbxproj_path, repo_path)
 
     for target_id, target in native_targets.items():
         target_name = target_names.get(target_id)
         if not target_name:
             continue
 
+        synced_roots = _target_synchronized_roots(
+            target=target,
+            synced_groups=synced_groups,
+            repo_path=repo_path,
+            project_root=project_root,
+        )
         swift_files = _target_swift_files(
             target=target,
             build_files=build_files,
@@ -129,20 +154,14 @@ def _parse_project_file(
             file_refs=file_refs,
             groups=groups,
             child_parents=child_parents,
+            project_root=project_root,
         )
-        if not swift_files:
-            continue
-
-        source_root = _common_source_root(swift_files, target_name=target_name)
+        source_root = (
+            _common_directory_root(synced_roots, target_name=target_name)
+            if synced_roots
+            else _common_source_root(swift_files, target_name=target_name)
+        )
         if source_root is None:
-            warnings.append(
-                ParserWarning(
-                    message=(
-                        f"xcodeproj: target {target_name!r} has Swift sources but "
-                        "no resolvable common source root"
-                    )
-                )
-            )
             continue
 
         modules.append(
@@ -232,6 +251,7 @@ def _target_swift_files(
     file_refs: dict[str, _PbxObject],
     groups: dict[str, _PbxObject],
     child_parents: dict[str, str],
+    project_root: PurePosixPath,
 ) -> list[PurePosixPath]:
     files: list[PurePosixPath] = []
     for phase_id in _list_field(target.body, "buildPhases"):
@@ -256,8 +276,48 @@ def _target_swift_files(
             )
             if resolved is None or resolved.suffix.lower() != ".swift":
                 continue
-            files.append(resolved)
+            files.append(project_root / resolved)
     return files
+
+
+def _target_synchronized_roots(
+    *,
+    target: _PbxObject,
+    synced_groups: dict[str, _PbxObject],
+    repo_path: Path,
+    project_root: PurePosixPath,
+) -> list[PurePosixPath]:
+    roots: list[PurePosixPath] = []
+    for group_id in _list_field(target.body, "fileSystemSynchronizedGroups"):
+        group = synced_groups.get(group_id)
+        if group is None:
+            continue
+        source_tree = (_string_field(group.body, "sourceTree") or "<group>").strip()
+        path = _string_field(group.body, "path")
+        if not path:
+            continue
+        if source_tree == "SOURCE_ROOT":
+            root = PurePosixPath(path)
+        elif source_tree == "<group>":
+            root = project_root / PurePosixPath(path)
+        else:
+            continue
+        if _contains_swift_files(repo_path / root):
+            roots.append(root)
+    return roots
+
+
+def _contains_swift_files(root: Path) -> bool:
+    return root.is_dir() and any(walk_repo(root, suffixes=frozenset({".swift"})))
+
+
+def _project_container_root(pbxproj_path: Path, repo_path: Path) -> PurePosixPath:
+    project_dir = pbxproj_path.parent.parent
+    try:
+        relative = project_dir.relative_to(repo_path)
+    except ValueError:
+        return PurePosixPath()
+    return PurePosixPath(str(relative)) if str(relative) != "." else PurePosixPath()
 
 
 def _resolve_file_ref_path(
@@ -323,10 +383,10 @@ def _resolve_group_path(
     return base / PurePosixPath(path) if path else base
 
 
-def _common_source_root(
-    paths: list[PurePosixPath], *, target_name: str
-) -> str | None:
-    directories = [str(path.parent) for path in paths if path.parent != PurePosixPath("")]
+def _common_source_root(paths: list[PurePosixPath], *, target_name: str) -> str | None:
+    directories = [
+        str(path.parent) for path in paths if path.parent != PurePosixPath("")
+    ]
     if not directories:
         return ""
     common = os.path.commonpath(directories)
@@ -345,6 +405,33 @@ def _common_source_root(
         if normalized_candidate and normalized_candidate in normalized_target:
             preferred_root = candidate
 
+    if preferred_root is not None:
+        return preferred_root
+    if counts:
+        return max(counts.items(), key=lambda item: (item[1], -len(item[0])))[0]
+    return ""
+
+
+def _common_directory_root(
+    paths: list[PurePosixPath], *, target_name: str
+) -> str | None:
+    directories = [str(path) for path in paths if path != PurePosixPath("")]
+    if not directories:
+        return ""
+    if len(directories) == 1:
+        return directories[0]
+    common = os.path.commonpath(directories)
+    if common not in ("", "."):
+        return common
+
+    preferred_root: str | None = None
+    normalized_target = _normalize(target_name)
+    counts: dict[str, int] = {}
+    for directory in directories:
+        candidate = PurePosixPath(directory).parts[0]
+        counts[candidate] = counts.get(candidate, 0) + 1
+        if _normalize(candidate) and _normalize(candidate) in normalized_target:
+            preferred_root = candidate
     if preferred_root is not None:
         return preferred_root
     if counts:

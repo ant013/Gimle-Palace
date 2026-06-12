@@ -138,7 +138,118 @@ class TestXcodeprojParser:
         result = parse_xcodeproj(tmp_path, project_id="project/test", run_id="r1")
         assert result.modules == ()
         assert result.edges == ()
-        assert any("project.pbxproj not found" in warning.message for warning in result.warnings)
+        assert any(
+            "project.pbxproj not found" in warning.message
+            for warning in result.warnings
+        )
+
+    def test_ignores_generated_xcode_projects(self, tmp_path: Path) -> None:
+        root_project = tmp_path / "App.xcodeproj"
+        generated_project = (
+            tmp_path
+            / ".palace-scip-derived-data-app"
+            / "SourcePackages"
+            / "checkouts"
+            / "Dependency"
+            / "Dependency.xcodeproj"
+        )
+        root_project.mkdir()
+        generated_project.mkdir(parents=True)
+
+        pbxproj = """
+// !$*UTF8*$!
+{
+  objects = {
+    BBBBBBBBBBBBBBBBBBBBBBBB /* Root */ = {
+      isa = PBXGroup;
+      children = (
+        CCCCCCCCCCCCCCCCCCCCCCCC /* App */,
+      );
+      sourceTree = "<group>";
+    };
+    CCCCCCCCCCCCCCCCCCCCCCCC /* App */ = {
+      isa = PBXGroup;
+      children = (
+        DDDDDDDDDDDDDDDDDDDDDDDD /* AppDelegate.swift */,
+      );
+      path = App;
+      sourceTree = "<group>";
+    };
+    DDDDDDDDDDDDDDDDDDDDDDDD /* AppDelegate.swift */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+    EEEEEEEEEEEEEEEEEEEEEEEE /* AppDelegate.swift in Sources */ = { isa = PBXBuildFile; fileRef = DDDDDDDDDDDDDDDDDDDDDDDD /* AppDelegate.swift */; };
+    FFFFFFFFFFFFFFFFFFFFFFFF /* App Sources */ = {
+      isa = PBXSourcesBuildPhase;
+      files = (
+        EEEEEEEEEEEEEEEEEEEEEEEE /* AppDelegate.swift in Sources */,
+      );
+    };
+    111111111111111111111111 /* App */ = {
+      isa = PBXNativeTarget;
+      buildPhases = (
+        FFFFFFFFFFFFFFFFFFFFFFFF /* App Sources */,
+      );
+      name = App;
+      productType = "com.apple.product-type.application";
+    };
+  };
+}
+"""
+        (root_project / "project.pbxproj").write_text(pbxproj, encoding="utf-8")
+        (generated_project / "project.pbxproj").write_text(
+            pbxproj.replace("name = App;", "name = Dependency;"),
+            encoding="utf-8",
+        )
+
+        result = parse_xcodeproj(tmp_path, project_id="project/test", run_id="r1")
+
+        assert [module.slug for module in result.modules] == ["App"]
+        assert result.modules[0].manifest_path == "App.xcodeproj/project.pbxproj"
+
+    def test_uses_file_system_synchronized_group_roots(self, tmp_path: Path) -> None:
+        project_dir = tmp_path / "Unstoppable" / "Unstoppable.xcodeproj"
+        project_dir.mkdir(parents=True)
+        swift_dir = tmp_path / "Unstoppable" / "Widget"
+        swift_dir.mkdir()
+        (swift_dir / "WidgetView.swift").write_text(
+            "import SwiftUI\n", encoding="utf-8"
+        )
+        (project_dir / "project.pbxproj").write_text(
+            """
+// !$*UTF8*$!
+{
+  objects = {
+    BBBBBBBBBBBBBBBBBBBBBBBB /* Widget */ = {
+      isa = PBXFileSystemSynchronizedRootGroup;
+      path = Widget;
+      sourceTree = "<group>";
+    };
+    CCCCCCCCCCCCCCCCCCCCCCCC /* Widget Sources */ = {
+      isa = PBXSourcesBuildPhase;
+      files = (
+      );
+    };
+    DDDDDDDDDDDDDDDDDDDDDDDD /* WidgetExtension */ = {
+      isa = PBXNativeTarget;
+      buildPhases = (
+        CCCCCCCCCCCCCCCCCCCCCCCC /* Widget Sources */,
+      );
+      fileSystemSynchronizedGroups = (
+        BBBBBBBBBBBBBBBBBBBBBBBB /* Widget */,
+      );
+      name = WidgetExtension;
+      productType = "com.apple.product-type.app-extension";
+    };
+  };
+}
+""",
+            encoding="utf-8",
+        )
+
+        result = parse_xcodeproj(tmp_path, project_id="project/test", run_id="r1")
+
+        assert len(result.modules) == 1
+        assert result.modules[0].slug == "WidgetExtension"
+        assert result.modules[0].source_root == "Unstoppable/Widget"
 
     def test_prefers_target_named_root_when_sources_mix_shared_files(
         self, tmp_path: Path
