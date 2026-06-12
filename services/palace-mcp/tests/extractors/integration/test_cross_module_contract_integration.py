@@ -407,7 +407,13 @@ async def test_cross_module_contract_writes_baseline_when_no_consumers_match(
 
     assert result["ok"] is True
     assert result["success"] is True
-    assert result["outcome"] == "ok"
+    assert result["outcome"] == "skipped"
+    assert "No cross-module consumers" in (result.get("message") or "")
+    assert (
+        result["next_action"]
+        == "Refresh the occurrence index and module ownership inputs before "
+        "rerunning cross_module_contract if consumer edges are expected."
+    )
     assert result["nodes_written"] == 1
     assert result["edges_written"] == 1
 
@@ -450,6 +456,64 @@ async def test_cross_module_contract_writes_baseline_when_no_consumers_match(
 
 
 @pytest.mark.asyncio
+async def test_cross_module_contract_keeps_zero_consumer_baseline_ok_when_bridge_confirms_absence(
+    driver: AsyncDriver,
+    graphiti_mock: MagicMock,
+    _project_and_repo: Path,
+    tmp_path: Path,
+) -> None:
+    await ensure_extractors_schema(driver)
+    repo = _project_and_repo / "contract-mini"
+    (repo / ".palace" / "cross-module-contract" / "delta-requests.json").unlink()
+    tantivy_dir = tmp_path / "tantivy-zero-consumers-verified"
+    tantivy_dir.mkdir()
+    settings = Settings(
+        neo4j_password="password",
+        openai_api_key="test-key",
+        palace_tantivy_index_path=str(tantivy_dir),
+        palace_tantivy_heap_mb=50,
+        palace_sourcekit_index_store_path="/tmp/fake-indexstore",
+    )
+
+    with (
+        patch("palace_mcp.extractors.runner.REPOS_ROOT", _project_and_repo),
+        patch("palace_mcp.mcp_server.get_driver", return_value=driver),
+        patch("palace_mcp.mcp_server.get_settings", return_value=settings),
+    ):
+        public_api_result = await run_extractor(
+            name="public_api_surface",
+            project="contract-mini",
+            driver=driver,
+            graphiti=graphiti_mock,
+        )
+    assert public_api_result["ok"] is True
+
+    with (
+        patch("palace_mcp.extractors.runner.REPOS_ROOT", _project_and_repo),
+        patch("palace_mcp.mcp_server.get_driver", return_value=driver),
+        patch("palace_mcp.mcp_server.get_settings", return_value=settings),
+        patch("palace_mcp.code.indexstore.find_callers", return_value=[]),
+        patch.dict(
+            registry.EXTRACTORS,
+            {"cross_module_contract": CrossModuleContractExtractor()},
+        ),
+    ):
+        result = await run_extractor(
+            name="cross_module_contract",
+            project="contract-mini",
+            driver=driver,
+            graphiti=graphiti_mock,
+        )
+
+    assert result["ok"] is True
+    assert result["success"] is True
+    assert result["outcome"] == "ok"
+    assert result.get("message") in (None, "")
+    assert result["nodes_written"] == 1
+    assert result["edges_written"] == 1
+
+
+@pytest.mark.asyncio
 async def test_cross_module_contract_skips_when_public_api_surface_is_missing(
     driver: AsyncDriver,
     graphiti_mock: MagicMock,
@@ -486,6 +550,11 @@ async def test_cross_module_contract_skips_when_public_api_surface_is_missing(
     assert result["success"] is True
     assert result["outcome"] == "skipped"
     assert "PublicApiSurface/PublicApiSymbol" in (result.get("message") or "")
+    assert (
+        result["next_action"]
+        == "Provide public API artifacts and rerun public_api_surface if "
+        "cross_module_contract coverage is required for this project."
+    )
 
 
 async def _seed_occurrences(tantivy_dir: Path) -> None:
