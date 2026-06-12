@@ -92,6 +92,20 @@ Tools observed as returning real data:
 - `palace.code.find_public_api`
 - `palace.code.find_dead_symbols`
 
+Historical regression note:
+
+- `dead_code` did work before the native/refactor path regressed. `docs/roadmap.md`
+  records G0d as closed on 2026-05-23 with `UW dead_code = 5926 findings,
+  5926 edges`.
+- Commit `c095a539399b2c774226ab7084f9cafc6bccddb6` on 2026-06-08 added the
+  current zero-edge preflight guard after native ingest produced `250 595`
+  isolated `:Symbol` nodes and hit the 3600 s timeout. That commit changed the
+  failure mode from "hang / classify everything dead" to `missing_input`; it
+  did not restore the relationship substrate.
+- Therefore the repair is not to remove the guard blindly. The repair is to
+  restore the relationship-producing substrate for native ingest and keep the
+  guard as a safety net for genuinely edge-empty input.
+
 ## Assumptions
 
 - Native MacBook + local Neo4j is the authoritative smoke environment for this
