@@ -142,6 +142,19 @@ class Settings(BaseSettings):
         description="Bolt session timeout for cross-repo skew aggregation Cypher (seconds)",
     )
 
+    palace_crypto_semgrep_timeout_s: int = Field(
+        default=120,
+        ge=1,
+        le=7200,
+        description="Per-run semgrep subprocess timeout for crypto_domain_model (seconds)",
+    )
+    palace_error_handling_semgrep_timeout_s: int = Field(
+        default=120,
+        ge=1,
+        le=7200,
+        description="Per-run semgrep subprocess timeout for error_handling_policy (seconds)",
+    )
+
     palace_hotspot_churn_window_days: int = Field(
         default=90,
         ge=1,

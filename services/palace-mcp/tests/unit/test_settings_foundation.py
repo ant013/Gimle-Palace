@@ -167,6 +167,52 @@ def test_version_skew_timeout_upper_bound_rejected(
         Settings()
 
 
+def test_semgrep_timeout_settings_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    for k, v in _minimal_env().items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.delenv("PALACE_CRYPTO_SEMGREP_TIMEOUT_S", raising=False)
+    monkeypatch.delenv("PALACE_ERROR_HANDLING_SEMGREP_TIMEOUT_S", raising=False)
+
+    settings = Settings()
+
+    assert settings.palace_crypto_semgrep_timeout_s == 120
+    assert settings.palace_error_handling_semgrep_timeout_s == 120
+
+
+def test_semgrep_timeout_settings_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    for k, v in _minimal_env().items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setenv("PALACE_CRYPTO_SEMGREP_TIMEOUT_S", "900")
+    monkeypatch.setenv("PALACE_ERROR_HANDLING_SEMGREP_TIMEOUT_S", "1800")
+
+    settings = Settings()
+
+    assert settings.palace_crypto_semgrep_timeout_s == 900
+    assert settings.palace_error_handling_semgrep_timeout_s == 1800
+
+
+def test_crypto_semgrep_timeout_lower_bound_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for k, v in _minimal_env().items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setenv("PALACE_CRYPTO_SEMGREP_TIMEOUT_S", "0")
+
+    with pytest.raises(ValidationError):
+        Settings()
+
+
+def test_error_handling_semgrep_timeout_lower_bound_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for k, v in _minimal_env().items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setenv("PALACE_ERROR_HANDLING_SEMGREP_TIMEOUT_S", "0")
+
+    with pytest.raises(ValidationError):
+        Settings()
+
+
 def test_ownership_settings_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     for k, v in _minimal_env().items():
         monkeypatch.setenv(k, v)

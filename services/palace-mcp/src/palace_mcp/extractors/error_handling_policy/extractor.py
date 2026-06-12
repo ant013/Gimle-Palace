@@ -203,6 +203,7 @@ class ErrorHandlingPolicyExtractor(BaseExtractor):
     """Error-handling anti-pattern extractor for Swift projects."""
 
     name: ClassVar[str] = "error_handling_policy"
+    timeout_s: ClassVar[float] = 1800.0
     description: ClassVar[str] = (
         "Detect Swift error-handling anti-patterns and index catch/try? surfaces."
     )
