@@ -7,6 +7,7 @@ runs the aggregation Cypher — enforced by source-grep regression test.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -22,10 +23,12 @@ from palace_mcp.extractors.cross_repo_version_skew.purl_parser import (
     purl_root_for_display,
 )
 from palace_mcp.extractors.cross_repo_version_skew.semver_classify import (
+    Severity,
     max_pairwise_severity,
 )
 
 Mode = Literal["project", "bundle"]
+_CONSTRAINT_VERSION_RE = re.compile(r"(?<![A-Za-z0-9])v?(\d+(?:\.\d+){0,2})")
 
 
 @dataclass(frozen=True)
@@ -33,6 +36,18 @@ class ComputeResult:
     skew_groups: list[SkewGroup]
     aligned_groups_total: int
     warnings: list[WarningEntry]
+
+
+def _constraint_severity(constraints: set[str]) -> Severity:
+    normalized_versions: set[str] = set()
+    for constraint in constraints:
+        match = _CONSTRAINT_VERSION_RE.search(constraint)
+        if match is None:
+            return "unknown"
+        normalized_versions.add(match.group(1))
+    if len(normalized_versions) < 2:
+        return "unknown"
+    return max_pairwise_severity(sorted(normalized_versions))
 
 
 _PROJECT_MODE_CYPHER = """
@@ -81,7 +96,8 @@ async def _compute_skew_groups(
 ) -> ComputeResult:
     """Aggregate :DEPENDS_ON over targets; group by purl_root; classify.
 
-    The result includes only true-skew groups (>=2 distinct versions).
+    The result includes true-skew groups from either resolved-version
+    disagreement or declared-constraint disagreement.
     Aligned groups (single-version) are counted but not returned as
     SkewGroup; the caller (MCP tool) emits them only on opt-in.
     """
@@ -122,13 +138,23 @@ async def _compute_skew_groups(
     aligned_groups_total = 0
     for (purl_root, ecosystem_value), group_rows in by_group.items():
         distinct_versions = sorted({r["version"] for r in group_rows})
-        if len(distinct_versions) < 2:
+        distinct_constraints = {
+            (r["declared_constraint"] or "").strip() for r in group_rows
+        }
+        has_version_skew = len(distinct_versions) >= 2
+        has_constraint_skew = len(distinct_constraints) >= 2
+        if not has_version_skew and not has_constraint_skew:
             # Aligned (or single-source). Single-source has 1 entry; >=2 entries
-            # with same version is true alignment.
+            # with same resolved version and declared constraint is true alignment.
             if len(group_rows) >= 2:
                 aligned_groups_total += 1
             continue
-        severity = max_pairwise_severity(distinct_versions)
+        if has_version_skew:
+            severity = max_pairwise_severity(distinct_versions)
+            version_count = len(distinct_versions)
+        else:
+            severity = _constraint_severity(distinct_constraints)
+            version_count = len(distinct_constraints)
         entries = tuple(
             SkewEntry(
                 scope_id=r["scope_id"],
@@ -143,7 +169,7 @@ async def _compute_skew_groups(
                 purl_root=purl_root,
                 ecosystem=ecosystem_value,
                 severity=severity,
-                version_count=len(distinct_versions),
+                version_count=version_count,
                 entries=entries,
             )
         )
