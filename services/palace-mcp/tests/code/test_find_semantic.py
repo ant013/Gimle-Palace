@@ -331,9 +331,17 @@ async def test_success_filters_scope_and_skips_context_when_disabled() -> None:
     cm_session_getter.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    "search_error",
+    [
+        "Invalid input 'SEARCH': expected MATCH",
+        "25 is not a valid option for cypher version. Valid options are: 5",
+    ],
+)
 @pytest.mark.asyncio
 async def test_vector_search_falls_back_when_search_is_unsupported(
     caplog: pytest.LogCaptureFixture,
+    search_error: str,
 ) -> None:
     from palace_mcp.code.find_semantic import semantic_search
 
@@ -350,7 +358,7 @@ async def test_vector_search_falls_back_when_search_is_unsupported(
             )
         if "SEARCH s IN" in query:
             calls["search"] += 1
-            raise Neo4jError("Invalid input 'SEARCH': expected MATCH")
+            raise Neo4jError(search_error)
         if "db.index.vector.queryNodes" in query:
             calls["legacy"] += 1
             return _FakeResult(

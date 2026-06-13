@@ -570,10 +570,17 @@ def _is_search_unsupported(exc: Exception) -> bool:
     if not isinstance(exc, Neo4jError):
         return False
     message = str(exc)
-    if not any(token in message for token in ("SEARCH", "CYPHER 25", "CYPHER_25")):
+    lower_message = message.lower()
+    cypher_version_rejected = (
+        "cypher version" in lower_message and "valid option" in lower_message
+    )
+    if not (
+        cypher_version_rejected
+        or any(token in message for token in ("SEARCH", "CYPHER 25", "CYPHER_25"))
+    ):
         return False
     return any(
-        token in message.lower()
+        token in lower_message
         for token in (
             "syntax",
             "invalid input",
@@ -581,6 +588,7 @@ def _is_search_unsupported(exc: Exception) -> bool:
             "unrecognized",
             "not defined",
             "not supported",
+            "valid option",
         )
     )
 
