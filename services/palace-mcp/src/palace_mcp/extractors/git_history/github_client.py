@@ -42,6 +42,10 @@ class RateLimitExhausted(Exception):
     """Raised when GraphQL budget would be exhausted; fail-fast (no sleep)."""
 
 
+class GitHubRepositoryUnavailable(Exception):
+    """Raised when GraphQL returns null for repository(owner:, name:)."""
+
+
 class GitHubClient:
     def __init__(
         self,
@@ -75,6 +79,10 @@ class GitHubClient:
                 {"owner": repo_owner, "name": repo_name, "cursor": cursor},
             )
             repo_data = resp_json["data"]["repository"]
+            if repo_data is None:
+                raise GitHubRepositoryUnavailable(
+                    f"github repository unavailable: {repo_owner}/{repo_name}"
+                )
             page = repo_data["pullRequests"]
             rate_limit = resp_json["data"]["rateLimit"]
 

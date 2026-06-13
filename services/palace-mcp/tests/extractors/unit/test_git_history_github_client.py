@@ -5,6 +5,7 @@ import respx
 
 from palace_mcp.extractors.git_history.github_client import (
     GitHubClient,
+    GitHubRepositoryUnavailable,
     RateLimitExhausted,
 )
 
@@ -55,6 +56,29 @@ async def test_fetch_prs_single_page():
             prs.extend(batch)
         assert len(prs) == 1
         assert prs[0]["number"] == 1
+
+
+@pytest.mark.asyncio
+async def test_fetch_prs_raises_when_repository_is_unavailable():
+    fake_response = {
+        "data": {
+            "rateLimit": {
+                "cost": 1,
+                "remaining": 4999,
+                "limit": 5000,
+                "resetAt": "2026-05-03T13:00:00Z",
+            },
+            "repository": None,
+        }
+    }
+    with respx.mock:
+        respx.post("https://api.github.com/graphql").mock(
+            return_value=httpx.Response(200, json=fake_response)
+        )
+        client = GitHubClient(token="tok")
+        with pytest.raises(GitHubRepositoryUnavailable):
+            async for _ in client.fetch_prs_since("owner", "repo", since=None):
+                pass
 
 
 @pytest.mark.asyncio

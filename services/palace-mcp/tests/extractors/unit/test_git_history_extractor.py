@@ -4,7 +4,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from palace_mcp.extractors.base import ExtractorOutcome
-from palace_mcp.extractors.git_history.extractor import GitHistoryExtractor
+from palace_mcp.extractors.git_history.extractor import (
+    GitHistoryExtractor,
+    _resolve_github_repo,
+)
 from palace_mcp.extractors.base import ExtractorRunContext, ExtractorStats
 
 UTC_TS = datetime(2026, 5, 3, 12, 0, tzinfo=timezone.utc)
@@ -192,3 +195,52 @@ def test_extractor_registered_in_registry():
 
     assert "git_history" in EXTRACTORS
     assert EXTRACTORS["git_history"].name == "git_history"
+
+
+@pytest.mark.parametrize(
+    ("remote_url", "expected"),
+    [
+        (
+            "https://github.com/horizontalsystems/stable-wallet-ios.git",
+            ("horizontalsystems", "stable-wallet-ios"),
+        ),
+        (
+            "git@github.com:horizontalsystems/unstoppable-wallet-ios.git",
+            ("horizontalsystems", "unstoppable-wallet-ios"),
+        ),
+        (
+            "ssh://git@github.com/horizontalsystems/market-kit.git",
+            ("horizontalsystems", "market-kit"),
+        ),
+    ],
+)
+def test_resolve_github_repo_from_origin_remote(
+    tmp_path: Path, remote_url: str, expected: tuple[str, str]
+) -> None:
+    import subprocess
+
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "remote", "add", "origin", remote_url],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+
+    assert _resolve_github_repo(tmp_path) == expected
+
+
+def test_resolve_github_repo_returns_none_for_non_github_remote(
+    tmp_path: Path,
+) -> None:
+    import subprocess
+
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "remote", "add", "origin", "https://example.com/acme/repo.git"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+
+    assert _resolve_github_repo(tmp_path) is None

@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import logging
+import re
+import subprocess
 from typing import ClassVar
 
 from datetime import datetime
+from pathlib import Path
 
 from palace_mcp.extractors.base import (
     BaseExtractor,
@@ -40,6 +43,13 @@ from palace_mcp.extractors.git_history.tantivy_writer import (
 
 log = logging.getLogger("watchdog.daemon")
 
+_GITHUB_HTTPS_RE = re.compile(
+    r"^https://github\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$"
+)
+_GITHUB_SSH_RE = re.compile(
+    r"^(?:git@github\.com:|ssh://git@github\.com/)(?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$"
+)
+
 
 async def _get_previous_error_code(driver: object, project: str) -> str | None:
     """Per-extractor circuit-breaker query (mirrors symbol_index_python.py:346)."""
@@ -57,6 +67,28 @@ async def _get_previous_error_code(driver: object, project: str) -> str | None:
         result = await session.run(_QUERY, project=project)
         record = await result.single()
         return record["error_code"] if record else None
+
+
+def _resolve_github_repo(repo_path: Path) -> tuple[str, str] | None:
+    """Resolve GitHub owner/repo from origin remote.
+
+    Project slugs are intentionally short identifiers like ``stable-wallet-ios``;
+    they are not GitHub coordinates. Phase 2 must use the repository remote.
+    """
+    try:
+        remote_url = subprocess.check_output(
+            ["git", "-C", str(repo_path), "remote", "get-url", "origin"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+
+    for pattern in (_GITHUB_HTTPS_RE, _GITHUB_SSH_RE):
+        match = pattern.match(remote_url)
+        if match:
+            return match.group("owner"), match.group("repo")
+    return None
 
 
 class GitHistoryExtractor(BaseExtractor):
@@ -252,15 +284,50 @@ class GitHistoryExtractor(BaseExtractor):
                 )
 
             # Phase 2 with token: fetch PRs via GraphQL
-            from palace_mcp.extractors.git_history.github_client import GitHubClient
+            from palace_mcp.extractors.git_history.github_client import (
+                GitHubClient,
+                GitHubRepositoryUnavailable,
+            )
             from palace_mcp.extractors.git_history.neo4j_writer import (
                 write_pr,
                 write_pr_comment,
             )
 
-            repo_parts = ctx.project_slug.split("/")
-            owner = repo_parts[0] if len(repo_parts) > 1 else ctx.project_slug
-            repo_name = repo_parts[1] if len(repo_parts) > 1 else ctx.project_slug
+            github_repo = _resolve_github_repo(ctx.repo_path)
+            if github_repo is None:
+                log.warning(
+                    "git_history_phase2_skipped_no_github_remote",
+                    extra={
+                        "event": "git_history_phase2_skipped_no_github_remote",
+                        "project_id": ctx.group_id,
+                    },
+                )
+                log.info(
+                    "git_history_complete",
+                    extra={
+                        "event": "git_history_complete",
+                        "project_id": ctx.group_id,
+                        "commits_written": commits_written,
+                        "prs_written": 0,
+                        "pr_comments_written": 0,
+                        "full_resync": full_resync,
+                    },
+                )
+                await finalize_ingest_run(driver, run_id=ctx.run_id, success=True)
+                return ExtractorStats(
+                    nodes_written=commits_written,
+                    edges_written=edges_written,
+                    outcome=ExtractorOutcome.SKIPPED,
+                    message=(
+                        "GitHub origin remote not detected; skipped pull request "
+                        "and comment ingestion after the commit walk."
+                    ),
+                    next_action=(
+                        "Set origin to a github.com remote and rerun git_history "
+                        "if pull request coverage is required."
+                    ),
+                )
+            owner, repo_name = github_repo
 
             gh_client = GitHubClient(token=settings.github_token)
             max_pr_updated_at: datetime | None = None
@@ -323,6 +390,41 @@ class GitHistoryExtractor(BaseExtractor):
                             )
                             pr_comments_written += 1
                             edges_written += 2
+            except GitHubRepositoryUnavailable:
+                log.warning(
+                    "git_history_phase2_skipped_github_repo_unavailable",
+                    extra={
+                        "event": "git_history_phase2_skipped_github_repo_unavailable",
+                        "project_id": ctx.group_id,
+                        "github_owner": owner,
+                        "github_repo": repo_name,
+                    },
+                )
+                log.info(
+                    "git_history_complete",
+                    extra={
+                        "event": "git_history_complete",
+                        "project_id": ctx.group_id,
+                        "commits_written": commits_written,
+                        "prs_written": 0,
+                        "pr_comments_written": 0,
+                        "full_resync": full_resync,
+                    },
+                )
+                await finalize_ingest_run(driver, run_id=ctx.run_id, success=True)
+                return ExtractorStats(
+                    nodes_written=commits_written,
+                    edges_written=edges_written,
+                    outcome=ExtractorOutcome.SKIPPED,
+                    message=(
+                        f"GitHub GraphQL did not return repository {owner}/{repo_name}; "
+                        "skipped pull request and comment ingestion after the commit walk."
+                    ),
+                    next_action=(
+                        "Check GitHub token access to the repository, or rerun with a "
+                        "token that can read repository pull requests."
+                    ),
+                )
             finally:
                 await gh_client.aclose()
 
