@@ -312,7 +312,7 @@ SET p.source_updated_at = $now
 RETURN p
 """
 
-LIST_PROJECT_SLUGS = "MATCH (p:Project) RETURN p.name AS slug ORDER BY slug"
+LIST_PROJECT_SLUGS = "MATCH (p:Project) RETURN p.slug AS slug ORDER BY slug"
 
 LIST_PROJECTS = "MATCH (p:Project) RETURN p ORDER BY p.slug"
 
@@ -323,10 +323,7 @@ RETURN p
 
 PROJECT_ENTITY_COUNTS = """
 MATCH (n)
-WHERE (n:Episode OR n:Iteration OR n:Decision OR n:IterationNote OR n:Finding
-    OR n:Module OR n:File OR n:Symbol OR n:APIEndpoint OR n:Model
-    OR n:Repository OR n:ExternalLib OR n:Trace)
-  AND n.group_id = $group_id
+WHERE n.group_id = $group_id
 RETURN labels(n) AS labels, count(n) AS c
 """
 

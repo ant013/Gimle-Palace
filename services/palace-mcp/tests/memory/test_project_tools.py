@@ -12,9 +12,18 @@ from palace_mcp.memory.project_tools import (
     list_projects,
     register_project,
 )
+from palace_mcp.memory.cypher import PROJECT_ENTITY_COUNTS
 from palace_mcp.memory.schema import ProjectInfo
 
 _NOW = "2026-04-18T10:00:00+00:00"
+
+
+class _Neo4jDateTimeLike:
+    def __init__(self, value: str) -> None:
+        self._value = value
+
+    def iso_format(self) -> str:
+        return self._value
 
 
 def _make_project_row(
@@ -202,9 +211,23 @@ async def test_list_projects_tolerates_null_timestamps() -> None:
     assert infos[0].source_updated_at is None
 
 
+@pytest.mark.asyncio
+async def test_list_projects_serializes_neo4j_temporal_values() -> None:
+    row = _make_project_row("uw-ios-app", "unstoppable-wallet-ios", [])
+    row["p"]["source_created_at"] = _Neo4jDateTimeLike(_NOW)
+    row["p"]["source_updated_at"] = _Neo4jDateTimeLike(_NOW)
+    driver = _make_mock_driver_for_list([row])
+
+    infos = await list_projects(driver)
+
+    assert infos[0].source_created_at == _NOW
+    assert infos[0].source_updated_at == _NOW
+
+
 def _make_mock_driver_for_overview(
     project_row: dict[str, Any],
     count_rows: list[dict[str, Any]],
+    last_ingest: dict[str, Any] | None = None,
 ) -> MagicMock:
     call_count: list[int] = [0]
 
@@ -234,8 +257,13 @@ def _make_mock_driver_for_overview(
             # PROJECT_ENTITY_COUNTS
             return _AsyncRows(count_rows)
         else:
-            # PROJECT_LAST_INGEST — no ingest run
-            result.single = AsyncMock(return_value=None)
+            # PROJECT_LAST_INGEST
+            if last_ingest is None:
+                result.single = AsyncMock(return_value=None)
+            else:
+                row = MagicMock()
+                row.__getitem__ = lambda _self, key: {"r": last_ingest}[key]
+                result.single = AsyncMock(return_value=row)
             return result
 
     session = MagicMock()
@@ -259,3 +287,46 @@ async def test_get_project_overview_returns_entity_counts() -> None:
     info = await get_project_overview(driver, slug="gimle")
     assert info.slug == "gimle"
     assert info.entity_counts == {"Issue": 10, "Comment": 5}
+
+
+@pytest.mark.asyncio
+async def test_get_project_overview_returns_code_extractor_entity_counts() -> None:
+    project_row = _make_project_row("uw-ios-app", "unstoppable-wallet-ios", ["swift"])
+    count_rows = [
+        {"labels": ["Symbol"], "c": 10},
+        {"labels": ["File"], "c": 5},
+        {"labels": ["DeadFinding"], "c": 2},
+        {"labels": ["ExternalDependency"], "c": 1},
+    ]
+    driver = _make_mock_driver_for_overview(project_row, count_rows)
+
+    info = await get_project_overview(driver, slug="uw-ios-app")
+
+    assert info.entity_counts == {
+        "Symbol": 10,
+        "File": 5,
+        "DeadFinding": 2,
+        "ExternalDependency": 1,
+    }
+
+
+def test_project_entity_counts_uses_group_id_without_static_label_filter() -> None:
+    assert "WHERE n.group_id = $group_id" in PROJECT_ENTITY_COUNTS
+    assert "n:ExternalLib" not in PROJECT_ENTITY_COUNTS
+    assert "n:Model" not in PROJECT_ENTITY_COUNTS
+    assert "n:Trace" not in PROJECT_ENTITY_COUNTS
+
+
+@pytest.mark.asyncio
+async def test_get_project_overview_serializes_last_ingest_temporal_values() -> None:
+    project_row = _make_project_row("gimle", "Gimle", ["infra"])
+    last_ingest = {
+        "started_at": _Neo4jDateTimeLike("2026-06-13T09:00:00+00:00"),
+        "finished_at": _Neo4jDateTimeLike("2026-06-13T09:01:00+00:00"),
+    }
+    driver = _make_mock_driver_for_overview(project_row, [], last_ingest=last_ingest)
+
+    info = await get_project_overview(driver, slug="gimle")
+
+    assert info.last_ingest_started_at == "2026-06-13T09:00:00+00:00"
+    assert info.last_ingest_finished_at == "2026-06-13T09:01:00+00:00"

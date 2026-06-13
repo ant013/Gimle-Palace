@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import pytest
 
+from palace_mcp.memory.cypher import LIST_PROJECT_SLUGS
 from palace_mcp.memory.projects import UnknownProjectError, resolve_group_ids
+
+
+def test_list_project_slugs_uses_slug_property_not_display_name() -> None:
+    assert "p.slug AS slug" in LIST_PROJECT_SLUGS
+    assert "p.name AS slug" not in LIST_PROJECT_SLUGS
 
 
 class _FakeTx:

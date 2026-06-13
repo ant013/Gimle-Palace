@@ -22,6 +22,16 @@ from palace_mcp.memory.schema import ProjectInfo
 logger = logging.getLogger(__name__)
 
 
+def _json_safe(value: Any) -> Any:
+    if hasattr(value, "iso_format"):
+        return value.iso_format()
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    return value
+
+
 def _project_info_from_row(
     row: Any, *, entity_counts: dict[str, int] | None = None
 ) -> ProjectInfo:
@@ -38,8 +48,8 @@ def _project_info_from_row(
         relative_path=p.get("relative_path"),
         language_profile=p.get("language_profile"),
         expected_profile=bool(p.get("expected_profile") or False),
-        source_created_at=p["source_created_at"],
-        source_updated_at=p["source_updated_at"],
+        source_created_at=_json_safe(p["source_created_at"]),
+        source_updated_at=_json_safe(p["source_updated_at"]),
         entity_counts=entity_counts or {},
     )
 
@@ -152,8 +162,7 @@ async def get_project_overview(
         counts: dict[str, int] = {}
         async for count_row in counts_result:
             for lbl in count_row["labels"]:
-                if lbl in ("Issue", "Comment", "Agent", "IngestRun"):
-                    counts[lbl] = counts.get(lbl, 0) + int(count_row["c"])
+                counts[lbl] = counts.get(lbl, 0) + int(count_row["c"])
 
         last_ingest: dict[str, Any] | None = None
         try:
@@ -169,10 +178,10 @@ async def get_project_overview(
     return base.model_copy(
         update={
             "entity_counts": counts,
-            "last_ingest_started_at": last_ingest.get("started_at")
+            "last_ingest_finished_at": _json_safe(last_ingest.get("finished_at"))
             if last_ingest
             else None,
-            "last_ingest_finished_at": last_ingest.get("finished_at")
+            "last_ingest_started_at": _json_safe(last_ingest.get("started_at"))
             if last_ingest
             else None,
         }

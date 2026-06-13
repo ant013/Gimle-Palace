@@ -26,10 +26,10 @@ RETURN
     f.severity AS severity,
     f.size AS size,
     f.safe_to_delete_score AS safe_to_delete_score,
-    f.git_last_external_ref AS git_last_external_ref,
+    properties(f)[$git_last_external_ref_key] AS git_last_external_ref,
     f.members_json AS members_json,
     f.module_coverage_ratio AS module_coverage_ratio,
-    f.target_dead_type AS target_dead_type,
+    properties(f)[$target_dead_type_key] AS target_dead_type,
     f.created_at AS created_at
 ORDER BY
     CASE f.severity
@@ -85,7 +85,12 @@ async def find_dead_code(
     rows: list[dict[str, Any]] = []
     async with driver.session() as sess:
         result = await sess.run(
-            _QUERY, project=project, severities=severities, limit=int(limit)
+            _QUERY,
+            project=project,
+            severities=severities,
+            limit=int(limit),
+            git_last_external_ref_key="git_last_external_ref",
+            target_dead_type_key="target_dead_type",
         )
         async for rec in result:
             rows.append(

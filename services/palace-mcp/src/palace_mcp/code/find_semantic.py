@@ -62,8 +62,8 @@ RETURN
   s.qualified_name AS qualified_name,
   s.kind AS kind,
   s.file_path AS file_path,
-  s.line_start AS line_start,
-  s.line_end AS line_end,
+  properties(s)[$line_start_key] AS line_start,
+  properties(s)[$line_end_key] AS line_end,
   s.module_name AS module_name,
   s.source_scope AS source_scope,
   s.embedding_input_hash AS embedding_input_hash,
@@ -497,6 +497,8 @@ async def _vector_search(
             group_ids=group_ids,
             query_k=query_k,
             include_deprecated=include_deprecated,
+            line_start_key="line_start",
+            line_end_key="line_end",
         )
         return cast(list[dict[str, Any]], await result.data())
 
