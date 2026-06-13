@@ -398,6 +398,86 @@ async def test_vector_search_falls_back_when_search_is_unsupported(
 
 
 @pytest.mark.asyncio
+async def test_vector_search_falls_back_after_cached_search_success() -> None:
+    from palace_mcp.code.find_semantic import semantic_search
+
+    backend = _FakeBackend()
+    dispatcher = EmbeddingBackendDispatcher({"qodo": backend}, default_backend="qodo")
+    calls = {"search": 0, "legacy": 0}
+
+    def run_fn(query: str, _params: dict[str, Any]) -> _FakeResult:
+        if "collect(p.slug)" in query:
+            return _FakeResult(single_value={"found_projects": ["wallet-core"]})
+        if "embedded_cnt" in query:
+            return _FakeResult(
+                data_value=[{"source_scope": "project", "total": 2, "embedded_cnt": 1}]
+            )
+        if "SEARCH s IN" in query:
+            calls["search"] += 1
+            if calls["search"] == 1:
+                return _FakeResult(
+                    data_value=[
+                        {
+                            "group_id": "project/wallet-core",
+                            "qualified_name": "Wallet.search",
+                            "kind": "function",
+                            "file_path": "Sources/Wallet.swift",
+                            "module_name": "WalletCore",
+                            "source_scope": "project",
+                            "embedding_input_hash": "hash",
+                            "commit_sha": None,
+                            "score": 0.93,
+                        }
+                    ]
+                )
+            raise Neo4jError(
+                "25 is not a valid option for cypher version. Valid options are: 5"
+            )
+        if "db.index.vector.queryNodes" in query:
+            calls["legacy"] += 1
+            return _FakeResult(
+                data_value=[
+                    {
+                        "group_id": "project/wallet-core",
+                        "qualified_name": "Wallet.legacy",
+                        "kind": "function",
+                        "file_path": "Sources/Wallet.swift",
+                        "module_name": "WalletCore",
+                        "source_scope": "project",
+                        "embedding_input_hash": "hash",
+                        "commit_sha": None,
+                        "score": 0.91,
+                    }
+                ]
+            )
+        raise AssertionError(f"unexpected query: {query}")
+
+    driver = _FakeDriver(run_fn)
+    with patch(
+        "palace_mcp.code.find_semantic.get_embedding_dispatcher",
+        return_value=dispatcher,
+    ):
+        first = await semantic_search(
+            driver=driver,
+            query="signature verification",
+            project="wallet-core",
+            include_context=False,
+        )
+        second = await semantic_search(
+            driver=driver,
+            query="signature verification",
+            project="wallet-core",
+            include_context=False,
+        )
+
+    assert first["ok"] is True
+    assert first["result"][0]["qualified_name"] == "Wallet.search"
+    assert second["ok"] is True
+    assert second["result"][0]["qualified_name"] == "Wallet.legacy"
+    assert calls == {"search": 2, "legacy": 1}
+
+
+@pytest.mark.asyncio
 async def test_vector_search_does_not_fallback_for_unrelated_neo4j_errors() -> None:
     from palace_mcp.code.find_semantic import semantic_search
 

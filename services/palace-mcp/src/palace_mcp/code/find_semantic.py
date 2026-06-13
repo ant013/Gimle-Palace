@@ -528,7 +528,7 @@ async def _vector_search(
                 include_deprecated=include_deprecated,
             )
         except Exception as exc:
-            if _vector_search_supported is not None or not _is_search_unsupported(exc):
+            if not _is_search_unsupported(exc):
                 raise
             _vector_search_supported = False
             _warn_legacy_vector_fallback(exc)
