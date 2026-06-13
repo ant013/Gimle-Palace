@@ -5,7 +5,9 @@ import inspect
 from palace_mcp.code.find_semantic import (
     _COUNT_EMBEDDED_SYMBOLS_QUERY,
     _COVERAGE_QUERY,
+    _VECTOR_LEGACY_QUERY,
     _VECTOR_QUERY,
+    _VECTOR_SEARCH_QUERY,
 )
 from palace_mcp.code.find_hotspots import _QUERY as HOTSPOTS_QUERY
 from palace_mcp.code.find_owners import _QUERY_CYPHER as OWNERS_QUERY
@@ -33,6 +35,31 @@ def test_phase_4a_queries_honor_include_deprecated_filter() -> None:
     assert "($include_deprecated OR NOT s:Deprecated)" in _COUNT_EMBEDDED_SYMBOLS_QUERY
     assert "($include_deprecated OR NOT s:Deprecated)" in _COVERAGE_QUERY
     assert "($include_deprecated OR NOT s:Deprecated)" in _VECTOR_QUERY
+
+
+def test_semantic_vector_query_shapes_support_search_and_legacy_fallback() -> None:
+    assert _VECTOR_QUERY == _VECTOR_SEARCH_QUERY
+    assert _VECTOR_SEARCH_QUERY.startswith("CYPHER 25")
+    assert "SEARCH s IN" in _VECTOR_SEARCH_QUERY
+    assert "VECTOR INDEX symbol_embedding_idx" in _VECTOR_SEARCH_QUERY
+    assert "SCORE AS score" in _VECTOR_SEARCH_QUERY
+    assert "db.index.vector.queryNodes" not in _VECTOR_SEARCH_QUERY
+
+    assert "db.index.vector.queryNodes('symbol_embedding_idx'" in _VECTOR_LEGACY_QUERY
+    assert "SEARCH s IN" not in _VECTOR_LEGACY_QUERY
+
+    assert "{symbol_embedding_idx}" not in _VECTOR_SEARCH_QUERY
+    assert "{symbol_embedding_idx}" not in _VECTOR_LEGACY_QUERY
+    assert "$index" not in _VECTOR_SEARCH_QUERY
+    assert "$index" not in _VECTOR_LEGACY_QUERY
+
+
+def test_semantic_vector_queries_read_optional_line_props_dynamically() -> None:
+    for query in (_VECTOR_SEARCH_QUERY, _VECTOR_LEGACY_QUERY):
+        assert "properties(s)[$line_start_key] AS line_start" in query
+        assert "properties(s)[$line_end_key] AS line_end" in query
+        assert "s.line_start AS line_start" not in query
+        assert "s.line_end AS line_end" not in query
 
 
 def test_extractor_queries_dual_read_file_path() -> None:
