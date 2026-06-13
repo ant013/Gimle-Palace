@@ -65,8 +65,14 @@ def neo4j_uri() -> Iterator[str]:
         os.environ["TESTCONTAINERS_RYUK_DISABLED"] = "true"
 
     try:
-        with Neo4jContainer("neo4j:5.26.0") as container:
-            yield container.get_connection_url()
+        try:
+            with Neo4jContainer("neo4j:5.26.0") as container:
+                yield container.get_connection_url()
+        except Exception as exc:
+            pytest.skip(
+                "project_analyze live integration needs COMPOSE_NEO4J_URI or "
+                f"reachable Docker testcontainers runtime: {exc}"
+            )
     finally:
         if fallback_docker_host is not None:
             if original_docker_host is None:

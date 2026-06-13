@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from typing import cast
+
+from neo4j.exceptions import Neo4jError
 
 from palace_mcp import code_router
 from palace_mcp.code.semantic_contract import ScoreComponents
@@ -19,10 +22,14 @@ if TYPE_CHECKING:
     from palace_mcp.config import Settings
 
 
+logger = logging.getLogger(__name__)
+
 _MAX_SCOPE_PROJECTS = 10
 _MAX_LIMIT = 50
 _MAX_CONTEXT_LIMIT = 10
 _USAGE_PREVIEW_PHASES = ("phase1_defs", "phase2_user_uses", "phase3_vendor_uses")
+_vector_search_supported: bool | None = None
+_vector_legacy_fallback_warned = False
 
 _VALIDATE_PROJECTS_QUERY = """
 MATCH (p:Project)
@@ -46,7 +53,32 @@ WITH s.source_scope AS source_scope, s.embedding IS NOT NULL AS has_embed
 RETURN source_scope, count(*) AS total, sum(CASE WHEN has_embed THEN 1 ELSE 0 END) AS embedded_cnt
 """.strip()
 
-_VECTOR_QUERY = """
+_VECTOR_SEARCH_QUERY = """
+CYPHER 25
+MATCH (s:Symbol)
+  SEARCH s IN (
+    VECTOR INDEX symbol_embedding_idx
+    FOR $embedding
+    LIMIT $query_k
+  ) SCORE AS score
+WHERE s.group_id IN $group_ids
+  AND ($include_deprecated OR NOT s:Deprecated)
+RETURN
+  s.group_id AS group_id,
+  s.qualified_name AS qualified_name,
+  s.kind AS kind,
+  s.file_path AS file_path,
+  properties(s)[$line_start_key] AS line_start,
+  properties(s)[$line_end_key] AS line_end,
+  s.module_name AS module_name,
+  s.source_scope AS source_scope,
+  s.embedding_input_hash AS embedding_input_hash,
+  s.commit_sha AS commit_sha,
+  score AS score
+ORDER BY score DESC
+""".strip()
+
+_VECTOR_LEGACY_QUERY = """
 CALL db.index.vector.queryNodes('symbol_embedding_idx', $query_k, $embedding)
 YIELD node, score
 WITH node AS s, score
@@ -58,8 +90,8 @@ RETURN
   s.qualified_name AS qualified_name,
   s.kind AS kind,
   s.file_path AS file_path,
-  s.line_start AS line_start,
-  s.line_end AS line_end,
+  properties(s)[$line_start_key] AS line_start,
+  properties(s)[$line_end_key] AS line_end,
   s.module_name AS module_name,
   s.source_scope AS source_scope,
   s.embedding_input_hash AS embedding_input_hash,
@@ -67,6 +99,8 @@ RETURN
   score AS score
 ORDER BY score DESC
 """.strip()
+
+_VECTOR_QUERY = _VECTOR_SEARCH_QUERY
 
 _MISSING_HITS_QUERY = """
 UNWIND $hits AS hit
@@ -471,15 +505,114 @@ async def _vector_search(
     query_k: int,
     include_deprecated: bool,
 ) -> list[dict[str, Any]]:
+    global _vector_search_supported  # noqa: PLW0603
+
     async with driver.session() as session:
-        result = await session.run(
-            _VECTOR_QUERY,
-            embedding=embedding,
-            group_ids=group_ids,
-            query_k=query_k,
-            include_deprecated=include_deprecated,
+        if _vector_search_supported is False:
+            return await _run_vector_query(
+                session,
+                _VECTOR_LEGACY_QUERY,
+                embedding=embedding,
+                group_ids=group_ids,
+                query_k=query_k,
+                include_deprecated=include_deprecated,
+            )
+
+        try:
+            rows = await _run_vector_query(
+                session,
+                _VECTOR_SEARCH_QUERY,
+                embedding=embedding,
+                group_ids=group_ids,
+                query_k=query_k,
+                include_deprecated=include_deprecated,
+            )
+        except Exception as exc:
+            if not _is_search_unsupported(exc):
+                raise
+            _vector_search_supported = False
+            _warn_legacy_vector_fallback(exc)
+            return await _run_vector_query(
+                session,
+                _VECTOR_LEGACY_QUERY,
+                embedding=embedding,
+                group_ids=group_ids,
+                query_k=query_k,
+                include_deprecated=include_deprecated,
+            )
+
+        _vector_search_supported = True
+        return rows
+
+
+async def _run_vector_query(
+    session: Any,
+    query: str,
+    *,
+    embedding: list[float],
+    group_ids: list[str],
+    query_k: int,
+    include_deprecated: bool,
+) -> list[dict[str, Any]]:
+    result = await session.run(
+        query,
+        embedding=embedding,
+        group_ids=group_ids,
+        query_k=query_k,
+        include_deprecated=include_deprecated,
+        line_start_key="line_start",
+        line_end_key="line_end",
+    )
+    return cast(list[dict[str, Any]], await result.data())
+
+
+def _is_search_unsupported(exc: Exception) -> bool:
+    if not isinstance(exc, Neo4jError):
+        return False
+    message = str(exc)
+    lower_message = message.lower()
+    cypher_version_rejected = (
+        "cypher version" in lower_message and "valid option" in lower_message
+    )
+    if not (
+        cypher_version_rejected
+        or any(token in message for token in ("SEARCH", "CYPHER 25", "CYPHER_25"))
+    ):
+        return False
+    return any(
+        token in lower_message
+        for token in (
+            "syntax",
+            "invalid input",
+            "unsupported",
+            "unrecognized",
+            "not defined",
+            "not supported",
+            "valid option",
         )
-        return cast(list[dict[str, Any]], await result.data())
+    )
+
+
+def _warn_legacy_vector_fallback(exc: Exception) -> None:
+    global _vector_legacy_fallback_warned  # noqa: PLW0603
+
+    if _vector_legacy_fallback_warned:
+        return
+    _vector_legacy_fallback_warned = True
+    logger.warning(
+        "semantic_search.vector_search.legacy_fallback",
+        extra={
+            "error_type": type(exc).__name__,
+            "error_code": getattr(exc, "code", None),
+        },
+    )
+
+
+def _reset_vector_search_capability_for_tests() -> None:
+    global _vector_search_supported, _vector_legacy_fallback_warned  # noqa: PLW0603
+
+    _vector_search_supported = None
+    _vector_legacy_fallback_warned = False
 
 
 def _merge_per_project_results(

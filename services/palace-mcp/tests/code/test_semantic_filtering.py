@@ -82,7 +82,7 @@ def _make_run_fn(rows: list[dict[str, Any]]) -> Any:
             return _FakeResult(
                 data_value=[{"source_scope": "project", "total": 10, "embedded_cnt": 5}]
             )
-        if "queryNodes('symbol_embedding_idx'" in query:
+        if "symbol_embedding_idx" in query:
             return _FakeResult(data_value=rows)
         raise AssertionError(f"unexpected query: {query}")
 
@@ -431,7 +431,7 @@ async def test_cross_project_search_with_scope_filter() -> None:
                     {"source_scope": "project", "total": 30, "embedded_cnt": 10}
                 ]
             )
-        if "queryNodes('symbol_embedding_idx'" in query:
+        if "symbol_embedding_idx" in query:
             all_rows = [
                 {
                     "group_id": "project/app",
