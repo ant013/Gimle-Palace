@@ -25,6 +25,7 @@ _MAX_CONTEXT_LIMIT = 10
 _MIN_CANDIDATE_LIMIT = 500
 _MAX_CANDIDATE_LIMIT = 5000
 _CANDIDATES_PER_REQUESTED_HIT = 100
+_SINGLE_PROJECT_VECTOR_OVERFETCH = 4
 _USAGE_PREVIEW_PHASES = ("phase1_defs", "phase2_user_uses", "phase3_vendor_uses")
 
 _VALIDATE_PROJECTS_QUERY = """
@@ -394,6 +395,15 @@ def _candidate_limit(limit: int, scope_size: int) -> int:
         ),
         _MAX_CANDIDATE_LIMIT,
     )
+
+
+def _vector_query_k(candidate_limit: int, scope_size: int) -> int:
+    if scope_size == 1:
+        return min(
+            candidate_limit * _SINGLE_PROJECT_VECTOR_OVERFETCH,
+            _MAX_CANDIDATE_LIMIT,
+        )
+    return candidate_limit
 
 
 def _project_from_group_id(group_id: str) -> str:
@@ -834,15 +844,16 @@ async def semantic_search(
     candidate_limit = _candidate_limit(limit, len(scope_projects))
     if len(group_ids) == 1:
         per_project_k: int | None = None
+        query_k = _vector_query_k(candidate_limit, len(scope_projects))
         rows = await _vector_search(
             driver,
             embedding=query_embedding,
             group_ids=group_ids,
-            query_k=candidate_limit,
+            query_k=query_k,
             include_deprecated=include_deprecated,
         )
     else:
-        per_project_k = _candidate_limit(limit, 1)
+        per_project_k = _vector_query_k(_candidate_limit(limit, 1), 1)
         per_project_results = await asyncio.gather(
             *[
                 _vector_search(

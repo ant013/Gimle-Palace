@@ -264,7 +264,7 @@ async def test_success_filters_scope_and_skips_context_when_disabled() -> None:
                 data_value=[{"source_scope": "project", "total": 10, "embedded_cnt": 3}]
             )
         if "queryNodes('symbol_embedding_idx'" in query:
-            assert params["query_k"] == 500
+            assert params["query_k"] == 2000
             all_rows = [
                 {
                     "group_id": "project/wallet-a",
@@ -343,7 +343,7 @@ async def test_vector_query_uses_candidate_limit_to_overfetch_before_scope_filte
                 data_value=[{"source_scope": "project", "total": 5, "embedded_cnt": 1}]
             )
         if "queryNodes('symbol_embedding_idx'" in query:
-            assert params["query_k"] == 500
+            assert params["query_k"] == 2000
             return _FakeResult(
                 data_value=[
                     {
@@ -1047,8 +1047,8 @@ async def test_multi_project_issues_per_project_hnsw_queries() -> None:
     assert result["returned_count"] == 3
     # _candidate_limit(3, 3) = min(max(900, 500), 5000) = 900
     assert result["candidate_limit"] == 900
-    # _candidate_limit(3, 1) = min(max(300, 500), 5000) = 500
-    assert result["per_project_k"] == 500
+    # _candidate_limit(3, 1) = 500; vector query overfetch raises query_k to 2000.
+    assert result["per_project_k"] == 2000
 
     # One HNSW query per project, each scoped to a single group_id
     vector_calls = [
