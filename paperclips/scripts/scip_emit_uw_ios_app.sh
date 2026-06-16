@@ -34,6 +34,10 @@ Options:
                               (default: 'generic/platform=iOS Simulator')
   --derived-data <path>       Explicit DerivedData root
                               (default: <repo>/.palace-scip-derived-data-app)
+  --clean                     Wipe DerivedData before building (full clean
+                              rebuild). Default REUSES DerivedData so
+                              xcodebuild only recompiles changed files —
+                              fast incremental re-emit after a git pull.
   --output <path>             SCIP output path
                               (default: <repo>/scip/index.scip)
   --slug <name>               Palace project slug
@@ -228,6 +232,7 @@ REMOTE_BASE="$DEFAULT_REMOTE_BASE"
 EMITTER_DIR="$DEFAULT_EMITTER_DIR"
 EMITTER_BIN=""
 NO_REMOTE_COPY="false"
+CLEAN_DERIVED_DATA="false"
 DRY_RUN="false"
 
 while [[ $# -gt 0 ]]; do
@@ -263,6 +268,7 @@ while [[ $# -gt 0 ]]; do
         --emitter-bin=*) EMITTER_BIN="${1#*=}"; shift ;;
         --emitter-bin)  [[ $# -ge 2 ]] || die "--emitter-bin requires a value"; EMITTER_BIN="$2"; shift 2 ;;
         --no-remote-copy) NO_REMOTE_COPY="true"; shift ;;
+        --clean)        CLEAN_DERIVED_DATA="true"; shift ;;
         --dry-run)      DRY_RUN="true"; shift ;;
         --help|-h)      usage; exit 0 ;;
         --*)            die "unknown option: $1" ;;
@@ -311,12 +317,18 @@ if [[ ! -x "$EMITTER_BIN" ]]; then
 fi
 [[ "$DRY_RUN" == "true" || -x "$EMITTER_BIN" ]] || die "emitter binary not found after build: $EMITTER_BIN"
 
-log "preparing build directories"
+log "preparing build directories (clean=$CLEAN_DERIVED_DATA)"
 if [[ "$DRY_RUN" == "false" ]]; then
-    rm -rf "$DERIVED_DATA"
+    if [[ "$CLEAN_DERIVED_DATA" == "true" ]]; then
+        rm -rf "$DERIVED_DATA"
+    fi
     mkdir -p "$DERIVED_DATA" "$(dirname "$OUTPUT_PATH")"
 else
-    printf 'DRY-RUN: rm -rf %q\n' "$DERIVED_DATA"
+    if [[ "$CLEAN_DERIVED_DATA" == "true" ]]; then
+        printf 'DRY-RUN: rm -rf %q\n' "$DERIVED_DATA"
+    else
+        printf 'DRY-RUN: reuse DerivedData (incremental): %q\n' "$DERIVED_DATA"
+    fi
     printf 'DRY-RUN: mkdir -p %q %q\n' "$DERIVED_DATA" "$(dirname "$OUTPUT_PATH")"
 fi
 
