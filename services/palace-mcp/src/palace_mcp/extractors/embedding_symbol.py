@@ -30,7 +30,8 @@ RETURN
   s.module_name AS module_name,
   s.source_scope AS source_scope,
   s.embedding_input_hash AS embedding_input_hash,
-  coalesce(s.embedding, s.name_embedding) IS NOT NULL AS has_embedding
+  s.embedding IS NOT NULL AS has_embedding,
+  s.name_embedding IS NOT NULL AS has_legacy_name_embedding
 """
 
 _WRITE_EMBEDDINGS = """
@@ -51,6 +52,7 @@ class _LoadedSymbolRow(TypedDict):
     source_scope: str | None
     embedding_input_hash: str | None
     has_embedding: bool
+    has_legacy_name_embedding: bool
 
 
 class _PendingSymbolRow(TypedDict):
