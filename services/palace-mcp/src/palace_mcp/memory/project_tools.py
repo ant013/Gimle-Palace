@@ -14,6 +14,7 @@ from palace_mcp.memory.cypher import (
     GET_PROJECT,
     LIST_PROJECTS,
     PROJECT_ENTITY_COUNTS,
+    PROJECT_INDEXED_COMMIT,
     PROJECT_LAST_INGEST,
     UPSERT_PROJECT,
 )
@@ -138,14 +139,21 @@ async def get_project_overview(
     source: str = "paperclip",
 ) -> ProjectInfo:
     """Return a :Project with entity_counts and last ingest metadata."""
+    from palace_mcp.code.snippet_provider import inspect_freshness
+    from palace_mcp.git.path_resolver import (
+        ProjectNotRegistered,
+        resolve_registered_project,
+    )
     from palace_mcp.memory.projects import UnknownProjectError
 
     group_id = f"project/{slug}"
+    project_node: Any | None = None
     async with driver.session() as session:
         result = await session.run(GET_PROJECT, slug=slug)
         row = await result.single()
         if row is None:
             raise UnknownProjectError(slug)
+        project_node = row["p"]
         base = _project_info_from_row(row)
 
         counts_result = await session.run(PROJECT_ENTITY_COUNTS, group_id=group_id)
@@ -166,6 +174,24 @@ async def get_project_overview(
         except Exception as exc:
             logger.warning("get_project_overview last_ingest query failed: %s", exc)
 
+        indexed_commit_result = await session.run(
+            PROJECT_INDEXED_COMMIT,
+            group_id=group_id,
+        )
+        indexed_commit_row = await indexed_commit_result.single()
+
+    indexed_commit = (
+        str(indexed_commit_row["commit_sha"])
+        if indexed_commit_row is not None
+        and indexed_commit_row["commit_sha"] is not None
+        else None
+    )
+    try:
+        repo_path = resolve_registered_project(slug, project_node=project_node)
+    except (ProjectNotRegistered, ValueError):
+        repo_path = None
+    freshness = inspect_freshness(repo_path, indexed_commit)
+
     return base.model_copy(
         update={
             "entity_counts": counts,
@@ -175,5 +201,7 @@ async def get_project_overview(
             "last_ingest_finished_at": last_ingest.get("finished_at")
             if last_ingest
             else None,
+            "indexed_commit": freshness.indexed_commit,
+            "commits_behind_head": freshness.commits_behind_head,
         }
     )

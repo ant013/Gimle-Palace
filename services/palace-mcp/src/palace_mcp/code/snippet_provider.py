@@ -53,7 +53,16 @@ class SnippetResult:
     end_line: int
     byte_count: int
     line_count: int
+    indexed_commit: str | None = None
+    commits_behind_head: int | None = None
     truncated: bool = False
+    stale: bool = False
+
+
+@dataclass(frozen=True)
+class FreshnessResult:
+    indexed_commit: str | None
+    commits_behind_head: int | None
     stale: bool = False
 
 
@@ -66,6 +75,7 @@ def resolve_snippet(
     line_end: int | None,
     commit_sha: str | None = None,
     repos_root: Path | None = None,
+    freshness: FreshnessResult | None = None,
 ) -> tuple[SnippetResult | None, str | None, str | None]:
     """Read and validate a snippet from the local repo filesystem.
 
@@ -95,6 +105,8 @@ def resolve_snippet(
         abs_path = validate_rel_path(file_path, repo_path=repo_root)
     except (InvalidPath, PathTraversalDetectedError) as exc:
         return None, "path_traversal_rejected", str(exc)
+
+    freshness_result = freshness or inspect_freshness(repo_root, commit_sha)
 
     try:
         text = abs_path.read_text(encoding="utf-8", errors="replace")
@@ -127,7 +139,6 @@ def resolve_snippet(
         truncated = True
 
     language = _LANGUAGE_MAP.get(abs_path.suffix.lower(), "")
-    stale = _check_stale(repo_root, commit_sha)
     byte_count = len(source.encode("utf-8"))
     line_count = source.count("\n") + 1 if source else 0
 
@@ -139,29 +150,74 @@ def resolve_snippet(
             end_line=start + line_count - 1,
             byte_count=byte_count,
             line_count=line_count,
+            indexed_commit=freshness_result.indexed_commit,
+            commits_behind_head=freshness_result.commits_behind_head,
             truncated=truncated,
-            stale=stale,
+            stale=freshness_result.stale,
         ),
         None,
         None,
     )
 
 
-def _check_stale(repo_root: Path, commit_sha: str | None) -> bool:
-    """Return True if commit_sha differs from the current HEAD of the repo."""
+def inspect_freshness(
+    repo_root: Path | None, commit_sha: str | None
+) -> FreshnessResult:
+    """Compare an indexed commit against the repo's current HEAD."""
     if not commit_sha:
-        return False
+        return FreshnessResult(
+            indexed_commit=None, commits_behind_head=None, stale=False
+        )
+    if repo_root is None:
+        return FreshnessResult(
+            indexed_commit=commit_sha,
+            commits_behind_head=None,
+            stale=False,
+        )
     try:
-        result = subprocess.run(
+        head_result = subprocess.run(
             ["git", "rev-parse", "HEAD"],
             cwd=repo_root,
             capture_output=True,
             text=True,
             timeout=5,
         )
-        if result.returncode != 0:
-            return False
-        head = result.stdout.strip()
-        return head != commit_sha
+        if head_result.returncode != 0:
+            return FreshnessResult(
+                indexed_commit=commit_sha,
+                commits_behind_head=None,
+                stale=False,
+            )
+        head = head_result.stdout.strip()
+        if head == commit_sha:
+            return FreshnessResult(
+                indexed_commit=commit_sha,
+                commits_behind_head=0,
+                stale=False,
+            )
+
+        behind_result = subprocess.run(
+            ["git", "rev-list", "--count", f"{commit_sha}..HEAD"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if behind_result.returncode != 0:
+            return FreshnessResult(
+                indexed_commit=commit_sha,
+                commits_behind_head=None,
+                stale=True,
+            )
+        behind = int(behind_result.stdout.strip() or "0")
+        return FreshnessResult(
+            indexed_commit=commit_sha,
+            commits_behind_head=behind,
+            stale=behind > 0,
+        )
     except Exception:  # noqa: BLE001
-        return False
+        return FreshnessResult(
+            indexed_commit=commit_sha,
+            commits_behind_head=None,
+            stale=False,
+        )

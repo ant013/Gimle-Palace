@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from pathlib import Path
+import subprocess
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -38,6 +39,16 @@ def _mock_driver(*row_sets: list[dict[str, object]]) -> object:
 
 async def _unresolved_repo_path(_: str) -> None:
     return None
+
+
+def _run(args: list[str], cwd: Path) -> None:
+    subprocess.run(args, cwd=cwd, check=True, capture_output=True)
+
+
+def _run_text(args: list[str], cwd: Path) -> str:
+    return subprocess.run(
+        args, cwd=cwd, check=True, capture_output=True, text=True
+    ).stdout.strip()
 
 
 @pytest.mark.asyncio
@@ -327,6 +338,9 @@ async def test_get_code_snippet_returns_canonical_struct_identity(
     assert result["short_name"] == "BalanceData"
     assert result["kind"] == "struct"
     assert result["label"] == "Struct"
+    assert result["indexed_commit"] == "abc"
+    assert result["commits_behind_head"] is None
+    assert result["stale"] is False
 
 
 @pytest.mark.asyncio
@@ -381,3 +395,58 @@ async def test_get_code_snippet_passes_resolved_repo_path_to_snippet_provider(
 
     assert result["source"] == "body"
     assert seen["repo_path"] == repo_path
+    assert seen["freshness"].indexed_commit == "abc"
+
+
+@pytest.mark.asyncio
+async def test_get_code_snippet_returns_stale_metadata_for_deleted_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_path = tmp_path / "gimle"
+    repo_path.mkdir()
+    _run(["git", "init", "-q", "-b", "main"], cwd=repo_path)
+    _run(["git", "config", "user.email", "t@t"], cwd=repo_path)
+    _run(["git", "config", "user.name", "T"], cwd=repo_path)
+    (repo_path / "BalanceData.swift").write_text("struct BalanceData {}\n")
+    _run(["git", "add", "."], cwd=repo_path)
+    _run(["git", "commit", "-m", "initial", "-q"], cwd=repo_path)
+    indexed_commit = _run_text(["git", "rev-parse", "HEAD"], cwd=repo_path)
+    (repo_path / "BalanceData.swift").unlink()
+    _run(["git", "add", "-A"], cwd=repo_path)
+    _run(["git", "commit", "-m", "delete", "-q"], cwd=repo_path)
+
+    driver = _mock_driver(
+        [
+            {
+                "qualified_name": "WalletKit.BalanceData",
+                "file_path": "BalanceData.swift",
+                "short_name": "BalanceData",
+                "kind": "struct",
+                "label": "Struct",
+                "commit_sha": indexed_commit,
+                "line_start": 1,
+                "line_end": 1,
+            }
+        ],
+        [],
+    )
+    monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: driver)
+
+    async def _resolve_repo_path(_: str) -> Path:
+        return repo_path
+
+    monkeypatch.setattr(
+        "palace_mcp.code.native_get_code_snippet._resolve_repo_path",
+        _resolve_repo_path,
+    )
+
+    result = await native_get_code_snippet(
+        qualified_name="WalletKit.BalanceData",
+        project="gimle",
+    )
+
+    assert result["error_code"] == "missing_source_file"
+    assert result["indexed_commit"] == indexed_commit
+    assert result["commits_behind_head"] == 1
+    assert result["stale"] is True

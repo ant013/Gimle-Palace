@@ -350,6 +350,16 @@ ORDER BY r.started_at DESC
 LIMIT 1
 """
 
+PROJECT_INDEXED_COMMIT = """
+MATCH (n)
+WHERE n.group_id = $group_id
+  AND (n:Symbol OR n:File)
+  AND n.commit_sha IS NOT NULL
+RETURN n.commit_sha AS commit_sha, count(*) AS c
+ORDER BY c DESC, commit_sha DESC
+LIMIT 1
+"""
+
 ENTITY_COUNTS_BY_PROJECT = """
 MATCH (p:Project)
 CALL (p) {
