@@ -300,7 +300,10 @@ async def test_legacy_name_embedding_counts_as_embedded_coverage() -> None:
                     }
                 ]
             )
-        if "OPTIONAL MATCH (s:Symbol {group_id: hit.group_id, qualified_name: hit.qualified_name})" in query:
+        if (
+            "OPTIONAL MATCH (s:Symbol {group_id: hit.group_id, qualified_name: hit.qualified_name})"
+            in query
+        ):
             return _FakeResult(data_value=[])
         raise AssertionError(f"unexpected query: {query}")
 

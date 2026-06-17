@@ -142,7 +142,10 @@ def _decode_short_name(value: str) -> str:
         return ""
 
     parts = _split_scip_top_level(raw)
-    candidate = parts[-1] if parts else raw
+    candidate = next(
+        (part for part in reversed(parts) if part and part not in {".", "#", ":"}),
+        raw,
+    )
     decoded = unquote(candidate)
     identifiers = _length_prefixed_identifiers(decoded)
     if identifiers:
