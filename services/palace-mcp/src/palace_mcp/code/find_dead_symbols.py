@@ -22,6 +22,7 @@ RETURN c.id AS id,
        c.commit_sha AS commit_sha,
        c.evidence_source AS evidence_source
 ORDER BY c.module_name, c.display_name
+LIMIT $limit
 """.strip()
 
 
@@ -53,7 +54,7 @@ async def find_dead_symbols(
         )
     rows: list[dict[str, Any]] = []
     async with driver.session() as sess:
-        result = await sess.run(_QUERY, project=project)
+        result = await sess.run(_QUERY, project=project, limit=int(limit))
         async for rec in result:
             if not include_dependencies and _is_dependency_candidate(
                 rec["source_file"]

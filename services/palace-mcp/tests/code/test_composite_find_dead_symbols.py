@@ -82,8 +82,14 @@ class _FakeDriver:
         return self._session
 
 
-def _run_fn_dead_symbols(rows: list[dict[str, Any]]) -> Any:
+def _run_fn_dead_symbols(
+    rows: list[dict[str, Any]],
+    *,
+    observed: list[tuple[str, dict[str, Any]]] | None = None,
+) -> Any:
     def run_fn(query: str, params: dict[str, Any]) -> _FakeResult:
+        if observed is not None:
+            observed.append((query, params))
         if "MATCH (p:Project" in query:
             return _FakeResult(single_value={"slug": params["slug"]})
         if "MATCH (c:DeadSymbolCandidate" in query:
@@ -173,6 +179,55 @@ async def test_find_dead_symbols_can_include_dependency_paths() -> None:
 
     assert result["ok"] is True
     assert [row["display_name"] for row in result["result"]] == ["DependencyOnly"]
+
+
+@pytest.mark.asyncio
+async def test_find_dead_symbols_keeps_query_bounded_before_dependency_filtering() -> (
+    None
+):
+    from palace_mcp.code.find_dead_symbols import find_dead_symbols
+
+    observed: list[tuple[str, dict[str, Any]]] = []
+    rows = [
+        {
+            "id": "dep-row",
+            "display_name": "DependencyOnly",
+            "kind": "class",
+            "module_name": "WalletKit",
+            "language": "swift",
+            "candidate_state": "unused_candidate",
+            "confidence": "high",
+            "source_file": "checkouts/WalletKit/Sources/WalletClient.swift",
+            "source_line": 4,
+            "commit_sha": "def456",
+            "evidence_source": "periphery",
+        },
+        {
+            "id": "project-row",
+            "display_name": "ProjectOnly",
+            "kind": "class",
+            "module_name": "AppModule",
+            "language": "swift",
+            "candidate_state": "unused_candidate",
+            "confidence": "high",
+            "source_file": "Unstoppable/Services/BalanceService.swift",
+            "source_line": 12,
+            "commit_sha": "abc123",
+            "evidence_source": "periphery",
+        },
+    ]
+    driver = _FakeDriver(_run_fn_dead_symbols(rows, observed=observed))
+
+    result = await find_dead_symbols(driver=driver, project="uw-ios-app", limit=23)
+
+    assert result["ok"] is True
+    query, params = next(
+        (query, params)
+        for query, params in observed
+        if "MATCH (c:DeadSymbolCandidate" in query
+    )
+    assert "LIMIT $limit" in query
+    assert params["limit"] == 23
 
 
 # ---------------------------------------------------------------------------

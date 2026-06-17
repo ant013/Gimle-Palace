@@ -41,6 +41,7 @@ ORDER BY
         ELSE 3
     END,
     f.safe_to_delete_score DESC
+LIMIT $limit
 """.strip()
 
 
@@ -96,7 +97,9 @@ async def find_dead_code(
     severities = _severities_from_min(min_severity)
     rows: list[dict[str, Any]] = []
     async with driver.session() as sess:
-        result = await sess.run(_QUERY, project=project, severities=severities)
+        result = await sess.run(
+            _QUERY, project=project, severities=severities, limit=int(limit)
+        )
         async for rec in result:
             members = json.loads(rec["members_json"]) if rec["members_json"] else []
             if not include_dependencies and _has_dependency_member(members):

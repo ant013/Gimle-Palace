@@ -74,8 +74,14 @@ def _finding_row(finding_id: str, file_path: str) -> dict[str, Any]:
     }
 
 
-def _run_fn_dead_code(rows: list[dict[str, Any]]) -> Any:
+def _run_fn_dead_code(
+    rows: list[dict[str, Any]],
+    *,
+    observed: list[tuple[str, dict[str, Any]]] | None = None,
+) -> Any:
     def run_fn(query: str, params: dict[str, Any]) -> _FakeResult:
+        if observed is not None:
+            observed.append((query, params))
         if "MATCH (p:Project" in query:
             return _FakeResult(single_value={"slug": params["slug"]})
         if "MATCH (f:DeadFinding" in query:
@@ -126,3 +132,27 @@ async def test_find_dead_code_can_include_dependency_members() -> None:
     assert result["ok"] is True
     assert [row["finding_id"] for row in result["result"]] == ["dependency-finding"]
     assert result["total"] == 1
+
+
+@pytest.mark.asyncio
+async def test_find_dead_code_keeps_query_bounded_before_dependency_filtering() -> None:
+    from palace_mcp.code.find_dead_code import find_dead_code
+
+    observed: list[tuple[str, dict[str, Any]]] = []
+    rows = [
+        _finding_row(
+            "dependency-finding",
+            "checkouts/WalletKit/Sources/WalletClient.swift",
+        ),
+        _finding_row("project-finding", "Unstoppable/Services/BalanceService.swift"),
+    ]
+    driver = _FakeDriver(_run_fn_dead_code(rows, observed=observed))
+
+    result = await find_dead_code(driver=driver, project="uw-ios-app", limit=17)
+
+    assert result["ok"] is True
+    query, params = next(
+        (query, params) for query, params in observed if "MATCH (f:DeadFinding" in query
+    )
+    assert "LIMIT $limit" in query
+    assert params["limit"] == 17
