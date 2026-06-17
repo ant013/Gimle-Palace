@@ -467,6 +467,66 @@ async def test_vector_query_uses_candidate_limit_to_overfetch_before_scope_filte
 
 
 @pytest.mark.asyncio
+async def test_single_project_search_retries_until_scoped_hits_are_found() -> None:
+    from palace_mcp.code.find_semantic import semantic_search
+
+    backend = _FakeBackend()
+    dispatcher = EmbeddingBackendDispatcher({"qodo": backend}, default_backend="qodo")
+    query_ks: list[int] = []
+
+    def run_fn(query: str, params: dict[str, Any]) -> _FakeResult:
+        if "collect(p.slug)" in query:
+            return _FakeResult(single_value={"found_projects": ["small-kit"]})
+        if "embedded_cnt" in query:
+            return _FakeResult(
+                data_value=[
+                    {"source_scope": "project", "total": 1500, "embedded_cnt": 1500}
+                ]
+            )
+        if _is_vector_query(query):
+            assert params["group_ids"] == ["project/small-kit"]
+            query_ks.append(params["query_k"])
+            if params["query_k"] < 200:
+                return _FakeResult(data_value=[])
+            return _FakeResult(
+                data_value=[
+                    {
+                        "group_id": "project/small-kit",
+                        "qualified_name": "SmallKit.verifySignature",
+                        "kind": "function",
+                        "file_path": "Sources/Verify.swift",
+                        "module_name": "SmallKit",
+                        "source_scope": "project",
+                        "embedding_input_hash": "hash-small",
+                        "commit_sha": None,
+                        "score": 0.88,
+                    }
+                ]
+            )
+        raise AssertionError(f"unexpected query: {query}")
+
+    driver = _FakeDriver(run_fn)
+    with patch(
+        "palace_mcp.code.find_semantic.get_embedding_dispatcher",
+        return_value=dispatcher,
+    ):
+        result = await semantic_search(
+            driver=driver,
+            query="signature verification",
+            project="small-kit",
+            include_context=False,
+            limit=1,
+        )
+
+    assert query_ks == [50, 200]
+    assert result["ok"] is True
+    assert result["candidate_limit"] == 200
+    assert result["returned_count"] == 1
+    assert result["warnings"] == []
+    assert result["result"][0]["project"] == "small-kit"
+
+
+@pytest.mark.asyncio
 async def test_include_deprecated_true_returns_seeded_row() -> None:
     from palace_mcp.code.find_semantic import semantic_search
 
