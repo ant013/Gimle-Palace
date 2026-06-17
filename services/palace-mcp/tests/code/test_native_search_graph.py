@@ -162,3 +162,92 @@ async def test_search_graph_returns_canonical_struct_identity(
     assert result["results"][0]["short_name"] == "BalanceData"
     assert result["results"][0]["kind"] == "struct"
     assert result["results"][0]["label"] == "Struct"
+
+
+@pytest.mark.asyncio
+async def test_search_graph_plain_name_lookup_prefers_kind_over_generic_symbol_label(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    driver = _mock_driver(
+        [{"total": 1}],
+        [
+            {
+                "name": "Passkey",
+                "qualified_name": "WalletKit s:9WalletKit7PasskeyV",
+                "label": "Struct",
+                "file_path": "Sources/Passkey.swift",
+                "short_name": "Passkey",
+                "kind": "struct",
+            }
+        ],
+    )
+    monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: driver)
+
+    result = await native_search_graph(
+        project="gimle",
+        name_pattern="Passkey",
+    )
+
+    assert result["results"][0]["name"] == "Passkey"
+    assert result["results"][0]["label"] == "Struct"
+
+    count_call = driver.session.return_value.run.await_args_list[0]
+    assert "ELSE coalesce(n.label, 'Symbol')" in count_call.args[0]
+    assert (
+        "coalesce(n.label, CASE toLower(coalesce(n.kind, ''))" not in count_call.args[0]
+    )
+
+
+@pytest.mark.asyncio
+async def test_search_graph_symbol_label_matches_any_symbol_kind(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    driver = _mock_driver(
+        [{"total": 1}],
+        [
+            {
+                "name": "BalanceData",
+                "qualified_name": "WalletKit s:9WalletKit11BalanceDataV",
+                "label": "Struct",
+                "file_path": "Sources/BalanceData.swift",
+                "short_name": "BalanceData",
+                "kind": "struct",
+            }
+        ],
+    )
+    monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: driver)
+
+    result = await native_search_graph(
+        project="gimle",
+        label="Symbol",
+        name_pattern="^BalanceData$",
+    )
+
+    assert result["results"][0]["label"] == "Struct"
+
+    count_call = driver.session.return_value.run.await_args_list[0]
+    assert count_call.kwargs["label"] == "Symbol"
+    assert "result_is_symbol" in count_call.args[0]
+    assert "$label = 'Symbol' AND result_is_symbol" in count_call.args[0]
+
+
+@pytest.mark.asyncio
+async def test_search_graph_unknown_name_returns_zero_results(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    driver = _mock_driver(
+        [{"total": 0}],
+        [],
+    )
+    monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: driver)
+
+    result = await native_search_graph(
+        project="gimle",
+        name_pattern="DefinitelyMissingSymbol",
+    )
+
+    assert result == {
+        "results": [],
+        "total": 0,
+        "has_more": False,
+    }

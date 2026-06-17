@@ -17,6 +17,7 @@ _SUPPORTED_LABELS = frozenset(
         "Project",
         "File",
         "Module",
+        "Symbol",
         "Function",
         "Method",
         "Class",
@@ -50,7 +51,7 @@ WITH
         WHEN n:Module THEN 'Module'
         WHEN n:Route THEN 'Route'
         WHEN n:Symbol THEN
-            coalesce(n.label, CASE toLower(coalesce(n.kind, ''))
+            CASE toLower(coalesce(n.kind, ''))
                 WHEN 'function' THEN 'Function'
                 WHEN 'method' THEN 'Method'
                 WHEN 'class' THEN 'Class'
@@ -66,8 +67,8 @@ WITH
                 WHEN 'accessor' THEN 'Accessor'
                 WHEN 'actor' THEN 'Actor'
                 WHEN 'route' THEN 'Route'
-                ELSE 'Symbol'
-            END)
+                ELSE coalesce(n.label, 'Symbol')
+            END
         ELSE ''
     END AS result_label,
     CASE
@@ -118,10 +119,15 @@ WITH
             ELSE ''
         END
     ) AS result_kind,
+    n:Symbol AS result_is_symbol,
     size([(n)--() | 1]) AS degree
 WHERE result_label <> ''
-  AND result_label <> 'Symbol'
-  AND ($label IS NULL OR result_label = $label)
+  AND ($label = 'Symbol' OR result_label <> 'Symbol')
+  AND (
+      $label IS NULL
+      OR ($label = 'Symbol' AND result_is_symbol)
+      OR result_label = $label
+  )
   AND ($name_pattern IS NULL OR result_name =~ $name_pattern)
   AND ($qn_pattern IS NULL OR result_qn =~ $qn_pattern)
   AND ($file_pattern IS NULL OR result_file_path =~ $file_pattern)

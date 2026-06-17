@@ -602,6 +602,37 @@ class TestPassthroughSerialization:
 
         _set_cm_session(None)
 
+    @pytest.mark.asyncio
+    async def test_search_graph_unknown_project_returns_structured_error(self) -> None:
+        from palace_mcp.code_router import _set_cm_session, register_code_tools
+
+        mock_session = AsyncMock(spec=ClientSession)
+        mock_session.call_tool = AsyncMock()
+        _set_cm_session(mock_session)
+
+        mcp = FastMCP("test")
+        stub_tool = lambda name, desc: mcp.tool(name=name, description=desc)  # noqa: E731
+        register_code_tools(stub_tool, mcp)
+
+        result = await mcp.call_tool(
+            "palace.code.search_graph",
+            {"project": "totally-bogus", "name_pattern": "Passkey"},
+        )
+
+        payload = result[1] if isinstance(result, tuple) else None
+        if payload is not None:
+            assert payload["error_code"] == "project_not_found"
+            assert payload["message"] == "totally-bogus"
+        else:
+            import json as _json
+
+            parsed = _json.loads(result[0].text)
+            assert parsed["error_code"] == "project_not_found"
+            assert parsed["message"] == "totally-bogus"
+        mock_session.call_tool.assert_not_called()
+
+        _set_cm_session(None)
+
     async def test_structured_content_returned_directly(self) -> None:
         """When structuredContent is present, it is returned as-is."""
         from mcp.types import CallToolResult
