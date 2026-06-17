@@ -174,7 +174,7 @@ async def _resolve_qn(
             **fallback_kwargs,
         )
 
-    if driver is not None and hasattr(driver, "session"):
+    if exact_match_only and driver is not None and hasattr(driver, "session"):
         results = await _resolve_exact_qn(
             driver,
             qualified_name=qualified_name,
