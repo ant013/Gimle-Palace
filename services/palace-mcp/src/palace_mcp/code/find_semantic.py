@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 _MAX_SCOPE_PROJECTS = 10
 _MAX_LIMIT = 50
 _MAX_CONTEXT_LIMIT = 10
+_MAX_SINGLE_PROJECT_QUERY_K = 2000
 _USAGE_PREVIEW_PHASES = ("phase1_defs", "phase2_user_uses", "phase3_vendor_uses")
 _vector_search_supported: bool | None = None
 _vector_legacy_fallback_warned = False
@@ -430,6 +431,15 @@ def _candidate_limit(limit: int, scope_size: int) -> int:
     return min(max(limit * scope_size * 10, 50), 500)
 
 
+def _single_project_query_k_budget(
+    initial_query_k: int, embedded_symbol_count: int
+) -> int:
+    return min(
+        max(initial_query_k, embedded_symbol_count),
+        _MAX_SINGLE_PROJECT_QUERY_K,
+    )
+
+
 def _project_from_group_id(group_id: str) -> str:
     if group_id.startswith("project/"):
         return group_id.removeprefix("project/")
@@ -573,6 +583,48 @@ async def _run_vector_query(
         line_end_key="line_end",
     )
     return cast(list[dict[str, Any]], await result.data())
+
+
+async def _vector_search_single_project(
+    driver: Any,
+    *,
+    embedding: list[float],
+    group_id: str,
+    requested_limit: int,
+    initial_query_k: int,
+    embedded_symbol_count: int,
+    include_deprecated: bool,
+) -> tuple[list[dict[str, Any]], int]:
+    rows = await _vector_search(
+        driver,
+        embedding=embedding,
+        group_ids=[group_id],
+        query_k=initial_query_k,
+        include_deprecated=include_deprecated,
+    )
+    query_k = initial_query_k
+    max_query_k = _single_project_query_k_budget(query_k, embedded_symbol_count)
+
+    # Single-project scopes can be starved by the global ANN top-K. Retry with
+    # a larger query_k, but cap by scope size and a latency budget.
+    while (
+        len(rows) < requested_limit
+        and len(rows) < embedded_symbol_count
+        and query_k < max_query_k
+    ):
+        next_query_k = min(max_query_k, max(query_k * 4, 200))
+        if next_query_k <= query_k:
+            break
+        query_k = next_query_k
+        rows = await _vector_search(
+            driver,
+            embedding=embedding,
+            group_ids=[group_id],
+            query_k=query_k,
+            include_deprecated=include_deprecated,
+        )
+
+    return rows, query_k
 
 
 def _is_search_unsupported(exc: Exception) -> bool:
@@ -977,11 +1029,13 @@ async def semantic_search(
     candidate_limit = _candidate_limit(limit, len(scope_projects))
     if len(group_ids) == 1:
         per_project_k: int | None = None
-        rows = await _vector_search(
+        rows, candidate_limit = await _vector_search_single_project(
             driver,
             embedding=query_embedding,
-            group_ids=group_ids,
-            query_k=candidate_limit,
+            group_id=group_ids[0],
+            requested_limit=limit,
+            initial_query_k=candidate_limit,
+            embedded_symbol_count=embedded_symbol_count,
             include_deprecated=include_deprecated,
         )
     else:
