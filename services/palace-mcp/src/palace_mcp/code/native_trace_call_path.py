@@ -91,6 +91,15 @@ LIMIT $limit
 """.strip()
 
 
+def _edge_presence_query() -> str:
+    relationship_types = _relationship_alternation()
+    return f"""
+MATCH (:Symbol {{group_id: $group_id}})-[:{relationship_types}]->(:Symbol {{group_id: $group_id}})
+RETURN true AS present
+LIMIT 1
+""".strip()
+
+
 async def _rows(session: Any, query: str, **params: Any) -> list[dict[str, Any]]:
     result = await session.run(query, **params)
     return cast(list[dict[str, Any]], await result.data())
@@ -243,6 +252,23 @@ async def native_trace_call_path(
                     existing = bucket.get(qualified_name)
                     if existing is None or hop < existing[0]:
                         bucket[qualified_name] = (hop, endpoint)
+            if not node_index and not edge_index and not callers and not callees:
+                edge_rows = await _rows(
+                    session,
+                    _edge_presence_query(),
+                    group_id=f"project/{project}",
+                )
+                if not edge_rows:
+                    return _error(
+                        "not_extracted",
+                        (
+                            "native palace.code.trace_call_path found no traversable "
+                            "call-graph edges for this project; run the symbol graph "
+                            "ingest first or configure a caller substrate"
+                        ),
+                        project=project,
+                        mode=mode,
+                    )
     except Exception as exc:  # noqa: BLE001
         return _error(
             "cypher_error",
