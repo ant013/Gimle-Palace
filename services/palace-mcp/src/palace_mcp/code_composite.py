@@ -18,7 +18,6 @@ import re
 from collections.abc import Callable, Hashable
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
-from urllib.parse import unquote
 
 from mcp import ClientSession
 from pydantic import BaseModel, Field, ValidationError, field_validator
@@ -30,6 +29,7 @@ from palace_mcp.extractors.foundation.identifiers import symbol_id_for
 from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
 from palace_mcp.memory.bundle import bundle_status
 from palace_mcp.memory.projects import UnknownProjectError
+from palace_mcp.symbol_identity import canonical_symbol_short_name
 
 
 logger = logging.getLogger(__name__)
@@ -620,32 +620,7 @@ def _split_scip_top_level(symbol: str) -> list[str]:
 
 
 def _decode_scip_short_name(symbol: str) -> str:
-    raw = symbol.strip()
-    if not raw:
-        return ""
-
-    parts = _split_scip_top_level(raw)
-    candidate = parts[-1] if parts else raw
-    decoded = unquote(candidate)
-    identifiers = _length_prefixed_identifiers(decoded)
-    if identifiers:
-        type_marker_indexes = [
-            idx
-            for idx, (_name, next_char) in enumerate(identifiers)
-            if next_char in "CPOVAE"
-        ]
-        if type_marker_indexes:
-            boundary = type_marker_indexes[-1]
-            if boundary + 1 < len(identifiers):
-                return identifiers[boundary + 1][0]
-            return identifiers[boundary][0]
-        return identifiers[0][0]
-
-    if "." in decoded:
-        return decoded.rsplit(".", 1)[-1]
-    if "/" in decoded:
-        return decoded.rsplit("/", 1)[-1]
-    return decoded.rstrip("#().:")
+    return canonical_symbol_short_name(symbol)
 
 
 async def _test_impact_tests_edge(
@@ -1236,6 +1211,7 @@ def register_code_composite_tools(
                     cm_project,
                     driver=driver,
                     project_slug=project_slug,
+                    label=None,
                     include_deprecated=include_deprecated,
                 )
                 if isinstance(disambig, dict):

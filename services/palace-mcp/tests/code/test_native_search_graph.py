@@ -64,12 +64,16 @@ async def test_search_graph_pattern_mode_returns_results_and_pagination(
                 "qualified_name": "pkg.code_router.register_code_tools",
                 "label": "Function",
                 "file_path": "src/palace_mcp/code_router.py",
+                "short_name": "register_code_tools",
+                "kind": "function",
             },
             {
                 "name": "register_code_tools_test",
                 "qualified_name": "pkg.tests.register_code_tools_test",
                 "label": "Function",
                 "file_path": "tests/test_code_router.py",
+                "short_name": "register_code_tools_test",
+                "kind": "function",
             },
         ],
     )
@@ -93,6 +97,8 @@ async def test_search_graph_pattern_mode_returns_results_and_pagination(
                 "qualified_name": "pkg.code_router.register_code_tools",
                 "label": "Function",
                 "file_path": "src/palace_mcp/code_router.py",
+                "short_name": "register_code_tools",
+                "kind": "function",
             }
         ],
         "total": 2,
@@ -126,3 +132,33 @@ async def test_search_graph_rejects_invalid_regex_before_query(
 
     assert result["error_code"] == "validation_error"
     driver.session.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_search_graph_returns_canonical_struct_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    driver = _mock_driver(
+        [{"total": 1}],
+        [
+            {
+                "name": "BalanceData",
+                "qualified_name": "WalletKit s:9WalletKit11BalanceDataV",
+                "label": "Struct",
+                "file_path": "Sources/BalanceData.swift",
+                "short_name": "BalanceData",
+                "kind": "struct",
+            }
+        ],
+    )
+    monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: driver)
+
+    result = await native_search_graph(
+        project="gimle",
+        label="Struct",
+        name_pattern="^BalanceData$",
+    )
+
+    assert result["results"][0]["short_name"] == "BalanceData"
+    assert result["results"][0]["kind"] == "struct"
+    assert result["results"][0]["label"] == "Struct"

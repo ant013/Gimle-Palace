@@ -16,6 +16,11 @@ from palace_mcp.git.path_resolver import (
     ProjectNotRegistered,
     resolve_registered_project,
 )
+from palace_mcp.symbol_identity import (
+    canonical_symbol_kind,
+    canonical_symbol_label,
+    canonical_symbol_short_name,
+)
 
 _LOOKUP_SYMBOL = """
 MATCH (s:Symbol)
@@ -29,6 +34,9 @@ WHERE s.group_id = $group_id
   )
 RETURN s.qualified_name AS qualified_name,
        coalesce(s.file_path, s.path) AS file_path,
+       coalesce(s.short_name, '') AS short_name,
+       coalesce(s.kind, '') AS kind,
+       coalesce(s.label, '') AS label,
        s.commit_sha AS commit_sha,
        s.line_start AS line_start,
        s.line_end AS line_end
@@ -262,6 +270,14 @@ async def native_get_code_snippet(
         "requested_qualified_name": qualified_name,
         "project": project,
         "file_path": file_path,
+        "short_name": canonical_symbol_short_name(
+            str(symbol_row.get("qualified_name") or requested),
+            short_name=str(symbol_row.get("short_name") or ""),
+        ),
+        "kind": canonical_symbol_kind(str(symbol_row.get("kind") or "")),
+        "label": canonical_symbol_label(
+            str(symbol_row.get("label") or symbol_row.get("kind") or "")
+        ),
         "start_line": snippet.start_line,
         "end_line": snippet.end_line,
         "source": snippet.source,
