@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -75,6 +77,16 @@ class _FakeBackend:
 
     def embed_batch(self, texts: list[str]) -> list[list[float]]:
         return [self.embed_text(text) for text in texts]
+
+
+def _run(args: list[str], cwd: Path) -> None:
+    subprocess.run(args, cwd=cwd, check=True, capture_output=True)
+
+
+def _run_text(args: list[str], cwd: Path) -> str:
+    return subprocess.run(
+        args, cwd=cwd, check=True, capture_output=True, text=True
+    ).stdout.strip()
 
 
 def _make_tool_result(payload: dict[str, Any]) -> CallToolResult:
@@ -630,6 +642,88 @@ async def test_context_warning_is_attached_per_hit_when_project_not_mounted() ->
     # Local provider returns project_not_mounted when /repos/<project> absent;
     # CM fallback is skipped because it is the project_not_mounted path.
     assert context["warning_code"] == "project_not_mounted"
+
+
+@pytest.mark.asyncio
+async def test_deleted_post_snapshot_hit_is_marked_stale(
+    tmp_path: Path,
+) -> None:
+    from palace_mcp.code.find_semantic import semantic_search
+
+    repo_path = tmp_path / "wallet-core"
+    repo_path.mkdir()
+    _run(["git", "init", "-q", "-b", "main"], cwd=repo_path)
+    _run(["git", "config", "user.email", "t@t"], cwd=repo_path)
+    _run(["git", "config", "user.name", "T"], cwd=repo_path)
+    (repo_path / "Sources").mkdir()
+    (repo_path / "Sources" / "A.swift").write_text("func verify() {}\n")
+    _run(["git", "add", "."], cwd=repo_path)
+    _run(["git", "commit", "-m", "initial", "-q"], cwd=repo_path)
+    indexed_commit = _run_text(["git", "rev-parse", "HEAD"], cwd=repo_path)
+    (repo_path / "Sources" / "A.swift").unlink()
+    _run(["git", "add", "-A"], cwd=repo_path)
+    _run(["git", "commit", "-m", "delete", "-q"], cwd=repo_path)
+
+    backend = _FakeBackend()
+    dispatcher = EmbeddingBackendDispatcher({"qodo": backend}, default_backend="qodo")
+
+    def run_fn(query: str, _params: dict[str, Any]) -> _FakeResult:
+        if "collect(p.slug)" in query:
+            return _FakeResult(single_value={"found_projects": ["wallet-core"]})
+        if "embedded_cnt" in query:
+            return _FakeResult(
+                data_value=[{"source_scope": "project", "total": 1, "embedded_cnt": 1}]
+            )
+        if _is_vector_query(query):
+            return _FakeResult(
+                data_value=[
+                    {
+                        "group_id": "project/wallet-core",
+                        "qualified_name": "Crypto.verify",
+                        "kind": "function",
+                        "file_path": "Sources/A.swift",
+                        "module_name": "WalletCore",
+                        "source_scope": "project",
+                        "embedding_input_hash": "hash-a",
+                        "commit_sha": indexed_commit,
+                        "score": 0.91,
+                    }
+                ]
+            )
+        raise AssertionError(f"unexpected query: {query}")
+
+    driver = _FakeDriver(run_fn)
+
+    async def _resolve_repo_path(_: str) -> Path:
+        return repo_path
+
+    with (
+        patch(
+            "palace_mcp.code.find_semantic.get_embedding_dispatcher",
+            return_value=dispatcher,
+        ),
+        patch(
+            "palace_mcp.code.find_semantic.code_router.get_cm_session",
+            return_value=None,
+        ),
+        patch(
+            "palace_mcp.code.find_semantic._resolve_registered_repo_path",
+            _resolve_repo_path,
+        ),
+    ):
+        result = await semantic_search(
+            driver=driver,
+            query="signature verification",
+            project="wallet-core",
+            include_context=True,
+            context_limit=0,
+        )
+
+    hit = result["result"][0]
+    assert hit["stale"] is True
+    assert hit["indexed_commit"] == indexed_commit
+    assert hit["commits_behind_head"] == 1
+    assert hit["context"]["warning_code"] == "missing_source_file"
 
 
 @pytest.mark.asyncio

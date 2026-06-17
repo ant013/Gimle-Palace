@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import subprocess
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -26,6 +28,7 @@ def _make_project_row(
     language: str | None = None,
     framework: str | None = None,
     repo_url: str | None = None,
+    repo_path: str | None = None,
     expected_profile: bool = False,
 ) -> dict[str, Any]:
     return {
@@ -37,6 +40,7 @@ def _make_project_row(
             "language": language,
             "framework": framework,
             "repo_url": repo_url,
+            "repo_path": repo_path,
             "expected_profile": expected_profile,
             "source_created_at": _NOW,
             "source_updated_at": _NOW,
@@ -205,6 +209,8 @@ async def test_list_projects_tolerates_null_timestamps() -> None:
 def _make_mock_driver_for_overview(
     project_row: dict[str, Any],
     count_rows: list[dict[str, Any]],
+    *,
+    indexed_commit: str | None = None,
 ) -> MagicMock:
     call_count: list[int] = [0]
 
@@ -233,9 +239,17 @@ def _make_mock_driver_for_overview(
         elif call_count[0] == 2:
             # PROJECT_ENTITY_COUNTS
             return _AsyncRows(count_rows)
-        else:
+        elif call_count[0] == 3:
             # PROJECT_LAST_INGEST — no ingest run
             result.single = AsyncMock(return_value=None)
+            return result
+        else:
+            if indexed_commit is None:
+                result.single = AsyncMock(return_value=None)
+                return result
+            row = MagicMock()
+            row.__getitem__ = lambda _self, key: {"commit_sha": indexed_commit}[key]
+            result.single = AsyncMock(return_value=row)
             return result
 
     session = MagicMock()
@@ -259,3 +273,48 @@ async def test_get_project_overview_returns_entity_counts() -> None:
     info = await get_project_overview(driver, slug="gimle")
     assert info.slug == "gimle"
     assert info.entity_counts == {"Issue": 10, "Comment": 5}
+
+
+def _run(args: list[str], cwd: Path) -> None:
+    subprocess.run(args, cwd=cwd, check=True, capture_output=True)
+
+
+def _run_text(args: list[str], cwd: Path) -> str:
+    return subprocess.run(
+        args, cwd=cwd, check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
+@pytest.mark.asyncio
+async def test_get_project_overview_reports_freshness_metadata(
+    tmp_path: Path,
+) -> None:
+    repo_path = tmp_path / "gimle"
+    repo_path.mkdir()
+    _run(["git", "init", "-q", "-b", "main"], cwd=repo_path)
+    _run(["git", "config", "user.email", "t@t"], cwd=repo_path)
+    _run(["git", "config", "user.name", "T"], cwd=repo_path)
+    (repo_path / "Wallet.swift").write_text("struct Wallet {}\n")
+    _run(["git", "add", "."], cwd=repo_path)
+    _run(["git", "commit", "-m", "initial", "-q"], cwd=repo_path)
+    indexed_commit = _run_text(["git", "rev-parse", "HEAD"], cwd=repo_path)
+    (repo_path / "Wallet.swift").write_text("struct Wallet { let id = 1 }\n")
+    _run(["git", "add", "."], cwd=repo_path)
+    _run(["git", "commit", "-m", "update", "-q"], cwd=repo_path)
+
+    project_row = _make_project_row(
+        "gimle",
+        "Gimle",
+        ["infra"],
+        repo_path=str(repo_path),
+    )
+    driver = _make_mock_driver_for_overview(
+        project_row,
+        [],
+        indexed_commit=indexed_commit,
+    )
+
+    info = await get_project_overview(driver, slug="gimle")
+
+    assert info.indexed_commit == indexed_commit
+    assert info.commits_behind_head == 1

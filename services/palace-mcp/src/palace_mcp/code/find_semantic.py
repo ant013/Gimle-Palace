@@ -13,7 +13,7 @@ from neo4j.exceptions import Neo4jError
 
 from palace_mcp import code_router
 from palace_mcp.code.semantic_contract import ScoreComponents
-from palace_mcp.code.snippet_provider import resolve_snippet
+from palace_mcp.code.snippet_provider import inspect_freshness, resolve_snippet
 from palace_mcp.embeddings import get_embedding_dispatcher
 from palace_mcp.extractors.foundation.identifiers import symbol_id_for
 from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
@@ -701,6 +701,16 @@ async def _resolve_registered_repo_path(project: str) -> Path | None:
         return None
 
 
+async def _load_freshness(project: str, commit_sha: str | None) -> dict[str, Any]:
+    repo_path = await _resolve_registered_repo_path(project)
+    freshness = await asyncio.to_thread(inspect_freshness, repo_path, commit_sha)
+    return {
+        "indexed_commit": freshness.indexed_commit,
+        "commits_behind_head": freshness.commits_behind_head,
+        "stale": freshness.stale,
+    }
+
+
 async def _load_snippet_context(
     *,
     project: str,
@@ -1062,6 +1072,15 @@ async def semantic_search(
         )
         for hit in result_rows
     ]
+    freshness_rows = await asyncio.gather(
+        *[
+            _load_freshness(hit["project"], cs)
+            for hit, (cs, _, _) in zip(result_rows, _hit_meta)
+        ]
+    )
+    for hit, freshness in zip(result_rows, freshness_rows):
+        hit.update(freshness)
+
     if include_context:
         contexts = await asyncio.gather(
             *[
