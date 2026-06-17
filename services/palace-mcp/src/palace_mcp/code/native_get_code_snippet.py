@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from palace_mcp.code.native_detect_changes import FALLBACK_TO_CM
-from palace_mcp.code.snippet_provider import resolve_snippet
+from palace_mcp.code.snippet_provider import inspect_freshness, resolve_snippet
 from palace_mcp.code.snippet_short_name import (
     snippet_short_name,
     snippet_short_name_candidates,
@@ -76,6 +76,9 @@ def _error(
     project: str,
     requested_qualified_name: str,
     resolved_qualified_name: str | None = None,
+    indexed_commit: str | None = None,
+    commits_behind_head: int | None = None,
+    stale: bool | None = None,
 ) -> dict[str, Any]:
     result: dict[str, Any] = {
         "ok": False,
@@ -86,6 +89,12 @@ def _error(
     }
     if resolved_qualified_name is not None:
         result["qualified_name"] = resolved_qualified_name
+    if indexed_commit is not None:
+        result["indexed_commit"] = indexed_commit
+    if commits_behind_head is not None:
+        result["commits_behind_head"] = commits_behind_head
+    if stale is not None:
+        result["stale"] = stale
     return result
 
 
@@ -245,6 +254,8 @@ async def native_get_code_snippet(
         snippet_quality = "approximate_window"
 
     repo_path = await _resolve_repo_path(project)
+    commit_sha = str(symbol_row.get("commit_sha") or "") or None
+    freshness = await asyncio.to_thread(inspect_freshness, repo_path, commit_sha)
     snippet, warning_code, warning_message = await asyncio.to_thread(
         resolve_snippet,
         project=project,
@@ -252,7 +263,8 @@ async def native_get_code_snippet(
         file_path=file_path or None,
         line_start=line_start,
         line_end=line_end,
-        commit_sha=str(symbol_row.get("commit_sha") or "") or None,
+        commit_sha=commit_sha,
+        freshness=freshness,
     )
     if snippet is None:
         if warning_code in _CM_FALLBACK_CODES:
@@ -263,6 +275,9 @@ async def native_get_code_snippet(
             project=project,
             requested_qualified_name=qualified_name,
             resolved_qualified_name=str(symbol_row.get("qualified_name") or requested),
+            indexed_commit=freshness.indexed_commit,
+            commits_behind_head=freshness.commits_behind_head,
+            stale=freshness.stale,
         )
 
     return {
@@ -283,6 +298,8 @@ async def native_get_code_snippet(
         "source": snippet.source,
         "language": snippet.language,
         "truncated": snippet.truncated,
-        "stale": snippet.stale,
+        "stale": freshness.stale,
+        "indexed_commit": freshness.indexed_commit,
+        "commits_behind_head": freshness.commits_behind_head,
         "snippet_quality": snippet_quality,
     }

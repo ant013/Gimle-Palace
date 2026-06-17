@@ -256,17 +256,26 @@ def test_byte_count_capped(tmp_path: Path) -> None:
 
 
 def test_stale_source_when_commit_sha_differs(repo: Path, repos_root: Path) -> None:
+    indexed_commit = _run_text(["git", "rev-parse", "HEAD"], cwd=repo)
+    (repo / "Sources" / "Wallet.swift").write_text(
+        "\n".join(f"line{i}" for i in range(1, 22)) + "\n"
+    )
+    _run(["git", "add", "."], cwd=repo)
+    _run(["git", "commit", "-m", "update", "-q"], cwd=repo)
+
     result, code, _ = resolve_snippet(
         project="myproject",
         file_path="Sources/Wallet.swift",
         line_start=1,
         line_end=3,
-        commit_sha="0000000000000000000000000000000000000000",
+        commit_sha=indexed_commit,
         repos_root=repos_root,
     )
     assert code is None
     assert result is not None
     assert result.stale is True
+    assert result.indexed_commit == indexed_commit
+    assert result.commits_behind_head == 1
 
 
 def test_not_stale_when_commit_sha_matches_head(repo: Path, repos_root: Path) -> None:
@@ -282,6 +291,8 @@ def test_not_stale_when_commit_sha_matches_head(repo: Path, repos_root: Path) ->
     assert code is None
     assert result is not None
     assert result.stale is False
+    assert result.indexed_commit == head
+    assert result.commits_behind_head == 0
 
 
 def test_not_stale_when_no_commit_sha(repo: Path, repos_root: Path) -> None:
@@ -296,3 +307,5 @@ def test_not_stale_when_no_commit_sha(repo: Path, repos_root: Path) -> None:
     assert code is None
     assert result is not None
     assert result.stale is False
+    assert result.indexed_commit is None
+    assert result.commits_behind_head is None
