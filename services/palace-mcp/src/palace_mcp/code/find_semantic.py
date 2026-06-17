@@ -17,6 +17,7 @@ from palace_mcp.code.snippet_provider import inspect_freshness, resolve_snippet
 from palace_mcp.embeddings import get_embedding_dispatcher
 from palace_mcp.extractors.foundation.identifiers import symbol_id_for
 from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
+from palace_mcp.pagination import pagination_envelope
 from palace_mcp.symbol_identity import (
     canonical_symbol_kind,
     canonical_symbol_label,
@@ -933,6 +934,7 @@ async def semantic_search(
     include_sdk: bool = False,
     include_deprecated: bool = False,
     limit: int = 10,
+    offset: int = 0,
     backend: str | None = None,
     include_context: bool = True,
     context_limit: int = 3,
@@ -944,6 +946,8 @@ async def semantic_search(
 
     if limit < 1 or limit > _MAX_LIMIT:
         return _error("invalid_limit", f"limit must be between 1 and {_MAX_LIMIT}")
+    if offset < 0:
+        return _error("invalid_offset", "offset must be >= 0")
     if context_limit < 0 or context_limit > _MAX_CONTEXT_LIMIT:
         return _error(
             "invalid_context_limit",
@@ -964,6 +968,9 @@ async def semantic_search(
         )
 
     group_ids = [f"project/{slug}" for slug in scope_projects]
+    effective_scopes = _resolve_effective_scopes(
+        source_scopes, include_dependencies, include_generated, include_sdk
+    )
 
     try:
         dispatcher = get_embedding_dispatcher()
@@ -1004,6 +1011,9 @@ async def semantic_search(
                 runtime=_runtime_metadata(settings),
             )
     warnings: list[dict[str, Any]] = []
+    total_candidates = sum(
+        int(coverage["source_scope_counts"].get(scope, 0)) for scope in effective_scopes
+    )
     if embedded_symbol_count == 0:
         warnings.append(
             _warning(
@@ -1018,28 +1028,31 @@ async def semantic_search(
             "backend": resolved_backend,
             "include_context": include_context,
             "limit": limit,
+            "offset": offset,
             "candidate_limit": _candidate_limit(limit, len(scope_projects)),
             "embedded_symbol_count": 0,
             "returned_count": 0,
             "warnings": warnings,
             "embedding_coverage": coverage,
             "result": [],
+            **pagination_envelope(total=0, returned=0, offset=offset),
         }
 
-    candidate_limit = _candidate_limit(limit, len(scope_projects))
+    page_limit = offset + limit
+    candidate_limit = _candidate_limit(page_limit, len(scope_projects))
     if len(group_ids) == 1:
         per_project_k: int | None = None
         rows, candidate_limit = await _vector_search_single_project(
             driver,
             embedding=query_embedding,
             group_id=group_ids[0],
-            requested_limit=limit,
+            requested_limit=page_limit,
             initial_query_k=candidate_limit,
             embedded_symbol_count=embedded_symbol_count,
             include_deprecated=include_deprecated,
         )
     else:
-        per_project_k = _candidate_limit(limit, 1)
+        per_project_k = _candidate_limit(page_limit, 1)
         per_project_results = await asyncio.gather(
             *[
                 _vector_search(
@@ -1101,15 +1114,12 @@ async def semantic_search(
             hit["embedding_input_hash"] = embedding_input_hash
         candidate_rows.append(hit)
 
-    effective_scopes = _resolve_effective_scopes(
-        source_scopes, include_dependencies, include_generated, include_sdk
-    )
     candidate_rows, scope_excluded_count = _filter_by_scope(
         candidate_rows, effective_scopes
     )
 
     _apply_ranking(normalized_query, candidate_rows)
-    result_rows = candidate_rows[:limit]
+    result_rows = candidate_rows[offset : offset + limit]
 
     context_available_count = 0
     warning_code_counts: dict[str, int] = {}
@@ -1166,12 +1176,14 @@ async def semantic_search(
                     total_byte_count += bc
                     snippets_with_size += 1
 
-    if len(result_rows) < limit:
+    expected_rows = min(limit, max(total_candidates - offset, 0))
+    if len(result_rows) < expected_rows:
         warnings.append(
             _warning(
                 "scope_filter_underfilled",
                 "vector search returned fewer scoped hits than requested",
                 requested_limit=limit,
+                requested_offset=offset,
                 returned_count=len(result_rows),
                 candidate_limit=candidate_limit,
             )
@@ -1198,6 +1210,7 @@ async def semantic_search(
         "backend": resolved_backend,
         "include_context": include_context,
         "limit": limit,
+        "offset": offset,
         "candidate_limit": candidate_limit,
         "per_project_k": per_project_k,
         "embedded_symbol_count": embedded_symbol_count,
@@ -1208,4 +1221,9 @@ async def semantic_search(
         "ranking_spec_version": "1",
         "context_metrics": context_metrics,
         "result": result_rows,
+        **pagination_envelope(
+            total=total_candidates,
+            returned=len(result_rows),
+            offset=offset,
+        ),
     }

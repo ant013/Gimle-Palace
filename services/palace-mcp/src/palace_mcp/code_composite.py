@@ -30,6 +30,7 @@ from palace_mcp.extractors.foundation.identifiers import symbol_id_for
 from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
 from palace_mcp.memory.bundle import bundle_status
 from palace_mcp.memory.projects import UnknownProjectError
+from palace_mcp.pagination import pagination_envelope
 from palace_mcp.symbol_identity import canonical_symbol_short_name
 
 
@@ -922,6 +923,7 @@ class FindReferencesRequest(BaseModel):
     qualified_name: str = Field(..., min_length=1, max_length=500)
     project: str | None = None
     max_results: int = Field(100, ge=1, le=500)
+    offset: int = Field(0, ge=0, le=50_000)
 
 
 class CallHierarchyRequest(BaseModel):
@@ -1128,10 +1130,10 @@ async def _search_unique_occurrences(
     symbol_id: int,
     fallback_qualified_name: str,
     max_results: int,
-) -> tuple[list[dict[str, Any]], bool]:
-    target_unique = max_results + 1
-    limit = target_unique
-    max_limit = target_unique * 8
+    offset: int = 0,
+) -> tuple[list[dict[str, Any]], int]:
+    target_unique = offset + max_results
+    limit = max(target_unique, 1)
 
     while True:
         raw_docs = await bridge.search_by_symbol_id_async(symbol_id, limit=limit)
@@ -1140,13 +1142,9 @@ async def _search_unique_occurrences(
             fallback_qualified_name=fallback_qualified_name,
             symbol_id=symbol_id,
         )
-        if len(occurrences) > max_results:
-            return occurrences[:max_results], True
         if len(raw_docs) < limit:
-            return occurrences, False
-        if limit >= max_limit:
-            return occurrences, True
-        limit = min(limit * 2, max_limit)
+            return occurrences[offset : offset + max_results], len(occurrences)
+        limit = max(limit * 2, limit + 1)
 
 
 def _partition_occurrences_by_source_scope(
@@ -1283,6 +1281,7 @@ def register_code_composite_tools(
         qualified_name: str,
         project: str | None = None,
         max_results: int = 100,
+        offset: int = 0,
         include_deprecated: bool = False,
     ) -> dict[str, Any]:
         from pathlib import Path
@@ -1304,6 +1303,7 @@ def register_code_composite_tools(
                 qualified_name=qualified_name,
                 project=project,
                 max_results=max_results,
+                offset=offset,
             )
         except ValidationError as e:
             return {
@@ -1345,16 +1345,17 @@ def register_code_composite_tools(
             tantivy_path = Path(settings.palace_tantivy_index_path)
             query_time_failures: list[str] = []
             occurrences_bundle: list[dict[str, Any]] = []
-            truncated = False
+            total_found = 0
             try:
                 async with TantivyBridge(
                     tantivy_path, heap_size_mb=settings.palace_tantivy_heap_mb
                 ) as bridge:
-                    occurrences_bundle, truncated = await _search_unique_occurrences(
+                    occurrences_bundle, total_found = await _search_unique_occurrences(
                         bridge,
                         symbol_id=sym_id,
                         fallback_qualified_name=req.qualified_name,
                         max_results=req.max_results,
+                        offset=req.offset,
                     )
             except Exception:
                 logger.warning(
@@ -1381,9 +1382,13 @@ def register_code_composite_tools(
                 "occurrences": occurrences_bundle,
                 "occurrences_by_source_scope": partitions,
                 "source_scope_counts": counts,
-                "total_found": len(occurrences_bundle) + (1 if truncated else 0),
-                "truncated": truncated,
+                "total_found": total_found,
                 "bundle_health": health.model_dump(mode="json"),
+                **pagination_envelope(
+                    total=total_found,
+                    returned=len(occurrences_bundle),
+                    offset=req.offset,
+                ),
             }
 
         # §5.2 project path — existing behaviour unchanged
@@ -1399,6 +1404,7 @@ def register_code_composite_tools(
                     f"Run palace.ingest.run_extractor(<extractor_name>, "
                     f"'{resolved_project}') before relying on this answer"
                 ),
+                **pagination_envelope(total=0, returned=0, offset=req.offset),
             }
 
         # Optional: resolve via CM session for suffix-match disambiguation
@@ -1447,11 +1453,12 @@ def register_code_composite_tools(
         async with TantivyBridge(
             tantivy_path, heap_size_mb=settings.palace_tantivy_heap_mb
         ) as bridge:
-            occurrences, truncated = await _search_unique_occurrences(
+            occurrences, total_found = await _search_unique_occurrences(
                 bridge,
                 symbol_id=sym_id,
                 fallback_qualified_name=resolved_qn,
                 max_results=req.max_results,
+                offset=req.offset,
             )
 
         # State C: evicted — attach partial_index warning
@@ -1464,12 +1471,18 @@ def register_code_composite_tools(
             "requested_qualified_name": req.qualified_name,
             "project": resolved_project,
             "occurrences": occurrences,
-            "total_found": len(occurrences) + (1 if truncated else 0),
-            "truncated": truncated,
+            "total_found": total_found,
         }
         partitions, counts = _partition_occurrences_by_source_scope(occurrences)
         response["occurrences_by_source_scope"] = partitions
         response["source_scope_counts"] = counts
+        response.update(
+            pagination_envelope(
+                total=total_found,
+                returned=len(occurrences),
+                offset=req.offset,
+            )
+        )
 
         if eviction_info:
             total_evicted = int(eviction_info.get("total_evicted", 0))

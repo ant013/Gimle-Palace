@@ -84,8 +84,33 @@ def _run_fn_dead_code(
             observed.append((query, params))
         if "MATCH (p:Project" in query:
             return _FakeResult(single_value={"slug": params["slug"]})
+        if "RETURN count(f) AS total" in query:
+            if params["include_dependencies"]:
+                total = len(rows)
+            else:
+                markers = tuple(params["dependency_markers"])
+                total = sum(
+                    1
+                    for row in rows
+                    if not any(
+                        marker in (row.get("members_json") or "") for marker in markers
+                    )
+                )
+            return _FakeResult(single_value={"total": total})
         if "MATCH (f:DeadFinding" in query:
-            return _FakeResult(rows=rows)
+            filtered = rows
+            if not params["include_dependencies"]:
+                markers = tuple(params["dependency_markers"])
+                filtered = [
+                    row
+                    for row in rows
+                    if not any(
+                        marker in (row.get("members_json") or "") for marker in markers
+                    )
+                ]
+            start = int(params["offset"])
+            end = start + int(params["limit"])
+            return _FakeResult(rows=filtered[start:end])
         raise AssertionError(f"unexpected query: {query}")
 
     return run_fn
@@ -152,7 +177,12 @@ async def test_find_dead_code_keeps_query_bounded_before_dependency_filtering() 
 
     assert result["ok"] is True
     query, params = next(
-        (query, params) for query, params in observed if "MATCH (f:DeadFinding" in query
+        (
+            query,
+            params,
+        )
+        for query, params in observed
+        if "MATCH (f:DeadFinding" in query and "LIMIT $limit" in query
     )
     assert "LIMIT $limit" in query
     assert params["limit"] == 17

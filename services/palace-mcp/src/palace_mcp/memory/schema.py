@@ -27,6 +27,7 @@ class LookupRequest(BaseModel):
     entity_type: EntityType
     project: str | list[str] | None = None
     filters: dict[str, Any] = Field(default_factory=dict)
+    offset: int = Field(default=0, ge=0)
     limit: int = Field(default=20, ge=1, le=100)
     order_by: Literal["created_at", "name"] = "created_at"
 
@@ -49,6 +50,13 @@ class LookupResponse(BaseModel):
     total_matched: int
     query_ms: int
     warnings: list[str] = Field(default_factory=list)
+    total: int = 0
+    returned: int = 0
+    offset: int = 0
+    has_more: bool = False
+    next_offset: int | None = None
+    truncated: bool = False
+    truncated_reason: str | None = None
 
 
 class ProjectInfo(BaseModel):

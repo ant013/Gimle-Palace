@@ -92,8 +92,33 @@ def _run_fn_dead_symbols(
             observed.append((query, params))
         if "MATCH (p:Project" in query:
             return _FakeResult(single_value={"slug": params["slug"]})
+        if "RETURN count(c) AS total" in query:
+            if params["include_dependencies"]:
+                total = len(rows)
+            else:
+                markers = tuple(params["dependency_markers"])
+                total = sum(
+                    1
+                    for row in rows
+                    if not any(
+                        marker in (row.get("source_file") or "") for marker in markers
+                    )
+                )
+            return _FakeResult(single_value={"total": total})
         if "MATCH (c:DeadSymbolCandidate" in query:
-            return _FakeResult(rows=rows)
+            filtered = rows
+            if not params["include_dependencies"]:
+                markers = tuple(params["dependency_markers"])
+                filtered = [
+                    row
+                    for row in rows
+                    if not any(
+                        marker in (row.get("source_file") or "") for marker in markers
+                    )
+                ]
+            start = int(params["offset"])
+            end = start + int(params["limit"])
+            return _FakeResult(rows=filtered[start:end])
         raise AssertionError(f"unexpected query: {query}")
 
     return run_fn
@@ -224,7 +249,7 @@ async def test_find_dead_symbols_keeps_query_bounded_before_dependency_filtering
     query, params = next(
         (query, params)
         for query, params in observed
-        if "MATCH (c:DeadSymbolCandidate" in query
+        if "MATCH (c:DeadSymbolCandidate" in query and "LIMIT $limit" in query
     )
     assert "LIMIT $limit" in query
     assert params["limit"] == 23
