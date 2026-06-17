@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from palace_mcp import code_router
 from palace_mcp.code.namespace import resolve as resolve_project_namespace
+from palace_mcp.code.source_scope import classify_source_scope
 from palace_mcp.errors import handle_tool_error
 from palace_mcp.extractors.foundation.identifiers import symbol_id_for
 from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
@@ -1148,6 +1149,18 @@ async def _search_unique_occurrences(
         limit = min(limit * 2, max_limit)
 
 
+def _partition_occurrences_by_source_scope(
+    occurrences: list[dict[str, Any]],
+) -> tuple[dict[str, list[dict[str, Any]]], dict[str, int]]:
+    partitions: dict[str, list[dict[str, Any]]] = {}
+    counts: dict[str, int] = {}
+    for occurrence in occurrences:
+        scope = classify_source_scope(occurrence["file_path"]).scope.value
+        partitions.setdefault(scope, []).append(occurrence)
+        counts[scope] = counts.get(scope, 0) + 1
+    return partitions, counts
+
+
 _DESC_SNIPPET_RICH = (
     "Rich context card for a symbol: source snippet, definition location, "
     "usages, code owners, hotspot score, and recent commits. "
@@ -1358,11 +1371,16 @@ def register_code_composite_tools(
                         "query_failed_slugs": tuple(sorted(set(query_time_failures)))
                     }
                 )
+            partitions, counts = _partition_occurrences_by_source_scope(
+                occurrences_bundle
+            )
             return {
                 "ok": True,
                 "requested_qualified_name": req.qualified_name,
                 "bundle": resolved_project,
                 "occurrences": occurrences_bundle,
+                "occurrences_by_source_scope": partitions,
+                "source_scope_counts": counts,
                 "total_found": len(occurrences_bundle) + (1 if truncated else 0),
                 "truncated": truncated,
                 "bundle_health": health.model_dump(mode="json"),
@@ -1449,6 +1467,9 @@ def register_code_composite_tools(
             "total_found": len(occurrences) + (1 if truncated else 0),
             "truncated": truncated,
         }
+        partitions, counts = _partition_occurrences_by_source_scope(occurrences)
+        response["occurrences_by_source_scope"] = partitions
+        response["source_scope_counts"] = counts
 
         if eviction_info:
             total_evicted = int(eviction_info.get("total_evicted", 0))

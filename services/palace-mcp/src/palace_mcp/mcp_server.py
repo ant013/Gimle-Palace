@@ -1424,11 +1424,13 @@ async def palace_code_find_owners(
         "List dead symbol candidates for a project as recorded by the "
         "dead_symbol_binary_surface extractor. Returns symbols identified by "
         "Periphery static analysis that are unused or binary-surface retained. "
-        "Accepts optional limit (default 200)."
+        "Accepts optional include_dependencies (default False) and limit "
+        "(default 200)."
     ),
 )
 async def palace_code_find_dead_symbols(
     project: str,
+    include_dependencies: bool = False,
     limit: int = 200,
 ) -> dict[str, Any]:
     """List dead symbol candidates ranked by module and display name."""
@@ -1439,7 +1441,12 @@ async def palace_code_find_dead_symbols(
             "error_code": "driver_unavailable",
             "message": "Neo4j driver not initialised",
         }
-    return await _find_dead_symbols_impl(driver=driver, project=project, limit=limit)
+    return await _find_dead_symbols_impl(
+        driver=driver,
+        project=project,
+        include_dependencies=include_dependencies,
+        limit=limit,
+    )
 
 
 @_tool(
@@ -1450,13 +1457,14 @@ async def palace_code_find_dead_symbols(
         "dead_module (≥50% of module), dead_extension_chain (no existential conformance). "
         "Distinct from palace.code.find_dead_symbols which uses Periphery/binary-surface. "
         "Accepts min_severity (default 'medium'), include_test_only (default False), "
-        "and limit (default 200)."
+        "include_dependencies (default False), and limit (default 200)."
     ),
 )
 async def palace_code_find_dead_code(
     project: str,
     min_severity: str = "medium",
     include_test_only: bool = False,
+    include_dependencies: bool = False,
     limit: int = 200,
 ) -> dict[str, Any]:
     """Graph-reachability dead-code findings ranked by severity and safe_to_delete_score."""
@@ -1472,6 +1480,7 @@ async def palace_code_find_dead_code(
         project=project,
         min_severity=min_severity,
         include_test_only=include_test_only,
+        include_dependencies=include_dependencies,
         limit=limit,
     )
 

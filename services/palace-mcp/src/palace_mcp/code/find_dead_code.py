@@ -13,6 +13,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from palace_mcp.code.source_scope import SourceScope, classify_source_scope
+
 _SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 
 _GET_PROJECT = "MATCH (p:Project {slug: $slug}) RETURN p LIMIT 1"
@@ -56,12 +58,23 @@ def _error(code: str, message: str, project: str | None = None) -> dict[str, Any
     return out
 
 
+def _has_dependency_member(members: list[dict[str, Any]]) -> bool:
+    for member in members:
+        file_path = member.get("file_path")
+        if not file_path:
+            continue
+        if classify_source_scope(str(file_path)).scope is SourceScope.DEPENDENCY:
+            return True
+    return False
+
+
 async def find_dead_code(
     *,
     driver: Any,
     project: str,
     min_severity: str = "medium",
     include_test_only: bool = False,
+    include_dependencies: bool = False,
     limit: int = 200,
 ) -> dict[str, Any]:
     """Return :DeadFinding nodes for a project above the given severity threshold."""
@@ -88,6 +101,9 @@ async def find_dead_code(
             _QUERY, project=project, severities=severities, limit=int(limit)
         )
         async for rec in result:
+            members = json.loads(rec["members_json"]) if rec["members_json"] else []
+            if not include_dependencies and _has_dependency_member(members):
+                continue
             rows.append(
                 {
                     "finding_id": rec["finding_id"],
@@ -96,14 +112,14 @@ async def find_dead_code(
                     "size": rec["size"],
                     "safe_to_delete_score": rec["safe_to_delete_score"],
                     "git_last_external_ref": rec["git_last_external_ref"],
-                    "members": json.loads(rec["members_json"])
-                    if rec["members_json"]
-                    else [],
+                    "members": members,
                     "module_coverage_ratio": rec["module_coverage_ratio"],
                     "target_dead_type": rec["target_dead_type"],
                     "created_at": rec["created_at"],
                 }
             )
+
+    rows = rows[: int(limit)]
 
     return {
         "ok": True,
