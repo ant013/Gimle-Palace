@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterator
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -38,6 +39,60 @@ def _mock_driver_no_project() -> MagicMock:
     return driver
 
 
+class _FakeResult:
+    def __init__(
+        self,
+        *,
+        single_value: Any | None = None,
+        rows: list[dict[str, Any]] | None = None,
+    ) -> None:
+        self._single_value = single_value
+        self._rows = rows or []
+
+    async def single(self) -> Any | None:
+        return self._single_value
+
+    def __aiter__(self) -> Any:
+        async def _iterate() -> Any:
+            for row in self._rows:
+                yield row
+
+        return _iterate()
+
+
+class _FakeSession:
+    def __init__(self, run_fn: Any) -> None:
+        self._run_fn = run_fn
+
+    async def run(self, query: str, **params: Any) -> _FakeResult:
+        return self._run_fn(query, params)
+
+    async def __aenter__(self) -> "_FakeSession":
+        return self
+
+    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+        return False
+
+
+class _FakeDriver:
+    def __init__(self, run_fn: Any) -> None:
+        self._session = _FakeSession(run_fn)
+
+    def session(self) -> _FakeSession:
+        return self._session
+
+
+def _run_fn_dead_symbols(rows: list[dict[str, Any]]) -> Any:
+    def run_fn(query: str, params: dict[str, Any]) -> _FakeResult:
+        if "MATCH (p:Project" in query:
+            return _FakeResult(single_value={"slug": params["slug"]})
+        if "MATCH (c:DeadSymbolCandidate" in query:
+            return _FakeResult(rows=rows)
+        raise AssertionError(f"unexpected query: {query}")
+
+    return run_fn
+
+
 @pytest.mark.asyncio
 async def test_find_dead_symbols_project_not_registered() -> None:
     """find_dead_symbols returns error when project is not registered."""
@@ -47,6 +102,77 @@ async def test_find_dead_symbols_project_not_registered() -> None:
     result = await find_dead_symbols(driver=driver, project="no-such-project")
     assert result["ok"] is False
     assert result["error_code"] == "project_not_registered"
+
+
+@pytest.mark.asyncio
+async def test_find_dead_symbols_excludes_dependency_paths_by_default() -> None:
+    from palace_mcp.code.find_dead_symbols import find_dead_symbols
+
+    rows = [
+        {
+            "id": "project-row",
+            "display_name": "ProjectOnly",
+            "kind": "class",
+            "module_name": "AppModule",
+            "language": "swift",
+            "candidate_state": "unused_candidate",
+            "confidence": "high",
+            "source_file": "Unstoppable/Services/BalanceService.swift",
+            "source_line": 12,
+            "commit_sha": "abc123",
+            "evidence_source": "periphery",
+        },
+        {
+            "id": "dep-row",
+            "display_name": "DependencyOnly",
+            "kind": "class",
+            "module_name": "WalletKit",
+            "language": "swift",
+            "candidate_state": "unused_candidate",
+            "confidence": "high",
+            "source_file": "checkouts/WalletKit/Sources/WalletClient.swift",
+            "source_line": 4,
+            "commit_sha": "def456",
+            "evidence_source": "periphery",
+        },
+    ]
+    driver = _FakeDriver(_run_fn_dead_symbols(rows))
+
+    result = await find_dead_symbols(driver=driver, project="uw-ios-app")
+
+    assert result["ok"] is True
+    assert [row["display_name"] for row in result["result"]] == ["ProjectOnly"]
+
+
+@pytest.mark.asyncio
+async def test_find_dead_symbols_can_include_dependency_paths() -> None:
+    from palace_mcp.code.find_dead_symbols import find_dead_symbols
+
+    rows = [
+        {
+            "id": "dep-row",
+            "display_name": "DependencyOnly",
+            "kind": "class",
+            "module_name": "WalletKit",
+            "language": "swift",
+            "candidate_state": "unused_candidate",
+            "confidence": "high",
+            "source_file": "checkouts/WalletKit/Sources/WalletClient.swift",
+            "source_line": 4,
+            "commit_sha": "def456",
+            "evidence_source": "periphery",
+        }
+    ]
+    driver = _FakeDriver(_run_fn_dead_symbols(rows))
+
+    result = await find_dead_symbols(
+        driver=driver,
+        project="uw-ios-app",
+        include_dependencies=True,
+    )
+
+    assert result["ok"] is True
+    assert [row["display_name"] for row in result["result"]] == ["DependencyOnly"]
 
 
 # ---------------------------------------------------------------------------

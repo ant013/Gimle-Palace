@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from palace_mcp.code.source_scope import SourceScope, classify_source_scope
+
 _GET_PROJECT = "MATCH (p:Project {slug: $slug}) RETURN p LIMIT 1"
 
 _QUERY = """
@@ -20,7 +22,6 @@ RETURN c.id AS id,
        c.commit_sha AS commit_sha,
        c.evidence_source AS evidence_source
 ORDER BY c.module_name, c.display_name
-LIMIT $limit
 """.strip()
 
 
@@ -31,10 +32,17 @@ def _error(code: str, message: str, project: str | None = None) -> dict[str, Any
     return out
 
 
+def _is_dependency_candidate(source_file: str | None) -> bool:
+    if not source_file:
+        return False
+    return classify_source_scope(source_file).scope is SourceScope.DEPENDENCY
+
+
 async def find_dead_symbols(
     *,
     driver: Any,
     project: str,
+    include_dependencies: bool = False,
     limit: int = 200,
 ) -> dict[str, Any]:
     async with driver.session() as sess:
@@ -45,8 +53,12 @@ async def find_dead_symbols(
         )
     rows: list[dict[str, Any]] = []
     async with driver.session() as sess:
-        result = await sess.run(_QUERY, project=project, limit=int(limit))
+        result = await sess.run(_QUERY, project=project)
         async for rec in result:
+            if not include_dependencies and _is_dependency_candidate(
+                rec["source_file"]
+            ):
+                continue
             rows.append(
                 {
                     "id": rec["id"],
@@ -62,4 +74,4 @@ async def find_dead_symbols(
                     "evidence_source": rec["evidence_source"],
                 }
             )
-    return {"ok": True, "project": project, "result": rows}
+    return {"ok": True, "project": project, "result": rows[: int(limit)]}

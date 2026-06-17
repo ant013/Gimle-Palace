@@ -112,3 +112,23 @@ class TestCodeToolRegistration:
             include_deprecated = tool.parameters["properties"]["include_deprecated"]
             assert include_deprecated["type"] == "boolean"
             assert include_deprecated["default"] is False
+
+    def test_dead_code_tools_expose_include_dependencies_default(self) -> None:
+        from palace_mcp.mcp_server import build_mcp_asgi_app, _mcp
+
+        build_mcp_asgi_app()
+        code_tools = {
+            tool.name: tool
+            for tool in _mcp._tool_manager.list_tools()
+            if tool.name
+            in {"palace.code.find_dead_code", "palace.code.find_dead_symbols"}
+        }
+        assert set(code_tools) == {
+            "palace.code.find_dead_code",
+            "palace.code.find_dead_symbols",
+        }
+
+        for tool in code_tools.values():
+            include_dependencies = tool.parameters["properties"]["include_dependencies"]
+            assert include_dependencies["type"] == "boolean"
+            assert include_dependencies["default"] is False

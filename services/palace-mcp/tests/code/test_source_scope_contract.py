@@ -228,6 +228,11 @@ class TestLegacyFallback:
         assert result.scope == SourceScope.DEPENDENCY
         assert result.warning is None
 
+    def test_no_recipe_bare_checkouts_is_dependency(self) -> None:
+        result = classify_source_scope("checkouts/WalletKit/Sources/WalletKit.swift")
+        assert result.scope == SourceScope.DEPENDENCY
+        assert result.warning is None
+
     def test_no_recipe_derived_sources_is_generated(self) -> None:
         result = classify_source_scope("DerivedSources/R.generated.swift")
         assert result.scope == SourceScope.GENERATED
