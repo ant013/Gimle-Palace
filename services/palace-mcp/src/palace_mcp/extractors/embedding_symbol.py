@@ -30,7 +30,7 @@ RETURN
   s.module_name AS module_name,
   s.source_scope AS source_scope,
   s.embedding_input_hash AS embedding_input_hash,
-  s.embedding IS NOT NULL AS has_embedding
+  coalesce(s.embedding, s.name_embedding) IS NOT NULL AS has_embedding
 """
 
 _WRITE_EMBEDDINGS = """
@@ -38,6 +38,7 @@ UNWIND $rows AS row
 MATCH (s:Symbol {group_id: $group_id, qualified_name: row.qualified_name})
 SET
   s.embedding = row.embedding,
+  s.name_embedding = row.embedding,
   s.embedding_input_hash = row.embedding_input_hash
 """
 
