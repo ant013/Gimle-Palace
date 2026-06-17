@@ -88,6 +88,15 @@ def _needs_human_resolution(qualified_name: str) -> bool:
     )
 
 
+def _qualified_name_variants(qualified_name: str) -> tuple[str, ...]:
+    variants = [qualified_name]
+    if "s%3A" in qualified_name:
+        variants.append(qualified_name.replace("s%3A", "s:"))
+    if "s:" in qualified_name:
+        variants.append(qualified_name.replace("s:", "s%3A"))
+    return tuple(dict.fromkeys(variant for variant in variants if variant))
+
+
 class TestImpactRequest(BaseModel):
     """Input model for palace.code.test_impact."""
 
@@ -131,6 +140,7 @@ async def _resolve_qn(
     driver: Any | None = None,
     max_candidates: int = 15,
     include_deprecated: bool = True,
+    exact_match_only: bool = False,
 ) -> tuple[str, str] | dict[str, Any]:
     """Disambiguate qualified_name → (short_name, resolved_qn).
 
@@ -163,6 +173,92 @@ async def _resolve_qn(
             max_candidates=max_candidates,
             **fallback_kwargs,
         )
+
+    if driver is not None and hasattr(driver, "session"):
+        results = await _resolve_exact_qn(
+            driver,
+            qualified_name=qualified_name,
+            project=project,
+            project_slug=project_slug,
+            max_candidates=max_candidates,
+            include_deprecated=include_deprecated,
+        )
+        if results:
+            target = results[0]
+            resolved_name = (
+                str(target.get("short_name") or "")
+                or str(target.get("name") or "")
+                or canonical_symbol_short_name(
+                    str(target.get("qualified_name") or ""),
+                    short_name=str(target.get("short_name") or ""),
+                    name=str(target.get("name") or ""),
+                    symbol=str(target.get("symbol") or ""),
+                )
+                or str(target.get("qualified_name") or "")
+            )
+            return resolved_name, str(target["qualified_name"])
+        if exact_match_only:
+            if can_try_short_name:
+                fallback = await _fallback_rows()
+                if isinstance(fallback, dict):
+                    return fallback
+                results = fallback
+                total = len(results)
+                has_more = False
+                match_source = "short-name search"
+            else:
+                results = []
+                total = 0
+                has_more = False
+                match_source = "exact qualified_name"
+        else:
+            results = []
+            total = 0
+            has_more = False
+            match_source = "qn_pattern"
+    elif exact_match_only:
+        results = []
+        total = 0
+        has_more = False
+        match_source = "exact qualified_name"
+    else:
+        results = []
+        total = 0
+        has_more = False
+        match_source = "qn_pattern"
+
+    if results:
+        if len(results) > 1:
+            count_phrase = f"at least {len(results)}" if has_more else f"{total}"
+            return {
+                "ok": False,
+                "error_code": "ambiguous_qualified_name",
+                "requested_qualified_name": qualified_name,
+                "message": (
+                    f"{match_source} matched {count_phrase} symbols in project "
+                    f"'{project}' — refine to uniquely identify"
+                ),
+                "matches": [
+                    {
+                        "qualified_name": r.get("qualified_name", ""),
+                        "file_path": r.get("file_path", ""),
+                    }
+                    for r in results
+                ],
+            }
+        target = results[0]
+        resolved_name = (
+            str(target.get("short_name") or "")
+            or str(target.get("name") or "")
+            or canonical_symbol_short_name(
+                str(target.get("qualified_name") or ""),
+                short_name=str(target.get("short_name") or ""),
+                name=str(target.get("name") or ""),
+                symbol=str(target.get("symbol") or ""),
+            )
+            or str(target.get("qualified_name") or "")
+        )
+        return resolved_name, str(target["qualified_name"])
 
     if session is None:
         if not can_try_short_name:
@@ -255,7 +351,18 @@ async def _resolve_qn(
         }
 
     target = results[0]
-    return target["name"], target["qualified_name"]
+    resolved_name = (
+        str(target.get("short_name") or "")
+        or str(target.get("name") or "")
+        or canonical_symbol_short_name(
+            str(target.get("qualified_name") or ""),
+            short_name=str(target.get("short_name") or ""),
+            name=str(target.get("name") or ""),
+            symbol=str(target.get("symbol") or ""),
+        )
+        or str(target.get("qualified_name") or "")
+    )
+    return resolved_name, str(target["qualified_name"])
 
 
 def _escape_cypher_string(value: str) -> str:
@@ -375,6 +482,50 @@ _QUERY_SHADOW_BY_SHORT_NAME_REGEX = """
 MATCH (shadow:SymbolOccurrenceShadow {group_id: $group_id})
 WITH shadow, coalesce(shadow.symbol_qualified_name, '') AS resolved_qn
 WHERE resolved_qn =~ $pattern
+RETURN '' AS name,
+       '' AS short_name,
+       '' AS symbol,
+       resolved_qn AS qualified_name,
+       '' AS file_path
+ORDER BY qualified_name
+LIMIT $limit
+"""
+
+_QUERY_SYMBOL_BY_EXACT_QN = """
+MATCH (s:Symbol {group_id: $group_id})
+WITH s,
+     coalesce(s.qualified_name, '') AS resolved_qn,
+     coalesce(s.symbol, '') AS resolved_symbol
+WHERE (resolved_qn IN $qualified_names OR resolved_symbol IN $qualified_names)
+  AND ($include_deprecated OR NOT s:Deprecated)
+RETURN coalesce(s.name, s.short_name, s.symbol, resolved_qn) AS name,
+       coalesce(s.short_name, s.name, s.symbol, '') AS short_name,
+       coalesce(s.symbol, '') AS symbol,
+       resolved_qn AS qualified_name,
+       coalesce(s.file_path, '') AS file_path
+ORDER BY qualified_name
+LIMIT $limit
+"""
+
+_QUERY_FUNCTION_BY_EXACT_QN = """
+MATCH (fn:Function {group_id: $group_id})
+WITH fn,
+     coalesce(fn.qualified_name, fn.symbol_qualified_name, '') AS resolved_qn,
+     coalesce(fn.symbol_qualified_name, '') AS resolved_symbol
+WHERE resolved_qn IN $qualified_names OR resolved_symbol IN $qualified_names
+RETURN coalesce(fn.display_name, fn.name, resolved_symbol, resolved_qn) AS name,
+       '' AS short_name,
+       resolved_symbol AS symbol,
+       resolved_qn AS qualified_name,
+       coalesce(fn.path, fn.file_path, '') AS file_path
+ORDER BY qualified_name
+LIMIT $limit
+"""
+
+_QUERY_SHADOW_BY_EXACT_QN = """
+MATCH (shadow:SymbolOccurrenceShadow {group_id: $group_id})
+WITH shadow, coalesce(shadow.symbol_qualified_name, '') AS resolved_qn
+WHERE resolved_qn IN $qualified_names
 RETURN '' AS name,
        '' AS short_name,
        '' AS symbol,
@@ -566,6 +717,52 @@ async def _resolve_short_name(
             return rows
 
     return []
+
+
+async def _resolve_exact_qn(
+    driver: Any,
+    *,
+    qualified_name: str,
+    project: str,
+    project_slug: str | None = None,
+    max_candidates: int = 15,
+    include_deprecated: bool = True,
+) -> list[dict[str, Any]]:
+    group_id = f"project/{project_slug or project.removeprefix('repos-')}"
+    query_limit = max_candidates + 1
+    qualified_names = list(_qualified_name_variants(qualified_name))
+    queries = (
+        (
+            _QUERY_SYMBOL_BY_EXACT_QN,
+            {
+                "group_id": group_id,
+                "qualified_names": qualified_names,
+                "limit": query_limit,
+                "include_deprecated": include_deprecated,
+            },
+        ),
+        (
+            _QUERY_FUNCTION_BY_EXACT_QN,
+            {
+                "group_id": group_id,
+                "qualified_names": qualified_names,
+                "limit": query_limit,
+            },
+        ),
+        (
+            _QUERY_SHADOW_BY_EXACT_QN,
+            {
+                "group_id": group_id,
+                "qualified_names": qualified_names,
+                "limit": query_limit,
+            },
+        ),
+    )
+
+    matches: list[dict[str, Any]] = []
+    for query, params in queries:
+        matches.extend(await _query_symbol_candidates(driver, query, **params))
+    return _dedup_items(matches, key=lambda row: row["qualified_name"])[:query_limit]
 
 
 def _length_prefixed_identifiers(symbol: str) -> list[tuple[str, str]]:
@@ -1213,6 +1410,7 @@ def register_code_composite_tools(
                     project_slug=project_slug,
                     label=None,
                     include_deprecated=include_deprecated,
+                    exact_match_only=True,
                 )
                 if isinstance(disambig, dict):
                     if disambig.get("error_code") == "cm_error":
