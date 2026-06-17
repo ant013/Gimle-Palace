@@ -2,7 +2,16 @@
 
 from __future__ import annotations
 
-CALL_EDGES = frozenset({"CALLS"})
+CALL_EDGES = frozenset(
+    {
+        "CALLS",
+        "CONFORMS_TO",
+        "EXISTENTIAL_USE",
+        "EXTENDS",
+        "EXTENSION_OF",
+        "REFERENCES",
+    }
+)
 
 KNOWN_NON_CALL_EDGES = frozenset(
     {

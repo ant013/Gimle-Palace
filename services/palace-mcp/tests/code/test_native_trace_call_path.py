@@ -76,7 +76,7 @@ async def test_trace_call_path_outbound_returns_stable_envelopes(
                     {
                         "source": "pkg.root",
                         "target": "pkg.child",
-                        "type": "CALLS",
+                        "type": "REFERENCES",
                     }
                 ],
             },
@@ -109,12 +109,12 @@ async def test_trace_call_path_outbound_returns_stable_envelopes(
                     {
                         "source": "pkg.root",
                         "target": "pkg.child",
-                        "type": "CALLS",
+                        "type": "REFERENCES",
                     },
                     {
                         "source": "pkg.child",
                         "target": "pkg.leaf",
-                        "type": "CALLS",
+                        "type": "REFERENCES",
                     },
                 ],
             },
@@ -155,8 +155,8 @@ async def test_trace_call_path_outbound_returns_stable_envelopes(
             },
         ],
         "edges": [
-            {"source": "pkg.child", "target": "pkg.leaf", "type": "CALLS"},
-            {"source": "pkg.root", "target": "pkg.child", "type": "CALLS"},
+            {"source": "pkg.child", "target": "pkg.leaf", "type": "REFERENCES"},
+            {"source": "pkg.root", "target": "pkg.child", "type": "REFERENCES"},
         ],
         "callees": [
             {
@@ -205,7 +205,7 @@ async def test_trace_call_path_both_direction_collects_callers_and_callees(
                     {
                         "source": "tests.test_root",
                         "target": "pkg.root",
-                        "type": "CALLS",
+                        "type": "REFERENCES",
                     }
                 ],
             }
@@ -233,7 +233,7 @@ async def test_trace_call_path_both_direction_collects_callers_and_callees(
                     {
                         "source": "pkg.root",
                         "target": "pkg.child",
-                        "type": "CALLS",
+                        "type": "REFERENCES",
                     }
                 ],
             }
@@ -298,7 +298,7 @@ async def test_trace_call_path_excludes_test_paths_from_envelope(
                     {
                         "source": "tests.test_root",
                         "target": "pkg.root",
-                        "type": "CALLS",
+                        "type": "REFERENCES",
                     }
                 ],
             }
@@ -326,7 +326,7 @@ async def test_trace_call_path_excludes_test_paths_from_envelope(
                     {
                         "source": "pkg.root",
                         "target": "pkg.child",
-                        "type": "CALLS",
+                        "type": "REFERENCES",
                     }
                 ],
             }
@@ -357,7 +357,7 @@ async def test_trace_call_path_excludes_test_paths_from_envelope(
         },
     ]
     assert result["edges"] == [
-        {"source": "pkg.root", "target": "pkg.child", "type": "CALLS"}
+        {"source": "pkg.root", "target": "pkg.child", "type": "REFERENCES"}
     ]
     assert result["callees"] == [
         {
@@ -381,7 +381,7 @@ async def test_trace_call_path_clamps_depth_in_query_and_response(
     expected_fragment: str,
     expected_clamped_depth: int,
 ) -> None:
-    driver = _mock_driver([])
+    driver = _mock_driver([], [{"present": True}])
     monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: driver)
 
     result = await native_trace_call_path(
@@ -392,7 +392,7 @@ async def test_trace_call_path_clamps_depth_in_query_and_response(
     )
 
     session = driver.session.return_value
-    query = session.run.await_args.args[0]
+    query = session.run.await_args_list[0].args[0]
     assert expected_fragment in query
     assert result["clamped_depth"] == expected_clamped_depth
 
@@ -447,6 +447,56 @@ def test_path_query_uses_only_call_edges() -> None:
         assert edge_type in query
     for edge_type in KNOWN_NON_CALL_EDGES:
         assert edge_type not in query
+
+
+@pytest.mark.asyncio
+async def test_trace_call_path_returns_not_extracted_without_traversable_edges(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    driver = _mock_driver([], [])
+    monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: driver)
+
+    result = await native_trace_call_path(
+        project="gimle",
+        function_name="root",
+        direction="outbound",
+    )
+
+    assert result == {
+        "ok": False,
+        "error_code": "not_extracted",
+        "message": (
+            "native palace.code.trace_call_path found no traversable "
+            "call-graph edges for this project; run the symbol graph "
+            "ingest first or configure a caller substrate"
+        ),
+        "project": "gimle",
+        "mode": "calls",
+    }
+
+
+@pytest.mark.asyncio
+async def test_trace_call_path_returns_empty_when_project_has_other_edges(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    driver = _mock_driver([], [{"present": True}])
+    monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: driver)
+
+    result = await native_trace_call_path(
+        project="gimle",
+        function_name="root",
+        direction="outbound",
+    )
+
+    assert result == {
+        "function": "root",
+        "project": "gimle",
+        "direction": "outbound",
+        "mode": "calls",
+        "nodes": [],
+        "edges": [],
+        "callees": [],
+    }
 
 
 @pytest.mark.parametrize("direction", ["inbound", "outbound"])
