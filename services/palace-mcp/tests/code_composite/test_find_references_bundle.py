@@ -706,6 +706,83 @@ class TestFindReferencesProjectPath:
         assert result["occurrences"][0]["qualified_name"] == scip_qn
         symbol_id.assert_called_once_with(scip_qn)
 
+    @pytest.mark.parametrize(
+        ("requested_name", "scip_qn"),
+        [
+            ("WalletClient", "WalletKit s:9WalletKit12WalletClientC"),
+            ("BalanceData", "WalletKit s:9WalletKit11BalanceDataV"),
+            ("BalanceProviding", "WalletKit s:9WalletKit16BalanceProvidingP"),
+            ("amount", "WalletKit s:9WalletKit11BalanceDataV6amountSivp"),
+            ("formatted", "WalletKit s:9WalletKit11BalanceDataV9formattedSSyF"),
+        ],
+    )
+    async def test_project_path_resolves_canonical_short_names(
+        self,
+        requested_name: str,
+        scip_qn: str,
+    ) -> None:
+        from palace_mcp.code_composite import SlugResolution
+
+        find_refs = self._get_fn()
+        ingest_run_row = {"run_id": "abc", "success": True, "extractor_name": "sym_py"}
+        raw_occ = _tantivy_doc(
+            symbol_id=12,
+            file_path="Sources/App/BalanceData.swift",
+            line=21,
+            col_start=5,
+        )
+
+        with (
+            patch(_PATCH_GET_DRIVER, return_value=MagicMock()),
+            patch(_PATCH_GET_SETTINGS, return_value=self._settings()),
+            patch(
+                "palace_mcp.code_composite._resolve_slug",
+                new=AsyncMock(return_value=SlugResolution(kind="project")),
+            ),
+            patch(
+                "palace_mcp.code_composite._query_any_ingest_run_for_project",
+                new=AsyncMock(return_value=ingest_run_row),
+            ),
+            patch(
+                "palace_mcp.code_composite._query_eviction_record",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "palace_mcp.code_composite._query_symbol_candidates",
+                new=AsyncMock(
+                    side_effect=[
+                        [],
+                        [],
+                        [],
+                        [],
+                        [
+                            {
+                                "name": scip_qn,
+                                "short_name": "",
+                                "symbol": scip_qn,
+                                "qualified_name": scip_qn,
+                                "file_path": "Sources/App/BalanceData.swift",
+                            }
+                        ],
+                    ]
+                ),
+            ),
+            patch(
+                "palace_mcp.code_composite.TantivyBridge",
+                return_value=_make_bridge_mock([raw_occ]),
+            ),
+            patch(
+                "palace_mcp.code_composite.symbol_id_for", return_value=12
+            ) as symbol_id,
+            patch("palace_mcp.code_router.get_cm_session", return_value=None),
+        ):
+            result = await find_refs(requested_name, "gimle", 100)
+
+        assert result["ok"] is True
+        assert result["requested_qualified_name"] == requested_name
+        assert result["occurrences"][0]["qualified_name"] == scip_qn
+        symbol_id.assert_called_once_with(scip_qn)
+
 
 # ---------------------------------------------------------------------------
 # palace_code_find_references — none path (unknown slug)

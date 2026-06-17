@@ -10,44 +10,17 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from palace_mcp.code.source_scope import classify_source_scope
+from palace_mcp.symbol_identity import (
+    canonical_symbol_kind,
+    canonical_symbol_label,
+    canonical_symbol_short_name,
+)
 
 if TYPE_CHECKING:
     from neo4j import AsyncDriver
 
     from palace_mcp.extractors.scip_parser import ScipSymbolInfo
     from palace_mcp.smoke.recipe import Recipe
-
-_SCIP_KIND_TO_STR: dict[str, str] = {
-    "Type": "type",
-    "Class": "class",
-    "Struct": "struct",
-    "Enum": "enum",
-    "Protocol": "protocol",
-    "Interface": "protocol",
-    "Trait": "protocol",
-    "Extension": "extension",
-    "Function": "function",
-    "Method": "function",
-    "AbstractMethod": "function",
-    "ProtocolMethod": "function",
-    "Constructor": "function",
-    "Getter": "function",
-    "Setter": "function",
-    "Accessor": "function",
-    "Subscript": "function",
-    "StaticMethod": "function",
-    "PureVirtualMethod": "function",
-    "TraitMethod": "function",
-    "Property": "property",
-    "Field": "property",
-    "EnumMember": "property",
-    "Variable": "property",
-    "StaticProperty": "property",
-    "StaticField": "property",
-    "StaticVariable": "property",
-    "TypeAlias": "typealias",
-    "AssociatedType": "typealias",
-}
 
 _SCIP_KINDS_WITH_SHADOW_BACKING = frozenset(
     {
@@ -72,6 +45,8 @@ UNWIND $rows AS r
 MERGE (s:Symbol {qualified_name: r.qualified_name, group_id: r.group_id})
 SET s.project_id             = $project_id,
     s.kind                   = r.kind,
+    s.label                  = r.label,
+    s.short_name             = r.short_name,
     s.file_path              = r.file_path,
     s.module_name            = r.module_name,
     s.source_scope           = r.source_scope,
@@ -172,11 +147,14 @@ def build_symbol_node_rows(
         if file_path is not None:
             result = classify_source_scope(file_path, recipe=recipe)
             source_scope = result.scope.value
+        kind = canonical_symbol_kind(si.scip_kind_name)
         rows.append(
             {
                 "qualified_name": si.qualified_name,
                 "group_id": group_id,
-                "kind": _SCIP_KIND_TO_STR.get(si.scip_kind_name, "unknown"),
+                "kind": kind or "unknown",
+                "label": canonical_symbol_label(kind or si.scip_kind_name),
+                "short_name": canonical_symbol_short_name(si.qualified_name),
                 "file_path": file_path,
                 "module_name": si.module_name or None,
                 "source_scope": source_scope,

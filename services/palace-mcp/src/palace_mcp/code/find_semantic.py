@@ -17,6 +17,11 @@ from palace_mcp.code.snippet_provider import resolve_snippet
 from palace_mcp.embeddings import get_embedding_dispatcher
 from palace_mcp.extractors.foundation.identifiers import symbol_id_for
 from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
+from palace_mcp.symbol_identity import (
+    canonical_symbol_kind,
+    canonical_symbol_label,
+    canonical_symbol_short_name,
+)
 
 if TYPE_CHECKING:
     from palace_mcp.config import Settings
@@ -66,7 +71,9 @@ WHERE s.group_id IN $group_ids
 RETURN
   s.group_id AS group_id,
   s.qualified_name AS qualified_name,
+  s.short_name AS short_name,
   s.kind AS kind,
+  s.label AS label,
   s.file_path AS file_path,
   properties(s)[$line_start_key] AS line_start,
   properties(s)[$line_end_key] AS line_end,
@@ -88,7 +95,9 @@ WHERE s:Symbol
 RETURN
   s.group_id AS group_id,
   s.qualified_name AS qualified_name,
+  s.short_name AS short_name,
   s.kind AS kind,
+  s.label AS label,
   s.file_path AS file_path,
   properties(s)[$line_start_key] AS line_start,
   properties(s)[$line_end_key] AS line_end,
@@ -1000,13 +1009,21 @@ async def semantic_search(
     for row in rows:
         group_id = str(row["group_id"])
         qualified_name = str(row["qualified_name"])
+        kind = canonical_symbol_kind(str(row.get("kind") or ""))
+        short_name = canonical_symbol_short_name(
+            qualified_name,
+            short_name=str(row.get("short_name") or ""),
+        )
+        label = canonical_symbol_label(str(row.get("label") or kind))
 
         hit: dict[str, Any] = {
             "project": _project_from_group_id(group_id),
             "group_id": group_id,
             "qualified_name": qualified_name,
             "occurrence_symbol_id": symbol_id_for(qualified_name),
-            "kind": row.get("kind"),
+            "short_name": short_name,
+            "kind": kind or str(row.get("kind") or ""),
+            "label": label or str(row.get("label") or ""),
             "file_path": row.get("file_path"),
             "module_name": row.get("module_name"),
             "source_scope": row.get("source_scope"),

@@ -232,6 +232,9 @@ async def test_native_passthrough_tools_use_seeded_graph_without_cm(
     assert snippet_payload["qualified_name"] == "wallet.bootstrap"
     assert snippet_payload["project"] == _SLUG
     assert snippet_payload["file_path"] == "src/wallet.py"
+    assert snippet_payload["short_name"] == "bootstrap"
+    assert snippet_payload["kind"] == "function"
+    assert snippet_payload["label"] == "Function"
     assert snippet_payload["snippet_quality"] == "approximate_function_match"
     assert "def bootstrap():" in snippet_payload["source"]
 
@@ -268,6 +271,8 @@ async def test_native_passthrough_tools_use_seeded_graph_without_cm(
                 "qualified_name": "wallet.bootstrap",
                 "label": "Function",
                 "file_path": "src/wallet.py",
+                "short_name": "bootstrap",
+                "kind": "function",
             }
         ],
         "total": 1,

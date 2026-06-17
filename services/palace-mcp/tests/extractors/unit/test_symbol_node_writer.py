@@ -56,6 +56,8 @@ class TestBuildSymbolNodeRows:
         assert row["qualified_name"] == "App.Foo"
         assert row["group_id"] == "project/test"
         assert row["kind"] == "class"
+        assert row["label"] == "Class"
+        assert row["short_name"] == "Foo"
         assert row["file_path"] is None
 
 

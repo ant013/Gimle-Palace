@@ -49,6 +49,9 @@ async def test_get_code_snippet_uses_function_window_when_available(
             {
                 "qualified_name": "WalletApp.AppDelegate.bootstrap()",
                 "file_path": "AppDelegate.swift",
+                "short_name": "bootstrap",
+                "kind": "method",
+                "label": "Method",
                 "commit_sha": "abc",
                 "line_start": None,
                 "line_end": None,
@@ -90,6 +93,9 @@ async def test_get_code_snippet_uses_function_window_when_available(
     )
 
     assert result["qualified_name"] == "WalletApp.AppDelegate.bootstrap()"
+    assert result["short_name"] == "bootstrap"
+    assert result["kind"] == "method"
+    assert result["label"] == "Method"
     assert result["snippet_quality"] == "approximate_function_match"
     assert result["source"] == "func body"
 
@@ -103,6 +109,9 @@ async def test_get_code_snippet_falls_back_to_symbol_window_without_function(
             {
                 "qualified_name": "WalletKit.BalanceData",
                 "file_path": "WalletKit.swift",
+                "short_name": "BalanceData",
+                "kind": "class",
+                "label": "Class",
                 "commit_sha": "abc",
                 "line_start": 30,
                 "line_end": 35,
@@ -150,6 +159,9 @@ async def test_get_code_snippet_uses_file_head_when_no_line_hints(
             {
                 "qualified_name": "WalletKit.BalanceData",
                 "file_path": "WalletKit.swift",
+                "short_name": "BalanceData",
+                "kind": "class",
+                "label": "Class",
                 "commit_sha": "abc",
                 "line_start": None,
                 "line_end": None,
@@ -239,6 +251,9 @@ async def test_get_code_snippet_can_fallback_to_cm(
             {
                 "qualified_name": "WalletKit.BalanceData",
                 "file_path": None,
+                "short_name": "BalanceData",
+                "kind": "class",
+                "label": "Class",
                 "commit_sha": None,
                 "line_start": None,
                 "line_end": None,
@@ -262,6 +277,56 @@ async def test_get_code_snippet_can_fallback_to_cm(
     )
 
     assert result is FALLBACK_TO_CM
+
+
+@pytest.mark.asyncio
+async def test_get_code_snippet_returns_canonical_struct_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    driver = _mock_driver(
+        [
+            {
+                "qualified_name": "WalletKit s:9WalletKit11BalanceDataV",
+                "file_path": "BalanceData.swift",
+                "short_name": "BalanceData",
+                "kind": "struct",
+                "label": "Struct",
+                "commit_sha": "abc",
+                "line_start": 10,
+                "line_end": 20,
+            }
+        ],
+        [],
+    )
+    monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: driver)
+    monkeypatch.setattr(
+        "palace_mcp.code.native_get_code_snippet._resolve_repo_path",
+        _unresolved_repo_path,
+    )
+    monkeypatch.setattr(
+        "palace_mcp.code.native_get_code_snippet.resolve_snippet",
+        lambda **kwargs: (
+            SimpleNamespace(
+                source="struct body",
+                language="swift",
+                start_line=kwargs["line_start"],
+                end_line=kwargs["line_end"],
+                truncated=False,
+                stale=False,
+            ),
+            None,
+            None,
+        ),
+    )
+
+    result = await native_get_code_snippet(
+        qualified_name="WalletKit s:9WalletKit11BalanceDataV",
+        project="gimle",
+    )
+
+    assert result["short_name"] == "BalanceData"
+    assert result["kind"] == "struct"
+    assert result["label"] == "Struct"
 
 
 @pytest.mark.asyncio

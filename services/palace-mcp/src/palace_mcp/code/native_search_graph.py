@@ -6,6 +6,11 @@ import re
 from typing import Any, cast
 
 from palace_mcp.code.native_detect_changes import FALLBACK_TO_CM
+from palace_mcp.symbol_identity import (
+    canonical_symbol_kind,
+    canonical_symbol_label,
+    canonical_symbol_short_name,
+)
 
 _SUPPORTED_LABELS = frozenset(
     {
@@ -15,9 +20,17 @@ _SUPPORTED_LABELS = frozenset(
         "Function",
         "Method",
         "Class",
+        "Struct",
+        "Protocol",
+        "Property",
         "Interface",
         "Enum",
         "Type",
+        "TypeAlias",
+        "Extension",
+        "Initializer",
+        "Accessor",
+        "Actor",
         "Route",
     }
 )
@@ -37,16 +50,24 @@ WITH
         WHEN n:Module THEN 'Module'
         WHEN n:Route THEN 'Route'
         WHEN n:Symbol THEN
-            CASE toLower(coalesce(n.kind, ''))
+            coalesce(n.label, CASE toLower(coalesce(n.kind, ''))
                 WHEN 'function' THEN 'Function'
                 WHEN 'method' THEN 'Method'
                 WHEN 'class' THEN 'Class'
+                WHEN 'struct' THEN 'Struct'
+                WHEN 'protocol' THEN 'Protocol'
                 WHEN 'interface' THEN 'Interface'
+                WHEN 'property' THEN 'Property'
                 WHEN 'enum' THEN 'Enum'
                 WHEN 'type' THEN 'Type'
+                WHEN 'typealias' THEN 'TypeAlias'
+                WHEN 'extension' THEN 'Extension'
+                WHEN 'initializer' THEN 'Initializer'
+                WHEN 'accessor' THEN 'Accessor'
+                WHEN 'actor' THEN 'Actor'
                 WHEN 'route' THEN 'Route'
                 ELSE 'Symbol'
-            END
+            END)
         ELSE ''
     END AS result_label,
     CASE
@@ -59,8 +80,8 @@ WITH
             ''
         )
         ELSE coalesce(
-            n.name,
             n.short_name,
+            n.name,
             n.display_name,
             last(split(coalesce(n.qualified_name, ''), '.')),
             n.slug,
@@ -68,6 +89,16 @@ WITH
             ''
         )
     END AS result_name,
+    coalesce(
+        n.short_name,
+        n.display_name,
+        n.qualified_name,
+        n.path,
+        n.file_path,
+        n.slug,
+        n.name,
+        ''
+    ) AS result_short_name,
     coalesce(
         n.qualified_name,
         n.path,
@@ -77,6 +108,16 @@ WITH
         ''
     ) AS result_qn,
     coalesce(n.file_path, n.path, '') AS result_file_path,
+    coalesce(
+        n.kind,
+        CASE
+            WHEN n:Project THEN 'project'
+            WHEN n:File THEN 'file'
+            WHEN n:Module THEN 'module'
+            WHEN n:Route THEN 'route'
+            ELSE ''
+        END
+    ) AS result_kind,
     size([(n)--() | 1]) AS degree
 WHERE result_label <> ''
   AND result_label <> 'Symbol'
@@ -98,7 +139,9 @@ _RESULTS_QUERY = f"""
 RETURN result_name AS name,
        result_qn AS qualified_name,
        result_label AS label,
-       result_file_path AS file_path
+       result_file_path AS file_path,
+       result_short_name AS short_name,
+       result_kind AS kind
 ORDER BY qualified_name ASC,
          file_path ASC,
          name ASC,
@@ -301,8 +344,32 @@ async def native_search_graph(
     trimmed_rows = raw_rows
     if validated_limit is not None:
         trimmed_rows = raw_rows[:validated_limit]
+
+    results: list[dict[str, Any]] = []
+    for raw_row in trimmed_rows:
+        row = dict(raw_row)
+        qualified_name = str(row.get("qualified_name") or "")
+        kind = canonical_symbol_kind(str(row.get("kind") or row.get("label") or ""))
+        label_value = canonical_symbol_label(str(row.get("label") or kind))
+        short_name = canonical_symbol_short_name(
+            qualified_name,
+            short_name=str(row.get("short_name") or ""),
+            name=str(row.get("name") or ""),
+        )
+        name = str(row.get("name") or short_name or qualified_name)
+        results.append(
+            {
+                **row,
+                "name": short_name or name,
+                "qualified_name": qualified_name,
+                "label": label_value or str(row.get("label") or ""),
+                "file_path": str(row.get("file_path") or ""),
+                "short_name": short_name or name,
+                "kind": kind or str(row.get("kind") or ""),
+            }
+        )
     return {
-        "results": [dict(row) for row in trimmed_rows],
+        "results": results,
         "total": total,
         "has_more": has_more,
     }
