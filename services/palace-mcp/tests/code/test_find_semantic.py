@@ -93,7 +93,9 @@ def _is_vector_query(query: str) -> bool:
 @pytest.fixture(autouse=True)
 def _reset_embedding_factory() -> None:
     try:
-        from palace_mcp.code.find_semantic import _reset_vector_search_capability_for_tests
+        from palace_mcp.code.find_semantic import (
+            _reset_vector_search_capability_for_tests,
+        )
     except ImportError:
         _reset_vector_search_capability_for_tests = None
 
@@ -1122,11 +1124,7 @@ async def test_multi_project_issues_per_project_hnsw_queries() -> None:
     assert result["per_project_k"] == 50
 
     # One HNSW query per project, each scoped to a single group_id
-    vector_calls = [
-        (q, p)
-        for q, p in driver._session.calls
-        if _is_vector_query(q)
-    ]
+    vector_calls = [(q, p) for q, p in driver._session.calls if _is_vector_query(q)]
     assert len(vector_calls) == 3
     queried_groups = {p["group_ids"][0] for _, p in vector_calls}
     assert queried_groups == {"project/alpha", "project/beta", "project/gamma"}
