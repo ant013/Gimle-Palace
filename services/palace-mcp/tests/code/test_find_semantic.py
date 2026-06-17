@@ -84,11 +84,26 @@ def _make_tool_result(payload: dict[str, Any]) -> CallToolResult:
     )
 
 
+def _is_vector_query(query: str) -> bool:
+    return "queryNodes('symbol_embedding_idx'" in query or (
+        "VECTOR INDEX symbol_embedding_idx" in query
+    )
+
+
 @pytest.fixture(autouse=True)
 def _reset_embedding_factory() -> None:
+    try:
+        from palace_mcp.code.find_semantic import _reset_vector_search_capability_for_tests
+    except ImportError:
+        _reset_vector_search_capability_for_tests = None
+
     set_embedding_dispatcher_factory(None)
+    if _reset_vector_search_capability_for_tests is not None:
+        _reset_vector_search_capability_for_tests()
     yield
     set_embedding_dispatcher_factory(None)
+    if _reset_vector_search_capability_for_tests is not None:
+        _reset_vector_search_capability_for_tests()
 
 
 @pytest.mark.asyncio
@@ -263,7 +278,7 @@ async def test_success_filters_scope_and_skips_context_when_disabled() -> None:
             return _FakeResult(
                 data_value=[{"source_scope": "project", "total": 10, "embedded_cnt": 3}]
             )
-        if "queryNodes('symbol_embedding_idx'" in query:
+        if _is_vector_query(query):
             assert params["query_k"] == 50
             all_rows = [
                 {
@@ -343,7 +358,7 @@ async def test_semantic_search_returns_canonical_struct_identity() -> None:
             return _FakeResult(
                 data_value=[{"source_scope": "project", "total": 1, "embedded_cnt": 1}]
             )
-        if "queryNodes('symbol_embedding_idx'" in query:
+        if _is_vector_query(query):
             return _FakeResult(
                 data_value=[
                     {
@@ -398,7 +413,7 @@ async def test_vector_query_uses_candidate_limit_to_overfetch_before_scope_filte
             return _FakeResult(
                 data_value=[{"source_scope": "project", "total": 5, "embedded_cnt": 1}]
             )
-        if "queryNodes('symbol_embedding_idx'" in query:
+        if _is_vector_query(query):
             assert params["query_k"] == 50
             return _FakeResult(
                 data_value=[
@@ -452,7 +467,7 @@ async def test_include_deprecated_true_returns_seeded_row() -> None:
             return _FakeResult(
                 data_value=[{"source_scope": "project", "total": 1, "embedded_cnt": 1}]
             )
-        if "queryNodes('symbol_embedding_idx'" in query:
+        if _is_vector_query(query):
             assert params["include_deprecated"] is True
             return _FakeResult(
                 data_value=[
@@ -511,7 +526,7 @@ async def test_context_warning_is_attached_per_hit_when_project_not_mounted() ->
             return _FakeResult(
                 data_value=[{"source_scope": "project", "total": 5, "embedded_cnt": 1}]
             )
-        if "queryNodes('symbol_embedding_idx'" in query:
+        if _is_vector_query(query):
             return _FakeResult(
                 data_value=[
                     {
@@ -567,7 +582,7 @@ async def test_context_limit_zero_returns_empty_usage_preview() -> None:
             return _FakeResult(
                 data_value=[{"source_scope": "project", "total": 5, "embedded_cnt": 1}]
             )
-        if "queryNodes('symbol_embedding_idx'" in query:
+        if _is_vector_query(query):
             return _FakeResult(
                 data_value=[
                     {
@@ -643,7 +658,7 @@ async def test_embedding_dispatcher_factory_is_reused_across_calls() -> None:
             return _FakeResult(
                 data_value=[{"source_scope": "project", "total": 5, "embedded_cnt": 1}]
             )
-        if "queryNodes('symbol_embedding_idx'" in query:
+        if _is_vector_query(query):
             return _FakeResult(
                 data_value=[
                     {
@@ -708,7 +723,7 @@ async def test_embedding_coverage_included_in_success_response(
                     {"source_scope": "sdk", "total": 251218, "embedded_cnt": 0},
                 ]
             )
-        if "queryNodes('symbol_embedding_idx'" in query:
+        if _is_vector_query(query):
             return _FakeResult(
                 data_value=[
                     {
@@ -845,7 +860,7 @@ async def test_runtime_path_fails_closed_on_missing_vector_hits() -> None:
             )
         if "embedded_symbol_count" in query:
             return _FakeResult(single_value={"embedded_symbol_count": 2186})
-        if "queryNodes('symbol_embedding_idx'" in query:
+        if _is_vector_query(query):
             return _FakeResult(
                 data_value=[
                     {
@@ -963,7 +978,7 @@ async def test_semantic_search_hydrates_hits_concurrently() -> None:
             return _FakeResult(
                 data_value=[{"source_scope": "project", "total": 10, "embedded_cnt": 5}]
             )
-        if "queryNodes('symbol_embedding_idx'" in query:
+        if _is_vector_query(query):
             return _FakeResult(
                 data_value=[
                     {
@@ -1080,7 +1095,7 @@ async def test_multi_project_issues_per_project_hnsw_queries() -> None:
             return _FakeResult(
                 data_value=[{"source_scope": "project", "total": 30, "embedded_cnt": 9}]
             )
-        if "queryNodes('symbol_embedding_idx'" in query:
+        if _is_vector_query(query):
             gids = params.get("group_ids", [])
             rows = [r for gid in gids for r in project_rows.get(gid, [])]
             return _FakeResult(data_value=rows)
@@ -1110,7 +1125,7 @@ async def test_multi_project_issues_per_project_hnsw_queries() -> None:
     vector_calls = [
         (q, p)
         for q, p in driver._session.calls
-        if "queryNodes('symbol_embedding_idx'" in q
+        if _is_vector_query(q)
     ]
     assert len(vector_calls) == 3
     queried_groups = {p["group_ids"][0] for _, p in vector_calls}

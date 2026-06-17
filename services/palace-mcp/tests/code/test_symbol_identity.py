@@ -11,7 +11,13 @@ from palace_mcp.symbol_identity import (
 
 
 @pytest.mark.parametrize(
-    ("qualified_name", "kind", "expected_short_name", "expected_kind", "expected_label"),
+    (
+        "qualified_name",
+        "kind",
+        "expected_short_name",
+        "expected_kind",
+        "expected_label",
+    ),
     [
         ("WalletKit.BalanceData", "Class", "BalanceData", "class", "Class"),
         (
