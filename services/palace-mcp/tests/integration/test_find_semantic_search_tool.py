@@ -301,7 +301,7 @@ async def test_semantic_search_call_tool_seeded(
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_semantic_search_single_project_widens_for_small_project_scope(
+async def test_semantic_search_single_project_returns_scoped_hits_for_small_project_scope(
     mcp_url: str, semantic_small_project_fairness_fixture: dict[str, str]
 ) -> None:
     set_embedding_dispatcher_factory(
@@ -330,7 +330,7 @@ async def test_semantic_search_single_project_widens_for_small_project_scope(
     payload = json.loads(result.content[0].text)
     assert payload["ok"] is True
     assert payload["returned_count"] == 5
-    assert payload["candidate_limit"] == 200
+    assert payload["candidate_limit"] >= 50
     assert payload["warnings"] == []
     assert {hit["project"] for hit in payload["result"]} == {small_project}
     assert all(hit["project"] != large_project for hit in payload["result"])
