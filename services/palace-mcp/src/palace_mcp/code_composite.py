@@ -197,25 +197,19 @@ async def _resolve_qn(
                 or str(target.get("qualified_name") or "")
             )
             return resolved_name, str(target["qualified_name"])
-        if exact_match_only:
-            if can_try_short_name:
-                fallback = await _fallback_rows()
-                if isinstance(fallback, dict):
-                    return fallback
-                results = fallback
-                total = len(results)
-                has_more = False
-                match_source = "short-name search"
-            else:
-                results = []
-                total = 0
-                has_more = False
-                match_source = "exact qualified_name"
+        if can_try_short_name:
+            fallback = await _fallback_rows()
+            if isinstance(fallback, dict):
+                return fallback
+            results = fallback
+            total = len(results)
+            has_more = False
+            match_source = "short-name search"
         else:
             results = []
             total = 0
             has_more = False
-            match_source = "qn_pattern"
+            match_source = "exact qualified_name"
     elif exact_match_only:
         results = []
         total = 0
