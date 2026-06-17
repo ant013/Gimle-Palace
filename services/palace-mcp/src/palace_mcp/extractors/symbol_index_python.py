@@ -38,6 +38,10 @@ from palace_mcp.extractors.foundation.importance import (
     importance_score,
     load_or_reset_in_degree_counter,
 )
+from palace_mcp.extractors.foundation.symbol_node_writer import (
+    soft_delete_symbols,
+    write_symbol_nodes,
+)
 from palace_mcp.extractors.foundation.models import (
     Language,
     SymbolKind,
@@ -48,7 +52,9 @@ from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
 from palace_mcp.extractors.scip_parser import (
     FindScipPath,
     ScipPathRequiredError,
+    ScipSymbolInfo,
     iter_scip_occurrences,
+    iter_scip_symbol_infos,
     parse_scip_file,
 )
 from neo4j import AsyncDriver
@@ -120,6 +126,15 @@ class SymbolIndexPython(BaseExtractor):
                     commit_sha=commit_sha,
                     ingest_run_id=ctx.run_id,
                 )
+            )
+
+            symbol_count = await _refresh_graph_state(
+                driver,
+                scip_index=scip_index,
+                occurrences=all_occs,
+                group_id=ctx.group_id,
+                run_id=ctx.run_id,
+                commit_sha=commit_sha,
             )
 
             # 7. Build in-degree counter for importance scoring
@@ -224,7 +239,7 @@ class SymbolIndexPython(BaseExtractor):
 
             # 10. Finalize as success
             await finalize_ingest_run(driver, run_id=ctx.run_id, success=True)
-            return ExtractorStats(nodes_written=total_written, edges_written=0)
+            return ExtractorStats(nodes_written=symbol_count, edges_written=0)
 
         except ScipPathRequiredError as e:
             await finalize_ingest_run(
@@ -254,6 +269,60 @@ class SymbolIndexPython(BaseExtractor):
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
+
+
+async def _refresh_graph_state(
+    driver: AsyncDriver,
+    *,
+    scip_index: object,
+    occurrences: list[SymbolOccurrence],
+    group_id: str,
+    run_id: str,
+    commit_sha: str,
+) -> int:
+    def_file_paths: dict[str, str] = {}
+    for occ in occurrences:
+        if occ.kind in (SymbolKind.DEF, SymbolKind.DECL):
+            def_file_paths.setdefault(occ.symbol_qualified_name, occ.file_path)
+
+    seen_at = datetime.now(tz=timezone.utc)
+    symbol_count = 0
+    seen_qnames: set[str] = set()
+    symbol_batch: list[ScipSymbolInfo] = []
+    batch_size = 5000
+
+    for symbol_info in iter_scip_symbol_infos(scip_index):
+        seen_qnames.add(symbol_info.qualified_name)
+        symbol_batch.append(symbol_info)
+        if len(symbol_batch) >= batch_size:
+            symbol_count += await write_symbol_nodes(
+                driver,
+                symbol_batch,
+                def_file_paths,
+                group_id,
+                project_id=group_id,
+                run_id=run_id,
+                seen_at=seen_at,
+                commit_sha=commit_sha,
+            )
+            symbol_batch = []
+
+    if symbol_batch:
+        symbol_count += await write_symbol_nodes(
+            driver,
+            symbol_batch,
+            def_file_paths,
+            group_id,
+            project_id=group_id,
+            run_id=run_id,
+            seen_at=seen_at,
+            commit_sha=commit_sha,
+        )
+
+    if seen_qnames:
+        await soft_delete_symbols(driver, group_id, seen_qnames, seen_at)
+
+    return symbol_count
 
 
 async def _ingest_batch(
