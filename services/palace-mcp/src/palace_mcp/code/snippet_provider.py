@@ -164,6 +164,7 @@ def inspect_freshness(
     repo_root: Path | None, commit_sha: str | None
 ) -> FreshnessResult:
     """Compare an indexed commit against the repo's current HEAD."""
+    mismatch = False
     if not commit_sha:
         return FreshnessResult(
             indexed_commit=None, commits_behind_head=None, stale=False
@@ -195,6 +196,7 @@ def inspect_freshness(
                 commits_behind_head=0,
                 stale=False,
             )
+        mismatch = True
 
         behind_result = subprocess.run(
             ["git", "rev-list", "--count", f"{commit_sha}..HEAD"],
@@ -213,11 +215,11 @@ def inspect_freshness(
         return FreshnessResult(
             indexed_commit=commit_sha,
             commits_behind_head=behind,
-            stale=behind > 0,
+            stale=True,
         )
     except Exception:  # noqa: BLE001
         return FreshnessResult(
             indexed_commit=commit_sha,
             commits_behind_head=None,
-            stale=False,
+            stale=mismatch,
         )

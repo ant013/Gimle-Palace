@@ -278,6 +278,33 @@ def test_stale_source_when_commit_sha_differs(repo: Path, repos_root: Path) -> N
     assert result.commits_behind_head == 1
 
 
+def test_stale_source_when_indexed_commit_is_ahead(
+    repo: Path, repos_root: Path
+) -> None:
+    base_commit = _run_text(["git", "rev-parse", "HEAD"], cwd=repo)
+    (repo / "Sources" / "Wallet.swift").write_text(
+        "\n".join(f"line{i}" for i in range(1, 22)) + "\n"
+    )
+    _run(["git", "add", "."], cwd=repo)
+    _run(["git", "commit", "-m", "update", "-q"], cwd=repo)
+    indexed_commit = _run_text(["git", "rev-parse", "HEAD"], cwd=repo)
+    _run(["git", "checkout", "-q", base_commit], cwd=repo)
+
+    result, code, _ = resolve_snippet(
+        project="myproject",
+        file_path="Sources/Wallet.swift",
+        line_start=1,
+        line_end=3,
+        commit_sha=indexed_commit,
+        repos_root=repos_root,
+    )
+    assert code is None
+    assert result is not None
+    assert result.stale is True
+    assert result.indexed_commit == indexed_commit
+    assert result.commits_behind_head == 0
+
+
 def test_not_stale_when_commit_sha_matches_head(repo: Path, repos_root: Path) -> None:
     head = _run_text(["git", "rev-parse", "HEAD"], cwd=repo)
     result, code, _ = resolve_snippet(
