@@ -521,6 +521,7 @@ async def palace_health_status() -> HealthStatusResponse:
 async def palace_memory_lookup(
     entity_type: str,
     filters: dict[str, Any] | None = None,
+    offset: int = 0,
     limit: int = 20,
     order_by: str = "created_at",
     project: str | None = None,
@@ -536,6 +537,7 @@ async def palace_memory_lookup(
             entity_type=entity_type,
             project=project,
             filters=filters or {},
+            offset=offset,
             limit=limit,
             order_by=order_by,
         )
@@ -1425,13 +1427,14 @@ async def palace_code_find_owners(
         "dead_symbol_binary_surface extractor. Returns symbols identified by "
         "Periphery static analysis that are unused or binary-surface retained. "
         "Accepts optional include_dependencies (default False) and limit "
-        "(default 200)."
+        "(default 50), plus offset for pagination."
     ),
 )
 async def palace_code_find_dead_symbols(
     project: str,
     include_dependencies: bool = False,
-    limit: int = 200,
+    limit: int = 50,
+    offset: int = 0,
 ) -> dict[str, Any]:
     """List dead symbol candidates ranked by module and display name."""
     driver = _driver
@@ -1446,6 +1449,7 @@ async def palace_code_find_dead_symbols(
         project=project,
         include_dependencies=include_dependencies,
         limit=limit,
+        offset=offset,
     )
 
 
@@ -1457,7 +1461,7 @@ async def palace_code_find_dead_symbols(
         "dead_module (≥50% of module), dead_extension_chain (no existential conformance). "
         "Distinct from palace.code.find_dead_symbols which uses Periphery/binary-surface. "
         "Accepts min_severity (default 'medium'), include_test_only (default False), "
-        "include_dependencies (default False), and limit (default 200)."
+        "include_dependencies (default False), limit (default 50), and offset."
     ),
 )
 async def palace_code_find_dead_code(
@@ -1465,7 +1469,8 @@ async def palace_code_find_dead_code(
     min_severity: str = "medium",
     include_test_only: bool = False,
     include_dependencies: bool = False,
-    limit: int = 200,
+    limit: int = 50,
+    offset: int = 0,
 ) -> dict[str, Any]:
     """Graph-reachability dead-code findings ranked by severity and safe_to_delete_score."""
     driver = _driver
@@ -1482,6 +1487,7 @@ async def palace_code_find_dead_code(
         include_test_only=include_test_only,
         include_dependencies=include_dependencies,
         limit=limit,
+        offset=offset,
     )
 
 
@@ -1514,7 +1520,8 @@ async def palace_code_find_public_api(
     description=(
         "Semantic symbol search over embedded :Symbol nodes for one project "
         "or an explicit projects list. Returns ranked hits with best-effort "
-        "snippet and usage-preview context."
+        "snippet and usage-preview context. Compact results are returned by default; "
+        "set include_context=True for verbose snippet hydration."
     ),
 )
 async def palace_code_semantic_search(
@@ -1527,8 +1534,9 @@ async def palace_code_semantic_search(
     include_sdk: bool = False,
     include_deprecated: bool = False,
     limit: int = 10,
+    offset: int = 0,
     backend: str | None = None,
-    include_context: bool = True,
+    include_context: bool = False,
     context_limit: int = 3,
 ) -> dict[str, Any]:
     """Run semantic symbol search over Neo4j vector embeddings."""
@@ -1551,6 +1559,7 @@ async def palace_code_semantic_search(
         include_sdk=include_sdk,
         include_deprecated=include_deprecated,
         limit=limit,
+        offset=offset,
         backend=backend,
         include_context=include_context,
         context_limit=context_limit,

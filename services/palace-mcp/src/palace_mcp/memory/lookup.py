@@ -21,6 +21,7 @@ from palace_mcp.memory.schema import (
     LookupResponse,
     LookupResponseItem,
 )
+from palace_mcp.pagination import pagination_envelope
 
 logger = logging.getLogger(__name__)
 
@@ -44,14 +45,19 @@ def _serialize_props(props: dict[str, Any]) -> dict[str, Any]:
 
 
 def _build_query(
-    entity_type: EntityType, where_clauses: list[str], order_by: str, limit: int
+    entity_type: EntityType,
+    where_clauses: list[str],
+    order_by: str,
+    limit: int,
+    offset: int = 0,
 ) -> str:
     where = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
-    # order_by is a Literal union of known column names; limit is int 1-100.
+    # order_by is a Literal union of known column names; limit/offset are validated ints.
     return f"""
         MATCH (n:{entity_type})
         {where}
         ORDER BY n.{order_by} DESC
+        SKIP {offset}
         LIMIT {limit}
         RETURN n AS node
     """
@@ -83,7 +89,9 @@ async def perform_lookup(
         all_clauses = ["n.group_id IN $group_ids"] + where_clauses
         all_params = {**params, "group_ids": group_ids}
 
-        query = _build_query(req.entity_type, all_clauses, req.order_by, req.limit)
+        query = _build_query(
+            req.entity_type, all_clauses, req.order_by, req.limit, req.offset
+        )
         count_q = _count_query(req.entity_type, all_clauses)
 
         result = await tx.run(query, **all_params)
@@ -126,6 +134,17 @@ async def perform_lookup(
         f"unknown filter '{k}' for entity_type '{req.entity_type}' — ignored"
         for k in unknown
     ]
+    page = pagination_envelope(total=total, returned=len(items), offset=req.offset)
     return LookupResponse(
-        items=items, total_matched=total, query_ms=query_ms, warnings=warnings
+        items=items,
+        total_matched=total,
+        query_ms=query_ms,
+        warnings=warnings,
+        total=page["total"],
+        returned=page["returned"],
+        offset=page["offset"],
+        has_more=page["has_more"],
+        next_offset=page.get("next_offset"),
+        truncated=page["truncated"],
+        truncated_reason=page.get("truncated_reason"),
     )

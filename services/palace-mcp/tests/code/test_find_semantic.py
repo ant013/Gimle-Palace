@@ -245,6 +245,56 @@ async def test_embedding_backend_failed_returns_error() -> None:
 
 
 @pytest.mark.asyncio
+async def test_semantic_search_tool_defaults_to_compact_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from palace_mcp import mcp_server
+
+    captured: dict[str, Any] = {}
+
+    async def _fake_impl(**kwargs: Any) -> dict[str, Any]:
+        captured.update(kwargs)
+        return {"ok": True, "result": [], "returned_count": 0}
+
+    monkeypatch.setattr("palace_mcp.mcp_server._semantic_search_impl", _fake_impl)
+    monkeypatch.setattr("palace_mcp.mcp_server.get_settings", lambda: None)
+    mcp_server._driver = MagicMock()
+    try:
+        result = await mcp_server.palace_code_semantic_search(query="wallet")
+    finally:
+        mcp_server._driver = None
+
+    assert result["ok"] is True
+    assert captured["include_context"] is False
+
+
+@pytest.mark.asyncio
+async def test_semantic_search_tool_allows_verbose_context_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from palace_mcp import mcp_server
+
+    captured: dict[str, Any] = {}
+
+    async def _fake_impl(**kwargs: Any) -> dict[str, Any]:
+        captured.update(kwargs)
+        return {"ok": True, "result": [], "returned_count": 0}
+
+    monkeypatch.setattr("palace_mcp.mcp_server._semantic_search_impl", _fake_impl)
+    monkeypatch.setattr("palace_mcp.mcp_server.get_settings", lambda: None)
+    mcp_server._driver = MagicMock()
+    try:
+        result = await mcp_server.palace_code_semantic_search(
+            query="wallet", include_context=True
+        )
+    finally:
+        mcp_server._driver = None
+
+    assert result["ok"] is True
+    assert captured["include_context"] is True
+
+
+@pytest.mark.asyncio
 async def test_embeddings_not_ready_returns_warning_without_vector_query() -> None:
     from palace_mcp.code.find_semantic import semantic_search
 

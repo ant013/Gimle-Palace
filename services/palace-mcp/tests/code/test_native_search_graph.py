@@ -102,7 +102,12 @@ async def test_search_graph_pattern_mode_returns_results_and_pagination(
             }
         ],
         "total": 2,
+        "returned": 1,
+        "offset": 0,
         "has_more": True,
+        "next_offset": 1,
+        "truncated": True,
+        "truncated_reason": "page_limit",
     }
 
     session = driver.session.return_value
@@ -249,5 +254,50 @@ async def test_search_graph_unknown_name_returns_zero_results(
     assert result == {
         "results": [],
         "total": 0,
+        "returned": 0,
+        "offset": 0,
         "has_more": False,
+        "truncated": False,
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("total", "limit", "expected_returned", "expected_truncated"),
+    [
+        (0, 1, 0, False),
+        (1, 1, 1, False),
+        (2, 1, 1, True),
+    ],
+)
+async def test_search_graph_pagination_boundaries(
+    monkeypatch: pytest.MonkeyPatch,
+    total: int,
+    limit: int,
+    expected_returned: int,
+    expected_truncated: bool,
+) -> None:
+    rows = [
+        {
+            "name": f"Symbol{i}",
+            "qualified_name": f"pkg.Symbol{i}",
+            "label": "Function",
+            "file_path": f"src/Symbol{i}.py",
+            "short_name": f"Symbol{i}",
+            "kind": "function",
+        }
+        for i in range(total)
+    ]
+    driver = _mock_driver([{"total": total}], rows)
+    monkeypatch.setattr("palace_mcp.mcp_server.get_driver", lambda: driver)
+
+    result = await native_search_graph(
+        project="gimle",
+        name_pattern="Symbol.*",
+        limit=limit,
+    )
+
+    assert result["total"] == total
+    assert result["returned"] == expected_returned
+    assert len(result["results"]) == expected_returned
+    assert result["truncated"] is expected_truncated

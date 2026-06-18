@@ -6,6 +6,7 @@ import re
 from typing import Any, cast
 
 from palace_mcp.code.native_detect_changes import FALLBACK_TO_CM
+from palace_mcp.pagination import pagination_envelope
 from palace_mcp.symbol_identity import (
     canonical_symbol_kind,
     canonical_symbol_label,
@@ -251,7 +252,7 @@ async def native_search_graph(
     min_degree: int | None = None,
     max_degree: int | None = None,
     offset: int = 0,
-    limit: int | None = None,
+    limit: int | None = 50,
     include_deprecated: bool = False,
     **_: Any,
 ) -> dict[str, Any] | object:
@@ -327,7 +328,6 @@ async def native_search_graph(
             total = int(count_rows[0]["total"]) if count_rows else 0
             if validated_limit == 0:
                 raw_rows: list[dict[str, Any]] = []
-                has_more = total > (validated_offset or 0)
             else:
                 fetch_limit = (
                     total + 1 if validated_limit is None else validated_limit + 1
@@ -338,9 +338,6 @@ async def native_search_graph(
                     **params,
                     offset=validated_offset,
                     fetch_limit=fetch_limit,
-                )
-                has_more = (
-                    validated_limit is not None and len(raw_rows) > validated_limit
                 )
     except Exception as exc:  # noqa: BLE001
         return _error(
@@ -376,6 +373,9 @@ async def native_search_graph(
         )
     return {
         "results": results,
-        "total": total,
-        "has_more": has_more,
+        **pagination_envelope(
+            total=total,
+            returned=len(results),
+            offset=validated_offset or 0,
+        ),
     }
