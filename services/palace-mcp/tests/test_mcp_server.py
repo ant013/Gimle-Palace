@@ -132,3 +132,17 @@ class TestCodeToolRegistration:
             include_dependencies = tool.parameters["properties"]["include_dependencies"]
             assert include_dependencies["type"] == "boolean"
             assert include_dependencies["default"] is False
+
+    def test_find_public_api_description_documents_kit_only_scope(self) -> None:
+        from palace_mcp.mcp_server import build_mcp_asgi_app, _mcp
+
+        build_mcp_asgi_app()
+        tool = next(
+            item
+            for item in _mcp._tool_manager.list_tools()
+            if item.name == "palace.code.find_public_api"
+        )
+
+        assert "kit/library project" in tool.description
+        assert "Xcode app targets" in tool.description
+        assert "return no records" in tool.description
