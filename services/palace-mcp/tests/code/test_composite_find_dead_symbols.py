@@ -148,8 +148,10 @@ async def test_find_dead_symbols_excludes_dependency_paths_by_default() -> None:
             "language": "swift",
             "candidate_state": "unused_candidate",
             "confidence": "high",
+            "accessibility": "internal",
             "source_file": "Unstoppable/Services/BalanceService.swift",
             "source_line": 12,
+            "hints": ["unused"],
             "commit_sha": "abc123",
             "evidence_source": "periphery",
         },
@@ -161,8 +163,10 @@ async def test_find_dead_symbols_excludes_dependency_paths_by_default() -> None:
             "language": "swift",
             "candidate_state": "unused_candidate",
             "confidence": "high",
+            "accessibility": "internal",
             "source_file": "checkouts/WalletKit/Sources/WalletClient.swift",
             "source_line": 4,
+            "hints": ["unused"],
             "commit_sha": "def456",
             "evidence_source": "periphery",
         },
@@ -188,8 +192,10 @@ async def test_find_dead_symbols_can_include_dependency_paths() -> None:
             "language": "swift",
             "candidate_state": "unused_candidate",
             "confidence": "high",
+            "accessibility": "internal",
             "source_file": "checkouts/WalletKit/Sources/WalletClient.swift",
             "source_line": 4,
+            "hints": ["unused"],
             "commit_sha": "def456",
             "evidence_source": "periphery",
         }
@@ -222,8 +228,10 @@ async def test_find_dead_symbols_keeps_query_bounded_before_dependency_filtering
             "language": "swift",
             "candidate_state": "unused_candidate",
             "confidence": "high",
+            "accessibility": "internal",
             "source_file": "checkouts/WalletKit/Sources/WalletClient.swift",
             "source_line": 4,
+            "hints": ["unused"],
             "commit_sha": "def456",
             "evidence_source": "periphery",
         },
@@ -235,8 +243,10 @@ async def test_find_dead_symbols_keeps_query_bounded_before_dependency_filtering
             "language": "swift",
             "candidate_state": "unused_candidate",
             "confidence": "high",
+            "accessibility": "internal",
             "source_file": "Unstoppable/Services/BalanceService.swift",
             "source_line": 12,
+            "hints": ["unused"],
             "commit_sha": "abc123",
             "evidence_source": "periphery",
         },
@@ -294,8 +304,10 @@ def dead_symbols_seeded_project(
                 display_name: 'UnusedView', kind: 'class',
                 candidate_state: 'unused_candidate',
                 confidence: 'high',
+                accessibility: 'internal',
                 evidence_source: 'periphery', evidence_mode: 'static',
                 commit_sha: 'abc123', symbol_key: 'CoreModule.UnusedView',
+                hints: ['unused', 'declared'],
                 schema_version: 1
             })
             """,
@@ -362,7 +374,11 @@ async def test_find_dead_symbols_seeded(
         "language",
         "candidate_state",
         "confidence",
+        "accessibility",
+        "hints",
     ):
         assert field in row, f"Missing field: {field}"
     assert row["display_name"] == "UnusedView"
     assert row["candidate_state"] == "unused_candidate"
+    assert row["accessibility"] == "internal"
+    assert row["hints"] == ["unused", "declared"]

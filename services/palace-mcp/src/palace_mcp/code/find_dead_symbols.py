@@ -40,8 +40,10 @@ RETURN c.id AS id,
        c.language AS language,
        c.candidate_state AS candidate_state,
        c.confidence AS confidence,
+       c.accessibility AS accessibility,
        c.source_file AS source_file,
        c.source_line AS source_line,
+       coalesce(c.hints, []) AS hints,
        c.commit_sha AS commit_sha,
        c.evidence_source AS evidence_source
 ORDER BY c.module_name, c.display_name
@@ -102,8 +104,10 @@ async def find_dead_symbols(
                     "language": rec["language"],
                     "candidate_state": rec["candidate_state"],
                     "confidence": rec["confidence"],
+                    "accessibility": rec["accessibility"],
                     "source_file": rec["source_file"],
                     "source_line": rec["source_line"],
+                    "hints": rec["hints"],
                     "commit_sha": rec["commit_sha"],
                     "evidence_source": rec["evidence_source"],
                 }

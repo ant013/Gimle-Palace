@@ -10,6 +10,7 @@ from neo4j import AsyncDriver
 from palace_mcp.extractors.dead_symbol_binary_surface.correlation import (
     CorrelationResult,
 )
+from palace_mcp.extractors.dead_symbol_binary_surface.models import DeadSymbolCandidate
 
 _MERGE_CANDIDATE = """
 MERGE (candidate:DeadSymbolCandidate {id: $candidate_id})
@@ -81,7 +82,7 @@ async def _write_batch(
             tx,
             _MERGE_CANDIDATE,
             candidate_id=candidate.id,
-            candidate_props=candidate.model_dump(mode="python"),
+            candidate_props=_candidate_props(candidate),
         )
         nodes_created += summary.nodes_created
         relationships_created += summary.relationships_created
@@ -169,3 +170,9 @@ async def _consume(tx: Any, query: str, **params: object) -> DeadSymbolWriteSumm
         relationships_created=counters.relationships_created,
         properties_set=counters.properties_set,
     )
+
+
+def _candidate_props(candidate: DeadSymbolCandidate) -> dict[str, object]:
+    props: dict[str, object] = candidate.model_dump(mode="python")
+    props["hints"] = list(candidate.hints)
+    return props
