@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from neo4j import AsyncManagedTransaction
 
-from palace_mcp.memory.cypher import LIST_PROJECT_SLUGS
+from palace_mcp.memory.cypher import LIST_PROJECT_SLUGS, LOOKUP_PROJECT_NAMESPACE
 
 if TYPE_CHECKING:
     from palace_mcp.config import Settings
@@ -80,6 +80,18 @@ async def _list_known_slugs(tx: AsyncManagedTransaction) -> list[str]:
     return [row["slug"] async for row in result]
 
 
+async def _resolve_known_slug(tx: AsyncManagedTransaction, value: str) -> str:
+    result = await tx.run(LOOKUP_PROJECT_NAMESPACE, value=value)
+    row = await result.single()
+    if row is None:
+        raise UnknownProjectError(value)
+    try:
+        project = row["p"]
+    except KeyError:
+        project = row
+    return project["slug"]
+
+
 async def resolve_group_ids(
     tx: AsyncManagedTransaction,
     project: str | list[str] | None,
@@ -95,15 +107,21 @@ async def resolve_group_ids(
         return [f"project/{s}" for s in known]
 
     if isinstance(project, str):
-        if project not in known:
-            raise UnknownProjectError(project)
-        return [f"project/{project}"]
+        return [f"project/{await _resolve_known_slug(tx, project)}"]
 
     if isinstance(project, list):
-        unknown = [s for s in project if s not in known]
+        group_ids: list[str] = []
+        unknown: list[str] = []
+        for value in project:
+            try:
+                slug = await _resolve_known_slug(tx, value)
+            except UnknownProjectError:
+                unknown.append(value)
+                continue
+            group_ids.append(f"project/{slug}")
         if unknown:
             raise UnknownProjectError(", ".join(unknown))
-        return [f"project/{s}" for s in project]
+        return group_ids
 
     raise TypeError(f"project must be str, list, or None; got {type(project).__name__}")
 

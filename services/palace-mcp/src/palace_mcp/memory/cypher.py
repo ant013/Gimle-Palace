@@ -312,7 +312,15 @@ SET p.source_updated_at = $now
 RETURN p
 """
 
-LIST_PROJECT_SLUGS = "MATCH (p:Project) RETURN p.name AS slug ORDER BY slug"
+LOOKUP_PROJECT_NAMESPACE = """
+MATCH (p:Project)
+WHERE p.slug = $value OR p.cm_project_name = $value
+RETURN p.slug AS slug, p.cm_project_name AS cm_project_name
+ORDER BY CASE WHEN p.slug = $value THEN 0 ELSE 1 END, p.slug
+LIMIT 1
+"""
+
+LIST_PROJECT_SLUGS = "MATCH (p:Project) RETURN p.slug AS slug ORDER BY slug"
 
 LIST_PROJECTS = "MATCH (p:Project) RETURN p ORDER BY p.slug"
 
