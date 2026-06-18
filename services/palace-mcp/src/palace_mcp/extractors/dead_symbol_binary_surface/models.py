@@ -111,8 +111,10 @@ class DeadSymbolCandidate(BaseModel):
     symbol_key: str = ""
     display_name: str
     kind: DeadSymbolKind
+    accessibility: str | None = None
     source_file: str | None = None
     source_line: int | None = Field(default=None, ge=1)
+    hints: tuple[str, ...] = ()
     evidence_source: DeadSymbolEvidenceSource
     evidence_mode: DeadSymbolEvidenceMode
     confidence: Confidence

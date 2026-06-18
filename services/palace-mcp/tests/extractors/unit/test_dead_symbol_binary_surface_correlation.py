@@ -143,6 +143,22 @@ def test_exact_match_to_phase1_symbol_id_for_join_key() -> None:
     assert result.candidate.confidence is Confidence.HIGH
 
 
+def test_candidate_preserves_periphery_accessibility_and_hints() -> None:
+    result = correlate_finding(
+        finding=replace(_finding(), accessibility="public", hints=("unused", "objc")),
+        group_id="project/test",
+        project="dead-symbol-mini",
+        commit_sha="commit-1",
+        public_api_symbols=(),
+        symbol_shadows=(),
+        blocked_contract_symbols=(),
+    )
+
+    assert result.candidate is not None
+    assert result.candidate.accessibility == "public"
+    assert result.candidate.hints == ("unused", "objc")
+
+
 def test_ambiguous_match_is_skipped() -> None:
     result = correlate_finding(
         finding=_finding(),
