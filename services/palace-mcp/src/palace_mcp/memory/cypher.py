@@ -397,7 +397,7 @@ CALL (p) {
     UNION ALL
     MATCH (n:Trace)        WHERE n.group_id = p.group_id RETURN 'Trace'        AS type, count(n) AS cnt
 }
-RETURN p.name AS slug, type, cnt
+RETURN p.slug AS slug, type, cnt
 """
 
 # --- Entity counts (health) ---

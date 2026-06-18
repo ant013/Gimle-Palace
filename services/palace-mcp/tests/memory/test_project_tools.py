@@ -150,6 +150,7 @@ async def test_register_project_invalidates_namespace_cache(
 
 def _make_mock_driver_for_list(
     project_rows: list[dict[str, Any]],
+    count_rows: list[dict[str, Any]] | None = None,
 ) -> MagicMock:
     class _AsyncRows:
         def __init__(self, rows: list[dict[str, Any]]) -> None:
@@ -164,8 +165,13 @@ def _make_mock_driver_for_list(
             except StopIteration:
                 raise StopAsyncIteration
 
+    call_count: list[int] = [0]
+
     async def _run(query: str, **params: Any) -> Any:
-        return _AsyncRows(project_rows)
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return _AsyncRows(project_rows)
+        return _AsyncRows(count_rows or [])
 
     session = MagicMock()
     session.run = _run
@@ -188,6 +194,29 @@ async def test_list_projects_returns_sorted_slugs() -> None:
     infos = await list_projects(driver)
     slugs = [i.slug for i in infos]
     assert slugs == ["gimle", "medic"]
+
+
+@pytest.mark.asyncio
+async def test_list_projects_returns_separate_code_index_stats() -> None:
+    rows = [
+        {"p": {**_make_project_row("gimle", "Gimle", [])["p"]}},
+        {"p": {**_make_project_row("medic", "Medic", [])["p"]}},
+    ]
+    count_rows = [
+        {"slug": "gimle", "type": "Episode", "cnt": 2},
+        {"slug": "gimle", "type": "Symbol", "cnt": 7},
+        {"slug": "medic", "type": "Module", "cnt": 3},
+    ]
+    driver = _make_mock_driver_for_list(rows, count_rows)
+
+    infos = await list_projects(driver)
+
+    assert infos[0].slug == "gimle"
+    assert infos[0].entity_counts == {"Episode": 2}
+    assert infos[0].code_index_stats == {"Symbol": 7}
+    assert infos[1].slug == "medic"
+    assert infos[1].entity_counts == {}
+    assert infos[1].code_index_stats == {"Module": 3}
 
 
 @pytest.mark.asyncio
@@ -266,13 +295,15 @@ def _make_mock_driver_for_overview(
 async def test_get_project_overview_returns_entity_counts() -> None:
     project_row = _make_project_row("gimle", "Gimle", ["infra"])
     count_rows = [
-        {"labels": ["Issue"], "c": 10},
-        {"labels": ["Comment"], "c": 5},
+        {"labels": ["Episode"], "c": 10},
+        {"labels": ["Iteration"], "c": 5},
+        {"labels": ["Symbol"], "c": 3},
     ]
     driver = _make_mock_driver_for_overview(project_row, count_rows)
     info = await get_project_overview(driver, slug="gimle")
     assert info.slug == "gimle"
-    assert info.entity_counts == {"Issue": 10, "Comment": 5}
+    assert info.entity_counts == {"Episode": 10, "Iteration": 5}
+    assert info.code_index_stats == {"Symbol": 3}
 
 
 def _run(args: list[str], cwd: Path) -> None:
