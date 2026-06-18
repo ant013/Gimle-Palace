@@ -290,6 +290,23 @@ compose. Required at minimum: `NEO4J_PASSWORD`.
 Issue/Comment/Agent/IngestRun nodes. Do **not** change casually — it
 determines which rows ingest writes against and GC scopes on.
 
+## Project identity cheat sheet
+
+Different palace-mcp tool families use different project identifiers:
+
+| Tool family | Identifier to pass | Accepted forms | Notes |
+|---|---|---|---|
+| `palace.memory.*`, ingest, bundles, health | project slug | `gimle`, `uw-ios-app` | Canonical Palace identity. `ProjectInfo.name` is display-only and should not be used as an identifier. |
+| `palace.code.*` passthrough/native tools | `project` | Palace slug or stored `cm_project_name` | The router resolves a Palace slug to the canonical CM namespace before dispatch. |
+| Direct codebase-memory / CM-native search | CM project name | `repos-gimle`, `repos-hs-unstoppable-wallet-ios`, path-derived names like `Users-Shared-Ios-worktrees-cx-Gimle-Palace` | CM derives names from mount or host-path components joined with `-`. Project-less search may return these raw CM names in results. |
+| `palace.git.*` | git slug | bind-mounted `/repos/<slug>` name only | Independent from `cm_project_name`; must exist as a mounted git repo. |
+| Project overview / list output | `slug`, `name`, `cm_project_name` | response fields only | `slug` is canonical, `name` is display text, `cm_project_name` is the bridge to CM/native code tools. |
+
+`get_project_overview` / `list_projects` expose two different count buckets:
+
+- `entity_counts`: Palace memory entities (`Episode`, `Iteration`, `Decision`, `IterationNote`, `Finding`).
+- `code_index_stats`: code index entities (`Module`, `File`, `Symbol`, `APIEndpoint`, `Model`, `Repository`, `ExternalLib`, `Trace`).
+
 ## Mounting project repos for palace.git.*
 
 `palace-mcp` exposes 5 read-only git tools (`palace.git.log`, `.show`,
@@ -303,6 +320,7 @@ the container.
 |--------------|-------------------------------------------------------------------------------------|--------------------------|
 | `gimle`      | `/Users/Shared/Ios/Gimle-Palace`                                                    | `/repos/gimle:ro`        |
 | `oz-v5-mini` | `services/palace-mcp/tests/extractors/fixtures/oz-v5-mini-project` (repo-relative) | `/repos/oz-v5-mini:ro`   |
+| `stable-wallet-ios` | `/Users/Shared/Ios/Gimle-Repos/HorizontalSystems/unstoppable-wallet-ios`      | `/repos/stable-wallet-ios:ro` |
 | `uw-android` | `/Users/Shared/Android/unstoppable-wallet-android`                                  | `/repos/uw-android:ro`   |
 | `uw-ios-mini`| `services/palace-mcp/tests/extractors/fixtures/uw-ios-mini-project` (repo-relative) | `/repos/uw-ios-mini:ro` |
 | `uw-ios`     | `/Users/Shared/Ios/unstoppable-wallet-ios`                                          | `/repos/uw-ios:ro`       |

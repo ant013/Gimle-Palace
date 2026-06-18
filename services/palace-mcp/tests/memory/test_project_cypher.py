@@ -1,4 +1,5 @@
 from palace_mcp.memory.cypher import (
+    ENTITY_COUNTS_BY_PROJECT,
     LIST_PROJECT_SLUGS,
     LOOKUP_PROJECT_NAMESPACE,
     UPSERT_PROJECT,
@@ -43,5 +44,11 @@ def test_project_info_has_required_fields() -> None:
         "source_created_at",
         "source_updated_at",
         "entity_counts",
+        "code_index_stats",
     ):
         assert req in fields, f"ProjectInfo missing required field: {req}"
+
+
+def test_entity_counts_by_project_returns_slug_not_display_name() -> None:
+    assert "RETURN p.slug AS slug, type, cnt" in ENTITY_COUNTS_BY_PROJECT
+    assert "RETURN p.name AS slug, type, cnt" not in ENTITY_COUNTS_BY_PROJECT
