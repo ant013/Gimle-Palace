@@ -1494,9 +1494,11 @@ async def palace_code_find_dead_code(
 @_tool(
     name="palace.code.find_public_api",
     description=(
-        "List public API symbols for a project as recorded by the "
+        "List public API symbols for a kit/library project as recorded by the "
         "public_api_surface extractor. Returns symbols exported from "
-        "Swift .swiftinterface or Kotlin BCV .api artifacts. "
+        "Swift .swiftinterface or Kotlin BCV .api artifacts. Xcode app targets "
+        "without .swiftinterface artifacts are expected to return no records "
+        "(the extractor is not_applicable there), not a server bug. "
         "Accepts optional limit (default 500)."
     ),
 )
@@ -1504,7 +1506,7 @@ async def palace_code_find_public_api(
     project: str,
     limit: int = 500,
 ) -> dict[str, Any]:
-    """List public API symbols recorded by the public_api_surface extractor."""
+    """List public API symbols for kit/library projects backed by public_api_surface."""
     driver = _driver
     if driver is None:
         return {

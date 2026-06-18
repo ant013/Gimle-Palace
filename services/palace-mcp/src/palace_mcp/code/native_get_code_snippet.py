@@ -142,6 +142,16 @@ def _window_bounds(row: dict[str, Any]) -> tuple[int, int] | None:
     return max(1, line_start - _WINDOW_BEFORE), line_start + _WINDOW_AFTER
 
 
+def _exact_bounds(row: dict[str, Any]) -> tuple[int, int] | None:
+    line_start = row.get("line_start", row.get("start_line"))
+    line_end = row.get("line_end", row.get("end_line"))
+    if not isinstance(line_start, int) or line_start < 1:
+        return None
+    if not isinstance(line_end, int) or line_end < line_start:
+        return None
+    return line_start, line_end
+
+
 async def _collect_rows(result: Any) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     async for record in result:
@@ -244,7 +254,10 @@ async def native_get_code_snippet(
     snippet_quality = "file_head"
     line_start = 1
     line_end = _FILE_HEAD_LINES
-    if function_rows:
+    if (bounds := _exact_bounds(symbol_row)) is not None:
+        line_start, line_end = bounds
+        snippet_quality = "exact"
+    elif function_rows:
         bounds = _window_bounds(function_rows[0])
         if bounds is not None:
             line_start, line_end = bounds
