@@ -40,7 +40,7 @@ the issue back to `blocked`, leave the cursor unchanged, and stop.
 N=<issueNumber of this Paperclip issue>
 RUN={{paths.team_workspace_root}}/UNS-$N-audit
 REPO={{paths.primary_repo_root}}
-BRANCH=version/0.49
+BRANCH=version/0.50
 CURSOR={{paths.project_root}}/state/ios-version-audit.json
 CODEBASE_MEMORY_PROJECT=Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wallet-ios
 ```
@@ -51,7 +51,7 @@ CODEBASE_MEMORY_PROJECT=Users-Shared-UnstoppableAudit-repos-ios-unstoppable-wall
 
 `mode=daily_infra_audit`: read `$RUN/{profile.json,commits.tsv,files.tsv,diff.patch,code.md,security.md,crypto.md}` for the supplied FROM..TO range. Write `$RUN/infra.md` with build, CI, dependency, delivery, repository, configuration, and operational findings plus limitations. Then write `$RUN/infra.done`. If Critical/Block findings or unresolved external questions require research, PATCH assignee to `{{bindings.agents.UWIResearchAgent}}` with `mode=daily_research`; otherwise PATCH assignee to `{{bindings.agents.UWIQAEngineer}}` with `mode=daily_qa_verify`. Stop after handoff.
 
-`mode=daily_delivery`: read `$RUN/audit-final.md`, compute its SHA-256, and send it through Telegram as `markdownFileName="uaudit-ios-version-0.49-delta-UNS-$N.md"`. Verify `ok:true`, `routeSource:file_route`, `routeName:UAudit`, and `mode:document`.
+`mode=daily_delivery`: read `$RUN/audit-final.md`, compute its SHA-256, and send it through Telegram as `markdownFileName="uaudit-ios-version-0.50-delta-UNS-$N.md"`. Verify `ok:true`, `routeSource:file_route`, `routeName:UAudit`, and `mode:document`.
 
 Never advance the cursor before successful Telegram delivery. Only after successful delivery, atomically update `$CURSOR` with `<TO>`, `UNS-$N`, and current UTC ISO-8601 timestamp. Then comment the report path, delivered filename, message id, FROM..TO, and mark done.
 
