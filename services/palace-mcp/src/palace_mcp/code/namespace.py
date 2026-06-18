@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from typing import Mapping, cast
 
 from neo4j import AsyncDriver
 
@@ -44,13 +45,10 @@ def _requested_log_value(value: str, resolution: NamespaceResolution) -> str:
 
 def _project_fields(row: object) -> tuple[str, str | None]:
     try:
-        project = row["p"]
+        project = cast(Mapping[str, object], cast(Mapping[str, object], row)["p"])
     except KeyError:
-        project = row
-    slug = project["slug"]
-    if hasattr(project, "get"):
-        return slug, project.get("cm_project_name")
-    return slug, project["cm_project_name"]
+        project = cast(Mapping[str, object], row)
+    return cast(str, project["slug"]), cast(str | None, project.get("cm_project_name"))
 
 
 async def resolve(driver: AsyncDriver, value: str) -> NamespaceResolution:

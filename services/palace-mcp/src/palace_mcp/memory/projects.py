@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Mapping, cast
 
 from neo4j import AsyncManagedTransaction
 
@@ -86,10 +86,10 @@ async def _resolve_known_slug(tx: AsyncManagedTransaction, value: str) -> str:
     if row is None:
         raise UnknownProjectError(value)
     try:
-        project = row["p"]
+        project = cast(Mapping[str, object], row["p"])
     except KeyError:
-        project = row
-    return project["slug"]
+        project = cast(Mapping[str, object], row)
+    return cast(str, project["slug"])
 
 
 async def resolve_group_ids(
