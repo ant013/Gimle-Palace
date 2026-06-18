@@ -4,20 +4,14 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from typing import Mapping, cast
 
 from neo4j import AsyncDriver
 
+from palace_mcp.memory.cypher import LOOKUP_PROJECT_NAMESPACE
 from palace_mcp.memory.projects import UnknownProjectError
 
 logger = logging.getLogger(__name__)
-
-_LOOKUP_PROJECT_NAMESPACE = """
-MATCH (p:Project)
-WHERE p.slug = $value OR p.cm_project_name = $value
-RETURN p
-ORDER BY CASE WHEN p.slug = $value THEN 0 ELSE 1 END, p.slug
-LIMIT 1
-"""
 
 
 @dataclass(frozen=True)
@@ -49,6 +43,14 @@ def _requested_log_value(value: str, resolution: NamespaceResolution) -> str:
     return value
 
 
+def _project_fields(row: object) -> tuple[str, str | None]:
+    try:
+        project = cast(Mapping[str, object], cast(Mapping[str, object], row)["p"])
+    except KeyError:
+        project = cast(Mapping[str, object], row)
+    return cast(str, project["slug"]), cast(str | None, project.get("cm_project_name"))
+
+
 async def resolve(driver: AsyncDriver, value: str) -> NamespaceResolution:
     cached = _CACHE.get(value)
     if cached is not None:
@@ -60,15 +62,13 @@ async def resolve(driver: AsyncDriver, value: str) -> NamespaceResolution:
         return cached
 
     async with driver.session() as session:
-        result = await session.run(_LOOKUP_PROJECT_NAMESPACE, value=value)
+        result = await session.run(LOOKUP_PROJECT_NAMESPACE, value=value)
         row = await result.single()
 
     if row is None:
         raise UnknownProjectError(value)
 
-    project = row["p"]
-    slug = project["slug"]
-    cm_project_name = project.get("cm_project_name")
+    slug, cm_project_name = _project_fields(row)
     if not cm_project_name:
         raise SlugRegisteredButUnmapped(slug)
 
