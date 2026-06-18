@@ -19,7 +19,30 @@ from gimle_watchdog.state import State
 log = logging.getLogger("watchdog.detection")
 
 
-PS_FILTER_TOKENS = ("append-system-prompt-file", "paperclip-skills")
+# Recognised agent-process families. A process is a watchdog target if its
+# command contains ALL tokens of ANY one family. Claude Code and Codex agents
+# have distinct invocation signatures; both must be detected for hung-process
+# recovery to cover the whole fleet (not just the Claude team).
+AGENT_PROCESS_TOKEN_SETS: tuple[tuple[str, ...], ...] = (
+    ("append-system-prompt-file", "paperclip-skills"),  # claude_local (Claude Code CLI)
+    ("codex", "exec", "--dangerously-bypass-approvals-and-sandbox"),  # codex_local
+)
+
+# Back-compat alias: the Claude family. Kept so existing importers keep working;
+# new code should call is_agent_process().
+PS_FILTER_TOKENS = AGENT_PROCESS_TOKEN_SETS[0]
+
+
+def is_agent_process(command: str) -> bool:
+    """True if `command` matches any recognised agent-process family (claude/codex).
+
+    The serena MCP helper (`... start-mcp-server --context codex`) is deliberately
+    NOT matched: it lacks the `exec` / `--dangerously-bypass-approvals-and-sandbox`
+    tokens of a real codex agent run.
+    """
+    return any(
+        all(tok in command for tok in token_set) for token_set in AGENT_PROCESS_TOKEN_SETS
+    )
 
 
 @dataclass(frozen=True)
@@ -145,7 +168,7 @@ def parse_ps_output(
 ) -> list[HangedProc]:
     """Parse `ps -ao pid,etime,time,command` output, return hanged procs.
 
-    Hanged = command matches PS_FILTER_TOKENS AND etime >= etime_min_s AND
+    Hanged = is_agent_process(command) AND etime >= etime_min_s AND
     (cpu_ratio < idle_cpu_ratio_max OR stream_event_age > hang_stream_idle_max_s).
     """
     hangs: list[HangedProc] = []
@@ -155,7 +178,7 @@ def parse_ps_output(
         if len(fields) < 4:
             continue
         pid_str, etime_str, time_str, command = fields
-        if not all(tok in command for tok in PS_FILTER_TOKENS):
+        if not is_agent_process(command):
             continue
         try:
             pid = int(pid_str)
@@ -187,7 +210,7 @@ def parse_ps_output(
 
 
 def scan_idle_hangs(config: Config) -> list[HangedProc]:
-    """Run ps on host, filter for hung paperclip claude subprocesses."""
+    """Run ps on host, filter for hung paperclip agent subprocesses (claude + codex)."""
     etime_min_s = min(c.thresholds.hang_etime_min for c in config.companies) * 60
     idle_cpu_ratio_max = min(c.thresholds.idle_cpu_ratio_max for c in config.companies)
     hang_stream_idle_max_s = min(c.thresholds.hang_stream_idle_max_s for c in config.companies)

@@ -268,7 +268,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
         matches = sum(
             1
             for line in result.stdout.splitlines()
-            if all(tok in line for tok in detection.PS_FILTER_TOKENS)
+            if detection.is_agent_process(line)
         )
     except Exception:
         matches = -1

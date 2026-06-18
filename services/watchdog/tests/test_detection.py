@@ -107,6 +107,39 @@ def test_parse_ps_skips_non_paperclip():
     assert _parse_ps(text, etime_min_s=60 * 60) == []
 
 
+def test_parse_ps_finds_codex_hangs():
+    # codex_local agent run: high etime + idle CPU → hung, must be detected too.
+    text = (
+        "  PID     ELAPSED        TIME COMMAND\n"
+        "77777    4:00:00     0:00:02 node /Users/x/.nvm/bin/codex exec --json "
+        "--dangerously-bypass-approvals-and-sandbox --model gpt-5.5\n"
+    )
+    hangs = _parse_ps(text, etime_min_s=60 * 60, ratio=0.005)
+    assert len(hangs) == 1
+    assert hangs[0].pid == 77777
+
+
+def test_parse_ps_skips_serena_codex_mcp():
+    # The serena MCP helper mentions "codex" but is not an agent run — must be skipped.
+    text = (
+        "  PID     ELAPSED        TIME COMMAND\n"
+        "88888    4:00:00     0:00:02 uv tool uvx --from git+https://x serena "
+        "start-mcp-server --context codex\n"
+    )
+    assert _parse_ps(text, etime_min_s=60 * 60) == []
+
+
+def test_is_agent_process_matches_claude_and_codex_not_serena():
+    assert det.is_agent_process(
+        "/usr/bin/claude --append-system-prompt-file /tmp/paperclip-skills-x --add-dir /tmp/paperclip-skills-x"
+    )
+    assert det.is_agent_process(
+        "node /x/codex exec --json --dangerously-bypass-approvals-and-sandbox --model gpt-5.5"
+    )
+    assert not det.is_agent_process("serena start-mcp-server --context codex")
+    assert not det.is_agent_process("/usr/bin/some-other-process --flag")
+
+
 def test_parse_ps_skips_fresh_procs():
     text = (FIXTURE_DIR / "ps_output_macos.txt").read_text()
     # 91082 has etime 5:30 = 330s, well under 3600

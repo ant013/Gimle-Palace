@@ -10,7 +10,7 @@ import subprocess
 from dataclasses import dataclass
 from datetime import datetime
 
-from gimle_watchdog.detection import HangedProc, PS_FILTER_TOKENS
+from gimle_watchdog.detection import HangedProc, is_agent_process
 from gimle_watchdog.models import (
     AlertResult,
     CommentOnlyHandoffFinding,
@@ -108,11 +108,11 @@ def _read_proc_cmdline(pid: int) -> str | None:
 
 
 async def kill_hanged_proc(proc: HangedProc) -> KillResult:
-    """Kill a hanged claude subprocess with PID-reuse mitigation."""
+    """Kill a hanged agent subprocess (claude or codex) with PID-reuse mitigation."""
     current = _read_proc_cmdline(proc.pid)
     if current is None:
         return KillResult(pid=proc.pid, status="already_dead")
-    if not all(tok in current for tok in PS_FILTER_TOKENS):
+    if not is_agent_process(current):
         log.warning(
             "pid_reused pid=%d old_cmd=%r new_cmd=%r",
             proc.pid,
