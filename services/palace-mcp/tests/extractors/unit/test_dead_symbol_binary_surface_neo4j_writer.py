@@ -167,7 +167,9 @@ async def test_writer_uses_execute_write_for_batch_atomicity() -> None:
     session = _FakeSession(tx)
     driver = _FakeDriver(session)
 
-    await write_dead_symbol_graph(driver=driver, rows=(_correlation_result(),), project="dead-symbol-mini")
+    await write_dead_symbol_graph(
+        driver=driver, rows=(_correlation_result(),), project="dead-symbol-mini"
+    )
 
     assert session.execute_write_calls == 1
 
@@ -179,7 +181,9 @@ async def test_writer_merges_candidate_once() -> None:
     )
     driver = _FakeDriver(_FakeSession(tx))
 
-    await write_dead_symbol_graph(driver=driver, rows=(_correlation_result(),), project="dead-symbol-mini")
+    await write_dead_symbol_graph(
+        driver=driver, rows=(_correlation_result(),), project="dead-symbol-mini"
+    )
 
     assert (
         sum("MERGE (candidate:DeadSymbolCandidate" in query for query in tx.queries)
@@ -192,7 +196,9 @@ async def test_writer_merges_binary_surface_once() -> None:
     tx = _FakeTx({"MERGE (surface:BinarySurfaceRecord": _FakeCounters(nodes_created=1)})
     driver = _FakeDriver(_FakeSession(tx))
 
-    await write_dead_symbol_graph(driver=driver, rows=(_correlation_result(),), project="dead-symbol-mini")
+    await write_dead_symbol_graph(
+        driver=driver, rows=(_correlation_result(),), project="dead-symbol-mini"
+    )
 
     assert (
         sum("MERGE (surface:BinarySurfaceRecord" in query for query in tx.queries) == 1
@@ -204,7 +210,9 @@ async def test_writer_merges_backed_by_symbol_once() -> None:
     tx = _FakeTx({"BACKED_BY_SYMBOL": _FakeCounters(relationships_created=1)})
     driver = _FakeDriver(_FakeSession(tx))
 
-    await write_dead_symbol_graph(driver=driver, rows=(_correlation_result(),), project="dead-symbol-mini")
+    await write_dead_symbol_graph(
+        driver=driver, rows=(_correlation_result(),), project="dead-symbol-mini"
+    )
 
     assert sum("BACKED_BY_SYMBOL" in query for query in tx.queries) == 1
 
@@ -214,7 +222,9 @@ async def test_writer_merges_backed_by_public_api_once() -> None:
     tx = _FakeTx({"BACKED_BY_PUBLIC_API": _FakeCounters(relationships_created=1)})
     driver = _FakeDriver(_FakeSession(tx))
 
-    await write_dead_symbol_graph(driver=driver, rows=(_correlation_result(),), project="dead-symbol-mini")
+    await write_dead_symbol_graph(
+        driver=driver, rows=(_correlation_result(),), project="dead-symbol-mini"
+    )
 
     assert sum("BACKED_BY_PUBLIC_API" in query for query in tx.queries) == 1
 
@@ -224,7 +234,9 @@ async def test_writer_merges_has_binary_surface_once() -> None:
     tx = _FakeTx({"HAS_BINARY_SURFACE": _FakeCounters(relationships_created=1)})
     driver = _FakeDriver(_FakeSession(tx))
 
-    await write_dead_symbol_graph(driver=driver, rows=(_correlation_result(),), project="dead-symbol-mini")
+    await write_dead_symbol_graph(
+        driver=driver, rows=(_correlation_result(),), project="dead-symbol-mini"
+    )
 
     assert sum("HAS_BINARY_SURFACE" in query for query in tx.queries) == 1
 
@@ -234,7 +246,9 @@ async def test_writer_merges_blocked_by_contract_symbol_once() -> None:
     tx = _FakeTx({"BLOCKED_BY_CONTRACT_SYMBOL": _FakeCounters(relationships_created=1)})
     driver = _FakeDriver(_FakeSession(tx))
 
-    await write_dead_symbol_graph(driver=driver, rows=(_correlation_result(),), project="dead-symbol-mini")
+    await write_dead_symbol_graph(
+        driver=driver, rows=(_correlation_result(),), project="dead-symbol-mini"
+    )
 
     assert sum("BLOCKED_BY_CONTRACT_SYMBOL" in query for query in tx.queries) == 1
 
