@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import shutil
+import subprocess
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -267,8 +268,18 @@ async def test_incremental_run_does_not_deprecate_unchanged_file_symbols(
     repo = repo_root / "swift-incremental-mini"
     repo.mkdir(parents=True)
     _write_incremental_repo(repo, file_c_suffix="// run 1")
-    (repo / ".git").mkdir()
-    (repo / ".git" / "HEAD").write_text(f"{_HEAD_SHA}\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "t@example.com"], cwd=repo, check=True
+    )
+    subprocess.run(["git", "config", "user.name", "t"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "initial"], cwd=repo, check=True)
+    head_sha = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repo,
+        text=True,
+    ).strip()
 
     settings = MagicMock()
     tantivy_dir = tmp_path / "tantivy"
@@ -346,7 +357,7 @@ async def test_incremental_run_does_not_deprecate_unchanged_file_symbols(
     for qname, docs in unchanged_docs.items():
         assert len(docs) == 1, qname
     assert len(changed_docs) == 1
-    assert changed_docs[0]["doc_key"][0].endswith(f":10:0:{_HEAD_SHA}")
+    assert changed_docs[0]["doc_key"][0].endswith(f":10:0:{head_sha}")
 
     async with driver.session() as session:
         unchanged_result = await session.run(
