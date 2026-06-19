@@ -23,6 +23,20 @@ def _patch_namespace_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
         _fake_resolve_namespace,
     )
 
+    # get_snippet_rich now prefers the native snippet path and only falls back to
+    # CM when native defers. Default these tests to the CM-fallback path so the
+    # existing CM-mock assertions still exercise the orchestration; the
+    # native-first behaviour has its own test.
+    from palace_mcp.code.native_detect_changes import FALLBACK_TO_CM
+
+    async def _native_defers(*_a: object, **_k: object) -> object:
+        return FALLBACK_TO_CM
+
+    monkeypatch.setattr(
+        "palace_mcp.code.native_get_code_snippet.native_get_code_snippet",
+        _native_defers,
+    )
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -226,6 +240,68 @@ class TestGetSnippetRichHappyPath:
         assert payload["definition_location"]["file_path"] == "src/mod/sub.py"
         assert payload["definition_location"]["start_line"] == 10
         assert "conventions" not in payload
+
+    @pytest.mark.asyncio
+    async def test_native_snippet_path_skips_cm_get_code_snippet(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # dogfood #7: when the native snippet resolves, get_snippet_rich must use
+        # it and NOT call the CM get_code_snippet (which errors on SCIP qns).
+        async def _native_ok(*_a: object, **_k: object) -> dict[str, Any]:
+            return {
+                "file_path": "src/mod/sub.py",
+                "source": "def my_fn(): native",
+                "language": "python",
+                "start_line": 10,
+                "end_line": 11,
+            }
+
+        monkeypatch.setattr(
+            "palace_mcp.code.native_get_code_snippet.native_get_code_snippet",
+            _native_ok,
+        )
+        # session only needs the search_graph response for _resolve_qn; no snippet.
+        fake_session = _fake_session(_SEARCH_GRAPH_HIT)
+        monkeypatch.setattr(
+            "palace_mcp.code_router.get_cm_session", lambda: fake_session
+        )
+
+        mock_settings = MagicMock()
+        mock_settings.palace_tantivy_index_path = "/tmp/tantivy"
+        mock_settings.palace_tantivy_heap_mb = 50
+        mock_bridge = AsyncMock()
+        mock_bridge.search_by_symbol_id_async = AsyncMock(return_value=[])
+        mock_bridge.__aenter__ = AsyncMock(return_value=mock_bridge)
+        mock_bridge.__aexit__ = AsyncMock(return_value=False)
+        mock_driver = AsyncMock()
+        mock_neo4j_session = AsyncMock()
+        mock_result = AsyncMock()
+        mock_result.single = AsyncMock(return_value={"hotspot_score": 0.0})
+        mock_neo4j_session.run = AsyncMock(return_value=mock_result)
+        mock_neo4j_session.__aenter__ = AsyncMock(return_value=mock_neo4j_session)
+        mock_neo4j_session.__aexit__ = AsyncMock(return_value=False)
+        mock_driver.session = MagicMock(return_value=mock_neo4j_session)
+
+        with (
+            patch("palace_mcp.code_composite.TantivyBridge", return_value=mock_bridge),
+            patch("palace_mcp.mcp_server.get_settings", return_value=mock_settings),
+            patch(
+                "palace_mcp.code.find_owners.find_owners",
+                new=AsyncMock(return_value=_OWNERS_RESPONSE),
+            ),
+            patch(
+                "palace_mcp.git.tools.palace_git_log",
+                new=AsyncMock(return_value=_COMMITS_RESPONSE),
+            ),
+            patch("palace_mcp.mcp_server.get_driver", return_value=mock_driver),
+        ):
+            mcp = _make_mcp_and_register()
+            payload = await _call(mcp, qualified_name="my_fn")
+
+        assert payload["ok"] is True
+        assert payload["snippet"]["source"] == "def my_fn(): native"
+        # only _resolve_qn's search_graph hit CM — no CM get_code_snippet call.
+        assert fake_session.call_tool.await_count == 1
 
     @pytest.mark.asyncio
     async def test_short_name_fallback_normalizes_cm_project_for_neo4j(
