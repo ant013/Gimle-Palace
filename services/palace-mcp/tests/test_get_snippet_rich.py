@@ -43,6 +43,43 @@ def _make_error_result(msg: str) -> CallToolResult:
     )
 
 
+class TestQnValidatorAcceptsScip:
+    """dogfood #7: get_snippet_rich / test_impact rejected the exact SCIP qns that
+    search_graph / semantic_search emit ('Module s%3A...'), making the rich card
+    unusable with a qn you already hold. The boundary validator must accept them.
+    """
+
+    _SCIP_QN = "WalletCore s%3A10WalletCore16AddressViewModelC"
+
+    def test_get_snippet_rich_accepts_scip_qn(self) -> None:
+        from palace_mcp.code_composite import GetSnippetRichRequest
+
+        req = GetSnippetRichRequest(qualified_name=self._SCIP_QN)
+        assert req.qualified_name == self._SCIP_QN
+
+    def test_test_impact_accepts_scip_qn(self) -> None:
+        from palace_mcp.code_composite import TestImpactRequest
+
+        req = TestImpactRequest(qualified_name=self._SCIP_QN)
+        assert req.qualified_name == self._SCIP_QN
+
+    def test_dotted_identifier_still_accepted(self) -> None:
+        from palace_mcp.code_composite import GetSnippetRichRequest
+
+        assert (
+            GetSnippetRichRequest(qualified_name="App.Foo.bar").qualified_name
+            == "App.Foo.bar"
+        )
+
+    def test_garbage_qn_rejected(self) -> None:
+        from pydantic import ValidationError
+
+        from palace_mcp.code_composite import GetSnippetRichRequest
+
+        with pytest.raises(ValidationError):
+            GetSnippetRichRequest(qualified_name="@#$%^&!")
+
+
 def _fake_session(*call_tool_responses: dict[str, Any] | CallToolResult) -> AsyncMock:
     session = AsyncMock()
     results = [
@@ -643,7 +680,7 @@ class TestGetSnippetRichValidation:
             patch("palace_mcp.mcp_server.get_settings", return_value=mock_settings),
         ):
             mcp = _make_mcp_and_register()
-            payload = await _call(mcp, qualified_name="0bad name with spaces")
+            payload = await _call(mcp, qualified_name="@bad-qn!")
 
         assert payload["ok"] is False
         assert payload["error_code"] == "validation_error"

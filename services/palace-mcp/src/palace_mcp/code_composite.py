@@ -82,6 +82,22 @@ async def _resolve_slug(driver: Any, slug: str) -> SlugResolution:
 _QN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*(\.[A-Za-z_][A-Za-z0-9_-]*)*$")
 
 
+def _is_acceptable_qn(v: str) -> bool:
+    """Accept a dotted/short identifier (``App.Foo.bar``) OR a SCIP-style symbol
+    (e.g. ``WalletCore s%3A10WalletCore16AddressViewModelC`` or the ``s:`` form).
+
+    SCIP qns carry a module-space prefix and/or a %-encoded / colon scheme marker
+    that the dotted-identifier regex rejects, yet the downstream resolver
+    (``_qualified_name_variants`` / ``_resolve_qualified_name``) already
+    understands them — rejecting them at the boundary made get_snippet_rich /
+    test_impact unusable with the exact qns search/semantic tools emit (dogfood).
+    Only obvious garbage (no identifier, no SCIP marker) is rejected.
+    """
+    if _QN_RE.match(v):
+        return True
+    return " " in v or "%3" in v or "s:" in v
+
+
 def _needs_human_resolution(qualified_name: str) -> bool:
     return (
         qualified_name.startswith("scip-")
@@ -111,10 +127,10 @@ class TestImpactRequest(BaseModel):
     @field_validator("qualified_name")
     @classmethod
     def _qn_charset(cls, v: str) -> str:
-        if not _QN_RE.match(v):
+        if not _is_acceptable_qn(v):
             raise ValueError(
-                "qualified_name must be a dotted Python identifier "
-                "(components match [A-Za-z_][A-Za-z0-9_-]*; allows slug-style hyphens)"
+                "qualified_name must be a dotted identifier (App.Foo.bar) or a "
+                'SCIP-style symbol (e.g. "Module s%3A...")'
             )
         return v
 
@@ -947,10 +963,10 @@ class GetSnippetRichRequest(BaseModel):
     @field_validator("qualified_name")
     @classmethod
     def _qn_charset(cls, v: str) -> str:
-        if not _QN_RE.match(v):
+        if not _is_acceptable_qn(v):
             raise ValueError(
-                "qualified_name must be a dotted Python identifier "
-                "(components match [A-Za-z_][A-Za-z0-9_-]*; allows slug-style hyphens)"
+                "qualified_name must be a dotted identifier (App.Foo.bar) or a "
+                'SCIP-style symbol (e.g. "Module s%3A...")'
             )
         return v
 
