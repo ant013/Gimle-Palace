@@ -9,6 +9,7 @@ PALACE_SOURCEKIT_INDEX_STORE_PATH is not set.
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from unittest.mock import patch
@@ -350,6 +351,10 @@ def test_qualified_name_splits_to_short_name(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 _INTEGRATION_STORE = os.environ.get("PALACE_SOURCEKIT_INDEX_STORE_PATH")
+_INTEGRATION_INDEXSTORE_PATHS = json.loads(
+    os.environ.get("PALACE_INDEXSTORE_PATHS", "{}") or "{}"
+)
+_INTEGRATION_UW_IOS_STORE = _INTEGRATION_INDEXSTORE_PATHS.get("uw-ios-app")
 
 
 @pytest.mark.skipif(
@@ -371,3 +376,25 @@ def test_integration_live_index_store_returns_results() -> None:
     # Not asserting ≥30 here because the test env may not have uw-ios-app indexed;
     # the full acceptance test (≥30 callers) should be run on iMac after symbol_index_swift.
     assert result["caller_count"] >= 0
+
+
+@pytest.mark.skipif(
+    not _INTEGRATION_UW_IOS_STORE,
+    reason="PALACE_INDEXSTORE_PATHS[uw-ios-app] not set; skip live uw-ios-app IndexStore test",
+)
+def test_integration_uw_ios_app_store_is_v5_and_returns_callers() -> None:
+    assert _INTEGRATION_UW_IOS_STORE is not None
+    assert _detect_store_format(_INTEGRATION_UW_IOS_STORE) == "v5"
+    assert next(Path(_INTEGRATION_UW_IOS_STORE).rglob("*.IDXU"), None) is not None
+
+    result = call_hierarchy_tool(
+        qualified_name="BalanceData",
+        project="uw-ios-app",
+        max_results=50,
+        index_store_path=None,
+        indexstore_paths={"uw-ios-app": _INTEGRATION_UW_IOS_STORE},
+        default_store_path=None,
+    )
+
+    assert result["ok"] is True
+    assert result["caller_count"] >= 1

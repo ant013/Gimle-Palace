@@ -92,6 +92,7 @@ fi
 derived_data=""
 status="${MOCK_XCODEBUILD_STATUS:-0}"
 emit_index="${MOCK_XCODEBUILD_EMIT_INDEX:-0}"
+indexstore_format="${MOCK_INDEXSTORE_FORMAT:-v5}"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -derivedDataPath)
@@ -105,8 +106,19 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "$emit_index" == "1" ]]; then
-    mkdir -p "$derived_data/Index.noindex/DataStore"
-    printf 'unit\n' > "$derived_data/Index.noindex/DataStore/mock.unit"
+    case "$indexstore_format" in
+        v5)
+            mkdir -p "$derived_data/Index.noindex/DataStore/v5"
+            printf 'unit\n' > "$derived_data/Index.noindex/DataStore/v5/mock.IDXU"
+            ;;
+        unidb)
+            mkdir -p "$derived_data/Index.noindex/DataStore"
+            printf 'db\n' > "$derived_data/Index.noindex/DataStore/index.db"
+            ;;
+        *)
+            exit 2
+            ;;
+    esac
 fi
 
 exit "$status"
@@ -130,10 +142,15 @@ bash "$SCIP_EMIT_SCRIPT" \
 assert_contains "$SUCCESS_OUT" "xcodebuild exited 65 after producing index data; continuing to SCIP emit"
 assert_contains "$SUCCESS_OUT" "scip_size_bytes=10"
 assert_contains "$SUCCESS_OUT" "container_scip_path=/repos-hs/unstoppable-wallet-ios/scip/index.scip"
+assert_contains "$SUCCESS_OUT" "index_store_path=$TMP_DIR/derived-success/Index.noindex/DataStore"
+assert_contains "$SUCCESS_OUT" "container_indexstore_path=/repos-hs/unstoppable-wallet-ios/.palace-scip-derived-data-app/Index.noindex/DataStore"
+assert_contains "$SUCCESS_OUT" "index_store_format=v5"
 assert_contains "$SUCCESS_OUT" "dry_run=false"
 [[ -f "$TMP_DIR/output-success/index.scip.marker" ]] || fail "emitter did not run after indexed xcodebuild failure"
 [[ -f "$TMP_DIR/repo/Unstoppable/Unstoppable/Configuration/Config.xcconfig" ]] || fail "Config.xcconfig was not prepared"
+[[ -f "$TMP_DIR/derived-success/Index.noindex/DataStore/v5/mock.IDXU" ]] || fail "IndexStore v5 record was not retained"
 assert_contains "$TMP_DIR/.env" 'PALACE_SCIP_INDEX_PATHS={"uw-ios-app":"/repos-hs/unstoppable-wallet-ios/scip/index.scip"}'
+assert_contains "$TMP_DIR/.env" 'PALACE_INDEXSTORE_PATHS={"uw-ios-app":"/repos-hs/unstoppable-wallet-ios/.palace-scip-derived-data-app/Index.noindex/DataStore"}'
 
 FAIL_OUT="$TMP_DIR/fail.out"
 if MOCK_XCODEBUILD_STATUS=65 \
@@ -149,5 +166,21 @@ if MOCK_XCODEBUILD_STATUS=65 \
 fi
 assert_not_contains "$FAIL_OUT" "continuing to SCIP emit"
 [[ ! -f "$TMP_DIR/output-fail/index.scip.marker" ]] || fail "emitter ran without index data"
+
+UNIDB_OUT="$TMP_DIR/unidb.out"
+if MOCK_XCODEBUILD_STATUS=0 \
+    MOCK_XCODEBUILD_EMIT_INDEX=1 \
+    MOCK_INDEXSTORE_FORMAT=unidb \
+    bash "$SCIP_EMIT_SCRIPT" \
+        --repo-path "$TMP_DIR/repo" \
+        --derived-data "$TMP_DIR/derived-unidb" \
+        --output "$TMP_DIR/output-unidb/index.scip" \
+        --emitter-dir "$TMP_DIR/emitter" \
+        --emitter-bin "$TMP_DIR/emitter/mock-emitter" \
+        --no-remote-copy >"$UNIDB_OUT" 2>&1; then
+    fail "UniDB IndexStore unexpectedly passed the v5 gate"
+fi
+assert_contains "$UNIDB_OUT" "UniDB format"
+[[ ! -f "$TMP_DIR/output-unidb/index.scip.marker" ]] || fail "emitter ran for UniDB IndexStore"
 
 printf 'PASS: uw-ios app SCIP emit helper\n'

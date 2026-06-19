@@ -42,8 +42,12 @@ Options:
                               (default: unstoppable-wallet-ios)
   --container-scip-path <p>   Container-visible SCIP path for extractor env
                               (default: /repos-hs/<relative-path>/scip/index.scip)
+  --container-indexstore-path <p>
+                              Container-visible IndexStore path for call_hierarchy
+                              (default: /repos-hs/<relative-path>/.palace-scip-derived-data-app/Index.noindex/DataStore)
   --env-file <path>           Optional local env file to merge
-                              PALACE_SCIP_INDEX_PATHS[slug]
+                              PALACE_SCIP_INDEX_PATHS[slug] and
+                              PALACE_INDEXSTORE_PATHS[slug]
   --remote-host <host>        SSH host for the iMac mirror
   --remote-base <path>        Remote base dir for repo mirrors
   --emitter-dir <path>        palace-swift-scip-emit package dir
@@ -157,24 +161,34 @@ run_xcodebuild_build() {
 }
 
 merge_scip_index_env_mapping() {
-    local env_file="$1"
-    local slug="$2"
-    local container_scip_path="$3"
+    merge_env_json_mapping "PALACE_SCIP_INDEX_PATHS" "$@"
+}
+
+merge_indexstore_env_mapping() {
+    merge_env_json_mapping "PALACE_INDEXSTORE_PATHS" "$@"
+}
+
+merge_env_json_mapping() {
+    local env_key="$1"
+    local env_file="$2"
+    local slug="$3"
+    local value="$4"
 
     if [[ "$DRY_RUN" == "true" ]]; then
-        printf 'DRY-RUN: merge %s PALACE_SCIP_INDEX_PATHS[%s]=%s\n' \
-            "$env_file" "$slug" "$container_scip_path"
+        printf 'DRY-RUN: merge %s %s[%s]=%s\n' \
+            "$env_file" "$env_key" "$slug" "$value"
         return 0
     fi
 
-    python3 - "$env_file" "$slug" "$container_scip_path" <<'PY'
+    python3 - "$env_key" "$env_file" "$slug" "$value" <<'PY'
 import json
 import sys
 from pathlib import Path
 
-env_file = Path(sys.argv[1])
-slug = sys.argv[2]
-container_scip_path = sys.argv[3]
+env_key = sys.argv[1]
+env_file = Path(sys.argv[2])
+slug = sys.argv[3]
+value = sys.argv[4]
 env_file.parent.mkdir(parents=True, exist_ok=True)
 lines = env_file.read_text(encoding="utf-8").splitlines() if env_file.exists() else []
 
@@ -182,7 +196,7 @@ merged = {}
 new_lines = []
 found = False
 for line in lines:
-    if not line.startswith("PALACE_SCIP_INDEX_PATHS="):
+    if not line.startswith(f"{env_key}="):
         new_lines.append(line)
         continue
     if found:
@@ -193,23 +207,50 @@ for line in lines:
         try:
             parsed = json.loads(raw)
         except json.JSONDecodeError as exc:
-            raise SystemExit(f"PALACE_SCIP_INDEX_PATHS is not valid JSON in {env_file}: {exc}")
+            raise SystemExit(f"{env_key} is not valid JSON in {env_file}: {exc}")
         if not isinstance(parsed, dict) or not all(
             isinstance(k, str) and isinstance(v, str) for k, v in parsed.items()
         ):
-            raise SystemExit("PALACE_SCIP_INDEX_PATHS must be a JSON object of string paths")
+            raise SystemExit(f"{env_key} must be a JSON object of string paths")
         merged.update(parsed)
-    merged[slug] = container_scip_path
+    merged[slug] = value
     encoded = json.dumps(merged, sort_keys=True, separators=(",", ":"))
-    new_lines.append(f"PALACE_SCIP_INDEX_PATHS={encoded}")
+    new_lines.append(f"{env_key}={encoded}")
 
 if not found:
-    merged[slug] = container_scip_path
+    merged[slug] = value
     encoded = json.dumps(merged, sort_keys=True, separators=(",", ":"))
-    new_lines.append(f"PALACE_SCIP_INDEX_PATHS={encoded}")
+    new_lines.append(f"{env_key}={encoded}")
 
 env_file.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
 PY
+}
+
+detect_store_format() {
+    python3 - "$REPO_ROOT/services/palace-mcp/src" "$1" <<'PY'
+import sys
+
+sys.path.insert(0, sys.argv[1])
+
+from palace_mcp.code.call_hierarchy import _detect_store_format
+
+result = _detect_store_format(sys.argv[2])
+if result:
+    print(result)
+PY
+}
+
+verify_v5_indexstore() {
+    local data_store_path="$1"
+    local fmt
+
+    fmt="$(detect_store_format "$data_store_path")"
+    if [[ "$fmt" == "unidb" ]]; then
+        die "IndexStore at $data_store_path is UniDB format. palace.code.call_hierarchy requires v5 DataStore; stop here and report the toolchain limitation."
+    fi
+    [[ "$fmt" == "v5" ]] || die "IndexStore path missing or unrecognized at $data_store_path"
+    find "$data_store_path/v5" -name '*.IDXU' -print -quit | grep -q . || \
+        die "IndexStore at $data_store_path is missing v5/*.IDXU records"
 }
 
 REPO_PATH=""
@@ -222,6 +263,7 @@ OUTPUT_ARG=""
 SLUG="$DEFAULT_SLUG"
 RELATIVE_PATH="$DEFAULT_RELATIVE_PATH"
 CONTAINER_SCIP_PATH_ARG=""
+CONTAINER_INDEXSTORE_PATH_ARG=""
 ENV_FILE=""
 REMOTE_HOST="$DEFAULT_REMOTE_HOST"
 REMOTE_BASE="$DEFAULT_REMOTE_BASE"
@@ -252,6 +294,8 @@ while [[ $# -gt 0 ]]; do
         --relative-path) [[ $# -ge 2 ]] || die "--relative-path requires a value"; RELATIVE_PATH="$2"; shift 2 ;;
         --container-scip-path=*) CONTAINER_SCIP_PATH_ARG="${1#*=}"; shift ;;
         --container-scip-path) [[ $# -ge 2 ]] || die "--container-scip-path requires a value"; CONTAINER_SCIP_PATH_ARG="$2"; shift 2 ;;
+        --container-indexstore-path=*) CONTAINER_INDEXSTORE_PATH_ARG="${1#*=}"; shift ;;
+        --container-indexstore-path) [[ $# -ge 2 ]] || die "--container-indexstore-path requires a value"; CONTAINER_INDEXSTORE_PATH_ARG="$2"; shift 2 ;;
         --env-file=*)   ENV_FILE="${1#*=}"; shift ;;
         --env-file)     [[ $# -ge 2 ]] || die "--env-file requires a value"; ENV_FILE="$2"; shift 2 ;;
         --remote-host=*) REMOTE_HOST="${1#*=}"; shift ;;
@@ -302,6 +346,10 @@ REMOTE_DEST_DIR="$REMOTE_BASE/$RELATIVE_PATH/scip"
 REMOTE_DEST_PATH="$REMOTE_DEST_DIR/index.scip"
 REMOTE_META_PATH="$REMOTE_DEST_DIR/index.scip.meta.json"
 CONTAINER_SCIP_PATH="${CONTAINER_SCIP_PATH_ARG:-/repos-hs/$RELATIVE_PATH/scip/index.scip}"
+DATA_STORE_PATH="$DERIVED_DATA/Index.noindex/DataStore"
+REMOTE_INDEXSTORE_DIR="$REMOTE_BASE/$RELATIVE_PATH/.palace-scip-derived-data-app/Index.noindex"
+REMOTE_INDEXSTORE_PATH="$REMOTE_INDEXSTORE_DIR/DataStore"
+CONTAINER_INDEXSTORE_PATH="${CONTAINER_INDEXSTORE_PATH_ARG:-/repos-hs/$RELATIVE_PATH/.palace-scip-derived-data-app/Index.noindex/DataStore}"
 
 log "slug=$SLUG repo=$REPO_PATH workspace=$BUILD_ARTIFACT scheme=$SCHEME_NAME"
 
@@ -324,6 +372,9 @@ prepare_config_xcconfig
 
 log "building app with xcodebuild (scheme=$SCHEME_NAME destination=$DESTINATION)"
 run_xcodebuild_build
+
+log "verifying retained IndexStore at $DATA_STORE_PATH"
+verify_v5_indexstore "$DATA_STORE_PATH"
 
 log "emitting SCIP"
 run_cmd "$EMITTER_BIN" \
@@ -364,15 +415,19 @@ fi
 if [[ -n "$ENV_FILE" ]]; then
     log "merging PALACE_SCIP_INDEX_PATHS for $SLUG into $ENV_FILE"
     merge_scip_index_env_mapping "$ENV_FILE" "$SLUG" "$CONTAINER_SCIP_PATH"
+    log "merging PALACE_INDEXSTORE_PATHS for $SLUG into $ENV_FILE"
+    merge_indexstore_env_mapping "$ENV_FILE" "$SLUG" "$CONTAINER_INDEXSTORE_PATH"
 fi
 
 if [[ "$NO_REMOTE_COPY" == "true" ]]; then
     log "skipping remote copy (--no-remote-copy)"
 else
     log "creating remote destination"
-    run_cmd ssh "$REMOTE_HOST" "mkdir -p $REMOTE_DEST_DIR"
+    run_cmd ssh "$REMOTE_HOST" "mkdir -p $REMOTE_DEST_DIR $REMOTE_INDEXSTORE_DIR && rm -rf $REMOTE_INDEXSTORE_PATH"
     log "copying SCIP to remote host"
     run_cmd scp "$OUTPUT_PATH" "$REMOTE_HOST:$REMOTE_DEST_PATH"
+    log "copying retained IndexStore to remote host"
+    run_cmd scp -r "$DATA_STORE_PATH" "$REMOTE_HOST:$REMOTE_INDEXSTORE_PATH"
     if [[ -f "$META_PATH" ]]; then
         run_cmd scp "$META_PATH" "$REMOTE_HOST:$REMOTE_META_PATH"
     fi
@@ -386,6 +441,9 @@ source=$OUTPUT_PATH
 destination=$REMOTE_HOST:$REMOTE_DEST_PATH
 metadata=$REMOTE_HOST:$REMOTE_META_PATH
 container_scip_path=$CONTAINER_SCIP_PATH
+index_store_path=$DATA_STORE_PATH
+container_indexstore_path=$CONTAINER_INDEXSTORE_PATH
+index_store_format=v5
 size_bytes=$size_bytes
 scip_size_bytes=$size_bytes
 dry_run=false
@@ -397,6 +455,9 @@ source=$OUTPUT_PATH
 destination=$REMOTE_HOST:$REMOTE_DEST_PATH
 metadata=$REMOTE_HOST:$REMOTE_META_PATH
 container_scip_path=$CONTAINER_SCIP_PATH
+index_store_path=$DATA_STORE_PATH
+container_indexstore_path=$CONTAINER_INDEXSTORE_PATH
+index_store_format=v5
 size_bytes=0
 scip_size_bytes=0
 dry_run=true
