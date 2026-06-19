@@ -183,6 +183,29 @@ class TestTantivyBridgeOperations:
         assert count == 3
         assert writer.delete_documents.call_count == 3
 
+    @pytest.mark.asyncio
+    async def test_delete_by_file_paths(self, tmp_index: Path) -> None:
+        mock_tantivy = _mock_tantivy()
+        with (
+            patch(
+                "palace_mcp.extractors.foundation.tantivy_bridge.tantivy", mock_tantivy
+            ),
+            patch(
+                "palace_mcp.extractors.foundation.tantivy_bridge._TANTIVY_AVAILABLE",
+                True,
+            ),
+        ):
+            async with TantivyBridge(tmp_index) as bridge:
+                writer = bridge._writer
+                count = await bridge.delete_by_file_paths_async(
+                    ["Sources/App/A.swift", "Sources/App/B.swift"]
+                )
+        assert count == 2
+        assert writer.delete_documents.call_args_list == [
+            (("file_path", "Sources/App/A.swift"),),
+            (("file_path", "Sources/App/B.swift"),),
+        ]
+
     def test_search_occurrences_filters_hits_to_exact_commit(self) -> None:
         bridge = TantivyBridge(Path("/tmp/tantivy-test"))
         searcher = MagicMock()

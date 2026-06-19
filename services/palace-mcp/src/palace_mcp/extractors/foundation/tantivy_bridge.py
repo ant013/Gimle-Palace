@@ -110,6 +110,10 @@ class TantivyBridge:
         """
         return cast(int, await self._run(self._delete_by_symbol_ids_sync, symbol_ids))
 
+    async def delete_by_file_paths_async(self, file_paths: list[str]) -> int:
+        """Delete all docs whose file_path matches any path in the list."""
+        return cast(int, await self._run(self._delete_by_file_paths_sync, file_paths))
+
     async def count_docs_for_run_async(self, run_id: str, phase: str) -> int:
         """Count committed docs matching ingest_run_id and phase (for checkpoint reconciliation)."""
         return cast(int, await self._run(self._count_docs_for_run_sync, run_id, phase))
@@ -153,7 +157,9 @@ class TantivyBridge:
         schema_builder.add_integer_field(
             "repo_id", fast=True, indexed=True, stored=False
         )
-        schema_builder.add_text_field("file_path", stored=True, index_option="basic")
+        # raw tokenizer keeps repo-relative paths as exact terms so
+        # delete_documents("file_path", path) removes one file's docs only.
+        schema_builder.add_text_field("file_path", stored=True, tokenizer_name="raw")
         schema_builder.add_integer_field("line", fast=True, indexed=True, stored=False)
         schema_builder.add_integer_field(
             "col_start", fast=True, indexed=False, stored=False
@@ -233,6 +239,14 @@ class TantivyBridge:
         count = 0
         for sid in symbol_ids:
             self._writer.delete_documents("symbol_id", sid)
+            count += 1
+        return count
+
+    def _delete_by_file_paths_sync(self, file_paths: list[str]) -> int:
+        assert self._writer is not None
+        count = 0
+        for file_path in file_paths:
+            self._writer.delete_documents("file_path", file_path)
             count += 1
         return count
 
