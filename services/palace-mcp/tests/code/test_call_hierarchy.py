@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
@@ -398,3 +399,30 @@ def test_integration_uw_ios_app_store_is_v5_and_returns_callers() -> None:
 
     assert result["ok"] is True
     assert result["caller_count"] >= 1
+
+    short_name = result["short_name"]
+    matched_caller = False
+    for caller in result["callers"]:
+        source_file = Path(caller["source_file"])
+        if not source_file.is_file():
+            continue
+        grep = subprocess.run(
+            ["grep", "-rnw", "--", short_name, str(source_file)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert grep.returncode in (0, 1), grep.stderr
+        grep_lines = {
+            int(line.split(":", 1)[0])
+            for line in grep.stdout.splitlines()
+            if ":" in line
+        }
+        if caller["line"] in grep_lines:
+            matched_caller = True
+            break
+
+    assert matched_caller, (
+        f"expected at least one caller location for {short_name} to match grep -rnw "
+        "on its source file"
+    )
