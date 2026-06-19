@@ -13,6 +13,8 @@ CALL_EDGES = frozenset(
     }
 )
 
+TRACE_CALL_EDGES = frozenset({"CALLS"})
+
 KNOWN_NON_CALL_EDGES = frozenset(
     {
         "ASYNC_CALLS",

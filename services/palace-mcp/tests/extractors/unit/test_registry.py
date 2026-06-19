@@ -80,6 +80,12 @@ def test_symbol_index_swift_registered() -> None:
     assert extractor.name == "symbol_index_swift"
 
 
+def test_call_edge_swift_registered() -> None:
+    extractor = registry.get("call_edge_swift")
+    assert extractor is not None
+    assert extractor.name == "call_edge_swift"
+
+
 def test_reactive_dependency_tracer_registered() -> None:
     extractor = registry.get("reactive_dependency_tracer")
     assert extractor is not None

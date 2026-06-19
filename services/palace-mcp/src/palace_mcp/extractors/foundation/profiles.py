@@ -37,6 +37,7 @@ class LanguageProfile:
 
 SWIFT_KIT_EXTRACTOR_ORDER: tuple[str, ...] = (
     "symbol_index_swift",
+    "call_edge_swift",
     "prune_swift_symbols",
     "arch_layer",
     "git_history",
@@ -65,6 +66,7 @@ PROFILES: dict[str, LanguageProfile] = {
             {
                 "arch_layer",
                 "code_ownership",
+                "call_edge_swift",
                 "coding_convention",
                 "crypto_domain_model",
                 "cross_module_contract",

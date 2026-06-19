@@ -10,6 +10,7 @@ from __future__ import annotations
 from palace_mcp.extractors.arch_layer.extractor import ArchLayerExtractor
 from palace_mcp.extractors.base import BaseExtractor
 from palace_mcp.extractors.code_ownership.extractor import CodeOwnershipExtractor
+from palace_mcp.extractors.call_edge_swift import CallEdgeSwiftExtractor
 from palace_mcp.extractors.crypto_domain_model.extractor import (
     CryptoDomainModelExtractor,
 )
@@ -68,6 +69,7 @@ EXTRACTORS: dict[str, BaseExtractor] = {
     "symbol_index_java": SymbolIndexJava(),
     "symbol_index_solidity": SymbolIndexSolidity(),
     "symbol_index_swift": SymbolIndexSwift(),
+    "call_edge_swift": CallEdgeSwiftExtractor(),
     "prune_swift_symbols": PruneSwiftSymbols(),
     "symbol_index_clang": SymbolIndexClang(),
     "dependency_surface": DependencySurfaceExtractor(),

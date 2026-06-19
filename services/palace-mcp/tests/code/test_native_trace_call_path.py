@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from palace_mcp.code.edges import CALL_EDGES, KNOWN_NON_CALL_EDGES
+from palace_mcp.code.edges import KNOWN_NON_CALL_EDGES, TRACE_CALL_EDGES
 from palace_mcp.code.native_detect_changes import FALLBACK_TO_CM
 from palace_mcp.code.native_trace_call_path import (
     _path_query,
@@ -76,7 +76,7 @@ async def test_trace_call_path_outbound_returns_stable_envelopes(
                     {
                         "source": "pkg.root",
                         "target": "pkg.child",
-                        "type": "REFERENCES",
+                        "type": "CALLS",
                     }
                 ],
             },
@@ -109,12 +109,12 @@ async def test_trace_call_path_outbound_returns_stable_envelopes(
                     {
                         "source": "pkg.root",
                         "target": "pkg.child",
-                        "type": "REFERENCES",
+                        "type": "CALLS",
                     },
                     {
                         "source": "pkg.child",
                         "target": "pkg.leaf",
-                        "type": "REFERENCES",
+                        "type": "CALLS",
                     },
                 ],
             },
@@ -155,8 +155,8 @@ async def test_trace_call_path_outbound_returns_stable_envelopes(
             },
         ],
         "edges": [
-            {"source": "pkg.child", "target": "pkg.leaf", "type": "REFERENCES"},
-            {"source": "pkg.root", "target": "pkg.child", "type": "REFERENCES"},
+            {"source": "pkg.child", "target": "pkg.leaf", "type": "CALLS"},
+            {"source": "pkg.root", "target": "pkg.child", "type": "CALLS"},
         ],
         "callees": [
             {
@@ -205,7 +205,7 @@ async def test_trace_call_path_both_direction_collects_callers_and_callees(
                     {
                         "source": "tests.test_root",
                         "target": "pkg.root",
-                        "type": "REFERENCES",
+                        "type": "CALLS",
                     }
                 ],
             }
@@ -233,7 +233,7 @@ async def test_trace_call_path_both_direction_collects_callers_and_callees(
                     {
                         "source": "pkg.root",
                         "target": "pkg.child",
-                        "type": "REFERENCES",
+                        "type": "CALLS",
                     }
                 ],
             }
@@ -298,7 +298,7 @@ async def test_trace_call_path_excludes_test_paths_from_envelope(
                     {
                         "source": "tests.test_root",
                         "target": "pkg.root",
-                        "type": "REFERENCES",
+                        "type": "CALLS",
                     }
                 ],
             }
@@ -326,7 +326,7 @@ async def test_trace_call_path_excludes_test_paths_from_envelope(
                     {
                         "source": "pkg.root",
                         "target": "pkg.child",
-                        "type": "REFERENCES",
+                        "type": "CALLS",
                     }
                 ],
             }
@@ -357,7 +357,7 @@ async def test_trace_call_path_excludes_test_paths_from_envelope(
         },
     ]
     assert result["edges"] == [
-        {"source": "pkg.root", "target": "pkg.child", "type": "REFERENCES"}
+        {"source": "pkg.root", "target": "pkg.child", "type": "CALLS"}
     ]
     assert result["callees"] == [
         {
@@ -443,10 +443,11 @@ async def test_trace_call_path_non_calls_modes_return_phase2_required(
 def test_path_query_uses_only_call_edges() -> None:
     query = _path_query("outbound", 3)
 
-    for edge_type in CALL_EDGES:
+    for edge_type in TRACE_CALL_EDGES:
         assert edge_type in query
     for edge_type in KNOWN_NON_CALL_EDGES:
         assert edge_type not in query
+    assert "REFERENCES" not in query
 
 
 @pytest.mark.asyncio
