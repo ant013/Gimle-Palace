@@ -241,6 +241,7 @@ async def test_incremental_run_does_not_deprecate_unchanged_file_symbols(
     driver: AsyncDriver,
     graphiti_mock: MagicMock,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     await ensure_extractors_schema(driver)
     async with driver.session() as session:
@@ -261,7 +262,9 @@ async def test_incremental_run_does_not_deprecate_unchanged_file_symbols(
         scip_path,
     )
 
-    repo = tmp_path / "repos" / "swift-incremental-mini"
+    repo_root = tmp_path / "repos"
+    monkeypatch.setenv("PALACE_ALLOWED_REPO_ROOTS", str(repo_root))
+    repo = repo_root / "swift-incremental-mini"
     repo.mkdir(parents=True)
     _write_incremental_repo(repo, file_c_suffix="// run 1")
     (repo / ".git").mkdir()
