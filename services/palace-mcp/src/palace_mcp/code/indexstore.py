@@ -399,7 +399,9 @@ def _collect_call_edges(
         return True
 
     for record_name in record_names:
-        rec_reader = lb.indexstore_record_reader_create(store, record_name.encode(), None)
+        rec_reader = lb.indexstore_record_reader_create(
+            store, record_name.encode(), None
+        )
         if not rec_reader:
             continue
 
@@ -446,9 +448,7 @@ def _collect_call_edges(
             edges.append(edge)
             return True
 
-        lb.indexstore_record_reader_occurrences_apply_f(
-            rec_reader, None, _occ_applier
-        )
+        lb.indexstore_record_reader_occurrences_apply_f(rec_reader, None, _occ_applier)
         lb.indexstore_record_reader_dispose(rec_reader)
 
     logger.info(
