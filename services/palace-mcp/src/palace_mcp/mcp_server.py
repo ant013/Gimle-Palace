@@ -898,7 +898,9 @@ async def palace_memory_delete_bundle(
         "project= and bundle= are mutually exclusive. "
         "On success (project mode): run_id + duration_ms + nodes_written + edges_written. "
         "On success (bundle mode): run_id + state='running' + members_total. "
-        "On failure: error_code envelope."
+        "On failure: error_code envelope. "
+        "force=True bypasses content-freshness skips (e.g. symbol_index_swift's "
+        "body_hash skip) to roll out a writer/schema change over unchanged source."
     ),
 )
 async def _palace_ingest_run_extractor(
@@ -906,6 +908,7 @@ async def _palace_ingest_run_extractor(
     project: str | None = None,
     bundle: str | None = None,
     scip_path: str | None = None,
+    force: bool = False,
 ) -> dict[str, Any]:
     driver = _driver
     if driver is None:
@@ -936,6 +939,7 @@ async def _palace_ingest_run_extractor(
         driver=driver,
         graphiti=graphiti,
         scip_path=scip_path,
+        force=force,
     )
 
 

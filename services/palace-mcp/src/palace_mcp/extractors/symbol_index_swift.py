@@ -194,7 +194,11 @@ class SymbolIndexSwift(BaseExtractor):
             previous_body_hashes = await _read_existing_file_body_hashes(
                 driver, project_id=ctx.group_id
             )
-            if previous_body_hashes and previous_body_hashes == current_body_hashes:
+            if (
+                not ctx.force
+                and previous_body_hashes
+                and previous_body_hashes == current_body_hashes
+            ):
                 await _refresh_graph_state(
                     driver,
                     scip_index=scip_index,
