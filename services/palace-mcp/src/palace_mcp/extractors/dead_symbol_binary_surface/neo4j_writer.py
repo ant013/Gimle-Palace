@@ -12,6 +12,16 @@ from palace_mcp.extractors.dead_symbol_binary_surface.correlation import (
 )
 from palace_mcp.extractors.dead_symbol_binary_surface.models import DeadSymbolCandidate
 
+# Replace-snapshot: each run rewrites the project's full dead-symbol surface, so
+# drop the previous snapshot first. Without this, candidates whose id changed
+# across commits accumulate and find_dead_symbols returns mixed commit_sha rows
+# (stale candidates from a prior Periphery scan — dogfood #4).
+_DELETE_PROJECT_SNAPSHOT = """
+MATCH (n)
+WHERE (n:DeadSymbolCandidate OR n:BinarySurfaceRecord) AND n.project = $project
+DETACH DELETE n
+"""
+
 _MERGE_CANDIDATE = """
 MERGE (candidate:DeadSymbolCandidate {id: $candidate_id})
 SET candidate += $candidate_props
@@ -58,20 +68,27 @@ class DeadSymbolWriteSummary:
 
 
 async def write_dead_symbol_graph(
-    *, driver: AsyncDriver, rows: tuple[CorrelationResult, ...]
+    *, driver: AsyncDriver, rows: tuple[CorrelationResult, ...], project: str
 ) -> DeadSymbolWriteSummary:
-    """Write dead symbol graph rows in one execute_write transaction."""
+    """Write dead symbol graph rows in one execute_write transaction.
+
+    The project's previous dead-symbol snapshot is dropped first (same
+    transaction) so a re-ingest fully replaces it instead of accumulating stale
+    candidates across commits.
+    """
 
     async with driver.session() as session:
-        return await session.execute_write(_write_batch, rows)
+        return await session.execute_write(_write_batch, rows, project)
 
 
 async def _write_batch(
-    tx: Any, rows: tuple[CorrelationResult, ...]
+    tx: Any, rows: tuple[CorrelationResult, ...], project: str
 ) -> DeadSymbolWriteSummary:
     nodes_created = 0
     relationships_created = 0
     properties_set = 0
+
+    await _consume(tx, _DELETE_PROJECT_SNAPSHOT, project=project)
 
     for row in rows:
         candidate = row.candidate

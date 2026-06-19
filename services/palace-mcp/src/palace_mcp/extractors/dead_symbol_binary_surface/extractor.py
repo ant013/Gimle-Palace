@@ -255,7 +255,7 @@ LIMIT 100
             phase="phase3_vendor_uses",
         )
         write_summary = await write_dead_symbol_graph(
-            driver=driver, rows=correlated_rows
+            driver=driver, rows=correlated_rows, project=ctx.project_slug
         )
         total_nodes += write_summary.nodes_created
         total_edges += write_summary.relationships_created

@@ -10,7 +10,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from palace_mcp.extractors.base import ExtractorRunContext
+from palace_mcp.extractors.base import (
+    ExtractorOutcome,
+    ExtractorRunContext,
+    ExtractorStats,
+)
 from palace_mcp.extractors.foundation.errors import ExtractorError, ExtractorErrorCode
 from palace_mcp.extractors.foundation.models import (
     Language,
@@ -1046,3 +1050,113 @@ class TestSymbolIndexSwiftShadowRows:
                 "ingest_run_id": "run-1",
             }
         ]
+
+
+def _force_settings(scip_fixture: Path, tantivy_dir: Path) -> MagicMock:
+    settings = MagicMock()
+    settings.palace_scip_index_paths = {"uw-ios-mini": str(scip_fixture)}
+    settings.palace_tantivy_index_path = str(tantivy_dir)
+    settings.palace_tantivy_heap_mb = 100
+    settings.palace_max_occurrences_total = 50_000_000
+    settings.palace_max_occurrences_per_project = 10_000_000
+    settings.palace_importance_threshold_use = 0.0
+    settings.palace_max_occurrences_per_symbol = 5_000
+    settings.palace_recency_decay_days = 30.0
+    return settings
+
+
+_FORCE_HASHES = {"Sources/UwMiniCore/State/WalletStore.swift": "hash-1"}
+
+
+async def _async_run_with_matching_hashes(
+    extractor: SymbolIndexSwift,
+    ctx: ExtractorRunContext,
+    scip_fixture: Path,
+    tmp_path: Path,
+) -> ExtractorStats:
+    """Run the extractor with previous == current body_hashes (would skip unless
+    ctx.force). All side-effecting collaborators are mocked."""
+    import contextlib
+
+    tantivy_dir = tmp_path / "tantivy"
+    tantivy_dir.mkdir(exist_ok=True)
+    bridge_mock = AsyncMock()
+    bridge_mock.__aenter__ = AsyncMock(return_value=bridge_mock)
+    bridge_mock.__aexit__ = AsyncMock(return_value=False)
+    bridge_mock.add_or_replace_async = AsyncMock()
+    bridge_mock.commit_async = AsyncMock()
+    p = "palace_mcp.extractors.symbol_index_swift"
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(
+            patch("palace_mcp.mcp_server.get_driver", return_value=_make_driver())
+        )
+        stack.enter_context(
+            patch(
+                "palace_mcp.mcp_server.get_settings",
+                return_value=_force_settings(scip_fixture, tantivy_dir),
+            )
+        )
+        stack.enter_context(patch(f"{p}.TantivyBridge", return_value=bridge_mock))
+        for fn in (
+            "ensure_custom_schema",
+            "create_ingest_run",
+            "write_checkpoint",
+            "finalize_ingest_run",
+        ):
+            stack.enter_context(patch(f"{p}.{fn}", new_callable=AsyncMock))
+        stack.enter_context(
+            patch(
+                f"{p}._get_previous_error_code",
+                new_callable=AsyncMock,
+                return_value=None,
+            )
+        )
+        stack.enter_context(
+            patch(f"{p}._build_file_body_hashes", return_value=dict(_FORCE_HASHES))
+        )
+        stack.enter_context(
+            patch(
+                f"{p}._read_existing_file_body_hashes",
+                new_callable=AsyncMock,
+                return_value=dict(_FORCE_HASHES),
+            )
+        )
+        return await extractor.run(graphiti=MagicMock(), ctx=ctx)
+
+
+def _force_ctx(tmp_path: Path, *, force: bool) -> ExtractorRunContext:
+    return ExtractorRunContext(
+        project_slug="uw-ios-mini",
+        group_id="project/uw-ios-mini",
+        repo_path=tmp_path,
+        run_id=f"force-test-{force}",
+        duration_ms=0,
+        logger=MagicMock(),
+        force=force,
+    )
+
+
+class TestSymbolIndexSwiftForceFlag:
+    """dogfood #6: a writer/schema change must be roll-out-able over unchanged
+    source without hand-clearing :File.body_hash. ctx.force bypasses the body_hash
+    skip; the default still skips when content is unchanged.
+    """
+
+    @pytest.mark.asyncio
+    async def test_matching_hashes_skip_without_force(
+        self, extractor: SymbolIndexSwift, scip_fixture: Path, tmp_path: Path
+    ) -> None:
+        stats = await _async_run_with_matching_hashes(
+            extractor, _force_ctx(tmp_path, force=False), scip_fixture, tmp_path
+        )
+        assert stats.outcome == ExtractorOutcome.SKIPPED
+
+    @pytest.mark.asyncio
+    async def test_force_bypasses_body_hash_skip(
+        self, extractor: SymbolIndexSwift, scip_fixture: Path, tmp_path: Path
+    ) -> None:
+        stats = await _async_run_with_matching_hashes(
+            extractor, _force_ctx(tmp_path, force=True), scip_fixture, tmp_path
+        )
+        assert stats.outcome != ExtractorOutcome.SKIPPED
+        assert stats.nodes_written >= 3

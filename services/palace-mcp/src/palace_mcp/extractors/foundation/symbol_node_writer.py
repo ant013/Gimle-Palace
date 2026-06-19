@@ -50,6 +50,8 @@ SET s.project_id             = $project_id,
     s.file_path              = r.file_path,
     s.module_name            = r.module_name,
     s.source_scope           = r.source_scope,
+    s.line_start             = r.line_start,
+    s.line_end               = r.line_end,
     s.last_seen_in_run_id    = $run_id,
     s.last_seen_at           = datetime($seen_at),
     s.last_seen_in_commit    = $commit_sha,
@@ -134,12 +136,19 @@ def build_symbol_node_rows(
     def_file_paths: dict[str, str],
     group_id: str,
     *,
+    def_line_starts: dict[str, int] | None = None,
     recipe: "Recipe | None" = None,
 ) -> list[dict[str, Any]]:
     """Build the UNWIND row dicts for :Symbol MERGE from ScipSymbolInfo list.
 
+    ``def_line_starts`` maps qualified_name → 1-based declaration line (from the
+    SCIP definition occurrence) so get_code_snippet can window on the symbol's
+    own location instead of falling back to the file head. ``line_end`` is left
+    null until the emitter surfaces an enclosing range.
+
     Exported so tests can inspect the exact payload without a live Neo4j.
     """
+    line_starts = def_line_starts or {}
     rows: list[dict[str, Any]] = []
     for si in symbol_infos:
         file_path = def_file_paths.get(si.qualified_name)
@@ -158,6 +167,8 @@ def build_symbol_node_rows(
                 "file_path": file_path,
                 "module_name": si.module_name or None,
                 "source_scope": source_scope,
+                "line_start": line_starts.get(si.qualified_name),
+                "line_end": None,
             }
         )
     return rows
@@ -195,6 +206,7 @@ async def write_symbol_nodes(
     run_id: str,
     seen_at: datetime,
     commit_sha: str,
+    def_line_starts: dict[str, int] | None = None,
     recipe: "Recipe | None" = None,
 ) -> int:
     """Write :Symbol nodes and edges to Neo4j in UNWIND batches.
@@ -206,7 +218,11 @@ async def write_symbol_nodes(
         return 0
 
     node_rows = build_symbol_node_rows(
-        symbol_infos, def_file_paths, group_id, recipe=recipe
+        symbol_infos,
+        def_file_paths,
+        group_id,
+        def_line_starts=def_line_starts,
+        recipe=recipe,
     )
 
     async with driver.session() as session:

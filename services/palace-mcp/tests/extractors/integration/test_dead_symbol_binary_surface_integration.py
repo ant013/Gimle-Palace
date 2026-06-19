@@ -255,7 +255,7 @@ async def test_dead_symbol_run_writes_candidates_binary_surfaces_and_edges(
     not _HAS_NEO4J_RUNTIME,
     reason="requires Docker socket or COMPOSE_NEO4J_URI for Neo4j integration",
 )
-async def test_dead_symbol_run_is_idempotent_on_real_neo4j(
+async def test_dead_symbol_run_replaces_snapshot_on_real_neo4j(
     driver: AsyncDriver,
     graphiti_mock: MagicMock,
     _project_repo_and_seed: Path,
@@ -275,10 +275,23 @@ async def test_dead_symbol_run_is_idempotent_on_real_neo4j(
     assert first["success"] is True
     assert first["nodes_written"] == 4
     assert first["edges_written"] == 4
+    # Replace-snapshot (dogfood #4): a re-ingest DETACH DELETEs the prior project
+    # snapshot then rewrites it, so the second run recreates the same counts
+    # (not 0 — it is no longer an idempotent MERGE) ...
     assert second["ok"] is True
     assert second["success"] is True
-    assert second["nodes_written"] == 0
-    assert second["edges_written"] == 0
+    assert second["nodes_written"] == 4
+    assert second["edges_written"] == 4
+
+    # ... and crucially does NOT accumulate stale candidates across runs.
+    async with driver.session() as session:
+        count_result = await session.run(
+            "MATCH (c:DeadSymbolCandidate {project: $project}) "
+            "RETURN count(c) AS count",
+            project=PROJECT_SLUG,
+        )
+        count_row = await count_result.single()
+    assert count_row is not None and count_row["count"] == 3
 
 
 @pytest.mark.integration

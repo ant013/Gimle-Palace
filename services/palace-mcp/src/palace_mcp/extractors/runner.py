@@ -290,6 +290,7 @@ async def run_extractor(
     timeout_s: float = EXTRACTOR_TIMEOUT_S,
     scip_path: str | None = None,
     companion_run_id: str | None = None,
+    force: bool = False,
 ) -> dict[str, Any]:
     """Full lifecycle: precheck → create :IngestRun → execute → finalize."""
     # 1. Precheck (driver used for :Project lookup)
@@ -353,6 +354,7 @@ async def run_extractor(
         logger=logger,
         scip_path=scip_path_override,
         companion_run_id=companion_run_id,
+        force=force,
     )
     exec_result = await _execute(
         extractor=pre.extractor,

@@ -37,7 +37,7 @@ RETURN s.qualified_name AS qualified_name,
        coalesce(s.short_name, '') AS short_name,
        coalesce(s.kind, '') AS kind,
        coalesce(s.label, '') AS label,
-       s.commit_sha AS commit_sha,
+       coalesce(s.commit_sha, s.last_seen_in_commit) AS commit_sha,
        s.line_start AS line_start,
        s.line_end AS line_end
 ORDER BY CASE WHEN s.qualified_name = $qualified_name THEN 0 ELSE 1 END,

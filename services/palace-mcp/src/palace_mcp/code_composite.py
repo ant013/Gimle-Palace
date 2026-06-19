@@ -17,7 +17,7 @@ import logging
 import re
 from collections.abc import Callable, Hashable
 from dataclasses import dataclass, field
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, cast
 
 from mcp import ClientSession
 from pydantic import BaseModel, Field, ValidationError, field_validator
@@ -82,6 +82,22 @@ async def _resolve_slug(driver: Any, slug: str) -> SlugResolution:
 _QN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*(\.[A-Za-z_][A-Za-z0-9_-]*)*$")
 
 
+def _is_acceptable_qn(v: str) -> bool:
+    """Accept a dotted/short identifier (``App.Foo.bar``) OR a SCIP-style symbol
+    (e.g. ``WalletCore s%3A10WalletCore16AddressViewModelC`` or the ``s:`` form).
+
+    SCIP qns carry a module-space prefix and/or a %-encoded / colon scheme marker
+    that the dotted-identifier regex rejects, yet the downstream resolver
+    (``_qualified_name_variants`` / ``_resolve_qualified_name``) already
+    understands them — rejecting them at the boundary made get_snippet_rich /
+    test_impact unusable with the exact qns search/semantic tools emit (dogfood).
+    Only obvious garbage (no identifier, no SCIP marker) is rejected.
+    """
+    if _QN_RE.match(v):
+        return True
+    return " " in v or "%3" in v or "s:" in v
+
+
 def _needs_human_resolution(qualified_name: str) -> bool:
     return (
         qualified_name.startswith("scip-")
@@ -111,10 +127,10 @@ class TestImpactRequest(BaseModel):
     @field_validator("qualified_name")
     @classmethod
     def _qn_charset(cls, v: str) -> str:
-        if not _QN_RE.match(v):
+        if not _is_acceptable_qn(v):
             raise ValueError(
-                "qualified_name must be a dotted Python identifier "
-                "(components match [A-Za-z_][A-Za-z0-9_-]*; allows slug-style hyphens)"
+                "qualified_name must be a dotted identifier (App.Foo.bar) or a "
+                'SCIP-style symbol (e.g. "Module s%3A...")'
             )
         return v
 
@@ -947,10 +963,10 @@ class GetSnippetRichRequest(BaseModel):
     @field_validator("qualified_name")
     @classmethod
     def _qn_charset(cls, v: str) -> str:
-        if not _QN_RE.match(v):
+        if not _is_acceptable_qn(v):
             raise ValueError(
-                "qualified_name must be a dotted Python identifier "
-                "(components match [A-Za-z_][A-Za-z0-9_-]*; allows slug-style hyphens)"
+                "qualified_name must be a dotted identifier (App.Foo.bar) or a "
+                'SCIP-style symbol (e.g. "Module s%3A...")'
             )
         return v
 
@@ -1571,20 +1587,32 @@ def register_code_composite_tools(
             return disambig
         _short_name, resolved_qn = disambig
 
-        # Step 2: Get snippet — must succeed for the tool to return ok=true
-        raw_snippet = await session.call_tool(
-            "get_code_snippet",
-            arguments={"qualified_name": resolved_qn, "project": cm_project},
-        )
-        if raw_snippet.isError:
-            cm_msg = code_router.parse_cm_result(raw_snippet).get("_raw", "")
-            return {
-                "ok": False,
-                "error_code": "cm_error",
-                "requested_qualified_name": req.qualified_name,
-                "message": f"CM error from get_code_snippet: {cm_msg}",
-            }
-        snippet_data = code_router.parse_cm_result(raw_snippet)
+        # Step 2: Get snippet — prefer the native path. The CM get_code_snippet
+        # errors on SCIP qns / native-only projects (dogfood #7: get_snippet_rich
+        # returned cm_error for the exact qns search/semantic emit). Only fall back
+        # to CM when the native path explicitly defers (project-less / unmounted).
+        from palace_mcp.code.native_detect_changes import FALLBACK_TO_CM
+        from palace_mcp.code.native_get_code_snippet import native_get_code_snippet
+
+        native_snippet = await native_get_code_snippet(resolved_qn, project=neo4j_slug)
+        if native_snippet is FALLBACK_TO_CM:
+            raw_snippet = await session.call_tool(
+                "get_code_snippet",
+                arguments={"qualified_name": resolved_qn, "project": cm_project},
+            )
+            if raw_snippet.isError:
+                cm_msg = code_router.parse_cm_result(raw_snippet).get("_raw", "")
+                return {
+                    "ok": False,
+                    "error_code": "cm_error",
+                    "requested_qualified_name": req.qualified_name,
+                    "message": f"CM error from get_code_snippet: {cm_msg}",
+                }
+            snippet_data = code_router.parse_cm_result(raw_snippet)
+        elif isinstance(native_snippet, dict) and native_snippet.get("ok") is False:
+            return {**native_snippet, "requested_qualified_name": req.qualified_name}
+        else:
+            snippet_data = cast(dict[str, Any], native_snippet)
         file_path = snippet_data.get("file_path", "")
         start_line = snippet_data.get("start_line")
         end_line = snippet_data.get("end_line")

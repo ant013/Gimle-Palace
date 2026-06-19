@@ -66,6 +66,10 @@ class ExtractorRunContext:
     logger: logging.Logger
     scip_path: Path | None = None
     companion_run_id: str | None = None
+    # When True, bypass content-freshness short-circuits (e.g. symbol_index_swift's
+    # body_hash skip) so a writer/schema change can be rolled out over unchanged
+    # source without hand-clearing :File.body_hash.
+    force: bool = False
 
 
 class ExtractorOutcome(StrEnum):

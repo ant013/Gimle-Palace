@@ -231,3 +231,39 @@ class TestFindIdiomModuleFilter:
         assert payload["total_outlier_samples"] == 50
         assert payload["truncated"] is True
         assert len(payload["outlier_samples"]) == 5
+
+
+# ---------------------------------------------------------------------------
+# Test 6: project_id key — must match what coding_convention writes (bare slug)
+# ---------------------------------------------------------------------------
+
+
+class TestFindIdiomProjectIdKey:
+    """Regression (dogfood W-skill rec #19): the coding_convention extractor
+    writes :Convention nodes with project_id = bare slug (ctx.project_slug);
+    its own audit_contract query matches the same bare-slug key. find_idiom
+    previously prefixed 'project/', so it silently matched zero nodes even
+    after the extractor wrote 1229 of them. Every query must use the bare slug.
+    """
+
+    @pytest.mark.asyncio
+    async def test_queries_bare_slug_project_id(self) -> None:
+        driver = _mock_driver_with_data(
+            conv_records=[_CONV_ROW],
+            viol_records=[],
+            total_violations=0,
+        )
+
+        with patch("palace_mcp.mcp_server.get_driver", return_value=driver):
+            mcp = _make_mcp_and_register()
+            payload = await _call(mcp, kind="naming", project="uw-ios-app")
+
+        assert payload["ok"] is True
+        assert payload["project"] == "uw-ios-app"
+        session = driver.session.return_value.__aenter__.return_value
+        assert session.run.call_args_list, "expected at least one Cypher call"
+        for call in session.run.call_args_list:
+            assert call.kwargs.get("project_id") == "uw-ios-app", (
+                "find_idiom must query bare-slug project_id "
+                "(coding_convention writes ctx.project_slug), not 'project/'-prefixed"
+            )
