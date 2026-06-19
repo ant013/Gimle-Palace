@@ -476,9 +476,14 @@ async def _refresh_graph_state(
 ) -> tuple[int, int, int]:
     # Keep graph-layer freshness aligned even when Tantivy ingest is skipped.
     def_file_paths: dict[str, str] = {}
+    def_line_starts: dict[str, int] = {}
     for occ in iter_occurrences():
         if occ.kind in (SymbolKind.DEF, SymbolKind.DECL):
             def_file_paths.setdefault(occ.symbol_qualified_name, occ.file_path)
+            # SCIP ranges are 0-based; snippet windows / get_code_snippet are
+            # 1-based. Record the declaration line so the snippet windows on the
+            # symbol instead of falling back to the file head (dogfood W8c).
+            def_line_starts.setdefault(occ.symbol_qualified_name, occ.line + 1)
 
     graph_seen_at = datetime.now(tz=timezone.utc)
     shadow_rows = _build_shadow_rows(
@@ -506,6 +511,7 @@ async def _refresh_graph_state(
                 run_id=run_id,
                 seen_at=graph_seen_at,
                 commit_sha=commit_sha,
+                def_line_starts=def_line_starts,
             )
             sym_batch = []
     if sym_batch:
@@ -518,6 +524,7 @@ async def _refresh_graph_state(
             run_id=run_id,
             seen_at=graph_seen_at,
             commit_sha=commit_sha,
+            def_line_starts=def_line_starts,
         )
 
     deleted_count = 0

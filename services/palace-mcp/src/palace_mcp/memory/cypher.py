@@ -358,12 +358,18 @@ ORDER BY r.started_at DESC
 LIMIT 1
 """
 
+# The SCIP symbol writer stamps the indexed commit as `last_seen_in_commit`
+# (symbol_node_writer); only some extractors set `commit_sha`. Coalesce both so
+# the indexed commit surfaces for SCIP-indexed projects. Exclude :Deprecated so
+# pruned (stale) nodes from an earlier snapshot don't outvote the live commit.
 PROJECT_INDEXED_COMMIT = """
 MATCH (n)
 WHERE n.group_id = $group_id
   AND (n:Symbol OR n:File)
-  AND n.commit_sha IS NOT NULL
-RETURN n.commit_sha AS commit_sha, count(*) AS c
+  AND NOT n:Deprecated
+  AND coalesce(n.last_seen_in_commit, n.commit_sha) IS NOT NULL
+WITH coalesce(n.last_seen_in_commit, n.commit_sha) AS commit_sha, count(*) AS c
+RETURN commit_sha, c
 ORDER BY c DESC, commit_sha DESC
 LIMIT 1
 """

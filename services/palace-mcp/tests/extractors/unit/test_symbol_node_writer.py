@@ -33,6 +33,12 @@ class TestMergeQueryClearsDeletedAt:
         assert "DELETE old" in _MERGE_SYMBOLS
         assert "MERGE (s)-[:LAST_SEEN_IN]->(run)" in _MERGE_SYMBOLS
 
+    def test_merge_symbols_sets_line_range(self) -> None:
+        # dogfood W8c: get_code_snippet windows on s.line_start/s.line_end and
+        # otherwise falls back to the file head.
+        assert "s.line_start" in _MERGE_SYMBOLS
+        assert "s.line_end" in _MERGE_SYMBOLS
+
     def test_soft_delete_query_uses_group_id_and_qnames(self) -> None:
         assert "$group_id" in _SOFT_DELETE_ABSENT
         assert "$qnames" in _SOFT_DELETE_ABSENT
@@ -59,6 +65,26 @@ class TestBuildSymbolNodeRows:
         assert row["label"] == "Class"
         assert row["short_name"] == "Foo"
         assert row["file_path"] is None
+        # No def_line_starts → line_start/line_end null (snippet falls back).
+        assert row["line_start"] is None
+        assert row["line_end"] is None
+
+    def test_line_start_from_def_line_starts(self) -> None:
+        # dogfood W8c: declaration line threaded onto the row so get_code_snippet
+        # windows on the symbol instead of returning the file head.
+        from palace_mcp.extractors.scip_parser import ScipSymbolInfo
+
+        si = ScipSymbolInfo(
+            qualified_name="App.Foo",
+            scip_kind_name="Class",
+            module_name="App",
+            relationships=(),
+        )
+        rows = build_symbol_node_rows(
+            [si], {}, "project/test", def_line_starts={"App.Foo": 42}
+        )
+        assert rows[0]["line_start"] == 42
+        assert rows[0]["line_end"] is None
 
 
 class TestSoftDeleteSymbols:

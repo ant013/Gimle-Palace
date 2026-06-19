@@ -2,9 +2,25 @@ from palace_mcp.memory.cypher import (
     ENTITY_COUNTS_BY_PROJECT,
     LIST_PROJECT_SLUGS,
     LOOKUP_PROJECT_NAMESPACE,
+    PROJECT_INDEXED_COMMIT,
     UPSERT_PROJECT,
 )
 from palace_mcp.memory.schema import ProjectInfo
+
+
+def test_indexed_commit_reads_last_seen_in_commit() -> None:
+    # symbol_node_writer stamps the indexed commit as `last_seen_in_commit`,
+    # not `commit_sha` — the query must coalesce both or it surfaces null
+    # (dogfood W1: get_project_overview.indexed_commit was always null despite
+    # 248k symbols carrying last_seen_in_commit).
+    assert "last_seen_in_commit" in PROJECT_INDEXED_COMMIT
+    assert "coalesce(n.last_seen_in_commit, n.commit_sha)" in PROJECT_INDEXED_COMMIT
+
+
+def test_indexed_commit_excludes_deprecated() -> None:
+    # pruned (stale-snapshot) nodes keep their old commit; excluding them keeps
+    # the surfaced commit the live one.
+    assert "NOT n:Deprecated" in PROJECT_INDEXED_COMMIT
 
 
 def test_upsert_project_merges_by_slug() -> None:
