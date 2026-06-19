@@ -8,7 +8,7 @@ regular C function pointers and are compatible with ctypes without ObjC blocks.
 IndexStore v5 on-disk layout::
 
     <store_path>/
-        v5/units/*.IDXU   – compiled-unit descriptors
+        v5/units/*        – compiled-unit descriptors
         v5/records/*.IDXR – per-source-file symbol occurrence records
 
 Query strategy:

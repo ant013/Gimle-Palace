@@ -108,8 +108,8 @@ done
 if [[ "$emit_index" == "1" ]]; then
     case "$indexstore_format" in
         v5)
-            mkdir -p "$derived_data/Index.noindex/DataStore/v5"
-            printf 'unit\n' > "$derived_data/Index.noindex/DataStore/v5/mock.IDXU"
+            mkdir -p "$derived_data/Index.noindex/DataStore/v5/units"
+            printf 'unit\n' > "$derived_data/Index.noindex/DataStore/v5/units/mock-unit"
             ;;
         unidb)
             mkdir -p "$derived_data/Index.noindex/DataStore"
@@ -148,7 +148,7 @@ assert_contains "$SUCCESS_OUT" "index_store_format=v5"
 assert_contains "$SUCCESS_OUT" "dry_run=false"
 [[ -f "$TMP_DIR/output-success/index.scip.marker" ]] || fail "emitter did not run after indexed xcodebuild failure"
 [[ -f "$TMP_DIR/repo/Unstoppable/Unstoppable/Configuration/Config.xcconfig" ]] || fail "Config.xcconfig was not prepared"
-[[ -f "$TMP_DIR/derived-success/Index.noindex/DataStore/v5/mock.IDXU" ]] || fail "IndexStore v5 record was not retained"
+[[ -f "$TMP_DIR/derived-success/Index.noindex/DataStore/v5/units/mock-unit" ]] || fail "IndexStore v5 unit record was not retained"
 assert_contains "$TMP_DIR/.env" 'PALACE_SCIP_INDEX_PATHS={"uw-ios-app":"/repos-hs/unstoppable-wallet-ios/scip/index.scip"}'
 assert_contains "$TMP_DIR/.env" 'PALACE_INDEXSTORE_PATHS={"uw-ios-app":"/repos-hs/unstoppable-wallet-ios/.palace-scip-derived-data-app/Index.noindex/DataStore"}'
 

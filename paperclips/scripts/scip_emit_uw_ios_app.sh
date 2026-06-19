@@ -249,8 +249,8 @@ verify_v5_indexstore() {
         die "IndexStore at $data_store_path is UniDB format. palace.code.call_hierarchy requires v5 DataStore; stop here and report the toolchain limitation."
     fi
     [[ "$fmt" == "v5" ]] || die "IndexStore path missing or unrecognized at $data_store_path"
-    find "$data_store_path/v5" -name '*.IDXU' -print -quit | grep -q . || \
-        die "IndexStore at $data_store_path is missing v5/*.IDXU records"
+    find "$data_store_path/v5/units" -type f -print -quit | grep -q . || \
+        die "IndexStore at $data_store_path is missing v5/units records"
 }
 
 REPO_PATH=""
