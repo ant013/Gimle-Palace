@@ -79,6 +79,13 @@ class Settings(BaseSettings):
         gt=0,
         description="Write-merge buffer size in MB (not runtime mmap budget).",
     )
+    palace_incremental_ingest: bool = Field(
+        default=False,
+        description=(
+            "Enable incremental Tantivy rewrites for symbol_index_swift when "
+            "only a subset of files changed."
+        ),
+    )
 
     # SCIP integration (101a decides pathing; 101b does the actual parse)
     palace_scip_index_paths: Annotated[dict[str, str], NoDecode] = Field(

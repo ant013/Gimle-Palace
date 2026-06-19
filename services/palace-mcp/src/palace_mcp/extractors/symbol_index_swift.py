@@ -127,6 +127,7 @@ RETURN f.path AS path, f.body_hash AS body_hash
 """
 
 _GRAPH_BATCH_SIZE = 500
+_INCREMENTAL_FULL_REPROCESS_THRESHOLD = 0.8
 
 
 class SymbolIndexSwift(BaseExtractor):
@@ -194,6 +195,9 @@ class SymbolIndexSwift(BaseExtractor):
             previous_body_hashes = await _read_existing_file_body_hashes(
                 driver, project_id=ctx.group_id
             )
+            changed_files: set[str] = set()
+            removed_files: set[str] = set()
+            incremental_tantivy = False
             if (
                 not ctx.force
                 and previous_body_hashes
@@ -236,9 +240,33 @@ class SymbolIndexSwift(BaseExtractor):
                         "freshness_reason": "body_hash_mismatch",
                         "changed_files": [
                             path
-                            for path, body_hash in sorted(current_body_hashes.items())
-                            if previous_body_hashes.get(path) != body_hash
+                            for path in sorted(current_body_hashes)
+                            if previous_body_hashes.get(path)
+                            != current_body_hashes[path]
                         ][:10],
+                    },
+                )
+                changed_files, removed_files, changed_ratio = _diff_file_body_hashes(
+                    previous_body_hashes=previous_body_hashes,
+                    current_body_hashes=current_body_hashes,
+                )
+                incremental_tantivy = (
+                    not ctx.force
+                    and _incremental_ingest_enabled(settings)
+                    and changed_ratio < _INCREMENTAL_FULL_REPROCESS_THRESHOLD
+                )
+                logger.info(
+                    "symbol_index_swift.tantivy.plan",
+                    extra={
+                        "extractor": self.name,
+                        "project": ctx.project_slug,
+                        "run_id": ctx.run_id,
+                        "tantivy_mode": (
+                            "incremental" if incremental_tantivy else "full_reprocess"
+                        ),
+                        "changed_file_count": len(changed_files),
+                        "removed_file_count": len(removed_files),
+                        "changed_file_ratio": changed_ratio,
                     },
                 )
 
@@ -253,6 +281,11 @@ class SymbolIndexSwift(BaseExtractor):
                 tantivy_path,
                 heap_size_mb=settings.palace_tantivy_heap_mb,
             ) as bridge:
+                selected_paths = changed_files if incremental_tantivy else None
+                if incremental_tantivy:
+                    await bridge.delete_by_file_paths_async(
+                        sorted(changed_files | removed_files)
+                    )
                 check_phase_budget(
                     nodes_written_so_far=total_written,
                     max_occurrences_total=settings.palace_max_occurrences_total,
@@ -260,10 +293,10 @@ class SymbolIndexSwift(BaseExtractor):
                 )
                 p1 = await _ingest_batch(
                     bridge,
-                    (
-                        occ
-                        for occ in _iter_occurrences()
-                        if occ.kind in (SymbolKind.DEF, SymbolKind.DECL)
+                    _iter_selected_occurrences(
+                        occurrences=_iter_occurrences(),
+                        selected_paths=selected_paths,
+                        kinds=(SymbolKind.DEF, SymbolKind.DECL),
                     ),
                     "phase1_defs",
                 )
@@ -291,7 +324,10 @@ class SymbolIndexSwift(BaseExtractor):
                     p2 = await _ingest_batch(
                         bridge,
                         _iter_phase2_occurrences(
-                            occurrences=_iter_occurrences(),
+                            occurrences=_iter_selected_occurrences(
+                                occurrences=_iter_occurrences(),
+                                selected_paths=selected_paths,
+                            ),
                             counter=counter,
                             settings=settings,
                         ),
@@ -320,10 +356,13 @@ class SymbolIndexSwift(BaseExtractor):
                     )
                     p3 = await _ingest_batch(
                         bridge,
-                        (
-                            _with_importance(occ, counter, settings)
-                            for occ in _iter_occurrences()
-                            if occ.kind == SymbolKind.USE and _is_vendor(occ.file_path)
+                        _iter_vendor_occurrences(
+                            occurrences=_iter_selected_occurrences(
+                                occurrences=_iter_occurrences(),
+                                selected_paths=selected_paths,
+                            ),
+                            counter=counter,
+                            settings=settings,
                         ),
                         "phase3_vendor_uses",
                     )
@@ -412,6 +451,31 @@ async def _ingest_batch(
 
 def _load_or_reset_counter(tantivy_path: Path, run_id: str) -> BoundedInDegreeCounter:
     return load_or_reset_in_degree_counter(tantivy_path, run_id, logger=logger)
+
+
+def _incremental_ingest_enabled(settings: object) -> bool:
+    value = getattr(settings, "palace_incremental_ingest", False)
+    return value if isinstance(value, bool) else False
+
+
+def _diff_file_body_hashes(
+    *,
+    previous_body_hashes: dict[str, str],
+    current_body_hashes: dict[str, str],
+) -> tuple[set[str], set[str], float]:
+    current_paths = set(current_body_hashes)
+    previous_paths = set(previous_body_hashes)
+    changed_files = {
+        path
+        for path in current_paths
+        if previous_body_hashes.get(path) != current_body_hashes[path]
+    }
+    removed_files = previous_paths - current_paths
+    total_paths = len(previous_paths | current_paths)
+    changed_ratio = (
+        len(changed_files | removed_files) / total_paths if total_paths else 0.0
+    )
+    return changed_files, removed_files, changed_ratio
 
 
 def _build_file_body_hashes(
@@ -650,6 +714,32 @@ def _iter_phase2_occurrences(
         occ = _with_importance(occ, counter, settings)
         if occ.importance >= threshold:
             yield occ
+
+
+def _iter_selected_occurrences(
+    *,
+    occurrences: Iterable[SymbolOccurrence],
+    selected_paths: set[str] | None,
+    kinds: tuple[SymbolKind, ...] | None = None,
+) -> Iterable[SymbolOccurrence]:
+    for occ in occurrences:
+        if selected_paths is not None and occ.file_path not in selected_paths:
+            continue
+        if kinds is not None and occ.kind not in kinds:
+            continue
+        yield occ
+
+
+def _iter_vendor_occurrences(
+    *,
+    occurrences: Iterable[SymbolOccurrence],
+    counter: BoundedInDegreeCounter,
+    settings: object,
+) -> Iterable[SymbolOccurrence]:
+    for occ in occurrences:
+        if occ.kind != SymbolKind.USE or not _is_vendor(occ.file_path):
+            continue
+        yield _with_importance(occ, counter, settings)
 
 
 def _is_vendor(file_path: str) -> bool:

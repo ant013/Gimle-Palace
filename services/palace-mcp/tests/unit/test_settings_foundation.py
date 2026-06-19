@@ -67,6 +67,14 @@ class TestSettingsFoundationDefaults:
         s = Settings()
         assert s.palace_tantivy_heap_mb == 100
 
+    def test_incremental_ingest_default_off(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        for k, v in _minimal_env().items():
+            monkeypatch.setenv(k, v)
+        s = Settings()
+        assert s.palace_incremental_ingest is False
+
     def test_scip_index_paths_default_empty(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -101,6 +109,13 @@ class TestSettingsFoundationOverrides:
         monkeypatch.setenv("PALACE_TANTIVY_HEAP_MB", "256")
         s = Settings()
         assert s.palace_tantivy_heap_mb == 256
+
+    def test_incremental_ingest_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        for k, v in _minimal_env().items():
+            monkeypatch.setenv(k, v)
+        monkeypatch.setenv("PALACE_INCREMENTAL_INGEST", "true")
+        s = Settings()
+        assert s.palace_incremental_ingest is True
 
     def test_max_occurrences_total_override(
         self, monkeypatch: pytest.MonkeyPatch
