@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from palace_mcp.code.edges import CALL_EDGES
+from palace_mcp.code.edges import TRACE_CALL_EDGES
 from palace_mcp.code.native_detect_changes import FALLBACK_TO_CM
 from palace_mcp.code.native_query_graph import _redact_error
 
@@ -45,7 +45,7 @@ def _clamp_depth(depth: int) -> tuple[int, int | None]:
 
 
 def _relationship_alternation() -> str:
-    return "|".join(sorted(CALL_EDGES))
+    return "|".join(sorted(TRACE_CALL_EDGES))
 
 
 def _path_query(direction: str, depth: int) -> str:
