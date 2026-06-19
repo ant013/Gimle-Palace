@@ -41,7 +41,9 @@ def test_call_edge_swift_in_swift_kit_default_order_after_symbol_index() -> None
 
 
 @pytest.mark.asyncio
-async def test_run_returns_missing_input_without_indexstore_path(tmp_path: Path) -> None:
+async def test_run_returns_missing_input_without_indexstore_path(
+    tmp_path: Path,
+) -> None:
     extractor = CallEdgeSwiftExtractor()
     graphiti = MagicMock()
 
@@ -70,7 +72,9 @@ async def test_run_drops_edges_without_active_symbols(tmp_path: Path) -> None:
     session = AsyncMock()
     session.run = AsyncMock(
         side_effect=[
-            MagicMock(data=AsyncMock(return_value=[{"qualified_name": "UwMiniCore caller"}])),
+            MagicMock(
+                data=AsyncMock(return_value=[{"qualified_name": "UwMiniCore caller"}])
+            ),
             MagicMock(),
             MagicMock(),
         ]

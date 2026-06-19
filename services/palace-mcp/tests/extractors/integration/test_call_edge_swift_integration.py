@@ -94,7 +94,9 @@ async def test_call_edge_swift_writes_calls_edges_and_replaces_snapshot(
             target="UwMiniCore callee",
             group_id="project/gimle",
         )
-        ref_result = await session.run("MATCH ()-[rel:REFERENCES]->() RETURN count(rel) AS count")
+        ref_result = await session.run(
+            "MATCH ()-[rel:REFERENCES]->() RETURN count(rel) AS count"
+        )
         call_record = await call_result.single()
         ref_record = await ref_result.single()
 

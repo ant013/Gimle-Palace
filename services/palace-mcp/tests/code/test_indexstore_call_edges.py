@@ -58,7 +58,9 @@ class _FakeBoundLib:
     def indexstore_unit_dependency_get_kind(self, *_: object) -> int:
         return _is._UNIT_DEP_RECORD
 
-    def indexstore_unit_dependency_get_name(self, dep: dict[str, str]) -> _FakeStringRef:
+    def indexstore_unit_dependency_get_name(
+        self, dep: dict[str, str]
+    ) -> _FakeStringRef:
         return _FakeStringRef(dep["name"])
 
     def indexstore_record_reader_create(self, *_: object) -> object:
@@ -82,7 +84,9 @@ class _FakeBoundLib:
     ) -> dict[str, str]:
         return occurrence["symbol"]  # type: ignore[return-value]
 
-    def indexstore_occurrence_relations_apply_f(self, occurrence: dict[str, object], *_: object) -> bool:
+    def indexstore_occurrence_relations_apply_f(
+        self, occurrence: dict[str, object], *_: object
+    ) -> bool:
         callback = _[-1]
         for relation in occurrence.get("relations", []):  # type: ignore[assignment]
             if callback(None, relation) is False:
