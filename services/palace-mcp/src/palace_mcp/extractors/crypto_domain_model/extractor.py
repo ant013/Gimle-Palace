@@ -175,7 +175,7 @@ class CryptoDomainModelExtractor(BaseExtractor):
 
         # Deduplicate: coalesce per (file, start_line, end_line, kind), keep
         # highest severity (D5 decision).
-        deduped = _dedup_findings(findings)
+        deduped = _dedup_findings(findings, repo_root=ctx.repo_path)
 
         if scope.mode == IncrementalMode.INCREMENTAL:
             await _delete_findings_for_paths(
@@ -227,15 +227,27 @@ _SEVERITY_RANK: dict[str, int] = {
 }
 
 
+def _normalise_finding_path(repo_root: Path, path_str: str) -> str:
+    raw_path = Path(path_str)
+    if raw_path.is_absolute():
+        try:
+            return raw_path.relative_to(repo_root).as_posix()
+        except ValueError:
+            return raw_path.as_posix()
+    return raw_path.as_posix()
+
+
 def _dedup_findings(
     raw: list[dict[str, Any]],
+    *,
+    repo_root: Path,
 ) -> list[dict[str, Any]]:
     """Coalesce findings per (file, start_line, end_line, kind), keep highest severity."""
     from palace_mcp.extractors.foundation.source_context import classify
 
     best: dict[tuple[str, int, int, str], dict[str, Any]] = {}
     for r in raw:
-        path = r.get("path", "")
+        path = _normalise_finding_path(repo_root, str(r.get("path", "")))
         start = r.get("start", {}).get("line", 0)
         end = r.get("end", {}).get("line", start)
         rule_id = r.get("check_id", "unknown")
