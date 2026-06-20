@@ -39,8 +39,14 @@ existing full-reprocess threshold, while preserving prune/dead-code correctness.
   symbols and does not traverse relationships from/to those symbols.
 - AC-6: `prune_swift_symbols` threshold denominator excludes `:Deprecated`
   nodes.
-- AC-7: P1-TC-01 through P1-TC-14 and prune threshold boundary tests are mapped
-  to concrete tests and pass locally before the PR is handed to review.
+- AC-7: B1-a liveness bump verification proves `< 60 s` wall-clock on the
+  representative UW symbol volume and no read-block for a concurrent
+  read-only Neo4j query.
+- AC-8: Phase 1 graph update verification proves edit-1-file graph work
+  completes in `< ~3 min` excluding xcodebuild.
+- AC-9: P1-TC-01 through P1-TC-14 and prune threshold tests for `0.50`,
+  `0.51`, `overall_total == 0`, and multi-generation liveness are mapped to
+  concrete tests and pass locally before the PR is handed to review.
 
 ## Work Plan
 
@@ -93,6 +99,8 @@ existing full-reprocess threshold, while preserving prune/dead-code correctness.
    - Verification: P1-TC-01 and P1-TC-08 pass against real Neo4j; unit tests
      assert the B1 query contains `IN TRANSACTIONS`, `group_id`, `deleted_at IS
      NULL`, `NOT s:Deprecated`, and excludes just-written qualified names.
+     Benchmark output records `< 60 s` wall-clock for the B1 bump and a
+     concurrent read-only Neo4j query completing during the bump.
 
 5. [ ] Handle removed files without global symbol soft-delete.
    - Owner: `CXPythonEngineer`.
@@ -113,10 +121,12 @@ existing full-reprocess threshold, while preserving prune/dead-code correctness.
      `last_seen_in_run_id`; after changed-file relationship writes, stale
      relationships whose source file is in the changed set and whose run id is
      not current are deleted. The delete is `group_id` scoped through endpoint
-     symbols.
-   - Verification: P1-TC-13 passes against real Neo4j; unit tests assert each
-     relationship query sets `last_seen_in_run_id` and stale-delete only targets
-     `REFERENCES|CONFORMS_TO|EXTENDS|EXTENSION_OF`.
+     symbols. The test matrix covers the unchanged-source / moved-renamed
+     target orphan case from the spec instead of leaving it to Phase 2.
+   - Verification: P1-TC-13 passes against real Neo4j for both removed
+     reference edges and unchanged-source / moved-renamed target orphans; unit
+     tests assert each relationship query sets `last_seen_in_run_id` and
+     stale-delete only targets `REFERENCES|CONFORMS_TO|EXTENDS|EXTENSION_OF`.
 
 7. [ ] Fix dead_code loader and prune denominator correctness.
    - Owner: `CXPythonEngineer`.
@@ -128,7 +138,10 @@ existing full-reprocess threshold, while preserving prune/dead-code correctness.
      NULL` and `:Deprecated` symbols; prune `overall_total` excludes
      `:Deprecated`.
    - Verification: dead_code unit tests prove filtered symbols/edges are absent;
-     T-B1 proves stale ratio `0.50` proceeds, T-B2 proves `0.51` aborts.
+     T-B1 proves stale ratio `0.50` proceeds, T-B2 proves `0.51` aborts, T-B3
+     proves `overall_total == 0` does not divide by zero, and T-B4 proves
+     multi-generation liveness keeps run N-1 symbols live while deprecating
+     run N-2 symbols.
 
 8. [ ] Final verification and PR handoff.
    - Owner: `CXPythonEngineer`.
@@ -140,6 +153,8 @@ existing full-reprocess threshold, while preserving prune/dead-code correctness.
      - `uv run ruff format --check`
      - `uv run mypy src/`
      - `uv run pytest tests/extractors/unit/test_symbol_index_swift.py tests/extractors/unit/test_symbol_node_writer.py tests/extractors/unit/test_dead_code_swift_contract.py tests/extractors/prune_swift_symbols/test_cypher.py tests/extractors/integration/test_symbol_index_swift_integration.py`
+     - benchmark/log artifact showing B1-a `< 60 s, no read-block` and Phase 1
+       graph update `< ~3 min` excluding xcodebuild
      - `gh pr checks <PR>`
 
 ## Test Mapping
@@ -158,9 +173,11 @@ existing full-reprocess threshold, while preserving prune/dead-code correctness.
 | P1-TC-10 changed ratio >= 0.8 | `tests/extractors/unit/test_symbol_index_swift.py` | full reprocess path is selected |
 | P1-TC-11 SCIP-only generated/vendor doc | same | unsafe SCIP-only path triggers full fallback |
 | P1-TC-12 detect_changes truncated | same | truncated/unsafe change set triggers full fallback |
-| P1-TC-13 B6 edge hygiene | `tests/extractors/integration/test_symbol_index_swift_integration.py` plus `tests/extractors/unit/test_symbol_node_writer.py` | removed reference edge is deleted and no stale relationship remains |
+| P1-TC-13 B6 edge hygiene | `tests/extractors/integration/test_symbol_index_swift_integration.py` plus `tests/extractors/unit/test_symbol_node_writer.py` | removed reference edge is deleted, unchanged-source / moved-renamed target orphan is removed or prevented, and no stale relationship remains |
 | P1-TC-14 Tantivy/Neo4j consistency | `tests/extractors/integration/test_symbol_index_swift_integration.py` | removed-file path is absent from Tantivy and deprecated in Neo4j |
-| T-B1/T-B2 prune boundaries | `tests/extractors/prune_swift_symbols/test_cypher.py` and `test_extractor.py` | 0.50 proceeds; 0.51 aborts |
+| T-B1/T-B2/T-B3/T-B4 prune boundaries | `tests/extractors/prune_swift_symbols/test_cypher.py` and `test_extractor.py` | 0.50 proceeds; 0.51 aborts; `overall_total == 0` proceeds without divide-by-zero; multi-generation liveness deprecates run N-2 while preserving run N-1 |
+| PERF-B1 | benchmark/log artifact attached to implementation PR | B1-a bump is `< 60 s` and a concurrent read-only Neo4j query is not blocked |
+| PERF-P1 | benchmark/log artifact attached to implementation PR | edit-1-file Phase 1 graph update is `< ~3 min` excluding xcodebuild |
 
 ## Handoff Sequence
 
