@@ -281,7 +281,7 @@ async def test_incremental_run_does_not_deprecate_unchanged_file_symbols(
     subprocess.run(["git", "config", "user.name", "t"], cwd=repo, check=True)
     subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
     subprocess.run(["git", "commit", "-q", "-m", "initial"], cwd=repo, check=True)
-    head_sha = subprocess.check_output(
+    initial_head_sha = subprocess.check_output(
         ["git", "rev-parse", "HEAD"],
         cwd=repo,
         text=True,
@@ -334,6 +334,15 @@ async def test_incremental_run_does_not_deprecate_unchanged_file_symbols(
         first_run = await SymbolIndexSwift().run(graphiti=graphiti_mock, ctx=run1_ctx)
 
         _write_incremental_repo(repo, file_c_suffix="// run 2 changed")
+        subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+        subprocess.run(
+            ["git", "commit", "-q", "-m", "incremental"], cwd=repo, check=True
+        )
+        head_sha = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo,
+            text=True,
+        ).strip()
         write_scip_fixture(
             _build_incremental_prune_scip(file_c_lines=(10, 20)),
             scip_path,
@@ -364,6 +373,7 @@ async def test_incremental_run_does_not_deprecate_unchanged_file_symbols(
         assert len(docs) == 1, qname
     assert len(changed_docs) == 1
     assert changed_docs[0]["doc_key"][0].endswith(f":10:0:{head_sha}")
+    assert head_sha != initial_head_sha
 
     async with driver.session() as session:
         unchanged_result = await session.run(
