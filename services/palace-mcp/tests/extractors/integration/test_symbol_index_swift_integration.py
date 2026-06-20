@@ -339,7 +339,7 @@ async def test_incremental_run_does_not_deprecate_unchanged_file_symbols(
         )
 
     assert first_run.nodes_written == 6
-    assert second_run.nodes_written == 6
+    assert second_run.nodes_written == 2
     assert prune_stats.nodes_written == 0
 
     async with TantivyBridge(

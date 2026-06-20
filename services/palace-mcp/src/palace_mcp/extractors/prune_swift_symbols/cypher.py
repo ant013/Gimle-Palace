@@ -15,6 +15,7 @@ WITH stale_symbols, count(n) AS stale_files
 
 MATCH (m {project_id: $project_id})
 WHERE m:Symbol OR m:File
+  AND NOT m:Deprecated
 WITH stale_symbols + stale_files AS stale_total, count(m) AS overall_total
 RETURN stale_total, overall_total
 """.strip()

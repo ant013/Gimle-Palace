@@ -85,32 +85,68 @@ WHERE NOT s.qualified_name IN $qnames
 SET s.deleted_at = $now
 """
 
+_SOFT_DELETE_FILE_SCOPED = """
+MATCH (s:Symbol {group_id: $group_id})
+WHERE s.file_path IN $file_paths
+  AND NOT s.qualified_name IN $qnames
+  AND s.deleted_at IS NULL
+SET s.deleted_at = $now
+"""
+
+_BUMP_UNCHANGED_SYMBOL_LIVENESS = """
+MATCH (s:Symbol {group_id: $group_id})
+WHERE NOT s:Deprecated
+  AND s.deleted_at IS NULL
+  AND NOT s.qualified_name IN $written_changed_qnames
+CALL {
+  WITH s
+  SET s.last_seen_in_run_id = $run_id
+} IN TRANSACTIONS OF 10000 ROWS
+"""
+
 _MERGE_REFERENCES = """
 UNWIND $rows AS r
 MATCH (a:Symbol {qualified_name: r.source, group_id: r.group_id})
 MATCH (b:Symbol {qualified_name: r.target, group_id: r.group_id})
-MERGE (a)-[:REFERENCES]->(b)
+MERGE (a)-[rel:REFERENCES]->(b)
+SET rel.last_seen_in_run_id = $run_id
 """
 
 _MERGE_CONFORMS_TO = """
 UNWIND $rows AS r
 MATCH (a:Symbol {qualified_name: r.source, group_id: r.group_id})
 MATCH (b:Symbol {qualified_name: r.target, group_id: r.group_id})
-MERGE (a)-[:CONFORMS_TO]->(b)
+MERGE (a)-[rel:CONFORMS_TO]->(b)
+SET rel.last_seen_in_run_id = $run_id
 """
 
 _MERGE_EXTENDS = """
 UNWIND $rows AS r
 MATCH (a:Symbol {qualified_name: r.source, group_id: r.group_id})
 MATCH (b:Symbol {qualified_name: r.target, group_id: r.group_id})
-MERGE (a)-[:EXTENDS]->(b)
+MERGE (a)-[rel:EXTENDS]->(b)
+SET rel.last_seen_in_run_id = $run_id
 """
 
 _MERGE_EXTENSION_OF = """
 UNWIND $rows AS r
 MATCH (a:Symbol {qualified_name: r.source, group_id: r.group_id})
 MATCH (b:Symbol {qualified_name: r.target, group_id: r.group_id})
-MERGE (a)-[:EXTENSION_OF]->(b)
+MERGE (a)-[rel:EXTENSION_OF]->(b)
+SET rel.last_seen_in_run_id = $run_id
+"""
+
+_DELETE_STALE_RELATIONSHIPS = """
+MATCH (a:Symbol {group_id: $group_id})-[r:REFERENCES|CONFORMS_TO|EXTENDS|EXTENSION_OF]->(b:Symbol {group_id: $group_id})
+WHERE (
+    a.file_path IN $changed_file_paths
+    OR b.deleted_at IS NOT NULL
+    OR b:Deprecated
+)
+  AND coalesce(r.last_seen_in_run_id, "") <> $run_id
+WITH r LIMIT $batch_size
+DELETE r
+RETURN count(r) AS deleted_count
 """
 
 _MERGE_BACKED_BY_SYMBOL_SHADOWS = """
@@ -260,7 +296,11 @@ async def write_symbol_nodes(
         for rel_type, edge_rows in edges_by_type.items():
             cypher = _EDGE_QUERIES[rel_type]
             for i in range(0, len(edge_rows), _BATCH_SIZE):
-                await session.run(cypher, rows=edge_rows[i : i + _BATCH_SIZE])
+                await session.run(
+                    cypher,
+                    rows=edge_rows[i : i + _BATCH_SIZE],
+                    run_id=run_id,
+                )
 
     return len(node_rows)
 
@@ -288,3 +328,71 @@ async def soft_delete_symbols(
         )
         summary = await result.consume()
         return summary.counters.properties_set
+
+
+async def soft_delete_symbols_for_paths(
+    driver: "AsyncDriver",
+    group_id: str,
+    file_paths: set[str],
+    seen_qnames: set[str],
+    now: datetime,
+) -> int:
+    """Mark stale symbols deleted inside the affected file set only."""
+    if not file_paths:
+        return 0
+    async with driver.session() as session:
+        result = await session.run(
+            _SOFT_DELETE_FILE_SCOPED,
+            group_id=group_id,
+            file_paths=sorted(file_paths),
+            qnames=list(seen_qnames),
+            now=now,
+        )
+        summary = await result.consume()
+        return summary.counters.properties_set
+
+
+async def bump_unchanged_symbol_liveness(
+    driver: "AsyncDriver",
+    *,
+    group_id: str,
+    written_changed_qnames: set[str],
+    run_id: str,
+) -> None:
+    """Advance live unchanged symbols to the current run id."""
+    async with driver.session() as session:
+        result = await session.run(
+            _BUMP_UNCHANGED_SYMBOL_LIVENESS,
+            group_id=group_id,
+            written_changed_qnames=list(written_changed_qnames),
+            run_id=run_id,
+        )
+        await result.consume()
+
+
+async def delete_stale_relationships(
+    driver: "AsyncDriver",
+    *,
+    group_id: str,
+    changed_file_paths: set[str],
+    run_id: str,
+) -> int:
+    """Delete stale REFERENCES-family edges for changed sources or deleted targets."""
+    if not changed_file_paths:
+        return 0
+    total_deleted = 0
+    async with driver.session() as session:
+        while True:
+            result = await session.run(
+                _DELETE_STALE_RELATIONSHIPS,
+                group_id=group_id,
+                changed_file_paths=sorted(changed_file_paths),
+                run_id=run_id,
+                batch_size=_BATCH_SIZE,
+            )
+            record = await result.single()
+            deleted = int(record["deleted_count"]) if record else 0
+            total_deleted += deleted
+            if deleted < _BATCH_SIZE:
+                break
+    return total_deleted
