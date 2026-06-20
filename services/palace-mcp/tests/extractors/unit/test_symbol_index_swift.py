@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -77,6 +78,16 @@ def _make_driver() -> MagicMock:
     driver = MagicMock()
     driver.session.return_value = session_cm
     return driver
+
+
+def _run(args: list[str], cwd: Path) -> None:
+    subprocess.run(args, cwd=cwd, check=True, capture_output=True)
+
+
+def _run_text(args: list[str], cwd: Path) -> str:
+    return subprocess.run(
+        args, cwd=cwd, check=True, capture_output=True, text=True
+    ).stdout.strip()
 
 
 class TestSymbolIndexSwiftMeta:
@@ -1380,6 +1391,7 @@ async def test_derive_incremental_graph_scope_uses_git_intersection(
     ):
         selected, removed, reason = await _derive_incremental_graph_scope(
             repo_path=tmp_path,
+            previous_commit_sha="base-sha",
             scip_paths={
                 "Sources/App/Changed.swift",
                 "Sources/App/Added.swift",
@@ -1400,7 +1412,41 @@ async def test_derive_incremental_graph_scope_uses_git_intersection(
 
 
 @pytest.mark.asyncio
-async def test_derive_incremental_graph_scope_falls_back_on_truncated_git_status(
+async def test_derive_incremental_graph_scope_uses_git_diff_for_clean_commits(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    swift_path = repo / "Sources" / "App" / "Changed.swift"
+    swift_path.parent.mkdir(parents=True)
+    _run(["git", "init", "-q", "-b", "main"], cwd=repo)
+    _run(["git", "config", "user.email", "t@t"], cwd=repo)
+    _run(["git", "config", "user.name", "T"], cwd=repo)
+    swift_path.write_text('print("old")\n')
+    _run(["git", "add", "."], cwd=repo)
+    _run(["git", "commit", "-m", "initial", "-q"], cwd=repo)
+    previous_commit_sha = _run_text(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repo,
+    )
+    swift_path.write_text('print("new")\n')
+    _run(["git", "add", "."], cwd=repo)
+    _run(["git", "commit", "-m", "change", "-q"], cwd=repo)
+
+    selected, removed, reason = await _derive_incremental_graph_scope(
+        repo_path=repo,
+        previous_commit_sha=previous_commit_sha,
+        scip_paths={"Sources/App/Changed.swift"},
+        changed_files={"Sources/App/Changed.swift"},
+        removed_files=set(),
+    )
+
+    assert selected == {"Sources/App/Changed.swift"}
+    assert removed == set()
+    assert reason is None
+
+
+@pytest.mark.asyncio
+async def test_derive_incremental_graph_scope_falls_back_on_truncated_git_diff(
     tmp_path: Path,
 ) -> None:
     with patch(
@@ -1416,6 +1462,7 @@ async def test_derive_incremental_graph_scope_falls_back_on_truncated_git_status
     ):
         selected, removed, reason = await _derive_incremental_graph_scope(
             repo_path=tmp_path,
+            previous_commit_sha="base-sha",
             scip_paths={"Sources/App/Changed.swift"},
             changed_files={"Sources/App/Changed.swift"},
             removed_files=set(),
@@ -1423,7 +1470,7 @@ async def test_derive_incremental_graph_scope_falls_back_on_truncated_git_status
 
     assert selected is None
     assert removed == set()
-    assert reason == "git_status_truncated"
+    assert reason == "git_diff_truncated"
 
 
 async def _async_run_with_matching_hashes(

@@ -14,4 +14,5 @@ def test_precheck_returns_counts_no_writes() -> None:
 
 
 def test_precheck_excludes_deprecated_from_overall_total() -> None:
+    assert "WHERE (m:Symbol OR m:File)" in PRECHECK_STALE
     assert "AND NOT m:Deprecated" in PRECHECK_STALE

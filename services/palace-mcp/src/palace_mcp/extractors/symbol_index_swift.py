@@ -132,6 +132,12 @@ WHERE f.body_hash IS NOT NULL
 RETURN f.path AS path, f.body_hash AS body_hash
 """
 
+_READ_FILE_COMMITS_CYPHER = """
+MATCH (f:File {project_id: $project_id})
+WHERE f.last_seen_in_commit IS NOT NULL
+RETURN collect(DISTINCT f.last_seen_in_commit) AS commits
+"""
+
 _GRAPH_BATCH_SIZE = 500
 _INCREMENTAL_FULL_REPROCESS_THRESHOLD = 0.8
 _GIT_CHANGESET_CAP = 500
@@ -276,12 +282,16 @@ class SymbolIndexSwift(BaseExtractor):
                     and changed_ratio < _INCREMENTAL_FULL_REPROCESS_THRESHOLD
                 )
                 if incremental_tantivy:
+                    previous_commit_sha = await _read_existing_commit_sha(
+                        driver, project_id=ctx.group_id
+                    )
                     (
                         selected_graph_paths,
                         removed_graph_paths,
                         graph_fallback_reason,
                     ) = await _derive_incremental_graph_scope(
                         repo_path=ctx.repo_path,
+                        previous_commit_sha=previous_commit_sha,
                         scip_paths=scip_paths,
                         changed_files=changed_files,
                         removed_files=removed_files,
@@ -563,21 +573,22 @@ def _build_file_body_hashes(
     return hashes
 
 
-async def _read_git_change_set(repo_path: Path) -> _GitChangeSet:
+async def _read_git_change_set(repo_path: Path, base_commit: str) -> _GitChangeSet:
     result = await asyncio.to_thread(
         run_git,
         [
-            "status",
-            "--porcelain=v1",
-            "--untracked-files=all",
+            "diff",
+            "--name-status",
             "--no-renames",
+            base_commit,
+            "HEAD",
             "--",
         ],
         repo_path=repo_path,
         max_stdout_lines=_GIT_CHANGESET_CAP,
     )
     if result.rc != 0:
-        raise GitError(result.rc, result.stderr[:200] or "git status failed")
+        raise GitError(result.rc, result.stderr[:200] or "git diff failed")
 
     changed: set[str] = set()
     added: set[str] = set()
@@ -585,20 +596,18 @@ async def _read_git_change_set(repo_path: Path) -> _GitChangeSet:
     for line in result.stdout.splitlines():
         if not line:
             continue
-        if line.startswith("?? "):
-            added.add(Path(line[3:]).as_posix())
+        status, _, raw_path = line.partition("\t")
+        if not status or not raw_path:
             continue
-        if len(line) < 4:
-            continue
-        path = Path(line[3:]).as_posix()
-        codes = {line[0], line[1]}
-        if "D" in codes:
+        path = Path(raw_path).as_posix()
+        code = status[0]
+        if code == "D":
             removed.add(path)
             continue
-        if "A" in codes:
+        if code == "A":
             added.add(path)
             continue
-        if codes & {"M", "T", "U", "C"}:
+        if code in {"M", "T", "U", "C"}:
             changed.add(path)
 
     return _GitChangeSet(
@@ -612,17 +621,20 @@ async def _read_git_change_set(repo_path: Path) -> _GitChangeSet:
 async def _derive_incremental_graph_scope(
     *,
     repo_path: Path,
+    previous_commit_sha: str | None,
     scip_paths: set[str],
     changed_files: set[str],
     removed_files: set[str],
 ) -> tuple[set[str] | None, set[str], str | None]:
+    if not previous_commit_sha:
+        return None, set(), "previous_commit_missing"
     try:
-        git_changes = await _read_git_change_set(repo_path)
+        git_changes = await _read_git_change_set(repo_path, previous_commit_sha)
     except (GitError, GitTimeout):
-        return None, set(), "git_status_error"
+        return None, set(), "git_diff_error"
 
     if git_changes.truncated:
-        return None, set(), "git_status_truncated"
+        return None, set(), "git_diff_truncated"
 
     git_changed = {
         path
@@ -658,6 +670,20 @@ async def _read_existing_file_body_hashes(
         for row in rows
         if row.get("path")
     }
+
+
+async def _read_existing_commit_sha(
+    driver: AsyncDriver, *, project_id: str
+) -> str | None:
+    async with driver.session() as session:
+        result = await session.run(_READ_FILE_COMMITS_CYPHER, project_id=project_id)
+        row = await result.single()
+    if not row:
+        return None
+    commits = [str(commit) for commit in row.get("commits") or [] if commit]
+    if len(commits) != 1:
+        return None
+    return commits[0]
 
 
 async def _write_file_body_hashes(
