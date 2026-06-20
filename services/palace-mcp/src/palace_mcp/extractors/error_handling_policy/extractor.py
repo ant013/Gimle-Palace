@@ -19,8 +19,13 @@ from neo4j import AsyncManagedTransaction
 from palace_mcp.extractors.base import (
     BaseExtractor,
     ExtractorConfigError,
+    ExtractorOutcome,
     ExtractorRunContext,
     ExtractorStats,
+)
+from palace_mcp.extractors.foundation.incremental_scope import (
+    IncrementalMode,
+    derive_incremental_path_scope,
 )
 from palace_mcp.extractors.foundation.scope_tagging import ScopeTaggedWriter
 from palace_mcp.extractors.foundation.walk import walk_repo
@@ -145,6 +150,14 @@ _SEVERITY_RANK: dict[str, int] = {
 _DELETE_EXISTING_SNAPSHOT = """
 MATCH (n)
 WHERE (n:CatchSite OR n:ErrorFinding) AND n.project_id = $project_id
+DETACH DELETE n
+"""
+
+_DELETE_SCOPED_SNAPSHOT = """
+MATCH (n)
+WHERE (n:CatchSite OR n:ErrorFinding)
+  AND n.project_id = $project_id
+  AND n.file IN $file_paths
 DETACH DELETE n
 """
 
@@ -273,9 +286,27 @@ class ErrorHandlingPolicyExtractor(BaseExtractor):
             },
         )
 
+        scope = await derive_incremental_path_scope(
+            driver,
+            repo_path=ctx.repo_path,
+            project_id=ctx.group_id,
+            settings=settings,
+            force=ctx.force,
+            path_filter=lambda path: path.endswith(".swift"),
+        )
+        if scope.mode == IncrementalMode.SKIP:
+            return ExtractorStats(
+                outcome=ExtractorOutcome.SKIPPED,
+                message="Skipped error_handling_policy: no changed Swift files.",
+                next_action="Modify Swift source or run with force=True before rerunning.",
+            )
+
         raw_findings = await _run_semgrep(
             rules_dir=_RULES_DIR,
             target=ctx.repo_path,
+            target_paths=[ctx.repo_path / path for path in sorted(scope.changed_paths)]
+            if scope.mode == IncrementalMode.INCREMENTAL
+            else None,
             timeout_s=timeout_s,
         )
         findings = _dedup_findings(
@@ -283,7 +314,12 @@ class ErrorHandlingPolicyExtractor(BaseExtractor):
         )
         findings = _apply_suppressions(repo_root=ctx.repo_path, findings=findings)
         findings = _apply_critical_path_severity(findings)
-        catch_sites = _collect_catch_sites(ctx.repo_path)
+        catch_sites = _collect_catch_sites(
+            ctx.repo_path,
+            selected_paths=scope.changed_paths
+            if scope.mode == IncrementalMode.INCREMENTAL
+            else None,
+        )
         catch_sites = _mark_swallowed_sites(catch_sites=catch_sites, findings=findings)
 
         await _write_snapshot(
@@ -292,6 +328,9 @@ class ErrorHandlingPolicyExtractor(BaseExtractor):
             run_id=ctx.run_id,
             catch_sites=catch_sites,
             findings=findings,
+            selected_paths=scope.changed_paths | scope.removed_paths
+            if scope.mode == IncrementalMode.INCREMENTAL
+            else None,
         )
 
         logger.info(
@@ -313,9 +352,14 @@ async def _run_semgrep(
     *,
     rules_dir: Path,
     target: Path,
+    target_paths: list[Path] | None,
     timeout_s: int,
 ) -> list[dict[str, Any]]:
     """Invoke semgrep as async subprocess and return raw results."""
+
+    targets = target_paths if target_paths is not None else [target]
+    if not targets:
+        return []
 
     proc = await asyncio.create_subprocess_exec(
         "semgrep",
@@ -323,7 +367,7 @@ async def _run_semgrep(
         str(rules_dir),
         "--json",
         "--quiet",
-        str(target),
+        *(str(path) for path in targets),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
@@ -334,7 +378,9 @@ async def _run_semgrep(
     except TimeoutError:
         proc.kill()
         await proc.wait()
-        raise ExtractorConfigError(f"semgrep timed out after {timeout_s}s on {target}")
+        raise ExtractorConfigError(
+            f"semgrep timed out after {timeout_s}s on {targets[0]}"
+        )
 
     if proc.returncode not in (0, 1):
         stderr_text = stderr_b.decode("utf-8", errors="replace")[:500]
@@ -480,12 +526,16 @@ def _has_suppression_marker(*, repo_root: Path, finding: ErrorFinding) -> bool:
     return False
 
 
-def _collect_catch_sites(repo_root: Path) -> list[CatchSite]:
+def _collect_catch_sites(
+    repo_root: Path, *, selected_paths: set[str] | None = None
+) -> list[CatchSite]:
     sites: list[CatchSite] = []
     for path in sorted(walk_repo(repo_root, suffixes=frozenset({".swift"}))):
         if not path.is_file():
             continue
         rel_path = path.relative_to(repo_root).as_posix()
+        if selected_paths is not None and rel_path not in selected_paths:
+            continue
         text = path.read_text(encoding="utf-8")
         module = _infer_module(rel_path)
         sites.extend(
@@ -611,6 +661,7 @@ async def _write_snapshot(
     run_id: str,
     catch_sites: list[CatchSite],
     findings: list[ErrorFinding],
+    selected_paths: set[str] | None = None,
 ) -> None:
     async with driver.session() as session:
         await session.execute_write(
@@ -619,6 +670,7 @@ async def _write_snapshot(
             run_id,
             catch_sites,
             findings,
+            selected_paths,
         )
 
 
@@ -628,8 +680,16 @@ async def _replace_snapshot_tx(
     run_id: str,
     catch_sites: list[CatchSite],
     findings: list[ErrorFinding],
+    selected_paths: set[str] | None,
 ) -> None:
-    delete_cursor = await tx.run(_DELETE_EXISTING_SNAPSHOT, project_id=project_id)
+    if selected_paths is None:
+        delete_cursor = await tx.run(_DELETE_EXISTING_SNAPSHOT, project_id=project_id)
+    else:
+        delete_cursor = await tx.run(
+            _DELETE_SCOPED_SNAPSHOT,
+            project_id=project_id,
+            file_paths=sorted(selected_paths),
+        )
     await delete_cursor.consume()
     writer = ScopeTaggedWriter(default_group_id=project_id)
 

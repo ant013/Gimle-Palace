@@ -51,6 +51,7 @@ async def run_semgrep(
     *,
     rules_dir: Path,
     target: Path,
+    target_paths: list[Path] | None = None,
     suffixes: frozenset[str] = _DEFAULT_SUFFIXES,
     batch_size: int = _DEFAULT_BATCH_SIZE,
     timeout_s: int = 120,
@@ -67,7 +68,9 @@ async def run_semgrep(
     if not rules_dir.exists():
         raise ExtractorConfigError(f"semgrep rules directory not found: {rules_dir}")
 
-    if target.is_file():
+    if target_paths is not None:
+        file_targets = sorted(path for path in target_paths if path.is_file())
+    elif target.is_file():
         file_targets = [target]
     else:
         parts = (

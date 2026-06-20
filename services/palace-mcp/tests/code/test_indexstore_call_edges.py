@@ -52,8 +52,14 @@ class _FakeBoundLib:
 
     def indexstore_unit_reader_dependencies_apply_f(self, *_: object) -> bool:
         callback = _[-1]
-        dep = {"name": "rec-1"}
-        return bool(callback(None, dep))
+        deps = [
+            {"name": "rec-1", "filepath": "/tmp/project/Sources/Changed.swift"},
+            {"name": "rec-2", "filepath": "/tmp/project/Sources/Other.swift"},
+        ]
+        for dep in deps:
+            if callback(None, dep) is False:
+                break
+        return True
 
     def indexstore_unit_dependency_get_kind(self, *_: object) -> int:
         return _is._UNIT_DEP_RECORD
@@ -63,15 +69,26 @@ class _FakeBoundLib:
     ) -> _FakeStringRef:
         return _FakeStringRef(dep["name"])
 
-    def indexstore_record_reader_create(self, *_: object) -> object:
-        return object()
+    def indexstore_unit_dependency_get_filepath(
+        self, dep: dict[str, str]
+    ) -> _FakeStringRef:
+        return _FakeStringRef(dep["filepath"])
+
+    def indexstore_record_reader_create(
+        self, _: object, record_name: bytes, __: object
+    ) -> object:
+        return {"record_name": record_name.decode()}
 
     def indexstore_record_reader_dispose(self, *_: object) -> None:
         return None
 
     def indexstore_record_reader_occurrences_apply_f(self, *_: object) -> bool:
+        reader = _[0]
         callback = _[-1]
+        record_name = reader["record_name"]
         for occurrence in self._occurrences:
+            if occurrence.get("record_name") != record_name:
+                continue
             if callback(None, occurrence) is False:
                 break
         return True
@@ -133,11 +150,13 @@ def test_collect_call_edges_counts_missing_relation() -> None:
     fake_lib = _FakeBoundLib(
         [
             {
+                "record_name": "rec-1",
                 "roles": _ROLE_REFERENCE,
                 "symbol": {"usr": "s:10UwMiniCore1RVyyF"},
                 "relations": [],
             },
             {
+                "record_name": "rec-1",
                 "roles": _ROLE_CALL,
                 "symbol": {"usr": "s:10UwMiniCore1GVyyF"},
                 "relations": [
@@ -148,6 +167,7 @@ def test_collect_call_edges_counts_missing_relation() -> None:
                 ],
             },
             {
+                "record_name": "rec-2",
                 "roles": _ROLE_CALL,
                 "symbol": {"usr": "s:10UwMiniCore1HVyyF"},
                 "relations": [],
@@ -162,11 +182,57 @@ def test_collect_call_edges_counts_missing_relation() -> None:
         CallEdgeRecord(
             source="UwMiniCore s%3A10UwMiniCore1FVyyF",
             target="UwMiniCore s%3A10UwMiniCore1GVyyF",
+            source_file="/tmp/project/Sources/Changed.swift",
         ),
     )
     assert result.counters == {
         "calls_seen": 2,
         "missing_relation": 1,
     }
-    assert result.records_scanned == 1
+    assert result.records_scanned == 2
     assert result.occurrences_scanned == 3
+
+
+def test_collect_call_edges_filters_selected_source_files() -> None:
+    fake_lib = _FakeBoundLib(
+        [
+            {
+                "record_name": "rec-1",
+                "roles": _ROLE_CALL,
+                "symbol": {"usr": "s:10UwMiniCore1GVyyF"},
+                "relations": [
+                    {
+                        "roles": _ROLE_REL_CALLEDBY | _ROLE_REL_CONTAINEDBY,
+                        "symbol": {"usr": "s:10UwMiniCore1FVyyF"},
+                    }
+                ],
+            },
+            {
+                "record_name": "rec-2",
+                "roles": _ROLE_CALL,
+                "symbol": {"usr": "s:10UwMiniCore1JVyyF"},
+                "relations": [
+                    {
+                        "roles": _ROLE_REL_CALLEDBY | _ROLE_REL_CONTAINEDBY,
+                        "symbol": {"usr": "s:10UwMiniCore1IVyyF"},
+                    }
+                ],
+            },
+        ]
+    )
+
+    with patch("palace_mcp.code.indexstore._get_lib", return_value=fake_lib):
+        result = collect_call_edges(
+            "/tmp/fake-indexstore",
+            selected_source_files={"/tmp/project/Sources/Changed.swift"},
+        )
+
+    assert result.edges == (
+        CallEdgeRecord(
+            source="UwMiniCore s%3A10UwMiniCore1FVyyF",
+            target="UwMiniCore s%3A10UwMiniCore1GVyyF",
+            source_file="/tmp/project/Sources/Changed.swift",
+        ),
+    )
+    assert result.records_scanned == 2
+    assert result.occurrences_scanned == 1

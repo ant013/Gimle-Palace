@@ -73,6 +73,7 @@ class CallEdgeRecord:
 
     source: str
     target: str
+    source_file: str = ""
 
 
 @dataclass(frozen=True)
@@ -302,7 +303,9 @@ def find_callers(
         lb.indexstore_store_dispose(store)
 
 
-def collect_call_edges(store_path: str) -> CallEdgeScanResult:
+def collect_call_edges(
+    store_path: str, *, selected_source_files: set[str] | None = None
+) -> CallEdgeScanResult:
     """Scan the IndexStore once and resolve Swift Symbol→Symbol call edges."""
     lb = _get_lib()
 
@@ -311,7 +314,9 @@ def collect_call_edges(store_path: str) -> CallEdgeScanResult:
         raise RuntimeError(f"indexstore_store_create failed for: {store_path}")
 
     try:
-        return _collect_call_edges(lb, store)
+        return _collect_call_edges(
+            lb, store, selected_source_files=selected_source_files
+        )
     finally:
         lb.indexstore_store_dispose(store)
 
@@ -339,6 +344,8 @@ def _swift_qname_from_usr(usr: str) -> str | None:
 def _resolve_call_edge(
     callee_usr: str,
     relations: list[tuple[int, str]],
+    *,
+    source_file: str = "",
 ) -> CallEdgeRecord | None:
     caller_usr = _resolve_caller_usr(relations)
     if caller_usr is None:
@@ -349,12 +356,14 @@ def _resolve_call_edge(
     if source is None or target is None:
         return None
 
-    return CallEdgeRecord(source=source, target=target)
+    return CallEdgeRecord(source=source, target=target, source_file=source_file)
 
 
 def _collect_call_edges(
     lb: _BoundLib,
     store: int,
+    *,
+    selected_source_files: set[str] | None = None,
 ) -> CallEdgeScanResult:
     unit_names: list[str] = []
 
@@ -367,15 +376,16 @@ def _collect_call_edges(
     lb.indexstore_store_units_apply_f(store, 0, None, _unit_applier)
 
     record_names: list[str] = []
-    seen_records: set[str] = set()
+    record_to_file: dict[str, str] = {}
 
     @lb.DepApplierF  # type: ignore[untyped-decorator]
     def _dep_applier(_ctx: int, dep: int) -> bool:
         if lb.indexstore_unit_dependency_get_kind(dep) != _UNIT_DEP_RECORD:
             return True
         record_name = lb.indexstore_unit_dependency_get_name(dep).decode()
-        if record_name and record_name not in seen_records:
-            seen_records.add(record_name)
+        file_path = lb.indexstore_unit_dependency_get_filepath(dep).decode()
+        if record_name and record_name not in record_to_file:
+            record_to_file[record_name] = file_path
             record_names.append(record_name)
         return True
 
@@ -398,7 +408,18 @@ def _collect_call_edges(
     def _noop_relation_applier(_ctx: int, rel: int) -> bool:
         return True
 
+    selected_files = (
+        {os.path.realpath(path) for path in selected_source_files}
+        if selected_source_files is not None
+        else None
+    )
     for record_name in record_names:
+        source_file = record_to_file.get(record_name, "")
+        if (
+            selected_files is not None
+            and os.path.realpath(source_file) not in selected_files
+        ):
+            continue
         rec_reader = lb.indexstore_record_reader_create(
             store, record_name.encode(), None
         )
@@ -436,7 +457,11 @@ def _collect_call_edges(
             callee_usr = lb.indexstore_symbol_get_usr(symbol).decode()
             relations.clear()
             lb.indexstore_occurrence_relations_apply_f(occ, None, _relation_applier)
-            edge = _resolve_call_edge(callee_usr, relations)
+            edge = _resolve_call_edge(
+                callee_usr,
+                relations,
+                source_file=source_file,
+            )
             if edge is None:
                 counters["missing_relation"] += 1
                 return True

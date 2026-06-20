@@ -14,11 +14,28 @@ from palace_mcp.extractors.base import (
     ExtractorRunContext,
     ExtractorStats,
 )
+from palace_mcp.extractors.foundation.incremental_scope import (
+    IncrementalMode,
+    derive_incremental_path_scope,
+)
 
 _BATCH_SIZE = 500
 
 _DELETE_INDEXSTORE_CALLS = """
 MATCH (:Symbol {group_id: $group_id})-[rel:CALLS {via: 'indexstore'}]->(:Symbol {group_id: $group_id})
+DELETE rel
+"""
+
+_DELETE_CHANGED_CALLER_CALLS = """
+MATCH (source:Symbol {group_id: $group_id})-[rel:CALLS {via: 'indexstore'}]->(:Symbol {group_id: $group_id})
+WHERE source.file_path IN $file_paths
+DELETE rel
+"""
+
+_DELETE_STALE_CHANGED_CALLEE_CALLS = """
+MATCH (:Symbol {group_id: $group_id})-[rel:CALLS {via: 'indexstore'}]->(target:Symbol {group_id: $group_id})
+WHERE target.file_path IN $file_paths
+  AND (target.deleted_at IS NOT NULL OR target:Deprecated)
 DELETE rel
 """
 
@@ -78,9 +95,26 @@ async def _replace_call_edges(
     run_id: str,
     seen_at: datetime,
     rows: list[dict[str, str]],
+    full_snapshot: bool,
+    caller_file_paths: set[str],
+    stale_callee_paths: set[str],
 ) -> None:
     async with driver.session() as session:
-        await session.run(_DELETE_INDEXSTORE_CALLS, group_id=group_id)
+        if full_snapshot:
+            await session.run(_DELETE_INDEXSTORE_CALLS, group_id=group_id)
+        else:
+            if caller_file_paths:
+                await session.run(
+                    _DELETE_CHANGED_CALLER_CALLS,
+                    group_id=group_id,
+                    file_paths=sorted(caller_file_paths),
+                )
+            if stale_callee_paths:
+                await session.run(
+                    _DELETE_STALE_CHANGED_CALLEE_CALLS,
+                    group_id=group_id,
+                    file_paths=sorted(stale_callee_paths),
+                )
         for i in range(0, len(rows), _BATCH_SIZE):
             await session.run(
                 _MERGE_INDEXSTORE_CALLS,
@@ -131,7 +165,35 @@ class CallEdgeSwiftExtractor(BaseExtractor):
                 next_action="Rebuild the project with a v5 IndexStore, then rerun call_edge_swift.",
             )
 
-        scan = await asyncio.to_thread(collect_call_edges, store_path)
+        scope = await derive_incremental_path_scope(
+            driver,
+            repo_path=ctx.repo_path,
+            project_id=ctx.group_id,
+            settings=settings,
+            force=ctx.force,
+            path_filter=lambda path: path.endswith(".swift"),
+        )
+        if scope.mode == IncrementalMode.SKIP:
+            return ExtractorStats(
+                outcome=ExtractorOutcome.SKIPPED,
+                message="Skipped call_edge_swift: no changed Swift caller files.",
+                next_action="Modify Swift source or run with force=True before rerunning.",
+            )
+
+        incremental_paths = scope.changed_paths | scope.removed_paths
+        selected_source_files = (
+            {
+                str((ctx.repo_path / relative_path).resolve())
+                for relative_path in sorted(scope.changed_paths)
+            }
+            if scope.mode == IncrementalMode.INCREMENTAL
+            else None
+        )
+        scan = await asyncio.to_thread(
+            collect_call_edges,
+            store_path,
+            selected_source_files=selected_source_files,
+        )
         active_symbols = await _load_active_symbols(driver, ctx.group_id)
 
         counters = {
@@ -165,18 +227,24 @@ class CallEdgeSwiftExtractor(BaseExtractor):
             run_id=ctx.run_id,
             seen_at=seen_at,
             rows=edge_rows,
+            full_snapshot=scope.mode != IncrementalMode.INCREMENTAL,
+            caller_file_paths=incremental_paths,
+            stale_callee_paths=incremental_paths,
         )
         return ExtractorStats(
             edges_written=len(edge_rows),
             message=(
                 "materialized "
                 f"{len(edge_rows)} indexstore CALLS edges "
-                f"(calls_seen={counters['calls_seen']}, "
+                f"(mode={scope.mode}, "
+                f"calls_seen={counters['calls_seen']}, "
                 f"calls_resolved={counters['calls_resolved']}, "
                 f"missing_caller_symbol={counters['missing_caller_symbol']}, "
                 f"missing_callee_symbol={counters['missing_callee_symbol']}, "
                 f"missing_relation={counters['missing_relation']}, "
                 f"records_scanned={scan.records_scanned}, "
-                f"occurrences_scanned={scan.occurrences_scanned})"
+                f"occurrences_scanned={scan.occurrences_scanned}, "
+                f"scope_reason={scope.reason}, "
+                f"changed_or_removed_files={len(incremental_paths)})"
             ),
         )
