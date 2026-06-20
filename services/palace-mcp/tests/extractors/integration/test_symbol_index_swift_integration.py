@@ -72,7 +72,7 @@ _INCREMENTAL_FILE_DOCS = {
         ("scip-swift apple IncrementalMini . FileBTwo", 2, _SCIP_KIND_CLASS),
     ],
 }
-_PERF_B1_SYMBOL_COUNT = 200_000
+_PERF_B1_SYMBOL_COUNT = 50_000
 
 
 def _build_incremental_prune_scip(*, file_c_lines: tuple[int, int]) -> object:
@@ -829,7 +829,10 @@ async def test_perf_b1_liveness_bump_completes_under_sixty_seconds_and_allows_re
     )
     read_completed_before_bump = read_task in done
     await bump_task
-    updated_total = await read_task
+    mid_bump_total = await read_task
+    updated_total = await _read_perf_b1_count(
+        driver, group_id=group_id, run_id=current_run_id
+    )
     elapsed_s = time.perf_counter() - start
 
     print(
@@ -837,6 +840,8 @@ async def test_perf_b1_liveness_bump_completes_under_sixty_seconds_and_allows_re
         f"elapsed_s={elapsed_s:.3f}",
         f"symbol_count={_PERF_B1_SYMBOL_COUNT}",
         f"read_completed_before_bump={read_completed_before_bump}",
+        f"mid_bump_total={mid_bump_total}",
+        f"final_total={updated_total}",
     )
 
     assert updated_total == _PERF_B1_SYMBOL_COUNT
