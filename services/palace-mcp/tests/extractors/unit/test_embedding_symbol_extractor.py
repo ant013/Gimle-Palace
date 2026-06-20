@@ -339,3 +339,9 @@ async def test_run_without_max_symbols_embeds_all_pending(
     )
 
     assert stats.nodes_written == 2
+
+
+def test_embedding_timeout_default_is_ten_hours() -> None:
+    """The old hardcoded 7200s (2h) cap timed out large projects (uw-ios-app ~248k
+    symbols ~5.6h). Default is now 10h, overridable via PALACE_EMBEDDING_TIMEOUT_S."""
+    assert EmbeddingSymbolExtractor.timeout_s == 36000.0

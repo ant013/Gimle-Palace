@@ -192,3 +192,48 @@ def test_extractor_registered_in_registry():
 
     assert "git_history" in EXTRACTORS
     assert EXTRACTORS["git_history"].name == "git_history"
+
+
+@pytest.mark.asyncio
+async def test_run_skips_pr_enrichment_for_non_owner_repo_slug(tmp_path: Path):
+    """A project_slug not in 'owner/repo' form (e.g. 'gimle') must skip GitHub PR
+    enrichment gracefully instead of crashing on repository:null; phase-1 commits
+    still ingest."""
+    from tests.extractors.unit.test_git_history_pygit2_walker import (
+        _build_synthetic_repo,
+    )
+
+    repo_path = _build_synthetic_repo(tmp_path, n_commits=1)
+    fake_driver = MagicMock()
+    fake_driver.execute_query = AsyncMock(return_value=MagicMock(records=[]))
+    fake_settings = MagicMock(
+        github_token="fake-token", git_history_tantivy_index_path=tmp_path / "tnt"
+    )
+    with (
+        patch("palace_mcp.mcp_server.get_driver", return_value=fake_driver),
+        patch("palace_mcp.mcp_server.get_settings", return_value=fake_settings),
+        patch(
+            "palace_mcp.extractors.git_history.extractor.ensure_custom_schema",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.git_history.extractor._get_previous_error_code",
+            new=AsyncMock(return_value=None),
+        ),
+        patch("palace_mcp.extractors.git_history.extractor.check_resume_budget"),
+        patch("palace_mcp.extractors.git_history.extractor.check_phase_budget"),
+        patch(
+            "palace_mcp.extractors.git_history.extractor.create_ingest_run",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.git_history.extractor.finalize_ingest_run",
+            new=AsyncMock(),
+        ),
+    ):
+        extractor = GitHistoryExtractor()
+        stats = await extractor.run(
+            graphiti=MagicMock(), ctx=_make_ctx(Path(repo_path))
+        )
+    assert stats.outcome == ExtractorOutcome.SKIPPED
+    assert "owner/repo" in (stats.message or "")

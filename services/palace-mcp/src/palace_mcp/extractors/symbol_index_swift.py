@@ -482,10 +482,22 @@ def _build_file_body_hashes(
     repo_path: Path, occurrences: Iterable[SymbolOccurrence]
 ) -> dict[str, str]:
     hashes: dict[str, str] = {}
+    missing = 0
     for file_path in sorted({occ.file_path for occ in occurrences}):
-        hashes[file_path] = hashlib.sha256(
-            (repo_path / file_path).read_bytes()
-        ).hexdigest()
+        try:
+            hashes[file_path] = hashlib.sha256(
+                (repo_path / file_path).read_bytes()
+            ).hexdigest()
+        except (FileNotFoundError, OSError):
+            # The SCIP may reference files that no longer exist on disk (e.g. cleaned
+            # DerivedData build-intermediates of a stale SCIP). body_hash is freshness
+            # metadata only; skip the unreadable file so symbol ingestion still runs.
+            missing += 1
+    if missing:
+        logger.warning(
+            "symbol_index_body_hash_missing_files",
+            extra={"missing_files": missing, "hashed_files": len(hashes)},
+        )
     return hashes
 
 

@@ -259,8 +259,38 @@ class GitHistoryExtractor(BaseExtractor):
             )
 
             repo_parts = ctx.project_slug.split("/")
-            owner = repo_parts[0] if len(repo_parts) > 1 else ctx.project_slug
-            repo_name = repo_parts[1] if len(repo_parts) > 1 else ctx.project_slug
+            if len(repo_parts) < 2:
+                # Slug is not in 'owner/repo' form (e.g. "uw-ios-app"); a GitHub PR
+                # query with a bogus owner/repo returns repository:null and crashes
+                # ("'NoneType' object is not subscriptable"). Commits (phase 1) are
+                # already written above — skip PR/comment enrichment gracefully.
+                log.info(
+                    "git_history_complete",
+                    extra={
+                        "event": "git_history_complete",
+                        "project_id": ctx.group_id,
+                        "commits_written": commits_written,
+                        "prs_written": 0,
+                        "pr_comments_written": 0,
+                        "full_resync": full_resync,
+                    },
+                )
+                await finalize_ingest_run(driver, run_id=ctx.run_id, success=True)
+                return ExtractorStats(
+                    nodes_written=commits_written,
+                    edges_written=edges_written,
+                    outcome=ExtractorOutcome.SKIPPED,
+                    message=(
+                        "project_slug is not in 'owner/repo' form; skipped GitHub "
+                        "pull request and comment enrichment (commits ingested)."
+                    ),
+                    next_action=(
+                        "Register the project with an 'owner/repo' slug if pull "
+                        "request coverage is required."
+                    ),
+                )
+            owner = repo_parts[0]
+            repo_name = repo_parts[1]
 
             gh_client = GitHubClient(token=settings.github_token)
             max_pr_updated_at: datetime | None = None
