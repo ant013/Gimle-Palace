@@ -1447,3 +1447,18 @@ class TestSymbolIndexSwiftForceFlag:
         )
         assert stats.outcome != ExtractorOutcome.SKIPPED
         assert stats.nodes_written >= 3
+
+
+def test_build_file_body_hashes_skips_missing_files(tmp_path: Path) -> None:
+    """A stale SCIP may reference files that no longer exist on disk (cleaned
+    DerivedData build-intermediates); the missing file must be skipped, not abort
+    the symbol_index run, while present files are still hashed."""
+    from types import SimpleNamespace
+
+    (tmp_path / "present.swift").write_text("let x = 1\n")
+    occurrences = [
+        SimpleNamespace(file_path="present.swift"),
+        SimpleNamespace(file_path="missing.swift"),
+    ]
+    hashes = _build_file_body_hashes(tmp_path, occurrences)  # type: ignore[arg-type]
+    assert set(hashes) == {"present.swift"}

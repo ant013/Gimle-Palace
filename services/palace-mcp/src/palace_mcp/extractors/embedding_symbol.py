@@ -113,7 +113,11 @@ async def _write_embeddings(
 class EmbeddingSymbolExtractor(BaseExtractor):
     name = "embedding_symbol"
     description = "Populate :Symbol.embedding vectors for a single project."
-    timeout_s: ClassVar[float] = 7200.0
+    # Large projects (uw-ios-app ~248k symbols) need >2h; the old 7200s cap timed
+    # out mid-run. Configurable via PALACE_EMBEDDING_TIMEOUT_S; default 10h.
+    timeout_s: ClassVar[float] = float(
+        os.environ.get("PALACE_EMBEDDING_TIMEOUT_S", "36000")
+    )
 
     def __init__(self, backend: EmbeddingBackend | None = None) -> None:
         self._backend = backend
