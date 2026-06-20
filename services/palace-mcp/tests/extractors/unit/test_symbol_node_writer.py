@@ -8,10 +8,18 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from palace_mcp.extractors.foundation.symbol_node_writer import (
+    _BUMP_UNCHANGED_SYMBOL_LIVENESS,
+    _DELETE_STALE_RELATIONSHIPS,
+    _MERGE_CONFORMS_TO,
+    _MERGE_EXTENDS,
+    _MERGE_EXTENSION_OF,
+    _MERGE_REFERENCES,
     _MERGE_SYMBOLS,
     _SOFT_DELETE_ABSENT,
+    _SOFT_DELETE_FILE_SCOPED,
     build_symbol_node_rows,
     soft_delete_symbols,
+    soft_delete_symbols_for_paths,
 )
 
 
@@ -44,6 +52,37 @@ class TestMergeQueryClearsDeletedAt:
         assert "$qnames" in _SOFT_DELETE_ABSENT
         assert "$now" in _SOFT_DELETE_ABSENT
         assert "NOT" in _SOFT_DELETE_ABSENT
+
+    def test_soft_delete_file_scoped_query_uses_paths_and_qnames(self) -> None:
+        assert "$group_id" in _SOFT_DELETE_FILE_SCOPED
+        assert "$file_paths" in _SOFT_DELETE_FILE_SCOPED
+        assert "$qnames" in _SOFT_DELETE_FILE_SCOPED
+        assert "s.file_path IN $file_paths" in _SOFT_DELETE_FILE_SCOPED
+
+    def test_bump_unchanged_symbol_liveness_is_group_scoped_and_batched(self) -> None:
+        assert "group_id" in _BUMP_UNCHANGED_SYMBOL_LIVENESS
+        assert "deleted_at IS NULL" in _BUMP_UNCHANGED_SYMBOL_LIVENESS
+        assert "NOT s:Deprecated" in _BUMP_UNCHANGED_SYMBOL_LIVENESS
+        assert "written_changed_qnames" in _BUMP_UNCHANGED_SYMBOL_LIVENESS
+        assert "IN TRANSACTIONS OF 10000 ROWS" in _BUMP_UNCHANGED_SYMBOL_LIVENESS
+
+    def test_relationship_queries_stamp_last_seen_in_run_id(self) -> None:
+        queries = (
+            _MERGE_REFERENCES,
+            _MERGE_CONFORMS_TO,
+            _MERGE_EXTENDS,
+            _MERGE_EXTENSION_OF,
+        )
+        for query in queries:
+            assert "last_seen_in_run_id" in query
+
+    def test_delete_stale_relationships_query_targets_expected_scope(self) -> None:
+        assert (
+            "REFERENCES|CONFORMS_TO|EXTENDS|EXTENSION_OF" in _DELETE_STALE_RELATIONSHIPS
+        )
+        assert "a.file_path IN $changed_file_paths" in _DELETE_STALE_RELATIONSHIPS
+        assert "b.deleted_at IS NOT NULL" in _DELETE_STALE_RELATIONSHIPS
+        assert "b:Deprecated" in _DELETE_STALE_RELATIONSHIPS
 
 
 class TestBuildSymbolNodeRows:
@@ -129,3 +168,26 @@ class TestSoftDeleteSymbols:
         now = datetime(2026, 1, 1, tzinfo=timezone.utc)
         count = await soft_delete_symbols(driver, "project/z", {"Sym.A"}, now)
         assert count == 0
+
+    @pytest.mark.asyncio
+    async def test_soft_delete_symbols_for_paths_passes_file_scope(self) -> None:
+        driver = self._make_driver(properties_set=1)
+        now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+        count = await soft_delete_symbols_for_paths(
+            driver,
+            "project/files",
+            {"Sources/App/Changed.swift", "Sources/App/Removed.swift"},
+            {"App.Alive"},
+            now,
+        )
+
+        assert count == 1
+        session = driver.session.return_value.__aenter__.return_value
+        kwargs = session.run.call_args.kwargs
+        assert kwargs["group_id"] == "project/files"
+        assert set(kwargs["file_paths"]) == {
+            "Sources/App/Changed.swift",
+            "Sources/App/Removed.swift",
+        }
+        assert set(kwargs["qnames"]) == {"App.Alive"}

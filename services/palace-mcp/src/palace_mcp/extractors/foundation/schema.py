@@ -187,6 +187,11 @@ EXPECTED_SCHEMA = SchemaDefinition(
             vector_dimensions=1536,
             vector_similarity_function="cosine",
         ),
+        IndexSpec(
+            name="symbol_group_run_lookup",
+            label="Symbol",
+            properties=("group_id", "last_seen_in_run_id"),
+        ),
     ],
     fulltext_indexes=[
         FulltextSpec(

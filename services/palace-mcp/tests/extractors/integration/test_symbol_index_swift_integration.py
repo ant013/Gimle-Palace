@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 import shutil
 import subprocess
+import time
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -13,6 +15,9 @@ from neo4j import AsyncDriver
 
 from palace_mcp.extractors.foundation.importance import BoundedInDegreeCounter
 from palace_mcp.extractors.foundation.identifiers import symbol_id_for
+from palace_mcp.extractors.foundation.symbol_node_writer import (
+    bump_unchanged_symbol_liveness,
+)
 from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
 from palace_mcp.extractors.base import ExtractorRunContext
 from palace_mcp.extractors.prune_swift_symbols import PruneSwiftSymbols
@@ -67,6 +72,7 @@ _INCREMENTAL_FILE_DOCS = {
         ("scip-swift apple IncrementalMini . FileBTwo", 2, _SCIP_KIND_CLASS),
     ],
 }
+_PERF_B1_SYMBOL_COUNT = 50_000
 
 
 def _build_incremental_prune_scip(*, file_c_lines: tuple[int, int]) -> object:
@@ -275,7 +281,7 @@ async def test_incremental_run_does_not_deprecate_unchanged_file_symbols(
     subprocess.run(["git", "config", "user.name", "t"], cwd=repo, check=True)
     subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
     subprocess.run(["git", "commit", "-q", "-m", "initial"], cwd=repo, check=True)
-    head_sha = subprocess.check_output(
+    initial_head_sha = subprocess.check_output(
         ["git", "rev-parse", "HEAD"],
         cwd=repo,
         text=True,
@@ -328,6 +334,15 @@ async def test_incremental_run_does_not_deprecate_unchanged_file_symbols(
         first_run = await SymbolIndexSwift().run(graphiti=graphiti_mock, ctx=run1_ctx)
 
         _write_incremental_repo(repo, file_c_suffix="// run 2 changed")
+        subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+        subprocess.run(
+            ["git", "commit", "-q", "-m", "incremental"], cwd=repo, check=True
+        )
+        head_sha = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo,
+            text=True,
+        ).strip()
         write_scip_fixture(
             _build_incremental_prune_scip(file_c_lines=(10, 20)),
             scip_path,
@@ -339,7 +354,7 @@ async def test_incremental_run_does_not_deprecate_unchanged_file_symbols(
         )
 
     assert first_run.nodes_written == 6
-    assert second_run.nodes_written == 6
+    assert second_run.nodes_written == 2
     assert prune_stats.nodes_written == 0
 
     async with TantivyBridge(
@@ -358,6 +373,7 @@ async def test_incremental_run_does_not_deprecate_unchanged_file_symbols(
         assert len(docs) == 1, qname
     assert len(changed_docs) == 1
     assert changed_docs[0]["doc_key"][0].endswith(f":10:0:{head_sha}")
+    assert head_sha != initial_head_sha
 
     async with driver.session() as session:
         unchanged_result = await session.run(
@@ -739,3 +755,222 @@ class TestSymbolIndexSwiftIntegration:
         assert symbol_record["deprecated_in_commit"] is None
         assert symbol_record["rel_count"] == 1
         assert symbol_record["rel_run_ids"] == [_RERUN_ID]
+
+
+async def _seed_perf_b1_symbols(
+    driver: AsyncDriver,
+    *,
+    group_id: str,
+    symbol_count: int,
+    run_id: str,
+) -> None:
+    async with driver.session() as session:
+        result = await session.run(
+            """
+            UNWIND range(1, $symbol_count) AS i
+            CREATE (:Symbol {
+                group_id: $group_id,
+                project_id: $group_id,
+                qualified_name: 'PerfSymbol' + toString(i),
+                short_name: 'PerfSymbol' + toString(i),
+                kind: 'class',
+                label: 'Class',
+                file_path: 'Sources/Perf/File' + toString(i % 32) + '.swift',
+                last_seen_in_run_id: $run_id
+            })
+            """,
+            group_id=group_id,
+            symbol_count=symbol_count,
+            run_id=run_id,
+        )
+        await result.consume()
+
+
+async def _read_perf_b1_count(
+    driver: AsyncDriver, *, group_id: str, run_id: str
+) -> int:
+    async with driver.session() as session:
+        result = await session.run(
+            """
+            MATCH (s:Symbol {group_id: $group_id, last_seen_in_run_id: $run_id})
+            WHERE s.qualified_name STARTS WITH 'PerfSymbol'
+            RETURN count(s) AS total
+            """,
+            group_id=group_id,
+            run_id=run_id,
+        )
+        record = await result.single()
+    assert record is not None
+    return int(record["total"])
+
+
+@pytest.mark.asyncio
+async def test_perf_b1_liveness_bump_completes_under_sixty_seconds_and_allows_reads(
+    driver: AsyncDriver,
+) -> None:
+    await ensure_extractors_schema(driver)
+    group_id = "project/swift-perf-b1"
+    previous_run_id = "swift-perf-b1-old"
+    current_run_id = "swift-perf-b1-new"
+
+    await _seed_perf_b1_symbols(
+        driver,
+        group_id=group_id,
+        symbol_count=_PERF_B1_SYMBOL_COUNT,
+        run_id=previous_run_id,
+    )
+
+    start = time.perf_counter()
+    bump_task = asyncio.create_task(
+        bump_unchanged_symbol_liveness(
+            driver,
+            group_id=group_id,
+            written_changed_qnames=set(),
+            run_id=current_run_id,
+        )
+    )
+    await asyncio.sleep(0)
+    read_task = asyncio.create_task(
+        _read_perf_b1_count(driver, group_id=group_id, run_id=current_run_id)
+    )
+    done, _ = await asyncio.wait(
+        {bump_task, read_task},
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+    read_completed_before_bump = read_task in done
+    await bump_task
+    mid_bump_total = await read_task
+    updated_total = await _read_perf_b1_count(
+        driver, group_id=group_id, run_id=current_run_id
+    )
+    elapsed_s = time.perf_counter() - start
+
+    print(
+        "PERF-B1",
+        f"elapsed_s={elapsed_s:.3f}",
+        f"symbol_count={_PERF_B1_SYMBOL_COUNT}",
+        f"read_completed_before_bump={read_completed_before_bump}",
+        f"mid_bump_total={mid_bump_total}",
+        f"final_total={updated_total}",
+    )
+
+    assert updated_total == _PERF_B1_SYMBOL_COUNT
+    assert read_completed_before_bump, (
+        "Concurrent read query did not finish before the B1-a bump completed"
+    )
+    assert elapsed_s < 60.0
+
+
+@pytest.mark.asyncio
+async def test_perf_p1_incremental_phase1_graph_update_completes_under_three_minutes(
+    driver: AsyncDriver,
+    graphiti_mock: MagicMock,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await ensure_extractors_schema(driver)
+    async with driver.session() as session:
+        await session.run(
+            """
+            MERGE (p:Project {slug: $slug})
+            SET p.group_id = 'project/' + $slug,
+                p.name = $name,
+                p.tags = []
+            """,
+            slug="swift-incremental-perf",
+            name="SwiftIncrementalPerf",
+        )
+
+    scip_path = tmp_path / "incremental-perf.scip"
+    write_scip_fixture(
+        _build_incremental_prune_scip(file_c_lines=(1, 2)),
+        scip_path,
+    )
+
+    repo_root = tmp_path / "repos"
+    monkeypatch.setenv("PALACE_ALLOWED_REPO_ROOTS", str(repo_root))
+    repo = repo_root / "swift-incremental-perf"
+    repo.mkdir(parents=True)
+    _write_incremental_repo(repo, file_c_suffix="// run 1")
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "t@example.com"], cwd=repo, check=True
+    )
+    subprocess.run(["git", "config", "user.name", "t"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "initial"], cwd=repo, check=True)
+
+    settings = MagicMock()
+    tantivy_dir = tmp_path / "tantivy"
+    tantivy_dir.mkdir()
+    settings.palace_tantivy_index_path = str(tantivy_dir)
+    settings.palace_tantivy_heap_mb = 50
+    settings.palace_max_occurrences_total = 50_000_000
+    settings.palace_max_occurrences_per_project = 10_000_000
+    settings.palace_importance_threshold_use = 0.0
+    settings.palace_max_occurrences_per_symbol = 5_000
+    settings.palace_recency_decay_days = 30.0
+    settings.palace_incremental_ingest = True
+
+    run1_ctx = ExtractorRunContext(
+        project_slug="swift-incremental-perf",
+        group_id="project/swift-incremental-perf",
+        repo_path=repo,
+        run_id=_INCREMENTAL_RUN_1,
+        duration_ms=0,
+        logger=MagicMock(),
+        scip_path=scip_path,
+    )
+    run2_ctx = ExtractorRunContext(
+        project_slug="swift-incremental-perf",
+        group_id="project/swift-incremental-perf",
+        repo_path=repo,
+        run_id=_INCREMENTAL_RUN_2,
+        duration_ms=0,
+        logger=MagicMock(),
+        scip_path=scip_path,
+    )
+    prune_ctx = ExtractorRunContext(
+        project_slug="swift-incremental-perf",
+        group_id="project/swift-incremental-perf",
+        repo_path=repo,
+        run_id=_PRUNE_RUN_2,
+        duration_ms=0,
+        logger=MagicMock(),
+        companion_run_id=_INCREMENTAL_RUN_2,
+    )
+
+    with (
+        patch("palace_mcp.mcp_server.get_driver", return_value=driver),
+        patch("palace_mcp.mcp_server.get_settings", return_value=settings),
+    ):
+        await SymbolIndexSwift().run(graphiti=graphiti_mock, ctx=run1_ctx)
+
+        _write_incremental_repo(repo, file_c_suffix="// run 2 changed")
+        subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+        subprocess.run(
+            ["git", "commit", "-q", "-m", "incremental"], cwd=repo, check=True
+        )
+        write_scip_fixture(
+            _build_incremental_prune_scip(file_c_lines=(10, 20)),
+            scip_path,
+        )
+
+        start = time.perf_counter()
+        second_run = await SymbolIndexSwift().run(graphiti=graphiti_mock, ctx=run2_ctx)
+        prune_stats = await PruneSwiftSymbols().run(
+            graphiti=SimpleNamespace(driver=driver),
+            ctx=prune_ctx,
+        )
+        elapsed_s = time.perf_counter() - start
+
+    print(
+        "PERF-P1",
+        f"elapsed_s={elapsed_s:.3f}",
+        f"incremental_nodes_written={second_run.nodes_written}",
+        f"prune_nodes_written={prune_stats.nodes_written}",
+    )
+
+    assert second_run.nodes_written == 2
+    assert prune_stats.nodes_written == 0
+    assert elapsed_s < 180.0
