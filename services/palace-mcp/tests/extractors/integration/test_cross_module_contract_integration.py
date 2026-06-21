@@ -514,6 +514,108 @@ async def test_cross_module_contract_keeps_zero_consumer_baseline_ok_when_bridge
 
 
 @pytest.mark.asyncio
+async def test_cross_module_contract_reuses_prior_surface_when_current_exports_are_gone(
+    driver: AsyncDriver,
+    graphiti_mock: MagicMock,
+    _project_and_repo: Path,
+    tmp_path: Path,
+) -> None:
+    await ensure_extractors_schema(driver)
+    tantivy_dir = tmp_path / "tantivy-prior-surface-only"
+    tantivy_dir.mkdir()
+    settings = Settings(
+        neo4j_password="password",
+        openai_api_key="test-key",
+        palace_tantivy_index_path=str(tantivy_dir),
+        palace_tantivy_heap_mb=50,
+    )
+
+    await _seed_previous_public_api_surface(driver)
+    await _seed_occurrences(tantivy_dir)
+
+    with (
+        patch("palace_mcp.extractors.runner.REPOS_ROOT", _project_and_repo),
+        patch("palace_mcp.mcp_server.get_driver", return_value=driver),
+        patch("palace_mcp.mcp_server.get_settings", return_value=settings),
+        patch.dict(
+            registry.EXTRACTORS,
+            {"cross_module_contract": CrossModuleContractExtractor()},
+        ),
+    ):
+        result = await run_extractor(
+            name="cross_module_contract",
+            project="contract-mini",
+            driver=driver,
+            graphiti=graphiti_mock,
+        )
+
+    assert result["ok"] is True
+    assert result["success"] is True
+    assert result["outcome"] == "ok"
+    assert result.get("message") in (None, "")
+    assert result["nodes_written"] >= 3
+    assert result["edges_written"] >= 6
+
+    async with driver.session() as session:
+        snapshot_result = await session.run(
+            """
+            MATCH (snap:ModuleContractSnapshot {project: $project})
+            RETURN snap.consumer_module_name AS consumer_module_name,
+                   snap.commit_sha AS commit_sha,
+                   snap.symbol_count AS symbol_count,
+                   snap.use_count AS use_count,
+                   snap.file_count AS file_count
+            ORDER BY snap.commit_sha
+            """,
+            project="contract-mini",
+        )
+        snapshots = await snapshot_result.data()
+
+        delta_result = await session.run(
+            """
+            MATCH (delta:ModuleContractDelta {project: $project})
+                  -[:DELTA_FROM]->(from_snapshot:ModuleContractSnapshot)
+            MATCH (delta)-[:DELTA_TO]->(to_snapshot:ModuleContractSnapshot)
+            RETURN delta.removed_consumed_symbol_count AS removed_consumed_symbol_count,
+                   delta.signature_changed_consumed_symbol_count AS signature_changed_consumed_symbol_count,
+                   delta.added_consumed_symbol_count AS added_consumed_symbol_count,
+                   delta.affected_use_count AS affected_use_count,
+                   from_snapshot.commit_sha AS from_snapshot_commit_sha,
+                   to_snapshot.commit_sha AS to_snapshot_commit_sha
+            """,
+            project="contract-mini",
+        )
+        deltas = await delta_result.data()
+
+    assert snapshots == [
+        {
+            "consumer_module_name": "ConsumerApp",
+            "commit_sha": _OLD_SHA,
+            "symbol_count": 2,
+            "use_count": 2,
+            "file_count": 1,
+        },
+        {
+            "consumer_module_name": "ConsumerApp",
+            "commit_sha": _HEAD_SHA,
+            "symbol_count": 0,
+            "use_count": 0,
+            "file_count": 0,
+        },
+    ]
+    assert deltas == [
+        {
+            "removed_consumed_symbol_count": 2,
+            "signature_changed_consumed_symbol_count": 0,
+            "added_consumed_symbol_count": 0,
+            "affected_use_count": 2,
+            "from_snapshot_commit_sha": _OLD_SHA,
+            "to_snapshot_commit_sha": _HEAD_SHA,
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_cross_module_contract_skips_when_public_api_surface_is_missing(
     driver: AsyncDriver,
     graphiti_mock: MagicMock,

@@ -2,16 +2,24 @@
 
 from __future__ import annotations
 
+import logging
+from types import SimpleNamespace
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from palace_mcp.extractors.base import (
+    ExtractorOutcome,
+    ExtractorRunContext,
+    ExtractorStats,
+)
 from palace_mcp.extractors.cross_module_contract import (
     _DELETE_DELTA_AFFECTED_SYMBOLS,
     _DELETE_DELTA_SNAPSHOT_LINKS,
     _DELETE_SNAPSHOT_CONSUMPTIONS,
     _DELETE_SNAPSHOT_SURFACE_LINKS,
+    CrossModuleContractExtractor,
     _DeltaRequest,
     _OccurrenceResolution,
     _PlannedContractDelta,
@@ -754,6 +762,156 @@ class _FakeDriver:
 
     def session(self) -> _FakeSessionContext:
         return _FakeSessionContext(self._session)
+
+
+class _FakeTantivyBridge:
+    async def __aenter__(self) -> "_FakeTantivyBridge":
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> bool:
+        return False
+
+
+@pytest.mark.asyncio
+async def test_run_uses_prior_surface_when_delta_requests_exist_but_current_is_empty(
+    tmp_path: Path,
+) -> None:
+    stale_symbol = _symbol(
+        symbol_id="sym-stale-old",
+        fqn="staleExport()",
+        signature_hash="sig-stale-old",
+        commit_sha="commit-from",
+    )
+    planned_from = _planned_snapshot(
+        commit_sha="commit-from",
+        consumer_module_name="ConsumerApp",
+        symbols=[stale_symbol],
+        consumptions=[
+            ModuleContractConsumption(
+                public_symbol_id="sym-stale-old",
+                group_id="project/test",
+                commit_sha="commit-from",
+                match_symbol_id=symbol_id_for("staleExport()"),
+                use_count=2,
+                file_count=1,
+                first_seen_path="ConsumerApp/Sources/ConsumerApp/WalletFeature.swift",
+                evidence_paths_sample=[
+                    "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift"
+                ],
+            )
+        ],
+    )
+    ctx = ExtractorRunContext(
+        project_slug="contract-mini",
+        group_id="project/test",
+        repo_path=tmp_path,
+        run_id="run-cross-module-contract",
+        duration_ms=0,
+        logger=logging.getLogger("test.cross_module_contract"),
+    )
+    settings = SimpleNamespace(
+        palace_indexstore_paths={},
+        palace_sourcekit_index_store_path=None,
+        palace_tantivy_index_path=str(tmp_path / "tantivy"),
+        palace_tantivy_heap_mb=50,
+    )
+
+    async def fake_load_public_api_surfaces(
+        *,
+        driver,
+        project: str,
+        commit_sha: str,
+        producer_modules: set[str] | None = None,
+    ) -> list[object]:
+        del driver, project, producer_modules
+        if commit_sha == "commit-current":
+            return []
+        return [MagicMock()]
+
+    async def fake_plan_snapshots_for_commit(
+        **kwargs,
+    ) -> list[_PlannedContractSnapshot]:
+        if kwargs["commit_sha"] == "commit-current":
+            return []
+        return [planned_from]
+
+    captured: dict[str, object] = {}
+
+    async def fake_write_contract_graph(
+        *,
+        driver,
+        planned: list[_PlannedContractSnapshot],
+        planned_deltas: list[_PlannedContractDelta],
+    ) -> ExtractorStats:
+        del driver
+        captured["planned"] = planned
+        captured["planned_deltas"] = planned_deltas
+        return ExtractorStats(
+            nodes_written=len(planned) + len(planned_deltas), edges_written=6
+        )
+
+    with (
+        patch("palace_mcp.mcp_server.get_driver", return_value=MagicMock()),
+        patch("palace_mcp.mcp_server.get_settings", return_value=settings),
+        patch(
+            "palace_mcp.extractors.cross_module_contract._read_head_sha",
+            return_value="commit-current",
+        ),
+        patch(
+            "palace_mcp.extractors.cross_module_contract._load_delta_requests",
+            new=AsyncMock(
+                return_value=[
+                    _DeltaRequest(
+                        consumer_module_name="ConsumerApp",
+                        producer_module_name="ProducerKit",
+                        language=Language.SWIFT,
+                        from_commit_sha="commit-from",
+                        to_commit_sha="commit-current",
+                        include_package=False,
+                    )
+                ]
+            ),
+        ),
+        patch(
+            "palace_mcp.extractors.cross_module_contract._load_public_api_surfaces",
+            new=fake_load_public_api_surfaces,
+        ),
+        patch(
+            "palace_mcp.extractors.cross_module_contract._plan_snapshots_for_commit",
+            new=fake_plan_snapshots_for_commit,
+        ),
+        patch(
+            "palace_mcp.extractors.cross_module_contract._write_contract_graph",
+            new=fake_write_contract_graph,
+        ),
+        patch(
+            "palace_mcp.extractors.foundation.tantivy_bridge.TantivyBridge",
+            return_value=_FakeTantivyBridge(),
+        ),
+    ):
+        stats = await CrossModuleContractExtractor().run(
+            graphiti=MagicMock(),
+            ctx=ctx,
+        )
+
+    assert stats.outcome == ExtractorOutcome.OK
+    assert stats.nodes_written == 3
+    planned = captured["planned"]
+    assert isinstance(planned, list)
+    assert len(planned) == 2
+    current_snapshot = planned[1].snapshot
+    assert current_snapshot.commit_sha == "commit-current"
+    assert current_snapshot.consumer_module_name == "ConsumerApp"
+    assert current_snapshot.symbol_count == 0
+    assert current_snapshot.use_count == 0
+    planned_deltas = captured["planned_deltas"]
+    assert isinstance(planned_deltas, list)
+    assert len(planned_deltas) == 1
+    delta = planned_deltas[0].delta
+    assert delta.removed_consumed_symbol_count == 1
+    assert delta.signature_changed_consumed_symbol_count == 0
+    assert delta.added_consumed_symbol_count == 0
+    assert delta.to_commit_sha == "commit-current"
 
 
 @pytest.mark.asyncio

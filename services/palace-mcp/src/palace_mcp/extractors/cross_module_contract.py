@@ -285,7 +285,7 @@ LIMIT 100
             )
 
         current_surfaces = surfaces_by_commit[commit_sha]
-        if not current_surfaces:
+        if not current_surfaces and not delta_requests:
             return ExtractorStats(
                 outcome=ExtractorOutcome.SKIPPED,
                 message=(
