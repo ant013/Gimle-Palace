@@ -757,6 +757,82 @@ class _FakeDriver:
 
 
 @pytest.mark.asyncio
+async def test_write_contract_graph_persists_synthesized_delta_snapshots() -> None:
+    session = AsyncMock()
+    driver = _FakeDriver(session)
+    stale_symbol = _symbol(
+        symbol_id="sym-stale-old",
+        fqn="staleExport()",
+        signature_hash="sig-stale-old",
+        commit_sha="commit-from",
+    )
+    planned = [
+        _planned_snapshot(
+            commit_sha="commit-from",
+            consumer_module_name="ConsumerApp",
+            symbols=[stale_symbol],
+            consumptions=[
+                ModuleContractConsumption(
+                    public_symbol_id="sym-stale-old",
+                    group_id="project/test",
+                    commit_sha="commit-from",
+                    match_symbol_id=symbol_id_for("staleExport()"),
+                    use_count=2,
+                    file_count=1,
+                    first_seen_path=(
+                        "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift"
+                    ),
+                    evidence_paths_sample=[
+                        "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift"
+                    ],
+                )
+            ],
+        )
+    ]
+    planned_deltas = _plan_requested_deltas(
+        project="contract-mini",
+        planned=planned,
+        delta_requests=[
+            _DeltaRequest(
+                producer_module_name="ProducerKit",
+                language=Language.SWIFT,
+                from_commit_sha="commit-from",
+                to_commit_sha="commit-to",
+                fqn="staleExport()",
+                change_kind="removed",
+                previous_signature_hash="sig-stale-old",
+            )
+        ],
+    )
+
+    assert len(planned) == 2
+    assert planned_deltas[0].to_snapshot_id == planned[1].snapshot.id
+
+    stats = await _write_contract_graph(
+        driver=driver,
+        planned=planned,
+        planned_deltas=planned_deltas,
+    )
+
+    assert stats.nodes_written == 3
+    assert stats.edges_written == 6
+    queries = [call.args[0] for call in session.run.await_args_list]
+    assert queries == [
+        _DELETE_SNAPSHOT_CONSUMPTIONS,
+        _DELETE_SNAPSHOT_SURFACE_LINKS,
+        _WRITE_SNAPSHOT,
+        _WRITE_CONSUMPTION,
+        _DELETE_SNAPSHOT_CONSUMPTIONS,
+        _DELETE_SNAPSHOT_SURFACE_LINKS,
+        _WRITE_SNAPSHOT,
+        _DELETE_DELTA_AFFECTED_SYMBOLS,
+        _DELETE_DELTA_SNAPSHOT_LINKS,
+        _WRITE_DELTA,
+        _WRITE_DELTA_AFFECTED_SYMBOL,
+    ]
+
+
+@pytest.mark.asyncio
 async def test_write_contract_graph_resets_stale_relationships_before_rewrite() -> None:
     session = AsyncMock()
     driver = _FakeDriver(session)

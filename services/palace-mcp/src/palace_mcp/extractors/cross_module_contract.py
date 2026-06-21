@@ -572,6 +572,8 @@ def _plan_requested_deltas(
                     )
                 ),
             )
+            snapshot_lookup[_snapshot_key(from_snapshot.snapshot)] = from_snapshot
+            planned.append(from_snapshot)
         if to_snapshot is None:
             assert from_snapshot is not None
             to_snapshot = _empty_planned_snapshot(
@@ -587,6 +589,8 @@ def _plan_requested_deltas(
                     )
                 ),
             )
+            snapshot_lookup[_snapshot_key(to_snapshot.snapshot)] = to_snapshot
+            planned.append(to_snapshot)
         delta, affected_symbols = build_contract_delta(
             from_snapshot=from_snapshot.snapshot,
             to_snapshot=to_snapshot.snapshot,
