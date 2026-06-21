@@ -98,6 +98,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings.neo4j_uri,
         auth=(settings.neo4j_user, settings.neo4j_password.get_secret_value()),
     )
+    audit_file: IO[str] | None = None
+    if settings.palace_audit_sink_path:
+        audit_path = Path(settings.palace_audit_sink_path)
+        audit_path.parent.mkdir(parents=True, exist_ok=True)
+        audit_file = audit_path.open("a", encoding="utf-8")
+        set_audit_sink(audit_file)
+    if settings.palace_qodo_prewarm:
+        # Pre-warm before Graphiti resolves the qodo backend so startup does
+        # not instantiate the 1.5B model twice.
+        await _run_qodo_prewarm()
     graphiti = build_graphiti(settings)
     app.state.neo4j = driver
     app.state.graphiti = graphiti
@@ -107,14 +117,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     set_default_group_id(settings.palace_default_group_id)
     init_cache(settings.palace_cache_max_size, settings.palace_cache_ttl_s)
     init_semaphore(settings.palace_hydration_sem_limit)
-    audit_file: IO[str] | None = None
-    if settings.palace_audit_sink_path:
-        audit_path = Path(settings.palace_audit_sink_path)
-        audit_path.parent.mkdir(parents=True, exist_ok=True)
-        audit_file = audit_path.open("a", encoding="utf-8")
-        set_audit_sink(audit_file)
-    if settings.palace_qodo_prewarm:
-        await _run_qodo_prewarm()
     if settings.codebase_memory_mcp_binary:
         await start_cm_subprocess(settings.codebase_memory_mcp_binary)
     await wait_for_neo4j_connectivity(driver)

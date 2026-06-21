@@ -476,7 +476,7 @@ class TestScoreComponentsInResponse:
                             {"source_scope": "project", "total": 5, "embedded_cnt": 2}
                         ]
                     )
-                if "queryNodes" in query:
+                if "symbol_embedding_idx" in query:
                     return _FakeResult(
                         data=[
                             {

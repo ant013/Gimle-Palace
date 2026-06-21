@@ -189,7 +189,7 @@ async def _bundle_exists(driver: AsyncDriver, name: str) -> bool:
 async def _bundle_members(driver: AsyncDriver, name: str) -> list[str]:
     async with driver.session() as session:
         result = await session.run(
-            "MATCH (b:Bundle {name: $name})-[:HAS_MEMBER]->(p:Project) RETURN p.slug AS slug",
+            "MATCH (b:Bundle {name: $name})-[:CONTAINS]->(p:Project) RETURN p.slug AS slug",
             name=name,
         )
         return [r["slug"] for r in await result.data()]

@@ -82,6 +82,12 @@ class TestArgParsing:
         args = parser.parse_args(["audit", "run", "--project=gimle", "--depth=quick"])
         assert args.depth == "quick"
 
+    def test_audit_run_mode_exits(self) -> None:
+        parser = build_parser()
+        with pytest.raises(SystemExit) as exc_info:
+            parser.parse_args(["audit", "run", "--project=gimle", "--mode=incremental"])
+        assert exc_info.value.code != 0
+
     def test_audit_run_missing_target_exits(self) -> None:
         parser = build_parser()
         with pytest.raises(SystemExit) as exc_info:

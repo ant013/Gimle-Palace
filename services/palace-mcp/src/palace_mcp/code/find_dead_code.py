@@ -13,13 +13,41 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from palace_mcp.pagination import pagination_envelope
+
 _SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 
 _GET_PROJECT = "MATCH (p:Project {slug: $slug}) RETURN p LIMIT 1"
+_DEPENDENCY_MARKERS = (
+    "SourcePackages/",
+    "checkouts/",
+    "Pods/",
+    "Carthage/",
+    ".build/",
+    ".swiftpm/",
+)
 
-_QUERY = """
-MATCH (f:DeadFinding {project: $project})
+_FILTER = """
+AND (
+    $include_dependencies
+    OR NOT any(
+        marker IN $dependency_markers
+        WHERE coalesce(f.members_json, '') CONTAINS marker
+    )
+)
+""".strip()
+
+_COUNT_QUERY = f"""
+MATCH (f:DeadFinding {{project: $project}})
 WHERE f.severity IN $severities
+{_FILTER}
+RETURN count(f) AS total
+""".strip()
+
+_QUERY = f"""
+MATCH (f:DeadFinding {{project: $project}})
+WHERE f.severity IN $severities
+{_FILTER}
 RETURN
     f.finding_id AS finding_id,
     f.kind AS kind,
@@ -39,6 +67,7 @@ ORDER BY
         ELSE 3
     END,
     f.safe_to_delete_score DESC
+SKIP $offset
 LIMIT $limit
 """.strip()
 
@@ -62,9 +91,13 @@ async def find_dead_code(
     project: str,
     min_severity: str = "medium",
     include_test_only: bool = False,
-    limit: int = 200,
+    include_dependencies: bool = False,
+    limit: int = 50,
+    offset: int = 0,
 ) -> dict[str, Any]:
     """Return :DeadFinding nodes for a project above the given severity threshold."""
+    page_limit = max(int(limit), 0)
+    page_offset = max(int(offset), 0)
     if min_severity not in _SEVERITY_ORDER:
         return _error(
             "invalid_severity",
@@ -84,10 +117,27 @@ async def find_dead_code(
     severities = _severities_from_min(min_severity)
     rows: list[dict[str, Any]] = []
     async with driver.session() as sess:
+        count_row = await (
+            await sess.run(
+                _COUNT_QUERY,
+                project=project,
+                severities=severities,
+                include_dependencies=include_dependencies,
+                dependency_markers=_DEPENDENCY_MARKERS,
+            )
+        ).single()
+        total = int(count_row["total"]) if count_row is not None else 0
         result = await sess.run(
-            _QUERY, project=project, severities=severities, limit=int(limit)
+            _QUERY,
+            project=project,
+            severities=severities,
+            include_dependencies=include_dependencies,
+            dependency_markers=_DEPENDENCY_MARKERS,
+            offset=page_offset,
+            limit=page_limit,
         )
         async for rec in result:
+            members = json.loads(rec["members_json"]) if rec["members_json"] else []
             rows.append(
                 {
                     "finding_id": rec["finding_id"],
@@ -96,9 +146,7 @@ async def find_dead_code(
                     "size": rec["size"],
                     "safe_to_delete_score": rec["safe_to_delete_score"],
                     "git_last_external_ref": rec["git_last_external_ref"],
-                    "members": json.loads(rec["members_json"])
-                    if rec["members_json"]
-                    else [],
+                    "members": members,
                     "module_coverage_ratio": rec["module_coverage_ratio"],
                     "target_dead_type": rec["target_dead_type"],
                     "created_at": rec["created_at"],
@@ -109,6 +157,6 @@ async def find_dead_code(
         "ok": True,
         "project": project,
         "min_severity": min_severity,
-        "total": len(rows),
         "result": rows,
+        **pagination_envelope(total=total, returned=len(rows), offset=page_offset),
     }

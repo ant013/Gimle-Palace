@@ -24,23 +24,24 @@ class TestSchemaDefinition:
 
     def test_has_nine_indexes(self) -> None:
         # symbol_qname_group_lookup dropped (superseded by symbol_unique constraint)
-        assert len(EXPECTED_SCHEMA.indexes) == 8
+        # and symbol_group_run_lookup was added for incremental liveness bumps.
+        assert len(EXPECTED_SCHEMA.indexes) == 9
 
     def test_has_one_fulltext(self) -> None:
         assert len(EXPECTED_SCHEMA.fulltext_indexes) == 1
 
     def test_total_twenty_one_objects(self) -> None:
-        # 12 constraints + 8 indexes + 1 fulltext
+        # 12 constraints + 9 indexes + 1 fulltext
         total = (
             len(EXPECTED_SCHEMA.constraints)
             + len(EXPECTED_SCHEMA.indexes)
             + len(EXPECTED_SCHEMA.fulltext_indexes)
         )
-        assert total == 21
+        assert total == 22
 
     def test_all_names_unique(self) -> None:
         names = EXPECTED_SCHEMA.all_names()
-        assert len(names) == 21
+        assert len(names) == 22
 
     def test_expected_names_present(self) -> None:
         names = EXPECTED_SCHEMA.all_names()
@@ -54,6 +55,7 @@ class TestSchemaDefinition:
         assert "dead_symbol_candidate_lookup" in names
         assert "binary_surface_record_lookup" in names
         assert "symbol_embedding_idx" in names
+        assert "symbol_group_run_lookup" in names
         assert "symbol_qn_fulltext" in names
 
     def test_symbol_embedding_idx_present(self) -> None:
@@ -246,6 +248,25 @@ class TestEnsureCustomSchema:
         ]
         driver = self._make_driver(constraint_records=matching)
         await ensure_custom_schema(driver)  # must not raise
+
+    @pytest.mark.asyncio
+    async def test_legacy_git_commit_constraint_is_migrated(self) -> None:
+        legacy = [
+            {
+                "name": "git_commit_sha",
+                "properties": ["sha"],
+                "labelsOrTypes": ["Commit"],
+            }
+        ]
+        driver = self._make_driver(constraint_records=legacy)
+
+        await ensure_custom_schema(driver)
+
+        queries = [
+            call.args[0] for call in driver.session.return_value.run.await_args_list
+        ]
+        assert "DROP CONSTRAINT git_commit_sha IF EXISTS" in queries
+        assert any("DETACH DELETE n" in query for query in queries)
 
     @pytest.mark.asyncio
     async def test_unknown_constraint_name_ignored(self) -> None:

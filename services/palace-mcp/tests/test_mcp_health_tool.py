@@ -4,6 +4,7 @@ Tests run against the tool function directly (no HTTP transport needed)
 to stay fast and portable.
 """
 
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -37,6 +38,7 @@ async def test_health_status_neo4j_reachable(monkeypatch):
 
     assert structured["neo4j"] == "reachable"
     assert structured["git_sha"] == "abc123"
+    assert structured["code_loaded_at"] == mcp_module._code_loaded_at
     assert isinstance(structured["uptime_seconds"], int)
     assert len(content) == 1
     assert "reachable" in content[0].text
@@ -50,6 +52,7 @@ async def test_health_status_neo4j_unreachable(monkeypatch):
 
     assert structured["neo4j"] == "unreachable"
     assert structured["git_sha"] == "def456"
+    assert structured["code_loaded_at"] == mcp_module._code_loaded_at
     assert "unreachable" in content[0].text
 
 
@@ -75,10 +78,20 @@ async def test_health_status_git_sha_default(monkeypatch):
 
 def test_health_status_response_schema():
     """HealthStatusResponse Pydantic model validates correctly."""
-    r = HealthStatusResponse(neo4j="reachable", git_sha="abc", uptime_seconds=42)
+    r = HealthStatusResponse(
+        neo4j="reachable",
+        git_sha="abc",
+        code_loaded_at="2026-06-09T00:00:00Z",
+        uptime_seconds=42,
+    )
     assert r.neo4j == "reachable"
     assert r.git_sha == "abc"
+    assert r.code_loaded_at == "2026-06-09T00:00:00Z"
     assert r.uptime_seconds == 42
+
+
+def test_health_status_code_loaded_at_is_iso8601() -> None:
+    datetime.fromisoformat(mcp_module._code_loaded_at.replace("Z", "+00:00"))
 
 
 async def test_tool_registered_in_mcp():

@@ -1,9 +1,13 @@
+import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 import pytest
 
-from palace_mcp.extractors.git_history.tantivy_writer import GitHistoryTantivyWriter
 from palace_mcp.extractors.git_history.models import Commit, PR, PRComment
+from palace_mcp.extractors.git_history.tantivy_writer import (
+    GitHistoryTantivyWriter,
+    project_index_path,
+)
 
 UTC_TS = datetime(2026, 5, 3, 12, 0, tzinfo=timezone.utc)
 
@@ -66,3 +70,59 @@ async def test_writer_writes_pr_and_comment(tmp_path: Path):
     cmt_docs = reader.search_by_doc_id_sync("cmt1")
     assert len(pr_docs) == 1
     assert len(cmt_docs) == 1
+
+
+@pytest.mark.asyncio
+async def test_concurrent_writers_use_project_isolated_paths(tmp_path: Path):
+    index_root = tmp_path / "git_history"
+    alpha_path = project_index_path(index_root, "project/alpha")
+    beta_path = project_index_path(index_root, "project/beta")
+    alpha_commit = Commit(
+        project_id="project/alpha",
+        sha="a" * 40,
+        author_provider="git",
+        author_identity_key="alpha@example.com",
+        committer_provider="git",
+        committer_identity_key="alpha@example.com",
+        message_subject="alpha",
+        message_full_truncated="alpha",
+        committed_at=UTC_TS,
+        parents=(),
+    )
+    beta_commit = Commit(
+        project_id="project/beta",
+        sha="b" * 40,
+        author_provider="git",
+        author_identity_key="beta@example.com",
+        committer_provider="git",
+        committer_identity_key="beta@example.com",
+        message_subject="beta",
+        message_full_truncated="beta",
+        committed_at=UTC_TS,
+        parents=(),
+    )
+
+    async def _write_commit(path: Path, commit: Commit) -> None:
+        writer = GitHistoryTantivyWriter(index_path=path)
+        async with writer:
+            await writer.add_commit_async(
+                commit, body_full=commit.message_full_truncated
+            )
+
+    await asyncio.gather(
+        _write_commit(alpha_path, alpha_commit),
+        _write_commit(beta_path, beta_commit),
+    )
+
+    alpha_docs = GitHistoryTantivyWriter(index_path=alpha_path).search_by_doc_id_sync(
+        alpha_commit.sha
+    )
+    beta_docs = GitHistoryTantivyWriter(index_path=beta_path).search_by_doc_id_sync(
+        beta_commit.sha
+    )
+
+    assert alpha_path != beta_path
+    assert alpha_path == index_root / "project" / "alpha"
+    assert beta_path == index_root / "project" / "beta"
+    assert len(alpha_docs) == 1
+    assert len(beta_docs) == 1

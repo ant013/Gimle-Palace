@@ -126,6 +126,7 @@ from palace_mcp.project_analyze import (
     AnalysisRun,
     AnalysisRunNotFoundError,
     AnalysisRunNotResumableError,
+    AnalysisRunMode,
     AnalysisRunStartResult,
     AnalysisRunStatus,
     ProjectAnalysisService,
@@ -163,6 +164,9 @@ def set_default_group_id(group_id: str) -> None:
 
 # Server start time for uptime_seconds calculation.
 _start_time: float = time.monotonic()
+_code_loaded_at: str = (
+    datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+)
 
 # Pattern #21: track registered tool names for startup uniqueness assertion.
 _registered_tool_names: list[str] = []
@@ -192,6 +196,7 @@ def assert_unique_tool_names(names: list[str]) -> None:
 class HealthStatusResponse(BaseModel):
     neo4j: Literal["reachable", "unreachable"]
     git_sha: str
+    code_loaded_at: str
     uptime_seconds: int
 
 
@@ -206,6 +211,7 @@ class ProjectAnalyzeRequest(BaseModel):
     bundle: str | None = None
     extractors: list[str] | None = None
     depth: Literal["quick", "full"] = "full"
+    mode: AnalysisRunMode = AnalysisRunMode.FULL
     continue_on_failure: bool = True
     idempotency_key: str | None = None
     force_new: bool = False
@@ -484,10 +490,10 @@ def _tool(name: str, description: str) -> Callable[[_F], _F]:
 
 @_tool(
     name="palace.health.status",
-    description="Return Neo4j reachability, git SHA, and server uptime.",
+    description="Return Neo4j reachability, git SHA, code load time, and server uptime.",
 )
 async def palace_health_status() -> HealthStatusResponse:
-    """Check Palace service health: Neo4j connectivity, git revision, uptime."""
+    """Check Palace service health: Neo4j connectivity, git revision, code load time, uptime."""
     neo4j_status: Literal["reachable", "unreachable"] = "unreachable"
     if _driver is not None:
         try:
@@ -500,6 +506,7 @@ async def palace_health_status() -> HealthStatusResponse:
     return HealthStatusResponse(
         neo4j=neo4j_status,
         git_sha=os.environ.get("PALACE_GIT_SHA", "unknown"),
+        code_loaded_at=_code_loaded_at,
         uptime_seconds=int(time.monotonic() - _start_time),
     )
 
@@ -516,6 +523,7 @@ async def palace_health_status() -> HealthStatusResponse:
 async def palace_memory_lookup(
     entity_type: str,
     filters: dict[str, Any] | None = None,
+    offset: int = 0,
     limit: int = 20,
     order_by: str = "created_at",
     project: str | None = None,
@@ -531,6 +539,7 @@ async def palace_memory_lookup(
             entity_type=entity_type,
             project=project,
             filters=filters or {},
+            offset=offset,
             limit=limit,
             order_by=order_by,
         )
@@ -645,6 +654,7 @@ async def palace_memory_register_project(
     parent_mount: str | None = None,
     relative_path: str | None = None,
     language_profile: str | None = None,
+    expected_profile: bool = False,
 ) -> dict[str, Any]:
     """Register or update a project in the knowledge graph."""
     driver = _driver
@@ -662,6 +672,7 @@ async def palace_memory_register_project(
             parent_mount=parent_mount,
             relative_path=relative_path,
             language_profile=language_profile,
+            expected_profile=expected_profile,
         )
         return info.model_dump()
     except InvalidSlug as exc:
@@ -889,7 +900,9 @@ async def palace_memory_delete_bundle(
         "project= and bundle= are mutually exclusive. "
         "On success (project mode): run_id + duration_ms + nodes_written + edges_written. "
         "On success (bundle mode): run_id + state='running' + members_total. "
-        "On failure: error_code envelope."
+        "On failure: error_code envelope. "
+        "force=True bypasses content-freshness skips (e.g. symbol_index_swift's "
+        "body_hash skip) to roll out a writer/schema change over unchanged source."
     ),
 )
 async def _palace_ingest_run_extractor(
@@ -897,6 +910,7 @@ async def _palace_ingest_run_extractor(
     project: str | None = None,
     bundle: str | None = None,
     scip_path: str | None = None,
+    force: bool = False,
 ) -> dict[str, Any]:
     driver = _driver
     if driver is None:
@@ -927,6 +941,7 @@ async def _palace_ingest_run_extractor(
         driver=driver,
         graphiti=graphiti,
         scip_path=scip_path,
+        force=force,
     )
 
 
@@ -988,6 +1003,7 @@ async def palace_project_analyze(
     bundle: str | None = None,
     extractors: list[str] | None = None,
     depth: Literal["quick", "full"] = "full",
+    mode: AnalysisRunMode = AnalysisRunMode.FULL,
     continue_on_failure: bool = True,
     idempotency_key: str | None = None,
     force_new: bool = False,
@@ -1008,6 +1024,7 @@ async def palace_project_analyze(
             bundle=bundle,
             extractors=extractors,
             depth=depth,
+            mode=mode,
             continue_on_failure=continue_on_failure,
             idempotency_key=idempotency_key,
             force_new=force_new,
@@ -1026,6 +1043,7 @@ async def palace_project_analyze(
             bundle=request.bundle,
             extractors=request.extractors,
             depth=request.depth,
+            mode=request.mode,
             continue_on_failure=request.continue_on_failure,
             idempotency_key=request.idempotency_key,
             force_new=request.force_new,
@@ -1417,12 +1435,15 @@ async def palace_code_find_owners(
         "List dead symbol candidates for a project as recorded by the "
         "dead_symbol_binary_surface extractor. Returns symbols identified by "
         "Periphery static analysis that are unused or binary-surface retained. "
-        "Accepts optional limit (default 200)."
+        "Accepts optional include_dependencies (default False) and limit "
+        "(default 50), plus offset for pagination."
     ),
 )
 async def palace_code_find_dead_symbols(
     project: str,
-    limit: int = 200,
+    include_dependencies: bool = False,
+    limit: int = 50,
+    offset: int = 0,
 ) -> dict[str, Any]:
     """List dead symbol candidates ranked by module and display name."""
     driver = _driver
@@ -1432,7 +1453,13 @@ async def palace_code_find_dead_symbols(
             "error_code": "driver_unavailable",
             "message": "Neo4j driver not initialised",
         }
-    return await _find_dead_symbols_impl(driver=driver, project=project, limit=limit)
+    return await _find_dead_symbols_impl(
+        driver=driver,
+        project=project,
+        include_dependencies=include_dependencies,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @_tool(
@@ -1443,14 +1470,16 @@ async def palace_code_find_dead_symbols(
         "dead_module (≥50% of module), dead_extension_chain (no existential conformance). "
         "Distinct from palace.code.find_dead_symbols which uses Periphery/binary-surface. "
         "Accepts min_severity (default 'medium'), include_test_only (default False), "
-        "and limit (default 200)."
+        "include_dependencies (default False), limit (default 50), and offset."
     ),
 )
 async def palace_code_find_dead_code(
     project: str,
     min_severity: str = "medium",
     include_test_only: bool = False,
-    limit: int = 200,
+    include_dependencies: bool = False,
+    limit: int = 50,
+    offset: int = 0,
 ) -> dict[str, Any]:
     """Graph-reachability dead-code findings ranked by severity and safe_to_delete_score."""
     driver = _driver
@@ -1465,16 +1494,20 @@ async def palace_code_find_dead_code(
         project=project,
         min_severity=min_severity,
         include_test_only=include_test_only,
+        include_dependencies=include_dependencies,
         limit=limit,
+        offset=offset,
     )
 
 
 @_tool(
     name="palace.code.find_public_api",
     description=(
-        "List public API symbols for a project as recorded by the "
+        "List public API symbols for a kit/library project as recorded by the "
         "public_api_surface extractor. Returns symbols exported from "
-        "Swift .swiftinterface or Kotlin BCV .api artifacts. "
+        "Swift .swiftinterface or Kotlin BCV .api artifacts. Xcode app targets "
+        "without .swiftinterface artifacts are expected to return no records "
+        "(the extractor is not_applicable there), not a server bug. "
         "Accepts optional limit (default 500)."
     ),
 )
@@ -1482,7 +1515,7 @@ async def palace_code_find_public_api(
     project: str,
     limit: int = 500,
 ) -> dict[str, Any]:
-    """List public API symbols recorded by the public_api_surface extractor."""
+    """List public API symbols for kit/library projects backed by public_api_surface."""
     driver = _driver
     if driver is None:
         return {
@@ -1498,7 +1531,8 @@ async def palace_code_find_public_api(
     description=(
         "Semantic symbol search over embedded :Symbol nodes for one project "
         "or an explicit projects list. Returns ranked hits with best-effort "
-        "snippet and usage-preview context."
+        "snippet and usage-preview context. Compact results are returned by default; "
+        "set include_context=True for verbose snippet hydration."
     ),
 )
 async def palace_code_semantic_search(
@@ -1511,8 +1545,9 @@ async def palace_code_semantic_search(
     include_sdk: bool = False,
     include_deprecated: bool = False,
     limit: int = 10,
+    offset: int = 0,
     backend: str | None = None,
-    include_context: bool = True,
+    include_context: bool = False,
     context_limit: int = 3,
 ) -> dict[str, Any]:
     """Run semantic symbol search over Neo4j vector embeddings."""
@@ -1535,6 +1570,7 @@ async def palace_code_semantic_search(
         include_sdk=include_sdk,
         include_deprecated=include_deprecated,
         limit=limit,
+        offset=offset,
         backend=backend,
         include_context=include_context,
         context_limit=context_limit,

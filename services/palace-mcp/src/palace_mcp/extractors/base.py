@@ -66,6 +66,10 @@ class ExtractorRunContext:
     logger: logging.Logger
     scip_path: Path | None = None
     companion_run_id: str | None = None
+    # When True, bypass content-freshness short-circuits (e.g. symbol_index_swift's
+    # body_hash skip) so a writer/schema change can be rolled out over unchanged
+    # source without hand-clearing :File.body_hash.
+    force: bool = False
 
 
 class ExtractorOutcome(StrEnum):
@@ -73,7 +77,16 @@ class ExtractorOutcome(StrEnum):
 
     OK = "ok"
     SKIPPED = "skipped"
+    NOT_APPLICABLE = "not_applicable"
     MISSING_INPUT = "missing_input"
+
+
+class ExtractorExecutionMode(StrEnum):
+    """How an extractor executed within a project_analyze run."""
+
+    FULL = "full"
+    INCREMENTAL = "incremental"
+    SKIPPED = "skipped"
 
 
 @dataclass(frozen=True)
@@ -85,6 +98,7 @@ class ExtractorStats:
     outcome: ExtractorOutcome = ExtractorOutcome.OK
     message: str | None = None
     next_action: str | None = None
+    mode: ExtractorExecutionMode | None = None
 
 
 class ExtractorError(Exception):

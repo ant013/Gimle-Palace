@@ -59,6 +59,10 @@ make_full_artefacts() {
     make_swiftinterface "$1"
 }
 
+mtime() {
+    python3 -c 'import os, sys; print(int(os.stat(sys.argv[1]).st_mtime))' "$1"
+}
+
 # ── Mock periphery binary ─────────────────────────────────────────────────────
 
 mkdir -p "$TMP_DIR/bin"
@@ -69,14 +73,7 @@ case "${1:-}" in
         printf '3.9.0\n'
         ;;
     scan)
-        # Parse --write-results path and write empty JSON array
-        while [[ $# -gt 0 ]]; do
-            if [[ "$1" == "--write-results" ]]; then
-                printf '[]' > "$2"
-                break
-            fi
-            shift
-        done
+        printf '[]\n'
         ;;
 esac
 MOCK
@@ -84,6 +81,20 @@ chmod +x "$TMP_DIR/bin/periphery"
 
 cat > "$TMP_DIR/bin/xcrun" <<'MOCK'
 #!/usr/bin/env bash
+case "${1:-} ${2:-} ${3:-}" in
+    "swift package describe")
+        cat <<'JSON'
+{"name":"TestKit","products":[{"name":"TestKit","targets":["TestKit"],"type":{"library":["automatic"]}}],"targets":[{"name":"TestKit","type":"library"}]}
+JSON
+        exit 0
+        ;;
+    "swift build "*)
+        ;;
+    *)
+        printf 'unexpected xcrun invocation: %s\n' "$*" >&2
+        exit 64
+        ;;
+esac
 # Mock xcrun swift build — create a fake .swiftinterface in build path
 shift  # remove 'swift'
 shift  # remove 'build'
@@ -100,6 +111,21 @@ printf '// swift-interface-format-version: 1.0\n' \
 MOCK
 chmod +x "$TMP_DIR/bin/xcrun"
 
+cat > "$TMP_DIR/bin/xcodebuild" <<'MOCK'
+#!/usr/bin/env bash
+derived_data="${TMPDIR:-/tmp}/mock-derived-data"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -derivedDataPath) derived_data="$2"; shift 2 ;;
+        *) shift ;;
+    esac
+done
+mkdir -p "$derived_data/Build/Intermediates.noindex/TestKit.build/Release-iphonesimulator/TestKit.build/Objects-normal/arm64"
+printf '// swift-interface-format-version: 1.0\n' \
+    > "$derived_data/Build/Intermediates.noindex/TestKit.build/Release-iphonesimulator/TestKit.build/Objects-normal/arm64/TestKit.swiftinterface"
+MOCK
+chmod +x "$TMP_DIR/bin/xcodebuild"
+
 PATH="$TMP_DIR/bin:$PATH"
 export PATH
 
@@ -109,7 +135,10 @@ HELP_OUT="$TMP_DIR/help.out"
 bash "$PREPARE_SCRIPT" --help > "$HELP_OUT"
 assert_contains "$HELP_OUT" "prepare_swift_kit_artifacts.sh"
 assert_contains "$HELP_OUT" "--dry-run"
+assert_contains "$HELP_OUT" "--periphery-only"
+assert_contains "$HELP_OUT" "--public-api-only"
 assert_contains "$HELP_OUT" "periphery"
+assert_contains "$HELP_OUT" "/Users/Shared/Ios/Gimle-Repos/HorizontalSystems"
 printf 'PASS: --help\n'
 
 # ── Test 2: requires --slug or --repo-path ────────────────────────────────────
@@ -156,16 +185,149 @@ iface_count="$(find "$REPO_FULL/.palace/public-api/swift" -name "*.swiftinterfac
 [[ "$iface_count" -gt 0 ]] || fail "no .swiftinterface files emitted"
 printf 'PASS: full run writes artefacts\n'
 
+# ── Test 4b: --periphery-only skips swiftinterface emission ──────────────────
+
+REPO_PERIPHERY_ONLY="$TMP_DIR/repo-periphery-only"
+make_repo "$REPO_PERIPHERY_ONLY"
+
+PERIPHERY_ONLY_OUT="$TMP_DIR/periphery-only.out"
+bash "$PREPARE_SCRIPT" --repo-path "$REPO_PERIPHERY_ONLY" --periphery-only > "$PERIPHERY_ONLY_OUT" 2>&1
+
+[[ -f "$REPO_PERIPHERY_ONLY/periphery/periphery-3.7.4-swiftpm.json" ]] || \
+    fail "periphery-only report not written"
+[[ -f "$REPO_PERIPHERY_ONLY/periphery/contract.json" ]] || \
+    fail "periphery-only contract not written"
+[[ ! -d "$REPO_PERIPHERY_ONLY/.palace/public-api/swift" ]] || \
+    fail "periphery-only must not emit swiftinterface files"
+assert_contains "$PERIPHERY_ONLY_OUT" "periphery-only complete"
+printf 'PASS: periphery-only skips swiftinterface\n'
+
+# ── Test 4c: --public-api-only skips Periphery refresh ───────────────────────
+
+REPO_PUBLIC_API_ONLY="$TMP_DIR/repo-public-api-only"
+make_repo "$REPO_PUBLIC_API_ONLY"
+
+PUBLIC_API_ONLY_OUT="$TMP_DIR/public-api-only.out"
+bash "$PREPARE_SCRIPT" --repo-path "$REPO_PUBLIC_API_ONLY" --public-api-only > "$PUBLIC_API_ONLY_OUT" 2>&1
+
+[[ ! -f "$REPO_PUBLIC_API_ONLY/periphery/periphery-3.7.4-swiftpm.json" ]] || \
+    fail "public-api-only must not write periphery report"
+[[ ! -f "$REPO_PUBLIC_API_ONLY/periphery/contract.json" ]] || \
+    fail "public-api-only must not write periphery contract"
+iface_count="$(find "$REPO_PUBLIC_API_ONLY/.palace/public-api/swift" -name "*.swiftinterface" -maxdepth 1 | wc -l | tr -d ' ')"
+[[ "$iface_count" -gt 0 ]] || fail "public-api-only emitted no .swiftinterface files"
+assert_contains "$PUBLIC_API_ONLY_OUT" "public-api-only complete"
+printf 'PASS: public-api-only skips periphery\n'
+
+# ── Test 4d: mutually exclusive focused modes ────────────────────────────────
+
+REPO_MODE_CONFLICT="$TMP_DIR/repo-mode-conflict"
+make_repo "$REPO_MODE_CONFLICT"
+
+MODE_CONFLICT_OUT="$TMP_DIR/mode-conflict.out"
+if bash "$PREPARE_SCRIPT" --repo-path "$REPO_MODE_CONFLICT" \
+    --periphery-only --public-api-only > "$MODE_CONFLICT_OUT" 2>&1; then
+    fail "expected focused-mode conflict to fail"
+fi
+assert_contains "$MODE_CONFLICT_OUT" "provide --periphery-only or --public-api-only, not both"
+printf 'PASS: focused mode conflict rejected\n'
+
+# ── Test 4e: slug resolution uses repo-base + manifest relative path ─────────
+
+REPO_SLUG="$TMP_DIR/repo-slug-base/Fixtures/SlugKit.Swift"
+mkdir -p "$(dirname "$REPO_SLUG")"
+make_repo "$REPO_SLUG"
+
+MANIFEST="$TMP_DIR/manifest.json"
+cat > "$MANIFEST" <<'JSON'
+{"members":[{"slug":"slug-kit","relative_path":"Fixtures/SlugKit.Swift"}]}
+JSON
+
+SLUG_OUT="$TMP_DIR/slug.out"
+bash "$PREPARE_SCRIPT" \
+    --slug slug-kit \
+    --repo-base "$TMP_DIR/repo-slug-base" \
+    --manifest "$MANIFEST" \
+    --public-api-only > "$SLUG_OUT" 2>&1
+
+[[ -f "$REPO_SLUG/.palace/public-api/swift/TestKit.swiftinterface" ]] || \
+    fail "slug-based repo resolution did not emit TestKit.swiftinterface"
+printf 'PASS: slug resolution uses manifest path under repo-base\n'
+
+# ── Test 4f: xcodebuild fallback emits public interface ──────────────────────
+
+REPO_XCODEBUILD_FALLBACK="$TMP_DIR/repo-xcodebuild-fallback"
+make_repo "$REPO_XCODEBUILD_FALLBACK"
+
+mkdir -p "$TMP_DIR/no-interface-bin"
+cat > "$TMP_DIR/no-interface-bin/xcrun" <<'MOCK'
+#!/usr/bin/env bash
+case "${1:-} ${2:-} ${3:-}" in
+    "swift package describe")
+        cat <<'JSON'
+{"name":"TestKit","products":[{"name":"TestKit","targets":["TestKit"],"type":{"library":["automatic"]}}],"targets":[{"name":"TestKit","type":"library"}]}
+JSON
+        ;;
+    "swift build "*)
+        exit 1
+        ;;
+    *)
+        printf 'unexpected xcrun invocation: %s\n' "$*" >&2
+        exit 64
+        ;;
+esac
+MOCK
+chmod +x "$TMP_DIR/no-interface-bin/xcrun"
+
+XCODEBUILD_FALLBACK_OUT="$TMP_DIR/xcodebuild-fallback.out"
+PATH="$TMP_DIR/no-interface-bin:$PATH" bash "$PREPARE_SCRIPT" \
+    --repo-path "$REPO_XCODEBUILD_FALLBACK" --public-api-only > "$XCODEBUILD_FALLBACK_OUT" 2>&1
+
+[[ -f "$REPO_XCODEBUILD_FALLBACK/.palace/public-api/swift/TestKit.swiftinterface" ]] || \
+    fail "xcodebuild fallback did not copy TestKit.swiftinterface"
+assert_contains "$XCODEBUILD_FALLBACK_OUT" "trying xcodebuild scheme 'TestKit'"
+printf 'PASS: xcodebuild fallback emits public interface\n'
+
+# ── Test 4g: failed periphery scan does not clobber existing report ──────────
+
+REPO_PRESERVE="$TMP_DIR/repo-preserve"
+make_repo "$REPO_PRESERVE"
+mkdir -p "$REPO_PRESERVE/periphery"
+printf 'KEEP_ME\n' > "$REPO_PRESERVE/periphery/periphery-3.7.4-swiftpm.json"
+mkdir -p "$TMP_DIR/fail-bin"
+cat > "$TMP_DIR/fail-bin/periphery" <<'MOCK'
+#!/usr/bin/env bash
+case "${1:-}" in
+    version|--version)
+        printf '3.9.0\n'
+        ;;
+    scan)
+        printf 'scan failed\n' >&2
+        exit 42
+        ;;
+esac
+MOCK
+chmod +x "$TMP_DIR/fail-bin/periphery"
+
+PRESERVE_OUT="$TMP_DIR/preserve.out"
+if PATH="$TMP_DIR/fail-bin:$PATH" bash "$PREPARE_SCRIPT" \
+    --repo-path "$REPO_PRESERVE" --periphery-only > "$PRESERVE_OUT" 2>&1; then
+    fail "expected failing periphery scan"
+fi
+[[ "$(cat "$REPO_PRESERVE/periphery/periphery-3.7.4-swiftpm.json")" == "KEEP_ME" ]] || \
+    fail "failed scan must not clobber existing report"
+printf 'PASS: failed periphery scan preserves existing report\n'
+
 # ── Test 5: idempotency — second run overwrites cleanly ───────────────────────
 
 REPO_IDEM="$TMP_DIR/repo-idem"
 make_repo "$REPO_IDEM"
 
 bash "$PREPARE_SCRIPT" --repo-path "$REPO_IDEM" > /dev/null 2>&1
-first_mtime="$(stat -f '%m' "$REPO_IDEM/periphery/contract.json" 2>/dev/null || stat -c '%Y' "$REPO_IDEM/periphery/contract.json")"
+first_mtime="$(mtime "$REPO_IDEM/periphery/contract.json")"
 sleep 1
 bash "$PREPARE_SCRIPT" --repo-path "$REPO_IDEM" > /dev/null 2>&1
-second_mtime="$(stat -f '%m' "$REPO_IDEM/periphery/contract.json" 2>/dev/null || stat -c '%Y' "$REPO_IDEM/periphery/contract.json")"
+second_mtime="$(mtime "$REPO_IDEM/periphery/contract.json")"
 [[ "$second_mtime" -ge "$first_mtime" ]] || fail "second run did not overwrite contract.json"
 printf 'PASS: idempotency\n'
 

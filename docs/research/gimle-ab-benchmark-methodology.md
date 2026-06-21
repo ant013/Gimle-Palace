@@ -109,6 +109,9 @@ call them.** Replaces v3's honor-system "DO NOT call palace.*" instruction.
 - `superpowers/test-driven-development` (TDD is universal)
 - `superpowers/systematic-debugging` (debug is universal)
 
+For Gimle's committed operator contract around degraded Palace sessions
+and RR2 re-runs, see `docs/runbooks/analog-driven-development-rr2.md`.
+
 ### Control: focused vanilla stack (5 skills)
 - `superpowers/brainstorming`
 - `superpowers/writing-plans`

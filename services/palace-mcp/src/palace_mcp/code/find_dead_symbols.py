@@ -4,10 +4,35 @@ from __future__ import annotations
 
 from typing import Any
 
-_GET_PROJECT = "MATCH (p:Project {slug: $slug}) RETURN p LIMIT 1"
+from palace_mcp.pagination import pagination_envelope
 
-_QUERY = """
-MATCH (c:DeadSymbolCandidate {project: $project})
+_GET_PROJECT = "MATCH (p:Project {slug: $slug}) RETURN p LIMIT 1"
+_DEPENDENCY_MARKERS = (
+    "SourcePackages/",
+    "checkouts/",
+    "Pods/",
+    "Carthage/",
+    ".build/",
+    ".swiftpm/",
+)
+
+_FILTER = """
+WHERE $include_dependencies
+   OR NOT any(
+       marker IN $dependency_markers
+       WHERE coalesce(c.source_file, '') CONTAINS marker
+   )
+""".strip()
+
+_COUNT_QUERY = f"""
+MATCH (c:DeadSymbolCandidate {{project: $project}})
+{_FILTER}
+RETURN count(c) AS total
+""".strip()
+
+_QUERY = f"""
+MATCH (c:DeadSymbolCandidate {{project: $project}})
+{_FILTER}
 RETURN c.id AS id,
        c.display_name AS display_name,
        c.kind AS kind,
@@ -15,11 +40,14 @@ RETURN c.id AS id,
        c.language AS language,
        c.candidate_state AS candidate_state,
        c.confidence AS confidence,
+       c.accessibility AS accessibility,
        c.source_file AS source_file,
        c.source_line AS source_line,
+       coalesce(c.hints, []) AS hints,
        c.commit_sha AS commit_sha,
        c.evidence_source AS evidence_source
 ORDER BY c.module_name, c.display_name
+SKIP $offset
 LIMIT $limit
 """.strip()
 
@@ -35,8 +63,12 @@ async def find_dead_symbols(
     *,
     driver: Any,
     project: str,
-    limit: int = 200,
+    include_dependencies: bool = False,
+    limit: int = 50,
+    offset: int = 0,
 ) -> dict[str, Any]:
+    page_limit = max(int(limit), 0)
+    page_offset = max(int(offset), 0)
     async with driver.session() as sess:
         row = await (await sess.run(_GET_PROJECT, slug=project)).single()
     if row is None:
@@ -45,7 +77,23 @@ async def find_dead_symbols(
         )
     rows: list[dict[str, Any]] = []
     async with driver.session() as sess:
-        result = await sess.run(_QUERY, project=project, limit=int(limit))
+        count_row = await (
+            await sess.run(
+                _COUNT_QUERY,
+                project=project,
+                include_dependencies=include_dependencies,
+                dependency_markers=_DEPENDENCY_MARKERS,
+            )
+        ).single()
+        total = int(count_row["total"]) if count_row is not None else 0
+        result = await sess.run(
+            _QUERY,
+            project=project,
+            include_dependencies=include_dependencies,
+            dependency_markers=_DEPENDENCY_MARKERS,
+            offset=page_offset,
+            limit=page_limit,
+        )
         async for rec in result:
             rows.append(
                 {
@@ -56,10 +104,17 @@ async def find_dead_symbols(
                     "language": rec["language"],
                     "candidate_state": rec["candidate_state"],
                     "confidence": rec["confidence"],
+                    "accessibility": rec["accessibility"],
                     "source_file": rec["source_file"],
                     "source_line": rec["source_line"],
+                    "hints": rec["hints"],
                     "commit_sha": rec["commit_sha"],
                     "evidence_source": rec["evidence_source"],
                 }
             )
-    return {"ok": True, "project": project, "result": rows}
+    return {
+        "ok": True,
+        "project": project,
+        "result": rows,
+        **pagination_envelope(total=total, returned=len(rows), offset=page_offset),
+    }

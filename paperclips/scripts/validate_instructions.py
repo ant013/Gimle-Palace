@@ -106,6 +106,12 @@ _ANTIPATTERN_HEADER_TOKENS = ("not example", "wrong", "anti-pattern", "antipatte
 
 _UUID_RE = re.compile(r"\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b")
 _UNRESOLVED_VARIABLE_RE = re.compile(r"\{\{[^}\n]+\}\}")
+_CODEX_FORBIDDEN_ACTIVE_ROLE_RE = re.compile(
+    r"(\[@(?:CTO|CodeReviewer|QAEngineer|ArchitectReviewer)\]"
+    r"|(?<![A-Za-z])@(?:CTO|CodeReviewer|QAEngineer|ArchitectReviewer)\b"
+    r"|\bReassign to QAEngineer\b"
+    r"|\bOpusArchitectReviewer\b)"
+)
 
 
 def sha256_text(text: str) -> str:
@@ -621,6 +627,44 @@ def validate_cross_team_targets(
     return errors
 
 
+def validate_codex_target_local_role_aliases(
+    bundle_paths_by_role: dict[str, Path],
+    role_meta_by_id: dict[str, "RoleMeta"],
+    repo_root: Path,
+) -> list[str]:
+    """Codex bundles must not contain active bare Claude-side handoff aliases.
+
+    Cross-team UUID validation catches concrete foreign UUIDs, but the failure
+    mode that burned GIM-1612 was a target-ambiguous alias: `@QAEngineer`.
+    Paperclip resolves that bare name to the Claude-side agent in Gimle, so keep
+    executable aliases out of Codex bundles unless the line/section is clearly an
+    anti-pattern example.
+    """
+    errors: list[str] = []
+    for role_id, bundle_path in bundle_paths_by_role.items():
+        meta = role_meta_by_id.get(role_id)
+        if not meta or meta.target != "codex":
+            continue
+        try:
+            text = bundle_path.read_text()
+        except OSError:
+            continue
+        rel = bundle_path.relative_to(repo_root)
+        if not str(rel).startswith("paperclips/dist/codex/"):
+            continue
+        for match in _CODEX_FORBIDDEN_ACTIVE_ROLE_RE.finditer(text):
+            if _is_antipattern_context(text, match.start()):
+                continue
+            line_no = text[: match.start()].count("\n") + 1
+            errors.append(
+                f"codex bundle contains active cross-team role alias: "
+                f"{rel}:{line_no} uses {match.group(0)!r}; use CX/Codex "
+                "target-local roster names instead"
+            )
+            break
+    return errors
+
+
 @dataclass
 class RoleMeta:
     target: str
@@ -1026,6 +1070,9 @@ def validate(repo_root: Path = REPO_ROOT) -> list[str]:
     errors.extend(validate_resolved_assembly_manifests(repo_root))
     errors.extend(
         validate_cross_team_targets(bundle_paths_by_role, role_meta_by_id, repo_root)
+    )
+    errors.extend(
+        validate_codex_target_local_role_aliases(bundle_paths_by_role, role_meta_by_id, repo_root)
     )
 
     return errors

@@ -17,19 +17,21 @@ import logging
 import re
 from collections.abc import Callable, Hashable
 from dataclasses import dataclass, field
-from typing import Any, Literal, Protocol
-from urllib.parse import unquote
+from typing import Any, Literal, Protocol, cast
 
 from mcp import ClientSession
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from palace_mcp import code_router
 from palace_mcp.code.namespace import resolve as resolve_project_namespace
+from palace_mcp.code.source_scope import classify_source_scope
 from palace_mcp.errors import handle_tool_error
 from palace_mcp.extractors.foundation.identifiers import symbol_id_for
 from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
 from palace_mcp.memory.bundle import bundle_status
 from palace_mcp.memory.projects import UnknownProjectError
+from palace_mcp.pagination import pagination_envelope
+from palace_mcp.symbol_identity import canonical_symbol_short_name
 
 
 logger = logging.getLogger(__name__)
@@ -80,12 +82,37 @@ async def _resolve_slug(driver: Any, slug: str) -> SlugResolution:
 _QN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*(\.[A-Za-z_][A-Za-z0-9_-]*)*$")
 
 
+def _is_acceptable_qn(v: str) -> bool:
+    """Accept a dotted/short identifier (``App.Foo.bar``) OR a SCIP-style symbol
+    (e.g. ``WalletCore s%3A10WalletCore16AddressViewModelC`` or the ``s:`` form).
+
+    SCIP qns carry a module-space prefix and/or a %-encoded / colon scheme marker
+    that the dotted-identifier regex rejects, yet the downstream resolver
+    (``_qualified_name_variants`` / ``_resolve_qualified_name``) already
+    understands them — rejecting them at the boundary made get_snippet_rich /
+    test_impact unusable with the exact qns search/semantic tools emit (dogfood).
+    Only obvious garbage (no identifier, no SCIP marker) is rejected.
+    """
+    if _QN_RE.match(v):
+        return True
+    return " " in v or "%3" in v or "s:" in v
+
+
 def _needs_human_resolution(qualified_name: str) -> bool:
     return (
         qualified_name.startswith("scip-")
         or "%3" in qualified_name
         or "." not in qualified_name
     )
+
+
+def _qualified_name_variants(qualified_name: str) -> tuple[str, ...]:
+    variants = [qualified_name]
+    if "s%3A" in qualified_name:
+        variants.append(qualified_name.replace("s%3A", "s:"))
+    if "s:" in qualified_name:
+        variants.append(qualified_name.replace("s:", "s%3A"))
+    return tuple(dict.fromkeys(variant for variant in variants if variant))
 
 
 class TestImpactRequest(BaseModel):
@@ -100,10 +127,10 @@ class TestImpactRequest(BaseModel):
     @field_validator("qualified_name")
     @classmethod
     def _qn_charset(cls, v: str) -> str:
-        if not _QN_RE.match(v):
+        if not _is_acceptable_qn(v):
             raise ValueError(
-                "qualified_name must be a dotted Python identifier "
-                "(components match [A-Za-z_][A-Za-z0-9_-]*; allows slug-style hyphens)"
+                "qualified_name must be a dotted identifier (App.Foo.bar) or a "
+                'SCIP-style symbol (e.g. "Module s%3A...")'
             )
         return v
 
@@ -131,6 +158,7 @@ async def _resolve_qn(
     driver: Any | None = None,
     max_candidates: int = 15,
     include_deprecated: bool = True,
+    exact_match_only: bool = False,
 ) -> tuple[str, str] | dict[str, Any]:
     """Disambiguate qualified_name → (short_name, resolved_qn).
 
@@ -163,6 +191,86 @@ async def _resolve_qn(
             max_candidates=max_candidates,
             **fallback_kwargs,
         )
+
+    if exact_match_only and driver is not None and hasattr(driver, "session"):
+        results = await _resolve_exact_qn(
+            driver,
+            qualified_name=qualified_name,
+            project=project,
+            project_slug=project_slug,
+            max_candidates=max_candidates,
+            include_deprecated=include_deprecated,
+        )
+        if results:
+            target = results[0]
+            resolved_name = (
+                str(target.get("short_name") or "")
+                or str(target.get("name") or "")
+                or canonical_symbol_short_name(
+                    str(target.get("qualified_name") or ""),
+                    short_name=str(target.get("short_name") or ""),
+                    name=str(target.get("name") or ""),
+                    symbol=str(target.get("symbol") or ""),
+                )
+                or str(target.get("qualified_name") or "")
+            )
+            return resolved_name, str(target["qualified_name"])
+        if can_try_short_name:
+            fallback = await _fallback_rows()
+            if isinstance(fallback, dict):
+                return fallback
+            results = fallback
+            total = len(results)
+            has_more = False
+            match_source = "short-name search"
+        else:
+            results = []
+            total = 0
+            has_more = False
+            match_source = "exact qualified_name"
+    elif exact_match_only:
+        results = []
+        total = 0
+        has_more = False
+        match_source = "exact qualified_name"
+    else:
+        results = []
+        total = 0
+        has_more = False
+        match_source = "qn_pattern"
+
+    if results:
+        if len(results) > 1:
+            count_phrase = f"at least {len(results)}" if has_more else f"{total}"
+            return {
+                "ok": False,
+                "error_code": "ambiguous_qualified_name",
+                "requested_qualified_name": qualified_name,
+                "message": (
+                    f"{match_source} matched {count_phrase} symbols in project "
+                    f"'{project}' — refine to uniquely identify"
+                ),
+                "matches": [
+                    {
+                        "qualified_name": r.get("qualified_name", ""),
+                        "file_path": r.get("file_path", ""),
+                    }
+                    for r in results
+                ],
+            }
+        target = results[0]
+        resolved_name = (
+            str(target.get("short_name") or "")
+            or str(target.get("name") or "")
+            or canonical_symbol_short_name(
+                str(target.get("qualified_name") or ""),
+                short_name=str(target.get("short_name") or ""),
+                name=str(target.get("name") or ""),
+                symbol=str(target.get("symbol") or ""),
+            )
+            or str(target.get("qualified_name") or "")
+        )
+        return resolved_name, str(target["qualified_name"])
 
     if session is None:
         if not can_try_short_name:
@@ -255,7 +363,18 @@ async def _resolve_qn(
         }
 
     target = results[0]
-    return target["name"], target["qualified_name"]
+    resolved_name = (
+        str(target.get("short_name") or "")
+        or str(target.get("name") or "")
+        or canonical_symbol_short_name(
+            str(target.get("qualified_name") or ""),
+            short_name=str(target.get("short_name") or ""),
+            name=str(target.get("name") or ""),
+            symbol=str(target.get("symbol") or ""),
+        )
+        or str(target.get("qualified_name") or "")
+    )
+    return resolved_name, str(target["qualified_name"])
 
 
 def _escape_cypher_string(value: str) -> str:
@@ -375,6 +494,50 @@ _QUERY_SHADOW_BY_SHORT_NAME_REGEX = """
 MATCH (shadow:SymbolOccurrenceShadow {group_id: $group_id})
 WITH shadow, coalesce(shadow.symbol_qualified_name, '') AS resolved_qn
 WHERE resolved_qn =~ $pattern
+RETURN '' AS name,
+       '' AS short_name,
+       '' AS symbol,
+       resolved_qn AS qualified_name,
+       '' AS file_path
+ORDER BY qualified_name
+LIMIT $limit
+"""
+
+_QUERY_SYMBOL_BY_EXACT_QN = """
+MATCH (s:Symbol {group_id: $group_id})
+WITH s,
+     coalesce(s.qualified_name, '') AS resolved_qn,
+     coalesce(s.symbol, '') AS resolved_symbol
+WHERE (resolved_qn IN $qualified_names OR resolved_symbol IN $qualified_names)
+  AND ($include_deprecated OR NOT s:Deprecated)
+RETURN coalesce(s.name, s.short_name, s.symbol, resolved_qn) AS name,
+       coalesce(s.short_name, s.name, s.symbol, '') AS short_name,
+       coalesce(s.symbol, '') AS symbol,
+       resolved_qn AS qualified_name,
+       coalesce(s.file_path, '') AS file_path
+ORDER BY qualified_name
+LIMIT $limit
+"""
+
+_QUERY_FUNCTION_BY_EXACT_QN = """
+MATCH (fn:Function {group_id: $group_id})
+WITH fn,
+     coalesce(fn.qualified_name, fn.symbol_qualified_name, '') AS resolved_qn,
+     coalesce(fn.symbol_qualified_name, '') AS resolved_symbol
+WHERE resolved_qn IN $qualified_names OR resolved_symbol IN $qualified_names
+RETURN coalesce(fn.display_name, fn.name, resolved_symbol, resolved_qn) AS name,
+       '' AS short_name,
+       resolved_symbol AS symbol,
+       resolved_qn AS qualified_name,
+       coalesce(fn.path, fn.file_path, '') AS file_path
+ORDER BY qualified_name
+LIMIT $limit
+"""
+
+_QUERY_SHADOW_BY_EXACT_QN = """
+MATCH (shadow:SymbolOccurrenceShadow {group_id: $group_id})
+WITH shadow, coalesce(shadow.symbol_qualified_name, '') AS resolved_qn
+WHERE resolved_qn IN $qualified_names
 RETURN '' AS name,
        '' AS short_name,
        '' AS symbol,
@@ -568,6 +731,52 @@ async def _resolve_short_name(
     return []
 
 
+async def _resolve_exact_qn(
+    driver: Any,
+    *,
+    qualified_name: str,
+    project: str,
+    project_slug: str | None = None,
+    max_candidates: int = 15,
+    include_deprecated: bool = True,
+) -> list[dict[str, Any]]:
+    group_id = f"project/{project_slug or project.removeprefix('repos-')}"
+    query_limit = max_candidates + 1
+    qualified_names = list(_qualified_name_variants(qualified_name))
+    queries = (
+        (
+            _QUERY_SYMBOL_BY_EXACT_QN,
+            {
+                "group_id": group_id,
+                "qualified_names": qualified_names,
+                "limit": query_limit,
+                "include_deprecated": include_deprecated,
+            },
+        ),
+        (
+            _QUERY_FUNCTION_BY_EXACT_QN,
+            {
+                "group_id": group_id,
+                "qualified_names": qualified_names,
+                "limit": query_limit,
+            },
+        ),
+        (
+            _QUERY_SHADOW_BY_EXACT_QN,
+            {
+                "group_id": group_id,
+                "qualified_names": qualified_names,
+                "limit": query_limit,
+            },
+        ),
+    )
+
+    matches: list[dict[str, Any]] = []
+    for query, params in queries:
+        matches.extend(await _query_symbol_candidates(driver, query, **params))
+    return _dedup_items(matches, key=lambda row: row["qualified_name"])[:query_limit]
+
+
 def _length_prefixed_identifiers(symbol: str) -> list[tuple[str, str]]:
     identifiers: list[tuple[str, str]] = []
     i = 0
@@ -620,32 +829,7 @@ def _split_scip_top_level(symbol: str) -> list[str]:
 
 
 def _decode_scip_short_name(symbol: str) -> str:
-    raw = symbol.strip()
-    if not raw:
-        return ""
-
-    parts = _split_scip_top_level(raw)
-    candidate = parts[-1] if parts else raw
-    decoded = unquote(candidate)
-    identifiers = _length_prefixed_identifiers(decoded)
-    if identifiers:
-        type_marker_indexes = [
-            idx
-            for idx, (_name, next_char) in enumerate(identifiers)
-            if next_char in "CPOVAE"
-        ]
-        if type_marker_indexes:
-            boundary = type_marker_indexes[-1]
-            if boundary + 1 < len(identifiers):
-                return identifiers[boundary + 1][0]
-            return identifiers[boundary][0]
-        return identifiers[0][0]
-
-    if "." in decoded:
-        return decoded.rsplit(".", 1)[-1]
-    if "/" in decoded:
-        return decoded.rsplit("/", 1)[-1]
-    return decoded.rstrip("#().:")
+    return canonical_symbol_short_name(symbol)
 
 
 async def _test_impact_tests_edge(
@@ -755,6 +939,7 @@ class FindReferencesRequest(BaseModel):
     qualified_name: str = Field(..., min_length=1, max_length=500)
     project: str | None = None
     max_results: int = Field(100, ge=1, le=500)
+    offset: int = Field(0, ge=0, le=50_000)
 
 
 class CallHierarchyRequest(BaseModel):
@@ -778,10 +963,10 @@ class GetSnippetRichRequest(BaseModel):
     @field_validator("qualified_name")
     @classmethod
     def _qn_charset(cls, v: str) -> str:
-        if not _QN_RE.match(v):
+        if not _is_acceptable_qn(v):
             raise ValueError(
-                "qualified_name must be a dotted Python identifier "
-                "(components match [A-Za-z_][A-Za-z0-9_-]*; allows slug-style hyphens)"
+                "qualified_name must be a dotted identifier (App.Foo.bar) or a "
+                'SCIP-style symbol (e.g. "Module s%3A...")'
             )
         return v
 
@@ -961,10 +1146,10 @@ async def _search_unique_occurrences(
     symbol_id: int,
     fallback_qualified_name: str,
     max_results: int,
-) -> tuple[list[dict[str, Any]], bool]:
-    target_unique = max_results + 1
-    limit = target_unique
-    max_limit = target_unique * 8
+    offset: int = 0,
+) -> tuple[list[dict[str, Any]], int]:
+    target_unique = offset + max_results
+    limit = max(target_unique, 1)
 
     while True:
         raw_docs = await bridge.search_by_symbol_id_async(symbol_id, limit=limit)
@@ -973,13 +1158,21 @@ async def _search_unique_occurrences(
             fallback_qualified_name=fallback_qualified_name,
             symbol_id=symbol_id,
         )
-        if len(occurrences) > max_results:
-            return occurrences[:max_results], True
         if len(raw_docs) < limit:
-            return occurrences, False
-        if limit >= max_limit:
-            return occurrences, True
-        limit = min(limit * 2, max_limit)
+            return occurrences[offset : offset + max_results], len(occurrences)
+        limit = max(limit * 2, limit + 1)
+
+
+def _partition_occurrences_by_source_scope(
+    occurrences: list[dict[str, Any]],
+) -> tuple[dict[str, list[dict[str, Any]]], dict[str, int]]:
+    partitions: dict[str, list[dict[str, Any]]] = {}
+    counts: dict[str, int] = {}
+    for occurrence in occurrences:
+        scope = classify_source_scope(occurrence["file_path"]).scope.value
+        partitions.setdefault(scope, []).append(occurrence)
+        counts[scope] = counts.get(scope, 0) + 1
+    return partitions, counts
 
 
 _DESC_SNIPPET_RICH = (
@@ -1104,6 +1297,7 @@ def register_code_composite_tools(
         qualified_name: str,
         project: str | None = None,
         max_results: int = 100,
+        offset: int = 0,
         include_deprecated: bool = False,
     ) -> dict[str, Any]:
         from pathlib import Path
@@ -1125,6 +1319,7 @@ def register_code_composite_tools(
                 qualified_name=qualified_name,
                 project=project,
                 max_results=max_results,
+                offset=offset,
             )
         except ValidationError as e:
             return {
@@ -1166,16 +1361,17 @@ def register_code_composite_tools(
             tantivy_path = Path(settings.palace_tantivy_index_path)
             query_time_failures: list[str] = []
             occurrences_bundle: list[dict[str, Any]] = []
-            truncated = False
+            total_found = 0
             try:
                 async with TantivyBridge(
                     tantivy_path, heap_size_mb=settings.palace_tantivy_heap_mb
                 ) as bridge:
-                    occurrences_bundle, truncated = await _search_unique_occurrences(
+                    occurrences_bundle, total_found = await _search_unique_occurrences(
                         bridge,
                         symbol_id=sym_id,
                         fallback_qualified_name=req.qualified_name,
                         max_results=req.max_results,
+                        offset=req.offset,
                     )
             except Exception:
                 logger.warning(
@@ -1192,14 +1388,23 @@ def register_code_composite_tools(
                         "query_failed_slugs": tuple(sorted(set(query_time_failures)))
                     }
                 )
+            partitions, counts = _partition_occurrences_by_source_scope(
+                occurrences_bundle
+            )
             return {
                 "ok": True,
                 "requested_qualified_name": req.qualified_name,
                 "bundle": resolved_project,
                 "occurrences": occurrences_bundle,
-                "total_found": len(occurrences_bundle) + (1 if truncated else 0),
-                "truncated": truncated,
+                "occurrences_by_source_scope": partitions,
+                "source_scope_counts": counts,
+                "total_found": total_found,
                 "bundle_health": health.model_dump(mode="json"),
+                **pagination_envelope(
+                    total=total_found,
+                    returned=len(occurrences_bundle),
+                    offset=req.offset,
+                ),
             }
 
         # §5.2 project path — existing behaviour unchanged
@@ -1215,6 +1420,7 @@ def register_code_composite_tools(
                     f"Run palace.ingest.run_extractor(<extractor_name>, "
                     f"'{resolved_project}') before relying on this answer"
                 ),
+                **pagination_envelope(total=0, returned=0, offset=req.offset),
             }
 
         # Optional: resolve via CM session for suffix-match disambiguation
@@ -1236,7 +1442,9 @@ def register_code_composite_tools(
                     cm_project,
                     driver=driver,
                     project_slug=project_slug,
+                    label=None,
                     include_deprecated=include_deprecated,
+                    exact_match_only=True,
                 )
                 if isinstance(disambig, dict):
                     if disambig.get("error_code") == "cm_error":
@@ -1261,11 +1469,12 @@ def register_code_composite_tools(
         async with TantivyBridge(
             tantivy_path, heap_size_mb=settings.palace_tantivy_heap_mb
         ) as bridge:
-            occurrences, truncated = await _search_unique_occurrences(
+            occurrences, total_found = await _search_unique_occurrences(
                 bridge,
                 symbol_id=sym_id,
                 fallback_qualified_name=resolved_qn,
                 max_results=req.max_results,
+                offset=req.offset,
             )
 
         # State C: evicted — attach partial_index warning
@@ -1278,9 +1487,18 @@ def register_code_composite_tools(
             "requested_qualified_name": req.qualified_name,
             "project": resolved_project,
             "occurrences": occurrences,
-            "total_found": len(occurrences) + (1 if truncated else 0),
-            "truncated": truncated,
+            "total_found": total_found,
         }
+        partitions, counts = _partition_occurrences_by_source_scope(occurrences)
+        response["occurrences_by_source_scope"] = partitions
+        response["source_scope_counts"] = counts
+        response.update(
+            pagination_envelope(
+                total=total_found,
+                returned=len(occurrences),
+                offset=req.offset,
+            )
+        )
 
         if eviction_info:
             total_evicted = int(eviction_info.get("total_evicted", 0))
@@ -1369,20 +1587,32 @@ def register_code_composite_tools(
             return disambig
         _short_name, resolved_qn = disambig
 
-        # Step 2: Get snippet — must succeed for the tool to return ok=true
-        raw_snippet = await session.call_tool(
-            "get_code_snippet",
-            arguments={"qualified_name": resolved_qn, "project": cm_project},
-        )
-        if raw_snippet.isError:
-            cm_msg = code_router.parse_cm_result(raw_snippet).get("_raw", "")
-            return {
-                "ok": False,
-                "error_code": "cm_error",
-                "requested_qualified_name": req.qualified_name,
-                "message": f"CM error from get_code_snippet: {cm_msg}",
-            }
-        snippet_data = code_router.parse_cm_result(raw_snippet)
+        # Step 2: Get snippet — prefer the native path. The CM get_code_snippet
+        # errors on SCIP qns / native-only projects (dogfood #7: get_snippet_rich
+        # returned cm_error for the exact qns search/semantic emit). Only fall back
+        # to CM when the native path explicitly defers (project-less / unmounted).
+        from palace_mcp.code.native_detect_changes import FALLBACK_TO_CM
+        from palace_mcp.code.native_get_code_snippet import native_get_code_snippet
+
+        native_snippet = await native_get_code_snippet(resolved_qn, project=neo4j_slug)
+        if native_snippet is FALLBACK_TO_CM:
+            raw_snippet = await session.call_tool(
+                "get_code_snippet",
+                arguments={"qualified_name": resolved_qn, "project": cm_project},
+            )
+            if raw_snippet.isError:
+                cm_msg = code_router.parse_cm_result(raw_snippet).get("_raw", "")
+                return {
+                    "ok": False,
+                    "error_code": "cm_error",
+                    "requested_qualified_name": req.qualified_name,
+                    "message": f"CM error from get_code_snippet: {cm_msg}",
+                }
+            snippet_data = code_router.parse_cm_result(raw_snippet)
+        elif isinstance(native_snippet, dict) and native_snippet.get("ok") is False:
+            return {**native_snippet, "requested_qualified_name": req.qualified_name}
+        else:
+            snippet_data = cast(dict[str, Any], native_snippet)
         file_path = snippet_data.get("file_path", "")
         start_line = snippet_data.get("start_line")
         end_line = snippet_data.get("end_line")

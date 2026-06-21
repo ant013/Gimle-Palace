@@ -172,18 +172,7 @@ LIMIT 100
 
         artifacts = discover_public_api_artifacts(ctx.repo_path)
         if not artifacts:
-            return ExtractorStats(
-                outcome=ExtractorOutcome.MISSING_INPUT,
-                message=(
-                    "No public API artifacts found under "
-                    "'.palace/public-api/kotlin/*.api' or "
-                    "'.palace/public-api/swift/*.swiftinterface'."
-                ),
-                next_action=(
-                    "Commit public API snapshots under .palace/public-api/ if "
-                    "public_api_surface coverage is required for this project."
-                ),
-            )
+            return _missing_artifact_stats(ctx.repo_path)
 
         commit_sha = _read_head_sha(ctx.repo_path)
         parsed: list[tuple[PublicApiSurface, list[PublicApiSymbol]]] = []
@@ -236,6 +225,34 @@ def discover_public_api_artifacts(repo_path: Path) -> list[DiscoveredArtifact]:
             )
         )
     return artifacts
+
+
+def _missing_artifact_stats(repo_path: Path) -> ExtractorStats:
+    if not (repo_path / "Package.swift").exists() and _has_xcode_project(repo_path):
+        return ExtractorStats(
+            outcome=ExtractorOutcome.NOT_APPLICABLE,
+            message=(
+                "No public API artifacts found and repo appears to be an Xcode app "
+                "project without a deliberate public API artifact source."
+            ),
+        )
+
+    return ExtractorStats(
+        outcome=ExtractorOutcome.MISSING_INPUT,
+        message=(
+            "No public API artifacts found under "
+            "'.palace/public-api/kotlin/*.api' or "
+            "'.palace/public-api/swift/*.swiftinterface'."
+        ),
+        next_action=(
+            "Commit public API snapshots under .palace/public-api/ if "
+            "public_api_surface coverage is required for this project."
+        ),
+    )
+
+
+def _has_xcode_project(repo_path: Path) -> bool:
+    return any(repo_path.rglob("*.xcodeproj")) or any(repo_path.rglob("*.xcworkspace"))
 
 
 def parse_kotlin_api_dump(

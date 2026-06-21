@@ -1,7 +1,7 @@
 """Integration tests for _compute_skew_groups() on a seeded fixture.
 
-The fixture is created via direct Cypher MERGE (not by running
-dependency_surface), so this test is hermetic to GIM-191.
+The dependency fixture is created via direct Cypher MERGE (not by running
+dependency_surface), while bundle membership uses the production CRUD helpers.
 """
 
 from __future__ import annotations
@@ -11,6 +11,8 @@ import pytest
 from palace_mcp.extractors.cross_repo_version_skew.compute import (
     _compute_skew_groups,
 )
+from palace_mcp.memory.bundle import add_to_bundle, register_bundle
+from palace_mcp.memory.models import Tier
 
 
 async def _seed_skew_fixture(driver) -> None:  # type: ignore[no-untyped-def]
@@ -19,37 +21,51 @@ async def _seed_skew_fixture(driver) -> None:  # type: ignore[no-untyped-def]
         await session.run("MATCH (n) DETACH DELETE n")
         await session.run("""
             // Projects
-            MERGE (a:Project {slug: 'uw-ios-app'})
-            MERGE (m:Project {slug: 'MarketKit'})
-            MERGE (e:Project {slug: 'EvmKit'})
-            MERGE (b:Project {slug: 'BitcoinKit'})
+            MERGE (a:Project {slug: 'hs-extensions'})
+              SET a.name = 'HsExtensions.Swift'
+            MERGE (m:Project {slug: 'hs-toolkit'})
+              SET m.name = 'HsToolKit.Swift'
+            MERGE (e:Project {slug: 'hs-crypto-kit'})
+              SET e.name = 'HsCryptoKit.Swift'
+            MERGE (b:Project {slug: 'bitcoin-core'})
+              SET b.name = 'BitcoinCore.Swift'
+        """)
 
-            // Bundle
-            MERGE (bd:Bundle {name: 'uw-ios-mini'})
-            MERGE (bd)-[:HAS_MEMBER]->(a)
-            MERGE (bd)-[:HAS_MEMBER]->(m)
-            MERGE (bd)-[:HAS_MEMBER]->(e)
-            MERGE (bd)-[:HAS_MEMBER]->(b)
+    await register_bundle(driver, name="uw-ios-mini", description="UW iOS mini fixture")
+    for slug in (
+        "hs-extensions",
+        "hs-toolkit",
+        "hs-crypto-kit",
+        "bitcoin-core",
+    ):
+        await add_to_bundle(driver, bundle="uw-ios-mini", project=slug, tier=Tier.USER)
 
-            // ExternalDependency: marketkit MAJOR skew
-            MERGE (mk_15:ExternalDependency {purl: 'pkg:github/horizontalsystems/marketkit@1.5.0'})
+    async with driver.session() as session:
+        await session.run("""
+            MATCH (a:Project {slug: 'hs-extensions'})
+            MATCH (m:Project {slug: 'hs-toolkit'})
+            MATCH (e:Project {slug: 'hs-crypto-kit'})
+            MATCH (b:Project {slug: 'bitcoin-core'})
+
+            // ExternalDependency: HsToolKit.Swift MAJOR skew
+            MERGE (mk_15:ExternalDependency {purl: 'pkg:github/horizontalsystems/HsToolKit.Swift@1.5.0'})
               SET mk_15.ecosystem = 'github', mk_15.resolved_version = '1.5.0'
-            MERGE (mk_20:ExternalDependency {purl: 'pkg:github/horizontalsystems/marketkit@2.0.1'})
+            MERGE (mk_20:ExternalDependency {purl: 'pkg:github/horizontalsystems/HsToolKit.Swift@2.0.1'})
               SET mk_20.ecosystem = 'github', mk_20.resolved_version = '2.0.1'
 
-            // ExternalDependency: BigInt PATCH+MINOR skew (3 pinnings)
-            MERGE (bi_5:ExternalDependency {purl: 'pkg:github/numerics/big@1.0.5'})
+            // ExternalDependency: HsCryptoKit PATCH+MINOR skew (3 pinnings)
+            MERGE (bi_5:ExternalDependency {purl: 'pkg:github/horizontalsystems/HsCryptoKit.Swift@1.0.5'})
               SET bi_5.ecosystem = 'github', bi_5.resolved_version = '1.0.5'
-            MERGE (bi_7:ExternalDependency {purl: 'pkg:github/numerics/big@1.0.7'})
+            MERGE (bi_7:ExternalDependency {purl: 'pkg:github/horizontalsystems/HsCryptoKit.Swift@1.0.7'})
               SET bi_7.ecosystem = 'github', bi_7.resolved_version = '1.0.7'
-            MERGE (bi_10:ExternalDependency {purl: 'pkg:github/numerics/big@1.1.0'})
+            MERGE (bi_10:ExternalDependency {purl: 'pkg:github/horizontalsystems/HsCryptoKit.Swift@1.1.0'})
               SET bi_10.ecosystem = 'github', bi_10.resolved_version = '1.1.0'
 
-            // ExternalDependency: aligned (single-source — only EvmKit pins it)
+            // ExternalDependency: aligned (single-source — only HsCryptoKit pins it)
             MERGE (sng:ExternalDependency {purl: 'pkg:pypi/notused@5.0.0'})
               SET sng.ecosystem = 'pypi', sng.resolved_version = '5.0.0'
 
-            // ExternalDependency: aligned cross-member (MarketKit and BitcoinKit both pin same)
+            // ExternalDependency: aligned cross-member (HsToolKit and BitcoinCore both pin same)
             MERGE (al:ExternalDependency {purl: 'pkg:pypi/aligned@3.1.0'})
               SET al.ecosystem = 'pypi', al.resolved_version = '3.1.0'
 
@@ -74,26 +90,33 @@ async def test_compute_bundle_mode_finds_two_skew_groups(driver):  # type: ignor
     result = await _compute_skew_groups(
         driver,
         mode="bundle",
-        member_slugs=["uw-ios-app", "MarketKit", "EvmKit", "BitcoinKit"],
+        member_slugs=[
+            "hs-extensions",
+            "hs-toolkit",
+            "hs-crypto-kit",
+            "bitcoin-core",
+        ],
         ecosystem=None,
     )
-    # marketkit (2 versions: major), big (3 versions: patch+minor → minor)
+    # HsToolKit.Swift (2 versions: major), HsCryptoKit.Swift (3 versions: patch+minor → minor)
     purl_roots = {g.purl_root for g in result.skew_groups}
-    assert "pkg:github/horizontalsystems/marketkit" in purl_roots
-    assert "pkg:github/numerics/big" in purl_roots
+    assert "pkg:github/horizontalsystems/HsToolKit.Swift" in purl_roots
+    assert "pkg:github/horizontalsystems/HsCryptoKit.Swift" in purl_roots
 
-    # marketkit severity = major (1.5.0 vs 2.0.1)
+    # HsToolKit.Swift severity = major (1.5.0 vs 2.0.1)
     mk = next(
         g
         for g in result.skew_groups
-        if g.purl_root == "pkg:github/horizontalsystems/marketkit"
+        if g.purl_root == "pkg:github/horizontalsystems/HsToolKit.Swift"
     )
     assert mk.severity == "major"
     assert mk.version_count == 2
 
-    # big severity = minor (1.0.5/1.0.7 → patch; vs 1.1.0 → minor; max = minor)
+    # HsCryptoKit.Swift severity = minor (1.0.5/1.0.7 → patch; vs 1.1.0 → minor; max = minor)
     big = next(
-        g for g in result.skew_groups if g.purl_root == "pkg:github/numerics/big"
+        g
+        for g in result.skew_groups
+        if g.purl_root == "pkg:github/horizontalsystems/HsCryptoKit.Swift"
     )
     assert big.severity == "minor"
     assert big.version_count == 3
@@ -105,7 +128,12 @@ async def test_compute_excludes_single_source_and_aligned(driver):  # type: igno
     result = await _compute_skew_groups(
         driver,
         mode="bundle",
-        member_slugs=["uw-ios-app", "MarketKit", "EvmKit", "BitcoinKit"],
+        member_slugs=[
+            "hs-extensions",
+            "hs-toolkit",
+            "hs-crypto-kit",
+            "bitcoin-core",
+        ],
         ecosystem=None,
     )
     purl_roots = {g.purl_root for g in result.skew_groups}
@@ -121,7 +149,12 @@ async def test_compute_aligned_count_present(driver):  # type: ignore[no-untyped
     result = await _compute_skew_groups(
         driver,
         mode="bundle",
-        member_slugs=["uw-ios-app", "MarketKit", "EvmKit", "BitcoinKit"],
+        member_slugs=[
+            "hs-extensions",
+            "hs-toolkit",
+            "hs-crypto-kit",
+            "bitcoin-core",
+        ],
         ecosystem=None,
     )
     # 'pkg:pypi/aligned' has 2 entries with same version → 1 aligned group
@@ -130,12 +163,51 @@ async def test_compute_aligned_count_present(driver):  # type: ignore[no-untyped
 
 
 @pytest.mark.asyncio
+async def test_compute_includes_declared_constraint_only_skew(driver):  # type: ignore[no-untyped-def]
+    async with driver.session() as session:
+        await session.run("MATCH (n) DETACH DELETE n")
+        await session.run("""
+            MERGE (a:Project {slug: 'kit-a'})
+              SET a.name = 'HsExtensions.Swift'
+            MERGE (b:Project {slug: 'kit-b'})
+              SET b.name = 'BitcoinCore.Swift'
+            MERGE (dep:ExternalDependency {purl: 'pkg:github/apple/swift-collections@1.1.0'})
+              SET dep.ecosystem = 'github', dep.resolved_version = '1.1.0'
+            MERGE (a)-[:DEPENDS_ON {scope: 'main', declared_in: 'Package.swift', declared_version_constraint: '^1.0.0'}]->(dep)
+            MERGE (b)-[:DEPENDS_ON {scope: 'main', declared_in: 'Package.swift', declared_version_constraint: '^2.0.0'}]->(dep)
+        """)
+
+    result = await _compute_skew_groups(
+        driver,
+        mode="bundle",
+        member_slugs=["kit-a", "kit-b"],
+        ecosystem=None,
+    )
+
+    assert len(result.skew_groups) == 1
+    group = result.skew_groups[0]
+    assert group.purl_root == "pkg:github/apple/swift-collections"
+    assert group.severity == "major"
+    assert group.version_count == 2
+    assert {entry.version for entry in group.entries} == {"1.1.0"}
+    assert {entry.declared_constraint for entry in group.entries} == {
+        "^1.0.0",
+        "^2.0.0",
+    }
+
+
+@pytest.mark.asyncio
 async def test_compute_ecosystem_filter(driver):  # type: ignore[no-untyped-def]
     await _seed_skew_fixture(driver)
     result = await _compute_skew_groups(
         driver,
         mode="bundle",
-        member_slugs=["uw-ios-app", "MarketKit", "EvmKit", "BitcoinKit"],
+        member_slugs=[
+            "hs-extensions",
+            "hs-toolkit",
+            "hs-crypto-kit",
+            "bitcoin-core",
+        ],
         ecosystem="github",
     )
     # only github-prefix purls
@@ -149,9 +221,10 @@ async def test_compute_project_mode_single_member(driver):  # type: ignore[no-un
     result = await _compute_skew_groups(
         driver,
         mode="project",
-        member_slugs=["MarketKit"],
+        member_slugs=["hs-toolkit"],
         ecosystem=None,
     )
-    # MarketKit alone has marketkit@2.0.1 (1 entry) and big@1.0.5 (1 entry)
+    # HsToolKit.Swift alone has HsToolKit.Swift@2.0.1 (1 entry) and
+    # HsCryptoKit.Swift@1.0.5 (1 entry)
     # No intra-project skew (each purl_root has 1 version) → 0 skew groups
     assert result.skew_groups == []

@@ -54,6 +54,9 @@ class _FakeResult:
         self._idx += 1
         return row
 
+    async def single(self) -> dict[str, object] | None:
+        return self._rows[0] if self._rows else None
+
 
 class _FakeSession:
     def __init__(self, rows: list[dict[str, object]]) -> None:
@@ -75,6 +78,30 @@ class _FakeDriver:
 
     def session(self) -> _FakeSession:
         return _FakeSession(self._rows)
+
+
+class _QueuedSession:
+    def __init__(self, row_sets: list[list[dict[str, object]]]) -> None:
+        self._row_sets = row_sets
+
+    async def __aenter__(self) -> "_QueuedSession":
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> bool:
+        return False
+
+    async def run(self, _query: str, **_kwargs: object) -> _FakeResult:
+        if not self._row_sets:
+            raise AssertionError("unexpected extra query")
+        return _FakeResult(self._row_sets.pop(0))
+
+
+class _QueuedDriver:
+    def __init__(self, *row_sets: list[dict[str, object]]) -> None:
+        self._row_sets = list(row_sets)
+
+    def session(self) -> _QueuedSession:
+        return _QueuedSession(self._row_sets)
 
 
 @pytest.mark.asyncio
@@ -193,6 +220,58 @@ async def test_find_cross_module_contracts_bundle_payload_without_neo4j(
                 "member_project": "contracts-bundle-beta",
             },
         ],
+    }
+
+
+@pytest.mark.asyncio
+async def test_find_cross_module_contracts_returns_not_extracted_without_snapshots_unit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from palace_mcp.code import find_cross_module_contracts as module
+
+    async def _fake_resolve_slug(_driver: object, _target_slug: str) -> SimpleNamespace:
+        return SimpleNamespace(kind="project", member_slugs=[])
+
+    monkeypatch.setattr(module, "_resolve_slug", _fake_resolve_slug)
+    driver = _QueuedDriver([], [{"present": False}])
+
+    result = await module.find_cross_module_contracts(
+        driver=driver,
+        project="contracts-empty",
+    )
+
+    assert result == {
+        "ok": False,
+        "error_code": "not_extracted",
+        "message": (
+            "no cross-module contract snapshot/delta records found; "
+            "run public_api_surface and cross_module_contract first"
+        ),
+        "project": "contracts-empty",
+    }
+
+
+@pytest.mark.asyncio
+async def test_find_cross_module_contracts_returns_empty_when_snapshots_exist_unit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from palace_mcp.code import find_cross_module_contracts as module
+
+    async def _fake_resolve_slug(_driver: object, _target_slug: str) -> SimpleNamespace:
+        return SimpleNamespace(kind="project", member_slugs=[])
+
+    monkeypatch.setattr(module, "_resolve_slug", _fake_resolve_slug)
+    driver = _QueuedDriver([], [{"present": True}])
+
+    result = await module.find_cross_module_contracts(
+        driver=driver,
+        project="contracts-zero",
+    )
+
+    assert result == {
+        "ok": True,
+        "project": "contracts-zero",
+        "result": [],
     }
 
 
@@ -366,7 +445,7 @@ def contracts_seeded_project(
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_find_cross_module_contracts_empty_graph(
+async def test_find_cross_module_contracts_returns_not_extracted_without_snapshots(
     neo4j_uri: str,
     neo4j_auth: tuple[str, str],
     contracts_empty_project: str,
@@ -381,8 +460,70 @@ async def test_find_cross_module_contracts_empty_graph(
         )
     finally:
         await drv.close()
-    assert result["ok"] is True
-    assert result["result"] == []
+    assert result == {
+        "ok": False,
+        "error_code": "not_extracted",
+        "message": (
+            "no cross-module contract snapshot/delta records found; "
+            "run public_api_surface and cross_module_contract first"
+        ),
+        "project": contracts_empty_project,
+    }
+
+
+@pytest.fixture(scope="module")
+def contracts_no_records_project(
+    neo4j_uri: str, neo4j_auth: tuple[str, str]
+) -> Iterator[str]:
+    from neo4j import GraphDatabase
+
+    slug = f"cm-no-records-{uuid.uuid4().hex[:8]}"
+    drv = GraphDatabase.driver(neo4j_uri, auth=neo4j_auth)
+    with drv.session() as sess:
+        sess.run("MERGE (p:Project {slug: $s})", s=slug)
+        sess.run(
+            """
+            CREATE (:ModuleContractSnapshot {
+                id: 'snapshot-old',
+                project: $slug,
+                group_id: $gid,
+                consumer_module_name: '__no_cross_module_consumer__',
+                producer_module_name: 'CoreKit',
+                language: 'swift',
+                commit_sha: 'aaa111',
+                symbol_count: 0,
+                use_count: 0,
+                file_count: 0,
+                skipped_symbol_count: 2,
+                schema_version: 1
+            })
+            CREATE (:ModuleContractSnapshot {
+                id: 'snapshot-new',
+                project: $slug,
+                group_id: $gid,
+                consumer_module_name: '__no_cross_module_consumer__',
+                producer_module_name: 'CoreKit',
+                language: 'swift',
+                commit_sha: 'bbb222',
+                symbol_count: 0,
+                use_count: 0,
+                file_count: 0,
+                skipped_symbol_count: 2,
+                schema_version: 1
+            })
+            """,
+            slug=slug,
+            gid=f"project/{slug}",
+        )
+    yield slug
+    with drv.session() as sess:
+        sess.run(
+            "MATCH (n) WHERE n.project = $s OR n.group_id = $g DETACH DELETE n",
+            s=slug,
+            g=f"project/{slug}",
+        )
+        sess.run("MATCH (p:Project {slug: $s}) DETACH DELETE p", s=slug)
+    drv.close()
 
 
 @pytest.mark.integration
@@ -417,6 +558,31 @@ async def test_find_cross_module_contracts_seeded(
     assert row["consumer_module"] == "AppModule"
     assert row["producer_module"] == "CoreKit"
     assert row["removed_count"] == 2
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_find_cross_module_contracts_returns_empty_after_seeded_zero_delta_ingest(
+    neo4j_uri: str,
+    neo4j_auth: tuple[str, str],
+    contracts_no_records_project: str,
+) -> None:
+    from neo4j import AsyncGraphDatabase
+    from palace_mcp.code.find_cross_module_contracts import find_cross_module_contracts
+
+    drv = AsyncGraphDatabase.driver(neo4j_uri, auth=neo4j_auth)
+    try:
+        result = await find_cross_module_contracts(
+            driver=drv, project=contracts_no_records_project
+        )
+    finally:
+        await drv.close()
+
+    assert result == {
+        "ok": True,
+        "project": contracts_no_records_project,
+        "result": [],
+    }
 
 
 @pytest.mark.integration

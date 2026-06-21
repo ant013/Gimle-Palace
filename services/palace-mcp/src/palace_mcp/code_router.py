@@ -10,6 +10,8 @@ import json
 import logging
 from collections.abc import Callable
 from contextlib import AsyncExitStack
+from dataclasses import dataclass
+from time import perf_counter
 from typing import Any
 
 from mcp import ClientSession
@@ -23,6 +25,15 @@ from mcp.server.fastmcp.utilities.func_metadata import (
 from mcp.types import CallToolResult, TextContent
 from pydantic import ConfigDict
 
+from palace_mcp.code.native_detect_changes import FALLBACK_TO_CM, native_detect_changes
+from palace_mcp.code.native_get_architecture import native_get_architecture
+from palace_mcp.code.native_get_code_snippet import native_get_code_snippet
+from palace_mcp.code.list_passthrough_projects import (
+    build_passthrough_project_listing,
+)
+from palace_mcp.code.native_query_graph import native_query_graph
+from palace_mcp.code.native_search_graph import native_search_graph
+from palace_mcp.code.native_trace_call_path import native_trace_call_path
 from palace_mcp.code.namespace import resolve as resolve_namespace
 
 logger = logging.getLogger(__name__)
@@ -109,6 +120,13 @@ class _OpenArgs(ArgModelBase):
 _OPEN_SCHEMA: dict[str, Any] = {"type": "object", "additionalProperties": True}
 _READ_FILTER_DEFAULT_TOOLS = frozenset({"search_graph", "get_code_snippet"})
 _MAX_PROJECTS = 64
+
+
+@dataclass(frozen=True)
+class PassthroughEntry:
+    description: str
+    native_handler: Callable[..., Any] | None = None
+    phase2_error_code: str | None = None
 
 
 def _make_open_fn_metadata(fn: Any) -> FuncMetadata:
@@ -210,14 +228,35 @@ async def _normalize_project_args(arguments: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-_ENABLED_CM_TOOLS: dict[str, str] = {
-    "search_graph": "Search code graph nodes by name pattern, label, or file pattern.",
-    "trace_call_path": "Trace function call chains (inbound/outbound/both).",
-    "query_graph": "Pass through a caller-supplied Cypher-like query against the code graph.",
-    "detect_changes": "Detect uncommitted changes mapped to symbols.",
-    "get_architecture": "Get project architecture: languages, packages, entry points, routes.",
-    "get_code_snippet": "Get source code for a qualified symbol name.",
-    "search_code": "Grep-like code search across indexed repositories.",
+_PASSTHROUGH_TOOLS: dict[str, PassthroughEntry] = {
+    "search_graph": PassthroughEntry(
+        "Search code graph nodes by name pattern, label, or file pattern.",
+        native_handler=native_search_graph,
+    ),
+    "trace_call_path": PassthroughEntry(
+        "Trace function call chains (inbound/outbound/both).",
+        native_handler=native_trace_call_path,
+    ),
+    "query_graph": PassthroughEntry(
+        "Pass through a caller-supplied Cypher-like query against the code graph.",
+        native_handler=native_query_graph,
+    ),
+    "detect_changes": PassthroughEntry(
+        "Detect uncommitted changes mapped to symbols.",
+        native_handler=native_detect_changes,
+    ),
+    "get_architecture": PassthroughEntry(
+        "Get project architecture: languages, packages, entry points, routes.",
+        native_handler=native_get_architecture,
+    ),
+    "get_code_snippet": PassthroughEntry(
+        "Get source code for a qualified symbol name.",
+        native_handler=native_get_code_snippet,
+    ),
+    "search_code": PassthroughEntry(
+        "Grep-like code search across indexed repositories.",
+        phase2_error_code="phase2_required",
+    ),
 }
 
 _DISABLED_CM_TOOLS: dict[str, str] = {
@@ -238,37 +277,141 @@ def register_code_tools(
     Pass `mcp_instance` (the FastMCP server) to enable open-schema patching
     so that MCP clients can call tools with flat arguments (GIM-89 fix).
     """
-    for cm_name, desc in _ENABLED_CM_TOOLS.items():
-        _register_passthrough(tool_decorator, cm_name, desc, mcp_instance)
+    for cm_name, entry in _PASSTHROUGH_TOOLS.items():
+        _register_passthrough(
+            tool_decorator,
+            cm_name,
+            entry.description,
+            entry,
+            mcp_instance,
+        )
+    _register_list_passthrough_projects(tool_decorator)
     for disabled_name, message in _DISABLED_CM_TOOLS.items():
         _register_disabled_tool(tool_decorator, disabled_name, message, mcp_instance)
+
+
+async def _call_cm_tool(cm_tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    assert _cm_session is not None, (
+        "CM subprocess not started; set CODEBASE_MEMORY_MCP_BINARY"
+    )
+    result: CallToolResult = await _cm_session.call_tool(
+        cm_tool_name, arguments=arguments
+    )
+    if result.isError:
+        return {"error": [str(block) for block in result.content]}
+    return parse_cm_result(result)
+
+
+async def _resolve_project(
+    arguments: dict[str, Any],
+) -> tuple[Any | None, dict[str, Any] | None]:
+    project = arguments.get("project")
+    if not isinstance(project, str):
+        return None, None
+
+    from palace_mcp.mcp_server import get_driver
+
+    driver = get_driver()
+    if driver is None:
+        return None, None
+    try:
+        return await resolve_namespace(driver, project), None
+    except Exception as exc:
+        return None, _project_not_found(str(exc))
+
+
+def _cm_fallback_unavailable(tool_name: str, project: str | None) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "ok": False,
+        "error_code": "cm_fallback_unavailable",
+        "message": f"CM fallback unavailable for palace.code.{tool_name}",
+    }
+    if project is not None:
+        result["project"] = project
+    return result
+
+
+def _phase2_required(tool_name: str, project: str) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "error_code": "phase2_required",
+        "message": f"native palace.code.{tool_name} is not implemented in this slice",
+        "project": project,
+    }
+
+
+async def _dispatch_passthrough(
+    cm_tool_name: str,
+    entry: PassthroughEntry,
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    resolution = None
+    project_error = None
+    decision = "cm"
+    project = (
+        arguments.get("project") if isinstance(arguments.get("project"), str) else None
+    )
+    started = perf_counter()
+    try:
+        resolution, project_error = await _resolve_project(arguments)
+        if resolution is not None and entry.native_handler is not None:
+            native_arguments = dict(arguments)
+            native_arguments["project"] = resolution.slug
+            native_result = await entry.native_handler(**native_arguments)
+            if native_result is not FALLBACK_TO_CM:
+                assert isinstance(native_result, dict)
+                decision = (
+                    "native_error" if native_result.get("ok") is False else "native"
+                )
+                return native_result
+            decision = "fallback_to_cm"
+
+        if project_error is not None:
+            decision = "project_not_found"
+            return project_error
+
+        if _cm_session is None:
+            if resolution is not None and entry.phase2_error_code is not None:
+                decision = entry.phase2_error_code
+                return _phase2_required(cm_tool_name, resolution.slug)
+            decision = "cm_fallback_unavailable"
+            return _cm_fallback_unavailable(
+                cm_tool_name, resolution.slug if resolution else project
+            )
+
+        normalized = await _normalize_project_args(arguments)
+        if "error_code" in normalized:
+            decision = str(normalized["error_code"])
+            return normalized
+        decision = "cm"
+        return await _call_cm_tool(cm_tool_name, normalized)
+    finally:
+        logger.info(
+            "passthrough.dispatch",
+            extra={
+                "tool": cm_tool_name,
+                "decision": decision,
+                "project": resolution.slug if resolution is not None else project,
+                "duration_ms": round((perf_counter() - started) * 1000, 3),
+            },
+        )
 
 
 def _register_passthrough(
     tool_decorator: Callable[[str, str], Callable[..., Any]],
     cm_tool_name: str,
     description: str,
+    entry: PassthroughEntry,
     mcp_instance: Any = None,
 ) -> None:
     palace_name = f"palace.code.{cm_tool_name}"
 
     @tool_decorator(palace_name, description)
     async def _forward(**kwargs: Any) -> dict[str, Any]:
-        assert _cm_session is not None, (
-            "CM subprocess not started; set CODEBASE_MEMORY_MCP_BINARY"
-        )
         arguments = dict(kwargs)
         if cm_tool_name in _READ_FILTER_DEFAULT_TOOLS:
             arguments.setdefault("include_deprecated", False)
-        normalized = await _normalize_project_args(arguments)
-        if "error_code" in normalized:
-            return normalized
-        result: CallToolResult = await _cm_session.call_tool(
-            cm_tool_name, arguments=normalized
-        )
-        if result.isError:
-            return {"error": [str(block) for block in result.content]}
-        return parse_cm_result(result)
+        return await _dispatch_passthrough(cm_tool_name, entry, arguments)
 
     if mcp_instance is not None:
         _patch_tool_open_schema(
@@ -277,6 +420,17 @@ def _register_passthrough(
             _make_open_fn_metadata(_forward),
             _open_schema_for_tool(cm_tool_name),
         )
+
+
+def _register_list_passthrough_projects(
+    tool_decorator: Callable[[str, str], Callable[..., Any]],
+) -> None:
+    @tool_decorator(
+        "palace.code.list_passthrough_projects",
+        "List palace.code passthrough tools by native or CM-only routing.",
+    )
+    async def _list_passthrough_projects() -> dict[str, list[str]]:
+        return build_passthrough_project_listing(_PASSTHROUGH_TOOLS)
 
 
 def _register_disabled_tool(

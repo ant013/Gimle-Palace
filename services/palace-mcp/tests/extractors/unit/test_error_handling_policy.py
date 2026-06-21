@@ -80,6 +80,7 @@ def test_error_handling_policy_registered() -> None:
     extractor = EXTRACTORS.get("error_handling_policy")
     assert extractor is not None
     assert extractor.name == "error_handling_policy"
+    assert extractor.timeout_s == 1800.0
 
 
 def test_audit_contract_returns_valid_contract() -> None:

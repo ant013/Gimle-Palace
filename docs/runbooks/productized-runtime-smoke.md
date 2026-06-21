@@ -270,14 +270,17 @@ Xcode (right-click the reference > Show File Inspector > change Location).
 
 ### Missing Config.xcconfig
 
-For `unstoppable-wallet-ios`, the build requires `Config.xcconfig` at the
-repo root. The recipe's `ensure_config_from_template` prepare step copies
-`Config.template.xcconfig` to `Config.xcconfig` if it is missing. If the
-template itself is missing, the prepare step will fail. Verify the template
-exists:
+For `unstoppable-wallet-ios`, the build requires
+`Unstoppable/Unstoppable/Configuration/Config.xcconfig`. On clean checkouts,
+`bench/ingest-fresh-build.sh unstoppable-wallet-ios` now copies
+`Unstoppable/Unstoppable/Configuration/Config.template.xcconfig` to
+`Config.xcconfig` before `[build]` when the gitignored file is missing, and it
+does not overwrite an existing local config. If the template itself is
+missing, the prepare step fails early with a path-specific error. Verify the
+template exists:
 
 ```bash
-ls -la /path/to/unstoppable-wallet-ios/Config.template.xcconfig
+ls -la /path/to/unstoppable-wallet-ios/Unstoppable/Unstoppable/Configuration/Config.template.xcconfig
 ```
 
 ### SwiftPM package resolution
@@ -480,7 +483,7 @@ These files are created during smoke and should not be committed:
 
 | Artifact | Location | Purpose |
 |---|---|---|
-| `Config.xcconfig` | repo root (UW only) | Copied from template by prepare step |
+| `Config.xcconfig` | `Unstoppable/Unstoppable/Configuration/` (UW only) | Copied from template by prepare step |
 | `.palace-scip-derived-data/` | repo root | Isolated Xcode DerivedData |
 | `scip/index.scip` | repo root | SCIP index artifact |
 | `smoke-report.json` | operator-chosen | Structured smoke result |

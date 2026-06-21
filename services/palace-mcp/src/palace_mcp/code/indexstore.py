@@ -8,7 +8,7 @@ regular C function pointers and are compatible with ctypes without ObjC blocks.
 IndexStore v5 on-disk layout::
 
     <store_path>/
-        v5/units/*.IDXU   – compiled-unit descriptors
+        v5/units/*        – compiled-unit descriptors
         v5/records/*.IDXR – per-source-file symbol occurrence records
 
 Query strategy:
@@ -44,6 +44,8 @@ _ROLE_REFERENCE = 1 << 2  # 4
 _ROLE_READ = 1 << 3  # 8
 _ROLE_WRITE = 1 << 4  # 16
 _ROLE_CALL = 1 << 5  # 32
+_ROLE_REL_CALLEDBY = 1 << 13  # 8192
+_ROLE_REL_CONTAINEDBY = 1 << 16  # 65536
 
 _UNIT_DEP_RECORD = 2  # indexstore_unit_dependency_kind_t::RECORD
 
@@ -63,6 +65,25 @@ class CallerRecord:
     line: int  # 1-based line number
     col: int  # 1-based column number
     roles: int  # bitmask from indexstore_symbol_role_t
+
+
+@dataclass(frozen=True)
+class CallEdgeRecord:
+    """A resolved Symbol→Symbol call edge from IndexStore relations."""
+
+    source: str
+    target: str
+    source_file: str = ""
+
+
+@dataclass(frozen=True)
+class CallEdgeScanResult:
+    """Single-pass IndexStore call-edge scan output."""
+
+    edges: tuple[CallEdgeRecord, ...]
+    counters: dict[str, int]
+    records_scanned: int
+    occurrences_scanned: int
 
 
 # ---------------------------------------------------------------------------
@@ -207,12 +228,23 @@ class _BoundLib:
             ctypes.POINTER(u32),
             ctypes.POINTER(u32),
         ]
+        self.RelationApplierF = ctypes.CFUNCTYPE(b, vp, vp)
+        lib.indexstore_occurrence_relations_apply_f.restype = b
+        lib.indexstore_occurrence_relations_apply_f.argtypes = [
+            vp,
+            vp,
+            self.RelationApplierF,
+        ]
 
         # symbol
         lib.indexstore_symbol_get_name.restype = _StringRef
         lib.indexstore_symbol_get_name.argtypes = [vp]
         lib.indexstore_symbol_get_usr.restype = _StringRef
         lib.indexstore_symbol_get_usr.argtypes = [vp]
+        lib.indexstore_symbol_relation_get_roles.restype = u64
+        lib.indexstore_symbol_relation_get_roles.argtypes = [vp]
+        lib.indexstore_symbol_relation_get_symbol.restype = vp
+        lib.indexstore_symbol_relation_get_symbol.argtypes = [vp]
 
         self._lib = lib
 
@@ -269,6 +301,194 @@ def find_callers(
         return _query(lb, store, symbol_name, max_results, include_definitions)
     finally:
         lb.indexstore_store_dispose(store)
+
+
+def collect_call_edges(
+    store_path: str, *, selected_source_files: set[str] | None = None
+) -> CallEdgeScanResult:
+    """Scan the IndexStore once and resolve Swift Symbol→Symbol call edges."""
+    lb = _get_lib()
+
+    store = lb.indexstore_store_create(store_path.encode(), None)
+    if not store:
+        raise RuntimeError(f"indexstore_store_create failed for: {store_path}")
+
+    try:
+        return _collect_call_edges(
+            lb, store, selected_source_files=selected_source_files
+        )
+    finally:
+        lb.indexstore_store_dispose(store)
+
+
+def _is_call_site(roles: int) -> bool:
+    return bool(roles & _ROLE_CALL)
+
+
+def _resolve_caller_usr(relations: list[tuple[int, str]]) -> str | None:
+    required = _ROLE_REL_CALLEDBY | _ROLE_REL_CONTAINEDBY
+    for rel_roles, rel_usr in relations:
+        if rel_usr and rel_roles & required == required:
+            return rel_usr
+    return None
+
+
+def _swift_qname_from_usr(usr: str) -> str | None:
+    from palace_mcp.extractors.cross_module_contract import (
+        _swift_qname_from_usr as bridge_swift_qname_from_usr,
+    )
+
+    return bridge_swift_qname_from_usr(usr)
+
+
+def _resolve_call_edge(
+    callee_usr: str,
+    relations: list[tuple[int, str]],
+    *,
+    source_file: str = "",
+) -> CallEdgeRecord | None:
+    caller_usr = _resolve_caller_usr(relations)
+    if caller_usr is None:
+        return None
+
+    source = _swift_qname_from_usr(caller_usr)
+    target = _swift_qname_from_usr(callee_usr)
+    if source is None or target is None:
+        return None
+
+    return CallEdgeRecord(source=source, target=target, source_file=source_file)
+
+
+def _collect_call_edges(
+    lb: _BoundLib,
+    store: int,
+    *,
+    selected_source_files: set[str] | None = None,
+) -> CallEdgeScanResult:
+    unit_names: list[str] = []
+
+    @lb.UnitApplierF  # type: ignore[untyped-decorator]
+    def _unit_applier(_ctx: int, name_bytes: bytes | None) -> bool:
+        if name_bytes:
+            unit_names.append(name_bytes.decode("utf-8", errors="replace"))
+        return True
+
+    lb.indexstore_store_units_apply_f(store, 0, None, _unit_applier)
+
+    record_names: list[str] = []
+    record_to_file: dict[str, str] = {}
+
+    @lb.DepApplierF  # type: ignore[untyped-decorator]
+    def _dep_applier(_ctx: int, dep: int) -> bool:
+        if lb.indexstore_unit_dependency_get_kind(dep) != _UNIT_DEP_RECORD:
+            return True
+        record_name = lb.indexstore_unit_dependency_get_name(dep).decode()
+        file_path = lb.indexstore_unit_dependency_get_filepath(dep).decode()
+        if record_name and record_name not in record_to_file:
+            record_to_file[record_name] = file_path
+            record_names.append(record_name)
+        return True
+
+    for unit_name in unit_names:
+        reader = lb.indexstore_unit_reader_create(store, unit_name.encode(), None)
+        if not reader:
+            continue
+        lb.indexstore_unit_reader_dependencies_apply_f(reader, None, _dep_applier)
+        lb.indexstore_unit_reader_dispose(reader)
+
+    counters = {
+        "calls_seen": 0,
+        "missing_relation": 0,
+    }
+    occurrences_scanned = 0
+    edges: list[CallEdgeRecord] = []
+    seen_edges: set[tuple[str, str]] = set()
+
+    @lb.RelationApplierF  # type: ignore[untyped-decorator]
+    def _noop_relation_applier(_ctx: int, rel: int) -> bool:
+        return True
+
+    selected_files = (
+        {os.path.realpath(path) for path in selected_source_files}
+        if selected_source_files is not None
+        else None
+    )
+    for record_name in record_names:
+        source_file = record_to_file.get(record_name, "")
+        if (
+            selected_files is not None
+            and os.path.realpath(source_file) not in selected_files
+        ):
+            continue
+        rec_reader = lb.indexstore_record_reader_create(
+            store, record_name.encode(), None
+        )
+        if not rec_reader:
+            continue
+
+        relations: list[tuple[int, str]] = []
+
+        @lb.RelationApplierF  # type: ignore[untyped-decorator]
+        def _relation_applier(_ctx: int, rel: int) -> bool:
+            rel_symbol = lb.indexstore_symbol_relation_get_symbol(rel)
+            if not rel_symbol:
+                return True
+            rel_roles = int(lb.indexstore_symbol_relation_get_roles(rel))
+            rel_usr = lb.indexstore_symbol_get_usr(rel_symbol).decode()
+            relations.append((rel_roles, rel_usr))
+            return True
+
+        @lb.OccApplierF  # type: ignore[untyped-decorator]
+        def _occ_applier(_ctx: int, occ: int) -> bool:
+            nonlocal occurrences_scanned
+            occurrences_scanned += 1
+
+            roles = int(lb.indexstore_occurrence_get_roles(occ))
+            if not _is_call_site(roles):
+                return True
+
+            counters["calls_seen"] += 1
+
+            symbol = lb.indexstore_occurrence_get_symbol(occ)
+            if not symbol:
+                counters["missing_relation"] += 1
+                return True
+
+            callee_usr = lb.indexstore_symbol_get_usr(symbol).decode()
+            relations.clear()
+            lb.indexstore_occurrence_relations_apply_f(occ, None, _relation_applier)
+            edge = _resolve_call_edge(
+                callee_usr,
+                relations,
+                source_file=source_file,
+            )
+            if edge is None:
+                counters["missing_relation"] += 1
+                return True
+
+            edge_key = (edge.source, edge.target)
+            if edge_key in seen_edges:
+                return True
+            seen_edges.add(edge_key)
+            edges.append(edge)
+            return True
+
+        lb.indexstore_record_reader_occurrences_apply_f(rec_reader, None, _occ_applier)
+        lb.indexstore_record_reader_dispose(rec_reader)
+
+    logger.info(
+        "indexstore.collect_call_edges: %d edges from %d/%d call occurrences across %d records",
+        len(edges),
+        len(edges) + counters["missing_relation"],
+        counters["calls_seen"],
+        len(record_names),
+    )
+    return CallEdgeScanResult(
+        edges=tuple(edges),
+        counters=counters,
+        records_scanned=len(record_names),
+        occurrences_scanned=occurrences_scanned,
+    )
 
 
 def _query(

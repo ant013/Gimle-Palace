@@ -12,6 +12,8 @@ from palace_mcp.extractors.dead_code.models import GraphEdge, SymbolGraph, Symbo
 # Falls back gracefully to empty if nodes don't exist.
 _LOAD_SYMBOLS = """
 MATCH (s:Symbol {group_id: $group_id})
+WHERE s.deleted_at IS NULL
+  AND NOT s:Deprecated
 RETURN
     s.qualified_name AS qualified_name,
     s.kind AS kind,
@@ -35,6 +37,10 @@ RETURN
 
 _LOAD_EDGES = """
 MATCH (a:Symbol {group_id: $group_id})-[r:CALLS|REFERENCES|EXTENDS|CONFORMS_TO|EXTENSION_OF|EXISTENTIAL_USE]->(b:Symbol {group_id: $group_id})
+WHERE a.deleted_at IS NULL
+  AND NOT a:Deprecated
+  AND b.deleted_at IS NULL
+  AND NOT b:Deprecated
 RETURN a.qualified_name AS source, b.qualified_name AS target, type(r) AS kind
 """
 

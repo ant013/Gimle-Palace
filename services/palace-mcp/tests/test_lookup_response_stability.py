@@ -18,7 +18,19 @@ def test_lookup_response_top_level_keys_stable() -> None:
     """Wire contract: top-level keys must not change without a major version bump."""
     resp = LookupResponse(items=[], total_matched=0, query_ms=5)
     dumped = resp.model_dump()
-    assert set(dumped.keys()) == {"items", "total_matched", "query_ms", "warnings"}
+    assert set(dumped.keys()) == {
+        "items",
+        "total_matched",
+        "query_ms",
+        "warnings",
+        "total",
+        "returned",
+        "offset",
+        "has_more",
+        "next_offset",
+        "truncated",
+        "truncated_reason",
+    }
 
 
 def test_lookup_response_item_keys_stable() -> None:

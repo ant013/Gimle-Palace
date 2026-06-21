@@ -76,6 +76,7 @@ class TestCodeToolRegistration:
             "palace.code.get_code_snippet",
             "palace.code.get_snippet_rich",
             "palace.code.list_functions",
+            "palace.code.list_passthrough_projects",
             "palace.code.manage_adr",
             "palace.code.query_graph",
             "palace.code.search_code",
@@ -111,3 +112,37 @@ class TestCodeToolRegistration:
             include_deprecated = tool.parameters["properties"]["include_deprecated"]
             assert include_deprecated["type"] == "boolean"
             assert include_deprecated["default"] is False
+
+    def test_dead_code_tools_expose_include_dependencies_default(self) -> None:
+        from palace_mcp.mcp_server import build_mcp_asgi_app, _mcp
+
+        build_mcp_asgi_app()
+        code_tools = {
+            tool.name: tool
+            for tool in _mcp._tool_manager.list_tools()
+            if tool.name
+            in {"palace.code.find_dead_code", "palace.code.find_dead_symbols"}
+        }
+        assert set(code_tools) == {
+            "palace.code.find_dead_code",
+            "palace.code.find_dead_symbols",
+        }
+
+        for tool in code_tools.values():
+            include_dependencies = tool.parameters["properties"]["include_dependencies"]
+            assert include_dependencies["type"] == "boolean"
+            assert include_dependencies["default"] is False
+
+    def test_find_public_api_description_documents_kit_only_scope(self) -> None:
+        from palace_mcp.mcp_server import build_mcp_asgi_app, _mcp
+
+        build_mcp_asgi_app()
+        tool = next(
+            item
+            for item in _mcp._tool_manager.list_tools()
+            if item.name == "palace.code.find_public_api"
+        )
+
+        assert "kit/library project" in tool.description
+        assert "Xcode app targets" in tool.description
+        assert "return no records" in tool.description

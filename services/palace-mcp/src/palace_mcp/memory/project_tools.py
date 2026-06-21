@@ -11,9 +11,11 @@ from neo4j import AsyncDriver
 from palace_mcp.memory.cypher import (
     CHECK_BUNDLE_NAME_EXISTS,
     CHECK_PROJECT_NAMESPACE_CONFLICT,
+    ENTITY_COUNTS_BY_PROJECT,
     GET_PROJECT,
     LIST_PROJECTS,
     PROJECT_ENTITY_COUNTS,
+    PROJECT_INDEXED_COMMIT,
     PROJECT_LAST_INGEST,
     UPSERT_PROJECT,
 )
@@ -21,9 +23,28 @@ from palace_mcp.memory.schema import ProjectInfo
 
 logger = logging.getLogger(__name__)
 
+_MEMORY_ENTITY_TYPES = frozenset(
+    {"Episode", "Iteration", "Decision", "IterationNote", "Finding"}
+)
+_CODE_INDEX_TYPES = frozenset(
+    {
+        "Module",
+        "File",
+        "Symbol",
+        "APIEndpoint",
+        "Model",
+        "Repository",
+        "ExternalLib",
+        "Trace",
+    }
+)
+
 
 def _project_info_from_row(
-    row: Any, *, entity_counts: dict[str, int] | None = None
+    row: Any,
+    *,
+    entity_counts: dict[str, int] | None = None,
+    code_index_stats: dict[str, int] | None = None,
 ) -> ProjectInfo:
     p = row["p"]
     return ProjectInfo(
@@ -37,10 +58,22 @@ def _project_info_from_row(
         parent_mount=p.get("parent_mount"),
         relative_path=p.get("relative_path"),
         language_profile=p.get("language_profile"),
+        expected_profile=bool(p.get("expected_profile") or False),
         source_created_at=p["source_created_at"],
         source_updated_at=p["source_updated_at"],
         entity_counts=entity_counts or {},
+        code_index_stats=code_index_stats or {},
     )
+
+
+def _split_count(label: str, count: int) -> tuple[dict[str, int], dict[str, int]]:
+    if count <= 0:
+        return {}, {}
+    if label in _MEMORY_ENTITY_TYPES:
+        return {label: count}, {}
+    if label in _CODE_INDEX_TYPES:
+        return {}, {label: count}
+    return {}, {}
 
 
 async def register_project(
@@ -55,6 +88,7 @@ async def register_project(
     parent_mount: str | None = None,
     relative_path: str | None = None,
     language_profile: str | None = None,
+    expected_profile: bool = False,
 ) -> ProjectInfo:
     from palace_mcp.code.namespace import invalidate
     from palace_mcp.memory.bundle import ProjectSlugConflictsWithBundle
@@ -112,6 +146,7 @@ async def register_project(
             parent_mount=parent_mount,
             relative_path=relative_path,
             language_profile=language_profile,
+            expected_profile=expected_profile,
             now=now,
         )
         result = await session.run(GET_PROJECT, slug=slug)
@@ -125,7 +160,28 @@ async def list_projects(driver: AsyncDriver) -> list[ProjectInfo]:
     """Return all :Project nodes ordered by slug."""
     async with driver.session() as session:
         result = await session.run(LIST_PROJECTS)
-        return [_project_info_from_row(row) async for row in result]
+        project_rows = [row async for row in result]
+
+        counts_result = await session.run(ENTITY_COUNTS_BY_PROJECT)
+        entity_counts_by_slug: dict[str, dict[str, int]] = {}
+        code_index_stats_by_slug: dict[str, dict[str, int]] = {}
+        async for count_row in counts_result:
+            slug = str(count_row["slug"])
+            count = int(count_row["cnt"])
+            memory_counts, code_counts = _split_count(str(count_row["type"]), count)
+            if memory_counts:
+                entity_counts_by_slug.setdefault(slug, {}).update(memory_counts)
+            if code_counts:
+                code_index_stats_by_slug.setdefault(slug, {}).update(code_counts)
+
+        return [
+            _project_info_from_row(
+                row,
+                entity_counts=entity_counts_by_slug.get(row["p"]["slug"]),
+                code_index_stats=code_index_stats_by_slug.get(row["p"]["slug"]),
+            )
+            for row in project_rows
+        ]
 
 
 async def get_project_overview(
@@ -134,23 +190,36 @@ async def get_project_overview(
     slug: str,
     source: str = "paperclip",
 ) -> ProjectInfo:
-    """Return a :Project with entity_counts and last ingest metadata."""
+    """Return a :Project with memory counts, code index stats, and ingest metadata."""
+    from palace_mcp.code.snippet_provider import inspect_freshness
+    from palace_mcp.git.path_resolver import (
+        ProjectNotRegistered,
+        resolve_registered_project,
+    )
     from palace_mcp.memory.projects import UnknownProjectError
 
     group_id = f"project/{slug}"
+    project_node: Any | None = None
     async with driver.session() as session:
         result = await session.run(GET_PROJECT, slug=slug)
         row = await result.single()
         if row is None:
             raise UnknownProjectError(slug)
+        project_node = row["p"]
         base = _project_info_from_row(row)
 
         counts_result = await session.run(PROJECT_ENTITY_COUNTS, group_id=group_id)
-        counts: dict[str, int] = {}
+        entity_counts: dict[str, int] = {}
+        code_index_stats: dict[str, int] = {}
         async for count_row in counts_result:
             for lbl in count_row["labels"]:
-                if lbl in ("Issue", "Comment", "Agent", "IngestRun"):
-                    counts[lbl] = counts.get(lbl, 0) + int(count_row["c"])
+                memory_counts, code_counts = _split_count(lbl, int(count_row["c"]))
+                if memory_counts:
+                    for key, value in memory_counts.items():
+                        entity_counts[key] = entity_counts.get(key, 0) + value
+                if code_counts:
+                    for key, value in code_counts.items():
+                        code_index_stats[key] = code_index_stats.get(key, 0) + value
 
         last_ingest: dict[str, Any] | None = None
         try:
@@ -163,14 +232,35 @@ async def get_project_overview(
         except Exception as exc:
             logger.warning("get_project_overview last_ingest query failed: %s", exc)
 
+        indexed_commit_result = await session.run(
+            PROJECT_INDEXED_COMMIT,
+            group_id=group_id,
+        )
+        indexed_commit_row = await indexed_commit_result.single()
+
+    indexed_commit = (
+        str(indexed_commit_row["commit_sha"])
+        if indexed_commit_row is not None
+        and indexed_commit_row["commit_sha"] is not None
+        else None
+    )
+    try:
+        repo_path = resolve_registered_project(slug, project_node=project_node)
+    except (ProjectNotRegistered, ValueError):
+        repo_path = None
+    freshness = inspect_freshness(repo_path, indexed_commit)
+
     return base.model_copy(
         update={
-            "entity_counts": counts,
+            "entity_counts": entity_counts,
+            "code_index_stats": code_index_stats,
             "last_ingest_started_at": last_ingest.get("started_at")
             if last_ingest
             else None,
             "last_ingest_finished_at": last_ingest.get("finished_at")
             if last_ingest
             else None,
+            "indexed_commit": freshness.indexed_commit,
+            "commits_behind_head": freshness.commits_behind_head,
         }
     )

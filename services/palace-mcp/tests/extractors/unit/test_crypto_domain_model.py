@@ -241,7 +241,7 @@ def test_dedup_keeps_highest_severity() -> None:
             },
         },
     ]
-    result = _dedup_findings(raw)
+    result = _dedup_findings(raw, repo_root=Path("."))
     assert len(result) == 1
     assert result[0]["severity"] == "high"
 
@@ -300,7 +300,7 @@ def test_dedup_different_lines_not_coalesced() -> None:
             "extra": {"severity": "WARNING", "message": "y", "metadata": {"kind": "k"}},
         },
     ]
-    result = _dedup_findings(raw)
+    result = _dedup_findings(raw, repo_root=Path("."))
     assert len(result) == 2
 
 

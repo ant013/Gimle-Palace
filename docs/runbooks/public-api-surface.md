@@ -59,6 +59,28 @@ Consumer query должен исключать такие symbols, если яв
 
 Extractor читает `// swift-compiler-version:` как `tool_version`.
 
+Для Swift kit repositories используйте операторский wrapper:
+
+```bash
+bash bench/regen-public-api.sh evm-kit
+```
+
+Он вызывает `paperclips/scripts/prepare_swift_kit_artifacts.sh --public-api-only`
+и обновляет только `.palace/public-api/swift/*.swiftinterface`, не трогая
+Periphery artifacts. Перед реальным запуском можно проверить путь и действия:
+
+```bash
+bash bench/regen-public-api.sh evm-kit --dry-run
+```
+
+Для iOS-only packages wrapper сначала пробует SwiftPM, затем Xcode iOS Simulator
+fallback с `SWIFT_EMIT_MODULE_INTERFACE=YES`. Если scheme не совпадает с именем
+library target, задайте `PALACE_SWIFT_KIT_XCODEBUILD_SCHEME`.
+
+Для `fix-6` запускайте этот путь только на выделенных Gimle clone repos под
+`/Users/Shared/Ios/Gimle-Repos/HorizontalSystems`. Не используйте active
+developer clones под `/Users/Shared/Ios/HorizontalSystems`.
+
 ## Проверка локально
 
 Из `services/palace-mcp`:

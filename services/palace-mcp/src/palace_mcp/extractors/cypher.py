@@ -20,6 +20,9 @@ CREATE (r:IngestRun {
   duration_ms: null,
   nodes_written: null,
   edges_written: null,
+  outcome: null,
+  message: null,
+  next_action: null,
   errors: [],
   success: null
 })
@@ -33,6 +36,9 @@ SET r.finished_at  = $finished_at,
     r.nodes_written = $nodes_written,
     r.edges_written = $edges_written,
     r.errors       = $errors,
+    r.outcome      = $outcome,
+    r.message      = $message,
+    r.next_action  = $next_action,
     r.success      = $success
 RETURN r
 """

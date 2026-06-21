@@ -99,6 +99,7 @@ class BundleStatus(FrozenModel):
 class IngestRunResult(FrozenModel):
     slug: str
     ok: bool
+    outcome: Literal["ok", "skipped", "not_applicable", "missing_input"] | None = None
     run_id: str | None
     error_kind: (
         Literal[
@@ -111,6 +112,8 @@ class IngestRunResult(FrozenModel):
         | None
     )
     error: str | None
+    message: str | None = None
+    next_action: str | None = None
     duration_ms: int
     completed_at: datetime | None = None  # set when per-member ingest finishes
 
@@ -131,6 +134,8 @@ class BundleIngestState(FrozenModel):
     members_total: int
     members_done: int
     members_ok: int
+    members_missing_input: int
+    members_not_applicable: int
     members_failed: int
     runs: tuple[IngestRunResult, ...]
     started_at: datetime

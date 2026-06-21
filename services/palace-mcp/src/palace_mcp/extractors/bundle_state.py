@@ -39,6 +39,8 @@ def init_bundle_ingest_state(
             "members_total": 0,
             "members_done": 0,
             "members_ok": 0,
+            "members_missing_input": 0,
+            "members_not_applicable": 0,
             "members_failed": 0,
             "runs": (),
             "started_at": now,
@@ -53,6 +55,8 @@ def init_bundle_ingest_state(
             "members_total": len(member_list),
             "members_done": 0,
             "members_ok": 0,
+            "members_missing_input": 0,
+            "members_not_applicable": 0,
             "members_failed": 0,
             "runs": (),
             "started_at": now,
@@ -70,7 +74,12 @@ def update_state(run_id: str, result: IngestRunResult) -> None:
     state = _registry[run_id]
     state["members_done"] += 1
     if result.ok:
-        state["members_ok"] += 1
+        if result.outcome == "missing_input":
+            state["members_missing_input"] += 1
+        elif result.outcome == "not_applicable":
+            state["members_not_applicable"] += 1
+        else:
+            state["members_ok"] += 1
     else:
         state["members_failed"] += 1
     state["runs"] = state["runs"] + (result,)

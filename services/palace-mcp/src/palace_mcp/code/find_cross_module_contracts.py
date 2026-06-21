@@ -25,6 +25,12 @@ ORDER BY d.to_commit_sha DESC, d.project, d.consumer_module_name
 LIMIT $limit
 """.strip()
 
+_HAS_SNAPSHOTS = """
+MATCH (snap:ModuleContractSnapshot)
+WHERE snap.project IN $projects
+RETURN count(snap) > 0 AS present
+""".strip()
+
 
 def _error(
     code: str,
@@ -104,6 +110,20 @@ async def find_cross_module_contracts(
             if bundle is not None:
                 row["member_project"] = rec["member_project"]
             rows.append(row)
+        if not rows:
+            snapshot_row = await (
+                await sess.run(_HAS_SNAPSHOTS, projects=project_slugs)
+            ).single()
+            if not (snapshot_row and snapshot_row["present"]):
+                return _error(
+                    "not_extracted",
+                    (
+                        "no cross-module contract snapshot/delta records found; "
+                        "run public_api_surface and cross_module_contract first"
+                    ),
+                    project=project,
+                    bundle=bundle,
+                )
     if project is not None:
         return {"ok": True, "project": project, "result": rows}
 

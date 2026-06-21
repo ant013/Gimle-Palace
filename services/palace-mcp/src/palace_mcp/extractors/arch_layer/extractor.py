@@ -1,14 +1,14 @@
 """arch_layer extractor — GIM-243.
 
 Composes rule loader, parsers, import scanner, evaluator and Neo4j writer.
-Dual-ecosystem dispatch: runs both SPM and Gradle parsers independently;
-modules are keyed by kind (swift_target / gradle_module) to avoid slug
-collisions when both manifest types exist in the same repo.
+Primary discovery comes from SwiftPM/Gradle manifests, with Xcode target
+fallback for iOS apps that do not declare root Package.swift modules.
 """
 
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from palace_mcp.extractors.arch_layer.evaluator import evaluate
@@ -22,10 +22,12 @@ from palace_mcp.extractors.arch_layer.models import (
 )
 from palace_mcp.extractors.arch_layer.parsers.gradle import parse_gradle
 from palace_mcp.extractors.arch_layer.parsers.spm import parse_spm
+from palace_mcp.extractors.arch_layer.parsers.xcodeproj import parse_xcodeproj
 from palace_mcp.extractors.arch_layer.rules import load_rules
 from palace_mcp.extractors.base import (
     BaseExtractor,
     ExtractorConfigError,
+    ExtractorOutcome,
     ExtractorRunContext,
     ExtractorRuntimeError,
     ExtractorStats,
@@ -79,7 +81,7 @@ class ArchLayerExtractor(BaseExtractor):
     name: ClassVar[str] = "arch_layer"
     description: ClassVar[str] = (
         "GIM-243 — Architecture Layer. "
-        "Builds module DAG for SwiftPM/Gradle projects, evaluates layer rules, "
+        "Builds module DAG for SwiftPM/Gradle/Xcode projects, evaluates layer rules, "
         "and writes :Module/:Layer/:ArchRule/:ArchViolation nodes to Neo4j."
     )
     constraints: ClassVar[list[str]] = [
@@ -144,23 +146,82 @@ async def _run_extraction(*, ctx: ExtractorRunContext, driver: Any) -> Extractor
     for loader_warn in ruleset.loader_warnings:
         logger.warning("arch_layer rule loader: %s", loader_warn)
 
-    # Parse both ecosystems independently (advisory note 1: dual-ecosystem dispatch)
+    # Parse declared build metadata first, then fall back to Xcode targets for apps.
     spm_result = parse_spm(repo_path, project_id=project_id, run_id=run_id)
     gradle_result = parse_gradle(repo_path, project_id=project_id, run_id=run_id)
+    xcode_result = (
+        parse_xcodeproj(repo_path, project_id=project_id, run_id=run_id)
+        if not spm_result.modules
+        else None
+    )
 
     parser_warnings = list(spm_result.warnings) + list(gradle_result.warnings)
+    if xcode_result is not None:
+        parser_warnings.extend(xcode_result.warnings)
     for pw in parser_warnings:
         logger.info("arch_layer parser: %s", pw.message)
 
-    all_modules: list[Module] = list(spm_result.modules) + list(gradle_result.modules)
-    all_edges: list[ModuleEdge] = list(spm_result.edges) + list(gradle_result.edges)
+    all_modules: list[Module] = list(spm_result.modules)
+    all_edges: list[ModuleEdge] = list(spm_result.edges)
+    if xcode_result is not None:
+        all_modules.extend(xcode_result.modules)
+        all_edges.extend(xcode_result.edges)
+    all_modules.extend(gradle_result.modules)
+    all_edges.extend(gradle_result.edges)
 
     if not all_modules:
         logger.warning(
-            "arch_layer: no modules found in %s — no Neo4j writes",
+            "arch_layer: no modules found in %s — writing summary sentinel only",
             repo_path,
         )
-        return ExtractorStats(nodes_written=0, edges_written=0)
+        sentinel_ts = datetime.now(timezone.utc).isoformat()
+        sentinel_source = ruleset.rule_source or "unconfigured"
+        nodes_written, edges_written = await replace_project_snapshot(
+            driver,
+            project_id=project_id,
+            modules=[],
+            layers=[
+                Layer(
+                    project_id=project_id,
+                    name="__summary__",
+                    rule_source=sentinel_source,
+                    run_id=run_id,
+                    summary=True,
+                    scanned_modules=0,
+                    scanned_at=sentinel_ts,
+                )
+            ],
+            rules=[
+                ArchRule(
+                    project_id=project_id,
+                    rule_id="__summary__",
+                    kind="summary",
+                    severity="informational",
+                    rule_source=sentinel_source,
+                    run_id=run_id,
+                    summary=True,
+                    scanned_at=sentinel_ts,
+                )
+            ],
+            violations=[],
+            edges=[],
+            module_layers={},
+            run_id=run_id,
+        )
+        return ExtractorStats(
+            nodes_written=nodes_written,
+            edges_written=edges_written,
+            outcome=ExtractorOutcome.MISSING_INPUT,
+            message=(
+                "No SwiftPM, Xcode, or Gradle modules were found; wrote only the "
+                "summary sentinel snapshot."
+            ),
+            next_action=(
+                "Provide supported project manifests or an Xcode project with "
+                "tracked source files before rerunning arch_layer if module "
+                "coverage is required."
+            ),
+        )
 
     # Build module_source_roots for import scanner
     module_source_roots = {m.slug: m.source_root for m in all_modules if m.source_root}
@@ -203,6 +264,32 @@ async def _run_extraction(*, ctx: ExtractorRunContext, driver: Any) -> Extractor
         )
         for rd in ruleset.rules
     ]
+
+    sentinel_source = ruleset.rule_source or "unconfigured"
+    sentinel_ts = datetime.now(timezone.utc).isoformat()
+    layers.append(
+        Layer(
+            project_id=project_id,
+            name="__summary__",
+            rule_source=sentinel_source,
+            run_id=run_id,
+            summary=True,
+            scanned_modules=len(all_modules),
+            scanned_at=sentinel_ts,
+        )
+    )
+    arch_rules.append(
+        ArchRule(
+            project_id=project_id,
+            rule_id="__summary__",
+            kind="summary",
+            severity="informational",
+            rule_source=sentinel_source,
+            run_id=run_id,
+            summary=True,
+            scanned_at=sentinel_ts,
+        )
+    )
 
     violations: list[ArchViolation] = evaluate(
         project_id=project_id,

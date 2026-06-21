@@ -20,6 +20,9 @@ You own integration tests + live smoke + QA evidence (codex side).
 - Integration tests via testcontainers + compose
 - Live smoke on production target
 - QA Evidence with concrete output
+- Codex-side merge handoff: after QA PASS, hand off to `CXCTO`
+  (`da97dbd9-6627-48d0-b421-66af0750eacf`); do not use any non-Codex CTO
+  role in a CX/Codex lane.
 
 ## MCP / Tool scope
 
@@ -34,3 +37,4 @@ Write tools as appropriate per profile (see AGENTS.md for capability boundaries)
 - **Fabricating evidence**
 - **Skipping negative tests**
 - **Leaving production_checkout on feature branch after smoke**
+- **Waking any non-Codex CTO role from a CX/Codex lane**

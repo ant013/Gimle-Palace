@@ -12,7 +12,11 @@ not just hand-crafted SymbolGraph fixtures.
 
 from __future__ import annotations
 
-from palace_mcp.extractors.dead_code.graph_loader import _row_to_symbol
+from palace_mcp.extractors.dead_code.graph_loader import (
+    _LOAD_EDGES,
+    _LOAD_SYMBOLS,
+    _row_to_symbol,
+)
 from palace_mcp.extractors.dead_code.models import SymbolGraph
 from palace_mcp.extractors.dead_code.reachability import (
     compute_dead_candidates,
@@ -150,3 +154,10 @@ class TestDeadCodeSwiftContract:
         assert all(r["group_id"] == group_id for r in rows), (
             "Every :Symbol row must carry the project group_id"
         )
+
+    def test_dead_code_loader_filters_deleted_and_deprecated_symbols(self) -> None:
+        assert "deleted_at IS NULL" in _LOAD_SYMBOLS
+        assert "NOT s:Deprecated" in _LOAD_SYMBOLS
+        assert "deleted_at IS NULL" in _LOAD_EDGES
+        assert "NOT a:Deprecated" in _LOAD_EDGES
+        assert "NOT b:Deprecated" in _LOAD_EDGES

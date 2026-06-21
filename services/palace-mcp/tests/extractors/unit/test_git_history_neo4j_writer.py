@@ -26,8 +26,14 @@ def test_merge_author_cypher_uses_on_create_and_on_match():
 
 def test_merge_commit_cypher_uses_merge_for_idempotency():
     assert "MERGE" in _MERGE_COMMIT_CYPHER
-    assert "Commit" in _MERGE_COMMIT_CYPHER
+    assert "Commit {project_id: $project_id, sha: $sha}" in _MERGE_COMMIT_CYPHER
     assert "c.group_id = $project_id" in _MERGE_COMMIT_CYPHER
+
+
+def test_merge_touched_cypher_scopes_commit_match_by_project():
+    assert (
+        "MATCH (c:Commit {project_id: $project_id, sha: $sha})" in _MERGE_TOUCHED_CYPHER
+    )
 
 
 @pytest.mark.parametrize(

@@ -306,6 +306,13 @@ async def test_success_response_preserves_skipped_outcome_metadata(
     assert res["outcome"] == "skipped"
     assert res["message"] == "missing prerequisite fixture"
     assert res["next_action"] == "Provide the fixture and rerun the extractor."
+    session = mock_driver.session.return_value.__aenter__.return_value
+    finalize_kwargs = session.run.call_args_list[-1].kwargs
+    assert finalize_kwargs["outcome"] == ExtractorOutcome.SKIPPED
+    assert finalize_kwargs["message"] == "missing prerequisite fixture"
+    assert (
+        finalize_kwargs["next_action"] == "Provide the fixture and rerun the extractor."
+    )
 
 
 @pytest.mark.asyncio
@@ -356,6 +363,7 @@ async def test_foundation_extractor_error_preserves_exact_code(
     assert res["ok"] is False
     assert res["error_code"] == "public_api_artifacts_required"
     assert res["message"] == "artifacts missing"
+    assert res["next_action"] == "manual_cleanup"
 
 
 @pytest.mark.asyncio

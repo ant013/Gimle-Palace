@@ -54,6 +54,12 @@ CREATE (r:AnalysisRun {
     bundle: $bundle,
     extractors: $extractors,
     depth: $depth,
+    requested_mode: $requested_mode,
+    effective_mode: $effective_mode,
+    effective_mode_reason: $effective_mode_reason,
+    stale_since_commit: $stale_since_commit,
+    changed_file_count: $changed_file_count,
+    changed_file_ratio: $changed_file_ratio,
     continue_on_failure: $continue_on_failure,
     idempotency_key: $idempotency_key,
     status: $status,
@@ -86,6 +92,7 @@ MATCH (r:AnalysisRun {run_id: $run_id})
 MERGE (c:AnalysisCheckpoint {run_id: $run_id, extractor: $extractor})
 SET c.position = $position,
     c.status = $status,
+    c.mode = $mode,
     c.started_at = $started_at,
     c.finished_at = $finished_at,
     c.error_code = $error_code,
@@ -233,6 +240,10 @@ CREATE (r:IngestRun {
     started_at: $started_at,
     finished_at: null,
     duration_ms: null,
+    success: null,
+    outcome: null,
+    message: null,
+    next_action: null,
     errors: []
 })
 """
@@ -241,6 +252,10 @@ FINALIZE_INGEST_RUN = """
 MATCH (r:IngestRun {id: $id})
 SET r.finished_at = $finished_at,
     r.duration_ms = $duration_ms,
+    r.success     = size($errors) = 0,
+    r.outcome     = $outcome,
+    r.message     = $message,
+    r.next_action = $next_action,
     r.errors      = $errors
 """
 
@@ -272,6 +287,7 @@ SET p.group_id            = 'project/' + $slug,
     p.parent_mount        = $parent_mount,
     p.relative_path       = $relative_path,
     p.language_profile    = coalesce($language_profile, p.language_profile),
+    p.expected_profile    = $expected_profile,
     p.source              = 'paperclip',
     p.source_created_at   = coalesce(p.source_created_at, $now),
     p.source_updated_at   = $now
@@ -291,17 +307,27 @@ ON CREATE SET
     p.parent_mount      = $parent_mount,
     p.relative_path     = $relative_path,
     p.language_profile  = $language_profile,
+    p.expected_profile  = $expected_profile,
     p.source            = 'paperclip',
     p.source_created_at = $now
 ON MATCH SET
     p.group_id          = coalesce(p.group_id, 'project/' + $slug),
     p.cm_project_name   = coalesce(p.cm_project_name, $cm_project_name),
+    p.expected_profile  = coalesce(p.expected_profile, $expected_profile),
     p.source            = coalesce(p.source, 'paperclip')
 SET p.source_updated_at = $now
 RETURN p
 """
 
-LIST_PROJECT_SLUGS = "MATCH (p:Project) RETURN p.name AS slug ORDER BY slug"
+LOOKUP_PROJECT_NAMESPACE = """
+MATCH (p:Project)
+WHERE p.slug = $value OR p.cm_project_name = $value
+RETURN p.slug AS slug, p.cm_project_name AS cm_project_name
+ORDER BY CASE WHEN p.slug = $value THEN 0 ELSE 1 END, p.slug
+LIMIT 1
+"""
+
+LIST_PROJECT_SLUGS = "MATCH (p:Project) RETURN p.slug AS slug ORDER BY slug"
 
 LIST_PROJECTS = "MATCH (p:Project) RETURN p ORDER BY p.slug"
 
@@ -339,6 +365,22 @@ ORDER BY r.started_at DESC
 LIMIT 1
 """
 
+# The SCIP symbol writer stamps the indexed commit as `last_seen_in_commit`
+# (symbol_node_writer); only some extractors set `commit_sha`. Coalesce both so
+# the indexed commit surfaces for SCIP-indexed projects. Exclude :Deprecated so
+# pruned (stale) nodes from an earlier snapshot don't outvote the live commit.
+PROJECT_INDEXED_COMMIT = """
+MATCH (n)
+WHERE n.group_id = $group_id
+  AND (n:Symbol OR n:File)
+  AND NOT n:Deprecated
+  AND coalesce(n.last_seen_in_commit, n.commit_sha) IS NOT NULL
+WITH coalesce(n.last_seen_in_commit, n.commit_sha) AS commit_sha, count(*) AS c
+RETURN commit_sha, c
+ORDER BY c DESC, commit_sha DESC
+LIMIT 1
+"""
+
 ENTITY_COUNTS_BY_PROJECT = """
 MATCH (p:Project)
 CALL (p) {
@@ -368,7 +410,7 @@ CALL (p) {
     UNION ALL
     MATCH (n:Trace)        WHERE n.group_id = p.group_id RETURN 'Trace'        AS type, count(n) AS cnt
 }
-RETURN p.name AS slug, type, cnt
+RETURN p.slug AS slug, type, cnt
 """
 
 # --- Entity counts (health) ---

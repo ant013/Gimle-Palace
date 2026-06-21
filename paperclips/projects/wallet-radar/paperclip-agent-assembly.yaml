@@ -1,0 +1,108 @@
+schemaVersion: 2
+
+project:
+  key: wallet-radar
+  display_name: Wallet Radar
+  system_name: Wallet Radar
+  issue_prefix: UNS
+  integration_branch: main
+  specs_dir: docs/specs
+  plans_dir: docs/plans
+
+domain:
+  wallet_target_short: Wallet Radar
+  wallet_target_name: Wallet Radar
+  wallet_target_slug: wallet-radar
+
+evidence:
+  merge_without_smoke_issue: WR-bootstrap
+  graphiti_mock_issue: WR-bootstrap
+  release_reset_issue: WR-bootstrap
+  asyncmock_driver_issue: WR-bootstrap
+  worktree_discipline_issue_pair: WR-bootstrap
+  qa_worktree_discipline_issue: WR-bootstrap
+  mcp_wire_contract_issue: WR-bootstrap
+  qa_deploy_checklist_issue: WR-bootstrap
+  review_scope_drift_issue: WR-bootstrap
+  qa_to_cto_stall_issue: WR-bootstrap
+  handoff_flake_issue: WR-bootstrap
+  pre_slim_baseline_issue: WR-bootstrap
+  cr_to_pe_stall_issue: WR-bootstrap
+  handoff_misclassified_issue: WR-bootstrap
+  post_merge_stall_issue: WR-bootstrap
+
+paths:
+  overlay_root: paperclips/projects/wallet-radar/overlays
+  project_rules_file: AGENTS.md
+
+mcp:
+  service_name: wallet-radar
+  package_name: wallet_radar
+  tool_namespace: wallet_radar
+  base_required:
+    - codebase-memory
+    - context7
+    - serena
+    - github
+    - sequential-thinking
+  codebase_memory_projects:
+    primary: Users-ant013-Data-AI-wallet-radar
+  additions:
+    project: []
+    by_role: {}
+
+skills:
+  additions:
+    project: []
+    by_role: {}
+
+subagents:
+  additions:
+    project: []
+    by_role: {}
+
+targets:
+  codex:
+    instruction_entry_file: AGENTS.md
+    adapter_type: codex_local
+    deploy_mode: api
+    instructions_bundle_mode: managed
+
+compatibility:
+  legacy_output_paths: false
+
+agents:
+  - agent_name: WalletRadarCEO
+    role_source: paperclips/roles-codex/cx-cto.md
+    instructions_entry_file: WalletRadarCEO.md
+    profile: cto
+    target: codex
+    primary_codebase_memory_project: Users-ant013-Data-AI-wallet-radar
+  - agent_name: WalletRadarCTO
+    role_source: paperclips/roles-codex/cx-cto.md
+    instructions_entry_file: WalletRadarCTO.md
+    profile: cto
+    target: codex
+    reportsTo: WalletRadarCEO
+    primary_codebase_memory_project: Users-ant013-Data-AI-wallet-radar
+  - agent_name: WalletRadarCodeReviewer
+    role_source: paperclips/roles-codex/cx-code-reviewer.md
+    instructions_entry_file: WalletRadarCodeReviewer.md
+    profile: reviewer
+    target: codex
+    reportsTo: WalletRadarCTO
+    primary_codebase_memory_project: Users-ant013-Data-AI-wallet-radar
+  - agent_name: WalletRadarPythonEngineer
+    role_source: paperclips/roles-codex/cx-python-engineer.md
+    instructions_entry_file: WalletRadarPythonEngineer.md
+    profile: implementer
+    target: codex
+    reportsTo: WalletRadarCTO
+    primary_codebase_memory_project: Users-ant013-Data-AI-wallet-radar
+  - agent_name: WalletRadarQAEngineer
+    role_source: paperclips/roles-codex/cx-qa-engineer.md
+    instructions_entry_file: WalletRadarQAEngineer.md
+    profile: qa
+    target: codex
+    reportsTo: WalletRadarCTO
+    primary_codebase_memory_project: Users-ant013-Data-AI-wallet-radar

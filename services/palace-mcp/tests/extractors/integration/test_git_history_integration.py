@@ -21,10 +21,16 @@ from palace_mcp.extractors.git_history.extractor import GitHistoryExtractor
 FIXTURE_DIR = Path(__file__).parent.parent / "fixtures" / "git-history-mini-project"
 
 
-def _make_ctx(repo_path: Path, run_id: str = "integ-run-gh-001") -> ExtractorRunContext:
+def _make_ctx(
+    repo_path: Path,
+    run_id: str = "integ-run-gh-001",
+    *,
+    project_slug: str = "mini",
+    group_id: str = "project/mini",
+) -> ExtractorRunContext:
     return ExtractorRunContext(
-        project_slug="mini",
-        group_id="project/mini",
+        project_slug=project_slug,
+        group_id=group_id,
         repo_path=repo_path,
         run_id=run_id,
         duration_ms=0,
@@ -191,6 +197,89 @@ async def test_incremental_second_run_writes_zero_new_commits(
     assert after_second == after_first, (
         f"Second run should not create new Commit nodes: {after_first} → {after_second}"
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_same_sha_can_exist_for_multiple_projects(
+    driver: AsyncDriver, tmp_path: Path
+) -> None:
+    """The same commit SHA must be able to exist once per project_id."""
+    from tests.extractors.unit.test_git_history_pygit2_walker import (
+        _build_synthetic_repo,
+    )
+
+    repo_path = _build_synthetic_repo(tmp_path / "repo", n_commits=2)
+
+    settings = MagicMock(
+        github_token=None,
+        git_history_tantivy_index_path=tmp_path / "tantivy",
+        git_history_max_commits_per_run=200_000,
+    )
+
+    patches = [
+        patch("palace_mcp.mcp_server.get_driver", return_value=driver),
+        patch("palace_mcp.mcp_server.get_settings", return_value=settings),
+        patch(
+            "palace_mcp.extractors.git_history.extractor.ensure_custom_schema",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.git_history.extractor._get_previous_error_code",
+            new=AsyncMock(return_value=None),
+        ),
+        patch("palace_mcp.extractors.git_history.extractor.check_resume_budget"),
+        patch("palace_mcp.extractors.git_history.extractor.check_phase_budget"),
+        patch(
+            "palace_mcp.extractors.git_history.extractor.create_ingest_run",
+            new=AsyncMock(),
+        ),
+        patch(
+            "palace_mcp.extractors.git_history.extractor.finalize_ingest_run",
+            new=AsyncMock(),
+        ),
+    ]
+
+    extractor = GitHistoryExtractor()
+
+    for p in patches:
+        p.start()
+    try:
+        await extractor.run(
+            graphiti=MagicMock(),
+            ctx=_make_ctx(
+                repo_path,
+                "run-project-a",
+                project_slug="mini-a",
+                group_id="project/mini-a",
+            ),
+        )
+        await extractor.run(
+            graphiti=MagicMock(),
+            ctx=_make_ctx(
+                repo_path,
+                "run-project-b",
+                project_slug="mini-b",
+                group_id="project/mini-b",
+            ),
+        )
+    finally:
+        for p in patches:
+            p.stop()
+
+    async with driver.session() as s:
+        result = await s.run(
+            """
+            MATCH (c:Commit)
+            WHERE c.project_id IN ['project/mini-a', 'project/mini-b']
+            RETURN c.sha AS sha, count(*) AS n
+            ORDER BY sha
+            """
+        )
+        rows = await result.data()
+
+    assert rows
+    assert all(row["n"] == 2 for row in rows)
 
 
 @pytest.mark.asyncio
