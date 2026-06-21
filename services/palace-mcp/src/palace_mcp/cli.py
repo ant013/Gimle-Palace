@@ -1692,7 +1692,6 @@ def build_parser() -> argparse.ArgumentParser:
     _add_target_args(run_p)
     run_p.add_argument("--url", default=_DEFAULT_MCP_URL, help="palace-mcp MCP URL")
     run_p.add_argument("--depth", default="full", choices=["quick", "full"])
-    run_p.add_argument("--mode", default="full", choices=["full", "incremental"])
 
     launch_p = audit_sub.add_parser("launch", help="Launch async audit workflow")
     _add_target_args(launch_p)
@@ -1755,6 +1754,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="full",
         choices=["quick", "full"],
         help="Analysis depth forwarded to palace.project.analyze",
+    )
+    analyze_p.add_argument(
+        "--mode",
+        default="full",
+        choices=["full", "incremental"],
+        help="Analysis mode forwarded to palace.project.analyze",
     )
     analyze_p.add_argument(
         "--url",
