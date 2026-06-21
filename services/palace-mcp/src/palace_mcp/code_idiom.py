@@ -101,7 +101,14 @@ def register_code_idiom_tools(
             }
 
         resolved_project = (req.project or default_project).removeprefix("repos-")
-        project_id = f"project/{resolved_project}"
+        # :Convention / :ConventionViolation nodes are written by the
+        # coding_convention extractor with project_id = bare slug
+        # (extractor passes ctx.project_slug; its own audit_contract query
+        # matches the same bare-slug key). find_idiom must query the same key
+        # — prefixing with "project/" silently matched nothing (dogfood W-skill
+        # rec #19: 1229 :Convention nodes written yet find_idiom returned
+        # no_conventions_found).
+        project_id = resolved_project
         module_param = req.module  # None passes through to Cypher as NULL
 
         async with driver.session() as session:

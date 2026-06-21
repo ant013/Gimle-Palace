@@ -51,6 +51,7 @@ _BUILTIN_DERIVED_ROOTS = ("DerivedData", ".palace-scip-derived-data")
 # iOS/macOS Xcode projects (SPM, CocoaPods, Carthage, local SPM build cache).
 _BUILTIN_SWIFT_DEPENDENCY_MARKERS = (
     "SourcePackages/",
+    "checkouts/",
     "Pods/",
     "Carthage/",
     ".build/",

@@ -67,6 +67,14 @@ class TestSettingsFoundationDefaults:
         s = Settings()
         assert s.palace_tantivy_heap_mb == 100
 
+    def test_incremental_ingest_default_off(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        for k, v in _minimal_env().items():
+            monkeypatch.setenv(k, v)
+        s = Settings()
+        assert s.palace_incremental_ingest is False
+
     def test_scip_index_paths_default_empty(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -101,6 +109,13 @@ class TestSettingsFoundationOverrides:
         monkeypatch.setenv("PALACE_TANTIVY_HEAP_MB", "256")
         s = Settings()
         assert s.palace_tantivy_heap_mb == 256
+
+    def test_incremental_ingest_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        for k, v in _minimal_env().items():
+            monkeypatch.setenv(k, v)
+        monkeypatch.setenv("PALACE_INCREMENTAL_INGEST", "true")
+        s = Settings()
+        assert s.palace_incremental_ingest is True
 
     def test_max_occurrences_total_override(
         self, monkeypatch: pytest.MonkeyPatch
@@ -163,6 +178,52 @@ def test_version_skew_timeout_upper_bound_rejected(
     for k, v in _minimal_env().items():
         monkeypatch.setenv(k, v)
     monkeypatch.setenv("PALACE_VERSION_SKEW_QUERY_TIMEOUT_S", "1000")
+    with pytest.raises(ValidationError):
+        Settings()
+
+
+def test_semgrep_timeout_settings_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    for k, v in _minimal_env().items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.delenv("PALACE_CRYPTO_SEMGREP_TIMEOUT_S", raising=False)
+    monkeypatch.delenv("PALACE_ERROR_HANDLING_SEMGREP_TIMEOUT_S", raising=False)
+
+    settings = Settings()
+
+    assert settings.palace_crypto_semgrep_timeout_s == 120
+    assert settings.palace_error_handling_semgrep_timeout_s == 120
+
+
+def test_semgrep_timeout_settings_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    for k, v in _minimal_env().items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setenv("PALACE_CRYPTO_SEMGREP_TIMEOUT_S", "900")
+    monkeypatch.setenv("PALACE_ERROR_HANDLING_SEMGREP_TIMEOUT_S", "1800")
+
+    settings = Settings()
+
+    assert settings.palace_crypto_semgrep_timeout_s == 900
+    assert settings.palace_error_handling_semgrep_timeout_s == 1800
+
+
+def test_crypto_semgrep_timeout_lower_bound_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for k, v in _minimal_env().items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setenv("PALACE_CRYPTO_SEMGREP_TIMEOUT_S", "0")
+
+    with pytest.raises(ValidationError):
+        Settings()
+
+
+def test_error_handling_semgrep_timeout_lower_bound_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for k, v in _minimal_env().items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setenv("PALACE_ERROR_HANDLING_SEMGREP_TIMEOUT_S", "0")
+
     with pytest.raises(ValidationError):
         Settings()
 

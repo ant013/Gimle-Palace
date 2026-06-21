@@ -176,6 +176,7 @@ class TestRegisterProject:
             parent_mount="hs",
             relative_path="unstoppable-wallet-ios",
             tags=["ios", "wallet"],
+            expected_profile=True,
             _session=session,
         )
         arguments = session.call_tool.call_args[0][1]
@@ -183,6 +184,7 @@ class TestRegisterProject:
         assert arguments["parent_mount"] == "hs"
         assert arguments["relative_path"] == "unstoppable-wallet-ios"
         assert arguments["tags"] == ["ios", "wallet"]
+        assert arguments["expected_profile"] is True
 
     async def test_omits_none_optional_fields(self) -> None:
         session = _mock_session(call_result={"slug": "s", "name": "n"})

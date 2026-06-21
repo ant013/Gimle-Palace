@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -77,6 +79,16 @@ class _FakeBackend:
         return [self.embed_text(text) for text in texts]
 
 
+def _run(args: list[str], cwd: Path) -> None:
+    subprocess.run(args, cwd=cwd, check=True, capture_output=True)
+
+
+def _run_text(args: list[str], cwd: Path) -> str:
+    return subprocess.run(
+        args, cwd=cwd, check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
 def _make_tool_result(payload: dict[str, Any]) -> CallToolResult:
     return CallToolResult(
         content=[TextContent(type="text", text=json.dumps(payload))],
@@ -84,11 +96,28 @@ def _make_tool_result(payload: dict[str, Any]) -> CallToolResult:
     )
 
 
+def _is_vector_query(query: str) -> bool:
+    return "queryNodes('symbol_embedding_idx'" in query or (
+        "VECTOR INDEX symbol_embedding_idx" in query
+    )
+
+
 @pytest.fixture(autouse=True)
 def _reset_embedding_factory() -> None:
+    try:
+        from palace_mcp.code.find_semantic import (
+            _reset_vector_search_capability_for_tests,
+        )
+    except ImportError:
+        _reset_vector_search_capability_for_tests = None
+
     set_embedding_dispatcher_factory(None)
+    if _reset_vector_search_capability_for_tests is not None:
+        _reset_vector_search_capability_for_tests()
     yield
     set_embedding_dispatcher_factory(None)
+    if _reset_vector_search_capability_for_tests is not None:
+        _reset_vector_search_capability_for_tests()
 
 
 @pytest.mark.asyncio
@@ -216,6 +245,56 @@ async def test_embedding_backend_failed_returns_error() -> None:
 
 
 @pytest.mark.asyncio
+async def test_semantic_search_tool_defaults_to_compact_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from palace_mcp import mcp_server
+
+    captured: dict[str, Any] = {}
+
+    async def _fake_impl(**kwargs: Any) -> dict[str, Any]:
+        captured.update(kwargs)
+        return {"ok": True, "result": [], "returned_count": 0}
+
+    monkeypatch.setattr("palace_mcp.mcp_server._semantic_search_impl", _fake_impl)
+    monkeypatch.setattr("palace_mcp.mcp_server.get_settings", lambda: None)
+    mcp_server._driver = MagicMock()
+    try:
+        result = await mcp_server.palace_code_semantic_search(query="wallet")
+    finally:
+        mcp_server._driver = None
+
+    assert result["ok"] is True
+    assert captured["include_context"] is False
+
+
+@pytest.mark.asyncio
+async def test_semantic_search_tool_allows_verbose_context_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from palace_mcp import mcp_server
+
+    captured: dict[str, Any] = {}
+
+    async def _fake_impl(**kwargs: Any) -> dict[str, Any]:
+        captured.update(kwargs)
+        return {"ok": True, "result": [], "returned_count": 0}
+
+    monkeypatch.setattr("palace_mcp.mcp_server._semantic_search_impl", _fake_impl)
+    monkeypatch.setattr("palace_mcp.mcp_server.get_settings", lambda: None)
+    mcp_server._driver = MagicMock()
+    try:
+        result = await mcp_server.palace_code_semantic_search(
+            query="wallet", include_context=True
+        )
+    finally:
+        mcp_server._driver = None
+
+    assert result["ok"] is True
+    assert captured["include_context"] is True
+
+
+@pytest.mark.asyncio
 async def test_embeddings_not_ready_returns_warning_without_vector_query() -> None:
     from palace_mcp.code.find_semantic import semantic_search
 
@@ -263,7 +342,7 @@ async def test_success_filters_scope_and_skips_context_when_disabled() -> None:
             return _FakeResult(
                 data_value=[{"source_scope": "project", "total": 10, "embedded_cnt": 3}]
             )
-        if "queryNodes('symbol_embedding_idx'" in query:
+        if _is_vector_query(query):
             assert params["query_k"] == 50
             all_rows = [
                 {
@@ -321,9 +400,65 @@ async def test_success_filters_scope_and_skips_context_when_disabled() -> None:
     assert result["candidate_limit"] == 50
     assert result["result"][0]["project"] == "wallet-a"
     assert result["result"][1]["project"] == "wallet-b"
+    assert result["result"][0]["short_name"] == "verify"
+    assert result["result"][0]["kind"] == "function"
+    assert result["result"][0]["label"] == "Function"
     assert "context" not in result["result"][0]
     assert result["warnings"] == []
     cm_session_getter.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_semantic_search_returns_canonical_struct_identity() -> None:
+    from palace_mcp.code.find_semantic import semantic_search
+
+    backend = _FakeBackend()
+    dispatcher = EmbeddingBackendDispatcher({"qodo": backend}, default_backend="qodo")
+
+    def run_fn(query: str, params: dict[str, Any]) -> _FakeResult:
+        if "collect(p.slug)" in query:
+            return _FakeResult(single_value={"found_projects": ["wallet-core"]})
+        if "embedded_cnt" in query:
+            return _FakeResult(
+                data_value=[{"source_scope": "project", "total": 1, "embedded_cnt": 1}]
+            )
+        if _is_vector_query(query):
+            return _FakeResult(
+                data_value=[
+                    {
+                        "group_id": "project/wallet-core",
+                        "qualified_name": "WalletKit s:9WalletKit11BalanceDataV",
+                        "short_name": "BalanceData",
+                        "kind": "struct",
+                        "label": "Struct",
+                        "file_path": "Sources/BalanceData.swift",
+                        "module_name": "WalletCore",
+                        "source_scope": "project",
+                        "commit_sha": "sha-a",
+                        "score": 0.91,
+                    }
+                ]
+            )
+        raise AssertionError(f"unexpected query: {query}")
+
+    driver = _FakeDriver(run_fn)
+    with patch(
+        "palace_mcp.code.find_semantic.get_embedding_dispatcher",
+        return_value=dispatcher,
+    ):
+        result = await semantic_search(
+            driver=driver,
+            query="balance data",
+            project="wallet-core",
+            limit=1,
+            include_context=False,
+        )
+
+    hit = result["result"][0]
+    assert hit["qualified_name"] == "WalletKit s:9WalletKit11BalanceDataV"
+    assert hit["short_name"] == "BalanceData"
+    assert hit["kind"] == "struct"
+    assert hit["label"] == "Struct"
 
 
 @pytest.mark.asyncio
@@ -342,7 +477,7 @@ async def test_vector_query_uses_candidate_limit_to_overfetch_before_scope_filte
             return _FakeResult(
                 data_value=[{"source_scope": "project", "total": 5, "embedded_cnt": 1}]
             )
-        if "queryNodes('symbol_embedding_idx'" in query:
+        if _is_vector_query(query):
             assert params["query_k"] == 50
             return _FakeResult(
                 data_value=[
@@ -382,6 +517,66 @@ async def test_vector_query_uses_candidate_limit_to_overfetch_before_scope_filte
 
 
 @pytest.mark.asyncio
+async def test_single_project_search_retries_until_scoped_hits_are_found() -> None:
+    from palace_mcp.code.find_semantic import semantic_search
+
+    backend = _FakeBackend()
+    dispatcher = EmbeddingBackendDispatcher({"qodo": backend}, default_backend="qodo")
+    query_ks: list[int] = []
+
+    def run_fn(query: str, params: dict[str, Any]) -> _FakeResult:
+        if "collect(p.slug)" in query:
+            return _FakeResult(single_value={"found_projects": ["small-kit"]})
+        if "embedded_cnt" in query:
+            return _FakeResult(
+                data_value=[
+                    {"source_scope": "project", "total": 1500, "embedded_cnt": 1500}
+                ]
+            )
+        if _is_vector_query(query):
+            assert params["group_ids"] == ["project/small-kit"]
+            query_ks.append(params["query_k"])
+            if params["query_k"] < 200:
+                return _FakeResult(data_value=[])
+            return _FakeResult(
+                data_value=[
+                    {
+                        "group_id": "project/small-kit",
+                        "qualified_name": "SmallKit.verifySignature",
+                        "kind": "function",
+                        "file_path": "Sources/Verify.swift",
+                        "module_name": "SmallKit",
+                        "source_scope": "project",
+                        "embedding_input_hash": "hash-small",
+                        "commit_sha": None,
+                        "score": 0.88,
+                    }
+                ]
+            )
+        raise AssertionError(f"unexpected query: {query}")
+
+    driver = _FakeDriver(run_fn)
+    with patch(
+        "palace_mcp.code.find_semantic.get_embedding_dispatcher",
+        return_value=dispatcher,
+    ):
+        result = await semantic_search(
+            driver=driver,
+            query="signature verification",
+            project="small-kit",
+            include_context=False,
+            limit=1,
+        )
+
+    assert query_ks == [50, 200]
+    assert result["ok"] is True
+    assert result["candidate_limit"] == 200
+    assert result["returned_count"] == 1
+    assert result["warnings"] == []
+    assert result["result"][0]["project"] == "small-kit"
+
+
+@pytest.mark.asyncio
 async def test_include_deprecated_true_returns_seeded_row() -> None:
     from palace_mcp.code.find_semantic import semantic_search
 
@@ -396,7 +591,7 @@ async def test_include_deprecated_true_returns_seeded_row() -> None:
             return _FakeResult(
                 data_value=[{"source_scope": "project", "total": 1, "embedded_cnt": 1}]
             )
-        if "queryNodes('symbol_embedding_idx'" in query:
+        if _is_vector_query(query):
             assert params["include_deprecated"] is True
             return _FakeResult(
                 data_value=[
@@ -455,7 +650,7 @@ async def test_context_warning_is_attached_per_hit_when_project_not_mounted() ->
             return _FakeResult(
                 data_value=[{"source_scope": "project", "total": 5, "embedded_cnt": 1}]
             )
-        if "queryNodes('symbol_embedding_idx'" in query:
+        if _is_vector_query(query):
             return _FakeResult(
                 data_value=[
                     {
@@ -498,6 +693,88 @@ async def test_context_warning_is_attached_per_hit_when_project_not_mounted() ->
 
 
 @pytest.mark.asyncio
+async def test_deleted_post_snapshot_hit_is_marked_stale(
+    tmp_path: Path,
+) -> None:
+    from palace_mcp.code.find_semantic import semantic_search
+
+    repo_path = tmp_path / "wallet-core"
+    repo_path.mkdir()
+    _run(["git", "init", "-q", "-b", "main"], cwd=repo_path)
+    _run(["git", "config", "user.email", "t@t"], cwd=repo_path)
+    _run(["git", "config", "user.name", "T"], cwd=repo_path)
+    (repo_path / "Sources").mkdir()
+    (repo_path / "Sources" / "A.swift").write_text("func verify() {}\n")
+    _run(["git", "add", "."], cwd=repo_path)
+    _run(["git", "commit", "-m", "initial", "-q"], cwd=repo_path)
+    indexed_commit = _run_text(["git", "rev-parse", "HEAD"], cwd=repo_path)
+    (repo_path / "Sources" / "A.swift").unlink()
+    _run(["git", "add", "-A"], cwd=repo_path)
+    _run(["git", "commit", "-m", "delete", "-q"], cwd=repo_path)
+
+    backend = _FakeBackend()
+    dispatcher = EmbeddingBackendDispatcher({"qodo": backend}, default_backend="qodo")
+
+    def run_fn(query: str, _params: dict[str, Any]) -> _FakeResult:
+        if "collect(p.slug)" in query:
+            return _FakeResult(single_value={"found_projects": ["wallet-core"]})
+        if "embedded_cnt" in query:
+            return _FakeResult(
+                data_value=[{"source_scope": "project", "total": 1, "embedded_cnt": 1}]
+            )
+        if _is_vector_query(query):
+            return _FakeResult(
+                data_value=[
+                    {
+                        "group_id": "project/wallet-core",
+                        "qualified_name": "Crypto.verify",
+                        "kind": "function",
+                        "file_path": "Sources/A.swift",
+                        "module_name": "WalletCore",
+                        "source_scope": "project",
+                        "embedding_input_hash": "hash-a",
+                        "commit_sha": indexed_commit,
+                        "score": 0.91,
+                    }
+                ]
+            )
+        raise AssertionError(f"unexpected query: {query}")
+
+    driver = _FakeDriver(run_fn)
+
+    async def _resolve_repo_path(_: str) -> Path:
+        return repo_path
+
+    with (
+        patch(
+            "palace_mcp.code.find_semantic.get_embedding_dispatcher",
+            return_value=dispatcher,
+        ),
+        patch(
+            "palace_mcp.code.find_semantic.code_router.get_cm_session",
+            return_value=None,
+        ),
+        patch(
+            "palace_mcp.code.find_semantic._resolve_registered_repo_path",
+            _resolve_repo_path,
+        ),
+    ):
+        result = await semantic_search(
+            driver=driver,
+            query="signature verification",
+            project="wallet-core",
+            include_context=True,
+            context_limit=0,
+        )
+
+    hit = result["result"][0]
+    assert hit["stale"] is True
+    assert hit["indexed_commit"] == indexed_commit
+    assert hit["commits_behind_head"] == 1
+    assert hit["context"]["warning_code"] == "missing_source_file"
+
+
+@pytest.mark.asyncio
 async def test_context_limit_zero_returns_empty_usage_preview() -> None:
     from palace_mcp.code.find_semantic import semantic_search
 
@@ -511,7 +788,7 @@ async def test_context_limit_zero_returns_empty_usage_preview() -> None:
             return _FakeResult(
                 data_value=[{"source_scope": "project", "total": 5, "embedded_cnt": 1}]
             )
-        if "queryNodes('symbol_embedding_idx'" in query:
+        if _is_vector_query(query):
             return _FakeResult(
                 data_value=[
                     {
@@ -587,7 +864,7 @@ async def test_embedding_dispatcher_factory_is_reused_across_calls() -> None:
             return _FakeResult(
                 data_value=[{"source_scope": "project", "total": 5, "embedded_cnt": 1}]
             )
-        if "queryNodes('symbol_embedding_idx'" in query:
+        if _is_vector_query(query):
             return _FakeResult(
                 data_value=[
                     {
@@ -652,7 +929,7 @@ async def test_embedding_coverage_included_in_success_response(
                     {"source_scope": "sdk", "total": 251218, "embedded_cnt": 0},
                 ]
             )
-        if "queryNodes('symbol_embedding_idx'" in query:
+        if _is_vector_query(query):
             return _FakeResult(
                 data_value=[
                     {
@@ -789,7 +1066,7 @@ async def test_runtime_path_fails_closed_on_missing_vector_hits() -> None:
             )
         if "embedded_symbol_count" in query:
             return _FakeResult(single_value={"embedded_symbol_count": 2186})
-        if "queryNodes('symbol_embedding_idx'" in query:
+        if _is_vector_query(query):
             return _FakeResult(
                 data_value=[
                     {
@@ -907,7 +1184,7 @@ async def test_semantic_search_hydrates_hits_concurrently() -> None:
             return _FakeResult(
                 data_value=[{"source_scope": "project", "total": 10, "embedded_cnt": 5}]
             )
-        if "queryNodes('symbol_embedding_idx'" in query:
+        if _is_vector_query(query):
             return _FakeResult(
                 data_value=[
                     {
@@ -1024,7 +1301,7 @@ async def test_multi_project_issues_per_project_hnsw_queries() -> None:
             return _FakeResult(
                 data_value=[{"source_scope": "project", "total": 30, "embedded_cnt": 9}]
             )
-        if "queryNodes('symbol_embedding_idx'" in query:
+        if _is_vector_query(query):
             gids = params.get("group_ids", [])
             rows = [r for gid in gids for r in project_rows.get(gid, [])]
             return _FakeResult(data_value=rows)
@@ -1051,11 +1328,7 @@ async def test_multi_project_issues_per_project_hnsw_queries() -> None:
     assert result["per_project_k"] == 50
 
     # One HNSW query per project, each scoped to a single group_id
-    vector_calls = [
-        (q, p)
-        for q, p in driver._session.calls
-        if "queryNodes('symbol_embedding_idx'" in q
-    ]
+    vector_calls = [(q, p) for q, p in driver._session.calls if _is_vector_query(q)]
     assert len(vector_calls) == 3
     queried_groups = {p["group_ids"][0] for _, p in vector_calls}
     assert queried_groups == {"project/alpha", "project/beta", "project/gamma"}

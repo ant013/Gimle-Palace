@@ -78,10 +78,13 @@ Source of truth = Paperclip API now, not CLI session ("galaxy brain — ignore")
 
 ### @-mentions: trailing space after name
 
-Paperclip's parser captures trailing punctuation into the name (e.g. `@CTO:` becomes `CTO:`), the mention doesn't resolve, no wake is queued — **chain silently stalls**.
+Paperclip's parser captures trailing punctuation into the name (e.g. `@Role:`
+becomes `Role:`), the mention doesn't resolve, no wake is queued — **chain
+silently stalls**.
 
-**Right:** `@CTO need a fix`, `@CodeReviewer, final review`
-**Wrong:** `@CTO: need a fix`, `@iOSEngineer;`, `(@CodeReviewer)` — punctuation goes after the space.
+**Right:** target-local role mention followed by a space.
+**Wrong:** `@Role: need a fix`, `@Role;`, `(@Role)` — punctuation goes after
+the space.
 
 ### Handoff: PATCH + comment with @mention + STOP
 
@@ -101,7 +104,7 @@ Got an @-mention with explicit handoff phrase (`"your turn"`, `"pick it up"`, `"
 
 **Do:**
 1. `GET /api/issues/{id}` → read `executionAgentNameKey`.
-2. Comment to holder: `"@CTO release execution lock on [TRD-5], I'm ready to close"`.
+2. Comment to the target-local lock holder: `"release execution lock on [TRD-5], I'm ready to close"`.
 3. Alternative — if holder unavailable, `PATCH ... assigneeAgentId=<original-assignee>` → originator closes.
 4. Don't retry close with the same JWT — without release, 409 keeps coming.
 
@@ -262,7 +265,8 @@ APPROVED. Reassigning to <next agent>.
 **Every wake ends in one of two states:**
 
 1. `status=done`, OR
-2. **Atomic handoff** to next agent (or your CTO if next is unknown).
+2. **Atomic handoff** to next target-local agent (or your target-local CTO if
+   next is unknown).
 
 No third option. `assignee=me, status=in_progress|todo` between phases = chain dies silently.
 
@@ -278,9 +282,13 @@ ONE POST + ONE PATCH + STOP, **in this exact order**:
 
 POST + PATCH is the only reliable wake mechanism. Mention in POST wakes by mention; PATCH wakes by reassign.
 
-### Fallback: unknown recipient → CTO
+### Fallback: unknown recipient -> target-local CTO
 
-Phase chain unclear? **Handoff to your CTO** (`reportsTo` in manifest). If you ARE CTO and don't know → escalate Board per `universal/escalation-board.md`. NEVER drop the issue.
+Phase chain unclear? **Handoff to your target-local CTO** (`reportsTo` in
+manifest). If you ARE CTO and don't know -> escalate Board per
+`universal/escalation-board.md`. NEVER drop the issue. Do not cross from a
+Codex/CX lane to bare Claude-side roles, or from a Claude lane to CX-prefixed
+roles.
 
 ### Comment format — STRICT
 
@@ -306,17 +314,23 @@ Evidence/context goes ABOVE:
 
 ### Formal vs plain @-mention
 
-Use **formal** `[@<Role>](agent://<uuid>?i=<icon>)` — machine-verifiable if assignee PATCH flakes. Resolve the concrete UUID from the local roster for your target/team.
+Use **formal** `[@<Role>](agent://<uuid>?i=<icon>)` — machine-verifiable if
+assignee PATCH flakes. Resolve the concrete UUID from the local roster for your
+target/team.
 
 Examples:
-- ✅ `[@CodeReviewer](agent://<uuid>?i=<icon>) your turn.`
-- ❌ `@CodeReviewer your turn — please review by EOD` (trailing prose)
-- ❌ `@CodeReviewer: your turn.` (`@Role:` breaks parser — see `universal/wake-and-handoff-basics.md`)
-- ❌ `Reassigning to @CodeReviewer for review.` (no `your turn.` + no formal mention)
+- OK: `[@<TargetLocalReviewer>](agent://<uuid>?i=<icon>) your turn.`
+- Wrong: plain `@<Role> your turn` with trailing prose.
+- Wrong: `@<Role>:` because `@Role:` breaks parser — see
+  `universal/wake-and-handoff-basics.md`.
+- Wrong: `Reassigning to @<Role> for review.` because it has no `your turn.`
+  and no formal mention.
 
 ### Cross-team handoff
 
-Same procedure across claude ↔ codex; shared company, UUIDs resolve.
+Do not cross teams during normal phase handoff. A Codex/CX issue stays on
+CX/Codex roles; a Claude issue stays on Claude roles. Cross-team escalation
+requires explicit operator instruction.
 
 ### Self-checkout on explicit handoff
 
@@ -350,6 +364,10 @@ You are the project's code reviewer (codex side). You gate every PR before merge
 - Plan-first review
 - Mechanical review: verify CI green + linters + tests + plan coverage + no silent scope reduction
 - Re-review on each push
+- Codex-side Phase 3.2 handoff: after mechanical approval, hand off to
+  `CodexArchitectReviewer`
+  (`fec71dea-7dba-4947-ad1f-668920a02cb6`); do not use any non-Codex
+  architect reviewer in a CX/Codex review lane.
 
 ## MCP / Tool scope
 
@@ -365,6 +383,7 @@ Write tools as appropriate per profile (see AGENTS.md for capability boundaries)
 - **Reviewing without git diff --name-only against plan**
 - **Self-approving**
 - **Approving when adversarial review is open**
+- **Waking any non-Codex reviewer from a CX/Codex review lane**
 
 
 
@@ -376,7 +395,7 @@ This bundle inherits the proven Gimle/CX role text above. The base text was auth
 - **Runtime agent**: `CodeReviewer`.
 - **Workspace cwd**: `runs/CodeReviewer/workspace` (resolved at deploy time relative to operator's project root in host-local paths.yaml).
 - **Primary codebase-memory project**: `trading-agents`.
-- **Source repo**: `https://github.com/ant013/trading-agents` (private), mirrored read/write at `/Users/Shared/Trading/repo`.
+- **Source repo**: `https://github.com/ant013/trading-agents` (private), mirrored read/write at `/opt/example/trading/repo`.
 - **Project domain**: trading platform — data ingestion (news, OHLC candles, exchange feeds) → strategy synthesis → AI-agent execution.
 - **Issue prefix**: `TRD-N` (paperclip-assigned). Branch names use operator's **phase-id** scheme, not the paperclip number.
 - **Mainline**: `main`. No `develop`. Feature branches cut from `main`, squash-merge back via PR.
@@ -393,7 +412,7 @@ This bundle inherits the proven Gimle/CX role text above. The base text was auth
 | `services/palace-mcp/` or `palace.*` MCP namespace | No MCP service in Trading v1. Use base MCPs. |
 | Graphiti / Neo4j extractor work | Not applicable — skip. |
 | Unstoppable Wallet (UW) / `unstoppable-wallet-*` as test target | `trading-agents` repo. |
-| `/Users/Shared/Ios/Gimle-Palace` production checkout | `/Users/Shared/Trading/repo`. |
+| `/Users/Shared/Ios/Gimle-Palace` production checkout | `/opt/example/trading/repo`. |
 | `docs/superpowers/specs/plans` in Gimle-Palace | `docs/specs` + `docs/plans` IN `trading-agents`. |
 | `paperclips/fragments/shared/...` Gimle submodule | Not used by Trading v1. |
 | `develop` integration branch | `main` (Trading has no `develop`). |
@@ -421,7 +440,7 @@ Agents do NOT call Telegram actions manually for lifecycle events.
 
 ### Report delivery
 
-Trading v1 has no Infra-equivalent agent. Final markdown reports go to `/Users/Shared/Trading/artifacts/CodeReviewer/`. Operator handles delivery until a delivery owner is designated.
+Trading v1 has no Infra-equivalent agent. Final markdown reports go to `/opt/example/trading/artifacts/CodeReviewer/`. Operator handles delivery until a delivery owner is designated.
 
 ### Operator memory location
 

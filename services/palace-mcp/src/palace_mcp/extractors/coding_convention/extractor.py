@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -85,6 +86,7 @@ class CodingConventionExtractor(BaseExtractor):
             template_name="coding_convention.md",
             query="""
 MATCH (c:Convention {project_id: $project})
+WHERE coalesce(c.summary, false) = false
 OPTIONAL MATCH (v:ConventionViolation {
   project_id: $project,
   module: c.module,
@@ -162,8 +164,9 @@ def collect_conventions(
 
     grouped: dict[tuple[str, str], list[ConventionSignal]] = defaultdict(list)
     rules = load_rules()
+    source_files = _iter_source_files(repo_path)
 
-    for path in _iter_source_files(repo_path):
+    for path in source_files:
         rel_path = path.relative_to(repo_path).as_posix()
         module = _infer_module(rel_path, project_id)
         text = path.read_text(encoding="utf-8")
@@ -171,7 +174,21 @@ def collect_conventions(
             for signal in rule.collect(module=module, rel_path=rel_path, text=text):
                 grouped[(signal.module, signal.kind)].append(signal)
 
-    findings: list[ConventionFinding] = []
+    findings: list[ConventionFinding] = [
+        ConventionFinding(
+            project_id=project_id,
+            module="__summary__",
+            kind="summary",
+            dominant_choice="completed",
+            confidence="certain",
+            sample_count=len(source_files),
+            outliers=0,
+            run_id=run_id,
+            summary=True,
+            scanned_files=len(source_files),
+            scanned_at=datetime.now(timezone.utc).isoformat(),
+        )
+    ]
     violations: list[ConventionViolation] = []
     for (module, kind), signals in sorted(grouped.items()):
         counts = Counter(signal.choice for signal in signals)

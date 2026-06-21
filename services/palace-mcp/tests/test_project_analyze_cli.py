@@ -26,7 +26,27 @@ def test_project_analyze_parser_defaults_to_host_port_8080() -> None:
             "swift_kit",
         ]
     )
+    assert args.mode == "full"
     assert args.url == "http://localhost:8080/mcp"
+
+
+def test_project_analyze_parser_accepts_incremental_mode() -> None:
+    parser = cli.build_parser()
+    args = parser.parse_args(
+        [
+            "project",
+            "analyze",
+            "--repo-path",
+            "/tmp/TronKit.Swift",
+            "--slug",
+            "tron-kit",
+            "--language-profile",
+            "swift_kit",
+            "--mode",
+            "incremental",
+        ]
+    )
+    assert args.mode == "incremental"
 
 
 def test_stage_project_runtime_spec_switches_to_stage_mount(

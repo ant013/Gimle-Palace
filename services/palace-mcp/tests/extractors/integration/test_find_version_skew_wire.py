@@ -9,6 +9,8 @@ import pytest
 from palace_mcp.extractors.cross_repo_version_skew.find_version_skew import (
     find_version_skew,
 )
+from palace_mcp.memory.bundle import add_to_bundle, register_bundle
+from palace_mcp.memory.models import Tier
 
 
 @pytest.mark.asyncio
@@ -104,8 +106,8 @@ async def test_success_bundle_mode_with_skew(driver):
             MERGE (a:Project {slug: 'a'})
             MERGE (b:Project {slug: 'b'})
             MERGE (bd:Bundle {name: 'mini'})
-            MERGE (bd)-[:HAS_MEMBER]->(a)
-            MERGE (bd)-[:HAS_MEMBER]->(b)
+            MERGE (bd)-[:CONTAINS]->(a)
+            MERGE (bd)-[:CONTAINS]->(b)
             MERGE (d1:ExternalDependency {purl: 'pkg:pypi/lib@1.5.0'})
               SET d1.ecosystem = 'pypi', d1.resolved_version = '1.5.0'
             MERGE (d2:ExternalDependency {purl: 'pkg:pypi/lib@2.0.0'})
@@ -137,9 +139,9 @@ async def test_acceptance_21_min_severity_excludes_lower(driver):
             MERGE (b:Project {slug: 'b'})
             MERGE (c:Project {slug: 'c'})
             MERGE (bd:Bundle {name: 'mix'})
-            MERGE (bd)-[:HAS_MEMBER]->(a)
-            MERGE (bd)-[:HAS_MEMBER]->(b)
-            MERGE (bd)-[:HAS_MEMBER]->(c)
+            MERGE (bd)-[:CONTAINS]->(a)
+            MERGE (bd)-[:CONTAINS]->(b)
+            MERGE (bd)-[:CONTAINS]->(c)
 
             // Major
             MERGE (d1:ExternalDependency {purl: 'pkg:pypi/big@1.5.0'}) SET d1.ecosystem='pypi', d1.resolved_version='1.5.0'
@@ -203,8 +205,8 @@ async def test_bundle_member_invalid_slug_emits_warning(driver):
             MERGE (a:Project {slug: 'ok-member'})
             MERGE (bad:Project {slug: '!!!CORRUPT!!!'})
             MERGE (bd:Bundle {name: 'mixed'})
-            MERGE (bd)-[:HAS_MEMBER]->(a)
-            MERGE (bd)-[:HAS_MEMBER]->(bad)
+            MERGE (bd)-[:CONTAINS]->(a)
+            MERGE (bd)-[:CONTAINS]->(bad)
             MERGE (d1:ExternalDependency {purl: 'pkg:pypi/lib@1.0.0'})
               SET d1.ecosystem = 'pypi', d1.resolved_version = '1.0.0'
             MERGE (a)-[:DEPENDS_ON {scope: 'main', declared_in: 'p.toml', declared_version_constraint: '^1.0'}]->(d1)
@@ -216,3 +218,49 @@ async def test_bundle_member_invalid_slug_emits_warning(driver):
     ]
     assert "!!!CORRUPT!!!" in slugs_warned
     assert r["target_status"]["!!!CORRUPT!!!"] == "invalid_slug"
+
+
+@pytest.mark.asyncio
+async def test_success_bundle_mode_reports_declared_constraint_only_skew(driver):
+    async with driver.session() as session:
+        await session.run("MATCH (n) DETACH DELETE n")
+        await session.run("""
+            MERGE (a:Project {slug: 'hs-extensions'})
+              SET a.name = 'HsExtensions.Swift'
+            MERGE (b:Project {slug: 'bitcoin-core'})
+              SET b.name = 'BitcoinCore.Swift'
+        """)
+
+    await register_bundle(
+        driver,
+        name="constraints-only",
+        description="Declared constraint skew fixture",
+    )
+    for slug in ("hs-extensions", "bitcoin-core"):
+        await add_to_bundle(
+            driver, bundle="constraints-only", project=slug, tier=Tier.USER
+        )
+
+    async with driver.session() as session:
+        await session.run("""
+            MATCH (a:Project {slug: 'hs-extensions'})
+            MATCH (b:Project {slug: 'bitcoin-core'})
+            MERGE (dep:ExternalDependency {purl: 'pkg:github/apple/swift-collections@1.1.0'})
+              SET dep.ecosystem = 'github', dep.resolved_version = '1.1.0'
+            MERGE (a)-[:DEPENDS_ON {scope: 'main', declared_in: 'Package.swift', declared_version_constraint: '^1.0.0'}]->(dep)
+            MERGE (b)-[:DEPENDS_ON {scope: 'main', declared_in: 'Package.swift', declared_version_constraint: '^2.0.0'}]->(dep)
+        """)
+
+    r = await find_version_skew(driver, bundle="constraints-only", top_n=5)
+
+    assert r["ok"] is True
+    assert len(r["skew_groups"]) == 1
+    group = r["skew_groups"][0]
+    assert group["purl_root"] == "pkg:github/apple/swift-collections"
+    assert group["severity"] == "major"
+    assert group["version_count"] == 2
+    assert {entry["version"] for entry in group["entries"]} == {"1.1.0"}
+    assert {entry["declared_constraint"] for entry in group["entries"]} == {
+        "^1.0.0",
+        "^2.0.0",
+    }

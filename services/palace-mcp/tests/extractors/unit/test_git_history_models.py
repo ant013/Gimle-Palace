@@ -223,6 +223,10 @@ def test_ensure_custom_schema_includes_git_history_constraints():
     assert "git_commit_sha" in constraint_names
     assert "git_author_pk" in constraint_names
     assert "git_history_ckpt" in constraint_names
+    commit_c = next(
+        c for c in EXPECTED_SCHEMA.constraints if c.name == "git_commit_sha"
+    )
+    assert commit_c.properties == ("project_id", "sha")
     # Verify composite key for Author
     author_c = next(c for c in EXPECTED_SCHEMA.constraints if c.name == "git_author_pk")
     assert author_c.properties == ("provider", "identity_key")

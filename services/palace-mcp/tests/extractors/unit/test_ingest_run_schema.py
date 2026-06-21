@@ -59,6 +59,11 @@ class TestPathACanonicalFields:
         matches = re.findall(r"\$project\b", CREATE_INGEST_RUN)
         assert len(matches) >= 1, "CREATE_INGEST_RUN must use $project parameter"
 
+    def test_cypher_declares_outcome_contract_fields(self) -> None:
+        assert "outcome: null" in CREATE_INGEST_RUN
+        assert "message: null" in CREATE_INGEST_RUN
+        assert "next_action: null" in CREATE_INGEST_RUN
+
     @pytest.mark.asyncio
     async def test_runner_passes_extractor_name_and_project(self) -> None:
         """run_extractor must pass extractor_name and project to CREATE_INGEST_RUN."""

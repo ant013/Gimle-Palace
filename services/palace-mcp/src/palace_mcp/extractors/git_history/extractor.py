@@ -9,6 +9,7 @@ from datetime import datetime
 
 from palace_mcp.extractors.base import (
     BaseExtractor,
+    ExtractorOutcome,
     ExtractorRunContext,
     ExtractorStats,
 )
@@ -32,7 +33,10 @@ from palace_mcp.extractors.git_history.pygit2_walker import (
     Pygit2Walker,
     CommitNotFoundError,
 )
-from palace_mcp.extractors.git_history.tantivy_writer import GitHistoryTantivyWriter
+from palace_mcp.extractors.git_history.tantivy_writer import (
+    GitHistoryTantivyWriter,
+    project_index_path,
+)
 
 log = logging.getLogger("watchdog.daemon")
 
@@ -145,7 +149,10 @@ class GitHistoryExtractor(BaseExtractor):
                         "full_resync": full_resync,
                     },
                 )
-                tantivy_index_path = settings.git_history_tantivy_index_path
+                tantivy_index_path = project_index_path(
+                    settings.git_history_tantivy_index_path,
+                    ctx.group_id,
+                )
                 async with GitHistoryTantivyWriter(tantivy_index_path) as tw:
                     for commit in commits_list:
                         bot_flag = is_bot(commit["author_email"], commit["author_name"])
@@ -233,6 +240,15 @@ class GitHistoryExtractor(BaseExtractor):
                 return ExtractorStats(
                     nodes_written=commits_written,
                     edges_written=edges_written,
+                    outcome=ExtractorOutcome.SKIPPED,
+                    message=(
+                        "GitHub token not configured; skipped pull request and "
+                        "comment ingestion after the commit walk."
+                    ),
+                    next_action=(
+                        "Set PALACE_GITHUB_TOKEN and rerun git_history if pull "
+                        "request coverage is required."
+                    ),
                 )
 
             # Phase 2 with token: fetch PRs via GraphQL

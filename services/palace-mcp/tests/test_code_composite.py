@@ -98,13 +98,24 @@ class TestTestImpactRequestValidation:
         with pytest.raises(ValidationError):
             TestImpactRequest(qualified_name="0bad_name")
 
-    def test_rejects_spaces(self) -> None:
+    def test_accepts_scip_qn_with_space(self) -> None:
+        # dogfood #7: SCIP qns carry a module-space prefix ("Module s%3A...");
+        # rejecting spaces made the tool unusable with the exact qns that
+        # search_graph / semantic_search emit. They must be accepted.
+        from palace_mcp.code_composite import TestImpactRequest
+
+        req = TestImpactRequest(
+            qualified_name="WalletCore s%3A10WalletCore16AddressViewModelC"
+        )
+        assert req.qualified_name.startswith("WalletCore")
+
+    def test_rejects_non_identifier_garbage(self) -> None:
         from pydantic import ValidationError
 
         from palace_mcp.code_composite import TestImpactRequest
 
         with pytest.raises(ValidationError):
-            TestImpactRequest(qualified_name="bad name with spaces")
+            TestImpactRequest(qualified_name="@bad-qn!")
 
     def test_rejects_max_hops_too_large(self) -> None:
         from pydantic import ValidationError
@@ -645,12 +656,12 @@ class TestDefaultPath:
             default_project="repos-gimle",
         )
         result = await mcp.call_tool(
-            "palace.code.test_impact", {"qualified_name": "bad name"}
+            "palace.code.test_impact", {"qualified_name": "@bad-qn!"}
         )
         payload = json.loads(result[0][0].text)  # type: ignore[index]
         assert payload["ok"] is False
         assert payload["error_code"] == "validation_error"
-        assert payload["requested_qualified_name"] == "bad name"
+        assert payload["requested_qualified_name"] == "@bad-qn!"
 
     @pytest.mark.asyncio
     async def test_resolved_qn_echo(self, monkeypatch: pytest.MonkeyPatch) -> None:

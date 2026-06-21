@@ -21,7 +21,11 @@ _NOW = "2026-05-03T12:00:00+00:00"
 
 
 def _project_row(
-    slug: str, *, parent_mount: str | None = None, relative_path: str | None = None
+    slug: str,
+    *,
+    parent_mount: str | None = None,
+    relative_path: str | None = None,
+    expected_profile: bool = False,
 ) -> dict[str, Any]:
     cm_project_name = None
     if parent_mount is None and relative_path is None:
@@ -39,6 +43,7 @@ def _project_row(
             "repo_url": None,
             "parent_mount": parent_mount,
             "relative_path": relative_path,
+            "expected_profile": expected_profile,
             "source_created_at": _NOW,
             "source_updated_at": _NOW,
         }

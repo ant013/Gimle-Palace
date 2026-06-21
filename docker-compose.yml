@@ -79,6 +79,7 @@ services:
       - /Users/Shared/Android/unstoppable-wallet-android:/repos/uw-android:ro
       - ./services/palace-mcp/tests/extractors/fixtures/uw-ios-mini-project:/repos/uw-ios-mini:ro
       - ./services/palace-mcp/tests/extractors/fixtures/uw-ios-mini-project/.git:/repos/uw-ios-mini/.git:ro
+      - /Users/Shared/Ios/Gimle-Repos/HorizontalSystems/unstoppable-wallet-ios:/repos/stable-wallet-ios:ro
       - /Users/Shared/Ios/unstoppable-wallet-ios:/repos/uw-ios:ro
       - /Users/Shared/Ios/HorizontalSystems/unstoppable-wallet-ios:/repos/uw-ios-app:ro
       - ./services/palace-mcp/tests/extractors/fixtures/oz-v5-mini-project:/repos/oz-v5-mini:ro

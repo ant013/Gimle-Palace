@@ -3,26 +3,40 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from typing import cast
 
+from neo4j.exceptions import Neo4jError
+
 from palace_mcp import code_router
 from palace_mcp.code.semantic_contract import ScoreComponents
-from palace_mcp.code.snippet_provider import resolve_snippet
+from palace_mcp.code.snippet_provider import inspect_freshness, resolve_snippet
 from palace_mcp.embeddings import get_embedding_dispatcher
 from palace_mcp.extractors.foundation.identifiers import symbol_id_for
 from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
+from palace_mcp.pagination import pagination_envelope
+from palace_mcp.symbol_identity import (
+    canonical_symbol_kind,
+    canonical_symbol_label,
+    canonical_symbol_short_name,
+)
 
 if TYPE_CHECKING:
     from palace_mcp.config import Settings
 
 
+logger = logging.getLogger(__name__)
+
 _MAX_SCOPE_PROJECTS = 10
 _MAX_LIMIT = 50
 _MAX_CONTEXT_LIMIT = 10
+_MAX_SINGLE_PROJECT_QUERY_K = 2000
 _USAGE_PREVIEW_PHASES = ("phase1_defs", "phase2_user_uses", "phase3_vendor_uses")
+_vector_search_supported: bool | None = None
+_vector_legacy_fallback_warned = False
 
 _VALIDATE_PROJECTS_QUERY = """
 MATCH (p:Project)
@@ -46,7 +60,34 @@ WITH s.source_scope AS source_scope, s.embedding IS NOT NULL AS has_embed
 RETURN source_scope, count(*) AS total, sum(CASE WHEN has_embed THEN 1 ELSE 0 END) AS embedded_cnt
 """.strip()
 
-_VECTOR_QUERY = """
+_VECTOR_SEARCH_QUERY = """
+CYPHER 25
+MATCH (s:Symbol)
+  SEARCH s IN (
+    VECTOR INDEX symbol_embedding_idx
+    FOR $embedding
+    LIMIT $query_k
+  ) SCORE AS score
+WHERE s.group_id IN $group_ids
+  AND ($include_deprecated OR NOT s:Deprecated)
+RETURN
+  s.group_id AS group_id,
+  s.qualified_name AS qualified_name,
+  s.short_name AS short_name,
+  s.kind AS kind,
+  s.label AS label,
+  s.file_path AS file_path,
+  properties(s)[$line_start_key] AS line_start,
+  properties(s)[$line_end_key] AS line_end,
+  s.module_name AS module_name,
+  s.source_scope AS source_scope,
+  s.embedding_input_hash AS embedding_input_hash,
+  s.commit_sha AS commit_sha,
+  score AS score
+ORDER BY score DESC
+""".strip()
+
+_VECTOR_LEGACY_QUERY = """
 CALL db.index.vector.queryNodes('symbol_embedding_idx', $query_k, $embedding)
 YIELD node, score
 WITH node AS s, score
@@ -56,10 +97,12 @@ WHERE s:Symbol
 RETURN
   s.group_id AS group_id,
   s.qualified_name AS qualified_name,
+  s.short_name AS short_name,
   s.kind AS kind,
+  s.label AS label,
   s.file_path AS file_path,
-  s.line_start AS line_start,
-  s.line_end AS line_end,
+  properties(s)[$line_start_key] AS line_start,
+  properties(s)[$line_end_key] AS line_end,
   s.module_name AS module_name,
   s.source_scope AS source_scope,
   s.embedding_input_hash AS embedding_input_hash,
@@ -67,6 +110,8 @@ RETURN
   score AS score
 ORDER BY score DESC
 """.strip()
+
+_VECTOR_QUERY = _VECTOR_SEARCH_QUERY
 
 _MISSING_HITS_QUERY = """
 UNWIND $hits AS hit
@@ -387,6 +432,15 @@ def _candidate_limit(limit: int, scope_size: int) -> int:
     return min(max(limit * scope_size * 10, 50), 500)
 
 
+def _single_project_query_k_budget(
+    initial_query_k: int, embedded_symbol_count: int
+) -> int:
+    return min(
+        max(initial_query_k, embedded_symbol_count),
+        _MAX_SINGLE_PROJECT_QUERY_K,
+    )
+
+
 def _project_from_group_id(group_id: str) -> str:
     if group_id.startswith("project/"):
         return group_id.removeprefix("project/")
@@ -471,15 +525,156 @@ async def _vector_search(
     query_k: int,
     include_deprecated: bool,
 ) -> list[dict[str, Any]]:
+    global _vector_search_supported  # noqa: PLW0603
+
     async with driver.session() as session:
-        result = await session.run(
-            _VECTOR_QUERY,
+        if _vector_search_supported is False:
+            return await _run_vector_query(
+                session,
+                _VECTOR_LEGACY_QUERY,
+                embedding=embedding,
+                group_ids=group_ids,
+                query_k=query_k,
+                include_deprecated=include_deprecated,
+            )
+
+        try:
+            rows = await _run_vector_query(
+                session,
+                _VECTOR_SEARCH_QUERY,
+                embedding=embedding,
+                group_ids=group_ids,
+                query_k=query_k,
+                include_deprecated=include_deprecated,
+            )
+        except Exception as exc:
+            if not _is_search_unsupported(exc):
+                raise
+            _vector_search_supported = False
+            _warn_legacy_vector_fallback(exc)
+            return await _run_vector_query(
+                session,
+                _VECTOR_LEGACY_QUERY,
+                embedding=embedding,
+                group_ids=group_ids,
+                query_k=query_k,
+                include_deprecated=include_deprecated,
+            )
+
+        _vector_search_supported = True
+        return rows
+
+
+async def _run_vector_query(
+    session: Any,
+    query: str,
+    *,
+    embedding: list[float],
+    group_ids: list[str],
+    query_k: int,
+    include_deprecated: bool,
+) -> list[dict[str, Any]]:
+    result = await session.run(
+        query,
+        embedding=embedding,
+        group_ids=group_ids,
+        query_k=query_k,
+        include_deprecated=include_deprecated,
+        line_start_key="line_start",
+        line_end_key="line_end",
+    )
+    return cast(list[dict[str, Any]], await result.data())
+
+
+async def _vector_search_single_project(
+    driver: Any,
+    *,
+    embedding: list[float],
+    group_id: str,
+    requested_limit: int,
+    initial_query_k: int,
+    embedded_symbol_count: int,
+    include_deprecated: bool,
+) -> tuple[list[dict[str, Any]], int]:
+    rows = await _vector_search(
+        driver,
+        embedding=embedding,
+        group_ids=[group_id],
+        query_k=initial_query_k,
+        include_deprecated=include_deprecated,
+    )
+    query_k = initial_query_k
+    max_query_k = _single_project_query_k_budget(query_k, embedded_symbol_count)
+
+    # Single-project scopes can be starved by the global ANN top-K. Retry with
+    # a larger query_k, but cap by scope size and a latency budget.
+    while (
+        len(rows) < requested_limit
+        and len(rows) < embedded_symbol_count
+        and query_k < max_query_k
+    ):
+        next_query_k = min(max_query_k, max(query_k * 4, 200))
+        if next_query_k <= query_k:
+            break
+        query_k = next_query_k
+        rows = await _vector_search(
+            driver,
             embedding=embedding,
-            group_ids=group_ids,
+            group_ids=[group_id],
             query_k=query_k,
             include_deprecated=include_deprecated,
         )
-        return cast(list[dict[str, Any]], await result.data())
+
+    return rows, query_k
+
+
+def _is_search_unsupported(exc: Exception) -> bool:
+    if not isinstance(exc, Neo4jError):
+        return False
+    message = str(exc)
+    lower_message = message.lower()
+    cypher_version_rejected = (
+        "cypher version" in lower_message and "valid option" in lower_message
+    )
+    if not (
+        cypher_version_rejected
+        or any(token in message for token in ("SEARCH", "CYPHER 25", "CYPHER_25"))
+    ):
+        return False
+    return any(
+        token in lower_message
+        for token in (
+            "syntax",
+            "invalid input",
+            "unsupported",
+            "unrecognized",
+            "not defined",
+            "not supported",
+            "valid option",
+        )
+    )
+
+
+def _warn_legacy_vector_fallback(exc: Exception) -> None:
+    global _vector_legacy_fallback_warned  # noqa: PLW0603
+
+    if _vector_legacy_fallback_warned:
+        return
+    _vector_legacy_fallback_warned = True
+    logger.warning(
+        "semantic_search.vector_search.legacy_fallback",
+        extra={
+            "error_type": type(exc).__name__,
+            "error_code": getattr(exc, "code", None),
+        },
+    )
+
+
+def _reset_vector_search_capability_for_tests() -> None:
+    global _vector_search_supported, _vector_legacy_fallback_warned  # noqa: PLW0603
+
+    _vector_search_supported = None
+    _vector_legacy_fallback_warned = False
 
 
 def _merge_per_project_results(
@@ -525,6 +720,49 @@ async def _find_missing_hits(
     ]
 
 
+async def _resolve_registered_repo_path(project: str) -> Path | None:
+    """Look up :Project.repo_path so snippet provider can use it.
+
+    Same pattern as native_get_code_snippet — fetch the :Project node and
+    delegate to resolve_registered_project which honors the persisted
+    absolute path. Returns None if the project is not registered or has
+    no resolvable on-disk path; callers fall back to the legacy
+    REPOS_ROOT/<slug> layout via resolve_project.
+    """
+    from palace_mcp.git.path_resolver import (
+        ProjectNotRegistered,
+        resolve_registered_project,
+    )
+    from palace_mcp.mcp_server import get_driver
+    from palace_mcp.memory.cypher import GET_PROJECT
+
+    driver = get_driver()
+    if driver is None:
+        return None
+
+    async with driver.session() as session:
+        result = await session.run(GET_PROJECT, slug=project)
+        row = await result.single()
+
+    try:
+        return resolve_registered_project(
+            project,
+            project_node=row["p"] if row is not None else None,
+        )
+    except (ProjectNotRegistered, ValueError):
+        return None
+
+
+async def _load_freshness(project: str, commit_sha: str | None) -> dict[str, Any]:
+    repo_path = await _resolve_registered_repo_path(project)
+    freshness = await asyncio.to_thread(inspect_freshness, repo_path, commit_sha)
+    return {
+        "indexed_commit": freshness.indexed_commit,
+        "commits_behind_head": freshness.commits_behind_head,
+        "stale": freshness.stale,
+    }
+
+
 async def _load_snippet_context(
     *,
     project: str,
@@ -536,9 +774,13 @@ async def _load_snippet_context(
 ) -> tuple[dict[str, Any] | None, str | None, str | None]:
     # Primary: read directly from the mounted repo using path_resolver.
     # This validates file_path containment and enforces line/byte bounds.
+    # Resolve repo_path from :Project node first so we honor PR #418 (GIM-1569)
+    # repo_path field; fall back to REPOS_ROOT/<slug> layout if unset.
+    repo_path = await _resolve_registered_repo_path(project)
     snippet, local_code, local_message = await asyncio.to_thread(
         resolve_snippet,
         project=project,
+        repo_path=repo_path,
         file_path=file_path,
         line_start=line_start,
         line_end=line_end,
@@ -692,6 +934,7 @@ async def semantic_search(
     include_sdk: bool = False,
     include_deprecated: bool = False,
     limit: int = 10,
+    offset: int = 0,
     backend: str | None = None,
     include_context: bool = True,
     context_limit: int = 3,
@@ -703,6 +946,8 @@ async def semantic_search(
 
     if limit < 1 or limit > _MAX_LIMIT:
         return _error("invalid_limit", f"limit must be between 1 and {_MAX_LIMIT}")
+    if offset < 0:
+        return _error("invalid_offset", "offset must be >= 0")
     if context_limit < 0 or context_limit > _MAX_CONTEXT_LIMIT:
         return _error(
             "invalid_context_limit",
@@ -723,6 +968,9 @@ async def semantic_search(
         )
 
     group_ids = [f"project/{slug}" for slug in scope_projects]
+    effective_scopes = _resolve_effective_scopes(
+        source_scopes, include_dependencies, include_generated, include_sdk
+    )
 
     try:
         dispatcher = get_embedding_dispatcher()
@@ -763,6 +1011,9 @@ async def semantic_search(
                 runtime=_runtime_metadata(settings),
             )
     warnings: list[dict[str, Any]] = []
+    total_candidates = sum(
+        int(coverage["source_scope_counts"].get(scope, 0)) for scope in effective_scopes
+    )
     if embedded_symbol_count == 0:
         warnings.append(
             _warning(
@@ -777,26 +1028,31 @@ async def semantic_search(
             "backend": resolved_backend,
             "include_context": include_context,
             "limit": limit,
+            "offset": offset,
             "candidate_limit": _candidate_limit(limit, len(scope_projects)),
             "embedded_symbol_count": 0,
             "returned_count": 0,
             "warnings": warnings,
             "embedding_coverage": coverage,
             "result": [],
+            **pagination_envelope(total=0, returned=0, offset=offset),
         }
 
-    candidate_limit = _candidate_limit(limit, len(scope_projects))
+    page_limit = offset + limit
+    candidate_limit = _candidate_limit(page_limit, len(scope_projects))
     if len(group_ids) == 1:
         per_project_k: int | None = None
-        rows = await _vector_search(
+        rows, candidate_limit = await _vector_search_single_project(
             driver,
             embedding=query_embedding,
-            group_ids=group_ids,
-            query_k=candidate_limit,
+            group_id=group_ids[0],
+            requested_limit=page_limit,
+            initial_query_k=candidate_limit,
+            embedded_symbol_count=embedded_symbol_count,
             include_deprecated=include_deprecated,
         )
     else:
-        per_project_k = _candidate_limit(limit, 1)
+        per_project_k = _candidate_limit(page_limit, 1)
         per_project_results = await asyncio.gather(
             *[
                 _vector_search(
@@ -830,13 +1086,21 @@ async def semantic_search(
     for row in rows:
         group_id = str(row["group_id"])
         qualified_name = str(row["qualified_name"])
+        kind = canonical_symbol_kind(str(row.get("kind") or ""))
+        short_name = canonical_symbol_short_name(
+            qualified_name,
+            short_name=str(row.get("short_name") or ""),
+        )
+        label = canonical_symbol_label(str(row.get("label") or kind))
 
         hit: dict[str, Any] = {
             "project": _project_from_group_id(group_id),
             "group_id": group_id,
             "qualified_name": qualified_name,
             "occurrence_symbol_id": symbol_id_for(qualified_name),
-            "kind": row.get("kind"),
+            "short_name": short_name,
+            "kind": kind or str(row.get("kind") or ""),
+            "label": label or str(row.get("label") or ""),
             "file_path": row.get("file_path"),
             "module_name": row.get("module_name"),
             "source_scope": row.get("source_scope"),
@@ -850,15 +1114,12 @@ async def semantic_search(
             hit["embedding_input_hash"] = embedding_input_hash
         candidate_rows.append(hit)
 
-    effective_scopes = _resolve_effective_scopes(
-        source_scopes, include_dependencies, include_generated, include_sdk
-    )
     candidate_rows, scope_excluded_count = _filter_by_scope(
         candidate_rows, effective_scopes
     )
 
     _apply_ranking(normalized_query, candidate_rows)
-    result_rows = candidate_rows[:limit]
+    result_rows = candidate_rows[offset : offset + limit]
 
     context_available_count = 0
     warning_code_counts: dict[str, int] = {}
@@ -874,6 +1135,15 @@ async def semantic_search(
         )
         for hit in result_rows
     ]
+    freshness_rows = await asyncio.gather(
+        *[
+            _load_freshness(hit["project"], cs)
+            for hit, (cs, _, _) in zip(result_rows, _hit_meta)
+        ]
+    )
+    for hit, freshness in zip(result_rows, freshness_rows):
+        hit.update(freshness)
+
     if include_context:
         contexts = await asyncio.gather(
             *[
@@ -906,12 +1176,14 @@ async def semantic_search(
                     total_byte_count += bc
                     snippets_with_size += 1
 
-    if len(result_rows) < limit:
+    expected_rows = min(limit, max(total_candidates - offset, 0))
+    if len(result_rows) < expected_rows:
         warnings.append(
             _warning(
                 "scope_filter_underfilled",
                 "vector search returned fewer scoped hits than requested",
                 requested_limit=limit,
+                requested_offset=offset,
                 returned_count=len(result_rows),
                 candidate_limit=candidate_limit,
             )
@@ -938,6 +1210,7 @@ async def semantic_search(
         "backend": resolved_backend,
         "include_context": include_context,
         "limit": limit,
+        "offset": offset,
         "candidate_limit": candidate_limit,
         "per_project_k": per_project_k,
         "embedded_symbol_count": embedded_symbol_count,
@@ -948,4 +1221,9 @@ async def semantic_search(
         "ranking_spec_version": "1",
         "context_metrics": context_metrics,
         "result": result_rows,
+        **pagination_envelope(
+            total=total_candidates,
+            returned=len(result_rows),
+            offset=offset,
+        ),
     }

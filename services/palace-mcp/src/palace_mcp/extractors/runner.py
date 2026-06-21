@@ -12,7 +12,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import re
 import time
 from collections.abc import Coroutine
 from dataclasses import dataclass
@@ -28,6 +27,8 @@ from palace_mcp.extractors import registry
 from palace_mcp.extractors.base import (
     BaseExtractor,
     ExtractorError,
+    ExtractorExecutionMode,
+    ExtractorOutcome,
     ExtractorRunContext,
     ExtractorStats,
 )
@@ -44,14 +45,16 @@ from palace_mcp.extractors.schemas import (
     ExtractorErrorResponse,
     ExtractorRunResponse,
 )
+from palace_mcp.git.path_resolver import (
+    ProjectNotRegistered,
+    resolve_registered_project,
+)
 from palace_mcp.memory.bundle import bundle_members
 from palace_mcp.memory.models import IngestRunResult, ProjectRef
 from palace_mcp.memory.projects import InvalidSlug, validate_slug
 
 REPOS_ROOT = Path(os.environ.get("PALACE_REPOS_ROOT", "/repos"))
 EXTRACTOR_TIMEOUT_S = 300.0
-_PARENT_MOUNT_RE = re.compile(r"^[a-z][a-z0-9-]{0,15}$")
-_RELATIVE_PATH_RE = re.compile(r"^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$")
 
 _logger = logging.getLogger(__name__)
 
@@ -59,6 +62,18 @@ _logger = logging.getLogger(__name__)
 GET_PROJECT = "MATCH (p:Project {slug: $slug}) RETURN p"
 
 _background_tasks: set[asyncio.Task[None]] = set()
+
+
+def _response_mode(stats: ExtractorStats) -> ExtractorExecutionMode:
+    if stats.mode is not None:
+        return stats.mode
+    if stats.outcome in {
+        ExtractorOutcome.SKIPPED,
+        ExtractorOutcome.NOT_APPLICABLE,
+        ExtractorOutcome.MISSING_INPUT,
+    }:
+        return ExtractorExecutionMode.SKIPPED
+    return ExtractorExecutionMode.FULL
 
 
 def _fire_and_forget(coro: Coroutine[None, None, None]) -> None:
@@ -148,30 +163,15 @@ async def _precheck(
 def _resolve_repo_path(
     *, repos_root: Path, project: str, project_node: Any
 ) -> Path | None:
-    parent_mount = _node_value(project_node, "parent_mount")
-    relative_path = _node_value(project_node, "relative_path")
-    if parent_mount and relative_path:
-        if not _PARENT_MOUNT_RE.match(parent_mount):
-            return None
-        if not _RELATIVE_PATH_RE.match(relative_path):
-            return None
-        if any(part == ".." for part in relative_path.split("/")):
-            return None
-
-        mount_root = repos_root.parent / f"{repos_root.name}-{parent_mount}"
-        candidate = (mount_root / relative_path).resolve()
-        if not candidate.is_dir():
-            return None
-        try:
-            candidate.relative_to(mount_root.resolve())
-        except ValueError:
-            return None
-        return candidate
-
-    candidate = repos_root / project
-    if not candidate.is_dir() or not (candidate / ".git").exists():
+    try:
+        return resolve_registered_project(
+            project,
+            project_node=project_node,
+            repos_root=repos_root,
+            require_git=False,
+        )
+    except (ProjectNotRegistered, ValueError):
         return None
-    return candidate
 
 
 def _resolve_scip_path_override(repo_path: Path, scip_path: str) -> Path | None:
@@ -187,17 +187,6 @@ def _resolve_scip_path_override(repo_path: Path, scip_path: str) -> Path | None:
     return candidate
 
 
-def _node_value(project_node: Any, key: str) -> str | None:
-    if hasattr(project_node, "get"):
-        value = project_node.get(key)
-    else:
-        try:
-            value = project_node[key]
-        except (KeyError, TypeError):
-            value = None
-    return value if isinstance(value, str) and value else None
-
-
 # --- execute ---
 
 
@@ -210,6 +199,7 @@ class _ExecuteOk:
 class _ExecuteError:
     error_code: str
     errors: list[str]
+    next_action: str | None = None
 
 
 _ExecuteResult = Union[_ExecuteOk, _ExecuteError]
@@ -233,7 +223,17 @@ async def _execute(
         msg = f"timeout after {timeout_s}s"
         logger.error("extractor.execute.timeout", extra={"run_id": ctx.run_id})
         return _ExecuteError(error_code="extractor_runtime_error", errors=[msg])
-    except (ExtractorError, FoundationExtractorError) as e:
+    except FoundationExtractorError as e:
+        logger.error(
+            "extractor.execute.extractor_error",
+            extra={"run_id": ctx.run_id, "error_code": e.error_code},
+        )
+        return _ExecuteError(
+            error_code=e.error_code,
+            errors=[str(e)[:200]],
+            next_action=e.action,
+        )
+    except ExtractorError as e:
         logger.error(
             "extractor.execute.extractor_error",
             extra={"run_id": ctx.run_id, "error_code": e.error_code},
@@ -266,8 +266,14 @@ async def _finalize(
             [],
             True,
         )
+        outcome = result.stats.outcome
+        message = result.stats.message
+        next_action = result.stats.next_action
     else:
         nodes, edges, errors, success = 0, 0, result.errors, False
+        outcome = None
+        message = errors[0] if errors else None
+        next_action = result.next_action
 
     async with driver.session() as session:
         await session.run(
@@ -278,6 +284,9 @@ async def _finalize(
             nodes_written=nodes,
             edges_written=edges,
             errors=errors,
+            outcome=outcome,
+            message=message,
+            next_action=next_action,
             success=success,
         )
     return nodes, edges, errors, success
@@ -295,6 +304,7 @@ async def run_extractor(
     timeout_s: float = EXTRACTOR_TIMEOUT_S,
     scip_path: str | None = None,
     companion_run_id: str | None = None,
+    force: bool = False,
 ) -> dict[str, Any]:
     """Full lifecycle: precheck → create :IngestRun → execute → finalize."""
     # 1. Precheck (driver used for :Project lookup)
@@ -358,6 +368,7 @@ async def run_extractor(
         logger=logger,
         scip_path=scip_path_override,
         companion_run_id=companion_run_id,
+        force=force,
     )
     exec_result = await _execute(
         extractor=pre.extractor,
@@ -404,6 +415,7 @@ async def run_extractor(
             outcome=exec_result.stats.outcome,
             message=exec_result.stats.message,
             next_action=exec_result.stats.next_action,
+            mode=_response_mode(exec_result.stats),
         ).model_dump()
 
     assert isinstance(exec_result, _ExecuteError)
@@ -424,6 +436,7 @@ async def run_extractor(
         extractor=name,
         project=project,
         run_id=run_id,
+        next_action=exec_result.next_action,
     ).model_dump()
 
 
@@ -468,9 +481,12 @@ async def _run_bundle_ingest_task(
                 member_result = IngestRunResult(
                     slug=member.slug,
                     ok=True,
+                    outcome=result_dict.get("outcome"),
                     run_id=result_dict.get("run_id"),
                     error_kind=None,
                     error=None,
+                    message=result_dict.get("message"),
+                    next_action=result_dict.get("next_action"),
                     duration_ms=int(result_dict.get("duration_ms", 0)),
                     completed_at=datetime.now(timezone.utc),
                 )
@@ -479,9 +495,12 @@ async def _run_bundle_ingest_task(
                 member_result = IngestRunResult(
                     slug=member.slug,
                     ok=False,
+                    outcome=None,
                     run_id=result_dict.get("run_id"),
                     error_kind=_error_code_to_kind(error_code),
                     error=result_dict.get("message", ""),
+                    message=result_dict.get("message"),
+                    next_action=result_dict.get("next_action"),
                     duration_ms=0,
                     completed_at=datetime.now(timezone.utc),
                 )
@@ -489,9 +508,12 @@ async def _run_bundle_ingest_task(
             member_result = IngestRunResult(
                 slug=member.slug,
                 ok=False,
+                outcome=None,
                 run_id=None,
                 error_kind="unknown",
                 error=f"{type(exc).__name__}: {str(exc)[:200]}",
+                message=f"{type(exc).__name__}: {str(exc)[:200]}",
+                next_action=None,
                 duration_ms=0,
                 completed_at=datetime.now(timezone.utc),
             )

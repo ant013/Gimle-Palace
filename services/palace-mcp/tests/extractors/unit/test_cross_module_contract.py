@@ -7,6 +7,10 @@ from pathlib import Path
 import pytest
 
 from palace_mcp.extractors.cross_module_contract import (
+    _OccurrenceResolution,
+    _load_occurrences_for_surface,
+    _swift_indexstore_lookup_name,
+    _swift_qname_from_usr,
     build_contract_delta,
     plan_contract_snapshots,
 )
@@ -114,23 +118,36 @@ def test_plan_contract_snapshots_exact_match_and_skips() -> None:
     ]
 
     occurrences_by_symbol = {
-        symbol_id_for("Wallet.balance()"): [
-            _occurrence(
-                "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift",
-                "Wallet.balance()",
+        "sym-balance": _OccurrenceResolution(
+            status="matched",
+            match_symbol_id=symbol_id_for("Wallet.balance()"),
+            occurrences=(
+                _occurrence(
+                    "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift",
+                    "Wallet.balance()",
+                ),
+                _occurrence(
+                    "ProducerKit/Sources/ProducerKit/InternalUse.swift",
+                    "Wallet.balance()",
+                ),
+                _occurrence(
+                    "UnknownFeature/Sources/UnknownFeature/Loose.swift",
+                    "Wallet.balance()",
+                ),
             ),
-            _occurrence(
-                "ProducerKit/Sources/ProducerKit/InternalUse.swift", "Wallet.balance()"
+        ),
+        "sym-package": _OccurrenceResolution(
+            status="matched",
+            match_symbol_id=symbol_id_for("packageHelper()"),
+            occurrences=(
+                _occurrence(
+                    "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift",
+                    "packageHelper()",
+                ),
             ),
-            _occurrence(
-                "UnknownFeature/Sources/UnknownFeature/Loose.swift", "Wallet.balance()"
-            ),
-        ],
-        symbol_id_for("packageHelper()"): [
-            _occurrence(
-                "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift", "packageHelper()"
-            )
-        ],
+        ),
+        "sym-stale": _OccurrenceResolution(status="no_consumers"),
+        "sym-missing": _OccurrenceResolution(status="unresolved"),
     }
 
     def resolve_owner(file_path: str) -> ModuleOwnerResolution:
@@ -178,17 +195,26 @@ def test_plan_contract_snapshots_include_package_when_explicit() -> None:
         ),
     ]
     occurrences_by_symbol = {
-        symbol_id_for("Wallet.balance()"): [
-            _occurrence(
-                "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift",
-                "Wallet.balance()",
-            )
-        ],
-        symbol_id_for("packageHelper()"): [
-            _occurrence(
-                "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift", "packageHelper()"
-            )
-        ],
+        "sym-balance": _OccurrenceResolution(
+            status="matched",
+            match_symbol_id=symbol_id_for("Wallet.balance()"),
+            occurrences=(
+                _occurrence(
+                    "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift",
+                    "Wallet.balance()",
+                ),
+            ),
+        ),
+        "sym-package": _OccurrenceResolution(
+            status="matched",
+            match_symbol_id=symbol_id_for("packageHelper()"),
+            occurrences=(
+                _occurrence(
+                    "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift",
+                    "packageHelper()",
+                ),
+            ),
+        ),
     }
 
     planned = plan_contract_snapshots(
@@ -210,6 +236,64 @@ def test_plan_contract_snapshots_include_package_when_explicit() -> None:
         "sym-balance",
         "sym-package",
     }
+
+
+def test_plan_contract_snapshots_writes_baseline_when_no_consumers_match() -> None:
+    surface = _surface()
+    symbols = [
+        _symbol(symbol_id="sym-balance", fqn="Wallet.balance()"),
+        _symbol(
+            symbol_id="sym-package",
+            fqn="packageHelper()",
+            visibility=PublicApiVisibility.PACKAGE,
+        ),
+        _symbol(
+            symbol_id="sym-missing",
+            fqn="missingQualifiedName()",
+            symbol_qualified_name=None,
+        ),
+    ]
+
+    planned = plan_contract_snapshots(
+        surface=surface,
+        symbols=symbols,
+        occurrences_by_symbol={
+            "sym-balance": _OccurrenceResolution(status="no_consumers"),
+            "sym-package": _OccurrenceResolution(status="unresolved"),
+            "sym-missing": _OccurrenceResolution(status="unresolved"),
+        },
+        resolve_owner=lambda _: ModuleOwnerResolution.unresolved(
+            "consumer_module_unresolved"
+        ),
+        include_package=False,
+    )
+
+    assert len(planned) == 1
+    snapshot = planned[0].snapshot
+    assert snapshot.consumer_module_name == "__no_cross_module_consumer__"
+    assert snapshot.producer_module_name == "ProducerKit"
+    assert snapshot.symbol_count == 0
+    assert snapshot.use_count == 0
+    assert snapshot.file_count == 0
+    assert snapshot.skipped_symbol_count == 3
+    assert planned[0].consumptions == []
+
+
+def test_swift_indexstore_lookup_name_strips_types_to_labels() -> None:
+    assert _swift_indexstore_lookup_name("Wallet.init(id: Swift.String)") == "init(id:)"
+    assert (
+        _swift_indexstore_lookup_name(
+            "Wallet.configure(_ value: Swift.Int, label: Wallet)"
+        )
+        == "configure(_:label:)"
+    )
+
+
+def test_swift_qname_from_usr_matches_scip_descriptor_format() -> None:
+    usr = "s:11ProducerKit6WalletV7balanceyyF"
+    assert _swift_qname_from_usr(usr) == (
+        "ProducerKit s%3A11ProducerKit6WalletV7balanceyyF"
+    )
 
 
 def test_build_contract_delta_counts_added_removed_and_signature_changed() -> None:
@@ -416,6 +500,59 @@ async def test_tantivy_bridge_search_occurrences_filters_commit_and_phase(
     assert hits[0].col_start == 14
     assert hits[0].col_end is None
     assert hits[0].commit_sha == "abc123"
+
+
+@pytest.mark.asyncio
+async def test_load_occurrences_for_surface_bridges_swift_fqn_via_indexstore_usr(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from types import SimpleNamespace
+
+    index_path = tmp_path / "tantivy"
+    commit_sha = "commitcurrent"
+    usr = "s:11ProducerKit6WalletV7balanceyyF"
+    qname = "ProducerKit s%3A11ProducerKit6WalletV7balanceyyF"
+    symbol = _symbol(symbol_id="sym-balance", fqn="Wallet.balance()")
+
+    async with TantivyBridge(index_path) as bridge:
+        await bridge.add_or_replace_async(
+            occ=_make_occurrence(
+                symbol_id=symbol_id_for(qname),
+                qname=qname,
+                file_path="ConsumerApp/Sources/ConsumerApp/WalletFeature.swift",
+                line=8,
+                col_start=14,
+                col_end=21,
+                commit_sha=commit_sha,
+            ),
+            phase="phase2_user_uses",
+        )
+
+    monkeypatch.setattr(
+        "palace_mcp.code.indexstore.find_callers",
+        lambda *args, **kwargs: [SimpleNamespace(symbol_usr=usr)],
+    )
+
+    async with TantivyBridge(index_path) as bridge:
+        resolutions = await _load_occurrences_for_surface(
+            bridge=bridge,
+            symbols=[symbol],
+            commit_sha=commit_sha,
+            include_package=False,
+            phases=("phase2_user_uses",),
+            cache={},
+            index_store_path="/tmp/indexstore",
+            caller_cache={},
+        )
+
+    resolution = resolutions["sym-balance"]
+    assert resolution.status == "matched"
+    assert resolution.match_symbol_id == symbol_id_for(qname)
+    assert len(resolution.occurrences) == 1
+    assert (
+        resolution.occurrences[0].file_path
+        == "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift"
+    )
 
 
 def _make_occurrence(

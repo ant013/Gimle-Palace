@@ -79,6 +79,13 @@ class Settings(BaseSettings):
         gt=0,
         description="Write-merge buffer size in MB (not runtime mmap budget).",
     )
+    palace_incremental_ingest: bool = Field(
+        default=False,
+        description=(
+            "Enable incremental Tantivy rewrites for symbol_index_swift when "
+            "only a subset of files changed."
+        ),
+    )
 
     # SCIP integration (101a decides pathing; 101b does the actual parse)
     palace_scip_index_paths: Annotated[dict[str, str], NoDecode] = Field(
@@ -118,7 +125,7 @@ class Settings(BaseSettings):
     )
     git_history_tantivy_index_path: Path = Field(
         default=Path("/var/lib/palace/tantivy/git_history"),
-        description="Path for the dedicated git_history Tantivy index.",
+        description="Base path for per-project dedicated git_history Tantivy indices.",
     )
 
     # -----------------------------------------------------------------------
@@ -140,6 +147,19 @@ class Settings(BaseSettings):
         ge=1,
         le=600,
         description="Bolt session timeout for cross-repo skew aggregation Cypher (seconds)",
+    )
+
+    palace_crypto_semgrep_timeout_s: int = Field(
+        default=120,
+        ge=1,
+        le=7200,
+        description="Per-run semgrep subprocess timeout for crypto_domain_model (seconds)",
+    )
+    palace_error_handling_semgrep_timeout_s: int = Field(
+        default=120,
+        ge=1,
+        le=7200,
+        description="Per-run semgrep subprocess timeout for error_handling_policy (seconds)",
     )
 
     palace_hotspot_churn_window_days: int = Field(

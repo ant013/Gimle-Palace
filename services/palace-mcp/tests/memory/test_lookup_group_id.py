@@ -213,6 +213,31 @@ class TestMcpToolProjectParam:
         mcp_server._driver = None
 
     @pytest.mark.asyncio
+    async def test_palace_memory_lookup_passes_offset_to_req(self) -> None:
+        captured_reqs: list[tuple[Any, LookupRequest, str]] = []
+
+        async def fake_perform_lookup(
+            driver: Any, req: LookupRequest, default_group_id: str
+        ) -> Any:
+            captured_reqs.append((driver, req, default_group_id))
+            from palace_mcp.memory.schema import LookupResponse
+
+            return LookupResponse(items=[], total_matched=0, query_ms=1)
+
+        from palace_mcp import mcp_server
+        from palace_mcp.mcp_server import palace_memory_lookup
+
+        mcp_server._driver = MagicMock()
+        with patch(
+            "palace_mcp.mcp_server.perform_lookup", side_effect=fake_perform_lookup
+        ):
+            await palace_memory_lookup(entity_type="Episode", offset=7)
+
+        _, req, _default_group_id = captured_reqs[0]
+        assert req.offset == 7
+        mcp_server._driver = None
+
+    @pytest.mark.asyncio
     async def test_palace_memory_lookup_uses_default_when_no_project(self) -> None:
         """When project is omitted, req.project is None and default_group_id is server default."""
         captured_reqs: list[tuple[Any, LookupRequest, str]] = []

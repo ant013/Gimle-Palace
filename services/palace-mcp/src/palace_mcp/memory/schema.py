@@ -27,6 +27,7 @@ class LookupRequest(BaseModel):
     entity_type: EntityType
     project: str | list[str] | None = None
     filters: dict[str, Any] = Field(default_factory=dict)
+    offset: int = Field(default=0, ge=0)
     limit: int = Field(default=20, ge=1, le=100)
     order_by: Literal["created_at", "name"] = "created_at"
 
@@ -49,6 +50,13 @@ class LookupResponse(BaseModel):
     total_matched: int
     query_ms: int
     warnings: list[str] = Field(default_factory=list)
+    total: int = 0
+    returned: int = 0
+    offset: int = 0
+    has_more: bool = False
+    next_offset: int | None = None
+    truncated: bool = False
+    truncated_reason: str | None = None
 
 
 class ProjectInfo(BaseModel):
@@ -66,11 +74,15 @@ class ProjectInfo(BaseModel):
     relative_path: str | None = None
     # GIM-283-1: language profile for audit extractor scoping
     language_profile: str | None = None
+    expected_profile: bool = False
     source_created_at: str | None = None
     source_updated_at: str | None = None
     entity_counts: dict[str, int] = Field(default_factory=dict)
+    code_index_stats: dict[str, int] = Field(default_factory=dict)
     last_ingest_started_at: str | None = None
     last_ingest_finished_at: str | None = None
+    indexed_commit: str | None = None
+    commits_behind_head: int | None = None
 
 
 class BridgeHealthInfo(BaseModel):

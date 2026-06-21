@@ -24,7 +24,10 @@ ON CREATE SET d.ecosystem = $ecosystem,
 # No ON MATCH SET: ExternalDependency is first-writer-wins per spec §3.4 inv 1+2.
 
 _UPSERT_DEPENDS_ON_EDGE = """
-MATCH (p:Project {slug: $project_slug})
+MERGE (p:Project {slug: $project_slug})
+ON CREATE SET p.group_id = $group_id,
+              p.source_created_at = datetime()
+WITH p
 MATCH (d:ExternalDependency {purl: $purl})
 MERGE (p)-[r:DEPENDS_ON {scope: $scope, declared_in: $declared_in}]->(d)
 ON CREATE SET r.declared_version_constraint = $declared_version_constraint,
@@ -60,6 +63,7 @@ async def write_to_neo4j(
             result = await session.run(
                 _UPSERT_DEPENDS_ON_EDGE,
                 project_slug=project_slug,
+                group_id=group_id,
                 purl=dep.purl,
                 scope=dep.scope,
                 declared_in=dep.declared_in,

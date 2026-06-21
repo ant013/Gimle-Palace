@@ -9,8 +9,10 @@ Swift DEF/USE occurrences through the standard 3-phase bootstrap:
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
-from collections.abc import Iterable, Sized
+from collections.abc import Callable, Iterable, Sized
+from dataclasses import dataclass
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,6 +23,7 @@ from neo4j import AsyncDriver
 
 from palace_mcp.extractors.base import (
     BaseExtractor,
+    ExtractorExecutionMode,
     ExtractorOutcome,
     ExtractorRunContext,
     ExtractorStats,
@@ -50,9 +53,13 @@ from palace_mcp.extractors.foundation.models import (
 from palace_mcp.extractors.foundation.schema import ensure_custom_schema
 from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
 from palace_mcp.extractors.foundation.symbol_node_writer import (
+    bump_unchanged_symbol_liveness,
+    delete_stale_relationships,
     soft_delete_symbols,
+    soft_delete_symbols_for_paths,
     write_symbol_nodes,
 )
+from palace_mcp.git.command import GitError, GitTimeout, run_git
 from palace_mcp.extractors.scip_parser import (
     FindScipPath,
     ScipPathRequiredError,
@@ -126,7 +133,24 @@ WHERE f.body_hash IS NOT NULL
 RETURN f.path AS path, f.body_hash AS body_hash
 """
 
+_READ_FILE_COMMITS_CYPHER = """
+MATCH (f:File {project_id: $project_id})
+WHERE f.last_seen_in_commit IS NOT NULL
+RETURN collect(DISTINCT f.last_seen_in_commit) AS commits
+"""
+
 _GRAPH_BATCH_SIZE = 500
+_INCREMENTAL_FULL_REPROCESS_THRESHOLD = 0.8
+_GIT_CHANGESET_CAP = 500
+_SWIFT_SOURCE_SUFFIXES = (".swift", ".swiftinterface")
+
+
+@dataclass(frozen=True)
+class _GitChangeSet:
+    changed: set[str]
+    added: set[str]
+    removed: set[str]
+    truncated: bool
 
 
 class SymbolIndexSwift(BaseExtractor):
@@ -180,6 +204,7 @@ class SymbolIndexSwift(BaseExtractor):
             )
             scip_index = parse_scip_file(scip_path)
             commit_sha = _read_head_sha(ctx.repo_path)
+            scip_paths = _scip_source_paths(scip_index)
 
             def _iter_occurrences() -> Iterable[SymbolOccurrence]:
                 return iter_scip_occurrences(
@@ -188,13 +213,32 @@ class SymbolIndexSwift(BaseExtractor):
                     ingest_run_id=ctx.run_id,
                 )
 
-            current_body_hashes = _build_file_body_hashes(
-                ctx.repo_path, _iter_occurrences()
-            )
+            current_body_hashes = _build_file_body_hashes(ctx.repo_path, scip_paths)
             previous_body_hashes = await _read_existing_file_body_hashes(
                 driver, project_id=ctx.group_id
             )
-            if previous_body_hashes and previous_body_hashes == current_body_hashes:
+            changed_files: set[str] = set()
+            removed_files: set[str] = set()
+            incremental_tantivy = False
+            selected_graph_paths: set[str] | None = None
+            removed_graph_paths: set[str] = set()
+            graph_fallback_reason: str | None = None
+            if (
+                not ctx.force
+                and previous_body_hashes
+                and previous_body_hashes == current_body_hashes
+            ):
+                await _refresh_graph_state(
+                    driver,
+                    scip_index=scip_index,
+                    iter_occurrences=_iter_occurrences,
+                    project_id=ctx.group_id,
+                    run_id=ctx.run_id,
+                    commit_sha=commit_sha,
+                    file_body_hashes=current_body_hashes,
+                    selected_paths=None,
+                    removed_paths=set(),
+                )
                 logger.info(
                     "symbol_index_swift.freshness.skip",
                     extra={
@@ -211,6 +255,7 @@ class SymbolIndexSwift(BaseExtractor):
                     outcome=ExtractorOutcome.SKIPPED,
                     message="Skipped re-ingest: file body_hash values matched existing :File nodes.",
                     next_action="Modify source content before rerunning symbol_index_swift.",
+                    mode=ExtractorExecutionMode.SKIPPED,
                 )
             if previous_body_hashes:
                 logger.info(
@@ -223,9 +268,55 @@ class SymbolIndexSwift(BaseExtractor):
                         "freshness_reason": "body_hash_mismatch",
                         "changed_files": [
                             path
-                            for path, body_hash in sorted(current_body_hashes.items())
-                            if previous_body_hashes.get(path) != body_hash
+                            for path in sorted(current_body_hashes)
+                            if previous_body_hashes.get(path)
+                            != current_body_hashes[path]
                         ][:10],
+                    },
+                )
+                changed_files, removed_files, changed_ratio = _diff_file_body_hashes(
+                    previous_body_hashes=previous_body_hashes,
+                    current_body_hashes=current_body_hashes,
+                )
+                incremental_tantivy = (
+                    not ctx.force
+                    and _incremental_ingest_enabled(settings)
+                    and changed_ratio < _INCREMENTAL_FULL_REPROCESS_THRESHOLD
+                )
+                if incremental_tantivy:
+                    previous_commit_sha = await _read_existing_commit_sha(
+                        driver, project_id=ctx.group_id
+                    )
+                    (
+                        selected_graph_paths,
+                        removed_graph_paths,
+                        graph_fallback_reason,
+                    ) = await _derive_incremental_graph_scope(
+                        repo_path=ctx.repo_path,
+                        previous_commit_sha=previous_commit_sha,
+                        scip_paths=scip_paths,
+                        changed_files=changed_files,
+                        removed_files=removed_files,
+                    )
+                    incremental_tantivy = selected_graph_paths is not None
+                logger.info(
+                    "symbol_index_swift.tantivy.plan",
+                    extra={
+                        "extractor": self.name,
+                        "project": ctx.project_slug,
+                        "run_id": ctx.run_id,
+                        "tantivy_mode": (
+                            "incremental" if incremental_tantivy else "full_reprocess"
+                        ),
+                        "changed_file_count": len(changed_files),
+                        "removed_file_count": len(removed_files),
+                        "changed_file_ratio": changed_ratio,
+                        "graph_mode": (
+                            "incremental"
+                            if selected_graph_paths is not None
+                            else "full"
+                        ),
+                        "graph_fallback_reason": graph_fallback_reason,
                     },
                 )
 
@@ -240,6 +331,11 @@ class SymbolIndexSwift(BaseExtractor):
                 tantivy_path,
                 heap_size_mb=settings.palace_tantivy_heap_mb,
             ) as bridge:
+                selected_paths = selected_graph_paths if incremental_tantivy else None
+                if incremental_tantivy:
+                    await bridge.delete_by_file_paths_async(
+                        sorted((selected_paths or set()) | removed_graph_paths)
+                    )
                 check_phase_budget(
                     nodes_written_so_far=total_written,
                     max_occurrences_total=settings.palace_max_occurrences_total,
@@ -247,10 +343,10 @@ class SymbolIndexSwift(BaseExtractor):
                 )
                 p1 = await _ingest_batch(
                     bridge,
-                    (
-                        occ
-                        for occ in _iter_occurrences()
-                        if occ.kind in (SymbolKind.DEF, SymbolKind.DECL)
+                    _iter_selected_occurrences(
+                        occurrences=_iter_occurrences(),
+                        selected_paths=selected_paths,
+                        kinds=(SymbolKind.DEF, SymbolKind.DECL),
                     ),
                     "phase1_defs",
                 )
@@ -278,7 +374,10 @@ class SymbolIndexSwift(BaseExtractor):
                     p2 = await _ingest_batch(
                         bridge,
                         _iter_phase2_occurrences(
-                            occurrences=_iter_occurrences(),
+                            occurrences=_iter_selected_occurrences(
+                                occurrences=_iter_occurrences(),
+                                selected_paths=selected_paths,
+                            ),
                             counter=counter,
                             settings=settings,
                         ),
@@ -307,10 +406,13 @@ class SymbolIndexSwift(BaseExtractor):
                     )
                     p3 = await _ingest_batch(
                         bridge,
-                        (
-                            _with_importance(occ, counter, settings)
-                            for occ in _iter_occurrences()
-                            if occ.kind == SymbolKind.USE and _is_vendor(occ.file_path)
+                        _iter_vendor_occurrences(
+                            occurrences=_iter_selected_occurrences(
+                                occurrences=_iter_occurrences(),
+                                selected_paths=selected_paths,
+                            ),
+                            counter=counter,
+                            settings=settings,
                         ),
                         "phase3_vendor_uses",
                     )
@@ -329,76 +431,37 @@ class SymbolIndexSwift(BaseExtractor):
             counter_path = tantivy_path / "in_degree_counter.json"
             counter.to_disk(counter_path, run_id=ctx.run_id)
 
-            # Write :Symbol nodes so dead_code can load the call graph.
-            # Build file_path lookup from the first DEF/DECL occurrence of each symbol.
-            def_file_paths: dict[str, str] = {}
-            for occ in _iter_occurrences():
-                if occ.kind in (SymbolKind.DEF, SymbolKind.DECL):
-                    def_file_paths.setdefault(occ.symbol_qualified_name, occ.file_path)
-            graph_seen_at = datetime.now(tz=timezone.utc)
-            shadow_rows = _build_shadow_rows(
-                occurrences=_iter_occurrences(),
-                symbol_infos=iter_scip_symbol_infos(scip_index),
-                group_id=ctx.group_id,
-                seen_at=graph_seen_at,
+            sym_nodes, shadow_count, deleted_count = await _refresh_graph_state(
+                driver,
+                scip_index=scip_index,
+                iter_occurrences=_iter_occurrences,
+                project_id=ctx.group_id,
+                run_id=ctx.run_id,
+                commit_sha=commit_sha,
+                file_body_hashes=current_body_hashes,
+                selected_paths=selected_graph_paths if incremental_tantivy else None,
+                removed_paths=removed_graph_paths,
             )
-            shadow_count = await _write_shadow_rows(driver, shadow_rows)
-            sym_nodes = 0
-            seen_qnames: set[str] = set()
-            sym_batch: list[ScipSymbolInfo] = []
-            sym_batch_size = 5000
-            for sym_info in iter_scip_symbol_infos(scip_index):
-                seen_qnames.add(sym_info.qualified_name)
-                sym_batch.append(sym_info)
-                if len(sym_batch) >= sym_batch_size:
-                    sym_nodes += await write_symbol_nodes(
-                        driver,
-                        sym_batch,
-                        def_file_paths,
-                        ctx.group_id,
-                        project_id=ctx.group_id,
-                        run_id=ctx.run_id,
-                        seen_at=graph_seen_at,
-                        commit_sha=commit_sha,
-                    )
-                    sym_batch = []
-            if sym_batch:
-                sym_nodes += await write_symbol_nodes(
-                    driver,
-                    sym_batch,
-                    def_file_paths,
-                    ctx.group_id,
-                    project_id=ctx.group_id,
-                    run_id=ctx.run_id,
-                    seen_at=graph_seen_at,
-                    commit_sha=commit_sha,
-                )
             logger.info(
                 "Symbol nodes written to Neo4j: %d; shadow rows: %d; Tantivy occurrences: %d",
                 sym_nodes,
                 shadow_count,
                 total_written,
             )
-
-            if seen_qnames:
-                deleted_count = await soft_delete_symbols(
-                    driver, ctx.group_id, seen_qnames, datetime.now(tz=timezone.utc)
-                )
-                logger.info("Soft-deleted %d absent :Symbol nodes", deleted_count)
-
-            await _write_file_body_hashes(
-                driver,
-                project_id=ctx.group_id,
-                run_id=ctx.run_id,
-                file_body_hashes=current_body_hashes,
-                observed_at=graph_seen_at,
-                commit_sha=commit_sha,
-            )
+            logger.info("Soft-deleted %d absent :Symbol nodes", deleted_count)
 
             await finalize_ingest_run(driver, run_id=ctx.run_id, success=True)
             # nodes_written reflects Neo4j :Symbol nodes (graph-layer count).
             # Tantivy occurrence count is logged above for observability.
-            return ExtractorStats(nodes_written=sym_nodes, edges_written=0)
+            return ExtractorStats(
+                nodes_written=sym_nodes,
+                edges_written=0,
+                mode=(
+                    ExtractorExecutionMode.INCREMENTAL
+                    if incremental_tantivy
+                    else ExtractorExecutionMode.FULL
+                ),
+            )
 
         except ScipPathRequiredError as e:
             await finalize_ingest_run(
@@ -450,15 +513,160 @@ def _load_or_reset_counter(tantivy_path: Path, run_id: str) -> BoundedInDegreeCo
     return load_or_reset_in_degree_counter(tantivy_path, run_id, logger=logger)
 
 
+def _incremental_ingest_enabled(settings: object) -> bool:
+    value = getattr(settings, "palace_incremental_ingest", False)
+    return value if isinstance(value, bool) else False
+
+
+def _diff_file_body_hashes(
+    *,
+    previous_body_hashes: dict[str, str],
+    current_body_hashes: dict[str, str],
+) -> tuple[set[str], set[str], float]:
+    current_paths = set(current_body_hashes)
+    previous_paths = set(previous_body_hashes)
+    changed_files = {
+        path
+        for path in current_paths
+        if previous_body_hashes.get(path) != current_body_hashes[path]
+    }
+    removed_files = previous_paths - current_paths
+    total_paths = len(previous_paths | current_paths)
+    changed_ratio = (
+        len(changed_files | removed_files) / total_paths if total_paths else 0.0
+    )
+    return changed_files, removed_files, changed_ratio
+
+
+def _is_swift_source_path(file_path: str) -> bool:
+    return file_path.endswith(_SWIFT_SOURCE_SUFFIXES)
+
+
+def _scip_source_paths(scip_index: object) -> set[str]:
+    documents = getattr(scip_index, "documents", ())
+    return {
+        str(doc.relative_path)
+        for doc in documents
+        if getattr(doc, "relative_path", None)
+        and _is_swift_source_path(str(doc.relative_path))
+    }
+
+
 def _build_file_body_hashes(
-    repo_path: Path, occurrences: Iterable[SymbolOccurrence]
+    repo_path: Path, paths_or_occurrences: Iterable[str] | Iterable[SymbolOccurrence]
 ) -> dict[str, str]:
     hashes: dict[str, str] = {}
-    for file_path in sorted({occ.file_path for occ in occurrences}):
-        hashes[file_path] = hashlib.sha256(
-            (repo_path / file_path).read_bytes()
-        ).hexdigest()
+    missing = 0
+    file_paths: set[str] = set()
+    for item in paths_or_occurrences:
+        if isinstance(item, SymbolOccurrence):
+            file_paths.add(item.file_path)
+        elif hasattr(item, "file_path"):
+            file_paths.add(str(getattr(item, "file_path")))
+        else:
+            file_paths.add(str(item))
+    for file_path in sorted(file_paths):
+        try:
+            hashes[file_path] = hashlib.sha256(
+                (repo_path / file_path).read_bytes()
+            ).hexdigest()
+        except (FileNotFoundError, OSError):
+            # The SCIP may reference files that no longer exist on disk (e.g. cleaned
+            # DerivedData build-intermediates of a stale SCIP). body_hash is freshness
+            # metadata only; skip the unreadable file so symbol ingestion still runs.
+            missing += 1
+    if missing:
+        logger.warning(
+            "symbol_index_body_hash_missing_files",
+            extra={"missing_files": missing, "hashed_files": len(hashes)},
+        )
     return hashes
+
+
+async def _read_git_change_set(repo_path: Path, base_commit: str) -> _GitChangeSet:
+    result = await asyncio.to_thread(
+        run_git,
+        [
+            "diff",
+            "--name-status",
+            "--no-renames",
+            base_commit,
+            "HEAD",
+            "--",
+        ],
+        repo_path=repo_path,
+        max_stdout_lines=_GIT_CHANGESET_CAP,
+    )
+    if result.rc != 0:
+        raise GitError(result.rc, result.stderr[:200] or "git diff failed")
+
+    changed: set[str] = set()
+    added: set[str] = set()
+    removed: set[str] = set()
+    for line in result.stdout.splitlines():
+        if not line:
+            continue
+        status, _, raw_path = line.partition("\t")
+        if not status or not raw_path:
+            continue
+        path = Path(raw_path).as_posix()
+        code = status[0]
+        if code == "D":
+            removed.add(path)
+            continue
+        if code == "A":
+            added.add(path)
+            continue
+        if code in {"M", "T", "U", "C"}:
+            changed.add(path)
+
+    return _GitChangeSet(
+        changed=changed,
+        added=added,
+        removed=removed,
+        truncated=result.truncated,
+    )
+
+
+async def _derive_incremental_graph_scope(
+    *,
+    repo_path: Path,
+    previous_commit_sha: str | None,
+    scip_paths: set[str],
+    changed_files: set[str],
+    removed_files: set[str],
+) -> tuple[set[str] | None, set[str], str | None]:
+    if not previous_commit_sha:
+        return None, set(), "previous_commit_missing"
+    try:
+        git_changes = await _read_git_change_set(repo_path, previous_commit_sha)
+    except (GitError, GitTimeout):
+        return None, set(), "git_diff_error"
+
+    if git_changes.truncated:
+        return None, set(), "git_diff_truncated"
+
+    git_changed = {
+        path
+        for path in git_changes.changed | git_changes.added
+        if _is_swift_source_path(path)
+    }
+    git_removed = {path for path in git_changes.removed if _is_swift_source_path(path)}
+    selected_paths = git_changed & scip_paths
+    if git_changed - scip_paths:
+        return None, set(), "scip_path_mismatch"
+
+    scoped_body_changes = {
+        path for path in changed_files if _is_swift_source_path(path)
+    }
+    scoped_body_removals = {
+        path for path in removed_files if _is_swift_source_path(path)
+    }
+    if scoped_body_changes != selected_paths:
+        return None, set(), "body_hash_changed_mismatch"
+    if scoped_body_removals != git_removed:
+        return None, set(), "body_hash_removed_mismatch"
+    return selected_paths, git_removed, None
 
 
 async def _read_existing_file_body_hashes(
@@ -472,6 +680,20 @@ async def _read_existing_file_body_hashes(
         for row in rows
         if row.get("path")
     }
+
+
+async def _read_existing_commit_sha(
+    driver: AsyncDriver, *, project_id: str
+) -> str | None:
+    async with driver.session() as session:
+        result = await session.run(_READ_FILE_COMMITS_CYPHER, project_id=project_id)
+        row = await result.single()
+    if not row:
+        return None
+    commits = [str(commit) for commit in row.get("commits") or [] if commit]
+    if len(commits) != 1:
+        return None
+    return commits[0]
 
 
 async def _write_file_body_hashes(
@@ -502,6 +724,128 @@ async def _write_file_body_hashes(
             )
             await result.consume()
     return len(rows)
+
+
+async def _refresh_graph_state(
+    driver: AsyncDriver,
+    *,
+    scip_index: object,
+    iter_occurrences: Callable[[], Iterable[SymbolOccurrence]],
+    project_id: str,
+    run_id: str,
+    commit_sha: str,
+    file_body_hashes: dict[str, str],
+    selected_paths: set[str] | None,
+    removed_paths: set[str],
+) -> tuple[int, int, int]:
+    # Keep graph-layer freshness aligned even when Tantivy ingest is skipped.
+    selected_file_paths = None if selected_paths is None else set(selected_paths)
+    affected_paths = set(removed_paths)
+    if selected_file_paths is not None:
+        affected_paths |= selected_file_paths
+
+    def _iter_graph_occurrences() -> Iterable[SymbolOccurrence]:
+        if selected_file_paths is None:
+            return iter_occurrences()
+        return _iter_selected_occurrences(
+            occurrences=iter_occurrences(),
+            selected_paths=selected_file_paths,
+        )
+
+    def_file_paths: dict[str, str] = {}
+    def_line_starts: dict[str, int] = {}
+    for occ in _iter_graph_occurrences():
+        if occ.kind in (SymbolKind.DEF, SymbolKind.DECL):
+            def_file_paths.setdefault(occ.symbol_qualified_name, occ.file_path)
+            # SCIP ranges are 0-based; snippet windows / get_code_snippet are
+            # 1-based. Record the declaration line so the snippet windows on the
+            # symbol instead of falling back to the file head (dogfood W8c).
+            def_line_starts.setdefault(occ.symbol_qualified_name, occ.line + 1)
+
+    graph_seen_at = datetime.now(tz=timezone.utc)
+    symbol_infos = tuple(iter_scip_symbol_infos(scip_index))
+    if selected_file_paths is not None:
+        symbol_infos = tuple(
+            sym_info
+            for sym_info in symbol_infos
+            if def_file_paths.get(sym_info.qualified_name) in selected_file_paths
+        )
+    shadow_rows = _build_shadow_rows(
+        occurrences=_iter_graph_occurrences(),
+        symbol_infos=symbol_infos,
+        group_id=project_id,
+        seen_at=graph_seen_at,
+    )
+    shadow_count = await _write_shadow_rows(driver, shadow_rows)
+
+    sym_nodes = 0
+    seen_qnames: set[str] = set()
+    sym_batch: list[ScipSymbolInfo] = []
+    sym_batch_size = 5000
+    for sym_info in symbol_infos:
+        seen_qnames.add(sym_info.qualified_name)
+        sym_batch.append(sym_info)
+        if len(sym_batch) >= sym_batch_size:
+            sym_nodes += await write_symbol_nodes(
+                driver,
+                sym_batch,
+                def_file_paths,
+                project_id,
+                project_id=project_id,
+                run_id=run_id,
+                seen_at=graph_seen_at,
+                commit_sha=commit_sha,
+                def_line_starts=def_line_starts,
+            )
+            sym_batch = []
+    if sym_batch:
+        sym_nodes += await write_symbol_nodes(
+            driver,
+            sym_batch,
+            def_file_paths,
+            project_id,
+            project_id=project_id,
+            run_id=run_id,
+            seen_at=graph_seen_at,
+            commit_sha=commit_sha,
+            def_line_starts=def_line_starts,
+        )
+
+    deleted_count = 0
+    if selected_file_paths is None and seen_qnames:
+        deleted_count = await soft_delete_symbols(
+            driver, project_id, seen_qnames, datetime.now(tz=timezone.utc)
+        )
+    elif affected_paths:
+        deleted_count = await soft_delete_symbols_for_paths(
+            driver,
+            project_id,
+            affected_paths,
+            seen_qnames,
+            datetime.now(tz=timezone.utc),
+        )
+        await bump_unchanged_symbol_liveness(
+            driver,
+            group_id=project_id,
+            written_changed_qnames=seen_qnames,
+            run_id=run_id,
+        )
+        await delete_stale_relationships(
+            driver,
+            group_id=project_id,
+            changed_file_paths=affected_paths,
+            run_id=run_id,
+        )
+
+    await _write_file_body_hashes(
+        driver,
+        project_id=project_id,
+        run_id=run_id,
+        file_body_hashes=file_body_hashes,
+        observed_at=graph_seen_at,
+        commit_sha=commit_sha,
+    )
+    return sym_nodes, shadow_count, deleted_count
 
 
 def _build_shadow_rows(
@@ -606,6 +950,32 @@ def _iter_phase2_occurrences(
         occ = _with_importance(occ, counter, settings)
         if occ.importance >= threshold:
             yield occ
+
+
+def _iter_selected_occurrences(
+    *,
+    occurrences: Iterable[SymbolOccurrence],
+    selected_paths: set[str] | None,
+    kinds: tuple[SymbolKind, ...] | None = None,
+) -> Iterable[SymbolOccurrence]:
+    for occ in occurrences:
+        if selected_paths is not None and occ.file_path not in selected_paths:
+            continue
+        if kinds is not None and occ.kind not in kinds:
+            continue
+        yield occ
+
+
+def _iter_vendor_occurrences(
+    *,
+    occurrences: Iterable[SymbolOccurrence],
+    counter: BoundedInDegreeCounter,
+    settings: object,
+) -> Iterable[SymbolOccurrence]:
+    for occ in occurrences:
+        if occ.kind != SymbolKind.USE or not _is_vendor(occ.file_path):
+            continue
+        yield _with_importance(occ, counter, settings)
 
 
 def _is_vendor(file_path: str) -> bool:

@@ -162,6 +162,7 @@ def test_swift_kit_includes_expected_extractors() -> None:
 
     expected = {
         "arch_layer",
+        "call_edge_swift",
         "code_ownership",
         "coding_convention",
         "crypto_domain_model",
@@ -189,7 +190,7 @@ def test_swift_kit_order_matches_contract() -> None:
     ordered = get_ordered_extractors("swift_kit")
 
     assert ordered == SWIFT_KIT_EXTRACTOR_ORDER
-    assert len(ordered) == 19
+    assert len(ordered) == 20
     assert all(name in registry.EXTRACTORS for name in ordered)
 
 

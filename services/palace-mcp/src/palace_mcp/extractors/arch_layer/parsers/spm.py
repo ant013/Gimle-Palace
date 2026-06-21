@@ -22,6 +22,7 @@ _TARGET_RE = re.compile(
     r"\.\s*(?:test)?[Tt]arget\s*\(\s*name\s*:\s*\"(?P<name>[^\"]+)\"",
     re.DOTALL,
 )
+_TARGET_PATH_RE = re.compile(r"\bpath\s*:\s*\"(?P<path>[^\"]+)\"", re.DOTALL)
 
 # Matches .target(name: "Dep") inside a dependencies: [...] block
 _DEP_ITEM_RE = re.compile(r'"(?P<name>[A-Za-z0-9_\-\.]+)"')
@@ -51,8 +52,12 @@ def parse_spm(repo_path: Path, *, project_id: str, run_id: str) -> ParseResult:
     manifest_path = "Package.swift"
     text = package_swift.read_text(encoding="utf-8")
 
-    target_names = _extract_target_names(text)
+    targets = _extract_targets(text)
+    target_names = [name for name, _ in targets]
     target_set = set(target_names)
+    target_source_roots = {
+        name: path or _infer_source_root(name) for name, path in targets
+    }
 
     modules = tuple(
         Module(
@@ -61,7 +66,7 @@ def parse_spm(repo_path: Path, *, project_id: str, run_id: str) -> ParseResult:
             name=name,
             kind="swift_target",
             manifest_path=manifest_path,
-            source_root=_infer_source_root(name),
+            source_root=target_source_roots[name],
             run_id=run_id,
         )
         for name in target_names
@@ -74,11 +79,26 @@ def parse_spm(repo_path: Path, *, project_id: str, run_id: str) -> ParseResult:
 
 def _extract_target_names(text: str) -> list[str]:
     seen: dict[str, int] = {}  # name -> first occurrence position
-    for m in _TARGET_RE.finditer(text):
-        name = m.group("name")
+    for i, (name, _) in enumerate(_extract_targets(text)):
         if name not in seen:
-            seen[name] = m.start()
+            seen[name] = i
     return sorted(seen, key=lambda n: seen[n])
+
+
+def _extract_targets(text: str) -> list[tuple[str, str | None]]:
+    target_starts = list(_TARGET_RE.finditer(text))
+    targets: list[tuple[str, str | None]] = []
+    for i, match in enumerate(target_starts):
+        segment_start = match.start()
+        segment_end = (
+            target_starts[i + 1].start() if i + 1 < len(target_starts) else len(text)
+        )
+        segment = text[segment_start:segment_end]
+        path_match = _TARGET_PATH_RE.search(segment)
+        targets.append(
+            (match.group("name"), path_match.group("path") if path_match else None)
+        )
+    return targets
 
 
 def _extract_edges(

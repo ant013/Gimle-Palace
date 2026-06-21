@@ -45,7 +45,15 @@ from palace_mcp.extractors.foundation.module_owner import (
 _LOAD_PUBLIC_API_ROWS = """
 MATCH (surface:PublicApiSurface {project: $project, commit_sha: $commit_sha})
       -[:EXPORTS]->(symbol:PublicApiSymbol {project: $project, commit_sha: $commit_sha})
-RETURN surface {.*} AS surface_props, symbol {.*} AS symbol_props
+OPTIONAL MATCH (symbol)-[:BACKED_BY_SYMBOL]->(shadow:SymbolOccurrenceShadow)
+RETURN surface {.*} AS surface_props,
+       symbol {
+           .*,
+           symbol_qualified_name: coalesce(
+               shadow.symbol_qualified_name,
+               symbol.symbol_qualified_name
+           )
+       } AS symbol_props
 ORDER BY surface.module_name, symbol.fqn
 """
 
@@ -82,6 +90,8 @@ SET rel += $edge_props
 """
 
 _DELTA_REQUESTS_PATH = Path(".palace") / "cross-module-contract" / "delta-requests.json"
+_NO_CROSS_MODULE_CONSUMER = "__no_cross_module_consumer__"
+_MAX_INDEXSTORE_RESULTS = 5000
 
 
 @dataclass(frozen=True)
@@ -95,6 +105,7 @@ class _PlannedContractSnapshot:
     snapshot: ModuleContractSnapshot
     consumptions: list[ModuleContractConsumption]
     symbols_by_fqn: dict[str, PublicApiSymbol]
+    correlation_unresolved_symbol_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -115,6 +126,13 @@ class _PairAccumulator:
         default_factory=dict
     )
     evidence_paths: set[str] = field(default_factory=set)
+
+
+@dataclass(frozen=True)
+class _OccurrenceResolution:
+    status: str
+    match_symbol_id: int | None = None
+    occurrences: tuple[TantivyOccurrenceMatch, ...] = ()
 
 
 class _DeltaRequest(BaseModel):
@@ -243,6 +261,11 @@ LIMIT 100
         from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
 
         occurrence_cache: dict[tuple[int, str], list[TantivyOccurrenceMatch]] = {}
+        indexstore_caller_cache: dict[str, tuple[object, ...]] = {}
+        index_store_path = (
+            settings.palace_indexstore_paths.get(ctx.project_slug)
+            or settings.palace_sourcekit_index_store_path
+        )
         tantivy_path = Path(settings.palace_tantivy_index_path)
         planned: list[_PlannedContractSnapshot] = []
         async with TantivyBridge(
@@ -263,6 +286,8 @@ LIMIT 100
                             include_package=include_package,
                             phases=self._consumer_phases,
                             cache=occurrence_cache,
+                            index_store_path=index_store_path,
+                            caller_cache=indexstore_caller_cache,
                         )
                     )
 
@@ -276,6 +301,45 @@ LIMIT 100
             planned=planned,
             planned_deltas=planned_deltas,
         )
+        only_zero_consumer_snapshots = planned and all(
+            planned_snapshot.snapshot.consumer_module_name == _NO_CROSS_MODULE_CONSUMER
+            for planned_snapshot in planned
+        )
+        if only_zero_consumer_snapshots and all(
+            not planned_snapshot.consumptions for planned_snapshot in planned
+        ):
+            if not any(
+                planned_snapshot.correlation_unresolved_symbol_count > 0
+                for planned_snapshot in planned
+            ):
+                ctx.logger.info(
+                    "extractor.cross_module_contract.summary",
+                    extra={
+                        "extractor": self.name,
+                        "project": ctx.project_slug,
+                        "commit_sha": commit_sha,
+                        "snapshot_count": len(planned),
+                        "delta_count": len(planned_deltas),
+                        "nodes_written": stats.nodes_written,
+                        "edges_written": stats.edges_written,
+                        "zero_consumer_baseline": True,
+                    },
+                )
+                return stats
+            return ExtractorStats(
+                nodes_written=stats.nodes_written,
+                edges_written=stats.edges_written,
+                outcome=ExtractorOutcome.SKIPPED,
+                message=(
+                    "No cross-module consumers were correlated from the available "
+                    "occurrence data; wrote only zero-consumer baseline snapshots."
+                ),
+                next_action=(
+                    "Refresh the occurrence index and module ownership inputs "
+                    "before rerunning cross_module_contract if consumer edges are "
+                    "expected."
+                ),
+            )
         ctx.logger.info(
             "extractor.cross_module_contract.summary",
             extra={
@@ -321,28 +385,36 @@ async def _plan_snapshots_for_commit(
     include_package: bool,
     phases: tuple[str, ...],
     cache: dict[tuple[int, str], list[TantivyOccurrenceMatch]],
+    index_store_path: str | None,
+    caller_cache: dict[str, tuple[object, ...]],
 ) -> list[_PlannedContractSnapshot]:
     planned: list[_PlannedContractSnapshot] = []
     for item in surfaces:
-        occurrences_by_symbol = await _load_occurrences_for_surface(
+        resolutions_by_symbol = await _load_occurrences_for_surface(
             bridge=bridge,
             symbols=item.symbols,
             commit_sha=commit_sha,
             include_package=include_package,
             phases=phases,
             cache=cache,
+            index_store_path=index_store_path,
+            caller_cache=caller_cache,
         )
         owner_cache = await _resolve_owner_cache(
             driver=driver,
             group_id=group_id,
             repo_path=repo_path,
-            occurrences_by_symbol=occurrences_by_symbol,
+            occurrences_by_symbol={
+                resolution.match_symbol_id: list(resolution.occurrences)
+                for resolution in resolutions_by_symbol.values()
+                if resolution.match_symbol_id is not None and resolution.occurrences
+            },
         )
         planned.extend(
             plan_contract_snapshots(
                 surface=item.surface,
                 symbols=item.symbols,
-                occurrences_by_symbol=occurrences_by_symbol,
+                occurrences_by_symbol=resolutions_by_symbol,
                 resolve_owner=lambda file_path: owner_cache[file_path],
                 include_package=include_package,
             )
@@ -440,7 +512,7 @@ def plan_contract_snapshots(
     *,
     surface: PublicApiSurface,
     symbols: list[PublicApiSymbol],
-    occurrences_by_symbol: Mapping[int, list[TantivyOccurrenceMatch]],
+    occurrences_by_symbol: Mapping[str, _OccurrenceResolution],
     resolve_owner: Callable[[str], ModuleOwnerResolution],
     include_package: bool,
 ) -> list[_PlannedContractSnapshot]:
@@ -448,87 +520,124 @@ def plan_contract_snapshots(
 
     accumulators: dict[tuple[str, str, str, str], _PairAccumulator] = {}
     skipped_symbol_count = 0
+    correlation_unresolved_symbol_count = 0
 
     for symbol in symbols:
         skip_symbol = False
-        if symbol.symbol_qualified_name is None:
+        resolution = occurrences_by_symbol.get(symbol.id)
+        if resolution is None or resolution.status == "unresolved":
             skip_symbol = True
+            if symbol.visibility != PublicApiVisibility.PACKAGE:
+                correlation_unresolved_symbol_count += 1
         elif not include_package and symbol.visibility == PublicApiVisibility.PACKAGE:
             skip_symbol = True
+        elif resolution.status == "no_consumers":
+            skip_symbol = True
         else:
-            match_symbol_id = symbol_id_for(symbol.symbol_qualified_name)
-            occurrences = occurrences_by_symbol.get(match_symbol_id, [])
-            if not occurrences:
-                skip_symbol = True
-            else:
-                matched_any = False
-                for occurrence in occurrences:
-                    resolution = resolve_owner(occurrence.file_path)
-                    if (
-                        resolution.status != "resolved"
-                        or resolution.module_name is None
-                    ):
-                        continue
-                    if resolution.module_name == surface.module_name:
-                        continue
+            assert resolution.match_symbol_id is not None
+            occurrences = resolution.occurrences
+            matched_any = False
+            for occurrence in occurrences:
+                owner_resolution = resolve_owner(occurrence.file_path)
+                if (
+                    owner_resolution.status != "resolved"
+                    or owner_resolution.module_name is None
+                ):
+                    continue
+                if owner_resolution.module_name == surface.module_name:
+                    continue
 
-                    matched_any = True
-                    pair_key = (
-                        resolution.module_name,
-                        surface.module_name,
-                        surface.language.value,
-                        surface.commit_sha,
-                    )
-                    accumulator = accumulators.setdefault(
-                        pair_key,
-                        _PairAccumulator(
-                            consumer_module_name=resolution.module_name,
-                            producer_module_name=surface.module_name,
-                            language=surface.language,
-                            commit_sha=surface.commit_sha,
-                        ),
-                    )
-                    accumulator.evidence_paths.add(occurrence.file_path)
-                    prior = accumulator.consumptions_by_symbol_id.get(symbol.id)
-                    if prior is None:
-                        accumulator.consumptions_by_symbol_id[symbol.id] = (
-                            ModuleContractConsumption(
-                                public_symbol_id=symbol.id,
-                                group_id=surface.group_id,
-                                commit_sha=surface.commit_sha,
-                                match_symbol_id=match_symbol_id,
-                                use_count=1,
-                                file_count=1,
-                                first_seen_path=occurrence.file_path,
-                                evidence_paths_sample=[occurrence.file_path],
-                            )
-                        )
-                        continue
-                    paths = sorted(
-                        {
-                            *prior.evidence_paths_sample,
-                            occurrence.file_path,
-                        }
-                    )
+                matched_any = True
+                pair_key = (
+                    owner_resolution.module_name,
+                    surface.module_name,
+                    surface.language.value,
+                    surface.commit_sha,
+                )
+                accumulator = accumulators.setdefault(
+                    pair_key,
+                    _PairAccumulator(
+                        consumer_module_name=owner_resolution.module_name,
+                        producer_module_name=surface.module_name,
+                        language=surface.language,
+                        commit_sha=surface.commit_sha,
+                    ),
+                )
+                accumulator.evidence_paths.add(occurrence.file_path)
+                prior = accumulator.consumptions_by_symbol_id.get(symbol.id)
+                if prior is None:
                     accumulator.consumptions_by_symbol_id[symbol.id] = (
                         ModuleContractConsumption(
-                            public_symbol_id=prior.public_symbol_id,
-                            group_id=prior.group_id,
-                            commit_sha=prior.commit_sha,
-                            match_symbol_id=prior.match_symbol_id,
-                            use_count=prior.use_count + 1,
-                            file_count=len(paths),
-                            first_seen_path=prior.first_seen_path,
-                            evidence_paths_sample=paths,
+                            public_symbol_id=symbol.id,
+                            group_id=surface.group_id,
+                            commit_sha=surface.commit_sha,
+                            match_symbol_id=resolution.match_symbol_id,
+                            use_count=1,
+                            file_count=1,
+                            first_seen_path=occurrence.file_path,
+                            evidence_paths_sample=[occurrence.file_path],
                         )
                     )
-                if not matched_any:
-                    skip_symbol = True
+                    continue
+                paths = sorted(
+                    {
+                        *prior.evidence_paths_sample,
+                        occurrence.file_path,
+                    }
+                )
+                accumulator.consumptions_by_symbol_id[symbol.id] = (
+                    ModuleContractConsumption(
+                        public_symbol_id=prior.public_symbol_id,
+                        group_id=prior.group_id,
+                        commit_sha=prior.commit_sha,
+                        match_symbol_id=prior.match_symbol_id,
+                        use_count=prior.use_count + 1,
+                        file_count=len(paths),
+                        first_seen_path=prior.first_seen_path,
+                        evidence_paths_sample=paths,
+                    )
+                )
+            if not matched_any:
+                skip_symbol = True
         if skip_symbol:
             skipped_symbol_count += 1
             continue
 
     planned: list[_PlannedContractSnapshot] = []
+    if not accumulators:
+        snapshot = ModuleContractSnapshot(
+            id=_stable_id(
+                surface.group_id,
+                surface.project,
+                _NO_CROSS_MODULE_CONSUMER,
+                surface.module_name,
+                surface.language.value,
+                surface.commit_sha,
+                str(include_package),
+                str(SCHEMA_VERSION_CURRENT),
+            ),
+            group_id=surface.group_id,
+            project=surface.project,
+            consumer_module_name=_NO_CROSS_MODULE_CONSUMER,
+            producer_module_name=surface.module_name,
+            language=surface.language,
+            commit_sha=surface.commit_sha,
+            include_package=include_package,
+            producer_surface_id=surface.id,
+            symbol_count=0,
+            use_count=0,
+            file_count=0,
+            skipped_symbol_count=skipped_symbol_count,
+        )
+        return [
+            _PlannedContractSnapshot(
+                snapshot=snapshot,
+                consumptions=[],
+                symbols_by_fqn={symbol.fqn: symbol for symbol in symbols},
+                correlation_unresolved_symbol_count=correlation_unresolved_symbol_count,
+            )
+        ]
+
     for pair_key in sorted(accumulators):
         accumulator = accumulators[pair_key]
         consumptions = sorted(
@@ -564,6 +673,7 @@ def plan_contract_snapshots(
                 snapshot=snapshot,
                 consumptions=consumptions,
                 symbols_by_fqn={symbol.fqn: symbol for symbol in symbols},
+                correlation_unresolved_symbol_count=correlation_unresolved_symbol_count,
             )
         )
     return planned
@@ -689,16 +799,24 @@ async def _load_occurrences_for_surface(
     include_package: bool,
     phases: tuple[str, ...],
     cache: dict[tuple[int, str], list[TantivyOccurrenceMatch]],
-) -> dict[int, list[TantivyOccurrenceMatch]]:
+    index_store_path: str | None,
+    caller_cache: dict[str, tuple[object, ...]],
+) -> dict[str, _OccurrenceResolution]:
     from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
 
     typed_bridge = bridge
     assert isinstance(typed_bridge, TantivyBridge)
-    occurrences_by_symbol: dict[int, list[TantivyOccurrenceMatch]] = {}
+    occurrences_by_symbol: dict[str, _OccurrenceResolution] = {}
     for symbol in symbols:
         if symbol.symbol_qualified_name is None:
+            occurrences_by_symbol[symbol.id] = _OccurrenceResolution(
+                status="unresolved"
+            )
             continue
         if not include_package and symbol.visibility == PublicApiVisibility.PACKAGE:
+            occurrences_by_symbol[symbol.id] = _OccurrenceResolution(
+                status="unresolved"
+            )
             continue
         match_symbol_id = symbol_id_for(symbol.symbol_qualified_name)
         cache_key = (match_symbol_id, commit_sha)
@@ -708,8 +826,175 @@ async def _load_occurrences_for_surface(
                 commit_sha=commit_sha,
                 phases=phases,
             )
-        occurrences_by_symbol[match_symbol_id] = cache[cache_key]
+        if cache[cache_key]:
+            occurrences_by_symbol[symbol.id] = _OccurrenceResolution(
+                status="matched",
+                match_symbol_id=match_symbol_id,
+                occurrences=tuple(cache[cache_key]),
+            )
+            continue
+        if _symbol_qname_is_trusted(symbol):
+            occurrences_by_symbol[symbol.id] = _OccurrenceResolution(
+                status="no_consumers",
+                match_symbol_id=match_symbol_id,
+            )
+            continue
+        occurrences_by_symbol[
+            symbol.id
+        ] = await _resolve_swift_occurrences_from_indexstore(
+            bridge=typed_bridge,
+            symbol=symbol,
+            commit_sha=commit_sha,
+            phases=phases,
+            cache=cache,
+            index_store_path=index_store_path,
+            caller_cache=caller_cache,
+        )
     return occurrences_by_symbol
+
+
+def _symbol_qname_is_trusted(symbol: PublicApiSymbol) -> bool:
+    return (
+        symbol.language is not Language.SWIFT
+        or symbol.symbol_qualified_name != symbol.fqn
+    )
+
+
+async def _resolve_swift_occurrences_from_indexstore(
+    *,
+    bridge: object,
+    symbol: PublicApiSymbol,
+    commit_sha: str,
+    phases: tuple[str, ...],
+    cache: dict[tuple[int, str], list[TantivyOccurrenceMatch]],
+    index_store_path: str | None,
+    caller_cache: dict[str, tuple[object, ...]],
+) -> _OccurrenceResolution:
+    from palace_mcp.code.indexstore import find_callers
+    from palace_mcp.extractors.foundation.tantivy_bridge import TantivyBridge
+
+    if index_store_path is None:
+        return _OccurrenceResolution(status="unresolved")
+
+    lookup_name = _swift_indexstore_lookup_name(symbol.fqn)
+    callers = caller_cache.get(lookup_name)
+    if callers is None:
+        try:
+            callers = tuple(
+                await asyncio.to_thread(
+                    find_callers,
+                    lookup_name,
+                    index_store_path,
+                    max_results=_MAX_INDEXSTORE_RESULTS,
+                )
+            )
+        except Exception:
+            return _OccurrenceResolution(status="unresolved")
+        caller_cache[lookup_name] = callers
+
+    match_qnames = {
+        qname
+        for caller in callers
+        for qname in [_swift_qname_from_usr(getattr(caller, "symbol_usr", ""))]
+        if qname is not None
+        and _swift_usr_module(getattr(caller, "symbol_usr", "")) == symbol.module_name
+    }
+    if not match_qnames:
+        return _OccurrenceResolution(status="no_consumers")
+    if len(match_qnames) > 1:
+        return _OccurrenceResolution(status="unresolved")
+
+    typed_bridge = bridge
+    assert isinstance(typed_bridge, TantivyBridge)
+    match_qname = next(iter(match_qnames))
+    match_symbol_id = symbol_id_for(match_qname)
+    cache_key = (match_symbol_id, commit_sha)
+    if cache_key not in cache:
+        cache[cache_key] = await typed_bridge.search_occurrences_async(
+            symbol_id=match_symbol_id,
+            commit_sha=commit_sha,
+            phases=phases,
+        )
+    if not cache[cache_key]:
+        return _OccurrenceResolution(
+            status="no_consumers",
+            match_symbol_id=match_symbol_id,
+        )
+    return _OccurrenceResolution(
+        status="matched",
+        match_symbol_id=match_symbol_id,
+        occurrences=tuple(cache[cache_key]),
+    )
+
+
+def _swift_indexstore_lookup_name(fqn: str) -> str:
+    param_start = fqn.find("(")
+    name_head = fqn if param_start == -1 else fqn[:param_start]
+    param_tail = "" if param_start == -1 else fqn[param_start:]
+    short_name = f"{name_head.rsplit('.', 1)[-1]}{param_tail}"
+    if "(" not in short_name or not short_name.endswith(")"):
+        return short_name
+
+    name, raw_params = short_name.split("(", 1)
+    params = raw_params[:-1].strip()
+    if not params:
+        return f"{name}()"
+
+    labels: list[str] = []
+    for raw_param in params.split(","):
+        label_text = raw_param.split(":", 1)[0].strip()
+        label = label_text.split()[0] if label_text else "_"
+        labels.append(f"{label}:")
+    return f"{name}({''.join(labels)})"
+
+
+def _swift_usr_module(usr: str) -> str | None:
+    if not usr.startswith("s:"):
+        return None
+
+    rest = usr[2:]
+    cursor = next((index for index, ch in enumerate(rest) if ch.isdigit()), None)
+    if cursor is None:
+        return None
+
+    length_text = ""
+    while cursor < len(rest) and rest[cursor].isdigit():
+        length_text += rest[cursor]
+        cursor += 1
+    if not length_text:
+        return None
+
+    length = int(length_text)
+    if length <= 0 or cursor + length > len(rest):
+        return None
+    return rest[cursor : cursor + length]
+
+
+def _swift_qname_from_usr(usr: str) -> str | None:
+    module_name = _swift_usr_module(usr)
+    if module_name is None:
+        return None
+    return f"{module_name} {_escape_swift_usr_for_descriptor(usr)}"
+
+
+def _escape_swift_usr_for_descriptor(usr: str) -> str:
+    replacements = {
+        " ": "%20",
+        "(": "%28",
+        ")": "%29",
+        ",": "%2C",
+        ".": "%2E",
+        ":": "%3A",
+        "/": "%2F",
+        "[": "%5B",
+        "]": "%5D",
+        "<": "%3C",
+        ">": "%3E",
+        "\\": "%5C",
+        "#": "%23",
+        "`": "%60",
+    }
+    return "".join(replacements.get(char, char) for char in usr)
 
 
 async def _resolve_owner_cache(

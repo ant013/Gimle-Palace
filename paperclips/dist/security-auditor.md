@@ -78,10 +78,13 @@ Source of truth = Paperclip API now, not CLI session ("galaxy brain — ignore")
 
 ### @-mentions: trailing space after name
 
-Paperclip's parser captures trailing punctuation into the name (e.g. `@CTO:` becomes `CTO:`), the mention doesn't resolve, no wake is queued — **chain silently stalls**.
+Paperclip's parser captures trailing punctuation into the name (e.g. `@Role:`
+becomes `Role:`), the mention doesn't resolve, no wake is queued — **chain
+silently stalls**.
 
-**Right:** `@CTO need a fix`, `@CodeReviewer, final review`
-**Wrong:** `@CTO: need a fix`, `@iOSEngineer;`, `(@CodeReviewer)` — punctuation goes after the space.
+**Right:** target-local role mention followed by a space.
+**Wrong:** `@Role: need a fix`, `@Role;`, `(@Role)` — punctuation goes after
+the space.
 
 ### Handoff: PATCH + comment with @mention + STOP
 
@@ -101,7 +104,7 @@ Got an @-mention with explicit handoff phrase (`"your turn"`, `"pick it up"`, `"
 
 **Do:**
 1. `GET /api/issues/{id}` → read `executionAgentNameKey`.
-2. Comment to holder: `"@CTO release execution lock on [GIM-5], I'm ready to close"`.
+2. Comment to the target-local lock holder: `"release execution lock on [GIM-5], I'm ready to close"`.
 3. Alternative — if holder unavailable, `PATCH ... assigneeAgentId=<original-assignee>` → originator closes.
 4. Don't retry close with the same JWT — without release, 409 keeps coming.
 
@@ -262,7 +265,8 @@ APPROVED. Reassigning to <next agent>.
 **Every wake ends in one of two states:**
 
 1. `status=done`, OR
-2. **Atomic handoff** to next agent (or your CTO if next is unknown).
+2. **Atomic handoff** to next target-local agent (or your target-local CTO if
+   next is unknown).
 
 No third option. `assignee=me, status=in_progress|todo` between phases = chain dies silently.
 
@@ -278,9 +282,13 @@ ONE POST + ONE PATCH + STOP, **in this exact order**:
 
 POST + PATCH is the only reliable wake mechanism. Mention in POST wakes by mention; PATCH wakes by reassign.
 
-### Fallback: unknown recipient → CTO
+### Fallback: unknown recipient -> target-local CTO
 
-Phase chain unclear? **Handoff to your CTO** (`reportsTo` in manifest). If you ARE CTO and don't know → escalate Board per `universal/escalation-board.md`. NEVER drop the issue.
+Phase chain unclear? **Handoff to your target-local CTO** (`reportsTo` in
+manifest). If you ARE CTO and don't know -> escalate Board per
+`universal/escalation-board.md`. NEVER drop the issue. Do not cross from a
+Codex/CX lane to bare Claude-side roles, or from a Claude lane to CX-prefixed
+roles.
 
 ### Comment format — STRICT
 
@@ -306,17 +314,23 @@ Evidence/context goes ABOVE:
 
 ### Formal vs plain @-mention
 
-Use **formal** `[@<Role>](agent://<uuid>?i=<icon>)` — machine-verifiable if assignee PATCH flakes. Resolve the concrete UUID from the local roster for your target/team.
+Use **formal** `[@<Role>](agent://<uuid>?i=<icon>)` — machine-verifiable if
+assignee PATCH flakes. Resolve the concrete UUID from the local roster for your
+target/team.
 
 Examples:
-- ✅ `[@CodeReviewer](agent://<uuid>?i=<icon>) your turn.`
-- ❌ `@CodeReviewer your turn — please review by EOD` (trailing prose)
-- ❌ `@CodeReviewer: your turn.` (`@Role:` breaks parser — see `universal/wake-and-handoff-basics.md`)
-- ❌ `Reassigning to @CodeReviewer for review.` (no `your turn.` + no formal mention)
+- OK: `[@<TargetLocalReviewer>](agent://<uuid>?i=<icon>) your turn.`
+- Wrong: plain `@<Role> your turn` with trailing prose.
+- Wrong: `@<Role>:` because `@Role:` breaks parser — see
+  `universal/wake-and-handoff-basics.md`.
+- Wrong: `Reassigning to @<Role> for review.` because it has no `your turn.`
+  and no formal mention.
 
 ### Cross-team handoff
 
-Same procedure across claude ↔ codex; shared company, UUIDs resolve.
+Do not cross teams during normal phase handoff. A Codex/CX issue stays on
+CX/Codex roles; a Claude issue stays on Claude roles. Cross-team escalation
+requires explicit operator instruction.
 
 ### Self-checkout on explicit handoff
 

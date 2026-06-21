@@ -48,6 +48,7 @@ async def test_register_project_passes_parent_mount_and_relative_path(
         parent_mount="hs",
         relative_path="EvmKit.Swift",
         language_profile=None,
+        expected_profile=False,
     )
 
 

@@ -7,12 +7,13 @@ DEFAULT_MANIFEST="$REPO_ROOT/services/palace-mcp/scripts/uw-ios-bundle-manifest.
 DEFAULT_ENV_FILE="$REPO_ROOT/.env"
 DEFAULT_MCP_URL="${PALACE_MCP_URL:-http://localhost:8080/mcp}"
 DEFAULT_REPO_BASE="${PALACE_SWIFT_KIT_REPO_BASE:-/repos-hs}"
-DEFAULT_HOST_REPO_BASE="${PALACE_SWIFT_KIT_HOST_REPO_BASE:-/Users/Shared/Ios/HorizontalSystems}"
+DEFAULT_HOST_REPO_BASE="${PALACE_SWIFT_KIT_HOST_REPO_BASE:-/Users/Shared/Ios/Gimle-Repos/HorizontalSystems}"
 DEFAULT_STAGE_ROOT="${PALACE_SWIFT_KIT_STAGE_ROOT:-$HOME/.cache/palace/swift-kit-mounts}"
 PALACE_MCP_SERVICE_DIR="$REPO_ROOT/services/palace-mcp"
 
 DEFAULT_EXTRACTORS=(
     symbol_index_swift
+    call_edge_swift
     prune_swift_symbols
     arch_layer
     git_history
@@ -49,7 +50,7 @@ Options:
   --mcp-url <url>           palace-mcp MCP URL
   --repo-base <path>        Container-visible repo base (default: /repos-hs)
   --host-repo-base <path>   Host repo base for preflight checks
-                            (default: /Users/Shared/Ios/HorizontalSystems)
+                            (default: /Users/Shared/Ios/Gimle-Repos/HorizontalSystems)
   --parent-mount <name>     Explicit register_project parent_mount
   --relative-path <path>    Explicit repo-relative path under repo-base
   --manifest <path>         Manifest used for slug -> relative_path lookup

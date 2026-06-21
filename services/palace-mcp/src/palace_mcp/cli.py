@@ -1092,6 +1092,7 @@ def build_project_analyze_idempotency_key(
     language_profile: str,
     repo_head_sha: str,
     depth: str,
+    mode: str,
     extractors: list[str],
     container_repo_path: str,
 ) -> str:
@@ -1100,6 +1101,7 @@ def build_project_analyze_idempotency_key(
         "language_profile": language_profile,
         "repo_head_sha": repo_head_sha,
         "depth": depth,
+        "mode": mode,
         "extractors": extractors,
         "container_repo_path": container_repo_path,
     }
@@ -1456,6 +1458,7 @@ def _cmd_tool_call(args: argparse.Namespace) -> int:
 
 def _cmd_project_analyze(args: argparse.Namespace) -> int:
     try:
+        mode = getattr(args, "mode", "full")
         repo_path = Path(args.repo_path).expanduser().resolve(strict=True)
         if not repo_path.is_dir():
             raise ProjectAnalyzeCliError(
@@ -1521,6 +1524,7 @@ def _cmd_project_analyze(args: argparse.Namespace) -> int:
             language_profile=args.language_profile,
             repo_head_sha=repo_head_sha,
             depth=args.depth,
+            mode=mode,
             extractors=ordered_extractors,
             container_repo_path=spec.container_repo_path,
         )
@@ -1531,6 +1535,7 @@ def _cmd_project_analyze(args: argparse.Namespace) -> int:
             "language_profile": args.language_profile,
             "bundle": spec.bundle,
             "depth": args.depth,
+            "mode": mode,
             "continue_on_failure": True,
             "idempotency_key": idempotency_key,
             "extractors": ordered_extractors,
@@ -1575,6 +1580,7 @@ def _cmd_project_analyze(args: argparse.Namespace) -> int:
             "container_repo_path": spec.container_repo_path,
             "container_scip_path": spec.container_scip_path,
             "extractors": ordered_extractors,
+            "mode": mode,
             "idempotency_key": idempotency_key,
             "run_id": final_payload.get("run_id"),
             "status": final_payload.get("status"),
@@ -1748,6 +1754,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="full",
         choices=["quick", "full"],
         help="Analysis depth forwarded to palace.project.analyze",
+    )
+    analyze_p.add_argument(
+        "--mode",
+        default="full",
+        choices=["full", "incremental"],
+        help="Analysis mode forwarded to palace.project.analyze",
     )
     analyze_p.add_argument(
         "--url",

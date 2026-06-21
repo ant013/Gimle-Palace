@@ -1,0 +1,9 @@
+schemaVersion: 2
+project_root: /opt/example/wallet-radar
+primary_repo_root: /opt/example/wallet-radar/repo
+primary_mcp_service_dir: /opt/example/wallet-radar
+production_checkout: /opt/example/wallet-radar/repo
+team_workspace_root: /opt/example/wallet-radar/repo
+operator_memory_dir: ~/.claude/projects/-opt-example-wallet-radar/memory
+overlay_root: paperclips/projects/wallet-radar/overlays
+project_rules_file: AGENTS.md

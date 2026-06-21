@@ -124,3 +124,17 @@ These are internal improvements; no operator action is needed unless troubleshoo
   receives its own HNSW query budget (`per_project_k`) rather than a single shared
   query. Results are merged and re-ranked by score. The `per_project_k` value is
   logged in the telemetry line (`candidate_limit` field) for debugging.
+
+## Post-merge restart
+
+When `develop` picks up a merged `palace-mcp` change, rerun the iMac deploy
+script so the long-running process reloads the new code:
+
+```bash
+cd /Users/Shared/Ios/Gimle-Palace
+bash paperclips/scripts/imac-deploy.sh
+```
+
+After the restart, confirm the health-status surface reports a fresh
+`code_loaded_at` timestamp for the running process before treating the deploy
+as complete.

@@ -29,9 +29,42 @@ def _ok_result(slug: str) -> IngestRunResult:
     return IngestRunResult(
         slug=slug,
         ok=True,
+        outcome="ok",
         run_id="run-1",
         error_kind=None,
         error=None,
+        message=None,
+        next_action=None,
+        duration_ms=100,
+        completed_at=datetime.now(timezone.utc),
+    )
+
+
+def _missing_input_result(slug: str) -> IngestRunResult:
+    return IngestRunResult(
+        slug=slug,
+        ok=True,
+        outcome="missing_input",
+        run_id="run-1",
+        error_kind=None,
+        error=None,
+        message="fixture missing",
+        next_action="Provide fixture",
+        duration_ms=100,
+        completed_at=datetime.now(timezone.utc),
+    )
+
+
+def _not_applicable_result(slug: str) -> IngestRunResult:
+    return IngestRunResult(
+        slug=slug,
+        ok=True,
+        outcome="not_applicable",
+        run_id="run-1",
+        error_kind=None,
+        error=None,
+        message="not applicable",
+        next_action=None,
         duration_ms=100,
         completed_at=datetime.now(timezone.utc),
     )
@@ -41,9 +74,12 @@ def _fail_result(slug: str) -> IngestRunResult:
     return IngestRunResult(
         slug=slug,
         ok=False,
+        outcome=None,
         run_id=None,
         error_kind="extractor_error",
         error="some error",
+        message="some error",
+        next_action=None,
         duration_ms=50,
         completed_at=datetime.now(timezone.utc),
     )
@@ -66,6 +102,8 @@ class TestInitBundleIngestState:
         assert state["members_total"] == 2
         assert state["members_done"] == 0
         assert state["members_ok"] == 0
+        assert state["members_missing_input"] == 0
+        assert state["members_not_applicable"] == 0
         assert state["members_failed"] == 0
         assert state["runs"] == ()
         assert state["completed_at"] is None
@@ -110,8 +148,46 @@ class TestUpdateState:
         updated = state  # dict is mutated in-place
         assert updated["members_done"] == 1
         assert updated["members_ok"] == 1
+        assert updated["members_missing_input"] == 0
+        assert updated["members_not_applicable"] == 0
         assert updated["members_failed"] == 0
         assert len(updated["runs"]) == 1
+
+    def test_missing_input_result_increments_missing_input_bucket(self) -> None:
+        from palace_mcp.extractors.bundle_state import (
+            init_bundle_ingest_state,
+            update_state,
+        )
+
+        members = (_make_member("evm-kit"),)
+        state = init_bundle_ingest_state("uw-ios", members)
+        run_id = state["run_id"]
+
+        update_state(run_id, _missing_input_result("evm-kit"))
+
+        assert state["members_done"] == 1
+        assert state["members_ok"] == 0
+        assert state["members_missing_input"] == 1
+        assert state["members_not_applicable"] == 0
+        assert state["members_failed"] == 0
+
+    def test_not_applicable_result_increments_not_applicable_bucket(self) -> None:
+        from palace_mcp.extractors.bundle_state import (
+            init_bundle_ingest_state,
+            update_state,
+        )
+
+        members = (_make_member("evm-kit"),)
+        state = init_bundle_ingest_state("uw-ios", members)
+        run_id = state["run_id"]
+
+        update_state(run_id, _not_applicable_result("evm-kit"))
+
+        assert state["members_done"] == 1
+        assert state["members_ok"] == 0
+        assert state["members_missing_input"] == 0
+        assert state["members_not_applicable"] == 1
+        assert state["members_failed"] == 0
 
     def test_fail_result_increments_failed_and_done(self) -> None:
         from palace_mcp.extractors.bundle_state import (
@@ -141,10 +217,12 @@ class TestUpdateState:
 
         update_state(run_id, _ok_result("a"))
         update_state(run_id, _fail_result("b"))
-        update_state(run_id, _ok_result("c"))
+        update_state(run_id, _missing_input_result("c"))
 
         assert state["members_done"] == 3
-        assert state["members_ok"] == 2
+        assert state["members_ok"] == 1
+        assert state["members_missing_input"] == 1
+        assert state["members_not_applicable"] == 0
         assert state["members_failed"] == 1
         assert len(state["runs"]) == 3
 

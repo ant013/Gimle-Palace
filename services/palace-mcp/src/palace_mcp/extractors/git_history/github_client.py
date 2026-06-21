@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Any
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 GRAPHQL_URL = "https://api.github.com/graphql"
 PR_QUERY = """
@@ -75,6 +78,17 @@ class GitHubClient:
                 {"owner": repo_owner, "name": repo_name, "cursor": cursor},
             )
             repo_data = resp_json["data"]["repository"]
+            if repo_data is None:
+                # GitHub returned repository:null — the (owner, name) pair does not
+                # resolve to a repository (e.g. a project slug that is not a real
+                # GitHub owner/repo). Without this guard the next line crashes with
+                # "'NoneType' object is not subscriptable". Stop PR pagination
+                # gracefully; phase-1 commits are already ingested.
+                logger.warning(
+                    "git_history.github.repository_null",
+                    extra={"repo_owner": repo_owner, "repo_name": repo_name},
+                )
+                return
             page = repo_data["pullRequests"]
             rate_limit = resp_json["data"]["rateLimit"]
 

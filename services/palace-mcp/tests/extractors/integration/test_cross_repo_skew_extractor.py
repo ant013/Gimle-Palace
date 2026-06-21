@@ -23,10 +23,10 @@ async def _seed(driver) -> None:  # type: ignore[no-untyped-def]
             MERGE (e:Project {slug: 'evmkit'})
             MERGE (b:Project {slug: 'bitcoinkit'})
             MERGE (bd:Bundle {name: 'uw-ios-mini'})
-            MERGE (bd)-[:HAS_MEMBER]->(a)
-            MERGE (bd)-[:HAS_MEMBER]->(m)
-            MERGE (bd)-[:HAS_MEMBER]->(e)
-            MERGE (bd)-[:HAS_MEMBER]->(b)
+            MERGE (bd)-[:CONTAINS]->(a)
+            MERGE (bd)-[:CONTAINS]->(m)
+            MERGE (bd)-[:CONTAINS]->(e)
+            MERGE (bd)-[:CONTAINS]->(b)
 
             MERGE (mk_15:ExternalDependency {purl: 'pkg:github/horizontalsystems/marketkit@1.5.0'})
               SET mk_15.ecosystem = 'github', mk_15.resolved_version = '1.5.0'

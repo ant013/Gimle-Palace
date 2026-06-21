@@ -10,6 +10,17 @@ from neo4j import AsyncDriver
 from palace_mcp.extractors.dead_symbol_binary_surface.correlation import (
     CorrelationResult,
 )
+from palace_mcp.extractors.dead_symbol_binary_surface.models import DeadSymbolCandidate
+
+# Replace-snapshot: each run rewrites the project's full dead-symbol surface, so
+# drop the previous snapshot first. Without this, candidates whose id changed
+# across commits accumulate and find_dead_symbols returns mixed commit_sha rows
+# (stale candidates from a prior Periphery scan — dogfood #4).
+_DELETE_PROJECT_SNAPSHOT = """
+MATCH (n)
+WHERE (n:DeadSymbolCandidate OR n:BinarySurfaceRecord) AND n.project = $project
+DETACH DELETE n
+"""
 
 _MERGE_CANDIDATE = """
 MERGE (candidate:DeadSymbolCandidate {id: $candidate_id})
@@ -57,20 +68,27 @@ class DeadSymbolWriteSummary:
 
 
 async def write_dead_symbol_graph(
-    *, driver: AsyncDriver, rows: tuple[CorrelationResult, ...]
+    *, driver: AsyncDriver, rows: tuple[CorrelationResult, ...], project: str
 ) -> DeadSymbolWriteSummary:
-    """Write dead symbol graph rows in one execute_write transaction."""
+    """Write dead symbol graph rows in one execute_write transaction.
+
+    The project's previous dead-symbol snapshot is dropped first (same
+    transaction) so a re-ingest fully replaces it instead of accumulating stale
+    candidates across commits.
+    """
 
     async with driver.session() as session:
-        return await session.execute_write(_write_batch, rows)
+        return await session.execute_write(_write_batch, rows, project)
 
 
 async def _write_batch(
-    tx: Any, rows: tuple[CorrelationResult, ...]
+    tx: Any, rows: tuple[CorrelationResult, ...], project: str
 ) -> DeadSymbolWriteSummary:
     nodes_created = 0
     relationships_created = 0
     properties_set = 0
+
+    await _consume(tx, _DELETE_PROJECT_SNAPSHOT, project=project)
 
     for row in rows:
         candidate = row.candidate
@@ -81,7 +99,7 @@ async def _write_batch(
             tx,
             _MERGE_CANDIDATE,
             candidate_id=candidate.id,
-            candidate_props=candidate.model_dump(mode="python"),
+            candidate_props=_candidate_props(candidate),
         )
         nodes_created += summary.nodes_created
         relationships_created += summary.relationships_created
@@ -169,3 +187,9 @@ async def _consume(tx: Any, query: str, **params: object) -> DeadSymbolWriteSumm
         relationships_created=counters.relationships_created,
         properties_set=counters.properties_set,
     )
+
+
+def _candidate_props(candidate: DeadSymbolCandidate) -> dict[str, object]:
+    props: dict[str, object] = candidate.model_dump(mode="python")
+    props["hints"] = list(candidate.hints)
+    return props

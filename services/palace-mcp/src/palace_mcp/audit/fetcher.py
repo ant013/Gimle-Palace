@@ -29,6 +29,7 @@ _ARCH_LAYER_SUPPLEMENT = """
 OPTIONAL MATCH (m:Module {project_id: $project_id})
 WITH count(m) AS module_count
 OPTIONAL MATCH (r:ArchRule {project_id: $project_id})
+WHERE coalesce(r.summary, false) = false
 RETURN module_count,
        count(r) > 0 AS rules_declared,
        head(collect(r.rule_source)) AS rule_source
