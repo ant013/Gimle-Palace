@@ -19,6 +19,8 @@ from palace_mcp.extractors.cross_module_contract import (
     _DELETE_DELTA_SNAPSHOT_LINKS,
     _DELETE_SNAPSHOT_CONSUMPTIONS,
     _DELETE_SNAPSHOT_SURFACE_LINKS,
+    _DELETE_STALE_PAIR_DELTAS,
+    _DELETE_STALE_PAIR_SNAPSHOTS,
     CrossModuleContractExtractor,
     _DeltaRequest,
     _OccurrenceResolution,
@@ -976,6 +978,8 @@ async def test_write_contract_graph_persists_synthesized_delta_snapshots() -> No
     assert stats.edges_written == 6
     queries = [call.args[0] for call in session.run.await_args_list]
     assert queries == [
+        _DELETE_STALE_PAIR_DELTAS,
+        _DELETE_STALE_PAIR_SNAPSHOTS,
         _DELETE_SNAPSHOT_CONSUMPTIONS,
         _DELETE_SNAPSHOT_SURFACE_LINKS,
         _WRITE_SNAPSHOT,
@@ -988,6 +992,23 @@ async def test_write_contract_graph_persists_synthesized_delta_snapshots() -> No
         _WRITE_DELTA,
         _WRITE_DELTA_AFFECTED_SYMBOL,
     ]
+    assert session.run.await_args_list[0].kwargs == {
+        "project": "contract-mini",
+        "consumer_module_name": "ConsumerApp",
+        "producer_module_name": "ProducerKit",
+        "language": "swift",
+        "keep_delta_id": planned_deltas[0].delta.id,
+    }
+    assert session.run.await_args_list[1].kwargs == {
+        "project": "contract-mini",
+        "consumer_module_name": "ConsumerApp",
+        "producer_module_name": "ProducerKit",
+        "language": "swift",
+        "keep_snapshot_ids": [
+            planned[0].snapshot.id,
+            planned[1].snapshot.id,
+        ],
+    }
 
 
 @pytest.mark.asyncio

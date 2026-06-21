@@ -111,6 +111,28 @@ MATCH (delta:ModuleContractDelta {id: $delta_id})-[rel:DELTA_FROM|DELTA_TO]->()
 DELETE rel
 """
 
+_DELETE_STALE_PAIR_DELTAS = """
+MATCH (delta:ModuleContractDelta {
+    project: $project,
+    consumer_module_name: $consumer_module_name,
+    producer_module_name: $producer_module_name,
+    language: $language
+})
+WHERE delta.id <> $keep_delta_id
+DETACH DELETE delta
+"""
+
+_DELETE_STALE_PAIR_SNAPSHOTS = """
+MATCH (snapshot:ModuleContractSnapshot {
+    project: $project,
+    consumer_module_name: $consumer_module_name,
+    producer_module_name: $producer_module_name,
+    language: $language
+})
+WHERE NOT snapshot.id IN $keep_snapshot_ids
+DETACH DELETE snapshot
+"""
+
 _DELTA_REQUESTS_PATH = Path(".palace") / "cross-module-contract" / "delta-requests.json"
 _NO_CROSS_MODULE_CONSUMER = "__no_cross_module_consumer__"
 _MAX_INDEXSTORE_RESULTS = 5000
@@ -1232,7 +1254,37 @@ async def _write_contract_graph(
 ) -> ExtractorStats:
     nodes_written = 0
     edges_written = 0
+    snapshots_by_id = {item.snapshot.id: item.snapshot for item in planned}
     async with driver.session() as session:
+        for planned_delta in planned_deltas:
+            from_snapshot = snapshots_by_id.get(planned_delta.from_snapshot_id)
+            to_snapshot = snapshots_by_id.get(planned_delta.to_snapshot_id)
+            if from_snapshot is None or to_snapshot is None:
+                continue
+            if (
+                planned_delta.delta.removed_consumed_symbol_count == 0
+                or from_snapshot.use_count == 0
+                or to_snapshot.consumer_module_name == _NO_CROSS_MODULE_CONSUMER
+                or to_snapshot.symbol_count != 0
+                or to_snapshot.use_count != 0
+            ):
+                continue
+            await session.run(
+                _DELETE_STALE_PAIR_DELTAS,
+                project=planned_delta.delta.project,
+                consumer_module_name=planned_delta.delta.consumer_module_name,
+                producer_module_name=planned_delta.delta.producer_module_name,
+                language=planned_delta.delta.language.value,
+                keep_delta_id=planned_delta.delta.id,
+            )
+            await session.run(
+                _DELETE_STALE_PAIR_SNAPSHOTS,
+                project=planned_delta.delta.project,
+                consumer_module_name=planned_delta.delta.consumer_module_name,
+                producer_module_name=planned_delta.delta.producer_module_name,
+                language=planned_delta.delta.language.value,
+                keep_snapshot_ids=[from_snapshot.id, to_snapshot.id],
+            )
         for planned_snapshot in planned:
             await session.run(
                 _DELETE_SNAPSHOT_CONSUMPTIONS,
