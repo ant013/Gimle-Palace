@@ -623,6 +623,8 @@ async def test_cross_module_contract_skips_when_public_api_surface_is_missing(
     tmp_path: Path,
 ) -> None:
     await ensure_extractors_schema(driver)
+    repo = _project_and_repo / "contract-mini"
+    (repo / ".palace" / "cross-module-contract" / "delta-requests.json").unlink()
     tantivy_dir = tmp_path / "tantivy-empty"
     tantivy_dir.mkdir()
     settings = Settings(
