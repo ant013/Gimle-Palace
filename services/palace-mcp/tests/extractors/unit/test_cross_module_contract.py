@@ -997,6 +997,7 @@ async def test_write_contract_graph_persists_synthesized_delta_snapshots() -> No
         "consumer_module_name": "ConsumerApp",
         "producer_module_name": "ProducerKit",
         "language": "swift",
+        "include_package": False,
         "keep_delta_id": planned_deltas[0].delta.id,
     }
     assert session.run.await_args_list[1].kwargs == {
@@ -1004,6 +1005,7 @@ async def test_write_contract_graph_persists_synthesized_delta_snapshots() -> No
         "consumer_module_name": "ConsumerApp",
         "producer_module_name": "ProducerKit",
         "language": "swift",
+        "include_package": False,
         "keep_snapshot_ids": [
             planned[0].snapshot.id,
             planned[1].snapshot.id,

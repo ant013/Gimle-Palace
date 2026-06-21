@@ -118,6 +118,12 @@ MATCH (delta:ModuleContractDelta {
     producer_module_name: $producer_module_name,
     language: $language
 })
+      -[:DELTA_FROM]->(from_snapshot:ModuleContractSnapshot {
+          include_package: $include_package
+      })
+MATCH (delta)-[:DELTA_TO]->(to_snapshot:ModuleContractSnapshot {
+    include_package: $include_package
+})
 WHERE delta.id <> $keep_delta_id
 DETACH DELETE delta
 """
@@ -127,7 +133,8 @@ MATCH (snapshot:ModuleContractSnapshot {
     project: $project,
     consumer_module_name: $consumer_module_name,
     producer_module_name: $producer_module_name,
-    language: $language
+    language: $language,
+    include_package: $include_package
 })
 WHERE NOT snapshot.id IN $keep_snapshot_ids
 DETACH DELETE snapshot
@@ -1275,6 +1282,7 @@ async def _write_contract_graph(
                 consumer_module_name=planned_delta.delta.consumer_module_name,
                 producer_module_name=planned_delta.delta.producer_module_name,
                 language=planned_delta.delta.language.value,
+                include_package=from_snapshot.include_package,
                 keep_delta_id=planned_delta.delta.id,
             )
             await session.run(
@@ -1283,6 +1291,7 @@ async def _write_contract_graph(
                 consumer_module_name=planned_delta.delta.consumer_module_name,
                 producer_module_name=planned_delta.delta.producer_module_name,
                 language=planned_delta.delta.language.value,
+                include_package=from_snapshot.include_package,
                 keep_snapshot_ids=[from_snapshot.id, to_snapshot.id],
             )
         for planned_snapshot in planned:
