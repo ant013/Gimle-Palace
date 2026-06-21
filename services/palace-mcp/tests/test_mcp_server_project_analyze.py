@@ -120,11 +120,47 @@ async def test_project_analyze_returns_run_id_and_schedules_background_execution
     assert structured["active_run_reused"] is False
     assert structured["background_execution_scheduled"] is True
     assert structured["run"]["language_profile"] == "swift_kit"
+    service.start_run.assert_awaited_once()
+    assert service.start_run.await_args.kwargs["mode"].value == "full"
     schedule_mock.assert_called_once_with(
         run_id="run-123",
         service=service,
         reacquire_lease=False,
     )
+
+
+async def test_project_analyze_forwards_incremental_mode_to_service() -> None:
+    run = _make_run(status=AnalysisRunStatus.RUNNING)
+    service = MagicMock()
+    service.start_run = AsyncMock(
+        return_value=AnalysisRunStartResult(run=run, active_run_reused=False)
+    )
+
+    with (
+        patch("palace_mcp.mcp_server._driver", new=MagicMock()),
+        patch("palace_mcp.mcp_server._graphiti", new=object()),
+        patch(
+            "palace_mcp.mcp_server._build_project_analysis_service",
+            return_value=service,
+        ),
+        patch(
+            "palace_mcp.mcp_server._schedule_project_analysis_execution",
+            return_value=True,
+        ),
+    ):
+        await _mcp.call_tool(
+            "palace.project.analyze",
+            {
+                "slug": "tron-kit",
+                "parent_mount": "hs",
+                "relative_path": "TronKit.Swift",
+                "language_profile": "swift_kit",
+                "mode": "incremental",
+            },
+        )
+
+    service.start_run.assert_awaited_once()
+    assert service.start_run.await_args.kwargs["mode"].value == "incremental"
 
 
 async def test_project_analyze_reused_running_run_does_not_schedule_duplicate() -> None:

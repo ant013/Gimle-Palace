@@ -1092,6 +1092,7 @@ def build_project_analyze_idempotency_key(
     language_profile: str,
     repo_head_sha: str,
     depth: str,
+    mode: str,
     extractors: list[str],
     container_repo_path: str,
 ) -> str:
@@ -1100,6 +1101,7 @@ def build_project_analyze_idempotency_key(
         "language_profile": language_profile,
         "repo_head_sha": repo_head_sha,
         "depth": depth,
+        "mode": mode,
         "extractors": extractors,
         "container_repo_path": container_repo_path,
     }
@@ -1521,6 +1523,7 @@ def _cmd_project_analyze(args: argparse.Namespace) -> int:
             language_profile=args.language_profile,
             repo_head_sha=repo_head_sha,
             depth=args.depth,
+            mode=args.mode,
             extractors=ordered_extractors,
             container_repo_path=spec.container_repo_path,
         )
@@ -1531,6 +1534,7 @@ def _cmd_project_analyze(args: argparse.Namespace) -> int:
             "language_profile": args.language_profile,
             "bundle": spec.bundle,
             "depth": args.depth,
+            "mode": args.mode,
             "continue_on_failure": True,
             "idempotency_key": idempotency_key,
             "extractors": ordered_extractors,
@@ -1575,6 +1579,7 @@ def _cmd_project_analyze(args: argparse.Namespace) -> int:
             "container_repo_path": spec.container_repo_path,
             "container_scip_path": spec.container_scip_path,
             "extractors": ordered_extractors,
+            "mode": args.mode,
             "idempotency_key": idempotency_key,
             "run_id": final_payload.get("run_id"),
             "status": final_payload.get("status"),
@@ -1686,6 +1691,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_target_args(run_p)
     run_p.add_argument("--url", default=_DEFAULT_MCP_URL, help="palace-mcp MCP URL")
     run_p.add_argument("--depth", default="full", choices=["quick", "full"])
+    run_p.add_argument("--mode", default="full", choices=["full", "incremental"])
 
     launch_p = audit_sub.add_parser("launch", help="Launch async audit workflow")
     _add_target_args(launch_p)

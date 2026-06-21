@@ -23,6 +23,7 @@ from neo4j import AsyncDriver
 
 from palace_mcp.extractors.base import (
     BaseExtractor,
+    ExtractorExecutionMode,
     ExtractorOutcome,
     ExtractorRunContext,
     ExtractorStats,
@@ -254,6 +255,7 @@ class SymbolIndexSwift(BaseExtractor):
                     outcome=ExtractorOutcome.SKIPPED,
                     message="Skipped re-ingest: file body_hash values matched existing :File nodes.",
                     next_action="Modify source content before rerunning symbol_index_swift.",
+                    mode=ExtractorExecutionMode.SKIPPED,
                 )
             if previous_body_hashes:
                 logger.info(
@@ -451,7 +453,15 @@ class SymbolIndexSwift(BaseExtractor):
             await finalize_ingest_run(driver, run_id=ctx.run_id, success=True)
             # nodes_written reflects Neo4j :Symbol nodes (graph-layer count).
             # Tantivy occurrence count is logged above for observability.
-            return ExtractorStats(nodes_written=sym_nodes, edges_written=0)
+            return ExtractorStats(
+                nodes_written=sym_nodes,
+                edges_written=0,
+                mode=(
+                    ExtractorExecutionMode.INCREMENTAL
+                    if incremental_tantivy
+                    else ExtractorExecutionMode.FULL
+                ),
+            )
 
         except ScipPathRequiredError as e:
             await finalize_ingest_run(

@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from palace_mcp.extractors.base import (
     BaseExtractor,
     ExtractorConfigError,
+    ExtractorExecutionMode,
     ExtractorOutcome,
     ExtractorRunContext,
     ExtractorStats,
@@ -160,6 +161,7 @@ class CryptoDomainModelExtractor(BaseExtractor):
                 outcome=ExtractorOutcome.SKIPPED,
                 message="Skipped crypto_domain_model: no changed Swift files.",
                 next_action="Modify Swift source or run with force=True before rerunning.",
+                mode=ExtractorExecutionMode.SKIPPED,
             )
 
         findings = await run_semgrep(
@@ -204,7 +206,15 @@ class CryptoDomainModelExtractor(BaseExtractor):
                 "written": nodes_written,
             },
         )
-        return ExtractorStats(nodes_written=nodes_written, edges_written=0)
+        return ExtractorStats(
+            nodes_written=nodes_written,
+            edges_written=0,
+            mode=(
+                ExtractorExecutionMode.INCREMENTAL
+                if scope.mode == IncrementalMode.INCREMENTAL
+                else ExtractorExecutionMode.FULL
+            ),
+        )
 
 
 _SEMGREP_SEVERITY_MAP: dict[str, str] = {
