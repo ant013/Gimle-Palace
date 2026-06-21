@@ -48,6 +48,13 @@ WHERE NOT coalesce(f.file_path, f.path) IN $preserved_paths
 DETACH DELETE fn
 """.strip()
 
+PHASE_4_PATH_EVICT_CYPHER = """
+MATCH (f:File {project_id: $project_id})-[:CONTAINS]->(fn:Function)
+WHERE coalesce(f.file_path, f.path) IN $paths
+  AND fn.last_run_at < datetime($run_started_at)
+DETACH DELETE fn
+""".strip()
+
 PHASE_5_DEAD_CYPHER = """
 MATCH (f:File {project_id: $project_id})
 WHERE NOT coalesce(f.file_path, f.path) IN $preserved_paths
@@ -57,6 +64,25 @@ SET f.ccn_total = 0,
     f.hotspot_score = 0.0,
     f.complexity_status = 'stale',
     f.last_complexity_run_at = datetime($run_started_at)
+""".strip()
+
+PHASE_5_PATH_ZERO_CYPHER = """
+MATCH (f:File {project_id: $project_id})
+WHERE coalesce(f.file_path, f.path) IN $paths
+  AND coalesce(f.ccn_total, 0) > 0
+SET f.ccn_total = 0,
+    f.churn_count = 0,
+    f.hotspot_score = 0.0,
+    f.complexity_status = 'stale',
+    f.last_complexity_run_at = datetime($run_started_at)
+""".strip()
+
+ACTIVE_FILE_COMPLEXITY_CYPHER = """
+MATCH (f:File {project_id: $project_id})
+WHERE coalesce(f.ccn_total, 0) > 0
+  AND NOT coalesce(f.file_path, f.path) IN $excluded_paths
+RETURN coalesce(f.file_path, f.path) AS path, f.ccn_total AS ccn_total
+ORDER BY path
 """.strip()
 
 
@@ -119,6 +145,26 @@ async def write_hotspot_score(
         )
 
 
+async def fetch_active_file_complexities(
+    driver: Any,
+    *,
+    project_id: str,
+    excluded_paths: list[str],
+) -> dict[str, int]:
+    async with driver.session() as session:
+        result = await session.run(
+            ACTIVE_FILE_COMPLEXITY_CYPHER,
+            {
+                "project_id": project_id,
+                "excluded_paths": excluded_paths,
+            },
+        )
+        out: dict[str, int] = {}
+        async for record in result:
+            out[record["path"]] = int(record["ccn_total"])
+        return out
+
+
 async def evict_stale_functions(
     driver: Any,
     *,
@@ -137,6 +183,26 @@ async def evict_stale_functions(
         )
 
 
+async def evict_stale_functions_for_paths(
+    driver: Any,
+    *,
+    project_id: str,
+    paths: list[str],
+    run_started_at: datetime,
+) -> None:
+    if not paths:
+        return
+    async with driver.session() as session:
+        await session.run(
+            PHASE_4_PATH_EVICT_CYPHER,
+            {
+                "project_id": project_id,
+                "paths": paths,
+                "run_started_at": run_started_at.isoformat(),
+            },
+        )
+
+
 async def mark_dead_files_zero(
     driver: Any,
     *,
@@ -150,6 +216,26 @@ async def mark_dead_files_zero(
             {
                 "project_id": project_id,
                 "preserved_paths": preserved_paths,
+                "run_started_at": run_started_at.isoformat(),
+            },
+        )
+
+
+async def mark_deleted_files_zero(
+    driver: Any,
+    *,
+    project_id: str,
+    paths: list[str],
+    run_started_at: datetime,
+) -> None:
+    if not paths:
+        return
+    async with driver.session() as session:
+        await session.run(
+            PHASE_5_PATH_ZERO_CYPHER,
+            {
+                "project_id": project_id,
+                "paths": paths,
                 "run_started_at": run_started_at.isoformat(),
             },
         )
