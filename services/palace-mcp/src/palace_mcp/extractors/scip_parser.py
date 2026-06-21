@@ -252,6 +252,7 @@ class ScipSymbolInfo:
     module_name: str
     scip_kind_name: str  # e.g. "Class", "Struct", "Function"
     relationships: tuple[tuple[str, str], ...]  # ((target_qname, neo4j_rel_type), ...)
+    access_modifier: str = ""
 
 
 def iter_scip_symbol_infos(index: Any) -> Iterator[ScipSymbolInfo]:

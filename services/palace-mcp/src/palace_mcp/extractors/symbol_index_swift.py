@@ -12,10 +12,11 @@ from __future__ import annotations
 import asyncio
 import hashlib
 from collections.abc import Callable, Iterable, Sized
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
+import re
 from typing import ClassVar
 
 from graphiti_core import Graphiti
@@ -143,6 +144,13 @@ _GRAPH_BATCH_SIZE = 500
 _INCREMENTAL_FULL_REPROCESS_THRESHOLD = 0.8
 _GIT_CHANGESET_CAP = 500
 _SWIFT_SOURCE_SUFFIXES = (".swift", ".swiftinterface")
+_SWIFT_ACCESS_LOOKBACK_LINES = 2
+_SWIFT_ACCESS_MODIFIER_RE = re.compile(
+    r"\b(open|public|package|internal|fileprivate|private)\b"
+)
+_SWIFT_DECLARATION_RE = re.compile(
+    r"\b(class|struct|enum|protocol|extension|func|var|let|typealias|actor|init|subscript)\b"
+)
 
 
 @dataclass(frozen=True)
@@ -230,6 +238,7 @@ class SymbolIndexSwift(BaseExtractor):
             ):
                 await _refresh_graph_state(
                     driver,
+                    repo_path=ctx.repo_path,
                     scip_index=scip_index,
                     iter_occurrences=_iter_occurrences,
                     project_id=ctx.group_id,
@@ -433,6 +442,7 @@ class SymbolIndexSwift(BaseExtractor):
 
             sym_nodes, shadow_count, deleted_count = await _refresh_graph_state(
                 driver,
+                repo_path=ctx.repo_path,
                 scip_index=scip_index,
                 iter_occurrences=_iter_occurrences,
                 project_id=ctx.group_id,
@@ -729,6 +739,7 @@ async def _write_file_body_hashes(
 async def _refresh_graph_state(
     driver: AsyncDriver,
     *,
+    repo_path: Path,
     scip_index: object,
     iter_occurrences: Callable[[], Iterable[SymbolOccurrence]],
     project_id: str,
@@ -770,6 +781,12 @@ async def _refresh_graph_state(
             for sym_info in symbol_infos
             if def_file_paths.get(sym_info.qualified_name) in selected_file_paths
         )
+    symbol_infos = _with_access_modifiers(
+        symbol_infos,
+        repo_path=repo_path,
+        def_file_paths=def_file_paths,
+        def_line_starts=def_line_starts,
+    )
     shadow_rows = _build_shadow_rows(
         occurrences=_iter_graph_occurrences(),
         symbol_infos=symbol_infos,
@@ -846,6 +863,85 @@ async def _refresh_graph_state(
         commit_sha=commit_sha,
     )
     return sym_nodes, shadow_count, deleted_count
+
+
+def _with_access_modifiers(
+    symbol_infos: tuple[ScipSymbolInfo, ...],
+    *,
+    repo_path: Path,
+    def_file_paths: dict[str, str],
+    def_line_starts: dict[str, int],
+) -> tuple[ScipSymbolInfo, ...]:
+    file_lines_cache: dict[str, tuple[str, ...] | None] = {}
+    return tuple(
+        replace(
+            sym_info,
+            access_modifier=_infer_swift_access_modifier(
+                repo_path=repo_path,
+                file_path=def_file_paths.get(sym_info.qualified_name),
+                line_start=def_line_starts.get(sym_info.qualified_name),
+                file_lines_cache=file_lines_cache,
+            ),
+        )
+        for sym_info in symbol_infos
+    )
+
+
+def _infer_swift_access_modifier(
+    *,
+    repo_path: Path,
+    file_path: str | None,
+    line_start: int | None,
+    file_lines_cache: dict[str, tuple[str, ...] | None],
+) -> str:
+    if file_path is None or line_start is None or line_start < 1:
+        return ""
+
+    lines = _load_repo_relative_lines(
+        repo_path=repo_path,
+        file_path=file_path,
+        file_lines_cache=file_lines_cache,
+    )
+    if lines is None or line_start > len(lines):
+        return ""
+
+    window_start = max(0, line_start - 1 - _SWIFT_ACCESS_LOOKBACK_LINES)
+    snippet_parts = [
+        code
+        for raw_line in lines[window_start:line_start]
+        if (code := raw_line.split("//", 1)[0].strip())
+    ]
+    if not snippet_parts:
+        return ""
+
+    snippet = " ".join(snippet_parts)
+    if not _SWIFT_DECLARATION_RE.search(snippet):
+        return ""
+
+    match = _SWIFT_ACCESS_MODIFIER_RE.search(snippet)
+    if match is not None:
+        return str(match.group(1))
+    return "internal"
+
+
+def _load_repo_relative_lines(
+    *,
+    repo_path: Path,
+    file_path: str,
+    file_lines_cache: dict[str, tuple[str, ...] | None],
+) -> tuple[str, ...] | None:
+    cached = file_lines_cache.get(file_path)
+    if cached is not None or file_path in file_lines_cache:
+        return cached
+
+    try:
+        lines = (repo_path / file_path).read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        file_lines_cache[file_path] = None
+        return None
+
+    file_lines_cache[file_path] = tuple(lines)
+    return file_lines_cache[file_path]
 
 
 def _build_shadow_rows(
