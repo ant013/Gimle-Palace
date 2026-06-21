@@ -914,10 +914,16 @@ def _infer_swift_access_modifier(
     if not snippet_parts:
         return ""
 
-    snippet = " ".join(snippet_parts)
-    if not _SWIFT_DECLARATION_RE.search(snippet):
+    declaration_indexes = [
+        index
+        for index, snippet_part in enumerate(snippet_parts)
+        if _SWIFT_DECLARATION_RE.search(snippet_part)
+    ]
+    if not declaration_indexes:
         return ""
 
+    start_index = declaration_indexes[-2] + 1 if len(declaration_indexes) > 1 else 0
+    snippet = " ".join(snippet_parts[start_index:])
     match = _SWIFT_ACCESS_MODIFIER_RE.search(snippet)
     if match is not None:
         return str(match.group(1))

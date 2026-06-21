@@ -35,6 +35,7 @@ from palace_mcp.extractors.symbol_index_swift import (
     _build_file_body_hashes,
     _build_shadow_rows,
     _derive_incremental_graph_scope,
+    _infer_swift_access_modifier,
     _ingest_batch,
     _is_vendor,
     _with_access_modifiers,
@@ -125,6 +126,25 @@ class TestSymbolIndexSwiftVendorClassification:
 
 
 class TestSymbolIndexSwiftAccessModifiers:
+    def test_infer_access_modifier_ignores_previous_declaration(
+        self, tmp_path: Path
+    ) -> None:
+        source_path = tmp_path / "Sources" / "Example.swift"
+        source_path.parent.mkdir(parents=True)
+        source_path.write_text(
+            "public class PublicThing {}\nclass InternalThing {}\n",
+            encoding="utf-8",
+        )
+
+        access_modifier = _infer_swift_access_modifier(
+            repo_path=tmp_path,
+            file_path="Sources/Example.swift",
+            line_start=2,
+            file_lines_cache={},
+        )
+
+        assert access_modifier == "internal"
+
     def test_with_access_modifiers_reads_source_visibility(
         self, tmp_path: Path
     ) -> None:
