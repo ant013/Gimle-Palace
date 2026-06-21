@@ -81,6 +81,14 @@ class ExtractorOutcome(StrEnum):
     MISSING_INPUT = "missing_input"
 
 
+class ExtractorExecutionMode(StrEnum):
+    """How an extractor executed within a project_analyze run."""
+
+    FULL = "full"
+    INCREMENTAL = "incremental"
+    SKIPPED = "skipped"
+
+
 @dataclass(frozen=True)
 class ExtractorStats:
     """What run() returns. Merged into :IngestRun for observability."""
@@ -90,6 +98,7 @@ class ExtractorStats:
     outcome: ExtractorOutcome = ExtractorOutcome.OK
     message: str | None = None
     next_action: str | None = None
+    mode: ExtractorExecutionMode | None = None
 
 
 class ExtractorError(Exception):

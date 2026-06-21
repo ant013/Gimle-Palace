@@ -11,7 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from palace_mcp.extractors.base import ExtractorOutcome
+from palace_mcp.extractors.base import ExtractorExecutionMode, ExtractorOutcome
 
 
 _CFG = ConfigDict(extra="forbid")
@@ -35,6 +35,7 @@ class ExtractorRunResponse(BaseModel):
     outcome: ExtractorOutcome = ExtractorOutcome.OK
     message: str | None = None
     next_action: str | None = None
+    mode: ExtractorExecutionMode = ExtractorExecutionMode.FULL
 
 
 class ExtractorErrorResponse(BaseModel):

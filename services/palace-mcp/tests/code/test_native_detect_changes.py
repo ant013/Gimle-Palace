@@ -57,6 +57,7 @@ def test_valid_since_accepts_iso_and_approxidate() -> None:
     assert _valid_since("2026-06-07")
     assert _valid_since("2026-06-07T12:34:56Z")
     assert _valid_since("2 weeks ago")
+    assert _valid_since("0123456789abcdef0123456789abcdef01234567")
 
 
 @pytest.mark.asyncio
@@ -97,6 +98,38 @@ async def test_native_detect_changes_uses_registered_parent_mount_path(
     )
 
     result = await native_detect_changes(project="evm-kit")
+
+    assert result["ok"] is True
+    assert result["files"] == ["a.py"]
+
+
+@pytest.mark.asyncio
+async def test_native_detect_changes_accepts_commit_sha_since(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repos_root = tmp_path / "repos"
+    repo = repos_root / "testproj"
+    repo.mkdir(parents=True)
+    _run(["git", "init", "-q", "-b", "main"], cwd=repo)
+    _run(["git", "config", "user.email", "t@t"], cwd=repo)
+    _run(["git", "config", "user.name", "T"], cwd=repo)
+    (repo / "a.py").write_text("line1\n")
+    _run(["git", "add", "."], cwd=repo)
+    _run(["git", "commit", "-m", "initial", "-q"], cwd=repo)
+    base_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    (repo / "a.py").write_text("line1\nline2\n")
+    _run(["git", "add", "."], cwd=repo)
+    _run(["git", "commit", "-m", "update", "-q"], cwd=repo)
+
+    monkeypatch.setattr("palace_mcp.git.path_resolver.REPOS_ROOT", repos_root)
+
+    result = await native_detect_changes(project="testproj", since=base_sha)
 
     assert result["ok"] is True
     assert result["files"] == ["a.py"]

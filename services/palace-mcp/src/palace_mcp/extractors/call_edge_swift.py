@@ -10,6 +10,7 @@ from typing import Any, ClassVar
 from palace_mcp.code.indexstore import collect_call_edges
 from palace_mcp.extractors.base import (
     BaseExtractor,
+    ExtractorExecutionMode,
     ExtractorOutcome,
     ExtractorRunContext,
     ExtractorStats,
@@ -178,6 +179,7 @@ class CallEdgeSwiftExtractor(BaseExtractor):
                 outcome=ExtractorOutcome.SKIPPED,
                 message="Skipped call_edge_swift: no changed Swift caller files.",
                 next_action="Modify Swift source or run with force=True before rerunning.",
+                mode=ExtractorExecutionMode.SKIPPED,
             )
 
         incremental_paths = scope.changed_paths | scope.removed_paths
@@ -246,5 +248,10 @@ class CallEdgeSwiftExtractor(BaseExtractor):
                 f"occurrences_scanned={scan.occurrences_scanned}, "
                 f"scope_reason={scope.reason}, "
                 f"changed_or_removed_files={len(incremental_paths)})"
+            ),
+            mode=(
+                ExtractorExecutionMode.INCREMENTAL
+                if scope.mode == IncrementalMode.INCREMENTAL
+                else ExtractorExecutionMode.FULL
             ),
         )

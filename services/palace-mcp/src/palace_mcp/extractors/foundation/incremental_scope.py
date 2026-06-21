@@ -14,8 +14,8 @@ _GIT_CHANGESET_CAP = 500
 
 _READ_FILE_COMMITS_CYPHER = """
 MATCH (f:File {project_id: $project_id})
-WHERE f.commit_sha IS NOT NULL
-RETURN collect(DISTINCT f.commit_sha) AS commits
+WHERE coalesce(f.last_seen_in_commit, f.commit_sha) IS NOT NULL
+RETURN collect(DISTINCT coalesce(f.last_seen_in_commit, f.commit_sha)) AS commits
 """
 
 

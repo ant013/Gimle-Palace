@@ -27,6 +27,8 @@ from palace_mcp.extractors import registry
 from palace_mcp.extractors.base import (
     BaseExtractor,
     ExtractorError,
+    ExtractorExecutionMode,
+    ExtractorOutcome,
     ExtractorRunContext,
     ExtractorStats,
 )
@@ -60,6 +62,18 @@ _logger = logging.getLogger(__name__)
 GET_PROJECT = "MATCH (p:Project {slug: $slug}) RETURN p"
 
 _background_tasks: set[asyncio.Task[None]] = set()
+
+
+def _response_mode(stats: ExtractorStats) -> ExtractorExecutionMode:
+    if stats.mode is not None:
+        return stats.mode
+    if stats.outcome in {
+        ExtractorOutcome.SKIPPED,
+        ExtractorOutcome.NOT_APPLICABLE,
+        ExtractorOutcome.MISSING_INPUT,
+    }:
+        return ExtractorExecutionMode.SKIPPED
+    return ExtractorExecutionMode.FULL
 
 
 def _fire_and_forget(coro: Coroutine[None, None, None]) -> None:
@@ -401,6 +415,7 @@ async def run_extractor(
             outcome=exec_result.stats.outcome,
             message=exec_result.stats.message,
             next_action=exec_result.stats.next_action,
+            mode=_response_mode(exec_result.stats),
         ).model_dump()
 
     assert isinstance(exec_result, _ExecuteError)

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Callable
+from unittest.mock import AsyncMock
 
 import pytest
 from neo4j.exceptions import ServiceUnavailable
@@ -13,11 +16,14 @@ from palace_mcp.project_analyze import (
     ActiveAnalysisRunExistsError,
     AnalysisCheckpoint,
     AnalysisCheckpointStatus,
+    AnalysisRunMode,
     AnalysisRun,
     AnalysisRunStartResult,
     AnalysisRunStatus,
     ExtractorAttemptResult,
+    ExtractorExecutionMode,
     ProjectAnalysisService,
+    _resolve_run_mode_plan,
 )
 from palace_mcp.memory.models import Tier
 
@@ -35,6 +41,17 @@ def _utc(
 
 def _iso(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).isoformat()
+
+
+def _git(args: list[str], cwd: Path) -> str:
+    result = subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
 
 
 class InMemoryAnalysisRunStore:
@@ -378,6 +395,239 @@ def test_resolve_default_extractors_matches_swift_kit_contract() -> None:
 
     assert ordered == SWIFT_KIT_EXTRACTOR_ORDER
     assert all(name in registry.EXTRACTORS for name in ordered)
+
+
+@pytest.mark.asyncio
+async def test_resolve_run_mode_plan_uses_incremental_when_detect_changes_is_small(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "palace_mcp.project_analyze._read_project_head_sha",
+        AsyncMock(return_value="head-123"),
+    )
+    monkeypatch.setattr(
+        "palace_mcp.project_analyze._read_project_indexed_commit",
+        AsyncMock(return_value="2026-06-20T12:00:00Z"),
+    )
+    monkeypatch.setattr(
+        "palace_mcp.project_analyze.native_detect_changes",
+        AsyncMock(
+            return_value={
+                "ok": True,
+                "files": ["Sources/A.swift", "Sources/B.swift"],
+                "truncated": False,
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        "palace_mcp.project_analyze._count_project_files",
+        AsyncMock(return_value=10),
+    )
+
+    plan = await _resolve_run_mode_plan(
+        object(),
+        slug="tron-kit",
+        requested_mode=AnalysisRunMode.INCREMENTAL,
+    )
+
+    assert plan == (
+        AnalysisRunMode.INCREMENTAL,
+        "requested_incremental",
+        "head-123",
+        2,
+        0.2,
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_run_mode_plan_falls_back_to_full_when_detect_changes_truncated(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "palace_mcp.project_analyze._read_project_head_sha",
+        AsyncMock(return_value="head-123"),
+    )
+    monkeypatch.setattr(
+        "palace_mcp.project_analyze._read_project_indexed_commit",
+        AsyncMock(return_value="2026-06-20T12:00:00Z"),
+    )
+    monkeypatch.setattr(
+        "palace_mcp.project_analyze.native_detect_changes",
+        AsyncMock(
+            return_value={
+                "ok": True,
+                "files": [f"Sources/{index}.swift" for index in range(600)],
+                "truncated": True,
+            }
+        ),
+    )
+
+    plan = await _resolve_run_mode_plan(
+        object(),
+        slug="tron-kit",
+        requested_mode=AnalysisRunMode.INCREMENTAL,
+    )
+
+    assert plan == (
+        AnalysisRunMode.FULL,
+        "detect_changes_truncated",
+        "head-123",
+        None,
+        None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_run_mode_plan_falls_back_to_full_for_large_committed_delta(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo = tmp_path / "tron-kit"
+    repo.mkdir()
+    _git(["init", "-q", "-b", "main"], cwd=repo)
+    _git(["config", "user.email", "t@t"], cwd=repo)
+    _git(["config", "user.name", "T"], cwd=repo)
+    for index in range(10):
+        (repo / f"File{index}.swift").write_text(f"v1-{index}\n")
+    _git(["add", "."], cwd=repo)
+    _git(["commit", "-m", "initial", "-q"], cwd=repo)
+    base_sha = _git(["rev-parse", "HEAD"], cwd=repo)
+    for index in range(9):
+        (repo / f"File{index}.swift").write_text(f"v2-{index}\n")
+    _git(["add", "."], cwd=repo)
+    _git(["commit", "-m", "update", "-q"], cwd=repo)
+    head_sha = _git(["rev-parse", "HEAD"], cwd=repo)
+
+    monkeypatch.setattr(
+        "palace_mcp.project_analyze._read_project_head_sha",
+        AsyncMock(return_value=head_sha),
+    )
+    monkeypatch.setattr(
+        "palace_mcp.project_analyze._read_project_indexed_commit",
+        AsyncMock(return_value=base_sha),
+    )
+    monkeypatch.setattr(
+        "palace_mcp.code.native_detect_changes._resolve_repo_path",
+        AsyncMock(return_value=repo),
+    )
+    monkeypatch.setattr(
+        "palace_mcp.project_analyze._count_project_files",
+        AsyncMock(return_value=10),
+    )
+
+    plan = await _resolve_run_mode_plan(
+        object(),
+        slug="tron-kit",
+        requested_mode=AnalysisRunMode.INCREMENTAL,
+    )
+
+    assert plan == (
+        AnalysisRunMode.FULL,
+        "change_threshold_exceeded",
+        head_sha,
+        9,
+        0.9,
+    )
+
+
+@pytest.mark.asyncio
+async def test_start_run_incremental_mode_skips_global_extractors_and_stamps_stale_since(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "palace_mcp.project_analyze._resolve_run_mode_plan",
+        AsyncMock(
+            return_value=(
+                AnalysisRunMode.INCREMENTAL,
+                "requested_incremental",
+                "head-abc",
+                3,
+                0.3,
+            )
+        ),
+    )
+    store = InMemoryAnalysisRunStore()
+    service = _build_service(store=store)
+
+    started = await service.start_run(
+        slug="tron-kit",
+        parent_mount="hs",
+        relative_path="TronKit.Swift",
+        language_profile="swift_kit",
+        extractors=["code_ownership", "hotspot", "cross_module_contract"],
+        mode=AnalysisRunMode.INCREMENTAL,
+        idempotency_key="incremental-plan",
+    )
+
+    assert started.run.requested_mode == AnalysisRunMode.INCREMENTAL
+    assert started.run.effective_mode == AnalysisRunMode.INCREMENTAL
+    assert started.run.stale_since_commit == "head-abc"
+    assert [checkpoint.mode for checkpoint in started.run.checkpoints] == [
+        ExtractorExecutionMode.INCREMENTAL,
+        ExtractorExecutionMode.SKIPPED,
+        ExtractorExecutionMode.SKIPPED,
+    ]
+    assert [checkpoint.status for checkpoint in started.run.checkpoints] == [
+        AnalysisCheckpointStatus.NOT_ATTEMPTED,
+        AnalysisCheckpointStatus.SKIPPED,
+        AnalysisCheckpointStatus.SKIPPED,
+    ]
+    assert "stale_since=head-abc" in (started.run.checkpoints[1].message or "")
+
+
+@pytest.mark.asyncio
+async def test_start_run_incremental_mode_isolated_per_project(monkeypatch) -> None:
+    async def _fake_plan(
+        _driver: object, *, slug: str, requested_mode: AnalysisRunMode
+    ) -> tuple[AnalysisRunMode, str | None, str | None, int | None, float | None]:
+        assert requested_mode == AnalysisRunMode.INCREMENTAL
+        if slug == "tron-kit":
+            return (
+                AnalysisRunMode.INCREMENTAL,
+                "requested_incremental",
+                "head-tron",
+                1,
+                0.1,
+            )
+        return (
+            AnalysisRunMode.FULL,
+            "change_threshold_exceeded",
+            "head-gimle",
+            9,
+            0.9,
+        )
+
+    monkeypatch.setattr("palace_mcp.project_analyze._resolve_run_mode_plan", _fake_plan)
+    service = _build_service(store=InMemoryAnalysisRunStore())
+
+    tron = await service.start_run(
+        slug="tron-kit",
+        parent_mount="hs",
+        relative_path="TronKit.Swift",
+        language_profile="swift_kit",
+        extractors=["code_ownership", "hotspot"],
+        mode=AnalysisRunMode.INCREMENTAL,
+        idempotency_key="tron-plan",
+    )
+    gimle = await service.start_run(
+        slug="gimle",
+        parent_mount="hs",
+        relative_path="Gimle",
+        language_profile="python_service",
+        extractors=["code_ownership", "hotspot"],
+        mode=AnalysisRunMode.INCREMENTAL,
+        idempotency_key="gimle-plan",
+    )
+
+    assert tron.run.effective_mode == AnalysisRunMode.INCREMENTAL
+    assert tron.run.stale_since_commit == "head-tron"
+    assert tron.run.checkpoints[1].status == AnalysisCheckpointStatus.SKIPPED
+    assert gimle.run.effective_mode == AnalysisRunMode.FULL
+    assert gimle.run.stale_since_commit == "head-gimle"
+    assert all(
+        checkpoint.status == AnalysisCheckpointStatus.NOT_ATTEMPTED
+        for checkpoint in gimle.run.checkpoints
+    )
 
 
 @pytest.mark.asyncio
@@ -920,8 +1170,70 @@ async def test_execute_run_marks_success_path_succeeded_and_records_audit_payloa
     assert finished.overview["OK"] == 2
     assert finished.audit is not None
     assert finished.audit["ok"] is True
-    assert finished.report_markdown == "# unexpected\n"
+    assert finished.report_markdown is not None
+    assert finished.report_markdown.startswith("# unexpected\n")
     assert audit_called is True
+
+
+@pytest.mark.asyncio
+async def test_execute_run_records_extractor_modes_and_stale_since_in_report(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "palace_mcp.project_analyze._resolve_run_mode_plan",
+        AsyncMock(
+            return_value=(
+                AnalysisRunMode.INCREMENTAL,
+                "requested_incremental",
+                "head-xyz",
+                2,
+                0.2,
+            )
+        ),
+    )
+    store = InMemoryAnalysisRunStore()
+
+    async def _audit_runner(*args: object, **kwargs: object) -> dict[str, Any]:
+        return {"ok": True, "report_markdown": "# audit\n"}
+
+    service = _build_service(store=store, audit_runner=_audit_runner)
+    started = await service.start_run(
+        slug="tron-kit",
+        parent_mount="hs",
+        relative_path="TronKit.Swift",
+        language_profile="swift_kit",
+        extractors=["code_ownership", "hotspot"],
+        mode=AnalysisRunMode.INCREMENTAL,
+        idempotency_key="incremental-report",
+    )
+
+    async def _executor(
+        extractor_name: str,
+        run: AnalysisRun,
+    ) -> ExtractorAttemptResult:
+        assert extractor_name == "code_ownership"
+        return ExtractorAttemptResult(
+            status=AnalysisCheckpointStatus.OK,
+            mode=ExtractorExecutionMode.INCREMENTAL,
+            ingest_run_id="ingest-code-ownership",
+        )
+
+    finished = await service.execute_run(
+        started.run.run_id,
+        executor=_executor,
+        reacquire_lease=False,
+    )
+
+    assert finished.audit is not None
+    assert finished.audit["effective_mode"] == "incremental"
+    assert finished.audit["extractor_modes"] == {
+        "code_ownership": "incremental",
+        "hotspot": "skipped",
+    }
+    assert finished.audit["stale_since"] == "head-xyz"
+    assert finished.report_markdown is not None
+    assert "Requested mode: `incremental`" in finished.report_markdown
+    assert "stale_since=`head-xyz`" in finished.report_markdown
 
 
 @pytest.mark.asyncio
@@ -985,7 +1297,8 @@ async def test_execute_run_marks_optional_missing_inputs_as_succeeded_with_skips
     assert finished.overview["SKIPPED"] == 1
     assert finished.audit is not None
     assert finished.audit["ok"] is True
-    assert finished.report_markdown == "# audit with skips\n"
+    assert finished.report_markdown is not None
+    assert finished.report_markdown.startswith("# audit with skips\n")
     assert finished.next_actions == [
         "Commit public API snapshots under .palace/public-api/.",
         "Rerun public_api_surface before cross_module_contract.",

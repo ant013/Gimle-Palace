@@ -19,6 +19,7 @@ from neo4j import AsyncManagedTransaction
 from palace_mcp.extractors.base import (
     BaseExtractor,
     ExtractorConfigError,
+    ExtractorExecutionMode,
     ExtractorOutcome,
     ExtractorRunContext,
     ExtractorStats,
@@ -299,6 +300,7 @@ class ErrorHandlingPolicyExtractor(BaseExtractor):
                 outcome=ExtractorOutcome.SKIPPED,
                 message="Skipped error_handling_policy: no changed Swift files.",
                 next_action="Modify Swift source or run with force=True before rerunning.",
+                mode=ExtractorExecutionMode.SKIPPED,
             )
 
         raw_findings = await _run_semgrep(
@@ -345,6 +347,11 @@ class ErrorHandlingPolicyExtractor(BaseExtractor):
         return ExtractorStats(
             nodes_written=len(findings) + len(catch_sites),
             edges_written=0,
+            mode=(
+                ExtractorExecutionMode.INCREMENTAL
+                if scope.mode == IncrementalMode.INCREMENTAL
+                else ExtractorExecutionMode.FULL
+            ),
         )
 
 

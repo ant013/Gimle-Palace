@@ -14,6 +14,7 @@ import socket
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 from uuid import uuid4
 
@@ -22,8 +23,11 @@ from neo4j.exceptions import ServiceUnavailable, SessionExpired
 from pydantic import BaseModel, ConfigDict, Field
 
 from palace_mcp.audit.run import run_audit
+from palace_mcp.code.native_detect_changes import FALLBACK_TO_CM, native_detect_changes
+from palace_mcp.extractors.base import ExtractorExecutionMode
 from palace_mcp.extractors.foundation.profiles import get_ordered_extractors
 from palace_mcp.extractors.runner import run_extractor
+from palace_mcp.git.command import GitError, GitTimeout, run_git
 from palace_mcp.memory.bundle import add_to_bundle, register_bundle
 from palace_mcp.memory.cypher import (
     ACQUIRE_ANALYSIS_LOCK,
@@ -31,15 +35,21 @@ from palace_mcp.memory.cypher import (
     CREATE_INDEXES,
     CREATE_ANALYSIS_RUN,
     FINALIZE_ANALYSIS_RUN,
+    GET_PROJECT,
     GET_ACTIVE_ANALYSIS_RUN,
     GET_ANALYSIS_RUN_WITH_CHECKPOINTS,
     MARK_ANALYSIS_RUN_RESUMABLE,
+    PROJECT_INDEXED_COMMIT,
     UPDATE_ANALYSIS_RUN_LEASE,
     UPDATE_ANALYSIS_RUN_PROGRESS,
     UPSERT_ANALYSIS_CHECKPOINT,
 )
 from palace_mcp.memory.models import Tier
 from palace_mcp.memory.project_tools import register_project
+from palace_mcp.git.path_resolver import (
+    ProjectNotRegistered,
+    resolve_registered_project,
+)
 
 if TYPE_CHECKING:
     from graphiti_core import Graphiti
@@ -50,6 +60,15 @@ CFG = ConfigDict(extra="forbid")
 logger = logging.getLogger(__name__)
 _T = TypeVar("_T")
 _EXPECTED_PROFILE_SLUGS = frozenset({"uw-ios-app", "uw-ios-baseline"})
+_INCREMENTAL_FULL_REPROCESS_THRESHOLD = 0.8
+_INCREMENTAL_GLOBAL_EXTRACTORS = frozenset(
+    {"dead_code", "hotspot", "cross_module_contract"}
+)
+
+
+class AnalysisRunMode(StrEnum):
+    FULL = "full"
+    INCREMENTAL = "incremental"
 
 
 class AnalysisRunStatus(StrEnum):
@@ -111,6 +130,7 @@ class AnalysisCheckpoint(BaseModel):
     extractor: str
     position: int = Field(ge=0)
     status: AnalysisCheckpointStatus = AnalysisCheckpointStatus.NOT_ATTEMPTED
+    mode: ExtractorExecutionMode | None = None
     started_at: str | None = None
     finished_at: str | None = None
     error_code: str | None = None
@@ -131,6 +151,12 @@ class AnalysisRun(BaseModel):
     bundle: str | None = None
     extractors: list[str]
     depth: str
+    requested_mode: AnalysisRunMode = AnalysisRunMode.FULL
+    effective_mode: AnalysisRunMode = AnalysisRunMode.FULL
+    effective_mode_reason: str | None = None
+    stale_since_commit: str | None = None
+    changed_file_count: int | None = None
+    changed_file_ratio: float | None = None
     continue_on_failure: bool = True
     idempotency_key: str
     status: AnalysisRunStatus
@@ -165,6 +191,7 @@ class ExtractorAttemptResult(BaseModel):
     model_config = CFG
 
     status: AnalysisCheckpointStatus
+    mode: ExtractorExecutionMode = ExtractorExecutionMode.FULL
     ingest_run_id: str | None = None
     error_code: str | None = None
     message: str | None = None
@@ -289,6 +316,129 @@ def _deserialize_json_string_list(value: str | None) -> list[str]:
     return list(parsed)
 
 
+async def _resolve_registered_repo_path(driver: AsyncDriver, slug: str) -> Path:
+    async with driver.session() as session:
+        result = await session.run(GET_PROJECT, slug=slug)
+        row = await result.single()
+    if row is None:
+        raise ProjectNotRegistered(slug)
+    return resolve_registered_project(slug, project_node=row["p"])
+
+
+async def _read_project_head_sha(driver: AsyncDriver, slug: str) -> str | None:
+    try:
+        repo_path = await _resolve_registered_repo_path(driver, slug)
+    except (ProjectNotRegistered, ValueError):
+        return None
+    try:
+        result = await asyncio.to_thread(
+            run_git,
+            ["rev-parse", "HEAD"],
+            repo_path=repo_path,
+            max_stdout_lines=1,
+        )
+    except (GitError, GitTimeout):
+        return None
+    if result.rc != 0 or result.truncated:
+        return None
+    return result.stdout.strip() or None
+
+
+async def _count_project_files(driver: AsyncDriver, project_id: str) -> int:
+    async with driver.session() as session:
+        result = await session.run(
+            "MATCH (f:File {project_id: $project_id}) RETURN count(f) AS total",
+            project_id=project_id,
+        )
+        row = await result.single()
+    total = row["total"] if row is not None else 0
+    return int(total or 0)
+
+
+async def _read_project_indexed_commit(driver: AsyncDriver, slug: str) -> str | None:
+    async with driver.session() as session:
+        result = await session.run(
+            PROJECT_INDEXED_COMMIT,
+            group_id=f"project/{slug}",
+        )
+        row = await result.single()
+    if row is None or row["commit_sha"] is None:
+        return None
+    return str(row["commit_sha"]) or None
+
+
+async def _resolve_run_mode_plan(
+    driver: AsyncDriver,
+    *,
+    slug: str,
+    requested_mode: AnalysisRunMode,
+) -> tuple[
+    AnalysisRunMode,
+    str | None,
+    str | None,
+    int | None,
+    float | None,
+]:
+    if requested_mode != AnalysisRunMode.INCREMENTAL:
+        return AnalysisRunMode.FULL, "requested_full", None, None, None
+
+    head_sha = await _read_project_head_sha(driver, slug)
+    if head_sha is None:
+        return AnalysisRunMode.FULL, "repo_head_unavailable", None, None, None
+
+    indexed_commit = await _read_project_indexed_commit(driver, slug)
+    if indexed_commit is None:
+        return AnalysisRunMode.FULL, "indexed_commit_unavailable", head_sha, None, None
+
+    detect_result = await native_detect_changes(project=slug, since=indexed_commit)
+    if detect_result is FALLBACK_TO_CM:
+        return AnalysisRunMode.FULL, "detect_changes_unavailable", head_sha, None, None
+    if not isinstance(detect_result, dict) or detect_result.get("ok") is not True:
+        reason = (
+            str(detect_result.get("error_code"))
+            if isinstance(detect_result, dict) and detect_result.get("error_code")
+            else "detect_changes_unusable"
+        )
+        return AnalysisRunMode.FULL, reason, head_sha, None, None
+    if detect_result.get("truncated") is True:
+        return AnalysisRunMode.FULL, "detect_changes_truncated", head_sha, None, None
+
+    raw_files = detect_result.get("files")
+    if not isinstance(raw_files, list) or not all(
+        isinstance(path, str) for path in raw_files
+    ):
+        return AnalysisRunMode.FULL, "detect_changes_unusable", head_sha, None, None
+
+    project_file_count = await _count_project_files(driver, f"project/{slug}")
+    if project_file_count <= 0:
+        return (
+            AnalysisRunMode.FULL,
+            "project_file_count_unavailable",
+            head_sha,
+            None,
+            None,
+        )
+
+    changed_file_count = len({path for path in raw_files if path})
+    changed_file_ratio = changed_file_count / project_file_count
+    if changed_file_ratio >= _INCREMENTAL_FULL_REPROCESS_THRESHOLD:
+        return (
+            AnalysisRunMode.FULL,
+            "change_threshold_exceeded",
+            head_sha,
+            changed_file_count,
+            changed_file_ratio,
+        )
+
+    return (
+        AnalysisRunMode.INCREMENTAL,
+        "requested_incremental",
+        head_sha,
+        changed_file_count,
+        changed_file_ratio,
+    )
+
+
 async def ensure_project_analyze_schema(driver: AsyncDriver) -> None:
     """Apply only DDL required for project-analyze runtime state."""
     async with driver.session() as session:
@@ -370,6 +520,25 @@ def _run_can_be_force_replaced(run: AnalysisRun, now: datetime) -> bool:
     ) or _run_is_stuck_before_first_checkpoint(run, now)
 
 
+def _response_mode_from_payload(
+    payload: dict[str, Any],
+    *,
+    status: AnalysisCheckpointStatus,
+) -> ExtractorExecutionMode:
+    raw_mode = payload.get("mode")
+    if isinstance(raw_mode, str):
+        try:
+            return ExtractorExecutionMode(raw_mode)
+        except ValueError:
+            pass
+    if status in {
+        AnalysisCheckpointStatus.SKIPPED,
+        AnalysisCheckpointStatus.MISSING_INPUT,
+    }:
+        return ExtractorExecutionMode.SKIPPED
+    return ExtractorExecutionMode.FULL
+
+
 def _node_to_dict(node: Any) -> dict[str, Any]:
     if isinstance(node, dict):
         return node
@@ -383,6 +552,11 @@ def _checkpoint_from_node(node: dict[str, Any]) -> AnalysisCheckpoint:
         extractor=str(node["extractor"]),
         position=int(node["position"]),
         status=AnalysisCheckpointStatus(str(node["status"])),
+        mode=(
+            ExtractorExecutionMode(str(node["mode"]))
+            if node.get("mode") is not None
+            else None
+        ),
         started_at=node.get("started_at"),
         finished_at=node.get("finished_at"),
         error_code=node.get("error_code"),
@@ -409,6 +583,20 @@ def _run_from_node(
         bundle=node.get("bundle"),
         extractors=list(node.get("extractors") or []),
         depth=str(node["depth"]),
+        requested_mode=AnalysisRunMode(str(node.get("requested_mode") or "full")),
+        effective_mode=AnalysisRunMode(str(node.get("effective_mode") or "full")),
+        effective_mode_reason=node.get("effective_mode_reason"),
+        stale_since_commit=node.get("stale_since_commit"),
+        changed_file_count=(
+            int(node["changed_file_count"])
+            if node.get("changed_file_count") is not None
+            else None
+        ),
+        changed_file_ratio=(
+            float(node["changed_file_ratio"])
+            if node.get("changed_file_ratio") is not None
+            else None
+        ),
         continue_on_failure=bool(node.get("continue_on_failure", True)),
         idempotency_key=str(node["idempotency_key"]),
         status=AnalysisRunStatus(str(node["status"])),
@@ -427,6 +615,19 @@ def _run_from_node(
         report_markdown=node.get("report_markdown"),
         next_actions=next_actions,
     )
+
+
+def _checkpoint_mode_label(checkpoint: AnalysisCheckpoint) -> str:
+    return checkpoint.mode.value if checkpoint.mode is not None else "unknown"
+
+
+def _stale_extractors(run: AnalysisRun) -> list[str]:
+    return [
+        checkpoint.extractor
+        for checkpoint in run.checkpoints
+        if checkpoint.mode == ExtractorExecutionMode.SKIPPED
+        and checkpoint.extractor in _INCREMENTAL_GLOBAL_EXTRACTORS
+    ]
 
 
 class Neo4jAnalysisRunStore:
@@ -478,6 +679,12 @@ class Neo4jAnalysisRunStore:
             bundle=run.bundle,
             extractors=run.extractors,
             depth=run.depth,
+            requested_mode=run.requested_mode.value,
+            effective_mode=run.effective_mode.value,
+            effective_mode_reason=run.effective_mode_reason,
+            stale_since_commit=run.stale_since_commit,
+            changed_file_count=run.changed_file_count,
+            changed_file_ratio=run.changed_file_ratio,
             continue_on_failure=run.continue_on_failure,
             idempotency_key=run.idempotency_key,
             status=run.status.value,
@@ -503,6 +710,7 @@ class Neo4jAnalysisRunStore:
                 extractor=checkpoint.extractor,
                 position=checkpoint.position,
                 status=checkpoint.status.value,
+                mode=checkpoint.mode.value if checkpoint.mode is not None else None,
                 started_at=checkpoint.started_at,
                 finished_at=checkpoint.finished_at,
                 error_code=checkpoint.error_code,
@@ -701,6 +909,7 @@ class Neo4jAnalysisRunStore:
             extractor=checkpoint.extractor,
             position=checkpoint.position,
             status=checkpoint.status.value,
+            mode=checkpoint.mode.value if checkpoint.mode is not None else None,
             started_at=checkpoint.started_at,
             finished_at=checkpoint.finished_at,
             error_code=checkpoint.error_code,
@@ -870,6 +1079,7 @@ class ProjectAnalysisService:
         bundle: str | None = None,
         extractors: Sequence[str] | None = None,
         depth: str = "full",
+        mode: AnalysisRunMode = AnalysisRunMode.FULL,
         continue_on_failure: bool = True,
         idempotency_key: str | None = None,
         force_new: bool = False,
@@ -916,6 +1126,49 @@ class ProjectAnalysisService:
                 ),
             )
 
+        (
+            effective_mode,
+            effective_mode_reason,
+            stale_since_commit,
+            changed_file_count,
+            changed_file_ratio,
+        ) = await _resolve_run_mode_plan(
+            driver,
+            slug=slug,
+            requested_mode=mode,
+        )
+        checkpoints: list[AnalysisCheckpoint] = []
+        for index, extractor_name in enumerate(ordered_extractors):
+            checkpoint_mode = (
+                ExtractorExecutionMode.FULL
+                if effective_mode == AnalysisRunMode.FULL
+                else (
+                    ExtractorExecutionMode.SKIPPED
+                    if extractor_name in _INCREMENTAL_GLOBAL_EXTRACTORS
+                    else ExtractorExecutionMode.INCREMENTAL
+                )
+            )
+            checkpoint = AnalysisCheckpoint(
+                extractor=extractor_name,
+                position=index,
+                mode=checkpoint_mode,
+            )
+            if checkpoint_mode == ExtractorExecutionMode.SKIPPED:
+                checkpoint = checkpoint.model_copy(
+                    update={
+                        "status": AnalysisCheckpointStatus.SKIPPED,
+                        "message": (
+                            f"Skipped {extractor_name} during incremental project_analyze; "
+                            f"latest project-wide findings may be stale_since={stale_since_commit}."
+                        ),
+                        "next_action": (
+                            f"Run a full project_analyze for {extractor_name} to refresh "
+                            "project-wide audit results."
+                        ),
+                    }
+                )
+            checkpoints.append(checkpoint)
+
         now = self._clock()
         lease_expires_at = _iso(now + timedelta(seconds=self._lease_seconds))
         run = AnalysisRun(
@@ -928,6 +1181,12 @@ class ProjectAnalysisService:
             bundle=bundle,
             extractors=list(ordered_extractors),
             depth=depth,
+            requested_mode=mode,
+            effective_mode=effective_mode,
+            effective_mode_reason=effective_mode_reason,
+            stale_since_commit=stale_since_commit,
+            changed_file_count=changed_file_count,
+            changed_file_ratio=changed_file_ratio,
             continue_on_failure=continue_on_failure,
             idempotency_key=idempotency_key or str(uuid4()),
             status=AnalysisRunStatus.RUNNING,
@@ -938,10 +1197,7 @@ class ProjectAnalysisService:
             lease_expires_at=lease_expires_at,
             error_code=None,
             message=None,
-            checkpoints=[
-                AnalysisCheckpoint(extractor=extractor_name, position=index)
-                for index, extractor_name in enumerate(ordered_extractors)
-            ],
+            checkpoints=checkpoints,
         )
         if force_new:
             run = run.model_copy(update={"idempotency_key": str(uuid4())})
@@ -1137,6 +1393,7 @@ class ProjectAnalysisService:
             updated_checkpoint = started_checkpoint.model_copy(
                 update={
                     "status": attempt.status,
+                    "mode": attempt.mode,
                     "finished_at": finished_at,
                     "error_code": attempt.error_code,
                     "message": attempt.message,
@@ -1178,6 +1435,7 @@ class ProjectAnalysisService:
 
         if all_non_failing:
             audit_payload = await self._run_audit(project=run.slug, depth=run.depth)
+            audit_payload = self._augment_audit_payload(run, audit_payload)
             report_markdown = (
                 audit_payload.get("report_markdown")
                 if isinstance(audit_payload.get("report_markdown"), str)
@@ -1187,6 +1445,8 @@ class ProjectAnalysisService:
                     stale_external=False,
                 )
             )
+            if isinstance(report_markdown, str):
+                report_markdown = self._decorate_report_markdown(report_markdown, run)
             if audit_payload.get("ok") is True:
                 has_optional_gaps = any(
                     checkpoint.status
@@ -1208,11 +1468,14 @@ class ProjectAnalysisService:
                     "Inspect audit payload and rerun project analyze if the audit output is incomplete."
                 ]
         else:
-            audit_payload = self._build_stale_external_audit_payload(
+            audit_payload = self._augment_audit_payload(
                 run,
-                message=(
-                    "Current AnalysisRun contains failed extractors; "
-                    "latest-run audit fallback would break pinned provenance."
+                self._build_stale_external_audit_payload(
+                    run,
+                    message=(
+                        "Current AnalysisRun contains failed extractors; "
+                        "latest-run audit fallback would break pinned provenance."
+                    ),
                 ),
             )
             final_status = AnalysisRunStatus.SUCCEEDED_WITH_FAILURES
@@ -1221,6 +1484,7 @@ class ProjectAnalysisService:
                 audit_payload,
                 stale_external=True,
             )
+            report_markdown = self._decorate_report_markdown(report_markdown, run)
             next_actions = checkpoint_next_actions or [
                 "Resume the run after failed extractors are fixed to produce a fully pinned audit report."
             ]
@@ -1317,6 +1581,7 @@ class ProjectAnalysisService:
                     )
                     return ExtractorAttemptResult(
                         status=AnalysisCheckpointStatus.SKIPPED,
+                        mode=ExtractorExecutionMode.SKIPPED,
                         message=(
                             "Skipped prune_swift_symbols because symbol_index_swift "
                             "did not complete successfully in this run."
@@ -1348,6 +1613,7 @@ class ProjectAnalysisService:
                     status = AnalysisCheckpointStatus.OK
                 return ExtractorAttemptResult(
                     status=status,
+                    mode=_response_mode_from_payload(response, status=status),
                     ingest_run_id=ingest_run_id,
                     message=(
                         response.get("message")
@@ -1363,6 +1629,7 @@ class ProjectAnalysisService:
             maybe_run_id = response.get("run_id")
             return ExtractorAttemptResult(
                 status=AnalysisCheckpointStatus.RUN_FAILED,
+                mode=ExtractorExecutionMode.FULL,
                 ingest_run_id=maybe_run_id if isinstance(maybe_run_id, str) else None,
                 error_code=str(response.get("error_code") or "extractor_runtime_error"),
                 message=str(response.get("message") or "extractor failed"),
@@ -1378,6 +1645,52 @@ class ProjectAnalysisService:
             project=project,
             depth=depth,
         )
+
+    def _augment_audit_payload(
+        self,
+        run: AnalysisRun,
+        audit_payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        payload = dict(audit_payload)
+        payload["requested_mode"] = run.requested_mode.value
+        payload["effective_mode"] = run.effective_mode.value
+        if run.effective_mode_reason is not None:
+            payload["effective_mode_reason"] = run.effective_mode_reason
+        if run.changed_file_count is not None:
+            payload["changed_file_count"] = run.changed_file_count
+        if run.changed_file_ratio is not None:
+            payload["changed_file_ratio"] = run.changed_file_ratio
+        payload["extractor_modes"] = {
+            checkpoint.extractor: _checkpoint_mode_label(checkpoint)
+            for checkpoint in run.checkpoints
+        }
+        stale_extractors = _stale_extractors(run)
+        if stale_extractors and run.stale_since_commit is not None:
+            payload["stale_since"] = run.stale_since_commit
+            payload["stale_extractors"] = stale_extractors
+        return payload
+
+    def _decorate_report_markdown(self, report_markdown: str, run: AnalysisRun) -> str:
+        lines = [
+            report_markdown.rstrip(),
+            "",
+            "## Orchestration",
+            f"- Requested mode: `{run.requested_mode.value}`",
+            f"- Effective mode: `{run.effective_mode.value}`",
+        ]
+        if run.effective_mode_reason is not None:
+            lines.append(f"- Mode reason: `{run.effective_mode_reason}`")
+        if run.changed_file_count is not None:
+            lines.append(f"- Changed files: `{run.changed_file_count}`")
+        if run.changed_file_ratio is not None:
+            lines.append(f"- Changed ratio: `{run.changed_file_ratio:.3f}`")
+        stale_extractors = _stale_extractors(run)
+        if stale_extractors and run.stale_since_commit is not None:
+            extractors = ", ".join(f"`{name}`" for name in stale_extractors)
+            lines.append(
+                f"- Global audit results may be stale_since=`{run.stale_since_commit}` for {extractors}"
+            )
+        return "\n".join(lines) + "\n"
 
     def _build_stale_external_audit_payload(
         self,
@@ -1415,14 +1728,23 @@ class ProjectAnalysisService:
             f"- Project: `{run.slug}`",
             f"- Profile: `{run.language_profile}`",
             f"- Status: `{run.status.value}`",
+            f"- Requested mode: `{run.requested_mode.value}`",
+            f"- Effective mode: `{run.effective_mode.value}`",
             "",
             "## Checkpoints",
         ]
+        if run.effective_mode_reason is not None:
+            lines.insert(6, f"- Mode reason: `{run.effective_mode_reason}`")
+        if run.stale_since_commit is not None and _stale_extractors(run):
+            lines.insert(
+                7 if run.effective_mode_reason is not None else 6,
+                f"- stale_since=`{run.stale_since_commit}`",
+            )
         for checkpoint in run.checkpoints:
             ingest_ref = checkpoint.ingest_run_id or "none"
             lines.append(
                 f"- `{checkpoint.extractor}`: `{checkpoint.status.value}` "
-                f"(ingest_run_id={ingest_ref})"
+                f"(mode={_checkpoint_mode_label(checkpoint)}, ingest_run_id={ingest_ref})"
             )
         if stale_external:
             lines.extend(

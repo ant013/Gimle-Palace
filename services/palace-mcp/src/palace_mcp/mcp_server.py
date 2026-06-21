@@ -126,6 +126,7 @@ from palace_mcp.project_analyze import (
     AnalysisRun,
     AnalysisRunNotFoundError,
     AnalysisRunNotResumableError,
+    AnalysisRunMode,
     AnalysisRunStartResult,
     AnalysisRunStatus,
     ProjectAnalysisService,
@@ -210,6 +211,7 @@ class ProjectAnalyzeRequest(BaseModel):
     bundle: str | None = None
     extractors: list[str] | None = None
     depth: Literal["quick", "full"] = "full"
+    mode: AnalysisRunMode = AnalysisRunMode.FULL
     continue_on_failure: bool = True
     idempotency_key: str | None = None
     force_new: bool = False
@@ -1001,6 +1003,7 @@ async def palace_project_analyze(
     bundle: str | None = None,
     extractors: list[str] | None = None,
     depth: Literal["quick", "full"] = "full",
+    mode: AnalysisRunMode = AnalysisRunMode.FULL,
     continue_on_failure: bool = True,
     idempotency_key: str | None = None,
     force_new: bool = False,
@@ -1021,6 +1024,7 @@ async def palace_project_analyze(
             bundle=bundle,
             extractors=extractors,
             depth=depth,
+            mode=mode,
             continue_on_failure=continue_on_failure,
             idempotency_key=idempotency_key,
             force_new=force_new,
@@ -1039,6 +1043,7 @@ async def palace_project_analyze(
             bundle=request.bundle,
             extractors=request.extractors,
             depth=request.depth,
+            mode=request.mode,
             continue_on_failure=request.continue_on_failure,
             idempotency_key=request.idempotency_key,
             force_new=request.force_new,

@@ -4,6 +4,7 @@ from palace_mcp.extractors.foundation.incremental_scope import (
     AUDIT_EXTRACTOR_SCOPE_KINDS,
     AuditScopeKind,
     FILE_SCOPED_AUDIT_EXTRACTORS,
+    _READ_FILE_COMMITS_CYPHER,
 )
 
 
@@ -27,3 +28,8 @@ def test_file_scoped_audit_extractors_are_only_true_file_local_writers() -> None
             "error_handling_policy",
         }
     )
+
+
+def test_read_existing_commit_sha_coalesces_last_seen_in_commit() -> None:
+    assert "last_seen_in_commit" in _READ_FILE_COMMITS_CYPHER
+    assert "coalesce(f.last_seen_in_commit, f.commit_sha)" in _READ_FILE_COMMITS_CYPHER
