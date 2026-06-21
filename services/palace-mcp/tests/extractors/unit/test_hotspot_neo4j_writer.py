@@ -144,6 +144,7 @@ async def test_fetch_churn_builds_correct_cypher_and_cutoff():
     assert params["project_id"] == "gimle"
     assert params["paths"] == paths
     assert params["cutoff"] == "2026-02-03T12:00:00+00:00"
+    assert params["as_of"] == "2026-05-04T12:00:00+00:00"
     assert out["src/a.py"] == 12
     assert out["src/b.py"] == 0
 

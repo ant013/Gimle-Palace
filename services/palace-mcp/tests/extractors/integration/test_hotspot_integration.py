@@ -246,6 +246,12 @@ async def test_fetch_churn_uses_pinned_as_of_window_boundary(
             "CREATE (c2)-[:TOUCHED]->(f)",
             pid=project_id,
         )
+        await session.run(
+            "MATCH (f:File {project_id: $pid, path: 'src/a.py'}) "
+            "CREATE (c3:Commit {sha: 'future', committed_at: datetime('2026-05-04T12:00:01Z')}) "
+            "CREATE (c3)-[:TOUCHED]->(f)",
+            pid=project_id,
+        )
 
     churn = await fetch_churn(
         driver,
