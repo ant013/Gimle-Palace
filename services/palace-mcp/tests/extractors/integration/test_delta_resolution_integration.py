@@ -8,7 +8,6 @@ import pytest
 from neo4j import AsyncDriver
 
 from palace_mcp.extractors.foundation.delta_resolution import (
-    DeltaResolutionBaseline,
     EdgeDelta,
     EdgeSnapshot,
     PublicApiDelta,
@@ -186,11 +185,76 @@ async def test_delta_resolution_matches_from_scratch_diff_for_two_commits(
         current_commit_sha=_NEW_COMMIT,
     )
 
-    expected = _expected_from_scratch(
-        baseline=baseline,
-        current_symbols=current_symbols,
-        current_edges=current_edges,
-        current_public_api=current_public_api,
+    expected = ResolvedDelta(
+        symbol_deltas=(
+            SymbolDelta(
+                qualified_name="Wallet.owner()",
+                change_kind="added",
+                current_file_path="Sources/Core/Wallet.swift",
+                current_module_name="CoreKit",
+            ),
+            SymbolDelta(
+                qualified_name="Wallet",
+                change_kind="moved",
+                previous_file_path="Sources/Wallet.swift",
+                current_file_path="Sources/Core/Wallet.swift",
+                previous_module_name="FinanceKit",
+                current_module_name="CoreKit",
+            ),
+            SymbolDelta(
+                qualified_name="Wallet.balance()",
+                change_kind="moved",
+                previous_file_path="Sources/Wallet.swift",
+                current_file_path="Sources/Core/Wallet.swift",
+                previous_module_name="FinanceKit",
+                current_module_name="CoreKit",
+            ),
+            SymbolDelta(
+                qualified_name="LegacyUtility",
+                change_kind="removed",
+                previous_file_path="Sources/Legacy.swift",
+                previous_module_name="FinanceKit",
+            ),
+        ),
+        edge_deltas=(
+            EdgeDelta(
+                source="Wallet.owner()",
+                target="Wallet",
+                relationship_type="EXTENDS",
+                change_kind="added",
+            ),
+        ),
+        seed_deltas=(
+            SeedDelta(
+                qualified_name="Wallet.balance()",
+                previous_is_seed=True,
+                current_is_seed=False,
+            ),
+        ),
+        public_api_deltas=(
+            PublicApiDelta(
+                fqn="Wallet.owner()",
+                module_name="FinanceKit",
+                source_artifact_path="Artifacts/FinanceKit.swiftinterface",
+                change_kind="added",
+                current_signature_hash="sig-owner-new",
+            ),
+            PublicApiDelta(
+                fqn="staleExport()",
+                module_name="FinanceKit",
+                source_artifact_path="Artifacts/FinanceKit.swiftinterface",
+                change_kind="removed",
+                previous_signature_hash="sig-stale-old",
+            ),
+            PublicApiDelta(
+                fqn="Wallet",
+                module_name="FinanceKit",
+                source_artifact_path="Artifacts/FinanceKit.swiftinterface",
+                change_kind="signature_changed",
+                previous_signature_hash="sig-wallet-old",
+                current_signature_hash="sig-wallet-new",
+            ),
+        ),
     )
 
     assert resolved == expected
@@ -298,189 +362,3 @@ async def _seed_public_api_snapshot(
                 artifact_path=symbol.source_artifact_path,
                 signature_hash=symbol.signature_hash,
             )
-
-
-def _expected_from_scratch(
-    *,
-    baseline: DeltaResolutionBaseline,
-    current_symbols: Iterable[SymbolSnapshot],
-    current_edges: Iterable[EdgeSnapshot],
-    current_public_api: Iterable[PublicApiSnapshot],
-) -> ResolvedDelta:
-    prior_symbols = {symbol.qualified_name: symbol for symbol in baseline.symbols}
-    next_symbols = {symbol.qualified_name: symbol for symbol in current_symbols}
-    symbol_deltas: list[SymbolDelta] = []
-    seed_deltas: list[SeedDelta] = []
-    for qualified_name in sorted(set(prior_symbols) | set(next_symbols)):
-        previous = prior_symbols.get(qualified_name)
-        current = next_symbols.get(qualified_name)
-        if previous is None and current is not None:
-            symbol_deltas.append(
-                SymbolDelta(
-                    qualified_name=qualified_name,
-                    change_kind="added",
-                    current_file_path=current.file_path,
-                    current_module_name=current.module_name,
-                )
-            )
-            continue
-        if previous is not None and current is None:
-            symbol_deltas.append(
-                SymbolDelta(
-                    qualified_name=qualified_name,
-                    change_kind="removed",
-                    previous_file_path=previous.file_path,
-                    previous_module_name=previous.module_name,
-                )
-            )
-            continue
-        assert previous is not None and current is not None
-        if (
-            previous.file_path != current.file_path
-            or previous.module_name != current.module_name
-        ):
-            symbol_deltas.append(
-                SymbolDelta(
-                    qualified_name=qualified_name,
-                    change_kind="moved",
-                    previous_file_path=previous.file_path,
-                    current_file_path=current.file_path,
-                    previous_module_name=previous.module_name,
-                    current_module_name=current.module_name,
-                )
-            )
-        previous_is_seed = previous.access_modifier in {"public", "open"} or any(
-            (
-                previous.is_main_entry,
-                previous.is_iboutlet,
-                previous.is_ibaction,
-                previous.is_objc_members,
-                previous.is_ns_managed,
-                previous.is_property_wrapper,
-                previous.is_codable,
-                previous.is_swift_app_storage,
-                previous.is_env_key,
-            )
-        )
-        current_is_seed = current.access_modifier in {"public", "open"} or any(
-            (
-                current.is_main_entry,
-                current.is_iboutlet,
-                current.is_ibaction,
-                current.is_objc_members,
-                current.is_ns_managed,
-                current.is_property_wrapper,
-                current.is_codable,
-                current.is_swift_app_storage,
-                current.is_env_key,
-            )
-        )
-        if previous_is_seed != current_is_seed:
-            seed_deltas.append(
-                SeedDelta(
-                    qualified_name=qualified_name,
-                    previous_is_seed=previous_is_seed,
-                    current_is_seed=current_is_seed,
-                )
-            )
-
-    prior_edges = set(baseline.edges)
-    next_edges = set(current_edges)
-    edge_deltas = tuple(
-        sorted(
-            [
-                EdgeDelta(
-                    source=edge.source,
-                    target=edge.target,
-                    relationship_type=edge.relationship_type,
-                    change_kind="removed",
-                )
-                for edge in prior_edges - next_edges
-            ]
-            + [
-                EdgeDelta(
-                    source=edge.source,
-                    target=edge.target,
-                    relationship_type=edge.relationship_type,
-                    change_kind="added",
-                )
-                for edge in next_edges - prior_edges
-            ],
-            key=lambda edge: (
-                edge.change_kind,
-                edge.relationship_type,
-                edge.source,
-                edge.target,
-            ),
-        )
-    )
-
-    prior_public_api = {
-        (row.source_artifact_path, row.module_name, row.fqn): row
-        for row in baseline.public_api_symbols
-    }
-    next_public_api = {
-        (row.source_artifact_path, row.module_name, row.fqn): row
-        for row in current_public_api
-    }
-    public_api_deltas: list[PublicApiDelta] = []
-    for key in sorted(set(prior_public_api) | set(next_public_api)):
-        previous = prior_public_api.get(key)
-        current = next_public_api.get(key)
-        source_artifact_path, module_name, fqn = key
-        if previous is None and current is not None:
-            public_api_deltas.append(
-                PublicApiDelta(
-                    fqn=fqn,
-                    module_name=module_name,
-                    source_artifact_path=source_artifact_path,
-                    change_kind="added",
-                    current_signature_hash=current.signature_hash,
-                )
-            )
-            continue
-        if previous is not None and current is None:
-            public_api_deltas.append(
-                PublicApiDelta(
-                    fqn=fqn,
-                    module_name=module_name,
-                    source_artifact_path=source_artifact_path,
-                    change_kind="removed",
-                    previous_signature_hash=previous.signature_hash,
-                )
-            )
-            continue
-        assert previous is not None and current is not None
-        if previous.signature_hash != current.signature_hash:
-            public_api_deltas.append(
-                PublicApiDelta(
-                    fqn=fqn,
-                    module_name=module_name,
-                    source_artifact_path=source_artifact_path,
-                    change_kind="signature_changed",
-                    previous_signature_hash=previous.signature_hash,
-                    current_signature_hash=current.signature_hash,
-                )
-            )
-
-    return ResolvedDelta(
-        symbol_deltas=tuple(
-            sorted(
-                symbol_deltas,
-                key=lambda delta: (delta.change_kind, delta.qualified_name),
-            )
-        ),
-        edge_deltas=edge_deltas,
-        seed_deltas=tuple(sorted(seed_deltas, key=lambda delta: delta.qualified_name)),
-        public_api_deltas=tuple(
-            sorted(
-                public_api_deltas,
-                key=lambda delta: (
-                    delta.change_kind,
-                    delta.source_artifact_path,
-                    delta.module_name,
-                    delta.fqn,
-                ),
-            )
-        ),
-    )
