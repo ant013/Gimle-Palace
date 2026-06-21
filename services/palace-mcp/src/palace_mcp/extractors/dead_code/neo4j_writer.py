@@ -48,9 +48,11 @@ async def write_dead_findings(
     kept_ids = [f.finding_id for f in findings]
 
     async with driver.session() as session:
-        write_summary = await session.execute_write(
-            _write_findings_batch, findings, group_id
-        )
+        write_summary = DeadFindingWriteSummary()
+        if findings:
+            write_summary = await session.execute_write(
+                _write_findings_batch, findings, group_id
+            )
         evict_summary = await session.execute_write(
             _evict_stale_findings, group_id, kept_ids
         )

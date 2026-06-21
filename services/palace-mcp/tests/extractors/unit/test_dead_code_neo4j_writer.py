@@ -126,14 +126,15 @@ class _FakeResult:
 
 
 class _FakeTx:
-    def __init__(self) -> None:
+    def __init__(self, *, nodes_deleted: int = 0) -> None:
         self.calls: list[tuple[str, dict[str, object]]] = []
+        self.nodes_deleted = nodes_deleted
 
     async def run(self, query: str, **kwargs: object) -> _FakeResult:
         self.calls.append((query, dict(kwargs)))
 
         if "DETACH DELETE f" in query:
-            return _FakeResult(_FakeCounters(nodes_deleted=0))
+            return _FakeResult(_FakeCounters(nodes_deleted=self.nodes_deleted))
         if "UNWIND $rows AS row" in query:
             rows = kwargs["rows"]
             assert isinstance(rows, list)
@@ -209,3 +210,23 @@ async def test_write_dead_findings_batches_findings_into_one_transaction() -> No
 
     assert session.execute_write_calls == 2
     assert summary.nodes_deleted == 0
+
+
+@pytest.mark.asyncio
+async def test_write_dead_findings_skips_empty_batch_and_evicts_stale_findings() -> (
+    None
+):
+    tx = _FakeTx(nodes_deleted=2)
+    session = _FakeSession(tx)
+    driver = _FakeDriver(session)
+
+    summary = await write_dead_findings(
+        driver=driver,
+        findings=[],
+        group_id="project/bitcoin-core",
+    )
+
+    assert session.execute_write_calls == 1
+    assert len(tx.calls) == 1
+    assert "DETACH DELETE f" in tx.calls[0][0]
+    assert summary == type(summary)(nodes_deleted=2)
