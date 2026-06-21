@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Callable
 from unittest.mock import AsyncMock
 
@@ -39,6 +41,17 @@ def _utc(
 
 def _iso(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).isoformat()
+
+
+def _git(args: list[str], cwd: Path) -> str:
+    result = subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
 
 
 class InMemoryAnalysisRunStore:
@@ -393,6 +406,10 @@ async def test_resolve_run_mode_plan_uses_incremental_when_detect_changes_is_sma
         AsyncMock(return_value="head-123"),
     )
     monkeypatch.setattr(
+        "palace_mcp.project_analyze._read_project_indexed_commit",
+        AsyncMock(return_value="2026-06-20T12:00:00Z"),
+    )
+    monkeypatch.setattr(
         "palace_mcp.project_analyze.native_detect_changes",
         AsyncMock(
             return_value={
@@ -431,6 +448,10 @@ async def test_resolve_run_mode_plan_falls_back_to_full_when_detect_changes_trun
         AsyncMock(return_value="head-123"),
     )
     monkeypatch.setattr(
+        "palace_mcp.project_analyze._read_project_indexed_commit",
+        AsyncMock(return_value="2026-06-20T12:00:00Z"),
+    )
+    monkeypatch.setattr(
         "palace_mcp.project_analyze.native_detect_changes",
         AsyncMock(
             return_value={
@@ -453,6 +474,59 @@ async def test_resolve_run_mode_plan_falls_back_to_full_when_detect_changes_trun
         "head-123",
         None,
         None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_run_mode_plan_falls_back_to_full_for_large_committed_delta(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo = tmp_path / "tron-kit"
+    repo.mkdir()
+    _git(["init", "-q", "-b", "main"], cwd=repo)
+    _git(["config", "user.email", "t@t"], cwd=repo)
+    _git(["config", "user.name", "T"], cwd=repo)
+    for index in range(10):
+        (repo / f"File{index}.swift").write_text(f"v1-{index}\n")
+    _git(["add", "."], cwd=repo)
+    _git(["commit", "-m", "initial", "-q"], cwd=repo)
+    base_sha = _git(["rev-parse", "HEAD"], cwd=repo)
+    for index in range(9):
+        (repo / f"File{index}.swift").write_text(f"v2-{index}\n")
+    _git(["add", "."], cwd=repo)
+    _git(["commit", "-m", "update", "-q"], cwd=repo)
+    head_sha = _git(["rev-parse", "HEAD"], cwd=repo)
+
+    monkeypatch.setattr(
+        "palace_mcp.project_analyze._read_project_head_sha",
+        AsyncMock(return_value=head_sha),
+    )
+    monkeypatch.setattr(
+        "palace_mcp.project_analyze._read_project_indexed_commit",
+        AsyncMock(return_value=base_sha),
+    )
+    monkeypatch.setattr(
+        "palace_mcp.code.native_detect_changes._resolve_repo_path",
+        AsyncMock(return_value=repo),
+    )
+    monkeypatch.setattr(
+        "palace_mcp.project_analyze._count_project_files",
+        AsyncMock(return_value=10),
+    )
+
+    plan = await _resolve_run_mode_plan(
+        object(),
+        slug="tron-kit",
+        requested_mode=AnalysisRunMode.INCREMENTAL,
+    )
+
+    assert plan == (
+        AnalysisRunMode.FULL,
+        "change_threshold_exceeded",
+        head_sha,
+        9,
+        0.9,
     )
 
 

@@ -39,6 +39,7 @@ from palace_mcp.memory.cypher import (
     GET_ACTIVE_ANALYSIS_RUN,
     GET_ANALYSIS_RUN_WITH_CHECKPOINTS,
     MARK_ANALYSIS_RUN_RESUMABLE,
+    PROJECT_INDEXED_COMMIT,
     UPDATE_ANALYSIS_RUN_LEASE,
     UPDATE_ANALYSIS_RUN_PROGRESS,
     UPSERT_ANALYSIS_CHECKPOINT,
@@ -354,6 +355,18 @@ async def _count_project_files(driver: AsyncDriver, project_id: str) -> int:
     return int(total or 0)
 
 
+async def _read_project_indexed_commit(driver: AsyncDriver, slug: str) -> str | None:
+    async with driver.session() as session:
+        result = await session.run(
+            PROJECT_INDEXED_COMMIT,
+            group_id=f"project/{slug}",
+        )
+        row = await result.single()
+    if row is None or row["commit_sha"] is None:
+        return None
+    return str(row["commit_sha"]) or None
+
+
 async def _resolve_run_mode_plan(
     driver: AsyncDriver,
     *,
@@ -373,7 +386,11 @@ async def _resolve_run_mode_plan(
     if head_sha is None:
         return AnalysisRunMode.FULL, "repo_head_unavailable", None, None, None
 
-    detect_result = await native_detect_changes(project=slug)
+    indexed_commit = await _read_project_indexed_commit(driver, slug)
+    if indexed_commit is None:
+        return AnalysisRunMode.FULL, "indexed_commit_unavailable", head_sha, None, None
+
+    detect_result = await native_detect_changes(project=slug, since=indexed_commit)
     if detect_result is FALLBACK_TO_CM:
         return AnalysisRunMode.FULL, "detect_changes_unavailable", head_sha, None, None
     if not isinstance(detect_result, dict) or detect_result.get("ok") is not True:

@@ -24,6 +24,7 @@ from palace_mcp.memory.projects import InvalidSlug
 logger = logging.getLogger(__name__)
 
 _EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+_COMMIT_SHA_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
 _APPROXIDATE_RE = re.compile(
     r"^(?:now|today|yesterday|tomorrow|\d+\s+"
     r"(?:second|minute|hour|day|week|month|year)s?\s+ago)$",
@@ -49,6 +50,8 @@ def _valid_since(value: str) -> bool:
     candidate = value.strip()
     if not candidate or candidate.startswith("-") or "\x00" in candidate:
         return False
+    if _COMMIT_SHA_RE.fullmatch(candidate):
+        return True
     if _APPROXIDATE_RE.fullmatch(candidate):
         return True
     try:
@@ -59,6 +62,18 @@ def _valid_since(value: str) -> bool:
 
 
 async def _resolve_since_base(repo_path: Path, since: str) -> str:
+    candidate = since.strip()
+    if _COMMIT_SHA_RE.fullmatch(candidate):
+        result = await asyncio.to_thread(
+            run_git,
+            ["cat-file", "-e", f"{candidate}^{{commit}}"],
+            repo_path=repo_path,
+            max_stdout_lines=1,
+        )
+        if result.rc != 0:
+            raise GitError(result.rc, result.stderr[:200] or "git cat-file failed")
+        return candidate
+
     result = await asyncio.to_thread(
         run_git,
         ["rev-list", "-n", "1", f"--before={since}", "HEAD"],
