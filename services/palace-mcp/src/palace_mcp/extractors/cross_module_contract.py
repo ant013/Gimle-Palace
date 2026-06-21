@@ -8,7 +8,7 @@ import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 if TYPE_CHECKING:
     from palace_mcp.audit.contracts import AuditContract
@@ -61,8 +61,10 @@ _WRITE_SNAPSHOT = """
 MERGE (snapshot:ModuleContractSnapshot {id: $snapshot_id})
 SET snapshot += $snapshot_props
 WITH snapshot
-MATCH (surface:PublicApiSurface {id: $surface_id})
-MERGE (snapshot)-[:CONTRACT_PRODUCER_SURFACE]->(surface)
+OPTIONAL MATCH (surface:PublicApiSurface {id: $surface_id})
+FOREACH (_ IN CASE WHEN surface IS NULL THEN [] ELSE [1] END |
+    MERGE (snapshot)-[:CONTRACT_PRODUCER_SURFACE]->(surface)
+)
 """
 
 _WRITE_CONSUMPTION = """
@@ -87,6 +89,26 @@ MATCH (delta:ModuleContractDelta {id: $delta_id})
 MATCH (symbol:PublicApiSymbol {id: $symbol_id})
 MERGE (delta)-[rel:AFFECTS_PUBLIC_SYMBOL]->(symbol)
 SET rel += $edge_props
+"""
+
+_DELETE_SNAPSHOT_CONSUMPTIONS = """
+MATCH (snapshot:ModuleContractSnapshot {id: $snapshot_id})-[rel:CONSUMES_PUBLIC_SYMBOL]->()
+DELETE rel
+"""
+
+_DELETE_SNAPSHOT_SURFACE_LINKS = """
+MATCH (snapshot:ModuleContractSnapshot {id: $snapshot_id})-[rel:CONTRACT_PRODUCER_SURFACE]->()
+DELETE rel
+"""
+
+_DELETE_DELTA_AFFECTED_SYMBOLS = """
+MATCH (delta:ModuleContractDelta {id: $delta_id})-[rel:AFFECTS_PUBLIC_SYMBOL]->()
+DELETE rel
+"""
+
+_DELETE_DELTA_SNAPSHOT_LINKS = """
+MATCH (delta:ModuleContractDelta {id: $delta_id})-[rel:DELTA_FROM|DELTA_TO]->()
+DELETE rel
 """
 
 _DELTA_REQUESTS_PATH = Path(".palace") / "cross-module-contract" / "delta-requests.json"
@@ -138,12 +160,24 @@ class _OccurrenceResolution:
 class _DeltaRequest(BaseModel):
     model_config = {"frozen": True}
 
-    consumer_module_name: str
+    consumer_module_name: str | None = None
     producer_module_name: str
     language: Language
     from_commit_sha: str
     to_commit_sha: str
     include_package: bool = False
+    fqn: str | None = None
+    change_kind: Literal["added", "removed", "signature_changed"] | None = None
+    previous_signature_hash: str | None = None
+    current_signature_hash: str | None = None
+
+    @property
+    def is_pair_request(self) -> bool:
+        return self.consumer_module_name is not None
+
+    @property
+    def is_symbol_request(self) -> bool:
+        return self.fqn is not None and self.change_kind is not None
 
 
 class CrossModuleContractExtractor(BaseExtractor):
@@ -236,12 +270,18 @@ LIMIT 100
             delta_requests=delta_requests,
             default_include_package=self._include_package,
         )
+        producer_modules = (
+            {request.producer_module_name for request in delta_requests}
+            if delta_requests
+            else None
+        )
         surfaces_by_commit: dict[str, list[_SurfaceSymbols]] = {}
         for candidate_commit_sha in sorted(commit_requests):
             surfaces_by_commit[candidate_commit_sha] = await _load_public_api_surfaces(
                 driver=driver,
                 project=ctx.project_slug,
                 commit_sha=candidate_commit_sha,
+                producer_modules=producer_modules,
             )
 
         current_surfaces = surfaces_by_commit[commit_sha]
@@ -428,7 +468,14 @@ async def _load_delta_requests(*, repo_path: Path) -> list[_DeltaRequest]:
         return []
     try:
         payload = json.loads(await asyncio.to_thread(request_path.read_text, "utf-8"))
-        return [_DeltaRequest.model_validate(row) for row in payload]
+        requests = [_DeltaRequest.model_validate(row) for row in payload]
+        for request in requests:
+            if not request.is_pair_request and not request.is_symbol_request:
+                raise ValueError(
+                    "delta requests must provide either consumer_module_name or "
+                    "fqn/change_kind"
+                )
+        return requests
     except (OSError, ValueError, TypeError) as exc:
         raise ExtractorError(
             error_code=ExtractorErrorCode.PUBLIC_API_PARSE_FAILED,
@@ -446,51 +493,100 @@ def _plan_requested_deltas(
     delta_requests: list[_DeltaRequest],
 ) -> list[_PlannedContractDelta]:
     snapshot_lookup = {_snapshot_key(item.snapshot): item for item in planned}
+    surface_lookup: dict[
+        tuple[str, str, str, bool], list[_PlannedContractSnapshot]
+    ] = {}
+    surface_ids: dict[tuple[str, str, str, bool], str] = {}
+    for item in planned:
+        surface_key = (
+            item.snapshot.producer_module_name,
+            item.snapshot.language.value,
+            item.snapshot.commit_sha,
+            item.snapshot.include_package,
+        )
+        surface_lookup.setdefault(surface_key, []).append(item)
+        surface_ids.setdefault(surface_key, item.snapshot.producer_surface_id)
     planned_deltas: dict[str, _PlannedContractDelta] = {}
+    pair_requests: dict[
+        tuple[str, str, str, str, str, bool],
+        _DeltaRequest,
+    ] = {}
     for request in delta_requests:
+        for pair_key in _requested_pair_keys(
+            request=request,
+            planned_by_surface=surface_lookup,
+        ):
+            pair_requests.setdefault(pair_key, request)
+
+    for pair_key, request in sorted(pair_requests.items()):
+        (
+            consumer_module_name,
+            producer_module_name,
+            language_value,
+            from_commit_sha,
+            to_commit_sha,
+            include_package,
+        ) = pair_key
         from_snapshot = snapshot_lookup.get(
             (
-                request.consumer_module_name,
-                request.producer_module_name,
-                request.language.value,
-                request.from_commit_sha,
-                request.include_package,
+                consumer_module_name,
+                producer_module_name,
+                language_value,
+                from_commit_sha,
+                include_package,
             )
         )
-        if from_snapshot is None:
-            raise ExtractorError(
-                error_code=ExtractorErrorCode.PUBLIC_API_ARTIFACTS_REQUIRED,
-                message=(
-                    "Requested delta source snapshot is missing for "
-                    f"{request.consumer_module_name} -> {request.producer_module_name} "
-                    f"at commit '{request.from_commit_sha}'."
-                ),
-                recoverable=False,
-                action="manual_cleanup",
-                context={"project": project},
-            )
         to_snapshot = snapshot_lookup.get(
             (
-                request.consumer_module_name,
-                request.producer_module_name,
-                request.language.value,
-                request.to_commit_sha,
-                request.include_package,
+                consumer_module_name,
+                producer_module_name,
+                language_value,
+                to_commit_sha,
+                include_package,
             )
         )
-        if to_snapshot is None:
+        if from_snapshot is None and to_snapshot is None:
             raise ExtractorError(
                 error_code=ExtractorErrorCode.PUBLIC_API_ARTIFACTS_REQUIRED,
                 message=(
-                    "Requested delta target snapshot is missing for "
-                    f"{request.consumer_module_name} -> {request.producer_module_name} "
-                    f"at commit '{request.to_commit_sha}'."
+                    "Requested delta snapshots are missing for "
+                    f"{consumer_module_name} -> {producer_module_name} across "
+                    f"'{from_commit_sha}' -> '{to_commit_sha}'."
                 ),
                 recoverable=False,
                 action="manual_cleanup",
                 context={"project": project},
             )
-
+        if from_snapshot is None:
+            assert to_snapshot is not None
+            from_snapshot = _empty_planned_snapshot(
+                reference=to_snapshot,
+                commit_sha=from_commit_sha,
+                consumer_module_name=consumer_module_name,
+                producer_surface_id=surface_ids.get(
+                    (
+                        producer_module_name,
+                        language_value,
+                        from_commit_sha,
+                        include_package,
+                    )
+                ),
+            )
+        if to_snapshot is None:
+            assert from_snapshot is not None
+            to_snapshot = _empty_planned_snapshot(
+                reference=from_snapshot,
+                commit_sha=to_commit_sha,
+                consumer_module_name=consumer_module_name,
+                producer_surface_id=surface_ids.get(
+                    (
+                        producer_module_name,
+                        language_value,
+                        to_commit_sha,
+                        include_package,
+                    )
+                ),
+            )
         delta, affected_symbols = build_contract_delta(
             from_snapshot=from_snapshot.snapshot,
             to_snapshot=to_snapshot.snapshot,
@@ -506,6 +602,106 @@ def _plan_requested_deltas(
             to_snapshot_id=to_snapshot.snapshot.id,
         )
     return [planned_deltas[key] for key in sorted(planned_deltas)]
+
+
+def _requested_pair_keys(
+    *,
+    request: _DeltaRequest,
+    planned_by_surface: Mapping[
+        tuple[str, str, str, bool],
+        list[_PlannedContractSnapshot],
+    ],
+) -> set[tuple[str, str, str, str, str, bool]]:
+    if request.is_pair_request:
+        assert request.consumer_module_name is not None
+        return {
+            (
+                request.consumer_module_name,
+                request.producer_module_name,
+                request.language.value,
+                request.from_commit_sha,
+                request.to_commit_sha,
+                request.include_package,
+            )
+        }
+
+    assert request.fqn is not None
+    pair_keys: set[tuple[str, str, str, str, str, bool]] = set()
+    for commit_sha in (request.from_commit_sha, request.to_commit_sha):
+        surface_key = (
+            request.producer_module_name,
+            request.language.value,
+            commit_sha,
+            request.include_package,
+        )
+        for planned_snapshot in planned_by_surface.get(surface_key, []):
+            symbol = planned_snapshot.symbols_by_fqn.get(request.fqn)
+            if symbol is None:
+                continue
+            if (
+                planned_snapshot.snapshot.consumer_module_name
+                == _NO_CROSS_MODULE_CONSUMER
+            ):
+                continue
+            if not any(
+                consumption.public_symbol_id == symbol.id
+                for consumption in planned_snapshot.consumptions
+            ):
+                continue
+            pair_keys.add(
+                (
+                    planned_snapshot.snapshot.consumer_module_name,
+                    request.producer_module_name,
+                    request.language.value,
+                    request.from_commit_sha,
+                    request.to_commit_sha,
+                    request.include_package,
+                )
+            )
+    return pair_keys
+
+
+def _empty_planned_snapshot(
+    *,
+    reference: _PlannedContractSnapshot,
+    commit_sha: str,
+    consumer_module_name: str,
+    producer_surface_id: str | None,
+) -> _PlannedContractSnapshot:
+    producer_surface_ref = producer_surface_id or (
+        f"missing:{reference.snapshot.project}:{reference.snapshot.producer_module_name}:"
+        f"{commit_sha}"
+    )
+    snapshot = ModuleContractSnapshot(
+        id=_stable_id(
+            reference.snapshot.group_id,
+            reference.snapshot.project,
+            consumer_module_name,
+            reference.snapshot.producer_module_name,
+            reference.snapshot.language.value,
+            commit_sha,
+            str(reference.snapshot.include_package),
+            str(SCHEMA_VERSION_CURRENT),
+        ),
+        group_id=reference.snapshot.group_id,
+        project=reference.snapshot.project,
+        consumer_module_name=consumer_module_name,
+        producer_module_name=reference.snapshot.producer_module_name,
+        language=reference.snapshot.language,
+        commit_sha=commit_sha,
+        include_package=reference.snapshot.include_package,
+        producer_surface_id=producer_surface_ref,
+        symbol_count=0,
+        use_count=0,
+        file_count=0,
+        skipped_symbol_count=0,
+    )
+    return _PlannedContractSnapshot(
+        snapshot=snapshot,
+        consumptions=[],
+        symbols_by_fqn={},
+        correlation_unresolved_symbol_count=0,
+    )
 
 
 def plan_contract_snapshots(
@@ -771,7 +967,11 @@ def build_contract_delta(
 
 
 async def _load_public_api_surfaces(
-    *, driver: AsyncDriver, project: str, commit_sha: str
+    *,
+    driver: AsyncDriver,
+    project: str,
+    commit_sha: str,
+    producer_modules: set[str] | None = None,
 ) -> list[_SurfaceSymbols]:
     async with driver.session() as session:
         result = await session.run(
@@ -782,6 +982,8 @@ async def _load_public_api_surfaces(
     grouped: dict[str, _SurfaceSymbols] = {}
     for row in rows:
         surface = PublicApiSurface.model_validate(row["surface_props"])
+        if producer_modules is not None and surface.module_name not in producer_modules:
+            continue
         symbol = PublicApiSymbol.model_validate(row["symbol_props"])
         current = grouped.get(surface.id)
         if current is None:
@@ -1028,6 +1230,14 @@ async def _write_contract_graph(
     edges_written = 0
     async with driver.session() as session:
         for planned_snapshot in planned:
+            await session.run(
+                _DELETE_SNAPSHOT_CONSUMPTIONS,
+                snapshot_id=planned_snapshot.snapshot.id,
+            )
+            await session.run(
+                _DELETE_SNAPSHOT_SURFACE_LINKS,
+                snapshot_id=planned_snapshot.snapshot.id,
+            )
             await _write_snapshot(session=session, snapshot=planned_snapshot.snapshot)
             nodes_written += 1
             edges_written += 1
@@ -1039,6 +1249,14 @@ async def _write_contract_graph(
                 )
                 edges_written += 1
         for planned_delta in planned_deltas:
+            await session.run(
+                _DELETE_DELTA_AFFECTED_SYMBOLS,
+                delta_id=planned_delta.delta.id,
+            )
+            await session.run(
+                _DELETE_DELTA_SNAPSHOT_LINKS,
+                delta_id=planned_delta.delta.id,
+            )
             await _write_delta(
                 session=session,
                 delta=planned_delta.delta,

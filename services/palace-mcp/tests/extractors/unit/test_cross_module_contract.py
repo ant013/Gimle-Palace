@@ -3,21 +3,37 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 
 from palace_mcp.extractors.cross_module_contract import (
+    _DELETE_DELTA_AFFECTED_SYMBOLS,
+    _DELETE_DELTA_SNAPSHOT_LINKS,
+    _DELETE_SNAPSHOT_CONSUMPTIONS,
+    _DELETE_SNAPSHOT_SURFACE_LINKS,
+    _DeltaRequest,
     _OccurrenceResolution,
+    _PlannedContractDelta,
+    _PlannedContractSnapshot,
     _load_occurrences_for_surface,
+    _plan_requested_deltas,
     _swift_indexstore_lookup_name,
     _swift_qname_from_usr,
+    _write_contract_graph,
+    _WRITE_CONSUMPTION,
+    _WRITE_DELTA,
+    _WRITE_DELTA_AFFECTED_SYMBOL,
+    _WRITE_SNAPSHOT,
     build_contract_delta,
     plan_contract_snapshots,
 )
 from palace_mcp.extractors.foundation.identifiers import symbol_id_for
 from palace_mcp.extractors.foundation.models import (
     Language,
+    ModuleContractAffectedSymbol,
     ModuleContractConsumption,
+    ModuleContractDelta,
     ModuleContractSnapshot,
     PublicApiArtifactKind,
     PublicApiSurface,
@@ -39,13 +55,17 @@ _DEFAULT_QNAME = object()
 
 
 def _surface() -> PublicApiSurface:
+    return _surface_for(commit_sha="commit-current")
+
+
+def _surface_for(*, commit_sha: str) -> PublicApiSurface:
     return PublicApiSurface(
-        id="surface-1",
+        id=f"surface-{commit_sha}",
         group_id="project/test",
         project="contract-mini",
         module_name="ProducerKit",
         language=Language.SWIFT,
-        commit_sha="commit-current",
+        commit_sha=commit_sha,
         artifact_path=".palace/public-api/swift/ProducerKit.swiftinterface",
         artifact_kind=PublicApiArtifactKind.SWIFTINTERFACE,
         tool_name="swiftc",
@@ -60,6 +80,7 @@ def _symbol(
     visibility: PublicApiVisibility = PublicApiVisibility.PUBLIC,
     signature_hash: str = "sig",
     symbol_qualified_name: object = _DEFAULT_QNAME,
+    commit_sha: str = "commit-current",
 ) -> PublicApiSymbol:
     return PublicApiSymbol(
         id=symbol_id,
@@ -67,7 +88,7 @@ def _symbol(
         project="contract-mini",
         module_name="ProducerKit",
         language=Language.SWIFT,
-        commit_sha="commit-current",
+        commit_sha=commit_sha,
         fqn=fqn,
         display_name=fqn,
         kind=PublicApiSymbolKind.FUNCTION,
@@ -79,6 +100,35 @@ def _symbol(
         symbol_qualified_name=(
             fqn if symbol_qualified_name is _DEFAULT_QNAME else symbol_qualified_name
         ),
+    )
+
+
+def _planned_snapshot(
+    *,
+    commit_sha: str,
+    consumer_module_name: str,
+    symbols: list[PublicApiSymbol],
+    consumptions: list[ModuleContractConsumption],
+) -> _PlannedContractSnapshot:
+    snapshot = ModuleContractSnapshot(
+        id=f"snapshot-{consumer_module_name}-{commit_sha}",
+        group_id="project/test",
+        project="contract-mini",
+        consumer_module_name=consumer_module_name,
+        producer_module_name="ProducerKit",
+        language=Language.SWIFT,
+        commit_sha=commit_sha,
+        include_package=False,
+        producer_surface_id=_surface_for(commit_sha=commit_sha).id,
+        symbol_count=len(consumptions),
+        use_count=sum(consumption.use_count for consumption in consumptions),
+        file_count=len({consumption.first_seen_path for consumption in consumptions}),
+        skipped_symbol_count=0,
+    )
+    return _PlannedContractSnapshot(
+        snapshot=snapshot,
+        consumptions=consumptions,
+        symbols_by_fqn={symbol.fqn: symbol for symbol in symbols},
     )
 
 
@@ -423,6 +473,355 @@ def test_build_contract_delta_counts_added_removed_and_signature_changed() -> No
         ("signature_changed", "sym-balance-new"),
         ("added", "sym-package-new"),
     }
+
+
+def test_plan_requested_deltas_supports_symbol_delta_requests_with_missing_target() -> (
+    None
+):
+    stale_symbol = _symbol(
+        symbol_id="sym-stale-old",
+        fqn="staleExport()",
+        signature_hash="sig-stale-old",
+        commit_sha="commit-from",
+    )
+    from_consumptions = [
+        ModuleContractConsumption(
+            public_symbol_id="sym-stale-old",
+            group_id="project/test",
+            commit_sha="commit-from",
+            match_symbol_id=symbol_id_for("staleExport()"),
+            use_count=2,
+            file_count=1,
+            first_seen_path="ConsumerApp/Sources/ConsumerApp/WalletFeature.swift",
+            evidence_paths_sample=[
+                "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift"
+            ],
+        )
+    ]
+    planned = [
+        _planned_snapshot(
+            commit_sha="commit-from",
+            consumer_module_name="ConsumerApp",
+            symbols=[stale_symbol],
+            consumptions=from_consumptions,
+        )
+    ]
+
+    deltas = _plan_requested_deltas(
+        project="contract-mini",
+        planned=planned,
+        delta_requests=[
+            _DeltaRequest(
+                producer_module_name="ProducerKit",
+                language=Language.SWIFT,
+                from_commit_sha="commit-from",
+                to_commit_sha="commit-to",
+                fqn="staleExport()",
+                change_kind="removed",
+                previous_signature_hash="sig-stale-old",
+            )
+        ],
+    )
+
+    assert len(deltas) == 1
+    delta = deltas[0]
+    assert delta.delta.consumer_module_name == "ConsumerApp"
+    assert delta.delta.producer_module_name == "ProducerKit"
+    assert delta.delta.from_commit_sha == "commit-from"
+    assert delta.delta.to_commit_sha == "commit-to"
+    assert delta.delta.removed_consumed_symbol_count == 1
+    assert delta.delta.signature_changed_consumed_symbol_count == 0
+    assert delta.delta.added_consumed_symbol_count == 0
+    assert delta.delta.affected_use_count == 2
+    assert delta.to_snapshot_id != planned[0].snapshot.id
+    assert [
+        (item.change_kind, item.public_symbol_id) for item in delta.affected_symbols
+    ] == [("removed", "sym-stale-old")]
+
+
+def test_plan_requested_deltas_emits_one_delta_per_consumer_for_symbol_requests() -> (
+    None
+):
+    from_symbol = _symbol(
+        symbol_id="sym-balance-old",
+        fqn="Wallet.balance()",
+        signature_hash="sig-old",
+        commit_sha="commit-from",
+    )
+    to_symbol = _symbol(
+        symbol_id="sym-balance-new",
+        fqn="Wallet.balance()",
+        signature_hash="sig-new",
+        commit_sha="commit-to",
+    )
+    planned = [
+        _planned_snapshot(
+            commit_sha="commit-from",
+            consumer_module_name="ConsumerApp",
+            symbols=[from_symbol],
+            consumptions=[
+                ModuleContractConsumption(
+                    public_symbol_id="sym-balance-old",
+                    group_id="project/test",
+                    commit_sha="commit-from",
+                    match_symbol_id=symbol_id_for("Wallet.balance()"),
+                    use_count=1,
+                    file_count=1,
+                    first_seen_path=(
+                        "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift"
+                    ),
+                    evidence_paths_sample=[
+                        "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift"
+                    ],
+                )
+            ],
+        ),
+        _planned_snapshot(
+            commit_sha="commit-to",
+            consumer_module_name="ConsumerApp",
+            symbols=[to_symbol],
+            consumptions=[
+                ModuleContractConsumption(
+                    public_symbol_id="sym-balance-new",
+                    group_id="project/test",
+                    commit_sha="commit-to",
+                    match_symbol_id=symbol_id_for("Wallet.balance()"),
+                    use_count=3,
+                    file_count=1,
+                    first_seen_path=(
+                        "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift"
+                    ),
+                    evidence_paths_sample=[
+                        "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift"
+                    ],
+                )
+            ],
+        ),
+        _planned_snapshot(
+            commit_sha="commit-from",
+            consumer_module_name="ConsumerCLI",
+            symbols=[from_symbol],
+            consumptions=[
+                ModuleContractConsumption(
+                    public_symbol_id="sym-balance-old",
+                    group_id="project/test",
+                    commit_sha="commit-from",
+                    match_symbol_id=symbol_id_for("Wallet.balance()"),
+                    use_count=2,
+                    file_count=1,
+                    first_seen_path="ConsumerCLI/Sources/ConsumerCLI/Main.swift",
+                    evidence_paths_sample=[
+                        "ConsumerCLI/Sources/ConsumerCLI/Main.swift"
+                    ],
+                )
+            ],
+        ),
+        _planned_snapshot(
+            commit_sha="commit-to",
+            consumer_module_name="ConsumerCLI",
+            symbols=[to_symbol],
+            consumptions=[
+                ModuleContractConsumption(
+                    public_symbol_id="sym-balance-new",
+                    group_id="project/test",
+                    commit_sha="commit-to",
+                    match_symbol_id=symbol_id_for("Wallet.balance()"),
+                    use_count=5,
+                    file_count=1,
+                    first_seen_path="ConsumerCLI/Sources/ConsumerCLI/Main.swift",
+                    evidence_paths_sample=[
+                        "ConsumerCLI/Sources/ConsumerCLI/Main.swift"
+                    ],
+                )
+            ],
+        ),
+    ]
+
+    deltas = _plan_requested_deltas(
+        project="contract-mini",
+        planned=planned,
+        delta_requests=[
+            _DeltaRequest(
+                producer_module_name="ProducerKit",
+                language=Language.SWIFT,
+                from_commit_sha="commit-from",
+                to_commit_sha="commit-to",
+                fqn="Wallet.balance()",
+                change_kind="signature_changed",
+                previous_signature_hash="sig-old",
+                current_signature_hash="sig-new",
+            )
+        ],
+    )
+
+    assert len(deltas) == 2
+    assert {
+        delta.delta.consumer_module_name: (
+            delta.delta.signature_changed_consumed_symbol_count,
+            delta.delta.affected_use_count,
+            [
+                (item.change_kind, item.public_symbol_id)
+                for item in delta.affected_symbols
+            ],
+        )
+        for delta in deltas
+    } == {
+        "ConsumerApp": (1, 3, [("signature_changed", "sym-balance-new")]),
+        "ConsumerCLI": (1, 5, [("signature_changed", "sym-balance-new")]),
+    }
+
+
+def test_plan_requested_deltas_synthesizes_evicted_consumer_target_snapshot() -> None:
+    stale_symbol = _symbol(
+        symbol_id="sym-stale-old",
+        fqn="staleExport()",
+        signature_hash="sig-stale-old",
+        commit_sha="commit-from",
+    )
+    planned = [
+        _planned_snapshot(
+            commit_sha="commit-from",
+            consumer_module_name="ConsumerApp",
+            symbols=[stale_symbol],
+            consumptions=[
+                ModuleContractConsumption(
+                    public_symbol_id="sym-stale-old",
+                    group_id="project/test",
+                    commit_sha="commit-from",
+                    match_symbol_id=symbol_id_for("staleExport()"),
+                    use_count=2,
+                    file_count=1,
+                    first_seen_path=(
+                        "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift"
+                    ),
+                    evidence_paths_sample=[
+                        "ConsumerApp/Sources/ConsumerApp/WalletFeature.swift"
+                    ],
+                )
+            ],
+        ),
+        _planned_snapshot(
+            commit_sha="commit-to",
+            consumer_module_name="__no_cross_module_consumer__",
+            symbols=[_symbol(symbol_id="sym-stale-new", fqn="staleExport()")],
+            consumptions=[],
+        ),
+    ]
+
+    deltas = _plan_requested_deltas(
+        project="contract-mini",
+        planned=planned,
+        delta_requests=[
+            _DeltaRequest(
+                producer_module_name="ProducerKit",
+                language=Language.SWIFT,
+                from_commit_sha="commit-from",
+                to_commit_sha="commit-to",
+                fqn="staleExport()",
+                change_kind="removed",
+                previous_signature_hash="sig-stale-old",
+            )
+        ],
+    )
+
+    assert len(deltas) == 1
+    delta = deltas[0]
+    assert delta.delta.consumer_module_name == "ConsumerApp"
+    assert delta.delta.removed_consumed_symbol_count == 1
+    assert delta.delta.signature_changed_consumed_symbol_count == 0
+    assert delta.delta.added_consumed_symbol_count == 0
+    assert delta.delta.affected_use_count == 2
+    assert delta.to_snapshot_id != planned[1].snapshot.id
+    assert [
+        (item.change_kind, item.public_symbol_id) for item in delta.affected_symbols
+    ] == [("removed", "sym-stale-old")]
+
+
+class _FakeSessionContext:
+    def __init__(self, session: AsyncMock) -> None:
+        self._session = session
+
+    async def __aenter__(self) -> AsyncMock:
+        return self._session
+
+    async def __aexit__(self, exc_type, exc, tb) -> bool:
+        return False
+
+
+class _FakeDriver:
+    def __init__(self, session: AsyncMock) -> None:
+        self._session = session
+
+    def session(self) -> _FakeSessionContext:
+        return _FakeSessionContext(self._session)
+
+
+@pytest.mark.asyncio
+async def test_write_contract_graph_resets_stale_relationships_before_rewrite() -> None:
+    session = AsyncMock()
+    driver = _FakeDriver(session)
+    balance_symbol = _symbol(symbol_id="sym-balance", fqn="Wallet.balance()")
+    consumption = ModuleContractConsumption(
+        public_symbol_id="sym-balance",
+        group_id="project/test",
+        commit_sha="commit-current",
+        match_symbol_id=symbol_id_for("Wallet.balance()"),
+        use_count=1,
+        file_count=1,
+        first_seen_path="ConsumerApp/Sources/ConsumerApp/WalletFeature.swift",
+        evidence_paths_sample=["ConsumerApp/Sources/ConsumerApp/WalletFeature.swift"],
+    )
+    planned_snapshot = _planned_snapshot(
+        commit_sha="commit-current",
+        consumer_module_name="ConsumerApp",
+        symbols=[balance_symbol],
+        consumptions=[consumption],
+    )
+    planned_delta = _PlannedContractDelta(
+        delta=ModuleContractDelta(
+            id="delta-1",
+            group_id="project/test",
+            project="contract-mini",
+            consumer_module_name="ConsumerApp",
+            producer_module_name="ProducerKit",
+            language=Language.SWIFT,
+            from_commit_sha="commit-from",
+            to_commit_sha="commit-current",
+            removed_consumed_symbol_count=0,
+            signature_changed_consumed_symbol_count=1,
+            added_consumed_symbol_count=0,
+            affected_use_count=1,
+        ),
+        affected_symbols=[
+            ModuleContractAffectedSymbol(
+                public_symbol_id="sym-balance",
+                change_kind="signature_changed",
+                affected_use_count=1,
+            )
+        ],
+        from_snapshot_id="snapshot-from",
+        to_snapshot_id=planned_snapshot.snapshot.id,
+    )
+
+    stats = await _write_contract_graph(
+        driver=driver,
+        planned=[planned_snapshot],
+        planned_deltas=[planned_delta],
+    )
+
+    assert stats.nodes_written == 2
+    assert stats.edges_written == 5
+    queries = [call.args[0] for call in session.run.await_args_list]
+    assert queries == [
+        _DELETE_SNAPSHOT_CONSUMPTIONS,
+        _DELETE_SNAPSHOT_SURFACE_LINKS,
+        _WRITE_SNAPSHOT,
+        _WRITE_CONSUMPTION,
+        _DELETE_DELTA_AFFECTED_SYMBOLS,
+        _DELETE_DELTA_SNAPSHOT_LINKS,
+        _WRITE_DELTA,
+        _WRITE_DELTA_AFFECTED_SYMBOL,
+    ]
 
 
 def test_resolve_module_owner_from_map_reports_ambiguous_match() -> None:
