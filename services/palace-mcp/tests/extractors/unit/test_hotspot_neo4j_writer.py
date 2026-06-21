@@ -10,7 +10,9 @@ from palace_mcp.extractors.hotspot.neo4j_writer import (
     PHASE_1_CYPHER,
     PHASE_3_CYPHER,
     PHASE_4_EVICT_CYPHER,
+    PHASE_4_PATH_EVICT_CYPHER,
     PHASE_5_DEAD_CYPHER,
+    PHASE_5_PATH_ZERO_CYPHER,
     write_file_and_functions,
 )
 
@@ -86,9 +88,19 @@ def test_phase4_cypher_uses_last_run_at_cutoff():
     assert "DETACH DELETE fn" in PHASE_4_EVICT_CYPHER
 
 
+def test_phase4_path_cypher_targets_only_selected_paths():
+    assert "coalesce(f.file_path, f.path) IN $paths" in PHASE_4_PATH_EVICT_CYPHER
+    assert "fn.last_run_at < datetime($run_started_at)" in PHASE_4_PATH_EVICT_CYPHER
+
+
 def test_no_writer_set_on_file_project_id_or_path():
     forbidden = ("SET f.project_id", "SET f.path")
-    for cypher in (PHASE_1_CYPHER, PHASE_3_CYPHER, PHASE_5_DEAD_CYPHER):
+    for cypher in (
+        PHASE_1_CYPHER,
+        PHASE_3_CYPHER,
+        PHASE_5_DEAD_CYPHER,
+        PHASE_5_PATH_ZERO_CYPHER,
+    ):
         for f in forbidden:
             assert f not in cypher
 
@@ -125,7 +137,7 @@ async def test_fetch_churn_builds_correct_cypher_and_cutoff():
         project_id="gimle",
         paths=paths,
         window_days=90,
-        run_started_at=run_at,
+        as_of=run_at,
     )
     cypher_arg, params = session.run.await_args.args[0], session.run.await_args.args[1]
     assert cypher_arg is CHURN_CYPHER
@@ -210,5 +222,59 @@ async def test_mark_dead_files_zero_passes_preserved_paths():
     assert session.run.await_args.args[1] == {
         "project_id": "gimle",
         "preserved_paths": preserved_paths,
+        "run_started_at": run_at.isoformat(),
+    }
+
+
+@pytest.mark.asyncio
+async def test_evict_stale_functions_for_paths_passes_selected_paths():
+    from palace_mcp.extractors.hotspot.neo4j_writer import (
+        evict_stale_functions_for_paths,
+    )
+
+    driver = MagicMock()
+    session = MagicMock()
+    session.run = AsyncMock()
+    driver.session.return_value.__aenter__.return_value = session
+    driver.session.return_value.__aexit__.return_value = None
+    run_at = datetime(2026, 5, 4, 12, 0, tzinfo=timezone.utc)
+    paths = ["src/a.py", "src/deleted.py"]
+    await evict_stale_functions_for_paths(
+        driver,
+        project_id="gimle",
+        paths=paths,
+        run_started_at=run_at,
+    )
+    cypher_arg, params = session.run.await_args.args[0], session.run.await_args.args[1]
+    assert cypher_arg is PHASE_4_PATH_EVICT_CYPHER
+    assert params == {
+        "project_id": "gimle",
+        "paths": paths,
+        "run_started_at": run_at.isoformat(),
+    }
+
+
+@pytest.mark.asyncio
+async def test_mark_deleted_files_zero_passes_selected_paths():
+    from palace_mcp.extractors.hotspot.neo4j_writer import mark_deleted_files_zero
+
+    driver = MagicMock()
+    session = MagicMock()
+    session.run = AsyncMock()
+    driver.session.return_value.__aenter__.return_value = session
+    driver.session.return_value.__aexit__.return_value = None
+    run_at = datetime(2026, 5, 4, 12, 0, tzinfo=timezone.utc)
+    paths = ["src/deleted.py"]
+    await mark_deleted_files_zero(
+        driver,
+        project_id="gimle",
+        paths=paths,
+        run_started_at=run_at,
+    )
+    cypher_arg, params = session.run.await_args.args[0], session.run.await_args.args[1]
+    assert cypher_arg is PHASE_5_PATH_ZERO_CYPHER
+    assert params == {
+        "project_id": "gimle",
+        "paths": paths,
         "run_started_at": run_at.isoformat(),
     }

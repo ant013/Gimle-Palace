@@ -62,8 +62,14 @@ async def test_hotspot_fails_fast_without_git_history(tmp_path: Path) -> None:
     )
 
     with patch("palace_mcp.mcp_server.get_settings", return_value=_fake_settings()):
-        with pytest.raises(ExtractorError) as exc_info:
-            await HotspotExtractor().run(graphiti=graphiti, ctx=ctx)
+        with patch(
+            "palace_mcp.extractors.hotspot.extractor._head_commit_as_of",
+            return_value=__import__("datetime").datetime(
+                2026, 5, 4, 12, 0, tzinfo=__import__("datetime").timezone.utc
+            ),
+        ):
+            with pytest.raises(ExtractorError) as exc_info:
+                await HotspotExtractor().run(graphiti=graphiti, ctx=ctx)
 
     assert exc_info.value.error_code == "prerequisite_missing"
 
@@ -97,6 +103,12 @@ async def test_hotspot_proceeds_when_git_history_present(tmp_path: Path) -> None
 
     with (
         patch("palace_mcp.mcp_server.get_settings", return_value=_fake_settings()),
+        patch(
+            "palace_mcp.extractors.hotspot.extractor._head_commit_as_of",
+            return_value=__import__("datetime").datetime(
+                2026, 5, 4, 12, 0, tzinfo=__import__("datetime").timezone.utc
+            ),
+        ),
         patch(
             "palace_mcp.extractors.hotspot.extractor.lizard_runner.run_batch",
             new=AsyncMock(return_value=lizard_result),

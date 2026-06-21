@@ -7,6 +7,7 @@ tantivy/budget infra requirements.
 
 from __future__ import annotations
 
+from datetime import datetime
 import logging
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -15,6 +16,7 @@ import pytest
 from neo4j import AsyncDriver
 
 from palace_mcp.extractors.base import ExtractorRunContext
+from palace_mcp.extractors.hotspot.churn_query import fetch_churn
 from palace_mcp.extractors.hotspot.extractor import HotspotExtractor
 
 FIXTURE_DIR = Path(__file__).parent.parent / "fixtures" / "hotspot-mini-project"
@@ -219,3 +221,38 @@ async def test_hotspot_eviction_removes_dead_functions(
         n_row = await result2.single()
         assert n_row is not None
         assert n_row["n"] == 0
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_fetch_churn_uses_pinned_as_of_window_boundary(
+    driver: AsyncDriver,
+) -> None:
+    project_id = "project/hs-boundary"
+    async with driver.session() as session:
+        await session.run(
+            "MERGE (f:File {project_id: $pid, path: 'src/a.py'})",
+            pid=project_id,
+        )
+        await session.run(
+            "MATCH (f:File {project_id: $pid, path: 'src/a.py'}) "
+            "CREATE (c1:Commit {sha: 'inside', committed_at: datetime('2026-02-03T12:00:00Z')}) "
+            "CREATE (c1)-[:TOUCHED]->(f)",
+            pid=project_id,
+        )
+        await session.run(
+            "MATCH (f:File {project_id: $pid, path: 'src/a.py'}) "
+            "CREATE (c2:Commit {sha: 'outside', committed_at: datetime('2026-02-03T11:59:59Z')}) "
+            "CREATE (c2)-[:TOUCHED]->(f)",
+            pid=project_id,
+        )
+
+    churn = await fetch_churn(
+        driver,
+        project_id=project_id,
+        paths=["src/a.py"],
+        window_days=90,
+        as_of=datetime.fromisoformat("2026-05-04T12:00:00+00:00"),
+    )
+
+    assert churn == {"src/a.py": 1}

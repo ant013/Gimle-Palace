@@ -19,11 +19,11 @@ async def fetch_churn(
     project_id: str,
     paths: list[str],
     window_days: int,
-    run_started_at: datetime,
+    as_of: datetime,
 ) -> dict[str, int]:
     if not paths:
         return {}
-    cutoff = (run_started_at - timedelta(days=window_days)).isoformat()
+    cutoff = (as_of - timedelta(days=window_days)).isoformat()
     out: dict[str, int] = {p: 0 for p in paths}
     async with driver.session() as session:
         result = await session.run(

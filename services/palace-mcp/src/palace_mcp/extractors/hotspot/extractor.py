@@ -2,13 +2,21 @@ from __future__ import annotations
 
 import math
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, ClassVar, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
+
+import pygit2
 
 from palace_mcp.extractors.base import (
     BaseExtractor,
     ExtractorError,
+    ExtractorExecutionMode,
+    ExtractorOutcome,
     ExtractorRunContext,
     ExtractorStats,
+)
+from palace_mcp.extractors.foundation.incremental_scope import (
+    IncrementalMode,
+    derive_incremental_path_scope,
 )
 
 if TYPE_CHECKING:
@@ -51,6 +59,12 @@ async def _count_db_files(driver: Any, *, project_id: str) -> int:
     return int(row["n"]) if row is not None else 0
 
 
+def _head_commit_as_of(repo_path: Any) -> datetime:
+    repo = pygit2.Repository(str(repo_path))
+    commit = cast(Any, repo[repo.head.target])
+    return datetime.fromtimestamp(commit.commit_time, tz=timezone.utc)
+
+
 class HotspotExtractor(BaseExtractor):
     name: ClassVar[str] = "hotspot"
     description: ClassVar[str] = (
@@ -73,6 +87,7 @@ class HotspotExtractor(BaseExtractor):
         assert settings is not None, "Palace settings not initialised"
         driver = graphiti.driver  # type: ignore[attr-defined]
         run_started_at = datetime.now(tz=timezone.utc)
+        as_of = _head_commit_as_of(ctx.repo_path)
 
         # Prerequisite: git_history must have run first (else all churn = 0 → all scores = 0)
         git_history_runs = await _count_git_history_runs(
@@ -85,7 +100,31 @@ class HotspotExtractor(BaseExtractor):
                 "run palace.ingest.run_extractor(name='git_history', project=...) first",
             )
 
-        files = list(file_walker._walk(ctx.repo_path))
+        scope = await derive_incremental_path_scope(
+            driver,
+            repo_path=ctx.repo_path,
+            project_id=ctx.group_id,
+            settings=settings,
+            force=ctx.force,
+            path_filter=file_walker.is_supported_path,
+        )
+        if scope.mode == IncrementalMode.SKIP:
+            return ExtractorStats(
+                outcome=ExtractorOutcome.SKIPPED,
+                message="Skipped hotspot: no changed hotspot-supported files.",
+                next_action=(
+                    "Modify tracked source files or rerun with force=True before rerunning hotspot."
+                ),
+                mode=ExtractorExecutionMode.SKIPPED,
+            )
+
+        is_incremental = scope.mode == IncrementalMode.INCREMENTAL
+        files = (
+            [ctx.repo_path / path for path in sorted(scope.changed_paths)]
+            if is_incremental
+            else list(file_walker._walk(ctx.repo_path))
+        )
+        deleted_paths = sorted(scope.removed_paths) if is_incremental else []
 
         batch_size: int = settings.palace_hotspot_lizard_batch_size
         timeout_s: int = settings.palace_hotspot_lizard_timeout_s
@@ -95,10 +134,8 @@ class HotspotExtractor(BaseExtractor):
 
         parsed_files: list[ParsedFile] = []
         skipped_paths: list[str] = []
-        for i in range(0, max(len(files), 1), batch_size):
+        for i in range(0, len(files), batch_size):
             batch = files[i : i + batch_size]
-            if not batch:
-                continue
             result = await lizard_runner.run_batch(
                 batch,
                 repo_root=ctx.repo_path,
@@ -112,19 +149,22 @@ class HotspotExtractor(BaseExtractor):
         scanned_files = len(files)
         parsed_functions = sum(len(pf.functions) for pf in parsed_files)
         if scanned_files == 0:
-            db_files = await _count_db_files(driver, project_id=ctx.group_id)
-            if db_files > 0:
+            if is_incremental:
+                parsed_functions = 0
+            else:
+                db_files = await _count_db_files(driver, project_id=ctx.group_id)
+                if db_files > 0:
+                    raise _HotspotError(
+                        "data_mismatch_zero_scan_with_files_present",
+                        f"file_walker found 0 source files for project {ctx.project_slug!r} "
+                        f"but {db_files} :File nodes exist in Neo4j — likely mount or stop-list mismatch",
+                    )
                 raise _HotspotError(
-                    "data_mismatch_zero_scan_with_files_present",
-                    f"file_walker found 0 source files for project {ctx.project_slug!r} "
-                    f"but {db_files} :File nodes exist in Neo4j — likely mount or stop-list mismatch",
+                    "empty_project",
+                    f"file_walker found 0 source files and Neo4j has 0 :File nodes for project "
+                    f"{ctx.project_slug!r} — repo may be empty or incorrectly mounted",
                 )
-            raise _HotspotError(
-                "empty_project",
-                f"file_walker found 0 source files and Neo4j has 0 :File nodes for project "
-                f"{ctx.project_slug!r} — repo may be empty or incorrectly mounted",
-            )
-        if parsed_functions == 0:
+        elif parsed_functions == 0:
             raise _HotspotError(
                 "lizard_parser_zero_functions",
                 f"lizard scanned {scanned_files} file(s) for project {ctx.project_slug!r} "
@@ -138,7 +178,7 @@ class HotspotExtractor(BaseExtractor):
             project_id=ctx.group_id,
             paths=paths,
             window_days=settings.palace_hotspot_churn_window_days,
-            run_started_at=run_started_at,
+            as_of=as_of,
         )
 
         nodes_w = 0
@@ -165,20 +205,42 @@ class HotspotExtractor(BaseExtractor):
                 run_started_at=run_started_at,
             )
 
-        await neo4j_writer.evict_stale_functions(
-            driver,
-            project_id=ctx.group_id,
-            preserved_paths=preserved_paths,
-            run_started_at=run_started_at,
-        )
-        await neo4j_writer.mark_dead_files_zero(
-            driver,
-            project_id=ctx.group_id,
-            preserved_paths=preserved_paths,
-            run_started_at=run_started_at,
-        )
+        if is_incremental:
+            await neo4j_writer.evict_stale_functions_for_paths(
+                driver,
+                project_id=ctx.group_id,
+                paths=paths + deleted_paths,
+                run_started_at=run_started_at,
+            )
+            await neo4j_writer.mark_deleted_files_zero(
+                driver,
+                project_id=ctx.group_id,
+                paths=deleted_paths,
+                run_started_at=run_started_at,
+            )
+        else:
+            await neo4j_writer.evict_stale_functions(
+                driver,
+                project_id=ctx.group_id,
+                preserved_paths=preserved_paths,
+                run_started_at=run_started_at,
+            )
+            await neo4j_writer.mark_dead_files_zero(
+                driver,
+                project_id=ctx.group_id,
+                preserved_paths=preserved_paths,
+                run_started_at=run_started_at,
+            )
 
-        return ExtractorStats(nodes_written=nodes_w, edges_written=edges_w)
+        return ExtractorStats(
+            nodes_written=nodes_w,
+            edges_written=edges_w,
+            mode=(
+                ExtractorExecutionMode.INCREMENTAL
+                if is_incremental
+                else ExtractorExecutionMode.FULL
+            ),
+        )
 
     def audit_contract(self) -> "AuditContract":
         from palace_mcp.audit.contracts import AuditContract, Severity
