@@ -77,6 +77,14 @@ SET f.ccn_total = 0,
     f.last_complexity_run_at = datetime($run_started_at)
 """.strip()
 
+ACTIVE_FILE_COMPLEXITY_CYPHER = """
+MATCH (f:File {project_id: $project_id})
+WHERE coalesce(f.ccn_total, 0) > 0
+  AND NOT coalesce(f.file_path, f.path) IN $excluded_paths
+RETURN coalesce(f.file_path, f.path) AS path, f.ccn_total AS ccn_total
+ORDER BY path
+""".strip()
+
 
 def _functions_payload(parsed_file: Any) -> list[dict[str, Any]]:
     return [
@@ -135,6 +143,26 @@ async def write_hotspot_score(
                 "run_started_at": run_started_at.isoformat(),
             },
         )
+
+
+async def fetch_active_file_complexities(
+    driver: Any,
+    *,
+    project_id: str,
+    excluded_paths: list[str],
+) -> dict[str, int]:
+    async with driver.session() as session:
+        result = await session.run(
+            ACTIVE_FILE_COMPLEXITY_CYPHER,
+            {
+                "project_id": project_id,
+                "excluded_paths": excluded_paths,
+            },
+        )
+        out: dict[str, int] = {}
+        async for record in result:
+            out[record["path"]] = int(record["ccn_total"])
+        return out
 
 
 async def evict_stale_functions(

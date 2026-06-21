@@ -281,11 +281,11 @@ async def test_hotspot_incremental_matches_full_with_pinned_as_of(
     incremental_repo = _build_repo(tmp_path / "incremental")
     full_slug = "hs-parity-full"
     incremental_slug = "hs-parity-incremental"
-    as_of = datetime.fromisoformat("2026-05-04T12:00:00+00:00")
+    baseline_as_of = datetime.fromisoformat("2026-05-04T12:00:00+00:00")
+    final_as_of = datetime.fromisoformat("2026-05-05T12:00:00+00:00")
     churn_map = {
         "src/python_simple.py": 2,
         "src/python_complex.py": 4,
-        "src/main.kt": 1,
         "src/util.ts": 1,
     }
 
@@ -293,12 +293,24 @@ async def test_hotspot_incremental_matches_full_with_pinned_as_of(
     await _seed_git_history_run(driver, incremental_slug)
     await _seed_churn(driver, f"project/{full_slug}", churn_map)
     await _seed_churn(driver, f"project/{incremental_slug}", churn_map)
+    await _seed_churn(
+        driver,
+        f"project/{full_slug}",
+        {"src/main.kt": 1},
+        committed_at="2026-02-03T18:00:00Z",
+    )
+    await _seed_churn(
+        driver,
+        f"project/{incremental_slug}",
+        {"src/main.kt": 1},
+        committed_at="2026-02-03T18:00:00Z",
+    )
 
     with (
         patch("palace_mcp.mcp_server.get_settings", return_value=_fake_settings()),
         patch(
             "palace_mcp.extractors.hotspot.extractor._head_commit_as_of",
-            return_value=as_of,
+            return_value=baseline_as_of,
         ),
     ):
         await HotspotExtractor().run(
@@ -317,7 +329,7 @@ async def test_hotspot_incremental_matches_full_with_pinned_as_of(
         patch("palace_mcp.mcp_server.get_settings", return_value=_fake_settings()),
         patch(
             "palace_mcp.extractors.hotspot.extractor._head_commit_as_of",
-            return_value=as_of,
+            return_value=final_as_of,
         ),
     ):
         full_stats = await HotspotExtractor().run(
@@ -334,7 +346,7 @@ async def test_hotspot_incremental_matches_full_with_pinned_as_of(
         ),
         patch(
             "palace_mcp.extractors.hotspot.extractor._head_commit_as_of",
-            return_value=as_of,
+            return_value=final_as_of,
         ),
         patch(
             "palace_mcp.extractors.hotspot.extractor.derive_incremental_path_scope",
@@ -366,6 +378,7 @@ async def test_hotspot_incremental_matches_full_with_pinned_as_of(
         "classify",
         "classify_bucket",
     ]
+    assert full_rows["src/main.kt"]["churn"] == 0
     assert full_rows["src/util.ts"]["ccn"] == 0
     assert full_rows["src/util.ts"]["status"] == "stale"
 

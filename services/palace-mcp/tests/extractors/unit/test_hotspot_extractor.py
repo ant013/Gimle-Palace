@@ -251,7 +251,7 @@ async def test_run_incremental_only_scans_changed_files_and_zeroes_deleted_files
         ) as m_lizard,
         patch(
             "palace_mcp.extractors.hotspot.extractor.churn_query.fetch_churn",
-            new=AsyncMock(return_value={"src/a.py": 5}),
+            new=AsyncMock(return_value={"src/a.py": 5, "src/untouched.py": 3}),
         ),
         patch(
             "palace_mcp.extractors.hotspot.extractor.neo4j_writer.write_file_and_functions",
@@ -260,7 +260,11 @@ async def test_run_incremental_only_scans_changed_files_and_zeroes_deleted_files
         patch(
             "palace_mcp.extractors.hotspot.extractor.neo4j_writer.write_hotspot_score",
             new=AsyncMock(),
-        ),
+        ) as m_score,
+        patch(
+            "palace_mcp.extractors.hotspot.extractor.neo4j_writer.fetch_active_file_complexities",
+            new=AsyncMock(return_value={"src/a.py": 1, "src/untouched.py": 4}),
+        ) as m_complexities,
         patch(
             "palace_mcp.extractors.hotspot.extractor.neo4j_writer.evict_stale_functions_for_paths",
             new=AsyncMock(),
@@ -282,6 +286,11 @@ async def test_run_incremental_only_scans_changed_files_and_zeroes_deleted_files
 
     batch = m_lizard.await_args.args[0]
     assert batch == [tmp_path / "src" / "a.py"]
+    assert m_complexities.await_args.kwargs["excluded_paths"] == ["src/deleted.py"]
+    assert {call.kwargs["path"] for call in m_score.await_args_list} == {
+        "src/a.py",
+        "src/untouched.py",
+    }
     assert m_evict.await_args.kwargs["paths"] == ["src/a.py", "src/deleted.py"]
     assert m_zero.await_args.kwargs["paths"] == ["src/deleted.py"]
     m_full_evict.assert_not_awaited()
@@ -331,12 +340,80 @@ async def test_run_incremental_skips_when_no_relevant_changes(tmp_path: Path):
             "palace_mcp.extractors.hotspot.extractor.lizard_runner.run_batch",
             new=AsyncMock(),
         ) as m_lizard,
+        patch(
+            "palace_mcp.extractors.hotspot.extractor.neo4j_writer.fetch_active_file_complexities",
+            new=AsyncMock(return_value={}),
+        ) as m_complexities,
     ):
         stats = await HotspotExtractor().run(graphiti=graphiti, ctx=ctx)
 
     m_lizard.assert_not_awaited()
+    m_complexities.assert_awaited_once()
     assert stats.outcome == ExtractorOutcome.SKIPPED
     assert stats.mode == ExtractorExecutionMode.SKIPPED
+
+
+@pytest.mark.asyncio
+async def test_run_incremental_refreshes_scores_when_no_hotspot_files_changed(
+    tmp_path: Path,
+):
+    settings = _fake_settings()
+    settings.palace_incremental_ingest = True
+    graphiti = MagicMock()
+    graphiti.driver = MagicMock()
+    ctx = ExtractorRunContext(
+        project_slug="testproj",
+        group_id="project/testproj",
+        repo_path=tmp_path,
+        run_id="run-4",
+        duration_ms=0,
+        logger=logging.getLogger("test"),
+    )
+
+    existing_complexities = {"src/untouched.py": 4}
+    with (
+        patch("palace_mcp.mcp_server.get_settings", return_value=settings),
+        patch(
+            "palace_mcp.extractors.hotspot.extractor._head_commit_as_of",
+            return_value=__import__("datetime").datetime(
+                2026, 5, 5, 12, 0, tzinfo=__import__("datetime").timezone.utc
+            ),
+        ),
+        patch(
+            "palace_mcp.extractors.hotspot.extractor.derive_incremental_path_scope",
+            new=AsyncMock(
+                return_value=IncrementalPathScope(
+                    mode=IncrementalMode.SKIP,
+                    changed_paths=set(),
+                    removed_paths=set(),
+                    reason="no_relevant_changes",
+                )
+            ),
+        ),
+        patch(
+            "palace_mcp.extractors.hotspot.extractor.neo4j_writer.fetch_active_file_complexities",
+            new=AsyncMock(side_effect=[existing_complexities, existing_complexities]),
+        ) as m_complexities,
+        patch(
+            "palace_mcp.extractors.hotspot.extractor.churn_query.fetch_churn",
+            new=AsyncMock(return_value={"src/untouched.py": 2}),
+        ),
+        patch(
+            "palace_mcp.extractors.hotspot.extractor.lizard_runner.run_batch",
+            new=AsyncMock(),
+        ) as m_lizard,
+        patch(
+            "palace_mcp.extractors.hotspot.extractor.neo4j_writer.write_hotspot_score",
+            new=AsyncMock(),
+        ) as m_score,
+    ):
+        stats = await HotspotExtractor().run(graphiti=graphiti, ctx=ctx)
+
+    m_lizard.assert_not_awaited()
+    assert m_complexities.await_count == 2
+    m_score.assert_awaited_once()
+    assert m_score.await_args.kwargs["path"] == "src/untouched.py"
+    assert stats.mode == ExtractorExecutionMode.INCREMENTAL
 
 
 def test_run_no_try_except_around_inner_phases():

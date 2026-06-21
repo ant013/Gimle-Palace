@@ -115,23 +115,36 @@ class HotspotExtractor(BaseExtractor):
             force=ctx.force,
             path_filter=file_walker.is_supported_path,
         )
-        if scope.mode == IncrementalMode.SKIP:
-            return ExtractorStats(
-                outcome=ExtractorOutcome.SKIPPED,
-                message="Skipped hotspot: no changed hotspot-supported files.",
-                next_action=(
-                    "Modify tracked source files or rerun with force=True before rerunning hotspot."
-                ),
-                mode=ExtractorExecutionMode.SKIPPED,
-            )
-
-        is_incremental = scope.mode == IncrementalMode.INCREMENTAL
-        files = (
-            [ctx.repo_path / path for path in sorted(scope.changed_paths)]
-            if is_incremental
-            else list(file_walker._walk(ctx.repo_path))
+        refresh_only_incremental = scope.mode == IncrementalMode.SKIP
+        is_incremental = (
+            scope.mode == IncrementalMode.INCREMENTAL or refresh_only_incremental
         )
-        deleted_paths = sorted(scope.removed_paths) if is_incremental else []
+        if refresh_only_incremental:
+            existing_file_complexities = (
+                await neo4j_writer.fetch_active_file_complexities(
+                    driver,
+                    project_id=ctx.group_id,
+                    excluded_paths=[],
+                )
+            )
+            if not existing_file_complexities:
+                return ExtractorStats(
+                    outcome=ExtractorOutcome.SKIPPED,
+                    message="Skipped hotspot: no changed hotspot-supported files.",
+                    next_action=(
+                        "Modify tracked source files or rerun with force=True before rerunning hotspot."
+                    ),
+                    mode=ExtractorExecutionMode.SKIPPED,
+                )
+            files: list[Any] = []
+            deleted_paths: list[str] = []
+        else:
+            files = (
+                [ctx.repo_path / path for path in sorted(scope.changed_paths)]
+                if is_incremental
+                else list(file_walker._walk(ctx.repo_path))
+            )
+            deleted_paths = sorted(scope.removed_paths) if is_incremental else []
 
         batch_size: int = settings.palace_hotspot_lizard_batch_size
         timeout_s: int = settings.palace_hotspot_lizard_timeout_s
@@ -178,16 +191,6 @@ class HotspotExtractor(BaseExtractor):
                 "but extracted 0 functions — lizard may be broken or files have no parseable code",
             )
 
-        paths = [pf.path for pf in parsed_files]
-        preserved_paths = sorted({*paths, *skipped_paths})
-        churn_map = await churn_query.fetch_churn(
-            driver,
-            project_id=ctx.group_id,
-            paths=paths,
-            window_days=settings.palace_hotspot_churn_window_days,
-            as_of=as_of,
-        )
-
         nodes_w = 0
         edges_w = 0
         for pf in parsed_files:
@@ -200,12 +203,30 @@ class HotspotExtractor(BaseExtractor):
             nodes_w += 1 + len(pf.functions)
             edges_w += len(pf.functions)
 
-            churn = churn_map.get(pf.path, 0)
-            score = math.log(pf.ccn_total + 1) * math.log(churn + 1)
+        paths = [pf.path for pf in parsed_files]
+        preserved_paths = sorted({*paths, *skipped_paths})
+        if is_incremental:
+            file_complexities = await neo4j_writer.fetch_active_file_complexities(
+                driver,
+                project_id=ctx.group_id,
+                excluded_paths=deleted_paths,
+            )
+        else:
+            file_complexities = {pf.path: pf.ccn_total for pf in parsed_files}
+        churn_map = await churn_query.fetch_churn(
+            driver,
+            project_id=ctx.group_id,
+            paths=sorted(file_complexities),
+            window_days=settings.palace_hotspot_churn_window_days,
+            as_of=as_of,
+        )
+        for path, ccn_total in file_complexities.items():
+            churn = churn_map.get(path, 0)
+            score = math.log(ccn_total + 1) * math.log(churn + 1)
             await neo4j_writer.write_hotspot_score(
                 driver,
                 project_id=ctx.group_id,
-                path=pf.path,
+                path=path,
                 churn=churn,
                 score=score,
                 window_days=settings.palace_hotspot_churn_window_days,

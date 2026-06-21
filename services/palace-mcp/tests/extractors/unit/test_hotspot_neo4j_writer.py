@@ -7,6 +7,7 @@ import pytest
 
 from palace_mcp.extractors.hotspot.models import ParsedFile, ParsedFunction
 from palace_mcp.extractors.hotspot.neo4j_writer import (
+    ACTIVE_FILE_COMPLEXITY_CYPHER,
     PHASE_1_CYPHER,
     PHASE_3_CYPHER,
     PHASE_4_EVICT_CYPHER,
@@ -105,6 +106,13 @@ def test_no_writer_set_on_file_project_id_or_path():
             assert f not in cypher
 
 
+def test_active_file_complexity_cypher_excludes_deleted_paths():
+    assert "coalesce(f.ccn_total, 0) > 0" in ACTIVE_FILE_COMPLEXITY_CYPHER
+    assert "NOT coalesce(f.file_path, f.path) IN $excluded_paths" in (
+        ACTIVE_FILE_COMPLEXITY_CYPHER
+    )
+
+
 @pytest.mark.asyncio
 async def test_fetch_churn_builds_correct_cypher_and_cutoff():
     from palace_mcp.extractors.hotspot.churn_query import CHURN_CYPHER, fetch_churn
@@ -177,6 +185,51 @@ async def test_write_hotspot_score_passes_correct_params():
         "window_days": 90,
         "run_started_at": run_at.isoformat(),
     }
+
+
+@pytest.mark.asyncio
+async def test_fetch_active_file_complexities_passes_correct_params():
+    from palace_mcp.extractors.hotspot.neo4j_writer import (
+        fetch_active_file_complexities,
+    )
+
+    driver = MagicMock()
+    session = MagicMock()
+    session.run = AsyncMock()
+    fake_records = [
+        {"path": "src/a.py", "ccn_total": 4},
+        {"path": "src/b.py", "ccn_total": 2},
+    ]
+
+    class FakeResult:
+        def __aiter__(self):
+            self._idx = 0
+            return self
+
+        async def __anext__(self):
+            if self._idx >= len(fake_records):
+                raise StopAsyncIteration
+            value = fake_records[self._idx]
+            self._idx += 1
+            return value
+
+    session.run.return_value = FakeResult()
+    driver.session.return_value.__aenter__.return_value = session
+    driver.session.return_value.__aexit__.return_value = None
+
+    out = await fetch_active_file_complexities(
+        driver,
+        project_id="gimle",
+        excluded_paths=["src/deleted.py"],
+    )
+
+    cypher_arg, params = session.run.await_args.args[0], session.run.await_args.args[1]
+    assert cypher_arg is ACTIVE_FILE_COMPLEXITY_CYPHER
+    assert params == {
+        "project_id": "gimle",
+        "excluded_paths": ["src/deleted.py"],
+    }
+    assert out == {"src/a.py": 4, "src/b.py": 2}
 
 
 @pytest.mark.asyncio
