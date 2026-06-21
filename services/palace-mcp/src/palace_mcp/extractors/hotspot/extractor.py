@@ -59,8 +59,15 @@ async def _count_db_files(driver: Any, *, project_id: str) -> int:
     return int(row["n"]) if row is not None else 0
 
 
-def _head_commit_as_of(repo_path: Any) -> datetime:
-    repo = pygit2.Repository(str(repo_path))
+def _head_commit_as_of(
+    repo_path: Any, *, fallback_as_of: datetime | None = None
+) -> datetime:
+    try:
+        repo = pygit2.Repository(str(repo_path))
+    except pygit2.GitError:
+        if fallback_as_of is not None:
+            return fallback_as_of
+        raise
     commit = cast(Any, repo[repo.head.target])
     return datetime.fromtimestamp(commit.commit_time, tz=timezone.utc)
 
@@ -87,7 +94,7 @@ class HotspotExtractor(BaseExtractor):
         assert settings is not None, "Palace settings not initialised"
         driver = graphiti.driver  # type: ignore[attr-defined]
         run_started_at = datetime.now(tz=timezone.utc)
-        as_of = _head_commit_as_of(ctx.repo_path)
+        as_of = _head_commit_as_of(ctx.repo_path, fallback_as_of=run_started_at)
 
         # Prerequisite: git_history must have run first (else all churn = 0 → all scores = 0)
         git_history_runs = await _count_git_history_runs(
