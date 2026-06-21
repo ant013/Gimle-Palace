@@ -713,9 +713,15 @@ async def test_cross_module_contract_retires_stale_pair_records_after_eviction(
                    snap.consumer_module_name AS consumer_module_name,
                    snap.symbol_count AS symbol_count,
                    snap.use_count AS use_count
-            ORDER BY snap.commit_sha
+            ORDER BY CASE snap.commit_sha
+                        WHEN $head_sha THEN 0
+                        WHEN $new_head_sha THEN 1
+                        ELSE 2
+                     END
             """,
             project="contract-mini",
+            head_sha=_HEAD_SHA,
+            new_head_sha=_NEW_HEAD_SHA,
         )
         snapshots = await snapshot_result.data()
 
@@ -924,9 +930,18 @@ async def test_cross_module_contract_eviction_preserves_other_include_package_mo
             RETURN snap.include_package AS include_package,
                    snap.commit_sha AS commit_sha,
                    snap.consumer_module_name AS consumer_module_name
-            ORDER BY snap.include_package, snap.commit_sha
+            ORDER BY snap.include_package,
+                     CASE snap.commit_sha
+                        WHEN $old_sha THEN 0
+                        WHEN $head_sha THEN 1
+                        WHEN $new_head_sha THEN 2
+                        ELSE 3
+                     END
             """,
             project="contract-mini",
+            old_sha=_OLD_SHA,
+            head_sha=_HEAD_SHA,
+            new_head_sha=_NEW_HEAD_SHA,
         )
         snapshots = await snapshot_result.data()
 
