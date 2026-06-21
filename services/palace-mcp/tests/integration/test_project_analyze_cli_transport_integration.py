@@ -101,6 +101,7 @@ _SERVER_SCRIPT = textwrap.dedent(
             bundle: str | None = None,
             extractors: list[str] | None = None,
             depth: str = "full",
+            mode: str = "full",
             continue_on_failure: bool = True,
             idempotency_key: str | None = None,
             force_new: bool = False,
@@ -109,6 +110,7 @@ _SERVER_SCRIPT = textwrap.dedent(
             assert relative_path == "TronKit.Swift"
             assert language_profile == "swift_kit"
             assert bundle == "uw-ios"
+            assert mode == "full"
             return AnalysisRunStartResult(
                 run=make_run("run-123", AnalysisRunStatus.RUNNING),
                 active_run_reused=False,

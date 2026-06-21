@@ -96,10 +96,12 @@ _SERVER_SCRIPT = textwrap.dedent(
             bundle: str | None = None,
             extractors: list[str] | None = None,
             depth: str = "full",
+            mode: str = "full",
             continue_on_failure: bool = True,
             idempotency_key: str | None = None,
             force_new: bool = False,
         ) -> AnalysisRunStartResult:
+            assert mode == "full"
             if idempotency_key == "different-key":
                 raise ActiveAnalysisRunExistsError("run-existing")
             run = make_run(run_id="run-123", status=AnalysisRunStatus.RUNNING)
