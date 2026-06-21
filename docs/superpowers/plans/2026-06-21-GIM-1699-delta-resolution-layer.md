@@ -37,7 +37,7 @@ extractors can consume instead of raw changed/removed paths.
 
 ## Work Plan
 
-1. [ ] Define snapshot and diff primitives for symbols, edges, seeds, and
+1. [x] Define snapshot and diff primitives for symbols, edges, seeds, and
    public API rows.
    - Owner: `CXPythonEngineer`.
    - Files: `services/palace-mcp/src/palace_mcp/extractors/foundation/delta_resolution.py`,
@@ -47,21 +47,21 @@ extractors can consume instead of raw changed/removed paths.
    - Verification: unit tests cover add/remove/move, seed flips, and
      `signature_hash` changes.
 
-2. [ ] Prove file-scoped diff behavior with unit tests.
+2. [x] Prove file-scoped diff behavior with unit tests.
    - Owner: `CXPythonEngineer`.
    - Files: `services/palace-mcp/tests/extractors/unit/test_delta_resolution.py`.
    - Acceptance: tests cover symbol adds/removes/moves, edge adds/removes,
      seed flips, and public-API adds/removes/changes.
    - Verification: `uv run pytest tests/extractors/unit/test_delta_resolution.py`.
 
-3. [ ] Add a real-Neo4j parity fixture for a known commit pair.
+3. [x] Add a real-Neo4j parity fixture for a known commit pair.
    - Owner: `CXPythonEngineer`.
    - Files: `services/palace-mcp/tests/extractors/integration/test_delta_resolution_integration.py`.
    - Acceptance: the expected delta is expressed as a fixed literal derived from
      the known fixture pair, not by duplicating `diff_delta_snapshots`.
    - Verification: `uv run pytest tests/extractors/integration/test_delta_resolution_integration.py -rs`.
 
-4. [ ] Package the slice for review.
+4. [x] Package the slice for review.
    - Owner: `CXPythonEngineer`.
    - Acceptance: the PR references this plan and includes a `## QA Evidence`
      section keyed to the review commit SHA.
