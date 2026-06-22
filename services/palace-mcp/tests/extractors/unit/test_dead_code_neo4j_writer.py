@@ -94,6 +94,38 @@ async def test_write_finding_includes_group_id() -> None:
     assert props_passed["group_id"] == group_id
 
 
+@pytest.mark.asyncio
+async def test_write_finding_clears_optional_props_when_absent() -> None:
+    finding = _finding().model_copy(
+        update={
+            "git_last_external_ref": None,
+            "module_coverage_ratio": None,
+            "target_dead_type": None,
+        }
+    )
+    group_id = "project/bitcoin-core"
+
+    consumed = MagicMock()
+    consumed.counters.nodes_created = 1
+    consumed.counters.properties_set = 3
+    consumed.counters.relationships_created = 0
+
+    result_mock = AsyncMock()
+    result_mock.consume.return_value = consumed
+
+    tx = AsyncMock()
+    tx.run.return_value = result_mock
+
+    await _write_finding(tx, finding, group_id)
+
+    query_passed = tx.run.call_args_list[0].args[0]
+    row_passed = tx.run.call_args_list[0].kwargs["rows"][0]
+    assert "SET f.git_last_external_ref = row.git_last_external_ref" in query_passed
+    assert row_passed["git_last_external_ref"] is None
+    assert row_passed["module_coverage_ratio"] is None
+    assert row_passed["target_dead_type"] is None
+
+
 class _FakeCounters:
     def __init__(
         self,

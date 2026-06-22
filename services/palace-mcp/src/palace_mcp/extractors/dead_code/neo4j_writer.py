@@ -17,6 +17,9 @@ _MERGE_DEAD_FINDINGS_BATCH = """
 UNWIND $rows AS row
 MERGE (f:DeadFinding {finding_id: row.finding_id})
 SET f += row.props
+SET f.git_last_external_ref = row.git_last_external_ref,
+    f.module_coverage_ratio = row.module_coverage_ratio,
+    f.target_dead_type = row.target_dead_type
 """
 
 _MERGE_DEAD_SYMBOL_EDGES_BATCH = """
@@ -163,6 +166,9 @@ async def _write_findings_batch(
         {
             "finding_id": finding.finding_id,
             "props": _finding_props(finding, group_id),
+            "git_last_external_ref": finding.git_last_external_ref,
+            "module_coverage_ratio": finding.module_coverage_ratio,
+            "target_dead_type": finding.target_dead_type,
         }
         for finding in findings
     ]
