@@ -905,26 +905,30 @@ def _infer_swift_access_modifier(
     if lines is None or line_start > len(lines):
         return ""
 
+    declaration_line = lines[line_start - 1].split("//", 1)[0].strip()
+    if not declaration_line:
+        return ""
+
+    declaration_match = _SWIFT_DECLARATION_RE.search(declaration_line)
+    if declaration_match is None:
+        return ""
+
+    declaration_prefix_parts = [declaration_line[: declaration_match.start()]]
     window_start = max(0, line_start - 1 - _SWIFT_ACCESS_LOOKBACK_LINES)
-    snippet_parts = [
-        code
-        for raw_line in lines[window_start:line_start]
-        if (code := raw_line.split("//", 1)[0].strip())
-    ]
-    if not snippet_parts:
-        return ""
+    for raw_line in reversed(lines[window_start : line_start - 1]):
+        prefix_line = raw_line.split("//", 1)[0].strip()
+        if not prefix_line:
+            break
+        if _SWIFT_DECLARATION_RE.search(prefix_line):
+            break
+        if not prefix_line.startswith("@") and (
+            _SWIFT_ACCESS_MODIFIER_RE.search(prefix_line) is None
+        ):
+            break
+        declaration_prefix_parts.insert(0, prefix_line)
 
-    declaration_indexes = [
-        index
-        for index, snippet_part in enumerate(snippet_parts)
-        if _SWIFT_DECLARATION_RE.search(snippet_part)
-    ]
-    if not declaration_indexes:
-        return ""
-
-    start_index = declaration_indexes[-2] + 1 if len(declaration_indexes) > 1 else 0
-    snippet = " ".join(snippet_parts[start_index:])
-    match = _SWIFT_ACCESS_MODIFIER_RE.search(snippet)
+    declaration_prefix = " ".join(part for part in declaration_prefix_parts if part)
+    match = _SWIFT_ACCESS_MODIFIER_RE.search(declaration_prefix)
     if match is not None:
         return str(match.group(1))
     return "internal"

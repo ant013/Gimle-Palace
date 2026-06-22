@@ -126,24 +126,34 @@ class TestSymbolIndexSwiftVendorClassification:
 
 
 class TestSymbolIndexSwiftAccessModifiers:
-    def test_infer_access_modifier_ignores_previous_declaration(
-        self, tmp_path: Path
+    @pytest.mark.parametrize(
+        ("source", "line_start", "expected"),
+        [
+            ("public class PublicThing {}\nclass InternalThing {}\n", 2, "internal"),
+            ("func send(_ public: String) {}\n", 1, "internal"),
+            ("class Box { public let value: Int }\n", 1, "internal"),
+            ('class Box { let label = "public" }\n', 1, "internal"),
+            ("class Box {} // public\n", 1, "internal"),
+            ("public\nclass Box {}\n", 2, "public"),
+            ("public class Box {}\n", 1, "public"),
+        ],
+    )
+    def test_infer_access_modifier_ignores_non_leading_tokens(
+        self, tmp_path: Path, source: str, line_start: int, expected: str
     ) -> None:
         source_path = tmp_path / "Sources" / "Example.swift"
         source_path.parent.mkdir(parents=True)
-        source_path.write_text(
-            "public class PublicThing {}\nclass InternalThing {}\n",
-            encoding="utf-8",
-        )
+        source_path.write_text(source, encoding="utf-8")
 
-        access_modifier = _infer_swift_access_modifier(
-            repo_path=tmp_path,
-            file_path="Sources/Example.swift",
-            line_start=2,
-            file_lines_cache={},
+        assert (
+            _infer_swift_access_modifier(
+                repo_path=tmp_path,
+                file_path="Sources/Example.swift",
+                line_start=line_start,
+                file_lines_cache={},
+            )
+            == expected
         )
-
-        assert access_modifier == "internal"
 
     def test_with_access_modifiers_reads_source_visibility(
         self, tmp_path: Path
