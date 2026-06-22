@@ -71,3 +71,12 @@ async def test_dead_code_rerun_evicts_stale_findings(driver: AsyncDriver) -> Non
     )
     assert await _count_findings(driver) == 2
     assert s3.nodes_deleted == 0
+
+    # Run 4: empty snapshot → all remaining findings evicted
+    s4 = await write_dead_findings(
+        driver=driver,
+        findings=[],
+        group_id=GROUP_ID,
+    )
+    assert await _count_findings(driver) == 0
+    assert s4.nodes_deleted == 2

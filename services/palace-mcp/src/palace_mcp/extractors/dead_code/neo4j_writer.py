@@ -10,14 +10,16 @@ from neo4j import AsyncDriver
 
 from palace_mcp.extractors.dead_code.models import DeadFinding
 
-_MERGE_DEAD_FINDING = """
-MERGE (f:DeadFinding {finding_id: $finding_id})
-SET f += $props
+_MERGE_DEAD_FINDINGS_BATCH = """
+UNWIND $rows AS row
+MERGE (f:DeadFinding {finding_id: row.finding_id})
+SET f += row.props
 """
 
-_MERGE_DEAD_SYMBOL_EDGE = """
-MATCH (f:DeadFinding {finding_id: $finding_id})
-MERGE (s:Symbol {qualified_name: $qualified_name, group_id: $group_id})
+_MERGE_DEAD_SYMBOL_EDGES_BATCH = """
+UNWIND $edges AS edge
+MATCH (f:DeadFinding {finding_id: edge.finding_id})
+MERGE (s:Symbol {qualified_name: edge.qualified_name, group_id: edge.group_id})
 MERGE (f)-[:DEAD_SYMBOL]->(s)
 """
 
@@ -43,27 +45,22 @@ async def write_dead_findings(
     group_id: str,
 ) -> DeadFindingWriteSummary:
     """Write :DeadFinding nodes then evict stale ones by group_id."""
-    total_nodes = 0
-    total_rels = 0
-    total_props = 0
-
     kept_ids = [f.finding_id for f in findings]
 
     async with driver.session() as session:
-        for finding in findings:
-            summary = await session.execute_write(_write_finding, finding, group_id)
-            total_nodes += summary.nodes_created
-            total_rels += summary.relationships_created
-            total_props += summary.properties_set
-
+        write_summary = DeadFindingWriteSummary()
+        if findings:
+            write_summary = await session.execute_write(
+                _write_findings_batch, findings, group_id
+            )
         evict_summary = await session.execute_write(
             _evict_stale_findings, group_id, kept_ids
         )
 
     return DeadFindingWriteSummary(
-        nodes_created=total_nodes,
-        relationships_created=total_rels,
-        properties_set=total_props,
+        nodes_created=write_summary.nodes_created,
+        relationships_created=write_summary.relationships_created,
+        properties_set=write_summary.properties_set,
         nodes_deleted=evict_summary.nodes_deleted,
     )
 
@@ -71,10 +68,52 @@ async def write_dead_findings(
 async def _write_finding(
     tx: Any, finding: DeadFinding, group_id: str
 ) -> DeadFindingWriteSummary:
+    return await _write_findings_batch(tx, [finding], group_id)
+
+
+async def _write_findings_batch(
+    tx: Any, findings: list[DeadFinding], group_id: str
+) -> DeadFindingWriteSummary:
     nodes_created = 0
     rels_created = 0
     props_set = 0
 
+    rows = [
+        {
+            "finding_id": finding.finding_id,
+            "props": _finding_props(finding, group_id),
+        }
+        for finding in findings
+    ]
+    if rows:
+        result = await tx.run(_MERGE_DEAD_FINDINGS_BATCH, rows=rows)
+        s = await result.consume()
+        nodes_created += s.counters.nodes_created
+        props_set += s.counters.properties_set
+
+    edges = [
+        {
+            "finding_id": finding.finding_id,
+            "qualified_name": member.qualified_name,
+            "group_id": group_id,
+        }
+        for finding in findings
+        for member in finding.members
+    ]
+    if edges:
+        result = await tx.run(_MERGE_DEAD_SYMBOL_EDGES_BATCH, edges=edges)
+        s = await result.consume()
+        nodes_created += s.counters.nodes_created
+        rels_created += s.counters.relationships_created
+
+    return DeadFindingWriteSummary(
+        nodes_created=nodes_created,
+        relationships_created=rels_created,
+        properties_set=props_set,
+    )
+
+
+def _finding_props(finding: DeadFinding, group_id: str) -> dict[str, Any]:
     props: dict[str, Any] = {
         "group_id": group_id,
         "kind": finding.kind.value,
@@ -94,32 +133,7 @@ async def _write_finding(
         props["module_coverage_ratio"] = finding.module_coverage_ratio
     if finding.target_dead_type is not None:
         props["target_dead_type"] = finding.target_dead_type
-
-    result = await tx.run(
-        _MERGE_DEAD_FINDING,
-        finding_id=finding.finding_id,
-        props=props,
-    )
-    s = await result.consume()
-    nodes_created += s.counters.nodes_created
-    props_set += s.counters.properties_set
-
-    for member in finding.members:
-        result = await tx.run(
-            _MERGE_DEAD_SYMBOL_EDGE,
-            finding_id=finding.finding_id,
-            qualified_name=member.qualified_name,
-            group_id=group_id,
-        )
-        s = await result.consume()
-        nodes_created += s.counters.nodes_created
-        rels_created += s.counters.relationships_created
-
-    return DeadFindingWriteSummary(
-        nodes_created=nodes_created,
-        relationships_created=rels_created,
-        properties_set=props_set,
-    )
+    return props
 
 
 async def _evict_stale_findings(
