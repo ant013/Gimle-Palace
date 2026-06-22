@@ -247,6 +247,76 @@ def test_extension_alive_when_protocol_used_via_existential() -> None:
     )
 
 
+def test_dead_module_boundary_classifies_exact_half_coverage_as_dead_module() -> None:
+    cycle_a = SymbolNode(
+        qualified_name="Payments.CycleA",
+        kind="class",
+        module_name="Payments",
+    )
+    cycle_b = SymbolNode(
+        qualified_name="Payments.CycleB",
+        kind="class",
+        module_name="Payments",
+    )
+    cycle_c = SymbolNode(
+        qualified_name="Payments.CycleC",
+        kind="class",
+        module_name="Payments",
+    )
+    live_a = SymbolNode(
+        qualified_name="Payments.LiveA",
+        kind="class",
+        module_name="Payments",
+        is_public=True,
+    )
+    live_b = SymbolNode(
+        qualified_name="Payments.LiveB",
+        kind="struct",
+        module_name="Payments",
+        is_public=True,
+    )
+    live_c = SymbolNode(
+        qualified_name="Payments.LiveC",
+        kind="enum",
+        module_name="Payments",
+        is_public=True,
+    )
+    graph = _make_graph(
+        cycle_a,
+        cycle_b,
+        cycle_c,
+        live_a,
+        live_b,
+        live_c,
+        edges=[
+            GraphEdge(
+                source=cycle_a.qualified_name,
+                target=cycle_b.qualified_name,
+                kind="CALLS",
+            ),
+            GraphEdge(
+                source=cycle_b.qualified_name,
+                target=cycle_c.qualified_name,
+                kind="CALLS",
+            ),
+            GraphEdge(
+                source=cycle_c.qualified_name,
+                target=cycle_a.qualified_name,
+                kind="CALLS",
+            ),
+        ],
+    )
+
+    seeds = compute_all_seeds(graph)
+    reachable = compute_reachable_set(graph, seeds)
+    dead = compute_dead_candidates(graph, reachable)
+    findings = build_findings(graph, dead, project="test")
+
+    dead_module_findings = [f for f in findings if f.kind == FindingKind.DEAD_MODULE]
+    assert len(dead_module_findings) == 1
+    assert dead_module_findings[0].module_coverage_ratio == 0.5
+
+
 # ---------------------------------------------------------------------------
 # Test 5: SwiftUI @AppStorage type → excluded from dead-candidate set
 # ---------------------------------------------------------------------------

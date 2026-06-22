@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from palace_mcp.extractors.foundation.delta_resolution import (
     DeltaResolutionBaseline,
     EdgeDelta,
@@ -12,6 +14,8 @@ from palace_mcp.extractors.foundation.delta_resolution import (
     SymbolDelta,
     SymbolSnapshot,
     diff_delta_snapshots,
+    read_delta_resolution_baseline_artifact,
+    write_delta_resolution_baseline_artifact,
 )
 
 
@@ -238,3 +242,48 @@ def test_diff_delta_snapshots_classifies_symbol_edge_seed_and_public_api_changes
             current_signature_hash="sig-wallet-new",
         ),
     )
+
+
+def test_delta_resolution_baseline_artifact_round_trips(tmp_path: Path) -> None:
+    baseline = DeltaResolutionBaseline(
+        group_id="project/delta-mini",
+        project="delta-mini",
+        previous_commit_sha="commit-old",
+        affected_paths=frozenset({"Sources/Wallet.swift", "Sources/Legacy.swift"}),
+        symbols=(
+            SymbolSnapshot(
+                qualified_name="Wallet",
+                file_path="Sources/Wallet.swift",
+                module_name="FinanceKit",
+                access_modifier="public",
+            ),
+        ),
+        edges=(
+            EdgeSnapshot(
+                source="Wallet.balance()",
+                target="Formatter.format()",
+                relationship_type="CALLS",
+            ),
+        ),
+        public_api_symbols=(
+            PublicApiSnapshot(
+                fqn="Wallet",
+                module_name="FinanceKit",
+                source_artifact_path="Artifacts/FinanceKit.swiftinterface",
+                signature_hash="sig-wallet-old",
+            ),
+        ),
+    )
+
+    write_delta_resolution_baseline_artifact(
+        repo_path=tmp_path,
+        run_id="run-symbol-index",
+        baseline=baseline,
+    )
+
+    loaded = read_delta_resolution_baseline_artifact(
+        repo_path=tmp_path,
+        run_id="run-symbol-index",
+    )
+
+    assert loaded == baseline

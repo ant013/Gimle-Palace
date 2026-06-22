@@ -86,6 +86,15 @@ class Settings(BaseSettings):
             "only a subset of files changed."
         ),
     )
+    palace_incremental_deadcode_full_threshold: float = Field(
+        default=0.2,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Fallback dead_code incremental runs to full when the affected "
+            "frontier exceeds this fraction of total symbols."
+        ),
+    )
 
     # SCIP integration (101a decides pathing; 101b does the actual parse)
     palace_scip_index_paths: Annotated[dict[str, str], NoDecode] = Field(

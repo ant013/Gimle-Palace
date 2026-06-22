@@ -1541,7 +1541,7 @@ class ProjectAnalysisService:
             run: AnalysisRun,
         ) -> ExtractorAttemptResult:
             companion_run_id: str | None = None
-            if extractor_name == "prune_swift_symbols":
+            if extractor_name in {"prune_swift_symbols", "dead_code"}:
                 symbol_index_checkpoint = next(
                     (
                         checkpoint
@@ -1550,16 +1550,17 @@ class ProjectAnalysisService:
                     ),
                     None,
                 )
-                if (
-                    symbol_index_checkpoint is None
-                    or symbol_index_checkpoint.status
-                    not in {
+                checkpoint_valid = (
+                    symbol_index_checkpoint is not None
+                    and symbol_index_checkpoint.status
+                    in {
                         AnalysisCheckpointStatus.OK,
                         AnalysisCheckpointStatus.SKIPPED,
                     }
-                    or symbol_index_checkpoint.error_code is not None
-                    or symbol_index_checkpoint.ingest_run_id is None
-                ):
+                    and symbol_index_checkpoint.error_code is None
+                    and symbol_index_checkpoint.ingest_run_id is not None
+                )
+                if extractor_name == "prune_swift_symbols" and not checkpoint_valid:
                     logger.warning(
                         "project_analyze.prune_skipped",
                         extra={
@@ -1590,7 +1591,9 @@ class ProjectAnalysisService:
                             "Rerun symbol_index_swift successfully before prune_swift_symbols."
                         ),
                     )
-                companion_run_id = symbol_index_checkpoint.ingest_run_id
+                if checkpoint_valid:
+                    assert symbol_index_checkpoint is not None
+                    companion_run_id = symbol_index_checkpoint.ingest_run_id
             response = await run_extractor(
                 driver=driver,
                 graphiti=graphiti,
