@@ -47,6 +47,9 @@ class TestMergeQueryClearsDeletedAt:
         assert "s.line_start" in _MERGE_SYMBOLS
         assert "s.line_end" in _MERGE_SYMBOLS
 
+    def test_merge_symbols_uses_row_access_modifier(self) -> None:
+        assert "s.access_modifier        = r.access_modifier" in _MERGE_SYMBOLS
+
     def test_soft_delete_query_uses_group_id_and_qnames(self) -> None:
         assert "$group_id" in _SOFT_DELETE_ABSENT
         assert "$qnames" in _SOFT_DELETE_ABSENT
@@ -104,9 +107,23 @@ class TestBuildSymbolNodeRows:
         assert row["label"] == "Class"
         assert row["short_name"] == "Foo"
         assert row["file_path"] is None
+        assert row["access_modifier"] == ""
         # No def_line_starts → line_start/line_end null (snippet falls back).
         assert row["line_start"] is None
         assert row["line_end"] is None
+
+    def test_rows_preserve_access_modifier(self) -> None:
+        from palace_mcp.extractors.scip_parser import ScipSymbolInfo
+
+        si = ScipSymbolInfo(
+            qualified_name="App.Foo",
+            scip_kind_name="Class",
+            module_name="App",
+            relationships=(),
+            access_modifier="public",
+        )
+        rows = build_symbol_node_rows([si], {}, "project/test")
+        assert rows[0]["access_modifier"] == "public"
 
     def test_line_start_from_def_line_starts(self) -> None:
         # dogfood W8c: declaration line threaded onto the row so get_code_snippet
