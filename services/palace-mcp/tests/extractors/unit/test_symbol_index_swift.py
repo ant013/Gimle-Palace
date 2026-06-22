@@ -24,15 +24,21 @@ from palace_mcp.extractors.foundation.models import (
 )
 from palace_mcp.extractors.runner import run_extractor
 from palace_mcp.extractors.foundation.symbol_node_writer import build_symbol_node_rows
-from palace_mcp.extractors.scip_parser import ScipSymbolInfo
+from palace_mcp.extractors.scip_parser import (
+    ScipSymbolInfo,
+    iter_scip_occurrences,
+    iter_scip_symbol_infos,
+)
 from palace_mcp.extractors.symbol_index_swift import (
     SymbolIndexSwift,
     _GitChangeSet,
     _build_file_body_hashes,
     _build_shadow_rows,
     _derive_incremental_graph_scope,
+    _infer_swift_access_modifier,
     _ingest_batch,
     _is_vendor,
+    _with_access_modifiers,
 )
 from tests.extractors.fixtures.scip_factory import (
     build_swift_scip_index_with_symbol_infos,
@@ -117,6 +123,98 @@ class TestSymbolIndexSwiftVendorClassification:
     )
     def test_vendor_paths_match_expected(self, file_path: str, expected: bool) -> None:
         assert _is_vendor(file_path) is expected
+
+
+class TestSymbolIndexSwiftAccessModifiers:
+    @pytest.mark.parametrize(
+        ("source", "line_start", "expected"),
+        [
+            ("public class PublicThing {}\nclass InternalThing {}\n", 2, "internal"),
+            ("func send(_ public: String) {}\n", 1, "internal"),
+            ("class Box { public let value: Int }\n", 1, "internal"),
+            ('class Box { let label = "public" }\n', 1, "internal"),
+            ("class Box {} // public\n", 1, "internal"),
+            ("public\nclass Box {}\n", 2, "public"),
+            ("public class Box {}\n", 1, "public"),
+        ],
+    )
+    def test_infer_access_modifier_ignores_non_leading_tokens(
+        self, tmp_path: Path, source: str, line_start: int, expected: str
+    ) -> None:
+        source_path = tmp_path / "Sources" / "Example.swift"
+        source_path.parent.mkdir(parents=True)
+        source_path.write_text(source, encoding="utf-8")
+
+        assert (
+            _infer_swift_access_modifier(
+                repo_path=tmp_path,
+                file_path="Sources/Example.swift",
+                line_start=line_start,
+                file_lines_cache={},
+            )
+            == expected
+        )
+
+    def test_with_access_modifiers_reads_source_visibility(
+        self, tmp_path: Path
+    ) -> None:
+        index = build_swift_scip_index_with_symbol_infos()
+        symbol_infos = tuple(iter_scip_symbol_infos(index))
+        def_file_paths: dict[str, str] = {}
+        for occ in iter_scip_occurrences(index, commit_sha="test"):
+            if occ.kind in (SymbolKind.DEF, SymbolKind.DECL):
+                def_file_paths.setdefault(occ.symbol_qualified_name, occ.file_path)
+
+        wallet_store_path = tmp_path / "Sources" / "UwMiniCore" / "State"
+        wallet_store_path.mkdir(parents=True)
+        (wallet_store_path / "WalletStore.swift").write_text(
+            "public class WalletStore {}\npublic func select(walletID: Int) {}\n",
+            encoding="utf-8",
+        )
+        dead_helper_path = tmp_path / "Sources" / "UwMiniCore"
+        dead_helper_path.mkdir(parents=True, exist_ok=True)
+        (dead_helper_path / "DeadHelper.swift").write_text(
+            "class DeadHelper {}\n",
+            encoding="utf-8",
+        )
+
+        # Synthetic fixture ranges are not sourced from the real emitter, so pin
+        # the declaration lines to the file content we just wrote.
+        def_line_starts = {
+            qname: 1
+            for qname in def_file_paths
+            if "WalletStore" in qname and "select" not in qname
+        }
+        def_line_starts.update(
+            {qname: 2 for qname in def_file_paths if "select" in qname}
+        )
+        def_line_starts.update(
+            {qname: 1 for qname in def_file_paths if "DeadHelper" in qname}
+        )
+
+        enriched = _with_access_modifiers(
+            symbol_infos,
+            repo_path=tmp_path,
+            def_file_paths=def_file_paths,
+            def_line_starts=def_line_starts,
+        )
+        access_by_qname = {
+            sym_info.qualified_name: sym_info.access_modifier for sym_info in enriched
+        }
+
+        wallet_store_qname = next(
+            qname
+            for qname in access_by_qname
+            if "WalletStore" in qname and "select" not in qname
+        )
+        select_qname = next(qname for qname in access_by_qname if "select" in qname)
+        dead_helper_qname = next(
+            qname for qname in access_by_qname if "DeadHelper" in qname
+        )
+
+        assert access_by_qname[wallet_store_qname] == "public"
+        assert access_by_qname[select_qname] == "public"
+        assert access_by_qname[dead_helper_qname] == "internal"
 
 
 class TestSymbolIndexSwiftErrorHandling:
