@@ -45,6 +45,10 @@ from palace_mcp.extractors.foundation.importance import (
     load_or_reset_in_degree_counter,
     tier_weight,
 )
+from palace_mcp.extractors.foundation.delta_resolution import (
+    capture_delta_resolution_baseline,
+    write_delta_resolution_baseline_artifact,
+)
 from palace_mcp.extractors.foundation.models import (
     Language,
     SCHEMA_VERSION_CURRENT,
@@ -231,6 +235,7 @@ class SymbolIndexSwift(BaseExtractor):
             selected_graph_paths: set[str] | None = None
             removed_graph_paths: set[str] = set()
             graph_fallback_reason: str | None = None
+            previous_commit_sha: str | None = None
             if (
                 not ctx.force
                 and previous_body_hashes
@@ -328,6 +333,24 @@ class SymbolIndexSwift(BaseExtractor):
                         "graph_fallback_reason": graph_fallback_reason,
                     },
                 )
+                if (
+                    incremental_tantivy
+                    and previous_commit_sha is not None
+                    and selected_graph_paths is not None
+                ):
+                    baseline = await capture_delta_resolution_baseline(
+                        driver,
+                        group_id=ctx.group_id,
+                        project=ctx.project_slug,
+                        previous_commit_sha=previous_commit_sha,
+                        changed_paths=selected_graph_paths,
+                        removed_paths=removed_graph_paths,
+                    )
+                    write_delta_resolution_baseline_artifact(
+                        repo_path=ctx.repo_path,
+                        run_id=ctx.run_id,
+                        baseline=baseline,
+                    )
 
             tantivy_path = Path(settings.palace_tantivy_index_path)
             counter = _load_or_reset_counter(tantivy_path, ctx.run_id)

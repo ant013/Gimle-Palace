@@ -7,9 +7,11 @@ all relevant edge/public-API writers have completed for the same commit.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
@@ -176,6 +178,65 @@ class ResolvedDelta:
     edge_deltas: tuple[EdgeDelta, ...]
     seed_deltas: tuple[SeedDelta, ...]
     public_api_deltas: tuple[PublicApiDelta, ...]
+
+
+_DELTA_RESOLUTION_ARTIFACT_DIR = Path(".palace") / "delta-resolution"
+
+
+def delta_resolution_artifact_path(*, repo_path: Path, run_id: str) -> Path:
+    return repo_path / _DELTA_RESOLUTION_ARTIFACT_DIR / f"{run_id}.json"
+
+
+def write_delta_resolution_baseline_artifact(
+    *,
+    repo_path: Path,
+    run_id: str,
+    baseline: DeltaResolutionBaseline,
+) -> Path:
+    artifact_path = delta_resolution_artifact_path(repo_path=repo_path, run_id=run_id)
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "group_id": baseline.group_id,
+        "project": baseline.project,
+        "previous_commit_sha": baseline.previous_commit_sha,
+        "affected_paths": sorted(baseline.affected_paths),
+        "symbols": [asdict(row) for row in baseline.symbols],
+        "edges": [asdict(row) for row in baseline.edges],
+        "public_api_symbols": [asdict(row) for row in baseline.public_api_symbols],
+    }
+    artifact_path.write_text(
+        json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    return artifact_path
+
+
+def read_delta_resolution_baseline_artifact(
+    *,
+    repo_path: Path,
+    run_id: str,
+) -> DeltaResolutionBaseline | None:
+    artifact_path = delta_resolution_artifact_path(repo_path=repo_path, run_id=run_id)
+    if not artifact_path.is_file():
+        return None
+
+    payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    return DeltaResolutionBaseline(
+        group_id=str(payload["group_id"]),
+        project=str(payload["project"]),
+        previous_commit_sha=(
+            str(payload["previous_commit_sha"])
+            if payload.get("previous_commit_sha") is not None
+            else None
+        ),
+        affected_paths=frozenset(
+            str(path) for path in payload.get("affected_paths", [])
+        ),
+        symbols=tuple(SymbolSnapshot(**row) for row in payload.get("symbols", [])),
+        edges=tuple(EdgeSnapshot(**row) for row in payload.get("edges", [])),
+        public_api_symbols=tuple(
+            PublicApiSnapshot(**row) for row in payload.get("public_api_symbols", [])
+        ),
+    )
 
 
 async def capture_delta_resolution_baseline(

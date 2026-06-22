@@ -1,14 +1,17 @@
-"""Neo4j writer for :DeadFinding nodes."""
+"""Neo4j writer for :DeadFinding nodes and incremental reachability state."""
 
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
 from typing import Any
+from collections.abc import Set as AbstractSet
 
 from neo4j import AsyncDriver
 
 from palace_mcp.extractors.dead_code.models import DeadFinding
+
+_WRITE_BATCH_SIZE = 5000
 
 _MERGE_DEAD_FINDINGS_BATCH = """
 UNWIND $rows AS row
@@ -29,6 +32,29 @@ WHERE NOT f.finding_id IN $kept_ids
 DETACH DELETE f
 """
 
+_EVICT_SELECTED_FINDINGS = """
+MATCH (f:DeadFinding {group_id: $group_id})
+WHERE f.finding_id IN $finding_ids
+DETACH DELETE f
+"""
+
+_LOAD_DEAD_FINDING_PROPS = """
+MATCH (f:DeadFinding {group_id: $group_id})
+RETURN f.finding_id AS finding_id, properties(f) AS props
+"""
+
+_SET_REACHABLE_RUN_ID = """
+UNWIND $qualified_names AS qualified_name
+MATCH (s:Symbol {qualified_name: qualified_name, group_id: $group_id})
+SET s.reachable_run_id = $run_id
+"""
+
+_CLEAR_REACHABLE_RUN_ID = """
+UNWIND $qualified_names AS qualified_name
+MATCH (s:Symbol {qualified_name: qualified_name, group_id: $group_id})
+REMOVE s.reachable_run_id
+"""
+
 
 @dataclass(frozen=True)
 class DeadFindingWriteSummary:
@@ -43,8 +69,15 @@ async def write_dead_findings(
     driver: AsyncDriver,
     findings: list[DeadFinding],
     group_id: str,
+    stale_finding_ids: list[str] | None = None,
 ) -> DeadFindingWriteSummary:
-    """Write :DeadFinding nodes then evict stale ones by group_id."""
+    """Write :DeadFinding nodes and evict stale findings.
+
+    When ``stale_finding_ids`` is omitted, behave like the original full-snapshot
+    writer and evict every finding not present in ``findings``.
+    When it is provided, evict only those stale ids and leave unaffected rows in
+    place for incremental runs.
+    """
     kept_ids = [f.finding_id for f in findings]
 
     async with driver.session() as session:
@@ -53,9 +86,16 @@ async def write_dead_findings(
             write_summary = await session.execute_write(
                 _write_findings_batch, findings, group_id
             )
-        evict_summary = await session.execute_write(
-            _evict_stale_findings, group_id, kept_ids
-        )
+
+        evict_summary = DeadFindingWriteSummary()
+        if stale_finding_ids is None:
+            evict_summary = await session.execute_write(
+                _evict_stale_findings, group_id, kept_ids
+            )
+        elif stale_finding_ids:
+            evict_summary = await session.execute_write(
+                _evict_selected_findings, group_id, stale_finding_ids
+            )
 
     return DeadFindingWriteSummary(
         nodes_created=write_summary.nodes_created,
@@ -63,6 +103,47 @@ async def write_dead_findings(
         properties_set=write_summary.properties_set,
         nodes_deleted=evict_summary.nodes_deleted,
     )
+
+
+async def write_symbol_reachability(
+    *,
+    driver: AsyncDriver,
+    group_id: str,
+    reachable_qnames: AbstractSet[str],
+    unreachable_qnames: AbstractSet[str],
+    run_id: str,
+) -> None:
+    async with driver.session() as session:
+        for batch in _chunked(sorted(reachable_qnames), _WRITE_BATCH_SIZE):
+            result = await session.run(
+                _SET_REACHABLE_RUN_ID,
+                group_id=group_id,
+                qualified_names=batch,
+                run_id=run_id,
+            )
+            await result.consume()
+        for batch in _chunked(sorted(unreachable_qnames), _WRITE_BATCH_SIZE):
+            result = await session.run(
+                _CLEAR_REACHABLE_RUN_ID,
+                group_id=group_id,
+                qualified_names=batch,
+            )
+            await result.consume()
+
+
+async def load_dead_finding_props(
+    *,
+    driver: AsyncDriver,
+    group_id: str,
+) -> dict[str, dict[str, Any]]:
+    async with driver.session() as session:
+        result = await session.run(_LOAD_DEAD_FINDING_PROPS, group_id=group_id)
+        rows = await result.data()
+    return {
+        str(row["finding_id"]): dict(row["props"])
+        for row in rows
+        if row.get("finding_id") is not None and row.get("props") is not None
+    }
 
 
 async def _write_finding(
@@ -87,9 +168,9 @@ async def _write_findings_batch(
     ]
     if rows:
         result = await tx.run(_MERGE_DEAD_FINDINGS_BATCH, rows=rows)
-        s = await result.consume()
-        nodes_created += s.counters.nodes_created
-        props_set += s.counters.properties_set
+        summary = await result.consume()
+        nodes_created += summary.counters.nodes_created
+        props_set += summary.counters.properties_set
 
     edges = [
         {
@@ -102,9 +183,9 @@ async def _write_findings_batch(
     ]
     if edges:
         result = await tx.run(_MERGE_DEAD_SYMBOL_EDGES_BATCH, edges=edges)
-        s = await result.consume()
-        nodes_created += s.counters.nodes_created
-        rels_created += s.counters.relationships_created
+        summary = await result.consume()
+        nodes_created += summary.counters.nodes_created
+        rels_created += summary.counters.relationships_created
 
     return DeadFindingWriteSummary(
         nodes_created=nodes_created,
@@ -144,8 +225,24 @@ async def _evict_stale_findings(
         group_id=group_id,
         kept_ids=kept_ids,
     )
-    s = await result.consume()
-    return DeadFindingWriteSummary(nodes_deleted=s.counters.nodes_deleted)
+    summary = await result.consume()
+    return DeadFindingWriteSummary(nodes_deleted=summary.counters.nodes_deleted)
+
+
+async def _evict_selected_findings(
+    tx: Any, group_id: str, finding_ids: list[str]
+) -> DeadFindingWriteSummary:
+    result = await tx.run(
+        _EVICT_SELECTED_FINDINGS,
+        group_id=group_id,
+        finding_ids=finding_ids,
+    )
+    summary = await result.consume()
+    return DeadFindingWriteSummary(nodes_deleted=summary.counters.nodes_deleted)
+
+
+def _chunked(values: list[str], size: int) -> list[list[str]]:
+    return [values[i : i + size] for i in range(0, len(values), size)]
 
 
 def _members_json(finding: DeadFinding) -> str:

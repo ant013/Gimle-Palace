@@ -15,8 +15,11 @@ from palace_mcp.extractors.foundation.delta_resolution import (
     SymbolDelta,
     SymbolSnapshot,
     capture_delta_resolution_baseline,
+    delta_resolution_artifact_path,
     diff_delta_snapshots,
+    read_delta_resolution_baseline_artifact,
     resolve_delta_resolution,
+    write_delta_resolution_baseline_artifact,
 )
 from palace_mcp.extractors.foundation.models import (
     Ecosystem,
@@ -81,7 +84,10 @@ __all__ = [
     "SymbolOccurrenceShadow",
     "SymbolSnapshot",
     "capture_delta_resolution_baseline",
+    "delta_resolution_artifact_path",
     "diff_delta_snapshots",
+    "read_delta_resolution_baseline_artifact",
     "resolve_delta_resolution",
+    "write_delta_resolution_baseline_artifact",
     "walk_repo",
 ]

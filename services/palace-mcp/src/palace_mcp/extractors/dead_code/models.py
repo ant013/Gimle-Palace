@@ -92,6 +92,7 @@ class SymbolNode:
     kind: str  # class|struct|enum|protocol|function|property|extension|actor
     file_path: str | None = None
     module_name: str | None = None
+    reachable_run_id: str | None = None
     # Access visibility
     is_public: bool = False
     is_open: bool = False
