@@ -73,6 +73,8 @@ class ProjectInfo(BaseModel):
     # GIM-182: parent mount for shared-prefix repo layouts
     parent_mount: str | None = None
     relative_path: str | None = None
+    # Absolute on-disk repo path persisted on the :Project node (native layout).
+    repo_path: str | None = None
     # GIM-283-1: language profile for audit extractor scoping
     language_profile: str | None = None
     expected_profile: bool = False

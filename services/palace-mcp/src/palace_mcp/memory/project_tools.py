@@ -57,6 +57,7 @@ def _project_info_from_row(
         repo_url=p.get("repo_url"),
         parent_mount=p.get("parent_mount"),
         relative_path=p.get("relative_path"),
+        repo_path=p.get("repo_path"),
         language_profile=p.get("language_profile"),
         expected_profile=bool(p.get("expected_profile") or False),
         source_created_at=p["source_created_at"],
