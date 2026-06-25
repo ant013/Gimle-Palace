@@ -23,6 +23,22 @@ RETURN f.project_id AS project_id,
 ORDER BY fn.ccn DESC, fn.start_line ASC
 """.strip()
 
+# Fallback when the hotspot extractor has not produced :Function nodes for this file
+# (e.g. an incremental analyze skipped hotspot, or hotspot has not run yet). The symbol
+# layer still has the functions, so list them — without complexity metrics (ccn/nloc).
+_FALLBACK_QUERY = """
+MATCH (s:Symbol)
+WHERE s.project_id IN $project_ids
+  AND coalesce(s.file_path, s.path) = $path
+  AND s.kind IN ['function', 'method', 'constructor', 'initializer', 'init']
+  AND ($include_deprecated OR NOT s:Deprecated)
+RETURN s.project_id AS project_id,
+       coalesce(s.short_name, s.name) AS name,
+       s.line_start AS start_line,
+       s.kind AS kind
+ORDER BY coalesce(s.line_start, 0) ASC
+""".strip()
+
 
 def _error(
     code: str,
@@ -112,6 +128,44 @@ async def list_functions(
                     "language": rec["language"],
                 }
             )
+
+    # Fallback to the symbol layer when hotspot produced no :Function nodes for this
+    # file (skipped by incremental analyze, or not yet run). min_ccn is ignored here —
+    # complexity metrics are unavailable. Keeps list_functions usable on the always-
+    # present symbol layer instead of returning an empty result.
+    used_symbol_fallback = False
+    if not rows:
+        async with driver.session() as session:
+            fb = await session.run(
+                _FALLBACK_QUERY,
+                {
+                    "project_ids": project_ids,
+                    "path": path,
+                    "include_deprecated": include_deprecated,
+                },
+            )
+            async for rec in fb:
+                rows.append(
+                    {
+                        "project_id": rec["project_id"].removeprefix("project/"),
+                        "name": rec["name"],
+                        "start_line": rec["start_line"],
+                        "end_line": None,
+                        "ccn": None,
+                        "parameter_count": None,
+                        "nloc": None,
+                        "language": None,
+                        "kind": rec["kind"],
+                    }
+                )
+        used_symbol_fallback = bool(rows)
+
+    _fallback_warning = (
+        "complexity unavailable (ccn/nloc/end_line null) — hotspot has not produced "
+        ":Function nodes for this file; run palace.ingest.run_extractor("
+        "name='hotspot', project=...) to populate complexity"
+    )
+
     if bundle is not None:
         assert health is not None
         out: dict[str, Any] = {
@@ -123,7 +177,14 @@ async def list_functions(
         }
         if not rows:
             out["warning"] = "path_not_found_in_any_member"
+        elif used_symbol_fallback:
+            out["source"] = "symbol_fallback"
+            out["warning"] = _fallback_warning
         return out
     for row in rows:
         row.pop("project_id", None)
-    return {"ok": True, "result": rows}
+    out_proj: dict[str, Any] = {"ok": True, "result": rows}
+    if used_symbol_fallback:
+        out_proj["source"] = "symbol_fallback"
+        out_proj["warning"] = _fallback_warning
+    return out_proj
